@@ -6,30 +6,33 @@ const TokenTypes = {
 	IMPORT: 'IMPORT',        // @
 	DEFINE: 'DEFINE',        // :
 	LAMBDA: 'LAMBDA',        // ?
-	SPREAD: 'SPREAD',        // ~
+	REST: 'REST',            // ~ <prefix>
+	SPREAD: 'SPREAD',        // ~ <postfix>
+	RANGE: 'RANGE',          // ~ <infix>
 	GET: 'GET',              // '
 	PRODUCT: 'PRODUCT',      // ,
 
 	// Operators
-	PLUS: 'PLUS',           // +
-	MINUS: 'MINUS',         // -
-	MULTIPLY: 'MULTIPLY',   // *
-	DIVIDE: 'DIVIDE',       // /
-	POWER: 'POWER',         // ^
-	MOD: 'MOD',            // %
+	PLUS: 'PLUS',            // +
+	MINUS: 'MINUS',          // -
+	MULTIPLY: 'MULTIPLY',    // *
+	DIVIDE: 'DIVIDE',        // /
+	POWER: 'POWER',          // ^
+	MOD: 'MOD',              // %
+	FACTRIAL: 'FACTRIAL', // ! <postfix>
 
 	// Logical operators
-	AND: 'AND',            // &
+	AND: 'AND',           // &
 	OR: 'OR',             // |
 	XOR: 'XOR',           // ;
-	NOT: 'NOT',           // !
+	NOT: 'NOT',           // ! <prefix>
 
 	// Comparison operators
-	EQUAL: 'EQUAL',        // =
-	NOT_EQUAL: 'NOT_EQUAL', // != or ><
-	LESS: 'LESS',          // <
-	GREATER: 'GREATER',    // >
-	LESS_EQ: 'LESS_EQ',    // <=
+	EQUAL: 'EQUAL',           // =
+	NOT_EQUAL: 'NOT_EQUAL',   // != or ><
+	LESS: 'LESS',             // <
+	GREATER: 'GREATER',       // >
+	LESS_EQ: 'LESS_EQ',       // <=
 	GREATER_EQ: 'GREATER_EQ', // >=
 
 	// Delimiters
@@ -209,7 +212,40 @@ class Lexer {
 	}
 
 	handleSymbol() {
+		const prefixMap = {
+			'#': TokenTypes.EXPORT,
+			'@': TokenTypes.IMPORT,
+			'!': TokenTypes.NOT,
+			'~': TokenTypes.REST
+		}
+
+		const infixLMap = {
+			',': TokenTypes.PRODUCT,
+			'~': TokenTypes.RANGE,
+			'+': TokenTypes.PLUS,
+			'-': TokenTypes.MINUS,
+			'*': TokenTypes.MULTIPLY,
+			'/': TokenTypes.DIVIDE,
+			'%': TokenTypes.MOD,
+			'&': TokenTypes.AND,
+			'|': TokenTypes.OR,
+			';': TokenTypes.XOR,
+			"'": TokenTypes.GET
+		}
+
+		const infixRMap = {
+			':': TokenTypes.DEFINE,
+			'?': TokenTypes.LAMBDA,
+			'^': TokenTypes.POWER
+		}
+
+		const postfixMap = {
+			'!': TokenTypes.FACTRIAL,
+			'~': TokenTypes.SPREAD
+		}
+
 		const symbolMap = {
+			/*
 			'#': TokenTypes.EXPORT,
 			'@': TokenTypes.IMPORT,
 			':': TokenTypes.DEFINE,
@@ -233,8 +269,10 @@ class Lexer {
 			']': TokenTypes.RBRACKET,
 			',': TokenTypes.PRODUCT,
 			"'": TokenTypes.GET,
+			*/
 			'_': TokenTypes.UNIT
 		};
+
 		const combinedMap = {
 			'=': TokenTypes.EQUAL,
 			'==': TokenTypes.EQUAL,
@@ -265,7 +303,13 @@ class Lexer {
 		} else {
 			this.advance();
 		}
-		const type = symbolMap[symbol] || combinedMap[symbol] || symbol;
+		const type = symbolMap[symbol]
+			|| combinedMap[symbol]
+			|| prefixMap[symbol]
+			|| infixLMap[symbol]
+			|| infixRMap[symbol]
+			|| postfixMap[symbol]
+			|| symbol;
 		this.tokens.push(new Token(type, symbol, this.line, this.column));
 	}
 
