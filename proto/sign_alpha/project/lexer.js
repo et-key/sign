@@ -46,7 +46,8 @@ const prepare = code => code
   .replace(
     /(`[^`\r\n]*`)|(?<!\\)(\[)|(?<!\\)(\])/g,
     (_, $1, $2, $3) => $1 || ($2 && '\x1D[') || ($3 && ']\x1D')
-  );
+  )
+  .replace(/(,)|(\\[\s\S])|(`[^`\n\r]+`)/g, ' $1 $2$3');
   
 const tokenize = code => code
   .replace(/(\r\n|[\r\n])/g, '\r')                                  // Normalize line endings to \r
