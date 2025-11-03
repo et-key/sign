@@ -123,7 +123,7 @@ const OperatorPriority = {
     infix : {
         ':' : 2,
         '#' : 3,
-        ',' : 4
+        ',' : 4,
         lambda_list : 4,
         lambda_lambda : 5,
         list_list : 6,
