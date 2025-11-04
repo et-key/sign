@@ -26,7 +26,7 @@ const procBlock = code => code
     /(\\[\s\S])|(`[^\r\n`]*`)|(?<!\\)\r(?<!\\)(\t)([^\r]+)/g,
     (_, $1, $2, $3, $4) => ($1 || $2) || `\r\x1D${procBlock($4)}\x1D`
   )
-  .replace(/\t/g, '');
+  .replace(/(\\[\s\S])|(`[^\r\n`]*`)|\t/g, (_, $1, $2) => ($1 || $2) || '');
 
 const markSeparator = code => code
   .replace(
