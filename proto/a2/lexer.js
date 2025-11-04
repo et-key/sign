@@ -57,4 +57,4 @@ module.exports = code => clean (
       unit => unit.split('\x1F')
     )
   )
-).flat(Infinity);
+);
