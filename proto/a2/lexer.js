@@ -23,9 +23,10 @@ const procUnary = code => code
 
 const procBlock = code => code
   .replace(
-    /(\\[\s\S])|(`[^\r\n`]*`)|(?<!\\)\r(?<!\\)(\t+)/gm,
-    (_, $1, $2, $3) => ($1 || $2) || `\r${$3}\x1D`
-  );
+    /(\\[\s\S])|(`[^\r\n`]*`)|(?<!\\)\r(?<!\\)(\t)([^\r]+)/g,
+    (_, $1, $2, $3, $4) => ($1 || $2) || `\r\x1D${procBlock($4)}\x1D`
+  )
+  .replace(/\t/g, '');
 
 const markSeparator = code => code
   .replace(
@@ -47,7 +48,7 @@ const markSeparator = code => code
 
 const clean = tokens => tokens
   .map( t => Array.isArray(t) ? clean(t) : t )
-  .filter( t => t.length > 0);
+  .filter( t => t.length > 0 ) ;
 
 module.exports = code => clean (
   markSeparator( procBlock( procUnary( prepare(code) ) ) ).split('\r')
