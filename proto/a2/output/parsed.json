@@ -27,14 +27,13 @@
   [
     "char3",
     " : ",
-    "\\\\"
+    "\\\\\n"
   ],
   [
     "HelloWorld",
     " : ",
-    "`Hello` \\"
+    "`Hello` \\\n `\tWorld`"
   ],
-  " `\tWorld`",
   [
     "My",
     " : ",
