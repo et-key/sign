@@ -4,26 +4,65 @@
 
 Welcome to the Sign integrity generic notation Page!
 
-This is a language for expressing the integrity of data in a generic way.
-It is designed to be used in various Anyone, such as data validation, integrity checks, and more.
+This is a language for expressing the integrity of data evaluation generic way.
+It is designed to be used in various Anyone, such as data validation, integrity checks, and Functional Effects.
 
 ## Manifesto
-  [Our Manifesto](./documents/manifesto/manifesto.en-us.md)
-  [日本語版はこちら](./documents/manifesto/manifesto.ja-jp.md)
+- [Our Manifesto](./documents/manifesto/manifesto.en-us.md)
+- [日本語版はこちら](./documents/manifesto/manifesto.ja-jp.md)
 
 ## Example
-  [language example](./documents/en-us/example.en-us.sn)
-  [日本語はこちら](./documents/ja-jp/example.ja-jp.sn)
+- [language example](./documents/en-us/example.en-us.sn)
+- [日本語はこちら](./documents/ja-jp/example.ja-jp.sn)
 
 ## Reference
-  [language reference](./documents/en-us/Sign_reference_en-us.md)
-  [日本語はこちら](./documents/ja-jp/Sign_reference_ja-jp.md)
+- [language reference](./documents/en-us/Sign_reference_en-us.md)
+- [日本語はこちら](./documents/ja-jp/Sign_reference_ja-jp.md)
 
 ## Specification
-  [language specification](./documents/en-us/specification/)
-  [日本語はこちら](./documents/ja-jp/specification/)
+- [language specification](./documents/en-us/specification/)
+- [日本語はこちら](./documents/ja-jp/specification/)
 
 ## License
-  [Language-License](./documents/License/sign-language-license.en-us.md)
-  [日本語はこちら](./documents/License/sign-language-license.ja-jp.md)
+- [Language-License](./documents/License/sign-language-license.en-us.md)
+- [日本語はこちら](./documents/License/sign-language-license.ja-jp.md)
 
+## Concept view
+
+```mermaid
+---
+config:
+  theme: redux-dark
+---
+graph LR
+ subgraph Product[" "]
+        Syntax
+        List
+        Stack
+        Literal
+        Compilation
+  end
+
+  subgraph Coproduct[" "]
+        Semantics
+        Lambda
+        Stream
+        Operator
+        Interpretation
+  end
+
+  Syntax --> Semantics
+  Semantics --> Syntax
+
+  List --> Lambda
+  Lambda --> List
+
+  Stack --> Stream
+  Stream --> Stack
+
+  Literal --> Operator
+  Operator --> Literal
+
+  Compilation --> Interpretation
+  Interpretation --> Compilation
+```
