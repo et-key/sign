@@ -54,7 +54,7 @@
 | 29 | `\t` | 前置 | indent | インデント | インデントブロック構築 |
 */
 
-const OperatorSemantics = {
+const Semantics = {
     prefix : {
         '#' : 'export',
         '~' : 'continuous',
@@ -115,7 +115,7 @@ const OperatorSemantics = {
     }
 };
 
-const OperatorPriority = {
+const Priority = {
     prefix : {
         '#' : 1,
         '~' : 9,
@@ -177,6 +177,6 @@ const OperatorPriority = {
 };
 
 module.exports = {
-    OperatorSemantics,
-    OperatorPriority
+    Semantics,
+    Priority
 };
