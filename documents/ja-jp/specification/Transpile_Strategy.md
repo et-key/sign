@@ -31,17 +31,19 @@ Sign源コード
   ↓
 [3] ブロック構造変換
   ↓
-[4] 演算子変換
+[4] match_case検出と変換
   ↓
-[5] 関数定義変換
+[5] 演算子変換
   ↓
-[6] リスト操作変換
+[6] 関数定義変換
   ↓
-[7] 特殊構文変換
+[7] リスト操作変換
   ↓
-[8] 識別子変換
+[8] 特殊構文変換
   ↓
-[9] 最終整形
+[9] 識別子変換
+  ↓
+[10] 最終整形
   ↓
 JavaScript コード
 ```
@@ -104,6 +106,13 @@ JavaScript コード
 | `[+ 1]` | `x => x + 1` | 部分適用 |
 | `[+]` | `x => y => x + y` | 演算子の関数化 |
 
+### 3.6 条件分岐（match_case）
+
+| Sign記法 | JavaScript | 備考 |
+|----------|-----------|------|
+| `x ?<br>  cond1 : val1<br>  cond2 : val2` | `x => {<br>  switch (true) {<br>    case cond1: return val1;<br>    case cond2: return val2;<br>  }<br>}` | ブロック内の条件分岐 |
+| `x ?<br>  cond : val<br>  default` | `x => {<br>  switch (true) {<br>    case cond: return val;<br>    default: return default;<br>  }<br>}` | デフォルト値あり |
+
 ## 4. 段階的変換の詳細
 
 ### 4.1 [1] 前処理（Lexer処理）
@@ -152,7 +161,122 @@ code = code.replace(/\x1D(.+?)\x1D/g, '{ $1 }');
 // ], }, ) → )
 ```
 
-### 4.4 [4] 演算子変換
+### 4.4 [4] match_case検出と変換
+
+#### match_case構文の検出
+
+関数定義のブロック内に `条件 : 返値` パターンが存在する場合、それをswitch文に変換：
+
+```javascript
+// パターン検出
+const matchCasePattern = /(\w+(?:\s+\w+)*)\s*\?\s*\{([^}]+)\}/g;
+
+function convertMatchCase(code) {
+  return code.replace(matchCasePattern, (match, params, body) => {
+    // ブロック内の各行を解析
+    const lines = body.trim().split('\n').map(l => l.trim()).filter(l => l);
+    
+    // 条件分岐行（: を含む）と通常の式を分離
+    const cases = [];
+    let defaultCase = null;
+    
+    lines.forEach(line => {
+      if (line.includes(':')) {
+        // 条件 : 返値 のパターン
+        const [condition, returnValue] = line.split(':').map(s => s.trim());
+        cases.push({ condition, returnValue });
+      } else {
+        // : がない行はデフォルトケース
+        defaultCase = line;
+      }
+    });
+    
+    // switch文の構築
+    const paramList = params.split(/\s+/);
+    const arrowFn = paramList.join(' => ');
+    
+    let switchBody = '  switch (true) {\n';
+    cases.forEach(c => {
+      switchBody += `    case ${c.condition}: return ${c.returnValue};\n`;
+    });
+    if (defaultCase) {
+      switchBody += `    default: return ${defaultCase};\n`;
+    }
+    switchBody += '  }';
+    
+    return `${arrowFn} => {\n${switchBody}\n}`;
+  });
+}
+```
+
+#### 変換例
+
+**入力:**
+```sign
+classify : x ?
+  x < 0 : `negative`
+  x = 0 : `zero`
+  x > 0 : `positive`
+```
+
+**出力:**
+```javascript
+const classify = x => {
+  switch (true) {
+    case x < 0: return "negative";
+    case x === 0: return "zero";
+    case x > 0: return "positive";
+  }
+}
+```
+
+#### 複数引数の場合
+
+**入力:**
+```sign
+mySc : x y ?
+  x < 0 : x * -1
+  x = 0 : y
+  x > 0 : x
+```
+
+**出力:**
+```javascript
+const mySc = x => y => {
+  switch (true) {
+    case x < 0: return x * -1;
+    case x === 0: return y;
+    case x > 0: return x;
+  }
+}
+```
+
+#### デフォルトケース付き
+
+**入力:**
+```sign
+grade : score ?
+  score >= 90 : `A`
+  score >= 80 : `B`
+  score >= 70 : `C`
+  score >= 60 : `D`
+  `F`
+```
+
+**出力:**
+```javascript
+const grade = score => {
+  switch (true) {
+    case score >= 90: return "A";
+    case score >= 80: return "B";
+    case score >= 70: return "C";
+    case score >= 60: return "D";
+    default: return "F";
+  }
+}
+```
+
+### 4.5 [5] 演算子変換
 
 #### 累乗演算子
 
@@ -190,7 +314,7 @@ code = code.replace(/(\w+)\s*!=\s*(\w+)/g, '($1 !== $2 ? $1 : undefined)');
 code = code.replace(/(\w+)\s*;\s*(\w+)/g, '(($1 || $2) && !($1 && $2))');
 ```
 
-### 4.5 [5] 関数定義変換
+### 4.6 [6] 関数定義変換
 
 #### ラムダ式の基本変換
 
@@ -229,7 +353,7 @@ code = code.replace(/\[\s*\+\s*\]/g, '(x, y) => x + y');
 code = code.replace(/\[\s*\*\s*\]/g, '(x, y) => x * y');
 ```
 
-### 4.6 [6] リスト操作変換
+### 4.7 [7] リスト操作変換
 
 #### リスト構築
 
@@ -279,7 +403,7 @@ code = code.replace(/\[\s*\*\s*\]\s*(\w+)/g, '$1.reduce((acc, x) => acc * x)');
 code = code.replace(/(\w+)~/g, '...$1');
 ```
 
-### 4.7 [7] 特殊構文変換
+### 4.8 [8] 特殊構文変換
 
 #### 定義演算子（:）
 
@@ -346,7 +470,7 @@ code = code.replace(/(\w+)\s*#\s*(\w+)/g, 'writeMemory($1, $2)');
 code = code.replace(/(\w+)@/g, "require('$1')");
 ```
 
-### 4.8 [8] 識別子変換
+### 4.9 [9] 識別子変換
 
 #### Unit（_）の変換
 
@@ -366,7 +490,7 @@ jsReserved.forEach(word => {
 });
 ```
 
-### 4.9 [9] 最終整形
+### 4.10 [10] 最終整形
 
 #### リテラルの復元
 
@@ -486,7 +610,7 @@ const doubled = numbers.map(x => x * 2);
 const sum = doubled.reduce((acc, x) => acc + x);
 ```
 
-### 6.4 条件分岐
+### 6.4 条件分岐（match_case）
 
 **Sign:**
 ```sign
@@ -499,13 +623,57 @@ classify : x ?
 **JavaScript:**
 ```javascript
 const classify = x => {
-  return (x < 0 ? x : undefined) && "negative" ||
-         (x === 0 ? x : undefined) && "zero" ||
-         (x > 0 ? x : undefined) && "positive";
+  switch (true) {
+    case x < 0: return "negative";
+    case x === 0: return "zero";
+    case x > 0: return "positive";
+  }
 };
 ```
 
-### 6.5 高階関数
+**Sign（複数引数）:**
+```sign
+mySc : x y ?
+  x < 0 : x * -1
+  x = 0 : y
+  x > 0 : x
+```
+
+**JavaScript:**
+```javascript
+const mySc = x => y => {
+  switch (true) {
+    case x < 0: return x * -1;
+    case x === 0: return y;
+    case x > 0: return x;
+  }
+};
+```
+
+**Sign（デフォルトケース）:**
+```sign
+grade : score ?
+  score >= 90 : `A`
+  score >= 80 : `B`
+  score >= 70 : `C`
+  score >= 60 : `D`
+  `F`
+```
+
+**JavaScript:**
+```javascript
+const grade = score => {
+  switch (true) {
+    case score >= 90: return "A";
+    case score >= 80: return "B";
+    case score >= 70: return "C";
+    case score >= 60: return "D";
+    default: return "F";
+  }
+};
+```
+
+### 6.6 高階関数
 
 **Sign:**
 ```sign
@@ -545,6 +713,7 @@ const result = map(() => x => x * 2)(1, 2, 3, 4);
 - ✅ Lexer実装済み
 - ✅ リテラル変換
 - ✅ 基本演算子変換
+- ✅ match_case変換（switch文）
 - 🔄 関数定義変換（進行中）
 
 ### Phase 2: 高度な機能
