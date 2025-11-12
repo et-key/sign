@@ -29,3 +29,34 @@ const logic2 = (a || b);
 const logic3 = ((a || b) && !(a && b));
 const logic4 = ((x > 0 ? x : NaN) && (x < 100 ? x : NaN));
 const logic5 = ((y === 0 ? y : NaN) || (y === 10 ? y : NaN));
+const xx = 42;
+const yy = -5;
+const classify = xx => {
+  switch (true) {
+    case xx < 0: return "negative";
+    case xx === 0: return "zero";
+    case xx > 0: return "positive";
+  }
+};
+const result1 = classify(xx);
+const result2 = classify(yy);
+const mySc = xx => yy => {
+  switch (true) {
+    case xx < 0: return xx * -1;
+    case xx === 0: return yy;
+    case xx > 0: return xx;
+  }
+};
+const result3 = mySc(xx)(yy);
+const score = 85;
+const grade = score => {
+  switch (true) {
+    case score >= 90: return "A";
+    case score >= 80: return "B";
+    case score >= 70: return "C";
+    case score >= 60: return "D";
+    default: return "F";
+  }
+};
+const result4 = grade(score);
+const result5 = grade(50);
