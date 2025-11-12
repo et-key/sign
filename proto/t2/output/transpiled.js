@@ -60,3 +60,76 @@ const grade = score => {
 };
 const result4 = grade(score);
 const result5 = grade(50);
+const xxx = 5;
+const yyy = 3;
+const classify2D = xxx => yyy => {
+  switch (true) {
+    case xxx > 0:
+      switch (true) {
+        case yyy > 0: return "first quadrant";
+        case yyy < 0: return "fourth quadrant";
+        default: return "y-axis positive";
+      }
+      break;
+    case xxx < 0:
+      switch (true) {
+        case yyy > 0: return "second quadrant";
+        case yyy < 0: return "third quadrant";
+        default: return "y-axis negative";
+      }
+      break;
+    default:
+      switch (true) {
+        case yyy > 0: return "x-axis positive";
+        case yyy < 0: return "x-axis negative";
+        default: return "origin";
+      }
+      break;
+  }
+};
+const result_2_1 = classify2D(5)(3);
+const result_2_2 = classify2D(-5)(3);
+const result_2_3 = classify2D(5)(-3);
+const result_2_4 = classify2D(-5)(-3);
+const result_2_5 = classify2D(0)(5);
+const result_2_6 = classify2D(0)(0);
+const gradeWithBonus = score => bonus => {
+  switch (true) {
+    case bonus > 0:
+      switch (true) {
+        case score >= 85: return "A";
+        case score >= 75: return "B";
+        default: return "C";
+      }
+      break;
+    default:
+      switch (true) {
+        case score >= 90: return "A";
+        case score >= 80: return "B";
+        default: return "C";
+      }
+      break;
+  }
+};
+const result_2_7 = gradeWithBonus(85)(5);
+const result_2_8 = gradeWithBonus(85)(0);
+const increment = n => n + 1;
+const double = n => n * 2;
+const square = n => Math.pow(n, 2);
+const lambda_result1 = increment(5);
+const lambda_result2 = double(3);
+const lambda_result3 = square(4);
+const add = x => y => x + y;
+const multiply = x => y => x * y;
+const power = base => exp => Math.pow(base, exp);
+const lambda_result4 = add(10)(20);
+const lambda_result5 = multiply(3)(7);
+const lambda_result6 = power(2)(8);
+const sum3 = x => y => z => x + y + z;
+const product3 = x => y => z => x * y * z;
+const lambda_result9 = sum3(1)(2)(3);
+const lambda_result10 = product3(2)(3)(4);
+const addX = n => n + x;
+const multiplyY = n => n * y;
+const lambda_result11 = addX(10);
+const lambda_result12 = multiplyY(5);

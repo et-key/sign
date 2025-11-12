@@ -273,14 +273,64 @@ function transpileMatchCaseCondition(expr) {
 }
 
 /**
+ * ラムダ式かどうかを判定
+ * [params, "?", body] の形式で、bodyは単一の式
+ * params は 文字列 または 文字列の配列
+ */
+function isLambda(expr) {
+  // [params, "?", body] の形式かチェック
+  if (!Array.isArray(expr) || expr.length !== 3 || expr[1] !== '?') {
+    return false;
+  }
+  
+  const body = expr[2];
+  
+  // bodyが配列でない場合は単純なラムダ式
+  if (!Array.isArray(body)) {
+    return true;
+  }
+  
+  // bodyが配列の場合、match_caseかどうかを判定
+  // match_caseの場合: [[case1], [case2], ...] の形式
+  // 各caseは [[condition, ":", value]] または [[value]] の形式
+  
+  // bodyが空配列の場合はラムダ式として扱う
+  if (body.length === 0) {
+    return true;
+  }
+  
+  // 最初の要素を確認
+  const firstElement = body[0];
+  
+  // match_caseの場合: 最初の要素は配列で、その中にさらに配列がある
+  // [[condition, ":", value]] のような形式
+  if (Array.isArray(firstElement) && Array.isArray(firstElement[0])) {
+    // さらに中を確認：":"を含むかどうか
+    const innerExpr = firstElement[0];
+    if (Array.isArray(innerExpr) && innerExpr.includes(':')) {
+      return false; // match_case
+    }
+    // デフォルトケースの可能性: [[value]] の形式
+    // これもmatch_caseの一部
+    return false;
+  }
+  
+  // それ以外はラムダ式として扱う
+  return true;
+}
+
+/**
  * match_case構文かどうかを判定
- * ["?", params, cases] の形式
+ * [params, "?", cases] の形式
  */
 function isMatchCase(expr) {
-  return Array.isArray(expr) &&
-         expr.length === 3 &&
-         expr[0] === '?' &&
-         Array.isArray(expr[2]);
+  // [params, "?", cases] の形式かチェック
+  if (!Array.isArray(expr) || expr.length !== 3 || expr[1] !== '?') {
+    return false;
+  }
+  
+  // ラムダ式でない場合はmatch_case
+  return !isLambda(expr);
 }
 
 /**
@@ -308,6 +358,21 @@ function buildCurriedArrow(params, body) {
 }
 
 /**
+ * ラムダ式を変換
+ * ["?", params, body] → カリー化アロー関数
+ */
+function transpileLambda(params, body) {
+  // パラメータの正規化
+  const paramList = normalizeParams(params);
+  
+  // 本体を変換
+  const bodyStr = transpileInfixExpression(body);
+  
+  // カリー化関数を構築
+  return buildCurriedArrow(paramList, bodyStr);
+}
+
+/**
  * match_case構文を変換
  * ["?", params, cases] → カリー化関数 + switch文
  */
@@ -326,14 +391,32 @@ function transpileMatchCase(params, cases) {
     if (Array.isArray(caseExpr) && caseExpr.length === 3 && caseExpr[1] === ':') {
       // 条件付きケース: [condition, ":", value]
       const condition = transpileMatchCaseCondition(caseExpr[0]);  // 真偽値として変換
-      const value = transpileInfixExpression(caseExpr[2]);         // 通常の式として変換
+      const valueExpr = caseExpr[2];
+      
+      // 返値がmatch_caseの場合、switch文本体のみを取り出す
+      let value;
+      if (isMatchCase(valueExpr)) {
+        value = transpileNestedMatchCase(valueExpr);  // ネスト用の変換
+      } else {
+        value = transpileInfixExpression(valueExpr);  // 通常の式として変換
+      }
+      
       normalCases.push({ condition, value });
     } else if (Array.isArray(caseExpr) && caseExpr.length === 1) {
       // デフォルトケース: [value]
-      defaultCase = transpileInfixExpression(caseExpr[0]);
+      const valueExpr = caseExpr[0];
+      if (isMatchCase(valueExpr)) {
+        defaultCase = transpileNestedMatchCase(valueExpr);
+      } else {
+        defaultCase = transpileInfixExpression(valueExpr);
+      }
     } else {
       // デフォルトケース: value（配列でない場合）
-      defaultCase = transpileInfixExpression(caseExpr);
+      if (isMatchCase(caseExpr)) {
+        defaultCase = transpileNestedMatchCase(caseExpr);
+      } else {
+        defaultCase = transpileInfixExpression(caseExpr);
+      }
     }
   });
   
@@ -341,17 +424,95 @@ function transpileMatchCase(params, cases) {
   let switchBody = '{\n  switch (true) {\n';
   
   normalCases.forEach(c => {
-    switchBody += `    case ${c.condition}: return ${c.value};\n`;
+    // 値がswitch文の場合は、ネストしたswitchとして展開
+    if (c.value.startsWith('switch (true)')) {
+      switchBody += `    case ${c.condition}:\n      ${c.value.replace(/\n/g, '\n      ')}\n      break;\n`;
+    } else {
+      switchBody += `    case ${c.condition}: return ${c.value};\n`;
+    }
   });
   
   if (defaultCase !== null) {
-    switchBody += `    default: return ${defaultCase};\n`;
+    // デフォルト値がswitch文の場合
+    if (defaultCase.startsWith('switch (true)')) {
+      switchBody += `    default:\n      ${defaultCase.replace(/\n/g, '\n      ')}\n      break;\n`;
+    } else {
+      switchBody += `    default: return ${defaultCase};\n`;
+    }
   }
   
   switchBody += '  }\n}';
   
   // カリー化関数を構築
   return buildCurriedArrow(paramList, switchBody);
+}
+
+/**
+ * ネストしたmatch_caseを変換（返値として使用される場合）
+ * 関数ラッパーなしでswitch文本体のみを返す
+ */
+function transpileNestedMatchCase(expr) {
+  const [params, , cases] = expr; // params ? cases
+  
+  // パラメータは無視（既に外側で定義されている）
+  // ケースの処理
+  const normalCases = [];
+  let defaultCase = null;
+  
+  cases.forEach(caseBlock => {
+    const caseExpr = caseBlock[0];
+    
+    if (Array.isArray(caseExpr) && caseExpr.length === 3 && caseExpr[1] === ':') {
+      const condition = transpileMatchCaseCondition(caseExpr[0]);
+      const valueExpr = caseExpr[2];
+      
+      // さらにネストしている場合も対応
+      let value;
+      if (isMatchCase(valueExpr)) {
+        value = transpileNestedMatchCase(valueExpr);
+      } else {
+        value = transpileInfixExpression(valueExpr);
+      }
+      
+      normalCases.push({ condition, value });
+    } else if (Array.isArray(caseExpr) && caseExpr.length === 1) {
+      const valueExpr = caseExpr[0];
+      if (isMatchCase(valueExpr)) {
+        defaultCase = transpileNestedMatchCase(valueExpr);
+      } else {
+        defaultCase = transpileInfixExpression(valueExpr);
+      }
+    } else {
+      if (isMatchCase(caseExpr)) {
+        defaultCase = transpileNestedMatchCase(caseExpr);
+      } else {
+        defaultCase = transpileInfixExpression(caseExpr);
+      }
+    }
+  });
+  
+  // switch文の構築（関数ラッパーなし）
+  let switchBody = 'switch (true) {\n';
+  
+  normalCases.forEach(c => {
+    if (c.value.startsWith('switch (true)')) {
+      switchBody += `  case ${c.condition}:\n    ${c.value.replace(/\n/g, '\n    ')}\n    break;\n`;
+    } else {
+      switchBody += `  case ${c.condition}: return ${c.value};\n`;
+    }
+  });
+  
+  if (defaultCase !== null) {
+    if (defaultCase.startsWith('switch (true)')) {
+      switchBody += `  default:\n    ${defaultCase.replace(/\n/g, '\n    ')}\n    break;\n`;
+    } else {
+      switchBody += `  default: return ${defaultCase};\n`;
+    }
+  }
+  
+  switchBody += '}';
+  
+  return switchBody;
 }
 
 // ==========================================
@@ -409,9 +570,15 @@ function transpileFunctionApplication(expr) {
  * 式を再帰的にトランスパイル（中置記法）
  */
 function transpileInfixExpression(expr) {
-  // match_case構文の検出
+  // ラムダ式の検出（match_caseより優先）: [params, "?", body]
+  if (isLambda(expr)) {
+    const [params, , body] = expr; // params ? body
+    return transpileLambda(params, body);
+  }
+  
+  // match_case構文の検出: [params, "?", cases]
   if (isMatchCase(expr)) {
-    const [, params, cases] = expr;
+    const [params, , cases] = expr; // params ? cases
     return transpileMatchCase(params, cases);
   }
   
@@ -536,9 +703,13 @@ module.exports = {
   // match_case関連
   isMatchCase,
   transpileMatchCase,
+  transpileNestedMatchCase,
   transpileMatchCaseCondition,
   normalizeParams,
   buildCurriedArrow,
+  // ラムダ式関連
+  isLambda,
+  transpileLambda,
   // 関数適用
   isFunctionApplication,
   transpileFunctionApplication
