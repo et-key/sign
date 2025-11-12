@@ -1,0 +1,211 @@
+// ==========================================
+// 基本的な定義
+// ==========================================
+
+x : 42
+y : 10
+
+// ==========================================
+// 基本算術演算
+// ==========================================
+
+sum : x + y
+diff : x - y
+product : x * y
+quotient : x / y
+
+calc1 : 10 + 20
+calc2 : 5 * 3
+calc3 : 100 - 25
+calc4 : 50 / 2
+
+// ==========================================
+// 演算子の優先順位
+// ==========================================
+
+complex1 : 10 + 20 * 3
+complex2 : 100 - 50 / 2
+complex3 : 2 * 3 + 4 * 5
+
+// ==========================================
+// 累乗演算
+// ==========================================
+
+power1 : 2 ^ 3
+power2 : x ^ 2
+power3 : 2 ^ 3 * 5
+
+// ==========================================
+// 剰余演算
+// ==========================================
+
+mod1 : 10 % 3
+mod2 : 100 % 7
+
+// ==========================================
+// 比較演算（値返却型）
+// ==========================================
+
+compare1 : x < 50
+compare2 : y > 5
+compare3 : x = 42
+compare4 : 10 <= 20
+compare5 : 50 >= 30
+compare6 : x != 0
+
+// ==========================================
+// 論理演算
+// ==========================================
+
+a : 1
+b : 0
+
+logic1 : a & b
+logic2 : a | b
+logic3 : a ; b
+logic4 : x > 0 & x < 100
+logic5 : y = 0 | y = 10
+
+// ==========================================
+// match_case構文（単一引数）
+// ==========================================
+
+xx : 42
+yy : -5
+
+classify : xx ?
+	xx < 0 : `negative`
+	xx = 0 : `zero`
+	xx > 0 : `positive`
+
+result1 : classify xx
+result2 : classify yy
+
+// ==========================================
+// match_case構文（カリー化・複数引数）
+// ==========================================
+
+mySc : xx yy ?
+	xx < 0 : xx * -1
+	xx = 0 : yy
+	xx > 0 : xx
+
+result3 : mySc xx yy
+
+// ==========================================
+// match_case構文（デフォルトケース）
+// ==========================================
+
+score : 85
+
+grade : score ?
+	score >= 90 : `A`
+	score >= 80 : `B`
+	score >= 70 : `C`
+	score >= 60 : `D`
+	`F`
+
+result4 : grade score
+result5 : grade 50
+
+// ==========================================
+// ネストしたmatch_case構文（2段階）
+// ==========================================
+
+xxx : 5
+yyy : 3
+
+classify2D : xxx yyy ?
+	xxx > 0 :
+		yyy ?
+			yyy > 0 : `first quadrant`
+			yyy < 0 : `fourth quadrant`
+			`y-axis positive`
+	xxx < 0 :
+		yyy ?
+			yyy > 0 : `second quadrant`
+			yyy < 0 : `third quadrant`
+			`y-axis negative`
+	yyy ?
+		yyy > 0 : `x-axis positive`
+		yyy < 0 : `x-axis negative`
+		`origin`
+
+result_2_1 : classify2D 5 3
+result_2_2 : classify2D -5 3
+result_2_3 : classify2D 5 -3
+result_2_4 : classify2D -5 -3
+result_2_5 : classify2D 0 5
+result_2_6 : classify2D 0 0
+
+// ==========================================
+// ネストしたmatch_case構文（2段階・条件内にネスト）
+// ==========================================
+
+gradeWithBonus : score bonus ?
+	bonus > 0 :
+		score ?
+			score >= 85 : `A`
+			score >= 75 : `B`
+			`C`
+	score ?
+		score >= 90 : `A`
+		score >= 80 : `B`
+		`C`
+
+result_2_7 : gradeWithBonus 85 5
+result_2_8 : gradeWithBonus 85 0
+
+// ==========================================
+// ラムダ式（単一引数）
+// ==========================================
+
+increment : n ? n + 1
+double : n ? n * 2
+square : n ? n ^ 2
+
+lambda_result1 : increment 5
+lambda_result2 : double 3
+lambda_result3 : square 4
+
+// ==========================================
+// ラムダ式（カリー化・複数引数）
+// ==========================================
+
+add : x y ? x + y
+multiply : x y ? x * y
+power : base exp ? base ^ exp
+
+lambda_result4 : add 10 20
+lambda_result5 : multiply 3 7
+lambda_result6 : power 2 8
+
+// ==========================================
+// ラムダ式（複雑な式）
+// ==========================================
+
+quadratic : a b c x ? a * x ^ 2 + b * x + c
+distance : x1 y1 x2 y2 ? (x2 - x1) ^ 2 + (y2 - y1) ^ 2
+
+lambda_result7 : quadratic 1 2 3 5
+lambda_result8 : distance 0 0 3 4
+
+// ==========================================
+// ラムダ式（3引数以上）
+// ==========================================
+
+sum3 : x y z ? x + y + z
+product3 : x y z ? x * y * z
+
+lambda_result9 : sum3 1 2 3
+lambda_result10 : product3 2 3 4
+
+// ==========================================
+// ラムダ式と既存の値の組み合わせ
+// ==========================================
+
+addX : n ? n + x
+multiplyY : n ? n * y
+
+lambda_result11 : addX 10
+lambda_result12 : multiplyY 5
