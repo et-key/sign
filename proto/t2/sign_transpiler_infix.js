@@ -161,17 +161,17 @@ function convertPower(left, right) {
 }
 
 /**
- * 比較演算子: [x, <, y] → (x < y ? x : undefined)
+ * 比較演算子: [x, <, y] → (x < y ? x : NaN)
  */
 function convertComparison(left, operator, right) {
-  return `(${left} ${operator} ${right} ? ${left} : undefined)`;
+  return `(${left} ${operator} ${right} ? ${left} : NaN)`;
 }
 
 /**
- * 等価比較: [x, =, y] → (x === y ? x : undefined)
+ * 等価比較: [x, =, y] → (x === y ? x : NaN)
  */
 function convertEqual(left, right) {
-  return `(${left} === ${right} ? ${left} : undefined)`;
+  return `(${left} === ${right} ? ${left} : NaN)`;
 }
 
 /**
@@ -208,7 +208,7 @@ const INFIX_OPERATOR_TABLE = {
   '%': convertModulo,
   '^': convertPower,
   
-  // 比較演算子
+  // 比較演算子（真なら左辺、偽ならNaN）
   '<': (l, r) => convertComparison(l, '<', r),
   '<=': (l, r) => convertComparison(l, '<=', r),
   '=': convertEqual,
