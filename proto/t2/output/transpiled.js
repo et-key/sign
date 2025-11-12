@@ -1,0 +1,13 @@
+const x = 42;
+const y = 10;
+const sum = x + y;
+const diff = x - y;
+const product = x * y;
+const quotient = x / y;
+const calc1 = 10 + 20;
+const calc2 = 5 * 3;
+const calc3 = 100 - 25;
+const calc4 = 50 / 2;
+const complex1 = 10 + 20 * 3;
+const complex2 = 100 - 50 / 2;
+const complex3 = 2 * 3 + 4 * 5;
