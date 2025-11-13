@@ -1,3 +1,22 @@
+// Helper functions
+function range(start, end, step) {
+  const result = [];
+  // stepが未指定の場合、自動判定
+  if (step === undefined) {
+    step = start <= end ? 1 : -1;
+  }
+  if (step > 0) {
+    for (let i = start; i <= end; i += step) {
+      result.push(i);
+    }
+  } else {
+    for (let i = start; i >= end; i += step) {
+      result.push(i);
+    }
+  }
+  return result;
+}
+
 const x = 42;
 const y = 10;
 const sum = x + y;
@@ -70,21 +89,18 @@ const classify2D = xxx => yyy => {
         case yyy < 0: return "fourth quadrant";
         default: return "y-axis positive";
       }
-      break;
     case xxx < 0:
       switch (true) {
         case yyy > 0: return "second quadrant";
         case yyy < 0: return "third quadrant";
         default: return "y-axis negative";
       }
-      break;
     default:
       switch (true) {
         case yyy > 0: return "x-axis positive";
         case yyy < 0: return "x-axis negative";
         default: return "origin";
       }
-      break;
   }
 };
 const result_2_1 = classify2D(5)(3);
@@ -101,14 +117,12 @@ const gradeWithBonus = score => bonus => {
         case score >= 75: return "B";
         default: return "C";
       }
-      break;
     default:
       switch (true) {
         case score >= 90: return "A";
         case score >= 80: return "B";
         default: return "C";
       }
-      break;
   }
 };
 const result_2_7 = gradeWithBonus(85)(5);
@@ -125,6 +139,18 @@ const power = base => exp => Math.pow(base, exp);
 const lambda_result4 = add(10)(20);
 const lambda_result5 = multiply(3)(7);
 const lambda_result6 = power(2)(8);
+const quadratic = a => b => c => x => {
+  switch (true) {
+    default: return c;
+  }
+};
+const distance = x1 => y1 => x2 => y2 => {
+  switch (true) {
+    default: return y2 - y1;
+  }
+};
+const lambda_result7 = quadratic(1)(2)(3)(5);
+const lambda_result8 = distance(0)(0)(3)(4);
 const sum3 = x => y => z => x + y + z;
 const product3 = x => y => z => x * y * z;
 const lambda_result9 = sum3(1)(2)(3);
@@ -133,3 +159,44 @@ const addX = n => n + x;
 const multiplyY = n => n * y;
 const lambda_result11 = addX(10);
 const lambda_result12 = multiplyY(5);
+const list1 = [1, 2, 3];
+const list2 = [10, 20, 30, 40];
+const list3 = [x, y, sum];
+const emptyList = [];
+const singleList = [42];
+const range1 = range(1, 5);
+const range2 = range(0, 10);
+const range3 = range(10, 1);
+const range4 = range(-5, 5);
+const concat1 = [...list1, ...list2];
+const concat2 = [...[1, 2], ...[3, 4]];
+const concat3 = [...list1, ...[100, 200]];
+const concat4 = [...[1], ...[2], ...[3]];
+const doubled = list1.map(x => x * 2);
+const added = list1.map(x => x + 10);
+const squared = list1.map(x => Math.pow(x, 2));
+const halved = list2.map(x => x / 2);
+const sum_list = list1.reduce((acc, x) => acc + x);
+const sum_range = range(1, 10).reduce((acc, x) => acc + x);
+const product_list = list1.reduce((acc, x) => acc * x);
+const product_range = range(1, 5).reduce((acc, x) => acc * x);
+const spread1 = sum3(...list1);
+const spread2 = add(...list1);
+const spread3 = [0, [...list1, 100]];
+const map_then_fold = list1.map(x => x * 2).reduce((acc, x) => acc + x);
+const range_map_fold = range(1, 5).map(x => Math.pow(x, 2)).reduce((acc, x) => acc + x);
+const concat_then_map = [...list1, ...list2].map(x => x + 1);
+const custom_map1 = list1.map(n => n * 3);
+const custom_map2 = list1.map(n => Math.pow(n, 2));
+const complex_map1 = [1, 2, 3].map(x => x * 2 + 1);
+const complex_map2 = [5, 6, 7].map(x => x * 3 - 10);
+const nested_2d = [[1, 2], [3, 4]];
+const nested_flat = [...[1, 2], ...[3, 4]];
+const nested_3d = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]];
+const first = list1[0];
+const slice1 = list2.slice(0, 3);
+const fib_sum = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55].reduce((acc, x) => acc + x);
+const squares = range(1, 10).map(x => Math.pow(x, 2));
+const factorial_5 = range(1, 5).reduce((acc, x) => acc * x);
+const even_sum = range(1, 5).map(x => x * 2).reduce((acc, x) => acc + x);
+const sum_of_squares = range(1, 5).map(x => Math.pow(x, 2)).reduce((acc, x) => acc + x);
