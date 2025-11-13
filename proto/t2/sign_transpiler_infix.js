@@ -197,6 +197,81 @@ function convertXor(left, right) {
 }
 
 // ==========================================
+// 2.5 単項演算子の変換
+// ==========================================
+
+/**
+ * 前置演算子かどうかを判定
+ * ["演算子", オペランド] の形式
+ */
+function isPrefixUnaryOperation(expr) {
+  if (!Array.isArray(expr) || expr.length !== 2) {
+    return false;
+  }
+  
+  const operator = expr[0];
+  // 前置演算子: ! (NOT) と - (符号反転)
+  return operator === '!' || operator === '-';
+}
+
+/**
+ * 後置演算子かどうかを判定
+ * [オペランド, "演算子"] の形式
+ */
+function isPostfixUnaryOperation(expr) {
+  if (!Array.isArray(expr) || expr.length !== 2) {
+    return false;
+  }
+  
+  const operator = expr[1];
+  // 後置演算子: ! (階乗)
+  return operator === '!';
+}
+
+/**
+ * 絶対値演算子かどうかを判定
+ * ["|", オペランド, "|"] の形式
+ */
+function isAbsoluteValue(expr) {
+  return Array.isArray(expr) && 
+         expr.length === 3 && 
+         expr[0] === '|' && 
+         expr[2] === '|';
+}
+
+/**
+ * 論理NOT: [!, x] → (!x) または (!(expr))
+ */
+function convertLogicalNot(operand) {
+  // operandが複雑な式の場合は、括弧で囲む
+  return `(!(${operand}))`;
+}
+
+/**
+ * 符号反転: [-, x] → (-x) または (-(expr))
+ */
+function convertNegate(operand) {
+  // operandが複雑な式の場合は、括弧で囲む
+  return `(-(${operand}))`;
+}
+
+/**
+ * 階乗: [x, !] → Sign_factorial(x)
+ */
+function convertFactorial(operand) {
+  // operandが複雑な式の場合は、括弧で囲む
+  return `Sign_factorial((${operand}))`;
+}
+
+/**
+ * 絶対値: [|, x, |] → Math.abs(x)
+ */
+function convertAbsoluteValue(operand) {
+  // operandが複雑な式の場合は、括弧で囲む
+  return `Math.abs((${operand}))`;
+}
+
+// ==========================================
 // 3. 演算子テーブル（中置記法用）
 // ==========================================
 
@@ -971,6 +1046,35 @@ function transpileInfixExpression(expr) {
     return transpileBracketExpression(expr);
   }
   
+  // 単項演算子の検出と処理
+  // 絶対値（囲み演算子）
+  if (isAbsoluteValue(expr)) {
+    const operand = transpileInfixExpression(expr[1]);
+    return convertAbsoluteValue(operand);
+  }
+  
+  // 前置演算子
+  if (isPrefixUnaryOperation(expr)) {
+    const [operator, operand] = expr;
+    const operandStr = transpileInfixExpression(operand);
+    
+    if (operator === '!') {
+      return convertLogicalNot(operandStr);
+    } else if (operator === '-') {
+      return convertNegate(operandStr);
+    }
+  }
+  
+  // 後置演算子
+  if (isPostfixUnaryOperation(expr)) {
+    const [operand, operator] = expr;
+    const operandStr = transpileInfixExpression(operand);
+    
+    if (operator === '!') {
+      return convertFactorial(operandStr);
+    }
+  }
+  
   // ラムダ式の検出（match_caseより優先）: [params, "?", body]
   if (isLambda(expr)) {
     const [params, , body] = expr; // params ? body
@@ -1108,6 +1212,16 @@ function range(start, end, step) {
   return result;
 }
 
+function Sign_factorial(n) {
+  if (n < 0) return NaN;
+  if (n === 0 || n === 1) return 1;
+  let result = 1;
+  for (let i = 2; i <= n; i++) {
+    result *= i;
+  }
+  return result;
+}
+
 `;
   
   return helperFunctions + statements.join('\n');
@@ -1148,5 +1262,13 @@ module.exports = {
   convertRange,
   convertGet,
   hasPostfixTilde,
-  convertPostfixTilde
+  convertPostfixTilde,
+  // 単項演算子関連
+  isPrefixUnaryOperation,
+  isPostfixUnaryOperation,
+  isAbsoluteValue,
+  convertLogicalNot,
+  convertNegate,
+  convertFactorial,
+  convertAbsoluteValue
 };
