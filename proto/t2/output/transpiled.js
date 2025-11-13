@@ -139,16 +139,8 @@ const power = base => exp => Math.pow(base, exp);
 const lambda_result4 = add(10)(20);
 const lambda_result5 = multiply(3)(7);
 const lambda_result6 = power(2)(8);
-const quadratic = a => b => c => x => {
-  switch (true) {
-    default: return c;
-  }
-};
-const distance = x1 => y1 => x2 => y2 => {
-  switch (true) {
-    default: return y2 - y1;
-  }
-};
+const quadratic = a => b => c => x => a * Math.pow(x, 2) + b * x + c;
+const distance = x1 => y1 => x2 => y2 => Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2);
 const lambda_result7 = quadratic(1)(2)(3)(5);
 const lambda_result8 = distance(0)(0)(3)(4);
 const sum3 = x => y => z => x + y + z;

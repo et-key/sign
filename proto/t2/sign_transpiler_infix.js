@@ -537,31 +537,56 @@ function isLambda(expr) {
   }
   
   // bodyが配列の場合、match_caseかどうかを判定
-  // match_caseの場合: [[case1], [case2], ...] の形式
-  // 各caseは [[condition, ":", value]] または [[value]] の形式
+  // match_caseの厳密な構造: [[case1], [case2], ...] の形式
+  // 各caseは必ず配列で1重にラップされている
   
   // bodyが空配列の場合はラムダ式として扱う
   if (body.length === 0) {
     return true;
   }
   
-  // 最初の要素を確認
-  const firstElement = body[0];
+  // match_caseの判定: 全ての要素が配列で1重ラップされているか
+  // そして、その内部に":"を含む条件節、または単一要素のデフォルトケースがあるか
+  const allElementsAreWrappedArrays = body.every(element => Array.isArray(element));
   
-  // match_caseの場合: 最初の要素は配列で、その中にさらに配列がある
-  // [[condition, ":", value]] のような形式
-  if (Array.isArray(firstElement) && Array.isArray(firstElement[0])) {
-    // さらに中を確認：":"を含むかどうか
-    const innerExpr = firstElement[0];
-    if (Array.isArray(innerExpr) && innerExpr.includes(':')) {
-      return false; // match_case
-    }
-    // デフォルトケースの可能性: [[value]] の形式
-    // これもmatch_caseの一部
-    return false;
+  if (!allElementsAreWrappedArrays) {
+    // 全要素が配列でない場合は、通常の式（ラムダ式）
+    return true;
   }
   
-  // それ以外はラムダ式として扱う
+  // 全要素が配列の場合、さらに検証
+  // match_caseかどうかを判定するために、内部構造を確認
+  const hasMatchCaseStructure = body.some(element => {
+    if (!Array.isArray(element) || element.length === 0) {
+      return false;
+    }
+    
+    const innerElement = element[0];
+    
+    // [[condition, ":", value]] の形式を検出
+    if (Array.isArray(innerElement) && innerElement.length === 3 && innerElement[1] === ':') {
+      return true;
+    }
+    
+    // [[value]] の形式（デフォルトケース）を検出
+    // ただし、これが単なる式の一部でないことを確認
+    // デフォルトケースは通常、単一要素の配列
+    if (Array.isArray(innerElement) && element.length === 1) {
+      // これがmatch_caseのデフォルトケースかどうかは、
+      // 他の要素も見て判断する必要がある
+      return false; // とりあえず保留
+    }
+    
+    return false;
+  });
+  
+  if (hasMatchCaseStructure) {
+    return false; // match_case
+  }
+  
+  // ここまで来た場合、bodyは式の構造
+  // 例: [[a, *, [x, ^, 2]], "+", [b, *, x]] のような二項演算
+  // この場合はラムダ式として扱う
   return true;
 }
 
