@@ -240,18 +240,45 @@ function isAbsoluteValue(expr) {
 }
 
 /**
- * 論理NOT: [!, x] → (!x) または (!(expr))
+ * 単純な式かどうかを判定（括弧が不要な式）
+ */
+function isSimpleExpression(expr) {
+  // 識別子
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(expr)) {
+    return true;
+  }
+  // 数値リテラル
+  if (/^-?\d+(\.\d+)?$/.test(expr)) {
+    return true;
+  }
+  // 文字列リテラル
+  if (/^".*"$/.test(expr)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 論理NOT: [!, x] → !x または (!(expr))
  */
 function convertLogicalNot(operand) {
-  // operandが複雑な式の場合は、括弧で囲む
+  // operandが単純な式の場合は括弧不要
+  if (isSimpleExpression(operand)) {
+    return `!${operand}`;
+  }
+  // 複雑な式の場合は括弧で囲む
   return `(!(${operand}))`;
 }
 
 /**
- * 符号反転: [-, x] → (-x) または (-(expr))
+ * 符号反転: [-, x] → -x または (-(expr))
  */
 function convertNegate(operand) {
-  // operandが複雑な式の場合は、括弧で囲む
+  // operandが単純な式の場合は括弧不要
+  if (isSimpleExpression(operand)) {
+    return `-${operand}`;
+  }
+  // 複雑な式の場合は括弧で囲む
   return `(-(${operand}))`;
 }
 
@@ -259,7 +286,11 @@ function convertNegate(operand) {
  * 階乗: [x, !] → Sign_factorial(x)
  */
 function convertFactorial(operand) {
-  // operandが複雑な式の場合は、括弧で囲む
+  // operandが単純な式の場合は括弧不要
+  if (isSimpleExpression(operand)) {
+    return `Sign_factorial(${operand})`;
+  }
+  // 複雑な式の場合は括弧で囲む
   return `Sign_factorial((${operand}))`;
 }
 
@@ -267,7 +298,11 @@ function convertFactorial(operand) {
  * 絶対値: [|, x, |] → Math.abs(x)
  */
 function convertAbsoluteValue(operand) {
-  // operandが複雑な式の場合は、括弧で囲む
+  // operandが単純な式の場合は括弧不要
+  if (isSimpleExpression(operand)) {
+    return `Math.abs(${operand})`;
+  }
+  // 複雑な式の場合は括弧で囲む
   return `Math.abs((${operand}))`;
 }
 
@@ -1389,6 +1424,7 @@ module.exports = {
   convertNegate,
   convertFactorial,
   convertAbsoluteValue,
+  isSimpleExpression,
   // 型推論関連
   inferType,
   registerSymbol,
