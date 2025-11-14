@@ -977,46 +977,41 @@ function transpileFunctionApplication(expr) {
     }
   }
   
-  // リスト結合の検出: 両方が識別子で、ブラケット構文でない場合
-  // 例: list1 list2 → [...list1, ...list2]
+  // リスト結合の検出: 型情報を使った判定
+  // 例: list1 list2 → [...list1, ...list2] (list1とlist2が両方リスト型の場合)
   if (args.length === 1 && 
       typeof func === 'string' && 
       typeof args[0] === 'string' &&
       !isBracketExpression(func) &&
       !isBracketExpression(args[0])) {
-    // 変数名に明示的なリスト関連の単語が含まれる場合のみリスト結合と判断
-    const isLikelyList = (name) => {
-      // 数値リテラルはリストではない
-      if (typeof name === 'string' && /^-?\d+(\.\d+)?$/.test(name)) {
-        return false;
-      }
-      // 明示的なリスト関連の単語を含む場合のみ
-      return /list|array|concat|range|items|elements/i.test(name);
-    };
     
-    // 両方がリストらしい名前の場合のみリスト結合
-    if (isLikelyList(func) && isLikelyList(args[0])) {
+    // 型情報を取得
+    const funcType = inferType(func);
+    const argType = inferType(args[0]);
+    
+    // 両方がリスト型の場合はリスト結合
+    if (funcType === 'list' && argType === 'list') {
       const arg = transpileInfixExpression(args[0]);
       return `[...${funcStr}, ...${arg}]`;
     }
+    
+    // それ以外は関数適用として処理（後続の処理へ）
   }
   
   // 複数引数のリスト結合: list1 list2 list3 → [...list1, ...list2, ...list3]
   if (args.length > 1 && args.every(arg => typeof arg === 'string')) {
     const allArgs = [func, ...args];
-    const isLikelyList = (name) => {
-      // 数値リテラルはリストではない
-      if (typeof name === 'string' && /^-?\d+(\.\d+)?$/.test(name)) {
-        return false;
-      }
-      // 明示的なリスト関連の単語を含む場合のみ
-      return typeof name === 'string' && /list|array|concat|range|items|elements/i.test(name);
-    };
     
-    if (allArgs.every(isLikelyList)) {
+    // すべての引数の型を確認
+    const types = allArgs.map(arg => inferType(arg));
+    
+    // すべてがリスト型の場合のみリスト結合
+    if (types.every(t => t === 'list')) {
       const spreads = allArgs.map(arg => `...${transpileInfixExpression(arg)}`).join(', ');
       return `[${spreads}]`;
     }
+    
+    // それ以外は関数適用として処理（後続の処理へ）
   }
   
   // 通常の関数適用
@@ -1122,7 +1117,121 @@ function transpileInfixExpression(expr) {
 }
 
 // ==========================================
-// 7. 定義演算子の処理
+// 7. シンボルテーブルと型推論
+// ==========================================
+
+// グローバルなシンボルテーブル
+const symbolTable = {};
+
+/**
+ * 式の型を推論
+ */
+function inferType(expr) {
+  // ブラケット式はリスト型
+  if (isBracketExpression(expr)) {
+    return 'list';
+  }
+  
+  // 配列の場合（構造を持つ式）
+  if (Array.isArray(expr)) {
+    // match_case構文は関数型
+    if (isMatchCase(expr) || isLambda(expr)) {
+      return 'function';
+    }
+    
+    // 二項演算の結果型を推論
+    if (isBinaryOperation(expr)) {
+      const [left, operator, right] = expr;
+      
+      // カンマ演算子はリスト型を生成
+      if (operator === ',') {
+        return 'list';
+      }
+      
+      // 範囲演算子はリスト型を生成
+      if (operator === '~') {
+        return 'list';
+      }
+      
+      // その他の演算子は左右のオペランドの型に依存
+      const leftType = inferType(left);
+      const rightType = inferType(right);
+      
+      // 両方がリストの場合、リスト結合の可能性
+      if (leftType === 'list' && rightType === 'list') {
+        return 'list';
+      }
+      
+      // 算術演算は数値型
+      if (['+', '-', '*', '/', '%', '^'].includes(operator)) {
+        return 'number';
+      }
+      
+      // 比較・論理演算は真偽値型
+      if (['<', '<=', '=', '==', '>', '>=', '!=', '&', '|', ';'].includes(operator)) {
+        return 'boolean';
+      }
+    }
+    
+    // 関数適用の場合
+    if (isFunctionApplication(expr)) {
+      const [func, ...args] = expr;
+      
+      // MAP式はリスト型を返す
+      if (isBracketExpression(func) && isMapExpression(func)) {
+        return 'list';
+      }
+      
+      // FOLD式は要素型を返す（簡易的には'number'とする）
+      if (isBracketExpression(func) && isFoldExpression(func)) {
+        return 'number';
+      }
+      
+      // 関数の返り値型は関数定義に依存（簡易的には'unknown'）
+      return 'unknown';
+    }
+    
+    return 'unknown';
+  }
+  
+  // 文字列トークンの場合
+  if (typeof expr === 'string') {
+    // 数値リテラル
+    if (/^-?\d+(\.\d+)?$/.test(expr)) {
+      return 'number';
+    }
+    
+    // 文字列リテラル
+    if (expr.startsWith('`') && expr.endsWith('`')) {
+      return 'string';
+    }
+    
+    // 識別子の場合、シンボルテーブルを参照
+    if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(expr)) {
+      return symbolTable[expr]?.type || 'unknown';
+    }
+  }
+  
+  return 'unknown';
+}
+
+/**
+ * シンボルテーブルに型情報を登録
+ */
+function registerSymbol(name, expr) {
+  const type = inferType(expr);
+  symbolTable[name] = { type, expr };
+}
+
+/**
+ * シンボルテーブルをリセット（テスト用）
+ */
+function resetSymbolTable() {
+  Object.keys(symbolTable).forEach(key => delete symbolTable[key]);
+}
+
+// ==========================================
+// 8. 定義演算子の処理
 // ==========================================
 
 /**
@@ -1152,19 +1261,25 @@ function transpileDefinition(tokens) {
   const name = convertAtom(namePart[0]);
   
   // 値が単一トークンか配列か
-  let value;
+  let valueExpr;
   if (valuePart.length === 1) {
-    value = transpileInfixExpression(valuePart[0]);
+    valueExpr = valuePart[0];
   } else {
     // 複数トークンの場合（通常はありえないが）
-    value = valuePart.map(transpileInfixExpression).join(' ');
+    valueExpr = valuePart;
   }
+  
+  // シンボルテーブルに登録（型推論）
+  registerSymbol(name, valueExpr);
+  
+  // トランスパイル
+  const value = transpileInfixExpression(valueExpr);
   
   return `const ${name} = ${value}`;
 }
 
 // ==========================================
-// 8. 文とプログラムの変換
+// 9. 文とプログラムの変換
 // ==========================================
 
 /**
@@ -1189,6 +1304,9 @@ function transpileStatement(statement) {
  */
 function transpile(tokensJson) {
   // tokensJson = [[statement1], [statement2], ...]
+  
+  // シンボルテーブルをリセット
+  resetSymbolTable();
   
   const statements = tokensJson.map(transpileStatement);
   
@@ -1228,7 +1346,7 @@ function Sign_factorial(n) {
 }
 
 // ==========================================
-// 9. エクスポート
+// 10. エクスポート
 // ==========================================
 
 module.exports = {
@@ -1270,5 +1388,10 @@ module.exports = {
   convertLogicalNot,
   convertNegate,
   convertFactorial,
-  convertAbsoluteValue
+  convertAbsoluteValue,
+  // 型推論関連
+  inferType,
+  registerSymbol,
+  resetSymbolTable,
+  symbolTable
 };
