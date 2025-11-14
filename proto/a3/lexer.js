@@ -25,7 +25,7 @@
 
 
 
-let infix = require('./operators.js').Priority.infix;
+let infix = require('./operators.js').infix;
 
 
 
