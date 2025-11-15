@@ -41,8 +41,8 @@ const prepare = code => code
     (_, $1, $2, $3, $4) => ($1 || $2) || ($3 && '[') || ($4 && ']')
   )
   .replace(
-    /(\\[\s\S])|(`[^\r\n`]*`)/g,
-    (_, $1, $2) => ($1 || $2) ? `\x1E${ $1 || $2 }\x1E` : _
+    /(`[^\r\n`]*`)|(\\[\s\S])|(0x[0-9A-Fa-f]+)|(0o[0-7]+)|(0b[01]+)|(-?\d+[\.\d]*)| (_) /g,
+    (_, ...$) => $.reduce((a, n) => !!a || n) ? `\x1E${ $.reduce((a, n) => !!a || n) }\x1E` : _
   );
 
 const procBinary = code => code
@@ -93,10 +93,6 @@ const markSeparator = code => code
   .replace(
     /(\\[\s\S])|(`[^`\r\n]*`)|(?<!\\)(\[)|(?<!\\)(\])/g,
     (_, $1, $2, $3, $4) => ($1 || $2) || ($3 && '\x1D[\x1F') || ($4 && '\x1F]\x1D')
-  )
-  .replace(
-    /(\\[\s\S])|(`[^`\r\n]*`)| +([\:\#\,\?\~\+\-\*\/\^\|\;\&\<\=\>\!\%\'\@]+) +/g,
-    (_, $1, $2, $3) => ($1 || $2) || `\x1F${$3}\x1F`
   );
 
 const clean = tokens => tokens
@@ -108,7 +104,10 @@ module.exports = code => clean (
   .map(
     line => line.split('\x1D')
     .map(
-      unit => unit.split('\x1F')
+      block => block.split('\x1F')
+      .map(
+        unit => unit.split('\x1E') // split literal
+      )      
     )
   )
 );
