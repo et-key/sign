@@ -55,16 +55,8 @@ function main() {
     console.log('入力ファイル読み込み完了:', inputPath);
     console.log('='.repeat(50));
 
-    // tokens: トークナイズ
-    console.log('tokens: トークナイズ');
-    const tokens = lexer(inputContent);
-
-    // tokensの結果をファイルに保存
-    console.log(tokens);
-    writeFile('./output/tokens.json', JSON.stringify(tokens, null, 2));
-
-    // tokensをパース
-    const parsed = parse(tokens);
+    // パース
+    const parsed = parse(inputContent);
     writeFile('./output/parsed.json', JSON.stringify(parsed, null, 2));
 }
 
