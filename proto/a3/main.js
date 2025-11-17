@@ -3,8 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const lexer = require('./lexer.js');
-const { parse } = require('./parser.js');
+const parse = require('./parser.js');
 
 /**
  * ファイルを読み込む
