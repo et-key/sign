@@ -4,7 +4,7 @@
 const prepare = code => code
   .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\xA0\xAD]/g, '')
   .replace(
-    /((?<!\\)\\(?:\r\n|[\r\n]))|(`[^\r\n`]*`)|(\r\n|[\r\n])/g,
+    /(`[^\r\n`]*`)|((?<!\\)\\(?:\r\n|[\r\n]))|(\r\n|[\r\n])/g,
     (_, $1, $2) => ($1 || $2) || '\r'
   )
   .replace(/^\t*`[^\r]*`?$/gm, '')
