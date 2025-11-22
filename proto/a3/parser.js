@@ -3,15 +3,26 @@
 
 const prepare = code => code
   .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\xA0\xAD]/g, '')
-  .replace(
-    /(`[^\r\n`]*`)|((?<!\\)\\(?:\r\n|[\r\n]))|(\r\n|[\r\n])/g,
-    (_, $1, $2) => ($1 || $2) || '\r'
-  )
   .replace(/^\t*`[^\r]*`?$/gm, '')
+  .replace(
+    /(?<!\\)\\(\r\n|[\r\n])|(\r\n|[\r\n])/g,
+    (_, $1, $2) => {
+      switch (true) {
+        case !!$1:
+          return '\n';
+
+        case !!$2:
+          return '\r';
+
+        default:
+          return _;
+      }
+    }
+  )
   .replace(
     /(`[^`\r\n]*`)|(?<!\\)([\{\(])|(?<!\\)([\}\)])/g,
     (_, $1, $2, $3 ) => $1  || ($2 && '[') || ($3 && ']')
-  );
+  )
 
 const procBinary = code => [
   /((`[^`\r\n]`)|(\\[\s\S]))|([^\r\t]+) +(\&\&) +((`[^`\r\n]`)|(\\[\s\S]))|([^\r\t]+)/g,
@@ -60,7 +71,7 @@ const procBinary = code => [
 
 const procUnary = code => code
   .replace(
-    /(`[^\r\n`]*`)|(\\[\s\S])|([#~!$@])([^\r\t ]+)|([^\r\t ]+)([!~@])|([#~!$@])([^\r\t ]+)([!~@])/g,
+    /(`[^\r\n`]*`)|(\\[\s\S])|([#~!$@])?([^\r\t ]+)([!~@])?/g,
     (_, ...$) => {
       switch (true) {
         case !!$[0]:
@@ -68,18 +79,9 @@ const procUnary = code => code
 
         case !!$[1]:
           return $[1];
-
-        case !!$[2] && !!$[3]:
-          return `\x1D[\x1F${$[2]}_\x1F${ procUnary( $[3] ) }\x1F]\x1D`;
-
-        case !!$[4] && !!$[5]:
-          return `\x1D[\x1F${ procUnary( $[4] ) }\x1F_${ $[5] }\x1F]\x1D`;
-
-        case !!$[6] && !!$[7] && !!$[8]:
-          return `\x1D[\x1F_${$[6]}\x1F${ procUnary( $[7] ) }\x1F_${ $[8] }\x1F]\x1D`;
-
+        
         default:
-          return _;
+          return `\x1D[\x1F${$[2] ? `${$[2]}_` : ''}\x1F${ procUnary( $[3] ) }\x1F_${ $[4] ? `_${$[4]}` : '' }\x1F]\x1D`;
       }
     }
   );
@@ -101,12 +103,4 @@ const clean = tokens => tokens
   .map( t => Array.isArray(t) ? clean(t) : t )
   .filter( t => t.length > 0);
 
-module.exports = code => clean (
-  markSeparator( procBlock( procBinary( procUnary( prepare(code) ) ) ) ).split('\r')
-  .map(
-    line => line.split('\x1D')
-      .map(
-          block => block.split('\x1F') // split literal
-      )      
-  )
-);
+module.exports = code => markSeparator( procBlock( procBinary( procUnary( prepare(code) ) ) ) )
