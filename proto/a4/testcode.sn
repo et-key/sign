@@ -1,0 +1,32 @@
+` Phase 1: リテラル
+42
+-3.14
+0xAF
+x
+myVar
+_
+`hello`
+`Hello World`
+\n
+\M
+\\
+
+` Phase 2: 基本演算
+x + 1
+x : 42
+x = y
+a * b
+
+` Phase 3: 優先順位
+x + y * 2
+x * y + z
+2 ^ 3 ^ 4
+x : y + 1
+a + b * c - d
+x : y + z * 2
+
+` Phase 4: ラムダ
+x ? x + 1
+x y ? x + y
+add : x y ? x + y
+f : x ? x + 1 * 2
