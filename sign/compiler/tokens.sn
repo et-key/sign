@@ -1,49 +1,75 @@
 once @ utility@
 
-chr : c l ? c = \\ l
 
-sp  : c ? c = \ 
-tab : c ? c = \	
-rt  : c ? c = \
+#chr : c l ? c = \\ l
 
-tabs : c ~cs ? tab c , tabs cs~
-Block : c ~cs ? rt c , tabs cs~
+#sp  : c ? c = \ 
+#tab : c ? c = \	
+#rt  : c ? c = \
 
-LETTER : c ? \A <= c <= \Z
-letter : c ? \a <= c <= \z
-Letter : c ? LETTER c | letter c
-nzero  : c ? \1 <= c <= \9
-digit  : c ? \0 <= c <= \9
-AlphaNum  : c ? Letter c | digit c
-Alpha_Num : c ? Letter c | digit c | \_
-hexa : c ? digit c | \A <= c <= \F | \a <= c <= \f
-octa : c ? \0 <= c <= \7
-bool : c ? \0 <= c <= \1
+#tabs : c ~cs ? tab c , tabs cs~
+#Block : c ~cs ? rt c , tabs cs~
 
-LETTERS : c ~s ? LETTER c , LETTERS s~
-letters : c ~s ? letter c , letters s~
-Letters : c ~s ? Letter c , Letters s~
-digits : c ~s ? digit c , digits s~
-AlphaNums : c ~s ? AlphaNum c , AlphaNums s~
-Alpha_Nums : c ~s ? Alpha_Num c , Alpha_Nums s~
-hexas : c ~s ? hexa c , hexas s~
-octas : c ~s ? octa c , octas s~
-bools : c ~s ? bool c , bools s~
+#LETTER : c ? \A <= c <= \Z
+#letter : c ? \a <= c <= \z
+#Letter : c ? LETTER c | letter c
+#nzero  : c ? \1 <= c <= \9
+#digit  : c ? \0 <= c <= \9
+#AlphaNum  : c ? Letter c | digit c
+#Alpha_Num : c ? Letter c | digit c | \_
+#hexa : c ? digit c | \A <= c <= \F | \a <= c <= \f
+#octa : c ? \0 <= c <= \7
+#bit : c ? \0 <= c <= \1
 
-Identifier : c ~s ? Letter c , Alpha_Nums s~
-unit : c ? c = \_
+#LETTERS : c ~s ?
+	[LETTER c] : c [LETTERS s~]
 
-hex : t u ~s ? t = \0 & u = \x & t , u , hexas s~
-oct : t u ~s ? t = \0 & u = \o & t , u , octas s~
-bit : t u ~s ? t = \0 & u = \b & t , u , bools s~
+#letters : c ~s ?
+	[letter c] : c [letters s~]
 
-string : c ~s ? c = \` , s~
+#Letters : c ~s ?
+	[Letter c] : c [Letters s~]
 
-uint : c ~s ? nzero c , digits s~
-int : c ~s ? [c = \- | nzero c] , uint s~
+#digits : c ~s ?
+	[digit c] : c [digits s~]
 
-float : c ~s ?
-	once \. c s~ :
-		(digit c | c = \.) & float s~
+#AlphaNums : c ~s ?
+	[AlphaNum c] : c [AlphaNums s~]
 
-operator : c ? \  < c < \0 | \9 < c < \A | \Z < c < \\ | \\ < c < \a | \z < c <= \~
+#Alpha_Nums : c ~s ? 
+	[Alpha_Num c] : c [Alpha_Nums s~]
+
+#hexas : c ~s ? 
+	[hexa c] : c [hexas s~]
+
+#octas : c ~s ?
+	[octa c] : c [octas s~]
+
+#bits : c ~s ?
+	[bit c] : c [bits s~]
+
+#Identifier : c ~s ?
+	[Letter c] : c [Alpha_Nums s~]
+
+#unit : c ? c = \_
+
+#hex : t u ~s ?
+	t = \0 & u = \x : t u [hexas s~]
+
+#oct : t u ~s ?
+	t = \0 & u = \o : t u [octas s~]
+
+#bit : t u ~s ?
+	t = \0 & u = \b : t u [bools s~]
+
+#string : c ~s ? c = \` , s~
+
+#uint : c ~s ? [nzero c] [digits s~]
+
+#int : c ~s ? 
+	[once \- c s~] | [digit c] : c [digits s~]
+
+#float : c ~s ?
+	[once \- c s~] | [once \. c s~] | [digit c] : c [digits s~]
+
+#operator : c ? \  < c < \0 | \9 < c < \A | \Z < c < \\ | \\ < c < \a | \z < c <= \~
