@@ -135,26 +135,11 @@ fn lambda_expr<'a>(ctx: &'a Context<'a>) -> impl Fn(TokenInput<'a>) -> IResult<T
         let (input, _) = infix_token("?")(input)?;
         let (input, body) = expression(ctx)(input)?;
         
-        Ok((input, build_curried_lambda(params, body)))
+        // パラメータをリストとして扱う（カリー化しない）
+        // x y ? body -> ["?", ["x", "y"], body]
+        let params_list = SExpr::List(params.iter().map(|t| token_to_atom(t)).collect());
+        Ok((input, SExpr::List(vec![SExpr::atom("?"), params_list, body])))
     }
-}
-
-fn build_curried_lambda(params: Vec<&Token>, body: SExpr) -> SExpr {
-    // x y ? body -> [?, x, [?, y, body]]
-    // params are [x, y]
-    // reverse: [y, x]
-    // fold:
-    // acc = body
-    // 1. param = y -> [?, y, body]
-    // 2. param = x -> [?, x, [?, y, body]]
-    
-    params.iter().rev().fold(body, |acc, param| {
-        SExpr::List(vec![
-            SExpr::atom("?"),
-            token_to_atom(param),
-            acc,
-        ])
-    })
 }
 
 fn prefix_expr<'a>(ctx: &'a Context<'a>) -> impl Fn(TokenInput<'a>) -> IResult<TokenInput<'a>, SExpr> {
