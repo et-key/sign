@@ -1,4 +1,4 @@
-once @ utility@
+once @ `utility.sn`@
 
 
 #chr : c l ? c = \\ l
@@ -22,34 +22,34 @@ once @ utility@
 #bit : c ? \0 <= c <= \1
 
 #LETTERS : c ~s ?
-	[LETTER c] : c [LETTERS s~]
+	LETTER c : c [LETTERS s~]
 
 #letters : c ~s ?
-	[letter c] : c [letters s~]
+	letter c : c [letters s~]
 
 #Letters : c ~s ?
-	[Letter c] : c [Letters s~]
+	Letter c : c [Letters s~]
 
 #digits : c ~s ?
-	[digit c] : c [digits s~]
+	digit c : c [digits s~]
 
 #AlphaNums : c ~s ?
-	[AlphaNum c] : c [AlphaNums s~]
+	AlphaNum c : c [AlphaNums s~]
 
 #Alpha_Nums : c ~s ? 
-	[Alpha_Num c] : c [Alpha_Nums s~]
+	Alpha_Num c : c [Alpha_Nums s~]
 
 #hexas : c ~s ? 
-	[hexa c] : c [hexas s~]
+	hexa c : c [hexas s~]
 
 #octas : c ~s ?
-	[octa c] : c [octas s~]
+	octa c : c [octas s~]
 
 #bits : c ~s ?
-	[bit c] : c [bits s~]
+	bit c : c [bits s~]
 
 #Identifier : c ~s ?
-	[Letter c] : c [Alpha_Nums s~]
+	Letter c : c [Alpha_Nums s~]
 
 #unit : c ? c = \_
 
