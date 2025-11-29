@@ -1,0 +1,7 @@
+`算術演算のサンプル`
+result1 : 1 + 2
+result2 : 3 * 4
+result3 : 10 / 2
+result4 : 1 + 2 * 3
+result5 : (1 + 2) * 3
+result6 : 2 ^ 3

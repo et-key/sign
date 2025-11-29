@@ -1,0 +1,99 @@
+{
+  "type": "program",
+  "statements": [
+    {
+      "type": "binary_op",
+      "operator": ":",
+      "left": {
+        "type": "identifier",
+        "name": "numbers"
+      },
+      "right": {
+        "type": "product",
+        "elements": [
+          {
+            "type": "literal",
+            "literal_type": "integer",
+            "value": "1"
+          },
+          {
+            "type": "literal",
+            "literal_type": "integer",
+            "value": "2"
+          },
+          {
+            "type": "literal",
+            "literal_type": "integer",
+            "value": "3"
+          },
+          {
+            "type": "literal",
+            "literal_type": "integer",
+            "value": "4"
+          },
+          {
+            "type": "literal",
+            "literal_type": "integer",
+            "value": "5"
+          }
+        ]
+      }
+    },
+    {
+      "type": "binary_op",
+      "operator": ":",
+      "left": {
+        "type": "identifier",
+        "name": "names"
+      },
+      "right": {
+        "type": "product",
+        "elements": [
+          {
+            "type": "literal",
+            "literal_type": "string",
+            "value": "Alice"
+          },
+          {
+            "type": "literal",
+            "literal_type": "string",
+            "value": "Bob"
+          },
+          {
+            "type": "literal",
+            "literal_type": "string",
+            "value": "Charlie"
+          }
+        ]
+      }
+    },
+    {
+      "type": "binary_op",
+      "operator": ":",
+      "left": {
+        "type": "identifier",
+        "name": "mixed"
+      },
+      "right": {
+        "type": "product",
+        "elements": [
+          {
+            "type": "literal",
+            "literal_type": "integer",
+            "value": "1"
+          },
+          {
+            "type": "literal",
+            "literal_type": "string",
+            "value": "hello"
+          },
+          {
+            "type": "literal",
+            "literal_type": "float",
+            "value": "3.14"
+          }
+        ]
+      }
+    }
+  ]
+}
