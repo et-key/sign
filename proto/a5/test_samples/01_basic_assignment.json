@@ -1,0 +1,44 @@
+{
+  "type": "program",
+  "statements": [
+    {
+      "type": "binary_op",
+      "operator": ":",
+      "left": {
+        "type": "identifier",
+        "name": "x"
+      },
+      "right": {
+        "type": "literal",
+        "literal_type": "integer",
+        "value": "5"
+      }
+    },
+    {
+      "type": "binary_op",
+      "operator": ":",
+      "left": {
+        "type": "identifier",
+        "name": "y"
+      },
+      "right": {
+        "type": "literal",
+        "literal_type": "integer",
+        "value": "10"
+      }
+    },
+    {
+      "type": "binary_op",
+      "operator": ":",
+      "left": {
+        "type": "identifier",
+        "name": "name"
+      },
+      "right": {
+        "type": "literal",
+        "literal_type": "string",
+        "value": "Alice"
+      }
+    }
+  ]
+}

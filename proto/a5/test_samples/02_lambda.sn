@@ -1,0 +1,4 @@
+`ラムダ式のサンプル`
+identity : x ? x
+add : x y ? x + y
+multiply : x y ? x * y
