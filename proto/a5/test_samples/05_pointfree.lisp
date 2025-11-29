@@ -1,0 +1,5 @@
+(defparameter fold_add (lambda (lst) (reduce #'+ lst)))
+(defparameter add_one (lambda (x) (+ x 1)))
+(defparameter subtract_from_five (lambda (x) (- 5 x)))
+(defparameter double_map (lambda (lst) (mapcar (lambda (x) (* x 2)) lst)))
+(defparameter negate (lambda (lst) (reduce #'! lst)))

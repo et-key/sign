@@ -38,17 +38,19 @@ cd proto\a5
 python convert_samples.py
 ```
 
-これにより、各.snファイルに対応する.jsonファイルが生成されます：
+これにより、各.snファイルに対応する以下のファイルが生成されます：
 
 ```
 test_samples/
-  ├── 01_basic_assignment.sn   → 01_basic_assignment.json
-  ├── 02_lambda.sn              → 02_lambda.json
-  ├── 03_lists.sn               → 03_lists.json
-  ├── 04_arithmetic.sn          → 04_arithmetic.json
-  ├── 05_pointfree.sn           → 05_pointfree.json
-  └── 06_complex.sn             → 06_complex.json
+  ├── 01_basic_assignment.sn   → .json, .sexp, .lisp
+  ├── 02_lambda.sn              → .json, .sexp, .lisp
+  ...
 ```
+
+**出力形式:**
+- `.json`: 抽象構文木（AST）の詳細な構造
+- `.sexp`: Sign言語の構造を反映したS式（前置記法）
+- `.lisp`: Common Lispで実行可能なコード（ポイントフリー記法などを展開済み）
 
 **サンプルファイルの内容:**
 - `01_basic_assignment.sn` - 基本的な代入式
