@@ -14,6 +14,20 @@ from lexer import Lexer
 from parser import Parser
 
 
+def get_clisp_preamble() -> str:
+    """Common Lisp runtime preamble for Sign language helper functions"""
+    return """;; --- Sign Language Runtime Preamble ---
+(defun xor (a b) 
+  "Logical XOR: true if exactly one argument is true"
+  (if a (not b) b))
+
+(defun range (start end &optional (step 1))
+  "Generate a list from start to end (inclusive) with the given step"
+  (loop for i from start to end by step collect i))
+;; --------------------------------------
+
+"""
+
 def parse_file(filepath: str):
     """Sign言語ファイルを構文解析"""
     with open(filepath, 'r', encoding='utf-8') as f:
@@ -110,8 +124,8 @@ def main():
             # S式形式で出力
             result = ast.to_sexp()
         elif output_format == 'clisp':
-            # Common Lisp形式で出力
-            result = ast.to_clisp()
+            # Common Lisp形式で出力（Preamble付き）
+            result = get_clisp_preamble() + ast.to_clisp()
         else:
             # JSON形式で出力（デフォルト）
             result = json.dumps(ast.to_dict(), indent=2, ensure_ascii=False)

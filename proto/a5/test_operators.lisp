@@ -1,3 +1,13 @@
+;; --- Sign Language Runtime Preamble ---
+(defun xor (a b) 
+  "Logical XOR: true if exactly one argument is true"
+  (if a (not b) b))
+
+(defun range (start end &optional (step 1))
+  "Generate a list from start to end (inclusive) with the given step"
+  (loop for i from start to end by step collect i))
+;; --------------------------------------
+
 (defun print-sign (str) (format t "~a" str))
 (print-sign "--- 1. Define演算子 (:) - 優先順位2 ---
 ")
@@ -62,6 +72,18 @@
 (defparameter coords (list 10 20 30))
 (print-sign "coords = ")
 (print-sign coords)
+(print-sign "
+")
+(print-sign "--- 6. Range演算子 (~) - 優先順位8 ---
+")
+(defparameter range1 (range 1 10))
+(print-sign "range1 (1 ~ 10) = ")
+(print-sign range1)
+(print-sign "
+")
+(defparameter range2 (range 0 10 2))
+(print-sign "range2 (0 ~ 2 ~ 10) = ")
+(print-sign range2)
 (print-sign "
 ")
 (print-sign "--- 7. 算術演算子 - 優先順位14-16 ---
@@ -148,6 +170,11 @@
 (defparameter or_result (or 0 1))
 (print-sign "0 | 1 = ")
 (print-sign or_result)
+(print-sign "
+")
+(defparameter xor_result (xor 1 1))
+(print-sign "1 ; 1 = ")
+(print-sign xor_result)
 (print-sign "
 ")
 (print-sign "--- 12. ポイントフリー記法 ---

@@ -92,18 +92,17 @@ print `\n`
 `-------------------------------------------
 ` 6. Range演算子 (~) - 優先順位8
 `-------------------------------------------
-`Range演算子: まだ正しく変換されていません
-`print --- 6. Range演算子 (~) - 優先順位8 ---\n`
+print `--- 6. Range演算子 (~) - 優先順位8 ---\n`
 
-`range1 : 1 ~ 10
-`print range1 (1 ~ 10) = `
-`print range1
-`print \n`
+range1 : 1 ~ 10
+print `range1 (1 ~ 10) = `
+print range1
+print `\n`
 
-`range2 : 0 ~ 2 ~ 10
-`print range2 (0 ~ 2 ~ 10) = `
-`print range2
-`print \n`
+range2 : 0 ~ 2 ~ 10
+print `range2 (0 ~ 2 ~ 10) = `
+print range2
+print `\n`
 
 `-------------------------------------------
 ` 7. 算術演算子 - 優先順位14-16
@@ -200,11 +199,10 @@ print `0 | 1 = `
 print or_result
 print `\n`
 
-`XOR関数: Common Lispにxor関数がないため実装が必要
-`xor_result : 1 ; 1
-`print 1 ; 1 = `
-`print xor_result
-`print \n`
+xor_result : 1 ; 1
+print `1 ; 1 = `
+print xor_result
+print `\n`
 
 `-------------------------------------------
 ` 12. ポイントフリー記法

@@ -108,7 +108,7 @@ class Parser:
                 break
             
             # カンマや演算子が来たら終了
-            if token.type in (TokenType.PRODUCT, TokenType.XOR, TokenType.OR, TokenType.AND,
+            if token.type in (TokenType.PRODUCT, TokenType.RANGE, TokenType.XOR, TokenType.OR, TokenType.AND,
                             TokenType.LESS, TokenType.LESS_EQUAL, TokenType.EQUAL,
                             TokenType.MORE_EQUAL, TokenType.MORE, TokenType.NOT_EQUAL):
                 break
@@ -344,6 +344,20 @@ class Parser:
         expr = self.parse_address_level()
         
         if self.current_token() and self.current_token().type == TokenType.RANGE:
+            # 先読み: 次にパース可能な式がある場合は、後置ではなく二項演算子として扱う
+            next_token = self.peek_token()
+            if next_token and next_token.type not in (
+                TokenType.NEWLINE, TokenType.EOF, TokenType.RPAREN, 
+                TokenType.RBRACKET, TokenType.RBRACE, TokenType.DEFINE,
+                TokenType.PRODUCT, TokenType.XOR, TokenType.OR, TokenType.AND,
+                TokenType.LESS, TokenType.LESS_EQUAL, TokenType.EQUAL,
+                TokenType.MORE_EQUAL, TokenType.MORE, TokenType.NOT_EQUAL
+            ):
+                # 次に式が続くので、後置ではなく二項Range演算子として扱う
+                # ここでは処理せず、上位のparse_range_levelに任せる
+                return expr
+            
+            # 後置Expand演算子として処理
             self.advance()
             return UnaryOp('~', expr, is_prefix=False)
         

@@ -500,11 +500,14 @@ class Range(ASTNode):
 
     def to_clisp(self) -> str:
         """範囲をCommon Lispに変換"""
-        # loopマクロを使ってリストを生成
         start = self.start.to_clisp()
         end = self.end.to_clisp()
-        step = self.step.to_clisp() if self.step else "1"
-        return f"(loop for i from {start} to {end} by {step} collect i)"
+        
+        if self.step:
+            step = self.step.to_clisp()
+            return f"(range {start} {end} {step})"
+        else:
+            return f"(range {start} {end})"
 
 
 @dataclass
