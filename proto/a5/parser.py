@@ -142,7 +142,8 @@ class Parser:
             if token.type == TokenType.LAMBDA:
                 # ラムダ構文確定
                 self.advance()
-                body = self.parse_product_level()
+                # Lambda本体は優先順位3（Output）まで含む必要がある
+                body = self.parse_output_level()
                 return Lambda(params, body)
             
             if token.type == TokenType.IDENTIFIER:

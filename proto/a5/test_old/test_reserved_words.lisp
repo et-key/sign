@@ -1,0 +1,7 @@
+(defun print-sign (str) (format t "~a" str))
+(print-sign "Hello, World!")
+(defparameter list-sign (list 1 2 3))
+(defun map-sign (x) (* x 2))
+(defparameter format-sign "test")
+(defun myFunc (x) (+ x 1))
+(defparameter result 42)

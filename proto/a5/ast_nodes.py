@@ -10,6 +10,54 @@ from typing import Any, List, Optional, Union
 from enum import Enum
 
 
+# Common Lisp予約語・組み込みシンボルのリスト
+# 主要な特殊演算子、マクロ、よく使われる関数をカバー
+COMMON_LISP_RESERVED = {
+    # 特殊演算子
+    'quote', 'function', 'if', 'let', 'let*', 'lambda', 'progn', 'setq',
+    'block', 'return-from', 'catch', 'throw', 'tagbody', 'go',
+    'multiple-value-call', 'multiple-value-prog1', 'unwind-protect',
+    'eval-when', 'load-time-value', 'locally', 'the',
+    
+    # よく使われるマクロと関数
+    'defun', 'defmacro', 'defvar', 'defparameter', 'defconstant',
+    'cond', 'case', 'when', 'unless', 'and', 'or', 'not',
+    'loop', 'do', 'dolist', 'dotimes', 'map', 'mapcar', 'reduce',
+    'list', 'cons', 'car', 'cdr', 'nth', 'append', 'reverse',
+    'print', 'format', 'read', 'write', 'error', 'warn',
+    'equal', 'eql', 'eq', 'equalp',
+    'type', 'class', 'struct', 'array', 'vector', 'string',
+    'nil', 't',
+    
+    # 算術・数学関数
+    'abs', 'mod', 'expt', 'sqrt', 'sin', 'cos', 'tan',
+    'min', 'max', 'floor', 'ceiling', 'round', 'truncate',
+    
+    # 型述語
+    'numberp', 'integerp', 'floatp', 'stringp', 'symbolp',
+    'listp', 'consp', 'null', 'atom',
+    
+    # Common Lispパッケージシステム
+    'in-package', 'defpackage', 'export', 'import', 'use-package',
+}
+
+
+def escape_identifier_for_clisp(name: str) -> str:
+    """
+    識別子名がCommon Lispの予約語と衝突する場合、-signサフィックスを追加
+    
+    Args:
+        name: Sign言語の識別子名
+    
+    Returns:
+        Common Lispで安全に使える識別子名
+    """
+    # 小文字に変換して予約語チェック（Common Lispは大文字小文字を区別しない）
+    if name.lower() in COMMON_LISP_RESERVED:
+        return f"{name}-sign"
+    return name
+
+
 class ASTNodeType(Enum):
     """ASTノードの種類"""
     PROGRAM = "program"
@@ -109,8 +157,8 @@ class Identifier(ASTNode):
 
     def to_clisp(self) -> str:
         """識別子をCommon Lispに変換"""
-        # Lispで使えない文字などをエスケープする必要があるかもしれないが、一旦そのまま
-        return self.name
+        # Common Lisp予約語との衝突を回避
+        return escape_identifier_for_clisp(self.name)
 
 
 @dataclass
@@ -156,13 +204,44 @@ class BinaryOp(ASTNode):
 
     def to_clisp(self) -> str:
         """二項演算をCommon Lispに変換"""
+        # 特殊処理: # (output) 演算子
+        if self.operator == '#':
+            # 左辺が0x1（標準出力アドレス）の場合
+            if isinstance(self.left, Literal) and self.left.literal_type == 'hex' and self.left.value == '0x1':
+                # 標準出力: (print right) または (format t "~a" right)
+                right_code = self.right.to_clisp()
+                return f"(format t \"~a\" {right_code})"
+            # 左辺がUnit（_）の場合も標準出力として扱う
+            elif isinstance(self.left, Literal) and self.left.literal_type == 'unit':
+                right_code = self.right.to_clisp()
+                return f"(format t \"~a\" {right_code})"
+            # 右辺がUnit（_）の場合（expr # _）も標準出力
+            elif isinstance(self.right, Literal) and self.right.literal_type == 'unit':
+                left_code = self.left.to_clisp()
+                return f"(format t \"~a\" {left_code})"
+            # それ以外のアドレスの場合: メモリ書き込みやIO操作
+            # Common Lispではコメントとして残す（実際の実装はシステム依存）
+            else:
+                left_code = self.left.to_clisp()
+                right_code = self.right.to_clisp()
+                return f"; TODO: Output {right_code} to address {left_code}\n(setf (mem-ref {left_code}) {right_code})"
+        
+        # 特殊処理: : (define) 演算子でLambdaを定義する場合
+        if self.operator == ':':
+            # 右辺がLambdaの場合、defunとして定義
+            if isinstance(self.right, Lambda):
+                func_name = self.left.to_clisp() if isinstance(self.left, Identifier) else str(self.left)
+                params = ' '.join(p.to_clisp() for p in self.right.params)
+                body = self.right.body.to_clisp()
+                return f"(defun {func_name} ({params}) {body})"
+        
+        # 通常の演算子のマッピング
         op_map = {
             ':': 'defparameter',
             '+': '+', '-': '-', '*': '*', '/': '/', '%': 'mod', '^': 'expt',
             '=': '=', '<': '<', '>': '>', '<=': '<=', '>=': '>=', '!=': '/=',
             '&': 'and', '|': 'or',
-            ',': 'list',
-            '#': 'print'  # output
+            ',': 'list'
         }
         
         op = op_map.get(self.operator, self.operator)
@@ -336,9 +415,18 @@ class ListNode(ASTNode):
 
     def to_clisp(self) -> str:
         """リストをCommon Lispに変換"""
-        # Signのリスト [a, b] はリスト構築
-        elements_code = ' '.join(e.to_clisp() for e in self.elements)
-        return f"(list {elements_code})"
+        # Sign言語の空白区切り要素は関数適用を表す
+        # 最初の要素が関数、残りが引数
+        if len(self.elements) == 0:
+            return "nil"
+        
+        if len(self.elements) == 1:
+            return self.elements[0].to_clisp()
+        
+        # 関数適用: (func arg1 arg2 ...)
+        func_code = self.elements[0].to_clisp()
+        args_code = ' '.join(e.to_clisp() for e in self.elements[1:])
+        return f"({func_code} {args_code})"
 
 
 @dataclass
