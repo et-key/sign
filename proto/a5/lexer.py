@@ -149,6 +149,33 @@ class Lexer:
             elif self.current_char() in '\n\r':
                 # 文字列内に改行は含められない
                 break
+            elif self.current_char() == '\\':
+                # エスケープシーケンス処理
+                self.advance()  # \ をスキップ
+                next_char = self.current_char()
+                
+                if next_char is None:
+                    break
+                
+                # エスケープシーケンスのマッピング
+                escape_map = {
+                    'n': '\n',   # 改行
+                    'r': '\r',   # キャリッジリターン
+                    't': '\t',   # タブ
+                    '\\': '\\',  # バックスラッシュ
+                    '`': '`',    # バッククォート
+                    '\"': '\"',  # ダブルクォート（将来のため）
+                    '\'': '\'',  # シングルクォート（将来のため）
+                }
+                
+                if next_char in escape_map:
+                    chars.append(escape_map[next_char])
+                else:
+                    # 未知のエスケープシーケンスはそのまま
+                    chars.append('\\')
+                    chars.append(next_char)
+                
+                self.advance()
             else:
                 chars.append(self.current_char())
                 self.advance()

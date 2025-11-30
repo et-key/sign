@@ -36,9 +36,22 @@ def convert_file(input_path: str, output_path: str) -> bool:
         ast_dict = ast.to_dict()
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(ast_dict, f, indent=2, ensure_ascii=False)
+            
+        # S式形式で保存 (.sexp)
+        sexp_path = Path(output_path).with_suffix('.sexp')
+        with open(sexp_path, 'w', encoding='utf-8') as f:
+            f.write(ast.to_sexp())
+
+        # Common Lisp形式で保存 (.lisp)
+        lisp_path = Path(output_path).with_suffix('.lisp')
+        with open(lisp_path, 'w', encoding='utf-8') as f:
+            f.write(ast.to_clisp())
         
         print(f"✓ 成功")
-        print(f"ステートメント数: {len(ast.statements)}")
+        print(f"  JSON: {Path(output_path).name}")
+        print(f"  SEXP: {sexp_path.name}")
+        print(f"  LISP: {lisp_path.name}")
+        print(f"  ステートメント数: {len(ast.statements)}")
         
         return True
         

@@ -1,0 +1,262 @@
+`===========================================
+` Sign言語演算子テストコード
+` 現在の実装と仕様の違いを確認するためのテストケース
+`===========================================
+`Range演算子: まだ正しく変換されていません
+`XOR関数: Common Lispにxor関数がないため実装が必要
+
+`-------------------------------------------
+` print関数の定義
+`-------------------------------------------
+print : str ? 0x1 # str
+
+`-------------------------------------------
+` 1. Define演算子 (:) - 優先順位2
+`-------------------------------------------
+print `--- 1. Define演算子 (:) - 優先順位2 ---\n`
+
+x : 10
+print `x = `
+print x
+print `\n`
+
+y : 20
+print `y = `
+print y
+print `\n`
+
+name : `hello`
+print `name = `
+print name
+print `\n`
+
+`-------------------------------------------
+` 2. Output演算子 (#) 中置 - 優先順位3
+`-------------------------------------------
+print `--- 2. Output演算子 (#) 中置 - 優先順位3 ---\n`
+
+result : x + y
+print `result = x + y = `
+print result
+print `\n`
+
+print `result # _ (標準出力): `
+result # _
+print `\n`
+
+`-------------------------------------------
+` 3. Export演算子 (#) 前置 - 優先順位1
+`-------------------------------------------
+print `--- 3. Export演算子 (#) 前置 - 優先順位1 ---\n`
+
+#exported_value : 42
+print `exported_value = `
+print exported_value
+print `\n`
+
+`-------------------------------------------
+` 4. Lambda演算子 (?) - 優先順位7
+`-------------------------------------------
+print `--- 4. Lambda演算子 (?) - 優先順位7 ---\n`
+
+add : x y ? x + y
+print `add 5 3 = `
+print (add 5 3)
+print `\n`
+
+square : n ? n * n
+print `square 7 = `
+print (square 7)
+print `\n`
+
+identity : x ? x
+print `identity 100 = `
+print (identity 100)
+print `\n`
+
+`-------------------------------------------
+` 5. Product演算子 (,) - 優先順位4
+`-------------------------------------------
+print `--- 5. Product演算子 (,) - 優先順位4 ---\n`
+
+list1 : 1, 2, 3
+print `list1 = `
+print list1
+print `\n`
+
+coords : 10, 20, 30
+print `coords = `
+print coords
+print `\n`
+
+`-------------------------------------------
+` 6. Range演算子 (~) - 優先順位8
+`-------------------------------------------
+print `--- 6. Range演算子 (~) - 優先順位8 ---\n`
+
+range1 : 1 ~ 10
+print `range1 (1 ~ 10) = `
+print range1
+print `\n`
+
+range2 : 0 ~ 2 ~ 10
+print `range2 (0 ~ 2 ~ 10) = `
+print range2
+print `\n`
+
+`-------------------------------------------
+` 7. 算術演算子 - 優先順位14-16
+`-------------------------------------------
+print `--- 7. 算術演算子 - 優先順位14-16 ---\n`
+
+sum : 5 + 3
+print `5 + 3 = `
+print sum
+print `\n`
+
+diff : 10 - 4
+print `10 - 4 = `
+print diff
+print `\n`
+
+prod : 6 * 7
+print `6 * 7 = `
+print prod
+print `\n`
+
+quot : 20 / 4
+print `20 / 4 = `
+print quot
+print `\n`
+
+mod_result : 17 % 5
+print `17 % 5 = `
+print mod_result
+print `\n`
+
+power : 2 ^ 8
+print `2 ^ 8 = `
+print power
+print `\n`
+
+`-------------------------------------------
+` 8. 比較演算子 - 優先順位13
+`-------------------------------------------
+print `--- 8. 比較演算子 - 優先順位13 ---\n`
+
+is_less : 5 < 10
+print `5 < 10 = `
+print is_less
+print `\n`
+
+is_less_eq : 5 <= 5
+print `5 <= 5 = `
+print is_less_eq
+print `\n`
+
+is_equal : 10 = 10
+print `10 = 10 = `
+print is_equal
+print `\n`
+
+is_more_eq : 15 >= 10
+print `15 >= 10 = `
+print is_more_eq
+print `\n`
+
+is_more : 20 > 10
+print `20 > 10 = `
+print is_more
+print `\n`
+
+is_not_eq : 5 != 10
+print `5 != 10 = `
+print is_not_eq
+print `\n`
+
+`-------------------------------------------
+` 9. 論理演算子 - 優先順位10-12
+`-------------------------------------------
+print `--- 9. 論理演算子 - 優先順位10-12 ---\n`
+
+bool1 : !0
+print `!0 = `
+print bool1
+print `\n`
+
+bool2 : 1
+print `1 = `
+print bool2
+print `\n`
+
+and_result : 1 & 1
+print `1 & 1 = `
+print and_result
+print `\n`
+
+or_result : 0 | 1
+print `0 | 1 = `
+print or_result
+print `\n`
+
+xor_result : 1 ; 1
+print `1 ; 1 = `
+print xor_result
+print `\n`
+
+`-------------------------------------------
+` 12. ポイントフリー記法
+`-------------------------------------------
+print `--- 12. ポイントフリー記法 ---\n`
+
+fold_add : [+]
+print `fold_add (DirectFold [+]) = `
+print fold_add
+print `\n`
+
+add_one : [+ 1]
+print `add_one (右部分適用 [+ 1]) = `
+print add_one
+print `\n`
+
+sub_from_10 : [10 -]
+print `sub_from_10 (左部分適用 [10 -]) = `
+print sub_from_10
+print `\n`
+
+double_all : [* 2,]
+print `double_all (map用 [* 2,]) = `
+print double_all
+print `\n`
+
+`-------------------------------------------
+` 13. 複合的な式
+`-------------------------------------------
+print `--- 13. 複合的な式 ---\n`
+
+complex1 : 2 + 3 * 4
+print `2 + 3 * 4 = `
+print complex1
+print `\n`
+
+complex2 : 10 - 2 ^ 3
+print `10 - 2 ^ 3 = `
+print complex2
+print `\n`
+
+complex3 : 1 + 2, 3 + 4
+print `(1 + 2, 3 + 4) = `
+print complex3
+print `\n`
+
+calc : a b ? a * 2 + b * 3
+print `calc 5 7 = `
+print (calc 5 7)
+print `\n`
+
+nested : (1 + 2) * (3 + 4)
+print `(1 + 2) * (3 + 4) = `
+print nested
+print `\n`
+
+print `--- テスト完了 ---\n`
