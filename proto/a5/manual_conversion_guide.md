@@ -17,7 +17,7 @@
 PowerShellまたはコマンドプロンプトを開き、`proto\a5` ディレクトリに移動します。
 
 ```powershell
-cd c:\Users\ym_st\Documents\Sign\sign\proto\a5
+cd path\to\sign\proto\a5
 ```
 
 ### 2. Sign言語ファイルの作成
@@ -37,8 +37,15 @@ x + y # _
 
 `main.py` を使用して `.sn` ファイルを `.lisp` ファイルに変換します。
 
-**PowerShellの場合（重要）:**
-PowerShellの標準のリダイレクト（`>`）を使用すると、文字コードの問題（BOM付きUTF-16など）でSBCLがエラーを起こすことがあります。以下のコマンドで **ASCIIエンコーディング** を指定して保存することをお勧めします。
+**推奨される方法（--output オプション）:**
+`main.py` の `--output` オプションを使用すると、自動的に適切なエンコーディング（BOMなしUTF-8）でファイルが出力されます。PowerShellのリダイレクトによるエンコーディング問題を回避できるため、この方法を推奨します。
+
+```powershell
+python main.py mysample.sn --format clisp --output mysample.lisp
+```
+
+**従来の方法（リダイレクト）:**
+もしリダイレクトを使用する場合は、`Out-File` でエンコーディングを指定する必要があります。
 
 ```powershell
 python main.py mysample.sn --format clisp | Out-File -Encoding ASCII mysample.lisp
@@ -46,7 +53,7 @@ python main.py mysample.sn --format clisp | Out-File -Encoding ASCII mysample.li
 
 **コマンドプロンプト (cmd.exe) の場合:**
 ```cmd
-python main.py mysample.sn --format clisp > mysample.lisp
+python main.py mysample.sn --format clisp --output mysample.lisp
 ```
 
 ### 4. 変換結果の確認（オプション）
@@ -79,7 +86,10 @@ sbcl --script mysample.lisp
 ## トラブルシューティング
 
 ### SBCLで "UNBOUND-VARIABLE" などのエラーが出る場合
-ファイルエンコーディングの問題の可能性が高いです。手順3の通り、`Out-File -Encoding ASCII` を使用して再変換してみてください。
+ファイルエンコーディングの問題の可能性が高いです。手順3の通り、`--output` オプションを使用して再変換してみてください。
+```powershell
+python main.py mysample.sn --format clisp --output mysample.lisp
+```
 
 ### 構文エラーが出る場合
 `main.py` は標準出力に変換結果を、標準エラー出力にエラーメッセージを表示します。リダイレクトせずに一度画面に表示させて確認してください。

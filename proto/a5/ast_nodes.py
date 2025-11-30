@@ -25,7 +25,7 @@ COMMON_LISP_RESERVED = {
     'loop', 'do', 'dolist', 'dotimes', 'map', 'mapcar', 'reduce',
     'list', 'cons', 'car', 'cdr', 'nth', 'append', 'reverse',
     'print', 'format', 'read', 'write', 'error', 'warn',
-    'equal', 'eql', 'eq', 'equalp',
+    'equal', 'eql', 'eq', 'equalp', 'identity',
     'type', 'class', 'struct', 'array', 'vector', 'string',
     'nil', 't',
     
@@ -240,7 +240,7 @@ class BinaryOp(ASTNode):
             ':': 'defparameter',
             '+': '+', '-': '-', '*': '*', '/': '/', '%': 'mod', '^': 'expt',
             '=': '=', '<': '<', '>': '>', '<=': '<=', '>=': '>=', '!=': '/=',
-            '&': 'and', '|': 'or',
+            '&': 'and', '|': 'or', ';': 'xor',  # XOR追加（Common Lispにはないので後で実装必要）
             ',': 'list'
         }
         
@@ -291,10 +291,19 @@ class UnaryOp(ASTNode):
 
     def to_clisp(self) -> str:
         """単項演算をCommon Lispに変換"""
+        # Export演算子（前置#）の特殊処理
+        if self.is_prefix and self.operator == '#':
+            # Common Lispのexportはパッケージシステムで使うため、
+            # Sign言語のexportとは意味が異なる
+            # コメントとして残すか、実際の定義だけを出力
+            operand_code = self.operand.to_clisp()
+            return f"; EXPORTED\n{operand_code}"
+        
+        # その他の単項演算子
         op_map = {
             '!': 'not',  # factorialは標準ではないので一旦notのみ
-            '#': 'export' # Lispのexport?
         }
+        
         # 階乗などはヘルパー関数が必要
         if not self.is_prefix and self.operator == '!':
             return f"(factorial {self.operand.to_clisp()})"

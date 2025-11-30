@@ -58,6 +58,7 @@ def main():
         # 出力形式の判定
         output_format = 'ast'
         code_or_file = None
+        output_file = None  # 出力ファイルパス
         is_code = False
         
         i = 1
@@ -76,6 +77,13 @@ def main():
                     i += 2
                 else:
                     print("エラー: --format オプションには形式を指定してください")
+                    sys.exit(1)
+            elif sys.argv[i] in ('--output', '-o'):
+                if i + 1 < len(sys.argv):
+                    output_file = sys.argv[i + 1]
+                    i += 2
+                else:
+                    print("エラー: --output オプションにはファイルパスを指定してください")
                     sys.exit(1)
             else:
                 code_or_file = sys.argv[i]
@@ -96,16 +104,26 @@ def main():
                 sys.exit(1)
             ast = parse_file(filepath)
         
-        # 出力
+        # 出力内容の生成
+        result = ""
         if output_format == 'sexp':
             # S式形式で出力
-            print(ast.to_sexp())
+            result = ast.to_sexp()
         elif output_format == 'clisp':
             # Common Lisp形式で出力
-            print(ast.to_clisp())
+            result = ast.to_clisp()
         else:
             # JSON形式で出力（デフォルト）
-            print(json.dumps(ast.to_dict(), indent=2, ensure_ascii=False))
+            result = json.dumps(ast.to_dict(), indent=2, ensure_ascii=False)
+            
+        # ファイルまたは標準出力へ書き込み
+        if output_file:
+            # UTF-8 (BOMなし) で書き込み
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(result)
+            print(f"出力しました: {output_file}")
+        else:
+            print(result)
         
     except SyntaxError as e:
         print(f"構文エラー: {e}", file=sys.stderr)

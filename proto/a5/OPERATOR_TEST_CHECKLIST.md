@@ -30,14 +30,17 @@ python main.py test_operators_minimal.sn --format ast
 - **前置**: `#x : 42` → 変数を外部公開（export）
 - **中置**: `addr # data` → アドレスにデータを関連付け（出力）
 
-#### 現在の実装
-- **前置**: `(export ...)`
-- **中置**: `(print ...)`
+#### 現在の実装（修正済み）
+- **前置**: `; EXPORTED` コメントを出力（Common Lispのexportとは異なるため）
+- **中置**: アドレス依存の変換
+  - `0x1 # expr` → `(format t "~a" expr)` (標準出力)
+  - `expr # _` → `(format t "~a" expr)` (標準出力)
+  - その他 → TODOコメント
 
 #### 確認ポイント
-- [ ] 前置と中置の区別が正しく解析されているか？
-- [ ] 中置の `#` が `print` でなく本来は何に変換されるべきか？
-- [ ] `expr # _` は標準出力と解釈して `print` で問題ないか？
+- [x] 前置と中置の区別が正しく解析されているか？
+- [x] 中置の `#` が `print` でなく本来は何に変換されるべきか？（修正済み）
+- [x] `expr # _` は標準出力と解釈して `print` で問題ないか？（修正済み）
 
 ---
 
@@ -46,13 +49,15 @@ python main.py test_operators_minimal.sn --format ast
 #### 仕様
 - `x : 42` → 左辺の名前を右辺の値に束縛
 
-#### 現在の実装
-- `(defparameter x 42)`
+#### 現在の実装（修正済み）
+- 変数定義: `(defparameter x 42)`
+- 関数定義（Lambda）: `(defun x (...) ...)`
 
 #### 確認ポイント
-- [ ] `defparameter` は適切か？（`defvar`, `setf`, `let` との違い）
-- [ ] スコープは正しく扱われるか？
-- [ ] 再代入の挙動は？
+- [x] `defparameter` は適切か？（`defvar`, `setf`, `let` との違い）
+- [x] スコープは正しく扱われるか？
+- [x] 再代入の挙動は？
+- [x] 関数定義（Lambda代入）が `defun` に変換されるか？（修正済み）
 
 ---
 
@@ -73,10 +78,10 @@ python main.py test_operators_minimal.sn --format ast
 ```
 
 #### 確認ポイント
-- [ ] DirectFoldの変換は正しいか？
-- [ ] 部分適用の左右の区別は正しいか？
-- [ ] map用のカンマ(`,`)の処理は正しいか？
-- [ ] Common Lispで実際に動作するか？
+- [x] DirectFoldの変換は正しいか？
+- [x] 部分適用の左右の区別は正しいか？
+- [x] map用のカンマ(`,`)の処理は正しいか？
+- [x] Common Lispで実際に動作するか？
 
 ---
 
@@ -89,9 +94,9 @@ python main.py test_operators_minimal.sn --format ast
 - `(lambda (x y) (+ x y))`
 
 #### 確認ポイント
-- [ ] 複数引数の処理は正しいか？
-- [ ] カリー化は不要か？（Sign言語の仕様確認）
-- [ ] 本体の式の変換は正しいか？
+- [x] 複数引数の処理は正しいか？
+- [x] カリー化は不要か？（Sign言語の仕様確認）
+- [x] 本体の式の変換は正しいか？（Output演算子の優先順位修正済み）
 
 ---
 
@@ -104,9 +109,9 @@ python main.py test_operators_minimal.sn --format ast
 - `(list 1 2 3)`
 
 #### 確認ポイント
-- [ ] `list` で正しいか？（`cons` ベースの方が良い？）
-- [ ] 右結合は実装されているか？
-- [ ] ネストした積の処理は？
+- [x] `list` で正しいか？
+- [x] 右結合は実装されているか？
+- [x] ネストした積の処理は？
 
 ---
 
@@ -123,9 +128,9 @@ python main.py test_operators_minimal.sn --format ast
 - 前置: `&rest x`
 
 #### 確認ポイント
-- [ ] `loop` マクロは適切か？
+- [ ] `loop` マクロは適切か？（一部変換エラーあり）
 - [ ] ステップ指定は正しく処理されるか？
-- [ ] 連続パラメータの `&rest` は正しいか？
+- [x] 連続パラメータの `&rest` は正しいか？
 - [ ] 後置展開は実装されているか？
 
 ---
@@ -153,8 +158,8 @@ python main.py test_operators_minimal.sn --format ast
 - `(and ...)`, `(or ...)`
 
 #### 確認ポイント
-- [ ] Common Lispの `and`, `or` は短絡評価なので問題ないはず
-- [ ] XOR (`;`) の実装は？（Common Lispには標準XORがない）
+- [x] Common Lispの `and`, `or` は短絡評価なので問題ないはず
+- [ ] XOR (`;`) の実装は？（`xor` 関数へのマッピング追加済みだが、CLに標準関数なし）
 
 ---
 
@@ -187,8 +192,23 @@ python main.py test_operators_minimal.sn --format ast
 
 ---
 
+## 実装済みの改善機能
+
+1. **予約語回避**
+   - Common Lispの予約語（`print`, `list`, `identity` 等）を自動的にリネーム（`print-sign`）
+   - エラー `SYMBOL-PACKAGE-LOCKED-ERROR` を回避
+
+2. **エスケープシーケンス処理**
+   - 文字列リテラル内の `\n`, `\t`, `\r` 等を正しく処理
+
+3. **ファイル出力オプション**
+   - `--output` オプションでBOMなしUTF-8出力をサポート
+   - SBCLでのエンコーディングエラーを回避
+
 ## 未実装・部分実装の可能性がある機能
 
+- [ ] Range演算子の完全な変換（`1 ~ 10` 等でエラーあり）
+- [ ] XOR関数（Common Lisp側での実装が必要）
 - [ ] 絶対値（`|...|`）
 - [ ] 階乗（後置 `!`）
 - [ ] Expand（後置 `~`）
@@ -199,7 +219,7 @@ python main.py test_operators_minimal.sn --format ast
 
 ## その他の確認事項
 
-- [ ] エラーメッセージは分かりやすいか？
-- [ ] パーサーの優先順位は仕様と一致しているか？
-- [ ] インデントブロックは正しく処理されるか？
-- [ ] コメント（`` ` ``）は正しく無視されるか？
+- [x] エラーメッセージは分かりやすいか？
+- [x] パーサーの優先順位は仕様と一致しているか？（Lambda修正済み）
+- [x] インデントブロックは正しく処理されるか？
+- [x] コメント（`` ` ``）は正しく無視されるか？
