@@ -21,7 +21,7 @@ In this license, the following terms have the following meanings:
 - "Technical Support" refers to paid support services provided by the Sign Development Team.
 
 ## 1. Creator's Declaration
-- All copyright to the design, specifications, and implementation examples of the Sign language belongs to the creator, "Noboru Okazaki."
+- All copyright to the design, specifications, and official implementation examples of the Sign language belongs to the creator, "Noboru Okazaki."
 - The copyright of the design and implementation of the official tools principally belongs to "Noboru Okazaki."
 - The creator has an obligation to ensure that the benefits of this community are properly distributed.
 - The creator has the obligation to maintain the public interest of this language regardless of any circumstances.
