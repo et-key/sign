@@ -85,18 +85,29 @@
 ;; リスト/Stream操作
 ;; ========================================
 
+;; ========================================
+;; リスト/Stream操作（Phase 3）
+;; ========================================
+
+;; リスト構築（カンマ演算子用）
+;; (sign:cons 1 2) -> (stream 1 2)
+;; (sign:cons 1 (stream 2 3)) -> (stream 1 2 3)
+(define (sign:cons x y)
+  (if (stream? y)
+      (stream-cons x y)
+      (stream-cons x (stream-cons y stream-null))))
+
 ;; 範囲リスト生成（有限）
 (define (sign:range start end)
   (if (<= start end)
-      (stream-take (+ (- end start) 1)
-                   (sign:range-infinite start))
+      (stream-cons start (sign:range (+ start 1) end))
       stream-null))
 
 ;; 無限リスト生成
 (define (sign:range-infinite start)
   (stream-cons start (sign:range-infinite (+ start 1))))
 
-;; リスト構築（カンマ演算子）
+;; リスト構築（可変長引数）
 (define (sign:list . args)
   (list->stream args))
 
@@ -114,19 +125,54 @@
        (if pair (cdr pair) '()))]
     [else '()]))
 
-;; MAP操作
-(define (sign:map f lst)
-  (stream-map f lst))
+;; MAP操作（カリー化対応）
+(define (sign:map f)
+  (lambda (lst)
+    (stream-map f lst)))
 
-;; FOLD操作
-(define (sign:fold f lst)
-  (if (stream-null? lst)
-      '()
-      (stream-fold f (stream-car lst) (stream-cdr lst))))
+;; FOLD操作（カリー化対応）
+;; 初期値はリストの先頭要素を使用（reduce的な動作）
+;; または初期値を明示的に渡すバージョンも検討可能だが、
+;; 仕様では [op] list -> fold なので、初期値なしか、0/Unitなどの単位元が必要
+;; ここでは単純化のため、(fold op init list) の形式を想定し、
+;; [op] が (lambda (list) (stream-fold op init list)) になるようにする
+;; ただし、initが決まらないため、sign:foldは (op init list) を取るか、
+;; (op list) で先頭を使うか。
+;; 仕様書 3.8: `[+] list` -> `(stream-fold + 0 list)` とあるので、
+;; 演算子ごとに初期値が決まっているか、明示する必要がある。
+;; ここでは汎用的な fold を定義し、呼び出し側で制御する。
+(define (sign:fold op init)
+  (lambda (lst)
+    (stream-fold op init lst)))
+
+;; FILTER操作
+(define (sign:filter pred)
+  (lambda (lst)
+    (stream-filter (lambda (x) (sign:truthy? (pred x))) lst)))
+
+;; リスト反転
+(define (sign:reverse lst)
+  (if (stream? lst)
+      (list->stream (reverse (stream->list lst))) ; stream-reverseがないため
+      '()))
+
+;; 先頭要素
+(define (sign:head lst)
+  (if (and (stream? lst) (not (stream-null? lst)))
+      (stream-car lst)
+      '()))
+
+;; 残り要素
+(define (sign:tail lst)
+  (if (and (stream? lst) (not (stream-null? lst)))
+      (stream-cdr lst)
+      stream-null))
 
 ;; リスト展開（Stream → List変換）
 (define (sign:expand stream)
-  (stream->list stream))
+  (if (stream? stream)
+      (stream->list stream)
+      stream))
 
 ;; ========================================
 ;; ラムダ構築子（Phase 2）

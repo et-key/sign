@@ -56,6 +56,9 @@ racket proto\a6\tests\test-basic.rkt
 
 # 関数機能テストの実行（Phase 2）
 racket proto\a6\tests\test-functions.rkt
+
+# Stream機能テストの実行（Phase 3）
+racket proto\a6\tests\test-streams.rkt
 ```
 
 #### `proto\a6` ディレクトリから実行する場合
@@ -69,6 +72,9 @@ racket tests\test-basic.rkt
 
 # 関数機能テストの実行（Phase 2）
 racket tests\test-functions.rkt
+
+# Stream機能テストの実行（Phase 3）
+racket tests\test-streams.rkt
 ```
 
 ### REPLの起動
@@ -110,6 +116,15 @@ inc : [+ 1]
 ` 関数適用
 result : add 3 5
 next : inc 10
+
+` リスト操作とStream（Phase 3）
+nums : 1, 2, 3, 4, 5
+doubled : [* 2,] nums
+total : [+] nums
+
+` 無限リスト
+naturals : [1 ~]
+first-5 : naturals ~
 ```
 
 ## プロジェクト構造
@@ -124,14 +139,15 @@ proto/a6/
 ├── example.sn            # サンプルファイル
 └── tests/
     ├── test-basic.rkt    # 基本テスト
-    └── test-functions.rkt # 関数機能テスト（Phase 2）
+    ├── test-functions.rkt # 関数機能テスト（Phase 2）
+    └── test-streams.rkt   # Stream機能テスト（Phase 3）
 ```
 
-## 今後の実装予定（Phase 3以降）
+## 今後の実装予定（Phase 4以降）
 
-- **Phase 3**: リスト操作とStream
-  - MAP/FOLD操作の完全実装
-  - 展開演算子（`~`後置）
+- **Phase 4**: パターンマッチと代数的データ型
+  - `match` 式の実装
+  - データ型定義構文
   
 - **Phase 4**: 制御構造
   - 条件分岐（match_case）

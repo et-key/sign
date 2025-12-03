@@ -113,8 +113,13 @@
   (define result '())
   (for ([line tokenized-lines])
     (match-define (list indent tokens) line)
-    ;; 暗黙の関数適用（%app）を挿入
-    (define tokens-with-app (insert-implicit-app tokens))
+    ;; 1. 角括弧 [...] の処理（ポイントフリー記法、範囲リスト）
+    (define tokens-with-brackets (process-brackets tokens))
+    ;; 2. 後置演算子（~）の処理
+    (define tokens-with-postfix (handle-postfix-operators tokens-with-brackets))
+    ;; 3. 暗黙の関数適用（%app）を挿入
+    (define tokens-with-app (insert-implicit-app tokens-with-postfix))
+    ;; 4. 式のパース
     (define parsed (parse-expression tokens-with-app))
     (when (not (null? parsed))
       (set! result (append result (list parsed)))))
@@ -122,6 +127,119 @@
     [(= (length result) 0) '()]
     [(= (length result) 1) (car result)]
     [else (cons 'begin result)]))
+
+;; 角括弧 [...] の処理
+(define (process-brackets tokens)
+  (let loop ([rest tokens]
+             [acc '()])
+    (cond
+      [(null? rest) (reverse acc)]
+      [(equal? (car rest) "[")
+       ;; 閉じ括弧を探す
+       (define-values (inner remaining) (split-at-bracket (cdr rest) 0))
+       ;; 内部を再帰的に処理
+       (define processed-inner (process-brackets inner))
+       ;; パターンマッチと変換
+       (define converted (convert-bracket-content processed-inner))
+       (loop remaining (cons converted acc))]
+      [else
+       (loop (cdr rest) (cons (car rest) acc))])))
+
+;; 括弧の対応をとって分割
+(define (split-at-bracket tokens depth)
+  (cond
+    [(null? tokens) (error 'parse "Unmatched [" )]
+    [(equal? (car tokens) "[")
+     (define-values (inner remaining) (split-at-bracket (cdr tokens) (+ depth 1)))
+     (values (cons "[" inner) remaining)]
+    [(equal? (car tokens) "]")
+     (if (= depth 0)
+         (values '() (cdr tokens))
+         (let-values ([(inner remaining) (split-at-bracket (cdr tokens) (- depth 1))])
+           (values (cons "]" inner) remaining)))]
+    [else
+     (define-values (inner remaining) (split-at-bracket (cdr tokens) depth))
+     (values (cons (car tokens) inner) remaining)]))
+
+;; 角括弧内の変換ロジック
+(define (convert-bracket-content tokens)
+  (cond
+    ;; 空の括弧
+    [(null? tokens) '()]
+    
+    ;; MAP操作: [... ,]
+    [(equal? (last tokens) ",")
+     (let ([inner (take tokens (sub1 (length tokens)))])
+       (list 'sign:map (convert-bracket-content inner)))]
+    
+    ;; 範囲リスト: [start ~ end]
+    [(and (= (length tokens) 3) (equal? (cadr tokens) "~"))
+     (list 'sign:range (parse-token (car tokens)) (parse-token (caddr tokens)))]
+    
+    ;; 無限範囲リスト: [start ~]
+    [(and (= (length tokens) 2) (equal? (cadr tokens) "~"))
+     (list 'sign:range-infinite (parse-token (car tokens)))]
+    
+    ;; FOLD操作: [op]
+    [(and (= (length tokens) 1) (is-operator? (car tokens)))
+     (list 'sign:fold (string->symbol (car tokens)))]
+    
+    ;; 部分適用（右）: [op arg]
+    [(and (= (length tokens) 2) (is-operator? (car tokens)))
+     (list 'sign:partial-right (string->symbol (car tokens)) (parse-token (cadr tokens)))]
+    
+    ;; 部分適用（左）: [arg op]
+    [(and (= (length tokens) 2) (is-operator? (cadr tokens)))
+     (list 'sign:partial-left (parse-token (car tokens)) (string->symbol (cadr tokens)))]
+    
+    ;; それ以外は通常のリストとして処理（カンマ区切りなどを想定）
+    [else
+     ;; 内部を infix->prefix でパースする
+     (parse-expression tokens)]))
+
+(define (is-operator? token)
+  (and (string? token)
+       (hash-has-key? operator-precedence token)))
+
+(define (parse-token token)
+  (if (string? token)
+      (cond
+        [(regexp-match? #px"^-?[0-9]" token) (string->number token)]
+        [(regexp-match? #px"^`.*`$" token) (substring token 1 (sub1 (string-length token)))]
+        [else (string->symbol token)])
+      token))
+
+;; 後置演算子の処理
+(define (handle-postfix-operators tokens)
+  (if (null? tokens)
+      '()
+      (let loop ([rest (cdr tokens)]
+                 [prev (car tokens)]
+                 [acc '()])
+        (cond
+          ;; ~ が後置演算子として使われている場合（直前がオペランド、直後がオペランドでない）
+          [(and (equal? prev "~")
+                (not (null? acc)) ; 直前に何かある
+                (is-operand? (car acc)) ; 直前がオペランド
+                (or (null? rest) ; 文末
+                    (not (is-operand? (car rest))))) ; 次がオペランドでない（演算子など）
+           ;; 直前のオペランドを取り出し、(sign:expand operand) に変換
+           (let ([operand (car acc)]
+                 [new-acc (cdr acc)])
+             (if (null? rest)
+                 (reverse (cons (list 'sign:expand (parse-token operand)) new-acc))
+                 (loop (cdr rest) (car rest) (cons (list 'sign:expand (parse-token operand)) new-acc))))]
+          
+          [(null? rest)
+           (reverse (cons prev acc))]
+          
+          [else
+           (loop (cdr rest) (car rest) (cons prev acc))]))))
+
+(define (is-operand? t)
+  (or (list? t)
+      (regexp-match? #px"^[a-zA-Z0-9_`]" t)
+      (member t '(")" "]" "}" "_"))))
 
 ;; 式のパース
 (define (parse-expression tokens)
@@ -145,10 +263,12 @@
 
 (define (should-insert-app? prev curr)
   (define (is-operand? t)
-    (or (regexp-match? #px"^[a-zA-Z0-9_`]" t) ; 識別子、数値、文字列
+    (or (list? t) ; S式（変換済み[...]など）もオペランド
+        (regexp-match? #px"^[a-zA-Z0-9_`]" t) ; 識別子、数値、文字列
         (member t '(")" "]" "}" "_"))))
   (define (is-start-operand? t)
-    (or (regexp-match? #px"^[a-zA-Z0-9_`]" t)
+    (or (list? t)
+        (regexp-match? #px"^[a-zA-Z0-9_`]" t)
         (member t '("(" "[" "{"))))
   
   ;; オペランドの後にオペランドが続く場合（間に演算子がない）
@@ -186,14 +306,13 @@
   
   (define (apply-operator! op)
     (cond
-      ;; ? 演算子（ラムダ構築子）の特別処理
+      ;; ? 演算子（ラムダ構築子）
       [(equal? op "?")
        (if (< (length output) 2)
            (error 'parse "Lambda operator ? requires both parameters and body")
            (let ([body (car output)]
                  [params-part (cadr output)])
              (set! output (cddr output))
-             ;; パラメータリストの構築
              (define params (flatten-params params-part))
              (push-output! (list 'sign:? params body))))]
       ;; %app 演算子（関数適用）
@@ -204,6 +323,14 @@
                  [func (cadr output)])
              (set! output (cddr output))
              (push-output! (list func arg))))]
+      ;; , 演算子（リスト構築）
+      [(equal? op ",")
+       (if (< (length output) 2)
+           (error 'parse "Comma operator requires two arguments")
+           (let ([right (car output)]
+                 [left (cadr output)])
+             (set! output (cddr output))
+             (push-output! (list 'sign:cons left right))))]
       ;; 通常の演算子処理
       [(< (length output) 2)
        (if (null? output)
@@ -217,19 +344,18 @@
        (set! output (cddr output))
        (push-output! (list (string->symbol op) left right))]))
 
-  ;; パラメータのフラット化（カリー化された適用列をリストに変換）
   (define (flatten-params expr)
     (cond
-      ;; (f arg) の形なら [f, arg] に分解して再帰
       [(and (list? expr) (= (length expr) 2) (not (eq? (car expr) 'sign:?)))
        (append (flatten-params (car expr)) (flatten-params (cadr expr)))]
-      ;; シンボルならリスト化
       [(symbol? expr) (list expr)]
-      ;; それ以外（エラーかもだが）
       [else (list expr)]))
   
   (for ([token tokens])
     (cond
+      ;; 既にパース済みのS式（[...]の中身など）
+      [(list? token)
+       (push-output! token)]
       ;; 演算子
       [(operator? token)
        (let loop ()
@@ -268,7 +394,7 @@
       ;; 2進数
       [(regexp-match? #px"^0b" token)
        (push-output! (string->number (substring token 2) 2))]
-      ;; 文字列リテラル（バッククォート付き）
+      ;; 文字列リテラル
       [(regexp-match? #px"^`.*`$" token)
        (push-output! (substring token 1 (sub1 (string-length token))))]
       ;; 識別子
