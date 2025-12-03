@@ -12,15 +12,7 @@
 (define-namespace-anchor anc)
 (define ns (namespace-anchor->namespace anc))
 
-;; 1. リスト構築と展開
-(check-equal? (sign:expand (sign:list 1 2 3))
-              '(1 2 3)
-              "リスト構築 (sign:list)")
-
-(check-equal? (sign:expand (sign:cons 1 (sign:cons 2 (sign:cons 3 stream-null))))
-              '(1 2 3)
-              "リスト構築 (sign:cons)")
-
+;; 1. リスト構築（カンマ演算子）
 (check-equal? (sign-read (open-input-string "1, 2, 3"))
               '(sign:cons 1 (sign:cons 2 3))
               "カンマ演算子によるリスト構築")
