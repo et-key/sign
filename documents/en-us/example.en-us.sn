@@ -4,10 +4,12 @@
 `Therefore, comments are written as strings.`
 
 `Newline is a postfix operator that "evaluates".`
-`If you don't want a newline to represent evaluation, use \, which is the character designator.
+`If you don't want a newline to represent evaluation, use \, which is the character designator.`
 `Line-start indent forms a block.`
 
-`The typical evaluation strategy for this language is lazy evaluation.`
+`This language's evaluation strategy is Pull-based evaluation.`
+`All computations are treated as Generators/Iterators, and values are generated when needed.`
+`Short-circuit evaluation and delays in conditional branches are automatically determined from the syntax.`
 
 `In English, ":" means "that is," so it's an assignment operator, while "=" remains purely a comparison operator.`
 
@@ -17,7 +19,7 @@ y : 4001.35364502
 Hello : `Hello`
 World : `World`
 
-`'true' represents all valid values, while 'false' is an empty list or an unevaluated lambda expression.`
+`'true' represents all valid values, while 'false' is a zero-length list or an unevaluated lambda expression.`
 `_ also retains its function as an id`
 
 yep : 0
@@ -330,7 +332,7 @@ My = M \y \  \D \o \m \e \s \t \i \c = `My Domestic`
 	Hello \ My \ `World` \! = `Hello My Domestic World!`
 	`Hello` \!\ My World \! = `Hello! My Domestic World!`
 
-`Strings containing `\ backslashes can be defined. Note that it's not an escape sequence.`
+`Strings containing \ backslashes can be defined. Note that it's not an escape sequence.`
 
 `The definition of a string containing 'back_quort' treats 'back_quort' as a character and handles it with string concatenation (coproduct).`
 
