@@ -115,10 +115,10 @@
     (match-define (list indent tokens) line)
     ;; 1. 角括弧 [...] の処理（ポイントフリー記法、範囲リスト）
     (define tokens-with-brackets (process-brackets tokens))
-    ;; 2. 後置演算子（~）の処理
-    (define tokens-with-postfix (handle-postfix-operators tokens-with-brackets))
+    ;; 2. ~演算子の分類（中置・前置・後置）
+    (define tokens-with-tilde (classify-tilde-operators tokens-with-brackets))
     ;; 3. 暗黙の関数適用（%app）を挿入
-    (define tokens-with-app (insert-implicit-app tokens-with-postfix))
+    (define tokens-with-app (insert-implicit-app tokens-with-tilde))
     ;; 4. 式のパース
     (define parsed (parse-expression tokens-with-app))
     (when (not (null? parsed))
@@ -209,8 +209,12 @@
         [else (string->symbol token)])
       token))
 
-;; 後置演算子の処理
-(define (handle-postfix-operators tokens)
+;; ~演算子の分類処理
+;; Sign言語リファレンスに基づき、~演算子を3種類に分類：
+;; - 中置: `1 ~ 5` (両側にオペランド)
+;; - 前置: `~rest` (直後に識別子) - 現在未実装
+;; - 後置: `list~` (直前にオペランド、直後が非オペランド)
+(define (classify-tilde-operators tokens)
   (if (null? tokens)
       '()
       (let loop ([rest (cdr tokens)]
@@ -240,6 +244,11 @@
   (or (list? t)
       (regexp-match? #px"^[a-zA-Z0-9_`]" t)
       (member t '(")" "]" "}" "_"))))
+
+;; 識別子判定
+(define (is-identifier? t)
+  (and (string? t)
+       (regexp-match? #px"^[a-zA-Z_][a-zA-Z0-9_]*$" t)))
 
 ;; 式のパース
 (define (parse-expression tokens)
