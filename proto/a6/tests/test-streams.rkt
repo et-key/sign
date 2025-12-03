@@ -83,7 +83,16 @@
                 '(1 2 3)
                 "展開演算子の評価"))
 
-;; 7. 複合テスト
+;; 7. リスト結合（並置による余積）
+(check-equal? (sign:expand (eval (sign-read (open-input-string "[1 ~ 3] [4 ~ 6]")) ns))
+              '(1 2 3 4 5 6)
+              "リスト結合（並置）")
+
+(check-equal? (sign:expand (sign:app (sign:range 1 3) (sign:range 4 ~ 6)))
+              '(1 2 3 4 5 6)
+              "リスト結合（sign:app直接呼び出し）")
+
+;; 8. 複合テスト
 (check-equal? (sign:expand ((sign:map (sign:partial-right + 1)) (sign:range 1 3)))
               '(2 3 4)
               "Range + Map")

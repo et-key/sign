@@ -315,14 +315,15 @@
              (set! output (cddr output))
              (define params (flatten-params params-part))
              (push-output! (list 'sign:? params body))))]
-      ;; %app 演算子（関数適用）
+      ;; %app 演算子（関数適用・リスト結合）
+      ;; 型判定により動作を切り替え（runtime.rktのsign:app参照）
       [(equal? op "%app")
        (if (< (length output) 2)
            (error 'parse "Application operator requires two arguments")
            (let ([arg (car output)]
                  [func (cadr output)])
              (set! output (cddr output))
-             (push-output! (list func arg))))]
+             (push-output! (list 'sign:app func arg))))]
       ;; , 演算子（リスト構築）
       [(equal? op ",")
        (if (< (length output) 2)

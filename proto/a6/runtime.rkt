@@ -86,6 +86,27 @@
 ;; ========================================
 
 ;; ========================================
+;; 余積（Juxtaposition）演算子
+;; ========================================
+
+;; 並置（空白）による余積演算
+;; Sign言語リファレンス L356-397:
+;; - リスト + リスト → リスト結合
+;; - 関数 + 引数 → 関数適用
+;; 型で動作を自動判定
+(define (sign:app func-or-list arg)
+  (cond
+    ;; 両方がstreamならリスト結合
+    [(and (stream? func-or-list) (stream? arg))
+     (stream-append func-or-list arg)]
+    ;; funcが関数なら関数適用
+    [(procedure? func-or-list)
+     (func-or-list arg)]
+    ;; それ以外はエラー
+    [else
+     (error 'sign:app "Cannot apply ~a to ~a" func-or-list arg)]))
+
+;; ========================================
 ;; リスト/Stream操作（Phase 3）
 ;; ========================================
 
