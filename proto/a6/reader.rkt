@@ -113,8 +113,8 @@
   (define result '())
   (for ([line tokenized-lines])
     (match-define (list indent tokens) line)
-    ;; 1. 角括弧 [...] の処理（ポイントフリー記法、範囲リスト）
-    (define tokens-with-brackets (process-brackets tokens))
+    ;; 1. 括弧 [...] (...) {...} の処理（ポイントフリー記法、範囲リスト、グループ化）
+    (define tokens-with-brackets (process-all-brackets tokens))
     ;; 2. ~演算子の分類（中置・前置・後置）
     (define tokens-with-tilde (classify-tilde-operators tokens-with-brackets))
     ;; 3. 暗黙の関数適用（%app）を挿入
@@ -128,37 +128,53 @@
     [(= (length result) 1) (car result)]
     [else (cons 'begin result)]))
 
-;; 角括弧 [...] の処理
-(define (process-brackets tokens)
+;; 全ての括弧 [...] (...) {...} の処理
+(define (process-all-brackets tokens)
   (let loop ([rest tokens]
              [acc '()])
     (cond
       [(null? rest) (reverse acc)]
+      
+      ;; 角括弧 [ ... ]
       [(equal? (car rest) "[")
-       ;; 閉じ括弧を探す
-       (define-values (inner remaining) (split-at-bracket (cdr rest) 0))
-       ;; 内部を再帰的に処理
-       (define processed-inner (process-brackets inner))
-       ;; パターンマッチと変換
+       (define-values (inner remaining) (split-at-matching-bracket (cdr rest) 0 "[" "]"))
+       (define processed-inner (process-all-brackets inner))
        (define converted (convert-bracket-content processed-inner))
        (loop remaining (cons converted acc))]
+       
+      ;; 丸括弧 ( ... )
+      [(equal? (car rest) "(")
+       (define-values (inner remaining) (split-at-matching-bracket (cdr rest) 0 "(" ")"))
+       (define processed-inner (process-all-brackets inner))
+       (define converted (convert-bracket-content processed-inner))
+       (loop remaining (cons converted acc))]
+       
+      ;; 波括弧 { ... }
+      [(equal? (car rest) "{")
+       (define-values (inner remaining) (split-at-matching-bracket (cdr rest) 0 "{" "}"))
+       (define processed-inner (process-all-brackets inner))
+       (define converted (convert-bracket-content processed-inner))
+       (loop remaining (cons converted acc))]
+       
       [else
        (loop (cdr rest) (cons (car rest) acc))])))
 
-;; 括弧の対応をとって分割
-(define (split-at-bracket tokens depth)
+;; 括弧の対応をとって分割（汎用版）
+;; open-paren: 期待する開き括弧
+;; close-paren: 期待する閉じ括弧
+(define (split-at-matching-bracket tokens depth open-paren close-paren)
   (cond
-    [(null? tokens) (error 'parse "Unmatched [" )]
-    [(equal? (car tokens) "[")
-     (define-values (inner remaining) (split-at-bracket (cdr tokens) (+ depth 1)))
-     (values (cons "[" inner) remaining)]
-    [(equal? (car tokens) "]")
+    [(null? tokens) (error 'parse "Unmatched ~a" open-paren)]
+    [(equal? (car tokens) open-paren)
+     (define-values (inner remaining) (split-at-matching-bracket (cdr tokens) (+ depth 1) open-paren close-paren))
+     (values (cons open-paren inner) remaining)]
+    [(equal? (car tokens) close-paren)
      (if (= depth 0)
          (values '() (cdr tokens))
-         (let-values ([(inner remaining) (split-at-bracket (cdr tokens) (- depth 1))])
-           (values (cons "]" inner) remaining)))]
+         (let-values ([(inner remaining) (split-at-matching-bracket (cdr tokens) (- depth 1) open-paren close-paren)])
+           (values (cons close-paren inner) remaining)))]
     [else
-     (define-values (inner remaining) (split-at-bracket (cdr tokens) depth))
+     (define-values (inner remaining) (split-at-matching-bracket (cdr tokens) depth open-paren close-paren))
      (values (cons (car tokens) inner) remaining)]))
 
 ;; 角括弧内の変換ロジック
