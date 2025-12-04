@@ -12,7 +12,10 @@
          sign-tokenize
          group-blocks
          sign-parse-block
-         parse-expression)
+         parse-expression
+         parse-line
+         process-all-brackets
+         insert-implicit-app)
 
 ;; 演算子優先順位テーブル
 (define operator-precedence
@@ -196,6 +199,59 @@
   ;; 5. 式のパース
   (parse-expression tokens-final))
 
+;; ブロック内容の処理（cond変換）
+(define (process-block-content sexps)
+  (define (is-conditional-clause? x)
+    (match x
+      [(list 'define key val) (not (symbol? key))]
+      [_ #f]))
+
+  (define (to-cond-clause x)
+    (match x
+      [(list 'define key val)
+       (list (list 'sign:truthy? key) val)]
+      [_ (error "Invalid cond clause")]))
+
+  ;; 最初の条件節を探す
+  (define-values (pre-cond post-cond)
+    (split-f-list (lambda (x) (not (is-conditional-clause? x))) sexps))
+
+  (cond
+    ;; 条件節がない場合 -> そのまま返す
+    [(null? post-cond) sexps]
+    
+    ;; 条件節がある場合 -> cond式を構築
+    [else
+     (define clauses '())
+     (define else-clause #f)
+     
+     (let loop ([remaining post-cond])
+       (cond
+         [(null? remaining) (void)]
+         [(is-conditional-clause? (car remaining))
+          (set! clauses (append clauses (list (to-cond-clause (car remaining)))))
+          (loop (cdr remaining))]
+         [(null? (cdr remaining)) ; 最後の要素かつ条件節でない -> else
+          (set! else-clause (car remaining))]
+         [else
+          (error 'process-block-content "Cannot mix definitions/expressions inside conditional block except as final else clause")]))
+     
+     (define cond-expr
+       (cons 'cond
+             (append clauses
+                     (if else-clause
+                         (list (list 'else else-clause))
+                         '()))))
+     
+     (append pre-cond (list cond-expr))]))
+
+;; リストを述語が真になる最初の要素の前で分割 (srfi-1 break equivalent)
+(define (split-f-list pred lst)
+  (let loop ([src lst] [acc '()])
+    (cond
+      [(null? src) (values (reverse acc) '())]
+      [(pred (car src)) (loop (cdr src) (cons (car src) acc))]
+      [else (values (reverse acc) src)])))
 ;; 式とブロックの結合
 (define (combine-with-block parent-sexp child-block)
   (define unwrapped-block
@@ -203,16 +259,32 @@
       [(list 'begin exprs ...) exprs]
       [_ (list child-block)]))
   
+  ;; ブロック内容を処理（cond変換など）
+  (define processed-block (process-block-content unwrapped-block))
+  
+  ;; processed-blockがcond式かどうか判定
+  (define is-cond?
+    (and (list? processed-block)
+         (not (null? processed-block))
+         (equal? (car processed-block) 'cond)))
+  
   (match parent-sexp
     [(list 'define name (list 'sign:? params body))
-     (list 'define name (cons 'sign:? (cons params unwrapped-block)))]
+     (if is-cond?
+         (list 'define name (list 'sign:? params processed-block))
+         (if (list? processed-block)
+             (list 'define name (cons 'sign:? (cons params processed-block)))
+             (list 'define name (list 'sign:? params processed-block))))]
       
     [(list 'sign:? params body)
-     (cons 'sign:? (cons params unwrapped-block))]
+     (if is-cond?
+         (list 'sign:? params processed-block)
+         (if (list? processed-block)
+             (cons 'sign:? (cons params processed-block))
+             (list 'sign:? params processed-block)))]
       
     [else
      (list 'begin parent-sexp child-block)]))
-
 ;; 全ての括弧 [...] (...) {...} の処理
 (define (process-all-brackets tokens)
   (let loop ([rest tokens]
@@ -374,7 +446,7 @@
             (reverse acc)
             (let ([curr (car rest)])
               (if (should-insert-app? prev curr)
-                  (loop rest prev (cons "%app" acc)) ; %appを挿入して再試行せず、prevはそのまま
+                  (loop rest "%app" (cons "%app" acc)) ; Insert %app and update prev to %app
                   (loop (cdr rest) curr (cons curr acc))))))))
 
 (define (should-insert-app? prev curr)
