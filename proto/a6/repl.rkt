@@ -7,10 +7,14 @@
 
 (provide sign-repl)
 
+;; マクロを含む名前空間のアンカー（トップレベルで定義）
+(define-namespace-anchor anc)
+(define ns (namespace-anchor->namespace anc))
+
 (define (sign-repl)
   (displayln "Sign Language REPL (Racket #lang implementation)")
   (displayln "Type :quit to exit, :help for help\n")
-  (repl-loop (make-base-namespace)))
+  (repl-loop ns))
 
 (define (repl-loop ns)
   (display "sign> ")
