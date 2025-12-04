@@ -79,14 +79,24 @@ racket tests\test-streams.rkt
 
 ### REPLの起動
 
+#### プロジェクトルートから実行する場合
+
 ```powershell
 # REPLを起動
-racket -e "(require (file \"proto/a6/repl.rkt\")) (sign-repl)"
+racket proto\a6\repl.rkt
+```
+
+#### `proto\a6` ディレクトリから実行する場合
+
+```powershell
+# REPLを起動
+racket repl.rkt
 ```
 
 REPLコマンド：
 - `:quit` - 終了
 - `:help` - ヘルプ表示
+- `Ctrl+C` - 強制終了
 
 ### Sign言語ファイルの実行
 

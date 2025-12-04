@@ -2,7 +2,8 @@
 
 (require "reader.rkt"
          "runtime.rkt"
-         racket/port)
+         racket/port
+         racket/string)
 
 (provide sign-repl)
 
@@ -14,7 +15,8 @@
 (define (repl-loop ns)
   (display "sign> ")
   (flush-output)
-  (define input (read-line))
+  (define raw-input (read-line))
+  (define input (if (string? raw-input) (string-trim raw-input) raw-input))
   (cond
     [(eof-object? input)
      (displayln "\nGoodbye!")]
@@ -22,6 +24,8 @@
      (displayln "Goodbye!")]
     [(equal? input ":help")
      (display-help)
+     (repl-loop ns)]
+    [(equal? input "")
      (repl-loop ns)]
     [else
      (with-handlers
@@ -57,3 +61,7 @@ Sign Language Examples:
     [(char? value) (printf "\\~a" value)]
     [(procedure? value) (display "[function]")]
     [else (display value)]))
+
+;; REPLを起動
+(module+ main
+  (sign-repl))
