@@ -63,4 +63,30 @@
 ;;               '(1 2 3 4 5 6)
 ;;               "リスト結合（sign:app直接呼び出し）")
 
+;; 9. 括弧の等価性テスト
+;; 丸括弧 (1 ~ 5)
+(check-equal? (sign:expand (eval (sign-read (open-input-string "(1 ~ 5)")) ns))
+              '(1 2 3 4 5)
+              "丸括弧による範囲リスト")
+
+;; 波括弧 {1 ~ 5}
+(check-equal? (sign:expand (eval (sign-read (open-input-string "{1 ~ 5}")) ns))
+              '(1 2 3 4 5)
+              "波括弧による範囲リスト")
+
+;; 通常のグループ化 (1 + 2)
+(check-equal? (eval (sign-read (open-input-string "(1 + 2)")) ns)
+              3
+              "丸括弧によるグループ化")
+
+;; 通常のグループ化 {1 + 2}
+(check-equal? (eval (sign-read (open-input-string "{1 + 2}")) ns)
+              3
+              "波括弧によるグループ化")
+
+;; ネストされた括弧 [(1 ~ 3)]
+(check-equal? (sign:expand (eval (sign-read (open-input-string "[(1 ~ 3)]")) ns))
+              '(1 2 3)
+              "ネストされた括弧")
+
 (printf "すべてのテストが成功しました！\n")
