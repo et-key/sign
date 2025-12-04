@@ -167,10 +167,11 @@
     ;; 空の括弧
     [(null? tokens) '()]
     
-    ;; MAP操作: [... ,]
+    ;; MAP操作: [... ,] → (lambda (lst) (stream-map f lst))
     [(equal? (last tokens) ",")
-     (let ([inner (take tokens (sub1 (length tokens)))])
-       (list 'sign:map (convert-bracket-content inner)))]
+     (let* ([inner (take tokens (sub1 (length tokens)))]
+            [f (convert-bracket-content inner)])
+       (list 'lambda '(lst) (list 'stream-map f 'lst)))]
     
     ;; 範囲リスト: [start ~ end]
     [(and (= (length tokens) 3) (equal? (cadr tokens) "~"))
@@ -180,17 +181,22 @@
     [(and (= (length tokens) 2) (equal? (cadr tokens) "~"))
      (list 'sign:range-infinite (parse-token (car tokens)))]
     
-    ;; FOLD操作: [op]
+    ;; FOLD操作: [op] → (lambda (lst) (stream-fold op 0 lst))
     [(and (= (length tokens) 1) (is-operator? (car tokens)))
-     (list 'sign:fold (string->symbol (car tokens)))]
+     (let ([op (string->symbol (car tokens))])
+       (list 'lambda '(lst) (list 'stream-fold op 0 'lst)))]
     
-    ;; 部分適用（右）: [op arg]
+    ;; 部分適用（右）: [op arg] → (lambda (x) (op x val))
     [(and (= (length tokens) 2) (is-operator? (car tokens)))
-     (list 'sign:partial-right (string->symbol (car tokens)) (parse-token (cadr tokens)))]
+     (let ([op (string->symbol (car tokens))]
+           [val (parse-token (cadr tokens))])
+       (list 'lambda '(x) (list op 'x val)))]
     
-    ;; 部分適用（左）: [arg op]
+    ;; 部分適用（左）: [arg op] → (lambda (x) (op val x))
     [(and (= (length tokens) 2) (is-operator? (cadr tokens)))
-     (list 'sign:partial-left (parse-token (car tokens)) (string->symbol (cadr tokens)))]
+     (let ([val (parse-token (car tokens))]
+           [op (string->symbol (cadr tokens))])
+       (list 'lambda '(x) (list op val 'x)))]
     
     ;; それ以外は通常のリストとして処理（カンマ区切りなどを想定）
     [else
