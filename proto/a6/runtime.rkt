@@ -120,16 +120,7 @@
        (if pair (cdr pair) '()))]
     [else '()]))
 
-;; MAP操作（カリー化対応）
-(define (sign:map f)
-  (lambda (lst)
-    (stream-map f lst)))
 
-;; FOLD操作（カリー化対応）
-;; 仕様書 3.8: `[+] list` -> `(stream-fold + 0 list)`
-(define (sign:fold op init)
-  (lambda (lst)
-    (stream-fold op init lst)))
 
 ;; リスト展開（Stream → List変換）
 ;; 仕様書 3.8: `list~` -> `(stream->list list)`
@@ -159,23 +150,4 @@
     [(_ (arg args ...) body)
      (lambda (arg) (sign:? (args ...) body))]))
 
-;; ========================================
-;; ポイントフリー記法サポート（Phase 2）
-;; ========================================
 
-;; 部分適用（右オペランド固定）
-;; 例: (sign:partial-right + 1) → (lambda (x) (+ x 1))
-;; Sign記法: [+ 1]
-(define (sign:partial-right op val)
-  (lambda (x) (op x val)))
-
-;; 部分適用（左オペランド固定）
-;; 例: (sign:partial-left 1 -) → (lambda (x) (- 1 x))
-;; Sign記法: [1 -]
-(define (sign:partial-left val op)
-  (lambda (x) (op val x)))
-
-;; 関数合成
-;; 例: (sign:compose f g) → (lambda (x) (f (g x)))
-(define (sign:compose f g)
-  (lambda (x) (f (g x))))
