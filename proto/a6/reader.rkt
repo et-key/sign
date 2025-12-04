@@ -372,6 +372,14 @@
                  [left (cadr output)])
              (set! output (cddr output))
              (push-output! (list 'sign:cons left right))))]
+      ;; 比較演算子（sign: プレフィックスに変換）
+      [(member op '("<" "<=" "=" ">=" ">" "!="))
+       (if (< (length output) 2)
+           (error 'parse (format "Comparison operator ~a requires two arguments" op))
+           (let ([right (car output)]
+                 [left (cadr output)])
+             (set! output (cddr output))
+             (push-output! (list (string->symbol (string-append "sign:" op)) left right))))]
       ;; 通常の演算子処理
       [(< (length output) 2)
        (if (null? output)
