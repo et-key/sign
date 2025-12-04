@@ -355,6 +355,15 @@
                  [func (cadr output)])
              (set! output (cddr output))
              (push-output! (list 'sign:app func arg))))]
+      ;; : 演算子（変数定義）
+      ;; x : 42 → (define x 42)
+      [(equal? op ":")
+       (if (< (length output) 2)
+           (error 'parse "Define operator : requires both name and value")
+           (let ([value (car output)]
+                 [name (cadr output)])
+             (set! output (cddr output))
+             (push-output! (list 'define name value))))]
       ;; , 演算子（リスト構築）
       [(equal? op ",")
        (if (< (length output) 2)
