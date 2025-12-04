@@ -144,13 +144,13 @@
 (define-syntax sign:?
   (syntax-rules ()
     ;; 引数なし（定数関数）
-    [(_ () body)
-     (lambda () body)]
+    [(_ () body ...)
+     (lambda () body ...)]
     ;; 単一引数
-    [(_ (arg) body)
-     (lambda (arg) body)]
+    [(_ (arg) body ...)
+     (lambda (arg) body ...)]
     ;; 複数引数（カリー化）
-    [(_ (arg args ...) body)
-     (lambda (arg) (sign:? (args ...) body))]))
+    [(_ (arg args ...) body ...)
+     (lambda (arg) (sign:? (args ...) body ...))]))
 
 

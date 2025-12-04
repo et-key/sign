@@ -1,4 +1,4 @@
-#lang racket/base
+﻿#lang racket/base
 
 (require racket/port
          racket/string
@@ -7,7 +7,12 @@
          racket/set)
 
 (provide sign-read
-         sign-read-syntax)
+         sign-read-syntax
+         ;; For testing
+         sign-tokenize
+         group-blocks
+         sign-parse-block
+         parse-expression)
 
 ;; 演算子優先順位テーブル
 (define operator-precedence
@@ -34,13 +39,58 @@
 (define (sign-read in)
   (define source (port->string in))
   (define lines (sign-tokenize source))
-  (define sexp (sign-parse lines))
+  (define block-tree (group-blocks lines))
+  (define sexp (sign-parse-block block-tree))
   sexp)
 
 ;; ソース位置情報付きで読み取り
 (define (sign-read-syntax src in)
   (define sexp (sign-read in))
   (datum->syntax #f sexp))
+
+;; ========================================
+;; ブロック構造化（インデント処理）
+;; ========================================
+
+;; フラットな行リストをインデントに基づいて木構造に変換
+;; 入力: list of (indent tokens)
+;; 出力: list of (tokens children...)
+(define (group-blocks lines)
+  (if (null? lines)
+      '()
+      (let loop ([remaining lines]
+                 [current-indent (car (car lines))]
+                 [acc '()])
+        (if (null? remaining)
+            (reverse acc)
+            (let* ([line (car remaining)]
+                   [indent (car line)]
+                   [tokens (cadr line)])
+              (cond
+                ;; インデントが深い場合（子ブロック）
+                [(> indent current-indent)
+                 (let-values ([(children rest) (collect-children remaining indent)])
+                   (define parent (car acc))
+                   (define new-parent (append parent (list (group-blocks children))))
+                   (loop rest current-indent (cons new-parent (cdr acc))))]
+                ;; インデントが同じ場合（兄弟）
+                [(= indent current-indent)
+                 (loop (cdr remaining) current-indent (cons (list tokens) acc))]
+                ;; インデントが浅い場合（親ブロックへ戻る）
+                [else
+                 (reverse acc)]))))))
+
+;; 子ブロックを収集
+(define (collect-children lines base-indent)
+  (let loop ([remaining lines]
+             [acc '()])
+    (cond
+      [(null? remaining)
+       (values (reverse acc) '())]
+      [(< (car (car remaining)) base-indent)
+       (values (reverse acc) remaining)]
+      [else
+       (loop (cdr remaining) (cons (car remaining) acc))])))
 
 ;; ========================================
 ;; トークン化
@@ -108,25 +158,60 @@
 ;; パース（中置→前置変換）
 ;; ========================================
 
-;; Shunting-yard algorithm による中置→前置変換
-(define (sign-parse tokenized-lines)
+;; ブロックツリーのパース
+(define (sign-parse-block block-tree)
   (define result '())
-  (for ([line tokenized-lines])
-    (match-define (list indent tokens) line)
-    ;; 1. 括弧 [...] (...) {...} の処理（ポイントフリー記法、範囲リスト、グループ化）
-    (define tokens-with-brackets (process-all-brackets tokens))
-    ;; 2. ~演算子の分類（中置・前置・後置）
-    (define tokens-with-tilde (classify-tilde-operators tokens-with-brackets))
-    ;; 3. 暗黙の関数適用（%app）を挿入
-    (define tokens-with-app (insert-implicit-app tokens-with-tilde))
-    ;; 4. 式のパース
-    (define parsed (parse-expression tokens-with-app))
-    (when (not (null? parsed))
-      (set! result (append result (list parsed)))))
+  (for ([node block-tree])
+    (match-define (list tokens children ...) node)
+    
+    ;; 1. 現在の行をパース
+    (define parsed-line (parse-line tokens))
+    
+    ;; 2. 子ブロックがある場合の処理
+    (if (null? children)
+        (set! result (append result (list parsed-line)))
+        (let ([child-sexps (sign-parse-block (car children))]) ; childrenはリストのリストになっている
+          ;; 親式と子ブロックを結合
+          (set! result (append result (list (combine-with-block parsed-line child-sexps)))))))
+          
   (cond
     [(= (length result) 0) '()]
     [(= (length result) 1) (car result)]
     [else (cons 'begin result)]))
+
+;; 行単位のパース
+(define (parse-line tokens)
+  ;; 1. 括弧 [...] (...) {...} の処理
+  (define tokens-with-brackets (process-all-brackets tokens))
+  ;; 2. ~演算子の分類
+  (define tokens-with-tilde (classify-tilde-operators tokens-with-brackets))
+  ;; 3. 暗黙の関数適用（%app）を挿入
+  (define tokens-with-app (insert-implicit-app tokens-with-tilde))
+  ;; 4. `?` で終わる場合はプレースホルダを挿入
+  (define tokens-final
+    (if (and (not (null? tokens-with-app))
+             (equal? (last tokens-with-app) "?"))
+        (append (drop-right tokens-with-app 1) (list "?" "__BLOCK__"))
+        tokens-with-app))
+  ;; 5. 式のパース
+  (parse-expression tokens-final))
+
+;; 式とブロックの結合
+(define (combine-with-block parent-sexp child-block)
+  (define unwrapped-block
+    (match child-block
+      [(list 'begin exprs ...) exprs]
+      [_ (list child-block)]))
+  
+  (match parent-sexp
+    [(list 'define name (list 'sign:? params body))
+     (list 'define name (cons 'sign:? (cons params unwrapped-block)))]
+      
+    [(list 'sign:? params body)
+     (cons 'sign:? (cons params unwrapped-block))]
+      
+    [else
+     (list 'begin parent-sexp child-block)]))
 
 ;; 全ての括弧 [...] (...) {...} の処理
 (define (process-all-brackets tokens)
@@ -446,6 +531,9 @@
       ;; 文字列リテラル
       [(regexp-match? #px"^`.*`$" token)
        (push-output! (substring token 1 (sub1 (string-length token))))]
+      ;; __BLOCK__ placeholder (for empty lambda body)
+      [(equal? token "__BLOCK__")
+       (push-output! ''())]
       ;; 識別子
       [else
        (push-output! (string->symbol token))]))
