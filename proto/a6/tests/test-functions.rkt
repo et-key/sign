@@ -2,8 +2,7 @@
 
 (require rackunit
          "../reader.rkt"
-         "../runtime.rkt"
-         srfi/41)
+         "../runtime.rkt")
 
 ;; ========================================
 ;; ラムダ式のパーステスト
@@ -18,7 +17,7 @@
               "複数引数ラムダのパース")
 
 ;; ========================================
-;; ラムダ式の評価テスト
+;; ラムダ式の評価テスト（直接呼び出し）
 ;; ========================================
 
 ;; 単一引数ラムダ
@@ -34,36 +33,31 @@
 (check-equal? (add3 7) 10 "部分適用された関数")
 
 ;; ========================================
+;; 定義演算子とラムダの統合テスト
+;; ========================================
+
+;; 定義演算子と組み合わせたテスト（パースのみ）
+(check-equal? (sign-read (open-input-string "f : x ? x * 2"))
+              '(define f (sign:? (x) (* x 2)))
+              "定義演算子とラムダの組み合わせパース")
+
+;; ========================================
 ;; ポイントフリー記法テスト
 ;; ========================================
 
-;; 右オペランド固定
-(define increment (sign:partial-right + 1))
-(check-equal? (increment 5) 6 "部分適用（右オペランド固定）")
+;; 右オペランド固定: [+ 1]
+(check-equal? (sign-read (open-input-string "[+ 1]"))
+              '(lambda (x) (+ x 1))
+              "ポイントフリー記法: [+ 1]")
 
-(define double (sign:partial-right * 2))
-(check-equal? (double 7) 14 "部分適用（乗算）")
+;; 左オペランド固定: [10 -]
+(check-equal? (sign-read (open-input-string "[10 -]"))
+              '(lambda (x) (- 10 x))
+              "ポイントフリー記法: [10 -]")
 
-;; 左オペランド固定
-(define subtract-from-10 (sign:partial-left 10 -))
-(check-equal? (subtract-from-10 3) 7 "部分適用（左オペランド固定）")
-
-;; ========================================
-;; 関数合成テスト
-;; ========================================
-
-(define add1-then-double (sign:compose double add1))
-(check-equal? (add1-then-double 5) 12 "関数合成: (5 + 1) * 2")
-
-;; ========================================
-;; 定義と適用の統合テスト
-;; ========================================
-
-;; 定義演算子と組み合わせたテスト
-(define test-expr "f : x ? x * 2")
-(define parsed (sign-read (open-input-string test-expr)))
-(check-equal? parsed
-              '(: f (sign:? (x) (* x 2)))
-              "定義演算子とラムダの組み合わせパース")
+;; FOLD操作: [+]
+(check-equal? (sign-read (open-input-string "[+]"))
+              '(lambda (lst) (stream-fold + 0 lst))
+              "ポイントフリー記法: [+]")
 
 (displayln "すべてのラムダ関数テストが成功しました！")

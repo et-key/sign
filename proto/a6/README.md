@@ -1,8 +1,8 @@
-# Sign言語インタープリタ - Phase 1実装
+# Sign言語インタープリタ - Phase 4まで実装完了
 
 Sign言語のRacket `#lang`実装です。仕様書 `documents\ja-jp\specification\Interpreter_Specification_ja-jp.md` に基づいています。
 
-## 実装済みの機能（Phase 1）
+## 実装済みの機能
 
 ### コアファイル
 - **info.rkt** - パッケージ情報とRacket依存関係
@@ -36,6 +36,12 @@ Sign言語のRacket `#lang`実装です。仕様書 `documents\ja-jp\specificati
 - 演算子優先順位の処理
 - 右結合/左結合の対応
 
+#### 制御構造（Phase 4）
+- **ブロック構文**: インデントベースのコードブロック
+- **条件分岐 (match_case)**: `Expr : Expr` パターンの自動 `cond` 変換
+- **暗黙的else**: 条件分岐の最後の式が自動的に `else` 節に
+- **混合コンテンツ**: 定義と条件分岐の組み合わせ
+
 ## 使用方法
 
 ### 前提条件
@@ -56,6 +62,14 @@ racket proto\a6\tests\test-basic.rkt
 
 # 関数機能テストの実行（Phase 2）
 racket proto\a6\tests\test-functions.rkt
+
+# Stream機能テストの実行（Phase 3）
+racket proto\a6\tests\test-streams.rkt
+
+# 制御構造テストの実行（Phase 4）
+racket proto\a6\tests\test-block.rkt
+racket proto\a6\tests\test-match.rkt
+racket proto\a6\tests\test-control.rkt
 ```
 
 #### `proto\a6` ディレクトリから実行する場合
@@ -69,18 +83,36 @@ racket tests\test-basic.rkt
 
 # 関数機能テストの実行（Phase 2）
 racket tests\test-functions.rkt
+
+# Stream機能テストの実行（Phase 3）
+racket tests\test-streams.rkt
+
+# 制御構造テストの実行（Phase 4）
+racket tests\test-block.rkt
+racket tests\test-match.rkt
+racket tests\test-control.rkt
 ```
 
 ### REPLの起動
 
+#### プロジェクトルートから実行する場合
+
 ```powershell
 # REPLを起動
-racket -e "(require (file \"proto/a6/repl.rkt\")) (sign-repl)"
+racket proto\a6\repl.rkt
+```
+
+#### `proto\a6` ディレクトリから実行する場合
+
+```powershell
+# REPLを起動
+racket repl.rkt
 ```
 
 REPLコマンド：
 - `:quit` - 終了
 - `:help` - ヘルプ表示
+- `Ctrl+C` - 強制終了
 
 ### Sign言語ファイルの実行
 
@@ -110,6 +142,27 @@ inc : [+ 1]
 ` 関数適用
 result : add 3 5
 next : inc 10
+
+` リスト操作とStream（Phase 3）
+nums : 1, 2, 3, 4, 5
+doubled : [* 2,] nums
+total : [+] nums
+
+` 無限リスト
+naturals : [1 ~]
+first-5 : naturals ~
+
+` 制御構造（Phase 4）
+` 条件分岐
+classify : x ?
+    x < 0 : `negative`
+    x = 0 : `zero`
+    x > 0 : `positive`
+
+` 再帰関数
+fact : n ?
+    n <= 1 : 1
+    n * (fact (n - 1))
 ```
 
 ## プロジェクト構造
@@ -123,22 +176,24 @@ proto/a6/
 ├── repl.rkt              # REPL実装
 ├── example.sn            # サンプルファイル
 └── tests/
-    ├── test-basic.rkt    # 基本テスト
-    └── test-functions.rkt # 関数機能テスト（Phase 2）
+    ├── test-basic.rkt     # 基本テスト
+    ├── test-functions.rkt # 関数機能テスト（Phase 2）
+    ├── test-streams.rkt   # Stream機能テスト（Phase 3）
+    ├── test-block.rkt     # ブロック構文テスト（Phase 4）
+    ├── test-match.rkt     # 条件分岐テスト（Phase 4）
+    └── test-control.rkt   # 制御構造統合テスト（Phase 4）
 ```
 
-## 今後の実装予定（Phase 3以降）
+## 今後の実装予定（Phase 5以降）
 
-- **Phase 3**: リスト操作とStream
-  - MAP/FOLD操作の完全実装
-  - 展開演算子（`~`後置）
-  
-- **Phase 4**: 制御構造
-  - 条件分岐（match_case）
-  - ブロック構文（インデント）
-  
 - **Phase 5**: モジュールシステム
   - Export/Import演算子
+  - 名前空間管理
+
+- **将来の拡張**:
+  - パターンマッチと代数的データ型
+  - マクロシステム
+  - 型システム（オプション）
 
 ## テスト内容
 
@@ -153,7 +208,8 @@ proto/a6/
 
 ## 注意事項
 
-このPhase 1実装は基本的な機能のみを含みます。ラムダ式、関数定義、高度なリスト操作は今後のフェーズで実装予定です。
+- Phase 1-4まで実装完了：基本演算、関数、Stream、制御構造
+- 詳細なステータスは `STATUS.md` を参照
 
 ## 参考資料
 

@@ -17,28 +17,6 @@
   (not (null? x)))
 
 ;; ========================================
-;; 比較演算子（値返却型）
-;; ========================================
-
-(define (sign:< x y)
-  (if (< x y) x '()))
-
-(define (sign:<= x y)
-  (if (<= x y) x '()))
-
-(define (sign:= x y)
-  (if (equal? x y) x '()))
-
-(define (sign:>= x y)
-  (if (>= x y) x '()))
-
-(define (sign:> x y)
-  (if (> x y) x '()))
-
-(define (sign:!= x y)
-  (if (not (equal? x y)) x '()))
-
-;; ========================================
 ;; 論理演算子（短絡評価）
 ;; ========================================
 
@@ -69,6 +47,31 @@
   (if (sign:truthy? x) '() 1))
 
 ;; ========================================
+;; 比較演算子（値返却型）
+;; ========================================
+
+;; Sign言語の比較演算子は、真の場合は左オペランドを返し、
+;; 偽の場合は空リスト（Unit）を返す
+
+(define (sign:< x y)
+  (if (< x y) x '()))
+
+(define (sign:<= x y)
+  (if (<= x y) x '()))
+
+(define (sign:= x y)
+  (if (equal? x y) x '()))
+
+(define (sign:>= x y)
+  (if (>= x y) x '()))
+
+(define (sign:> x y)
+  (if (> x y) x '()))
+
+(define (sign:!= x y)
+  (if (not (equal? x y)) x '()))
+
+;; ========================================
 ;; 算術演算子
 ;; ========================================
 
@@ -85,20 +88,26 @@
 ;; リスト/Stream操作
 ;; ========================================
 
+
+;; リスト構築（カンマ演算子用）
+;; (sign:cons 1 2) -> (stream 1 2)
+;; (sign:cons 1 (stream 2 3)) -> (stream 1 2 3)
+(define (sign:cons x y)
+  (if (stream? y)
+      (stream-cons x y)
+      (stream-cons x (stream-cons y stream-null))))
+
 ;; 範囲リスト生成（有限）
 (define (sign:range start end)
   (if (<= start end)
-      (stream-take (+ (- end start) 1)
-                   (sign:range-infinite start))
+      (stream-cons start (sign:range (+ start 1) end))
       stream-null))
 
 ;; 無限リスト生成
 (define (sign:range-infinite start)
   (stream-cons start (sign:range-infinite (+ start 1))))
 
-;; リスト構築（カンマ演算子）
-(define (sign:list . args)
-  (list->stream args))
+
 
 ;; Get演算子
 (define (sign:get obj key)
@@ -114,19 +123,14 @@
        (if pair (cdr pair) '()))]
     [else '()]))
 
-;; MAP操作
-(define (sign:map f lst)
-  (stream-map f lst))
 
-;; FOLD操作
-(define (sign:fold f lst)
-  (if (stream-null? lst)
-      '()
-      (stream-fold f (stream-car lst) (stream-cdr lst))))
 
 ;; リスト展開（Stream → List変換）
+;; 仕様書 3.8: `list~` -> `(stream->list list)`
 (define (sign:expand stream)
-  (stream->list stream))
+  (if (stream? stream)
+      (stream->list stream)
+      stream))
 
 ;; ========================================
 ;; ラムダ構築子（Phase 2）
@@ -140,32 +144,13 @@
 (define-syntax sign:?
   (syntax-rules ()
     ;; 引数なし（定数関数）
-    [(_ () body)
-     (lambda () body)]
+    [(_ () body ...)
+     (lambda () body ...)]
     ;; 単一引数
-    [(_ (arg) body)
-     (lambda (arg) body)]
+    [(_ (arg) body ...)
+     (lambda (arg) body ...)]
     ;; 複数引数（カリー化）
-    [(_ (arg args ...) body)
-     (lambda (arg) (sign:? (args ...) body))]))
+    [(_ (arg args ...) body ...)
+     (lambda (arg) (sign:? (args ...) body ...))]))
 
-;; ========================================
-;; ポイントフリー記法サポート（Phase 2）
-;; ========================================
 
-;; 部分適用（右オペランド固定）
-;; 例: (sign:partial-right + 1) → (lambda (x) (+ x 1))
-;; Sign記法: [+ 1]
-(define (sign:partial-right op val)
-  (lambda (x) (op x val)))
-
-;; 部分適用（左オペランド固定）
-;; 例: (sign:partial-left 1 -) → (lambda (x) (- 1 x))
-;; Sign記法: [1 -]
-(define (sign:partial-left val op)
-  (lambda (x) (op val x)))
-
-;; 関数合成
-;; 例: (sign:compose f g) → (lambda (x) (f (g x)))
-(define (sign:compose f g)
-  (lambda (x) (f (g x))))

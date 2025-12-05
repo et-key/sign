@@ -2,19 +2,25 @@
 
 (require "reader.rkt"
          "runtime.rkt"
-         racket/port)
+         racket/port
+         racket/string)
 
 (provide sign-repl)
+
+;; マクロを含む名前空間のアンカー（トップレベルで定義）
+(define-namespace-anchor anc)
+(define ns (namespace-anchor->namespace anc))
 
 (define (sign-repl)
   (displayln "Sign Language REPL (Racket #lang implementation)")
   (displayln "Type :quit to exit, :help for help\n")
-  (repl-loop (make-base-namespace)))
+  (repl-loop ns))
 
 (define (repl-loop ns)
   (display "sign> ")
   (flush-output)
-  (define input (read-line))
+  (define raw-input (read-line))
+  (define input (if (string? raw-input) (string-trim raw-input) raw-input))
   (cond
     [(eof-object? input)
      (displayln "\nGoodbye!")]
@@ -22,6 +28,8 @@
      (displayln "Goodbye!")]
     [(equal? input ":help")
      (display-help)
+     (repl-loop ns)]
+    [(equal? input "")
      (repl-loop ns)]
     [else
      (with-handlers
@@ -57,3 +65,7 @@ Sign Language Examples:
     [(char? value) (printf "\\~a" value)]
     [(procedure? value) (display "[function]")]
     [else (display value)]))
+
+;; REPLを起動
+(module+ main
+  (sign-repl))
