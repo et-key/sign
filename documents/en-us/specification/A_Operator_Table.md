@@ -30,8 +30,8 @@
 | 8 | `~+` | infix | range | Around (range vicinity) | Arithmetic progression specification |
 | 8 | `~-` | infix | range | Around (range vicinity) | Descending arithmetic progression specification |
 | 8 | `~*` | infix | range | Around (range vicinity) | Geometric progression specification |
-| 8 | `~/` | infix | range | Around (range vicinity) | Exponential progression specification |
-| 8 | `~^` | infix | range | Around (range vicinity) | Range list construction |
+| 8 | `~/` | infix | range | Around (range vicinity) | Descending geometric progression specification |
+| 8 | `~^` | infix | range | Around (range vicinity) | Exponential progression specification |
 | 9 | `~` | prefix | continuous | Around (entire vicinity) | Continuous list construction |
 | 10 | `;` | infix | xor | Exclusive relationship | Exclusive logical OR |
 | 10 | `\|` | infix | or | Or (passage) | Logical OR (short-circuit evaluation) |

@@ -1,5 +1,5 @@
 // Complete Sign language PEG.js syntax analysis specification
-// Full implementation of operator symbol table priority 1-16
+// Full implementation of operator symbol table priority 1-29
 // Implementation of pointfree notation and four meanings of coproduct expression
 
 Start = Program
@@ -15,43 +15,38 @@ Statement =
 
 Comment = "`" [^\n\r`]* "`"?
 
-// ==================== Priority Hierarchy (1-16) ====================
+// ==================== Priority Hierarchy (1-29) ====================
 
-// Priority 1: Export (lowest priority)
+// Priority 1: Export (prefix, lowest priority)
 ExportLevel = 
     ExportSymbol DefineLevel
     / DefineLevel
 
-// Priority 2: Define + Output
+// Priority 2: Define (infix, right associative)
 DefineLevel = 
     Identifier __ DefineSymbol __ OutputLevel
     / OutputLevel
 
+// Priority 3: Output (infix)
 OutputLevel = 
     (HexNumber / AddressSymbol? Identifier) __ OutputSymbol __ FunctionApplyLevel
     / FunctionApplyLevel
 
-// Priority 3: Construction Domain (Coproduct, Lambda, Product, Range)
-
-ListConstructLevel = 
-    (Number / Character / Identifier) (__ ConcatListLevel)*
-    / ConcatListLevel
-
-ConcatListLevel = 
-    (ProductLevel / Number / String / Character / Unit / Identifier) (__ FunctionApplyLevel)*
-    / FunctionApplyLevel
+// Priority 4-7: Construction Domain (Coproduct, Lambda, Product, Range)
 
 FunctionApplyLevel = 
-    (LambdaLevel / PointlessExpression / Unit / Identifier) (__ FunctionComposeLevel)*
-    / FunctionComposeLevel
+    (LambdaLevel / PointlessExpression / Unit / Identifier) (__ ProductLevel)*
+    / ProductLevel
 
-FunctionComposeLevel = 
-    (LambdaLevel / PointlessExpression / Unit / Identifier) (__ LambdaLevel)*
+// Priority 5: Product (infix, right associative)
+ProductLevel = 
+    LambdaLevel (__ ProductSymbol __ LambdaLevel)*
     / LambdaLevel
 
+// Priority 8: Lambda (infix, right associative)
 LambdaLevel = 
-    ParameterList __ LambdaSymbol __ ProductLevel
-    / ProductLevel
+    ParameterList __ LambdaSymbol __ RangeLevel
+    / RangeLevel
 
 ParameterList = 
     Parameter (__ Parameter)*
@@ -60,89 +55,119 @@ Parameter =
     ContinuousSymbol Identifier
     / Identifier
 
-ProductLevel = 
-    RangeLevel (__ ProductSymbol __ RangeLevel)*
-
+// Priority 9: Range (infix)
 RangeLevel = 
-    LogicalXorLevel __ RangeSymbol __ LogicalXorLevel
+    LogicalXorLevel __ RangeOperator __ LogicalXorLevel
     / LogicalXorLevel
 
-// Priority 4-6: Logical Domain
+RangeOperator = 
+    "~^" / "~*" / "~/" / "~+" / "~-" / "~"
+
+// Priority 10-11: Logical Domain (Continuous prefix is processed at priority 9)
 LogicalXorLevel = 
-    LogicalOrLevel (__ XorSymbol __ LogicalOrLevel)*
+    LogicalOrLevel (__ (XorSymbol / OrSymbol) __ LogicalOrLevel)*
 
 LogicalOrLevel = 
     LogicalAndLevel (__ OrSymbol __ LogicalAndLevel)*
+    / LogicalAndLevel
 
+// Priority 12: AND
 LogicalAndLevel = 
     LogicalNotLevel (__ AndSymbol __ LogicalNotLevel)*
+    / LogicalNotLevel
 
+// Priority 13: NOT (prefix)
 LogicalNotLevel = 
     NotSymbol ComparisonLevel
     / ComparisonLevel
 
-// Priority 7: Comparison Operation Domain (supports comparison chaining)
+// Priority 14: Comparison Operation Domain (supports comparison chaining)
 ComparisonLevel = 
     AbsoluteLevel ComparisonChain*
 
 ComparisonChain = __ ComparisonOperator __ AbsoluteLevel 
 
-// Priority 8: Absolute Value
+// Priority 18: Absolute Value (enclosure)
 AbsoluteLevel = 
     "|" ArithmeticAddLevel "|"
     / ArithmeticAddLevel
 
-// Priority 9: Addition and Subtraction
+// Priority 14-15: Arithmetic Operation Domain
 ArithmeticAddLevel = 
     ArithmeticMulLevel (_ AdditiveOperator _ ArithmeticMulLevel)*
 
-// Priority 10: Multiplication and Division
+// Priority 16: Multiplication and Division
 ArithmeticMulLevel = 
     PowerLevel (_ MultiplicativeOperator _ PowerLevel)*
 
-// Priority 11: Exponentiation (right associative)
+// Priority 17: Exponentiation (right associative)
 PowerLevel = 
     FactorialLevel (_ PowerSymbol _ PowerLevel)*
     / FactorialLevel
 
-// Priority 12: Factorial
+// Priority 18: Factorial (postfix)
 FactorialLevel = 
-    ResolveLevel FactorialSymbol
-    / ResolveLevel
+    ExpandLevel FactorialSymbol
+    / ExpandLevel
 
-// Priority 13: Resolution Evaluation Domain (Expand, Address, Get)
-ResolveLevel = ExpandLevel
-
+// Priority 19: Resolution Evaluation Domain (Expand, Address, Get)
 ExpandLevel = 
     AddressLevel ExpandSymbol
     / AddressLevel
 
+// Priority 20: Address (prefix)
 AddressLevel = 
     AddressSymbol GetLevel
     / GetLevel
 
-GetLevel = GetRightExpression / GetLeftExpression / ImportLevel
+// Priority 21: Get (infix)
+GetLevel = GetRightExpression / GetLeftExpression / InputLevel
 
 // Right identity: key @ object (left associative)
 GetRightExpression = 
     (Identifier / String / Integer) __ GetRightSymbol __ GetLeftExpression
-    / (Identifier / String / Integer) __ GetRightSymbol __ ImportLevel
+    / (Identifier / String / Integer) __ GetRightSymbol __ InputLevel
 
 // Left identity: object "'" key (left associative)
 GetLeftExpression = 
-    ImportLevel (__ GetLeftSymbol __ (Identifier / String / Integer))+
+    InputLevel (__ GetLeftSymbol __ (Identifier / String / Integer))+
 
-// Priority 14: Import
-ImportLevel = 
-    InputLevel ImportSymbol
-    / InputLevel
-
-// Priority 15: Input
+// Priority 22: Input (prefix)
 InputLevel = 
     InputSymbol (HexNumber / Identifier)
+    / BitShiftLevel
+
+// Priority 23: Bit Shift (infix)
+BitShiftLevel = 
+    BitOrLevel (__ BitShiftOperator __ BitOrLevel)*
+    / BitOrLevel
+
+// Priority 24: Bit OR (infix)
+BitOrLevel = 
+    BitXorLevel (__ BitOrSymbol __ BitXorLevel)*
+    / BitXorLevel
+
+// Priority 25: Bit XOR (infix)
+BitXorLevel = 
+    BitAndLevel (__ BitXorSymbol __ BitAndLevel)*
+    / BitAndLevel
+
+// Priority 26: Bit AND (infix)
+BitAndLevel = 
+    BitNotLevel (__ BitAndSymbol __ BitNotLevel)*
+    / BitNotLevel
+
+// Priority 27: Bit NOT (prefix)
+BitNotLevel = 
+    BitNotSymbol ImportLevel
+    / ImportLevel
+
+// Priority 28: Import (postfix)
+ImportLevel = 
+    PrimaryLevel ImportSymbol
     / PrimaryLevel
 
-// Priority 16: Block and Basic Elements
+// Priority 29: Block and Basic Elements
 PrimaryLevel = 
     PointlessExpression
     / BlockExpression
@@ -245,12 +270,19 @@ XorSymbol = ";"
 OrSymbol = "|"
 AndSymbol = "&"
 
-ComparisonOperator = "<=" / ">=" / "!=" / "<" / ">" / "="
+ComparisonOperator = "<=" / ">=" / "!=" / "==" / "<" / ">" / "="
 AdditiveOperator = "+" / "-"
 MultiplicativeOperator = "*" / "/" / "%"
 PowerSymbol = "^"
 
 AddressSymbol = "$"
+
+// Bit operators
+BitShiftOperator = "<<" / ">>"
+BitOrSymbol = "||"
+BitXorSymbol = ";;"
+BitAndSymbol = "&&"
+BitNotSymbol = "!!"
 
 // ==================== Operator Classification for Pointfree Notation ====================
 
@@ -260,9 +292,10 @@ AnyOperator =
 InfixOperator = 
     DefineSymbol / ProductSymbol / RangeSymbol / XorSymbol / OrSymbol / AndSymbol
     / ComparisonOperator / AdditiveOperator / MultiplicativeOperator / PowerSymbol / GetLeftSymbol / GetRightSymbol
+    / BitShiftOperator / BitOrSymbol / BitXorSymbol / BitAndSymbol
 
 PrefixOperator = 
-    ExportSymbol / NotSymbol / ContinuousSymbol / AddressSymbol / InputSymbol
+    ExportSymbol / NotSymbol / ContinuousSymbol / AddressSymbol / InputSymbol / BitNotSymbol
 
 PostfixOperator = 
     FactorialSymbol / ExpandSymbol / ImportSymbol
