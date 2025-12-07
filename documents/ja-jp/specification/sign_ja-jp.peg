@@ -71,45 +71,6 @@ RangeLevel =
 LogicalXorLevel = 
     LogicalOrLevel (__ XorSymbol __ LogicalOrLevel)*
 
-LogicalOrLevel = 
-    LogicalAndLevel (__ OrSymbol __ LogicalAndLevel)*
-
-LogicalAndLevel = 
-    LogicalNotLevel (__ AndSymbol __ LogicalNotLevel)*
-
-LogicalNotLevel = 
-    NotSymbol ComparisonLevel
-    / ComparisonLevel
-
-// 優先順位7: 比較演算域（連鎖比較対応）
-ComparisonLevel = 
-    AbsoluteLevel ComparisonChain*
-
-ComparisonChain = __ ComparisonOperator __ AbsoluteLevel 
-
-// 優先順位8: 絶対値
-AbsoluteLevel = 
-    "|" ArithmeticAddLevel "|"
-    / ArithmeticAddLevel
-
-// 優先順位9: 加減算
-ArithmeticAddLevel = 
-    ArithmeticMulLevel (_ AdditiveOperator _ ArithmeticMulLevel)*
-
-// 優先順位10: 乗除算
-ArithmeticMulLevel = 
-    PowerLevel (_ MultiplicativeOperator _ PowerLevel)*
-
-// 優先順位11: 冪乗（右結合）
-PowerLevel = 
-    FactorialLevel (_ PowerSymbol _ PowerLevel)*
-    / FactorialLevel
-
-// 優先順位12: 階乗
-FactorialLevel = 
-    ResolveLevel FactorialSymbol
-    / ResolveLevel
-
 // 優先順位13: 解決評価域（Expand, Address, Get）
 ResolveLevel = ExpandLevel
 
@@ -126,22 +87,6 @@ GetLevel = GetRightExpression / GetLeftExpression / ImportLevel
 // 右単位元: key @ object（左結合）
 GetRightExpression = 
     (Identifier / String / Integer) __ GetRightSymbol __ GetLeftExpression
-    / (Identifier / String / Integer) __ GetRightSymbol __ ImportLevel
-
-// 左単位元: object "'" key（左結合）
-GetLeftExpression = 
-    ImportLevel (__ GetLeftSymbol __ (Identifier / String / Integer))+
-
-// 優先順位14: Import
-ImportLevel = 
-    InputLevel ImportSymbol
-    / InputLevel
-
-// 優先順位15: Input
-InputLevel = 
-    InputSymbol (HexNumber / Identifier)
-    / PrimaryLevel
-
 // 優先順位16: ブロック・基本要素
 PrimaryLevel = 
     PointlessExpression
