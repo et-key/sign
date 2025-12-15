@@ -1,0 +1,20 @@
+Running test_debug_run.js
+Imports successful
+Reading file: C:\Users\ym_st\Documents\Sign\sign\documents\ja-jp\example.ja-jp.sn
+Tokenizing...
+Tokenization complete. Total tokens: 1128
+Initializing Converter...
+Processing blocks...
+CRASH at line 83, stmt: Filter : f x ~ y ? f x , Filter f y ~
+Fatal Error: TypeError: First argument to String.prototype.includes must not be a regular expression
+TypeError: First argument to String.prototype.includes must not be a regular expression
+    at String.includes (<anonymous>)
+    at Converter.isBracketedOp (C:\Users\ym_st\Documents\Sign\sign\proto\a8\converter.js:224:71)
+    at Converter.convertExpr (C:\Users\ym_st\Documents\Sign\sign\proto\a8\converter.js:99:63)
+    at Converter.convertExpr (C:\Users\ym_st\Documents\Sign\sign\proto\a8\converter.js:95:34)
+    at Converter.convertExpr (C:\Users\ym_st\Documents\Sign\sign\proto\a8\converter.js:96:35)
+    at Object.<anonymous> (C:\Users\ym_st\Documents\Sign\sign\proto\a8\test_debug_run.js:51:43)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+    at Function._load (node:internal/modules/cjs/loader:1108:12)
