@@ -5,7 +5,7 @@ const { Interpreter } = require('./interpreter');
 const util = require('util');
 
 const examplePath = path.resolve(__dirname, '../../documents/ja-jp/example.ja-jp.sn');
-const outputPath = path.resolve(__dirname, 'example_ast.txt');
+const outputPath = path.resolve(__dirname, 'example_ast.json');
 
 try {
     console.log(`Reading file: ${examplePath}`);
@@ -15,8 +15,7 @@ try {
     const ast = parse(input);
 
     console.log('Writing AST to:', outputPath);
-    // Use util.inspect to get a readable full depth string
-    const outputContent = util.inspect(ast, { showHidden: false, depth: null, colors: false });
+    const outputContent = JSON.stringify(ast, null, 2);
     fs.writeFileSync(outputPath, outputContent);
 
     console.log('Interpreting...');

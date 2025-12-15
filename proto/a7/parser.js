@@ -193,6 +193,8 @@ class Parser {
                 return { type: NodeType.LITERAL, value: parseFloat(token.value), raw: token.value };
             case TokenType.STRING:
                 return { type: NodeType.LITERAL, value: token.value, kind: 'string' };
+            case TokenType.CHAR:
+                return { type: NodeType.LITERAL, value: token.value, kind: 'char' };
             case TokenType.IDENTIFIER:
                 return { type: NodeType.IDENTIFIER, name: token.value };
             case TokenType.LPAREN: // (
@@ -262,6 +264,7 @@ class Parser {
             TokenType.IDENTIFIER,
             TokenType.NUMBER,
             TokenType.STRING,
+            TokenType.CHAR,
             TokenType.LPAREN,
             TokenType.LBRACKET,
             TokenType.LBRACE
