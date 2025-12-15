@@ -20,7 +20,8 @@ const TokenType = {
     RBRACKET: 'RBRACKET', // ]
     LBRACE: 'LBRACE', // {
     RBRACE: 'RBRACE', // }
-    COMMA: 'COMMA',   // , (Also an operator but special handling might be useful)
+    COMMA: 'COMMA',   // ,
+    CHAR: 'CHAR',     // Character literal specified by \
     EOF: 'EOF'
 };
 
@@ -116,16 +117,20 @@ class Lexer {
                 // - Identifiers
                 // - Brackets
 
-                // 1. Strings (Double quotes or Backticks)
-                let match = rest.match(/^"([^"]*)"/); // Simple string for now
+                // 1. Strings (Backticks only, single line, no escapes)
+                // User provided regex: /^`([^`\r\n]*)`/
+                let match = rest.match(/^`([^`\r\n]*)`/);
                 if (match) {
                     this.tokens.push(this.createToken(TokenType.STRING, match[1]));
                     cursor += match[0].length;
                     continue;
                 }
-                match = rest.match(/^`([^`]*)`?/); // Backtick string (comment-like or string)
+
+                // 2. Character Literals (Specified by \)
+                // Matches \ followed by ANY single character (including newline)
+                match = rest.match(/^\\([\s\S])/);
                 if (match) {
-                    this.tokens.push(this.createToken(TokenType.STRING, match[1]));
+                    this.tokens.push(this.createToken(TokenType.CHAR, match[1]));
                     cursor += match[0].length;
                     continue;
                 }
