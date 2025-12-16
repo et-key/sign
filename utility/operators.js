@@ -216,8 +216,8 @@ const OperatorList = [
     // 優先順位4: 積演算子（右結合）
     { ',': { precedence: 4, associativity: 'right' } },
 
-    // 優先順位7: ラムダ構築演算子（右結合）
-    { '?': { precedence: 7, associativity: 'right' } },
+    // 優先順位1: ラムダ構築演算子（右結合） - Define(:) より低くすることで match_case(:) を内包する
+    { '?': { precedence: 1, associativity: 'right' } },
 
     // 優先順位8: 範囲演算子（左結合）
     { '~': { precedence: 8, associativity: 'left' } },
