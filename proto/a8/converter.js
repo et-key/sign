@@ -58,7 +58,6 @@ class Converter {
         }
 
         if (tokens[0].type === TokenType.INDENT) {
-            // Handle INDENT block
             const inner = tokens.slice(1, tokens.length - 1);
             return this.processBlock(inner);
         }
@@ -69,28 +68,75 @@ class Converter {
             if (tokens.length === 1) {
                 return this.getTokenValue(tokens[0]);
             }
+
+            // Adjacency
             const parts = this.splitByAdjacency(tokens);
+
+            if (parts.length === 1 && parts[0].length === tokens.length) {
+                // Force finding tight operator if present
+                const fallbackIdx = this.findSplitOperatorIndex(tokens, true);
+                if (fallbackIdx !== -1) {
+                    return this.convertOpAt(tokens, fallbackIdx);
+                }
+            }
+
             return parts.map(p => this.convertExpr(p));
         }
 
+        return this.convertOpAt(tokens, opIdx);
+    }
+
+    convertOpAt(tokens, opIdx) {
         const opToken = tokens[opIdx];
         const leftTokens = tokens.slice(0, opIdx);
         const rightTokens = tokens.slice(opIdx + 1);
-
         const opVal = opToken.value;
 
         if (opIdx === 0) {
             // Prefix
-            const opStr = `[${opVal}_]`;
-            return [opStr, this.convertExpr(rightTokens)];
+            if (isPrefixOperator(opVal)) {
+                const opStr = `[${opVal}_]`;
+                const right = this.convertExpr(rightTokens);
+                if (Array.isArray(right) && right.length === 0) return opStr;
+                return [opStr, right];
+            } else {
+                const opStr = `[${opVal}]`;
+                if (rightTokens.length === 0) return opStr;
+                const rightRes = this.convertExpr(rightTokens);
+                return [opStr, rightRes];
+            }
         } else if (opIdx === tokens.length - 1) {
             // Postfix
-            const opStr = `[_${opVal}]`;
-            return [opStr, this.convertExpr(leftTokens)];
+            if (isPostfixOperator(opVal)) {
+                const opStr = `[_${opVal}]`;
+                const left = this.convertExpr(leftTokens);
+                return [opStr, left];
+            } else {
+                const opStr = `[${opVal}]`;
+                if (leftTokens.length === 0) return opStr;
+                const leftRes = this.convertExpr(leftTokens);
+                return [opStr, leftRes];
+            }
         } else {
-            // Infix
-            const opStr = `[${opVal}]`;
+            // Infix (unless we detected it as Postfix in findSplit, but convertOpAt just takes index)
+            // If findSplit selected a Postfix op in middle, it would have high precedence, so unlikely to be selected.
+            // But if it WAS selected, we must treat it as Postfix?
+            // Wait, Infix Logic: `Left Op Right`. 
+            // If it is Postfix, it should be `Left Op`.
+            // But here we have `Right` tokens.
+            // If `findSplit` selected it, it expects Infix.
+            // UNLESS it's the only operator?
+            // If `x!` and we selected `!`. `Right` is empty. `opIdx === length-1`. Handled above.
+            // If `x!y` and we selected `!`.
+            // Then `Left`=`x`. `Right`=`y`.
+            // If we treat as Infix `[!]`. `x [!] y`.
+            // If `!` is strictly Postfix?
+            // It logic for Infix handles it.
+            // BUT our "Tight Postfix Detection" logic in findSplit basically prevents selecting `!` if there's a looser Infix.
+            // So if `!` is selected here, it implies it IS the split point.
+            // If so, it must be Infix.
 
+            const opStr = `[${opVal}]`;
             const leftRes = this.convertExpr(leftTokens);
             const rightRes = this.convertExpr(rightTokens);
 
@@ -103,7 +149,7 @@ class Converter {
         }
     }
 
-    findSplitOperatorIndex(tokens) {
+    findSplitOperatorIndex(tokens, allowTight = false) {
         let lowestPrec = Infinity;
         let lowestIdx = -1;
 
@@ -127,17 +173,43 @@ class Converter {
                 if (i === 0) {
                     prec = OperatorPriority.prefix[val];
                     if (!prec && isPrefixOperator(val)) prec = 12;
+
+                    if (!allowTight && tokens[i + 1] && !tokens[i + 1].hasPrecedingSpace) {
+                        prec = Infinity;
+                    }
+
                 } else if (i === tokens.length - 1) {
                     prec = OperatorPriority.postfix[val];
+
+                    if (!allowTight && !t.hasPrecedingSpace) {
+                        prec = Infinity;
+                    }
+
                 } else {
-                    const info = this.opMap.get(val);
-                    if (info) {
-                        prec = info.precedence;
-                        assoc = info.associativity;
+                    const isPrefixBinding = t.hasPrecedingSpace && (tokens[i + 1] && !tokens[i + 1].hasPrecedingSpace);
+                    if (!allowTight && isPrefixBinding && isPrefixOperator(val)) {
+                        prec = Infinity;
+                    } else {
+                        // Tight Postfix Detection: No Preceding Space, Has Following Space
+                        const isPostfixBinding = !t.hasPrecedingSpace && tokens[i + 1].hasPrecedingSpace;
+                        if (!allowTight && isPostfixBinding && isPostfixOperator(val)) {
+                            // Use Postfix Precedence (High)
+                            prec = OperatorPriority.postfix[val];
+                            // Logic: If operator is Tight Left and Loose Right, it binds to Left.
+                            // Its precedence becomes Postfix (High).
+                            // Thus, it will NOT be selected as the split point if there is a lower Infix (e.g. =) around.
+                        } else {
+                            const info = this.opMap.get(val);
+                            if (info) {
+                                prec = info.precedence;
+                                assoc = info.associativity;
+                            }
+                        }
                     }
                 }
 
                 if (!prec) prec = 0;
+                if (prec === Infinity) continue;
 
                 if (prec < lowestPrec) {
                     lowestPrec = prec;
@@ -154,40 +226,71 @@ class Converter {
 
     splitByAdjacency(tokens) {
         const chunks = [];
-        let currentChunk = [];
-        let depth = 0;
+        let i = 0;
+        while (i < tokens.length) {
+            const { chunk, nextIdx } = this.readNextExpression(tokens, i);
+            chunks.push(chunk);
+            i = nextIdx;
+        }
+        return chunks;
+    }
 
-        for (let i = 0; i < tokens.length; i++) {
-            const t = tokens[i];
+    readNextExpression(tokens, startIdx) {
+        if (startIdx >= tokens.length) return { chunk: [], nextIdx: startIdx };
 
-            if (t.type === TokenType.LPAREN || t.type === TokenType.LBRACKET || t.type === TokenType.LBRACE) {
-                if (depth === 0 && currentChunk.length > 0) {
-                    chunks.push(currentChunk);
-                    currentChunk = [];
-                }
-                depth++;
-                currentChunk.push(t);
-            } else if (t.type === TokenType.RPAREN || t.type === TokenType.RBRACKET || t.type === TokenType.RBRACE) {
-                depth--;
-                currentChunk.push(t);
+        const t = tokens[startIdx];
+        let currentExpr = null;
+        let nextIdx = startIdx;
+
+        if (t.type === TokenType.LPAREN || t.type === TokenType.LBRACKET || t.type === TokenType.LBRACE) {
+            let depth = 0;
+            let found = false;
+            for (let i = startIdx; i < tokens.length; i++) {
+                const tk = tokens[i];
+                if (tk.type === TokenType.LPAREN || tk.type === TokenType.LBRACKET || tk.type === TokenType.LBRACE) depth++;
+                else if (tk.type === TokenType.RPAREN || tk.type === TokenType.RBRACKET || tk.type === TokenType.RBRACE) depth--;
+
                 if (depth === 0) {
-                    chunks.push(currentChunk);
-                    currentChunk = [];
-                }
-            } else {
-                if (depth > 0) {
-                    currentChunk.push(t);
-                } else {
-                    if (currentChunk.length > 0) {
-                        chunks.push(currentChunk);
-                        currentChunk = [];
-                    }
-                    chunks.push([t]);
+                    currentExpr = tokens.slice(startIdx, i + 1);
+                    nextIdx = i + 1;
+                    found = true;
+                    break;
                 }
             }
+            if (!found) {
+                currentExpr = tokens.slice(startIdx);
+                nextIdx = tokens.length;
+            }
+        } else if (t.type === TokenType.OPERATOR && isPrefixOperator(t.value)) {
+            if (tokens[startIdx + 1] && !tokens[startIdx + 1].hasPrecedingSpace) {
+                const arg = this.readNextExpression(tokens, startIdx + 1);
+                currentExpr = [t, ...arg.chunk];
+                nextIdx = arg.nextIdx;
+            } else {
+                currentExpr = [t];
+                nextIdx = startIdx + 1;
+            }
+        } else {
+            currentExpr = [t];
+            nextIdx = startIdx + 1;
         }
-        if (currentChunk.length > 0) chunks.push(currentChunk);
-        return chunks;
+
+        while (nextIdx < tokens.length) {
+            const nextT = tokens[nextIdx];
+            if (nextT.type === TokenType.OPERATOR && isPostfixOperator(nextT.value)) {
+                if (!nextT.hasPrecedingSpace) {
+                    const isTightPrefixRight = tokens[nextIdx + 1] && !tokens[nextIdx + 1].hasPrecedingSpace && isPrefixOperator(nextT.value);
+                    if (!isTightPrefixRight) {
+                        currentExpr = currentExpr.concat([nextT]);
+                        nextIdx++;
+                        continue;
+                    }
+                }
+            }
+            break;
+        }
+
+        return { chunk: currentExpr, nextIdx };
     }
 
     isGrouped(tokens) {
