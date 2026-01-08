@@ -171,26 +171,33 @@ john ' name = john ' `name`
 
 `データクラスっぽい記述`
 
-Item :
-	name
-	duration
-	equip
-	use
-	effect
+#MyGame :
+	State :
+		Existence
+		Durability
+		Mentality
+		Wisdom
+		Agility
+		Equipment
+		Bag
 
-medicalWeed : Item
-	`medicalWeed`
-	1
-	_
-	[' amount] [- 1]
-	[' HP] [+ 20]
+`後置「~」による展開作用によって、オブジェクトがコピーされる。
+`他のファイルからの読み込みであれば、「@」を使用する。
 
-lightningStaff : Item
-	`lightningStaff`
-	50
-	[' Atk] [+ 8]
-	[' ThunderBolt]
-	[' HP] [- 40]
+#Mob : MyGame~
+	Base : State~
+	State~
+
+#Magician : Mob~
+	Base :
+		Existence : 1
+		Durability : 3
+		Mentality : 10
+		Wisdom : 8
+		agility : 5
+	State : Magician ' Base~
+
+myMagician : Magician~
 
 
 `いわゆるlet ~ inも以下のように記述する。`
@@ -248,10 +255,10 @@ s: [1 2],[3 4]
 `辞書型`
 `ただし、開カッコと閉カッコは必ず対になる必要がある。`
 
-myGreet:
-	greet: 
-		hello: `hello,`
-		welcome: `welcome,`
+myGreet :
+	greet : 
+		hello : `hello,`
+		welcome : `welcome,`
 	world : ` world`
 
 
@@ -342,7 +349,7 @@ My = M \y \  \D \o \m \e \s \t \i \c = `My Domestic`
 `理由は、" " が、「リストの結合、及び関数合成、関数適用」を意味するため。`
 `改行を含めたい場合。`
 
-HWinEnter :
+InEnter :
  `Hello` \
  `World!`
 
