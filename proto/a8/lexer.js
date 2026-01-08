@@ -191,21 +191,20 @@ class Lexer {
                     // So check operators first.
                 }
 
-                // Swap order: Check Operators FIRST.
-                const opMatch = this.matchOperator(rest);
-                if (opMatch) {
-                    this.tokens.push(this.createToken(TokenType.OPERATOR, opMatch, skippedSpace));
-                    cursor += opMatch.length;
+                // 5. Numbers (Moved before Operators to handle negative numbers)
+                match = rest.match(/^-?\d+(\.\d+)?/);
+                if (match) {
+                    this.tokens.push(this.createToken(TokenType.NUMBER, match[0], skippedSpace));
+                    cursor += match[0].length;
                     skippedSpace = false;
                     continue;
                 }
 
-                // Check Numbers (Now only positive? Or if op check failed?)
-                // Op check succeeds for `-`. So `-1` will match `-`.
-                match = rest.match(/^\d+(\.\d+)?/);
-                if (match) {
-                    this.tokens.push(this.createToken(TokenType.NUMBER, match[0], skippedSpace));
-                    cursor += match[0].length;
+                // 6. Operators
+                const opMatch = this.matchOperator(rest);
+                if (opMatch) {
+                    this.tokens.push(this.createToken(TokenType.OPERATOR, opMatch, skippedSpace));
+                    cursor += opMatch.length;
                     skippedSpace = false;
                     continue;
                 }
