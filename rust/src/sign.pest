@@ -4,13 +4,14 @@ program = { SOI ~ expression* ~ EOI }
 expression = { export }
 
 export = { f_export? ~ define }
-define = { coproduct ~ (f_define ~ define)? }
+define = { lambda ~ (f_define ~ define)? }
+
+product = { coproduct ~ (f_product ~ product)? }
 
 coproduct = { lambda ~ (apply | literal_product)* }
   apply = { closure ~ (apply | literal_product)* }
   literal_product = { literal ~ (apply | literal_product)* }
 lambda = { product+ ~ (f_lambda ~ lambda)? }
-product = { spread ~ (f_product ~ product)? }
 spread = { lift ~ (f_spread ~ lift)? }
 lift = { f_spread? ~ or_xor }
 or_xor = { and ~ ((f_or | f_xor) ~ or_xor)? }
