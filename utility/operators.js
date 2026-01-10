@@ -2,6 +2,7 @@
 /*--------------------------------このファイルは変更禁止--------------------------------*/
 
 /*
+
 # Sign言語演算子記号表（優先順位順）
 
 ## 基本原則
@@ -27,11 +28,11 @@
 | 3 | `#` | 中置 | output | ハッシュタグ（関連付け） | アドレスにデータを関連付ける |
 | 4 | `,` | 中置※ | product | 積（構造的組み立て） | 右結合なリスト構築 |
 | 5 | ` ` | 中置 | apply | 余積（連接） | 関数適用 |
-| 6 | ` ` | 中置 | compose | 余積（連接） | 左結合な関数合成 |
-| 7 | ` ` | 中置 | push | 余積（連接） | リストへ追加 |
-| 7 | ` ` | 中置 | concat | 余積（連接） | リスト結合 |
-| 7 | ` ` | 中置 | construct | 余積（連接） | 左結合なリスト構築 |
-| 8 | `?` | 中置※ | lambda | 問いかけ（どうするか？） | 関数定義 |
+| 6 | `?` | 中置※ | lambda | 問いかけ（どうするか？） | 関数定義 |
+| 7 | ` ` | 中置 | compose | 余積（連接） | 左結合な関数合成 |
+| 8 | ` ` | 中置 | push | 余積（連接） | リストへ追加 |
+| 8 | ` ` | 中置 | concat | 余積（連接） | リスト結合 |
+| 8 | ` ` | 中置 | construct | 余積（連接） | 左結合なリスト構築 |
 | 9 | `~` | 中置 | range | around（範囲のその辺り） | 範囲リスト構築 |
 | 9 | `~+` | 中置 | range | around（範囲のその辺り） | 等差数列指定 |
 | 9 | `~-` | 中置 | range | around（範囲のその辺り） | 等差逆数列指定 |
@@ -90,6 +91,7 @@
 - **自然言語との対応**: プログラムが文章として読める
 - **予約語の排除**: 単語の意味の曖昧性を避け、記号の明確性を重視
 - **メタ言語としての機能**: 任意の言語パラダイムを関数として実装可能
+
 */
 
 
@@ -112,7 +114,7 @@ const parseTable = {
     ":": { "precedence": 2, "notation": "infix", "associativity": "right" },
     "#": { "precedence": 3, "notation": "infix", "associativity": "left" },
     ",": { "precedence": 4, "notation": "infix", "associativity": "right" },
-    "?": { "precedence": 8, "notation": "infix", "associativity": "right" },
+    "?": { "precedence": 6, "notation": "infix", "associativity": "right" },
     "~": { "precedence": 9, "notation": "infix" },
     "~+": { "precedence": 9, "notation": "infix" },
     "~-": { "precedence": 9, "notation": "infix" },
