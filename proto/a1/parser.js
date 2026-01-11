@@ -11,8 +11,13 @@ const INPUT_FILE = path.join(__dirname, 'test_input.sn');
 const OUTPUT_FILE = path.join(__dirname, 'test_output.json');
 
 // --- Helpers ---
+// Sort symbols longest first
+// Add missing symbols from parseTable if any (user reported ~_)
+let opSymbols = Object.keys(operators.parseTable);
+if (!opSymbols.includes('~_')) opSymbols.push('~_');
+opSymbols.sort((a, b) => b.length - a.length);
+
 const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const opSymbols = Object.keys(operators.parseTable).sort((a, b) => b.length - a.length);
 
 // --- Tokenizer ---
 
@@ -20,48 +25,71 @@ function tokenize(code) {
     let text = prepareLexer.prepare(code);
     text = prepareLexer.markSeparator(text);
 
-    // Normalize Bracket, Newline, Tab to wrapped tokens
-    text = text.replace(/(\\[\s\S])|(`[^`\r\n]*`)|([\[\]\r\n\t])/g, (m, e, s, t) => {
-        if (e || s) return m;
+    // Normalize Bracket, Newline, Tab to wrapped tokens.
+    text = text.replace(/(\\[\s\S])|(`[^`]*`)|([\[\]\r\n\t])/g, (m, e, s, t) => {
+        if (e || s) return m; // Leave escaped and strings alone
         // Wrap with \x1F
         if (t === '\r' || t === '\n') return `\x1F\n\x1F`;
         if (t === '\t') return `\x1F\t\x1F`;
         return `\x1F${t}\x1F`;
     });
 
-    // Note: SPACE is replaced by \x1F in prepareLexer.markSeparator.
-
     let rawParts = text.split('\x1F');
     let finalTokens = [];
+
+    // Updated Regexes
+    // Hex: 0x..., Oct: 0o..., Bin: 0b...
+    const numRegex = /^(-?(0x[0-9a-fA-F]+|0o[0-7]+|0b[0-1]+|\d+(\.\d+)?))/;
+    // Identifier: Allow \S (escaped char) or standard chars
+    const idRegex = /^([^\s\[\]\(\)\{\}#:,?~|&!=+\-*/%^$@<>\.'`\\]+|\\.)/;
+    // String Literal Regex (Single Line strict)
+    const strRegex = /^`[^`\r\n]*`/;
 
     for (let i = 0; i < rawParts.length; i++) {
         let chunk = rawParts[i];
         if (!chunk) continue;
 
-        let subTokens = [];
+        // --- FIX: Insert Space Marker BEFORE processing chunk ---
+        if (i > 0 && finalTokens.length > 0) finalTokens.push({ type: 'space_marker' });
 
-        if (chunk.startsWith('`') || ['[', ']', '\n', '\t'].includes(chunk)) {
-            let type = chunk.startsWith('`') ? 'string' : 'marker';
-            subTokens.push({ type, value: chunk });
+        // Check for Markers (Brackets/Newlines from split)
+        if (['[', ']', '\n', '\t'].includes(chunk)) {
+            finalTokens.push({ type: chunk === '\n' || chunk === '\t' ? 'marker' : 'marker', value: chunk });
         } else {
-            // Check for negative number or normal parsing
-            // Manual Scan
+            // Manual Scan of Chunk
             let pos = 0;
-            const numRegex = /^-?\d+(\.\d+)?/;
-            const idRegex = /^[^\s\[\]\(\)\{\}#:,?~|&!=+\-*/%^$@<>\.'`\\]+/;
+            let subTokens = [];
 
             while (pos < chunk.length) {
                 let remain = chunk.slice(pos);
+
+                // 1. String Literal (Backticks)
+                if (remain.startsWith('`')) {
+                    let mStr = remain.match(strRegex);
+                    if (mStr) {
+                        subTokens.push({ type: 'string', value: mStr[0] });
+                        pos += mStr[0].length;
+                        continue;
+                    } else {
+                        // Unclosed or Multiline or Invalid -> Treat as "Line Comment"
+                        // Consume until newline (or end of chunk)
+                        let eol = remain.indexOf('\n');
+                        if (eol === -1) pos = chunk.length;
+                        else pos += eol;
+                        continue;
+                    }
+                }
+
                 let isNegLiteral = false;
 
-                // 1. Negative Number Check context-aware
+                // 2. Negative Number Check (Context Aware)
                 if (remain.startsWith('-')) {
-                    if (/^-\d/.test(remain)) {
-                        // Look behind to decide if Unary(NegLiteral) or Binary(Minus)
+                    // Check if looks like number (Hex/Dec/etc)
+                    if (numRegex.test(remain)) { // matches -...
+                        // Context check
                         let lastReal = null;
                         if (subTokens.length > 0) lastReal = subTokens[subTokens.length - 1];
                         else if (finalTokens.length > 0) {
-                            // Ignore space_marker if present
                             let t = finalTokens[finalTokens.length - 1];
                             if (t.type === 'space_marker' && finalTokens.length > 1) t = finalTokens[finalTokens.length - 2];
                             else if (t.type === 'space_marker') t = null;
@@ -73,15 +101,12 @@ function tokenize(code) {
                             if (['number', 'string', 'identifier'].includes(lastReal.type)) isValLike = true;
                             if (lastReal.type === 'marker' && lastReal.value === ']') isValLike = true;
                             if (lastReal.type === 'operator') {
-                                // If postfix op, it acts as value
                                 if (operators.parseTable[lastReal.value]?.notation === 'postfix') isValLike = true;
-                                // If we have decorated symbol in info, check that?
-                                // But tokenization happens before resolution.
-                                // We have to rely on table lookup.
+                                if (lastReal.value === '~_') isValLike = true;
+                                if (lastReal.value === '_') isValLike = true;
+                                if (lastReal.value === '!') isValLike = true;
                             }
                         }
-
-                        // If NOT val-like (e.g. start, infix op, newline), then Negative Literal
                         if (!isValLike) isNegLiteral = true;
                     }
                 }
@@ -95,23 +120,21 @@ function tokenize(code) {
                     }
                 }
 
-                // 2. Operator (Longest Match)
+                // 3. Operator
                 let bestOp = null;
                 for (let sym of opSymbols) {
                     if (remain.startsWith(sym)) {
                         if (!bestOp || sym.length > bestOp.length) bestOp = sym;
                     }
                 }
-                // If bestOp found, check if it conflicts with Number?
-                // e.g. '...' vs '.'.
-                // We prioritize Operator unless it was a NegLiteral case handled above.
+
                 if (bestOp) {
                     subTokens.push({ type: 'operator', value: bestOp });
                     pos += bestOp.length;
                     continue;
                 }
 
-                // 3. Number (Positive)
+                // 4. Number (Positive)
                 let mNum = remain.match(numRegex);
                 if (mNum) {
                     subTokens.push({ type: 'number', value: mNum[0] });
@@ -119,7 +142,7 @@ function tokenize(code) {
                     continue;
                 }
 
-                // 4. Identifier
+                // 5. Identifier (including Escapes)
                 let mId = remain.match(idRegex);
                 if (mId) {
                     subTokens.push({ type: 'identifier', value: mId[0] });
@@ -127,20 +150,15 @@ function tokenize(code) {
                     continue;
                 }
 
-                // Skip unknown char
                 pos++;
             }
+            finalTokens.push(...subTokens);
         }
-
-        // Insert space marker separate chunks (except first)
-        if (i > 0 && finalTokens.length > 0) finalTokens.push({ type: 'space_marker' });
-        finalTokens.push(...subTokens);
     }
     return finalTokens;
 }
 
 // --- Structurizer ---
-
 function structurize(tokens) {
     let root = [];
     let stack = [{ list: root, indent: 0 }];
@@ -148,7 +166,6 @@ function structurize(tokens) {
 
     for (let i = 0; i < tokens.length; i++) {
         let t = tokens[i];
-
         if (t.type === 'marker') {
             if (t.value === '[') {
                 let newList = [];
@@ -162,16 +179,10 @@ function structurize(tokens) {
                 let indent = 0;
                 let j = i + 1;
                 while (j < tokens.length) {
-                    if (tokens[j].value === '\t') {
-                        indent++;
-                        j++;
-                    } else if (tokens[j].type === 'space_marker') {
-                        j++;
-                    } else {
-                        break;
-                    }
+                    if (tokens[j].value === '\t') { indent++; j++; }
+                    else if (tokens[j].type === 'space_marker') { j++; }
+                    else { break; }
                 }
-
                 if (stack[stack.length - 1].bracket) {
                     i = j - 1;
                 } else {
@@ -182,9 +193,7 @@ function structurize(tokens) {
                         stack.push({ list: newList, indent: indent });
                         i = j - 1;
                     } else if (indent < currIndent) {
-                        while (stack.length > 1 && stack[stack.length - 1].indent > indent) {
-                            stack.pop();
-                        }
+                        while (stack.length > 1 && stack[stack.length - 1].indent > indent) stack.pop();
                         current().list.push({ type: 'newline_marker' });
                         i = j - 1;
                     } else {
@@ -193,8 +202,7 @@ function structurize(tokens) {
                     }
                 }
             }
-        }
-        else {
+        } else {
             current().list.push(t);
         }
     }
@@ -205,13 +213,12 @@ function structurize(tokens) {
 
 const SPACE_OP = { precedence: 5, notation: 'infix', associativity: 'left' };
 
-// Overrides with Decorated Symbols for Ambiguity
 const overrides = {
     '!': { prefix: { p: 13, sym: '!_' }, postfix: { p: 18, sym: '_!' } },
-    '~': { prefix: { p: 10, sym: '~' }, infix: { p: 9, sym: '~' }, postfix: { p: 20, sym: '_~' } },
+    '~': { prefix: { p: 10, sym: '~_' }, infix: { p: 9, sym: '~' }, postfix: { p: 20, sym: '_~' } },
     '#': { prefix: { p: 1, sym: '#_' }, infix: { p: 3, sym: '#' } },
     '@': { prefix: { p: 23, sym: '@_' }, infix: { p: 22, sym: '@' }, postfix: { p: 29, sym: '_@' } },
-    // Math - Clean
+    '~_': { infix: { p: 9, sym: '~_' }, prefix: { p: 10, sym: '~_' } },
     '+': { prefix: { p: 11 }, infix: { p: 11 } },
     '-': { prefix: { p: 11 }, infix: { p: 11 } },
     '*': { prefix: { p: 12 }, infix: { p: 12 } },
@@ -222,7 +229,7 @@ function resolveOpInfo(op, type) {
     if (op === ' ') return SPACE_OP;
     if (overrides[op]) {
         let data = overrides[op][type];
-        if (data) return { precedence: data.p, notation: type, symbol: data.sym };
+        if (data) return { precedence: data.p, notation: type, symbol: (data.sym || op) };
     }
     let info = operators.parseTable[op];
     if (info && info.notation === type) return info;
@@ -232,12 +239,9 @@ function resolveOpInfo(op, type) {
 
 function parseBlock(block) {
     if (!Array.isArray(block)) return convertNode(block);
-
     let processed = block.map(item => Array.isArray(item) ? parseBlock(item) : item);
-
     let expressions = [];
     let currentChunk = [];
-
     for (let token of processed) {
         if (token.type === 'newline_marker') {
             if (currentChunk.length > 0) {
@@ -248,29 +252,22 @@ function parseBlock(block) {
             currentChunk.push(token);
         }
     }
-    if (currentChunk.length > 0) {
-        expressions.push(parseExpr(currentChunk));
-    }
-
+    if (currentChunk.length > 0) expressions.push(parseExpr(currentChunk));
     if (expressions.length === 0) return ["_"];
     return expressions;
 }
 
 function parseExpr(tokens) {
     if (tokens.length === 0) return ["_"];
-
     let values = [];
     let ops = [];
 
     const applyOp = (opToken) => {
-        // Use decorated symbol if available
         let opValue = (opToken.info && opToken.info.symbol) ? opToken.info.symbol : opToken.value;
-        let info = opToken.info;
-
-        // Handling special mapping for newline/comma/space
+        let info = opToken.info || {};
         if (opToken.type === 'newline_marker') opValue = ',';
 
-        if (!info) {
+        if (!opToken.info) {
             if (opValue === ' ') info = SPACE_OP;
             else if (opValue === ',') info = operators.parseTable[','];
             else info = operators.parseTable[opValue] || {};
@@ -282,15 +279,16 @@ function parseExpr(tokens) {
         if (notation === 'infix') {
             let right = values.pop();
             let left = values.pop();
-            if (!left) {
-                if (right) node.push(right);
+            if (left === undefined) {
+                if (right !== undefined) node.push(right);
                 else node.push("_");
             } else {
-                node.push(left, right);
+                node.push(left);
+                if (right !== undefined) node.push(right);
             }
         } else {
             let arg = values.pop();
-            if (arg) node.push(arg);
+            if (arg !== undefined) node.push(arg);
             else node.push("_");
         }
         values.push(node);
@@ -298,7 +296,7 @@ function parseExpr(tokens) {
 
     let stream = [];
 
-    // Pass 1: Resolve Types & Insert Space Ops
+    // Pass 1: Resolve Types + Strict Infix Logic
     for (let i = 0; i < tokens.length; i++) {
         let t = tokens[i];
 
@@ -316,11 +314,7 @@ function parseExpr(tokens) {
                     if (next && isVal(next)) {
                         stream.push({ type: 'operator', value: ' ', info: SPACE_OP });
                     } else if (next && next.type === 'operator') {
-                        let canBeInfix = resolveOpInfo(next.value, 'infix');
-                        let canBePostfix = resolveOpInfo(next.value, 'postfix');
-                        if (!canBeInfix && !canBePostfix) {
-                            stream.push({ type: 'operator', value: ' ', info: SPACE_OP });
-                        }
+                        next.hasSpaceBefore = true;
                     }
                 }
             }
@@ -336,11 +330,27 @@ function parseExpr(tokens) {
                 if (!isPrevVal) {
                     t.info = resolveOpInfo(t.value, 'prefix');
                 } else {
-                    let hasSpace = (i > 0 && tokens[i - 1].type === 'space_marker');
-                    if (!hasSpace) {
-                        t.info = resolveOpInfo(t.value, 'postfix') || resolveOpInfo(t.value, 'infix');
-                    } else {
+                    let hasSpaceAfter = (i + 1 < tokens.length && tokens[i + 1].type === 'space_marker');
+
+                    if (t.hasSpaceBefore && hasSpaceAfter) {
                         t.info = resolveOpInfo(t.value, 'infix');
+                    } else {
+                        if (t.hasSpaceBefore && !hasSpaceAfter) {
+                            stream.push({ type: 'operator', value: ' ', info: SPACE_OP });
+                            t.info = resolveOpInfo(t.value, 'prefix');
+                        } else if (!t.hasSpaceBefore) {
+                            const tightOps = ['+', '-', '*', '/', '%', '^', '=', '<', '>', '<=', '>=', '!=', ':'];
+                            let isTight = tightOps.includes(t.value);
+
+                            if (isTight) {
+                                t.info = resolveOpInfo(t.value, 'infix');
+                            } else {
+                                t.info = resolveOpInfo(t.value, 'postfix');
+                                if (!t.info) t.info = resolveOpInfo(t.value, 'infix');
+                            }
+                        } else {
+                            t.info = resolveOpInfo(t.value, 'infix');
+                        }
                     }
                 }
             }
@@ -382,12 +392,19 @@ function parseExpr(tokens) {
 
 // Helpers
 function isVal(t) {
+    if (!t) return false;
+    if (t.type === 'operator' && (t.value === '~_' || t.value === '_')) return true;
     return t.type === 'identifier' || t.type === 'number' || t.type === 'string' || t.type === 'literal' || Array.isArray(t);
 }
 
 function convertNode(node) {
     if (node.type === 'identifier') return node.value;
-    if (node.type === 'number') return parseFloat(node.value);
+    if (node.type === 'operator') return node.value;
+    if (node.type === 'number') {
+        if (/^(-?0x|-?0o|-?0b)/.test(node.value)) return node.value;
+        let n = Number(node.value);
+        return isNaN(n) ? node.value : n;
+    }
     if (node.type === 'string') return node.value;
     if (node.type === 'literal') return node.value;
     return node;
