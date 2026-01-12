@@ -1675,9 +1675,11 @@
       "main",
       [
         "integer_test",
+        "float_test",
         "add_result",
         "complex1",
         "list_explicit",
+        "range_basic",
         [
           " ",
           "increment",
@@ -1693,6 +1695,7 @@
           5
         ],
         "double_list",
+        "sum_list",
         "`All tests completed`"
       ]
     ]

@@ -26,13 +26,8 @@ function tokenize(code) {
     text = prepareLexer.markSeparator(text);
 
     // Normalize Bracket, Newline, Tab to wrapped tokens.
-    text = text.replace(/(\\[\s\S])|(`[^`]*`)|([\[\]\r\n\t])/g, (m, e, s, t) => {
-        if (e || s) return m; // Leave escaped and strings alone
-        // Wrap with \x1F
-        if (t === '\r' || t === '\n') return `\x1F\n\x1F`;
-        if (t === '\t') return `\x1F\t\x1F`;
-        return `\x1F${t}\x1F`;
-    });
+    // Normalize Bracket, Newline, Tab to wrapped tokens.
+    // Moved to prepareLexer.markSeparator
 
     let rawParts = text.split('\x1F');
     let finalTokens = [];
