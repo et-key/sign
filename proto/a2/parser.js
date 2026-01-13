@@ -99,19 +99,7 @@ function tokenize(code) {
                                 if (['number', 'string', 'identifier'].includes(lastReal.type)) isValLike = true;
                                 if (lastReal.type === 'marker' && lastReal.value === ']') isValLike = true;
                                 if (lastReal.type === 'marker' && lastReal.value === '|') {
-                                    // Assume | is value-like if it was a Close Bracket?
-                                    // But checking type 'marker' is ambiguous until structurize.
-                                    // However, usually - follows Open Bracket or Operator.
-                                    // If | is Close, it acts as value.
-                                    // If | is Open, it acts as Bracket.
-                                    // Hard to know here. Let's assume NON-value for now to allow |-5|.
-                                    // If | is Close, |-5 becomes Close - 5 (Binary).
-                                    // Current logic: if marker ] -> ValLike.
-                                    // If we don't treat | as ValLike, |-5 is Literal -5.
-                                    // |x| - 5. | is ValLike.
-                                    // Just Check Adjacency?
-                                    // For now, let's include | as ValLike ?? No, | -5 should be Valid.
-                                    // Let's leave it out of isValLike for | so |-5 is always literal.
+                                    // Let's assume NON-value for now to allow |-5|.
                                 }
                                 if (lastReal.type === 'operator') {
                                     if (operators.parseTable[lastReal.value]?.notation === 'postfix') isValLike = true;
@@ -274,67 +262,19 @@ function parseBlock(block) {
     return expressions;
 }
 
-function parseExpr(tokens) {
-    if (tokens.length === 0) return ["_"];
-    let values = [];
-    let ops = [];
-
-    const applyOp = (opToken) => {
-        let opValue = (opToken.info && opToken.info.symbol) ? opToken.info.symbol : opToken.value;
-        let info = opToken.info || {};
-        if (opToken.type === 'newline_marker') opValue = ',';
-
-        if (!opToken.info) {
-            if (opValue === ' ') info = SPACE_OP;
-            else if (opValue === ',') info = operators.parseTable[','];
-            else info = operators.parseTable[opValue] || {};
-        }
-
-        let node = [opValue];
-        let notation = info.notation || 'infix';
-
-        if (notation === 'infix') {
-            let right = values.pop();
-            let left = values.pop();
-            if (left === undefined) {
-                if (right !== undefined) node.push(right);
-                else node.push("_");
-            } else {
-                node.push(left);
-                if (right !== undefined) node.push(right);
-            }
-        } else {
-            let arg = values.pop();
-            if (arg !== undefined) node.push(arg);
-            else node.push("_");
-        }
-
-        // Special handling for absolute value wrapper
-        if (opValue === '|]') {
-            // postfix |] just marks end, but we need to verify we have matching |[
-            // The real work happens when we encounter |] in the shunting yard loop
-            // or here?
-            // Wait, Standard Shunting Yard handles parentheses by popping until (.
-            // Here |] is like ).
-            // We should NOT strictly push |] as an operator to values array.
-            // But applyOp is called when operator is popped.
-            // Current logic treats all operators as nodes.
-            // We need 'paren-like' logic in the main loop, not here?
-            // OR, we do it here:
-            // If we are applying `|[`, it acts like OPEN.
-            // But `|[` is Prefix.
-            // Let's modify the Main Loop to treat |[ and |] special.
-        }
-        values.push(node);
-    };
-
+// Pass 1: Resolve Token Types (Prefix/Infix) and Handle Markers
+function resolveTokens(tokens) {
     let stream = [];
 
-    // Pass 1: Resolve Types + Strict Infix Logic
     for (let i = 0; i < tokens.length; i++) {
         let t = tokens[i];
 
         if (Array.isArray(t)) {
+            stream.push(t);
+            continue;
+        }
+
+        if (t.info) { // Already resolved (idempotency)
             stream.push(t);
             continue;
         }
@@ -357,105 +297,238 @@ function parseExpr(tokens) {
             stream.push({ type: 'newline_marker', value: ',', info: commaInfo });
         } else {
             if (t.type === 'operator' || (t.type === 'marker' && t.value === '|')) {
-                let info = operators.parseTable[t.value];
-                let prev = stream[stream.length - 1];
+                let prev = stream.length > 0 ? stream[stream.length - 1] : null;
                 let isPrevVal = prev && isVal(prev);
+                let info = null;
 
                 if (!isPrevVal) {
                     if (t.value === '|') {
                         t.value = '[|';
-                        t.type = 'operator'; // Ensure it's treated as Op in Pass 2
+                        t.type = 'operator';
                     }
-                    t.info = resolveOpInfo(t.value, 'prefix');
+                    info = resolveOpInfo(t.value, 'prefix');
                 } else {
                     let hasSpaceAfter = (i + 1 < tokens.length && tokens[i + 1].type === 'space_marker');
 
                     if (t.value === '|') {
-                        let hasSpaceBefore = t.hasSpaceBefore;
-                        // Note: t.hasSpaceBefore is set by previous loop if space was there.
-                        // But we better check stream.
-                        // In Pass 1 stream construction:
-                        // invalid `t.hasSpaceBefore` concept if stream has `space_marker` operator?
-                        // Wait, `tokens` has `space_marker`.
-                        // `t` is from `tokens`.
-                        // Check raw `tokens[i-1]`?
+                        // Original | Logic reused
                         let prevT = (i > 0) ? tokens[i - 1] : null;
                         let nextT = (i + 1 < tokens.length) ? tokens[i + 1] : null;
                         let spBefore = (!prevT) || (prevT.type === 'space_marker') || (prevT.type === 'marker' && prevT.value === '\n');
-                        let spAfter = (!nextT) || (nextT.type === 'space_marker') || (nextT.type === 'marker' && nextT.value === '\n'); // or newline logic
+                        let spAfter = (!nextT) || (nextT.type === 'space_marker') || (nextT.type === 'marker' && nextT.value === '\n');
+
+                        // We need access to space markers which are not in stream yet?
+                        // `tokens` has space markers. `prevT` checks `tokens`. Correct.
 
                         if (spBefore && spAfter) {
-                            t.info = resolveOpInfo(t.value, 'infix');
+                            info = resolveOpInfo(t.value, 'infix');
                             t.type = 'operator';
                         } else if (spBefore && !spAfter) {
-                            t.value = '[|'; // Transform to Open Abs
-                            t.info = resolveOpInfo('|', 'prefix');
+                            t.value = '[|';
+                            info = resolveOpInfo('|', 'prefix');
                             t.type = 'operator';
                         } else if (!spBefore && spAfter) {
-                            t.value = '|]'; // Transform to Close Abs
-                            t.info = resolveOpInfo('|', 'postfix');
+                            t.value = '|]';
+                            info = resolveOpInfo('|', 'postfix');
                             t.type = 'operator';
                         } else {
-                            throw new Error(`Syntax Error: Pipe '|' requires whitespace on at least one side.`);
+                            // Syntax error strictly, but fallback to infix 
+                            info = resolveOpInfo(t.value, 'infix');
                         }
                     } else if (t.hasSpaceBefore && hasSpaceAfter) {
-                        t.info = resolveOpInfo(t.value, 'infix');
+                        info = resolveOpInfo(t.value, 'infix');
                     } else {
                         if (t.hasSpaceBefore && !hasSpaceAfter) {
                             stream.push({ type: 'operator', value: ' ', info: SPACE_OP });
-                            t.info = resolveOpInfo(t.value, 'prefix');
+                            info = resolveOpInfo(t.value, 'prefix');
                         } else if (!t.hasSpaceBefore) {
                             const tightOps = ['+', '-', '*', '/', '%', '^', '=', '<', '>', '<=', '>=', '!=', ':'];
                             let isTight = tightOps.includes(t.value);
-                            // ... existing logic ...
                             if (isTight) {
-                                t.info = resolveOpInfo(t.value, 'infix');
+                                info = resolveOpInfo(t.value, 'infix');
                             } else {
-                                t.info = resolveOpInfo(t.value, 'postfix');
-                                if (!t.info) t.info = resolveOpInfo(t.value, 'infix');
+                                info = resolveOpInfo(t.value, 'postfix');
+                                if (!info) info = resolveOpInfo(t.value, 'infix');
                             }
                         } else {
-                            t.info = resolveOpInfo(t.value, 'infix');
+                            info = resolveOpInfo(t.value, 'infix');
                         }
                     }
                 }
+                t.info = info;
             }
+            stream.push(t); // Always push 't' (which might be modified)
+        }
+    }
+    return stream;
+}
 
-            stream.push(t);
+function parseParams(tokens) {
+    let params = [];
+    let current = [];
+
+    // We can run resolveTokens on 'current' when parsing
+    const flush = () => {
+        if (current.length > 0) {
+            params.push(parseExpr(current));
+            current = [];
+        }
+    };
+
+    // Simple split by Space or Comma operators
+    // Note: tokens passed here are un-resolved chunks from valid split.
+    // They might contain space markers.
+
+    for (let t of tokens) {
+        if (t.type === 'space_marker' || (t.type === 'operator' && t.value === ' ')) {
+            flush();
+        } else if ((t.type === 'operator' || t.type === 'newline_marker') && t.value === ',') {
+            flush();
+        } else {
+            current.push(t);
+        }
+    }
+    flush();
+    return params;
+}
+
+function parseExpr(tokens) {
+    if (tokens.length === 0) return ["_"];
+
+    let stream = resolveTokens(tokens);
+
+    let minPrec = Infinity;
+    let splitIndex = -1;
+    let bracketLevel = 0; // Track | wrapper nesting
+
+    for (let i = 0; i < stream.length; i++) {
+        let t = stream[i];
+
+        // Track Abs Pipes to avoid splitting inside them
+        if (t.value === '[|') { bracketLevel++; continue; }
+        if (t.value === '|]') { bracketLevel--; continue; }
+        if (bracketLevel > 0) continue;
+
+        if (t.type === 'operator' || t.type === 'newline_marker') {
+            let op = t.value;
+            // Precedence from info
+            let info = t.info;
+            if (!info) continue; // Should not happen after resolveTokens
+
+            let prec = info.precedence;
+            if (op === '?') prec = 3; // Force ? to 3 for structural split
+
+            // Limit to structural operators (<= 3)
+            if (prec <= 3) {
+                if (prec < minPrec) {
+                    minPrec = prec;
+                    splitIndex = i;
+                } else if (prec === minPrec) {
+                    // Associativity
+                    let assoc = info.associativity || 'left';
+                    if (op === '?') assoc = 'right'; // ? is Right Associative
+
+                    if (assoc === 'left') {
+                        splitIndex = i;
+                    }
+                }
+            }
         }
     }
 
-    // Pass 2: Shunting Yard
-    for (let t of stream) {
+    if (splitIndex !== -1) {
+        let splitToken = stream[splitIndex];
+        let op = splitToken.value;
+        let info = splitToken.info;
+
+        let sym = info.symbol || op;
+        if (op === '?') sym = '?';
+
+        // Reconstruct LHS/RHS
+        // We can pass slice of stream. `resolveTokens` handles already-resolved tokens.
+        let lhs = stream.slice(0, splitIndex);
+        let rhs = stream.slice(splitIndex + 1);
+
+        if (info.notation === 'prefix') {
+            return [sym, parseExpr(rhs)];
+        } else {
+            if (op === '?') {
+                return [sym, parseParams(lhs), parseExpr(rhs)];
+            }
+            return [sym, parseExpr(lhs), parseExpr(rhs)];
+        }
+    }
+
+    // Fallback: Pass Resolved Stream to Shunting Yard
+    return shuntingYard(stream);
+}
+
+function shuntingYard(tokens) {
+    // tokens are already resolved (Pass 1 done)
+    if (tokens.length === 0) return ["_"];
+    let values = [];
+    let ops = [];
+
+    const applyOp = (opToken) => {
+        let opValue = (opToken.info && opToken.info.symbol) ? opToken.info.symbol : opToken.value;
+        let info = opToken.info;
+        // ... (standard logic)
+
+        let node = [opValue];
+        let notation = info.notation || 'infix';
+
+        if (notation === 'infix') {
+            let right = values.pop();
+            let left = values.pop();
+            if (left === undefined) {
+                if (right !== undefined) node.push(right);
+                else node.push("_");
+            } else {
+                node.push(left);
+                if (right !== undefined) node.push(right);
+            }
+        } else {
+            let arg = values.pop();
+            if (arg !== undefined) node.push(arg);
+            else node.push("_");
+        }
+        values.push(node);
+    };
+
+    // Pass 2: Shunting Yard Loop
+    for (let t of tokens) {
         if (isVal(t)) {
             values.push(Array.isArray(t) ? t : convertNode(t));
         } else if (t.type === 'operator' || t.type === 'newline_marker') {
             let op = t;
-            let info = op.info || {};
+            let info = op.info;
+            if (!info) {
+                // Should have been resolved. Check if it is | logic or marker?
+                // console.log("Missing info for", op);
+                info = {}; // Safe fallback
+            }
             let prec = info.precedence || 0;
             let assoc = info.associativity || 'left';
 
+            // Override ? precedence for SY fallback not needed if handled by Splitter.
+
             if (op.value === '[|') {
-                // Open Absolute Value -> Push to stack like (
-                // Do not pop based on precedence
                 ops.push(op);
                 continue;
             }
             if (op.value === '|]') {
-                // Close Absolute Value -> Pop until [|
                 while (ops.length > 0) {
                     let top = ops[ops.length - 1];
                     if (top.value === '[|') {
-                        ops.pop(); // Pop [|
-                        // Now convert top value `v` to `["!-", v]`
+                        ops.pop();
                         let v = values.pop();
                         if (v !== undefined) values.push(["!-", v]);
-                        else values.push(["!-", "_"]); // Error case?
+                        else values.push(["!-", "_"]);
                         break;
                     }
                     applyOp(ops.pop());
                 }
-                continue; // Done with |]
+                continue;
             }
 
             while (ops.length > 0) {
@@ -463,7 +536,6 @@ function parseExpr(tokens) {
                 let topInfo = top.info || {};
                 let topPrec = topInfo.precedence || 0;
 
-                // Stop popping if we hit open abs
                 if (top.value === '[|') break;
 
                 if ((assoc === 'left' && prec <= topPrec) || (assoc === 'right' && prec < topPrec)) {
