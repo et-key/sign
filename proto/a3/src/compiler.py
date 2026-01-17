@@ -3,8 +3,13 @@
 import sys
 import json
 import argparse
-from .ir_builder import create_module, create_function_type, function, create_builder, int_type, get_backend, constant
-from .codegen import compile_expr
+import os
+
+# srcディレクトリをパスに追加
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from ir_builder import create_module, create_function_type, function, create_builder, int_type, get_backend, constant
+from codegen import compile_expr
 
 def compile_module_from_sexpr(s_exprs, module_name="sign_module"):
     """S式のリストからモジュールを生成"""

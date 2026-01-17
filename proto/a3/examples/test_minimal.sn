@@ -1,0 +1,22 @@
+`============================================
+` Sign言語 最小限の動作確認用テストコード
+` 空白演算子を使わない基本構文のみ
+`============================================
+
+`基本リテラル
+integer_test : 42
+negative_test : -10
+
+`算術演算
+add_result : 1 + 2
+sub_result : 10 - 3
+mul_result : 4 * 5
+div_result : 20 / 4
+complex1 : 2 + 3 * 4
+
+`比較演算
+less_test : 3 < 5
+equal_test : 5 = 5
+
+`文字列
+greeting : `Hello, LLVM!`

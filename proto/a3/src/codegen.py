@@ -1,6 +1,6 @@
 """Code generation logic for Sign language"""
 
-from .ir_builder import int_type, constant, create_builder, create_function_type, function, pointer_type, array_type, global_variable
+from ir_builder import int_type, constant, create_builder, create_function_type, function, pointer_type, array_type, global_variable
 
 # エラーハンドリング用（簡易的）
 def error(msg):

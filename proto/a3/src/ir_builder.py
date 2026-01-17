@@ -11,12 +11,12 @@ if USE_LLVMLITE:
         BACKEND = 'llvmlite'
     except ImportError:
         print("Warning: llvmlite not available, falling back to mock")
-        from .llvm_mock import *
-        from .llvm_mock import MockIRBuilder # specific import
+        from llvm_mock import *
+        from llvm_mock import MockIRBuilder # specific import
         BACKEND = 'mock'
 else:
-    from .llvm_mock import *
-    from .llvm_mock import MockIRBuilder # specific import
+    from llvm_mock import *
+    from llvm_mock import MockIRBuilder # specific import
     BACKEND = 'mock'
 
 def get_backend():
