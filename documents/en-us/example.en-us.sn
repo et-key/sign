@@ -171,26 +171,33 @@ john ' name = john ' `name`
 
 `Data class-like description`
 
-Item :
-	name
-	duration
-	equip
-	use
-	effect
+#MyGame :
+	State :
+		Existence
+		Durability
+		Mentality
+		Wisdom
+		Agility
+		Equipment
+		Bag
 
-medicalWeed : Item
-	`medicalWeed`
-	1
-	_
-	[' amount] [- 1]
-	[' HP] [+ 20]
+`Objects are copied by the expansion operation using postfix "~".
+`For loading from other files, use "@".
 
-lightningStaff : Item
-	`lightningStaff`
-	50
-	[' Atk] [+ 8]
-	[' ThunderBolt]
-	[' HP] [- 40]
+#Mob : MyGame~
+	Base : State~
+	State~
+
+#Magician : Mob~
+	Base :
+		Existence : 1
+		Durability : 3
+		Mentality : 10
+		Wisdom : 8
+		agility : 5
+	State : Magician ' Base~
+
+myMagician : Magician~
 
 
 `The so-called 'let ~ in' is also written as follows.`
@@ -248,10 +255,10 @@ s: [1 2],[3 4]
 `Dictionary type`
 `However, opening and closing parentheses must always be paired.`
 
-myGreet:
-	greet: 
-		hello: `hello,`
-		welcome: `welcome,`
+myGreet :
+	greet : 
+		hello : `hello,`
+		welcome : `welcome,`
 	world : ` world`
 
 
@@ -342,7 +349,7 @@ My = M \y \  \D \o \m \e \s \t \i \c = `My Domestic`
 `The reason is that " " means "list concatenation, function composition, and function application."`
 `If you want to include newlines.`
 
-HWinEnter :
+InEnter :
  `Hello` \
  `World!`
 

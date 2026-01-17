@@ -858,24 +858,19 @@ The following reserved words exist for defining operators.
 These reserved words are only valid within metaprogramming declarations and cannot be used in normal code.
 
 
-* `Prefix`		(prefix operator)
-* `Infix`		(infix operator without identity element)
-* `InfixL`		(infix operator with left identity element)
-* `InfixR`		(infix operator with right identity element)
-* `Postfix`		(postfix operator)
 * `Number`		(number type)
-* `UInt`		(unsigned integer type)
-* `Int`			(signed integer type)
-* `Float`		(floating-point type)
-* `Hex`			(hexadecimal type)
-* `Oct`			(octal type)
-* `Bin`			(binary type)
+* `UInt`			(unsigned integer type)
+* `Int`				(signed integer type)
+* `Float`			(floating-point type)
+* `Hex`				(hexadecimal type)
+* `Oct`				(octal type)
+* `Bin`				(binary type)
 * `String`		(string type)
 * `Address`		(address type)
 * `Function`	(function type)
-* `Char`		(character type)
-* `List`		(list type)
-* `Dict`		(dictionary type)
+* `Char`			(character type)
+* `List`			(list type)
+* `Map`				(dictionary type)
 
 ## About Types
 In Sign, metaprogramming functionality exists for defining types.
@@ -885,7 +880,7 @@ f : x y ? x + y
 ```
 
 Note that there is also a notation method using concrete values for types.
-In this case, it is recommended to use identity elements and such for clarity.
+In this case, it is recommended to use identity elements for clarity.
 
 ```
 "f : 0 0 0"
