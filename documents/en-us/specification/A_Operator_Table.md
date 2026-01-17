@@ -57,7 +57,7 @@
 | 20※ | `~` | postfix | expand | Leading~ | Expansion |
 | 21 | `$` | prefix | address | Money (abstraction of value) | Address acquisition |
 | 22 | `'` | infix | get | Possessive ('s with s omitted) | Get value from structure |
-| 22 | `@` | infixR* | get | At (at ~) | Get value from structure |
+| 22 | `@` | infixR※ | get | At (at ~) | Get value from structure |
 | 23 | `@` | prefix | input | At (at ~) | Get data from address |
 | 24 | `<<` | infix | shift left | Shift left | Bit shift to left |
 | 24 | `>>` | infix | shift right | Shift right | Bit shift to right |
