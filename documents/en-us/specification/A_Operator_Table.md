@@ -18,7 +18,9 @@
 
 | Priority | Symbol | Position | Function | Natural Meaning | Operational Semantics |
 |----------|--------|----------|----------|-----------------|---------------------|
-| 1 | `#` | prefix | export | Hashtag (public/discoverable) | Make name discoverable from outside |
+| 1 | `#` | prefix | export | Hashtag (public/discoverable) | Make name discoverable from within the project |
+| 1 | `##` | prefix | export | Hashtag (public/discoverable) | Make name discoverable from outside (corresponds to ARC) |
+| 1 | `###` | prefix | export | Hashtag (public/discoverable) | Make name discoverable from outside (assuming no unload in Pin region) |
 | 2 | `:` | infixR※ | define | That is (identification) | Bind left-hand name (condition) to right-hand value |
 | 3 | `#` | infix | output | Hashtag (association) | Associate data with address |
 | 4 | `,` | infixR※ | product | Product (structural assembly) | Right-associative list construction |
