@@ -111,6 +111,8 @@
 
 const parseTable = {
     "#": { "precedence": Infinity, "notation": "prefix" },
+    "##": { "precedence": Infinity, "notation": "prefix" },
+    "###": { "precedence": Infinity, "notation": "prefix" },
     ":": { "precedence": 2, "notation": "infix", "associativity": "right" },
     "#": { "precedence": 3, "notation": "infix", "associativity": "left" },
     ",": { "precedence": 4, "notation": "infix", "associativity": "right" },
@@ -171,7 +173,9 @@ const parseTable = {
 **/
 
 const semantics = {
-    "#_": "import",
+    "#_": "export",
+    "##_": "export_escapable",
+    "###_": "pin_export",
     ":": "define",
     "#": "output",
     ",": "product",
@@ -212,7 +216,9 @@ const semantics = {
     "&&": "bitAnd",
     "!!_": "bitNot",
     "_@": "atRoot",
-    "import": "#_",
+    "export": "#_" ,
+    "export_escapable": "##_",
+    "pin_export": "###_",
     "define": ":",
     "output": "#",
     "product": ",",
