@@ -1,0 +1,2 @@
+#compose : f g x ? f (g x)
+#double : x ? x * 2
