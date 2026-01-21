@@ -1,0 +1,4 @@
+ternary_less : 1 < 3 < 5
+ternary_more : 10 > 5 > 0
+mixed_binary : 1 < 5 > 2
+normal_binary : 1 < 2
