@@ -1,6 +1,0 @@
-(defparameter result1 (+ 1 2))
-(defparameter result2 (* 3 4))
-(defparameter result3 (/ 10 2))
-(defparameter result4 (+ 1 (* 2 3)))
-(defparameter result5 (* (+ 1 2) 3))
-(defparameter result6 (expt 2 3))

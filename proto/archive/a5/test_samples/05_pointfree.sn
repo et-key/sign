@@ -1,6 +1,0 @@
-`ポイントフリー記法のサンプル`
-fold_add : [+]
-add_one : [+ 1]
-subtract_from_five : [5 -]
-double_map : [* 2,]
-negate : [!]

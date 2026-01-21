@@ -1,7 +1,0 @@
-(defun print-sign (str) (format t "~a" str))
-(print-sign "Hello from Sign!")
-(defparameter x 10)
-(defparameter y 20)
-(print-sign (+ x y))
-(defparameter result 100)
-(format t "~a" result)

@@ -1,4 +1,0 @@
-`複合的なサンプル`
-square : x ? x * x
-sum : x y ? x + y
-process : x y ? [+ 1] (x * y)
