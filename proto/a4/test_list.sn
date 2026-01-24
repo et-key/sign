@@ -1,0 +1,3 @@
+[cons 10 20]
+[head [cons 10 20]]
+[tail [cons 10 20]]
