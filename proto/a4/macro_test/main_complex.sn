@@ -3,4 +3,4 @@ comp : compose @ lib
 dbl : double @ lib
 
 my_func : comp dbl dbl
-[my_func 5]
+my_func 5
