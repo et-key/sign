@@ -1,0 +1,6 @@
+head : [' 0]
+tail : [' (1~)]
+
+list : [10, 20, 30]
+h : head list
+t : tail list

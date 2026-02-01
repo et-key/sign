@@ -1,0 +1,10 @@
+match : x ?
+  x = 10 : 100
+  x = 20 : 200
+  300
+
+main : ?
+  match 10
+  match 20
+  match 99
+  match 0
