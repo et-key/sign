@@ -39,10 +39,11 @@ function tokenize(code) {
 
     for (let i = 0; i < rawParts.length; i++) {
         let majorChunk = rawParts[i];
-        if (!majorChunk) continue;
 
         // --- Insert Space Marker ONLY between Major Chunks ---
         if (i > 0 && finalTokens.length > 0) finalTokens.push({ type: 'space_marker' });
+
+        if (!majorChunk) continue;
 
         // --- Sub-split by \x1D (Tight Adjacency) ---
         let subParts = majorChunk.split('\x1D');
@@ -179,10 +180,15 @@ function structurize(tokens) {
             }
             else if (t.value === '\n') {
                 let indent = 0;
+                let spaces = 0;
                 let j = i + 1;
                 while (j < tokens.length) {
-                    if (tokens[j].value === '\t') { indent++; j++; }
-                    else if (tokens[j].type === 'space_marker') { j++; }
+                    if (tokens[j].value === '\t') { indent++; j++; spaces = 0; }
+                    else if (tokens[j].type === 'space_marker') {
+                        spaces++;
+                        if (spaces === 2) { indent++; spaces = 0; }
+                        j++;
+                    }
                     else { break; }
                 }
                 if (stack[stack.length - 1].bracket) {
@@ -219,7 +225,7 @@ const SPACE_OP = { precedence: 5, notation: 'infix', associativity: 'left' };
 
 const overrides = {
     '!': { prefix: { p: 13, sym: '!_' }, postfix: { p: 18, sym: '_!' } },
-    '~': { prefix: { p: 10, sym: '~_' }, infix: { p: 9, sym: '~' }, postfix: { p: 20, sym: '_~' } },
+    '~': { prefix: { p: 10, sym: '~_' }, infix: { p: 9, sym: '~' }, postfix: { p: 23, sym: '_~' } },
     '#': { prefix: { p: 1, sym: '#_' }, infix: { p: 3, sym: '#' } },
     '##': { prefix: { p: 1, sym: '##_' } },
     '###': { prefix: { p: 1, sym: '###_' } },
