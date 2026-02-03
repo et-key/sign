@@ -282,6 +282,102 @@ class Compiler {
             body: [...tailBody, OP.END]
         });
         this.exports.push({ name: tailName, idx: tailIdx, kind: 0x00 });
+
+        // 5. Range (start, end) -> list
+        const rangeName = "range";
+        const rangeIdx = baseIdx + this.functions.length;
+        this.funcNameMap.set(rangeName, rangeIdx);
+        // Recursive range implementation
+        const rangeBody = [
+            // if start > end : return NaN
+            OP.GET_LOCAL, 0, // start
+            OP.GET_LOCAL, 1, // end
+            OP.F64_GT,
+            OP.IF, VALTYPE.F64,
+            OP.F64_CONST, ...new WasmEmitter().encodeF64(NaN),
+            OP.ELSE,
+            // return cons(start, range(start + 1, end))
+            OP.GET_LOCAL, 0, // cons param 1: start
+
+            OP.GET_LOCAL, 0, // start for +1
+            OP.F64_CONST, ...new WasmEmitter().encodeF64(1.0),
+            OP.F64_ADD, // start + 1
+            OP.GET_LOCAL, 1, // end
+            OP.CALL, ...new WasmEmitter().encodeULEB128(rangeIdx), // recursive call
+
+            OP.CALL, ...new WasmEmitter().encodeULEB128(consIdx), // call cons
+            OP.END
+        ];
+        const rangeTypeIdx = this.getTypeIdx([VALTYPE.F64, VALTYPE.F64], [VALTYPE.F64]);
+        this.functions.push({
+            typeIdx: rangeTypeIdx,
+            locals: [],
+            body: [...rangeBody, OP.END]
+        });
+        // range is internal, but can be exported for testing/debugging
+        this.exports.push({ name: rangeName, idx: rangeIdx, kind: 0x00 });
+
+        // 6. Factorial (n) -> n!
+        const factName = "factorial";
+        const factIdx = baseIdx + this.functions.length;
+        this.funcNameMap.set(factName, factIdx);
+        const factBody = [
+            // if n <= 1 return 1
+            OP.GET_LOCAL, 0,
+            OP.F64_CONST, ...new WasmEmitter().encodeF64(1.0),
+            OP.F64_LE,
+            OP.IF, VALTYPE.F64,
+            OP.F64_CONST, ...new WasmEmitter().encodeF64(1.0),
+            OP.ELSE,
+            // return n * factorial(n - 1)
+            OP.GET_LOCAL, 0,
+            OP.GET_LOCAL, 0,
+            OP.F64_CONST, ...new WasmEmitter().encodeF64(1.0),
+            OP.F64_SUB,
+            OP.CALL, ...new WasmEmitter().encodeULEB128(factIdx),
+            OP.F64_MUL,
+            OP.END
+        ];
+        const factTypeIdx = this.getTypeIdx([VALTYPE.F64], [VALTYPE.F64]);
+        this.functions.push({
+            typeIdx: factTypeIdx,
+            locals: [],
+            body: [...factBody, OP.END]
+        });
+        this.exports.push({ name: factName, idx: factIdx, kind: 0x00 });
+
+        // 7. Nth (list, index) -> val
+        const nthName = "nth";
+        const nthIdx = baseIdx + this.functions.length;
+        this.funcNameMap.set(nthName, nthIdx);
+        const nthBody = [
+            // if index <= 0 return head(list) (Allow rough index check for now)
+            // Strict: index == 0
+            OP.GET_LOCAL, 1,
+            OP.F64_CONST, ...new WasmEmitter().encodeF64(0.0),
+            OP.F64_LE, // index <= 0
+            OP.IF, VALTYPE.F64,
+            OP.GET_LOCAL, 0,
+            OP.CALL, ...new WasmEmitter().encodeULEB128(headIdx),
+            OP.ELSE,
+            // return nth(tail(list), index - 1)
+            OP.GET_LOCAL, 0,
+            OP.CALL, ...new WasmEmitter().encodeULEB128(tailIdx),
+            OP.GET_LOCAL, 1,
+            OP.F64_CONST, ...new WasmEmitter().encodeF64(1.0),
+            OP.F64_SUB, // index - 1
+            OP.CALL, ...new WasmEmitter().encodeULEB128(nthIdx),
+            OP.END
+        ];
+        // Note: Missing checks for empty list (tail on empty?)
+        // For prototype, assuming valid bounds.
+        this.functions.push({
+            typeIdx: rangeTypeIdx, // Same sig as range (f64, f64 -> f64)
+            locals: [],
+            body: [...nthBody, OP.END]
+        });
+        this.exports.push({ name: nthName, idx: nthIdx, kind: 0x00 });
+
     }
 
     injectImports() {
@@ -869,7 +965,38 @@ class Compiler {
             if (op === '!-') {
                 let bytes = [];
                 bytes = bytes.concat(this.compileExpr(node[1], VALTYPE.F64));
-                bytes.push(OP.F64_ABS);
+                return bytes;
+            }
+
+            // 10. Range Operator (start ~ end)
+            if (op === '~') {
+                let bytes = [];
+                // Push start, Push end, Call range
+                bytes = bytes.concat(this.compileExpr(node[1], VALTYPE.F64));
+                bytes = bytes.concat(this.compileExpr(node[2], VALTYPE.F64));
+                const rangeIdx = this.funcNameMap.get("range");
+                bytes.push(OP.CALL, ...new WasmEmitter().encodeULEB128(rangeIdx));
+                return bytes;
+            }
+
+            // 11. Factorial Operator (n!)
+            // Parser emits postfix `_!` for `n!`. 
+            if (op === '_!') {
+                let bytes = [];
+                bytes = bytes.concat(this.compileExpr(node[1], VALTYPE.F64));
+                const factIdx = this.funcNameMap.get("factorial");
+                bytes.push(OP.CALL, ...new WasmEmitter().encodeULEB128(factIdx));
+                return bytes;
+            }
+
+            // 12. Access Operator (' or @)
+            if (op === "'" || op === "@") {
+                // Infix @ or ' : list ' index
+                let bytes = [];
+                bytes = bytes.concat(this.compileExpr(node[1], VALTYPE.F64)); // List
+                bytes = bytes.concat(this.compileExpr(node[2], VALTYPE.F64)); // Index
+                const nthIdx = this.funcNameMap.get("nth");
+                bytes.push(OP.CALL, ...new WasmEmitter().encodeULEB128(nthIdx));
                 return bytes;
             }
 

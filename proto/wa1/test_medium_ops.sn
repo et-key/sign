@@ -1,0 +1,23 @@
+` Range Test: 1 ~ 5 -> [1, 2, 3, 4, 5]
+` 1 ~ 5 should return a list (pointer)
+test_range : 1 ~ 5
+
+` Helper for testing access
+get_2nd : list ? list ' 2
+
+test_range_nth : get_2nd 1 ~ 5
+` Expected: 3
+
+` Factorial Test: 5! -> 120
+test_fact : 5!
+
+` Access Test (' and @)
+get_5th : list ? list ' 5
+
+test_access_q : get_5th 10 ~ 20
+` Expected: 15
+
+get_5th_at : list ? list @ 5
+
+test_access_at : get_5th_at 10 ~ 20
+` Expected: 15
