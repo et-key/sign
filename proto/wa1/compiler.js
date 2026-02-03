@@ -10,6 +10,7 @@ const SECTION = {
     GLOBAL: 6,
     EXPORT: 7,
     CODE: 10,
+    DATA: 11,
     DATA: 11
 };
 
@@ -138,10 +139,19 @@ class Compiler {
         this.data = []; // {offset, bytes}
         this.memoryPages = 1;
 
+        // String Literals Support
+        this.stringTable = new Map(); // "`Hello`" -> offset
+        this.dataBytes = [];
+        this.dataStartOffset = 0; // Strings start at 0
+        this.heapStartOffset = 1024;
+
         // Reserve Global 0 for Heap Pointer
         this.heapPtrIdx = 0;
-        // Start heap at 1024 to avoid 0 (NULL) confusion
-        this.globals.push({ type: VALTYPE.I32, mutable: true, init: [OP.I32_CONST, ...new WasmEmitter().encodeSLEB128(1024), OP.END] });
+        // Start heap at 1024 to avoid 0 (NULL) confusion and overlap
+        this.globals.push({ type: VALTYPE.I32, mutable: true, init: [OP.I32_CONST, ...new WasmEmitter().encodeSLEB128(this.heapStartOffset), OP.END] });
+
+        // Export Memory
+        this.exports.push({ name: "memory", idx: 0, kind: 0x02 }); // Kind 0x02 = Memory
 
         // Inject Runtime Functions
         this.injectRuntime();
@@ -263,7 +273,42 @@ class Compiler {
         this.exports.push({ name: tailName, idx: tailIdx, kind: 0x00 });
     }
 
+    collectStringLiterals(node) {
+        if (typeof node === 'string') {
+            if (node.startsWith('`')) {
+                // String Literal
+                if (!this.stringTable.has(node)) {
+                    // Extract content (remove backticks)
+                    const content = node.slice(1, -1);
+                    const encoder = new TextEncoder();
+                    const bytes = encoder.encode(content);
+
+                    // Limit check
+                    if (this.dataBytes.length + bytes.length + 1 > this.heapStartOffset) {
+                        throw new Error("Static data exceeds 1024 bytes buffer");
+                    }
+
+                    const offset = this.dataStartOffset + this.dataBytes.length;
+                    this.stringTable.set(node, offset);
+
+                    // Append bytes + null terminator
+                    bytes.forEach(b => this.dataBytes.push(b));
+                    this.dataBytes.push(0); // \0
+                }
+            }
+            return;
+        }
+        if (Array.isArray(node)) {
+            for (const child of node) {
+                this.collectStringLiterals(child);
+            }
+        }
+    }
+
     compile(sexpr) {
+        // 0. Pass: Collect String Literals
+        this.collectStringLiterals(sexpr);
+
         // 1. Pass: Collect Function Names (for forward references)
         let items = Array.isArray(sexpr[0]) ? sexpr : [sexpr];
         if (sexpr[0] === ':') items = [sexpr];
@@ -374,7 +419,17 @@ class Compiler {
     }
 
     compileExpr(node, expectedType = null) {
-        // 1. Literal Numbers
+        // 1. String Literals
+        if (typeof node === 'string' && node.startsWith('`')) {
+            if (!this.stringTable.has(node)) {
+                throw new Error("Compiler Error: String literal not collected");
+            }
+            const offset = this.stringTable.get(node);
+            // Return ptr as f64
+            return [OP.F64_CONST, ...new WasmEmitter().encodeF64(offset)];
+        }
+
+        // 2. Literal Numbers
         if (typeof node === 'number') {
             if (expectedType === VALTYPE.F64 || (!Number.isInteger(node))) {
                 return [OP.F64_CONST, ...new WasmEmitter().encodeF64(node)];
@@ -590,6 +645,15 @@ class Compiler {
             return [...emitter.encodeULEB128(body.length), ...body];
         }));
 
+        // 8. Data Section
+        let dataSectionBytes = [];
+        if (this.dataBytes.length > 0) {
+            // mode=0 (active), memidx=0 (implicit), offset=expr, init=vec(byte)
+            const offsetExpr = [OP.I32_CONST, ...emitter.encodeSLEB128(this.dataStartOffset), OP.END];
+            const segment = [0, ...offsetExpr, ...emitter.encodeVector(this.dataBytes)];
+            dataSectionBytes = emitter.encodeSection(SECTION.DATA, emitter.encodeVector([segment]));
+        }
+
         return new Uint8Array([
             ...magic, ...version,
             ...emitter.encodeSection(SECTION.TYPE, typePayload),
@@ -597,7 +661,8 @@ class Compiler {
             ...emitter.encodeSection(SECTION.MEMORY, memoryPayload),
             ...emitter.encodeSection(SECTION.GLOBAL, globalPayload),
             ...emitter.encodeSection(SECTION.EXPORT, exportPayload),
-            ...emitter.encodeSection(SECTION.CODE, codePayload)
+            ...emitter.encodeSection(SECTION.CODE, codePayload),
+            ...dataSectionBytes
         ]);
     }
 }
