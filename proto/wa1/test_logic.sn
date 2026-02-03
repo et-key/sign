@@ -1,25 +1,25 @@
 ` テスト: 比較とループ・条件分岐
 
 ` 1. 比較演算 (Comparison)
-` 結果は 1 (True) か 0 (False) で返ると想定 (Wasm仕様に準拠)
+` 結果は 真なら右辺の値、偽なら NaN (False/Unit) を返す
 test_less : 10 < 20
 test_greater : 10 > 20
 test_equal : 5 = 5
 test_not_equal : 5 != 10
 
 ` 2. 論理演算 (Not)
-` f64値を評価 (0.0はFalse, それ以外はTrue扱い)
+` f64値を評価 (NaNはFalse, それ以外はTrue扱い)
 test_not_true : !0
-test_not_false : !1
+test_not_false : !_
 
 ` 3. 条件分岐 (Branch)
 ` 条件 : 結果
-` 条件が真(非0)なら結果を返す。偽(0)なら0を返す。
+` 条件が真(非NaN)なら結果を返す。偽(NaN)ならNaNを返す。
 branch_taken : 1 < 2 : 100
 branch_skipped : 1 > 2 : 100
 
 ` 4. 複合デモ
-` xが正なら2倍、そうでなければ0
+` xが正なら2倍、そうでなければNaN
 check_pos : x ? (x > 0 : x * 2)
 run_check : check_pos 10
 run_check_fail : check_pos -5

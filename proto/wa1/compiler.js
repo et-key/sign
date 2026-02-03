@@ -347,11 +347,6 @@ class Compiler {
 
         if (scanOnly) {
             // Pass 1: Register Name
-            // Index = current functions length (including runtime) + count of user functions processed
-            // Wait, we can just track the next available index.
-            // But we don't push to `this.functions` yet.
-            // So we need to know how many we have scanned.
-            // Better: use `this.funcNameMap.size`.
             const idx = this.funcNameMap.size;
             this.funcNameMap.set(name, idx);
             return;
@@ -385,13 +380,12 @@ class Compiler {
         const typeIdx = this.getTypeIdx(paramTypes, [resultType]);
         const funcIdx = this.funcNameMap.get(name);
 
-        // We must push to `this.functions` in the same order as Pass 1 scanned them.
-        // Pass 2 iterates in same order, so `this.functions.length` should match `funcIdx`.
         if (this.functions.length !== funcIdx) {
             throw new Error(`Sync error: Compiling func ${name} (idx ${funcIdx}) but functions array len is ${this.functions.length}`);
         }
 
-        this.functions.push({ typeIdx, locals: [], body: code });
+        // Add 1 scratch local (F64) for logic operations
+        this.functions.push({ typeIdx, locals: [{ count: 1, type: VALTYPE.F64 }], body: code });
 
         this.exports.push({ name, idx: funcIdx, kind: 0x00 });
     }
@@ -419,6 +413,11 @@ class Compiler {
     }
 
     compileExpr(node, expectedType = null) {
+        // 0. Unit / False (_)
+        if (node === '_') {
+            return [OP.F64_CONST, ...new WasmEmitter().encodeF64(NaN)];
+        }
+
         // 1. String Literals
         if (typeof node === 'string' && node.startsWith('`')) {
             if (!this.stringTable.has(node)) {
@@ -447,21 +446,30 @@ class Compiler {
             // Check if it's a global function (0-arity constant)
             if (this.funcNameMap.has(node)) {
                 const funcIdx = this.funcNameMap.get(node);
-                // We assume 0-arity if used as a value without arguments?
-                // Or we should verify arity. For now, just CALL it.
                 return [OP.CALL, ...new WasmEmitter().encodeULEB128(funcIdx)];
             }
             throw new Error(`Undefined variable: ${node}`);
         }
 
         if (Array.isArray(node)) {
-            if (node.length === 0) return [];
+            if (node.length === 0) return [OP.F64_CONST, ...new WasmEmitter().encodeF64(NaN)];
 
             // Handle Blocks (nested lists)
             if (typeof node[0] !== 'string') {
                 let bytes = [];
                 for (const expr of node) {
                     bytes = bytes.concat(this.compileExpr(expr, expectedType));
+                    // If block, we probably discard results of non-last exprs?
+                    // For now, assume array of exprs is executed in sequence, leaving last value?
+                    // But standard logic (parseBlock) might separate them.
+                    // This logic concat them all, suggesting they all push to stack?
+                    // If so, we'd need DROP for all but last.
+                    // But `parseBlock` returns `expressions` array only if logic.
+                    // Actually, let's assume `node` here is a single expression.
+                    // If `node` is array of arrays, it's a block.
+                    // Phase 1 compiler here is simplistic.
+                    if (expr !== node[node.length - 1]) bytes.push(OP.DROP);
+                    // Add DROP to minimal fix for sequence
                 }
                 return bytes;
             }
@@ -471,11 +479,20 @@ class Compiler {
             // 3. Comparisons
             if (['<', '>', '<=', '>=', '=', '!='].includes(op)) {
                 const args = node.slice(1);
-                // Compare F64s, return I32
+                const scratchIdx = this.currentLocals.size; // Params end at size-1. Scratch is at size.
+
                 let bytes = [];
+                // Compile LHS
                 bytes = bytes.concat(this.compileExpr(args[0], VALTYPE.F64));
+                // Compile RHS
                 bytes = bytes.concat(this.compileExpr(args[1], VALTYPE.F64));
 
+                // Stack: [LHS, RHS]
+                // Save RHS for potential return
+                bytes.push(OP.TEE_LOCAL, ...new WasmEmitter().encodeULEB128(scratchIdx));
+                // Stack: [LHS, RHS]
+
+                // Compare (Consumers LHS, RHS, pushes I32)
                 if (op === '=') bytes.push(OP.F64_EQ);
                 if (op === '!=') bytes.push(OP.F64_NE);
                 if (op === '<') bytes.push(OP.F64_LT);
@@ -483,56 +500,79 @@ class Compiler {
                 if (op === '<=') bytes.push(OP.F64_LE);
                 if (op === '>=') bytes.push(OP.F64_GE);
 
-                // Coerce to F64 if expected
-                if (expectedType === VALTYPE.F64) {
-                    bytes.push(OP.F64_CONVERT_I32_S);
-                }
+                // Stack: [I32 (Condition)]
+                bytes.push(OP.IF);
+                bytes.push(VALTYPE.F64); // Result F64
+
+                // True Branch: Return RHS
+                bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(scratchIdx));
+
+                // False Branch: Return NaN
+                bytes.push(OP.ELSE);
+                bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(NaN));
+
+                bytes.push(OP.END);
+
+                // If expected type is I32 (e.g. for low level), we might need convert
+                // But generally we stay in F64 world.
                 return bytes;
             }
 
             // 4. Logic (Not)
-            if (op === '!_') { // Parser outputs '!_' for prefix !
+            if (op === '!_') {
                 const val = node[1];
+                const scratchIdx = this.currentLocals.size;
+
                 let bytes = [];
                 bytes = bytes.concat(this.compileExpr(val, VALTYPE.F64));
-                bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(0));
-                bytes.push(OP.F64_EQ); // result i32 (1 if 0.0)
 
-                if (expectedType === VALTYPE.F64) {
-                    bytes.push(OP.F64_CONVERT_I32_S);
-                }
+                // Check if Truthy (x == x)
+                bytes.push(OP.TEE_LOCAL, ...new WasmEmitter().encodeULEB128(scratchIdx));
+                bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(scratchIdx));
+                bytes.push(OP.F64_EQ); // 1 if Num, 0 if NaN
+
+                // If Truthy (1) -> Return NaN (False)
+                // If Falsy (0) -> Return 0.0 (True)
+
+                bytes.push(OP.IF);
+                bytes.push(VALTYPE.F64);
+
+                // Was Truthy -> Become False
+                bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(NaN)); // False
+
+                bytes.push(OP.ELSE);
+                // Was Falsy -> Become True
+                bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(0)); // True (0 is True)
+
+                bytes.push(OP.END);
                 return bytes;
             }
 
             // 5. Conditionals (:)
             if (op === ':') {
-                // [":", cond, then]
                 const cond = node[1];
                 const thenExpr = node[2];
+                const scratchIdx = this.currentLocals.size;
 
                 let bytes = [];
-                // Compile Cond (Result should be i32)
-                const isComp = Array.isArray(cond) && ['<', '>', '=', '!=', '<=', '>='].includes(cond[0]);
+                // Compile Cond
+                bytes = bytes.concat(this.compileExpr(cond, VALTYPE.F64));
 
-                if (isComp) {
-                    bytes = bytes.concat(this.compileExpr(cond)); // returns i32
-                } else {
-                    // Evaluate as F64, check != 0
-                    bytes = bytes.concat(this.compileExpr(cond, VALTYPE.F64));
-                    bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(0));
-                    bytes.push(OP.F64_NE); // 1 if != 0
-                }
+                // Check Truthy (x == x)
+                bytes.push(OP.TEE_LOCAL, ...new WasmEmitter().encodeULEB128(scratchIdx));
+                bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(scratchIdx));
+                bytes.push(OP.F64_EQ); // 1 if Truthy, 0 if NaN
 
                 // IF Block
                 bytes.push(OP.IF);
-                bytes.push(VALTYPE.F64); // Result type of block
+                bytes.push(VALTYPE.F64);
 
                 // THEN
                 bytes = bytes.concat(this.compileExpr(thenExpr, VALTYPE.F64));
 
-                // ELSE (Implicit else returns 0.0)
+                // ELSE (Implicit else returns NaN)
                 bytes.push(OP.ELSE);
-                bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(0));
+                bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(NaN));
 
                 bytes.push(OP.END);
                 return bytes;
