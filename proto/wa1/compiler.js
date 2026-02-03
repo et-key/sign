@@ -4,6 +4,7 @@ import path from 'path';
 // --- Wasm Constants ---
 const SECTION = {
     TYPE: 1,
+    IMPORT: 2,
     FUNCTION: 3,
     TABLE: 4,
     MEMORY: 5,
@@ -46,6 +47,7 @@ const OP = {
     F64_SUB: 0xA1,
     F64_MUL: 0xA2,
     F64_DIV: 0xA3,
+    F64_ABS: 0x99,
     F64_EQ: 0x61, // f64.eq -> i32
     F64_NE: 0x62,
     F64_LT: 0x63,
@@ -57,7 +59,10 @@ const OP = {
     I32_TRUNC_F64_S: 0xAA, // f64 -> i32 (0xAA signed)
 
     IF: 0x04,
-    ELSE: 0x05
+    ELSE: 0x05,
+    BLOCK: 0x02,
+    BR: 0x0C,
+    BR_IF: 0x0D
 };
 
 // --- Wasm Emitter ---
@@ -126,6 +131,7 @@ class WasmEmitter {
 // --- Compiler ---
 class Compiler {
     constructor() {
+        this.imports = []; // List of {module, name, desc}
         this.exports = []; // List of {name, idx, kind}
         this.functions = []; // List of {typeIdx, locals, body}
         this.types = []; // List of {params, results} signature string for dedup
@@ -153,6 +159,8 @@ class Compiler {
         // Export Memory
         this.exports.push({ name: "memory", idx: 0, kind: 0x02 }); // Kind 0x02 = Memory
 
+        // Inject Imports First
+        this.injectImports();
         // Inject Runtime Functions
         this.injectRuntime();
     }
@@ -168,10 +176,13 @@ class Compiler {
     }
 
     injectRuntime() {
+        // Base Index for internal functions overrides imports
+        const baseIdx = this.imports.length;
+
         // 1. Alloc (i32 size -> i32 ptr)
         // returns old_heap_ptr, updates heap_ptr += size
         const allocName = "alloc";
-        const allocIdx = this.functions.length; // 0
+        const allocIdx = baseIdx + this.functions.length; // 0 + N
         this.funcNameMap.set(allocName, allocIdx);
 
         const allocBody = [
@@ -200,7 +211,7 @@ class Compiler {
         // 2. Cons (f64 head, f64 tail -> f64 ptr)
         // Alloc 16 bytes. Store head at +0, tail at +8. Return ptr.
         const consName = "cons";
-        const consIdx = this.functions.length;
+        const consIdx = baseIdx + this.functions.length;
         this.funcNameMap.set(consName, consIdx);
 
         const consBody = [
@@ -239,7 +250,7 @@ class Compiler {
 
         // 3. Head (f64 ptr -> f64 val)
         const headName = "head";
-        const headIdx = this.functions.length;
+        const headIdx = baseIdx + this.functions.length;
         this.funcNameMap.set(headName, headIdx);
 
         const headBody = [
@@ -258,7 +269,7 @@ class Compiler {
 
         // 4. Tail (f64 ptr -> f64 val)
         const tailName = "tail";
-        const tailIdx = this.functions.length;
+        const tailIdx = baseIdx + this.functions.length;
         this.funcNameMap.set(tailName, tailIdx);
         const tailBody = [
             OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(0),
@@ -271,6 +282,32 @@ class Compiler {
             body: [...tailBody, OP.END]
         });
         this.exports.push({ name: tailName, idx: tailIdx, kind: 0x00 });
+    }
+
+    injectImports() {
+        // Register Math.pow as env.pow
+        // Type: (f64, f64) -> f64
+        const typeIdx = this.getTypeIdx([VALTYPE.F64, VALTYPE.F64], [VALTYPE.F64]);
+        this.imports.push({
+            module: "env",
+            name: "pow",
+            desc: { kind: 0x00, typeIdx: typeIdx } // Kind 0 = Function
+        });
+        const funcIdx = this.functions.length + this.imports.length - 1; // Function Space = Imports + Internal
+        // Note: Function Index Space includes imports first.
+        // We need to adjust `functions.length` logic or `funcNameMap`.
+        // Current compiler assumes `functions.length` is the index.
+        // If we have 1 import, real internal function 0 is actually index 1.
+
+        // Let's refactor index handling slightly.
+        // But for now, let's just claim the index.
+        // WAIT: Compiler.constructor sets up runtime functions BEFORE imports?
+        // NO, we call injectImports AFTER injectRuntime.
+        // So internal functions are 0, 1, 2, 3...
+        // But Import functions are *prepended* in index space.
+
+        // FIX: We should inject imports FIRST.
+        // Reordering constructor logic.
     }
 
     collectStringLiterals(node) {
@@ -347,7 +384,7 @@ class Compiler {
 
         if (scanOnly) {
             // Pass 1: Register Name
-            const idx = this.funcNameMap.size;
+            const idx = this.imports.length + this.funcNameMap.size; // Fix index calculation
             this.funcNameMap.set(name, idx);
             return;
         }
@@ -380,8 +417,10 @@ class Compiler {
         const typeIdx = this.getTypeIdx(paramTypes, [resultType]);
         const funcIdx = this.funcNameMap.get(name);
 
-        if (this.functions.length !== funcIdx) {
-            throw new Error(`Sync error: Compiling func ${name} (idx ${funcIdx}) but functions array len is ${this.functions.length}`);
+        // Check Sync (Adjust for imports offset)
+        const expectedIdx = this.functions.length + this.imports.length;
+        if (expectedIdx !== funcIdx) {
+            throw new Error(`Sync error: Compiling func ${name} (idx ${funcIdx}) but expected ${expectedIdx} (funcs: ${this.functions.length} + imports: ${this.imports.length})`);
         }
 
         // Add 1 scratch local (F64) for logic operations
@@ -595,7 +634,7 @@ class Compiler {
             }
 
             // 7. Arithmetic
-            if (['+', '-', '*', '/', '%'].includes(op)) {
+            if (['+', '-', '*', '/', '%', '^'].includes(op)) {
                 const type = VALTYPE.F64; // Force F64 for Phase 2/3
                 let bytes = [];
                 const args = node.slice(1);
@@ -636,12 +675,220 @@ class Compiler {
                 if (op === '*') bytes.push(OP.F64_MUL);
                 if (op === '-') bytes.push(OP.F64_SUB);
                 if (op === '/') bytes.push(OP.F64_DIV);
+
+                if (op === '^') {
+                    // Power: Call env.pow
+                    // Find 'pow' import index
+                    // We know we put it first. 
+                    // To be safe, we could store it in a map or fixed var.
+                    // For now, assume import 0 is pow.
+                    const powImportIdx = 0;
+                    bytes.push(OP.CALL, ...new WasmEmitter().encodeULEB128(powImportIdx));
+                }
+
+                return bytes;
+            }
+
+            // 8. Logical Operators (Short-circuiting)
+            if (['&', '|', ';'].includes(op)) {
+                // &, | are Binary Short-circuit
+                // ; is XOR (Binary, strict boolean)
+
+                const type = VALTYPE.F64;
+                const args = node.slice(1);
+
+                // OR (|)
+                // Left ? Left : Right
+                if (op === '|') {
+                    let bytes = [];
+                    // 1. Evaluate Left
+                    bytes = bytes.concat(this.compileExpr(args[0], type)); // [L]
+
+                    // 2. Tee Left to check (preserving it for return if True)
+                    // But we can't TEE if stack is arbitrary.
+                    // We need a scratch local.
+                    const scratchIdx = this.currentLocals.size; // We need to reserve this scratch space? 
+                    // Actually `compileDefinition` only allocates locals for params + 1 scratch.
+                    // If we nest, we might overwrite scratch.
+                    // ideally we should allocate a fresh local.
+                    // For prototype, reusing scratch (local N) is risky if recursive.
+                    // BUT `compileDefinition` does: `locals: [{ count: 1, type: VALTYPE.F64 }]`
+                    // This gives us ONE local at `params.length`.
+                    // Is it enough?
+                    // If we do `(a | b) | c`
+                    //  Calc `a|b` -> uses scratch.
+                    //  Result is on stack.
+                    //  Calc `c`.
+                    //  OR them. Uses scratch.
+                    // It seems ok as long as we don't need *multiple* scratches simultaneously active in stack frame.
+
+                    const localScratch = this.currentLocals.size;
+
+                    bytes.push(OP.TEE_LOCAL, ...new WasmEmitter().encodeULEB128(localScratch)); // [L]
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(localScratch)); // [L, L]
+
+                    // Check Is Truthy (x == x) reduces NaN to 0
+                    bytes.push(OP.F64_EQ); // [L, 0/1]
+
+                    bytes.push(OP.IF);
+                    bytes.push(VALTYPE.F64);
+                    // True (L is Truthy) -> Return L
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(localScratch));
+                    bytes.push(OP.ELSE);
+                    // False (L is Falsy/NaN) -> Return R
+                    bytes.push(OP.DROP); // Drop L which is on stack from TEE? Wait.
+                    // Stack entering IF: [L] (from initial eval).
+                    // WAIT. 
+                    // TEE puts value on stack AND local.
+                    // GET puts value on stack.
+                    // F64_EQ consumes 2.
+                    // Initial: [L]
+                    // TEE: [L] (Local=L)
+                    // GET: [L, L]
+                    // EQ: [L, 0/1] -> This won't work. EQ consumes 2 items.
+                    // We need to consume the checked value, but keep the original if true.
+
+                    // Correct Sequence:
+                    // Eval L -> [L]
+                    // Set Global/Local -> [ ]
+                    // Get -> [L]
+                    // Check -> [0/1]
+                    // IF ...
+
+                    // Let's use SET_LOCAL to save, GET_LOCAL to check.
+                    bytes = [];
+                    bytes = bytes.concat(this.compileExpr(args[0], type)); // [L]
+                    bytes.push(OP.SET_LOCAL, ...new WasmEmitter().encodeULEB128(localScratch)); // []
+
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(localScratch)); // [L]
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(localScratch)); // [L, L]
+                    bytes.push(OP.F64_EQ); // [0/1] (Truthy check)
+
+                    bytes.push(OP.IF);
+                    bytes.push(VALTYPE.F64);
+                    // True: Return L
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(localScratch));
+                    bytes.push(OP.ELSE);
+                    // False: Return R
+                    bytes = bytes.concat(this.compileExpr(args[1], type));
+                    bytes.push(OP.END);
+
+                    return bytes;
+                }
+
+                // AND (&)
+                // Left ? Right : Left
+                if (op === '&') {
+                    const localScratch = this.currentLocals.size;
+                    let bytes = [];
+
+                    bytes = bytes.concat(this.compileExpr(args[0], type)); // [L]
+                    bytes.push(OP.SET_LOCAL, ...new WasmEmitter().encodeULEB128(localScratch)); // []
+
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(localScratch)); // [L]
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(localScratch)); // [L, L]
+                    bytes.push(OP.F64_EQ); // [0/1] (Truthy check)
+
+                    bytes.push(OP.IF);
+                    bytes.push(VALTYPE.F64);
+                    // True (L is Truthy): Return R
+                    bytes = bytes.concat(this.compileExpr(args[1], type));
+                    bytes.push(OP.ELSE);
+                    // False (L is Falsy/NaN): Return L
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(localScratch));
+                    bytes.push(OP.END);
+
+                    return bytes;
+                }
+
+                // XOR (;)
+                // (!!L) ^ (!!R) -> 0 or 1 -> 0.0 or NaN
+                if (op === ';') {
+                    // This requires converting L and R to pure Booleans (0/1)
+                    // Then Integer XOR
+                    // Then Map 1->0.0 (True), 0->NaN (False)
+                    // Wait, Standard: 0.0 is True, NaN is False.
+                    // XOR logic:
+                    // T ; T -> F (NaN)
+                    // F ; F -> F (NaN)
+                    // T ; F -> T (0.0)
+                    // F ; T -> T (0.0)
+
+                    let bytes = [];
+
+                    // L -> Bool(0/1)
+                    bytes = bytes.concat(this.compileExpr(args[0], type)); // [L]
+                    bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(NaN));
+                    bytes.push(OP.F64_NE); // [1 if L!=NaN, 0 if L==NaN] -> Truthy is 1
+
+                    // R -> Bool(0/1)
+                    bytes = bytes.concat(this.compileExpr(args[1], type)); // [1, R]
+                    bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(NaN));
+                    bytes.push(OP.F64_NE); // [1, 0/1]
+
+                    // I32 XOR
+                    const I32_XOR = 0x73;
+                    bytes.push(I32_XOR); // [0/1 result]
+
+                    // Map 1 -> 0.0 (True), 0 -> NaN (False)
+                    bytes.push(OP.IF);
+                    bytes.push(VALTYPE.F64);
+                    // 1 (True Result) -> 0.0 in Sign
+                    bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(0.0));
+                    bytes.push(OP.ELSE);
+                    // 0 (False Result) -> NaN in Sign
+                    bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(NaN));
+                    bytes.push(OP.END);
+
+                    return bytes;
+                }
+            }
+
+            // 9. Absolute Value (Parser emits `!-` for `|...|`)
+            // We intercept `!-` here and check if we treat it as ABS?
+            // Wait, implementation plan said `abs`.
+            // User requested NO PARSER CHANGE.
+            // Parser emits `["!-", val]` for `|val|`.
+            // Standard `!-` (unary minus) is `["-", val]`?
+            // Let's check Parser:
+            // Parser overrides: `|`: { prefix: { p: 1, sym: '[|' }, ... }
+            // Parser shuntingYard logic: 
+            // `if (top.value === '[|')` -> `values.push(["!-", v])`
+            // So `|x|` becomes `["!-", x]`.
+            // But Unary Minus `-x`?
+            // Parser: `'-': { prefix: { p: 11 }, infix: { p: 11 } }`.
+            // shuntingYard: if prefix, `node.push(arg)`. Symbol is `-`.
+            // So Unary Minus is `["-", x]`.
+            // Absolute Value is `["!-", x]`.
+            // Confusion: `!-` usually means "NOT MINUS"? 
+            // In `operators.js`?
+            // Actually `!` is NOT.
+            // But Parser manually pushes `["!-", v]` for Absolute Value wrapper. (Line 531 in parser.js)
+            // So we just need to handle `!-` operator here.
+
+            if (op === '!-') {
+                let bytes = [];
+                bytes = bytes.concat(this.compileExpr(node[1], VALTYPE.F64));
+                bytes.push(OP.F64_ABS);
                 return bytes;
             }
 
             return [];
         }
         return [];
+    }
+
+    emitImports(emitter) {
+        if (this.imports.length === 0) return [];
+        // Vector of Imports
+        return emitter.encodeVector(this.imports.map(imp => {
+            return [
+                ...emitter.encodeString(imp.module),
+                ...emitter.encodeString(imp.name),
+                imp.desc.kind,
+                ...emitter.encodeULEB128(imp.desc.typeIdx)
+            ];
+        }));
     }
 
     emit() {
@@ -697,6 +944,7 @@ class Compiler {
         return new Uint8Array([
             ...magic, ...version,
             ...emitter.encodeSection(SECTION.TYPE, typePayload),
+            ...emitter.encodeSection(SECTION.IMPORT, this.emitImports(emitter)), // Emitting Imports
             ...emitter.encodeSection(SECTION.FUNCTION, funcPayload),
             ...emitter.encodeSection(SECTION.MEMORY, memoryPayload),
             ...emitter.encodeSection(SECTION.GLOBAL, globalPayload),

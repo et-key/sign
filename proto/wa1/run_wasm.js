@@ -6,7 +6,12 @@ async function run() {
     try {
         const buffer = fs.readFileSync(wasmFile);
         const module = await WebAssembly.compile(buffer);
-        const instance = await WebAssembly.instantiate(module);
+        const importObject = {
+            env: {
+                pow: Math.pow
+            }
+        };
+        const instance = await WebAssembly.instantiate(module, importObject);
 
         console.log(`--- Running Wasm: ${wasmFile} ---`);
 
