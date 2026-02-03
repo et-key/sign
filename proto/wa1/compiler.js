@@ -5,8 +5,12 @@ import path from 'path';
 const SECTION = {
     TYPE: 1,
     FUNCTION: 3,
+    TABLE: 4,
+    MEMORY: 5,
+    GLOBAL: 6,
     EXPORT: 7,
-    CODE: 10
+    CODE: 10,
+    DATA: 11
 };
 
 const VALTYPE = {
@@ -19,6 +23,16 @@ const OP = {
     CALL: 0x10,
     DROP: 0x1A,
     GET_LOCAL: 0x20,
+    SET_LOCAL: 0x21,
+    TEE_LOCAL: 0x22,
+    GET_GLOBAL: 0x23,
+    SET_GLOBAL: 0x24,
+
+    I32_LOAD: 0x28,
+    I32_STORE: 0x36,
+    F64_LOAD: 0x2B,
+    F64_STORE: 0x39,
+
     I32_CONST: 0x41,
     F64_CONST: 0x44,
     I32_EQZ: 0x45,
@@ -26,6 +40,7 @@ const OP = {
     I32_SUB: 0x6B,
     I32_MUL: 0x6C,
     I32_DIV_S: 0x6D,
+
     F64_ADD: 0xA0,
     F64_SUB: 0xA1,
     F64_MUL: 0xA2,
@@ -37,6 +52,9 @@ const OP = {
     F64_LE: 0x65,
     F64_GE: 0x66,
     F64_CONVERT_I32_S: 0xB7, // i32 -> f64
+    F64_TRUNC: 0x9D, // f64.trunc
+    I32_TRUNC_F64_S: 0xAA, // f64 -> i32 (0xAA signed)
+
     IF: 0x04,
     ELSE: 0x05
 };
@@ -114,6 +132,19 @@ class Compiler {
 
         this.funcNameMap = new Map(); // Name -> FuncIdx
         this.currentLocals = new Map(); // Name -> LocalIdx
+
+        // Memory & Globals
+        this.globals = []; // {type, mutable, initExpr}
+        this.data = []; // {offset, bytes}
+        this.memoryPages = 1;
+
+        // Reserve Global 0 for Heap Pointer
+        this.heapPtrIdx = 0;
+        // Start heap at 1024 to avoid 0 (NULL) confusion
+        this.globals.push({ type: VALTYPE.I32, mutable: true, init: [OP.I32_CONST, ...new WasmEmitter().encodeSLEB128(1024), OP.END] });
+
+        // Inject Runtime Functions
+        this.injectRuntime();
     }
 
     getTypeIdx(params, results) {
@@ -126,30 +157,161 @@ class Compiler {
         return idx;
     }
 
+    injectRuntime() {
+        // 1. Alloc (i32 size -> i32 ptr)
+        // returns old_heap_ptr, updates heap_ptr += size
+        const allocName = "alloc";
+        const allocIdx = this.functions.length; // 0
+        this.funcNameMap.set(allocName, allocIdx);
+
+        const allocBody = [
+            OP.GET_GLOBAL, ...new WasmEmitter().encodeULEB128(this.heapPtrIdx),
+            OP.GET_GLOBAL, ...new WasmEmitter().encodeULEB128(this.heapPtrIdx),
+            OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(0),
+            OP.I32_ADD,
+            OP.SET_GLOBAL, ...new WasmEmitter().encodeULEB128(this.heapPtrIdx),
+            // We need to return the OLD ptr.
+            // Stack above: [ptr, ptr, size] -> [ptr, new_ptr] -> [ptr].
+            // But we consumed `ptr` in `SET_GLOBAL`? I32_ADD consumes 2, produces 1.
+            // Stack: [ptr, ptr] --get_local--> [ptr, ptr, size] --add--> [ptr, new_ptr] --set--> [ptr].
+            // YES. 
+            // Note: I32 type for alloc.
+        ];
+        // Register Alloc
+        const allocTypeIdx = this.getTypeIdx([VALTYPE.I32], [VALTYPE.I32]);
+        this.functions.push({
+            typeIdx: allocTypeIdx,
+            locals: [],
+            body: [...allocBody, OP.END]
+        });
+        // We don't export alloc for now, or maybe as 'malloc'?
+        this.exports.push({ name: allocName, idx: allocIdx, kind: 0x00 });
+
+        // 2. Cons (f64 head, f64 tail -> f64 ptr)
+        // Alloc 16 bytes. Store head at +0, tail at +8. Return ptr.
+        const consName = "cons";
+        const consIdx = this.functions.length;
+        this.funcNameMap.set(consName, consIdx);
+
+        const consBody = [
+            // 1. Get Heap Ptr -> Local 2
+            OP.GET_GLOBAL, ...new WasmEmitter().encodeULEB128(this.heapPtrIdx),
+            OP.SET_LOCAL, ...new WasmEmitter().encodeULEB128(2),
+
+            // 2. Advance Heap +16
+            OP.GET_GLOBAL, ...new WasmEmitter().encodeULEB128(this.heapPtrIdx),
+            OP.I32_CONST, ...new WasmEmitter().encodeSLEB128(16),
+            OP.I32_ADD,
+            OP.SET_GLOBAL, ...new WasmEmitter().encodeULEB128(this.heapPtrIdx),
+
+            // 3. Store Head (ptr=local2 + 0) = local 0
+            OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(2), // ptr
+            OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(0), // head
+            OP.F64_STORE, 2, ...new WasmEmitter().encodeULEB128(0),
+
+            // 4. Store Tail (ptr=local2 + 8) = local 1
+            OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(2), // ptr
+            OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(1), // tail
+            OP.F64_STORE, 2, ...new WasmEmitter().encodeULEB128(8),
+
+            // 5. Return Ptr (as F64)
+            OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(2),
+            OP.F64_CONVERT_I32_S
+        ];
+
+        const consTypeIdx = this.getTypeIdx([VALTYPE.F64, VALTYPE.F64], [VALTYPE.F64]);
+        this.functions.push({
+            typeIdx: consTypeIdx,
+            locals: [{ count: 1, type: VALTYPE.I32 }], // idx 2
+            body: [...consBody, OP.END]
+        });
+        this.exports.push({ name: consName, idx: consIdx, kind: 0x00 });
+
+        // 3. Head (f64 ptr -> f64 val)
+        const headName = "head";
+        const headIdx = this.functions.length;
+        this.funcNameMap.set(headName, headIdx);
+
+        const headBody = [
+            OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(0), // ptr (f64)
+            OP.I32_TRUNC_F64_S, // f64 -> i32 (0x9C, wait, check OP)
+            // Add OP.I32_TRUNC_F64_S = 0x9C
+            OP.F64_LOAD, 2, ...new WasmEmitter().encodeULEB128(0) // load at +0
+        ];
+        const headTypeIdx = this.getTypeIdx([VALTYPE.F64], [VALTYPE.F64]);
+        this.functions.push({
+            typeIdx: headTypeIdx,
+            locals: [],
+            body: [...headBody, OP.END] // 0 locals
+        });
+        this.exports.push({ name: headName, idx: headIdx, kind: 0x00 });
+
+        // 4. Tail (f64 ptr -> f64 val)
+        const tailName = "tail";
+        const tailIdx = this.functions.length;
+        this.funcNameMap.set(tailName, tailIdx);
+        const tailBody = [
+            OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(0),
+            OP.I32_TRUNC_F64_S,
+            OP.F64_LOAD, 2, ...new WasmEmitter().encodeULEB128(8) // load at +8
+        ];
+        this.functions.push({
+            typeIdx: headTypeIdx, // Same sig
+            locals: [],
+            body: [...tailBody, OP.END]
+        });
+        this.exports.push({ name: tailName, idx: tailIdx, kind: 0x00 });
+    }
+
     compile(sexpr) {
         // 1. Pass: Collect Function Names (for forward references)
         let items = Array.isArray(sexpr[0]) ? sexpr : [sexpr];
         if (sexpr[0] === ':') items = [sexpr];
 
         let funcCounter = 0;
+        // Pass 1: Collect Function Names and Signatures
         for (const item of items) {
-            if (Array.isArray(item) && item[0] === ':') {
-                const name = item[1];
-                // Assign index
-                this.funcNameMap.set(name, funcCounter++);
+            const op = item[0];
+            if (op === ':') {
+                this.compileDefinition(item, true); // true = scan only
             }
         }
 
-        // 2. Pass: Compile Definitions
+        console.log("--- Functions Table ---");
+        this.funcNameMap.forEach((idx, name) => {
+            const f = this.functions[idx];
+            const type = f ? this.types[f.typeIdx] : "Not Compiled Yet";
+            console.log(`Func #${idx}: ${name} -> Sig: ${JSON.stringify(type)}`);
+        });
+        console.log("-----------------------");
+
+        // Pass 2: Compile Bodies
         for (const item of items) {
-            if (Array.isArray(item) && item[0] === ':') {
-                this.compileDefinition(item);
+            const op = item[0];
+            if (op === ':') {
+                this.compileDefinition(item, false);
+            } else {
+                // Top-level expression? Treat as implicit 'main'?
+                // Verify phase 1 logic doesn't skip top level exprs
             }
         }
     }
 
-    compileDefinition(node) {
+    compileDefinition(node, scanOnly = false) {
         const name = node[1];
+
+        if (scanOnly) {
+            // Pass 1: Register Name
+            // Index = current functions length (including runtime) + count of user functions processed
+            // Wait, we can just track the next available index.
+            // But we don't push to `this.functions` yet.
+            // So we need to know how many we have scanned.
+            // Better: use `this.funcNameMap.size`.
+            const idx = this.funcNameMap.size;
+            this.funcNameMap.set(name, idx);
+            return;
+        }
+
         let body = node[2];
         let params = [];
 
@@ -177,6 +339,12 @@ class Compiler {
 
         const typeIdx = this.getTypeIdx(paramTypes, [resultType]);
         const funcIdx = this.funcNameMap.get(name);
+
+        // We must push to `this.functions` in the same order as Pass 1 scanned them.
+        // Pass 2 iterates in same order, so `this.functions.length` should match `funcIdx`.
+        if (this.functions.length !== funcIdx) {
+            throw new Error(`Sync error: Compiling func ${name} (idx ${funcIdx}) but functions array len is ${this.functions.length}`);
+        }
 
         this.functions.push({ typeIdx, locals: [], body: code });
 
@@ -220,6 +388,13 @@ class Compiler {
             if (this.currentLocals.has(node)) {
                 // Variables are F64 in Phase 2/3
                 return [OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(this.currentLocals.get(node))];
+            }
+            // Check if it's a global function (0-arity constant)
+            if (this.funcNameMap.has(node)) {
+                const funcIdx = this.funcNameMap.get(node);
+                // We assume 0-arity if used as a value without arguments?
+                // Or we should verify arity. For now, just CALL it.
+                return [OP.CALL, ...new WasmEmitter().encodeULEB128(funcIdx)];
             }
             throw new Error(`Undefined variable: ${node}`);
         }
@@ -325,7 +500,7 @@ class Compiler {
             }
 
             // 7. Arithmetic
-            if (['+', '-', '*', '/'].includes(op)) {
+            if (['+', '-', '*', '/', '%'].includes(op)) {
                 const type = VALTYPE.F64; // Force F64 for Phase 2/3
                 let bytes = [];
                 const args = node.slice(1);
@@ -335,6 +510,26 @@ class Compiler {
                     // 0 - val
                     bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(0));
                     bytes = bytes.concat(this.compileExpr(args[0], type));
+                    bytes.push(OP.F64_SUB);
+                    return bytes;
+                }
+
+                // Modulo (%)
+                if (op === '%') {
+                    const arg0 = args[0];
+                    const arg1 = args[1];
+
+                    // a
+                    bytes = bytes.concat(this.compileExpr(arg0, type));
+
+                    // b * trunc(a/b)
+                    bytes = bytes.concat(this.compileExpr(arg1, type));
+                    bytes = bytes.concat(this.compileExpr(arg0, type));
+                    bytes = bytes.concat(this.compileExpr(arg1, type));
+                    bytes.push(OP.F64_DIV);
+                    bytes.push(OP.F64_TRUNC);
+                    bytes.push(OP.F64_MUL);
+
                     bytes.push(OP.F64_SUB);
                     return bytes;
                 }
@@ -369,22 +564,38 @@ class Compiler {
         // 3. Function Section (map indices to types)
         const funcPayload = emitter.encodeVector(this.functions.map(f => f.typeIdx));
 
-        // 4. Export Section
+        // 4. Memory Section
+        // (memory 1)
+        const memoryPayload = [1, 0, this.memoryPages]; // flags=0, initial=1
+
+        // 5. Global Section
+        const globalPayload = emitter.encodeVector(this.globals.map(g => {
+            return [g.type, g.mutable ? 1 : 0, ...g.init];
+        }));
+
+        // 6. Export Section
         const exportPayload = emitter.encodeVector(this.exports.map(e => {
             return [...emitter.encodeString(e.name), e.kind, ...emitter.encodeULEB128(e.idx)];
         }));
 
-        // 5. Code Section
+        // 7. Code Section
         const codePayload = emitter.encodeVector(this.functions.map(f => {
-            const body = [...emitter.encodeVector(f.locals), ...f.body]; // Locals decl (empty for now) then body
-            // Locals format: u32 count, valtype. We skip proper locals for now.
-            return [...emitter.encodeULEB128(body.length), 0x00, ...f.body];
+            // Encode locals
+            // f.locals is array of {count, type}
+            const localsBytes = f.locals.map(l => [...emitter.encodeULEB128(l.count), l.type]).flat();
+            const localsCount = f.locals.length;
+            const localsPayload = [...emitter.encodeULEB128(localsCount), ...localsBytes];
+
+            const body = [...localsPayload, ...f.body];
+            return [...emitter.encodeULEB128(body.length), ...body];
         }));
 
         return new Uint8Array([
             ...magic, ...version,
             ...emitter.encodeSection(SECTION.TYPE, typePayload),
             ...emitter.encodeSection(SECTION.FUNCTION, funcPayload),
+            ...emitter.encodeSection(SECTION.MEMORY, memoryPayload),
+            ...emitter.encodeSection(SECTION.GLOBAL, globalPayload),
             ...emitter.encodeSection(SECTION.EXPORT, exportPayload),
             ...emitter.encodeSection(SECTION.CODE, codePayload)
         ]);

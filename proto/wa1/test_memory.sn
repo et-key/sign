@@ -1,0 +1,23 @@
+` テスト: メモリ管理 (Memory Management)
+
+` 1. リスト構築 (List Construction)
+` list = [10, 20, 30]
+` 0 is used as NULL/Nil
+list_node : cons 10 (cons 20 (cons 30 0))
+
+` 2. アクセス (Access)
+` head(list) => 10
+get_head : head list_node
+
+` 3. ネストしたアクセス
+` head(tail(list)) => 20
+get_second : head (tail list_node)
+
+` 4. 再帰的なリスト処理 (Recursive List Processing)
+` sum(list)
+sum : lst ? (
+    (lst = 0 : 0) +
+    (lst != 0 : (head lst) + (sum (tail lst)))
+)
+
+run_sum : sum list_node

@@ -558,7 +558,7 @@ function shuntingYard(tokens) {
         applyOp(ops.pop());
     }
 
-    return values[0] || ["_"];
+    return values[0] !== undefined ? values[0] : ["_"];
 }
 
 // Helpers
