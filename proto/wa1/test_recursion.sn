@@ -1,0 +1,33 @@
+` テスト: 再帰とアルゴリズム (Recursion and Algorithms)
+
+` 1. 階乗 (Factorial)
+` fact(n) = n * fact(n-1) if n > 0 else 1
+fact : n ? (
+    (n > 0 : n * (fact (n - 1))) +
+    (n <= 0 : 1)
+)
+
+` 2. フィボナッチ (Fibonacci)
+` fib(n) = fib(n-1) + fib(n-2) if n > 1 else n
+fib : n ? (
+    (n > 1 : (fib (n - 1)) + (fib (n - 2))) +
+    (n <= 1 : n)
+)
+
+` 3. 最大公約数 (GCD) - ユークリッドの互除法
+` gcd(a, b) = gcd(b, a % b) if b != 0 else a
+gcd : a b ? (
+    (b != 0 : gcd b (a % b)) +
+    (b = 0 : a)
+)
+
+` --- 実行テスト (Execution Tests) ---
+
+` Factorial of 5 => 120
+run_fact : fact 5
+
+` Fibonacci of 10 => 55
+run_fib : fib 10
+
+` GCD of 48 and 18 => 6
+run_gcd : gcd 48 18

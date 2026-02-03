@@ -1,0 +1,13 @@
+
+test_or_true : 1 | 2
+test_or_false : _ | 2 
+
+test_and_true : 1 & 2
+test_and_false : _ & 2 
+
+test_xor_true : 1 ; 0 
+test_xor_false : 1 ; 2
+
+test_abs : |-5|
+
+test_pow : 2 ^ 3
