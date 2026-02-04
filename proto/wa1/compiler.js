@@ -519,8 +519,8 @@ class Compiler {
             throw new Error(`Sync error: Compiling func ${name} (idx ${funcIdx}) but expected ${expectedIdx} (funcs: ${this.functions.length} + imports: ${this.imports.length})`);
         }
 
-        // Add 1 scratch local (F64) for logic operations
-        this.functions.push({ typeIdx, locals: [{ count: 1, type: VALTYPE.F64 }], body: code });
+        // Add 2 scratch locals (F64) for logic operations (especially XOR which needs 2)
+        this.functions.push({ typeIdx, locals: [{ count: 2, type: VALTYPE.F64 }], body: code });
 
         this.exports.push({ name, idx: funcIdx, kind: 0x00 });
     }
@@ -900,40 +900,70 @@ class Compiler {
                 // XOR (;)
                 // (!!L) ^ (!!R) -> 0 or 1 -> 0.0 or NaN
                 if (op === ';') {
-                    // This requires converting L and R to pure Booleans (0/1)
-                    // Then Integer XOR
-                    // Then Map 1->0.0 (True), 0->NaN (False)
-                    // Wait, Standard: 0.0 is True, NaN is False.
-                    // XOR logic:
-                    // T ; T -> F (NaN)
-                    // F ; F -> F (NaN)
-                    // T ; F -> T (0.0)
-                    // F ; T -> T (0.0)
+                    // Logic:
+                    // L ; R
+                    // if (xor(is_truthy(L), is_truthy(R))) {
+                    //    if (is_truthy(L)) return L;
+                    //    else return R;
+                    // } else {
+                    //    return NaN;
+                    // }
+
+                    // Locals: scratch1 (idx 0 in scratch area), scratch2 (idx 1)
+                    // We need absolute indices.
+                    // compilation locals are: params... then scratch...
+                    // this.functions.push({ ..., locals: [{ count: 2 ... }] })
+                    // So scratch1 = this.currentLocals.size
+                    // scratch2 = this.currentLocals.size + 1
+
+                    const scratch1 = this.currentLocals.size;
+                    const scratch2 = this.currentLocals.size + 1;
 
                     let bytes = [];
 
-                    // L -> Bool(0/1)
+                    // 1. Eval L -> Scratch1
                     bytes = bytes.concat(this.compileExpr(args[0], type)); // [L]
-                    bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(NaN));
-                    bytes.push(OP.F64_NE); // [1 if L!=NaN, 0 if L==NaN] -> Truthy is 1
+                    bytes.push(OP.SET_LOCAL, ...new WasmEmitter().encodeULEB128(scratch1)); // []
 
-                    // R -> Bool(0/1)
-                    bytes = bytes.concat(this.compileExpr(args[1], type)); // [1, R]
-                    bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(NaN));
-                    bytes.push(OP.F64_NE); // [1, 0/1]
+                    // 2. Eval R -> Scratch2
+                    bytes = bytes.concat(this.compileExpr(args[1], type)); // [R]
+                    bytes.push(OP.SET_LOCAL, ...new WasmEmitter().encodeULEB128(scratch2)); // []
 
-                    // I32 XOR
+                    // 3. Check Truthiness L
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(scratch1)); // [L]
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(scratch1)); // [L, L]
+                    bytes.push(OP.F64_EQ); // [IsL (0/1)] (x == x is 1 if Not NaN, 0 if NaN)
+
+                    // 4. Check Truthiness R
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(scratch2)); // [R]
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(scratch2)); // [R, R]
+                    bytes.push(OP.F64_EQ); // [IsL, IsR]
+
+                    // 5. XOR Truthiness
                     const I32_XOR = 0x73;
-                    bytes.push(I32_XOR); // [0/1 result]
+                    bytes.push(I32_XOR); // [IsL ^ IsR]
 
-                    // Map 1 -> 0.0 (True), 0 -> NaN (False)
+                    // 6. IF Result
                     bytes.push(OP.IF);
                     bytes.push(VALTYPE.F64);
-                    // 1 (True Result) -> 0.0 in Sign
-                    bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(0.0));
+
+                    // True (Difference found): Return the Truthy one
+                    // If L is Truthy, Return L. Else Return R.
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(scratch1)); // [L]
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(scratch1)); // [L, L]
+                    bytes.push(OP.F64_EQ); // [IsL]
+                    bytes.push(OP.IF);
+                    bytes.push(VALTYPE.F64);
+                    // L is Truthy -> Return L
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(scratch1));
                     bytes.push(OP.ELSE);
-                    // 0 (False Result) -> NaN in Sign
-                    bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(NaN));
+                    // L is Falsy (so R must be Truthy) -> Return R
+                    bytes.push(OP.GET_LOCAL, ...new WasmEmitter().encodeULEB128(scratch2));
+                    bytes.push(OP.END);
+
+                    bytes.push(OP.ELSE);
+                    // False (Same truthiness): Return NaN
+                    bytes.push(OP.F64_CONST, ...new WasmEmitter().encodeF64(NaN)); // [NaN]
                     bytes.push(OP.END);
 
                     return bytes;

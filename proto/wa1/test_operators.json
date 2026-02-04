@@ -1,56 +1,110 @@
 [
   [
     ":",
-    "test_or_true",
+    "test_or_true_tt",
     [
       "|",
-      1,
-      2
+      2,
+      3
     ]
   ],
   [
     ":",
-    "test_or_false",
+    "test_or_true_tf",
+    [
+      "|",
+      0,
+      "_"
+    ]
+  ],
+  [
+    ":",
+    "test_or_true_ft",
     [
       "|",
       "_",
-      2
+      1
     ]
   ],
   [
     ":",
-    "test_and_true",
+    "test_or_false_ff",
+    [
+      "|",
+      "_",
+      "_"
+    ]
+  ],
+  [
+    ":",
+    "test_and_true_tt",
     [
       "&",
-      1,
-      2
+      0,
+      1
     ]
   ],
   [
     ":",
-    "test_and_false",
+    "test_and_false_ft",
     [
       "&",
       "_",
-      2
+      1
     ]
   ],
   [
     ":",
-    "test_xor_true",
+    "test_and_false_tf",
     [
-      ";",
-      1,
-      0
+      "&",
+      0,
+      "_"
     ]
   ],
   [
     ":",
-    "test_xor_false",
+    "test_and_false_ff",
+    [
+      "&",
+      "_",
+      "_"
+    ]
+  ],
+  [
+    ":",
+    "test_xor_true_tf",
     [
       ";",
-      1,
-      2
+      0,
+      "_"
+    ]
+  ],
+  [
+    ":",
+    "test_xor_true_ft",
+    [
+      ";",
+      "_",
+      1
+    ]
+  ],
+  [
+    ":",
+    "test_xor_false_tt",
+    [
+      ";",
+      2,
+      3
+    ]
+  ],
+  [
+    ":",
+    "test_xor_false_ff",
+    [
+      ";",
+      "_",
+      "_"
     ]
   ],
   [
