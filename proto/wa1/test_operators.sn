@@ -17,3 +17,10 @@ test_xor_false_ff : _ ; _
 test_abs : |-5|
 
 test_pow : 2 ^ 3
+
+test_bit_shl : 1 << 2
+test_bit_shr : 8 >> 1
+test_bit_or : 3 || 5
+test_bit_and : 3 && 5
+test_bit_xor : 3 ;; 5
+test_bit_not : !! 3

@@ -1,29 +1,65 @@
-# High Priority Operators Implementation Walkthrough
+# 演算子実装ウォークスルー
 
-## Accomplishments
-Implemented the following High Priority operators in `proto\wa1\compiler.js` without modifying the parser:
+## 実装完了した内容
 
-1.  **Logical OR (`|`)**: Short-circuiting. Returns LHS if truthy (!NaN), else RHS.
-2.  **Logical AND (`&`)**: Short-circuiting. Returns LHS if falsy (NaN), else RHS.
-3.  **Logical XOR (`;`)**: "Choice" XOR. Returns the unique Truthy operand if distinct, else `NaN`.
-4.  **Absolute Value (`|...|`)**: Implemented by intercepting the `!-` (parser specific unary) operator.
-5.  **Power (`^`)**: Implemented via Wasm Import of `Math.pow`.
+`proto\wa1\compiler.js` でパーサーを変更せずに以下の演算子を実装しました：
 
-## Changes
-- **`compiler.js`**:
-    - Added `SECTION.IMPORT`.
-    - Updated `constructor` to inject imports (`Math.pow`) BEFORE runtime functions to ensure correct function indexing.
-    - Updated `emit` to include Import Section.
-    - Updated `compileDefinition` to correctly sync function indices accounting for imports.
-    - Updated `compileDefinition` to allocate 2 scratch locals (for XOR).
-    - Updated `compileExpr` with logic for all 5 operators (updated XOR to use non-boolean return).
-- **`run_wasm.js`**:
-    - Updated to providing `env` import object with `pow: Math.pow`.
+### 高優先度演算子 (2026-02-03 実装)
 
-## Verification Results (`test_operators.sn`)
+1.  **論理OR (`|`)**: 短絡評価。LHS が真値 (!NaN) なら LHS を返し、そうでなければ RHS を返す。
+2.  **論理AND (`&`)**: 短絡評価。LHS が偽値 (NaN) なら LHS を返し、そうでなければ RHS を返す。
+3.  **論理XOR (`;`)**: "選択" XOR。2つのオペランドの真偽値が異なる場合、真値のほうを返す。同じ場合は `NaN` を返す。
+4.  **絶対値 (`|...|`)**: パーサー固有の `!-` 演算子をインターセプトして実装。
+5.  **冪乗 (`^`)**: `Math.pow` の Wasm Import 経由で実装。
 
-| Test Case | Expression | Expected | Result | Validation |
-|-----------|------------|----------|--------|------------|
+### ビット演算子 (2026-02-05 実装)
+
+6.  **左ビットシフト (`<<`)**: f64 を i32 に変換し、I32_SHL で実装。
+7.  **右ビットシフト (`>>`)**: f64 を i32 に変換し、I32_SHR_S (符号付き) で実装。
+8.  **ビットOR (`||`)**: f64 を i32 に変換し、I32_OR で実装。
+9.  **ビットAND (`&&`)**: f64 を i32 に変換し、I32_AND で実装。
+10. **ビットXOR (`;;`)**: f64 を i32 に変換し、I32_XOR で実装。
+11. **ビットNOT (`!!`)**: f64 を i32 に変換し、-1 との I32_XOR で実装。
+
+### 中優先度演算子 (2026-02-03 実装)
+
+12. **範囲生成 (`~`)**: ランタイム関数 `range` として実装。再帰的にリストを生成。
+13. **階乗 (`!`)**: ランタイム関数 `factorial` として実装。再帰的に計算。
+14. **リストアクセス (`'`, `@`)**: ランタイム関数 `nth` として実装。再帰的にリストを走査。
+
+## 変更内容
+
+### `compiler.js` の変更:
+- **高優先度演算子 (2026-02-03)**:
+    - `SECTION.IMPORT` を追加。
+    - `constructor` を更新し、imports (`Math.pow`) をランタイム関数の前に注入し、関数インデックスの正確性を確保。
+    - `emit` を更新し、Import Section を含めるように変更。
+    - `compileDefinition` を更新し、imports を考慮した関数インデックスの同期を修正。
+    - `compileDefinition` を更新し、2つのスクラッチローカル変数を割り当て (XOR 用)。
+    - `compileExpr` を更新し、5つの演算子すべてのロジックを追加 (XOR を非ブール値返却に更新)。
+
+- **ビット演算子 (2026-02-05)**:
+    - `OP` に i32 ビット演算命令を追加 (`I32_SHL`, `I32_SHR_S`, `I32_OR`, `I32_AND`, `I32_XOR`)。
+    - `compileExpr` にビット演算子のコンパイルロジックを追加。
+    - すべてのビット演算は f64 → i32 変換後に実行され、結果は f64 に戻される。
+
+- **中優先度演算子 (2026-02-03)**:
+    - `injectRuntime` に `range`, `factorial`, `nth` を追加。
+
+### `parser.js` の変更:
+- **ビット演算子 (2026-02-05)**:
+    - `tokenize` 関数を更新し、連続する `|` マーカーを `||` 演算子にマージするロジックを追加。
+    - `resolveTokens` を更新し、`[|` (絶対値の開始) を正しく解決するように修正。
+
+### `run_wasm.js` の変更:
+- `env` インポートオブジェクトに `pow: Math.pow` を追加。
+
+## 検証結果 (`test_operators.sn`)
+
+### 論理演算子
+
+| テストケース | 式 | 期待値 | 結果 | 検証 |
+|-----------|------------|----------|--------|--------------|
 | `test_or_true_tt` | `2 \| 3` | `2` | `2` | ✅ |
 | `test_or_true_tf` | `0 \| _` | `0` | `0` | ✅ |
 | `test_or_true_ft` | `_ \| 1` | `1` | `1` | ✅ |
@@ -36,11 +72,46 @@ Implemented the following High Priority operators in `proto\wa1\compiler.js` wit
 | `test_xor_true_ft` | `_ ; 1` | `1` | `1` | ✅ |
 | `test_xor_false_tt` | `2 ; 3` | `NaN` | `NaN` | ✅ |
 | `test_xor_false_ff` | `_ ; _` | `NaN` | `NaN` | ✅ |
+
+### その他の演算子
+
+| テストケース | 式 | 期待値 | 結果 | 検証 |
+|-----------|------------|----------|--------|--------------|
 | `test_abs` | `\|-5\|` | `5` | `5` | ✅ |
 | `test_pow` | `2 ^ 3` | `8` | `8` | ✅ |
 
-> [!NOTE]
-> `;` returns `NaN` (False) if operands have same truthiness. If one is Truthy and one Falsy, it returns the Truthy one.
+### ビット演算子
 
-## Next Steps
-- Implement Medium Priority Operators (Range, Access, Factorial).
+| テストケース | 式 | 期待値 | 結果 | 検証 |
+|-----------|------------|----------|--------|--------------|
+| `test_bit_shl` | `1 << 2` | `4` | `4` | ✅ |
+| `test_bit_shr` | `8 >> 1` | `4` | `4` | ✅ |
+| `test_bit_or` | `3 \|\| 5` | `7` | `7` | ✅ |
+| `test_bit_and` | `3 && 5` | `1` | `1` | ✅ |
+| `test_bit_xor` | `3 ;; 5` | `6` | `6` | ✅ |
+| `test_bit_not` | `!! 3` | `-4` | `-4` | ✅ |
+
+> [!NOTE]
+> - 論理 XOR (`;`) は、オペランドの真偽値が同じ場合 `NaN` (False) を返します。一方が真値でもう一方が偽値の場合、真値のほうを返します。
+> - ビット演算はすべて i32 型で実行されますが、Sign 言語の型システムに合わせて結果は f64 に変換されます。
+> - ビット NOT (`!!`) は、ビット XOR を -1 との演算として実装されています (`~x = x ^ -1`)。
+
+## 実装の技術的詳細
+
+### 真偽値の扱い
+- **真値 (Truthy)**: `NaN` 以外のすべての値 (0 を含む)
+- **偽値 (Falsy)**: `NaN` のみ (Sign 言語では `_` として表現)
+
+### 短絡評価の実装
+論理 OR と AND は、左オペランドを評価した後、その真偽値に応じて右オペランドの評価をスキップします。これにより効率的な実行が可能になります。
+
+### ビット演算の型変換
+ビット演算は以下の手順で実行されます：
+1. f64 オペランドを `I32_TRUNC_F64_S` で i32 に変換
+2. i32 ビット演算命令を実行
+3. `F64_CONVERT_I32_S` で結果を f64 に戻す
+
+## 今後のステップ
+- 拡張範囲演算子 (`~+`, `~-`, `~*`, `~/`, `~^`) の実装検討
+- エクスポート演算子 (`#`, `##`, `###`) の実装検討
+- ブロック構文 (`(...)`, `{...}`) の実装検討

@@ -43,6 +43,13 @@ const OP = {
     I32_MUL: 0x6C,
     I32_DIV_S: 0x6D,
 
+    I32_AND: 0x71,
+    I32_OR: 0x72,
+    I32_XOR: 0x73,
+    I32_SHL: 0x74,
+    I32_SHR_S: 0x75,
+    I32_SHR_U: 0x76,
+
     F64_ADD: 0xA0,
     F64_SUB: 0xA1,
     F64_MUL: 0xA2,
@@ -970,6 +977,40 @@ class Compiler {
                 }
             }
 
+            // 8.5 Bitwise Operators
+            if (['<<', '>>', '||', ';;', '&&'].includes(op)) {
+                let bytes = [];
+                const args = node.slice(1);
+                // Arg 0 (LHS)
+                bytes = bytes.concat(this.compileExpr(args[0], VALTYPE.F64));
+                bytes.push(OP.I32_TRUNC_F64_S); // -> i32
+
+                // Arg 1 (RHS)
+                bytes = bytes.concat(this.compileExpr(args[1], VALTYPE.F64));
+                bytes.push(OP.I32_TRUNC_F64_S); // -> i32
+
+                if (op === '<<') bytes.push(OP.I32_SHL);
+                if (op === '>>') bytes.push(OP.I32_SHR_S);
+                if (op === '||') bytes.push(OP.I32_OR);
+                if (op === '&&') bytes.push(OP.I32_AND);
+                if (op === ';;') bytes.push(OP.I32_XOR);
+
+                // Convert back to F64
+                bytes.push(OP.F64_CONVERT_I32_S);
+                return bytes;
+            }
+
+            if (op === '!!') {
+                let bytes = [];
+                bytes = bytes.concat(this.compileExpr(node[1], VALTYPE.F64));
+                bytes.push(OP.I32_TRUNC_F64_S);
+                // Bitwise Not = XOR -1
+                bytes.push(OP.I32_CONST, ...new WasmEmitter().encodeSLEB128(-1));
+                bytes.push(OP.I32_XOR);
+                bytes.push(OP.F64_CONVERT_I32_S);
+                return bytes;
+            }
+
             // 9. Absolute Value (Parser emits `!-` for `|...|`)
             // We intercept `!-` here and check if we treat it as ABS?
             // Wait, implementation plan said `abs`.
@@ -995,6 +1036,7 @@ class Compiler {
             if (op === '!-') {
                 let bytes = [];
                 bytes = bytes.concat(this.compileExpr(node[1], VALTYPE.F64));
+                bytes.push(OP.F64_ABS);
                 return bytes;
             }
 
