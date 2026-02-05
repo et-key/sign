@@ -58,6 +58,14 @@ function tokenize(code) {
 
             // Check for Markers (Brackets/Newlines/Pipe)
             if (['[', ']', '|', '\n', '\t'].includes(chunk)) {
+                if (chunk === '|' && finalTokens.length > 0) {
+                    let last = finalTokens[finalTokens.length - 1];
+                    if (last.type === 'marker' && last.value === '|') {
+                        last.value = '||';
+                        last.type = 'operator';
+                        continue;
+                    }
+                }
                 finalTokens.push({ type: chunk === '\n' || chunk === '\t' ? 'marker' : 'marker', value: chunk });
             } else {
                 // Manual Scan of Chunk
@@ -308,11 +316,13 @@ function resolveTokens(tokens) {
                 let info = null;
 
                 if (!isPrevVal) {
+                    let lookup = t.value;
                     if (t.value === '|') {
                         t.value = '[|';
                         t.type = 'operator';
+                        lookup = '|';
                     }
-                    info = resolveOpInfo(t.value, 'prefix');
+                    info = resolveOpInfo(lookup, 'prefix');
                 } else {
                     let hasSpaceAfter = (i + 1 < tokens.length && tokens[i + 1].type === 'space_marker');
 
@@ -478,8 +488,10 @@ function shuntingYard(tokens) {
     const applyOp = (opToken) => {
         let opValue = (opToken.info && opToken.info.symbol) ? opToken.info.symbol : opToken.value;
         let info = opToken.info;
-        // ... (standard logic)
-
+        if (!info) {
+            console.error("Error: opToken.info is null for:", opToken);
+            throw new Error("Missing info for operator " + opToken.value);
+        }
         let node = [opValue];
         let notation = info.notation || 'infix';
 

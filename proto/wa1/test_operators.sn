@@ -1,13 +1,26 @@
 
-test_or_true : 1 | 2
-test_or_false : _ | 2 
+test_or_true_tt : 2 | 3
+test_or_true_tf : 0 | _
+test_or_true_ft : _ | 1 
+test_or_false_ff : _ | _
 
-test_and_true : 1 & 2
-test_and_false : _ & 2 
+test_and_true_tt : 0 & 1
+test_and_false_ft : _ & 1 
+test_and_false_tf : 0 & _
+test_and_false_ff : _ & _
 
-test_xor_true : 1 ; 0 
-test_xor_false : 1 ; 2
+test_xor_true_tf : 0 ; _
+test_xor_true_ft : _ ; 1
+test_xor_false_tt : 2 ; 3
+test_xor_false_ff : _ ; _
 
 test_abs : |-5|
 
 test_pow : 2 ^ 3
+
+test_bit_shl : 1 << 2
+test_bit_shr : 8 >> 1
+test_bit_or : 3 || 5
+test_bit_and : 3 && 5
+test_bit_xor : 3 ;; 5
+test_bit_not : !! 3
