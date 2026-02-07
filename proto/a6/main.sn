@@ -1,0 +1,34 @@
+
+`Test Bitwise`
+test_bit_lsl : 1 << 2
+test_bit_asr : -8 >> 1
+test_bit_or : 1 || 2
+test_bit_xor : 3 ;; 1
+test_bit_and : 3 && 1
+test_bit_not : !!0
+
+`Test Logic`
+test_choice_1 : 1 ; _
+test_choice_2 : _ ; 2
+test_no_choice : 1 ; 2
+test_falsy : _ ; _
+
+`! (Not)`
+test_logic_not : !_ & 4
+
+`^ (Pow)`
+test_pow : 2 ^ 3
+
+`! (Factorial)`
+test_fact : 5!
+
+`Abs`
+test_abs : |(-5 + 2) * 4| + 3 * 2
+
+`List / Range`
+test_cons : 1 , 2
+test_range : 1 ~ 5
+
+`Access`
+test_get : test_range ' 2
+test_get_at : 2 @ test_range
