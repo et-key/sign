@@ -809,6 +809,83 @@ _nth:
 .Lnth_end:
     ldp x29, x30, [sp], #16
     ret
+
+_print_char:
+    ; x0 = char code (number)
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    
+    ; Store char on stack to get address
+    str x0, [sp, #-16]!
+    mov x1, sp        ; Buffer address
+    mov x0, #1        ; FD = stdout
+    mov x2, #1        ; Count = 1
+    mov x8, #64       ; Syscall write
+    svc #0
+    
+    add sp, sp, #16   ; Cleanup
+    ldp x29, x30, [sp], #16
+    ret
+    
+_print_str:
+    ; x0 = string address (null terminated)
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    
+    mov x1, x0        ; Buffer
+    ; Calculate length? Or assume we have length?
+    ; 'asciz' is null terminated. We need strlen.
+    mov x2, #0
+.Lstrlen_loop:
+    ldrb w3, [x1, x2]
+    cbz w3, .Lstrlen_end
+    add x2, x2, #1
+    b .Lstrlen_loop
+.Lstrlen_end:
+    
+    mov x0, #1        ; stdout
+    mov x8, #64       ; write
+    svc #0
+    
+    ldp x29, x30, [sp], #16
+    ret
+    
+_read_char:
+    ; Read 1 char from stdin (fd 0)
+    ; Return char in x0, or -1 (EOF)
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    
+    sub sp, sp, #16     ; Alloc buffer
+    mov x1, sp          ; Buffer at [sp]
+    mov x0, #0          ; FD = stdin
+    mov x2, #1          ; Count = 1
+    mov x8, #63         ; Syscall read
+    svc #0
+    
+    ; Check result (x0)
+    ; If x0 == 0 -> EOF
+    ; If x0 < 0 -> Error
+    cmp x0, #1
+    b.ne .Lread_eof
+    
+    ldrb w0, [sp]       ; Load char
+    b .Lread_end
+    
+.Lread_eof:
+    mov x0, #-1         ; Return -1
+    
+.Lread_end:
+    add sp, sp, #16
+    ldp x29, x30, [sp], #16
+    ret
+
+_str_at:
+    ; x1 = string ptr, x0 = index
+    ; Return char code at list[index]
+    ; Note: Strings are C-strings (asciz)
+    ldrb w0, [x1, x0]
+    ret
 `;
 
 // Globals

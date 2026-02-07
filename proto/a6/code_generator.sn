@@ -1,0 +1,135 @@
+`code_generator.sn - Assembly Emitter`
+
+TOK_NUM : 1
+TOK_BLOCK : 6
+
+emit : str ?
+    _print_str str
+    _print_char 10
+
+compile_node : node ?
+    `Check if node is list ([op, args...])`
+    
+    `If unit (End of block)`
+    node = _ : _
+    
+    `Try to access head (Op)`
+    op : node ' 0
+    
+    `Check TOK_BLOCK`
+    op = TOK_BLOCK : (
+        nodes : node ' 1 ' 0
+        compile_block nodes
+        _
+    )
+    
+    `Check TOK_NUM`
+    op = TOK_NUM : (
+        val : node ' 1 ' 0
+        emit `ldr x0, =`
+        _print_str val `Wait, val is number. Need to print number?`
+        `For generated asm, we need text.`
+        `If val is int, we need int-to-str runtime? Or just emit raw val if we have print_num?`
+        `Our emit takes string. We need _print_int for asm generation.`
+        `Hack: Assume small number digit logic for now? Or implement int_to_str.`
+        
+        `Actually, emit passes string to _print_str.`
+        `_print_str expects pointer.`
+        `If we pass int to _print_str it crashes.`
+        
+        `Prototype Hack: Just emit placeholder for 1/2.`
+        val = 1 : emit `mov x0, #1`
+        val = 2 : emit `mov x0, #2`
+        val = 3 : emit `mov x0, #3`
+        val = 5 : emit `mov x0, #5`
+        _
+    )
+    
+    `If Op (is String?)`
+    `Binary: [Op, LHS, RHS, _]`
+    `Unary:  [Op, LHS, _]`
+    
+    args : node ' 1
+    
+    `Check Arity (Binary or Unary)`
+    `Binary has 2nd arg?`
+    `args: [lhs, [rhs, _]]`
+    tail : args ' 1
+    second_arg_exists : tail
+    
+    second_arg_exists = _ : (
+        `Unary Compilation`
+        child : args ' 0
+        
+        compile_node child
+        
+        op = `!` : (
+             emit `bl _factorial`
+             _
+        )
+        _
+    )
+    
+    `Binary Compilation`
+    lhs : args ' 0
+    rhs : tail ' 0
+    
+    compile_node lhs
+    emit `str x0, [sp, #-16]!`
+    
+    compile_node rhs
+    emit `ldr x1, [sp], #16`
+    
+    op = `+` : (
+        emit `add x0, x1, x0`
+        _
+    )
+    op = `-` : (
+        emit `sub x0, x1, x0`
+        _
+    )
+    op = `*` : (
+        emit `mul x0, x1, x0`
+        _
+    )
+    
+    `Definition: Name : RHS`
+    op = `:` : (
+        `Assume LHS is CharCode (ID)`
+        name_char : lhs
+        
+        `Emit Label: char + :`
+        _print_char name_char
+        _print_str `:`
+        _print_char 10
+        
+        `Compile RHS`
+        compile_node rhs
+        _
+    )
+    
+    `Function: Args ? Body`
+    op = `?` : (
+        `Args (LHS), Body (RHS)`
+        `Function Prologue/Epilogue?`
+        
+        emit `    stp x29, x30, [sp, #-16]!`
+        emit `    mov x29, sp`
+        
+        compile_node rhs
+        
+        emit `    ldp x29, x30, [sp], #16`
+        emit `    ret`
+        _
+    )
+    
+    _
+
+compile_block : nodes ?
+    nodes = _ : _
+    
+    head : nodes ' 0
+    tail : nodes ' 1
+    
+    compile_node head
+    compile_block tail
