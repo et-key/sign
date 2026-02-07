@@ -1,0 +1,25 @@
+
+`compiler_main.sn - Entry Point`
+
+main : _ ?
+    _print_str `Enter Sign Code (Input): `
+    _print_char 10
+    
+    source : read_all _
+    tokens : tokenize source
+    
+    _print_str `Parsing Block...`
+    _print_char 10
+    
+    res : parse_block tokens
+    ast_list : res ' 0
+    
+    _print_str `Compiling Block...`
+    _print_char 10
+    
+    compile_block ast_list
+    
+    _print_str `Done.`
+    _print_char 10
+    
+main _

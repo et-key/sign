@@ -1,0 +1,180 @@
+
+`compiler.sn - Sign Compiler in Sign`
+
+`--- Token Types ---`
+TOK_EOF : -1
+TOK_NUM : 1
+TOK_ID : 2
+TOK_OP : 3
+
+`--- Constants ---`
+EOF : -1
+CHAR_SPACE : 32
+CHAR_NEWLINE : 10
+CHAR_TAB : 9
+CHAR_PLUS : 43
+CHAR_MINUS : 45
+CHAR_0 : 48
+CHAR_9 : 57
+
+OP_ADD : `+`
+
+`--- Runtime Wrappers ---`
+print_s : s ? _print_str s
+print_c : c ? _print_char c
+read_c : _ ? _read_char _
+
+`--- Helper Functions ---`
+is_digit : c ? c >= CHAR_0 & c <= CHAR_9
+is_space : c ? c = CHAR_SPACE | c = CHAR_NEWLINE | c = CHAR_TAB
+
+`--- Lexer ---`
+
+`read_all : reads stdin until EOF into a list`
+read_all : _ ?
+    c : read_c _
+    c = EOF : _ `Unit/Empty List`
+    
+    `Cons char to list`
+    rest : read_all _
+    c , rest
+
+`tokenize : chars -> tokens`
+tokenize : chars ?
+    chars = _ : _ `End`
+    
+    head : chars ' 0
+    tail : chars ' 1
+    
+    `Skip Space`
+    is_space head : tokenize tail
+    
+    `Check specific chars`
+    head = CHAR_PLUS : [TOK_OP, `+`] , (tokenize tail)
+    head = CHAR_MINUS : [TOK_OP, `-`] , (tokenize tail)
+    
+    `Check Digit (Simple 1-char number for now)`
+    is_digit head : [TOK_NUM, head - CHAR_0] , (tokenize tail)
+    
+    `Unknown char -> Skip`
+    tokenize tail
+
+`--- Parser (Simple Prefix) ---`
+`parse_expr : tokens -> [node, rest_tokens]`
+parse_expr : tokens ?
+    tokens = _ : [_, _] `Error/End`
+    
+    token : tokens ' 0
+    rest : tokens ' 1
+    
+    type : token ' 0
+    val : token ' 1
+    
+    `If Num -> Return [val, rest]`
+    type = TOK_NUM : [val, rest]
+    
+    `If Op -> Parse Args`
+    type = TOK_OP : (
+        `Assume Binary Op for now`
+        `Parse Arg1`
+        res1 : parse_expr rest
+        arg1 : res1 ' 0
+        rest1 : res1 ' 1
+        
+        `Parse Arg2`
+        res2 : parse_expr rest1
+        arg2 : res2 ' 0
+        rest2 : res2 ' 1
+        
+        `Build Node [Op, Arg1, Arg2]`
+        node : val , arg1 , arg2
+        [node, rest2]
+    )
+    
+    `Default`
+    [_, rest]
+
+`parse_block : tokens -> [ast_list, rest]`
+parse_block : tokens ?
+    tokens = _ : [_, _]
+    
+    `Check EOF`
+    token : tokens ' 0
+    type : token ' 0
+    type = TOK_EOF : [_, tokens]
+    
+    `Parse Expr`
+    res : parse_expr tokens
+    node : res ' 0
+    rest : res ' 1
+    
+    `Recurse`
+    res2 : parse_block rest
+    nodes : res2 ' 0
+    final_rest : res2 ' 1
+    
+    `Cons result`
+    final_nodes : node , nodes
+    [final_nodes, final_rest]
+
+`--- Compiler ---`
+emit : str ?
+    print_s str
+    print_c 10
+
+compile_node : node ?
+    `Check if node is list ([op, args...]) or number`
+    
+    `If unit (End of block)`
+    node = _ : _
+    
+    `If list of nodes (Block)? -> This is tricky without explicit type check`
+    `We assume compile_node handles single node.`
+    
+    `Try to access head`
+    op : node ' 0
+    `If op is +`
+    op = `+` : (
+        emit `add x0, x1, x0`
+        _
+    )
+    op = `-` : (
+        emit `sub x0, x1, x0`
+        _
+    )
+    
+    `If it's a number?`
+    _
+
+compile_block : nodes ?
+    nodes = _ : _
+    
+    head : nodes ' 0
+    tail : nodes ' 1
+    
+    compile_node head
+    compile_block tail
+
+`--- Main ---`
+main : _ ?
+    print_s `Enter Sign Code (Prefix): `
+    print_c 10
+    
+    source : read_all _
+    tokens : tokenize source
+    
+    print_s `Parsing Block...`
+    print_c 10
+    
+    res : parse_block tokens
+    ast_list : res ' 0
+    
+    print_s `Compiling Block...`
+    print_c 10
+    
+    compile_block ast_list
+    
+    print_s `Done.`
+    print_c 10
+    
+main _

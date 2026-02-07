@@ -1,0 +1,42 @@
+heap : 0x0
+
+alloc : size ?
+`Allocates memory block of given size`
+	$current # heap
+	
+`Update global heap pointer`
+	$heap # current + size
+	
+`Return usage address`
+	@current
+
+`Construct a list cell (16 bytes)`
+cons : h t ?
+	$cell # alloc 16
+	$cell # h          `Store head at +0`
+	$next_ptr # cell + 8
+	$next_ptr # t      `Store tail at +8`
+	@cell
+
+`Get head of list`
+head : list ?
+	@list
+
+`Get tail of list`
+tail : list ?
+	$next_ptr # list + 8
+	@next_ptr
+
+main : ?
+`Test List Construction`
+	list : cons 10 20
+	h : head list
+	t : tail list
+	h
+
+match_test : v ?
+		v = 0 : 100
+		v = 1 : 200
+		300
+
+main _

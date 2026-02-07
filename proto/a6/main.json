@@ -1,0 +1,2762 @@
+[
+  [
+    ":",
+    "TOK_EOF",
+    -1
+  ],
+  [
+    ":",
+    "TOK_NUM",
+    1
+  ],
+  [
+    ":",
+    "TOK_ID",
+    2
+  ],
+  [
+    ":",
+    "TOK_OP",
+    3
+  ],
+  [
+    ":",
+    "TOK_INDENT",
+    4
+  ],
+  [
+    ":",
+    "TOK_DEDENT",
+    5
+  ],
+  [
+    ":",
+    "EOF",
+    -1
+  ],
+  [
+    ":",
+    "CHAR_SPACE",
+    32
+  ],
+  [
+    ":",
+    "CHAR_NEWLINE",
+    10
+  ],
+  [
+    ":",
+    "CHAR_TAB",
+    9
+  ],
+  [
+    ":",
+    "CHAR_PLUS",
+    43
+  ],
+  [
+    ":",
+    "CHAR_MINUS",
+    45
+  ],
+  [
+    ":",
+    "CHAR_0",
+    48
+  ],
+  [
+    ":",
+    "CHAR_9",
+    57
+  ],
+  [
+    ":",
+    "is_digit",
+    [
+      "?",
+      [
+        "c"
+      ],
+      [
+        "&",
+        [
+          ">=",
+          "c",
+          "CHAR_0"
+        ],
+        [
+          "<=",
+          "c",
+          "CHAR_9"
+        ]
+      ]
+    ]
+  ],
+  [
+    ":",
+    "is_space",
+    [
+      "?",
+      [
+        "c"
+      ],
+      [
+        "|",
+        [
+          "|",
+          [
+            "=",
+            "c",
+            "CHAR_SPACE"
+          ],
+          [
+            "=",
+            "c",
+            "CHAR_NEWLINE"
+          ]
+        ],
+        [
+          "=",
+          "c",
+          "CHAR_TAB"
+        ]
+      ]
+    ]
+  ],
+  [
+    ":",
+    "read_all",
+    [
+      "?",
+      [
+        "_"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    "c",
+    [
+      " ",
+      "_read_char",
+      "_"
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "c",
+      "EOF"
+    ],
+    [
+      " ",
+      "_",
+      "`Unit/Empty List`"
+    ]
+  ],
+  "`Cons char to list`",
+  [
+    ":",
+    "rest",
+    [
+      " ",
+      "read_all",
+      "_"
+    ]
+  ],
+  [
+    ",",
+    "c",
+    "rest"
+  ],
+  [
+    ":",
+    "TOK_INDENT",
+    4
+  ],
+  [
+    ":",
+    "TOK_DEDENT",
+    5
+  ],
+  [
+    ":",
+    "count_indent",
+    [
+      "?",
+      [
+        "chars"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "chars",
+      "_"
+    ],
+    [
+      [
+        ",",
+        0,
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    "head",
+    [
+      "'",
+      "chars",
+      0
+    ]
+  ],
+  [
+    ":",
+    "tail",
+    [
+      "'",
+      "chars",
+      1
+    ]
+  ],
+  [
+    ":",
+    [
+      " ",
+      "is_space",
+      "head"
+    ],
+    [
+      [
+        ":",
+        [
+          " ",
+          "`Only count space/tab, not newline (handled by caller)`",
+          [
+            "=",
+            "head",
+            "CHAR_NEWLINE"
+          ]
+        ],
+        [
+          ":",
+          [
+            " ",
+            [
+              [
+                ",",
+                0,
+                "chars"
+              ]
+            ],
+            "res"
+          ],
+          [
+            ":",
+            [
+              " ",
+              [
+                " ",
+                "count_indent",
+                "tail"
+              ],
+              "cnt"
+            ],
+            [
+              ":",
+              [
+                " ",
+                [
+                  "'",
+                  "res",
+                  0
+                ],
+                "rest"
+              ],
+              [
+                " ",
+                [
+                  "'",
+                  "res",
+                  1
+                ],
+                [
+                  [
+                    ",",
+                    [
+                      "+",
+                      "cnt",
+                      1
+                    ],
+                    "rest"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    ]
+  ],
+  [
+    [
+      ",",
+      0,
+      "chars"
+    ]
+  ],
+  [
+    ":",
+    "tokenize_indent",
+    [
+      "?",
+      [
+        "chars",
+        "current_indent"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "chars",
+      "_"
+    ],
+    [
+      [
+        " ",
+        [
+          " ",
+          "`EOF: Emit DEDENTs if indent > 0`",
+          "`For prototype, assume 1 level dedent at optional EOF or just end.`"
+        ],
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    "head",
+    [
+      "'",
+      "chars",
+      0
+    ]
+  ],
+  "`Skip Spaces (Non-Newlines)`",
+  [
+    ":",
+    [
+      "=",
+      "head",
+      "CHAR_SPACE"
+    ],
+    [
+      [
+        " ",
+        [
+          " ",
+          "tokenize_indent",
+          [
+            [
+              "'",
+              "chars",
+              1
+            ]
+          ]
+        ],
+        "current_indent"
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "head",
+      "CHAR_TAB"
+    ],
+    [
+      [
+        " ",
+        [
+          " ",
+          "tokenize_indent",
+          [
+            [
+              "'",
+              "chars",
+              1
+            ]
+          ]
+        ],
+        "current_indent"
+      ]
+    ]
+  ],
+  "`Check Newline`",
+  [
+    ":",
+    [
+      "=",
+      "head",
+      "CHAR_NEWLINE"
+    ],
+    [
+      [
+        ":",
+        "tail",
+        [
+          ":",
+          [
+            " ",
+            [
+              "'",
+              "chars",
+              1
+            ],
+            "res"
+          ],
+          [
+            ":",
+            [
+              " ",
+              [
+                " ",
+                "count_indent",
+                "tail"
+              ],
+              "new_indent"
+            ],
+            [
+              ":",
+              [
+                " ",
+                [
+                  "'",
+                  "res",
+                  0
+                ],
+                "rest"
+              ],
+              [
+                ":",
+                [
+                  " ",
+                  [
+                    " ",
+                    [
+                      " ",
+                      [
+                        " ",
+                        [
+                          "'",
+                          "res",
+                          1
+                        ],
+                        "`Compare Indent`"
+                      ],
+                      "`Note: We assume indent increases by 1 'unit' or we track raw count?`"
+                    ],
+                    "`Let's track raw count for now.`"
+                  ],
+                  [
+                    ">",
+                    "new_indent",
+                    "current_indent"
+                  ]
+                ],
+                [
+                  ":",
+                  [
+                    " ",
+                    [
+                      [
+                        ",",
+                        [
+                          " ",
+                          "`Indent`",
+                          "TOK_INDENT"
+                        ],
+                        [
+                          [
+                            " ",
+                            [
+                              " ",
+                              "tokenize_indent",
+                              "rest"
+                            ],
+                            "new_indent"
+                          ]
+                        ]
+                      ]
+                    ],
+                    [
+                      "<",
+                      "new_indent",
+                      "current_indent"
+                    ]
+                  ],
+                  [
+                    " ",
+                    [
+                      " ",
+                      [
+                        " ",
+                        [
+                          " ",
+                          [
+                            [
+                              ",",
+                              [
+                                " ",
+                                "`Dedent`",
+                                "TOK_DEDENT"
+                              ],
+                              [
+                                [
+                                  " ",
+                                  [
+                                    " ",
+                                    "tokenize_indent",
+                                    "rest"
+                                  ],
+                                  "new_indent"
+                                ]
+                              ]
+                            ]
+                          ],
+                          "`Same Indent -> Just continue`"
+                        ],
+                        "tokenize_indent"
+                      ],
+                      "rest"
+                    ],
+                    "current_indent"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    ]
+  ],
+  "`Normal Tokenize Logic (Pass current_indent)`",
+  "`Refactored to take indent param`",
+  "`Check specific chars`",
+  [
+    ":",
+    [
+      "=",
+      "head",
+      "CHAR_PLUS"
+    ],
+    [
+      ",",
+      [
+        [
+          ",",
+          "TOK_OP",
+          "`+`"
+        ]
+      ],
+      [
+        [
+          " ",
+          [
+            " ",
+            "tokenize_indent",
+            [
+              [
+                "'",
+                "chars",
+                1
+              ]
+            ]
+          ],
+          "current_indent"
+        ]
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "head",
+      "CHAR_MINUS"
+    ],
+    [
+      ",",
+      [
+        [
+          ",",
+          "TOK_OP",
+          "`-`"
+        ]
+      ],
+      [
+        [
+          " ",
+          [
+            " ",
+            "tokenize_indent",
+            [
+              [
+                "'",
+                "chars",
+                1
+              ]
+            ]
+          ],
+          "current_indent"
+        ]
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "head",
+      "`:`"
+    ],
+    [
+      ",",
+      [
+        [
+          ",",
+          "TOK_OP",
+          "`:`"
+        ]
+      ],
+      [
+        [
+          " ",
+          [
+            " ",
+            "tokenize_indent",
+            [
+              [
+                "'",
+                "chars",
+                1
+              ]
+            ]
+          ],
+          "current_indent"
+        ]
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "head",
+      "`?`"
+    ],
+    [
+      ",",
+      [
+        [
+          ",",
+          "TOK_OP",
+          "`?`"
+        ]
+      ],
+      [
+        [
+          " ",
+          [
+            " ",
+            "tokenize_indent",
+            [
+              [
+                "'",
+                "chars",
+                1
+              ]
+            ]
+          ],
+          "current_indent"
+        ]
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "head",
+      "`=`"
+    ],
+    [
+      ",",
+      [
+        [
+          ",",
+          "TOK_OP",
+          "`=`"
+        ]
+      ],
+      [
+        [
+          " ",
+          [
+            " ",
+            "tokenize_indent",
+            [
+              [
+                "'",
+                "chars",
+                1
+              ]
+            ]
+          ],
+          "current_indent"
+        ]
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "head",
+      "`!`"
+    ],
+    [
+      ",",
+      [
+        [
+          ",",
+          "TOK_OP",
+          "`!`"
+        ]
+      ],
+      [
+        [
+          " ",
+          [
+            " ",
+            "tokenize_indent",
+            [
+              [
+                "'",
+                "chars",
+                1
+              ]
+            ]
+          ],
+          "current_indent"
+        ]
+      ]
+    ]
+  ],
+  "`Check Digit`",
+  [
+    ":",
+    [
+      " ",
+      "is_digit",
+      "head"
+    ],
+    [
+      ",",
+      [
+        [
+          ",",
+          "TOK_NUM",
+          [
+            "-",
+            "head",
+            "CHAR_0"
+          ]
+        ]
+      ],
+      [
+        [
+          " ",
+          [
+            " ",
+            "tokenize_indent",
+            [
+              [
+                "'",
+                "chars",
+                1
+              ]
+            ]
+          ],
+          "current_indent"
+        ]
+      ]
+    ]
+  ],
+  "`ID`",
+  [
+    ":",
+    "id_val",
+    "head"
+  ],
+  [
+    ",",
+    [
+      [
+        ",",
+        "TOK_ID",
+        "id_val"
+      ]
+    ],
+    [
+      [
+        " ",
+        [
+          " ",
+          "tokenize_indent",
+          [
+            [
+              "'",
+              "chars",
+              1
+            ]
+          ]
+        ],
+        "current_indent"
+      ]
+    ]
+  ],
+  [
+    ":",
+    "tokenize",
+    [
+      "?",
+      [
+        "chars"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  [
+    " ",
+    [
+      " ",
+      "tokenize_indent",
+      "chars"
+    ],
+    0
+  ],
+  [
+    ":",
+    "PREC_NONE",
+    0
+  ],
+  [
+    ":",
+    "PREC_ASSIGN",
+    [
+      " ",
+      1,
+      "`:`"
+    ]
+  ],
+  [
+    ":",
+    "PREC_FUNC",
+    [
+      " ",
+      2,
+      "`?`"
+    ]
+  ],
+  [
+    ":",
+    "PREC_COMPARE",
+    [
+      " ",
+      3,
+      "`=`"
+    ]
+  ],
+  [
+    ":",
+    "PREC_TERM",
+    [
+      " ",
+      4,
+      "`+ -`"
+    ]
+  ],
+  [
+    ":",
+    "PREC_FACTOR",
+    [
+      " ",
+      5,
+      "`* /`"
+    ]
+  ],
+  [
+    ":",
+    "PREC_POSTFIX",
+    [
+      " ",
+      6,
+      "`! (Factorial)`"
+    ]
+  ],
+  [
+    ":",
+    "get_precedence",
+    [
+      "?",
+      [
+        "op"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "`:`"
+    ],
+    "PREC_ASSIGN"
+  ],
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "`?`"
+    ],
+    "PREC_FUNC"
+  ],
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "`=`"
+    ],
+    "PREC_COMPARE"
+  ],
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "`+`"
+    ],
+    "PREC_TERM"
+  ],
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "`-`"
+    ],
+    "PREC_TERM"
+  ],
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "`*`"
+    ],
+    "PREC_FACTOR"
+  ],
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "`/`"
+    ],
+    "PREC_FACTOR"
+  ],
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "`!`"
+    ],
+    "PREC_POSTFIX"
+  ],
+  "PREC_NONE",
+  [
+    ":",
+    "TOK_INDENT",
+    4
+  ],
+  [
+    ":",
+    "TOK_DEDENT",
+    5
+  ],
+  [
+    ":",
+    "TOK_BLOCK",
+    6
+  ],
+  [
+    ":",
+    "EOF",
+    -1
+  ],
+  [
+    ":",
+    "parse_block_list",
+    [
+      "?",
+      [
+        "tokens"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "tokens",
+      "_"
+    ],
+    [
+      [
+        ",",
+        "_",
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    "token",
+    [
+      "'",
+      "tokens",
+      0
+    ]
+  ],
+  [
+    ":",
+    "type",
+    [
+      "'",
+      "token",
+      0
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "type",
+      "TOK_DEDENT"
+    ],
+    [
+      [
+        ":",
+        [
+          " ",
+          "`End of Block`",
+          "rest"
+        ],
+        [
+          " ",
+          [
+            "'",
+            "tokens",
+            1
+          ],
+          [
+            [
+              ",",
+              "_",
+              "rest"
+            ]
+          ]
+        ]
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "type",
+      "TOK_EOF"
+    ],
+    [
+      [
+        " ",
+        "`End of Block (Allow EOF to close)`",
+        [
+          [
+            ",",
+            "_",
+            "tokens"
+          ]
+        ]
+      ]
+    ]
+  ],
+  "`Parse Expr`",
+  [
+    ":",
+    "res",
+    [
+      " ",
+      "parse_expr",
+      "tokens"
+    ]
+  ],
+  [
+    ":",
+    "node",
+    [
+      "'",
+      "res",
+      0
+    ]
+  ],
+  [
+    ":",
+    "rest",
+    [
+      "'",
+      "res",
+      1
+    ]
+  ],
+  "`Recurse`",
+  [
+    ":",
+    "res2",
+    [
+      " ",
+      "parse_block_list",
+      "rest"
+    ]
+  ],
+  [
+    ":",
+    "nodes",
+    [
+      "'",
+      "res2",
+      0
+    ]
+  ],
+  [
+    ":",
+    "final_rest",
+    [
+      "'",
+      "res2",
+      1
+    ]
+  ],
+  "`Cons`",
+  [
+    ":",
+    "final_nodes",
+    [
+      ",",
+      "node",
+      [
+        ",",
+        "nodes",
+        "_"
+      ]
+    ]
+  ],
+  [
+    [
+      ",",
+      "final_nodes",
+      "final_rest"
+    ]
+  ],
+  [
+    ":",
+    "parse_atom",
+    [
+      "?",
+      [
+        "tokens"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "tokens",
+      "_"
+    ],
+    [
+      " ",
+      [
+        [
+          ",",
+          "_",
+          "_"
+        ]
+      ],
+      "`Error`"
+    ]
+  ],
+  [
+    ":",
+    "token",
+    [
+      "'",
+      "tokens",
+      0
+    ]
+  ],
+  [
+    ":",
+    "rest",
+    [
+      "'",
+      "tokens",
+      1
+    ]
+  ],
+  [
+    ":",
+    "type",
+    [
+      "'",
+      "token",
+      0
+    ]
+  ],
+  [
+    ":",
+    "val",
+    [
+      "'",
+      "token",
+      1
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "type",
+      "TOK_NUM"
+    ],
+    [
+      [
+        ":",
+        [
+          " ",
+          "`Wrap in [TOK_NUM, val]`",
+          "node"
+        ],
+        [
+          ":",
+          [
+            ",",
+            "TOK_NUM",
+            [
+              ",",
+              "val",
+              [
+                " ",
+                "_",
+                "tokens_after_num"
+              ]
+            ]
+          ],
+          [
+            " ",
+            [
+              " ",
+              [
+                " ",
+                [
+                  " ",
+                  "rest",
+                  "`Check Postfix Loop`"
+                ],
+                "parse_postfix_loop"
+              ],
+              "node"
+            ],
+            "tokens_after_num"
+          ]
+        ]
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "type",
+      "TOK_ID"
+    ],
+    [
+      [
+        ":",
+        [
+          " ",
+          [
+            " ",
+            [
+              " ",
+              "`Just return val (assume number/charcode for now)`",
+              "`For CodeGen to work, it needs to print this.`"
+            ],
+            "`If val is CharCode, we need to print char.`"
+          ],
+          "node"
+        ],
+        [
+          " ",
+          "val",
+          [
+            [
+              ",",
+              "node",
+              "rest"
+            ]
+          ]
+        ]
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "type",
+      "TOK_INDENT"
+    ],
+    [
+      [
+        ":",
+        [
+          " ",
+          [
+            " ",
+            "`Start of Block`",
+            "`Parse List`"
+          ],
+          "res"
+        ],
+        [
+          ":",
+          [
+            " ",
+            [
+              " ",
+              "parse_block_list",
+              "rest"
+            ],
+            "nodes"
+          ],
+          [
+            ":",
+            [
+              " ",
+              [
+                "'",
+                "res",
+                0
+              ],
+              "rest_after_block"
+            ],
+            [
+              ":",
+              [
+                " ",
+                [
+                  " ",
+                  [
+                    "'",
+                    "res",
+                    1
+                  ],
+                  "`Wrap in TOK_BLOCK`"
+                ],
+                "node"
+              ],
+              [
+                ",",
+                "TOK_BLOCK",
+                [
+                  ",",
+                  "nodes",
+                  [
+                    " ",
+                    "_",
+                    [
+                      [
+                        ",",
+                        "node",
+                        "rest_after_block"
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    ]
+  ],
+  "`TODO: Handle Parens`",
+  "`Error/Skip`",
+  [
+    [
+      ",",
+      "_",
+      "rest"
+    ]
+  ],
+  [
+    ":",
+    "parse_postfix_loop",
+    [
+      "?",
+      [
+        "lhs",
+        "tokens"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "tokens",
+      "_"
+    ],
+    [
+      [
+        ",",
+        "lhs",
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    "token",
+    [
+      "'",
+      "tokens",
+      0
+    ]
+  ],
+  [
+    ":",
+    "type",
+    [
+      "'",
+      "token",
+      0
+    ]
+  ],
+  [
+    ":",
+    "val",
+    [
+      "'",
+      "token",
+      1
+    ]
+  ],
+  "`Check if Postfix Op`",
+  [
+    ":",
+    "is_postfix",
+    [
+      "=",
+      "val",
+      "`!`"
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "is_postfix",
+      "_"
+    ],
+    [
+      " ",
+      [
+        [
+          ",",
+          "lhs",
+          "tokens"
+        ]
+      ],
+      "`False`"
+    ]
+  ],
+  "`Consume`",
+  [
+    ":",
+    "rest",
+    [
+      "'",
+      "tokens",
+      1
+    ]
+  ],
+  "`Build Unary Node: [Op, LHS]`",
+  "`Correct List: Op, LHS, _`",
+  [
+    ":",
+    "new_lhs",
+    [
+      ",",
+      "val",
+      [
+        ",",
+        "lhs",
+        "_"
+      ]
+    ]
+  ],
+  "`Loop`",
+  [
+    " ",
+    [
+      " ",
+      "parse_postfix_loop",
+      "new_lhs"
+    ],
+    "rest"
+  ],
+  [
+    ":",
+    "parse_expr_climb",
+    [
+      "?",
+      [
+        "lhs",
+        "min_prec",
+        "tokens"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "tokens",
+      "_"
+    ],
+    [
+      [
+        ",",
+        "lhs",
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    "token",
+    [
+      "'",
+      "tokens",
+      0
+    ]
+  ],
+  [
+    ":",
+    "type",
+    [
+      "'",
+      "token",
+      0
+    ]
+  ],
+  "`Check if it is an operator`",
+  [
+    ":",
+    [
+      "=",
+      "type",
+      "TOK_OP"
+    ],
+    [
+      [
+        ":",
+        "op",
+        [
+          ":",
+          [
+            " ",
+            [
+              "'",
+              "token",
+              1
+            ],
+            "prec"
+          ],
+          [
+            ":",
+            [
+              " ",
+              [
+                " ",
+                [
+                  " ",
+                  "get_precedence",
+                  "op"
+                ],
+                "`Check Precedence`"
+              ],
+              "should_climb"
+            ],
+            [
+              ":",
+              [
+                " ",
+                [
+                  ">=",
+                  "prec",
+                  "min_prec"
+                ],
+                [
+                  "=",
+                  "should_climb",
+                  "_"
+                ]
+              ],
+              [
+                ":",
+                [
+                  " ",
+                  [
+                    " ",
+                    [
+                      " ",
+                      [
+                        [
+                          ",",
+                          "lhs",
+                          "tokens"
+                        ]
+                      ],
+                      "`False (Unit) -> Return LHS`"
+                    ],
+                    "`Consume Op`"
+                  ],
+                  "rest"
+                ],
+                [
+                  ":",
+                  [
+                    " ",
+                    [
+                      " ",
+                      [
+                        "'",
+                        "tokens",
+                        1
+                      ],
+                      "`Parse RHS`"
+                    ],
+                    "next_prec"
+                  ],
+                  [
+                    ":",
+                    [
+                      " ",
+                      [
+                        " ",
+                        [
+                          "+",
+                          "prec",
+                          1
+                        ],
+                        "`Parse RHS Atom`"
+                      ],
+                      "res_rhs"
+                    ],
+                    [
+                      ":",
+                      [
+                        " ",
+                        [
+                          " ",
+                          "parse_atom",
+                          "rest"
+                        ],
+                        "rhs_atom"
+                      ],
+                      [
+                        ":",
+                        [
+                          " ",
+                          [
+                            "'",
+                            "res_rhs",
+                            0
+                          ],
+                          "rest_after_atom"
+                        ],
+                        [
+                          ":",
+                          [
+                            " ",
+                            [
+                              " ",
+                              [
+                                "'",
+                                "res_rhs",
+                                1
+                              ],
+                              "`Climb RHS`"
+                            ],
+                            "res_tree"
+                          ],
+                          [
+                            ":",
+                            [
+                              " ",
+                              [
+                                " ",
+                                [
+                                  " ",
+                                  [
+                                    " ",
+                                    "parse_expr_climb",
+                                    "rhs_atom"
+                                  ],
+                                  "next_prec"
+                                ],
+                                "rest_after_atom"
+                              ],
+                              "rhs"
+                            ],
+                            [
+                              ":",
+                              [
+                                " ",
+                                [
+                                  "'",
+                                  "res_tree",
+                                  0
+                                ],
+                                "final_rest"
+                              ],
+                              [
+                                ":",
+                                [
+                                  " ",
+                                  [
+                                    " ",
+                                    [
+                                      " ",
+                                      [
+                                        "'",
+                                        "res_tree",
+                                        1
+                                      ],
+                                      "`Build Node: [Op, LHS, RHS]`"
+                                    ],
+                                    "`Correct List: Op, LHS, RHS, _`"
+                                  ],
+                                  "new_lhs"
+                                ],
+                                [
+                                  ",",
+                                  "op",
+                                  [
+                                    ",",
+                                    "lhs",
+                                    [
+                                      ",",
+                                      "rhs",
+                                      [
+                                        " ",
+                                        [
+                                          " ",
+                                          [
+                                            " ",
+                                            [
+                                              " ",
+                                              [
+                                                " ",
+                                                "_",
+                                                "`Loop / Continue Climbing`"
+                                              ],
+                                              "parse_expr_climb"
+                                            ],
+                                            "new_lhs"
+                                          ],
+                                          "min_prec"
+                                        ],
+                                        "final_rest"
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    ]
+  ],
+  "`Not an op, return lhs`",
+  [
+    [
+      ",",
+      "lhs",
+      "tokens"
+    ]
+  ],
+  [
+    ":",
+    "parse_expr",
+    [
+      "?",
+      [
+        "tokens"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  "`Parse Left`",
+  [
+    ":",
+    "res",
+    [
+      " ",
+      "parse_atom",
+      "tokens"
+    ]
+  ],
+  [
+    ":",
+    "lhs",
+    [
+      "'",
+      "res",
+      0
+    ]
+  ],
+  [
+    ":",
+    "rest",
+    [
+      "'",
+      "res",
+      1
+    ]
+  ],
+  "`Climb`",
+  [
+    " ",
+    [
+      " ",
+      [
+        " ",
+        "parse_expr_climb",
+        "lhs"
+      ],
+      "PREC_NONE"
+    ],
+    "rest"
+  ],
+  [
+    ":",
+    "parse_block",
+    [
+      "?",
+      [
+        "tokens"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "tokens",
+      "_"
+    ],
+    [
+      [
+        ",",
+        "_",
+        "_"
+      ]
+    ]
+  ],
+  "`Check EOF`",
+  [
+    ":",
+    "token",
+    [
+      "'",
+      "tokens",
+      0
+    ]
+  ],
+  [
+    ":",
+    "type",
+    [
+      "'",
+      "token",
+      0
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "type",
+      "TOK_EOF"
+    ],
+    [
+      [
+        ",",
+        "_",
+        "tokens"
+      ]
+    ]
+  ],
+  "`Parse Expr`",
+  [
+    ":",
+    "res",
+    [
+      " ",
+      "parse_expr",
+      "tokens"
+    ]
+  ],
+  [
+    ":",
+    "node",
+    [
+      "'",
+      "res",
+      0
+    ]
+  ],
+  [
+    ":",
+    "rest",
+    [
+      "'",
+      "res",
+      1
+    ]
+  ],
+  "`Recurse`",
+  [
+    ":",
+    "res2",
+    [
+      " ",
+      "parse_block",
+      "rest"
+    ]
+  ],
+  [
+    ":",
+    "nodes",
+    [
+      "'",
+      "res2",
+      0
+    ]
+  ],
+  [
+    ":",
+    "final_rest",
+    [
+      "'",
+      "res2",
+      1
+    ]
+  ],
+  "`Cons result`",
+  [
+    ":",
+    "final_nodes",
+    [
+      ",",
+      "node",
+      "nodes"
+    ]
+  ],
+  [
+    [
+      ",",
+      "final_nodes",
+      "final_rest"
+    ]
+  ],
+  [
+    ":",
+    "TOK_NUM",
+    1
+  ],
+  [
+    ":",
+    "TOK_BLOCK",
+    6
+  ],
+  [
+    ":",
+    "emit",
+    [
+      "?",
+      [
+        "str"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  [
+    " ",
+    "_print_str",
+    "str"
+  ],
+  [
+    " ",
+    "_print_char",
+    10
+  ],
+  [
+    ":",
+    "compile_node",
+    [
+      "?",
+      [
+        "node"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  "`Check if node is list ([op, args...])`",
+  "`If unit (End of block)`",
+  [
+    ":",
+    [
+      "=",
+      "node",
+      "_"
+    ],
+    "_"
+  ],
+  "`Try to access head (Op)`",
+  [
+    ":",
+    "op",
+    [
+      "'",
+      "node",
+      0
+    ]
+  ],
+  "`Check TOK_BLOCK`",
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "TOK_BLOCK"
+    ],
+    [
+      [
+        ":",
+        "nodes",
+        [
+          " ",
+          [
+            " ",
+            [
+              " ",
+              [
+                "'",
+                [
+                  "'",
+                  "node",
+                  1
+                ],
+                0
+              ],
+              "compile_block"
+            ],
+            "nodes"
+          ],
+          "_"
+        ]
+      ]
+    ]
+  ],
+  "`Check TOK_NUM`",
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "TOK_NUM"
+    ],
+    [
+      [
+        ":",
+        "val",
+        [
+          ":",
+          [
+            " ",
+            [
+              " ",
+              [
+                " ",
+                [
+                  " ",
+                  [
+                    " ",
+                    [
+                      " ",
+                      [
+                        " ",
+                        [
+                          " ",
+                          [
+                            " ",
+                            [
+                              " ",
+                              [
+                                " ",
+                                [
+                                  " ",
+                                  [
+                                    " ",
+                                    [
+                                      " ",
+                                      [
+                                        "'",
+                                        [
+                                          "'",
+                                          "node",
+                                          1
+                                        ],
+                                        0
+                                      ],
+                                      "emit"
+                                    ],
+                                    "`ldr x0, =`"
+                                  ],
+                                  "_print_str"
+                                ],
+                                "val"
+                              ],
+                              "`Wait, val is number. Need to print number?`"
+                            ],
+                            "`For generated asm, we need text.`"
+                          ],
+                          "`If val is int, we need int-to-str runtime? Or just emit raw val if we have print_num?`"
+                        ],
+                        "`Our emit takes string. We need _print_int for asm generation.`"
+                      ],
+                      "`Hack: Assume small number digit logic for now? Or implement int_to_str.`"
+                    ],
+                    "`Actually, emit passes string to _print_str.`"
+                  ],
+                  "`_print_str expects pointer.`"
+                ],
+                "`If we pass int to _print_str it crashes.`"
+              ],
+              "`Prototype Hack: Just emit placeholder for 1/2.`"
+            ],
+            [
+              "=",
+              "val",
+              1
+            ]
+          ],
+          [
+            ":",
+            [
+              " ",
+              [
+                " ",
+                "emit",
+                "`mov x0, #1`"
+              ],
+              [
+                "=",
+                "val",
+                2
+              ]
+            ],
+            [
+              ":",
+              [
+                " ",
+                [
+                  " ",
+                  "emit",
+                  "`mov x0, #2`"
+                ],
+                [
+                  "=",
+                  "val",
+                  3
+                ]
+              ],
+              [
+                ":",
+                [
+                  " ",
+                  [
+                    " ",
+                    "emit",
+                    "`mov x0, #3`"
+                  ],
+                  [
+                    "=",
+                    "val",
+                    5
+                  ]
+                ],
+                [
+                  " ",
+                  [
+                    " ",
+                    "emit",
+                    "`mov x0, #5`"
+                  ],
+                  "_"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    ]
+  ],
+  "`If Op (is String?)`",
+  "`Binary: [Op, LHS, RHS, _]`",
+  "`Unary:  [Op, LHS, _]`",
+  [
+    ":",
+    "args",
+    [
+      "'",
+      "node",
+      1
+    ]
+  ],
+  "`Check Arity (Binary or Unary)`",
+  "`Binary has 2nd arg?`",
+  "`args: [lhs, [rhs, _]]`",
+  [
+    ":",
+    "tail",
+    [
+      "'",
+      "args",
+      1
+    ]
+  ],
+  [
+    ":",
+    "second_arg_exists",
+    "tail"
+  ],
+  [
+    ":",
+    [
+      "=",
+      "second_arg_exists",
+      "_"
+    ],
+    [
+      [
+        ":",
+        [
+          " ",
+          "`Unary Compilation`",
+          "child"
+        ],
+        [
+          ":",
+          [
+            " ",
+            [
+              " ",
+              [
+                " ",
+                [
+                  "'",
+                  "args",
+                  0
+                ],
+                "compile_node"
+              ],
+              "child"
+            ],
+            [
+              "=",
+              "op",
+              "`!`"
+            ]
+          ],
+          [
+            " ",
+            [
+              [
+                " ",
+                [
+                  " ",
+                  "emit",
+                  "`bl _factorial`"
+                ],
+                "_"
+              ]
+            ],
+            "_"
+          ]
+        ]
+      ]
+    ]
+  ],
+  "`Binary Compilation`",
+  [
+    ":",
+    "lhs",
+    [
+      "'",
+      "args",
+      0
+    ]
+  ],
+  [
+    ":",
+    "rhs",
+    [
+      "'",
+      "tail",
+      0
+    ]
+  ],
+  [
+    " ",
+    "compile_node",
+    "lhs"
+  ],
+  [
+    " ",
+    "emit",
+    "`str x0, [sp, #-16]!`"
+  ],
+  [
+    " ",
+    "compile_node",
+    "rhs"
+  ],
+  [
+    " ",
+    "emit",
+    "`ldr x1, [sp], #16`"
+  ],
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "`+`"
+    ],
+    [
+      [
+        " ",
+        [
+          " ",
+          "emit",
+          "`add x0, x1, x0`"
+        ],
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "`-`"
+    ],
+    [
+      [
+        " ",
+        [
+          " ",
+          "emit",
+          "`sub x0, x1, x0`"
+        ],
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "`*`"
+    ],
+    [
+      [
+        " ",
+        [
+          " ",
+          "emit",
+          "`mul x0, x1, x0`"
+        ],
+        "_"
+      ]
+    ]
+  ],
+  "`Definition: Name : RHS`",
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "`:`"
+    ],
+    [
+      [
+        ":",
+        [
+          " ",
+          "`Assume LHS is CharCode (ID)`",
+          "name_char"
+        ],
+        [
+          " ",
+          [
+            " ",
+            [
+              " ",
+              [
+                " ",
+                [
+                  " ",
+                  [
+                    " ",
+                    [
+                      " ",
+                      [
+                        " ",
+                        [
+                          " ",
+                          [
+                            " ",
+                            [
+                              " ",
+                              "lhs",
+                              "`Emit Label: char + :`"
+                            ],
+                            "_print_char"
+                          ],
+                          "name_char"
+                        ],
+                        "_print_str"
+                      ],
+                      "`:`"
+                    ],
+                    "_print_char"
+                  ],
+                  10
+                ],
+                "`Compile RHS`"
+              ],
+              "compile_node"
+            ],
+            "rhs"
+          ],
+          "_"
+        ]
+      ]
+    ]
+  ],
+  "`Function: Args ? Body`",
+  [
+    ":",
+    [
+      "=",
+      "op",
+      "`?`"
+    ],
+    [
+      [
+        " ",
+        [
+          " ",
+          [
+            " ",
+            [
+              " ",
+              [
+                " ",
+                [
+                  " ",
+                  [
+                    " ",
+                    [
+                      " ",
+                      [
+                        " ",
+                        [
+                          " ",
+                          [
+                            " ",
+                            [
+                              " ",
+                              "`Args (LHS), Body (RHS)`",
+                              "`Function Prologue/Epilogue?`"
+                            ],
+                            "emit"
+                          ],
+                          "`    stp x29, x30, [sp, #-16]!`"
+                        ],
+                        "emit"
+                      ],
+                      "`    mov x29, sp`"
+                    ],
+                    "compile_node"
+                  ],
+                  "rhs"
+                ],
+                "emit"
+              ],
+              "`    ldp x29, x30, [sp], #16`"
+            ],
+            "emit"
+          ],
+          "`    ret`"
+        ],
+        "_"
+      ]
+    ]
+  ],
+  "_",
+  [
+    ":",
+    "compile_block",
+    [
+      "?",
+      [
+        "nodes"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  [
+    ":",
+    [
+      "=",
+      "nodes",
+      "_"
+    ],
+    "_"
+  ],
+  [
+    ":",
+    "head",
+    [
+      "'",
+      "nodes",
+      0
+    ]
+  ],
+  [
+    ":",
+    "tail",
+    [
+      "'",
+      "nodes",
+      1
+    ]
+  ],
+  [
+    " ",
+    "compile_node",
+    "head"
+  ],
+  [
+    " ",
+    "compile_block",
+    "tail"
+  ],
+  [
+    ":",
+    "main",
+    [
+      "?",
+      [
+        "_"
+      ],
+      [
+        "_"
+      ]
+    ]
+  ],
+  [
+    " ",
+    "_print_str",
+    "`Enter Sign Code (Input): `"
+  ],
+  [
+    " ",
+    "_print_char",
+    10
+  ],
+  [
+    ":",
+    "source",
+    [
+      " ",
+      "read_all",
+      "_"
+    ]
+  ],
+  [
+    ":",
+    "tokens",
+    [
+      " ",
+      "tokenize",
+      "source"
+    ]
+  ],
+  [
+    " ",
+    "_print_str",
+    "`Parsing Block...`"
+  ],
+  [
+    " ",
+    "_print_char",
+    10
+  ],
+  [
+    ":",
+    "res",
+    [
+      " ",
+      "parse_block",
+      "tokens"
+    ]
+  ],
+  [
+    ":",
+    "ast_list",
+    [
+      "'",
+      "res",
+      0
+    ]
+  ],
+  [
+    " ",
+    "_print_str",
+    "`Compiling Block...`"
+  ],
+  [
+    " ",
+    "_print_char",
+    10
+  ],
+  [
+    " ",
+    "compile_block",
+    "ast_list"
+  ],
+  [
+    " ",
+    "_print_str",
+    "`Done.`"
+  ],
+  [
+    " ",
+    "_print_char",
+    10
+  ],
+  [
+    " ",
+    "main",
+    "_"
+  ]
+]

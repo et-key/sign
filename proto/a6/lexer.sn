@@ -1,0 +1,125 @@
+
+`lexer.sn - Tokenizer`
+
+`--- Token Types ---`
+TOK_EOF : -1
+TOK_NUM : 1
+TOK_ID : 2
+TOK_OP : 3
+TOK_INDENT : 4
+TOK_DEDENT : 5
+
+`--- Constants ---`
+EOF : -1
+CHAR_SPACE : 32
+CHAR_NEWLINE : 10
+CHAR_TAB : 9
+CHAR_PLUS : 43
+CHAR_MINUS : 45
+CHAR_0 : 48
+CHAR_9 : 57
+
+`--- Helper Functions ---`
+is_digit : c ? c >= CHAR_0 & c <= CHAR_9
+is_space : c ? c = CHAR_SPACE | c = CHAR_NEWLINE | c = CHAR_TAB
+
+`--- Lexer ---`
+
+`read_all : reads stdin until EOF into a list`
+read_all : _ ?
+    c : _read_char _
+    c = EOF : _ `Unit/Empty List`
+    
+    `Cons char to list`
+    rest : read_all _
+    c , rest
+
+TOK_INDENT : 4
+TOK_DEDENT : 5
+
+`--- Lexer ---`
+
+`count_indent : chars -> [count, rest_chars]`
+count_indent : chars ?
+    chars = _ : [0, _]
+    
+    head : chars ' 0
+    tail : chars ' 1
+    
+    is_space head : (
+        `Only count space/tab, not newline (handled by caller)`
+        head = CHAR_NEWLINE : [0, chars]
+        
+        res : count_indent tail
+        cnt : res ' 0
+        rest : res ' 1
+        [cnt + 1, rest]
+    )
+    
+    [0, chars]
+
+`tokenize_indent : chars, current_indent -> tokens`
+tokenize_indent : chars current_indent ?
+    chars = _ : (
+        `EOF: Emit DEDENTs if indent > 0`
+        `For prototype, assume 1 level dedent at optional EOF or just end.`
+        _
+    )
+    
+    head : chars ' 0
+    
+    `Skip Spaces (Non-Newlines)`
+    head = CHAR_SPACE : (
+        tokenize_indent (chars ' 1) current_indent
+    )
+    head = CHAR_TAB : (
+        tokenize_indent (chars ' 1) current_indent
+    )
+    
+    `Check Newline`
+    head = CHAR_NEWLINE : (
+        tail : chars ' 1
+        res : count_indent tail
+        new_indent : res ' 0
+        rest : res ' 1
+        
+        `Compare Indent`
+        `Note: We assume indent increases by 1 'unit' or we track raw count?`
+        `Let's track raw count for now.`
+        
+        new_indent > current_indent : (
+             `Indent`
+             TOK_INDENT , (tokenize_indent rest new_indent)
+        )
+        
+        new_indent < current_indent : (
+             `Dedent`
+             TOK_DEDENT , (tokenize_indent rest new_indent)
+        )
+        
+        `Same Indent -> Just continue`
+        tokenize_indent rest current_indent
+    )
+    
+    `Normal Tokenize Logic (Pass current_indent)`
+    `Refactored to take indent param`
+    
+    `Check specific chars`
+    head = CHAR_PLUS : [TOK_OP, `+`] , (tokenize_indent (chars ' 1) current_indent)
+    head = CHAR_MINUS : [TOK_OP, `-`] , (tokenize_indent (chars ' 1) current_indent)
+    
+    head = `:` : [TOK_OP, `:`] , (tokenize_indent (chars ' 1) current_indent)
+    head = `?` : [TOK_OP, `?`] , (tokenize_indent (chars ' 1) current_indent)
+    head = `=` : [TOK_OP, `=`] , (tokenize_indent (chars ' 1) current_indent)
+    head = `!` : [TOK_OP, `!`] , (tokenize_indent (chars ' 1) current_indent)
+    
+    `Check Digit`
+    is_digit head : [TOK_NUM, head - CHAR_0] , (tokenize_indent (chars ' 1) current_indent)
+    
+    `ID`
+    id_val : head
+    [TOK_ID, id_val] , (tokenize_indent (chars ' 1) current_indent)
+
+`tokenize : chars -> tokens`
+tokenize : chars ?
+    tokenize_indent chars 0
