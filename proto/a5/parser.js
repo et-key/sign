@@ -7,8 +7,8 @@ import prepareLexer from './prepare_lexer.js';
 import operators from '../../utility/operators.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const INPUT_FILE = path.join(__dirname, 'test_input.sn');
-const OUTPUT_FILE = path.join(__dirname, 'test_output.json');
+const INPUT_FILE = path.join(__dirname, 'main.sn');
+const OUTPUT_FILE = path.join(__dirname, 'main.json');
 
 // --- Helpers ---
 // Sort symbols longest first

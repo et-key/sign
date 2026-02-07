@@ -4,30 +4,23 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const INPUT_FILE = path.join(__dirname, 'test_output.json');
+const INPUT_FILE = path.join(__dirname, 'main.json');
 const OUTPUT_FILE = path.join(__dirname, 'output.s');
 
 const AST = JSON.parse(fs.readFileSync(INPUT_FILE, 'utf8'));
 
 // --- Instruction Dictionary ---
+const UNIT_VAL = '0xDEAD000000000000'; // Placeholder for Unit (False)
+
+// --- Instruction Dictionary ---
 const TEMPLATES = {
 	'+': 'add x0, x1, x0',
-	'-': 'sub x0, x1, x0',
 	'*': 'mul x0, x1, x0',
 	'/': 'sdiv x0, x1, x0',
-	'%': 'sdiv x2, x1, x0\n    msub x0, x2, x0, x1', // x1 % x0 -> x1 - (x1/x0)*x0
+	'%': 'sdiv x2, x1, x0\n    msub x0, x2, x0, x1',
 
 	// Memory (Infix # is Store)
-	'#': 'str x0, [x1]', // x1 # x0 -> str val(x0), [ptr(x1)]
-
-	// Comparison (Simple Boolean 0/1 for Phase 1)
-	'=': 'cmp x1, x0\n    cset x0, eq',
-	'<': 'cmp x1, x0\n    cset x0, lt',
-	'>': 'cmp x1, x0\n    cset x0, gt',
-
-	// Logic
-	'&': 'and x0, x1, x0',
-	'|': 'orr x0, x1, x0'
+	'#': 'str x0, [x1]',
 };
 
 // --- Code Generator ---
@@ -72,11 +65,38 @@ function compileNode(node) {
 		// If 'op' is NOT a string, assume it's a list [expr1, expr2...] to be executed sequentially.
 		// Also if 'op' IS a string but starts with '`', it's a literal, so this is a list of values/exprs (Block).
 		if (typeof op !== 'string' || op.startsWith('`')) {
-			let code = '';
+			// SCAN for Match Syntax ([:] with non-string name)
+			let isMatchBlock = false;
 			for (let subNode of node) {
-				code += compileNode(subNode);
+				if (Array.isArray(subNode) && subNode[0] === ':') {
+					if (typeof subNode[1] !== 'string') isMatchBlock = true;
+				}
 			}
-			return code;
+
+			if (isMatchBlock) {
+				// OR Chain Logic (|)
+				let code = '';
+				let useLabels = (node.length > 0);
+				let lblEnd = generateLabel("match_end");
+
+				for (let i = 0; i < node.length; i++) {
+					code += compileNode(node[i]);
+					if (i < node.length - 1) { // Don't check last one (it returns whatever)
+						code += `    adr x9, sign_id\n`;
+						code += '    cmp x0, x9\n';
+						code += `    b.ne ${lblEnd}\n`; // Found Valid Result -> End
+					}
+				}
+				code += `${lblEnd}:\n`;
+				return code;
+			} else {
+				// Sequential Block
+				let code = '';
+				for (let subNode of node) {
+					code += compileNode(subNode);
+				}
+				return code;
+			}
 		}
 
 		// --- SPECIAL FORMS ---
@@ -87,17 +107,35 @@ function compileNode(node) {
 			const [name, val] = args;
 			// Top-level function definition
 			if (Array.isArray(val) && val[0] === '?') {
+				// If name is expression? Invalid for function def?
+				if (typeof name !== 'string') return `    ; Error: Invalid Function Name\n`;
 				return compileFunction(val, name);
 			}
 
-			// Check if we are at Top-Level (env is emptyish?)
-			// Or just check if `env._stackOffset` is missing?
-			// "Function" scope always sets `_stackOffset`.
-			// Top-Level (main scope compilation) might not.
-			// But we wrap everything in loop.
+			// Match Case Condition: [":", cond, res]
+			// Implement as AND (&) Logic: cond & res
+			if (typeof name !== 'string') {
+				// args[0] is Condition. args[1] is Result.
+				// Logic: If Cond is Truthy (Not Unit), Eval/Return Res. Else Return Unit.
+				let lblFalse = generateLabel("case_fail");
+				let lblEnd = generateLabel("case_end");
 
-			// Actually, we need to know if we are inside a function.
-			// Let's check `env._stackOffset`.
+				let code = '';
+				code += compileNode(name); // Condition -> x0
+				code += `    adr x9, sign_id\n`;
+				code += '    cmp x0, x9\n';
+				code += `    b.eq ${lblFalse}\n`; // Fail -> Unit
+
+				code += compileNode(val); // Result -> x0
+				code += `    b ${lblEnd}\n`;
+
+				code += `${lblFalse}:\n`;
+				code += `    adr x0, sign_id\n`;
+				code += `${lblEnd}:\n`;
+				return code;
+			}
+
+			// Global Variable Definition
 			if (env._stackOffset === undefined) {
 				// GLOBAL VARIABLE DEFINITION
 				// Only support immediate numbers
@@ -109,12 +147,6 @@ function compileNode(node) {
 				} else if (typeof val === 'string' && /^(-?0x|-?0o|-?0b)/.test(val)) {
 					initVal = Number(val);
 				} else {
-					// If it's not a number, we can't emit .quad directly in this Phase.
-					// But for verification, let's complain if we try to put complex expr in global.
-					// However, "current : @heap_ptr" became global because of scope bug.
-					// With scope fix, this branch won't be taken for 'current'.
-					// So we can keep it strict or simple.
-					// Let's mark it clearly.
 					return `    ; ERROR: Global Init must be constant: ${name}\n`;
 				}
 
@@ -124,25 +156,8 @@ function compileNode(node) {
 			}
 
 			// Local Variable Definition (inside function)
-			// 1. Compile Value -> x0
 			let code = compileNode(val);
-			// 2. Push to Stack
 			code += '    str x0, [sp, #-16]!\n';
-			// 3. Update Env (Offset from FP?)
-			// FP is currently SP at entry.
-			// Stack grows down. Arg1 at [fp, #...]?
-			// Let's rely on simple stack tracking relative to FP.
-			// We need a 'context' object passed to compileNode to track stack depth?
-			// Or just use global 'stackDepth'?
-			// 'env' is global for now (reset per function).
-
-			// HACK: We assume simplistic linear stack growth.
-			// Only works if we don't pop?
-			// Sign is immutable-ish. definitions imply new vars.
-			// We define `env[name]` = current_stack_offset.
-
-			// How to get current stack offset? 
-			// We need to track it manually.
 			if (!env._stackOffset) env._stackOffset = 0;
 			env._stackOffset -= 16;
 			env[name] = `local:${env._stackOffset}`;
@@ -242,15 +257,76 @@ function compileNode(node) {
 		}
 
 
-		// Binary Operators (Strict Templates)
-		if (TEMPLATES[op] && args.length === 2) {
+		// Binary Operators (Expanded Check)
+		if (args.length === 2) {
 			let code = '';
-			code += compileNode(args[0]);
-			code += '    str x0, [sp, #-16]!\n';
-			code += compileNode(args[1]);
-			code += '    ldr x1, [sp], #16\n';
-			code += `    ${TEMPLATES[op]}\n`;
-			return code;
+
+			// Comparisons with Unit Logic
+			if (['=', '<', '>', '<=', '>=', '!='].includes(op)) {
+				let lblTrue = generateLabel("true");
+				let lblEnd = generateLabel("end");
+
+				code += compileNode(args[0]); // LHS -> x0
+				code += '    str x0, [sp, #-16]!\n';
+				code += compileNode(args[1]); // RHS -> x0
+				code += '    mov x1, x0\n'; // RHS -> x1
+				code += '    ldr x0, [sp], #16\n'; // LHS -> x0
+				code += '    cmp x0, x1\n';
+
+				let cond = '';
+				if (op === '=') cond = 'eq';
+				if (op === '!=') cond = 'ne';
+				if (op === '<') cond = 'lt';
+				if (op === '>') cond = 'gt';
+				if (op === '<=') cond = 'le';
+				if (op === '>=') cond = 'ge';
+
+				code += `    b.${cond} ${lblTrue}\n`;
+				code += `    adr x0, sign_id ; Unit (False)\n`;
+				code += `    b ${lblEnd}\n`;
+				code += `${lblTrue}:\n`;
+				code += `    mov x0, x1 ; Return RHS\n`;
+				code += `${lblEnd}:\n`;
+				return code;
+			}
+
+			// Manual Logic Operators
+			if (op === '&') {
+				let lblFail = generateLabel("and_fail");
+				let lblEnd = generateLabel("and_end");
+				code += compileNode(args[0]);
+				code += `    adr x9, sign_id\n`;
+				code += '    cmp x0, x9\n';
+				code += `    b.eq ${lblFail}\n`;
+				code += compileNode(args[1]);
+				code += `    b ${lblEnd}\n`;
+				code += `${lblFail}:\n`;
+				code += `    adr x0, sign_id\n`;
+				code += `${lblEnd}:\n`;
+				return code;
+			}
+			if (op === '|') {
+				let lblSucc = generateLabel("or_succ");
+				let lblEnd = generateLabel("or_end");
+				code += compileNode(args[0]);
+				code += `    adr x9, sign_id\n`;
+				code += '    cmp x0, x9\n';
+				code += `    b.ne ${lblSucc}\n`;
+				code += compileNode(args[1]);
+				code += `    b ${lblEnd}\n`;
+				code += `${lblSucc}:\n`;
+				code += `${lblEnd}:\n`;
+				return code;
+			}
+
+			if (TEMPLATES[op]) {
+				code += compileNode(args[0]);
+				code += '    str x0, [sp, #-16]!\n';
+				code += compileNode(args[1]);
+				code += '    ldr x1, [sp], #16\n';
+				code += `    ${TEMPLATES[op]}\n`;
+				return code;
+			}
 		}
 
 		// Fallback or Unknown
@@ -286,11 +362,14 @@ function compileNode(node) {
 
 		let loc = resolveVar(node);
 		if (loc.startsWith('global:')) {
-			// Identifier resolves to VALUE.
-			// Global: Load value from label.
 			let label = loc.split(':')[1];
-			// adr x0, label; ldr x0, [x0]
-			return `    adr x0, ${label}\n    ldr x0, [x0]\n`;
+			if (globals[label] !== undefined) {
+				// Global Variable: Load Value
+				return `    adr x0, ${label}\n    ldr x0, [x0]\n`;
+			} else {
+				// Function Label: Load Address
+				return `    adr x0, ${label}\n`;
+			}
 		}
 
 		// Register or Memory
@@ -404,16 +483,8 @@ for (let expr of AST) {
 }
 
 // Call main?
-// Parse result usually generates "main" label but doesn't call it.
-// We should check if "main" exists in globals/labels and call it.
-// Or we assume the user wrote a top-level expression to run it?
-// In `test_input.sn`: `main : ? ...`. It defines "main". But doesn't call it.
-// We need to explicitly call "main" if it exists.
-asm += `    adr x0, main\n`; // Check if main exists? (Assembler will error if not... wait, simple adr won't error if forward declared?)
-// Let's just assume we need to call it if it's defined.
-// Better: The AST execution flow just DEFINES 'main'. It doesn't run it (since it's inside `?`).
-// So we must manually add a call to main at the end of _start.
-asm += `    blr x0\n`;
+// NO: User must explicitly call main in main.sn (e.g. `main _`)
+// The top-level expressions are executed sequentially.
 
 // Exit (using result in x0 as status code for now?)
 asm += `    mov x8, #93       ; svc exit\n`;
