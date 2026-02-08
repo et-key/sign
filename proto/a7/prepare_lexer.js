@@ -222,6 +222,10 @@ const parseToSExpr = (code) => {
       while (indentStack.length > 1 && indentStack[indentStack.length - 1].indent > indent) {
         indentStack.pop();
       }
+      // After dedent, we are back in parent list.
+      // We should ensure a separator or something?
+      // If the previous block ended, the next item is a new statement.
+      currentList().push({ type: 'separator', value: '\n' });
     }
 
     // Add content tokens to current list
@@ -229,11 +233,20 @@ const parseToSExpr = (code) => {
     // `[ a b ]` -> `['a', 'b']`
     // We need a mini-parser for inline brackets
 
+    // Check for "open" operators at end of line
     const processedLine = processLine(content);
+    const lastToken = processedLine[processedLine.length - 1];
+    const isOpenOp = ['?', ':', '='].includes(lastToken);
+
     currentList().push(...processedLine);
-    // Add newline marker or just rely on structure?
-    // Parser might need newline to separate expressions.
-    currentList().push({ type: 'separator', value: '\n' });
+
+    // Add newline separator UNLESS line ends with open op
+    if (!isOpenOp) {
+      currentList().push({ type: 'separator', value: '\n' });
+    } else {
+      // If open op, we expect next block/line to be argument.
+      // No separator.
+    }
   }
 
   return root;
@@ -251,7 +264,7 @@ const processLine = (tokens) => {
     } else if (t === ']') {
       if (stack.length > 1) stack.pop();
     } else if (t !== '\t') { // Should be no tabs left
-      res.push(t); // Keep as string
+      stack[stack.length - 1].push(t); // Keep as string
     }
   }
   return res;

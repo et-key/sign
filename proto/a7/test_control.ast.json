@@ -1,0 +1,96 @@
+{
+  "type": "block",
+  "body": [
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "fact"
+      },
+      "right": {
+        "type": "infix",
+        "op": "?",
+        "left": {
+          "type": "identifier",
+          "value": "n"
+        },
+        "right": {
+          "type": "block",
+          "body": [
+            {
+              "type": "infix",
+              "op": ":",
+              "left": {
+                "type": "infix",
+                "op": "<",
+                "left": {
+                  "type": "identifier",
+                  "value": "n"
+                },
+                "right": {
+                  "type": "number",
+                  "value": 2
+                }
+              },
+              "right": {
+                "type": "number",
+                "value": 1
+              }
+            },
+            {
+              "type": "infix",
+              "op": "*",
+              "left": {
+                "type": "identifier",
+                "value": "n"
+              },
+              "right": {
+                "type": "apply",
+                "func": {
+                  "type": "identifier",
+                  "value": "fact"
+                },
+                "arg": {
+                  "type": "infix",
+                  "op": "-",
+                  "left": {
+                    "type": "identifier",
+                    "value": "n"
+                  },
+                  "right": {
+                    "type": "number",
+                    "value": 1
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": "#",
+      "left": {
+        "type": "number",
+        "value": 1
+      },
+      "right": {
+        "type": "apply",
+        "func": {
+          "type": "identifier",
+          "value": "fact"
+        },
+        "arg": {
+          "type": "number",
+          "value": 5
+        }
+      }
+    },
+    {
+      "type": "identifier",
+      "value": "_"
+    }
+  ]
+}
