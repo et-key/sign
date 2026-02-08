@@ -78,6 +78,20 @@ function tokenize(code) {
                         }
                     }
 
+                    // Handle Parens
+                    if (remain[0] === '(' || remain[0] === ')') {
+                        subTokens.push({ type: 'marker', value: remain[0] });
+                        pos++;
+                        continue;
+                    }
+
+                    // 3. Operator
+                    let bestOp = null;
+                    for (let sym of opSymbols) {
+                        if (remain.startsWith(sym)) {
+                            if (!bestOp || sym.length > bestOp.length) bestOp = sym;
+                        }
+                    }
                     let isNegLiteral = false;
 
                     // 2. Negative Number Check (Context Aware)
@@ -98,9 +112,7 @@ function tokenize(code) {
                             if (lastReal) {
                                 if (['number', 'string', 'identifier'].includes(lastReal.type)) isValLike = true;
                                 if (lastReal.type === 'marker' && lastReal.value === ']') isValLike = true;
-                                if (lastReal.type === 'marker' && lastReal.value === '|') {
-                                    // Let's assume NON-value for now to allow |-5|.
-                                }
+                                // Pipe is special, assume non-val for |-5|
                                 if (lastReal.type === 'operator') {
                                     if (operators.parseTable[lastReal.value]?.notation === 'postfix') isValLike = true;
                                     if (lastReal.value === '~_') isValLike = true;
@@ -112,20 +124,13 @@ function tokenize(code) {
                         }
                     }
 
+                    // Apply Logic
                     if (isNegLiteral) {
                         let m = remain.match(numRegex);
                         if (m) {
                             subTokens.push({ type: 'number', value: m[0] });
                             pos += m[0].length;
                             continue;
-                        }
-                    }
-
-                    // 3. Operator
-                    let bestOp = null;
-                    for (let sym of opSymbols) {
-                        if (remain.startsWith(sym)) {
-                            if (!bestOp || sym.length > bestOp.length) bestOp = sym;
                         }
                     }
 
@@ -153,7 +158,6 @@ function tokenize(code) {
 
                     pos++;
                 }
-                finalTokens.push(...subTokens);
             }
         }
     }
@@ -247,11 +251,26 @@ function parseBlock(block) {
     let processed = block.map(item => Array.isArray(item) ? parseBlock(item) : item);
     let expressions = [];
     let currentChunk = [];
+    let bracketDepth = 0;
+
     for (let token of processed) {
+        if (token.type === 'marker' && token.value === '(') bracketDepth++;
+        if (token.type === 'marker' && token.value === ')') bracketDepth--;
+
         if (token.type === 'newline_marker') {
-            if (currentChunk.length > 0) {
-                expressions.push(parseExpr(currentChunk));
-                currentChunk = [];
+            if (bracketDepth > 0) {
+                // Inside parens (multi-line group), ignore newline split
+                // Maybe push space? Or just ignore?
+                // Newline as separator?
+                // resolving tokens inside will handle it?
+                // resolveTokens splits by parens.
+                // so we want to keep them in currentChunk.
+                currentChunk.push(token);
+            } else {
+                if (currentChunk.length > 0) {
+                    expressions.push(parseExpr(currentChunk));
+                    currentChunk = [];
+                }
             }
         } else {
             currentChunk.push(token);
@@ -276,6 +295,33 @@ function resolveTokens(tokens) {
 
         if (t.info) { // Already resolved (idempotency)
             stream.push(t);
+            continue;
+        }
+
+        // Handle Parens (Tokenized as marker by our update)
+        if (t.type === 'marker' && t.value === '(') {
+            // Scan for matching ')'
+            let depth = 1;
+            let j = i + 1;
+            while (j < tokens.length) {
+                let sub = tokens[j];
+                if (sub.value === '(') depth++;
+                else if (sub.value === ')') depth--;
+
+                if (depth === 0) break;
+                j++;
+            }
+            if (depth > 0) throw new Error("Unmatched ( in resolveTokens");
+
+            let inner = tokens.slice(i + 1, j);
+            // Parse Inner as BLOCK
+            // parseBlock returns Array of expressions.
+            // We want [TOK_BLOCK (6), expressions, null]
+            let exprs = parseBlock(inner);
+            let blockNode = [6, exprs, null];
+            stream.push(blockNode);
+
+            i = j; // Advance past ')'
             continue;
         }
 

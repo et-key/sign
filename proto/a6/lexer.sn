@@ -40,7 +40,7 @@ TOK_DEDENT : 5
 `--- Lexer ---`
 
 `count_indent : chars -> [count, rest_chars]`
-count_indent : chars ?
+count_indent : chars ? (
     chars = _ : [0, _]
     
     head : chars ' 0
@@ -57,9 +57,10 @@ count_indent : chars ?
     )
     
     [0, chars]
+)
 
 `tokenize_indent : chars, current_indent -> tokens`
-tokenize_indent : chars current_indent ?
+tokenize_indent : chars current_indent ? (
     chars = _ : (
         `EOF: Emit DEDENTs if indent > 0`
         `For prototype, assume 1 level dedent at optional EOF or just end.`
@@ -119,7 +120,9 @@ tokenize_indent : chars current_indent ?
     `ID`
     id_val : head
     [TOK_ID, id_val] , (tokenize_indent (chars ' 1) current_indent)
+)
 
 `tokenize : chars -> tokens`
-tokenize : chars ?
+tokenize : chars ? (
     tokenize_indent chars 0
+)

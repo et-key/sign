@@ -11,7 +11,7 @@ PREC_TERM : 4      `+ -`
 PREC_FACTOR : 5    `* /`
 PREC_POSTFIX : 6   `! (Factorial)`
 
-get_precedence : op ?
+get_precedence : op ? (
     op = `:` : PREC_ASSIGN
     op = `?` : PREC_FUNC
     op = `=` : PREC_COMPARE
@@ -21,6 +21,7 @@ get_precedence : op ?
     op = `/` : PREC_FACTOR
     op = `!` : PREC_POSTFIX
     PREC_NONE
+)
 
 TOK_INDENT : 4
 TOK_DEDENT : 5
@@ -30,7 +31,7 @@ TOK_BLOCK : 6
 EOF : -1
 
 `parse_block_list : tokens -> [list_of_nodes, rest]`
-parse_block_list : tokens ?
+parse_block_list : tokens ? (
     tokens = _ : [_, _]
     
     token : tokens ' 0
@@ -59,13 +60,14 @@ parse_block_list : tokens ?
     `Cons`
     final_nodes : node , nodes , _
     [final_nodes, final_rest]
+)
 
 `--- Parser State Handling ---`
 `State is just the token stream list`
 
 `parse_atom : tokens -> [node, rest]`
 `Parses: Number, or ( Expression )`
-parse_atom : tokens ?
+parse_atom : tokens ? (
     tokens = _ : [_, _] `Error`
     
     token : tokens ' 0
@@ -107,9 +109,10 @@ parse_atom : tokens ?
     
     `Error/Skip`
     [_, rest]
+)
 
 `parse_postfix_loop : lhs, tokens -> [node, rest]`
-parse_postfix_loop : lhs tokens ?
+parse_postfix_loop : lhs tokens ? (
     tokens = _ : [lhs, _]
     
     token : tokens ' 0
@@ -130,9 +133,10 @@ parse_postfix_loop : lhs tokens ?
     
     `Loop`
     parse_postfix_loop new_lhs rest
+)
 
 `parse_expr_climb : lhs, min_prec, tokens -> [node, rest]`
-parse_expr_climb : lhs min_prec tokens ?
+parse_expr_climb : lhs min_prec tokens ? (
     tokens = _ : [lhs, _]
     
     token : tokens ' 0
@@ -174,9 +178,10 @@ parse_expr_climb : lhs min_prec tokens ?
     
     `Not an op, return lhs`
     [lhs, tokens]
+)
 
 `parse_expr : tokens -> [node, rest]`
-parse_expr : tokens ?
+parse_expr : tokens ? (
     `Parse Left`
     res : parse_atom tokens
     lhs : res ' 0
@@ -184,9 +189,10 @@ parse_expr : tokens ?
     
     `Climb`
     parse_expr_climb lhs PREC_NONE rest
+)
     
 `parse_block : tokens -> [ast_list, rest]`
-parse_block : tokens ?
+parse_block : tokens ? (
     tokens = _ : [_, _]
     
     `Check EOF`
@@ -207,3 +213,4 @@ parse_block : tokens ?
     `Cons result`
     final_nodes : node , nodes
     [final_nodes, final_rest]
+)

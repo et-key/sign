@@ -1,0 +1,25 @@
+`test_closure.sn`
+
+`Simple Closure Test`
+make_adder : x ? (
+    `Inner function uses x from outer scope`
+    y ? x + y
+)
+
+`Main`
+main : _ ? (
+    add_five : make_adder 5
+    res : add_five 3
+    
+    `Expected: 8`
+    res = 8 : (
+        `Success`
+        0
+    )
+    res != 8 : (
+        `Fail`
+        1
+    )
+)
+
+main _

@@ -3,11 +3,12 @@
 TOK_NUM : 1
 TOK_BLOCK : 6
 
-emit : str ?
+emit : str ? (
     _print_str str
     _print_char 10
+)
 
-compile_node : node ?
+compile_node : node ? (
     `Check if node is list ([op, args...])`
     
     `If unit (End of block)`
@@ -63,10 +64,16 @@ compile_node : node ?
         
         compile_node child
         
-        op = `!` : (
-             emit `bl _factorial`
-             _
+        `Lookup Op`
+        template : get_op_template op
+        
+        `If template is valid (not Unit), emit it`
+        is_valid : template = _
+        
+        is_valid = _ : (
+             emit template
         )
+        
         _
     )
     
@@ -80,17 +87,31 @@ compile_node : node ?
     compile_node rhs
     emit `ldr x1, [sp], #16`
     
-    op = `+` : (
-        emit `add x0, x1, x0`
-        _
+    `Lookup Table`
+    template : get_op_template op
+    
+    template = _ : (
+        `Not in table, check special forms`
     )
-    op = `-` : (
-        emit `sub x0, x1, x0`
-        _
+    
+    template = _ : _ `Continue to Special Forms` ( `Note: Sign 'if' structure passes through if mismatch? No, logic needed` )
+    
+    `If template found, emit and return`
+    template = _ : 0 `Skip`
+    template = _ : (
+         `Do nothing`
     )
-    op = `*` : (
-        emit `mul x0, x1, x0`
-        _
+    
+    `Sign Logic: We need to branch if template found.`
+    template = _ : (
+        `Fallthrough`
+    )
+    
+    `Control Flow Logic fixed:`
+    found : template = _
+    found = _ : (
+        emit template
+        _ `Return`
     )
     
     `Definition: Name : RHS`
@@ -124,8 +145,9 @@ compile_node : node ?
     )
     
     _
+)
 
-compile_block : nodes ?
+compile_block : nodes ? (
     nodes = _ : _
     
     head : nodes ' 0
@@ -133,3 +155,4 @@ compile_block : nodes ?
     
     compile_node head
     compile_block tail
+)

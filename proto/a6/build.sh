@@ -3,7 +3,7 @@ set -e
 
 echo "Building Sign Compiler (Linux/AArch64)..."
 
-gcc -o sign_compiler runtime.s output.s -static -g
+gcc -o sign_compiler runtime.s output.s -static -g -nostartfiles
 
 if [ $? -eq 0 ]; then
     echo "✓ Build Successful: sign_compiler"
