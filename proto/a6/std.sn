@@ -1,0 +1,52 @@
+`std.sn - Standard Library`
+
+`Operator Table: [Op, AsmTemplate]`
+std_ops : (
+    op_add : [ `+` , `add x0, x1, x0` ]
+    op_sub : [ `-` , `sub x0, x1, x0` ]
+    op_mul : [ `*` , `mul x0, x1, x0` ]
+    op_div : [ `/` , `sdiv x0, x1, x0` ]
+    op_shl : [ `<<` , `lsl x0, x1, x0` ]
+    op_shr : [ `>>` , `asr x0, x1, x0` ]
+    op_or :  [ `||` , `orr x0, x1, x0` ]
+    op_xor : [ `;;` , `eor x0, x1, x0` ]
+    op_and : [ `&&` , `and x0, x1, x0` ]
+    op_fact: [ `!` , `bl _factorial` ]
+    
+    op_eq : [ `=` , `bl _eq` ]
+    op_ne : [ `!=` , `bl _ne` ]
+    op_lt : [ `<` , `bl _lt` ]
+    op_gt : [ `>` , `bl _gt` ]
+    op_le : [ `<=` , `bl _le` ]
+    op_ge : [ `>=` , `bl _ge` ]
+    
+    op_mod : [ `%` , `bl _mod` ]
+    op_pow : [ `^` , `bl _pow` ]
+    op_not : [ `!` , `bl _not` ]
+    op_bitnot : [ `!!` , `bl _bitnot` ]
+    op_abs : [ `!-` , `bl _abs` ]
+    op_store : [ `#` , `str x0, [x1]` ]
+    
+    op_add , op_sub , op_mul , op_div , 
+    op_shl , op_shr , op_or , op_xor , op_and , 
+    op_fact , 
+    op_eq , op_ne , op_lt , op_gt , op_le , op_ge , 
+    op_mod , op_pow , op_not , op_bitnot , op_abs , op_store , _
+)
+
+`Helper to find op template: op -> template | _`
+get_op_template : op ? (
+    find_in_list : list ? (
+        list = _ : _
+        
+        pair : list ' 0
+        key : pair ' 0
+        val : pair ' 1
+        
+        match_res : (key = op : val)
+        rec_res : (match_res = _ : find_in_list (list ' 1))
+        
+        match_res ; rec_res
+    )
+    find_in_list std_ops
+)

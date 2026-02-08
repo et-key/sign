@@ -1,4 +1,56 @@
-﻿
+`std.sn - Standard Library`
+
+`Operator Table: [Op, AsmTemplate]`
+std_ops : (
+    op_add : [ `+` , `add x0, x1, x0` ]
+    op_sub : [ `-` , `sub x0, x1, x0` ]
+    op_mul : [ `*` , `mul x0, x1, x0` ]
+    op_div : [ `/` , `sdiv x0, x1, x0` ]
+    op_shl : [ `<<` , `lsl x0, x1, x0` ]
+    op_shr : [ `>>` , `asr x0, x1, x0` ]
+    op_or :  [ `||` , `orr x0, x1, x0` ]
+    op_xor : [ `;;` , `eor x0, x1, x0` ]
+    op_and : [ `&&` , `and x0, x1, x0` ]
+    op_fact: [ `!` , `bl _factorial` ]
+    
+    op_eq : [ `=` , `bl _eq` ]
+    op_ne : [ `!=` , `bl _ne` ]
+    op_lt : [ `<` , `bl _lt` ]
+    op_gt : [ `>` , `bl _gt` ]
+    op_le : [ `<=` , `bl _le` ]
+    op_ge : [ `>=` , `bl _ge` ]
+    
+    op_mod : [ `%` , `bl _mod` ]
+    op_pow : [ `^` , `bl _pow` ]
+    op_not : [ `!` , `bl _not` ]
+    op_bitnot : [ `!!` , `bl _bitnot` ]
+    op_abs : [ `!-` , `bl _abs` ]
+    op_store : [ `#` , `str x0, [x1]` ]
+    
+    op_add , op_sub , op_mul , op_div , 
+    op_shl , op_shr , op_or , op_xor , op_and , 
+    op_fact , 
+    op_eq , op_ne , op_lt , op_gt , op_le , op_ge , 
+    op_mod , op_pow , op_not , op_bitnot , op_abs , op_store , _
+)
+
+`Helper to find op template: op -> template | _`
+get_op_template : op ? (
+    find_in_list : list ? (
+        list = _ : _
+        
+        pair : list ' 0
+        key : pair ' 0
+        val : pair ' 1
+        
+        match_res : (key = op : val)
+        rec_res : (match_res = _ : find_in_list (list ' 1))
+        
+        match_res ; rec_res
+    )
+    find_in_list std_ops
+)
+
 `lexer.sn - Tokenizer`
 
 `--- Token Types ---`
@@ -40,7 +92,7 @@ TOK_DEDENT : 5
 `--- Lexer ---`
 
 `count_indent : chars -> [count, rest_chars]`
-count_indent : chars ?
+count_indent : chars ? (
     chars = _ : [0, _]
     
     head : chars ' 0
@@ -57,9 +109,10 @@ count_indent : chars ?
     )
     
     [0, chars]
+)
 
 `tokenize_indent : chars, current_indent -> tokens`
-tokenize_indent : chars current_indent ?
+tokenize_indent : chars current_indent ? (
     chars = _ : (
         `EOF: Emit DEDENTs if indent > 0`
         `For prototype, assume 1 level dedent at optional EOF or just end.`
@@ -119,10 +172,12 @@ tokenize_indent : chars current_indent ?
     `ID`
     id_val : head
     [TOK_ID, id_val] , (tokenize_indent (chars ' 1) current_indent)
+)
 
 `tokenize : chars -> tokens`
-tokenize : chars ?
+tokenize : chars ? (
     tokenize_indent chars 0
+)
 
 `parser.sn - Infix / Postfix Parser`
 
@@ -136,7 +191,7 @@ PREC_TERM : 4      `+ -`
 PREC_FACTOR : 5    `* /`
 PREC_POSTFIX : 6   `! (Factorial)`
 
-get_precedence : op ?
+get_precedence : op ? (
     op = `:` : PREC_ASSIGN
     op = `?` : PREC_FUNC
     op = `=` : PREC_COMPARE
@@ -146,6 +201,7 @@ get_precedence : op ?
     op = `/` : PREC_FACTOR
     op = `!` : PREC_POSTFIX
     PREC_NONE
+)
 
 TOK_INDENT : 4
 TOK_DEDENT : 5
@@ -155,7 +211,7 @@ TOK_BLOCK : 6
 EOF : -1
 
 `parse_block_list : tokens -> [list_of_nodes, rest]`
-parse_block_list : tokens ?
+parse_block_list : tokens ? (
     tokens = _ : [_, _]
     
     token : tokens ' 0
@@ -184,13 +240,14 @@ parse_block_list : tokens ?
     `Cons`
     final_nodes : node , nodes , _
     [final_nodes, final_rest]
+)
 
 `--- Parser State Handling ---`
 `State is just the token stream list`
 
 `parse_atom : tokens -> [node, rest]`
 `Parses: Number, or ( Expression )`
-parse_atom : tokens ?
+parse_atom : tokens ? (
     tokens = _ : [_, _] `Error`
     
     token : tokens ' 0
@@ -232,9 +289,10 @@ parse_atom : tokens ?
     
     `Error/Skip`
     [_, rest]
+)
 
 `parse_postfix_loop : lhs, tokens -> [node, rest]`
-parse_postfix_loop : lhs tokens ?
+parse_postfix_loop : lhs tokens ? (
     tokens = _ : [lhs, _]
     
     token : tokens ' 0
@@ -255,9 +313,10 @@ parse_postfix_loop : lhs tokens ?
     
     `Loop`
     parse_postfix_loop new_lhs rest
+)
 
 `parse_expr_climb : lhs, min_prec, tokens -> [node, rest]`
-parse_expr_climb : lhs min_prec tokens ?
+parse_expr_climb : lhs min_prec tokens ? (
     tokens = _ : [lhs, _]
     
     token : tokens ' 0
@@ -299,9 +358,10 @@ parse_expr_climb : lhs min_prec tokens ?
     
     `Not an op, return lhs`
     [lhs, tokens]
+)
 
 `parse_expr : tokens -> [node, rest]`
-parse_expr : tokens ?
+parse_expr : tokens ? (
     `Parse Left`
     res : parse_atom tokens
     lhs : res ' 0
@@ -309,9 +369,10 @@ parse_expr : tokens ?
     
     `Climb`
     parse_expr_climb lhs PREC_NONE rest
+)
     
 `parse_block : tokens -> [ast_list, rest]`
-parse_block : tokens ?
+parse_block : tokens ? (
     tokens = _ : [_, _]
     
     `Check EOF`
@@ -332,16 +393,18 @@ parse_block : tokens ?
     `Cons result`
     final_nodes : node , nodes
     [final_nodes, final_rest]
+)
 `code_generator.sn - Assembly Emitter`
 
 TOK_NUM : 1
 TOK_BLOCK : 6
 
-emit : str ?
+emit : str ? (
     _print_str str
     _print_char 10
+)
 
-compile_node : node ?
+compile_node : node ? (
     `Check if node is list ([op, args...])`
     
     `If unit (End of block)`
@@ -397,10 +460,16 @@ compile_node : node ?
         
         compile_node child
         
-        op = `!` : (
-             emit `bl _factorial`
-             _
+        `Lookup Op`
+        template : get_op_template op
+        
+        `If template is valid (not Unit), emit it`
+        is_valid : template = _
+        
+        is_valid = _ : (
+             emit template
         )
+        
         _
     )
     
@@ -414,17 +483,31 @@ compile_node : node ?
     compile_node rhs
     emit `ldr x1, [sp], #16`
     
-    op = `+` : (
-        emit `add x0, x1, x0`
-        _
+    `Lookup Table`
+    template : get_op_template op
+    
+    template = _ : (
+        `Not in table, check special forms`
     )
-    op = `-` : (
-        emit `sub x0, x1, x0`
-        _
+    
+    template = _ : _ `Continue to Special Forms` ( `Note: Sign 'if' structure passes through if mismatch? No, logic needed` )
+    
+    `If template found, emit and return`
+    template = _ : 0 `Skip`
+    template = _ : (
+         `Do nothing`
     )
-    op = `*` : (
-        emit `mul x0, x1, x0`
-        _
+    
+    `Sign Logic: We need to branch if template found.`
+    template = _ : (
+        `Fallthrough`
+    )
+    
+    `Control Flow Logic fixed:`
+    found : template = _
+    found = _ : (
+        emit template
+        _ `Return`
     )
     
     `Definition: Name : RHS`
@@ -458,8 +541,9 @@ compile_node : node ?
     )
     
     _
+)
 
-compile_block : nodes ?
+compile_block : nodes ? (
     nodes = _ : _
     
     head : nodes ' 0
@@ -467,6 +551,7 @@ compile_block : nodes ?
     
     compile_node head
     compile_block tail
+)
 
 `compiler_main.sn - Entry Point`
 
