@@ -1,0 +1,78 @@
+{
+	"type": "block",
+	"body": [
+		{
+			"type": "apply",
+			"func": {
+				"type": "apply",
+				"func": {
+					"type": "apply",
+					"func": {
+						"type": "infix",
+						"op": "?",
+						"left": {
+							"type": "identifier",
+							"value": "x"
+						},
+						"right": {
+							"type": "infix",
+							"op": "+",
+							"left": {
+								"type": "identifier",
+								"value": "x"
+							},
+							"right": {
+								"type": "number",
+								"value": 1
+							}
+						}
+					},
+					"arg": {
+						"type": "infix",
+						"op": "?",
+						"left": {
+							"type": "identifier",
+							"value": "x"
+						},
+						"right": {
+							"type": "infix",
+							"op": "*",
+							"left": {
+								"type": "identifier",
+								"value": "x"
+							},
+							"right": {
+								"type": "number",
+								"value": 2
+							}
+						}
+					}
+				},
+				"arg": {
+					"type": "infix",
+					"op": "?",
+					"left": {
+						"type": "identifier",
+						"value": "x"
+					},
+					"right": {
+						"type": "infix",
+						"op": "=",
+						"left": {
+							"type": "identifier",
+							"value": "x"
+						},
+						"right": {
+							"type": "number",
+							"value": 8
+						}
+					}
+				}
+			},
+			"arg": {
+				"type": "number",
+				"value": 3
+			}
+		}
+	]
+}

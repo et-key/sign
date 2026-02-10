@@ -5,7 +5,34 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INPUT_FILE = process.argv[2];
-const OUTPUT_FILE = path.join(__dirname, 'output.s');
+
+// Compiler Options
+const defaultOptions = {
+	target: "aarch64",
+	output: "output.s",
+	entry: "main.sn",
+	debug: true,
+	optimize: false,
+	mode: "compile",
+	ExceptionLevel: 0,
+	link: "static"
+};
+
+let options = { ...defaultOptions };
+
+try {
+	const configPath = path.join(__dirname, 'option.json');
+	if (fs.existsSync(configPath)) {
+		const data = fs.readFileSync(configPath, 'utf8');
+		const json = JSON.parse(data);
+		options = { ...options, ...json };
+		console.log("Loaded option.json:", options);
+	}
+} catch (e) {
+	console.warn("Failed to load option.json:", e.message);
+}
+
+const OUTPUT_FILE = path.join(__dirname, options.output);
 
 if (!INPUT_FILE) {
 	console.error("Usage: node compiler.js <ast_json_file>");
@@ -296,22 +323,6 @@ function compileInfix(node) {
 			return code;
 		}
 	}
-	// Wait, the previous tool call replaced `compileNode` block logic AND `compileInfix` colon logic?
-	// No, `compileNode` handles block. `compileInfix` handles colon.
-	// I need to be careful not to create valid code in `compileNode` and then LEAVE valid code in `compileInfix`.
-	// The previous tool call targeted `// 1. Block` in `compileNode`.
-	// But it ALSO included the Colon logic in standard form?
-	// No, I can't put Colon logic inside `compileNode` unless I am replacing `compileInfix` too.
-	// `compileInfix` calls are separate.
-	// The previous replacement content included `// ... (logic for infix :)` which is NOT valid JS.
-	// I made a mistake in the previous tool call. I tried to replace TWO separate sections with one block.
-	// I must use `multi_replace_file_content` or separate calls.
-	// I will use `undo` logic by failing this call? No, I must correct it.
-	// The tool call 534 targeted `StartLine: 144`.
-	// That's `compileNode`.
-	// `compileInfix` is way down at line 231.
-	// I cannot replace both in one `replace_file_content` if they are not contiguous.
-	// I will ABORT this attempt and use `multi_replace_file_content`.
 
 
 	if (op === '?') {
@@ -475,16 +486,42 @@ function compileInfix(node) {
 
 function compileApply(node) {
 	let code = '';
+
+	// 1. Compile Func -> Stack
 	code += compileNode(node.func);
 	code += '    str x0, [sp, #-16]!\n';
 
+	// 2. Compile Arg -> x0
 	code += compileNode(node.arg);
 
-	code += '    ldr x9, [sp], #16\n';
-	code += '    ldr x10, [x9]\n';
-	code += '    ldr x9, [x9, #8]\n';
+	// 3. Dynamic Check: is Arg (x0) a function?
+	let lblCompose = generateLabel("do_compose");
+	let lblApply = generateLabel("do_apply");
+	let lblEnd = generateLabel("apply_end");
 
+	// Check if Arg is Func
+	// We check x0 directly. If > 4096, it's a pointer (Func).
+
+	code += '    cmp x0, #4096\n';
+	code += `    b.hi ${lblCompose}\n`;
+
+	// Case A: Apply (Arg is Data)
+	code += `${lblApply}:\n`;
+	code += '    ldr x9, [sp], #16\n'; // Pop Func
+	code += '    ldr x10, [x9]\n';     // Code
+	code += '    ldr x9, [x9, #8]\n';  // Env
 	code += '    blr x10\n';
+	code += `    b ${lblEnd}\n`;
+
+	// Case B: Compose (Arg is Func)
+	// Stack: [Func]
+	// x0: Arg (Func)
+	code += `${lblCompose}:\n`;
+	code += '    mov x1, x0\n';        // x1 = Arg (g)
+	code += '    ldr x0, [sp], #16\n'; // Pop Func -> x0 (f)
+	code += '    bl _compose\n';       // Returns Closure h(x) = g(f(x))
+
+	code += `${lblEnd}:\n`;
 	return code;
 }
 
@@ -651,7 +688,13 @@ for (let name of Object.keys(globals)) {
 	}
 }
 
-let finalOutput = `
+let finalOutput = `// Sign Compiler Output
+// Target: ${options.target}
+// Mode: ${options.mode}
+// Exception Level: ${options.ExceptionLevel}
+// Link: ${options.link}
+// Options: debug=${options.debug}, optimize=${options.optimize}
+
 .global __sign_init
 .text
 __sign_init:
@@ -660,10 +703,114 @@ __sign_init:
 
 ${mainCode}
 
+
+    ldp x29, x30, [sp], #16
+    ret
+`;
+
+finalOutput += `
+// --- Runtime Helpers for Composition ---
+
+// _is_func: x0 -> x0 (1 if func, 0 if not)
+// Simple heuristic: If > 4096, it's a pointer (Func). Else Number.
+// (Very naive, needs tagging later)
+_is_func:
+    cmp x0, #4096
+    b.hi .L_is_func_true
+    mov x0, #0
+    ret
+.L_is_func_true:
+    mov x0, #1
+    ret
+
+// _compose: x0=f, x1=g -> Returns Closure h(x) = g(f(x))
+// Creates a closure that captures f and g.
+// The code for h is _composed_impl.
+_compose:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    
+    // Save f(x0) and g(x1) to stack to build closure
+    str x0, [sp, #-16]! // f
+    str x1, [sp, #-16]! // g
+    
+    // Create Env list: [g, f] (cons g (cons f sign_id)) ?
+    // Environment for _composed_impl needs f and g.
+    // Env: [g, [f, sign_id]]
+    
+    adr x0, sign_id
+    str x0, [sp, #-16]! // nil
+    
+    ldr x0, [x29, #-16] // Load f
+    ldr x1, [sp], #16   // Pop nil
+    bl _cons            // x0 = [f, nil]
+    str x0, [sp, #-16]! // Push env
+    
+    ldr x0, [x29, #-32] // Load g
+    ldr x1, [sp], #16   // Pop env
+    bl _cons            // x0 = [g, [f, nil]]
+    
+    // Create Closure: [_composed_impl, Env]
+    str x0, [sp, #-16]! // Env
+    adr x0, _composed_impl
+    ldr x1, [sp], #16   // Env
+    bl _cons            // Closure
+    
+    mov sp, x29
     ldp x29, x30, [sp], #16
     ret
 
-${dataSection}
+// _composed_impl: x0=Arg. Env=[g, [f, nil]]
+// Logic: g( f(Arg) )
+_composed_impl:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    
+    // Save Arg
+    str x0, [sp, #-16]!
+    
+    str x9, [sp, #-16]! // Save Env to Stack (local var 1)
+    
+    // 1. Call f(Arg)
+    // We need f.
+    // Env -> [g, rest]. rest -> [f, nil].
+    ldr x10, [x9, #8] // rest = [f, nil]
+    ldr x10, [x10]    // f (Closure)
+    str x10, [sp, #-16]! // Save f
+    
+    // Prepare Call to f
+    // x0 is Arg (already in x0)
+    // closure in x10
+    // Unpack f
+    mov x9, x10
+    ldr x10, [x9]     // Code
+    ldr x9, [x9, #8]  // f's Env
+    blr x10           // Call f(Arg) -> returns result in x0
+    
+    // 2. Call g(Result)
+    // Result is in x0.
+    // Load g from saved Env (at [sp, #16])
+    ldr x9, [sp, #16] // Reload 'Env' (which was saved at start)
+    
+    // Reload Env
+    ldr x11, [sp, #16] // Env
+    ldr x10, [x11]     // g (Closure)
+    
+    // Unpack g
+    mov x9, x10
+    ldr x10, [x9]     // Code
+    ldr x9, [x9, #8]  // g's Env
+    blr x10           // Call g(f(Arg)) -> returns result
+    
+    // Clean up stack
+    add sp, sp, #32 // Pop f, Env.
+    
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+`;
+
+finalOutput += `
 ${bssSection}
 `;
 

@@ -276,8 +276,224 @@ const parseAtom = (tokens) => {
 };
 
 const parseBlock = (tokens) => {
+	// Check for Operator Section pattern in a "Block" (Array)
+	// [ + 1 ] -> (x ? x + 1)
+	// [ 1 + ] -> (x ? 1 + x)
+	// [ + ]   -> (x ? y ? x + y)
+
+	// Filter separators for analysis
+	const cleanTokens = tokens.filter(t => !isSeparator(t));
+
+	if (cleanTokens.length > 0) {
+		// Case 1: [ op expr ] -> Right Section
+		if (cleanTokens.length === 2 && typeof cleanTokens[0] === 'string' && isOpSymbol(cleanTokens[0])) {
+			const op = cleanTokens[0];
+			// Ensure it's not a prefix op like '!' if followed by expr? 
+			// But `[ ! x ]` -> `_ ? ! x` ? Or `_ ? _ ! x` (infix)?
+			// Assumption: If it's in [], and starts with Op, it's a section.
+			// Unless it's a known prefix-only op?
+
+			// We need to parse the rest to see if it's an expression
+			// But parseExpr consumes tokens.
+			// Let's try to parse the block as usual first.
+		}
+	}
+
 	const exprs = [];
 	const blockTokens = [...tokens];
+
+	// Special handling for Operator Sections
+	// If the block contains exactly [ op expr ] or [ expr op ] or [ op ]
+	// We need to detect this BEFORE regular parsing, or start parsing and see?
+
+	// Issue: `parseExpr` might consume `+ 1` as `(+ 1)` (prefix +). 
+	// If `+` is infix, `+ 1` is invalid expr normally?
+	// `parser.js` `parseAtom` handles prefix ops. 
+	// `+` can be prefix (unary plus)? Sign doesn't have unary plus usually?
+	// If `+` is only infix, `parseExpr` fails or returns null?
+
+	// Let's check `processLine` in lexer. `[ + 1 ]` -> `['+', '1']`.
+
+	const isSectionOp = (t) => typeof t === 'string' && isOpSymbol(t);
+
+	// Try to detect section
+	// 1. [ op ]
+	if (cleanTokens.length === 1 && isSectionOp(cleanTokens[0])) {
+		const op = cleanTokens[0];
+
+		// Normal Lambda: x ? y ? x op y
+		const opLambda = {
+			type: 'infix', op: '?',
+			left: { type: 'identifier', value: '$2' },
+			right: {
+				type: 'infix', op: '?',
+				left: { type: 'identifier', value: '$3' },
+				right: {
+					type: 'infix', op: op,
+					left: { type: 'identifier', value: '$2' },
+					right: { type: 'identifier', value: '$3' }
+				}
+			}
+		};
+
+		// Composition Logic: $1 ? (_is_func $1) ? _compose(opLambda, $1) : opLambda($1)
+		// Default: opLambda($1) -> y ? $1 op y
+		const defaultCase = {
+			type: 'infix', op: '?',
+			left: { type: 'identifier', value: '$2' },
+			right: {
+				type: 'infix', op: op,
+				left: { type: 'identifier', value: '$1' },
+				right: { type: 'identifier', value: '$2' }
+			}
+		};
+
+		return {
+			type: 'infix', op: '?',
+			left: { type: 'identifier', value: '$1' },
+			right: {
+				type: 'infix', op: ';',
+				left: {
+					type: 'infix', op: '?',
+					left: {
+						type: 'apply',
+						func: { type: 'identifier', value: '_is_func' },
+						arg: { type: 'identifier', value: '$1' }
+					},
+					right: {
+						type: 'apply',
+						func: {
+							type: 'apply',
+							func: { type: 'identifier', value: '_compose' },
+							arg: opLambda
+						},
+						arg: { type: 'identifier', value: '$1' }
+					}
+				},
+				right: defaultCase
+			}
+		};
+	}
+
+	// 2. [ op expr ] (Right Section: [+ 1] -> x + 1)
+	if (cleanTokens.length >= 2 && isSectionOp(cleanTokens[0])) {
+		const opStr = cleanTokens[0];
+		if (findOp(opStr, 'infix')) {
+			// Parse the rest as expr
+			const content = [...tokens];
+			// remove leading separators until op
+			while (content.length > 0 && isSeparator(content[0])) content.shift();
+			content.shift(); // remove op
+
+			const rhs = parseExpr(content);
+			if (rhs && content.every(t => isSeparator(t))) {
+
+				// opLambda: $2 ? $2 op rhs
+				const opLambda = {
+					type: 'infix', op: '?',
+					left: { type: 'identifier', value: '$2' },
+					right: {
+						type: 'infix', op: opStr,
+						left: { type: 'identifier', value: '$2' },
+						right: rhs
+					}
+				};
+
+				// Default: $1 op rhs
+				const defaultCase = {
+					type: 'infix', op: opStr,
+					left: { type: 'identifier', value: '$1' },
+					right: rhs
+				};
+
+				return {
+					type: 'infix', op: '?',
+					left: { type: 'identifier', value: '$1' },
+					right: {
+						type: 'infix', op: ';',
+						left: {
+							type: 'infix', op: '?',
+							left: {
+								type: 'apply',
+								func: { type: 'identifier', value: '_is_func' },
+								arg: { type: 'identifier', value: '$1' }
+							},
+							right: {
+								type: 'apply',
+								func: {
+									type: 'apply',
+									func: { type: 'identifier', value: '_compose' },
+									arg: opLambda
+								},
+								arg: { type: 'identifier', value: '$1' }
+							}
+						},
+						right: defaultCase
+					}
+				};
+			}
+		}
+	}
+
+	// 3. [ expr op ] (Left Section: [1 +] -> 1 + x)
+	if (cleanTokens.length >= 2 && isSectionOp(cleanTokens[cleanTokens.length - 1])) {
+		const opStr = cleanTokens[cleanTokens.length - 1];
+		if (findOp(opStr, 'infix')) {
+			const content = [...tokens];
+			while (content.length > 0 && isSeparator(content[content.length - 1])) content.pop();
+			const last = content.pop(); // Op
+			if (last === opStr) {
+				const lhs = parseExpr(content);
+				if (lhs && content.every(t => isSeparator(t))) {
+
+					// opLambda: $2 ? lhs op $2
+					const opLambda = {
+						type: 'infix', op: '?',
+						left: { type: 'identifier', value: '$2' },
+						right: {
+							type: 'infix', op: opStr,
+							left: lhs,
+							right: { type: 'identifier', value: '$2' }
+						}
+					};
+
+					// Default: lhs op $1
+					const defaultCase = {
+						type: 'infix', op: opStr,
+						left: lhs,
+						right: { type: 'identifier', value: '$1' }
+					};
+
+					return {
+						type: 'infix', op: '?',
+						left: { type: 'identifier', value: '$1' },
+						right: {
+							type: 'infix', op: ';',
+							left: {
+								type: 'infix', op: '?',
+								left: {
+									type: 'apply',
+									func: { type: 'identifier', value: '_is_func' },
+									arg: { type: 'identifier', value: '$1' }
+								},
+								right: {
+									type: 'apply',
+									func: {
+										type: 'apply',
+										func: { type: 'identifier', value: '_compose' },
+										arg: opLambda
+									},
+									arg: { type: 'identifier', value: '$1' }
+								}
+							},
+							right: defaultCase
+						}
+					};
+				}
+			}
+		}
+	}
+
 
 	while (blockTokens.length > 0) {
 		if (isSeparator(blockTokens[0])) {
