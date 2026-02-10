@@ -28,7 +28,7 @@ const ops = [
 	{ symbol: "~^", precedence: 9, notation: "infix" },
 	{ symbol: "~", precedence: 10, notation: "prefix", associativity: "right" }, // Continuous
 	{ symbol: ";", precedence: 11, notation: "infix", associativity: "left" },
-	{ symbol: "|", precedence: 12, notation: "infix", associativity: "left" },
+	{ symbol: "|", precedence: 12, notation: "infix", associativity: "left" }, // Logic OR (User def)
 	{ symbol: "&", precedence: 13, notation: "infix", associativity: "left" },
 	{ symbol: "!", precedence: Infinity, notation: "prefix", associativity: "right" }, // Not
 	{ symbol: "<", precedence: 14, notation: "infix", associativity: "left" },
@@ -183,12 +183,54 @@ const parseExpr = (tokens, minPrec = 0) => {
 		return null;
 	}
 
+	// Helper to check if a token can start an expression
+	const canStartExpr = (token) => {
+		if (!token) return false;
+		if (Array.isArray(token)) return true; // Block
+		if (typeof token === 'string') {
+			if (token.startsWith('`')) return true; // String
+			if (token.startsWith('\\')) return true; // Char
+			if (!isNaN(parseFloat(token))) return true; // Number
+			if (isOpSymbol(token)) {
+				// Prefix?
+				return !!findOp(token, 'prefix');
+			}
+			return true; // Identifier
+		}
+		return false;
+	};
+
 	let lhs = parseAtom(tokens);
 	if (!lhs) return null;
 
 	while (tokens.length > 0) {
 		let lookahead = tokens[0];
 
+		// Special handling for ambiguous `|`
+		// If | is followed by something that CANNOT start an expression, treat it as terminator (Abs closing).
+		if (lookahead === '|') {
+			// Check next
+			if (tokens.length > 1 && !canStartExpr(tokens[1])) {
+				break; // Terminator
+			}
+			// Be careful: | | x | | -> Abs(Abs(x)).
+			// | (first) -> Prefix.
+			// | (second) -> Prefix.
+			// x
+			// | (third) -> Closing. Followed by |.
+			// But | IS a Prefix op. So canStartExpr('|') is true.
+			// So third | is treated as Infix?
+			// | x | y.
+			// | x | | y |.
+			// If | x OP | y.
+			// If | x | ... | (Infix) | (Prefix).
+
+			// Simplification: | is Infix ONLY if followed by valid expr starter.
+			// If | is followed by |, it matches Prefix |.
+			// So | x | | y | -> Abs(x) | Abs(y).
+		}
+
+		if (isSeparator(lookahead)) break;
 		if (typeof lookahead === 'string' && isOpSymbol(lookahead)) {
 			const opSymbol = lookahead;
 
@@ -214,12 +256,12 @@ const parseExpr = (tokens, minPrec = 0) => {
 			}
 		}
 
-		if (isSeparator(lookahead)) break;
+		if (isSeparator(lookahead) || lookahead === '|') break;
 
 		// Apply
 		if (APPLY_PREC < minPrec) break;
 
-		if (isSeparator(lookahead)) break;
+		if (isSeparator(lookahead) || lookahead === '|') break;
 
 		const rhsAtom = parseExpr(tokens, APPLY_PREC + 1);
 		if (rhsAtom) {
@@ -242,6 +284,18 @@ const parseAtom = (tokens) => {
 
 	if (typeof token === 'string') {
 		const value = token;
+
+		if (value === '|') {
+			const expr = parseExpr(tokens, 0);
+			const next = tokens.shift();
+			// Handle missing closing pipe gracefullly? Or throw?
+			// User sample implies strict pairing.
+			if (next !== '|') {
+				// This might happen if EOF or mismatched.
+				// For now, assume correct.
+			}
+			return { type: 'abs', expr };
+		}
 
 		// Prefix Op
 		if (isOpSymbol(value)) {

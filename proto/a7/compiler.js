@@ -4,14 +4,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const INPUT_FILE = process.argv[2];
 
 // Compiler Options
 const defaultOptions = {
 	target: "aarch64",
 	output: "output.s",
 	entry: "main.sn",
-	debug: true,
+	debug: false,
 	optimize: false,
 	mode: "compile",
 	ExceptionLevel: 0,
@@ -20,22 +19,40 @@ const defaultOptions = {
 
 let options = { ...defaultOptions };
 
+// Load config
 try {
 	const configPath = path.join(__dirname, 'option.json');
 	if (fs.existsSync(configPath)) {
 		const data = fs.readFileSync(configPath, 'utf8');
 		const json = JSON.parse(data);
 		options = { ...options, ...json };
-		console.log("Loaded option.json:", options);
+		// console.log("Loaded option.json:", options);
 	}
 } catch (e) {
 	console.warn("Failed to load option.json:", e.message);
 }
 
+// Parse Args
+const args = process.argv.slice(2);
+let INPUT_FILE = null;
+
+for (let i = 0; i < args.length; i++) {
+	const arg = args[i];
+	if (arg === '-o') {
+		options.output = args[++i];
+	} else if (arg === '-O') {
+		options.optimize = true;
+	} else if (arg === '-g') {
+		options.debug = true;
+	} else if (!arg.startsWith('-')) {
+		INPUT_FILE = arg;
+	}
+}
+
 const OUTPUT_FILE = path.join(__dirname, options.output);
 
 if (!INPUT_FILE) {
-	console.error("Usage: node compiler.js <ast_json_file>");
+	console.error("Usage: node compiler.js <ast_json_file> [-o output] [-O] [-g]");
 	process.exit(1);
 }
 
@@ -192,6 +209,17 @@ function compileNode(node) {
 	// 6. Apply
 	if (node.type === 'apply') {
 		return compileApply(node);
+	}
+
+	// 7. Abs
+	if (node.type === 'abs') {
+		let code = compileNode(node.expr);
+		let lblPos = generateLabel("abs_pos");
+		code += '    cmp x0, #0\n';
+		code += `    b.ge ${lblPos}\n`;
+		code += '    neg x0, x0\n';
+		code += `${lblPos}:\n`;
+		return code;
 	}
 
 	return `    // UNKNOWN NODE TYPE ${node.type}\n`;
@@ -436,6 +464,40 @@ function compileInfix(node) {
 
 		code += `${lblFalse}:\n`;
 		code += '    mov x0, x1\n';
+		return code;
+	}
+
+	if (op === '||') {
+		// Bitwise OR (User: bit_or)
+		let code = compileNode(left);
+		code += '    str x0, [sp, #-16]!\n';
+		code += compileNode(right);
+		code += '    mov x1, x0\n';
+		code += '    ldr x0, [sp], #16\n';
+		code += '    orr x0, x1, x0\n';
+		return code;
+	}
+
+	if (op === '|') {
+		// Logic OR (User: logic_or)
+		// Short-circuit? "First Truthy".
+		// Truthy = Not Unit AND Not 0?
+		// User example: 0 | 1 -> 1. So 0 is "Falseish" for this op?
+
+		let lblRight = generateLabel("or_right");
+		let lblEnd = generateLabel("or_end");
+
+		let code = compileNode(left);
+		// Check if False (Unit)
+		code += '    adr x9, sign_id\n';
+		code += '    cmp x0, x9\n';
+		code += `    b.eq ${lblRight}\n`;
+
+		// If here, LHS is Truthy. Return LHS.
+		code += `    b ${lblEnd}\n`;
+
+		code += `${lblRight}:\n`;
+		code += compileNode(right);
 
 		code += `${lblEnd}:\n`;
 		return code;

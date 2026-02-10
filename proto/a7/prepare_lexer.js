@@ -23,8 +23,8 @@ const markSeparator = code => code
   // Sign operators are symbols.
   // We want `x,` -> `x` `,`
   .replace(
-    /(\\[\s\S])|(`[^`\r\n]*`)|(?<!\\)([,\:;])/g,
-    (_, $1, $2, $3) => ($1 || $2) || ($3 && `\x1F${$3}\x1F`)
+    /(\\[\s\S])|(`[^`\r\n]*`)|(\|\|)|(?<!\\)([,\:;|])/g,
+    (_, $1, $2, $3, $4) => ($1 || $2 || $3) || ($4 && `\x1F${$4}\x1F`)
   )
   // 3. Separate Spaces
   .replace(
