@@ -338,9 +338,25 @@ function compileInfix(node) {
 			if (left.value === 2) { isMagic = true; fd = 2; }
 		}
 
+
 		if (isMagic) {
 			let code = compileNode(right);
 
+			let lblPrintNum = generateLabel("print_num");
+			let lblPrintStr = generateLabel("print_str");
+			let lblDone = generateLabel("print_done");
+
+			// Check if x0 is a pointer (> 4096) or Number
+			code += '    cmp x0, #4096\n';
+			code += `    b.hi ${lblPrintStr}\n`;
+
+			// Print Number
+			code += `${lblPrintNum}:\n`;
+			code += '    bl _print_int\n';
+			code += `    b ${lblDone}\n`;
+
+			// Print String
+			code += `${lblPrintStr}:\n`;
 			code += `    // Magic IO Write to FD ${fd}\n`;
 			code += `    mov x1, x0       // buf = RHS\n`;
 			code += `    mov x0, #${fd}   // fd\n`;
@@ -348,17 +364,18 @@ function compileInfix(node) {
 			// Calculate length (strlen logic)
 			code += `    mov x2, #0       // len\n`;
 			let lblLoop = generateLabel("strlen");
-			let lblDone = generateLabel("strlen_done");
+			let lblStrDone = generateLabel("strlen_done");
 			code += `${lblLoop}:\n`;
 			code += `    ldrb w3, [x1, x2]\n`;
-			code += `    cbz w3, ${lblDone}\n`;
+			code += `    cbz w3, ${lblStrDone}\n`;
 			code += `    add x2, x2, #1\n`;
 			code += `    b ${lblLoop}\n`;
-			code += `${lblDone}:\n`;
+			code += `${lblStrDone}:\n`;
 
 			code += `    mov x8, #64      // syscall write\n`;
 			code += `    svc #0\n`;
 
+			code += `${lblDone}:\n`;
 			code += '    adr x0, sign_id\n';
 			return code;
 		}
@@ -446,7 +463,14 @@ function compileInfix(node) {
 		code += '    adr x0, sign_id\n';
 		code += `    b ${lblEnd}\n`;
 		code += `${lblTrue}:\n`;
-		code += '    mov x0, x1\n';
+		// Mixed Return Strategy for Chaining:
+		// If Left is Literal (Bound), return Right (Value).
+		// If Left is Variable/Expr (Value), return Left (Value).
+		if (['number', 'string'].includes(left.type)) {
+			code += '    mov x0, x1\n'; // Return RHS
+		} else {
+			// Return LHS (already in x0)
+		}
 		code += `${lblEnd}:\n`;
 		return code;
 	}
@@ -808,6 +832,79 @@ _composed_impl:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
+
+// _print_int: x0 = integer
+// Prints integer to stdout
+_print_int:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    
+    // Handle 0 explicitly
+    cmp x0, #0
+    b.ne .L_print_int_not_zero
+    
+    // Print "0"
+    mov x0, #1 // stdout
+    adr x1, .L_str_zero
+    mov x2, #1 // len
+    mov x8, #64 // write
+    svc #0
+    
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+    
+.L_print_int_not_zero:
+    // We need a buffer. Use stack.
+    // Max 64-bit int is ~20 digits.
+    sub sp, sp, #64         // Alloc 64 bytes
+    mov x9, sp              // buffer start
+    add x9, x9, #63         // buffer end
+    strb wzr, [x9]          // null terminate? Not needed for write syscall if we know len.
+    sub x9, x9, #1          // Move back
+    
+    mov x10, #10            // divisor
+    mov x11, x0             // number
+    
+    // Loop
+.L_print_int_loop:
+    udiv x12, x11, x10      // q = n / 10
+    msub x13, x12, x10, x11 // r = n - q * 10
+    
+    add w13, w13, #48       // '0'
+    strb w13, [x9]
+    sub x9, x9, #1
+    
+    mov x11, x12
+    cbnz x11, .L_print_int_loop
+    
+    // Print
+    add x1, x9, #1          // Start address
+    
+    // Length = (sp + 63) - (x9 + 1) + 1?
+    // End is sp+63.
+    // Start is x1.
+    // Len = (sp+63) - x1.
+    mov x2, sp
+    add x2, x2, #63
+    sub x2, x2, x1
+    add x2, x2, #1          // Fix length? No.
+    // If end=100, start=100. Len = 100-100+1 = 1.
+    // Wait. sp+63 is the last written byte.
+    // x1 is the first written byte.
+    // Length is (last - first) + 1. Correct.
+    
+    mov x0, #1 // stdout
+    mov x8, #64 // write
+    svc #0
+    
+    add sp, sp, #64
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+    
+.L_str_zero:
+    .ascii "0"
 `;
 
 finalOutput += `
