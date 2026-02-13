@@ -1,12 +1,12 @@
 # Sign Language Operator Symbol Table (Priority Order)
 
 ## Basic Principles
-- Prefix operators must be placed immediately before the target value (must not be separated from the target value by spaces)
-- Postfix operators must be placed immediately after the target value (must not be separated from the target value by spaces)
-- Infix operators must be placed between target values and separated by spaces
+- Prefix operators must be placed immediately before the target value (no space between operator and operand)
+- Postfix operators must be placed immediately after the target value (no space between operand and operator)
+- Infix operators must be placed between target values, separated by spaces on both sides
 - Expression using only operators without reserved words
 - Alignment between natural meaning of symbols and operational meaning
-- Arranged from lowest priority (evaluated later) to highest priority
+- Arranged from lowest priority (evaluated later) to highest priority (evaluated first)
 - Coproduct operators can be considered as simple delimiters, and all spaces can be regarded as coproduct operators
 - The reason spaces can be regarded as delimiters is that the priority with product operators can be appropriately determined in subsequent processing
 - Line breaks can also be considered as operators, in which case their function has the meaning of evaluation on a line-by-line basis
@@ -17,15 +17,15 @@
 - Prefix or postfix operators that must strictly respect precedence are marked with ※ in the priority notation
 
 | Priority | Symbol | Position | Function | Natural Meaning | Operational Semantics |
-|----------|--------|----------|----------|-----------------|---------------------|
+|----------|--------|----------|----------|-----------------|----------------------|
 | 1 | `#` | prefix | export | Hashtag (public/discoverable) | Make name discoverable from within the project |
 | 1 | `##` | prefix | export | Hashtag (public/discoverable) | Make name discoverable from outside (corresponds to ARC) |
 | 1 | `###` | prefix | export | Hashtag (public/discoverable) | Make name discoverable from outside (assuming no unload in Pin region) |
 | 2 | `:` | infixR※ | define | That is (identification) | Bind left-hand name (condition) to right-hand value |
 | 3 | `#` | infix | output | Hashtag (association) | Associate data with address |
-| 4 | `,` | infixR※ | product | Product (structural assembly) | Right-associative list construction |
-| 5 | ` ` | infix | apply | Coproduct (concatenation) | Function application |
-| 6 | `?` | infixR※ | lambda | Question (what to do?) | Function definition |
+| 4 | ` ` | infix | apply | Coproduct (concatenation) | Function application |
+| 5 | `?` | infixR※ | lambda | Question (what to do?) | Function definition |
+| 6 | `,` | infixR※ | product | Product (structural assembly) | Right-associative list construction |
 | 7 | ` ` | infix | compose | Coproduct (concatenation) | Left-associative function composition |
 | 8 | ` ` | infix | push | Coproduct (concatenation) | Add to list |
 | 8 | ` ` | infix | concat | Coproduct (concatenation) | List concatenation |
@@ -72,6 +72,7 @@
 | 30 | `{...}` | enclosure | block | Block | Inline block construction |
 | 30 | `[...]` | enclosure | block | Block | Inline block construction |
 | 30 | `\t` | prefix | indent | Indent | Indented block construction |
+| 31 | `\\` | prefix | escape | Char conversion | Treat the immediately following character as a character literal |
 
 ※Conditional branching is only represented by match_case expressions using function block syntax.
 ※When you want to perform function composition with right associativity, use parentheses to make it explicit.
@@ -80,8 +81,8 @@
 ## Special Symbols
 
 | Symbol | Function | Natural Meaning | Operational Semantics |
-|--------|----------|-----------------|---------------------|
-| `_` | unit | Visible no-value (explicit empty) | Empty list/identity morphism/unit element |
+|--------|----------|-----------------|----------------------|
+| `_` | unit | Visible no-value (explicit empty) | Empty list / identity morphism / unit element |
 
 ## Design Philosophy
 - **Symbols understandable by everyone**: Prioritize intuitive understanding over mathematical rigor
