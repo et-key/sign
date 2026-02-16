@@ -19,23 +19,41 @@ const defaultOptions = {
 
 let options = { ...defaultOptions };
 
+// Parse Args (Pass 1: Get Input File)
+const args = process.argv.slice(2);
+let INPUT_FILE = null;
+for (let arg of args) {
+	if (!arg.startsWith('-')) {
+		INPUT_FILE = arg;
+		break;
+	}
+}
+
 // Load config
 try {
-	const configPath = path.join(__dirname, 'option.json');
-	if (fs.existsSync(configPath)) {
-		const data = fs.readFileSync(configPath, 'utf8');
-		const json = JSON.parse(data);
-		options = { ...options, ...json };
-		// console.log("Loaded option.json:", options);
+	let configDirs = [process.cwd()];
+	if (INPUT_FILE) {
+		configDirs.unshift(path.dirname(path.resolve(INPUT_FILE)));
+	}
+	configDirs.push(__dirname); // Fallback to compiler dir
+
+	let loaded = false;
+	for (let dir of configDirs) {
+		const configPath = path.join(dir, 'option.json');
+		if (fs.existsSync(configPath)) {
+			const data = fs.readFileSync(configPath, 'utf8');
+			const json = JSON.parse(data);
+			options = { ...options, ...json };
+			if (options.debug) console.log(`Loaded option.json from ${dir}`);
+			loaded = true;
+			break; // Stop at first find? Or merge? User said "folder specific", usually implies nearest wins.
+		}
 	}
 } catch (e) {
 	console.warn("Failed to load option.json:", e.message);
 }
 
-// Parse Args
-const args = process.argv.slice(2);
-let INPUT_FILE = null;
-
+// Parse Args (Pass 2: Overrides)
 for (let i = 0; i < args.length; i++) {
 	const arg = args[i];
 	if (arg === '-o') {
@@ -44,8 +62,6 @@ for (let i = 0; i < args.length; i++) {
 		options.optimize = true;
 	} else if (arg === '-g') {
 		options.debug = true;
-	} else if (!arg.startsWith('-')) {
-		INPUT_FILE = arg;
 	}
 }
 
@@ -93,7 +109,11 @@ let globals = {
 const runtimeClosures = {
 	"_print_str": "closure_print_str",
 	"_print_char": "closure_print_char",
-	"_read_char": "sign_id"
+	"_print_str": "closure_print_str",
+	"_print_char": "closure_print_char",
+	"_read_char": "sign_id",
+	"__sys_write": "_sys_write",
+	"__sys_brk": "_sys_brk"
 };
 
 function resolveVar(name) {
@@ -160,12 +180,9 @@ function compileNode(node) {
 	}
 	if (node.type === 'char') {
 		let val = node.value;
-		let codeVal = 0;
-		if (val.length === 1) codeVal = val.charCodeAt(0);
-		else if (val === '\\n') codeVal = 10;
-		else if (val === '\\t') codeVal = 9;
-		else if (val.startsWith('\\')) codeVal = val.charCodeAt(1);
-
+		// No escapes: just take the character value.
+		// Parser passed sliced value (e.g. "b" for "\b").
+		let codeVal = val.charCodeAt(0);
 		return `    mov x0, #${codeVal}\n`;
 	}
 	if (node.type === 'identifier') {
@@ -264,6 +281,16 @@ function compilePrefix(node) {
 		if (expr.type === 'identifier') {
 			let name = expr.value;
 			let loc = resolveVar(name);
+
+			// Auto-allocation if not found
+			if (!loc) {
+				if (g_env._stackOffset === undefined) g_env._stackOffset = 0;
+				g_env._stackOffset -= 16;
+				g_env[name] = `local:${g_env._stackOffset}`;
+				loc = resolveVar(name);
+				return `    sub sp, sp, #16 // Alloc ${name}\n    mov x0, sp // Address of new var\n`;
+			}
+
 			if (loc.startsWith('global:')) {
 				return `    adr x0, ${loc.split(':')[1]}\n`;
 			}
@@ -1102,5 +1129,138 @@ finalOutput += `
 ${bssSection}
 `;
 
+
+
+// Intrinsic: __sys_write(fd)(buf)(len)
+finalOutput += `
+_sys_write:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    // fd is in x0
+    // Create Closure [_sys_write_2, [fd, nil]]
+    
+    // 1. Env = [fd, nil]
+    stp x0, x1, [sp, #-16]! // Save regs
+    mov x1, x0 // Car = fd
+    adr x0, sign_id // Cdr = nil
+    // Swap for _cons(car=x0, cdr=x1)? No _cons(x0, x1) usually.
+    // Let's assume _cons(head=x0, tail=x1)
+    mov x2, x0 // nil
+    mov x0, x1 // fd
+    mov x1, x2 // nil
+    bl _cons
+    // x0 is Env
+    
+    // 2. Closure = [_sys_write_2, Env]
+    mov x1, x0 // Env
+    adr x0, _sys_write_2 // Code
+    bl _cons
+    
+    ldp x0, x1, [sp], #16 // Restore (garbage)
+    ldp x29, x30, [sp], #16
+    ret
+
+_sys_write_2:
+    // x0 = buf
+    // Env = [fd, nil]
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    
+    // New Env needs to capture buf AND fd.
+    // Current Env (in x9 usually? No, apply passes Code in x10, Env in x9)
+    // We need to fetch fd from Old Env.
+    // Old Env = [fd, nil]
+    // Car(OldEnv) = fd.
+    
+    stp x0, x9, [sp, #-16]! // Save buf, OldEnv
+    
+    ldr x1, [x9] // Load fd from OldEnv (Car)
+    // We want NewEnv = [len?, [buf, [fd, nil]]] ? 
+    // No, we are building up.
+    // Result of this function is Closure [_sys_write_3, [buf, fd]]
+    
+    // Let's make Env = [buf, fd] (simplified list)
+    // x0 combined with fd.
+    
+    // x0 = buf (saved)
+    // x1 = fd (loaded)
+    
+    // Create [buf, fd]
+    // Step 1: Create [fd, nil] (Recreate? Or reuse OldEnv?)
+    // OldEnv IS [fd, nil]. So we can reuse it as Tail!
+    // So NewEnv = Cons(buf, OldEnv)
+    
+    ldr x0, [sp] // Restore buf
+    ldr x1, [sp, #8] // Restore OldEnv
+    bl _cons
+    // x0 is NewEnv [buf, [fd, nil]]
+    
+    // Closure
+    mov x1, x0 // Env
+    adr x0, _sys_write_3 // Code
+    bl _cons
+    
+    ldp x0, x9, [sp], #16
+    ldp x29, x30, [sp], #16
+    ret
+
+_sys_write_3:
+    // x0 = len
+    // Env = [buf, [fd, nil]]
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    
+    mov x2, x0 // arg3: len
+    
+    // Extract buf, fd from Env (x9)
+    ldr x1, [x9] // buf (Car)
+    ldr x9, [x9, #8] // Tail [fd, nil]
+    ldr x0, [x9] // fd (Car)
+    
+    // Now x0=fd, x1=buf, x2=len
+    
+    mov x8, #64 // sys_write
+    svc #0
+    
+    // Return result (usually 0 or written bytes)
+    // x0 has result.
+    
+    ldp x29, x30, [sp], #16
+    ret
+    
+
+
+// Intrinsic: __sys_brk(addr) -> addr
+// Usage: __sys_brk 0 (get current), __sys_brk new_addr (alloc)
+// Returns CLOSURE
+_sys_brk:
+    // Create Closure [_sys_brk_impl, nil]
+    stp x29, x30, [sp, # - 16]!
+    mov x29, sp
+    
+    adr x0, sign_id // nil
+    str x0, [sp, # - 16]!
+    adr x1, _sys_brk_impl
+    ldr x0, [sp], #16
+    bl _cons
+    
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+ret
+
+_sys_brk_impl:
+    // x0 is Arg (addr). Env is nil (ignored).
+    stp x29, x30, [sp, # - 16]!
+    mov x29, sp
+    
+    mov x8, #214 // brk
+    svc #0
+    
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+ret
+
+`;
+
 fs.writeFileSync(OUTPUT_FILE, finalOutput);
-console.log(`Compiled to ${OUTPUT_FILE}`);
+console.log(`Compiled to ${OUTPUT_FILE} `);

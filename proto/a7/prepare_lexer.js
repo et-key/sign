@@ -33,7 +33,7 @@ const markSeparator = code => code
   )
   .replace(
     /(\\[\s\S])|(`[^`\r\n]*`)|([\r])|([\t])/g,
-    (_, e, s, $1, $2) => (e || s) || ($1 && `\x1F\n\x1F`) || ($2 && `\x1F\t\x1F`)
+    (_, e, s, $1, $2) => (e ? e + '\x1F' : s) || ($1 && `\x1F\n\x1F`) || ($2 && `\x1F\t\x1F`)
   );
 
 const toSExpr = code => {

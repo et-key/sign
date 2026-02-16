@@ -1,0 +1,225 @@
+`
+  Sign Self-Hosting Parser
+  Parses token list into AST (S-expressions)
+`
+
+`--- AST Node Types ---`
+ast_num : 1
+ast_id : 2
+ast_str : 3
+ast_op : 4
+ast_def : 5
+ast_apply : 6
+ast_block : 7
+
+ast_infix : 8
+
+tok_lparen : 7
+tok_rparen : 8
+
+`--- Precedence ---`
+PREC_APPLY : 6
+PREC_XOR : 11
+PREC_OR : 12
+PREC_AND : 13
+PREC_CMP : 14
+PREC_ADD : 15
+PREC_MUL : 16
+PREC_PREFIX : 20
+
+#streq : s1 s2 ?
+    s1 = s2 : 1
+    c1 : @s1
+    c2 : @s2
+    c1 != c2 : 0
+    c1 = 0 : 1
+    streq (s1 + 1) (s2 + 1)
+
+#get_semicolon_str : _ ?
+    s : alloc 2
+    s # 59
+    (s + 1) # 0
+    s
+
+#get_bar_str : _ ?
+    s : alloc 2
+    s # 124
+    (s + 1) # 0
+    s
+
+#get_lt_str : _ ?
+    s : alloc 2
+    s # 60
+    (s + 1) # 0
+    s
+
+#get_gt_str : _ ?
+    s : alloc 2
+    s # 62
+    (s + 1) # 0
+    s
+
+#get_prec : op ?
+    streq op `*` : PREC_MUL
+    streq op `/` : PREC_MUL
+    streq op `%` : PREC_MUL
+    streq op `+` : PREC_ADD
+    streq op `-` : PREC_ADD
+    streq op (get_lt_str 0) : PREC_CMP
+    streq op (get_gt_str 0) : PREC_CMP
+    streq op `=` : PREC_CMP
+    streq op (get_semicolon_str 0) : PREC_XOR
+    streq op (get_bar_str 0) : PREC_OR
+    streq op `&` : PREC_AND
+    
+    streq op `?` : 5
+    streq op `,` : 6
+    streq op `:` : 2
+    0
+
+#is_right_assoc : op ?
+    streq op `?` : 1
+    streq op `:` : 1
+    streq op `,` : 1
+    streq op `^` : 1
+    0
+$p_tokens # 0
+$p_curr # 0
+
+#init_parser : toks ?
+    $p_tokens # toks
+    advance 0
+
+#advance : _ ?
+    p_tokens = 0 : (
+        $p_curr # cons tok_eof 0
+        0
+    )
+    $p_curr # head p_tokens
+    $p_tokens # tail p_tokens
+    p_curr
+
+#peek_type : _ ? @(peek 0)
+#peek_val : _ ? @(peek 0 + 8)
+
+#expect_val : val ?
+    v : peek_val 0
+    v = val : (
+        advance 0
+        1
+    )
+    0
+
+#expect_type : type ?
+    t : peek_type 0
+    t = type : (
+        advance 0
+        1
+    )
+    0
+
+#can_start_expr : _ ?
+    t : peek_type 0
+    t = tok_num : 1
+    t = tok_id : 1
+    t = tok_lparen : 1
+    0
+
+#parse_program : _ ?
+    type : peek_type 0
+    type = tok_eof : 0
+    type = tok_sep : (
+        advance 0
+        parse_program 0
+    )
+    
+    expr : parse_expr 0
+    cons expr (parse_program 0)
+
+#parse_block : _ ?
+    type : peek_type 0
+    type = tok_sep : (
+        advance 0
+        parse_block 0
+    )
+    
+    expr : parse_expr 0
+    
+    type : peek_type 0
+    type = tok_sep : (
+        advance 0
+        rest : parse_block_rest 0
+        rest = 0 : expr
+        cons ast_block (cons expr rest)
+    )
+    expr
+
+#parse_block_rest : _ ?
+    type : peek_type 0
+    type = tok_eof : 0
+    
+    type != tok_sep : (
+        ; Check if it's a closing paren or dedent implicit
+        type = tok_rparen : 0
+        ; Also should check for dedent if we had indentation logic
+        0
+    )
+    
+    type = tok_sep : (
+        advance 0
+        parse_block_rest 0
+    )
+    
+    expr : parse_expr 0
+    cons expr (parse_block_rest 0)
+
+#parse_expr : min_prec ?
+    lhs : parse_primary 0
+    _parse_expr_loop lhs min_prec
+
+#_parse_expr_loop : lhs min_prec ?
+    is_app : can_start_expr 0
+    is_app & (PREC_APPLY >= min_prec) : (
+        rhs : parse_expr (PREC_APPLY + 1)
+        new_lhs : cons ast_apply (cons lhs (cons rhs 0))
+        _parse_expr_loop new_lhs min_prec
+    )
+
+    type : peek_type 0
+    type != tok_op : lhs
+    
+    op : peek_val 0
+    prec : get_prec op
+    
+    prec < min_prec : lhs
+    
+    advance 0
+    
+    next_min_prec : (is_right_assoc op) ? prec (prec + 1)
+    
+    rhs : parse_expr next_min_prec
+    
+    new_lhs : cons ast_infix (cons op (cons lhs (cons rhs 0)))
+    _parse_expr_loop new_lhs min_prec
+
+#parse_primary : _ ?
+    t : peek_type 0
+    v : peek_val 0
+    
+    t = tok_num : (
+        advance 0
+        cons ast_num (cons v 0)
+    )
+    t = tok_id : (
+        advance 0
+        cons ast_id (cons v 0)
+    )
+    
+    t = tok_lparen : (
+        advance 0
+        expr : parse_expr 0
+        expect_type tok_rparen
+        expr
+    )
+    
+    cons ast_num (cons 999 0)

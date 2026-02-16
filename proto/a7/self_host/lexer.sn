@@ -1,0 +1,146 @@
+`
+  Sign Self-Hosting Lexer
+  Ported from prepare_lexer.js / parser.js
+`
+
+`--- Token Constants ---`
+tok_eof : -1
+tok_id : 1
+tok_num : 2
+tok_str : 3
+tok_op : 4
+tok_punc : 5
+tok_sep : 6
+tok_lparen : 7
+tok_rparen : 8
+
+`--- Global State (Scanner) ---`
+$src # 0
+$src_len # 0
+$pos # 0
+$ch # 0
+
+#init_lexer : source ?
+    $src # source
+    $src_len # len source
+    $pos # 0
+    read_char 0
+
+#read_char : _ ?
+    $p # @pos
+    p >= @src_len : (
+        $ch # -1
+        0
+    )
+    $c # nth @src p
+    $ch # c
+    $pos # p + 1
+    c
+
+`--- Predicates ---`
+#is_space : c ? c = 32 | c = \	 | c = 13
+#is_digit : c ? c >= 48 & c <= 57
+#is_alpha : c ? (c >= 65 & c <= 90) | (c >= 97 & c <= 122) | c = 95
+#is_op_char : c ? c = 61 | c = 43 | c = 45 | c = 42 | c = 47 | c = 37 | c = 94 | c = 38 | c = 124 | c = 33 | c = 60 | c = 62 | c = 63 | c = 58 | c = 59 | c = 126
+
+`--- Functional Helpers ---`
+#length : list ?
+    list = 0 : 0
+    1 + length (tail list)
+
+#list_to_string : list ?
+    len : length list
+    str : alloc (len + 1)
+    _write_list list str 0
+    (str + len) # 0
+    str
+
+#_write_list : list buf idx ?
+    list = 0 : 0
+    (buf + idx) # head list
+    _write_list (tail list) buf (idx + 1)
+
+`--- Scanners ---`
+#tokenize : _ ?
+    tok : scan 0
+    type : @tok
+    type = tok_eof : cons tok 0
+    cons tok (tokenize 0)
+
+#scan : _ ?
+    skip_space 0
+    c : @ch
+    c = -1 : cons tok_eof 0
+    
+    is_digit c : scan_num c
+    is_alpha c : scan_id c
+    is_op_char c : scan_op 0
+    
+    c = \` : scan_str 0
+    c = 96 : scan_str 0
+    
+    c = \ : (
+        read_char 0
+        cons tok_sep 0
+    )
+    
+    c = 40 | c = 91 | c = 123 : (
+        read_char 0
+        cons tok_lparen 0
+    )
+    c = 41 | c = 93 | c = 125 : (
+        read_char 0
+        cons tok_rparen 0
+    )
+    
+    read_char 0
+    cons tok_punc c
+
+#skip_space : _ ?
+    is_space (@ch) : (
+        read_char 0
+        skip_space 0
+    )
+    0
+
+#scan_id : first_char ?
+    chars : cons first_char (_scan_id_rec (read_char 0))
+    str : list_to_string chars
+    cons tok_id str
+
+#_scan_id_rec : c ?
+    is_alpha c | is_digit c : (
+        cons c (_scan_id_rec (read_char 0))
+    )
+    0
+
+#scan_num : acc ?
+    res : _scan_num_rec acc 0
+    cons tok_num res
+
+#_scan_num_rec : c acc ?
+    is_digit c : 
+        $val # acc * 10 + (c - 48)
+        _scan_num_rec (read_char 0) val
+    acc
+
+#scan_op : _ ?
+    chars : cons (read_char 0) (_scan_op_rec (read_char 0))
+    str : list_to_string chars
+    cons tok_op str
+
+#_scan_op_rec : c ?
+    is_op_char c : (
+        cons c (_scan_op_rec (read_char 0))
+    )
+    0
+
+#scan_str : _ ?
+    str : list_to_string (_scan_str_rec (read_char 0))
+    cons tok_str str
+
+#_scan_str_rec : c ?
+    c = 96 | c = -1 : 
+        read_char 0
+        0
+    cons c (_scan_str_rec (read_char 0))

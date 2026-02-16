@@ -1,0 +1,20 @@
+`Test Driver for Compiler`
+
+#main : _ ?
+    src : `#main : ? print_num 123`
+    
+    print_str `Source: `
+    print_str src
+    print_char 10
+    
+    init_lexer src
+    tokens : tokenize 0
+    
+    init_parser tokens
+    ast : parse_program 0
+    
+    asm : compile_program ast
+    print_str asm
+
+#compile_program : ast ?
+    `// TODO: Generate Assembly\n`
