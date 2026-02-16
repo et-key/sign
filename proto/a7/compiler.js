@@ -65,6 +65,7 @@ const TEMPLATES = {
 	'*': 'mul x0, x1, x0',
 	'/': 'sdiv x0, x1, x0',
 	'%': 'sdiv x2, x1, x0\n    msub x0, x2, x0, x1',
+	'^': 'bl _pow',
 
 	// Bitwise
 	'<<': 'lsl x0, x1, x0',
@@ -573,6 +574,99 @@ function compileInfix(node) {
 function compileApply(node) {
 	let code = '';
 
+	// Optimization: Static Inline Composition
+	// Check if both Func and Arg are static lambda definitions (infix '?')
+	if (node.func.type === 'infix' && node.func.op === '?' &&
+		node.arg.type === 'infix' && node.arg.op === '?') {
+
+		// We have [Outer] [Inner].
+		// Outer: node.func
+		// Inner: node.arg
+		// Goal: Create a new function H that does Inner then Outer.
+
+		let label = generateLabel("inline_composed");
+		let afterLabel = generateLabel("after_" + label);
+		let setupCode = `    b ${afterLabel}\n`;
+		let funcCode = `${label}:\n`;
+
+		// Standard Prologue
+		funcCode += '    stp x29, x30, [sp, #-16]!\n';
+		funcCode += '    mov x29, sp\n';
+
+		// Setup environment (simulate compileFunction partially)
+		let oldEnv = { ...g_env };
+		g_env._stackOffset = -16;
+
+		// We assume both distinct functions use the same argument name (e.g. $1) or compatible checking
+		// For this prototype, we assume single argument '$1' logic from the AST we saw.
+		// We need to allocate space for the argument.
+		// H(x) is called. x is in x0 or stack?
+		// Logic:
+		// 1. H(x) is called. x is passed (likely in x0, or if this is Apply, we are pushing to stack?)
+		// Wait, compileFunction usually expects args.
+		// Use compileFunction logic to setup ONE argument frame.
+
+		let params = [];
+		// Extract params from Inner (Arg) - it determines the input signature of H
+		if (node.arg.left) {
+			let collectParams = (n) => {
+				if (n.type === 'identifier') params.push(n.value);
+				else if (n.type === 'infix' && n.op === ',') {
+					collectParams(n.left);
+					collectParams(n.right);
+				}
+			};
+			collectParams(node.arg.left);
+		}
+
+		if (params.length > 0) {
+			let p = params[0]; // Primary arg (e.g. $1)
+			funcCode += '    str x0, [sp, #-16]!\n'; // Push Arg
+			g_env._stackOffset -= 16;
+			g_env[p] = `local:${g_env._stackOffset}`;
+		}
+
+		// 2. Compile Left Body (Outer: node.func)
+		funcCode += `    // Inline: Left Body\n`;
+		funcCode += compileNode(node.func.right);
+		// Result is in x0.
+
+		// 3. Chain: Update the Argument slot with the result!
+		// So Right reads this result as its '$1'.
+		if (params.length > 0) {
+			let p = params[0];
+			let loc = g_env[p]; // local:-32
+			let offset = parseInt(loc.split(':')[1]);
+			funcCode += `    // Inline: Chaining (Update ${p})\n`;
+			funcCode += `    str x0, [x29, #${offset}]\n`;
+		}
+
+		// 4. Compile Right Body (Inner: node.arg)
+		funcCode += `    // Inline: Right Body\n`;
+		funcCode += compileNode(node.arg.right);
+		// Result is in x0.
+
+		// Standard Eqpilegue
+		funcCode += '    mov sp, x29\n';
+		funcCode += '    ldp x29, x30, [sp], #16\n';
+		funcCode += '    ret\n';
+
+		g_env = oldEnv;
+
+		// Emit the function definition
+		code += setupCode + funcCode + `${afterLabel}:\n`;
+
+		// Return the closure of this new function
+		// For prototype, assume no free vars in these simple lambdas
+		code += `    adr x0, sign_id\n`; // Nil Env
+		code += `    str x0, [sp, #-16]!\n`;
+		code += `    adr x1, ${label}\n`;
+		code += `    ldr x0, [sp], #16\n`;
+		code += `    bl _cons\n`; // Make Closure [Function, Env]
+
+		return code;
+	}
+
 	// 1. Compile Func -> Stack
 	code += compileNode(node.func);
 	code += '    str x0, [sp, #-16]!\n';
@@ -619,6 +713,12 @@ function compileFunction(node, name) {
 			else if (n.type === 'infix' && n.op === ',') {
 				collectParams(n.left);
 				collectParams(n.right);
+			}
+			// Handle Apply as Parameter List (e.g. x y ?)
+			// Apply(Apply(x, y), z) -> [x, y, z]
+			else if (n.type === 'apply') {
+				collectParams(n.func);
+				collectParams(n.arg);
 			}
 		};
 		collectParams(node.left);
@@ -891,6 +991,35 @@ _composed_impl:
     // Clean up stack
     add sp, sp, #32 // Pop f, Env.
     
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+
+// _pow: x0 (base), x1 (exp) -> x0 (result)
+_pow:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    // Check if exp < 0 (Return 0 for integer pow?)
+    cmp x1, #0
+    b.lt .L_pow_zero 
+    mov x2, #1        // result = 1
+    mov x3, x0        // base
+    mov x4, x1        // exp
+
+.L_pow_loop:
+    cbz x4, .L_pow_done
+    tst x4, #1
+    b.eq .L_pow_square
+    mul x2, x2, x3
+.L_pow_square:
+    lsr x4, x4, #1
+    mul x3, x3, x3
+    b .L_pow_loop
+
+.L_pow_zero:
+    mov x2, #0
+.L_pow_done:
+    mov x0, x2
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret

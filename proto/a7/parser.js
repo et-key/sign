@@ -173,7 +173,7 @@ const refineTokens = (rawTokens) => {
 
 const isSeparator = (token) => token && typeof token === 'object' && token.type === 'separator';
 
-const APPLY_PREC = 4;
+const APPLY_PREC = 6;
 
 const parseExpr = (tokens, minPrec = 0) => {
 	if (tokens.length === 0) return null;
@@ -573,10 +573,17 @@ const parseBlock = (tokens) => {
 // --- Main ---
 
 const file = process.argv[2];
+const outFile = process.argv[3];
 if (file) {
 	const code = fs.readFileSync(file, 'utf8');
 	const rawRoot = lexer.parseToSExpr(code);
 	const refinedRoot = refineTokens(rawRoot);
 	const ast = parseBlock(refinedRoot);
-	console.log(JSON.stringify(ast, null, 2));
+	const json = JSON.stringify(ast, null, 2);
+	if (outFile) {
+		fs.writeFileSync(outFile, json, 'utf8');
+		console.log(`AST written to ${outFile}`);
+	} else {
+		console.log(json);
+	}
 }
