@@ -1,209 +1,434 @@
 `
-  Sign Self-Hosting Compiler
-  Compiles AST to AArch64 Assembly
+  Sign Pure Functional Compiler (Code Generator)
+  
+  Transforms AST from parser.sn into ARM64 Assembly.
+  
+  Philosophy:
+  - Pure Functional: State (LabelCount, StringTable, Env) is threaded.
+  - Stack Machine: Context is passed as arguments.
+  - Output: List of assembly instruction strings.
 `
 
-`--- String Helpers ---`
-#str_len : s ?
-    c : @s
-    c = 0 : 0
-    1 + str_len (s + 1)
+`--- AST Constants (Match Parser) ---`
+ast_unit : 0
+ast_num : 1
+ast_id : 2
+ast_str : 3
+ast_op : 4
+ast_def : 5
+ast_apply : 6
+ast_block : 7
+ast_infix : 8
+ast_prefix : 9
+ast_postfix : 10
+ast_lambda : 11
+ast_char : 12
 
-#str_cpy : dest src ?
-    c : @src
-    c = 0 : (
-        dest # 0
+`--- Context Management ---`
+`Context : [LabelCount, StringList, Env, StackOffset]`
+
+#make_context : label_count str_list env stack_offset ?
+    cons label_count (cons str_list (cons env (cons stack_offset 0)))
+
+#ctx_label_count : ctx ? head ctx
+#ctx_strings : ctx ? head (tail ctx)
+#ctx_env : ctx ? head (tail (tail ctx))
+#ctx_stack_offset : ctx ? head (tail (tail (tail ctx)))
+
+`--- Environment Helpers ---`
+#lookup_var : env name ?
+    env = 0 : 0
+    (entry ?
+        (streq (head entry) name) : (tail entry)
+        lookup_var (tail env) name
+    ) (head env)
+
+#compile_str : node ctx ?
+    (content ?
+        (res_add ? 
+             (lbl ? (new_ctx ?
+                 cons (emit (concat "    adr x0, " (concat lbl "\n")) 0) (cons new_ctx 0)
+             ) (ctx_from_res res_add) ) (head res_add)
+        ) (add_string ctx content)
+    ) (tok_val node)
+
+#compile_apply : node ctx ?
+    (func ? (arg ? 
+        (res_func ? 
+             (asm_func ? (ctx_func ?
+                 (res_arg ?
+                     (asm_arg ? (ctx_arg ?
+                         cons 
+                             (concat_lists asm_func 
+                                 (cons "    str x0, [sp, #-16]!\n"
+                                     (concat_lists asm_arg
+                                         (cons "    ldr x1, [sp], #16\n"
+                                             (cons "    ldr x2, [x1]\n"      `Code`
+                                                 (cons "    ldr x9, [x1, #8]\n"  `Env`
+                                                     (cons "    blr x2\n" 0)
+                                                 )
+                                             )
+                                         )
+                                     )
+                                 )
+                             )
+                             (cons ctx_arg 0)
+                     ) (ctx_from_res res_arg) ) (asm_from_res res_arg)
+                 ) (compile_node arg ctx_func)
+             ) (ctx_from_res res_func) ) (asm_from_res res_func)
+        ) (compile_node func ctx)
+    ) (head (tail (tail node))) ) (head (tail node))
+
+#push_var : ctx name ?
+    (offset ? 
+        make_context 
+            (ctx_label_count ctx) 
+            (ctx_strings ctx) 
+            (cons (cons name offset) (ctx_env ctx))
+            offset
+    ) ((ctx_stack_offset ctx) - 8)
+
+`--- String Table Helpers ---`
+#add_string : ctx content ?
+    `TODO: Check existence, return label. For now just add.`
+    (count ? 
+        (label ? 
+            cons 
+                label
+                (make_context 
+                    (count + 1)
+                    (cons (cons label (cons content 0)) (ctx_strings ctx))
+                    (ctx_env ctx)
+                    (ctx_stack_offset ctx)
+                )
+        ) (make_label "str_" count)
+    ) (ctx_label_count ctx)
+
+`--- String Utils ---`
+#strlen : s ?
+    (c ? 
+        c = 0 : 0
+        1 + strlen (s + 1)
+    ) (@s)
+
+#strcpy : dest src ?
+    (c ?
+        c = 0 : (
+            dest # 0
+            dest
+        )
+        dest # c
+        strcpy (dest + 1) (src + 1)
+    ) (@src)
+
+#strcat : dest src ?
+    (len ? 
+        strcpy (dest + len) src
         dest
-    )
-    dest # c
-    str_cpy (dest + 1) (src + 1)
+    ) (strlen dest)
 
-#str_cat : s1 s2 ?
-    len1 : str_len s1
-    len2 : str_len s2
-    new_s : alloc (len1 + len2 + 1)
-    
-    end_s1 : str_cpy new_s s1
-    ; end_s1 points to null terminator of first copy
-    ; str_cpy returns pointer to null terminator? 
-    ; My impl above returns `dest` (ptr to 0).
-    ; So we can chain.
-    
-    str_cpy end_s1 s2
-    new_s
+#concat : s1 s2 ?
+    (len1 ? 
+        (len2 ?
+            (new_s ? 
+                strcpy new_s s1
+                strcpy (new_s + len1) s2
+                new_s
+            ) (alloc (len1 + len2 + 1))
+        ) (strlen s2)
+    ) (strlen s1)
 
+#concat_list : list ?
+    list = 0 : ""
+    concat (head list) (concat_list (tail list))
+
+`--- Number Conversion ---`
 #int_to_str : n ?
-    n = 0 : `0`
-    n < 0 : str_cat `-` (int_to_str_rec (0 - n))
-    int_to_str_rec n
+    n = 0 : "0"
+    n < 0 : concat "-" (int_to_str (0 - n))
+    _int_to_str_rec n
 
-#int_to_str_rec : n ?
-    n = 0 : ``
-    str : int_to_str_rec (n / 10)
-    digit : (n % 10) + 48
-    
-    ; Append digit char to string
-    ; Since we don't have mutable buffer easily in functional style,
-    ; we might recurse differently or stick to str_cat.
-    ; str_cat is expensive (allocs).
-    ; Optimization: Use a local buffer or list then convert?
-    ; For now, use str_cat for correctness.
-    
-    char_str : alloc 2
-    char_str # digit
-    (char_str + 1) # 0
-    
-    str_cat str char_str
+#_int_to_str_rec : n ?
+    n = 0 : ""
+    (digit ? 
+        concat (_int_to_str_rec (n / 10)) (char_to_str (digit + 48))
+    ) (n % 10)
 
-`--- Compiler ---`
+#char_to_str : c ?
+    (s ? 
+        s # c
+        (s + 1) # 0
+        s
+    ) (alloc 2)
+
+#emit_num : val rest ?
+    concat (int_to_str val) rest
+
+`--- Label Helpers ---`
+#make_label : prefix count ?
+    concat prefix (concat "_" (int_to_str count))
+
+#new_label : ctx prefix ?
+    (count ? 
+        (lbl ? 
+             cons 
+                lbl
+                (make_context 
+                    (count + 1)
+                    (ctx_strings ctx)
+                    (ctx_env ctx)
+                    (ctx_stack_offset ctx)
+                )
+        ) (make_label prefix count)
+    ) (ctx_label_count ctx)
+
+`--- Core Compiler ---`
+`compile_program : ast -> assembly_string`
 #compile_program : ast ?
-    ast = 0 : ``
-    
-    expr : @ast
-    
-    ; Check if expr is definition (infix :)
-    type : @expr
-    type = ast_infix : (
-        op : @(expr + 8)
-        streq op `:` : (
-            code : compile_global_def expr
-            rest : compile_program (tail ast)
-            str_cat code rest
+    (res ? 
+        (asm_list ? 
+             concat_list asm_list
+        ) (head res)
+    ) (compile_node ast (make_context 0 0 0 0))
+
+`compile_node : node ctx -> [asm_list, ctx]`
+#compile_node : node ctx ?
+    (type ?
+         type = ast_num : compile_num node ctx
+         type = ast_infix : compile_infix node ctx
+         type = ast_block : compile_block node ctx
+         type = ast_unit : compile_unit node ctx
+         type = ast_str : compile_str node ctx
+         type = ast_id : compile_id node ctx
+         type = ast_apply : compile_apply node ctx
+         
+         `Default`
+         cons (emit "    // Unknown Node Type\n" 0) (cons ctx 0)
+    ) (head node)
+
+`--- Node Compilers ---`
+
+#compile_num : node ctx ?
+    (val ? 
+        cons 
+            (emit "    mov x0, #" (emit_num val (emit "\n" 0)))
+            (cons ctx 0)
+    ) (head (tail node))
+
+#compile_unit : node ctx ?
+    cons (emit "    adr x0, sign_id\n" 0) (cons ctx 0)
+
+#compile_infix : node ctx ?
+    (op ?
+        (streq op "+") : (compile_binop node ctx "    add x0, x0, x1\n")
+        (streq op "-") : (compile_binop node ctx "    sub x0, x0, x1\n")
+        (streq op "*") : (compile_binop node ctx "    mul x0, x0, x1\n")
+        (streq op "/") : (compile_binop node ctx "    sdiv x0, x0, x1\n")
+        
+        (streq op "=") : (compile_cmp node ctx "eq")
+        (streq op "!=") : (compile_cmp node ctx "ne")
+        (streq op "<") : (compile_cmp node ctx "lt")
+        (streq op ">") : (compile_cmp node ctx "gt")
+        (streq op "<=") : (compile_cmp node ctx "le")
+        (streq op ">=") : (compile_cmp node ctx "ge")
+
+        (streq op ":") : (compile_bind node ctx)
+        (streq op "?") : (compile_lambda node ctx)
+
+        `Default`
+        cons (emit (concat "    // Unknown Infix: " (concat op "\n")) 0) (cons ctx 0)
+        
+    ) (tok_val (head (tail node))) 
+
+#compile_bind : node ctx ?
+    (lhs ? (rhs ?
+        (name ? 
+             (res_rhs ?
+                 (asm_rhs ? (ctx_rhs ?
+                     (new_ctx ?
+                         cons 
+                             (concat_lists asm_rhs
+                                 (cons "    str x0, [sp, #-16]!\n"
+                                     (cons "    adr x0, sign_id\n" 0)
+                                 )
+                             )
+                             (cons new_ctx 0)
+                     ) (push_var ctx_rhs name)
+                 ) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
+             ) (compile_node rhs ctx)
+        ) (tok_val lhs) `Expect lhs to be ID`
+    ) (head (tail (tail (tail node)))) ) (head (tail (tail node)))
+
+#compile_lambda : node ctx ?
+    (params ? (body ?
+         (lbl_func ? (res_lbl ? (ctx_lbl ?
+             (lbl_after ? (res_after ? (ctx_after ?
+                 (param_name ?
+                     (ctx_with_arg ?
+                         (res_body ?
+                             (asm_body ? (ctx_body ? 
+                                 cons
+                                     (concat_lists 
+                                         (cons (concat "    b " (concat lbl_after "\n"))
+                                             (cons (concat lbl_func ":\n")
+                                                 (cons "    stp x29, x30, [sp, #-16]!\n"
+                                                     (cons "    mov x29, sp\n"
+                                                         (cons "    str x0, [sp, #-16]!\n" `Push Arg`
+                                                             (concat_lists asm_body
+                                                                 (cons "    mov sp, x29\n"
+                                                                     (cons "    ldp x29, x30, [sp], #16\n"
+                                                                         (cons "    ret\n"
+                                                                             (cons (concat lbl_after ":\n")
+                                                                                 (cons "    adr x0, sign_id\n" 
+                                                                                     (cons "    str x0, [sp, #-16]!\n"
+                                                                                         (cons (concat "    adr x1, " (concat lbl_func "\n"))
+                                                                                             (cons "    ldr x0, [sp], #16\n"
+                                                                                                 (cons "    bl _cons\n" 0)
+                                                                                             )
+                                                                                         )
+                                                                                     )
+                                                                                 )
+                                                                             )
+                                                                         )
+                                                                     )
+                                                                 )
+                                                             )
+                                                         )
+                                                     )
+                                                 )
+                                             )
+                                         )
+                                         0
+                                     )
+                                     (cons ctx_body 0)
+                         ) (ctx_from_res res_body) ) (asm_from_res res_body)
+                     ) (compile_node body ctx_with_arg)
+                 ) (push_var ctx_lbl param_name) ) (tok_val params) `Assume single param ID`
+             ) (ctx_from_res res_after) ) (new_label ctx_lbl "after_func") )
+         ) (ctx_from_res res_lbl) ) (new_label ctx "func") )
+    ) (head (tail (tail (tail node)))) ) (head (tail (tail node)))
+
+#compile_binop : node ctx instr ?
+    (lhs ? (rhs ?
+        (res_lhs ?
+             (asm_lhs ? (ctx_lhs ?
+                 (res_rhs ?
+                     (asm_rhs ? (ctx_rhs ?
+                         cons 
+                             (concat_lists asm_lhs 
+                                 (cons "    str x0, [sp, #-16]!\n"
+                                     (concat_lists asm_rhs
+                                         (cons "    mov x1, x0\n"
+                                             (cons "    ldr x0, [sp], #16\n"
+                                                 (cons instr 0)
+                                             )
+                                         )
+                                     )
+                                 )
+                             )
+                             (cons ctx_rhs 0)
+                     ) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
+                 ) (compile_node rhs ctx_lhs)
+             ) (ctx_from_res res_lhs) ) (asm_from_res res_lhs)
+        ) (compile_node lhs ctx)
+    ) (head (tail (tail (tail node)))) ) (head (tail (tail node)))
+
+#compile_cmp : node ctx cond ?
+    (lhs ? (rhs ?
+        (res_lhs ?
+             (asm_lhs ? (ctx_lhs ?
+                 (res_rhs ?
+                     (asm_rhs ? (ctx_rhs ?
+                         (lbl_true ? (lbl_end ? (res_lbl_end ?
+                             (ctx_final ? 
+                                 cons 
+                                     (concat_lists asm_lhs 
+                                         (cons "    str x0, [sp, #-16]!\n"
+                                             (concat_lists asm_rhs
+                                                 (cons "    mov x1, x0\n"
+                                                     (cons "    ldr x0, [sp], #16\n"
+                                                         (cons "    cmp x0, x1\n"
+                                                             (cons (concat "    b." (concat cond (concat " " (concat lbl_true "\n"))))
+                                                                 (cons "    mov x0, #0\n" 
+                                                                     (cons (concat "    b " (concat lbl_end "\n"))
+                                                                         (cons (concat lbl_true ":\n")
+                                                                             `True Case: Return LHS (x0) already in x0 from ldr`
+                                                                             (cons (concat lbl_end ":\n") 0)
+                                                                         )
+                                                                     )
+                                                                 )
+                                                             )
+                                                         )
+                                                     )
+                                                 )
+                                             )
+                                         )
+                                     )
+                                     (cons ctx_final 0)
+                             ) (ctx_from_res res_lbl_end)
+                         ) (new_label (ctx_from_res res_rhs) "cmp_end") ) ) (new_label ctx_rhs "cmp_true") )
+                     ) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
+                 ) (compile_node rhs ctx_lhs)
+             ) (ctx_from_res res_lhs) ) (asm_from_res res_lhs)
+        ) (compile_node lhs ctx)
+    ) (head (tail (tail (tail node)))) ) (head (tail (tail node)))
+
+#compile_block : node ctx ?
+    (stmts ?
+        stmts = 0 : (
+             cons (emit "    adr x0, sign_id\n" 0) (cons ctx 0)
         )
-    )
-    
-    ; Skip non-definitions for now
-    compile_program (tail ast)
-
-#compile_global_def : node ?
-    lhs : @(node + 16)
-    rhs : @(node + 24)
-    
-    ; lhs should be ast_id for function name
-    name : @(lhs + 8)
-    
-    ; rhs should be ast_infix ? for function body
-    rhs_type : @rhs
-    rhs_type = ast_infix : (
-        op : @(rhs + 8)
-        streq op `?` : (
-            compile_function_def name rhs
-        )
-    )
-    
-    `; TODO: Global variable def\n`
-
-#compile_function_def : name node ?
-    ; node is (infix ? args body)
-    args_node : @(node + 16)
-    body_node : @(node + 24)
-    
-    label : str_cat `_` name
-    label_colon : str_cat label `:\n`
-    
-    ; Generate end label for recursive blocks to jump to
-    end_label : str_cat label `_end`
-    
-    body_code : compile_expr body_node end_label
-    
-    ret_label : str_cat end_label `:\n    ret\n`
-    
-    str_cat label_colon (str_cat body_code ret_label)
-
-#compile_expr : node end_label ?
-    node = 0 : ``
-    type : @node
-    val : @(node + 8)
-    
-    type = ast_num : (
-        s_val : int_to_str val
-        str_cat `    mov x0, #` (str_cat s_val `\n`)
-    )
-    
-    type = ast_block : (
-        compile_block val end_label
-    )
-    
-    type = ast_infix : (
-        compile_infix val end_label
-    )
-    
-    type = ast_apply : (
-        compile_apply val
-    )
-    
-    type = ast_id : (
-        compile_id val
-    )
-    
-    ``
-
-#compile_id : name ?
-    label : str_cat `_` name
-    
-    load_env : `    adr x0, sign_id\n`
-    load_code : str_cat `    adr x1, ` (str_cat label `\n`)
-    make_cons : `    bl _cons\n`
-    
-    str_cat load_env (str_cat load_code make_cons)
-
-#compile_apply : node ?
-    func : @(node + 8)
-    arg : @(node + 16)
-    
-    code_f : compile_expr func 0
-    code_a : compile_expr arg 0
-    
-    push_f : `    str x0, [sp, #-16]!\n`
-    
-    pop_f : `    ldr x9, [sp], #16\n`
-    load_code : `    ldr x10, [x9]\n`
-    load_env : `    ldr x9, [x9, #8]\n`
-    call : `    blr x10\n`
-    
-    str_cat code_f (str_cat push_f (str_cat code_a (str_cat pop_f (str_cat load_code (str_cat load_env call)))))
-
-#compile_infix : node end_label ?
-    op : @(node + 8)
-    lhs : @(node + 16)
-    rhs : @(node + 24)
-    
-    is_match : streq op `:`
-    
-    is_match : (
-        ; Match Case: cond : val
-        cond_code : compile_expr lhs end_label
-        val_code : compile_expr rhs end_label
         
-        check : `    cmp x0, #0\n    beq 1f\n`
-        docase : str_cat val_code (str_cat `    b ` (str_cat end_label `\n`))
-        next : `1:\n`
-        
-        str_cat cond_code (str_cat check (str_cat docase next))
-    )
-    
-    is_match = 0 : (
-        code_l : compile_expr lhs end_label
-        code_r : compile_expr rhs end_label
-        
-        push_x0 : `    str x0, [sp, #-16]!\n`
-        pop_x1 : `    ldr x1, [sp], #16\n`
-        
-        op_code : emit_op op
-        
-        str_cat code_l (str_cat push_x0 (str_cat code_r (str_cat pop_x1 op_code)))
-    )
+        (lbl_end ? 
+            (res_stmts ? 
+                (asm_stmts ? (ctx_stmts ?
+                     cons 
+                         (concat_lists asm_stmts
+                             (cons (concat lbl_end ":\n") 0)
+                         )
+                         (cons ctx_stmts 0)
+                ) (ctx_from_res res_stmts) ) (asm_from_res res_stmts)
+            ) (compile_stmts stmts lbl_end (ctx_from_lbl res_lbl_end))
+        ) (new_label ctx "blk_end")
+    ) (head (tail node))
 
-#emit_op : op ?
-    streq op `+` : `    add x0, x1, x0\n`
-    streq op `-` : `    sub x0, x1, x0\n`
-    streq op `*` : `    mul x0, x1, x0\n`
-    streq op `|` : `    orr x0, x1, x0\n`
-    `    ; Unknown Op\n`
+#compile_stmts : stmts lbl_end ctx ?
+    (head_stmt ? 
+        (tail_stmts ?
+            tail_stmts = 0 : (
+                `Last Statement`
+                compile_node head_stmt ctx
+            )
+            
+            `Not Last Statement`
+            (res_head ? 
+                (asm_head ? (ctx_head ?
+                    (res_tail ?
+                        (asm_tail ? (ctx_tail ?
+                             cons
+                                 (concat_lists asm_head
+                                     (cons "    adr x9, sign_id\n"
+                                         (cons "    cmp x0, x9\n"
+                                             (cons (concat "    b.ne " (concat lbl_end "\n"))
+                                                 asm_tail
+                                             )
+                                         )
+                                     )
+                                 )
+                                 (cons ctx_tail 0)
+                        ) (ctx_from_res res_tail) ) (asm_from_res res_tail)
+                    ) (compile_stmts tail_stmts lbl_end ctx_head)
+                ) (ctx_from_res res_head) ) (asm_from_res res_head)
+            ) (compile_node head_stmt ctx)
+            
+        ) (tail stmts)
+    ) (head stmts)
 
-#compile_block : exprs end_label ?
-    exprs = 0 : ``
-    expr : @exprs
-    code : compile_expr expr end_label
-    rest : compile_block (tail exprs) end_label
-    str_cat code rest
+#concat_lists : l1 l2 ?
+    l1 = 0 : l2
+    cons (head l1) (concat_lists (tail l1) l2)
+
+#asm_from_res : res ? head res
+#ctx_from_res : res ? head (tail res)
+#res_lbl_end : res ? res `Typo fix context usage above`
+#ctx_from_lbl : res ? head (tail res)

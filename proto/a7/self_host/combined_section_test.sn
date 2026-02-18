@@ -1,3 +1,245 @@
+
+heap_start : sys_brk 0
+heap_end : sys_brk (heap_start + 1048576)
+heap_addr : heap_start
+
+#alloc : size ?
+	$curr # heap_addr
+	$heap_addr # curr + size
+	curr
+
+#cons : head tail ?
+	$addr : alloc 16
+	addr # head
+	(addr + 8) # tail
+	addr
+
+#head : list ?
+	@(list)
+
+#tail : list ?
+	@(list + 8)
+
+#nth : list index ?
+	index <= 0 : head list
+	nth (tail list) (index - 1)
+
+#factorial : n ?
+	n <= 1 : 1
+	n * factorial (n - 1)
+
+#range : start end ?
+	start > end : 0
+	cons start (range (start + 1) end)
+
+#print_char : c ?
+	buf : cons c 0
+	sys_write 1 buf 1
+	
+#print_str : str ?
+	len : (len_loop ?
+		p : $1
+		cnt : $2
+		char : @p
+		char = 0 : cnt
+		len_loop (p + 1) (cnt + 1)
+	) str 0
+	sys_write 1 str len
+
+#print_num : n ?
+	n = 0 : (
+		print_char 48
+		0
+	)
+	n < 0 : (
+		print_char 45
+		print_num (0 - n)
+		0
+	)
+	_print_num_rec n
+
+#_print_num_rec : n ?
+	n = 0 : 0
+	_print_num_rec (n / 10)
+	print_char (48 + (n % 10))
+
+#add : x y ? x + y
+#sub : x y ? x - y
+#mul : x y ? x * y
+#div : x y ? x / y
+#mod : x y ? x % y
+
+`
+  Sign Pure Functional Lexer
+  (Strict No-Local-Binding Version)
+`
+
+`--- Token Constants ---`
+tok_eof : -1
+tok_id : 1
+tok_num : 2
+tok_str : 3
+tok_op : 4
+tok_punc : 5
+tok_sep : 6
+tok_unit : 0
+
+`--- Predicates (Pure) ---`
+#is_space : c ? c = 32 | c = \	 | c = 13
+#is_digit : c ? c >= 48 & c <= 57
+#is_alpha : c ? (c >= 65 & c <= 90) | (c >= 97 & c <= 122) | c = 95
+#is_op_char : c ? c = 61 | c = 43 | c = 45 | c = 42 | c = 47 | c = 37 | c = 94 | c = 38 | c = 124 | c = 33 | c = 60 | c = 62 | c = 63 | c = 58 | c = 59 | c = 126
+
+`--- Helper: List Construction ---`
+#length : list ?
+    list = 0 : 0
+    1 + length (tail list)
+
+#reverse : list ?
+    _rev list 0
+
+#_rev : list acc ?
+    list = 0 : acc
+    _rev (tail list) (cons (head list) acc)
+
+#list_to_string : list ?
+    (len ? 
+        (str ? 
+            _write_list list str 0
+            (str + len) # 0
+            str
+        ) (alloc (len + 1))
+    ) (length list)
+
+#_write_list : list buf idx ?
+    list = 0 : 0
+    (buf + idx) # head list
+    _write_list (tail list) buf (idx + 1)
+
+`--- Core Lexer Logic ---`
+
+`tokenize : source -> tokens`
+#tokenize : source ?
+    _tokenize_loop source (len source) 0
+
+#_tokenize_loop : source source_len pos ?
+    (res ?
+        (token ? 
+            (type ?
+                type = tok_eof : cons token 0
+                cons token (_tokenize_loop source source_len (head (tail res)))
+            ) (@token)
+        ) (head res)
+    ) (scan_token source source_len pos)
+
+
+`scan_token : (source, len, pos) -> [token, next_pos]`
+#scan_token : source source_len pos ?
+    pos >= source_len : (
+        cons (cons tok_eof 0) (cons pos 0)
+    )
+    
+    (c ? 
+        is_space c : (
+            scan_token source source_len (pos + 1)
+        )
+        
+        c = \ : (
+            cons (cons tok_sep 0) (cons (pos + 1) 0)
+        )
+        
+        is_digit c : (
+            (res ?
+                (val_str ?
+                    (val ?
+                        cons (cons tok_num val) (cons (head (tail res)) 0)
+                    ) (_parse_int val_str)
+                ) (head res)
+            ) (scan_num source source_len pos)
+        )
+        
+        is_alpha c : (
+            (res ? 
+                cons (cons tok_id (head res)) (cons (head (tail res)) 0)
+            ) (scan_id source source_len pos)
+        )
+        
+        is_op_char c : (
+            (res ? 
+                cons (cons tok_op (head res)) (cons (head (tail res)) 0)
+            ) (scan_op source source_len pos)
+        )
+        
+        c = \` : (
+            (res ?
+                cons (cons tok_str (head res)) (cons (head (tail res)) 0)
+            ) (scan_str source source_len pos)
+        )
+        
+        `Default: Punctuation`
+        cons (cons tok_punc c) (cons (pos + 1) 0)
+    ) (nth source pos)
+
+
+`--- Specific Scanners ---`
+
+#scan_num : source source_len pos ?
+    _scan_while source source_len pos is_digit
+
+#scan_id : source source_len pos ?
+    `ID can contain alpha or digit after first char`
+    _scan_while source source_len pos (c ? is_alpha c | is_digit c)
+
+#scan_op : source source_len pos ?
+    _scan_while source source_len pos is_op_char
+
+#_scan_while : source source_len pos pred ?
+    (res ?
+        (chars_rev ?
+             (chars ?
+                  cons (list_to_string chars) (cons (head (tail res)) 0)
+             ) (reverse chars_rev)
+        ) (head res)
+    ) (_scan_while_rec source source_len pos pred 0)
+
+#_scan_while_rec : source source_len pos pred acc ?
+    pos >= source_len : (
+        cons acc (cons pos 0)
+    )
+    (c ?
+        pred c : (
+            _scan_while_rec source source_len (pos + 1) pred (cons c acc)
+        )
+        cons acc (cons pos 0)
+    ) (nth source pos)
+
+#scan_str : source source_len pos ?
+    `Skip opening backtick`
+    (start_pos ?
+        (res ?
+            (chars_rev ?
+                (chars ?
+                    cons (list_to_string chars) (cons (head (tail res)) 0)
+                ) (reverse chars_rev)
+            ) (head res)
+        ) (_scan_str_rec source source_len start_pos 0)
+    ) (pos + 1)
+
+#_scan_str_rec : source source_len pos acc ?
+    pos >= source_len : (
+        cons acc (cons pos 0)
+    )
+    (c ?
+        (c = \` | c = -1) : (
+            `End of string`
+            cons acc (cons (pos + 1) 0)
+        )
+        _scan_str_rec source source_len (pos + 1) (cons c acc)
+    ) (nth source pos)
+
+`--- Utils ---`
+#_parse_int : str ?
+    str
 `
   Sign Pure Functional Parser
   
@@ -21,16 +263,6 @@ ast_prefix : 9
 ast_postfix : 10
 ast_lambda : 11
 ast_char : 12
-
-`--- Token Constants (Match Lexer) ---`
-tok_eof : -1
-tok_id : 1
-tok_num : 2
-tok_str : 3
-tok_op : 4
-tok_punc : 5
-tok_sep : 6
-tok_unit : 0
 
 `--- Helper: Get Token Info ---`
 #tok_type : tok ? @tok
@@ -122,11 +354,6 @@ tok_unit : 0
             
         ) (tok_type tok)
     ) (peek tokens)
-
-`parse_block : tokens -> [ast_block, rest]`
-#parse_block : tokens ?
-    `TODO: Block logic, Section logic`
-    parse_program tokens `Temporary: Treat block same as program for now`
 
 `parse_expr : tokens min_prec -> [node, rest]`
 #parse_expr : tokens min_prec ?
@@ -355,3 +582,82 @@ tok_unit : 0
         ) (make_id "$2") ) (make_id "$1")
     ) (length exprs)
 
+`Test Driver for Parser Sections`
+
+#main : _ ?
+    _test "[+]"
+    _test "[+ 1]"
+    _test "[1 +]"
+    _test "[1, 2]"
+
+#_test : src ?
+    print_str "Testing: "
+    print_str src
+    print_char 10
+    
+    tokens : tokenize src
+    (res ?
+         (ast ?
+             _print_ast ast 0
+         ) (head res)
+    ) (parse_program tokens)
+    print_char 10
+
+#_print_ast : node indent ?
+    _print_indent indent
+    
+    type : head node
+    val : head (tail node)
+    
+    type = ast_infix : (
+        print_str "INFIX: "
+        print_str val
+        print_char 10
+        
+        left : head (tail (tail node))
+        right : head (tail (tail (tail node)))
+        
+        _print_ast left (indent + 2)
+        _print_ast right (indent + 2)
+        0
+    )
+    
+    type = ast_block : (
+        print_str "BLOCK"
+        print_char 10
+        _print_list val (indent + 2)
+        0
+    )
+    
+    type = ast_id : (
+        print_str "ID: "
+        print_str val
+        print_char 10
+        0
+    )
+
+    type = ast_num : (
+        print_str "NUM: "
+        print_num val
+        print_char 10
+        0
+    )
+    
+    type = ast_op : (
+        print_str "OP: "
+        print_str val
+        print_char 10
+        0
+    )
+    
+    0
+
+#_print_list : list indent ?
+    list = 0 : 0
+    _print_ast (head list) indent
+    _print_list (tail list) indent
+
+#_print_indent : n ?
+    n <= 0 : 0
+    print_char 32
+    _print_indent (n - 1)
