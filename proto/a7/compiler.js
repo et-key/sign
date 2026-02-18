@@ -19,23 +19,41 @@ const defaultOptions = {
 
 let options = { ...defaultOptions };
 
+// Parse Args (Pass 1: Get Input File)
+const args = process.argv.slice(2);
+let INPUT_FILE = null;
+for (let arg of args) {
+	if (!arg.startsWith('-')) {
+		INPUT_FILE = arg;
+		break;
+	}
+}
+
 // Load config
 try {
-	const configPath = path.join(__dirname, 'option.json');
-	if (fs.existsSync(configPath)) {
-		const data = fs.readFileSync(configPath, 'utf8');
-		const json = JSON.parse(data);
-		options = { ...options, ...json };
-		// console.log("Loaded option.json:", options);
+	let configDirs = [process.cwd()];
+	if (INPUT_FILE) {
+		configDirs.unshift(path.dirname(path.resolve(INPUT_FILE)));
+	}
+	configDirs.push(__dirname); // Fallback to compiler dir
+
+	let loaded = false;
+	for (let dir of configDirs) {
+		const configPath = path.join(dir, 'option.json');
+		if (fs.existsSync(configPath)) {
+			const data = fs.readFileSync(configPath, 'utf8');
+			const json = JSON.parse(data);
+			options = { ...options, ...json };
+			if (options.debug) console.log(`Loaded option.json from ${dir}`);
+			loaded = true;
+			break; // Stop at first find? Or merge? User said "folder specific", usually implies nearest wins.
+		}
 	}
 } catch (e) {
 	console.warn("Failed to load option.json:", e.message);
 }
 
-// Parse Args
-const args = process.argv.slice(2);
-let INPUT_FILE = null;
-
+// Parse Args (Pass 2: Overrides)
 for (let i = 0; i < args.length; i++) {
 	const arg = args[i];
 	if (arg === '-o') {
@@ -44,8 +62,6 @@ for (let i = 0; i < args.length; i++) {
 		options.optimize = true;
 	} else if (arg === '-g') {
 		options.debug = true;
-	} else if (!arg.startsWith('-')) {
-		INPUT_FILE = arg;
 	}
 }
 
@@ -65,6 +81,7 @@ const TEMPLATES = {
 	'*': 'mul x0, x1, x0',
 	'/': 'sdiv x0, x1, x0',
 	'%': 'sdiv x2, x1, x0\n    msub x0, x2, x0, x1',
+	'^': 'bl _pow',
 
 	// Bitwise
 	'<<': 'lsl x0, x1, x0',
@@ -92,7 +109,11 @@ let globals = {
 const runtimeClosures = {
 	"_print_str": "closure_print_str",
 	"_print_char": "closure_print_char",
-	"_read_char": "sign_id"
+	"_print_str": "closure_print_str",
+	"_print_char": "closure_print_char",
+	"_read_char": "sign_id",
+	"__sys_write": "_sys_write",
+	"__sys_brk": "_sys_brk"
 };
 
 function resolveVar(name) {
@@ -159,12 +180,9 @@ function compileNode(node) {
 	}
 	if (node.type === 'char') {
 		let val = node.value;
-		let codeVal = 0;
-		if (val.length === 1) codeVal = val.charCodeAt(0);
-		else if (val === '\\n') codeVal = 10;
-		else if (val === '\\t') codeVal = 9;
-		else if (val.startsWith('\\')) codeVal = val.charCodeAt(1);
-
+		// No escapes: just take the character value.
+		// Parser passed sliced value (e.g. "b" for "\b").
+		let codeVal = val.charCodeAt(0);
 		return `    mov x0, #${codeVal}\n`;
 	}
 	if (node.type === 'identifier') {
@@ -263,6 +281,16 @@ function compilePrefix(node) {
 		if (expr.type === 'identifier') {
 			let name = expr.value;
 			let loc = resolveVar(name);
+
+			// Auto-allocation if not found
+			if (!loc) {
+				if (g_env._stackOffset === undefined) g_env._stackOffset = 0;
+				g_env._stackOffset -= 16;
+				g_env[name] = `local:${g_env._stackOffset}`;
+				loc = resolveVar(name);
+				return `    sub sp, sp, #16 // Alloc ${name}\n    mov x0, sp // Address of new var\n`;
+			}
+
 			if (loc.startsWith('global:')) {
 				return `    adr x0, ${loc.split(':')[1]}\n`;
 			}
@@ -573,6 +601,99 @@ function compileInfix(node) {
 function compileApply(node) {
 	let code = '';
 
+	// Optimization: Static Inline Composition
+	// Check if both Func and Arg are static lambda definitions (infix '?')
+	if (node.func.type === 'infix' && node.func.op === '?' &&
+		node.arg.type === 'infix' && node.arg.op === '?') {
+
+		// We have [Outer] [Inner].
+		// Outer: node.func
+		// Inner: node.arg
+		// Goal: Create a new function H that does Inner then Outer.
+
+		let label = generateLabel("inline_composed");
+		let afterLabel = generateLabel("after_" + label);
+		let setupCode = `    b ${afterLabel}\n`;
+		let funcCode = `${label}:\n`;
+
+		// Standard Prologue
+		funcCode += '    stp x29, x30, [sp, #-16]!\n';
+		funcCode += '    mov x29, sp\n';
+
+		// Setup environment (simulate compileFunction partially)
+		let oldEnv = { ...g_env };
+		g_env._stackOffset = -16;
+
+		// We assume both distinct functions use the same argument name (e.g. $1) or compatible checking
+		// For this prototype, we assume single argument '$1' logic from the AST we saw.
+		// We need to allocate space for the argument.
+		// H(x) is called. x is in x0 or stack?
+		// Logic:
+		// 1. H(x) is called. x is passed (likely in x0, or if this is Apply, we are pushing to stack?)
+		// Wait, compileFunction usually expects args.
+		// Use compileFunction logic to setup ONE argument frame.
+
+		let params = [];
+		// Extract params from Inner (Arg) - it determines the input signature of H
+		if (node.arg.left) {
+			let collectParams = (n) => {
+				if (n.type === 'identifier') params.push(n.value);
+				else if (n.type === 'infix' && n.op === ',') {
+					collectParams(n.left);
+					collectParams(n.right);
+				}
+			};
+			collectParams(node.arg.left);
+		}
+
+		if (params.length > 0) {
+			let p = params[0]; // Primary arg (e.g. $1)
+			funcCode += '    str x0, [sp, #-16]!\n'; // Push Arg
+			g_env._stackOffset -= 16;
+			g_env[p] = `local:${g_env._stackOffset}`;
+		}
+
+		// 2. Compile Left Body (Outer: node.func)
+		funcCode += `    // Inline: Left Body\n`;
+		funcCode += compileNode(node.func.right);
+		// Result is in x0.
+
+		// 3. Chain: Update the Argument slot with the result!
+		// So Right reads this result as its '$1'.
+		if (params.length > 0) {
+			let p = params[0];
+			let loc = g_env[p]; // local:-32
+			let offset = parseInt(loc.split(':')[1]);
+			funcCode += `    // Inline: Chaining (Update ${p})\n`;
+			funcCode += `    str x0, [x29, #${offset}]\n`;
+		}
+
+		// 4. Compile Right Body (Inner: node.arg)
+		funcCode += `    // Inline: Right Body\n`;
+		funcCode += compileNode(node.arg.right);
+		// Result is in x0.
+
+		// Standard Eqpilegue
+		funcCode += '    mov sp, x29\n';
+		funcCode += '    ldp x29, x30, [sp], #16\n';
+		funcCode += '    ret\n';
+
+		g_env = oldEnv;
+
+		// Emit the function definition
+		code += setupCode + funcCode + `${afterLabel}:\n`;
+
+		// Return the closure of this new function
+		// For prototype, assume no free vars in these simple lambdas
+		code += `    adr x0, sign_id\n`; // Nil Env
+		code += `    str x0, [sp, #-16]!\n`;
+		code += `    adr x1, ${label}\n`;
+		code += `    ldr x0, [sp], #16\n`;
+		code += `    bl _cons\n`; // Make Closure [Function, Env]
+
+		return code;
+	}
+
 	// 1. Compile Func -> Stack
 	code += compileNode(node.func);
 	code += '    str x0, [sp, #-16]!\n';
@@ -619,6 +740,12 @@ function compileFunction(node, name) {
 			else if (n.type === 'infix' && n.op === ',') {
 				collectParams(n.left);
 				collectParams(n.right);
+			}
+			// Handle Apply as Parameter List (e.g. x y ?)
+			// Apply(Apply(x, y), z) -> [x, y, z]
+			else if (n.type === 'apply') {
+				collectParams(n.func);
+				collectParams(n.arg);
 			}
 		};
 		collectParams(node.left);
@@ -895,6 +1022,35 @@ _composed_impl:
     ldp x29, x30, [sp], #16
     ret
 
+// _pow: x0 (base), x1 (exp) -> x0 (result)
+_pow:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    // Check if exp < 0 (Return 0 for integer pow?)
+    cmp x1, #0
+    b.lt .L_pow_zero 
+    mov x2, #1        // result = 1
+    mov x3, x0        // base
+    mov x4, x1        // exp
+
+.L_pow_loop:
+    cbz x4, .L_pow_done
+    tst x4, #1
+    b.eq .L_pow_square
+    mul x2, x2, x3
+.L_pow_square:
+    lsr x4, x4, #1
+    mul x3, x3, x3
+    b .L_pow_loop
+
+.L_pow_zero:
+    mov x2, #0
+.L_pow_done:
+    mov x0, x2
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+
 // _print_int: x0 = integer
 // Prints integer to stdout
 _print_int:
@@ -973,5 +1129,138 @@ finalOutput += `
 ${bssSection}
 `;
 
+
+
+// Intrinsic: __sys_write(fd)(buf)(len)
+finalOutput += `
+_sys_write:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    // fd is in x0
+    // Create Closure [_sys_write_2, [fd, nil]]
+    
+    // 1. Env = [fd, nil]
+    stp x0, x1, [sp, #-16]! // Save regs
+    mov x1, x0 // Car = fd
+    adr x0, sign_id // Cdr = nil
+    // Swap for _cons(car=x0, cdr=x1)? No _cons(x0, x1) usually.
+    // Let's assume _cons(head=x0, tail=x1)
+    mov x2, x0 // nil
+    mov x0, x1 // fd
+    mov x1, x2 // nil
+    bl _cons
+    // x0 is Env
+    
+    // 2. Closure = [_sys_write_2, Env]
+    mov x1, x0 // Env
+    adr x0, _sys_write_2 // Code
+    bl _cons
+    
+    ldp x0, x1, [sp], #16 // Restore (garbage)
+    ldp x29, x30, [sp], #16
+    ret
+
+_sys_write_2:
+    // x0 = buf
+    // Env = [fd, nil]
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    
+    // New Env needs to capture buf AND fd.
+    // Current Env (in x9 usually? No, apply passes Code in x10, Env in x9)
+    // We need to fetch fd from Old Env.
+    // Old Env = [fd, nil]
+    // Car(OldEnv) = fd.
+    
+    stp x0, x9, [sp, #-16]! // Save buf, OldEnv
+    
+    ldr x1, [x9] // Load fd from OldEnv (Car)
+    // We want NewEnv = [len?, [buf, [fd, nil]]] ? 
+    // No, we are building up.
+    // Result of this function is Closure [_sys_write_3, [buf, fd]]
+    
+    // Let's make Env = [buf, fd] (simplified list)
+    // x0 combined with fd.
+    
+    // x0 = buf (saved)
+    // x1 = fd (loaded)
+    
+    // Create [buf, fd]
+    // Step 1: Create [fd, nil] (Recreate? Or reuse OldEnv?)
+    // OldEnv IS [fd, nil]. So we can reuse it as Tail!
+    // So NewEnv = Cons(buf, OldEnv)
+    
+    ldr x0, [sp] // Restore buf
+    ldr x1, [sp, #8] // Restore OldEnv
+    bl _cons
+    // x0 is NewEnv [buf, [fd, nil]]
+    
+    // Closure
+    mov x1, x0 // Env
+    adr x0, _sys_write_3 // Code
+    bl _cons
+    
+    ldp x0, x9, [sp], #16
+    ldp x29, x30, [sp], #16
+    ret
+
+_sys_write_3:
+    // x0 = len
+    // Env = [buf, [fd, nil]]
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    
+    mov x2, x0 // arg3: len
+    
+    // Extract buf, fd from Env (x9)
+    ldr x1, [x9] // buf (Car)
+    ldr x9, [x9, #8] // Tail [fd, nil]
+    ldr x0, [x9] // fd (Car)
+    
+    // Now x0=fd, x1=buf, x2=len
+    
+    mov x8, #64 // sys_write
+    svc #0
+    
+    // Return result (usually 0 or written bytes)
+    // x0 has result.
+    
+    ldp x29, x30, [sp], #16
+    ret
+    
+
+
+// Intrinsic: __sys_brk(addr) -> addr
+// Usage: __sys_brk 0 (get current), __sys_brk new_addr (alloc)
+// Returns CLOSURE
+_sys_brk:
+    // Create Closure [_sys_brk_impl, nil]
+    stp x29, x30, [sp, # - 16]!
+    mov x29, sp
+    
+    adr x0, sign_id // nil
+    str x0, [sp, # - 16]!
+    adr x1, _sys_brk_impl
+    ldr x0, [sp], #16
+    bl _cons
+    
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+ret
+
+_sys_brk_impl:
+    // x0 is Arg (addr). Env is nil (ignored).
+    stp x29, x30, [sp, # - 16]!
+    mov x29, sp
+    
+    mov x8, #214 // brk
+    svc #0
+    
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+ret
+
+`;
+
 fs.writeFileSync(OUTPUT_FILE, finalOutput);
-console.log(`Compiled to ${OUTPUT_FILE}`);
+console.log(`Compiled to ${OUTPUT_FILE} `);

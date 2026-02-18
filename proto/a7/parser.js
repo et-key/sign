@@ -4,6 +4,9 @@ import path from 'path';
 import util from 'util';
 import operators from './operators.js';
 import lexer from './prepare_lexer.js';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const { parseTable, semantics } = operators;
 
@@ -173,7 +176,7 @@ const refineTokens = (rawTokens) => {
 
 const isSeparator = (token) => token && typeof token === 'object' && token.type === 'separator';
 
-const APPLY_PREC = 4;
+const APPLY_PREC = 6;
 
 const parseExpr = (tokens, minPrec = 0) => {
 	if (tokens.length === 0) return null;
@@ -573,10 +576,48 @@ const parseBlock = (tokens) => {
 // --- Main ---
 
 const file = process.argv[2];
+const outFile = process.argv[3];
 if (file) {
-	const code = fs.readFileSync(file, 'utf8');
+	// Load Options
+	let options = { runtime: "hosted" };
+	try {
+		let configDirs = [process.cwd()];
+		configDirs.unshift(path.dirname(path.resolve(file)));
+		configDirs.push(__dirname);
+
+		for (let dir of configDirs) {
+			const configPath = path.join(dir, 'option.json');
+			if (fs.existsSync(configPath)) {
+				const data = fs.readFileSync(configPath, 'utf8');
+				const json = JSON.parse(data);
+				options = { ...options, ...json };
+				break;
+			}
+		}
+	} catch (e) {
+		// Ignore
+	}
+
+	let code = fs.readFileSync(file, 'utf8');
+
+	// Inject Runtime
+	if (options.runtime === 'bare') {
+		const runtimePath = path.join(__dirname, 'runtime.bare.sn');
+		const operatorPath = path.join(__dirname, 'operator.sn');
+		let injected = '';
+		if (fs.existsSync(runtimePath)) injected += fs.readFileSync(runtimePath, 'utf8') + '\n';
+		if (fs.existsSync(operatorPath)) injected += fs.readFileSync(operatorPath, 'utf8') + '\n';
+		code = injected + code;
+	}
+
 	const rawRoot = lexer.parseToSExpr(code);
 	const refinedRoot = refineTokens(rawRoot);
 	const ast = parseBlock(refinedRoot);
-	console.log(JSON.stringify(ast, null, 2));
+	const json = JSON.stringify(ast, null, 2);
+	if (outFile) {
+		fs.writeFileSync(outFile, json, 'utf8');
+		console.log(`AST written to ${outFile}`);
+	} else {
+		console.log(json);
+	}
 }
