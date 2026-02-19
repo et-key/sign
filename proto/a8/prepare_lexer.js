@@ -108,8 +108,13 @@ const parseToSExpr = (code) => {
       const match = line.match(/^(\s*)/);
       if (match) {
           const indentStr = match[1];
-          if (indentStr.includes(' ')) {
-              throw new Error(`Invalid indentation at line ${i+1}: Spaces are not allowed. Use tabs only.`);
+          if (indentStr.length > 0) { // Only check if there's actual indentation
+            for (let charIdx = 0; charIdx < indentStr.length; charIdx++) {
+              if (indentStr[charIdx] === ' ') {
+                // Spaces are no longer allowed for indentation at all.
+                throw new Error(`Invalid indentation at line ${i+1}: Spaces are not allowed. Use tabs only.`);
+              }
+            }
           }
       }
   }
