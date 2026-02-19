@@ -11,6 +11,10 @@
 - The reason spaces can be regarded as delimiters is that the priority with product operators can be appropriately determined in subsequent processing
 - Line breaks can also be considered as operators, in which case their function has the meaning of evaluation on a line-by-line basis
 - The meaning of line breaks can be replaced with either `|`, `,`, or ` ` (space)
+- No space after opening absolute value bracket
+- No space before closing absolute value bracket
+- No space after opening parenthesis
+- No space before closing parenthesis
 
 ## Complete Operator Table
 - Right-associative operators (right unit element) are marked with ※ in the position notation
