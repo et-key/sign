@@ -3,30 +3,18 @@
 const prepare = code => code
   .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\xA0\xAD]/g, '')
   .replace(/^`[^\r\n]*(\r\n|[\r\n])/gm, '')
-  .replace(/(\r\n|[\r\n])/g, '\r')                                  // Normalize line endings to \r
-  .replace(/\\\r/g, '\\\n')                                       // Escaped \\\r to \\\n
-
+  .replace(/(\r\n|[\r\n])/g, '\r')
+  .replace(/\\\r/g, '\\\n');
 
 const markSeparator = code => code
-  // ブロック内の改行をひとまず区切らないようにする？ Regex above didn't really do that.
-  // 1. Separate Brackets: [ ] { } ( ) -> surround with \x1F
   .replace(
     /(\\[\s\S])|(`[^`\r\n]*`)|(?<!\\)([\{\(\[])|(?<!\\)([\}\)\]])/g,
     (_, $1, $2, $3, $4) => ($1 || $2) || ($3 && '\x1F[\x1F') || ($4 && '\x1F]\x1F')
   )
-  // 2. Separate Commas, Colons, Semicolons if not already separated?
-  // User's lexer didn't do this, implying strict space usage or maybe it should?
-  // "x," token suggests comma is attached. We should split it.
-  // Operators: , : ; ? ! etc.
-  // Be careful not to split inside strings or escaped chars.
-  // Regex: Match operators that are NOT spaces.
-  // Sign operators are symbols.
-  // We want `x,` -> `x` `,`
   .replace(
     /(\\[\s\S])|(`[^`\r\n]*`)|(\|\|)|(?<!\\)([,\:;|])/g,
     (_, $1, $2, $3, $4) => ($1 || $2 || $3) || ($4 && `\x1F${$4}\x1F`)
   )
-  // 3. Separate Spaces
   .replace(
     /(\\[\s\S])|(`[^`\r\n]*`)|(?<!\\) /g,
     (_, $1, $2, $3) => ($1 || $2) || ($3 && `\x1F`)
@@ -36,134 +24,22 @@ const markSeparator = code => code
     (_, e, s, $1, $2) => (e ? e + '\x1F' : s) || ($1 && `\x1F\n\x1F`) || ($2 && `\x1F\t\x1F`)
   );
 
-const toSExpr = code => {
-  const marked = markSeparator(prepare(code));
-  const rawTokens = marked.split('\x1F').filter(t => t !== '');
-
-  // Stack for nesting
-  // We need to handle:
-  // 1. Indentation (Tabs) -> Block structure
-  // 2. Brackets [ ] -> In-line lists/blocks
-  // 3. Lines -> Expressions?
-
-  // Structure:
-  // Root = Block
-  // Block = [Line, Line, ...]
-  // Line = [Atom, Atom, ...]
-
-  // However, indentation levels are tricky with just a flat list.
-  // We need to track indentation at the start of lines.
-
-  let root = { type: 'block', body: [] };
-  let stack = [{ node: root, indent: 0 }]; // Stack of blocks
-  let currentLine = [];
-
-  // We need to group tokens by line first to handle indentation?
-  // Or process stream?
-
-  let lineIndent = 0;
-  let isLineStart = true;
-
-  for (let i = 0; i < rawTokens.length; i++) {
-    const token = rawTokens[i];
-
-    if (token === '\n') {
-      if (currentLine.length > 0) {
-        stack[stack.length - 1].node.body.push(currentLine);
-        currentLine = [];
-      }
-      isLineStart = true;
-      lineIndent = 0;
-      continue;
-    }
-
-    if (token === '\t') {
-      if (isLineStart) {
-        lineIndent++;
-      }
-      // Ignore tabs not at start?
-      continue;
-    }
-
-    if (token === '[' || token === ']') {
-      // Handle brackets
-      // Brackets start a new nested list/block inside the current line
-      if (token === '[') {
-        const newList = [];
-        currentLine.push(newList);
-        // We need to process inside of [] recursively or using stack?
-        // Mixed stack: Blocks (indent) and Lists (brackets)?
-        // Complexity: Indentation is block-level, brackets are expression-level.
-        // Sign: `[ ... ]` can span lines? 
-        // If so, we need a unified stack.
-        // But indent stack is for explicit indent blocks.
-
-        // Let's refine the approach:
-        // Pre-process indentation into INDENT/DEDENT tokens?
-        // Then standard parsing.
-      }
-    }
-
-    // If we are at start of line and have content (not tab/newline), check indentation
-    if (isLineStart) {
-      isLineStart = false;
-
-      // Adjust stack based on lineIndent
-      let currentIndent = stack[stack.length - 1].indent;
-
-      if (lineIndent > currentIndent) {
-        // New block
-        // The previous line should have started it? Or just this line?
-        // Sign: 
-        // key :
-        //    val
-        // The block is attached to `key :`.
-
-        // We create a new block and append it to the LAST item of the previous line?
-        // Or just push a Block token?
-
-        // Let's simplify: 
-        // Convert structure to nested arrays where Blocks are arrays with special markers?
-      }
-      else if (lineIndent < currentIndent) {
-        while (stack.length > 1 && stack[stack.length - 1].indent > lineIndent) {
-          stack.pop();
-        }
-      }
-    }
-
-    currentLine.push(token);
-  }
-
-  // Flush last line
-  if (currentLine.length > 0) {
-    stack[stack.length - 1].node.body.push(currentLine);
-  }
-
-  return root;
-};
-
-// Simplified tokenizer/parser for S-Expr
-// Returns a nested array structure representing the tokens
 const parseToSExpr = (code) => {
   const marked = markSeparator(prepare(code));
   const tokens = marked.split('\x1F').filter(t => t !== '');
 
   const root = [];
-  const stack = []; // Stores { array: [], indent: N }
+  // indentStack: { list: Array, indent: Number }
+  let indentStack = [{ list: root, indent: 0 }];
 
-  let currentBlock = root;
-  let currentIndent = 0;
+  const currentList = () => indentStack[indentStack.length - 1].list;
 
-  // Buffers for line processing to detect indentation
+  // Split into lines
   let lines = [];
-  let line = [];
-
-  // 1. Split into lines
   let temp = [];
   for (const t of tokens) {
     if (t === '\n') {
-      lines.push(temp);
+      if (temp.length > 0) lines.push(temp);
       temp = [];
     } else {
       temp.push(t);
@@ -171,82 +47,136 @@ const parseToSExpr = (code) => {
   }
   if (temp.length > 0) lines.push(temp);
 
-  // 2. Process spaces/tabs for indentation
-  // 3. Build tree
+  for (let l of lines) {
+    if (l.length === 0) continue;
 
-  // Helper to count tabs at start
-  const countTabs = (toks) => {
-    let c = 0;
-    for (const t of toks) {
-      if (t === '\t') c++;
+    // Strict Tab Indentation Check
+    let indent = 0;
+    for (const t of l) {
+      if (t === '\t') indent++;
+      else if (t.startsWith(' ')) {
+         throw new Error("Invalid indentation: Spaces are not allowed. Use tabs only.");
+      }
       else break;
     }
-    return c;
-  };
 
-  // We need a proper stack for indentation blocks
-  // root is the top level block
+    // Remove leading tabs
+    const content = l.slice(indent);
+    if (content.length === 0) continue;
 
-  let indentStack = [{ list: root, indent: 0 }];
+    // Check for space indentation in content (e.g. 4 spaces)
+    // The tokenizer separates spaces as tokens, so if we see a space token at start of content, it's mixed indentation or space indent.
+    if (content[0] === ' ' || (content[0] && content[0].startsWith(' '))) { // content[0] could be empty string from split? No, filtered.
+       // Check if it's a space token (our tokenizer puts spaces in \x1F)
+       // markSeparator replaces space with \x1F. split removes empty.
+       // So space becomes empty string? No.
+       // replaced by \x1F. split('\x1F').
+       // Wait, markSeparator replaces space with \x1F?
+       // .replace(/...|(?<!\\) /g, ... => \x1F)
+       // If we have "    ", it becomes \x1F\x1F\x1F\x1F.
+       // trace: ` ` -> `\x1F`. split -> ``. filtered -> gone.
+       // So spaces are REMOVED?
+       // The original code passed spaces as empty tokens?
+       // `rawTokens = marked.split('\x1F').filter(t => t !== '')`
+       // if space -> \x1F. split -> ["", ""]. filter -> [].
+       // So spaces are IGNORED.
+       
+       // REQUIRED: We need to detect spaces to throw error.
+       // We must check `code` or `marked` before split/filter?
+       // Or change markSeparator to keep spaces as distinct tokens?
+    }
+    
+    // RE-VERIFY: `prepare_lexer` lines 31-33:
+    // .replace( ... |(?<!\\) /g, ... ($3 && `\x1F`) )
+    // Space is replaced by \x1F.
+    // So "  x" -> "\x1F\x1Fx". split -> ["", "", "x"]. filter -> ["x"].
+    // Spaces are lost.
+    
+    // FIX: We need to enforce this BEFORE tokenizing.
+    // Let's rely on `toSExpr` to check original lines? 
+    // Or simpler: check strictly in `toSExpr` iteration?
+    // But `tokens` don't have spaces.
+    
+    // We can check `code` or `lines` before processing?
+    // Let's add a pre-check validation for 4-spaces at start of line.
+  }
+  
+  // Validation Pass
+  const linesRaw = prepare(code).split('\r'); // Processed code has \r lines
+  for (let i = 0; i < linesRaw.length; i++) {
+      const line = linesRaw[i];
+      const match = line.match(/^(\s*)/);
+      if (match) {
+          const indentStr = match[1];
+          if (indentStr.includes(' ')) {
+              throw new Error(`Invalid indentation at line ${i+1}: Spaces are not allowed. Use tabs only.`);
+          }
+      }
+  }
 
-  // Helper to get current list
-  const currentList = () => indentStack[indentStack.length - 1].list;
+  // Resume Processing with `lines` and `tokens` (spaces already removed)
 
   for (let l of lines) {
     if (l.length === 0) continue;
 
-    const indent = countTabs(l);
-    // Remove leading tabs
-    const content = l.slice(indent);
-    if (content.length === 0) continue; // Empty line with tabs
+    let indent = 0;
+    while(l.length > 0 && l[0] === '\t') {
+        indent++;
+        l.shift();
+    }
+    
+    const content = l; 
+    if (content.length === 0) continue;
 
-    // Adjust indentation
     let top = indentStack[indentStack.length - 1];
 
     if (indent > top.indent) {
       // New Block
-      // The block should be attached to the last item of the previous list?
-      // Or just a new list added to current list?
-      // In S-expr: `(parent (child ...))`
-      // Here: `parent` `child...`
-      // If we just push a new array, `parent` and `child` are siblings in currentList?
-      // No, `parent` is previous line.
-
-      // Sign semantics: Indent block is an argument or body.
-      // We push a new array to the current list.
       const newBlock = [];
-      currentList().push(newBlock);
+      const parentList = currentList();
+      
+      // If parent list is empty? (Should not happen if previous line existed)
+      // Check if previous line ended with "open op" like `?` or `:`
+      // If so, `newBlock` is the argument.
+      // If not, `newBlock` is... what? A new argument? `func arg`
+      // `func \n indent arg` -> `func arg`
+      
+      // We push the new block to the current list.
+      // NOTE: User wants "indent" to be like "[".
+      // So we just push a new array.
+      parentList.push(newBlock);
       indentStack.push({ list: newBlock, indent: indent });
+      
     } else if (indent < top.indent) {
       // Dedent
       while (indentStack.length > 1 && indentStack[indentStack.length - 1].indent > indent) {
         indentStack.pop();
       }
-      // After dedent, we are back in parent list.
-      // We should ensure a separator or something?
-      // If the previous block ended, the next item is a new statement.
-      currentList().push({ type: 'separator', value: '\n' });
-    }
-
-    // Add content tokens to current list
-    // Handle brackets within content?
-    // `[ a b ]` -> `['a', 'b']`
-    // We need a mini-parser for inline brackets
-
-    // Check for "open" operators at end of line
-    const processedLine = processLine(content);
-    const lastToken = processedLine[processedLine.length - 1];
-    const isOpenOp = ['?', ':', '='].includes(lastToken);
-
-    currentList().push(...processedLine);
-
-    // Add newline separator UNLESS line ends with open op
-    if (!isOpenOp) {
+      
+      // Check if we dedented too much? (mismatched indent)
+      // Python allows matches to previous levels.
+      if (indentStack[indentStack.length - 1].indent !== indent) {
+          // This implies the indentation level doesn't match any outer block
+          // For now, we default to the nearest outer block (standard behavior).
+      }
+      
+      // Seperator handling:
+      // If we dedent, we are back in a list.
+      // Should we add a separator?
+      // `x \n y` -> `x, y` (in list)
+      // `block \n y` -> `block, y`
       currentList().push({ type: 'separator', value: '\n' });
     } else {
-      // If open op, we expect next block/line to be argument.
-      // No separator.
+       // Same indent -> Separate statement
+       currentList().push({ type: 'separator', value: '\n' });
     }
+
+    // Process Line Content
+    // Handle inline blocks [ ] ( {
+    // And map ( { to [ behavior
+    const processed = processLine(content);
+    
+    currentList().push(...processed);
   }
 
   return root;
@@ -257,14 +187,14 @@ const processLine = (tokens) => {
   let stack = [res];
 
   for (const t of tokens) {
-    if (t === '[') {
+    if (t === '[' || t === '(' || t === '{') {
       const nu = [];
       stack[stack.length - 1].push(nu);
       stack.push(nu);
-    } else if (t === ']') {
+    } else if (t === ']' || t === ')' || t === '}') {
       if (stack.length > 1) stack.pop();
-    } else if (t !== '\t') { // Should be no tabs left
-      stack[stack.length - 1].push(t); // Keep as string
+    } else if (t !== '\t') {
+      stack[stack.length - 1].push(t);
     }
   }
   return res;

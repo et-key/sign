@@ -1,0 +1,36 @@
+{
+  "type": "infix",
+  "op": ":",
+  "left": {
+    "type": "identifier",
+    "value": "add"
+  },
+  "right": {
+    "type": "infix",
+    "op": "?",
+    "left": {
+      "type": "identifier",
+      "value": "x"
+    },
+    "right": {
+      "type": "infix",
+      "op": "?",
+      "left": {
+        "type": "identifier",
+        "value": "y"
+      },
+      "right": {
+        "type": "infix",
+        "op": "+",
+        "left": {
+          "type": "identifier",
+          "value": "x"
+        },
+        "right": {
+          "type": "identifier",
+          "value": "y"
+        }
+      }
+    }
+  }
+}

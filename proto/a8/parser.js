@@ -251,7 +251,54 @@ const parseExpr = (tokens, minPrec = 0) => {
 					continue;
 				}
 
-				// Infix
+
+				// Automatic Currying Logic for '?'
+				if (opSymbol === '?') {
+					// Recursive helper to transform apply chains and blocks into curried functions
+					const curry = (expr, body) => {
+						if (expr.type === 'apply') {
+							// apply(f, a) ? body -> f ? (a ? body)
+							return curry(expr.func, {
+								type: 'infix',
+								op: '?',
+								left: expr.arg,
+								right: body
+							});
+						}
+
+						// Support [arg1 arg2] ? body -> arg1 ? (arg2 ? body)
+						if (expr.type === 'block') {
+							let result = body;
+							const args = expr.body;
+							// If block is empty? [ ] ? body -> body
+							if (args.length === 0) return body;
+
+							for (let i = args.length - 1; i >= 0; i--) {
+								result = {
+									type: 'infix',
+									op: '?',
+									left: args[i],
+									right: result
+								};
+							}
+							return result;
+						}
+
+						// Base case
+						return {
+							type: 'infix',
+							op: '?',
+							left: expr,
+							right: body
+						};
+					};
+
+					const nextMinPrec = op.associativity === 'right' ? op.precedence : op.precedence + 1;
+					const rhs = parseExpr(tokens, nextMinPrec);
+					lhs = curry(lhs, rhs);
+					continue;
+				}
+
 				const nextMinPrec = op.associativity === 'right' ? op.precedence : op.precedence + 1;
 				const rhs = parseExpr(tokens, nextMinPrec);
 				lhs = { type: 'infix', op: opSymbol, left: lhs, right: rhs };
