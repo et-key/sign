@@ -16,10 +16,7 @@ const createNode = (type, value, children = []) => ({ type, value, children });
 // --- Operators ---
 
 const ops = [
-	{ symbol: "#", precedence: Infinity, notation: "prefix" },
-	{ symbol: "##", precedence: Infinity, notation: "prefix" },
-	{ symbol: "###", precedence: Infinity, notation: "prefix" },
-	{ symbol: ":", precedence: 2, notation: "infix", associativity: "right" },
+	{ symbol: ":", precedence: 8, notation: "infix", associativity: "right" },
 	{ symbol: "#", precedence: 3, notation: "infix", associativity: "left" },
 	{ symbol: ",", precedence: 6, notation: "infix", associativity: "right" },
 	{ symbol: "?", precedence: 5, notation: "infix", associativity: "right" },
@@ -254,16 +251,66 @@ const parseExpr = (tokens, minPrec = 0) => {
 
 				// Automatic Currying Logic for '?'
 				if (opSymbol === '?') {
+
+					// Helper: Create a lambda, handling Default Arguments (infix :)
+					const makeLambda = (arg, body) => {
+						// Handle Default Argument: arg is { type: 'infix', op: ':', left: param, right: defaultVal }
+						if (arg.type === 'infix' && arg.op === ':') {
+							const param = arg.left;
+							const defaultVal = arg.right;
+							const tempParamName = '$temp_' + (param.value || 'arg');
+
+							// wrapper block: [ param : tempParam | defaultVal; body... ]
+
+							let newBodyStatements = [];
+
+							// Definition expr: param : tempParam | defaultVal
+							const defExpr = {
+								type: 'infix', op: ':',
+								left: param,
+								right: {
+									type: 'infix', op: '|', // Logical OR
+									left: { type: 'identifier', value: tempParamName },
+									right: defaultVal
+								}
+							};
+							newBodyStatements.push(defExpr);
+
+							// Add original body
+							if (body.type === 'block') {
+								newBodyStatements.push(...body.body);
+							} else {
+								newBodyStatements.push(body);
+							}
+
+							const wrappedBody = {
+								type: 'block',
+								body: newBodyStatements
+							};
+
+							// Return: tempParam ? wrappedBody
+							return {
+								type: 'infix',
+								op: '?',
+								left: { type: 'identifier', value: tempParamName },
+								right: wrappedBody
+							};
+						}
+
+						// Standard Lambda
+						return {
+							type: 'infix',
+							op: '?',
+							left: arg,
+							right: body
+						};
+					};
+
 					// Recursive helper to transform apply chains and blocks into curried functions
 					const curry = (expr, body) => {
 						if (expr.type === 'apply') {
-							// apply(f, a) ? body -> f ? (a ? body)
-							return curry(expr.func, {
-								type: 'infix',
-								op: '?',
-								left: expr.arg,
-								right: body
-							});
+							// With default args: f ? makeLambda(a, body)
+							return curry(expr.func, makeLambda(expr.arg, body));
 						}
 
 						// Support [arg1 arg2] ? body -> arg1 ? (arg2 ? body)
@@ -274,28 +321,30 @@ const parseExpr = (tokens, minPrec = 0) => {
 							if (args.length === 0) return body;
 
 							for (let i = args.length - 1; i >= 0; i--) {
-								result = {
-									type: 'infix',
-									op: '?',
-									left: args[i],
-									right: result
-								};
+								result = curry(args[i], result);
 							}
 							return result;
 						}
 
 						// Base case
-						return {
-							type: 'infix',
-							op: '?',
-							left: expr,
-							right: body
-						};
+						return makeLambda(expr, body);
 					};
+
 
 					const nextMinPrec = op.associativity === 'right' ? op.precedence : op.precedence + 1;
 					const rhs = parseExpr(tokens, nextMinPrec);
-					lhs = curry(lhs, rhs);
+
+					// Rewrite Rule for Definition: f : args ? body -> f : (args ? body)
+					// Because ':' has higher precedence than '?', 'f : args' is parsed as LHS.
+					if (lhs.type === 'infix' && lhs.op === ':') {
+						const defName = lhs.left;
+						const defArgs = lhs.right;
+						const curried = curry(defArgs, rhs);
+						lhs = { type: 'infix', op: ':', left: defName, right: curried };
+					} else {
+						lhs = curry(lhs, rhs);
+					}
+
 					continue;
 				}
 
