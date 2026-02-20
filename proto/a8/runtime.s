@@ -126,6 +126,48 @@ _cons:
     ldp x29, x30, [sp], #16
     ret
 
+_concat:
+    // x0 = A, x1 = B
+    // Return: if A is scalar -> cons(A, B)
+    //         if A is List -> cons(Head(A), concat(Tail(A), B))
+    stp x29, x30, [sp, #-32]!
+    mov x29, sp
+
+    // Is A a pointer to heap?
+    cmp x0, #4096
+    b.ls .Lconcat_scalar
+    adr x9, heap_buffer
+    cmp x0, x9
+    b.lo .Lconcat_scalar // Below heap, it's string/static data.
+
+    // A is a list cons cell. x0 = [Head, Tail].
+    // Save A and B
+    str x0, [sp, #16] // A
+    str x1, [sp, #24] // B
+
+    // Recursion: concat(Tail(A), B)
+    ldr x0, [x0, #8] // x0 = Tail(A)
+    // x1 is already B
+    bl _concat
+
+    // Now x0 is concatResult. Needs to be Tail of new cons.
+    // x1 needs to be Head(A).
+    ldr x2, [sp, #16] // Load A
+    ldr x1, [x2]      // Load Head(A)
+    bl _cons          // _cons(x1=Head, x0=concatResult)
+
+    ldp x29, x30, [sp], #32
+    ret
+
+.Lconcat_scalar:
+    // A is scalar. Return cons(A, B)
+    mov x2, x0  // x2 = A
+    mov x0, x1  // x0 = B
+    mov x1, x2  // x1 = A
+    bl _cons
+    ldp x29, x30, [sp], #32
+    ret
+
 _nth:
     // x1 = list, x0 = index
     stp x29, x30, [sp, #-16]!
