@@ -1,0 +1,210 @@
+{
+  "type": "block",
+  "body": [
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "fibonacci"
+      },
+      "right": {
+        "type": "infix",
+        "op": "?",
+        "left": {
+          "type": "identifier",
+          "value": "n"
+        },
+        "right": {
+          "type": "infix",
+          "op": "?",
+          "left": {
+            "type": "identifier",
+            "value": "$temp_n0"
+          },
+          "right": {
+            "type": "block",
+            "body": [
+              {
+                "type": "infix",
+                "op": ":",
+                "left": {
+                  "type": "identifier",
+                  "value": "n0"
+                },
+                "right": {
+                  "type": "infix",
+                  "op": "|",
+                  "left": {
+                    "type": "identifier",
+                    "value": "$temp_n0"
+                  },
+                  "right": {
+                    "type": "infix",
+                    "op": "-",
+                    "left": {
+                      "type": "identifier",
+                      "value": "n"
+                    },
+                    "right": {
+                      "type": "number",
+                      "value": 1
+                    }
+                  }
+                }
+              },
+              {
+                "type": "infix",
+                "op": "?",
+                "left": {
+                  "type": "identifier",
+                  "value": "$temp_n1"
+                },
+                "right": {
+                  "type": "block",
+                  "body": [
+                    {
+                      "type": "infix",
+                      "op": ":",
+                      "left": {
+                        "type": "identifier",
+                        "value": "n1"
+                      },
+                      "right": {
+                        "type": "infix",
+                        "op": "|",
+                        "left": {
+                          "type": "identifier",
+                          "value": "$temp_n1"
+                        },
+                        "right": {
+                          "type": "infix",
+                          "op": "-",
+                          "left": {
+                            "type": "identifier",
+                            "value": "n"
+                          },
+                          "right": {
+                            "type": "number",
+                            "value": 2
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "infix",
+                      "op": ":",
+                      "left": {
+                        "type": "infix",
+                        "op": "<=",
+                        "left": {
+                          "type": "identifier",
+                          "value": "n"
+                        },
+                        "right": {
+                          "type": "number",
+                          "value": 1
+                        }
+                      },
+                      "right": {
+                        "type": "identifier",
+                        "value": "n"
+                      }
+                    },
+                    {
+                      "type": "infix",
+                      "op": "+",
+                      "left": {
+                        "type": "apply",
+                        "func": {
+                          "type": "apply",
+                          "func": {
+                            "type": "apply",
+                            "func": {
+                              "type": "identifier",
+                              "value": "fibonacci"
+                            },
+                            "arg": {
+                              "type": "identifier",
+                              "value": "n0"
+                            }
+                          },
+                          "arg": {
+                            "type": "identifier",
+                            "value": "_"
+                          }
+                        },
+                        "arg": {
+                          "type": "identifier",
+                          "value": "_"
+                        }
+                      },
+                      "right": {
+                        "type": "apply",
+                        "func": {
+                          "type": "apply",
+                          "func": {
+                            "type": "apply",
+                            "func": {
+                              "type": "identifier",
+                              "value": "fibonacci"
+                            },
+                            "arg": {
+                              "type": "identifier",
+                              "value": "n1"
+                            }
+                          },
+                          "arg": {
+                            "type": "identifier",
+                            "value": "_"
+                          }
+                        },
+                        "arg": {
+                          "type": "identifier",
+                          "value": "_"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "apply",
+      "func": {
+        "type": "apply",
+        "func": {
+          "type": "apply",
+          "func": {
+            "type": "infix",
+            "op": ":",
+            "left": {
+              "type": "identifier",
+              "value": "test"
+            },
+            "right": {
+              "type": "identifier",
+              "value": "fibonacci"
+            }
+          },
+          "arg": {
+            "type": "number",
+            "value": 5
+          }
+        },
+        "arg": {
+          "type": "identifier",
+          "value": "_"
+        }
+      },
+      "arg": {
+        "type": "identifier",
+        "value": "_"
+      }
+    }
+  ]
+}

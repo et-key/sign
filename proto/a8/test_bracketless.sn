@@ -1,0 +1,9 @@
+fibonacci :
+	n
+	n0 : n - 1
+	n1 : n - 2
+?
+	n <= 1 : n
+	[fibonacci n0 _ _] + [fibonacci n1 _ _]
+
+test : fibonacci 5 _ _
