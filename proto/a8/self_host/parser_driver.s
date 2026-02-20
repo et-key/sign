@@ -64,12 +64,12 @@ apply_end_9:
     adr x1, Philosophy
     str x0, [x1]
     adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    adr x0, -
     str x0, [sp, #-16]!
     adr x0, No
+    ldr x1, [sp], #16
+    sub x0, x1, x0
+    str x0, [sp, #-16]!
+    adr x0, global
     cmp x0, #4096
     b.hi do_compose_10
 do_apply_11:
@@ -84,7 +84,11 @@ do_compose_10:
     bl _compose
 apply_end_12:
     str x0, [sp, #-16]!
-    adr x0, global
+    adr x0, state
+    str x0, [sp, #-16]!
+    adr x0, No
+    ldr x1, [sp], #16
+    sub x0, x1, x0
     cmp x0, #4096
     b.hi do_compose_13
 do_apply_14:
@@ -99,7 +103,7 @@ do_compose_13:
     bl _compose
 apply_end_15:
     str x0, [sp, #-16]!
-    adr x0, state
+    adr x0, local
     cmp x0, #4096
     b.hi do_compose_16
 do_apply_17:
@@ -113,12 +117,8 @@ do_compose_16:
     ldr x0, [sp], #16
     bl _compose
 apply_end_18:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    adr x0, -
     str x0, [sp, #-16]!
-    adr x0, No
+    adr x0, bindings
     cmp x0, #4096
     b.hi do_compose_19
 do_apply_20:
@@ -133,38 +133,20 @@ do_compose_19:
     bl _compose
 apply_end_21:
     str x0, [sp, #-16]!
-    adr x0, local
-    cmp x0, #4096
-    b.hi do_compose_22
-do_apply_23:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_24
-do_compose_22:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_24:
+    b after_func_24_25
+func_24:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
-    adr x0, bindings
-    cmp x0, #4096
-    b.hi do_compose_25
-do_apply_26:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_27
-do_compose_25:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_27:
+    b after_func_29_30
+func_29:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_28_29
-func_28:
+    adr x0, _compose
+    str x0, [sp, #-16]!
+    b after_func_31_32
+func_31:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -173,18 +155,6 @@ func_33:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    adr x0, _compose
-    str x0, [sp, #-16]!
-    b after_func_35_36
-func_35:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_37_38
-func_37:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
     ldr x9, [x29, #-16] // Reload Env
     ldr x10, [x9] // Load Val
     str x10, [sp, #-16]! // Push Val
@@ -192,61 +162,6 @@ func_37:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     adr x0, sign_id
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_37_38:
-    // Closure for func_37
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    ldr x1, [sp], #16
-    mov x9, x0
-    mov x0, x1
-    mov x1, x9
-    bl _cons
-    str x0, [sp, #-16]!
-    adr x1, func_37
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_35_36:
-    // Closure for func_35
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_35
-    ldr x0, [sp], #16
-    bl _cons
-    cmp x0, #4096
-    b.hi do_compose_39
-do_apply_40:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_41
-do_compose_39:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_41:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    cmp x0, #4096
-    b.hi do_compose_42
-do_apply_43:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_44
-do_compose_42:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_44:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
@@ -254,12 +169,67 @@ after_func_33_34:
     // Closure for func_33
     adr x0, sign_id
     str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
     adr x1, func_33
     ldr x0, [sp], #16
     bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_31_32:
+    // Closure for func_31
+    adr x0, sign_id
     str x0, [sp, #-16]!
-    b after_func_45_46
-func_45:
+    adr x1, func_31
+    ldr x0, [sp], #16
+    bl _cons
+    cmp x0, #4096
+    b.hi do_compose_35
+do_apply_36:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_37
+do_compose_35:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_37:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    cmp x0, #4096
+    b.hi do_compose_38
+do_apply_39:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_40
+do_compose_38:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_40:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_29_30:
+    // Closure for func_29
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_29
+    ldr x0, [sp], #16
+    bl _cons
+    str x0, [sp, #-16]!
+    b after_func_41_42
+func_41:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -273,8 +243,8 @@ func_45:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_45_46:
-    // Closure for func_45
+after_func_41_42:
+    // Closure for func_41
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -284,7 +254,7 @@ after_func_45_46:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_45
+    adr x1, func_41
     ldr x0, [sp], #16
     bl _cons
     ldr x1, [sp], #16
@@ -292,69 +262,59 @@ after_func_45_46:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_30
+    b.ne xor_true_26
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_32
-xor_true_30:
+    b xor_end_28
+xor_true_26:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_31
+    b.eq xor_false_27
     adr x0, sign_id
-    b xor_end_32
-xor_false_31:
+    b xor_end_28
+xor_false_27:
     mov x0, x1
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_28_29:
-    // Closure for func_28
+after_func_24_25:
+    // Closure for func_24
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_28
+    adr x1, func_24
     ldr x0, [sp], #16
     bl _cons
-    cmp x0, #4096
-    b.hi do_compose_47
-do_apply_48:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_49
-do_compose_47:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_49:
+    str x0, [sp, #-16]!
+    adr x0, Logic
+    ldr x1, [sp], #16
+    sub x0, x1, x0
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_0
-    adr x0, -
-    str x0, [sp, #-16]!
+    b.eq cond_false_22
     adr x0, tokens
     str x0, [sp, #-16]!
     adr x0, >
     ldr x1, [sp], #16
     sub x0, x1, x0
-    adr x1, Logic
-    str x0, [x1]
+    b cond_end_23
+cond_false_22:
     adr x0, sign_id
+cond_end_23:
     cmp x0, #4096
-    b.hi do_compose_50
-do_apply_51:
+    b.hi do_compose_43
+do_apply_44:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_52
-do_compose_50:
+    b apply_end_45
+do_compose_43:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_52:
+apply_end_45:
     str x0, [sp, #-16]!
     adr x0, ast_node
     str x0, [sp, #-16]!
@@ -362,18 +322,18 @@ apply_end_52:
     ldr x1, [sp], #16
     bl _cons
     cmp x0, #4096
-    b.hi do_compose_53
-do_apply_54:
+    b.hi do_compose_46
+do_apply_47:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_55
-do_compose_53:
+    b apply_end_48
+do_compose_46:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_55:
+apply_end_48:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
@@ -521,136 +481,60 @@ apply_end_55:
     adr x1, tok_unit
     str x0, [x1]
     adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_56_57
-func_56:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_58_59
-func_58:
+    b after_tok_type_impl_49
+tok_type_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_61
-    b or_end_62
-or_right_61:
-    adr x0, tok
-or_end_62:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_60
-    adr x0, tok
     ldr x0, [x0] // @ load
-blk_end_60:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_58_59:
-    // Closure for func_58
+after_tok_type_impl_49:
+    // Closure for tok_type_impl
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_58
+    adr x1, tok_type_impl
     ldr x0, [sp], #16
     bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_56_57:
-    // Closure for func_56
     adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
     str x0, [sp, #-16]!
-    adr x1, func_56
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_63_64
-func_63:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_65_66
-func_65:
+    b after_tok_val_impl_50
+tok_val_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_68
-    b or_end_69
-or_right_68:
-    adr x0, tok
-or_end_69:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_67
-    adr x0, tok
     str x0, [sp, #-16]!
     mov x0, #8
     ldr x1, [sp], #16
     add x0, x1, x0
     ldr x0, [x0] // @ load
-blk_end_67:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_65_66:
-    // Closure for func_65
+after_tok_val_impl_50:
+    // Closure for tok_val_impl
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_65
+    adr x1, tok_val_impl
     ldr x0, [sp], #16
     bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_63_64:
-    // Closure for func_63
     adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
     str x0, [sp, #-16]!
-    adr x1, func_63
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_70_71
-func_70:
+    b after_streq_impl_51
+streq_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_72_73
-func_72:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_75
-    b or_end_76
-or_right_75:
-    adr x0, s1
-or_end_76:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_74
-    b after_func_77_78
-func_77:
+    b after_func_52_53
+func_52:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -658,71 +542,289 @@ func_77:
     ldr x10, [x9] // Load Val
     str x10, [sp, #-16]! // Push Val
     ldr x9, [x9, #8] // Next
-    adr x0, s1
-    ldr x0, [x0] // @ load
+    b after_func_54_55
+func_54:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_79
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
     ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_57
+    b or_end_58
+or_right_57:
+    ldr x0, [x29, #-48]
     ldr x0, [x0] // @ load
+or_end_58:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_79
+    b.ne blk_end_56
+    b after_func_59_60
+func_59:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_62
+    b or_end_63
+or_right_62:
+    ldr x0, [x29, #-48]
+    ldr x0, [x0] // @ load
+or_end_63:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_61
     ldr x0, [x29, #-64]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.ne cmp_true_66
+    adr x0, sign_id
+    b cmp_end_67
+cmp_true_66:
+cmp_end_67:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_64
+    mov x0, #0
+    b cond_end_65
+cond_false_64:
+    adr x0, sign_id
+cond_end_65:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_61
+    ldr x0, [x29, #-64]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_70
+    adr x0, sign_id
+    b cmp_end_71
+cmp_true_70:
+cmp_end_71:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_68
+    mov x0, #1
+    b cond_end_69
+cond_false_68:
+    adr x0, sign_id
+cond_end_69:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_61
+    adr x0, streq
+    ldr x0, [x0]
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.ne cmp_true_82
-    adr x0, sign_id
-    b cmp_end_83
-cmp_true_82:
-cmp_end_83:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_80
-    mov x0, #0
-    b cond_end_81
-cond_false_80:
-    adr x0, sign_id
-cond_end_81:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_79
-    ldr x0, [x29, #-64]
-    str x0, [sp, #-16]!
-    mov x0, #0
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.eq cmp_true_86
-    adr x0, sign_id
-    b cmp_end_87
-cmp_true_86:
-cmp_end_87:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_84
-    mov x0, #1
-    b cond_end_85
-cond_false_84:
-    adr x0, sign_id
-cond_end_85:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_79
-    ldr x0, [x29, #-48]
-    str x0, [sp, #-16]!
-    adr x0, s1
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
+    cmp x0, #4096
+    b.hi do_compose_72
+do_apply_73:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_74
+do_compose_72:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_74:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    str x0, [sp, #-16]!
+    mov x0, #1
+    ldr x1, [sp], #16
+    add x0, x1, x0
+    cmp x0, #4096
+    b.hi do_compose_75
+do_apply_76:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_77
+do_compose_75:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_77:
+blk_end_61:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_59_60:
+    // Closure for func_59
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_59
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_56:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_54_55:
+    // Closure for func_54
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_54
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_52_53:
+    // Closure for func_52
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_52
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_streq_impl_51:
+    // Closure for streq_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, streq_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_get_prec_impl_78
+get_prec_impl:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    adr x0, streq
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    cmp x0, #4096
+    b.hi do_compose_80
+do_apply_81:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_82
+do_compose_80:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_82:
+    str x0, [sp, #-16]!
+    adr x0, "
+    str x0, [sp, #-16]!
+    adr x0, "
+    ldr x1, [sp], #16
+    add x0, x1, x0
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_83
+    mov x0, #15
+    b cond_end_84
+cond_false_83:
+    adr x0, sign_id
+cond_end_84:
+    cmp x0, #4096
+    b.hi do_compose_85
+do_apply_86:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_87
+do_compose_85:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_87:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_79
+    adr x0, streq
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
     cmp x0, #4096
     b.hi do_compose_88
 do_apply_89:
@@ -737,92 +839,66 @@ do_compose_88:
     bl _compose
 apply_end_90:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
+    adr x0, "
     str x0, [sp, #-16]!
-    mov x0, #1
+    adr x0, "
     ldr x1, [sp], #16
-    add x0, x1, x0
+    sub x0, x1, x0
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_91
+    mov x0, #15
+    b cond_end_92
+cond_false_91:
+    adr x0, sign_id
+cond_end_92:
     cmp x0, #4096
-    b.hi do_compose_91
-do_apply_92:
+    b.hi do_compose_93
+do_apply_94:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_93
-do_compose_91:
+    b apply_end_95
+do_compose_93:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_93:
-blk_end_79:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_77_78:
-    // Closure for func_77
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-48]
-    ldr x1, [sp], #16
-    mov x9, x0
-    mov x0, x1
-    mov x1, x9
-    bl _cons
-    str x0, [sp, #-16]!
-    adr x1, func_77
-    ldr x0, [sp], #16
-    bl _cons
-blk_end_74:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_72_73:
-    // Closure for func_72
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_72
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_70_71:
-    // Closure for func_70
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_70
-    ldr x0, [sp], #16
-    bl _cons
+apply_end_95:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_0
-    b after_func_94_95
-func_94:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_96_97
-func_96:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
+    b.ne blk_end_79
+    adr x0, streq
+    ldr x0, [x0]
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
+    cmp x0, #4096
+    b.hi do_compose_96
+do_apply_97:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_98
+do_compose_96:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_98:
+    str x0, [sp, #-16]!
+    adr x0, "
+    str x0, [sp, #-16]!
+    adr x0, "
+    ldr x1, [sp], #16
+    mul x0, x1, x0
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_99
-    b or_end_100
-or_right_99:
-    adr x0, op_str
-or_end_100:
-    str x0, [sp, #-16]!
+    b.eq cond_false_99
+    mov x0, #16
+    b cond_end_100
+cond_false_99:
     adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_98
-    adr x0, streq
-    str x0, [sp, #-16]!
-    adr x0, op_str
+cond_end_100:
     cmp x0, #4096
     b.hi do_compose_101
 do_apply_102:
@@ -836,39 +912,40 @@ do_compose_101:
     ldr x0, [sp], #16
     bl _compose
 apply_end_103:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_79
+    adr x0, streq
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    cmp x0, #4096
+    b.hi do_compose_104
+do_apply_105:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_106
+do_compose_104:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_106:
     str x0, [sp, #-16]!
     adr x0, "
     str x0, [sp, #-16]!
     adr x0, "
     ldr x1, [sp], #16
-    add x0, x1, x0
+    sdiv x0, x1, x0
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_104
-    mov x0, #15
-    b cond_end_105
-cond_false_104:
+    b.eq cond_false_107
+    mov x0, #16
+    b cond_end_108
+cond_false_107:
     adr x0, sign_id
-cond_end_105:
-    cmp x0, #4096
-    b.hi do_compose_106
-do_apply_107:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_108
-do_compose_106:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_108:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_98
-    adr x0, streq
-    str x0, [sp, #-16]!
-    adr x0, op_str
+cond_end_108:
     cmp x0, #4096
     b.hi do_compose_109
 do_apply_110:
@@ -882,39 +959,41 @@ do_compose_109:
     ldr x0, [sp], #16
     bl _compose
 apply_end_111:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_79
+    adr x0, streq
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    cmp x0, #4096
+    b.hi do_compose_112
+do_apply_113:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_114
+do_compose_112:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_114:
     str x0, [sp, #-16]!
     adr x0, "
     str x0, [sp, #-16]!
     adr x0, "
     ldr x1, [sp], #16
-    sub x0, x1, x0
+    sdiv x2, x1, x0
+    msub x0, x2, x0, x1
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_112
-    mov x0, #15
-    b cond_end_113
-cond_false_112:
+    b.eq cond_false_115
+    mov x0, #16
+    b cond_end_116
+cond_false_115:
     adr x0, sign_id
-cond_end_113:
-    cmp x0, #4096
-    b.hi do_compose_114
-do_apply_115:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_116
-do_compose_114:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_116:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_98
-    adr x0, streq
-    str x0, [sp, #-16]!
-    adr x0, op_str
+cond_end_116:
     cmp x0, #4096
     b.hi do_compose_117
 do_apply_118:
@@ -928,113 +1007,144 @@ do_compose_117:
     ldr x0, [sp], #16
     bl _compose
 apply_end_119:
-    str x0, [sp, #-16]!
-    adr x0, "
-    str x0, [sp, #-16]!
-    adr x0, "
-    ldr x1, [sp], #16
-    mul x0, x1, x0
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_120
-    mov x0, #16
-    b cond_end_121
-cond_false_120:
-    adr x0, sign_id
-cond_end_121:
-    cmp x0, #4096
-    b.hi do_compose_122
-do_apply_123:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_124
-do_compose_122:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_124:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_98
+    b.ne blk_end_79
     adr x0, streq
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, op_str
+    ldr x0, [x29, #-32]
     cmp x0, #4096
-    b.hi do_compose_125
-do_apply_126:
+    b.hi do_compose_120
+do_apply_121:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_127
-do_compose_125:
+    b apply_end_122
+do_compose_120:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_127:
+apply_end_122:
     str x0, [sp, #-16]!
-    adr x0, "
+    mov x0, #2
     str x0, [sp, #-16]!
-    adr x0, "
-    ldr x1, [sp], #16
-    sdiv x0, x1, x0
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_128
-    mov x0, #16
-    b cond_end_129
-cond_false_128:
     adr x0, sign_id
-cond_end_129:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
     cmp x0, #4096
-    b.hi do_compose_130
-do_apply_131:
+    b.hi do_compose_123
+do_apply_124:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_132
-do_compose_130:
+    b apply_end_125
+do_compose_123:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_132:
+apply_end_125:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_98
+    b.ne blk_end_79
+    b after_func_126_127
+func_126:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_128_129
+func_128:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_130_131
+func_130:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    mov x0, #5
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_130_131:
+    // Closure for func_130
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_130
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_128_129:
+    // Closure for func_128
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_128
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_126_127:
+    // Closure for func_126
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_126
+    ldr x0, [sp], #16
+    bl _cons
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_79
     adr x0, streq
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, op_str
+    ldr x0, [x29, #-32]
     cmp x0, #4096
-    b.hi do_compose_133
-do_apply_134:
+    b.hi do_compose_132
+do_apply_133:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_135
-do_compose_133:
+    b apply_end_134
+do_compose_132:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_135:
+apply_end_134:
     str x0, [sp, #-16]!
-    adr x0, "
+    ldr x0, [x29, #-64]
+    cmp x0, #4096
+    b.hi do_compose_135
+do_apply_136:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_137
+do_compose_135:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_137:
     str x0, [sp, #-16]!
-    adr x0, "
+    mov x0, #6
+    str x0, [sp, #-16]!
+    adr x0, sign_id
     ldr x1, [sp], #16
-    sdiv x2, x1, x0
-    msub x0, x2, x0, x1
+    bl _cons
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_136
-    mov x0, #16
-    b cond_end_137
-cond_false_136:
-    adr x0, sign_id
-cond_end_137:
+    b.ne blk_end_79
+    adr x0, streq
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
     cmp x0, #4096
     b.hi do_compose_138
 do_apply_139:
@@ -1048,101 +1158,72 @@ do_compose_138:
     ldr x0, [sp], #16
     bl _compose
 apply_end_140:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_143
+    adr x0, sign_id
+    b cmp_end_144
+cmp_true_143:
+cmp_end_144:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_98
-    adr x0, streq
-    str x0, [sp, #-16]!
-    adr x0, op_str
+    b.eq cond_false_141
+    mov x0, #14
+    b cond_end_142
+cond_false_141:
+    adr x0, sign_id
+cond_end_142:
     cmp x0, #4096
-    b.hi do_compose_141
-do_apply_142:
+    b.hi do_compose_145
+do_apply_146:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_143
-do_compose_141:
+    b apply_end_147
+do_compose_145:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_143:
+apply_end_147:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_79
+    adr x0, streq
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    mov x0, #2
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, sign_id
+    ldr x0, [x29, #-32]
     cmp x0, #4096
-    b.hi do_compose_144
-do_apply_145:
+    b.hi do_compose_148
+do_apply_149:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_146
-do_compose_144:
+    b apply_end_150
+do_compose_148:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_146:
+apply_end_150:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_98
-    b after_func_147_148
-func_147:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_149_150
-func_149:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_151_152
-func_151:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    mov x0, #5
-    str x0, [sp, #-16]!
+    b.eq cond_false_151
+    mov x0, #14
+    b cond_end_152
+cond_false_151:
     adr x0, sign_id
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_151_152:
-    // Closure for func_151
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_151
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_149_150:
-    // Closure for func_149
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_149
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_147_148:
-    // Closure for func_147
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_147
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_98
-    adr x0, streq
-    str x0, [sp, #-16]!
-    adr x0, op_str
+cond_end_152:
     cmp x0, #4096
     b.hi do_compose_153
 do_apply_154:
@@ -1156,8 +1237,13 @@ do_compose_153:
     ldr x0, [sp], #16
     bl _compose
 apply_end_155:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_79
+    adr x0, streq
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
+    ldr x0, [x29, #-32]
     cmp x0, #4096
     b.hi do_compose_156
 do_apply_157:
@@ -1172,50 +1258,45 @@ do_compose_156:
     bl _compose
 apply_end_158:
     str x0, [sp, #-16]!
-    mov x0, #6
+    ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.lt cmp_true_161
     adr x0, sign_id
-    ldr x1, [sp], #16
-    bl _cons
+    b cmp_end_162
+cmp_true_161:
+cmp_end_162:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_98
-    adr x0, streq
-    str x0, [sp, #-16]!
-    adr x0, op_str
+    b.eq cond_false_159
+    mov x0, #14
+    b cond_end_160
+cond_false_159:
+    adr x0, sign_id
+cond_end_160:
     cmp x0, #4096
-    b.hi do_compose_159
-do_apply_160:
+    b.hi do_compose_163
+do_apply_164:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_161
-do_compose_159:
+    b apply_end_165
+do_compose_163:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_161:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.eq cmp_true_164
-    adr x0, sign_id
-    b cmp_end_165
-cmp_true_164:
-cmp_end_165:
+apply_end_165:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_162
-    mov x0, #14
-    b cond_end_163
-cond_false_162:
-    adr x0, sign_id
-cond_end_163:
+    b.ne blk_end_79
+    adr x0, streq
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
     cmp x0, #4096
     b.hi do_compose_166
 do_apply_167:
@@ -1229,469 +1310,509 @@ do_compose_166:
     ldr x0, [sp], #16
     bl _compose
 apply_end_168:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_98
-    adr x0, streq
     str x0, [sp, #-16]!
-    adr x0, op_str
-    cmp x0, #4096
-    b.hi do_compose_169
-do_apply_170:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_171
-do_compose_169:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_171:
+    ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    ldr x1, [sp], #16
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_172
-    mov x0, #14
-    b cond_end_173
-cond_false_172:
-    adr x0, sign_id
-cond_end_173:
-    cmp x0, #4096
-    b.hi do_compose_174
-do_apply_175:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_176
-do_compose_174:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_176:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_98
-    adr x0, streq
-    str x0, [sp, #-16]!
-    adr x0, op_str
-    cmp x0, #4096
-    b.hi do_compose_177
-do_apply_178:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_179
-do_compose_177:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_179:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
+    ldr x0, [x29, #-80]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.lt cmp_true_182
+    b.gt cmp_true_171
     adr x0, sign_id
-    b cmp_end_183
-cmp_true_182:
-cmp_end_183:
+    b cmp_end_172
+cmp_true_171:
+cmp_end_172:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_180
+    b.eq cond_false_169
     mov x0, #14
-    b cond_end_181
-cond_false_180:
+    b cond_end_170
+cond_false_169:
     adr x0, sign_id
-cond_end_181:
+cond_end_170:
     cmp x0, #4096
-    b.hi do_compose_184
-do_apply_185:
+    b.hi do_compose_173
+do_apply_174:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_186
-do_compose_184:
+    b apply_end_175
+do_compose_173:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_186:
+apply_end_175:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_98
+    b.ne blk_end_79
     adr x0, streq
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, op_str
+    ldr x0, [x29, #-32]
     cmp x0, #4096
-    b.hi do_compose_187
-do_apply_188:
+    b.hi do_compose_176
+do_apply_177:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_189
-do_compose_187:
+    b apply_end_178
+do_compose_176:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_189:
+apply_end_178:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
+    ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
+    ldr x0, [x29, #-80]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.gt cmp_true_192
+    b.le cmp_true_181
     adr x0, sign_id
-    b cmp_end_193
-cmp_true_192:
-cmp_end_193:
+    b cmp_end_182
+cmp_true_181:
+cmp_end_182:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_190
+    b.eq cond_false_179
     mov x0, #14
-    b cond_end_191
-cond_false_190:
+    b cond_end_180
+cond_false_179:
     adr x0, sign_id
-cond_end_191:
+cond_end_180:
     cmp x0, #4096
-    b.hi do_compose_194
-do_apply_195:
+    b.hi do_compose_183
+do_apply_184:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_196
-do_compose_194:
+    b apply_end_185
+do_compose_183:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_196:
+apply_end_185:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_98
+    b.ne blk_end_79
     adr x0, streq
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, op_str
+    ldr x0, [x29, #-32]
     cmp x0, #4096
-    b.hi do_compose_197
-do_apply_198:
+    b.hi do_compose_186
+do_apply_187:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_199
-do_compose_197:
+    b apply_end_188
+do_compose_186:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_199:
+apply_end_188:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
+    ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
+    ldr x0, [x29, #-80]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.le cmp_true_202
+    b.ge cmp_true_191
     adr x0, sign_id
-    b cmp_end_203
-cmp_true_202:
-cmp_end_203:
+    b cmp_end_192
+cmp_true_191:
+cmp_end_192:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_200
+    b.eq cond_false_189
     mov x0, #14
-    b cond_end_201
-cond_false_200:
+    b cond_end_190
+cond_false_189:
     adr x0, sign_id
-cond_end_201:
+cond_end_190:
     cmp x0, #4096
-    b.hi do_compose_204
-do_apply_205:
+    b.hi do_compose_193
+do_apply_194:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_206
-do_compose_204:
+    b apply_end_195
+do_compose_193:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_206:
+apply_end_195:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_98
+    b.ne blk_end_79
     adr x0, streq
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, op_str
+    ldr x0, [x29, #-32]
     cmp x0, #4096
-    b.hi do_compose_207
-do_apply_208:
+    b.hi do_compose_196
+do_apply_197:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_209
-do_compose_207:
+    b apply_end_198
+do_compose_196:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_209:
+apply_end_198:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
+    ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
+    ldr x0, [x29, #-80]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.ge cmp_true_212
+    b.ne cmp_true_201
     adr x0, sign_id
-    b cmp_end_213
-cmp_true_212:
-cmp_end_213:
+    b cmp_end_202
+cmp_true_201:
+cmp_end_202:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_210
+    b.eq cond_false_199
     mov x0, #14
-    b cond_end_211
-cond_false_210:
+    b cond_end_200
+cond_false_199:
     adr x0, sign_id
-cond_end_211:
+cond_end_200:
     cmp x0, #4096
-    b.hi do_compose_214
-do_apply_215:
+    b.hi do_compose_203
+do_apply_204:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_216
-do_compose_214:
+    b apply_end_205
+do_compose_203:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_216:
+apply_end_205:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_98
-    adr x0, streq
-    str x0, [sp, #-16]!
-    adr x0, op_str
-    cmp x0, #4096
-    b.hi do_compose_217
-do_apply_218:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_219
-do_compose_217:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_219:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.ne cmp_true_222
-    adr x0, sign_id
-    b cmp_end_223
-cmp_true_222:
-cmp_end_223:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_220
-    mov x0, #14
-    b cond_end_221
-cond_false_220:
-    adr x0, sign_id
-cond_end_221:
-    cmp x0, #4096
-    b.hi do_compose_224
-do_apply_225:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_226
-do_compose_224:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_226:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_98
+    b.ne blk_end_79
     mov x0, #0
-blk_end_98:
+blk_end_79:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_96_97:
-    // Closure for func_96
+after_get_prec_impl_78:
+    // Closure for get_prec_impl
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_96
+    adr x1, get_prec_impl
     ldr x0, [sp], #16
     bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_94_95:
-    // Closure for func_94
     adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
     str x0, [sp, #-16]!
-    adr x1, func_94
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_227_228
-func_227:
+    b after_is_right_assoc_impl_206
+is_right_assoc_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_229_230
-func_229:
+    adr x0, streq
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    cmp x0, #4096
+    b.hi do_compose_208
+do_apply_209:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_210
+do_compose_208:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_210:
+    str x0, [sp, #-16]!
+    mov x0, #1
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    cmp x0, #4096
+    b.hi do_compose_211
+do_apply_212:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_213
+do_compose_211:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_213:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_207
+    b after_func_214_215
+func_214:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_216_217
+func_216:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_218_219
+func_218:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    mov x0, #1
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_218_219:
+    // Closure for func_218
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_218
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_216_217:
+    // Closure for func_216
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_216
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_214_215:
+    // Closure for func_214
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_214
+    ldr x0, [sp], #16
+    bl _cons
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_207
+    adr x0, streq
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    cmp x0, #4096
+    b.hi do_compose_220
+do_apply_221:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_222
+do_compose_220:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_222:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    cmp x0, #4096
+    b.hi do_compose_223
+do_apply_224:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_225
+do_compose_223:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_225:
+    str x0, [sp, #-16]!
+    mov x0, #1
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    bl _cons
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_207
+    adr x0, streq
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    cmp x0, #4096
+    b.hi do_compose_226
+do_apply_227:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_228
+do_compose_226:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_228:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    bl _pow
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_229
+    mov x0, #1
+    b cond_end_230
+cond_false_229:
+    adr x0, sign_id
+cond_end_230:
+    cmp x0, #4096
+    b.hi do_compose_231
+do_apply_232:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_233
+do_compose_231:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_233:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_207
+    mov x0, #0
+blk_end_207:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_is_right_assoc_impl_206:
+    // Closure for is_right_assoc_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, is_right_assoc_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_peek_impl_234
+peek_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_232
-    b or_end_233
-or_right_232:
-    adr x0, op_str
-or_end_233:
     str x0, [sp, #-16]!
+    mov x0, #0
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_238
     adr x0, sign_id
+    b cmp_end_239
+cmp_true_238:
+cmp_end_239:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_231
-    adr x0, streq
+    b.eq cond_false_236
+    adr x0, tok_eof
+    ldr x0, [x0]
+    b cond_end_237
+cond_false_236:
+    adr x0, sign_id
+cond_end_237:
     str x0, [sp, #-16]!
-    adr x0, op_str
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_235
+    adr x0, head
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
     cmp x0, #4096
-    b.hi do_compose_234
-do_apply_235:
+    b.hi do_compose_240
+do_apply_241:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_236
-do_compose_234:
+    b apply_end_242
+do_compose_240:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_236:
-    str x0, [sp, #-16]!
-    mov x0, #1
-    str x0, [sp, #-16]!
+apply_end_242:
+blk_end_235:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_peek_impl_234:
+    // Closure for peek_impl
     adr x0, sign_id
     str x0, [sp, #-16]!
+    adr x1, peek_impl
+    ldr x0, [sp], #16
+    bl _cons
     adr x0, sign_id
-    cmp x0, #4096
-    b.hi do_compose_237
-do_apply_238:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_239
-do_compose_237:
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_next_impl_243
+next_impl:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    str x0, [sp, #-16]!
+    mov x0, #0
     mov x1, x0
     ldr x0, [sp], #16
-    bl _compose
-apply_end_239:
+    cmp x0, x1
+    b.eq cmp_true_247
+    adr x0, sign_id
+    b cmp_end_248
+cmp_true_247:
+cmp_end_248:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_231
-    b after_func_240_241
-func_240:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_242_243
-func_242:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_244_245
-func_244:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    mov x0, #1
-    str x0, [sp, #-16]!
+    b.eq cond_false_245
+    mov x0, #0
+    b cond_end_246
+cond_false_245:
     adr x0, sign_id
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_244_245:
-    // Closure for func_244
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_244
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_242_243:
-    // Closure for func_242
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_242
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_240_241:
-    // Closure for func_240
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_240
-    ldr x0, [sp], #16
-    bl _cons
+cond_end_246:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_231
-    adr x0, streq
+    b.ne blk_end_244
+    adr x0, tail
     str x0, [sp, #-16]!
-    adr x0, op_str
-    cmp x0, #4096
-    b.hi do_compose_246
-do_apply_247:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_248
-do_compose_246:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_248:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
+    ldr x0, [x29, #-32]
     cmp x0, #4096
     b.hi do_compose_249
 do_apply_250:
@@ -1705,152 +1826,183 @@ do_compose_249:
     ldr x0, [sp], #16
     bl _compose
 apply_end_251:
-    str x0, [sp, #-16]!
-    mov x0, #1
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    ldr x1, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_231
-    adr x0, streq
-    str x0, [sp, #-16]!
-    adr x0, op_str
-    cmp x0, #4096
-    b.hi do_compose_252
-do_apply_253:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_254
-do_compose_252:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_254:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    ldr x1, [sp], #16
-    bl _pow
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_255
-    mov x0, #1
-    b cond_end_256
-cond_false_255:
-    adr x0, sign_id
-cond_end_256:
-    cmp x0, #4096
-    b.hi do_compose_257
-do_apply_258:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_259
-do_compose_257:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_259:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_231
-    mov x0, #0
-blk_end_231:
+blk_end_244:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_229_230:
-    // Closure for func_229
+after_next_impl_243:
+    // Closure for next_impl
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_229
+    adr x1, next_impl
     ldr x0, [sp], #16
     bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_227_228:
-    // Closure for func_227
     adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
     str x0, [sp, #-16]!
-    adr x1, func_227
-    ldr x0, [sp], #16
-    bl _cons
+    b after_expect_impl_252
+expect_impl:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_253_254
+func_253:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_255_256
+func_255:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_0
+    b.eq or_right_258
+    b or_end_259
+or_right_258:
+    adr x0, peek
+    ldr x0, [x0]
+or_end_259:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_257
     b after_func_260_261
 func_260:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
     b after_func_262_263
 func_262:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
     ldr x0, [x29, #-32]
     adr x9, sign_id
     cmp x0, x9
     b.eq or_right_265
     b or_end_266
 or_right_265:
-    adr x0, tokens
+    adr x0, tok_type
+    ldr x0, [x0]
 or_end_266:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_264
-    adr x0, tokens
+    b after_func_267_268
+func_267:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
-    mov x0, #0
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-48]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_269
+    b.eq cmp_true_272
     adr x0, sign_id
-    b cmp_end_270
-cmp_true_269:
-cmp_end_270:
+    b cmp_end_273
+cmp_true_272:
+cmp_end_273:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_267
-    adr x0, tok_eof
+    b.eq cond_false_270
+    mov x0, #1
+    b cond_end_271
+cond_false_270:
+    adr x0, sign_id
+cond_end_271:
+    str x0, [sp, #-16]!
+    adr x0, next
     ldr x0, [x0]
-    b cond_end_268
-cond_false_267:
-    adr x0, sign_id
-cond_end_268:
     str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_264
-    adr x0, head
-    str x0, [sp, #-16]!
-    adr x0, tokens
+    ldr x0, [x29, #-80]
     cmp x0, #4096
-    b.hi do_compose_271
-do_apply_272:
+    b.hi do_compose_274
+do_apply_275:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_273
-do_compose_271:
+    b apply_end_276
+do_compose_274:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_273:
+apply_end_276:
+    ldr x1, [sp], #16
+    bl _cons
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_269
+    mov x0, #0
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    bl _cons
+blk_end_269:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_267_268:
+    // Closure for func_267
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_267
+    ldr x0, [sp], #16
+    bl _cons
 blk_end_264:
     mov sp, x29
     ldp x29, x30, [sp], #16
@@ -1858,6 +2010,20 @@ blk_end_264:
 after_func_262_263:
     // Closure for func_262
     adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
     str x0, [sp, #-16]!
     adr x1, func_262
     ldr x0, [sp], #16
@@ -1869,60 +2035,96 @@ after_func_260_261:
     // Closure for func_260
     adr x0, sign_id
     str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
     adr x1, func_260
     ldr x0, [sp], #16
     bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_274_275
-func_274:
+blk_end_257:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_255_256:
+    // Closure for func_255
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_255
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_253_254:
+    // Closure for func_253
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_253
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_expect_impl_252:
+    // Closure for expect_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, expect_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_parse_program_impl_277
+parse_program_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_276_277
-func_276:
+    b after_func_278_279
+func_278:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_279
-    b or_end_280
-or_right_279:
-    adr x0, tokens
-or_end_280:
+    b.eq or_right_281
+    b or_end_282
+or_right_281:
+    adr x0, parse_stmts
+or_end_282:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_278
-    adr x0, tokens
+    b.ne blk_end_280
+    b after_func_283_284
+func_283:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
-    mov x0, #0
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.eq cmp_true_283
-    adr x0, sign_id
-    b cmp_end_284
-cmp_true_283:
-cmp_end_284:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_281
-    mov x0, #0
-    b cond_end_282
-cond_false_281:
-    adr x0, sign_id
-cond_end_282:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_278
-    adr x0, tail
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    adr x0, ast_block
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, tokens
+    adr x0, head
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
     cmp x0, #4096
     b.hi do_compose_285
 do_apply_286:
@@ -1936,244 +2138,6 @@ do_compose_285:
     ldr x0, [sp], #16
     bl _compose
 apply_end_287:
-blk_end_278:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_276_277:
-    // Closure for func_276
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_276
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_274_275:
-    // Closure for func_274
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_274
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_288_289
-func_288:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_290_291
-func_290:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_293
-    b or_end_294
-or_right_293:
-    adr x0, tokens
-or_end_294:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_292
-    b after_func_295_296
-func_295:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    adr x0, peek
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tokens
-    cmp x0, #4096
-    b.hi do_compose_298
-do_apply_299:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_300
-do_compose_298:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_300:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_297
-    adr x0, tok_type
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-48]
-    cmp x0, #4096
-    b.hi do_compose_301
-do_apply_302:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_303
-do_compose_301:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_303:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_297
-    ldr x0, [x29, #-64]
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.eq cmp_true_306
-    adr x0, sign_id
-    b cmp_end_307
-cmp_true_306:
-cmp_end_307:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_304
-    mov x0, #1
-    b cond_end_305
-cond_false_304:
-    adr x0, sign_id
-cond_end_305:
-    str x0, [sp, #-16]!
-    adr x0, next
-    str x0, [sp, #-16]!
-    adr x0, tokens
-    cmp x0, #4096
-    b.hi do_compose_308
-do_apply_309:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_310
-do_compose_308:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_310:
-    ldr x1, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_297
-    mov x0, #0
-    str x0, [sp, #-16]!
-    adr x0, tokens
-    ldr x1, [sp], #16
-    bl _cons
-blk_end_297:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_295_296:
-    // Closure for func_295
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_295
-    ldr x0, [sp], #16
-    bl _cons
-blk_end_292:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_290_291:
-    // Closure for func_290
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_290
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_288_289:
-    // Closure for func_288
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_288
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_311_312
-func_311:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_313_314
-func_313:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_316
-    b or_end_317
-or_right_316:
-    adr x0, tokens
-or_end_317:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_315
-    adr x0, parse_stmts
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tokens
-    cmp x0, #4096
-    b.hi do_compose_318
-do_apply_319:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_320
-do_compose_318:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_320:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_315
-    adr x0, ast_block
-    ldr x0, [x0]
-    str x0, [sp, #-16]!
-    adr x0, head
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-64]
-    cmp x0, #4096
-    b.hi do_compose_321
-do_apply_322:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_323
-do_compose_321:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_323:
     ldr x1, [sp], #16
     bl _cons
     str x0, [sp, #-16]!
@@ -2181,150 +2145,338 @@ apply_end_323:
     str x0, [sp, #-16]!
     adr x0, tail
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-64]
+    ldr x0, [x29, #-48]
     cmp x0, #4096
-    b.hi do_compose_324
-do_apply_325:
+    b.hi do_compose_288
+do_apply_289:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_326
-do_compose_324:
+    b apply_end_290
+do_compose_288:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_326:
+apply_end_290:
     cmp x0, #4096
-    b.hi do_compose_327
-do_apply_328:
+    b.hi do_compose_291
+do_apply_292:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_329
-do_compose_327:
+    b apply_end_293
+do_compose_291:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_329:
+apply_end_293:
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
     bl _cons
     ldr x1, [sp], #16
     bl _cons
-blk_end_315:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_313_314:
-    // Closure for func_313
+after_func_283_284:
+    // Closure for func_283
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_313
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_283
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_280:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_278_279:
+    // Closure for func_278
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_278
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_311_312:
-    // Closure for func_311
+after_parse_program_impl_277:
+    // Closure for parse_program_impl
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_311
+    adr x1, parse_program_impl
     ldr x0, [sp], #16
     bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_330_331
-func_330:
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_parse_stmts_impl_294
+parse_stmts_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_332_333
-func_332:
+    b after_func_295_296
+func_295:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     adr x9, sign_id
     cmp x0, x9
+    b.eq or_right_298
+    b or_end_299
+or_right_298:
+    adr x0, peek
+    ldr x0, [x0]
+or_end_299:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_297
+    b after_func_300_301
+func_300:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_302_303
+func_302:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_305
+    b or_end_306
+or_right_305:
+    adr x0, tok_type
+    ldr x0, [x0]
+or_end_306:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_304
+    b after_func_307_308
+func_307:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_309_310
+func_309:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_312
+    b or_end_313
+or_right_312:
+    adr x0, parse_expr
+or_end_313:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_311
+    b after_func_314_315
+func_314:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_316_317
+func_316:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_318_319
+func_318:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_321
+    b or_end_322
+or_right_321:
+    adr x0, head
+or_end_322:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_320
+    b after_func_323_324
+func_323:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_325_326
+func_325:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_328
+    b or_end_329
+or_right_328:
+    adr x0, head
+or_end_329:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_327
+    b after_func_330_331
+func_330:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_332_333
+func_332:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
     b.eq or_right_335
     b or_end_336
 or_right_335:
-    adr x0, tokens
+    adr x0, parse_stmts
+    ldr x0, [x0]
 or_end_336:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_334
-    adr x0, peek
+    b after_func_337_338
+func_337:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tokens
-    cmp x0, #4096
-    b.hi do_compose_337
-do_apply_338:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_339
-do_compose_337:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_339:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_334
-    adr x0, tok_type
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-64]
-    cmp x0, #4096
-    b.hi do_compose_340
-do_apply_341:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_342
-do_compose_340:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_342:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_334
-    ldr x0, [x29, #-80]
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_eof
     ldr x0, [x0]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_345
+    b.eq cmp_true_342
     adr x0, sign_id
-    b cmp_end_346
-cmp_true_345:
-cmp_end_346:
+    b cmp_end_343
+cmp_true_342:
+cmp_end_343:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_343
+    b.eq cond_false_340
     mov x0, #0
-    b cond_end_344
-cond_false_343:
+    b cond_end_341
+cond_false_340:
     adr x0, sign_id
-cond_end_344:
+cond_end_341:
     str x0, [sp, #-16]!
-    adr x0, tokens
+    ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
@@ -2333,31 +2485,46 @@ cond_end_344:
     bl _cons
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_334
-    ldr x0, [x29, #-80]
+    b.ne blk_end_339
+    ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_sep
     ldr x0, [x0]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_349
+    b.eq cmp_true_346
     adr x0, sign_id
-    b cmp_end_350
-cmp_true_349:
-cmp_end_350:
+    b cmp_end_347
+cmp_true_346:
+cmp_end_347:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_347
-    ldr x0, [x29, #-48]
-    b cond_end_348
-cond_false_347:
+    b.eq cond_false_344
+    adr x0, parse_stmts
+    ldr x0, [x0]
+    b cond_end_345
+cond_false_344:
     adr x0, sign_id
-cond_end_348:
+cond_end_345:
     str x0, [sp, #-16]!
     adr x0, next
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, tokens
+    ldr x0, [x29, #-64]
+    cmp x0, #4096
+    b.hi do_compose_348
+do_apply_349:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_350
+do_compose_348:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_350:
     cmp x0, #4096
     b.hi do_compose_351
 do_apply_352:
@@ -2371,6 +2538,18 @@ do_compose_351:
     ldr x0, [sp], #16
     bl _compose
 apply_end_353:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_339
+    adr x0, str_0
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_339
+    ldr x0, [x29, #-80]
+    str x0, [sp, #-16]!
+    adr x0, head
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
     cmp x0, #4096
     b.hi do_compose_354
 do_apply_355:
@@ -2384,18 +2563,14 @@ do_compose_354:
     ldr x0, [sp], #16
     bl _compose
 apply_end_356:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_334
-    adr x0, str_0
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_334
-    adr x0, parse_expr
+    ldr x1, [sp], #16
+    bl _cons
     str x0, [sp, #-16]!
-    adr x0, sign_id
+    adr x0, head
     str x0, [sp, #-16]!
-    adr x0, tokens
+    ldr x0, [x29, #-112]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
     cmp x0, #4096
     b.hi do_compose_357
 do_apply_358:
@@ -2409,8 +2584,6 @@ do_compose_357:
     ldr x0, [sp], #16
     bl _compose
 apply_end_359:
-    str x0, [sp, #-16]!
-    mov x0, #0
     cmp x0, #4096
     b.hi do_compose_360
 do_apply_361:
@@ -2424,144 +2597,57 @@ do_compose_360:
     ldr x0, [sp], #16
     bl _compose
 apply_end_362:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_334
-    adr x0, head
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    cmp x0, #4096
-    b.hi do_compose_363
-do_apply_364:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_365
-do_compose_363:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_365:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_334
-    adr x0, head
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tail
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    cmp x0, #4096
-    b.hi do_compose_366
-do_apply_367:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_368
-do_compose_366:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_368:
-    cmp x0, #4096
-    b.hi do_compose_369
-do_apply_370:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_371
-do_compose_369:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_371:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_334
-    ldr x0, [x29, #-48]
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-128]
-    cmp x0, #4096
-    b.hi do_compose_372
-do_apply_373:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_374
-do_compose_372:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_374:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_334
-    ldr x0, [x29, #-112]
-    str x0, [sp, #-16]!
-    adr x0, head
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-144]
-    cmp x0, #4096
-    b.hi do_compose_375
-do_apply_376:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_377
-do_compose_375:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_377:
-    ldr x1, [sp], #16
-    bl _cons
-    str x0, [sp, #-16]!
-    adr x0, head
-    str x0, [sp, #-16]!
-    adr x0, tail
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-144]
-    cmp x0, #4096
-    b.hi do_compose_378
-do_apply_379:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_380
-do_compose_378:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_380:
-    cmp x0, #4096
-    b.hi do_compose_381
-do_apply_382:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_383
-do_compose_381:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_383:
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
     bl _cons
     ldr x1, [sp], #16
+    bl _cons
+blk_end_339:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_337_338:
+    // Closure for func_337
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_337
+    ldr x0, [sp], #16
     bl _cons
 blk_end_334:
     mov sp, x29
@@ -2570,6 +2656,34 @@ blk_end_334:
 after_func_332_333:
     // Closure for func_332
     adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
     str x0, [sp, #-16]!
     adr x1, func_332
     ldr x0, [sp], #16
@@ -2581,71 +2695,513 @@ after_func_330_331:
     // Closure for func_330
     adr x0, sign_id
     str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
     adr x1, func_330
     ldr x0, [sp], #16
     bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_384_385
-func_384:
+blk_end_327:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_325_326:
+    // Closure for func_325
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_325
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_323_324:
+    // Closure for func_323
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_323
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_320:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_318_319:
+    // Closure for func_318
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_318
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_316_317:
+    // Closure for func_316
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_316
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_314_315:
+    // Closure for func_314
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_314
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_311:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_309_310:
+    // Closure for func_309
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_309
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_307_308:
+    // Closure for func_307
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_307
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_304:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_302_303:
+    // Closure for func_302
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_302
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_300_301:
+    // Closure for func_300
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_300
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_297:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_295_296:
+    // Closure for func_295
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_295
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_parse_stmts_impl_294:
+    // Closure for parse_stmts_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, parse_stmts_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_parse_block_impl_363
+parse_block_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
+    adr x0, str_1
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_364
+    adr x0, parse_program
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    cmp x0, #4096
+    b.hi do_compose_365
+do_apply_366:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_367
+do_compose_365:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_367:
+    str x0, [sp, #-16]!
+    adr x0, str_2
+    cmp x0, #4096
+    b.hi do_compose_368
+do_apply_369:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_370
+do_compose_368:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_370:
+blk_end_364:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_parse_block_impl_363:
+    // Closure for parse_block_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, parse_block_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_parse_expr_impl_371
+parse_expr_impl:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_372_373
+func_372:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_374_375
+func_374:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_377
+    b or_end_378
+or_right_377:
+    adr x0, parse_primary
+or_end_378:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_376
+    b after_func_379_380
+func_379:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_381_382
+func_381:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_384
+    b or_end_385
+or_right_384:
+    adr x0, head
+or_end_385:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_383
     b after_func_386_387
 func_386:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_388_389
+func_388:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
     ldr x0, [x29, #-32]
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_389
-    b or_end_390
-or_right_389:
-    adr x0, tokens
-or_end_390:
+    b.eq or_right_391
+    b or_end_392
+or_right_391:
+    adr x0, head
+or_end_392:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_388
-    adr x0, str_1
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_388
-    adr x0, parse_program
+    b.ne blk_end_390
+    b after_func_393_394
+func_393:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
-    adr x0, tokens
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    adr x0, _parse_expr_loop
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
     cmp x0, #4096
-    b.hi do_compose_391
-do_apply_392:
+    b.hi do_compose_395
+do_apply_396:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_393
-do_compose_391:
+    b apply_end_397
+do_compose_395:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_393:
+apply_end_397:
     str x0, [sp, #-16]!
-    adr x0, str_2
+    ldr x0, [x29, #-64]
     cmp x0, #4096
-    b.hi do_compose_394
-do_apply_395:
+    b.hi do_compose_398
+do_apply_399:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_396
-do_compose_394:
+    b apply_end_400
+do_compose_398:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_396:
-blk_end_388:
+apply_end_400:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    cmp x0, #4096
+    b.hi do_compose_401
+do_apply_402:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_403
+do_compose_401:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_403:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_393_394:
+    // Closure for func_393
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_393
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_390:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_388_389:
+    // Closure for func_388
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_388
+    ldr x0, [sp], #16
+    bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
@@ -2653,246 +3209,224 @@ after_func_386_387:
     // Closure for func_386
     adr x0, sign_id
     str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
     adr x1, func_386
     ldr x0, [sp], #16
     bl _cons
+blk_end_383:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_384_385:
-    // Closure for func_384
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_384
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_397_398
-func_397:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_399_400
-func_399:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_402
-    b or_end_403
-or_right_402:
-    adr x0, tokens
-or_end_403:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_401
-    b after_func_404_405
-func_404:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    adr x0, parse_primary
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tokens
-    cmp x0, #4096
-    b.hi do_compose_407
-do_apply_408:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_409
-do_compose_407:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_409:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_406
-    adr x0, head
-    str x0, [sp, #-16]!
+after_func_381_382:
+    // Closure for func_381
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    cmp x0, #4096
-    b.hi do_compose_410
-do_apply_411:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_412
-do_compose_410:
-    mov x1, x0
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_381
     ldr x0, [sp], #16
-    bl _compose
-apply_end_412:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_406
-    adr x0, head
-    str x0, [sp, #-16]!
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_379_380:
+    // Closure for func_379
     adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tail
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    cmp x0, #4096
-    b.hi do_compose_413
-do_apply_414:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_415
-do_compose_413:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_415:
-    cmp x0, #4096
-    b.hi do_compose_416
-do_apply_417:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_418
-do_compose_416:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_418:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_406
-    adr x0, _parse_expr_loop
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-64]
-    cmp x0, #4096
-    b.hi do_compose_419
-do_apply_420:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_421
-do_compose_419:
-    mov x1, x0
+    adr x1, func_379
     ldr x0, [sp], #16
-    bl _compose
-apply_end_421:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
-    cmp x0, #4096
-    b.hi do_compose_422
-do_apply_423:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_424
-do_compose_422:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_424:
+    bl _cons
+blk_end_376:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_374_375:
+    // Closure for func_374
+    adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    cmp x0, #4096
-    b.hi do_compose_425
-do_apply_426:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_427
-do_compose_425:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_427:
-blk_end_406:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_404_405:
-    // Closure for func_404
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_404
-    ldr x0, [sp], #16
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
     bl _cons
-blk_end_401:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_399_400:
-    // Closure for func_399
-    adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_399
+    adr x1, func_374
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_397_398:
-    // Closure for func_397
+after_func_372_373:
+    // Closure for func_372
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_397
+    adr x1, func_372
     ldr x0, [sp], #16
     bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_428_429
-func_428:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_parse_expr_impl_371:
+    // Closure for parse_expr_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, parse_expr_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after__parse_expr_loop_impl_404
+_parse_expr_loop_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
+    b after_func_405_406
+func_405:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_407_408
+func_407:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_409_410
+func_409:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_412
+    b or_end_413
+or_right_412:
+    adr x0, peek
+    ldr x0, [x0]
+or_end_413:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_411
+    b after_func_414_415
+func_414:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_416_417
+func_416:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_419
+    b or_end_420
+or_right_419:
+    adr x0, tok_type
+    ldr x0, [x0]
+or_end_420:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_418
+    b after_func_421_422
+func_421:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_423_424
+func_423:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_425_426
+func_425:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_428
+    b or_end_429
+or_right_428:
+    adr x0, parse_expr
+    ldr x0, [x0]
+or_end_429:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_427
     b after_func_430_431
 func_430:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_433
-    b or_end_434
-or_right_433:
-    adr x0, lhs
-or_end_434:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_432
-    b after_func_435_436
-func_435:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    ldr x9, [x29, #-16] // Reload Env
-    ldr x10, [x9] // Load Val
-    str x10, [sp, #-16]! // Push Val
-    ldr x9, [x9, #8] // Next
-    b after_func_437_438
-func_437:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
     ldr x9, [x29, #-16] // Reload Env
     ldr x10, [x9] // Load Val
     str x10, [sp, #-16]! // Push Val
@@ -2900,382 +3434,248 @@ func_437:
     ldr x10, [x9] // Load Val
     str x10, [sp, #-16]! // Push Val
     ldr x9, [x9, #8] // Next
-    adr x0, peek
+    b after_func_432_433
+func_432:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_434_435
+func_434:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-48]
-    cmp x0, #4096
-    b.hi do_compose_440
-do_apply_441:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_442
-do_compose_440:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_442:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_439
-    adr x0, tok_type
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
-    cmp x0, #4096
-    b.hi do_compose_443
-do_apply_444:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_445
-do_compose_443:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_445:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_439
-    adr x0, str_3
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_439
-    adr x0, can_start_expr
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    cmp x0, #4096
-    b.hi do_compose_448
-do_apply_449:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_450
-do_compose_448:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_450:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_446
-    adr x0, sign_id
-    b cond_end_447
-cond_false_446:
-    adr x0, sign_id
-cond_end_447:
-    str x0, [sp, #-16]!
-    adr x0, str_4
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_451
-    adr x0, parse_expr
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-48]
-    cmp x0, #4096
-    b.hi do_compose_452
-do_apply_453:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_454
-do_compose_452:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_454:
-    str x0, [sp, #-16]!
-    mov x0, #6
-    cmp x0, #4096
-    b.hi do_compose_455
-do_apply_456:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_457
-do_compose_455:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_457:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_451
-    adr x0, head
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-112]
-    cmp x0, #4096
-    b.hi do_compose_458
-do_apply_459:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_460
-do_compose_458:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_460:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_451
-    adr x0, head
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tail
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-112]
-    cmp x0, #4096
-    b.hi do_compose_461
-do_apply_462:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_463
-do_compose_461:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_463:
-    cmp x0, #4096
-    b.hi do_compose_464
-do_apply_465:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_466
-do_compose_464:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_466:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_451
-    adr x0, ast_apply
-    ldr x0, [x0]
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, lhs
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-128]
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_451
-    ldr x0, [x29, #-64]
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-160]
-    cmp x0, #4096
-    b.hi do_compose_467
-do_apply_468:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_469
-do_compose_467:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_469:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-144]
-    cmp x0, #4096
-    b.hi do_compose_470
-do_apply_471:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_472
-do_compose_470:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_472:
-    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
     ldr x0, [x29, #-32]
-    cmp x0, #4096
-    b.hi do_compose_473
-do_apply_474:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_475
-do_compose_473:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_475:
-blk_end_451:
-    cmp x0, #4096
-    b.hi do_compose_476
-do_apply_477:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_478
-do_compose_476:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_478:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_439
-    ldr x0, [x29, #-96]
+    b.eq or_right_437
+    b or_end_438
+or_right_437:
+    adr x0, head
+or_end_438:
     str x0, [sp, #-16]!
-    adr x0, tok_op
-    ldr x0, [x0]
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.ne cmp_true_481
     adr x0, sign_id
-    b cmp_end_482
-cmp_true_481:
-cmp_end_482:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_479
-    adr x0, lhs
-    b cond_end_480
-cond_false_479:
+    b.ne blk_end_436
+    b after_func_439_440
+func_439:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_441_442
+func_441:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_444
+    b or_end_445
+or_right_444:
+    adr x0, head
+or_end_445:
+    str x0, [sp, #-16]!
     adr x0, sign_id
-cond_end_480:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-48]
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_439
+    b.ne blk_end_443
+    b after_func_446_447
+func_446:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_448_449
+func_448:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_450_451
+func_450:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_452_453
+func_452:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_455
+    b or_end_456
+or_right_455:
     adr x0, tok_val
+    ldr x0, [x0]
+or_end_456:
     str x0, [sp, #-16]!
     adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
-    cmp x0, #4096
-    b.hi do_compose_483
-do_apply_484:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_485
-do_compose_483:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_485:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_439
-    adr x0, get_prec
+    b.ne blk_end_454
+    b after_func_457_458
+func_457:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
-    adr x0, sign_id
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_459_460
+func_459:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-176]
-    cmp x0, #4096
-    b.hi do_compose_486
-do_apply_487:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_488
-do_compose_486:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_488:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_439
-    ldr x0, [x29, #-192]
-    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
     ldr x0, [x29, #-32]
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.lt cmp_true_491
-    adr x0, sign_id
-    b cmp_end_492
-cmp_true_491:
-cmp_end_492:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_489
-    adr x0, lhs
-    b cond_end_490
-cond_false_489:
+    b.eq or_right_462
+    b or_end_463
+or_right_462:
+    adr x0, get_prec
+    ldr x0, [x0]
+or_end_463:
+    str x0, [sp, #-16]!
     adr x0, sign_id
-cond_end_490:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-48]
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_439
+    b.ne blk_end_461
+    b after_func_464_465
+func_464:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_466_467
+func_466:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_469
+    b or_end_470
+or_right_469:
     adr x0, next
+    ldr x0, [x0]
+or_end_470:
     str x0, [sp, #-16]!
     adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-48]
-    cmp x0, #4096
-    b.hi do_compose_493
-do_apply_494:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_495
-do_compose_493:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_495:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_439
-    b after_next_min_prec_impl_496
-next_min_prec_impl:
+    b.ne blk_end_468
+    b after_func_471_472
+func_471:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -3283,8 +3683,53 @@ next_min_prec_impl:
     ldr x10, [x9] // Load Val
     str x10, [sp, #-16]! // Push Val
     ldr x9, [x9, #8] // Next
-    b after_func_497_498
-func_497:
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_473_474
+func_473:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_476
+    b or_end_477
+or_right_476:
+    b after_func_478_479
+func_478:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_480_481
+func_480:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -3295,20 +3740,20 @@ func_497:
     ldr x0, [x29, #-48]
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_499
-    b or_end_500
-or_right_499:
+    b.eq or_right_482
+    b or_end_483
+or_right_482:
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-or_end_500:
+or_end_483:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_497_498:
-    // Closure for func_497
+after_func_480_481:
+    // Closure for func_480
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
@@ -3318,149 +3763,283 @@ after_func_497_498:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_497
+    adr x1, func_480
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_next_min_prec_impl_496:
-    // Closure for next_min_prec_impl
+after_func_478_479:
+    // Closure for func_478
     adr x0, sign_id
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-192]
+    ldr x0, [x29, #-48]
     ldr x1, [sp], #16
     mov x9, x0
     mov x0, x1
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, next_min_prec_impl
+    adr x1, func_478
     ldr x0, [sp], #16
     bl _cons
+or_end_477:
+    str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_439
+    b.ne blk_end_475
+    b after_func_484_485
+func_484:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_487
+    b or_end_488
+or_right_487:
     adr x0, parse_expr
+    ldr x0, [x0]
+or_end_488:
     str x0, [sp, #-16]!
     adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-208]
-    cmp x0, #4096
-    b.hi do_compose_501
-do_apply_502:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_503
-do_compose_501:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_503:
-    str x0, [sp, #-16]!
-    adr x0, next_min_prec
-    cmp x0, #4096
-    b.hi do_compose_504
-do_apply_505:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_506
-do_compose_504:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_506:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_439
+    b.ne blk_end_486
+    b after_func_489_490
+func_489:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_491_492
+func_491:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_493_494
+func_493:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_496
+    b or_end_497
+or_right_496:
     adr x0, head
+or_end_497:
     str x0, [sp, #-16]!
     adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-224]
-    cmp x0, #4096
-    b.hi do_compose_507
-do_apply_508:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_509
-do_compose_507:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_509:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_439
+    b.ne blk_end_495
+    b after_func_498_499
+func_498:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_500_501
+func_500:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_503
+    b or_end_504
+or_right_503:
     adr x0, head
+or_end_504:
     str x0, [sp, #-16]!
     adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tail
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-224]
-    cmp x0, #4096
-    b.hi do_compose_510
-do_apply_511:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_512
-do_compose_510:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_512:
-    cmp x0, #4096
-    b.hi do_compose_513
-do_apply_514:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_515
-do_compose_513:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_515:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_439
-    adr x0, ast_infix
+    b.ne blk_end_502
+    b after_func_505_506
+func_505:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_507_508
+func_507:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    adr x0, str_3
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_509
+    adr x0, can_start_expr
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    cmp x0, #4096
+    b.hi do_compose_512
+do_apply_513:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_514
+do_compose_512:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_514:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_510
+    adr x0, sign_id
+    b cond_end_511
+cond_false_510:
+    adr x0, sign_id
+cond_end_511:
+    str x0, [sp, #-16]!
+    adr x0, str_4
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_515
+    adr x0, _parse_expr_loop
     ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-176]
-    str x0, [sp, #-16]!
-    adr x0, lhs
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-240]
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_439
-    ldr x0, [x29, #-64]
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-272]
+    adr x0, new_lhs_apply
     cmp x0, #4096
     b.hi do_compose_516
 do_apply_517:
@@ -3475,7 +4054,7 @@ do_compose_516:
     bl _compose
 apply_end_518:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-256]
+    ldr x0, [x29, #-64]
     cmp x0, #4096
     b.hi do_compose_519
 do_apply_520:
@@ -3490,7 +4069,7 @@ do_compose_519:
     bl _compose
 apply_end_521:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
+    ldr x0, [x29, #-80]
     cmp x0, #4096
     b.hi do_compose_522
 do_apply_523:
@@ -3504,103 +4083,61 @@ do_compose_522:
     ldr x0, [sp], #16
     bl _compose
 apply_end_524:
-blk_end_439:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_437_438:
-    // Closure for func_437
-    adr x0, sign_id
-    str x0, [sp, #-16]!
+blk_end_515:
+    cmp x0, #4096
+    b.hi do_compose_525
+do_apply_526:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_527
+do_compose_525:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_527:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_509
     ldr x0, [x29, #-48]
-    ldr x1, [sp], #16
-    mov x9, x0
-    mov x0, x1
-    mov x1, x9
-    bl _cons
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    ldr x1, [sp], #16
-    mov x9, x0
-    mov x0, x1
-    mov x1, x9
-    bl _cons
-    str x0, [sp, #-16]!
-    adr x1, func_437
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_435_436:
-    // Closure for func_435
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-48]
-    ldr x1, [sp], #16
-    mov x9, x0
-    mov x0, x1
-    mov x1, x9
-    bl _cons
-    str x0, [sp, #-16]!
-    adr x1, func_435
-    ldr x0, [sp], #16
-    bl _cons
-blk_end_432:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_430_431:
-    // Closure for func_430
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_430
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_428_429:
-    // Closure for func_428
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_428
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_525_526
-func_525:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_527_528
-func_527:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_530
-    b or_end_531
-or_right_530:
-    adr x0, type
-or_end_531:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_529
-    adr x0, type
-    str x0, [sp, #-16]!
-    adr x0, tok_id
+    adr x0, tok_op
     ldr x0, [x0]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_534
+    b.ne cmp_true_530
+    adr x0, sign_id
+    b cmp_end_531
+cmp_true_530:
+cmp_end_531:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_528
+    ldr x0, [x29, #-32]
+    b cond_end_529
+cond_false_528:
+    adr x0, sign_id
+cond_end_529:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_509
+    ldr x0, [x29, #-112]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.lt cmp_true_534
     adr x0, sign_id
     b cmp_end_535
 cmp_true_534:
@@ -3608,229 +4145,1296 @@ cmp_end_535:
     adr x9, sign_id
     cmp x0, x9
     b.eq cond_false_532
-    mov x0, #1
+    ldr x0, [x29, #-32]
     b cond_end_533
 cond_false_532:
     adr x0, sign_id
 cond_end_533:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_529
-    adr x0, type
+    b.ne blk_end_509
+    adr x0, _parse_expr_loop
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    adr x0, new_lhs_infix
+    cmp x0, #4096
+    b.hi do_compose_536
+do_apply_537:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_538
+do_compose_536:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_538:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-128]
+    cmp x0, #4096
+    b.hi do_compose_539
+do_apply_540:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_541
+do_compose_539:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_541:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    cmp x0, #4096
+    b.hi do_compose_542
+do_apply_543:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_544
+do_compose_542:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_544:
+blk_end_509:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_507_508:
+    // Closure for func_507
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-128]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_507
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_505_506:
+    // Closure for func_505
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-128]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_505
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_502:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_500_501:
+    // Closure for func_500
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_500
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_498_499:
+    // Closure for func_498
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_498
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_495:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_493_494:
+    // Closure for func_493
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_493
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_491_492:
+    // Closure for func_491
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_491
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_489_490:
+    // Closure for func_489
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_489
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_486:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_484_485:
+    // Closure for func_484
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_484
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_475:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_473_474:
+    // Closure for func_473
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_473
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_471_472:
+    // Closure for func_471
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_471
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_468:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_466_467:
+    // Closure for func_466
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_466
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_464_465:
+    // Closure for func_464
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_464
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_461:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_459_460:
+    // Closure for func_459
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_459
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_457_458:
+    // Closure for func_457
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_457
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_454:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_452_453:
+    // Closure for func_452
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_452
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_450_451:
+    // Closure for func_450
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_450
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_448_449:
+    // Closure for func_448
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_448
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_446_447:
+    // Closure for func_446
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_446
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_443:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_441_442:
+    // Closure for func_441
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_441
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_439_440:
+    // Closure for func_439
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_439
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_436:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_434_435:
+    // Closure for func_434
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_434
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_432_433:
+    // Closure for func_432
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_432
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_430_431:
+    // Closure for func_430
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_430
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_427:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_425_426:
+    // Closure for func_425
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_425
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_423_424:
+    // Closure for func_423
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_423
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_421_422:
+    // Closure for func_421
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_421
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_418:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_416_417:
+    // Closure for func_416
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_416
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_414_415:
+    // Closure for func_414
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_414
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_411:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_409_410:
+    // Closure for func_409
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_409
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_407_408:
+    // Closure for func_407
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_407
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_405_406:
+    // Closure for func_405
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_405
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after__parse_expr_loop_impl_404:
+    // Closure for _parse_expr_loop_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, _parse_expr_loop_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_can_start_expr_impl_545
+can_start_expr_impl:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    str x0, [sp, #-16]!
+    adr x0, tok_id
+    ldr x0, [x0]
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_549
+    adr x0, sign_id
+    b cmp_end_550
+cmp_true_549:
+cmp_end_550:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_547
+    mov x0, #1
+    b cond_end_548
+cond_false_547:
+    adr x0, sign_id
+cond_end_548:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_546
+    ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     adr x0, tok_num
     ldr x0, [x0]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_538
+    b.eq cmp_true_553
     adr x0, sign_id
-    b cmp_end_539
-cmp_true_538:
-cmp_end_539:
+    b cmp_end_554
+cmp_true_553:
+cmp_end_554:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_536
+    b.eq cond_false_551
     mov x0, #1
-    b cond_end_537
-cond_false_536:
+    b cond_end_552
+cond_false_551:
     adr x0, sign_id
-cond_end_537:
+cond_end_552:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_529
-    adr x0, type
+    b.ne blk_end_546
+    ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     adr x0, tok_str
     ldr x0, [x0]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_542
+    b.eq cmp_true_557
     adr x0, sign_id
-    b cmp_end_543
-cmp_true_542:
-cmp_end_543:
+    b cmp_end_558
+cmp_true_557:
+cmp_end_558:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_540
+    b.eq cond_false_555
     mov x0, #1
-    b cond_end_541
-cond_false_540:
+    b cond_end_556
+cond_false_555:
     adr x0, sign_id
-cond_end_541:
+cond_end_556:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_529
-    adr x0, type
+    b.ne blk_end_546
+    ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     adr x0, tok_punc
     ldr x0, [x0]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_546
+    b.eq cmp_true_561
     adr x0, sign_id
-    b cmp_end_547
-cmp_true_546:
-cmp_end_547:
+    b cmp_end_562
+cmp_true_561:
+cmp_end_562:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_544
+    b.eq cond_false_559
     mov x0, #1
-    b cond_end_545
-cond_false_544:
+    b cond_end_560
+cond_false_559:
     adr x0, sign_id
-cond_end_545:
+cond_end_560:
     str x0, [sp, #-16]!
     adr x0, str_5
     cmp x0, #4096
-    b.hi do_compose_548
-do_apply_549:
+    b.hi do_compose_563
+do_apply_564:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_550
-do_compose_548:
+    b apply_end_565
+do_compose_563:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_550:
+apply_end_565:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_529
+    b.ne blk_end_546
     mov x0, #0
-blk_end_529:
+blk_end_546:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_527_528:
-    // Closure for func_527
+after_can_start_expr_impl_545:
+    // Closure for can_start_expr_impl
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_527
+    adr x1, can_start_expr_impl
     ldr x0, [sp], #16
     bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_525_526:
-    // Closure for func_525
     adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
     str x0, [sp, #-16]!
-    adr x1, func_525
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_551_552
-func_551:
+    b after_is_prefix_op_impl_566
+is_prefix_op_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_553_554
-func_553:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
+    adr x0, streq
+    ldr x0, [x0]
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_556
-    b or_end_557
-or_right_556:
-    adr x0, op
-or_end_557:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_555
-    adr x0, streq
-    str x0, [sp, #-16]!
-    adr x0, op
     cmp x0, #4096
-    b.hi do_compose_558
-do_apply_559:
+    b.hi do_compose_568
+do_apply_569:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_560
-do_compose_558:
+    b apply_end_570
+do_compose_568:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_560:
+apply_end_570:
     str x0, [sp, #-16]!
     adr x0, "
     bl _factorial
     cmp x0, #4096
-    b.hi do_compose_561
-do_apply_562:
+    b.hi do_compose_571
+do_apply_572:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_563
-do_compose_561:
+    b apply_end_573
+do_compose_571:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_563:
+apply_end_573:
     str x0, [sp, #-16]!
     mov x0, #1
     str x0, [sp, #-16]!
     adr x0, sign_id
     cmp x0, #4096
-    b.hi do_compose_564
-do_apply_565:
+    b.hi do_compose_574
+do_apply_575:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_566
-do_compose_564:
+    b apply_end_576
+do_compose_574:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_566:
+apply_end_576:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_555
+    b.ne blk_end_567
     adr x0, streq
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, op
+    ldr x0, [x29, #-32]
     cmp x0, #4096
-    b.hi do_compose_567
-do_apply_568:
+    b.hi do_compose_577
+do_apply_578:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_569
-do_compose_567:
+    b apply_end_579
+do_compose_577:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_569:
+apply_end_579:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-64]
+    ldr x0, [x29, #-48]
     cmp x0, #4096
-    b.hi do_compose_570
-do_apply_571:
+    b.hi do_compose_580
+do_apply_581:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_572
-do_compose_570:
+    b apply_end_582
+do_compose_580:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_572:
+apply_end_582:
     str x0, [sp, #-16]!
     mov x0, #1
     str x0, [sp, #-16]!
@@ -3839,84 +5443,86 @@ apply_end_572:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_555
+    b.ne blk_end_567
     adr x0, streq
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, op
+    ldr x0, [x29, #-32]
     cmp x0, #4096
-    b.hi do_compose_573
-do_apply_574:
+    b.hi do_compose_583
+do_apply_584:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_575
-do_compose_573:
+    b apply_end_585
+do_compose_583:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_575:
+apply_end_585:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
+    ldr x0, [x29, #-64]
     cmp x0, #4096
-    b.hi do_compose_576
-do_apply_577:
+    b.hi do_compose_586
+do_apply_587:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_578
-do_compose_576:
+    b apply_end_588
+do_compose_586:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_578:
+apply_end_588:
     str x0, [sp, #-16]!
-    add x0, x29, #-80
+    add x0, x29, #-64
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_579
+    b.eq cond_false_589
     mov x0, #1
-    b cond_end_580
-cond_false_579:
+    b cond_end_590
+cond_false_589:
     adr x0, sign_id
-cond_end_580:
+cond_end_590:
     cmp x0, #4096
-    b.hi do_compose_581
-do_apply_582:
+    b.hi do_compose_591
+do_apply_592:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_583
-do_compose_581:
+    b apply_end_593
+do_compose_591:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_583:
+apply_end_593:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_555
+    b.ne blk_end_567
     adr x0, streq
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, op
+    ldr x0, [x29, #-32]
     cmp x0, #4096
-    b.hi do_compose_584
-do_apply_585:
+    b.hi do_compose_594
+do_apply_595:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_586
-do_compose_584:
+    b apply_end_596
+do_compose_594:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_586:
+apply_end_596:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
+    ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
+    ldr x0, [x29, #-64]
     ldr x1, [sp], #16
     mov x9, x0
     mov x0, x1
@@ -3924,81 +5530,12 @@ apply_end_586:
     bl _nth
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_587
+    b.eq cond_false_597
     mov x0, #1
-    b cond_end_588
-cond_false_587:
+    b cond_end_598
+cond_false_597:
     adr x0, sign_id
-cond_end_588:
-    cmp x0, #4096
-    b.hi do_compose_589
-do_apply_590:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_591
-do_compose_589:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_591:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_555
-    mov x0, #0
-blk_end_555:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_553_554:
-    // Closure for func_553
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_553
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_551_552:
-    // Closure for func_551
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_551
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_592_593
-func_592:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_594_595
-func_594:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_597
-    b or_end_598
-or_right_597:
-    adr x0, tokens
-or_end_598:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_596
-    adr x0, peek
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tokens
+cond_end_598:
     cmp x0, #4096
     b.hi do_compose_599
 do_apply_600:
@@ -4014,325 +5551,301 @@ do_compose_599:
 apply_end_601:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_596
+    b.ne blk_end_567
+    mov x0, #0
+blk_end_567:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_is_prefix_op_impl_566:
+    // Closure for is_prefix_op_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, is_prefix_op_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_parse_primary_impl_602
+parse_primary_impl:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_603_604
+func_603:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_606
+    b or_end_607
+or_right_606:
+    adr x0, peek
+    ldr x0, [x0]
+or_end_607:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_605
+    b after_func_608_609
+func_608:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_610_611
+func_610:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_613
+    b or_end_614
+or_right_613:
     adr x0, tok_type
+    ldr x0, [x0]
+or_end_614:
     str x0, [sp, #-16]!
     adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-64]
-    cmp x0, #4096
-    b.hi do_compose_602
-do_apply_603:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_604
-do_compose_602:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_604:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_596
+    b.ne blk_end_612
+    b after_func_615_616
+func_615:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_617_618
+func_617:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_620
+    b or_end_621
+or_right_620:
     adr x0, next
+    ldr x0, [x0]
+or_end_621:
     str x0, [sp, #-16]!
     adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tokens
-    cmp x0, #4096
-    b.hi do_compose_605
-do_apply_606:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_607
-do_compose_605:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_607:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_596
-    ldr x0, [x29, #-80]
+    b.ne blk_end_619
+    b after_func_622_623
+func_622:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_624_625
+func_624:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_627
+    b or_end_628
+or_right_627:
+    adr x0, tok_val
+    ldr x0, [x0]
+or_end_628:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_626
+    b after_func_629_630
+func_629:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_num
     ldr x0, [x0]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_610
+    b.eq cmp_true_634
     adr x0, sign_id
-    b cmp_end_611
-cmp_true_610:
-cmp_end_611:
+    b cmp_end_635
+cmp_true_634:
+cmp_end_635:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_608
-    adr x0, sign_id
-    b cond_end_609
-cond_false_608:
-    adr x0, sign_id
-cond_end_609:
-    str x0, [sp, #-16]!
-    adr x0, tok_val
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-64]
-    cmp x0, #4096
-    b.hi do_compose_613
-do_apply_614:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_615
-do_compose_613:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_615:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_612
+    b.eq cond_false_632
     adr x0, ast_num
     ldr x0, [x0]
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-112]
+    ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
     bl _cons
     ldr x1, [sp], #16
     bl _cons
+    b cond_end_633
+cond_false_632:
+    adr x0, sign_id
+cond_end_633:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
+    ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
     bl _cons
     ldr x1, [sp], #16
     bl _cons
-blk_end_612:
-    cmp x0, #4096
-    b.hi do_compose_616
-do_apply_617:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_618
-do_compose_616:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_618:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_596
-    ldr x0, [x29, #-80]
+    b.ne blk_end_631
+    ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_id
     ldr x0, [x0]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_621
+    b.eq cmp_true_638
     adr x0, sign_id
-    b cmp_end_622
-cmp_true_621:
-cmp_end_622:
+    b cmp_end_639
+cmp_true_638:
+cmp_end_639:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_619
-    adr x0, sign_id
-    b cond_end_620
-cond_false_619:
-    adr x0, sign_id
-cond_end_620:
-    str x0, [sp, #-16]!
-    adr x0, tok_val
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-64]
-    cmp x0, #4096
-    b.hi do_compose_624
-do_apply_625:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_626
-do_compose_624:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_626:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_623
+    b.eq cond_false_636
     adr x0, ast_id
     ldr x0, [x0]
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-128]
+    ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
     bl _cons
     ldr x1, [sp], #16
     bl _cons
+    b cond_end_637
+cond_false_636:
+    adr x0, sign_id
+cond_end_637:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
+    ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
     bl _cons
     ldr x1, [sp], #16
     bl _cons
-blk_end_623:
-    cmp x0, #4096
-    b.hi do_compose_627
-do_apply_628:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_629
-do_compose_627:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_629:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_596
-    ldr x0, [x29, #-80]
+    b.ne blk_end_631
+    ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_str
     ldr x0, [x0]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_632
+    b.eq cmp_true_642
     adr x0, sign_id
-    b cmp_end_633
-cmp_true_632:
-cmp_end_633:
+    b cmp_end_643
+cmp_true_642:
+cmp_end_643:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_630
-    adr x0, sign_id
-    b cond_end_631
-cond_false_630:
-    adr x0, sign_id
-cond_end_631:
-    str x0, [sp, #-16]!
-    adr x0, tok_val
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-64]
-    cmp x0, #4096
-    b.hi do_compose_635
-do_apply_636:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_637
-do_compose_635:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_637:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_634
+    b.eq cond_false_640
     adr x0, ast_str
     ldr x0, [x0]
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-144]
+    ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
     bl _cons
     ldr x1, [sp], #16
     bl _cons
+    b cond_end_641
+cond_false_640:
+    adr x0, sign_id
+cond_end_641:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
+    ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
     bl _cons
     ldr x1, [sp], #16
     bl _cons
-blk_end_634:
-    cmp x0, #4096
-    b.hi do_compose_638
-do_apply_639:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_640
-do_compose_638:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_640:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_596
-    ldr x0, [x29, #-80]
+    b.ne blk_end_631
+    ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_op
     ldr x0, [x0]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_643
+    b.eq cmp_true_646
     adr x0, sign_id
-    b cmp_end_644
-cmp_true_643:
-cmp_end_644:
+    b cmp_end_647
+cmp_true_646:
+cmp_end_647:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_641
+    b.eq cond_false_644
     adr x0, sign_id
-    b cond_end_642
-cond_false_641:
+    b cond_end_645
+cond_false_644:
     adr x0, sign_id
-cond_end_642:
+cond_end_645:
     str x0, [sp, #-16]!
-    adr x0, tok_val
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-64]
-    cmp x0, #4096
-    b.hi do_compose_646
-do_apply_647:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_648
-do_compose_646:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_648:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_645
     adr x0, is_prefix_op
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, sign_id
+    adr x0, _parse_prefix
     str x0, [sp, #-16]!
     adr x0, sign_id
     cmp x0, #4096
@@ -4349,82 +5862,461 @@ do_compose_649:
     bl _compose
 apply_end_651:
     str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    cmp x0, #4096
+    b.hi do_compose_652
+do_apply_653:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_654
+do_compose_652:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_654:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    cmp x0, #4096
+    b.hi do_compose_655
+do_apply_656:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_657
+do_compose_655:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_657:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_648
+    adr x0, ast_op
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
+blk_end_648:
+    cmp x0, #4096
+    b.hi do_compose_658
+do_apply_659:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_660
+do_compose_658:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_660:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_631
+    ldr x0, [x29, #-48]
+    str x0, [sp, #-16]!
+    adr x0, tok_punc
+    ldr x0, [x0]
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_663
+    adr x0, sign_id
+    b cmp_end_664
+cmp_true_663:
+cmp_end_664:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_661
+    adr x0, sign_id
+    b cond_end_662
+cond_false_661:
+    adr x0, sign_id
+cond_end_662:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    str x0, [sp, #-16]!
+    mov x0, #91
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_668
+    adr x0, sign_id
+    b cmp_end_669
+cmp_true_668:
+cmp_end_669:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_666
+    adr x0, parse_block
+    ldr x0, [x0]
+    b cond_end_667
+cond_false_666:
+    adr x0, sign_id
+cond_end_667:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    cmp x0, #4096
+    b.hi do_compose_670
+do_apply_671:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_672
+do_compose_670:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_672:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_665
+    ldr x0, [x29, #-96]
+    str x0, [sp, #-16]!
+    mov x0, #40
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_675
+    adr x0, sign_id
+    b cmp_end_676
+cmp_true_675:
+cmp_end_676:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_673
+    adr x0, _parse_group
+    b cond_end_674
+cond_false_673:
+    adr x0, sign_id
+cond_end_674:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    cmp x0, #4096
+    b.hi do_compose_677
+do_apply_678:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_679
+do_compose_677:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_679:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_665
+    adr x0, ast_unit
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
+blk_end_665:
+    cmp x0, #4096
+    b.hi do_compose_680
+do_apply_681:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_682
+do_compose_680:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_682:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_631
     adr x0, str_6
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_652
-    adr x0, parse_expr
+    b.ne blk_end_631
+    adr x0, ast_unit
+    ldr x0, [x0]
     str x0, [sp, #-16]!
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
+blk_end_631:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_629_630:
+    // Closure for func_629
     adr x0, sign_id
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    cmp x0, #4096
-    b.hi do_compose_653
-do_apply_654:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_655
-do_compose_653:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_655:
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
     str x0, [sp, #-16]!
-    mov x0, #20
-    cmp x0, #4096
-    b.hi do_compose_656
-do_apply_657:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_658
-do_compose_656:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_658:
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
     str x0, [sp, #-16]!
-    adr x0, str_7
-    cmp x0, #4096
-    b.hi do_compose_659
-do_apply_660:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_661
-do_compose_659:
-    mov x1, x0
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_629
     ldr x0, [sp], #16
-    bl _compose
-apply_end_661:
+    bl _cons
+blk_end_626:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_624_625:
+    // Closure for func_624
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_624
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_622_623:
+    // Closure for func_622
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_622
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_619:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_617_618:
+    // Closure for func_617
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_617
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_615_616:
+    // Closure for func_615
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_615
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_612:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_610_611:
+    // Closure for func_610
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_610
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_608_609:
+    // Closure for func_608
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_608
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_605:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_603_604:
+    // Closure for func_603
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_603
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_parse_primary_impl_602:
+    // Closure for parse_primary_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, parse_primary_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after__parse_prefix_impl_683
+_parse_prefix_impl:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_684_685
+func_684:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_686_687
+func_686:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_652
+    b.eq or_right_689
+    b or_end_690
+or_right_689:
+    adr x0, parse_expr
+    ldr x0, [x0]
+or_end_690:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_688
+    b after_func_691_692
+func_691:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_693_694
+func_693:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
     adr x0, ast_prefix
     ldr x0, [x0]
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-176]
+    ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     adr x0, head
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-192]
+    ldr x0, [x29, #-48]
     cmp x0, #4096
-    b.hi do_compose_662
-do_apply_663:
+    b.hi do_compose_695
+do_apply_696:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_664
-do_compose_662:
+    b apply_end_697
+do_compose_695:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_664:
+apply_end_697:
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
@@ -4438,223 +6330,20 @@ apply_end_664:
     str x0, [sp, #-16]!
     adr x0, tail
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-192]
+    ldr x0, [x29, #-48]
     cmp x0, #4096
-    b.hi do_compose_665
-do_apply_666:
+    b.hi do_compose_698
+do_apply_699:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_667
-do_compose_665:
+    b apply_end_700
+do_compose_698:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_667:
-    cmp x0, #4096
-    b.hi do_compose_668
-do_apply_669:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_670
-do_compose_668:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_670:
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-blk_end_652:
-    cmp x0, #4096
-    b.hi do_compose_671
-do_apply_672:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_673
-do_compose_671:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_673:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_645
-    adr x0, str_8
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_645
-    adr x0, ast_op
-    ldr x0, [x0]
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-176]
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-blk_end_645:
-    cmp x0, #4096
-    b.hi do_compose_674
-do_apply_675:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_676
-do_compose_674:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_676:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_596
-    ldr x0, [x29, #-80]
-    str x0, [sp, #-16]!
-    adr x0, tok_punc
-    ldr x0, [x0]
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.eq cmp_true_679
-    adr x0, sign_id
-    b cmp_end_680
-cmp_true_679:
-cmp_end_680:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_677
-    adr x0, sign_id
-    b cond_end_678
-cond_false_677:
-    adr x0, sign_id
-cond_end_678:
-    str x0, [sp, #-16]!
-    adr x0, tok_val
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-64]
-    cmp x0, #4096
-    b.hi do_compose_682
-do_apply_683:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_684
-do_compose_682:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_684:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_681
-    ldr x0, [x29, #-208]
-    str x0, [sp, #-16]!
-    mov x0, #91
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.eq cmp_true_687
-    adr x0, sign_id
-    b cmp_end_688
-cmp_true_687:
-cmp_end_688:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_685
-    adr x0, sign_id
-    b cond_end_686
-cond_false_685:
-    adr x0, sign_id
-cond_end_686:
-    str x0, [sp, #-16]!
-    adr x0, str_9
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_689
-    adr x0, parse_block
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    cmp x0, #4096
-    b.hi do_compose_690
-do_apply_691:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_692
-do_compose_690:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_692:
-blk_end_689:
-    cmp x0, #4096
-    b.hi do_compose_693
-do_apply_694:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_695
-do_compose_693:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_695:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_681
-    ldr x0, [x29, #-208]
-    str x0, [sp, #-16]!
-    mov x0, #40
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.eq cmp_true_698
-    adr x0, sign_id
-    b cmp_end_699
-cmp_true_698:
-cmp_end_699:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_696
-    adr x0, sign_id
-    b cond_end_697
-cond_false_696:
-    adr x0, sign_id
-cond_end_697:
-    str x0, [sp, #-16]!
-    adr x0, str_10
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_700
-    adr x0, parse_stmts
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
+apply_end_700:
     cmp x0, #4096
     b.hi do_compose_701
 do_apply_702:
@@ -4668,334 +6357,288 @@ do_compose_701:
     ldr x0, [sp], #16
     bl _compose
 apply_end_703:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_700
-    adr x0, head
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-224]
-    cmp x0, #4096
-    b.hi do_compose_704
-do_apply_705:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_706
-do_compose_704:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_706:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_700
-    adr x0, head
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tail
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-224]
-    cmp x0, #4096
-    b.hi do_compose_707
-do_apply_708:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_709
-do_compose_707:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_709:
-    cmp x0, #4096
-    b.hi do_compose_710
-do_apply_711:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_712
-do_compose_710:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_712:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_700
-    adr x0, str_11
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_700
-    adr x0, peek
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-256]
-    cmp x0, #4096
-    b.hi do_compose_713
-do_apply_714:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_715
-do_compose_713:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_715:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_700
-    adr x0, str_12
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_700
-    adr x0, str_13
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_700
-    adr x0, is_null
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tail
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-240]
-    cmp x0, #4096
-    b.hi do_compose_716
-do_apply_717:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_718
-do_compose_716:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_718:
-    cmp x0, #4096
-    b.hi do_compose_719
-do_apply_720:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_721
-do_compose_719:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_721:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_700
-    adr x0, head
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-240]
-    cmp x0, #4096
-    b.hi do_compose_722
-do_apply_723:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_724
-do_compose_722:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_724:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, next
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-256]
-    cmp x0, #4096
-    b.hi do_compose_725
-do_apply_726:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_727
-do_compose_725:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_727:
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
     bl _cons
     ldr x1, [sp], #16
     bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_700
-    adr x0, ast_block
-    ldr x0, [x0]
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-240]
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-    str x0, [sp, #-16]!
-    adr x0, next
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-256]
-    cmp x0, #4096
-    b.hi do_compose_728
-do_apply_729:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_730
-do_compose_728:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_730:
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-blk_end_700:
-    cmp x0, #4096
-    b.hi do_compose_731
-do_apply_732:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_733
-do_compose_731:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_733:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_681
-    adr x0, str_14
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_681
-    adr x0, ast_unit
-    ldr x0, [x0]
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-blk_end_681:
-    cmp x0, #4096
-    b.hi do_compose_734
-do_apply_735:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_736
-do_compose_734:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_736:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_596
-    adr x0, str_15
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_596
-    adr x0, ast_unit
-    ldr x0, [x0]
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-blk_end_596:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_594_595:
-    // Closure for func_594
+after_func_693_694:
+    // Closure for func_693
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_594
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_693
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_592_593:
-    // Closure for func_592
+after_func_691_692:
+    // Closure for func_691
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_592
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_691
     ldr x0, [sp], #16
     bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_737_738
-func_737:
+blk_end_688:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_686_687:
+    // Closure for func_686
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_686
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_684_685:
+    // Closure for func_684
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_684
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after__parse_prefix_impl_683:
+    // Closure for _parse_prefix_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, _parse_prefix_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after__parse_group_impl_704
+_parse_group_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_739_740
-func_739:
+    b after_func_705_706
+func_705:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_742
-    b or_end_743
-or_right_742:
-    adr x0, tokens
-or_end_743:
+    b.eq or_right_708
+    b or_end_709
+or_right_708:
+    adr x0, parse_stmts
+    ldr x0, [x0]
+or_end_709:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_741
-    adr x0, parse_stmts
+    b.ne blk_end_707
+    b after_func_710_711
+func_710:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_712_713
+func_712:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_715
+    b or_end_716
+or_right_715:
+    adr x0, head
+or_end_716:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_714
+    b after_func_717_718
+func_717:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_719_720
+func_719:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_722
+    b or_end_723
+or_right_722:
+    adr x0, head
+or_end_723:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_721
+    b after_func_724_725
+func_724:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_726_727
+func_726:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_729
+    b or_end_730
+or_right_729:
+    adr x0, peek
+    ldr x0, [x0]
+or_end_730:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_728
+    b after_func_731_732
+func_731:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_733_734
+func_733:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_736
+    b or_end_737
+or_right_736:
+    adr x0, is_null
+or_end_737:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_735
+    b after_func_738_739
+func_738:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    adr x0, head
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    cmp x0, #4096
+    b.hi do_compose_741
+do_apply_742:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_743
+do_compose_741:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_743:
     str x0, [sp, #-16]!
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x0, tokens
+    adr x0, next
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
     cmp x0, #4096
     b.hi do_compose_744
 do_apply_745:
@@ -5009,12 +6652,28 @@ do_compose_744:
     ldr x0, [sp], #16
     bl _compose
 apply_end_746:
+    str x0, [sp, #-16]!
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_741
-    adr x0, head
+    b.ne blk_end_740
+    adr x0, ast_block
+    ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, sign_id
+    ldr x0, [x29, #-48]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x0, next
+    ldr x0, [x0]
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
     cmp x0, #4096
@@ -5030,200 +6689,427 @@ do_compose_747:
     ldr x0, [sp], #16
     bl _compose
 apply_end_749:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_741
-    adr x0, head
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tail
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-64]
-    cmp x0, #4096
-    b.hi do_compose_750
-do_apply_751:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_752
-do_compose_750:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_752:
-    cmp x0, #4096
-    b.hi do_compose_753
-do_apply_754:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_755
-do_compose_753:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_755:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_741
-    adr x0, str_16
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_741
-    adr x0, peek
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    cmp x0, #4096
-    b.hi do_compose_756
-do_apply_757:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_758
-do_compose_756:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_758:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_741
-    adr x0, str_17
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_741
-    adr x0, transform_section
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
-    cmp x0, #4096
-    b.hi do_compose_759
-do_apply_760:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_761
-do_compose_759:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_761:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_741
-    ldr x0, [x29, #-128]
-    str x0, [sp, #-16]!
-    adr x0, next
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    cmp x0, #4096
-    b.hi do_compose_762
-do_apply_763:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_764
-do_compose_762:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_764:
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
     bl _cons
     ldr x1, [sp], #16
     bl _cons
-blk_end_741:
+blk_end_740:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_739_740:
-    // Closure for func_739
+after_func_738_739:
+    // Closure for func_738
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_739
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_738
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_735:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_733_734:
+    // Closure for func_733
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_733
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_737_738:
-    // Closure for func_737
+after_func_731_732:
+    // Closure for func_731
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_737
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_731
     ldr x0, [sp], #16
     bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_765_766
-func_765:
+blk_end_728:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_726_727:
+    // Closure for func_726
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_726
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_724_725:
+    // Closure for func_724
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_724
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_721:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_719_720:
+    // Closure for func_719
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_719
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_717_718:
+    // Closure for func_717
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_717
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_714:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_712_713:
+    // Closure for func_712
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_712
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_710_711:
+    // Closure for func_710
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_710
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_707:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_705_706:
+    // Closure for func_705
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_705
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after__parse_group_impl_704:
+    // Closure for _parse_group_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, _parse_group_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_parse_block_impl_impl_750
+parse_block_impl_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_767_768
-func_767:
+    b after_func_751_752
+func_751:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_770
-    b or_end_771
-or_right_770:
-    adr x0, list
-or_end_771:
+    b.eq or_right_754
+    b or_end_755
+or_right_754:
+    adr x0, parse_stmts
+    ldr x0, [x0]
+or_end_755:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_769
-    adr x0, list
+    b.ne blk_end_753
+    b after_func_756_757
+func_756:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
-    mov x0, #0
+    b after_func_758_759
+func_758:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_761
+    b or_end_762
+or_right_761:
+    adr x0, head
+or_end_762:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_760
+    b after_func_763_764
+func_763:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_765_766
+func_765:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_768
+    b or_end_769
+or_right_768:
+    adr x0, head
+or_end_769:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_767
+    b after_func_770_771
+func_770:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_772_773
+func_772:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_775
+    b or_end_776
+or_right_775:
+    adr x0, peek
+    ldr x0, [x0]
+or_end_776:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_774
+    b after_func_777_778
+func_777:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_779_780
+func_779:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_782
+    b or_end_783
+or_right_782:
+    adr x0, transform_section
+or_end_783:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_781
+    b after_func_784_785
+func_784:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-48]
+    str x0, [sp, #-16]!
+    adr x0, next
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    cmp x0, #4096
+    b.hi do_compose_786
+do_apply_787:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_788
+do_compose_786:
     mov x1, x0
     ldr x0, [sp], #16
-    cmp x0, x1
-    b.eq cmp_true_774
-    adr x0, sign_id
-    b cmp_end_775
-cmp_true_774:
-cmp_end_775:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_772
-    mov x0, #1
-    b cond_end_773
-cond_false_772:
-    adr x0, sign_id
-cond_end_773:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_769
+    bl _compose
+apply_end_788:
+    str x0, [sp, #-16]!
     mov x0, #0
-blk_end_769:
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_767_768:
-    // Closure for func_767
+after_func_784_785:
+    // Closure for func_784
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_767
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_784
     ldr x0, [sp], #16
     bl _cons
+blk_end_781:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_779_780:
+    // Closure for func_779
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_779
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_777_778:
+    // Closure for func_777
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_777
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_774:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_772_773:
+    // Closure for func_772
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_772
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_770_771:
+    // Closure for func_770
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_770
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_767:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
@@ -5234,34 +7120,125 @@ after_func_765_766:
     adr x1, func_765
     ldr x0, [sp], #16
     bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_776_777
-func_776:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_763_764:
+    // Closure for func_763
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_763
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_760:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_758_759:
+    // Closure for func_758
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_758
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_756_757:
+    // Closure for func_756
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_756
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_753:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_751_752:
+    // Closure for func_751
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_751
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_parse_block_impl_impl_750:
+    // Closure for parse_block_impl_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, parse_block_impl_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_is_null_impl_789
+is_null_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_778_779
-func_778:
+    ldr x0, [x29, #-32]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_793
+    adr x0, sign_id
+    b cmp_end_794
+cmp_true_793:
+cmp_end_794:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_791
+    mov x0, #1
+    b cond_end_792
+cond_false_791:
+    adr x0, sign_id
+cond_end_792:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_790
+    mov x0, #0
+blk_end_790:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_is_null_impl_789:
+    // Closure for is_null_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, is_null_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_func_795_796
+func_795:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_781
-    b or_end_782
-or_right_781:
+    b.eq or_right_798
+    b or_end_799
+or_right_798:
     adr x0, type
-or_end_782:
+or_end_799:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_780
-    b after_func_783_784
-func_783:
+    b.ne blk_end_797
+    b after_func_800_801
+func_800:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -5277,175 +7254,6 @@ func_783:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_783_784:
-    // Closure for func_783
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_783
-    ldr x0, [sp], #16
-    bl _cons
-blk_end_780:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_778_779:
-    // Closure for func_778
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_778
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_776_777:
-    // Closure for func_776
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_776
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_785_786
-func_785:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_787_788
-func_787:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_790
-    b or_end_791
-or_right_790:
-    adr x0, val
-or_end_791:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_789
-    adr x0, make_node
-    str x0, [sp, #-16]!
-    adr x0, ast_num
-    ldr x0, [x0]
-    cmp x0, #4096
-    b.hi do_compose_792
-do_apply_793:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_794
-do_compose_792:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_794:
-    str x0, [sp, #-16]!
-    adr x0, val
-    cmp x0, #4096
-    b.hi do_compose_795
-do_apply_796:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_797
-do_compose_795:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_797:
-blk_end_789:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_787_788:
-    // Closure for func_787
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_787
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_785_786:
-    // Closure for func_785
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_785
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_798_799
-func_798:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_800_801
-func_800:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_803
-    b or_end_804
-or_right_803:
-    adr x0, val
-or_end_804:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_802
-    adr x0, make_node
-    str x0, [sp, #-16]!
-    adr x0, ast_id
-    ldr x0, [x0]
-    cmp x0, #4096
-    b.hi do_compose_805
-do_apply_806:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_807
-do_compose_805:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_807:
-    str x0, [sp, #-16]!
-    adr x0, val
-    cmp x0, #4096
-    b.hi do_compose_808
-do_apply_809:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_810
-do_compose_808:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_810:
-blk_end_802:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
 after_func_800_801:
     // Closure for func_800
     adr x0, sign_id
@@ -5453,181 +7261,314 @@ after_func_800_801:
     adr x1, func_800
     ldr x0, [sp], #16
     bl _cons
+blk_end_797:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_798_799:
-    // Closure for func_798
+after_func_795_796:
+    // Closure for func_795
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_798
+    adr x1, func_795
     ldr x0, [sp], #16
     bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_811_812
-func_811:
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_make_num_impl_802
+make_num_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_813_814
-func_813:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
+    adr x0, make_node
+    str x0, [sp, #-16]!
+    adr x0, ast_num
+    ldr x0, [x0]
+    cmp x0, #4096
+    b.hi do_compose_803
+do_apply_804:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_805
+do_compose_803:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_805:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_816
-    b or_end_817
-or_right_816:
-    adr x0, val
-or_end_817:
-    str x0, [sp, #-16]!
+    cmp x0, #4096
+    b.hi do_compose_806
+do_apply_807:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_808
+do_compose_806:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_808:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_make_num_impl_802:
+    // Closure for make_num_impl
     adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_815
+    str x0, [sp, #-16]!
+    adr x1, make_num_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_make_id_impl_809
+make_id_impl:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    adr x0, make_node
+    str x0, [sp, #-16]!
+    adr x0, ast_id
+    ldr x0, [x0]
+    cmp x0, #4096
+    b.hi do_compose_810
+do_apply_811:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_812
+do_compose_810:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_812:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    cmp x0, #4096
+    b.hi do_compose_813
+do_apply_814:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_815
+do_compose_813:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_815:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_make_id_impl_809:
+    // Closure for make_id_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, make_id_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_make_op_impl_816
+make_op_impl:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
     adr x0, make_node
     str x0, [sp, #-16]!
     adr x0, ast_op
     ldr x0, [x0]
     cmp x0, #4096
-    b.hi do_compose_818
-do_apply_819:
+    b.hi do_compose_817
+do_apply_818:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_820
-do_compose_818:
+    b apply_end_819
+do_compose_817:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_820:
+apply_end_819:
     str x0, [sp, #-16]!
-    adr x0, val
+    ldr x0, [x29, #-32]
     cmp x0, #4096
-    b.hi do_compose_821
-do_apply_822:
+    b.hi do_compose_820
+do_apply_821:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_823
-do_compose_821:
+    b apply_end_822
+do_compose_820:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_823:
-blk_end_815:
+apply_end_822:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_813_814:
-    // Closure for func_813
+after_make_op_impl_816:
+    // Closure for make_op_impl
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_813
+    adr x1, make_op_impl
     ldr x0, [sp], #16
     bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_811_812:
-    // Closure for func_811
     adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
     str x0, [sp, #-16]!
-    adr x1, func_811
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_824_825
-func_824:
+    b after_make_str_impl_823
+make_str_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_826_827
-func_826:
+    adr x0, make_node
+    str x0, [sp, #-16]!
+    adr x0, ast_str
+    ldr x0, [x0]
+    cmp x0, #4096
+    b.hi do_compose_824
+do_apply_825:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_826
+do_compose_824:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_826:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    cmp x0, #4096
+    b.hi do_compose_827
+do_apply_828:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_829
+do_compose_827:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_829:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_make_str_impl_823:
+    // Closure for make_str_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, make_str_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after_func_830_831
+func_830:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_829
-    b or_end_830
-or_right_829:
-    adr x0, val
-or_end_830:
+    b.eq or_right_833
+    b or_end_834
+or_right_833:
+    adr x0, op
+or_end_834:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_828
-    adr x0, make_node
+    b.ne blk_end_832
+    b after_func_835_836
+func_835:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
-    adr x0, ast_str
-    ldr x0, [x0]
-    cmp x0, #4096
-    b.hi do_compose_831
-do_apply_832:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_833
-do_compose_831:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_833:
-    str x0, [sp, #-16]!
-    adr x0, val
-    cmp x0, #4096
-    b.hi do_compose_834
-do_apply_835:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_836
-do_compose_834:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_836:
-blk_end_828:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_826_827:
-    // Closure for func_826
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_826
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_824_825:
-    // Closure for func_824
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_824
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
     b after_func_837_838
 func_837:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    adr x0, ast_infix
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    adr x0, op
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_837_838:
+    // Closure for func_837
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_837
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_835_836:
+    // Closure for func_835
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_835
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_832:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_830_831:
+    // Closure for func_830
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_830
+    ldr x0, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    str x0, [x1]
     str x0, [sp, #-16]!
     b after_func_839_840
 func_839:
@@ -5640,7 +7581,7 @@ func_839:
     b.eq or_right_842
     b or_end_843
 or_right_842:
-    adr x0, op
+    adr x0, params
 or_end_843:
     str x0, [sp, #-16]!
     adr x0, sign_id
@@ -5661,23 +7602,62 @@ func_846:
     ldr x10, [x9] // Load Val
     str x10, [sp, #-16]! // Push Val
     ldr x9, [x9, #8] // Next
-    adr x0, ast_infix
-    ldr x0, [x0]
+    b after_func_848_849
+func_848:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
-    adr x0, op
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-48]
-    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
-    mov x0, #0
+    adr x0, params
+    cmp x0, #4096
+    b.hi do_compose_850
+do_apply_851:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_852
+do_compose_850:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_852:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    cmp x0, #4096
+    b.hi do_compose_853
+do_apply_854:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_855
+do_compose_853:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_855:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_848_849:
+    // Closure for func_848
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
     ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
     bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
+    str x0, [sp, #-16]!
+    adr x1, func_848
+    ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
@@ -5717,44 +7697,11 @@ after_func_839_840:
     adr x1, func_839
     ldr x0, [sp], #16
     bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_837_838:
-    // Closure for func_837
-    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
     str x0, [sp, #-16]!
-    adr x1, func_837
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_848_849
-func_848:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_850_851
-func_850:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_853
-    b or_end_854
-or_right_853:
-    adr x0, params
-or_end_854:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_852
-    b after_func_855_856
-func_855:
+    b after_transform_section_impl_856
+transform_section_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -5763,12 +7710,21 @@ func_857:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    ldr x9, [x29, #-16] // Reload Env
-    ldr x10, [x9] // Load Val
-    str x10, [sp, #-16]! // Push Val
-    ldr x9, [x9, #8] // Next
-    b after_func_859_860
-func_859:
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_860
+    b or_end_861
+or_right_860:
+    adr x0, length
+or_end_861:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_859
+    b after_func_862_863
+func_862:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -5776,42 +7732,572 @@ func_859:
     ldr x10, [x9] // Load Val
     str x10, [sp, #-16]! // Push Val
     ldr x9, [x9, #8] // Next
+    b after_func_864_865
+func_864:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
     ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_867
+    b or_end_868
+or_right_867:
+    adr x0, make_id
+    ldr x0, [x0]
+or_end_868:
     str x0, [sp, #-16]!
-    adr x0, params
-    cmp x0, #4096
-    b.hi do_compose_861
-do_apply_862:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_863
-do_compose_861:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_863:
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_866
+    b after_func_869_870
+func_869:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
     str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_871_872
+func_871:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_873_874
+func_873:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_875_876
+func_875:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_878
+    b or_end_879
+or_right_878:
+    adr x0, make_id
+    ldr x0, [x0]
+or_end_879:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_877
+    b after_func_880_881
+func_880:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_882_883
+func_882:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_884_885
+func_884:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
     ldr x0, [x29, #-48]
+    str x0, [sp, #-16]!
+    mov x0, #1
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_889
+    adr x0, sign_id
+    b cmp_end_890
+cmp_true_889:
+cmp_end_890:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_887
+    adr x0, _transform_section_1
+    b cond_end_888
+cond_false_887:
+    adr x0, sign_id
+cond_end_888:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
     cmp x0, #4096
-    b.hi do_compose_864
-do_apply_865:
+    b.hi do_compose_891
+do_apply_892:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_866
-do_compose_864:
+    b apply_end_893
+do_compose_891:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_866:
+apply_end_893:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    cmp x0, #4096
+    b.hi do_compose_894
+do_apply_895:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_896
+do_compose_894:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_896:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    cmp x0, #4096
+    b.hi do_compose_897
+do_apply_898:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_899
+do_compose_897:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_899:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_886
+    ldr x0, [x29, #-48]
+    str x0, [sp, #-16]!
+    mov x0, #2
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_902
+    adr x0, sign_id
+    b cmp_end_903
+cmp_true_902:
+cmp_end_903:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_900
+    adr x0, _transform_section_2
+    b cond_end_901
+cond_false_900:
+    adr x0, sign_id
+cond_end_901:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    cmp x0, #4096
+    b.hi do_compose_904
+do_apply_905:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_906
+do_compose_904:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_906:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    cmp x0, #4096
+    b.hi do_compose_907
+do_apply_908:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_909
+do_compose_907:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_909:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    cmp x0, #4096
+    b.hi do_compose_910
+do_apply_911:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_912
+do_compose_910:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_912:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_886
+    adr x0, ast_block
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
+blk_end_886:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_859_860:
-    // Closure for func_859
+after_func_884_885:
+    // Closure for func_884
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_884
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_882_883:
+    // Closure for func_882
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_882
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_880_881:
+    // Closure for func_880
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_880
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_877:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_875_876:
+    // Closure for func_875
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_875
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_873_874:
+    // Closure for func_873
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_873
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_871_872:
+    // Closure for func_871
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_871
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_869_870:
+    // Closure for func_869
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_869
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_866:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_864_865:
+    // Closure for func_864
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_864
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_862_863:
+    // Closure for func_862
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
@@ -5821,9 +8307,10 @@ after_func_859_860:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_859
+    adr x1, func_862
     ldr x0, [sp], #16
     bl _cons
+blk_end_859:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
@@ -5831,533 +8318,266 @@ after_func_857_858:
     // Closure for func_857
     adr x0, sign_id
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    ldr x1, [sp], #16
-    mov x9, x0
-    mov x0, x1
-    mov x1, x9
-    bl _cons
-    str x0, [sp, #-16]!
     adr x1, func_857
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_855_856:
-    // Closure for func_855
+after_transform_section_impl_856:
+    // Closure for transform_section_impl
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_855
+    adr x1, transform_section_impl
     ldr x0, [sp], #16
     bl _cons
-blk_end_852:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_850_851:
-    // Closure for func_850
     adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
     str x0, [sp, #-16]!
-    adr x1, func_850
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_848_849:
-    // Closure for func_848
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_848
-    ldr x0, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    b after_func_867_868
-func_867:
+    b after__transform_section_1_impl_913
+_transform_section_1_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_869_870
-func_869:
+    b after_func_914_915
+func_914:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
+    b after_func_916_917
+func_916:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_918_919
+func_918:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
     ldr x0, [x29, #-32]
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_872
-    b or_end_873
-or_right_872:
-    adr x0, exprs
-or_end_873:
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_871
-    adr x0, length
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, exprs
-    cmp x0, #4096
-    b.hi do_compose_874
-do_apply_875:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_876
-do_compose_874:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_876:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_871
-    adr x0, make_id
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, "
-    cmp x0, #4096
-    b.hi do_compose_877
-do_apply_878:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_879
-do_compose_877:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_879:
-    str x0, [sp, #-16]!
-    mov x0, #1
-    cmp x0, #4096
-    b.hi do_compose_880
-do_apply_881:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_882
-do_compose_880:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_882:
-    str x0, [sp, #-16]!
-    adr x0, "
-    cmp x0, #4096
-    b.hi do_compose_883
-do_apply_884:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_885
-do_compose_883:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_885:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_871
-    adr x0, make_id
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, "
-    cmp x0, #4096
-    b.hi do_compose_886
-do_apply_887:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_888
-do_compose_886:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_888:
-    str x0, [sp, #-16]!
-    mov x0, #2
-    cmp x0, #4096
-    b.hi do_compose_889
-do_apply_890:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_891
-do_compose_889:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_891:
-    str x0, [sp, #-16]!
-    adr x0, "
-    cmp x0, #4096
-    b.hi do_compose_892
-do_apply_893:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_894
-do_compose_892:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_894:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_871
-    ldr x0, [x29, #-64]
-    str x0, [sp, #-16]!
-    mov x0, #1
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.eq cmp_true_897
-    adr x0, sign_id
-    b cmp_end_898
-cmp_true_897:
-cmp_end_898:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_895
-    adr x0, sign_id
-    b cond_end_896
-cond_false_895:
-    adr x0, sign_id
-cond_end_896:
-    str x0, [sp, #-16]!
+    b.eq or_right_921
+    b or_end_922
+or_right_921:
     adr x0, head
+or_end_922:
     str x0, [sp, #-16]!
     adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, exprs
-    cmp x0, #4096
-    b.hi do_compose_900
-do_apply_901:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_902
-do_compose_900:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_902:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_899
+    b.ne blk_end_920
+    b after_func_923_924
+func_923:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_925_926
+func_925:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_928
+    b or_end_929
+or_right_928:
     adr x0, head
+or_end_929:
     str x0, [sp, #-16]!
     adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-112]
-    cmp x0, #4096
-    b.hi do_compose_903
-do_apply_904:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_905
-do_compose_903:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_905:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_899
-    ldr x0, [x29, #-128]
+    b.ne blk_end_927
+    b after_func_930_931
+func_930:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_932_933
+func_932:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_935
+    b or_end_936
+or_right_935:
+    adr x0, tok_val
+    ldr x0, [x0]
+or_end_936:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_934
+    b after_func_937_938
+func_937:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, ast_op
     ldr x0, [x0]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_908
+    b.eq cmp_true_942
     adr x0, sign_id
-    b cmp_end_909
-cmp_true_908:
-cmp_end_909:
+    b cmp_end_943
+cmp_true_942:
+cmp_end_943:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_906
-    adr x0, sign_id
-    b cond_end_907
-cond_false_906:
-    adr x0, sign_id
-cond_end_907:
-    str x0, [sp, #-16]!
-    adr x0, str_18
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_910
-    adr x0, tok_val
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, head
-    str x0, [sp, #-16]!
-    adr x0, tail
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-112]
-    cmp x0, #4096
-    b.hi do_compose_911
-do_apply_912:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_913
-do_compose_911:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_913:
-    cmp x0, #4096
-    b.hi do_compose_914
-do_apply_915:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_916
-do_compose_914:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_916:
-    cmp x0, #4096
-    b.hi do_compose_917
-do_apply_918:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_919
-do_compose_917:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_919:
-    str x0, [sp, #-16]!
-    adr x0, str_19
-    cmp x0, #4096
-    b.hi do_compose_920
-do_apply_921:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_922
-do_compose_920:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_922:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_910
+    b.eq cond_false_940
     adr x0, make_lambda
+    b cond_end_941
+cond_false_940:
+    adr x0, sign_id
+cond_end_941:
     str x0, [sp, #-16]!
     adr x0, make_infix
     str x0, [sp, #-16]!
     adr x0, "
     cmp x0, #4096
-    b.hi do_compose_924
-do_apply_925:
+    b.hi do_compose_944
+do_apply_945:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_926
-do_compose_924:
+    b apply_end_946
+do_compose_944:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_926:
+apply_end_946:
     str x0, [sp, #-16]!
     adr x0, "
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
-    cmp x0, #4096
-    b.hi do_compose_927
-do_apply_928:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_929
-do_compose_927:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_929:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    cmp x0, #4096
-    b.hi do_compose_930
-do_apply_931:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_932
-do_compose_930:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_932:
-    ldr x1, [sp], #16
-    bl _cons
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_923
-    adr x0, make_infix
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-144]
-    cmp x0, #4096
-    b.hi do_compose_933
-do_apply_934:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_935
-do_compose_933:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_935:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
-    cmp x0, #4096
-    b.hi do_compose_936
-do_apply_937:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_938
-do_compose_936:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_938:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-96]
-    cmp x0, #4096
-    b.hi do_compose_939
-do_apply_940:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_941
-do_compose_939:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_941:
-blk_end_923:
-    cmp x0, #4096
-    b.hi do_compose_942
-do_apply_943:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_944
-do_compose_942:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_944:
-blk_end_910:
-    cmp x0, #4096
-    b.hi do_compose_945
-do_apply_946:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_947
-do_compose_945:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_947:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_899
-    adr x0, ast_block
-    ldr x0, [x0]
-    str x0, [sp, #-16]!
-    adr x0, exprs
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-blk_end_899:
-    cmp x0, #4096
-    b.hi do_compose_948
-do_apply_949:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_950
-do_compose_948:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_950:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_871
     ldr x0, [x29, #-64]
-    str x0, [sp, #-16]!
-    mov x0, #2
+    cmp x0, #4096
+    b.hi do_compose_947
+do_apply_948:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_949
+do_compose_947:
     mov x1, x0
     ldr x0, [sp], #16
-    cmp x0, x1
-    b.eq cmp_true_953
-    adr x0, sign_id
-    b cmp_end_954
-cmp_true_953:
-cmp_end_954:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_951
-    adr x0, sign_id
-    b cond_end_952
-cond_false_951:
-    adr x0, sign_id
-cond_end_952:
+    bl _compose
+apply_end_949:
     str x0, [sp, #-16]!
-    adr x0, head
+    ldr x0, [x29, #-80]
+    cmp x0, #4096
+    b.hi do_compose_950
+do_apply_951:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_952
+do_compose_950:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_952:
+    ldr x1, [sp], #16
+    bl _cons
+    cmp x0, #4096
+    b.hi do_compose_953
+do_apply_954:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_955
+do_compose_953:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_955:
     str x0, [sp, #-16]!
-    adr x0, sign_id
+    adr x0, make_infix
     str x0, [sp, #-16]!
-    adr x0, exprs
+    ldr x0, [x29, #-96]
     cmp x0, #4096
     b.hi do_compose_956
 do_apply_957:
@@ -6371,16 +8591,8 @@ do_compose_956:
     ldr x0, [sp], #16
     bl _compose
 apply_end_958:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_955
-    adr x0, head
     str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, tail
-    str x0, [sp, #-16]!
-    adr x0, exprs
+    ldr x0, [x29, #-64]
     cmp x0, #4096
     b.hi do_compose_959
 do_apply_960:
@@ -6394,6 +8606,8 @@ do_compose_959:
     ldr x0, [sp], #16
     bl _compose
 apply_end_961:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
     cmp x0, #4096
     b.hi do_compose_962
 do_apply_963:
@@ -6407,14 +8621,6 @@ do_compose_962:
     ldr x0, [sp], #16
     bl _compose
 apply_end_964:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_955
-    adr x0, head
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-160]
     cmp x0, #4096
     b.hi do_compose_965
 do_apply_966:
@@ -6430,293 +8636,590 @@ do_compose_965:
 apply_end_967:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_955
-    adr x0, head
+    b.ne blk_end_939
+    adr x0, ast_block
+    ldr x0, [x0]
     str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    ldr x1, [sp], #16
+    bl _cons
+    ldr x1, [sp], #16
+    bl _cons
+blk_end_939:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_937_938:
+    // Closure for func_937
     adr x0, sign_id
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-176]
-    cmp x0, #4096
-    b.hi do_compose_968
-do_apply_969:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_970
-do_compose_968:
-    mov x1, x0
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_937
     ldr x0, [sp], #16
-    bl _compose
-apply_end_970:
+    bl _cons
+blk_end_934:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_932_933:
+    // Closure for func_932
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_932
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_930_931:
+    // Closure for func_930
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_930
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_927:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_925_926:
+    // Closure for func_925
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_925
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_923_924:
+    // Closure for func_923
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_923
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_920:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_918_919:
+    // Closure for func_918
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_918
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_916_917:
+    // Closure for func_916
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_916
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_914_915:
+    // Closure for func_914
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_914
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after__transform_section_1_impl_913:
+    // Closure for _transform_section_1_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, _transform_section_1_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
+    str x0, [sp, #-16]!
+    b after__transform_section_2_impl_968
+_transform_section_2_impl:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_969_970
+func_969:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_971_972
+func_971:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_973_974
+func_973:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_955
-    ldr x0, [x29, #-192]
+    b.eq or_right_976
+    b or_end_977
+or_right_976:
+    adr x0, head
+or_end_977:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_975
+    b after_func_978_979
+func_978:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_980_981
+func_980:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_983
+    b or_end_984
+or_right_983:
+    adr x0, head
+or_end_984:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_982
+    b after_func_985_986
+func_985:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_987_988
+func_987:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_990
+    b or_end_991
+or_right_990:
+    adr x0, head
+or_end_991:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_989
+    b after_func_992_993
+func_992:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_994_995
+func_994:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_997
+    b or_end_998
+or_right_997:
+    adr x0, head
+or_end_998:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_996
+    b after_func_999_1000
+func_999:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_1001_1002
+func_1001:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_1004
+    b or_end_1005
+or_right_1004:
+    adr x0, tok_val
+    ldr x0, [x0]
+or_end_1005:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_1003
+    b after_func_1006_1007
+func_1006:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    b after_func_1008_1009
+func_1008:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_1011
+    b or_end_1012
+or_right_1011:
+    adr x0, tok_val
+    ldr x0, [x0]
+or_end_1012:
+    str x0, [sp, #-16]!
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_1010
+    b after_func_1013_1014
+func_1013:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, ast_op
     ldr x0, [x0]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_973
+    b.eq cmp_true_1018
     adr x0, sign_id
-    b cmp_end_974
-cmp_true_973:
-cmp_end_974:
+    b cmp_end_1019
+cmp_true_1018:
+cmp_end_1019:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_971
-    adr x0, sign_id
-    b cond_end_972
-cond_false_971:
-    adr x0, sign_id
-cond_end_972:
-    str x0, [sp, #-16]!
-    adr x0, str_20
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_975
-    adr x0, tok_val
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, head
-    str x0, [sp, #-16]!
-    adr x0, tail
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-160]
-    cmp x0, #4096
-    b.hi do_compose_976
-do_apply_977:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_978
-do_compose_976:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_978:
-    cmp x0, #4096
-    b.hi do_compose_979
-do_apply_980:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_981
-do_compose_979:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_981:
-    cmp x0, #4096
-    b.hi do_compose_982
-do_apply_983:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_984
-do_compose_982:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_984:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_975
+    b.eq cond_false_1016
     adr x0, make_lambda
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
-    cmp x0, #4096
-    b.hi do_compose_985
-do_apply_986:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_987
-do_compose_985:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_987:
-    str x0, [sp, #-16]!
-    adr x0, make_infix
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-224]
-    cmp x0, #4096
-    b.hi do_compose_988
-do_apply_989:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_990
-do_compose_988:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_990:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
-    cmp x0, #4096
-    b.hi do_compose_991
-do_apply_992:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_993
-do_compose_991:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_993:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-176]
-    cmp x0, #4096
-    b.hi do_compose_994
-do_apply_995:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_996
-do_compose_994:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_996:
-    cmp x0, #4096
-    b.hi do_compose_997
-do_apply_998:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_999
-do_compose_997:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_999:
-blk_end_975:
-    cmp x0, #4096
-    b.hi do_compose_1000
-do_apply_1001:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1002
-do_compose_1000:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_1002:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_955
-    ldr x0, [x29, #-208]
-    str x0, [sp, #-16]!
-    adr x0, ast_op
-    ldr x0, [x0]
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.eq cmp_true_1005
+    b cond_end_1017
+cond_false_1016:
     adr x0, sign_id
-    b cmp_end_1006
-cmp_true_1005:
-cmp_end_1006:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_1003
-    adr x0, sign_id
-    b cond_end_1004
-cond_false_1003:
-    adr x0, sign_id
-cond_end_1004:
+cond_end_1017:
     str x0, [sp, #-16]!
-    adr x0, str_21
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_1007
-    adr x0, tok_val
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x0, head
-    str x0, [sp, #-16]!
-    adr x0, tail
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-176]
-    cmp x0, #4096
-    b.hi do_compose_1008
-do_apply_1009:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1010
-do_compose_1008:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_1010:
-    cmp x0, #4096
-    b.hi do_compose_1011
-do_apply_1012:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1013
-do_compose_1011:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_1013:
-    cmp x0, #4096
-    b.hi do_compose_1014
-do_apply_1015:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1016
-do_compose_1014:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_1016:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_1007
-    adr x0, make_lambda
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
-    cmp x0, #4096
-    b.hi do_compose_1017
-do_apply_1018:
-    ldr x9, [sp], #16
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1019
-do_compose_1017:
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _compose
-apply_end_1019:
-    str x0, [sp, #-16]!
-    adr x0, make_infix
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-240]
+    ldr x0, [x29, #-64]
     cmp x0, #4096
     b.hi do_compose_1020
 do_apply_1021:
@@ -6731,7 +9234,9 @@ do_compose_1020:
     bl _compose
 apply_end_1022:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-160]
+    adr x0, make_infix
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
     cmp x0, #4096
     b.hi do_compose_1023
 do_apply_1024:
@@ -6746,7 +9251,7 @@ do_compose_1023:
     bl _compose
 apply_end_1025:
     str x0, [sp, #-16]!
-    ldr x0, [x29, #-80]
+    ldr x0, [x29, #-64]
     cmp x0, #4096
     b.hi do_compose_1026
 do_apply_1027:
@@ -6760,6 +9265,8 @@ do_compose_1026:
     ldr x0, [sp], #16
     bl _compose
 apply_end_1028:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
     cmp x0, #4096
     b.hi do_compose_1029
 do_apply_1030:
@@ -6773,7 +9280,6 @@ do_compose_1029:
     ldr x0, [sp], #16
     bl _compose
 apply_end_1031:
-blk_end_1007:
     cmp x0, #4096
     b.hi do_compose_1032
 do_apply_1033:
@@ -6789,65 +9295,597 @@ do_compose_1032:
 apply_end_1034:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_955
-    adr x0, ast_block
+    b.ne blk_end_1015
+    ldr x0, [x29, #-96]
+    str x0, [sp, #-16]!
+    adr x0, ast_op
     ldr x0, [x0]
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_1037
+    adr x0, sign_id
+    b cmp_end_1038
+cmp_true_1037:
+cmp_end_1038:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_1035
+    adr x0, make_lambda
+    b cond_end_1036
+cond_false_1035:
+    adr x0, sign_id
+cond_end_1036:
     str x0, [sp, #-16]!
-    adr x0, exprs
-    str x0, [sp, #-16]!
-    mov x0, #0
-    ldr x1, [sp], #16
-    bl _cons
-    ldr x1, [sp], #16
-    bl _cons
-blk_end_955:
+    ldr x0, [x29, #-64]
     cmp x0, #4096
-    b.hi do_compose_1035
-do_apply_1036:
+    b.hi do_compose_1039
+do_apply_1040:
     ldr x9, [sp], #16
     ldr x10, [x9]
     ldr x9, [x9, #8]
     blr x10
-    b apply_end_1037
-do_compose_1035:
+    b apply_end_1041
+do_compose_1039:
     mov x1, x0
     ldr x0, [sp], #16
     bl _compose
-apply_end_1037:
+apply_end_1041:
+    str x0, [sp, #-16]!
+    adr x0, make_infix
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    cmp x0, #4096
+    b.hi do_compose_1042
+do_apply_1043:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_1044
+do_compose_1042:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_1044:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-128]
+    cmp x0, #4096
+    b.hi do_compose_1045
+do_apply_1046:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_1047
+do_compose_1045:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_1047:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    cmp x0, #4096
+    b.hi do_compose_1048
+do_apply_1049:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_1050
+do_compose_1048:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_1050:
+    cmp x0, #4096
+    b.hi do_compose_1051
+do_apply_1052:
+    ldr x9, [sp], #16
+    ldr x10, [x9]
+    ldr x9, [x9, #8]
+    blr x10
+    b apply_end_1053
+do_compose_1051:
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _compose
+apply_end_1053:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_871
+    b.ne blk_end_1015
     adr x0, ast_block
     ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, exprs
+    ldr x0, [x29, #-144]
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
     bl _cons
     ldr x1, [sp], #16
     bl _cons
-blk_end_871:
+blk_end_1015:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_869_870:
-    // Closure for func_869
+after_func_1013_1014:
+    // Closure for func_1013
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_869
+    ldr x0, [x29, #-144]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-128]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-160]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_1013
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_1010:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_1008_1009:
+    // Closure for func_1008
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-128]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_1008
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_867_868:
-    // Closure for func_867
+after_func_1006_1007:
+    // Closure for func_1006
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_867
+    ldr x0, [x29, #-128]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-144]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_1006
     ldr x0, [sp], #16
     bl _cons
+blk_end_1003:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_1001_1002:
+    // Closure for func_1001
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_1001
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_999_1000:
+    // Closure for func_999
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-96]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-112]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_999
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_996:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_994_995:
+    // Closure for func_994
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_994
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_992_993:
+    // Closure for func_992
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-80]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_992
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_989:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_987_988:
+    // Closure for func_987
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-64]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_987
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_985_986:
+    // Closure for func_985
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_985
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_982:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_980_981:
+    // Closure for func_980
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_980
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_978_979:
+    // Closure for func_978
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_978
+    ldr x0, [sp], #16
+    bl _cons
+blk_end_975:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_973_974:
+    // Closure for func_973
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_973
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_971_972:
+    // Closure for func_971
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_971
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_969_970:
+    // Closure for func_969
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_969
+    ldr x0, [sp], #16
+    bl _cons
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after__transform_section_2_impl_968:
+    // Closure for _transform_section_2_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, _transform_section_2_impl
+    ldr x0, [sp], #16
+    bl _cons
+    adr x0, sign_id
+    ldr x1, [sp], #16
+    str x0, [x1]
 blk_end_0:
 
 
@@ -7059,7 +10097,6 @@ _print_int:
 
 .bss
 Philosophy: .quad 0
-Logic: .quad 0
 ast_unit: .quad 0
 ast_num: .quad 0
 ast_id: .quad 0
@@ -7081,6 +10118,33 @@ tok_op: .quad 0
 tok_punc: .quad 0
 tok_sep: .quad 0
 tok_unit: .quad 0
+tok_type: .quad 0
+tok_val: .quad 0
+streq: .quad 0
+get_prec: .quad 0
+is_right_assoc: .quad 0
+peek: .quad 0
+next: .quad 0
+expect: .quad 0
+parse_program: .quad 0
+parse_stmts: .quad 0
+parse_block: .quad 0
+parse_expr: .quad 0
+_parse_expr_loop: .quad 0
+can_start_expr: .quad 0
+is_prefix_op: .quad 0
+parse_primary: .quad 0
+_parse_prefix: .quad 0
+_parse_group: .quad 0
+parse_block_impl: .quad 0
+is_null: .quad 0
+make_num: .quad 0
+make_id: .quad 0
+make_op: .quad 0
+make_str: .quad 0
+transform_section: .quad 0
+_transform_section_1: .quad 0
+_transform_section_2: .quad 0
 
 
 _sys_write:

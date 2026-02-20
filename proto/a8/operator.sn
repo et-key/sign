@@ -1,7 +1,7 @@
 `
-  Sign Language Operator Table (operator.sn)
-  Wraps standard operators as first-class functions using #[op] syntax.
-  Reference: A_Operator_Table.md
+	Sign Language Operator Table (operator.sn)
+	Wraps standard operators as first-class functions using #[op] syntax.
+	Reference: A_Operator_Table.md
 `
 
 #[+] : ~x ? [+] x~

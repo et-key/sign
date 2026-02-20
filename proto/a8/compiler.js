@@ -118,7 +118,7 @@ const runtimeClosures = {
 
 function resolveVar(name) {
 	if (runtimeClosures[name]) {
-		return `    adr x0, ${runtimeClosures[name]}\n`;
+		return `    adr x0, ${runtimeClosures[name]}\n    orr x0, x0, #1 // Tag closure\n`;
 	}
 
 	if (g_env[name] !== undefined) {
@@ -690,6 +690,7 @@ function compileApply(node) {
 		code += `    adr x1, ${label}\n`;
 		code += `    ldr x0, [sp], #16\n`;
 		code += `    bl _cons\n`; // Make Closure [Function, Env]
+		code += `    orr x0, x0, #1 // Tag closure\n`;
 
 		return code;
 	}
@@ -701,32 +702,41 @@ function compileApply(node) {
 	// 2. Compile Arg -> x0
 	code += compileNode(node.arg);
 
-	// 3. Dynamic Check: is Arg (x0) a function?
 	let lblCompose = generateLabel("do_compose");
 	let lblApply = generateLabel("do_apply");
+	let lblConcat = generateLabel("do_concat");
 	let lblEnd = generateLabel("apply_end");
 
-	// Check if Arg is Func
-	// We check x0 directly. If > 4096, it's a pointer (Func).
+	code += '    ldr x9, [sp], #16\n'; // Pop Func into x9
 
-	code += '    cmp x0, #4096\n';
-	code += `    b.hi ${lblCompose}\n`;
+	// Check if LHS (x9) is a function (tagged with #1)
+	code += '    tst x9, #1\n';
+	code += `    b.eq ${lblConcat}\n`; // LHS=Data -> Concat
 
-	// Case A: Apply (Arg is Data)
+	// Check if RHS (x0) is a function
+	code += '    tst x0, #1\n';
+	code += `    b.ne ${lblCompose}\n`; // LHS=Func, RHS=Func -> Compose
+
+	// Case A: Apply (LHS=Func, RHS=Data)
 	code += `${lblApply}:\n`;
-	code += '    ldr x9, [sp], #16\n'; // Pop Func
+	code += '    bic x9, x9, #1\n';   // Clear tag from Func
 	code += '    ldr x10, [x9]\n';     // Code
 	code += '    ldr x9, [x9, #8]\n';  // Env
 	code += '    blr x10\n';
 	code += `    b ${lblEnd}\n`;
 
-	// Case B: Compose (Arg is Func)
-	// Stack: [Func]
-	// x0: Arg (Func)
+	// Case B: Compose (LHS=Func, RHS=Func)
 	code += `${lblCompose}:\n`;
 	code += '    mov x1, x0\n';        // x1 = Arg (g)
-	code += '    ldr x0, [sp], #16\n'; // Pop Func -> x0 (f)
+	code += '    mov x0, x9\n';        // x0 = Func (f)
 	code += '    bl _compose\n';       // Returns Closure h(x) = g(f(x))
+	code += `    b ${lblEnd}\n`;
+
+	// Case C: Concat (LHS=Data, RHS=Any)
+	code += `${lblConcat}:\n`;
+	code += '    mov x1, x0\n';        // x1 = RHS
+	code += '    mov x0, x9\n';        // x0 = LHS
+	code += '    bl _concat\n';
 
 	code += `${lblEnd}:\n`;
 	return code;

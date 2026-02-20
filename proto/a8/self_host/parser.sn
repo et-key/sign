@@ -38,9 +38,12 @@ tok_unit : 0
 #tok_val : tok ? @(tok + 8)
 
 `--- String Comparison (Pure) ---`
-#streq : s1 s2 ?
+#streq :
+	s1 
+	s2
 	c1 : @s1
 	c2 : @s2
+?
 	c1 != c2 : 0
 	c1 = 0 : 1
 	streq (s1 + 1) (s2 + 1)
@@ -84,32 +87,39 @@ tok_unit : 0
 	tail tokens
 
 `expect : tokens type ?`
-#expect : tokens type ?
+#expect :
+	tokens 
+	type
 	tok : peek tokens
 	tok_t : tok_type tok
+?
 	tok_t = type : 1 , (next tokens)
 	0 , tokens
 
 `--- Core Parser Logic ---`
 
 `parse_program : tokens -> [ast_block, rest]`
-#parse_program : tokens ?
+#parse_program :
+	tokens
 	res : parse_stmts tokens
+?
 	(ast_block , (head res)) , ((head (tail res)) , 0)
 
 `parse_stmts : tokens -> [list<node>, rest]`
-#parse_stmts : tokens ?
+#parse_stmts :
+	tokens
 	tok : peek tokens
 	type : tok_type tok
+	res : parse_expr tokens 0
+	expr : head res
+	rest : head (tail res)
+	res2 : parse_stmts rest
+?
 	type = tok_eof : 0 , (tokens , 0)
 	
 	type = tok_sep : parse_stmts (next tokens)
 	
 	`Parse Expression`
-	res : parse_expr tokens 0
-	expr : head res
-	rest : head (tail res)
-	res2 : parse_stmts rest
 	(expr , (head res2)) , ((head (tail res2)) , 0)
 
 
@@ -119,40 +129,50 @@ tok_unit : 0
 	parse_program tokens `Temporary: Treat block same as program for now`
 
 `parse_expr : tokens min_prec -> [node, rest]`
-#parse_expr : tokens min_prec ?
+#parse_expr :
+	tokens 
+	min_prec
 	res_lhs : parse_primary tokens
 	lhs : head res_lhs
 	rest_1 : head (tail res_lhs)
+?
 	_parse_expr_loop lhs rest_1 min_prec
 
 `_parse_expr_loop : lhs tokens min_prec -> [node, rest]`
-#_parse_expr_loop : lhs tokens min_prec ?
+#_parse_expr_loop :
+	lhs 
+	tokens 
+	min_prec
 	tok : peek tokens
 	type : tok_type tok
 	
+	`Apply vars`
+	res_rhs_apply : parse_expr tokens 6
+	rhs_apply : head res_rhs_apply
+	rest_rhs_apply : head (tail res_rhs_apply)
+	new_lhs_apply : ast_apply , (lhs , (rhs_apply , 0))
+	
+	`Infix vars`
+	op_str : tok_val tok
+	prec : get_prec op_str
+	next_tokens : next tokens
+	next_min_prec : (is_right_assoc op_str) ? prec | (prec + 1)
+	res_rhs_infix : parse_expr next_tokens next_min_prec
+	rhs_infix : head res_rhs_infix
+	rest_rhs_infix : head (tail res_rhs_infix)
+	new_lhs_infix : ast_infix , (op_str , (lhs , (rhs_infix , 0)))
+?
 	`Check for Apply (Implicit)`
 	(can_start_expr type) : (
 		`Apply: lhs next_expr`
-		res_rhs : parse_expr tokens 6
-		rhs : head res_rhs
-		rest_rhs : head (tail res_rhs)
-		new_lhs : ast_apply , (lhs , (rhs , 0))
-		_parse_expr_loop new_lhs rest_rhs min_prec
+		_parse_expr_loop new_lhs_apply rest_rhs_apply min_prec
 	)
 	
 	type != tok_op : lhs , (tokens , 0)
 	
-	op_str : tok_val tok
-	prec : get_prec op_str
 	prec < min_prec : lhs , (tokens , 0)
 	
-	next_tokens : next tokens
-	next_min_prec : (is_right_assoc op_str) ? prec | (prec + 1)
-	res_rhs : parse_expr next_tokens next_min_prec
-	rhs : head res_rhs
-	rest_rhs : head (tail res_rhs)
-	new_lhs : ast_infix , (op_str , (lhs , (rhs , 0)))
-	_parse_expr_loop new_lhs rest_rhs min_prec
+	_parse_expr_loop new_lhs_infix rest_rhs_infix min_prec
 
 #can_start_expr : type ?
 	type = tok_id : 1
@@ -169,132 +189,114 @@ tok_unit : 0
 	0
 
 `parse_primary : tokens -> [node, rest]`
-#parse_primary : tokens ?
+#parse_primary :
+	tokens
 	tok : peek tokens
 	type : tok_type tok
 	tokens_next : next tokens
+	val : tok_val tok
+?
+	type = tok_num : (ast_num , (val , 0)) , (tokens_next , 0)
+	type = tok_id : (ast_id , (val , 0)) , (tokens_next , 0)
+	type = tok_str : (ast_str , (val , 0)) , (tokens_next , 0)
 	
-	type = tok_num : (
-		val : tok_val tok
-		(ast_num , (val , 0)) , (tokens_next , 0)
-	)
-	
-	type = tok_id : (
-		val : tok_val tok
-		(ast_id , (val , 0)) , (tokens_next , 0)
-	)
-	
-	type = tok_str : (
-		val : tok_val tok
-		(ast_str , (val , 0)) , (tokens_next , 0)
-	)
-
 	type = tok_op : (
-		op : tok_val tok
-		is_prefix_op op : (
-			`Prefix Ops`
-			res : parse_expr tokens_next 20 `Prefix Prec`
-			(ast_prefix , (op , ((head res) , 0))) , ((head (tail res)) , 0)
-		)
-		
-		`Standalone Operator (for Sections)`
-		(ast_op , (op , 0)) , (tokens_next , 0)
+		is_prefix_op val : _parse_prefix val tokens_next
+		(ast_op , (val , 0)) , (tokens_next , 0)
 	)
 	
 	type = tok_punc : (
-			val : tok_val tok
-			val = 91 : (
-				`LBRACKET -> Block (Potential Section)`
-				parse_block tokens_next
-			)
-			
-			val = 40 : (
-				`LPAREN -> Group (No Section)`
-				res : parse_stmts tokens_next
-				exprs : head res
-				rest : head (tail res)
-				`Expect RPAREN (val 41)`
-				tok_r : peek rest
-				`Consume RPAREN`
-				`Check if single expr for paren group`
-				is_single : is_null (tail exprs)
-				is_single : (head exprs) , ((next rest) , 0)
-				(ast_block , (exprs , 0)) , ((next rest) , 0)
-			)
-			`Default Unknown`
-			(ast_unit , 0) , (tokens_next , 0)
+		val = 91 : parse_block tokens_next
+		val = 40 : _parse_group tokens_next
+		(ast_unit , 0) , (tokens_next , 0)
 	)
 	
 	`Unknown`
 	(ast_unit , 0) , (tokens_next , 0)
 
+#_parse_prefix :
+	op
+	tokens_next
+	res : parse_expr tokens_next 20
+?
+	(ast_prefix , (op , ((head res) , 0))) , ((head (tail res)) , 0)
+
+#_parse_group :
+	tokens_next
+	res : parse_stmts tokens_next
+	exprs : head res
+	rest : head (tail res)
+	tok_r : peek rest
+	is_single : is_null (tail exprs)
+?
+	is_single : (head exprs) , ((next rest) , 0)
+	(ast_block , (exprs , 0)) , ((next rest) , 0)
+
 
 `parse_block : tokens -> [node, rest]`
-#parse_block_impl : tokens ?
+#parse_block_impl :
+	tokens
 	res : parse_stmts tokens
 	exprs : head res
 	rest : head (tail res)
-	`Expect RBRACKET (93)`
 	tok_r : peek rest
-	`Consume RBRACKET`
 	node : transform_section exprs
+?
 	node , ((next rest) , 0)
 
-#is_null : list ?
+#is_null :
+	list 
+?
 	list = 0 : 1
 	0
 
 `--- AST Constructors ---`
-#make_node : type val ?
-	type , (val , 0)
+#make_node : type val ? type , (val , 0)
 
 #make_num : val ? make_node ast_num val
 #make_id : val ? make_node ast_id val
 #make_op : val ? make_node ast_op val
 #make_str : val ? make_node ast_str val
 
-#make_infix : op lhs rhs ?
-	ast_infix , (op , (lhs , (rhs , 0)))
+#make_infix : op lhs rhs ? ast_infix , (op , (lhs , (rhs , 0)))
 
-#make_lambda : params body ?
-	make_infix "?" params body
+#make_lambda : params body ? make_infix "?" params body
 
 `transform_section : exprs -> node`
-#transform_section : exprs ?
+#transform_section :
+	exprs
 	len : length exprs
 	p1 : make_id "$1"
 	p2 : make_id "$2"
-	
-	len = 1 : (
-		e1 : head exprs
-		type : head e1
-		type = ast_op : (
-			`[op] -> (p1 p2 ? p1 op p2)`
-			op_str : tok_val (head (tail e1)) `e1=(type val). val=op`
-			make_lambda
-				(make_infix "," p1 p2)
-				(make_infix op_str p1 p2)
-		)
-		ast_block , (exprs , 0)
-	)
-	
-	len = 2 : (
-		e1 : head exprs
-		e2 : head (tail exprs)
-		t1 : head e1
-		t2 : head e2
-		t1 = ast_op : (
-			`[op expr] -> (p1 ? p1 op expr)`
-			op_str : tok_val (head (tail e1))
-			make_lambda p1 (make_infix op_str p1 e2)
-		)
-		t2 = ast_op : (
-			`[expr op] -> (p1 ? expr op p1)`
-			op_str : tok_val (head (tail e2))
-			make_lambda p1 (make_infix op_str e1 p1)
-		)
-		ast_block , (exprs , 0)
-	)
-	
+?
+	len = 1 : _transform_section_1 exprs p1 p2
+	len = 2 : _transform_section_2 exprs p1 p2
 	ast_block , (exprs , 0)
+
+#_transform_section_1 :
+	exprs
+	p1 
+	p2
+	e1 : head exprs
+	type : head e1
+	op_str : tok_val (head (tail e1))
+?
+	type = ast_op : make_lambda (make_infix "," p1 p2) (make_infix op_str p1 p2)
+	ast_block , (exprs , 0)
+
+#_transform_section_2 :
+	exprs
+	p1 
+	p2
+	e1 : head exprs
+	e2 : head (tail exprs)
+	t1 : head e1
+	t2 : head e2
+	op_str_1 : tok_val (head (tail e1))
+	op_str_2 : tok_val (head (tail e2))
+?
+	t1 = ast_op : make_lambda p1 (make_infix op_str_1 p1 e2)
+	t2 = ast_op : make_lambda p1 (make_infix op_str_2 e1 p1)
+	ast_block , (exprs , 0)
+
 

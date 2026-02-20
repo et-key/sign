@@ -230,7 +230,22 @@ const parseExpr = (tokens, minPrec = 0) => {
 			// So | x | | y | -> Abs(x) | Abs(y).
 		}
 
-		if (isSeparator(lookahead)) break;
+		if (isSeparator(lookahead)) {
+			let sepCount = 0;
+			while (sepCount < tokens.length && isSeparator(tokens[sepCount])) sepCount++;
+			if (sepCount < tokens.length && typeof tokens[sepCount] === 'string' && isOpSymbol(tokens[sepCount])) {
+				const nextOp = tokens[sepCount];
+				const opInfo = findOp(nextOp, 'infix') || findOp(nextOp, 'postfix');
+				if (opInfo && opInfo.precedence >= minPrec && !canStartExpr(nextOp)) {
+					tokens.splice(0, sepCount);
+					lookahead = tokens[0];
+				} else {
+					break;
+				}
+			} else {
+				break;
+			}
+		}
 		if (typeof lookahead === 'string' && isOpSymbol(lookahead)) {
 			const opSymbol = lookahead;
 
