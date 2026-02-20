@@ -1,0 +1,106 @@
+{
+  "type": "block",
+  "body": [
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "f"
+      },
+      "right": {
+        "type": "infix",
+        "op": "?",
+        "left": {
+          "type": "identifier",
+          "value": "x"
+        },
+        "right": {
+          "type": "infix",
+          "op": "?",
+          "left": {
+            "type": "identifier",
+            "value": "$temp_y"
+          },
+          "right": {
+            "type": "block",
+            "body": [
+              {
+                "type": "infix",
+                "op": ":",
+                "left": {
+                  "type": "identifier",
+                  "value": "y"
+                },
+                "right": {
+                  "type": "infix",
+                  "op": "|",
+                  "left": {
+                    "type": "identifier",
+                    "value": "$temp_y"
+                  },
+                  "right": {
+                    "type": "number",
+                    "value": 10
+                  }
+                }
+              },
+              {
+                "type": "infix",
+                "op": "+",
+                "left": {
+                  "type": "identifier",
+                  "value": "x"
+                },
+                "right": {
+                  "type": "identifier",
+                  "value": "y"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": "+",
+      "left": {
+        "type": "apply",
+        "func": {
+          "type": "apply",
+          "func": {
+            "type": "identifier",
+            "value": "f"
+          },
+          "arg": {
+            "type": "number",
+            "value": 5
+          }
+        },
+        "arg": {
+          "type": "identifier",
+          "value": "_"
+        }
+      },
+      "right": {
+        "type": "apply",
+        "func": {
+          "type": "apply",
+          "func": {
+            "type": "identifier",
+            "value": "f"
+          },
+          "arg": {
+            "type": "number",
+            "value": 5
+          }
+        },
+        "arg": {
+          "type": "number",
+          "value": 20
+        }
+      }
+    }
+  ]
+}

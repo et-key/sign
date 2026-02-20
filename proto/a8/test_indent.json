@@ -1,0 +1,49 @@
+{
+  "type": "infix",
+  "op": ":",
+  "left": {
+    "type": "identifier",
+    "value": "main"
+  },
+  "right": {
+    "type": "block",
+    "body": [
+      {
+        "type": "infix",
+        "op": ":",
+        "left": {
+          "type": "identifier",
+          "value": "x"
+        },
+        "right": {
+          "type": "number",
+          "value": 10
+        }
+      },
+      {
+        "type": "infix",
+        "op": ":",
+        "left": {
+          "type": "identifier",
+          "value": "y"
+        },
+        "right": {
+          "type": "number",
+          "value": 20
+        }
+      },
+      {
+        "type": "infix",
+        "op": "+",
+        "left": {
+          "type": "identifier",
+          "value": "x"
+        },
+        "right": {
+          "type": "identifier",
+          "value": "y"
+        }
+      }
+    ]
+  }
+}

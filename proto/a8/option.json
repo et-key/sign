@@ -1,0 +1,10 @@
+{
+	"target": "aarch64",
+	"output": "output.s",
+	"entry": "main.sn",
+	"debug": true,
+	"optimize": false,
+	"mode": "compile",
+	"ExceptionLevel": 0,
+	"link": "static"
+}

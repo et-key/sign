@@ -1,0 +1,62 @@
+`
+  Sign Language Operator Table (operator.sn)
+  Wraps standard operators as first-class functions using #[op] syntax.
+  Reference: A_Operator_Table.md
+`
+
+#[+] : ~x ? [+] x~
+
+#[-] : ~x ? [-] x~
+
+#[*] : ~x ? [*] x~
+
+#[/] : ~x ? [/] x~
+
+#[%] : ~x ? [%] x~
+
+#[^] : ~x ? [^] x~
+
+`--- Comparison ---`
+#[<] : ~x ? [<] x~
+#[<=] : ~x ? [<=] x~
+#[>] : ~x ? [>] x~
+#[>=] : ~x ? [>=] x~
+#[=] : ~x ? [=] x~
+#[==] : ~x ? [==] x~
+#[!=] : ~x ? [!=] x~
+
+`--- Logic & Bitwise ---`
+#[!_] : x ? !x
+
+#[!!_] : x ? !!x
+#[||] : x y ? x || y
+#[&&] : x y ? x && y
+#[;;] : x y ? x ;; y
+
+`--- Bit Shift ---`
+#[<<] : x y ? x << y
+#[>>] : x y ? x >> y
+
+`--- List / Range / Expand ---`
+#[~] : s e ? s ~ e
+#[~_] : s ? ~s
+#[_~] : s ? s~
+
+#[~+] : s e ? s ~+ e
+#[~-] : s e ? s ~- e
+#[~*] : s e ? s ~* e
+#[~/] : s e ? s ~/ e
+#[~^] : s e ? s ~^ e
+#[,] : x y ? x , y 
+
+`--- Structure Access ---`
+#['] : obj key ? obj ' key
+#[@] : obj key ? key @ obj
+#[@_] : addr ? @addr
+#[_@] : path ? path@
+
+
+`--- Memory / Address ---`
+#[$_] : x ? $x
+#[#] : addr val ? addr # val
+
