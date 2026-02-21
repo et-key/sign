@@ -14,11 +14,11 @@ tok_sep : 6
 tok_unit : 0
 
 `--- Predicates (Pure) ---`
-#is_space : c ? c = ` ` | c = \	 | c = \
+#is_space : c ? c = \  | c = \	 | c = \
 
-#is_digit : c ? c >= `0` & c <= `9`
-#is_alpha : c ? (c >= `A` & c <= `Z`) | (c >= `A` & c <= `Z`) | c = `_`
-#is_op_char : c ? c = `=` | c = `+` | c = `-` | c = `*` | c = `/` | c = `%` | c = `^` | c = `&` | c = `|` | c = `!` | c = `<` | c = `>` | c = `?` | c = `:` | c = `;` | c = `~`
+#is_digit : c ? c >= \0 & c <= \9
+#is_alpha : c ? (c >= \A & c <= \Z) | (c >= \A & c <= \Z) | c = \_
+#is_op_char : c ? c = \= | c = \+ | c = \- | c = \* | c = \/ | c = \% | c = \^ | c = \& | c = \| | c = \! | c = \< | c = \> | c = \? | c = \: | c = \; | c = \~
 
 `--- Helper: List Construction ---`
 #length : list ?
@@ -100,7 +100,7 @@ tok_unit : 0
 		(tok_op , (head res_op)) , ((head (tail res_op)) , 0)
 	)
 	
-	c = ``` : (
+	c = \` : (
 		(tok_str , (head res_str)) , ((head (tail res_str)) , 0)
 	)
 	
@@ -159,7 +159,7 @@ tok_unit : 0
 		acc , (pos , 0)
 	)
 	c : nth source pos
-	(c = ``` | c = -1) : (
+	(c = \` | c = -1) : (
 		`End of string`
 		acc , ((pos + 1) , 0)
 	)

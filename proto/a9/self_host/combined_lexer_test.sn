@@ -70,8 +70,8 @@ heap_addr : heap_start
 #mod : x y ? x % y
 
 `
-  Sign Pure Functional Lexer
-  (Strict No-Local-Binding Version)
+Sign Pure Functional Lexer
+(Strict No-Local-Binding Version)
 `
 
 `--- Token Constants ---`
@@ -92,154 +92,154 @@ tok_unit : 0
 
 `--- Helper: List Construction ---`
 #length : list ?
-    list = 0 : 0
-    1 + length (tail list)
+	list = 0 : 0
+	1 + length (tail list)
 
 #reverse : list ?
-    _rev list 0
+	_rev list 0
 
 #_rev : list acc ?
-    list = 0 : acc
-    _rev (tail list) (cons (head list) acc)
+	list = 0 : acc
+	_rev (tail list) (cons (head list) acc)
 
 #list_to_string : list ?
-    (len ? 
-        (str ? 
-            _write_list list str 0
-            (str + len) # 0
-            str
-        ) (alloc (len + 1))
-    ) (length list)
+	(len ? 
+		(str ? 
+			_write_list list str 0
+			(str + len) # 0
+			str
+		) (alloc (len + 1))
+	) (length list)
 
 #_write_list : list buf idx ?
-    list = 0 : 0
-    (buf + idx) # head list
-    _write_list (tail list) buf (idx + 1)
+	list = 0 : 0
+	(buf + idx) # head list
+	_write_list (tail list) buf (idx + 1)
 
 `--- Core Lexer Logic ---`
 
 `tokenize : source -> tokens`
 #tokenize : source ?
-    _tokenize_loop source (len source) 0
+	_tokenize_loop source (len source) 0
 
 #_tokenize_loop : source source_len pos ?
-    (res ?
-        (token ? 
-            (type ?
-                type = tok_eof : cons token 0
-                cons token (_tokenize_loop source source_len (head (tail res)))
-            ) (@token)
-        ) (head res)
-    ) (scan_token source source_len pos)
+	(res ?
+		(token ? 
+			(type ?
+				type = tok_eof : cons token 0
+				cons token (_tokenize_loop source source_len (head (tail res)))
+			) (@token)
+		) (head res)
+	) (scan_token source source_len pos)
 
 
 `scan_token : (source, len, pos) -> [token, next_pos]`
 #scan_token : source source_len pos ?
-    pos >= source_len : (
-        cons (cons tok_eof 0) (cons pos 0)
-    )
-    
-    (c ? 
-        is_space c : (
-            scan_token source source_len (pos + 1)
-        )
-        
-        c = \ : (
-            cons (cons tok_sep 0) (cons (pos + 1) 0)
-        )
-        
-        is_digit c : (
-            (res ?
-                (val_str ?
-                    (val ?
-                        cons (cons tok_num val) (cons (head (tail res)) 0)
-                    ) (_parse_int val_str)
-                ) (head res)
-            ) (scan_num source source_len pos)
-        )
-        
-        is_alpha c : (
-            (res ? 
-                cons (cons tok_id (head res)) (cons (head (tail res)) 0)
-            ) (scan_id source source_len pos)
-        )
-        
-        is_op_char c : (
-            (res ? 
-                cons (cons tok_op (head res)) (cons (head (tail res)) 0)
-            ) (scan_op source source_len pos)
-        )
-        
-        c = \` : (
-            (res ?
-                cons (cons tok_str (head res)) (cons (head (tail res)) 0)
-            ) (scan_str source source_len pos)
-        )
-        
-        `Default: Punctuation`
-        cons (cons tok_punc c) (cons (pos + 1) 0)
-    ) (nth source pos)
+	pos >= source_len : (
+		cons (cons tok_eof 0) (cons pos 0)
+	)
+	
+	(c ? 
+		is_space c : (
+			scan_token source source_len (pos + 1)
+		)
+		
+		c = \ : (
+			cons (cons tok_sep 0) (cons (pos + 1) 0)
+		)
+		
+		is_digit c : (
+			(res ?
+				(val_str ?
+					(val ?
+						cons (cons tok_num val) (cons (head (tail res)) 0)
+					) (_parse_int val_str)
+				) (head res)
+			) (scan_num source source_len pos)
+		)
+		
+		is_alpha c : (
+			(res ? 
+				cons (cons tok_id (head res)) (cons (head (tail res)) 0)
+			) (scan_id source source_len pos)
+		)
+		
+		is_op_char c : (
+			(res ? 
+				cons (cons tok_op (head res)) (cons (head (tail res)) 0)
+			) (scan_op source source_len pos)
+		)
+		
+		c = \` : (
+			(res ?
+				cons (cons tok_str (head res)) (cons (head (tail res)) 0)
+			) (scan_str source source_len pos)
+		)
+		
+		`Default: Punctuation`
+		cons (cons tok_punc c) (cons (pos + 1) 0)
+	) (nth source pos)
 
 
 `--- Specific Scanners ---`
 
 #scan_num : source source_len pos ?
-    _scan_while source source_len pos is_digit
+	_scan_while source source_len pos is_digit
 
 #scan_id : source source_len pos ?
-    `ID can contain alpha or digit after first char`
-    _scan_while source source_len pos (c ? is_alpha c | is_digit c)
+	`ID can contain alpha or digit after first char`
+	_scan_while source source_len pos (c ? is_alpha c | is_digit c)
 
 #scan_op : source source_len pos ?
-    _scan_while source source_len pos is_op_char
+	_scan_while source source_len pos is_op_char
 
 #_scan_while : source source_len pos pred ?
-    (res ?
-        (chars_rev ?
-             (chars ?
-                  cons (list_to_string chars) (cons (head (tail res)) 0)
-             ) (reverse chars_rev)
-        ) (head res)
-    ) (_scan_while_rec source source_len pos pred 0)
+	(res ?
+		(chars_rev ?
+			(chars ?
+				cons (list_to_string chars) (cons (head (tail res)) 0)
+			) (reverse chars_rev)
+		) (head res)
+	) (_scan_while_rec source source_len pos pred 0)
 
 #_scan_while_rec : source source_len pos pred acc ?
-    pos >= source_len : (
-        cons acc (cons pos 0)
-    )
-    (c ?
-        pred c : (
-            _scan_while_rec source source_len (pos + 1) pred (cons c acc)
-        )
-        cons acc (cons pos 0)
-    ) (nth source pos)
+	pos >= source_len : (
+		cons acc (cons pos 0)
+	)
+	(c ?
+		pred c : (
+			_scan_while_rec source source_len (pos + 1) pred (cons c acc)
+		)
+		cons acc (cons pos 0)
+	) (nth source pos)
 
 #scan_str : source source_len pos ?
-    `Skip opening backtick`
-    (start_pos ?
-        (res ?
-            (chars_rev ?
-                (chars ?
-                    cons (list_to_string chars) (cons (head (tail res)) 0)
-                ) (reverse chars_rev)
-            ) (head res)
-        ) (_scan_str_rec source source_len start_pos 0)
-    ) (pos + 1)
+	`Skip opening backtick`
+	(start_pos ?
+		(res ?
+			(chars_rev ?
+				(chars ?
+					cons (list_to_string chars) (cons (head (tail res)) 0)
+				) (reverse chars_rev)
+			) (head res)
+		) (_scan_str_rec source source_len start_pos 0)
+	) (pos + 1)
 
 #_scan_str_rec : source source_len pos acc ?
-    pos >= source_len : (
-        cons acc (cons pos 0)
-    )
-    (c ?
-        (c = \` | c = -1) : (
-            `End of string`
-            cons acc (cons (pos + 1) 0)
-        )
-        _scan_str_rec source source_len (pos + 1) (cons c acc)
-    ) (nth source pos)
+	pos >= source_len : (
+		cons acc (cons pos 0)
+	)
+	(c ?
+		(c = \` | c = -1) : (
+			`End of string`
+			cons acc (cons (pos + 1) 0)
+		)
+		_scan_str_rec source source_len (pos + 1) (cons c acc)
+	) (nth source pos)
 
 `--- Utils ---`
 #_parse_int : str ?
-    str
+	str
 
 `Test Driver for Pure Lexer`
 
@@ -247,59 +247,59 @@ tok_unit : 0
 `For this test, we assume lexer.sn content is available`
 
 #main : _ ?
-    (src ? 
-        print_str `Source: `
-        print_str src
-        print_char 10
+	(src ? 
+		print_str `Source: `
+		print_str src
+		print_char 10
 
-        _process_list (tokenize src)
-    ) (`x = 123 + `foo``)
+		_process_list (tokenize src)
+	) (`x = 123 + `foo``)
 
 #_process_list : list ?
-    list = 0 : (
-        print_str `End of List`
-        print_char 10
-        0
-    )
-    
-    (token ? 
-        _print_token token
-        _process_list (tail list)
-    ) (head list)
+	list = 0 : (
+		print_str `End of List`
+		print_char 10
+		0
+	)
+	
+	(token ? 
+		_print_token token
+		_process_list (tail list)
+	) (head list)
 
 #_print_token : tok ?
-    (type ? 
-        (val ?
-            type = tok_eof : (
-                print_str `EOF`
-                print_char 10
-                0
-            )
-            
-            type = tok_id : (
-                print_str `ID: `
-                print_str val
-            )
-            type = tok_num : (
-                print_str `NUM: `
-                print_num val
-            )
-            type = tok_str : (
-                print_str `STR: `
-                print_str val
-            )
-            type = tok_op : (
-                print_str `OP: `
-                print_str val
-            )
-            type = tok_punc : (
-                print_str `PUNC: `
-                print_char val
-            )
-            type = tok_sep : (
-                print_str `SEP`
-            )
-            
-            print_char 10
-        ) (tail tok)
-    ) (head tok)
+	(type ? 
+		(val ?
+			type = tok_eof : (
+				print_str `EOF`
+				print_char 10
+				0
+			)
+			
+			type = tok_id : (
+				print_str `ID: `
+				print_str val
+			)
+			type = tok_num : (
+				print_str `NUM: `
+				print_num val
+			)
+			type = tok_str : (
+				print_str `STR: `
+				print_str val
+			)
+			type = tok_op : (
+				print_str `OP: `
+				print_str val
+			)
+			type = tok_punc : (
+				print_str `PUNC: `
+				print_char val
+			)
+			type = tok_sep : (
+				print_str `SEP`
+			)
+			
+			print_char 10
+		) (tail tok)
+	) (head tok)

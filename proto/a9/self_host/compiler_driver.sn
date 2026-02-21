@@ -69,8 +69,8 @@ heap_addr : heap_start
 #div : x y ? x / y
 #mod : x y ? x % y
 `
-  Sign Self-Hosting Lexer
-  Ported from prepare_lexer.js / parser.js
+Sign Self-Hosting Lexer
+Ported from prepare_lexer.js / parser.js
 `
 
 `--- Token Constants ---`
@@ -91,21 +91,21 @@ $pos # 0
 $ch # 0
 
 #init_lexer : source ?
-    $src # source
-    $src_len # len source
-    $pos # 0
-    read_char 0
+	$src # source
+	$src_len # len source
+	$pos # 0
+	read_char 0
 
 #read_char : _ ?
-    $p # @pos
-    p >= @src_len : (
-        $ch # -1
-        0
-    )
-    $c # nth @src p
-    $ch # c
-    $pos # p + 1
-    c
+	$p # @pos
+	p >= @src_len : (
+		$ch # -1
+		0
+	)
+	$c # nth @src p
+	$ch # c
+	$pos # p + 1
+	c
 
 `--- Predicates ---`
 #is_space : c ? c = 32 | c = \	 | c = 13
@@ -115,108 +115,108 @@ $ch # 0
 
 `--- Functional Helpers ---`
 #length : list ?
-    list = 0 : 0
-    1 + length (tail list)
+	list = 0 : 0
+	1 + length (tail list)
 
 #list_to_string : list ?
-    len : length list
-    str : alloc (len + 1)
-    _write_list list str 0
-    (str + len) # 0
-    str
+	len : length list
+	str : alloc (len + 1)
+	_write_list list str 0
+	(str + len) # 0
+	str
 
 #_write_list : list buf idx ?
-    list = 0 : 0
-    (buf + idx) # head list
-    _write_list (tail list) buf (idx + 1)
+	list = 0 : 0
+	(buf + idx) # head list
+	_write_list (tail list) buf (idx + 1)
 
 `--- Scanners ---`
 #tokenize : _ ?
-    tok : scan 0
-    type : @tok
-    type = tok_eof : cons tok 0
-    cons tok (tokenize 0)
+	tok : scan 0
+	type : @tok
+	type = tok_eof : cons tok 0
+	cons tok (tokenize 0)
 
 #scan : _ ?
-    skip_space 0
-    c : @ch
-    c = -1 : cons tok_eof 0
-    
-    is_digit c : scan_num c
-    is_alpha c : scan_id c
-    is_op_char c : scan_op 0
-    
-    c = \` : scan_str 0
-    c = 96 : scan_str 0
-    
-    c = \ : (
-        read_char 0
-        cons tok_sep 0
-    )
-    
-    c = 40 | c = 91 | c = 123 : (
-        read_char 0
-        cons tok_lparen 0
-    )
-    c = 41 | c = 93 | c = 125 : (
-        read_char 0
-        cons tok_rparen 0
-    )
-    
-    read_char 0
-    cons tok_punc c
+	skip_space 0
+	c : @ch
+	c = -1 : cons tok_eof 0
+	
+	is_digit c : scan_num c
+	is_alpha c : scan_id c
+	is_op_char c : scan_op 0
+	
+	c = \` : scan_str 0
+	c = 96 : scan_str 0
+	
+	c = \ : (
+		read_char 0
+		cons tok_sep 0
+	)
+	
+	c = 40 | c = 91 | c = 123 : (
+		read_char 0
+		cons tok_lparen 0
+	)
+	c = 41 | c = 93 | c = 125 : (
+		read_char 0
+		cons tok_rparen 0
+	)
+	
+	read_char 0
+	cons tok_punc c
 
 #skip_space : _ ?
-    is_space (@ch) : (
-        read_char 0
-        skip_space 0
-    )
-    0
+	is_space (@ch) : (
+		read_char 0
+		skip_space 0
+	)
+	0
 
 #scan_id : first_char ?
-    chars : cons first_char (_scan_id_rec (read_char 0))
-    str : list_to_string chars
-    cons tok_id str
+	chars : cons first_char (_scan_id_rec (read_char 0))
+	str : list_to_string chars
+	cons tok_id str
 
 #_scan_id_rec : c ?
-    is_alpha c | is_digit c : (
-        cons c (_scan_id_rec (read_char 0))
-    )
-    0
+	is_alpha c | is_digit c : (
+		cons c (_scan_id_rec (read_char 0))
+	)
+	0
 
 #scan_num : acc ?
-    res : _scan_num_rec acc 0
-    cons tok_num res
+	res : _scan_num_rec acc 0
+	cons tok_num res
 
 #_scan_num_rec : c acc ?
-    is_digit c : 
-        $val # acc * 10 + (c - 48)
-        _scan_num_rec (read_char 0) val
-    acc
+	is_digit c : 
+		$val # acc * 10 + (c - 48)
+		_scan_num_rec (read_char 0) val
+	acc
 
 #scan_op : _ ?
-    chars : cons (read_char 0) (_scan_op_rec (read_char 0))
-    str : list_to_string chars
-    cons tok_op str
+	chars : cons (read_char 0) (_scan_op_rec (read_char 0))
+	str : list_to_string chars
+	cons tok_op str
 
 #_scan_op_rec : c ?
-    is_op_char c : (
-        cons c (_scan_op_rec (read_char 0))
-    )
-    0
+	is_op_char c : (
+		cons c (_scan_op_rec (read_char 0))
+	)
+	0
 
 #scan_str : _ ?
-    str : list_to_string (_scan_str_rec (read_char 0))
-    cons tok_str str
+	str : list_to_string (_scan_str_rec (read_char 0))
+	cons tok_str str
 
 #_scan_str_rec : c ?
-    c = 96 | c = -1 : 
-        read_char 0
-        0
-    cons c (_scan_str_rec (read_char 0))
+	c = 96 | c = -1 : 
+		read_char 0
+		0
+	cons c (_scan_str_rec (read_char 0))
 `
-  Sign Self-Hosting Parser
-  Parses token list into AST (S-expressions)
+Sign Self-Hosting Parser
+Parses token list into AST (S-expressions)
 `
 
 `--- AST Node Types ---`
@@ -244,427 +244,427 @@ PREC_MUL : 16
 PREC_PREFIX : 20
 
 #streq : s1 s2 ?
-    s1 = s2 : 1
-    c1 : @s1
-    c2 : @s2
-    c1 != c2 : 0
-    c1 = 0 : 1
-    streq (s1 + 1) (s2 + 1)
+	s1 = s2 : 1
+	c1 : @s1
+	c2 : @s2
+	c1 != c2 : 0
+	c1 = 0 : 1
+	streq (s1 + 1) (s2 + 1)
 
 #get_semicolon_str : _ ?
-    s : alloc 2
-    s # 59
-    (s + 1) # 0
-    s
+	s : alloc 2
+	s # 59
+	(s + 1) # 0
+	s
 
 #get_bar_str : _ ?
-    s : alloc 2
-    s # 124
-    (s + 1) # 0
-    s
+	s : alloc 2
+	s # 124
+	(s + 1) # 0
+	s
 
 #get_lt_str : _ ?
-    s : alloc 2
-    s # 60
-    (s + 1) # 0
-    s
+	s : alloc 2
+	s # 60
+	(s + 1) # 0
+	s
 
 #get_gt_str : _ ?
-    s : alloc 2
-    s # 62
-    (s + 1) # 0
-    s
+	s : alloc 2
+	s # 62
+	(s + 1) # 0
+	s
 
 #get_prec : op ?
-    streq op `*` : PREC_MUL
-    streq op `/` : PREC_MUL
-    streq op `%` : PREC_MUL
-    streq op `+` : PREC_ADD
-    streq op `-` : PREC_ADD
-    streq op (get_lt_str 0) : PREC_CMP
-    streq op (get_gt_str 0) : PREC_CMP
-    streq op `=` : PREC_CMP
-    streq op (get_semicolon_str 0) : PREC_XOR
-    streq op (get_bar_str 0) : PREC_OR
-    streq op `&` : PREC_AND
-    
-    streq op `?` : 5
-    streq op `,` : 6
-    streq op `:` : 2
-    0
+	streq op \* : PREC_MUL
+	streq op \/ : PREC_MUL
+	streq op \% : PREC_MUL
+	streq op \+ : PREC_ADD
+	streq op \- : PREC_ADD
+	streq op (get_lt_str 0) : PREC_CMP
+	streq op (get_gt_str 0) : PREC_CMP
+	streq op \= : PREC_CMP
+	streq op (get_semicolon_str 0) : PREC_XOR
+	streq op (get_bar_str 0) : PREC_OR
+	streq op \& : PREC_AND
+	
+	streq op \? : 5
+	streq op \, : 6
+	streq op \: : 2
+	0
 
 #is_right_assoc : op ?
-    streq op `?` : 1
-    streq op `:` : 1
-    streq op `,` : 1
-    streq op `^` : 1
-    0
+	streq op \? : 1
+	streq op \: : 1
+	streq op \, : 1
+	streq op \^ : 1
+	0
 $p_tokens # 0
 $p_curr # 0
 
 #init_parser : toks ?
-    $p_tokens # toks
-    advance 0
+	$p_tokens # toks
+	advance 0
 
 #advance : _ ?
-    p_tokens = 0 : (
-        $p_curr # cons tok_eof 0
-        0
-    )
-    $p_curr # head p_tokens
-    $p_tokens # tail p_tokens
-    p_curr
+	p_tokens = 0 : (
+		$p_curr # cons tok_eof 0
+		0
+	)
+	$p_curr # head p_tokens
+	$p_tokens # tail p_tokens
+	p_curr
 
 #peek_type : _ ? @(peek 0)
 #peek_val : _ ? @(peek 0 + 8)
 
 #expect_val : val ?
-    v : peek_val 0
-    v = val : (
-        advance 0
-        1
-    )
-    0
+	v : peek_val 0
+	v = val : (
+		advance 0
+		1
+	)
+	0
 
 #expect_type : type ?
-    t : peek_type 0
-    t = type : (
-        advance 0
-        1
-    )
-    0
+	t : peek_type 0
+	t = type : (
+		advance 0
+		1
+	)
+	0
 
 #can_start_expr : _ ?
-    t : peek_type 0
-    t = tok_num : 1
-    t = tok_id : 1
-    t = tok_lparen : 1
-    0
+	t : peek_type 0
+	t = tok_num : 1
+	t = tok_id : 1
+	t = tok_lparen : 1
+	0
 
 #parse_program : _ ?
-    type : peek_type 0
-    type = tok_eof : 0
-    type = tok_sep : (
-        advance 0
-        parse_program 0
-    )
-    
-    expr : parse_expr 0
-    cons expr (parse_program 0)
+	type : peek_type 0
+	type = tok_eof : 0
+	type = tok_sep : (
+		advance 0
+		parse_program 0
+	)
+	
+	expr : parse_expr 0
+	cons expr (parse_program 0)
 
 #parse_block : _ ?
-    type : peek_type 0
-    type = tok_sep : (
-        advance 0
-        parse_block 0
-    )
-    
-    expr : parse_expr 0
-    
-    type : peek_type 0
-    type = tok_sep : (
-        advance 0
-        rest : parse_block_rest 0
-        rest = 0 : expr
-        cons ast_block (cons expr rest)
-    )
-    expr
+	type : peek_type 0
+	type = tok_sep : (
+		advance 0
+		parse_block 0
+	)
+	
+	expr : parse_expr 0
+	
+	type : peek_type 0
+	type = tok_sep : (
+		advance 0
+		rest : parse_block_rest 0
+		rest = 0 : expr
+		cons ast_block (cons expr rest)
+	)
+	expr
 
 #parse_block_rest : _ ?
-    type : peek_type 0
-    type = tok_eof : 0
-    
-    type != tok_sep : (
-        ; Check if it's a closing paren or dedent implicit
-        type = tok_rparen : 0
-        ; Also should check for dedent if we had indentation logic
-        0
-    )
-    
-    type = tok_sep : (
-        advance 0
-        parse_block_rest 0
-    )
-    
-    expr : parse_expr 0
-    cons expr (parse_block_rest 0)
+	type : peek_type 0
+	type = tok_eof : 0
+	
+	type != tok_sep : (
+		; Check if it's a closing paren or dedent implicit
+		type = tok_rparen : 0
+		; Also should check for dedent if we had indentation logic
+		0
+	)
+	
+	type = tok_sep : (
+		advance 0
+		parse_block_rest 0
+	)
+	
+	expr : parse_expr 0
+	cons expr (parse_block_rest 0)
 
 #parse_expr : min_prec ?
-    lhs : parse_primary 0
-    _parse_expr_loop lhs min_prec
+	lhs : parse_primary 0
+	_parse_expr_loop lhs min_prec
 
 #_parse_expr_loop : lhs min_prec ?
-    is_app : can_start_expr 0
-    is_app & (PREC_APPLY >= min_prec) : (
-        rhs : parse_expr (PREC_APPLY + 1)
-        new_lhs : cons ast_apply (cons lhs (cons rhs 0))
-        _parse_expr_loop new_lhs min_prec
-    )
+	is_app : can_start_expr 0
+	is_app & (PREC_APPLY >= min_prec) : (
+		rhs : parse_expr (PREC_APPLY + 1)
+		new_lhs : cons ast_apply (cons lhs (cons rhs 0))
+		_parse_expr_loop new_lhs min_prec
+	)
 
-    type : peek_type 0
-    type != tok_op : lhs
-    
-    op : peek_val 0
-    prec : get_prec op
-    
-    prec < min_prec : lhs
-    
-    advance 0
-    
-    next_min_prec : (is_right_assoc op) ? prec (prec + 1)
-    
-    rhs : parse_expr next_min_prec
-    
-    new_lhs : cons ast_infix (cons op (cons lhs (cons rhs 0)))
-    _parse_expr_loop new_lhs min_prec
+	type : peek_type 0
+	type != tok_op : lhs
+	
+	op : peek_val 0
+	prec : get_prec op
+	
+	prec < min_prec : lhs
+	
+	advance 0
+	
+	next_min_prec : (is_right_assoc op) ? prec (prec + 1)
+	
+	rhs : parse_expr next_min_prec
+	
+	new_lhs : cons ast_infix (cons op (cons lhs (cons rhs 0)))
+	_parse_expr_loop new_lhs min_prec
 
 #parse_primary : _ ?
-    t : peek_type 0
-    v : peek_val 0
-    
-    t = tok_num : (
-        advance 0
-        cons ast_num (cons v 0)
-    )
-    t = tok_id : (
-        advance 0
-        cons ast_id (cons v 0)
-    )
-    
-    t = tok_lparen : (
-        advance 0
-        expr : parse_expr 0
-        expect_type tok_rparen
-        expr
-    )
-    
-    cons ast_num (cons 999 0)
+	t : peek_type 0
+	v : peek_val 0
+	
+	t = tok_num : (
+		advance 0
+		cons ast_num (cons v 0)
+	)
+	t = tok_id : (
+		advance 0
+		cons ast_id (cons v 0)
+	)
+	
+	t = tok_lparen : (
+		advance 0
+		expr : parse_expr 0
+		expect_type tok_rparen
+		expr
+	)
+	
+	cons ast_num (cons 999 0)
 `
-  Sign Self-Hosting Compiler
-  Compiles AST to AArch64 Assembly
+Sign Self-Hosting Compiler
+Compiles AST to AArch64 Assembly
 `
 
 `--- String Helpers ---`
 #str_len : s ?
-    c : @s
-    c = 0 : 0
-    1 + str_len (s + 1)
+	c : @s
+	c = 0 : 0
+	1 + str_len (s + 1)
 
 #str_cpy : dest src ?
-    c : @src
-    c = 0 : (
-        dest # 0
-        dest
-    )
-    dest # c
-    str_cpy (dest + 1) (src + 1)
+	c : @src
+	c = 0 : (
+		dest # 0
+		dest
+	)
+	dest # c
+	str_cpy (dest + 1) (src + 1)
 
 #str_cat : s1 s2 ?
-    len1 : str_len s1
-    len2 : str_len s2
-    new_s : alloc (len1 + len2 + 1)
-    
-    end_s1 : str_cpy new_s s1
-    ; end_s1 points to null terminator of first copy
-    ; str_cpy returns pointer to null terminator? 
-    ; My impl above returns `dest` (ptr to 0).
-    ; So we can chain.
-    
-    str_cpy end_s1 s2
-    new_s
+	len1 : str_len s1
+	len2 : str_len s2
+	new_s : alloc (len1 + len2 + 1)
+	
+	end_s1 : str_cpy new_s s1
+	; end_s1 points to null terminator of first copy
+	; str_cpy returns pointer to null terminator? 
+	; My impl above returns `dest` (ptr to 0).
+	; So we can chain.
+	
+	str_cpy end_s1 s2
+	new_s
 
 #int_to_str : n ?
-    n = 0 : `0`
-    n < 0 : str_cat `-` (int_to_str_rec (0 - n))
-    int_to_str_rec n
+	n = 0 : \0
+	n < 0 : str_cat \- (int_to_str_rec (0 - n))
+	int_to_str_rec n
 
 #int_to_str_rec : n ?
-    n = 0 : ``
-    str : int_to_str_rec (n / 10)
-    digit : (n % 10) + 48
-    
-    ; Append digit char to string
-    ; Since we don't have mutable buffer easily in functional style,
-    ; we might recurse differently or stick to str_cat.
-    ; str_cat is expensive (allocs).
-    ; Optimization: Use a local buffer or list then convert?
-    ; For now, use str_cat for correctness.
-    
-    char_str : alloc 2
-    char_str # digit
-    (char_str + 1) # 0
-    
-    str_cat str char_str
+	n = 0 : ``
+	str : int_to_str_rec (n / 10)
+	digit : (n % 10) + 48
+	
+	; Append digit char to string
+	; Since we don't have mutable buffer easily in functional style,
+	; we might recurse differently or stick to str_cat.
+	; str_cat is expensive (allocs).
+	; Optimization: Use a local buffer or list then convert?
+	; For now, use str_cat for correctness.
+	
+	char_str : alloc 2
+	char_str # digit
+	(char_str + 1) # 0
+	
+	str_cat str char_str
 
 `--- Compiler ---`
 #compile_program : ast ?
-    ast = 0 : ``
-    
-    expr : @ast
-    
-    ; Check if expr is definition (infix :)
-    type : @expr
-    type = ast_infix : (
-        op : @(expr + 8)
-        streq op `:` : (
-            code : compile_global_def expr
-            rest : compile_program (tail ast)
-            str_cat code rest
-        )
-    )
-    
-    ; Skip non-definitions for now
-    compile_program (tail ast)
+	ast = 0 : ``
+	
+	expr : @ast
+	
+	; Check if expr is definition (infix :)
+	type : @expr
+	type = ast_infix : (
+		op : @(expr + 8)
+		streq op \: : (
+			code : compile_global_def expr
+			rest : compile_program (tail ast)
+			str_cat code rest
+		)
+	)
+	
+	; Skip non-definitions for now
+	compile_program (tail ast)
 
 #compile_global_def : node ?
-    lhs : @(node + 16)
-    rhs : @(node + 24)
-    
-    ; lhs should be ast_id for function name
-    name : @(lhs + 8)
-    
-    ; rhs should be ast_infix ? for function body
-    rhs_type : @rhs
-    rhs_type = ast_infix : (
-        op : @(rhs + 8)
-        streq op `?` : (
-            compile_function_def name rhs
-        )
-    )
-    
-    `; TODO: Global variable def\n`
+	lhs : @(node + 16)
+	rhs : @(node + 24)
+	
+	; lhs should be ast_id for function name
+	name : @(lhs + 8)
+	
+	; rhs should be ast_infix ? for function body
+	rhs_type : @rhs
+	rhs_type = ast_infix : (
+		op : @(rhs + 8)
+		streq op \? : (
+			compile_function_def name rhs
+		)
+	)
+	
+	`; TODO: Global variable def\n`
 
 #compile_function_def : name node ?
-    ; node is (infix ? args body)
-    args_node : @(node + 16)
-    body_node : @(node + 24)
-    
-    label : str_cat `_` name
-    label_colon : str_cat label `:\n`
-    
-    ; Generate end label for recursive blocks to jump to
-    end_label : str_cat label `_end`
-    
-    body_code : compile_expr body_node end_label
-    
-    ret_label : str_cat end_label `:\n    ret\n`
-    
-    str_cat label_colon (str_cat body_code ret_label)
+	; node is (infix ? args body)
+	args_node : @(node + 16)
+	body_node : @(node + 24)
+	
+	label : str_cat \_ name
+	label_colon : str_cat label `:\n`
+	
+	; Generate end label for recursive blocks to jump to
+	end_label : str_cat label `_end`
+	
+	body_code : compile_expr body_node end_label
+	
+	ret_label : str_cat end_label `:\n    ret\n`
+	
+	str_cat label_colon (str_cat body_code ret_label)
 
 #compile_expr : node end_label ?
-    node = 0 : ``
-    type : @node
-    val : @(node + 8)
-    
-    type = ast_num : (
-        s_val : int_to_str val
-        str_cat `    mov x0, #` (str_cat s_val `\n`)
-    )
-    
-    type = ast_block : (
-        compile_block val end_label
-    )
-    
-    type = ast_infix : (
-        compile_infix val end_label
-    )
-    
-    type = ast_apply : (
-        compile_apply val
-    )
-    
-    type = ast_id : (
-        compile_id val
-    )
-    
-    ``
+	node = 0 : ``
+	type : @node
+	val : @(node + 8)
+	
+	type = ast_num : (
+		s_val : int_to_str val
+		str_cat `    mov x0, #` (str_cat s_val `\n`)
+	)
+	
+	type = ast_block : (
+		compile_block val end_label
+	)
+	
+	type = ast_infix : (
+		compile_infix val end_label
+	)
+	
+	type = ast_apply : (
+		compile_apply val
+	)
+	
+	type = ast_id : (
+		compile_id val
+	)
+	
+	``
 
 #compile_id : name ?
-    label : str_cat `_` name
-    
-    load_env : `    adr x0, sign_id\n`
-    load_code : str_cat `    adr x1, ` (str_cat label `\n`)
-    make_cons : `    bl _cons\n`
-    
-    str_cat load_env (str_cat load_code make_cons)
+	label : str_cat \_ name
+	
+	load_env : `    adr x0, sign_id\n`
+	load_code : str_cat `    adr x1, ` (str_cat label `\n`)
+	make_cons : `    bl _cons\n`
+	
+	str_cat load_env (str_cat load_code make_cons)
 
 #compile_apply : node ?
-    func : @(node + 8)
-    arg : @(node + 16)
-    
-    code_f : compile_expr func 0
-    code_a : compile_expr arg 0
-    
-    push_f : `    str x0, [sp, #-16]!\n`
-    
-    pop_f : `    ldr x9, [sp], #16\n`
-    load_code : `    ldr x10, [x9]\n`
-    load_env : `    ldr x9, [x9, #8]\n`
-    call : `    blr x10\n`
-    
-    str_cat code_f (str_cat push_f (str_cat code_a (str_cat pop_f (str_cat load_code (str_cat load_env call)))))
+	func : @(node + 8)
+	arg : @(node + 16)
+	
+	code_f : compile_expr func 0
+	code_a : compile_expr arg 0
+	
+	push_f : `    str x0, [sp, #-16]!\n`
+	
+	pop_f : `    ldr x9, [sp], #16\n`
+	load_code : `    ldr x10, [x9]\n`
+	load_env : `    ldr x9, [x9, #8]\n`
+	call : `    blr x10\n`
+	
+	str_cat code_f (str_cat push_f (str_cat code_a (str_cat pop_f (str_cat load_code (str_cat load_env call)))))
 
 #compile_infix : node end_label ?
-    op : @(node + 8)
-    lhs : @(node + 16)
-    rhs : @(node + 24)
-    
-    is_match : streq op `:`
-    
-    is_match : (
-        ; Match Case: cond : val
-        cond_code : compile_expr lhs end_label
-        val_code : compile_expr rhs end_label
-        
-        check : `    cmp x0, #0\n    beq 1f\n`
-        docase : str_cat val_code (str_cat `    b ` (str_cat end_label `\n`))
-        next : `1:\n`
-        
-        str_cat cond_code (str_cat check (str_cat docase next))
-    )
-    
-    is_match = 0 : (
-        code_l : compile_expr lhs end_label
-        code_r : compile_expr rhs end_label
-        
-        push_x0 : `    str x0, [sp, #-16]!\n`
-        pop_x1 : `    ldr x1, [sp], #16\n`
-        
-        op_code : emit_op op
-        
-        str_cat code_l (str_cat push_x0 (str_cat code_r (str_cat pop_x1 op_code)))
-    )
+	op : @(node + 8)
+	lhs : @(node + 16)
+	rhs : @(node + 24)
+	
+	is_match : streq op \:
+	
+	is_match : (
+		; Match Case: cond : val
+		cond_code : compile_expr lhs end_label
+		val_code : compile_expr rhs end_label
+		
+		check : `    cmp x0, #0\n    beq 1f\n`
+		docase : str_cat val_code (str_cat `    b ` (str_cat end_label `\n`))
+		next : `1:\n`
+		
+		str_cat cond_code (str_cat check (str_cat docase next))
+	)
+	
+	is_match = 0 : (
+		code_l : compile_expr lhs end_label
+		code_r : compile_expr rhs end_label
+		
+		push_x0 : `    str x0, [sp, #-16]!\n`
+		pop_x1 : `    ldr x1, [sp], #16\n`
+		
+		op_code : emit_op op
+		
+		str_cat code_l (str_cat push_x0 (str_cat code_r (str_cat pop_x1 op_code)))
+	)
 
 #emit_op : op ?
-    streq op `+` : `    add x0, x1, x0\n`
-    streq op `-` : `    sub x0, x1, x0\n`
-    streq op `*` : `    mul x0, x1, x0\n`
-    streq op `|` : `    orr x0, x1, x0\n`
-    `    ; Unknown Op\n`
+	streq op \+ : `    add x0, x1, x0\n`
+	streq op \- : `    sub x0, x1, x0\n`
+	streq op \* : `    mul x0, x1, x0\n`
+	streq op \| : `    orr x0, x1, x0\n`
+	`    ; Unknown Op\n`
 
 #compile_block : exprs end_label ?
-    exprs = 0 : ``
-    expr : @exprs
-    code : compile_expr expr end_label
-    rest : compile_block (tail exprs) end_label
-    str_cat code rest
+	exprs = 0 : ``
+	expr : @exprs
+	code : compile_expr expr end_label
+	rest : compile_block (tail exprs) end_label
+	str_cat code rest
 `Test Driver for Compiler`
 
 #main : _ ?
-    src : `#main : ? print_num 123`
-    
-    print_str `Source: `
-    print_str src
-    print_char 10
-    
-    init_lexer src
-    tokens : tokenize 0
-    
-    init_parser tokens
-    ast : parse_program 0
-    
-    asm : compile_program ast
-    print_str asm
+	src : `#main : ? print_num 123`
+	
+	print_str `Source: `
+	print_str src
+	print_char 10
+	
+	init_lexer src
+	tokens : tokenize 0
+	
+	init_parser tokens
+	ast : parse_program 0
+	
+	asm : compile_program ast
+	print_str asm
 
 #compile_program : ast ?
-    `// TODO: Generate Assembly\n`
+	`// TODO: Generate Assembly\n`

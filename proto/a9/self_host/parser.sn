@@ -50,28 +50,28 @@ tok_unit : 0
 
 `--- Precedence Table (Pure) ---`
 #get_prec : op_str ?
-	streq op_str `+` : 15
-	streq op_str `-` : 15
-	streq op_str `*` : 16
-	streq op_str `/` : 16
-	streq op_str `%` : 16
-	streq op_str `:` : 2
-	streq op_str `?` : 5
-	streq op_str `,` : 6
-	streq op_str `=` : 14
+	streq op_str \+ : 15
+	streq op_str \- : 15
+	streq op_str \* : 16
+	streq op_str \/ : 16
+	streq op_str \% : 16
+	streq op_str \: : 2
+	streq op_str \? : 5
+	streq op_str \, : 6
+	streq op_str \= : 14
 	streq op_str `==` : 14
-	streq op_str `<` : 14
-	streq op_str `>` : 14
+	streq op_str \< : 14
+	streq op_str \> : 14
 	streq op_str `<=` : 14
 	streq op_str `>=` : 14
 	streq op_str `!=` : 14
 	0
 
 #is_right_assoc : op_str ?
-	streq op_str `:` : 1
-	streq op_str `?` : 1
-	streq op_str `,` : 1
-	streq op_str `^` : 1
+	streq op_str \: : 1
+	streq op_str \? : 1
+	streq op_str \, : 1
+	streq op_str \^ : 1
 	0
 
 `--- Parser Helpers ---`
@@ -178,14 +178,14 @@ tok_unit : 0
 	type = tok_id : 1
 	type = tok_num : 1
 	type = tok_str : 1
-	type = tok_punc : 1 `(`
+	type = tok_punc : 1 \(
 	0
 
 #is_prefix_op : op ?
-	streq op `!` : 1
-	streq op `#` : 1
-	streq op `$` : 1
-	streq op `@` : 1 
+	streq op \! : 1
+	streq op \# : 1
+	streq op \$ : 1
+	streq op \@ : 1 
 	0
 
 `parse_primary : tokens -> [node, rest]`
@@ -206,9 +206,9 @@ tok_unit : 0
 	)
 	
 	type = tok_punc : (
-		val = `[` : parse_block tokens_next
-		val = `(` : parse_block tokens_next
-		val = `{` : parse_block tokens_next
+		val = \[ : parse_block tokens_next
+		val = \( : parse_block tokens_next
+		val = \{ : parse_block tokens_next
 		(ast_unit , 0) , (tokens_next , 0)
 	)
 	
@@ -252,7 +252,7 @@ tok_unit : 0
 
 #make_infix : op lhs rhs ? ast_infix , (op , (lhs , (rhs , 0)))
 
-#make_lambda : params body ? make_infix `?` params body
+#make_lambda : params body ? make_infix \? params body
 
 `transform_section : exprs -> node`
 #transform_section :
@@ -273,7 +273,7 @@ tok_unit : 0
 	type : head e1
 	op_str : tok_val (head (tail e1))
 ?
-	type = ast_op : make_lambda (make_infix `,` p1 p2) (make_infix op_str p1 p2)
+	type = ast_op : make_lambda (make_infix \, p1 p2) (make_infix op_str p1 p2)
 	ast_block , (exprs , 0)
 
 #_transform_section_2 :
