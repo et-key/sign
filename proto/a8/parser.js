@@ -16,7 +16,7 @@ const createNode = (type, value, children = []) => ({ type, value, children });
 // --- Operators ---
 
 const ops = [
-	{ symbol: ":", precedence: 8, notation: "infix", associativity: "right" },
+	{ symbol: ":", precedence: 2, notation: "infix", associativity: "right" },
 	{ symbol: "#", precedence: 3, notation: "infix", associativity: "left" },
 	{ symbol: ",", precedence: 6, notation: "infix", associativity: "right" },
 	{ symbol: "?", precedence: 5, notation: "infix", associativity: "right" },
