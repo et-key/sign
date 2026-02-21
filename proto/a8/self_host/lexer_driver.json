@@ -231,21 +231,40 @@
                                                   "value": "c"
                                                 },
                                                 "right": {
-                                                  "type": "infix",
-                                                  "op": "|",
-                                                  "left": {
+                                                  "type": "apply",
+                                                  "func": {
+                                                    "type": "infix",
+                                                    "op": "=",
+                                                    "left": {
+                                                      "type": "identifier",
+                                                      "value": "c"
+                                                    },
+                                                    "right": {
+                                                      "type": "identifier",
+                                                      "value": "\""
+                                                    }
+                                                  },
+                                                  "arg": {
                                                     "type": "infix",
                                                     "op": "|",
                                                     "left": {
                                                       "type": "infix",
-                                                      "op": "=",
+                                                      "op": "|",
                                                       "left": {
                                                         "type": "identifier",
-                                                        "value": "c"
+                                                        "value": "\""
                                                       },
                                                       "right": {
-                                                        "type": "number",
-                                                        "value": 32
+                                                        "type": "infix",
+                                                        "op": "=",
+                                                        "left": {
+                                                          "type": "identifier",
+                                                          "value": "c"
+                                                        },
+                                                        "right": {
+                                                          "type": "char",
+                                                          "value": "\t"
+                                                        }
                                                       }
                                                     },
                                                     "right": {
@@ -257,20 +276,8 @@
                                                       },
                                                       "right": {
                                                         "type": "char",
-                                                        "value": "\t"
+                                                        "value": "\n"
                                                       }
-                                                    }
-                                                  },
-                                                  "right": {
-                                                    "type": "infix",
-                                                    "op": "=",
-                                                    "left": {
-                                                      "type": "identifier",
-                                                      "value": "c"
-                                                    },
-                                                    "right": {
-                                                      "type": "number",
-                                                      "value": 13
                                                     }
                                                   }
                                                 }
@@ -292,31 +299,59 @@
                                                 "value": "c"
                                               },
                                               "right": {
-                                                "type": "infix",
-                                                "op": "&",
-                                                "left": {
-                                                  "type": "infix",
-                                                  "op": ">=",
-                                                  "left": {
-                                                    "type": "identifier",
-                                                    "value": "c"
+                                                "type": "apply",
+                                                "func": {
+                                                  "type": "apply",
+                                                  "func": {
+                                                    "type": "apply",
+                                                    "func": {
+                                                      "type": "apply",
+                                                      "func": {
+                                                        "type": "infix",
+                                                        "op": ">=",
+                                                        "left": {
+                                                          "type": "identifier",
+                                                          "value": "c"
+                                                        },
+                                                        "right": {
+                                                          "type": "identifier",
+                                                          "value": "\""
+                                                        }
+                                                      },
+                                                      "arg": {
+                                                        "type": "number",
+                                                        "value": 0
+                                                      }
+                                                    },
+                                                    "arg": {
+                                                      "type": "infix",
+                                                      "op": "&",
+                                                      "left": {
+                                                        "type": "identifier",
+                                                        "value": "\""
+                                                      },
+                                                      "right": {
+                                                        "type": "infix",
+                                                        "op": "<=",
+                                                        "left": {
+                                                          "type": "identifier",
+                                                          "value": "c"
+                                                        },
+                                                        "right": {
+                                                          "type": "identifier",
+                                                          "value": "\""
+                                                        }
+                                                      }
+                                                    }
                                                   },
-                                                  "right": {
+                                                  "arg": {
                                                     "type": "number",
-                                                    "value": 48
+                                                    "value": 9
                                                   }
                                                 },
-                                                "right": {
-                                                  "type": "infix",
-                                                  "op": "<=",
-                                                  "left": {
-                                                    "type": "identifier",
-                                                    "value": "c"
-                                                  },
-                                                  "right": {
-                                                    "type": "number",
-                                                    "value": 57
-                                                  }
+                                                "arg": {
+                                                  "type": "identifier",
+                                                  "value": "\""
                                                 }
                                               }
                                             }
@@ -337,79 +372,149 @@
                                               "value": "c"
                                             },
                                             "right": {
-                                              "type": "infix",
-                                              "op": "|",
-                                              "left": {
-                                                "type": "infix",
-                                                "op": "|",
-                                                "left": {
+                                              "type": "apply",
+                                              "func": {
+                                                "type": "apply",
+                                                "func": {
                                                   "type": "infix",
-                                                  "op": "&",
+                                                  "op": "|",
                                                   "left": {
                                                     "type": "infix",
-                                                    "op": ">=",
+                                                    "op": "|",
                                                     "left": {
-                                                      "type": "identifier",
-                                                      "value": "c"
+                                                      "type": "apply",
+                                                      "func": {
+                                                        "type": "apply",
+                                                        "func": {
+                                                          "type": "apply",
+                                                          "func": {
+                                                            "type": "apply",
+                                                            "func": {
+                                                              "type": "infix",
+                                                              "op": ">=",
+                                                              "left": {
+                                                                "type": "identifier",
+                                                                "value": "c"
+                                                              },
+                                                              "right": {
+                                                                "type": "identifier",
+                                                                "value": "\""
+                                                              }
+                                                            },
+                                                            "arg": {
+                                                              "type": "identifier",
+                                                              "value": "A"
+                                                            }
+                                                          },
+                                                          "arg": {
+                                                            "type": "infix",
+                                                            "op": "&",
+                                                            "left": {
+                                                              "type": "identifier",
+                                                              "value": "\""
+                                                            },
+                                                            "right": {
+                                                              "type": "infix",
+                                                              "op": "<=",
+                                                              "left": {
+                                                                "type": "identifier",
+                                                                "value": "c"
+                                                              },
+                                                              "right": {
+                                                                "type": "identifier",
+                                                                "value": "\""
+                                                              }
+                                                            }
+                                                          }
+                                                        },
+                                                        "arg": {
+                                                          "type": "identifier",
+                                                          "value": "Z"
+                                                        }
+                                                      },
+                                                      "arg": {
+                                                        "type": "identifier",
+                                                        "value": "\""
+                                                      }
                                                     },
                                                     "right": {
-                                                      "type": "number",
-                                                      "value": 65
+                                                      "type": "apply",
+                                                      "func": {
+                                                        "type": "apply",
+                                                        "func": {
+                                                          "type": "apply",
+                                                          "func": {
+                                                            "type": "apply",
+                                                            "func": {
+                                                              "type": "infix",
+                                                              "op": ">=",
+                                                              "left": {
+                                                                "type": "identifier",
+                                                                "value": "c"
+                                                              },
+                                                              "right": {
+                                                                "type": "identifier",
+                                                                "value": "\""
+                                                              }
+                                                            },
+                                                            "arg": {
+                                                              "type": "identifier",
+                                                              "value": "a"
+                                                            }
+                                                          },
+                                                          "arg": {
+                                                            "type": "infix",
+                                                            "op": "&",
+                                                            "left": {
+                                                              "type": "identifier",
+                                                              "value": "\""
+                                                            },
+                                                            "right": {
+                                                              "type": "infix",
+                                                              "op": "<=",
+                                                              "left": {
+                                                                "type": "identifier",
+                                                                "value": "c"
+                                                              },
+                                                              "right": {
+                                                                "type": "identifier",
+                                                                "value": "\""
+                                                              }
+                                                            }
+                                                          }
+                                                        },
+                                                        "arg": {
+                                                          "type": "identifier",
+                                                          "value": "z"
+                                                        }
+                                                      },
+                                                      "arg": {
+                                                        "type": "identifier",
+                                                        "value": "\""
+                                                      }
                                                     }
                                                   },
                                                   "right": {
                                                     "type": "infix",
-                                                    "op": "<=",
+                                                    "op": "=",
                                                     "left": {
                                                       "type": "identifier",
                                                       "value": "c"
                                                     },
                                                     "right": {
-                                                      "type": "number",
-                                                      "value": 90
+                                                      "type": "identifier",
+                                                      "value": "\""
                                                     }
                                                   }
                                                 },
-                                                "right": {
-                                                  "type": "infix",
-                                                  "op": "&",
-                                                  "left": {
-                                                    "type": "infix",
-                                                    "op": ">=",
-                                                    "left": {
-                                                      "type": "identifier",
-                                                      "value": "c"
-                                                    },
-                                                    "right": {
-                                                      "type": "number",
-                                                      "value": 97
-                                                    }
-                                                  },
-                                                  "right": {
-                                                    "type": "infix",
-                                                    "op": "<=",
-                                                    "left": {
-                                                      "type": "identifier",
-                                                      "value": "c"
-                                                    },
-                                                    "right": {
-                                                      "type": "number",
-                                                      "value": 122
-                                                    }
-                                                  }
+                                                "arg": {
+                                                  "type": "identifier",
+                                                  "value": "_"
                                                 }
                                               },
-                                              "right": {
-                                                "type": "infix",
-                                                "op": "=",
-                                                "left": {
-                                                  "type": "identifier",
-                                                  "value": "c"
-                                                },
-                                                "right": {
-                                                  "type": "number",
-                                                  "value": 95
-                                                }
+                                              "arg": {
+                                                "type": "identifier",
+                                                "value": "\""
                                               }
                                             }
                                           }
@@ -431,7 +536,7 @@
                                           },
                                           "right": {
                                             "type": "infix",
-                                            "op": "|",
+                                            "op": "?",
                                             "left": {
                                               "type": "infix",
                                               "op": "|",
@@ -464,68 +569,8 @@
                                                                 "op": "|",
                                                                 "left": {
                                                                   "type": "infix",
-                                                                  "op": "|",
+                                                                  "op": "=",
                                                                   "left": {
-                                                                    "type": "infix",
-                                                                    "op": "|",
-                                                                    "left": {
-                                                                      "type": "infix",
-                                                                      "op": "|",
-                                                                      "left": {
-                                                                        "type": "infix",
-                                                                        "op": "|",
-                                                                        "left": {
-                                                                          "type": "infix",
-                                                                          "op": "=",
-                                                                          "left": {
-                                                                            "type": "identifier",
-                                                                            "value": "c"
-                                                                          },
-                                                                          "right": {
-                                                                            "type": "number",
-                                                                            "value": 61
-                                                                          }
-                                                                        },
-                                                                        "right": {
-                                                                          "type": "infix",
-                                                                          "op": "=",
-                                                                          "left": {
-                                                                            "type": "identifier",
-                                                                            "value": "c"
-                                                                          },
-                                                                          "right": {
-                                                                            "type": "number",
-                                                                            "value": 43
-                                                                          }
-                                                                        }
-                                                                      },
-                                                                      "right": {
-                                                                        "type": "infix",
-                                                                        "op": "=",
-                                                                        "left": {
-                                                                          "type": "identifier",
-                                                                          "value": "c"
-                                                                        },
-                                                                        "right": {
-                                                                          "type": "number",
-                                                                          "value": 45
-                                                                        }
-                                                                      }
-                                                                    },
-                                                                    "right": {
-                                                                      "type": "infix",
-                                                                      "op": "=",
-                                                                      "left": {
-                                                                        "type": "identifier",
-                                                                        "value": "c"
-                                                                      },
-                                                                      "right": {
-                                                                        "type": "number",
-                                                                        "value": 42
-                                                                      }
-                                                                    }
-                                                                  },
-                                                                  "right": {
                                                                     "type": "infix",
                                                                     "op": "=",
                                                                     "left": {
@@ -533,9 +578,13 @@
                                                                       "value": "c"
                                                                     },
                                                                     "right": {
-                                                                      "type": "number",
-                                                                      "value": 47
+                                                                      "type": "identifier",
+                                                                      "value": "\""
                                                                     }
+                                                                  },
+                                                                  "right": {
+                                                                    "type": "identifier",
+                                                                    "value": "\""
                                                                   }
                                                                 },
                                                                 "right": {
@@ -546,8 +595,16 @@
                                                                     "value": "c"
                                                                   },
                                                                   "right": {
-                                                                    "type": "number",
-                                                                    "value": 37
+                                                                    "type": "infix",
+                                                                    "op": "+",
+                                                                    "left": {
+                                                                      "type": "identifier",
+                                                                      "value": "\""
+                                                                    },
+                                                                    "right": {
+                                                                      "type": "identifier",
+                                                                      "value": "\""
+                                                                    }
                                                                   }
                                                                 }
                                                               },
@@ -559,8 +616,16 @@
                                                                   "value": "c"
                                                                 },
                                                                 "right": {
-                                                                  "type": "number",
-                                                                  "value": 94
+                                                                  "type": "infix",
+                                                                  "op": "-",
+                                                                  "left": {
+                                                                    "type": "identifier",
+                                                                    "value": "\""
+                                                                  },
+                                                                  "right": {
+                                                                    "type": "identifier",
+                                                                    "value": "\""
+                                                                  }
                                                                 }
                                                               }
                                                             },
@@ -572,8 +637,16 @@
                                                                 "value": "c"
                                                               },
                                                               "right": {
-                                                                "type": "number",
-                                                                "value": 38
+                                                                "type": "infix",
+                                                                "op": "*",
+                                                                "left": {
+                                                                  "type": "identifier",
+                                                                  "value": "\""
+                                                                },
+                                                                "right": {
+                                                                  "type": "identifier",
+                                                                  "value": "\""
+                                                                }
                                                               }
                                                             }
                                                           },
@@ -585,8 +658,16 @@
                                                               "value": "c"
                                                             },
                                                             "right": {
-                                                              "type": "number",
-                                                              "value": 124
+                                                              "type": "infix",
+                                                              "op": "/",
+                                                              "left": {
+                                                                "type": "identifier",
+                                                                "value": "\""
+                                                              },
+                                                              "right": {
+                                                                "type": "identifier",
+                                                                "value": "\""
+                                                              }
                                                             }
                                                           }
                                                         },
@@ -598,8 +679,16 @@
                                                             "value": "c"
                                                           },
                                                           "right": {
-                                                            "type": "number",
-                                                            "value": 33
+                                                            "type": "infix",
+                                                            "op": "%",
+                                                            "left": {
+                                                              "type": "identifier",
+                                                              "value": "\""
+                                                            },
+                                                            "right": {
+                                                              "type": "identifier",
+                                                              "value": "\""
+                                                            }
                                                           }
                                                         }
                                                       },
@@ -611,21 +700,37 @@
                                                           "value": "c"
                                                         },
                                                         "right": {
-                                                          "type": "number",
-                                                          "value": 60
+                                                          "type": "infix",
+                                                          "op": "^",
+                                                          "left": {
+                                                            "type": "identifier",
+                                                            "value": "\""
+                                                          },
+                                                          "right": {
+                                                            "type": "identifier",
+                                                            "value": "\""
+                                                          }
                                                         }
                                                       }
                                                     },
                                                     "right": {
                                                       "type": "infix",
-                                                      "op": "=",
+                                                      "op": "&",
                                                       "left": {
-                                                        "type": "identifier",
-                                                        "value": "c"
+                                                        "type": "infix",
+                                                        "op": "=",
+                                                        "left": {
+                                                          "type": "identifier",
+                                                          "value": "c"
+                                                        },
+                                                        "right": {
+                                                          "type": "identifier",
+                                                          "value": "\""
+                                                        }
                                                       },
                                                       "right": {
-                                                        "type": "number",
-                                                        "value": 62
+                                                        "type": "identifier",
+                                                        "value": "\""
                                                       }
                                                     }
                                                   },
@@ -637,8 +742,88 @@
                                                       "value": "c"
                                                     },
                                                     "right": {
-                                                      "type": "number",
-                                                      "value": 63
+                                                      "type": "identifier",
+                                                      "value": "\""
+                                                    }
+                                                  }
+                                                },
+                                                "right": {
+                                                  "type": "identifier",
+                                                  "value": "\""
+                                                }
+                                              },
+                                              "right": {
+                                                "type": "infix",
+                                                "op": "=",
+                                                "left": {
+                                                  "type": "identifier",
+                                                  "value": "c"
+                                                },
+                                                "right": {
+                                                  "type": "postfix",
+                                                  "op": "!",
+                                                  "expr": {
+                                                    "type": "identifier",
+                                                    "value": "\""
+                                                  }
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "type": "infix",
+                                              "op": "?",
+                                              "left": {
+                                                "type": "infix",
+                                                "op": "|",
+                                                "left": {
+                                                  "type": "infix",
+                                                  "op": "|",
+                                                  "left": {
+                                                    "type": "infix",
+                                                    "op": "|",
+                                                    "left": {
+                                                      "type": "identifier",
+                                                      "value": "\""
+                                                    },
+                                                    "right": {
+                                                      "type": "infix",
+                                                      "op": "<",
+                                                      "left": {
+                                                        "type": "infix",
+                                                        "op": "=",
+                                                        "left": {
+                                                          "type": "identifier",
+                                                          "value": "c"
+                                                        },
+                                                        "right": {
+                                                          "type": "identifier",
+                                                          "value": "\""
+                                                        }
+                                                      },
+                                                      "right": {
+                                                        "type": "identifier",
+                                                        "value": "\""
+                                                      }
+                                                    }
+                                                  },
+                                                  "right": {
+                                                    "type": "infix",
+                                                    "op": ">",
+                                                    "left": {
+                                                      "type": "infix",
+                                                      "op": "=",
+                                                      "left": {
+                                                        "type": "identifier",
+                                                        "value": "c"
+                                                      },
+                                                      "right": {
+                                                        "type": "identifier",
+                                                        "value": "\""
+                                                      }
+                                                    },
+                                                    "right": {
+                                                      "type": "identifier",
+                                                      "value": "\""
                                                     }
                                                   }
                                                 },
@@ -650,34 +835,86 @@
                                                     "value": "c"
                                                   },
                                                   "right": {
-                                                    "type": "number",
-                                                    "value": 58
+                                                    "type": "identifier",
+                                                    "value": "\""
                                                   }
                                                 }
                                               },
                                               "right": {
                                                 "type": "infix",
-                                                "op": "=",
+                                                "op": ":",
                                                 "left": {
-                                                  "type": "identifier",
-                                                  "value": "c"
+                                                  "type": "infix",
+                                                  "op": "|",
+                                                  "left": {
+                                                    "type": "identifier",
+                                                    "value": "\""
+                                                  },
+                                                  "right": {
+                                                    "type": "infix",
+                                                    "op": "=",
+                                                    "left": {
+                                                      "type": "identifier",
+                                                      "value": "c"
+                                                    },
+                                                    "right": {
+                                                      "type": "identifier",
+                                                      "value": "\""
+                                                    }
+                                                  }
                                                 },
                                                 "right": {
-                                                  "type": "number",
-                                                  "value": 59
+                                                  "type": "infix",
+                                                  "op": "~",
+                                                  "left": {
+                                                    "type": "infix",
+                                                    "op": ";",
+                                                    "left": {
+                                                      "type": "infix",
+                                                      "op": "|",
+                                                      "left": {
+                                                        "type": "identifier",
+                                                        "value": "\""
+                                                      },
+                                                      "right": {
+                                                        "type": "infix",
+                                                        "op": "=",
+                                                        "left": {
+                                                          "type": "identifier",
+                                                          "value": "c"
+                                                        },
+                                                        "right": {
+                                                          "type": "identifier",
+                                                          "value": "\""
+                                                        }
+                                                      }
+                                                    },
+                                                    "right": {
+                                                      "type": "infix",
+                                                      "op": "|",
+                                                      "left": {
+                                                        "type": "identifier",
+                                                        "value": "\""
+                                                      },
+                                                      "right": {
+                                                        "type": "infix",
+                                                        "op": "=",
+                                                        "left": {
+                                                          "type": "identifier",
+                                                          "value": "c"
+                                                        },
+                                                        "right": {
+                                                          "type": "identifier",
+                                                          "value": "\""
+                                                        }
+                                                      }
+                                                    }
+                                                  },
+                                                  "right": {
+                                                    "type": "identifier",
+                                                    "value": "\""
+                                                  }
                                                 }
-                                              }
-                                            },
-                                            "right": {
-                                              "type": "infix",
-                                              "op": "=",
-                                              "left": {
-                                                "type": "identifier",
-                                                "value": "c"
-                                              },
-                                              "right": {
-                                                "type": "number",
-                                                "value": 126
                                               }
                                             }
                                           }
@@ -2210,22 +2447,36 @@
                                                                                                             {
                                                                                                               "type": "apply",
                                                                                                               "func": {
-                                                                                                                "type": "infix",
-                                                                                                                "op": ":",
-                                                                                                                "left": {
-                                                                                                                  "type": "infix",
-                                                                                                                  "op": "=",
-                                                                                                                  "left": {
-                                                                                                                    "type": "identifier",
-                                                                                                                    "value": "c"
+                                                                                                                "type": "apply",
+                                                                                                                "func": {
+                                                                                                                  "type": "apply",
+                                                                                                                  "func": {
+                                                                                                                    "type": "infix",
+                                                                                                                    "op": "=",
+                                                                                                                    "left": {
+                                                                                                                      "type": "identifier",
+                                                                                                                      "value": "c"
+                                                                                                                    },
+                                                                                                                    "right": {
+                                                                                                                      "type": "identifier",
+                                                                                                                      "value": "\""
+                                                                                                                    }
                                                                                                                   },
-                                                                                                                  "right": {
-                                                                                                                    "type": "char",
+                                                                                                                  "arg": {
+                                                                                                                    "type": "string",
                                                                                                                     "value": "`"
                                                                                                                   }
                                                                                                                 },
-                                                                                                                "right": {
-                                                                                                                  "type": "unit"
+                                                                                                                "arg": {
+                                                                                                                  "type": "infix",
+                                                                                                                  "op": ":",
+                                                                                                                  "left": {
+                                                                                                                    "type": "identifier",
+                                                                                                                    "value": "\""
+                                                                                                                  },
+                                                                                                                  "right": {
+                                                                                                                    "type": "unit"
+                                                                                                                  }
                                                                                                                 }
                                                                                                               },
                                                                                                               "arg": {
@@ -3518,30 +3769,44 @@
                             "type": "infix",
                             "op": ":",
                             "left": {
-                              "type": "infix",
-                              "op": "|",
-                              "left": {
-                                "type": "infix",
-                                "op": "=",
-                                "left": {
-                                  "type": "identifier",
-                                  "value": "c"
+                              "type": "apply",
+                              "func": {
+                                "type": "apply",
+                                "func": {
+                                  "type": "infix",
+                                  "op": "=",
+                                  "left": {
+                                    "type": "identifier",
+                                    "value": "c"
+                                  },
+                                  "right": {
+                                    "type": "identifier",
+                                    "value": "\""
+                                  }
                                 },
-                                "right": {
-                                  "type": "char",
+                                "arg": {
+                                  "type": "string",
                                   "value": "`"
                                 }
                               },
-                              "right": {
+                              "arg": {
                                 "type": "infix",
-                                "op": "=",
+                                "op": "|",
                                 "left": {
                                   "type": "identifier",
-                                  "value": "c"
+                                  "value": "\""
                                 },
                                 "right": {
-                                  "type": "number",
-                                  "value": -1
+                                  "type": "infix",
+                                  "op": "=",
+                                  "left": {
+                                    "type": "identifier",
+                                    "value": "c"
+                                  },
+                                  "right": {
+                                    "type": "number",
+                                    "value": -1
+                                  }
                                 }
                               }
                             },

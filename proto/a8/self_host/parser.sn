@@ -206,8 +206,8 @@ tok_unit : 0
 	)
 	
 	type = tok_punc : (
-		val = 91 : parse_block tokens_next
-		val = 40 : _parse_group tokens_next
+		val = "[" : parse_block tokens_next
+		val = "(" : _parse_group tokens_next
 		(ast_unit , 0) , (tokens_next , 0)
 	)
 	
