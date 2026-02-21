@@ -60,7 +60,7 @@
                 <g
                    id="g75">
                  <!-- wing scales down while sliding in from left/back -->
-                 <animateTransform attributeName="transform" type="rotate" from="-30 600 425" to="0 600 300"  begin="1.25s" dur="2s"/>
+                 <animateTransform attributeName="transform" type="rotate" from="-30 600 425" to="0 600 300"  begin="1.25s" dur="1.5s"/>
 
                   <g
                      id="g77"
