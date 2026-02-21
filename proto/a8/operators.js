@@ -121,6 +121,7 @@ const parseTable = {
     "#": { "precedence": 3, "notation": "infix", "associativity": "left" },
     ",": { "precedence": 6, "notation": "infix", "associativity": "right" },
     "?": { "precedence": 5, "notation": "infix", "associativity": "right" },
+    "~": { "precedence": 9, "notation": "infix" },
     "~+": { "precedence": 9, "notation": "infix" },
     "~-": { "precedence": 9, "notation": "infix" },
     "~*": { "precedence": 9, "notation": "infix" },

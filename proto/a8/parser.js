@@ -144,23 +144,31 @@ const refineTokens = (rawTokens) => {
 				refined.push(token);
 			} else if (token.startsWith('\\')) {
 				// Special handling for `\` token from lexer
-				// Lexer returns `\` + char (2 chars) usually.
-				// But `splitAlphaSymbol` handles `\` as symbol.
-				// If it is `\c` (2 chars), it might be `\` op applied to `c`?
-				// Or literal?
-				// `example.ja-jp.sn`: `M: \M` -> Char literal?
-				// If we treat it as literal here, `parser` is simpler.
-				// If length > 1, treating as Char Literal seems safer for `\M`.
-				// But `\` `\n` ?
-				// If `\` is alone token?
 				if (token.length > 1) {
-					refined.push(token); // Treat as unit (Char literal likely)
+					refined.push(token);
 				} else {
-					refined.push(token); // Just `\` op
+					refined.push({ type: 'operator', symbol: token, spacing: 'isolated' });
 				}
+			} else if (isOpSymbol(token)) {
+				refined.push({ type: 'operator', symbol: token, spacing: 'isolated' });
 			} else {
 				const parts = splitAlphaSymbol(token);
-				refined.push(...parts);
+				for (let i = 0; i < parts.length; i++) {
+					const p = parts[i];
+					if (isOpSymbol(p)) {
+						let spacing = 'attached';
+						if (i === 0) {
+							spacing = 'prefix_attached';
+						} else if (i === parts.length - 1) {
+							spacing = 'postfix_attached';
+						} else {
+							spacing = 'both_attached';
+						}
+						refined.push({ type: 'operator', symbol: p, spacing: spacing });
+					} else {
+						refined.push(p);
+					}
+				}
 			}
 		} else {
 			refined.push(token);
@@ -187,13 +195,26 @@ const parseExpr = (tokens, minPrec = 0) => {
 	const canStartExpr = (token) => {
 		if (!token) return false;
 		if (Array.isArray(token)) return true; // Block
-		if (typeof token === 'string') {
-			if (token.startsWith('`')) return true; // String
-			if (token.startsWith('\\')) return true; // Char
-			if (!isNaN(parseFloat(token))) return true; // Number
-			if (isOpSymbol(token)) {
-				// Prefix?
-				return !!findOp(token, 'prefix');
+
+		let value = token;
+		let is_op = false;
+		let spacing = null;
+
+		if (typeof token === 'object' && token.type === 'operator') {
+			value = token.symbol;
+			is_op = true;
+			spacing = token.spacing;
+		}
+
+		if (typeof token === 'string' || is_op) {
+			if (typeof value === 'string') {
+				if (value.startsWith && value.startsWith('`')) return true; // String
+				if (value.startsWith && value.startsWith('\\')) return true; // Char
+				if (!isNaN(parseFloat(value))) return true; // Number
+			}
+			if (is_op || (typeof value === 'string' && isOpSymbol(value))) {
+				if (spacing === 'postfix_attached') return false;
+				return !!findOp(value, 'prefix');
 			}
 			return true; // Identifier
 		}
@@ -233,12 +254,26 @@ const parseExpr = (tokens, minPrec = 0) => {
 		if (isSeparator(lookahead)) {
 			let sepCount = 0;
 			while (sepCount < tokens.length && isSeparator(tokens[sepCount])) sepCount++;
-			if (sepCount < tokens.length && typeof tokens[sepCount] === 'string' && isOpSymbol(tokens[sepCount])) {
-				const nextOp = tokens[sepCount];
-				const opInfo = findOp(nextOp, 'infix') || findOp(nextOp, 'postfix');
-				if (opInfo && opInfo.precedence >= minPrec && !canStartExpr(nextOp)) {
-					tokens.splice(0, sepCount);
-					lookahead = tokens[0];
+			if (sepCount < tokens.length) {
+				const nextOpTok = tokens[sepCount];
+				let nextOpVal = null;
+				let nextOpIsMap = false;
+				if (typeof nextOpTok === 'object' && nextOpTok.type === 'operator') {
+					nextOpVal = nextOpTok.symbol;
+					nextOpIsMap = true;
+				} else if (typeof nextOpTok === 'string' && isOpSymbol(nextOpTok)) {
+					nextOpVal = nextOpTok;
+					nextOpIsMap = true;
+				}
+
+				if (nextOpIsMap) {
+					const opInfo = findOp(nextOpVal, 'infix') || findOp(nextOpVal, 'postfix');
+					if (opInfo && opInfo.precedence >= minPrec && !canStartExpr(nextOpTok)) {
+						tokens.splice(0, sepCount);
+						lookahead = tokens[0];
+					} else {
+						break;
+					}
 				} else {
 					break;
 				}
@@ -246,10 +281,36 @@ const parseExpr = (tokens, minPrec = 0) => {
 				break;
 			}
 		}
-		if (typeof lookahead === 'string' && isOpSymbol(lookahead)) {
-			const opSymbol = lookahead;
 
-			let op = findOp(opSymbol, 'infix') || findOp(opSymbol, 'postfix');
+		let is_op = false;
+		let opValue = null;
+		let spacing = null;
+
+		if (typeof lookahead === 'object' && lookahead.type === 'operator') {
+			is_op = true;
+			opValue = lookahead.symbol;
+			spacing = lookahead.spacing;
+		} else if (typeof lookahead === 'string' && isOpSymbol(lookahead)) {
+			is_op = true;
+			opValue = lookahead;
+			spacing = 'isolated';
+		}
+
+		if (is_op) {
+			const opSymbol = opValue;
+
+			if (spacing === 'prefix_attached') {
+				break;
+			}
+
+			let op;
+			if (spacing === 'postfix_attached') {
+				op = findOp(opSymbol, 'postfix');
+			} else if (spacing === 'isolated') {
+				op = findOp(opSymbol, 'infix');
+			} else {
+				op = findOp(opSymbol, 'infix') || findOp(opSymbol, 'postfix');
+			}
 
 			if (!op) {
 				// Not infix/postfix -> Apply?
@@ -396,48 +457,61 @@ const parseAtom = (tokens) => {
 		return parseBlock(token);
 	}
 
-	if (typeof token === 'string') {
-		const value = token;
+	let value = token;
+	let is_op = false;
+	let spacing = null;
 
+	if (typeof token === 'object' && token.type === 'operator') {
+		value = token.symbol;
+		is_op = true;
+		spacing = token.spacing;
+	} else if (typeof token === 'string') {
+		if (isOpSymbol(token)) {
+			is_op = true;
+			spacing = 'isolated';
+		}
+	} else {
+		return { type: 'unknown', token };
+	}
+
+	if (typeof value === 'string' || is_op) {
 		if (value === '|') {
 			const expr = parseExpr(tokens, 0);
 			const next = tokens.shift();
-			// Handle missing closing pipe gracefullly? Or throw?
 			// User sample implies strict pairing.
-			if (next !== '|') {
-				// This might happen if EOF or mismatched.
-				// For now, assume correct.
-			}
+			if (typeof next === 'object' && next.type === 'operator' && next.symbol !== '|') { }
+			else if (typeof next === 'string' && next !== '|') { }
 			return { type: 'abs', expr };
 		}
 
 		// Prefix Op
-		if (isOpSymbol(value)) {
-			const op = findOp(value, 'prefix');
-			if (op) {
-				const splitPrec = op.precedence;
-				// Special case escaping
-				// If we had `\` alone, next token is char?
-				// But `refineTokens` keeps `\c` together.
-				const rhs = parseExpr(tokens, splitPrec);
-				return { type: 'prefix', op: value, expr: rhs };
+		if (is_op) {
+			if (spacing !== 'postfix_attached') {
+				const op = findOp(value, 'prefix');
+				if (op) {
+					const splitPrec = op.precedence;
+					const rhs = parseExpr(tokens, splitPrec);
+					return { type: 'prefix', op: value, expr: rhs };
+				}
 			}
 			return { type: 'identifier', value: value, isOp: true };
 		}
 
-		if (value.startsWith('`')) {
-			return { type: 'string', value: value };
-		}
+		if (typeof value === 'string') {
+			if (value.startsWith && value.startsWith('`')) {
+				return { type: 'string', value: value };
+			}
 
-		if (value.startsWith('\\')) {
-			return { type: 'char', value: value.slice(1) };
-		}
+			if (value.startsWith && value.startsWith('\\')) {
+				return { type: 'char', value: value.slice(1) };
+			}
 
-		if (!isNaN(parseFloat(value))) {
-			return { type: 'number', value: parseFloat(value) };
-		}
+			if (!isNaN(parseFloat(value))) {
+				return { type: 'number', value: parseFloat(value) };
+			}
 
-		return { type: 'identifier', value: value };
+			return { type: 'identifier', value: value };
+		}
 	}
 
 	return { type: 'unknown', token };

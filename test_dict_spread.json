@@ -49,13 +49,12 @@
         "type": "block",
         "body": [
           {
-            "type": "infix",
+            "type": "postfix",
             "op": "~",
-            "left": {
+            "expr": {
               "type": "identifier",
               "value": "base_dict"
-            },
-            "right": null
+            }
           },
           {
             "type": "infix",

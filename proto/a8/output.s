@@ -40,20 +40,28 @@ __sign_init:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    mov x0, #30
+    str x0, [sp, #-16]!
+    adr x0, str_2
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _cons
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _cons
+    str x0, [sp, #-16]!
     adr x0, base_dict
     ldr x0, [x0]
-    str x0, [sp, #-16]!
-    adr x0, sign_id
-    ldr x1, [sp], #16
+    mov x1, x0
+    ldr x0, [sp], #16
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_1
-    mov x0, #30
-    adr x1, c
-    str x0, [x1]
-    adr x0, sign_id
-blk_end_1:
+    str x0, [sp, #-16]!
+    ldr x0, [sp], #16
     adr x1, extended_dict
     str x0, [x1]
     adr x0, sign_id
@@ -89,24 +97,24 @@ blk_end_1:
     adr x0, res1
     ldr x0, [x0]
     cmp x0, #4096
-    b.hi print_str_3
-print_num_2:
+    b.hi print_str_2
+print_num_1:
     bl _print_int
-    b print_done_4
-print_str_3:
+    b print_done_3
+print_str_2:
     // Magic IO Write to FD 1
     mov x1, x0       // buf = RHS
     mov x0, #1   // fd
     mov x2, #0       // len
-strlen_5:
+strlen_4:
     ldrb w3, [x1, x2]
-    cbz w3, strlen_done_6
+    cbz w3, strlen_done_5
     add x2, x2, #1
-    b strlen_5
-strlen_done_6:
+    b strlen_4
+strlen_done_5:
     mov x8, #64      // syscall write
     svc #0
-print_done_4:
+print_done_3:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
@@ -114,24 +122,24 @@ print_done_4:
     adr x0, res2
     ldr x0, [x0]
     cmp x0, #4096
-    b.hi print_str_8
-print_num_7:
+    b.hi print_str_7
+print_num_6:
     bl _print_int
-    b print_done_9
-print_str_8:
+    b print_done_8
+print_str_7:
     // Magic IO Write to FD 1
     mov x1, x0       // buf = RHS
     mov x0, #1   // fd
     mov x2, #0       // len
-strlen_10:
+strlen_9:
     ldrb w3, [x1, x2]
-    cbz w3, strlen_done_11
+    cbz w3, strlen_done_10
     add x2, x2, #1
-    b strlen_10
-strlen_done_11:
+    b strlen_9
+strlen_done_10:
     mov x8, #64      // syscall write
     svc #0
-print_done_9:
+print_done_8:
     adr x0, sign_id
 blk_end_0:
 
@@ -345,7 +353,6 @@ _print_int:
 .bss
 base_dict: .quad 0
 extended_dict: .quad 0
-c: .quad 0
 res1: .quad 0
 res2: .quad 0
 
