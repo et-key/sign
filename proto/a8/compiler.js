@@ -134,8 +134,54 @@ function resolveVar(name) {
 function compileNode(node) {
 	if (!node) return compileUnit();
 
-	// 1. Block (Short-Circuit OR)
+	// 1. Block (Short-Circuit OR or Dictionary)
 	if (node.type === 'block') {
+		// Heuristic: If all statements in the block are `infix :` (definitions), it acts as a Dictionary Environment
+		let isDict = node.body.length > 0 && node.body.every(stmt =>
+			stmt.type === 'infix' && stmt.op === ':' && stmt.left && stmt.left.type === 'identifier'
+		);
+
+		if (isDict) {
+			let code = `    adr x0, sign_id\n    str x0, [sp, #-16]!\n`; // Nil tail
+
+			// Build dictionary list in reverse order
+			for (let i = node.body.length - 1; i >= 0; i--) {
+				let stmt = node.body[i];
+				let key = stmt.left.value;
+				let valNode = stmt.right;
+
+				// Ensure string key is in string table
+				let lblKey = stringTable[key];
+				if (!lblKey) {
+					lblKey = `str_${stringCounter++}`;
+					stringTable[key] = lblKey;
+				}
+
+				// Compile Value
+				code += compileNode(valNode);
+				code += `    str x0, [sp, #-16]!\n`;
+
+				// Load Key
+				code += `    adr x0, ${lblKey}\n`;
+				code += `    mov x1, x0\n`;
+				// Pop Value
+				code += `    ldr x0, [sp], #16\n`;
+
+				// Make Pair [Key, Value] -> x1=Key, x0=Value
+				code += `    bl _cons\n`;
+
+				// Push Pair onto List
+				code += `    mov x1, x0\n`;
+				code += `    ldr x0, [sp], #16\n`; // Pop tail
+				code += `    bl _cons\n`;
+
+				// Push current list
+				code += `    str x0, [sp, #-16]!\n`;
+			}
+			code += `    ldr x0, [sp], #16\n`;
+			return code;
+		}
+
 		let code = '';
 		let lblEnd = generateLabel("blk_end");
 		for (let i = 0; i < node.body.length; i++) {
@@ -565,6 +611,46 @@ function compileInfix(node) {
 		return code;
 	}
 
+	// Dictionary Access (left-associative)
+	if (op === "'") {
+		let code = compileNode(left);
+		code += '    str x0, [sp, #-16]!\n';
+		if (right.type === 'identifier') {
+			let lbl = stringTable[right.value];
+			if (!lbl) {
+				lbl = `str_${stringCounter++}`;
+				stringTable[right.value] = lbl;
+			}
+			code += `    adr x0, ${lbl}\n`;
+		} else {
+			code += compileNode(right);
+		}
+		code += '    mov x1, x0\n'; // Key -> x1
+		code += '    ldr x0, [sp], #16\n'; // Dict -> x0
+		code += '    bl _dict_get\n';
+		return code;
+	}
+
+	// Dictionary Access (right-associative)
+	if (op === "@") {
+		let code = compileNode(right);
+		code += '    str x0, [sp, #-16]!\n';
+		if (left.type === 'identifier') {
+			let lbl = stringTable[left.value];
+			if (!lbl) {
+				lbl = `str_${stringCounter++}`;
+				stringTable[left.value] = lbl;
+			}
+			code += `    adr x0, ${lbl}\n`;
+		} else {
+			code += compileNode(left);
+		}
+		code += '    mov x1, x0\n'; // Key -> x1
+		code += '    ldr x0, [sp], #16\n'; // Dict -> x0
+		code += '    bl _dict_get\n';
+		return code;
+	}
+
 	let code = compileNode(left);
 	code += '    str x0, [sp, #-16]!\n';
 	code += compileNode(right);
@@ -576,17 +662,6 @@ function compileInfix(node) {
 	}
 	if (op === '~') {
 		code += '    bl _range\n';
-		return code;
-	}
-	if (op === "'") {
-		code += '    bl _nth\n';
-		return code;
-	}
-	if (op === '@') {
-		code += '    mov x9, x0\n';
-		code += '    mov x0, x1\n';
-		code += '    mov x1, x9\n';
-		code += '    bl _nth\n';
 		return code;
 	}
 
@@ -1272,5 +1347,16 @@ ret
 
 `;
 
+finalOutput += `
+.data
+`;
+
+// Append String Table
+for (let key in stringTable) {
+	let lbl = stringTable[key];
+	// AArch64 null-terminated string
+	finalOutput += `${lbl}:\n    .asciz "${key.replace(/"/g, '\\"')}"\n`;
+}
+
 fs.writeFileSync(OUTPUT_FILE, finalOutput);
-console.log(`Compiled to ${OUTPUT_FILE} `);
+console.log(`Compiled to ${OUTPUT_FILE}`);

@@ -207,7 +207,8 @@ tok_unit : 0
 	
 	type = tok_punc : (
 		val = `[` : parse_block tokens_next
-		val = `(` : _parse_group tokens_next
+		val = `(` : parse_block tokens_next
+		val = `{` : parse_block tokens_next
 		(ast_unit , 0) , (tokens_next , 0)
 	)
 	
@@ -221,16 +222,7 @@ tok_unit : 0
 ?
 	(ast_prefix , (op , ((head res) , 0))) , ((head (tail res)) , 0)
 
-#_parse_group :
-	tokens_next
-	res : parse_stmts tokens_next
-	exprs : head res
-	rest : head (tail res)
-	tok_r : peek rest
-	is_single : is_null (tail exprs)
-?
-	is_single : (head exprs) , ((next rest) , 0)
-	(ast_block , (exprs , 0)) , ((next rest) , 0)
+
 
 
 `parse_block : tokens -> [node, rest]`
