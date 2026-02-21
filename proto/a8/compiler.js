@@ -65,7 +65,7 @@ for (let i = 0; i < args.length; i++) {
 	}
 }
 
-const OUTPUT_FILE = path.join(__dirname, options.output);
+const OUTPUT_FILE = path.isAbsolute(options.output) ? options.output : path.resolve(process.cwd(), options.output);
 
 if (!INPUT_FILE) {
 	console.error("Usage: node compiler.js <ast_json_file> [-o output] [-O] [-g]");
