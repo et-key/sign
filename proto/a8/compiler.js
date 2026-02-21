@@ -136,10 +136,10 @@ function compileNode(node) {
 
 	// 1. Block (Short-Circuit OR or Dictionary)
 	if (node.type === 'block') {
-		// Heuristic: If all statements in the block are `infix :` (definitions) OR `prefix ~` (spread), it acts as a Dictionary Environment
+		// Heuristic: If all statements in the block are `infix :` (definitions) OR `postfix ~` (spread), it acts as a Dictionary Environment
 		let isDict = node.body.length > 0 && node.body.every(stmt =>
 			(stmt.type === 'infix' && stmt.op === ':' && stmt.left && stmt.left.type === 'identifier') ||
-			(stmt.type === 'prefix' && stmt.op === '~')
+			(stmt.type === 'postfix' && stmt.op === '~')
 		);
 
 		if (isDict) {
@@ -149,7 +149,7 @@ function compileNode(node) {
 			for (let i = node.body.length - 1; i >= 0; i--) {
 				let stmt = node.body[i];
 
-				if (stmt.type === 'prefix' && stmt.op === '~') {
+				if (stmt.type === 'postfix' && stmt.op === '~') {
 					// Spread operator: Evaluate dict to spread and concat
 					code += compileNode(stmt.expr); // Evaluate dict -> x0
 					code += `    mov x1, x0\n`;      // x1 = spread_dict

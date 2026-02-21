@@ -3,7 +3,7 @@ base_dict :
 	b : 20
 
 extended_dict :
-	~ base_dict
+	base_dict ~
 	c : 30
 
 res1 : extended_dict ' a
