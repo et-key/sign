@@ -13,9 +13,17 @@ __sign_init:
 
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x0, sign_id
+    mov x0, #20
     str x0, [sp, #-16]!
-    mov x0, #12
+    adr x0, str_0
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _cons
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _cons
+    str x0, [sp, #-16]!
+    mov x0, #10
     str x0, [sp, #-16]!
     adr x0, str_1
     mov x1, x0
@@ -25,52 +33,45 @@ __sign_init:
     ldr x0, [sp], #16
     bl _cons
     str x0, [sp, #-16]!
-    mov x0, #21
-    str x0, [sp, #-16]!
-    adr x0, str_2
-    mov x1, x0
     ldr x0, [sp], #16
-    bl _cons
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _cons
-    str x0, [sp, #-16]!
-    ldr x0, [sp], #16
-    str x0, [sp, #-16]!
-    adr x0, str_0
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _cons
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _cons
-    str x0, [sp, #-16]!
-    mov x0, #1
-    str x0, [sp, #-16]!
-    adr x0, str_3
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _cons
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _cons
-    str x0, [sp, #-16]!
-    ldr x0, [sp], #16
-    adr x1, myNum
+    adr x1, base_dict
     str x0, [x1]
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
-    adr x0, myNum
-    ldr x0, [x0]
+    adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x0, str_0
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _dict_get
+    mov x0, #30
     str x0, [sp, #-16]!
     adr x0, str_2
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _cons
+    mov x1, x0
+    ldr x0, [sp], #16
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x0, base_dict
+    ldr x0, [x0]
+    mov x1, x0
+    ldr x0, [sp], #16
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
+    bl _concat
+    str x0, [sp, #-16]!
+    ldr x0, [sp], #16
+    adr x1, extended_dict
+    str x0, [x1]
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_0
+    adr x0, extended_dict
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    adr x0, str_1
     mov x1, x0
     ldr x0, [sp], #16
     bl _dict_get
@@ -80,15 +81,10 @@ __sign_init:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
-    adr x0, myNum
+    adr x0, extended_dict
     ldr x0, [x0]
     str x0, [sp, #-16]!
-    adr x0, str_0
-    mov x1, x0
-    ldr x0, [sp], #16
-    bl _dict_get
-    str x0, [sp, #-16]!
-    adr x0, str_1
+    adr x0, str_2
     mov x1, x0
     ldr x0, [sp], #16
     bl _dict_get
@@ -355,7 +351,8 @@ _print_int:
     .ascii "0"
 
 .bss
-myNum: .quad 0
+base_dict: .quad 0
+extended_dict: .quad 0
 res1: .quad 0
 res2: .quad 0
 
@@ -490,10 +487,8 @@ ret
 
 .data
 str_0:
-    .asciz "two"
+    .asciz "b"
 str_1:
-    .asciz "one_two"
+    .asciz "a"
 str_2:
-    .asciz "two_one"
-str_3:
-    .asciz "one"
+    .asciz "c"

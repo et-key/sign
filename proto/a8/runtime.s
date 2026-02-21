@@ -126,6 +126,7 @@ _cons:
     ldp x29, x30, [sp], #16
     ret
 
+    .global _concat
 _concat:
     // x0 = A, x1 = B
     // Return: if A is scalar -> cons(A, B)

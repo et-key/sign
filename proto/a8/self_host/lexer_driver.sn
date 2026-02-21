@@ -137,9 +137,9 @@ $ch # 0
 `Test Driver for Lexer (Functional)`
 
 #main : _ ?
-    src : "x = 123 + `foo`"
+    src : `x = 123 + `foo``
     
-    print_str "Source: "
+    print_str `Source: `
     print_str src
     print_char 10
 
@@ -149,7 +149,7 @@ $ch # 0
 
 #_process_list : list ?
     list = 0 : (
-        print_str "End of List"
+        print_str `End of List`
         print_char 10
         0
     )
@@ -160,7 +160,7 @@ $ch # 0
 #_print_token : tok ?
     type : @tok
     type = tok_eof : (
-        print_str "EOF"
+        print_str `EOF`
         print_char 10
         0
     )
@@ -168,27 +168,27 @@ $ch # 0
     val : @(tok + 8)
     
     type = tok_id : (
-        print_str "ID: "
+        print_str `ID: `
         print_str val
     )
     type = tok_num : (
-        print_str "NUM: "
+        print_str `NUM: `
         print_num val
     )
     type = tok_str : (
-        print_str "STR: "
+        print_str `STR: `
         print_str val
     )
     type = tok_op : (
-        print_str "OP: "
+        print_str `OP: `
         print_str val
     )
     type = tok_punc : (
-        print_str "PUNC: "
+        print_str `PUNC: `
         print_char val
     )
     type = tok_sep : (
-        print_str "SEP"
+        print_str `SEP`
     )
     
     print_char 10

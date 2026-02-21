@@ -183,17 +183,17 @@ PREC_PREFIX : 20
     streq (s1 + 1) (s2 + 1)
 
 #get_prec : op ?
-    streq op "*" : PREC_MUL
-    streq op "/" : PREC_MUL
-    streq op "%" : PREC_MUL
-    streq op "+" : PREC_ADD
-    streq op "-" : PREC_ADD
-    streq op "<" : PREC_CMP
-    streq op ">" : PREC_CMP
-    streq op "=" : PREC_CMP
-    streq op "&" : PREC_AND
-    streq op "|" : PREC_OR
-    streq op ";" : PREC_XOR
+    streq op `*` : PREC_MUL
+    streq op `/` : PREC_MUL
+    streq op `%` : PREC_MUL
+    streq op `+` : PREC_ADD
+    streq op `-` : PREC_ADD
+    streq op `<` : PREC_CMP
+    streq op `>` : PREC_CMP
+    streq op `=` : PREC_CMP
+    streq op `&` : PREC_AND
+    streq op `|` : PREC_OR
+    streq op `;` : PREC_XOR
     0
 $p_tokens # 0     ; Remaining tokens
 $p_curr # 0       ; Current token
@@ -361,16 +361,16 @@ ast_block : 7
 ast_infix : 8
 
 #main : _ ?
-    src : "#main : ? \
+    src : `#main : ? \
 1 + 2 * 3 \
 x < y | z \
 a ; b \
 f x y \
 (1 + 2) * 3 \
 [4 + 5] * 6 \
-{7 + 8} * 9"
+{7 + 8} * 9`
     
-    print_str "Source: "
+    print_str `Source: `
     print_str src
     print_char 10
     
@@ -380,7 +380,7 @@ f x y \
     init_parser tokens
     ast : parse_program 0
     
-    print_str "AST Generated."
+    print_str `AST Generated.`
     print_char 10
     _print_ast ast
 
@@ -392,43 +392,43 @@ f x y \
     
     ; List of Defs
     type = ast_def : (
-        print_str "(DEF "
+        print_str `(DEF `
         name : @val
         print_str name
-        print_str " ARGS "
+        print_str ` ARGS `
         
         args : @(val + 8)
         ; TODO print args
         
-        print_str " BODY "
+        print_str ` BODY `
         body : @(val + 16)
         _print_ast body
-        print_str ")"
+        print_str `)`
         print_char 10
         0
     )
     
     type = ast_block : (
-        print_str "(BLOCK "
+        print_str `(BLOCK `
         _print_ast val
-        print_str ")"
+        print_str `)`
         print_char 10
         0
     )
     
     type = ast_apply : (
-        print_str "(APPLY "
+        print_str `(APPLY `
         func : @val
         _print_ast func
         print_char 32
         arg : @(val + 8)
         _print_ast arg
-        print_str ")"
+        print_str `)`
         0
     )
 
     type = ast_infix : (
-        print_str "("
+        print_str `(`
         op : @val
         print_str op
         print_char 32 ; space
@@ -440,21 +440,21 @@ f x y \
         rhs : @(val + 16)
         _print_ast rhs
         
-        print_str ")"
+        print_str `)`
         0
     )
     
     type = ast_num : (
-        print_str "(NUM "
+        print_str `(NUM `
         print_num (@val)
-        print_str ")"
+        print_str `)`
         0
     )
     
     type = ast_id : (
-        print_str "(ID "
+        print_str `(ID `
         print_str (@val)
-        print_str ")"
+        print_str `)`
         0
     )
     

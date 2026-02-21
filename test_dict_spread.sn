@@ -1,0 +1,13 @@
+base_dict :
+	a : 10
+	b : 20
+
+extended_dict :
+	~ base_dict
+	c : 30
+
+res1 : extended_dict ' a
+res2 : c @ extended_dict
+
+1 # res1
+1 # res2

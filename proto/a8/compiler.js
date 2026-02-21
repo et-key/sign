@@ -136,9 +136,10 @@ function compileNode(node) {
 
 	// 1. Block (Short-Circuit OR or Dictionary)
 	if (node.type === 'block') {
-		// Heuristic: If all statements in the block are `infix :` (definitions), it acts as a Dictionary Environment
+		// Heuristic: If all statements in the block are `infix :` (definitions) OR `prefix ~` (spread), it acts as a Dictionary Environment
 		let isDict = node.body.length > 0 && node.body.every(stmt =>
-			stmt.type === 'infix' && stmt.op === ':' && stmt.left && stmt.left.type === 'identifier'
+			(stmt.type === 'infix' && stmt.op === ':' && stmt.left && stmt.left.type === 'identifier') ||
+			(stmt.type === 'prefix' && stmt.op === '~')
 		);
 
 		if (isDict) {
@@ -147,6 +148,25 @@ function compileNode(node) {
 			// Build dictionary list in reverse order
 			for (let i = node.body.length - 1; i >= 0; i--) {
 				let stmt = node.body[i];
+
+				if (stmt.type === 'prefix' && stmt.op === '~') {
+					// Spread operator: Evaluate dict to spread and concat
+					code += compileNode(stmt.expr); // Evaluate dict -> x0
+					code += `    mov x1, x0\n`;      // x1 = spread_dict
+					code += `    ldr x0, [sp], #16\n`; // x0 = current_built_tail
+					// Spread logic: The rightmost items should be at the base of the list.
+					// Actually, if we are building backwards:
+					// current_built_tail currently has the items defined *after* this spread.
+					// We want: spread_dict concatenated with current_built_tail.
+					// _concat(x0=spread_dict, x1=current_built_tail) -> x0
+					code += `    mov x2, x0\n`; // temp
+					code += `    mov x0, x1\n`; // x0 = spread_dict
+					code += `    mov x1, x2\n`; // x1 = current_built_tail
+					code += `    bl _concat\n`;
+					code += `    str x0, [sp, #-16]!\n`; // push new tail
+					continue;
+				}
+
 				let key = stmt.left.value;
 				let valNode = stmt.right;
 
@@ -661,7 +681,7 @@ function compileInfix(node) {
 		return code;
 	}
 	if (op === '~') {
-		code += '    bl _range\n';
+		code += '    bl _concat\n'; // Array/Dictionary Spread
 		return code;
 	}
 
