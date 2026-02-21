@@ -1,1 +1,100 @@
+`Test Driver for Parser`
+ast_apply : 6
+ast_block : 7
+ast_infix : 8
 
+#main : _ ?
+    src : `#main : ? \
+1 + 2 * 3 \
+x < y | z \
+a ; b \
+f x y \
+(1 + 2) * 3 \
+[4 + 5] * 6 \
+{7 + 8} * 9`
+    
+    print_str `Source: `
+    print_str src
+    print_char 10
+    
+    init_lexer src
+    tokens : tokenize 0
+    
+    init_parser tokens
+    ast : parse_program 0
+    
+    print_str `AST:`
+    print_char 10
+    _print_ast ast
+
+#_print_ast : val ?
+    val = 0 : 0
+    
+    node_type : @val
+    
+    node_type = ast_num : (
+        print_str `(NUM `
+        print_num (@(val + 8))
+        print_str `)`
+        0
+    )
+    
+    node_type = ast_id : (
+        print_str `(ID `
+        print_str (@(val + 8))
+        print_str `)`
+        0
+    )
+    
+    node_type = ast_block : (
+        print_str `(BLOCK `
+        _print_ast (@(val + 8))
+        print_str `)`
+        print_char 10
+        0
+    )
+    
+    node_type = ast_apply : (
+        print_str `(APPLY `
+        func : @(val + 8)
+        _print_ast func
+        print_char 32
+        arg : @(val + 16)
+        _print_ast arg
+        print_str `)`
+        0
+    )
+
+    node_type = ast_infix : (
+        print_str `(`
+        op : @(val + 8)
+        print_str op
+        print_char 32
+        
+        lhs : @(val + 16)
+        _print_ast lhs
+        
+        print_char 32
+        rhs : @(val + 24)
+        _print_ast rhs
+        
+        print_str `)`
+        0
+    )
+    
+    node_type = ast_def : (
+        print_str `(DEF `
+        print_str (@(val + 8))
+        print_str ` `
+        ; print args...
+        print_str ` `
+        _print_ast (@(val + 24)) ; body
+        print_str `)`
+        print_char 10
+        0
+    )
+    
+    ; List handling
+    _print_ast (head val)
+    print_char 32
+    _print_ast (tail val)

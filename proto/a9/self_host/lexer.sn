@@ -1,1 +1,171 @@
+`
+Sign Pure Functional Lexer
+(Strict No-Local-Binding Version)
+`
+
+`--- Token Constants ---`
+tok_eof : -1
+tok_id : 1
+tok_num : 2
+tok_str : 3
+tok_op : 4
+tok_punc : 5
+tok_sep : 6
+tok_unit : 0
+
+`--- Predicates (Pure) ---`
+#is_space : c ? c = ` ` | c = \	 | c = \
+
+#is_digit : c ? c >= `0` & c <= `9`
+#is_alpha : c ? (c >= `A` & c <= `Z`) | (c >= `A` & c <= `Z`) | c = `_`
+#is_op_char : c ? c = `=` | c = `+` | c = `-` | c = `*` | c = `/` | c = `%` | c = `^` | c = `&` | c = `|` | c = `!` | c = `<` | c = `>` | c = `?` | c = `:` | c = `;` | c = `~`
+
+`--- Helper: List Construction ---`
+#length : list ?
+	list = 0 : 0
+	1 + length (tail list)
+
+#reverse : list ?
+	_rev list 0
+
+#_rev : list acc ?
+	list = 0 : acc
+	_rev (tail list) ((head list) , acc)
+
+#list_to_string :
+	list
+	len : length list
+	str : alloc (len + 1)
+?
+	_write_list list str 0
+	(str + len) # 0
+	str
+
+#_write_list : list buf idx ?
+	list = 0 : 0
+	(buf + idx) # head list
+	_write_list (tail list) buf (idx + 1)
+
+`--- Core Lexer Logic ---`
+
+`tokenize : source -> tokens`
+#tokenize : source ?
+	_tokenize_loop source (len source) 0
+
+#_tokenize_loop :
+	source 
+	source_len 
+	pos
+	res : scan_token source source_len pos
+	token : head res
+	type : @token
+?
+	type = tok_eof : token , 0
+	token , (_tokenize_loop source source_len (head (tail res)))
+
+
+#scan_token :
+	source 
+	source_len 
+	pos
+	c : nth source pos
+	res_num : scan_num source source_len pos
+	val_str : head res_num
+	val : _parse_int val_str
+	res_id : scan_id source source_len pos
+	res_op : scan_op source source_len pos
+	res_str : scan_str source source_len pos
+?
+	pos >= source_len : (
+		(tok_eof , 0) , (pos , 0)
+	)
+	
+	is_space c : (
+		scan_token source source_len (pos + 1)
+	)
+	
+	c = \ : (
+		(tok_sep , 0) , ((pos + 1) , 0)
+	)
+	
+	is_digit c : (
+		(tok_num , val) , ((head (tail res_num)) , 0)
+	)
+	
+	is_alpha c : (
+		(tok_id , (head res_id)) , ((head (tail res_id)) , 0)
+	)
+	
+	is_op_char c : (
+		(tok_op , (head res_op)) , ((head (tail res_op)) , 0)
+	)
+	
+	c = ``` : (
+		(tok_str , (head res_str)) , ((head (tail res_str)) , 0)
+	)
+	
+	`Default: Punctuation`
+	(tok_punc , c) , ((pos + 1) , 0)
+
+
+
+`--- Specific Scanners ---`
+
+#scan_num : source source_len pos ?
+	_scan_while source source_len pos is_digit
+
+#scan_id : source source_len pos ?
+	`ID can contain alpha or digit after first char`
+	_scan_while source source_len pos (c ? is_alpha c | is_digit c)
+
+#scan_op : source source_len pos ?
+	_scan_while source source_len pos is_op_char
+
+#_scan_while :
+	source 
+	source_len 
+	pos 
+	pred
+	res : _scan_while_rec source source_len pos pred 0
+	chars_rev : head res
+	chars : reverse chars_rev
+?
+	(list_to_string chars) , ((head (tail res)) , 0)
+
+#_scan_while_rec : source source_len pos pred acc ?
+	pos >= source_len : (
+		acc , (pos , 0)
+	)
+	c : nth source pos
+	pred c : (
+		_scan_while_rec source source_len (pos + 1) pred (c , acc)
+	)
+	acc , (pos , 0)
+
+#scan_str :
+	source 
+	source_len 
+	pos
+	start_pos : pos + 1
+	res : _scan_str_rec source source_len start_pos 0
+	chars_rev : head res
+	chars : reverse chars_rev
+?
+	`Skip opening backtick`
+	(list_to_string chars) , ((head (tail res)) , 0)
+
+#_scan_str_rec : source source_len pos acc ?
+	pos >= source_len : (
+		acc , (pos , 0)
+	)
+	c : nth source pos
+	(c = ``` | c = -1) : (
+		`End of string`
+		acc , ((pos + 1) , 0)
+	)
+	_scan_str_rec source source_len (pos + 1) (c , acc)
+
+`--- Utils ---`
+#_parse_int : str ?
+	str
 

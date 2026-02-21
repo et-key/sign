@@ -1,1 +1,79 @@
+`Test Driver for Parser Sections`
 
+#main : _ ?
+    _test `[+]`
+    _test `[+ 1]`
+    _test `[1 +]`
+    _test `[1, 2]`
+
+#_test : src ?
+    print_str `Testing: `
+    print_str src
+    print_char 10
+    
+    tokens : tokenize src
+    (res ?
+         (ast ?
+             _print_ast ast 0
+         ) (head res)
+    ) (parse_program tokens)
+    print_char 10
+
+#_print_ast : node indent ?
+    _print_indent indent
+    
+    type : head node
+    val : head (tail node)
+    
+    type = ast_infix : (
+        print_str `INFIX: `
+        print_str val
+        print_char 10
+        
+        left : head (tail (tail node))
+        right : head (tail (tail (tail node)))
+        
+        _print_ast left (indent + 2)
+        _print_ast right (indent + 2)
+        0
+    )
+    
+    type = ast_block : (
+        print_str `BLOCK`
+        print_char 10
+        _print_list val (indent + 2)
+        0
+    )
+    
+    type = ast_id : (
+        print_str `ID: `
+        print_str val
+        print_char 10
+        0
+    )
+
+    type = ast_num : (
+        print_str `NUM: `
+        print_num val
+        print_char 10
+        0
+    )
+    
+    type = ast_op : (
+        print_str `OP: `
+        print_str val
+        print_char 10
+        0
+    )
+    
+    0
+
+#_print_list : list indent ?
+    list = 0 : 0
+    _print_ast (head list) indent
+    _print_list (tail list) indent
+
+#_print_indent : n ?
+    n <= 0 : 0
+    print_char 32
+    _print_indent (n - 1)
