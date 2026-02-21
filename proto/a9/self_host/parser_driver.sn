@@ -1,0 +1,463 @@
+`
+Sign Self-Hosting Lexer
+Ported from prepare_lexer.js / parser.js
+`
+
+`--- Token Constants ---`
+tok_eof : -1
+tok_id : 1
+tok_num : 2
+tok_str : 3
+tok_op : 4
+tok_punc : 5
+tok_sep : 6
+tok_lparen : 7
+tok_rparen : 8
+
+`--- Global State (Scanner) ---`
+$src # 0
+$src_len # 0
+$pos # 0
+$ch # 0
+
+#init_lexer : source ?
+	$src # source
+	$src_len # len source
+	$pos # 0
+	read_char 0
+
+#read_char : _ ?
+	$p # @pos
+	p >= @src_len : (
+		$ch # -1
+		0
+	)
+	$c # nth @src p
+	$ch # c
+	$pos # p + 1
+	c
+
+`--- Predicates ---`
+#is_space : c ? c = 32 | c = \	 | c = 13
+#is_digit : c ? c >= 48 & c <= 57
+#is_alpha : c ? (c >= 65 & c <= 90) | (c >= 97 & c <= 122) | c = 95
+#is_op_char : c ? c = 61 | c = 43 | c = 45 | c = 42 | c = 47 | c = 37 | c = 94 | c = 38 | c = 124 | c = 33 | c = 60 | c = 62 | c = 63 | c = 58 | c = 59 | c = 126
+
+`--- Functional Helpers ---`
+#length : list ?
+	list = 0 : 0
+	1 + length (tail list)
+
+#list_to_string : list ?
+	len : length list
+	str : alloc (len + 1)
+	_write_list list str 0
+	(str + len) # 0
+	str
+
+#_write_list : list buf idx ?
+	list = 0 : 0
+	(buf + idx) # head list
+	_write_list (tail list) buf (idx + 1)
+
+`--- Scanners ---`
+#tokenize : _ ?
+	tok : scan 0
+	type : @tok
+	type = tok_eof : cons tok 0
+	cons tok (tokenize 0)
+
+#scan : _ ?
+	skip_space 0
+	c : @ch
+	c = -1 : cons tok_eof 0
+	
+	is_digit c : scan_num c
+	is_alpha c : scan_id c
+	is_op_char c : scan_op 0
+	
+	c = \` : scan_str 0
+	
+	c = \ : (
+		read_char 0
+		cons tok_sep 0
+	)
+	
+	c = 40 | c = 91 | c = 123 : ( ; ( [ {
+		read_char 0
+		cons tok_lparen 0
+	)
+	c = 41 | c = 93 | c = 125 : ( ; ) ] }
+		read_char 0
+		cons tok_rparen 0
+	)
+	
+	read_char 0
+	cons tok_punc c
+
+#skip_space : _ ?
+	is_space (@ch) : (
+		read_char 0
+		skip_space 0
+	)
+	0
+
+#scan_id : c ?
+	chars : _scan_id_rec c
+	str : list_to_string chars
+	cons tok_id str
+
+#_scan_id_rec : c ?
+	is_alpha c | is_digit c : (
+		cons c (_scan_id_rec (read_char 0))
+	)
+	0
+
+#scan_num : c ?
+	cons tok_num (_scan_num_rec c 0)
+
+#_scan_num_rec : c acc ?
+	is_digit c : (
+		val : acc * 10 + (c - 48)
+		_scan_num_rec (read_char 0) val
+	)
+	acc
+
+#scan_op : _ ?
+	chars : _scan_op_rec (@ch)
+	str : list_to_string chars
+	cons tok_op str
+
+#_scan_op_rec : c ?
+	is_op_char c : (
+		cons c (_scan_op_rec (read_char 0))
+	)
+	0
+
+#scan_str : _ ?
+	read_char 0
+	chars : _scan_str_rec (read_char 0)
+	cons tok_str (list_to_string chars)
+
+#_scan_str_rec : c ?
+	c = \` | c = -1 : (
+		read_char 0
+		0
+	)
+	cons c (_scan_str_rec (read_char 0))
+`
+Sign Self-Hosting Parser
+Parses token list into AST (S-expressions)
+`
+
+`--- AST Node Types ---`
+ast_num : 1
+ast_id : 2
+ast_str : 3
+ast_op : 4  ; prefix/infix
+ast_def : 5
+ast_apply : 6
+ast_block : 7
+
+ast_infix : 8
+
+tok_lparen : 7
+tok_rparen : 8
+
+`--- Precedence ---`
+PREC_APPLY : 6
+PREC_XOR : 11
+PREC_OR : 12
+PREC_AND : 13
+PREC_CMP : 14
+PREC_ADD : 15
+PREC_MUL : 16
+PREC_PREFIX : 20
+
+#streq : s1 s2 ?
+	s1 = s2 : 1 ; Ptr equality optimize
+	c1 : @s1
+	c2 : @s2
+	c1 != c2 : 0
+	c1 = 0 : 1
+	streq (s1 + 1) (s2 + 1)
+
+#get_prec : op ?
+	streq op \* : PREC_MUL
+	streq op \/ : PREC_MUL
+	streq op \% : PREC_MUL
+	streq op \+ : PREC_ADD
+	streq op \- : PREC_ADD
+	streq op \< : PREC_CMP
+	streq op \> : PREC_CMP
+	streq op \= : PREC_CMP
+	streq op \& : PREC_AND
+	streq op \| : PREC_OR
+	streq op \; : PREC_XOR
+	0
+$p_tokens # 0     ; Remaining tokens
+$p_curr # 0       ; Current token
+
+#init_parser : toks ?
+	$p_tokens # toks
+	advance 0
+
+#advance : _ ?
+	p_tokens = 0 : (
+		$p_curr # cons tok_eof 0
+		0
+	)
+	$p_curr # head p_tokens
+	$p_tokens # tail p_tokens
+	p_curr
+
+#peek_type : _ ? @(peek 0)
+#peek_val : _ ? @(peek 0 + 8)
+
+#expect_val : val ?
+	v : peek_val 0
+	v = val : (
+		advance 0
+		1
+	)
+	0 ; TODO: Error handling
+
+#expect_type : type ?
+	t : peek_type 0
+	t = type : (
+		advance 0
+		1
+	)
+	0
+
+#can_start_expr : _ ?
+	t : peek_type 0
+	t = tok_num : 1
+	t = tok_id : 1
+	t = tok_lparen : 1
+	0 ; TODO: strings, parens, prefix ops
+
+#parse_program : _ ?
+	type : peek_type 0
+	type = tok_eof : 0
+	type = tok_sep : (
+		advance 0
+		parse_program 0
+	)
+	
+	def : parse_def 0
+	cons def (parse_program 0)
+
+#parse_def : _ ?
+	expect_val 35 ; #
+	
+	name : peek_val 0
+	expect_type tok_id
+	
+	expect_val \: ; :
+	
+	args : parse_args 0
+	
+	expect_val \? ; ?
+	
+	body : parse_block 0
+	
+	cons ast_def (cons name (cons args (cons body 0)))
+
+#parse_block : _ ?
+	type : peek_type 0
+	type = tok_sep : (
+		advance 0
+		parse_block 0
+	)
+	
+	expr : parse_expr 0
+	
+	type : peek_type 0
+	type = tok_sep : (
+		advance 0
+		rest : parse_block_rest 0
+		rest = 0 : expr
+		cons ast_block (cons expr rest)
+	)
+	expr
+
+#parse_block_rest : _ ?
+	type : peek_type 0
+	type = tok_eof : 0
+	type = 35 : 0 ; # start of next def
+	
+	type = tok_sep : (
+		advance 0
+		parse_block_rest 0
+	)
+	
+	expr : parse_expr 0
+	cons expr (parse_block_rest 0)
+
+#parse_args : _ ?
+	t : peek_type 0
+	v : peek_val 0
+	
+	; Stop at ?
+	v = \? : 0
+	
+	expect_type tok_id
+	cons v (parse_args 0)
+
+#parse_expr : min_prec ?
+	lhs : parse_primary 0
+	_parse_expr_loop lhs min_prec
+
+#_parse_expr_loop : lhs min_prec ?
+	; 1. Check for application (Juxtaposition)
+	is_app : can_start_expr 0
+	is_app & (PREC_APPLY >= min_prec) : (
+		rhs : parse_expr (PREC_APPLY + 1)
+		new_lhs : cons ast_apply (cons lhs (cons rhs 0))
+		_parse_expr_loop new_lhs min_prec
+	)
+
+	type : peek_type 0
+	type != tok_op : lhs
+	
+	op : peek_val 0
+	prec : get_prec op
+	
+	prec < min_prec : lhs
+	
+	advance 0 ; Consume op
+	
+	rhs : parse_expr (prec + 1) ; Right associative? No, left. prec + 1
+	
+	new_lhs : cons ast_infix (cons op (cons lhs (cons rhs 0)))
+	_parse_expr_loop new_lhs min_prec
+
+#parse_primary : _ ?
+	t : peek_type 0
+	v : peek_val 0
+	
+	t = tok_num : (
+		advance 0
+		cons ast_num (cons v 0)
+	)
+	t = tok_id : (
+		advance 0
+		cons ast_id (cons v 0)
+	)
+	
+	t = tok_lparen : (
+		advance 0
+		expr : parse_expr 0
+		expect_type tok_rparen
+		expr
+	)
+	
+	cons ast_num (cons 999 0) ; Fallback
+`Test Driver for Parser`
+
+ast_apply : 6
+ast_block : 7
+ast_infix : 8
+
+#main : _ ?
+	src : `#main : ? \
+1 + 2 * 3 \
+x < y | z \
+a ; b \
+f x y \
+(1 + 2) * 3 \
+[4 + 5] * 6 \
+{7 + 8} * 9`
+	
+	print_str `Source: `
+	print_str src
+	print_char 10
+	
+	init_lexer src
+	tokens : tokenize 0
+	
+	init_parser tokens
+	ast : parse_program 0
+	
+	print_str `AST Generated.`
+	print_char 10
+	_print_ast ast
+
+#_print_ast : node ?
+	node = 0 : 0
+	
+	type : @node
+	val : @(node + 8)
+	
+	; List of Defs
+	type = ast_def : (
+		print_str `(DEF `
+		name : @val
+		print_str name
+		print_str ` ARGS `
+		
+		args : @(val + 8)
+		; TODO print args
+		
+		print_str ` BODY `
+		body : @(val + 16)
+		_print_ast body
+		print_str \)
+		print_char 10
+		0
+	)
+	
+	type = ast_block : (
+		print_str `(BLOCK `
+		_print_ast val
+		print_str \)
+		print_char 10
+		0
+	)
+	
+	type = ast_apply : (
+		print_str `(APPLY `
+		func : @val
+		_print_ast func
+		print_char 32
+		arg : @(val + 8)
+		_print_ast arg
+		print_str \)
+		0
+	)
+
+	type = ast_infix : (
+		print_str \(
+		op : @val
+		print_str op
+		print_char 32 ; space
+		
+		lhs : @(val + 8)
+		_print_ast lhs
+		
+		print_char 32
+		rhs : @(val + 16)
+		_print_ast rhs
+		
+		print_str \)
+		0
+	)
+	
+	type = ast_num : (
+		print_str `(NUM `
+		print_num (@val)
+		print_str \)
+		0
+	)
+	
+	type = ast_id : (
+		print_str `(ID `
+		print_str (@val)
+		print_str \)
+		0
+	)
+	
+	; If it's a list (Program), iterate
+	_print_ast (@node)
+	_print_ast (tail node)
