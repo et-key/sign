@@ -50,28 +50,28 @@ tok_unit : 0
 
 `--- Precedence Table (Pure) ---`
 #get_prec : op_str ?
-	streq op_str "+" : 15
-	streq op_str "-" : 15
-	streq op_str "*" : 16
-	streq op_str "/" : 16
-	streq op_str "%" : 16
-	streq op_str ":" : 2
-	streq op_str "?" : 5
-	streq op_str "," : 6
-	streq op_str "=" : 14
-	streq op_str "==" : 14
-	streq op_str "<" : 14
-	streq op_str ">" : 14
-	streq op_str "<=" : 14
-	streq op_str ">=" : 14
-	streq op_str "!=" : 14
+	streq op_str `+` : 15
+	streq op_str `-` : 15
+	streq op_str `*` : 16
+	streq op_str `/` : 16
+	streq op_str `%` : 16
+	streq op_str `:` : 2
+	streq op_str `?` : 5
+	streq op_str `,` : 6
+	streq op_str `=` : 14
+	streq op_str `==` : 14
+	streq op_str `<` : 14
+	streq op_str `>` : 14
+	streq op_str `<=` : 14
+	streq op_str `>=` : 14
+	streq op_str `!=` : 14
 	0
 
 #is_right_assoc : op_str ?
-	streq op_str ":" : 1
-	streq op_str "?" : 1
-	streq op_str "," : 1
-	streq op_str "^" : 1
+	streq op_str `:` : 1
+	streq op_str `?` : 1
+	streq op_str `,` : 1
+	streq op_str `^` : 1
 	0
 
 `--- Parser Helpers ---`
@@ -182,10 +182,10 @@ tok_unit : 0
 	0
 
 #is_prefix_op : op ?
-	streq op "!" : 1
-	streq op "#" : 1
-	streq op "$" : 1
-	streq op "@" : 1 
+	streq op `!` : 1
+	streq op `#` : 1
+	streq op `$` : 1
+	streq op `@` : 1 
 	0
 
 `parse_primary : tokens -> [node, rest]`
@@ -206,8 +206,9 @@ tok_unit : 0
 	)
 	
 	type = tok_punc : (
-		val = 91 : parse_block tokens_next
-		val = 40 : _parse_group tokens_next
+		val = `[` : parse_block tokens_next
+		val = `(` : parse_block tokens_next
+		val = `{` : parse_block tokens_next
 		(ast_unit , 0) , (tokens_next , 0)
 	)
 	
@@ -221,16 +222,7 @@ tok_unit : 0
 ?
 	(ast_prefix , (op , ((head res) , 0))) , ((head (tail res)) , 0)
 
-#_parse_group :
-	tokens_next
-	res : parse_stmts tokens_next
-	exprs : head res
-	rest : head (tail res)
-	tok_r : peek rest
-	is_single : is_null (tail exprs)
-?
-	is_single : (head exprs) , ((next rest) , 0)
-	(ast_block , (exprs , 0)) , ((next rest) , 0)
+
 
 
 `parse_block : tokens -> [node, rest]`
@@ -260,14 +252,14 @@ tok_unit : 0
 
 #make_infix : op lhs rhs ? ast_infix , (op , (lhs , (rhs , 0)))
 
-#make_lambda : params body ? make_infix "?" params body
+#make_lambda : params body ? make_infix `?` params body
 
 `transform_section : exprs -> node`
 #transform_section :
 	exprs
 	len : length exprs
-	p1 : make_id "$1"
-	p2 : make_id "$2"
+	p1 : make_id `$1`
+	p2 : make_id `$2`
 ?
 	len = 1 : _transform_section_1 exprs p1 p2
 	len = 2 : _transform_section_2 exprs p1 p2
@@ -281,7 +273,7 @@ tok_unit : 0
 	type : head e1
 	op_str : tok_val (head (tail e1))
 ?
-	type = ast_op : make_lambda (make_infix "," p1 p2) (make_infix op_str p1 p2)
+	type = ast_op : make_lambda (make_infix `,` p1 p2) (make_infix op_str p1 p2)
 	ast_block , (exprs , 0)
 
 #_transform_section_2 :
@@ -298,5 +290,6 @@ tok_unit : 0
 	t1 = ast_op : make_lambda p1 (make_infix op_str_1 p1 e2)
 	t2 = ast_op : make_lambda p1 (make_infix op_str_2 e1 p1)
 	ast_block , (exprs , 0)
+
 
 

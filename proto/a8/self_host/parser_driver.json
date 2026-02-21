@@ -4066,54 +4066,68 @@
                                                                                   "type": "apply",
                                                                                   "func": {
                                                                                     "type": "infix",
-                                                                                    "op": ":",
+                                                                                    "op": "=",
                                                                                     "left": {
-                                                                                      "type": "infix",
-                                                                                      "op": "=",
-                                                                                      "left": {
-                                                                                        "type": "identifier",
-                                                                                        "value": "val"
-                                                                                      },
-                                                                                      "right": {
-                                                                                        "type": "number",
-                                                                                        "value": 91
-                                                                                      }
+                                                                                      "type": "identifier",
+                                                                                      "value": "val"
                                                                                     },
                                                                                     "right": {
                                                                                       "type": "identifier",
-                                                                                      "value": "parse_block"
+                                                                                      "value": "\""
                                                                                     }
                                                                                   },
                                                                                   "arg": {
-                                                                                    "type": "identifier",
-                                                                                    "value": "tokens_next"
+                                                                                    "type": "apply",
+                                                                                    "func": {
+                                                                                      "type": "infix",
+                                                                                      "op": ":",
+                                                                                      "left": {
+                                                                                        "type": "identifier",
+                                                                                        "value": "\""
+                                                                                      },
+                                                                                      "right": {
+                                                                                        "type": "identifier",
+                                                                                        "value": "parse_block"
+                                                                                      }
+                                                                                    },
+                                                                                    "arg": {
+                                                                                      "type": "identifier",
+                                                                                      "value": "tokens_next"
+                                                                                    }
                                                                                   }
                                                                                 },
                                                                                 {
                                                                                   "type": "apply",
                                                                                   "func": {
                                                                                     "type": "infix",
-                                                                                    "op": ":",
+                                                                                    "op": "=",
                                                                                     "left": {
-                                                                                      "type": "infix",
-                                                                                      "op": "=",
-                                                                                      "left": {
-                                                                                        "type": "identifier",
-                                                                                        "value": "val"
-                                                                                      },
-                                                                                      "right": {
-                                                                                        "type": "number",
-                                                                                        "value": 40
-                                                                                      }
+                                                                                      "type": "identifier",
+                                                                                      "value": "val"
                                                                                     },
                                                                                     "right": {
                                                                                       "type": "identifier",
-                                                                                      "value": "_parse_group"
+                                                                                      "value": "\""
                                                                                     }
                                                                                   },
                                                                                   "arg": {
-                                                                                    "type": "identifier",
-                                                                                    "value": "tokens_next"
+                                                                                    "type": "apply",
+                                                                                    "func": {
+                                                                                      "type": "infix",
+                                                                                      "op": ":",
+                                                                                      "left": {
+                                                                                        "type": "identifier",
+                                                                                        "value": "\""
+                                                                                      },
+                                                                                      "right": {
+                                                                                        "type": "identifier",
+                                                                                        "value": "_parse_group"
+                                                                                      }
+                                                                                    },
+                                                                                    "arg": {
+                                                                                      "type": "identifier",
+                                                                                      "value": "tokens_next"
+                                                                                    }
                                                                                   }
                                                                                 },
                                                                                 {

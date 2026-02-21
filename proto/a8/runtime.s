@@ -126,6 +126,7 @@ _cons:
     ldp x29, x30, [sp], #16
     ret
 
+    .global _concat
 _concat:
     // x0 = A, x1 = B
     // Return: if A is scalar -> cons(A, B)
@@ -188,6 +189,41 @@ _nth:
 .Lnth_fail:
     adr x0, sign_id
 .Lnth_end:
+    ldp x29, x30, [sp], #16
+    ret
+
+    .global _dict_get
+_dict_get:
+    // x1 = Key Ptr, x0 = Dict List Ptr
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq .Ldict_fail
+.Ldict_loop:
+    // Extract Pair
+    ldr x2, [x0]      // x2 = Pair [Key, Value]
+    ldr x3, [x0, #8]  // x3 = Next Dict
+    
+    // Extract Key and Value
+    ldr x4, [x2]      // x4 = Pair.Key Ptr
+    ldr x5, [x2, #8]  // x5 = Pair.Value Ptr
+    
+    // Compare Keys (Pointer Comparison for literal string deduplication)
+    cmp x1, x4
+    b.eq .Ldict_found
+    
+    // Move to next
+    mov x0, x3
+    cmp x0, x9
+    b.eq .Ldict_fail
+    b .Ldict_loop
+.Ldict_found:
+    mov x0, x5
+    b .Ldict_end
+.Ldict_fail:
+    adr x0, sign_id
+.Ldict_end:
     ldp x29, x30, [sp], #16
     ret
 

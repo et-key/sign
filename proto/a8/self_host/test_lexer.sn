@@ -1,9 +1,9 @@
 `Test Driver for Lexer (Functional)`
 
 #main : _ ?
-    src : "x = 123 + `foo`"
+    src : `x = 123 + `foo``
     
-    print_str "Source: "
+    print_str `Source: `
     print_str src
     print_char 10
 

@@ -65,7 +65,7 @@ for (let i = 0; i < args.length; i++) {
 	}
 }
 
-const OUTPUT_FILE = path.join(__dirname, options.output);
+const OUTPUT_FILE = path.isAbsolute(options.output) ? options.output : path.resolve(process.cwd(), options.output);
 
 if (!INPUT_FILE) {
 	console.error("Usage: node compiler.js <ast_json_file> [-o output] [-O] [-g]");
@@ -134,8 +134,74 @@ function resolveVar(name) {
 function compileNode(node) {
 	if (!node) return compileUnit();
 
-	// 1. Block (Short-Circuit OR)
+	// 1. Block (Short-Circuit OR or Dictionary)
 	if (node.type === 'block') {
+		// Heuristic: If all statements in the block are `infix :` (definitions) OR `postfix ~` (spread), it acts as a Dictionary Environment
+		let isDict = node.body.length > 0 && node.body.every(stmt =>
+			(stmt.type === 'infix' && stmt.op === ':' && stmt.left && stmt.left.type === 'identifier') ||
+			(stmt.type === 'postfix' && stmt.op === '~')
+		);
+
+		if (isDict) {
+			let code = `    adr x0, sign_id\n    str x0, [sp, #-16]!\n`; // Nil tail
+
+			// Build dictionary list in reverse order
+			for (let i = node.body.length - 1; i >= 0; i--) {
+				let stmt = node.body[i];
+
+				if (stmt.type === 'postfix' && stmt.op === '~') {
+					// Spread operator: Evaluate dict to spread and concat
+					code += compileNode(stmt.expr); // Evaluate dict -> x0
+					code += `    mov x1, x0\n`;      // x1 = spread_dict
+					code += `    ldr x0, [sp], #16\n`; // x0 = current_built_tail
+					// Spread logic: The rightmost items should be at the base of the list.
+					// Actually, if we are building backwards:
+					// current_built_tail currently has the items defined *after* this spread.
+					// We want: spread_dict concatenated with current_built_tail.
+					// _concat(x0=spread_dict, x1=current_built_tail) -> x0
+					code += `    mov x2, x0\n`; // temp
+					code += `    mov x0, x1\n`; // x0 = spread_dict
+					code += `    mov x1, x2\n`; // x1 = current_built_tail
+					code += `    bl _concat\n`;
+					code += `    str x0, [sp, #-16]!\n`; // push new tail
+					continue;
+				}
+
+				let key = stmt.left.value;
+				let valNode = stmt.right;
+
+				// Ensure string key is in string table
+				let lblKey = stringTable[key];
+				if (!lblKey) {
+					lblKey = `str_${stringCounter++}`;
+					stringTable[key] = lblKey;
+				}
+
+				// Compile Value
+				code += compileNode(valNode);
+				code += `    str x0, [sp, #-16]!\n`;
+
+				// Load Key
+				code += `    adr x0, ${lblKey}\n`;
+				code += `    mov x1, x0\n`;
+				// Pop Value
+				code += `    ldr x0, [sp], #16\n`;
+
+				// Make Pair [Key, Value] -> x1=Key, x0=Value
+				code += `    bl _cons\n`;
+
+				// Push Pair onto List
+				code += `    mov x1, x0\n`;
+				code += `    ldr x0, [sp], #16\n`; // Pop tail
+				code += `    bl _cons\n`;
+
+				// Push current list
+				code += `    str x0, [sp, #-16]!\n`;
+			}
+			code += `    ldr x0, [sp], #16\n`;
+			return code;
+		}
+
 		let code = '';
 		let lblEnd = generateLabel("blk_end");
 		for (let i = 0; i < node.body.length; i++) {
@@ -565,6 +631,46 @@ function compileInfix(node) {
 		return code;
 	}
 
+	// Dictionary Access (left-associative)
+	if (op === "'") {
+		let code = compileNode(left);
+		code += '    str x0, [sp, #-16]!\n';
+		if (right.type === 'identifier') {
+			let lbl = stringTable[right.value];
+			if (!lbl) {
+				lbl = `str_${stringCounter++}`;
+				stringTable[right.value] = lbl;
+			}
+			code += `    adr x0, ${lbl}\n`;
+		} else {
+			code += compileNode(right);
+		}
+		code += '    mov x1, x0\n'; // Key -> x1
+		code += '    ldr x0, [sp], #16\n'; // Dict -> x0
+		code += '    bl _dict_get\n';
+		return code;
+	}
+
+	// Dictionary Access (right-associative)
+	if (op === "@") {
+		let code = compileNode(right);
+		code += '    str x0, [sp, #-16]!\n';
+		if (left.type === 'identifier') {
+			let lbl = stringTable[left.value];
+			if (!lbl) {
+				lbl = `str_${stringCounter++}`;
+				stringTable[left.value] = lbl;
+			}
+			code += `    adr x0, ${lbl}\n`;
+		} else {
+			code += compileNode(left);
+		}
+		code += '    mov x1, x0\n'; // Key -> x1
+		code += '    ldr x0, [sp], #16\n'; // Dict -> x0
+		code += '    bl _dict_get\n';
+		return code;
+	}
+
 	let code = compileNode(left);
 	code += '    str x0, [sp, #-16]!\n';
 	code += compileNode(right);
@@ -575,18 +681,7 @@ function compileInfix(node) {
 		return code;
 	}
 	if (op === '~') {
-		code += '    bl _range\n';
-		return code;
-	}
-	if (op === "'") {
-		code += '    bl _nth\n';
-		return code;
-	}
-	if (op === '@') {
-		code += '    mov x9, x0\n';
-		code += '    mov x0, x1\n';
-		code += '    mov x1, x9\n';
-		code += '    bl _nth\n';
+		code += '    bl _concat\n'; // Array/Dictionary Spread
 		return code;
 	}
 
@@ -1272,5 +1367,16 @@ ret
 
 `;
 
+finalOutput += `
+.data
+`;
+
+// Append String Table
+for (let key in stringTable) {
+	let lbl = stringTable[key];
+	// AArch64 null-terminated string
+	finalOutput += `${lbl}:\n    .asciz "${key.replace(/"/g, '\\"')}"\n`;
+}
+
 fs.writeFileSync(OUTPUT_FILE, finalOutput);
-console.log(`Compiled to ${OUTPUT_FILE} `);
+console.log(`Compiled to ${OUTPUT_FILE}`);

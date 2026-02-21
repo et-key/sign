@@ -1,0 +1,147 @@
+{
+  "type": "block",
+  "body": [
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "myNum"
+      },
+      "right": {
+        "type": "block",
+        "body": [
+          {
+            "type": "infix",
+            "op": ":",
+            "left": {
+              "type": "identifier",
+              "value": "one"
+            },
+            "right": {
+              "type": "number",
+              "value": 1
+            }
+          },
+          {
+            "type": "infix",
+            "op": ":",
+            "left": {
+              "type": "identifier",
+              "value": "two"
+            },
+            "right": {
+              "type": "block",
+              "body": [
+                {
+                  "type": "infix",
+                  "op": ":",
+                  "left": {
+                    "type": "identifier",
+                    "value": "two_one"
+                  },
+                  "right": {
+                    "type": "number",
+                    "value": 21
+                  }
+                },
+                {
+                  "type": "infix",
+                  "op": ":",
+                  "left": {
+                    "type": "identifier",
+                    "value": "one_two"
+                  },
+                  "right": {
+                    "type": "number",
+                    "value": 12
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "res1"
+      },
+      "right": {
+        "type": "infix",
+        "op": "'",
+        "left": {
+          "type": "infix",
+          "op": "'",
+          "left": {
+            "type": "identifier",
+            "value": "myNum"
+          },
+          "right": {
+            "type": "identifier",
+            "value": "two"
+          }
+        },
+        "right": {
+          "type": "identifier",
+          "value": "two_one"
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "res2"
+      },
+      "right": {
+        "type": "infix",
+        "op": "@",
+        "left": {
+          "type": "identifier",
+          "value": "one_two"
+        },
+        "right": {
+          "type": "infix",
+          "op": "@",
+          "left": {
+            "type": "identifier",
+            "value": "two"
+          },
+          "right": {
+            "type": "identifier",
+            "value": "myNum"
+          }
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": "#",
+      "left": {
+        "type": "number",
+        "value": 1
+      },
+      "right": {
+        "type": "identifier",
+        "value": "res1"
+      }
+    },
+    {
+      "type": "infix",
+      "op": "#",
+      "left": {
+        "type": "number",
+        "value": 1
+      },
+      "right": {
+        "type": "identifier",
+        "value": "res2"
+      }
+    }
+  ]
+}

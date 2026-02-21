@@ -4,7 +4,7 @@
 
 #main : _ ?
     (src ? 
-        print_str "Source: "
+        print_str `Source: `
         print_str src
         print_char 10
         
@@ -12,13 +12,13 @@
         
         (res ?
              (ast ?
-                 print_str "Parsed AST Root (Block):"
+                 print_str `Parsed AST Root (Block):`
                  print_char 10
                  _print_ast ast 0
              ) (head res)
         ) (parse_program tokens)
         
-    ) ("1 + 2 * 3")
+    ) (`1 + 2 * 3`)
 
 #_print_ast : node indent ?
     _print_indent indent
@@ -27,14 +27,14 @@
     val : head (tail node)
     
     type = ast_num : (
-        print_str "NUM: "
+        print_str `NUM: `
         print_num val
         print_char 10
         0
     )
     
     type = ast_infix : (
-        print_str "INFIX: "
+        print_str `INFIX: `
         print_str val
         print_char 10
         
@@ -47,13 +47,13 @@
     )
     
     type = ast_block : (
-        print_str "BLOCK"
+        print_str `BLOCK`
         print_char 10
         ` TODO: Print children list `
         0
     )
     
-    print_str "UNKNOWN NODE"
+    print_str `UNKNOWN NODE`
     print_char 10
 
 #_print_indent : n ?

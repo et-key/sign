@@ -280,28 +280,28 @@ ast_char : 12
 
 `--- Precedence Table (Pure) ---`
 #get_prec : op_str ?
-    streq op_str "+" : 15
-    streq op_str "-" : 15
-    streq op_str "*" : 16
-    streq op_str "/" : 16
-    streq op_str "%" : 16
-    streq op_str ":" : 2
-    streq op_str "?" : 5
-    streq op_str "," : 6
-    streq op_str "=" : 14
-    streq op_str "==" : 14
-    streq op_str "<" : 14
-    streq op_str ">" : 14
-    streq op_str "<=" : 14
-    streq op_str ">=" : 14
-    streq op_str "!=" : 14
+    streq op_str `+` : 15
+    streq op_str `-` : 15
+    streq op_str `*` : 16
+    streq op_str `/` : 16
+    streq op_str `%` : 16
+    streq op_str `:` : 2
+    streq op_str `?` : 5
+    streq op_str `,` : 6
+    streq op_str `=` : 14
+    streq op_str `==` : 14
+    streq op_str `<` : 14
+    streq op_str `>` : 14
+    streq op_str `<=` : 14
+    streq op_str `>=` : 14
+    streq op_str `!=` : 14
     0
 
 #is_right_assoc : op_str ?
-    streq op_str ":" : 1
-    streq op_str "?" : 1
-    streq op_str "," : 1
-    streq op_str "^" : 1
+    streq op_str `:` : 1
+    streq op_str `?` : 1
+    streq op_str `,` : 1
+    streq op_str `^` : 1
     0
 
 `--- Parser Helpers ---`
@@ -418,10 +418,10 @@ ast_char : 12
     0
 
 #is_prefix_op : op ?
-    streq op "!" : 1
-    streq op "#" : 1
-    streq op "$" : 1
-    streq op "@" : 1 
+    streq op `!` : 1
+    streq op `#` : 1
+    streq op `$` : 1
+    streq op `@` : 1 
     0
 
 `parse_primary : tokens -> [node, rest]`
@@ -532,7 +532,7 @@ ast_char : 12
     cons ast_infix (cons op (cons lhs (cons rhs 0)))
 
 #make_lambda : params body ?
-    make_infix "?" params body
+    make_infix `?` params body
 
 `transform_section : exprs -> node`
 #transform_section : exprs ?
@@ -545,7 +545,7 @@ ast_char : 12
                              `[op] -> (p1 p2 ? p1 op p2)`
                              (op_str ? 
                                  make_lambda
-                                     (make_infix "," p1 p2)
+                                     (make_infix `,` p1 p2)
                                      (make_infix op_str p1 p2)
                              ) (tok_val (head (tail e1))) `e1=(type val). val=op`
                          )
@@ -579,19 +579,19 @@ ast_char : 12
             )
             
             cons ast_block (cons exprs 0)
-        ) (make_id "$2") ) (make_id "$1")
+        ) (make_id `$2`) ) (make_id `$1`)
     ) (length exprs)
 
 `Test Driver for Parser Sections`
 
 #main : _ ?
-    _test "[+]"
-    _test "[+ 1]"
-    _test "[1 +]"
-    _test "[1, 2]"
+    _test `[+]`
+    _test `[+ 1]`
+    _test `[1 +]`
+    _test `[1, 2]`
 
 #_test : src ?
-    print_str "Testing: "
+    print_str `Testing: `
     print_str src
     print_char 10
     
@@ -610,7 +610,7 @@ ast_char : 12
     val : head (tail node)
     
     type = ast_infix : (
-        print_str "INFIX: "
+        print_str `INFIX: `
         print_str val
         print_char 10
         
@@ -623,28 +623,28 @@ ast_char : 12
     )
     
     type = ast_block : (
-        print_str "BLOCK"
+        print_str `BLOCK`
         print_char 10
         _print_list val (indent + 2)
         0
     )
     
     type = ast_id : (
-        print_str "ID: "
+        print_str `ID: `
         print_str val
         print_char 10
         0
     )
 
     type = ast_num : (
-        print_str "NUM: "
+        print_str `NUM: `
         print_num val
         print_char 10
         0
     )
     
     type = ast_op : (
-        print_str "OP: "
+        print_str `OP: `
         print_str val
         print_char 10
         0

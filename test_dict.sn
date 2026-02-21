@@ -1,0 +1,11 @@
+myNum :
+	one : 1
+	two :
+		two_one : 21
+		one_two : 12
+
+res1 : myNum ' two ' two_one
+res2 : one_two @ two @ myNum
+
+1 # res1
+1 # res2
