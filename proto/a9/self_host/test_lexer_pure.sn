@@ -1,0 +1,62 @@
+`Test Driver for Pure Lexer`
+
+`Include lexer (in actual compilation, this is linked or concatenated)`
+`For this test, we assume lexer.sn content is available`
+
+#main : _ ?
+    (src ? 
+        print_str `Source: `
+        print_str src
+        print_char 10
+
+        _process_list (tokenize src)
+    ) (`x = 123 + `foo``)
+
+#_process_list : list ?
+    list = 0 : (
+        print_str `End of List`
+        print_char 10
+        0
+    )
+    
+    (token ? 
+        _print_token token
+        _process_list (tail list)
+    ) (head list)
+
+#_print_token : tok ?
+    (type ? 
+        (val ?
+            type = tok_eof : (
+                print_str `EOF`
+                print_char 10
+                0
+            )
+            
+            type = tok_id : (
+                print_str `ID: `
+                print_str val
+            )
+            type = tok_num : (
+                print_str `NUM: `
+                print_num val
+            )
+            type = tok_str : (
+                print_str `STR: `
+                print_str val
+            )
+            type = tok_op : (
+                print_str `OP: `
+                print_str val
+            )
+            type = tok_punc : (
+                print_str `PUNC: `
+                print_char val
+            )
+            type = tok_sep : (
+                print_str `SEP`
+            )
+            
+            print_char 10
+        ) (tail tok)
+    ) (head tok)

@@ -1,0 +1,547 @@
+
+heap_start : sys_brk 0
+heap_end : sys_brk (heap_start + 1048576)
+heap_addr : heap_start
+
+#alloc : size ?
+	$curr # heap_addr
+	$heap_addr # curr + size
+	curr
+
+#cons : head tail ?
+	$addr : alloc 16
+	addr # head
+	(addr + 8) # tail
+	addr
+
+#head : list ?
+	@(list)
+
+#tail : list ?
+	@(list + 8)
+
+#nth : list index ?
+	index <= 0 : head list
+	nth (tail list) (index - 1)
+
+#factorial : n ?
+	n <= 1 : 1
+	n * factorial (n - 1)
+
+#range : start end ?
+	start > end : 0
+	cons start (range (start + 1) end)
+
+#print_char : c ?
+	buf : cons c 0
+	sys_write 1 buf 1
+	
+#print_str : str ?
+	len : (len_loop ?
+		p : $1
+		cnt : $2
+		char : @p
+		char = 0 : cnt
+		len_loop (p + 1) (cnt + 1)
+	) str 0
+	sys_write 1 str len
+
+#print_num : n ?
+	n = 0 : (
+		print_char 48
+		0
+	)
+	n < 0 : (
+		print_char 45
+		print_num (0 - n)
+		0
+	)
+	_print_num_rec n
+
+#_print_num_rec : n ?
+	n = 0 : 0
+	_print_num_rec (n / 10)
+	print_char (48 + (n % 10))
+
+#add : x y ? x + y
+#sub : x y ? x - y
+#mul : x y ? x * y
+#div : x y ? x / y
+#mod : x y ? x % y
+
+`
+  Sign Pure Functional Lexer
+  (Strict No-Local-Binding Version)
+`
+
+`--- Token Constants ---`
+tok_eof : -1
+tok_id : 1
+tok_num : 2
+tok_str : 3
+tok_op : 4
+tok_punc : 5
+tok_sep : 6
+tok_unit : 0
+
+`--- Predicates (Pure) ---`
+#is_space : c ? c = 32 | c = \	 | c = 13
+#is_digit : c ? c >= 48 & c <= 57
+#is_alpha : c ? (c >= 65 & c <= 90) | (c >= 97 & c <= 122) | c = 95
+#is_op_char : c ? c = 61 | c = 43 | c = 45 | c = 42 | c = 47 | c = 37 | c = 94 | c = 38 | c = 124 | c = 33 | c = 60 | c = 62 | c = 63 | c = 58 | c = 59 | c = 126
+
+`--- Helper: List Construction ---`
+#length : list ?
+    list = 0 : 0
+    1 + length (tail list)
+
+#reverse : list ?
+    _rev list 0
+
+#_rev : list acc ?
+    list = 0 : acc
+    _rev (tail list) (cons (head list) acc)
+
+#list_to_string : list ?
+    (len ? 
+        (str ? 
+            _write_list list str 0
+            (str + len) # 0
+            str
+        ) (alloc (len + 1))
+    ) (length list)
+
+#_write_list : list buf idx ?
+    list = 0 : 0
+    (buf + idx) # head list
+    _write_list (tail list) buf (idx + 1)
+
+`--- Core Lexer Logic ---`
+
+`tokenize : source -> tokens`
+#tokenize : source ?
+    _tokenize_loop source (len source) 0
+
+#_tokenize_loop : source source_len pos ?
+    (res ?
+        (token ? 
+            (type ?
+                type = tok_eof : cons token 0
+                cons token (_tokenize_loop source source_len (head (tail res)))
+            ) (@token)
+        ) (head res)
+    ) (scan_token source source_len pos)
+
+
+`scan_token : (source, len, pos) -> [token, next_pos]`
+#scan_token : source source_len pos ?
+    pos >= source_len : (
+        cons (cons tok_eof 0) (cons pos 0)
+    )
+    
+    (c ? 
+        is_space c : (
+            scan_token source source_len (pos + 1)
+        )
+        
+        c = \ : (
+            cons (cons tok_sep 0) (cons (pos + 1) 0)
+        )
+        
+        is_digit c : (
+            (res ?
+                (val_str ?
+                    (val ?
+                        cons (cons tok_num val) (cons (head (tail res)) 0)
+                    ) (_parse_int val_str)
+                ) (head res)
+            ) (scan_num source source_len pos)
+        )
+        
+        is_alpha c : (
+            (res ? 
+                cons (cons tok_id (head res)) (cons (head (tail res)) 0)
+            ) (scan_id source source_len pos)
+        )
+        
+        is_op_char c : (
+            (res ? 
+                cons (cons tok_op (head res)) (cons (head (tail res)) 0)
+            ) (scan_op source source_len pos)
+        )
+        
+        c = \` : (
+            (res ?
+                cons (cons tok_str (head res)) (cons (head (tail res)) 0)
+            ) (scan_str source source_len pos)
+        )
+        
+        `Default: Punctuation`
+        cons (cons tok_punc c) (cons (pos + 1) 0)
+    ) (nth source pos)
+
+
+`--- Specific Scanners ---`
+
+#scan_num : source source_len pos ?
+    _scan_while source source_len pos is_digit
+
+#scan_id : source source_len pos ?
+    `ID can contain alpha or digit after first char`
+    _scan_while source source_len pos (c ? is_alpha c | is_digit c)
+
+#scan_op : source source_len pos ?
+    _scan_while source source_len pos is_op_char
+
+#_scan_while : source source_len pos pred ?
+    (res ?
+        (chars_rev ?
+             (chars ?
+                  cons (list_to_string chars) (cons (head (tail res)) 0)
+             ) (reverse chars_rev)
+        ) (head res)
+    ) (_scan_while_rec source source_len pos pred 0)
+
+#_scan_while_rec : source source_len pos pred acc ?
+    pos >= source_len : (
+        cons acc (cons pos 0)
+    )
+    (c ?
+        pred c : (
+            _scan_while_rec source source_len (pos + 1) pred (cons c acc)
+        )
+        cons acc (cons pos 0)
+    ) (nth source pos)
+
+#scan_str : source source_len pos ?
+    `Skip opening backtick`
+    (start_pos ?
+        (res ?
+            (chars_rev ?
+                (chars ?
+                    cons (list_to_string chars) (cons (head (tail res)) 0)
+                ) (reverse chars_rev)
+            ) (head res)
+        ) (_scan_str_rec source source_len start_pos 0)
+    ) (pos + 1)
+
+#_scan_str_rec : source source_len pos acc ?
+    pos >= source_len : (
+        cons acc (cons pos 0)
+    )
+    (c ?
+        (c = \` | c = -1) : (
+            `End of string`
+            cons acc (cons (pos + 1) 0)
+        )
+        _scan_str_rec source source_len (pos + 1) (cons c acc)
+    ) (nth source pos)
+
+`--- Utils ---`
+#_parse_int : str ?
+    str
+`
+  Sign Pure Functional Parser
+  
+  Philosophy:
+  - No global state
+  - No local bindings (:)
+  - Logic: tokens -> [ast_node, remaining_tokens]
+`
+
+`--- AST Constants ---`
+ast_unit : 0
+ast_num : 1
+ast_id : 2
+ast_str : 3
+ast_op : 4
+ast_def : 5
+ast_apply : 6
+ast_block : 7
+ast_infix : 8
+ast_prefix : 9
+ast_postfix : 10
+ast_lambda : 11
+ast_char : 12
+
+`--- Helper: Get Token Info ---`
+#tok_type : tok ? @tok
+#tok_val : tok ? @(tok + 8)
+
+`--- String Comparison (Pure) ---`
+#streq : s1 s2 ?
+    (c1 ? 
+        (c2 ?
+            c1 != c2 : 0
+            c1 = 0 : 1
+            streq (s1 + 1) (s2 + 1)
+        ) (@s2)
+    ) (@s1)
+
+`--- Precedence Table (Pure) ---`
+#get_prec : op_str ?
+    streq op_str `+` : 15
+    streq op_str `-` : 15
+    streq op_str `*` : 16
+    streq op_str `/` : 16
+    streq op_str `%` : 16
+    streq op_str `:` : 2
+    streq op_str `?` : 5
+    streq op_str `,` : 6
+    streq op_str `=` : 14
+    streq op_str `==` : 14
+    streq op_str `<` : 14
+    streq op_str `>` : 14
+    streq op_str `<=` : 14
+    streq op_str `>=` : 14
+    streq op_str `!=` : 14
+    0
+
+#is_right_assoc : op_str ?
+    streq op_str `:` : 1
+    streq op_str `?` : 1
+    streq op_str `,` : 1
+    streq op_str `^` : 1
+    0
+
+`--- Parser Helpers ---`
+
+`peek : tokens -> token`
+#peek : tokens ? 
+    tokens = 0 : cons tok_eof 0
+    head tokens
+
+`next : tokens -> rest`
+#next : tokens ?
+    tokens = 0 : 0
+    tail tokens
+
+`expect : tokens type -> [bool, tokens]`
+#expect : tokens type ?
+    (tok ? 
+        (tok_t ?
+            tok_t = type : cons 1 (next tokens)
+            cons 0 tokens
+        ) (tok_type tok)
+    ) (peek tokens)
+
+`--- Core Parser Logic ---`
+
+`parse_program : tokens -> [ast_block, rest]`
+#parse_program : tokens ?
+    (res ? 
+         cons (cons ast_block (head res)) (cons (head (tail res)) 0)
+    ) (parse_stmts tokens)
+
+`parse_stmts : tokens -> [list<node>, rest]`
+#parse_stmts : tokens ?
+    (tok ?
+        (type ?
+            type = tok_eof : cons 0 (cons tokens 0)
+            
+            type = tok_sep : parse_stmts (next tokens)
+            
+            `Parse Expression`
+            (res ?
+                (expr ?
+                     (rest ?
+                         (res2 ?
+                             cons (cons expr (head res2)) (cons (head (tail res2)) 0)
+                         ) (parse_stmts rest)
+                     ) (head (tail res))
+                ) (head res)
+            ) (parse_expr tokens 0)
+            
+        ) (tok_type tok)
+    ) (peek tokens)
+
+`parse_block : tokens -> [ast_block, rest]`
+#parse_block : tokens ?
+    `TODO: Block logic, Section logic`
+    parse_program tokens `Temporary: Treat block same as program for now`
+
+`parse_expr : tokens min_prec -> [node, rest]`
+#parse_expr : tokens min_prec ?
+    (res_lhs ?
+        (lhs ?
+            (rest_1 ? 
+                _parse_expr_loop lhs rest_1 min_prec
+            ) (head (tail res_lhs))
+        ) (head res_lhs)
+    ) (parse_primary tokens)
+
+`_parse_expr_loop : lhs tokens min_prec -> [node, rest]`
+#_parse_expr_loop : lhs tokens min_prec ?
+    (tok ?
+        (type ?
+            `Check for Apply (Implicit)`
+            (can_start_expr type) : (
+                `Apply: lhs next_expr`
+                (res_rhs ? 
+                     (rhs ?
+                         (rest_rhs ?
+                             (new_lhs ? 
+                                  _parse_expr_loop new_lhs rest_rhs min_prec
+                             ) (cons ast_apply (cons lhs (cons rhs 0)))
+                         ) (head (tail res_rhs))
+                     ) (head res_rhs)
+                ) (parse_expr tokens 6) 
+                `6 is Apply Precedence`
+            )
+            
+            type != tok_op : cons lhs (cons tokens 0)
+            
+            (op_str ?
+                (prec ?
+                    prec < min_prec : cons lhs (cons tokens 0)
+                    
+                    (next_tokens ?
+                        (next_min_prec ?
+                            (res_rhs ?
+                                (rhs ?
+                                    (rest_rhs ?
+                                        (new_lhs ?
+                                            _parse_expr_loop new_lhs rest_rhs min_prec
+                                        ) (cons ast_infix (cons op_str (cons lhs (cons rhs 0))))
+                                    ) (head (tail res_rhs))
+                                ) (head res_rhs)
+                            ) (parse_expr next_tokens next_min_prec)
+                        ) ((is_right_assoc op_str) ? prec (prec + 1))
+                    ) (next tokens)
+                    
+                ) (get_prec op_str)
+            ) (tok_val tok)
+            
+        ) (tok_type tok)
+    ) (peek tokens)
+
+#can_start_expr : type ?
+    type = tok_id : 1
+    type = tok_num : 1
+    type = tok_str : 1
+    type = tok_punc : 1 `(`
+    0
+
+`parse_primary : tokens -> [node, rest]`
+#parse_primary : tokens ?
+    (tok ?
+        (type ?
+            (tokens_next ? 
+                type = tok_num : (
+                    (val ? 
+                        cons (cons ast_num (cons val 0)) (cons tokens_next 0)
+                    ) (tok_val tok)
+                )
+                
+                type = tok_id : (
+                    (val ?
+                        cons (cons ast_id (cons val 0)) (cons tokens_next 0)
+                    ) (tok_val tok)
+                )
+                
+                type = tok_str : (
+                     (val ?
+                         cons (cons ast_str (cons val 0)) (cons tokens_next 0)
+                     ) (tok_val tok)
+                )
+
+                type = tok_op : (
+                    `Prefix Ops`
+                    (op ?
+                         (res ? 
+                             cons (cons ast_prefix (cons op (cons (head res) 0))) (cons (head (tail res)) 0)
+                         ) (parse_expr tokens_next 20 `Prefix Prec`)
+                    ) (tok_val tok)
+                )
+                
+                type = tok_punc : (
+                     (val ?
+                         val = 40 : (
+                             `LPAREN`
+                             (res ? 
+                                 (expr ?
+                                     (rest ?
+                                         `Expect RPAREN`
+                                         (tok_r ? 
+                                             (type_r ?
+                                                  `TODO: Check type_r = tok_punc & val=41`
+                                                  cons expr (cons (next rest) 0)
+                                             ) (tok_type tok_r)
+                                         ) (peek rest)
+                                     ) (head (tail res))
+                                 ) (head res)
+                             ) (parse_expr tokens_next 0)
+                         )
+                         `Default Unknown`
+                         cons (cons ast_unit 0) (cons tokens_next 0)
+                     ) (tok_val tok)
+                )
+                
+                `Unknown`
+                cons (cons ast_unit 0) (cons tokens_next 0)
+                
+            ) (next tokens)
+        ) (tok_type tok)
+    ) (peek tokens)
+`Test Driver for Pure Parser`
+
+`Includes: runtime, lexer, parser`
+
+#main : _ ?
+    (src ? 
+        print_str `Source: `
+        print_str src
+        print_char 10
+        
+        tokens : tokenize src
+        
+        (res ?
+             (ast ?
+                 print_str `Parsed AST Root (Block):`
+                 print_char 10
+                 _print_ast ast 0
+             ) (head res)
+        ) (parse_program tokens)
+        
+    ) (`1 + 2 * 3`)
+
+#_print_ast : node indent ?
+    _print_indent indent
+    
+    type : head node
+    val : head (tail node)
+    
+    type = ast_num : (
+        print_str `NUM: `
+        print_num val
+        print_char 10
+        0
+    )
+    
+    type = ast_infix : (
+        print_str `INFIX: `
+        print_str val
+        print_char 10
+        
+        left : head (tail (tail node))
+        right : head (tail (tail (tail node)))
+        
+        _print_ast left (indent + 2)
+        _print_ast right (indent + 2)
+        0
+    )
+    
+    type = ast_block : (
+        print_str `BLOCK`
+        print_char 10
+        ` TODO: Print children list `
+        0
+    )
+    
+    print_str `UNKNOWN NODE`
+    print_char 10
+
+#_print_indent : n ?
+    n <= 0 : 0
+    print_char 32
+    _print_indent (n - 1)

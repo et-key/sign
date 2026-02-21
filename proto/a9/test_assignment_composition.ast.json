@@ -1,0 +1,257 @@
+{
+	"type": "block",
+	"body": [
+		{
+			"type": "infix",
+			"op": ":",
+			"left": {
+				"type": "identifier",
+				"value": "myF"
+			},
+			"right": {
+				"type": "apply",
+				"func": {
+					"type": "apply",
+					"func": {
+						"type": "infix",
+						"op": "?",
+						"left": {
+							"type": "identifier",
+							"value": "$1"
+						},
+						"right": {
+							"type": "infix",
+							"op": ";",
+							"left": {
+								"type": "infix",
+								"op": "?",
+								"left": {
+									"type": "apply",
+									"func": {
+										"type": "identifier",
+										"value": "_is_func"
+									},
+									"arg": {
+										"type": "identifier",
+										"value": "$1"
+									}
+								},
+								"right": {
+									"type": "apply",
+									"func": {
+										"type": "apply",
+										"func": {
+											"type": "identifier",
+											"value": "_compose"
+										},
+										"arg": {
+											"type": "infix",
+											"op": "?",
+											"left": {
+												"type": "identifier",
+												"value": "$2"
+											},
+											"right": {
+												"type": "infix",
+												"op": "+",
+												"left": {
+													"type": "identifier",
+													"value": "$2"
+												},
+												"right": {
+													"type": "number",
+													"value": 1
+												}
+											}
+										}
+									},
+									"arg": {
+										"type": "identifier",
+										"value": "$1"
+									}
+								}
+							},
+							"right": {
+								"type": "infix",
+								"op": "+",
+								"left": {
+									"type": "identifier",
+									"value": "$1"
+								},
+								"right": {
+									"type": "number",
+									"value": 1
+								}
+							}
+						}
+					},
+					"arg": {
+						"type": "infix",
+						"op": "?",
+						"left": {
+							"type": "identifier",
+							"value": "$1"
+						},
+						"right": {
+							"type": "infix",
+							"op": ";",
+							"left": {
+								"type": "infix",
+								"op": "?",
+								"left": {
+									"type": "apply",
+									"func": {
+										"type": "identifier",
+										"value": "_is_func"
+									},
+									"arg": {
+										"type": "identifier",
+										"value": "$1"
+									}
+								},
+								"right": {
+									"type": "apply",
+									"func": {
+										"type": "apply",
+										"func": {
+											"type": "identifier",
+											"value": "_compose"
+										},
+										"arg": {
+											"type": "infix",
+											"op": "?",
+											"left": {
+												"type": "identifier",
+												"value": "$2"
+											},
+											"right": {
+												"type": "infix",
+												"op": "*",
+												"left": {
+													"type": "identifier",
+													"value": "$2"
+												},
+												"right": {
+													"type": "number",
+													"value": 2
+												}
+											}
+										}
+									},
+									"arg": {
+										"type": "identifier",
+										"value": "$1"
+									}
+								}
+							},
+							"right": {
+								"type": "infix",
+								"op": "*",
+								"left": {
+									"type": "identifier",
+									"value": "$1"
+								},
+								"right": {
+									"type": "number",
+									"value": 2
+								}
+							}
+						}
+					}
+				},
+				"arg": {
+					"type": "infix",
+					"op": "?",
+					"left": {
+						"type": "identifier",
+						"value": "$1"
+					},
+					"right": {
+						"type": "infix",
+						"op": ";",
+						"left": {
+							"type": "infix",
+							"op": "?",
+							"left": {
+								"type": "apply",
+								"func": {
+									"type": "identifier",
+									"value": "_is_func"
+								},
+								"arg": {
+									"type": "identifier",
+									"value": "$1"
+								}
+							},
+							"right": {
+								"type": "apply",
+								"func": {
+									"type": "apply",
+									"func": {
+										"type": "identifier",
+										"value": "_compose"
+									},
+									"arg": {
+										"type": "infix",
+										"op": "?",
+										"left": {
+											"type": "identifier",
+											"value": "$2"
+										},
+										"right": {
+											"type": "infix",
+											"op": "=",
+											"left": {
+												"type": "identifier",
+												"value": "$2"
+											},
+											"right": {
+												"type": "number",
+												"value": 8
+											}
+										}
+									}
+								},
+								"arg": {
+									"type": "identifier",
+									"value": "$1"
+								}
+							}
+						},
+						"right": {
+							"type": "infix",
+							"op": "=",
+							"left": {
+								"type": "identifier",
+								"value": "$1"
+							},
+							"right": {
+								"type": "number",
+								"value": 8
+							}
+						}
+					}
+				}
+			}
+		},
+		{
+			"type": "infix",
+			"op": "#",
+			"left": {
+				"type": "number",
+				"value": 1
+			},
+			"right": {
+				"type": "apply",
+				"func": {
+					"type": "identifier",
+					"value": "myF"
+				},
+				"arg": {
+					"type": "number",
+					"value": 3
+				}
+			}
+		}
+	]
+}
