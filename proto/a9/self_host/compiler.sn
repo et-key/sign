@@ -28,7 +28,7 @@ ast_char : 12
 `Context : [LabelCount, StringList, Env, StackOffset]`
 
 #make_context : label_count str_list env stack_offset ?
-	cons label_count (cons str_list (cons env (cons stack_offset 0)))
+	label_count , str_list , env , stack_offset , 0
 
 #ctx_label_count : ctx ? head ctx
 #ctx_strings : ctx ? head (tail ctx)
@@ -47,7 +47,7 @@ ast_char : 12
 	(content ?
 		(res_add ? 
 			(lbl ? (new_ctx ?
-				cons (emit (concat `    adr x0, ` (concat lbl `\n`)) 0) (cons new_ctx 0)
+				(emit (concat `    adr x0, ` (concat lbl `\n`)) 0) , new_ctx , 0
 			) (ctx_from_res res_add) ) (head res_add)
 		) (add_string ctx content)
 	) (tok_val node)
@@ -58,21 +58,17 @@ ast_char : 12
 			(asm_func ? (ctx_func ?
 				(res_arg ?
 					(asm_arg ? (ctx_arg ?
-						cons 
-							(concat_lists asm_func 
-								(cons `    str x0, [sp, #-16]!\n`
-									(concat_lists asm_arg
-										(cons `    ldr x1, [sp], #16\n`
-											(cons `    ldr x2, [x1]\n`      `Code`
-												(cons `    ldr x9, [x1, #8]\n`  `Env`
-													(cons `    blr x2\n` 0)
-												)
-											)
-										)
+						(asm_func ~ 
+							(`    str x0, [sp, #-16]!\n` ,
+								(asm_arg ~
+									(`    ldr x1, [sp], #16\n` ,
+										`    ldr x2, [x1]\n` ,
+										`    ldr x9, [x1, #8]\n` ,
+										`    blr x2\n` , 0
 									)
 								)
 							)
-							(cons ctx_arg 0)
+						) , ctx_arg , 0
 					) (ctx_from_res res_arg) ) (asm_from_res res_arg)
 				) (compile_node arg ctx_func)
 			) (ctx_from_res res_func) ) (asm_from_res res_func)
@@ -84,7 +80,7 @@ ast_char : 12
 		make_context 
 			(ctx_label_count ctx) 
 			(ctx_strings ctx) 
-			(cons (cons name offset) (ctx_env ctx))
+			((name , offset) , ctx_env ctx)
 			offset
 	) ((ctx_stack_offset ctx) - 8)
 
@@ -93,14 +89,12 @@ ast_char : 12
 	`TODO: Check existence, return label. For now just add.`
 	(count ? 
 		(label ? 
-			cons 
-				label
-				(make_context 
+			label ,
+				make_context 
 					(count + 1)
-					(cons (cons label (cons content 0)) (ctx_strings ctx))
+					((label , content , 0) , ctx_strings ctx)
 					(ctx_env ctx)
 					(ctx_stack_offset ctx)
-				)
 		) (make_label `str_` count)
 	) (ctx_label_count ctx)
 
@@ -171,14 +165,13 @@ ast_char : 12
 #new_label : ctx prefix ?
 	(count ? 
 		(lbl ? 
-			cons 
-				lbl
-				(make_context 
+			lbl ,
+				make_context 
 					(count + 1)
 					(ctx_strings ctx)
 					(ctx_env ctx)
 					(ctx_stack_offset ctx)
-				)
+				, 0
 		) (make_label prefix count)
 	) (ctx_label_count ctx)
 
@@ -205,20 +198,18 @@ ast_char : 12
 		type = ast_apply : compile_apply node ctx
 		
 		`Default`
-		cons (emit `    // Unknown Node Type\n` 0) (cons ctx 0)
+		((emit `    // Unknown Node Type\n` 0) , 0) , ctx , 0
 	) (head node)
 
 `--- Node Compilers ---`
 
 #compile_num : node ctx ?
 	(val ? 
-		cons 
-			(emit `    mov x0, #` (emit_num val (emit `\n` 0)))
-			(cons ctx 0)
+		(emit `    mov x0, #` (emit_num val (emit `\n` 0))) , ctx , 0
 	) (head (tail node))
 
 #compile_unit : node ctx ?
-	cons (emit `    adr x0, sign_id\n` 0) (cons ctx 0)
+	(emit `    adr x0, sign_id\n` 0) , ctx , 0
 
 #compile_prefix : node ctx ?
 	(op ? (expr ?
@@ -232,47 +223,33 @@ ast_char : 12
 
 #compile_prefix_at : expr ctx ?
 	(expr_is_zero_num expr) : (
-		cons (emit `    bl _read_char\n` 0) (cons ctx 0)
+		(emit `    bl _read_char\n` 0) , ctx , 0
 	)
 	
 	(res ?
 		(asm ? (ctx_new ?
-			cons 
-				(concat_lists asm 
-					(cons `    ldr x0, [x0] // @ load\n` 0)
-				)
-				(cons ctx_new 0)
+			(asm ~ (`    ldr x0, [x0] // @ load\n` , 0)) , ctx_new , 0
 		) (ctx_from_res res) ) (asm_from_res res)
 	) (compile_node expr ctx)
 
 #expr_is_zero_num : expr ?
-	(head expr) = ast_num : (head (tail expr)) = 0
-	0
+	((head expr) = ast_num) & ((head (tail expr)) = 0)
 
 #compile_prefix_not : expr ctx ?
 	(lbl_true ? (lbl_end ? (res_lbl_end ? 
 		(ctx_new ?
 			(res_expr ?
 				(asm_expr ? (ctx_expr ?
-					cons
-						(concat_lists asm_expr
-							(cons `    adr x9, sign_id\n`
-								(cons `    cmp x0, x9\n`
-									(cons (concat `    b.eq ` (concat lbl_true `\n`))
-										(cons `    adr x0, sign_id\n`
-											(cons (concat `    b ` (concat lbl_end `\n`))
-												(cons (concat lbl_true `:\n`)
-													(cons `    mov x0, #0\n`
-														(cons (concat lbl_end `:\n`) 0)
-													)
-												)
-											)
-										)
-									)
-								)
-							)
-						)
-						(cons ctx_expr 0)
+					(asm_expr ~
+						(`    adr x9, sign_id\n` ,
+							`    cmp x0, x9\n` ,
+								(concat `    b.eq ` (concat lbl_true `\n`)) ,
+									`    adr x0, sign_id\n` ,
+										(concat `    b ` (concat lbl_end `\n`)) ,
+											(concat lbl_true `:\n`) ,
+												`    mov x0, #0\n` ,
+													(concat lbl_end `:\n`) , 0
+					)) , ctx_expr , 0
 				) (ctx_from_res res_expr) ) (asm_from_res res_expr)
 			) (compile_node expr ctx_new)
 		) (ctx_from_lbl res_lbl_end) ) (new_label (new_label ctx `not_true`) `not_end`) ) )
@@ -280,11 +257,7 @@ ast_char : 12
 #compile_prefix_bitwise_not : expr ctx ?
 	(res ?
 		(asm ? (ctx_new ?
-			cons 
-				(concat_lists asm 
-					(cons `    mvn x0, x0\n` 0)
-				)
-				(cons ctx_new 0)
+			(asm ~ (`    mvn x0, x0\n` , 0)) , ctx_new , 0
 		) (ctx_from_res res) ) (asm_from_res res)
 	) (compile_node expr ctx)
 
@@ -293,11 +266,7 @@ ast_char : 12
 		(streq op \!) : (
 			(res ?
 				(asm ? (ctx_new ?
-					cons 
-						(concat_lists asm 
-							(cons `    bl _factorial\n` 0)
-						)
-						(cons ctx_new 0)
+					(asm ~ (`    bl _factorial\n` , 0)) , ctx_new , 0
 				) (ctx_from_res res) ) (asm_from_res res)
 			) (compile_node expr ctx)
 		)
@@ -333,7 +302,7 @@ ast_char : 12
 		(streq op \?) : (compile_lambda node ctx)
 
 		`Default`
-		cons (emit (concat `    // Unknown Infix: ` (concat op `\n`)) 0) (cons ctx 0)
+		((emit (concat `    // Unknown Infix: ` (concat op `\n`)) 0) , 0) , ctx , 0
 		
 	) (tok_val (head (tail node))) 
 
@@ -343,13 +312,7 @@ ast_char : 12
 			(res_rhs ?
 				(asm_rhs ? (ctx_rhs ?
 					(new_ctx ?
-						cons 
-							(concat_lists asm_rhs
-								(cons `    str x0, [sp, #-16]!\n`
-									(cons `    adr x0, sign_id\n` 0)
-								)
-							)
-							(cons new_ctx 0)
+						(asm_rhs ~ (`    str x0, [sp, #-16]!\n` , `    adr x0, sign_id\n` , 0)) , new_ctx , 0
 					) (push_var ctx_rhs name)
 				) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
 			) (compile_node rhs ctx)
@@ -364,40 +327,24 @@ ast_char : 12
 					(ctx_with_arg ?
 						(res_body ?
 							(asm_body ? (ctx_body ? 
-								cons
-									(concat_lists 
-										(cons (concat `    b ` (concat lbl_after `\n`))
-											(cons (concat lbl_func `:\n`)
-												(cons `    stp x29, x30, [sp, #-16]!\n`
-													(cons `    mov x29, sp\n`
-														(cons `    str x0, [sp, #-16]!\n\ Push Arg`
-															(concat_lists asm_body
-																(cons `    mov sp, x29\n`
-																	(cons `    ldp x29, x30, [sp], #16\n`
-																		(cons `    ret\n`
-																			(cons (concat lbl_after `:\n`)
-																				(cons `    adr x0, sign_id\n` 
-																					(cons `    str x0, [sp, #-16]!\n`
-																						(cons (concat `    adr x1, ` (concat lbl_func `\n`))
-																							(cons `    ldr x0, [sp], #16\n`
-																								(cons `    bl _cons\n` 0)
-																							)
-																						)
-																					)
-																				)
-																			)
-																		)
-																	)
-																)
-															)
-														)
-													)
-												)
-											)
-										)
-										0
+								(((concat `    b ` (concat lbl_after `\n`)) ,
+									(concat lbl_func `:\n`) ,
+										`    stp x29, x30, [sp, #-16]!\n` ,
+											`    mov x29, sp\n` ,
+												`    str x0, [sp, #-16]!\n\ Push Arg` , 0
+								) ~
+								(asm_body ~
+									(`    mov sp, x29\n` ,
+										`    ldp x29, x30, [sp], #16\n` ,
+											`    ret\n` ,
+												(concat lbl_after `:\n`) ,
+													`    adr x0, sign_id\n` ,
+														`    str x0, [sp, #-16]!\n` ,
+															(concat `    adr x1, ` (concat lbl_func `\n`)) ,
+																`    ldr x0, [sp], #16\n` ,
+																	`    bl _cons\n` , 0
 									)
-									(cons ctx_body 0)
+								)) , ctx_body , 0
 						) (ctx_from_res res_body) ) (asm_from_res res_body)
 					) (compile_node body ctx_with_arg)
 				) (push_var ctx_lbl param_name) ) (tok_val params) `Assume single param ID`
@@ -411,19 +358,16 @@ ast_char : 12
 			(asm_lhs ? (ctx_lhs ?
 				(res_rhs ?
 					(asm_rhs ? (ctx_rhs ?
-						cons 
-							(concat_lists asm_lhs 
-								(cons `    str x0, [sp, #-16]!\n`
-									(concat_lists asm_rhs
-										(cons `    mov x1, x0\n`
-											(cons `    ldr x0, [sp], #16\n`
-												(cons instr 0)
-											)
-										)
+						(asm_lhs ~ 
+							(`    str x0, [sp, #-16]!\n` ,
+								(asm_rhs ~
+									(`    mov x1, x0\n` ,
+										`    ldr x0, [sp], #16\n` ,
+											instr , 0
 									)
 								)
 							)
-							(cons ctx_rhs 0)
+						) , ctx_rhs , 0
 					) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
 				) (compile_node rhs ctx_lhs)
 			) (ctx_from_res res_lhs) ) (asm_from_res res_lhs)
@@ -438,32 +382,23 @@ ast_char : 12
 					(asm_rhs ? (ctx_rhs ?
 						(lbl_true ? (lbl_end ? (res_lbl_end ?
 							(ctx_final ? 
-								cons 
-									(concat_lists asm_lhs 
-										(cons `    str x0, [sp, #-16]!\n`
-											(concat_lists asm_rhs
-												(cons `    mov x1, x0\n`
-													(cons `    ldr x0, [sp], #16\n`
-														(cons `    cmp x0, x1\n`
-															(cons (concat `    b.` (concat cond (concat \  (concat lbl_true `\n`))))
-																(cons `    mov x0, #0\n` 
-																	(cons (concat `    b ` (concat lbl_end `\n`))
-																		(cons (concat lbl_true `:\n`)
-																			(concat_lists
-																				((is_literal_expr lhs) ? (cons `    mov x0, x1\n` 0) | 0)
-																				(cons (concat lbl_end `:\n`) 0)
-																			)
+								(asm_lhs ~ 
+									(`    str x0, [sp, #-16]!\n` ,
+										(asm_rhs ~
+											(`    mov x1, x0\n` ,
+												`    ldr x0, [sp], #16\n` ,
+													`    cmp x0, x1\n` ,
+														(concat `    b.` (concat cond (concat \  (concat lbl_true `\n`)))) ,
+															`    mov x0, #0\n` ,
+																(concat `    b ` (concat lbl_end `\n`)) ,
+																	(concat lbl_true `:\n`) ,
+																		(((is_literal_expr lhs) ? (`    mov x0, x1\n` , 0) | 0) ~
+																			((concat lbl_end `:\n`) , 0)
 																		)
-																	)
-																)
-															)
-														)
-													)
-												)
 											)
 										)
 									)
-									(cons ctx_final 0)
+								) , ctx_final , 0
 							) (ctx_from_res res_lbl_end)
 						) (new_label (ctx_from_res res_rhs) `cmp_end`) ) ) (new_label ctx_rhs `cmp_true`) )
 					) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
@@ -480,23 +415,15 @@ ast_char : 12
 					(asm_lhs ? (ctx_lhs ?
 						(res_rhs ?
 							(asm_rhs ? (ctx_rhs ?
-								cons
-									(concat_lists asm_lhs
-										(cons `    adr x9, sign_id\n`
-											(cons `    cmp x0, x9\n`
-												(cons (concat `    b.eq ` (concat lbl_right `\n`))
-													(cons (concat `    b ` (concat lbl_end `\n`))
-														(cons (concat lbl_right `:\n`)
-															(concat_lists asm_rhs
-																(cons (concat lbl_end `:\n`) 0)
-															)
-														)
-													)
-												)
-											)
-										)
+								(asm_lhs ~
+									(`    adr x9, sign_id\n` ,
+										`    cmp x0, x9\n` ,
+											(concat `    b.eq ` (concat lbl_right `\n`)) ,
+												(concat `    b ` (concat lbl_end `\n`)) ,
+													(concat lbl_right `:\n`) ,
+														(asm_rhs ~ ((concat lbl_end `:\n`) , 0))
 									)
-									(cons ctx_rhs 0)
+								) , ctx_rhs , 0
 							) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
 						) (compile_node rhs ctx_lhs)
 					) (ctx_from_res res_lhs) ) (asm_from_res res_lhs)
@@ -513,25 +440,19 @@ ast_char : 12
 					(asm_lhs ? (ctx_lhs ?
 						(res_rhs ?
 							(asm_rhs ? (ctx_rhs ?
-								cons
-									(concat_lists asm_lhs
-										(cons `    adr x9, sign_id\n`
-											(cons `    cmp x0, x9\n`
-												(cons (concat `    b.eq ` (concat lbl_fail `\n`))
-													(concat_lists asm_rhs
-														(cons (concat `    b ` (concat lbl_end `\n`))
-															(cons (concat lbl_fail `:\n`)
-																(cons `    adr x0, sign_id\n`
-																	(cons (concat lbl_end `:\n`) 0)
-																)
-															)
-														)
+								(asm_lhs ~
+									(`    adr x9, sign_id\n` ,
+										`    cmp x0, x9\n` ,
+											(concat `    b.eq ` (concat lbl_fail `\n`)) ,
+												(asm_rhs ~
+													((concat `    b ` (concat lbl_end `\n`)) ,
+														(concat lbl_fail `:\n`) ,
+															`    adr x0, sign_id\n` ,
+																(concat lbl_end `:\n`) , 0
 													)
 												)
-											)
-										)
 									)
-									(cons ctx_rhs 0)
+								) , ctx_rhs , 0
 							) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
 						) (compile_node rhs ctx_lhs)
 					) (ctx_from_res res_lhs) ) (asm_from_res res_lhs)
@@ -543,17 +464,13 @@ ast_char : 12
 #compile_block : node ctx ?
 	(stmts ?
 		stmts = 0 : (
-			cons (emit `    adr x0, sign_id\n` 0) (cons ctx 0)
+			(emit `    adr x0, sign_id\n` 0) , ctx , 0
 		)
 		
 		(lbl_end ? 
 			(res_stmts ? 
 				(asm_stmts ? (ctx_stmts ?
-					cons 
-						(concat_lists asm_stmts
-							(cons (concat lbl_end `:\n`) 0)
-						)
-						(cons ctx_stmts 0)
+					(asm_stmts ~ ((concat lbl_end `:\n`) , 0)) , ctx_stmts , 0
 				) (ctx_from_res res_stmts) ) (asm_from_res res_stmts)
 			) (compile_stmts stmts lbl_end (ctx_from_lbl res_lbl_end))
 		) (new_label ctx `blk_end`)
@@ -572,17 +489,13 @@ ast_char : 12
 				(asm_head ? (ctx_head ?
 					(res_tail ?
 						(asm_tail ? (ctx_tail ?
-							cons
-								(concat_lists asm_head
-									(cons `    adr x9, sign_id\n`
-										(cons `    cmp x0, x9\n`
-											(cons (concat `    b.ne ` (concat lbl_end `\n`))
-												asm_tail
-											)
-										)
-									)
+							(asm_head ~
+								(`    adr x9, sign_id\n` ,
+									`    cmp x0, x9\n` ,
+										(concat `    b.ne ` (concat lbl_end `\n`)) ,
+											asm_tail
 								)
-								(cons ctx_tail 0)
+							) , ctx_tail , 0
 						) (ctx_from_res res_tail) ) (asm_from_res res_tail)
 					) (compile_stmts tail_stmts lbl_end ctx_head)
 				) (ctx_from_res res_head) ) (asm_from_res res_head)
@@ -591,19 +504,10 @@ ast_char : 12
 		) (tail stmts)
 	) (head stmts)
 
-#concat_lists : l1 l2 ?
-	l1 = 0 : l2
-	cons (head l1) (concat_lists (tail l1) l2)
-
 #asm_from_res : res ? head res
 #ctx_from_res : res ? head (tail res)
 #res_lbl_end : res ? res `Typo fix context usage above`
 #ctx_from_lbl : res ? head (tail res)
 
 #is_literal_expr : node ?
-	(type ?
-		type = ast_num : 1
-		type = ast_str : 1
-		type = ast_char : 1
-		0
-	) (head node)
+	(type ? type = ast_num | type = ast_str | type = ast_char) (head node)
