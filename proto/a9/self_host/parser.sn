@@ -49,7 +49,7 @@ tok_unit : 0
 	streq (s1 + 1) (s2 + 1)
 
 `--- Precedence Table (Pure) ---`
-#get_prec : op_str ?
+#get_prec : op_str in_block ?
 	streq op_str \+ : 15
 	streq op_str \- : 15
 	streq op_str \* : 16
@@ -68,7 +68,7 @@ tok_unit : 0
 	streq op_str \< : 14
 	streq op_str \> : 14
 	streq op_str \^ : 17
-	streq op_str \~ : 9
+	streq op_str \~ : (in_block ? 9 | 0)
 	streq op_str `~+` : 9
 	streq op_str `~-` : 9
 	streq op_str `~*` : 9
@@ -118,23 +118,24 @@ tok_unit : 0
 `parse_program : tokens -> [ast_block, rest]`
 #parse_program :
 	tokens
-	res : parse_stmts tokens
+	res : parse_stmts tokens 0
 ?
 	(ast_block , (head res)) , ((head (tail res)) , 0)
 
-`parse_stmts : tokens -> [list<node>, rest]`
+`parse_stmts : tokens in_block -> [list<node>, rest]`
 #parse_stmts :
 	tokens
+	in_block
 	tok : peek tokens
 	type : tok_type tok
-	res : parse_expr tokens 0
+	res : parse_expr tokens 0 in_block
 	expr : head res
 	rest : head (tail res)
-	res2 : parse_stmts rest
+	res2 : parse_stmts rest in_block
 ?
 	type = tok_eof : 0 , (tokens , 0)
 	
-	type = tok_sep : parse_stmts (next tokens)
+	type = tok_sep : parse_stmts (next tokens) in_block
 	
 	`Parse Expression`
 	(expr , (head res2)) , ((head (tail res2)) , 0)
@@ -142,54 +143,66 @@ tok_unit : 0
 
 `parse_block : tokens -> [ast_block, rest]`
 #parse_block : tokens ?
-	`TODO: Block logic, Section logic`
-	parse_program tokens `Temporary: Treat block same as program for now`
+	parse_block_impl tokens
 
-`parse_expr : tokens min_prec -> [node, rest]`
+`parse_expr : tokens min_prec in_block -> [node, rest]`
 #parse_expr :
 	tokens 
 	min_prec
-	res_lhs : parse_primary tokens
+	in_block
+	res_lhs : parse_primary tokens in_block
 	lhs : head res_lhs
 	rest_1 : head (tail res_lhs)
 ?
-	_parse_expr_loop lhs rest_1 min_prec
+	_parse_expr_loop lhs rest_1 min_prec in_block
 
-`_parse_expr_loop : lhs tokens min_prec -> [node, rest]`
+`_parse_expr_loop : lhs tokens min_prec in_block -> [node, rest]`
 #_parse_expr_loop :
 	lhs 
 	tokens 
 	min_prec
+	in_block
 	tok : peek tokens
 	type : tok_type tok
 	
 	`Apply vars`
-	res_rhs_apply : parse_expr tokens 6
+	res_rhs_apply : parse_expr tokens 6 in_block
 	rhs_apply : head res_rhs_apply
 	rest_rhs_apply : head (tail res_rhs_apply)
 	new_lhs_apply : ast_apply , (lhs , (rhs_apply , 0))
 	
 	`Infix vars`
 	op_str : tok_val tok
-	prec : get_prec op_str
+	prec : get_prec op_str in_block
 	next_tokens : next tokens
 	next_min_prec : (is_right_assoc op_str) ? prec | (prec + 1)
-	res_rhs_infix : parse_expr next_tokens next_min_prec
+	res_rhs_infix : parse_expr next_tokens next_min_prec in_block
 	rhs_infix : head res_rhs_infix
 	rest_rhs_infix : head (tail res_rhs_infix)
 	new_lhs_infix : ast_infix , (op_str , (lhs , (rhs_infix , 0)))
+
+	`Postfix vars`
+	is_post : is_postfix_op op_str
+	post_prec : get_postfix_prec op_str in_block
+	new_lhs_post : ast_postfix , (op_str , (lhs , 0))
 ?
 	`Check for Apply (Implicit)`
 	(can_start_expr type) : (
 		`Apply: lhs next_expr`
-		_parse_expr_loop new_lhs_apply rest_rhs_apply min_prec
+		_parse_expr_loop new_lhs_apply rest_rhs_apply min_prec in_block
 	)
 	
 	type != tok_op : lhs , (tokens , 0)
+
+	is_post & (post_prec >= min_prec) : (
+		_parse_expr_loop new_lhs_post next_tokens min_prec in_block
+	)
 	
 	prec < min_prec : lhs , (tokens , 0)
 	
-	_parse_expr_loop new_lhs_infix rest_rhs_infix min_prec
+	prec = 0 : lhs , (tokens , 0)
+	
+	_parse_expr_loop new_lhs_infix rest_rhs_infix min_prec in_block
 
 #can_start_expr : type ?
 	type = tok_id : 1
@@ -207,9 +220,22 @@ tok_unit : 0
 	streq op `!!` : 1
 	0
 
-`parse_primary : tokens -> [node, rest]`
+#is_postfix_op : op ?
+	streq op \! : 1
+	streq op \~ : 1
+	streq op \@ : 1
+	0
+
+#get_postfix_prec : op_str in_block ?
+	streq op_str \! : 999
+	streq op_str \~ : (in_block ? 0 | 23)
+	streq op_str \@ : 999
+	0
+
+`parse_primary : tokens in_block -> [node, rest]`
 #parse_primary :
 	tokens
+	in_block
 	tok : peek tokens
 	type : tok_type tok
 	tokens_next : next tokens
@@ -220,7 +246,7 @@ tok_unit : 0
 	type = tok_str : (ast_str , (val , 0)) , (tokens_next , 0)
 	
 	type = tok_op : (
-		is_prefix_op val : _parse_prefix val tokens_next
+		is_prefix_op val : _parse_prefix val tokens_next in_block
 		(ast_op , (val , 0)) , (tokens_next , 0)
 	)
 	
@@ -237,7 +263,8 @@ tok_unit : 0
 #_parse_prefix :
 	op
 	tokens_next
-	res : parse_expr tokens_next 20
+	in_block
+	res : parse_expr tokens_next 20 in_block
 ?
 	(ast_prefix , (op , ((head res) , 0))) , ((head (tail res)) , 0)
 
@@ -247,7 +274,7 @@ tok_unit : 0
 `parse_block : tokens -> [node, rest]`
 #parse_block_impl :
 	tokens
-	res : parse_stmts tokens
+	res : parse_stmts tokens 1
 	exprs : head res
 	rest : head (tail res)
 	tok_r : peek rest
