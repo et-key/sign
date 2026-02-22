@@ -54,26 +54,55 @@ ast_char : 12
 
 #compile_apply : node ctx ?
 	(func ? (arg ? 
-		(res_func ? 
-			(asm_func ? (ctx_func ?
-				(res_arg ?
-					(asm_arg ? (ctx_arg ?
-						(asm_func ~ 
-							(`    str x0, [sp, #-16]!\n` ,
-								(asm_arg ~
-									(`    ldr x1, [sp], #16\n` ,
-										`    ldr x2, [x1]\n` ,
-										`    ldr x9, [x1, #8]\n` ,
-										`    blr x2\n` , 0
+		(func_is_spread ?
+			func_is_spread : (
+				`Spread Concat via Whitespace Apply`
+				(target ?
+					(res_target ?
+						(asm_target ? (ctx_target ?
+							(res_arg ?
+								(asm_arg ? (ctx_arg ?
+									(asm_target~ 
+										(`    str x0, [sp, #-16]!\n` ,
+											(asm_arg ~
+												(`    mov x1, x0\n` ,
+													`    ldr x0, [sp], #16\n` ,
+													`    bl _concat\n` , 0
+												)
+											)
+										)
+									) , ctx_arg , 0
+								) (ctx_from_res res_arg) ) (asm_from_res res_arg)
+							) (compile_node arg ctx_target)
+						) (ctx_from_res res_target) ) (asm_from_res res_target)
+					) (compile_node target ctx)
+				) (head (tail (tail func)))
+			)
+			`Standard Function Call`
+			(res_func ? 
+				(asm_func ? (ctx_func ?
+					(res_arg ?
+						(asm_arg ? (ctx_arg ?
+							(asm_func~ 
+								(`    str x0, [sp, #-16]!\n` ,
+									(asm_arg ~
+										(`    ldr x1, [sp], #16\n` ,
+											`    ldr x2, [x1]\n` ,
+											`    ldr x9, [x1, #8]\n` ,
+											`    blr x2\n` , 0
+										)
 									)
 								)
-							)
-						) , ctx_arg , 0
-					) (ctx_from_res res_arg) ) (asm_from_res res_arg)
-				) (compile_node arg ctx_func)
-			) (ctx_from_res res_func) ) (asm_from_res res_func)
-		) (compile_node func ctx)
+							) , ctx_arg , 0
+						) (ctx_from_res res_arg) ) (asm_from_res res_arg)
+					) (compile_node arg ctx_func)
+				) (ctx_from_res res_func) ) (asm_from_res res_func)
+			) (compile_node func ctx)
+		) (is_spread_node func)
 	) (head (tail (tail node))) ) (head (tail node))
+
+#is_spread_node : node ?
+	((head node) = ast_postfix) & (streq (tok_val (head (tail node))) \~)
 
 #push_var : ctx name ?
 	(offset ? 
@@ -228,7 +257,7 @@ ast_char : 12
 	
 	(res ?
 		(asm ? (ctx_new ?
-			(asm ~ (`    ldr x0, [x0] // @ load\n` , 0)) , ctx_new , 0
+			(asm~ (`    ldr x0, [x0] // @ load\n` , 0)) , ctx_new , 0
 		) (ctx_from_res res) ) (asm_from_res res)
 	) (compile_node expr ctx)
 
@@ -257,7 +286,7 @@ ast_char : 12
 #compile_prefix_bitwise_not : expr ctx ?
 	(res ?
 		(asm ? (ctx_new ?
-			(asm ~ (`    mvn x0, x0\n` , 0)) , ctx_new , 0
+			(asm~ (`    mvn x0, x0\n` , 0)) , ctx_new , 0
 		) (ctx_from_res res) ) (asm_from_res res)
 	) (compile_node expr ctx)
 
@@ -266,7 +295,7 @@ ast_char : 12
 		(streq op \!) : (
 			(res ?
 				(asm ? (ctx_new ?
-					(asm ~ (`    bl _factorial\n` , 0)) , ctx_new , 0
+					(asm~ (`    bl _factorial\n` , 0)) , ctx_new , 0
 				) (ctx_from_res res) ) (asm_from_res res)
 			) (compile_node expr ctx)
 		)
@@ -312,7 +341,7 @@ ast_char : 12
 			(res_rhs ?
 				(asm_rhs ? (ctx_rhs ?
 					(new_ctx ?
-						(asm_rhs ~ (`    str x0, [sp, #-16]!\n` , `    adr x0, sign_id\n` , 0)) , new_ctx , 0
+						(asm_rhs~ (`    str x0, [sp, #-16]!\n` , `    adr x0, sign_id\n` , 0)) , new_ctx , 0
 					) (push_var ctx_rhs name)
 				) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
 			) (compile_node rhs ctx)
@@ -358,7 +387,7 @@ ast_char : 12
 			(asm_lhs ? (ctx_lhs ?
 				(res_rhs ?
 					(asm_rhs ? (ctx_rhs ?
-						(asm_lhs ~ 
+						(asm_lhs~ 
 							(`    str x0, [sp, #-16]!\n` ,
 								(asm_rhs ~
 									(`    mov x1, x0\n` ,
@@ -382,7 +411,7 @@ ast_char : 12
 					(asm_rhs ? (ctx_rhs ?
 						(lbl_true ? (lbl_end ? (res_lbl_end ?
 							(ctx_final ? 
-								(asm_lhs ~ 
+								(asm_lhs~ 
 									(`    str x0, [sp, #-16]!\n` ,
 										(asm_rhs ~
 											(`    mov x1, x0\n` ,
@@ -421,7 +450,7 @@ ast_char : 12
 											(concat `    b.eq ` (concat lbl_right `\n`)) ,
 												(concat `    b ` (concat lbl_end `\n`)) ,
 													(concat lbl_right `:\n`) ,
-														(asm_rhs ~ ((concat lbl_end `:\n`) , 0))
+														(asm_rhs~ ((concat lbl_end `:\n`) , 0))
 									)
 								) , ctx_rhs , 0
 							) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
@@ -470,7 +499,7 @@ ast_char : 12
 		(lbl_end ? 
 			(res_stmts ? 
 				(asm_stmts ? (ctx_stmts ?
-					(asm_stmts ~ ((concat lbl_end `:\n`) , 0)) , ctx_stmts , 0
+					(asm_stmts~ ((concat lbl_end `:\n`) , 0)) , ctx_stmts , 0
 				) (ctx_from_res res_stmts) ) (asm_from_res res_stmts)
 			) (compile_stmts stmts lbl_end (ctx_from_lbl res_lbl_end))
 		) (new_label ctx `blk_end`)

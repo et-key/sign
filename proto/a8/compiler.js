@@ -696,6 +696,20 @@ function compileInfix(node) {
 function compileApply(node) {
 	let code = '';
 
+	// Spread Concat via Whitespace Apply
+	if (node.func && node.func.type === 'postfix' && node.func.op === '~') {
+		let funcCode = compileNode(node.func.expr); // target list
+		let argCode = compileNode(node.arg);        // items to concat
+
+		code += funcCode;
+		code += '    str x0, [sp, #-16]!\n';
+		code += argCode;
+		code += '    mov x1, x0\n';
+		code += '    ldr x0, [sp], #16\n';
+		code += '    bl _concat\n';
+		return code;
+	}
+
 	// Optimization: Static Inline Composition
 	// Check if both Func and Arg are static lambda definitions (infix '?')
 	if (node.func.type === 'infix' && node.func.op === '?' &&
