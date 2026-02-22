@@ -1,0 +1,6 @@
+`Testing Context-Free Range Mapping`
+
+range : [ 0 ~+ 2 ~ 10 ]
+obj_post : [ a : obj~ ]
+func : f x + y z
+func2 : x ~y ? x : y~

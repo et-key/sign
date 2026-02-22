@@ -68,7 +68,7 @@ tok_unit : 0
 	streq op_str \< : 14
 	streq op_str \> : 14
 	streq op_str \^ : 17
-	streq op_str \~ : (in_block ? 9 | 0)
+	streq op_str \~ : 9
 	streq op_str `~+` : 9
 	streq op_str `~-` : 9
 	streq op_str `~*` : 9
@@ -187,7 +187,7 @@ tok_unit : 0
 	new_lhs_post : ast_postfix , (op_str , (lhs , 0))
 ?
 	`Check for Apply (Implicit)`
-	(can_start_expr type) : (
+	(can_start_expr type) & (6 >= min_prec) : (
 		`Apply: lhs next_expr`
 		_parse_expr_loop new_lhs_apply rest_rhs_apply min_prec in_block
 	)
@@ -228,7 +228,7 @@ tok_unit : 0
 
 #get_postfix_prec : op_str in_block ?
 	streq op_str \! : 999
-	streq op_str \~ : (in_block ? 0 | 23)
+	streq op_str \~ : 23
 	streq op_str \@ : 999
 	0
 
