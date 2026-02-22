@@ -13,10 +13,19 @@
      id="defs45">
     <!-- hidden animation path for swan flight -->
     <path id="curve" d="M -1840,-1600 Q -800,0 0,0" fill="none" stroke="none" visibility="hidden"/>
+      <clipPath id="logoCircleClip">
+    <circle
+      cx="520.50024"
+      cy="-225.88086"
+      r="520.50018"
+      transform="scale(1,-1)" />
+  </clipPath>
+　
   </defs>
   <g
      id="g49"
-     transform="matrix(1.3333333,0,0,-1.3333333,-8.2038948e-5,995.1747)">
+     transform="matrix(1.3333333,0,0,-1.3333333,-8.2038948e-5,995.1747)"
+     clip-path="url(#logoCircleClip)">
     <circle
        style="fill:#ffffff;stroke-width:1.5;fill-opacity:1"
        id="path972"
