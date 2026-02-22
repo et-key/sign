@@ -120,7 +120,7 @@ tok_unit : 0
 	tokens
 	res : parse_stmts tokens 0
 ?
-	(ast_block , (head res)) , ((head (tail res)) , 0)
+	(ast_block , (head res) , 0) , ((head (tail res)) , 0)
 
 `parse_stmts : tokens in_block -> [list<node>, rest]`
 #parse_stmts :
@@ -241,13 +241,13 @@ tok_unit : 0
 	tokens_next : next tokens
 	val : tok_val tok
 ?
-	type = tok_num : (ast_num , (val , 0)) , (tokens_next , 0)
-	type = tok_id : (ast_id , (val , 0)) , (tokens_next , 0)
-	type = tok_str : (ast_str , (val , 0)) , (tokens_next , 0)
+	type = tok_num : (ast_num , val , 0) , (tokens_next , 0)
+	type = tok_id : (ast_id , val , 0) , (tokens_next , 0)
+	type = tok_str : (ast_str , val , 0) , (tokens_next , 0)
 	
 	type = tok_op : (
 		is_prefix_op val : _parse_prefix val tokens_next in_block
-		(ast_op , (val , 0)) , (tokens_next , 0)
+		(ast_op , val , 0) , (tokens_next , 0)
 	)
 	
 	type = tok_punc : (
@@ -266,7 +266,7 @@ tok_unit : 0
 	in_block
 	res : parse_expr tokens_next 20 in_block
 ?
-	(ast_prefix , (op , ((head res) , 0))) , ((head (tail res)) , 0)
+	(ast_prefix , op , (head res) , 0) , ((head (tail res)) , 0)
 
 
 
@@ -289,14 +289,14 @@ tok_unit : 0
 	0
 
 `--- AST Constructors ---`
-#make_node : type val ? type , (val , 0)
+#make_node : type val ? type , val , 0
 
 #make_num : val ? make_node ast_num val
 #make_id : val ? make_node ast_id val
 #make_op : val ? make_node ast_op val
 #make_str : val ? make_node ast_str val
 
-#make_infix : op lhs rhs ? ast_infix , (op , (lhs , (rhs , 0)))
+#make_infix : op lhs rhs ? ast_infix , op , lhs , rhs , 0
 
 #make_lambda : params body ? make_infix \? params body
 
