@@ -16,8 +16,8 @@ tok_unit : 0
 `--- Predicates (Pure) ---`
 #is_space : c ? c = \  | c = \	 | c = \
 
-#is_digit : c ? c >= \0 & c <= \9
-#is_alpha : c ? (c >= \A & c <= \Z) | (c >= \a & c <= \z) | c = \_
+#is_digit : c ? \0 <= c <= \9
+#is_alpha : c ? (\A <= c <= \Z) | (\a <= c <= \z) | c = \_
 #is_op_char : c ? c = \= | c = \+ | c = \- | c = \* | c = \/ | c = \% | c = \^ | c = \& | c = \| | c = \! | c = \< | c = \> | c = \? | c = \: | c = \; | c = \~
 
 `--- Helper: List Construction ---`
