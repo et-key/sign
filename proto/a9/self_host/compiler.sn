@@ -449,8 +449,10 @@ ast_char : 12
 																(cons `    mov x0, #0\n` 
 																	(cons (concat `    b ` (concat lbl_end `\n`))
 																		(cons (concat lbl_true `:\n`)
-																			`True Case: Return LHS (x0) already in x0 from ldr`
-																			(cons (concat lbl_end `:\n`) 0)
+																			(concat_lists
+																				((is_literal_expr lhs) ? (cons `    mov x0, x1\n` 0) | 0)
+																				(cons (concat lbl_end `:\n`) 0)
+																			)
 																		)
 																	)
 																)
@@ -597,3 +599,11 @@ ast_char : 12
 #ctx_from_res : res ? head (tail res)
 #res_lbl_end : res ? res `Typo fix context usage above`
 #ctx_from_lbl : res ? head (tail res)
+
+#is_literal_expr : node ?
+	(type ?
+		type = ast_num : 1
+		type = ast_str : 1
+		type = ast_char : 1
+		0
+	) (head node)
