@@ -222,12 +222,20 @@ ast_char : 12
 	) (ctx_label_count ctx)
 
 `--- Core Compiler ---`
+#format_str_list : str_list ?
+	str_list = 0 : (`.global _str_end\n_str_end:\n` , 0)
+	(entry ?
+		(content ? (label ?
+			label , (`:\n    .asciz "` , (content , (`"\n` , (format_str_list (tail str_list)))))
+		) (head (tail entry))) (head entry)
+	) (head str_list)
+
 `compile_program : ast -> assembly_string`
 #compile_program : ast ?
 	(res ? 
-		(asm_list ? 
-			concat_list asm_list
-		) (head res)
+		(asm_list ? (ctx ? (str_list ?
+			concat_list (asm_list ~ (`\n.data\n.balign 8\n.global _str_start\n_str_start:\n` , (format_str_list str_list)))
+		) (ctx_strings ctx)) (ctx_from_res res)) (head res)
 	) (compile_node ast (make_context 0 0 0 0))
 
 `compile_node : node ctx -> [asm_list, ctx]`

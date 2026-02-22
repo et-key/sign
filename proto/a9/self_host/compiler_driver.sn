@@ -636,7 +636,7 @@ Compiles AST to AArch64 Assembly
 	)
 
 #emit_op : op ?
-	streq op \+ : `    add x0, x1, x0\n`
+	streq op \+ : `    bl _add\n`
 	streq op \- : `    sub x0, x1, x0\n`
 	streq op \* : `    mul x0, x1, x0\n`
 	streq op \| : `    orr x0, x1, x0\n`

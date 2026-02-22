@@ -76,7 +76,7 @@ const AST = JSON.parse(fs.readFileSync(INPUT_FILE, 'utf8'));
 
 // --- Instruction Dictionary ---
 const TEMPLATES = {
-	'+': 'add x0, x1, x0',
+	'+': 'bl _add',
 	'-': 'sub x0, x1, x0',
 	'*': 'mul x0, x1, x0',
 	'/': 'sdiv x0, x1, x0',
@@ -806,7 +806,7 @@ function compileApply(node) {
 
 	// 1. Compile Func -> Stack
 	code += compileNode(node.func);
-		code += '    str x0, [sp, #-16]!\n';
+	code += '    str x0, [sp, #-16]!\n';
 
 	// 2. Compile Arg -> x0
 	code += compileNode(node.arg);
@@ -1378,6 +1378,9 @@ ret
 
 finalOutput += `
 .data
+.balign 8
+.global _str_start
+_str_start:
 `;
 
 // Append String Table
@@ -1386,6 +1389,11 @@ for (let key in stringTable) {
 	// AArch64 null-terminated string
 	finalOutput += `${lbl}:\n    .asciz "${key.replace(/"/g, '\\"')}"\n`;
 }
+
+finalOutput += `
+.global _str_end
+_str_end:
+`;
 
 fs.writeFileSync(OUTPUT_FILE, finalOutput);
 console.log(`Compiled to ${OUTPUT_FILE}`);

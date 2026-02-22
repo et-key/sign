@@ -54,7 +54,12 @@ _heap_init:
     adr x0, heap_buffer
     adr x1, heap_ptr
     str x0, [x1]
+    
+    adr x0, heap_string
+    adr x1, heap_string_ptr
+    str x0, [x1]
     ret
+
 
 // --- IO ---
 
@@ -110,6 +115,30 @@ _read_char:
     ldp x29, x30, [sp], #16
     ret
 
+// --- String Heuristics ---
+_is_string:
+    // returns x0 = 1 if string pointer, 0 otherwise
+    adr x9, _str_start
+    adr x10, _str_end
+    cmp x0, x9
+    b.lo .L_is_str_dyn
+    cmp x0, x10
+    b.lo .L_is_str_true
+.L_is_str_dyn:
+    adr x9, heap_string
+    adr x10, heap_string_ptr
+    ldr x10, [x10]
+    cmp x0, x9
+    b.lo .L_is_str_false
+    cmp x0, x10
+    b.lo .L_is_str_true
+.L_is_str_false:
+    mov x0, #0
+    ret
+.L_is_str_true:
+    mov x0, #1
+    ret
+
 // --- List / Memory ---
 
 _cons:
@@ -128,46 +157,60 @@ _cons:
 
     .global _concat
 _concat:
-    // x0 = A, x1 = B
-    // Return: if A is scalar -> cons(A, B)
-    //         if A is List -> cons(Head(A), concat(Tail(A), B))
-    //         if A == 0 (nil) -> return B
     cbz x0, .Lconcat_empty
 
     stp x29, x30, [sp, #-32]!
     mov x29, sp
 
-    // Is A a pointer to heap?
-    cmp x0, #4096
-    b.ls .Lconcat_scalar
+    str x0, [sp, #16] // Save A
+    str x1, [sp, #24] // Save B
+
+    bl _is_string
+    mov x2, x0
+    ldr x0, [sp, #24]
+    str x2, [sp, #-16]!
+    bl _is_string
+    ldr x2, [sp], #16
+    orr x2, x2, x0
+    cbz x2, .Lconcat_is_list_or_scalar
+
+    ldr x0, [sp, #16]
+    bl _to_string
+    str x0, [sp, #16]
+    ldr x0, [sp, #24]
+    bl _to_string
+    mov x1, x0
+    ldr x0, [sp, #16]
+    bl _strcat
+    ldp x29, x30, [sp], #32
+    ret
+
+.Lconcat_is_list_or_scalar:
+    ldr x0, [sp, #16]
+    ldr x1, [sp, #24]
+
     adr x9, heap_buffer
+    adr x10, heap_ptr
+    ldr x10, [x10]
     cmp x0, x9
-    b.lo .Lconcat_scalar // Below heap, it's string/static data.
+    b.lo .Lconcat_scalar
+    cmp x0, x10
+    b.hs .Lconcat_scalar
+    tst x0, #1
+    b.ne .Lconcat_scalar
 
-    // A is a list cons cell. x0 = [Head, Tail].
-    // Save A and B
-    str x0, [sp, #16] // A
-    str x1, [sp, #24] // B
-
-    // Recursion: concat(Tail(A), B)
-    ldr x0, [x0, #8] // x0 = Tail(A)
-    // x1 is already B
+.Lconcat_list:
+    ldr x0, [x0, #8]
     bl _concat
-
-    // Now x0 is concatResult. Needs to be Tail of new cons.
-    // x1 needs to be Head(A).
-    ldr x2, [sp, #16] // Load A
-    ldr x1, [x2]      // Load Head(A)
-    bl _cons          // _cons(x1=Head, x0=concatResult)
-
+    ldr x2, [sp, #16]
+    ldr x1, [x2]
+    bl _cons
     ldp x29, x30, [sp], #32
     ret
 
 .Lconcat_scalar:
-    // A is scalar. Return cons(A, B)
-    mov x2, x0  // x2 = A
-    mov x0, x1  // x0 = B
-    mov x1, x2  // x1 = A
+    ldr x0, [sp, #24]
+    ldr x1, [sp, #16]
     bl _cons
     ldp x29, x30, [sp], #32
     ret
@@ -175,6 +218,7 @@ _concat:
 .Lconcat_empty:
     mov x0, x1
     ret
+
 
 _nth:
     // x1 = list, x0 = index
@@ -338,11 +382,13 @@ _str_at:
     ret
 
 .data
+.align 8
 heap_ptr: .quad 0
+heap_string_ptr: .quad 0
 
 // Static Closures for Runtime Functions
 // Closure = [CodePtr, EnvPtr]
-.align 4
+.align 8
 closure_print_str:
     .quad _print_str
     .quad sign_id
@@ -352,4 +398,112 @@ closure_print_char:
     .quad sign_id
 
 .bss
-heap_buffer: .skip 65536
+.align 16
+heap_buffer: .skip 16777216
+heap_string: .skip 16777216
+
+.text
+// --- String Parsing Coercion ---
+_to_int:
+    stp x29, x30, [sp, #-16]!
+    str x0, [sp, #-16]!
+    bl _is_string
+    cbz x0, .L_to_int_done
+    ldr x1, [sp]
+    mov x0, #0
+    mov x2, #10
+.L_to_int_loop:
+    ldrb w3, [x1], #1
+    cbz w3, .L_to_int_end
+    sub w3, w3, #48
+    cmp w3, #9
+    b.hi .L_to_int_end
+    mul x0, x0, x2
+    add x0, x0, x3
+    b .L_to_int_loop
+.L_to_int_end:
+    add sp, sp, #16
+    ldp x29, x30, [sp], #16
+    ret
+.L_to_int_done:
+    ldr x0, [sp], #16
+    ldp x29, x30, [sp], #16
+    ret
+
+_to_string:
+    stp x29, x30, [sp, #-16]!
+    str x0, [sp, #-16]!
+    bl _is_string
+    cbnz x0, .L_to_str_done
+    ldr x0, [sp]
+    
+    adr x9, heap_string_ptr
+    ldr x1, [x9]
+    mov x12, x1
+    add x2, x1, #24
+    str x2, [x9]
+    
+    cbnz x0, .L_to_str_not_zero
+    mov w3, #48
+    strb w3, [x1], #1
+    strb wzr, [x1]
+    mov x0, x12
+    add sp, sp, #16
+    ldp x29, x30, [sp], #16
+    ret
+
+.L_to_str_not_zero:
+    add x1, x12, #24
+    strb wzr, [x1, #-1]!
+    mov x2, #10
+.L_to_str_loop:
+    cbz x0, .L_to_str_copy
+    udiv x3, x0, x2
+    msub x4, x3, x2, x0
+    add w4, w4, #48
+    strb w4, [x1, #-1]!
+    mov x0, x3
+    b .L_to_str_loop
+.L_to_str_copy:
+    mov x0, x1
+    add sp, sp, #16
+    ldp x29, x30, [sp], #16
+    ret
+
+.L_to_str_done:
+    ldr x0, [sp], #16
+    ldp x29, x30, [sp], #16
+    ret
+
+_strcat:
+    stp x29, x30, [sp, #-16]!
+    str x0, [sp, #-16]!
+    str x1, [sp, #-16]!
+    
+    adr x9, heap_string_ptr
+    ldr x2, [x9]
+    str x2, [sp, #-16]!
+    
+.L_strcat_a:
+    ldrb w3, [x0], #1
+    cbz w3, .L_strcat_b
+    strb w3, [x2], #1
+    b .L_strcat_a
+.L_strcat_b:
+    ldr x1, [sp, #16]
+.L_strcat_b_loop:
+    ldrb w3, [x1], #1
+    cbz w3, .L_strcat_end
+    strb w3, [x2], #1
+    b .L_strcat_b_loop
+.L_strcat_end:
+    strb wzr, [x2], #1
+    add x2, x2, #7
+    bic x2, x2, #7
+    adr x9, heap_string_ptr
+    str x2, [x9]
+    
+    ldr x0, [sp], #16
+    add sp, sp, #32
+    ldp x29, x30, [sp], #16
+    ret
