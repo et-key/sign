@@ -55,6 +55,11 @@ tok_unit : 0
 	streq op_str \* : 16
 	streq op_str \/ : 16
 	streq op_str \% : 16
+	streq op_str `>=` : 14
+	streq op_str `!=` : 14
+	streq op_str \| : 12
+	streq op_str \& : 13
+	streq op_str \; : 11
 	streq op_str \: : 2
 	streq op_str \? : 5
 	streq op_str \, : 6
@@ -62,9 +67,20 @@ tok_unit : 0
 	streq op_str `==` : 14
 	streq op_str \< : 14
 	streq op_str \> : 14
-	streq op_str `<=` : 14
-	streq op_str `>=` : 14
-	streq op_str `!=` : 14
+	streq op_str \^ : 17
+	streq op_str \~ : 9
+	streq op_str `~+` : 9
+	streq op_str `~-` : 9
+	streq op_str `~*` : 9
+	streq op_str `~/` : 9
+	streq op_str `~^` : 9
+	streq op_str \' : 22
+	streq op_str \@ : 22
+	streq op_str `<<` : 24
+	streq op_str `>>` : 24
+	streq op_str `||` : 25
+	streq op_str `;;` : 26
+	streq op_str `&&` : 27
 	0
 
 #is_right_assoc : op_str ?
@@ -72,6 +88,7 @@ tok_unit : 0
 	streq op_str \? : 1
 	streq op_str \, : 1
 	streq op_str \^ : 1
+	streq op_str \@ : 1
 	0
 
 `--- Parser Helpers ---`
@@ -186,6 +203,8 @@ tok_unit : 0
 	streq op \# : 1
 	streq op \$ : 1
 	streq op \@ : 1 
+	streq op \~ : 1
+	streq op `!!` : 1
 	0
 
 `parse_primary : tokens -> [node, rest]`

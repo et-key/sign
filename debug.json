@@ -1,0 +1,237 @@
+{
+  "type": "block",
+  "body": [
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "add"
+      },
+      "right": {
+        "type": "infix",
+        "op": "+",
+        "left": {
+          "type": "identifier",
+          "value": "x"
+        },
+        "right": {
+          "type": "identifier",
+          "value": "y"
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "bitwise"
+      },
+      "right": {
+        "type": "apply",
+        "func": {
+          "type": "infix",
+          "op": ";",
+          "left": {
+            "type": "infix",
+            "op": "||",
+            "left": {
+              "type": "identifier",
+              "value": "a"
+            },
+            "right": {
+              "type": "identifier",
+              "value": "b"
+            }
+          },
+          "right": {
+            "type": "identifier",
+            "value": ";",
+            "isOp": true
+          }
+        },
+        "arg": {
+          "type": "infix",
+          "op": "&&",
+          "left": {
+            "type": "identifier",
+            "value": "c"
+          },
+          "right": {
+            "type": "identifier",
+            "value": "d"
+          }
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "bitshift"
+      },
+      "right": {
+        "type": "infix",
+        "op": ">>",
+        "left": {
+          "type": "infix",
+          "op": "<<",
+          "left": {
+            "type": "identifier",
+            "value": "a"
+          },
+          "right": {
+            "type": "identifier",
+            "value": "b"
+          }
+        },
+        "right": {
+          "type": "identifier",
+          "value": "c"
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "logic"
+      },
+      "right": {
+        "type": "infix",
+        "op": ";",
+        "left": {
+          "type": "infix",
+          "op": "|",
+          "left": {
+            "type": "identifier",
+            "value": "a"
+          },
+          "right": {
+            "type": "infix",
+            "op": "&",
+            "left": {
+              "type": "identifier",
+              "value": "b"
+            },
+            "right": {
+              "type": "identifier",
+              "value": "c"
+            }
+          }
+        },
+        "right": {
+          "type": "identifier",
+          "value": "d"
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "medium"
+      },
+      "right": {
+        "type": "infix",
+        "op": "~*",
+        "left": {
+          "type": "infix",
+          "op": "~+",
+          "left": {
+            "type": "identifier",
+            "value": "array"
+          },
+          "right": {
+            "type": "number",
+            "value": 5
+          }
+        },
+        "right": {
+          "type": "number",
+          "value": 2
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "access"
+      },
+      "right": {
+        "type": "infix",
+        "op": "@",
+        "left": {
+          "type": "identifier",
+          "value": "base"
+        },
+        "right": {
+          "type": "infix",
+          "op": "'",
+          "left": {
+            "type": "identifier",
+            "value": "key"
+          },
+          "right": {
+            "type": "identifier",
+            "value": "val"
+          }
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "pre"
+      },
+      "right": {
+        "type": "prefix",
+        "op": "!!",
+        "expr": {
+          "type": "identifier",
+          "value": "x"
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "pre2"
+      },
+      "right": {
+        "type": "prefix",
+        "op": "~",
+        "expr": {
+          "type": "identifier",
+          "value": "y"
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "pre3"
+      },
+      "right": {
+        "type": "prefix",
+        "op": "@",
+        "expr": {
+          "type": "identifier",
+          "value": "z"
+        }
+      }
+    }
+  ]
+}
