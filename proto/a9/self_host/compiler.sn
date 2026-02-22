@@ -196,6 +196,8 @@ ast_char : 12
 	(type ?
 		type = ast_num : compile_num node ctx
 		type = ast_infix : compile_infix node ctx
+		type = ast_prefix : compile_prefix node ctx
+		type = ast_postfix : compile_postfix node ctx
 		type = ast_block : compile_block node ctx
 		type = ast_unit : compile_unit node ctx
 		type = ast_str : compile_str node ctx
@@ -218,6 +220,92 @@ ast_char : 12
 #compile_unit : node ctx ?
 	cons (emit `    adr x0, sign_id\n` 0) (cons ctx 0)
 
+#compile_prefix : node ctx ?
+	(op ? (expr ?
+		(streq op \@) : (compile_prefix_at expr ctx)
+		(streq op \!) : (compile_prefix_not expr ctx)
+		(streq op `!!`) : (compile_prefix_bitwise_not expr ctx)
+		
+		`Fallback`
+		compile_node expr ctx
+	) (head (tail (tail node))) ) (tok_val (head (tail node)))
+
+#compile_prefix_at : expr ctx ?
+	(expr_is_zero_num expr) : (
+		cons (emit `    bl _read_char\n` 0) (cons ctx 0)
+	)
+	
+	(res ?
+		(asm ? (ctx_new ?
+			cons 
+				(concat_lists asm 
+					(cons `    ldr x0, [x0] // @ load\n` 0)
+				)
+				(cons ctx_new 0)
+		) (ctx_from_res res) ) (asm_from_res res)
+	) (compile_node expr ctx)
+
+#expr_is_zero_num : expr ?
+	(head expr) = ast_num : (head (tail expr)) = 0
+	0
+
+#compile_prefix_not : expr ctx ?
+	(lbl_true ? (lbl_end ? (res_lbl_end ? 
+		(ctx_new ?
+			(res_expr ?
+				(asm_expr ? (ctx_expr ?
+					cons
+						(concat_lists asm_expr
+							(cons `    adr x9, sign_id\n`
+								(cons `    cmp x0, x9\n`
+									(cons (concat `    b.eq ` (concat lbl_true `\n`))
+										(cons `    adr x0, sign_id\n`
+											(cons (concat `    b ` (concat lbl_end `\n`))
+												(cons (concat lbl_true `:\n`)
+													(cons `    mov x0, #0\n`
+														(cons (concat lbl_end `:\n`) 0)
+													)
+												)
+											)
+										)
+									)
+								)
+							)
+						)
+						(cons ctx_expr 0)
+				) (ctx_from_res res_expr) ) (asm_from_res res_expr)
+			) (compile_node expr ctx_new)
+		) (ctx_from_lbl res_lbl_end) ) (new_label (new_label ctx `not_true`) `not_end`) ) )
+
+#compile_prefix_bitwise_not : expr ctx ?
+	(res ?
+		(asm ? (ctx_new ?
+			cons 
+				(concat_lists asm 
+					(cons `    mvn x0, x0\n` 0)
+				)
+				(cons ctx_new 0)
+		) (ctx_from_res res) ) (asm_from_res res)
+	) (compile_node expr ctx)
+
+#compile_postfix : node ctx ?
+	(op ? (expr ?
+		(streq op \!) : (
+			(res ?
+				(asm ? (ctx_new ?
+					cons 
+						(concat_lists asm 
+							(cons `    bl _factorial\n` 0)
+						)
+						(cons ctx_new 0)
+				) (ctx_from_res res) ) (asm_from_res res)
+			) (compile_node expr ctx)
+		)
+		
+		`Fallback`
+		compile_node expr ctx
+	) (head (tail (tail node))) ) (tok_val (head (tail node)))
+
 #compile_infix : node ctx ?
 	(op ?
 		(streq op \+) : (compile_binop node ctx `    add x0, x0, x1\n`)
@@ -231,6 +319,15 @@ ast_char : 12
 		(streq op \>) : (compile_cmp node ctx `gt`)
 		(streq op `<=`) : (compile_cmp node ctx `le`)
 		(streq op `>=`) : (compile_cmp node ctx `ge`)
+
+		(streq op \|)  : (compile_logic_or node ctx)
+		(streq op `||`) : (compile_binop node ctx `    orr x0, x1, x0\n`)
+		(streq op \&) : (compile_logic_and node ctx)
+
+		(streq op \,) : (compile_binop node ctx `    bl _cons\n`)
+		(streq op \~) : (compile_binop node ctx `    bl _concat\n`)
+		(streq op `~+`) : (compile_binop node ctx `    bl _range\n`)
+		(streq op \') : (compile_binop node ctx `    bl _dict_get\n`)
 
 		(streq op \:) : (compile_bind node ctx)
 		(streq op \?) : (compile_lambda node ctx)
@@ -371,6 +468,74 @@ ast_char : 12
 				) (compile_node rhs ctx_lhs)
 			) (ctx_from_res res_lhs) ) (asm_from_res res_lhs)
 		) (compile_node lhs ctx)
+	) (head (tail (tail (tail node)))) ) (head (tail (tail node)))
+
+#compile_logic_or : node ctx ?
+	(lhs ? (rhs ?
+		(lbl_right ? (lbl_end ? (res_lbl_end ?
+			(ctx_new ?
+				(res_lhs ?
+					(asm_lhs ? (ctx_lhs ?
+						(res_rhs ?
+							(asm_rhs ? (ctx_rhs ?
+								cons
+									(concat_lists asm_lhs
+										(cons `    adr x9, sign_id\n`
+											(cons `    cmp x0, x9\n`
+												(cons (concat `    b.eq ` (concat lbl_right `\n`))
+													(cons (concat `    b ` (concat lbl_end `\n`))
+														(cons (concat lbl_right `:\n`)
+															(concat_lists asm_rhs
+																(cons (concat lbl_end `:\n`) 0)
+															)
+														)
+													)
+												)
+											)
+										)
+									)
+									(cons ctx_rhs 0)
+							) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
+						) (compile_node rhs ctx_lhs)
+					) (ctx_from_res res_lhs) ) (asm_from_res res_lhs)
+				) (compile_node lhs ctx_new)
+			) (ctx_from_lbl res_lbl_end)
+		) (new_label (new_label ctx `or_right`) `or_end`) ) )
+	) (head (tail (tail (tail node)))) ) (head (tail (tail node)))
+
+#compile_logic_and : node ctx ?
+	(lhs ? (rhs ?
+		(lbl_fail ? (lbl_end ? (res_lbl_end ?
+			(ctx_new ?
+				(res_lhs ?
+					(asm_lhs ? (ctx_lhs ?
+						(res_rhs ?
+							(asm_rhs ? (ctx_rhs ?
+								cons
+									(concat_lists asm_lhs
+										(cons `    adr x9, sign_id\n`
+											(cons `    cmp x0, x9\n`
+												(cons (concat `    b.eq ` (concat lbl_fail `\n`))
+													(concat_lists asm_rhs
+														(cons (concat `    b ` (concat lbl_end `\n`))
+															(cons (concat lbl_fail `:\n`)
+																(cons `    adr x0, sign_id\n`
+																	(cons (concat lbl_end `:\n`) 0)
+																)
+															)
+														)
+													)
+												)
+											)
+										)
+									)
+									(cons ctx_rhs 0)
+							) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
+						) (compile_node rhs ctx_lhs)
+					) (ctx_from_res res_lhs) ) (asm_from_res res_lhs)
+				) (compile_node lhs ctx_new)
+			) (ctx_from_lbl res_lbl_end)
+		) (new_label (new_label ctx `and_fail`) `and_end`) ) )
 	) (head (tail (tail (tail node)))) ) (head (tail (tail node)))
 
 #compile_block : node ctx ?

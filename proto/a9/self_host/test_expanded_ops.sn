@@ -1,0 +1,11 @@
+`Testing expanded operators`
+
+add : x + y
+bitwise : a || b ;; c && d
+bitshift : a << b >> c
+logic : a | b & c ; d
+medium : array ~+ 5 ~* 2
+access : base @ key ' val
+pre : !!x
+pre2 : ~y
+pre3 : @z

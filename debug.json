@@ -1,0 +1,131 @@
+{
+  "type": "block",
+  "body": [
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "range"
+      },
+      "right": {
+        "type": "infix",
+        "op": "~",
+        "left": {
+          "type": "infix",
+          "op": "~+",
+          "left": {
+            "type": "number",
+            "value": 0
+          },
+          "right": {
+            "type": "number",
+            "value": 2
+          }
+        },
+        "right": {
+          "type": "number",
+          "value": 10
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "obj_post"
+      },
+      "right": {
+        "type": "infix",
+        "op": ":",
+        "left": {
+          "type": "identifier",
+          "value": "a"
+        },
+        "right": {
+          "type": "postfix",
+          "op": "~",
+          "expr": {
+            "type": "identifier",
+            "value": "obj"
+          }
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "func"
+      },
+      "right": {
+        "type": "apply",
+        "func": {
+          "type": "apply",
+          "func": {
+            "type": "identifier",
+            "value": "f"
+          },
+          "arg": {
+            "type": "infix",
+            "op": "+",
+            "left": {
+              "type": "identifier",
+              "value": "x"
+            },
+            "right": {
+              "type": "identifier",
+              "value": "y"
+            }
+          }
+        },
+        "arg": {
+          "type": "identifier",
+          "value": "z"
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "func2"
+      },
+      "right": {
+        "type": "identifier",
+        "value": "x"
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "infix",
+        "op": "?",
+        "left": {
+          "type": "prefix",
+          "op": "~",
+          "expr": {
+            "type": "identifier",
+            "value": "y"
+          }
+        },
+        "right": {
+          "type": "identifier",
+          "value": "x"
+        }
+      },
+      "right": {
+        "type": "postfix",
+        "op": "~",
+        "expr": {
+          "type": "identifier",
+          "value": "y"
+        }
+      }
+    }
+  ]
+}
