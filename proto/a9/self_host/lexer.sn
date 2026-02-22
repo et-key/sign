@@ -89,23 +89,23 @@ tok_unit : 0
 	)
 	
 	is_digit c : (
-		(tok_num , val , 0) , ((head (tail res_num)) , 0)
+		(tok_num , val) , ((head (tail res_num)) , 0)
 	)
 	
 	is_alpha c : (
-		(tok_id , (head res_id) , 0) , ((head (tail res_id)) , 0)
+		(tok_id , (head res_id)) , ((head (tail res_id)) , 0)
 	)
 	
 	is_op_char c : (
-		(tok_op , (head res_op) , 0) , ((head (tail res_op)) , 0)
+		(tok_op , (head res_op)) , ((head (tail res_op)) , 0)
 	)
 	
 	c = \` : (
-		(tok_str , (head res_str) , 0) , ((head (tail res_str)) , 0)
+		(tok_str , (head res_str)) , ((head (tail res_str)) , 0)
 	)
 	
 	`Default: Punctuation`
-	(tok_punc , c , 0) , ((pos + 1) , 0)
+	(tok_punc , c) , ((pos + 1) , 0)
 
 
 
