@@ -120,7 +120,7 @@ tok_unit : 0
 	tokens
 	res : parse_stmts tokens 0
 ?
-	(ast_block , (head res)) , ((head (tail res)) , 0)
+	(ast_block , (head res) , 0) , ((head (tail res)) , 0)
 
 `parse_stmts : tokens in_block -> [list<node>, rest]`
 #parse_stmts :

@@ -76,7 +76,7 @@ const AST = JSON.parse(fs.readFileSync(INPUT_FILE, 'utf8'));
 
 // --- Instruction Dictionary ---
 const TEMPLATES = {
-	'+': 'add x0, x1, x0',
+	'+': 'bl _add',
 	'-': 'sub x0, x1, x0',
 	'*': 'mul x0, x1, x0',
 	'/': 'sdiv x0, x1, x0',
@@ -696,6 +696,20 @@ function compileInfix(node) {
 function compileApply(node) {
 	let code = '';
 
+	// Spread Concat via Whitespace Apply
+	if (node.func && node.func.type === 'postfix' && node.func.op === '~') {
+		let funcCode = compileNode(node.func.expr); // target list
+		let argCode = compileNode(node.arg);        // items to concat
+
+		code += funcCode;
+		code += '    str x0, [sp, #-16]!\n';
+		code += argCode;
+		code += '    mov x1, x0\n';
+		code += '    ldr x0, [sp], #16\n';
+		code += '    bl _concat\n';
+		return code;
+	}
+
 	// Optimization: Static Inline Composition
 	// Check if both Func and Arg are static lambda definitions (infix '?')
 	if (node.func.type === 'infix' && node.func.op === '?' &&
@@ -797,43 +811,38 @@ function compileApply(node) {
 	// 2. Compile Arg -> x0
 	code += compileNode(node.arg);
 
-	let lblCompose = generateLabel("do_compose");
 	let lblApply = generateLabel("do_apply");
 	let lblConcat = generateLabel("do_concat");
 	let lblEnd = generateLabel("apply_end");
 
-	code += '    ldr x9, [sp], #16\n'; // Pop Func into x9
+	code += '    ldr x1, [sp], #16\n'; // Pop Func into x1
 
-	// Check if LHS (x9) is a function (tagged with #1)
-	code += '    tst x9, #1\n';
+	// Check if LHS (x1) is >= heap_buffer
+	code += `    adr x9, heap_buffer\n`;
+	code += `    cmp x1, x9\n`;
+	code += `    b.lo ${lblConcat}\n`;
+
+	// Check if LHS (x1) is a function (tagged with #1)
+	code += `    tst x1, #1\n`;
 	code += `    b.eq ${lblConcat}\n`; // LHS=Data -> Concat
-
-	// Check if RHS (x0) is a function
-	code += '    tst x0, #1\n';
-	code += `    b.ne ${lblCompose}\n`; // LHS=Func, RHS=Func -> Compose
 
 	// Case A: Apply (LHS=Func, RHS=Data)
 	code += `${lblApply}:\n`;
-	code += '    bic x9, x9, #1\n';   // Clear tag from Func
-	code += '    ldr x10, [x9]\n';     // Code
-	code += '    ldr x9, [x9, #8]\n';  // Env
-	code += '    blr x10\n';
+	code += '    bic x1, x1, #1\n';   // Clear tag from Func
+	code += '    ldr x2, [x1]\n';     // Code
+	code += '    ldr x9, [x1, #8]\n';  // Env
+	code += '    blr x2\n';
 	code += `    b ${lblEnd}\n`;
 
-	// Case B: Compose (LHS=Func, RHS=Func)
-	code += `${lblCompose}:\n`;
-	code += '    mov x1, x0\n';        // x1 = Arg (g)
-	code += '    mov x0, x9\n';        // x0 = Func (f)
-	code += '    bl _compose\n';       // Returns Closure h(x) = g(f(x))
-	code += `    b ${lblEnd}\n`;
-
-	// Case C: Concat (LHS=Data, RHS=Any)
+	// Case B: Concat (LHS=Data, RHS=Any)
 	code += `${lblConcat}:\n`;
-	code += '    mov x1, x0\n';        // x1 = RHS
-	code += '    mov x0, x9\n';        // x0 = LHS
+	code += '    mov x2, x0\n';
+	code += '    mov x0, x1\n';        // x0 = LHS
+	code += '    mov x1, x2\n';        // x1 = RHS
 	code += '    bl _concat\n';
 
 	code += `${lblEnd}:\n`;
+
 	return code;
 }
 
@@ -1369,6 +1378,9 @@ ret
 
 finalOutput += `
 .data
+.balign 8
+.global _str_start
+_str_start:
 `;
 
 // Append String Table
@@ -1377,6 +1389,11 @@ for (let key in stringTable) {
 	// AArch64 null-terminated string
 	finalOutput += `${lbl}:\n    .asciz "${key.replace(/"/g, '\\"')}"\n`;
 }
+
+finalOutput += `
+.global _str_end
+_str_end:
+`;
 
 fs.writeFileSync(OUTPUT_FILE, finalOutput);
 console.log(`Compiled to ${OUTPUT_FILE}`);
