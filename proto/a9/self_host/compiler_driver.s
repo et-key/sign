@@ -14,27 +14,24 @@ __sign_init:
     adr x0, sys_brk
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3
-    tst x0, #1
-    b.ne do_compose_1
-do_apply_2:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_4
-do_compose_1:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_4
-do_concat_3:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2
+    tst x1, #1
+    b.eq do_concat_2
+do_apply_1:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_3
+do_concat_2:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_4:
+apply_end_3:
     adr x1, heap_start
     str x0, [x1]
     adr x0, sign_id
@@ -49,27 +46,24 @@ apply_end_4:
     ldr x0, =0x4130000000000000
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_7
-    tst x0, #1
-    b.ne do_compose_5
-do_apply_6:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_8
-do_compose_5:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_8
-do_concat_7:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_5
+    tst x1, #1
+    b.eq do_concat_5
+do_apply_4:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_6
+do_concat_5:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_8:
+apply_end_6:
     adr x1, heap_end
     str x0, [x1]
     adr x0, sign_id
@@ -87,32 +81,29 @@ apply_end_8:
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, alloc
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_13
-    tst x0, #1
-    b.ne do_compose_11
-do_apply_12:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_14
-do_compose_11:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_14
-do_concat_13:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_10
+    tst x1, #1
+    b.eq do_concat_10
+do_apply_9:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_11
+do_concat_10:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_14:
+apply_end_11:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_9
-    b after_func_15_16
-func_15:
+    b.eq cond_false_7
+    b after_func_12_13
+func_12:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -124,7 +115,7 @@ func_15:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_17
+    b.ne blk_end_14
     adr x0, heap_addr
     str x0, [sp, #-16]!
     adr x0, curr
@@ -136,60 +127,57 @@ func_15:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_17
+    b.ne blk_end_14
     adr x0, curr
-blk_end_17:
+blk_end_14:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_15_16:
-    // Closure for func_15
+after_func_12_13:
+    // Closure for func_12
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_15
+    adr x1, func_12
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_10
-cond_false_9:
+    b cond_end_8
+cond_false_7:
     adr x0, sign_id
-cond_end_10:
+cond_end_8:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, cons
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_22
-    tst x0, #1
-    b.ne do_compose_20
-do_apply_21:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_23
-do_compose_20:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_23
-do_concat_22:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_18
+    tst x1, #1
+    b.eq do_concat_18
+do_apply_17:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_19
+do_concat_18:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_23:
+apply_end_19:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_18
-    b after_func_24_25
-func_24:
+    b.eq cond_false_15
+    b after_func_20_21
+func_20:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_26_27
-func_26:
+    b after_func_22_23
+func_22:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -200,38 +188,35 @@ func_26:
     adr x0, addr
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_29
+    b.eq cond_false_25
     adr x0, alloc
     str x0, [sp, #-16]!
     mov x0, #16
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_33
-    tst x0, #1
-    b.ne do_compose_31
-do_apply_32:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_34
-do_compose_31:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_34
-do_concat_33:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_28
+    tst x1, #1
+    b.eq do_concat_28
+do_apply_27:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_29
+do_concat_28:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_34:
-    b cond_end_30
-cond_false_29:
+apply_end_29:
+    b cond_end_26
+cond_false_25:
     adr x0, sign_id
-cond_end_30:
+cond_end_26:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_28
+    b.ne blk_end_24
     adr x0, addr
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
@@ -239,7 +224,7 @@ cond_end_30:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_28
+    b.ne blk_end_24
     adr x0, addr
     str x0, [sp, #-16]!
     mov x0, #8
@@ -251,14 +236,14 @@ cond_end_30:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_28
+    b.ne blk_end_24
     adr x0, addr
-blk_end_28:
+blk_end_24:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_26_27:
-    // Closure for func_26
+after_func_22_23:
+    // Closure for func_22
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -268,55 +253,52 @@ after_func_26_27:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_26
+    adr x1, func_22
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_24_25:
-    // Closure for func_24
+after_func_20_21:
+    // Closure for func_20
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_24
+    adr x1, func_20
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_19
-cond_false_18:
+    b cond_end_16
+cond_false_15:
     adr x0, sign_id
-cond_end_19:
+cond_end_16:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, head
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_39
-    tst x0, #1
-    b.ne do_compose_37
-do_apply_38:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_40
-do_compose_37:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_40
-do_concat_39:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_33
+    tst x1, #1
+    b.eq do_concat_33
+do_apply_32:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_34
+do_concat_33:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_40:
+apply_end_34:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_35
-    b after_func_41_42
-func_41:
+    b.eq cond_false_30
+    b after_func_35_36
+func_35:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -325,49 +307,46 @@ func_41:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_41_42:
-    // Closure for func_41
+after_func_35_36:
+    // Closure for func_35
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_41
+    adr x1, func_35
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_36
-cond_false_35:
+    b cond_end_31
+cond_false_30:
     adr x0, sign_id
-cond_end_36:
+cond_end_31:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, tail
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_47
-    tst x0, #1
-    b.ne do_compose_45
-do_apply_46:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_48
-do_compose_45:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_48
-do_concat_47:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_40
+    tst x1, #1
+    b.eq do_concat_40
+do_apply_39:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_41
+do_concat_40:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_48:
+apply_end_41:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_43
-    b after_func_49_50
-func_49:
+    b.eq cond_false_37
+    b after_func_42_43
+func_42:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -377,6 +356,186 @@ func_49:
     ldr x1, [sp], #16
     add x0, x1, x0
     ldr x0, [x0] // @ load
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_42_43:
+    // Closure for func_42
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_42
+    ldr x0, [sp], #16
+    bl _cons
+    b cond_end_38
+cond_false_37:
+    adr x0, sign_id
+cond_end_38:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_0
+    adr x0, #
+    str x0, [sp, #-16]!
+    adr x0, nth
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_47
+    tst x1, #1
+    b.eq do_concat_47
+do_apply_46:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_48
+do_concat_47:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
+    bl _concat
+apply_end_48:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_44
+    b after_func_49_50
+func_49:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    b after_func_51_52
+func_51:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x9, [x29, #-16] // Reload Env
+    ldr x10, [x9] // Load Val
+    str x10, [sp, #-16]! // Push Val
+    ldr x9, [x9, #8] // Next
+    ldr x0, [x29, #-32]
+    str x0, [sp, #-16]!
+    mov x0, #0
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.le cmp_true_56
+    adr x0, sign_id
+    b cmp_end_57
+cmp_true_56:
+cmp_end_57:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_54
+    adr x0, head
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_59
+    tst x1, #1
+    b.eq do_concat_59
+do_apply_58:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_60
+do_concat_59:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
+    bl _concat
+apply_end_60:
+    b cond_end_55
+cond_false_54:
+    adr x0, sign_id
+cond_end_55:
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_53
+    adr x0, nth
+    str x0, [sp, #-16]!
+    adr x0, tail
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-48]
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_62
+    tst x1, #1
+    b.eq do_concat_62
+do_apply_61:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_63
+do_concat_62:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
+    bl _concat
+apply_end_63:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_65
+    tst x1, #1
+    b.eq do_concat_65
+do_apply_64:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_66
+do_concat_65:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
+    bl _concat
+apply_end_66:
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    str x0, [sp, #-16]!
+    mov x0, #1
+    ldr x1, [sp], #16
+    sub x0, x1, x0
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_68
+    tst x1, #1
+    b.eq do_concat_68
+do_apply_67:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_69
+do_concat_68:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
+    bl _concat
+apply_end_69:
+blk_end_53:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_51_52:
+    // Closure for func_51
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x1, [sp], #16
+    mov x9, x0
+    mov x0, x1
+    mov x1, x9
+    bl _cons
+    str x0, [sp, #-16]!
+    adr x1, func_51
+    ldr x0, [sp], #16
+    bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
@@ -387,237 +546,39 @@ after_func_49_50:
     adr x1, func_49
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_44
-cond_false_43:
+    b cond_end_45
+cond_false_44:
     adr x0, sign_id
-cond_end_44:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    adr x0, #
-    str x0, [sp, #-16]!
-    adr x0, nth
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_55
-    tst x0, #1
-    b.ne do_compose_53
-do_apply_54:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_56
-do_compose_53:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_56
-do_concat_55:
-    mov x1, x0
-    mov x0, x9
-    bl _concat
-apply_end_56:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_51
-    b after_func_57_58
-func_57:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    b after_func_59_60
-func_59:
-    stp x29, x30, [sp, #-16]!
-    mov x29, sp
-    str x0, [sp, #-16]!
-    ldr x9, [x29, #-16] // Reload Env
-    ldr x10, [x9] // Load Val
-    str x10, [sp, #-16]! // Push Val
-    ldr x9, [x9, #8] // Next
-    ldr x0, [x29, #-32]
-    str x0, [sp, #-16]!
-    mov x0, #0
-    mov x1, x0
-    ldr x0, [sp], #16
-    cmp x0, x1
-    b.le cmp_true_64
-    adr x0, sign_id
-    b cmp_end_65
-cmp_true_64:
-cmp_end_65:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq cond_false_62
-    adr x0, head
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_68
-    tst x0, #1
-    b.ne do_compose_66
-do_apply_67:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_69
-do_compose_66:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_69
-do_concat_68:
-    mov x1, x0
-    mov x0, x9
-    bl _concat
-apply_end_69:
-    b cond_end_63
-cond_false_62:
-    adr x0, sign_id
-cond_end_63:
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_61
-    adr x0, nth
-    str x0, [sp, #-16]!
-    adr x0, tail
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_72
-    tst x0, #1
-    b.ne do_compose_70
-do_apply_71:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_73
-do_compose_70:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_73
-do_concat_72:
-    mov x1, x0
-    mov x0, x9
-    bl _concat
-apply_end_73:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_76
-    tst x0, #1
-    b.ne do_compose_74
-do_apply_75:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_77
-do_compose_74:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_77
-do_concat_76:
-    mov x1, x0
-    mov x0, x9
-    bl _concat
-apply_end_77:
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    str x0, [sp, #-16]!
-    mov x0, #1
-    ldr x1, [sp], #16
-    sub x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_80
-    tst x0, #1
-    b.ne do_compose_78
-do_apply_79:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_81
-do_compose_78:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_81
-do_concat_80:
-    mov x1, x0
-    mov x0, x9
-    bl _concat
-apply_end_81:
-blk_end_61:
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_59_60:
-    // Closure for func_59
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    ldr x0, [x29, #-32]
-    ldr x1, [sp], #16
-    mov x9, x0
-    mov x0, x1
-    mov x1, x9
-    bl _cons
-    str x0, [sp, #-16]!
-    adr x1, func_59
-    ldr x0, [sp], #16
-    bl _cons
-    mov sp, x29
-    ldp x29, x30, [sp], #16
-    ret
-after_func_57_58:
-    // Closure for func_57
-    adr x0, sign_id
-    str x0, [sp, #-16]!
-    adr x1, func_57
-    ldr x0, [sp], #16
-    bl _cons
-    b cond_end_52
-cond_false_51:
-    adr x0, sign_id
-cond_end_52:
+cond_end_45:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, factorial
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_86
-    tst x0, #1
-    b.ne do_compose_84
-do_apply_85:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_87
-do_compose_84:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_87
-do_concat_86:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_73
+    tst x1, #1
+    b.eq do_concat_73
+do_apply_72:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_74
+do_concat_73:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_87:
+apply_end_74:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_82
-    b after_func_88_89
-func_88:
+    b.eq cond_false_70
+    b after_func_75_76
+func_75:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -627,22 +588,22 @@ func_88:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.le cmp_true_93
+    b.le cmp_true_80
     adr x0, sign_id
-    b cmp_end_94
-cmp_true_93:
-cmp_end_94:
+    b cmp_end_81
+cmp_true_80:
+cmp_end_81:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_91
+    b.eq cond_false_78
     mov x0, #1
-    b cond_end_92
-cond_false_91:
+    b cond_end_79
+cond_false_78:
     adr x0, sign_id
-cond_end_92:
+cond_end_79:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_90
+    b.ne blk_end_77
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     adr x0, factorial
@@ -654,79 +615,73 @@ cond_end_92:
     mov x0, #1
     ldr x1, [sp], #16
     sub x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_97
-    tst x0, #1
-    b.ne do_compose_95
-do_apply_96:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_98
-do_compose_95:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_98
-do_concat_97:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_83
+    tst x1, #1
+    b.eq do_concat_83
+do_apply_82:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_84
+do_concat_83:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_98:
-blk_end_90:
+apply_end_84:
+blk_end_77:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_88_89:
-    // Closure for func_88
+after_func_75_76:
+    // Closure for func_75
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_88
+    adr x1, func_75
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_83
-cond_false_82:
+    b cond_end_71
+cond_false_70:
     adr x0, sign_id
-cond_end_83:
+cond_end_71:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, range
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_103
-    tst x0, #1
-    b.ne do_compose_101
-do_apply_102:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_104
-do_compose_101:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_104
-do_concat_103:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_88
+    tst x1, #1
+    b.eq do_concat_88
+do_apply_87:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_89
+do_concat_88:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_104:
+apply_end_89:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_99
-    b after_func_105_106
-func_105:
+    b.eq cond_false_85
+    b after_func_90_91
+func_90:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_107_108
-func_107:
+    b after_func_92_93
+func_92:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -740,46 +695,43 @@ func_107:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.gt cmp_true_112
+    b.gt cmp_true_97
     adr x0, sign_id
-    b cmp_end_113
-cmp_true_112:
-cmp_end_113:
+    b cmp_end_98
+cmp_true_97:
+cmp_end_98:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_110
+    b.eq cond_false_95
     mov x0, #0
-    b cond_end_111
-cond_false_110:
+    b cond_end_96
+cond_false_95:
     adr x0, sign_id
-cond_end_111:
+cond_end_96:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_109
+    b.ne blk_end_94
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_116
-    tst x0, #1
-    b.ne do_compose_114
-do_apply_115:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_117
-do_compose_114:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_117
-do_concat_116:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_100
+    tst x1, #1
+    b.eq do_concat_100
+do_apply_99:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_101
+do_concat_100:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_117:
+apply_end_101:
     str x0, [sp, #-16]!
     adr x0, range
     str x0, [sp, #-16]!
@@ -788,77 +740,68 @@ apply_end_117:
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_120
-    tst x0, #1
-    b.ne do_compose_118
-do_apply_119:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_121
-do_compose_118:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_121
-do_concat_120:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_103
+    tst x1, #1
+    b.eq do_concat_103
+do_apply_102:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_104
+do_concat_103:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_121:
+apply_end_104:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_124
-    tst x0, #1
-    b.ne do_compose_122
-do_apply_123:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_125
-do_compose_122:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_125
-do_concat_124:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_106
+    tst x1, #1
+    b.eq do_concat_106
+do_apply_105:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_107
+do_concat_106:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_125:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_128
-    tst x0, #1
-    b.ne do_compose_126
-do_apply_127:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_129
-do_compose_126:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_129
-do_concat_128:
-    mov x1, x0
-    mov x0, x9
+apply_end_107:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_109
+    tst x1, #1
+    b.eq do_concat_109
+do_apply_108:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_110
+do_concat_109:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_129:
-blk_end_109:
+apply_end_110:
+blk_end_94:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_107_108:
-    // Closure for func_107
+after_func_92_93:
+    // Closure for func_92
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -868,232 +811,211 @@ after_func_107_108:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_107
+    adr x1, func_92
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_105_106:
-    // Closure for func_105
+after_func_90_91:
+    // Closure for func_90
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_105
+    adr x1, func_90
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_100
-cond_false_99:
+    b cond_end_86
+cond_false_85:
     adr x0, sign_id
-cond_end_100:
+cond_end_86:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, print_char
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_134
-    tst x0, #1
-    b.ne do_compose_132
-do_apply_133:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_135
-do_compose_132:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_135
-do_concat_134:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_114
+    tst x1, #1
+    b.eq do_concat_114
+do_apply_113:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_115
+do_concat_114:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_135:
+apply_end_115:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_130
-    b after_func_136_137
-func_136:
+    b.eq cond_false_111
+    b after_func_116_117
+func_116:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_141
-    tst x0, #1
-    b.ne do_compose_139
-do_apply_140:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_142
-do_compose_139:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_142
-do_concat_141:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_120
+    tst x1, #1
+    b.eq do_concat_120
+do_apply_119:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_121
+do_concat_120:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_142:
+apply_end_121:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_145
-    tst x0, #1
-    b.ne do_compose_143
-do_apply_144:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_146
-do_compose_143:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_146
-do_concat_145:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_123
+    tst x1, #1
+    b.eq do_concat_123
+do_apply_122:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_124
+do_concat_123:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_146:
+apply_end_124:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_138
+    b.ne blk_end_118
     adr x0, sys_write
     str x0, [sp, #-16]!
     mov x0, #1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_149
-    tst x0, #1
-    b.ne do_compose_147
-do_apply_148:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_150
-do_compose_147:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_150
-do_concat_149:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_126
+    tst x1, #1
+    b.eq do_concat_126
+do_apply_125:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_127
+do_concat_126:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_150:
+apply_end_127:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_153
-    tst x0, #1
-    b.ne do_compose_151
-do_apply_152:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_154
-do_compose_151:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_154
-do_concat_153:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_129
+    tst x1, #1
+    b.eq do_concat_129
+do_apply_128:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_130
+do_concat_129:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_154:
+apply_end_130:
     str x0, [sp, #-16]!
     mov x0, #1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_157
-    tst x0, #1
-    b.ne do_compose_155
-do_apply_156:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_158
-do_compose_155:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_158
-do_concat_157:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_132
+    tst x1, #1
+    b.eq do_concat_132
+do_apply_131:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_133
+do_concat_132:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_158:
-blk_end_138:
+apply_end_133:
+blk_end_118:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_136_137:
-    // Closure for func_136
+after_func_116_117:
+    // Closure for func_116
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_136
+    adr x1, func_116
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_131
-cond_false_130:
+    b cond_end_112
+cond_false_111:
     adr x0, sign_id
-cond_end_131:
+cond_end_112:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, print_str
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_163
-    tst x0, #1
-    b.ne do_compose_161
-do_apply_162:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_164
-do_compose_161:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_164
-do_concat_163:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_137
+    tst x1, #1
+    b.eq do_concat_137
+do_apply_136:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_138
+do_concat_137:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_164:
+apply_end_138:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_159
-    b after_func_165_166
-func_165:
+    b.eq cond_false_134
+    b after_func_139_140
+func_139:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_168_169
-func_168:
+    b after_func_142_143
+func_142:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -1101,11 +1023,11 @@ func_168:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_168_169:
-    // Closure for func_168
+after_func_142_143:
+    // Closure for func_142
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_168
+    adr x1, func_142
     ldr x0, [sp], #16
     bl _cons
     str x0, [sp, #-16]!
@@ -1114,42 +1036,42 @@ after_func_168_169:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_170
+    b.ne blk_end_144
     mov x0, #2
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_170
+    b.ne blk_end_144
     ldr x0, [x29, #-48]
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_170
+    b.ne blk_end_144
     ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
     mov x0, #0
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_173
+    b.eq cmp_true_147
     adr x0, sign_id
-    b cmp_end_174
-cmp_true_173:
-cmp_end_174:
+    b cmp_end_148
+cmp_true_147:
+cmp_end_148:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_171
+    b.eq cond_false_145
     ldr x0, [x29, #-64]
-    b cond_end_172
-cond_false_171:
+    b cond_end_146
+cond_false_145:
     adr x0, sign_id
-cond_end_172:
+cond_end_146:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_170
+    b.ne blk_end_144
     adr x0, len_loop
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
@@ -1157,225 +1079,201 @@ cond_end_172:
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_177
-    tst x0, #1
-    b.ne do_compose_175
-do_apply_176:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_178
-do_compose_175:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_178
-do_concat_177:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_150
+    tst x1, #1
+    b.eq do_concat_150
+do_apply_149:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_151
+do_concat_150:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_178:
+apply_end_151:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_181
-    tst x0, #1
-    b.ne do_compose_179
-do_apply_180:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_182
-do_compose_179:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_182
-do_concat_181:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_153
+    tst x1, #1
+    b.eq do_concat_153
+do_apply_152:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_154
+do_concat_153:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_182:
-blk_end_170:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_185
-    tst x0, #1
-    b.ne do_compose_183
-do_apply_184:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_186
-do_compose_183:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_186
-do_concat_185:
-    mov x1, x0
-    mov x0, x9
+apply_end_154:
+blk_end_144:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_156
+    tst x1, #1
+    b.eq do_concat_156
+do_apply_155:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_157
+do_concat_156:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_186:
+apply_end_157:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_167
+    b.ne blk_end_141
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_189
-    tst x0, #1
-    b.ne do_compose_187
-do_apply_188:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_190
-do_compose_187:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_190
-do_concat_189:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_159
+    tst x1, #1
+    b.eq do_concat_159
+do_apply_158:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_160
+do_concat_159:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_190:
+apply_end_160:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_167
+    b.ne blk_end_141
     adr x0, sys_write
     str x0, [sp, #-16]!
     mov x0, #1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_193
-    tst x0, #1
-    b.ne do_compose_191
-do_apply_192:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_194
-do_compose_191:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_194
-do_concat_193:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_162
+    tst x1, #1
+    b.eq do_concat_162
+do_apply_161:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_163
+do_concat_162:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_194:
+apply_end_163:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_197
-    tst x0, #1
-    b.ne do_compose_195
-do_apply_196:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_198
-do_compose_195:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_198
-do_concat_197:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_165
+    tst x1, #1
+    b.eq do_concat_165
+do_apply_164:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_166
+do_concat_165:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_198:
+apply_end_166:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_201
-    tst x0, #1
-    b.ne do_compose_199
-do_apply_200:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_202
-do_compose_199:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_202
-do_concat_201:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_168
+    tst x1, #1
+    b.eq do_concat_168
+do_apply_167:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_169
+do_concat_168:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_202:
-blk_end_167:
+apply_end_169:
+blk_end_141:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_165_166:
-    // Closure for func_165
+after_func_139_140:
+    // Closure for func_139
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_165
+    adr x1, func_139
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_160
-cond_false_159:
+    b cond_end_135
+cond_false_134:
     adr x0, sign_id
-cond_end_160:
+cond_end_135:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, print_num
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_207
-    tst x0, #1
-    b.ne do_compose_205
-do_apply_206:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_208
-do_compose_205:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_208
-do_concat_207:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_173
+    tst x1, #1
+    b.eq do_concat_173
+do_apply_172:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_174
+do_concat_173:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_208:
+apply_end_174:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_203
-    b after_func_209_210
-func_209:
+    b.eq cond_false_170
+    b after_func_175_176
+func_175:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -1385,116 +1283,107 @@ func_209:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_214
+    b.eq cmp_true_180
     adr x0, sign_id
-    b cmp_end_215
-cmp_true_214:
-cmp_end_215:
+    b cmp_end_181
+cmp_true_180:
+cmp_end_181:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_212
+    b.eq cond_false_178
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, print_char
     str x0, [sp, #-16]!
     mov x0, #48
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_219
-    tst x0, #1
-    b.ne do_compose_217
-do_apply_218:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_220
-do_compose_217:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_220
-do_concat_219:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_184
+    tst x1, #1
+    b.eq do_concat_184
+do_apply_183:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_185
+do_concat_184:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_220:
+apply_end_185:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_216
+    b.ne blk_end_182
     mov x0, #0
-blk_end_216:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_223
-    tst x0, #1
-    b.ne do_compose_221
-do_apply_222:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_224
-do_compose_221:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_224
-do_concat_223:
-    mov x1, x0
-    mov x0, x9
+blk_end_182:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_187
+    tst x1, #1
+    b.eq do_concat_187
+do_apply_186:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_188
+do_concat_187:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_224:
-    b cond_end_213
-cond_false_212:
+apply_end_188:
+    b cond_end_179
+cond_false_178:
     adr x0, sign_id
-cond_end_213:
+cond_end_179:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_211
+    b.ne blk_end_177
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #0
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.lt cmp_true_227
+    b.lt cmp_true_191
     adr x0, sign_id
-    b cmp_end_228
-cmp_true_227:
-cmp_end_228:
+    b cmp_end_192
+cmp_true_191:
+cmp_end_192:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_225
+    b.eq cond_false_189
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, print_char
     str x0, [sp, #-16]!
     mov x0, #45
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_232
-    tst x0, #1
-    b.ne do_compose_230
-do_apply_231:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_233
-do_compose_230:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_233
-do_concat_232:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_195
+    tst x1, #1
+    b.eq do_concat_195
+do_apply_194:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_196
+do_concat_195:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_233:
+apply_end_196:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_229
+    b.ne blk_end_193
     adr x0, print_num
     str x0, [sp, #-16]!
     mov x0, #0
@@ -1502,131 +1391,119 @@ apply_end_233:
     ldr x0, [x29, #-32]
     ldr x1, [sp], #16
     sub x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_236
-    tst x0, #1
-    b.ne do_compose_234
-do_apply_235:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_237
-do_compose_234:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_237
-do_concat_236:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_198
+    tst x1, #1
+    b.eq do_concat_198
+do_apply_197:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_199
+do_concat_198:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_237:
+apply_end_199:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_229
+    b.ne blk_end_193
     mov x0, #0
-blk_end_229:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_240
-    tst x0, #1
-    b.ne do_compose_238
-do_apply_239:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_241
-do_compose_238:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_241
-do_concat_240:
-    mov x1, x0
-    mov x0, x9
+blk_end_193:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_201
+    tst x1, #1
+    b.eq do_concat_201
+do_apply_200:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_202
+do_concat_201:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_241:
-    b cond_end_226
-cond_false_225:
+apply_end_202:
+    b cond_end_190
+cond_false_189:
     adr x0, sign_id
-cond_end_226:
+cond_end_190:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_211
+    b.ne blk_end_177
     adr x0, _print_num_rec
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_244
-    tst x0, #1
-    b.ne do_compose_242
-do_apply_243:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_245
-do_compose_242:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_245
-do_concat_244:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_204
+    tst x1, #1
+    b.eq do_concat_204
+do_apply_203:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_205
+do_concat_204:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_245:
-blk_end_211:
+apply_end_205:
+blk_end_177:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_209_210:
-    // Closure for func_209
+after_func_175_176:
+    // Closure for func_175
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_209
+    adr x1, func_175
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_204
-cond_false_203:
+    b cond_end_171
+cond_false_170:
     adr x0, sign_id
-cond_end_204:
+cond_end_171:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, _print_num_rec
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_250
-    tst x0, #1
-    b.ne do_compose_248
-do_apply_249:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_251
-do_compose_248:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_251
-do_concat_250:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_209
+    tst x1, #1
+    b.eq do_concat_209
+do_apply_208:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_210
+do_concat_209:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_251:
+apply_end_210:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_246
-    b after_func_252_253
-func_252:
+    b.eq cond_false_206
+    b after_func_211_212
+func_211:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -1636,22 +1513,22 @@ func_252:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_257
+    b.eq cmp_true_216
     adr x0, sign_id
-    b cmp_end_258
-cmp_true_257:
-cmp_end_258:
+    b cmp_end_217
+cmp_true_216:
+cmp_end_217:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_255
+    b.eq cond_false_214
     mov x0, #0
-    b cond_end_256
-cond_false_255:
+    b cond_end_215
+cond_false_214:
     adr x0, sign_id
-cond_end_256:
+cond_end_215:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_254
+    b.ne blk_end_213
     adr x0, _print_num_rec
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -1659,30 +1536,27 @@ cond_end_256:
     mov x0, #10
     ldr x1, [sp], #16
     sdiv x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_261
-    tst x0, #1
-    b.ne do_compose_259
-do_apply_260:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_262
-do_compose_259:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_262
-do_concat_261:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_219
+    tst x1, #1
+    b.eq do_concat_219
+do_apply_218:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_220
+do_concat_219:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_262:
+apply_end_220:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_254
+    b.ne blk_end_213
     adr x0, print_char
     str x0, [sp, #-16]!
     mov x0, #48
@@ -1695,79 +1569,73 @@ apply_end_262:
     msub x0, x2, x0, x1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_265
-    tst x0, #1
-    b.ne do_compose_263
-do_apply_264:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_266
-do_compose_263:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_266
-do_concat_265:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_222
+    tst x1, #1
+    b.eq do_concat_222
+do_apply_221:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_223
+do_concat_222:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_266:
-blk_end_254:
+apply_end_223:
+blk_end_213:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_252_253:
-    // Closure for func_252
+after_func_211_212:
+    // Closure for func_211
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_252
+    adr x1, func_211
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_247
-cond_false_246:
+    b cond_end_207
+cond_false_206:
     adr x0, sign_id
-cond_end_247:
+cond_end_207:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, add
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_271
-    tst x0, #1
-    b.ne do_compose_269
-do_apply_270:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_272
-do_compose_269:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_272
-do_concat_271:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_227
+    tst x1, #1
+    b.eq do_concat_227
+do_apply_226:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_228
+do_concat_227:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_272:
+apply_end_228:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_267
-    b after_func_273_274
-func_273:
+    b.eq cond_false_224
+    b after_func_229_230
+func_229:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_275_276
-func_275:
+    b after_func_231_232
+func_231:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -1783,8 +1651,8 @@ func_275:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_275_276:
-    // Closure for func_275
+after_func_231_232:
+    // Closure for func_231
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -1794,60 +1662,57 @@ after_func_275_276:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_275
+    adr x1, func_231
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_273_274:
-    // Closure for func_273
+after_func_229_230:
+    // Closure for func_229
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_273
+    adr x1, func_229
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_268
-cond_false_267:
+    b cond_end_225
+cond_false_224:
     adr x0, sign_id
-cond_end_268:
+cond_end_225:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, sub
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_281
-    tst x0, #1
-    b.ne do_compose_279
-do_apply_280:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_282
-do_compose_279:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_282
-do_concat_281:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_236
+    tst x1, #1
+    b.eq do_concat_236
+do_apply_235:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_237
+do_concat_236:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_282:
+apply_end_237:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_277
-    b after_func_283_284
-func_283:
+    b.eq cond_false_233
+    b after_func_238_239
+func_238:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_285_286
-func_285:
+    b after_func_240_241
+func_240:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -1863,8 +1728,8 @@ func_285:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_285_286:
-    // Closure for func_285
+after_func_240_241:
+    // Closure for func_240
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -1874,60 +1739,57 @@ after_func_285_286:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_285
+    adr x1, func_240
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_283_284:
-    // Closure for func_283
+after_func_238_239:
+    // Closure for func_238
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_283
+    adr x1, func_238
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_278
-cond_false_277:
+    b cond_end_234
+cond_false_233:
     adr x0, sign_id
-cond_end_278:
+cond_end_234:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, mul
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_291
-    tst x0, #1
-    b.ne do_compose_289
-do_apply_290:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_292
-do_compose_289:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_292
-do_concat_291:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_245
+    tst x1, #1
+    b.eq do_concat_245
+do_apply_244:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_246
+do_concat_245:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_292:
+apply_end_246:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_287
-    b after_func_293_294
-func_293:
+    b.eq cond_false_242
+    b after_func_247_248
+func_247:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_295_296
-func_295:
+    b after_func_249_250
+func_249:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -1943,8 +1805,8 @@ func_295:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_295_296:
-    // Closure for func_295
+after_func_249_250:
+    // Closure for func_249
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -1954,60 +1816,57 @@ after_func_295_296:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_295
+    adr x1, func_249
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_293_294:
-    // Closure for func_293
+after_func_247_248:
+    // Closure for func_247
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_293
+    adr x1, func_247
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_288
-cond_false_287:
+    b cond_end_243
+cond_false_242:
     adr x0, sign_id
-cond_end_288:
+cond_end_243:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, div
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_301
-    tst x0, #1
-    b.ne do_compose_299
-do_apply_300:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_302
-do_compose_299:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_302
-do_concat_301:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_254
+    tst x1, #1
+    b.eq do_concat_254
+do_apply_253:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_255
+do_concat_254:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_302:
+apply_end_255:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_297
-    b after_func_303_304
-func_303:
+    b.eq cond_false_251
+    b after_func_256_257
+func_256:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_305_306
-func_305:
+    b after_func_258_259
+func_258:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -2023,8 +1882,8 @@ func_305:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_305_306:
-    // Closure for func_305
+after_func_258_259:
+    // Closure for func_258
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -2034,60 +1893,57 @@ after_func_305_306:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_305
+    adr x1, func_258
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_303_304:
-    // Closure for func_303
+after_func_256_257:
+    // Closure for func_256
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_303
+    adr x1, func_256
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_298
-cond_false_297:
+    b cond_end_252
+cond_false_251:
     adr x0, sign_id
-cond_end_298:
+cond_end_252:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, mod
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_311
-    tst x0, #1
-    b.ne do_compose_309
-do_apply_310:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_312
-do_compose_309:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_312
-do_concat_311:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_263
+    tst x1, #1
+    b.eq do_concat_263
+do_apply_262:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_264
+do_concat_263:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_312:
+apply_end_264:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_307
-    b after_func_313_314
-func_313:
+    b.eq cond_false_260
+    b after_func_265_266
+func_265:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_315_316
-func_315:
+    b after_func_267_268
+func_267:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -2104,8 +1960,8 @@ func_315:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_315_316:
-    // Closure for func_315
+after_func_267_268:
+    // Closure for func_267
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -2115,23 +1971,23 @@ after_func_315_316:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_315
+    adr x1, func_267
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_313_314:
-    // Closure for func_313
+after_func_265_266:
+    // Closure for func_265
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_313
+    adr x1, func_265
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_308
-cond_false_307:
+    b cond_end_261
+cond_false_260:
     adr x0, sign_id
-cond_end_308:
+cond_end_261:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
@@ -2142,196 +1998,172 @@ cond_end_308:
     adr x0, Hosting
     ldr x1, [sp], #16
     sub x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_319
-    tst x0, #1
-    b.ne do_compose_317
-do_apply_318:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_320
-do_compose_317:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_320
-do_concat_319:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_270
+    tst x1, #1
+    b.eq do_concat_270
+do_apply_269:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_271
+do_concat_270:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_320:
+apply_end_271:
     str x0, [sp, #-16]!
     adr x0, Lexer
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_323
-    tst x0, #1
-    b.ne do_compose_321
-do_apply_322:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_324
-do_compose_321:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_324
-do_concat_323:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_273
+    tst x1, #1
+    b.eq do_concat_273
+do_apply_272:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_274
+do_concat_273:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_324:
+apply_end_274:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, Ported
     str x0, [sp, #-16]!
     adr x0, from
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_327
-    tst x0, #1
-    b.ne do_compose_325
-do_apply_326:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_328
-do_compose_325:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_328
-do_concat_327:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_276
+    tst x1, #1
+    b.eq do_concat_276
+do_apply_275:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_277
+do_concat_276:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_328:
+apply_end_277:
     str x0, [sp, #-16]!
     adr x0, prepare_lexer
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_331
-    tst x0, #1
-    b.ne do_compose_329
-do_apply_330:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_332
-do_compose_329:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_332
-do_concat_331:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_279
+    tst x1, #1
+    b.eq do_concat_279
+do_apply_278:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_280
+do_concat_279:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_332:
+apply_end_280:
     str x0, [sp, #-16]!
     adr x0, .
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_335
-    tst x0, #1
-    b.ne do_compose_333
-do_apply_334:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_336
-do_compose_333:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_336
-do_concat_335:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_282
+    tst x1, #1
+    b.eq do_concat_282
+do_apply_281:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_283
+do_concat_282:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_336:
+apply_end_283:
     str x0, [sp, #-16]!
     adr x0, js
     str x0, [sp, #-16]!
     adr x0, parser
     ldr x1, [sp], #16
     sdiv x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_339
-    tst x0, #1
-    b.ne do_compose_337
-do_apply_338:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_340
-do_compose_337:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_340
-do_concat_339:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_285
+    tst x1, #1
+    b.eq do_concat_285
+do_apply_284:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_286
+do_concat_285:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_340:
+apply_end_286:
     str x0, [sp, #-16]!
     adr x0, .
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_343
-    tst x0, #1
-    b.ne do_compose_341
-do_apply_342:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_344
-do_compose_341:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_344
-do_concat_343:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_288
+    tst x1, #1
+    b.eq do_concat_288
+do_apply_287:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_289
+do_concat_288:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_344:
+apply_end_289:
     str x0, [sp, #-16]!
     adr x0, js
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_347
-    tst x0, #1
-    b.ne do_compose_345
-do_apply_346:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_348
-do_compose_345:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_348
-do_concat_347:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_291
+    tst x1, #1
+    b.eq do_concat_291
+do_apply_290:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_292
+do_concat_291:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_348:
+apply_end_292:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
@@ -2433,32 +2265,29 @@ apply_end_348:
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, init_lexer
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_353
-    tst x0, #1
-    b.ne do_compose_351
-do_apply_352:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_354
-do_compose_351:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_354
-do_concat_353:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_296
+    tst x1, #1
+    b.eq do_concat_296
+do_apply_295:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_297
+do_concat_296:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_354:
+apply_end_297:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_349
-    b after_func_355_356
-func_355:
+    b.eq cond_false_293
+    b after_func_298_299
+func_298:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -2469,38 +2298,35 @@ func_355:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_357
+    b.ne blk_end_300
     adr x0, src_len
     str x0, [sp, #-16]!
     adr x0, len
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_360
-    tst x0, #1
-    b.ne do_compose_358
-do_apply_359:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_361
-do_compose_358:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_361
-do_concat_360:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_302
+    tst x1, #1
+    b.eq do_concat_302
+do_apply_301:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_303
+do_concat_302:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_361:
+apply_end_303:
     ldr x1, [sp], #16
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_357
+    b.ne blk_end_300
     adr x0, pos
     str x0, [sp, #-16]!
     mov x0, #0
@@ -2508,78 +2334,72 @@ apply_end_361:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_357
+    b.ne blk_end_300
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_364
-    tst x0, #1
-    b.ne do_compose_362
-do_apply_363:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_365
-do_compose_362:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_365
-do_concat_364:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_305
+    tst x1, #1
+    b.eq do_concat_305
+do_apply_304:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_306
+do_concat_305:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_365:
-blk_end_357:
+apply_end_306:
+blk_end_300:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_355_356:
-    // Closure for func_355
+after_func_298_299:
+    // Closure for func_298
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_355
+    adr x1, func_298
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_350
-cond_false_349:
+    b cond_end_294
+cond_false_293:
     adr x0, sign_id
-cond_end_350:
+cond_end_294:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, read_char
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_370
-    tst x0, #1
-    b.ne do_compose_368
-do_apply_369:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_371
-do_compose_368:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_371
-do_concat_370:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_310
+    tst x1, #1
+    b.eq do_concat_310
+do_apply_309:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_311
+do_concat_310:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_371:
+apply_end_311:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_366
-    b after_func_372_373
-func_372:
+    b.eq cond_false_307
+    b after_func_312_313
+func_312:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -2591,7 +2411,7 @@ func_372:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_374
+    b.ne blk_end_314
     adr x0, p
     str x0, [sp, #-16]!
     adr x0, src_len
@@ -2599,14 +2419,14 @@ func_372:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.ge cmp_true_377
+    b.ge cmp_true_317
     adr x0, sign_id
-    b cmp_end_378
-cmp_true_377:
-cmp_end_378:
+    b cmp_end_318
+cmp_true_317:
+cmp_end_318:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_375
+    b.eq cond_false_315
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, ch
@@ -2616,37 +2436,34 @@ cmp_end_378:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_379
+    b.ne blk_end_319
     mov x0, #0
-blk_end_379:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_382
-    tst x0, #1
-    b.ne do_compose_380
-do_apply_381:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_383
-do_compose_380:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_383
-do_concat_382:
-    mov x1, x0
-    mov x0, x9
+blk_end_319:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_321
+    tst x1, #1
+    b.eq do_concat_321
+do_apply_320:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_322
+do_concat_321:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_383:
-    b cond_end_376
-cond_false_375:
+apply_end_322:
+    b cond_end_316
+cond_false_315:
     adr x0, sign_id
-cond_end_376:
+cond_end_316:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_374
+    b.ne blk_end_314
     adr x0, c
     str x0, [sp, #-16]!
     adr x0, nth
@@ -2654,35 +2471,32 @@ cond_end_376:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_374
+    b.ne blk_end_314
     adr x0, src
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, p
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_386
-    tst x0, #1
-    b.ne do_compose_384
-do_apply_385:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_387
-do_compose_384:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_387
-do_concat_386:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_324
+    tst x1, #1
+    b.eq do_concat_324
+do_apply_323:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_325
+do_concat_324:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_387:
+apply_end_325:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_374
+    b.ne blk_end_314
     adr x0, ch
     str x0, [sp, #-16]!
     adr x0, c
@@ -2690,7 +2504,7 @@ apply_end_387:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_374
+    b.ne blk_end_314
     adr x0, pos
     str x0, [sp, #-16]!
     adr x0, p
@@ -2702,55 +2516,52 @@ apply_end_387:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_374
+    b.ne blk_end_314
     adr x0, c
-blk_end_374:
+blk_end_314:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_372_373:
-    // Closure for func_372
+after_func_312_313:
+    // Closure for func_312
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_372
+    adr x1, func_312
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_367
-cond_false_366:
+    b cond_end_308
+cond_false_307:
     adr x0, sign_id
-cond_end_367:
+cond_end_308:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, is_space
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_392
-    tst x0, #1
-    b.ne do_compose_390
-do_apply_391:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_393
-do_compose_390:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_393
-do_concat_392:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_329
+    tst x1, #1
+    b.eq do_concat_329
+do_apply_328:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_330
+do_concat_329:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_393:
+apply_end_330:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_388
-    b after_func_394_395
-func_394:
+    b.eq cond_false_326
+    b after_func_331_332
+func_331:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -2760,91 +2571,88 @@ func_394:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_400
+    b.eq cmp_true_337
     adr x0, sign_id
-    b cmp_end_401
-cmp_true_400:
-cmp_end_401:
+    b cmp_end_338
+cmp_true_337:
+cmp_end_338:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_398
-    b or_end_399
-or_right_398:
+    b.eq or_right_335
+    b or_end_336
+or_right_335:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #9
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_402
+    b.eq cmp_true_339
     adr x0, sign_id
-    b cmp_end_403
-cmp_true_402:
-cmp_end_403:
-or_end_399:
+    b cmp_end_340
+cmp_true_339:
+cmp_end_340:
+or_end_336:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_396
-    b or_end_397
-or_right_396:
+    b.eq or_right_333
+    b or_end_334
+or_right_333:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #13
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_404
+    b.eq cmp_true_341
     adr x0, sign_id
-    b cmp_end_405
-cmp_true_404:
-cmp_end_405:
-or_end_397:
+    b cmp_end_342
+cmp_true_341:
+cmp_end_342:
+or_end_334:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_394_395:
-    // Closure for func_394
+after_func_331_332:
+    // Closure for func_331
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_394
+    adr x1, func_331
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_389
-cond_false_388:
+    b cond_end_327
+cond_false_326:
     adr x0, sign_id
-cond_end_389:
+cond_end_327:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, is_digit
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_410
-    tst x0, #1
-    b.ne do_compose_408
-do_apply_409:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_411
-do_compose_408:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_411
-do_concat_410:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_346
+    tst x1, #1
+    b.eq do_concat_346
+do_apply_345:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_347
+do_concat_346:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_411:
+apply_end_347:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_406
-    b after_func_412_413
-func_412:
+    b.eq cond_false_343
+    b after_func_348_349
+func_348:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -2854,75 +2662,72 @@ func_412:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.ge cmp_true_416
+    b.ge cmp_true_352
     adr x0, sign_id
-    b cmp_end_417
-cmp_true_416:
-cmp_end_417:
+    b cmp_end_353
+cmp_true_352:
+cmp_end_353:
     adr x9, sign_id
     cmp x0, x9
-    b.eq and_fail_414
+    b.eq and_fail_350
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #57
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.le cmp_true_418
+    b.le cmp_true_354
     adr x0, sign_id
-    b cmp_end_419
-cmp_true_418:
-cmp_end_419:
-    b and_end_415
-and_fail_414:
+    b cmp_end_355
+cmp_true_354:
+cmp_end_355:
+    b and_end_351
+and_fail_350:
     adr x0, sign_id
-and_end_415:
+and_end_351:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_412_413:
-    // Closure for func_412
+after_func_348_349:
+    // Closure for func_348
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_412
+    adr x1, func_348
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_407
-cond_false_406:
+    b cond_end_344
+cond_false_343:
     adr x0, sign_id
-cond_end_407:
+cond_end_344:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, is_alpha
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_424
-    tst x0, #1
-    b.ne do_compose_422
-do_apply_423:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_425
-do_compose_422:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_425
-do_concat_424:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_359
+    tst x1, #1
+    b.eq do_concat_359
+do_apply_358:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_360
+do_concat_359:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_425:
+apply_end_360:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_420
-    b after_func_426_427
-func_426:
+    b.eq cond_false_356
+    b after_func_361_362
+func_361:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -2932,127 +2737,124 @@ func_426:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.ge cmp_true_434
+    b.ge cmp_true_369
     adr x0, sign_id
-    b cmp_end_435
-cmp_true_434:
-cmp_end_435:
+    b cmp_end_370
+cmp_true_369:
+cmp_end_370:
     adr x9, sign_id
     cmp x0, x9
-    b.eq and_fail_432
+    b.eq and_fail_367
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #90
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.le cmp_true_436
+    b.le cmp_true_371
     adr x0, sign_id
-    b cmp_end_437
-cmp_true_436:
-cmp_end_437:
-    b and_end_433
-and_fail_432:
+    b cmp_end_372
+cmp_true_371:
+cmp_end_372:
+    b and_end_368
+and_fail_367:
     adr x0, sign_id
-and_end_433:
+and_end_368:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_430
-    b or_end_431
-or_right_430:
+    b.eq or_right_365
+    b or_end_366
+or_right_365:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #97
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.ge cmp_true_440
+    b.ge cmp_true_375
     adr x0, sign_id
-    b cmp_end_441
-cmp_true_440:
-cmp_end_441:
+    b cmp_end_376
+cmp_true_375:
+cmp_end_376:
     adr x9, sign_id
     cmp x0, x9
-    b.eq and_fail_438
+    b.eq and_fail_373
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #122
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.le cmp_true_442
+    b.le cmp_true_377
     adr x0, sign_id
-    b cmp_end_443
-cmp_true_442:
-cmp_end_443:
-    b and_end_439
-and_fail_438:
+    b cmp_end_378
+cmp_true_377:
+cmp_end_378:
+    b and_end_374
+and_fail_373:
     adr x0, sign_id
-and_end_439:
-or_end_431:
+and_end_374:
+or_end_366:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_428
-    b or_end_429
-or_right_428:
+    b.eq or_right_363
+    b or_end_364
+or_right_363:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #95
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_444
+    b.eq cmp_true_379
     adr x0, sign_id
-    b cmp_end_445
-cmp_true_444:
-cmp_end_445:
-or_end_429:
+    b cmp_end_380
+cmp_true_379:
+cmp_end_380:
+or_end_364:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_426_427:
-    // Closure for func_426
+after_func_361_362:
+    // Closure for func_361
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_426
+    adr x1, func_361
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_421
-cond_false_420:
+    b cond_end_357
+cond_false_356:
     adr x0, sign_id
-cond_end_421:
+cond_end_357:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, is_op_char
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_450
-    tst x0, #1
-    b.ne do_compose_448
-do_apply_449:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_451
-do_compose_448:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_451
-do_concat_450:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_384
+    tst x1, #1
+    b.eq do_concat_384
+do_apply_383:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_385
+do_concat_384:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_451:
+apply_end_385:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_446
-    b after_func_452_453
-func_452:
+    b.eq cond_false_381
+    b after_func_386_387
+func_386:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -3062,312 +2864,309 @@ func_452:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_484
+    b.eq cmp_true_418
     adr x0, sign_id
-    b cmp_end_485
-cmp_true_484:
-cmp_end_485:
+    b cmp_end_419
+cmp_true_418:
+cmp_end_419:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_482
-    b or_end_483
-or_right_482:
+    b.eq or_right_416
+    b or_end_417
+or_right_416:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #43
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_486
+    b.eq cmp_true_420
     adr x0, sign_id
-    b cmp_end_487
-cmp_true_486:
-cmp_end_487:
-or_end_483:
+    b cmp_end_421
+cmp_true_420:
+cmp_end_421:
+or_end_417:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_480
-    b or_end_481
-or_right_480:
+    b.eq or_right_414
+    b or_end_415
+or_right_414:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #45
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_488
+    b.eq cmp_true_422
     adr x0, sign_id
-    b cmp_end_489
-cmp_true_488:
-cmp_end_489:
-or_end_481:
+    b cmp_end_423
+cmp_true_422:
+cmp_end_423:
+or_end_415:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_478
-    b or_end_479
-or_right_478:
+    b.eq or_right_412
+    b or_end_413
+or_right_412:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #42
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_490
+    b.eq cmp_true_424
     adr x0, sign_id
-    b cmp_end_491
-cmp_true_490:
-cmp_end_491:
-or_end_479:
+    b cmp_end_425
+cmp_true_424:
+cmp_end_425:
+or_end_413:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_476
-    b or_end_477
-or_right_476:
+    b.eq or_right_410
+    b or_end_411
+or_right_410:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #47
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_492
+    b.eq cmp_true_426
     adr x0, sign_id
-    b cmp_end_493
-cmp_true_492:
-cmp_end_493:
-or_end_477:
+    b cmp_end_427
+cmp_true_426:
+cmp_end_427:
+or_end_411:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_474
-    b or_end_475
-or_right_474:
+    b.eq or_right_408
+    b or_end_409
+or_right_408:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #37
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_494
+    b.eq cmp_true_428
     adr x0, sign_id
-    b cmp_end_495
-cmp_true_494:
-cmp_end_495:
-or_end_475:
+    b cmp_end_429
+cmp_true_428:
+cmp_end_429:
+or_end_409:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_472
-    b or_end_473
-or_right_472:
+    b.eq or_right_406
+    b or_end_407
+or_right_406:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #94
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_496
+    b.eq cmp_true_430
     adr x0, sign_id
-    b cmp_end_497
-cmp_true_496:
-cmp_end_497:
-or_end_473:
+    b cmp_end_431
+cmp_true_430:
+cmp_end_431:
+or_end_407:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_470
-    b or_end_471
-or_right_470:
+    b.eq or_right_404
+    b or_end_405
+or_right_404:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #38
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_498
+    b.eq cmp_true_432
     adr x0, sign_id
-    b cmp_end_499
-cmp_true_498:
-cmp_end_499:
-or_end_471:
+    b cmp_end_433
+cmp_true_432:
+cmp_end_433:
+or_end_405:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_468
-    b or_end_469
-or_right_468:
+    b.eq or_right_402
+    b or_end_403
+or_right_402:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #124
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_500
+    b.eq cmp_true_434
     adr x0, sign_id
-    b cmp_end_501
-cmp_true_500:
-cmp_end_501:
-or_end_469:
+    b cmp_end_435
+cmp_true_434:
+cmp_end_435:
+or_end_403:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_466
-    b or_end_467
-or_right_466:
+    b.eq or_right_400
+    b or_end_401
+or_right_400:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #33
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_502
+    b.eq cmp_true_436
     adr x0, sign_id
-    b cmp_end_503
-cmp_true_502:
-cmp_end_503:
-or_end_467:
+    b cmp_end_437
+cmp_true_436:
+cmp_end_437:
+or_end_401:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_464
-    b or_end_465
-or_right_464:
+    b.eq or_right_398
+    b or_end_399
+or_right_398:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #60
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_504
+    b.eq cmp_true_438
     adr x0, sign_id
-    b cmp_end_505
-cmp_true_504:
-cmp_end_505:
-or_end_465:
+    b cmp_end_439
+cmp_true_438:
+cmp_end_439:
+or_end_399:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_462
-    b or_end_463
-or_right_462:
+    b.eq or_right_396
+    b or_end_397
+or_right_396:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #62
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_506
+    b.eq cmp_true_440
     adr x0, sign_id
-    b cmp_end_507
-cmp_true_506:
-cmp_end_507:
-or_end_463:
+    b cmp_end_441
+cmp_true_440:
+cmp_end_441:
+or_end_397:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_460
-    b or_end_461
-or_right_460:
+    b.eq or_right_394
+    b or_end_395
+or_right_394:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #63
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_508
+    b.eq cmp_true_442
     adr x0, sign_id
-    b cmp_end_509
-cmp_true_508:
-cmp_end_509:
-or_end_461:
+    b cmp_end_443
+cmp_true_442:
+cmp_end_443:
+or_end_395:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_458
-    b or_end_459
-or_right_458:
+    b.eq or_right_392
+    b or_end_393
+or_right_392:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #58
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_510
+    b.eq cmp_true_444
     adr x0, sign_id
-    b cmp_end_511
-cmp_true_510:
-cmp_end_511:
-or_end_459:
+    b cmp_end_445
+cmp_true_444:
+cmp_end_445:
+or_end_393:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_456
-    b or_end_457
-or_right_456:
+    b.eq or_right_390
+    b or_end_391
+or_right_390:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #59
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_512
+    b.eq cmp_true_446
     adr x0, sign_id
-    b cmp_end_513
-cmp_true_512:
-cmp_end_513:
-or_end_457:
+    b cmp_end_447
+cmp_true_446:
+cmp_end_447:
+or_end_391:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_454
-    b or_end_455
-or_right_454:
+    b.eq or_right_388
+    b or_end_389
+or_right_388:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #126
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_514
+    b.eq cmp_true_448
     adr x0, sign_id
-    b cmp_end_515
-cmp_true_514:
-cmp_end_515:
-or_end_455:
+    b cmp_end_449
+cmp_true_448:
+cmp_end_449:
+or_end_389:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_452_453:
-    // Closure for func_452
+after_func_386_387:
+    // Closure for func_386
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_452
+    adr x1, func_386
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_447
-cond_false_446:
+    b cond_end_382
+cond_false_381:
     adr x0, sign_id
-cond_end_447:
+cond_end_382:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, length
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_520
-    tst x0, #1
-    b.ne do_compose_518
-do_apply_519:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_521
-do_compose_518:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_521
-do_concat_520:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_453
+    tst x1, #1
+    b.eq do_concat_453
+do_apply_452:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_454
+do_concat_453:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_521:
+apply_end_454:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_516
-    b after_func_522_523
-func_522:
+    b.eq cond_false_450
+    b after_func_455_456
+func_455:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -3377,22 +3176,22 @@ func_522:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_527
+    b.eq cmp_true_460
     adr x0, sign_id
-    b cmp_end_528
-cmp_true_527:
-cmp_end_528:
+    b cmp_end_461
+cmp_true_460:
+cmp_end_461:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_525
+    b.eq cond_false_458
     mov x0, #0
-    b cond_end_526
-cond_false_525:
+    b cond_end_459
+cond_false_458:
     adr x0, sign_id
-cond_end_526:
+cond_end_459:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_524
+    b.ne blk_end_457
     mov x0, #1
     str x0, [sp, #-16]!
     adr x0, length
@@ -3402,127 +3201,115 @@ cond_end_526:
     adr x0, tail
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_531
-    tst x0, #1
-    b.ne do_compose_529
-do_apply_530:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_532
-do_compose_529:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_532
-do_concat_531:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_463
+    tst x1, #1
+    b.eq do_concat_463
+do_apply_462:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_464
+do_concat_463:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_532:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_535
-    tst x0, #1
-    b.ne do_compose_533
-do_apply_534:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_536
-do_compose_533:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_536
-do_concat_535:
-    mov x1, x0
-    mov x0, x9
+apply_end_464:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_466
+    tst x1, #1
+    b.eq do_concat_466
+do_apply_465:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_467
+do_concat_466:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_536:
-blk_end_524:
+apply_end_467:
+blk_end_457:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_522_523:
-    // Closure for func_522
+after_func_455_456:
+    // Closure for func_455
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_522
+    adr x1, func_455
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_517
-cond_false_516:
+    b cond_end_451
+cond_false_450:
     adr x0, sign_id
-cond_end_517:
+cond_end_451:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, list_to_string
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_541
-    tst x0, #1
-    b.ne do_compose_539
-do_apply_540:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_542
-do_compose_539:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_542
-do_concat_541:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_471
+    tst x1, #1
+    b.eq do_concat_471
+do_apply_470:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_472
+do_concat_471:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_542:
+apply_end_472:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_537
-    b after_func_543_544
-func_543:
+    b.eq cond_false_468
+    b after_func_473_474
+func_473:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, length
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_548
-    tst x0, #1
-    b.ne do_compose_546
-do_apply_547:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_549
-do_compose_546:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_549
-do_concat_548:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_477
+    tst x1, #1
+    b.eq do_concat_477
+do_apply_476:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_478
+do_concat_477:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_549:
+apply_end_478:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_545
+    b.ne blk_end_475
     adr x0, alloc
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
@@ -3530,105 +3317,93 @@ apply_end_549:
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_552
-    tst x0, #1
-    b.ne do_compose_550
-do_apply_551:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_553
-do_compose_550:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_553
-do_concat_552:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_480
+    tst x1, #1
+    b.eq do_concat_480
+do_apply_479:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_481
+do_concat_480:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_553:
+apply_end_481:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_545
+    b.ne blk_end_475
     adr x0, _write_list
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_556
-    tst x0, #1
-    b.ne do_compose_554
-do_apply_555:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_557
-do_compose_554:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_557
-do_concat_556:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_483
+    tst x1, #1
+    b.eq do_concat_483
+do_apply_482:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_484
+do_concat_483:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_557:
+apply_end_484:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_560
-    tst x0, #1
-    b.ne do_compose_558
-do_apply_559:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_561
-do_compose_558:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_561
-do_concat_560:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_486
+    tst x1, #1
+    b.eq do_concat_486
+do_apply_485:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_487
+do_concat_486:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_561:
+apply_end_487:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_564
-    tst x0, #1
-    b.ne do_compose_562
-do_apply_563:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_565
-do_compose_562:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_565
-do_concat_564:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_489
+    tst x1, #1
+    b.eq do_concat_489
+do_apply_488:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_490
+do_concat_489:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_565:
+apply_end_490:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_545
+    b.ne blk_end_475
     ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
@@ -3640,60 +3415,57 @@ apply_end_565:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_545
+    b.ne blk_end_475
     ldr x0, [x29, #-64]
-blk_end_545:
+blk_end_475:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_543_544:
-    // Closure for func_543
+after_func_473_474:
+    // Closure for func_473
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_543
+    adr x1, func_473
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_538
-cond_false_537:
+    b cond_end_469
+cond_false_468:
     adr x0, sign_id
-cond_end_538:
+cond_end_469:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, _write_list
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_570
-    tst x0, #1
-    b.ne do_compose_568
-do_apply_569:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_571
-do_compose_568:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_571
-do_concat_570:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_494
+    tst x1, #1
+    b.eq do_concat_494
+do_apply_493:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_495
+do_concat_494:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_571:
+apply_end_495:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_566
-    b after_func_572_573
-func_572:
+    b.eq cond_false_491
+    b after_func_496_497
+func_496:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_574_575
-func_574:
+    b after_func_498_499
+func_498:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -3701,8 +3473,8 @@ func_574:
     ldr x10, [x9] // Load Val
     str x10, [sp, #-16]! // Push Val
     ldr x9, [x9, #8] // Next
-    b after_func_576_577
-func_576:
+    b after_func_500_501
+func_500:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -3719,22 +3491,22 @@ func_576:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_581
+    b.eq cmp_true_505
     adr x0, sign_id
-    b cmp_end_582
-cmp_true_581:
-cmp_end_582:
+    b cmp_end_506
+cmp_true_505:
+cmp_end_506:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_579
+    b.eq cond_false_503
     mov x0, #0
-    b cond_end_580
-cond_false_579:
+    b cond_end_504
+cond_false_503:
     adr x0, sign_id
-cond_end_580:
+cond_end_504:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_578
+    b.ne blk_end_502
     ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -3744,135 +3516,120 @@ cond_end_580:
     adr x0, head
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_585
-    tst x0, #1
-    b.ne do_compose_583
-do_apply_584:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_586
-do_compose_583:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_586
-do_concat_585:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_508
+    tst x1, #1
+    b.eq do_concat_508
+do_apply_507:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_509
+do_concat_508:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_586:
+apply_end_509:
     ldr x1, [sp], #16
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_578
+    b.ne blk_end_502
     adr x0, _write_list
     str x0, [sp, #-16]!
     adr x0, tail
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_589
-    tst x0, #1
-    b.ne do_compose_587
-do_apply_588:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_590
-do_compose_587:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_590
-do_concat_589:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_511
+    tst x1, #1
+    b.eq do_concat_511
+do_apply_510:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_512
+do_concat_511:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_590:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_593
-    tst x0, #1
-    b.ne do_compose_591
-do_apply_592:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_594
-do_compose_591:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_594
-do_concat_593:
-    mov x1, x0
-    mov x0, x9
+apply_end_512:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_514
+    tst x1, #1
+    b.eq do_concat_514
+do_apply_513:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_515
+do_concat_514:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_594:
+apply_end_515:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_597
-    tst x0, #1
-    b.ne do_compose_595
-do_apply_596:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_598
-do_compose_595:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_598
-do_concat_597:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_517
+    tst x1, #1
+    b.eq do_concat_517
+do_apply_516:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_518
+do_concat_517:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_598:
+apply_end_518:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_601
-    tst x0, #1
-    b.ne do_compose_599
-do_apply_600:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_602
-do_compose_599:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_602
-do_concat_601:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_520
+    tst x1, #1
+    b.eq do_concat_520
+do_apply_519:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_521
+do_concat_520:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_602:
-blk_end_578:
+apply_end_521:
+blk_end_502:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_576_577:
-    // Closure for func_576
+after_func_500_501:
+    // Closure for func_500
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -3889,14 +3646,14 @@ after_func_576_577:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_576
+    adr x1, func_500
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_574_575:
-    // Closure for func_574
+after_func_498_499:
+    // Closure for func_498
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -3906,94 +3663,88 @@ after_func_574_575:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_574
+    adr x1, func_498
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_572_573:
-    // Closure for func_572
+after_func_496_497:
+    // Closure for func_496
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_572
+    adr x1, func_496
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_567
-cond_false_566:
+    b cond_end_492
+cond_false_491:
     adr x0, sign_id
-cond_end_567:
+cond_end_492:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, tokenize
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_607
-    tst x0, #1
-    b.ne do_compose_605
-do_apply_606:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_608
-do_compose_605:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_608
-do_concat_607:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_525
+    tst x1, #1
+    b.eq do_concat_525
+do_apply_524:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_526
+do_concat_525:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_608:
+apply_end_526:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_603
-    b after_func_609_610
-func_609:
+    b.eq cond_false_522
+    b after_func_527_528
+func_527:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, scan
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_614
-    tst x0, #1
-    b.ne do_compose_612
-do_apply_613:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_615
-do_compose_612:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_615
-do_concat_614:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_531
+    tst x1, #1
+    b.eq do_concat_531
+do_apply_530:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_532
+do_concat_531:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_615:
+apply_end_532:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_611
+    b.ne blk_end_529
     ldr x0, [x29, #-48]
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_611
+    b.ne blk_end_529
     ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     adr x0, tok_eof
@@ -4001,1105 +3752,1006 @@ apply_end_615:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_618
+    b.eq cmp_true_535
     adr x0, sign_id
-    b cmp_end_619
-cmp_true_618:
-cmp_end_619:
+    b cmp_end_536
+cmp_true_535:
+cmp_end_536:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_616
+    b.eq cond_false_533
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_622
-    tst x0, #1
-    b.ne do_compose_620
-do_apply_621:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_623
-do_compose_620:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_623
-do_concat_622:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_538
+    tst x1, #1
+    b.eq do_concat_538
+do_apply_537:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_539
+do_concat_538:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_623:
+apply_end_539:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_626
-    tst x0, #1
-    b.ne do_compose_624
-do_apply_625:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_627
-do_compose_624:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_627
-do_concat_626:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_541
+    tst x1, #1
+    b.eq do_concat_541
+do_apply_540:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_542
+do_concat_541:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_627:
-    b cond_end_617
-cond_false_616:
+apply_end_542:
+    b cond_end_534
+cond_false_533:
     adr x0, sign_id
-cond_end_617:
+cond_end_534:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_611
+    b.ne blk_end_529
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_630
-    tst x0, #1
-    b.ne do_compose_628
-do_apply_629:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_631
-do_compose_628:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_631
-do_concat_630:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_544
+    tst x1, #1
+    b.eq do_concat_544
+do_apply_543:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_545
+do_concat_544:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_631:
+apply_end_545:
     str x0, [sp, #-16]!
     adr x0, tokenize
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_634
-    tst x0, #1
-    b.ne do_compose_632
-do_apply_633:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_635
-do_compose_632:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_635
-do_concat_634:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_547
+    tst x1, #1
+    b.eq do_concat_547
+do_apply_546:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_548
+do_concat_547:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_635:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_638
-    tst x0, #1
-    b.ne do_compose_636
-do_apply_637:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_639
-do_compose_636:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_639
-do_concat_638:
-    mov x1, x0
-    mov x0, x9
+apply_end_548:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_550
+    tst x1, #1
+    b.eq do_concat_550
+do_apply_549:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_551
+do_concat_550:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_639:
-blk_end_611:
+apply_end_551:
+blk_end_529:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_609_610:
-    // Closure for func_609
+after_func_527_528:
+    // Closure for func_527
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_609
+    adr x1, func_527
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_604
-cond_false_603:
+    b cond_end_523
+cond_false_522:
     adr x0, sign_id
-cond_end_604:
+cond_end_523:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, scan
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_644
-    tst x0, #1
-    b.ne do_compose_642
-do_apply_643:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_645
-do_compose_642:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_645
-do_concat_644:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_555
+    tst x1, #1
+    b.eq do_concat_555
+do_apply_554:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_556
+do_concat_555:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_645:
+apply_end_556:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_640
-    b after_func_646_647
-func_646:
+    b.eq cond_false_552
+    b after_func_557_558
+func_557:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, skip_space
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_651
-    tst x0, #1
-    b.ne do_compose_649
-do_apply_650:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_652
-do_compose_649:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_652
-do_concat_651:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_561
+    tst x1, #1
+    b.eq do_concat_561
+do_apply_560:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_562
+do_concat_561:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_652:
+apply_end_562:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_648
+    b.ne blk_end_559
     adr x0, ch
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_648
+    b.ne blk_end_559
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #-1
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_655
+    b.eq cmp_true_565
     adr x0, sign_id
-    b cmp_end_656
-cmp_true_655:
-cmp_end_656:
+    b cmp_end_566
+cmp_true_565:
+cmp_end_566:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_653
+    b.eq cond_false_563
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, tok_eof
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_659
-    tst x0, #1
-    b.ne do_compose_657
-do_apply_658:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_660
-do_compose_657:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_660
-do_concat_659:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_568
+    tst x1, #1
+    b.eq do_concat_568
+do_apply_567:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_569
+do_concat_568:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_660:
+apply_end_569:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_663
-    tst x0, #1
-    b.ne do_compose_661
-do_apply_662:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_664
-do_compose_661:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_664
-do_concat_663:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_571
+    tst x1, #1
+    b.eq do_concat_571
+do_apply_570:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_572
+do_concat_571:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_664:
-    b cond_end_654
-cond_false_653:
+apply_end_572:
+    b cond_end_564
+cond_false_563:
     adr x0, sign_id
-cond_end_654:
+cond_end_564:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_648
+    b.ne blk_end_559
     adr x0, is_digit
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_669
-    tst x0, #1
-    b.ne do_compose_667
-do_apply_668:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_670
-do_compose_667:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_670
-do_concat_669:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_576
+    tst x1, #1
+    b.eq do_concat_576
+do_apply_575:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_577
+do_concat_576:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_670:
+apply_end_577:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_665
+    b.eq cond_false_573
     adr x0, scan_num
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_673
-    tst x0, #1
-    b.ne do_compose_671
-do_apply_672:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_674
-do_compose_671:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_674
-do_concat_673:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_579
+    tst x1, #1
+    b.eq do_concat_579
+do_apply_578:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_580
+do_concat_579:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_674:
-    b cond_end_666
-cond_false_665:
+apply_end_580:
+    b cond_end_574
+cond_false_573:
     adr x0, sign_id
-cond_end_666:
+cond_end_574:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_648
+    b.ne blk_end_559
     adr x0, is_alpha
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_679
-    tst x0, #1
-    b.ne do_compose_677
-do_apply_678:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_680
-do_compose_677:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_680
-do_concat_679:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_584
+    tst x1, #1
+    b.eq do_concat_584
+do_apply_583:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_585
+do_concat_584:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_680:
+apply_end_585:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_675
+    b.eq cond_false_581
     adr x0, scan_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_683
-    tst x0, #1
-    b.ne do_compose_681
-do_apply_682:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_684
-do_compose_681:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_684
-do_concat_683:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_587
+    tst x1, #1
+    b.eq do_concat_587
+do_apply_586:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_588
+do_concat_587:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_684:
-    b cond_end_676
-cond_false_675:
+apply_end_588:
+    b cond_end_582
+cond_false_581:
     adr x0, sign_id
-cond_end_676:
+cond_end_582:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_648
+    b.ne blk_end_559
     adr x0, is_op_char
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_689
-    tst x0, #1
-    b.ne do_compose_687
-do_apply_688:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_690
-do_compose_687:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_690
-do_concat_689:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_592
+    tst x1, #1
+    b.eq do_concat_592
+do_apply_591:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_593
+do_concat_592:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_690:
+apply_end_593:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_685
+    b.eq cond_false_589
     adr x0, scan_op
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_693
-    tst x0, #1
-    b.ne do_compose_691
-do_apply_692:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_694
-do_compose_691:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_694
-do_concat_693:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_595
+    tst x1, #1
+    b.eq do_concat_595
+do_apply_594:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_596
+do_concat_595:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_694:
-    b cond_end_686
-cond_false_685:
+apply_end_596:
+    b cond_end_590
+cond_false_589:
     adr x0, sign_id
-cond_end_686:
+cond_end_590:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_648
+    b.ne blk_end_559
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #96
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_697
+    b.eq cmp_true_599
     adr x0, sign_id
-    b cmp_end_698
-cmp_true_697:
-cmp_end_698:
+    b cmp_end_600
+cmp_true_599:
+cmp_end_600:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_695
+    b.eq cond_false_597
     adr x0, scan_str
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_701
-    tst x0, #1
-    b.ne do_compose_699
-do_apply_700:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_702
-do_compose_699:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_702
-do_concat_701:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_602
+    tst x1, #1
+    b.eq do_concat_602
+do_apply_601:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_603
+do_concat_602:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_702:
-    b cond_end_696
-cond_false_695:
+apply_end_603:
+    b cond_end_598
+cond_false_597:
     adr x0, sign_id
-cond_end_696:
+cond_end_598:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_648
+    b.ne blk_end_559
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #96
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_705
+    b.eq cmp_true_606
     adr x0, sign_id
-    b cmp_end_706
-cmp_true_705:
-cmp_end_706:
+    b cmp_end_607
+cmp_true_606:
+cmp_end_607:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_703
+    b.eq cond_false_604
     adr x0, scan_str
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_709
-    tst x0, #1
-    b.ne do_compose_707
-do_apply_708:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_710
-do_compose_707:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_710
-do_concat_709:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_609
+    tst x1, #1
+    b.eq do_concat_609
+do_apply_608:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_610
+do_concat_609:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_710:
-    b cond_end_704
-cond_false_703:
+apply_end_610:
+    b cond_end_605
+cond_false_604:
     adr x0, sign_id
-cond_end_704:
+cond_end_605:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_648
+    b.ne blk_end_559
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #32
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_713
+    b.eq cmp_true_613
     adr x0, sign_id
-    b cmp_end_714
-cmp_true_713:
-cmp_end_714:
+    b cmp_end_614
+cmp_true_613:
+cmp_end_614:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_711
+    b.eq cond_false_611
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_718
-    tst x0, #1
-    b.ne do_compose_716
-do_apply_717:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_719
-do_compose_716:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_719
-do_concat_718:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_617
+    tst x1, #1
+    b.eq do_concat_617
+do_apply_616:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_618
+do_concat_617:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_719:
+apply_end_618:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_715
+    b.ne blk_end_615
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, tok_sep
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_722
-    tst x0, #1
-    b.ne do_compose_720
-do_apply_721:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_723
-do_compose_720:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_723
-do_concat_722:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_620
+    tst x1, #1
+    b.eq do_concat_620
+do_apply_619:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_621
+do_concat_620:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_723:
+apply_end_621:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_726
-    tst x0, #1
-    b.ne do_compose_724
-do_apply_725:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_727
-do_compose_724:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_727
-do_concat_726:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_623
+    tst x1, #1
+    b.eq do_concat_623
+do_apply_622:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_624
+do_concat_623:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_727:
-blk_end_715:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_730
-    tst x0, #1
-    b.ne do_compose_728
-do_apply_729:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_731
-do_compose_728:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_731
-do_concat_730:
-    mov x1, x0
-    mov x0, x9
+apply_end_624:
+blk_end_615:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_626
+    tst x1, #1
+    b.eq do_concat_626
+do_apply_625:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_627
+do_concat_626:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_731:
-    b cond_end_712
-cond_false_711:
+apply_end_627:
+    b cond_end_612
+cond_false_611:
     adr x0, sign_id
-cond_end_712:
+cond_end_612:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_648
+    b.ne blk_end_559
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #40
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_738
+    b.eq cmp_true_634
     adr x0, sign_id
-    b cmp_end_739
-cmp_true_738:
-cmp_end_739:
+    b cmp_end_635
+cmp_true_634:
+cmp_end_635:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_736
-    b or_end_737
-or_right_736:
+    b.eq or_right_632
+    b or_end_633
+or_right_632:
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #91
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_740
+    b.eq cmp_true_636
     adr x0, sign_id
-    b cmp_end_741
-cmp_true_740:
-cmp_end_741:
-or_end_737:
+    b cmp_end_637
+cmp_true_636:
+cmp_end_637:
+or_end_633:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_734
-    b or_end_735
-or_right_734:
+    b.eq or_right_630
+    b or_end_631
+or_right_630:
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #123
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_742
+    b.eq cmp_true_638
     adr x0, sign_id
-    b cmp_end_743
-cmp_true_742:
-cmp_end_743:
-or_end_735:
+    b cmp_end_639
+cmp_true_638:
+cmp_end_639:
+or_end_631:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_732
+    b.eq cond_false_628
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_747
-    tst x0, #1
-    b.ne do_compose_745
-do_apply_746:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_748
-do_compose_745:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_748
-do_concat_747:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_642
+    tst x1, #1
+    b.eq do_concat_642
+do_apply_641:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_643
+do_concat_642:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_748:
+apply_end_643:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_744
+    b.ne blk_end_640
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, tok_lparen
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_751
-    tst x0, #1
-    b.ne do_compose_749
-do_apply_750:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_752
-do_compose_749:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_752
-do_concat_751:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_645
+    tst x1, #1
+    b.eq do_concat_645
+do_apply_644:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_646
+do_concat_645:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_752:
+apply_end_646:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_755
-    tst x0, #1
-    b.ne do_compose_753
-do_apply_754:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_756
-do_compose_753:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_756
-do_concat_755:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_648
+    tst x1, #1
+    b.eq do_concat_648
+do_apply_647:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_649
+do_concat_648:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_756:
-blk_end_744:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_759
-    tst x0, #1
-    b.ne do_compose_757
-do_apply_758:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_760
-do_compose_757:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_760
-do_concat_759:
-    mov x1, x0
-    mov x0, x9
+apply_end_649:
+blk_end_640:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_651
+    tst x1, #1
+    b.eq do_concat_651
+do_apply_650:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_652
+do_concat_651:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_760:
-    b cond_end_733
-cond_false_732:
+apply_end_652:
+    b cond_end_629
+cond_false_628:
     adr x0, sign_id
-cond_end_733:
+cond_end_629:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_648
+    b.ne blk_end_559
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #41
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_767
+    b.eq cmp_true_659
     adr x0, sign_id
-    b cmp_end_768
-cmp_true_767:
-cmp_end_768:
+    b cmp_end_660
+cmp_true_659:
+cmp_end_660:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_765
-    b or_end_766
-or_right_765:
+    b.eq or_right_657
+    b or_end_658
+or_right_657:
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #93
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_769
+    b.eq cmp_true_661
     adr x0, sign_id
-    b cmp_end_770
-cmp_true_769:
-cmp_end_770:
-or_end_766:
+    b cmp_end_662
+cmp_true_661:
+cmp_end_662:
+or_end_658:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_763
-    b or_end_764
-or_right_763:
+    b.eq or_right_655
+    b or_end_656
+or_right_655:
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #125
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_771
+    b.eq cmp_true_663
     adr x0, sign_id
-    b cmp_end_772
-cmp_true_771:
-cmp_end_772:
-or_end_764:
+    b cmp_end_664
+cmp_true_663:
+cmp_end_664:
+or_end_656:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_761
+    b.eq cond_false_653
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_776
-    tst x0, #1
-    b.ne do_compose_774
-do_apply_775:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_777
-do_compose_774:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_777
-do_concat_776:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_667
+    tst x1, #1
+    b.eq do_concat_667
+do_apply_666:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_668
+do_concat_667:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_777:
+apply_end_668:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_773
+    b.ne blk_end_665
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, tok_rparen
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_780
-    tst x0, #1
-    b.ne do_compose_778
-do_apply_779:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_781
-do_compose_778:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_781
-do_concat_780:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_670
+    tst x1, #1
+    b.eq do_concat_670
+do_apply_669:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_671
+do_concat_670:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_781:
+apply_end_671:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_784
-    tst x0, #1
-    b.ne do_compose_782
-do_apply_783:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_785
-do_compose_782:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_785
-do_concat_784:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_673
+    tst x1, #1
+    b.eq do_concat_673
+do_apply_672:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_674
+do_concat_673:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_785:
-blk_end_773:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_788
-    tst x0, #1
-    b.ne do_compose_786
-do_apply_787:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_789
-do_compose_786:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_789
-do_concat_788:
-    mov x1, x0
-    mov x0, x9
+apply_end_674:
+blk_end_665:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_676
+    tst x1, #1
+    b.eq do_concat_676
+do_apply_675:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_677
+do_concat_676:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_789:
-    b cond_end_762
-cond_false_761:
+apply_end_677:
+    b cond_end_654
+cond_false_653:
     adr x0, sign_id
-cond_end_762:
+cond_end_654:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_648
+    b.ne blk_end_559
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_792
-    tst x0, #1
-    b.ne do_compose_790
-do_apply_791:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_793
-do_compose_790:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_793
-do_concat_792:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_679
+    tst x1, #1
+    b.eq do_concat_679
+do_apply_678:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_680
+do_concat_679:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_793:
+apply_end_680:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_648
+    b.ne blk_end_559
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, tok_punc
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_796
-    tst x0, #1
-    b.ne do_compose_794
-do_apply_795:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_797
-do_compose_794:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_797
-do_concat_796:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_682
+    tst x1, #1
+    b.eq do_concat_682
+do_apply_681:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_683
+do_concat_682:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_797:
+apply_end_683:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_800
-    tst x0, #1
-    b.ne do_compose_798
-do_apply_799:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_801
-do_compose_798:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_801
-do_concat_800:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_685
+    tst x1, #1
+    b.eq do_concat_685
+do_apply_684:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_686
+do_concat_685:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_801:
-blk_end_648:
+apply_end_686:
+blk_end_559:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_646_647:
-    // Closure for func_646
+after_func_557_558:
+    // Closure for func_557
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_646
+    adr x1, func_557
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_641
-cond_false_640:
+    b cond_end_553
+cond_false_552:
     adr x0, sign_id
-cond_end_641:
+cond_end_553:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, skip_space
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_806
-    tst x0, #1
-    b.ne do_compose_804
-do_apply_805:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_807
-do_compose_804:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_807
-do_concat_806:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_690
+    tst x1, #1
+    b.eq do_concat_690
+do_apply_689:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_691
+do_concat_690:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_807:
+apply_end_691:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_802
-    b after_func_808_809
-func_808:
+    b.eq cond_false_687
+    b after_func_692_693
+func_692:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -5107,385 +4759,346 @@ func_808:
     str x0, [sp, #-16]!
     adr x0, ch
     ldr x0, [x0] // @ load
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_815
-    tst x0, #1
-    b.ne do_compose_813
-do_apply_814:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_816
-do_compose_813:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_816
-do_concat_815:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_698
+    tst x1, #1
+    b.eq do_concat_698
+do_apply_697:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_699
+do_concat_698:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_816:
+apply_end_699:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_811
+    b.eq cond_false_695
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_820
-    tst x0, #1
-    b.ne do_compose_818
-do_apply_819:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_821
-do_compose_818:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_821
-do_concat_820:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_702
+    tst x1, #1
+    b.eq do_concat_702
+do_apply_701:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_703
+do_concat_702:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_821:
+apply_end_703:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_817
+    b.ne blk_end_700
     adr x0, skip_space
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_824
-    tst x0, #1
-    b.ne do_compose_822
-do_apply_823:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_825
-do_compose_822:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_825
-do_concat_824:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_705
+    tst x1, #1
+    b.eq do_concat_705
+do_apply_704:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_706
+do_concat_705:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_825:
-blk_end_817:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_828
-    tst x0, #1
-    b.ne do_compose_826
-do_apply_827:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_829
-do_compose_826:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_829
-do_concat_828:
-    mov x1, x0
-    mov x0, x9
+apply_end_706:
+blk_end_700:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_708
+    tst x1, #1
+    b.eq do_concat_708
+do_apply_707:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_709
+do_concat_708:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_829:
-    b cond_end_812
-cond_false_811:
+apply_end_709:
+    b cond_end_696
+cond_false_695:
     adr x0, sign_id
-cond_end_812:
+cond_end_696:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_810
+    b.ne blk_end_694
     mov x0, #0
-blk_end_810:
+blk_end_694:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_808_809:
-    // Closure for func_808
+after_func_692_693:
+    // Closure for func_692
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_808
+    adr x1, func_692
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_803
-cond_false_802:
+    b cond_end_688
+cond_false_687:
     adr x0, sign_id
-cond_end_803:
+cond_end_688:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, scan_id
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_834
-    tst x0, #1
-    b.ne do_compose_832
-do_apply_833:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_835
-do_compose_832:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_835
-do_concat_834:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_713
+    tst x1, #1
+    b.eq do_concat_713
+do_apply_712:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_714
+do_concat_713:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_835:
+apply_end_714:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_830
-    b after_func_836_837
-func_836:
+    b.eq cond_false_710
+    b after_func_715_716
+func_715:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_841
-    tst x0, #1
-    b.ne do_compose_839
-do_apply_840:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_842
-do_compose_839:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_842
-do_concat_841:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_719
+    tst x1, #1
+    b.eq do_concat_719
+do_apply_718:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_720
+do_concat_719:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_842:
+apply_end_720:
     str x0, [sp, #-16]!
     adr x0, _scan_id_rec
     str x0, [sp, #-16]!
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_845
-    tst x0, #1
-    b.ne do_compose_843
-do_apply_844:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_846
-do_compose_843:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_846
-do_concat_845:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_722
+    tst x1, #1
+    b.eq do_concat_722
+do_apply_721:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_723
+do_concat_722:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_846:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_849
-    tst x0, #1
-    b.ne do_compose_847
-do_apply_848:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_850
-do_compose_847:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_850
-do_concat_849:
-    mov x1, x0
-    mov x0, x9
+apply_end_723:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_725
+    tst x1, #1
+    b.eq do_concat_725
+do_apply_724:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_726
+do_concat_725:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_850:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_853
-    tst x0, #1
-    b.ne do_compose_851
-do_apply_852:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_854
-do_compose_851:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_854
-do_concat_853:
-    mov x1, x0
-    mov x0, x9
+apply_end_726:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_728
+    tst x1, #1
+    b.eq do_concat_728
+do_apply_727:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_729
+do_concat_728:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_854:
+apply_end_729:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_838
+    b.ne blk_end_717
     adr x0, list_to_string
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_857
-    tst x0, #1
-    b.ne do_compose_855
-do_apply_856:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_858
-do_compose_855:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_858
-do_concat_857:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_731
+    tst x1, #1
+    b.eq do_concat_731
+do_apply_730:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_732
+do_concat_731:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_858:
+apply_end_732:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_838
+    b.ne blk_end_717
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, tok_id
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_861
-    tst x0, #1
-    b.ne do_compose_859
-do_apply_860:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_862
-do_compose_859:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_862
-do_concat_861:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_734
+    tst x1, #1
+    b.eq do_concat_734
+do_apply_733:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_735
+do_concat_734:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_862:
+apply_end_735:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_865
-    tst x0, #1
-    b.ne do_compose_863
-do_apply_864:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_866
-do_compose_863:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_866
-do_concat_865:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_737
+    tst x1, #1
+    b.eq do_concat_737
+do_apply_736:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_738
+do_concat_737:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_866:
-blk_end_838:
+apply_end_738:
+blk_end_717:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_836_837:
-    // Closure for func_836
+after_func_715_716:
+    // Closure for func_715
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_836
+    adr x1, func_715
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_831
-cond_false_830:
+    b cond_end_711
+cond_false_710:
     adr x0, sign_id
-cond_end_831:
+cond_end_711:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, _scan_id_rec
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_871
-    tst x0, #1
-    b.ne do_compose_869
-do_apply_870:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_872
-do_compose_869:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_872
-do_concat_871:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_742
+    tst x1, #1
+    b.eq do_concat_742
+do_apply_741:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_743
+do_concat_742:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_872:
+apply_end_743:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_867
-    b after_func_873_874
-func_873:
+    b.eq cond_false_739
+    b after_func_744_745
+func_744:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -5494,384 +5107,345 @@ func_873:
     ldr x0, [x29, #-32]
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_878
-    b or_end_879
-or_right_878:
+    b.eq or_right_749
+    b or_end_750
+or_right_749:
     adr x0, is_digit
-or_end_879:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_882
-    tst x0, #1
-    b.ne do_compose_880
-do_apply_881:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_883
-do_compose_880:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_883
-do_concat_882:
-    mov x1, x0
-    mov x0, x9
+or_end_750:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_752
+    tst x1, #1
+    b.eq do_concat_752
+do_apply_751:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_753
+do_concat_752:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_883:
+apply_end_753:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_886
-    tst x0, #1
-    b.ne do_compose_884
-do_apply_885:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_887
-do_compose_884:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_887
-do_concat_886:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_755
+    tst x1, #1
+    b.eq do_concat_755
+do_apply_754:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_756
+do_concat_755:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_887:
+apply_end_756:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_876
+    b.eq cond_false_747
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_890
-    tst x0, #1
-    b.ne do_compose_888
-do_apply_889:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_891
-do_compose_888:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_891
-do_concat_890:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_758
+    tst x1, #1
+    b.eq do_concat_758
+do_apply_757:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_759
+do_concat_758:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_891:
+apply_end_759:
     str x0, [sp, #-16]!
     adr x0, _scan_id_rec
     str x0, [sp, #-16]!
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_894
-    tst x0, #1
-    b.ne do_compose_892
-do_apply_893:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_895
-do_compose_892:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_895
-do_concat_894:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_761
+    tst x1, #1
+    b.eq do_concat_761
+do_apply_760:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_762
+do_concat_761:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_895:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_898
-    tst x0, #1
-    b.ne do_compose_896
-do_apply_897:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_899
-do_compose_896:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_899
-do_concat_898:
-    mov x1, x0
-    mov x0, x9
+apply_end_762:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_764
+    tst x1, #1
+    b.eq do_concat_764
+do_apply_763:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_765
+do_concat_764:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_899:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_902
-    tst x0, #1
-    b.ne do_compose_900
-do_apply_901:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_903
-do_compose_900:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_903
-do_concat_902:
-    mov x1, x0
-    mov x0, x9
+apply_end_765:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_767
+    tst x1, #1
+    b.eq do_concat_767
+do_apply_766:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_768
+do_concat_767:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_903:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_906
-    tst x0, #1
-    b.ne do_compose_904
-do_apply_905:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_907
-do_compose_904:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_907
-do_concat_906:
-    mov x1, x0
-    mov x0, x9
+apply_end_768:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_770
+    tst x1, #1
+    b.eq do_concat_770
+do_apply_769:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_771
+do_concat_770:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_907:
-    b cond_end_877
-cond_false_876:
+apply_end_771:
+    b cond_end_748
+cond_false_747:
     adr x0, sign_id
-cond_end_877:
+cond_end_748:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_875
+    b.ne blk_end_746
     mov x0, #0
-blk_end_875:
+blk_end_746:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_873_874:
-    // Closure for func_873
+after_func_744_745:
+    // Closure for func_744
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_873
+    adr x1, func_744
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_868
-cond_false_867:
+    b cond_end_740
+cond_false_739:
     adr x0, sign_id
-cond_end_868:
+cond_end_740:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, scan_num
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_912
-    tst x0, #1
-    b.ne do_compose_910
-do_apply_911:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_913
-do_compose_910:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_913
-do_concat_912:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_775
+    tst x1, #1
+    b.eq do_concat_775
+do_apply_774:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_776
+do_concat_775:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_913:
+apply_end_776:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_908
-    b after_func_914_915
-func_914:
+    b.eq cond_false_772
+    b after_func_777_778
+func_777:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, _scan_num_rec
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_919
-    tst x0, #1
-    b.ne do_compose_917
-do_apply_918:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_920
-do_compose_917:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_920
-do_concat_919:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_781
+    tst x1, #1
+    b.eq do_concat_781
+do_apply_780:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_782
+do_concat_781:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_920:
+apply_end_782:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_923
-    tst x0, #1
-    b.ne do_compose_921
-do_apply_922:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_924
-do_compose_921:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_924
-do_concat_923:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_784
+    tst x1, #1
+    b.eq do_concat_784
+do_apply_783:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_785
+do_concat_784:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_924:
+apply_end_785:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_916
+    b.ne blk_end_779
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, tok_num
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_927
-    tst x0, #1
-    b.ne do_compose_925
-do_apply_926:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_928
-do_compose_925:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_928
-do_concat_927:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_787
+    tst x1, #1
+    b.eq do_concat_787
+do_apply_786:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_788
+do_concat_787:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_928:
+apply_end_788:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_931
-    tst x0, #1
-    b.ne do_compose_929
-do_apply_930:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_932
-do_compose_929:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_932
-do_concat_931:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_790
+    tst x1, #1
+    b.eq do_concat_790
+do_apply_789:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_791
+do_concat_790:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_932:
-blk_end_916:
+apply_end_791:
+blk_end_779:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_914_915:
-    // Closure for func_914
+after_func_777_778:
+    // Closure for func_777
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_914
+    adr x1, func_777
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_909
-cond_false_908:
+    b cond_end_773
+cond_false_772:
     adr x0, sign_id
-cond_end_909:
+cond_end_773:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, _scan_num_rec
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_937
-    tst x0, #1
-    b.ne do_compose_935
-do_apply_936:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_938
-do_compose_935:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_938
-do_concat_937:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_795
+    tst x1, #1
+    b.eq do_concat_795
+do_apply_794:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_796
+do_concat_795:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_938:
+apply_end_796:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_933
-    b after_func_939_940
-func_939:
+    b.eq cond_false_792
+    b after_func_797_798
+func_797:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_941_942
-func_941:
+    b after_func_799_800
+func_799:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -5882,30 +5456,27 @@ func_941:
     adr x0, is_digit
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_948
-    tst x0, #1
-    b.ne do_compose_946
-do_apply_947:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_949
-do_compose_946:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_949
-do_concat_948:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_805
+    tst x1, #1
+    b.eq do_concat_805
+do_apply_804:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_806
+do_concat_805:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_949:
+apply_end_806:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_944
+    b.eq cond_false_802
     adr x0, val
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -5925,92 +5496,83 @@ apply_end_949:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_950
+    b.ne blk_end_807
     adr x0, _scan_num_rec
     str x0, [sp, #-16]!
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_953
-    tst x0, #1
-    b.ne do_compose_951
-do_apply_952:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_954
-do_compose_951:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_954
-do_concat_953:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_809
+    tst x1, #1
+    b.eq do_concat_809
+do_apply_808:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_810
+do_concat_809:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_954:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_957
-    tst x0, #1
-    b.ne do_compose_955
-do_apply_956:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_958
-do_compose_955:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_958
-do_concat_957:
-    mov x1, x0
-    mov x0, x9
+apply_end_810:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_812
+    tst x1, #1
+    b.eq do_concat_812
+do_apply_811:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_813
+do_concat_812:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_958:
+apply_end_813:
     str x0, [sp, #-16]!
     adr x0, val
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_961
-    tst x0, #1
-    b.ne do_compose_959
-do_apply_960:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_962
-do_compose_959:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_962
-do_concat_961:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_815
+    tst x1, #1
+    b.eq do_concat_815
+do_apply_814:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_816
+do_concat_815:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_962:
-blk_end_950:
-    b cond_end_945
-cond_false_944:
+apply_end_816:
+blk_end_807:
+    b cond_end_803
+cond_false_802:
     adr x0, sign_id
-cond_end_945:
+cond_end_803:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_943
+    b.ne blk_end_801
     ldr x0, [x29, #-32]
-blk_end_943:
+blk_end_801:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_941_942:
-    // Closure for func_941
+after_func_799_800:
+    // Closure for func_799
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -6020,55 +5582,52 @@ after_func_941_942:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_941
+    adr x1, func_799
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_939_940:
-    // Closure for func_939
+after_func_797_798:
+    // Closure for func_797
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_939
+    adr x1, func_797
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_934
-cond_false_933:
+    b cond_end_793
+cond_false_792:
     adr x0, sign_id
-cond_end_934:
+cond_end_793:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, scan_op
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_967
-    tst x0, #1
-    b.ne do_compose_965
-do_apply_966:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_968
-do_compose_965:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_968
-do_concat_967:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_820
+    tst x1, #1
+    b.eq do_concat_820
+do_apply_819:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_821
+do_concat_820:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_968:
+apply_end_821:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_963
-    b after_func_969_970
-func_969:
+    b.eq cond_false_817
+    b after_func_822_823
+func_822:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -6077,447 +5636,399 @@ func_969:
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_974
-    tst x0, #1
-    b.ne do_compose_972
-do_apply_973:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_975
-do_compose_972:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_975
-do_concat_974:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_826
+    tst x1, #1
+    b.eq do_concat_826
+do_apply_825:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_827
+do_concat_826:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_975:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_978
-    tst x0, #1
-    b.ne do_compose_976
-do_apply_977:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_979
-do_compose_976:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_979
-do_concat_978:
-    mov x1, x0
-    mov x0, x9
+apply_end_827:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_829
+    tst x1, #1
+    b.eq do_concat_829
+do_apply_828:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_830
+do_concat_829:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_979:
+apply_end_830:
     str x0, [sp, #-16]!
     adr x0, _scan_op_rec
     str x0, [sp, #-16]!
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_982
-    tst x0, #1
-    b.ne do_compose_980
-do_apply_981:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_983
-do_compose_980:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_983
-do_concat_982:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_832
+    tst x1, #1
+    b.eq do_concat_832
+do_apply_831:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_833
+do_concat_832:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_983:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_986
-    tst x0, #1
-    b.ne do_compose_984
-do_apply_985:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_987
-do_compose_984:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_987
-do_concat_986:
-    mov x1, x0
-    mov x0, x9
+apply_end_833:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_835
+    tst x1, #1
+    b.eq do_concat_835
+do_apply_834:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_836
+do_concat_835:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_987:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_990
-    tst x0, #1
-    b.ne do_compose_988
-do_apply_989:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_991
-do_compose_988:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_991
-do_concat_990:
-    mov x1, x0
-    mov x0, x9
+apply_end_836:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_838
+    tst x1, #1
+    b.eq do_concat_838
+do_apply_837:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_839
+do_concat_838:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_991:
+apply_end_839:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_971
+    b.ne blk_end_824
     adr x0, list_to_string
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_994
-    tst x0, #1
-    b.ne do_compose_992
-do_apply_993:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_995
-do_compose_992:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_995
-do_concat_994:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_841
+    tst x1, #1
+    b.eq do_concat_841
+do_apply_840:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_842
+do_concat_841:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_995:
+apply_end_842:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_971
+    b.ne blk_end_824
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, tok_op
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_998
-    tst x0, #1
-    b.ne do_compose_996
-do_apply_997:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_999
-do_compose_996:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_999
-do_concat_998:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_844
+    tst x1, #1
+    b.eq do_concat_844
+do_apply_843:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_845
+do_concat_844:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_999:
+apply_end_845:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1002
-    tst x0, #1
-    b.ne do_compose_1000
-do_apply_1001:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1003
-do_compose_1000:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1003
-do_concat_1002:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_847
+    tst x1, #1
+    b.eq do_concat_847
+do_apply_846:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_848
+do_concat_847:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1003:
-blk_end_971:
+apply_end_848:
+blk_end_824:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_969_970:
-    // Closure for func_969
+after_func_822_823:
+    // Closure for func_822
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_969
+    adr x1, func_822
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_964
-cond_false_963:
+    b cond_end_818
+cond_false_817:
     adr x0, sign_id
-cond_end_964:
+cond_end_818:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, _scan_op_rec
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1008
-    tst x0, #1
-    b.ne do_compose_1006
-do_apply_1007:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1009
-do_compose_1006:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1009
-do_concat_1008:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_852
+    tst x1, #1
+    b.eq do_concat_852
+do_apply_851:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_853
+do_concat_852:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1009:
+apply_end_853:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1004
-    b after_func_1010_1011
-func_1010:
+    b.eq cond_false_849
+    b after_func_854_855
+func_854:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, is_op_char
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1017
-    tst x0, #1
-    b.ne do_compose_1015
-do_apply_1016:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1018
-do_compose_1015:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1018
-do_concat_1017:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_860
+    tst x1, #1
+    b.eq do_concat_860
+do_apply_859:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_861
+do_concat_860:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1018:
+apply_end_861:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1013
+    b.eq cond_false_857
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1021
-    tst x0, #1
-    b.ne do_compose_1019
-do_apply_1020:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1022
-do_compose_1019:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1022
-do_concat_1021:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_863
+    tst x1, #1
+    b.eq do_concat_863
+do_apply_862:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_864
+do_concat_863:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1022:
+apply_end_864:
     str x0, [sp, #-16]!
     adr x0, _scan_op_rec
     str x0, [sp, #-16]!
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1025
-    tst x0, #1
-    b.ne do_compose_1023
-do_apply_1024:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1026
-do_compose_1023:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1026
-do_concat_1025:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_866
+    tst x1, #1
+    b.eq do_concat_866
+do_apply_865:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_867
+do_concat_866:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1026:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1029
-    tst x0, #1
-    b.ne do_compose_1027
-do_apply_1028:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1030
-do_compose_1027:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1030
-do_concat_1029:
-    mov x1, x0
-    mov x0, x9
+apply_end_867:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_869
+    tst x1, #1
+    b.eq do_concat_869
+do_apply_868:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_870
+do_concat_869:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1030:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1033
-    tst x0, #1
-    b.ne do_compose_1031
-do_apply_1032:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1034
-do_compose_1031:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1034
-do_concat_1033:
-    mov x1, x0
-    mov x0, x9
+apply_end_870:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_872
+    tst x1, #1
+    b.eq do_concat_872
+do_apply_871:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_873
+do_concat_872:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1034:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1037
-    tst x0, #1
-    b.ne do_compose_1035
-do_apply_1036:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1038
-do_compose_1035:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1038
-do_concat_1037:
-    mov x1, x0
-    mov x0, x9
+apply_end_873:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_875
+    tst x1, #1
+    b.eq do_concat_875
+do_apply_874:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_876
+do_concat_875:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1038:
-    b cond_end_1014
-cond_false_1013:
+apply_end_876:
+    b cond_end_858
+cond_false_857:
     adr x0, sign_id
-cond_end_1014:
+cond_end_858:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1012
+    b.ne blk_end_856
     mov x0, #0
-blk_end_1012:
+blk_end_856:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1010_1011:
-    // Closure for func_1010
+after_func_854_855:
+    // Closure for func_854
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1010
+    adr x1, func_854
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1005
-cond_false_1004:
+    b cond_end_850
+cond_false_849:
     adr x0, sign_id
-cond_end_1005:
+cond_end_850:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, scan_str
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1043
-    tst x0, #1
-    b.ne do_compose_1041
-do_apply_1042:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1044
-do_compose_1041:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1044
-do_concat_1043:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_880
+    tst x1, #1
+    b.eq do_concat_880
+do_apply_879:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_881
+do_concat_880:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1044:
+apply_end_881:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1039
-    b after_func_1045_1046
-func_1045:
+    b.eq cond_false_877
+    b after_func_882_883
+func_882:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -6528,169 +6039,151 @@ func_1045:
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1050
-    tst x0, #1
-    b.ne do_compose_1048
-do_apply_1049:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1051
-do_compose_1048:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1051
-do_concat_1050:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_886
+    tst x1, #1
+    b.eq do_concat_886
+do_apply_885:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_887
+do_concat_886:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1051:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1054
-    tst x0, #1
-    b.ne do_compose_1052
-do_apply_1053:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1055
-do_compose_1052:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1055
-do_concat_1054:
-    mov x1, x0
-    mov x0, x9
+apply_end_887:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_889
+    tst x1, #1
+    b.eq do_concat_889
+do_apply_888:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_890
+do_concat_889:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1055:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1058
-    tst x0, #1
-    b.ne do_compose_1056
-do_apply_1057:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1059
-do_compose_1056:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1059
-do_concat_1058:
-    mov x1, x0
-    mov x0, x9
+apply_end_890:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_892
+    tst x1, #1
+    b.eq do_concat_892
+do_apply_891:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_893
+do_concat_892:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1059:
+apply_end_893:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1047
+    b.ne blk_end_884
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, tok_str
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1062
-    tst x0, #1
-    b.ne do_compose_1060
-do_apply_1061:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1063
-do_compose_1060:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1063
-do_concat_1062:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_895
+    tst x1, #1
+    b.eq do_concat_895
+do_apply_894:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_896
+do_concat_895:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1063:
+apply_end_896:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1066
-    tst x0, #1
-    b.ne do_compose_1064
-do_apply_1065:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1067
-do_compose_1064:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1067
-do_concat_1066:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_898
+    tst x1, #1
+    b.eq do_concat_898
+do_apply_897:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_899
+do_concat_898:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1067:
-blk_end_1047:
+apply_end_899:
+blk_end_884:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1045_1046:
-    // Closure for func_1045
+after_func_882_883:
+    // Closure for func_882
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1045
+    adr x1, func_882
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1040
-cond_false_1039:
+    b cond_end_878
+cond_false_877:
     adr x0, sign_id
-cond_end_1040:
+cond_end_878:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, _scan_str_rec
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1072
-    tst x0, #1
-    b.ne do_compose_1070
-do_apply_1071:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1073
-do_compose_1070:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1073
-do_concat_1072:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_903
+    tst x1, #1
+    b.eq do_concat_903
+do_apply_902:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_904
+do_concat_903:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1073:
+apply_end_904:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1068
-    b after_func_1074_1075
-func_1074:
+    b.eq cond_false_900
+    b after_func_905_906
+func_905:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -6700,175 +6193,160 @@ func_1074:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1081
+    b.eq cmp_true_912
     adr x0, sign_id
-    b cmp_end_1082
-cmp_true_1081:
-cmp_end_1082:
+    b cmp_end_913
+cmp_true_912:
+cmp_end_913:
     adr x9, sign_id
     cmp x0, x9
-    b.eq or_right_1079
-    b or_end_1080
-or_right_1079:
+    b.eq or_right_910
+    b or_end_911
+or_right_910:
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #-1
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1083
+    b.eq cmp_true_914
     adr x0, sign_id
-    b cmp_end_1084
-cmp_true_1083:
-cmp_end_1084:
-or_end_1080:
+    b cmp_end_915
+cmp_true_914:
+cmp_end_915:
+or_end_911:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1077
+    b.eq cond_false_908
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1088
-    tst x0, #1
-    b.ne do_compose_1086
-do_apply_1087:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1089
-do_compose_1086:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1089
-do_concat_1088:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_918
+    tst x1, #1
+    b.eq do_concat_918
+do_apply_917:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_919
+do_concat_918:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1089:
+apply_end_919:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1085
+    b.ne blk_end_916
     mov x0, #0
-blk_end_1085:
-    b cond_end_1078
-cond_false_1077:
+blk_end_916:
+    b cond_end_909
+cond_false_908:
     adr x0, sign_id
-cond_end_1078:
+cond_end_909:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1076
+    b.ne blk_end_907
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1092
-    tst x0, #1
-    b.ne do_compose_1090
-do_apply_1091:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1093
-do_compose_1090:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1093
-do_concat_1092:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_921
+    tst x1, #1
+    b.eq do_concat_921
+do_apply_920:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_922
+do_concat_921:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1093:
+apply_end_922:
     str x0, [sp, #-16]!
     adr x0, _scan_str_rec
     str x0, [sp, #-16]!
     adr x0, read_char
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1096
-    tst x0, #1
-    b.ne do_compose_1094
-do_apply_1095:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1097
-do_compose_1094:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1097
-do_concat_1096:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_924
+    tst x1, #1
+    b.eq do_concat_924
+do_apply_923:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_925
+do_concat_924:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1097:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1100
-    tst x0, #1
-    b.ne do_compose_1098
-do_apply_1099:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1101
-do_compose_1098:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1101
-do_concat_1100:
-    mov x1, x0
-    mov x0, x9
+apply_end_925:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_927
+    tst x1, #1
+    b.eq do_concat_927
+do_apply_926:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_928
+do_concat_927:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1101:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1104
-    tst x0, #1
-    b.ne do_compose_1102
-do_apply_1103:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1105
-do_compose_1102:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1105
-do_concat_1104:
-    mov x1, x0
-    mov x0, x9
+apply_end_928:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_930
+    tst x1, #1
+    b.eq do_concat_930
+do_apply_929:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_931
+do_concat_930:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1105:
-blk_end_1076:
+apply_end_931:
+blk_end_907:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1074_1075:
-    // Closure for func_1074
+after_func_905_906:
+    // Closure for func_905
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1074
+    adr x1, func_905
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1069
-cond_false_1068:
+    b cond_end_901
+cond_false_900:
     adr x0, sign_id
-cond_end_1069:
+cond_end_901:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
@@ -6879,173 +6357,152 @@ cond_end_1069:
     adr x0, Hosting
     ldr x1, [sp], #16
     sub x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1108
-    tst x0, #1
-    b.ne do_compose_1106
-do_apply_1107:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1109
-do_compose_1106:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1109
-do_concat_1108:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_933
+    tst x1, #1
+    b.eq do_concat_933
+do_apply_932:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_934
+do_concat_933:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1109:
+apply_end_934:
     str x0, [sp, #-16]!
     adr x0, Parser
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1112
-    tst x0, #1
-    b.ne do_compose_1110
-do_apply_1111:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1113
-do_compose_1110:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1113
-do_concat_1112:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_936
+    tst x1, #1
+    b.eq do_concat_936
+do_apply_935:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_937
+do_concat_936:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1113:
+apply_end_937:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, Parses
     str x0, [sp, #-16]!
     adr x0, token
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1116
-    tst x0, #1
-    b.ne do_compose_1114
-do_apply_1115:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1117
-do_compose_1114:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1117
-do_concat_1116:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_939
+    tst x1, #1
+    b.eq do_concat_939
+do_apply_938:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_940
+do_concat_939:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1117:
+apply_end_940:
     str x0, [sp, #-16]!
     adr x0, list
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1120
-    tst x0, #1
-    b.ne do_compose_1118
-do_apply_1119:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1121
-do_compose_1118:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1121
-do_concat_1120:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_942
+    tst x1, #1
+    b.eq do_concat_942
+do_apply_941:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_943
+do_concat_942:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1121:
+apply_end_943:
     str x0, [sp, #-16]!
     adr x0, into
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1124
-    tst x0, #1
-    b.ne do_compose_1122
-do_apply_1123:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1125
-do_compose_1122:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1125
-do_concat_1124:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_945
+    tst x1, #1
+    b.eq do_concat_945
+do_apply_944:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_946
+do_concat_945:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1125:
+apply_end_946:
     str x0, [sp, #-16]!
     adr x0, AST
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1128
-    tst x0, #1
-    b.ne do_compose_1126
-do_apply_1127:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1129
-do_compose_1126:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1129
-do_concat_1128:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_948
+    tst x1, #1
+    b.eq do_concat_948
+do_apply_947:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_949
+do_concat_948:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1129:
+apply_end_949:
     str x0, [sp, #-16]!
     adr x0, S
     str x0, [sp, #-16]!
     adr x0, expressions
     ldr x1, [sp], #16
     sub x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1132
-    tst x0, #1
-    b.ne do_compose_1130
-do_apply_1131:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1133
-do_compose_1130:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1133
-do_concat_1132:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_951
+    tst x1, #1
+    b.eq do_concat_951
+do_apply_950:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_952
+do_concat_951:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1133:
+apply_end_952:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
@@ -7178,37 +6635,34 @@ apply_end_1133:
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, streq
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1138
-    tst x0, #1
-    b.ne do_compose_1136
-do_apply_1137:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1139
-do_compose_1136:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1139
-do_concat_1138:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_956
+    tst x1, #1
+    b.eq do_concat_956
+do_apply_955:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_957
+do_concat_956:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1139:
+apply_end_957:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1134
-    b after_func_1140_1141
-func_1140:
+    b.eq cond_false_953
+    b after_func_958_959
+func_958:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_1142_1143
-func_1142:
+    b after_func_960_961
+func_960:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -7222,80 +6676,80 @@ func_1142:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1147
+    b.eq cmp_true_965
     adr x0, sign_id
-    b cmp_end_1148
-cmp_true_1147:
-cmp_end_1148:
+    b cmp_end_966
+cmp_true_965:
+cmp_end_966:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1145
+    b.eq cond_false_963
     mov x0, #1
-    b cond_end_1146
-cond_false_1145:
+    b cond_end_964
+cond_false_963:
     adr x0, sign_id
-cond_end_1146:
+cond_end_964:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1144
+    b.ne blk_end_962
     ldr x0, [x29, #-48]
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1144
+    b.ne blk_end_962
     ldr x0, [x29, #-32]
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1144
+    b.ne blk_end_962
     ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.ne cmp_true_1151
+    b.ne cmp_true_969
     adr x0, sign_id
-    b cmp_end_1152
-cmp_true_1151:
-cmp_end_1152:
+    b cmp_end_970
+cmp_true_969:
+cmp_end_970:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1149
+    b.eq cond_false_967
     mov x0, #0
-    b cond_end_1150
-cond_false_1149:
+    b cond_end_968
+cond_false_967:
     adr x0, sign_id
-cond_end_1150:
+cond_end_968:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1144
+    b.ne blk_end_962
     ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     mov x0, #0
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1155
+    b.eq cmp_true_973
     adr x0, sign_id
-    b cmp_end_1156
-cmp_true_1155:
-cmp_end_1156:
+    b cmp_end_974
+cmp_true_973:
+cmp_end_974:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1153
+    b.eq cond_false_971
     mov x0, #1
-    b cond_end_1154
-cond_false_1153:
+    b cond_end_972
+cond_false_971:
     adr x0, sign_id
-cond_end_1154:
+cond_end_972:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1144
+    b.ne blk_end_962
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
@@ -7303,60 +6757,54 @@ cond_end_1154:
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1159
-    tst x0, #1
-    b.ne do_compose_1157
-do_apply_1158:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1160
-do_compose_1157:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1160
-do_concat_1159:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_976
+    tst x1, #1
+    b.eq do_concat_976
+do_apply_975:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_977
+do_concat_976:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1160:
+apply_end_977:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1163
-    tst x0, #1
-    b.ne do_compose_1161
-do_apply_1162:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1164
-do_compose_1161:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1164
-do_concat_1163:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_979
+    tst x1, #1
+    b.eq do_concat_979
+do_apply_978:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_980
+do_concat_979:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1164:
-blk_end_1144:
+apply_end_980:
+blk_end_962:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1142_1143:
-    // Closure for func_1142
+after_func_960_961:
+    // Closure for func_960
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -7366,87 +6814,81 @@ after_func_1142_1143:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_1142
+    adr x1, func_960
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1140_1141:
-    // Closure for func_1140
+after_func_958_959:
+    // Closure for func_958
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1140
+    adr x1, func_958
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1135
-cond_false_1134:
+    b cond_end_954
+cond_false_953:
     adr x0, sign_id
-cond_end_1135:
+cond_end_954:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, get_semicolon_str
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1169
-    tst x0, #1
-    b.ne do_compose_1167
-do_apply_1168:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1170
-do_compose_1167:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1170
-do_concat_1169:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_984
+    tst x1, #1
+    b.eq do_concat_984
+do_apply_983:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_985
+do_concat_984:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1170:
+apply_end_985:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1165
-    b after_func_1171_1172
-func_1171:
+    b.eq cond_false_981
+    b after_func_986_987
+func_986:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, alloc
     str x0, [sp, #-16]!
     mov x0, #2
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1176
-    tst x0, #1
-    b.ne do_compose_1174
-do_apply_1175:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1177
-do_compose_1174:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1177
-do_concat_1176:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_990
+    tst x1, #1
+    b.eq do_concat_990
+do_apply_989:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_991
+do_concat_990:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1177:
+apply_end_991:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1173
+    b.ne blk_end_988
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #59
@@ -7454,7 +6896,7 @@ apply_end_1177:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1173
+    b.ne blk_end_988
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #1
@@ -7466,87 +6908,81 @@ apply_end_1177:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1173
+    b.ne blk_end_988
     ldr x0, [x29, #-48]
-blk_end_1173:
+blk_end_988:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1171_1172:
-    // Closure for func_1171
+after_func_986_987:
+    // Closure for func_986
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1171
+    adr x1, func_986
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1166
-cond_false_1165:
+    b cond_end_982
+cond_false_981:
     adr x0, sign_id
-cond_end_1166:
+cond_end_982:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, get_bar_str
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1182
-    tst x0, #1
-    b.ne do_compose_1180
-do_apply_1181:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1183
-do_compose_1180:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1183
-do_concat_1182:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_995
+    tst x1, #1
+    b.eq do_concat_995
+do_apply_994:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_996
+do_concat_995:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1183:
+apply_end_996:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1178
-    b after_func_1184_1185
-func_1184:
+    b.eq cond_false_992
+    b after_func_997_998
+func_997:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, alloc
     str x0, [sp, #-16]!
     mov x0, #2
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1189
-    tst x0, #1
-    b.ne do_compose_1187
-do_apply_1188:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1190
-do_compose_1187:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1190
-do_concat_1189:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1001
+    tst x1, #1
+    b.eq do_concat_1001
+do_apply_1000:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1002
+do_concat_1001:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1190:
+apply_end_1002:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1186
+    b.ne blk_end_999
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #124
@@ -7554,7 +6990,7 @@ apply_end_1190:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1186
+    b.ne blk_end_999
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #1
@@ -7566,87 +7002,81 @@ apply_end_1190:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1186
+    b.ne blk_end_999
     ldr x0, [x29, #-48]
-blk_end_1186:
+blk_end_999:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1184_1185:
-    // Closure for func_1184
+after_func_997_998:
+    // Closure for func_997
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1184
+    adr x1, func_997
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1179
-cond_false_1178:
+    b cond_end_993
+cond_false_992:
     adr x0, sign_id
-cond_end_1179:
+cond_end_993:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, get_lt_str
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1195
-    tst x0, #1
-    b.ne do_compose_1193
-do_apply_1194:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1196
-do_compose_1193:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1196
-do_concat_1195:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1006
+    tst x1, #1
+    b.eq do_concat_1006
+do_apply_1005:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1007
+do_concat_1006:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1196:
+apply_end_1007:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1191
-    b after_func_1197_1198
-func_1197:
+    b.eq cond_false_1003
+    b after_func_1008_1009
+func_1008:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, alloc
     str x0, [sp, #-16]!
     mov x0, #2
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1202
-    tst x0, #1
-    b.ne do_compose_1200
-do_apply_1201:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1203
-do_compose_1200:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1203
-do_concat_1202:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1012
+    tst x1, #1
+    b.eq do_concat_1012
+do_apply_1011:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1013
+do_concat_1012:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1203:
+apply_end_1013:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1199
+    b.ne blk_end_1010
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #60
@@ -7654,7 +7084,7 @@ apply_end_1203:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1199
+    b.ne blk_end_1010
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #1
@@ -7666,87 +7096,81 @@ apply_end_1203:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1199
+    b.ne blk_end_1010
     ldr x0, [x29, #-48]
-blk_end_1199:
+blk_end_1010:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1197_1198:
-    // Closure for func_1197
+after_func_1008_1009:
+    // Closure for func_1008
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1197
+    adr x1, func_1008
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1192
-cond_false_1191:
+    b cond_end_1004
+cond_false_1003:
     adr x0, sign_id
-cond_end_1192:
+cond_end_1004:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, get_gt_str
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1208
-    tst x0, #1
-    b.ne do_compose_1206
-do_apply_1207:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1209
-do_compose_1206:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1209
-do_concat_1208:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1017
+    tst x1, #1
+    b.eq do_concat_1017
+do_apply_1016:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1018
+do_concat_1017:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1209:
+apply_end_1018:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1204
-    b after_func_1210_1211
-func_1210:
+    b.eq cond_false_1014
+    b after_func_1019_1020
+func_1019:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, alloc
     str x0, [sp, #-16]!
     mov x0, #2
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1215
-    tst x0, #1
-    b.ne do_compose_1213
-do_apply_1214:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1216
-do_compose_1213:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1216
-do_concat_1215:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1023
+    tst x1, #1
+    b.eq do_concat_1023
+do_apply_1022:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1024
+do_concat_1023:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1216:
+apply_end_1024:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1212
+    b.ne blk_end_1021
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #62
@@ -7754,7 +7178,7 @@ apply_end_1216:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1212
+    b.ne blk_end_1021
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #1
@@ -7766,1272 +7190,1146 @@ apply_end_1216:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1212
+    b.ne blk_end_1021
     ldr x0, [x29, #-48]
-blk_end_1212:
+blk_end_1021:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1210_1211:
-    // Closure for func_1210
+after_func_1019_1020:
+    // Closure for func_1019
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1210
+    adr x1, func_1019
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1205
-cond_false_1204:
+    b cond_end_1015
+cond_false_1014:
     adr x0, sign_id
-cond_end_1205:
+cond_end_1015:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, get_prec
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1221
-    tst x0, #1
-    b.ne do_compose_1219
-do_apply_1220:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1222
-do_compose_1219:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1222
-do_concat_1221:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1028
+    tst x1, #1
+    b.eq do_concat_1028
+do_apply_1027:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1029
+do_concat_1028:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1222:
+apply_end_1029:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1217
-    b after_func_1223_1224
-func_1223:
+    b.eq cond_false_1025
+    b after_func_1030_1031
+func_1030:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1230
-    tst x0, #1
-    b.ne do_compose_1228
-do_apply_1229:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1231
-do_compose_1228:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1231
-do_concat_1230:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1036
+    tst x1, #1
+    b.eq do_concat_1036
+do_apply_1035:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1037
+do_concat_1036:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1231:
+apply_end_1037:
     str x0, [sp, #-16]!
     mov x0, #42
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1234
-    tst x0, #1
-    b.ne do_compose_1232
-do_apply_1233:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1235
-do_compose_1232:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1235
-do_concat_1234:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1039
+    tst x1, #1
+    b.eq do_concat_1039
+do_apply_1038:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1040
+do_concat_1039:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1235:
+apply_end_1040:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1226
+    b.eq cond_false_1033
     adr x0, PREC_MUL
     ldr x0, [x0]
-    b cond_end_1227
-cond_false_1226:
+    b cond_end_1034
+cond_false_1033:
     adr x0, sign_id
-cond_end_1227:
+cond_end_1034:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1240
-    tst x0, #1
-    b.ne do_compose_1238
-do_apply_1239:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1241
-do_compose_1238:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1241
-do_concat_1240:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1044
+    tst x1, #1
+    b.eq do_concat_1044
+do_apply_1043:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1045
+do_concat_1044:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1241:
+apply_end_1045:
     str x0, [sp, #-16]!
     mov x0, #47
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1244
-    tst x0, #1
-    b.ne do_compose_1242
-do_apply_1243:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1245
-do_compose_1242:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1245
-do_concat_1244:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1047
+    tst x1, #1
+    b.eq do_concat_1047
+do_apply_1046:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1048
+do_concat_1047:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1245:
+apply_end_1048:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1236
+    b.eq cond_false_1041
     adr x0, PREC_MUL
     ldr x0, [x0]
-    b cond_end_1237
-cond_false_1236:
+    b cond_end_1042
+cond_false_1041:
     adr x0, sign_id
-cond_end_1237:
+cond_end_1042:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1250
-    tst x0, #1
-    b.ne do_compose_1248
-do_apply_1249:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1251
-do_compose_1248:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1251
-do_concat_1250:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1052
+    tst x1, #1
+    b.eq do_concat_1052
+do_apply_1051:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1053
+do_concat_1052:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1251:
+apply_end_1053:
     str x0, [sp, #-16]!
     mov x0, #37
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1254
-    tst x0, #1
-    b.ne do_compose_1252
-do_apply_1253:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1255
-do_compose_1252:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1255
-do_concat_1254:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1055
+    tst x1, #1
+    b.eq do_concat_1055
+do_apply_1054:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1056
+do_concat_1055:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1255:
+apply_end_1056:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1246
+    b.eq cond_false_1049
     adr x0, PREC_MUL
     ldr x0, [x0]
-    b cond_end_1247
-cond_false_1246:
+    b cond_end_1050
+cond_false_1049:
     adr x0, sign_id
-cond_end_1247:
+cond_end_1050:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1260
-    tst x0, #1
-    b.ne do_compose_1258
-do_apply_1259:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1261
-do_compose_1258:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1261
-do_concat_1260:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1060
+    tst x1, #1
+    b.eq do_concat_1060
+do_apply_1059:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1061
+do_concat_1060:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1261:
+apply_end_1061:
     str x0, [sp, #-16]!
     mov x0, #43
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1264
-    tst x0, #1
-    b.ne do_compose_1262
-do_apply_1263:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1265
-do_compose_1262:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1265
-do_concat_1264:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1063
+    tst x1, #1
+    b.eq do_concat_1063
+do_apply_1062:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1064
+do_concat_1063:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1265:
+apply_end_1064:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1256
+    b.eq cond_false_1057
     adr x0, PREC_ADD
     ldr x0, [x0]
-    b cond_end_1257
-cond_false_1256:
+    b cond_end_1058
+cond_false_1057:
     adr x0, sign_id
-cond_end_1257:
+cond_end_1058:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1270
-    tst x0, #1
-    b.ne do_compose_1268
-do_apply_1269:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1271
-do_compose_1268:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1271
-do_concat_1270:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1068
+    tst x1, #1
+    b.eq do_concat_1068
+do_apply_1067:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1069
+do_concat_1068:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1271:
+apply_end_1069:
     str x0, [sp, #-16]!
     mov x0, #45
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1274
-    tst x0, #1
-    b.ne do_compose_1272
-do_apply_1273:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1275
-do_compose_1272:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1275
-do_concat_1274:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1071
+    tst x1, #1
+    b.eq do_concat_1071
+do_apply_1070:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1072
+do_concat_1071:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1275:
+apply_end_1072:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1266
+    b.eq cond_false_1065
     adr x0, PREC_ADD
     ldr x0, [x0]
-    b cond_end_1267
-cond_false_1266:
+    b cond_end_1066
+cond_false_1065:
     adr x0, sign_id
-cond_end_1267:
+cond_end_1066:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1280
-    tst x0, #1
-    b.ne do_compose_1278
-do_apply_1279:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1281
-do_compose_1278:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1281
-do_concat_1280:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1076
+    tst x1, #1
+    b.eq do_concat_1076
+do_apply_1075:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1077
+do_concat_1076:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1281:
+apply_end_1077:
     str x0, [sp, #-16]!
     adr x0, get_lt_str
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1284
-    tst x0, #1
-    b.ne do_compose_1282
-do_apply_1283:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1285
-do_compose_1282:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1285
-do_concat_1284:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1079
+    tst x1, #1
+    b.eq do_concat_1079
+do_apply_1078:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1080
+do_concat_1079:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1285:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1288
-    tst x0, #1
-    b.ne do_compose_1286
-do_apply_1287:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1289
-do_compose_1286:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1289
-do_concat_1288:
-    mov x1, x0
-    mov x0, x9
+apply_end_1080:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1082
+    tst x1, #1
+    b.eq do_concat_1082
+do_apply_1081:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1083
+do_concat_1082:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1289:
+apply_end_1083:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1276
+    b.eq cond_false_1073
     adr x0, PREC_CMP
     ldr x0, [x0]
-    b cond_end_1277
-cond_false_1276:
+    b cond_end_1074
+cond_false_1073:
     adr x0, sign_id
-cond_end_1277:
+cond_end_1074:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1294
-    tst x0, #1
-    b.ne do_compose_1292
-do_apply_1293:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1295
-do_compose_1292:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1295
-do_concat_1294:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1087
+    tst x1, #1
+    b.eq do_concat_1087
+do_apply_1086:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1088
+do_concat_1087:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1295:
+apply_end_1088:
     str x0, [sp, #-16]!
     adr x0, get_gt_str
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1298
-    tst x0, #1
-    b.ne do_compose_1296
-do_apply_1297:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1299
-do_compose_1296:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1299
-do_concat_1298:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1090
+    tst x1, #1
+    b.eq do_concat_1090
+do_apply_1089:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1091
+do_concat_1090:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1299:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1302
-    tst x0, #1
-    b.ne do_compose_1300
-do_apply_1301:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1303
-do_compose_1300:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1303
-do_concat_1302:
-    mov x1, x0
-    mov x0, x9
+apply_end_1091:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1093
+    tst x1, #1
+    b.eq do_concat_1093
+do_apply_1092:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1094
+do_concat_1093:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1303:
+apply_end_1094:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1290
+    b.eq cond_false_1084
     adr x0, PREC_CMP
     ldr x0, [x0]
-    b cond_end_1291
-cond_false_1290:
+    b cond_end_1085
+cond_false_1084:
     adr x0, sign_id
-cond_end_1291:
+cond_end_1085:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1308
-    tst x0, #1
-    b.ne do_compose_1306
-do_apply_1307:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1309
-do_compose_1306:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1309
-do_concat_1308:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1098
+    tst x1, #1
+    b.eq do_concat_1098
+do_apply_1097:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1099
+do_concat_1098:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1309:
+apply_end_1099:
     str x0, [sp, #-16]!
     mov x0, #61
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1312
-    tst x0, #1
-    b.ne do_compose_1310
-do_apply_1311:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1313
-do_compose_1310:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1313
-do_concat_1312:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1101
+    tst x1, #1
+    b.eq do_concat_1101
+do_apply_1100:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1102
+do_concat_1101:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1313:
+apply_end_1102:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1304
+    b.eq cond_false_1095
     adr x0, PREC_CMP
     ldr x0, [x0]
-    b cond_end_1305
-cond_false_1304:
+    b cond_end_1096
+cond_false_1095:
     adr x0, sign_id
-cond_end_1305:
+cond_end_1096:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1318
-    tst x0, #1
-    b.ne do_compose_1316
-do_apply_1317:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1319
-do_compose_1316:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1319
-do_concat_1318:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1106
+    tst x1, #1
+    b.eq do_concat_1106
+do_apply_1105:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1107
+do_concat_1106:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1319:
+apply_end_1107:
     str x0, [sp, #-16]!
     adr x0, get_semicolon_str
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1322
-    tst x0, #1
-    b.ne do_compose_1320
-do_apply_1321:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1323
-do_compose_1320:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1323
-do_concat_1322:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1109
+    tst x1, #1
+    b.eq do_concat_1109
+do_apply_1108:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1110
+do_concat_1109:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1323:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1326
-    tst x0, #1
-    b.ne do_compose_1324
-do_apply_1325:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1327
-do_compose_1324:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1327
-do_concat_1326:
-    mov x1, x0
-    mov x0, x9
+apply_end_1110:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1112
+    tst x1, #1
+    b.eq do_concat_1112
+do_apply_1111:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1113
+do_concat_1112:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1327:
+apply_end_1113:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1314
+    b.eq cond_false_1103
     adr x0, PREC_XOR
     ldr x0, [x0]
-    b cond_end_1315
-cond_false_1314:
+    b cond_end_1104
+cond_false_1103:
     adr x0, sign_id
-cond_end_1315:
+cond_end_1104:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1332
-    tst x0, #1
-    b.ne do_compose_1330
-do_apply_1331:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1333
-do_compose_1330:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1333
-do_concat_1332:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1117
+    tst x1, #1
+    b.eq do_concat_1117
+do_apply_1116:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1118
+do_concat_1117:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1333:
+apply_end_1118:
     str x0, [sp, #-16]!
     adr x0, get_bar_str
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1336
-    tst x0, #1
-    b.ne do_compose_1334
-do_apply_1335:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1337
-do_compose_1334:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1337
-do_concat_1336:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1120
+    tst x1, #1
+    b.eq do_concat_1120
+do_apply_1119:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1121
+do_concat_1120:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1337:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1340
-    tst x0, #1
-    b.ne do_compose_1338
-do_apply_1339:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1341
-do_compose_1338:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1341
-do_concat_1340:
-    mov x1, x0
-    mov x0, x9
+apply_end_1121:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1123
+    tst x1, #1
+    b.eq do_concat_1123
+do_apply_1122:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1124
+do_concat_1123:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1341:
+apply_end_1124:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1328
+    b.eq cond_false_1114
     adr x0, PREC_OR
     ldr x0, [x0]
-    b cond_end_1329
-cond_false_1328:
+    b cond_end_1115
+cond_false_1114:
     adr x0, sign_id
-cond_end_1329:
+cond_end_1115:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1346
-    tst x0, #1
-    b.ne do_compose_1344
-do_apply_1345:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1347
-do_compose_1344:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1347
-do_concat_1346:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1128
+    tst x1, #1
+    b.eq do_concat_1128
+do_apply_1127:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1129
+do_concat_1128:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1347:
+apply_end_1129:
     str x0, [sp, #-16]!
     mov x0, #38
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1350
-    tst x0, #1
-    b.ne do_compose_1348
-do_apply_1349:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1351
-do_compose_1348:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1351
-do_concat_1350:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1131
+    tst x1, #1
+    b.eq do_concat_1131
+do_apply_1130:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1132
+do_concat_1131:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1351:
+apply_end_1132:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1342
+    b.eq cond_false_1125
     adr x0, PREC_AND
     ldr x0, [x0]
-    b cond_end_1343
-cond_false_1342:
+    b cond_end_1126
+cond_false_1125:
     adr x0, sign_id
-cond_end_1343:
+cond_end_1126:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1356
-    tst x0, #1
-    b.ne do_compose_1354
-do_apply_1355:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1357
-do_compose_1354:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1357
-do_concat_1356:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1136
+    tst x1, #1
+    b.eq do_concat_1136
+do_apply_1135:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1137
+do_concat_1136:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1357:
+apply_end_1137:
     str x0, [sp, #-16]!
     mov x0, #63
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1360
-    tst x0, #1
-    b.ne do_compose_1358
-do_apply_1359:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1361
-do_compose_1358:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1361
-do_concat_1360:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1139
+    tst x1, #1
+    b.eq do_concat_1139
+do_apply_1138:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1140
+do_concat_1139:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1361:
+apply_end_1140:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1352
+    b.eq cond_false_1133
     mov x0, #5
-    b cond_end_1353
-cond_false_1352:
+    b cond_end_1134
+cond_false_1133:
     adr x0, sign_id
-cond_end_1353:
+cond_end_1134:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1366
-    tst x0, #1
-    b.ne do_compose_1364
-do_apply_1365:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1367
-do_compose_1364:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1367
-do_concat_1366:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1144
+    tst x1, #1
+    b.eq do_concat_1144
+do_apply_1143:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1145
+do_concat_1144:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1367:
+apply_end_1145:
     str x0, [sp, #-16]!
     mov x0, #44
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1370
-    tst x0, #1
-    b.ne do_compose_1368
-do_apply_1369:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1371
-do_compose_1368:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1371
-do_concat_1370:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1147
+    tst x1, #1
+    b.eq do_concat_1147
+do_apply_1146:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1148
+do_concat_1147:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1371:
+apply_end_1148:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1362
+    b.eq cond_false_1141
     mov x0, #6
-    b cond_end_1363
-cond_false_1362:
+    b cond_end_1142
+cond_false_1141:
     adr x0, sign_id
-cond_end_1363:
+cond_end_1142:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1376
-    tst x0, #1
-    b.ne do_compose_1374
-do_apply_1375:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1377
-do_compose_1374:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1377
-do_concat_1376:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1152
+    tst x1, #1
+    b.eq do_concat_1152
+do_apply_1151:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1153
+do_concat_1152:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1377:
+apply_end_1153:
     str x0, [sp, #-16]!
     mov x0, #58
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1380
-    tst x0, #1
-    b.ne do_compose_1378
-do_apply_1379:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1381
-do_compose_1378:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1381
-do_concat_1380:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1155
+    tst x1, #1
+    b.eq do_concat_1155
+do_apply_1154:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1156
+do_concat_1155:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1381:
+apply_end_1156:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1372
+    b.eq cond_false_1149
     mov x0, #2
-    b cond_end_1373
-cond_false_1372:
+    b cond_end_1150
+cond_false_1149:
     adr x0, sign_id
-cond_end_1373:
+cond_end_1150:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1225
+    b.ne blk_end_1032
     mov x0, #0
-blk_end_1225:
+blk_end_1032:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1223_1224:
-    // Closure for func_1223
+after_func_1030_1031:
+    // Closure for func_1030
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1223
+    adr x1, func_1030
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1218
-cond_false_1217:
+    b cond_end_1026
+cond_false_1025:
     adr x0, sign_id
-cond_end_1218:
+cond_end_1026:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, is_right_assoc
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1386
-    tst x0, #1
-    b.ne do_compose_1384
-do_apply_1385:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1387
-do_compose_1384:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1387
-do_concat_1386:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1160
+    tst x1, #1
+    b.eq do_concat_1160
+do_apply_1159:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1161
+do_concat_1160:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1387:
+apply_end_1161:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1382
-    b after_func_1388_1389
-func_1388:
+    b.eq cond_false_1157
+    b after_func_1162_1163
+func_1162:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1395
-    tst x0, #1
-    b.ne do_compose_1393
-do_apply_1394:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1396
-do_compose_1393:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1396
-do_concat_1395:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1168
+    tst x1, #1
+    b.eq do_concat_1168
+do_apply_1167:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1169
+do_concat_1168:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1396:
+apply_end_1169:
     str x0, [sp, #-16]!
     mov x0, #63
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1399
-    tst x0, #1
-    b.ne do_compose_1397
-do_apply_1398:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1400
-do_compose_1397:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1400
-do_concat_1399:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1171
+    tst x1, #1
+    b.eq do_concat_1171
+do_apply_1170:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1172
+do_concat_1171:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1400:
+apply_end_1172:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1391
+    b.eq cond_false_1165
     mov x0, #1
-    b cond_end_1392
-cond_false_1391:
+    b cond_end_1166
+cond_false_1165:
     adr x0, sign_id
-cond_end_1392:
+cond_end_1166:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1390
+    b.ne blk_end_1164
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1405
-    tst x0, #1
-    b.ne do_compose_1403
-do_apply_1404:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1406
-do_compose_1403:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1406
-do_concat_1405:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1176
+    tst x1, #1
+    b.eq do_concat_1176
+do_apply_1175:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1177
+do_concat_1176:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1406:
+apply_end_1177:
     str x0, [sp, #-16]!
     mov x0, #58
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1409
-    tst x0, #1
-    b.ne do_compose_1407
-do_apply_1408:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1410
-do_compose_1407:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1410
-do_concat_1409:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1179
+    tst x1, #1
+    b.eq do_concat_1179
+do_apply_1178:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1180
+do_concat_1179:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1410:
+apply_end_1180:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1401
+    b.eq cond_false_1173
     mov x0, #1
-    b cond_end_1402
-cond_false_1401:
+    b cond_end_1174
+cond_false_1173:
     adr x0, sign_id
-cond_end_1402:
+cond_end_1174:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1390
+    b.ne blk_end_1164
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1415
-    tst x0, #1
-    b.ne do_compose_1413
-do_apply_1414:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1416
-do_compose_1413:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1416
-do_concat_1415:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1184
+    tst x1, #1
+    b.eq do_concat_1184
+do_apply_1183:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1185
+do_concat_1184:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1416:
+apply_end_1185:
     str x0, [sp, #-16]!
     mov x0, #44
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1419
-    tst x0, #1
-    b.ne do_compose_1417
-do_apply_1418:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1420
-do_compose_1417:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1420
-do_concat_1419:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1187
+    tst x1, #1
+    b.eq do_concat_1187
+do_apply_1186:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1188
+do_concat_1187:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1420:
+apply_end_1188:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1411
+    b.eq cond_false_1181
     mov x0, #1
-    b cond_end_1412
-cond_false_1411:
+    b cond_end_1182
+cond_false_1181:
     adr x0, sign_id
-cond_end_1412:
+cond_end_1182:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1390
+    b.ne blk_end_1164
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1425
-    tst x0, #1
-    b.ne do_compose_1423
-do_apply_1424:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1426
-do_compose_1423:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1426
-do_concat_1425:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1192
+    tst x1, #1
+    b.eq do_concat_1192
+do_apply_1191:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1193
+do_concat_1192:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1426:
+apply_end_1193:
     str x0, [sp, #-16]!
     mov x0, #94
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1429
-    tst x0, #1
-    b.ne do_compose_1427
-do_apply_1428:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1430
-do_compose_1427:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1430
-do_concat_1429:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1195
+    tst x1, #1
+    b.eq do_concat_1195
+do_apply_1194:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1196
+do_concat_1195:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1430:
+apply_end_1196:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1421
+    b.eq cond_false_1189
     mov x0, #1
-    b cond_end_1422
-cond_false_1421:
+    b cond_end_1190
+cond_false_1189:
     adr x0, sign_id
-cond_end_1422:
+cond_end_1190:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1390
+    b.ne blk_end_1164
     mov x0, #0
-blk_end_1390:
+blk_end_1164:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1388_1389:
-    // Closure for func_1388
+after_func_1162_1163:
+    // Closure for func_1162
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1388
+    adr x1, func_1162
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1383
-cond_false_1382:
+    b cond_end_1158
+cond_false_1157:
     adr x0, sign_id
-cond_end_1383:
+cond_end_1158:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
@@ -9054,32 +8352,29 @@ cond_end_1383:
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, init_parser
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1435
-    tst x0, #1
-    b.ne do_compose_1433
-do_apply_1434:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1436
-do_compose_1433:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1436
-do_concat_1435:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1200
+    tst x1, #1
+    b.eq do_concat_1200
+do_apply_1199:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1201
+do_concat_1200:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1436:
+apply_end_1201:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1431
-    b after_func_1437_1438
-func_1437:
+    b.eq cond_false_1197
+    b after_func_1202_1203
+func_1202:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -9090,78 +8385,72 @@ func_1437:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1439
+    b.ne blk_end_1204
     adr x0, advance
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1442
-    tst x0, #1
-    b.ne do_compose_1440
-do_apply_1441:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1443
-do_compose_1440:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1443
-do_concat_1442:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1206
+    tst x1, #1
+    b.eq do_concat_1206
+do_apply_1205:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1207
+do_concat_1206:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1443:
-blk_end_1439:
+apply_end_1207:
+blk_end_1204:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1437_1438:
-    // Closure for func_1437
+after_func_1202_1203:
+    // Closure for func_1202
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1437
+    adr x1, func_1202
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1432
-cond_false_1431:
+    b cond_end_1198
+cond_false_1197:
     adr x0, sign_id
-cond_end_1432:
+cond_end_1198:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, advance
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1448
-    tst x0, #1
-    b.ne do_compose_1446
-do_apply_1447:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1449
-do_compose_1446:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1449
-do_concat_1448:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1211
+    tst x1, #1
+    b.eq do_concat_1211
+do_apply_1210:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1212
+do_concat_1211:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1449:
+apply_end_1212:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1444
-    b after_func_1450_1451
-func_1450:
+    b.eq cond_false_1208
+    b after_func_1213_1214
+func_1213:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -9171,14 +8460,14 @@ func_1450:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1455
+    b.eq cmp_true_1218
     adr x0, sign_id
-    b cmp_end_1456
-cmp_true_1455:
-cmp_end_1456:
+    b cmp_end_1219
+cmp_true_1218:
+cmp_end_1219:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1453
+    b.eq cond_false_1216
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, p_curr
@@ -9187,269 +8476,245 @@ cmp_end_1456:
     str x0, [sp, #-16]!
     adr x0, tok_eof
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1460
-    tst x0, #1
-    b.ne do_compose_1458
-do_apply_1459:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1461
-do_compose_1458:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1461
-do_concat_1460:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1222
+    tst x1, #1
+    b.eq do_concat_1222
+do_apply_1221:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1223
+do_concat_1222:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1461:
+apply_end_1223:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1464
-    tst x0, #1
-    b.ne do_compose_1462
-do_apply_1463:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1465
-do_compose_1462:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1465
-do_concat_1464:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1225
+    tst x1, #1
+    b.eq do_concat_1225
+do_apply_1224:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1226
+do_concat_1225:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1465:
+apply_end_1226:
     ldr x1, [sp], #16
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1457
+    b.ne blk_end_1220
     mov x0, #0
-blk_end_1457:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1468
-    tst x0, #1
-    b.ne do_compose_1466
-do_apply_1467:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1469
-do_compose_1466:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1469
-do_concat_1468:
-    mov x1, x0
-    mov x0, x9
+blk_end_1220:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1228
+    tst x1, #1
+    b.eq do_concat_1228
+do_apply_1227:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1229
+do_concat_1228:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1469:
-    b cond_end_1454
-cond_false_1453:
+apply_end_1229:
+    b cond_end_1217
+cond_false_1216:
     adr x0, sign_id
-cond_end_1454:
+cond_end_1217:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1452
+    b.ne blk_end_1215
     adr x0, p_curr
     str x0, [sp, #-16]!
     adr x0, head
     str x0, [sp, #-16]!
     adr x0, p_tokens
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1472
-    tst x0, #1
-    b.ne do_compose_1470
-do_apply_1471:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1473
-do_compose_1470:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1473
-do_concat_1472:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1231
+    tst x1, #1
+    b.eq do_concat_1231
+do_apply_1230:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1232
+do_concat_1231:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1473:
+apply_end_1232:
     ldr x1, [sp], #16
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1452
+    b.ne blk_end_1215
     adr x0, p_tokens
     str x0, [sp, #-16]!
     adr x0, tail
     str x0, [sp, #-16]!
     adr x0, p_tokens
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1476
-    tst x0, #1
-    b.ne do_compose_1474
-do_apply_1475:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1477
-do_compose_1474:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1477
-do_concat_1476:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1234
+    tst x1, #1
+    b.eq do_concat_1234
+do_apply_1233:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1235
+do_concat_1234:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1477:
+apply_end_1235:
     ldr x1, [sp], #16
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1452
+    b.ne blk_end_1215
     adr x0, p_curr
-blk_end_1452:
+blk_end_1215:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1450_1451:
-    // Closure for func_1450
+after_func_1213_1214:
+    // Closure for func_1213
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1450
+    adr x1, func_1213
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1445
-cond_false_1444:
+    b cond_end_1209
+cond_false_1208:
     adr x0, sign_id
-cond_end_1445:
+cond_end_1209:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, peek_type
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1482
-    tst x0, #1
-    b.ne do_compose_1480
-do_apply_1481:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1483
-do_compose_1480:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1483
-do_concat_1482:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1239
+    tst x1, #1
+    b.eq do_concat_1239
+do_apply_1238:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1240
+do_concat_1239:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1483:
+apply_end_1240:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1478
-    b after_func_1484_1485
-func_1484:
+    b.eq cond_false_1236
+    b after_func_1241_1242
+func_1241:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, peek
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1488
-    tst x0, #1
-    b.ne do_compose_1486
-do_apply_1487:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1489
-do_compose_1486:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1489
-do_concat_1488:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1244
+    tst x1, #1
+    b.eq do_concat_1244
+do_apply_1243:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1245
+do_concat_1244:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1489:
+apply_end_1245:
     ldr x0, [x0] // @ load
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1484_1485:
-    // Closure for func_1484
+after_func_1241_1242:
+    // Closure for func_1241
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1484
+    adr x1, func_1241
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1479
-cond_false_1478:
+    b cond_end_1237
+cond_false_1236:
     adr x0, sign_id
-cond_end_1479:
+cond_end_1237:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, peek_val
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1494
-    tst x0, #1
-    b.ne do_compose_1492
-do_apply_1493:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1495
-do_compose_1492:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1495
-do_concat_1494:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1249
+    tst x1, #1
+    b.eq do_concat_1249
+do_apply_1248:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1250
+do_concat_1249:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1495:
+apply_end_1250:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1490
-    b after_func_1496_1497
-func_1496:
+    b.eq cond_false_1246
+    b after_func_1251_1252
+func_1251:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -9460,412 +8725,379 @@ func_1496:
     mov x0, #8
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1500
-    tst x0, #1
-    b.ne do_compose_1498
-do_apply_1499:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1501
-do_compose_1498:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1501
-do_concat_1500:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1254
+    tst x1, #1
+    b.eq do_concat_1254
+do_apply_1253:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1255
+do_concat_1254:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1501:
+apply_end_1255:
     ldr x0, [x0] // @ load
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1496_1497:
-    // Closure for func_1496
+after_func_1251_1252:
+    // Closure for func_1251
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1496
+    adr x1, func_1251
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1491
-cond_false_1490:
+    b cond_end_1247
+cond_false_1246:
     adr x0, sign_id
-cond_end_1491:
+cond_end_1247:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, expect_val
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1506
-    tst x0, #1
-    b.ne do_compose_1504
-do_apply_1505:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1507
-do_compose_1504:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1507
-do_concat_1506:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1259
+    tst x1, #1
+    b.eq do_concat_1259
+do_apply_1258:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1260
+do_concat_1259:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1507:
+apply_end_1260:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1502
-    b after_func_1508_1509
-func_1508:
+    b.eq cond_false_1256
+    b after_func_1261_1262
+func_1261:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, peek_val
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1513
-    tst x0, #1
-    b.ne do_compose_1511
-do_apply_1512:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1514
-do_compose_1511:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1514
-do_concat_1513:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1265
+    tst x1, #1
+    b.eq do_concat_1265
+do_apply_1264:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1266
+do_concat_1265:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1514:
+apply_end_1266:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1510
+    b.ne blk_end_1263
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1517
+    b.eq cmp_true_1269
     adr x0, sign_id
-    b cmp_end_1518
-cmp_true_1517:
-cmp_end_1518:
+    b cmp_end_1270
+cmp_true_1269:
+cmp_end_1270:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1515
+    b.eq cond_false_1267
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, advance
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1522
-    tst x0, #1
-    b.ne do_compose_1520
-do_apply_1521:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1523
-do_compose_1520:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1523
-do_concat_1522:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1273
+    tst x1, #1
+    b.eq do_concat_1273
+do_apply_1272:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1274
+do_concat_1273:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1523:
+apply_end_1274:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1519
+    b.ne blk_end_1271
     mov x0, #1
-blk_end_1519:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1526
-    tst x0, #1
-    b.ne do_compose_1524
-do_apply_1525:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1527
-do_compose_1524:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1527
-do_concat_1526:
-    mov x1, x0
-    mov x0, x9
+blk_end_1271:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1276
+    tst x1, #1
+    b.eq do_concat_1276
+do_apply_1275:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1277
+do_concat_1276:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1527:
-    b cond_end_1516
-cond_false_1515:
+apply_end_1277:
+    b cond_end_1268
+cond_false_1267:
     adr x0, sign_id
-cond_end_1516:
+cond_end_1268:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1510
+    b.ne blk_end_1263
     mov x0, #0
-blk_end_1510:
+blk_end_1263:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1508_1509:
-    // Closure for func_1508
+after_func_1261_1262:
+    // Closure for func_1261
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1508
+    adr x1, func_1261
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1503
-cond_false_1502:
+    b cond_end_1257
+cond_false_1256:
     adr x0, sign_id
-cond_end_1503:
+cond_end_1257:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, expect_type
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1532
-    tst x0, #1
-    b.ne do_compose_1530
-do_apply_1531:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1533
-do_compose_1530:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1533
-do_concat_1532:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1281
+    tst x1, #1
+    b.eq do_concat_1281
+do_apply_1280:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1282
+do_concat_1281:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1533:
+apply_end_1282:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1528
-    b after_func_1534_1535
-func_1534:
+    b.eq cond_false_1278
+    b after_func_1283_1284
+func_1283:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, peek_type
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1539
-    tst x0, #1
-    b.ne do_compose_1537
-do_apply_1538:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1540
-do_compose_1537:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1540
-do_concat_1539:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1287
+    tst x1, #1
+    b.eq do_concat_1287
+do_apply_1286:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1288
+do_concat_1287:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1540:
+apply_end_1288:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1536
+    b.ne blk_end_1285
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1543
+    b.eq cmp_true_1291
     adr x0, sign_id
-    b cmp_end_1544
-cmp_true_1543:
-cmp_end_1544:
+    b cmp_end_1292
+cmp_true_1291:
+cmp_end_1292:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1541
+    b.eq cond_false_1289
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, advance
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1548
-    tst x0, #1
-    b.ne do_compose_1546
-do_apply_1547:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1549
-do_compose_1546:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1549
-do_concat_1548:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1295
+    tst x1, #1
+    b.eq do_concat_1295
+do_apply_1294:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1296
+do_concat_1295:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1549:
+apply_end_1296:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1545
+    b.ne blk_end_1293
     mov x0, #1
-blk_end_1545:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1552
-    tst x0, #1
-    b.ne do_compose_1550
-do_apply_1551:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1553
-do_compose_1550:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1553
-do_concat_1552:
-    mov x1, x0
-    mov x0, x9
+blk_end_1293:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1298
+    tst x1, #1
+    b.eq do_concat_1298
+do_apply_1297:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1299
+do_concat_1298:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1553:
-    b cond_end_1542
-cond_false_1541:
+apply_end_1299:
+    b cond_end_1290
+cond_false_1289:
     adr x0, sign_id
-cond_end_1542:
+cond_end_1290:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1536
+    b.ne blk_end_1285
     mov x0, #0
-blk_end_1536:
+blk_end_1285:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1534_1535:
-    // Closure for func_1534
+after_func_1283_1284:
+    // Closure for func_1283
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1534
+    adr x1, func_1283
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1529
-cond_false_1528:
+    b cond_end_1279
+cond_false_1278:
     adr x0, sign_id
-cond_end_1529:
+cond_end_1279:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, can_start_expr
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1558
-    tst x0, #1
-    b.ne do_compose_1556
-do_apply_1557:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1559
-do_compose_1556:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1559
-do_concat_1558:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1303
+    tst x1, #1
+    b.eq do_concat_1303
+do_apply_1302:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1304
+do_concat_1303:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1559:
+apply_end_1304:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1554
-    b after_func_1560_1561
-func_1560:
+    b.eq cond_false_1300
+    b after_func_1305_1306
+func_1305:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, peek_type
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1565
-    tst x0, #1
-    b.ne do_compose_1563
-do_apply_1564:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1566
-do_compose_1563:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1566
-do_concat_1565:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1309
+    tst x1, #1
+    b.eq do_concat_1309
+do_apply_1308:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1310
+do_concat_1309:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1566:
+apply_end_1310:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1562
+    b.ne blk_end_1307
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_num
@@ -9873,22 +9105,22 @@ apply_end_1566:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1569
+    b.eq cmp_true_1313
     adr x0, sign_id
-    b cmp_end_1570
-cmp_true_1569:
-cmp_end_1570:
+    b cmp_end_1314
+cmp_true_1313:
+cmp_end_1314:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1567
+    b.eq cond_false_1311
     mov x0, #1
-    b cond_end_1568
-cond_false_1567:
+    b cond_end_1312
+cond_false_1311:
     adr x0, sign_id
-cond_end_1568:
+cond_end_1312:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1562
+    b.ne blk_end_1307
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_id
@@ -9896,22 +9128,22 @@ cond_end_1568:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1573
+    b.eq cmp_true_1317
     adr x0, sign_id
-    b cmp_end_1574
-cmp_true_1573:
-cmp_end_1574:
+    b cmp_end_1318
+cmp_true_1317:
+cmp_end_1318:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1571
+    b.eq cond_false_1315
     mov x0, #1
-    b cond_end_1572
-cond_false_1571:
+    b cond_end_1316
+cond_false_1315:
     adr x0, sign_id
-cond_end_1572:
+cond_end_1316:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1562
+    b.ne blk_end_1307
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_lparen
@@ -9919,102 +9151,96 @@ cond_end_1572:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1577
+    b.eq cmp_true_1321
     adr x0, sign_id
-    b cmp_end_1578
-cmp_true_1577:
-cmp_end_1578:
+    b cmp_end_1322
+cmp_true_1321:
+cmp_end_1322:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1575
+    b.eq cond_false_1319
     mov x0, #1
-    b cond_end_1576
-cond_false_1575:
+    b cond_end_1320
+cond_false_1319:
     adr x0, sign_id
-cond_end_1576:
+cond_end_1320:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1562
+    b.ne blk_end_1307
     mov x0, #0
-blk_end_1562:
+blk_end_1307:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1560_1561:
-    // Closure for func_1560
+after_func_1305_1306:
+    // Closure for func_1305
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1560
+    adr x1, func_1305
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1555
-cond_false_1554:
+    b cond_end_1301
+cond_false_1300:
     adr x0, sign_id
-cond_end_1555:
+cond_end_1301:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, parse_program
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1583
-    tst x0, #1
-    b.ne do_compose_1581
-do_apply_1582:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1584
-do_compose_1581:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1584
-do_concat_1583:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1326
+    tst x1, #1
+    b.eq do_concat_1326
+do_apply_1325:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1327
+do_concat_1326:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1584:
+apply_end_1327:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1579
-    b after_func_1585_1586
-func_1585:
+    b.eq cond_false_1323
+    b after_func_1328_1329
+func_1328:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, peek_type
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1590
-    tst x0, #1
-    b.ne do_compose_1588
-do_apply_1589:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1591
-do_compose_1588:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1591
-do_concat_1590:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1332
+    tst x1, #1
+    b.eq do_concat_1332
+do_apply_1331:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1333
+do_concat_1332:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1591:
+apply_end_1333:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1587
+    b.ne blk_end_1330
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_eof
@@ -10022,22 +9248,22 @@ apply_end_1591:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1594
+    b.eq cmp_true_1336
     adr x0, sign_id
-    b cmp_end_1595
-cmp_true_1594:
-cmp_end_1595:
+    b cmp_end_1337
+cmp_true_1336:
+cmp_end_1337:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1592
+    b.eq cond_false_1334
     mov x0, #0
-    b cond_end_1593
-cond_false_1592:
+    b cond_end_1335
+cond_false_1334:
     adr x0, sign_id
-cond_end_1593:
+cond_end_1335:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1587
+    b.ne blk_end_1330
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_sep
@@ -10045,274 +9271,247 @@ cond_end_1593:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1598
+    b.eq cmp_true_1340
     adr x0, sign_id
-    b cmp_end_1599
-cmp_true_1598:
-cmp_end_1599:
+    b cmp_end_1341
+cmp_true_1340:
+cmp_end_1341:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1596
+    b.eq cond_false_1338
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, advance
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1603
-    tst x0, #1
-    b.ne do_compose_1601
-do_apply_1602:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1604
-do_compose_1601:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1604
-do_concat_1603:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1344
+    tst x1, #1
+    b.eq do_concat_1344
+do_apply_1343:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1345
+do_concat_1344:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1604:
+apply_end_1345:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1600
+    b.ne blk_end_1342
     adr x0, parse_program
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1607
-    tst x0, #1
-    b.ne do_compose_1605
-do_apply_1606:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1608
-do_compose_1605:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1608
-do_concat_1607:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1347
+    tst x1, #1
+    b.eq do_concat_1347
+do_apply_1346:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1348
+do_concat_1347:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1608:
-blk_end_1600:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1611
-    tst x0, #1
-    b.ne do_compose_1609
-do_apply_1610:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1612
-do_compose_1609:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1612
-do_concat_1611:
-    mov x1, x0
-    mov x0, x9
+apply_end_1348:
+blk_end_1342:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1350
+    tst x1, #1
+    b.eq do_concat_1350
+do_apply_1349:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1351
+do_concat_1350:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1612:
-    b cond_end_1597
-cond_false_1596:
+apply_end_1351:
+    b cond_end_1339
+cond_false_1338:
     adr x0, sign_id
-cond_end_1597:
+cond_end_1339:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1587
+    b.ne blk_end_1330
     adr x0, parse_expr
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1615
-    tst x0, #1
-    b.ne do_compose_1613
-do_apply_1614:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1616
-do_compose_1613:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1616
-do_concat_1615:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1353
+    tst x1, #1
+    b.eq do_concat_1353
+do_apply_1352:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1354
+do_concat_1353:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1616:
+apply_end_1354:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1587
+    b.ne blk_end_1330
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1619
-    tst x0, #1
-    b.ne do_compose_1617
-do_apply_1618:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1620
-do_compose_1617:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1620
-do_concat_1619:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1356
+    tst x1, #1
+    b.eq do_concat_1356
+do_apply_1355:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1357
+do_concat_1356:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1620:
+apply_end_1357:
     str x0, [sp, #-16]!
     adr x0, parse_program
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1623
-    tst x0, #1
-    b.ne do_compose_1621
-do_apply_1622:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1624
-do_compose_1621:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1624
-do_concat_1623:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1359
+    tst x1, #1
+    b.eq do_concat_1359
+do_apply_1358:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1360
+do_concat_1359:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1624:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1627
-    tst x0, #1
-    b.ne do_compose_1625
-do_apply_1626:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1628
-do_compose_1625:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1628
-do_concat_1627:
-    mov x1, x0
-    mov x0, x9
+apply_end_1360:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1362
+    tst x1, #1
+    b.eq do_concat_1362
+do_apply_1361:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1363
+do_concat_1362:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1628:
-blk_end_1587:
+apply_end_1363:
+blk_end_1330:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1585_1586:
-    // Closure for func_1585
+after_func_1328_1329:
+    // Closure for func_1328
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1585
+    adr x1, func_1328
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1580
-cond_false_1579:
+    b cond_end_1324
+cond_false_1323:
     adr x0, sign_id
-cond_end_1580:
+cond_end_1324:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, parse_block
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1633
-    tst x0, #1
-    b.ne do_compose_1631
-do_apply_1632:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1634
-do_compose_1631:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1634
-do_concat_1633:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1367
+    tst x1, #1
+    b.eq do_concat_1367
+do_apply_1366:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1368
+do_concat_1367:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1634:
+apply_end_1368:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1629
-    b after_func_1635_1636
-func_1635:
+    b.eq cond_false_1364
+    b after_func_1369_1370
+func_1369:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, peek_type
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1640
-    tst x0, #1
-    b.ne do_compose_1638
-do_apply_1639:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1641
-do_compose_1638:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1641
-do_concat_1640:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1373
+    tst x1, #1
+    b.eq do_concat_1373
+do_apply_1372:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1374
+do_concat_1373:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1641:
+apply_end_1374:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1637
+    b.ne blk_end_1371
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_sep
@@ -10320,154 +9519,139 @@ apply_end_1641:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1644
+    b.eq cmp_true_1377
     adr x0, sign_id
-    b cmp_end_1645
-cmp_true_1644:
-cmp_end_1645:
+    b cmp_end_1378
+cmp_true_1377:
+cmp_end_1378:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1642
+    b.eq cond_false_1375
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, advance
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1649
-    tst x0, #1
-    b.ne do_compose_1647
-do_apply_1648:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1650
-do_compose_1647:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1650
-do_concat_1649:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1381
+    tst x1, #1
+    b.eq do_concat_1381
+do_apply_1380:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1382
+do_concat_1381:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1650:
+apply_end_1382:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1646
+    b.ne blk_end_1379
     adr x0, parse_block
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1653
-    tst x0, #1
-    b.ne do_compose_1651
-do_apply_1652:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1654
-do_compose_1651:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1654
-do_concat_1653:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1384
+    tst x1, #1
+    b.eq do_concat_1384
+do_apply_1383:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1385
+do_concat_1384:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1654:
-blk_end_1646:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1657
-    tst x0, #1
-    b.ne do_compose_1655
-do_apply_1656:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1658
-do_compose_1655:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1658
-do_concat_1657:
-    mov x1, x0
-    mov x0, x9
+apply_end_1385:
+blk_end_1379:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1387
+    tst x1, #1
+    b.eq do_concat_1387
+do_apply_1386:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1388
+do_concat_1387:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1658:
-    b cond_end_1643
-cond_false_1642:
+apply_end_1388:
+    b cond_end_1376
+cond_false_1375:
     adr x0, sign_id
-cond_end_1643:
+cond_end_1376:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1637
+    b.ne blk_end_1371
     adr x0, parse_expr
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1661
-    tst x0, #1
-    b.ne do_compose_1659
-do_apply_1660:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1662
-do_compose_1659:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1662
-do_concat_1661:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1390
+    tst x1, #1
+    b.eq do_concat_1390
+do_apply_1389:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1391
+do_concat_1390:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1662:
+apply_end_1391:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1637
+    b.ne blk_end_1371
     adr x0, peek_type
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1665
-    tst x0, #1
-    b.ne do_compose_1663
-do_apply_1664:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1666
-do_compose_1663:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1666
-do_concat_1665:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1393
+    tst x1, #1
+    b.eq do_concat_1393
+do_apply_1392:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1394
+do_concat_1393:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1666:
+apply_end_1394:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1637
+    b.ne blk_end_1371
     ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
     adr x0, tok_sep
@@ -10475,297 +9659,270 @@ apply_end_1666:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1669
+    b.eq cmp_true_1397
     adr x0, sign_id
-    b cmp_end_1670
-cmp_true_1669:
-cmp_end_1670:
+    b cmp_end_1398
+cmp_true_1397:
+cmp_end_1398:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1667
+    b.eq cond_false_1395
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, advance
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1674
-    tst x0, #1
-    b.ne do_compose_1672
-do_apply_1673:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1675
-do_compose_1672:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1675
-do_concat_1674:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1401
+    tst x1, #1
+    b.eq do_concat_1401
+do_apply_1400:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1402
+do_concat_1401:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1675:
+apply_end_1402:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1671
+    b.ne blk_end_1399
     adr x0, parse_block_rest
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1678
-    tst x0, #1
-    b.ne do_compose_1676
-do_apply_1677:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1679
-do_compose_1676:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1679
-do_concat_1678:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1404
+    tst x1, #1
+    b.eq do_concat_1404
+do_apply_1403:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1405
+do_concat_1404:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1679:
+apply_end_1405:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1671
+    b.ne blk_end_1399
     ldr x0, [x29, #-96]
     str x0, [sp, #-16]!
     mov x0, #0
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1682
+    b.eq cmp_true_1408
     adr x0, sign_id
-    b cmp_end_1683
-cmp_true_1682:
-cmp_end_1683:
+    b cmp_end_1409
+cmp_true_1408:
+cmp_end_1409:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1680
+    b.eq cond_false_1406
     ldr x0, [x29, #-64]
-    b cond_end_1681
-cond_false_1680:
+    b cond_end_1407
+cond_false_1406:
     adr x0, sign_id
-cond_end_1681:
+cond_end_1407:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1671
+    b.ne blk_end_1399
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, ast_block
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1686
-    tst x0, #1
-    b.ne do_compose_1684
-do_apply_1685:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1687
-do_compose_1684:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1687
-do_concat_1686:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1411
+    tst x1, #1
+    b.eq do_concat_1411
+do_apply_1410:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1412
+do_concat_1411:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1687:
+apply_end_1412:
     str x0, [sp, #-16]!
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1690
-    tst x0, #1
-    b.ne do_compose_1688
-do_apply_1689:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1691
-do_compose_1688:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1691
-do_concat_1690:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1414
+    tst x1, #1
+    b.eq do_concat_1414
+do_apply_1413:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1415
+do_concat_1414:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1691:
+apply_end_1415:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1694
-    tst x0, #1
-    b.ne do_compose_1692
-do_apply_1693:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1695
-do_compose_1692:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1695
-do_concat_1694:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1417
+    tst x1, #1
+    b.eq do_concat_1417
+do_apply_1416:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1418
+do_concat_1417:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1695:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1698
-    tst x0, #1
-    b.ne do_compose_1696
-do_apply_1697:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1699
-do_compose_1696:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1699
-do_concat_1698:
-    mov x1, x0
-    mov x0, x9
+apply_end_1418:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1420
+    tst x1, #1
+    b.eq do_concat_1420
+do_apply_1419:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1421
+do_concat_1420:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1699:
-blk_end_1671:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1702
-    tst x0, #1
-    b.ne do_compose_1700
-do_apply_1701:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1703
-do_compose_1700:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1703
-do_concat_1702:
-    mov x1, x0
-    mov x0, x9
+apply_end_1421:
+blk_end_1399:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1423
+    tst x1, #1
+    b.eq do_concat_1423
+do_apply_1422:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1424
+do_concat_1423:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1703:
-    b cond_end_1668
-cond_false_1667:
+apply_end_1424:
+    b cond_end_1396
+cond_false_1395:
     adr x0, sign_id
-cond_end_1668:
+cond_end_1396:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1637
+    b.ne blk_end_1371
     ldr x0, [x29, #-64]
-blk_end_1637:
+blk_end_1371:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1635_1636:
-    // Closure for func_1635
+after_func_1369_1370:
+    // Closure for func_1369
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1635
+    adr x1, func_1369
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1630
-cond_false_1629:
+    b cond_end_1365
+cond_false_1364:
     adr x0, sign_id
-cond_end_1630:
+cond_end_1365:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, parse_block_rest
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1708
-    tst x0, #1
-    b.ne do_compose_1706
-do_apply_1707:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1709
-do_compose_1706:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1709
-do_concat_1708:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1428
+    tst x1, #1
+    b.eq do_concat_1428
+do_apply_1427:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1429
+do_concat_1428:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1709:
+apply_end_1429:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1704
-    b after_func_1710_1711
-func_1710:
+    b.eq cond_false_1425
+    b after_func_1430_1431
+func_1430:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, peek_type
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1715
-    tst x0, #1
-    b.ne do_compose_1713
-do_apply_1714:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1716
-do_compose_1713:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1716
-do_concat_1715:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1434
+    tst x1, #1
+    b.eq do_concat_1434
+do_apply_1433:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1435
+do_concat_1434:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1716:
+apply_end_1435:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1712
+    b.ne blk_end_1432
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_eof
@@ -10773,22 +9930,22 @@ apply_end_1716:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1719
+    b.eq cmp_true_1438
     adr x0, sign_id
-    b cmp_end_1720
-cmp_true_1719:
-cmp_end_1720:
+    b cmp_end_1439
+cmp_true_1438:
+cmp_end_1439:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1717
+    b.eq cond_false_1436
     mov x0, #0
-    b cond_end_1718
-cond_false_1717:
+    b cond_end_1437
+cond_false_1436:
     adr x0, sign_id
-cond_end_1718:
+cond_end_1437:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1712
+    b.ne blk_end_1432
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_sep
@@ -10796,63 +9953,57 @@ cond_end_1718:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.ne cmp_true_1723
+    b.ne cmp_true_1442
     adr x0, sign_id
-    b cmp_end_1724
-cmp_true_1723:
-cmp_end_1724:
+    b cmp_end_1443
+cmp_true_1442:
+cmp_end_1443:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1721
+    b.eq cond_false_1440
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, ;
     str x0, [sp, #-16]!
     adr x0, Check
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1728
-    tst x0, #1
-    b.ne do_compose_1726
-do_apply_1727:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1729
-do_compose_1726:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1729
-do_concat_1728:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1446
+    tst x1, #1
+    b.eq do_concat_1446
+do_apply_1445:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1447
+do_concat_1446:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1729:
+apply_end_1447:
     str x0, [sp, #-16]!
     adr x0, if
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1732
-    tst x0, #1
-    b.ne do_compose_1730
-do_apply_1731:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1733
-do_compose_1730:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1733
-do_concat_1732:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1449
+    tst x1, #1
+    b.eq do_concat_1449
+do_apply_1448:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1450
+do_concat_1449:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1733:
+apply_end_1450:
     str x0, [sp, #-16]!
     adr x0, it
     str x0, [sp, #-16]!
@@ -10860,168 +10011,147 @@ apply_end_1733:
     mov x1, x0
     ldr x0, [sp], #16
     bl _dict_get
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1736
-    tst x0, #1
-    b.ne do_compose_1734
-do_apply_1735:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1737
-do_compose_1734:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1737
-do_concat_1736:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1452
+    tst x1, #1
+    b.eq do_concat_1452
+do_apply_1451:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1453
+do_concat_1452:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1737:
+apply_end_1453:
     str x0, [sp, #-16]!
     adr x0, a
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1740
-    tst x0, #1
-    b.ne do_compose_1738
-do_apply_1739:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1741
-do_compose_1738:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1741
-do_concat_1740:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1455
+    tst x1, #1
+    b.eq do_concat_1455
+do_apply_1454:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1456
+do_concat_1455:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1741:
+apply_end_1456:
     str x0, [sp, #-16]!
     adr x0, closing
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1744
-    tst x0, #1
-    b.ne do_compose_1742
-do_apply_1743:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1745
-do_compose_1742:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1745
-do_concat_1744:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1458
+    tst x1, #1
+    b.eq do_concat_1458
+do_apply_1457:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1459
+do_concat_1458:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1745:
+apply_end_1459:
     str x0, [sp, #-16]!
     adr x0, paren
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1748
-    tst x0, #1
-    b.ne do_compose_1746
-do_apply_1747:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1749
-do_compose_1746:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1749
-do_concat_1748:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1461
+    tst x1, #1
+    b.eq do_concat_1461
+do_apply_1460:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1462
+do_concat_1461:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1749:
+apply_end_1462:
     str x0, [sp, #-16]!
     adr x0, or
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1752
-    tst x0, #1
-    b.ne do_compose_1750
-do_apply_1751:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1753
-do_compose_1750:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1753
-do_concat_1752:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1464
+    tst x1, #1
+    b.eq do_concat_1464
+do_apply_1463:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1465
+do_concat_1464:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1753:
+apply_end_1465:
     str x0, [sp, #-16]!
     adr x0, dedent
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1756
-    tst x0, #1
-    b.ne do_compose_1754
-do_apply_1755:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1757
-do_compose_1754:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1757
-do_concat_1756:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1467
+    tst x1, #1
+    b.eq do_concat_1467
+do_apply_1466:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1468
+do_concat_1467:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1757:
+apply_end_1468:
     str x0, [sp, #-16]!
     adr x0, implicit
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1760
-    tst x0, #1
-    b.ne do_compose_1758
-do_apply_1759:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1761
-do_compose_1758:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1761
-do_concat_1760:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1470
+    tst x1, #1
+    b.eq do_concat_1470
+do_apply_1469:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1471
+do_concat_1470:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1761:
+apply_end_1471:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1725
+    b.ne blk_end_1444
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_rparen
@@ -11029,14 +10159,14 @@ apply_end_1761:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1764
+    b.eq cmp_true_1474
     adr x0, sign_id
-    b cmp_end_1765
-cmp_true_1764:
-cmp_end_1765:
+    b cmp_end_1475
+cmp_true_1474:
+cmp_end_1475:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1762
+    b.eq cond_false_1472
     mov x0, #0
     str x0, [sp, #-16]!
     adr x0, Also
@@ -11045,264 +10175,234 @@ cmp_end_1765:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_1766
+    b.ne xor_true_1476
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_1768
-xor_true_1766:
+    b xor_end_1478
+xor_true_1476:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_1767
+    b.eq xor_false_1477
     adr x0, sign_id
-    b xor_end_1768
-xor_false_1767:
+    b xor_end_1478
+xor_false_1477:
     mov x0, x1
     str x0, [sp, #-16]!
     adr x0, should
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1771
-    tst x0, #1
-    b.ne do_compose_1769
-do_apply_1770:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1772
-do_compose_1769:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1772
-do_concat_1771:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1480
+    tst x1, #1
+    b.eq do_concat_1480
+do_apply_1479:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1481
+do_concat_1480:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1772:
+apply_end_1481:
     str x0, [sp, #-16]!
     adr x0, check
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1775
-    tst x0, #1
-    b.ne do_compose_1773
-do_apply_1774:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1776
-do_compose_1773:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1776
-do_concat_1775:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1483
+    tst x1, #1
+    b.eq do_concat_1483
+do_apply_1482:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1484
+do_concat_1483:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1776:
+apply_end_1484:
     str x0, [sp, #-16]!
     adr x0, for
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1779
-    tst x0, #1
-    b.ne do_compose_1777
-do_apply_1778:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1780
-do_compose_1777:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1780
-do_concat_1779:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1486
+    tst x1, #1
+    b.eq do_concat_1486
+do_apply_1485:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1487
+do_concat_1486:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1780:
+apply_end_1487:
     str x0, [sp, #-16]!
     adr x0, dedent
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1783
-    tst x0, #1
-    b.ne do_compose_1781
-do_apply_1782:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1784
-do_compose_1781:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1784
-do_concat_1783:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1489
+    tst x1, #1
+    b.eq do_concat_1489
+do_apply_1488:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1490
+do_concat_1489:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1784:
+apply_end_1490:
     str x0, [sp, #-16]!
     adr x0, if
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1787
-    tst x0, #1
-    b.ne do_compose_1785
-do_apply_1786:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1788
-do_compose_1785:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1788
-do_concat_1787:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1492
+    tst x1, #1
+    b.eq do_concat_1492
+do_apply_1491:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1493
+do_concat_1492:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1788:
+apply_end_1493:
     str x0, [sp, #-16]!
     adr x0, we
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1791
-    tst x0, #1
-    b.ne do_compose_1789
-do_apply_1790:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1792
-do_compose_1789:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1792
-do_concat_1791:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1495
+    tst x1, #1
+    b.eq do_concat_1495
+do_apply_1494:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1496
+do_concat_1495:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1792:
+apply_end_1496:
     str x0, [sp, #-16]!
     adr x0, had
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1795
-    tst x0, #1
-    b.ne do_compose_1793
-do_apply_1794:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1796
-do_compose_1793:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1796
-do_concat_1795:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1498
+    tst x1, #1
+    b.eq do_concat_1498
+do_apply_1497:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1499
+do_concat_1498:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1796:
+apply_end_1499:
     str x0, [sp, #-16]!
     adr x0, indentation
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1799
-    tst x0, #1
-    b.ne do_compose_1797
-do_apply_1798:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1800
-do_compose_1797:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1800
-do_concat_1799:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1501
+    tst x1, #1
+    b.eq do_concat_1501
+do_apply_1500:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1502
+do_concat_1501:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1800:
+apply_end_1502:
     str x0, [sp, #-16]!
     adr x0, logic
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1803
-    tst x0, #1
-    b.ne do_compose_1801
-do_apply_1802:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1804
-do_compose_1801:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1804
-do_concat_1803:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1504
+    tst x1, #1
+    b.eq do_concat_1504
+do_apply_1503:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1505
+do_concat_1504:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1804:
-    b cond_end_1763
-cond_false_1762:
+apply_end_1505:
+    b cond_end_1473
+cond_false_1472:
     adr x0, sign_id
-cond_end_1763:
+cond_end_1473:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1725
+    b.ne blk_end_1444
     mov x0, #0
-blk_end_1725:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1807
-    tst x0, #1
-    b.ne do_compose_1805
-do_apply_1806:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1808
-do_compose_1805:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1808
-do_concat_1807:
-    mov x1, x0
-    mov x0, x9
+blk_end_1444:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1507
+    tst x1, #1
+    b.eq do_concat_1507
+do_apply_1506:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1508
+do_concat_1507:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1808:
-    b cond_end_1722
-cond_false_1721:
+apply_end_1508:
+    b cond_end_1441
+cond_false_1440:
     adr x0, sign_id
-cond_end_1722:
+cond_end_1441:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1712
+    b.ne blk_end_1432
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_sep
@@ -11310,373 +10410,337 @@ cond_end_1722:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_1811
+    b.eq cmp_true_1511
     adr x0, sign_id
-    b cmp_end_1812
-cmp_true_1811:
-cmp_end_1812:
+    b cmp_end_1512
+cmp_true_1511:
+cmp_end_1512:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1809
+    b.eq cond_false_1509
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, advance
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1816
-    tst x0, #1
-    b.ne do_compose_1814
-do_apply_1815:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1817
-do_compose_1814:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1817
-do_concat_1816:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1515
+    tst x1, #1
+    b.eq do_concat_1515
+do_apply_1514:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1516
+do_concat_1515:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1817:
+apply_end_1516:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1813
+    b.ne blk_end_1513
     adr x0, parse_block_rest
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1820
-    tst x0, #1
-    b.ne do_compose_1818
-do_apply_1819:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1821
-do_compose_1818:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1821
-do_concat_1820:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1518
+    tst x1, #1
+    b.eq do_concat_1518
+do_apply_1517:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1519
+do_concat_1518:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1821:
-blk_end_1813:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1824
-    tst x0, #1
-    b.ne do_compose_1822
-do_apply_1823:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1825
-do_compose_1822:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1825
-do_concat_1824:
-    mov x1, x0
-    mov x0, x9
+apply_end_1519:
+blk_end_1513:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1521
+    tst x1, #1
+    b.eq do_concat_1521
+do_apply_1520:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1522
+do_concat_1521:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1825:
-    b cond_end_1810
-cond_false_1809:
+apply_end_1522:
+    b cond_end_1510
+cond_false_1509:
     adr x0, sign_id
-cond_end_1810:
+cond_end_1510:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1712
+    b.ne blk_end_1432
     adr x0, parse_expr
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1828
-    tst x0, #1
-    b.ne do_compose_1826
-do_apply_1827:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1829
-do_compose_1826:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1829
-do_concat_1828:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1524
+    tst x1, #1
+    b.eq do_concat_1524
+do_apply_1523:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1525
+do_concat_1524:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1829:
+apply_end_1525:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1712
+    b.ne blk_end_1432
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1832
-    tst x0, #1
-    b.ne do_compose_1830
-do_apply_1831:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1833
-do_compose_1830:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1833
-do_concat_1832:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1527
+    tst x1, #1
+    b.eq do_concat_1527
+do_apply_1526:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1528
+do_concat_1527:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1833:
+apply_end_1528:
     str x0, [sp, #-16]!
     adr x0, parse_block_rest
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1836
-    tst x0, #1
-    b.ne do_compose_1834
-do_apply_1835:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1837
-do_compose_1834:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1837
-do_concat_1836:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1530
+    tst x1, #1
+    b.eq do_concat_1530
+do_apply_1529:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1531
+do_concat_1530:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1837:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1840
-    tst x0, #1
-    b.ne do_compose_1838
-do_apply_1839:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1841
-do_compose_1838:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1841
-do_concat_1840:
-    mov x1, x0
-    mov x0, x9
+apply_end_1531:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1533
+    tst x1, #1
+    b.eq do_concat_1533
+do_apply_1532:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1534
+do_concat_1533:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1841:
-blk_end_1712:
+apply_end_1534:
+blk_end_1432:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1710_1711:
-    // Closure for func_1710
+after_func_1430_1431:
+    // Closure for func_1430
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1710
+    adr x1, func_1430
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1705
-cond_false_1704:
+    b cond_end_1426
+cond_false_1425:
     adr x0, sign_id
-cond_end_1705:
+cond_end_1426:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, parse_expr
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1846
-    tst x0, #1
-    b.ne do_compose_1844
-do_apply_1845:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1847
-do_compose_1844:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1847
-do_concat_1846:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1538
+    tst x1, #1
+    b.eq do_concat_1538
+do_apply_1537:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1539
+do_concat_1538:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1847:
+apply_end_1539:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1842
-    b after_func_1848_1849
-func_1848:
+    b.eq cond_false_1535
+    b after_func_1540_1541
+func_1540:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, parse_primary
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1853
-    tst x0, #1
-    b.ne do_compose_1851
-do_apply_1852:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1854
-do_compose_1851:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1854
-do_concat_1853:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1544
+    tst x1, #1
+    b.eq do_concat_1544
+do_apply_1543:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1545
+do_concat_1544:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1854:
+apply_end_1545:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1850
+    b.ne blk_end_1542
     adr x0, _parse_expr_loop
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1857
-    tst x0, #1
-    b.ne do_compose_1855
-do_apply_1856:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1858
-do_compose_1855:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1858
-do_concat_1857:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1547
+    tst x1, #1
+    b.eq do_concat_1547
+do_apply_1546:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1548
+do_concat_1547:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1858:
+apply_end_1548:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1861
-    tst x0, #1
-    b.ne do_compose_1859
-do_apply_1860:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1862
-do_compose_1859:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1862
-do_concat_1861:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1550
+    tst x1, #1
+    b.eq do_concat_1550
+do_apply_1549:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1551
+do_concat_1550:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1862:
-blk_end_1850:
+apply_end_1551:
+blk_end_1542:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1848_1849:
-    // Closure for func_1848
+after_func_1540_1541:
+    // Closure for func_1540
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1848
+    adr x1, func_1540
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1843
-cond_false_1842:
+    b cond_end_1536
+cond_false_1535:
     adr x0, sign_id
-cond_end_1843:
+cond_end_1536:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, _parse_expr_loop
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1867
-    tst x0, #1
-    b.ne do_compose_1865
-do_apply_1866:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1868
-do_compose_1865:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1868
-do_concat_1867:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1555
+    tst x1, #1
+    b.eq do_concat_1555
+do_apply_1554:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1556
+do_concat_1555:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1868:
+apply_end_1556:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1863
-    b after_func_1869_1870
-func_1869:
+    b.eq cond_false_1552
+    b after_func_1557_1558
+func_1557:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_1871_1872
-func_1871:
+    b after_func_1559_1560
+func_1559:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -11687,36 +10751,33 @@ func_1871:
     adr x0, can_start_expr
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1876
-    tst x0, #1
-    b.ne do_compose_1874
-do_apply_1875:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1877
-do_compose_1874:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1877
-do_concat_1876:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1563
+    tst x1, #1
+    b.eq do_concat_1563
+do_apply_1562:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1564
+do_concat_1563:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1877:
+apply_end_1564:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1873
+    b.ne blk_end_1561
     ldr x0, [x29, #-64]
     adr x9, sign_id
     cmp x0, x9
-    b.eq and_fail_1880
+    b.eq and_fail_1567
     adr x0, PREC_APPLY
     ldr x0, [x0]
     str x0, [sp, #-16]!
@@ -11724,18 +10785,18 @@ apply_end_1877:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.ge cmp_true_1882
+    b.ge cmp_true_1569
     adr x0, sign_id
-    b cmp_end_1883
-cmp_true_1882:
-cmp_end_1883:
-    b and_end_1881
-and_fail_1880:
+    b cmp_end_1570
+cmp_true_1569:
+cmp_end_1570:
+    b and_end_1568
+and_fail_1567:
     adr x0, sign_id
-and_end_1881:
+and_end_1568:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1878
+    b.eq cond_false_1565
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, parse_expr
@@ -11746,282 +10807,249 @@ and_end_1881:
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1887
-    tst x0, #1
-    b.ne do_compose_1885
-do_apply_1886:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1888
-do_compose_1885:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1888
-do_concat_1887:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1573
+    tst x1, #1
+    b.eq do_concat_1573
+do_apply_1572:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1574
+do_concat_1573:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1888:
+apply_end_1574:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1884
+    b.ne blk_end_1571
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, ast_apply
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1891
-    tst x0, #1
-    b.ne do_compose_1889
-do_apply_1890:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1892
-do_compose_1889:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1892
-do_concat_1891:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1576
+    tst x1, #1
+    b.eq do_concat_1576
+do_apply_1575:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1577
+do_concat_1576:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1892:
+apply_end_1577:
     str x0, [sp, #-16]!
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1895
-    tst x0, #1
-    b.ne do_compose_1893
-do_apply_1894:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1896
-do_compose_1893:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1896
-do_concat_1895:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1579
+    tst x1, #1
+    b.eq do_concat_1579
+do_apply_1578:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1580
+do_concat_1579:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1896:
+apply_end_1580:
     str x0, [sp, #-16]!
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1899
-    tst x0, #1
-    b.ne do_compose_1897
-do_apply_1898:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1900
-do_compose_1897:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1900
-do_concat_1899:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1582
+    tst x1, #1
+    b.eq do_concat_1582
+do_apply_1581:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1583
+do_concat_1582:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1900:
+apply_end_1583:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1903
-    tst x0, #1
-    b.ne do_compose_1901
-do_apply_1902:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1904
-do_compose_1901:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1904
-do_concat_1903:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1585
+    tst x1, #1
+    b.eq do_concat_1585
+do_apply_1584:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1586
+do_concat_1585:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1904:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1907
-    tst x0, #1
-    b.ne do_compose_1905
-do_apply_1906:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1908
-do_compose_1905:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1908
-do_concat_1907:
-    mov x1, x0
-    mov x0, x9
+apply_end_1586:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1588
+    tst x1, #1
+    b.eq do_concat_1588
+do_apply_1587:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1589
+do_concat_1588:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1908:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1911
-    tst x0, #1
-    b.ne do_compose_1909
-do_apply_1910:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1912
-do_compose_1909:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1912
-do_concat_1911:
-    mov x1, x0
-    mov x0, x9
+apply_end_1589:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1591
+    tst x1, #1
+    b.eq do_concat_1591
+do_apply_1590:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1592
+do_concat_1591:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1912:
+apply_end_1592:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1884
+    b.ne blk_end_1571
     adr x0, _parse_expr_loop
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1915
-    tst x0, #1
-    b.ne do_compose_1913
-do_apply_1914:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1916
-do_compose_1913:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1916
-do_concat_1915:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1594
+    tst x1, #1
+    b.eq do_concat_1594
+do_apply_1593:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1595
+do_concat_1594:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1916:
+apply_end_1595:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1919
-    tst x0, #1
-    b.ne do_compose_1917
-do_apply_1918:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1920
-do_compose_1917:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1920
-do_concat_1919:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1597
+    tst x1, #1
+    b.eq do_concat_1597
+do_apply_1596:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1598
+do_concat_1597:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1920:
-blk_end_1884:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1923
-    tst x0, #1
-    b.ne do_compose_1921
-do_apply_1922:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1924
-do_compose_1921:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1924
-do_concat_1923:
-    mov x1, x0
-    mov x0, x9
+apply_end_1598:
+blk_end_1571:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1600
+    tst x1, #1
+    b.eq do_concat_1600
+do_apply_1599:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1601
+do_concat_1600:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1924:
-    b cond_end_1879
-cond_false_1878:
+apply_end_1601:
+    b cond_end_1566
+cond_false_1565:
     adr x0, sign_id
-cond_end_1879:
+cond_end_1566:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1873
+    b.ne blk_end_1561
     adr x0, peek_type
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1927
-    tst x0, #1
-    b.ne do_compose_1925
-do_apply_1926:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1928
-do_compose_1925:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1928
-do_concat_1927:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1603
+    tst x1, #1
+    b.eq do_concat_1603
+do_apply_1602:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1604
+do_concat_1603:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1928:
+apply_end_1604:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1873
+    b.ne blk_end_1561
     ldr x0, [x29, #-112]
     str x0, [sp, #-16]!
     adr x0, tok_op
@@ -12029,130 +11057,121 @@ apply_end_1928:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.ne cmp_true_1931
+    b.ne cmp_true_1607
     adr x0, sign_id
-    b cmp_end_1932
-cmp_true_1931:
-cmp_end_1932:
+    b cmp_end_1608
+cmp_true_1607:
+cmp_end_1608:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1929
+    b.eq cond_false_1605
     ldr x0, [x29, #-48]
-    b cond_end_1930
-cond_false_1929:
+    b cond_end_1606
+cond_false_1605:
     adr x0, sign_id
-cond_end_1930:
+cond_end_1606:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1873
+    b.ne blk_end_1561
     adr x0, peek_val
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1935
-    tst x0, #1
-    b.ne do_compose_1933
-do_apply_1934:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1936
-do_compose_1933:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1936
-do_concat_1935:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1610
+    tst x1, #1
+    b.eq do_concat_1610
+do_apply_1609:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1611
+do_concat_1610:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1936:
+apply_end_1611:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1873
+    b.ne blk_end_1561
     adr x0, get_prec
     str x0, [sp, #-16]!
     ldr x0, [x29, #-128]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1939
-    tst x0, #1
-    b.ne do_compose_1937
-do_apply_1938:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1940
-do_compose_1937:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1940
-do_concat_1939:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1613
+    tst x1, #1
+    b.eq do_concat_1613
+do_apply_1612:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1614
+do_concat_1613:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1940:
+apply_end_1614:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1873
+    b.ne blk_end_1561
     ldr x0, [x29, #-144]
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.lt cmp_true_1943
+    b.lt cmp_true_1617
     adr x0, sign_id
-    b cmp_end_1944
-cmp_true_1943:
-cmp_end_1944:
+    b cmp_end_1618
+cmp_true_1617:
+cmp_end_1618:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_1941
+    b.eq cond_false_1615
     ldr x0, [x29, #-48]
-    b cond_end_1942
-cond_false_1941:
+    b cond_end_1616
+cond_false_1615:
     adr x0, sign_id
-cond_end_1942:
+cond_end_1616:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1873
+    b.ne blk_end_1561
     adr x0, advance
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1947
-    tst x0, #1
-    b.ne do_compose_1945
-do_apply_1946:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1948
-do_compose_1945:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1948
-do_concat_1947:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1620
+    tst x1, #1
+    b.eq do_concat_1620
+do_apply_1619:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1621
+do_concat_1620:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1948:
+apply_end_1621:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1873
-    b after_next_min_prec_impl_1949
+    b.ne blk_end_1561
+    b after_next_min_prec_impl_1622
 next_min_prec_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
@@ -12161,8 +11180,8 @@ next_min_prec_impl:
     ldr x10, [x9] // Load Val
     str x10, [sp, #-16]! // Push Val
     ldr x9, [x9, #8] // Next
-    b after_func_1950_1951
-func_1950:
+    b after_func_1623_1624
+func_1623:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -12177,32 +11196,29 @@ func_1950:
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1954
-    tst x0, #1
-    b.ne do_compose_1952
-do_apply_1953:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1955
-do_compose_1952:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1955
-do_concat_1954:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1626
+    tst x1, #1
+    b.eq do_concat_1626
+do_apply_1625:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1627
+do_concat_1626:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1955:
+apply_end_1627:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1950_1951:
-    // Closure for func_1950
+after_func_1623_1624:
+    // Closure for func_1623
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
@@ -12212,13 +11228,13 @@ after_func_1950_1951:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_1950
+    adr x1, func_1623
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_next_min_prec_impl_1949:
+after_next_min_prec_impl_1622:
     // Closure for next_min_prec_impl
     adr x0, sign_id
     str x0, [sp, #-16]!
@@ -12235,280 +11251,247 @@ after_next_min_prec_impl_1949:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1873
+    b.ne blk_end_1561
     adr x0, parse_expr
     str x0, [sp, #-16]!
     adr x0, next_min_prec
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1958
-    tst x0, #1
-    b.ne do_compose_1956
-do_apply_1957:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1959
-do_compose_1956:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1959
-do_concat_1958:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1629
+    tst x1, #1
+    b.eq do_concat_1629
+do_apply_1628:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1630
+do_concat_1629:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1959:
+apply_end_1630:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1873
+    b.ne blk_end_1561
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, ast_infix
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1962
-    tst x0, #1
-    b.ne do_compose_1960
-do_apply_1961:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1963
-do_compose_1960:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1963
-do_concat_1962:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1632
+    tst x1, #1
+    b.eq do_concat_1632
+do_apply_1631:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1633
+do_concat_1632:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1963:
+apply_end_1633:
     str x0, [sp, #-16]!
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-128]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1966
-    tst x0, #1
-    b.ne do_compose_1964
-do_apply_1965:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1967
-do_compose_1964:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1967
-do_concat_1966:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1635
+    tst x1, #1
+    b.eq do_concat_1635
+do_apply_1634:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1636
+do_concat_1635:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1967:
+apply_end_1636:
     str x0, [sp, #-16]!
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1970
-    tst x0, #1
-    b.ne do_compose_1968
-do_apply_1969:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1971
-do_compose_1968:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1971
-do_concat_1970:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1638
+    tst x1, #1
+    b.eq do_concat_1638
+do_apply_1637:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1639
+do_concat_1638:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1971:
+apply_end_1639:
     str x0, [sp, #-16]!
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-160]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1974
-    tst x0, #1
-    b.ne do_compose_1972
-do_apply_1973:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1975
-do_compose_1972:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1975
-do_concat_1974:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1641
+    tst x1, #1
+    b.eq do_concat_1641
+do_apply_1640:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1642
+do_concat_1641:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1975:
+apply_end_1642:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1978
-    tst x0, #1
-    b.ne do_compose_1976
-do_apply_1977:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1979
-do_compose_1976:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1979
-do_concat_1978:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1644
+    tst x1, #1
+    b.eq do_concat_1644
+do_apply_1643:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1645
+do_concat_1644:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1979:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1982
-    tst x0, #1
-    b.ne do_compose_1980
-do_apply_1981:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1983
-do_compose_1980:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1983
-do_concat_1982:
-    mov x1, x0
-    mov x0, x9
+apply_end_1645:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1647
+    tst x1, #1
+    b.eq do_concat_1647
+do_apply_1646:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1648
+do_concat_1647:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1983:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1986
-    tst x0, #1
-    b.ne do_compose_1984
-do_apply_1985:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1987
-do_compose_1984:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1987
-do_concat_1986:
-    mov x1, x0
-    mov x0, x9
+apply_end_1648:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1650
+    tst x1, #1
+    b.eq do_concat_1650
+do_apply_1649:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1651
+do_concat_1650:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1987:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1990
-    tst x0, #1
-    b.ne do_compose_1988
-do_apply_1989:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1991
-do_compose_1988:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1991
-do_concat_1990:
-    mov x1, x0
-    mov x0, x9
+apply_end_1651:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1653
+    tst x1, #1
+    b.eq do_concat_1653
+do_apply_1652:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1654
+do_concat_1653:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1991:
+apply_end_1654:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_1873
+    b.ne blk_end_1561
     adr x0, _parse_expr_loop
     str x0, [sp, #-16]!
     ldr x0, [x29, #-176]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1994
-    tst x0, #1
-    b.ne do_compose_1992
-do_apply_1993:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1995
-do_compose_1992:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1995
-do_concat_1994:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1656
+    tst x1, #1
+    b.eq do_concat_1656
+do_apply_1655:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1657
+do_concat_1656:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1995:
+apply_end_1657:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_1998
-    tst x0, #1
-    b.ne do_compose_1996
-do_apply_1997:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_1999
-do_compose_1996:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_1999
-do_concat_1998:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1659
+    tst x1, #1
+    b.eq do_concat_1659
+do_apply_1658:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1660
+do_concat_1659:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_1999:
-blk_end_1873:
+apply_end_1660:
+blk_end_1561:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1871_1872:
-    // Closure for func_1871
+after_func_1559_1560:
+    // Closure for func_1559
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -12518,116 +11501,107 @@ after_func_1871_1872:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_1871
+    adr x1, func_1559
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_1869_1870:
-    // Closure for func_1869
+after_func_1557_1558:
+    // Closure for func_1557
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_1869
+    adr x1, func_1557
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_1864
-cond_false_1863:
+    b cond_end_1553
+cond_false_1552:
     adr x0, sign_id
-cond_end_1864:
+cond_end_1553:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, parse_primary
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2004
-    tst x0, #1
-    b.ne do_compose_2002
-do_apply_2003:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2005
-do_compose_2002:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2005
-do_concat_2004:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1664
+    tst x1, #1
+    b.eq do_concat_1664
+do_apply_1663:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1665
+do_concat_1664:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2005:
+apply_end_1665:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2000
-    b after_func_2006_2007
-func_2006:
+    b.eq cond_false_1661
+    b after_func_1666_1667
+func_1666:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, peek_type
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2011
-    tst x0, #1
-    b.ne do_compose_2009
-do_apply_2010:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2012
-do_compose_2009:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2012
-do_concat_2011:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1670
+    tst x1, #1
+    b.eq do_concat_1670
+do_apply_1669:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1671
+do_concat_1670:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2012:
+apply_end_1671:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2008
+    b.ne blk_end_1668
     adr x0, peek_val
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2015
-    tst x0, #1
-    b.ne do_compose_2013
-do_apply_2014:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2016
-do_compose_2013:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2016
-do_concat_2015:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1673
+    tst x1, #1
+    b.eq do_concat_1673
+do_apply_1672:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1674
+do_concat_1673:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2016:
+apply_end_1674:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2008
+    b.ne blk_end_1668
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_num
@@ -12635,166 +11609,148 @@ apply_end_2016:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2019
+    b.eq cmp_true_1677
     adr x0, sign_id
-    b cmp_end_2020
-cmp_true_2019:
-cmp_end_2020:
+    b cmp_end_1678
+cmp_true_1677:
+cmp_end_1678:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2017
+    b.eq cond_false_1675
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, advance
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2024
-    tst x0, #1
-    b.ne do_compose_2022
-do_apply_2023:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2025
-do_compose_2022:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2025
-do_concat_2024:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1681
+    tst x1, #1
+    b.eq do_concat_1681
+do_apply_1680:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1682
+do_concat_1681:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2025:
+apply_end_1682:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2021
+    b.ne blk_end_1679
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, ast_num
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2028
-    tst x0, #1
-    b.ne do_compose_2026
-do_apply_2027:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2029
-do_compose_2026:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2029
-do_concat_2028:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1684
+    tst x1, #1
+    b.eq do_concat_1684
+do_apply_1683:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1685
+do_concat_1684:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2029:
+apply_end_1685:
     str x0, [sp, #-16]!
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2032
-    tst x0, #1
-    b.ne do_compose_2030
-do_apply_2031:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2033
-do_compose_2030:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2033
-do_concat_2032:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1687
+    tst x1, #1
+    b.eq do_concat_1687
+do_apply_1686:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1688
+do_concat_1687:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2033:
+apply_end_1688:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2036
-    tst x0, #1
-    b.ne do_compose_2034
-do_apply_2035:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2037
-do_compose_2034:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2037
-do_concat_2036:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1690
+    tst x1, #1
+    b.eq do_concat_1690
+do_apply_1689:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1691
+do_concat_1690:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2037:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2040
-    tst x0, #1
-    b.ne do_compose_2038
-do_apply_2039:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2041
-do_compose_2038:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2041
-do_concat_2040:
-    mov x1, x0
-    mov x0, x9
+apply_end_1691:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1693
+    tst x1, #1
+    b.eq do_concat_1693
+do_apply_1692:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1694
+do_concat_1693:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2041:
-blk_end_2021:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2044
-    tst x0, #1
-    b.ne do_compose_2042
-do_apply_2043:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2045
-do_compose_2042:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2045
-do_concat_2044:
-    mov x1, x0
-    mov x0, x9
+apply_end_1694:
+blk_end_1679:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1696
+    tst x1, #1
+    b.eq do_concat_1696
+do_apply_1695:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1697
+do_concat_1696:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2045:
-    b cond_end_2018
-cond_false_2017:
+apply_end_1697:
+    b cond_end_1676
+cond_false_1675:
     adr x0, sign_id
-cond_end_2018:
+cond_end_1676:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2008
+    b.ne blk_end_1668
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_id
@@ -12802,166 +11758,148 @@ cond_end_2018:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2048
+    b.eq cmp_true_1700
     adr x0, sign_id
-    b cmp_end_2049
-cmp_true_2048:
-cmp_end_2049:
+    b cmp_end_1701
+cmp_true_1700:
+cmp_end_1701:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2046
+    b.eq cond_false_1698
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, advance
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2053
-    tst x0, #1
-    b.ne do_compose_2051
-do_apply_2052:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2054
-do_compose_2051:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2054
-do_concat_2053:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1704
+    tst x1, #1
+    b.eq do_concat_1704
+do_apply_1703:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1705
+do_concat_1704:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2054:
+apply_end_1705:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2050
+    b.ne blk_end_1702
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, ast_id
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2057
-    tst x0, #1
-    b.ne do_compose_2055
-do_apply_2056:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2058
-do_compose_2055:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2058
-do_concat_2057:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1707
+    tst x1, #1
+    b.eq do_concat_1707
+do_apply_1706:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1708
+do_concat_1707:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2058:
+apply_end_1708:
     str x0, [sp, #-16]!
     adr x0, cons
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2061
-    tst x0, #1
-    b.ne do_compose_2059
-do_apply_2060:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2062
-do_compose_2059:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2062
-do_concat_2061:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1710
+    tst x1, #1
+    b.eq do_concat_1710
+do_apply_1709:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1711
+do_concat_1710:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2062:
+apply_end_1711:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2065
-    tst x0, #1
-    b.ne do_compose_2063
-do_apply_2064:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2066
-do_compose_2063:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2066
-do_concat_2065:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1713
+    tst x1, #1
+    b.eq do_concat_1713
+do_apply_1712:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1714
+do_concat_1713:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2066:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2069
-    tst x0, #1
-    b.ne do_compose_2067
-do_apply_2068:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2070
-do_compose_2067:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2070
-do_concat_2069:
-    mov x1, x0
-    mov x0, x9
+apply_end_1714:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1716
+    tst x1, #1
+    b.eq do_concat_1716
+do_apply_1715:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1717
+do_concat_1716:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2070:
-blk_end_2050:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2073
-    tst x0, #1
-    b.ne do_compose_2071
-do_apply_2072:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2074
-do_compose_2071:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2074
-do_concat_2073:
-    mov x1, x0
-    mov x0, x9
+apply_end_1717:
+blk_end_1702:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1719
+    tst x1, #1
+    b.eq do_concat_1719
+do_apply_1718:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1720
+do_concat_1719:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2074:
-    b cond_end_2047
-cond_false_2046:
+apply_end_1720:
+    b cond_end_1699
+cond_false_1698:
     adr x0, sign_id
-cond_end_2047:
+cond_end_1699:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2008
+    b.ne blk_end_1668
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     adr x0, tok_lparen
@@ -12969,239 +11907,215 @@ cond_end_2047:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2077
+    b.eq cmp_true_1723
     adr x0, sign_id
-    b cmp_end_2078
-cmp_true_2077:
-cmp_end_2078:
+    b cmp_end_1724
+cmp_true_1723:
+cmp_end_1724:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2075
+    b.eq cond_false_1721
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, advance
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2082
-    tst x0, #1
-    b.ne do_compose_2080
-do_apply_2081:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2083
-do_compose_2080:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2083
-do_concat_2082:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1727
+    tst x1, #1
+    b.eq do_concat_1727
+do_apply_1726:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1728
+do_concat_1727:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2083:
+apply_end_1728:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2079
+    b.ne blk_end_1725
     adr x0, parse_expr
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2086
-    tst x0, #1
-    b.ne do_compose_2084
-do_apply_2085:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2087
-do_compose_2084:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2087
-do_concat_2086:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1730
+    tst x1, #1
+    b.eq do_concat_1730
+do_apply_1729:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1731
+do_concat_1730:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2087:
+apply_end_1731:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2079
+    b.ne blk_end_1725
     adr x0, expect_type
     str x0, [sp, #-16]!
     adr x0, tok_rparen
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2090
-    tst x0, #1
-    b.ne do_compose_2088
-do_apply_2089:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2091
-do_compose_2088:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2091
-do_concat_2090:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1733
+    tst x1, #1
+    b.eq do_concat_1733
+do_apply_1732:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1734
+do_concat_1733:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2091:
+apply_end_1734:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2079
+    b.ne blk_end_1725
     ldr x0, [x29, #-80]
-blk_end_2079:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2094
-    tst x0, #1
-    b.ne do_compose_2092
-do_apply_2093:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2095
-do_compose_2092:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2095
-do_concat_2094:
-    mov x1, x0
-    mov x0, x9
+blk_end_1725:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1736
+    tst x1, #1
+    b.eq do_concat_1736
+do_apply_1735:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1737
+do_concat_1736:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2095:
-    b cond_end_2076
-cond_false_2075:
+apply_end_1737:
+    b cond_end_1722
+cond_false_1721:
     adr x0, sign_id
-cond_end_2076:
+cond_end_1722:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2008
+    b.ne blk_end_1668
     adr x0, cons
     str x0, [sp, #-16]!
     adr x0, ast_num
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2098
-    tst x0, #1
-    b.ne do_compose_2096
-do_apply_2097:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2099
-do_compose_2096:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2099
-do_concat_2098:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1739
+    tst x1, #1
+    b.eq do_concat_1739
+do_apply_1738:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1740
+do_concat_1739:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2099:
+apply_end_1740:
     str x0, [sp, #-16]!
     adr x0, cons
     str x0, [sp, #-16]!
     mov x0, #999
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2102
-    tst x0, #1
-    b.ne do_compose_2100
-do_apply_2101:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2103
-do_compose_2100:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2103
-do_concat_2102:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1742
+    tst x1, #1
+    b.eq do_concat_1742
+do_apply_1741:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1743
+do_concat_1742:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2103:
+apply_end_1743:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2106
-    tst x0, #1
-    b.ne do_compose_2104
-do_apply_2105:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2107
-do_compose_2104:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2107
-do_concat_2106:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1745
+    tst x1, #1
+    b.eq do_concat_1745
+do_apply_1744:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1746
+do_concat_1745:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2107:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2110
-    tst x0, #1
-    b.ne do_compose_2108
-do_apply_2109:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2111
-do_compose_2108:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2111
-do_concat_2110:
-    mov x1, x0
-    mov x0, x9
+apply_end_1746:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1748
+    tst x1, #1
+    b.eq do_concat_1748
+do_apply_1747:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1749
+do_concat_1748:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2111:
-blk_end_2008:
+apply_end_1749:
+blk_end_1668:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2006_2007:
-    // Closure for func_2006
+after_func_1666_1667:
+    // Closure for func_1666
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2006
+    adr x1, func_1666
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_2001
-cond_false_2000:
+    b cond_end_1662
+cond_false_1661:
     adr x0, sign_id
-cond_end_2001:
+cond_end_1662:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
@@ -13212,178 +12126,157 @@ cond_end_2001:
     adr x0, Hosting
     ldr x1, [sp], #16
     sub x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2114
-    tst x0, #1
-    b.ne do_compose_2112
-do_apply_2113:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2115
-do_compose_2112:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2115
-do_concat_2114:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1751
+    tst x1, #1
+    b.eq do_concat_1751
+do_apply_1750:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1752
+do_concat_1751:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2115:
+apply_end_1752:
     str x0, [sp, #-16]!
     adr x0, Compiler
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2118
-    tst x0, #1
-    b.ne do_compose_2116
-do_apply_2117:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2119
-do_compose_2116:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2119
-do_concat_2118:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1754
+    tst x1, #1
+    b.eq do_concat_1754
+do_apply_1753:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1755
+do_concat_1754:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2119:
+apply_end_1755:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, Compiles
     str x0, [sp, #-16]!
     adr x0, AST
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2122
-    tst x0, #1
-    b.ne do_compose_2120
-do_apply_2121:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2123
-do_compose_2120:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2123
-do_concat_2122:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1757
+    tst x1, #1
+    b.eq do_concat_1757
+do_apply_1756:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1758
+do_concat_1757:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2123:
+apply_end_1758:
     str x0, [sp, #-16]!
     adr x0, to
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2126
-    tst x0, #1
-    b.ne do_compose_2124
-do_apply_2125:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2127
-do_compose_2124:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2127
-do_concat_2126:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1760
+    tst x1, #1
+    b.eq do_concat_1760
+do_apply_1759:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1761
+do_concat_1760:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2127:
+apply_end_1761:
     str x0, [sp, #-16]!
     adr x0, AArch64
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2130
-    tst x0, #1
-    b.ne do_compose_2128
-do_apply_2129:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2131
-do_compose_2128:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2131
-do_concat_2130:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1763
+    tst x1, #1
+    b.eq do_concat_1763
+do_apply_1762:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1764
+do_concat_1763:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2131:
+apply_end_1764:
     str x0, [sp, #-16]!
     adr x0, Assembly
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2134
-    tst x0, #1
-    b.ne do_compose_2132
-do_apply_2133:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2135
-do_compose_2132:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2135
-do_concat_2134:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1766
+    tst x1, #1
+    b.eq do_concat_1766
+do_apply_1765:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1767
+do_concat_1766:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2135:
+apply_end_1767:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, str_len
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2140
-    tst x0, #1
-    b.ne do_compose_2138
-do_apply_2139:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2141
-do_compose_2138:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2141
-do_concat_2140:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1771
+    tst x1, #1
+    b.eq do_concat_1771
+do_apply_1770:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1772
+do_concat_1771:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2141:
+apply_end_1772:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2136
-    b after_func_2142_2143
-func_2142:
+    b.eq cond_false_1768
+    b after_func_1773_1774
+func_1773:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -13393,29 +12286,29 @@ func_2142:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2144
+    b.ne blk_end_1775
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #0
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2147
+    b.eq cmp_true_1778
     adr x0, sign_id
-    b cmp_end_2148
-cmp_true_2147:
-cmp_end_2148:
+    b cmp_end_1779
+cmp_true_1778:
+cmp_end_1779:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2145
+    b.eq cond_false_1776
     mov x0, #0
-    b cond_end_2146
-cond_false_2145:
+    b cond_end_1777
+cond_false_1776:
     adr x0, sign_id
-cond_end_2146:
+cond_end_1777:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2144
+    b.ne blk_end_1775
     mov x0, #1
     str x0, [sp, #-16]!
     adr x0, str_len
@@ -13427,79 +12320,73 @@ cond_end_2146:
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2151
-    tst x0, #1
-    b.ne do_compose_2149
-do_apply_2150:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2152
-do_compose_2149:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2152
-do_concat_2151:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1781
+    tst x1, #1
+    b.eq do_concat_1781
+do_apply_1780:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1782
+do_concat_1781:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2152:
-blk_end_2144:
+apply_end_1782:
+blk_end_1775:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2142_2143:
-    // Closure for func_2142
+after_func_1773_1774:
+    // Closure for func_1773
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2142
+    adr x1, func_1773
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_2137
-cond_false_2136:
+    b cond_end_1769
+cond_false_1768:
     adr x0, sign_id
-cond_end_2137:
+cond_end_1769:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, str_cpy
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2157
-    tst x0, #1
-    b.ne do_compose_2155
-do_apply_2156:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2158
-do_compose_2155:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2158
-do_concat_2157:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1786
+    tst x1, #1
+    b.eq do_concat_1786
+do_apply_1785:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1787
+do_concat_1786:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2158:
+apply_end_1787:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2153
-    b after_func_2159_2160
-func_2159:
+    b.eq cond_false_1783
+    b after_func_1788_1789
+func_1788:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_2161_2162
-func_2161:
+    b after_func_1790_1791
+func_1790:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -13513,21 +12400,21 @@ func_2161:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2163
+    b.ne blk_end_1792
     ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     mov x0, #0
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2166
+    b.eq cmp_true_1795
     adr x0, sign_id
-    b cmp_end_2167
-cmp_true_2166:
-cmp_end_2167:
+    b cmp_end_1796
+cmp_true_1795:
+cmp_end_1796:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2164
+    b.eq cond_false_1793
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
@@ -13537,37 +12424,34 @@ cmp_end_2167:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2168
+    b.ne blk_end_1797
     ldr x0, [x29, #-48]
-blk_end_2168:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2171
-    tst x0, #1
-    b.ne do_compose_2169
-do_apply_2170:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2172
-do_compose_2169:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2172
-do_concat_2171:
-    mov x1, x0
-    mov x0, x9
+blk_end_1797:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1799
+    tst x1, #1
+    b.eq do_concat_1799
+do_apply_1798:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1800
+do_concat_1799:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2172:
-    b cond_end_2165
-cond_false_2164:
+apply_end_1800:
+    b cond_end_1794
+cond_false_1793:
     adr x0, sign_id
-cond_end_2165:
+cond_end_1794:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2163
+    b.ne blk_end_1792
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
@@ -13575,7 +12459,7 @@ cond_end_2165:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2163
+    b.ne blk_end_1792
     adr x0, str_cpy
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
@@ -13583,60 +12467,54 @@ cond_end_2165:
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2175
-    tst x0, #1
-    b.ne do_compose_2173
-do_apply_2174:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2176
-do_compose_2173:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2176
-do_concat_2175:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1802
+    tst x1, #1
+    b.eq do_concat_1802
+do_apply_1801:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1803
+do_concat_1802:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2176:
+apply_end_1803:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2179
-    tst x0, #1
-    b.ne do_compose_2177
-do_apply_2178:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2180
-do_compose_2177:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2180
-do_concat_2179:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1805
+    tst x1, #1
+    b.eq do_concat_1805
+do_apply_1804:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1806
+do_concat_1805:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2180:
-blk_end_2163:
+apply_end_1806:
+blk_end_1792:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2161_2162:
-    // Closure for func_2161
+after_func_1790_1791:
+    // Closure for func_1790
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -13646,60 +12524,57 @@ after_func_2161_2162:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_2161
+    adr x1, func_1790
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2159_2160:
-    // Closure for func_2159
+after_func_1788_1789:
+    // Closure for func_1788
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2159
+    adr x1, func_1788
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_2154
-cond_false_2153:
+    b cond_end_1784
+cond_false_1783:
     adr x0, sign_id
-cond_end_2154:
+cond_end_1784:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, str_cat
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2185
-    tst x0, #1
-    b.ne do_compose_2183
-do_apply_2184:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2186
-do_compose_2183:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2186
-do_concat_2185:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1810
+    tst x1, #1
+    b.eq do_concat_1810
+do_apply_1809:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1811
+do_concat_1810:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2186:
+apply_end_1811:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2181
-    b after_func_2187_2188
-func_2187:
+    b.eq cond_false_1807
+    b after_func_1812_1813
+func_1812:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_2189_2190
-func_2189:
+    b after_func_1814_1815
+func_1814:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -13710,61 +12585,55 @@ func_2189:
     adr x0, str_len
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2194
-    tst x0, #1
-    b.ne do_compose_2192
-do_apply_2193:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2195
-do_compose_2192:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2195
-do_concat_2194:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1818
+    tst x1, #1
+    b.eq do_concat_1818
+do_apply_1817:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1819
+do_concat_1818:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2195:
+apply_end_1819:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2191
+    b.ne blk_end_1816
     adr x0, str_len
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2198
-    tst x0, #1
-    b.ne do_compose_2196
-do_apply_2197:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2199
-do_compose_2196:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2199
-do_concat_2198:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1821
+    tst x1, #1
+    b.eq do_concat_1821
+do_apply_1820:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1822
+do_concat_1821:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2199:
+apply_end_1822:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2191
+    b.ne blk_end_1816
     adr x0, alloc
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
@@ -13776,56 +12645,50 @@ apply_end_2199:
     mov x0, #1
     ldr x1, [sp], #16
     add x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2202
-    tst x0, #1
-    b.ne do_compose_2200
-do_apply_2201:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2203
-do_compose_2200:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2203
-do_concat_2202:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1824
+    tst x1, #1
+    b.eq do_concat_1824
+do_apply_1823:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1825
+do_concat_1824:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2203:
+apply_end_1825:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2191
+    b.ne blk_end_1816
     adr x0, str_cpy
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2206
-    tst x0, #1
-    b.ne do_compose_2204
-do_apply_2205:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2207
-do_compose_2204:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2207
-do_concat_2206:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1827
+    tst x1, #1
+    b.eq do_concat_1827
+do_apply_1826:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1828
+do_concat_1827:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2207:
+apply_end_1828:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
@@ -13835,179 +12698,158 @@ apply_end_2207:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2208
+    b.ne xor_true_1829
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2210
-xor_true_2208:
+    b xor_end_1831
+xor_true_1829:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2209
+    b.eq xor_false_1830
     adr x0, sign_id
-    b xor_end_2210
-xor_false_2209:
+    b xor_end_1831
+xor_false_1830:
     mov x0, x1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2213
-    tst x0, #1
-    b.ne do_compose_2211
-do_apply_2212:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2214
-do_compose_2211:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2214
-do_concat_2213:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1833
+    tst x1, #1
+    b.eq do_concat_1833
+do_apply_1832:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1834
+do_concat_1833:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2214:
+apply_end_1834:
     str x0, [sp, #-16]!
     adr x0, points
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2217
-    tst x0, #1
-    b.ne do_compose_2215
-do_apply_2216:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2218
-do_compose_2215:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2218
-do_concat_2217:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1836
+    tst x1, #1
+    b.eq do_concat_1836
+do_apply_1835:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1837
+do_concat_1836:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2218:
+apply_end_1837:
     str x0, [sp, #-16]!
     adr x0, to
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2221
-    tst x0, #1
-    b.ne do_compose_2219
-do_apply_2220:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2222
-do_compose_2219:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2222
-do_concat_2221:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1839
+    tst x1, #1
+    b.eq do_concat_1839
+do_apply_1838:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1840
+do_concat_1839:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2222:
+apply_end_1840:
     str x0, [sp, #-16]!
     adr x0, null
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2225
-    tst x0, #1
-    b.ne do_compose_2223
-do_apply_2224:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2226
-do_compose_2223:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2226
-do_concat_2225:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1842
+    tst x1, #1
+    b.eq do_concat_1842
+do_apply_1841:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1843
+do_concat_1842:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2226:
+apply_end_1843:
     str x0, [sp, #-16]!
     adr x0, terminator
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2229
-    tst x0, #1
-    b.ne do_compose_2227
-do_apply_2228:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2230
-do_compose_2227:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2230
-do_concat_2229:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1845
+    tst x1, #1
+    b.eq do_concat_1845
+do_apply_1844:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1846
+do_concat_1845:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2230:
+apply_end_1846:
     str x0, [sp, #-16]!
     adr x0, of
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2233
-    tst x0, #1
-    b.ne do_compose_2231
-do_apply_2232:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2234
-do_compose_2231:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2234
-do_concat_2233:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1848
+    tst x1, #1
+    b.eq do_concat_1848
+do_apply_1847:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1849
+do_concat_1848:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2234:
+apply_end_1849:
     str x0, [sp, #-16]!
     adr x0, first
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2237
-    tst x0, #1
-    b.ne do_compose_2235
-do_apply_2236:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2238
-do_compose_2235:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2238
-do_concat_2237:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1851
+    tst x1, #1
+    b.eq do_concat_1851
+do_apply_1850:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1852
+do_concat_1851:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2238:
+apply_end_1852:
     str x0, [sp, #-16]!
     adr x0, copy
     str x0, [sp, #-16]!
@@ -14017,156 +12859,138 @@ apply_end_2238:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2239
+    b.ne xor_true_1853
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2241
-xor_true_2239:
+    b xor_end_1855
+xor_true_1853:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2240
+    b.eq xor_false_1854
     adr x0, sign_id
-    b xor_end_2241
-xor_false_2240:
+    b xor_end_1855
+xor_false_1854:
     mov x0, x1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2244
-    tst x0, #1
-    b.ne do_compose_2242
-do_apply_2243:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2245
-do_compose_2242:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2245
-do_concat_2244:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1857
+    tst x1, #1
+    b.eq do_concat_1857
+do_apply_1856:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1858
+do_concat_1857:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2245:
+apply_end_1858:
     str x0, [sp, #-16]!
     adr x0, returns
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2248
-    tst x0, #1
-    b.ne do_compose_2246
-do_apply_2247:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2249
-do_compose_2246:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2249
-do_concat_2248:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1860
+    tst x1, #1
+    b.eq do_concat_1860
+do_apply_1859:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1861
+do_concat_1860:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2249:
+apply_end_1861:
     str x0, [sp, #-16]!
     adr x0, pointer
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2252
-    tst x0, #1
-    b.ne do_compose_2250
-do_apply_2251:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2253
-do_compose_2250:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2253
-do_concat_2252:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1863
+    tst x1, #1
+    b.eq do_concat_1863
+do_apply_1862:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1864
+do_concat_1863:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2253:
+apply_end_1864:
     str x0, [sp, #-16]!
     adr x0, to
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2256
-    tst x0, #1
-    b.ne do_compose_2254
-do_apply_2255:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2257
-do_compose_2254:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2257
-do_concat_2256:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1866
+    tst x1, #1
+    b.eq do_concat_1866
+do_apply_1865:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1867
+do_concat_1866:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2257:
+apply_end_1867:
     str x0, [sp, #-16]!
     adr x0, null
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2260
-    tst x0, #1
-    b.ne do_compose_2258
-do_apply_2259:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2261
-do_compose_2258:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2261
-do_concat_2260:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1869
+    tst x1, #1
+    b.eq do_concat_1869
+do_apply_1868:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1870
+do_concat_1869:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2261:
+apply_end_1870:
     str x0, [sp, #-16]!
     adr x0, terminator
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2264
-    tst x0, #1
-    b.ne do_compose_2262
-do_apply_2263:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2265
-do_compose_2262:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2265
-do_concat_2264:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1872
+    tst x1, #1
+    b.eq do_concat_1872
+do_apply_1871:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1873
+do_concat_1872:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2265:
+apply_end_1873:
     str x0, [sp, #-16]!
     adr x0, ?
     str x0, [sp, #-16]!
@@ -14176,202 +13000,178 @@ apply_end_2265:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2266
+    b.ne xor_true_1874
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2268
-xor_true_2266:
+    b xor_end_1876
+xor_true_1874:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2267
+    b.eq xor_false_1875
     adr x0, sign_id
-    b xor_end_2268
-xor_false_2267:
+    b xor_end_1876
+xor_false_1875:
     mov x0, x1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2271
-    tst x0, #1
-    b.ne do_compose_2269
-do_apply_2270:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2272
-do_compose_2269:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2272
-do_concat_2271:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1878
+    tst x1, #1
+    b.eq do_concat_1878
+do_apply_1877:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1879
+do_concat_1878:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2272:
+apply_end_1879:
     str x0, [sp, #-16]!
     adr x0, impl
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2275
-    tst x0, #1
-    b.ne do_compose_2273
-do_apply_2274:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2276
-do_compose_2273:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2276
-do_concat_2275:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1881
+    tst x1, #1
+    b.eq do_concat_1881
+do_apply_1880:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1882
+do_concat_1881:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2276:
+apply_end_1882:
     str x0, [sp, #-16]!
     adr x0, above
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2279
-    tst x0, #1
-    b.ne do_compose_2277
-do_apply_2278:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2280
-do_compose_2277:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2280
-do_concat_2279:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1884
+    tst x1, #1
+    b.eq do_concat_1884
+do_apply_1883:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1885
+do_concat_1884:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2280:
+apply_end_1885:
     str x0, [sp, #-16]!
     adr x0, returns
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2283
-    tst x0, #1
-    b.ne do_compose_2281
-do_apply_2282:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2284
-do_compose_2281:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2284
-do_concat_2283:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1887
+    tst x1, #1
+    b.eq do_concat_1887
+do_apply_1886:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1888
+do_concat_1887:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2284:
+apply_end_1888:
     str x0, [sp, #-16]!
     adr x0, str_1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2287
-    tst x0, #1
-    b.ne do_compose_2285
-do_apply_2286:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2288
-do_compose_2285:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2288
-do_concat_2287:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1890
+    tst x1, #1
+    b.eq do_concat_1890
+do_apply_1889:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1891
+do_concat_1890:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2288:
+apply_end_1891:
     str x0, [sp, #-16]!
     adr x0, ptr
     str x0, [sp, #-16]!
     adr x0, to
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2291
-    tst x0, #1
-    b.ne do_compose_2289
-do_apply_2290:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2292
-do_compose_2289:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2292
-do_concat_2291:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1893
+    tst x1, #1
+    b.eq do_concat_1893
+do_apply_1892:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1894
+do_concat_1893:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2292:
+apply_end_1894:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2295
-    tst x0, #1
-    b.ne do_compose_2293
-do_apply_2294:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2296
-do_compose_2293:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2296
-do_concat_2295:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1896
+    tst x1, #1
+    b.eq do_concat_1896
+do_apply_1895:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1897
+do_concat_1896:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2296:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2299
-    tst x0, #1
-    b.ne do_compose_2297
-do_apply_2298:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2300
-do_compose_2297:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2300
-do_concat_2299:
-    mov x1, x0
-    mov x0, x9
+apply_end_1897:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1899
+    tst x1, #1
+    b.eq do_concat_1899
+do_apply_1898:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1900
+do_concat_1899:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2300:
+apply_end_1900:
     str x0, [sp, #-16]!
     adr x0, .
     str x0, [sp, #-16]!
@@ -14381,195 +13181,174 @@ apply_end_2300:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2301
+    b.ne xor_true_1901
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2303
-xor_true_2301:
+    b xor_end_1903
+xor_true_1901:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2302
+    b.eq xor_false_1902
     adr x0, sign_id
-    b xor_end_2303
-xor_false_2302:
+    b xor_end_1903
+xor_false_1902:
     mov x0, x1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2306
-    tst x0, #1
-    b.ne do_compose_2304
-do_apply_2305:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2307
-do_compose_2304:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2307
-do_concat_2306:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1905
+    tst x1, #1
+    b.eq do_concat_1905
+do_apply_1904:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1906
+do_concat_1905:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2307:
+apply_end_1906:
     str x0, [sp, #-16]!
     adr x0, we
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2310
-    tst x0, #1
-    b.ne do_compose_2308
-do_apply_2309:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2311
-do_compose_2308:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2311
-do_concat_2310:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1908
+    tst x1, #1
+    b.eq do_concat_1908
+do_apply_1907:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1909
+do_concat_1908:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2311:
+apply_end_1909:
     str x0, [sp, #-16]!
     adr x0, can
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2314
-    tst x0, #1
-    b.ne do_compose_2312
-do_apply_2313:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2315
-do_compose_2312:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2315
-do_concat_2314:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1911
+    tst x1, #1
+    b.eq do_concat_1911
+do_apply_1910:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1912
+do_concat_1911:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2315:
+apply_end_1912:
     str x0, [sp, #-16]!
     adr x0, chain
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2318
-    tst x0, #1
-    b.ne do_compose_2316
-do_apply_2317:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2319
-do_compose_2316:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2319
-do_concat_2318:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1914
+    tst x1, #1
+    b.eq do_concat_1914
+do_apply_1913:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1915
+do_concat_1914:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2319:
+apply_end_1915:
     str x0, [sp, #-16]!
     adr x0, .
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2322
-    tst x0, #1
-    b.ne do_compose_2320
-do_apply_2321:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2323
-do_compose_2320:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2323
-do_concat_2322:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1917
+    tst x1, #1
+    b.eq do_concat_1917
+do_apply_1916:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1918
+do_concat_1917:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2323:
+apply_end_1918:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2191
+    b.ne blk_end_1816
     adr x0, str_cpy
     str x0, [sp, #-16]!
     ldr x0, [x29, #-112]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2326
-    tst x0, #1
-    b.ne do_compose_2324
-do_apply_2325:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2327
-do_compose_2324:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2327
-do_concat_2326:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1920
+    tst x1, #1
+    b.eq do_concat_1920
+do_apply_1919:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1921
+do_concat_1920:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2327:
+apply_end_1921:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2330
-    tst x0, #1
-    b.ne do_compose_2328
-do_apply_2329:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2331
-do_compose_2328:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2331
-do_concat_2330:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1923
+    tst x1, #1
+    b.eq do_concat_1923
+do_apply_1922:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1924
+do_concat_1923:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2331:
+apply_end_1924:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2191
+    b.ne blk_end_1816
     ldr x0, [x29, #-96]
-blk_end_2191:
+blk_end_1816:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2189_2190:
-    // Closure for func_2189
+after_func_1814_1815:
+    // Closure for func_1814
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -14579,55 +13358,52 @@ after_func_2189_2190:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_2189
+    adr x1, func_1814
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2187_2188:
-    // Closure for func_2187
+after_func_1812_1813:
+    // Closure for func_1812
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2187
+    adr x1, func_1812
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_2182
-cond_false_2181:
+    b cond_end_1808
+cond_false_1807:
     adr x0, sign_id
-cond_end_2182:
+cond_end_1808:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, int_to_str
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2336
-    tst x0, #1
-    b.ne do_compose_2334
-do_apply_2335:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2337
-do_compose_2334:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2337
-do_concat_2336:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1928
+    tst x1, #1
+    b.eq do_concat_1928
+do_apply_1927:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1929
+do_concat_1928:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2337:
+apply_end_1929:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2332
-    b after_func_2338_2339
-func_2338:
+    b.eq cond_false_1925
+    b after_func_1930_1931
+func_1930:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -14637,60 +13413,57 @@ func_2338:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2343
+    b.eq cmp_true_1935
     adr x0, sign_id
-    b cmp_end_2344
-cmp_true_2343:
-cmp_end_2344:
+    b cmp_end_1936
+cmp_true_1935:
+cmp_end_1936:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2341
+    b.eq cond_false_1933
     mov x0, #48
-    b cond_end_2342
-cond_false_2341:
+    b cond_end_1934
+cond_false_1933:
     adr x0, sign_id
-cond_end_2342:
+cond_end_1934:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2340
+    b.ne blk_end_1932
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #0
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.lt cmp_true_2347
+    b.lt cmp_true_1939
     adr x0, sign_id
-    b cmp_end_2348
-cmp_true_2347:
-cmp_end_2348:
+    b cmp_end_1940
+cmp_true_1939:
+cmp_end_1940:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2345
+    b.eq cond_false_1937
     adr x0, str_cat
     str x0, [sp, #-16]!
     mov x0, #45
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2351
-    tst x0, #1
-    b.ne do_compose_2349
-do_apply_2350:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2352
-do_compose_2349:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2352
-do_concat_2351:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1942
+    tst x1, #1
+    b.eq do_concat_1942
+do_apply_1941:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1943
+do_concat_1942:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2352:
+apply_end_1943:
     str x0, [sp, #-16]!
     adr x0, int_to_str_rec
     str x0, [sp, #-16]!
@@ -14699,126 +13472,114 @@ apply_end_2352:
     ldr x0, [x29, #-32]
     ldr x1, [sp], #16
     sub x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2355
-    tst x0, #1
-    b.ne do_compose_2353
-do_apply_2354:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2356
-do_compose_2353:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2356
-do_concat_2355:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1945
+    tst x1, #1
+    b.eq do_concat_1945
+do_apply_1944:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1946
+do_concat_1945:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2356:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2359
-    tst x0, #1
-    b.ne do_compose_2357
-do_apply_2358:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2360
-do_compose_2357:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2360
-do_concat_2359:
-    mov x1, x0
-    mov x0, x9
+apply_end_1946:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1948
+    tst x1, #1
+    b.eq do_concat_1948
+do_apply_1947:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1949
+do_concat_1948:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2360:
-    b cond_end_2346
-cond_false_2345:
+apply_end_1949:
+    b cond_end_1938
+cond_false_1937:
     adr x0, sign_id
-cond_end_2346:
+cond_end_1938:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2340
+    b.ne blk_end_1932
     adr x0, int_to_str_rec
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2363
-    tst x0, #1
-    b.ne do_compose_2361
-do_apply_2362:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2364
-do_compose_2361:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2364
-do_concat_2363:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1951
+    tst x1, #1
+    b.eq do_concat_1951
+do_apply_1950:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1952
+do_concat_1951:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2364:
-blk_end_2340:
+apply_end_1952:
+blk_end_1932:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2338_2339:
-    // Closure for func_2338
+after_func_1930_1931:
+    // Closure for func_1930
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2338
+    adr x1, func_1930
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_2333
-cond_false_2332:
+    b cond_end_1926
+cond_false_1925:
     adr x0, sign_id
-cond_end_2333:
+cond_end_1926:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, int_to_str_rec
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2369
-    tst x0, #1
-    b.ne do_compose_2367
-do_apply_2368:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2370
-do_compose_2367:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2370
-do_concat_2369:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1956
+    tst x1, #1
+    b.eq do_concat_1956
+do_apply_1955:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1957
+do_concat_1956:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2370:
+apply_end_1957:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2365
-    b after_func_2371_2372
-func_2371:
+    b.eq cond_false_1953
+    b after_func_1958_1959
+func_1958:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -14828,22 +13589,22 @@ func_2371:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2376
+    b.eq cmp_true_1963
     adr x0, sign_id
-    b cmp_end_2377
-cmp_true_2376:
-cmp_end_2377:
+    b cmp_end_1964
+cmp_true_1963:
+cmp_end_1964:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2374
+    b.eq cond_false_1961
     adr x0, str_2
-    b cond_end_2375
-cond_false_2374:
+    b cond_end_1962
+cond_false_1961:
     adr x0, sign_id
-cond_end_2375:
+cond_end_1962:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2373
+    b.ne blk_end_1960
     adr x0, int_to_str_rec
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -14851,32 +13612,29 @@ cond_end_2375:
     mov x0, #10
     ldr x1, [sp], #16
     sdiv x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2380
-    tst x0, #1
-    b.ne do_compose_2378
-do_apply_2379:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2381
-do_compose_2378:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2381
-do_concat_2380:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1966
+    tst x1, #1
+    b.eq do_concat_1966
+do_apply_1965:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1967
+do_concat_1966:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2381:
+apply_end_1967:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2373
+    b.ne blk_end_1960
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #10
@@ -14894,89 +13652,80 @@ apply_end_2381:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2387
+    b.ne xor_true_1973
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2389
-xor_true_2387:
+    b xor_end_1975
+xor_true_1973:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2388
+    b.eq xor_false_1974
     adr x0, sign_id
-    b xor_end_2389
-xor_false_2388:
+    b xor_end_1975
+xor_false_1974:
     mov x0, x1
     str x0, [sp, #-16]!
     adr x0, digit
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2392
-    tst x0, #1
-    b.ne do_compose_2390
-do_apply_2391:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2393
-do_compose_2390:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2393
-do_concat_2392:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1977
+    tst x1, #1
+    b.eq do_concat_1977
+do_apply_1976:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1978
+do_concat_1977:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2393:
+apply_end_1978:
     str x0, [sp, #-16]!
     adr x0, char
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2396
-    tst x0, #1
-    b.ne do_compose_2394
-do_apply_2395:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2397
-do_compose_2394:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2397
-do_concat_2396:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1980
+    tst x1, #1
+    b.eq do_concat_1980
+do_apply_1979:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1981
+do_concat_1980:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2397:
+apply_end_1981:
     str x0, [sp, #-16]!
     adr x0, to
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2400
-    tst x0, #1
-    b.ne do_compose_2398
-do_apply_2399:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2401
-do_compose_2398:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2401
-do_concat_2400:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1983
+    tst x1, #1
+    b.eq do_concat_1983
+do_apply_1982:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1984
+do_concat_1983:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2401:
+apply_end_1984:
     str x0, [sp, #-16]!
     adr x0, string
     str x0, [sp, #-16]!
@@ -14986,64 +13735,58 @@ apply_end_2401:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2402
+    b.ne xor_true_1985
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2404
-xor_true_2402:
+    b xor_end_1987
+xor_true_1985:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2403
+    b.eq xor_false_1986
     adr x0, sign_id
-    b xor_end_2404
-xor_false_2403:
+    b xor_end_1987
+xor_false_1986:
     mov x0, x1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2407
-    tst x0, #1
-    b.ne do_compose_2405
-do_apply_2406:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2408
-do_compose_2405:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2408
-do_concat_2407:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1989
+    tst x1, #1
+    b.eq do_concat_1989
+do_apply_1988:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1990
+do_concat_1989:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2408:
+apply_end_1990:
     str x0, [sp, #-16]!
     adr x0, we
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2411
-    tst x0, #1
-    b.ne do_compose_2409
-do_apply_2410:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2412
-do_compose_2409:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2412
-do_concat_2411:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1992
+    tst x1, #1
+    b.eq do_concat_1992
+do_apply_1991:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1993
+do_concat_1992:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2412:
+apply_end_1993:
     str x0, [sp, #-16]!
     adr x0, don
     str x0, [sp, #-16]!
@@ -15051,188 +13794,164 @@ apply_end_2412:
     mov x1, x0
     ldr x0, [sp], #16
     bl _dict_get
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2415
-    tst x0, #1
-    b.ne do_compose_2413
-do_apply_2414:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2416
-do_compose_2413:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2416
-do_concat_2415:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1995
+    tst x1, #1
+    b.eq do_concat_1995
+do_apply_1994:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1996
+do_concat_1995:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2416:
+apply_end_1996:
     str x0, [sp, #-16]!
     adr x0, have
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2419
-    tst x0, #1
-    b.ne do_compose_2417
-do_apply_2418:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2420
-do_compose_2417:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2420
-do_concat_2419:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_1998
+    tst x1, #1
+    b.eq do_concat_1998
+do_apply_1997:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_1999
+do_concat_1998:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2420:
+apply_end_1999:
     str x0, [sp, #-16]!
     adr x0, mutable
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2423
-    tst x0, #1
-    b.ne do_compose_2421
-do_apply_2422:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2424
-do_compose_2421:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2424
-do_concat_2423:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2001
+    tst x1, #1
+    b.eq do_concat_2001
+do_apply_2000:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2002
+do_concat_2001:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2424:
+apply_end_2002:
     str x0, [sp, #-16]!
     adr x0, buffer
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2427
-    tst x0, #1
-    b.ne do_compose_2425
-do_apply_2426:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2428
-do_compose_2425:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2428
-do_concat_2427:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2004
+    tst x1, #1
+    b.eq do_concat_2004
+do_apply_2003:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2005
+do_concat_2004:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2428:
+apply_end_2005:
     str x0, [sp, #-16]!
     adr x0, easily
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2431
-    tst x0, #1
-    b.ne do_compose_2429
-do_apply_2430:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2432
-do_compose_2429:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2432
-do_concat_2431:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2007
+    tst x1, #1
+    b.eq do_concat_2007
+do_apply_2006:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2008
+do_concat_2007:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2432:
+apply_end_2008:
     str x0, [sp, #-16]!
     adr x0, in
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2435
-    tst x0, #1
-    b.ne do_compose_2433
-do_apply_2434:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2436
-do_compose_2433:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2436
-do_concat_2435:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2010
+    tst x1, #1
+    b.eq do_concat_2010
+do_apply_2009:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2011
+do_concat_2010:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2436:
+apply_end_2011:
     str x0, [sp, #-16]!
     adr x0, functional
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2439
-    tst x0, #1
-    b.ne do_compose_2437
-do_apply_2438:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2440
-do_compose_2437:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2440
-do_concat_2439:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2013
+    tst x1, #1
+    b.eq do_concat_2013
+do_apply_2012:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2014
+do_concat_2013:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2440:
+apply_end_2014:
     str x0, [sp, #-16]!
     adr x0, style
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2443
-    tst x0, #1
-    b.ne do_compose_2441
-do_apply_2442:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2444
-do_compose_2441:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2444
-do_concat_2443:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2016
+    tst x1, #1
+    b.eq do_concat_2016
+do_apply_2015:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2017
+do_concat_2016:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2444:
+apply_end_2017:
     str x0, [sp, #-16]!
     adr x0, sign_id
     ldr x1, [sp], #16
@@ -15244,181 +13963,160 @@ apply_end_2444:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2384
+    b.ne xor_true_1970
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2386
-xor_true_2384:
+    b xor_end_1972
+xor_true_1970:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2385
+    b.eq xor_false_1971
     adr x0, sign_id
-    b xor_end_2386
-xor_false_2385:
+    b xor_end_1972
+xor_false_1971:
     mov x0, x1
     str x0, [sp, #-16]!
     adr x0, might
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2447
-    tst x0, #1
-    b.ne do_compose_2445
-do_apply_2446:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2448
-do_compose_2445:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2448
-do_concat_2447:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2019
+    tst x1, #1
+    b.eq do_concat_2019
+do_apply_2018:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2020
+do_concat_2019:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2448:
+apply_end_2020:
     str x0, [sp, #-16]!
     adr x0, recurse
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2451
-    tst x0, #1
-    b.ne do_compose_2449
-do_apply_2450:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2452
-do_compose_2449:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2452
-do_concat_2451:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2022
+    tst x1, #1
+    b.eq do_concat_2022
+do_apply_2021:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2023
+do_concat_2022:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2452:
+apply_end_2023:
     str x0, [sp, #-16]!
     adr x0, differently
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2455
-    tst x0, #1
-    b.ne do_compose_2453
-do_apply_2454:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2456
-do_compose_2453:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2456
-do_concat_2455:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2025
+    tst x1, #1
+    b.eq do_concat_2025
+do_apply_2024:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2026
+do_concat_2025:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2456:
+apply_end_2026:
     str x0, [sp, #-16]!
     adr x0, or
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2459
-    tst x0, #1
-    b.ne do_compose_2457
-do_apply_2458:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2460
-do_compose_2457:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2460
-do_concat_2459:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2028
+    tst x1, #1
+    b.eq do_concat_2028
+do_apply_2027:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2029
+do_concat_2028:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2460:
+apply_end_2029:
     str x0, [sp, #-16]!
     adr x0, stick
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2463
-    tst x0, #1
-    b.ne do_compose_2461
-do_apply_2462:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2464
-do_compose_2461:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2464
-do_concat_2463:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2031
+    tst x1, #1
+    b.eq do_concat_2031
+do_apply_2030:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2032
+do_concat_2031:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2464:
+apply_end_2032:
     str x0, [sp, #-16]!
     adr x0, to
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2467
-    tst x0, #1
-    b.ne do_compose_2465
-do_apply_2466:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2468
-do_compose_2465:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2468
-do_concat_2467:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2034
+    tst x1, #1
+    b.eq do_concat_2034
+do_apply_2033:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2035
+do_concat_2034:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2468:
+apply_end_2035:
     str x0, [sp, #-16]!
     adr x0, str_cat
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2471
-    tst x0, #1
-    b.ne do_compose_2469
-do_apply_2470:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2472
-do_compose_2469:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2472
-do_concat_2471:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2037
+    tst x1, #1
+    b.eq do_concat_2037
+do_apply_2036:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2038
+do_concat_2037:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2472:
+apply_end_2038:
     str x0, [sp, #-16]!
     adr x0, .
     str x0, [sp, #-16]!
@@ -15428,110 +14126,98 @@ apply_end_2472:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2473
+    b.ne xor_true_2039
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2475
-xor_true_2473:
+    b xor_end_2041
+xor_true_2039:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2474
+    b.eq xor_false_2040
     adr x0, sign_id
-    b xor_end_2475
-xor_false_2474:
+    b xor_end_2041
+xor_false_2040:
     mov x0, x1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2478
-    tst x0, #1
-    b.ne do_compose_2476
-do_apply_2477:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2479
-do_compose_2476:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2479
-do_concat_2478:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2043
+    tst x1, #1
+    b.eq do_concat_2043
+do_apply_2042:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2044
+do_concat_2043:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2479:
+apply_end_2044:
     str x0, [sp, #-16]!
     adr x0, is
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2482
-    tst x0, #1
-    b.ne do_compose_2480
-do_apply_2481:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2483
-do_compose_2480:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2483
-do_concat_2482:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2046
+    tst x1, #1
+    b.eq do_concat_2046
+do_apply_2045:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2047
+do_concat_2046:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2483:
+apply_end_2047:
     str x0, [sp, #-16]!
     adr x0, expensive
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2486
-    tst x0, #1
-    b.ne do_compose_2484
-do_apply_2485:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2487
-do_compose_2484:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2487
-do_concat_2486:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2049
+    tst x1, #1
+    b.eq do_concat_2049
+do_apply_2048:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2050
+do_concat_2049:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2487:
+apply_end_2050:
     str x0, [sp, #-16]!
     adr x0, allocs
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2490
-    tst x0, #1
-    b.ne do_compose_2488
-do_apply_2489:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2491
-do_compose_2488:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2491
-do_concat_2490:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2052
+    tst x1, #1
+    b.eq do_concat_2052
+do_apply_2051:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2053
+do_concat_2052:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2491:
+apply_end_2053:
     str x0, [sp, #-16]!
     adr x0, .
     str x0, [sp, #-16]!
@@ -15541,206 +14227,182 @@ apply_end_2491:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2492
+    b.ne xor_true_2054
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2494
-xor_true_2492:
+    b xor_end_2056
+xor_true_2054:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2493
+    b.eq xor_false_2055
     adr x0, sign_id
-    b xor_end_2494
-xor_false_2493:
+    b xor_end_2056
+xor_false_2055:
     mov x0, x1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2497
-    tst x0, #1
-    b.ne do_compose_2495
-do_apply_2496:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2498
-do_compose_2495:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2498
-do_concat_2497:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2058
+    tst x1, #1
+    b.eq do_concat_2058
+do_apply_2057:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2059
+do_concat_2058:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2498:
+apply_end_2059:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2382
+    b.eq cond_false_1968
     adr x0, Use
     str x0, [sp, #-16]!
     adr x0, a
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2501
-    tst x0, #1
-    b.ne do_compose_2499
-do_apply_2500:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2502
-do_compose_2499:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2502
-do_concat_2501:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2061
+    tst x1, #1
+    b.eq do_concat_2061
+do_apply_2060:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2062
+do_concat_2061:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2502:
+apply_end_2062:
     str x0, [sp, #-16]!
     adr x0, local
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2505
-    tst x0, #1
-    b.ne do_compose_2503
-do_apply_2504:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2506
-do_compose_2503:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2506
-do_concat_2505:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2064
+    tst x1, #1
+    b.eq do_concat_2064
+do_apply_2063:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2065
+do_concat_2064:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2506:
+apply_end_2065:
     str x0, [sp, #-16]!
     adr x0, buffer
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2509
-    tst x0, #1
-    b.ne do_compose_2507
-do_apply_2508:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2510
-do_compose_2507:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2510
-do_concat_2509:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2067
+    tst x1, #1
+    b.eq do_concat_2067
+do_apply_2066:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2068
+do_concat_2067:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2510:
+apply_end_2068:
     str x0, [sp, #-16]!
     adr x0, or
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2513
-    tst x0, #1
-    b.ne do_compose_2511
-do_apply_2512:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2514
-do_compose_2511:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2514
-do_concat_2513:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2070
+    tst x1, #1
+    b.eq do_concat_2070
+do_apply_2069:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2071
+do_concat_2070:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2514:
+apply_end_2071:
     str x0, [sp, #-16]!
     adr x0, list
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2517
-    tst x0, #1
-    b.ne do_compose_2515
-do_apply_2516:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2518
-do_compose_2515:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2518
-do_concat_2517:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2073
+    tst x1, #1
+    b.eq do_concat_2073
+do_apply_2072:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2074
+do_concat_2073:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2518:
+apply_end_2074:
     str x0, [sp, #-16]!
     adr x0, then
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2521
-    tst x0, #1
-    b.ne do_compose_2519
-do_apply_2520:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2522
-do_compose_2519:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2522
-do_concat_2521:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2076
+    tst x1, #1
+    b.eq do_concat_2076
+do_apply_2075:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2077
+do_concat_2076:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2522:
+apply_end_2077:
     str x0, [sp, #-16]!
     adr x0, convert
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2525
-    tst x0, #1
-    b.ne do_compose_2523
-do_apply_2524:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2526
-do_compose_2523:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2526
-do_concat_2525:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2079
+    tst x1, #1
+    b.eq do_concat_2079
+do_apply_2078:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2080
+do_concat_2079:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2526:
+apply_end_2080:
     str x0, [sp, #-16]!
     adr x0, ?
     str x0, [sp, #-16]!
@@ -15750,198 +14412,177 @@ apply_end_2526:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2527
+    b.ne xor_true_2081
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2529
-xor_true_2527:
+    b xor_end_2083
+xor_true_2081:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2528
+    b.eq xor_false_2082
     adr x0, sign_id
-    b xor_end_2529
-xor_false_2528:
+    b xor_end_2083
+xor_false_2082:
     mov x0, x1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2532
-    tst x0, #1
-    b.ne do_compose_2530
-do_apply_2531:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2533
-do_compose_2530:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2533
-do_concat_2532:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2085
+    tst x1, #1
+    b.eq do_concat_2085
+do_apply_2084:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2086
+do_concat_2085:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2533:
+apply_end_2086:
     str x0, [sp, #-16]!
     adr x0, now
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2536
-    tst x0, #1
-    b.ne do_compose_2534
-do_apply_2535:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2537
-do_compose_2534:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2537
-do_concat_2536:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2088
+    tst x1, #1
+    b.eq do_concat_2088
+do_apply_2087:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2089
+do_concat_2088:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2537:
+apply_end_2089:
     str x0, [sp, #-16]!
     adr x0, use
     str x0, [sp, #-16]!
     adr x0, str_cat
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2540
-    tst x0, #1
-    b.ne do_compose_2538
-do_apply_2539:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2541
-do_compose_2538:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2541
-do_concat_2540:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2091
+    tst x1, #1
+    b.eq do_concat_2091
+do_apply_2090:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2092
+do_concat_2091:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2541:
+apply_end_2092:
     str x0, [sp, #-16]!
     adr x0, for
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2544
-    tst x0, #1
-    b.ne do_compose_2542
-do_apply_2543:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2545
-do_compose_2542:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2545
-do_concat_2544:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2094
+    tst x1, #1
+    b.eq do_concat_2094
+do_apply_2093:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2095
+do_concat_2094:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2545:
+apply_end_2095:
     str x0, [sp, #-16]!
     adr x0, correctness
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2548
-    tst x0, #1
-    b.ne do_compose_2546
-do_apply_2547:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2549
-do_compose_2546:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2549
-do_concat_2548:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2097
+    tst x1, #1
+    b.eq do_concat_2097
+do_apply_2096:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2098
+do_concat_2097:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2549:
+apply_end_2098:
     str x0, [sp, #-16]!
     adr x0, .
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2552
-    tst x0, #1
-    b.ne do_compose_2550
-do_apply_2551:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2553
-do_compose_2550:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2553
-do_concat_2552:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2100
+    tst x1, #1
+    b.eq do_concat_2100
+do_apply_2099:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2101
+do_concat_2100:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2553:
+apply_end_2101:
     ldr x1, [sp], #16
     bl _cons
-    b cond_end_2383
-cond_false_2382:
+    b cond_end_1969
+cond_false_1968:
     adr x0, sign_id
-cond_end_2383:
+cond_end_1969:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2373
+    b.ne blk_end_1960
     adr x0, alloc
     str x0, [sp, #-16]!
     mov x0, #2
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2556
-    tst x0, #1
-    b.ne do_compose_2554
-do_apply_2555:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2557
-do_compose_2554:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2557
-do_concat_2556:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2103
+    tst x1, #1
+    b.eq do_concat_2103
+do_apply_2102:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2104
+do_concat_2103:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2557:
+apply_end_2104:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2373
+    b.ne blk_end_1960
     ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
@@ -15949,7 +14590,7 @@ apply_end_2557:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2373
+    b.ne blk_end_1960
     ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
     mov x0, #1
@@ -15961,101 +14602,92 @@ apply_end_2557:
     str x0, [x1]
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2373
+    b.ne blk_end_1960
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2560
-    tst x0, #1
-    b.ne do_compose_2558
-do_apply_2559:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2561
-do_compose_2558:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2561
-do_concat_2560:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2106
+    tst x1, #1
+    b.eq do_concat_2106
+do_apply_2105:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2107
+do_concat_2106:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2561:
+apply_end_2107:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2564
-    tst x0, #1
-    b.ne do_compose_2562
-do_apply_2563:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2565
-do_compose_2562:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2565
-do_concat_2564:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2109
+    tst x1, #1
+    b.eq do_concat_2109
+do_apply_2108:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2110
+do_concat_2109:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2565:
-blk_end_2373:
+apply_end_2110:
+blk_end_1960:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2371_2372:
-    // Closure for func_2371
+after_func_1958_1959:
+    // Closure for func_1958
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2371
+    adr x1, func_1958
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_2366
-cond_false_2365:
+    b cond_end_1954
+cond_false_1953:
     adr x0, sign_id
-cond_end_2366:
+cond_end_1954:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, compile_program
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2570
-    tst x0, #1
-    b.ne do_compose_2568
-do_apply_2569:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2571
-do_compose_2568:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2571
-do_concat_2570:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2114
+    tst x1, #1
+    b.eq do_concat_2114
+do_apply_2113:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2115
+do_concat_2114:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2571:
+apply_end_2115:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2566
-    b after_func_2572_2573
-func_2572:
+    b.eq cond_false_2111
+    b after_func_2116_2117
+func_2116:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -16065,22 +14697,22 @@ func_2572:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2577
+    b.eq cmp_true_2121
     adr x0, sign_id
-    b cmp_end_2578
-cmp_true_2577:
-cmp_end_2578:
+    b cmp_end_2122
+cmp_true_2121:
+cmp_end_2122:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2575
+    b.eq cond_false_2119
     adr x0, str_2
-    b cond_end_2576
-cond_false_2575:
+    b cond_end_2120
+cond_false_2119:
     adr x0, sign_id
-cond_end_2576:
+cond_end_2120:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2574
+    b.ne blk_end_2118
     ldr x0, [x29, #-32]
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
@@ -16090,149 +14722,134 @@ cond_end_2576:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2579
+    b.ne xor_true_2123
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2581
-xor_true_2579:
+    b xor_end_2125
+xor_true_2123:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2580
+    b.eq xor_false_2124
     adr x0, sign_id
-    b xor_end_2581
-xor_false_2580:
+    b xor_end_2125
+xor_false_2124:
     mov x0, x1
     str x0, [sp, #-16]!
     adr x0, if
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2584
-    tst x0, #1
-    b.ne do_compose_2582
-do_apply_2583:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2585
-do_compose_2582:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2585
-do_concat_2584:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2127
+    tst x1, #1
+    b.eq do_concat_2127
+do_apply_2126:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2128
+do_concat_2127:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2585:
+apply_end_2128:
     str x0, [sp, #-16]!
     adr x0, expr
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2588
-    tst x0, #1
-    b.ne do_compose_2586
-do_apply_2587:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2589
-do_compose_2586:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2589
-do_concat_2588:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2130
+    tst x1, #1
+    b.eq do_concat_2130
+do_apply_2129:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2131
+do_concat_2130:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2589:
+apply_end_2131:
     str x0, [sp, #-16]!
     adr x0, is
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2592
-    tst x0, #1
-    b.ne do_compose_2590
-do_apply_2591:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2593
-do_compose_2590:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2593
-do_concat_2592:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2133
+    tst x1, #1
+    b.eq do_concat_2133
+do_apply_2132:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2134
+do_concat_2133:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2593:
+apply_end_2134:
     str x0, [sp, #-16]!
     adr x0, definition
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2596
-    tst x0, #1
-    b.ne do_compose_2594
-do_apply_2595:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2597
-do_compose_2594:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2597
-do_concat_2596:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2136
+    tst x1, #1
+    b.eq do_concat_2136
+do_apply_2135:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2137
+do_concat_2136:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2597:
+apply_end_2137:
     str x0, [sp, #-16]!
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, sign_id
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2600
-    tst x0, #1
-    b.ne do_compose_2598
-do_apply_2599:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2601
-do_compose_2598:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2601
-do_concat_2600:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2139
+    tst x1, #1
+    b.eq do_concat_2139
+do_apply_2138:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2140
+do_concat_2139:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2601:
+apply_end_2140:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2574
+    b.ne blk_end_2118
     ldr x0, [x29, #-64]
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2574
+    b.ne blk_end_2118
     ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
     adr x0, ast_infix
@@ -16240,14 +14857,14 @@ apply_end_2601:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2604
+    b.eq cmp_true_2143
     adr x0, sign_id
-    b cmp_end_2605
-cmp_true_2604:
-cmp_end_2605:
+    b cmp_end_2144
+cmp_true_2143:
+cmp_end_2144:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2602
+    b.eq cond_false_2141
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
@@ -16260,214 +14877,190 @@ cmp_end_2605:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2609
+    b.ne blk_end_2148
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2614
-    tst x0, #1
-    b.ne do_compose_2612
-do_apply_2613:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2615
-do_compose_2612:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2615
-do_concat_2614:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2152
+    tst x1, #1
+    b.eq do_concat_2152
+do_apply_2151:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2153
+do_concat_2152:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2615:
+apply_end_2153:
     str x0, [sp, #-16]!
     mov x0, #58
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2618
-    tst x0, #1
-    b.ne do_compose_2616
-do_apply_2617:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2619
-do_compose_2616:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2619
-do_concat_2618:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2155
+    tst x1, #1
+    b.eq do_concat_2155
+do_apply_2154:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2156
+do_concat_2155:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2619:
+apply_end_2156:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2610
+    b.eq cond_false_2149
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, compile_global_def
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2623
-    tst x0, #1
-    b.ne do_compose_2621
-do_apply_2622:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2624
-do_compose_2621:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2624
-do_concat_2623:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2159
+    tst x1, #1
+    b.eq do_concat_2159
+do_apply_2158:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2160
+do_concat_2159:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2624:
+apply_end_2160:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2620
+    b.ne blk_end_2157
     adr x0, compile_program
     str x0, [sp, #-16]!
     adr x0, tail
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2627
-    tst x0, #1
-    b.ne do_compose_2625
-do_apply_2626:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2628
-do_compose_2625:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2628
-do_concat_2627:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2162
+    tst x1, #1
+    b.eq do_concat_2162
+do_apply_2161:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2163
+do_concat_2162:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2628:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2631
-    tst x0, #1
-    b.ne do_compose_2629
-do_apply_2630:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2632
-do_compose_2629:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2632
-do_concat_2631:
-    mov x1, x0
-    mov x0, x9
+apply_end_2163:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2165
+    tst x1, #1
+    b.eq do_concat_2165
+do_apply_2164:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2166
+do_concat_2165:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2632:
+apply_end_2166:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2620
+    b.ne blk_end_2157
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-112]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2635
-    tst x0, #1
-    b.ne do_compose_2633
-do_apply_2634:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2636
-do_compose_2633:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2636
-do_concat_2635:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2168
+    tst x1, #1
+    b.eq do_concat_2168
+do_apply_2167:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2169
+do_concat_2168:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2636:
+apply_end_2169:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-128]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2639
-    tst x0, #1
-    b.ne do_compose_2637
-do_apply_2638:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2640
-do_compose_2637:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2640
-do_concat_2639:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2171
+    tst x1, #1
+    b.eq do_concat_2171
+do_apply_2170:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2172
+do_concat_2171:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2640:
-blk_end_2620:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2643
-    tst x0, #1
-    b.ne do_compose_2641
-do_apply_2642:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2644
-do_compose_2641:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2644
-do_concat_2643:
-    mov x1, x0
-    mov x0, x9
+apply_end_2172:
+blk_end_2157:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2174
+    tst x1, #1
+    b.eq do_concat_2174
+do_apply_2173:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2175
+do_concat_2174:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2644:
-    b cond_end_2611
-cond_false_2610:
+apply_end_2175:
+    b cond_end_2150
+cond_false_2149:
     adr x0, sign_id
-cond_end_2611:
-blk_end_2609:
+cond_end_2150:
+blk_end_2148:
     str x0, [sp, #-16]!
     adr x0, Skip
     ldr x1, [sp], #16
@@ -16475,215 +15068,194 @@ blk_end_2609:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2606
+    b.ne xor_true_2145
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2608
-xor_true_2606:
+    b xor_end_2147
+xor_true_2145:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2607
+    b.eq xor_false_2146
     adr x0, sign_id
-    b xor_end_2608
-xor_false_2607:
+    b xor_end_2147
+xor_false_2146:
     mov x0, x1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2647
-    tst x0, #1
-    b.ne do_compose_2645
-do_apply_2646:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2648
-do_compose_2645:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2648
-do_concat_2647:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2177
+    tst x1, #1
+    b.eq do_concat_2177
+do_apply_2176:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2178
+do_concat_2177:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2648:
+apply_end_2178:
     str x0, [sp, #-16]!
     adr x0, non
     str x0, [sp, #-16]!
     adr x0, definitions
     ldr x1, [sp], #16
     sub x0, x1, x0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2651
-    tst x0, #1
-    b.ne do_compose_2649
-do_apply_2650:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2652
-do_compose_2649:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2652
-do_concat_2651:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2180
+    tst x1, #1
+    b.eq do_concat_2180
+do_apply_2179:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2181
+do_concat_2180:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2652:
+apply_end_2181:
     str x0, [sp, #-16]!
     adr x0, for
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2655
-    tst x0, #1
-    b.ne do_compose_2653
-do_apply_2654:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2656
-do_compose_2653:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2656
-do_concat_2655:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2183
+    tst x1, #1
+    b.eq do_concat_2183
+do_apply_2182:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2184
+do_concat_2183:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2656:
+apply_end_2184:
     str x0, [sp, #-16]!
     adr x0, now
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2659
-    tst x0, #1
-    b.ne do_compose_2657
-do_apply_2658:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2660
-do_compose_2657:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2660
-do_concat_2659:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2186
+    tst x1, #1
+    b.eq do_concat_2186
+do_apply_2185:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2187
+do_concat_2186:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2660:
-    b cond_end_2603
-cond_false_2602:
+apply_end_2187:
+    b cond_end_2142
+cond_false_2141:
     adr x0, sign_id
-cond_end_2603:
+cond_end_2142:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2574
+    b.ne blk_end_2118
     adr x0, compile_program
     str x0, [sp, #-16]!
     adr x0, tail
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2663
-    tst x0, #1
-    b.ne do_compose_2661
-do_apply_2662:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2664
-do_compose_2661:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2664
-do_concat_2663:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2189
+    tst x1, #1
+    b.eq do_concat_2189
+do_apply_2188:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2190
+do_concat_2189:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2664:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2667
-    tst x0, #1
-    b.ne do_compose_2665
-do_apply_2666:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2668
-do_compose_2665:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2668
-do_concat_2667:
-    mov x1, x0
-    mov x0, x9
+apply_end_2190:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2192
+    tst x1, #1
+    b.eq do_concat_2192
+do_apply_2191:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2193
+do_concat_2192:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2668:
-blk_end_2574:
+apply_end_2193:
+blk_end_2118:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2572_2573:
-    // Closure for func_2572
+after_func_2116_2117:
+    // Closure for func_2116
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2572
+    adr x1, func_2116
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_2567
-cond_false_2566:
+    b cond_end_2112
+cond_false_2111:
     adr x0, sign_id
-cond_end_2567:
+cond_end_2112:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, compile_global_def
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2673
-    tst x0, #1
-    b.ne do_compose_2671
-do_apply_2672:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2674
-do_compose_2671:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2674
-do_concat_2673:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2197
+    tst x1, #1
+    b.eq do_concat_2197
+do_apply_2196:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2198
+do_concat_2197:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2674:
+apply_end_2198:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2669
-    b after_func_2675_2676
-func_2675:
+    b.eq cond_false_2194
+    b after_func_2199_2200
+func_2199:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -16697,7 +15269,7 @@ func_2675:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2677
+    b.ne blk_end_2201
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #24
@@ -16711,264 +15283,240 @@ func_2675:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2678
+    b.ne xor_true_2202
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2680
-xor_true_2678:
+    b xor_end_2204
+xor_true_2202:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2679
+    b.eq xor_false_2203
     adr x0, sign_id
-    b xor_end_2680
-xor_false_2679:
+    b xor_end_2204
+xor_false_2203:
     mov x0, x1
     str x0, [sp, #-16]!
     adr x0, should
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2683
-    tst x0, #1
-    b.ne do_compose_2681
-do_apply_2682:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2684
-do_compose_2681:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2684
-do_concat_2683:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2206
+    tst x1, #1
+    b.eq do_concat_2206
+do_apply_2205:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2207
+do_concat_2206:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2684:
+apply_end_2207:
     str x0, [sp, #-16]!
     adr x0, be
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2687
-    tst x0, #1
-    b.ne do_compose_2685
-do_apply_2686:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2688
-do_compose_2685:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2688
-do_concat_2687:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2209
+    tst x1, #1
+    b.eq do_concat_2209
+do_apply_2208:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2210
+do_concat_2209:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2688:
+apply_end_2210:
     str x0, [sp, #-16]!
     adr x0, ast_id
     ldr x0, [x0]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2691
-    tst x0, #1
-    b.ne do_compose_2689
-do_apply_2690:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2692
-do_compose_2689:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2692
-do_concat_2691:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2212
+    tst x1, #1
+    b.eq do_concat_2212
+do_apply_2211:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2213
+do_concat_2212:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2692:
+apply_end_2213:
     str x0, [sp, #-16]!
     adr x0, for
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2695
-    tst x0, #1
-    b.ne do_compose_2693
-do_apply_2694:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2696
-do_compose_2693:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2696
-do_concat_2695:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2215
+    tst x1, #1
+    b.eq do_concat_2215
+do_apply_2214:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2216
+do_concat_2215:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2696:
+apply_end_2216:
     str x0, [sp, #-16]!
     adr x0, function
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2699
-    tst x0, #1
-    b.ne do_compose_2697
-do_apply_2698:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2700
-do_compose_2697:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2700
-do_concat_2699:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2218
+    tst x1, #1
+    b.eq do_concat_2218
+do_apply_2217:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2219
+do_concat_2218:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2700:
+apply_end_2219:
     str x0, [sp, #-16]!
     adr x0, name
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2703
-    tst x0, #1
-    b.ne do_compose_2701
-do_apply_2702:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2704
-do_compose_2701:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2704
-do_concat_2703:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2221
+    tst x1, #1
+    b.eq do_concat_2221
+do_apply_2220:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2222
+do_concat_2221:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2704:
+apply_end_2222:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2677
-    b after_name_impl_2705
+    b.ne blk_end_2201
+    b after_name_impl_2223
 name_impl:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
-    b after_func_2706_2707
-func_2706:
+    b after_func_2224_2225
+func_2224:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_2708_2709
-func_2708:
+    b after_func_2226_2227
+func_2226:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_2710_2711
-func_2710:
+    b after_func_2228_2229
+func_2228:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, for
     str x0, [sp, #-16]!
     adr x0, function
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2714
-    tst x0, #1
-    b.ne do_compose_2712
-do_apply_2713:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2715
-do_compose_2712:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2715
-do_concat_2714:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2231
+    tst x1, #1
+    b.eq do_concat_2231
+do_apply_2230:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2232
+do_concat_2231:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2715:
+apply_end_2232:
     str x0, [sp, #-16]!
     adr x0, body
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2718
-    tst x0, #1
-    b.ne do_compose_2716
-do_apply_2717:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2719
-do_compose_2716:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2719
-do_concat_2718:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2234
+    tst x1, #1
+    b.eq do_concat_2234
+do_apply_2233:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2235
+do_concat_2234:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2719:
+apply_end_2235:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2710_2711:
-    // Closure for func_2710
+after_func_2228_2229:
+    // Closure for func_2228
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2710
+    adr x1, func_2228
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2708_2709:
-    // Closure for func_2708
+after_func_2226_2227:
+    // Closure for func_2226
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2708
+    adr x1, func_2226
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2706_2707:
-    // Closure for func_2706
+after_func_2224_2225:
+    // Closure for func_2224
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2706
+    adr x1, func_2224
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_name_impl_2705:
+after_name_impl_2223:
     // Closure for name_impl
     adr x0, sign_id
     str x0, [sp, #-16]!
@@ -16978,14 +15526,14 @@ after_name_impl_2705:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2677
+    b.ne blk_end_2201
     ldr x0, [x29, #-64]
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2677
+    b.ne blk_end_2201
     ldr x0, [x29, #-80]
     str x0, [sp, #-16]!
     adr x0, ast_infix
@@ -16993,14 +15541,14 @@ after_name_impl_2705:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2722
+    b.eq cmp_true_2238
     adr x0, sign_id
-    b cmp_end_2723
-cmp_true_2722:
-cmp_end_2723:
+    b cmp_end_2239
+cmp_true_2238:
+cmp_end_2239:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2720
+    b.eq cond_false_2236
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
@@ -17013,213 +15561,192 @@ cmp_end_2723:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2724
+    b.ne blk_end_2240
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2729
-    tst x0, #1
-    b.ne do_compose_2727
-do_apply_2728:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2730
-do_compose_2727:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2730
-do_concat_2729:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2244
+    tst x1, #1
+    b.eq do_concat_2244
+do_apply_2243:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2245
+do_concat_2244:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2730:
+apply_end_2245:
     str x0, [sp, #-16]!
     mov x0, #63
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2733
-    tst x0, #1
-    b.ne do_compose_2731
-do_apply_2732:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2734
-do_compose_2731:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2734
-do_concat_2733:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2247
+    tst x1, #1
+    b.eq do_concat_2247
+do_apply_2246:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2248
+do_concat_2247:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2734:
+apply_end_2248:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2725
+    b.eq cond_false_2241
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, compile_function_def
     str x0, [sp, #-16]!
     adr x0, name
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2737
-    tst x0, #1
-    b.ne do_compose_2735
-do_apply_2736:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2738
-do_compose_2735:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2738
-do_concat_2737:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2250
+    tst x1, #1
+    b.eq do_concat_2250
+do_apply_2249:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2251
+do_concat_2250:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2738:
+apply_end_2251:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2741
-    tst x0, #1
-    b.ne do_compose_2739
-do_apply_2740:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2742
-do_compose_2739:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2742
-do_concat_2741:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2253
+    tst x1, #1
+    b.eq do_concat_2253
+do_apply_2252:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2254
+do_concat_2253:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2742:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2745
-    tst x0, #1
-    b.ne do_compose_2743
-do_apply_2744:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2746
-do_compose_2743:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2746
-do_concat_2745:
-    mov x1, x0
-    mov x0, x9
+apply_end_2254:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2256
+    tst x1, #1
+    b.eq do_concat_2256
+do_apply_2255:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2257
+do_concat_2256:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2746:
-    b cond_end_2726
-cond_false_2725:
+apply_end_2257:
+    b cond_end_2242
+cond_false_2241:
     adr x0, sign_id
-cond_end_2726:
-blk_end_2724:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2749
-    tst x0, #1
-    b.ne do_compose_2747
-do_apply_2748:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2750
-do_compose_2747:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2750
-do_concat_2749:
-    mov x1, x0
-    mov x0, x9
+cond_end_2242:
+blk_end_2240:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2259
+    tst x1, #1
+    b.eq do_concat_2259
+do_apply_2258:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2260
+do_concat_2259:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2750:
-    b cond_end_2721
-cond_false_2720:
+apply_end_2260:
+    b cond_end_2237
+cond_false_2236:
     adr x0, sign_id
-cond_end_2721:
+cond_end_2237:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2677
+    b.ne blk_end_2201
     adr x0, str_4
-blk_end_2677:
+blk_end_2201:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2675_2676:
-    // Closure for func_2675
+after_func_2199_2200:
+    // Closure for func_2199
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2675
+    adr x1, func_2199
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_2670
-cond_false_2669:
+    b cond_end_2195
+cond_false_2194:
     adr x0, sign_id
-cond_end_2670:
+cond_end_2195:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, compile_function_def
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2755
-    tst x0, #1
-    b.ne do_compose_2753
-do_apply_2754:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2756
-do_compose_2753:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2756
-do_concat_2755:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2264
+    tst x1, #1
+    b.eq do_concat_2264
+do_apply_2263:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2265
+do_concat_2264:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2756:
+apply_end_2265:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2751
-    b after_func_2757_2758
-func_2757:
+    b.eq cond_false_2261
+    b after_func_2266_2267
+func_2266:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_2759_2760
-func_2759:
+    b after_func_2268_2269
+func_2268:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -17230,114 +15757,102 @@ func_2759:
     adr x0, ;
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2764
-    tst x0, #1
-    b.ne do_compose_2762
-do_apply_2763:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2765
-do_compose_2762:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2765
-do_concat_2764:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2272
+    tst x1, #1
+    b.eq do_concat_2272
+do_apply_2271:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2273
+do_concat_2272:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2765:
+apply_end_2273:
     str x0, [sp, #-16]!
     adr x0, is
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2768
-    tst x0, #1
-    b.ne do_compose_2766
-do_apply_2767:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2769
-do_compose_2766:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2769
-do_concat_2768:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2275
+    tst x1, #1
+    b.eq do_concat_2275
+do_apply_2274:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2276
+do_concat_2275:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2769:
+apply_end_2276:
     str x0, [sp, #-16]!
-    b after_func_2770_2771
-func_2770:
+    b after_func_2277_2278
+func_2277:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, args
     str x0, [sp, #-16]!
     adr x0, body
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2774
-    tst x0, #1
-    b.ne do_compose_2772
-do_apply_2773:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2775
-do_compose_2772:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2775
-do_concat_2774:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2280
+    tst x1, #1
+    b.eq do_concat_2280
+do_apply_2279:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2281
+do_concat_2280:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2775:
+apply_end_2281:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2770_2771:
-    // Closure for func_2770
+after_func_2277_2278:
+    // Closure for func_2277
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2770
+    adr x1, func_2277
     ldr x0, [sp], #16
     bl _cons
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2778
-    tst x0, #1
-    b.ne do_compose_2776
-do_apply_2777:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2779
-do_compose_2776:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2779
-do_concat_2778:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2283
+    tst x1, #1
+    b.eq do_concat_2283
+do_apply_2282:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2284
+do_concat_2283:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2779:
+apply_end_2284:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2761
+    b.ne blk_end_2270
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #16
@@ -17348,7 +15863,7 @@ apply_end_2779:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2761
+    b.ne blk_end_2270
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #24
@@ -17359,83 +15874,74 @@ apply_end_2779:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2761
+    b.ne blk_end_2270
     adr x0, str_cat
     str x0, [sp, #-16]!
     mov x0, #95
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2782
-    tst x0, #1
-    b.ne do_compose_2780
-do_apply_2781:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2783
-do_compose_2780:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2783
-do_concat_2782:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2286
+    tst x1, #1
+    b.eq do_concat_2286
+do_apply_2285:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2287
+do_concat_2286:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2783:
+apply_end_2287:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2786
-    tst x0, #1
-    b.ne do_compose_2784
-do_apply_2785:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2787
-do_compose_2784:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2787
-do_concat_2786:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2289
+    tst x1, #1
+    b.eq do_concat_2289
+do_apply_2288:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2290
+do_concat_2289:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2787:
+apply_end_2290:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2761
+    b.ne blk_end_2270
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2790
-    tst x0, #1
-    b.ne do_compose_2788
-do_apply_2789:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2791
-do_compose_2788:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2791
-do_concat_2790:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2292
+    tst x1, #1
+    b.eq do_concat_2292
+do_apply_2291:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2293
+do_concat_2292:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2791:
+apply_end_2293:
     str x0, [sp, #-16]!
     adr x0, str_5
     str x0, [sp, #-16]!
@@ -17445,485 +15951,428 @@ apply_end_2791:
     str x1, [sp, #-16]!
     adr x9, sign_id
     cmp x1, x9
-    b.ne xor_true_2792
+    b.ne xor_true_2294
     ldr x0, [sp], #16
     ldr x0, [sp], #16
-    b xor_end_2794
-xor_true_2792:
+    b xor_end_2296
+xor_true_2294:
     ldr x1, [sp], #16
     ldr x0, [sp], #16
     adr x9, sign_id
     cmp x0, x9
-    b.eq xor_false_2793
+    b.eq xor_false_2295
     adr x0, sign_id
-    b xor_end_2794
-xor_false_2793:
+    b xor_end_2296
+xor_false_2295:
     mov x0, x1
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2797
-    tst x0, #1
-    b.ne do_compose_2795
-do_apply_2796:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2798
-do_compose_2795:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2798
-do_concat_2797:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2298
+    tst x1, #1
+    b.eq do_concat_2298
+do_apply_2297:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2299
+do_concat_2298:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2798:
+apply_end_2299:
     str x0, [sp, #-16]!
     adr x0, end
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2801
-    tst x0, #1
-    b.ne do_compose_2799
-do_apply_2800:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2802
-do_compose_2799:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2802
-do_concat_2801:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2301
+    tst x1, #1
+    b.eq do_concat_2301
+do_apply_2300:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2302
+do_concat_2301:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2802:
+apply_end_2302:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2805
-    tst x0, #1
-    b.ne do_compose_2803
-do_apply_2804:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2806
-do_compose_2803:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2806
-do_concat_2805:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2304
+    tst x1, #1
+    b.eq do_concat_2304
+do_apply_2303:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2305
+do_concat_2304:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2806:
+apply_end_2305:
     str x0, [sp, #-16]!
     adr x0, for
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2809
-    tst x0, #1
-    b.ne do_compose_2807
-do_apply_2808:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2810
-do_compose_2807:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2810
-do_concat_2809:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2307
+    tst x1, #1
+    b.eq do_concat_2307
+do_apply_2306:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2308
+do_concat_2307:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2810:
+apply_end_2308:
     str x0, [sp, #-16]!
     adr x0, recursive
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2813
-    tst x0, #1
-    b.ne do_compose_2811
-do_apply_2812:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2814
-do_compose_2811:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2814
-do_concat_2813:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2310
+    tst x1, #1
+    b.eq do_concat_2310
+do_apply_2309:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2311
+do_concat_2310:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2814:
+apply_end_2311:
     str x0, [sp, #-16]!
     adr x0, blocks
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2817
-    tst x0, #1
-    b.ne do_compose_2815
-do_apply_2816:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2818
-do_compose_2815:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2818
-do_concat_2817:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2313
+    tst x1, #1
+    b.eq do_concat_2313
+do_apply_2312:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2314
+do_concat_2313:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2818:
+apply_end_2314:
     str x0, [sp, #-16]!
     adr x0, to
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2821
-    tst x0, #1
-    b.ne do_compose_2819
-do_apply_2820:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2822
-do_compose_2819:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2822
-do_concat_2821:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2316
+    tst x1, #1
+    b.eq do_concat_2316
+do_apply_2315:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2317
+do_concat_2316:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2822:
+apply_end_2317:
     str x0, [sp, #-16]!
     adr x0, jump
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2825
-    tst x0, #1
-    b.ne do_compose_2823
-do_apply_2824:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2826
-do_compose_2823:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2826
-do_concat_2825:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2319
+    tst x1, #1
+    b.eq do_concat_2319
+do_apply_2318:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2320
+do_concat_2319:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2826:
+apply_end_2320:
     str x0, [sp, #-16]!
     adr x0, to
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2829
-    tst x0, #1
-    b.ne do_compose_2827
-do_apply_2828:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2830
-do_compose_2827:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2830
-do_concat_2829:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2322
+    tst x1, #1
+    b.eq do_concat_2322
+do_apply_2321:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2323
+do_concat_2322:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2830:
+apply_end_2323:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2761
+    b.ne blk_end_2270
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2833
-    tst x0, #1
-    b.ne do_compose_2831
-do_apply_2832:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2834
-do_compose_2831:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2834
-do_concat_2833:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2325
+    tst x1, #1
+    b.eq do_concat_2325
+do_apply_2324:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2326
+do_concat_2325:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2834:
+apply_end_2326:
     str x0, [sp, #-16]!
     adr x0, str_6
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2837
-    tst x0, #1
-    b.ne do_compose_2835
-do_apply_2836:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2838
-do_compose_2835:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2838
-do_concat_2837:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2328
+    tst x1, #1
+    b.eq do_concat_2328
+do_apply_2327:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2329
+do_concat_2328:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2838:
+apply_end_2329:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2761
+    b.ne blk_end_2270
     adr x0, compile_expr
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2841
-    tst x0, #1
-    b.ne do_compose_2839
-do_apply_2840:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2842
-do_compose_2839:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2842
-do_concat_2841:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2331
+    tst x1, #1
+    b.eq do_concat_2331
+do_apply_2330:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2332
+do_concat_2331:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2842:
+apply_end_2332:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-128]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2845
-    tst x0, #1
-    b.ne do_compose_2843
-do_apply_2844:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2846
-do_compose_2843:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2846
-do_concat_2845:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2334
+    tst x1, #1
+    b.eq do_concat_2334
+do_apply_2333:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2335
+do_concat_2334:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2846:
+apply_end_2335:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2761
+    b.ne blk_end_2270
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-128]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2849
-    tst x0, #1
-    b.ne do_compose_2847
-do_apply_2848:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2850
-do_compose_2847:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2850
-do_concat_2849:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2337
+    tst x1, #1
+    b.eq do_concat_2337
+do_apply_2336:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2338
+do_concat_2337:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2850:
+apply_end_2338:
     str x0, [sp, #-16]!
     adr x0, str_7
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2853
-    tst x0, #1
-    b.ne do_compose_2851
-do_apply_2852:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2854
-do_compose_2851:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2854
-do_concat_2853:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2340
+    tst x1, #1
+    b.eq do_concat_2340
+do_apply_2339:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2341
+do_concat_2340:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2854:
+apply_end_2341:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2761
+    b.ne blk_end_2270
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-112]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2857
-    tst x0, #1
-    b.ne do_compose_2855
-do_apply_2856:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2858
-do_compose_2855:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2858
-do_concat_2857:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2343
+    tst x1, #1
+    b.eq do_concat_2343
+do_apply_2342:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2344
+do_concat_2343:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2858:
+apply_end_2344:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-144]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2861
-    tst x0, #1
-    b.ne do_compose_2859
-do_apply_2860:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2862
-do_compose_2859:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2862
-do_concat_2861:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2346
+    tst x1, #1
+    b.eq do_concat_2346
+do_apply_2345:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2347
+do_concat_2346:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2862:
+apply_end_2347:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-160]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2865
-    tst x0, #1
-    b.ne do_compose_2863
-do_apply_2864:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2866
-do_compose_2863:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2866
-do_concat_2865:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2349
+    tst x1, #1
+    b.eq do_concat_2349
+do_apply_2348:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2350
+do_concat_2349:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2866:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2869
-    tst x0, #1
-    b.ne do_compose_2867
-do_apply_2868:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2870
-do_compose_2867:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2870
-do_concat_2869:
-    mov x1, x0
-    mov x0, x9
+apply_end_2350:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2352
+    tst x1, #1
+    b.eq do_concat_2352
+do_apply_2351:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2353
+do_concat_2352:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2870:
-blk_end_2761:
+apply_end_2353:
+blk_end_2270:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2759_2760:
-    // Closure for func_2759
+after_func_2268_2269:
+    // Closure for func_2268
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -17933,60 +16382,57 @@ after_func_2759_2760:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_2759
+    adr x1, func_2268
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2757_2758:
-    // Closure for func_2757
+after_func_2266_2267:
+    // Closure for func_2266
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2757
+    adr x1, func_2266
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_2752
-cond_false_2751:
+    b cond_end_2262
+cond_false_2261:
     adr x0, sign_id
-cond_end_2752:
+cond_end_2262:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, compile_expr
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2875
-    tst x0, #1
-    b.ne do_compose_2873
-do_apply_2874:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2876
-do_compose_2873:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2876
-do_concat_2875:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2357
+    tst x1, #1
+    b.eq do_concat_2357
+do_apply_2356:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2358
+do_concat_2357:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2876:
+apply_end_2358:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2871
-    b after_func_2877_2878
-func_2877:
+    b.eq cond_false_2354
+    b after_func_2359_2360
+func_2359:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_2879_2880
-func_2879:
+    b after_func_2361_2362
+func_2361:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -18000,29 +16446,29 @@ func_2879:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2884
+    b.eq cmp_true_2366
     adr x0, sign_id
-    b cmp_end_2885
-cmp_true_2884:
-cmp_end_2885:
+    b cmp_end_2367
+cmp_true_2366:
+cmp_end_2367:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2882
+    b.eq cond_false_2364
     adr x0, str_2
-    b cond_end_2883
-cond_false_2882:
+    b cond_end_2365
+cond_false_2364:
     adr x0, sign_id
-cond_end_2883:
+cond_end_2365:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2881
+    b.ne blk_end_2363
     ldr x0, [x29, #-48]
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2881
+    b.ne blk_end_2363
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #8
@@ -18033,7 +16479,7 @@ cond_end_2883:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2881
+    b.ne blk_end_2363
     ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     adr x0, ast_num
@@ -18041,167 +16487,149 @@ cond_end_2883:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2888
+    b.eq cmp_true_2370
     adr x0, sign_id
-    b cmp_end_2889
-cmp_true_2888:
-cmp_end_2889:
+    b cmp_end_2371
+cmp_true_2370:
+cmp_end_2371:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2886
+    b.eq cond_false_2368
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, int_to_str
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2893
-    tst x0, #1
-    b.ne do_compose_2891
-do_apply_2892:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2894
-do_compose_2891:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2894
-do_concat_2893:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2374
+    tst x1, #1
+    b.eq do_concat_2374
+do_apply_2373:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2375
+do_concat_2374:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2894:
+apply_end_2375:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2890
+    b.ne blk_end_2372
     adr x0, str_cat
     str x0, [sp, #-16]!
     adr x0, str_8
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2897
-    tst x0, #1
-    b.ne do_compose_2895
-do_apply_2896:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2898
-do_compose_2895:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2898
-do_concat_2897:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2377
+    tst x1, #1
+    b.eq do_concat_2377
+do_apply_2376:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2378
+do_concat_2377:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2898:
+apply_end_2378:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2901
-    tst x0, #1
-    b.ne do_compose_2899
-do_apply_2900:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2902
-do_compose_2899:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2902
-do_concat_2901:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2380
+    tst x1, #1
+    b.eq do_concat_2380
+do_apply_2379:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2381
+do_concat_2380:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2902:
+apply_end_2381:
     str x0, [sp, #-16]!
     adr x0, str_9
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2905
-    tst x0, #1
-    b.ne do_compose_2903
-do_apply_2904:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2906
-do_compose_2903:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2906
-do_concat_2905:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2383
+    tst x1, #1
+    b.eq do_concat_2383
+do_apply_2382:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2384
+do_concat_2383:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2906:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2909
-    tst x0, #1
-    b.ne do_compose_2907
-do_apply_2908:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2910
-do_compose_2907:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2910
-do_concat_2909:
-    mov x1, x0
-    mov x0, x9
+apply_end_2384:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2386
+    tst x1, #1
+    b.eq do_concat_2386
+do_apply_2385:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2387
+do_concat_2386:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2910:
-blk_end_2890:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2913
-    tst x0, #1
-    b.ne do_compose_2911
-do_apply_2912:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2914
-do_compose_2911:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2914
-do_concat_2913:
-    mov x1, x0
-    mov x0, x9
+apply_end_2387:
+blk_end_2372:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2389
+    tst x1, #1
+    b.eq do_concat_2389
+do_apply_2388:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2390
+do_concat_2389:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2914:
-    b cond_end_2887
-cond_false_2886:
+apply_end_2390:
+    b cond_end_2369
+cond_false_2368:
     adr x0, sign_id
-cond_end_2887:
+cond_end_2369:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2881
+    b.ne blk_end_2363
     ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     adr x0, ast_block
@@ -18209,91 +16637,82 @@ cond_end_2887:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2917
+    b.eq cmp_true_2393
     adr x0, sign_id
-    b cmp_end_2918
-cmp_true_2917:
-cmp_end_2918:
+    b cmp_end_2394
+cmp_true_2393:
+cmp_end_2394:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2915
+    b.eq cond_false_2391
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, compile_block
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2921
-    tst x0, #1
-    b.ne do_compose_2919
-do_apply_2920:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2922
-do_compose_2919:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2922
-do_concat_2921:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2396
+    tst x1, #1
+    b.eq do_concat_2396
+do_apply_2395:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2397
+do_concat_2396:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2922:
+apply_end_2397:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2925
-    tst x0, #1
-    b.ne do_compose_2923
-do_apply_2924:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2926
-do_compose_2923:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2926
-do_concat_2925:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2399
+    tst x1, #1
+    b.eq do_concat_2399
+do_apply_2398:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2400
+do_concat_2399:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2926:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2929
-    tst x0, #1
-    b.ne do_compose_2927
-do_apply_2928:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2930
-do_compose_2927:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2930
-do_concat_2929:
-    mov x1, x0
-    mov x0, x9
+apply_end_2400:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2402
+    tst x1, #1
+    b.eq do_concat_2402
+do_apply_2401:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2403
+do_concat_2402:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2930:
-    b cond_end_2916
-cond_false_2915:
+apply_end_2403:
+    b cond_end_2392
+cond_false_2391:
     adr x0, sign_id
-cond_end_2916:
+cond_end_2392:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2881
+    b.ne blk_end_2363
     ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     adr x0, ast_infix
@@ -18301,91 +16720,82 @@ cond_end_2916:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2933
+    b.eq cmp_true_2406
     adr x0, sign_id
-    b cmp_end_2934
-cmp_true_2933:
-cmp_end_2934:
+    b cmp_end_2407
+cmp_true_2406:
+cmp_end_2407:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2931
+    b.eq cond_false_2404
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, compile_infix
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2937
-    tst x0, #1
-    b.ne do_compose_2935
-do_apply_2936:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2938
-do_compose_2935:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2938
-do_concat_2937:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2409
+    tst x1, #1
+    b.eq do_concat_2409
+do_apply_2408:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2410
+do_concat_2409:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2938:
+apply_end_2410:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2941
-    tst x0, #1
-    b.ne do_compose_2939
-do_apply_2940:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2942
-do_compose_2939:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2942
-do_concat_2941:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2412
+    tst x1, #1
+    b.eq do_concat_2412
+do_apply_2411:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2413
+do_concat_2412:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2942:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2945
-    tst x0, #1
-    b.ne do_compose_2943
-do_apply_2944:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2946
-do_compose_2943:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2946
-do_concat_2945:
-    mov x1, x0
-    mov x0, x9
+apply_end_2413:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2415
+    tst x1, #1
+    b.eq do_concat_2415
+do_apply_2414:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2416
+do_concat_2415:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2946:
-    b cond_end_2932
-cond_false_2931:
+apply_end_2416:
+    b cond_end_2405
+cond_false_2404:
     adr x0, sign_id
-cond_end_2932:
+cond_end_2405:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2881
+    b.ne blk_end_2363
     ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     adr x0, ast_apply
@@ -18393,68 +16803,62 @@ cond_end_2932:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2949
+    b.eq cmp_true_2419
     adr x0, sign_id
-    b cmp_end_2950
-cmp_true_2949:
-cmp_end_2950:
+    b cmp_end_2420
+cmp_true_2419:
+cmp_end_2420:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2947
+    b.eq cond_false_2417
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, compile_apply
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2953
-    tst x0, #1
-    b.ne do_compose_2951
-do_apply_2952:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2954
-do_compose_2951:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2954
-do_concat_2953:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2422
+    tst x1, #1
+    b.eq do_concat_2422
+do_apply_2421:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2423
+do_concat_2422:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2954:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2957
-    tst x0, #1
-    b.ne do_compose_2955
-do_apply_2956:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2958
-do_compose_2955:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2958
-do_concat_2957:
-    mov x1, x0
-    mov x0, x9
+apply_end_2423:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2425
+    tst x1, #1
+    b.eq do_concat_2425
+do_apply_2424:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2426
+do_concat_2425:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2958:
-    b cond_end_2948
-cond_false_2947:
+apply_end_2426:
+    b cond_end_2418
+cond_false_2417:
     adr x0, sign_id
-cond_end_2948:
+cond_end_2418:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2881
+    b.ne blk_end_2363
     ldr x0, [x29, #-64]
     str x0, [sp, #-16]!
     adr x0, ast_id
@@ -18462,75 +16866,69 @@ cond_end_2948:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_2961
+    b.eq cmp_true_2429
     adr x0, sign_id
-    b cmp_end_2962
-cmp_true_2961:
-cmp_end_2962:
+    b cmp_end_2430
+cmp_true_2429:
+cmp_end_2430:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2959
+    b.eq cond_false_2427
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, compile_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2965
-    tst x0, #1
-    b.ne do_compose_2963
-do_apply_2964:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2966
-do_compose_2963:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2966
-do_concat_2965:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2432
+    tst x1, #1
+    b.eq do_concat_2432
+do_apply_2431:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2433
+do_concat_2432:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2966:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2969
-    tst x0, #1
-    b.ne do_compose_2967
-do_apply_2968:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2970
-do_compose_2967:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2970
-do_concat_2969:
-    mov x1, x0
-    mov x0, x9
+apply_end_2433:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2435
+    tst x1, #1
+    b.eq do_concat_2435
+do_apply_2434:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2436
+do_concat_2435:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2970:
-    b cond_end_2960
-cond_false_2959:
+apply_end_2436:
+    b cond_end_2428
+cond_false_2427:
     adr x0, sign_id
-cond_end_2960:
+cond_end_2428:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2881
+    b.ne blk_end_2363
     adr x0, str_2
-blk_end_2881:
+blk_end_2363:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2879_2880:
-    // Closure for func_2879
+after_func_2361_2362:
+    // Closure for func_2361
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -18540,360 +16938,324 @@ after_func_2879_2880:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_2879
+    adr x1, func_2361
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2877_2878:
-    // Closure for func_2877
+after_func_2359_2360:
+    // Closure for func_2359
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2877
+    adr x1, func_2359
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_2872
-cond_false_2871:
+    b cond_end_2355
+cond_false_2354:
     adr x0, sign_id
-cond_end_2872:
+cond_end_2355:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, compile_id
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2975
-    tst x0, #1
-    b.ne do_compose_2973
-do_apply_2974:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2976
-do_compose_2973:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2976
-do_concat_2975:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2440
+    tst x1, #1
+    b.eq do_concat_2440
+do_apply_2439:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2441
+do_concat_2440:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2976:
+apply_end_2441:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_2971
-    b after_func_2977_2978
-func_2977:
+    b.eq cond_false_2437
+    b after_func_2442_2443
+func_2442:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     mov x0, #95
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2982
-    tst x0, #1
-    b.ne do_compose_2980
-do_apply_2981:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2983
-do_compose_2980:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2983
-do_concat_2982:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2446
+    tst x1, #1
+    b.eq do_concat_2446
+do_apply_2445:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2447
+do_concat_2446:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2983:
+apply_end_2447:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2986
-    tst x0, #1
-    b.ne do_compose_2984
-do_apply_2985:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2987
-do_compose_2984:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2987
-do_concat_2986:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2449
+    tst x1, #1
+    b.eq do_concat_2449
+do_apply_2448:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2450
+do_concat_2449:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2987:
+apply_end_2450:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2979
+    b.ne blk_end_2444
     adr x0, str_10
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2979
+    b.ne blk_end_2444
     adr x0, str_cat
     str x0, [sp, #-16]!
     adr x0, str_11
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2990
-    tst x0, #1
-    b.ne do_compose_2988
-do_apply_2989:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2991
-do_compose_2988:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2991
-do_concat_2990:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2452
+    tst x1, #1
+    b.eq do_concat_2452
+do_apply_2451:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2453
+do_concat_2452:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2991:
+apply_end_2453:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2994
-    tst x0, #1
-    b.ne do_compose_2992
-do_apply_2993:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2995
-do_compose_2992:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2995
-do_concat_2994:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2455
+    tst x1, #1
+    b.eq do_concat_2455
+do_apply_2454:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2456
+do_concat_2455:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2995:
+apply_end_2456:
     str x0, [sp, #-16]!
     adr x0, str_9
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_2998
-    tst x0, #1
-    b.ne do_compose_2996
-do_apply_2997:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_2999
-do_compose_2996:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_2999
-do_concat_2998:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2458
+    tst x1, #1
+    b.eq do_concat_2458
+do_apply_2457:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2459
+do_concat_2458:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_2999:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3002
-    tst x0, #1
-    b.ne do_compose_3000
-do_apply_3001:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3003
-do_compose_3000:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3003
-do_concat_3002:
-    mov x1, x0
-    mov x0, x9
+apply_end_2459:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2461
+    tst x1, #1
+    b.eq do_concat_2461
+do_apply_2460:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2462
+do_concat_2461:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3003:
+apply_end_2462:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2979
+    b.ne blk_end_2444
     adr x0, str_12
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_2979
+    b.ne blk_end_2444
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3006
-    tst x0, #1
-    b.ne do_compose_3004
-do_apply_3005:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3007
-do_compose_3004:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3007
-do_concat_3006:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2464
+    tst x1, #1
+    b.eq do_concat_2464
+do_apply_2463:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2465
+do_concat_2464:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3007:
+apply_end_2465:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3010
-    tst x0, #1
-    b.ne do_compose_3008
-do_apply_3009:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3011
-do_compose_3008:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3011
-do_concat_3010:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2467
+    tst x1, #1
+    b.eq do_concat_2467
+do_apply_2466:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2468
+do_concat_2467:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3011:
+apply_end_2468:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3014
-    tst x0, #1
-    b.ne do_compose_3012
-do_apply_3013:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3015
-do_compose_3012:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3015
-do_concat_3014:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2470
+    tst x1, #1
+    b.eq do_concat_2470
+do_apply_2469:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2471
+do_concat_2470:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3015:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3018
-    tst x0, #1
-    b.ne do_compose_3016
-do_apply_3017:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3019
-do_compose_3016:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3019
-do_concat_3018:
-    mov x1, x0
-    mov x0, x9
+apply_end_2471:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2473
+    tst x1, #1
+    b.eq do_concat_2473
+do_apply_2472:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2474
+do_concat_2473:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3019:
-blk_end_2979:
+apply_end_2474:
+blk_end_2444:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_2977_2978:
-    // Closure for func_2977
+after_func_2442_2443:
+    // Closure for func_2442
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_2977
+    adr x1, func_2442
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_2972
-cond_false_2971:
+    b cond_end_2438
+cond_false_2437:
     adr x0, sign_id
-cond_end_2972:
+cond_end_2438:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, compile_apply
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3024
-    tst x0, #1
-    b.ne do_compose_3022
-do_apply_3023:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3025
-do_compose_3022:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3025
-do_concat_3024:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2478
+    tst x1, #1
+    b.eq do_concat_2478
+do_apply_2477:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2479
+do_concat_2478:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3025:
+apply_end_2479:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_3020
-    b after_func_3026_3027
-func_3026:
+    b.eq cond_false_2475
+    b after_func_2480_2481
+func_2480:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -18907,7 +17269,7 @@ func_3026:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3028
+    b.ne blk_end_2482
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #16
@@ -18918,470 +17280,419 @@ func_3026:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3028
+    b.ne blk_end_2482
     adr x0, compile_expr
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3031
-    tst x0, #1
-    b.ne do_compose_3029
-do_apply_3030:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3032
-do_compose_3029:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3032
-do_concat_3031:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2484
+    tst x1, #1
+    b.eq do_concat_2484
+do_apply_2483:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2485
+do_concat_2484:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3032:
+apply_end_2485:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3035
-    tst x0, #1
-    b.ne do_compose_3033
-do_apply_3034:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3036
-do_compose_3033:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3036
-do_concat_3035:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2487
+    tst x1, #1
+    b.eq do_concat_2487
+do_apply_2486:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2488
+do_concat_2487:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3036:
+apply_end_2488:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3028
+    b.ne blk_end_2482
     adr x0, compile_expr
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3039
-    tst x0, #1
-    b.ne do_compose_3037
-do_apply_3038:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3040
-do_compose_3037:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3040
-do_concat_3039:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2490
+    tst x1, #1
+    b.eq do_concat_2490
+do_apply_2489:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2491
+do_concat_2490:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3040:
+apply_end_2491:
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3043
-    tst x0, #1
-    b.ne do_compose_3041
-do_apply_3042:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3044
-do_compose_3041:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3044
-do_concat_3043:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2493
+    tst x1, #1
+    b.eq do_concat_2493
+do_apply_2492:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2494
+do_concat_2493:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3044:
+apply_end_2494:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3028
+    b.ne blk_end_2482
     adr x0, str_13
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3028
+    b.ne blk_end_2482
     adr x0, str_14
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3028
+    b.ne blk_end_2482
     adr x0, str_15
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3028
+    b.ne blk_end_2482
     adr x0, str_16
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3028
+    b.ne blk_end_2482
     adr x0, str_17
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3028
+    b.ne blk_end_2482
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3047
-    tst x0, #1
-    b.ne do_compose_3045
-do_apply_3046:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3048
-do_compose_3045:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3048
-do_concat_3047:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2496
+    tst x1, #1
+    b.eq do_concat_2496
+do_apply_2495:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2497
+do_concat_2496:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3048:
+apply_end_2497:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-112]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3051
-    tst x0, #1
-    b.ne do_compose_3049
-do_apply_3050:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3052
-do_compose_3049:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3052
-do_concat_3051:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2499
+    tst x1, #1
+    b.eq do_concat_2499
+do_apply_2498:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2500
+do_concat_2499:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3052:
+apply_end_2500:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3055
-    tst x0, #1
-    b.ne do_compose_3053
-do_apply_3054:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3056
-do_compose_3053:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3056
-do_concat_3055:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2502
+    tst x1, #1
+    b.eq do_concat_2502
+do_apply_2501:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2503
+do_concat_2502:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3056:
+apply_end_2503:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-128]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3059
-    tst x0, #1
-    b.ne do_compose_3057
-do_apply_3058:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3060
-do_compose_3057:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3060
-do_concat_3059:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2505
+    tst x1, #1
+    b.eq do_concat_2505
+do_apply_2504:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2506
+do_concat_2505:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3060:
+apply_end_2506:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-144]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3063
-    tst x0, #1
-    b.ne do_compose_3061
-do_apply_3062:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3064
-do_compose_3061:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3064
-do_concat_3063:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2508
+    tst x1, #1
+    b.eq do_concat_2508
+do_apply_2507:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2509
+do_concat_2508:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3064:
+apply_end_2509:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-160]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3067
-    tst x0, #1
-    b.ne do_compose_3065
-do_apply_3066:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3068
-do_compose_3065:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3068
-do_concat_3067:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2511
+    tst x1, #1
+    b.eq do_concat_2511
+do_apply_2510:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2512
+do_concat_2511:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3068:
+apply_end_2512:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-176]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3071
-    tst x0, #1
-    b.ne do_compose_3069
-do_apply_3070:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3072
-do_compose_3069:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3072
-do_concat_3071:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2514
+    tst x1, #1
+    b.eq do_concat_2514
+do_apply_2513:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2515
+do_concat_2514:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3072:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3075
-    tst x0, #1
-    b.ne do_compose_3073
-do_apply_3074:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3076
-do_compose_3073:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3076
-do_concat_3075:
-    mov x1, x0
-    mov x0, x9
+apply_end_2515:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2517
+    tst x1, #1
+    b.eq do_concat_2517
+do_apply_2516:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2518
+do_concat_2517:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3076:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3079
-    tst x0, #1
-    b.ne do_compose_3077
-do_apply_3078:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3080
-do_compose_3077:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3080
-do_concat_3079:
-    mov x1, x0
-    mov x0, x9
+apply_end_2518:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2520
+    tst x1, #1
+    b.eq do_concat_2520
+do_apply_2519:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2521
+do_concat_2520:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3080:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3083
-    tst x0, #1
-    b.ne do_compose_3081
-do_apply_3082:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3084
-do_compose_3081:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3084
-do_concat_3083:
-    mov x1, x0
-    mov x0, x9
+apply_end_2521:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2523
+    tst x1, #1
+    b.eq do_concat_2523
+do_apply_2522:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2524
+do_concat_2523:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3084:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3087
-    tst x0, #1
-    b.ne do_compose_3085
-do_apply_3086:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3088
-do_compose_3085:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3088
-do_concat_3087:
-    mov x1, x0
-    mov x0, x9
+apply_end_2524:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2526
+    tst x1, #1
+    b.eq do_concat_2526
+do_apply_2525:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2527
+do_concat_2526:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3088:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3091
-    tst x0, #1
-    b.ne do_compose_3089
-do_apply_3090:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3092
-do_compose_3089:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3092
-do_concat_3091:
-    mov x1, x0
-    mov x0, x9
+apply_end_2527:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2529
+    tst x1, #1
+    b.eq do_concat_2529
+do_apply_2528:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2530
+do_concat_2529:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3092:
-blk_end_3028:
+apply_end_2530:
+blk_end_2482:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_3026_3027:
-    // Closure for func_3026
+after_func_2480_2481:
+    // Closure for func_2480
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_3026
+    adr x1, func_2480
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_3021
-cond_false_3020:
+    b cond_end_2476
+cond_false_2475:
     adr x0, sign_id
-cond_end_3021:
+cond_end_2476:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, compile_infix
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3097
-    tst x0, #1
-    b.ne do_compose_3095
-do_apply_3096:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3098
-do_compose_3095:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3098
-do_concat_3097:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2534
+    tst x1, #1
+    b.eq do_concat_2534
+do_apply_2533:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2535
+do_concat_2534:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3098:
+apply_end_2535:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_3093
-    b after_func_3099_3100
-func_3099:
+    b.eq cond_false_2531
+    b after_func_2536_2537
+func_2536:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_3101_3102
-func_3101:
+    b after_func_2538_2539
+func_2538:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -19399,7 +17710,7 @@ func_3101:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3103
+    b.ne blk_end_2540
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #16
@@ -19410,7 +17721,7 @@ func_3101:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3103
+    b.ne blk_end_2540
     ldr x0, [x29, #-48]
     str x0, [sp, #-16]!
     mov x0, #24
@@ -19421,925 +17732,820 @@ func_3101:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3103
+    b.ne blk_end_2540
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3106
-    tst x0, #1
-    b.ne do_compose_3104
-do_apply_3105:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3107
-do_compose_3104:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3107
-do_concat_3106:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2542
+    tst x1, #1
+    b.eq do_concat_2542
+do_apply_2541:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2543
+do_concat_2542:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3107:
+apply_end_2543:
     str x0, [sp, #-16]!
     mov x0, #58
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3110
-    tst x0, #1
-    b.ne do_compose_3108
-do_apply_3109:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3111
-do_compose_3108:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3111
-do_concat_3110:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2545
+    tst x1, #1
+    b.eq do_concat_2545
+do_apply_2544:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2546
+do_concat_2545:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3111:
+apply_end_2546:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3103
+    b.ne blk_end_2540
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, ;
     str x0, [sp, #-16]!
     adr x0, Match
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3117
-    tst x0, #1
-    b.ne do_compose_3115
-do_apply_3116:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3118
-do_compose_3115:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3118
-do_concat_3117:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2551
+    tst x1, #1
+    b.eq do_concat_2551
+do_apply_2550:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2552
+do_concat_2551:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3118:
+apply_end_2552:
     str x0, [sp, #-16]!
     adr x0, Case
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3121
-    tst x0, #1
-    b.ne do_compose_3119
-do_apply_3120:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3122
-do_compose_3119:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3122
-do_concat_3121:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2554
+    tst x1, #1
+    b.eq do_concat_2554
+do_apply_2553:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2555
+do_concat_2554:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3122:
+apply_end_2555:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_3113
+    b.eq cond_false_2548
     adr x0, val
     str x0, [sp, #-16]!
     adr x0, sign_id
-    b cond_end_3114
-cond_false_3113:
+    b cond_end_2549
+cond_false_2548:
     adr x0, sign_id
-cond_end_3114:
+cond_end_2549:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3112
+    b.ne blk_end_2547
     adr x0, compile_expr
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3125
-    tst x0, #1
-    b.ne do_compose_3123
-do_apply_3124:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3126
-do_compose_3123:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3126
-do_concat_3125:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2557
+    tst x1, #1
+    b.eq do_concat_2557
+do_apply_2556:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2558
+do_concat_2557:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3126:
+apply_end_2558:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3129
-    tst x0, #1
-    b.ne do_compose_3127
-do_apply_3128:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3130
-do_compose_3127:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3130
-do_concat_3129:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2560
+    tst x1, #1
+    b.eq do_concat_2560
+do_apply_2559:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2561
+do_concat_2560:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3130:
+apply_end_2561:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3112
+    b.ne blk_end_2547
     adr x0, compile_expr
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3133
-    tst x0, #1
-    b.ne do_compose_3131
-do_apply_3132:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3134
-do_compose_3131:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3134
-do_concat_3133:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2563
+    tst x1, #1
+    b.eq do_concat_2563
+do_apply_2562:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2564
+do_concat_2563:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3134:
+apply_end_2564:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3137
-    tst x0, #1
-    b.ne do_compose_3135
-do_apply_3136:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3138
-do_compose_3135:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3138
-do_concat_3137:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2566
+    tst x1, #1
+    b.eq do_concat_2566
+do_apply_2565:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2567
+do_concat_2566:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3138:
+apply_end_2567:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3112
+    b.ne blk_end_2547
     adr x0, str_18
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3112
+    b.ne blk_end_2547
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-160]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3141
-    tst x0, #1
-    b.ne do_compose_3139
-do_apply_3140:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3142
-do_compose_3139:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3142
-do_concat_3141:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2569
+    tst x1, #1
+    b.eq do_concat_2569
+do_apply_2568:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2570
+do_concat_2569:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3142:
+apply_end_2570:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     adr x0, str_19
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3145
-    tst x0, #1
-    b.ne do_compose_3143
-do_apply_3144:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3146
-do_compose_3143:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3146
-do_concat_3145:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2572
+    tst x1, #1
+    b.eq do_concat_2572
+do_apply_2571:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2573
+do_concat_2572:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3146:
+apply_end_2573:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3149
-    tst x0, #1
-    b.ne do_compose_3147
-do_apply_3148:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3150
-do_compose_3147:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3150
-do_concat_3149:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2575
+    tst x1, #1
+    b.eq do_concat_2575
+do_apply_2574:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2576
+do_concat_2575:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3150:
+apply_end_2576:
     str x0, [sp, #-16]!
     adr x0, str_9
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3153
-    tst x0, #1
-    b.ne do_compose_3151
-do_apply_3152:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3154
-do_compose_3151:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3154
-do_concat_3153:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2578
+    tst x1, #1
+    b.eq do_concat_2578
+do_apply_2577:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2579
+do_concat_2578:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3154:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3157
-    tst x0, #1
-    b.ne do_compose_3155
-do_apply_3156:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3158
-do_compose_3155:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3158
-do_concat_3157:
-    mov x1, x0
-    mov x0, x9
+apply_end_2579:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2581
+    tst x1, #1
+    b.eq do_concat_2581
+do_apply_2580:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2582
+do_concat_2581:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3158:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3161
-    tst x0, #1
-    b.ne do_compose_3159
-do_apply_3160:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3162
-do_compose_3159:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3162
-do_concat_3161:
-    mov x1, x0
-    mov x0, x9
+apply_end_2582:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2584
+    tst x1, #1
+    b.eq do_concat_2584
+do_apply_2583:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2585
+do_concat_2584:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3162:
+apply_end_2585:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3112
+    b.ne blk_end_2547
     adr x0, str_20
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3112
+    b.ne blk_end_2547
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-144]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3165
-    tst x0, #1
-    b.ne do_compose_3163
-do_apply_3164:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3166
-do_compose_3163:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3166
-do_concat_3165:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2587
+    tst x1, #1
+    b.eq do_concat_2587
+do_apply_2586:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2588
+do_concat_2587:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3166:
+apply_end_2588:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-176]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3169
-    tst x0, #1
-    b.ne do_compose_3167
-do_apply_3168:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3170
-do_compose_3167:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3170
-do_concat_3169:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2590
+    tst x1, #1
+    b.eq do_concat_2590
+do_apply_2589:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2591
+do_concat_2590:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3170:
+apply_end_2591:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-192]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3173
-    tst x0, #1
-    b.ne do_compose_3171
-do_apply_3172:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3174
-do_compose_3171:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3174
-do_concat_3173:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2593
+    tst x1, #1
+    b.eq do_concat_2593
+do_apply_2592:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2594
+do_concat_2593:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3174:
+apply_end_2594:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-208]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3177
-    tst x0, #1
-    b.ne do_compose_3175
-do_apply_3176:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3178
-do_compose_3175:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3178
-do_concat_3177:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2596
+    tst x1, #1
+    b.eq do_concat_2596
+do_apply_2595:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2597
+do_concat_2596:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3178:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3181
-    tst x0, #1
-    b.ne do_compose_3179
-do_apply_3180:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3182
-do_compose_3179:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3182
-do_concat_3181:
-    mov x1, x0
-    mov x0, x9
+apply_end_2597:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2599
+    tst x1, #1
+    b.eq do_concat_2599
+do_apply_2598:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2600
+do_concat_2599:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3182:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3185
-    tst x0, #1
-    b.ne do_compose_3183
-do_apply_3184:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3186
-do_compose_3183:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3186
-do_concat_3185:
-    mov x1, x0
-    mov x0, x9
+apply_end_2600:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2602
+    tst x1, #1
+    b.eq do_concat_2602
+do_apply_2601:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2603
+do_concat_2602:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3186:
-blk_end_3112:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3189
-    tst x0, #1
-    b.ne do_compose_3187
-do_apply_3188:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3190
-do_compose_3187:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3190
-do_concat_3189:
-    mov x1, x0
-    mov x0, x9
+apply_end_2603:
+blk_end_2547:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2605
+    tst x1, #1
+    b.eq do_concat_2605
+do_apply_2604:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2606
+do_concat_2605:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3190:
+apply_end_2606:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3103
+    b.ne blk_end_2540
     ldr x0, [x29, #-224]
     str x0, [sp, #-16]!
     mov x0, #0
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_3193
+    b.eq cmp_true_2609
     adr x0, sign_id
-    b cmp_end_3194
-cmp_true_3193:
-cmp_end_3194:
+    b cmp_end_2610
+cmp_true_2609:
+cmp_end_2610:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_3191
+    b.eq cond_false_2607
     adr x0, sign_id
     str x0, [sp, #-16]!
     adr x0, compile_expr
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3198
-    tst x0, #1
-    b.ne do_compose_3196
-do_apply_3197:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3199
-do_compose_3196:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3199
-do_concat_3198:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2613
+    tst x1, #1
+    b.eq do_concat_2613
+do_apply_2612:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2614
+do_concat_2613:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3199:
+apply_end_2614:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3202
-    tst x0, #1
-    b.ne do_compose_3200
-do_apply_3201:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3203
-do_compose_3200:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3203
-do_concat_3202:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2616
+    tst x1, #1
+    b.eq do_concat_2616
+do_apply_2615:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2617
+do_concat_2616:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3203:
+apply_end_2617:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3195
+    b.ne blk_end_2611
     adr x0, compile_expr
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3206
-    tst x0, #1
-    b.ne do_compose_3204
-do_apply_3205:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3207
-do_compose_3204:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3207
-do_concat_3206:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2619
+    tst x1, #1
+    b.eq do_concat_2619
+do_apply_2618:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2620
+do_concat_2619:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3207:
+apply_end_2620:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3210
-    tst x0, #1
-    b.ne do_compose_3208
-do_apply_3209:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3211
-do_compose_3208:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3211
-do_concat_3210:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2622
+    tst x1, #1
+    b.eq do_concat_2622
+do_apply_2621:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2623
+do_concat_2622:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3211:
+apply_end_2623:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3195
+    b.ne blk_end_2611
     adr x0, str_13
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3195
+    b.ne blk_end_2611
     adr x0, str_21
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3195
+    b.ne blk_end_2611
     adr x0, emit_op
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3214
-    tst x0, #1
-    b.ne do_compose_3212
-do_apply_3213:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3215
-do_compose_3212:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3215
-do_concat_3214:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2625
+    tst x1, #1
+    b.eq do_concat_2625
+do_apply_2624:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2626
+do_concat_2625:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3215:
+apply_end_2626:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3195
+    b.ne blk_end_2611
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-240]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3218
-    tst x0, #1
-    b.ne do_compose_3216
-do_apply_3217:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3219
-do_compose_3216:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3219
-do_concat_3218:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2628
+    tst x1, #1
+    b.eq do_concat_2628
+do_apply_2627:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2629
+do_concat_2628:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3219:
+apply_end_2629:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-272]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3222
-    tst x0, #1
-    b.ne do_compose_3220
-do_apply_3221:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3223
-do_compose_3220:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3223
-do_concat_3222:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2631
+    tst x1, #1
+    b.eq do_concat_2631
+do_apply_2630:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2632
+do_concat_2631:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3223:
+apply_end_2632:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-256]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3226
-    tst x0, #1
-    b.ne do_compose_3224
-do_apply_3225:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3227
-do_compose_3224:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3227
-do_concat_3226:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2634
+    tst x1, #1
+    b.eq do_concat_2634
+do_apply_2633:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2635
+do_concat_2634:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3227:
+apply_end_2635:
     str x0, [sp, #-16]!
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-288]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3230
-    tst x0, #1
-    b.ne do_compose_3228
-do_apply_3229:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3231
-do_compose_3228:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3231
-do_concat_3230:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2637
+    tst x1, #1
+    b.eq do_concat_2637
+do_apply_2636:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2638
+do_concat_2637:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3231:
+apply_end_2638:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-304]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3234
-    tst x0, #1
-    b.ne do_compose_3232
-do_apply_3233:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3235
-do_compose_3232:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3235
-do_concat_3234:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2640
+    tst x1, #1
+    b.eq do_concat_2640
+do_apply_2639:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2641
+do_concat_2640:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3235:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3238
-    tst x0, #1
-    b.ne do_compose_3236
-do_apply_3237:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3239
-do_compose_3236:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3239
-do_concat_3238:
-    mov x1, x0
-    mov x0, x9
+apply_end_2641:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2643
+    tst x1, #1
+    b.eq do_concat_2643
+do_apply_2642:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2644
+do_concat_2643:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3239:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3242
-    tst x0, #1
-    b.ne do_compose_3240
-do_apply_3241:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3243
-do_compose_3240:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3243
-do_concat_3242:
-    mov x1, x0
-    mov x0, x9
+apply_end_2644:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2646
+    tst x1, #1
+    b.eq do_concat_2646
+do_apply_2645:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2647
+do_concat_2646:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3243:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3246
-    tst x0, #1
-    b.ne do_compose_3244
-do_apply_3245:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3247
-do_compose_3244:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3247
-do_concat_3246:
-    mov x1, x0
-    mov x0, x9
+apply_end_2647:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2649
+    tst x1, #1
+    b.eq do_concat_2649
+do_apply_2648:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2650
+do_concat_2649:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3247:
-blk_end_3195:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3250
-    tst x0, #1
-    b.ne do_compose_3248
-do_apply_3249:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3251
-do_compose_3248:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3251
-do_concat_3250:
-    mov x1, x0
-    mov x0, x9
+apply_end_2650:
+blk_end_2611:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2652
+    tst x1, #1
+    b.eq do_concat_2652
+do_apply_2651:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2653
+do_concat_2652:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3251:
-    b cond_end_3192
-cond_false_3191:
+apply_end_2653:
+    b cond_end_2608
+cond_false_2607:
     adr x0, sign_id
-cond_end_3192:
-blk_end_3103:
+cond_end_2608:
+blk_end_2540:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_3101_3102:
-    // Closure for func_3101
+after_func_2538_2539:
+    // Closure for func_2538
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -20349,343 +18555,313 @@ after_func_3101_3102:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_3101
+    adr x1, func_2538
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_3099_3100:
-    // Closure for func_3099
+after_func_2536_2537:
+    // Closure for func_2536
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_3099
+    adr x1, func_2536
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_3094
-cond_false_3093:
+    b cond_end_2532
+cond_false_2531:
     adr x0, sign_id
-cond_end_3094:
+cond_end_2532:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, emit_op
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3256
-    tst x0, #1
-    b.ne do_compose_3254
-do_apply_3255:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3257
-do_compose_3254:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3257
-do_concat_3256:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2657
+    tst x1, #1
+    b.eq do_concat_2657
+do_apply_2656:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2658
+do_concat_2657:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3257:
+apply_end_2658:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_3252
-    b after_func_3258_3259
-func_3258:
+    b.eq cond_false_2654
+    b after_func_2659_2660
+func_2659:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3265
-    tst x0, #1
-    b.ne do_compose_3263
-do_apply_3264:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3266
-do_compose_3263:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3266
-do_concat_3265:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2665
+    tst x1, #1
+    b.eq do_concat_2665
+do_apply_2664:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2666
+do_concat_2665:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3266:
+apply_end_2666:
     str x0, [sp, #-16]!
     mov x0, #43
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3269
-    tst x0, #1
-    b.ne do_compose_3267
-do_apply_3268:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3270
-do_compose_3267:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3270
-do_concat_3269:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2668
+    tst x1, #1
+    b.eq do_concat_2668
+do_apply_2667:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2669
+do_concat_2668:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3270:
+apply_end_2669:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_3261
+    b.eq cond_false_2662
     adr x0, str_22
-    b cond_end_3262
-cond_false_3261:
+    b cond_end_2663
+cond_false_2662:
     adr x0, sign_id
-cond_end_3262:
+cond_end_2663:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3260
+    b.ne blk_end_2661
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3275
-    tst x0, #1
-    b.ne do_compose_3273
-do_apply_3274:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3276
-do_compose_3273:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3276
-do_concat_3275:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2673
+    tst x1, #1
+    b.eq do_concat_2673
+do_apply_2672:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2674
+do_concat_2673:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3276:
+apply_end_2674:
     str x0, [sp, #-16]!
     mov x0, #45
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3279
-    tst x0, #1
-    b.ne do_compose_3277
-do_apply_3278:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3280
-do_compose_3277:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3280
-do_concat_3279:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2676
+    tst x1, #1
+    b.eq do_concat_2676
+do_apply_2675:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2677
+do_concat_2676:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3280:
+apply_end_2677:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_3271
+    b.eq cond_false_2670
     adr x0, str_23
-    b cond_end_3272
-cond_false_3271:
+    b cond_end_2671
+cond_false_2670:
     adr x0, sign_id
-cond_end_3272:
+cond_end_2671:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3260
+    b.ne blk_end_2661
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3285
-    tst x0, #1
-    b.ne do_compose_3283
-do_apply_3284:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3286
-do_compose_3283:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3286
-do_concat_3285:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2681
+    tst x1, #1
+    b.eq do_concat_2681
+do_apply_2680:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2682
+do_concat_2681:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3286:
+apply_end_2682:
     str x0, [sp, #-16]!
     mov x0, #42
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3289
-    tst x0, #1
-    b.ne do_compose_3287
-do_apply_3288:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3290
-do_compose_3287:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3290
-do_concat_3289:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2684
+    tst x1, #1
+    b.eq do_concat_2684
+do_apply_2683:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2685
+do_concat_2684:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3290:
+apply_end_2685:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_3281
+    b.eq cond_false_2678
     adr x0, str_24
-    b cond_end_3282
-cond_false_3281:
+    b cond_end_2679
+cond_false_2678:
     adr x0, sign_id
-cond_end_3282:
+cond_end_2679:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3260
+    b.ne blk_end_2661
     adr x0, streq
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3295
-    tst x0, #1
-    b.ne do_compose_3293
-do_apply_3294:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3296
-do_compose_3293:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3296
-do_concat_3295:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2689
+    tst x1, #1
+    b.eq do_concat_2689
+do_apply_2688:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2690
+do_concat_2689:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3296:
+apply_end_2690:
     str x0, [sp, #-16]!
     mov x0, #124
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3299
-    tst x0, #1
-    b.ne do_compose_3297
-do_apply_3298:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3300
-do_compose_3297:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3300
-do_concat_3299:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2692
+    tst x1, #1
+    b.eq do_concat_2692
+do_apply_2691:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2693
+do_concat_2692:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3300:
+apply_end_2693:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_3291
+    b.eq cond_false_2686
     adr x0, str_25
-    b cond_end_3292
-cond_false_3291:
+    b cond_end_2687
+cond_false_2686:
     adr x0, sign_id
-cond_end_3292:
+cond_end_2687:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3260
+    b.ne blk_end_2661
     adr x0, str_26
-blk_end_3260:
+blk_end_2661:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_3258_3259:
-    // Closure for func_3258
+after_func_2659_2660:
+    // Closure for func_2659
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_3258
+    adr x1, func_2659
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_3253
-cond_false_3252:
+    b cond_end_2655
+cond_false_2654:
     adr x0, sign_id
-cond_end_3253:
+cond_end_2655:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, compile_block
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3305
-    tst x0, #1
-    b.ne do_compose_3303
-do_apply_3304:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3306
-do_compose_3303:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3306
-do_concat_3305:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2697
+    tst x1, #1
+    b.eq do_concat_2697
+do_apply_2696:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2698
+do_concat_2697:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3306:
+apply_end_2698:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_3301
-    b after_func_3307_3308
-func_3307:
+    b.eq cond_false_2694
+    b after_func_2699_2700
+func_2699:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
-    b after_func_3309_3310
-func_3309:
+    b after_func_2701_2702
+func_2701:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -20699,209 +18875,188 @@ func_3309:
     mov x1, x0
     ldr x0, [sp], #16
     cmp x0, x1
-    b.eq cmp_true_3314
+    b.eq cmp_true_2706
     adr x0, sign_id
-    b cmp_end_3315
-cmp_true_3314:
-cmp_end_3315:
+    b cmp_end_2707
+cmp_true_2706:
+cmp_end_2707:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_3312
+    b.eq cond_false_2704
     adr x0, str_2
-    b cond_end_3313
-cond_false_3312:
+    b cond_end_2705
+cond_false_2704:
     adr x0, sign_id
-cond_end_3313:
+cond_end_2705:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3311
+    b.ne blk_end_2703
     ldr x0, [x29, #-48]
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3311
+    b.ne blk_end_2703
     adr x0, compile_expr
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3318
-    tst x0, #1
-    b.ne do_compose_3316
-do_apply_3317:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3319
-do_compose_3316:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3319
-do_concat_3318:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2709
+    tst x1, #1
+    b.eq do_concat_2709
+do_apply_2708:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2710
+do_concat_2709:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3319:
+apply_end_2710:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3322
-    tst x0, #1
-    b.ne do_compose_3320
-do_apply_3321:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3323
-do_compose_3320:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3323
-do_concat_3322:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2712
+    tst x1, #1
+    b.eq do_concat_2712
+do_apply_2711:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2713
+do_concat_2712:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3323:
+apply_end_2713:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3311
+    b.ne blk_end_2703
     adr x0, compile_block
     str x0, [sp, #-16]!
     adr x0, tail
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3326
-    tst x0, #1
-    b.ne do_compose_3324
-do_apply_3325:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3327
-do_compose_3324:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3327
-do_concat_3326:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2715
+    tst x1, #1
+    b.eq do_concat_2715
+do_apply_2714:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2716
+do_concat_2715:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3327:
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3330
-    tst x0, #1
-    b.ne do_compose_3328
-do_apply_3329:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3331
-do_compose_3328:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3331
-do_concat_3330:
-    mov x1, x0
-    mov x0, x9
+apply_end_2716:
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2718
+    tst x1, #1
+    b.eq do_concat_2718
+do_apply_2717:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2719
+do_concat_2718:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3331:
+apply_end_2719:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3334
-    tst x0, #1
-    b.ne do_compose_3332
-do_apply_3333:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3335
-do_compose_3332:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3335
-do_concat_3334:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2721
+    tst x1, #1
+    b.eq do_concat_2721
+do_apply_2720:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2722
+do_concat_2721:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3335:
+apply_end_2722:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3311
+    b.ne blk_end_2703
     adr x0, str_cat
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3338
-    tst x0, #1
-    b.ne do_compose_3336
-do_apply_3337:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3339
-do_compose_3336:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3339
-do_concat_3338:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2724
+    tst x1, #1
+    b.eq do_concat_2724
+do_apply_2723:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2725
+do_concat_2724:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3339:
+apply_end_2725:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3342
-    tst x0, #1
-    b.ne do_compose_3340
-do_apply_3341:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3343
-do_compose_3340:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3343
-do_concat_3342:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2727
+    tst x1, #1
+    b.eq do_concat_2727
+do_apply_2726:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2728
+do_concat_2727:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3343:
-blk_end_3311:
+apply_end_2728:
+blk_end_2703:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_3309_3310:
-    // Closure for func_3309
+after_func_2701_2702:
+    // Closure for func_2701
     adr x0, sign_id
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
@@ -20911,55 +19066,52 @@ after_func_3309_3310:
     mov x1, x9
     bl _cons
     str x0, [sp, #-16]!
-    adr x1, func_3309
+    adr x1, func_2701
     ldr x0, [sp], #16
     bl _cons
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_3307_3308:
-    // Closure for func_3307
+after_func_2699_2700:
+    // Closure for func_2699
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_3307
+    adr x1, func_2699
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_3302
-cond_false_3301:
+    b cond_end_2695
+cond_false_2694:
     adr x0, sign_id
-cond_end_3302:
+cond_end_2695:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, main
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3348
-    tst x0, #1
-    b.ne do_compose_3346
-do_apply_3347:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3349
-do_compose_3346:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3349
-do_concat_3348:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2732
+    tst x1, #1
+    b.eq do_concat_2732
+do_apply_2731:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2733
+do_concat_2732:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3349:
+apply_end_2733:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_3344
-    b after_func_3350_3351
-func_3350:
+    b.eq cond_false_2729
+    b after_func_2734_2735
+func_2734:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -20968,300 +19120,270 @@ func_3350:
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3352
+    b.ne blk_end_2736
     adr x0, print_str
     str x0, [sp, #-16]!
     adr x0, str_28
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3355
-    tst x0, #1
-    b.ne do_compose_3353
-do_apply_3354:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3356
-do_compose_3353:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3356
-do_concat_3355:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2738
+    tst x1, #1
+    b.eq do_concat_2738
+do_apply_2737:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2739
+do_concat_2738:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3356:
+apply_end_2739:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3352
+    b.ne blk_end_2736
     adr x0, print_str
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3359
-    tst x0, #1
-    b.ne do_compose_3357
-do_apply_3358:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3360
-do_compose_3357:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3360
-do_concat_3359:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2741
+    tst x1, #1
+    b.eq do_concat_2741
+do_apply_2740:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2742
+do_concat_2741:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3360:
+apply_end_2742:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3352
+    b.ne blk_end_2736
     adr x0, print_char
     str x0, [sp, #-16]!
     mov x0, #10
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3363
-    tst x0, #1
-    b.ne do_compose_3361
-do_apply_3362:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3364
-do_compose_3361:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3364
-do_concat_3363:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2744
+    tst x1, #1
+    b.eq do_concat_2744
+do_apply_2743:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2745
+do_concat_2744:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3364:
+apply_end_2745:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3352
+    b.ne blk_end_2736
     adr x0, init_lexer
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3367
-    tst x0, #1
-    b.ne do_compose_3365
-do_apply_3366:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3368
-do_compose_3365:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3368
-do_concat_3367:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2747
+    tst x1, #1
+    b.eq do_concat_2747
+do_apply_2746:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2748
+do_concat_2747:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3368:
+apply_end_2748:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3352
+    b.ne blk_end_2736
     adr x0, tokenize
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3371
-    tst x0, #1
-    b.ne do_compose_3369
-do_apply_3370:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3372
-do_compose_3369:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3372
-do_concat_3371:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2750
+    tst x1, #1
+    b.eq do_concat_2750
+do_apply_2749:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2751
+do_concat_2750:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3372:
+apply_end_2751:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3352
+    b.ne blk_end_2736
     adr x0, init_parser
     str x0, [sp, #-16]!
     ldr x0, [x29, #-64]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3375
-    tst x0, #1
-    b.ne do_compose_3373
-do_apply_3374:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3376
-do_compose_3373:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3376
-do_concat_3375:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2753
+    tst x1, #1
+    b.eq do_concat_2753
+do_apply_2752:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2754
+do_concat_2753:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3376:
+apply_end_2754:
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3352
+    b.ne blk_end_2736
     adr x0, parse_program
     str x0, [sp, #-16]!
     mov x0, #0
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3379
-    tst x0, #1
-    b.ne do_compose_3377
-do_apply_3378:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3380
-do_compose_3377:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3380
-do_concat_3379:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2756
+    tst x1, #1
+    b.eq do_concat_2756
+do_apply_2755:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2757
+do_concat_2756:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3380:
+apply_end_2757:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3352
+    b.ne blk_end_2736
     adr x0, compile_program
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3383
-    tst x0, #1
-    b.ne do_compose_3381
-do_apply_3382:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3384
-do_compose_3381:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3384
-do_concat_3383:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2759
+    tst x1, #1
+    b.eq do_concat_2759
+do_apply_2758:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2760
+do_concat_2759:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3384:
+apply_end_2760:
     str x0, [sp, #-16]!
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
-    b.ne blk_end_3352
+    b.ne blk_end_2736
     adr x0, print_str
     str x0, [sp, #-16]!
     ldr x0, [x29, #-96]
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3387
-    tst x0, #1
-    b.ne do_compose_3385
-do_apply_3386:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3388
-do_compose_3385:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3388
-do_concat_3387:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2762
+    tst x1, #1
+    b.eq do_concat_2762
+do_apply_2761:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2763
+do_concat_2762:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3388:
-blk_end_3352:
+apply_end_2763:
+blk_end_2736:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_3350_3351:
-    // Closure for func_3350
+after_func_2734_2735:
+    // Closure for func_2734
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_3350
+    adr x1, func_2734
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_3345
-cond_false_3344:
+    b cond_end_2730
+cond_false_2729:
     adr x0, sign_id
-cond_end_3345:
+cond_end_2730:
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
     adr x0, #
     str x0, [sp, #-16]!
     adr x0, compile_program
-    ldr x9, [sp], #16
-    tst x9, #1
-    b.eq do_concat_3393
-    tst x0, #1
-    b.ne do_compose_3391
-do_apply_3392:
-    bic x9, x9, #1
-    ldr x10, [x9]
-    ldr x9, [x9, #8]
-    blr x10
-    b apply_end_3394
-do_compose_3391:
-    mov x1, x0
-    mov x0, x9
-    bl _compose
-    b apply_end_3394
-do_concat_3393:
-    mov x1, x0
-    mov x0, x9
+    ldr x1, [sp], #16
+    adr x9, heap_buffer
+    cmp x1, x9
+    b.lo do_concat_2767
+    tst x1, #1
+    b.eq do_concat_2767
+do_apply_2766:
+    bic x1, x1, #1
+    ldr x2, [x1]
+    ldr x9, [x1, #8]
+    blr x2
+    b apply_end_2768
+do_concat_2767:
+    mov x2, x0
+    mov x0, x1
+    mov x1, x2
     bl _concat
-apply_end_3394:
+apply_end_2768:
     adr x9, sign_id
     cmp x0, x9
-    b.eq cond_false_3389
-    b after_func_3395_3396
-func_3395:
+    b.eq cond_false_2764
+    b after_func_2769_2770
+func_2769:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
     str x0, [sp, #-16]!
@@ -21269,17 +19391,17 @@ func_3395:
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
-after_func_3395_3396:
-    // Closure for func_3395
+after_func_2769_2770:
+    // Closure for func_2769
     adr x0, sign_id
     str x0, [sp, #-16]!
-    adr x1, func_3395
+    adr x1, func_2769
     ldr x0, [sp], #16
     bl _cons
-    b cond_end_3390
-cond_false_3389:
+    b cond_end_2765
+cond_false_2764:
     adr x0, sign_id
-cond_end_3390:
+cond_end_2765:
 blk_end_0:
 
 

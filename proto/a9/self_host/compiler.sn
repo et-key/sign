@@ -83,17 +83,34 @@ ast_char : 12
 				(asm_func ? (ctx_func ?
 					(res_arg ?
 						(asm_arg ? (ctx_arg ?
-							(asm_func~ 
-								(`    str x0, [sp, #-16]!\n` ,
-									(asm_arg ~
-										(`    ldr x1, [sp], #16\n` ,
-											`    ldr x2, [x1]\n` ,
-											`    ldr x9, [x1, #8]\n` ,
-											`    blr x2\n` , 0
+							(lbl_concat ? (res_lbl_concat ? (ctx_lbl_concat ?
+								(lbl_end ? (res_lbl_end ? (ctx_lbl_end ?
+									(asm_func~ 
+										(`    str x0, [sp, #-16]!\n` ,
+											(asm_arg ~
+												(`    ldr x1, [sp], #16\n` ,
+													`    adr x9, heap_buffer\n` ,
+													`    cmp x1, x9\n` ,
+													(concat `    b.lo ` (concat lbl_concat `\n`)) ,
+													`    tst x1, #1\n` ,
+													(concat `    b.eq ` (concat lbl_concat `\n`)) ,
+													`    bic x1, x1, #1\n` ,
+													`    ldr x2, [x1]\n` ,
+													`    ldr x9, [x1, #8]\n` ,
+													`    blr x2\n` ,
+													(concat `    b ` (concat lbl_end `\n`)) ,
+													(concat lbl_concat `:\n`) ,
+													`    mov x2, x0\n` ,
+													`    mov x0, x1\n` ,
+													`    mov x1, x2\n` ,
+													`    bl _concat\n` ,
+													(concat lbl_end `:\n`) , 0
+												)
+											)
 										)
-									)
-								)
-							) , ctx_arg , 0
+									) , ctx_lbl_end , 0
+								) (ctx_from_res res_lbl_end) ) (new_label ctx_lbl_concat `apply_end`) )
+							) (ctx_from_res res_lbl_concat) ) (new_label ctx_arg `do_concat`) )
 						) (ctx_from_res res_arg) ) (asm_from_res res_arg)
 					) (compile_node arg ctx_func)
 				) (ctx_from_res res_func) ) (asm_from_res res_func)
@@ -371,7 +388,8 @@ ast_char : 12
 														`    str x0, [sp, #-16]!\n` ,
 															(concat `    adr x1, ` (concat lbl_func `\n`)) ,
 																`    ldr x0, [sp], #16\n` ,
-																	`    bl _cons\n` , 0
+																	`    bl _cons\n` ,
+																		`    orr x0, x0, #1 // Tag closure\n` , 0
 									)
 								)) , ctx_body , 0
 						) (ctx_from_res res_body) ) (asm_from_res res_body)
