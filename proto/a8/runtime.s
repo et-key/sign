@@ -131,6 +131,9 @@ _concat:
     // x0 = A, x1 = B
     // Return: if A is scalar -> cons(A, B)
     //         if A is List -> cons(Head(A), concat(Tail(A), B))
+    //         if A == 0 (nil) -> return B
+    cbz x0, .Lconcat_empty
+
     stp x29, x30, [sp, #-32]!
     mov x29, sp
 
@@ -167,6 +170,10 @@ _concat:
     mov x1, x2  // x1 = A
     bl _cons
     ldp x29, x30, [sp], #32
+    ret
+
+.Lconcat_empty:
+    mov x0, x1
     ret
 
 _nth:

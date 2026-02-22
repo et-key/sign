@@ -47,7 +47,7 @@ ast_char : 12
 	(content ?
 		(res_add ? 
 			(lbl ? (new_ctx ?
-				(emit (concat `    adr x0, ` (concat lbl `\n`)) 0) , new_ctx , 0
+				((concat `    adr x0, ` (concat lbl `\n`)) , 0) , new_ctx , 0
 			) (ctx_from_res res_add) ) (head res_add)
 		) (add_string ctx content)
 	) (tok_val node)
@@ -185,7 +185,7 @@ ast_char : 12
 	) (alloc 2)
 
 #emit_num : val rest ?
-	concat (int_to_str val) rest
+	(concat (int_to_str val) rest)
 
 `--- Label Helpers ---`
 #make_label : prefix count ?
@@ -227,18 +227,18 @@ ast_char : 12
 		type = ast_apply : compile_apply node ctx
 		
 		`Default`
-		((emit `    // Unknown Node Type\n` 0) , 0) , ctx , 0
+		((`    // Unknown Node Type\n` , 0) , ctx , 0)
 	) (head node)
 
 `--- Node Compilers ---`
 
 #compile_num : node ctx ?
 	(val ? 
-		(emit `    mov x0, #` (emit_num val (emit `\n` 0))) , ctx , 0
+		((concat `    mov x0, #` (concat (int_to_str val) `\n`)) , 0) , ctx , 0
 	) (head (tail node))
 
 #compile_unit : node ctx ?
-	(emit `    adr x0, sign_id\n` 0) , ctx , 0
+	(`    adr x0, sign_id\n` , 0) , ctx , 0
 
 #compile_prefix : node ctx ?
 	(op ? (expr ?
@@ -252,7 +252,7 @@ ast_char : 12
 
 #compile_prefix_at : expr ctx ?
 	(expr_is_zero_num expr) : (
-		(emit `    bl _read_char\n` 0) , ctx , 0
+		(`    bl _read_char\n` , 0) , ctx , 0
 	)
 	
 	(res ?
@@ -331,7 +331,7 @@ ast_char : 12
 		(streq op \?) : (compile_lambda node ctx)
 
 		`Default`
-		((emit (concat `    // Unknown Infix: ` (concat op `\n`)) 0) , 0) , ctx , 0
+		((concat `    // Unknown Infix: ` (concat op `\n`)) , 0) , ctx , 0
 		
 	) (tok_val (head (tail node))) 
 
@@ -493,7 +493,7 @@ ast_char : 12
 #compile_block : node ctx ?
 	(stmts ?
 		stmts = 0 : (
-			(emit `    adr x0, sign_id\n` 0) , ctx , 0
+			(`    adr x0, sign_id\n` , 0) , ctx , 0
 		)
 		
 		(lbl_end ? 
