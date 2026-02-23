@@ -1,0 +1,1437 @@
+commit d2667f920130a80e4daf70c55b3421ec98e2a2a9
+Author: et-key <etkey0x0@gmail.com>
+Date:   Sun Feb 22 19:57:58 2026 +0900
+
+    update : a9(parser.sn??exer.sn????)
+
+diff --git a/proto/a9/self_host/parser.sn b/proto/a9/self_host/parser.sn
+index a3970fc..dacb105 100644
+--- a/proto/a9/self_host/parser.sn
++++ b/proto/a9/self_host/parser.sn
+@@ -241,13 +241,13 @@ tok_unit : 0
+ 	tokens_next : next tokens
+ 	val : tok_val tok
+ ?
+-	type = tok_num : (ast_num , val , 0) , (tokens_next , 0)
+-	type = tok_id : (ast_id , val , 0) , (tokens_next , 0)
+-	type = tok_str : (ast_str , val , 0) , (tokens_next , 0)
++	type = tok_num : (ast_num , (val , 0)) , (tokens_next , 0)
++	type = tok_id : (ast_id , (val , 0)) , (tokens_next , 0)
++	type = tok_str : (ast_str , (val , 0)) , (tokens_next , 0)
+ 	
+ 	type = tok_op : (
+ 		is_prefix_op val : _parse_prefix val tokens_next in_block
+-		(ast_op , val , 0) , (tokens_next , 0)
++		(ast_op , (val , 0)) , (tokens_next , 0)
+ 	)
+ 	
+ 	type = tok_punc : (
+@@ -266,7 +266,7 @@ tok_unit : 0
+ 	in_block
+ 	res : parse_expr tokens_next 20 in_block
+ ?
+-	(ast_prefix , op , (head res) , 0) , ((head (tail res)) , 0)
++	(ast_prefix , (op , ((head res) , 0))) , ((head (tail res)) , 0)
+ 
+ 
+ 
+@@ -289,14 +289,14 @@ tok_unit : 0
+ 	0
+ 
+ `--- AST Constructors ---`
+-#make_node : type val ? type , val , 0
++#make_node : type val ? type , (val , 0)
+ 
+ #make_num : val ? make_node ast_num val
+ #make_id : val ? make_node ast_id val
+ #make_op : val ? make_node ast_op val
+ #make_str : val ? make_node ast_str val
+ 
+-#make_infix : op lhs rhs ? ast_infix , op , lhs , rhs , 0
++#make_infix : op lhs rhs ? ast_infix , (op , (lhs , (rhs , 0)))
+ 
+ #make_lambda : params body ? make_infix \? params body
+ 
+
+commit fc1958eea02b900d91101b6af0a31dc2f6ded2b0
+Author: et-key <etkey0x0@gmail.com>
+Date:   Sun Feb 22 19:35:19 2026 +0900
+
+    update : a9(parser.sn??exer.sn????)
+
+diff --git a/proto/a9/self_host/parser.sn b/proto/a9/self_host/parser.sn
+index f2ae705..a3970fc 100644
+--- a/proto/a9/self_host/parser.sn
++++ b/proto/a9/self_host/parser.sn
+@@ -120,7 +120,7 @@ tok_unit : 0
+ 	tokens
+ 	res : parse_stmts tokens 0
+ ?
+-	(ast_block , (head res)) , ((head (tail res)) , 0)
++	(ast_block , (head res) , 0) , ((head (tail res)) , 0)
+ 
+ `parse_stmts : tokens in_block -> [list<node>, rest]`
+ #parse_stmts :
+@@ -241,13 +241,13 @@ tok_unit : 0
+ 	tokens_next : next tokens
+ 	val : tok_val tok
+ ?
+-	type = tok_num : (ast_num , (val , 0)) , (tokens_next , 0)
+-	type = tok_id : (ast_id , (val , 0)) , (tokens_next , 0)
+-	type = tok_str : (ast_str , (val , 0)) , (tokens_next , 0)
++	type = tok_num : (ast_num , val , 0) , (tokens_next , 0)
++	type = tok_id : (ast_id , val , 0) , (tokens_next , 0)
++	type = tok_str : (ast_str , val , 0) , (tokens_next , 0)
+ 	
+ 	type = tok_op : (
+ 		is_prefix_op val : _parse_prefix val tokens_next in_block
+-		(ast_op , (val , 0)) , (tokens_next , 0)
++		(ast_op , val , 0) , (tokens_next , 0)
+ 	)
+ 	
+ 	type = tok_punc : (
+@@ -266,7 +266,7 @@ tok_unit : 0
+ 	in_block
+ 	res : parse_expr tokens_next 20 in_block
+ ?
+-	(ast_prefix , (op , ((head res) , 0))) , ((head (tail res)) , 0)
++	(ast_prefix , op , (head res) , 0) , ((head (tail res)) , 0)
+ 
+ 
+ 
+@@ -289,14 +289,14 @@ tok_unit : 0
+ 	0
+ 
+ `--- AST Constructors ---`
+-#make_node : type val ? type , (val , 0)
++#make_node : type val ? type , val , 0
+ 
+ #make_num : val ? make_node ast_num val
+ #make_id : val ? make_node ast_id val
+ #make_op : val ? make_node ast_op val
+ #make_str : val ? make_node ast_str val
+ 
+-#make_infix : op lhs rhs ? ast_infix , (op , (lhs , (rhs , 0)))
++#make_infix : op lhs rhs ? ast_infix , op , lhs , rhs , 0
+ 
+ #make_lambda : params body ? make_infix \? params body
+ 
+
+commit 6d1b1319c96351c55e9a37f31df7e427a4c0b6f8
+Author: et-key <etkey0x0@gmail.com>
+Date:   Sun Feb 22 14:06:19 2026 +0900
+
+    update : a9(~?????ompiler.sn????)
+
+diff --git a/proto/a9/self_host/parser.sn b/proto/a9/self_host/parser.sn
+index 5fa044a..f2ae705 100644
+--- a/proto/a9/self_host/parser.sn
++++ b/proto/a9/self_host/parser.sn
+@@ -68,7 +68,7 @@ tok_unit : 0
+ 	streq op_str \< : 14
+ 	streq op_str \> : 14
+ 	streq op_str \^ : 17
+-	streq op_str \~ : (in_block ? 9 | 0)
++	streq op_str \~ : 9
+ 	streq op_str `~+` : 9
+ 	streq op_str `~-` : 9
+ 	streq op_str `~*` : 9
+@@ -187,7 +187,7 @@ tok_unit : 0
+ 	new_lhs_post : ast_postfix , (op_str , (lhs , 0))
+ ?
+ 	`Check for Apply (Implicit)`
+-	(can_start_expr type) : (
++	(can_start_expr type) & (6 >= min_prec) : (
+ 		`Apply: lhs next_expr`
+ 		_parse_expr_loop new_lhs_apply rest_rhs_apply min_prec in_block
+ 	)
+@@ -228,7 +228,7 @@ tok_unit : 0
+ 
+ #get_postfix_prec : op_str in_block ?
+ 	streq op_str \! : 999
+-	streq op_str \~ : (in_block ? 0 | 23)
++	streq op_str \~ : 23
+ 	streq op_str \@ : 999
+ 	0
+ 
+
+commit 601e56f8fde10d8419b81239126bf1860bfe0dd8
+Author: et-key <etkey0x0@gmail.com>
+Date:   Sun Feb 22 12:36:41 2026 +0900
+
+    update : a9(parser????)
+
+diff --git a/proto/a9/self_host/parser.sn b/proto/a9/self_host/parser.sn
+index 28c6a4d..5fa044a 100644
+--- a/proto/a9/self_host/parser.sn
++++ b/proto/a9/self_host/parser.sn
+@@ -49,7 +49,7 @@ tok_unit : 0
+ 	streq (s1 + 1) (s2 + 1)
+ 
+ `--- Precedence Table (Pure) ---`
+-#get_prec : op_str ?
++#get_prec : op_str in_block ?
+ 	streq op_str \+ : 15
+ 	streq op_str \- : 15
+ 	streq op_str \* : 16
+@@ -68,7 +68,7 @@ tok_unit : 0
+ 	streq op_str \< : 14
+ 	streq op_str \> : 14
+ 	streq op_str \^ : 17
+-	streq op_str \~ : 9
++	streq op_str \~ : (in_block ? 9 | 0)
+ 	streq op_str `~+` : 9
+ 	streq op_str `~-` : 9
+ 	streq op_str `~*` : 9
+@@ -118,23 +118,24 @@ tok_unit : 0
+ `parse_program : tokens -> [ast_block, rest]`
+ #parse_program :
+ 	tokens
+-	res : parse_stmts tokens
++	res : parse_stmts tokens 0
+ ?
+ 	(ast_block , (head res)) , ((head (tail res)) , 0)
+ 
+-`parse_stmts : tokens -> [list<node>, rest]`
++`parse_stmts : tokens in_block -> [list<node>, rest]`
+ #parse_stmts :
+ 	tokens
++	in_block
+ 	tok : peek tokens
+ 	type : tok_type tok
+-	res : parse_expr tokens 0
++	res : parse_expr tokens 0 in_block
+ 	expr : head res
+ 	rest : head (tail res)
+-	res2 : parse_stmts rest
++	res2 : parse_stmts rest in_block
+ ?
+ 	type = tok_eof : 0 , (tokens , 0)
+ 	
+-	type = tok_sep : parse_stmts (next tokens)
++	type = tok_sep : parse_stmts (next tokens) in_block
+ 	
+ 	`Parse Expression`
+ 	(expr , (head res2)) , ((head (tail res2)) , 0)
+@@ -142,54 +143,66 @@ tok_unit : 0
+ 
+ `parse_block : tokens -> [ast_block, rest]`
+ #parse_block : tokens ?
+-	`TODO: Block logic, Section logic`
+-	parse_program tokens `Temporary: Treat block same as program for now`
++	parse_block_impl tokens
+ 
+-`parse_expr : tokens min_prec -> [node, rest]`
++`parse_expr : tokens min_prec in_block -> [node, rest]`
+ #parse_expr :
+ 	tokens 
+ 	min_prec
+-	res_lhs : parse_primary tokens
++	in_block
++	res_lhs : parse_primary tokens in_block
+ 	lhs : head res_lhs
+ 	rest_1 : head (tail res_lhs)
+ ?
+-	_parse_expr_loop lhs rest_1 min_prec
++	_parse_expr_loop lhs rest_1 min_prec in_block
+ 
+-`_parse_expr_loop : lhs tokens min_prec -> [node, rest]`
++`_parse_expr_loop : lhs tokens min_prec in_block -> [node, rest]`
+ #_parse_expr_loop :
+ 	lhs 
+ 	tokens 
+ 	min_prec
++	in_block
+ 	tok : peek tokens
+ 	type : tok_type tok
+ 	
+ 	`Apply vars`
+-	res_rhs_apply : parse_expr tokens 6
++	res_rhs_apply : parse_expr tokens 6 in_block
+ 	rhs_apply : head res_rhs_apply
+ 	rest_rhs_apply : head (tail res_rhs_apply)
+ 	new_lhs_apply : ast_apply , (lhs , (rhs_apply , 0))
+ 	
+ 	`Infix vars`
+ 	op_str : tok_val tok
+-	prec : get_prec op_str
++	prec : get_prec op_str in_block
+ 	next_tokens : next tokens
+ 	next_min_prec : (is_right_assoc op_str) ? prec | (prec + 1)
+-	res_rhs_infix : parse_expr next_tokens next_min_prec
++	res_rhs_infix : parse_expr next_tokens next_min_prec in_block
+ 	rhs_infix : head res_rhs_infix
+ 	rest_rhs_infix : head (tail res_rhs_infix)
+ 	new_lhs_infix : ast_infix , (op_str , (lhs , (rhs_infix , 0)))
++
++	`Postfix vars`
++	is_post : is_postfix_op op_str
++	post_prec : get_postfix_prec op_str in_block
++	new_lhs_post : ast_postfix , (op_str , (lhs , 0))
+ ?
+ 	`Check for Apply (Implicit)`
+ 	(can_start_expr type) : (
+ 		`Apply: lhs next_expr`
+-		_parse_expr_loop new_lhs_apply rest_rhs_apply min_prec
++		_parse_expr_loop new_lhs_apply rest_rhs_apply min_prec in_block
+ 	)
+ 	
+ 	type != tok_op : lhs , (tokens , 0)
++
++	is_post & (post_prec >= min_prec) : (
++		_parse_expr_loop new_lhs_post next_tokens min_prec in_block
++	)
+ 	
+ 	prec < min_prec : lhs , (tokens , 0)
+ 	
+-	_parse_expr_loop new_lhs_infix rest_rhs_infix min_prec
++	prec = 0 : lhs , (tokens , 0)
++	
++	_parse_expr_loop new_lhs_infix rest_rhs_infix min_prec in_block
+ 
+ #can_start_expr : type ?
+ 	type = tok_id : 1
+@@ -207,9 +220,22 @@ tok_unit : 0
+ 	streq op `!!` : 1
+ 	0
+ 
+-`parse_primary : tokens -> [node, rest]`
++#is_postfix_op : op ?
++	streq op \! : 1
++	streq op \~ : 1
++	streq op \@ : 1
++	0
++
++#get_postfix_prec : op_str in_block ?
++	streq op_str \! : 999
++	streq op_str \~ : (in_block ? 0 | 23)
++	streq op_str \@ : 999
++	0
++
++`parse_primary : tokens in_block -> [node, rest]`
+ #parse_primary :
+ 	tokens
++	in_block
+ 	tok : peek tokens
+ 	type : tok_type tok
+ 	tokens_next : next tokens
+@@ -220,7 +246,7 @@ tok_unit : 0
+ 	type = tok_str : (ast_str , (val , 0)) , (tokens_next , 0)
+ 	
+ 	type = tok_op : (
+-		is_prefix_op val : _parse_prefix val tokens_next
++		is_prefix_op val : _parse_prefix val tokens_next in_block
+ 		(ast_op , (val , 0)) , (tokens_next , 0)
+ 	)
+ 	
+@@ -237,7 +263,8 @@ tok_unit : 0
+ #_parse_prefix :
+ 	op
+ 	tokens_next
+-	res : parse_expr tokens_next 20
++	in_block
++	res : parse_expr tokens_next 20 in_block
+ ?
+ 	(ast_prefix , (op , ((head res) , 0))) , ((head (tail res)) , 0)
+ 
+@@ -247,7 +274,7 @@ tok_unit : 0
+ `parse_block : tokens -> [node, rest]`
+ #parse_block_impl :
+ 	tokens
+-	res : parse_stmts tokens
++	res : parse_stmts tokens 1
+ 	exprs : head res
+ 	rest : head (tail res)
+ 	tok_r : peek rest
+
+commit 57ce4a7ac083093767a2206eeaeb2e48421bf305
+Author: et-key <etkey0x0@gmail.com>
+Date:   Sun Feb 22 10:55:45 2026 +0900
+
+    update : a9(??????????)
+
+diff --git a/proto/a9/self_host/parser.sn b/proto/a9/self_host/parser.sn
+index 011f4e5..28c6a4d 100644
+--- a/proto/a9/self_host/parser.sn
++++ b/proto/a9/self_host/parser.sn
+@@ -55,6 +55,11 @@ tok_unit : 0
+ 	streq op_str \* : 16
+ 	streq op_str \/ : 16
+ 	streq op_str \% : 16
++	streq op_str `>=` : 14
++	streq op_str `!=` : 14
++	streq op_str \| : 12
++	streq op_str \& : 13
++	streq op_str \; : 11
+ 	streq op_str \: : 2
+ 	streq op_str \? : 5
+ 	streq op_str \, : 6
+@@ -62,9 +67,20 @@ tok_unit : 0
+ 	streq op_str `==` : 14
+ 	streq op_str \< : 14
+ 	streq op_str \> : 14
+-	streq op_str `<=` : 14
+-	streq op_str `>=` : 14
+-	streq op_str `!=` : 14
++	streq op_str \^ : 17
++	streq op_str \~ : 9
++	streq op_str `~+` : 9
++	streq op_str `~-` : 9
++	streq op_str `~*` : 9
++	streq op_str `~/` : 9
++	streq op_str `~^` : 9
++	streq op_str \' : 22
++	streq op_str \@ : 22
++	streq op_str `<<` : 24
++	streq op_str `>>` : 24
++	streq op_str `||` : 25
++	streq op_str `;;` : 26
++	streq op_str `&&` : 27
+ 	0
+ 
+ #is_right_assoc : op_str ?
+@@ -72,6 +88,7 @@ tok_unit : 0
+ 	streq op_str \? : 1
+ 	streq op_str \, : 1
+ 	streq op_str \^ : 1
++	streq op_str \@ : 1
+ 	0
+ 
+ `--- Parser Helpers ---`
+@@ -186,6 +203,8 @@ tok_unit : 0
+ 	streq op \# : 1
+ 	streq op \$ : 1
+ 	streq op \@ : 1 
++	streq op \~ : 1
++	streq op `!!` : 1
+ 	0
+ 
+ `parse_primary : tokens -> [node, rest]`
+
+commit 61b86f644734eb9b1384ad7366484dba4fb3ae2e
+Author: et-key <etkey0x0@gmail.com>
+Date:   Sun Feb 22 07:24:30 2026 +0900
+
+    update : a9(?????????????????)
+
+diff --git a/proto/a9/self_host/parser.sn b/proto/a9/self_host/parser.sn
+index f686d41..011f4e5 100644
+--- a/proto/a9/self_host/parser.sn
++++ b/proto/a9/self_host/parser.sn
+@@ -50,28 +50,28 @@ tok_unit : 0
+ 
+ `--- Precedence Table (Pure) ---`
+ #get_prec : op_str ?
+-	streq op_str `+` : 15
+-	streq op_str `-` : 15
+-	streq op_str `*` : 16
+-	streq op_str `/` : 16
+-	streq op_str `%` : 16
+-	streq op_str `:` : 2
+-	streq op_str `?` : 5
+-	streq op_str `,` : 6
+-	streq op_str `=` : 14
++	streq op_str \+ : 15
++	streq op_str \- : 15
++	streq op_str \* : 16
++	streq op_str \/ : 16
++	streq op_str \% : 16
++	streq op_str \: : 2
++	streq op_str \? : 5
++	streq op_str \, : 6
++	streq op_str \= : 14
+ 	streq op_str `==` : 14
+-	streq op_str `<` : 14
+-	streq op_str `>` : 14
++	streq op_str \< : 14
++	streq op_str \> : 14
+ 	streq op_str `<=` : 14
+ 	streq op_str `>=` : 14
+ 	streq op_str `!=` : 14
+ 	0
+ 
+ #is_right_assoc : op_str ?
+-	streq op_str `:` : 1
+-	streq op_str `?` : 1
+-	streq op_str `,` : 1
+-	streq op_str `^` : 1
++	streq op_str \: : 1
++	streq op_str \? : 1
++	streq op_str \, : 1
++	streq op_str \^ : 1
+ 	0
+ 
+ `--- Parser Helpers ---`
+@@ -178,14 +178,14 @@ tok_unit : 0
+ 	type = tok_id : 1
+ 	type = tok_num : 1
+ 	type = tok_str : 1
+-	type = tok_punc : 1 `(`
++	type = tok_punc : 1 \(
+ 	0
+ 
+ #is_prefix_op : op ?
+-	streq op `!` : 1
+-	streq op `#` : 1
+-	streq op `$` : 1
+-	streq op `@` : 1 
++	streq op \! : 1
++	streq op \# : 1
++	streq op \$ : 1
++	streq op \@ : 1 
+ 	0
+ 
+ `parse_primary : tokens -> [node, rest]`
+@@ -206,9 +206,9 @@ tok_unit : 0
+ 	)
+ 	
+ 	type = tok_punc : (
+-		val = `[` : parse_block tokens_next
+-		val = `(` : parse_block tokens_next
+-		val = `{` : parse_block tokens_next
++		val = \[ : parse_block tokens_next
++		val = \( : parse_block tokens_next
++		val = \{ : parse_block tokens_next
+ 		(ast_unit , 0) , (tokens_next , 0)
+ 	)
+ 	
+@@ -252,7 +252,7 @@ tok_unit : 0
+ 
+ #make_infix : op lhs rhs ? ast_infix , (op , (lhs , (rhs , 0)))
+ 
+-#make_lambda : params body ? make_infix `?` params body
++#make_lambda : params body ? make_infix \? params body
+ 
+ `transform_section : exprs -> node`
+ #transform_section :
+@@ -273,7 +273,7 @@ tok_unit : 0
+ 	type : head e1
+ 	op_str : tok_val (head (tail e1))
+ ?
+-	type = ast_op : make_lambda (make_infix `,` p1 p2) (make_infix op_str p1 p2)
++	type = ast_op : make_lambda (make_infix \, p1 p2) (make_infix op_str p1 p2)
+ 	ast_block , (exprs , 0)
+ 
+ #_transform_section_2 :
+
+commit 239c101cca3c1e8ec249036304bbc7823c7b26d6
+Author: et-key <etkey0x0@gmail.com>
+Date:   Sun Feb 22 07:24:07 2026 +0900
+
+    update : a9(?????????????????)
+
+diff --git a/proto/a9/self_host/parser.sn b/proto/a9/self_host/parser.sn
+index 8b13789..f686d41 100644
+--- a/proto/a9/self_host/parser.sn
++++ b/proto/a9/self_host/parser.sn
+@@ -1 +1,295 @@
++`
++Sign Pure Functional Parser
++
++Philosophy:
++- No global state
++- No local bindings (:)
++- Logic: tokens -> [ast_node, remaining_tokens]
++`
++
++`--- AST Constants ---`
++ast_unit : 0
++ast_num : 1
++ast_id : 2
++ast_str : 3
++ast_op : 4
++ast_def : 5
++ast_apply : 6
++ast_block : 7
++ast_infix : 8
++ast_prefix : 9
++ast_postfix : 10
++ast_lambda : 11
++ast_char : 12
++
++`--- Token Constants (Match Lexer) ---`
++tok_eof : -1
++tok_id : 1
++tok_num : 2
++tok_str : 3
++tok_op : 4
++tok_punc : 5
++tok_sep : 6
++tok_unit : 0
++
++
++`--- Helper: Get Token Info ---`
++#tok_type : tok ? @tok
++#tok_val : tok ? @(tok + 8)
++
++`--- String Comparison (Pure) ---`
++#streq :
++	s1 
++	s2
++	c1 : @s1
++	c2 : @s2
++?
++	c1 != c2 : 0
++	c1 = 0 : 1
++	streq (s1 + 1) (s2 + 1)
++
++`--- Precedence Table (Pure) ---`
++#get_prec : op_str ?
++	streq op_str `+` : 15
++	streq op_str `-` : 15
++	streq op_str `*` : 16
++	streq op_str `/` : 16
++	streq op_str `%` : 16
++	streq op_str `:` : 2
++	streq op_str `?` : 5
++	streq op_str `,` : 6
++	streq op_str `=` : 14
++	streq op_str `==` : 14
++	streq op_str `<` : 14
++	streq op_str `>` : 14
++	streq op_str `<=` : 14
++	streq op_str `>=` : 14
++	streq op_str `!=` : 14
++	0
++
++#is_right_assoc : op_str ?
++	streq op_str `:` : 1
++	streq op_str `?` : 1
++	streq op_str `,` : 1
++	streq op_str `^` : 1
++	0
++
++`--- Parser Helpers ---`
++
++`peek : tokens -> token`
++#peek : tokens ? 
++	tokens = 0 : tok_eof , 0
++	head tokens
++
++`next : tokens -> rest`
++#next : tokens ?
++	tokens = 0 : 0
++	tail tokens
++
++`expect : tokens type ?`
++#expect :
++	tokens 
++	type
++	tok : peek tokens
++	tok_t : tok_type tok
++?
++	tok_t = type : 1 , (next tokens)
++	0 , tokens
++
++`--- Core Parser Logic ---`
++
++`parse_program : tokens -> [ast_block, rest]`
++#parse_program :
++	tokens
++	res : parse_stmts tokens
++?
++	(ast_block , (head res)) , ((head (tail res)) , 0)
++
++`parse_stmts : tokens -> [list<node>, rest]`
++#parse_stmts :
++	tokens
++	tok : peek tokens
++	type : tok_type tok
++	res : parse_expr tokens 0
++	expr : head res
++	rest : head (tail res)
++	res2 : parse_stmts rest
++?
++	type = tok_eof : 0 , (tokens , 0)
++	
++	type = tok_sep : parse_stmts (next tokens)
++	
++	`Parse Expression`
++	(expr , (head res2)) , ((head (tail res2)) , 0)
++
++
++`parse_block : tokens -> [ast_block, rest]`
++#parse_block : tokens ?
++	`TODO: Block logic, Section logic`
++	parse_program tokens `Temporary: Treat block same as program for now`
++
++`parse_expr : tokens min_prec -> [node, rest]`
++#parse_expr :
++	tokens 
++	min_prec
++	res_lhs : parse_primary tokens
++	lhs : head res_lhs
++	rest_1 : head (tail res_lhs)
++?
++	_parse_expr_loop lhs rest_1 min_prec
++
++`_parse_expr_loop : lhs tokens min_prec -> [node, rest]`
++#_parse_expr_loop :
++	lhs 
++	tokens 
++	min_prec
++	tok : peek tokens
++	type : tok_type tok
++	
++	`Apply vars`
++	res_rhs_apply : parse_expr tokens 6
++	rhs_apply : head res_rhs_apply
++	rest_rhs_apply : head (tail res_rhs_apply)
++	new_lhs_apply : ast_apply , (lhs , (rhs_apply , 0))
++	
++	`Infix vars`
++	op_str : tok_val tok
++	prec : get_prec op_str
++	next_tokens : next tokens
++	next_min_prec : (is_right_assoc op_str) ? prec | (prec + 1)
++	res_rhs_infix : parse_expr next_tokens next_min_prec
++	rhs_infix : head res_rhs_infix
++	rest_rhs_infix : head (tail res_rhs_infix)
++	new_lhs_infix : ast_infix , (op_str , (lhs , (rhs_infix , 0)))
++?
++	`Check for Apply (Implicit)`
++	(can_start_expr type) : (
++		`Apply: lhs next_expr`
++		_parse_expr_loop new_lhs_apply rest_rhs_apply min_prec
++	)
++	
++	type != tok_op : lhs , (tokens , 0)
++	
++	prec < min_prec : lhs , (tokens , 0)
++	
++	_parse_expr_loop new_lhs_infix rest_rhs_infix min_prec
++
++#can_start_expr : type ?
++	type = tok_id : 1
++	type = tok_num : 1
++	type = tok_str : 1
++	type = tok_punc : 1 `(`
++	0
++
++#is_prefix_op : op ?
++	streq op `!` : 1
++	streq op `#` : 1
++	streq op `$` : 1
++	streq op `@` : 1 
++	0
++
++`parse_primary : tokens -> [node, rest]`
++#parse_primary :
++	tokens
++	tok : peek tokens
++	type : tok_type tok
++	tokens_next : next tokens
++	val : tok_val tok
++?
++	type = tok_num : (ast_num , (val , 0)) , (tokens_next , 0)
++	type = tok_id : (ast_id , (val , 0)) , (tokens_next , 0)
++	type = tok_str : (ast_str , (val , 0)) , (tokens_next , 0)
++	
++	type = tok_op : (
++		is_prefix_op val : _parse_prefix val tokens_next
++		(ast_op , (val , 0)) , (tokens_next , 0)
++	)
++	
++	type = tok_punc : (
++		val = `[` : parse_block tokens_next
++		val = `(` : parse_block tokens_next
++		val = `{` : parse_block tokens_next
++		(ast_unit , 0) , (tokens_next , 0)
++	)
++	
++	`Unknown`
++	(ast_unit , 0) , (tokens_next , 0)
++
++#_parse_prefix :
++	op
++	tokens_next
++	res : parse_expr tokens_next 20
++?
++	(ast_prefix , (op , ((head res) , 0))) , ((head (tail res)) , 0)
++
++
++
++
++`parse_block : tokens -> [node, rest]`
++#parse_block_impl :
++	tokens
++	res : parse_stmts tokens
++	exprs : head res
++	rest : head (tail res)
++	tok_r : peek rest
++	node : transform_section exprs
++?
++	node , ((next rest) , 0)
++
++#is_null :
++	list 
++?
++	list = 0 : 1
++	0
++
++`--- AST Constructors ---`
++#make_node : type val ? type , (val , 0)
++
++#make_num : val ? make_node ast_num val
++#make_id : val ? make_node ast_id val
++#make_op : val ? make_node ast_op val
++#make_str : val ? make_node ast_str val
++
++#make_infix : op lhs rhs ? ast_infix , (op , (lhs , (rhs , 0)))
++
++#make_lambda : params body ? make_infix `?` params body
++
++`transform_section : exprs -> node`
++#transform_section :
++	exprs
++	len : length exprs
++	p1 : make_id `$1`
++	p2 : make_id `$2`
++?
++	len = 1 : _transform_section_1 exprs p1 p2
++	len = 2 : _transform_section_2 exprs p1 p2
++	ast_block , (exprs , 0)
++
++#_transform_section_1 :
++	exprs
++	p1 
++	p2
++	e1 : head exprs
++	type : head e1
++	op_str : tok_val (head (tail e1))
++?
++	type = ast_op : make_lambda (make_infix `,` p1 p2) (make_infix op_str p1 p2)
++	ast_block , (exprs , 0)
++
++#_transform_section_2 :
++	exprs
++	p1 
++	p2
++	e1 : head exprs
++	e2 : head (tail exprs)
++	t1 : head e1
++	t2 : head e2
++	op_str_1 : tok_val (head (tail e1))
++	op_str_2 : tok_val (head (tail e2))
++?
++	t1 = ast_op : make_lambda p1 (make_infix op_str_1 p1 e2)
++	t2 = ast_op : make_lambda p1 (make_infix op_str_2 e1 p1)
++	ast_block , (exprs , 0)
++
++
+ 
+
+commit a62e15e21860726bab1271b574784ce46be1c1d8
+Author: et-key <etkey0x0@gmail.com>
+Date:   Sun Feb 22 07:00:34 2026 +0900
+
+    update : a9(?????????????????????)
+
+diff --git a/proto/a9/self_host/parser.sn b/proto/a9/self_host/parser.sn
+index f686d41..8b13789 100644
+--- a/proto/a9/self_host/parser.sn
++++ b/proto/a9/self_host/parser.sn
+@@ -1,295 +1 @@
+-`
+-Sign Pure Functional Parser
+-
+-Philosophy:
+-- No global state
+-- No local bindings (:)
+-- Logic: tokens -> [ast_node, remaining_tokens]
+-`
+-
+-`--- AST Constants ---`
+-ast_unit : 0
+-ast_num : 1
+-ast_id : 2
+-ast_str : 3
+-ast_op : 4
+-ast_def : 5
+-ast_apply : 6
+-ast_block : 7
+-ast_infix : 8
+-ast_prefix : 9
+-ast_postfix : 10
+-ast_lambda : 11
+-ast_char : 12
+-
+-`--- Token Constants (Match Lexer) ---`
+-tok_eof : -1
+-tok_id : 1
+-tok_num : 2
+-tok_str : 3
+-tok_op : 4
+-tok_punc : 5
+-tok_sep : 6
+-tok_unit : 0
+-
+-
+-`--- Helper: Get Token Info ---`
+-#tok_type : tok ? @tok
+-#tok_val : tok ? @(tok + 8)
+-
+-`--- String Comparison (Pure) ---`
+-#streq :
+-	s1 
+-	s2
+-	c1 : @s1
+-	c2 : @s2
+-?
+-	c1 != c2 : 0
+-	c1 = 0 : 1
+-	streq (s1 + 1) (s2 + 1)
+-
+-`--- Precedence Table (Pure) ---`
+-#get_prec : op_str ?
+-	streq op_str `+` : 15
+-	streq op_str `-` : 15
+-	streq op_str `*` : 16
+-	streq op_str `/` : 16
+-	streq op_str `%` : 16
+-	streq op_str `:` : 2
+-	streq op_str `?` : 5
+-	streq op_str `,` : 6
+-	streq op_str `=` : 14
+-	streq op_str `==` : 14
+-	streq op_str `<` : 14
+-	streq op_str `>` : 14
+-	streq op_str `<=` : 14
+-	streq op_str `>=` : 14
+-	streq op_str `!=` : 14
+-	0
+-
+-#is_right_assoc : op_str ?
+-	streq op_str `:` : 1
+-	streq op_str `?` : 1
+-	streq op_str `,` : 1
+-	streq op_str `^` : 1
+-	0
+-
+-`--- Parser Helpers ---`
+-
+-`peek : tokens -> token`
+-#peek : tokens ? 
+-	tokens = 0 : tok_eof , 0
+-	head tokens
+-
+-`next : tokens -> rest`
+-#next : tokens ?
+-	tokens = 0 : 0
+-	tail tokens
+-
+-`expect : tokens type ?`
+-#expect :
+-	tokens 
+-	type
+-	tok : peek tokens
+-	tok_t : tok_type tok
+-?
+-	tok_t = type : 1 , (next tokens)
+-	0 , tokens
+-
+-`--- Core Parser Logic ---`
+-
+-`parse_program : tokens -> [ast_block, rest]`
+-#parse_program :
+-	tokens
+-	res : parse_stmts tokens
+-?
+-	(ast_block , (head res)) , ((head (tail res)) , 0)
+-
+-`parse_stmts : tokens -> [list<node>, rest]`
+-#parse_stmts :
+-	tokens
+-	tok : peek tokens
+-	type : tok_type tok
+-	res : parse_expr tokens 0
+-	expr : head res
+-	rest : head (tail res)
+-	res2 : parse_stmts rest
+-?
+-	type = tok_eof : 0 , (tokens , 0)
+-	
+-	type = tok_sep : parse_stmts (next tokens)
+-	
+-	`Parse Expression`
+-	(expr , (head res2)) , ((head (tail res2)) , 0)
+-
+-
+-`parse_block : tokens -> [ast_block, rest]`
+-#parse_block : tokens ?
+-	`TODO: Block logic, Section logic`
+-	parse_program tokens `Temporary: Treat block same as program for now`
+-
+-`parse_expr : tokens min_prec -> [node, rest]`
+-#parse_expr :
+-	tokens 
+-	min_prec
+-	res_lhs : parse_primary tokens
+-	lhs : head res_lhs
+-	rest_1 : head (tail res_lhs)
+-?
+-	_parse_expr_loop lhs rest_1 min_prec
+-
+-`_parse_expr_loop : lhs tokens min_prec -> [node, rest]`
+-#_parse_expr_loop :
+-	lhs 
+-	tokens 
+-	min_prec
+-	tok : peek tokens
+-	type : tok_type tok
+-	
+-	`Apply vars`
+-	res_rhs_apply : parse_expr tokens 6
+-	rhs_apply : head res_rhs_apply
+-	rest_rhs_apply : head (tail res_rhs_apply)
+-	new_lhs_apply : ast_apply , (lhs , (rhs_apply , 0))
+-	
+-	`Infix vars`
+-	op_str : tok_val tok
+-	prec : get_prec op_str
+-	next_tokens : next tokens
+-	next_min_prec : (is_right_assoc op_str) ? prec | (prec + 1)
+-	res_rhs_infix : parse_expr next_tokens next_min_prec
+-	rhs_infix : head res_rhs_infix
+-	rest_rhs_infix : head (tail res_rhs_infix)
+-	new_lhs_infix : ast_infix , (op_str , (lhs , (rhs_infix , 0)))
+-?
+-	`Check for Apply (Implicit)`
+-	(can_start_expr type) : (
+-		`Apply: lhs next_expr`
+-		_parse_expr_loop new_lhs_apply rest_rhs_apply min_prec
+-	)
+-	
+-	type != tok_op : lhs , (tokens , 0)
+-	
+-	prec < min_prec : lhs , (tokens , 0)
+-	
+-	_parse_expr_loop new_lhs_infix rest_rhs_infix min_prec
+-
+-#can_start_expr : type ?
+-	type = tok_id : 1
+-	type = tok_num : 1
+-	type = tok_str : 1
+-	type = tok_punc : 1 `(`
+-	0
+-
+-#is_prefix_op : op ?
+-	streq op `!` : 1
+-	streq op `#` : 1
+-	streq op `$` : 1
+-	streq op `@` : 1 
+-	0
+-
+-`parse_primary : tokens -> [node, rest]`
+-#parse_primary :
+-	tokens
+-	tok : peek tokens
+-	type : tok_type tok
+-	tokens_next : next tokens
+-	val : tok_val tok
+-?
+-	type = tok_num : (ast_num , (val , 0)) , (tokens_next , 0)
+-	type = tok_id : (ast_id , (val , 0)) , (tokens_next , 0)
+-	type = tok_str : (ast_str , (val , 0)) , (tokens_next , 0)
+-	
+-	type = tok_op : (
+-		is_prefix_op val : _parse_prefix val tokens_next
+-		(ast_op , (val , 0)) , (tokens_next , 0)
+-	)
+-	
+-	type = tok_punc : (
+-		val = `[` : parse_block tokens_next
+-		val = `(` : parse_block tokens_next
+-		val = `{` : parse_block tokens_next
+-		(ast_unit , 0) , (tokens_next , 0)
+-	)
+-	
+-	`Unknown`
+-	(ast_unit , 0) , (tokens_next , 0)
+-
+-#_parse_prefix :
+-	op
+-	tokens_next
+-	res : parse_expr tokens_next 20
+-?
+-	(ast_prefix , (op , ((head res) , 0))) , ((head (tail res)) , 0)
+-
+-
+-
+-
+-`parse_block : tokens -> [node, rest]`
+-#parse_block_impl :
+-	tokens
+-	res : parse_stmts tokens
+-	exprs : head res
+-	rest : head (tail res)
+-	tok_r : peek rest
+-	node : transform_section exprs
+-?
+-	node , ((next rest) , 0)
+-
+-#is_null :
+-	list 
+-?
+-	list = 0 : 1
+-	0
+-
+-`--- AST Constructors ---`
+-#make_node : type val ? type , (val , 0)
+-
+-#make_num : val ? make_node ast_num val
+-#make_id : val ? make_node ast_id val
+-#make_op : val ? make_node ast_op val
+-#make_str : val ? make_node ast_str val
+-
+-#make_infix : op lhs rhs ? ast_infix , (op , (lhs , (rhs , 0)))
+-
+-#make_lambda : params body ? make_infix `?` params body
+-
+-`transform_section : exprs -> node`
+-#transform_section :
+-	exprs
+-	len : length exprs
+-	p1 : make_id `$1`
+-	p2 : make_id `$2`
+-?
+-	len = 1 : _transform_section_1 exprs p1 p2
+-	len = 2 : _transform_section_2 exprs p1 p2
+-	ast_block , (exprs , 0)
+-
+-#_transform_section_1 :
+-	exprs
+-	p1 
+-	p2
+-	e1 : head exprs
+-	type : head e1
+-	op_str : tok_val (head (tail e1))
+-?
+-	type = ast_op : make_lambda (make_infix `,` p1 p2) (make_infix op_str p1 p2)
+-	ast_block , (exprs , 0)
+-
+-#_transform_section_2 :
+-	exprs
+-	p1 
+-	p2
+-	e1 : head exprs
+-	e2 : head (tail exprs)
+-	t1 : head e1
+-	t2 : head e2
+-	op_str_1 : tok_val (head (tail e1))
+-	op_str_2 : tok_val (head (tail e2))
+-?
+-	t1 = ast_op : make_lambda p1 (make_infix op_str_1 p1 e2)
+-	t2 = ast_op : make_lambda p1 (make_infix op_str_2 e1 p1)
+-	ast_block , (exprs , 0)
+-
+-
+ 
+
+commit b7654b72ddf5d883e668416cd7128ef91ee10a23
+Author: et-key <etkey0x0@gmail.com>
+Date:   Sun Feb 22 06:54:50 2026 +0900
+
+    add : a9(a8 copy)
+
+diff --git a/proto/a9/self_host/parser.sn b/proto/a9/self_host/parser.sn
+new file mode 100644
+index 0000000..f686d41
+--- /dev/null
++++ b/proto/a9/self_host/parser.sn
+@@ -0,0 +1,295 @@
++`
++Sign Pure Functional Parser
++
++Philosophy:
++- No global state
++- No local bindings (:)
++- Logic: tokens -> [ast_node, remaining_tokens]
++`
++
++`--- AST Constants ---`
++ast_unit : 0
++ast_num : 1
++ast_id : 2
++ast_str : 3
++ast_op : 4
++ast_def : 5
++ast_apply : 6
++ast_block : 7
++ast_infix : 8
++ast_prefix : 9
++ast_postfix : 10
++ast_lambda : 11
++ast_char : 12
++
++`--- Token Constants (Match Lexer) ---`
++tok_eof : -1
++tok_id : 1
++tok_num : 2
++tok_str : 3
++tok_op : 4
++tok_punc : 5
++tok_sep : 6
++tok_unit : 0
++
++
++`--- Helper: Get Token Info ---`
++#tok_type : tok ? @tok
++#tok_val : tok ? @(tok + 8)
++
++`--- String Comparison (Pure) ---`
++#streq :
++	s1 
++	s2
++	c1 : @s1
++	c2 : @s2
++?
++	c1 != c2 : 0
++	c1 = 0 : 1
++	streq (s1 + 1) (s2 + 1)
++
++`--- Precedence Table (Pure) ---`
++#get_prec : op_str ?
++	streq op_str `+` : 15
++	streq op_str `-` : 15
++	streq op_str `*` : 16
++	streq op_str `/` : 16
++	streq op_str `%` : 16
++	streq op_str `:` : 2
++	streq op_str `?` : 5
++	streq op_str `,` : 6
++	streq op_str `=` : 14
++	streq op_str `==` : 14
++	streq op_str `<` : 14
++	streq op_str `>` : 14
++	streq op_str `<=` : 14
++	streq op_str `>=` : 14
++	streq op_str `!=` : 14
++	0
++
++#is_right_assoc : op_str ?
++	streq op_str `:` : 1
++	streq op_str `?` : 1
++	streq op_str `,` : 1
++	streq op_str `^` : 1
++	0
++
++`--- Parser Helpers ---`
++
++`peek : tokens -> token`
++#peek : tokens ? 
++	tokens = 0 : tok_eof , 0
++	head tokens
++
++`next : tokens -> rest`
++#next : tokens ?
++	tokens = 0 : 0
++	tail tokens
++
++`expect : tokens type ?`
++#expect :
++	tokens 
++	type
++	tok : peek tokens
++	tok_t : tok_type tok
++?
++	tok_t = type : 1 , (next tokens)
++	0 , tokens
++
++`--- Core Parser Logic ---`
++
++`parse_program : tokens -> [ast_block, rest]`
++#parse_program :
++	tokens
++	res : parse_stmts tokens
++?
++	(ast_block , (head res)) , ((head (tail res)) , 0)
++
++`parse_stmts : tokens -> [list<node>, rest]`
++#parse_stmts :
++	tokens
++	tok : peek tokens
++	type : tok_type tok
++	res : parse_expr tokens 0
++	expr : head res
++	rest : head (tail res)
++	res2 : parse_stmts rest
++?
++	type = tok_eof : 0 , (tokens , 0)
++	
++	type = tok_sep : parse_stmts (next tokens)
++	
++	`Parse Expression`
++	(expr , (head res2)) , ((head (tail res2)) , 0)
++
++
++`parse_block : tokens -> [ast_block, rest]`
++#parse_block : tokens ?
++	`TODO: Block logic, Section logic`
++	parse_program tokens `Temporary: Treat block same as program for now`
++
++`parse_expr : tokens min_prec -> [node, rest]`
++#parse_expr :
++	tokens 
++	min_prec
++	res_lhs : parse_primary tokens
++	lhs : head res_lhs
++	rest_1 : head (tail res_lhs)
++?
++	_parse_expr_loop lhs rest_1 min_prec
++
++`_parse_expr_loop : lhs tokens min_prec -> [node, rest]`
++#_parse_expr_loop :
++	lhs 
++	tokens 
++	min_prec
++	tok : peek tokens
++	type : tok_type tok
++	
++	`Apply vars`
++	res_rhs_apply : parse_expr tokens 6
++	rhs_apply : head res_rhs_apply
++	rest_rhs_apply : head (tail res_rhs_apply)
++	new_lhs_apply : ast_apply , (lhs , (rhs_apply , 0))
++	
++	`Infix vars`
++	op_str : tok_val tok
++	prec : get_prec op_str
++	next_tokens : next tokens
++	next_min_prec : (is_right_assoc op_str) ? prec | (prec + 1)
++	res_rhs_infix : parse_expr next_tokens next_min_prec
++	rhs_infix : head res_rhs_infix
++	rest_rhs_infix : head (tail res_rhs_infix)
++	new_lhs_infix : ast_infix , (op_str , (lhs , (rhs_infix , 0)))
++?
++	`Check for Apply (Implicit)`
++	(can_start_expr type) : (
++		`Apply: lhs next_expr`
++		_parse_expr_loop new_lhs_apply rest_rhs_apply min_prec
++	)
++	
++	type != tok_op : lhs , (tokens , 0)
++	
++	prec < min_prec : lhs , (tokens , 0)
++	
++	_parse_expr_loop new_lhs_infix rest_rhs_infix min_prec
++
++#can_start_expr : type ?
++	type = tok_id : 1
++	type = tok_num : 1
++	type = tok_str : 1
++	type = tok_punc : 1 `(`
++	0
++
++#is_prefix_op : op ?
++	streq op `!` : 1
++	streq op `#` : 1
++	streq op `$` : 1
++	streq op `@` : 1 
++	0
++
++`parse_primary : tokens -> [node, rest]`
++#parse_primary :
++	tokens
++	tok : peek tokens
++	type : tok_type tok
++	tokens_next : next tokens
++	val : tok_val tok
++?
++	type = tok_num : (ast_num , (val , 0)) , (tokens_next , 0)
++	type = tok_id : (ast_id , (val , 0)) , (tokens_next , 0)
++	type = tok_str : (ast_str , (val , 0)) , (tokens_next , 0)
++	
++	type = tok_op : (
++		is_prefix_op val : _parse_prefix val tokens_next
++		(ast_op , (val , 0)) , (tokens_next , 0)
++	)
++	
++	type = tok_punc : (
++		val = `[` : parse_block tokens_next
++		val = `(` : parse_block tokens_next
++		val = `{` : parse_block tokens_next
++		(ast_unit , 0) , (tokens_next , 0)
++	)
++	
++	`Unknown`
++	(ast_unit , 0) , (tokens_next , 0)
++
++#_parse_prefix :
++	op
++	tokens_next
++	res : parse_expr tokens_next 20
++?
++	(ast_prefix , (op , ((head res) , 0))) , ((head (tail res)) , 0)
++
++
++
++
++`parse_block : tokens -> [node, rest]`
++#parse_block_impl :
++	tokens
++	res : parse_stmts tokens
++	exprs : head res
++	rest : head (tail res)
++	tok_r : peek rest
++	node : transform_section exprs
++?
++	node , ((next rest) , 0)
++
++#is_null :
++	list 
++?
++	list = 0 : 1
++	0
++
++`--- AST Constructors ---`
++#make_node : type val ? type , (val , 0)
++
++#make_num : val ? make_node ast_num val
++#make_id : val ? make_node ast_id val
++#make_op : val ? make_node ast_op val
++#make_str : val ? make_node ast_str val
++
++#make_infix : op lhs rhs ? ast_infix , (op , (lhs , (rhs , 0)))
++
++#make_lambda : params body ? make_infix `?` params body
++
++`transform_section : exprs -> node`
++#transform_section :
++	exprs
++	len : length exprs
++	p1 : make_id `$1`
++	p2 : make_id `$2`
++?
++	len = 1 : _transform_section_1 exprs p1 p2
++	len = 2 : _transform_section_2 exprs p1 p2
++	ast_block , (exprs , 0)
++
++#_transform_section_1 :
++	exprs
++	p1 
++	p2
++	e1 : head exprs
++	type : head e1
++	op_str : tok_val (head (tail e1))
++?
++	type = ast_op : make_lambda (make_infix `,` p1 p2) (make_infix op_str p1 p2)
++	ast_block , (exprs , 0)
++
++#_transform_section_2 :
++	exprs
++	p1 
++	p2
++	e1 : head exprs
++	e2 : head (tail exprs)
++	t1 : head e1
++	t2 : head e2
++	op_str_1 : tok_val (head (tail e1))
++	op_str_2 : tok_val (head (tail e2))
++?
++	t1 = ast_op : make_lambda p1 (make_infix op_str_1 p1 e2)
++	t2 = ast_op : make_lambda p1 (make_infix op_str_2 e1 p1)
++	ast_block , (exprs , 0)
++
++
++
