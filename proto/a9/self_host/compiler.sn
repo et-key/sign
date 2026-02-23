@@ -44,105 +44,104 @@ ast_char : 12
 	) (head env)
 
 #compile_str : node ctx ?
-	(content ?
-		(res_add ? 
-			(lbl ? (new_ctx ?
-				((concat `    adr x0, ` (concat lbl `\n`)) , 0) , new_ctx , 0
-			) (ctx_from_res res_add) ) (head res_add)
-		) (add_string ctx content)
-	) (tok_val node)
+	content : tok_val node
+	res_add : add_string ctx content
+	lbl : head res_add
+	new_ctx : ctx_from_res res_add
+?
+	((concat `    adr x0, ` (concat lbl `\n`)) , 0) , new_ctx , 0
 
 #compile_apply : node ctx ?
-	(func ? (arg ? 
-		(func_is_spread ?
-			func_is_spread : (
-				`Spread Concat via Whitespace Apply`
-				(target ?
-					(res_target ?
-						(asm_target ? (ctx_target ?
-							(res_arg ?
-								(asm_arg ? (ctx_arg ?
-									(asm_target~ 
-										(`    str x0, [sp, #-16]!\n` ,
-											(asm_arg ~
-												(`    mov x1, x0\n` ,
-													`    ldr x0, [sp], #16\n` ,
-													`    bl _concat\n` , 0
-												)
-											)
-										)
-									) , ctx_arg , 0
-								) (ctx_from_res res_arg) ) (asm_from_res res_arg)
-							) (compile_node arg ctx_target)
-						) (ctx_from_res res_target) ) (asm_from_res res_target)
-					) (compile_node target ctx)
-				) (head (tail (tail func)))
+	func : head (tail node)
+	arg : head (tail (tail node))
+	func_is_spread : is_spread_node func
+	
+	func_is_spread : (
+		`Spread Concat via Whitespace Apply`
+		target : head (tail (tail func))
+		res_target : compile_node target ctx
+		asm_target : asm_from_res res_target
+		ctx_target : ctx_from_res res_target
+		
+		res_arg : compile_node arg ctx_target
+		asm_arg : asm_from_res res_arg
+		ctx_arg : ctx_from_res res_arg
+		
+		(asm_target ~ 
+			(`    str x0, [sp, #-16]!\n` ,
+				(asm_arg ~
+					(`    mov x1, x0\n` ,
+						`    ldr x0, [sp], #16\n` ,
+						`    bl _concat\n` , 0
+					)
+				)
 			)
-			`Standard Function Call`
-			(res_func ? 
-				(asm_func ? (ctx_func ?
-					(res_arg ?
-						(asm_arg ? (ctx_arg ?
-							(lbl_concat ? (res_lbl_concat ? (ctx_lbl_concat ?
-								(lbl_end ? (res_lbl_end ? (ctx_lbl_end ?
-									(asm_func~ 
-										(`    str x0, [sp, #-16]!\n` ,
-											(asm_arg ~
-												(`    ldr x1, [sp], #16\n` ,
-													`    adr x9, heap_buffer\n` ,
-													`    cmp x1, x9\n` ,
-													(concat `    b.lo ` (concat lbl_concat `\n`)) ,
-													`    tst x1, #1\n` ,
-													(concat `    b.eq ` (concat lbl_concat `\n`)) ,
-													`    bic x1, x1, #1\n` ,
-													`    ldr x2, [x1]\n` ,
-													`    ldr x9, [x1, #8]\n` ,
-													`    blr x2\n` ,
-													(concat `    b ` (concat lbl_end `\n`)) ,
-													(concat lbl_concat `:\n`) ,
-													`    mov x2, x0\n` ,
-													`    mov x0, x1\n` ,
-													`    mov x1, x2\n` ,
-													`    bl _concat\n` ,
-													(concat lbl_end `:\n`) , 0
-												)
-											)
-										)
-									) , ctx_lbl_end , 0
-								) (ctx_from_res res_lbl_end) ) (new_label ctx_lbl_concat `apply_end`) )
-							) (ctx_from_res res_lbl_concat) ) (new_label ctx_arg `do_concat`) )
-						) (ctx_from_res res_arg) ) (asm_from_res res_arg)
-					) (compile_node arg ctx_func)
-				) (ctx_from_res res_func) ) (asm_from_res res_func)
-			) (compile_node func ctx)
-		) (is_spread_node func)
-	) (head (tail (tail node))) ) (head (tail node))
+		) , ctx_arg , 0
+	)
+	
+	`Standard Function Call`
+	res_func : compile_node func ctx
+	asm_func : asm_from_res res_func
+	ctx_func : ctx_from_res res_func
+	
+	res_arg : compile_node arg ctx_func
+	asm_arg : asm_from_res res_arg
+	ctx_arg : ctx_from_res res_arg
+	
+	ctx_lbl_concat : new_label ctx_arg `do_concat`
+	lbl_concat : head ctx_lbl_concat
+	ctx_lbl_end : new_label ctx_lbl_concat `apply_end`
+	lbl_end : head ctx_lbl_end
+	
+	(asm_func ~ 
+		(`    str x0, [sp, #-16]!\n` ,
+			(asm_arg ~
+				(`    ldr x1, [sp], #16\n` ,
+					`    adr x9, heap_buffer\n` ,
+					`    cmp x1, x9\n` ,
+					(concat `    b.lo ` (concat lbl_concat `\n`)) ,
+					`    tst x1, #1\n` ,
+					(concat `    b.eq ` (concat lbl_concat `\n`)) ,
+					`    bic x1, x1, #1\n` ,
+					`    ldr x2, [x1]\n` ,
+					`    ldr x9, [x1, #8]\n` ,
+					`    blr x2\n` ,
+					(concat `    b ` (concat lbl_end `\n`)) ,
+					(concat lbl_concat `:\n`) ,
+					`    mov x2, x0\n` ,
+					`    mov x0, x1\n` ,
+					`    mov x1, x2\n` ,
+					`    bl _concat\n` ,
+					(concat lbl_end `:\n`) , 0
+				)
+			)
+		)
+	) , ctx_lbl_end , 0
 
 #is_spread_node : node ?
 	((head node) = ast_postfix) & (streq (tok_val (head (tail node))) \~)
 
 #push_var : ctx name ?
-	(offset ? 
-		make_context 
-			(ctx_label_count ctx) 
-			(ctx_strings ctx) 
-			((name , offset) , ctx_env ctx)
-			offset
-	) ((ctx_stack_offset ctx) - 8)
+	offset : (ctx_stack_offset ctx) - 8
+?
+	make_context 
+		(ctx_label_count ctx) 
+		(ctx_strings ctx) 
+		((name , offset) , ctx_env ctx)
+		offset
 
 `--- String Table Helpers ---`
 #add_string : ctx content ?
 	`TODO: Check existence, return label. For now just add.`
-	(count ? 
-		(label ? 
-			label ,
-				make_context 
-					(count + 1)
-					((label , content , 0) , ctx_strings ctx)
-					(ctx_env ctx)
-					(ctx_stack_offset ctx)
-		) (make_label `str_` count)
-	) (ctx_label_count ctx)
+	count : ctx_label_count ctx
+	label : make_label `str_` count
+?
+	label ,
+		make_context 
+			(count + 1)
+			((label , content , 0) , ctx_strings ctx)
+			(ctx_env ctx)
+			(ctx_stack_offset ctx)
 
 `--- String Utils ---`
 #strlen : s ?
@@ -209,34 +208,34 @@ ast_char : 12
 	concat prefix (concat \_ (int_to_str count))
 
 #new_label : ctx prefix ?
-	(count ? 
-		(lbl ? 
-			lbl ,
-				make_context 
-					(count + 1)
-					(ctx_strings ctx)
-					(ctx_env ctx)
-					(ctx_stack_offset ctx)
-				, 0
-		) (make_label prefix count)
-	) (ctx_label_count ctx)
+	count : ctx_label_count ctx
+	lbl : make_label prefix count
+?
+	lbl ,
+		make_context 
+			(count + 1)
+			(ctx_strings ctx)
+			(ctx_env ctx)
+			(ctx_stack_offset ctx)
+		, 0
 
 `--- Core Compiler ---`
 #format_str_list : str_list ?
 	str_list = 0 : (`.global _str_end\n_str_end:\n` , 0)
-	(entry ?
-		(content ? (label ?
-			label , (`:\n    .asciz "` , (content , (`"\n` , (format_str_list (tail str_list)))))
-		) (head (tail entry))) (head entry)
-	) (head str_list)
+	entry : head str_list
+	label : head entry
+	content : head (tail entry)
+?
+	label , (`:\n    .asciz "` , (content , (`"\n` , (format_str_list (tail str_list)))))
 
 `compile_program : ast -> assembly_string`
 #compile_program : ast ?
-	(res ? 
-		(asm_list ? (ctx ? (str_list ?
-			concat_list (asm_list ~ (`\n.data\n.balign 8\n.global _str_start\n_str_start:\n` , (format_str_list str_list)))
-		) (ctx_strings ctx)) (ctx_from_res res)) (head res)
-	) (compile_node ast (make_context 0 0 0 0))
+	res : compile_node ast (make_context 0 0 0 0)
+	asm_list : asm_from_res res
+	ctx : ctx_from_res res
+	str_list : ctx_strings ctx
+?
+	concat_list (asm_list ~ (`\n.data\n.balign 8\n.global _str_start\n_str_start:\n` , (format_str_list str_list)))
 
 `compile_node : node ctx -> [asm_list, ctx]`
 #compile_node : node ctx ?
@@ -290,23 +289,27 @@ ast_char : 12
 	((head expr) = ast_num) & ((head (tail expr)) = 0)
 
 #compile_prefix_not : expr ctx ?
-	(lbl_true ? (lbl_end ? (res_lbl_end ? 
-		(ctx_new ?
-			(res_expr ?
-				(asm_expr ? (ctx_expr ?
-					(asm_expr ~
-						(`    adr x9, sign_id\n` ,
-							`    cmp x0, x9\n` ,
-								(concat `    b.eq ` (concat lbl_true `\n`)) ,
-									`    adr x0, sign_id\n` ,
-										(concat `    b ` (concat lbl_end `\n`)) ,
-											(concat lbl_true `:\n`) ,
-												`    mov x0, #0\n` ,
-													(concat lbl_end `:\n`) , 0
-					)) , ctx_expr , 0
-				) (ctx_from_res res_expr) ) (asm_from_res res_expr)
-			) (compile_node expr ctx_new)
-		) (ctx_from_lbl res_lbl_end) ) (new_label (new_label ctx `not_true`) `not_end`) ) )
+	ctx_lbl_true : new_label ctx `not_true`
+	lbl_true : head ctx_lbl_true
+	res_lbl_end : new_label ctx_lbl_true `not_end`
+	lbl_end : head res_lbl_end
+	ctx_new : ctx_from_lbl res_lbl_end
+	
+	res_expr : compile_node expr ctx_new
+	asm_expr : asm_from_res res_expr
+	ctx_expr : ctx_from_res res_expr
+?
+	(asm_expr ~
+		(`    adr x9, sign_id\n` ,
+			`    cmp x0, x9\n` ,
+			(concat `    b.eq ` (concat lbl_true `\n`)) ,
+			`    adr x0, sign_id\n` ,
+			(concat `    b ` (concat lbl_end `\n`)) ,
+			(concat lbl_true `:\n`) ,
+			`    mov x0, #0\n` ,
+			(concat lbl_end `:\n`) , 0
+		)
+	) , ctx_expr , 0
 
 #compile_prefix_bitwise_not : expr ctx ?
 	(res ?
@@ -361,207 +364,218 @@ ast_char : 12
 	) (tok_val (head (tail node))) 
 
 #compile_bind : node ctx ?
-	(lhs ? (rhs ?
-		(name ? 
-			(res_rhs ?
-				(asm_rhs ? (ctx_rhs ?
-					(new_ctx ?
-						(asm_rhs~ (`    str x0, [sp, #-16]!\n` , `    adr x0, sign_id\n` , 0)) , new_ctx , 0
-					) (push_var ctx_rhs name)
-				) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
-			) (compile_node rhs ctx)
-		) (tok_val lhs) `Expect lhs to be ID`
-	) (head (tail (tail (tail node)))) ) (head (tail (tail node)))
+	lhs : head (tail (tail node))
+	rhs : head (tail (tail (tail node)))
+	name : tok_val lhs
+	
+	res_rhs : compile_node rhs ctx
+	asm_rhs : asm_from_res res_rhs
+	ctx_rhs : ctx_from_res res_rhs
+	
+	new_ctx : push_var ctx_rhs name
+?
+	(asm_rhs ~ (`    str x0, [sp, #-16]!\n` , `    adr x0, sign_id\n` , 0)) , new_ctx , 0
 
 #compile_lambda : node ctx ?
-	(params ? (body ?
-		(lbl_func ? (res_lbl ? (ctx_lbl ?
-			(lbl_after ? (res_after ? (ctx_after ?
-				(param_name ?
-					(ctx_with_arg ?
-						(res_body ?
-							(asm_body ? (ctx_body ? 
-								(((concat `    b ` (concat lbl_after `\n`)) ,
-									(concat lbl_func `:\n`) ,
-										`    stp x29, x30, [sp, #-16]!\n` ,
-											`    mov x29, sp\n` ,
-												`    str x0, [sp, #-16]!\n\ Push Arg` , 0
-								) ~
-								(asm_body ~
-									(`    mov sp, x29\n` ,
-										`    ldp x29, x30, [sp], #16\n` ,
-											`    ret\n` ,
-												(concat lbl_after `:\n`) ,
-													`    adr x0, sign_id\n` ,
-														`    str x0, [sp, #-16]!\n` ,
-															(concat `    adr x1, ` (concat lbl_func `\n`)) ,
-																`    ldr x0, [sp], #16\n` ,
-																	`    bl _cons\n` ,
-																		`    orr x0, x0, #1 // Tag closure\n` , 0
-									)
-								)) , ctx_body , 0
-						) (ctx_from_res res_body) ) (asm_from_res res_body)
-					) (compile_node body ctx_with_arg)
-				) (push_var ctx_lbl param_name) ) (tok_val params) `Assume single param ID`
-			) (ctx_from_res res_after) ) (new_label ctx_lbl `after_func`) )
-		) (ctx_from_res res_lbl) ) (new_label ctx `func`) )
-	) (head (tail (tail (tail node)))) ) (head (tail (tail node)))
+	params : head (tail (tail node))
+	body : head (tail (tail (tail node)))
+	
+	res_lbl : new_label ctx `func`
+	lbl_func : head res_lbl
+	ctx_lbl : ctx_from_res res_lbl
+	
+	res_after : new_label ctx_lbl `after_func`
+	lbl_after : head res_after
+	ctx_after : ctx_from_res res_after
+	
+	param_name : tok_val params
+	ctx_with_arg : push_var ctx_after param_name
+	
+	res_body : compile_node body ctx_with_arg
+	asm_body : asm_from_res res_body
+	ctx_body : ctx_from_res res_body
+?
+	(((concat `    b ` (concat lbl_after `\n`)) ,
+		(concat lbl_func `:\n`) ,
+		`    stp x29, x30, [sp, #-16]!\n` ,
+		`    mov x29, sp\n` ,
+		`    str x0, [sp, #-16]!\n\ Push Arg` , 0
+	) ~
+	(asm_body ~
+		(`    mov sp, x29\n` ,
+			`    ldp x29, x30, [sp], #16\n` ,
+			`    ret\n` ,
+			(concat lbl_after `:\n`) ,
+			`    adr x0, sign_id\n` ,
+			`    str x0, [sp, #-16]!\n` ,
+			(concat `    adr x1, ` (concat lbl_func `\n`)) ,
+			`    ldr x0, [sp], #16\n` ,
+			`    bl _cons\n` ,
+			`    orr x0, x0, #1 // Tag closure\n` , 0
+		)
+	)) , ctx_body , 0
 
 #compile_binop : node ctx instr ?
-	(lhs ? (rhs ?
-		(res_lhs ?
-			(asm_lhs ? (ctx_lhs ?
-				(res_rhs ?
-					(asm_rhs ? (ctx_rhs ?
-						(asm_lhs~ 
-							(`    str x0, [sp, #-16]!\n` ,
-								(asm_rhs ~
-									(`    mov x1, x0\n` ,
-										`    ldr x0, [sp], #16\n` ,
-											instr , 0
-									)
-								)
-							)
-						) , ctx_rhs , 0
-					) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
-				) (compile_node rhs ctx_lhs)
-			) (ctx_from_res res_lhs) ) (asm_from_res res_lhs)
-		) (compile_node lhs ctx)
-	) (head (tail (tail (tail node)))) ) (head (tail (tail node)))
+	lhs : head (tail (tail node))
+	rhs : head (tail (tail (tail node)))
+	
+	res_lhs : compile_node lhs ctx
+	asm_lhs : asm_from_res res_lhs
+	ctx_lhs : ctx_from_res res_lhs
+	
+	res_rhs : compile_node rhs ctx_lhs
+	asm_rhs : asm_from_res res_rhs
+	ctx_rhs : ctx_from_res res_rhs
+?
+	(asm_lhs ~ 
+		(`    str x0, [sp, #-16]!\n` ,
+			(asm_rhs ~
+				(`    mov x1, x0\n` ,
+					`    ldr x0, [sp], #16\n` ,
+					instr , 0
+				)
+			)
+		)
+	) , ctx_rhs , 0
 
 #compile_cmp : node ctx cond ?
-	(lhs ? (rhs ?
-		(res_lhs ?
-			(asm_lhs ? (ctx_lhs ?
-				(res_rhs ?
-					(asm_rhs ? (ctx_rhs ?
-						(lbl_true ? (lbl_end ? (res_lbl_end ?
-							(ctx_final ? 
-								(asm_lhs~ 
-									(`    str x0, [sp, #-16]!\n` ,
-										(asm_rhs ~
-											(`    mov x1, x0\n` ,
-												`    ldr x0, [sp], #16\n` ,
-													`    cmp x0, x1\n` ,
-														(concat `    b.` (concat cond (concat \  (concat lbl_true `\n`)))) ,
-															`    mov x0, #0\n` ,
-																(concat `    b ` (concat lbl_end `\n`)) ,
-																	(concat lbl_true `:\n`) ,
-																		(((is_literal_expr lhs) ? (`    mov x0, x1\n` , 0) | 0) ~
-																			((concat lbl_end `:\n`) , 0)
-																		)
-											)
-										)
-									)
-								) , ctx_final , 0
-							) (ctx_from_res res_lbl_end)
-						) (new_label (ctx_from_res res_rhs) `cmp_end`) ) ) (new_label ctx_rhs `cmp_true`) )
-					) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
-				) (compile_node rhs ctx_lhs)
-			) (ctx_from_res res_lhs) ) (asm_from_res res_lhs)
-		) (compile_node lhs ctx)
-	) (head (tail (tail (tail node)))) ) (head (tail (tail node)))
+	lhs : head (tail (tail node))
+	rhs : head (tail (tail (tail node)))
+	
+	res_lhs : compile_node lhs ctx
+	asm_lhs : asm_from_res res_lhs
+	ctx_lhs : ctx_from_res res_lhs
+	
+	res_rhs : compile_node rhs ctx_lhs
+	asm_rhs : asm_from_res res_rhs
+	ctx_rhs : ctx_from_res res_rhs
+	
+	ctx_lbl_true : new_label ctx_rhs `cmp_true`
+	lbl_true : head ctx_lbl_true
+	res_lbl_end : new_label ctx_lbl_true `cmp_end`
+	lbl_end : head res_lbl_end
+	ctx_final : ctx_from_lbl res_lbl_end
+?
+	(asm_lhs ~ 
+		(`    str x0, [sp, #-16]!\n` ,
+			(asm_rhs ~
+				(`    mov x1, x0\n` ,
+					`    ldr x0, [sp], #16\n` ,
+					`    cmp x0, x1\n` ,
+					(concat `    b.` (concat cond (concat \  (concat lbl_true `\n`)))) ,
+					`    mov x0, #0\n` ,
+					(concat `    b ` (concat lbl_end `\n`)) ,
+					(concat lbl_true `:\n`) ,
+					(((is_literal_expr lhs) ? (`    mov x0, x1\n` , 0) | 0) ~
+						((concat lbl_end `:\n`) , 0)
+					)
+				)
+			)
+		)
+	) , ctx_final , 0
 
 #compile_logic_or : node ctx ?
-	(lhs ? (rhs ?
-		(lbl_right ? (lbl_end ? (res_lbl_end ?
-			(ctx_new ?
-				(res_lhs ?
-					(asm_lhs ? (ctx_lhs ?
-						(res_rhs ?
-							(asm_rhs ? (ctx_rhs ?
-								(asm_lhs ~
-									(`    adr x9, sign_id\n` ,
-										`    cmp x0, x9\n` ,
-											(concat `    b.eq ` (concat lbl_right `\n`)) ,
-												(concat `    b ` (concat lbl_end `\n`)) ,
-													(concat lbl_right `:\n`) ,
-														(asm_rhs~ ((concat lbl_end `:\n`) , 0))
-									)
-								) , ctx_rhs , 0
-							) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
-						) (compile_node rhs ctx_lhs)
-					) (ctx_from_res res_lhs) ) (asm_from_res res_lhs)
-				) (compile_node lhs ctx_new)
-			) (ctx_from_lbl res_lbl_end)
-		) (new_label (new_label ctx `or_right`) `or_end`) ) )
-	) (head (tail (tail (tail node)))) ) (head (tail (tail node)))
+	lhs : head (tail (tail node))
+	rhs : head (tail (tail (tail node)))
+	
+	ctx_lbl_right : new_label ctx `or_right`
+	lbl_right : head ctx_lbl_right
+	res_lbl_end : new_label ctx_lbl_right `or_end`
+	lbl_end : head res_lbl_end
+	ctx_new : ctx_from_lbl res_lbl_end
+	
+	res_lhs : compile_node lhs ctx_new
+	asm_lhs : asm_from_res res_lhs
+	ctx_lhs : ctx_from_res res_lhs
+	
+	res_rhs : compile_node rhs ctx_lhs
+	asm_rhs : asm_from_res res_rhs
+	ctx_rhs : ctx_from_res res_rhs
+?
+	(asm_lhs ~
+		(`    adr x9, sign_id\n` ,
+			`    cmp x0, x9\n` ,
+			(concat `    b.eq ` (concat lbl_right `\n`)) ,
+			(concat `    b ` (concat lbl_end `\n`)) ,
+			(concat lbl_right `:\n`) ,
+			(asm_rhs ~ ((concat lbl_end `:\n`) , 0))
+		)
+	) , ctx_rhs , 0
 
 #compile_logic_and : node ctx ?
-	(lhs ? (rhs ?
-		(lbl_fail ? (lbl_end ? (res_lbl_end ?
-			(ctx_new ?
-				(res_lhs ?
-					(asm_lhs ? (ctx_lhs ?
-						(res_rhs ?
-							(asm_rhs ? (ctx_rhs ?
-								(asm_lhs ~
-									(`    adr x9, sign_id\n` ,
-										`    cmp x0, x9\n` ,
-											(concat `    b.eq ` (concat lbl_fail `\n`)) ,
-												(asm_rhs ~
-													((concat `    b ` (concat lbl_end `\n`)) ,
-														(concat lbl_fail `:\n`) ,
-															`    adr x0, sign_id\n` ,
-																(concat lbl_end `:\n`) , 0
-													)
-												)
-									)
-								) , ctx_rhs , 0
-							) (ctx_from_res res_rhs) ) (asm_from_res res_rhs)
-						) (compile_node rhs ctx_lhs)
-					) (ctx_from_res res_lhs) ) (asm_from_res res_lhs)
-				) (compile_node lhs ctx_new)
-			) (ctx_from_lbl res_lbl_end)
-		) (new_label (new_label ctx `and_fail`) `and_end`) ) )
-	) (head (tail (tail (tail node)))) ) (head (tail (tail node)))
+	lhs : head (tail (tail node))
+	rhs : head (tail (tail (tail node)))
+	
+	ctx_lbl_fail : new_label ctx `and_fail`
+	lbl_fail : head ctx_lbl_fail
+	res_lbl_end : new_label ctx_lbl_fail `and_end`
+	lbl_end : head res_lbl_end
+	ctx_new : ctx_from_lbl res_lbl_end
+	
+	res_lhs : compile_node lhs ctx_new
+	asm_lhs : asm_from_res res_lhs
+	ctx_lhs : ctx_from_res res_lhs
+	
+	res_rhs : compile_node rhs ctx_lhs
+	asm_rhs : asm_from_res res_rhs
+	ctx_rhs : ctx_from_res res_rhs
+?
+	(asm_lhs ~
+		(`    adr x9, sign_id\n` ,
+			`    cmp x0, x9\n` ,
+			(concat `    b.eq ` (concat lbl_fail `\n`)) ,
+			(asm_rhs ~
+				((concat `    b ` (concat lbl_end `\n`)) ,
+					(concat lbl_fail `:\n`) ,
+					`    adr x0, sign_id\n` ,
+					(concat lbl_end `:\n`) , 0
+				)
+			)
+		)
+	) , ctx_rhs , 0
 
 #compile_block : node ctx ?
-	(stmts ?
-		stmts = 0 : (
-			(`    adr x0, sign_id\n` , 0) , ctx , 0
-		)
-		
-		(lbl_end ? 
-			(res_stmts ? 
-				(asm_stmts ? (ctx_stmts ?
-					(asm_stmts~ ((concat lbl_end `:\n`) , 0)) , ctx_stmts , 0
-				) (ctx_from_res res_stmts) ) (asm_from_res res_stmts)
-			) (compile_stmts stmts lbl_end (ctx_from_lbl res_lbl_end))
-		) (new_label ctx `blk_end`)
-	) (head (tail node))
+	stmts : head (tail node)
+	stmts = 0 : (`    adr x0, sign_id\n` , 0) , ctx , 0
+	
+	res_lbl_end : new_label ctx `blk_end`
+	lbl_end : head res_lbl_end
+	ctx_new : ctx_from_lbl res_lbl_end
+	
+	res_stmts : compile_stmts stmts lbl_end ctx_new
+	asm_stmts : asm_from_res res_stmts
+	ctx_stmts : ctx_from_res res_stmts
+?
+	(asm_stmts ~ ((concat lbl_end `:\n`) , 0)) , ctx_stmts , 0
 
 #compile_stmts : stmts lbl_end ctx ?
-	(head_stmt ? 
-		(tail_stmts ?
-			tail_stmts = 0 : (
-				`Last Statement`
-				compile_node head_stmt ctx
-			)
-			
-			`Not Last Statement`
-			(res_head ? 
-				(asm_head ? (ctx_head ?
-					(res_tail ?
-						(asm_tail ? (ctx_tail ?
-							(asm_head ~
-								(`    adr x9, sign_id\n` ,
-									`    cmp x0, x9\n` ,
-										(concat `    b.ne ` (concat lbl_end `\n`)) ,
-											asm_tail
-								)
-							) , ctx_tail , 0
-						) (ctx_from_res res_tail) ) (asm_from_res res_tail)
-					) (compile_stmts tail_stmts lbl_end ctx_head)
-				) (ctx_from_res res_head) ) (asm_from_res res_head)
-			) (compile_node head_stmt ctx)
-			
-		) (tail stmts)
-	) (head stmts)
+	head_stmt : head stmts
+	tail_stmts : tail stmts
+	
+	tail_stmts = 0 : (
+		`Last Statement`
+		compile_node head_stmt ctx
+	)
+	
+	`Not Last Statement`
+	res_head : compile_node head_stmt ctx
+	asm_head : asm_from_res res_head
+	ctx_head : ctx_from_res res_head
+	
+	res_tail : compile_stmts tail_stmts lbl_end ctx_head
+	asm_tail : asm_from_res res_tail
+	ctx_tail : ctx_from_res res_tail
+?
+	(asm_head ~
+		(`    adr x9, sign_id\n` ,
+			`    cmp x0, x9\n` ,
+			(concat `    b.ne ` (concat lbl_end `\n`)) ,
+			asm_tail
+		)
+	) , ctx_tail , 0
 
 #asm_from_res : res ? head res
 #ctx_from_res : res ? head (tail res)
-#res_lbl_end : res ? res `Typo fix context usage above`
 #ctx_from_lbl : res ? head (tail res)
 
 #is_literal_expr : node ?
