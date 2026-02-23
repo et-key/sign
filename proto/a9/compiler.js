@@ -468,6 +468,11 @@ function compileInfix(node) {
 			let lblPrintStr = generateLabel("print_str");
 			let lblDone = generateLabel("print_done");
 
+			// Check if x0 is sign_id (_) -> do not print anything (control statement)
+			code += '    adr x9, sign_id\n';
+			code += '    cmp x0, x9\n';
+			code += `    b.eq ${lblDone}\n`;
+
 			// Check if x0 is a pointer (> 4096) or Number
 			code += '    cmp x0, #4096\n';
 			code += `    b.hi ${lblPrintStr}\n`;
@@ -800,9 +805,15 @@ function compileApply(node) {
 	let lblCompose = generateLabel("do_compose");
 	let lblApply = generateLabel("do_apply");
 	let lblConcat = generateLabel("do_concat");
+	let lblIdMorphism = generateLabel("id_morphism");
 	let lblEnd = generateLabel("apply_end");
 
 	code += '    ldr x9, [sp], #16\n'; // Pop Func into x9
+
+	// Check if LHS (x9) is _ (sign_id) -> id morphism
+	code += '    adr x10, sign_id\n';
+	code += '    cmp x9, x10\n';
+	code += `    b.eq ${lblIdMorphism}\n`;
 
 	// Check if LHS (x9) is a function (tagged with #1)
 	code += '    tst x9, #1\n';
@@ -832,6 +843,12 @@ function compileApply(node) {
 	code += '    mov x1, x0\n';        // x1 = RHS
 	code += '    mov x0, x9\n';        // x0 = LHS
 	code += '    bl _concat\n';
+	code += `    b ${lblEnd}\n`;
+
+	// Case D: Id Morphism (_ Arg -> Arg)
+	code += `${lblIdMorphism}:\n`;
+	// Arg is already in x0, no-op
+	code += `    b ${lblEnd}\n`;
 
 	code += `${lblEnd}:\n`;
 	return code;
