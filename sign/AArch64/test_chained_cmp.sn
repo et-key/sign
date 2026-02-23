@@ -1,0 +1,6 @@
+`Test literal chain mapping`
+foo : \a <= \d <= \z
+bar : 0 <= 5 <= 9
+baz : 5 < 2 < 8
+
+test : foo == \d & bar == 5 & baz == 0

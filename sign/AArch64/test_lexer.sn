@@ -1,0 +1,54 @@
+`Test Driver for Lexer (Functional)`
+
+#main : _ ?
+	src : `x = 123 + `foo``
+	
+	print_str `Source: `
+	print_str src
+	print_char 10
+
+	init_lexer src
+	_process_tokens (scan 0)
+
+#_process_tokens : tok ?
+	type : @tok
+	type = tok_eof : (
+		print_str `EOF`
+		print_char 10
+		0
+	)
+	
+	val : @(tok + 8)
+	
+	type = tok_id : (
+		print_str `ID: `
+		print_str val
+	)
+	type = tok_num : (
+		print_str `NUM: `
+		print_num val
+	)
+	type = tok_str : (
+		print_str `STR: `
+		print_str val
+	)
+	type = tok_op : (
+		print_str `OP: `
+		print_str val
+	)
+	type = tok_punc : (
+		print_str `PUNC: `
+		print_char val
+	)
+	type = tok_sep : (
+		print_str `SEP`
+	)
+	type = tok_lparen : (
+		print_str `LPAREN`
+	)
+	type = tok_rparen : (
+		print_str `RPAREN`
+	)
+	
+	print_char 10
+	_process_tokens (scan 0)
