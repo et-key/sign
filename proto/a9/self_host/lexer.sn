@@ -30,7 +30,7 @@ tok_unit : 0
 
 #_rev : list acc ?
 	list = 0 : acc
-	_rev (tail list) ((head list), acc)
+	_rev (tail list) [(head list) acc]
 
 #list_to_string :
 	list
@@ -60,8 +60,8 @@ tok_unit : 0
 	token : head res
 	type : @token
 ?
-	type = tok_eof : token, 0
-	token, (_tokenize_loop source source_len (head (tail res)))
+	type = tok_eof : [token 0]
+	[token (_tokenize_loop source source_len (head (tail res)))]
 
 
 #scan_token :
@@ -76,36 +76,36 @@ tok_unit : 0
 	res_op : scan_op source source_len pos
 	res_str : scan_str source source_len pos
 ?
-	pos >= source_len : (
-		(tok_eof, 0), (pos, 0)
-	)
+	pos >= source_len : [
+		[tok_eof 0] [pos 0]
+	]
 	
 	is_space c : (
 		scan_token source source_len (pos + 1)
 	)
 	
-	c = \ : (
-		(tok_sep, 0), ((pos + 1), 0)
-	)
+	c = \ : [
+		[tok_sep 0] [(pos + 1) 0]
+	]
 	
-	is_digit c : (
-		(tok_num, val, 0), ((head (tail res_num)), 0)
-	)
+	is_digit c : [
+		[tok_num val] [(head (tail res_num)) 0]
+	]
 	
-	is_alpha c : (
-		(tok_id, (head res_id)), ((head (tail res_id)), 0)
-	)
+	is_alpha c : [
+		[tok_id (head res_id)] [(head (tail res_id)) 0]
+	]
 	
-	is_op_char c : (
-		(tok_op, (head res_op)), ((head (tail res_op)), 0)
-	)
+	is_op_char c : [
+		[tok_op (head res_op)] [(head (tail res_op)) 0]
+	]
 	
-	c = \` : (
-		(tok_str, (head res_str)), ((head (tail res_str)), 0)
-	)
+	c = \` : [
+		[tok_str (head res_str)] [(head (tail res_str)) 0]
+	]
 	
 	`Default: Punctuation`
-	(tok_punc, c, 0), ((pos + 1), 0)
+	[ [tok_punc c] [(pos + 1) 0] ]
 
 
 
@@ -130,17 +130,17 @@ tok_unit : 0
 	chars_rev : head res
 	chars : reverse chars_rev
 ?
-	(list_to_string chars), ((head (tail res)), 0)
+	[ (list_to_string chars) [(head (tail res)) 0] ]
 
 #_scan_while_rec : source source_len pos pred acc ?
-	pos >= source_len : (
-		acc, (pos, 0)
-	)
+	pos >= source_len : [
+		acc [pos 0]
+	]
 	c : nth source pos
 	pred c : (
-		_scan_while_rec source source_len (pos + 1) pred (c, acc)
+		_scan_while_rec source source_len (pos + 1) pred [c acc]
 	)
-	acc, (pos, 0)
+	[acc [pos 0]]
 
 #scan_str :
 	source 
@@ -152,18 +152,18 @@ tok_unit : 0
 	chars : reverse chars_rev
 ?
 	`Skip opening backtick`
-	(list_to_string chars), ((head (tail res)), 0)
+	[ (list_to_string chars) [(head (tail res)) 0] ]
 
 #_scan_str_rec : source source_len pos acc ?
-	pos >= source_len : (
-		acc, (pos, 0)
-	)
+	pos >= source_len : [
+		acc [pos 0]
+	]
 	c : nth source pos
-	(c = \` | c = -1) : (
+	(c = \` | c = -1) : [
 		`End of string`
-		acc, ((pos + 1), 0)
-	)
-	_scan_str_rec source source_len (pos + 1) (c, acc)
+		acc [(pos + 1) 0]
+	]
+	_scan_str_rec source source_len (pos + 1) [c acc]
 
 `--- Utils ---`
 #_parse_int : str ?

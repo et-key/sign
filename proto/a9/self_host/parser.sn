@@ -110,8 +110,8 @@ tok_unit : 0
 	tok : peek tokens
 	tok_t : tok_type tok
 ?
-	tok_t = type : 1, (next tokens)
-	0, tokens
+	tok_t = type : [1 (next tokens)]
+	[0 tokens]
 
 `--- Core Parser Logic ---`
 
@@ -120,7 +120,7 @@ tok_unit : 0
 	tokens
 	res : parse_stmts tokens 0
 ?
-	(ast_block, (head res), 0), ((head (tail res)), 0)
+	[ [ast_block (head res) 0] [(head (tail res)) 0] ]
 
 `parse_stmts : tokens in_block -> [list<node>, rest]`
 #parse_stmts :
@@ -133,12 +133,12 @@ tok_unit : 0
 	rest : head (tail res)
 	res2 : parse_stmts rest in_block
 ?
-	type = tok_eof : 0, (tokens, 0)
+	type = tok_eof : [0 [tokens 0]]
 	
 	type = tok_sep : parse_stmts (next tokens) in_block
 	
 	`Parse Expression`
-	(expr, (head res2)), ((head (tail res2)), 0)
+	[ [expr (head res2)] [(head (tail res2)) 0] ]
 
 
 `parse_block : tokens -> [ast_block, rest]`
@@ -192,15 +192,15 @@ tok_unit : 0
 		_parse_expr_loop new_lhs_apply rest_rhs_apply min_prec in_block
 	)
 	
-	type != tok_op : lhs, (tokens, 0)
+	type != tok_op : [lhs [tokens 0]]
 
 	is_post & (post_prec >= min_prec) : (
 		_parse_expr_loop new_lhs_post next_tokens min_prec in_block
 	)
 	
-	prec < min_prec : lhs, (tokens, 0)
+	prec < min_prec : [lhs [tokens 0]]
 	
-	prec = 0 : lhs, (tokens, 0)
+	prec = 0 : [lhs [tokens 0]]
 	
 	_parse_expr_loop new_lhs_infix rest_rhs_infix min_prec in_block
 
@@ -241,24 +241,24 @@ tok_unit : 0
 	tokens_next : next tokens
 	val : tok_val tok
 ?
-	type = tok_num : (ast_num, (val, 0)), (tokens_next, 0)
-	type = tok_id : (ast_id, (val, 0)), (tokens_next, 0)
-	type = tok_str : (ast_str, (val, 0)), (tokens_next, 0)
+	type = tok_num : [ [ast_num val] [tokens_next 0] ]
+	type = tok_id : [ [ast_id val] [tokens_next 0] ]
+	type = tok_str : [ [ast_str val] [tokens_next 0] ]
 	
 	type = tok_op : (
 		is_prefix_op val : _parse_prefix val tokens_next in_block
-		(ast_op, (val, 0)), (tokens_next, 0)
+		[ [ast_op val] [tokens_next 0] ]
 	)
 	
 	type = tok_punc : (
 		val = \[ : parse_block tokens_next
 		val = \( : parse_block tokens_next
 		val = \{ : parse_block tokens_next
-		(ast_unit, 0), (tokens_next, 0)
+		[ ast_unit [tokens_next 0] ]
 	)
 	
 	`Unknown`
-	(ast_unit, 0), (tokens_next, 0)
+	[ ast_unit [tokens_next 0] ]
 
 #_parse_prefix :
 	op
@@ -266,7 +266,7 @@ tok_unit : 0
 	in_block
 	res : parse_expr tokens_next 20 in_block
 ?
-	(ast_prefix, (op, ((head res), 0))), ((head (tail res)), 0)
+	[ [ast_prefix op [(head res) 0]] [(head (tail res)) 0] ]
 
 
 
@@ -280,7 +280,7 @@ tok_unit : 0
 	tok_r : peek rest
 	node : transform_section exprs
 ?
-	node, ((next rest), 0)
+	[node [(next rest) 0]]
 
 #is_null :
 	list 
@@ -289,14 +289,14 @@ tok_unit : 0
 	0
 
 `--- AST Constructors ---`
-#make_node : type val ? type, (val, 0)
+#make_node : type val ? [type [val 0]]
 
 #make_num : val ? make_node ast_num val
 #make_id : val ? make_node ast_id val
 #make_op : val ? make_node ast_op val
 #make_str : val ? make_node ast_str val
 
-#make_infix : op lhs rhs ? ast_infix, (op, (lhs, (rhs, 0)))
+#make_infix : op lhs rhs ? [ast_infix [op [lhs [rhs 0]]]]
 
 #make_lambda : params body ? make_infix \? params body
 
@@ -309,7 +309,7 @@ tok_unit : 0
 ?
 	len = 1 : _transform_section_1 exprs p1 p2
 	len = 2 : _transform_section_2 exprs p1 p2
-	ast_block, (exprs, 0)
+	[ast_block [exprs 0]]
 
 #_transform_section_1 :
 	exprs
@@ -320,7 +320,7 @@ tok_unit : 0
 	op_str : tok_val (head (tail e1))
 ?
 	type = ast_op : make_lambda (make_infix \, p1 p2) (make_infix op_str p1 p2)
-	ast_block, (exprs, 0)
+	[ast_block [exprs 0]]
 
 #_transform_section_2 :
 	exprs
@@ -335,7 +335,7 @@ tok_unit : 0
 ?
 	t1 = ast_op : make_lambda p1 (make_infix op_str_1 p1 e2)
 	t2 = ast_op : make_lambda p1 (make_infix op_str_2 e1 p1)
-	ast_block, (exprs, 0)
+	[ast_block [exprs 0]]
 
 
 
