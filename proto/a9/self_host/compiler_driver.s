@@ -45,7 +45,7 @@ apply_end_3:
     str x0, [sp, #-16]!
     ldr x0, =0x4130000000000000
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -122,7 +122,7 @@ func_12:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     str x0, [x1]
     adr x9, sign_id
@@ -229,7 +229,7 @@ cond_end_26:
     str x0, [sp, #-16]!
     mov x0, #8
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     ldr x1, [sp], #16
@@ -354,7 +354,7 @@ func_42:
     str x0, [sp, #-16]!
     mov x0, #8
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x0, [x0] // @ load
     mov sp, x29
     ldp x29, x30, [sp], #16
@@ -739,7 +739,7 @@ apply_end_101:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -1078,7 +1078,7 @@ cond_end_146:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -1102,7 +1102,7 @@ apply_end_151:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -1568,7 +1568,7 @@ apply_end_220:
     sdiv x2, x1, x0
     msub x0, x2, x0, x1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -1647,7 +1647,7 @@ func_231:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     mov sp, x29
     ldp x29, x30, [sp], #16
     ret
@@ -2511,7 +2511,7 @@ apply_end_325:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     str x0, [x1]
     adr x9, sign_id
@@ -3196,7 +3196,7 @@ cond_end_459:
     str x0, [sp, #-16]!
     adr x0, length
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     str x0, [sp, #-16]!
     adr x0, tail
     str x0, [sp, #-16]!
@@ -3316,7 +3316,7 @@ apply_end_478:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -3408,7 +3408,7 @@ apply_end_490:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
@@ -3511,7 +3511,7 @@ cond_end_504:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     str x0, [sp, #-16]!
     adr x0, head
     str x0, [sp, #-16]!
@@ -3605,7 +3605,7 @@ apply_end_518:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -5491,7 +5491,7 @@ apply_end_806:
     ldr x1, [sp], #16
     sub x0, x1, x0
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     str x0, [x1]
     adr x9, sign_id
@@ -6756,7 +6756,7 @@ cond_end_972:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -6780,7 +6780,7 @@ apply_end_977:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -6901,7 +6901,7 @@ apply_end_991:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
@@ -6995,7 +6995,7 @@ apply_end_1002:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
@@ -7089,7 +7089,7 @@ apply_end_1013:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
@@ -7183,7 +7183,7 @@ apply_end_1024:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
@@ -8724,7 +8724,7 @@ func_1251:
     str x0, [sp, #-16]!
     mov x0, #8
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -10806,7 +10806,7 @@ and_end_1568:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -11195,7 +11195,7 @@ func_1623:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -12313,13 +12313,13 @@ cond_end_1777:
     str x0, [sp, #-16]!
     adr x0, str_len
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     str x0, [sp, #-16]!
     ldr x0, [x29, #-32]
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -12466,7 +12466,7 @@ cond_end_1794:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -12490,7 +12490,7 @@ apply_end_1803:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -12640,11 +12640,11 @@ apply_end_1822:
     str x0, [sp, #-16]!
     ldr x0, [x29, #-80]
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x1, [sp], #16
     adr x9, heap_buffer
     cmp x1, x9
@@ -13644,7 +13644,7 @@ apply_end_1967:
     str x0, [sp, #-16]!
     mov x0, #48
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     str x0, [sp, #-16]!
     adr x0, Append
     ldr x1, [sp], #16
@@ -14595,7 +14595,7 @@ apply_end_2104:
     str x0, [sp, #-16]!
     mov x0, #1
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     str x0, [sp, #-16]!
     mov x0, #0
     ldr x1, [sp], #16
@@ -14871,7 +14871,7 @@ cmp_end_2144:
     str x0, [sp, #-16]!
     mov x0, #8
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
@@ -15263,7 +15263,7 @@ func_2199:
     str x0, [sp, #-16]!
     mov x0, #16
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
@@ -15274,7 +15274,7 @@ func_2199:
     str x0, [sp, #-16]!
     mov x0, #24
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     ldr x0, [x29, #-48]
@@ -15555,7 +15555,7 @@ cmp_end_2239:
     str x0, [sp, #-16]!
     mov x0, #8
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
@@ -15857,7 +15857,7 @@ apply_end_2284:
     str x0, [sp, #-16]!
     mov x0, #16
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
@@ -15868,7 +15868,7 @@ apply_end_2284:
     str x0, [sp, #-16]!
     mov x0, #24
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
@@ -16473,7 +16473,7 @@ cond_end_2365:
     str x0, [sp, #-16]!
     mov x0, #8
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
@@ -17263,7 +17263,7 @@ func_2480:
     str x0, [sp, #-16]!
     mov x0, #8
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
@@ -17274,7 +17274,7 @@ func_2480:
     str x0, [sp, #-16]!
     mov x0, #16
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
@@ -17704,7 +17704,7 @@ func_2538:
     str x0, [sp, #-16]!
     mov x0, #8
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
@@ -17715,7 +17715,7 @@ func_2538:
     str x0, [sp, #-16]!
     mov x0, #16
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
@@ -17726,7 +17726,7 @@ func_2538:
     str x0, [sp, #-16]!
     mov x0, #24
     ldr x1, [sp], #16
-    add x0, x1, x0
+    bl _add
     ldr x0, [x0] // @ load
     str x0, [sp, #-16]!
     adr x0, sign_id
@@ -19771,6 +19771,9 @@ ret
 
 
 .data
+.balign 8
+.global _str_start
+_str_start:
 str_0:
     .asciz "s"
 str_1:
@@ -19816,7 +19819,7 @@ str_20:
 str_21:
     .asciz "    ldr x1, [sp], #16\n"
 str_22:
-    .asciz "    add x0, x1, x0\n"
+    .asciz "    bl _add\n"
 str_23:
     .asciz "    sub x0, x1, x0\n"
 str_24:
@@ -19831,3 +19834,6 @@ str_28:
     .asciz "Source: "
 str_29:
     .asciz "// TODO: Generate Assembly\n"
+
+.global _str_end
+_str_end:
