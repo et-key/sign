@@ -138,68 +138,78 @@ function compileNode(node) {
 	if (node.type === 'block') {
 		// Heuristic: If all statements in the block are `infix :` (definitions) OR `postfix ~` (spread), it acts as a Dictionary Environment
 		let isDict = node.body.length > 0 && node.body.every(stmt =>
-			(stmt.type === 'infix' && stmt.op === ':' && stmt.left && stmt.left.type === 'identifier') ||
+			(stmt.type === 'infix' && stmt.op === ':' && stmt.left && (stmt.left.type === 'identifier' || stmt.left.type === 'apply' || stmt.left.type === 'string')) ||
 			(stmt.type === 'postfix' && stmt.op === '~')
 		);
 
 		if (isDict) {
-			let code = `    adr x0, sign_id\n    str x0, [sp, #-16]!\n`; // Nil tail
+			function extractStringFromApply(node) {
+				if (node.type === 'identifier') return node.value === '"' ? '' : node.value;
+				if (node.type === 'apply') {
+					return extractStringFromApply(node.func) + extractStringFromApply(node.arg);
+				}
+				if (node.type === 'string') return node.value.replace(/["`]/g, '');
+				return '';
+			}
 
-			// Build dictionary list in reverse order
+			// A dictionary acts as a function: k ? (k = key1 : val1) | (k = key2 : val2) | _
+			// We build this AST dynamically right here so we can compile it cleanly via compileNode.
+
+			// Base case: `_` (identity function/unit fallback)
+			let dictAst = { type: 'identifier', value: '_' };
+
+			// Build the chained AST in reverse order so `dictAst` is the fallback/tail.
+			// e.g., for [ "a": 1, "b": 2 ]
+			// AST: k ? (k = "a" : 1) | ((k = "b" : 2) | _)
 			for (let i = node.body.length - 1; i >= 0; i--) {
 				let stmt = node.body[i];
 
 				if (stmt.type === 'postfix' && stmt.op === '~') {
-					// Spread operator: Evaluate dict to spread and concat
-					code += compileNode(stmt.expr); // Evaluate dict -> x0
-					code += `    mov x1, x0\n`;      // x1 = spread_dict
-					code += `    ldr x0, [sp], #16\n`; // x0 = current_built_tail
-					// Spread logic: The rightmost items should be at the base of the list.
-					// Actually, if we are building backwards:
-					// current_built_tail currently has the items defined *after* this spread.
-					// We want: spread_dict concatenated with current_built_tail.
-					// _concat(x0=spread_dict, x1=current_built_tail) -> x0
-					code += `    mov x2, x0\n`; // temp
-					code += `    mov x0, x1\n`; // x0 = spread_dict
-					code += `    mov x1, x2\n`; // x1 = current_built_tail
-					code += `    bl _concat\n`;
-					code += `    str x0, [sp, #-16]!\n`; // push new tail
+					// Apply `spread_dict` to `k`
+					let fallbackCheck = {
+						type: 'infix', op: '|',
+						left: { type: 'apply', func: stmt.expr, arg: { type: 'identifier', value: '$k' } },
+						right: dictAst
+					};
+					dictAst = fallbackCheck;
 					continue;
 				}
 
-				let key = stmt.left.value;
-				let valNode = stmt.right;
+				if (stmt.type === 'infix' && stmt.op === ':') {
+					let key = stmt.left; // usually an identifier or string
+					let valNode = stmt.right;
 
-				// Ensure string key is in string table
-				let lblKey = stringTable[key];
-				if (!lblKey) {
-					lblKey = `str_${stringCounter++}`;
-					stringTable[key] = lblKey;
+					// Condition: k = "key"
+					let keyStr = extractStringFromApply(key);
+					let keyCondition = {
+						type: 'infix', op: '=',
+						left: { type: 'identifier', value: '$k' },
+						right: { type: 'string', value: '"`' + keyStr + '`"' } // String with both double quotes and backticks to bypass slice
+					};
+
+					// (k = "key" : value) | fallback
+					let pair = {
+						type: 'infix', op: ':',
+						left: keyCondition,
+						right: valNode
+					};
+
+					dictAst = {
+						type: 'infix', op: '|',
+						left: pair,
+						right: dictAst
+					};
 				}
-
-				// Compile Value
-				code += compileNode(valNode);
-				code += `    str x0, [sp, #-16]!\n`;
-
-				// Load Key
-				code += `    adr x0, ${lblKey}\n`;
-				code += `    mov x1, x0\n`;
-				// Pop Value
-				code += `    ldr x0, [sp], #16\n`;
-
-				// Make Pair [Key, Value] -> x1=Key, x0=Value
-				code += `    bl _cons\n`;
-
-				// Push Pair onto List
-				code += `    mov x1, x0\n`;
-				code += `    ldr x0, [sp], #16\n`; // Pop tail
-				code += `    bl _cons\n`;
-
-				// Push current list
-				code += `    str x0, [sp, #-16]!\n`;
 			}
-			code += `    ldr x0, [sp], #16\n`;
-			return code;
+
+			// Wrap in lambda: $k ? dictAst
+			let lambdaAst = {
+				type: 'infix', op: '?',
+				left: { type: 'identifier', value: '$k' },
+				right: dictAst
+			};
+
+			return compileNode(lambdaAst);
 		}
 
 		let code = '';
@@ -468,6 +478,11 @@ function compileInfix(node) {
 			let lblPrintStr = generateLabel("print_str");
 			let lblDone = generateLabel("print_done");
 
+			// Check if x0 is sign_id (_) -> do not print anything (control statement)
+			code += '    adr x9, sign_id\n';
+			code += '    cmp x0, x9\n';
+			code += `    b.eq ${lblDone}\n`;
+
 			// Check if x0 is a pointer (> 4096) or Number
 			code += '    cmp x0, #4096\n';
 			code += `    b.hi ${lblPrintStr}\n`;
@@ -631,44 +646,35 @@ function compileInfix(node) {
 		return code;
 	}
 
-	// Dictionary Access (left-associative)
+	// Dictionary Access (left-associative) e.g., dict ' key
 	if (op === "'") {
-		let code = compileNode(left);
-		code += '    str x0, [sp, #-16]!\n';
+		// Treat `x ' y` exactly as `x y` (function application) where y is generally a string identifier.
+		let keyNode = right;
 		if (right.type === 'identifier') {
-			let lbl = stringTable[right.value];
-			if (!lbl) {
-				lbl = `str_${stringCounter++}`;
-				stringTable[right.value] = lbl;
-			}
-			code += `    adr x0, ${lbl}\n`;
-		} else {
-			code += compileNode(right);
+			let s = right.value;
+			keyNode = { type: 'string', value: '"`' + s + '`"' };
 		}
-		code += '    mov x1, x0\n'; // Key -> x1
-		code += '    ldr x0, [sp], #16\n'; // Dict -> x0
-		code += '    bl _dict_get\n';
-		return code;
+		let applyAst = {
+			type: 'apply',
+			func: left,
+			arg: keyNode
+		};
+		return compileApply(applyAst);
 	}
 
-	// Dictionary Access (right-associative)
+	// Dictionary Access (right-associative) e.g., key @ dict
 	if (op === "@") {
-		let code = compileNode(right);
-		code += '    str x0, [sp, #-16]!\n';
+		let keyNode = left;
 		if (left.type === 'identifier') {
-			let lbl = stringTable[left.value];
-			if (!lbl) {
-				lbl = `str_${stringCounter++}`;
-				stringTable[left.value] = lbl;
-			}
-			code += `    adr x0, ${lbl}\n`;
-		} else {
-			code += compileNode(left);
+			let s = left.value;
+			keyNode = { type: 'string', value: '"`' + s + '`"' };
 		}
-		code += '    mov x1, x0\n'; // Key -> x1
-		code += '    ldr x0, [sp], #16\n'; // Dict -> x0
-		code += '    bl _dict_get\n';
-		return code;
+		let applyAst = {
+			type: 'apply',
+			func: right,
+			arg: keyNode
+		};
+		return compileApply(applyAst);
 	}
 
 	let code = compileNode(left);
@@ -696,99 +702,7 @@ function compileInfix(node) {
 function compileApply(node) {
 	let code = '';
 
-	// Optimization: Static Inline Composition
-	// Check if both Func and Arg are static lambda definitions (infix '?')
-	if (node.func.type === 'infix' && node.func.op === '?' &&
-		node.arg.type === 'infix' && node.arg.op === '?') {
 
-		// We have [Outer] [Inner].
-		// Outer: node.func
-		// Inner: node.arg
-		// Goal: Create a new function H that does Inner then Outer.
-
-		let label = generateLabel("inline_composed");
-		let afterLabel = generateLabel("after_" + label);
-		let setupCode = `    b ${afterLabel}\n`;
-		let funcCode = `${label}:\n`;
-
-		// Standard Prologue
-		funcCode += '    stp x29, x30, [sp, #-16]!\n';
-		funcCode += '    mov x29, sp\n';
-
-		// Setup environment (simulate compileFunction partially)
-		let oldEnv = { ...g_env };
-		g_env._stackOffset = -16;
-
-		// We assume both distinct functions use the same argument name (e.g. $1) or compatible checking
-		// For this prototype, we assume single argument '$1' logic from the AST we saw.
-		// We need to allocate space for the argument.
-		// H(x) is called. x is in x0 or stack?
-		// Logic:
-		// 1. H(x) is called. x is passed (likely in x0, or if this is Apply, we are pushing to stack?)
-		// Wait, compileFunction usually expects args.
-		// Use compileFunction logic to setup ONE argument frame.
-
-		let params = [];
-		// Extract params from Inner (Arg) - it determines the input signature of H
-		if (node.arg.left) {
-			let collectParams = (n) => {
-				if (n.type === 'identifier') params.push(n.value);
-				else if (n.type === 'infix' && n.op === ',') {
-					collectParams(n.left);
-					collectParams(n.right);
-				}
-			};
-			collectParams(node.arg.left);
-		}
-
-		if (params.length > 0) {
-			let p = params[0]; // Primary arg (e.g. $1)
-			funcCode += '    str x0, [sp, #-16]!\n'; // Push Arg
-			g_env._stackOffset -= 16;
-			g_env[p] = `local:${g_env._stackOffset}`;
-		}
-
-		// 2. Compile Left Body (Outer: node.func)
-		funcCode += `    // Inline: Left Body\n`;
-		funcCode += compileNode(node.func.right);
-		// Result is in x0.
-
-		// 3. Chain: Update the Argument slot with the result!
-		// So Right reads this result as its '$1'.
-		if (params.length > 0) {
-			let p = params[0];
-			let loc = g_env[p]; // local:-32
-			let offset = parseInt(loc.split(':')[1]);
-			funcCode += `    // Inline: Chaining (Update ${p})\n`;
-			funcCode += `    str x0, [x29, #${offset}]\n`;
-		}
-
-		// 4. Compile Right Body (Inner: node.arg)
-		funcCode += `    // Inline: Right Body\n`;
-		funcCode += compileNode(node.arg.right);
-		// Result is in x0.
-
-		// Standard Eqpilegue
-		funcCode += '    mov sp, x29\n';
-		funcCode += '    ldp x29, x30, [sp], #16\n';
-		funcCode += '    ret\n';
-
-		g_env = oldEnv;
-
-		// Emit the function definition
-		code += setupCode + funcCode + `${afterLabel}:\n`;
-
-		// Return the closure of this new function
-		// For prototype, assume no free vars in these simple lambdas
-		code += `    adr x0, sign_id\n`; // Nil Env
-		code += `    str x0, [sp, #-16]!\n`;
-		code += `    adr x1, ${label}\n`;
-		code += `    ldr x0, [sp], #16\n`;
-		code += `    bl _cons\n`; // Make Closure [Function, Env]
-		code += `    orr x0, x0, #1 // Tag closure\n`;
-
-		return code;
-	}
 
 	// 1. Compile Func -> Stack
 	code += compileNode(node.func);
@@ -800,9 +714,15 @@ function compileApply(node) {
 	let lblCompose = generateLabel("do_compose");
 	let lblApply = generateLabel("do_apply");
 	let lblConcat = generateLabel("do_concat");
+	let lblIdMorphism = generateLabel("id_morphism");
 	let lblEnd = generateLabel("apply_end");
 
 	code += '    ldr x9, [sp], #16\n'; // Pop Func into x9
+
+	// Check if LHS (x9) is _ (sign_id) -> id morphism
+	code += '    adr x1, sign_id\n';
+	code += '    cmp x9, x1\n'; // Use x1 instead of x10 for simple cmp
+	code += `    b.eq ${lblIdMorphism}\n`;
 
 	// Check if LHS (x9) is a function (tagged with #1)
 	code += '    tst x9, #1\n';
@@ -814,10 +734,10 @@ function compileApply(node) {
 
 	// Case A: Apply (LHS=Func, RHS=Data)
 	code += `${lblApply}:\n`;
-	code += '    bic x9, x9, #1\n';   // Clear tag from Func
-	code += '    ldr x10, [x9]\n';     // Code
+	code += '    eor x9, x9, #1\n';   // Clear tag from Func (toggle bit 0)
+	code += '    ldr x1, [x9]\n';     // Code
 	code += '    ldr x9, [x9, #8]\n';  // Env
-	code += '    blr x10\n';
+	code += '    blr x1\n';
 	code += `    b ${lblEnd}\n`;
 
 	// Case B: Compose (LHS=Func, RHS=Func)
@@ -832,6 +752,12 @@ function compileApply(node) {
 	code += '    mov x1, x0\n';        // x1 = RHS
 	code += '    mov x0, x9\n';        // x0 = LHS
 	code += '    bl _concat\n';
+	code += `    b ${lblEnd}\n`;
+
+	// Case D: Id Morphism (_ Arg -> Arg)
+	code += `${lblIdMorphism}:\n`;
+	// Arg is already in x0, no-op
+	code += `    b ${lblEnd}\n`;
 
 	code += `${lblEnd}:\n`;
 	return code;
@@ -884,10 +810,9 @@ function compileFunction(node, name) {
 	});
 
 	if (freeVars.length > 0) {
-		funcCode += `    ldr x9, [x29, #-16] // Reload Env\n`;
 		for (let v of freeVars) {
-			funcCode += `    ldr x10, [x9] // Load Val\n`;
-			funcCode += `    str x10, [sp, #-16]! // Push Val\n`;
+			funcCode += `    ldr x1, [x9] // Load Val\n`;
+			funcCode += `    str x1, [sp, #-16]! // Push Val\n`;
 			g_env._stackOffset -= 16;
 			g_env[v] = `local:${g_env._stackOffset}`;
 			funcCode += `    ldr x9, [x9, #8] // Next\n`;
@@ -928,9 +853,10 @@ function compileFunction(node, name) {
 	}
 
 	closureSetup += `    str x0, [sp, #-16]!\n`;
-	closureSetup += `    adr x1, ${label}\n`;
-	closureSetup += `    ldr x0, [sp], #16\n`;
+	closureSetup += `    adr x0, ${label}\n`;
+	closureSetup += `    ldr x1, [sp], #16\n`;
 	closureSetup += `    bl _cons\n`;
+	closureSetup += `    orr x0, x0, #1 // Tag closure\n`;
 
 	result += closureSetup;
 	return result;
@@ -1169,7 +1095,7 @@ _print_int:
     // Print "0"
     mov x0, #1 // stdout
     adr x1, .L_str_zero
-    mov x2, #1 // len
+    mov x2, #2 // len
     mov x8, #64 // write
     svc #0
     
@@ -1183,7 +1109,8 @@ _print_int:
     sub sp, sp, #64         // Alloc 64 bytes
     mov x9, sp              // buffer start
     add x9, x9, #63         // buffer end
-    strb wzr, [x9]          // null terminate? Not needed for write syscall if we know len.
+    mov w13, #10            // '\\n'
+    strb w13, [x9]
     sub x9, x9, #1          // Move back
     
     mov x10, #10            // divisor
@@ -1227,7 +1154,7 @@ _print_int:
     ret
     
 .L_str_zero:
-    .ascii "0"
+    .ascii "0\\n"
 `;
 
 finalOutput += `
@@ -1378,5 +1305,5 @@ for (let key in stringTable) {
 	finalOutput += `${lbl}:\n    .asciz "${key.replace(/"/g, '\\"')}"\n`;
 }
 
-fs.writeFileSync(OUTPUT_FILE, finalOutput);
+fs.writeFileSync(OUTPUT_FILE, finalOutput.replace(/\r/g, ''));
 console.log(`Compiled to ${OUTPUT_FILE}`);

@@ -11,187 +11,88 @@ __sign_init:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
 
-    mov x0, #0
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_1
-    b or_end_2
-or_right_1:
-    mov x0, #1
-or_end_2:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq print_done_5
-    cmp x0, #4096
-    b.hi print_str_4
-print_num_3:
-    bl _print_int
-    b print_done_5
-print_str_4:
-    // Magic IO Write to FD 1
-    mov x1, x0       // buf = RHS
-    mov x0, #1   // fd
-    mov x2, #0       // len
-strlen_6:
-    ldrb w3, [x1, x2]
-    cbz w3, strlen_done_7
-    add x2, x2, #1
-    b strlen_6
-strlen_done_7:
-    mov x8, #64      // syscall write
-    svc #0
-print_done_5:
+    mov x0, #100
+    adr x1, a
+    str x0, [x1]
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_8
-    b or_end_9
-or_right_8:
-    mov x0, #1
-or_end_9:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq print_done_12
-    cmp x0, #4096
-    b.hi print_str_11
-print_num_10:
-    bl _print_int
-    b print_done_12
-print_str_11:
-    // Magic IO Write to FD 1
-    mov x1, x0       // buf = RHS
-    mov x0, #1   // fd
-    mov x2, #0       // len
-strlen_13:
-    ldrb w3, [x1, x2]
-    cbz w3, strlen_done_14
-    add x2, x2, #1
-    b strlen_13
-strlen_done_14:
-    mov x8, #64      // syscall write
-    svc #0
-print_done_12:
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_15
-    b or_end_16
-or_right_15:
-    mov x0, #0
-or_end_16:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq print_done_19
-    cmp x0, #4096
-    b.hi print_str_18
-print_num_17:
-    bl _print_int
-    b print_done_19
-print_str_18:
-    // Magic IO Write to FD 1
-    mov x1, x0       // buf = RHS
-    mov x0, #1   // fd
-    mov x2, #0       // len
-strlen_20:
-    ldrb w3, [x1, x2]
-    cbz w3, strlen_done_21
-    add x2, x2, #1
-    b strlen_20
-strlen_done_21:
-    mov x8, #64      // syscall write
-    svc #0
-print_done_19:
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
+    b after_f_impl_1
+f_impl:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    adr x0, a
+    ldr x0, [x0]
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_f_impl_1:
+    // Closure for f_impl
     adr x0, sign_id
     str x0, [sp, #-16]!
-    mov x0, #5
+    adr x0, f_impl
+    ldr x1, [sp], #16
+    bl _cons
+    orr x0, x0, #1 // Tag closure
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_0
+    adr x0, f
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    mov x0, #0
     ldr x9, [sp], #16
-    adr x10, sign_id
-    cmp x9, x10
-    b.eq id_morphism_25
+    adr x1, sign_id
+    cmp x9, x1
+    b.eq id_morphism_5
     tst x9, #1
-    b.eq do_concat_24
+    b.eq do_concat_4
     tst x0, #1
-    b.ne do_compose_22
-do_apply_23:
-    bic x9, x9, #1
-    ldr x10, [x9]
+    b.ne do_compose_2
+do_apply_3:
+    eor x9, x9, #1
+    ldr x1, [x9]
     ldr x9, [x9, #8]
-    blr x10
-    b apply_end_26
-do_compose_22:
+    blr x1
+    b apply_end_6
+do_compose_2:
     mov x1, x0
     mov x0, x9
     bl _compose
-    b apply_end_26
-do_concat_24:
+    b apply_end_6
+do_concat_4:
     mov x1, x0
     mov x0, x9
     bl _concat
-    b apply_end_26
-id_morphism_25:
-    b apply_end_26
-apply_end_26:
+    b apply_end_6
+id_morphism_5:
+    b apply_end_6
+apply_end_6:
     adr x9, sign_id
     cmp x0, x9
-    b.eq print_done_29
+    b.eq print_done_9
     cmp x0, #4096
-    b.hi print_str_28
-print_num_27:
+    b.hi print_str_8
+print_num_7:
     bl _print_int
-    b print_done_29
-print_str_28:
+    b print_done_9
+print_str_8:
     // Magic IO Write to FD 1
     mov x1, x0       // buf = RHS
     mov x0, #1   // fd
     mov x2, #0       // len
-strlen_30:
+strlen_10:
     ldrb w3, [x1, x2]
-    cbz w3, strlen_done_31
+    cbz w3, strlen_done_11
     add x2, x2, #1
-    b strlen_30
-strlen_done_31:
+    b strlen_10
+strlen_done_11:
     mov x8, #64      // syscall write
     svc #0
-print_done_29:
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq print_done_34
-    cmp x0, #4096
-    b.hi print_str_33
-print_num_32:
-    bl _print_int
-    b print_done_34
-print_str_33:
-    // Magic IO Write to FD 1
-    mov x1, x0       // buf = RHS
-    mov x0, #1   // fd
-    mov x2, #0       // len
-strlen_35:
-    ldrb w3, [x1, x2]
-    cbz w3, strlen_done_36
-    add x2, x2, #1
-    b strlen_35
-strlen_done_36:
-    mov x8, #64      // syscall write
-    svc #0
-print_done_34:
+print_done_9:
     adr x0, sign_id
 blk_end_0:
 
@@ -342,7 +243,7 @@ _print_int:
     // Print "0"
     mov x0, #1 // stdout
     adr x1, .L_str_zero
-    mov x2, #1 // len
+    mov x2, #2 // len
     mov x8, #64 // write
     svc #0
     
@@ -356,7 +257,8 @@ _print_int:
     sub sp, sp, #64         // Alloc 64 bytes
     mov x9, sp              // buffer start
     add x9, x9, #63         // buffer end
-    strb wzr, [x9]          // null terminate? Not needed for write syscall if we know len.
+    mov w13, #10            // '\n'
+    strb w13, [x9]
     sub x9, x9, #1          // Move back
     
     mov x10, #10            // divisor
@@ -400,9 +302,11 @@ _print_int:
     ret
     
 .L_str_zero:
-    .ascii "0"
+    .ascii "0\n"
 
 .bss
+a: .quad 0
+f: .quad 0
 
 
 _sys_write:

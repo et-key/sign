@@ -60,6 +60,37 @@
           "value": 0
         }
       }
+    },
+    {
+      "type": "infix",
+      "op": "#",
+      "left": {
+        "type": "number",
+        "value": 1
+      },
+      "right": {
+        "type": "apply",
+        "func": {
+          "type": "identifier",
+          "value": "_"
+        },
+        "arg": {
+          "type": "number",
+          "value": 5
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": "#",
+      "left": {
+        "type": "number",
+        "value": 1
+      },
+      "right": {
+        "type": "identifier",
+        "value": "_"
+      }
     }
   ]
 }

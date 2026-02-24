@@ -3,21 +3,33 @@
   "body": [
     {
       "type": "infix",
-      "op": "#",
+      "op": ":",
       "left": {
+        "type": "identifier",
+        "value": "a"
+      },
+      "right": {
         "type": "number",
-        "value": 1
+        "value": 100
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "f"
       },
       "right": {
         "type": "infix",
-        "op": "|",
+        "op": "?",
         "left": {
-          "type": "number",
-          "value": 0
+          "type": "identifier",
+          "value": "x"
         },
         "right": {
-          "type": "number",
-          "value": 1
+          "type": "identifier",
+          "value": "a"
         }
       }
     },
@@ -30,30 +42,10 @@
       },
       "right": {
         "type": "infix",
-        "op": "|",
+        "op": "'",
         "left": {
           "type": "identifier",
-          "value": "_"
-        },
-        "right": {
-          "type": "number",
-          "value": 1
-        }
-      }
-    },
-    {
-      "type": "infix",
-      "op": "#",
-      "left": {
-        "type": "number",
-        "value": 1
-      },
-      "right": {
-        "type": "infix",
-        "op": "|",
-        "left": {
-          "type": "identifier",
-          "value": "_"
+          "value": "f"
         },
         "right": {
           "type": "number",

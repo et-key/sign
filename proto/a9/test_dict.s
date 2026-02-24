@@ -11,187 +11,522 @@ __sign_init:
     stp x29, x30, [sp, #-16]!
     mov x29, sp
 
-    mov x0, #0
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_1
-    b or_end_2
-or_right_1:
-    mov x0, #1
-or_end_2:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq print_done_5
-    cmp x0, #4096
-    b.hi print_str_4
-print_num_3:
-    bl _print_int
-    b print_done_5
-print_str_4:
-    // Magic IO Write to FD 1
-    mov x1, x0       // buf = RHS
-    mov x0, #1   // fd
-    mov x2, #0       // len
-strlen_6:
-    ldrb w3, [x1, x2]
-    cbz w3, strlen_done_7
-    add x2, x2, #1
-    b strlen_6
-strlen_done_7:
-    mov x8, #64      // syscall write
-    svc #0
-print_done_5:
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_8
-    b or_end_9
-or_right_8:
-    mov x0, #1
-or_end_9:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq print_done_12
-    cmp x0, #4096
-    b.hi print_str_11
-print_num_10:
-    bl _print_int
-    b print_done_12
-print_str_11:
-    // Magic IO Write to FD 1
-    mov x1, x0       // buf = RHS
-    mov x0, #1   // fd
-    mov x2, #0       // len
-strlen_13:
-    ldrb w3, [x1, x2]
-    cbz w3, strlen_done_14
-    add x2, x2, #1
-    b strlen_13
-strlen_done_14:
-    mov x8, #64      // syscall write
-    svc #0
-print_done_12:
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq or_right_15
-    b or_end_16
-or_right_15:
-    mov x0, #0
-or_end_16:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq print_done_19
-    cmp x0, #4096
-    b.hi print_str_18
-print_num_17:
-    bl _print_int
-    b print_done_19
-print_str_18:
-    // Magic IO Write to FD 1
-    mov x1, x0       // buf = RHS
-    mov x0, #1   // fd
-    mov x2, #0       // len
-strlen_20:
-    ldrb w3, [x1, x2]
-    cbz w3, strlen_done_21
-    add x2, x2, #1
-    b strlen_20
-strlen_done_21:
-    mov x8, #64      // syscall write
-    svc #0
-print_done_19:
-    adr x0, sign_id
-    adr x9, sign_id
-    cmp x0, x9
-    b.ne blk_end_0
     adr x0, sign_id
     str x0, [sp, #-16]!
-    mov x0, #5
+    b after_func_1_2
+func_1:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    str x0, [sp, #-16]!
+    adr x0, str_0
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_7
+    adr x0, sign_id
+    b cmp_end_8
+cmp_true_7:
+cmp_end_8:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_5
+    mov x0, #100
+    b cond_end_6
+cond_false_5:
+    adr x0, sign_id
+cond_end_6:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_3
+    b or_end_4
+or_right_3:
+    ldr x0, [x29, #-32]
+    str x0, [sp, #-16]!
+    adr x0, str_1
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_13
+    adr x0, sign_id
+    b cmp_end_14
+cmp_true_13:
+cmp_end_14:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_11
+    mov x0, #200
+    b cond_end_12
+cond_false_11:
+    adr x0, sign_id
+cond_end_12:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_9
+    b or_end_10
+or_right_9:
+    adr x0, sign_id
+or_end_10:
+or_end_4:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_func_1_2:
+    // Closure for func_1
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, func_1
+    ldr x0, [sp], #16
+    bl _cons
+    orr x0, x0, #1 // Tag closure
     ldr x9, [sp], #16
-    adr x10, sign_id
-    cmp x9, x10
-    b.eq id_morphism_25
+    adr x1, sign_id
+    cmp x9, x1
+    b.eq id_morphism_18
     tst x9, #1
-    b.eq do_concat_24
+    b.eq do_concat_17
     tst x0, #1
-    b.ne do_compose_22
-do_apply_23:
-    bic x9, x9, #1
-    ldr x10, [x9]
+    b.ne do_compose_15
+do_apply_16:
+    eor x9, x9, #1
+    ldr x1, [x9]
     ldr x9, [x9, #8]
-    blr x10
-    b apply_end_26
-do_compose_22:
+    blr x1
+    b apply_end_19
+do_compose_15:
     mov x1, x0
     mov x0, x9
     bl _compose
-    b apply_end_26
-do_concat_24:
+    b apply_end_19
+do_concat_17:
     mov x1, x0
     mov x0, x9
     bl _concat
-    b apply_end_26
-id_morphism_25:
-    b apply_end_26
-apply_end_26:
-    adr x9, sign_id
-    cmp x0, x9
-    b.eq print_done_29
-    cmp x0, #4096
-    b.hi print_str_28
-print_num_27:
-    bl _print_int
-    b print_done_29
-print_str_28:
-    // Magic IO Write to FD 1
-    mov x1, x0       // buf = RHS
-    mov x0, #1   // fd
-    mov x2, #0       // len
-strlen_30:
-    ldrb w3, [x1, x2]
-    cbz w3, strlen_done_31
-    add x2, x2, #1
-    b strlen_30
-strlen_done_31:
-    mov x8, #64      // syscall write
-    svc #0
-print_done_29:
+    b apply_end_19
+id_morphism_18:
+    b apply_end_19
+apply_end_19:
+    adr x1, dict
+    str x0, [x1]
     adr x0, sign_id
     adr x9, sign_id
     cmp x0, x9
     b.ne blk_end_0
-    adr x0, sign_id
+    adr x0, dict
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    adr x0, str_0
+    ldr x9, [sp], #16
+    adr x1, sign_id
+    cmp x9, x1
+    b.eq id_morphism_23
+    tst x9, #1
+    b.eq do_concat_22
+    tst x0, #1
+    b.ne do_compose_20
+do_apply_21:
+    eor x9, x9, #1
+    ldr x1, [x9]
+    ldr x9, [x9, #8]
+    blr x1
+    b apply_end_24
+do_compose_20:
+    mov x1, x0
+    mov x0, x9
+    bl _compose
+    b apply_end_24
+do_concat_22:
+    mov x1, x0
+    mov x0, x9
+    bl _concat
+    b apply_end_24
+id_morphism_23:
+    b apply_end_24
+apply_end_24:
     adr x9, sign_id
     cmp x0, x9
-    b.eq print_done_34
+    b.eq print_done_27
     cmp x0, #4096
-    b.hi print_str_33
-print_num_32:
+    b.hi print_str_26
+print_num_25:
     bl _print_int
-    b print_done_34
-print_str_33:
+    b print_done_27
+print_str_26:
     // Magic IO Write to FD 1
     mov x1, x0       // buf = RHS
     mov x0, #1   // fd
     mov x2, #0       // len
-strlen_35:
+strlen_28:
     ldrb w3, [x1, x2]
-    cbz w3, strlen_done_36
+    cbz w3, strlen_done_29
     add x2, x2, #1
-    b strlen_35
-strlen_done_36:
+    b strlen_28
+strlen_done_29:
     mov x8, #64      // syscall write
     svc #0
-print_done_34:
+print_done_27:
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_0
+    adr x0, dict
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    adr x0, str_1
+    ldr x9, [sp], #16
+    adr x1, sign_id
+    cmp x9, x1
+    b.eq id_morphism_33
+    tst x9, #1
+    b.eq do_concat_32
+    tst x0, #1
+    b.ne do_compose_30
+do_apply_31:
+    eor x9, x9, #1
+    ldr x1, [x9]
+    ldr x9, [x9, #8]
+    blr x1
+    b apply_end_34
+do_compose_30:
+    mov x1, x0
+    mov x0, x9
+    bl _compose
+    b apply_end_34
+do_concat_32:
+    mov x1, x0
+    mov x0, x9
+    bl _concat
+    b apply_end_34
+id_morphism_33:
+    b apply_end_34
+apply_end_34:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq print_done_37
+    cmp x0, #4096
+    b.hi print_str_36
+print_num_35:
+    bl _print_int
+    b print_done_37
+print_str_36:
+    // Magic IO Write to FD 1
+    mov x1, x0       // buf = RHS
+    mov x0, #1   // fd
+    mov x2, #0       // len
+strlen_38:
+    ldrb w3, [x1, x2]
+    cbz w3, strlen_done_39
+    add x2, x2, #1
+    b strlen_38
+strlen_done_39:
+    mov x8, #64      // syscall write
+    svc #0
+print_done_37:
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_0
+    adr x0, dict
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    adr x0, str_0
+    ldr x9, [sp], #16
+    adr x1, sign_id
+    cmp x9, x1
+    b.eq id_morphism_43
+    tst x9, #1
+    b.eq do_concat_42
+    tst x0, #1
+    b.ne do_compose_40
+do_apply_41:
+    eor x9, x9, #1
+    ldr x1, [x9]
+    ldr x9, [x9, #8]
+    blr x1
+    b apply_end_44
+do_compose_40:
+    mov x1, x0
+    mov x0, x9
+    bl _compose
+    b apply_end_44
+do_concat_42:
+    mov x1, x0
+    mov x0, x9
+    bl _concat
+    b apply_end_44
+id_morphism_43:
+    b apply_end_44
+apply_end_44:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq print_done_47
+    cmp x0, #4096
+    b.hi print_str_46
+print_num_45:
+    bl _print_int
+    b print_done_47
+print_str_46:
+    // Magic IO Write to FD 1
+    mov x1, x0       // buf = RHS
+    mov x0, #1   // fd
+    mov x2, #0       // len
+strlen_48:
+    ldrb w3, [x1, x2]
+    cbz w3, strlen_done_49
+    add x2, x2, #1
+    b strlen_48
+strlen_done_49:
+    mov x8, #64      // syscall write
+    svc #0
+print_done_47:
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_0
+    adr x0, dict
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    adr x0, str_2
+    ldr x9, [sp], #16
+    adr x1, sign_id
+    cmp x9, x1
+    b.eq id_morphism_53
+    tst x9, #1
+    b.eq do_concat_52
+    tst x0, #1
+    b.ne do_compose_50
+do_apply_51:
+    eor x9, x9, #1
+    ldr x1, [x9]
+    ldr x9, [x9, #8]
+    blr x1
+    b apply_end_54
+do_compose_50:
+    mov x1, x0
+    mov x0, x9
+    bl _compose
+    b apply_end_54
+do_concat_52:
+    mov x1, x0
+    mov x0, x9
+    bl _concat
+    b apply_end_54
+id_morphism_53:
+    b apply_end_54
+apply_end_54:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq print_done_57
+    cmp x0, #4096
+    b.hi print_str_56
+print_num_55:
+    bl _print_int
+    b print_done_57
+print_str_56:
+    // Magic IO Write to FD 1
+    mov x1, x0       // buf = RHS
+    mov x0, #1   // fd
+    mov x2, #0       // len
+strlen_58:
+    ldrb w3, [x1, x2]
+    cbz w3, strlen_done_59
+    add x2, x2, #1
+    b strlen_58
+strlen_done_59:
+    mov x8, #64      // syscall write
+    svc #0
+print_done_57:
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_0
+    b after_new_dict_impl_60
+new_dict_impl:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    str x0, [sp, #-16]!
+    adr x0, str_2
+    mov x1, x0
+    ldr x0, [sp], #16
+    cmp x0, x1
+    b.eq cmp_true_65
+    adr x0, sign_id
+    b cmp_end_66
+cmp_true_65:
+cmp_end_66:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq cond_false_63
+    mov x0, #300
+    b cond_end_64
+cond_false_63:
+    adr x0, sign_id
+cond_end_64:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq or_right_61
+    b or_end_62
+or_right_61:
+    adr x0, dict
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    ldr x0, [x29, #-32]
+    ldr x9, [sp], #16
+    adr x1, sign_id
+    cmp x9, x1
+    b.eq id_morphism_70
+    tst x9, #1
+    b.eq do_concat_69
+    tst x0, #1
+    b.ne do_compose_67
+do_apply_68:
+    eor x9, x9, #1
+    ldr x1, [x9]
+    ldr x9, [x9, #8]
+    blr x1
+    b apply_end_71
+do_compose_67:
+    mov x1, x0
+    mov x0, x9
+    bl _compose
+    b apply_end_71
+do_concat_69:
+    mov x1, x0
+    mov x0, x9
+    bl _concat
+    b apply_end_71
+id_morphism_70:
+    b apply_end_71
+apply_end_71:
+or_end_62:
+    mov sp, x29
+    ldp x29, x30, [sp], #16
+    ret
+after_new_dict_impl_60:
+    // Closure for new_dict_impl
+    adr x0, sign_id
+    str x0, [sp, #-16]!
+    adr x1, new_dict_impl
+    ldr x0, [sp], #16
+    bl _cons
+    orr x0, x0, #1 // Tag closure
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_0
+    adr x0, new_dict
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    adr x0, str_2
+    ldr x9, [sp], #16
+    adr x1, sign_id
+    cmp x9, x1
+    b.eq id_morphism_75
+    tst x9, #1
+    b.eq do_concat_74
+    tst x0, #1
+    b.ne do_compose_72
+do_apply_73:
+    eor x9, x9, #1
+    ldr x1, [x9]
+    ldr x9, [x9, #8]
+    blr x1
+    b apply_end_76
+do_compose_72:
+    mov x1, x0
+    mov x0, x9
+    bl _compose
+    b apply_end_76
+do_concat_74:
+    mov x1, x0
+    mov x0, x9
+    bl _concat
+    b apply_end_76
+id_morphism_75:
+    b apply_end_76
+apply_end_76:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq print_done_79
+    cmp x0, #4096
+    b.hi print_str_78
+print_num_77:
+    bl _print_int
+    b print_done_79
+print_str_78:
+    // Magic IO Write to FD 1
+    mov x1, x0       // buf = RHS
+    mov x0, #1   // fd
+    mov x2, #0       // len
+strlen_80:
+    ldrb w3, [x1, x2]
+    cbz w3, strlen_done_81
+    add x2, x2, #1
+    b strlen_80
+strlen_done_81:
+    mov x8, #64      // syscall write
+    svc #0
+print_done_79:
+    adr x0, sign_id
+    adr x9, sign_id
+    cmp x0, x9
+    b.ne blk_end_0
+    adr x0, new_dict
+    ldr x0, [x0]
+    str x0, [sp, #-16]!
+    adr x0, str_0
+    ldr x9, [sp], #16
+    adr x1, sign_id
+    cmp x9, x1
+    b.eq id_morphism_85
+    tst x9, #1
+    b.eq do_concat_84
+    tst x0, #1
+    b.ne do_compose_82
+do_apply_83:
+    eor x9, x9, #1
+    ldr x1, [x9]
+    ldr x9, [x9, #8]
+    blr x1
+    b apply_end_86
+do_compose_82:
+    mov x1, x0
+    mov x0, x9
+    bl _compose
+    b apply_end_86
+do_concat_84:
+    mov x1, x0
+    mov x0, x9
+    bl _concat
+    b apply_end_86
+id_morphism_85:
+    b apply_end_86
+apply_end_86:
+    adr x9, sign_id
+    cmp x0, x9
+    b.eq print_done_89
+    cmp x0, #4096
+    b.hi print_str_88
+print_num_87:
+    bl _print_int
+    b print_done_89
+print_str_88:
+    // Magic IO Write to FD 1
+    mov x1, x0       // buf = RHS
+    mov x0, #1   // fd
+    mov x2, #0       // len
+strlen_90:
+    ldrb w3, [x1, x2]
+    cbz w3, strlen_done_91
+    add x2, x2, #1
+    b strlen_90
+strlen_done_91:
+    mov x8, #64      // syscall write
+    svc #0
+print_done_89:
     adr x0, sign_id
 blk_end_0:
 
@@ -403,6 +738,8 @@ _print_int:
     .ascii "0"
 
 .bss
+dict: .quad 0
+new_dict: .quad 0
 
 
 _sys_write:
@@ -534,3 +871,9 @@ ret
 
 
 .data
+str_0:
+    .asciz "a"
+str_1:
+    .asciz "b"
+str_2:
+    .asciz "c"

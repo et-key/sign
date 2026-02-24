@@ -97,6 +97,9 @@ ast_char : 12
 		(`    str x0, [sp, #-16]!\n` ,
 			(asm_arg ~
 				(`    ldr x1, [sp], #16\n` ,
+					`    adr x10, sign_id\n` ,
+					`    cmp x1, x10\n` ,
+					(concat `    b.eq ` (concat lbl_end `\n`)) ,
 					`    adr x9, heap_buffer\n` ,
 					`    cmp x1, x9\n` ,
 					(concat `    b.lo ` (concat lbl_concat `\n`)) ,

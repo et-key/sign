@@ -1,0 +1,247 @@
+{
+  "type": "block",
+  "body": [
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "dict"
+      },
+      "right": {
+        "type": "apply",
+        "func": {
+          "type": "unit"
+        },
+        "arg": {
+          "type": "block",
+          "body": [
+            {
+              "type": "infix",
+              "op": ":",
+              "left": {
+                "type": "apply",
+                "func": {
+                  "type": "apply",
+                  "func": {
+                    "type": "identifier",
+                    "value": "\""
+                  },
+                  "arg": {
+                    "type": "identifier",
+                    "value": "a"
+                  }
+                },
+                "arg": {
+                  "type": "identifier",
+                  "value": "\""
+                }
+              },
+              "right": {
+                "type": "number",
+                "value": 100
+              }
+            },
+            {
+              "type": "infix",
+              "op": ":",
+              "left": {
+                "type": "apply",
+                "func": {
+                  "type": "apply",
+                  "func": {
+                    "type": "identifier",
+                    "value": "\""
+                  },
+                  "arg": {
+                    "type": "identifier",
+                    "value": "b"
+                  }
+                },
+                "arg": {
+                  "type": "identifier",
+                  "value": "\""
+                }
+              },
+              "right": {
+                "type": "number",
+                "value": 200
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": "#",
+      "left": {
+        "type": "number",
+        "value": 1
+      },
+      "right": {
+        "type": "infix",
+        "op": "'",
+        "left": {
+          "type": "identifier",
+          "value": "dict"
+        },
+        "right": {
+          "type": "string",
+          "value": "`a`"
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": "#",
+      "left": {
+        "type": "number",
+        "value": 1
+      },
+      "right": {
+        "type": "infix",
+        "op": "'",
+        "left": {
+          "type": "identifier",
+          "value": "dict"
+        },
+        "right": {
+          "type": "string",
+          "value": "`b`"
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": "#",
+      "left": {
+        "type": "number",
+        "value": 1
+      },
+      "right": {
+        "type": "infix",
+        "op": "@",
+        "left": {
+          "type": "string",
+          "value": "`a`"
+        },
+        "right": {
+          "type": "identifier",
+          "value": "dict"
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": "#",
+      "left": {
+        "type": "number",
+        "value": 1
+      },
+      "right": {
+        "type": "infix",
+        "op": "'",
+        "left": {
+          "type": "identifier",
+          "value": "dict"
+        },
+        "right": {
+          "type": "string",
+          "value": "`c`"
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": ":",
+      "left": {
+        "type": "identifier",
+        "value": "new_dict"
+      },
+      "right": {
+        "type": "infix",
+        "op": "?",
+        "left": {
+          "type": "identifier",
+          "value": "k"
+        },
+        "right": {
+          "type": "infix",
+          "op": "|",
+          "left": {
+            "type": "infix",
+            "op": ":",
+            "left": {
+              "type": "infix",
+              "op": "=",
+              "left": {
+                "type": "identifier",
+                "value": "k"
+              },
+              "right": {
+                "type": "string",
+                "value": "`c`"
+              }
+            },
+            "right": {
+              "type": "number",
+              "value": 300
+            }
+          },
+          "right": {
+            "type": "apply",
+            "func": {
+              "type": "identifier",
+              "value": "dict"
+            },
+            "arg": {
+              "type": "identifier",
+              "value": "k"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": "#",
+      "left": {
+        "type": "number",
+        "value": 1
+      },
+      "right": {
+        "type": "infix",
+        "op": "'",
+        "left": {
+          "type": "identifier",
+          "value": "new_dict"
+        },
+        "right": {
+          "type": "string",
+          "value": "`c`"
+        }
+      }
+    },
+    {
+      "type": "infix",
+      "op": "#",
+      "left": {
+        "type": "number",
+        "value": 1
+      },
+      "right": {
+        "type": "infix",
+        "op": "'",
+        "left": {
+          "type": "identifier",
+          "value": "new_dict"
+        },
+        "right": {
+          "type": "string",
+          "value": "`a`"
+        }
+      }
+    }
+  ]
+}
