@@ -14,23 +14,38 @@
 			background: #fafafa;
 		}
 
+		.top-panels {
+			display: flex;
+			gap: 20px;
+			margin-bottom: 10px;
+		}
+
+		.input-panel {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+		}
+
 		textarea {
 			height: 100px;
-			margin-bottom: 10px;
 			font-family: monospace;
 			font-size: 16px;
 			padding: 10px;
+			border-radius: 5px;
+			border: 1px solid #ccc;
 		}
 
 		.panels {
 			display: flex;
 			gap: 20px;
+			margin-top: 10px;
 		}
 
 		.panel {
 			flex: 1;
 			display: flex;
 			flex-direction: column;
+			min-width: 0;
 		}
 
 		pre {
@@ -40,10 +55,11 @@
 			overflow-x: auto;
 			flex-grow: 1;
 			border-radius: 5px;
+			font-size: 14px;
 		}
 
 		button {
-			padding: 10px;
+			padding: 10px 20px;
 			font-size: 16px;
 			font-weight: bold;
 			cursor: pointer;
@@ -51,6 +67,7 @@
 			color: white;
 			border: none;
 			border-radius: 5px;
+			align-self: flex-start;
 		}
 
 		button:hover {
@@ -61,18 +78,25 @@
 
 <body>
 
-	<h2>Sign → WebAssembly Playground</h2>
-	<p>Signのコード（四則演算と <code>1 # expr</code> によるPrint出力に対応）</p>
-	<textarea id="codeInput">1 # 10 + 20 * 2</textarea>
+	<h2>Sign → WebAssembly Playground (f64)</h2>
+
+	<div class="top-panels">
+		<div class="input-panel">
+			<label><strong>Sign Code:</strong></label>
+			<textarea id="codeInput">1 # (@ 0) * 2.5
+1 # (@ 0) ^ 2</textarea>
+		</div>
+		<div class="input-panel">
+			<label><strong>Standard Input (for @):</strong></label>
+			<textarea id="stdInput">42.0 3.14</textarea>
+		</div>
+	</div>
+
 	<button id="runBtn">Compile & Run WASM</button>
 
 	<div class="panels">
 		<div class="panel">
-			<h3>Generated AST</h3>
-			<pre id="astOutput"></pre>
-		</div>
-		<div class="panel">
-			<h3>Generated WAT (WASM Text)</h3>
+			<h3>Generated WAT</h3>
 			<pre id="watOutput"></pre>
 		</div>
 		<div class="panel">
@@ -87,35 +111,49 @@
 
 		document.getElementById('runBtn').addEventListener('click', async () => {
 			const code = document.getElementById('codeInput').value;
+			const stdinText = document.getElementById('stdInput').value;
 			const outputEl = document.getElementById('consoleOutput');
 			outputEl.textContent = '';
 
 			try {
-				// 1. Signコードの構文解析 (AST生成)
-				const ast = parseSign(code);
-				document.getElementById('astOutput').textContent = JSON.stringify(ast, null, 2);
+				// 1. 標準入力をパースして配列（キュー）にする
+				const inputQueue = stdinText.split(/\s+/)
+					.filter(x => x !== '')
+					.map(x => parseFloat(x) || 0.0);
+				let inputPointer = 0;
 
-				// 2. ASTからWAT(WebAssembly Text)を生成
+				// 2. Signコードの構文解析
+				const ast = parseSign(code);
+
+				// 3. WATの生成
 				const watCode = compileToWat(ast);
 				document.getElementById('watOutput').textContent = watCode;
 
-				// 3. wabt.js を使って WAT を WASMバイナリに変換
+				// 4. WABTによるバイナリコンパイル
 				const wabt = await WabtModule();
 				const module = wabt.parseWat('test.wat', watCode);
 				module.resolveNames();
 				module.validate();
 				const { buffer } = module.toBinary({ log: true });
 
-				// 4. WASMのインポート環境（Cのシステムコールの代替）
+				// 5. WASMインポート環境
 				const importObject = {
 					env: {
-						print_int: (arg) => {
+						print_float: (arg) => {
 							outputEl.textContent += `[Print] ${arg}\n`;
-						}
+						},
+						input_float: () => {
+							if (inputPointer < inputQueue.length) {
+								return inputQueue[inputPointer++];
+							}
+							return 0.0; // 入力が尽きた場合は 0.0 を返す
+						},
+						math_fmod: (a, b) => a % b,
+						math_pow: Math.pow
 					}
 				};
 
-				// 5. WASMインスタンス化と実行
+				// 6. 実行
 				const wasmInstance = await WebAssembly.instantiate(buffer, importObject);
 				const result = wasmInstance.instance.exports.main();
 
