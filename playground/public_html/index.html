@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+	<meta charset="UTF-8">
+	<title>Sign WASM Playground</title>
+	<script src="https://unpkg.com/wabt@1.0.32/index.js"></script>
+	<style>
+		body {
+			font-family: monospace;
+			display: flex;
+			flex-direction: column;
+			padding: 20px;
+			background: #fafafa;
+		}
+
+		textarea {
+			height: 100px;
+			margin-bottom: 10px;
+			font-family: monospace;
+			font-size: 16px;
+			padding: 10px;
+		}
+
+		.panels {
+			display: flex;
+			gap: 20px;
+		}
+
+		.panel {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+		}
+
+		pre {
+			background: #1e1e1e;
+			color: #d4d4d4;
+			padding: 15px;
+			overflow-x: auto;
+			flex-grow: 1;
+			border-radius: 5px;
+		}
+
+		button {
+			padding: 10px;
+			font-size: 16px;
+			font-weight: bold;
+			cursor: pointer;
+			background: #007acc;
+			color: white;
+			border: none;
+			border-radius: 5px;
+		}
+
+		button:hover {
+			background: #005999;
+		}
+	</style>
+</head>
+
+<body>
+
+	<h2>Sign → WebAssembly Playground</h2>
+	<p>Signのコード（四則演算と <code>1 # expr</code> によるPrint出力に対応）</p>
+	<textarea id="codeInput">1 # 10 + 20 * 2</textarea>
+	<button id="runBtn">Compile & Run WASM</button>
+
+	<div class="panels">
+		<div class="panel">
+			<h3>Generated AST</h3>
+			<pre id="astOutput"></pre>
+		</div>
+		<div class="panel">
+			<h3>Generated WAT (WASM Text)</h3>
+			<pre id="watOutput"></pre>
+		</div>
+		<div class="panel">
+			<h3>Execution Output</h3>
+			<pre id="consoleOutput"></pre>
+		</div>
+	</div>
+
+	<script type="module">
+		import { parseSign } from './parser_browser.js';
+		import { compileToWat } from './compiler_wat.js';
+
+		document.getElementById('runBtn').addEventListener('click', async () => {
+			const code = document.getElementById('codeInput').value;
+			const outputEl = document.getElementById('consoleOutput');
+			outputEl.textContent = '';
+
+			try {
+				// 1. Signコードの構文解析 (AST生成)
+				const ast = parseSign(code);
+				document.getElementById('astOutput').textContent = JSON.stringify(ast, null, 2);
+
+				// 2. ASTからWAT(WebAssembly Text)を生成
+				const watCode = compileToWat(ast);
+				document.getElementById('watOutput').textContent = watCode;
+
+				// 3. wabt.js を使って WAT を WASMバイナリに変換
+				const wabt = await WabtModule();
+				const module = wabt.parseWat('test.wat', watCode);
+				module.resolveNames();
+				module.validate();
+				const { buffer } = module.toBinary({ log: true });
+
+				// 4. WASMのインポート環境（Cのシステムコールの代替）
+				const importObject = {
+					env: {
+						print_int: (arg) => {
+							outputEl.textContent += `[Print] ${arg}\n`;
+						}
+					}
+				};
+
+				// 5. WASMインスタンス化と実行
+				const wasmInstance = await WebAssembly.instantiate(buffer, importObject);
+				const result = wasmInstance.instance.exports.main();
+
+				outputEl.textContent += `\n[Main Result] ${result}\n`;
+
+			} catch (err) {
+				outputEl.textContent = `Error: ${err.message}`;
+				console.error(err);
+			}
+		});
+	</script>
+</body>
+
+</html>
