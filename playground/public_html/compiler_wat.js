@@ -1,31 +1,33 @@
 // compiler_wat.js
 
-// --- WASM Instruction Templates (f64) ---
 const TEMPLATES = {
 	'+': 'f64.add',
 	'-': 'f64.sub',
 	'*': 'f64.mul',
 	'/': 'f64.div',
+	'%': 'call $math_fmod',
+	'^': 'call $math_pow'
 };
 
-// ★ 新規追加：構文解析後のASTを走査し `:` をマクロ展開する関数
+// 1. 変数やラムダの「インライン展開」だけを行う（複雑なβ簡約は不要）
 function expandMacros(node, env = {}) {
 	if (!node) return node;
 
-	// 1. Block: 中にある `:` (定義) を走査して環境に登録
 	if (node.type === 'block') {
 		const newBody = [];
 		for (const child of node.body) {
-			// `:` による定義を発見
+			// 定義 ( : ) を見つけたら環境に登録し、実行コードからは完全に消去する
 			if (child.type === 'infix' && child.op === ':') {
-				const name = child.left.value; // 左辺の識別子
-				const valueAst = expandMacros(child.right, env); // 右辺も展開
+				let name = '';
+				if (child.left && child.left.type === 'identifier') {
+					name = child.left.value.trim();
+				} else if (child.left && child.left.type === 'block' && child.left.body.length > 0) {
+					name = child.left.body[0].value.trim();
+				}
 
-				// 環境(辞書)にASTを登録
-				env[name] = valueAst;
-
-				// 定義式自体はWASMの実行コードとしては不要なため Unit (0.0) を残す
-				newBody.push({ type: 'number', value: 0.0 });
+				if (name) {
+					env[name] = expandMacros(child.right, env);
+				}
 			} else {
 				newBody.push(expandMacros(child, env));
 			}
@@ -33,47 +35,37 @@ function expandMacros(node, env = {}) {
 		return { type: 'block', body: newBody };
 	}
 
-	// 2. 再帰的な走査
 	if (node.type === 'infix') {
 		return { ...node, left: expandMacros(node.left, env), right: expandMacros(node.right, env) };
 	}
 	if (node.type === 'prefix') {
 		return { ...node, expr: expandMacros(node.expr, env) };
 	}
-	if (node.type === 'postfix') {
-		return { ...node, expr: expandMacros(node.expr, env) };
-	}
 	if (node.type === 'apply') {
 		return { ...node, func: expandMacros(node.func, env), arg: expandMacros(node.arg, env) };
 	}
 
-	// 3. ★ 核心：識別子が見つかったら [ 定義内容 ] に置換
+	// ★ 識別子が見つかったら、環境からディープコピーしてそのまま置換
 	if (node.type === 'identifier') {
-		const name = node.value;
-		if (env[name]) {
-			// ASTをディープコピーし、指示通り Block [ ] でラップして返す
-			const clonedAst = JSON.parse(JSON.stringify(env[name]));
-			return {
-				type: 'block',
-				body: [clonedAst]
-			};
+		const name = node.value.trim();
+		if (env[name] !== undefined) {
+			return JSON.parse(JSON.stringify(env[name]));
 		}
 	}
 
 	return node;
 }
 
-// --- WASMコンパイラ本体 ---
+// 2. WASMスタックマシンへのコンパイル
 function compileNode(node) {
-	if (!node) return `    f64.const 0.0 ;; Unit\n`;
+	if (!node) return '';
 
 	if (node.type === 'block') {
 		let code = '';
-		for (let i = 0; i < node.body.length; i++) {
-			code += compileNode(node.body[i]);
-			if (i < node.body.length - 1) {
-				code += `    drop\n`;
-			}
+		for (let child of node.body) {
+			code += compileNode(child);
+			// ★重要: Signのデータフローを維持するため、むやみに drop しない
+			// 積まれた値は、後続の関数や演算子が自然に消費します
 		}
 		return code;
 	}
@@ -84,55 +76,79 @@ function compileNode(node) {
 		return `    f64.const ${valStr}\n`;
 	}
 
-	if (node.type === 'prefix') {
-		if (node.op === '@') {
-			let code = compileNode(node.expr);
-			code += `    drop\n`;
-			code += `    call $input_float\n`;
-			return code;
+	if (node.type === 'identifier') {
+		const name = node.value.trim();
+		// 識別子が + や * などの演算子だった場合、WASM命令を直接発行する
+		if (TEMPLATES[name]) {
+			return `    ${TEMPLATES[name]}\n`;
 		}
+		return `    ;; UNIMPLEMENTED: identifier (${name})\n`;
 	}
 
 	if (node.type === 'infix') {
 		const op = node.op;
 
+		// Print (1 # expr)
 		if (op === '#' && node.left && node.left.value === 1) {
 			let code = compileNode(node.right);
 			code += `    call $print_float\n`;
-			code += `    f64.const 0.0 ;; Print returns Unit\n`;
 			return code;
 		}
 
-		// `:` は expandMacros で Unit 化済みなので、そのまま子ノードを処理
-		if (op === ':') {
-			// 展開済みの残骸（Unit 0.0）を返す
-			return compileNode(node.right);
+		// 空白演算子（関数適用）は「右(引数) → 左(関数)」の順でスタックに積む
+		if (op === ' ' || op === '') {
+			let code = '';
+			if (node.right) code += compileNode(node.right);
+			if (node.left) code += compileNode(node.left);
+			return code;
 		}
 
-		let code = compileNode(node.left);
-		code += compileNode(node.right);
+		// 通常の中置演算子
+		let code = '';
+		if (node.left) code += compileNode(node.left);
+		if (node.right) code += compileNode(node.right);
 
 		if (TEMPLATES[op]) {
 			code += `    ${TEMPLATES[op]}\n`;
 			return code;
-		} else if (op === '%') {
-			code += `    call $math_fmod\n`;
-			return code;
-		} else if (op === '^') {
-			code += `    call $math_pow\n`;
-			return code;
 		}
+		return `    ;; UNIMPLEMENTED: infix (${op})\n`;
 	}
 
-	// Applyなどの未実装ノード
-	return `    ;; UNIMPLEMENTED: ${node.type}\n    f64.const 0.0\n`;
+	if (node.type === 'apply') {
+		let code = '';
+		// applyノードも「引数 → 関数」の順で評価
+		if (node.arg) code += compileNode(node.arg);
+		if (node.func) code += compileNode(node.func);
+		return code;
+	}
+
+	if (node.type === 'prefix') {
+		if (node.op === '@') {
+			let code = '';
+			if (node.expr) code += compileNode(node.expr);
+			code += `    drop\n`;
+			code += `    call $input_float\n`;
+			return code;
+		}
+
+		// [+ 4] のような前置演算子の評価 (4 を積んでから + を実行)
+		let code = '';
+		if (node.expr) code += compileNode(node.expr);
+		if (TEMPLATES[node.op]) {
+			code += `    ${TEMPLATES[node.op]}\n`;
+		} else {
+			code += `    ;; UNIMPLEMENTED: prefix (${node.op})\n`;
+		}
+		return code;
+	}
+
+	return `    ;; UNIMPLEMENTED: ${node.type}\n`;
 }
 
 // エントリポイント
 export function compileToWat(ast) {
-	// ★ WASM生成の直前に、定数・関数をインライン展開(マクロ展開)する
 	const expandedAst = expandMacros(ast, {});
-
 	const bodyCode = compileNode(expandedAst);
 
 	return `(module
@@ -143,6 +159,8 @@ export function compileToWat(ast) {
 
   (func $main (export "main") (result f64)
 ${bodyCode}
+    ;; WASMの関数の戻り値(f64)制約を満たすためのダミー値
+    f64.const 0.0
   )
 )`;
 }
