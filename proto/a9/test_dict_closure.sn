@@ -1,0 +1,15 @@
+dict : [
+	"a" : 100
+	"b" : 200
+]
+
+1 # [dict ' `a`]
+1 # [dict ' `b`]
+1 # [`a` @ dict]
+
+1 # [dict ' `c`]
+
+new_dict : k ? (k = `c` : 300) | (dict k)
+
+1 # [new_dict ' `c`]
+1 # [new_dict ' `a`]
