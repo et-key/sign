@@ -21,6 +21,8 @@ const TEMPLATES = {
 let stringTable = {};
 let stringAllocOffset = 8;
 let dataSection = '';
+let closureFunctions = [];
+let closureCount = 0;
 
 function encodeWatString(str) {
 	let utf8 = unescape(encodeURIComponent(str));
@@ -38,10 +40,65 @@ function encodeWatString(str) {
 
 function isFunction(node) {
 	if (!node) return false;
-	if (node.type === 'identifier' && TEMPLATES[node.value]) return true;
+	if (node.type === 'identifier') return true;
 	if (node.type === 'compose') return true;
-	if (node.type === 'apply' && node.func && node.func.type === 'identifier' && TEMPLATES[node.func.value]) return true;
+	if (node.type === 'apply') return true;
+	if (node.type === 'infix' && node.op === '?') return true;
 	return false;
+}
+
+function getFreeVariables(node, boundVars = new Set()) {
+	if (!node) return new Set();
+
+	if (node.type === 'number' || node.type === 'string') return new Set();
+
+	if (node.type === 'identifier') {
+		const name = node.value.trim();
+		if (!boundVars.has(name) && !TEMPLATES[name]) {
+			return new Set([name]);
+		}
+		return new Set();
+	}
+
+	if (node.type === 'block') {
+		let free = new Set();
+		let currentBound = new Set(boundVars);
+		if (node.body) {
+			for (const child of node.body) {
+				if (child.type === 'infix' && child.op === ':') {
+					const name = (child.left && child.left.type === 'identifier') ? child.left.value.trim() : '';
+					getFreeVariables(child.right, currentBound).forEach(v => free.add(v));
+					if (name) currentBound.add(name);
+				} else {
+					getFreeVariables(child, currentBound).forEach(v => free.add(v));
+				}
+			}
+		}
+		return free;
+	}
+
+	if (node.type === 'infix' && node.op === '?') {
+		let newBound = new Set(boundVars);
+		if (node.left && node.left.type === 'identifier') {
+			newBound.add(node.left.value.trim());
+		}
+		return getFreeVariables(node.right, newBound);
+	}
+
+	let free = new Set();
+	const children = ['body', 'left', 'right', 'expr', 'func', 'arg', 'first', 'second'];
+	for (let child of children) {
+		if (node[child]) {
+			if (Array.isArray(node[child])) {
+				for (let c of node[child]) {
+					getFreeVariables(c, boundVars).forEach(v => free.add(v));
+				}
+			} else {
+				getFreeVariables(node[child], boundVars).forEach(v => free.add(v));
+			}
+		}
+	}
+	return free;
 }
 
 function expandMacros(node, env = {}) {
@@ -161,14 +218,14 @@ function expandMacros(node, env = {}) {
 }
 
 // WASMスタック命令の生成
-function compileNode(node) {
+function compileNode(node, envMap = {}) {
 	if (!node) return '';
 
 	if (node.type === 'block') {
 		if (!node.body || node.body.length === 0) return `    f64.const nan\n`;
 		let code = '';
 		for (let i = 0; i < node.body.length - 1; i++) {
-			code += compileNode(node.body[i]);
+			code += compileNode(node.body[i], envMap);
 			code += `    local.set $tmp_bool\n`;
 			code += `    local.get $tmp_bool\n`;
 			code += `    call $is_truthy\n`;
@@ -176,7 +233,7 @@ function compileNode(node) {
 			code += `      local.get $tmp_bool\n`;
 			code += `    else\n`;
 		}
-		code += compileNode(node.body[node.body.length - 1]);
+		code += compileNode(node.body[node.body.length - 1], envMap);
 		for (let i = 0; i < node.body.length - 1; i++) {
 			code += `    end\n`;
 		}
@@ -193,6 +250,14 @@ function compileNode(node) {
 		const name = node.value.trim();
 		if (TEMPLATES[name]) {
 			return `    ${TEMPLATES[name]}\n`;
+		}
+		if (envMap[name]) {
+			const loc = envMap[name];
+			if (loc.type === 'arg') {
+				return `    local.get $arg\n`;
+			} else if (loc.type === 'env') {
+				return `    local.get $env\n    i32.trunc_sat_f64_u\n    f64.load offset=${loc.offset}\n`;
+			}
 		}
 		return `    ;; IGNORED: identifier (${name})\n    f64.const nan\n`;
 	}
@@ -223,7 +288,7 @@ function compileNode(node) {
 		const op = node.op;
 
 		if (op === '#') {
-			let code = compileNode(node.right);
+			let code = compileNode(node.right, envMap);
 			code += `    local.set $tmp_L\n`;
 			code += `    local.get $tmp_L\n`;
 
@@ -267,10 +332,10 @@ function compileNode(node) {
 				return `    ;; UNIMPLEMENTED: Standalone binding (:)\n    f64.const nan\n`;
 			} else {
 				// Condition : TrueBranch
-				let code = compileNode(node.left);
+				let code = compileNode(node.left, envMap);
 				code += `    call $is_truthy\n`;
 				code += `    if (result f64)\n`;
-				code += compileNode(node.right);
+				code += compileNode(node.right, envMap);
 				code += `    else\n`;
 				code += `      f64.const nan\n`;
 				code += `    end\n`;
@@ -279,8 +344,77 @@ function compileNode(node) {
 		}
 
 		if (op === '?') {
-			let code = `    ;; UNIMPLEMENTED: lambda (?)\n`;
-			code += `    f64.const nan\n`;
+			// Find free variables
+			const paramName = (node.left && node.left.type === 'identifier') ? node.left.value.trim() : '';
+			const freeVars = Array.from(getFreeVariables(node.right, new Set([paramName])));
+
+			const funcIndex = closureCount++;
+			const lambdaName = `$lambda_${funcIndex}`;
+
+			// 1. Compile the body into a new WASM function
+			let innerEnvMap = {};
+			if (paramName) innerEnvMap[paramName] = { type: 'arg' };
+			freeVars.forEach((v, i) => {
+				innerEnvMap[v] = { type: 'env', offset: i * 8 };
+			});
+
+			let funcCode = `  (func ${lambdaName} (param $env f64) (param $arg f64) (result f64)\n`;
+			funcCode += `    (local $tmp_bool f64)\n    (local $tmp_L f64)\n    (local $tmp_R f64)\n    (local $tmp_ptr i32)\n`;
+			funcCode += compileNode(node.right, innerEnvMap);
+			funcCode += `  )\n`;
+			closureFunctions.push({ name: lambdaName, code: funcCode, index: funcIndex });
+
+			// 2. Emit code to create the closure object at runtime
+			let code = ``;
+
+			// Alloc Environment
+			if (freeVars.length > 0) {
+				code += `    i32.const ${freeVars.length * 8}\n`;
+				code += `    call $alloc\n`;
+				code += `    local.set $tmp_ptr\n`;
+				freeVars.forEach((v, i) => {
+					code += `    local.get $tmp_ptr\n`;
+					if (envMap[v]) {
+						if (envMap[v].type === 'arg') {
+							code += `    local.get $arg\n`;
+						} else if (envMap[v].type === 'env') {
+							code += `    local.get $env\n    i32.trunc_sat_f64_u\n    f64.load offset=${envMap[v].offset}\n`;
+						}
+					} else {
+						code += `    f64.const nan\n`;
+					}
+					code += `    f64.store offset=${i * 8}\n`;
+				});
+				code += `    local.get $tmp_ptr\n`;
+				code += `    f64.convert_i32_u\n`;
+				code += `    local.set $tmp_L\n`; // tmp_L holds env_ptr as f64
+			} else {
+				code += `    f64.const 0\n`;
+				code += `    local.set $tmp_L\n`; // tmp_L holds 0 as f64
+			}
+
+			// Alloc Closure
+			code += `    i32.const 16\n`;
+			code += `    call $alloc\n`;
+			code += `    local.set $tmp_ptr\n`;
+
+			// Store Function Index
+			code += `    local.get $tmp_ptr\n`;
+			code += `    f64.const ${funcIndex}\n`;
+			code += `    f64.store offset=0\n`;
+
+			// Store Env Pointer
+			code += `    local.get $tmp_ptr\n`;
+			code += `    local.get $tmp_L\n`;
+			code += `    f64.store offset=8\n`;
+
+			// Create Tagged Pointer (f64)
+			// Tag = 0x7FFE000000000000
+			code += `    i64.const 0x7FFE000000000000\n`;
+			code += `    local.get $tmp_ptr\n`;
+			code += `    i64.extend_i32_u\n`;
+			code += `    i64.or\n`;
+			code += `    f64.reinterpret_i64\n`;
 			return code;
 		}
 
@@ -317,9 +451,9 @@ function compileNode(node) {
 		}
 
 		if (['<', '>', '<=', '>='].includes(op)) {
-			let code = compileNode(node.left);
+			let code = compileNode(node.left, envMap);
 			code += `    local.set $tmp_L\n`;
-			code += compileNode(node.right);
+			code += compileNode(node.right, envMap);
 			code += `    local.set $tmp_R\n`;
 
 			code += `    local.get $tmp_L\n`;
@@ -343,12 +477,12 @@ function compileNode(node) {
 
 		// --- LOGICAL OPERATORS (Short-Circuit) ---
 		if (op === '&') {
-			let code = compileNode(node.left);
+			let code = compileNode(node.left, envMap);
 			code += `    local.set $tmp_bool\n`;
 			code += `    local.get $tmp_bool\n`;
 			code += `    call $is_truthy\n`;
 			code += `    if (result f64)\n`;
-			code += compileNode(node.right);
+			code += compileNode(node.right, envMap);
 			code += `    else\n`;
 			code += `      local.get $tmp_bool\n`; // Return Falsy (NaN)
 			code += `    end\n`;
@@ -356,14 +490,14 @@ function compileNode(node) {
 		}
 
 		if (op === '|') {
-			let code = compileNode(node.left);
+			let code = compileNode(node.left, envMap);
 			code += `    local.set $tmp_bool\n`;
 			code += `    local.get $tmp_bool\n`;
 			code += `    call $is_truthy\n`;
 			code += `    if (result f64)\n`;
 			code += `      local.get $tmp_bool\n`; // Return Truthy
 			code += `    else\n`;
-			code += compileNode(node.right);
+			code += compileNode(node.right, envMap);
 			code += `    end\n`;
 			return code;
 		}
@@ -373,9 +507,9 @@ function compileNode(node) {
 			// If both truthy -> NaN
 			// If none truthy -> NaN
 			// If one truthy -> return it.
-			let code = compileNode(node.left);
+			let code = compileNode(node.left, envMap);
 			code += `    local.set $tmp_L\n`;
-			code += compileNode(node.right);
+			code += compileNode(node.right, envMap);
 			code += `    local.set $tmp_R\n`;
 
 			code += `    local.get $tmp_L\n`;
@@ -415,11 +549,11 @@ function compileNode(node) {
 			if (op === '<<') wasmOp = 'i32.shl';
 			if (op === '>>') wasmOp = 'i32.shr_s';
 
-			let code = compileNode(node.left);
+			let code = compileNode(node.left, envMap);
 			// f64 to i32
 			code += `    i32.trunc_sat_f64_s\n`;
 
-			code += compileNode(node.right);
+			code += compileNode(node.right, envMap);
 			// f64 to i32
 			code += `    i32.trunc_sat_f64_s\n`;
 
@@ -436,8 +570,8 @@ function compileNode(node) {
 
 
 		let code = '';
-		if (node.left) code += compileNode(node.left);
-		if (node.right) code += compileNode(node.right);
+		if (node.left) code += compileNode(node.left, envMap);
+		if (node.right) code += compileNode(node.right, envMap);
 		if (TEMPLATES[op]) {
 			code += `    ${TEMPLATES[op]}\n`;
 			return code;
@@ -448,14 +582,14 @@ function compileNode(node) {
 	if (node.type === 'prefix') {
 		if (node.op === '@') {
 			let code = '';
-			if (node.expr) code += compileNode(node.expr);
+			if (node.expr) code += compileNode(node.expr, envMap);
 			code += `    drop\n`;
 			code += `    call $input_float\n`;
 			return code;
 		}
 		if (node.op === '!') {
 			let code = '';
-			if (node.expr) code += compileNode(node.expr);
+			if (node.expr) code += compileNode(node.expr, envMap);
 			code += `    call $is_truthy\n`;
 			code += `    if (result f64)\n`;
 			code += `      f64.const nan\n`;
@@ -467,7 +601,7 @@ function compileNode(node) {
 
 		if (node.op === '!!') {
 			let code = '';
-			if (node.expr) code += compileNode(node.expr);
+			if (node.expr) code += compileNode(node.expr, envMap);
 			code += `    i32.trunc_sat_f64_s\n`;
 			code += `    i32.const -1\n`;
 			code += `    i32.xor\n`;
@@ -476,7 +610,7 @@ function compileNode(node) {
 		}
 
 		let code = '';
-		if (node.expr) code += compileNode(node.expr);
+		if (node.expr) code += compileNode(node.expr, envMap);
 		if (TEMPLATES[node.op]) {
 			code += `    ${TEMPLATES[node.op]}\n`;
 		}
@@ -496,25 +630,14 @@ function compileNode(node) {
 		// 関数が中置演算等を含んだブロックの場合（例: [+ 4]）の特殊展開
 		// ※ [2, +, 4] のようにスタックに積む順序を調整する必要がある
 		if (node.pipeline) {
-			// val |> func の順の場合、WASMのスタックにおいては
-			// 1. まず値を積む: code(node.arg)
-			// 2. 次に関数の中身を展開するが、関数の持っている内部引数より「手前」に積まれている扱いなので、
-			//    WASMの順序上は自然と結合する。
-			// ただし、単純な func と arg の呼び出し順序を制御する
-			code += compileNode(node.arg);
-
-			// もし func 側がさらに apply（[+ 4] のような部分適用）なら、
-			// すでにスタックの一番下に第一引数がある状態なので、
-			// 追加の引数だけを積み、最後に関数を呼ぶ
+			code += compileNode(node.arg, envMap);
 			if (node.func && node.func.type === 'apply') {
-				code += compileNode(node.func.arg);
-				code += compileNode(node.func.func);
+				code += compileNode(node.func.arg, envMap);
+				code += compileNode(node.func.func, envMap);
 			} else {
-				code += compileNode(node.func);
+				code += compileNode(node.func, envMap);
 				if (!isNative(node.func)) {
-					code += `    drop\n`; // drop func
-					code += `    drop\n`; // drop arg
-					code += `    f64.const nan\n`;
+					code += `    call $apply_closure\n`;
 				}
 			}
 			return code;
@@ -522,27 +645,21 @@ function compileNode(node) {
 
 		// 通常の apply（func arg）
 		if (isNative(node.func)) {
-			if (node.arg) code += compileNode(node.arg);
-			if (node.func) code += compileNode(node.func);
+			if (node.arg) code += compileNode(node.arg, envMap);
+			if (node.func) code += compileNode(node.func, envMap);
 			return code;
 		} else {
-			if (node.arg) {
-				code += compileNode(node.arg);
-				code += `    drop\n`;
-			}
-			if (node.func) {
-				code += compileNode(node.func);
-				code += `    drop\n`;
-			}
-			code += `    f64.const nan\n`;
+			if (node.func) code += compileNode(node.func, envMap);
+			if (node.arg) code += compileNode(node.arg, envMap);
+			code += `    call $apply_closure_reversed\n`;
 			return code;
 		}
 	}
 
 	if (node.type === 'compose') {
 		let code = '';
-		if (node.first) code += compileNode(node.first);
-		if (node.second) code += compileNode(node.second);
+		if (node.first) code += compileNode(node.first, envMap);
+		if (node.second) code += compileNode(node.second, envMap);
 		return code;
 	}
 
@@ -553,9 +670,26 @@ export function compileToWat(ast) {
 	stringTable = {};
 	stringAllocOffset = 8;
 	dataSection = '';
+	closureFunctions = [];
+	closureCount = 0;
 
 	const expandedAst = expandMacros(ast, {});
-	const bodyCode = compileNode(expandedAst);
+	const bodyCode = compileNode(expandedAst, {});
+
+	let closureCode = '';
+	let elemSection = '';
+
+	if (closureFunctions.length > 0) {
+		closureFunctions.sort((a, b) => a.index - b.index);
+		elemSection = `  (table ${closureFunctions.length} funcref)\n`;
+		elemSection += `  (elem (i32.const 0)`;
+		closureFunctions.forEach(f => {
+			elemSection += ` ${f.name}`;
+			closureCode += f.code + '\n';
+		});
+		elemSection += `)\n`;
+		elemSection += `  (type $closure_sig (func (param f64 f64) (result f64)))\n`;
+	}
 
 	return `(module
   (import "env" "print_string" (func $print_string (param i32 i32)))
@@ -565,6 +699,7 @@ export function compileToWat(ast) {
   (import "env" "math_pow" (func $math_pow (param f64 f64) (result f64)))
 
   (memory (export "memory") 1)
+${elemSection}
   (global $heap_alloc_ptr (mut i32) (i32.const 8))
 ${dataSection}
   (func $alloc (param $size i32) (result i32)
@@ -691,6 +826,55 @@ ${dataSection}
     i64.ne
   )
 
+  (func $apply_closure (param $arg_val f64) (param $func_val f64) (result f64)
+    (local $ptr i32)
+    (local $env f64)
+    (local $func_idx i32)
+    
+    local.get $func_val
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    i32.const 0x7FFE0000
+    i32.ne
+    if
+      f64.const nan
+      return
+    end
+    
+    local.get $func_val
+    i64.reinterpret_f64
+    i32.wrap_i64
+    local.set $ptr
+    
+    local.get $ptr
+    f64.load offset=8
+    local.set $env
+    
+    local.get $ptr
+    f64.load offset=0
+    i32.trunc_sat_f64_u
+    local.set $func_idx
+    
+    local.get $env
+    local.get $arg_val
+    local.get $func_idx
+    call_indirect (type $closure_sig)
+  )
+
+  (func $apply_closure_reversed (param $func_val f64) (param $arg_val f64) (result f64)
+    local.get $arg_val
+    local.get $func_val
+    call $apply_closure
+  )
+
+  (func $spread_concat (param $left f64) (param $right f64) (result f64)
+    ;; Dictionary / List / String concatenation fallback helper (Unimplemented logic placeholder)
+    f64.const nan
+  )
+
+${closureCode}
   (func $main (export "main") (result f64)
     (local $tmp_bool f64)
     (local $tmp_L f64)
