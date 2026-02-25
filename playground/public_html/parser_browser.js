@@ -208,6 +208,7 @@ const parseExpr = (tokens, minPrec = 0) => {
 			}
 			if (is_op || (typeof value === 'string' && isOpSymbol(value))) {
 				if (spacing === 'postfix_attached') return false;
+				if (spacing === 'prefix_attached') return !!findOp(value, 'prefix');
 				return !!findOp(value, 'prefix');
 			}
 			return true; // Identifier
@@ -293,7 +294,7 @@ const parseExpr = (tokens, minPrec = 0) => {
 		if (is_op) {
 			const opSymbol = opValue;
 
-			if (spacing === 'prefix_attached') {
+			if (spacing === 'prefix_attached' && !findOp(opSymbol, 'prefix')) {
 				break;
 			}
 
@@ -302,8 +303,10 @@ const parseExpr = (tokens, minPrec = 0) => {
 				op = findOp(opSymbol, 'postfix');
 			} else if (spacing === 'isolated') {
 				op = findOp(opSymbol, 'infix');
-			} else {
+			} else if (spacing === 'both_attached') {
 				op = findOp(opSymbol, 'infix') || findOp(opSymbol, 'postfix');
+			} else if (spacing === 'prefix_attached') {
+				// leave op undefined to fall through to Apply
 			}
 
 			if (!op) {
