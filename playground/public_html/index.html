@@ -137,8 +137,16 @@
 				const { buffer } = module.toBinary({ log: true });
 
 				// 5. WASMインポート環境
+				let wasmMemory;
 				const importObject = {
 					env: {
+						print_string: (ptr, len) => {
+							if (wasmMemory) {
+								const bytes = new Uint8Array(wasmMemory.buffer, ptr, len);
+								const str = new TextDecoder('utf-8').decode(bytes);
+								outputEl.textContent += `[Print] ${str}\n`;
+							}
+						},
 						print_float: (arg) => {
 							outputEl.textContent += `[Print] ${arg}\n`;
 						},
@@ -155,6 +163,7 @@
 
 				// 6. 実行
 				const wasmInstance = await WebAssembly.instantiate(buffer, importObject);
+				wasmMemory = wasmInstance.instance.exports.memory;
 				const result = wasmInstance.instance.exports.main();
 
 				outputEl.textContent += `\n[Main Result] ${result}\n`;

@@ -12,8 +12,29 @@ const TEMPLATES = {
 	'<': 'f64.lt',
 	'>': 'f64.gt',
 	'<=': 'f64.le',
-	'>=': 'f64.ge'
+	'>=': 'f64.ge',
+	',': 'call $cons',
+	'head': 'call $head',
+	'tail': 'call $tail'
 };
+
+let stringTable = {};
+let stringAllocOffset = 8;
+let dataSection = '';
+
+function encodeWatString(str) {
+	let utf8 = unescape(encodeURIComponent(str));
+	let res = '';
+	for (let i = 0; i < utf8.length; i++) {
+		let code = utf8.charCodeAt(i);
+		if (code >= 32 && code <= 126 && code !== 34 && code !== 92) {
+			res += utf8.charAt(i);
+		} else {
+			res += '\\\\' + code.toString(16).padStart(2, '0');
+		}
+	}
+	return res + '\\00';
+}
 
 function isFunction(node) {
 	if (!node) return false;
@@ -144,9 +165,20 @@ function compileNode(node) {
 	if (!node) return '';
 
 	if (node.type === 'block') {
+		if (!node.body || node.body.length === 0) return `    f64.const nan\n`;
 		let code = '';
-		for (let child of node.body) {
-			code += compileNode(child);
+		for (let i = 0; i < node.body.length - 1; i++) {
+			code += compileNode(node.body[i]);
+			code += `    local.set $tmp_bool\n`;
+			code += `    local.get $tmp_bool\n`;
+			code += `    call $is_truthy\n`;
+			code += `    if (result f64)\n`;
+			code += `      local.get $tmp_bool\n`;
+			code += `    else\n`;
+		}
+		code += compileNode(node.body[node.body.length - 1]);
+		for (let i = 0; i < node.body.length - 1; i++) {
+			code += `    end\n`;
 		}
 		return code;
 	}
@@ -162,7 +194,29 @@ function compileNode(node) {
 		if (TEMPLATES[name]) {
 			return `    ${TEMPLATES[name]}\n`;
 		}
-		return `    ;; IGNORED: identifier (${name})\n`;
+		return `    ;; IGNORED: identifier (${name})\n    f64.const nan\n`;
+	}
+
+	if (node.type === 'string') {
+		let content = node.value.slice(1, -1);
+		if (content.startsWith('\`') && content.endsWith('\`')) {
+			content = content.slice(1, -1);
+		}
+
+		if (stringTable[content] === undefined) {
+			stringTable[content] = stringAllocOffset;
+			let watStr = encodeWatString(content);
+			dataSection += `  (data (i32.const ${stringAllocOffset}) "${watStr}")\n`;
+
+			// Compute byte length to bump allocator
+			let byteLen = unescape(encodeURIComponent(content)).length + 1;
+			stringAllocOffset += byteLen;
+			stringAllocOffset = (stringAllocOffset + 7) & ~7; // 8-byte align
+		}
+
+		let offset = stringTable[content];
+		// NaN-box the pointer into String Tag: 0x7FFD000000000000 | offset
+		return `    i64.const 0x7FFD000000000000\n    i64.const ${offset}\n    i64.or\n    f64.reinterpret_i64\n`;
 	}
 
 	if (node.type === 'infix') {
@@ -170,7 +224,39 @@ function compileNode(node) {
 
 		if (op === '#') {
 			let code = compileNode(node.right);
-			code += `    call $print_float\n`;
+			code += `    local.set $tmp_L\n`;
+			code += `    local.get $tmp_L\n`;
+
+			// Check if it's a string (tag: 0x7FFD0000)
+			code += `    i64.reinterpret_f64\n`;
+			code += `    i64.const 32\n`;
+			code += `    i64.shr_u\n`;
+			code += `    i32.wrap_i64\n`;
+			code += `    i32.const 0x7FFD0000\n`;
+			code += `    i32.eq\n`;
+			code += `    if\n`;
+
+			// If String:
+			code += `      local.get $tmp_L\n`;
+			code += `      i64.reinterpret_f64\n`;
+			code += `      i32.wrap_i64\n`; // Lower 32 bits = Pointer
+
+			// Compute length (strlen equivalent)
+			code += `      local.tee $tmp_ptr\n`;
+			code += `      local.get $tmp_ptr\n`;
+			code += `      call $strlen\n`; // Call helper function
+
+			// Print string
+			code += `      call $print_string\n`;
+
+			code += `    else\n`;
+
+			// If Float:
+			code += `      local.get $tmp_L\n`;
+			code += `      call $print_float\n`;
+
+			code += `    end\n`;
+			code += `    f64.const nan\n`;
 			return code;
 		}
 
@@ -178,7 +264,7 @@ function compileNode(node) {
 			if (node.left && node.left.type === 'identifier') {
 				// Standalone `:` without `?` usually means assignment/binding in Sign
 				// We handle this via expandMacros normally, but if it reaches here:
-				return `    ;; UNIMPLEMENTED: Standalone binding (:)\n`;
+				return `    ;; UNIMPLEMENTED: Standalone binding (:)\n    f64.const nan\n`;
 			} else {
 				// Condition : TrueBranch
 				let code = compileNode(node.left);
@@ -198,7 +284,39 @@ function compileNode(node) {
 			return code;
 		}
 
-		if (['==', '!=', '<', '>', '<=', '>='].includes(op)) {
+		if (['==', '!='].includes(op)) {
+			let code = compileNode(node.left);
+			code += `    local.set $tmp_L\n`;
+			code += compileNode(node.right);
+			code += `    local.set $tmp_R\n`;
+
+			code += `    local.get $tmp_L\n`;
+			code += `    i64.reinterpret_f64\n`;
+			code += `    local.get $tmp_R\n`;
+			code += `    i64.reinterpret_f64\n`;
+
+			if (op === '==') {
+				code += `    i64.eq\n`;
+			} else {
+				code += `    i64.ne\n`;
+			}
+
+			// Convert i32 Wasm boolean to the actual value
+			code += `    if (result f64)\n`;
+
+			if (['number', 'string'].includes(node.left.type)) {
+				code += `      local.get $tmp_R\n`;
+			} else {
+				code += `      local.get $tmp_L\n`;
+			}
+
+			code += `    else\n`;
+			code += `      f64.const nan\n`;
+			code += `    end\n`;
+			return code;
+		}
+
+		if (['<', '>', '<=', '>='].includes(op)) {
 			let code = compileNode(node.left);
 			code += `    local.set $tmp_L\n`;
 			code += compileNode(node.right);
@@ -211,9 +329,6 @@ function compileNode(node) {
 			// Convert i32 Wasm boolean to the actual value
 			code += `    if (result f64)\n`;
 
-			// Mixed Return Strategy for Chaining (from a9):
-			// If Left is Literal, return Right (Value)
-			// Else, return Left (Value)
 			if (['number', 'string'].includes(node.left.type)) {
 				code += `      local.get $tmp_R\n`;
 			} else {
@@ -369,6 +484,13 @@ function compileNode(node) {
 	}
 
 	if (node.type === 'apply') {
+		const isNative = (fnNode) => {
+			if (!fnNode) return false;
+			if (fnNode.type === 'identifier' && TEMPLATES[fnNode.value]) return true;
+			if (fnNode.type === 'apply') return isNative(fnNode.func);
+			return false;
+		};
+
 		let code = '';
 
 		// 関数が中置演算等を含んだブロックの場合（例: [+ 4]）の特殊展開
@@ -389,14 +511,32 @@ function compileNode(node) {
 				code += compileNode(node.func.func);
 			} else {
 				code += compileNode(node.func);
+				if (!isNative(node.func)) {
+					code += `    drop\n`; // drop func
+					code += `    drop\n`; // drop arg
+					code += `    f64.const nan\n`;
+				}
 			}
 			return code;
 		}
 
 		// 通常の apply（func arg）
-		if (node.arg) code += compileNode(node.arg);
-		if (node.func) code += compileNode(node.func);
-		return code;
+		if (isNative(node.func)) {
+			if (node.arg) code += compileNode(node.arg);
+			if (node.func) code += compileNode(node.func);
+			return code;
+		} else {
+			if (node.arg) {
+				code += compileNode(node.arg);
+				code += `    drop\n`;
+			}
+			if (node.func) {
+				code += compileNode(node.func);
+				code += `    drop\n`;
+			}
+			code += `    f64.const nan\n`;
+			return code;
+		}
 	}
 
 	if (node.type === 'compose') {
@@ -406,31 +546,156 @@ function compileNode(node) {
 		return code;
 	}
 
-	return `    ;; IGNORED: ${node.type}\n`;
+	return `    ;; IGNORED: ${node.type}\n    f64.const nan\n`;
 }
 
 export function compileToWat(ast) {
+	stringTable = {};
+	stringAllocOffset = 8;
+	dataSection = '';
+
 	const expandedAst = expandMacros(ast, {});
 	const bodyCode = compileNode(expandedAst);
 
 	return `(module
+  (import "env" "print_string" (func $print_string (param i32 i32)))
   (import "env" "print_float" (func $print_float (param f64)))
   (import "env" "input_float" (func $input_float (result f64)))
   (import "env" "math_fmod" (func $math_fmod (param f64 f64) (result f64)))
   (import "env" "math_pow" (func $math_pow (param f64 f64) (result f64)))
 
+  (memory (export "memory") 1)
+  (global $heap_alloc_ptr (mut i32) (i32.const 8))
+${dataSection}
+  (func $alloc (param $size i32) (result i32)
+    (local $ptr i32)
+    global.get $heap_alloc_ptr
+    local.set $ptr
+
+    global.get $heap_alloc_ptr
+    local.get $size
+    i32.add
+    global.set $heap_alloc_ptr
+
+    local.get $ptr
+  )
+
+  (func $strlen (param $ptr i32) (result i32)
+    (local $len i32)
+    (local $current i32)
+    local.get $ptr
+    local.set $current
+    i32.const 0
+    local.set $len
+
+    (loop $count_loop
+      local.get $current
+      i32.load8_u
+      i32.const 0
+      i32.eq
+      (if
+        (then
+          local.get $len
+          return
+        )
+      )
+      
+      local.get $len
+      i32.const 1
+      i32.add
+      local.set $len
+      
+      local.get $current
+      i32.const 1
+      i32.add
+      local.set $current
+      
+      br $count_loop
+    )
+    
+    local.get $len
+  )
+
+  (func $cons (param $car f64) (param $cdr f64) (result f64)
+    (local $ptr i32)
+    i32.const 16
+    call $alloc
+    local.tee $ptr
+    
+    local.get $car
+    f64.store offset=0
+    
+    local.get $ptr
+    local.get $cdr
+    f64.store offset=8
+    
+    i64.const 0x7FFC000000000000
+    local.get $ptr
+    i64.extend_i32_u
+    i64.or
+    f64.reinterpret_i64
+  )
+
+  (func $head (param $list_val f64) (result f64)
+    (local $ptr i32)
+    
+    local.get $list_val
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    i32.const 0x7FFC0000
+    i32.ne
+    if
+      f64.const nan
+      return
+    end
+    
+    local.get $list_val
+    i64.reinterpret_f64
+    i32.wrap_i64
+    local.set $ptr
+    
+    local.get $ptr
+    f64.load offset=0
+  )
+
+  (func $tail (param $list_val f64) (result f64)
+    (local $ptr i32)
+    
+    local.get $list_val
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    i32.const 0x7FFC0000
+    i32.ne
+    if
+      f64.const nan
+      return
+    end
+    
+    local.get $list_val
+    i64.reinterpret_f64
+    i32.wrap_i64
+    local.set $ptr
+    
+    local.get $ptr
+    f64.load offset=8
+  )
+
   (func $is_truthy (param $val f64) (result i32)
     local.get $val
-    local.get $val
-    f64.eq
+    i64.reinterpret_f64
+    i64.const 0x7FF8000000000000
+    i64.ne
   )
 
   (func $main (export "main") (result f64)
     (local $tmp_bool f64)
     (local $tmp_L f64)
     (local $tmp_R f64)
-${bodyCode}
-    f64.const 0.0
-  )
+    (local $tmp_ptr i32)
+${bodyCode ? bodyCode : '    f64.const 0.0\\n'}  )
 )`;
 }
