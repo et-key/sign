@@ -9,79 +9,21 @@ const TEMPLATES = {
 	'^': 'call $math_pow'
 };
 
-// ★ 核心：ASTの「左側の穴」を探して引数を注入するβ簡約アルゴリズム
-function betaReduce(funcAst, argAst) {
-	let applied = false;
-
-	function inject(node) {
-		if (!node || applied) return node;
-
-		// 元のASTテンプレートを汚染しないようディープコピー
-		const cloned = Array.isArray(node) ? [...node] : { ...node };
-
-		// 1. 前置演算子 (例: + 4) を発見 -> 左側に穴がある！
-		if (cloned.type === 'prefix' && ['+', '-', '*', '/', '%', '^'].includes(cloned.op)) {
-			applied = true;
-			return {
-				type: 'infix',
-				op: cloned.op,
-				left: argAst,    // ★ 引数を穴に注入
-				right: cloned.expr
-			};
-		}
-
-		// 2. 左側が欠落している中置演算子を発見 -> 穴に注入
-		if (cloned.type === 'infix' && !cloned.left) {
-			applied = true;
-			cloned.left = argAst;
-			return cloned;
-		}
-
-		// 3. ブロックや関数の中へ深く潜り、パイプラインの最も上流（左側）の穴を探す
-		if (cloned.type === 'block') {
-			cloned.body = cloned.body.map(child => inject(child));
-			return cloned;
-		}
-
-		if (cloned.type === 'infix') {
-			if (cloned.left) cloned.left = inject(cloned.left);
-			// 関数合成の場合、左が埋まっていれば右側も探す
-			if (!applied && cloned.right) cloned.right = inject(cloned.right);
-			return cloned;
-		}
-
-		if (cloned.type === 'apply') {
-			if (cloned.func) cloned.func = inject(cloned.func);
-			if (!applied && cloned.arg) cloned.arg = inject(cloned.arg);
-			return cloned;
-		}
-
-		if (cloned.type === 'prefix') {
-			if (cloned.expr) cloned.expr = inject(cloned.expr);
-			return cloned;
-		}
-
-		return cloned;
-	}
-
-	const reduced = inject(funcAst);
-
-	// 万が一穴が見つからなかった場合は、未適用の関数として並べる（WASMスタックに順に積む）
-	if (!applied) {
-		return { type: 'apply', func: funcAst, arg: argAst };
-	}
-
-	return reduced;
+function isFunction(node) {
+	if (!node) return false;
+	if (node.type === 'identifier' && TEMPLATES[node.value]) return true;
+	if (node.type === 'block') return true;
+	if (node.type === 'infix' && (!node.left || !node.right)) return true;
+	if (node.type === 'compose') return true;
+	return false;
 }
 
-// 構文木を走査して定義の展開とβ簡約を行うマクロエンジン
 function expandMacros(node, env = {}) {
 	if (!node) return node;
 
 	if (node.type === 'block') {
 		const newBody = [];
 		for (const child of node.body) {
-			// 定義 ( : ) は環境に保存してASTから消去
 			if (child.type === 'infix' && child.op === ':') {
 				let name = '';
 				if (child.left && child.left.type === 'identifier') {
@@ -89,7 +31,6 @@ function expandMacros(node, env = {}) {
 				} else if (child.left && child.left.type === 'block' && child.left.body.length > 0) {
 					name = child.left.body[0].value.trim();
 				}
-
 				if (name) {
 					env[name] = expandMacros(child.right, env);
 				}
@@ -100,35 +41,85 @@ function expandMacros(node, env = {}) {
 		return { type: 'block', body: newBody };
 	}
 
-	// ★ 関数合成・関数適用 (apply または 空白) を見つけたらβ簡約を実行
+	// ★ 矛盾の解消：ボトムアップ（スタック）ではなく、トップダウンで一気にフラットなキューを作る
 	if (node.type === 'apply' || (node.type === 'infix' && (node.op === ' ' || node.op === ''))) {
-		// 左結合の順序に従って、左(func)と右(arg)をそれぞれ展開
-		const funcAst = expandMacros(node.type === 'apply' ? node.func : node.left, env);
-		const argAst = expandMacros(node.type === 'apply' ? node.arg : node.right, env);
 
-		// β簡約（関数合成 または 引数注入）
-		return betaReduce(funcAst, argAst);
+		// 1. ASTをキューに展開する
+		function flatten(n) {
+			if (!n) return [];
+			if (n.type === 'apply') {
+				// applyは特殊なフラット化（関数と引数）
+				return [...flatten(n.func), ...flatten(n.arg)];
+			}
+			if (n.type === 'infix' && (n.op === ' ' || n.op === '')) {
+				return [...flatten(n.left), ...flatten(n.right)];
+			}
+			return [n];
+		}
+
+		const rawQueue = flatten(node);
+
+		// 2. マクロ展開
+		const queue = rawQueue.map(n => expandMacros(n, env));
+
+		if (queue.length === 0) return null;
+		if (queue.length === 1) return queue[0];
+
+		// 3. 左結合での Apply 木の再構築
+		// foo bar baz -> [foo, bar, baz]
+		// 左から順に処理していく
+
+		let acc = queue[0];
+
+		for (let i = 1; i < queue.length; i++) {
+			const current = queue[i];
+			const accIsFunc = isFunction(acc);
+			const currentIsFunc = isFunction(current);
+
+			if (accIsFunc && currentIsFunc) {
+				// Func, Func の場合は合成 (compose) しておく
+				acc = { type: 'compose', first: acc, second: current };
+			} else if (accIsFunc && !currentIsFunc) {
+				// Func, Val: 関数に値を適用する
+				// 引数の評価が先、関数の評価が後になるように apply を組む
+				acc = { type: 'apply', func: acc, arg: current };
+			} else if (!accIsFunc && currentIsFunc) {
+				// Val, Func: 値（計算結果）を次の関数の引数にする (Pipeline / left-associative apply)
+				// これがポイントフリーの "1 # foo bar" における "foo" に "1" を渡す動き。
+				// current が `[+ 4]` (つまり apply(+, 4)) なら、
+				// さらにその全体に対して acc を適用する形になる。
+
+				// applyノードとして、左側の値を右側の関数に適用する
+				// 実際にはWASMのスタックマシンの順序としては
+				// [accを積む] -> [currentの引数を積む] -> [currentの関数を呼ぶ] となる
+				acc = { type: 'apply', func: current, arg: acc, pipeline: true };
+			} else {
+				// Val, Val の場合は通常あり得ないが、もし来たら単純に並べる
+				acc = { type: 'block', body: [acc, current] };
+			}
+		}
+
+		return acc;
 	}
 
 	if (node.type === 'infix') {
 		return { ...node, left: expandMacros(node.left, env), right: expandMacros(node.right, env) };
 	}
-	if (node.type === 'prefix') {
+	if (node.type === 'prefix' || node.type === 'postfix') {
 		return { ...node, expr: expandMacros(node.expr, env) };
 	}
 
-	// 識別子を環境から展開
 	if (node.type === 'identifier') {
 		const name = node.value.trim();
 		if (env[name] !== undefined) {
-			return JSON.parse(JSON.stringify(env[name]));
+			return JSON.parse(JSON.stringify(env[name])); // 深いコピー
 		}
 	}
 
 	return node;
 }
 
-// WASMスタックマシンコードの生成
+// WASMスタック命令の生成
 function compileNode(node) {
 	if (!node) return '';
 
@@ -151,13 +142,12 @@ function compileNode(node) {
 		if (TEMPLATES[name]) {
 			return `    ${TEMPLATES[name]}\n`;
 		}
-		return `    ;; UNIMPLEMENTED: identifier (${name})\n`;
+		return `    ;; IGNORED: identifier (${name})\n`;
 	}
 
 	if (node.type === 'infix') {
 		const op = node.op;
 
-		// 1 # expr (Print)
 		if (op === '#' && node.left && node.left.value === 1) {
 			let code = compileNode(node.right);
 			code += `    call $print_float\n`;
@@ -167,19 +157,11 @@ function compileNode(node) {
 		let code = '';
 		if (node.left) code += compileNode(node.left);
 		if (node.right) code += compileNode(node.right);
-
 		if (TEMPLATES[op]) {
 			code += `    ${TEMPLATES[op]}\n`;
 			return code;
 		}
 		return `    ;; UNIMPLEMENTED: infix (${op})\n`;
-	}
-
-	if (node.type === 'apply') {
-		let code = '';
-		if (node.arg) code += compileNode(node.arg);
-		if (node.func) code += compileNode(node.func);
-		return code;
 	}
 
 	if (node.type === 'prefix') {
@@ -190,8 +172,6 @@ function compileNode(node) {
 			code += `    call $input_float\n`;
 			return code;
 		}
-
-		// 展開されずに残った単独の前置演算子の評価
 		let code = '';
 		if (node.expr) code += compileNode(node.expr);
 		if (TEMPLATES[node.op]) {
@@ -200,12 +180,48 @@ function compileNode(node) {
 		return code;
 	}
 
-	return `    ;; UNIMPLEMENTED: ${node.type}\n`;
+	if (node.type === 'apply') {
+		let code = '';
+
+		// 関数が中置演算等を含んだブロックの場合（例: [+ 4]）の特殊展開
+		// ※ [2, +, 4] のようにスタックに積む順序を調整する必要がある
+		if (node.pipeline) {
+			// val |> func の順の場合、WASMのスタックにおいては
+			// 1. まず値を積む: code(node.arg)
+			// 2. 次に関数の中身を展開するが、関数の持っている内部引数より「手前」に積まれている扱いなので、
+			//    WASMの順序上は自然と結合する。
+			// ただし、単純な func と arg の呼び出し順序を制御する
+			code += compileNode(node.arg);
+
+			// もし func 側がさらに apply（[+ 4] のような部分適用）なら、
+			// すでにスタックの一番下に第一引数がある状態なので、
+			// 追加の引数だけを積み、最後に関数を呼ぶ
+			if (node.func && node.func.type === 'apply') {
+				code += compileNode(node.func.arg);
+				code += compileNode(node.func.func);
+			} else {
+				code += compileNode(node.func);
+			}
+			return code;
+		}
+
+		// 通常の apply（func arg）
+		if (node.arg) code += compileNode(node.arg);
+		if (node.func) code += compileNode(node.func);
+		return code;
+	}
+
+	if (node.type === 'compose') {
+		let code = '';
+		if (node.first) code += compileNode(node.first);
+		if (node.second) code += compileNode(node.second);
+		return code;
+	}
+
+	return `    ;; IGNORED: ${node.type}\n`;
 }
 
-// エントリポイント
 export function compileToWat(ast) {
-	// コンパイル前にマクロ展開とβ簡約(関数合成)をすべて完了させる
 	const expandedAst = expandMacros(ast, {});
 	const bodyCode = compileNode(expandedAst);
 
