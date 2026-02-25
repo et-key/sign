@@ -6,7 +6,13 @@ const TEMPLATES = {
 	'*': 'f64.mul',
 	'/': 'f64.div',
 	'%': 'call $math_fmod',
-	'^': 'call $math_pow'
+	'^': 'call $math_pow',
+	'==': 'f64.eq',
+	'!=': 'f64.ne',
+	'<': 'f64.lt',
+	'>': 'f64.gt',
+	'<=': 'f64.le',
+	'>=': 'f64.ge'
 };
 
 function isFunction(node) {
@@ -162,11 +168,157 @@ function compileNode(node) {
 	if (node.type === 'infix') {
 		const op = node.op;
 
-		if (op === '#' && node.left && node.left.value === 1) {
+		if (op === '#') {
 			let code = compileNode(node.right);
 			code += `    call $print_float\n`;
 			return code;
 		}
+
+		if (op === ':') {
+			if (node.left && node.left.type === 'identifier') {
+				// Standalone `:` without `?` usually means assignment/binding in Sign
+				// We handle this via expandMacros normally, but if it reaches here:
+				return `    ;; UNIMPLEMENTED: Standalone binding (:)\n`;
+			} else {
+				// Condition : TrueBranch
+				let code = compileNode(node.left);
+				code += `    call $is_truthy\n`;
+				code += `    if (result f64)\n`;
+				code += compileNode(node.right);
+				code += `    else\n`;
+				code += `      f64.const nan\n`;
+				code += `    end\n`;
+				return code;
+			}
+		}
+
+		if (op === '?') {
+			let code = `    ;; UNIMPLEMENTED: lambda (?)\n`;
+			code += `    f64.const nan\n`;
+			return code;
+		}
+
+		if (['==', '!=', '<', '>', '<=', '>='].includes(op)) {
+			let code = compileNode(node.left);
+			code += `    local.set $tmp_L\n`;
+			code += compileNode(node.right);
+			code += `    local.set $tmp_R\n`;
+
+			code += `    local.get $tmp_L\n`;
+			code += `    local.get $tmp_R\n`;
+			code += `    ${TEMPLATES[op]}\n`;
+
+			// Convert i32 Wasm boolean to the actual value
+			code += `    if (result f64)\n`;
+
+			// Mixed Return Strategy for Chaining (from a9):
+			// If Left is Literal, return Right (Value)
+			// Else, return Left (Value)
+			if (['number', 'string'].includes(node.left.type)) {
+				code += `      local.get $tmp_R\n`;
+			} else {
+				code += `      local.get $tmp_L\n`;
+			}
+
+			code += `    else\n`;
+			code += `      f64.const nan\n`;
+			code += `    end\n`;
+			return code;
+		}
+
+		// --- LOGICAL OPERATORS (Short-Circuit) ---
+		if (op === '&') {
+			let code = compileNode(node.left);
+			code += `    local.set $tmp_bool\n`;
+			code += `    local.get $tmp_bool\n`;
+			code += `    call $is_truthy\n`;
+			code += `    if (result f64)\n`;
+			code += compileNode(node.right);
+			code += `    else\n`;
+			code += `      local.get $tmp_bool\n`; // Return Falsy (NaN)
+			code += `    end\n`;
+			return code;
+		}
+
+		if (op === '|') {
+			let code = compileNode(node.left);
+			code += `    local.set $tmp_bool\n`;
+			code += `    local.get $tmp_bool\n`;
+			code += `    call $is_truthy\n`;
+			code += `    if (result f64)\n`;
+			code += `      local.get $tmp_bool\n`; // Return Truthy
+			code += `    else\n`;
+			code += compileNode(node.right);
+			code += `    end\n`;
+			return code;
+		}
+
+		if (op === ';') {
+			// Logical XOR: Only one truthy. 
+			// If both truthy -> NaN
+			// If none truthy -> NaN
+			// If one truthy -> return it.
+			let code = compileNode(node.left);
+			code += `    local.set $tmp_L\n`;
+			code += compileNode(node.right);
+			code += `    local.set $tmp_R\n`;
+
+			code += `    local.get $tmp_L\n`;
+			code += `    call $is_truthy\n`;
+			code += `    if (result f64)\n`;
+
+			// L is Truthy
+			code += `      local.get $tmp_R\n`;
+			code += `      call $is_truthy\n`;
+			code += `      if (result f64)\n`;
+			code += `        f64.const nan\n`; // Both Truthy -> NaN
+			code += `      else\n`;
+			code += `        local.get $tmp_L\n`; // L is alone Truthy
+			code += `      end\n`;
+
+			code += `    else\n`;
+
+			// L is Falsy
+			code += `      local.get $tmp_R\n`;
+			code += `      call $is_truthy\n`;
+			code += `      if (result f64)\n`;
+			code += `        local.get $tmp_R\n`; // R is alone Truthy
+			code += `      else\n`;
+			code += `        f64.const nan\n`; // Both Falsy -> NaN
+			code += `      end\n`;
+
+			code += `    end\n`;
+			return code;
+		}
+
+		// --- BITWISE OPERATORS (i32 cast required) ---
+		if (['&&', '||', ';;', '<<', '>>'].includes(op)) {
+			let wasmOp = '';
+			if (op === '&&') wasmOp = 'i32.and';
+			if (op === '||') wasmOp = 'i32.or';
+			if (op === ';;') wasmOp = 'i32.xor';
+			if (op === '<<') wasmOp = 'i32.shl';
+			if (op === '>>') wasmOp = 'i32.shr_s';
+
+			let code = compileNode(node.left);
+			// f64 to i32
+			code += `    i32.trunc_sat_f64_s\n`;
+
+			code += compileNode(node.right);
+			// f64 to i32
+			code += `    i32.trunc_sat_f64_s\n`;
+
+			// Bitwise op
+			code += `    ${wasmOp}\n`;
+
+			// i32 to f64 back
+			code += `    f64.convert_i32_s\n`;
+			return code;
+		}
+
+
+
+
 
 		let code = '';
 		if (node.left) code += compileNode(node.left);
@@ -186,6 +338,28 @@ function compileNode(node) {
 			code += `    call $input_float\n`;
 			return code;
 		}
+		if (node.op === '!') {
+			let code = '';
+			if (node.expr) code += compileNode(node.expr);
+			code += `    call $is_truthy\n`;
+			code += `    if (result f64)\n`;
+			code += `      f64.const nan\n`;
+			code += `    else\n`;
+			code += `      f64.const 1.0\n`;
+			code += `    end\n`;
+			return code;
+		}
+
+		if (node.op === '!!') {
+			let code = '';
+			if (node.expr) code += compileNode(node.expr);
+			code += `    i32.trunc_sat_f64_s\n`;
+			code += `    i32.const -1\n`;
+			code += `    i32.xor\n`;
+			code += `    f64.convert_i32_s\n`;
+			return code;
+		}
+
 		let code = '';
 		if (node.expr) code += compileNode(node.expr);
 		if (TEMPLATES[node.op]) {
@@ -245,7 +419,16 @@ export function compileToWat(ast) {
   (import "env" "math_fmod" (func $math_fmod (param f64 f64) (result f64)))
   (import "env" "math_pow" (func $math_pow (param f64 f64) (result f64)))
 
+  (func $is_truthy (param $val f64) (result i32)
+    local.get $val
+    local.get $val
+    f64.eq
+  )
+
   (func $main (export "main") (result f64)
+    (local $tmp_bool f64)
+    (local $tmp_L f64)
+    (local $tmp_R f64)
 ${bodyCode}
     f64.const 0.0
   )
