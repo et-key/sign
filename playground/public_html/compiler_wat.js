@@ -12,9 +12,8 @@ const TEMPLATES = {
 function isFunction(node) {
 	if (!node) return false;
 	if (node.type === 'identifier' && TEMPLATES[node.value]) return true;
-	if (node.type === 'block') return true;
-	if (node.type === 'infix' && (!node.left || !node.right)) return true;
 	if (node.type === 'compose') return true;
+	if (node.type === 'apply' && node.func && node.func.type === 'identifier' && TEMPLATES[node.func.value]) return true;
 	return false;
 }
 
@@ -48,7 +47,13 @@ function expandMacros(node, env = {}) {
 		function flatten(n) {
 			if (!n) return [];
 			if (n.type === 'apply') {
-				// applyは特殊なフラット化（関数と引数）
+				// applyが演算子の部分適用（[+ 4] のような部分）である場合、
+				// それ以上ばらさずに1つの関数（クロージャ相当）として扱う。
+				// そうしないと [+ 4] [* 3] などのチェインが全部バラバラになってしまう。
+				if (n.func && n.func.type === 'identifier' && TEMPLATES[n.func.value]) {
+					return [n];
+				}
+				// 通常の関数適用（チェイン）の場合はフラットに展開する
 				return [...flatten(n.func), ...flatten(n.arg)];
 			}
 			if (n.type === 'infix' && (n.op === ' ' || n.op === '')) {
@@ -58,6 +63,15 @@ function expandMacros(node, env = {}) {
 		}
 
 		const rawQueue = flatten(node);
+
+		// もし展開結果が元のノード自身１つだけなら、それ以上パイプライン処理する必要なし（無限ループ防止）
+		if (rawQueue.length === 1 && rawQueue[0] === node) {
+			// ただし、ブロックや中身にマクロが含まれる場合は展開しておく
+			if (node.type === 'apply') {
+				return { ...node, func: expandMacros(node.func, env), arg: expandMacros(node.arg, env) };
+			}
+			return node;
+		}
 
 		// 2. マクロ展開
 		const queue = rawQueue.map(n => expandMacros(n, env));
