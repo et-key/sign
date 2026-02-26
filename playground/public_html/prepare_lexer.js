@@ -12,8 +12,8 @@ const markSeparator = code => code
     (_, $1, $2, $3, $4) => ($1 || $2) || ($3 && '\x1F[\x1F') || ($4 && '\x1F]\x1F')
   )
   .replace(
-    /(\\[\s\S])|(`[^`\r\n]*`)|(\|\|)|(?<!\\)([,\:;|])/g,
-    (_, $1, $2, $3, $4) => ($1 || $2 || $3) || ($4 && `\x1F${$4}\x1F`)
+    /(\\[\s\S])|(`[^`\r\n]*`)|(\|\|)|(;;)|(?<!\\)([,\:;|])/g,
+    (_, $1, $2, $3, $4, $5) => ($1 || $2 || $3 || $4) || ($5 && `\x1F${$5}\x1F`)
   )
   .replace(
     /(\\[\s\S])|(`[^`\r\n]*`)|(?<!\\) /g,
@@ -55,7 +55,7 @@ const parseToSExpr = (code) => {
     for (const t of l) {
       if (t === '\t') indent++;
       else if (t.startsWith(' ')) {
-         throw new Error("Invalid indentation: Spaces are not allowed. Use tabs only.");
+        throw new Error("Invalid indentation: Spaces are not allowed. Use tabs only.");
       }
       else break;
     }
@@ -67,56 +67,56 @@ const parseToSExpr = (code) => {
     // Check for space indentation in content (e.g. 4 spaces)
     // The tokenizer separates spaces as tokens, so if we see a space token at start of content, it's mixed indentation or space indent.
     if (content[0] === ' ' || (content[0] && content[0].startsWith(' '))) { // content[0] could be empty string from split? No, filtered.
-       // Check if it's a space token (our tokenizer puts spaces in \x1F)
-       // markSeparator replaces space with \x1F. split removes empty.
-       // So space becomes empty string? No.
-       // replaced by \x1F. split('\x1F').
-       // Wait, markSeparator replaces space with \x1F?
-       // .replace(/...|(?<!\\) /g, ... => \x1F)
-       // If we have "    ", it becomes \x1F\x1F\x1F\x1F.
-       // trace: ` ` -> `\x1F`. split -> ``. filtered -> gone.
-       // So spaces are REMOVED?
-       // The original code passed spaces as empty tokens?
-       // `rawTokens = marked.split('\x1F').filter(t => t !== '')`
-       // if space -> \x1F. split -> ["", ""]. filter -> [].
-       // So spaces are IGNORED.
-       
-       // REQUIRED: We need to detect spaces to throw error.
-       // We must check `code` or `marked` before split/filter?
-       // Or change markSeparator to keep spaces as distinct tokens?
+      // Check if it's a space token (our tokenizer puts spaces in \x1F)
+      // markSeparator replaces space with \x1F. split removes empty.
+      // So space becomes empty string? No.
+      // replaced by \x1F. split('\x1F').
+      // Wait, markSeparator replaces space with \x1F?
+      // .replace(/...|(?<!\\) /g, ... => \x1F)
+      // If we have "    ", it becomes \x1F\x1F\x1F\x1F.
+      // trace: ` ` -> `\x1F`. split -> ``. filtered -> gone.
+      // So spaces are REMOVED?
+      // The original code passed spaces as empty tokens?
+      // `rawTokens = marked.split('\x1F').filter(t => t !== '')`
+      // if space -> \x1F. split -> ["", ""]. filter -> [].
+      // So spaces are IGNORED.
+
+      // REQUIRED: We need to detect spaces to throw error.
+      // We must check `code` or `marked` before split/filter?
+      // Or change markSeparator to keep spaces as distinct tokens?
     }
-    
+
     // RE-VERIFY: `prepare_lexer` lines 31-33:
     // .replace( ... |(?<!\\) /g, ... ($3 && `\x1F`) )
     // Space is replaced by \x1F.
     // So "  x" -> "\x1F\x1Fx". split -> ["", "", "x"]. filter -> ["x"].
     // Spaces are lost.
-    
+
     // FIX: We need to enforce this BEFORE tokenizing.
     // Let's rely on `toSExpr` to check original lines? 
     // Or simpler: check strictly in `toSExpr` iteration?
     // But `tokens` don't have spaces.
-    
+
     // We can check `code` or `lines` before processing?
     // Let's add a pre-check validation for 4-spaces at start of line.
   }
-  
+
   // Validation Pass
   const linesRaw = prepare(code).split('\r'); // Processed code has \r lines
   for (let i = 0; i < linesRaw.length; i++) {
-      const line = linesRaw[i];
-      const match = line.match(/^(\s*)/);
-      if (match) {
-          const indentStr = match[1];
-          if (indentStr.length > 0) { // Only check if there's actual indentation
-            for (let charIdx = 0; charIdx < indentStr.length; charIdx++) {
-              if (indentStr[charIdx] === ' ') {
-                // Spaces are no longer allowed for indentation at all.
-                throw new Error(`Invalid indentation at line ${i+1}: Spaces are not allowed. Use tabs only.`);
-              }
-            }
+    const line = linesRaw[i];
+    const match = line.match(/^(\s*)/);
+    if (match) {
+      const indentStr = match[1];
+      if (indentStr.length > 0) { // Only check if there's actual indentation
+        for (let charIdx = 0; charIdx < indentStr.length; charIdx++) {
+          if (indentStr[charIdx] === ' ') {
+            // Spaces are no longer allowed for indentation at all.
+            throw new Error(`Invalid indentation at line ${i + 1}: Spaces are not allowed. Use tabs only.`);
           }
+        }
       }
+    }
   }
 
   // Resume Processing with `lines` and `tokens` (spaces already removed)
@@ -125,12 +125,12 @@ const parseToSExpr = (code) => {
     if (l.length === 0) continue;
 
     let indent = 0;
-    while(l.length > 0 && l[0] === '\t') {
-        indent++;
-        l.shift();
+    while (l.length > 0 && l[0] === '\t') {
+      indent++;
+      l.shift();
     }
-    
-    const content = l; 
+
+    const content = l;
     if (content.length === 0) continue;
 
     let top = indentStack[indentStack.length - 1];
@@ -139,32 +139,32 @@ const parseToSExpr = (code) => {
       // New Block
       const newBlock = [];
       const parentList = currentList();
-      
+
       // If parent list is empty? (Should not happen if previous line existed)
       // Check if previous line ended with "open op" like `?` or `:`
       // If so, `newBlock` is the argument.
       // If not, `newBlock` is... what? A new argument? `func arg`
       // `func \n indent arg` -> `func arg`
-      
+
       // We push the new block to the current list.
       // NOTE: User wants "indent" to be like "[".
       // So we just push a new array.
       parentList.push(newBlock);
       indentStack.push({ list: newBlock, indent: indent });
-      
+
     } else if (indent < top.indent) {
       // Dedent
       while (indentStack.length > 1 && indentStack[indentStack.length - 1].indent > indent) {
         indentStack.pop();
       }
-      
+
       // Check if we dedented too much? (mismatched indent)
       // Python allows matches to previous levels.
       if (indentStack[indentStack.length - 1].indent !== indent) {
-          // This implies the indentation level doesn't match any outer block
-          // For now, we default to the nearest outer block (standard behavior).
+        // This implies the indentation level doesn't match any outer block
+        // For now, we default to the nearest outer block (standard behavior).
       }
-      
+
       // Seperator handling:
       // If we dedent, we are back in a list.
       // Should we add a separator?
@@ -172,15 +172,15 @@ const parseToSExpr = (code) => {
       // `block \n y` -> `block, y`
       currentList().push({ type: 'separator', value: '\n' });
     } else {
-       // Same indent -> Separate statement
-       currentList().push({ type: 'separator', value: '\n' });
+      // Same indent -> Separate statement
+      currentList().push({ type: 'separator', value: '\n' });
     }
 
     // Process Line Content
     // Handle inline blocks [ ] ( {
     // And map ( { to [ behavior
     const processed = processLine(content);
-    
+
     currentList().push(...processed);
   }
 
