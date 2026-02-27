@@ -196,7 +196,7 @@ let maxEnvDepth = -1;
 
 // WASMスタック命令の生成
 function compileNode(node, envMap = {}) {
-	if (!node) return '';
+	if (!node) return `    f64.const nan\n`;
 	if (node.type === 'apply' && node.func && node.func.type === 'unit') {
 	}
 
@@ -306,7 +306,7 @@ function compileNode(node, envMap = {}) {
 	if (node.type === 'identifier') {
 		const name = node.value.trim();
 		if (TEMPLATES[name]) {
-			return `    ${TEMPLATES[name]}\n`;
+			return `    ;; UNBOUND NATIVE OP (${name})\n    f64.const nan\n`;
 		}
 		if (envMap[name]) {
 			const loc = envMap[name];
@@ -678,9 +678,8 @@ function compileNode(node, envMap = {}) {
 
 
 
-		let code = '';
-		if (node.left) code += compileNode(node.left, envMap);
-		if (node.right) code += compileNode(node.right, envMap);
+		let code = compileNode(node.left, envMap);
+		code += compileNode(node.right, envMap);
 		if (TEMPLATES[op]) {
 			code += `    ${TEMPLATES[op]}\n`;
 			return code;
@@ -690,15 +689,13 @@ function compileNode(node, envMap = {}) {
 
 	if (node.type === 'prefix') {
 		if (node.op === '@') {
-			let code = '';
-			if (node.expr) code += compileNode(node.expr, envMap);
+			let code = compileNode(node.expr, envMap);
 			code += `    drop\n`;
 			code += `    call $input_float\n`;
 			return code;
 		}
 		if (node.op === '!') {
-			let code = '';
-			if (node.expr) code += compileNode(node.expr, envMap);
+			let code = compileNode(node.expr, envMap);
 			code += `    call $is_truthy\n`;
 			code += `    if (result f64)\n`;
 			code += `      f64.const nan\n`;
@@ -709,8 +706,7 @@ function compileNode(node, envMap = {}) {
 		}
 
 		if (node.op === '!!') {
-			let code = '';
-			if (node.expr) code += compileNode(node.expr, envMap);
+			let code = compileNode(node.expr, envMap);
 			code += `    i32.trunc_sat_f64_s\n`;
 			code += `    i32.const -1\n`;
 			code += `    i32.xor\n`;
@@ -718,8 +714,7 @@ function compileNode(node, envMap = {}) {
 			return code;
 		}
 
-		let code = '';
-		if (node.expr) code += compileNode(node.expr, envMap);
+		let code = compileNode(node.expr, envMap);
 		if (TEMPLATES[node.op]) {
 			code += `    ${TEMPLATES[node.op]}\n`;
 		}
@@ -741,11 +736,37 @@ function compileNode(node, envMap = {}) {
 			return false;
 		};
 
+		if (isNative(node.func)) {
+			const flattenNativeApply = (n) => {
+				if (!n) return { args: [], op: null };
+				if (n.type === 'identifier' && TEMPLATES[n.value]) return { args: [], op: n.value };
+				if (n.type === 'apply') {
+					let inner = flattenNativeApply(n.func);
+					inner.args.push(n.arg);
+					return inner;
+				}
+				return { args: [], op: null };
+			};
+
+			let info = flattenNativeApply(node);
+			let code = '';
+			let expectedArgs = ['head', 'tail', '!', '!!', '@'].includes(info.op) ? 1 : 2;
+
+			for (let i = info.args.length; i < expectedArgs; i++) {
+				code += `    f64.const nan\n`;
+			}
+
+			for (let i = info.args.length - 1; i >= 0; i--) {
+				code += compileNode(info.args[i], envMap);
+			}
+			code += `    ${TEMPLATES[info.op]}\n`;
+			return code;
+		}
+
 		if (node.func && node.func.type === 'identifier') {
 			let fnName = node.func.value.trim();
 			if (envMap[fnName] && envMap[fnName].layout) {
 				node._layout = envMap[fnName].layout;
-			} else {
 			}
 		} else if (node.func && node.func._layout) {
 			node._layout = node.func._layout;
@@ -753,39 +774,22 @@ function compileNode(node, envMap = {}) {
 
 		let code = '';
 
-		// 関数が中置演算等を含んだブロックの場合（例: [+ 4]）の特殊展開
-		// ※ [2, +, 4] のようにスタックに積む順序を調整する必要がある
 		if (node.pipeline) {
 			code += compileNode(node.arg, envMap);
-			if (node.func && node.func.type === 'apply') {
-				code += compileNode(node.func.arg, envMap);
-				code += compileNode(node.func.func, envMap);
-			} else {
-				code += compileNode(node.func, envMap);
-				if (!isNative(node.func)) {
-					code += `    call $apply_closure\n`;
-				}
-			}
+			code += compileNode(node.func, envMap);
+			code += `    call $apply_closure\n`;
 			return code;
 		}
 
-		// 通常の apply（func arg）
-		if (isNative(node.func)) {
-			if (node.arg) code += compileNode(node.arg, envMap);
-			if (node.func) code += compileNode(node.func, envMap);
-			return code;
-		} else {
-			if (node.func) code += compileNode(node.func, envMap);
-			if (node.arg) code += compileNode(node.arg, envMap);
-			code += `    call $apply_closure_reversed\n`;
-			return code;
-		}
+		code += compileNode(node.func, envMap);
+		code += compileNode(node.arg, envMap);
+		code += `    call $apply_closure_reversed\n`;
+		return code;
 	}
 
 	if (node.type === 'compose') {
-		let code = '';
-		if (node.first) code += compileNode(node.first, envMap);
-		if (node.second) code += compileNode(node.second, envMap);
+		let code = compileNode(node.first, envMap);
+		code += compileNode(node.second, envMap);
 		return code;
 	}
 
