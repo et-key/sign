@@ -105,22 +105,7 @@ function expandMacros(node, env = {}) {
 	if (!node) return node;
 
 	if (node.type === 'block') {
-		const newBody = [];
-		for (const child of node.body) {
-			if (child.type === 'infix' && child.op === ':') {
-				let name = '';
-				if (child.left && child.left.type === 'identifier') {
-					name = child.left.value.trim();
-				} else if (child.left && child.left.type === 'block' && child.left.body.length > 0) {
-					name = child.left.body[0].value.trim();
-				}
-				if (name) {
-					env[name] = expandMacros(child.right, env);
-				}
-			} else {
-				newBody.push(expandMacros(child, env));
-			}
-		}
+		const newBody = node.body.map(child => expandMacros(child, env));
 		return { type: 'block', body: newBody };
 	}
 
@@ -217,26 +202,102 @@ function expandMacros(node, env = {}) {
 	return node;
 }
 
+let currentEnvDepth = 0;
+let maxEnvDepth = -1;
+
 // WASMスタック命令の生成
 function compileNode(node, envMap = {}) {
 	if (!node) return '';
 
 	if (node.type === 'block') {
-		if (!node.body || node.body.length === 0) return `    f64.const nan\n`;
+		let defineNodes = node.body.filter(child => child.type === 'infix' && child.op === ':');
+		let isEnvBlock = defineNodes.length > 0;
+		// If ALL statements are definitions, treat this block as returning its Environment (Dictionary literal)
+		let isDictReturn = node.body.length > 0 && node.body.every(child => child.type === 'infix' && child.op === ':');
+
+		let myDepth = -1;
+		let envLocalName = '';
+		let newEnvMap = { ...envMap };
 		let code = '';
-		for (let i = 0; i < node.body.length - 1; i++) {
-			code += compileNode(node.body[i], envMap);
-			code += `    local.set $tmp_bool\n`;
-			code += `    local.get $tmp_bool\n`;
-			code += `    call $is_truthy\n`;
-			code += `    if (result f64)\n`;
-			code += `      local.get $tmp_bool\n`;
-			code += `    else\n`;
+
+		if (isEnvBlock) {
+			myDepth = currentEnvDepth++;
+			if (myDepth > maxEnvDepth) maxEnvDepth = myDepth;
+			envLocalName = `$env_blk_${myDepth}`;
+
+			code += `    i32.const ${defineNodes.length * 8}\n`;
+			code += `    call $alloc\n`;
+			code += `    local.set ${envLocalName}\n`;
+
+			let offset = 0;
+			let layoutMeta = {};
+			for (let def of defineNodes) {
+				let name = '';
+				if (def.left && def.left.type === 'identifier') name = def.left.value.trim();
+				if (name) {
+					newEnvMap[name] = { type: 'local_env', localName: envLocalName, offset: offset };
+					layoutMeta[name] = offset;
+					offset += 8;
+				}
+			}
+			node._layout = layoutMeta;
+			node._envLocalName = envLocalName;
 		}
-		code += compileNode(node.body[node.body.length - 1], envMap);
+
+		if (!node.body || node.body.length === 0) return `    f64.const nan\n`;
+
+		for (let i = 0; i < node.body.length; i++) {
+			let child = node.body[i];
+
+			if (child.type === 'infix' && child.op === ':') {
+				let name = (child.left && child.left.type === 'identifier') ? child.left.value.trim() : '';
+				let targetOffset = (name && newEnvMap[name] && newEnvMap[name].localName === envLocalName) ? newEnvMap[name].offset : -1;
+
+				let rhsCode = compileNode(child.right, newEnvMap);
+				if (name && child.right && child.right._layout && newEnvMap[name]) {
+					newEnvMap[name].layout = child.right._layout;
+				}
+
+				code += rhsCode;
+
+				if (targetOffset >= 0) {
+					code += `    local.set $tmp_R\n`;
+					code += `    local.get ${envLocalName}\n`;
+					code += `    local.get $tmp_R\n`;
+					code += `    f64.store offset=${targetOffset}\n`;
+					code += `    f64.const nan\n`;
+				}
+			} else {
+				code += compileNode(child, newEnvMap);
+			}
+
+			if (i < node.body.length - 1) {
+				code += `    local.set $tmp_bool\n`;
+				code += `    local.get $tmp_bool\n`;
+				code += `    call $is_truthy\n`;
+				code += `    if (result f64)\n`;
+				code += `      local.get $tmp_bool\n`;
+				code += `    else\n`;
+			}
+		}
+
 		for (let i = 0; i < node.body.length - 1; i++) {
 			code += `    end\n`;
 		}
+
+		if (isEnvBlock) {
+			if (isDictReturn) {
+				// Return Dictionary / Environment Pointer tagged as 0x7FFB
+				code += `    drop\n`;
+				code += `    i64.const 0x7FFB000000000000\n`;
+				code += `    local.get ${envLocalName}\n`;
+				code += `    i64.extend_i32_u\n`;
+				code += `    i64.or\n`;
+				code += `    f64.reinterpret_i64\n`;
+			}
+			currentEnvDepth--;
+		}
+
 		return code;
 	}
 
@@ -257,6 +318,8 @@ function compileNode(node, envMap = {}) {
 				return `    local.get $arg\n`;
 			} else if (loc.type === 'env') {
 				return `    local.get $env\n    i32.trunc_sat_f64_u\n    f64.load offset=${loc.offset}\n`;
+			} else if (loc.type === 'local_env') {
+				return `    local.get ${loc.localName}\n    f64.load offset=${loc.offset}\n`;
 			}
 		}
 		return `    ;; IGNORED: identifier (${name})\n    f64.const nan\n`;
@@ -355,14 +418,29 @@ function compileNode(node, envMap = {}) {
 			let innerEnvMap = {};
 			if (paramName) innerEnvMap[paramName] = { type: 'arg' };
 			freeVars.forEach((v, i) => {
-				innerEnvMap[v] = { type: 'env', offset: i * 8 };
+				let propagatedLayout = (envMap[v] && envMap[v].layout) ? envMap[v].layout : null;
+				innerEnvMap[v] = { type: 'env', offset: i * 8, layout: propagatedLayout };
 			});
+
+			let savedDepth = currentEnvDepth;
+			let savedMax = maxEnvDepth;
+			currentEnvDepth = 0;
+			maxEnvDepth = -1;
+
+			let funcBody = compileNode(node.right, innerEnvMap);
+			if (node.right && node.right._layout) {
+				node._layout = node.right._layout;
+			}
 
 			let funcCode = `  (func ${lambdaName} (param $env f64) (param $arg f64) (result f64)\n`;
 			funcCode += `    (local $tmp_bool f64)\n    (local $tmp_L f64)\n    (local $tmp_R f64)\n    (local $tmp_ptr i32)\n`;
-			funcCode += compileNode(node.right, innerEnvMap);
+			for (let i = 0; i <= maxEnvDepth; i++) funcCode += `    (local $env_blk_${i} i32)\n`;
+			funcCode += funcBody;
 			funcCode += `  )\n`;
 			closureFunctions.push({ name: lambdaName, code: funcCode, index: funcIndex });
+
+			currentEnvDepth = savedDepth;
+			maxEnvDepth = savedMax;
 
 			// 2. Emit code to create the closure object at runtime
 			let code = ``;
@@ -416,6 +494,36 @@ function compileNode(node, envMap = {}) {
 			code += `    i64.or\n`;
 			code += `    f64.reinterpret_i64\n`;
 			return code;
+		}
+
+		if (op === "'") {
+			let keyName = (node.right && node.right.type === 'identifier') ? node.right.value.trim() : '';
+			let offset = -1;
+			let lhsLayout = null;
+
+			if (node.left && node.left.type === 'identifier') {
+				let lhsName = node.left.value.trim();
+				if (envMap[lhsName] && envMap[lhsName].layout) {
+					lhsLayout = envMap[lhsName].layout;
+				}
+			} else if (node.left && node.left._layout) {
+				lhsLayout = node.left._layout;
+			}
+
+			if (lhsLayout && keyName && lhsLayout[keyName] !== undefined) {
+				offset = lhsLayout[keyName];
+			}
+
+			if (offset >= 0) {
+				let code = compileNode(node.left, envMap);
+				code += `    i64.reinterpret_f64\n`;
+				code += `    i32.wrap_i64\n`;
+				code += `    f64.load offset=${offset}\n`;
+				return code;
+			} else {
+				console.warn(`[Compile Warning] Static offset resolution failed for property '${keyName}'`);
+				return `    ;; UNABLE TO RESOLVE STATIC OFFSET FOR GET\n    f64.const nan\n`;
+			}
 		}
 
 		if (['==', '!='].includes(op)) {
@@ -625,6 +733,15 @@ function compileNode(node, envMap = {}) {
 			return false;
 		};
 
+		if (node.func && node.func.type === 'identifier') {
+			let fnName = node.func.value.trim();
+			if (envMap[fnName] && envMap[fnName].layout) {
+				node._layout = envMap[fnName].layout;
+			}
+		} else if (node.func && node.func._layout) {
+			node._layout = node.func._layout;
+		}
+
 		let code = '';
 
 		// 関数が中置演算等を含んだブロックの場合（例: [+ 4]）の特殊展開
@@ -666,6 +783,7 @@ function compileNode(node, envMap = {}) {
 	return `    ;; IGNORED: ${node.type}\n    f64.const nan\n`;
 }
 
+export function expandMacrosPublic(ast) { return expandMacros(ast, {}); }
 export function compileToWat(ast) {
 	stringTable = {};
 	stringAllocOffset = 8;
@@ -674,6 +792,8 @@ export function compileToWat(ast) {
 	closureCount = 0;
 
 	const expandedAst = expandMacros(ast, {});
+	currentEnvDepth = 0;
+	maxEnvDepth = -1;
 	const bodyCode = compileNode(expandedAst, {});
 
 	let closureCode = '';
@@ -681,15 +801,18 @@ export function compileToWat(ast) {
 
 	if (closureFunctions.length > 0) {
 		closureFunctions.sort((a, b) => a.index - b.index);
-		elemSection = `  (table ${closureFunctions.length} funcref)\n`;
+	}
+	let tableSize = closureFunctions.length > 0 ? closureFunctions.length : 1;
+	elemSection = `  (table ${tableSize} funcref)\n`;
+	if (closureFunctions.length > 0) {
 		elemSection += `  (elem (i32.const 0)`;
 		closureFunctions.forEach(f => {
 			elemSection += ` ${f.name}`;
 			closureCode += f.code + '\n';
 		});
 		elemSection += `)\n`;
-		elemSection += `  (type $closure_sig (func (param f64 f64) (result f64)))\n`;
 	}
+	elemSection += `  (type $closure_sig (func (param f64 f64) (result f64)))\n`;
 
 	return `(module
   (import "env" "print_string" (func $print_string (param i32 i32)))
@@ -880,6 +1003,7 @@ ${closureCode}
     (local $tmp_L f64)
     (local $tmp_R f64)
     (local $tmp_ptr i32)
-${bodyCode ? bodyCode : '    f64.const 0.0\\n'}  )
+${Array.from({ length: maxEnvDepth + 1 }, (_, i) => `    (local $env_blk_${i} i32)\n`).join('')}
+${bodyCode ? bodyCode : '    f64.const 0.0\n'}  )
 )`;
 }

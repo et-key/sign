@@ -1,0 +1,6 @@
+make_dict : x ?
+	id : x
+	val : x + 2
+
+my_dict : make_dict 40
+my_dict ' val
