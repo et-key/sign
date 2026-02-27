@@ -110,21 +110,11 @@ function expandMacros(node, env = {}) {
 	}
 
 	// ★ 矛盾の解消：ボトムアップ（スタック）ではなく、トップダウンで一気にフラットなキューを作る
-	if (node.type === 'apply' || (node.type === 'infix' && (node.op === ' ' || node.op === ''))) {
+	if (node.type === 'infix' && (node.op === ' ' || node.op === '')) {
 
 		// 1. ASTをキューに展開する
 		function flatten(n) {
 			if (!n) return [];
-			if (n.type === 'apply') {
-				// applyが演算子の部分適用（[+ 4] のような部分）である場合、
-				// それ以上ばらさずに1つの関数（クロージャ相当）として扱う。
-				// そうしないと [+ 4] [* 3] などのチェインが全部バラバラになってしまう。
-				if (n.func && n.func.type === 'identifier' && TEMPLATES[n.func.value]) {
-					return [n];
-				}
-				// 通常の関数適用（チェイン）の場合はフラットに展開する
-				return [...flatten(n.func), ...flatten(n.arg)];
-			}
 			if (n.type === 'infix' && (n.op === ' ' || n.op === '')) {
 				return [...flatten(n.left), ...flatten(n.right)];
 			}
@@ -135,10 +125,6 @@ function expandMacros(node, env = {}) {
 
 		// もし展開結果が元のノード自身１つだけなら、それ以上パイプライン処理する必要なし（無限ループ防止）
 		if (rawQueue.length === 1 && rawQueue[0] === node) {
-			// ただし、ブロックや中身にマクロが含まれる場合は展開しておく
-			if (node.type === 'apply') {
-				return { ...node, func: expandMacros(node.func, env), arg: expandMacros(node.arg, env) };
-			}
 			return node;
 		}
 
@@ -185,6 +171,9 @@ function expandMacros(node, env = {}) {
 		return acc;
 	}
 
+	if (node.type === 'apply') {
+		return { ...node, func: expandMacros(node.func, env), arg: expandMacros(node.arg, env) };
+	}
 	if (node.type === 'infix') {
 		return { ...node, left: expandMacros(node.left, env), right: expandMacros(node.right, env) };
 	}
@@ -208,12 +197,14 @@ let maxEnvDepth = -1;
 // WASMスタック命令の生成
 function compileNode(node, envMap = {}) {
 	if (!node) return '';
+	if (node.type === 'apply' && node.func && node.func.type === 'unit') {
+	}
 
 	if (node.type === 'block') {
-		let defineNodes = node.body.filter(child => child.type === 'infix' && child.op === ':');
+		let defineNodes = node.body.filter(child => child.type === 'infix' && child.op === ':' && child.left && child.left.type === 'identifier');
 		let isEnvBlock = defineNodes.length > 0;
 		// If ALL statements are definitions, treat this block as returning its Environment (Dictionary literal)
-		let isDictReturn = node.body.length > 0 && node.body.every(child => child.type === 'infix' && child.op === ':');
+		let isDictReturn = node.body.length > 0 && node.body.every(child => child.type === 'infix' && child.op === ':' && child.left && child.left.type === 'identifier');
 
 		let myDepth = -1;
 		let envLocalName = '';
@@ -249,13 +240,14 @@ function compileNode(node, envMap = {}) {
 		for (let i = 0; i < node.body.length; i++) {
 			let child = node.body[i];
 
-			if (child.type === 'infix' && child.op === ':') {
-				let name = (child.left && child.left.type === 'identifier') ? child.left.value.trim() : '';
-				let targetOffset = (name && newEnvMap[name] && newEnvMap[name].localName === envLocalName) ? newEnvMap[name].offset : -1;
+			if (child.type === 'infix' && child.op === ':' && child.left && child.left.type === 'identifier') {
+				let name = child.left.value.trim();
+				let targetOffset = (newEnvMap[name] && newEnvMap[name].localName === envLocalName) ? newEnvMap[name].offset : -1;
 
 				let rhsCode = compileNode(child.right, newEnvMap);
 				if (name && child.right && child.right._layout && newEnvMap[name]) {
 					newEnvMap[name].layout = child.right._layout;
+				} else if (name) {
 				}
 
 				code += rhsCode;
@@ -269,6 +261,10 @@ function compileNode(node, envMap = {}) {
 				}
 			} else {
 				code += compileNode(child, newEnvMap);
+				// 子ノードがレイアウトを持つ（つまり辞書を返す式である）場合、ブロック全体の返り値のレイアウトとして採用する
+				if (child._layout && !node._layout) {
+					node._layout = child._layout;
+				}
 			}
 
 			if (i < node.body.length - 1) {
@@ -402,6 +398,11 @@ function compileNode(node, envMap = {}) {
 				code += `    else\n`;
 				code += `      f64.const nan\n`;
 				code += `    end\n`;
+
+				if (node.right && node.right._layout) {
+					node._layout = node.right._layout;
+				}
+
 				return code;
 			}
 		}
@@ -526,10 +527,10 @@ function compileNode(node, envMap = {}) {
 			}
 		}
 
-		if (['==', '!='].includes(op)) {
-			let code = compileNode(node.left);
+		if (['==', '=', '!='].includes(op)) {
+			let code = compileNode(node.left, envMap);
 			code += `    local.set $tmp_L\n`;
-			code += compileNode(node.right);
+			code += compileNode(node.right, envMap);
 			code += `    local.set $tmp_R\n`;
 
 			code += `    local.get $tmp_L\n`;
@@ -537,7 +538,7 @@ function compileNode(node, envMap = {}) {
 			code += `    local.get $tmp_R\n`;
 			code += `    i64.reinterpret_f64\n`;
 
-			if (op === '==') {
+			if (op === '==' || op === '=') {
 				code += `    i64.eq\n`;
 			} else {
 				code += `    i64.ne\n`;
@@ -726,6 +727,13 @@ function compileNode(node, envMap = {}) {
 	}
 
 	if (node.type === 'apply') {
+		if (node.func && node.func.type === 'unit') {
+			let code = compileNode(node.arg, envMap);
+			if (node.arg && node.arg._layout) node._layout = node.arg._layout;
+			if (node.arg && node.arg._envLocalName) node._envLocalName = node.arg._envLocalName;
+			return code;
+		}
+
 		const isNative = (fnNode) => {
 			if (!fnNode) return false;
 			if (fnNode.type === 'identifier' && TEMPLATES[fnNode.value]) return true;
@@ -737,6 +745,7 @@ function compileNode(node, envMap = {}) {
 			let fnName = node.func.value.trim();
 			if (envMap[fnName] && envMap[fnName].layout) {
 				node._layout = envMap[fnName].layout;
+			} else {
 			}
 		} else if (node.func && node.func._layout) {
 			node._layout = node.func._layout;

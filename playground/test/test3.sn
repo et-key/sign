@@ -1,0 +1,16 @@
+complex_test : x ?
+	x = 0 : [
+		status : 100
+		msg : 0
+	]
+	x > 0 : [
+		status : 200
+		msg : 1
+	]
+	[
+		status : 300
+		msg : -1
+	]
+
+res : complex_test 10
+res ' status
