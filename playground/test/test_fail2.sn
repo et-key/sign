@@ -1,0 +1,8 @@
+dict_test : x ? [
+	id : x
+	val : x + 2
+]
+
+my_dict : dict_test - 
+
+1 # my_dict
