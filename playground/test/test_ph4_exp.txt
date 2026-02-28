@@ -2,5 +2,10 @@
 [Print] 12
 [Print] 5
 [Print] 22
+[Print] NaN
+[Print] 15
+[Print] 12
+[Print] 150
+[Print] 23
 
-[Main Result] NaN
+[Main Result] 23

@@ -51,7 +51,12 @@ function isFunction(node, env = {}) {
 	}
 
 	if (node.type === 'compose') return true;
-	if (node.type === 'infix' && node.op === '?') return true;
+	if (node.type === 'infix') {
+		if (node.op === '?') return true;
+		// A missing left or right operand in an infix operator implies partial application (closure)
+		if (!node.left || !node.right) return true;
+	}
+	if (node.type === 'prefix' && !node.expr) return true;
 
 	if (node.type === 'block') {
 		if (!node.body) return false;
@@ -815,11 +820,60 @@ function compileNode(node, envMap = {}) {
 			return code;
 		}
 
+		const isMissingLeft = !node.left;
+		const isMissingRight = !node.right;
 
+		if (isMissingLeft || isMissingRight) {
+			const uuid = Math.random().toString(36).substr(2, 5);
+			if (isMissingLeft && isMissingRight) {
+				const L = `0_curry_L_` + uuid;
+				const R = `0_curry_R_` + uuid;
+				const lambdaAst = {
+					type: 'infix', op: '?',
+					left: { type: 'identifier', value: L },
+					right: {
+						type: 'infix', op: '?',
+						left: { type: 'identifier', value: R },
+						right: { type: 'infix', op: node.op, left: { type: 'identifier', value: L }, right: { type: 'identifier', value: R } }
+					}
+				};
+				return compileNode(lambdaAst, envMap);
+			}
 
+			if (isMissingLeft && !isMissingRight) {
+				const C = `0_cap_R_` + uuid;
+				const L = `0_curry_L_` + uuid;
+				const blockAst = {
+					type: 'block',
+					body: [
+						{ type: 'infix', op: ':', left: { type: 'identifier', value: C }, right: node.right },
+						{
+							type: 'infix', op: '?',
+							left: { type: 'identifier', value: L },
+							right: { type: 'infix', op: node.op, left: { type: 'identifier', value: L }, right: { type: 'identifier', value: C } }
+						}
+					]
+				};
+				return compileNode(blockAst, envMap);
+			}
 
-
-		let code = compileNode(node.left, envMap);
+			if (!isMissingLeft && isMissingRight) {
+				const C = `0_cap_L_` + uuid;
+				const R = `0_curry_R_` + uuid;
+				const blockAst = {
+					type: 'block',
+					body: [
+						{ type: 'infix', op: ':', left: { type: 'identifier', value: C }, right: node.left },
+						{
+							type: 'infix', op: '?',
+							left: { type: 'identifier', value: R },
+							right: { type: 'infix', op: node.op, left: { type: 'identifier', value: C }, right: { type: 'identifier', value: R } }
+						}
+					]
+				};
+				return compileNode(blockAst, envMap);
+			}
+		} let code = compileNode(node.left, envMap);
 		code += compileNode(node.right, envMap);
 		if (TEMPLATES[op]) {
 			code += `    ${TEMPLATES[op]}\n`;
@@ -829,6 +883,17 @@ function compileNode(node, envMap = {}) {
 	}
 
 	if (node.type === 'prefix') {
+		if (!node.expr) {
+			const uuid = Math.random().toString(36).substr(2, 5);
+			const L = `0_curry_L_` + uuid;
+			const lambdaAst = {
+				type: 'infix', op: '?',
+				left: { type: 'identifier', value: L },
+				right: { type: 'prefix', op: node.op, expr: { type: 'identifier', value: L } }
+			};
+			return compileNode(lambdaAst, envMap);
+		}
+
 		if (node.op === '@') {
 			let code = compileNode(node.expr, envMap);
 			code += `    drop\n`;
@@ -903,29 +968,34 @@ function compileNode(node, envMap = {}) {
 			let info = flattenNativeApply(node);
 			let expectedArgs = ['head', 'tail', '!', '!!', '@'].includes(info.op) ? 1 : 2;
 
-			// すでにカリー化ラムダ内部の評価（native_op）であれば再度カリー化はしない
 			if (info.args.length < expectedArgs && !info.isCurriedBody) {
 				let missingCount = expectedArgs - info.args.length;
-				let dummyParamNames = [];
-				for (let i = 0; i < missingCount; i++) {
-					dummyParamNames.push(`$curried_${i}`);
+				let uuid = Math.random().toString(36).substr(2, 5);
+
+				// 引数がある場合、再評価を防ぐために一旦ブロック（Environment）に退避して eager-eval を行う
+				let blockBody = [];
+				let collectedArgs = [];
+
+				for (let i = 0; i < info.args.length; i++) {
+					let capName = `0_cap_${i}_${uuid}`;
+					blockBody.push({ type: 'infix', op: ':', left: { type: 'identifier', value: capName }, right: info.args[i] });
+					collectedArgs.push({ type: 'identifier', value: capName });
 				}
 
-				// 新しいラムダのASTを構築する
-				// 内部の関数呼び出しは再カリー化を防ぐため、引数リストを持つ特殊ノード native_op とする
-				let collectedArgs = [...info.args];
-				// ダミー引数は最後に積むべき引数として追加
+				let dummyParamNames = [];
 				for (let i = 0; i < missingCount; i++) {
-					collectedArgs.push({ type: 'identifier', value: dummyParamNames[i] });
+					let curryName = `0_curry_${i}_${uuid}`;
+					dummyParamNames.push(curryName);
+					collectedArgs.push({ type: 'identifier', value: curryName });
 				}
 
 				let curriedAst = {
 					type: 'native_op',
 					value: info.op,
-					args: collectedArgs
+					args: collectedArgs,
+					isCurriedBody: true
 				};
 
-				// それらを包むラムダ（関数定義）の木を作る
 				let finalLambdaAst = curriedAst;
 				for (let i = missingCount - 1; i >= 0; i--) {
 					finalLambdaAst = {
@@ -936,8 +1006,13 @@ function compileNode(node, envMap = {}) {
 					};
 				}
 
-				// 構築したASTを通常のラムダとしてコンパイルしてクロージャを返す。
-				return compileNode(finalLambdaAst, envMap);
+				if (info.args.length > 0) {
+					blockBody.push(finalLambdaAst);
+					let blockAst = { type: 'block', body: blockBody };
+					return compileNode(blockAst, envMap);
+				} else {
+					return compileNode(finalLambdaAst, envMap);
+				}
 			}
 
 			// 引数が揃っている（後から渡された）場合はそのままネイティブ命令を出力
