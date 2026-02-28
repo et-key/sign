@@ -38,12 +38,15 @@ function encodeWatString(str) {
 	return res + '\\00';
 }
 
-function isFunction(node) {
+function isFunction(node, env = {}) {
 	if (!node) return false;
 
 	// `_` は変数だが、プレースホルダ（空値）として扱われるため関数ではない
 	if (node.type === 'identifier') {
 		if (node.value.trim() === '_') return false;
+		if (env[node.value.trim()] !== undefined) {
+			return env[node.value.trim()].isFunc;
+		}
 		return true;
 	}
 
@@ -55,7 +58,7 @@ function isFunction(node) {
 		// 関数定義 (?) を含むブロックはクロージャを返すので関数とみなす
 		if (node.body.some(c => c.type === 'infix' && c.op === '?')) return true;
 		// ブロックの最後の評価値が関数なら関数とみなす
-		if (node.body.length > 0 && isFunction(node.body[node.body.length - 1])) return true;
+		if (node.body.length > 0 && isFunction(node.body[node.body.length - 1], env)) return true;
 		return false;
 	}
 
@@ -88,6 +91,7 @@ function isFunction(node) {
 			let expectedArgs = ['head', 'tail', '!', '!!', '@'].includes(info.op) ? 1 : 2;
 			let currentArgsCount = info.args.length + (info.nativeArgsLen || 0);
 			if (currentArgsCount < expectedArgs) return true;
+			return false;
 		}
 		return true;
 	}
@@ -153,7 +157,17 @@ function expandMacros(node, env = {}) {
 	if (!node) return node;
 
 	if (node.type === 'block') {
-		const newBody = node.body.map(child => expandMacros(child, env));
+		let currentEnv = { ...env };
+		const newBody = node.body.map(child => {
+			if (child.type === 'infix' && child.op === ':') {
+				if (child.left && child.left.type === 'identifier') {
+					let expandedRight = expandMacros(child.right, currentEnv);
+					currentEnv[child.left.value.trim()] = { isFunc: isFunction(expandedRight, currentEnv) };
+					return { ...child, right: expandedRight, _expanded: true };
+				}
+			}
+			return expandMacros(child, currentEnv);
+		});
 		return { type: 'block', body: newBody };
 	}
 
@@ -194,18 +208,45 @@ function expandMacros(node, env = {}) {
 		const expandedFunc = expandMacros(node.func, env);
 		const expandedArg = expandMacros(node.arg, env);
 
-		const isFuncL = isFunction(expandedFunc);
-		const isFuncR = isFunction(expandedArg);
+		const isFuncL = isFunction(expandedFunc, env);
+		const isFuncR = isFunction(expandedArg, env);
 
 		// 1. パイプライン適用の推測 (Val -> Func)
 		if (!isFuncL && isFuncR && !node.pipeline) {
 			return {
 				type: 'apply',
-				func: expandedArg,
-				arg: expandedFunc,
-				pipeline: true,
+				func: expandedArg, // g
+				arg: expandedFunc, // x
+				pipeline: true,    // mark as pipeline
 				_expanded: true
 			};
+		}
+
+		// 1.5. 関数合成 (Func -> Func) 命令型順序 (左結合)
+		if (isFuncL && isFuncR && !node.pipeline) {
+			// A B -> x ? B(A(x))  (where A = expandedFunc, B = expandedArg)
+			const argName = '$compose_arg_' + Math.random().toString(36).substr(2, 5);
+			const lambdaAst = {
+				type: 'infix',
+				op: '?',
+				left: { type: 'identifier', value: argName },
+				right: {
+					type: 'apply',
+					func: expandedArg, // B (右側・後から実行される)
+					arg: {
+						type: 'apply',
+						func: expandedFunc, // A (左側・先に実行される)
+						arg: { type: 'identifier', value: argName },
+						pipeline: false,
+						_expanded: true
+					},
+					pipeline: false,
+					_expanded: true
+				}
+			};
+			const lambdaExpanded = expandMacros(lambdaAst, env);
+			if (lambdaExpanded && lambdaExpanded.type === 'apply') lambdaExpanded._expanded = true;
+			return lambdaExpanded;
 		}
 
 		// 2. 値の並びのブロック化 (Val -> Val)
@@ -252,7 +293,11 @@ function expandMacros(node, env = {}) {
 	if (node.type === 'identifier') {
 		const name = node.value.trim();
 		if (env[name] !== undefined) {
-			return JSON.parse(JSON.stringify(env[name])); // 深いコピー
+			// Don't replace the node with the environment tracking object (which just has {isFunc: true})
+			// Just return the identifier, let compiler_wat.js compileNode look up the actual value
+			let cloned = JSON.parse(JSON.stringify(node));
+			cloned.isFunc = env[name].isFunc;
+			return cloned;
 		}
 	}
 
@@ -550,6 +595,10 @@ function compileNode(node, envMap = {}) {
 							code += `    local.get $arg\n`;
 						} else if (envMap[v].type === 'env') {
 							code += `    local.get $env\n    i32.trunc_sat_f64_u\n    f64.load offset=${envMap[v].offset}\n`;
+						} else if (envMap[v].type === 'local_env') {
+							code += `    local.get ${envMap[v].localName}\n    f64.load offset=${envMap[v].offset}\n`;
+						} else {
+							code += `    f64.const nan\n`;
 						}
 					} else {
 						code += `    f64.const nan\n`;
