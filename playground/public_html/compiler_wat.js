@@ -47,7 +47,7 @@ function isFunction(node, env = {}) {
 		if (env[node.value.trim()] !== undefined) {
 			return env[node.value.trim()].isFunc;
 		}
-		return true;
+		return !!TEMPLATES[node.value.trim()];
 	}
 
 	if (node.type === 'compose') return true;
@@ -256,6 +256,11 @@ function expandMacros(node, env = {}) {
 
 		// 2. 値の並びのブロック化 (Val -> Val)
 		if (!isFuncL && !isFuncR && !node.pipeline) {
+			// 未知の演算子（isFuncLがfalseになる未定義のopなど）が先頭に来た場合は前置演算子として解釈し直す
+			if (expandedFunc.isOp) {
+				return { type: 'prefix', op: expandedFunc.value.trim(), expr: expandedArg, _expanded: true };
+			}
+
 			if (expandedFunc.type === 'block') {
 				return { type: 'block', body: [...expandedFunc.body, expandedArg], _expanded: true };
 			}
@@ -355,6 +360,10 @@ function compileNode(node, envMap = {}) {
 
 		if (!node.body || node.body.length === 0) return `    f64.const nan\n`;
 
+		let blockId = Math.random().toString(36).substr(2, 5);
+		let blkName = `$blk_exit_${blockId}`;
+		code += `    (block ${blkName} (result f64)\n`;
+
 		for (let i = 0; i < node.body.length; i++) {
 			let child = node.body[i];
 
@@ -386,18 +395,15 @@ function compileNode(node, envMap = {}) {
 			}
 
 			if (i < node.body.length - 1) {
-				code += `    local.set $tmp_bool\n`;
-				code += `    local.get $tmp_bool\n`;
-				code += `    call $is_truthy\n`;
-				code += `    if (result f64)\n`;
-				code += `      local.get $tmp_bool\n`;
-				code += `    else\n`;
+				code += `    local.tee $tmp_bool\n`; // Leave f64 on stack for br_if
+				code += `    local.get $tmp_bool\n`; // Push f64 for is_truthy arguments
+				code += `    call $is_truthy\n`; // Pops one f64, returns i32
+				code += `    br_if ${blkName}\n`;
+				code += `    drop\n`; // discard Falsy value before compiling next node
 			}
 		}
 
-		for (let i = 0; i < node.body.length - 1; i++) {
-			code += `    end\n`;
-		}
+		code += `    )\n`; // end of (block $blk_exit...)
 
 		if (isEnvBlock) {
 			if (isDictReturn) {
@@ -922,8 +928,11 @@ function compileNode(node, envMap = {}) {
 		let code = compileNode(node.expr, envMap);
 		if (TEMPLATES[node.op]) {
 			code += `    ${TEMPLATES[node.op]}\n`;
+			return code;
 		}
-		return code;
+
+		// TEMPLATESに存在しない不正な前置演算子 (パーサが誤認した ':' や '?' など) の場合はパススルーを防ぐ
+		return code + `    drop\n    ;; INVALID PREFIX OP (${node.op})\n    f64.const nan\n`;
 	}
 
 	if (node.type === 'native_op') {
@@ -1128,7 +1137,7 @@ export function compileToWat(ast) {
 
   (memory (export "memory") 1)
 ${elemSection}
-  (global $heap_alloc_ptr (mut i32) (i32.const 8))
+  (global $heap_alloc_ptr (mut i32) (i32.const ${stringAllocOffset}))
 ${dataSection}
   (func $alloc (param $size i32) (result i32)
     (local $ptr i32)
