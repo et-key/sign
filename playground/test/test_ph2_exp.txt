@@ -1,0 +1,7 @@
+[Print] Hello! WASM Strings!
+[Print] NaN
+[Print] 100
+[Print] 200
+[Print] 42
+
+[Main Result] NaN

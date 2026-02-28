@@ -1,5 +1,0 @@
-bad_calc2 : * 5
-chaos : [ 10 + - * ]
-
-1 # bad_calc2
-1 # chaos ' 0

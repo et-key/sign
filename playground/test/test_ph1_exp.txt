@@ -1,0 +1,30 @@
+[Print] 5
+[Print] 2
+[Print] 2
+[Print] 1
+[Print] 1
+[Print] 2
+[Print] NaN
+[Print] NaN
+[Print] 1
+[Print] 0
+[Print] 0
+[Print] 0
+[Print] 0
+[Print] 1
+[Print] NaN
+[Print] NaN
+[Print] 0
+[Print] 99
+[Print] 0
+[Print] 1
+[Print] 4
+[Print] 2
+[Print] -1
+[Print] NaN
+[Print] 1
+[Print] 100
+[Print] NaN
+[Print] NaN
+
+[Main Result] NaN

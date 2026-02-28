@@ -40,10 +40,58 @@ function encodeWatString(str) {
 
 function isFunction(node) {
 	if (!node) return false;
-	if (node.type === 'identifier') return true;
+
+	// `_` は変数だが、プレースホルダ（空値）として扱われるため関数ではない
+	if (node.type === 'identifier') {
+		if (node.value.trim() === '_') return false;
+		return true;
+	}
+
 	if (node.type === 'compose') return true;
-	if (node.type === 'apply') return true;
 	if (node.type === 'infix' && node.op === '?') return true;
+
+	if (node.type === 'block') {
+		if (!node.body) return false;
+		// 関数定義 (?) を含むブロックはクロージャを返すので関数とみなす
+		if (node.body.some(c => c.type === 'infix' && c.op === '?')) return true;
+		// ブロックの最後の評価値が関数なら関数とみなす
+		if (node.body.length > 0 && isFunction(node.body[node.body.length - 1])) return true;
+		return false;
+	}
+
+	if (node.type === 'apply') {
+		// パイプライン（関数の合成や部分適用の連鎖）はカリー化等の対象になるため
+		// isNative として単純なWASM命令の出力を行わず、正しく関数としてクロージャ連鎖へ回す
+		if (node.pipeline) return true;
+
+		// ネイティブ演算子で引数が足りていない場合は関数（部分適用）として扱う
+		const isNative = (fnNode) => {
+			if (!fnNode) return false;
+			if (fnNode.type === 'identifier' && TEMPLATES[fnNode.value]) return true;
+			if (fnNode.type === 'native_op') return true;
+			if (fnNode.type === 'apply') return isNative(fnNode.func);
+			return false;
+		};
+		if (isNative(node.func)) {
+			const flattenNativeApply = (n) => {
+				if (!n) return { args: [], op: null };
+				if (n.type === 'identifier' && TEMPLATES[n.value]) return { args: [], op: n.value };
+				if (n.type === 'native_op') return { args: [], op: n.value, nativeArgsLen: n.args ? n.args.length : 0 };
+				if (n.type === 'apply') {
+					let inner = flattenNativeApply(n.func);
+					inner.args.push(n.arg);
+					return inner;
+				}
+				return { args: [], op: null };
+			};
+			let info = flattenNativeApply(node);
+			let expectedArgs = ['head', 'tail', '!', '!!', '@'].includes(info.op) ? 1 : 2;
+			let currentArgsCount = info.args.length + (info.nativeArgsLen || 0);
+			if (currentArgsCount < expectedArgs) return true;
+		}
+		return true;
+	}
+
 	return false;
 }
 
@@ -86,7 +134,7 @@ function getFreeVariables(node, boundVars = new Set()) {
 	}
 
 	let free = new Set();
-	const children = ['body', 'left', 'right', 'expr', 'func', 'arg', 'first', 'second'];
+	const children = ['body', 'left', 'right', 'expr', 'func', 'arg', 'first', 'second', 'args'];
 	for (let child of children) {
 		if (node[child]) {
 			if (Array.isArray(node[child])) {
@@ -109,70 +157,90 @@ function expandMacros(node, env = {}) {
 		return { type: 'block', body: newBody };
 	}
 
-	// ★ 矛盾の解消：ボトムアップ（スタック）ではなく、トップダウンで一気にフラットなキューを作る
-	if (node.type === 'infix' && (node.op === ' ' || node.op === '')) {
+	if (node.type === 'compose') {
+		// A compose B -> x ? B(A(x))
+		// We implement this as a lambda with a unique argument name to avoid collisions
+		const argName = '$compose_arg_' + Math.random().toString(36).substr(2, 5);
+		const expandedFirst = expandMacros(node.first, env);
+		const expandedSecond = expandMacros(node.second, env);
 
-		// 1. ASTをキューに展開する
-		function flatten(n) {
-			if (!n) return [];
-			if (n.type === 'infix' && (n.op === ' ' || n.op === '')) {
-				return [...flatten(n.left), ...flatten(n.right)];
+		const lambdaAst = {
+			type: 'infix',
+			op: '?',
+			left: { type: 'identifier', value: argName },
+			right: {
+				type: 'apply',
+				func: expandedSecond,
+				arg: {
+					type: 'apply',
+					func: expandedFirst,
+					arg: { type: 'identifier', value: argName },
+					pipeline: false,
+					_expanded: true
+				},
+				pipeline: false,
+				_expanded: true
 			}
-			return [n];
-		}
-
-		const rawQueue = flatten(node);
-
-		// もし展開結果が元のノード自身１つだけなら、それ以上パイプライン処理する必要なし（無限ループ防止）
-		if (rawQueue.length === 1 && rawQueue[0] === node) {
-			return node;
-		}
-
-		// 2. マクロ展開
-		const queue = rawQueue.map(n => expandMacros(n, env));
-
-		if (queue.length === 0) return null;
-		if (queue.length === 1) return queue[0];
-
-		// 3. 左結合での Apply 木の再構築
-		// foo bar baz -> [foo, bar, baz]
-		// 左から順に処理していく
-
-		let acc = queue[0];
-
-		for (let i = 1; i < queue.length; i++) {
-			const current = queue[i];
-			const accIsFunc = isFunction(acc);
-			const currentIsFunc = isFunction(current);
-
-			if (accIsFunc && currentIsFunc) {
-				// Func, Func の場合は合成 (compose) しておく
-				acc = { type: 'compose', first: acc, second: current };
-			} else if (accIsFunc && !currentIsFunc) {
-				// Func, Val: 関数に値を適用する
-				// 引数の評価が先、関数の評価が後になるように apply を組む
-				acc = { type: 'apply', func: acc, arg: current };
-			} else if (!accIsFunc && currentIsFunc) {
-				// Val, Func: 値（計算結果）を次の関数の引数にする (Pipeline / left-associative apply)
-				// これがポイントフリーの "1 # foo bar" における "foo" に "1" を渡す動き。
-				// current が `[+ 4]` (つまり apply(+, 4)) なら、
-				// さらにその全体に対して acc を適用する形になる。
-
-				// applyノードとして、左側の値を右側の関数に適用する
-				// 実際にはWASMのスタックマシンの順序としては
-				// [accを積む] -> [currentの引数を積む] -> [currentの関数を呼ぶ] となる
-				acc = { type: 'apply', func: current, arg: acc, pipeline: true };
-			} else {
-				// Val, Val の場合は通常あり得ないが、もし来たら単純に並べる
-				acc = { type: 'block', body: [acc, current] };
-			}
-		}
-
-		return acc;
+		};
+		const lambdaExpanded = expandMacros(lambdaAst, env);
+		if (lambdaExpanded && lambdaExpanded.type === 'apply') lambdaExpanded._expanded = true;
+		return lambdaExpanded;
 	}
 
+	// ★ 安全なボトムアップ局所組み替え
 	if (node.type === 'apply') {
-		return { ...node, func: expandMacros(node.func, env), arg: expandMacros(node.arg, env) };
+		if (node._expanded) return node;
+
+		const expandedFunc = expandMacros(node.func, env);
+		const expandedArg = expandMacros(node.arg, env);
+
+		const isFuncL = isFunction(expandedFunc);
+		const isFuncR = isFunction(expandedArg);
+
+		// 1. パイプライン適用の推測 (Val -> Func)
+		if (!isFuncL && isFuncR && !node.pipeline) {
+			return {
+				type: 'apply',
+				func: expandedArg,
+				arg: expandedFunc,
+				pipeline: true,
+				_expanded: true
+			};
+		}
+
+		// 2. 値の並びのブロック化 (Val -> Val)
+		if (!isFuncL && !isFuncR && !node.pipeline) {
+			if (expandedFunc.type === 'block') {
+				return { type: 'block', body: [...expandedFunc.body, expandedArg], _expanded: true };
+			}
+			return { type: 'block', body: [expandedFunc, expandedArg], _expanded: true };
+		}
+
+		// 3. 引数のスプレッド展開 (Func -> Block(タプル))
+		if (isFuncL && expandedArg && expandedArg.type === 'block' && !node.pipeline) {
+			let hasBinding = expandedArg.body.some(c => c.type === 'infix' && c.op === ':');
+			if (!hasBinding && expandedArg.body.length > 0) {
+				let newApply = expandedFunc;
+				for (let i = 0; i < expandedArg.body.length; i++) {
+					newApply = {
+						type: 'apply',
+						func: newApply,
+						arg: expandedArg.body[i],
+						pipeline: false,
+						_expanded: true
+					};
+				}
+				return newApply;
+			}
+		}
+
+		// 上記以外は通常の関数適用として保持
+		return {
+			...node,
+			func: expandedFunc,
+			arg: expandedArg,
+			_expanded: true
+		};
 	}
 	if (node.type === 'infix') {
 		return { ...node, left: expandMacros(node.left, env), right: expandMacros(node.right, env) };
@@ -306,7 +374,31 @@ function compileNode(node, envMap = {}) {
 	if (node.type === 'identifier') {
 		const name = node.value.trim();
 		if (TEMPLATES[name]) {
-			return `    ;; UNBOUND NATIVE OP (${name})\n    f64.const nan\n`;
+			// ネイティブ演算子が単体で評価された場合（引数0個での出現）
+			// 単純なNaNを返すのではなく、必要な引数分のダミーを受け取るクロージャを生成して返す
+			let expectedArgs = ['head', 'tail', '!', '!!', '@'].includes(name) ? 1 : 2;
+			let dummyParamNames = [];
+			for (let i = 0; i < expectedArgs; i++) {
+				dummyParamNames.push(`$curried_${i}`);
+			}
+
+			// 再カリー化を防ぐため、元の演算子は identifier ではなく直接ネイティブ命令を出力する特殊ノードにしておく
+			let curriedAst = {
+				type: 'native_op',
+				value: name,
+				args: dummyParamNames.map(n => ({ type: 'identifier', value: n }))
+			};
+
+			let finalLambdaAst = curriedAst;
+			for (let i = expectedArgs - 1; i >= 0; i--) {
+				finalLambdaAst = {
+					type: 'infix',
+					op: '?',
+					left: { type: 'identifier', value: dummyParamNames[i] },
+					right: JSON.parse(JSON.stringify(finalLambdaAst))
+				};
+			}
+			return compileNode(finalLambdaAst, envMap);
 		}
 		if (envMap[name]) {
 			const loc = envMap[name];
@@ -713,11 +805,19 @@ function compileNode(node, envMap = {}) {
 			code += `    f64.convert_i32_s\n`;
 			return code;
 		}
-
 		let code = compileNode(node.expr, envMap);
 		if (TEMPLATES[node.op]) {
 			code += `    ${TEMPLATES[node.op]}\n`;
 		}
+		return code;
+	}
+
+	if (node.type === 'native_op') {
+		let code = '';
+		for (let i = node.args.length - 1; i >= 0; i--) {
+			code += compileNode(node.args[i], envMap);
+		}
+		code += `    ${TEMPLATES[node.value]}\n`; // カリー化内で引数が積まれた後に直接呼ばれる前提
 		return code;
 	}
 
@@ -732,15 +832,18 @@ function compileNode(node, envMap = {}) {
 		const isNative = (fnNode) => {
 			if (!fnNode) return false;
 			if (fnNode.type === 'identifier' && TEMPLATES[fnNode.value]) return true;
-			if (fnNode.type === 'apply') return isNative(fnNode.func);
+			if (fnNode.type === 'native_op') return true;
+			// func側にあるパイプラインノードは、すでにカリー化関数(ポインタ)等になっているためネイティブ展開しない
+			if (fnNode.type === 'apply' && !fnNode.pipeline) return isNative(fnNode.func);
 			return false;
 		};
 
-		if (isNative(node.func)) {
+		if (isNative(node.func) && !node.pipeline) {
 			const flattenNativeApply = (n) => {
 				if (!n) return { args: [], op: null };
 				if (n.type === 'identifier' && TEMPLATES[n.value]) return { args: [], op: n.value };
-				if (n.type === 'apply') {
+				if (n.type === 'native_op') return { args: [], op: n.value, isCurriedBody: true };
+				if (n.type === 'apply' && !n.pipeline) {
 					let inner = flattenNativeApply(n.func);
 					inner.args.push(n.arg);
 					return inner;
@@ -749,18 +852,82 @@ function compileNode(node, envMap = {}) {
 			};
 
 			let info = flattenNativeApply(node);
-			let code = '';
 			let expectedArgs = ['head', 'tail', '!', '!!', '@'].includes(info.op) ? 1 : 2;
 
-			for (let i = info.args.length; i < expectedArgs; i++) {
-				code += `    f64.const nan\n`;
+			// すでにカリー化ラムダ内部の評価（native_op）であれば再度カリー化はしない
+			if (info.args.length < expectedArgs && !info.isCurriedBody) {
+				let missingCount = expectedArgs - info.args.length;
+				let dummyParamNames = [];
+				for (let i = 0; i < missingCount; i++) {
+					dummyParamNames.push(`$curried_${i}`);
+				}
+
+				// 新しいラムダのASTを構築する
+				// 内部の関数呼び出しは再カリー化を防ぐため、引数リストを持つ特殊ノード native_op とする
+				let collectedArgs = [...info.args];
+				// ダミー引数は最後に積むべき引数として追加
+				for (let i = 0; i < missingCount; i++) {
+					collectedArgs.push({ type: 'identifier', value: dummyParamNames[i] });
+				}
+
+				let curriedAst = {
+					type: 'native_op',
+					value: info.op,
+					args: collectedArgs
+				};
+
+				// それらを包むラムダ（関数定義）の木を作る
+				let finalLambdaAst = curriedAst;
+				for (let i = missingCount - 1; i >= 0; i--) {
+					finalLambdaAst = {
+						type: 'infix',
+						op: '?',
+						left: { type: 'identifier', value: dummyParamNames[i] },
+						right: JSON.parse(JSON.stringify(finalLambdaAst))
+					};
+				}
+
+				// 構築したASTを通常のラムダとしてコンパイルしてクロージャを返す。
+				return compileNode(finalLambdaAst, envMap);
 			}
 
-			for (let i = info.args.length - 1; i >= 0; i--) {
-				code += compileNode(info.args[i], envMap);
+			// 引数が揃っている（後から渡された）場合はそのままネイティブ命令を出力
+			// ただし、引数群 args の中にさらに関数（カリー化されたものや関数ポインタ）が含まれており、
+			// なおかつ自分が pipeline に巻き込まれている場合は直接出力せずクロージャ呼び出しにフォールバックさせる
+			let hasFunctionArg = info.args.some(a => {
+				if (!a) return false;
+				if (a.type === 'native_op') return true;
+				if (a.type === 'identifier' && !TEMPLATES[a.value]) return true; // ユーザー定義関数や変数の可能性
+				if (a.type === 'apply') {
+					// 適用結果が関数のままであるか（カリー化クロージャ等）
+					const checkNative = (n) => {
+						if (!n) return false;
+						if (n.type === 'identifier' && TEMPLATES[n.value]) return true;
+						if (n.type === 'native_op') return true;
+						if (n.type === 'apply') return checkNative(n.func);
+						return false;
+					};
+					if (checkNative(a.func)) {
+						// 引数が足りているか？
+						let innerInfo = flattenNativeApply(a);
+						let expected = ['head', 'tail', '!', '!!', '@'].includes(innerInfo.op) ? 1 : 2;
+						if (innerInfo.args.length < expected) return true; // 引数不足＝関数ポインタ
+					}
+					if (a.pipeline) return true;
+				}
+				return false;
+			});
+
+			if (hasFunctionArg) {
+				// isNative で弾かれたものとして扱い、後続の apply_closure 呼び出し処理へ回す
+			} else {
+				let code = '';
+				for (let i = info.args.length - 1; i >= 0; i--) {
+					code += compileNode(info.args[i], envMap);
+				}
+				code += `    ${TEMPLATES[info.op]}\n`;
+				return code;
 			}
-			code += `    ${TEMPLATES[info.op]}\n`;
-			return code;
 		}
 
 		if (node.func && node.func.type === 'identifier') {
@@ -774,22 +941,23 @@ function compileNode(node, envMap = {}) {
 
 		let code = '';
 
+		let funcNodeCode = compileNode(node.func, envMap);
+		let argNodeCode = compileNode(node.arg, envMap);
+
 		if (node.pipeline) {
-			code += compileNode(node.arg, envMap);
-			code += compileNode(node.func, envMap);
+			code += argNodeCode;
+			code += funcNodeCode;
+
+			// パイプライン適用の際、func側が「未評価の関数（unitで包まれたブロックなど）」のままになるのを防ぐ
+			// スタックには arg(値) -> func(関数) が積まれている
+			// この状態で closureを呼ぶ
 			code += `    call $apply_closure\n`;
 			return code;
 		}
 
-		code += compileNode(node.func, envMap);
-		code += compileNode(node.arg, envMap);
+		code += funcNodeCode;
+		code += argNodeCode;
 		code += `    call $apply_closure_reversed\n`;
-		return code;
-	}
-
-	if (node.type === 'compose') {
-		let code = compileNode(node.first, envMap);
-		code += compileNode(node.second, envMap);
 		return code;
 	}
 
