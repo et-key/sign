@@ -1,0 +1,64 @@
+` 1.クロージャの生成と適用
+f : x y ? x + y
+1 # f 10 20
+1 # f (10 20)
+1 # (f 10) 20
+1 # (f 10 20)
+
+1 # [x y ? x + y] 10 20
+
+
+` 2.`match_case` (条件分岐) の機能
+match_test : x ?
+	x = 0 : 100
+	x > 0 : 200
+	x < 0 : 300
+	400
+1 # match_test 0
+1 # match_test 1
+1 # match_test -1
+1 # match_test _
+1 # match_test `a`
+1 # match_test a
+
+` 3.カッコブロック `[]` を用いた辞書の生成とアクセス
+dict_test : x ? [
+	id : x
+	val : x + 2
+]
+
+my_dict : dict_test 40
+1 # my_dict ' id
+1 # my_dict ' val
+
+
+` 4.Match Case と辞書環境の統合テスト
+complex_test : code ?
+	code == 200 : [
+		status : 200
+		msg : 1
+	]
+	code == 404 : [
+		status : 404
+		msg : 0
+	]
+	[
+		status : 500
+		msg : -1
+	]
+
+res : complex_test 200
+1 # res ' status
+1 # res ' msg
+
+res : complex_test 404
+1 # res ' status
+1 # res ' msg
+
+res : complex_test _
+1 # res ' status
+1 # res ' msg
+
+res : complex_test a
+1 # res ' status
+1 # res ' msg

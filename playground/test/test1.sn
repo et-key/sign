@@ -1,7 +1,0 @@
-match_test : x ?
-	x = 0 : 100
-	x > 0 : 200
-	x < 0 : 300
-	400
-
-match_test 1

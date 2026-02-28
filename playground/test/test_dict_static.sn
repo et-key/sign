@@ -1,5 +1,0 @@
-my_dict :
-	id : 100
-	val : 42
-
-my_dict ' val

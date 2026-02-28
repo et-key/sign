@@ -1,0 +1,23 @@
+[Print] 30
+[Print] 30
+[Print] 30
+[Print] 30
+[Print] 30
+[Print] 100
+[Print] 200
+[Print] 300
+[Print] 400
+[Print] 400
+[Print] 400
+[Print] 40
+[Print] 42
+[Print] 200
+[Print] 1
+[Print] 404
+[Print] 0
+[Print] 500
+[Print] -1
+[Print] 500
+[Print] -1
+
+[Main Result] NaN
