@@ -61,111 +61,13 @@ const findOp = (symbol, notation) => {
 // Check if a string is a known operator symbol
 const isOpSymbol = (str) => ops.some(op => op.symbol === str);
 
-// --- Token Processing ---
-
-const splitAlphaSymbol = (str) => {
-	const parts = [];
-	let remaining = str;
-
-	while (remaining.length > 0) {
-		// 1. Try Number
-		const numMatch = remaining.match(/^(-?\d+(\.\d+)?)/);
-		if (numMatch) {
-			const numStr = numMatch[0];
-			if (numStr === '-' && remaining.length > 1 && !/\d/.test(remaining[1])) {
-				// Just minus symbol
-			} else {
-				parts.push(numStr);
-				remaining = remaining.slice(numStr.length);
-				continue;
-			}
-		}
-
-		// 2. If starts with WordChar (Alpha + _)
-		const wordMatch = remaining.match(/^([a-zA-Z_][a-zA-Z0-9_]*)/);
-		if (wordMatch) {
-			parts.push(wordMatch[0]);
-			remaining = remaining.slice(wordMatch[0].length);
-			continue;
-		}
-
-		// 3. If starts with Symbol
-		// Includes `\` as symbol
-		const symMatch = remaining.match(/^([!#$%&'*+,\-./:;<=>?@^|~\\]+)/);
-		if (symMatch) {
-			const sym = symMatch[0];
-			let symRem = sym;
-			while (symRem.length > 0) {
-				// Find longest prefix that is an op
-				let found = false;
-				for (let len = symRem.length; len > 0; len--) {
-					const sub = symRem.slice(0, len);
-					if (isOpSymbol(sub)) {
-						parts.push(sub);
-						symRem = symRem.slice(len);
-						found = true;
-						break;
-					}
-				}
-				if (!found) {
-					// If no op matches, consume one char as unknown op/symbol
-					parts.push(symRem[0]);
-					symRem = symRem.slice(1);
-				}
-			}
-
-			remaining = remaining.slice(sym.length);
-			continue;
-		}
-
-		// 4. Catch all
-		parts.push(remaining[0]);
-		remaining = remaining.slice(1);
-	}
-
-	return parts;
-};
-
 const refineTokens = (rawTokens) => {
 	const refined = [];
 	for (const token of rawTokens) {
 		if (Array.isArray(token)) {
 			refined.push(refineTokens(token));
-		} else if (typeof token === 'object') {
-			refined.push(token); // Separators
-		} else if (typeof token === 'string') {
-			if (token.startsWith('`')) {
-				refined.push(token);
-			} else if (token.startsWith('\\')) {
-				// Special handling for `\` token from lexer
-				if (token.length > 1) {
-					refined.push(token);
-				} else {
-					refined.push({ type: 'operator', symbol: token, spacing: 'isolated' });
-				}
-			} else if (isOpSymbol(token)) {
-				refined.push({ type: 'operator', symbol: token, spacing: 'isolated' });
-			} else {
-				const parts = splitAlphaSymbol(token);
-				for (let i = 0; i < parts.length; i++) {
-					const p = parts[i];
-					if (isOpSymbol(p)) {
-						let spacing = 'attached';
-						if (i === 0) {
-							spacing = 'prefix_attached';
-						} else if (i === parts.length - 1) {
-							spacing = 'postfix_attached';
-						} else {
-							spacing = 'both_attached';
-						}
-						refined.push({ type: 'operator', symbol: p, spacing: spacing });
-					} else {
-						refined.push(p);
-					}
-				}
-			}
 		} else {
-			refined.push(token);
+			refined.push(token); // Separators (\n, etc.) and raw strings
 		}
 	}
 	return refined;
@@ -190,27 +92,29 @@ const parseExpr = (tokens, minPrec = 0) => {
 		if (!token) return false;
 		if (Array.isArray(token)) return true; // Block
 
-		let value = token;
-		let is_op = false;
-		let spacing = null;
+		if (typeof token === 'string') {
+			if (token.startsWith('`')) return true; // String
+			if (token.startsWith('\\')) return true; // Char
+			if (!isNaN(parseFloat(token)) && isFinite(token)) return true; // Number
 
-		if (typeof token === 'object' && token.type === 'operator') {
-			value = token.symbol;
-			is_op = true;
-			spacing = token.spacing;
-		}
+			// Does it start with a prefix operator? Or is it an identifier?
+			// Even if it starts with an operator, if that operator is Prefix, it CAN start an expr.
+			// If it's pure operator string but NOT a prefix, it cannot start.
+			// Actually, almost any string can start an expr (either as id, number, or prefix op + id).
+			// The only things that CANNOT start an expr are literal infix/postfix operators standing alone.
+			if (isOpSymbol(token)) {
+				return !!findOp(token, 'prefix');
+			}
 
-		if (typeof token === 'string' || is_op) {
-			if (typeof value === 'string') {
-				if (value.startsWith && value.startsWith('`')) return true; // String
-				if (value.startsWith && value.startsWith('\\')) return true; // Char
-				if (!isNaN(parseFloat(value))) return true; // Number
+			// If it's a mixed string starting with operator characters, check if they form a prefix op
+			const opMatch = token.match(/^([!#$%&'*+,\-./:;<=>?@^|~\\]+)/);
+			if (opMatch) {
+				const pre = opMatch[1];
+				// Even if it's not a known prefix, if it's attached to an identifier, we might treat it as prefix or parse error later, but it "starts" something.
+				// For canStartExpr, let's assume if it has non-op chars, it's a valid starter (prefix + id).
+				if (pre.length < token.length) return true;
 			}
-			if (is_op || (typeof value === 'string' && isOpSymbol(value))) {
-				if (spacing === 'postfix_attached') return false;
-				if (spacing === 'prefix_attached') return !!findOp(value, 'prefix');
-				return !!findOp(value, 'prefix');
-			}
+
 			return true; // Identifier
 		}
 		return false;
@@ -223,27 +127,10 @@ const parseExpr = (tokens, minPrec = 0) => {
 		let lookahead = tokens[0];
 
 		// Special handling for ambiguous `|`
-		// If | is followed by something that CANNOT start an expression, treat it as terminator (Abs closing).
 		if (lookahead === '|') {
-			// Check next
 			if (tokens.length > 1 && !canStartExpr(tokens[1])) {
 				break; // Terminator
 			}
-			// Be careful: | | x | | -> Abs(Abs(x)).
-			// | (first) -> Prefix.
-			// | (second) -> Prefix.
-			// x
-			// | (third) -> Closing. Followed by |.
-			// But | IS a Prefix op. So canStartExpr('|') is true.
-			// So third | is treated as Infix?
-			// | x | y.
-			// | x | | y |.
-			// If | x OP | y.
-			// If | x | ... | (Infix) | (Prefix).
-
-			// Simplification: | is Infix ONLY if followed by valid expr starter.
-			// If | is followed by |, it matches Prefix |.
-			// So | x | | y | -> Abs(x) | Abs(y).
 		}
 
 		if (isSeparator(lookahead)) {
@@ -251,18 +138,8 @@ const parseExpr = (tokens, minPrec = 0) => {
 			while (sepCount < tokens.length && isSeparator(tokens[sepCount])) sepCount++;
 			if (sepCount < tokens.length) {
 				const nextOpTok = tokens[sepCount];
-				let nextOpVal = null;
-				let nextOpIsMap = false;
-				if (typeof nextOpTok === 'object' && nextOpTok.type === 'operator') {
-					nextOpVal = nextOpTok.symbol;
-					nextOpIsMap = true;
-				} else if (typeof nextOpTok === 'string' && isOpSymbol(nextOpTok)) {
-					nextOpVal = nextOpTok;
-					nextOpIsMap = true;
-				}
-
-				if (nextOpIsMap) {
-					const opInfo = findOp(nextOpVal, 'infix') || findOp(nextOpVal, 'postfix');
+				if (typeof nextOpTok === 'string' && isOpSymbol(nextOpTok)) {
+					const opInfo = findOp(nextOpTok, 'infix') || findOp(nextOpTok, 'postfix');
 					if (opInfo && opInfo.precedence >= minPrec && !canStartExpr(nextOpTok)) {
 						tokens.splice(0, sepCount);
 						lookahead = tokens[0];
@@ -278,154 +155,188 @@ const parseExpr = (tokens, minPrec = 0) => {
 		}
 
 		let is_op = false;
-		let opValue = null;
-		let spacing = null;
+		let opSymbol = null;
+		let is_post_or_in = false;
 
-		if (typeof lookahead === 'object' && lookahead.type === 'operator') {
-			is_op = true;
-			opValue = lookahead.symbol;
-			spacing = lookahead.spacing;
-		} else if (typeof lookahead === 'string' && isOpSymbol(lookahead)) {
-			is_op = true;
-			opValue = lookahead;
-			spacing = 'isolated';
+		if (typeof lookahead === 'string') {
+			// Extract postfix or infix operator from the token if possible
+			// If it's an exact match:
+			if (isOpSymbol(lookahead)) {
+				is_op = true;
+				opSymbol = lookahead;
+			} else {
+				// Check if the token STARTS with an infix/postfix operator that can be peeled?
+				// No, Infix/Postfix operators must either be space-separated OR attached at the END.
+				// For Zero Cost Domain Abstraction, operators are space separated!
+				// Wait! If they are space separated, we shouldn't peel them from the *ends* either?
+				// User said: "構文解析器自身が、渡ってきた文字列を見て「先頭が前置演算子であるか」「末尾が後置演算子であるか」「単独の記号（中置演算子）であるか」を動的に判定し、その場で文字列をスライスして"
+				// OK, so we peel dynamically.
+
+				// Postfix Check: Can we peel a postfix operator from the end?
+				// Wait, if it's "a!", '!' is at the end.
+				// Infix check: Can we peel an infix operator from the START?
+				// No, infix shouldn't really be peeled if attached, unless it's a macro or something.
+				// "空白で区切られた生の文字列トークンがそのまま渡ってくる前提"
+				// "先頭が前置演算子であるか、末尾が後置演算子であるか" -> Only Prefix and Postfix are attached!
+				// 中置演算子は "単独の記号" であるか。
+			}
 		}
 
-		if (is_op) {
-			const opSymbol = opValue;
-
-			if (spacing === 'prefix_attached' && !findOp(opSymbol, 'prefix')) {
-				break;
-			}
-
-			let op;
-			if (spacing === 'postfix_attached') {
-				op = findOp(opSymbol, 'postfix');
-			} else if (spacing === 'isolated') {
-				op = findOp(opSymbol, 'infix');
-			} else if (spacing === 'both_attached') {
-				op = findOp(opSymbol, 'infix') || findOp(opSymbol, 'postfix');
-			} else if (spacing === 'prefix_attached') {
-				// leave op undefined to fall through to Apply
-			}
-
-			if (!op) {
-				// Not infix/postfix -> Apply?
-			} else {
-				if (op.precedence < minPrec) break;
-
-				tokens.shift();
-
-				if (op.notation === 'postfix') {
-					lhs = { type: 'postfix', op: opSymbol, expr: lhs };
-					continue;
+		// If lookahead is a pure string ending with a postfix operator, we should peel it.
+		if (typeof lookahead === 'string' && !is_op) {
+			const postMatch = lookahead.match(/([!#$%&'*+,\-./:;<=>?@^|~\\]+)$/);
+			if (postMatch) {
+				const postStr = postMatch[1];
+				// Find the longest valid postfix op
+				let foundPost = null;
+				let foundLen = 0;
+				for (let len = postStr.length; len > 0; len--) {
+					const sub = postStr.slice(-len);
+					if (findOp(sub, 'postfix')) {
+						foundPost = sub;
+						foundLen = len;
+						break;
+					}
 				}
 
+				if (foundPost) {
+					// We found a postfix operator at the end of the token.
+					// We must split the token into two: (token without postfix) and (postfix)
+					// But wait! If we do this here, we are looking ahead AFTER an expression. 
+					// Actually, the left expression (lhs) has *already* consumed the token without the postfix?
+					// No, if `a!` is a single token, `parseAtom` would see it.
+					// Ah! So `parseAtom` should also handle peeling postfix?
+					// No, if `a!` is one token, `parseAtom` sees `a!`. It should peel `a` as Identifier, and leave `!` in `tokens`!
+					// Yes, `parseAtom` should consume the prefix/body, and push the postfix back to `tokens` *before* returning!
+					// So `parseExpr`'s lookahead will just see single operator strings for infix/postfix!
+				}
+			}
+		}
 
-				// Automatic Currying Logic for '?'
-				if (opSymbol === '?') {
+		if (typeof lookahead === 'string' && isOpSymbol(lookahead)) {
+			opSymbol = lookahead;
 
-					// Helper: Create a lambda, handling Default Arguments (infix :)
-					const makeLambda = (arg, body) => {
-						// Handle Default Argument: arg is { type: 'infix', op: ':', left: param, right: defaultVal }
-						if (arg.type === 'infix' && arg.op === ':') {
-							const param = arg.left;
-							const defaultVal = arg.right;
-							const tempParamName = '$temp_' + (param.value || 'arg');
+			// 中置/後置としてパースできるかチェック
+			let op = findOp(opSymbol, 'postfix') || findOp(opSymbol, 'infix');
 
-							// wrapper block: [ param : tempParam | defaultVal; body... ]
+			if (!op) {
+				break; // Not infix/postfix, so it must be applying it as an argument
+			}
 
-							let newBodyStatements = [];
+			// Do not consume if precedence is lower
+			if (op.precedence < minPrec) break;
 
-							// Definition expr: param : tempParam | defaultVal
-							const defExpr = {
-								type: 'infix', op: ':',
-								left: param,
-								right: {
-									type: 'infix', op: '|', // Logical OR
-									left: { type: 'identifier', value: tempParamName },
-									right: defaultVal
-								}
-							};
-							newBodyStatements.push(defExpr);
+			// Consumed token
+			tokens.shift();
 
-							// Add original body
-							if (body.type === 'block') {
-								newBodyStatements.push(...body.body);
-							} else {
-								newBodyStatements.push(body);
-							}
+			if (op.notation === 'postfix') {
+				lhs = { type: 'postfix', op: opSymbol, expr: lhs };
+				continue;
+			}
 
-							const wrappedBody = {
-								type: 'block',
-								body: newBodyStatements
-							};
+			// Automatic Currying Logic for '?'
+			if (opSymbol === '?') {
 
-							// Return: tempParam ? wrappedBody
-							return {
-								type: 'infix',
-								op: '?',
+				// Helper: Create a lambda, handling Default Arguments (infix :)
+				const makeLambda = (arg, body) => {
+					// Handle Default Argument: arg is { type: 'infix', op: ':', left: param, right: defaultVal }
+					if (arg.type === 'infix' && arg.op === ':') {
+						const param = arg.left;
+						const defaultVal = arg.right;
+						const tempParamName = '$temp_' + (param.value || 'arg');
+
+						// wrapper block: [ param : tempParam | defaultVal; body... ]
+
+						let newBodyStatements = [];
+
+						// Definition expr: param : tempParam | defaultVal
+						const defExpr = {
+							type: 'infix', op: ':',
+							left: param,
+							right: {
+								type: 'infix', op: '|', // Logical OR
 								left: { type: 'identifier', value: tempParamName },
-								right: wrappedBody
-							};
+								right: defaultVal
+							}
+						};
+						newBodyStatements.push(defExpr);
+
+						// Add original body
+						if (body.type === 'block') {
+							newBodyStatements.push(...body.body);
+						} else {
+							newBodyStatements.push(body);
 						}
 
-						// Standard Lambda
+						const wrappedBody = {
+							type: 'block',
+							body: newBodyStatements
+						};
+
+						// Return: tempParam ? wrappedBody
 						return {
 							type: 'infix',
 							op: '?',
-							left: arg,
-							right: body
+							left: { type: 'identifier', value: tempParamName },
+							right: wrappedBody
 						};
-					};
-
-					// Recursive helper to transform apply chains and blocks into curried functions
-					const curry = (expr, body) => {
-						if (expr.type === 'apply') {
-							// With default args: f ? makeLambda(a, body)
-							return curry(expr.func, makeLambda(expr.arg, body));
-						}
-
-						// Support [arg1 arg2] ? body -> arg1 ? (arg2 ? body)
-						if (expr.type === 'block') {
-							let result = body;
-							const args = expr.body;
-							// If block is empty? [ ] ? body -> body
-							if (args.length === 0) return body;
-
-							for (let i = args.length - 1; i >= 0; i--) {
-								result = curry(args[i], result);
-							}
-							return result;
-						}
-
-						// Base case
-						return makeLambda(expr, body);
-					};
-
-
-					const nextMinPrec = op.associativity === 'right' ? op.precedence : op.precedence + 1;
-					const rhs = parseExpr(tokens, nextMinPrec);
-
-					// Rewrite Rule for Definition: f : args ? body -> f : (args ? body)
-					// Because ':' has higher precedence than '?', 'f : args' is parsed as LHS.
-					if (lhs.type === 'infix' && lhs.op === ':') {
-						const defName = lhs.left;
-						const defArgs = lhs.right;
-						const curried = curry(defArgs, rhs);
-						lhs = { type: 'infix', op: ':', left: defName, right: curried };
-					} else {
-						lhs = curry(lhs, rhs);
 					}
 
-					continue;
-				}
+					// Standard Lambda
+					return {
+						type: 'infix',
+						op: '?',
+						left: arg,
+						right: body
+					};
+				};
+
+				// Recursive helper to transform apply chains and blocks into curried functions
+				const curry = (expr, body) => {
+					if (expr.type === 'apply') {
+						// With default args: f ? makeLambda(a, body)
+						return curry(expr.func, makeLambda(expr.arg, body));
+					}
+
+					// Support [arg1 arg2] ? body -> arg1 ? (arg2 ? body)
+					if (expr.type === 'block') {
+						let result = body;
+						const args = expr.body;
+						// If block is empty? [ ] ? body -> body
+						if (args.length === 0) return body;
+
+						for (let i = args.length - 1; i >= 0; i--) {
+							result = curry(args[i], result);
+						}
+						return result;
+					}
+
+					// Base case
+					return makeLambda(expr, body);
+				};
+
 
 				const nextMinPrec = op.associativity === 'right' ? op.precedence : op.precedence + 1;
 				const rhs = parseExpr(tokens, nextMinPrec);
-				lhs = { type: 'infix', op: opSymbol, left: lhs, right: rhs };
+
+				// Rewrite Rule for Definition: f : args ? body -> f : (args ? body)
+				// Because ':' has higher precedence than '?', 'f : args' is parsed as LHS.
+				if (lhs.type === 'infix' && lhs.op === ':') {
+					const defName = lhs.left;
+					const defArgs = lhs.right;
+					const curried = curry(defArgs, rhs);
+					lhs = { type: 'infix', op: ':', left: defName, right: curried };
+				} else {
+					lhs = curry(lhs, rhs);
+				}
+
 				continue;
 			}
+
+			const nextMinPrec = op.associativity === 'right' ? op.precedence : op.precedence + 1;
+			const rhs = parseExpr(tokens, nextMinPrec);
+			lhs = { type: 'infix', op: opSymbol, left: lhs, right: rhs };
+			continue;
 		}
 
 		if (isSeparator(lookahead) || lookahead === '|') break;
@@ -454,64 +365,133 @@ const parseAtom = (tokens) => {
 		return parseBlock(token);
 	}
 
-	let value = token;
-	let is_op = false;
-	let spacing = null;
-
-	if (typeof token === 'object' && token.type === 'operator') {
-		value = token.symbol;
-		is_op = true;
-		spacing = token.spacing;
-	} else if (typeof token === 'string') {
-		if (isOpSymbol(token)) {
-			is_op = true;
-			spacing = 'isolated';
-		}
-	} else {
+	if (typeof token !== 'string') {
 		return { type: 'unknown', token };
 	}
 
-	if (typeof value === 'string' || is_op) {
-		if (value === '|') {
-			const expr = parseExpr(tokens, 0);
-			const next = tokens.shift();
-			// User sample implies strict pairing.
-			if (typeof next === 'object' && next.type === 'operator' && next.symbol !== '|') { }
-			else if (typeof next === 'string' && next !== '|') { }
-			return { type: 'abs', expr };
-		}
+	let value = token;
 
-		// Prefix Op
-		if (is_op) {
-			if (spacing !== 'postfix_attached') {
-				const op = findOp(value, 'prefix');
-				if (op) {
-					const splitPrec = op.precedence;
-					const rhs = parseExpr(tokens, splitPrec);
-					return { type: 'prefix', op: value, expr: rhs };
+	// Absolute value operator | ... |
+	if (value === '|') {
+		const expr = parseExpr(tokens, 0);
+		tokens.shift(); // Consume the closing |
+		return { type: 'abs', expr };
+	}
+
+	// 1. Literal evaluation
+	if (value.startsWith('`')) {
+		return { type: 'string', value: value };
+	}
+
+	if (value.startsWith('\\')) {
+		return { type: 'char', value: value.slice(1) };
+	}
+
+	if (!isNaN(parseFloat(value)) && isFinite(value)) {
+		return { type: 'number', value: parseFloat(value) };
+	}
+
+	// 2. Pure Operator String (Standalone)
+	if (isOpSymbol(value)) {
+		const op = findOp(value, 'prefix');
+		if (op) {
+			// Prefix operator evaluation
+			const rhs = parseExpr(tokens, op.precedence);
+			return { type: 'prefix', op: value, expr: rhs };
+		}
+		// If it's a standalone symbol but not a prefix, return as identifier (e.g. for functions)
+		return { type: 'identifier', value: value, isOp: true };
+	}
+
+	// 3. Mixed token processing (Dynamic Splitting)
+	// Peel off ALL prefix operators one by one from left to right.
+	const preMatch = value.match(/^([!#$%&'*+,\-./:;<=>?@^|~\\]+)/);
+	if (preMatch) {
+		const preStr = preMatch[1];
+		let remainingPre = preStr;
+		let foundPrefixes = [];
+
+		while (remainingPre.length > 0) {
+			let found = false;
+			for (let len = remainingPre.length; len > 0; len--) {
+				const sub = remainingPre.slice(0, len);
+				if (findOp(sub, 'prefix')) {
+					foundPrefixes.push(sub);
+					remainingPre = remainingPre.slice(len);
+					found = true;
+					break;
 				}
 			}
-			return { type: 'identifier', value: value, isOp: true };
+			if (!found) {
+				// No valid prefix op matched. Treat as rest of identifier?
+				// But strings of symbols should either be valid operators or identifiers.
+				// If a prefix fails to parse, we exit pre-peeling.
+				break;
+			}
 		}
 
-		if (typeof value === 'string') {
-			if (value.startsWith && value.startsWith('`')) {
-				return { type: 'string', value: value };
+		if (foundPrefixes.length > 0) {
+			// Calculate how much of the original string to keep as the "rest"
+			const strippedLen = preStr.length - remainingPre.length;
+			const restOfToken = value.slice(strippedLen);
+
+			if (restOfToken.length > 0) {
+				// Push the rest of the token back onto the stream to be parsed NEXT.
+				tokens.unshift(restOfToken);
 			}
 
-			if (value.startsWith && value.startsWith('\\')) {
-				return { type: 'char', value: value.slice(1) };
+			// Unshift the remaining prefixes so they can be parsed by `parseExpr` successively
+			for (let i = foundPrefixes.length - 1; i > 0; i--) {
+				tokens.unshift(foundPrefixes[i]);
 			}
 
-			if (!isNaN(parseFloat(value))) {
-				return { type: 'number', value: parseFloat(value) };
-			}
+			const firstPrefix = foundPrefixes[0];
+			const opPrecedence = findOp(firstPrefix, 'prefix').precedence;
 
-			return { type: 'identifier', value: value };
+			// Recursively call parseExpr to build the AST for the rest.
+			const rhs = parseExpr(tokens, opPrecedence);
+			return { type: 'prefix', op: firstPrefix, expr: rhs };
 		}
 	}
 
-	return { type: 'unknown', token };
+	// 4. Peel postfix operators from the end
+	const postMatch = value.match(/([!#$%&'*+,\-./:;<=>?@^|~\\]+)$/);
+	if (postMatch) {
+		const postStr = postMatch[1];
+		let remainingPost = postStr;
+		let foundPostfixes = [];
+
+		while (remainingPost.length > 0) {
+			let found = false;
+			for (let len = remainingPost.length; len > 0; len--) {
+				const sub = remainingPost.slice(-len);
+				if (findOp(sub, 'postfix')) {
+					foundPostfixes.unshift(sub); // Add to front of list
+					remainingPost = remainingPost.slice(0, -len);
+					found = true;
+					break;
+				}
+			}
+			if (!found) break;
+		}
+
+		if (foundPostfixes.length > 0) {
+			const strippedLen = postStr.length - remainingPost.length;
+			const bodyToken = value.slice(0, value.length - strippedLen);
+
+			if (bodyToken.length > 0) {
+				// Push the postfixes back onto the stream to be parsed by parseExpr loop
+				for (const pst of foundPostfixes) {
+					tokens.unshift(pst);
+				}
+				// The body is treated as the atom
+				return { type: 'identifier', value: bodyToken };
+			}
+			// If body is empty, it was pure postfixes? That's handled in pure operator section
+		}
+	}
+
+	return { type: 'identifier', value: value };
 };
 
 const parseBlock = (tokens) => {
@@ -593,7 +573,7 @@ const parseBlock = (tokens) => {
 			right: {
 				type: 'infix', op: ';',
 				left: {
-					type: 'infix', op: '?',
+					type: 'infix', op: ':',
 					left: {
 						type: 'apply',
 						func: { type: 'identifier', value: '_is_func' },
@@ -651,7 +631,7 @@ const parseBlock = (tokens) => {
 					right: {
 						type: 'infix', op: ';',
 						left: {
-							type: 'infix', op: '?',
+							type: 'infix', op: ':',
 							left: {
 								type: 'apply',
 								func: { type: 'identifier', value: '_is_func' },
@@ -709,7 +689,7 @@ const parseBlock = (tokens) => {
 						right: {
 							type: 'infix', op: ';',
 							left: {
-								type: 'infix', op: '?',
+								type: 'infix', op: ':',
 								left: {
 									type: 'apply',
 									func: { type: 'identifier', value: '_is_func' },

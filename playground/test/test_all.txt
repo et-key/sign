@@ -1,0 +1,83 @@
+[Print] ===== Ph1 =====
+[Print] 5
+[Print] 2
+[Print] 2
+[Print] 1
+[Print] 1
+[Print] 2
+[Print] NaN
+[Print] NaN
+[Print] 1
+[Print] 0
+[Print] 0
+[Print] 0
+[Print] 0
+[Print] 1
+[Print] NaN
+[Print] NaN
+[Print] 0
+[Print] 99
+[Print] 0
+[Print] 1
+[Print] 4
+[Print] 2
+[Print] -1
+[Print] NaN
+[Print] 1
+[Print] 100
+[Print] NaN
+[Print] NaN
+[Print] ===== Ph2 =====
+[Print] Hello! WASM Strings!
+[Print] NaN
+[Print] 100
+[Print] 200
+[Print] 42
+[Print] ===== Ph3 =====
+[Print] 30
+[Print] 30
+[Print] 30
+[Print] 30
+[Print] 30
+[Print] 100
+[Print] 200
+[Print] 300
+[Print] 400
+[Print] 400
+[Print] 400
+[Print] 40
+[Print] 42
+[Print] 200
+[Print] 1
+[Print] 404
+[Print] 0
+[Print] 500
+[Print] -1
+[Print] 500
+[Print] -1
+[Print] ===== Ph3.5 =====
+[Print] NaN
+[Print] NaN
+[Print] NaN
+[Print] NaN
+[Print] NaN
+[Print] NaN
+[Print] NaN
+[Print] NaN
+[Print] NaN
+[Print] NaN
+[Print] NaN
+[Print] NaN
+[Print] ===== Ph4 =====
+[Print] 18
+[Print] 12
+[Print] 5
+[Print] 22
+[Print] NaN
+[Print] 15
+[Print] 12
+[Print] 150
+[Print] 23
+[Print] ===== end =====
+
+[Main Result] NaN
