@@ -495,28 +495,165 @@ function compileNode(node, envMap = {}) {
 		const op = node.op;
 
 		if (op === '#') {
-			let code = compileNode(node.left, envMap);
-			code += compileNode(node.right, envMap);
-			code += `    local.set $tmp_R\n`;
-			code += `    local.set $tmp_L\n`;
+			let isUnroll = false;
+			let unrollExpr = null;
 
-			// MMIO アドレスデコーダ (アドレス 1.0 = stdout)
-			code += `    local.get $tmp_L\n`;
-			code += `    f64.const 1.0\n`;
-			code += `    f64.eq\n`;
-			code += `    if\n`;
-			code += `      local.get $tmp_R\n`;
-			code += `      call $print_float\n`;
-			code += `    else\n`;
-			code += `      local.get $tmp_L\n`;
-			code += `      i32.trunc_sat_f64_u\n`;
-			code += `      i32.const 3\n`;
-			code += `      i32.shl\n`;
-			code += `      local.get $tmp_R\n`;
-			code += `      f64.store\n`;
-			code += `    end\n`;
+			// 柔軟な発想：パーサーがどんな形でASTを組んでも確実に `~` の対象を抽出する
+			if (node.right) {
+				const findUnroll = (n) => {
+					if (!n) return null;
+					if (n.type === 'postfix' && n.op === '~') return n.expr;
+					if (n.type === 'apply') {
+						if (n.func && n.func.type === 'identifier' && n.func.value.trim() === '~') return n.arg;
+						if (n.arg && n.arg.type === 'identifier' && n.arg.value.trim() === '~') return n.func;
+					}
+					// 文字列や識別子に結合してしまった場合の柔軟な分離
+					if (n.type === 'string' && typeof n.value === 'string') {
+						let val = n.value.trim();
+						if (val.endsWith('~')) return { type: 'string', value: val.slice(0, -1) };
+					}
+					if (n.type === 'identifier' && typeof n.value === 'string') {
+						let val = n.value.trim();
+						if (val.endsWith('~') && val !== '~') return { type: 'identifier', value: val.slice(0, -1) };
+					}
+					// Block展開への対応
+					if (n.type === 'block' && n.body && n.body.length > 0) {
+						let last = n.body[n.body.length - 1];
+						if (last.type === 'identifier' && typeof last.value === 'string' && last.value.trim() === '~') {
+							if (n.body.length === 2) return n.body[0];
+							return { type: 'block', body: n.body.slice(0, -1) };
+						}
+					}
+					return null;
+				};
+				unrollExpr = findUnroll(node.right);
+				isUnroll = unrollExpr !== null;
+			}
 
-			code += `    f64.const nan\n`; // 副作用式はUnitを返す
+			let code = ``;
+
+			if (isUnroll) {
+				// ★ スタックマシンの原則：左右の式を評価してスタックに積み、最後にPOPする (そのまま維持)
+				code += compileNode(node.left, envMap);
+				code += compileNode(unrollExpr, envMap);
+				code += `    local.set $target_val\n`;
+				code += `    local.set $tmp_L\n`;
+
+				let blockId = Math.random().toString(36).substr(2, 5);
+				let consumerCode = `
+    local.get $tmp_L
+    f64.const 1.0
+    f64.eq
+    if
+      local.get $tmp_R
+      call $print_float
+    else
+      local.get $tmp_L
+      i32.trunc_sat_f64_u
+      i32.const 3
+      i32.shl
+      local.get $tmp_R
+      f64.store
+    end
+`;
+				code += `    local.get $target_val\n`;
+				code += `    i64.reinterpret_f64\n`;
+				code += `    i64.const 32\n`;
+				code += `    i64.shr_u\n`;
+				code += `    i32.wrap_i64\n`;
+				code += `    local.set $tag\n`;
+
+				code += `    (block $end_stream_${blockId}\n`;
+				// --- 文字列 (0x7FFD) ---
+				code += `      local.get $tag\n`;
+				code += `      i32.const 0x7FFD0000\n`;
+				code += `      i32.eq\n`;
+				code += `      if\n`;
+				code += `        local.get $target_val\n`;
+				code += `        i64.reinterpret_f64\n`;
+				code += `        i32.wrap_i64\n`;
+				code += `        local.set $str_ptr\n`;
+				// ストリーム最適化
+				code += `        local.get $tmp_L\n`;
+				code += `        f64.const 1.0\n`;
+				code += `        f64.eq\n`;
+				code += `        if\n`;
+				code += `          local.get $str_ptr\n`;
+				code += `          local.get $str_ptr\n`;
+				code += `          call $strlen\n`;
+				code += `          call $print_string\n`;
+				code += `        else\n`;
+				code += `          (loop $str_loop_${blockId}\n`;
+				code += `            local.get $str_ptr\n`;
+				code += `            i32.load8_u\n`;
+				code += `            i32.eqz\n`;
+				code += `            br_if $end_stream_${blockId}\n`;
+				code += `            local.get $str_ptr\n`;
+				code += `            i32.load8_u\n`;
+				code += `            f64.convert_i32_u\n`;
+				code += `            local.set $tmp_R\n`;
+				code += consumerCode;
+				code += `            local.get $str_ptr\n`;
+				code += `            i32.const 1\n`;
+				code += `            i32.add\n`;
+				code += `            local.set $str_ptr\n`;
+				code += `            br $str_loop_${blockId}\n`;
+				code += `          )\n`;
+				code += `        end\n`;
+				code += `      end\n`;
+
+				// --- リスト (0x7FFC) ---
+				code += `      local.get $tag\n`;
+				code += `      i32.const 0x7FFC0000\n`;
+				code += `      i32.eq\n`;
+				code += `      if\n`;
+				code += `        local.get $target_val\n`;
+				code += `        local.set $list_val\n`;
+				code += `        (loop $list_loop_${blockId}\n`;
+				code += `          local.get $list_val\n`;
+				code += `          call $is_truthy\n`;
+				code += `          i32.eqz\n`;
+				code += `          br_if $end_stream_${blockId}\n`;
+				code += `          local.get $list_val\n`;
+				code += `          i64.reinterpret_f64\n`;
+				code += `          i32.wrap_i64\n`;
+				code += `          local.set $list_ptr\n`;
+				code += `          local.get $list_ptr\n`;
+				code += `          f64.load offset=0\n`;
+				code += `          local.set $tmp_R\n`;
+				code += consumerCode;
+				code += `          local.get $list_ptr\n`;
+				code += `          f64.load offset=8\n`;
+				code += `          local.set $list_val\n`;
+				code += `          br $list_loop_${blockId}\n`;
+				code += `        )\n`;
+				code += `      end\n`;
+				code += `    )\n`;
+				code += `    f64.const nan\n`;
+			} else {
+				// ★ スタックマシンの原則：元の美しい順序に戻す（左右を評価し切ってからPOPする）
+				code += compileNode(node.left, envMap);
+				code += compileNode(node.right, envMap);
+				code += `    local.set $tmp_R\n`;
+				code += `    local.set $tmp_L\n`;
+
+				code += `    ;; MMIO アドレスデコーダ (アドレス 1.0 = stdout)\n`;
+				code += `    local.get $tmp_L\n`;
+				code += `    f64.const 1.0\n`;
+				code += `    f64.eq\n`;
+				code += `    if\n`;
+				code += `      local.get $tmp_R\n`;
+				code += `      call $print_float\n`;
+				code += `    else\n`;
+				code += `      local.get $tmp_L\n`;
+				code += `      i32.trunc_sat_f64_u\n`;
+				code += `      i32.const 3\n`;
+				code += `      i32.shl\n`;
+				code += `      local.get $tmp_R\n`;
+				code += `      f64.store\n`;
+				code += `    end\n`;
+				code += `    f64.const nan\n`;
+			}
 			return code;
 		}
 
@@ -571,6 +708,7 @@ function compileNode(node, envMap = {}) {
 
 			let funcCode = `  (func ${lambdaName} (param $env f64) (param $arg f64) (result f64)\n`;
 			funcCode += `    (local $tmp_bool f64)\n    (local $tmp_L f64)\n    (local $tmp_R f64)\n    (local $tmp_ptr i32)\n`;
+			funcCode += `    (local $target_val f64)\n    (local $tag i32)\n    (local $str_ptr i32)\n    (local $list_val f64)\n    (local $list_ptr i32)\n`;
 			for (let i = 0; i <= maxEnvDepth; i++) funcCode += `    (local $env_blk_${i} i32)\n`;
 			funcCode += funcBody;
 			funcCode += `  )\n`;
@@ -1324,6 +1462,11 @@ ${closureCode}
     (local $tmp_L f64)
     (local $tmp_R f64)
     (local $tmp_ptr i32)
+    (local $target_val f64)
+    (local $tag i32)
+    (local $str_ptr i32)
+    (local $list_val f64)
+    (local $list_ptr i32)
 ${Array.from({ length: maxEnvDepth + 1 }, (_, i) => `    (local $env_blk_${i} i32)\n`).join('')}
 ${bodyCode ? bodyCode : '    f64.const 0.0\n'}  )
 )`;
