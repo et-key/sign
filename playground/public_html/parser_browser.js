@@ -61,69 +61,76 @@ const findOp = (symbol, notation) => {
 // Check if a string is a known operator symbol
 const isOpSymbol = (str) => ops.some(op => op.symbol === str);
 
-// --- Token Processing ---
+// --- Token Processing (Refined for Strict Spacing) ---
 
-const splitAlphaSymbol = (str) => {
-	const parts = [];
-	let remaining = str;
+const processTokenString = (token) => {
+	// 1. 文字列リテラルや文字リテラルはそのまま
+	if (token.startsWith('`') || token.startsWith('\\')) return [token];
 
-	while (remaining.length > 0) {
-		// 1. Try Number
-		const numMatch = remaining.match(/^(-?\d+(\.\d+)?)/);
-		if (numMatch) {
-			const numStr = numMatch[0];
-			if (numStr === '-' && remaining.length > 1 && !/\d/.test(remaining[1])) {
-				// Just minus symbol
-			} else {
-				parts.push(numStr);
-				remaining = remaining.slice(numStr.length);
-				continue;
-			}
-		}
+	// 2. 完全な数値（負の数含む）はそのまま
+	if (!isNaN(parseFloat(token)) && isFinite(token)) return [token];
 
-		// 2. If starts with WordChar (Alpha + _)
-		const wordMatch = remaining.match(/^([a-zA-Z_][a-zA-Z0-9_]*)/);
-		if (wordMatch) {
-			parts.push(wordMatch[0]);
-			remaining = remaining.slice(wordMatch[0].length);
-			continue;
-		}
+	// 3. 完全に記号のみで構成されている場合（空白で区切られた中置演算子など）
+	if (/^[!#$%&'*+,\-./:;<=>?@^|~\\]+$/.test(token)) {
+		return [{ type: 'operator', symbol: token, attached: 'none' }];
+	}
 
-		// 3. If starts with Symbol
-		// Includes `\` as symbol
-		const symMatch = remaining.match(/^([!#$%&'*+,\-./:;<=>?@^|~\\]+)/);
-		if (symMatch) {
-			const sym = symMatch[0];
-			let symRem = sym;
-			while (symRem.length > 0) {
-				// Find longest prefix that is an op
+	// 4. 前置記号 + 本体(英数字) + 後置記号 が結合している場合
+	const match = token.match(/^([!#$%&'*+,\-./:;<=>?@^|~\\]*)([a-zA-Z0-9_.]+)([!#$%&'*+,\-./:;<=>?@^|~\\]*)$/);
+	if (match) {
+		const parts = [];
+		const pre = match[1];
+		const body = match[2];
+		const post = match[3];
+
+		// 前置演算子の切り出し
+		if (pre) {
+			let remaining = pre;
+			while (remaining.length > 0) {
 				let found = false;
-				for (let len = symRem.length; len > 0; len--) {
-					const sub = symRem.slice(0, len);
-					if (isOpSymbol(sub)) {
-						parts.push(sub);
-						symRem = symRem.slice(len);
+				for (let len = remaining.length; len > 0; len--) {
+					const sub = remaining.slice(0, len);
+					if (findOp(sub, 'prefix')) {
+						parts.push({ type: 'operator', symbol: sub, attached: 'prefix' });
+						remaining = remaining.slice(len);
 						found = true;
 						break;
 					}
 				}
 				if (!found) {
-					// If no op matches, consume one char as unknown op/symbol
-					parts.push(symRem[0]);
-					symRem = symRem.slice(1);
+					parts.push({ type: 'operator', symbol: remaining[0], attached: 'prefix' });
+					remaining = remaining.slice(1);
 				}
 			}
-
-			remaining = remaining.slice(sym.length);
-			continue;
 		}
 
-		// 4. Catch all
-		parts.push(remaining[0]);
-		remaining = remaining.slice(1);
+		if (body) parts.push(body);
+
+		// 後置演算子の切り出し
+		if (post) {
+			let remaining = post;
+			while (remaining.length > 0) {
+				let found = false;
+				for (let len = remaining.length; len > 0; len--) {
+					const sub = remaining.slice(0, len);
+					if (findOp(sub, 'postfix')) {
+						parts.push({ type: 'operator', symbol: sub, attached: 'postfix' });
+						remaining = remaining.slice(len);
+						found = true;
+						break;
+					}
+				}
+				if (!found) {
+					parts.push({ type: 'operator', symbol: remaining[0], attached: 'postfix' });
+					remaining = remaining.slice(1);
+				}
+			}
+		}
+		return parts;
 	}
 
-	return parts;
+	// 上記以外（フォールバック）
+	return [token];
 };
 
 const refineTokens = (rawTokens) => {
@@ -132,40 +139,9 @@ const refineTokens = (rawTokens) => {
 		if (Array.isArray(token)) {
 			refined.push(refineTokens(token));
 		} else if (typeof token === 'object') {
-			refined.push(token); // Separators
+			refined.push(token); // Separators (\n, etc.)
 		} else if (typeof token === 'string') {
-			if (token.startsWith('`')) {
-				refined.push(token);
-			} else if (token.startsWith('\\')) {
-				// Special handling for `\` token from lexer
-				if (token.length > 1) {
-					refined.push(token);
-				} else {
-					refined.push({ type: 'operator', symbol: token, spacing: 'isolated' });
-				}
-			} else if (isOpSymbol(token)) {
-				refined.push({ type: 'operator', symbol: token, spacing: 'isolated' });
-			} else {
-				const parts = splitAlphaSymbol(token);
-				for (let i = 0; i < parts.length; i++) {
-					const p = parts[i];
-					if (isOpSymbol(p)) {
-						let spacing = 'attached';
-						if (i === 0) {
-							spacing = 'prefix_attached';
-						} else if (i === parts.length - 1) {
-							spacing = 'postfix_attached';
-						} else {
-							spacing = 'both_attached';
-						}
-						refined.push({ type: 'operator', symbol: p, spacing: spacing });
-					} else {
-						refined.push(p);
-					}
-				}
-			}
-		} else {
-			refined.push(token);
+			refined.push(...processTokenString(token));
 		}
 	}
 	return refined;
@@ -207,9 +183,12 @@ const parseExpr = (tokens, minPrec = 0) => {
 				if (!isNaN(parseFloat(value))) return true; // Number
 			}
 			if (is_op || (typeof value === 'string' && isOpSymbol(value))) {
-				if (spacing === 'postfix_attached') return false;
-				if (spacing === 'prefix_attached') return !!findOp(value, 'prefix');
-				return !!findOp(value, 'prefix');
+				if (spacing === 'postfix') return false;
+				if (spacing === 'prefix') return !!findOp(value, 'prefix');
+
+				// spacing === 'none' (空白で独立している場合) は中置演算子とみなすため、
+				// 原則として単独では式を開始できない（前置演算子としては扱わない）
+				return false;
 			}
 			return true; // Identifier
 		}
@@ -284,33 +263,31 @@ const parseExpr = (tokens, minPrec = 0) => {
 		if (typeof lookahead === 'object' && lookahead.type === 'operator') {
 			is_op = true;
 			opValue = lookahead.symbol;
-			spacing = lookahead.spacing;
+			spacing = lookahead.attached; // ここも token.attached に変更
 		} else if (typeof lookahead === 'string' && isOpSymbol(lookahead)) {
 			is_op = true;
 			opValue = lookahead;
-			spacing = 'isolated';
+			spacing = 'none';
 		}
 
 		if (is_op) {
 			const opSymbol = opValue;
 
-			if (spacing === 'prefix_attached' && !findOp(opSymbol, 'prefix')) {
+			// 前置演算子が中置の位置に来た場合はパースを抜ける
+			if (spacing === 'prefix') {
 				break;
 			}
 
 			let op;
-			if (spacing === 'postfix_attached') {
+			if (spacing === 'postfix') {
 				op = findOp(opSymbol, 'postfix');
-			} else if (spacing === 'isolated') {
+			} else if (spacing === 'none') {
 				op = findOp(opSymbol, 'infix');
-			} else if (spacing === 'both_attached') {
-				op = findOp(opSymbol, 'infix') || findOp(opSymbol, 'postfix');
-			} else if (spacing === 'prefix_attached') {
-				// leave op undefined to fall through to Apply
 			}
 
 			if (!op) {
-				// Not infix/postfix -> Apply?
+				// 中置でも後置でもない場合は Apply へ
+				break;
 			} else {
 				if (op.precedence < minPrec) break;
 
@@ -461,11 +438,11 @@ const parseAtom = (tokens) => {
 	if (typeof token === 'object' && token.type === 'operator') {
 		value = token.symbol;
 		is_op = true;
-		spacing = token.spacing;
+		spacing = token.attached; // ここを token.spacing から token.attached に変更
 	} else if (typeof token === 'string') {
 		if (isOpSymbol(token)) {
 			is_op = true;
-			spacing = 'isolated';
+			spacing = 'none'; // 独立した文字列なら 'none' (中置)
 		}
 	} else {
 		return { type: 'unknown', token };
@@ -475,15 +452,13 @@ const parseAtom = (tokens) => {
 		if (value === '|') {
 			const expr = parseExpr(tokens, 0);
 			const next = tokens.shift();
-			// User sample implies strict pairing.
-			if (typeof next === 'object' && next.type === 'operator' && next.symbol !== '|') { }
-			else if (typeof next === 'string' && next !== '|') { }
 			return { type: 'abs', expr };
 		}
 
 		// Prefix Op
 		if (is_op) {
-			if (spacing !== 'postfix_attached') {
+			// ★ 前置演算子として結合している場合のみ前置としてパースする！
+			if (spacing === 'prefix') {
 				const op = findOp(value, 'prefix');
 				if (op) {
 					const splitPrec = op.precedence;
@@ -491,6 +466,7 @@ const parseAtom = (tokens) => {
 					return { type: 'prefix', op: value, expr: rhs };
 				}
 			}
+			// それ以外（spacing === 'none' など）は単独の識別子/演算子として返す
 			return { type: 'identifier', value: value, isOp: true };
 		}
 
