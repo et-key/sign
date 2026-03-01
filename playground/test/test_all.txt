@@ -80,4 +80,4 @@
 [Print] 23
 [Print] ===== end =====
 
-[Main Result] Nan
+[Main Result] NaN

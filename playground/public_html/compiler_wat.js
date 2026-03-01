@@ -91,7 +91,7 @@ function isFunction(node, env = {}) {
 				return { args: [], op: null };
 			};
 			let info = flattenNativeApply(node);
-			let expectedArgs = ['head', 'tail', '!', '!!', '@'].includes(info.op) ? 1 : 2;
+			let expectedArgs = ['!', '!!', '@'].includes(info.op) ? 1 : 2;
 			let currentArgsCount = info.args.length + (info.nativeArgsLen || 0);
 			if (currentArgsCount < expectedArgs) return true;
 			return false;
@@ -292,7 +292,9 @@ function expandMacros(node, env = {}) {
 		};
 	}
 	if (node.type === 'infix') {
-		return { ...node, left: expandMacros(node.left, env), right: expandMacros(node.right, env) };
+		const expandedLeft = expandMacros(node.left, env);
+		const expandedRight = expandMacros(node.right, env);
+		return { ...node, left: expandedLeft, right: expandedRight };
 	}
 	if (node.type === 'prefix' || node.type === 'postfix') {
 		return { ...node, expr: expandMacros(node.expr, env) };
@@ -430,7 +432,7 @@ function compileNode(node, envMap = {}) {
 		if (TEMPLATES[name]) {
 			// ネイティブ演算子が単体で評価された場合（引数0個での出現）
 			// 単純なNaNを返すのではなく、必要な引数分のダミーを受け取るクロージャを生成して返す
-			let expectedArgs = ['head', 'tail', '!', '!!', '@'].includes(name) ? 1 : 2;
+			let expectedArgs = ['!', '!!', '@'].includes(name) ? 1 : 2;
 			let dummyParamNames = [];
 			for (let i = 0; i < expectedArgs; i++) {
 				dummyParamNames.push(`$curried_${i}`);
@@ -494,9 +496,9 @@ function compileNode(node, envMap = {}) {
 
 		if (op === '#') {
 			let code = compileNode(node.left, envMap);
-			code += `    local.set $tmp_L\n`;
 			code += compileNode(node.right, envMap);
 			code += `    local.set $tmp_R\n`;
+			code += `    local.set $tmp_L\n`;
 
 			// MMIO アドレスデコーダ (アドレス 1.0 = stdout)
 			code += `    local.get $tmp_L\n`;
@@ -661,34 +663,68 @@ function compileNode(node, envMap = {}) {
 				return code;
 			} else {
 				// 動的メモリ参照（リスト要素などのアクセス）: list ' index
-				let code = compileNode(node.left, envMap); // base pointer
-				code += compileNode(node.right, envMap);   // index offset
-				code += `    f64.add\n`;
-				code += `    i32.trunc_sat_f64_u\n`;
-				code += `    i32.const 3\n`;
-				code += `    i32.shl\n`;
-				code += `    f64.load\n`;
+				let code = compileNode(node.left, envMap);
+				code += `    local.set $tmp_L\n`; // base pointer
+				code += compileNode(node.right, envMap);
+				code += `    local.set $tmp_R\n`; // index offset
+
+				// NaNガード (NaN == NaN は false になるWASMの性質を利用)
+				code += `    local.get $tmp_R\n`;
+				code += `    local.get $tmp_R\n`;
+				code += `    f64.eq\n`;
+				code += `    if (result f64)\n`;
+
+				code += `      local.get $tmp_L\n`;
+				code += `      i64.reinterpret_f64\n`;
+				code += `      i32.wrap_i64\n`;
+				code += `      local.get $tmp_R\n`;
+				code += `      i32.trunc_sat_f64_u\n`;
+				code += `      i32.const 3\n`;
+				code += `      i32.shl\n`;
+				code += `      i32.add\n`;
+				code += `      f64.load\n`;
+
+				code += `    else\n`;
+				code += `      f64.const nan\n`; // indexがNaNならNaNを返す
+				code += `    end\n`;
 				return code;
 			}
 		}
 
 		if (op === "@") {
 			// 動的メモリ参照（リスト要素などのアクセス）: index @ list
-			let code = compileNode(node.right, envMap); // base pointer
-			code += compileNode(node.left, envMap);     // index offset
-			code += `    f64.add\n`;
-			code += `    i32.trunc_sat_f64_u\n`;
-			code += `    i32.const 3\n`;
-			code += `    i32.shl\n`;
-			code += `    f64.load\n`;
+			let code = compileNode(node.right, envMap);
+			code += `    local.set $tmp_L\n`; // base pointer
+			code += compileNode(node.left, envMap);
+			code += `    local.set $tmp_R\n`; // index offset
+
+			// NaNガード
+			code += `    local.get $tmp_R\n`;
+			code += `    local.get $tmp_R\n`;
+			code += `    f64.eq\n`;
+			code += `    if (result f64)\n`;
+
+			code += `      local.get $tmp_L\n`;
+			code += `      i64.reinterpret_f64\n`;
+			code += `      i32.wrap_i64\n`;
+			code += `      local.get $tmp_R\n`;
+			code += `      i32.trunc_sat_f64_u\n`;
+			code += `      i32.const 3\n`;
+			code += `      i32.shl\n`;
+			code += `      i32.add\n`;
+			code += `      f64.load\n`;
+
+			code += `    else\n`;
+			code += `      f64.const nan\n`;
+			code += `    end\n`;
 			return code;
 		}
 
 		if (['==', '=', '!='].includes(op)) {
 			let code = compileNode(node.left, envMap);
-			code += `    local.set $tmp_L\n`;
 			code += compileNode(node.right, envMap);
 			code += `    local.set $tmp_R\n`;
+			code += `    local.set $tmp_L\n`;
 
 			code += `    local.get $tmp_L\n`;
 			code += `    i64.reinterpret_f64\n`;
@@ -718,9 +754,9 @@ function compileNode(node, envMap = {}) {
 
 		if (['<', '>', '<=', '>='].includes(op)) {
 			let code = compileNode(node.left, envMap);
-			code += `    local.set $tmp_L\n`;
 			code += compileNode(node.right, envMap);
 			code += `    local.set $tmp_R\n`;
+			code += `    local.set $tmp_L\n`;
 
 			code += `    local.get $tmp_L\n`;
 			code += `    local.get $tmp_R\n`;
@@ -774,9 +810,9 @@ function compileNode(node, envMap = {}) {
 			// If none truthy -> NaN
 			// If one truthy -> return it.
 			let code = compileNode(node.left, envMap);
-			code += `    local.set $tmp_L\n`;
 			code += compileNode(node.right, envMap);
 			code += `    local.set $tmp_R\n`;
+			code += `    local.set $tmp_L\n`;
 
 			code += `    local.get $tmp_L\n`;
 			code += `    call $is_truthy\n`;
@@ -993,7 +1029,7 @@ function compileNode(node, envMap = {}) {
 			};
 
 			let info = flattenNativeApply(node);
-			let expectedArgs = ['head', 'tail', '!', '!!', '@'].includes(info.op) ? 1 : 2;
+			let expectedArgs = ['!', '!!', '@'].includes(info.op) ? 1 : 2;
 
 			if (info.args.length < expectedArgs && !info.isCurriedBody) {
 				let missingCount = expectedArgs - info.args.length;
@@ -1061,7 +1097,7 @@ function compileNode(node, envMap = {}) {
 					if (checkNative(a.func)) {
 						// 引数が足りているか？
 						let innerInfo = flattenNativeApply(a);
-						let expected = ['head', 'tail', '!', '!!', '@'].includes(innerInfo.op) ? 1 : 2;
+						let expected = ['!', '!!', '@'].includes(innerInfo.op) ? 1 : 2;
 						if (innerInfo.args.length < expected) return true; // 引数不足＝関数ポインタ
 					}
 					if (a.pipeline) return true;
@@ -1118,7 +1154,7 @@ function compileNode(node, envMap = {}) {
 export function expandMacrosPublic(ast) { return expandMacros(ast, {}); }
 export function compileToWat(ast) {
 	stringTable = {};
-	stringAllocOffset = 8;
+	stringAllocOffset = 1024;
 	dataSection = '';
 	closureFunctions = [];
 	closureCount = 0;
@@ -1219,11 +1255,12 @@ ${dataSection}
     local.get $cdr
     f64.store offset=8
     
-    ;; 生のf64インデックス(バイトアドレス / 8)を返す
+    ;; リストのポインタを NaN-boxing する (Tag: 0x7FFC000000000000)
+    i64.const 0x7FFC000000000000
     local.get $ptr
-    i32.const 3
-    i32.shr_u
-    f64.convert_i32_u
+    i64.extend_i32_u
+    i64.or
+    f64.reinterpret_i64
   )
 
   (func $is_truthy (param $val f64) (result i32)
