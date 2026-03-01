@@ -13,13 +13,11 @@ const TEMPLATES = {
 	'>': 'f64.gt',
 	'<=': 'f64.le',
 	'>=': 'f64.ge',
-	',': 'call $cons',
-	'head': 'call $head',
-	'tail': 'call $tail'
+	',': 'call $cons'
 };
 
 let stringTable = {};
-let stringAllocOffset = 8;
+let stringAllocOffset = 1024; // インデックス0〜127をI/Oやレジスタ用に予約
 let dataSection = '';
 let closureFunctions = [];
 let closureCount = 0;
@@ -495,40 +493,28 @@ function compileNode(node, envMap = {}) {
 		const op = node.op;
 
 		if (op === '#') {
-			let code = compileNode(node.right, envMap);
+			let code = compileNode(node.left, envMap);
 			code += `    local.set $tmp_L\n`;
+			code += compileNode(node.right, envMap);
+			code += `    local.set $tmp_R\n`;
+
+			// MMIO アドレスデコーダ (アドレス 1.0 = stdout)
 			code += `    local.get $tmp_L\n`;
-
-			// Check if it's a string (tag: 0x7FFD0000)
-			code += `    i64.reinterpret_f64\n`;
-			code += `    i64.const 32\n`;
-			code += `    i64.shr_u\n`;
-			code += `    i32.wrap_i64\n`;
-			code += `    i32.const 0x7FFD0000\n`;
-			code += `    i32.eq\n`;
+			code += `    f64.const 1.0\n`;
+			code += `    f64.eq\n`;
 			code += `    if\n`;
-
-			// If String:
-			code += `      local.get $tmp_L\n`;
-			code += `      i64.reinterpret_f64\n`;
-			code += `      i32.wrap_i64\n`; // Lower 32 bits = Pointer
-
-			// Compute length (strlen equivalent)
-			code += `      local.tee $tmp_ptr\n`;
-			code += `      local.get $tmp_ptr\n`;
-			code += `      call $strlen\n`; // Call helper function
-
-			// Print string
-			code += `      call $print_string\n`;
-
-			code += `    else\n`;
-
-			// If Float:
-			code += `      local.get $tmp_L\n`;
+			code += `      local.get $tmp_R\n`;
 			code += `      call $print_float\n`;
-
+			code += `    else\n`;
+			code += `      local.get $tmp_L\n`;
+			code += `      i32.trunc_sat_f64_u\n`;
+			code += `      i32.const 3\n`;
+			code += `      i32.shl\n`;
+			code += `      local.get $tmp_R\n`;
+			code += `      f64.store\n`;
 			code += `    end\n`;
-			code += `    f64.const nan\n`;
+
+			code += `    f64.const nan\n`; // 副作用式はUnitを返す
 			return code;
 		}
 
@@ -674,9 +660,28 @@ function compileNode(node, envMap = {}) {
 				code += `    f64.load offset=${offset}\n`;
 				return code;
 			} else {
-				console.warn(`[Compile Warning] Static offset resolution failed for property '${keyName}'`);
-				return `    ;; UNABLE TO RESOLVE STATIC OFFSET FOR GET\n    f64.const nan\n`;
+				// 動的メモリ参照（リスト要素などのアクセス）: list ' index
+				let code = compileNode(node.left, envMap); // base pointer
+				code += compileNode(node.right, envMap);   // index offset
+				code += `    f64.add\n`;
+				code += `    i32.trunc_sat_f64_u\n`;
+				code += `    i32.const 3\n`;
+				code += `    i32.shl\n`;
+				code += `    f64.load\n`;
+				return code;
 			}
+		}
+
+		if (op === "@") {
+			// 動的メモリ参照（リスト要素などのアクセス）: index @ list
+			let code = compileNode(node.right, envMap); // base pointer
+			code += compileNode(node.left, envMap);     // index offset
+			code += `    f64.add\n`;
+			code += `    i32.trunc_sat_f64_u\n`;
+			code += `    i32.const 3\n`;
+			code += `    i32.shl\n`;
+			code += `    f64.load\n`;
+			return code;
 		}
 
 		if (['==', '=', '!='].includes(op)) {
@@ -902,8 +907,21 @@ function compileNode(node, envMap = {}) {
 
 		if (node.op === '@') {
 			let code = compileNode(node.expr, envMap);
-			code += `    drop\n`;
-			code += `    call $input_float\n`;
+			code += `    local.set $tmp_L\n`;
+
+			// MMIO アドレスデコーダ (アドレス 0.0 = stdin)
+			code += `    local.get $tmp_L\n`;
+			code += `    f64.const 0.0\n`;
+			code += `    f64.eq\n`;
+			code += `    if (result f64)\n`;
+			code += `      call $input_float\n`;
+			code += `    else\n`;
+			code += `      local.get $tmp_L\n`;
+			code += `      i32.trunc_sat_f64_u\n`;
+			code += `      i32.const 3\n`;
+			code += `      i32.shl\n`;
+			code += `      f64.load\n`;
+			code += `    end\n`;
 			return code;
 		}
 		if (node.op === '!') {
@@ -1201,59 +1219,11 @@ ${dataSection}
     local.get $cdr
     f64.store offset=8
     
-    i64.const 0x7FFC000000000000
+    ;; 生のf64インデックス(バイトアドレス / 8)を返す
     local.get $ptr
-    i64.extend_i32_u
-    i64.or
-    f64.reinterpret_i64
-  )
-
-  (func $head (param $list_val f64) (result f64)
-    (local $ptr i32)
-    
-    local.get $list_val
-    i64.reinterpret_f64
-    i64.const 32
-    i64.shr_u
-    i32.wrap_i64
-    i32.const 0x7FFC0000
-    i32.ne
-    if
-      f64.const nan
-      return
-    end
-    
-    local.get $list_val
-    i64.reinterpret_f64
-    i32.wrap_i64
-    local.set $ptr
-    
-    local.get $ptr
-    f64.load offset=0
-  )
-
-  (func $tail (param $list_val f64) (result f64)
-    (local $ptr i32)
-    
-    local.get $list_val
-    i64.reinterpret_f64
-    i64.const 32
-    i64.shr_u
-    i32.wrap_i64
-    i32.const 0x7FFC0000
-    i32.ne
-    if
-      f64.const nan
-      return
-    end
-    
-    local.get $list_val
-    i64.reinterpret_f64
-    i32.wrap_i64
-    local.set $ptr
-    
-    local.get $ptr
-    f64.load offset=8
+    i32.const 3
+    i32.shr_u
+    f64.convert_i32_u
   )
 
   (func $is_truthy (param $val f64) (result i32)
