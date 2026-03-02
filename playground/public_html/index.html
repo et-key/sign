@@ -156,7 +156,20 @@
 							return 0.0; // 入力が尽きた場合は 0.0 を返す
 						},
 						math_fmod: (a, b) => a % b,
-						math_pow: Math.pow
+						math_pow: Math.pow,
+
+						// ==========================================
+						// ★ 今回追加するシステムコールの受け口（スタブ）
+						// ==========================================
+						print_list: (ptr) => {
+							// WASMからリストの先頭ポインタだけが渡されてくる
+							// （※後で wasmMemory を辿って中身を読み解く処理を作ります）
+							outputEl.textContent += `[Print] <List Structure (Ptr: ${ptr})>\n`;
+						},
+						print_closure: (ptr) => {
+							// WASMから関数の構造体ポインタだけが渡されてくる
+							outputEl.textContent += `[Print] <Closure (Ptr: ${ptr})>\n`;
+						}
 					}
 				};
 
