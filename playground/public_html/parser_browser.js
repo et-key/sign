@@ -742,6 +742,12 @@ export function parseSign(code) {
 	// ファイル操作は行わず、純粋に文字列からASTを生成して返します
 	const rawRoot = lexer.parseToSExpr(code);
 	const refinedRoot = refineTokens(rawRoot);
-	const ast = parseBlock(refinedRoot);
+	let ast = parseBlock(refinedRoot);
+
+	// ★ 追加: トップレベルが単一の文だった場合、コンパイラがバインディングを処理できるよう強制的にブロックでラップする
+	if (ast && ast.type !== 'block') {
+		ast = { type: 'block', body: [ast] };
+	}
+
 	return ast;
 }

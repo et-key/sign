@@ -1,72 +1,52 @@
 ` =========================================================
-1 # `===== Ph1 =====`~
+_ : 1 # `===== Ph1 =====`
 ` =========================================================
 ` --- 比較演算 ---
-1 # (5 == 5)
-1 # (1 != 2)
-1 # (1 < 2)
-1 # (2 > 1)
-1 # (1 <= 1)
-1 # (2 >= 2)
+ph1_cmp : (5 == 5), (1 != 2), (1 < 2), (2 > 1), (1 <= 1), (2 >= 2)
+_ : 1 # ph1_cmp~
 
 ` --- 論理演算 (0, 1 は Truthy, _ は Falsy) ---
-1 # (_ & 0)
-1 # (0 & _)
-1 # (0 & 1)
-1 # (_ | 0)
-1 # (0 | _)
-1 # (0 | 1)
-1 # (_ ; 0)
-1 # (1 ; _)
-1 # (0 ; 1)
-1 # (_ ; _)
+ph1_log : (_ & 0), (0 & _), (0 & 1), (_ | 0), (0 | _), (0 | 1), (_ ; 0), (1 ; _), (0 ; 1), (_ ; _)
+_ : 1 # ph1_log~
 
 ` --- ビット演算 ---
-1 # (1 && 42)
-1 # (0 || 99)
-1 # (1 ;; 1)
-1 # (1 ;; 0)
-1 # (1 << 2)
-1 # (4 >> 1)
-1 # (!!0)
+ph1_bit : (1 && 42), (0 || 99), (1 ;; 1), (1 ;; 0), (1 << 2), (4 >> 1), (!!0)
+_ : 1 # ph1_bit~
 
 ` --- その他制御・単項演算 ---
-1 # (!1)
-1 # (!(1 == 2))
-1 # ((1 == 1) : 100)
-1 # ((1 == 2) : 200)
-1 # (x ? x + 1)
+ph1_oth : (!1), (!(1 == 2)), ((1 == 1) : 100), ((1 == 2) : 200), (x ? x + 1)
+_ : 1 # ph1_oth~
+
 
 ` =========================================================
-1 # `===== Ph2 =====`~
+_ : 1 # `===== Ph2 =====`
 ` =========================================================
 ` テスト1: 文字列（Strings）の割り当てと出力
-1 # `Hello! WASM Strings!`~
+` ※SVCによるストリーム出力を使うため ~ を外しています
+_ : 1 # `Hello! WASM Strings!`
 
 ` テスト2: リスト作成と結合 (cons と ,)
-list : 100, 200
-1 # list
+list_test : 100, 200
+_ : 1 # list_test~
 
 ` テスト3: リスト要素の抽出 (head, tail)
-list : 100, 200
-1 # list ' 0
-1 # list ' 1
+ph2_ext : (list_test ' 0), (list_test ' 1)
+_ : 1 # ph2_ext~
 
 ` テスト4: ブロックの短絡評価 ([...])
-1 # [ _ 42 99 ]
+_ : 1 # [ _ 42 99 ]
+
 
 ` =========================================================
-1 # `===== Ph3 =====`~
+_ : 1 # `===== Ph3 =====`
 ` =========================================================
 ` 1.クロージャの生成と適用
-f : x y ? x + y
-1 # f 10 20
-1 # f (10 20)
-1 # (f 10) 20
-1 # (f 10 20)
+f : x y ?
+	x + y
+ph3_closure : f 10 20, (f 10 20), (f (10 20)), ((f 10) 20)
+_ : 1 # ph3_closure~
 
-1 # [x y ? x + y] 10 20
-
+_ : 1 # [x y ? x + y] 10 20
 
 ` 2.`match_case` (条件分岐) の機能
 match_test : x ?
@@ -74,23 +54,19 @@ match_test : x ?
 	x > 0 : 200
 	x < 0 : 300
 	400
-1 # match_test 0
-1 # match_test 1
-1 # match_test -1
-1 # match_test _
-1 # match_test `a`
-1 # match_test a
+ph3_match : (match_test 0), (match_test 1), (match_test -1), (match_test _), (match_test `a`), (match_test a)
+_ : 1 # ph3_match~
 
 ` 3.カッコブロック `[]` を用いた辞書の生成とアクセス
-dict_test : x ? [
-	id : x
-	val : x + 2
-]
+dict_test : x ?
+	[
+		id : x
+		val : x + 2
+	]
 
 my_dict : dict_test 40
-1 # my_dict ' id
-1 # my_dict ' val
-
+ph3_dict : (my_dict ' id), (my_dict ' val)
+_ : 1 # ph3_dict~
 
 ` 4.Match Case と辞書環境の統合テスト
 complex_test : code ?
@@ -107,140 +83,113 @@ complex_test : code ?
 		msg : -1
 	]
 
-res : complex_test 200
-1 # res ' status
-1 # res ' msg
+res1 : complex_test 200
+res2 : complex_test 404
+res3 : complex_test _
+res4 : complex_test a
+ph3_complex : (res1 ' status), (res1 ' msg), (res2 ' status), (res2 ' msg), (res3 ' status), (res3 ' msg), (res4 ' status), (res4 ' msg)
+_ : 1 # ph3_complex~
 
-res : complex_test 404
-1 # res ' status
-1 # res ' msg
-
-res : complex_test _
-1 # res ' status
-1 # res ' msg
-
-res : complex_test a
-1 # res ' status
-1 # res ' msg
 
 ` =========================================================
-1 # `===== Ph3.5 =====`~
+_ : 1 # `===== Ph3.5 =====`
 ` =========================================================
 ` 1. 算術・論理演算子のオペランド欠落
 test_math_R : 10 +
 test_math_L : * 5
 test_logic_R : 1 &
-1 # test_math_R
-1 # test_math_L
-1 # test_logic_R
-`期待値: すべてスタックアンダーフローを起こさず Unit (NaN) を返す
-
+ph35_1 : test_math_R, test_math_L, test_logic_R
+_ : 1 # ph35_1~
 
 ` 2. 辞書の定義エラーとプロパティアクセスの崩壊
 test_dict_bad : [ : 100 ]
 test_prop_bad : test_dict_bad ' missing
-1 # test_dict_bad
-1 # test_prop_bad
-`期待値: Unit (NaN) を返す
+ph35_2 : test_dict_bad, test_prop_bad
+_ : 1 # ph35_2~
 
 ` 3. 関数定義（ラムダ構築子）の構文エラー
 test_lambda_empty : x ?
-test_lambda_no_arg : ? 10
-1 # test_lambda_empty
-1 # test_lambda_no_arg
-`期待値: Unit (NaN) を返す
+test_lambda_no_arg : ?
+	10
+ph35_3 : test_lambda_empty, test_lambda_no_arg
+_ : 1 # ph35_3~
 
 ` 4. 演算子の関数化（ポイントフリー）での中身の崩壊
 test_pf_empty : []
 test_pf_bad_op : [+ -]
 test_pf_bad_apply : [10 + *]
-1 # test_pf_empty
-1 # test_pf_bad_op
-1 # test_pf_bad_apply
-`期待値: Unit (NaN) を返す
+ph35_4 : test_pf_empty, test_pf_bad_op, test_pf_bad_apply
+_ : 1 # ph35_4~
 
 ` 5. 関数合成・適用における引数不足（カリー化・クロージャ返却の検証）
 test_compose_short : [+ 2] [* 5] [+] 4
-1 # test_compose_short
-`期待値: 14などの誤った計算結果を出さず、スタック整合性を保ったまま未評価のラムダ項のポインタとして機能し、JS側へはフォールバックの NaN を返す
+_ : 1 # test_compose_short
 
 ` 6. インデントブロックにおけるパイプライン連鎖の検証
 test_pipeline : [
 	* 2
 	10
 ]
-1 # test_pipeline
-`期待値: ブロック内の配列が apply 連鎖にフラット化され、5と同様に引数不足の未評価関数となり NaN を返す
+_ : 1 # test_pipeline
 
 
 ` =========================================================
-1 # `===== Ph4 =====`~
+_ : 1 # `===== Ph4 =====`
 ` =========================================================
 ` 1. ポイントフリー記法（関数合成）のテスト
-
-` テスト1: ポイントフリー記法の基本（右から左への評価/関数合成）
-` 処理順: 2 -> [+ 4] -> [* 3]
-` 期待値: (2 + 4) * 3 = 18
 foo : [+ 4]
 bar : [* 3]
 baz : 2
-1 # foo bar baz
+_ : 1 # foo bar baz
 
-` テスト2: 3つ以上の関数合成
-` 処理順: 5 -> [+ 3] -> [* 2] -> [- 4]
 test_pf_multi : [+ 3] [* 2] [- 4] 5
-1 # test_pf_multi
-` 期待値: ((5 + 3) * 2) - 4 = 12
+_ : 1 # test_pf_multi
 
-` テスト3: 関数適用の連鎖によるデータフロー
-` 引数を明示しない関数合成 [+ 5] [/ 3] に対して、値 10 を適用する
-` 処理順: 10 -> [+ 5] -> [/ 3]
 test_pf_pipe : [+ 5] [/ 3] 10
-1 # test_pf_pipe
-` 期待値: (10 + 5) / 3 = 5
+_ : 1 # test_pf_pipe
 
-` テスト4: 変数への合成関数の束縛と、後からの値の適用
-` f に合成関数を束縛し、それに値を渡す
-f : [* 3] [+ 10]
-test_pf_bind : f 4
-` 処理順: 4 -> f( [* 3] -> [+ 10] )
-1 # test_pf_bind
-` 期待値: (4 * 3) + 10 = 22
+f_pipe : [* 3] [+ 10]
+test_pf_bind : f_pipe 4
+_ : 1 # test_pf_bind
 
-` テスト5: 引数不足の未評価関数の返却（パイプライン途中での引数枯渇）
-test_pf_short : [+ 2] [* 5] [+] 4
-1 # test_pf_short
-` 期待値: 途中で引数が尽きるため、関数ポインタのフォールバックとして NaN を返す
+test_pf_short2 : [+ 2] [* 5] [+] 4
+_ : 1 # test_pf_short2
 
-`2. 部分適用（カリー化）のテスト
-
-` テスト6: 右辺不足の部分適用 (10 + ?)
-` 10 がキャプチャされ、後から 5 を受け取って 10 + 5 を計算する
+` 2. 部分適用（カリー化）のテスト
 f1 : 10 +
-1 # f1 5
-` 期待値: 15
+_ : 1 # f1 5
 
-` テスト7: 左辺不足の部分適用 (? + 2)
-` 2 がキャプチャされ、後から 10 を受け取って 10 + 2 を計算する
 f2 : + 2
-1 # f2 10
-` 期待値: 12
+_ : 1 # f2 10
 
-` テスト8: 両辺不足の完全なカリー化 (?)
-` 2段階で引数を受け取る関数となる
 f3 : +
 f4 : f3 100
-1 # f4 50
-` 期待値: 150
+_ : 1 # f4 50
 
-` テスト9: 事前評価（Call-by-value）の確認
-` 複雑な式 [10 * 2] が環境に1度だけ事前計算・キャプチャされてクロージャになるか
 f5 : [10 * 2] +
-1 # f5 3
-` 期待値: 23
+_ : 1 # f5 3
 
 
 ` =========================================================
-1 # `===== end =====`~
+_ : 1 # `===== Ph5 =====`
 ` =========================================================
+` Description of Phase 5 achievements
+_ : 1 # `Phase 5: Spread operator (~) and SVC are fully implemented.`
+_ : 1 # `Lists and strings now return actual values instead of NaN.`
 
+` 1. 文字列の1文字ずつの展開 (ストリーム展開)
+test_str_spread : `abc`
+_ : 1 # `String spread:`
+_ : 1 # test_str_spread~
+
+` 2. リスト構造そのままの出力 (SVCによるシリアライズ)
+_ : 1 # `List structure output:`
+_ : 1 # (10, 20, 30)
+
+` 3. 未定義変数を展開しようとした時の安全装置 (NaNを返して止まるか)
+_ : 1 # `Undefined variable spread (should be NaN):`
+_ : 1 # undefined_list~
+
+` =========================================================
+1 # `===== end =====`
+` =========================================================

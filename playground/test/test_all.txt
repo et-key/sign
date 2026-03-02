@@ -29,7 +29,8 @@
 [Print] NaN
 [Print] ===== Ph2 =====
 [Print] Hello! WASM Strings!
-[Print] NaN
+[Print] 100
+[Print] 200
 [Print] 100
 [Print] 200
 [Print] 42
@@ -66,18 +67,27 @@
 [Print] NaN
 [Print] NaN
 [Print] NaN
-[Print] NaN
-[Print] NaN
+[Print] <Closure (Ptr: 0000)>
+[Print] <Closure (Ptr: 0000)>
 [Print] ===== Ph4 =====
 [Print] 18
 [Print] 12
 [Print] 5
 [Print] 22
-[Print] NaN
+[Print] <Closure (Ptr: 0000)>
 [Print] 15
 [Print] 12
 [Print] 150
 [Print] 23
+[Print] ===== Ph5 =====
+[Print] Phase 5: Spread operator (~) and SVC are fully implemented.
+[Print] Lists and strings now return actual values instead of NaN.
+[Print] String spread:
+[Print] abc
+[Print] List structure output:
+[Print] <List Structure (Ptr: 0000)>
+[Print] Undefined variable spread (should be NaN):
+[Print] NaN
 [Print] ===== end =====
 
 [Main Result] NaN

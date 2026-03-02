@@ -374,22 +374,31 @@ function compileNode(node, envMap = {}) {
 
 			if (child.type === 'infix' && child.op === ':' && child.left && child.left.type === 'identifier') {
 				let name = child.left.value.trim();
-				let targetOffset = (newEnvMap[name] && newEnvMap[name].localName === envLocalName) ? newEnvMap[name].offset : -1;
 
-				let rhsCode = compileNode(child.right, newEnvMap);
-				if (name && child.right && child.right._layout && newEnvMap[name]) {
-					newEnvMap[name].layout = child.right._layout;
-				} else if (name) {
-				}
+				// ★ 追加: '_' への代入は値を破棄し、純粋な Unit(NaN) を返す (終対象への射)
+				if (name === '_') {
+					code += compileNode(child.right, newEnvMap); // 右辺(副作用など)を評価
+					code += `    drop\n`;                       // 評価結果をWASMスタックから捨てる
+					code += `    f64.const nan\n`;              // Unit を返す
+				} else {
+					// 既存の変数バインディング処理
+					let targetOffset = (newEnvMap[name] && newEnvMap[name].localName === envLocalName) ? newEnvMap[name].offset : -1;
 
-				code += rhsCode;
+					let rhsCode = compileNode(child.right, newEnvMap);
+					if (name && child.right && child.right._layout && newEnvMap[name]) {
+						newEnvMap[name].layout = child.right._layout;
+					} else if (name) {
+					}
 
-				if (targetOffset >= 0) {
-					code += `    local.set $tmp_R\n`;
-					code += `    local.get ${envLocalName}\n`;
-					code += `    local.get $tmp_R\n`;
-					code += `    f64.store offset=${targetOffset}\n`;
-					code += `    f64.const nan\n`;
+					code += rhsCode;
+
+					if (targetOffset >= 0) {
+						code += `    local.set $tmp_R\n`;
+						code += `    local.get ${envLocalName}\n`;
+						code += `    local.get $tmp_R\n`;
+						code += `    f64.store offset=${targetOffset}\n`;
+						code += `    f64.const nan\n`;
+					}
 				}
 			} else {
 				code += compileNode(child, newEnvMap);
@@ -434,6 +443,12 @@ function compileNode(node, envMap = {}) {
 
 	if (node.type === 'identifier') {
 		const name = node.value.trim();
+
+		// ★ 追加: '_' の評価は常に Unit(NaN) 
+		if (name === '_') {
+			return `    f64.const nan\n`;
+		}
+
 		if (TEMPLATES[name]) {
 			// ネイティブ演算子が単体で評価された場合（引数0個での出現）
 			// 単純なNaNを返すのではなく、必要な引数分のダミーを受け取るクロージャを生成して返す
@@ -500,187 +515,10 @@ function compileNode(node, envMap = {}) {
 		const op = node.op;
 
 		if (op === '#') {
-			let isUnroll = false;
-			let unrollExpr = null;
-
-			if (node.right) {
-				const findUnroll = (n) => {
-					if (!n) return null;
-					if (n.type === 'postfix' && n.op === '~') return n.expr;
-					if (n.type === 'apply') {
-						if (n.func && n.func.type === 'identifier' && n.func.value.trim() === '~') return n.arg;
-						if (n.arg && n.arg.type === 'identifier' && n.arg.value.trim() === '~') return n.func;
-					}
-					if (n.type === 'string' && typeof n.value === 'string') {
-						let val = n.value.trim();
-						if (val.endsWith('~')) return { type: 'string', value: val.slice(0, -1) };
-					}
-					if (n.type === 'identifier' && typeof n.value === 'string') {
-						let val = n.value.trim();
-						if (val.endsWith('~') && val !== '~') return { type: 'identifier', value: val.slice(0, -1) };
-					}
-					if (n.type === 'block' && n.body && n.body.length > 0) {
-						let last = n.body[n.body.length - 1];
-						if (last.type === 'identifier' && typeof last.value === 'string' && last.value.trim() === '~') {
-							if (n.body.length === 2) return n.body[0];
-							return { type: 'block', body: n.body.slice(0, -1) };
-						}
-					}
-					return null;
-				};
-				unrollExpr = findUnroll(node.right);
-				isUnroll = unrollExpr !== null;
-			}
-
 			let code = ``;
-			// ★ 静的解析：出力先が定数の「1」(= stdout) であるかコンパイル時に見抜く
-			let isStdout = (node.left && node.left.type === 'number' && node.left.value == 1);
-
-			if (isUnroll) {
-				code += compileNode(node.left, envMap);
-				code += compileNode(unrollExpr, envMap);
-				code += `    local.set $target_val\n`;
-				code += `    local.set $tmp_L\n`;
-
-				let blockId = unrollCounter++; // ★ ランダムを排除してカウンタ化
-
-				let consumerCode = '';
-				if (isStdout) {
-					// ★ 静的最適化：stdoutと確定しているなら、実行時のif分岐を消滅させて直接出力
-					consumerCode = `
-            local.get $tmp_R
-            call $print_float
-`;
-				} else {
-					consumerCode = `
-            local.get $tmp_L
-            f64.const 1.0
-            f64.eq
-            if
-              local.get $tmp_R
-              call $print_float
-            else
-              local.get $tmp_L
-              i32.trunc_sat_f64_u
-              i32.const 3
-              i32.shl
-              local.get $tmp_R
-              f64.store
-            end
-`;
-				}
-
-				code += `    local.get $target_val\n`;
-				code += `    i64.reinterpret_f64\n`;
-				code += `    i64.const 32\n`;
-				code += `    i64.shr_u\n`;
-				code += `    i32.wrap_i64\n`;
-				code += `    local.set $tag\n`;
-
-				code += `    (block $end_stream_${blockId}\n`;
-				// --- 文字列 (0x7FFD) ---
-				code += `      local.get $tag\n`;
-				code += `      i32.const 0x7FFD0000\n`;
-				code += `      i32.eq\n`;
-				code += `      if\n`;
-				code += `        local.get $target_val\n`;
-				code += `        i64.reinterpret_f64\n`;
-				code += `        i32.wrap_i64\n`;
-				code += `        local.set $str_ptr\n`;
-				if (isStdout) {
-					// ★ 静的ストリーム最適化：stdoutなら1バイトループを組まず一撃で出力
-					code += `        local.get $str_ptr\n`;
-					code += `        local.get $str_ptr\n`;
-					code += `        call $strlen\n`;
-					code += `        call $print_string\n`;
-				} else {
-					code += `        local.get $tmp_L\n`;
-					code += `        f64.const 1.0\n`;
-					code += `        f64.eq\n`;
-					code += `        if\n`;
-					code += `          local.get $str_ptr\n`;
-					code += `          local.get $str_ptr\n`;
-					code += `          call $strlen\n`;
-					code += `          call $print_string\n`;
-					code += `        else\n`;
-					code += `          (loop $str_loop_${blockId}\n`;
-					code += `            local.get $str_ptr\n`;
-					code += `            i32.load8_u\n`;
-					code += `            i32.eqz\n`;
-					code += `            br_if $end_stream_${blockId}\n`;
-					code += `            local.get $str_ptr\n`;
-					code += `            i32.load8_u\n`;
-					code += `            f64.convert_i32_u\n`;
-					code += `            local.set $tmp_R\n`;
-					code += consumerCode;
-					code += `            local.get $str_ptr\n`;
-					code += `            i32.const 1\n`;
-					code += `            i32.add\n`;
-					code += `            local.set $str_ptr\n`;
-					code += `            br $str_loop_${blockId}\n`;
-					code += `          )\n`;
-					code += `        end\n`;
-				}
-				code += `      end\n`;
-
-				// --- リスト (0x7FFC) ---
-				code += `      local.get $tag\n`;
-				code += `      i32.const 0x7FFC0000\n`;
-				code += `      i32.eq\n`;
-				code += `      if\n`;
-				code += `        local.get $target_val\n`;
-				code += `        local.set $list_val\n`;
-				code += `        (loop $list_loop_${blockId}\n`;
-				code += `          local.get $list_val\n`;
-				code += `          call $is_truthy\n`;
-				code += `          i32.eqz\n`;
-				code += `          br_if $end_stream_${blockId}\n`;
-				code += `          local.get $list_val\n`;
-				code += `          i64.reinterpret_f64\n`;
-				code += `          i32.wrap_i64\n`;
-				code += `          local.set $list_ptr\n`;
-				code += `          local.get $list_ptr\n`;
-				code += `          f64.load offset=0\n`;
-				code += `          local.set $tmp_R\n`;
-				code += consumerCode;
-				code += `          local.get $list_ptr\n`;
-				code += `          f64.load offset=8\n`;
-				code += `          local.set $list_val\n`;
-				code += `          br $list_loop_${blockId}\n`;
-				code += `        )\n`;
-				code += `      end\n`;
-				code += `    )\n`;
-				code += `    f64.const nan\n`;
-			} else {
-				// ★ 通常の出力処理
-				code += compileNode(node.left, envMap);
-				code += compileNode(node.right, envMap);
-				code += `    local.set $tmp_R\n`;
-				code += `    local.set $tmp_L\n`;
-
-				code += `    ;; MMIO アドレスデコーダ (静的最適化適用)\n`;
-				if (isStdout) {
-					// ★ 実行時の無駄な if (1.0 == 1.0) を消滅させ、WASMのコードサイズと実行サイクルを削減
-					code += `    local.get $tmp_R\n`;
-					code += `    call $print_float\n`;
-				} else {
-					code += `    local.get $tmp_L\n`;
-					code += `    f64.const 1.0\n`;
-					code += `    f64.eq\n`;
-					code += `    if\n`;
-					code += `      local.get $tmp_R\n`;
-					code += `      call $print_float\n`;
-					code += `    else\n`;
-					code += `      local.get $tmp_L\n`;
-					code += `      i32.trunc_sat_f64_u\n`;
-					code += `      i32.const 3\n`;
-					code += `      i32.shl\n`;
-					code += `      local.get $tmp_R\n`;
-					code += `      f64.store\n`;
-					code += `    end\n`;
-				}
-				code += `    f64.const nan\n`;
-			}
+			code += compileNode(node.left, envMap);
+			code += compileNode(node.right, envMap);
+			code += `    call $apply_hash\n`;  // ★ランタイムのシステムコールに丸投げ
 			return code;
 		}
 
@@ -1154,6 +992,16 @@ function compileNode(node, envMap = {}) {
 		return code + `    drop\n    ;; INVALID PREFIX OP (${node.op})\n    f64.const nan\n`;
 	}
 
+	if (node.type === 'postfix') {
+		if (node.op === '~') {
+			let code = compileNode(node.expr, envMap);
+			// 実行時に型をチェックし、List/String に応じたSPREADタグを安全に付与するシステムコール
+			code += `    call $make_spread\n`;
+			return code;
+		}
+		return `    ;; UNIMPLEMENTED: postfix (${node.op})\n    f64.const nan\n`;
+	}
+
 	if (node.type === 'native_op') {
 		let code = '';
 		for (let i = node.args.length - 1; i >= 0; i--) {
@@ -1299,17 +1147,13 @@ function compileNode(node, envMap = {}) {
 		if (node.pipeline) {
 			code += argNodeCode;
 			code += funcNodeCode;
-
-			// パイプライン適用の際、func側が「未評価の関数（unitで包まれたブロックなど）」のままになるのを防ぐ
-			// スタックには arg(値) -> func(関数) が積まれている
-			// この状態で closureを呼ぶ
-			code += `    call $apply_closure\n`;
+			code += `    call $apply_space\n`; // ★変更：単純適用からSPREAD対応の適用へ
 			return code;
 		}
 
 		code += funcNodeCode;
 		code += argNodeCode;
-		code += `    call $apply_closure_reversed\n`;
+		code += `    call $apply_space_reversed\n`; // ★変更
 		return code;
 	}
 
@@ -1355,6 +1199,8 @@ export function compileToWat(ast) {
 	return `(module
   (import "env" "print_string" (func $print_string (param i32 i32)))
   (import "env" "print_float" (func $print_float (param f64)))
+  (import "env" "print_list" (func $print_list (param i32)))    ;; ★追加: リスト構造出力SVC
+  (import "env" "print_closure" (func $print_closure (param i32))) ;; ★追加: クロージャ出力SVC
   (import "env" "input_float" (func $input_float (result f64)))
   (import "env" "math_fmod" (func $math_fmod (param f64 f64) (result f64)))
   (import "env" "math_pow" (func $math_pow (param f64 f64) (result f64)))
@@ -1488,6 +1334,368 @@ ${dataSection}
     f64.const nan
   )
 
+;; ==========================================
+  ;; 新アーキテクチャ: 動的ディスパッチと除法射
+  ;; ==========================================
+
+  ;; $make_spread: ~ 演算子の実体。元の型を維持しつつ SPREAD フラグを立てる
+  (func $make_spread (param $val f64) (result f64)
+    (local $tag i32)
+    local.get $val
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    local.set $tag
+
+    ;; List (0x7FFC) -> Spread List (0x7FF4)
+    local.get $tag
+    i32.const 0x7FFC0000
+    i32.eq
+    if
+      local.get $val
+      i64.reinterpret_f64
+      i64.const 0x0008000000000000  ;; タグビットを反転して 0x7FF4 にする
+      i64.xor
+      f64.reinterpret_i64
+      return
+    end
+
+    ;; String (0x7FFD) -> Spread String (0x7FF5)
+    local.get $tag
+    i32.const 0x7FFD0000
+    i32.eq
+    if
+      local.get $val
+      i64.reinterpret_f64
+      i64.const 0x0008000000000000  ;; タグビットを反転して 0x7FF5 にする
+      i64.xor
+      f64.reinterpret_i64
+      return
+    end
+
+    ;; それ以外(未定義変数など)を展開しようとした場合は NaN のまま返す (安全装置)
+    f64.const nan
+  )
+
+  ;; $apply_hash: # 演算子の実体 (AArch64 SVC / システムコール仕様 & パススルー)
+  (func $apply_hash (param $left f64) (param $right f64) (result f64)
+    (local $tag i32)
+    (local $ptr i32)
+    (local $target_val f64)  ;; ★ 追加: cdrの値を受け取る変数
+
+    local.get $right
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    local.set $tag
+
+    ;; ==========================================
+    ;; ★ SVC (Supervisor Call) ルーティング
+    ;; ==========================================
+    local.get $left
+    f64.const 1.0
+    f64.eq
+    if
+      ;; 右辺が Normal String (0x7FFD) または Spread String (0x7FF5) なら一括ストリーム出力
+      local.get $tag
+      i32.const 0x7FFD0000
+      i32.eq
+      local.get $tag
+      i32.const 0x7FF50000
+      i32.eq
+      i32.or
+      if
+        local.get $right
+        i64.reinterpret_f64
+        i32.wrap_i64
+        local.set $ptr
+
+        local.get $ptr
+        local.get $ptr
+        call $strlen
+        call $print_string
+        local.get $right
+        return
+      end
+
+      ;; 右辺が List (0x7FFC) の場合、print_list を呼び出してシリアライズ
+      local.get $tag
+      i32.const 0x7FFC0000
+      i32.eq
+      if
+        local.get $right
+        i64.reinterpret_f64
+        i32.wrap_i64
+        call $print_list
+        local.get $right
+        return
+      end
+
+      ;; 右辺が Closure (0x7FFE) の場合、print_closure を呼び出してシリアライズ
+      local.get $tag
+      i32.const 0x7FFE0000
+      i32.eq
+      if
+        local.get $right
+        i64.reinterpret_f64
+        i32.wrap_i64
+        call $print_closure
+        local.get $right
+        return
+      end
+    end
+
+    ;; --- Spread List (0x7FF4) ---
+    local.get $tag
+    i32.const 0x7FF40000
+    i32.eq
+    if
+      local.get $right
+      i64.reinterpret_f64
+      i32.wrap_i64
+      local.set $ptr
+
+      (block $spread_loop_end
+        (loop $spread_loop
+          local.get $ptr
+          i32.eqz  ;; ポインタが0 (念のための安全装置)
+          br_if $spread_loop_end
+
+          ;; --- car (左側) の処理 ---
+          local.get $left
+          local.get $ptr
+          f64.load offset=0
+          call $apply_hash_single
+          drop
+
+          ;; --- cdr (右側) の処理 ---
+          local.get $ptr
+          f64.load offset=8
+          local.set $target_val
+
+          ;; cdrの型タグを確認
+          local.get $target_val
+          i64.reinterpret_f64
+          i64.const 32
+          i64.shr_u
+          i32.wrap_i64
+          local.set $tag
+
+          local.get $tag
+          i32.const 0x7FFC0000
+          i32.eq
+          if
+            ;; cdrがリストなら、ポインタを更新して次へ進む
+            local.get $target_val
+            i64.reinterpret_f64
+            i32.wrap_i64
+            local.set $ptr
+            br $spread_loop
+          else
+            ;; cdrがリスト以外 (数値やNaNなど) なら、それが最後の要素
+            local.get $left
+            local.get $target_val
+            call $apply_hash_single
+            drop
+            br $spread_loop_end
+          end
+        )
+      )
+      local.get $right  ;; 右辺をパススルー
+      return
+    end
+
+    ;; --- Spread String (0x7FF5) --- (stdout以外のポートへの展開用)
+    local.get $tag
+    i32.const 0x7FF50000
+    i32.eq
+    if
+      local.get $right
+      i64.reinterpret_f64
+      i32.wrap_i64
+      local.set $ptr
+
+      (block $spread_loop_end
+        (loop $spread_loop
+          local.get $ptr
+          i32.load8_u
+          i32.eqz  ;; 文字列終端 (\0) なら脱出
+          br_if $spread_loop_end
+
+          local.get $left
+          local.get $ptr
+          i32.load8_u
+          f64.convert_i32_u
+          call $apply_hash_single
+          drop
+
+          local.get $ptr
+          i32.const 1
+          i32.add
+          local.set $ptr
+          br $spread_loop
+        )
+      )
+      local.get $right  ;; 右辺をパススルー
+      return
+    end
+
+    ;; === 単発実行 ===
+    local.get $left
+    local.get $right
+    call $apply_hash_single
+    drop
+
+    local.get $right  ;; 最終的に右辺をパススルー
+  )
+
+  ;; $apply_hash_single: 1要素に対する実際のMMIO処理 (変更なし)
+  (func $apply_hash_single (param $left f64) (param $right f64) (result f64)
+    local.get $left
+    f64.const 1.0
+    f64.eq
+    if
+      local.get $right
+      call $print_float
+    else
+      local.get $left
+      i32.trunc_sat_f64_u
+      i32.const 3
+      i32.shl
+      local.get $right
+      f64.store
+    end
+    f64.const nan
+  )
+
+  ;; $apply_space: 空白演算子の実体 (SPREAD対応)
+  (func $apply_space (param $arg_val f64) (param $func_val f64) (result f64)
+    (local $tag i32)
+    (local $ptr i32)
+    (local $last_result f64)
+    (local $target_val f64)  ;; ★ 追加: cdrの値を受け取る変数
+
+    local.get $arg_val
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    local.set $tag
+
+    ;; --- Spread List (0x7FF4) ---
+    local.get $tag
+    i32.const 0x7FF40000
+    i32.eq
+    if
+      local.get $arg_val
+      i64.reinterpret_f64
+      i32.wrap_i64
+      local.set $ptr
+
+      f64.const nan
+      local.set $last_result
+
+      (block $spread_loop_end
+        (loop $spread_loop
+          local.get $ptr
+          i32.eqz  ;; ポインタゼロ判定
+          br_if $spread_loop_end
+
+          ;; --- carの適用 ---
+          local.get $ptr
+          f64.load offset=0
+          local.get $func_val
+          call $apply_closure
+          local.set $last_result
+
+          ;; --- cdrの処理 ---
+          local.get $ptr
+          f64.load offset=8
+          local.set $target_val
+
+          local.get $target_val
+          i64.reinterpret_f64
+          i64.const 32
+          i64.shr_u
+          i32.wrap_i64
+          local.set $tag
+
+          local.get $tag
+          i32.const 0x7FFC0000
+          i32.eq
+          if
+            ;; cdrがリストなら次へ進む
+            local.get $target_val
+            i64.reinterpret_f64
+            i32.wrap_i64
+            local.set $ptr
+            br $spread_loop
+          else
+            ;; cdrがスカラーなら最後の要素として関数適用して脱出
+            local.get $target_val
+            local.get $func_val
+            call $apply_closure
+            local.set $last_result
+            br $spread_loop_end
+          end
+        )
+      )
+      local.get $last_result
+      return
+    end
+
+    ;; --- Spread String (0x7FF5) --- (変更なし)
+    local.get $tag
+    i32.const 0x7FF50000
+    i32.eq
+    if
+      local.get $arg_val
+      i64.reinterpret_f64
+      i32.wrap_i64
+      local.set $ptr
+
+      f64.const nan
+      local.set $last_result
+
+      (block $spread_loop_end
+        (loop $spread_loop
+          local.get $ptr
+          i32.load8_u
+          i32.eqz
+          br_if $spread_loop_end
+
+          local.get $ptr
+          i32.load8_u
+          f64.convert_i32_u
+          local.get $func_val
+          call $apply_closure
+          local.set $last_result
+
+          local.get $ptr
+          i32.const 1
+          i32.add
+          local.set $ptr
+          br $spread_loop
+        )
+      )
+      local.get $last_result
+      return
+    end
+
+    ;; === 単発実行 ===
+    local.get $arg_val
+    local.get $func_val
+    call $apply_closure
+  )
+
+  (func $apply_space_reversed (param $func_val f64) (param $arg_val f64) (result f64)
+    local.get $arg_val
+    local.get $func_val
+    call $apply_space
+  )
+  
 ${closureCode}
   (func $main (export "main") (result f64)
     (local $tmp_bool f64)
