@@ -216,6 +216,11 @@ function expandMacros(node, env = {}) {
 		const expandedFunc = expandMacros(node.func, env);
 		const expandedArg = expandMacros(node.arg, env);
 
+		// ★追加: unit(括弧のグルーピング)の場合は、パイプライン判定をせずに中身をそのまま返す
+		if (expandedFunc && expandedFunc.type === 'unit') {
+			return expandedArg;
+		}
+
 		const isFuncL = isFunction(expandedFunc, env);
 		const isFuncR = isFunction(expandedArg, env);
 
@@ -323,36 +328,40 @@ let maxEnvDepth = -1;
 // WASMスタック命令の生成
 function compileNode(node, envMap = {}) {
 	if (!node) return `    f64.const nan\n`;
-	if (node.type === 'apply' && node.func && node.func.type === 'unit') {
+
+	if (node.type === 'unit') {
+		return `    f64.const nan\n`; // 万が一単体で来たとき用に追加
 	}
 
 	if (node.type === 'block') {
 		let defineNodes = node.body.filter(child => child.type === 'infix' && child.op === ':' && child.left && child.left.type === 'identifier');
 		let isEnvBlock = defineNodes.length > 0;
-		// If ALL statements are definitions, treat this block as returning its Environment (Dictionary literal)
 		let isDictReturn = node.body.length > 0 && node.body.every(child => child.type === 'infix' && child.op === ':' && child.left && child.left.type === 'identifier');
 
 		let myDepth = -1;
 		let envLocalName = '';
 		let newEnvMap = { ...envMap };
 		let code = '';
+		let localVarsSize = defineNodes.length * 8;
 
 		if (isEnvBlock) {
 			myDepth = currentEnvDepth++;
 			if (myDepth > maxEnvDepth) maxEnvDepth = myDepth;
 			envLocalName = `$env_blk_${myDepth}`;
 
-			code += `    i32.const ${defineNodes.length * 8}\n`;
-			code += `    call $alloc\n`;
-			code += `    local.set ${envLocalName}\n`;
+			// ★変更: ベースポインタを用いたプロローグ
+			code += `    ;; --- Prologue (Shadow Stack) ---\n`;
+			code += `    global.get $SP\n`;
+			code += `    local.set ${envLocalName}\n`;  // ブロック開始時のSPを保存(ベースポインタとして使用)
+			code += `    global.get $SP\n    i32.const ${localVarsSize}\n    i32.sub\n    global.set $SP\n`; // SPを下げる(スタック領域確保)
 
-			let offset = 0;
+			let offset = 8; // base - 8, base - 16 ... に配置
 			let layoutMeta = {};
 			for (let def of defineNodes) {
 				let name = '';
 				if (def.left && def.left.type === 'identifier') name = def.left.value.trim();
 				if (name) {
-					newEnvMap[name] = { type: 'local_env', localName: envLocalName, offset: offset };
+					newEnvMap[name] = { type: 'stack_env', localName: envLocalName, offset: offset };
 					layoutMeta[name] = offset;
 					offset += 8;
 				}
@@ -373,59 +382,62 @@ function compileNode(node, envMap = {}) {
 			if (child.type === 'infix' && child.op === ':' && child.left && child.left.type === 'identifier') {
 				let name = child.left.value.trim();
 
-				// ★ 追加: '_' への代入は値を破棄し、純粋な Unit(NaN) を返す (終対象への射)
 				if (name === '_') {
-					code += compileNode(child.right, newEnvMap); // 右辺(副作用など)を評価
-					code += `    drop\n`;                       // 評価結果をWASMスタックから捨てる
-					code += `    f64.const nan\n`;              // Unit を返す
+					code += compileNode(child.right, newEnvMap);
+					code += `    drop\n`;
+					code += `    f64.const nan\n`;
 				} else {
-					// 既存の変数バインディング処理
-					let targetOffset = (newEnvMap[name] && newEnvMap[name].localName === envLocalName) ? newEnvMap[name].offset : -1;
+					let targetOffset = (newEnvMap[name] && newEnvMap[name].type === 'stack_env') ? newEnvMap[name].offset : -1;
+					let targetBase = (newEnvMap[name] && newEnvMap[name].type === 'stack_env') ? newEnvMap[name].localName : '';
 
 					let rhsCode = compileNode(child.right, newEnvMap);
 					if (name && child.right && child.right._layout && newEnvMap[name]) {
 						newEnvMap[name].layout = child.right._layout;
-					} else if (name) {
 					}
 
 					code += rhsCode;
 
 					if (targetOffset >= 0) {
+						// ★変更: ベースポインタから相対ストア
 						code += `    local.set $tmp_R\n`;
-						code += `    local.get ${envLocalName}\n`;
+						code += `    local.get ${targetBase}\n`;
+						code += `    i32.const ${targetOffset}\n`;
+						code += `    i32.sub\n`;
 						code += `    local.get $tmp_R\n`;
-						code += `    f64.store offset=${targetOffset}\n`;
+						code += `    f64.store\n`;
 						code += `    f64.const nan\n`;
 					}
 				}
 			} else {
 				code += compileNode(child, newEnvMap);
-				// 子ノードがレイアウトを持つ（つまり辞書を返す式である）場合、ブロック全体の返り値のレイアウトとして採用する
 				if (child._layout && !node._layout) {
 					node._layout = child._layout;
 				}
 			}
 
 			if (i < node.body.length - 1) {
-				code += `    local.tee $tmp_bool\n`; // Leave f64 on stack for br_if
-				code += `    local.get $tmp_bool\n`; // Push f64 for is_truthy arguments
-				code += `    call $is_truthy\n`; // Pops one f64, returns i32
+				code += `    local.tee $tmp_bool\n`;
+				code += `    local.get $tmp_bool\n`;
+				code += `    call $is_truthy\n`;
 				code += `    br_if ${blkName}\n`;
-				code += `    drop\n`; // discard Falsy value before compiling next node
+				code += `    drop\n`;
 			}
 		}
 
 		code += `    )\n`; // end of (block $blk_exit...)
 
 		if (isEnvBlock) {
+			code += `    local.set $target_val\n`;
+
+			// ★変更: ベースポインタを用いたエピローグ
+			code += `    ;; --- Epilogue ---\n`;
+			code += `    local.get ${envLocalName}\n    global.set $SP\n`; // SPをブロック開始時のベースポインタに戻す(解放)
+
+			code += `    local.get $target_val\n`; // 評価結果を戻す
+
 			if (isDictReturn) {
-				// Return Dictionary / Environment Pointer tagged as 0x7FFB
 				code += `    drop\n`;
-				code += `    i64.const 0x7FFB000000000000\n`;
-				code += `    local.get ${envLocalName}\n`;
-				code += `    i64.extend_i32_u\n`;
-				code += `    i64.or\n`;
-				code += `    f64.reinterpret_i64\n`;
+				code += `    f64.const nan\n`; // 一時的に辞書返しはNaN
 			}
 			currentEnvDepth--;
 		}
@@ -482,6 +494,9 @@ function compileNode(node, envMap = {}) {
 				return `    local.get $env\n    i32.trunc_sat_f64_u\n    f64.load offset=${loc.offset}\n`;
 			} else if (loc.type === 'local_env') {
 				return `    local.get ${loc.localName}\n    f64.load offset=${loc.offset}\n`;
+			} else if (loc.type === 'stack_env') {
+				// ★変更: その変数が属するブロックのベースポインタ ($env_blk_X) から相対ロード
+				return `    local.get ${loc.localName}\n    i32.const ${loc.offset}\n    i32.sub\n    f64.load\n`;
 			}
 		}
 		return `    ;; IGNORED: identifier (${name})\n    f64.const nan\n`;
@@ -597,6 +612,9 @@ function compileNode(node, envMap = {}) {
 							code += `    local.get $env\n    i32.trunc_sat_f64_u\n    f64.load offset=${envMap[v].offset}\n`;
 						} else if (envMap[v].type === 'local_env') {
 							code += `    local.get ${envMap[v].localName}\n    f64.load offset=${envMap[v].offset}\n`;
+						} else if (envMap[v].type === 'stack_env') {
+							// ★ここがクロージャ生成時のヒープ退避処理
+							code += `    local.get ${envMap[v].localName}\n    i32.const ${envMap[v].offset}\n    i32.sub\n    f64.load\n`;
 						} else {
 							code += `    f64.const nan\n`;
 						}
@@ -942,6 +960,27 @@ function compileNode(node, envMap = {}) {
 			return compileNode(lambdaAst, envMap);
 		}
 
+		// アドレス取得演算子 $ の特別処理 (node.right ではなく node.expr を使用)
+		if (node.op === '$' && node.expr && node.expr.type === 'identifier') {
+			let name = node.expr.value.trim();
+			if (envMap[name]) {
+				let loc = envMap[name];
+				if (loc.type === 'stack_env') {
+					// 変数のポインタ (ベースポインタ - オフセット) を計算し、f64(数値)として返す
+					let code = `    ;; --- Address of ${name} ---\n`;
+					code += `    local.get ${loc.localName}\n`;
+					code += `    i32.const ${loc.offset}\n`;
+					code += `    i32.sub\n`;
+					code += `    f64.convert_i32_u\n`; // WASMスタックにはf64として積む
+					return code;
+				} else {
+					// スタック変数以外（未実装・またはグローバル）の場合はとりあえずNaN
+					return `    f64.const nan\n`;
+				}
+			}
+			return `    f64.const nan\n`;
+		}
+
 		if (node.op === '$') {
 			let code = compileNode(node.expr, envMap);
 			// 評価された値(タグ付きポインタ)から、下位32ビット(アドレスインデックス)のみを抽出し、
@@ -1214,6 +1253,11 @@ export function compileToWat(ast) {
   (import "env" "math_pow" (func $math_pow (param f64 f64) (result f64)))
 
   (memory (export "memory") 1)
+  
+  ;; ★追加: AArch64風 シャドウスタックポインタ (初期値 64KB = 65536)
+  (global $SP (mut i32) (i32.const 65536))
+  (global $FP (mut i32) (i32.const 65536))
+
 ${elemSection}
   (global $heap_alloc_ptr (mut i32) (i32.const ${stringAllocOffset}))
 ${dataSection}
