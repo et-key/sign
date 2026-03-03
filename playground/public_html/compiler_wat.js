@@ -264,10 +264,8 @@ function expandMacros(node, env = {}) {
 				return { type: 'prefix', op: expandedFunc.value.trim(), expr: expandedArg, _expanded: true };
 			}
 
-			if (expandedFunc.type === 'block') {
-				return { type: 'block', body: [...expandedFunc.body, expandedArg], _expanded: true };
-			}
-			return { type: 'block', body: [expandedFunc, expandedArg], _expanded: true };
+			// ★ blockへの強制変換処理を削除し、下部のデフォルト処理にフォールバックさせる。
+			// これにより「値と値の適用」が apply ノードのまま保たれ、WASMの $apply_space に委譲されます。
 		}
 
 		// 3. 引数のスプレッド展開 (Func -> Block(タプル))
@@ -944,6 +942,16 @@ function compileNode(node, envMap = {}) {
 			return compileNode(lambdaAst, envMap);
 		}
 
+		if (node.op === '$') {
+			let code = compileNode(node.expr, envMap);
+			// 評価された値(タグ付きポインタ)から、下位32ビット(アドレスインデックス)のみを抽出し、
+			// 再び通常の数値(f64)としてスタックに戻す
+			code += `    i64.reinterpret_f64\n`;
+			code += `    i32.wrap_i64\n`;
+			code += `    f64.convert_i32_u\n`;
+			return code;
+		}
+
 		if (node.op === '@') {
 			let code = compileNode(node.expr, envMap);
 			code += `    local.set $tmp_L\n`;
@@ -1329,9 +1337,149 @@ ${dataSection}
     call $apply_closure
   )
 
-  (func $spread_concat (param $left f64) (param $right f64) (result f64)
-    ;; Dictionary / List / String concatenation fallback helper (Unimplemented logic placeholder)
-    f64.const nan
+(func $spread_concat (param $left f64) (param $right f64) (result f64)
+    (local $src_ptr i32)
+    (local $head_ptr i32)
+    (local $tail_ptr i32)
+    (local $new_node i32)
+    (local $last_node i32)
+    (local $tag i32)
+    (local $cdr_val f64)
+    (local $cdr_tag i32)
+
+    ;; Check if left is List (0x7FFC) or Spread List (0x7FF4)
+    local.get $left
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    local.set $tag
+
+    local.get $tag
+    i32.const 0x7FFC0000
+    i32.eq
+    local.get $tag
+    i32.const 0x7FF40000
+    i32.eq
+    i32.or
+    if
+      local.get $left
+      i64.reinterpret_f64
+      i32.wrap_i64
+      local.set $src_ptr
+
+      i32.const 0
+      local.set $head_ptr
+      i32.const 0
+      local.set $tail_ptr
+
+      ;; Deep copy loop for left side
+      (block $copy_end
+        (loop $copy_loop
+          local.get $src_ptr
+          i32.eqz
+          br_if $copy_end
+
+          i32.const 16
+          call $alloc
+          local.set $new_node
+
+          local.get $new_node
+          local.get $src_ptr
+          f64.load offset=0
+          f64.store offset=0
+
+          local.get $tail_ptr
+          i32.eqz
+          if
+            local.get $new_node
+            local.set $head_ptr
+          else
+            local.get $tail_ptr
+            i64.const 0x7FFC000000000000
+            local.get $new_node
+            i64.extend_i32_u
+            i64.or
+            f64.reinterpret_i64
+            f64.store offset=8
+          end
+
+          local.get $new_node
+          local.set $tail_ptr
+
+          local.get $src_ptr
+          f64.load offset=8
+          local.set $cdr_val
+
+          local.get $cdr_val
+          i64.reinterpret_f64
+          i64.const 32
+          i64.shr_u
+          i32.wrap_i64
+          local.set $cdr_tag
+
+          local.get $cdr_tag
+          i32.const 0x7FFC0000
+          i32.eq
+          local.get $cdr_tag
+          i32.const 0x7FF40000
+          i32.eq
+          i32.or
+          if
+            local.get $cdr_val
+            i64.reinterpret_f64
+            i32.wrap_i64
+            local.set $src_ptr
+            br $copy_loop
+          else
+            ;; End of dot-pair, add one more node
+            i32.const 16
+            call $alloc
+            local.set $last_node
+
+            local.get $last_node
+            local.get $cdr_val
+            f64.store offset=0
+
+            local.get $tail_ptr
+            i64.const 0x7FFC000000000000
+            local.get $last_node
+            i64.extend_i32_u
+            i64.or
+            f64.reinterpret_i64
+            f64.store offset=8
+
+            local.get $last_node
+            local.set $tail_ptr
+            br $copy_end
+          end
+        )
+      )
+
+      ;; Attach right side
+      local.get $tail_ptr
+      i32.eqz
+      if
+        local.get $right
+        return
+      else
+        local.get $tail_ptr
+        local.get $right
+        f64.store offset=8
+
+        i64.const 0x7FFC000000000000
+        local.get $head_ptr
+        i64.extend_i32_u
+        i64.or
+        f64.reinterpret_i64
+        return
+      end
+    end
+
+    ;; Fallback
+    local.get $left
+    local.get $right
+    call $cons
   )
 
 ;; ==========================================
@@ -1551,14 +1699,50 @@ ${dataSection}
     local.get $right  ;; 最終的に右辺をパススルー
   )
 
-  ;; $apply_hash_single: 1要素に対する実際のMMIO処理 (変更なし)
+  ;; $apply_hash_single: 1要素に対する実際のMMIO処理 (ポリモーフィズム対応版)
   (func $apply_hash_single (param $left f64) (param $right f64) (result f64)
+    (local $tag i32)
     local.get $left
     f64.const 1.0
     f64.eq
     if
+      ;; 右辺の型タグを取得
       local.get $right
-      call $print_float
+      i64.reinterpret_f64
+      i64.const 32
+      i64.shr_u
+      i32.wrap_i64
+      local.set $tag
+
+      ;; List (0x7FFC) または Spread List (0x7FF4) か？
+      local.get $tag
+      i32.const 0x7FFC0000
+      i32.eq
+      local.get $tag
+      i32.const 0x7FF40000
+      i32.eq
+      i32.or
+      if
+        local.get $right
+        i64.reinterpret_f64
+        i32.wrap_i64
+        call $print_list
+      else
+        ;; Closure (0x7FFE) か？
+        local.get $tag
+        i32.const 0x7FFE0000
+        i32.eq
+        if
+          local.get $right
+          i64.reinterpret_f64
+          i32.wrap_i64
+          call $print_closure
+        else
+          ;; それ以外（数値等）
+          local.get $right
+          call $print_float
+        end
+      end
     else
       local.get $left
       i32.trunc_sat_f64_u
@@ -1570,14 +1754,44 @@ ${dataSection}
     f64.const nan
   )
 
-  ;; $apply_space: 空白演算子の実体 (SPREAD対応)
-  (func $apply_space (param $arg_val f64) (param $func_val f64) (result f64)
+(func $apply_space (param $right f64) (param $left f64) (result f64)
     (local $tag i32)
+    (local $left_tag i32)
     (local $ptr i32)
     (local $last_result f64)
-    (local $target_val f64)  ;; ★ 追加: cdrの値を受け取る変数
+    (local $target_val f64)
 
-    local.get $arg_val
+    ;; Dispatch coproduct if left is a list
+    local.get $left
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    local.set $left_tag
+
+    ;; If left is not closure (0x7FFE)
+    local.get $left_tag
+    i32.const 0x7FFE0000
+    i32.ne
+    if
+      ;; If left is List or Spread List, do concat
+      local.get $left_tag
+      i32.const 0x7FFC0000
+      i32.eq
+      local.get $left_tag
+      i32.const 0x7FF40000
+      i32.eq
+      i32.or
+      if
+        local.get $left
+        local.get $right
+        call $spread_concat
+        return
+      end
+    end
+
+    ;; Function application
+    local.get $right
     i64.reinterpret_f64
     i64.const 32
     i64.shr_u
@@ -1589,7 +1803,7 @@ ${dataSection}
     i32.const 0x7FF40000
     i32.eq
     if
-      local.get $arg_val
+      local.get $right
       i64.reinterpret_f64
       i32.wrap_i64
       local.set $ptr
@@ -1600,17 +1814,15 @@ ${dataSection}
       (block $spread_loop_end
         (loop $spread_loop
           local.get $ptr
-          i32.eqz  ;; ポインタゼロ判定
+          i32.eqz
           br_if $spread_loop_end
 
-          ;; --- carの適用 ---
           local.get $ptr
           f64.load offset=0
-          local.get $func_val
+          local.get $left
           call $apply_closure
           local.set $last_result
 
-          ;; --- cdrの処理 ---
           local.get $ptr
           f64.load offset=8
           local.set $target_val
@@ -1625,17 +1837,19 @@ ${dataSection}
           local.get $tag
           i32.const 0x7FFC0000
           i32.eq
+          local.get $tag
+          i32.const 0x7FF40000
+          i32.eq
+          i32.or
           if
-            ;; cdrがリストなら次へ進む
             local.get $target_val
             i64.reinterpret_f64
             i32.wrap_i64
             local.set $ptr
             br $spread_loop
           else
-            ;; cdrがスカラーなら最後の要素として関数適用して脱出
             local.get $target_val
-            local.get $func_val
+            local.get $left
             call $apply_closure
             local.set $last_result
             br $spread_loop_end
@@ -1646,12 +1860,12 @@ ${dataSection}
       return
     end
 
-    ;; --- Spread String (0x7FF5) --- (変更なし)
+    ;; --- Spread String (0x7FF5) ---
     local.get $tag
     i32.const 0x7FF50000
     i32.eq
     if
-      local.get $arg_val
+      local.get $right
       i64.reinterpret_f64
       i32.wrap_i64
       local.set $ptr
@@ -1659,17 +1873,17 @@ ${dataSection}
       f64.const nan
       local.set $last_result
 
-      (block $spread_loop_end
-        (loop $spread_loop
+      (block $spread_loop_end_str
+        (loop $spread_loop_str
           local.get $ptr
           i32.load8_u
           i32.eqz
-          br_if $spread_loop_end
+          br_if $spread_loop_end_str
 
           local.get $ptr
           i32.load8_u
           f64.convert_i32_u
-          local.get $func_val
+          local.get $left
           call $apply_closure
           local.set $last_result
 
@@ -1677,22 +1891,22 @@ ${dataSection}
           i32.const 1
           i32.add
           local.set $ptr
-          br $spread_loop
+          br $spread_loop_str
         )
       )
       local.get $last_result
       return
     end
 
-    ;; === 単発実行 ===
-    local.get $arg_val
-    local.get $func_val
+    ;; === Single execution ===
+    local.get $right
+    local.get $left
     call $apply_closure
   )
 
-  (func $apply_space_reversed (param $func_val f64) (param $arg_val f64) (result f64)
-    local.get $arg_val
-    local.get $func_val
+  (func $apply_space_reversed (param $left f64) (param $right f64) (result f64)
+    local.get $right
+    local.get $left
     call $apply_space
   )
   
