@@ -182,7 +182,7 @@
 								if (p === 0) return "()";
 								const car_val = memView.getFloat64(p, true);
 								const cdr_val = memView.getFloat64(p + 8, true);
-								return `(${readRaw(car_val)} . ${readRaw(cdr_val)})`;
+								return `(${readRaw(car_val)} , ${readRaw(cdr_val)})`;
 							}
 
 							// --- 2. 綺麗に整形した配列表示用のパース ---

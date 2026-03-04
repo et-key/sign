@@ -77,10 +77,10 @@
 [Print] 150
 [Print] 23
 [Print] ===== Ph5: List Operations =====
-[Print] [1, 2, 3, 4]  // Raw: (1 . (2 . (3 . (4 . ()))))
+[Print] [1, 2, 3, 4]  // Raw: (1 , (2 , (3 , (4 , ()))))
 [Print] --- 2D Array Spread ---
-[Print] [10, 20]  // Raw: (10 . (20 . ()))
-[Print] [30, 40]  // Raw: (30 . (40 . ()))
+[Print] [10, 20]  // Raw: (10 , (20 , ()))
+[Print] [30, 40]  // Raw: (30 , (40 , ()))
 [Print] ===== Ph6: Advanced Memory (Escape) =====
 [Print] 160
 [Print] ===== end =====
