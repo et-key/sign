@@ -728,12 +728,16 @@ const parseBlock = (tokens) => {
 		}
 	}
 
-	if (exprs.length === 0) return { type: 'unit' };
-	if (exprs.length === 1) return exprs[0];
+	// ----------------------------------------------------
+	// ↓ ここから下を新しく書き換えます
+	// ----------------------------------------------------
+	let result;
+	if (exprs.length === 0) result = { type: 'unit' };
+	else if (exprs.length === 1) result = exprs[0];
+	else result = { type: 'block', body: exprs };
 
-	return { type: 'block', body: exprs };
+	return result;
 };
-
 
 // --- Main ---
 // ↓ 既存の process.argv や fs.readFileSync の部分を丸ごと以下の関数に置き換えます

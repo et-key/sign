@@ -349,21 +349,26 @@ function compileNode(node, envMap = {}) {
 			if (myDepth > maxEnvDepth) maxEnvDepth = myDepth;
 			envLocalName = `$env_blk_${myDepth}`;
 
-			// ★変更: ベースポインタを用いたプロローグ
+			// --- Prologue (Shadow Stack) ---
 			code += `    ;; --- Prologue (Shadow Stack) ---\n`;
 			code += `    global.get $SP\n`;
 			code += `    local.set ${envLocalName}\n`;  // ブロック開始時のSPを保存(ベースポインタとして使用)
 			code += `    global.get $SP\n    i32.const ${localVarsSize}\n    i32.sub\n    global.set $SP\n`; // SPを下げる(スタック領域確保)
 
-			let offset = 8; // base - 8, base - 16 ... に配置
+			// ==========================================
+			// ★ 変更1: スタック用オフセットとヒープ用オフセットを分ける
+			// ==========================================
+			let stackOffset = 8; // base - 8, base - 16 ... に配置
+			let heapOffset = 0;  // 辞書のプロパティとしてのオフセットは0から
 			let layoutMeta = {};
 			for (let def of defineNodes) {
 				let name = '';
 				if (def.left && def.left.type === 'identifier') name = def.left.value.trim();
 				if (name) {
-					newEnvMap[name] = { type: 'stack_env', localName: envLocalName, offset: offset };
-					layoutMeta[name] = offset;
-					offset += 8;
+					newEnvMap[name] = { type: 'stack_env', localName: envLocalName, offset: stackOffset };
+					layoutMeta[name] = heapOffset;
+					stackOffset += 8;
+					heapOffset += 8;
 				}
 			}
 			node._layout = layoutMeta;
@@ -436,8 +441,36 @@ function compileNode(node, envMap = {}) {
 			code += `    local.get $target_val\n`; // 評価結果を戻す
 
 			if (isDictReturn) {
-				code += `    drop\n`;
-				code += `    f64.const nan\n`; // 一時的に辞書返しはNaN
+				// ==========================================
+				// ★ 変更2: 辞書の実体をヒープに退避してポインタを返す
+				// ==========================================
+				code += `    drop\n`; // 最後の代入の戻り値(NaN)を捨てる
+
+				let dictSize = defineNodes.length * 8;
+				code += `    i32.const ${dictSize}\n`;
+				code += `    call $alloc\n`;
+				code += `    local.set $tmp_ptr\n`;
+
+				for (let def of defineNodes) {
+					let name = def.left.value.trim();
+					let sOff = newEnvMap[name].offset;
+					let hOff = node._layout[name];
+
+					// スタックから値を読み出してヒープにストア
+					code += `    local.get $tmp_ptr\n`;
+					code += `    local.get ${envLocalName}\n`;
+					code += `    i32.const ${sOff}\n`;
+					code += `    i32.sub\n`;
+					code += `    f64.load\n`;
+					code += `    f64.store offset=${hOff}\n`;
+				}
+
+				// 辞書ポインタをNaN-boxing (Dict Tag: 0x7FFB) して返す
+				code += `    i64.const 0x7FFB000000000000\n`;
+				code += `    local.get $tmp_ptr\n`;
+				code += `    i64.extend_i32_u\n`;
+				code += `    i64.or\n`;
+				code += `    f64.reinterpret_i64\n`;
 			}
 			currentEnvDepth--;
 		}
@@ -1476,6 +1509,17 @@ ${dataSection}
             local.set $src_ptr
             br $copy_loop
           else
+            ;; -------------------------------------------
+            ;; ★ 修正版: NaN(Unit) なら最後のノード追加をスキップして終了
+            local.get $cdr_val
+            i64.reinterpret_f64
+            i64.const 0x7FF8000000000000
+            i64.eq
+            if
+              br $copy_end
+            end
+            ;; -------------------------------------------
+
             ;; End of dot-pair, add one more node
             i32.const 16
             call $alloc
@@ -1666,6 +1710,17 @@ ${dataSection}
           local.get $ptr
           f64.load offset=8
           local.set $target_val
+
+          ;; -------------------------------------------
+          ;; ★ 修正版: cdrが Unit(0x7FF8000000000000) なら展開ループを終了
+          local.get $target_val
+          i64.reinterpret_f64
+          i64.const 0x7FF8000000000000
+          i64.eq
+          if
+            br $spread_loop_end
+          end
+          ;; -------------------------------------------
 
           ;; cdrの型タグを確認
           local.get $target_val
@@ -1870,6 +1925,17 @@ ${dataSection}
           local.get $ptr
           f64.load offset=8
           local.set $target_val
+
+          ;; -------------------------------------------
+          ;; ★ 修正版: cdrが Unit(0x7FF8000000000000) なら展開ループを終了
+          local.get $target_val
+          i64.reinterpret_f64
+          i64.const 0x7FF8000000000000
+          i64.eq
+          if
+            br $spread_loop_end
+          end
+          ;; -------------------------------------------
 
           local.get $target_val
           i64.reinterpret_f64

@@ -159,12 +159,79 @@
 						math_pow: Math.pow,
 
 						// ==========================================
-						// ★ 今回追加するシステムコールの受け口（スタブ）
+						// ★ システムコールの受け口（デュアル表示版）
 						// ==========================================
 						print_list: (ptr) => {
-							// WASMからリストの先頭ポインタだけが渡されてくる
-							// （※後で wasmMemory を辿って中身を読み解く処理を作ります）
-							outputEl.textContent += `[Print] <List Structure (Ptr: ${ptr})>\n`;
+							if (!wasmMemory) return;
+							const memView = new DataView(wasmMemory.buffer);
+
+							// --- 1. Raw表示 (Lispドットペア) 用のパース ---
+							function readRaw(f64_val) {
+								const buf = new ArrayBuffer(8);
+								new Float64Array(buf)[0] = f64_val;
+								const view = new DataView(buf);
+								const tag = view.getUint32(4, true) & 0xFFFF0000;
+								const low = view.getUint32(0, true);
+
+								if (tag === 0x7FFC0000 || tag === 0x7FF40000) return traverseRaw(low);
+								if (tag === 0x7FF80000) return "()";
+								if (tag === 0x7FFE0000) return "<Closure>";
+								return f64_val.toString();
+							}
+							function traverseRaw(p) {
+								if (p === 0) return "()";
+								const car_val = memView.getFloat64(p, true);
+								const cdr_val = memView.getFloat64(p + 8, true);
+								return `(${readRaw(car_val)} . ${readRaw(cdr_val)})`;
+							}
+
+							// --- 2. 綺麗に整形した配列表示用のパース ---
+							function readPretty(f64_val) {
+								const buf = new ArrayBuffer(8);
+								new Float64Array(buf)[0] = f64_val;
+								const view = new DataView(buf);
+								const tag = view.getUint32(4, true) & 0xFFFF0000;
+								const low = view.getUint32(0, true);
+
+								if (tag === 0x7FFC0000 || tag === 0x7FF40000) return formatPretty(low);
+								if (tag === 0x7FF80000) return "()";
+								if (tag === 0x7FFE0000) return "<Closure>";
+								return f64_val.toString();
+							}
+							function formatPretty(p) {
+								if (p === 0) return "[]";
+								let res = "[";
+								let current = p;
+								while (current !== 0) {
+									const car_val = memView.getFloat64(current, true);
+									const cdr_val = memView.getFloat64(current + 8, true);
+
+									res += readPretty(car_val);
+
+									const cdr_buf = new ArrayBuffer(8);
+									new Float64Array(cdr_buf)[0] = cdr_val;
+									const cdr_view = new DataView(cdr_buf);
+									const cdr_tag = cdr_view.getUint32(4, true) & 0xFFFF0000;
+
+									if (cdr_tag === 0x7FF80000) {
+										break; // Unitなら正常な終端
+									} else if (cdr_tag === 0x7FFC0000 || cdr_tag === 0x7FF40000) {
+										res += ", "; // 次の要素へ
+										current = cdr_view.getUint32(0, true);
+									} else {
+										res += " | " + readPretty(cdr_val); // Lispの不正なドットペア
+										break;
+									}
+								}
+								res += "]";
+								return res;
+							}
+
+							const rawStr = traverseRaw(ptr);
+							const prettyStr = formatPretty(ptr);
+
+							// ★ 両方を出力する
+							outputEl.textContent += `[Print] ${prettyStr}  // Raw: ${rawStr}\n`;
 						},
 						print_closure: (ptr) => {
 							// WASMから関数の構造体ポインタだけが渡されてくる
