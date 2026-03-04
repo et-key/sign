@@ -101,7 +101,7 @@
 [Print] [1.5, 2.5, 3.5]  // Raw: (1.5 , (2.5 , (3.5 , ())))
 [Print] --- Lift Operator  ---
 [Print] [42]  // Raw: (42 , ())
-[Print] [[10, 20]]  // Raw: ((10 , 20) , ())
+[Print] [10, 20]  // Raw: (10 , 20)
 [Print] ===== end =====
 
 [Main Result] NaN

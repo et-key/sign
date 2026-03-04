@@ -420,20 +420,6 @@ function optimizeAst(node) {
 	if (node.type === 'prefix') {
 		const expr = optimizeAst(node.expr);
 
-		// ==========================================
-		// ★ Phase 9: 持ち上げ演算子 (前置 ~ / Lift)
-		// 後置 `~` (フラット化) の双対。
-		// 値 x を単一要素のリスト [x] に持ち上げるため、`x , ()` というASTに展開する。
-		// ==========================================
-		if (node.op === '~') {
-			return optimizeAst({
-				type: 'infix',
-				op: ',',
-				left: expr,
-				right: { type: 'unit' } // Unit (NaN) と結合してリスト化
-			});
-		}
-
 		// --- 前置演算子の定数畳み込み ---
 		if (expr && expr.type === 'number') {
 			// Signの仕様: どんな数値(0.0含む)もTruthyなので、! (論理NOT) は必ず Falsy (NaN) になる
@@ -1310,6 +1296,16 @@ function compileNode(node, envMap = {}) {
 			code += `    f64.convert_i32_s\n`;
 			return code;
 		}
+
+		// ==========================================
+		// ★ Phase 9: 持ち上げ演算子 (前置 ~ / Lift) のランタイム実行
+		// ==========================================
+		if (node.op === '~') {
+			let code = compileNode(node.expr, envMap);
+			code += `    call $lift\n`;
+			return code;
+		}
+
 		let code = compileNode(node.expr, envMap);
 
 		// ==========================================
@@ -1959,6 +1955,51 @@ ${dataSection}
 
     ;; それ以外(未定義変数など)を展開しようとした場合は NaN のまま返す (安全装置)
     f64.const nan
+  )
+
+;; ==========================================
+  ;; ★ 追加: $lift (前置 ~ 演算子)。Spreadタグを解除するか、純粋な値をリストに包む
+  ;; ==========================================
+  (func $lift (param $val f64) (result f64)
+    (local $tag i32)
+    local.get $val
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    local.set $tag
+
+    ;; Spread List (0x7FF4) -> Normal List (0x7FFC)
+    local.get $tag
+    i32.const 0x7FF40000
+    i32.eq
+    if
+      local.get $val
+      i64.reinterpret_f64
+      i64.const 0x0008000000000000  ;; タグビットを反転
+      i64.xor
+      f64.reinterpret_i64
+      return
+    end
+
+    ;; Spread String (0x7FF5) -> Normal String (0x7FFD)
+    local.get $tag
+    i32.const 0x7FF50000
+    i32.eq
+    if
+      local.get $val
+      i64.reinterpret_f64
+      i64.const 0x0008000000000000  ;; タグビットを反転
+      i64.xor
+      f64.reinterpret_i64
+      return
+    end
+
+    ;; その他: 値を単一要素のリストに包む cons(val, Unit)
+    local.get $val
+    i64.const 0x7FF8000000000000
+    f64.reinterpret_i64
+    call $cons
   )
 
   ;; $apply_hash: # 演算子の実体 (AArch64 SVC / システムコール仕様 & パススルー)
