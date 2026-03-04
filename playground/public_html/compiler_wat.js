@@ -419,6 +419,21 @@ function optimizeAst(node) {
 
 	if (node.type === 'prefix') {
 		const expr = optimizeAst(node.expr);
+
+		// ==========================================
+		// ★ Phase 9: 持ち上げ演算子 (前置 ~ / Lift)
+		// 後置 `~` (フラット化) の双対。
+		// 値 x を単一要素のリスト [x] に持ち上げるため、`x , ()` というASTに展開する。
+		// ==========================================
+		if (node.op === '~') {
+			return optimizeAst({
+				type: 'infix',
+				op: ',',
+				left: expr,
+				right: { type: 'unit' } // Unit (NaN) と結合してリスト化
+			});
+		}
+
 		// --- 前置演算子の定数畳み込み ---
 		if (expr && expr.type === 'number') {
 			// Signの仕様: どんな数値(0.0含む)もTruthyなので、! (論理NOT) は必ず Falsy (NaN) になる
@@ -471,6 +486,20 @@ function optimizeAst(node) {
 	if (node.type === 'apply') {
 		let optFunc = optimizeAst(node.func);
 		let optArg = optimizeAst(node.arg);
+
+		// ==========================================
+		// ★ 追加: Range演算子 (1 ~ 5) のパース救済
+		// パーサが `A ~ B` を `(A ~) B` (後置演算子 + 関数適用) 
+		// としてパースしてしまうため、ここで中置演算子(infix)の `~` に変換する！
+		// ==========================================
+		if (optFunc && optFunc.type === 'postfix' && optFunc.op === '~') {
+			return optimizeAst({
+				type: 'infix',
+				op: '~',
+				left: optFunc.expr,
+				right: optArg
+			});
+		}
 
 		// --- β簡約 (Beta Reduction / インライン展開) ---
 		if (optFunc && optFunc.type === 'infix' && optFunc.op === '?') {
@@ -947,6 +976,16 @@ function compileNode(node, envMap = {}) {
 				code += `    end\n`;
 				return code;
 			}
+		}
+
+		// ==========================================
+		// ★ ここに追加！ Phase 9: 動的リスト構築 (Range演算子)
+		// ==========================================
+		if (op === '~') {
+			let code = compileNode(node.left, envMap);
+			code += compileNode(node.right, envMap);
+			code += `    call $make_range\n`;
+			return code;
 		}
 
 		if (op === "@") {
@@ -1593,6 +1632,83 @@ ${dataSection}
     i64.extend_i32_u
     i64.or
     f64.reinterpret_i64
+  )
+
+  (func $make_range (param $start f64) (param $end f64) (result f64)
+    (local $curr f64)
+    (local $step f64)
+    (local $count f64)
+    (local $list f64)
+
+    ;; 1. 初期リストを Unit(NaN) に設定
+    i64.const 0x7FF8000000000000
+    f64.reinterpret_i64
+    local.set $list
+
+    ;; 2. 生成する要素数を計算: count = floor(abs(start - end)) + 1.0
+    local.get $start
+    local.get $end
+    f64.sub
+    f64.abs
+    f64.floor
+    f64.const 1.0
+    f64.add
+    local.set $count
+
+    ;; 3. 進行方向(step)の決定 (後ろから前に向かうための逆向きステップ)
+    local.get $start
+    local.get $end
+    f64.le
+    if
+      f64.const -1.0  ;; start <= end なら、後ろから前へはマイナス方向
+      local.set $step
+    else
+      f64.const 1.0   ;; start > end なら、後ろから前へはプラス方向
+      local.set $step
+    end
+
+    ;; 4. ループ開始地点(curr)の計算: curr = start - (count - 1.0) * step
+    ;; （浮動小数点の誤差蓄積を防ぐため、正確な終点から逆算する）
+    local.get $start
+    local.get $count
+    f64.const 1.0
+    f64.sub
+    local.get $step
+    f64.mul
+    f64.sub
+    local.set $curr
+
+    ;; 5. 逆順リスト構築ループ
+    (block $break
+      (loop $loop
+        ;; list = cons(curr, list)
+        local.get $curr
+        local.get $list
+        call $cons
+        local.set $list
+
+        ;; count -= 1.0
+        local.get $count
+        f64.const 1.0
+        f64.sub
+        local.tee $count
+
+        ;; if (count <= 0) break
+        f64.const 0.0
+        f64.le
+        br_if $break
+
+        ;; curr += step
+        local.get $curr
+        local.get $step
+        f64.add
+        local.set $curr
+
+        br $loop
+      )
+    )
+    ;; 完成したリストの先頭ポインタを返す
+    local.get $list
   )
 
   (func $is_truthy (param $val f64) (result i32)
