@@ -33,6 +33,7 @@
 [Print] <Closure (Ptr: 0000))>
 [Print] ===== Ph2: Strings & Short-circuit =====
 [Print] Hello! WASM Strings!
+[Print] [100, 200]  // Raw: (100 , 200)
 [Print] 100
 [Print] 200
 [Print] 100
@@ -83,6 +84,8 @@
 [Print] [30, 40]  // Raw: (30 , (40 , ()))
 [Print] ===== Ph6: Advanced Memory (Escape) =====
 [Print] 160
+[Print] Address of val is:
+[Print] 00000
 [Print] ===== end =====
 
 [Main Result] NaN

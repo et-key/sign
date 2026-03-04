@@ -46,11 +46,12 @@ _ : 1 # `Hello! WASM Strings!`
 
 ` テスト2: リスト作成と結合 (cons と ,)
 list_test : 100, 200
+_ : 1 # list_test
 _ : 1 # list_test~
 
 ` テスト3: リスト要素の抽出 (head, tail)
-ph2_ext : (list_test ' 0), (list_test ' 1)
-_ : 1 # ph2_ext~
+_ : 1 # list_test ' 0
+_ : 1 # list_test ' 1
 
 ` テスト4: ブロックの短絡評価 ([...])
 _ : 1 # [
@@ -232,6 +233,15 @@ f : x ? (
 )
 my_func : f 50
 _ : 1 # my_func 10
+
+
+` 2. Address Operator ($)
+test_addr : (
+	val : 42
+	$val
+)
+_ : 1 # `Address of val is:`
+_ : 1 # test_addr
 
 
 ` =========================================================

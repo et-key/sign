@@ -1033,7 +1033,10 @@ function compileNode(node, envMap = {}) {
 			code += `    f64.const 0.0\n`;
 			code += `    f64.eq\n`;
 			code += `    if (result f64)\n`;
-			code += `      call $input_float\n`;
+			// ★変更: sys_read(63) を呼ぶ
+			code += `      i32.const 63\n`;
+			code += `      f64.const 0.0\n`; // sys_readにはダミー引数を渡す
+			code += `      call $syscall\n`;
 			code += `    else\n`;
 			code += `      local.get $tmp_L\n`;
 			code += `      i32.trunc_sat_f64_u\n`;
@@ -1277,11 +1280,8 @@ export function compileToWat(ast) {
 	elemSection += `  (type $closure_sig (func (param f64 f64) (result f64)))\n`;
 
 	return `(module
-  (import "env" "print_string" (func $print_string (param i32 i32)))
-  (import "env" "print_float" (func $print_float (param f64)))
-  (import "env" "print_list" (func $print_list (param i32)))    ;; ★追加: リスト構造出力SVC
-  (import "env" "print_closure" (func $print_closure (param i32))) ;; ★追加: クロージャ出力SVC
-  (import "env" "input_float" (func $input_float (result f64)))
+  ;; ★変更: 個別のI/O関数を廃止し、AArch64風の単一syscallに統合
+  (import "env" "syscall" (func $syscall (param i32 f64) (result f64)))
   (import "env" "math_fmod" (func $math_fmod (param f64 f64) (result f64)))
   (import "env" "math_pow" (func $math_pow (param f64 f64) (result f64)))
 
@@ -1305,42 +1305,6 @@ ${dataSection}
     global.set $heap_alloc_ptr
 
     local.get $ptr
-  )
-
-  (func $strlen (param $ptr i32) (result i32)
-    (local $len i32)
-    (local $current i32)
-    local.get $ptr
-    local.set $current
-    i32.const 0
-    local.set $len
-
-    (loop $count_loop
-      local.get $current
-      i32.load8_u
-      i32.const 0
-      i32.eq
-      (if
-        (then
-          local.get $len
-          return
-        )
-      )
-      
-      local.get $len
-      i32.const 1
-      i32.add
-      local.set $len
-      
-      local.get $current
-      i32.const 1
-      i32.add
-      local.set $current
-      
-      br $count_loop
-    )
-    
-    local.get $len
   )
 
   (func $cons (param $car f64) (param $cdr f64) (result f64)
@@ -1618,7 +1582,7 @@ ${dataSection}
   (func $apply_hash (param $left f64) (param $right f64) (result f64)
     (local $tag i32)
     (local $ptr i32)
-    (local $target_val f64)  ;; ★ 追加: cdrの値を受け取る変数
+    (local $target_val f64)
 
     local.get $right
     i64.reinterpret_f64
@@ -1628,57 +1592,20 @@ ${dataSection}
     local.set $tag
 
     ;; ==========================================
-    ;; ★ SVC (Supervisor Call) ルーティング
+    ;; ★ SVC (Supervisor Call) ルーティング (stdout)
     ;; ==========================================
     local.get $left
     f64.const 1.0
     f64.eq
     if
-      ;; 右辺が Normal String (0x7FFD) または Spread String (0x7FF5) なら一括ストリーム出力
+      ;; ★ 修正: 展開リスト(Spread List: 0x7FF4) 以外は直接syscallで一括出力
       local.get $tag
-      i32.const 0x7FFD0000
-      i32.eq
-      local.get $tag
-      i32.const 0x7FF50000
-      i32.eq
-      i32.or
+      i32.const 0x7FF40000
+      i32.ne
       if
+        i32.const 64
         local.get $right
-        i64.reinterpret_f64
-        i32.wrap_i64
-        local.set $ptr
-
-        local.get $ptr
-        local.get $ptr
-        call $strlen
-        call $print_string
-        local.get $right
-        return
-      end
-
-      ;; 右辺が List (0x7FFC) の場合、print_list を呼び出してシリアライズ
-      local.get $tag
-      i32.const 0x7FFC0000
-      i32.eq
-      if
-        local.get $right
-        i64.reinterpret_f64
-        i32.wrap_i64
-        call $print_list
-        local.get $right
-        return
-      end
-
-      ;; 右辺が Closure (0x7FFE) の場合、print_closure を呼び出してシリアライズ
-      local.get $tag
-      i32.const 0x7FFE0000
-      i32.eq
-      if
-        local.get $right
-        i64.reinterpret_f64
-        i32.wrap_i64
-        call $print_closure
-        local.get $right
+        call $syscall
         return
       end
     end
@@ -1711,8 +1638,7 @@ ${dataSection}
           f64.load offset=8
           local.set $target_val
 
-          ;; -------------------------------------------
-          ;; ★ 修正版: cdrが Unit(0x7FF8000000000000) なら展開ループを終了
+          ;; cdrが Unit(0x7FF8000000000000) なら展開ループを終了
           local.get $target_val
           i64.reinterpret_f64
           i64.const 0x7FF8000000000000
@@ -1720,7 +1646,6 @@ ${dataSection}
           if
             br $spread_loop_end
           end
-          ;; -------------------------------------------
 
           ;; cdrの型タグを確認
           local.get $target_val
@@ -1800,49 +1725,17 @@ ${dataSection}
 
   ;; $apply_hash_single: 1要素に対する実際のMMIO処理 (ポリモーフィズム対応版)
   (func $apply_hash_single (param $left f64) (param $right f64) (result f64)
-    (local $tag i32)
     local.get $left
     f64.const 1.0
     f64.eq
     if
-      ;; 右辺の型タグを取得
+      ;; ★変更: stdoutなら、どんな型であろうと sys_write (64) に丸投げ
+      i32.const 64
       local.get $right
-      i64.reinterpret_f64
-      i64.const 32
-      i64.shr_u
-      i32.wrap_i64
-      local.set $tag
-
-      ;; List (0x7FFC) または Spread List (0x7FF4) か？
-      local.get $tag
-      i32.const 0x7FFC0000
-      i32.eq
-      local.get $tag
-      i32.const 0x7FF40000
-      i32.eq
-      i32.or
-      if
-        local.get $right
-        i64.reinterpret_f64
-        i32.wrap_i64
-        call $print_list
-      else
-        ;; Closure (0x7FFE) か？
-        local.get $tag
-        i32.const 0x7FFE0000
-        i32.eq
-        if
-          local.get $right
-          i64.reinterpret_f64
-          i32.wrap_i64
-          call $print_closure
-        else
-          ;; それ以外（数値等）
-          local.get $right
-          call $print_float
-        end
-      end
+      call $syscall
+      drop
     else
+      ;; stdout以外のポートならWASMメモリに直接ストア (MMIO)
       local.get $left
       i32.trunc_sat_f64_u
       i32.const 3
