@@ -75,6 +75,11 @@ function isFunction(node, env = {}) {
 		// isNative として単純なWASM命令の出力を行わず、正しく関数としてクロージャ連鎖へ回す
 		if (node.pipeline) return true;
 
+		// ==========================================
+		// ★ 修正: 左側が関数ではない(値である)場合、この適用はタプル結合なので関数ではない
+		// ==========================================
+		if (!isFunction(node.func, env)) return false;
+
 		// ネイティブ演算子で引数が足りていない場合は関数（部分適用）として扱う
 		const isNative = (fnNode) => {
 			if (!fnNode) return false;
@@ -273,21 +278,47 @@ function expandMacros(node, env = {}) {
 			// これにより「値と値の適用」が apply ノードのまま保たれ、WASMの $apply_space に委譲されます。
 		}
 
-		// 3. 引数のスプレッド展開 (Func -> Block(タプル))
-		if (isFuncL && expandedArg && expandedArg.type === 'block' && !node.pipeline) {
-			let hasBinding = expandedArg.body.some(c => c.type === 'infix' && c.op === ':');
-			if (!hasBinding && expandedArg.body.length > 0) {
-				let newApply = expandedFunc;
-				for (let i = 0; i < expandedArg.body.length; i++) {
-					newApply = {
-						type: 'apply',
-						func: newApply,
-						arg: expandedArg.body[i],
-						pipeline: false,
-						_expanded: true
-					};
+		// 3. 引数のスプレッド展開 (Func -> Block または Tuple)
+		if (isFuncL && expandedArg && !node.pipeline) {
+			if (expandedArg.type === 'block') {
+				let hasBinding = expandedArg.body.some(c => c.type === 'infix' && c.op === ':');
+				if (!hasBinding && expandedArg.body.length > 0) {
+					let newApply = expandedFunc;
+					for (let i = 0; i < expandedArg.body.length; i++) {
+						newApply = {
+							type: 'apply',
+							func: newApply,
+							arg: expandedArg.body[i],
+							pipeline: false,
+							_expanded: true
+						};
+					}
+					return newApply;
 				}
-				return newApply;
+			} else if (expandedArg.type === 'apply') {
+				// 左側が関数ではない適用 (例: `10 20`) はタプルとみなして引数展開する
+				const isTuple = (n) => {
+					if (n.type === 'apply') return isTuple(n.func);
+					return !isFunction(n, env);
+				};
+				if (isTuple(expandedArg)) {
+					const flattenTuple = (n) => {
+						if (n.type === 'apply') return [...flattenTuple(n.func), n.arg];
+						return [n];
+					};
+					let args = flattenTuple(expandedArg);
+					let newApply = expandedFunc;
+					for (let i = 0; i < args.length; i++) {
+						newApply = {
+							type: 'apply',
+							func: newApply,
+							arg: args[i],
+							pipeline: false,
+							_expanded: true
+						};
+					}
+					return newApply;
+				}
 			}
 		}
 
@@ -304,7 +335,7 @@ function expandMacros(node, env = {}) {
 		const expandedRight = expandMacros(node.right, env);
 		return { ...node, left: expandedLeft, right: expandedRight };
 	}
-	if (node.type === 'prefix' || node.type === 'postfix') {
+	if (node.type === 'prefix' || node.type === 'postfix' || node.type === 'abs') {
 		return { ...node, expr: expandMacros(node.expr, env) };
 	}
 
@@ -322,6 +353,158 @@ function expandMacros(node, env = {}) {
 	return node;
 }
 
+// ==========================================
+// ★ 変数の置換関数 (β簡約用)
+// ==========================================
+function substitute(node, paramName, argNode) {
+	if (!node) return node;
+
+	if (node.type === 'identifier' && node.value.trim() === paramName) {
+		// 変数が見つかったら、渡された引数のASTに丸ごと置き換える（ディープコピーして参照を切る）
+		return JSON.parse(JSON.stringify(argNode));
+	}
+
+	if (node.type === 'block') {
+		// ブロック内で同じ名前の変数が再定義(シャドウイング)されている場合は、そこから下の置換を止める
+		let isShadowed = node.body.some(c => c.type === 'infix' && c.op === ':' && c.left && c.left.value.trim() === paramName);
+		if (isShadowed) return node;
+		return { ...node, body: node.body.map(c => substitute(c, paramName, argNode)) };
+	}
+
+	if (node.type === 'infix') {
+		// 新しいラムダ式で同じ引数名が使われている場合もシャドウイングなので止める
+		if (node.op === '?' && node.left && node.left.value.trim() === paramName) return node;
+		return {
+			...node,
+			left: substitute(node.left, paramName, argNode),
+			right: substitute(node.right, paramName, argNode)
+		};
+	}
+
+	if (node.type === 'prefix' || node.type === 'postfix' || node.type === 'abs') {
+		return { ...node, expr: substitute(node.expr, paramName, argNode) };
+	}
+
+	if (node.type === 'apply') {
+		return {
+			...node,
+			func: substitute(node.func, paramName, argNode),
+			arg: substitute(node.arg, paramName, argNode)
+		};
+	}
+
+	return node;
+}
+
+// ==========================================
+// ★ Phase 7: オプティマイザ (事前評価・定数畳み込み・β簡約・静的ディスパッチ)
+// ==========================================
+function optimizeAst(node) {
+	if (!node) return node;
+
+	if (node.type === 'block') {
+		return { ...node, body: node.body.map(optimizeAst) };
+	}
+
+	// ==========================================
+	// ★ 修正1: 絶対値ノードの中身も最適化（定数畳み込み）する
+	// ==========================================
+	if (node.type === 'abs') {
+		const expr = optimizeAst(node.expr);
+		if (expr && expr.type === 'number') {
+			return { type: 'number', value: Math.abs(expr.value) };
+		}
+		return { ...node, expr };
+	}
+
+	if (node.type === 'prefix') {
+		const expr = optimizeAst(node.expr);
+		// --- 前置演算子の定数畳み込み ---
+		if (expr && expr.type === 'number') {
+			// Signの仕様: どんな数値(0.0含む)もTruthyなので、! (論理NOT) は必ず Falsy (NaN) になる
+			if (node.op === '!') return { type: 'identifier', value: '_' };
+			// !! はビット反転(NOT)なので、i32にキャストして反転する
+			if (node.op === '!!') return { type: 'number', value: ~(expr.value | 0) };
+			if (node.op === '-') return { type: 'number', value: -expr.value };
+		} else if (expr && expr.type === 'identifier' && expr.value === '_') {
+			// NaN(_) に対する処理
+			if (node.op === '!') return { type: 'number', value: 1 }; // !NaN -> 1
+			if (node.op === '!!') return { type: 'number', value: -1 }; // !!NaN -> ~0 -> -1
+		}
+		return { ...node, expr };
+	}
+
+	if (node.type === 'infix') {
+		const left = optimizeAst(node.left);
+		const right = optimizeAst(node.right);
+
+		// --- 定数畳み込み (Constant Folding) ---
+		if (left && right && left.type === 'number' && right.type === 'number') {
+			const l = left.value;
+			const r = right.value;
+			let result = null;
+
+			switch (node.op) {
+				case '+': result = l + r; break;
+				case '-': result = l - r; break;
+				case '*': result = l * r; break;
+				case '/': result = l / r; break;
+				case '==': result = (l === r) ? r : NaN; break;
+				case '!=': result = (l !== r) ? r : NaN; break;
+				case '<': result = (l < r) ? r : NaN; break;
+				case '>': result = (l > r) ? r : NaN; break;
+				case '<=': result = (l <= r) ? r : NaN; break;
+				case '>=': result = (l >= r) ? r : NaN; break;
+			}
+
+			if (result !== null) {
+				if (Number.isNaN(result)) {
+					return { type: 'identifier', value: '_' };
+				} else {
+					return { type: 'number', value: result };
+				}
+			}
+		}
+		return { ...node, left, right };
+	}
+
+	if (node.type === 'apply') {
+		let optFunc = optimizeAst(node.func);
+		let optArg = optimizeAst(node.arg);
+
+		// --- β簡約 (Beta Reduction / インライン展開) ---
+		if (optFunc && optFunc.type === 'infix' && optFunc.op === '?') {
+			let paramName = (optFunc.left && optFunc.left.type === 'identifier') ? optFunc.left.value.trim() : '';
+			if (paramName) {
+				let substitutedBody = substitute(optFunc.right, paramName, optArg);
+				return optimizeAst(substitutedBody);
+			}
+		}
+
+		// --- 静的ディスパッチ (Static Dispatch) ---
+		// 左辺が「関数ではない純粋な値（数値・文字列・リスト・Unit）」であると確定している場合、
+		// 空白適用 (A B) は「コンスセルの構築 (A , B)」と完全に同義である。
+		// これをコンパイル時に置換し、実行時の重い型判定($apply_space)を完全に消滅させる！
+		const isPureValue = (n) => n && (n.type === 'number' || n.type === 'string' || (n.type === 'infix' && n.op === ',') || n.type === 'unit');
+		if (isPureValue(optFunc)) {
+			return optimizeAst({
+				type: 'infix',
+				op: ',',
+				left: optFunc,
+				right: optArg
+			});
+		}
+
+		return {
+			...node,
+			func: optFunc,
+			arg: optArg
+		};
+	}
+
+	return node;
+}
+
 let currentEnvDepth = 0;
 let maxEnvDepth = -1;
 
@@ -331,6 +514,15 @@ function compileNode(node, envMap = {}) {
 
 	if (node.type === 'unit') {
 		return `    f64.const nan\n`; // 万が一単体で来たとき用に追加
+	}
+
+	// ==========================================
+	// ★ ここに追加！ Phase 8: 絶対値演算子 (|...|)
+	// ==========================================
+	if (node.type === 'abs') {
+		let code = compileNode(node.expr, envMap);
+		code += `    f64.abs\n`; // WASMネイティブの絶対値命令
+		return code;
 	}
 
 	if (node.type === 'block') {
@@ -480,7 +672,12 @@ function compileNode(node, envMap = {}) {
 
 	if (node.type === 'number') {
 		let valStr = node.value.toString();
-		if (!valStr.includes('.')) valStr += '.0';
+		// JSの計算結果がNaNやInfinityになった場合の安全ガード
+		if (valStr === 'NaN') return `    f64.const nan\n`;
+		if (valStr === 'Infinity') return `    f64.const inf\n`;
+		if (valStr === '-Infinity') return `    f64.const -inf\n`;
+
+		if (!valStr.includes('.') && !valStr.includes('e')) valStr += '.0';
 		return `    f64.const ${valStr}\n`;
 	}
 
@@ -490,6 +687,15 @@ function compileNode(node, envMap = {}) {
 		// ★ 追加: '_' の評価は常に Unit(NaN) 
 		if (name === '_') {
 			return `    f64.const nan\n`;
+		}
+
+		// ==========================================
+		// ★ 追加: パーサが演算子を剥がした際に '5' などが識別子になってしまう問題の救済
+		// ==========================================
+		if (!isNaN(parseFloat(name)) && isFinite(name)) {
+			let valStr = name;
+			if (!valStr.includes('.') && !valStr.includes('e')) valStr += '.0';
+			return `    f64.const ${valStr}\n`;
 		}
 
 		if (TEMPLATES[name]) {
@@ -1066,6 +1272,15 @@ function compileNode(node, envMap = {}) {
 			return code;
 		}
 		let code = compileNode(node.expr, envMap);
+
+		// ==========================================
+		// ★ 修正2: 前置マイナスは引き算(sub)ではなく符号反転(neg)を使う
+		// ==========================================
+		if (node.op === '-') {
+			code += `    f64.neg\n`;
+			return code;
+		}
+
 		if (TEMPLATES[node.op]) {
 			code += `    ${TEMPLATES[node.op]}\n`;
 			return code;
@@ -1082,6 +1297,51 @@ function compileNode(node, envMap = {}) {
 			code += `    call $make_spread\n`;
 			return code;
 		}
+
+		// ==========================================
+		// ★ Phase 8: 階乗演算子 (後置 !)
+		// ==========================================
+		if (node.op === '!') {
+			let code = compileNode(node.expr, envMap);
+			let loopName = `$fact_loop_${blockCounter++}`;
+			let endName = `$fact_end_${blockCounter++}`; // ★ ブロック脱出用のラベルを追加
+
+			// --- 高速ネイティブ階乗ループ ---
+			code += `    ;; --- Factorial Loop ---\n`;
+			code += `    local.set $tmp_L\n`; // tmp_L をカウンタ(N)として使う
+			code += `    f64.const 1.0\n`;
+			code += `    local.set $tmp_R\n`; // tmp_R を結果(Result)として使う
+
+			code += `    (block ${endName}\n`;  // ★ ループ全体を囲む脱出用ブロック
+			code += `      (loop ${loopName}\n`;
+
+			// ★ 無限ループ防止: if !(N > 1.0) break; 
+			// (NaNと比較した場合は gt が false になり、eqz で true に反転して即脱出する)
+			code += `        local.get $tmp_L\n`;
+			code += `        f64.const 1.0\n`;
+			code += `        f64.gt\n`;
+			code += `        i32.eqz\n`;
+			code += `        br_if ${endName}\n`;
+
+			// Result = Result * N
+			code += `        local.get $tmp_R\n`;
+			code += `        local.get $tmp_L\n`;
+			code += `        f64.mul\n`;
+			code += `        local.set $tmp_R\n`;
+
+			// N = N - 1
+			code += `        local.get $tmp_L\n`;
+			code += `        f64.const 1.0\n`;
+			code += `        f64.sub\n`;
+			code += `        local.set $tmp_L\n`;
+
+			code += `        br ${loopName}\n`; // ループの先頭に戻る(continue)
+			code += `      )\n`;
+			code += `    )\n`;
+			code += `    local.get $tmp_R\n`; // 結果をスタックに積む
+			return code;
+		}
+
 		return `    ;; UNIMPLEMENTED: postfix (${node.op})\n    f64.const nan\n`;
 	}
 
@@ -1250,16 +1510,23 @@ export function compileToWat(ast) {
 	dataSection = '';
 	closureFunctions = [];
 	closureCount = 0;
-	// ★ 追加：コンパイルのたびに完全にリセットする
 	unrollCounter = 0;
 	blockCounter = 0;
 	lambdaCounter = 0;
 	curryCounter = 0;
 
 	const expandedAst = expandMacros(ast, {});
+
+	// ==========================================
+	// ★ ここでAST最適化パス（事前評価）を通す！
+	// ==========================================
+	const optimizedAst = optimizeAst(expandedAst);
+
 	currentEnvDepth = 0;
 	maxEnvDepth = -1;
-	const bodyCode = compileNode(expandedAst, {});
+
+	// 最適化されたASTを元にWASMコードを生成
+	const bodyCode = compileNode(optimizedAst, {});
 
 	let closureCode = '';
 	let elemSection = '';

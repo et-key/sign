@@ -86,6 +86,14 @@
 [Print] 160
 [Print] Address of val is:
 [Print] 00000
+[Print] ===== Ph7: Compiler Optimization =====
+[Print] 70
+[Print] [100, 200]  // Raw: (100 , 200)
+[Print] 30
+[Print] ===== Ph8: Math Operators =====
+[Print] 42
+[Print] 99
+[Print] 120
 [Print] ===== end =====
 
 [Main Result] NaN
