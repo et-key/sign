@@ -286,27 +286,6 @@ processData : x ?
 	x > 100 : `large`
 	finalize x
 ```
-#### 正しい混在パターン
-```sign
-`✅ 正常：条件式と一般処理の混在
-`原始構文
-processData : x ?
-	preProcess x
-	x < 0 : `negative`
-		transform x
-	x > 100 : `large`
-		finalize x
-
-`変換後
-processData : x ?
-	preProcess x,
-	[x < 0 : `negative`
-		transform x],
-	[x > 100 : `large`
-		finalize x]
-```
-条件にぶら下がってる返値部分のブロックをもう１階層下げる事で、正しい記述とします。
-
 
 ### 7.3 判定基準
 

@@ -146,40 +146,37 @@ process_data : ?
 ` IOコア担当
 ` 入力段階: ハードウェアポートからデータ取得
 ` バッファに格納して次段階に渡す
-input_handler : ?
-	loop :
-		input_buffer # @0x1000
+
+input_buffer : get_input_buffer _
+
+input_handler : _ ?
+	input_buffer # @0x1000
+	input_handler
 
 ` メモリコア担当
 ` メモリ段階: 入力バッファからデータ取得
 ` データがなければスキップ（Unitの場合は&演算で短絡評価）
 ` データの解析・構造化を行い処理用バッファに格納
-memory_handler : ?
-	loop :
-		@input_buffer & [data ?
-			process_buffer # parse data
-		]
+
+memory_handler : _ ?
+	@input_buffer : [data ? process_buffer # parse data]
 
 ` 処理コア担当
 ` 処理段階: 処理用バッファからデータ取得
 ` データがなければスキップ（Unitの場合は&演算で短絡評価）
 ` データの変換処理を行い出力用バッファに格納
-processing_handler : ?
-	loop :
-		@process_buffer & [data ?
-			output_buffer # process data
-		]
+
+processing_handler : _ ?
+	@process_buffer : [data ? output_buffer # process data]
 
 ` 出力コア担当
 ` 出力段階: 出力用バッファからデータ取得
 ` データがなければスキップ（Unitの場合は&演算で短絡評価）
 ` 処理結果をハードウェアポートに送信
-output_handler : ?
-	loop :
-		@output_buffer & [result ?
-			0x2000 # result
-		]
+output_handler : _ ?
+	@output_buffer : [result ? 0x2000 # result]
 ```
+**↑より良い実装方針が必要で、副作用だらけ！！！↑**
 
 ### 4.3 パイプラインパラレリズム
 
@@ -189,13 +186,11 @@ output_handler : ?
 ` パイプライン処理の抽象化
 ` 各段階を関数として抽象化し、データを順次処理
 ` 入力⇒メモリ⇒処理⇒出力の順で関数合成実行
-pipeline : input_fn memory_fn process_fn output_fn data ?
-	@output_fn @process_fn @memory_fn @input_fn data
+pipeline : @memory_fn @process_fn @output_fn  @input_fn data
 
 ` または関数合成演算子を使用（Sign言語の自然な表現）
 ` MAP演算子(,)により各段階を連鎖実行
-pipeline_natural : input_fn memory_fn process_fn output_fn ?
-	[output_fn,] [process_fn,] [memory_fn,] [input_fn,]
+pipeline_natural : [input_fn,] [memory_fn,] [process_fn,] [output_fn,]   
 ```
 
 ## 5. 利点と特徴
@@ -255,25 +250,23 @@ optimize_buffers : ?
 ```sign
 ` イベント駆動型データフロー
 ` データ到着時にハンドラを呼び出す
-on_data_available : handler ?
-	register_event input_port handler
+on_data_available : input_port register_event
 
 ` 非同期処理チェーン
-async_pipeline : ?
-	on_data_available input_port [data ?
+async_pipeline : _ ? input_port on_data_available [data ?
 ` 入力段階（非同期）: データ処理を直接実行
 ` 出力が準備できたら次のステージへ通知
 		notify output_ready process data
 	]
 ```
+**↑どうして手続き型？、よりよい修正ください↑**
 
 ### 6.3 フィードバック制御
 
 データフローの最適化には、フィードバック制御メカニズムの導入も効果的です：
 
 ```sign
-flow_control : ?
-	loop :
+flow_control : _ ?
 ` 各バッファの充填率を監視し、直接制御関数に渡す
 ` 入力バッファが満杯に近づいたら入力速度を低下
 		measure_buffer input_buffer > 0.8 : throttle_input 0.7
