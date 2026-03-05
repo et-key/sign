@@ -75,6 +75,11 @@ function isFunction(node, env = {}) {
 		// isNative として単純なWASM命令の出力を行わず、正しく関数としてクロージャ連鎖へ回す
 		if (node.pipeline) return true;
 
+		// ==========================================
+		// ★ 修正: 左側が関数ではない(値である)場合、この適用はタプル結合なので関数ではない
+		// ==========================================
+		if (!isFunction(node.func, env)) return false;
+
 		// ネイティブ演算子で引数が足りていない場合は関数（部分適用）として扱う
 		const isNative = (fnNode) => {
 			if (!fnNode) return false;
@@ -216,6 +221,11 @@ function expandMacros(node, env = {}) {
 		const expandedFunc = expandMacros(node.func, env);
 		const expandedArg = expandMacros(node.arg, env);
 
+		// ★追加: unit(括弧のグルーピング)の場合は、パイプライン判定をせずに中身をそのまま返す
+		if (expandedFunc && expandedFunc.type === 'unit') {
+			return expandedArg;
+		}
+
 		const isFuncL = isFunction(expandedFunc, env);
 		const isFuncR = isFunction(expandedArg, env);
 
@@ -264,27 +274,51 @@ function expandMacros(node, env = {}) {
 				return { type: 'prefix', op: expandedFunc.value.trim(), expr: expandedArg, _expanded: true };
 			}
 
-			if (expandedFunc.type === 'block') {
-				return { type: 'block', body: [...expandedFunc.body, expandedArg], _expanded: true };
-			}
-			return { type: 'block', body: [expandedFunc, expandedArg], _expanded: true };
+			// ★ blockへの強制変換処理を削除し、下部のデフォルト処理にフォールバックさせる。
+			// これにより「値と値の適用」が apply ノードのまま保たれ、WASMの $apply_space に委譲されます。
 		}
 
-		// 3. 引数のスプレッド展開 (Func -> Block(タプル))
-		if (isFuncL && expandedArg && expandedArg.type === 'block' && !node.pipeline) {
-			let hasBinding = expandedArg.body.some(c => c.type === 'infix' && c.op === ':');
-			if (!hasBinding && expandedArg.body.length > 0) {
-				let newApply = expandedFunc;
-				for (let i = 0; i < expandedArg.body.length; i++) {
-					newApply = {
-						type: 'apply',
-						func: newApply,
-						arg: expandedArg.body[i],
-						pipeline: false,
-						_expanded: true
-					};
+		// 3. 引数のスプレッド展開 (Func -> Block または Tuple)
+		if (isFuncL && expandedArg && !node.pipeline) {
+			if (expandedArg.type === 'block') {
+				let hasBinding = expandedArg.body.some(c => c.type === 'infix' && c.op === ':');
+				if (!hasBinding && expandedArg.body.length > 0) {
+					let newApply = expandedFunc;
+					for (let i = 0; i < expandedArg.body.length; i++) {
+						newApply = {
+							type: 'apply',
+							func: newApply,
+							arg: expandedArg.body[i],
+							pipeline: false,
+							_expanded: true
+						};
+					}
+					return newApply;
 				}
-				return newApply;
+			} else if (expandedArg.type === 'apply') {
+				// 左側が関数ではない適用 (例: `10 20`) はタプルとみなして引数展開する
+				const isTuple = (n) => {
+					if (n.type === 'apply') return isTuple(n.func);
+					return !isFunction(n, env);
+				};
+				if (isTuple(expandedArg)) {
+					const flattenTuple = (n) => {
+						if (n.type === 'apply') return [...flattenTuple(n.func), n.arg];
+						return [n];
+					};
+					let args = flattenTuple(expandedArg);
+					let newApply = expandedFunc;
+					for (let i = 0; i < args.length; i++) {
+						newApply = {
+							type: 'apply',
+							func: newApply,
+							arg: args[i],
+							pipeline: false,
+							_expanded: true
+						};
+					}
+					return newApply;
+				}
 			}
 		}
 
@@ -301,7 +335,7 @@ function expandMacros(node, env = {}) {
 		const expandedRight = expandMacros(node.right, env);
 		return { ...node, left: expandedLeft, right: expandedRight };
 	}
-	if (node.type === 'prefix' || node.type === 'postfix') {
+	if (node.type === 'prefix' || node.type === 'postfix' || node.type === 'abs') {
 		return { ...node, expr: expandMacros(node.expr, env) };
 	}
 
@@ -319,44 +353,229 @@ function expandMacros(node, env = {}) {
 	return node;
 }
 
+// ==========================================
+// ★ 変数の置換関数 (β簡約用)
+// ==========================================
+function substitute(node, paramName, argNode) {
+	if (!node) return node;
+
+	if (node.type === 'identifier' && node.value.trim() === paramName) {
+		// 変数が見つかったら、渡された引数のASTに丸ごと置き換える（ディープコピーして参照を切る）
+		return JSON.parse(JSON.stringify(argNode));
+	}
+
+	if (node.type === 'block') {
+		// ブロック内で同じ名前の変数が再定義(シャドウイング)されている場合は、そこから下の置換を止める
+		let isShadowed = node.body.some(c => c.type === 'infix' && c.op === ':' && c.left && c.left.value.trim() === paramName);
+		if (isShadowed) return node;
+		return { ...node, body: node.body.map(c => substitute(c, paramName, argNode)) };
+	}
+
+	if (node.type === 'infix') {
+		// 新しいラムダ式で同じ引数名が使われている場合もシャドウイングなので止める
+		if (node.op === '?' && node.left && node.left.value.trim() === paramName) return node;
+		return {
+			...node,
+			left: substitute(node.left, paramName, argNode),
+			right: substitute(node.right, paramName, argNode)
+		};
+	}
+
+	if (node.type === 'prefix' || node.type === 'postfix' || node.type === 'abs') {
+		return { ...node, expr: substitute(node.expr, paramName, argNode) };
+	}
+
+	if (node.type === 'apply') {
+		return {
+			...node,
+			func: substitute(node.func, paramName, argNode),
+			arg: substitute(node.arg, paramName, argNode)
+		};
+	}
+
+	return node;
+}
+
+// ==========================================
+// ★ Phase 7: オプティマイザ (事前評価・定数畳み込み・β簡約・静的ディスパッチ)
+// ==========================================
+function optimizeAst(node) {
+	if (!node) return node;
+
+	if (node.type === 'block') {
+		return { ...node, body: node.body.map(optimizeAst) };
+	}
+
+	// ==========================================
+	// ★ 修正1: 絶対値ノードの中身も最適化（定数畳み込み）する
+	// ==========================================
+	if (node.type === 'abs') {
+		const expr = optimizeAst(node.expr);
+		if (expr && expr.type === 'number') {
+			return { type: 'number', value: Math.abs(expr.value) };
+		}
+		return { ...node, expr };
+	}
+
+	if (node.type === 'prefix') {
+		const expr = optimizeAst(node.expr);
+
+		// --- 前置演算子の定数畳み込み ---
+		if (expr && expr.type === 'number') {
+			// Signの仕様: どんな数値(0.0含む)もTruthyなので、! (論理NOT) は必ず Falsy (NaN) になる
+			if (node.op === '!') return { type: 'identifier', value: '_' };
+			// !! はビット反転(NOT)なので、i32にキャストして反転する
+			if (node.op === '!!') return { type: 'number', value: ~(expr.value | 0) };
+			if (node.op === '-') return { type: 'number', value: -expr.value };
+		} else if (expr && expr.type === 'identifier' && expr.value === '_') {
+			// NaN(_) に対する処理
+			if (node.op === '!') return { type: 'number', value: 1 }; // !NaN -> 1
+			if (node.op === '!!') return { type: 'number', value: -1 }; // !!NaN -> ~0 -> -1
+		}
+		return { ...node, expr };
+	}
+
+	if (node.type === 'infix') {
+		const left = optimizeAst(node.left);
+		const right = optimizeAst(node.right);
+
+		// --- 定数畳み込み (Constant Folding) ---
+		if (left && right && left.type === 'number' && right.type === 'number') {
+			const l = left.value;
+			const r = right.value;
+			let result = null;
+
+			switch (node.op) {
+				case '+': result = l + r; break;
+				case '-': result = l - r; break;
+				case '*': result = l * r; break;
+				case '/': result = l / r; break;
+				case '==': result = (l === r) ? r : NaN; break;
+				case '!=': result = (l !== r) ? r : NaN; break;
+				case '<': result = (l < r) ? r : NaN; break;
+				case '>': result = (l > r) ? r : NaN; break;
+				case '<=': result = (l <= r) ? r : NaN; break;
+				case '>=': result = (l >= r) ? r : NaN; break;
+			}
+
+			if (result !== null) {
+				if (Number.isNaN(result)) {
+					return { type: 'identifier', value: '_' };
+				} else {
+					return { type: 'number', value: result };
+				}
+			}
+		}
+		return { ...node, left, right };
+	}
+
+	if (node.type === 'apply') {
+		let optFunc = optimizeAst(node.func);
+		let optArg = optimizeAst(node.arg);
+
+		// ==========================================
+		// ★ 追加: Range演算子 (1 ~ 5) のパース救済
+		// パーサが `A ~ B` を `(A ~) B` (後置演算子 + 関数適用) 
+		// としてパースしてしまうため、ここで中置演算子(infix)の `~` に変換する！
+		// ==========================================
+		if (optFunc && optFunc.type === 'postfix' && optFunc.op === '~') {
+			return optimizeAst({
+				type: 'infix',
+				op: '~',
+				left: optFunc.expr,
+				right: optArg
+			});
+		}
+
+		// --- β簡約 (Beta Reduction / インライン展開) ---
+		if (optFunc && optFunc.type === 'infix' && optFunc.op === '?') {
+			let paramName = (optFunc.left && optFunc.left.type === 'identifier') ? optFunc.left.value.trim() : '';
+			if (paramName) {
+				let substitutedBody = substitute(optFunc.right, paramName, optArg);
+				return optimizeAst(substitutedBody);
+			}
+		}
+
+		// --- 静的ディスパッチ (Static Dispatch) ---
+		// 左辺が「関数ではない純粋な値（数値・文字列・リスト・Unit）」であると確定している場合、
+		// 空白適用 (A B) は「コンスセルの構築 (A , B)」と完全に同義である。
+		// これをコンパイル時に置換し、実行時の重い型判定($apply_space)を完全に消滅させる！
+		const isPureValue = (n) => n && (n.type === 'number' || n.type === 'string' || (n.type === 'infix' && n.op === ',') || n.type === 'unit');
+		if (isPureValue(optFunc)) {
+			return optimizeAst({
+				type: 'infix',
+				op: ',',
+				left: optFunc,
+				right: optArg
+			});
+		}
+
+		return {
+			...node,
+			func: optFunc,
+			arg: optArg
+		};
+	}
+
+	return node;
+}
+
 let currentEnvDepth = 0;
 let maxEnvDepth = -1;
 
 // WASMスタック命令の生成
 function compileNode(node, envMap = {}) {
 	if (!node) return `    f64.const nan\n`;
-	if (node.type === 'apply' && node.func && node.func.type === 'unit') {
+
+	if (node.type === 'unit') {
+		return `    f64.const nan\n`; // 万が一単体で来たとき用に追加
+	}
+
+	// ==========================================
+	// ★ ここに追加！ Phase 8: 絶対値演算子 (|...|)
+	// ==========================================
+	if (node.type === 'abs') {
+		let code = compileNode(node.expr, envMap);
+		code += `    f64.abs\n`; // WASMネイティブの絶対値命令
+		return code;
 	}
 
 	if (node.type === 'block') {
 		let defineNodes = node.body.filter(child => child.type === 'infix' && child.op === ':' && child.left && child.left.type === 'identifier');
 		let isEnvBlock = defineNodes.length > 0;
-		// If ALL statements are definitions, treat this block as returning its Environment (Dictionary literal)
 		let isDictReturn = node.body.length > 0 && node.body.every(child => child.type === 'infix' && child.op === ':' && child.left && child.left.type === 'identifier');
 
 		let myDepth = -1;
 		let envLocalName = '';
 		let newEnvMap = { ...envMap };
 		let code = '';
+		let localVarsSize = defineNodes.length * 8;
 
 		if (isEnvBlock) {
 			myDepth = currentEnvDepth++;
 			if (myDepth > maxEnvDepth) maxEnvDepth = myDepth;
 			envLocalName = `$env_blk_${myDepth}`;
 
-			code += `    i32.const ${defineNodes.length * 8}\n`;
-			code += `    call $alloc\n`;
-			code += `    local.set ${envLocalName}\n`;
+			// --- Prologue (Shadow Stack) ---
+			code += `    ;; --- Prologue (Shadow Stack) ---\n`;
+			code += `    global.get $SP\n`;
+			code += `    local.set ${envLocalName}\n`;  // ブロック開始時のSPを保存(ベースポインタとして使用)
+			code += `    global.get $SP\n    i32.const ${localVarsSize}\n    i32.sub\n    global.set $SP\n`; // SPを下げる(スタック領域確保)
 
-			let offset = 0;
+			// ==========================================
+			// ★ 変更1: スタック用オフセットとヒープ用オフセットを分ける
+			// ==========================================
+			let stackOffset = 8; // base - 8, base - 16 ... に配置
+			let heapOffset = 0;  // 辞書のプロパティとしてのオフセットは0から
 			let layoutMeta = {};
 			for (let def of defineNodes) {
 				let name = '';
 				if (def.left && def.left.type === 'identifier') name = def.left.value.trim();
 				if (name) {
-					newEnvMap[name] = { type: 'local_env', localName: envLocalName, offset: offset };
-					layoutMeta[name] = offset;
-					offset += 8;
+					newEnvMap[name] = { type: 'stack_env', localName: envLocalName, offset: stackOffset };
+					layoutMeta[name] = heapOffset;
+					stackOffset += 8;
+					heapOffset += 8;
 				}
 			}
 			node._layout = layoutMeta;
@@ -375,56 +594,87 @@ function compileNode(node, envMap = {}) {
 			if (child.type === 'infix' && child.op === ':' && child.left && child.left.type === 'identifier') {
 				let name = child.left.value.trim();
 
-				// ★ 追加: '_' への代入は値を破棄し、純粋な Unit(NaN) を返す (終対象への射)
 				if (name === '_') {
-					code += compileNode(child.right, newEnvMap); // 右辺(副作用など)を評価
-					code += `    drop\n`;                       // 評価結果をWASMスタックから捨てる
-					code += `    f64.const nan\n`;              // Unit を返す
+					code += compileNode(child.right, newEnvMap);
+					code += `    drop\n`;
+					code += `    f64.const nan\n`;
 				} else {
-					// 既存の変数バインディング処理
-					let targetOffset = (newEnvMap[name] && newEnvMap[name].localName === envLocalName) ? newEnvMap[name].offset : -1;
+					let targetOffset = (newEnvMap[name] && newEnvMap[name].type === 'stack_env') ? newEnvMap[name].offset : -1;
+					let targetBase = (newEnvMap[name] && newEnvMap[name].type === 'stack_env') ? newEnvMap[name].localName : '';
 
 					let rhsCode = compileNode(child.right, newEnvMap);
 					if (name && child.right && child.right._layout && newEnvMap[name]) {
 						newEnvMap[name].layout = child.right._layout;
-					} else if (name) {
 					}
 
 					code += rhsCode;
 
 					if (targetOffset >= 0) {
+						// ★変更: ベースポインタから相対ストア
 						code += `    local.set $tmp_R\n`;
-						code += `    local.get ${envLocalName}\n`;
+						code += `    local.get ${targetBase}\n`;
+						code += `    i32.const ${targetOffset}\n`;
+						code += `    i32.sub\n`;
 						code += `    local.get $tmp_R\n`;
-						code += `    f64.store offset=${targetOffset}\n`;
+						code += `    f64.store\n`;
 						code += `    f64.const nan\n`;
 					}
 				}
 			} else {
 				code += compileNode(child, newEnvMap);
-				// 子ノードがレイアウトを持つ（つまり辞書を返す式である）場合、ブロック全体の返り値のレイアウトとして採用する
 				if (child._layout && !node._layout) {
 					node._layout = child._layout;
 				}
 			}
 
 			if (i < node.body.length - 1) {
-				code += `    local.tee $tmp_bool\n`; // Leave f64 on stack for br_if
-				code += `    local.get $tmp_bool\n`; // Push f64 for is_truthy arguments
-				code += `    call $is_truthy\n`; // Pops one f64, returns i32
+				code += `    local.tee $tmp_bool\n`;
+				code += `    local.get $tmp_bool\n`;
+				code += `    call $is_truthy\n`;
 				code += `    br_if ${blkName}\n`;
-				code += `    drop\n`; // discard Falsy value before compiling next node
+				code += `    drop\n`;
 			}
 		}
 
 		code += `    )\n`; // end of (block $blk_exit...)
 
 		if (isEnvBlock) {
+			code += `    local.set $target_val\n`;
+
+			// ★変更: ベースポインタを用いたエピローグ
+			code += `    ;; --- Epilogue ---\n`;
+			code += `    local.get ${envLocalName}\n    global.set $SP\n`; // SPをブロック開始時のベースポインタに戻す(解放)
+
+			code += `    local.get $target_val\n`; // 評価結果を戻す
+
 			if (isDictReturn) {
-				// Return Dictionary / Environment Pointer tagged as 0x7FFB
-				code += `    drop\n`;
+				// ==========================================
+				// ★ 変更2: 辞書の実体をヒープに退避してポインタを返す
+				// ==========================================
+				code += `    drop\n`; // 最後の代入の戻り値(NaN)を捨てる
+
+				let dictSize = defineNodes.length * 8;
+				code += `    i32.const ${dictSize}\n`;
+				code += `    call $alloc\n`;
+				code += `    local.set $tmp_ptr\n`;
+
+				for (let def of defineNodes) {
+					let name = def.left.value.trim();
+					let sOff = newEnvMap[name].offset;
+					let hOff = node._layout[name];
+
+					// スタックから値を読み出してヒープにストア
+					code += `    local.get $tmp_ptr\n`;
+					code += `    local.get ${envLocalName}\n`;
+					code += `    i32.const ${sOff}\n`;
+					code += `    i32.sub\n`;
+					code += `    f64.load\n`;
+					code += `    f64.store offset=${hOff}\n`;
+				}
+
+				// 辞書ポインタをNaN-boxing (Dict Tag: 0x7FFB) して返す
 				code += `    i64.const 0x7FFB000000000000\n`;
-				code += `    local.get ${envLocalName}\n`;
+				code += `    local.get $tmp_ptr\n`;
 				code += `    i64.extend_i32_u\n`;
 				code += `    i64.or\n`;
 				code += `    f64.reinterpret_i64\n`;
@@ -437,7 +687,12 @@ function compileNode(node, envMap = {}) {
 
 	if (node.type === 'number') {
 		let valStr = node.value.toString();
-		if (!valStr.includes('.')) valStr += '.0';
+		// JSの計算結果がNaNやInfinityになった場合の安全ガード
+		if (valStr === 'NaN') return `    f64.const nan\n`;
+		if (valStr === 'Infinity') return `    f64.const inf\n`;
+		if (valStr === '-Infinity') return `    f64.const -inf\n`;
+
+		if (!valStr.includes('.') && !valStr.includes('e')) valStr += '.0';
 		return `    f64.const ${valStr}\n`;
 	}
 
@@ -447,6 +702,15 @@ function compileNode(node, envMap = {}) {
 		// ★ 追加: '_' の評価は常に Unit(NaN) 
 		if (name === '_') {
 			return `    f64.const nan\n`;
+		}
+
+		// ==========================================
+		// ★ 追加: パーサが演算子を剥がした際に '5' などが識別子になってしまう問題の救済
+		// ==========================================
+		if (!isNaN(parseFloat(name)) && isFinite(name)) {
+			let valStr = name;
+			if (!valStr.includes('.') && !valStr.includes('e')) valStr += '.0';
+			return `    f64.const ${valStr}\n`;
 		}
 
 		if (TEMPLATES[name]) {
@@ -484,6 +748,9 @@ function compileNode(node, envMap = {}) {
 				return `    local.get $env\n    i32.trunc_sat_f64_u\n    f64.load offset=${loc.offset}\n`;
 			} else if (loc.type === 'local_env') {
 				return `    local.get ${loc.localName}\n    f64.load offset=${loc.offset}\n`;
+			} else if (loc.type === 'stack_env') {
+				// ★変更: その変数が属するブロックのベースポインタ ($env_blk_X) から相対ロード
+				return `    local.get ${loc.localName}\n    i32.const ${loc.offset}\n    i32.sub\n    f64.load\n`;
 			}
 		}
 		return `    ;; IGNORED: identifier (${name})\n    f64.const nan\n`;
@@ -599,6 +866,9 @@ function compileNode(node, envMap = {}) {
 							code += `    local.get $env\n    i32.trunc_sat_f64_u\n    f64.load offset=${envMap[v].offset}\n`;
 						} else if (envMap[v].type === 'local_env') {
 							code += `    local.get ${envMap[v].localName}\n    f64.load offset=${envMap[v].offset}\n`;
+						} else if (envMap[v].type === 'stack_env') {
+							// ★ここがクロージャ生成時のヒープ退避処理
+							code += `    local.get ${envMap[v].localName}\n    i32.const ${envMap[v].offset}\n    i32.sub\n    f64.load\n`;
 						} else {
 							code += `    f64.const nan\n`;
 						}
@@ -692,6 +962,16 @@ function compileNode(node, envMap = {}) {
 				code += `    end\n`;
 				return code;
 			}
+		}
+
+		// ==========================================
+		// ★ ここに追加！ Phase 9: 動的リスト構築 (Range演算子)
+		// ==========================================
+		if (op === '~') {
+			let code = compileNode(node.left, envMap);
+			code += compileNode(node.right, envMap);
+			code += `    call $make_range\n`;
+			return code;
 		}
 
 		if (op === "@") {
@@ -944,6 +1224,37 @@ function compileNode(node, envMap = {}) {
 			return compileNode(lambdaAst, envMap);
 		}
 
+		// アドレス取得演算子 $ の特別処理 (node.right ではなく node.expr を使用)
+		if (node.op === '$' && node.expr && node.expr.type === 'identifier') {
+			let name = node.expr.value.trim();
+			if (envMap[name]) {
+				let loc = envMap[name];
+				if (loc.type === 'stack_env') {
+					// 変数のポインタ (ベースポインタ - オフセット) を計算し、f64(数値)として返す
+					let code = `    ;; --- Address of ${name} ---\n`;
+					code += `    local.get ${loc.localName}\n`;
+					code += `    i32.const ${loc.offset}\n`;
+					code += `    i32.sub\n`;
+					code += `    f64.convert_i32_u\n`; // WASMスタックにはf64として積む
+					return code;
+				} else {
+					// スタック変数以外（未実装・またはグローバル）の場合はとりあえずNaN
+					return `    f64.const nan\n`;
+				}
+			}
+			return `    f64.const nan\n`;
+		}
+
+		if (node.op === '$') {
+			let code = compileNode(node.expr, envMap);
+			// 評価された値(タグ付きポインタ)から、下位32ビット(アドレスインデックス)のみを抽出し、
+			// 再び通常の数値(f64)としてスタックに戻す
+			code += `    i64.reinterpret_f64\n`;
+			code += `    i32.wrap_i64\n`;
+			code += `    f64.convert_i32_u\n`;
+			return code;
+		}
+
 		if (node.op === '@') {
 			let code = compileNode(node.expr, envMap);
 			code += `    local.set $tmp_L\n`;
@@ -953,7 +1264,10 @@ function compileNode(node, envMap = {}) {
 			code += `    f64.const 0.0\n`;
 			code += `    f64.eq\n`;
 			code += `    if (result f64)\n`;
-			code += `      call $input_float\n`;
+			// ★変更: sys_read(63) を呼ぶ
+			code += `      i32.const 63\n`;
+			code += `      f64.const 0.0\n`; // sys_readにはダミー引数を渡す
+			code += `      call $syscall\n`;
 			code += `    else\n`;
 			code += `      local.get $tmp_L\n`;
 			code += `      i32.trunc_sat_f64_u\n`;
@@ -982,7 +1296,26 @@ function compileNode(node, envMap = {}) {
 			code += `    f64.convert_i32_s\n`;
 			return code;
 		}
+
+		// ==========================================
+		// ★ Phase 9: 持ち上げ演算子 (前置 ~ / Lift) のランタイム実行
+		// ==========================================
+		if (node.op === '~') {
+			let code = compileNode(node.expr, envMap);
+			code += `    call $lift\n`;
+			return code;
+		}
+
 		let code = compileNode(node.expr, envMap);
+
+		// ==========================================
+		// ★ 修正2: 前置マイナスは引き算(sub)ではなく符号反転(neg)を使う
+		// ==========================================
+		if (node.op === '-') {
+			code += `    f64.neg\n`;
+			return code;
+		}
+
 		if (TEMPLATES[node.op]) {
 			code += `    ${TEMPLATES[node.op]}\n`;
 			return code;
@@ -999,6 +1332,51 @@ function compileNode(node, envMap = {}) {
 			code += `    call $make_spread\n`;
 			return code;
 		}
+
+		// ==========================================
+		// ★ Phase 8: 階乗演算子 (後置 !)
+		// ==========================================
+		if (node.op === '!') {
+			let code = compileNode(node.expr, envMap);
+			let loopName = `$fact_loop_${blockCounter++}`;
+			let endName = `$fact_end_${blockCounter++}`; // ★ ブロック脱出用のラベルを追加
+
+			// --- 高速ネイティブ階乗ループ ---
+			code += `    ;; --- Factorial Loop ---\n`;
+			code += `    local.set $tmp_L\n`; // tmp_L をカウンタ(N)として使う
+			code += `    f64.const 1.0\n`;
+			code += `    local.set $tmp_R\n`; // tmp_R を結果(Result)として使う
+
+			code += `    (block ${endName}\n`;  // ★ ループ全体を囲む脱出用ブロック
+			code += `      (loop ${loopName}\n`;
+
+			// ★ 無限ループ防止: if !(N > 1.0) break; 
+			// (NaNと比較した場合は gt が false になり、eqz で true に反転して即脱出する)
+			code += `        local.get $tmp_L\n`;
+			code += `        f64.const 1.0\n`;
+			code += `        f64.gt\n`;
+			code += `        i32.eqz\n`;
+			code += `        br_if ${endName}\n`;
+
+			// Result = Result * N
+			code += `        local.get $tmp_R\n`;
+			code += `        local.get $tmp_L\n`;
+			code += `        f64.mul\n`;
+			code += `        local.set $tmp_R\n`;
+
+			// N = N - 1
+			code += `        local.get $tmp_L\n`;
+			code += `        f64.const 1.0\n`;
+			code += `        f64.sub\n`;
+			code += `        local.set $tmp_L\n`;
+
+			code += `        br ${loopName}\n`; // ループの先頭に戻る(continue)
+			code += `      )\n`;
+			code += `    )\n`;
+			code += `    local.get $tmp_R\n`; // 結果をスタックに積む
+			return code;
+		}
+
 		return `    ;; UNIMPLEMENTED: postfix (${node.op})\n    f64.const nan\n`;
 	}
 
@@ -1167,16 +1545,23 @@ export function compileToWat(ast) {
 	dataSection = '';
 	closureFunctions = [];
 	closureCount = 0;
-	// ★ 追加：コンパイルのたびに完全にリセットする
 	unrollCounter = 0;
 	blockCounter = 0;
 	lambdaCounter = 0;
 	curryCounter = 0;
 
 	const expandedAst = expandMacros(ast, {});
+
+	// ==========================================
+	// ★ ここでAST最適化パス（事前評価）を通す！
+	// ==========================================
+	const optimizedAst = optimizeAst(expandedAst);
+
 	currentEnvDepth = 0;
 	maxEnvDepth = -1;
-	const bodyCode = compileNode(expandedAst, {});
+
+	// 最適化されたASTを元にWASMコードを生成
+	const bodyCode = compileNode(optimizedAst, {});
 
 	let closureCode = '';
 	let elemSection = '';
@@ -1197,15 +1582,17 @@ export function compileToWat(ast) {
 	elemSection += `  (type $closure_sig (func (param f64 f64) (result f64)))\n`;
 
 	return `(module
-  (import "env" "print_string" (func $print_string (param i32 i32)))
-  (import "env" "print_float" (func $print_float (param f64)))
-  (import "env" "print_list" (func $print_list (param i32)))    ;; ★追加: リスト構造出力SVC
-  (import "env" "print_closure" (func $print_closure (param i32))) ;; ★追加: クロージャ出力SVC
-  (import "env" "input_float" (func $input_float (result f64)))
+  ;; ★変更: 個別のI/O関数を廃止し、AArch64風の単一syscallに統合
+  (import "env" "syscall" (func $syscall (param i32 f64) (result f64)))
   (import "env" "math_fmod" (func $math_fmod (param f64 f64) (result f64)))
   (import "env" "math_pow" (func $math_pow (param f64 f64) (result f64)))
 
   (memory (export "memory") 1)
+  
+  ;; ★追加: AArch64風 シャドウスタックポインタ (初期値 64KB = 65536)
+  (global $SP (mut i32) (i32.const 65536))
+  (global $FP (mut i32) (i32.const 65536))
+
 ${elemSection}
   (global $heap_alloc_ptr (mut i32) (i32.const ${stringAllocOffset}))
 ${dataSection}
@@ -1220,42 +1607,6 @@ ${dataSection}
     global.set $heap_alloc_ptr
 
     local.get $ptr
-  )
-
-  (func $strlen (param $ptr i32) (result i32)
-    (local $len i32)
-    (local $current i32)
-    local.get $ptr
-    local.set $current
-    i32.const 0
-    local.set $len
-
-    (loop $count_loop
-      local.get $current
-      i32.load8_u
-      i32.const 0
-      i32.eq
-      (if
-        (then
-          local.get $len
-          return
-        )
-      )
-      
-      local.get $len
-      i32.const 1
-      i32.add
-      local.set $len
-      
-      local.get $current
-      i32.const 1
-      i32.add
-      local.set $current
-      
-      br $count_loop
-    )
-    
-    local.get $len
   )
 
   (func $cons (param $car f64) (param $cdr f64) (result f64)
@@ -1277,6 +1628,83 @@ ${dataSection}
     i64.extend_i32_u
     i64.or
     f64.reinterpret_i64
+  )
+
+  (func $make_range (param $start f64) (param $end f64) (result f64)
+    (local $curr f64)
+    (local $step f64)
+    (local $count f64)
+    (local $list f64)
+
+    ;; 1. 初期リストを Unit(NaN) に設定
+    i64.const 0x7FF8000000000000
+    f64.reinterpret_i64
+    local.set $list
+
+    ;; 2. 生成する要素数を計算: count = floor(abs(start - end)) + 1.0
+    local.get $start
+    local.get $end
+    f64.sub
+    f64.abs
+    f64.floor
+    f64.const 1.0
+    f64.add
+    local.set $count
+
+    ;; 3. 進行方向(step)の決定 (後ろから前に向かうための逆向きステップ)
+    local.get $start
+    local.get $end
+    f64.le
+    if
+      f64.const -1.0  ;; start <= end なら、後ろから前へはマイナス方向
+      local.set $step
+    else
+      f64.const 1.0   ;; start > end なら、後ろから前へはプラス方向
+      local.set $step
+    end
+
+    ;; 4. ループ開始地点(curr)の計算: curr = start - (count - 1.0) * step
+    ;; （浮動小数点の誤差蓄積を防ぐため、正確な終点から逆算する）
+    local.get $start
+    local.get $count
+    f64.const 1.0
+    f64.sub
+    local.get $step
+    f64.mul
+    f64.sub
+    local.set $curr
+
+    ;; 5. 逆順リスト構築ループ
+    (block $break
+      (loop $loop
+        ;; list = cons(curr, list)
+        local.get $curr
+        local.get $list
+        call $cons
+        local.set $list
+
+        ;; count -= 1.0
+        local.get $count
+        f64.const 1.0
+        f64.sub
+        local.tee $count
+
+        ;; if (count <= 0) break
+        f64.const 0.0
+        f64.le
+        br_if $break
+
+        ;; curr += step
+        local.get $curr
+        local.get $step
+        f64.add
+        local.set $curr
+
+        br $loop
+      )
+    )
+    ;; 完成したリストの先頭ポインタを返す
+    local.get $list
   )
 
   (func $is_truthy (param $val f64) (result i32)
@@ -1329,9 +1757,160 @@ ${dataSection}
     call $apply_closure
   )
 
-  (func $spread_concat (param $left f64) (param $right f64) (result f64)
-    ;; Dictionary / List / String concatenation fallback helper (Unimplemented logic placeholder)
-    f64.const nan
+(func $spread_concat (param $left f64) (param $right f64) (result f64)
+    (local $src_ptr i32)
+    (local $head_ptr i32)
+    (local $tail_ptr i32)
+    (local $new_node i32)
+    (local $last_node i32)
+    (local $tag i32)
+    (local $cdr_val f64)
+    (local $cdr_tag i32)
+
+    ;; Check if left is List (0x7FFC) or Spread List (0x7FF4)
+    local.get $left
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    local.set $tag
+
+    local.get $tag
+    i32.const 0x7FFC0000
+    i32.eq
+    local.get $tag
+    i32.const 0x7FF40000
+    i32.eq
+    i32.or
+    if
+      local.get $left
+      i64.reinterpret_f64
+      i32.wrap_i64
+      local.set $src_ptr
+
+      i32.const 0
+      local.set $head_ptr
+      i32.const 0
+      local.set $tail_ptr
+
+      ;; Deep copy loop for left side
+      (block $copy_end
+        (loop $copy_loop
+          local.get $src_ptr
+          i32.eqz
+          br_if $copy_end
+
+          i32.const 16
+          call $alloc
+          local.set $new_node
+
+          local.get $new_node
+          local.get $src_ptr
+          f64.load offset=0
+          f64.store offset=0
+
+          local.get $tail_ptr
+          i32.eqz
+          if
+            local.get $new_node
+            local.set $head_ptr
+          else
+            local.get $tail_ptr
+            i64.const 0x7FFC000000000000
+            local.get $new_node
+            i64.extend_i32_u
+            i64.or
+            f64.reinterpret_i64
+            f64.store offset=8
+          end
+
+          local.get $new_node
+          local.set $tail_ptr
+
+          local.get $src_ptr
+          f64.load offset=8
+          local.set $cdr_val
+
+          local.get $cdr_val
+          i64.reinterpret_f64
+          i64.const 32
+          i64.shr_u
+          i32.wrap_i64
+          local.set $cdr_tag
+
+          local.get $cdr_tag
+          i32.const 0x7FFC0000
+          i32.eq
+          local.get $cdr_tag
+          i32.const 0x7FF40000
+          i32.eq
+          i32.or
+          if
+            local.get $cdr_val
+            i64.reinterpret_f64
+            i32.wrap_i64
+            local.set $src_ptr
+            br $copy_loop
+          else
+            ;; -------------------------------------------
+            ;; ★ 修正版: NaN(Unit) なら最後のノード追加をスキップして終了
+            local.get $cdr_val
+            i64.reinterpret_f64
+            i64.const 0x7FF8000000000000
+            i64.eq
+            if
+              br $copy_end
+            end
+            ;; -------------------------------------------
+
+            ;; End of dot-pair, add one more node
+            i32.const 16
+            call $alloc
+            local.set $last_node
+
+            local.get $last_node
+            local.get $cdr_val
+            f64.store offset=0
+
+            local.get $tail_ptr
+            i64.const 0x7FFC000000000000
+            local.get $last_node
+            i64.extend_i32_u
+            i64.or
+            f64.reinterpret_i64
+            f64.store offset=8
+
+            local.get $last_node
+            local.set $tail_ptr
+            br $copy_end
+          end
+        )
+      )
+
+      ;; Attach right side
+      local.get $tail_ptr
+      i32.eqz
+      if
+        local.get $right
+        return
+      else
+        local.get $tail_ptr
+        local.get $right
+        f64.store offset=8
+
+        i64.const 0x7FFC000000000000
+        local.get $head_ptr
+        i64.extend_i32_u
+        i64.or
+        f64.reinterpret_i64
+        return
+      end
+    end
+
+    ;; Fallback
+    local.get $left
+    local.get $right
+    call $cons
   )
 
 ;; ==========================================
@@ -1378,11 +1957,56 @@ ${dataSection}
     f64.const nan
   )
 
+;; ==========================================
+  ;; ★ 追加: $lift (前置 ~ 演算子)。Spreadタグを解除するか、純粋な値をリストに包む
+  ;; ==========================================
+  (func $lift (param $val f64) (result f64)
+    (local $tag i32)
+    local.get $val
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    local.set $tag
+
+    ;; Spread List (0x7FF4) -> Normal List (0x7FFC)
+    local.get $tag
+    i32.const 0x7FF40000
+    i32.eq
+    if
+      local.get $val
+      i64.reinterpret_f64
+      i64.const 0x0008000000000000  ;; タグビットを反転
+      i64.xor
+      f64.reinterpret_i64
+      return
+    end
+
+    ;; Spread String (0x7FF5) -> Normal String (0x7FFD)
+    local.get $tag
+    i32.const 0x7FF50000
+    i32.eq
+    if
+      local.get $val
+      i64.reinterpret_f64
+      i64.const 0x0008000000000000  ;; タグビットを反転
+      i64.xor
+      f64.reinterpret_i64
+      return
+    end
+
+    ;; その他: 値を単一要素のリストに包む cons(val, Unit)
+    local.get $val
+    i64.const 0x7FF8000000000000
+    f64.reinterpret_i64
+    call $cons
+  )
+
   ;; $apply_hash: # 演算子の実体 (AArch64 SVC / システムコール仕様 & パススルー)
   (func $apply_hash (param $left f64) (param $right f64) (result f64)
     (local $tag i32)
     (local $ptr i32)
-    (local $target_val f64)  ;; ★ 追加: cdrの値を受け取る変数
+    (local $target_val f64)
 
     local.get $right
     i64.reinterpret_f64
@@ -1392,57 +2016,20 @@ ${dataSection}
     local.set $tag
 
     ;; ==========================================
-    ;; ★ SVC (Supervisor Call) ルーティング
+    ;; ★ SVC (Supervisor Call) ルーティング (stdout)
     ;; ==========================================
     local.get $left
     f64.const 1.0
     f64.eq
     if
-      ;; 右辺が Normal String (0x7FFD) または Spread String (0x7FF5) なら一括ストリーム出力
+      ;; ★ 修正: 展開リスト(Spread List: 0x7FF4) 以外は直接syscallで一括出力
       local.get $tag
-      i32.const 0x7FFD0000
-      i32.eq
-      local.get $tag
-      i32.const 0x7FF50000
-      i32.eq
-      i32.or
+      i32.const 0x7FF40000
+      i32.ne
       if
+        i32.const 64
         local.get $right
-        i64.reinterpret_f64
-        i32.wrap_i64
-        local.set $ptr
-
-        local.get $ptr
-        local.get $ptr
-        call $strlen
-        call $print_string
-        local.get $right
-        return
-      end
-
-      ;; 右辺が List (0x7FFC) の場合、print_list を呼び出してシリアライズ
-      local.get $tag
-      i32.const 0x7FFC0000
-      i32.eq
-      if
-        local.get $right
-        i64.reinterpret_f64
-        i32.wrap_i64
-        call $print_list
-        local.get $right
-        return
-      end
-
-      ;; 右辺が Closure (0x7FFE) の場合、print_closure を呼び出してシリアライズ
-      local.get $tag
-      i32.const 0x7FFE0000
-      i32.eq
-      if
-        local.get $right
-        i64.reinterpret_f64
-        i32.wrap_i64
-        call $print_closure
-        local.get $right
+        call $syscall
         return
       end
     end
@@ -1474,6 +2061,15 @@ ${dataSection}
           local.get $ptr
           f64.load offset=8
           local.set $target_val
+
+          ;; cdrが Unit(0x7FF8000000000000) なら展開ループを終了
+          local.get $target_val
+          i64.reinterpret_f64
+          i64.const 0x7FF8000000000000
+          i64.eq
+          if
+            br $spread_loop_end
+          end
 
           ;; cdrの型タグを確認
           local.get $target_val
@@ -1551,15 +2147,19 @@ ${dataSection}
     local.get $right  ;; 最終的に右辺をパススルー
   )
 
-  ;; $apply_hash_single: 1要素に対する実際のMMIO処理 (変更なし)
+  ;; $apply_hash_single: 1要素に対する実際のMMIO処理 (ポリモーフィズム対応版)
   (func $apply_hash_single (param $left f64) (param $right f64) (result f64)
     local.get $left
     f64.const 1.0
     f64.eq
     if
+      ;; ★変更: stdoutなら、どんな型であろうと sys_write (64) に丸投げ
+      i32.const 64
       local.get $right
-      call $print_float
+      call $syscall
+      drop
     else
+      ;; stdout以外のポートならWASMメモリに直接ストア (MMIO)
       local.get $left
       i32.trunc_sat_f64_u
       i32.const 3
@@ -1570,14 +2170,44 @@ ${dataSection}
     f64.const nan
   )
 
-  ;; $apply_space: 空白演算子の実体 (SPREAD対応)
-  (func $apply_space (param $arg_val f64) (param $func_val f64) (result f64)
+(func $apply_space (param $right f64) (param $left f64) (result f64)
     (local $tag i32)
+    (local $left_tag i32)
     (local $ptr i32)
     (local $last_result f64)
-    (local $target_val f64)  ;; ★ 追加: cdrの値を受け取る変数
+    (local $target_val f64)
 
-    local.get $arg_val
+    ;; Dispatch coproduct if left is a list
+    local.get $left
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    local.set $left_tag
+
+    ;; If left is not closure (0x7FFE)
+    local.get $left_tag
+    i32.const 0x7FFE0000
+    i32.ne
+    if
+      ;; If left is List or Spread List, do concat
+      local.get $left_tag
+      i32.const 0x7FFC0000
+      i32.eq
+      local.get $left_tag
+      i32.const 0x7FF40000
+      i32.eq
+      i32.or
+      if
+        local.get $left
+        local.get $right
+        call $spread_concat
+        return
+      end
+    end
+
+    ;; Function application
+    local.get $right
     i64.reinterpret_f64
     i64.const 32
     i64.shr_u
@@ -1589,7 +2219,7 @@ ${dataSection}
     i32.const 0x7FF40000
     i32.eq
     if
-      local.get $arg_val
+      local.get $right
       i64.reinterpret_f64
       i32.wrap_i64
       local.set $ptr
@@ -1600,20 +2230,29 @@ ${dataSection}
       (block $spread_loop_end
         (loop $spread_loop
           local.get $ptr
-          i32.eqz  ;; ポインタゼロ判定
+          i32.eqz
           br_if $spread_loop_end
 
-          ;; --- carの適用 ---
           local.get $ptr
           f64.load offset=0
-          local.get $func_val
+          local.get $left
           call $apply_closure
           local.set $last_result
 
-          ;; --- cdrの処理 ---
           local.get $ptr
           f64.load offset=8
           local.set $target_val
+
+          ;; -------------------------------------------
+          ;; ★ 修正版: cdrが Unit(0x7FF8000000000000) なら展開ループを終了
+          local.get $target_val
+          i64.reinterpret_f64
+          i64.const 0x7FF8000000000000
+          i64.eq
+          if
+            br $spread_loop_end
+          end
+          ;; -------------------------------------------
 
           local.get $target_val
           i64.reinterpret_f64
@@ -1625,17 +2264,19 @@ ${dataSection}
           local.get $tag
           i32.const 0x7FFC0000
           i32.eq
+          local.get $tag
+          i32.const 0x7FF40000
+          i32.eq
+          i32.or
           if
-            ;; cdrがリストなら次へ進む
             local.get $target_val
             i64.reinterpret_f64
             i32.wrap_i64
             local.set $ptr
             br $spread_loop
           else
-            ;; cdrがスカラーなら最後の要素として関数適用して脱出
             local.get $target_val
-            local.get $func_val
+            local.get $left
             call $apply_closure
             local.set $last_result
             br $spread_loop_end
@@ -1646,12 +2287,12 @@ ${dataSection}
       return
     end
 
-    ;; --- Spread String (0x7FF5) --- (変更なし)
+    ;; --- Spread String (0x7FF5) ---
     local.get $tag
     i32.const 0x7FF50000
     i32.eq
     if
-      local.get $arg_val
+      local.get $right
       i64.reinterpret_f64
       i32.wrap_i64
       local.set $ptr
@@ -1659,17 +2300,17 @@ ${dataSection}
       f64.const nan
       local.set $last_result
 
-      (block $spread_loop_end
-        (loop $spread_loop
+      (block $spread_loop_end_str
+        (loop $spread_loop_str
           local.get $ptr
           i32.load8_u
           i32.eqz
-          br_if $spread_loop_end
+          br_if $spread_loop_end_str
 
           local.get $ptr
           i32.load8_u
           f64.convert_i32_u
-          local.get $func_val
+          local.get $left
           call $apply_closure
           local.set $last_result
 
@@ -1677,22 +2318,22 @@ ${dataSection}
           i32.const 1
           i32.add
           local.set $ptr
-          br $spread_loop
+          br $spread_loop_str
         )
       )
       local.get $last_result
       return
     end
 
-    ;; === 単発実行 ===
-    local.get $arg_val
-    local.get $func_val
+    ;; === Single execution ===
+    local.get $right
+    local.get $left
     call $apply_closure
   )
 
-  (func $apply_space_reversed (param $func_val f64) (param $arg_val f64) (result f64)
-    local.get $arg_val
-    local.get $func_val
+  (func $apply_space_reversed (param $left f64) (param $right f64) (result f64)
+    local.get $right
+    local.get $left
     call $apply_space
   )
   

@@ -197,7 +197,22 @@ const processLine = (tokens) => {
       stack[stack.length - 1].push(nu);
       stack.push(nu);
     } else if (t === ']' || t === ')' || t === '}') {
-      if (stack.length > 1) stack.pop();
+      if (stack.length > 1) {
+        const currentList = stack[stack.length - 1];
+
+        // ★ Signの哲学：すべての括弧は等価。
+        // ブロック内にカンマ ',' が直接存在する場合のみ、リスト(タプルの連鎖)とみなして終端()を付与する
+        if (currentList.includes(',')) {
+          // 末尾が既にカンマで終わっていない場合のみカンマを追加
+          if (currentList[currentList.length - 1] !== ',') {
+            currentList.push(',');
+          }
+          // 空の配列 [] を追加（これはパーサ側で Unit / NaN として解釈されます）
+          currentList.push([]);
+        }
+
+        stack.pop();
+      }
     } else if (t !== '\t') {
       stack[stack.length - 1].push(t);
     }

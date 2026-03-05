@@ -139,36 +139,122 @@
 				let wasmMemory;
 				const importObject = {
 					env: {
-						print_string: (ptr, len) => {
-							if (wasmMemory) {
-								const bytes = new Uint8Array(wasmMemory.buffer, ptr, len);
-								const str = new TextDecoder('utf-8').decode(bytes);
-								outputEl.textContent += `[Print] ${str}\n`;
-							}
-						},
-						print_float: (arg) => {
-							outputEl.textContent += `[Print] ${arg}\n`;
-						},
-						input_float: () => {
-							if (inputPointer < inputQueue.length) {
-								return inputQueue[inputPointer++];
-							}
-							return 0.0; // 入力が尽きた場合は 0.0 を返す
-						},
 						math_fmod: (a, b) => a % b,
 						math_pow: Math.pow,
 
 						// ==========================================
-						// ★ 今回追加するシステムコールの受け口（スタブ）
+						// ★ AArch64 OSカーネル相当の統合システムコール
 						// ==========================================
-						print_list: (ptr) => {
-							// WASMからリストの先頭ポインタだけが渡されてくる
-							// （※後で wasmMemory を辿って中身を読み解く処理を作ります）
-							outputEl.textContent += `[Print] <List Structure (Ptr: ${ptr})>\n`;
-						},
-						print_closure: (ptr) => {
-							// WASMから関数の構造体ポインタだけが渡されてくる
-							outputEl.textContent += `[Print] <Closure (Ptr: ${ptr})>\n`;
+						syscall: (sys_num, arg) => {
+							if (!wasmMemory) return Number.NaN;
+
+							// --- sys_read (63): 標準入力 ---
+							if (sys_num === 63) {
+								if (inputPointer < inputQueue.length) {
+									return inputQueue[inputPointer++];
+								}
+								return 0.0;
+							}
+
+							// --- sys_write (64): 標準出力 ---
+							if (sys_num === 64) {
+								const buf = new ArrayBuffer(8);
+								new Float64Array(buf)[0] = arg;
+								const view = new DataView(buf);
+								const tag = view.getUint32(4, true) & 0xFFFF0000;
+								const ptr = view.getUint32(0, true);
+
+								const memView = new DataView(wasmMemory.buffer);
+
+								// 1. 文字列出力 (0x7FFD, 0x7FF5)
+								if (tag === 0x7FFD0000 || tag === 0x7FF50000) {
+									let len = 0;
+									// C言語ライクにNull終端(\0)まで読む
+									while (new Uint8Array(wasmMemory.buffer, ptr + len, 1)[0] !== 0) len++;
+									const bytes = new Uint8Array(wasmMemory.buffer, ptr, len);
+									const str = new TextDecoder('utf-8').decode(bytes);
+									outputEl.textContent += `[Print] ${str}\n`;
+									return arg;
+								}
+
+								// 2. クロージャ出力 (0x7FFE)
+								if (tag === 0x7FFE0000) {
+									outputEl.textContent += `[Print] <Closure (Ptr: ${ptr})>\n`;
+									return arg;
+								}
+
+								// 3. リスト出力 (0x7FFC, 0x7FF4) - デュアル表示
+								if (tag === 0x7FFC0000 || tag === 0x7FF40000) {
+									function readRaw(f64_val) {
+										const b = new ArrayBuffer(8);
+										new Float64Array(b)[0] = f64_val;
+										const v = new DataView(b);
+										const t = v.getUint32(4, true) & 0xFFFF0000;
+										const p = v.getUint32(0, true);
+										if (t === 0x7FFC0000 || t === 0x7FF40000) return traverseRaw(p);
+										if (t === 0x7FF80000) return "()";
+										if (t === 0x7FFE0000) return "<Closure>";
+										return f64_val.toString();
+									}
+									// --- 1. Raw表示 (Signのドットペア) 用のパース ---
+									function traverseRaw(p) {
+										if (p === 0) return "()";
+										const car_val = memView.getFloat64(p, true);
+										const cdr_val = memView.getFloat64(p + 8, true);
+										// ★ 修正: Lispの `.` ではなく Signの `,` を使う
+										return `(${readRaw(car_val)} , ${readRaw(cdr_val)})`;
+									}
+									function readPretty(f64_val) {
+										const b = new ArrayBuffer(8);
+										new Float64Array(b)[0] = f64_val;
+										const v = new DataView(b);
+										const t = v.getUint32(4, true) & 0xFFFF0000;
+										const p = v.getUint32(0, true);
+										if (t === 0x7FFC0000 || t === 0x7FF40000) return formatPretty(p);
+										if (t === 0x7FF80000) return "()";
+										if (t === 0x7FFE0000) return "<Closure>";
+										return f64_val.toString();
+									}
+									// --- 2. 綺麗に整形した配列表示用のパース ---
+									function formatPretty(p) {
+										if (p === 0) return "[]";
+										let res = "[";
+										let current = p;
+										while (current !== 0) {
+											const car_val = memView.getFloat64(current, true);
+											const cdr_val = memView.getFloat64(current + 8, true);
+
+											res += readPretty(car_val);
+
+											const cdr_buf = new ArrayBuffer(8);
+											new Float64Array(cdr_buf)[0] = cdr_val;
+											const cdr_view = new DataView(cdr_buf);
+											const cdr_tag = cdr_view.getUint32(4, true) & 0xFFFF0000;
+
+											if (cdr_tag === 0x7FF80000) {
+												break; // Unitなら正常な終端
+											} else if (cdr_tag === 0x7FFC0000 || cdr_tag === 0x7FF40000) {
+												res += ", "; // 次の要素へ
+												current = cdr_view.getUint32(0, true);
+											} else {
+												// ★ 修正: 不正なドットペアの末尾も `|` ではなく `,` で繋ぐ
+												res += ", " + readPretty(cdr_val);
+												break;
+											}
+										}
+										res += "]";
+										return res;
+									}
+									outputEl.textContent += `[Print] ${formatPretty(ptr)}  // Raw: ${traverseRaw(ptr)}\n`;
+									return arg;
+								}
+
+								// 4. 通常の数値
+								outputEl.textContent += `[Print] ${arg}\n`;
+								return arg;
+							}
+
+							return Number.NaN;
 						}
 					}
 				};

@@ -1,25 +1,44 @@
 ` =========================================================
-_ : 1 # `===== Ph1 =====`
+_ : 1 # `===== Ph1: Basic Math & Logic =====`
 ` =========================================================
-` --- 比較演算 ---
-ph1_cmp : (5 == 5), (1 != 2), (1 < 2), (2 > 1), (1 <= 1), (2 >= 2)
-_ : 1 # ph1_cmp~
+_ : 1 # `--- Comparison ---`
+_ : 1 # 5 == 5
+_ : 1 # 1 != 2
+_ : 1 # 1 < 2
+_ : 1 # 2 > 1
+_ : 1 # 1 <= 1
+_ : 1 # 2 >= 2
 
-` --- 論理演算 (0, 1 は Truthy, _ は Falsy) ---
-ph1_log : (_ & 0), (0 & _), (0 & 1), (_ | 0), (0 | _), (0 | 1), (_ ; 0), (1 ; _), (0 ; 1), (_ ; _)
-_ : 1 # ph1_log~
+_ : 1 # `--- Logic ---`
+_ : 1 # _ & 0
+_ : 1 # 0 & _
+_ : 1 # 0 & 1
+_ : 1 # _ | 0
+_ : 1 # 0 | _
+_ : 1 # 0 | 1
+_ : 1 # _ ; 0
+_ : 1 # 1 ; _
+_ : 1 # 0 ; 1
+_ : 1 # _ ; _
 
-` --- ビット演算 ---
-ph1_bit : (1 && 42), (0 || 99), (1 ;; 1), (1 ;; 0), (1 << 2), (4 >> 1), (!!0)
-_ : 1 # ph1_bit~
+_ : 1 # `--- Bitwise ---`
+_ : 1 # 1 && 42
+_ : 1 # 0 || 99
+_ : 1 # 1 ;; 1
+_ : 1 # 1 ;; 0
+_ : 1 # 1 << 2
+_ : 1 # 4 >> 1
+_ : 1 # !!0
 
-` --- その他制御・単項演算 ---
-ph1_oth : (!1), (!(1 == 2)), ((1 == 1) : 100), ((1 == 2) : 200), (x ? x + 1)
-_ : 1 # ph1_oth~
-
+_ : 1 # `--- Other Control & Unary Operators ---`
+_ : 1 # !1
+_ : 1 # !(1 == 2)
+_ : 1 # ((1 == 1) : 100)
+_ : 1 # ((1 == 2) : 200)
+_ : 1 # x ? x + 1
 
 ` =========================================================
-_ : 1 # `===== Ph2 =====`
+_ : 1 # `===== Ph2: Strings & Short-circuit =====`
 ` =========================================================
 ` テスト1: 文字列（Strings）の割り当てと出力
 ` ※SVCによるストリーム出力を使うため ~ を外しています
@@ -27,36 +46,50 @@ _ : 1 # `Hello! WASM Strings!`
 
 ` テスト2: リスト作成と結合 (cons と ,)
 list_test : 100, 200
+_ : 1 # list_test
 _ : 1 # list_test~
 
 ` テスト3: リスト要素の抽出 (head, tail)
-ph2_ext : (list_test ' 0), (list_test ' 1)
-_ : 1 # ph2_ext~
+_ : 1 # list_test ' 0
+_ : 1 # list_test ' 1
 
 ` テスト4: ブロックの短絡評価 ([...])
-_ : 1 # [ _ 42 99 ]
+_ : 1 # [
+	_
+	42
+	99
+]
 
 
 ` =========================================================
-_ : 1 # `===== Ph3 =====`
+_ : 1 # `===== Ph3: Closures =====`
 ` =========================================================
+_ : 1 # `--- Closures ---`
 ` 1.クロージャの生成と適用
 f : x y ?
 	x + y
-ph3_closure : f 10 20, (f 10 20), (f (10 20)), ((f 10) 20)
-_ : 1 # ph3_closure~
+_ : 1 # f 10 20
+_ : 1 # (f 10 20)
+_ : 1 # (f (10 20))
+_ : 1 # ((f 10) 20)
 
 _ : 1 # [x y ? x + y] 10 20
 
+_ : 1 # `--- Match Case ---`
 ` 2.`match_case` (条件分岐) の機能
 match_test : x ?
 	x = 0 : 100
 	x > 0 : 200
 	x < 0 : 300
 	400
-ph3_match : (match_test 0), (match_test 1), (match_test -1), (match_test _), (match_test `a`), (match_test a)
-_ : 1 # ph3_match~
+_ : 1 # match_test 0
+_ : 1 # match_test 1
+_ : 1 # match_test -1
+_ : 1 # match_test _
+_ : 1 # match_test `a`
+_ : 1 # match_test a
 
+_ : 1 # `--- Dictionary ---`
 ` 3.カッコブロック `[]` を用いた辞書の生成とアクセス
 dict_test : x ?
 	[
@@ -65,9 +98,11 @@ dict_test : x ?
 	]
 
 my_dict : dict_test 40
-ph3_dict : (my_dict ' id), (my_dict ' val)
-_ : 1 # ph3_dict~
 
+_ : 1 # (my_dict ' id)
+_ : 1 # (my_dict ' val)
+
+_ : 1 # `--- Match Case & Dictionary ---`
 ` 4.Match Case と辞書環境の統合テスト
 complex_test : code ?
 	code == 200 : [
@@ -87,55 +122,61 @@ res1 : complex_test 200
 res2 : complex_test 404
 res3 : complex_test _
 res4 : complex_test a
-ph3_complex : (res1 ' status), (res1 ' msg), (res2 ' status), (res2 ' msg), (res3 ' status), (res3 ' msg), (res4 ' status), (res4 ' msg)
-_ : 1 # ph3_complex~
+_ : 1 # res1 ' status
+_ : 1 # res1 ' msg
+_ : 1 # res2 ' status
+_ : 1 # res2 ' msg
+_ : 1 # res3 ' status
+_ : 1 # res3 ' msg
+_ : 1 # res4 ' status
+_ : 1 # res4 ' msg
+
+`` =========================================================
+`_ : 1 # `===== Ph3.5: Error handling =====`
+`` =========================================================
+`` 1. 算術・論理演算子のオペランド欠落
+`test_math_R : 10 +
+`test_math_L : * 5
+`test_logic_R : 1 &
+`ph35_1 : test_math_R, test_math_L, test_logic_R
+`_ : 1 # ph35_1~
+`
+`` 2. 辞書の定義エラーとプロパティアクセスの崩壊
+`test_dict_bad : [ : 100 ]
+`test_prop_bad : test_dict_bad ' missing
+`ph35_2 : test_dict_bad, test_prop_bad
+`_ : 1 # ph35_2~
+`
+`` 3. 関数定義（ラムダ構築子）の構文エラー
+`test_lambda_empty : x ?
+`test_lambda_no_arg : ?
+`	10
+`ph35_3 : test_lambda_empty, test_lambda_no_arg
+`_ : 1 # ph35_3~
+`
+`` 4. 演算子の関数化（ポイントフリー）での中身の崩壊
+`test_pf_empty : []
+`test_pf_bad_op : [+ -]
+`test_pf_bad_apply : [10 + *]
+`ph35_4 : test_pf_empty, test_pf_bad_op, test_pf_bad_apply
+`_ : 1 # ph35_4~
+`
+`` 5. 関数合成・適用における引数不足（カリー化・クロージャ返却の検証）
+`test_compose_short : [+ 2] [* 5] [+] 4
+`_ : 1 # test_compose_short
+`
+`` 6. インデントブロックにおけるパイプライン連鎖の検証
+`test_pipeline : [
+`	* 2
+`	10
+`]
+`_ : 1 # test_pipeline
 
 
 ` =========================================================
-_ : 1 # `===== Ph3.5 =====`
+_ : 1 # `===== Ph4: Point-free & Sections =====`
 ` =========================================================
-` 1. 算術・論理演算子のオペランド欠落
-test_math_R : 10 +
-test_math_L : * 5
-test_logic_R : 1 &
-ph35_1 : test_math_R, test_math_L, test_logic_R
-_ : 1 # ph35_1~
-
-` 2. 辞書の定義エラーとプロパティアクセスの崩壊
-test_dict_bad : [ : 100 ]
-test_prop_bad : test_dict_bad ' missing
-ph35_2 : test_dict_bad, test_prop_bad
-_ : 1 # ph35_2~
-
-` 3. 関数定義（ラムダ構築子）の構文エラー
-test_lambda_empty : x ?
-test_lambda_no_arg : ?
-	10
-ph35_3 : test_lambda_empty, test_lambda_no_arg
-_ : 1 # ph35_3~
-
-` 4. 演算子の関数化（ポイントフリー）での中身の崩壊
-test_pf_empty : []
-test_pf_bad_op : [+ -]
-test_pf_bad_apply : [10 + *]
-ph35_4 : test_pf_empty, test_pf_bad_op, test_pf_bad_apply
-_ : 1 # ph35_4~
-
-` 5. 関数合成・適用における引数不足（カリー化・クロージャ返却の検証）
-test_compose_short : [+ 2] [* 5] [+] 4
-_ : 1 # test_compose_short
-
-` 6. インデントブロックにおけるパイプライン連鎖の検証
-test_pipeline : [
-	* 2
-	10
-]
-_ : 1 # test_pipeline
-
-
-` =========================================================
-_ : 1 # `===== Ph4 =====`
-` =========================================================
+_ : 1 # `--- Point-free ---`
 ` 1. ポイントフリー記法（関数合成）のテスト
 foo : [+ 4]
 bar : [* 3]
@@ -155,6 +196,7 @@ _ : 1 # test_pf_bind
 test_pf_short2 : [+ 2] [* 5] [+] 4
 _ : 1 # test_pf_short2
 
+_ : 1 # `--- Sections ---`
 ` 2. 部分適用（カリー化）のテスト
 f1 : 10 +
 _ : 1 # f1 5
@@ -171,24 +213,87 @@ _ : 1 # f5 3
 
 
 ` =========================================================
-_ : 1 # `===== Ph5 =====`
+_ : 1 # `===== Ph5: List Operations =====`
 ` =========================================================
-` Description of Phase 5 achievements
-_ : 1 # `Phase 5: Spread operator (~) and SVC are fully implemented.`
-_ : 1 # `Lists and strings now return actual values instead of NaN.`
+list_a : [1, 2]
+list_b : [3, 4]
+concat_list : list_a list_b
+_ : 1 # concat_list
 
-` 1. 文字列の1文字ずつの展開 (ストリーム展開)
-test_str_spread : `abc`
-_ : 1 # `String spread:`
-_ : 1 # test_str_spread~
+_ : 1 # `--- 2D Array Spread ---`
+_ : 1 # [[10, 20], [30, 40]]~
 
-` 2. リスト構造そのままの出力 (SVCによるシリアライズ)
-_ : 1 # `List structure output:`
-_ : 1 # (10, 20, 30)
+` =========================================================
+_ : 1 # `===== Ph6: Advanced Memory (Escape) =====`
+` =========================================================
+f : x ? (
+	y : 100
+	g : z ? x + y + z
+	g
+)
+my_func : f 50
+_ : 1 # my_func 10
 
-` 3. 未定義変数を展開しようとした時の安全装置 (NaNを返して止まるか)
-_ : 1 # `Undefined variable spread (should be NaN):`
-_ : 1 # undefined_list~
+
+` 2. Address Operator ($)
+test_addr : (
+	val : 42
+	$val
+)
+_ : 1 # `Address of val is:`
+_ : 1 # test_addr
+
+` =========================================================
+_ : 1 # `===== Ph7: Compiler Optimization =====`
+` =========================================================
+
+` 1. Constant Folding (定数畳み込み)
+` JS側で事前計算され、WASMには 70 だけが出力される
+_ : 1 # 10 + 20 * 3
+
+` 2. Static Dispatch (静的ディスパッチ)
+` 関数ではない空白適用が実行時判定をスキップし、直接リストに置換される
+_ : 1 # 100 200
+
+` 3. Beta Reduction (インライン展開)
+` クロージャが生成されず、即座に 20 + 10 が計算されて出力される
+_ : 1 # (x ? x + 10) 20
+
+` =========================================================
+_ : 1 # `===== Ph8: Math Operators =====`
+` =========================================================
+
+` 1. Absolute Value (絶対値)
+` 定数畳み込み（JS側で事前計算されるパターン）
+_ : 1 # |-42|
+
+` ランタイム実行（WASM側で f64.abs が呼ばれるパターン）
+f : x ? |x|
+_ : 1 # f -99
+
+` 2. Factorial (階乗)
+_ : 1 # 5!
+
+` =========================================================
+_ : 1 # `===== Ph9: Dynamic List =====`
+` =========================================================
+_ : 1 # `--- Range  ---`
+` 1. 昇順リスト
+_ : 1 # 1 ~ 5
+
+` 2. 降順リスト (自動で逆向きに生成)
+_ : 1 # 5 ~ 1
+
+` 3. 浮動小数点のRange (賢く小数点ステップを解釈)
+_ : 1 # 1.5 ~ 4.0
+
+_ : 1 # `--- Lift Operator  ---`
+` 1. 単一の値を持ち上げてリストにする
+_ : 1 # ~42
+
+` 2. Spread (後置) と Lift (前置) の対称性の確認
+list : 10, 20
+_ : 1 # ~(list~)
 
 ` =========================================================
 1 # `===== end =====`
