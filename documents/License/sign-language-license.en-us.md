@@ -17,7 +17,7 @@ In this license, the following terms have the following meanings:
 - "User" refers to any individual or organization that uses Sign.
 - "Contributor" refers to a contributor to the community.
 - "Investor" refers to a person who invests in or provides capital to this community.
-- "SignCertified" refers to certification granted to programs built with the official Sign compiler that receive technical support.
+- "Sign Certified" refers to certification granted to programs built with the official Sign compiler that receive technical support.
 - "Technical Support" refers to paid support services provided by the Sign Development Team.
 
 ## 1. Creator's Declaration
@@ -66,6 +66,7 @@ For programs written in Sign, unless they are self-hosted compilers or copies or
 
 ### 5.1 Technical Support
 1. Provision conditions:
+   - The intended use must not be for military purposes, whether directly or indirectly
    - Provided as a paid service by the Sign Development Team
    - Only available for programs built with the official Sign compiler
    - Detailed conditions are specified in a separate support contract
@@ -76,16 +77,24 @@ For programs written in Sign, unless they are self-hosted compilers or copies or
    - Performance optimization
    - Security advice
 
-### 5.2 SignCertified Certification
+### 5.2 Sign Certified Certification
 1. Requirements:
+   - The intended use must not be for military purposes, whether directly or indirectly
    - Building with the official Sign compiler is required
    - A valid technical support contract is required
 
 2. Benefits:
    - Proof of using the official compiler
    - Guarantee of specification compliance
-   - Right to use the SignCertified mark
+   - Right to use the Sign Certified mark
    - Access to technical support services
+
+### 5.3 Non-Involvement in Military Use
+- The Sign Development Team does not provide any technical support for military use, whether direct or indirect
+- Technical support contracts with the Sign Development Team cannot be concluded for military use, whether direct or indirect
+- The Sign Development Team is not involved in any way in military use, whether direct or indirect
+- The Sign Development Team bears no responsibility whatsoever for military use, whether direct or indirect
+- Should a user choose to use this language for military purposes, all judgment and consequences thereof belong solely to that user
 
 ## 6. Disclaimer and Limitation of Liability
 
