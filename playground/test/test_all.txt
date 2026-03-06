@@ -30,7 +30,7 @@
 [Print] 1
 [Print] 100
 [Print] NaN
-[Print] <Closure (Ptr: 0000))>
+[Print] <Closure (Ptr: 0000)>
 [Print] ===== Ph2: Strings & Short-circuit =====
 [Print] Hello! WASM Strings!
 [Print] [100, 200]  // Raw: (100 , 200)
@@ -38,7 +38,7 @@
 [Print] 200
 [Print] 100
 [Print] 200
-[Print] 42
+[Print] 99
 [Print] ===== Ph3: Closures =====
 [Print] --- Closures ---
 [Print] 30
@@ -102,6 +102,16 @@
 [Print] --- Lift Operator  ---
 [Print] [42]  // Raw: (42 , ())
 [Print] [10, 20]  // Raw: (10 , 20)
+[Print] ===== Ph9.5: Design contradiction correction =====
+[Print] ---- Task 1: Block Sequential & Let return ----
+[Print] 30
+[Print] 60
+[Print] ---- Task 2: Falsy Closures ----
+[Print] 100
+[Print] ---- Task 3: Dynamic Dictionary ----
+[Print] 222
+[Print] 333
+[Print] NaN
 [Print] ===== end =====
 
 [Main Result] NaN
