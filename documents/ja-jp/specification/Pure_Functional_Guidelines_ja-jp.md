@@ -137,8 +137,8 @@ example : data ?
 
 ` プリプロセッサによる変換後
 example : _0 ?
-	[validate_data _0],
-	[_0 ' type = `special` & special_process _0],
+	[validate_data _0]
+	[_0 ' type = `special` & special_process _0]
 	[finalize_data _0]
 ```
 
@@ -259,7 +259,19 @@ system_state_update : state_address new_state ?
 
 ### 8.1 段階的な改善プロセス
 
-関数内定義を排除する具体的な手法を段階的に適用します：
+結論から先に述べると…
+
+---
+❣
+関数内（あるいは引数リスト内）で名前を束縛したいという欲求が生まれたとき、
+
+それは関数の分割粒度が間違っているか、関数合成（空白）を活用できていないサインである。
+
+変数を定義するのではなく、処理（動詞）を合成せよ。
+
+---
+
+に尽きます。
 
 #### ステップ1：関数分割
 
