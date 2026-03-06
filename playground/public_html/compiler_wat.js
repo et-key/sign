@@ -41,6 +41,166 @@ function encodeWatString(str) {
 	return res + '\\00';
 }
 
+// ==========================================
+// ★ 追加: 単一演算子 fold のインライン展開ジェネレータ
+// ==========================================
+function generateInlineFold(op, argCode) {
+	let opWat = TEMPLATES[op] || '';
+	// 乗算・除算・累乗は初期値を1.0、それ以外は0.0にする
+	let initAcc = (op === '*' || op === '/' || op === '^') ? 'f64.const 1.0' : 'f64.const 0.0';
+
+	let blockId = `fold_end_${unrollCounter}`;
+	let loopId = `fold_loop_${unrollCounter}`;
+	unrollCounter++;
+
+	return `
+		;; === INLINE FOLD: [${op}] ===
+${argCode}
+		local.set $target_val
+		
+		;; Tag Check
+		local.get $target_val
+		i64.reinterpret_f64
+		i64.const 32
+		i64.shr_u
+		i32.wrap_i64
+		local.set $tag
+		
+		local.get $tag
+		i32.const 0x7FF20000 ;; Tag: Range (Zero Cost Abstraction)
+		i32.eq
+		if (result f64)
+			;; --- 1. RANGE FOLD (メモリを使わない超高速ループ) ---
+			local.get $target_val
+			i64.reinterpret_f64
+			i32.wrap_i64
+			local.set $tmp_ptr
+			
+			;; acc = start (最初の要素)
+			local.get $tmp_ptr
+			f64.load offset=0
+			local.set $acc_val
+			
+			;; cur = start + step (2番目の要素)
+			local.get $tmp_ptr
+			f64.load offset=0
+			local.get $tmp_ptr
+			f64.load offset=16
+			f64.add
+			local.set $cur_val
+			
+			(block $${blockId}_R
+				(loop $${loopId}_R
+					;; if cur > end, break
+					local.get $cur_val
+					local.get $tmp_ptr
+					f64.load offset=8
+					f64.gt
+					br_if $${blockId}_R
+					
+					;; acc = acc OP cur
+					local.get $acc_val
+					local.get $cur_val
+					${opWat}
+					local.set $acc_val
+					
+					;; cur = cur + step
+					local.get $cur_val
+					local.get $tmp_ptr
+					f64.load offset=16
+					f64.add
+					local.set $cur_val
+					
+					br $${loopId}_R
+				)
+			)
+			local.get $acc_val
+		else
+			local.get $tag
+			i32.const 0x7FFC0000 ;; Tag: List
+			i32.eq
+			local.get $tag
+			i32.const 0x7FF40000 ;; Tag: List (Alt)
+			i32.eq
+			i32.or
+			if (result f64)
+				;; --- 2. LIST FOLD (通常の動的リストの走査) ---
+				local.get $target_val
+				i64.reinterpret_f64
+				i32.wrap_i64
+				local.set $list_ptr
+				
+				;; 空リストなら初期値を返す
+				local.get $list_ptr
+				i32.eqz
+				if (result f64)
+					${initAcc}
+				else
+					;; acc = car (最初の要素)
+					local.get $list_ptr
+					f64.load offset=0
+					local.set $acc_val
+					
+					;; target_val = cdr (次のノード)
+					local.get $list_ptr
+					f64.load offset=8
+					local.set $target_val
+					
+					(block $${blockId}_L
+						(loop $${loopId}_L
+							;; Check if target_val is end of list
+							local.get $target_val
+							i64.reinterpret_f64
+							i64.const 32
+							i64.shr_u
+							i32.wrap_i64
+							local.set $tag
+							
+							;; リストのタグでなければ終了
+							local.get $tag
+							i32.const 0x7FFC0000
+							i32.eq
+							local.get $tag
+							i32.const 0x7FF40000
+							i32.eq
+							i32.or
+							i32.eqz
+							br_if $${blockId}_L
+							
+							local.get $target_val
+							i64.reinterpret_f64
+							i32.wrap_i64
+							local.set $list_ptr
+							
+							local.get $list_ptr
+							i32.eqz
+							br_if $${blockId}_L
+							
+							;; acc = acc OP car
+							local.get $acc_val
+							local.get $list_ptr
+							f64.load offset=0
+							${opWat}
+							local.set $acc_val
+							
+							;; target_val = cdr
+							local.get $list_ptr
+							f64.load offset=8
+							local.set $target_val
+							
+							br $${loopId}_L
+						)
+					)
+					local.get $acc_val
+				end
+			else
+				;; どちらでもない場合はそのまま返す
+				local.get $target_val
+			end
+		end
+	`;
+}
+
 function isFunction(node, env = {}) {
 	if (!node) return false;
 
@@ -397,6 +557,23 @@ function substitute(node, paramName, argNode) {
 }
 
 // ==========================================
+// ★ 追加: パーサが生成した Operator Section ([+], [*] など) を特定する
+// ==========================================
+function extractSectionOp(n) {
+	if (!n || n.type !== 'infix' || n.op !== '?') return null;
+	if (!n.left || n.left.value !== '$1') return null;
+	if (!n.right || n.right.type !== 'infix' || n.right.op !== ';') return null;
+	let defCase = n.right.right;
+	if (!defCase || defCase.type !== 'infix' || defCase.op !== '?') return null;
+	if (!defCase.left || defCase.left.value !== '$2') return null;
+	let inner = defCase.right;
+	if (!inner || inner.type !== 'infix') return null;
+	if (!inner.left || inner.left.value !== '$1') return null;
+	if (!inner.right || inner.right.value !== '$2') return null;
+	return inner.op; // 例: '+' や '*' が返る
+}
+
+// ==========================================
 // ★ Phase 7: オプティマイザ (事前評価・定数畳み込み・β簡約・静的ディスパッチ)
 // ==========================================
 function optimizeAst(node) {
@@ -469,14 +646,60 @@ function optimizeAst(node) {
 		return { ...node, left, right };
 	}
 
+	// ==========================================
+	// ★ 追加: 専用ノード化されたインラインFoldのコンパイル
+	// ==========================================
+	if (node.type === 'inline_fold') {
+		let argCode = compileNode(node.arg, envMap);
+		return generateInlineFold(node.op, argCode);
+	}
+
+	// （↓ 既存の apply 処理。前回の追加部分は削除して元の状態に戻します）
 	if (node.type === 'apply') {
+
+		// ==========================================
+		// ★ 修正: インラインFold の事前検知 (Operator Sectionの確実な捕捉)
+		// パーサが生成した巨大なラムダ式の構造を静的にパターンマッチし、
+		// 高速なインラインループ(inline_fold)へとコンパイル時にすり替える。
+		// ==========================================
+		let sectionOp = extractSectionOp(node.func);
+		if (sectionOp && ['+', '-', '*', '/', '%', '^'].includes(sectionOp)) {
+			let optArg = optimizeAst(node.arg);
+			return {
+				type: 'inline_fold',
+				op: sectionOp,
+				arg: optArg
+			};
+		}
+
 		let optFunc = optimizeAst(node.func);
 		let optArg = optimizeAst(node.arg);
 
 		// ==========================================
-		// ★ 追加: Range演算子 (1 ~ 5) のパース救済
-		// パーサが `A ~ B` を `(A ~) B` (後置演算子 + 関数適用) 
-		// としてパースしてしまうため、ここで中置演算子(infix)の `~` に変換する！
+		// ★ 新規追加: inline_fold に巻き込まれた Range の救済
+		// `[+] [1 ~ 10]` が `([+] 1~) 10` と解釈されてしまう問題の解決
+		// ==========================================
+		let isSwallowedRange = false;
+		if (optFunc && optFunc.type === 'inline_fold' && optFunc.arg) {
+			if (optFunc.arg.type === 'postfix' && optFunc.arg.op === '~') isSwallowedRange = true;
+			if (optFunc.arg.type === 'infix' && optFunc.arg.right && optFunc.arg.right.type === 'postfix' && optFunc.arg.right.op === '~') isSwallowedRange = true;
+		}
+
+		if (isSwallowedRange) {
+			let rescuedArg = optimizeAst({
+				type: 'apply',
+				func: optFunc.arg,
+				arg: optArg
+			});
+			return {
+				type: 'inline_fold',
+				op: optFunc.op,
+				arg: rescuedArg
+			};
+		}
+
+		// ==========================================
+		// ★ 既存のルール: Range演算子 (1 ~ 5) のパース救済
 		// ==========================================
 		if (optFunc && optFunc.type === 'postfix' && optFunc.op === '~') {
 			return optimizeAst({
@@ -485,6 +708,27 @@ function optimizeAst(node) {
 				left: optFunc.expr,
 				right: optArg
 			});
+		}
+
+		// ==========================================
+		// ★ 新規追加: ステップ付きRange演算子 (0 ~+ 2 ~ 10) のパース救済
+		// パーサが `(0 ~+ (2 ~)) 10` と誤認したASTを、正しい `(0 ~+ 2) ~ 10` に組み替える
+		// ==========================================
+		if (optFunc && optFunc.type === 'infix' && ['~+', '~-', '~*', '~/', '~^'].includes(optFunc.op)) {
+			if (optFunc.right && optFunc.right.type === 'postfix' && optFunc.right.op === '~') {
+				let newRangeStep = {
+					type: 'infix',
+					op: optFunc.op,
+					left: optFunc.left,
+					right: optFunc.right.expr
+				};
+				return optimizeAst({
+					type: 'infix',
+					op: '~',
+					left: newRangeStep,
+					right: optArg
+				});
+			}
 		}
 
 		// --- β簡約 (Beta Reduction / インライン展開) ---
@@ -529,6 +773,14 @@ function compileNode(node, envMap = {}) {
 
 	if (node.type === 'unit') {
 		return `    f64.const nan\n`; // 万が一単体で来たとき用に追加
+	}
+
+	// ==========================================
+	// ★ 新規追加: インラインFoldをアセンブリに変換する処理
+	// ==========================================
+	if (node.type === 'inline_fold') {
+		let argCode = compileNode(node.arg, envMap);
+		return generateInlineFold(node.op, argCode);
 	}
 
 	// ==========================================
@@ -889,7 +1141,8 @@ function compileNode(node, envMap = {}) {
 			let funcCode = `  (func ${lambdaName}(param $env f64)(param $arg f64)(result f64) \n`;
 			funcCode += `    (local $tmp_bool f64) \n(local $tmp_L f64) \n(local $tmp_R f64) \n(local $tmp_ptr i32) \n`;
 			funcCode += `    (local $target_val f64) \n(local $tag i32) \n(local $str_ptr i32) \n(local $list_val f64) \n(local $list_ptr i32) \n`;
-			funcCode += `    (local $tmp_meta_ptr i32) \n`;
+			// ★ 末尾にインラインFold用の2つの変数を追加
+			funcCode += `    (local $tmp_meta_ptr i32) \n(local $acc_val f64) \n(local $cur_val f64) \n`;
 			for (let i = 0; i <= maxEnvDepth; i++) funcCode += `    (local $env_blk_${i} i32) \n`;
 			funcCode += funcBody;
 			funcCode += `  ) \n`;
@@ -993,12 +1246,19 @@ function compileNode(node, envMap = {}) {
 		}
 
 		// ==========================================
-		// ★ ここに追加！ Phase 9: 動的リスト構築 (Range演算子)
+		// ★ 修正: Zero Cost Domain Abstraction 対応の Range 演算子群
 		// ==========================================
-		if (op === '~') {
+		if (['~', '~+', '~-', '~*', '~/', '~^'].includes(op)) {
 			let code = compileNode(node.left, envMap);
 			code += compileNode(node.right, envMap);
-			code += `    call $make_range\n`;
+
+			if (op === '~') code += `    call $build_range\n`;
+			else if (op === '~+') code += `    f64.const 0.0\n    call $build_range_step\n`; // Add
+			else if (op === '~-') code += `    f64.const 1.0\n    call $build_range_step\n`; // Sub
+			else if (op === '~*') code += `    f64.const 2.0\n    call $build_range_step\n`; // Mul
+			else if (op === '~/') code += `    f64.const 3.0\n    call $build_range_step\n`; // Div
+			else if (op === '~^') code += `    f64.const 4.0\n    call $build_range_step\n`; // Pow
+
 			return code;
 		}
 
@@ -1658,82 +1918,104 @@ ${dataSection}
 						f64.reinterpret_i64
   )
 
-						(func $make_range(param $start f64)(param $end f64)(result f64)
-							(local $curr f64)
+						(func $build_range_step (param $start f64) (param $step f64) (param $op_type f64) (result f64)
+							(local $ptr i32)
+							i32.const 24  ;; 8 bytes * 3 (start, step, op_type)
+							call $alloc
+							local.tee $ptr
+
+							local.get $start
+							f64.store offset=0
+
+							local.get $ptr
+							local.get $step
+							f64.store offset=8
+
+							local.get $ptr
+							local.get $op_type
+							f64.store offset=16
+
+							;; Tag as RangeStep (0x7FF3)
+							i64.const 0x7FF3000000000000
+							local.get $ptr
+							i64.extend_i32_u
+							i64.or
+							f64.reinterpret_i64
+						)
+
+						(func $build_range (param $lhs f64) (param $end f64) (result f64)
+							(local $tag i32)
+							(local $ptr i32)
+							(local $start f64)
 							(local $step f64)
-							(local $count f64)
-							(local $list f64)
+							(local $op_type f64)
 
-							;; 1. 初期リストを Unit(NaN) に設定
-						i64.const 0x7FF8000000000000
-						f64.reinterpret_i64
-						local.set $list
+							;; Check if lhs is RangeStep (0x7FF3)
+							local.get $lhs
+							i64.reinterpret_f64
+							i64.const 32
+							i64.shr_u
+							i32.wrap_i64
+							local.set $tag
 
-							;; 2. 生成する要素数を計算: count = floor(abs(start -end)) + 1.0
-						local.get $start
-						local.get $end
-						f64.sub
-						f64.abs
-						f64.floor
-						f64.const 1.0
-						f64.add
-						local.set $count
+							local.get $tag
+							i32.const 0x7FF30000
+							i32.eq
+							if
+								;; Case A: lhs is RangeStep
+								local.get $lhs
+								i64.reinterpret_f64
+								i32.wrap_i64
+								local.set $ptr
 
-							;; 3. 進行方向(step)の決定(後ろから前に向かうための逆向きステップ)
-						local.get $start
-						local.get $end
-						f64.le
-						if
-      f64.const -1.0  ;; start <= end なら、後ろから前へはマイナス方向
-						local.set $step
-    else
-						f64.const 1.0;; start > end なら、後ろから前へはプラス方向
-						local.set $step
-						end
+								local.get $ptr
+								f64.load offset=0
+								local.set $start
 
-							;; 4. ループ開始地点(curr)の計算: curr = start -(count -1.0) * step
-								;; （浮動小数点の誤差蓄積を防ぐため、正確な終点から逆算する）
-						local.get $start
-						local.get $count
-						f64.const 1.0
-						f64.sub
-						local.get $step
-						f64.mul
-						f64.sub
-						local.set $curr
+								local.get $ptr
+								f64.load offset=8
+								local.set $step
 
-							;; 5. 逆順リスト構築ループ
-								(block $break
-									(loop $loop
-        ;; list = cons(curr, list)
-						local.get $curr
-						local.get $list
-        call $cons
-						local.set $list
+								local.get $ptr
+								f64.load offset=16
+								local.set $op_type
+							else
+								;; Case B: lhs is simple start value. Default OP: Add(0.0), Step: 1.0
+								local.get $lhs
+								local.set $start
+								f64.const 1.0
+								local.set $step
+								f64.const 0.0
+								local.set $op_type
+							end
 
-							;; count -= 1.0
-						local.get $count
-						f64.const 1.0
-						f64.sub
-						local.tee $count
+							;; Alloc Range Object: 32 bytes (start, end, step, op_type)
+							i32.const 32
+							call $alloc
+							local.tee $ptr
 
-							;; if (count <= 0) break
-						f64.const 0.0
-						f64.le
-        br_if $break
+							local.get $start
+							f64.store offset=0
 
-							;; curr += step
-						local.get $curr
-						local.get $step
-						f64.add
-						local.set $curr
+							local.get $ptr
+							local.get $end
+							f64.store offset=8
 
-        br $loop
-      )
-    )
-						;; 完成したリストの先頭ポインタを返す
-						local.get $list
-  )
+							local.get $ptr
+							local.get $step
+							f64.store offset=16
+
+							local.get $ptr
+							local.get $op_type
+							f64.store offset=24
+
+							;; Tag as Range (0x7FF2)
+							i64.const 0x7FF2000000000000
+							local.get $ptr
+							i64.extend_i32_u
+							i64.or
+							f64.reinterpret_i64
+						)
 
 						(func $is_not_unit(param $val f64)(result i32)
 							;; 完全に Unit(NaN) 0x7FF8000000000000 の場合のみ 0 (False) を返す
@@ -2543,6 +2825,8 @@ ${closureCode}
 							(local $list_val f64)
 							(local $list_ptr i32)
 							(local $tmp_meta_ptr i32)
+							(local $acc_val f64)  ;; ★インラインFold用
+							(local $cur_val f64)  ;; ★インラインFold用
 ${Array.from({ length: maxEnvDepth + 1 }, (_, i) => `    (local $env_blk_${i} i32)\n`).join('')}
 ${bodyCode ? bodyCode : '    f64.const 0.0\n'}  )
 )`;
