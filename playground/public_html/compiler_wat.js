@@ -91,11 +91,22 @@ ${argCode}
 			
 			(block $${blockId}_R
 				(loop $${loopId}_R
-					;; if cur > end, break
-					local.get $cur_val
+					;; ★ 修正: stepの正負によって終了条件(gt/lt)を切り替える
 					local.get $tmp_ptr
-					f64.load offset=8
-					f64.gt
+					f64.load offset=16
+					f64.const 0.0
+					f64.ge
+					if (result i32)
+						local.get $cur_val
+						local.get $tmp_ptr
+						f64.load offset=8
+						f64.gt
+					else
+						local.get $cur_val
+						local.get $tmp_ptr
+						f64.load offset=8
+						f64.lt
+					end
 					br_if $${blockId}_R
 					
 					;; acc = acc OP cur
@@ -197,6 +208,201 @@ ${argCode}
 				;; どちらでもない場合はそのまま返す
 				local.get $target_val
 			end
+		end
+	`;
+}
+
+// ==========================================
+// ★ 追加: Mapのインライン展開ジェネレータ
+// ==========================================
+function generateInlineMap(paramName, bodyNode, argCode, envMap) {
+	let blockId = `map_end_${unrollCounter}`;
+	let loopId = `map_loop_${unrollCounter}`;
+	unrollCounter++;
+
+	// ★ 魔法: 引数名(xや$1)が呼ばれたら、WASMの $cur_val レジスタを返すように環境を上書き
+	let newEnvMap = { ...envMap, [paramName]: '    local.get $cur_val\n' };
+	let bodyWat = compileNode(bodyNode, newEnvMap);
+
+	return `
+		;; === INLINE MAP ===
+${argCode}
+		local.set $target_val
+		
+		;; 空チェック
+		local.get $target_val
+		call $is_not_unit
+		i32.eqz
+		if (result f64)
+			f64.const nan ;; Return Unit
+		else
+		
+		local.get $target_val
+		i64.reinterpret_f64
+		i64.const 32
+		i64.shr_u
+		i32.wrap_i64
+		local.set $tag
+		
+		;; 1. ダミーヘッドの割り当て (リスト構築の起点)
+		i32.const 16
+		call $alloc
+		local.set $dummy_ptr
+		local.get $dummy_ptr
+		local.set $curr_ptr
+		
+		local.get $tag
+		i32.const 0x7FF20000 ;; Range
+		i32.eq
+		if
+			;; --- 2. RANGE MAP (Zero Cost Loop) ---
+			local.get $target_val
+			i64.reinterpret_f64
+			i32.wrap_i64
+			local.set $tmp_ptr
+			
+			local.get $tmp_ptr
+			f64.load offset=0
+			local.set $cur_val
+			
+			(block $${blockId}_R
+				(loop $${loopId}_R
+					;; ★ 修正: stepの正負によって終了条件(gt/lt)を切り替える
+					local.get $tmp_ptr
+					f64.load offset=16
+					f64.const 0.0
+					f64.ge
+					if (result i32)
+						local.get $cur_val
+						local.get $tmp_ptr
+						f64.load offset=8
+						f64.gt
+					else
+						local.get $cur_val
+						local.get $tmp_ptr
+						f64.load offset=8
+						f64.lt
+					end
+					br_if $${blockId}_R
+					
+					;; body(cur_val) を評価
+${bodyWat}
+					local.set $mapped_val
+					
+					;; 新しいコンスセルの作成
+					i32.const 16
+					call $alloc
+					local.set $new_node
+					
+					local.get $new_node
+					local.get $mapped_val
+					f64.store offset=0
+					
+					local.get $new_node
+					f64.const nan ;; unit
+					f64.store offset=8
+					
+					;; curr_ptrのcdrに繋ぐ
+					local.get $curr_ptr
+					i64.const 0x7FFC000000000000
+					local.get $new_node
+					i64.extend_i32_u
+					i64.or
+					f64.reinterpret_i64
+					f64.store offset=8
+					
+					local.get $new_node
+					local.set $curr_ptr
+					
+					local.get $cur_val
+					local.get $tmp_ptr
+					f64.load offset=16
+					f64.add
+					local.set $cur_val
+					
+					br $${loopId}_R
+				)
+			)
+		else
+			;; --- 3. LIST MAP ---
+			local.get $target_val
+			i64.reinterpret_f64
+			i32.wrap_i64
+			local.set $list_ptr
+			
+			(block $${blockId}_L
+				(loop $${loopId}_L
+					local.get $list_ptr
+					i32.eqz
+					br_if $${blockId}_L
+					
+					local.get $list_ptr
+					f64.load offset=0
+					local.set $cur_val
+					
+					;; body(cur_val) を評価
+${bodyWat}
+					local.set $mapped_val
+					
+					i32.const 16
+					call $alloc
+					local.set $new_node
+					
+					local.get $new_node
+					local.get $mapped_val
+					f64.store offset=0
+					
+					local.get $new_node
+					f64.const nan
+					f64.store offset=8
+					
+					local.get $curr_ptr
+					i64.const 0x7FFC000000000000
+					local.get $new_node
+					i64.extend_i32_u
+					i64.or
+					f64.reinterpret_i64
+					f64.store offset=8
+					
+					local.get $new_node
+					local.set $curr_ptr
+					
+					local.get $list_ptr
+					f64.load offset=8
+					local.set $target_val
+					
+					local.get $target_val
+					i64.reinterpret_f64
+					i64.const 32
+					i64.shr_u
+					i32.wrap_i64
+					local.set $tag
+					
+					local.get $tag
+					i32.const 0x7FFC0000
+					i32.eq
+					local.get $tag
+					i32.const 0x7FF40000
+					i32.eq
+					i32.or
+					if
+						local.get $target_val
+						i64.reinterpret_f64
+						i32.wrap_i64
+						local.set $list_ptr
+					else
+						i32.const 0
+						local.set $list_ptr
+					end
+					
+					br $${loopId}_L
+				)
+			)
+		end
+		
+		;; ダミーヘッドの次（本当の先頭要素）を返す
+		local.get $dummy_ptr
+		f64.load offset=8
 		end
 	`;
 }
@@ -574,6 +780,39 @@ function extractSectionOp(n) {
 }
 
 // ==========================================
+// ★ 追加: Map関数の抽出 ([x ? x * 2,] や [* 2,])
+// ==========================================
+function extractMapFunc(n) {
+	if (!n || n.type !== 'infix' || n.op !== '?') return null;
+
+	// パターンA: ユーザー定義ラムダ [x ? x * 2,]
+	if (n.right && n.right.type === 'infix' && n.right.op === ',') {
+		if (n.right.right && n.right.right.type === 'unit') {
+			return { param: n.left.value, body: n.right.left }; // { param: "x", body: "x * 2" }
+		}
+	}
+
+	// パターンB: Operator Section [* 2,]
+	// 内部構造: $1 ? (... ; $1 * (2 , unit))
+	if (n.left && n.left.value === '$1' && n.right && n.right.type === 'infix' && n.right.op === ';') {
+		let inner = n.right.right;
+		if (inner && inner.type === 'infix' && inner.right && inner.right.type === 'infix' && inner.right.op === ',') {
+			if (inner.right.right && inner.right.right.type === 'unit') {
+				// (2, unit) の皮を剥がして `$1 * 2` を再構築する
+				let reconstructedBody = {
+					type: 'infix',
+					op: inner.op,
+					left: inner.left,
+					right: inner.right.left
+				};
+				return { param: '$1', body: reconstructedBody };
+			}
+		}
+	}
+	return null;
+}
+
+// ==========================================
 // ★ Phase 7: オプティマイザ (事前評価・定数畳み込み・β簡約・静的ディスパッチ)
 // ==========================================
 function optimizeAst(node) {
@@ -646,16 +885,22 @@ function optimizeAst(node) {
 		return { ...node, left, right };
 	}
 
-	// ==========================================
-	// ★ 追加: 専用ノード化されたインラインFoldのコンパイル
-	// ==========================================
-	if (node.type === 'inline_fold') {
-		let argCode = compileNode(node.arg, envMap);
-		return generateInlineFold(node.op, argCode);
-	}
-
 	// （↓ 既存の apply 処理。前回の追加部分は削除して元の状態に戻します）
 	if (node.type === 'apply') {
+
+		// ==========================================
+		// ★ 新規追加: インラインMap の事前検知と専用ノード化
+		// ==========================================
+		let mapFunc = extractMapFunc(node.func);
+		if (mapFunc) {
+			let optArg = optimizeAst(node.arg);
+			return {
+				type: 'inline_map',
+				param: mapFunc.param,
+				body: optimizeAst(mapFunc.body),
+				arg: optArg
+			};
+		}
 
 		// ==========================================
 		// ★ 修正: インラインFold の事前検知 (Operator Sectionの確実な捕捉)
@@ -676,11 +921,12 @@ function optimizeAst(node) {
 		let optArg = optimizeAst(node.arg);
 
 		// ==========================================
-		// ★ 新規追加: inline_fold に巻き込まれた Range の救済
+		// ★ 新規追加: inline_fold / inline_map に巻き込まれた Range の救済
 		// `[+] [1 ~ 10]` が `([+] 1~) 10` と解釈されてしまう問題の解決
 		// ==========================================
 		let isSwallowedRange = false;
-		if (optFunc && optFunc.type === 'inline_fold' && optFunc.arg) {
+		// ★ map も検知対象に追加
+		if (optFunc && (optFunc.type === 'inline_fold' || optFunc.type === 'inline_map') && optFunc.arg) {
 			if (optFunc.arg.type === 'postfix' && optFunc.arg.op === '~') isSwallowedRange = true;
 			if (optFunc.arg.type === 'infix' && optFunc.arg.right && optFunc.arg.right.type === 'postfix' && optFunc.arg.right.op === '~') isSwallowedRange = true;
 		}
@@ -691,11 +937,21 @@ function optimizeAst(node) {
 				func: optFunc.arg,
 				arg: optArg
 			});
-			return {
-				type: 'inline_fold',
-				op: optFunc.op,
-				arg: rescuedArg
-			};
+			// ★ map と fold で返すノードを分岐
+			if (optFunc.type === 'inline_map') {
+				return {
+					type: 'inline_map',
+					param: optFunc.param,
+					body: optFunc.body,
+					arg: rescuedArg
+				};
+			} else {
+				return {
+					type: 'inline_fold',
+					op: optFunc.op,
+					arg: rescuedArg
+				};
+			}
 		}
 
 		// ==========================================
@@ -781,6 +1037,11 @@ function compileNode(node, envMap = {}) {
 	if (node.type === 'inline_fold') {
 		let argCode = compileNode(node.arg, envMap);
 		return generateInlineFold(node.op, argCode);
+	}
+
+	if (node.type === 'inline_map') {
+		let argCode = compileNode(node.arg, envMap);
+		return generateInlineMap(node.param, node.body, argCode, envMap);
 	}
 
 	// ==========================================
@@ -997,6 +1258,14 @@ function compileNode(node, envMap = {}) {
 	}
 
 	if (node.type === 'identifier') {
+		// ==========================================
+		// ★ 追加: Map等で注入されたローカル環境変数の解決
+		// ==========================================
+		// 修正: オブジェクトを返さないように、文字列（WASMアセンブリ）の時だけ返す
+		if (envMap && typeof envMap[node.value] === 'string') {
+			return envMap[node.value];
+		}
+
 		const name = node.value.trim();
 
 		// ★ 追加: '_' の評価は常に Unit(NaN) 
@@ -1141,8 +1410,9 @@ function compileNode(node, envMap = {}) {
 			let funcCode = `  (func ${lambdaName}(param $env f64)(param $arg f64)(result f64) \n`;
 			funcCode += `    (local $tmp_bool f64) \n(local $tmp_L f64) \n(local $tmp_R f64) \n(local $tmp_ptr i32) \n`;
 			funcCode += `    (local $target_val f64) \n(local $tag i32) \n(local $str_ptr i32) \n(local $list_val f64) \n(local $list_ptr i32) \n`;
-			// ★ 末尾にインラインFold用の2つの変数を追加
 			funcCode += `    (local $tmp_meta_ptr i32) \n(local $acc_val f64) \n(local $cur_val f64) \n`;
+			// ★ ここにMap用の4つの変数を追加
+			funcCode += `    (local $dummy_ptr i32) \n(local $curr_ptr i32) \n(local $new_node i32) \n(local $mapped_val f64) \n`;
 			for (let i = 0; i <= maxEnvDepth; i++) funcCode += `    (local $env_blk_${i} i32) \n`;
 			funcCode += funcBody;
 			funcCode += `  ) \n`;
@@ -1980,11 +2250,21 @@ ${dataSection}
 								f64.load offset=16
 								local.set $op_type
 							else
-								;; Case B: lhs is simple start value. Default OP: Add(0.0), Step: 1.0
+								;; Case B: lhs is simple start value.
 								local.get $lhs
 								local.set $start
-								f64.const 1.0
+								
+								;; ★ 修正: 降順の自動判定 (start > end なら step=-1.0)
+								local.get $start
+								local.get $end
+								f64.gt
+								if (result f64)
+									f64.const -1.0
+								else
+									f64.const 1.0
+								end
 								local.set $step
+								
 								f64.const 0.0
 								local.set $op_type
 							end
@@ -2827,7 +3107,11 @@ ${closureCode}
 							(local $tmp_meta_ptr i32)
 							(local $acc_val f64)  ;; ★インラインFold用
 							(local $cur_val f64)  ;; ★インラインFold用
-${Array.from({ length: maxEnvDepth + 1 }, (_, i) => `    (local $env_blk_${i} i32)\n`).join('')}
+							(local $dummy_ptr i32)
+							(local $curr_ptr i32)
+							(local $new_node i32)
+							(local $mapped_val f64)
+							${Array.from({ length: maxEnvDepth + 1 }, (_, i) => `    (local $env_blk_${i} i32)\n`).join('')}
 ${bodyCode ? bodyCode : '    f64.const 0.0\n'}  )
 )`;
 }
