@@ -11,6 +11,7 @@
 ```ebnf
 (* === 文字クラス === *)
 letter        = "a" | ... | "z" | "A" | ... | "Z" ;
+bit_value       = "0" | "1" ;
 digit         = "0" | "1" | ... | "9" ;
 hex           = "0" | "1" | ... | "9" | "a" | ... | "f" | "A" | ... | "F" ;
 word_char     = letter | digit | "_" ;
@@ -23,6 +24,7 @@ integer       = [ "-" ] digit { digit } ;
 float         = [ "-" ] digit { digit } "." digit { digit } ;
 Address       = "0x" hex { hex } ;
 Register      = "0r" hex { hex } ;
+bit           = "0b" bit_value { bit_value } ;
 number        = float | integer | Adress | Register ;
 
 identifier    = ( letter | "_" ) { word_char } ;
