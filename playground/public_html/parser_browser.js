@@ -504,6 +504,13 @@ const parseBlock = (tokens) => {
 	// Filter separators for analysis
 	const cleanTokens = tokens.filter(t => !isSeparator(t));
 
+	// -------------------------------------------------------------------
+	// ★ 追加: ブロックの先頭と末尾が両方 `|` なら「絶対値」なので、セクション判定から除外する
+	const isAbsoluteValueBlock = cleanTokens.length >= 2
+		&& cleanTokens[0] === '|'
+		&& cleanTokens[cleanTokens.length - 1] === '|';
+	// -------------------------------------------------------------------
+
 	if (cleanTokens.length > 0) {
 		// Case 1: [ op expr ] -> Right Section
 		if (cleanTokens.length === 2 && typeof cleanTokens[0] === 'string' && isOpSymbol(cleanTokens[0])) {
@@ -596,7 +603,8 @@ const parseBlock = (tokens) => {
 	}
 
 	// 2. [ op expr ] (Right Section: [+ 1] -> x + 1)
-	if (cleanTokens.length >= 2 && isSectionOp(cleanTokens[0])) {
+	// ★ 修正: if文の先頭に `!isAbsoluteValueBlock &&` を追加
+	if (!isAbsoluteValueBlock && cleanTokens.length >= 2 && isSectionOp(cleanTokens[0])) {
 		const opStr = cleanTokens[0];
 		if (findOp(opStr, 'infix')) {
 			// Parse the rest as expr
@@ -656,7 +664,8 @@ const parseBlock = (tokens) => {
 	}
 
 	// 3. [ expr op ] (Left Section: [1 +] -> 1 + x)
-	if (cleanTokens.length >= 2 && isSectionOp(cleanTokens[cleanTokens.length - 1])) {
+	// ★ 修正: if文の先頭に `!isAbsoluteValueBlock &&` を追加
+	if (!isAbsoluteValueBlock && cleanTokens.length >= 2 && isSectionOp(cleanTokens[cleanTokens.length - 1])) {
 		const opStr = cleanTokens[cleanTokens.length - 1];
 		if (findOp(opStr, 'infix')) {
 			const content = [...tokens];
