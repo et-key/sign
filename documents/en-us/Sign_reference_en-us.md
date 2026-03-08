@@ -57,7 +57,7 @@ The following summarizes its features:
 * Spaces are considered as operators for examination, but may be treated as delimiters for literals
 * When function composition is performed by spaces, it has left identity
 * Prefix and postfix operators must not have spaces between them and their target literals
-* Infix operators generally require spaces before and after them, but when they can be interpreted as infix operators, spaces are automatically inserted
+* Infix operators require spaces before and after them
 * Lines with only literals without meaning are never executed
 * Code files have local scope, and scopes are not contaminated unless import or export is used
 * Empty lists and unevaluated lambda terms are false. Everything else is true, so the boolean type is never explicitly specified
@@ -78,8 +78,11 @@ Since it's obvious that it starts with \` at the beginning of a line, it is trea
 `This is a comment`
 `This is a comment
 
-	`This is not a comment`
-	`This is an error
+	`This is a comment`
+	`This is a comment
+	 `This is not a comment`
+	 `This is an error
+
 ```
 
 # Literals []({#literals})
@@ -321,11 +324,14 @@ Define always takes the following form, so it can be regarded as similar to an a
 
 `[Identifier] : [Expression]`
 
-(Example)
+(Example: About normal definitions)
 ```javascript
 nop : _
 yep : !_
+```
 
+(Example: Dictionary type definition)
+```javascript
 calc :
 	additive :
 		add : \+
@@ -335,6 +341,25 @@ calc :
 		div : /
 		mod : %
 ```
+
+(Example: When you want to save the result of procedural composition)
+```javascript
+
+compositted_func : [* 2] [+ 3]
+
+compositted_func2 :
+	[* 2]
+	[+ 3]
+
+proc_result : [* 2] [+ 3] 5
+
+proc_result2 :
+	[* 2]
+	[+ 3]
+	5
+
+```
+
 
 ## `#`	(output infix operator) []({#-number(output-infix-operator)})
 
@@ -416,18 +441,18 @@ The reason is that loops and conditional branches are implemented using lambdas.
      [x y ? (x + y) ^ 2]
      ```
 
-   * (Example 3: When wanting to define a function that branches conditions)
+   * (Example 3: When wanting to define a function that branches conditions, and how to write a match_case where comparison operations are also possible)
      ```javascript
      ABS : x ?
-     	x >= 0 : x
-     	x < 0 : -x
+    	x >= 0 : x
+    	x < 0 : -x
      ```
 
    * (Example 4: Conditional branching can also be defined without a name)
      ```javascript
      [x ?
-     	x >= 0 : x
-     	x < 0 : -x
+    	x >= 0 : x
+    	x < 0 : -x
      ]
      ```
 
@@ -436,12 +461,12 @@ The reason is that loops and conditional branches are implemented using lambdas.
      reverse : x ~y ? reverse y~, x
      ```
 
-   * (Example 6: Example of using recursion and conditional branching simultaneously)
+   * (Example 6: Example of using recursion and conditional branching simultaneously, including a match_case where comparison operations are also possible)
      ```javascript
      collatz : x ?
-     	x = 1 : `OK`
-     	x % 2 = 0 : collatz x / 2
-     	x % 2 = 1 : collatz 3 * x + 1
+    	x = 1 : `OK`
+    	x % 2 = 0 : collatz x / 2
+    	x % 2 = 1 : collatz 3 * x + 1
      ```
 
 2. ### Description by point-free style    This method provides a way to treat operators directly as functions, but note that the operator precedence is lost because function application is inserted!    The type is as follows:

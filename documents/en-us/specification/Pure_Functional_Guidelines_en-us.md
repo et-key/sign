@@ -14,14 +14,24 @@ In Sign language, **writing code that does not involve definitions within functi
 
 ```sign
 ` Prohibited Pattern: Variable declaration within functions
-bad_function : input ?
+error_function : input ?
 	temp : process_step1 input		` ← This is a side effect
 	result : process_step2 temp		` ← This is also a side effect
 	result
 
-` Recommended Pattern: Direct function composition
-good_function : input ?
+
+` Recommended Pattern 1: Simple calculation description of default arguments by block description of argument list
+good_function_1 :
+		input
+		temp : process_step1 input
+		result : process_step2 temp
+	?
+		result
+
+` Recommended Pattern 2: Direct function composition
+good_function_2 : input ?
 	process_step2 process_step1 input
+
 ```
 
 ### 2.3 Theoretical Foundation
@@ -90,13 +100,13 @@ process_data : x ?
 
 ```sign
 ` ✅ Recommended: Verb-like and clear expression
-process_data : x ?
-	preProcess x
-	classify x
-	finalize x
+process_data : x ? preProcess classify finalize x
 
-classify : x ?
-	x < 0 & `negative` | x > 100 & `large` | `normal`
+` ✅ More Recommended: Verb-like and clear expression
+process_data : preProcess classify finalize
+process_data x
+
+classify : x ? x < 0 & `negative` | x > 100 & `large` | `normal`
 ```
 
 **Advantages of the recommended pattern**:
@@ -127,8 +137,8 @@ example : data ?
 
 ` After preprocessor conversion
 example : _0 ?
-	[validate_data _0],
-	[_0 ' type = `special` & special_process _0],
+	[validate_data _0]
+	[_0 ' type = `special` & special_process _0]
 	[finalize_data _0]
 ```
 
@@ -144,17 +154,23 @@ Temporary memo-like behavior that manipulates arguments internally **should all 
 
 ```sign
 ` Problematic pattern: Object manipulation within functions
-problematic : large_object ?
+error : large_object ?
 	field1 : large_object ' field1
 	field2 : large_object ' field2  
 	combine field1 field2
 
-` Recommended pattern: Extract necessary values when passing arguments
-better : field1 field2 ?
-	combine field1 field2
+` Recommended Pattern 1: Extract necessary values when passing arguments
+better1 : field1 field2 ? combine field1 field2
+result1 : better (large_object ' field1) (large_object ' field2)
 
-` Usage
-result : better (large_object ' field1) (large_object ' field2)
+` Recommended Pattern 2: Chain calculations within function
+better2 : large_object ? combine (large_object ' field1) (large_object ' field2)
+result2 : better2 large_object 
+
+` Recommended Pattern 3: Define as simple renaming
+best : combine
+result : best (large_object ' field1) (large_object ' field2)
+
 ```
 
 ### 4.3 Advantages of Argument Design
@@ -176,8 +192,7 @@ config_value : complex_initialization_process
 helper_data : precomputed_expensive_operation
 
 ` Using file scope identifiers within functions
-process_function : input ?
-	transform input config_value helper_data
+process_function : input ? transform input config_value helper_data
 ```
 
 ## 6. Avoiding get Operator Dependency
@@ -194,23 +209,17 @@ inefficient : data ?
 	data ' field1 ' subfield + data ' field2 ' subfield
 
 ` Improvement 1: Structure redesign
-efficient : field1_sub field2_sub ?
-	field1_sub + field2_sub
+efficient : field1_sub field2_sub ? field1_sub + field2_sub
 
 ` Improvement 2: Value extraction through preprocessing
-with_preprocessing : data ?
-	add (data ' field1 ' subfield) (data ' field2 ' subfield)
+with_preprocessing : data ? add (data ' field1 ' subfield) (data ' field2 ' subfield)
 
 ` Improvement 3: Utilizing dedicated access functions
-extract_subfields : data ?
-	data ' field1 ' subfield
-	data ' field2 ' subfield
+extract_subfields : data ? data ' field1 ' subfield , data ' field2 ' subfield
 
-calculate : data ?
-	add_subfields data
+calculate : data ? add_subfields data
 
-add_subfields : data ?
-	data ' field1 ' subfield + data ' field2 ' subfield
+add_subfields : data ? data ' field1 ' subfield + data ' field2 ' subfield
 ```
 
 ### 6.3 Design Guidelines
@@ -250,53 +259,58 @@ system_state_update : state_address new_state ?
 
 ### 8.1 Stepwise Improvement Process
 
-Apply specific techniques to eliminate in-function definitions step by step:
+To state the conclusion first...
+
+---
+❣
+When the desire to bind names within a function (or within an argument list) arises,
+
+It is a sign that the granularity of function division is wrong or function composition (spaces) is not being utilized.
+
+Do not define variables; compose processing (verbs).
+
+---
+
+That says it all.
 
 #### Step 1: Function Division
 
 ```sign
 ` Before: Complex internal processing
-complex_old : data ?
-	validated : validate data
-	normalized : normalize validated  
-	processed : heavy_process normalized
-	format processed
+complex_old :
+		data
+		validated : validate data
+		normalized : normalize validated  
+		processed : heavy_process normalized
+	?
+		format processed
 
 ` After: Creating intermediate functions
-validate_and_normalize : data ?
-	normalize validate data
-
-complex_new : data ?
-	format heavy_process validate_and_normalize data
+validate_and_normalize : data ? validate normalize data
+complex_new : data ? validate_and_normalize heavy_process format data
 ```
 
 #### Step 2: Utilizing Function Composition
 
 ```sign
 ` Further improvement: Direct function composition
-complex_optimized : data ?
-	format heavy_process normalize validate data
-
-` Or using function composition operator
-pipeline_version : ?
-	[format,] [heavy_process,] [normalize,] [validate,]
+complex_optimized : validate normalize heavy_process format
 ```
 
 #### Step 3: Applying Verb-like Separation
 
 ```sign
 ` Before: Complex conditional processing
-conditional_old : input ?
-	type : input ' type
-	type = `numeric` : process_numeric input
-	type = `text` : process_text input
-	default_process input
+conditional_old : 
+		input
+		type : input ' type
+	?
+		type = `numeric` : process_numeric input
+		type = `text` : process_text input
+		default_process input
 
 ` After: Verb-like clarification
-conditional_new : input ?
-	validate input
-	classify input
-	process_by_type input
+conditional_new : validate classify process_by_type
 
 classify : input ?
 	input ' type = `numeric` : `numeric`

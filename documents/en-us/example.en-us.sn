@@ -12,6 +12,7 @@
 `Short-circuit evaluation and delays in conditional branches are automatically determined from the syntax.`
 
 `In English, ":" means "that is," so it's an assignment operator, while "=" remains purely a comparison operator.`
+`For the precedence and meaning of each operator, see specification\A_Operator_Table.md.`
 
 x : -353.15134
 y : 4001.35364502
@@ -34,21 +35,27 @@ unit : none : []
 none : []
 unit : []
 
+none : _
+unit : _
 
-`Comparison operations have shorthands.`
+id : _
 
-`[[x = y & y] = z] & y`
+`Comparison operations return the left-hand side value if the condition is met, and return _ if not met.`
 
-x = y = z
+[x < 4] = [x < 4 & x]
+[x > 4] = [x > 4 & x]
+[x = 4] = [x = 4 & x]
+[x <= 4] = [x <= 4 & x]
+[x >= 4] = [x >= 4 & x]
 
-`[[1 <= x & x] <= 9] & x`
+`Comparison operations have shorthands, and ternary comparisons like the following are allowed.`
 
-1 <= x <= 9
-
+[1 = y = 5] = [[y = 1] & [y = 5]]
+[1 <= x <= 9] = [[x >= 1] & [x <= 9]]
 
 `Lambda term definition method`
 `The basis of lambda terms uses '?'.`
-`Functions without assignment must be enclosed in parentheses.`
+`Anonymous functions must be enclosed in parentheses.`
 
 [x y ? x ^ 2 + 2 * x * y + y ^ 2]
 
@@ -71,32 +78,30 @@ x = y = z
 `...it would be.`
 
 
-`If you don't want function application or composition, you can append a comma directly after the function to create a Cartesian product.`
-`Alternatively, you can use the '$' prefix operator before the function to obtain a temporary address.`
+`If you don't want function application or composition, use the '$' prefix operator before the function to obtain a temporary address.`
 
-[+ 2] 2 = 4
-[+ 2], 2 = [+ 2], 2
+$[+ 2] 2
 
+`It is also not evaluated immediately in the case of a Cartesian product.`
 
-`Example of passing a function as a Cartesian product`
+[+ 2], 2
 
-Filter : f x ~y ? f x , Filter f y~
-Filter [> 0], [-2 ~ 3]
+`The following is evaluated immediately`
 
+[+ 2] 2
+
+`Using a postfix tilde enables immediate evaluation`
+
+list : [+ 2], 2
+evaluate : list~
+evaluate = 4
+
+[[+ 2], 2]~ = 4
 
 `Example in the case of a function pointer`
 
 Filter : f x ~y ? @f x , Filter f y~
 Filter $[> 0] [-2 ~ 3]
-
-
-`The very last argument of a function can also be written before the function.`
-
-result2 : [-] 3 1
-add : [+]
-exp : [^]
-id : x ? x
-
 
 `Function evaluation has lower precedence than lambda definition.`
 `Function composition is a left identity, but normal function execution can be written as a right identity.`
@@ -108,6 +113,9 @@ id : x ? x
 
 [x ? x] 1 2 3 = 1
 [x ? x] 1, 2, 3 = 1
+
+_ 1 2 3 = 1
+_ 1, 2, 3 = 1
 
 [1 2 3] ' 0 = 1
 [1, 2, 3] ' 0 = 1
@@ -121,13 +129,17 @@ id : x ? x
 [1 2 3] ' 1~ = 2 3
 [1, 2, 3] ' 1~ = 2 3
 
-
 `Arguments passed to higher-order functions must be explicitly separated by Cartesian product to determine whether they are evaluated or not.`
 
-`match_case can be written using block syntax as follows:`
-`The block serves as a guard notation.`
-`This is also the true nature of block-scoped assignment operators.`
-`If you assign the block itself or enclose it in parentheses for immediate generation, it's just like a regular function.`
+`When describing side effects within a function, the ':' operator cannot be used because it involves immediate generation.`
+`Therefore, use the side-effect description in accordance with documents\en-us\specification\system_semantics_en-us.md.`
+`However, keep in mind that this description is equivalent to unsafe_perform_io.`
+
+x ?
+	$y # 1
+	x + @y
+
+`compared_match_case can be written using block syntax as follows:`
 `When using lambdas anonymously, they must be enclosed in parentheses.`
 
 [x ?
@@ -137,27 +149,28 @@ id : x ? x
 	`other_wise`
 ] 3
 
-`The above is replaced by the following in preprocessing.`
+`The above can be replaced by the following in preprocessing.`
 `Key points here...`
 `0 is true`
-`_ or an empty list, or an unevaluated function, is false`
+`_, an empty list, or an unevaluated function is false, and it returns _`
 
 [x ?
-	x = 0 & 0 |
+	x = 0 |
 	x > 0 & `more` |
 	x < 0 & `less` |
 	`other_wise`
 ] 3
 
-`Constructor-like description.`
-`Dynamic key names can also be assigned; in such cases, to force extraction of values assigned to variables or arguments, use prefix @ and prefix $.`
+`Constructor-like description.
+`Dynamic key names can also be assigned; in such cases, pass by reference is used.`
+`Pass by reference can be represented based on the behavior of operators.`
 
 Person : name age etc x ?
 	name
 	age
-	@$etc : x
+	@etc : x
 
-john : Person `john` 18 `Like` `Sushi`
+john : Person `john` 18 $`Like` `Sushi`
 
 `The 'get' operator treats 5 types equivalently: identifier, number, character, string, and type of type.`
 
@@ -249,7 +262,10 @@ r: [1 2] [3 4]
 
 `This is a Cartesian product (2D array).`
 
-s: [1 2],[3 4]
+s0 : 1 2 , 3 4
+s1 :
+	1 2 ,
+	3 4
 
 
 `Dictionary type`
@@ -288,7 +304,7 @@ myGreet
 `All given names are definitions, and as they are self-evident types, the name *is* the type.`
 
 
-`The '~' operator can only expand match_case, which mimics a dictionary type, onto the target scope.`
+`The '~' operator can only expand dictionary types onto the target scope.`
 `If prefixed, it takes precedence over other terms; if postfixed, other terms take precedence.`
 
 [
@@ -300,9 +316,9 @@ y = 1
 
 
 `The '@' postfix operator is for import. File names can be specified, and paths are also allowed.`
-`If match_case can be treated as a dictionary type, the '~' operator can expand it to the scope above, so '@~' also allows imports usable within the file.`
+`In the case of dictionary types, the '~' operator can expand them to the scope above, so '@~' also allows imports usable within the file.`
 
-io@
+io@~
 	say Hello World
 
 `Since this is not a file-scoped import, the line below will return a "Say is not defined" error.`
@@ -362,10 +378,17 @@ InEnter :
 #gets : name ? myDict ' name~
 
 
-`Logical operators are short-circuited.`
+`Logical operators except xor are short-circuited.`
 
 _ & `me` = _
 1 & `me` = `me`
 
 _ | `me` = `me`
 1 | `me` = 1
+
+`xor is not short-circuited, following the truth table.`
+
+1 ; `me` = _
+_ ; `me` = `me`
+1 ; _ = 1
+_ ; _ = _

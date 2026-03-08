@@ -1,93 +1,60 @@
-# Sign Language Commenting Rules
+# Sign Language Commenting Rules (Revised Edition)
 
 ## Basic Principle
 
-Sign language adopts a unique principle: "All literals that are not evaluated or whose results are not used are comments."
+Comments in the Sign language are defined **not as "special syntactic markers" but as "literals whose evaluation results are not used"**.
+This allows the structure of the code itself to function as documentation.
 
-## Syntax Patterns That Become Comments
+## Rule Definitions
 
-### 1. String Literals Starting from Line Beginning
+### 1. String literals are always "values"
+Strings enclosed in backquotes (`` ` ``), or strings from an unclosed backquote to the end of the line, are all parsed as "string literals".
+
+### 2. "Unused" literals are considered comments
+In the execution of a program, if a value is not bound to anything, has no side effects (such as output), and is not a return value, that literal essentially becomes a comment.
+
+## Application Examples
+
+### A. Inside a block (`\t` indent)
+A block is a sequence of multiple expressions, and **only the last expression** becomes the return value of the block.
+If any expression before it is an isolated literal without any effect, it is ignored.
+
 ```sign
-`This is a valid comment`
+calc_func : x ?
+	`This functions as the documentation (comment) for the function`
+	`↓This becomes the return value. Placing a string on the last line makes that string the return value`
+	x * 2
+```
+-> The strings above are evaluated, but since they are discarded, they function as comments.
 
-`Multi-line
-`comments require ` at the beginning of each line
+### B. Top level
+The top level can also be considered as one large block (or module definition).
 
-`The closing ` at line end is optional
+```sign
+`Module description`
+x : 1
+```
+-> This string also does not affect the definition of `x`, so it functions as documentation.
+(However, in environments like REPL, the evaluation result may be displayed)
+
+### C. Interpretation of user-presented examples
+
+```sign
+    `This is not treated as a comment`
+	 `This is not a comment`
+	`This is a comment`
+	`This becomes the return value`
 ```
 
-### 2. Isolated Literals (Not Used Within Statements)
-```sign
-`When numeric literals are isolated
-42
+1. **No indent (or spaces)**: Depending on the context, it is evaluated as an expression. If it is on the right side of a definition, it becomes a value.
+2. **`\t` Indent**: Indicates the start of a block. A string **at the beginning** of a block becomes a "discarded value" if there is a subsequent expression, making it a comment.
 
-`Even if defined, becomes comment if not used
-variable_name
+## Resolution of Contradictions
+In the old version, we stated that "indented string literals are errors", but this has been abolished.
+Currently, **"it is valid to write string literals within an indented block, and they are treated as comments as long as they are not the return value"**.
 
-`Unused function definitions are also comments
-[x ? x * 2]
+## Grammar Specification (See PEG)
 
-`Expressions whose results are not used are also comments
-x + y
-```
-
-### 3. Non-IO Expressions
-```sign
-`Defined but not exported with #
-calc : x * 2
-
-`Calculated but not output
-result : some_function arg
-`The above is actually a definition statement, so can be referenced later by the identifier 'result'
-`However, it's not visible externally unless exported with #
-```
-
-## Syntax Patterns That Do NOT Become Comments
-
-### 1. Definition Statements (Contains : operator)
-```sign
-`This is a definition statement (not a comment)
-x : 42
-
-`This is also a definition statement
-func : x ? x * 2
-```
-
-### 2. Export Statements (Contains # operator)
-```sign
-`Executed because it's exported
-#result : calculation
-
-`Executed because it's output
-output_port # data
-```
-
-### 3. Indented String Literals
-```sign
-func : x ?
-	`This is not a comment (error due to indentation)`
-	`This is an error (string not closed)
-```
-
-## Clarification of Judgment Criteria
-
-| Syntax Pattern | Position | Judgment | Reason |
-|----------------|----------|----------|---------|
-| `string` | Line beginning | Comment | String literal is isolated |
-| `string` | Within indent | Error | Isolated literal in block |
-| `string | Line beginning (unclosed) | Comment | Treated as string until line end |
-| `string | Within indent (unclosed) | Error | Syntax error |
-| Number/identifier | Line beginning (isolated) | Comment | Unused literal |
-| x : expression | Line beginning | Definition statement | Definition referenceable later |
-| #x : expression | Line beginning | Export | Referenceable externally |
-
-## IO Determinism Details
-
-The principle "Code that is not IO'd is a comment" is determined through the following hierarchy:
-
-1. **Immediate IO**: Output/export via `#` operator
-2. **Indirect IO**: Called from functions that are IO'd
-3. **Definition only**: Defined but not used
-4. **Isolated**: Neither defined nor used → **Comment**
-
-This mechanism naturally achieves self-documenting code and optimal resource utilization.
+Everything is parsed as an `Expression`.
+- There is no independent syntax node called `Comment` (except for comments that disappear at the lexical analysis level).
+- It is recommended that Syntax highlighting and Language Servers display **"string literals other than the last one in a block"** in comment colors.
