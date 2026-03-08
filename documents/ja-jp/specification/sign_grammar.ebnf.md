@@ -12,6 +12,7 @@
 (* === 文字クラス === *)
 letter        = "a" | ... | "z" | "A" | ... | "Z" ;
 digit         = "0" | "1" | ... | "9" ;
+hex           = "0" | "1" | ... | "9" | "a" | ... | "f" | "A" | ... | "F" ;
 word_char     = letter | digit | "_" ;
 symbol_char   = "!" | "#" | "$" | "%" | "&" | "'" | "*" | "+" | ","
               | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?"
@@ -20,14 +21,16 @@ symbol_char   = "!" | "#" | "$" | "%" | "&" | "'" | "*" | "+" | ","
 (* === トークン === *)
 integer       = [ "-" ] digit { digit } ;
 float         = [ "-" ] digit { digit } "." digit { digit } ;
-number        = float | integer ;
+Address       = "0x" hex { hex } ;
+Register      = "0r" hex { hex } ;
+number        = float | integer | Adress | Register ;
 
 identifier    = ( letter | "_" ) { word_char } ;
               (* 注: 単独の "_" は変数ではなくUnitとして解析される *)
 
 string        = "`" { any_char - newline } "`" ;
 
-char_literal  = "\" any_char ;              (* 例: \M \n \t *)
+char_literal  = "\" any_char | "0u" hex { hex } ;              (* 例: \M \n \t *)
 
 comment       = "`" { any_char - newline } newline ;
               (* ` で始まる行はコメント *)
