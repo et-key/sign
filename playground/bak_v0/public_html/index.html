@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+	<meta charset="UTF-8">
+	<title>Sign WASM Playground</title>
+	<script src="https://unpkg.com/wabt@1.0.32/index.js"></script>
+	<style>
+		body {
+			font-family: monospace;
+			display: flex;
+			flex-direction: column;
+			padding: 20px;
+			background: #fafafa;
+			height: 90vh;
+			/* 画面全体に広げるためのベース */
+			margin: 0;
+		}
+
+		.top-panels {
+			display: flex;
+			gap: 20px;
+			margin-bottom: 10px;
+		}
+
+		.input-panel {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+		}
+
+		/* テキストエリアの共通設定 */
+		textarea {
+			font-family: monospace;
+			font-size: 14px;
+			padding: 10px;
+			border-radius: 5px;
+			border: 1px solid #ccc;
+		}
+
+		/* 入力用のテキストエリア */
+		.input-area {
+			height: 100px;
+			font-size: 16px;
+		}
+
+		/* 出力用のテキストエリア (黒背景に白文字) */
+		.output-area {
+			background: #1e1e1e;
+			color: #d4d4d4;
+			flex-grow: 1;
+			resize: none;
+			/* flexで伸びるため手動リサイズ無効 */
+			white-space: pre;
+			overflow-wrap: normal;
+			overflow-x: auto;
+		}
+
+		.panels {
+			display: flex;
+			gap: 20px;
+			margin-top: 10px;
+			flex-grow: 1;
+			/* 下部のパネルを画面いっぱいに伸ばす */
+		}
+
+		.panel {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+			min-width: 0;
+		}
+
+		.panel-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 5px;
+		}
+
+		.panel-header h3 {
+			margin: 0;
+		}
+
+		button {
+			padding: 10px 20px;
+			font-size: 16px;
+			font-weight: bold;
+			cursor: pointer;
+			background: #007acc;
+			color: white;
+			border: none;
+			border-radius: 5px;
+			align-self: flex-start;
+		}
+
+		button:hover {
+			background: #005999;
+		}
+	</style>
+</head>
+
+<body>
+
+	<h2>Sign → WebAssembly Playground (f64)</h2>
+
+	<div class="top-panels">
+		<div class="input-panel">
+			<label><strong>Sign Code:</strong></label>
+			<textarea id="codeInput" class="input-area"></textarea>
+		</div>
+		<div class="input-panel">
+			<label><strong>Standard Input:</strong></label>
+			<textarea id="stdInput" class="input-area"></textarea>
+		</div>
+	</div>
+
+	<button id="runBtn">Compile & Run WASM</button>
+
+	<div class="panels">
+		<div class="panel">
+			<div class="panel-header">
+				<h3>Generated WAT</h3>
+			</div>
+			<textarea id="watOutput" class="output-area" readonly></textarea>
+		</div>
+		<div class="panel">
+			<div class="panel-header">
+				<h3>Execution Output</h3>
+			</div>
+			<textarea id="consoleOutput" class="output-area" readonly></textarea>
+		</div>
+	</div>
+
+	<script type="module">
+		import { parseSign } from './parser_browser.js';
+		import { compileToWat } from './compiler_wat.js';
+
+		document.getElementById('runBtn').addEventListener('click', async () => {
+			const code = document.getElementById('codeInput').value;
+			const stdinText = document.getElementById('stdInput').value;
+			const outputEl = document.getElementById('consoleOutput');
+			outputEl.value = ''; // textContentからvalueに変更
+
+			try {
+				// 1. 標準入力をパースして配列（キュー）にする
+				const inputQueue = stdinText.split(/\s+/)
+					.filter(x => x !== '')
+					.map(x => parseFloat(x) || 0.0);
+				let inputPointer = 0;
+
+				// 2. Signコードの構文解析
+				const ast = parseSign(code);
+
+				// 3. WATの生成
+				const watCode = compileToWat(ast);
+				document.getElementById('watOutput').value = watCode; // textContentからvalueに変更
+
+				// 4. WABTによるバイナリコンパイル
+				const wabt = await WabtModule();
+				const module = wabt.parseWat('test.wat', watCode);
+				module.resolveNames();
+				module.validate();
+				const { buffer } = module.toBinary({ log: true });
+
+				// 5. WASMインポート環境
+				let wasmMemory;
+				const importObject = {
+					env: {
+						math_fmod: (a, b) => a % b,
+						math_pow: Math.pow,
+
+						syscall: (sys_num, arg) => {
+							if (!wasmMemory) return Number.NaN;
+
+							if (sys_num === 63) {
+								if (inputPointer < inputQueue.length) {
+									return inputQueue[inputPointer++];
+								}
+								return 0.0;
+							}
+
+							if (sys_num === 64) {
+								const buf = new ArrayBuffer(8);
+								new Float64Array(buf)[0] = arg;
+								const view = new DataView(buf);
+								const tag = view.getUint32(4, true) & 0xFFFF0000;
+								const ptr = view.getUint32(0, true);
+
+								const memView = new DataView(wasmMemory.buffer);
+
+								if (tag === 0x7FFD0000 || tag === 0x7FF50000) {
+									let len = 0;
+									while (new Uint8Array(wasmMemory.buffer, ptr + len, 1)[0] !== 0) len++;
+									const bytes = new Uint8Array(wasmMemory.buffer, ptr, len);
+									const str = new TextDecoder('utf-8').decode(bytes);
+									outputEl.value += `[Print] ${str}\n`;
+									return arg;
+								}
+
+								if (tag === 0x7FFE0000) {
+									outputEl.value += `[Print] <Closure (Ptr: ${ptr})>\n`;
+									return arg;
+								}
+
+								if (tag === 0x7FFC0000 || tag === 0x7FF40000) {
+									function readRaw(f64_val) {
+										const b = new ArrayBuffer(8);
+										new Float64Array(b)[0] = f64_val;
+										const v = new DataView(b);
+										const t = v.getUint32(4, true) & 0xFFFF0000;
+										const p = v.getUint32(0, true);
+										if (t === 0x7FFC0000 || t === 0x7FF40000) return traverseRaw(p);
+										if (t === 0x7FF80000) return "()";
+										if (t === 0x7FFE0000) return "<Closure>";
+										return f64_val.toString();
+									}
+									function traverseRaw(p) {
+										if (p === 0) return "()";
+										const car_val = memView.getFloat64(p, true);
+										const cdr_val = memView.getFloat64(p + 8, true);
+										return `(${readRaw(car_val)} , ${readRaw(cdr_val)})`;
+									}
+									function readPretty(f64_val) {
+										const b = new ArrayBuffer(8);
+										new Float64Array(b)[0] = f64_val;
+										const v = new DataView(b);
+										const t = v.getUint32(4, true) & 0xFFFF0000;
+										const p = v.getUint32(0, true);
+										if (t === 0x7FFC0000 || t === 0x7FF40000) return formatPretty(p);
+										if (t === 0x7FF80000) return "()";
+										if (t === 0x7FFE0000) return "<Closure>";
+										return f64_val.toString();
+									}
+									function formatPretty(p) {
+										if (p === 0) return "[]";
+										let res = "[";
+										let current = p;
+										while (current !== 0) {
+											const car_val = memView.getFloat64(current, true);
+											const cdr_val = memView.getFloat64(current + 8, true);
+
+											res += readPretty(car_val);
+
+											const cdr_buf = new ArrayBuffer(8);
+											new Float64Array(cdr_buf)[0] = cdr_val;
+											const cdr_view = new DataView(cdr_buf);
+											const cdr_tag = cdr_view.getUint32(4, true) & 0xFFFF0000;
+
+											if (cdr_tag === 0x7FF80000) {
+												break;
+											} else if (cdr_tag === 0x7FFC0000 || cdr_tag === 0x7FF40000) {
+												res += ", ";
+												current = cdr_view.getUint32(0, true);
+											} else {
+												res += ", " + readPretty(cdr_val);
+												break;
+											}
+										}
+										res += "]";
+										return res;
+									}
+									outputEl.value += `[Print] ${formatPretty(ptr)}  // Raw: ${traverseRaw(ptr)}\n`;
+									return arg;
+								}
+
+								outputEl.value += `[Print] ${arg}\n`;
+								return arg;
+							}
+
+							return Number.NaN;
+						}
+					}
+				};
+
+				// 6. 実行
+				const wasmInstance = await WebAssembly.instantiate(buffer, importObject);
+				wasmMemory = wasmInstance.instance.exports.memory;
+				const result = wasmInstance.instance.exports.main();
+
+				outputEl.value += `\n[Main Result] ${result}\n`;
+
+			} catch (err) {
+				outputEl.value = `Error: ${err.message}`;
+				console.error(err);
+			}
+		});
+	</script>
+</body>
+
+</html>
