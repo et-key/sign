@@ -185,7 +185,6 @@ access_check : _0 _1 ?
 	_0 != _ & `basic_access` |
 	`no_access`
 ```
-
 ## 6. General Block Syntax List Conversion (Automatic Insertion of `,` at End of Blocks)
 
 For pure list construction in block syntax, automatic insertion of `,` product operators at the end of each line is performed.
@@ -287,28 +286,6 @@ processData : x ?
 	x > 100 : `large`
 	finalize x
 ```
-
-#### Correct Mixed Pattern
-```sign
-`✅ Valid: Mixing conditional expressions and general processing
-`Original syntax
-processData : x ?
-	preProcess x
-	x < 0 : `negative`
-		transform x
-	x > 100 : `large`
-		finalize x
-
-`After conversion
-processData : x ?
-	preProcess x,
-	[x < 0 : `negative`
-		transform x],
-	[x > 100 : `large`
-		finalize x]
-```
-
-By indenting the return value block that hangs from conditions one more level down, this becomes correct notation.
 
 ### 7.3 Judgment Criteria
 

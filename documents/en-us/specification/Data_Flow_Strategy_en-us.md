@@ -146,40 +146,37 @@ process_data : ?
 ` IO Core responsibility
 ` Input stage: Data acquisition from hardware port
 ` Store in buffer and pass to next stage
-input_handler : ?
-	loop :
-		input_buffer # @0x1000
+
+input_buffer : get_input_buffer _
+
+input_handler : _ ?
+	input_buffer # @0x1000
+	input_handler
 
 ` Memory Core responsibility
 ` Memory stage: Data acquisition from input buffer
 ` Skip if no data (short-circuit evaluation with & operator for Unit)
 ` Analyze and structure data, store in processing buffer
-memory_handler : ?
-	loop :
-		@input_buffer & [data ?
-			process_buffer # parse data
-		]
+
+memory_handler : _ ?
+	@input_buffer : [data ? process_buffer # parse data]
 
 ` Processing Core responsibility
 ` Processing stage: Data acquisition from processing buffer
 ` Skip if no data (short-circuit evaluation with & operator for Unit)
 ` Transform data, store in output buffer
-processing_handler : ?
-	loop :
-		@process_buffer & [data ?
-			output_buffer # process data
-		]
+
+processing_handler : _ ?
+	@process_buffer : [data ? output_buffer # process data]
 
 ` Output Core responsibility
 ` Output stage: Data acquisition from output buffer
 ` Skip if no data (short-circuit evaluation with & operator for Unit)
 ` Send processing results to hardware port
-output_handler : ?
-	loop :
-		@output_buffer & [result ?
-			0x2000 # result
-		]
+output_handler : _ ?
+	@output_buffer : [result ? 0x2000 # result]
 ```
+**↑A better implementation strategy is needed here, as it is full of side effects!!!↑**
 
 ### 4.3 Pipeline Parallelism
 
@@ -189,13 +186,11 @@ Basic data flow forms natural pipeline parallelism:
 ` Pipeline processing abstraction
 ` Abstract each stage as functions, process data sequentially
 ` Execute function composition in order: input⇒memory⇒processing⇒output
-pipeline : input_fn memory_fn process_fn output_fn data ?
-	@output_fn @process_fn @memory_fn @input_fn data
+pipeline : @memory_fn @process_fn @output_fn  @input_fn data
 
 ` Or using function composition operators (natural Sign language expression)
 ` Chain execution of each stage using MAP operator (,)
-pipeline_natural : input_fn memory_fn process_fn output_fn ?
-	[output_fn,] [process_fn,] [memory_fn,] [input_fn,]
+pipeline_natural : [input_fn,] [memory_fn,] [process_fn,] [output_fn,]
 ```
 
 ## 5. Advantages and Characteristics
@@ -255,25 +250,23 @@ For efficient data flow, introducing asynchronous processing and event-driven me
 ```sign
 ` Event-driven data flow
 ` Call handler when data arrives
-on_data_available : handler ?
-	register_event input_port handler
+on_data_available : input_port register_event
 
 ` Asynchronous processing chain
-async_pipeline : ?
-	on_data_available input_port [data ?
+async_pipeline : _ ? input_port on_data_available [data ?
 ` Input stage (asynchronous): Execute data processing directly
 ` Notify next stage when output is ready
 		notify output_ready process data
 	]
 ```
+**↑Why procedural?, please provide a better correction↑**
 
 ### 6.3 Feedback Control
 
 Introducing feedback control mechanisms is also effective for data flow optimization:
 
 ```sign
-flow_control : ?
-	loop :
+flow_control : _ ?
 ` Monitor fill rate of each buffer and pass directly to control function
 ` Reduce input speed when input buffer approaches full
 		measure_buffer input_buffer > 0.8 : throttle_input 0.7

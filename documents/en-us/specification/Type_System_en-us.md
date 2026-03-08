@@ -5,6 +5,9 @@
 Sign language's type system adopts a different approach from conventional programming languages. In particular, the concept of "invisible strong static typing" aims to ensure type safety without making programmers conscious of the existence of types.
 The essence of this type is guaranteed as follows:
 
+- **Type declarations are unnecessary** because **the concept of type itself is abstracted**
+- **There are no reserved words** because **the concept of language itself is abstracted**
+- It is **zero-cost** not because abstraction layers were added, but because **redundant layers were removed**
 - **Name = Type**: The name of an identifier itself expresses the type, making explicit type declarations unnecessary
 - **Value = Type**: Values themselves have types, and type mismatches are detected at compile time
 - **Syntax = Type**: The language syntax guarantees types, allowing programmers to code without being conscious of types
@@ -33,35 +36,33 @@ This distinction enables safe and intuitive expression of low-level hardware ope
 
 ## 4. Value Return Characteristics of Comparison Operations
 
-Comparison operations in Sign language have the characteristic of returning concrete values rather than just boolean values.
-
 ### 4.1 Basic Principle
 
-- When a comparison condition evaluates to `true`, the comparison operation returns **the value of the variable term**
+- Ideally, when a comparison condition evaluates to `true`, the comparison operation returns **the value of the variable term**
   - Usually the value of the left side (especially variables) is returned
   - When the left side is a constant literal, the variable value on the right side is returned
   - Essentially, it returns the variable that is "meaningful as a value" in the comparison
 - When a comparison condition evaluates to `false`, the comparison operation returns **Unit (`_`)**
 - This mechanism allows conditional branching to be treated directly as values without boolean conversion
+- As a result, everything except Unit and unevaluated lambdas can be treated as true, including 0.
 
-### 4.2 Evaluation Order and Variable Value Return in Polynomial Comparisons
+### 4.2 Evaluation Order and Variable Value Return in Polynomial Comparisons (Continuous up to 2 comparisons)
 
 Polynomials containing comparison operations are evaluated sequentially from left to right, with the result of each comparison becoming the input for the next comparison:
 
 ```
-3 < x = y < 20
+3 < x < 20
 ```
 
 This expression is equivalent to:
 
 ```
-[[3 < x & x] = y & y] < 20 & y
+[3 < x & x] < 20 & x
 ```
 
 Evaluation process:
 1. If `3 < x` is `true`, **the value of variable x** is returned and becomes the left side of the next comparison
-2. If `x = y` is `true`, **the value of variable y** is returned and becomes the left side of the next comparison
-3. If `y < 20` is `true`, the final result is **the value of variable y**
+3. If `x < 20` is `true`, the final result is **the value of variable x**
 4. If any condition is `false`, `_` (Unit) is returned at that point, and subsequent evaluations are short-circuited
 
 ### 4.3 Practical Examples

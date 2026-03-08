@@ -76,7 +76,7 @@
 | 30 | `{...}` | enclosure | block | Block | Inline block construction |
 | 30 | `[...]` | enclosure | block | Block | Inline block construction |
 | 30 | `\t` | prefix | indent | Indent | Indented block construction |
-| 31 | `\\` | prefix | escape | Char conversion | Treat the immediately following character as a character literal |
+| 31 | `\` | prefix | escape | Char conversion | Treat the immediately following character as a character literal |
 
 ※Conditional branching is only represented by match_case expressions using function block syntax.
 ※When you want to perform function composition with right associativity, use parentheses to make it explicit.

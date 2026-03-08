@@ -190,7 +190,7 @@ pipeline : @memory_fn @process_fn @output_fn  @input_fn data
 
 ` または関数合成演算子を使用（Sign言語の自然な表現）
 ` MAP演算子(,)により各段階を連鎖実行
-pipeline_natural : [input_fn,] [memory_fn,] [process_fn,] [output_fn,]   
+pipeline_natural : [input_fn,] [memory_fn,] [process_fn,] [output_fn,]
 ```
 
 ## 5. 利点と特徴

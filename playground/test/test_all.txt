@@ -71,7 +71,7 @@
 [Print] 12
 [Print] 5
 [Print] 22
-[Print] <Closure (Ptr: 0000)>
+[Print] NaN
 [Print] --- Sections ---
 [Print] 15
 [Print] 12
