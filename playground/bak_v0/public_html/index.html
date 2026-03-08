@@ -152,9 +152,6 @@
 				// 2. Signコードの構文解析
 				const ast = parseSign(code);
 
-				// パース直後のASTをコンソールにすべて出力する魔法
-				console.log("★ AST:", JSON.stringify(ast, null, 2));
-
 				// 3. WATの生成
 				const watCode = compileToWat(ast);
 				document.getElementById('watOutput').value = watCode; // textContentからvalueに変更
