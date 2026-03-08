@@ -137,7 +137,7 @@ Literal =
 
 Unit = "_"
 
-Number = Float / Integer / HexNumber / OctNumber / BinNumber
+Number = Float / Integer / HexNumber / regNumber / OctNumber / BinNumber
 
 Integer = "-"? UnsignedInteger
 
@@ -146,6 +146,8 @@ UnsignedInteger = $([1-9] [0-9]*) / "0"
 Float = "-"? [0-9]+ "." [0-9]+
 
 HexNumber = $("0x" [0-9A-Fa-f]+)
+
+regNumber = $("0r" [0-9A-Fa-f]+)
 
 OctNumber = $("0o" [0-7]+)
 
@@ -156,6 +158,7 @@ String =
 
 Character = 
     "\\" .
+    / $("0u" [0-9A-Fa-f]+)
 
 Identifier = 
     $([A-Za-z_] [0-9A-Za-z_]*)
