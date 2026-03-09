@@ -8,11 +8,11 @@ export class ASTNormalizer {
 
     let node = { ...ast };
 
-    // 空白区切り（apply/call）をリスト構造(infix ,)に変換
+    // 空白区切り（apply/call）を 余積(infix ' ') に変換
     if (node.type === 'apply' || node.type === 'call') {
       return {
         type: 'infix',
-        op: ',',
+        op: ' ',
         left: this.normalize(node.left || node.fn || node.callee),
         right: this.normalize(node.right || node.arg || node.args)
       };

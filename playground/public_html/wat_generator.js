@@ -9,12 +9,56 @@ export class WatGenerator {
   }
 
   generate(ast) {
+    // ★ 仮想型スタックなどの初期化を追加
+    this.typeStack = [];
+    this.functions = [];
+    this.elemFuncs = [];
+    this.lambdaCount = 0;
+
     this.emit('(module');
     this.emit('  (import "env" "math_pow" (func $math_pow (param f64 f64) (result f64)))');
 
     this.emit('  (memory $mem 1)');
     this.emit('  (export "memory" (memory $mem))');
     this.emit('  (global $hp (mut i32) (i32.const 8))');
+    // ★追加: 高階関数のためのテーブルと、クロージャ呼び出しの型シグネチャ
+    this.emit('  (table $func_table 100 funcref)');
+    this.emit('  (type $closure_sig (func (param f64 f64) (result f64)))');
+    // wat_generator.js の emit("module...") の後あたりに追加
+    this.emit(`
+  (func $is_ptr (param $val f64) (result i32)
+    local.get $val
+    i64.reinterpret_f64
+    i64.const 0x7FFC000000000000
+    i64.and
+    i64.const 0x7FFC000000000000
+    i64.eq
+  )`);
+
+    this.emit(`
+  (func $f64_to_ptr (param $val f64) (result i32)
+    local.get $val
+    i64.reinterpret_f64
+    i32.wrap_i64
+  )`);
+
+    // ★ , (積) の実体となるConsセル生成関数
+    this.emit(`
+  (func $cons (param $car f64) (param $cdr f64) (result f64)
+    (local $ptr i32)
+    i32.const 16
+    call $alloc
+    local.set $ptr
+    local.get $ptr
+    local.get $car
+    f64.store offset=0
+    local.get $ptr
+    local.get $cdr
+    f64.store offset=8
+    local.get $ptr
+    call $ptr_to_f64
+  )`);
+
 
     this.emit(`
   (func $alloc (param $size i32) (result i32)
@@ -108,7 +152,15 @@ export class WatGenerator {
     this.emit('    local.get $final_res');
     this.emit('    f64.store offset=0');
     this.emit('    local.get $final_res');
-    this.emit('  )');
+    this.emit('  )'); // ★ $mainの終わり
+
+    // ★ ここに追加: 見つけたラムダ関数をモジュール末尾に出力
+    if (this.functions.length > 0) {
+      this.functions.forEach(line => this.emit(line));
+      const funcList = this.elemFuncs.join(' ');
+      this.emit(`  (elem (i32.const 1) ${funcList})`);
+    }
+
     this.emit(')');
 
     return this.code.join('\n');
@@ -151,7 +203,9 @@ export class WatGenerator {
         if (varName === '_' || varName === 'nan') {
           this.emit(`    f64.const nan`);
         } else {
-          this.emit(`    local.get $${varName}`);
+          // ★ 修正：すでに '$' で始まっているかチェックし、二重になるのを防ぐ
+          const wasmVarName = varName.startsWith('$') ? varName : '$' + varName;
+          this.emit(`    local.get ${wasmVarName}`);
         }
         break;
       case 'absolute':
@@ -192,11 +246,33 @@ export class WatGenerator {
   compilePrefix(node) {
     const op = node.op || node.value;
     const operand = node.right || node.left || node.expr || node.argument || node.operand || node.base || node.value;
-    this.visit(operand);
+
+    this.visit(operand); // オペランドを評価してスタックに積む
+
     switch (op) {
       case '-': this.emit(`    f64.neg`); break;
       case '+': break;
       case '|': this.emit(`    f64.abs`); break;
+
+      // ★ 単体値の Lift (ポインタ化)
+      case '$':
+        this.emit(`    local.set $tmp_l`);      // スタックの値を一時退避
+        this.emit(`    i32.const 8`);           // f64一つ分(8バイト)のメモリを要求
+        this.emit(`    call $alloc`);
+        this.emit(`    local.set $tmp_ptr`);    // 確保したアドレスを退避
+        this.emit(`    local.get $tmp_ptr`);
+        this.emit(`    local.get $tmp_l`);
+        this.emit(`    f64.store offset=0`);    // ヒープへ持ち上げ（保存）
+        this.emit(`    local.get $tmp_ptr`);
+        this.emit(`    call $ptr_to_f64`);      // アドレスをNaN-Box化してスタックへ
+        break;
+
+      // ★ 単体値の Flat (値の取り出し)
+      case '@':
+        this.emit(`    call $f64_to_ptr`);      // NaN-Box化されたアドレスをi32に戻す
+        this.emit(`    f64.load offset=0`);     // ヒープからスタックへ持ち下げ（読み出し）
+        break;
+
       case '!':
         this.emit(`    local.set $tmp_cond`);
         this.emit(`    local.get $tmp_cond`);
@@ -232,30 +308,32 @@ export class WatGenerator {
   compileInfix(node) {
     const { op, left, right } = node;
 
+    // ★ 追加: ラムダ関数 (?) のコンパイル
+    if (op === '?') {
+      this.compileLambda(node);
+      return;
+    }
+
+    // ★ 変更: 空白 (余積) の静的ディスパッチ
+    if (op === ' ') {
+      this.compileSpace(node);
+      return;
+    }
+
     if (op === ',') {
       this.visit(left);
-      this.emit(`    local.set $tmp_l`);
       this.visit(right);
-      this.emit(`    local.set $tmp_r`);
-      this.emit(`    i32.const 16`);
-      this.emit(`    call $alloc`);
-      this.emit(`    local.set $tmp_ptr`);
-      this.emit(`    local.get $tmp_ptr`);
-      this.emit(`    local.get $tmp_l`);
-      this.emit(`    f64.store offset=0`);
-      this.emit(`    local.get $tmp_ptr`);
-      this.emit(`    local.get $tmp_r`);
-      this.emit(`    f64.store offset=8`);
-      this.emit(`    local.get $tmp_ptr`);
-      this.emit(`    call $ptr_to_f64`);
+      this.emit(`    call $cons`);
       return;
     }
 
     if (op === ':' && left && (left.type === 'identifier' || left.type === 'variable')) {
       this.visit(right);
       const lName = left.name || left.value || left.text;
-      this.emit(`    local.set $${lName}`);
-      this.emit(`    local.get $${lName}`);
+      // ★ 修正：代入時も '$' の二重付与を防ぐ
+      const wasmVarName = lName.startsWith('$') ? lName : '$' + lName;
+      this.emit(`    local.set ${wasmVarName}`);
+      this.emit(`    local.get ${wasmVarName}`);
       return;
     }
 
@@ -362,5 +440,61 @@ export class WatGenerator {
     this.emit(`    else`);
     this.emit(`      f64.const nan`);
     this.emit(`    end`);
+  }
+
+  compileLambda(node) {
+    this.lambdaCount++;
+    const funcName = `$lambda_${this.lambdaCount}`;
+
+    const paramName = node.left.value.startsWith('$') ? node.left.value : '$' + node.left.value;
+
+    const prevCode = this.code;
+    const prevLocals = this.locals;
+    this.code = [];
+    this.locals = [paramName];
+
+    this.emit(`  (func ${funcName} (param $env f64) (param ${paramName} f64) (result f64)`);
+
+    this.visit(node.right);
+
+    this.emit(`  )`);
+
+    this.functions.push(...this.code);
+    this.elemFuncs.push(funcName);
+    this.code = prevCode;
+    this.locals = prevLocals;
+
+    this.emit(`    ;; ⚡ Lambda ${funcName} generated -> index ${this.lambdaCount}`);
+    this.emit(`    f64.const ${this.lambdaCount}`);
+
+    if (this.typeStack) {
+      this.typeStack.push({ type: 'Function', id: this.lambdaCount });
+    }
+  }
+
+  compileSpace(node) {
+    this.visit(node.left);
+    let leftType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Unknown' };
+
+    this.visit(node.right);
+    let rightType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Unknown' };
+
+    if (leftType.type === 'Function') {
+      this.emit(`    ;; ⚡ [静的型解決] 左辺は関数なので、直接 call_indirect を発行`);
+      this.emit(`    local.set $tmp_r  ;; 引数`);
+      this.emit(`    local.set $tmp_l  ;; 関数ポインタ`);
+      this.emit(`    f64.const 0       ;; ダミーの環境ポインタ`);
+      this.emit(`    local.get $tmp_r`);
+      this.emit(`    local.get $tmp_l`);
+      this.emit(`    i32.trunc_f64_s   ;; ポインタをi32に変換`);
+      this.emit(`    call_indirect (type $closure_sig)`);
+
+      if (this.typeStack) this.typeStack.push({ type: 'Float' });
+    } else {
+      this.emit(`    ;; ⚡ [静的型解決] 左辺はデータなので、リスト結合(cons)を発行`);
+      this.emit(`    call $cons`);
+
+      if (this.typeStack) this.typeStack.push({ type: 'List' });
+    }
   }
 }
