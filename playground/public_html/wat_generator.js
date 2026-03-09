@@ -11,6 +11,7 @@ export class WatGenerator {
   generate(ast) {
     // ★ 仮想型スタックなどの初期化を追加
     this.typeStack = [];
+    this.typeEnv = {};   // ★ 追加：変数の型を記憶するノート（シンボルテーブル）
     this.functions = [];
     this.elemFuncs = [];
     this.lambdaCount = 0;
@@ -194,7 +195,10 @@ export class WatGenerator {
       if (body.length === 0) { this.emit('    f64.const nan'); return; }
       for (let i = 0; i < body.length; i++) {
         this.visit(body[i]);
-        if (i < body.length - 1) this.emit('    drop');
+        if (i < body.length - 1) {
+          this.emit('    drop');
+          if (this.typeStack) this.typeStack.pop(); // ★ 追加：捨てた値の型も忘れる
+        }
       }
       return;
     }
@@ -207,16 +211,21 @@ export class WatGenerator {
         } else {
           this.emit(`    f64.const ${numVal}`);
         }
+        if (this.typeStack) this.typeStack.push({ type: 'Float' }); // ★ 追加：数値の型を記憶
         break;
       case 'identifier':
       case 'variable':
         const varName = node.name || node.value || node.text;
         if (varName === '_' || varName === 'nan') {
           this.emit(`    f64.const nan`);
+          if (this.typeStack) this.typeStack.push({ type: 'Unit' }); // ★ 追加
         } else {
-          // ★ 修正：すでに '$' で始まっているかチェックし、二重になるのを防ぐ
           const wasmVarName = varName.startsWith('$') ? varName : '$' + varName;
           this.emit(`    local.get ${wasmVarName}`);
+
+          // ★ 追加：ノート（typeEnv）から変数の型を引いてきてスタックに積む！
+          let savedType = this.typeEnv[varName] || { type: 'Unknown' };
+          if (this.typeStack) this.typeStack.push(savedType);
         }
         break;
       case 'absolute':
@@ -341,7 +350,12 @@ export class WatGenerator {
     if (op === ':' && left && (left.type === 'identifier' || left.type === 'variable')) {
       this.visit(right);
       const lName = left.name || left.value || left.text;
-      // ★ 修正：代入時も '$' の二重付与を防ぐ
+
+      // ★ 追加：右辺を評価して確定した型を、変数名をキーにしてノートに書き込む！
+      if (this.typeStack && this.typeStack.length > 0) {
+        this.typeEnv[lName] = this.typeStack[this.typeStack.length - 1]; // popせずに覗き見
+      }
+
       const wasmVarName = lName.startsWith('$') ? lName : '$' + lName;
       this.emit(`    local.set ${wasmVarName}`);
       this.emit(`    local.get ${wasmVarName}`);
