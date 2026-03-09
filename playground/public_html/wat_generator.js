@@ -137,11 +137,22 @@ export class WatGenerator {
   )`);
 
     this.emit('  (func $main (export "main") (result f64)');
-    this.emit('    (local $tmp_ptr i32)');
-    this.emit('    (local $final_res f64)'); // ★ 0番地メールボックス用レジスタ
 
+    // ★ 追加：変数の二重宣言を絶対に防ぐガード
+    const declaredLocals = new Set();
+
+    this.emit('    (local $tmp_ptr i32)');
+    declaredLocals.add('tmp_ptr');
+
+    this.emit('    (local $final_res f64)');
+    declaredLocals.add('final_res');
+
+    // this.locals の中身を展開（すでに tmp_l などが含まれていればここで一回だけ出力される）
     for (let l of this.locals) {
-      this.emit(`    (local $${l} f64)`);
+      if (!declaredLocals.has(l)) {
+        this.emit(`    (local $${l} f64)`);
+        declaredLocals.add(l);
+      }
     }
 
     this.visit(ast);
@@ -455,6 +466,12 @@ export class WatGenerator {
 
     this.emit(`  (func ${funcName} (param $env f64) (param ${paramName} f64) (result f64)`);
 
+    // ★ラムダ関数専用のローカル変数を確実に宣言
+    this.emit(`    (local $tmp_l f64)`);
+    this.emit(`    (local $tmp_r f64)`);
+    this.emit(`    (local $tmp_cond f64)`);
+    this.emit(`    (local $tmp_ptr i32)`);
+
     this.visit(node.right);
 
     this.emit(`  )`);
@@ -483,7 +500,7 @@ export class WatGenerator {
       this.emit(`    ;; ⚡ [静的型解決] 左辺は関数なので、直接 call_indirect を発行`);
       this.emit(`    local.set $tmp_r  ;; 引数`);
       this.emit(`    local.set $tmp_l  ;; 関数ポインタ`);
-      this.emit(`    f64.const 0       ;; ダミーの環境ポインタ`);
+      this.emit(`    f64.const 0.0     ;; ★ 0 ではなく 0.0 に変更`);
       this.emit(`    local.get $tmp_r`);
       this.emit(`    local.get $tmp_l`);
       this.emit(`    i32.trunc_f64_s   ;; ポインタをi32に変換`);

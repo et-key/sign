@@ -13,8 +13,8 @@ export class ASTNormalizer {
       return {
         type: 'infix',
         op: ' ',
-        left: this.normalize(node.left || node.fn || node.callee),
-        right: this.normalize(node.right || node.arg || node.args)
+        left: this.normalize(node.func || node.fn || node.callee || node.left), // ★ node.func を追加！
+        right: this.normalize(node.arg || node.args || node.right)              // ★ node.arg を追加！
       };
     }
 
