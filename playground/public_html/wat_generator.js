@@ -24,7 +24,8 @@ export class WatGenerator {
     this.emit('  (global $hp (mut i32) (i32.const 8))');
     // ★追加: 高階関数のためのテーブルと、クロージャ呼び出しの型シグネチャ
     this.emit('  (table $func_table 100 funcref)');
-    this.emit('  (type $closure_sig (func (param f64 f64) (result f64)))');
+    // ⚡ 関数シグネチャを単一の「コンテキストリスト (ctx)」のみに変更
+    this.emit('  (type $closure_sig (func (param f64) (result f64)))');
     // wat_generator.js の emit("module...") の後あたりに追加
     this.emit(`
   (func $is_ptr (param $val f64) (result i32)
@@ -139,11 +140,24 @@ export class WatGenerator {
 
     // ⚡ 1. Composed Caller (Dispatcher)
     this.emit(`
-  (func $composed_caller (param $env f64) (param $arg f64) (result f64)
+  (func $composed_caller (param $ctx f64) (result f64)
     (local $env_ptr i32)
     (local $f f64)
     (local $g f64)
     (local $g_res f64)
+    (local $arg f64)
+    (local $env f64)
+    
+    local.get $ctx
+    i32.trunc_f64_u
+    local.set $env_ptr
+    
+    local.get $env_ptr
+    f64.load offset=0
+    local.set $arg
+    local.get $env_ptr
+    f64.load offset=8
+    local.set $env
     
     local.get $env
     i32.trunc_f64_u
@@ -156,12 +170,14 @@ export class WatGenerator {
     f64.load offset=8
     local.set $g
     
+    local.get $arg
     local.get $g
     i64.reinterpret_f64
     i64.const 0xFFFFFFFF
     i64.and
     f64.convert_i64_u
-    local.get $arg
+    call $cons
+
     local.get $g
     i64.reinterpret_f64
     i64.const 32
@@ -169,13 +185,15 @@ export class WatGenerator {
     i32.wrap_i64
     call_indirect (type $closure_sig)
     local.set $g_res
-    
+
+    local.get $g_res
     local.get $f
     i64.reinterpret_f64
     i64.const 0xFFFFFFFF
     i64.and
     f64.convert_i64_u
-    local.get $g_res
+    call $cons
+    
     local.get $f
     i64.reinterpret_f64
     i64.const 32
@@ -698,6 +716,32 @@ export class WatGenerator {
 
     const paramName = node.left.value.startsWith('$') ? node.left.value : '$' + node.left.value;
 
+    // ⚡ 修正：WASMのシグネチャを (param $ctx f64) の1つだけにする
+    this.functions.push(`  (func ${funcName} (param $ctx f64) (result f64)`);
+    this.functions.push(`    (local $tmp_l f64)`);
+    this.functions.push(`    (local $tmp_r f64)`);
+    this.functions.push(`    (local $tmp_cond f64)`);
+    this.functions.push(`    (local $tmp_ptr i32)`);
+
+    // ⚡ 追加：コンテキストリスト($ctx)から、引数と環境をローカル変数に復元する
+    this.functions.push(`    (local ${paramName} f64)`);
+    this.functions.push(`    (local $env f64)`);
+    this.functions.push(`    (local $ctx_ptr i32)`);
+
+    this.functions.push(`    local.get $ctx`);
+    this.functions.push(`    i32.trunc_f64_u`);
+    this.functions.push(`    local.set $ctx_ptr`);
+
+    // offset=0 が今回渡された実引数 (arg)
+    this.functions.push(`    local.get $ctx_ptr`);
+    this.functions.push(`    f64.load offset=0`);
+    this.functions.push(`    local.set ${paramName}`);
+
+    // offset=8 が関数の環境 (env)
+    this.functions.push(`    local.get $ctx_ptr`);
+    this.functions.push(`    f64.load offset=8`);
+    this.functions.push(`    local.set $env`);
+
     // ユーザー様が完璧に修正してくださったキャプチャ解析を使います
     const freeVars = this.getFreeVariables(node.right, paramName);
 
@@ -799,24 +843,29 @@ export class WatGenerator {
       if (this.typeStack) this.typeStack.push({ type: 'Function', returnType: leftType.returnType });
 
     } else if (leftType.type === 'Function') {
-      this.emit(`    ;; ⚡ [静的型解決] 関数 ␣ Any -> 関数適用 (call_indirect)`);
-      this.emit(`    local.set $tmp_r`);
-      this.emit(`    local.set $tmp_l`);
+      this.emit(`    ;; ⚡ [静的型解決] 関数 ␣ Any -> 関数適用 (コンテキストリストの作成)`);
+      this.emit(`    local.set $tmp_r`); // arg
+      this.emit(`    local.set $tmp_l`); // func
 
+      // 1. 実引数 (arg) を積む
+      this.emit(`    local.get $tmp_r`);
+
+      // 2. 関数の環境ポインタ (env) を積む
       this.emit(`    local.get $tmp_l`);
       this.emit(`    i64.reinterpret_f64`);
       this.emit(`    i64.const 0xFFFFFFFF`);
       this.emit(`    i64.and`);
       this.emit(`    f64.convert_i64_u`);
 
-      this.emit(`    local.get $tmp_r`);
+      // 3. arg と env を cons して１つのリスト(ctx)にする！
+      this.emit(`    call $cons`);
 
+      // 4. 関数インデックスを取り出して間接呼び出し
       this.emit(`    local.get $tmp_l`);
       this.emit(`    i64.reinterpret_f64`);
       this.emit(`    i64.const 32`);
       this.emit(`    i64.shr_u`);
       this.emit(`    i32.wrap_i64`);
-
       this.emit(`    call_indirect (type $closure_sig)`);
 
       let retType = leftType.returnType || { type: 'Float' };
