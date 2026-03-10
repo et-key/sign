@@ -145,17 +145,96 @@ export class WatGenerator {
 
     this.emit(`
   (func $list_concat (param $l1 f64) (param $l2 f64) (result f64)
+    ;; ⚡ ConcatのロジックはPushと完全に数学的に同値！
+    (local $curr_ptr i32)
+    (local $cdr_val f64)
+    (local $new_cell f64)
+
+    local.get $l1
+    i64.reinterpret_f64
+    i32.wrap_i64
+    local.set $curr_ptr
+
+    (loop $find_end
+      local.get $curr_ptr
+      f64.load offset=8
+      local.set $cdr_val
+
+      local.get $cdr_val
+      call $is_ptr
+      if
+        local.get $cdr_val
+        i64.reinterpret_f64
+        i32.wrap_i64
+        local.set $curr_ptr
+        br $find_end
+      end
+    )
+
+    local.get $cdr_val
+    local.get $l2        ;; Pushの時の $val が $l2 になっただけ
+    call $cons
+    local.set $new_cell
+
+    local.get $curr_ptr
+    local.get $new_cell
+    f64.store offset=8
+
     local.get $l1
   )`);
 
     this.emit(`
   (func $list_push (param $list f64) (param $val f64) (result f64)
+    (local $curr_ptr i32)
+    (local $cdr_val f64)
+    (local $new_cell f64)
+
+    ;; 1. 先頭ポインタをF64からI32に変換して走査開始
+    local.get $list
+    i64.reinterpret_f64
+    i32.wrap_i64
+    local.set $curr_ptr
+
+    (loop $find_end
+      ;; 2. 現在のノードの右側(cdr)を offset=8 から読み込む
+      local.get $curr_ptr
+      f64.load offset=8
+      local.set $cdr_val
+
+      ;; 3. cdrがポインタ(次のノード)かどうか判定
+      local.get $cdr_val
+      call $is_ptr
+      if
+        ;; ポインタなら、curr_ptrを次のアドレスに進めてループ継続
+        local.get $cdr_val
+        i64.reinterpret_f64
+        i32.wrap_i64
+        local.set $curr_ptr
+        br $find_end
+      end
+    )
+
+    ;; 4. 終端に到達。新しいConsセル (cdrの末尾値, 追加したい値) を生成する
+    local.get $cdr_val
+    local.get $val
+    call $cons
+    local.set $new_cell
+
+    ;; 5. 現在の終端ノードの右側(offset=8)を、新しく作ったセルのポインタに書き換える（破壊的結合）
+    local.get $curr_ptr
+    local.get $new_cell
+    f64.store offset=8
+
+    ;; 6. 元のリストの先頭ポインタを返す
     local.get $list
   )`);
 
     this.emit(`
   (func $list_unshift (param $val f64) (param $list f64) (result f64)
+    ;; ⚡ Unshiftは本質的に (cons val list) と同義
+    local.get $val
     local.get $list
+    call $cons
   )`);
 
     this.emit('  (func $main (export "main") (result f64)');
