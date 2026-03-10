@@ -169,8 +169,13 @@ export class WatGenerator {
     // ★ ここに追加: 見つけたラムダ関数をモジュール末尾に出力
     if (this.functions.length > 0) {
       this.functions.forEach(line => this.emit(line));
-      const funcList = this.elemFuncs.join(' ');
-      this.emit(`  (elem (i32.const 1) ${funcList})`);
+
+      // ⚡ IDの順番通りにテーブルのリストを作成する
+      const funcList = [];
+      for (let i = 1; i <= this.lambdaCount; i++) {
+        funcList.push(this.elemFuncs[i]);
+      }
+      this.emit(`  (elem (i32.const 1) ${funcList.join(' ')})`);
     }
 
     this.emit(')');
@@ -467,39 +472,136 @@ export class WatGenerator {
     this.emit(`    end`);
   }
 
+  getFreeVariables(node, argName) {
+    let freeVars = new Set();
+
+    // 探索用の内部関数（bound: そのスコープで自前で持っている変数のリスト）
+    const traverse = (n, bound) => {
+      if (!n) return;
+      if (n.type === 'identifier' || n.type === 'variable') {
+        const vName = n.name || n.value || n.text;
+        const normalizedName = vName.startsWith('$') ? vName : '$' + vName;
+
+        // 自分が持っていない変数（boundに含まれていない）なら、自由変数として記録！
+        if (!bound.has(normalizedName) && normalizedName !== '$_' && normalizedName !== '$nan') {
+          freeVars.add(normalizedName);
+        }
+      } else if (n.type === 'infix') {
+        if (n.op === '?') {
+          // ⚡ 重要: 内側のラムダ式に入るときは、その引数を「自前で持つ変数」として追加する
+          const newBound = new Set(bound);
+          const pName = n.left.name || n.left.value || n.left.text;
+          newBound.add(pName.startsWith('$') ? pName : '$' + pName);
+          traverse(n.right, newBound); // 新しいスコープで中身を探索
+        } else {
+          traverse(n.left, bound);
+          traverse(n.right, bound);
+        }
+      } else if (n.type === 'block') {
+        (n.body || []).forEach(stmt => traverse(stmt, bound));
+      } else if (n.type === 'apply' || n.type === 'call') {
+        traverse(n.func || n.fn || n.callee || n.left, bound);
+        traverse(n.arg || n.args || n.right, bound);
+      }
+    };
+
+    // 一番最初は「自分自身の引数(argName)」だけを持っている状態で探索スタート
+    traverse(node, new Set([argName]));
+
+    return Array.from(freeVars);
+  }
+
   compileLambda(node) {
     this.lambdaCount++;
-    const funcName = `$lambda_${this.lambdaCount}`;
+    const funcId = this.lambdaCount;
+    const funcName = `$lambda_${funcId}`;
 
     const paramName = node.left.value.startsWith('$') ? node.left.value : '$' + node.left.value;
 
+    // ユーザー様が完璧に修正してくださったキャプチャ解析を使います
+    const freeVars = this.getFreeVariables(node.right, paramName);
+
+    const envSize = freeVars.length * 8;
+    if (envSize > 0) {
+      this.emit(`    ;; ⚡ クロージャ環境の確保 (${envSize} bytes)`);
+      this.emit(`    i32.const ${envSize}`);
+      this.emit(`    call $alloc`);
+      this.emit(`    local.set $tmp_ptr`);
+
+      freeVars.forEach((v, idx) => {
+        this.emit(`    local.get $tmp_ptr`);
+        this.emit(`    local.get ${v}`);
+        this.emit(`    f64.store offset=${idx * 8}`);
+      });
+    } else {
+      this.emit(`    i32.const 0`);
+      this.emit(`    local.set $tmp_ptr`);
+    }
+
+    this.emit(`    ;; ⚡ Fat Pointer の作成`);
+    this.emit(`    i64.const ${funcId}`);
+    this.emit(`    i64.const 32`);
+    this.emit(`    i64.shl`);
+    this.emit(`    local.get $tmp_ptr`);
+    this.emit(`    i64.extend_i32_u`);
+    this.emit(`    i64.or`);
+    this.emit(`    f64.reinterpret_i64`);
+
+    // --- ここから【内側の関数】の定義 ---
     const prevCode = this.code;
     const prevLocals = this.locals;
+
+    // ★ 追加: ラムダの中身をコンパイルする前に、外側の「型スタック」を安全な場所に退避させる
+    const prevTypeStack = this.typeStack;
+
     this.code = [];
-    this.locals = [paramName];
+    this.locals = [paramName, ...freeVars];
+    this.typeStack = []; // ★ ラムダ内部のコンパイル用に空のスタックを用意
 
     this.emit(`  (func ${funcName} (param $env f64) (param ${paramName} f64) (result f64)`);
-
-    // ★ラムダ関数専用のローカル変数を確実に宣言
     this.emit(`    (local $tmp_l f64)`);
     this.emit(`    (local $tmp_r f64)`);
     this.emit(`    (local $tmp_cond f64)`);
     this.emit(`    (local $tmp_ptr i32)`);
 
+    freeVars.forEach(v => {
+      this.emit(`    (local ${v} f64)`);
+    });
+
+    if (freeVars.length > 0) {
+      this.emit(`    ;; ⚡ 環境の復元`);
+      this.emit(`    local.get $env`);
+      this.emit(`    i32.trunc_f64_s`);
+      this.emit(`    local.set $tmp_ptr`);
+
+      freeVars.forEach((v, idx) => {
+        this.emit(`    local.get $tmp_ptr`);
+        this.emit(`    f64.load offset=${idx * 8}`);
+        this.emit(`    local.set ${v}`);
+      });
+    }
+
+    // ラムダの本体をコンパイル
     this.visit(node.right);
+
+    // ★ 追加: 本体をコンパイルし終えた時点のトップの型が「この関数の戻り値の型」になる！
+    let returnType = this.typeStack.length > 0 ? this.typeStack.pop() : { type: 'Float' };
 
     this.emit(`  )`);
 
     this.functions.push(...this.code);
-    this.elemFuncs.push(funcName);
+    this.elemFuncs[funcId] = funcName; // ⚡ PushではなくIDを指定して絶対的な位置に配置！
     this.code = prevCode;
     this.locals = prevLocals;
 
-    this.emit(`    ;; ⚡ Lambda ${funcName} generated -> index ${this.lambdaCount}`);
-    this.emit(`    f64.const ${this.lambdaCount}`);
+    // コンパイラの状態を外側のものに戻す
+    this.code = prevCode;
+    this.locals = prevLocals;
+    this.typeStack = prevTypeStack; // ★ 型スタックを復元
 
     if (this.typeStack) {
-      this.typeStack.push({ type: 'Function', id: this.lambdaCount });
+      // ★ 変更: 関数型情報の中に「戻り値の型(returnType)」も一緒に記憶させておく
+      this.typeStack.push({ type: 'Function', id: funcId, returnType: returnType });
     }
   }
 
@@ -511,16 +613,30 @@ export class WatGenerator {
     let rightType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Unknown' };
 
     if (leftType.type === 'Function') {
-      this.emit(`    ;; ⚡ [静的型解決] 左辺は関数なので、直接 call_indirect を発行`);
-      this.emit(`    local.set $tmp_r  ;; 引数`);
-      this.emit(`    local.set $tmp_l  ;; 関数ポインタ`);
-      this.emit(`    f64.const 0.0     ;; ★ 0 ではなく 0.0 に変更`);
-      this.emit(`    local.get $tmp_r`);
+      this.emit(`    ;; ⚡ [静的型解決] 左辺は関数(Fat Pointer)なので、アンパックして call_indirect`);
+      this.emit(`    local.set $tmp_r`);
+      this.emit(`    local.set $tmp_l`);
+
       this.emit(`    local.get $tmp_l`);
-      this.emit(`    i32.trunc_f64_s   ;; ポインタをi32に変換`);
+      this.emit(`    i64.reinterpret_f64`);
+      this.emit(`    i64.const 0xFFFFFFFF`);
+      this.emit(`    i64.and`);
+      this.emit(`    f64.convert_i64_u`);
+
+      this.emit(`    local.get $tmp_r`);
+
+      this.emit(`    local.get $tmp_l`);
+      this.emit(`    i64.reinterpret_f64`);
+      this.emit(`    i64.const 32`);
+      this.emit(`    i64.shr_u`);
+      this.emit(`    i32.wrap_i64`);
+
       this.emit(`    call_indirect (type $closure_sig)`);
 
-      if (this.typeStack) this.typeStack.push({ type: 'Float' });
+      // ★ 変更: 無条件の Float ではなく、推論しておいた戻り値の型を積む！
+      let retType = leftType.returnType || { type: 'Float' };
+      if (this.typeStack) this.typeStack.push(retType);
+
     } else {
       this.emit(`    ;; ⚡ [静的型解決] 左辺はデータなので、リスト結合(cons)を発行`);
       this.emit(`    call $cons`);
