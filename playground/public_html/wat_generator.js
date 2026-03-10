@@ -443,7 +443,8 @@ export class WatGenerator {
       case '!=':
       case '<=':
       case '>=':
-        this.compileComparison(op);
+        // opだけでなく、leftとrightのノード情報も渡す
+        this.compileComparison(op, left, right);
         break;
 
       // ★ 防犯ブザー：知らない演算子が来たらエラーで止める！
@@ -452,7 +453,7 @@ export class WatGenerator {
     }
   }
 
-  compileComparison(op) {
+  compileComparison(op, leftNode, rightNode) {
     this.emit(`    local.set $tmp_r`);
     this.emit(`    local.set $tmp_l`);
     this.emit(`    local.get $tmp_l`);
@@ -465,8 +466,22 @@ export class WatGenerator {
       case '<=': this.emit(`    f64.le`); break;
       case '>=': this.emit(`    f64.ge`); break;
     }
+
+    // ★追加：どちらの値を「意味のある値」として返すか静的に判定
+    let returnRight = false;
+    if (leftNode && rightNode) {
+      // 左辺が純粋なリテラル（数値や文字列）であれば、右辺（変数や式）を返す
+      if (leftNode.type === 'number' || leftNode.type === 'string') {
+        returnRight = true;
+      }
+    }
+
     this.emit(`    if (result f64)`);
-    this.emit(`      local.get $tmp_l`);
+    if (returnRight) {
+      this.emit(`      local.get $tmp_r`);
+    } else {
+      this.emit(`      local.get $tmp_l`);
+    }
     this.emit(`    else`);
     this.emit(`      f64.const nan`);
     this.emit(`    end`);
