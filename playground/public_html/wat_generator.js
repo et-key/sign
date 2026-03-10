@@ -137,6 +137,27 @@ export class WatGenerator {
     local.get $res
   )`);
 
+    // ★ 余積のランタイム拡張用スタブ（TODO: 後でメモリ操作を実装する）
+    this.emit(`
+  (func $compose (param $f1 f64) (param $f2 f64) (result f64)
+    local.get $f1
+  )`);
+
+    this.emit(`
+  (func $list_concat (param $l1 f64) (param $l2 f64) (result f64)
+    local.get $l1
+  )`);
+
+    this.emit(`
+  (func $list_push (param $list f64) (param $val f64) (result f64)
+    local.get $list
+  )`);
+
+    this.emit(`
+  (func $list_unshift (param $val f64) (param $list f64) (result f64)
+    local.get $list
+  )`);
+
     this.emit('  (func $main (export "main") (result f64)');
 
     // ★ 追加：変数の二重宣言を絶対に防ぐガード
@@ -349,6 +370,13 @@ export class WatGenerator {
       this.visit(left);
       this.visit(right);
       this.emit(`    call $cons`);
+
+      // ★ 追加：スタックから左右の型を取り除き、結果が「List型」であることを記憶させる
+      if (this.typeStack) {
+        this.typeStack.pop(); // rightの型を捨てる
+        this.typeStack.pop(); // leftの型を捨てる
+        this.typeStack.push({ type: 'List' });
+      }
       return;
     }
 
@@ -627,8 +655,14 @@ export class WatGenerator {
     this.visit(node.right);
     let rightType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Unknown' };
 
-    if (leftType.type === 'Function') {
-      this.emit(`    ;; ⚡ [静的型解決] 左辺は関数(Fat Pointer)なので、アンパックして call_indirect`);
+    if (leftType.type === 'Function' && rightType.type === 'Function') {
+      this.emit(`    ;; ⚡ [静的型解決] 関数 ␣ 関数 -> 関数合成`);
+      this.emit(`    call $compose`);
+      // 合成された関数の戻り値は、左側の関数の戻り値になる
+      if (this.typeStack) this.typeStack.push({ type: 'Function', returnType: leftType.returnType });
+
+    } else if (leftType.type === 'Function') {
+      this.emit(`    ;; ⚡ [静的型解決] 関数 ␣ Any -> 関数適用 (call_indirect)`);
       this.emit(`    local.set $tmp_r`);
       this.emit(`    local.set $tmp_l`);
 
@@ -648,14 +682,27 @@ export class WatGenerator {
 
       this.emit(`    call_indirect (type $closure_sig)`);
 
-      // ★ 変更: 無条件の Float ではなく、推論しておいた戻り値の型を積む！
       let retType = leftType.returnType || { type: 'Float' };
       if (this.typeStack) this.typeStack.push(retType);
 
-    } else {
-      this.emit(`    ;; ⚡ [静的型解決] 左辺はデータなので、リスト結合(cons)を発行`);
-      this.emit(`    call $cons`);
+    } else if (leftType.type === 'List' && rightType.type === 'List') {
+      this.emit(`    ;; ⚡ [静的型解決] List ␣ List -> リスト結合`);
+      this.emit(`    call $list_concat`);
+      if (this.typeStack) this.typeStack.push({ type: 'List' });
 
+    } else if (leftType.type === 'List') {
+      this.emit(`    ;; ⚡ [静的型解決] List ␣ Any -> Push`);
+      this.emit(`    call $list_push`);
+      if (this.typeStack) this.typeStack.push({ type: 'List' });
+
+    } else if (rightType.type === 'List') {
+      this.emit(`    ;; ⚡ [静的型解決] Any ␣ List -> Unshift`);
+      this.emit(`    call $list_unshift`);
+      if (this.typeStack) this.typeStack.push({ type: 'List' });
+
+    } else {
+      this.emit(`    ;; ⚡ [静的型解決] Any ␣ Any -> 積 (Cons)`);
+      this.emit(`    call $cons`);
       if (this.typeStack) this.typeStack.push({ type: 'List' });
     }
   }
