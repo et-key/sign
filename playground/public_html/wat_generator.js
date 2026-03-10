@@ -228,16 +228,32 @@ export class WatGenerator {
     f64.reinterpret_i64
   )`);
 
-    // ⚡ 3. List Concat
+    // ⚡ 3. List Concat (完全修正版)
     this.emit(`
   (func $list_concat (param $l1 f64) (param $l2 f64) (result f64)
     (local $curr_ptr i32)
     (local $cdr_val f64)
-    (local $new_cell f64)
 
     local.get $l1
-    i64.reinterpret_f64
-    i32.wrap_i64
+    call $is_ptr
+    i32.eqz
+    if
+      local.get $l1
+      local.get $l1
+      f64.ne
+      if
+        local.get $l2
+        return
+      else
+        local.get $l1
+        local.get $l2
+        call $cons
+        return
+      end
+    end
+
+    local.get $l1
+    call $f64_to_ptr
     local.set $curr_ptr
 
     (loop $find_end
@@ -249,21 +265,26 @@ export class WatGenerator {
       call $is_ptr
       if
         local.get $cdr_val
-        i64.reinterpret_f64
-        i32.wrap_i64
+        call $f64_to_ptr
         local.set $curr_ptr
         br $find_end
       end
     )
 
     local.get $cdr_val
-    local.get $l2
-    call $cons
-    local.set $new_cell
-
-    local.get $curr_ptr
-    local.get $new_cell
-    f64.store offset=8
+    local.get $cdr_val
+    f64.ne
+    if
+      local.get $curr_ptr
+      local.get $l2
+      f64.store offset=8
+    else
+      local.get $curr_ptr
+      local.get $cdr_val
+      local.get $l2
+      call $cons
+      f64.store offset=8
+    end
 
     local.get $l1
   )`);
@@ -314,6 +335,37 @@ export class WatGenerator {
     local.get $val
     local.get $list
     call $cons
+  )`);
+
+    // ⚡ 6. List Flatten (後置 ~ の実体)
+    this.emit(`
+  (func $list_flatten (param $val f64) (result f64)
+    (local $car f64)
+    (local $cdr f64)
+
+    local.get $val
+    call $is_ptr
+    i32.eqz
+    if
+      local.get $val
+      return
+    end
+
+    local.get $val
+    call $f64_to_ptr
+    f64.load offset=0
+    call $list_flatten
+    local.set $car
+
+    local.get $val
+    call $f64_to_ptr
+    f64.load offset=8
+    call $list_flatten
+    local.set $cdr
+
+    local.get $car
+    local.get $cdr
+    call $list_concat
   )`);
 
     this.emit('  (func $main (export "main") (result f64)');
@@ -496,6 +548,11 @@ export class WatGenerator {
         this.emit(`    i32.xor`);
         this.emit(`    f64.convert_i32_s`);
         break;
+      // ★ リストへの Lift (単一値を長さ1のリストにする)
+      case '~':
+        this.emit(`    f64.const nan`);
+        this.emit(`    call $cons`);
+        break;
       default:
         throw new Error(`[WASM Compiler] Unsupported prefix operator: "${op}"`);
     }
@@ -508,6 +565,12 @@ export class WatGenerator {
     switch (op) {
       case '!': this.emit(`    call $fact`); break;
       case '|': break;
+
+      // ★ リストの Flat (平坦化)
+      case '~':
+        this.emit(`    call $list_flatten`);
+        break;
+
       default: throw new Error(`[WASM Compiler] Unsupported postfix operator: "${op}"`);
     }
   }
