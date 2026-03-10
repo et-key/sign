@@ -149,7 +149,7 @@ export class WatGenerator {
     (local $env f64)
     
     local.get $ctx
-    i32.trunc_f64_u
+    call $f64_to_ptr
     local.set $env_ptr
     
     local.get $env_ptr
@@ -716,38 +716,14 @@ export class WatGenerator {
 
     const paramName = node.left.value.startsWith('$') ? node.left.value : '$' + node.left.value;
 
-    // ⚡ 修正：WASMのシグネチャを (param $ctx f64) の1つだけにする
-    this.functions.push(`  (func ${funcName} (param $ctx f64) (result f64)`);
-    this.functions.push(`    (local $tmp_l f64)`);
-    this.functions.push(`    (local $tmp_r f64)`);
-    this.functions.push(`    (local $tmp_cond f64)`);
-    this.functions.push(`    (local $tmp_ptr i32)`);
-
-    // ⚡ 追加：コンテキストリスト($ctx)から、引数と環境をローカル変数に復元する
-    this.functions.push(`    (local ${paramName} f64)`);
-    this.functions.push(`    (local $env f64)`);
-    this.functions.push(`    (local $ctx_ptr i32)`);
-
-    this.functions.push(`    local.get $ctx`);
-    this.functions.push(`    i32.trunc_f64_u`);
-    this.functions.push(`    local.set $ctx_ptr`);
-
-    // offset=0 が今回渡された実引数 (arg)
-    this.functions.push(`    local.get $ctx_ptr`);
-    this.functions.push(`    f64.load offset=0`);
-    this.functions.push(`    local.set ${paramName}`);
-
-    // offset=8 が関数の環境 (env)
-    this.functions.push(`    local.get $ctx_ptr`);
-    this.functions.push(`    f64.load offset=8`);
-    this.functions.push(`    local.set $env`);
-
-    // ユーザー様が完璧に修正してくださったキャプチャ解析を使います
+    // 1. キャプチャ解析（ユーザー様の完璧な実装）
     const freeVars = this.getFreeVariables(node.right, paramName);
 
+    // ==========================================
+    // ⚡ [CALLER] 外側の環境（クロージャ）の確保とFat Pointerの生成
+    // ==========================================
     const envSize = freeVars.length * 8;
     if (envSize > 0) {
-      this.emit(`    ;; ⚡ クロージャ環境の確保 (${envSize} bytes)`);
       this.emit(`    i32.const ${envSize}`);
       this.emit(`    call $alloc`);
       this.emit(`    local.set $tmp_ptr`);
@@ -762,7 +738,6 @@ export class WatGenerator {
       this.emit(`    local.set $tmp_ptr`);
     }
 
-    this.emit(`    ;; ⚡ Fat Pointer の作成`);
     this.emit(`    i64.const ${funcId}`);
     this.emit(`    i64.const 32`);
     this.emit(`    i64.shl`);
@@ -771,29 +746,49 @@ export class WatGenerator {
     this.emit(`    i64.or`);
     this.emit(`    f64.reinterpret_i64`);
 
-    // --- ここから【内側の関数】の定義 ---
+    // ==========================================
+    // ⚡ [LAMBDA] 内側の関数定義（引数は $ctx のみ！）
+    // ==========================================
     const prevCode = this.code;
     const prevLocals = this.locals;
-
-    // ★ 追加: ラムダの中身をコンパイルする前に、外側の「型スタック」を安全な場所に退避させる
     const prevTypeStack = this.typeStack;
 
-    this.code = [];
+    this.code = []; // 新しい関数の出力バッファ
     this.locals = [paramName, ...freeVars];
-    this.typeStack = []; // ★ ラムダ内部のコンパイル用に空のスタックを用意
+    this.typeStack = []; // ラムダ内部用の空スタック
 
-    this.emit(`  (func ${funcName} (param $env f64) (param ${paramName} f64) (result f64)`);
+    // ★ 関数シグネチャ：引数は $ctx だけ
+    this.emit(`  (func ${funcName} (param $ctx f64) (result f64)`);
     this.emit(`    (local $tmp_l f64)`);
     this.emit(`    (local $tmp_r f64)`);
     this.emit(`    (local $tmp_cond f64)`);
     this.emit(`    (local $tmp_ptr i32)`);
 
+    // 変数の準備
+    this.emit(`    (local ${paramName} f64)`);
+    this.emit(`    (local $env f64)`);
+    this.emit(`    (local $ctx_ptr i32)`);
     freeVars.forEach(v => {
       this.emit(`    (local ${v} f64)`);
     });
 
+    // ★ 1つのリスト($ctx)から、引数と環境ポインタを復元
+    this.emit(`    local.get $ctx`);
+    this.emit(`    call $f64_to_ptr`);
+    this.emit(`    local.set $ctx_ptr`);
+
+    // offset=0 は実引数
+    this.emit(`    local.get $ctx_ptr`);
+    this.emit(`    f64.load offset=0`);
+    this.emit(`    local.set ${paramName}`);
+
+    // offset=8 は環境ポインタ
+    this.emit(`    local.get $ctx_ptr`);
+    this.emit(`    f64.load offset=8`);
+    this.emit(`    local.set $env`);
+
+    // ★ 環境ポインタから自由変数（キャプチャした値）を復元
     if (freeVars.length > 0) {
-      this.emit(`    ;; ⚡ 環境の復元`);
       this.emit(`    local.get $env`);
       this.emit(`    i32.trunc_f64_s`);
       this.emit(`    local.set $tmp_ptr`);
@@ -805,26 +800,23 @@ export class WatGenerator {
       });
     }
 
-    // ラムダの本体をコンパイル
+    // ラムダ本体の評価
     this.visit(node.right);
 
-    // ★ 追加: 本体をコンパイルし終えた時点のトップの型が「この関数の戻り値の型」になる！
     let returnType = this.typeStack.length > 0 ? this.typeStack.pop() : { type: 'Float' };
 
-    this.emit(`  )`);
+    this.emit(`  )`); // 関数終了
 
+    // 出来上がった関数をグローバル関数リストに追加
     this.functions.push(...this.code);
-    this.elemFuncs[funcId] = funcName; // ⚡ PushではなくIDを指定して絶対的な位置に配置！
-    this.code = prevCode;
-    this.locals = prevLocals;
+    this.elemFuncs[funcId] = funcName;
 
-    // コンパイラの状態を外側のものに戻す
+    // コンテキストを元に戻す
     this.code = prevCode;
     this.locals = prevLocals;
-    this.typeStack = prevTypeStack; // ★ 型スタックを復元
+    this.typeStack = prevTypeStack;
 
     if (this.typeStack) {
-      // ★ 変更: 関数型情報の中に「戻り値の型(returnType)」も一緒に記憶させておく
       this.typeStack.push({ type: 'Function', id: funcId, returnType: returnType });
     }
   }
@@ -837,13 +829,11 @@ export class WatGenerator {
     let rightType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Unknown' };
 
     if (leftType.type === 'Function' && rightType.type === 'Function') {
-      this.emit(`    ;; ⚡ [静的型解決] 関数 ␣ 関数 -> 関数合成`);
       this.emit(`    call $compose`);
       // 合成された関数の戻り値は、左側の関数の戻り値になる
       if (this.typeStack) this.typeStack.push({ type: 'Function', returnType: leftType.returnType });
 
     } else if (leftType.type === 'Function') {
-      this.emit(`    ;; ⚡ [静的型解決] 関数 ␣ Any -> 関数適用 (コンテキストリストの作成)`);
       this.emit(`    local.set $tmp_r`); // arg
       this.emit(`    local.set $tmp_l`); // func
 
@@ -872,22 +862,18 @@ export class WatGenerator {
       if (this.typeStack) this.typeStack.push(retType);
 
     } else if (leftType.type === 'List' && rightType.type === 'List') {
-      this.emit(`    ;; ⚡ [静的型解決] List ␣ List -> リスト結合`);
       this.emit(`    call $list_concat`);
       if (this.typeStack) this.typeStack.push({ type: 'List' });
 
     } else if (leftType.type === 'List') {
-      this.emit(`    ;; ⚡ [静的型解決] List ␣ Any -> Push`);
       this.emit(`    call $list_push`);
       if (this.typeStack) this.typeStack.push({ type: 'List' });
 
     } else if (rightType.type === 'List') {
-      this.emit(`    ;; ⚡ [静的型解決] Any ␣ List -> Unshift`);
       this.emit(`    call $list_unshift`);
       if (this.typeStack) this.typeStack.push({ type: 'List' });
 
     } else {
-      this.emit(`    ;; ⚡ [静的型解決] Any ␣ Any -> 積 (Cons)`);
       this.emit(`    call $cons`);
       if (this.typeStack) this.typeStack.push({ type: 'List' });
     }
