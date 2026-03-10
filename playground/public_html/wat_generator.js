@@ -137,15 +137,76 @@ export class WatGenerator {
     local.get $res
   )`);
 
-    // ★ 余積のランタイム拡張用スタブ（TODO: 後でメモリ操作を実装する）
+    // ⚡ 1. Composed Caller (Dispatcher)
     this.emit(`
-  (func $compose (param $f1 f64) (param $f2 f64) (result f64)
-    local.get $f1
+  (func $composed_caller (param $env f64) (param $arg f64) (result f64)
+    (local $env_ptr i32)
+    (local $f f64)
+    (local $g f64)
+    (local $g_res f64)
+    
+    local.get $env
+    i32.trunc_f64_u
+    local.set $env_ptr
+    
+    local.get $env_ptr
+    f64.load offset=0
+    local.set $f
+    local.get $env_ptr
+    f64.load offset=8
+    local.set $g
+    
+    local.get $g
+    i64.reinterpret_f64
+    i64.const 0xFFFFFFFF
+    i64.and
+    f64.convert_i64_u
+    local.get $arg
+    local.get $g
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    call_indirect (type $closure_sig)
+    local.set $g_res
+    
+    local.get $f
+    i64.reinterpret_f64
+    i64.const 0xFFFFFFFF
+    i64.and
+    f64.convert_i64_u
+    local.get $g_res
+    local.get $f
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    call_indirect (type $closure_sig)
   )`);
 
+    // ⚡ 2. Compose function
+    this.emit(`
+  (func $compose (param $f f64) (param $g f64) (result f64)
+    (local $env_ptr i32)
+    local.get $f
+    local.get $g
+    call $cons
+    i64.reinterpret_f64
+    i32.wrap_i64
+    local.set $env_ptr
+    
+    i64.const 99
+    i64.const 32
+    i64.shl
+    local.get $env_ptr
+    i64.extend_i32_u
+    i64.or
+    f64.reinterpret_i64
+  )`);
+
+    // ⚡ 3. List Concat
     this.emit(`
   (func $list_concat (param $l1 f64) (param $l2 f64) (result f64)
-    ;; ⚡ ConcatのロジックはPushと完全に数学的に同値！
     (local $curr_ptr i32)
     (local $cdr_val f64)
     (local $new_cell f64)
@@ -172,7 +233,7 @@ export class WatGenerator {
     )
 
     local.get $cdr_val
-    local.get $l2        ;; Pushの時の $val が $l2 になっただけ
+    local.get $l2
     call $cons
     local.set $new_cell
 
@@ -183,29 +244,26 @@ export class WatGenerator {
     local.get $l1
   )`);
 
+    // ⚡ 4. List Push
     this.emit(`
   (func $list_push (param $list f64) (param $val f64) (result f64)
     (local $curr_ptr i32)
     (local $cdr_val f64)
     (local $new_cell f64)
 
-    ;; 1. 先頭ポインタをF64からI32に変換して走査開始
     local.get $list
     i64.reinterpret_f64
     i32.wrap_i64
     local.set $curr_ptr
 
     (loop $find_end
-      ;; 2. 現在のノードの右側(cdr)を offset=8 から読み込む
       local.get $curr_ptr
       f64.load offset=8
       local.set $cdr_val
 
-      ;; 3. cdrがポインタ(次のノード)かどうか判定
       local.get $cdr_val
       call $is_ptr
       if
-        ;; ポインタなら、curr_ptrを次のアドレスに進めてループ継続
         local.get $cdr_val
         i64.reinterpret_f64
         i32.wrap_i64
@@ -214,24 +272,21 @@ export class WatGenerator {
       end
     )
 
-    ;; 4. 終端に到達。新しいConsセル (cdrの末尾値, 追加したい値) を生成する
     local.get $cdr_val
     local.get $val
     call $cons
     local.set $new_cell
 
-    ;; 5. 現在の終端ノードの右側(offset=8)を、新しく作ったセルのポインタに書き換える（破壊的結合）
     local.get $curr_ptr
     local.get $new_cell
     f64.store offset=8
 
-    ;; 6. 元のリストの先頭ポインタを返す
     local.get $list
   )`);
 
+    // ⚡ 5. List Unshift
     this.emit(`
   (func $list_unshift (param $val f64) (param $list f64) (result f64)
-    ;; ⚡ Unshiftは本質的に (cons val list) と同義
     local.get $val
     local.get $list
     call $cons
@@ -278,7 +333,10 @@ export class WatGenerator {
       this.emit(`  (elem (i32.const 1) ${funcList.join(' ')})`);
     }
 
-    this.emit(')');
+    // ★ ここに追加：関数合成用のディスパッチャを 99番地 に登録する
+    this.emit(`  (elem (i32.const 99) $composed_caller)`);
+
+    this.emit(')'); // ★ $mainの終わりじゃなくてモジュールの終わり
 
     return this.code.join('\n');
   }
