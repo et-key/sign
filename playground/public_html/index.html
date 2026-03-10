@@ -102,7 +102,7 @@
 
 <body>
 
-	<h2>Sign → WebAssembly Playground (f64)</h2>
+	<h2>Sign → WebAssembly Playground</h2>
 
 	<div class="top-panels">
 		<div class="input-panel">
@@ -281,7 +281,83 @@
 				wasmMemory = wasmInstance.instance.exports.memory;
 				const result = wasmInstance.instance.exports.main();
 
-				outputEl.value += `\n[Main Result] ${result}\n`;
+				// ⚡ 7. 出力フォーマッタ (WASMのメモリから美しく値を復元する)
+				function formatSignResult(f64_val, memory) {
+					// 64ビットFloatからビット単位でデータを読み出す
+					const buf = new ArrayBuffer(8);
+					const view = new DataView(buf);
+					view.setFloat64(0, f64_val, true);
+
+					const upper32 = view.getUint32(4, true); // 上位32ビット (関数IDやタグ)
+					const lower32 = view.getUint32(0, true); // 下位32ビット (環境ポインタ)
+
+					// 🌟 Unit (純粋なNaN) の場合
+					if (Number.isNaN(f64_val) && upper32 !== 0x7FFC0000) {
+						return "Unit";
+					}
+
+					// 🌟 関数 (Fat Pointer) の場合
+					// 上位32ビットが関数ID(1〜99等)、かつ実数としては非正規化数(< 1e-300)になる特徴を利用
+					if (upper32 > 0 && upper32 < 10000 && lower32 % 8 === 0 && Math.abs(f64_val) < 1e-300) {
+						return `<Function: ${upper32}>`;
+					}
+
+					// 🌟 リスト (NaN-Boxingされたポインタ) の場合
+					if (upper32 === 0x7FFC0000) {
+						const memView = new DataView(memory.buffer);
+
+						function traverseList(ptr) {
+							if (ptr === 0) return [];
+
+							const car = memView.getFloat64(ptr, true);
+							const cdr = memView.getFloat64(ptr + 8, true);
+
+							let res = [];
+
+							// car (左側) の評価
+							const carBuf = new ArrayBuffer(8);
+							const carView = new DataView(carBuf);
+							carView.setFloat64(0, car, true);
+							const carUpper = carView.getUint32(4, true);
+
+							if (carUpper === 0x7FFC0000) {
+								res.push(traverseList(carView.getUint32(0, true)));
+							} else {
+								// car が関数の場合もフォーマット
+								res.push(formatSignResult(car, memory));
+							}
+
+							// cdr (右側) の評価
+							const cdrBuf = new ArrayBuffer(8);
+							const cdrView = new DataView(cdrBuf);
+							cdrView.setFloat64(0, cdr, true);
+							const cdrUpper = cdrView.getUint32(4, true);
+
+							if (cdrUpper === 0x7FFC0000) {
+								res = res.concat(traverseList(cdrView.getUint32(0, true)));
+							} else if (!Number.isNaN(cdr)) {
+								res.push(formatSignResult(cdr, memory));
+							}
+
+							return res;
+						}
+
+						const array = traverseList(lower32);
+
+						// 配列を文字列化する再帰ヘルパー
+						function arrayToString(arr) {
+							return "[ " + arr.map(v => Array.isArray(v) ? arrayToString(v) : v).join(", ") + " ]";
+						}
+
+						return arrayToString(array);
+					}
+
+					// 🌟 普通の数値の場合
+					return f64_val;
+				}
+
+				const formattedResult = formatSignResult(result, wasmMemory);
+				outputEl.value += `\n[Main Result] ${formattedResult}\n`;
 
 			} catch (err) {
 				outputEl.value = `Error: ${err.message}`;

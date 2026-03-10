@@ -138,63 +138,69 @@ export class WatGenerator {
     local.get $res
   )`);
 
-    // ⚡ 1. Composed Caller (Dispatcher)
+    // ⚡ 1. Pipeline Caller (Dispatcher) - 堅牢なポインタ渡し版
     this.emit(`
   (func $composed_caller (param $ctx f64) (result f64)
-    (local $env_ptr i32)
-    (local $f f64)
-    (local $g f64)
-    (local $g_res f64)
+    (local $ctx_ptr i32)
     (local $arg f64)
     (local $env f64)
-    
+    (local $f f64)
+    (local $g f64)
+    (local $f_res f64)
+
     local.get $ctx
     call $f64_to_ptr
-    local.set $env_ptr
+    local.set $ctx_ptr
     
-    local.get $env_ptr
+    local.get $ctx_ptr
     f64.load offset=0
     local.set $arg
-    local.get $env_ptr
+    local.get $ctx_ptr
     f64.load offset=8
     local.set $env
-    
+
     local.get $env
-    i32.trunc_f64_u
-    local.set $env_ptr
+    call $f64_to_ptr
+    local.set $ctx_ptr
     
-    local.get $env_ptr
+    local.get $ctx_ptr
     f64.load offset=0
     local.set $f
-    local.get $env_ptr
+    local.get $ctx_ptr
     f64.load offset=8
     local.set $g
-    
+
     local.get $arg
-    local.get $g
+
+    local.get $f
     i64.reinterpret_f64
     i64.const 0xFFFFFFFF
     i64.and
-    f64.convert_i64_u
+    i32.wrap_i64
+    call $ptr_to_f64
+    
     call $cons
 
-    local.get $g
+    local.get $f
     i64.reinterpret_f64
     i64.const 32
     i64.shr_u
     i32.wrap_i64
     call_indirect (type $closure_sig)
-    local.set $g_res
+    local.set $f_res
 
-    local.get $g_res
-    local.get $f
+    local.get $f_res
+
+    local.get $g
     i64.reinterpret_f64
     i64.const 0xFFFFFFFF
     i64.and
-    f64.convert_i64_u
+    i32.wrap_i64
+    call $ptr_to_f64
+    
     call $cons
     
-    local.get $f
+    local.get $g
     i64.reinterpret_f64
     i64.const 32
     i64.shr_u
@@ -202,15 +208,15 @@ export class WatGenerator {
     call_indirect (type $closure_sig)
   )`);
 
-    // ⚡ 2. Compose function
+    // ⚡ 2. Compose function - 堅牢なポインタ取得版
     this.emit(`
   (func $compose (param $f f64) (param $g f64) (result f64)
     (local $env_ptr i32)
     local.get $f
     local.get $g
     call $cons
-    i64.reinterpret_f64
-    i32.wrap_i64
+    
+    call $f64_to_ptr
     local.set $env_ptr
     
     i64.const 99
@@ -834,18 +840,20 @@ export class WatGenerator {
       if (this.typeStack) this.typeStack.push({ type: 'Function', returnType: leftType.returnType });
 
     } else if (leftType.type === 'Function') {
+      this.emit(`    ;; ⚡ [静的型解決] 関数 ␣ Any -> 関数適用 (コンテキストリストの作成)`);
       this.emit(`    local.set $tmp_r`); // arg
       this.emit(`    local.set $tmp_l`); // func
 
       // 1. 実引数 (arg) を積む
       this.emit(`    local.get $tmp_r`);
 
-      // 2. 関数の環境ポインタ (env) を積む
+      // 2. 関数の環境ポインタ (env) を積んで NaN-Boxing する
       this.emit(`    local.get $tmp_l`);
       this.emit(`    i64.reinterpret_f64`);
       this.emit(`    i64.const 0xFFFFFFFF`);
       this.emit(`    i64.and`);
-      this.emit(`    f64.convert_i64_u`);
+      this.emit(`    i32.wrap_i64`);        // ⚡ 修正
+      this.emit(`    call $ptr_to_f64`);   // ⚡ 修正
 
       // 3. arg と env を cons して１つのリスト(ctx)にする！
       this.emit(`    call $cons`);
