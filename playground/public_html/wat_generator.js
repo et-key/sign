@@ -452,6 +452,49 @@ export class WatGenerator {
         }
         if (this.typeStack) this.typeStack.push({ type: 'Float' }); // ★ 追加：数値の型を記憶
         break;
+
+      // ==========================================
+      // ⚡ [追加] 文字列 (String) ノードの処理
+      // ==========================================
+      case 'string': {
+        // 1. バッククォートの安全な除去
+        let strVal = node.value;
+        if (strVal.startsWith('`') && strVal.endsWith('`')) {
+          strVal = strVal.slice(1, -1);
+        }
+
+        // 2. UTF-8バイト列へのエンコード
+        const encoder = new TextEncoder();
+        const bytes = encoder.encode(strVal);
+        const len = bytes.length;
+
+        // 3. メモリ確保 (文字列長: 4バイト + 本体: lenバイト)
+        this.emit(`    i32.const ${len + 4}`);
+        this.emit(`    call $alloc`);
+        this.emit(`    local.set $tmp_ptr`);
+
+        // 4. 文字列長の保存 (先頭4バイト, i32)
+        this.emit(`    local.get $tmp_ptr`);
+        this.emit(`    i32.const ${len}`);
+        this.emit(`    i32.store offset=0`);
+
+        // 5. 各バイトデータの保存
+        for (let i = 0; i < len; i++) {
+          this.emit(`    local.get $tmp_ptr`);
+          this.emit(`    i32.const ${bytes[i]}`);
+          this.emit(`    i32.store8 offset=${4 + i}`);
+        }
+
+        // 6. ポインタをNaN-Box化してスタックに積む
+        this.emit(`    local.get $tmp_ptr`);
+        this.emit(`    call $ptr_to_f64`);
+
+        // 型スタックにStringを記憶
+        if (this.typeStack) this.typeStack.push({ type: 'String' });
+        break;
+      }
+      // ==========================================
+
       case 'identifier':
       case 'variable':
         const varName = node.name || node.value || node.text;
@@ -859,7 +902,7 @@ export class WatGenerator {
     // ★ 環境ポインタから自由変数（キャプチャした値）を復元
     if (freeVars.length > 0) {
       this.emit(`    local.get $env`);
-      this.emit(`    i32.trunc_f64_s`);
+      this.emit(`    call $f64_to_ptr`);
       this.emit(`    local.set $tmp_ptr`);
 
       freeVars.forEach((v, idx) => {
