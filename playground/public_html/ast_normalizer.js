@@ -52,16 +52,13 @@ export class ASTNormalizer {
     // ⚡ 中置 ' (get) の正規化: 右辺の識別子を文字列にキャスト
     // ==========================================
     if (node.type === 'infix' && node.op === "'") {
-      let keyNode = node.right;
-      if (keyNode && (keyNode.type === 'identifier' || keyNode.type === 'variable')) {
-        let keyStr = keyNode.name || keyNode.value || keyNode.text;
-        keyNode = { type: 'string', value: '`' + keyStr + '`' };
-      }
+      // ❌ 右辺の強制文字列キャストを廃止！
+      // これにより、変数(動的キー)やリスト構造をキーとしてWASMに渡せるようになります。
       return {
         type: 'infix',
         op: "'",
         left: this.normalize(node.left, false),
-        right: this.normalize(keyNode, false)
+        right: this.normalize(node.right, false)
       };
     }
 
