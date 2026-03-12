@@ -368,11 +368,13 @@ export class WatGenerator {
     call $list_concat
   )`);
 
-    // ⚡ 7. String/Value Equality (文字列と値の完全一致比較)
+    // ⚡ 7. Deep Search Equality (ディープ・サーチ・イコール)
     this.emit(`
   (func $val_eq (param $p1 f64) (param $p2 f64) (result i32)
     (local $ptr1 i32)
     (local $ptr2 i32)
+    (local $tag1 i32)
+    (local $tag2 i32)
     (local $len1 i32)
     (local $len2 i32)
     (local $i i32)
@@ -385,61 +387,111 @@ export class WatGenerator {
     if i32.const 1 return end
 
     local.get $p1
-    call $f64_to_ptr
-    local.set $ptr1
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    i32.const 0xFFFF0000
+    i32.and
+    local.set $tag1
+
     local.get $p2
-    call $f64_to_ptr
-    local.set $ptr2
+    i64.reinterpret_f64
+    i64.const 32
+    i64.shr_u
+    i32.wrap_i64
+    i32.const 0xFFFF0000
+    i32.and
+    local.set $tag2
 
-    local.get $ptr1
-    i32.eqz
-    if i32.const 0 return end
-    local.get $ptr2
-    i32.eqz
-    if i32.const 0 return end
-
-    local.get $ptr1
-    i32.load offset=0
-    local.set $len1
-    local.get $ptr2
-    i32.load offset=0
-    local.set $len2
-
-    local.get $len1
-    local.get $len2
+    local.get $tag1
+    local.get $tag2
     i32.ne
     if i32.const 0 return end
 
-    i32.const 0
-    local.set $i
-    (block $break
-      (loop $compare_loop
-        local.get $i
-        local.get $len1
-        i32.ge_u
-        br_if $break
+    local.get $tag1
+    i32.const 0x7FFB0000
+    i32.eq
+    if
+      local.get $p1
+      call $f64_to_ptr
+      local.set $ptr1
+      local.get $p2
+      call $f64_to_ptr
+      local.set $ptr2
 
-        local.get $ptr1
-        local.get $i
-        i32.add
-        i32.load8_u offset=4
+      local.get $ptr1
+      i32.load offset=0
+      local.set $len1
+      local.get $ptr2
+      i32.load offset=0
+      local.set $len2
 
-        local.get $ptr2
-        local.get $i
-        i32.add
-        i32.load8_u offset=4
+      local.get $len1
+      local.get $len2
+      i32.ne
+      if i32.const 0 return end
 
-        i32.ne
-        if i32.const 0 return end
+      i32.const 0
+      local.set $i
+      (block $break
+        (loop $compare_loop
+          local.get $i
+          local.get $len1
+          i32.ge_u
+          br_if $break
 
-        local.get $i
-        i32.const 1
-        i32.add
-        local.set $i
-        br $compare_loop
+          local.get $ptr1
+          local.get $i
+          i32.add
+          i32.load8_u offset=4
+          local.get $ptr2
+          local.get $i
+          i32.add
+          i32.load8_u offset=4
+          i32.ne
+          if i32.const 0 return end
+
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br $compare_loop
+        )
       )
-    )
-    i32.const 1
+      i32.const 1
+      return
+    end
+
+    local.get $tag1
+    i32.const 0x7FFC0000
+    i32.eq
+    local.get $tag1
+    i32.const 0x7FF40000
+    i32.eq
+    i32.or
+    if
+      local.get $p1
+      call $f64_to_ptr
+      f64.load offset=0
+      local.get $p2
+      call $f64_to_ptr
+      f64.load offset=0
+      call $val_eq
+      i32.eqz
+      if i32.const 0 return end
+
+      local.get $p1
+      call $f64_to_ptr
+      f64.load offset=8
+      local.get $p2
+      call $f64_to_ptr
+      f64.load offset=8
+      call $val_eq
+      return
+    end
+
+    i32.const 0
     return
   )`);
 
@@ -957,8 +1009,18 @@ export class WatGenerator {
     switch (op) {
       case '<': this.emit(`    f64.lt`); break;
       case '>': this.emit(`    f64.gt`); break;
-      case '=': this.emit(`    f64.eq`); break;
-      case '!=': this.emit(`    f64.ne`); break;
+
+      // ⚡ 変更: f64.eq ではなく $val_eq を呼ぶ
+      case '=':
+        this.emit(`    call $val_eq`);
+        break;
+
+      // ⚡ 変更: $val_eq を呼んでから結果(i32)を反転させる
+      case '!=':
+        this.emit(`    call $val_eq`);
+        this.emit(`    i32.eqz`);
+        break;
+
       case '<=': this.emit(`    f64.le`); break;
       case '>=': this.emit(`    f64.ge`); break;
     }
@@ -1113,8 +1175,55 @@ export class WatGenerator {
       });
     }
 
-    // ラムダ本体の評価
-    this.visit(node.right);
+    // ==========================================
+    // ⚡ [修正] パターンマッチの検知とWASMジャンプテーブル展開
+    // ==========================================
+    // ブロックの「最初の要素」が `:` であれば、パターンマッチブロックとみなす
+    const isMatchBlock = node.right && node.right.type === 'block' &&
+      node.right.body && node.right.body.length > 0 &&
+      node.right.body[0].type === 'infix' && node.right.body[0].op === ':';
+
+    if (isMatchBlock) {
+      this.emit(`    ;; --- Pattern Match Block ---`);
+      this.emit(`    (block $match_exit (result f64)`);
+
+      for (let i = 0; i < node.right.body.length; i++) {
+        const branch = node.right.body[i];
+
+        if (branch.type === 'infix' && branch.op === ':') {
+          // 1. パターン条件の比較 ( a : b の形式 )
+          this.visit(branch.left);
+          if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+
+          this.emit(`      local.get ${paramName}`); // 引数(x)をスタックに積む
+          this.emit(`      call $val_eq`);           // ディープ比較
+          this.emit(`      if`);
+
+          // 一致したら右辺を評価して、ブロックからジャンプして抜ける
+          this.visit(branch.right);
+          if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+          this.emit(`      br $match_exit`);
+          this.emit(`      end`);
+        } else {
+          // 2. デフォルトケース ( : がない、ブロック最後の単独の式 )
+          // 無条件で評価して、ブロックからジャンプして抜ける
+          this.visit(branch);
+          if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+          this.emit(`      br $match_exit`);
+        }
+      }
+
+      // 3. どのパターンにもマッチせず、デフォルトケースもなかった場合のフォールバック (Unit)
+      this.emit(`      f64.const nan`);
+      this.emit(`    )`);
+
+      if (this.typeStack) this.typeStack.push({ type: 'Any' });
+
+    } else {
+      // ⚡ パターンマッチではない通常のラムダ本体の評価
+      this.visit(node.right);
+    }
+    // ==========================================
 
     let returnType = this.typeStack.length > 0 ? this.typeStack.pop() : { type: 'Float' };
 
