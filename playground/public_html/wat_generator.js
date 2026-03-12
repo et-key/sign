@@ -368,6 +368,137 @@ export class WatGenerator {
     call $list_concat
   )`);
 
+    // ⚡ 7. String/Value Equality (文字列と値の完全一致比較)
+    this.emit(`
+  (func $val_eq (param $p1 f64) (param $p2 f64) (result i32)
+    (local $ptr1 i32)
+    (local $ptr2 i32)
+    (local $len1 i32)
+    (local $len2 i32)
+    (local $i i32)
+
+    local.get $p1
+    i64.reinterpret_f64
+    local.get $p2
+    i64.reinterpret_f64
+    i64.eq
+    if i32.const 1 return end
+
+    local.get $p1
+    call $f64_to_ptr
+    local.set $ptr1
+    local.get $p2
+    call $f64_to_ptr
+    local.set $ptr2
+
+    local.get $ptr1
+    i32.eqz
+    if i32.const 0 return end
+    local.get $ptr2
+    i32.eqz
+    if i32.const 0 return end
+
+    local.get $ptr1
+    i32.load offset=0
+    local.set $len1
+    local.get $ptr2
+    i32.load offset=0
+    local.set $len2
+
+    local.get $len1
+    local.get $len2
+    i32.ne
+    if i32.const 0 return end
+
+    i32.const 0
+    local.set $i
+    (block $break
+      (loop $compare_loop
+        local.get $i
+        local.get $len1
+        i32.ge_u
+        br_if $break
+
+        local.get $ptr1
+        local.get $i
+        i32.add
+        i32.load8_u offset=4
+
+        local.get $ptr2
+        local.get $i
+        i32.add
+        i32.load8_u offset=4
+
+        i32.ne
+        if i32.const 0 return end
+
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br $compare_loop
+      )
+    )
+    i32.const 1
+    return
+  )`);
+
+    // ⚡ 8. Dictionary Get (辞書/A-Listからの値取得)
+    this.emit(`
+  (func $dict_get (param $alist f64) (param $key f64) (result f64)
+    (local $current_node i32)
+    (local $pair_ptr i32)
+    (local $current_key f64)
+
+    local.get $alist
+    call $f64_to_ptr
+    local.set $current_node
+
+    (block $exit
+      (loop $search
+        local.get $current_node
+        i32.eqz
+        br_if $exit
+
+        local.get $current_node
+        f64.load offset=0
+        call $f64_to_ptr
+        local.set $pair_ptr
+
+        local.get $pair_ptr
+        f64.load offset=0
+        local.set $current_key
+
+        local.get $current_key
+        local.get $key
+        call $val_eq
+        if
+          local.get $pair_ptr
+          f64.load offset=8
+          return
+        end
+
+        ;; 次のノードへ
+        local.get $current_node
+        f64.load offset=8
+        call $f64_to_ptr
+        local.set $current_node
+        br $search
+      )
+    )
+    f64.const nan
+  )`);
+
+    // ⚡ 9. Memory Store (アドレスへの破壊的書き込み)
+    this.emit(`
+  (func $store_data (param $addr f64) (param $data f64) (result f64)
+    local.get $addr
+    call $f64_to_ptr
+    local.get $data
+    f64.store offset=0
+    local.get $data
+  )`);
+
     this.emit('  (func $main (export "main") (result f64)');
 
     // ★ 追加：変数の二重宣言を絶対に防ぐガード
@@ -502,7 +633,10 @@ export class WatGenerator {
 
         // 6. ポインタをNaN-Box化してスタックに積む
         this.emit(`    local.get $tmp_ptr`);
-        this.emit(`    call $ptr_to_f64`);
+        this.emit(`    i64.extend_i32_u`);
+        this.emit(`    i64.const 0x7FFB000000000000`);
+        this.emit(`    i64.or`);
+        this.emit(`    f64.reinterpret_i64`);
 
         // 型スタックにStringを記憶
         if (this.typeStack) this.typeStack.push({ type: 'String' });
@@ -581,7 +715,10 @@ export class WatGenerator {
         this.emit(`    local.get $tmp_l`);
         this.emit(`    f64.store offset=0`);    // ヒープへ持ち上げ（保存）
         this.emit(`    local.get $tmp_ptr`);
-        this.emit(`    call $ptr_to_f64`);      // アドレスをNaN-Box化してスタックへ
+        this.emit(`    i64.extend_i32_u`);
+        this.emit(`    i64.const 0x7FF9000000000000`);
+        this.emit(`    i64.or`);
+        this.emit(`    f64.reinterpret_i64`);
         break;
 
       // ★ 単体値の Flat (値の取り出し)
@@ -671,6 +808,42 @@ export class WatGenerator {
 
       if (this.typeStack) {
         this.typeStack.push({ type: 'List' });
+      }
+      return;
+    }
+
+    // ==========================================
+    // ⚡ 辞書からの値取得 (')
+    // ==========================================
+    if (op === "'") {
+      this.visit(left);
+      if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+
+      this.visit(right);
+      if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+
+      this.emit(`    call $dict_get`);
+
+      if (this.typeStack) {
+        this.typeStack.push({ type: 'Any' });
+      }
+      return;
+    }
+
+    // ==========================================
+    // ⚡ アドレスへのデータ関連付け/書き込み (#)
+    // ==========================================
+    if (op === '#') {
+      this.visit(left);
+      if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+
+      this.visit(right);
+      if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+
+      this.emit(`    call $store_data`);
+
+      if (this.typeStack) {
+        this.typeStack.push({ type: 'Any' });
       }
       return;
     }

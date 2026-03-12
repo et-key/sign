@@ -192,6 +192,21 @@
 						return "Unit";
 					}
 
+					// 🌟 文字列 (String) の場合 (タグ: 0x7FFB0000)
+					if (upper32 === 0x7FFB0000) {
+						// メモリから文字列長とUTF-8バイト列を直接読み出して復元
+						const len = memView.getUint32(lower32, true);
+						const bytes = new Uint8Array(wasmMemory.buffer, lower32 + 4, len);
+						const str = new TextDecoder('utf-8').decode(bytes);
+						return "`" + str + "`";
+					}
+
+					// 🌟 アドレス値 ($) の場合 (タグ: 0x7FF90000)
+					if (upper32 === 0x7FF90000) {
+						// 16進数でセキュアかつ仕様通りにフォーマット (例: $0x0400)
+						return `$0x${lower32.toString(16).padStart(4, '0')}`;
+					}
+
 					// 🌟 文字型 (Char) の場合 (タグ: 0x7FFA0000)
 					if (upper32 === 0x7FFA0000) {
 						return `'${String.fromCodePoint(lower32)}'`; // 文字コードを復元！
