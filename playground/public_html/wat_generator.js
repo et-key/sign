@@ -454,6 +454,21 @@ export class WatGenerator {
         break;
 
       // ==========================================
+      // ⚡ [追加] 文字型 (Char) ノードの処理
+      // ==========================================
+      case 'char':
+        this.emit(`    i32.const ${node.value}`);
+        this.emit(`    i64.extend_i32_u`);
+        // ポインタ(0x7FFC~)と衝突しない独自のCharタグ(0x7FFA~)を付与
+        this.emit(`    i64.const 0x7FFA000000000000`);
+        this.emit(`    i64.or`);
+        this.emit(`    f64.reinterpret_i64`); // NaN-Box化してスタックに積む
+
+        if (this.typeStack) this.typeStack.push({ type: 'Char' });
+        break;
+      // ==========================================
+
+      // ==========================================
       // ⚡ [追加] 文字列 (String) ノードの処理
       // ==========================================
       case 'string': {

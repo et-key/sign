@@ -151,10 +151,54 @@ export class ASTNormalizer {
       }
     }
 
+    // ==========================================
+    // ⚡ 文字型 (\a または 0u00f0) の完全な正規化
+    // ==========================================
+
+    // ケース1: 既に "char" ノードとしてパースされている場合 (値が文字列 "a" など)
+    if (node.type === 'char' || node.type === 'char_literal' || node.type === 'character') {
+      if (typeof node.value === 'string') {
+        let val = node.value;
+        if (val.startsWith('0u')) {
+          return { type: 'char', value: parseInt(val.slice(2), 16) };
+        } else if (val.startsWith('\\')) {
+          return { type: 'char', value: val.charCodeAt(1) };
+        } else {
+          return { type: 'char', value: val.charCodeAt(0) }; // "a" を文字コード 97 に変換
+        }
+      }
+      return node; // 既に数値化されていればそのまま
+    }
+
+    // ケース2: "\" が前置演算子としてパースされた場合 (\a)
+    if (node.type === 'prefix' && node.op === '\\') {
+      let charStr = node.right.name || node.right.value || node.right.text || '';
+      return { type: 'char', value: String(charStr).charCodeAt(0) };
+    }
+
+    // ケース3: identifier (識別子) としてパースされてしまった "0u00f0" の救出
+    if (node.type === 'identifier' || node.type === 'variable') {
+      let name = node.name || node.value || node.text;
+
+      // 先頭が "0u" なら文字型コードポイントとしてパース！
+      if (typeof name === 'string' && name.startsWith('0u')) {
+        return { type: 'char', value: parseInt(name.slice(2), 16) }; // "00f0" -> 240
+      }
+
+      if (!isNaN(parseFloat(name)) && isFinite(name)) {
+        node.type = 'number';
+        node.value = parseFloat(name);
+        delete node.name;
+      }
+    }
+
+    // 既存の number の進数処理
     if (node.type === 'number' && typeof node.value === 'string') {
       if (node.value.startsWith('0b') || node.value.startsWith('0r')) {
         const base = node.value.startsWith('0b') ? 2 : 16;
         node.value = parseInt(node.value.slice(2), base);
+      } else if (node.value.startsWith('0u')) {
+        return { type: 'char', value: parseInt(node.value.slice(2), 16) };
       }
     }
 
