@@ -1045,27 +1045,31 @@ export class WatGenerator {
     this.emit(`    end`);
   }
 
-  getFreeVariables(node, argName) {
+  // ⚡ 修正: initialBoundArray (配列) を受け取るように変更
+  getFreeVariables(node, initialBoundArray) {
     let freeVars = new Set();
 
-    // 探索用の内部関数（bound: そのスコープで自前で持っている変数のリスト）
     const traverse = (n, bound) => {
       if (!n) return;
       if (n.type === 'identifier' || n.type === 'variable') {
         const vName = n.name || n.value || n.text;
         const normalizedName = vName.startsWith('$') ? vName : '$' + vName;
 
-        // 自分が持っていない変数（boundに含まれていない）なら、自由変数として記録！
         if (!bound.has(normalizedName) && normalizedName !== '$_' && normalizedName !== '$nan') {
           freeVars.add(normalizedName);
         }
       } else if (n.type === 'infix') {
         if (n.op === '?') {
-          // ⚡ 重要: 内側のラムダ式に入るときは、その引数を「自前で持つ変数」として追加する
           const newBound = new Set(bound);
-          const pName = n.left.name || n.left.value || n.left.text;
-          newBound.add(pName.startsWith('$') ? pName : '$' + pName);
-          traverse(n.right, newBound); // 新しいスコープで中身を探索
+          let pName = n.left.name || n.left.value || n.left.text;
+
+          // ~b のような接頭辞付きパラメータの救済
+          if (!pName && n.left.type === 'prefix' && n.left.op === '~') {
+            pName = n.left.expr.name || n.left.expr.value || n.left.expr.text;
+          }
+          if (pName) newBound.add(pName.startsWith('$') ? pName : '$' + pName);
+
+          traverse(n.right, newBound);
         } else {
           traverse(n.left, bound);
           traverse(n.right, bound);
@@ -1078,9 +1082,7 @@ export class WatGenerator {
       }
     };
 
-    // 一番最初は「自分自身の引数(argName)」だけを持っている状態で探索スタート
-    traverse(node, new Set([argName]));
-
+    traverse(node, new Set(initialBoundArray));
     return Array.from(freeVars);
   }
 
@@ -1089,13 +1091,48 @@ export class WatGenerator {
     const funcId = this.lambdaCount;
     const funcName = `$lambda_${funcId}`;
 
-    const paramName = node.left.value.startsWith('$') ? node.left.value : '$' + node.left.value;
-
-    // 1. キャプチャ解析（ユーザー様の完璧な実装）
-    const freeVars = this.getFreeVariables(node.right, paramName);
+    let isDestructuring = false;
+    let headName = null;
+    let tailName = null;
+    let actualBody = node.right;
+    let paramName = null;
 
     // ==========================================
-    // ⚡ [CALLER] 外側の環境（クロージャ）の確保とFat Pointerの生成
+    // ⚡ 1. 構造分解 ( a ~b ? ... ) の検知
+    // パーサーが a ? (~b ? ...) と解釈したものをフラット化
+    // ==========================================
+    if (node.left && (node.left.type === 'identifier' || node.left.type === 'variable')) {
+      if (node.right && node.right.type === 'infix' && node.right.op === '?') {
+        if (node.right.left && node.right.left.type === 'prefix' && node.right.left.op === '~') {
+          isDestructuring = true;
+          let hName = node.left.name || node.left.value || node.left.text;
+          let tName = node.right.left.expr.name || node.right.left.expr.value || node.right.left.expr.text;
+          headName = hName.startsWith('$') ? hName : '$' + hName;
+          tailName = tName.startsWith('$') ? tName : '$' + tName;
+          actualBody = node.right.right;
+          paramName = '$list_arg'; // 引数全体(リスト)の一時変数
+        }
+      }
+    }
+
+    if (!isDestructuring) {
+      let pName = node.left.name || node.left.value || node.left.text;
+      if (!pName && node.left.type === 'prefix' && node.left.op === '~') {
+        pName = node.left.expr.name || node.left.expr.value || node.left.expr.text;
+      }
+      paramName = pName.startsWith('$') ? pName : '$' + pName;
+    }
+
+    // ⚡ 2. キャプチャ解析
+    let freeVars;
+    if (isDestructuring) {
+      freeVars = this.getFreeVariables(actualBody, [headName, tailName]);
+    } else {
+      freeVars = this.getFreeVariables(actualBody, [paramName]);
+    }
+
+    // ==========================================
+    // ⚡ [CALLER] 外側の環境（クロージャ）の確保
     // ==========================================
     const envSize = freeVars.length * 8;
     if (envSize > 0) {
@@ -1122,47 +1159,48 @@ export class WatGenerator {
     this.emit(`    f64.reinterpret_i64`);
 
     // ==========================================
-    // ⚡ [LAMBDA] 内側の関数定義（引数は $ctx のみ！）
+    // ⚡ [LAMBDA] 内側の関数定義
     // ==========================================
     const prevCode = this.code;
     const prevLocals = this.locals;
     const prevTypeStack = this.typeStack;
 
-    this.code = []; // 新しい関数の出力バッファ
+    this.code = [];
     this.locals = [paramName, ...freeVars];
-    this.typeStack = []; // ラムダ内部用の空スタック
+    if (isDestructuring) {
+      this.locals.push(headName, tailName);
+    }
+    this.typeStack = [];
 
-    // ★ 関数シグネチャ：引数は $ctx だけ
     this.emit(`  (func ${funcName} (param $ctx f64) (result f64)`);
     this.emit(`    (local $tmp_l f64)`);
     this.emit(`    (local $tmp_r f64)`);
     this.emit(`    (local $tmp_cond f64)`);
     this.emit(`    (local $tmp_ptr i32)`);
 
-    // 変数の準備
     this.emit(`    (local ${paramName} f64)`);
+    if (isDestructuring) {
+      this.emit(`    (local ${headName} f64)`);
+      this.emit(`    (local ${tailName} f64)`);
+    }
     this.emit(`    (local $env f64)`);
     this.emit(`    (local $ctx_ptr i32)`);
     freeVars.forEach(v => {
       this.emit(`    (local ${v} f64)`);
     });
 
-    // ★ 1つのリスト($ctx)から、引数と環境ポインタを復元
     this.emit(`    local.get $ctx`);
     this.emit(`    call $f64_to_ptr`);
     this.emit(`    local.set $ctx_ptr`);
 
-    // offset=0 は実引数
     this.emit(`    local.get $ctx_ptr`);
     this.emit(`    f64.load offset=0`);
     this.emit(`    local.set ${paramName}`);
 
-    // offset=8 は環境ポインタ
     this.emit(`    local.get $ctx_ptr`);
     this.emit(`    f64.load offset=8`);
     this.emit(`    local.set $env`);
 
-    // ★ 環境ポインタから自由変数（キャプチャした値）を復元
     if (freeVars.length > 0) {
       this.emit(`    local.get $env`);
       this.emit(`    call $f64_to_ptr`);
@@ -1176,64 +1214,78 @@ export class WatGenerator {
     }
 
     // ==========================================
-    // ⚡ [修正] パターンマッチの検知とWASMジャンプテーブル展開
+    // ⚡ 3. リストの構造分解アセンブリ出力
     // ==========================================
-    // ブロックの「最初の要素」が `:` であれば、パターンマッチブロックとみなす
-    const isMatchBlock = node.right && node.right.type === 'block' &&
-      node.right.body && node.right.body.length > 0 &&
-      node.right.body[0].type === 'infix' && node.right.body[0].op === ':';
+    if (isDestructuring) {
+      this.emit(`    local.get ${paramName}`);
+      this.emit(`    call $is_ptr`);
+      this.emit(`    if`);
+      this.emit(`      local.get ${paramName}`);
+      this.emit(`      call $f64_to_ptr`);
+      this.emit(`      f64.load offset=0`);
+      this.emit(`      local.set ${headName}`);
+
+      this.emit(`      local.get ${paramName}`);
+      this.emit(`      call $f64_to_ptr`);
+      this.emit(`      f64.load offset=8`);
+      this.emit(`      local.set ${tailName}`);
+      this.emit(`    else`);
+      // リストでないものが渡された場合は安全に Unit にする
+      this.emit(`      f64.const nan`);
+      this.emit(`      local.set ${headName}`);
+      this.emit(`      f64.const nan`);
+      this.emit(`      local.set ${tailName}`);
+      this.emit(`    end`);
+    }
+
+    // ==========================================
+    // パターンマッチ または 通常の評価
+    // ==========================================
+    const isMatchBlock = actualBody && actualBody.type === 'block' &&
+      actualBody.body && actualBody.body.length > 0 &&
+      actualBody.body[0].type === 'infix' && actualBody.body[0].op === ':';
 
     if (isMatchBlock) {
-      this.emit(`    ;; --- Pattern Match Block ---`);
       this.emit(`    (block $match_exit (result f64)`);
 
-      for (let i = 0; i < node.right.body.length; i++) {
-        const branch = node.right.body[i];
+      for (let i = 0; i < actualBody.body.length; i++) {
+        const branch = actualBody.body[i];
 
         if (branch.type === 'infix' && branch.op === ':') {
-          // 1. パターン条件の比較 ( a : b の形式 )
           this.visit(branch.left);
           if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
-          this.emit(`      local.get ${paramName}`); // 引数(x)をスタックに積む
-          this.emit(`      call $val_eq`);           // ディープ比較
+          this.emit(`      local.get ${paramName}`);
+          this.emit(`      call $val_eq`);
           this.emit(`      if`);
 
-          // 一致したら右辺を評価して、ブロックからジャンプして抜ける
           this.visit(branch.right);
           if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
           this.emit(`      br $match_exit`);
           this.emit(`      end`);
         } else {
-          // 2. デフォルトケース ( : がない、ブロック最後の単独の式 )
-          // 無条件で評価して、ブロックからジャンプして抜ける
           this.visit(branch);
           if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
           this.emit(`      br $match_exit`);
         }
       }
 
-      // 3. どのパターンにもマッチせず、デフォルトケースもなかった場合のフォールバック (Unit)
       this.emit(`      f64.const nan`);
       this.emit(`    )`);
 
       if (this.typeStack) this.typeStack.push({ type: 'Any' });
 
     } else {
-      // ⚡ パターンマッチではない通常のラムダ本体の評価
-      this.visit(node.right);
+      this.visit(actualBody);
     }
-    // ==========================================
 
     let returnType = this.typeStack.length > 0 ? this.typeStack.pop() : { type: 'Float' };
 
     this.emit(`  )`); // 関数終了
 
-    // 出来上がった関数をグローバル関数リストに追加
     this.functions.push(...this.code);
     this.elemFuncs[funcId] = funcName;
 
-    // コンテキストを元に戻す
     this.code = prevCode;
     this.locals = prevLocals;
     this.typeStack = prevTypeStack;
