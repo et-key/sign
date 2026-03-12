@@ -610,6 +610,8 @@ export class WatGenerator {
       case '~':
         this.emit(`    f64.const nan`);
         this.emit(`    call $cons`);
+        if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+        if (this.typeStack) this.typeStack.push({ type: 'List' }); // ★ List型として積む
         break;
       default:
         throw new Error(`[WASM Compiler] Unsupported prefix operator: "${op}"`);
@@ -624,9 +626,13 @@ export class WatGenerator {
       case '!': this.emit(`    call $fact`); break;
       case '|': break;
 
-      // ★ リストの Flat (平坦化)
+      // ==========================================
+      // ⚡ リストの Flat (平坦化・スプレッド展開)
+      // ==========================================
       case '~':
         this.emit(`    call $list_flatten`);
+        if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+        if (this.typeStack) this.typeStack.push({ type: 'SpreadList' }); // ★ スプレッド展開済みタグを積む
         break;
 
       default: throw new Error(`[WASM Compiler] Unsupported postfix operator: "${op}"`);
@@ -636,27 +642,34 @@ export class WatGenerator {
   compileInfix(node) {
     const { op, left, right } = node;
 
-    // ★ 追加: ラムダ関数 (?) のコンパイル
     if (op === '?') {
       this.compileLambda(node);
       return;
     }
 
-    // ★ 変更: 空白 (余積) の静的ディスパッチ
     if (op === ' ') {
       this.compileSpace(node);
       return;
     }
 
+    // ==========================================
+    // ⚡ カンマ(積)の賢い静的ディスパッチ (Spread対応)
+    // ==========================================
     if (op === ',') {
       this.visit(left);
-      this.visit(right);
-      this.emit(`    call $cons`);
+      let leftType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Unknown' };
 
-      // ★ 追加：スタックから左右の型を取り除き、結果が「List型」であることを記憶させる
+      this.visit(right);
+      let rightType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Unknown' };
+
+      // 左右どちらかが「スプレッド展開済み(SpreadList)」であれば、平坦に結合(concat)する！
+      if (leftType.type === 'SpreadList' || rightType.type === 'SpreadList') {
+        this.emit(`    call $list_concat`);
+      } else {
+        this.emit(`    call $cons`);
+      }
+
       if (this.typeStack) {
-        this.typeStack.pop(); // rightの型を捨てる
-        this.typeStack.pop(); // leftの型を捨てる
         this.typeStack.push({ type: 'List' });
       }
       return;
