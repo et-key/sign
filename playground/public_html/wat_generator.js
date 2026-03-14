@@ -803,10 +803,21 @@ export class WatGenerator {
         } else {
           const wasmVarName = varName.startsWith('$') ? varName : '$' + varName;
 
-          // ⚡ [究極の改善] Hardware-Isomorphic Stream Lookup with Local Fallback
-          // ストリーム(token~)のコンテキスト内にいる場合、まずポインタから辞書引きする
+          // ⚡ 変数のポインタから値を読み取る（未割り当てなら nan を返す）ヘルパー
+          const emitVarLoad = () => {
+            this.emit(`      local.get ${wasmVarName}`);
+            this.emit(`      f64.const 0`);
+            this.emit(`      f64.eq`);
+            this.emit(`      if (result f64)`);
+            this.emit(`        f64.const nan`);
+            this.emit(`      else`);
+            this.emit(`        local.get ${wasmVarName}`);
+            this.emit(`        i32.trunc_f64_u`);
+            this.emit(`        f64.load offset=0`);
+            this.emit(`      end`);
+          };
+
           if (this.currentMatchTarget) {
-            this.emit(`    ;; Hardware-Isomorphic Stream Lookup: ${varName}`);
             this.emit(`    local.get ${this.currentMatchTarget}`);
 
             let rawName = varName.startsWith('$') ? varName.slice(1) : varName;
@@ -814,18 +825,17 @@ export class WatGenerator {
             if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
             this.emit(`    call $dict_get`);
-            this.emit(`    local.set $tmp_cond`); // 検索結果を一時保存
+            this.emit(`    local.set $tmp_cond`);
 
-            // ⚡ 修正: NaN かどうかの判定に is_truthy を使う！
             this.emit(`    local.get $tmp_cond`);
             this.emit(`    call $is_truthy`);
             this.emit(`    if (result f64)`);
-            this.emit(`      local.get $tmp_cond`); // 見つかったらストリームの値をそのまま使う！
+            this.emit(`      local.get $tmp_cond`);
             this.emit(`    else`);
-            this.emit(`      local.get ${wasmVarName}`); // 無ければ外側のローカル変数にフォールバック
+            emitVarLoad();
             this.emit(`    end`);
           } else {
-            this.emit(`    local.get ${wasmVarName}`);
+            emitVarLoad();
           }
 
           let savedType = this.typeEnv[varName] || { type: 'Unknown' };
@@ -871,7 +881,33 @@ export class WatGenerator {
     const op = node.op || node.value;
     const operand = node.right || node.left || node.expr || node.argument || node.operand || node.base || node.value;
 
-    this.visit(operand); // オペランドを評価してスタックに積む
+    // ⚡ 評価される前に「対象が変数」ならその箱（ポインタ）を返す
+    if (op === '$' && (operand.type === 'identifier' || operand.type === 'variable')) {
+      const vName = operand.name || operand.value || operand.text;
+      const wasmVarName = vName.startsWith('$') ? vName : '$' + vName;
+
+      // 未割り当ての場合は先に箱を作る
+      this.emit(`    local.get ${wasmVarName}`);
+      this.emit(`    f64.const 0`);
+      this.emit(`    f64.eq`);
+      this.emit(`    if`);
+      this.emit(`      i32.const 8`);
+      this.emit(`      call $alloc`);
+      this.emit(`      f64.convert_i32_u`);
+      this.emit(`      local.set ${wasmVarName}`);
+      this.emit(`    end`);
+
+      // ポインタタグを付けて返す
+      this.emit(`    local.get ${wasmVarName}`);
+      this.emit(`    i32.trunc_f64_u`);
+      this.emit(`    i64.extend_i32_u`);
+      this.emit(`    i64.const 0x7FF9000000000000`);
+      this.emit(`    i64.or`);
+      this.emit(`    f64.reinterpret_i64`);
+      return;
+    }
+
+    this.visit(operand);
 
     switch (op) {
       case '-': this.emit(`    f64.neg`); break;
@@ -1044,14 +1080,31 @@ export class WatGenerator {
       this.visit(right);
       const lName = left.name || left.value || left.text;
 
-      // ★ 追加：右辺を評価して確定した型を、変数名をキーにしてノートに書き込む！
       if (this.typeStack && this.typeStack.length > 0) {
-        this.typeEnv[lName] = this.typeStack[this.typeStack.length - 1]; // popせずに覗き見
+        this.typeEnv[lName] = this.typeStack[this.typeStack.length - 1];
       }
 
       const wasmVarName = lName.startsWith('$') ? lName : '$' + lName;
-      this.emit(`    local.set ${wasmVarName}`);
+      this.emit(`    local.set $tmp_l`); // 評価結果を退避
+
+      // 未割り当てなら箱を作る
       this.emit(`    local.get ${wasmVarName}`);
+      this.emit(`    f64.const 0`);
+      this.emit(`    f64.eq`);
+      this.emit(`    if`);
+      this.emit(`      i32.const 8`);
+      this.emit(`      call $alloc`);
+      this.emit(`      f64.convert_i32_u`);
+      this.emit(`      local.set ${wasmVarName}`);
+      this.emit(`    end`);
+
+      // 箱（ポインタ）の中身に値をストアする
+      this.emit(`    local.get ${wasmVarName}`);
+      this.emit(`    i32.trunc_f64_u`);
+      this.emit(`    local.get $tmp_l`);
+      this.emit(`    f64.store offset=0`);
+
+      this.emit(`    local.get $tmp_l`);
       return;
     }
 
@@ -1353,6 +1406,17 @@ export class WatGenerator {
 
     this.emit(`    local.get $ctx_ptr`);
     this.emit(`    f64.load offset=0`);
+    this.emit(`    local.set $tmp_l`);
+
+    // ⚡ 引数用の箱を作成
+    this.emit(`    i32.const 8`);
+    this.emit(`    call $alloc`);
+    this.emit(`    local.set $tmp_ptr`);
+    this.emit(`    local.get $tmp_ptr`);
+    this.emit(`    local.get $tmp_l`);
+    this.emit(`    f64.store offset=0`);
+    this.emit(`    local.get $tmp_ptr`);
+    this.emit(`    f64.convert_i32_u`);
     this.emit(`    local.set ${paramName}`);
 
     this.emit(`    local.get $ctx_ptr`);
@@ -1376,22 +1440,67 @@ export class WatGenerator {
     // ==========================================
     if (isDestructuring) {
       this.emit(`    local.get ${paramName}`);
+      this.emit(`    i32.trunc_f64_u`);
+      this.emit(`    f64.load offset=0`);
       this.emit(`    call $is_ptr`);
       this.emit(`    if`);
+
       this.emit(`      local.get ${paramName}`);
+      this.emit(`      i32.trunc_f64_u`);
+      this.emit(`      f64.load offset=0`);
       this.emit(`      call $f64_to_ptr`);
       this.emit(`      f64.load offset=0`);
+      this.emit(`      local.set $tmp_l`);
+      this.emit(`      i32.const 8`);
+      this.emit(`      call $alloc`);
+      this.emit(`      local.set $tmp_ptr`);
+      this.emit(`      local.get $tmp_ptr`);
+      this.emit(`      local.get $tmp_l`);
+      this.emit(`      f64.store offset=0`);
+      this.emit(`      local.get $tmp_ptr`);
+      this.emit(`      f64.convert_i32_u`);
       this.emit(`      local.set ${headName}`);
 
       this.emit(`      local.get ${paramName}`);
+      this.emit(`      i32.trunc_f64_u`);
+      this.emit(`      f64.load offset=0`);
       this.emit(`      call $f64_to_ptr`);
       this.emit(`      f64.load offset=8`);
+      this.emit(`      local.set $tmp_l`);
+      this.emit(`      i32.const 8`);
+      this.emit(`      call $alloc`);
+      this.emit(`      local.set $tmp_ptr`);
+      this.emit(`      local.get $tmp_ptr`);
+      this.emit(`      local.get $tmp_l`);
+      this.emit(`      f64.store offset=0`);
+      this.emit(`      local.get $tmp_ptr`);
+      this.emit(`      f64.convert_i32_u`);
       this.emit(`      local.set ${tailName}`);
+
       this.emit(`    else`);
-      // リストでないものが渡された場合は安全に Unit にする
+
       this.emit(`      f64.const nan`);
+      this.emit(`      local.set $tmp_l`);
+      this.emit(`      i32.const 8`);
+      this.emit(`      call $alloc`);
+      this.emit(`      local.set $tmp_ptr`);
+      this.emit(`      local.get $tmp_ptr`);
+      this.emit(`      local.get $tmp_l`);
+      this.emit(`      f64.store offset=0`);
+      this.emit(`      local.get $tmp_ptr`);
+      this.emit(`      f64.convert_i32_u`);
       this.emit(`      local.set ${headName}`);
+
       this.emit(`      f64.const nan`);
+      this.emit(`      local.set $tmp_l`);
+      this.emit(`      i32.const 8`);
+      this.emit(`      call $alloc`);
+      this.emit(`      local.set $tmp_ptr`);
+      this.emit(`      local.get $tmp_ptr`);
+      this.emit(`      local.get $tmp_l`);
+      this.emit(`      f64.store offset=0`);
+      this.emit(`      local.get $tmp_ptr`);
+      this.emit(`      f64.convert_i32_u`);
       this.emit(`      local.set ${tailName}`);
       this.emit(`    end`);
     }
@@ -1414,6 +1523,8 @@ export class WatGenerator {
           if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
           this.emit(`      local.get ${paramName}`);
+          this.emit(`      i32.trunc_f64_u`);
+          this.emit(`      f64.load offset=0`);
           this.emit(`      call $val_eq`);
           this.emit(`      if`);
 
