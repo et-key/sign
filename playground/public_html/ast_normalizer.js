@@ -114,6 +114,23 @@ export class ASTNormalizer {
     // Fold / Map の正規化
     // ==========================================
     if (node.type === 'apply' || node.type === 'call') {
+      let f = node.func || node.fn || node.callee || node.left;
+      let a = node.arg || node.args || node.right;
+
+      // ⚡ [修正] パーサーが [ ] を Unit + Block として出力したものを検知
+      if (f && (f.type === 'unit' || (f.type === 'identifier' && f.value === 'Unit') || f.value === 'nan') && a && a.type === 'block') {
+        let body = a.body || [];
+        if (body.length === 0) return { type: 'number', value: 'nan' };
+
+        let listNode = { type: 'number', value: 'nan' };
+        for (let i = body.length - 1; i >= 0; i--) {
+          // ブロック内を辞書コンテキスト(true)としてコンスセルの連鎖に変換
+          let elem = this.normalize(body[i], true);
+          listNode = { type: 'infix', op: ',', left: elem, right: listNode };
+        }
+        return listNode;
+      }
+
       let flattened = this.flattenApply(node);
       let func = flattened.func;
       let args = flattened.args;

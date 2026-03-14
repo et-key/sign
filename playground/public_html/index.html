@@ -154,15 +154,68 @@
 				module.validate();
 				const { buffer } = module.toBinary({ log: true });
 
+				let wasmInstance;
 				let wasmMemory;
 				const importObject = {
 					env: {
 						math_fmod: (a, b) => a % b,
 						math_pow: Math.pow,
 
+						// ⚡ 追加: WASMから文字列ポインタを受け取り、JSのparseFloatで数値にして返す
+						str_to_num: (ptrF64) => {
+							if (!wasmMemory) return Number.NaN;
+							// f64にエンコードされたポインタから下位32bitのアドレスを取り出す
+							const buf = new ArrayBuffer(8);
+							const view = new DataView(buf);
+							view.setFloat64(0, ptrF64, true);
+							const ptr = view.getUint32(0, true);
+
+							// WASMメモリから文字列長とUTF-8バイト列を読み出す
+							const memView = new DataView(wasmMemory.buffer);
+							const len = memView.getUint32(ptr, true);
+							const bytes = new Uint8Array(wasmMemory.buffer, ptr + 4, len);
+							const str = new TextDecoder('utf-8').decode(bytes);
+
+							const num = parseFloat(str);
+							return isNaN(num) ? 0.0 : num; // パース失敗時は0を返す
+						},
+
+						// ⚡ 追加: 文字列ポインタと数値を受け取り、結合してWASMメモリにアロケートして返す
+						str_concat: (strPtrF64, numF64) => {
+							if (!wasmMemory || !wasmInstance) return Number.NaN;
+							const buf = new ArrayBuffer(8);
+							const view = new DataView(buf);
+							view.setFloat64(0, strPtrF64, true);
+							const ptr = view.getUint32(0, true);
+
+							const memView = new DataView(wasmMemory.buffer);
+							const len = memView.getUint32(ptr, true);
+							const bytes = new Uint8Array(wasmMemory.buffer, ptr + 4, len);
+							const str = new TextDecoder('utf-8').decode(bytes);
+
+							// JS側で文字列結合を行う
+							const newStr = str + numF64.toString();
+							const encoder = new TextEncoder();
+							const newBytes = encoder.encode(newStr);
+							const newLen = newBytes.length;
+
+							// WASM側にエクスポートさせた $alloc を呼び出して必要なメモリを確保！
+							const newPtr = wasmInstance.instance.exports.alloc(newLen + 4);
+
+							// allocによってメモリ(ArrayBuffer)が拡張された可能性があるため、DataViewを再取得
+							const newMemView = new DataView(wasmMemory.buffer);
+							newMemView.setUint32(newPtr, newLen, true);
+							const targetBytes = new Uint8Array(wasmMemory.buffer, newPtr + 4, newLen);
+							targetBytes.set(newBytes); // メモリにUTF-8バイト列を書き込む
+
+							// 0x7FFB0000 の Stringタグを付けて f64 にエンコードして返す
+							view.setUint32(0, newPtr, true);
+							view.setUint32(4, 0x7FFB0000, true);
+							return view.getFloat64(0, true);
+						},
+
 						syscall: (sys_num, arg) => {
 							if (!wasmMemory) return Number.NaN;
-							// (※ syscallの表示部分は一旦現状維持)
 							if (sys_num === 63) {
 								if (inputPointer < inputQueue.length) return inputQueue[inputPointer++];
 								return 0.0;
@@ -177,7 +230,7 @@
 				};
 
 				// 6. 実行
-				const wasmInstance = await WebAssembly.instantiate(buffer, importObject);
+				wasmInstance = await WebAssembly.instantiate(buffer, importObject);
 				wasmMemory = wasmInstance.instance.exports.memory;
 				const memView = new DataView(wasmMemory.buffer);
 

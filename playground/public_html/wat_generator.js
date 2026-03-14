@@ -18,6 +18,8 @@ export class WatGenerator {
 
     this.emit('(module');
     this.emit('  (import "env" "math_pow" (func $math_pow (param f64 f64) (result f64)))');
+    this.emit('  (import "env" "str_to_num" (func $str_to_num (param f64) (result f64)))');
+    this.emit('  (import "env" "str_concat" (func $str_concat (param f64 f64) (result f64)))');
 
     this.emit('  (memory $mem 1)');
     this.emit('  (export "memory" (memory $mem))');
@@ -63,7 +65,7 @@ export class WatGenerator {
 
 
     this.emit(`
-  (func $alloc (param $size i32) (result i32)
+  (func $alloc (export "alloc") (param $size i32) (result i32)
     (local $ptr i32)
     global.get $hp
     local.set $ptr
@@ -83,9 +85,10 @@ export class WatGenerator {
     f64.reinterpret_i64
   )`);
 
-    // ★ 鉄壁のTruthy判定（0やポインタは真、純粋なNaNだけ偽）
+    // ★ 鉄壁のTruthy判定（0やすべてのポインタは真、純粋なNaNだけ偽）
     this.emit(`
   (func $is_truthy (param $val f64) (result i32)
+    (local $tag i32)
     local.get $val
     local.get $val
     f64.eq
@@ -94,10 +97,16 @@ export class WatGenerator {
     else
       local.get $val
       i64.reinterpret_f64
-      i64.const 0xFFFF000000000000
-      i64.and
-      i64.const 0x7FFC000000000000
-      i64.eq
+      i64.const 32
+      i64.shr_u
+      i32.wrap_i64
+      i32.const 0xFFFF0000
+      i32.and
+      local.set $tag
+      
+      local.get $tag
+      i32.const 0x7FF90000
+      i32.ge_u
     end
   )`);
 
@@ -551,6 +560,58 @@ export class WatGenerator {
     local.get $data
   )`);
 
+    // ⚡ 10. String Map Add (文字列の各文字コードに数値を加算してリスト化する)
+    this.emit(`
+  (func $str_map_add (param $str f64) (param $num f64) (result f64)
+    (local $str_ptr i32)
+    (local $len i32)
+    (local $i i32)
+    (local $char_val f64)
+    (local $list f64)
+
+    local.get $str
+    call $f64_to_ptr
+    local.set $str_ptr
+
+    local.get $str_ptr
+    i32.load offset=0
+    local.set $len
+
+    f64.const nan
+    local.set $list
+    local.get $len
+    local.set $i
+
+    (block $break
+      (loop $loop
+        local.get $i
+        i32.eqz
+        br_if $break
+
+        local.get $i
+        i32.const 1
+        i32.sub
+        local.set $i
+
+        local.get $str_ptr
+        local.get $i
+        i32.add
+        i32.load8_u offset=4
+        f64.convert_i32_u
+        local.get $num
+        f64.add
+        local.set $char_val
+
+        local.get $char_val
+        local.get $list
+        call $cons
+        local.set $list
+        br $loop
+      )
+    )
+    local.get $list
+  )`);
+
     this.emit('  (func $main (export "main") (result f64)');
 
     // ★ 追加：変数の二重宣言を絶対に防ぐガード
@@ -558,6 +619,10 @@ export class WatGenerator {
 
     this.emit('    (local $tmp_ptr i32)');
     declaredLocals.add('tmp_ptr');
+
+    // ⚡ 追加: ストリームマッチ用のターゲットレジスタ
+    this.emit('    (local $tmp_match_target f64)');
+    declaredLocals.add('tmp_match_target');
 
     this.emit('    (local $final_res f64)');
     declaredLocals.add('final_res');
@@ -615,13 +680,46 @@ export class WatGenerator {
     if (node.type === 'block') {
       const body = node.body || [];
       if (body.length === 0) { this.emit('    f64.const nan'); return; }
+
+      // ⚡ [究極の改善] ブロックの脱出ラベル (ガード節による早期リターンのため)
+      const blockLabel = `$block_exit_${Math.floor(Math.random() * 1000000)}`;
+      this.emit(`    (block ${blockLabel} (result f64)`);
+
       for (let i = 0; i < body.length; i++) {
-        this.visit(body[i]);
-        if (i < body.length - 1) {
-          this.emit('    drop');
-          if (this.typeStack) this.typeStack.pop(); // ★ 追加：捨てた値の型も忘れる
+        let expr = body[i];
+
+        // ⚡ ガード節 ( 例: token = Unit ? Unit ) の検知
+        let isGuard = false;
+        if (expr.type === 'infix' && expr.op === '?') {
+          let left = expr.left;
+          let isLambdaDef = false; // 左辺がラムダの引数か判定
+          if (left && (left.type === 'identifier' || left.type === 'variable')) isLambdaDef = true;
+          else if (left && left.type === 'prefix' && left.op === '~') isLambdaDef = true;
+
+          if (!isLambdaDef) isGuard = true;
+        }
+
+        if (isGuard) {
+          this.visit(expr.left);
+          this.emit(`    call $is_truthy`);
+          this.emit(`    if`);
+          this.visit(expr.right);
+          this.emit(`    br ${blockLabel}`); // 真なら評価して即座にブロックを抜ける！
+          this.emit(`    end`);
+
+          if (i === body.length - 1) {
+            this.emit(`    f64.const nan`); // 最後の式が偽だった場合のフォールバック
+          }
+        } else {
+          // 通常の式の評価
+          this.visit(expr);
+          if (i < body.length - 1) {
+            this.emit('    drop');
+            if (this.typeStack) this.typeStack.pop();
+          }
         }
       }
+      this.emit(`    )`); // ブロック終了
       return;
     }
 
@@ -701,12 +799,35 @@ export class WatGenerator {
         const varName = node.name || node.value || node.text;
         if (varName === '_' || varName === 'nan') {
           this.emit(`    f64.const nan`);
-          if (this.typeStack) this.typeStack.push({ type: 'Unit' }); // ★ 追加
+          if (this.typeStack) this.typeStack.push({ type: 'Unit' });
         } else {
           const wasmVarName = varName.startsWith('$') ? varName : '$' + varName;
-          this.emit(`    local.get ${wasmVarName}`);
 
-          // ★ 追加：ノート（typeEnv）から変数の型を引いてきてスタックに積む！
+          // ⚡ [究極の改善] Hardware-Isomorphic Stream Lookup with Local Fallback
+          // ストリーム(token~)のコンテキスト内にいる場合、まずポインタから辞書引きする
+          if (this.currentMatchTarget) {
+            this.emit(`    ;; Hardware-Isomorphic Stream Lookup: ${varName}`);
+            this.emit(`    local.get ${this.currentMatchTarget}`);
+
+            let rawName = varName.startsWith('$') ? varName.slice(1) : varName;
+            this.visit({ type: 'string', value: '\`' + rawName + '\`' });
+            if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+
+            this.emit(`    call $dict_get`);
+            this.emit(`    local.set $tmp_cond`); // 検索結果を一時保存
+
+            // ⚡ 修正: NaN かどうかの判定に is_truthy を使う！
+            this.emit(`    local.get $tmp_cond`);
+            this.emit(`    call $is_truthy`);
+            this.emit(`    if (result f64)`);
+            this.emit(`      local.get $tmp_cond`); // 見つかったらストリームの値をそのまま使う！
+            this.emit(`    else`);
+            this.emit(`      local.get ${wasmVarName}`); // 無ければ外側のローカル変数にフォールバック
+            this.emit(`    end`);
+          } else {
+            this.emit(`    local.get ${wasmVarName}`);
+          }
+
           let savedType = this.typeEnv[varName] || { type: 'Unknown' };
           if (this.typeStack) this.typeStack.push(savedType);
         }
@@ -832,7 +953,26 @@ export class WatGenerator {
     const { op, left, right } = node;
 
     if (op === '?') {
-      this.compileLambda(node);
+      // ⚡ 修正: 左辺がラムダの引数定義であるかを厳密に判定
+      let isLambdaDef = false;
+      if (left && (left.type === 'identifier' || left.type === 'variable')) {
+        isLambdaDef = true;
+      } else if (left && left.type === 'prefix' && left.op === '~') {
+        isLambdaDef = true;
+      }
+
+      if (isLambdaDef) {
+        this.compileLambda(node);
+      } else {
+        // インラインのガード節 (ブロック内ではなく単独で評価された場合)
+        this.visit(left);
+        this.emit(`    call $is_truthy`);
+        this.emit(`    if (result f64)`);
+        this.visit(right);
+        this.emit(`    else`);
+        this.emit(`      f64.const nan`);
+        this.emit(`    end`);
+      }
       return;
     }
 
@@ -941,11 +1081,27 @@ export class WatGenerator {
       return;
     }
 
+    // ⚡ 型を推論しながらスタックに積む
     this.visit(left);
+    let leftType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Unknown' };
+
     this.visit(right);
+    let rightType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Unknown' };
 
     switch (op) {
-      case '+': this.emit(`    f64.add`); break;
+      case '+':
+        if (leftType.type === 'String') {
+          this.emit(`    call $str_map_add`);
+          if (this.typeStack) this.typeStack.push({ type: 'List' });
+        } else if (rightType.type === 'String') {
+          this.emit(`    call $str_to_num`);
+          this.emit(`    f64.add`);
+          if (this.typeStack) this.typeStack.push({ type: 'Float' });
+        } else {
+          this.emit(`    f64.add`);
+          if (this.typeStack) this.typeStack.push({ type: 'Float' });
+        }
+        break;
       case '-': this.emit(`    f64.sub`); break;
       case '*': this.emit(`    f64.mul`); break;
       case '/': this.emit(`    f64.div`); break;
@@ -1178,6 +1334,8 @@ export class WatGenerator {
     this.emit(`    (local $tmp_cond f64)`);
     this.emit(`    (local $tmp_ptr i32)`);
 
+    this.emit(`    (local $tmp_match_target f64)`);
+
     this.emit(`    (local ${paramName} f64)`);
     if (isDestructuring) {
       this.emit(`    (local ${headName} f64)`);
@@ -1296,6 +1454,62 @@ export class WatGenerator {
   }
 
   compileSpace(node) {
+    // ==========================================
+    // ⚡ [究極の改善] Hardware-Isomorphic Stream Match Block
+    // token~ { type = `number` : ... } の展開
+    // ==========================================
+    // ⚡ 修正: 右辺が block (複数パターン) の場合と、単独の infix ':' (1パターンの場合) の両方を許可する
+    const isStreamMatch = node.left && node.left.type === 'postfix' && node.left.op === '~' &&
+      node.right && (node.right.type === 'block' || (node.right.type === 'infix' && node.right.op === ':'));
+
+    if (isStreamMatch) {
+      this.emit(`    ;; --- Hardware-Isomorphic Stream Match ---`);
+      this.visit(node.left.expr); // ターゲット(token)を評価
+      if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+
+      this.emit(`    local.set $tmp_match_target`);
+      this.emit(`    (block $stream_match_exit (result f64)`);
+
+      // ⚡ 修正: blockなら中身を、単独の ':' なら配列で包んでループを統一化
+      const branches = node.right.type === 'block' ? (node.right.body || []) : [node.right];
+
+      for (let i = 0; i < branches.length; i++) {
+        const branch = branches[i];
+
+        // ⚡ このブロック内では未知の識別子を $tmp_match_target から読むようコンテキストを切り替え
+        let prevTarget = this.currentMatchTarget;
+        this.currentMatchTarget = '$tmp_match_target';
+
+        if (branch.type === 'infix' && branch.op === ':') {
+          // パターンマッチ (例: type = `number` : ...)
+          this.visit(branch.left);
+          if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+
+          this.emit(`      call $is_truthy`);
+          this.emit(`      if`);
+
+          this.visit(branch.right); // 右辺もストリームコンテキストで評価！
+          if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+
+          this.emit(`      br $stream_match_exit`);
+          this.emit(`      end`);
+        } else {
+          // デフォルトケース
+          this.visit(branch);
+          if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+          this.emit(`      br $stream_match_exit`);
+        }
+
+        // コンテキストを元に戻す
+        this.currentMatchTarget = prevTarget;
+      }
+
+      this.emit(`      f64.const nan`);
+      this.emit(`    )`);
+      if (this.typeStack) this.typeStack.push({ type: 'Any' });
+      return;
+    }
+
     this.visit(node.left);
     let leftType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Unknown' };
 
@@ -1340,6 +1554,10 @@ export class WatGenerator {
     } else if (leftType.type === 'List' && rightType.type === 'List') {
       this.emit(`    call $list_concat`);
       if (this.typeStack) this.typeStack.push({ type: 'List' });
+
+    } else if (leftType.type === 'String' && rightType.type === 'Float') {
+      this.emit(`    call $str_concat`);
+      if (this.typeStack) this.typeStack.push({ type: 'String' });
 
     } else if (leftType.type === 'List') {
       this.emit(`    call $list_push`);
