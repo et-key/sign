@@ -803,21 +803,8 @@ export class WatGenerator {
         } else {
           const wasmVarName = varName.startsWith('$') ? varName : '$' + varName;
 
-          // ⚡ 変数のポインタから値を読み取る（未割り当てなら nan を返す）ヘルパー
-          const emitVarLoad = () => {
-            this.emit(`      local.get ${wasmVarName}`);
-            this.emit(`      f64.const 0`);
-            this.emit(`      f64.eq`);
-            this.emit(`      if (result f64)`);
-            this.emit(`        f64.const nan`);
-            this.emit(`      else`);
-            this.emit(`        local.get ${wasmVarName}`);
-            this.emit(`        i32.trunc_f64_u`);
-            this.emit(`        f64.load offset=0`);
-            this.emit(`      end`);
-          };
-
           if (this.currentMatchTarget) {
+            this.emit(`    ;; Hardware-Isomorphic Stream Lookup: ${varName}`);
             this.emit(`    local.get ${this.currentMatchTarget}`);
 
             let rawName = varName.startsWith('$') ? varName.slice(1) : varName;
@@ -832,10 +819,10 @@ export class WatGenerator {
             this.emit(`    if (result f64)`);
             this.emit(`      local.get $tmp_cond`);
             this.emit(`    else`);
-            emitVarLoad();
+            this.emit(`      local.get ${wasmVarName}`);
             this.emit(`    end`);
           } else {
-            emitVarLoad();
+            this.emit(`    local.get ${wasmVarName}`);
           }
 
           let savedType = this.typeEnv[varName] || { type: 'Unknown' };
@@ -1076,35 +1063,59 @@ export class WatGenerator {
       return;
     }
 
-    if (op === ':' && left && (left.type === 'identifier' || left.type === 'variable')) {
-      this.visit(right);
-      const lName = left.name || left.value || left.text;
+    if (op === ':') {
+      let lName = "";
+      let wasmVarName = "";
 
-      if (this.typeStack && this.typeStack.length > 0) {
-        this.typeEnv[lName] = this.typeStack[this.typeStack.length - 1];
+      // 左辺が識別子の場合、それがWASMのローカル変数(this.locals)として
+      // コンパイラに予約されているかをチェックする
+      if (left && (left.type === 'identifier' || left.type === 'variable')) {
+        lName = left.name || left.value || left.text;
+        const checkName = lName.startsWith('$') ? lName.slice(1) : lName;
+        if (this.locals && this.locals.includes(checkName)) {
+          wasmVarName = lName.startsWith('$') ? lName : '$' + lName;
+        }
       }
 
-      const wasmVarName = lName.startsWith('$') ? lName : '$' + lName;
-      this.emit(`    local.set $tmp_l`); // 評価結果を退避
+      // 1. Evaluate LEFT (キーを文字列としてスタックに積む)
+      if (left && (left.type === 'identifier' || left.type === 'variable')) {
+        this.visit({ type: 'string', value: '\`' + lName + '\`' });
+      } else {
+        this.visit(left);
+      }
 
-      // 未割り当てなら箱を作る
-      this.emit(`    local.get ${wasmVarName}`);
-      this.emit(`    f64.const 0`);
-      this.emit(`    f64.eq`);
-      this.emit(`    if`);
-      this.emit(`      i32.const 8`);
-      this.emit(`      call $alloc`);
-      this.emit(`      f64.convert_i32_u`);
-      this.emit(`      local.set ${wasmVarName}`);
-      this.emit(`    end`);
+      // 2. Evaluate RIGHT (値をスタックに積む)
+      this.visit(right);
 
-      // 箱（ポインタ）の中身に値をストアする
-      this.emit(`    local.get ${wasmVarName}`);
-      this.emit(`    i32.trunc_f64_u`);
-      this.emit(`    local.get $tmp_l`);
-      this.emit(`    f64.store offset=0`);
+      // 3. Side-effect: ローカル変数として予約されていれば、値をレジスタにバインド(コピー)する
+      if (wasmVarName) {
+        this.emit(`    local.set $tmp_l`);
+        this.emit(`    local.get $tmp_l`);
+        this.emit(`    local.set ${wasmVarName}`);
 
-      this.emit(`    local.get $tmp_l`);
+        // 型環境の更新
+        if (this.typeStack && this.typeStack.length > 0) {
+          this.typeEnv[lName] = this.typeStack[this.typeStack.length - 1];
+        }
+
+        this.emit(`    local.get $tmp_l`);
+      }
+
+      // 4. ペアの生成: cons(key, value)
+      this.emit(`    call $cons`);
+
+      // 5. 辞書の終端を繋いでA-Listにする: cons(pair, nan)
+      this.emit(`    f64.const nan`);
+      this.emit(`    call $cons`);
+
+      // 型スタックの更新
+      if (this.typeStack && this.typeStack.length >= 2) {
+        this.typeStack.pop();
+        this.typeStack.pop();
+      }
+      if (this.typeStack) {
+        this.typeStack.push({ type: 'Dict' });
+      }
       return;
     }
 
@@ -1406,17 +1417,6 @@ export class WatGenerator {
 
     this.emit(`    local.get $ctx_ptr`);
     this.emit(`    f64.load offset=0`);
-    this.emit(`    local.set $tmp_l`);
-
-    // ⚡ 引数用の箱を作成
-    this.emit(`    i32.const 8`);
-    this.emit(`    call $alloc`);
-    this.emit(`    local.set $tmp_ptr`);
-    this.emit(`    local.get $tmp_ptr`);
-    this.emit(`    local.get $tmp_l`);
-    this.emit(`    f64.store offset=0`);
-    this.emit(`    local.get $tmp_ptr`);
-    this.emit(`    f64.convert_i32_u`);
     this.emit(`    local.set ${paramName}`);
 
     this.emit(`    local.get $ctx_ptr`);
@@ -1440,74 +1440,25 @@ export class WatGenerator {
     // ==========================================
     if (isDestructuring) {
       this.emit(`    local.get ${paramName}`);
-      this.emit(`    i32.trunc_f64_u`);
-      this.emit(`    f64.load offset=0`);
       this.emit(`    call $is_ptr`);
       this.emit(`    if`);
-
       this.emit(`      local.get ${paramName}`);
-      this.emit(`      i32.trunc_f64_u`);
-      this.emit(`      f64.load offset=0`);
       this.emit(`      call $f64_to_ptr`);
       this.emit(`      f64.load offset=0`);
-      this.emit(`      local.set $tmp_l`);
-      this.emit(`      i32.const 8`);
-      this.emit(`      call $alloc`);
-      this.emit(`      local.set $tmp_ptr`);
-      this.emit(`      local.get $tmp_ptr`);
-      this.emit(`      local.get $tmp_l`);
-      this.emit(`      f64.store offset=0`);
-      this.emit(`      local.get $tmp_ptr`);
-      this.emit(`      f64.convert_i32_u`);
       this.emit(`      local.set ${headName}`);
 
       this.emit(`      local.get ${paramName}`);
-      this.emit(`      i32.trunc_f64_u`);
-      this.emit(`      f64.load offset=0`);
       this.emit(`      call $f64_to_ptr`);
       this.emit(`      f64.load offset=8`);
-      this.emit(`      local.set $tmp_l`);
-      this.emit(`      i32.const 8`);
-      this.emit(`      call $alloc`);
-      this.emit(`      local.set $tmp_ptr`);
-      this.emit(`      local.get $tmp_ptr`);
-      this.emit(`      local.get $tmp_l`);
-      this.emit(`      f64.store offset=0`);
-      this.emit(`      local.get $tmp_ptr`);
-      this.emit(`      f64.convert_i32_u`);
       this.emit(`      local.set ${tailName}`);
-
       this.emit(`    else`);
-
       this.emit(`      f64.const nan`);
-      this.emit(`      local.set $tmp_l`);
-      this.emit(`      i32.const 8`);
-      this.emit(`      call $alloc`);
-      this.emit(`      local.set $tmp_ptr`);
-      this.emit(`      local.get $tmp_ptr`);
-      this.emit(`      local.get $tmp_l`);
-      this.emit(`      f64.store offset=0`);
-      this.emit(`      local.get $tmp_ptr`);
-      this.emit(`      f64.convert_i32_u`);
       this.emit(`      local.set ${headName}`);
-
       this.emit(`      f64.const nan`);
-      this.emit(`      local.set $tmp_l`);
-      this.emit(`      i32.const 8`);
-      this.emit(`      call $alloc`);
-      this.emit(`      local.set $tmp_ptr`);
-      this.emit(`      local.get $tmp_ptr`);
-      this.emit(`      local.get $tmp_l`);
-      this.emit(`      f64.store offset=0`);
-      this.emit(`      local.get $tmp_ptr`);
-      this.emit(`      f64.convert_i32_u`);
       this.emit(`      local.set ${tailName}`);
       this.emit(`    end`);
     }
 
-    // ==========================================
-    // パターンマッチ または 通常の評価
-    // ==========================================
     const isMatchBlock = actualBody && actualBody.type === 'block' &&
       actualBody.body && actualBody.body.length > 0 &&
       actualBody.body[0].type === 'infix' && actualBody.body[0].op === ':';
@@ -1523,8 +1474,6 @@ export class WatGenerator {
           if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
           this.emit(`      local.get ${paramName}`);
-          this.emit(`      i32.trunc_f64_u`);
-          this.emit(`      f64.load offset=0`);
           this.emit(`      call $val_eq`);
           this.emit(`      if`);
 
@@ -1592,23 +1541,77 @@ export class WatGenerator {
         this.currentMatchTarget = '$tmp_match_target';
 
         if (branch.type === 'infix' && branch.op === ':') {
-          // パターンマッチ (例: type = `number` : ...)
-          this.visit(branch.left);
-          if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+          // ★ 静的ディスパッチ（型の推論）★
+          let isMatchCase = false;
+          let isWildcard = false;
 
-          this.emit(`      call $is_truthy`);
-          this.emit(`      if`);
+          if (branch.left) {
+            // 比較演算子は match_case
+            if (branch.left.type === 'infix' && ['<', '>', '=', '!=', '<=', '>='].includes(branch.left.op)) {
+              isMatchCase = true;
+            }
+            // 左辺が _ ならワイルドカード（デフォルトケース）
+            const leftVal = branch.left.value || branch.left.name || branch.left.text;
+            if (leftVal === '_' || leftVal === 'nan' || (branch.left.type === 'number' && isNaN(Number(leftVal)))) {
+              isMatchCase = true;
+              isWildcard = true;
+            }
+          }
 
-          this.visit(branch.right); // 右辺もストリームコンテキストで評価！
-          if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+          if (isMatchCase) {
+            // ⚡ match_case (条件分岐・早期リターン)
+            this.emit(`      ;; [Static Dispatch] match_case branch`);
 
-          this.emit(`      br $stream_match_exit`);
-          this.emit(`      end`);
+            if (isWildcard) {
+              // ワイルドカードは無条件で右辺を評価してブロックを抜ける
+              this.visit(branch.right);
+              if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+              this.emit(`      br $stream_match_exit`);
+            } else {
+              this.visit(branch.left);
+              if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+
+              this.emit(`      call $is_truthy`);
+              this.emit(`      if`);
+
+              this.visit(branch.right);
+              if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+
+              this.emit(`      br $stream_match_exit`); // 条件に合致したので抜ける
+              this.emit(`      end`);
+            }
+          } else {
+            // ⚡ Dict Init / Local Binding (Lens/Prism コンテキスト内の評価)
+            this.emit(`      ;; [Static Dispatch] Dict Init / Prism context`);
+
+            // 左辺が識別子なら文字列キーとして扱う（辞書生成の振る舞い）
+            if (branch.left.type === 'identifier' || branch.left.type === 'variable') {
+              let keyName = branch.left.name || branch.left.value || branch.left.text;
+              this.visit({ type: 'string', value: '\`' + keyName + '\`' });
+            } else {
+              this.visit(branch.left);
+            }
+            this.visit(branch.right);
+
+            // Consでペアを作る（副作用として評価されるが、ブロックは抜けない！）
+            this.emit(`      call $cons`);
+            if (i < branches.length - 1) {
+              this.emit(`      drop`); // 途中の評価ならWASMスタックから下ろす
+            } else {
+              this.emit(`      br $stream_match_exit`); // 最後なら結果として返す
+            }
+          }
         } else {
-          // デフォルトケース
+          // 単なる式（Prismの # 操作など）
+          this.emit(`      ;; [Static Dispatch] Pure Expression or Prism (#)`);
           this.visit(branch);
           if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
-          this.emit(`      br $stream_match_exit`);
+
+          if (i === branches.length - 1) {
+            this.emit(`      br $stream_match_exit`);
+          } else {
+            this.emit(`      drop`);
+          }
         }
 
         // コンテキストを元に戻す
