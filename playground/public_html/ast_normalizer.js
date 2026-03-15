@@ -239,6 +239,70 @@ export class ASTNormalizer {
       }
     });
 
+    // ⚡ ====== ここから追加: 型の推論とノードの静的ディスパッチ ====== ⚡
+
+    // 1. 現在のノードの型を簡易推論してマーキングする
+    this.inferType(node);
+
+    // 2. 曖昧な並置演算子 (空白 ' ' や カンマ ',') を意味のあるノードに変換する
+    if (node.type === 'infix' && (node.op === ' ' || node.op === ',')) {
+      const leftType = node.left?.inferredType || { type: 'Unknown' };
+      const rightType = node.right?.inferredType || { type: 'Unknown' };
+
+      // [A] 左辺が副作用（Prismの '#' など）の場合 → 「順次実行 (Sequence)」
+      if (leftType.type === 'SideEffect') {
+        node.type = 'SequenceNode';
+        node.inferredType = rightType; // ブロック全体の戻り値は右辺の型になる
+
+        // ⚡ nanの包みを剥がす最適化 (f foo , nan のようなリスト化の残骸を消す)
+        if (node.right && node.right.type === 'infix' && node.right.op === ',' &&
+          (node.right.right?.value === 'nan' || node.right.right?.name === 'nan')) {
+          node.right = node.right.left;
+        }
+      }
+      // [B] 左辺が関数の場合 (空白のみ)
+      else if (node.op === ' ' && leftType.type === 'Function') {
+        if (rightType.type === 'Function') {
+          node.type = 'ComposeNode'; // 関数合成
+          node.inferredType = { type: 'Function' };
+        } else {
+          node.type = 'ApplyNode';   // 関数適用
+          node.inferredType = { type: 'Unknown' };
+        }
+      }
+      // [C] それ以外 → 「積・リスト構築 (Product)」
+      else {
+        node.type = 'ProductNode';
+        node.inferredType = { type: 'List' };
+      }
+    }
+
     return node;
+  }
+
+  // ⚡ 追加: 簡易的な型推論ヘルパー
+  inferType(node) {
+    if (node.inferredType) return;
+
+    switch (node.type) {
+      case 'number': node.inferredType = { type: 'Float' }; break;
+      case 'string': node.inferredType = { type: 'String' }; break;
+      case 'char': node.inferredType = { type: 'Char' }; break;
+      case 'infix':
+        if (node.op === '?') node.inferredType = { type: 'Function' };
+        else if (node.op === '#') node.inferredType = { type: 'SideEffect' }; // Prism更新は副作用！
+        else if (node.op === ':') node.inferredType = { type: 'Pair' };
+        else if (['+', '-', '*', '/'].includes(node.op)) node.inferredType = { type: 'Float' };
+        break;
+      case 'prefix':
+        if (node.op === '$') node.inferredType = { type: 'Pointer' };
+        else if (node.op === '~') node.inferredType = { type: 'List' };
+        break;
+      case 'ProductNode': node.inferredType = { type: 'List' }; break;
+      case 'ApplyNode': node.inferredType = { type: 'Unknown' }; break;
+      case 'SequenceNode': node.inferredType = node.right?.inferredType || { type: 'Unknown' }; break;
+    }
+    // 推論できない場合は Unknown を設定
+    if (!node.inferredType) node.inferredType = { type: 'Unknown' };
   }
 }

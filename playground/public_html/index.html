@@ -275,7 +275,6 @@
 						function traverseList(ptr) {
 							if (ptr === 0) return [];
 
-							// メモリからcarとcdrを直接ビット単位で読み出す
 							const carLower = memView.getUint32(ptr, true);
 							const carUpper = memView.getUint32(ptr + 4, true);
 							const cdrLower = memView.getUint32(ptr + 8, true);
@@ -283,17 +282,15 @@
 
 							let res = [];
 
-							// car (左側)
 							if (carUpper === 0x7FFC0000 || carUpper === 0x7FF40000) {
 								res.push(traverseList(carLower));
 							} else {
 								res.push(formatSignResult(carUpper, carLower));
 							}
 
-							// cdr (右側)
 							if (cdrUpper === 0x7FFC0000 || cdrUpper === 0x7FF40000) {
 								res = res.concat(traverseList(cdrLower));
-							} else if (!(cdrUpper === 0x7FF80000 && cdrLower === 0)) { // Unitじゃなければ
+							} else if (!(cdrUpper === 0x7FF80000 && cdrLower === 0)) {
 								res.push(formatSignResult(cdrUpper, cdrLower));
 							}
 
@@ -302,8 +299,32 @@
 
 						const array = traverseList(lower32);
 
-						function arrayToString(arr) {
-							return "[ " + arr.map(v => Array.isArray(v) ? arrayToString(v) : v).join(", ") + " ]";
+						// ⚡ 修正: A-List(辞書)を検知して美しくフォーマットする関数
+						function arrayToString(arr, indent = "") {
+							if (!Array.isArray(arr)) return arr;
+							if (arr.length === 0) return "[ ]";
+
+							// 💡 辞書(A-List)の判定: 全ての要素が「長さ2の配列」かつ「最初の要素が文字列(バッククォート付き)」か？
+							const isDict = arr.every(item =>
+								Array.isArray(item) &&
+								item.length === 2 &&
+								typeof item[0] === 'string' &&
+								item[0].startsWith('`') && item[0].endsWith('`')
+							);
+
+							if (isDict) {
+								// 辞書フォーマットで出力
+								let lines = arr.map(item => {
+									let key = item[0].replace(/^`|`$/g, ''); // キーのバッククォートを外す
+									let val = Array.isArray(item[1]) ? arrayToString(item[1], indent + "  ") : item[1];
+									return `${indent}  ${key} : ${val}`;
+								});
+								return "[\n" + lines.join("\n") + "\n" + indent + "]";
+							} else {
+								// 通常のリストフォーマットで出力
+								let elements = arr.map(v => Array.isArray(v) ? arrayToString(v, indent) : v);
+								return "[ " + elements.join(", ") + " ]";
+							}
 						}
 
 						return arrayToString(array);
