@@ -356,14 +356,12 @@ export class WatGenerator {
     local.get $cdr_val
     f64.ne
     if
-      ;; 終端がnan(正常なリスト)の場合: 新たな終端を持つ cons(val, nan) を追加
       local.get $curr_ptr
       local.get $val
       f64.const nan
       call $cons
       f64.store offset=8
     else
-      ;; 終端が値(不正なリスト)の場合: そのまま値を cons して繋ぐ
       local.get $curr_ptr
       local.get $cdr_val
       local.get $val
@@ -575,7 +573,6 @@ export class WatGenerator {
           return
         end
 
-        ;; 次のノードへ
         local.get $current_node
         f64.load offset=8
         call $f64_to_ptr
@@ -598,7 +595,6 @@ export class WatGenerator {
     local.set $curr
     (block $exit (result f64)
       (loop $loop
-        ;; 終端(nan)に到達したら終了
         local.get $curr
         i64.reinterpret_f64
         i64.const 0x7FF8000000000000
@@ -608,12 +604,10 @@ export class WatGenerator {
           br $exit
         end
         
-        ;; ポインタを取得
         local.get $curr
         call $f64_to_ptr
         local.set $ptr
 
-        ;; idx == 0 なら car(左側) を返す
         local.get $idx
         i32.eqz
         if
@@ -622,7 +616,6 @@ export class WatGenerator {
           br $exit
         end
         
-        ;; idx -= 1 して cdr(右側) へ進む
         local.get $idx
         i32.const 1
         i32.sub
@@ -860,7 +853,6 @@ export class WatGenerator {
       // ⚡ 追加: ブロック(改行)の順次実行と平坦なリスト化(辞書構築)
       // ⚡ =========================================================
       case 'BlockSeq':
-        this.emit(`    ;; --- Block Sequence ---`);
         this.visit(node.left);
 
         let bLeftType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack[this.typeStack.length - 1] : { type: 'Unknown' };
@@ -886,7 +878,6 @@ export class WatGenerator {
       // ⚡ =========================================================
 
       case 'CommaNode':
-        this.emit(`    ;; --- Comma (Lift Both / Concat Spread) ---`);
         this.visit(node.left);
         // 左辺の型をスタックから覗き見
         let cLeftType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack[this.typeStack.length - 1] : { type: 'Unknown' };
@@ -923,7 +914,6 @@ export class WatGenerator {
         return;
 
       case 'ProductNode':
-        this.emit(`    ;; --- Product (Flat Cons for Blocks/Dicts) ---`);
         this.visit(node.left);
         let pLeftType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack[this.typeStack.length - 1] : { type: 'Unknown' };
 
@@ -948,7 +938,6 @@ export class WatGenerator {
         return;
 
       case 'SequenceNode':
-        this.emit(`    ;; --- Sequence (Drop side-effect) ---`);
         this.visit(node.left);
         this.emit(`    drop`); // 副作用のゴミを捨てる
         this.visit(node.right);
@@ -965,7 +954,6 @@ export class WatGenerator {
 
       case 'ComposeNode':
         // 関数合成 (WASM側に $compose 関数が存在する前提のプレースホルダー)
-        this.emit(`    ;; --- Function Compose ---`);
         this.visit(node.left);
         this.visit(node.right);
         this.emit(`    call $compose`);
@@ -1056,7 +1044,6 @@ export class WatGenerator {
           const wasmVarName = varName.startsWith('$') ? varName : '$' + varName;
 
           if (this.currentMatchTarget) {
-            this.emit(`    ;; Hardware-Isomorphic Stream Lookup: ${varName}`);
             this.emit(`    local.get ${this.currentMatchTarget}`);
 
             let rawName = varName.startsWith('$') ? varName.slice(1) : varName;
@@ -1268,7 +1255,6 @@ export class WatGenerator {
       // ⚡ [Mode A] 左辺が副作用（Prism #）の場合 -> 順次実行モード
       let isSideEffect = (leftType && leftType.type === 'SideEffect') || (left && left.op === '#');
       if (isSideEffect) {
-        this.emit(`    ;; --- Sequence Mode (Drop side-effect) ---`);
         this.emit(`    drop`); // 15などのゴミを捨てる
         if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
@@ -1299,14 +1285,10 @@ export class WatGenerator {
       // ⚡ [Mode B] 左辺がペア(:)や辞書の場合 -> 辞書構築モード (平坦に結合)
       let isDictOrPair = (left && left.op === ':') || (leftType && (leftType.type === 'Pair' || leftType.type === 'Dict' || leftType.type === 'String'));
       if (isDictOrPair) {
-        this.emit(`    ;; --- Dict/Block Mode (Flat Cons) ---`);
         this.emit(`    call $cons`);
         if (this.typeStack) this.typeStack.push({ type: 'Dict' });
         return;
       }
-
-      // ⚡ [Mode C] 通常の値の場合 -> リテラルカンマモード (両方持ち上げて結合)
-      this.emit(`    ;; --- Literal Comma Mode (Lift Both) ---`);
 
       // 右辺がさらにカンマ(連鎖)なら、そのままconsするだけでリストが美しく伸びる
       if (right && right.op === ',') {
@@ -1351,7 +1333,6 @@ export class WatGenerator {
     if (op === '#') {
       // ⚡ Prism: 左辺が識別子で、ストリームマッチ（~）の中であれば辞書更新
       if (left && (left.type === 'identifier' || left.type === 'variable') && this.currentMatchTarget) {
-        this.emit(`    ;; Hardware-Isomorphic Stream Prism (#)`);
         this.emit(`    local.get ${this.currentMatchTarget}`);
 
         let rawName = left.name || left.value || left.text;
@@ -1695,7 +1676,6 @@ export class WatGenerator {
     let assignedName = node.assignedName;
     if (assignedName && freeVars.includes(assignedName)) {
       let idx = freeVars.indexOf(assignedName);
-      this.emit(`    ;; [Letrec] Knot tying for recursive function ${assignedName}`);
       this.emit(`    local.set $tmp_l`);               // 生成したクロージャのポインタを退避
       this.emit(`    local.get $tmp_ptr`);             // 環境（env）のポインタを取得
       this.emit(`    local.get $tmp_l`);               // 退避したポインタ
@@ -1846,7 +1826,6 @@ export class WatGenerator {
       node.right && (node.right.type === 'block' || (node.right.type === 'infix' && node.right.op === ':'));
 
     if (isStreamMatch) {
-      this.emit(`    ;; --- Hardware-Isomorphic Stream Match ---`);
       this.visit(node.left.expr); // ターゲット(token)を評価
       if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
@@ -1882,8 +1861,6 @@ export class WatGenerator {
 
           if (isMatchCase) {
             // ⚡ match_case (条件分岐・早期リターン)
-            this.emit(`      ;; [Static Dispatch] match_case branch`);
-
             if (isWildcard) {
               // ワイルドカードは無条件で右辺を評価してブロックを抜ける
               this.visit(branch.right);
@@ -1904,8 +1881,6 @@ export class WatGenerator {
             }
           } else {
             // ⚡ Dict Init / Local Binding (Lens/Prism コンテキスト内の評価)
-            this.emit(`      ;; [Static Dispatch] Dict Init / Prism context`);
-
             // 左辺が識別子なら文字列キーとして扱う（辞書生成の振る舞い）
             if (branch.left.type === 'identifier' || branch.left.type === 'variable') {
               let keyName = branch.left.name || branch.left.value || branch.left.text;
@@ -1925,7 +1900,6 @@ export class WatGenerator {
           }
         } else {
           // 単なる式（Prismの # 操作など）
-          this.emit(`      ;; [Static Dispatch] Pure Expression or Prism (#)`);
           this.visit(branch);
           if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
@@ -1954,7 +1928,6 @@ export class WatGenerator {
 
     // ⚡ 追加: 左側が副作用(#など)なら、結果を捨てて次(右側)の式を評価する
     if (leftType.type === 'SideEffect') {
-      this.emit(`    ;; Implicit sequence after side-effect`);
       this.emit(`    drop`);
       this.visit(node.right);
       return;
@@ -1969,7 +1942,6 @@ export class WatGenerator {
       if (this.typeStack) this.typeStack.push({ type: 'Function', returnType: leftType.returnType });
 
     } else if (leftType.type === 'Function') {
-      this.emit(`    ;; ⚡ [静的型解決] 関数 ␣ Any -> 関数適用 (コンテキストリストの作成)`);
       this.emit(`    local.set $tmp_r`); // arg
       this.emit(`    local.set $tmp_l`); // func
 
