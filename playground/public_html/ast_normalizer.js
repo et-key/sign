@@ -219,12 +219,16 @@ export class ASTNormalizer {
       }
     }
 
+    // ==========================================
+    // 1. 配列(ブロック)の正規化処理
+    // ==========================================
     if (node.type === 'array' || node.type === 'list') {
       let elements = node.elements || node.items || node.value || [];
       if (elements.length === 0) return { type: 'number', value: 'nan' };
       let result = this.normalize(elements[elements.length - 1], false);
       for (let i = elements.length - 2; i >= 0; i--) {
-        result = { type: 'infix', op: ',', left: this.normalize(elements[i], false), right: result };
+        // ⚡ 修正: 'infix', op: ',' ではなく専用の 'BlockSeq' にする！
+        result = { type: 'BlockSeq', left: this.normalize(elements[i], false), right: result };
       }
       return result;
     }
@@ -239,44 +243,60 @@ export class ASTNormalizer {
       }
     });
 
-    // ⚡ ====== ここから追加: 型の推論とノードの静的ディスパッチ ====== ⚡
-
-    // 1. 現在のノードの型を簡易推論してマーキングする
+    // ==========================================
+    // 静的ディスパッチ処理
+    // ==========================================
     this.inferType(node);
 
-    // 2. 曖昧な並置演算子 (空白 ' ' や カンマ ',') を意味のあるノードに変換する
-    if (node.type === 'infix' && (node.op === ' ' || node.op === ',')) {
+    // ⚡ ブロック由来の ProductNode の副作用チェック
+    if (node.type === 'ProductNode') {
       const leftType = node.left?.inferredType || { type: 'Unknown' };
-      const rightType = node.right?.inferredType || { type: 'Unknown' };
-
-      // [A] 左辺が副作用（Prismの '#' など）の場合 → 「順次実行 (Sequence)」
-      if (leftType.type === 'SideEffect') {
+      if (leftType.type === 'SideEffect' || node.left?.op === '#') {
         node.type = 'SequenceNode';
-        node.inferredType = rightType; // ブロック全体の戻り値は右辺の型になる
-
-        // ⚡ nanの包みを剥がす最適化 (f foo , nan のようなリスト化の残骸を消す)
-        if (node.right && node.right.type === 'infix' && node.right.op === ',' &&
-          (node.right.right?.value === 'nan' || node.right.right?.name === 'nan')) {
+        node.inferredType = node.right?.inferredType || { type: 'Unknown' };
+        // 末尾の不要なnanを剥がす
+        if (node.right && node.right.type === 'ProductNode' && node.right.right &&
+          (node.right.right.value === 'nan' || node.right.right.name === 'nan')) {
           node.right = node.right.left;
         }
-      }
-      // [B] 左辺が関数の場合 (空白のみ)
-      else if (node.op === ' ' && leftType.type === 'Function') {
-        if (rightType.type === 'Function') {
-          node.type = 'ComposeNode'; // 関数合成
-          node.inferredType = { type: 'Function' };
-        } else {
-          node.type = 'ApplyNode';   // 関数適用
-          node.inferredType = { type: 'Unknown' };
-        }
-      }
-      // [C] それ以外 → 「積・リスト構築 (Product)」
-      else {
-        node.type = 'ProductNode';
+      } else {
         node.inferredType = { type: 'List' };
       }
     }
 
+    // ⚡ 空白とリテラルカンマのディスパッチ
+    if (node.type === 'infix') {
+      const leftType = node.left?.inferredType || { type: 'Unknown' };
+      const rightType = node.right?.inferredType || { type: 'Unknown' };
+
+      if (node.op === ' ') {
+        if (leftType.type === 'SideEffect' || node.left?.op === '#') {
+          node.type = 'SequenceNode';
+          node.inferredType = rightType;
+        } else if (leftType.type === 'Function') {
+          if (rightType.type === 'Function') {
+            node.type = 'ComposeNode';
+            node.inferredType = { type: 'Function' };
+          } else {
+            node.type = 'ApplyNode';
+            node.inferredType = { type: 'Unknown' };
+          }
+        } else {
+          node.type = 'ProductNode';
+          node.inferredType = { type: 'List' };
+        }
+      }
+      else if (node.op === ',') {
+        if (leftType.type === 'SideEffect' || node.left?.op === '#') {
+          node.type = 'SequenceNode';
+          node.inferredType = rightType;
+        } else {
+          // ⚡ リテラルのカンマは両方持ち上げ専用の 'CommaNode' にする！
+          node.type = 'CommaNode';
+          node.inferredType = { type: 'List' };
+        }
+      }
+    }
     return node;
   }
 

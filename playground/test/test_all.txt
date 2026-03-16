@@ -1,124 +1,110 @@
-[Print] ===== Ph1: Basic Math & Logic =====
-[Print] --- Comparison ---
-[Print] 5
-[Print] 2
-[Print] 2
-[Print] 1
-[Print] 1
-[Print] 2
-[Print] --- Logic ---
-[Print] NaN
-[Print] NaN
-[Print] 1
-[Print] 0
-[Print] 0
-[Print] 0
-[Print] 0
-[Print] 1
-[Print] NaN
-[Print] NaN
-[Print] --- Bitwise ---
-[Print] 0
-[Print] 99
-[Print] 0
-[Print] 1
-[Print] 4
-[Print] 2
-[Print] -1
-[Print] --- Other Control & Unary Operators ---
-[Print] NaN
-[Print] 1
-[Print] 100
-[Print] NaN
-[Print] <Closure (Ptr: 0000)>
-[Print] ===== Ph2: Strings & Short-circuit =====
-[Print] Hello! WASM Strings!
-[Print] [100, 200]  // Raw: (100 , 200)
-[Print] 100
-[Print] 200
-[Print] 100
-[Print] 200
-[Print] 99
-[Print] ===== Ph3: Closures =====
-[Print] --- Closures ---
-[Print] 30
-[Print] 30
-[Print] 30
-[Print] 30
-[Print] 30
-[Print] --- Match Case ---
-[Print] 100
-[Print] 200
-[Print] 300
-[Print] 400
-[Print] 400
-[Print] 400
-[Print] --- Dictionary ---
-[Print] 40
-[Print] 42
-[Print] --- Match Case & Dictionary ---
-[Print] 200
-[Print] 1
-[Print] 404
-[Print] 0
-[Print] 500
-[Print] -1
-[Print] 500
-[Print] -1
-[Print] ===== Ph4: Point-free & Sections =====
-[Print] --- Point-free ---
-[Print] 18
-[Print] 12
-[Print] 5
-[Print] 22
-[Print] NaN
-[Print] --- Sections ---
-[Print] 15
-[Print] 12
-[Print] 150
-[Print] 23
-[Print] ===== Ph5: List Operations =====
-[Print] [1, 2, 3, 4]  // Raw: (1 , (2 , (3 , (4 , ()))))
-[Print] --- 2D Array Spread ---
-[Print] [10, 20]  // Raw: (10 , (20 , ()))
-[Print] [30, 40]  // Raw: (30 , (40 , ()))
-[Print] ===== Ph6: Advanced Memory (Escape) =====
-[Print] 160
-[Print] Address of val is:
-[Print] 00000
-[Print] ===== Ph7: Compiler Optimization =====
-[Print] 70
-[Print] [100, 200]  // Raw: (100 , 200)
-[Print] 30
-[Print] ===== Ph8: Math Operators =====
-[Print] 42
-[Print] 99
-[Print] 120
-[Print] ===== Ph9: Dynamic List =====
-[Print] --- Range  ---
-[Print] NaN
-[Print] NaN
-[Print] NaN
-[Print] --- Lift Operator  ---
-[Print] [42]  // Raw: (42 , ())
-[Print] [10, 20]  // Raw: (10 , 20)
-[Print] ===== Ph9.5: Design contradiction correction =====
-[Print] ---- Task 1: Block Sequential & Let return ----
-[Print] 30
-[Print] 60
-[Print] ---- Task 2: Falsy Closures ----
-[Print] 100
-[Print] ---- Task 3: Dynamic Dictionary ----
-[Print] 222
-[Print] 333
-[Print] NaN
-[Print] ===== Ph10: Map =====
-[Print] 55
-[Print] 120
-[Print] 15
-[Print] 7.5
-[Print] [2, 4, 6, 8, 10]  // Raw: (2 , (4 , (6 , (8 , (10 , ())))))
-[Print] [11, 12, 13]  // Raw: (11 , (12 , (13 , ())))
-[Print] ===== end =====
+###フェーズ1（真偽値と短絡評価）
+0 & 1
+[Main Result] 1
 
-[Main Result] NaN
+!_
+[Main Result] Infinity
+
+_ & 100
+[Main Result] Unit
+
+###フェーズ2（リストの次元操作と随伴関手）
+[1 2] [3 4]
+[Main Result] [ 1, 2, 3, 4 ]
+
+list : 1 2 , 3 4
+[Main Result] [ [ 1, 2 ], [ 3, 4 ] ]
+
+list : 1 2 , 3 4
+list ' 0
+[Main Result] [ 1, 2 ]
+
+list : 1 2 , 3 4
+list ' 1
+[Main Result] [ 3, 4 ]
+
+list : 1 2 , 3 4
+list ' 3
+[Main Result] Unit
+
+
+[1 2 , 3 4]~
+[Main Result] [ 1, 2, 3, 4 ]
+
+###フェーズ3（左辺優先規則による型変換）
+0 + `123`
+[Main Result] 123
+
+`123` + 0
+[Main Result] [ 49, 50, 51 ]
+
+`123` 0
+[Main Result] `1230`
+
+###フェーズ4：システムセマンティクスとポインタ操作（System Semantics）
+x : 10
+$x # 20
+x
+★★期待値20だが返却10。xがアドレスだと期待値なので保留？
+
+0x1000 : 10
+0x1000 # 20
+@0x1000
+[Main Result] 20
+
+###フェーズ5（クロージャと環境キャプチャ）
+f : x ? y ? x + y
+addTen : f 10
+addTen 20
+[Main Result] 30
+
+###フェーズ6（IOとシステムセマンティクス）
+0x100 # 777 
+@0x100`
+[Main Result] 777
+
+###辞書型/MatchCaseテスト（修正ステップC）
+
+dict :
+	x : 10
+	y : 5
+	z : 30
+
+f : foo ? 
+	foo~
+		x > 0 :
+			xy : x * y
+			xz : x * z
+		x < 1 :
+			x # |x| + 5
+			f foo
+
+f dict
+[Main Result] [
+  xy : 50
+  xz : 300
+]
+
+
+dict :
+	x : -10
+	y : 5
+	z : 30
+
+f : foo ? 
+	foo~
+		x > 0 :
+			xy : x * y
+			xz : x * z
+		x < 1 :
+			x # |x| + 5
+			f foo
+
+f dict
+[Main Result] [
+  xy : 75
+  xz : 450
+]
+
+
+

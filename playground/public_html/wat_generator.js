@@ -550,6 +550,56 @@ export class WatGenerator {
     f64.const nan
   )`);
 
+    // ⚡ 追加: リストのN番目の要素を取得する $list_get 関数
+    this.emit(`  (func $list_get (param $list f64) (param $index f64) (result f64)
+    (local $idx i32)
+    (local $curr f64)
+    (local $ptr i32)
+    local.get $index
+    i32.trunc_f64_s
+    local.set $idx
+    local.get $list
+    local.set $curr
+    (block $exit (result f64)
+      (loop $loop
+        ;; 終端(nan)に到達したら終了
+        local.get $curr
+        i64.reinterpret_f64
+        i64.const 0x7FF8000000000000
+        i64.eq
+        if
+          f64.const nan
+          br $exit
+        end
+        
+        ;; ポインタを取得
+        local.get $curr
+        call $f64_to_ptr
+        local.set $ptr
+
+        ;; idx == 0 なら car(左側) を返す
+        local.get $idx
+        i32.eqz
+        if
+          local.get $ptr
+          f64.load offset=0
+          br $exit
+        end
+        
+        ;; idx -= 1 して cdr(右側) へ進む
+        local.get $idx
+        i32.const 1
+        i32.sub
+        local.set $idx
+        local.get $ptr
+        f64.load offset=8
+        local.set $curr
+        br $loop
+      )
+      f64.const nan
+    )
+  )`);
+
     this.emit(`
   (func $dict_set (param $alist f64) (param $key f64) (param $val f64) (result f64)
     (local $current_node i32)
@@ -771,29 +821,88 @@ export class WatGenerator {
 
     switch (node.type) {
       // ⚡ =========================================================
-      // ⚡ スマートフロントエンドからの「意味確定ノード」の受け口とルーティング
+      // ⚡ 追加: ブロック(改行)の順次実行と平坦なリスト化(辞書構築)
       // ⚡ =========================================================
-      case 'ProductNode':
-        // すでに完璧に仕上がっている compileInfix の「カンマ(積)処理」へルーティング
-        this.compileInfix({ ...node, type: 'infix', op: ',' });
+      case 'BlockSeq':
+        this.emit(`    ;; --- Block Sequence ---`);
+        this.visit(node.left);
+
+        let bLeftType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack[this.typeStack.length - 1] : { type: 'Unknown' };
+        let isSideEffect = (bLeftType && bLeftType.type === 'SideEffect') || (node.left && node.left.op === '#');
+
+        if (isSideEffect) {
+          this.emit(`    drop`); // ⚡ 15などの副作用のゴミを完全に捨てる！
+          if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+          this.visit(node.right); // 右側(f fooなど)をそのまま評価して返す
+        } else {
+          // 副作用でなければ平坦に結合 (元のコンパイラの正常なA-List構築)
+          this.visit(node.right);
+          this.emit(`    call $cons`);
+          if (this.typeStack && this.typeStack.length >= 2) {
+            this.typeStack.pop(); this.typeStack.pop();
+            this.typeStack.push({ type: 'Dict' });
+          }
+        }
         return;
 
-      case 'ApplyNode':
-        // すでに仕上がっている compileInfix の「空白(適用)処理」へルーティング
-        this.compileInfix({ ...node, type: 'infix', op: ' ' });
+      // ⚡ =========================================================
+      // ⚡ スマートフロントエンドからの「意味確定ノード」の受け口
+      // ⚡ =========================================================
+
+      case 'CommaNode':
+        this.emit(`    ;; --- Comma (Lift Both) ---`);
+        // ⚡ 修正: 正しいWasmのスタック順序 ( left -> right -> nan -> cons -> cons )
+        this.visit(node.left);          // 1. 左辺(A) を積む
+        this.visit(node.right);         // 2. 右辺(B) を積む
+        this.emit(`    f64.const nan`); // 3. 終端(nan) を積む
+        this.emit(`    call $cons`);    // 4. cons(B, nan) = [B] を作る
+        this.emit(`    call $cons`);    // 5. cons(A, [B]) = [A, B] を作る
+
+        if (this.typeStack) {
+          if (this.typeStack.length >= 2) { this.typeStack.pop(); this.typeStack.pop(); }
+          this.typeStack.push({ type: 'List' });
+        }
+        return;
+
+      case 'ProductNode':
+        this.emit(`    ;; --- Product (Flat Cons for Blocks/Dicts) ---`);
+        this.visit(node.left);
+        let pLeftType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack[this.typeStack.length - 1] : { type: 'Unknown' };
+
+        this.visit(node.right);
+        let pRightType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack[this.typeStack.length - 1] : { type: 'Unknown' };
+
+        // ⚡ 平坦な結合 (余計な nan や 2回の cons は絶対に書かない！)
+        if ((pLeftType && pLeftType.type === 'SpreadList') || (pRightType && pRightType.type === 'SpreadList')) {
+          this.emit(`    call $list_concat`);
+        } else {
+          this.emit(`    call $cons`);
+        }
+
+        if (this.typeStack) {
+          if (this.typeStack.length >= 2) { this.typeStack.pop(); this.typeStack.pop(); }
+          // 辞書の型タグ復元
+          let isDict = false;
+          if (pLeftType && pLeftType.type === 'String') isDict = true;
+          else if (pLeftType && pLeftType.type === 'Dict' && (pRightType && (pRightType.type === 'Dict' || pRightType.type === 'Unit' || pRightType.type === 'Unknown'))) isDict = true;
+          this.typeStack.push({ type: isDict ? 'Dict' : 'List' });
+        }
         return;
 
       case 'SequenceNode':
-        // 副作用を確実に捨てる(Drop)順次実行
         this.emit(`    ;; --- Sequence (Drop side-effect) ---`);
         this.visit(node.left);
-        this.emit(`    drop`);
+        this.emit(`    drop`); // 副作用のゴミを捨てる
         this.visit(node.right);
         if (this.typeStack && this.typeStack.length >= 2) {
           let rightT = this.typeStack.pop();
-          this.typeStack.pop(); // 左側の副作用の型を消す
+          this.typeStack.pop();
           this.typeStack.push(rightT);
         }
+        return;
+
+      case 'ApplyNode':
+        this.compileInfix({ ...node, type: 'infix', op: ' ' });
         return;
 
       case 'ComposeNode':
@@ -1090,69 +1199,68 @@ export class WatGenerator {
     }
 
     // ==========================================
-    // ⚡ カンマ(積)の賢い静的ディスパッチ (Spread & Dict対応)
+    // ⚡ カンマ(,)の究極の静的ディスパッチ (ブロック・辞書・リテラルの完全統合)
     // ==========================================
     if (op === ',') {
+      // ⚡ 1. 実行順序を絶対に守るため、まず左辺を評価する (無限ループ防止)
       this.visit(left);
+
       let leftType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack[this.typeStack.length - 1] : { type: 'Unknown' };
 
-      // ⚡ [核心] 左辺が「# (Prism更新)」などの副作用の場合、シーケンス(順次実行)として扱う！
+      // ⚡ [Mode A] 左辺が副作用（Prism #）の場合 -> 順次実行モード
       let isSideEffect = (leftType && leftType.type === 'SideEffect') || (left && left.op === '#');
-
       if (isSideEffect) {
-        this.emit(`    ;; ⚡ Implicit sequence after side-effect (comma bypass)`);
-        this.emit(`    drop`); // ⚡ 副作用の結果(15など)をWASMスタックから捨てる！
+        this.emit(`    ;; --- Sequence Mode (Drop side-effect) ---`);
+        this.emit(`    drop`); // 15などのゴミを捨てる
+        if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
-        if (this.typeStack && this.typeStack.length > 0) {
-          this.typeStack.pop(); // SideEffectの型を型スタックからも消す
-        }
-
-        // ⚡ 右辺が「(expr , nan)」というブロック終端のリスト化ラッパーなら、それを剥がす
+        // 右辺の不要な nan を剥がす処理
         let isRightNan = right && right.right && (right.right.value === 'nan' || right.right.name === 'nan' || right.right.text === 'nan');
-
         if (right && right.type === 'infix' && right.op === ',' && isRightNan) {
-          this.visit(right.left); // nan を無視して本体(f foo等)だけを直接評価！
+          this.visit(right.left);
         } else {
           this.visit(right);
         }
-        return; // ⚡ consを発行せずにここで終了！
+        return;
       }
 
-      // --- 副作用ではない通常のカンマ処理 (リスト構築 / 辞書構築) ---
-      if (this.typeStack && this.typeStack.length > 0) {
-        leftType = this.typeStack.pop(); // ここで初めて左辺の型を取り出す
-      }
-
+      // ⚡ 2. 副作用でなければ右辺を評価する
       this.visit(right);
       let rightType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Unknown' };
+      if (this.typeStack && this.typeStack.length > 0) {
+        leftType = this.typeStack.pop(); // 左辺の型を取り出す
+      }
 
-      // 左右どちらかが「スプレッド展開済み(SpreadList)」であれば、平坦に結合(concat)する！
+      // スプレッド展開の処理 (維持)
       if ((leftType && leftType.type === 'SpreadList') || (rightType && rightType.type === 'SpreadList')) {
         this.emit(`    call $list_concat`);
+        if (this.typeStack) this.typeStack.push({ type: 'List' });
+        return;
+      }
+
+      // ⚡ [Mode B] 左辺がペア(:)や辞書の場合 -> 辞書構築モード (平坦に結合)
+      let isDictOrPair = (left && left.op === ':') || (leftType && (leftType.type === 'Pair' || leftType.type === 'Dict' || leftType.type === 'String'));
+      if (isDictOrPair) {
+        this.emit(`    ;; --- Dict/Block Mode (Flat Cons) ---`);
+        this.emit(`    call $cons`);
+        if (this.typeStack) this.typeStack.push({ type: 'Dict' });
+        return;
+      }
+
+      // ⚡ [Mode C] 通常の値の場合 -> リテラルカンマモード (両方持ち上げて結合)
+      this.emit(`    ;; --- Literal Comma Mode (Lift Both) ---`);
+
+      // 右辺がさらにカンマ(連鎖)なら、そのままconsするだけでリストが美しく伸びる
+      if (right && right.op === ',') {
+        this.emit(`    call $cons`);
       } else {
+        // 連鎖の最後(または単発)なら、右辺をnanで閉じてから持ち上げる
+        this.emit(`    f64.const nan`);
+        this.emit(`    call $cons`);
         this.emit(`    call $cons`);
       }
 
-      // ⚡ [究極の型推論] A-List(辞書)の型を復元する！
-      if (this.typeStack) {
-        let isDict = false;
-        // 1. 左辺が文字列(Key)なら、これは (Key . Value) の辞書ペア！
-        if (leftType && leftType.type === 'String') {
-          isDict = true;
-        }
-        // 2. 左辺が辞書で、右辺も辞書(または終端のUnit)なら、辞書同士の結合！
-        else if (leftType && leftType.type === 'Dict') {
-          if (rightType && (rightType.type === 'Dict' || rightType.type === 'Unit' || rightType.type === 'Unknown')) {
-            isDict = true;
-          }
-        }
-
-        if (isDict) {
-          this.typeStack.push({ type: 'Dict' });
-        } else {
-          this.typeStack.push({ type: 'List' });
-        }
-      }
+      if (this.typeStack) this.typeStack.push({ type: 'List' });
       return;
     }
 
@@ -1161,15 +1269,20 @@ export class WatGenerator {
     // ==========================================
     if (op === "'") {
       this.visit(left);
-      if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
-
       this.visit(right);
-      if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
-      this.emit(`    call $dict_get`);
+      let rightType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack[this.typeStack.length - 1] : { type: 'Unknown' };
 
-      if (this.typeStack) {
-        this.typeStack.push({ type: 'Any' });
+      // ⚡ 数値なら $list_get、それ以外は $dict_get に分岐
+      if (rightType && rightType.type === 'Float') {
+        this.emit(`    call $list_get`);
+      } else {
+        this.emit(`    call $dict_get`);
+      }
+
+      if (this.typeStack && this.typeStack.length >= 2) {
+        this.typeStack.pop(); this.typeStack.pop();
+        this.typeStack.push({ type: 'Unknown' });
       }
       return;
     }
