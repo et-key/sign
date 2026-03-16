@@ -106,5 +106,171 @@ f dict
   xz : 450
 ]
 
+`##############################################
+
+`============================ 
+` fix : list_concat flat/lift
+`============================ 
+[[1 2] [3 4]]~
+[Main Result] [ 1, 2, 3, 4 ]
+
+a : 1 2 3 4 5
+~a
+[Main Result] [ [ 1, 2, 3, 4, 5 ] ]
+
+~10
+[Main Result] [ 10 ]
+
+10~
+[Main Result] 10
+
+@$10
+[Main Result] 10
+
+a : 10
+a_address : $a
+@a_address
+[Main Result] 10
+★★要確認★★　[Main Result] 0
+
+`============================ 
+` fix : map/fold
+`============================ 
+[+] 1 2 3 4 5
+[Main Result] 15
+
+[* 2,] 1 2 3 4 5
+[Main Result] [ 2, 4, 6, 8, 10 ]
+
+`============================ 
+` fix : char
+`============================ 
+\a
+[Main Result] 'a'
+
+0u00f0
+[Main Result] 'ð'
+
+`============================ 
+` fix : Spread/Rest
+`============================ 
+[ 1 , [2, 3]~ , 4 ]
+[Main Result] [ 1, 2, 3, 4 ]
+
+[ 1 , [2, 3]~ 4 ]
+[Main Result] [ 1, [ [ 2, 3 ], 4 ] ]
+
+[ 1 [2, 3]~ , 4 ]
+[Main Result] [ [ 1, 2, 3 ], 4 ]
+
+[ 1 [2, 3]~ 4 ]
+[Main Result] [ 1, 2, 3, 4 ]
+
+`============================ 
+` fix : #output 'get
+`============================ 
+myGreet :
+	hello : `hello,`
+	welcome : `welcome,`
+myGreet ' hello
+[Main Result] `hello,`
+★★要確認★★　[Main Result] Unit
+
+ptr : $10
+ptr # 99
+@ptr
+[Main Result] 99
+
+`============================ 
+` fix : match_case deep_eq
+`============================ 
+a : [1, [2, 3]]
+b : [1, [2, 3]]
+a = b
+[Main Result] [ 1, [ 2, 3 ] ]　※Trueなので値そのまま返す
+
+myMatch : x ?
+	0 : `zero`
+	1 : `one`
+	`other`
+myMatch 99
+[Main Result] `other`
+
+myMatch : x ?
+	0 : `zero`
+	1 : `one`
+	`other`
+myMatch 0
+[Main Result] `zero`
+
+myMatch : x ?
+	0 : `zero`
+	1 : `one`
+	`other`
+myMatch 1
+[Main Result] `one`
+
+`============================ 
+` fix : 'get
+`============================ 
+myDict :
+	`key1` : `value_one`
+	`key2` : `value_two`
+target : `key2`
+myDict ' target
+[Main Result] `value_two`
+
+complexDict :
+	[1, 2] : `Pattern A`
+	[3, 4] : `Pattern B`
+complexDict ' [1, 2]
+[Main Result] [ `Pattern A` ]
+
+`============================ 
+` get Head/Tail
+`============================ 
+getHead : a ~b ? a
+getHead [1, 2, 3]
+[Main Result] 1
+
+getTail : a ~b ? b
+getTail [1, 2, 3]
+[Main Result] [ 2, 3 ]
+
+`##############################################
+` playground\bak_v0 作成時のテスト一部
+`##############################################
+`テストケース1：複数のマクロの連続合成
+foo : [+ 4]
+bar : [* 3]
+baz : 2
+foo bar baz
+[Main Result] 18
+
+add_ten : [+ 10]
+mul_two : [* 2]
+sub_five : [- 5]
+add_ten mul_two sub_five 5
+[Main Result] 25
+
+`テストケース2：無名リスト（ブロック）の直接パイプライン
+[+ 4] [* 3] [/ 2] 10
+[Main Result] 21
+★★要確認★★　[Main Result] [ 0, 0, 21 ]
+
+`テストケース4：中置演算子とパイプラインの混在
+double : [* 2]
+square : [^ 2]
+double square (3 + 2)
+[Main Result] 100
+
+`テストケース5：複数の出力命令（副作用の確認）
+foo : [+ 10]
+bar : [* 5]
+foo 5
+bar 4
+[Main Result] 20
 
 
+[1 ~ 5]
+★★要確認★★　[Main Result] [ 1, 5 ]

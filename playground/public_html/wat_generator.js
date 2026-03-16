@@ -50,6 +50,25 @@ export class WatGenerator {
     this.emit(`
   (func $cons (param $car f64) (param $cdr f64) (result f64)
     (local $ptr i32)
+
+    local.get $car
+    local.get $car
+    f64.ne
+    if
+      local.get $car
+      i64.reinterpret_f64
+      i64.const 48
+      i64.shr_u
+      i32.wrap_i64
+      i32.const 0x7FFF
+      i32.and
+      i32.const 0x7FFA
+      i32.lt_u
+      if
+        local.get $cdr
+        return
+      end
+    end
     i32.const 16
     call $alloc
     local.set $ptr
@@ -298,16 +317,24 @@ export class WatGenerator {
     local.get $l1
   )`);
 
-    // ⚡ 4. List Push
+    // ⚡ 4. List Push (リストの末尾に要素を追加。Unitの混入を防ぐ)
     this.emit(`
   (func $list_push (param $list f64) (param $val f64) (result f64)
     (local $curr_ptr i32)
     (local $cdr_val f64)
-    (local $new_cell f64)
 
     local.get $list
-    i64.reinterpret_f64
-    i32.wrap_i64
+    call $is_ptr
+    i32.eqz
+    if
+      local.get $list
+      local.get $val
+      call $cons
+      return
+    end
+
+    local.get $list
+    call $f64_to_ptr
     local.set $curr_ptr
 
     (loop $find_end
@@ -319,21 +346,30 @@ export class WatGenerator {
       call $is_ptr
       if
         local.get $cdr_val
-        i64.reinterpret_f64
-        i32.wrap_i64
+        call $f64_to_ptr
         local.set $curr_ptr
         br $find_end
       end
     )
 
     local.get $cdr_val
-    local.get $val
-    call $cons
-    local.set $new_cell
-
-    local.get $curr_ptr
-    local.get $new_cell
-    f64.store offset=8
+    local.get $cdr_val
+    f64.ne
+    if
+      ;; 終端がnan(正常なリスト)の場合: 新たな終端を持つ cons(val, nan) を追加
+      local.get $curr_ptr
+      local.get $val
+      f64.const nan
+      call $cons
+      f64.store offset=8
+    else
+      ;; 終端が値(不正なリスト)の場合: そのまま値を cons して繋ぐ
+      local.get $curr_ptr
+      local.get $cdr_val
+      local.get $val
+      call $cons
+      f64.store offset=8
+    end
 
     local.get $list
   )`);
@@ -850,13 +886,35 @@ export class WatGenerator {
       // ⚡ =========================================================
 
       case 'CommaNode':
-        this.emit(`    ;; --- Comma (Lift Both) ---`);
-        // ⚡ 修正: 正しいWasmのスタック順序 ( left -> right -> nan -> cons -> cons )
-        this.visit(node.left);          // 1. 左辺(A) を積む
-        this.visit(node.right);         // 2. 右辺(B) を積む
-        this.emit(`    f64.const nan`); // 3. 終端(nan) を積む
-        this.emit(`    call $cons`);    // 4. cons(B, nan) = [B] を作る
-        this.emit(`    call $cons`);    // 5. cons(A, [B]) = [A, B] を作る
+        this.emit(`    ;; --- Comma (Lift Both / Concat Spread) ---`);
+        this.visit(node.left);
+        // 左辺の型をスタックから覗き見
+        let cLeftType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack[this.typeStack.length - 1] : { type: 'Unknown' };
+
+        this.visit(node.right);
+        // 右辺の型をスタックから覗き見
+        let cRightType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack[this.typeStack.length - 1] : { type: 'Unknown' };
+
+        const isRightComma = node.right && node.right.type === 'CommaNode';
+        // パーサーが自動付与した Unit(nan) かどうかを判定
+        const isRightUnit = node.right && (
+          node.right.value === 'nan' || node.right.name === 'nan' || node.right.text === 'nan' ||
+          node.right.value === '_' || node.right.name === '_' || node.right.text === '_' ||
+          node.right.type === 'Unit'
+        );
+
+        // ⚡ 右辺をリスト化（右辺がカンマ連鎖でもUnitでもSpreadListでもない場合のみ、終端nanを付与）
+        if (!isRightComma && !isRightUnit && cRightType.type !== 'SpreadList') {
+          this.emit(`    f64.const nan`);
+          this.emit(`    call $cons`);
+        }
+
+        // ⚡ 左辺と右辺の結合 (SpreadListならconcatで融合、そうでなければconsで階層化)
+        if (cLeftType && cLeftType.type === 'SpreadList') {
+          this.emit(`    call $list_concat`);
+        } else {
+          this.emit(`    call $cons`);
+        }
 
         if (this.typeStack) {
           if (this.typeStack.length >= 2) { this.typeStack.pop(); this.typeStack.pop(); }
