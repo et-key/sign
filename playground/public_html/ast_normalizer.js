@@ -22,10 +22,11 @@ export class ASTNormalizer {
           if (innerRight && innerRight.type === 'infix' && innerRight.op === ',') {
             if (isUnitNode(innerRight.right) || (innerRight.right && innerRight.right.value === 'nan')) {
               innerBody.right = innerRight.left;
+              return cleanFunc; // ⚡ 修正：Map構文を満たした場合のみ返す
             }
           }
         }
-        return cleanFunc;
+        return null; // ⚡ 修正：カンマで終わっていない普通のラムダは null を返す！
       }
     }
     return null;
