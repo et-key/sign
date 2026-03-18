@@ -62,8 +62,8 @@ export class WatGenerator {
       i32.wrap_i64
       i32.const 0x7FFF
       i32.and
-      i32.const 0x7FFA
-      i32.lt_u
+      i32.const 0x7FF8
+      i32.eq
       if
         local.get $cdr
         return
@@ -1977,7 +1977,8 @@ export class WatGenerator {
       this.emit(`    call $list_concat`);
       if (this.typeStack) this.typeStack.push({ type: 'List' });
 
-    } else if (leftType.type === 'String' && rightType.type === 'Float') {
+      // ⚡ 修正: 静的にどちらかが String や Char と分かっていれば concat
+    } else if (leftType.type === 'String' || rightType.type === 'String' || leftType.type === 'Char' || rightType.type === 'Char') {
       this.emit(`    call $str_concat`);
       if (this.typeStack) this.typeStack.push({ type: 'String' });
 
@@ -1989,6 +1990,7 @@ export class WatGenerator {
       this.emit(`    call $list_unshift`);
       if (this.typeStack) this.typeStack.push({ type: 'List' });
 
+      // ⚡ 修正: 型が不明なもの（1 2 など）はSignの原則通りコンスしてList型とする！
     } else {
       this.emit(`    call $cons`);
       if (this.typeStack) this.typeStack.push({ type: 'List' });
