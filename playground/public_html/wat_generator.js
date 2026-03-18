@@ -1449,8 +1449,11 @@ export class WatGenerator {
     switch (op) {
       case '+':
         if (leftType.type === 'String') {
-          this.emit(`    call $str_map_add`);
-          if (this.typeStack) this.typeStack.push({ type: 'List' });
+          // ⚡ 修正: 文字列を左辺に置いた加算は仕様外として、値を破棄して Unit (nan) を返す
+          this.emit(`    drop`); // 右辺の値をWASMスタックから捨てる
+          this.emit(`    drop`); // 左辺の文字列ポインタをWASMスタックから捨てる
+          this.emit(`    f64.const nan`); // 代わりに Unit を積む
+          if (this.typeStack) this.typeStack.push({ type: 'Unit' }); // 型推論も Unit に更新
         } else if (rightType.type === 'String') {
           this.emit(`    call $str_to_num`);
           this.emit(`    f64.add`);
