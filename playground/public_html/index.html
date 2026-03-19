@@ -13,7 +13,6 @@
 			padding: 20px;
 			background: #fafafa;
 			height: 90vh;
-			/* 画面全体に広げるためのベース */
 			margin: 0;
 		}
 
@@ -29,7 +28,6 @@
 			flex-direction: column;
 		}
 
-		/* テキストエリアの共通設定 */
 		textarea {
 			font-family: monospace;
 			font-size: 14px;
@@ -38,19 +36,16 @@
 			border: 1px solid #ccc;
 		}
 
-		/* 入力用のテキストエリア */
 		.input-area {
 			height: 100px;
 			font-size: 16px;
 		}
 
-		/* 出力用のテキストエリア (黒背景に白文字) */
 		.output-area {
 			background: #1e1e1e;
 			color: #d4d4d4;
 			flex-grow: 1;
 			resize: none;
-			/* flexで伸びるため手動リサイズ無効 */
 			white-space: pre;
 			overflow-wrap: normal;
 			overflow-x: auto;
@@ -61,7 +56,6 @@
 			gap: 20px;
 			margin-top: 10px;
 			flex-grow: 1;
-			/* 下部のパネルを画面いっぱいに伸ばす */
 		}
 
 		.panel {
@@ -102,7 +96,7 @@
 
 <body>
 
-	<h2>Sign → WebAssembly Playground (f64)</h2>
+	<h2>Sign → WebAssembly Playground</h2>
 
 	<div class="top-panels">
 		<div class="input-panel">
@@ -140,148 +134,232 @@
 			const code = document.getElementById('codeInput').value;
 			const stdinText = document.getElementById('stdInput').value;
 			const outputEl = document.getElementById('consoleOutput');
-			outputEl.value = ''; // textContentからvalueに変更
+			outputEl.value = '';
 
 			try {
-				// 1. 標準入力をパースして配列（キュー）にする
 				const inputQueue = stdinText.split(/\s+/)
 					.filter(x => x !== '')
 					.map(x => parseFloat(x) || 0.0);
 				let inputPointer = 0;
 
-				// 2. Signコードの構文解析
 				const ast = parseSign(code);
-
-				// パース直後のASTをコンソールにすべて出力する魔法
 				console.log("★ AST:", JSON.stringify(ast, null, 2));
 
-				// 3. WATの生成
 				const watCode = compileToWat(ast);
-				document.getElementById('watOutput').value = watCode; // textContentからvalueに変更
+				document.getElementById('watOutput').value = watCode;
 
-				// 4. WABTによるバイナリコンパイル
 				const wabt = await WabtModule();
 				const module = wabt.parseWat('test.wat', watCode);
 				module.resolveNames();
 				module.validate();
 				const { buffer } = module.toBinary({ log: true });
 
-				// 5. WASMインポート環境
+				let wasmInstance;
 				let wasmMemory;
 				const importObject = {
 					env: {
 						math_fmod: (a, b) => a % b,
 						math_pow: Math.pow,
 
-						syscall: (sys_num, arg) => {
+						// ⚡ 追加: WASMから文字列ポインタを受け取り、JSのparseFloatで数値にして返す
+						str_to_num: (ptrF64) => {
 							if (!wasmMemory) return Number.NaN;
+							// f64にエンコードされたポインタから下位32bitのアドレスを取り出す
+							const buf = new ArrayBuffer(8);
+							const view = new DataView(buf);
+							view.setFloat64(0, ptrF64, true);
+							const ptr = view.getUint32(0, true);
 
-							if (sys_num === 63) {
-								if (inputPointer < inputQueue.length) {
-									return inputQueue[inputPointer++];
+							// WASMメモリから文字列長とUTF-8バイト列を読み出す
+							const memView = new DataView(wasmMemory.buffer);
+							const len = memView.getUint32(ptr, true);
+							const bytes = new Uint8Array(wasmMemory.buffer, ptr + 4, len);
+							const str = new TextDecoder('utf-8').decode(bytes);
+
+							const num = parseFloat(str);
+							return isNaN(num) ? 0.0 : num; // パース失敗時は0を返す
+						},
+
+						// ⚡ 修正: 文字列ポインタや文字タグを汎用的に受け取り、結合してWASMメモリにアロケートして返す
+						str_concat: (leftF64, rightF64) => {
+							if (!wasmMemory || !wasmInstance) return Number.NaN;
+
+							// f64のNaN-Boxから型タグを判別してJSの文字列に復元するヘルパー
+							function getStr(valF64) {
+								const buf = new ArrayBuffer(8);
+								const view = new DataView(buf);
+								view.setFloat64(0, valF64, true);
+								const lower = view.getUint32(0, true);
+								const upper = view.getUint32(4, true);
+								const tag = upper & 0xFFFF0000;
+
+								if (tag === 0x7FFB0000) { // String
+									const memView = new DataView(wasmMemory.buffer);
+									const len = memView.getUint32(lower, true);
+									const bytes = new Uint8Array(wasmMemory.buffer, lower + 4, len);
+									return new TextDecoder('utf-8').decode(bytes);
+								} else if (tag === 0x7FFA0000) { // Char
+									return String.fromCodePoint(lower);
+								} else {
+									return valF64.toString(); // Fallback (Floatなど)
 								}
-								return 0.0;
 							}
 
+							const strL = getStr(leftF64);
+							const strR = getStr(rightF64);
+							const newStr = strL + strR; // JS側で結合
+
+							const encoder = new TextEncoder();
+							const newBytes = encoder.encode(newStr);
+							const newLen = newBytes.length;
+
+							// WASM側にエクスポートさせた $alloc を呼び出して必要なメモリを確保！
+							const newPtr = wasmInstance.instance.exports.alloc(newLen + 4);
+
+							// allocによってメモリ(ArrayBuffer)が拡張された可能性があるため、DataViewを再取得
+							const newMemView = new DataView(wasmMemory.buffer);
+							newMemView.setUint32(newPtr, newLen, true);
+							const targetBytes = new Uint8Array(wasmMemory.buffer, newPtr + 4, newLen);
+							targetBytes.set(newBytes); // メモリにUTF-8バイト列を書き込む
+
+							// 0x7FFB0000 の Stringタグを付けて f64 にエンコードして返す
+							const buf = new ArrayBuffer(8);
+							const view = new DataView(buf);
+							view.setUint32(0, newPtr, true);
+							view.setUint32(4, 0x7FFB0000, true);
+							return view.getFloat64(0, true);
+						},
+
+						syscall: (sys_num, arg) => {
+							if (!wasmMemory) return Number.NaN;
+							if (sys_num === 63) {
+								if (inputPointer < inputQueue.length) return inputQueue[inputPointer++];
+								return 0.0;
+							}
 							if (sys_num === 64) {
-								const buf = new ArrayBuffer(8);
-								new Float64Array(buf)[0] = arg;
-								const view = new DataView(buf);
-								const tag = view.getUint32(4, true) & 0xFFFF0000;
-								const ptr = view.getUint32(0, true);
-
-								const memView = new DataView(wasmMemory.buffer);
-
-								if (tag === 0x7FFD0000 || tag === 0x7FF50000) {
-									let len = 0;
-									while (new Uint8Array(wasmMemory.buffer, ptr + len, 1)[0] !== 0) len++;
-									const bytes = new Uint8Array(wasmMemory.buffer, ptr, len);
-									const str = new TextDecoder('utf-8').decode(bytes);
-									outputEl.value += `[Print] ${str}\n`;
-									return arg;
-								}
-
-								if (tag === 0x7FFE0000) {
-									outputEl.value += `[Print] <Closure (Ptr: ${ptr})>\n`;
-									return arg;
-								}
-
-								if (tag === 0x7FFC0000 || tag === 0x7FF40000) {
-									function readRaw(f64_val) {
-										const b = new ArrayBuffer(8);
-										new Float64Array(b)[0] = f64_val;
-										const v = new DataView(b);
-										const t = v.getUint32(4, true) & 0xFFFF0000;
-										const p = v.getUint32(0, true);
-										if (t === 0x7FFC0000 || t === 0x7FF40000) return traverseRaw(p);
-										if (t === 0x7FF80000) return "()";
-										if (t === 0x7FFE0000) return "<Closure>";
-										return f64_val.toString();
-									}
-									function traverseRaw(p) {
-										if (p === 0) return "()";
-										const car_val = memView.getFloat64(p, true);
-										const cdr_val = memView.getFloat64(p + 8, true);
-										return `(${readRaw(car_val)} , ${readRaw(cdr_val)})`;
-									}
-									function readPretty(f64_val) {
-										const b = new ArrayBuffer(8);
-										new Float64Array(b)[0] = f64_val;
-										const v = new DataView(b);
-										const t = v.getUint32(4, true) & 0xFFFF0000;
-										const p = v.getUint32(0, true);
-										if (t === 0x7FFC0000 || t === 0x7FF40000) return formatPretty(p);
-										if (t === 0x7FF80000) return "()";
-										if (t === 0x7FFE0000) return "<Closure>";
-										return f64_val.toString();
-									}
-									function formatPretty(p) {
-										if (p === 0) return "[]";
-										let res = "[";
-										let current = p;
-										while (current !== 0) {
-											const car_val = memView.getFloat64(current, true);
-											const cdr_val = memView.getFloat64(current + 8, true);
-
-											res += readPretty(car_val);
-
-											const cdr_buf = new ArrayBuffer(8);
-											new Float64Array(cdr_buf)[0] = cdr_val;
-											const cdr_view = new DataView(cdr_buf);
-											const cdr_tag = cdr_view.getUint32(4, true) & 0xFFFF0000;
-
-											if (cdr_tag === 0x7FF80000) {
-												break;
-											} else if (cdr_tag === 0x7FFC0000 || cdr_tag === 0x7FF40000) {
-												res += ", ";
-												current = cdr_view.getUint32(0, true);
-											} else {
-												res += ", " + readPretty(cdr_val);
-												break;
-											}
-										}
-										res += "]";
-										return res;
-									}
-									outputEl.value += `[Print] ${formatPretty(ptr)}  // Raw: ${traverseRaw(ptr)}\n`;
-									return arg;
-								}
-
 								outputEl.value += `[Print] ${arg}\n`;
 								return arg;
 							}
-
 							return Number.NaN;
 						}
 					}
 				};
 
 				// 6. 実行
-				const wasmInstance = await WebAssembly.instantiate(buffer, importObject);
+				wasmInstance = await WebAssembly.instantiate(buffer, importObject);
 				wasmMemory = wasmInstance.instance.exports.memory;
-				const result = wasmInstance.instance.exports.main();
+				const memView = new DataView(wasmMemory.buffer);
 
-				outputEl.value += `\n[Main Result] ${result}\n`;
+				// ★戻り値(f64)はJSエンジンに丸められるため無視する
+				wasmInstance.instance.exports.main();
+
+				// ⚡ 7. 出力フォーマッタ (WASMメモリからビット単位で完全に値を復元)
+				// JSの f64 (Number) に乗せる前に、上位32bit/下位32bitの整数として取り回す
+				function formatSignResult(upper32, lower32) {
+					// 🌟 Unit の場合 (0x7FF80000 00000000)
+					if (upper32 === 0x7FF80000 && lower32 === 0) {
+						return "Unit";
+					}
+
+					// 🌟 文字列 (String) の場合 (タグ: 0x7FFB0000)
+					if (upper32 === 0x7FFB0000) {
+						// メモリから文字列長とUTF-8バイト列を直接読み出して復元
+						const len = memView.getUint32(lower32, true);
+						const bytes = new Uint8Array(wasmMemory.buffer, lower32 + 4, len);
+						const str = new TextDecoder('utf-8').decode(bytes);
+						return "`" + str + "`";
+					}
+
+					// 🌟 アドレス値 ($) の場合 (タグ: 0x7FF90000)
+					if (upper32 === 0x7FF90000) {
+						// 16進数でセキュアかつ仕様通りにフォーマット (例: $0x0400)
+						return `$0x${lower32.toString(16).padStart(4, '0')}`;
+					}
+
+					// 🌟 文字型 (Char) の場合 (タグ: 0x7FFA0000)
+					if (upper32 === 0x7FFA0000) {
+						return `'${String.fromCodePoint(lower32)}'`; // 文字コードを復元！
+					}
+
+					// 🌟 関数 (Fat Pointer) の場合
+					if (upper32 > 0 && upper32 < 10000 && lower32 % 8 === 0) {
+						return `<Function: ${upper32}>`;
+					}
+
+					// 🌟 リスト (コンスセル) の場合
+					if (upper32 === 0x7FFC0000 || upper32 === 0x7FF40000) {
+						function traverseList(ptr) {
+							if (ptr === 0) return [];
+
+							const carLower = memView.getUint32(ptr, true);
+							const carUpper = memView.getUint32(ptr + 4, true);
+							const cdrLower = memView.getUint32(ptr + 8, true);
+							const cdrUpper = memView.getUint32(ptr + 12, true);
+
+							let res = [];
+
+							if (carUpper === 0x7FFC0000 || carUpper === 0x7FF40000) {
+								res.push(traverseList(carLower));
+							} else {
+								res.push(formatSignResult(carUpper, carLower));
+							}
+
+							if (cdrUpper === 0x7FFC0000 || cdrUpper === 0x7FF40000) {
+								res = res.concat(traverseList(cdrLower));
+							} else if (!(cdrUpper === 0x7FF80000 && cdrLower === 0)) {
+								res.push(formatSignResult(cdrUpper, cdrLower));
+							}
+
+							return res;
+						}
+
+						const array = traverseList(lower32);
+
+						// ⚡ 修正: A-List(辞書)を検知して美しくフォーマットする関数
+						function arrayToString(arr, indent = "") {
+							if (!Array.isArray(arr)) return arr;
+							if (arr.length === 0) return "[ ]";
+
+							// 💡 辞書(A-List)の判定: 全ての要素が「長さ2の配列」かつ「最初の要素が文字列(バッククォート付き)」か？
+							const isDict = arr.every(item =>
+								Array.isArray(item) &&
+								item.length === 2 &&
+								typeof item[0] === 'string' &&
+								item[0].startsWith('`') && item[0].endsWith('`')
+							);
+
+							if (isDict) {
+								// 辞書フォーマットで出力
+								let lines = arr.map(item => {
+									let key = item[0].replace(/^`|`$/g, ''); // キーのバッククォートを外す
+									let val = Array.isArray(item[1]) ? arrayToString(item[1], indent + "  ") : item[1];
+									return `${indent}  ${key} : ${val}`;
+								});
+								return "[\n" + lines.join("\n") + "\n" + indent + "]";
+							} else {
+								// 通常のリストフォーマットで出力
+								let elements = arr.map(v => Array.isArray(v) ? arrayToString(v, indent) : v);
+								return "[ " + elements.join(", ") + " ]";
+							}
+						}
+
+						return arrayToString(array);
+					}
+
+					// 🌟 普通の数値の場合
+					const floatBuf = new ArrayBuffer(8);
+					const floatView = new DataView(floatBuf);
+					floatView.setUint32(0, lower32, true);
+					floatView.setUint32(4, upper32, true);
+					return floatView.getFloat64(0, true).toString();
+				}
+
+				// ★ 0番地のメモリから、計算の最終結果を安全に読み取る
+				const finalLower = memView.getUint32(0, true);
+				const finalUpper = memView.getUint32(4, true);
+
+				const formattedResult = formatSignResult(finalUpper, finalLower);
+				outputEl.value += `\n[Main Result] ${formattedResult}\n`;
 
 			} catch (err) {
 				outputEl.value = `Error: ${err.message}`;

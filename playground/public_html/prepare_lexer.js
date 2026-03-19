@@ -3,7 +3,11 @@
 const prepare = code => {
   let normalized = code
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\xA0\xAD]/g, '')
-    .replace(/^`[^\r\n]*(\r\n|[\r\n])/gm, '')
+
+    // ★修正：行頭の`から改行までを削除（EOF対応のために $ を追加）
+    // これにより「行頭の\`は問答無用で絶対にコメント」という仕様が完璧に適用されます
+    .replace(/^`[^\r\n]*(\r\n|[\r\n]|$)/gm, '')
+
     .replace(/(\r\n|[\r\n])/g, '\r')
     .replace(/\\\r/g, '\\\n');
 
