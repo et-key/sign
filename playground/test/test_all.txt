@@ -304,10 +304,11 @@ bar 4
 [Main Result] `world`
 
 ` === 4. 改行を含んだ文字列の比較 === `
-`abc` \
+x : `abc` \
 	`def` = `abc` \
 	`def`
-※現状エラー
+[Main Result] `abc
+def`
 
 ` === 5. 文字と文字列のリスト化 (コンスセル結合) === `
 \A , `bc`

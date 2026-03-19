@@ -136,6 +136,41 @@ export class ASTNormalizer {
       let func = flattened.func;
       let args = flattened.args;
 
+      // ==========================================
+      // ⚡ 修正：演算子の優先順位逆転（汎用ツリー回転）
+      // 関数と引数のすべての要素をフラットに並べ、
+      // 比較演算子が混ざっていれば、そこで適用チェーンを左右に真っ二つに割る！
+      // ==========================================
+      let allElements = [func, ...args];
+      let cmpOps = ['=', '!=', '<', '>', '<=', '>='];
+      let cmpIndex = allElements.findIndex(el => el && el.type === 'infix' && cmpOps.includes(el.op));
+
+      if (cmpIndex !== -1) {
+        let cmpNode = allElements[cmpIndex];
+
+        // 演算子の左側にある要素群 + 演算子自身の左辺
+        let leftElements = [...allElements.slice(0, cmpIndex), cmpNode.left];
+        // 演算子自身の右辺 + 演算子の右側にある要素群
+        let rightElements = [cmpNode.right, ...allElements.slice(cmpIndex + 1)];
+
+        // 再帰的に Apply ノードを組み立て直すヘルパー
+        const buildApply = (elements) => {
+          let res = elements[0];
+          for (let i = 1; i < elements.length; i++) {
+            res = { type: 'apply', func: res, arg: elements[i] };
+          }
+          return res;
+        };
+
+        // 組み替えた新しい Infix ノードを再度 normalize に投げる
+        return this.normalize({
+          type: 'infix',
+          op: cmpNode.op,
+          left: buildApply(leftElements),
+          right: buildApply(rightElements)
+        }, isDictContext);
+      }
+
       let foldOp = this.extractFoldOp(func);
       if (foldOp && args.length >= 2) {
         let result = this.normalize(args[0], false);
