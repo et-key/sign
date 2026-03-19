@@ -171,6 +171,58 @@ export class ASTNormalizer {
         }, isDictContext);
       }
 
+      // ==========================================
+      // ⚡ 追加: プレースホルダー (_) のマクロ展開
+      // ==========================================
+      let hasPlaceholder = false;
+      let newArgs = [];
+      let placeholders = [];
+
+      for (let i = 0; i < args.length; i++) {
+        let arg = args[i];
+        let isPh = false;
+
+        // パーサーから来たASTノードが明示的な '_' (Unit) であるかを判定
+        if (arg && (arg.type === 'unit' || arg.type === 'Unit' || arg.name === '_' || arg.text === '_' || arg.value === '_')) {
+          isPh = true;
+        }
+
+        if (isPh) {
+          hasPlaceholder = true;
+          // 一意な一時変数名(引数名)を生成 (例: $ph_123456)
+          let phName = `$ph_${Math.floor(Math.random() * 1000000)}`;
+          let phNode = { type: 'identifier', name: phName };
+          placeholders.push(phNode);
+          newArgs.push(phNode);
+        } else {
+          newArgs.push(arg);
+        }
+      }
+
+      if (hasPlaceholder) {
+        // プレースホルダーを一時変数に置き換えた関数適用ツリーを再構築
+        let buildApply = (fNode, argNodes) => {
+          let res = this.normalize(fNode, false);
+          for (let i = 0; i < argNodes.length; i++) {
+            res = { type: 'infix', op: ' ', left: res, right: this.normalize(argNodes[i], false) };
+          }
+          return res;
+        };
+
+        let result = buildApply(func, newArgs);
+
+        // 再構築したツリーを、ラムダで右側からラップしていく (カリー化の実現)
+        for (let i = placeholders.length - 1; i >= 0; i--) {
+          result = {
+            type: 'infix',
+            op: '?',
+            left: placeholders[i],
+            right: result
+          };
+        }
+        return result;
+      }
+
       let foldOp = this.extractFoldOp(func);
       if (foldOp && args.length >= 2) {
         let result = this.normalize(args[0], false);

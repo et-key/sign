@@ -310,6 +310,12 @@ x : `abc` \
 [Main Result] `abc
 def`
 
+`abc` \
+	`def` = `abc` \
+	`def`
+★★要確認★★行頭`だがコメント扱いせず出力を許容すべき？　[Main Result] Unit
+
+
 ` === 5. 文字と文字列のリスト化 (コンスセル結合) === `
 \A , `bc`
 [Main Result] [ 'A', `bc` ]
@@ -330,4 +336,12 @@ f $`Hello` $`Sign`
 [Main Result] `Hello
 Sign`
 
+`============================================
+` プレースホルダー (Unit) の挙動確認
+`============================================
+div : x y ? x / y
+div2 : div _ 2
+div2_type : div2
+Result : div2 10
+[Main Result] 5
 
