@@ -35,10 +35,10 @@ list ' 3
 0 + `123`
 [Main Result] 123
 
-`123` + 0
+x : `123` + 0
 [Main Result] Unit　※構文エラー
 
-`123` 0
+x : `123` 0
 [Main Result] `1230`
 
 ###フェーズ4：システムセマンティクスとポインタ操作（System Semantics）
@@ -297,10 +297,10 @@ bar 4
 [Main Result] 't'
 
 ` === 3. 文字列 (String) の基本的な等価比較 === `
-`abc` = `abc`
+(`abc` = `abc`)
 [Main Result] `abc`
 
-`hello` != `world`
+(`hello`) != `world`
 [Main Result] `world`
 
 ` === 4. 改行を含んだ文字列の比較 === `
@@ -313,8 +313,13 @@ def`
 `abc` \
 	`def` = `abc` \
 	`def`
-★★要確認★★行頭`だがコメント扱いせず出力を許容すべき？　[Main Result] Unit
+[Main Result] Unit
 
+(`abc` \
+	`def` = `abc` \
+	`def`)
+[Main Result] `abc
+def`
 
 ` === 5. 文字と文字列のリスト化 (コンスセル結合) === `
 \A , `bc`
@@ -322,7 +327,7 @@ def`
 
 ` === 6. 暗黙のシーケンスによる結合 (現在の実装確認) === `
 `現在のWASM版では、[文字列 Float] のみ特殊な結合処理が入っています`
-`Result: ` 123
+(`Result: ` 123)
 [Main Result] `Result: 123`
 
 `============================================

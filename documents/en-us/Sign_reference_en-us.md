@@ -71,17 +71,20 @@ The following summarizes its features:
 
 Sign does not execute lines with meaningless literals alone.
 This means that string literals starting from the beginning of a line become comments.
-Since it's obvious that it starts with \` at the beginning of a line, it is treated as a comment even if the string is not closed.
+Since it is obvious when it starts with a ` at the beginning of a line (without indentation), the entire line is treated as a comment even if the string is not closed.
+
+Conversely, a ` starting from an indented position (e.g., with tabs) is not considered a comment and is evaluated as a normal string literal.
+Additionally, due to the absolute rule that "a ` at the beginning of a line is always a comment," if you want to write an expression starting with a string literal at the beginning of a line, you must enclose it in parentheses `()` or bind it to a variable to avoid it being treated as a comment.
 
 (Example)
 ```javascript
 `This is a comment`
 `This is a comment
 
-	`This is a comment`
-	`This is a comment
-	 `This is not a comment`
-	 `This is an error
+`	This is a comment`
+`	This is a comment
+	`This is not a comment`
+	`This is an error
 
 ```
 
