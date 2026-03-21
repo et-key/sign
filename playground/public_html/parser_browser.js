@@ -77,7 +77,7 @@ const refineTokens = (rawTokens) => {
 
 const isSeparator = (token) => token && typeof token === 'object' && token.type === 'separator';
 
-const APPLY_PREC = 6;
+const APPLY_PREC = 21;
 
 const parseExpr = (tokens, minPrec = 0) => {
 	if (tokens.length === 0) return null;
