@@ -130,6 +130,28 @@
 		import { parseSign } from './parser_browser.js';
 		import { compileToWat } from './compiler_wat.js';
 
+		// --- Tabキー入力対応の追加 ---
+		const codeInput = document.getElementById('codeInput');
+		codeInput.addEventListener('keydown', (e) => {
+			if (e.key === 'Tab') {
+				e.preventDefault(); // フォーカス移動を無効化
+
+				const start = codeInput.selectionStart;
+				const end = codeInput.selectionEnd;
+				const value = codeInput.value;
+
+				// Tab文字（またはスペース2つなど）を挿入
+				// Signのインデント仕様に合わせて調整可能ですが、ここでは標準的なTab文字を入れています
+				const tabChar = "\t";
+
+				codeInput.value = value.substring(0, start) + tabChar + value.substring(end);
+
+				// カーソル位置を挿入した文字の直後に移動
+				codeInput.selectionStart = codeInput.selectionEnd = start + tabChar.length;
+			}
+		});
+		// ----------------------------
+
 		document.getElementById('runBtn').addEventListener('click', async () => {
 			const code = document.getElementById('codeInput').value;
 			const stdinText = document.getElementById('stdInput').value;
