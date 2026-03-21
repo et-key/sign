@@ -42,6 +42,23 @@ export class ASTNormalizer {
     return { func: current, args: args };
   }
 
+  // ⚡ 追加: コンスセル連鎖やリスト構造をフラットな配列に戻すヘルパー
+  // パイプラインの中間結果を次の関数の引数として渡すために使用します
+  extractListElements(node) {
+    if (!node) return [];
+    if (node.type === 'infix' && node.op === ',') {
+      return [node.left, ...this.extractListElements(node.right)];
+    }
+    if (['BlockSeq', 'SequenceNode', 'ProductNode', 'CommaNode'].includes(node.type)) {
+      if (node.right && (node.right.value === 'nan' || node.right.name === 'nan' || isUnitNode(node.right))) {
+        return [node.left];
+      }
+      return [node.left, ...this.extractListElements(node.right)];
+    }
+    if (node.value === 'nan' || node.name === 'nan' || isUnitNode(node)) return [];
+    return [node];
+  }
+
   // ⚡ 追加: isDictContext フラグにより、自分が辞書の中にいるかを判定する
   normalize(ast, isDictContext = false) {
     if (!ast) return ast;
@@ -169,6 +186,55 @@ export class ASTNormalizer {
           left: buildApply(leftElements),
           right: buildApply(rightElements)
         }, isDictContext);
+      }
+
+      // ==========================================
+      // ⚡ 新機能：関数のパイプライン合成とデータの分離 (左から右への適用)
+      // ==========================================
+      allElements.forEach(el => this.inferType(el));
+
+      let functions = [];
+      let dataElements = [];
+      let isDataPhase = false;
+
+      for (let el of allElements) {
+        if (!isDataPhase && el.inferredType && el.inferredType.type === 'Function') {
+          functions.push(el);
+        } else {
+          isDataPhase = true; // 一度データが現れたら以後はすべてデータとして扱う
+          dataElements.push(el);
+        }
+      }
+
+      // 関数が2つ以上連続している場合、パイプラインとして適用
+      if (functions.length >= 2 && dataElements.length > 0) {
+        let currentArgs = [...dataElements];
+        let finalResult = null;
+
+        for (let i = 0; i < functions.length; i++) {
+          let fn = functions[i];
+
+          // 現在の引数群を fn に適用する Apply ノードを構築
+          let applyNode = fn;
+          for (let arg of currentArgs) {
+            applyNode = { type: 'apply', func: applyNode, arg: arg };
+          }
+
+          // ASTを展開 (MapやFoldが発動する)
+          finalResult = this.normalize(applyNode, isDictContext);
+
+          // 次の関数のために、結果のリストを再びフラットな引数配列に分解する
+          if (i < functions.length - 1) {
+            let extracted = this.extractListElements(finalResult);
+            if (extracted.length > 1) {
+              currentArgs = extracted;
+            } else {
+              currentArgs = [finalResult];
+            }
+          }
+        }
+
+        return finalResult;
       }
 
       // ==========================================
