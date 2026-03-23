@@ -1,0 +1,80 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Sign",
+  "scopeName": "source.sign",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#operators"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.sign",
+          "match": "^[ \\t]*`.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.other.sign",
+          "begin": "`",
+          "end": "`|$",
+          "patterns": [
+            {
+              "name": "constant.character.escape.sign",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.unit.sign",
+          "match": "\\b_\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.control.sign",
+          "match": "(###|##|#|@|\\$|')"
+        },
+        {
+          "name": "entity.name.function.sign",
+          "match": "(:|\\?)"
+        },
+        {
+          "name": "support.type.sign",
+          "match": "(~\\^|~/|~\\*|~-|~\\+|~|,)"
+        },
+        {
+          "name": "support.function.builtin.sign",
+          "match": "(==|!=|<=|>=|<|>|=)"
+        },
+        {
+          "name": "support.function.builtin.sign",
+          "match": "(\\|\\||&&|;;|!!|\\||&|;|!)"
+        },
+        {
+          "name": "constant.language.sign",
+          "match": "(<<|>>|\\+|-|\\*|/|%|\\^)"
+        }
+      ]
+    }
+  }
+}

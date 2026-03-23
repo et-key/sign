@@ -388,6 +388,21 @@ const parseAtom = (tokens) => {
 		return { type: 'char', value: value.slice(1) };
 	}
 
+	// ⚡修正：parseFloatによる 0x 等の誤変換を防ぐため、N進数/文字接頭辞のパースを先に行う
+	if (value.startsWith('0x') || value.startsWith('0r')) {
+		return { type: 'number', value: parseInt(value.slice(2), 16) };
+	}
+	if (value.startsWith('0b')) {
+		return { type: 'number', value: parseInt(value.slice(2), 2) };
+	}
+	if (value.startsWith('0o')) {
+		return { type: 'number', value: parseInt(value.slice(2), 8) };
+	}
+	if (value.startsWith('0u')) {
+		return { type: 'char', value: parseInt(value.slice(2), 16) };
+	}
+
+	// 通常の10進数
 	if (!isNaN(parseFloat(value)) && isFinite(value)) {
 		return { type: 'number', value: parseFloat(value) };
 	}

@@ -353,10 +353,23 @@ export class ASTNormalizer {
     }
 
     if (node.type === 'identifier' || node.type === 'variable') {
-      let name = node.name || node.value || node.text;
-      if (typeof name === 'string' && name.startsWith('0u')) {
+      let name = String(node.name || node.value || node.text);
+
+      // ⚡修正：parseFloatによる誤変換を防ぐため、接頭辞のチェックを先に行う
+      if (name.startsWith('0u')) {
         return { type: 'char', value: parseInt(name.slice(2), 16) };
       }
+      if (name.startsWith('0x') || name.startsWith('0r')) {
+        return { type: 'number', value: parseInt(name.slice(2), 16) };
+      }
+      if (name.startsWith('0b')) {
+        return { type: 'number', value: parseInt(name.slice(2), 2) };
+      }
+      if (name.startsWith('0o')) {
+        return { type: 'number', value: parseInt(name.slice(2), 8) };
+      }
+
+      // 通常の10進数（浮動小数点含む）のフォールバック
       if (!isNaN(parseFloat(name)) && isFinite(name)) {
         node.type = 'number';
         node.value = parseFloat(name);

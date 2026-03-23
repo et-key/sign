@@ -1,0 +1,29 @@
+{
+  "name": "sign-language",
+  "displayName": "Sign Language Support",
+  "description": "Language support for the Sign programming language.",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "sign",
+        "aliases": ["Sign", "sign"],
+        "extensions": [".sn"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "sign",
+        "scopeName": "source.sign",
+        "path": "./syntaxes/sign.tmLanguage.json"
+      }
+    ]
+  }
+}
