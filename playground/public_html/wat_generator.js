@@ -737,6 +737,59 @@ export class WatGenerator {
     local.get $list
   )`);
 
+    // ⚡ 11. Range List Builder (中置 ~ の実体：A ~ B)
+    this.emit(`
+  (func $list_range (param $start f64) (param $end f64) (result f64)
+    (local $list f64)
+    (local $curr f64)
+    (local $step f64)
+
+    ;; startとendの大小関係でstep（1.0 または -1.0）を決める
+    local.get $start
+    local.get $end
+    f64.gt
+    if
+      f64.const -1.0
+      local.set $step
+    else
+      f64.const 1.0
+      local.set $step
+    end
+
+    ;; 空リスト(nan)から構築を開始
+    f64.const nan
+    local.set $list
+
+    ;; 末尾(end)から逆順に処理していく
+    local.get $end
+    local.set $curr
+
+    (block $break
+      (loop $loop
+        ;; curr を先頭に cons する
+        local.get $curr
+        local.get $list
+        call $cons
+        local.set $list
+
+        ;; curr == start に到達したらループを抜ける
+        local.get $curr
+        local.get $start
+        f64.eq
+        br_if $break
+
+        ;; curr = curr - step (一つ前の値に戻る)
+        local.get $curr
+        local.get $step
+        f64.sub
+        local.set $curr
+
+        br $loop
+      )
+    )
+    local.get $list
+  )`);
+
     this.emit('  (func $main (export "main") (result f64)');
 
     // ★ 追加：変数の二重宣言を絶対に防ぐガード
@@ -1464,6 +1517,10 @@ export class WatGenerator {
         }
         break;
       case '-': this.emit(`    f64.sub`); break;
+      case '~':
+        this.emit(`    call $list_range`);
+        if (this.typeStack) this.typeStack.push({ type: 'List' });
+        break;
       case '*': this.emit(`    f64.mul`); break;
       case '/': this.emit(`    f64.div`); break;
       case '^':

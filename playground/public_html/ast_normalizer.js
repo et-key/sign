@@ -135,6 +135,70 @@ export class ASTNormalizer {
       let f = node.func || node.fn || node.callee || node.left;
       let a = node.arg || node.args || node.right;
 
+      // ⚡ 追加: 中置演算子 `~` (範囲リスト生成) のパース補正
+      const extractRangeLeft = (n) => {
+        if (!n) return { found: false };
+        if (n.type === 'postfix' && n.op === '~') {
+          let inner = n.expr || n.left;
+          // ⚡ [修正] [2, 3]~ のようにリストに直接 ~ がついている場合は
+          // Spread(展開) なので、範囲リストの ~ としては抽出せずにスルーする
+          let isSpread = inner && (inner.type === 'block' || inner.type === 'array' || (inner.type === 'infix' && inner.op === ','));
+          if (isSpread) {
+            return { found: false };
+          }
+          return { stripped: inner, found: true };
+        }
+        if (n.type === 'infix' && n.right) {
+          let res = extractRangeLeft(n.right);
+          if (res.found) {
+            return { stripped: { ...n, right: res.stripped }, found: true };
+          }
+        }
+        if ((n.type === 'apply' || n.type === 'call') && n.arg) {
+          let res = extractRangeLeft(n.arg);
+          if (res.found) {
+            return { stripped: { ...n, arg: res.stripped }, found: true };
+          }
+        }
+        return { found: false };
+      };
+
+      let isRange = false;
+      let rangeLeft = null;
+      let rangeRight = null;
+
+      let leftRes = extractRangeLeft(f);
+      if (leftRes.found) {
+        isRange = true;
+        rangeLeft = leftRes.stripped;
+        rangeRight = a;
+      } else if (a && a.type === 'prefix' && a.op === '~') {
+        isRange = true;
+        rangeLeft = f;
+        rangeRight = a.right || a.expr;
+      }
+
+      if (isRange) {
+        // パターンマッチ・展開との区別
+        let isPatternMatch = (rangeRight && (rangeRight.type === 'block' || (rangeRight.type === 'infix' && rangeRight.op === ':')));
+
+        // 念のため rangeLeft 自体がリストだった場合も除外
+        let isListLiteral = (rangeLeft && (
+          rangeLeft.type === 'block' ||
+          rangeLeft.type === 'array' ||
+          (rangeLeft.type === 'infix' && rangeLeft.op === ',')
+        ));
+
+        if (!isPatternMatch && !isListLiteral) {
+          return this.normalize({
+            type: 'infix',
+            op: '~',
+            left: rangeLeft,
+            right: rangeRight
+          }, isDictContext);
+        }
+      }
+
       // ⚡ [修正] パーサーが [ ] を Unit + Block として出力したものを検知
       if (f && (f.type === 'unit' || (f.type === 'identifier' && f.value === 'Unit') || f.value === 'nan') && a && a.type === 'block') {
         let body = a.body || [];
