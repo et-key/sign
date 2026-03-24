@@ -135,26 +135,30 @@ export class ASTNormalizer {
       let f = node.func || node.fn || node.callee || node.left;
       let a = node.arg || node.args || node.right;
 
-      // 対象となる範囲演算子のリスト
-      const rangeOps = ['~', '~+', '~-', '~*', '~/', '~^'];
-
-      // 左辺のツリーの一番右下に `postfix(範囲演算子)` が埋もれている場合、それを抽出するヘルパー
+      // ⚡ 追加: 中置演算子 `~` (範囲リスト生成) のパース補正
       const extractRangeLeft = (n) => {
         if (!n) return { found: false };
-        if (n.type === 'postfix' && rangeOps.includes(n.op)) {
+        if (n.type === 'postfix' && n.op === '~') {
           let inner = n.expr || n.left;
-          // [2, 3]~ のようにリストに直接ついている場合は Spread(展開) なのでスルー
+          // ⚡ [修正] [2, 3]~ のようにリストに直接 ~ がついている場合は
+          // Spread(展開) なので、範囲リストの ~ としては抽出せずにスルーする
           let isSpread = inner && (inner.type === 'block' || inner.type === 'array' || (inner.type === 'infix' && inner.op === ','));
-          if (isSpread) return { found: false };
-          return { stripped: inner, found: true, op: n.op }; // ⚡ 演算子の種類を保持
+          if (isSpread) {
+            return { found: false };
+          }
+          return { stripped: inner, found: true };
         }
         if (n.type === 'infix' && n.right) {
           let res = extractRangeLeft(n.right);
-          if (res.found) return { stripped: { ...n, right: res.stripped }, found: true, op: res.op };
+          if (res.found) {
+            return { stripped: { ...n, right: res.stripped }, found: true };
+          }
         }
         if ((n.type === 'apply' || n.type === 'call') && n.arg) {
           let res = extractRangeLeft(n.arg);
-          if (res.found) return { stripped: { ...n, arg: res.stripped }, found: true, op: res.op };
+          if (res.found) {
+            return { stripped: { ...n, arg: res.stripped }, found: true };
+          }
         }
         return { found: false };
       };
@@ -162,19 +166,16 @@ export class ASTNormalizer {
       let isRange = false;
       let rangeLeft = null;
       let rangeRight = null;
-      let rangeOp = null; // ⚡ どの演算子かを特定
 
       let leftRes = extractRangeLeft(f);
       if (leftRes.found) {
         isRange = true;
         rangeLeft = leftRes.stripped;
         rangeRight = a;
-        rangeOp = leftRes.op;
-      } else if (a && a.type === 'prefix' && rangeOps.includes(a.op)) {
+      } else if (a && a.type === 'prefix' && a.op === '~') {
         isRange = true;
         rangeLeft = f;
         rangeRight = a.right || a.expr;
-        rangeOp = a.op;
       }
 
       if (isRange) {
@@ -191,7 +192,7 @@ export class ASTNormalizer {
         if (!isPatternMatch && !isListLiteral) {
           return this.normalize({
             type: 'infix',
-            op: rangeOp, // ⚡ 抽出した特定の派生演算子(~+など)をそのまま渡す
+            op: '~',
             left: rangeLeft,
             right: rangeRight
           }, isDictContext);

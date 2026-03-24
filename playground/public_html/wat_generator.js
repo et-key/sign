@@ -744,6 +744,7 @@ export class WatGenerator {
     (local $curr f64)
     (local $step f64)
 
+    ;; startとendの大小関係でstep（1.0 または -1.0）を決める
     local.get $start
     local.get $end
     f64.gt
@@ -755,24 +756,29 @@ export class WatGenerator {
       local.set $step
     end
 
+    ;; 空リスト(nan)から構築を開始
     f64.const nan
     local.set $list
 
+    ;; 末尾(end)から逆順に処理していく
     local.get $end
     local.set $curr
 
     (block $break
       (loop $loop
+        ;; curr を先頭に cons する
         local.get $curr
         local.get $list
         call $cons
         local.set $list
 
+        ;; curr == start に到達したらループを抜ける
         local.get $curr
         local.get $start
         f64.eq
         br_if $break
 
+        ;; curr = curr - step (一つ前の値に戻る)
         local.get $curr
         local.get $step
         f64.sub
@@ -782,83 +788,6 @@ export class WatGenerator {
       )
     )
     local.get $list
-  )`);
-
-    // ⚡ 12. Advanced Range List Builders (~+, ~-, ~*, ~/, ~^)
-    this.emit(`
-  (func $list_range_step_add (param $curr f64) (param $end f64) (param $step f64) (result f64)
-    local.get $step
-    f64.const 0.0
-    f64.gt
-    if (result i32)
-      local.get $curr
-      local.get $end
-      f64.gt
-    else
-      local.get $curr
-      local.get $end
-      f64.lt
-    end
-    if
-      f64.const nan
-      return
-    end
-
-    local.get $curr
-    local.get $curr
-    local.get $step
-    f64.add
-    local.get $end
-    local.get $step
-    call $list_range_step_add
-    call $cons
-  )
-
-  (func $list_range_step_mul (param $curr f64) (param $end f64) (param $step f64) (result f64)
-    local.get $step
-    f64.const 1.0
-    f64.gt
-    if (result i32)
-      local.get $curr
-      local.get $end
-      f64.gt
-    else
-      local.get $curr
-      local.get $end
-      f64.lt
-    end
-    if
-      f64.const nan
-      return
-    end
-
-    local.get $curr
-    local.get $curr
-    local.get $step
-    f64.mul
-    local.get $end
-    local.get $step
-    call $list_range_step_mul
-    call $cons
-  )
-
-  (func $list_range_step_pow (param $curr f64) (param $end f64) (param $step f64) (result f64)
-    local.get $curr
-    local.get $end
-    f64.gt
-    if
-      f64.const nan
-      return
-    end
-
-    local.get $curr
-    local.get $curr
-    local.get $step
-    call $math_pow
-    local.get $end
-    local.get $step
-    call $list_range_step_pow
-    call $cons
   )`);
 
     this.emit('  (func $main (export "main") (result f64)');
@@ -1590,31 +1519,6 @@ export class WatGenerator {
       case '-': this.emit(`    f64.sub`); break;
       case '~':
         this.emit(`    call $list_range`);
-        if (this.typeStack) this.typeStack.push({ type: 'List' });
-        break;
-      case '~+':
-        this.emit(`    f64.const 1.0`);
-        this.emit(`    call $list_range_step_add`);
-        if (this.typeStack) this.typeStack.push({ type: 'List' });
-        break;
-      case '~-':
-        this.emit(`    f64.const -1.0`);
-        this.emit(`    call $list_range_step_add`);
-        if (this.typeStack) this.typeStack.push({ type: 'List' });
-        break;
-      case '~*':
-        this.emit(`    f64.const 2.0`);
-        this.emit(`    call $list_range_step_mul`);
-        if (this.typeStack) this.typeStack.push({ type: 'List' });
-        break;
-      case '~/':
-        this.emit(`    f64.const 0.5`); // 0.5を掛ける＝2で割る
-        this.emit(`    call $list_range_step_mul`);
-        if (this.typeStack) this.typeStack.push({ type: 'List' });
-        break;
-      case '~^':
-        this.emit(`    f64.const 2.0`);
-        this.emit(`    call $list_range_step_pow`);
         if (this.typeStack) this.typeStack.push({ type: 'List' });
         break;
       case '*': this.emit(`    f64.mul`); break;
