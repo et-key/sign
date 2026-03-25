@@ -59,10 +59,10 @@ export class ASTNormalizer {
     return [node];
   }
 
-  // ⚡ 追加: isDictContext フラグにより、自分が辞書の中にいるかを判定する
-  normalize(ast, isDictContext = false) {
+  // ⚡ 修正: isBindingRight (束縛の右側かどうか) コンテキストを追加
+  normalize(ast, isDictContext = false, isBindingRight = false) {
     if (!ast) return ast;
-    if (Array.isArray(ast)) return ast.map(node => this.normalize(node, isDictContext));
+    if (Array.isArray(ast)) return ast.map(node => this.normalize(node, isDictContext, isBindingRight));
 
     let node = { ...ast };
 
@@ -81,12 +81,11 @@ export class ASTNormalizer {
     }
 
     // ==========================================
-    // ⚡ 辞書型の平坦化 (賢いコンテキストスイッチ)
+    // ⚡ 辞書型の平坦化 & isBindingRightの伝播
     // ==========================================
     if (node.type === 'infix' && node.op === ':') {
       let rightNode;
 
-      // 右辺がブロックの場合、そのブロック内は「辞書コンテキスト」として処理する！
       if (node.right && node.right.type === 'block') {
         let body = node.right.body || [];
         if (body.length === 0) {
@@ -94,14 +93,15 @@ export class ASTNormalizer {
         } else {
           let listNode = { type: 'number', value: 'nan' };
           for (let i = body.length - 1; i >= 0; i--) {
-            // ブロック内の要素は isDictContext = true として再帰
-            let elem = this.normalize(body[i], true);
+            // ⚡ ブロック内の要素にも isBindingRight = true を伝播させる！
+            let elem = this.normalize(body[i], true, true);
             listNode = { type: 'infix', op: ',', left: elem, right: listNode };
           }
           rightNode = listNode;
         }
       } else {
-        rightNode = this.normalize(node.right, false);
+        // ⚡ 右辺の評価のみ isBindingRight = true として伝播
+        rightNode = this.normalize(node.right, false, true);
       }
 
       // 自分が辞書の中にいる場合だけ、: をペア(,)に変換する
@@ -315,39 +315,45 @@ export class ASTNormalizer {
       }
 
       // ==========================================
-      // ⚡ 追加: プレースホルダー (_) のマクロ展開
+      // ⚡ 究極の2条件によるプレースホルダー (_) のマクロ展開
       // ==========================================
       let hasPlaceholder = false;
-      let newArgs = [];
-      let placeholders = [];
+      let lastArgIsPlaceholder = false;
 
       for (let i = 0; i < args.length; i++) {
         let arg = args[i];
-        let isPh = false;
-
-        // パーサーから来たASTノードが明示的な '_' (Unit) であるかを判定
-        if (arg && (arg.type === 'unit' || arg.type === 'Unit' || arg.name === '_' || arg.text === '_' || arg.value === '_')) {
-          isPh = true;
-        }
-
+        let isPh = arg && (arg.type === 'unit' || arg.type === 'Unit' || arg.name === '_' || arg.text === '_' || arg.value === '_');
         if (isPh) {
           hasPlaceholder = true;
-          // 一意な一時変数名(引数名)を生成 (例: $ph_123456)
-          let phName = `$ph_${Math.floor(Math.random() * 1000000)}`;
-          let phNode = { type: 'identifier', name: phName };
-          placeholders.push(phNode);
-          newArgs.push(phNode);
-        } else {
-          newArgs.push(arg);
+          if (i === args.length - 1) {
+            lastArgIsPlaceholder = true; // 最後尾が _ なら True
+          }
         }
       }
 
-      if (hasPlaceholder) {
+      // ⚡ 究極の2条件：「束縛(:)の右側」かつ「最後尾が _ ではない」場合のみ展開
+      if (isBindingRight && hasPlaceholder && !lastArgIsPlaceholder) {
+        let placeholders = [];
+        let newArgs = [];
+
+        for (let i = 0; i < args.length; i++) {
+          let arg = args[i];
+          let isPh = arg && (arg.type === 'unit' || arg.type === 'Unit' || arg.name === '_' || arg.text === '_' || arg.value === '_');
+          if (isPh) {
+            let phName = `$ph_${Math.floor(Math.random() * 1000000)}`;
+            let phNode = { type: 'identifier', name: phName };
+            placeholders.push(phNode);
+            newArgs.push(phNode);
+          } else {
+            newArgs.push(arg); // 元のASTノードを保持
+          }
+        }
+
         // プレースホルダーを一時変数に置き換えた関数適用ツリーを再構築
         let buildApply = (fNode, argNodes) => {
-          let res = this.normalize(fNode, false);
+          let res = this.normalize(fNode, false, false);
           for (let i = 0; i < argNodes.length; i++) {
-            res = { type: 'infix', op: ' ', left: res, right: this.normalize(argNodes[i], false) };
+            res = { type: 'infix', op: ' ', left: res, right: this.normalize(argNodes[i], false, false) };
           }
           return res;
         };

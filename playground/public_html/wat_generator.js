@@ -175,6 +175,7 @@ export class WatGenerator {
     (local $f f64)
     (local $g f64)
     (local $f_res f64)
+    (local $new_ctx_ptr i32)
 
     local.get $ctx
     call $f64_to_ptr
@@ -198,17 +199,23 @@ export class WatGenerator {
     f64.load offset=8
     local.set $g
 
+    i32.const 16
+    call $alloc
+    local.set $new_ctx_ptr
+    local.get $new_ctx_ptr
     local.get $arg
-
+    f64.store offset=0
+    local.get $new_ctx_ptr
     local.get $f
     i64.reinterpret_f64
     i64.const 0xFFFFFFFF
     i64.and
     i32.wrap_i64
     call $ptr_to_f64
+    f64.store offset=8
+    local.get $new_ctx_ptr
+    call $ptr_to_f64
     
-    call $cons
-
     local.get $f
     i64.reinterpret_f64
     i64.const 32
@@ -217,16 +224,22 @@ export class WatGenerator {
     call_indirect (type $closure_sig)
     local.set $f_res
 
+    i32.const 16
+    call $alloc
+    local.set $new_ctx_ptr
+    local.get $new_ctx_ptr
     local.get $f_res
-
+    f64.store offset=0
+    local.get $new_ctx_ptr
     local.get $g
     i64.reinterpret_f64
     i64.const 0xFFFFFFFF
     i64.and
     i32.wrap_i64
     call $ptr_to_f64
-    
-    call $cons
+    f64.store offset=8
+    local.get $new_ctx_ptr
+    call $ptr_to_f64
     
     local.get $g
     i64.reinterpret_f64
@@ -2126,21 +2139,31 @@ export class WatGenerator {
       this.emit(`    local.set $tmp_r`); // arg
       this.emit(`    local.set $tmp_l`); // func
 
-      // 1. 実引数 (arg) を積む
-      this.emit(`    local.get $tmp_r`);
+      // 1. ctx用のメモリを強制確保 (16バイト)
+      this.emit(`    i32.const 16`);
+      this.emit(`    call $alloc`);
+      this.emit(`    local.set $tmp_ptr`);
 
-      // 2. 関数の環境ポインタ (env) を積んで NaN-Boxing する
+      // 2. arg を offset=0 に保存
+      this.emit(`    local.get $tmp_ptr`);
+      this.emit(`    local.get $tmp_r`);
+      this.emit(`    f64.store offset=0`);
+
+      // 3. env を抽出して offset=8 に保存
+      this.emit(`    local.get $tmp_ptr`);
       this.emit(`    local.get $tmp_l`);
       this.emit(`    i64.reinterpret_f64`);
       this.emit(`    i64.const 0xFFFFFFFF`);
       this.emit(`    i64.and`);
-      this.emit(`    i32.wrap_i64`);        // ⚡ 修正
-      this.emit(`    call $ptr_to_f64`);   // ⚡ 修正
+      this.emit(`    i32.wrap_i64`);
+      this.emit(`    call $ptr_to_f64`);
+      this.emit(`    f64.store offset=8`);
 
-      // 3. arg と env を cons して１つのリスト(ctx)にする！
-      this.emit(`    call $cons`);
+      // 4. 構築した ctx ポインタをスタックに積む
+      this.emit(`    local.get $tmp_ptr`);
+      this.emit(`    call $ptr_to_f64`);
 
-      // 4. 関数インデックスを取り出して間接呼び出し
+      // 5. 関数インデックスを取り出して間接呼び出し
       this.emit(`    local.get $tmp_l`);
       this.emit(`    i64.reinterpret_f64`);
       this.emit(`    i64.const 32`);
