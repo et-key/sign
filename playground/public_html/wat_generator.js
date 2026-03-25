@@ -790,6 +790,95 @@ export class WatGenerator {
     local.get $list
   )`);
 
+    // ===== ⚡ここから追加 (デモ版用: 有限範囲リスト構築関数群) =====
+    this.emit(`
+  (func $list_range_demo_add (param $curr f64) (param $step f64) (param $end f64) (result f64)
+    local.get $step
+    f64.const 0.0
+    f64.eq
+    if
+      f64.const nan
+      return
+    end
+    local.get $step
+    f64.const 0.0
+    f64.gt
+    if (result i32)
+      local.get $curr
+      local.get $end
+      f64.gt
+    else
+      local.get $curr
+      local.get $end
+      f64.lt
+    end
+    if
+      f64.const nan
+      return
+    end
+    local.get $curr
+    local.get $curr
+    local.get $step
+    f64.add
+    local.get $step
+    local.get $end
+    call $list_range_demo_add
+    call $cons
+  )
+
+  (func $list_range_demo_mul (param $curr f64) (param $step f64) (param $end f64) (result f64)
+    local.get $step
+    f64.const 1.0
+    f64.eq
+    if
+      f64.const nan
+      return
+    end
+    local.get $step
+    f64.const 1.0
+    f64.gt
+    if (result i32)
+      local.get $curr
+      local.get $end
+      f64.gt
+    else
+      local.get $curr
+      local.get $end
+      f64.lt
+    end
+    if
+      f64.const nan
+      return
+    end
+    local.get $curr
+    local.get $curr
+    local.get $step
+    f64.mul
+    local.get $step
+    local.get $end
+    call $list_range_demo_mul
+    call $cons
+  )
+
+  (func $list_range_demo_pow (param $curr f64) (param $step f64) (param $end f64) (result f64)
+    local.get $curr
+    local.get $end
+    f64.gt
+    if
+      f64.const nan
+      return
+    end
+    local.get $curr
+    local.get $curr
+    local.get $step
+    call $math_pow
+    local.get $step
+    local.get $end
+    call $list_range_demo_pow
+    call $cons
+  )`);
+    // ===== ⚡ここまで追加 =====
+
     this.emit('  (func $main (export "main") (result f64)');
 
     // ★ 追加：変数の二重宣言を絶対に防ぐガード
@@ -902,6 +991,38 @@ export class WatGenerator {
     }
 
     switch (node.type) {
+      // ===== ⚡ここから追加 =====
+      case 'RangeDemo':
+        this.visit(node.start);
+
+        // 演算子の意味に合わせてステップ値を前処理する
+        if (node.op === '~/') {
+          this.emit(`    f64.const 1.0`);
+          this.visit(node.step);
+          this.emit(`    f64.div`); // step = 1.0 / step
+        } else if (node.op === '~-') {
+          this.emit(`    f64.const 0.0`);
+          this.visit(node.step);
+          this.emit(`    f64.sub`); // step = 0.0 - step
+        } else {
+          this.visit(node.step);
+        }
+
+        this.visit(node.end);
+
+        // 変化規則に応じて呼び出すWASM関数を切り替える
+        if (node.op === '~*' || node.op === '~/') {
+          this.emit(`    call $list_range_demo_mul`);
+        } else if (node.op === '~^') {
+          this.emit(`    call $list_range_demo_pow`);
+        } else {
+          this.emit(`    call $list_range_demo_add`);
+        }
+
+        if (this.typeStack) this.typeStack.push({ type: 'List' });
+        return;
+      // ===== ⚡ここまで追加 =====
+
       // ⚡ =========================================================
       // ⚡ 追加: ブロック(改行)の順次実行と平坦なリスト化(辞書構築)
       // ⚡ =========================================================

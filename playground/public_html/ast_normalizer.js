@@ -135,69 +135,82 @@ export class ASTNormalizer {
       let f = node.func || node.fn || node.callee || node.left;
       let a = node.arg || node.args || node.right;
 
-      // ⚡ 追加: 中置演算子 `~` (範囲リスト生成) のパース補正
+      // ===== ⚡ここから追加 (デモ版用: 派生演算子対応の3項セット抽出) =====
+      const rangeOps = ['~', '~+', '~-', '~*', '~/', '~^'];
+
       const extractRangeLeft = (n) => {
         if (!n) return { found: false };
-        if (n.type === 'postfix' && n.op === '~') {
+        if (n.type === 'postfix' && rangeOps.includes(n.op)) {
           let inner = n.expr || n.left;
-          // ⚡ [修正] [2, 3]~ のようにリストに直接 ~ がついている場合は
-          // Spread(展開) なので、範囲リストの ~ としては抽出せずにスルーする
           let isSpread = inner && (inner.type === 'block' || inner.type === 'array' || (inner.type === 'infix' && inner.op === ','));
-          if (isSpread) {
-            return { found: false };
-          }
-          return { stripped: inner, found: true };
+          if (isSpread) return { found: false };
+          return { stripped: inner, found: true, op: n.op };
         }
         if (n.type === 'infix' && n.right) {
           let res = extractRangeLeft(n.right);
-          if (res.found) {
-            return { stripped: { ...n, right: res.stripped }, found: true };
-          }
+          if (res.found) return { stripped: { ...n, right: res.stripped }, found: true, op: res.op };
         }
         if ((n.type === 'apply' || n.type === 'call') && n.arg) {
           let res = extractRangeLeft(n.arg);
-          if (res.found) {
-            return { stripped: { ...n, arg: res.stripped }, found: true };
-          }
+          if (res.found) return { stripped: { ...n, arg: res.stripped }, found: true, op: res.op };
         }
         return { found: false };
       };
 
+      let leftRes = extractRangeLeft(f);
       let isRange = false;
       let rangeLeft = null;
       let rangeRight = null;
+      let rangeOp = '~';
 
-      let leftRes = extractRangeLeft(f);
       if (leftRes.found) {
         isRange = true;
         rangeLeft = leftRes.stripped;
         rangeRight = a;
-      } else if (a && a.type === 'prefix' && a.op === '~') {
+        rangeOp = leftRes.op;
+      } else if (a && a.type === 'prefix' && rangeOps.includes(a.op)) {
         isRange = true;
         rangeLeft = f;
         rangeRight = a.right || a.expr;
+        rangeOp = a.op;
       }
 
       if (isRange) {
-        // パターンマッチ・展開との区別
         let isPatternMatch = (rangeRight && (rangeRight.type === 'block' || (rangeRight.type === 'infix' && rangeRight.op === ':')));
-
-        // 念のため rangeLeft 自体がリストだった場合も除外
-        let isListLiteral = (rangeLeft && (
-          rangeLeft.type === 'block' ||
-          rangeLeft.type === 'array' ||
-          (rangeLeft.type === 'infix' && rangeLeft.op === ',')
-        ));
+        let isListLiteral = (rangeLeft && (rangeLeft.type === 'block' || rangeLeft.type === 'array' || (rangeLeft.type === 'infix' && rangeLeft.op === ',')));
 
         if (!isPatternMatch && !isListLiteral) {
-          return this.normalize({
-            type: 'infix',
-            op: '~',
-            left: rangeLeft,
-            right: rangeRight
-          }, isDictContext);
+          let startNode, stepNode;
+
+          if (rangeOp === '~') {
+            // 末尾が `~` による切り取りの場合
+            if (rangeLeft && rangeLeft.type === 'infix' && rangeOps.includes(rangeLeft.op) && rangeLeft.op !== '~') {
+              // 1. `A ~+ B ~ C` の形 (ジェネレータ + 切り取り)
+              startNode = rangeLeft.left;
+              stepNode = rangeLeft.right;
+              rangeOp = rangeLeft.op; // 内側のジェネレータ規則(~+など)を適用
+            } else {
+              // 2. `A ~ B` の形 (糖衣構文: ステップ1の等差ジェネレータ)
+              startNode = rangeLeft;
+              stepNode = { type: 'number', value: 1 };
+              rangeOp = '~+'; // デフォルトは加算規則
+            }
+          } else {
+            // 3. `A ~+ B` など末尾が `~` でない場合 (無限リスト)
+            // デモ版ではメモリ枯渇を防ぐため、仕様通り無限リストとして解釈した上でエラーとする
+            throw new Error(`[Demo Limitation] Infinite lists like 'A ${rangeOp} B' are not supported in the WASM demo. Please append '~ MaxValue' to slice it into a finite list.`);
+          }
+
+          return {
+            type: 'RangeDemo',
+            op: rangeOp,
+            start: this.normalize(startNode, isDictContext),
+            step: this.normalize(stepNode, isDictContext),
+            end: this.normalize(rangeRight, isDictContext)
+          };
         }
       }
+      // ===== ⚡ここまで追加 =====
 
       // ⚡ [修正] パーサーが [ ] を Unit + Block として出力したものを検知
       if (f && (f.type === 'unit' || (f.type === 'identifier' && f.value === 'Unit') || f.value === 'nan') && a && a.type === 'block') {
@@ -499,6 +512,40 @@ export class ASTNormalizer {
     if (node.type === 'infix') {
       const leftType = node.left?.inferredType || { type: 'Unknown' };
       const rightType = node.right?.inferredType || { type: 'Unknown' };
+
+      // ===== ⚡ここから追加 (デモ版用: 直接の infix ~ 補正) =====
+      const rangeOps = ['~', '~+', '~-', '~*', '~/', '~^'];
+      if (rangeOps.includes(node.op)) {
+        let startNode, stepNode;
+        let finalOp = node.op;
+
+        if (node.op === '~') {
+          // 末尾が `~` による切り取りの場合
+          if (node.left && node.left.type === 'infix' && rangeOps.includes(node.left.op) && node.left.op !== '~') {
+            // `A ~+ B ~ C` の形
+            startNode = node.left.left;
+            stepNode = node.left.right;
+            finalOp = node.left.op;
+          } else {
+            // `A ~ B` の形 (糖衣構文)
+            startNode = node.left;
+            stepNode = { type: 'number', value: 1 };
+            finalOp = '~+';
+          }
+        } else {
+          // `A ~+ B` などの無限リストはデモ版制約で弾く
+          throw new Error(`[Demo Limitation] Infinite lists like 'A ${node.op} B' are not supported in the WASM demo. Please append '~ MaxValue' to slice it into a finite list.`);
+        }
+
+        return {
+          type: 'RangeDemo',
+          op: finalOp,
+          start: this.normalize(startNode, isDictContext),
+          step: this.normalize(stepNode, isDictContext),
+          end: this.normalize(node.right, isDictContext)
+        };
+      }
+      // ===== ⚡ここまで追加 =====
 
       if (node.op === ' ') {
         if (leftType.type === 'SideEffect' || node.left?.op === '#') {
