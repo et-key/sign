@@ -273,10 +273,6 @@ foo 5
 bar 4
 [Main Result] 20
 
-
-[1 ~ 5]
-★★要確認★★　[Main Result] [ 1, 5 ]
-
 `##############################################
 ` 細かいバグ修正　テスト
 `##############################################
@@ -442,4 +438,149 @@ _ | |-4*2+3| + 5 < 0 | 3
 0u0041 = \A
 [Main Result] 'A'
 
+// ==========================================
+// 派生ジェネレータ(Range) 3項セット テスト
+// ==========================================
+1 ~ 5
+[Main Result] [ 1, 2, 3, 4, 5 ]
+★★要確認★★　現状は上記の動作で許容するが、将来的に明示的な[]が無い場合は構文エラーにするかも
+
+` 糖衣構文 (1ずつ増える)
+[-2 ~ 3]
+[Main Result] [ -2, -1, 0, 1, 2, 3 ]
+[1 + 2 - 5 ~ 6]
+[Main Result] [ -2, -1, 0, 1, 2, 3, 4, 5, 6 ]
+[10 ~ 5]
+[Main Result] Unit
+
+` 等差ジェネレータ
+[0 ~+ 2.5 ~ 10]
+[Main Result] [ 0, 2.5, 5, 7.5, 10 ]
+[0 ~+ 10]
+Error: [Demo Limitation] Infinite lists like 'A ~+ B' are not supported in the WASM demo. Please append '~ MaxValue' to slice it into a finite list.
+[10 ~+ 2 ~ 0]
+[Main Result] Unit
+
+` 減算ジェネレータ
+[10 ~- 2.5 ~ 1]
+[Main Result] [ 10, 7.5, 5, 2.5 ]
+[5 ~- 1]
+Error: [Demo Limitation] Infinite lists like 'A ~- B' are not supported in the WASM demo. Please append '~ MaxValue' to slice it into a finite list.
+
+` 乗算ジェネレータ
+[1 ~* 2 ~ 16]
+[Main Result] [ 1, 2, 4, 8, 16 ]
+[1 ~* 2.5 ~ 16]
+[Main Result] [ 1, 2.5, 6.25, 15.625 ]
+[1 ~* 16]
+Error: [Demo Limitation] Infinite lists like 'A ~* B' are not supported in the WASM demo. Please append '~ MaxValue' to slice it into a finite list.
+
+` 除算ジェネレータ
+[16 ~/ 2 ~ 1]
+[Main Result] [ 16, 8, 4, 2, 1 ]
+[10 ~/ 2.5 ~ 1]
+[Main Result] [ 10, 4, 1.6 ]
+[16 ~/ 2]
+Error: [Demo Limitation] Infinite lists like 'A ~/ B' are not supported in the WASM demo. Please append '~ MaxValue' to slice it into a finite list.
+
+` 冪乗ジェネレータ
+[2 ~^ 2 ~ 256]
+[Main Result] [ 2, 4, 16, 256 ]
+[2 ~^ 256]
+Error: [Demo Limitation] Infinite lists like 'A ~^ B' are not supported in the WASM demo. Please append '~ MaxValue' to slice it into a finite list.
+
+` 四則演算が混在
+[0 ~+ 2 ~ 10 + 4]
+[Main Result] [ 0, 2, 4, 6, 8, 10, 12, 14 ]
+[0 ~+ 2 - 1 ~ 5]
+[Main Result] [ 0, 1, 2, 3, 4, 5 ]
+[1 + 2 ~+ 2 ~ 11]
+[Main Result] [ 3, 5, 7, 9, 11 ]
+
+` ******************************************
+` 比較・論理演算の「透過的」な評価挙動
+` ******************************************
+` Sign言語では、演算結果として人工的な `true(1)` を生成しません。
+` 条件を満たした場合、「最後に評価されて真を確定させた値」がそのまま返ります。
+` （※ 0 は「値が存在する（真）」として扱われます）
+` （※ _(Unit) や [] は「値が存在しない（偽）」として扱われます）
+
+` ==========================================
+` 比較演算による値の透過（フィルタ処理）
+` ==========================================
+` Signの比較演算は、条件成立時に「右辺の評価値」をそのまま返します。
+` 比較したい変数を右辺に置くことで、if文なしでフィルタ処理が書けます。
+
+` --- 1. 等価 (=) と 不等価 (!=) ---
+pass_eq  : x ? 10 = x
+pass_eq 10
+` 期待値: 10 (10と等しいので透過)
+
+pass_eq  : x ? 10 = x
+pass_eq 5
+` 期待値: _  (条件不成立のため Unit)
+
+pass_neq : x ? 10 != x
+pass_neq 5
+` 期待値: 5  (10以外なので透過)
+
+` --- 2. 大小比較 (<, >) ---
+` 常に右辺が返るため、左辺を基準に考えます。
+pass_gt : x ? 5 < x
+pass_gt 10
+` 期待値: 10
+
+pass_lt : x ? 5 > x
+pass_lt 2
+` 期待値: 2
+
+` --- 3. 以上・以下 (<=, >=) ---
+pass_ge : x ? 5 <= x
+pass_ge 5
+` 期待値: 5
+
+pass_le : x ? 5 >= x
+pass_le 5
+` 期待値: 5
+
+
+` ==========================================
+` 論理演算によるフォールバックとガード処理
+` ==========================================
+` Signの論理演算も真偽値(true/false)ではなく値を透過させます。
+
+` --- 1. 論理和 (|) によるデフォルト値設定 ---
+` 左辺が真(値が存在する)ならそのまま左辺を返し、偽(Unit)なら右辺を返します。
+set_default : x ? x | 100
+set_default 50
+` 期待値: 50 (値があるのでそのまま 50)
+
+set_default : x ? x | 100
+set_default _
+` 期待値: 100 (値がないのでデフォルト値 100 が適用される)
+
+` --- 2. 論理積 (&) によるガード処理 ---
+` 左辺が真の場合のみ右辺を評価して返します。
+` 値が存在する場合だけ後続の計算を行わせる安全な処理が書けます。
+calc_if_exists : x ? x & (x * 10)
+calc_if_exists 5
+` 期待値: 50 (値があるので右辺の計算結果が返る)
+
+calc_if_exists : x ? x & (x * 10)
+calc_if_exists _
+` 期待値: _  (値がないので短絡評価され Unit が返る)
+
+
+` ==========================================
+` 単項演算子（否定）の反転挙動
+` ==========================================
+` 否定(!)は、値が存在すれば無(Unit)にし、無であれば全域(Infinity)にします。
+
+is_empty : x ? !x
+is_empty 100
+` 期待値: _ (値が存在するため偽値に反転)
+
+is_empty : x ? !x
+is_empty _
+` 期待値: Infinity (WASM仕様: 無の反転として Infinity が返る)
 

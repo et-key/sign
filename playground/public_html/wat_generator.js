@@ -175,6 +175,7 @@ export class WatGenerator {
     (local $f f64)
     (local $g f64)
     (local $f_res f64)
+    (local $new_ctx_ptr i32)
 
     local.get $ctx
     call $f64_to_ptr
@@ -198,17 +199,23 @@ export class WatGenerator {
     f64.load offset=8
     local.set $g
 
+    i32.const 16
+    call $alloc
+    local.set $new_ctx_ptr
+    local.get $new_ctx_ptr
     local.get $arg
-
+    f64.store offset=0
+    local.get $new_ctx_ptr
     local.get $f
     i64.reinterpret_f64
     i64.const 0xFFFFFFFF
     i64.and
     i32.wrap_i64
     call $ptr_to_f64
+    f64.store offset=8
+    local.get $new_ctx_ptr
+    call $ptr_to_f64
     
-    call $cons
-
     local.get $f
     i64.reinterpret_f64
     i64.const 32
@@ -217,16 +224,22 @@ export class WatGenerator {
     call_indirect (type $closure_sig)
     local.set $f_res
 
+    i32.const 16
+    call $alloc
+    local.set $new_ctx_ptr
+    local.get $new_ctx_ptr
     local.get $f_res
-
+    f64.store offset=0
+    local.get $new_ctx_ptr
     local.get $g
     i64.reinterpret_f64
     i64.const 0xFFFFFFFF
     i64.and
     i32.wrap_i64
     call $ptr_to_f64
-    
-    call $cons
+    f64.store offset=8
+    local.get $new_ctx_ptr
+    call $ptr_to_f64
     
     local.get $g
     i64.reinterpret_f64
@@ -737,6 +750,148 @@ export class WatGenerator {
     local.get $list
   )`);
 
+    // ⚡ 11. Range List Builder (中置 ~ の実体：A ~ B)
+    this.emit(`
+  (func $list_range (param $start f64) (param $end f64) (result f64)
+    (local $list f64)
+    (local $curr f64)
+    (local $step f64)
+
+    ;; startとendの大小関係でstep（1.0 または -1.0）を決める
+    local.get $start
+    local.get $end
+    f64.gt
+    if
+      f64.const -1.0
+      local.set $step
+    else
+      f64.const 1.0
+      local.set $step
+    end
+
+    ;; 空リスト(nan)から構築を開始
+    f64.const nan
+    local.set $list
+
+    ;; 末尾(end)から逆順に処理していく
+    local.get $end
+    local.set $curr
+
+    (block $break
+      (loop $loop
+        ;; curr を先頭に cons する
+        local.get $curr
+        local.get $list
+        call $cons
+        local.set $list
+
+        ;; curr == start に到達したらループを抜ける
+        local.get $curr
+        local.get $start
+        f64.eq
+        br_if $break
+
+        ;; curr = curr - step (一つ前の値に戻る)
+        local.get $curr
+        local.get $step
+        f64.sub
+        local.set $curr
+
+        br $loop
+      )
+    )
+    local.get $list
+  )`);
+
+    // ===== ⚡ここから追加 (デモ版用: 有限範囲リスト構築関数群) =====
+    this.emit(`
+  (func $list_range_demo_add (param $curr f64) (param $step f64) (param $end f64) (result f64)
+    local.get $step
+    f64.const 0.0
+    f64.eq
+    if
+      f64.const nan
+      return
+    end
+    local.get $step
+    f64.const 0.0
+    f64.gt
+    if (result i32)
+      local.get $curr
+      local.get $end
+      f64.gt
+    else
+      local.get $curr
+      local.get $end
+      f64.lt
+    end
+    if
+      f64.const nan
+      return
+    end
+    local.get $curr
+    local.get $curr
+    local.get $step
+    f64.add
+    local.get $step
+    local.get $end
+    call $list_range_demo_add
+    call $cons
+  )
+
+  (func $list_range_demo_mul (param $curr f64) (param $step f64) (param $end f64) (result f64)
+    local.get $step
+    f64.const 1.0
+    f64.eq
+    if
+      f64.const nan
+      return
+    end
+    local.get $step
+    f64.const 1.0
+    f64.gt
+    if (result i32)
+      local.get $curr
+      local.get $end
+      f64.gt
+    else
+      local.get $curr
+      local.get $end
+      f64.lt
+    end
+    if
+      f64.const nan
+      return
+    end
+    local.get $curr
+    local.get $curr
+    local.get $step
+    f64.mul
+    local.get $step
+    local.get $end
+    call $list_range_demo_mul
+    call $cons
+  )
+
+  (func $list_range_demo_pow (param $curr f64) (param $step f64) (param $end f64) (result f64)
+    local.get $curr
+    local.get $end
+    f64.gt
+    if
+      f64.const nan
+      return
+    end
+    local.get $curr
+    local.get $curr
+    local.get $step
+    call $math_pow
+    local.get $step
+    local.get $end
+    call $list_range_demo_pow
+    call $cons
+  )`);
+    // ===== ⚡ここまで追加 =====
+
     this.emit('  (func $main (export "main") (result f64)');
 
     // ★ 追加：変数の二重宣言を絶対に防ぐガード
@@ -849,6 +1004,38 @@ export class WatGenerator {
     }
 
     switch (node.type) {
+      // ===== ⚡ここから追加 =====
+      case 'RangeDemo':
+        this.visit(node.start);
+
+        // 演算子の意味に合わせてステップ値を前処理する
+        if (node.op === '~/') {
+          this.emit(`    f64.const 1.0`);
+          this.visit(node.step);
+          this.emit(`    f64.div`); // step = 1.0 / step
+        } else if (node.op === '~-') {
+          this.emit(`    f64.const 0.0`);
+          this.visit(node.step);
+          this.emit(`    f64.sub`); // step = 0.0 - step
+        } else {
+          this.visit(node.step);
+        }
+
+        this.visit(node.end);
+
+        // 変化規則に応じて呼び出すWASM関数を切り替える
+        if (node.op === '~*' || node.op === '~/') {
+          this.emit(`    call $list_range_demo_mul`);
+        } else if (node.op === '~^') {
+          this.emit(`    call $list_range_demo_pow`);
+        } else {
+          this.emit(`    call $list_range_demo_add`);
+        }
+
+        if (this.typeStack) this.typeStack.push({ type: 'List' });
+        return;
+      // ===== ⚡ここまで追加 =====
+
       // ⚡ =========================================================
       // ⚡ 追加: ブロック(改行)の順次実行と平坦なリスト化(辞書構築)
       // ⚡ =========================================================
@@ -1464,6 +1651,10 @@ export class WatGenerator {
         }
         break;
       case '-': this.emit(`    f64.sub`); break;
+      case '~':
+        this.emit(`    call $list_range`);
+        if (this.typeStack) this.typeStack.push({ type: 'List' });
+        break;
       case '*': this.emit(`    f64.mul`); break;
       case '/': this.emit(`    f64.div`); break;
       case '^':
@@ -1948,21 +2139,31 @@ export class WatGenerator {
       this.emit(`    local.set $tmp_r`); // arg
       this.emit(`    local.set $tmp_l`); // func
 
-      // 1. 実引数 (arg) を積む
-      this.emit(`    local.get $tmp_r`);
+      // 1. ctx用のメモリを強制確保 (16バイト)
+      this.emit(`    i32.const 16`);
+      this.emit(`    call $alloc`);
+      this.emit(`    local.set $tmp_ptr`);
 
-      // 2. 関数の環境ポインタ (env) を積んで NaN-Boxing する
+      // 2. arg を offset=0 に保存
+      this.emit(`    local.get $tmp_ptr`);
+      this.emit(`    local.get $tmp_r`);
+      this.emit(`    f64.store offset=0`);
+
+      // 3. env を抽出して offset=8 に保存
+      this.emit(`    local.get $tmp_ptr`);
       this.emit(`    local.get $tmp_l`);
       this.emit(`    i64.reinterpret_f64`);
       this.emit(`    i64.const 0xFFFFFFFF`);
       this.emit(`    i64.and`);
-      this.emit(`    i32.wrap_i64`);        // ⚡ 修正
-      this.emit(`    call $ptr_to_f64`);   // ⚡ 修正
+      this.emit(`    i32.wrap_i64`);
+      this.emit(`    call $ptr_to_f64`);
+      this.emit(`    f64.store offset=8`);
 
-      // 3. arg と env を cons して１つのリスト(ctx)にする！
-      this.emit(`    call $cons`);
+      // 4. 構築した ctx ポインタをスタックに積む
+      this.emit(`    local.get $tmp_ptr`);
+      this.emit(`    call $ptr_to_f64`);
 
-      // 4. 関数インデックスを取り出して間接呼び出し
+      // 5. 関数インデックスを取り出して間接呼び出し
       this.emit(`    local.get $tmp_l`);
       this.emit(`    i64.reinterpret_f64`);
       this.emit(`    i64.const 32`);
