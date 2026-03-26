@@ -363,7 +363,16 @@ const parseAtom = (tokens) => {
 	if (!token) return null;
 
 	if (Array.isArray(token)) {
-		return parseBlock(token);
+		const blockAst = parseBlock(token);
+
+		// ⚡ 修正: カンマ結合(リスト)やブロックの場合、カッコの境界情報として group ノードでラップする
+		// これにより [5, 6] が外側のリストと同化(フラット化)するのを完全に防ぎます。
+		// ※セクション構文(ラムダ)や単独の演算はラップせず通すため、パイプライン等は壊れません！
+		if (blockAst && (blockAst.type === 'block' || (blockAst.type === 'infix' && blockAst.op === ','))) {
+			return { type: 'group', body: blockAst };
+		}
+
+		return blockAst;
 	}
 
 	if (typeof token !== 'string') {

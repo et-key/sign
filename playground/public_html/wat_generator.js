@@ -559,6 +559,14 @@ export class WatGenerator {
     (local $current_key f64)
 
     local.get $alist
+    call $is_ptr
+    i32.eqz
+    if
+      f64.const nan
+      return
+    end
+
+    local.get $alist
     call $f64_to_ptr
     local.set $current_node
 
@@ -647,6 +655,14 @@ export class WatGenerator {
     (local $current_node i32)
     (local $pair_ptr i32)
     (local $current_key f64)
+
+    local.get $alist
+    call $is_ptr
+    i32.eqz
+    if
+      local.get $val
+      return
+    end
 
     local.get $alist
     call $f64_to_ptr
@@ -1787,6 +1803,14 @@ export class WatGenerator {
       } else if (n.type === 'apply' || n.type === 'call') {
         traverse(n.func || n.fn || n.callee || n.left, bound);
         traverse(n.arg || n.args || n.right, bound);
+      } else {
+        // ⚡ 追加: group など未知のノード内にある変数も、漏れなくキャプチャする！
+        ['left', 'right', 'expr', 'body', 'content', 'start', 'step', 'end', 'func', 'arg'].forEach(key => {
+          if (n[key] && typeof n[key] === 'object') {
+            if (Array.isArray(n[key])) n[key].forEach(c => traverse(c, bound));
+            else traverse(n[key], bound);
+          }
+        });
       }
     };
 
@@ -1803,7 +1827,13 @@ export class WatGenerator {
     let headName = null;
     let tailName = null;
     let actualBody = node.right;
-    let paramName = null;
+
+    // ⚡ 修正: 通常のラムダの引数名(paramName)を確実に取得する
+    let pName = node.left && (node.left.name || node.left.value || node.left.text);
+    if (!pName && node.left && node.left.type === 'prefix' && node.left.op === '~') {
+      pName = node.left.expr && (node.left.expr.name || node.left.expr.value || node.left.expr.text);
+    }
+    let paramName = pName ? (pName.startsWith('$') ? pName : '$' + pName) : '$tmp_arg';
 
     // ==========================================
     // ⚡ 1. 構造分解 ( a ~b ? ... ) の検知
@@ -1823,21 +1853,20 @@ export class WatGenerator {
       }
     }
 
-    if (!isDestructuring) {
-      let pName = node.left.name || node.left.value || node.left.text;
-      if (!pName && node.left.type === 'prefix' && node.left.op === '~') {
-        pName = node.left.expr.name || node.left.expr.value || node.left.expr.text;
-      }
-      paramName = pName.startsWith('$') ? pName : '$' + pName;
+    // ⚡ 2. キャプチャ解析
+    let allReferencedVars;
+    if (isDestructuring) {
+      allReferencedVars = this.getFreeVariables(actualBody, [headName, tailName]);
+    } else {
+      allReferencedVars = this.getFreeVariables(actualBody, [paramName]);
     }
 
-    // ⚡ 2. キャプチャ解析
-    let freeVars;
-    if (isDestructuring) {
-      freeVars = this.getFreeVariables(actualBody, [headName, tailName]);
-    } else {
-      freeVars = this.getFreeVariables(actualBody, [paramName]);
-    }
+    // ⚡ 修正: キャプチャ(環境に保存)するのは、現在のスコープ(外側)に実際に存在する変数のみ！
+    // 辞書のキー等として使われた未定義変数を外側で get してWASMエラーになるのを防ぐ
+    let freeVars = allReferencedVars.filter(v => {
+      let raw = v.startsWith('$') ? v.slice(1) : v;
+      return this.locals.includes(raw) || this.locals.includes(v);
+    });
 
     // ==========================================
     // ⚡ [CALLER] 外側の環境（クロージャ）の確保
@@ -1885,7 +1914,8 @@ export class WatGenerator {
     const prevTypeStack = this.typeStack;
 
     this.code = [];
-    this.locals = [paramName, ...freeVars];
+    // ⚡ 修正: this.locals には関数内で言及される全ての変数を入れ、未定義エラーを防ぐ
+    this.locals = [paramName, ...allReferencedVars];
     if (isDestructuring) {
       this.locals.push(headName, tailName);
     }
@@ -1896,19 +1926,28 @@ export class WatGenerator {
     this.emit(`    (local $tmp_r f64)`);
     this.emit(`    (local $tmp_cond f64)`);
     this.emit(`    (local $tmp_ptr i32)`);
-
     this.emit(`    (local $tmp_match_target f64)`);
 
-    this.emit(`    (local ${paramName} f64)`);
+    // ⚡ 修正: 重複を排除してローカル変数を一括宣言する
+    let declaredLambdaLocals = new Set();
+    const addLocal = (name) => {
+      let wasmName = name.startsWith('$') ? name : '$' + name;
+      if (!declaredLambdaLocals.has(wasmName)) {
+        this.emit(`    (local ${wasmName} f64)`);
+        declaredLambdaLocals.add(wasmName);
+      }
+    };
+
+    addLocal(paramName);
     if (isDestructuring) {
-      this.emit(`    (local ${headName} f64)`);
-      this.emit(`    (local ${tailName} f64)`);
+      addLocal(headName);
+      addLocal(tailName);
     }
     this.emit(`    (local $env f64)`);
     this.emit(`    (local $ctx_ptr i32)`);
-    freeVars.forEach(v => {
-      this.emit(`    (local ${v} f64)`);
-    });
+
+    // ⚡ 修正: 関数内で言及された全ての変数をダミー宣言してWASMエラーを防ぐ
+    allReferencedVars.forEach(v => addLocal(v));
 
     this.emit(`    local.get $ctx`);
     this.emit(`    call $f64_to_ptr`);
@@ -1958,15 +1997,18 @@ export class WatGenerator {
       this.emit(`    end`);
     }
 
-    const isMatchBlock = actualBody && actualBody.type === 'block' &&
-      actualBody.body && actualBody.body.length > 0 &&
-      actualBody.body[0].type === 'infix' && actualBody.body[0].op === ':';
+    // ⚡ 修正: group が被っている場合は中身(body)を対象にする
+    let checkBody = actualBody && actualBody.type === 'group' ? actualBody.body : actualBody;
+
+    const isMatchBlock = checkBody && checkBody.type === 'block' &&
+      checkBody.body && checkBody.body.length > 0 &&
+      checkBody.body[0].type === 'infix' && checkBody.body[0].op === ':';
 
     if (isMatchBlock) {
       this.emit(`    (block $match_exit (result f64)`);
 
-      for (let i = 0; i < actualBody.body.length; i++) {
-        const branch = actualBody.body[i];
+      for (let i = 0; i < checkBody.body.length; i++) {
+        const branch = checkBody.body[i];
 
         if (branch.type === 'infix' && branch.op === ':') {
           this.visit(branch.left);
@@ -2016,8 +2058,11 @@ export class WatGenerator {
     // ==========================================
     // ⚡ [究極の改善] Hardware-Isomorphic Stream Match Block
     // ==========================================
+    // ⚡ 修正: group が被っている場合は中身(body)を対象にする
+    let rightNode = node.right && node.right.type === 'group' ? node.right.body : node.right;
+
     const isStreamMatch = node.left && node.left.type === 'postfix' && node.left.op === '~' &&
-      node.right && (node.right.type === 'block' || (node.right.type === 'infix' && node.right.op === ':'));
+      rightNode && (rightNode.type === 'block' || (rightNode.type === 'infix' && rightNode.op === ':'));
 
     if (isStreamMatch) {
       this.visit(node.left.expr); // ターゲット(token)を評価
@@ -2026,7 +2071,7 @@ export class WatGenerator {
       this.emit(`    local.set $tmp_match_target`);
       this.emit(`    (block $stream_match_exit (result f64)`);
 
-      const branches = node.right.type === 'block' ? (node.right.body || []) : [node.right];
+      const branches = rightNode.type === 'block' ? (rightNode.body || []) : [rightNode];
 
       for (let i = 0; i < branches.length; i++) {
         const branch = branches[i];
