@@ -603,7 +603,7 @@
 						const bytes = new Uint8Array(wasmMemory.buffer, lower32 + 4, len);
 						return "`" + new TextDecoder('utf-8').decode(bytes) + "`";
 					}
-					if (upper32 === 0x7FF90000) return `$0x${lower32.toString(16).padStart(4, '0')}`;
+					if (upper32 === 0x7FF90000) return `0x${lower32.toString(16).padStart(4, '0')}`;
 					if (upper32 === 0x7FFA0000) return `'${String.fromCodePoint(lower32)}'`;
 					if (upper32 > 0 && upper32 < 10000 && lower32 % 8 === 0) return `<Function: ${upper32}>`;
 
