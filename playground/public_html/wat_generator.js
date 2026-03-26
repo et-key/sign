@@ -1310,32 +1310,6 @@ export class WatGenerator {
     const op = node.op || node.value;
     const operand = node.right || node.left || node.expr || node.argument || node.operand || node.base || node.value;
 
-    // ⚡ 評価される前に「対象が変数」ならその箱（ポインタ）を返す
-    if (op === '$' && (operand.type === 'identifier' || operand.type === 'variable')) {
-      const vName = operand.name || operand.value || operand.text;
-      const wasmVarName = vName.startsWith('$') ? vName : '$' + vName;
-
-      // 未割り当ての場合は先に箱を作る
-      this.emit(`    local.get ${wasmVarName}`);
-      this.emit(`    f64.const 0`);
-      this.emit(`    f64.eq`);
-      this.emit(`    if`);
-      this.emit(`      i32.const 8`);
-      this.emit(`      call $alloc`);
-      this.emit(`      f64.convert_i32_u`);
-      this.emit(`      local.set ${wasmVarName}`);
-      this.emit(`    end`);
-
-      // ポインタタグを付けて返す
-      this.emit(`    local.get ${wasmVarName}`);
-      this.emit(`    i32.trunc_f64_u`);
-      this.emit(`    i64.extend_i32_u`);
-      this.emit(`    i64.const 0x7FF9000000000000`);
-      this.emit(`    i64.or`);
-      this.emit(`    f64.reinterpret_i64`);
-      return;
-    }
-
     this.visit(operand);
 
     switch (op) {
