@@ -46,9 +46,15 @@ export class ASTNormalizer {
   // パイプラインの中間結果を次の関数の引数として渡すために使用します
   extractListElements(node) {
     if (!node) return [];
+
+    // ⚡ Map展開などで生成されたカンマ連鎖を確実にフラットな配列に分解する
     if (node.type === 'infix' && node.op === ',') {
+      if (node.right && (node.right.value === 'nan' || node.right.name === 'nan' || isUnitNode(node.right))) {
+        return [node.left];
+      }
       return [node.left, ...this.extractListElements(node.right)];
     }
+
     if (['BlockSeq', 'SequenceNode', 'ProductNode', 'CommaNode'].includes(node.type)) {
       if (node.right && (node.right.value === 'nan' || node.right.name === 'nan' || isUnitNode(node.right))) {
         return [node.left];
@@ -86,8 +92,13 @@ export class ASTNormalizer {
     if (node.type === 'infix' && node.op === ':') {
       let rightNode;
 
-      if (node.right && node.right.type === 'block') {
-        let body = node.right.body || [];
+      // ⚡ 修正: group で保護されているブロックも透過して検知する
+      let actualRight = node.right;
+      let isGroupedBlock = actualRight && actualRight.type === 'group' && actualRight.body && actualRight.body.type === 'block';
+      let blockNode = isGroupedBlock ? actualRight.body : (actualRight && actualRight.type === 'block' ? actualRight : null);
+
+      if (blockNode) {
+        let body = blockNode.body || [];
         if (body.length === 0) {
           rightNode = { type: 'number', value: 'nan' };
         } else {
@@ -97,7 +108,8 @@ export class ASTNormalizer {
             let elem = this.normalize(body[i], true, true);
             listNode = { type: 'infix', op: ',', left: elem, right: listNode };
           }
-          rightNode = listNode;
+          // 保護グループを維持したままリストを返す
+          rightNode = isGroupedBlock ? { type: 'group', body: listNode } : listNode;
         }
       } else {
         // ⚡ 右辺の評価のみ isBindingRight = true として伝播
@@ -142,7 +154,7 @@ export class ASTNormalizer {
         if (!n) return { found: false };
         if (n.type === 'postfix' && rangeOps.includes(n.op)) {
           let inner = n.expr || n.left;
-          let isSpread = inner && (inner.type === 'block' || inner.type === 'array' || (inner.type === 'infix' && inner.op === ','));
+          let isSpread = inner && (inner.type === 'block' || inner.type === 'array' || inner.type === 'group' || (inner.type === 'infix' && inner.op === ','));
           if (isSpread) return { found: false };
           return { stripped: inner, found: true, op: n.op };
         }
@@ -176,8 +188,9 @@ export class ASTNormalizer {
       }
 
       if (isRange) {
-        let isPatternMatch = (rangeRight && (rangeRight.type === 'block' || (rangeRight.type === 'infix' && rangeRight.op === ':')));
-        let isListLiteral = (rangeLeft && (rangeLeft.type === 'block' || rangeLeft.type === 'array' || (rangeLeft.type === 'infix' && rangeLeft.op === ',')));
+        // ⚡ 修正: group もパターンマッチの有効なブロックとして認識させる！
+        let isPatternMatch = (rangeRight && (rangeRight.type === 'block' || rangeRight.type === 'group' || (rangeRight.type === 'infix' && rangeRight.op === ':')));
+        let isListLiteral = (rangeLeft && (rangeLeft.type === 'block' || rangeLeft.type === 'array' || rangeLeft.type === 'group' || (rangeLeft.type === 'infix' && rangeLeft.op === ',')));
 
         if (!isPatternMatch && !isListLiteral) {
           let startNode, stepNode;
@@ -213,17 +226,18 @@ export class ASTNormalizer {
       // ===== ⚡ここまで追加 =====
 
       // ⚡ [修正] パーサーが [ ] を Unit + Block として出力したものを検知
-      if (f && (f.type === 'unit' || (f.type === 'identifier' && f.value === 'Unit') || f.value === 'nan') && a && a.type === 'block') {
-        let body = a.body || [];
+      let isGroupedA = a && a.type === 'group' && a.body && a.body.type === 'block';
+      let actualA = isGroupedA ? a.body : a;
+      if (f && (f.type === 'unit' || (f.type === 'identifier' && f.value === 'Unit') || f.value === 'nan') && actualA && actualA.type === 'block') {
+        let body = actualA.body || [];
         if (body.length === 0) return { type: 'number', value: 'nan' };
 
         let listNode = { type: 'number', value: 'nan' };
         for (let i = body.length - 1; i >= 0; i--) {
-          // ブロック内を辞書コンテキスト(true)としてコンスセルの連鎖に変換
           let elem = this.normalize(body[i], true);
           listNode = { type: 'infix', op: ',', left: elem, right: listNode };
         }
-        return listNode;
+        return isGroupedA ? { type: 'group', body: listNode } : listNode;
       }
 
       let flattened = this.flattenApply(node);
@@ -470,17 +484,33 @@ export class ASTNormalizer {
     }
 
     // ==========================================
-    // 1. 配列(ブロック)の正規化処理
+    // 1. 配列(ブロック)の正規化処理（カンマへの還元と表現の保護）
     // ==========================================
     if (node.type === 'array' || node.type === 'list') {
       let elements = node.elements || node.items || node.value || [];
       if (elements.length === 0) return { type: 'number', value: 'nan' };
-      let result = this.normalize(elements[elements.length - 1], false);
-      for (let i = elements.length - 2; i >= 0; i--) {
-        // ⚡ 修正: 'infix', op: ',' ではなく専用の 'BlockSeq' にする！
-        result = { type: 'BlockSeq', left: this.normalize(elements[i], false), right: result };
-      }
-      return result;
+
+      // array は単なるカンマ結合の糖衣構文として扱い、再帰的に infix ',' の処理に委譲する
+      let buildComma = (index) => {
+        if (index === elements.length - 1) return elements[index];
+        return {
+          type: 'infix',
+          op: ',',
+          left: elements[index],
+          right: buildComma(index + 1)
+        };
+      };
+
+      let fakeAst = buildComma(0);
+      let normalized = this.normalize(fakeAst, isDictContext, isBindingRight);
+
+      // ⚡ ユーザーの「表現（カッコで囲んだという意図）」を推し量り、
+      // ⚡ フラット化の波に飲み込まれないよう group ノードで境界を保護する！
+      return {
+        type: 'group',
+        body: normalized,
+        inferredType: normalized.inferredType || { type: 'List' }
+      };
     }
 
     ['left', 'right', 'cond', 'expr', 'argument', 'operand', 'base', 'body', 'content', 'value'].forEach(key => {
