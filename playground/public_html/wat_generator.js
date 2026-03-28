@@ -134,6 +134,13 @@ export class WatGenerator {
     (local $res f64)
     (local $i f64)
     local.get $n
+    local.get $n
+    f64.ne
+    if
+      f64.const nan
+      return
+    end
+    local.get $n
     f64.const 0.0
     f64.lt
     if f64.const nan return end
