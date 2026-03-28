@@ -244,6 +244,31 @@ export class ASTNormalizer {
       let func = flattened.func;
       let args = flattened.args;
 
+      // 👇=== 追加: funcがプレースホルダーを伴う単項演算子ならラムダ化する (!_, _!) ===
+      let isPrefixPh = func && func.type === 'prefix' && func.expr?.value === '_';
+      let isPostfixPh = func && func.type === 'postfix' && func.expr?.value === '_';
+
+      if (isPrefixPh || isPostfixPh) {
+        let phName = `$ph_${Math.floor(Math.random() * 1000000)}`;
+        let lambdaFunc = {
+          type: 'infix',
+          op: '?',
+          left: { type: 'identifier', value: phName }, // ※プロパティを value に修正
+          right: {
+            type: func.type,
+            op: func.op,
+            expr: { type: 'identifier', value: phName }
+          }
+        };
+        // 置換したラムダ関数で Apply ノードを再構築
+        let applyNode = lambdaFunc;
+        for (let arg of args) {
+          applyNode = { type: 'apply', func: applyNode, arg: arg };
+        }
+        return this.normalize(applyNode, isDictContext, isBindingRight);
+      }
+      // 👆===========================================================================
+
       // ==========================================
       // ⚡ 修正：演算子の優先順位逆転（汎用ツリー回転）
       // 関数と引数のすべての要素をフラットに並べ、
