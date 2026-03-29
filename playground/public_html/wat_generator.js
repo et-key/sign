@@ -779,8 +779,6 @@ export class WatGenerator {
     (local $list f64)
     (local $curr f64)
     (local $step f64)
-
-    ;; startとendの大小関係でstep（1.0 または -1.0）を決める
     local.get $start
     local.get $end
     f64.gt
@@ -791,30 +789,21 @@ export class WatGenerator {
       f64.const 1.0
       local.set $step
     end
-
-    ;; 空リスト(nan)から構築を開始
     f64.const nan
     local.set $list
-
-    ;; 末尾(end)から逆順に処理していく
     local.get $end
     local.set $curr
 
     (block $break
       (loop $loop
-        ;; curr を先頭に cons する
         local.get $curr
         local.get $list
         call $cons
         local.set $list
-
-        ;; curr == start に到達したらループを抜ける
         local.get $curr
         local.get $start
         f64.eq
         br_if $break
-
-        ;; curr = curr - step (一つ前の値に戻る)
         local.get $curr
         local.get $step
         f64.sub
@@ -1246,13 +1235,17 @@ export class WatGenerator {
 
       case 'identifier':
       case 'variable':
-        const varName = node.name || node.value || node.text;
+        // ⚡ 修正: node.value などが数値(Number)で渡ってきても文字列にキャストする
+        const varName = String(node.name || node.value || node.text);
+
         if (varName === '_' || varName === 'nan') {
           this.emit(`    f64.const nan`);
-          if (this.typeStack) this.typeStack.push({ type: 'Unit' });
+          if (this.typeStack) this.typeStack.push({ type: 'Float' });
         } else {
+          // キャスト済みなので startsWith が安全に使える
           const wasmVarName = varName.startsWith('$') ? varName : '$' + varName;
 
+          // ⚡ 修正: マッチコンテキスト(~)の中にいる場合は、まず辞書から値を探す
           if (this.currentMatchTarget) {
             this.emit(`    local.get ${this.currentMatchTarget}`);
 
@@ -1261,20 +1254,34 @@ export class WatGenerator {
             if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
             this.emit(`    call $dict_get`);
-            this.emit(`    local.set $tmp_cond`);
 
+            this.emit(`    local.set $tmp_cond`);
             this.emit(`    local.get $tmp_cond`);
-            this.emit(`    call $is_truthy`);
+            this.emit(`    local.get $tmp_cond`);
+            this.emit(`    f64.eq`); // 値が NaN でないか（見つかったか）判定
             this.emit(`    if (result f64)`);
-            this.emit(`      local.get $tmp_cond`);
+            this.emit(`      local.get $tmp_cond`); // 辞書から見つかった値を使う
             this.emit(`    else`);
-            this.emit(`      local.get ${wasmVarName}`);
+            this.emit(`      local.get ${wasmVarName}`); // 見つからなければ通常のローカル変数にフォールバック
             this.emit(`    end`);
           } else {
+            // 通常の変数呼び出し
             this.emit(`    local.get ${wasmVarName}`);
           }
 
-          let savedType = this.typeEnv[varName] || { type: 'Unknown' };
+          // ⚡ 修正: wasmVarName($付き) と varName の両方で型環境を検索
+          let savedType = null;
+          if (this.typeEnv) {
+            savedType = this.typeEnv[wasmVarName] || this.typeEnv[varName];
+          }
+          if (!savedType && node.inferredType) {
+            savedType = node.inferredType;
+          }
+          // Signでは未知の変数は高階関数の可能性が高いため Function として扱う
+          if (!savedType) {
+            savedType = { type: 'Function', returnType: { type: 'Any' } };
+          }
+
           if (this.typeStack) this.typeStack.push(savedType);
         }
         break;
@@ -1519,7 +1526,8 @@ export class WatGenerator {
       if (left && (left.type === 'identifier' || left.type === 'variable') && this.currentMatchTarget) {
         this.emit(`    local.get ${this.currentMatchTarget}`);
 
-        let rawName = left.name || left.value || left.text;
+        // ⚡ 修正: String() で確実に文字列キャストする
+        let rawName = String(left.name || left.value || left.text);
         rawName = rawName.startsWith('$') ? rawName.slice(1) : rawName;
         this.visit({ type: 'string', value: '\`' + rawName + '\`' });
         if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
@@ -1546,55 +1554,42 @@ export class WatGenerator {
     }
 
     if (op === ':') {
-      let isVariableBinding = false;
-      let lName = "";
+      // ⚡ 修正: 左辺が本当に「変数(identifier)」であるか確認し、数値の場合は変数名として扱わない
+      let isVar = left && (left.type === 'identifier' || left.type === 'variable');
+      let rawVal = isVar ? (left.name || left.value || left.text) : null;
+      let varName = rawVal != null ? String(rawVal) : null;
+      let wasmName = varName ? (varName.startsWith('$') ? varName : '$' + varName) : null;
 
-      if (left && (left.type === 'identifier' || left.type === 'variable')) {
-        lName = left.name || left.value || left.text;
-        const checkName = lName.startsWith('$') ? lName.slice(1) : lName;
-        if (this.locals && this.locals.includes(checkName)) {
-          isVariableBinding = true;
-        }
+      // ⚡ 事前登録: 自己再帰のために、中身を評価する「前」にカリー化シグネチャを登録する
+      if (wasmName && right && right.type === 'infix' && right.op === '?') {
+        right.assignedName = wasmName; // 自己参照キャプチャ用
+        if (!this.typeEnv) this.typeEnv = {};
+
+        // ASTを先読みして Function -> Function -> Any のシグネチャを構築
+        const buildFuncType = (astNode) => {
+          if (astNode && astNode.type === 'infix' && astNode.op === '?') {
+            return { type: 'Function', returnType: buildFuncType(astNode.right) };
+          }
+          return { type: 'Any' };
+        };
+        this.typeEnv[wasmName] = buildFuncType(right);
       }
 
-      if (isVariableBinding) {
-        const wasmVarName = lName.startsWith('$') ? lName : '$' + lName;
+      this.visit(right);
+      let rhsType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Any' };
 
-        // ⚡ [Letrec] 右辺がラムダ(?)なら、事前に名前と型(Function)を登録しておく
-        if (right && right.type === 'infix' && right.op === '?') {
-          right.assignedName = wasmVarName;
-          this.typeEnv[lName] = { type: 'Function' };
-        }
-
-        this.visit(right);
-        if (this.typeStack && this.typeStack.length > 0) {
-          this.typeEnv[lName] = this.typeStack[this.typeStack.length - 1];
-        }
+      if (wasmName) {
+        if (!this.typeEnv) this.typeEnv = {};
+        this.typeEnv[wasmName] = rhsType; // 実際の評価結果で正確に上書き
 
         this.emit(`    local.set $tmp_l`);
         this.emit(`    local.get $tmp_l`);
-        this.emit(`    local.set ${wasmVarName}`);
+        this.emit(`    local.set ${wasmName}`);
         this.emit(`    local.get $tmp_l`);
-        return;
-      } else {
-        // ⚡ ペアの生成（辞書の中身 x : 5 など）
-        if (left && (left.type === 'identifier' || left.type === 'variable')) {
-          lName = left.name || left.value || left.text;
-          this.visit({ type: 'string', value: '\`' + lName + '\`' });
-        } else {
-          this.visit(left);
-        }
-
-        this.visit(right);
-        this.emit(`    call $cons`);
-        this.emit(`    f64.const nan`);
-        this.emit(`    call $cons`);
-
-        if (this.typeStack) {
-          this.typeStack.push({ type: 'Dict' });
-        }
-        return;
       }
+
+      if (this.typeStack) this.typeStack.push(rhsType);
+      return;
     }
 
     // ★ フラットなif文による安定した論理評価
@@ -1992,17 +1987,49 @@ export class WatGenerator {
         const branch = checkBody.body[i];
 
         if (branch.type === 'infix' && branch.op === ':') {
-          this.visit(branch.left);
-          if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+          let isWildcard = false;
+          let isComparison = false;
 
-          this.emit(`      local.get ${paramName}`);
-          this.emit(`      call $val_eq`);
-          this.emit(`      if`);
+          if (branch.left) {
+            if (branch.left.type === 'infix' && ['<', '>', '=', '!=', '<=', '>='].includes(branch.left.op)) {
+              isComparison = true;
+            }
+            const leftVal = branch.left.value || branch.left.name || branch.left.text;
+            if (leftVal === '_' || leftVal === 'nan') {
+              isWildcard = true;
+            }
+          }
 
-          this.visit(branch.right);
-          if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
-          this.emit(`      br $match_exit`);
-          this.emit(`      end`);
+          if (isWildcard) {
+            this.visit(branch.right);
+            if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+            this.emit(`      br $match_exit`);
+          } else if (isComparison) {
+            this.visit(branch.left);
+            if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+
+            // ⚡ 比較演算子は f64.eq を使い、NaNでない場合のみ成功とする
+            this.emit(`      local.set $tmp_cond`);
+            this.emit(`      local.get $tmp_cond`);
+            this.emit(`      local.get $tmp_cond`);
+            this.emit(`      f64.eq`);
+            this.emit(`      if`);
+
+            this.visit(branch.right);
+            if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+            this.emit(`      br $match_exit`);
+            this.emit(`      end`);
+          } else {
+            this.visit(branch.left);
+            if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+            this.emit(`      local.get ${paramName}`);
+            this.emit(`      call $val_eq`);
+            this.emit(`      if`);
+            this.visit(branch.right);
+            if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
+            this.emit(`      br $match_exit`);
+            this.emit(`      end`);
+          }
         } else {
           this.visit(branch);
           if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
@@ -2036,17 +2063,13 @@ export class WatGenerator {
   }
 
   compileSpace(node) {
-    // ==========================================
-    // ⚡ [究極の改善] Hardware-Isomorphic Stream Match Block
-    // ==========================================
-    // ⚡ 修正: group が被っている場合は中身(body)を対象にする
     let rightNode = node.right && node.right.type === 'group' ? node.right.body : node.right;
 
     const isStreamMatch = node.left && node.left.type === 'postfix' && node.left.op === '~' &&
       rightNode && (rightNode.type === 'block' || (rightNode.type === 'infix' && rightNode.op === ':'));
 
     if (isStreamMatch) {
-      this.visit(node.left.expr); // ターゲット(token)を評価
+      this.visit(node.left.expr);
       if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
       this.emit(`    local.set $tmp_match_target`);
@@ -2056,22 +2079,20 @@ export class WatGenerator {
 
       for (let i = 0; i < branches.length; i++) {
         const branch = branches[i];
-
-        // ⚡ このブロック内では未知の識別子を $tmp_match_target から読むようコンテキストを切り替え
+        // ⚡ 修正: マッチターゲットは上書きするが、null で消去はしない
         let prevTarget = this.currentMatchTarget;
         this.currentMatchTarget = '$tmp_match_target';
 
         if (branch.type === 'infix' && branch.op === ':') {
-          // ★ 静的ディスパッチ（型の推論）★
           let isMatchCase = false;
           let isWildcard = false;
+          let isComparison = false;
 
           if (branch.left) {
-            // 比較演算子は match_case
             if (branch.left.type === 'infix' && ['<', '>', '=', '!=', '<=', '>='].includes(branch.left.op)) {
               isMatchCase = true;
+              isComparison = true;
             }
-            // 左辺が _ や nan ならワイルドカード（デフォルトケース）
             const leftVal = branch.left.value || branch.left.name || branch.left.text;
             if (leftVal === '_' || leftVal === 'nan' || (branch.left.type === 'number' && isNaN(Number(leftVal)))) {
               isMatchCase = true;
@@ -2080,28 +2101,28 @@ export class WatGenerator {
           }
 
           if (isMatchCase) {
-            // ⚡ match_case (条件分岐・早期リターン)
             if (isWildcard) {
-              // ワイルドカードは無条件で右辺を評価してブロックを抜ける
               this.visit(branch.right);
               if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
               this.emit(`      br $stream_match_exit`);
-            } else {
+            } else if (isComparison) {
               this.visit(branch.left);
               if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
-              this.emit(`      call $is_truthy`);
+              this.emit(`      local.set $tmp_cond`);
+              this.emit(`      local.get $tmp_cond`);
+              this.emit(`      local.get $tmp_cond`);
+              this.emit(`      f64.eq`);
               this.emit(`      if`);
 
               this.visit(branch.right);
               if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
-              this.emit(`      br $stream_match_exit`); // 条件に合致したので抜ける
+              this.emit(`      br $stream_match_exit`);
               this.emit(`      end`);
             }
           } else {
-            // ⚡ Dict Init / Local Binding (Lens/Prism コンテキスト内の評価)
-            // 左辺が識別子なら文字列キーとして扱う（辞書生成の振る舞い）
+            // Dictionary property style
             if (branch.left.type === 'identifier' || branch.left.type === 'variable') {
               let keyName = branch.left.name || branch.left.value || branch.left.text;
               this.visit({ type: 'string', value: '\`' + keyName + '\`' });
@@ -2110,19 +2131,17 @@ export class WatGenerator {
             }
             this.visit(branch.right);
 
-            // Consでペアを作る（副作用として評価されるが、ブロックは抜けない！）
-            this.emit(`      call $cons`);
+            this.emit(`    call $cons`);
             if (i < branches.length - 1) {
-              this.emit(`      drop`); // 途中の評価ならWASMスタックから下ろす
+              this.emit(`      drop`);
             } else {
-              this.emit(`      br $stream_match_exit`); // 最後なら結果として返す
+              this.emit(`      br $stream_match_exit`);
             }
           }
         } else {
-          // 単なる式（Prismの # 操作など）
           this.visit(branch);
-          if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
 
+          if (this.typeStack && this.typeStack.length > 0) this.typeStack.pop();
           if (i === branches.length - 1) {
             this.emit(`      br $stream_match_exit`);
           } else {
@@ -2130,7 +2149,7 @@ export class WatGenerator {
           }
         }
 
-        // コンテキストを元に戻す
+        // ⚡ 修正: 元のコンテキストに戻す
         this.currentMatchTarget = prevTarget;
       }
 
@@ -2140,71 +2159,104 @@ export class WatGenerator {
       return;
     }
 
-    // ==========================================
-    // ⚡ [Implicit Sequence] 副作用の暗黙的シーケンス評価
-    // ==========================================
-    this.visit(node.left);
+    // ⚡ 純粋な関数適用(カリー化)のディスパッチ
+    this.visit(node.left || node.func);
     let leftType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Unknown' };
 
-    // ⚡ 追加: 左側が副作用(#など)なら、結果を捨てて次(右側)の式を評価する
     if (leftType.type === 'SideEffect') {
       this.emit(`    drop`);
-      this.visit(node.right);
+      this.visit(node.right || node.arg);
       return;
     }
 
-    this.visit(node.right);
+    this.visit(node.right || node.arg);
     let rightType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack.pop() : { type: 'Unknown' };
 
-    if (leftType.type === 'Function' && rightType.type === 'Function') {
-      this.emit(`    call $compose`);
-      // 合成された関数の戻り値は、左側の関数の戻り値になる
-      if (this.typeStack) this.typeStack.push({ type: 'Function', returnType: leftType.returnType });
+    // ⚡ 未知の型やAnyも、適用時は関数(Function)として強気に呼び出す！
+    const isLeftFunc = leftType.type === 'Function' || leftType.type === 'Any' || leftType.type === 'Unknown';
+    const isRightFunc = rightType.type === 'Function';
 
-    } else if (leftType.type === 'Function') {
+    if (isLeftFunc && isRightFunc) {
+      this.emit(`    call $compose`);
+      if (this.typeStack) this.typeStack.push({ type: 'Function', returnType: leftType.returnType || { type: 'Any' } });
+
+    } else if (isLeftFunc) {
       this.emit(`    local.set $tmp_r`); // arg
       this.emit(`    local.set $tmp_l`); // func
 
-      // 1. ctx用のメモリを強制確保 (16バイト)
-      this.emit(`    i32.const 16`);
-      this.emit(`    call $alloc`);
-      this.emit(`    local.set $tmp_ptr`);
-
-      // 2. arg を offset=0 に保存
-      this.emit(`    local.get $tmp_ptr`);
-      this.emit(`    local.get $tmp_r`);
-      this.emit(`    f64.store offset=0`);
-
-      // 3. env を抽出して offset=8 に保存
-      this.emit(`    local.get $tmp_ptr`);
-      this.emit(`    local.get $tmp_l`);
-      this.emit(`    i64.reinterpret_f64`);
-      this.emit(`    i64.const 0xFFFFFFFF`);
-      this.emit(`    i64.and`);
-      this.emit(`    i32.wrap_i64`);
-      this.emit(`    call $ptr_to_f64`);
-      this.emit(`    f64.store offset=8`);
-
-      // 4. 構築した ctx ポインタをスタックに積む
-      this.emit(`    local.get $tmp_ptr`);
-      this.emit(`    call $ptr_to_f64`);
-
-      // 5. 関数インデックスを取り出して間接呼び出し
+      // ⚡ 動的タグチェック: 左辺のタグ(上位16ビット)を取得して分岐
       this.emit(`    local.get $tmp_l`);
       this.emit(`    i64.reinterpret_f64`);
       this.emit(`    i64.const 32`);
       this.emit(`    i64.shr_u`);
       this.emit(`    i32.wrap_i64`);
-      this.emit(`    call_indirect (type $closure_sig)`);
+      this.emit(`    i32.const 0xFFFF0000`);
+      this.emit(`    i32.and`);
+      this.emit(`    local.set $tmp_ptr`); // タグを一時保存
 
-      let retType = leftType.returnType || { type: 'Float' };
+      // 1. 文字列(0x7FFB0000) または 文字(0x7FFA0000) の場合 -> str_concat
+      this.emit(`    local.get $tmp_ptr`);
+      this.emit(`    i32.const 0x7FFB0000`);
+      this.emit(`    i32.eq`);
+      this.emit(`    local.get $tmp_ptr`);
+      this.emit(`    i32.const 0x7FFA0000`);
+      this.emit(`    i32.eq`);
+      this.emit(`    i32.or`);
+      this.emit(`    if (result f64)`);
+      this.emit(`      local.get $tmp_l`);
+      this.emit(`      local.get $tmp_r`);
+      this.emit(`      call $str_concat`);
+      this.emit(`    else`);
+
+      // 2. その他の値やリスト(0x7FF00000以上)の場合 -> 関数ではないので cons に逃がす
+      this.emit(`      local.get $tmp_ptr`);
+      this.emit(`      i32.const 0x7FF00000`);
+      this.emit(`      i32.ge_u`);
+      this.emit(`      if (result f64)`);
+      this.emit(`        local.get $tmp_l`);
+      this.emit(`        local.get $tmp_r`);
+      this.emit(`        call $cons`);
+      this.emit(`      else`);
+
+      // 3. 本当の関数クロージャ(IDが上位にいる場合) -> call_indirect
+      this.emit(`        i32.const 16`);
+      this.emit(`        call $alloc`);
+      this.emit(`        local.set $tmp_ptr`);
+
+      this.emit(`        local.get $tmp_ptr`);
+      this.emit(`        local.get $tmp_r`);
+      this.emit(`        f64.store offset=0`);
+
+      this.emit(`        local.get $tmp_ptr`);
+      this.emit(`        local.get $tmp_l`);
+      this.emit(`        i64.reinterpret_f64`);
+      this.emit(`        i64.const 0xFFFFFFFF`);
+      this.emit(`        i64.and`);
+      this.emit(`        i32.wrap_i64`);
+      this.emit(`        call $ptr_to_f64`);
+      this.emit(`        f64.store offset=8`);
+
+      this.emit(`        local.get $tmp_ptr`);
+      this.emit(`        call $ptr_to_f64`);
+
+      this.emit(`        local.get $tmp_l`);
+      this.emit(`        i64.reinterpret_f64`);
+      this.emit(`        i64.const 32`);
+      this.emit(`        i64.shr_u`);
+      this.emit(`        i32.wrap_i64`);
+      this.emit(`        call_indirect (type $closure_sig)`);
+
+      this.emit(`      end`);
+      this.emit(`    end`);
+
+      // デフォルトを Any にして想定外のリスト化フォールバックを防ぐ
+      let retType = leftType.returnType || { type: 'Any' };
       if (this.typeStack) this.typeStack.push(retType);
 
     } else if (leftType.type === 'List' && rightType.type === 'List') {
       this.emit(`    call $list_concat`);
       if (this.typeStack) this.typeStack.push({ type: 'List' });
 
-      // ⚡ 修正: 静的にどちらかが String や Char と分かっていれば concat
     } else if (leftType.type === 'String' || rightType.type === 'String' || leftType.type === 'Char' || rightType.type === 'Char') {
       this.emit(`    call $str_concat`);
       if (this.typeStack) this.typeStack.push({ type: 'String' });
@@ -2217,7 +2269,6 @@ export class WatGenerator {
       this.emit(`    call $list_unshift`);
       if (this.typeStack) this.typeStack.push({ type: 'List' });
 
-      // ⚡ 修正: 型が不明なもの（1 2 など）はSignの原則通りコンスしてList型とする！
     } else {
       this.emit(`    call $cons`);
       if (this.typeStack) this.typeStack.push({ type: 'List' });
