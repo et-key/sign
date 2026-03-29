@@ -366,14 +366,6 @@ fact: n ?
 fact 5
 [Main Result] 120
 
-`③評価値が関数オブジェクトになる？`
-fact: n ?
-	n=0:1
-	n * fact ( n - 1 )
-fact 5
-[Main Result] [ <Function: 5>, 4 ]
-
-
 `④意図通り`
 fact: n ?
 	n=0:1
