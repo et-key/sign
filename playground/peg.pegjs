@@ -7,7 +7,7 @@
 // プログラムのエントリポイント
 // ----------------------------------------------------
 program
-  = expressions / comment?
+  = expressions / comment*
 
 // 全ての式は余積（リストまたは適用）として並び得る
 expressions
