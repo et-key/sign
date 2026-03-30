@@ -1500,7 +1500,30 @@ export class WatGenerator {
     // ==========================================
     if (op === "'") {
       this.visit(left);
-      this.visit(right);
+
+      // ⚡ 追加: 動的アクセスと静的アクセスの分岐
+      let isDynamic = false;
+      if (right && right.type === 'postfix' && (right.op === '~' || right.value === '~')) {
+        isDynamic = true;
+      }
+
+      if (isDynamic) {
+        // 動的アクセス (~ による強制評価)
+        const rExpr = right.left || right.right || right.expr || right.argument || right.operand || right.base || right.value;
+        this.visit(rExpr);
+      } else if (right && (right.type === 'identifier' || right.type === 'variable')) {
+        // 静的アクセス (暗黙の文字列化)
+        let rName = String(right.name || right.value || right.text);
+        // ⚡ ガード: test_all.txt にある list ' 0 などを壊さないため、数値は文字列化しない
+        if (!isNaN(Number(rName))) {
+          this.visit(right);
+        } else {
+          this.visit({ type: 'string', value: '\`' + rName + '\`' });
+        }
+      } else {
+        // その他 (文字列リテラルや数値など)
+        this.visit(right);
+      }
 
       let rightType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack[this.typeStack.length - 1] : { type: 'Unknown' };
 
@@ -1554,13 +1577,59 @@ export class WatGenerator {
     }
 
     if (op === ':') {
-      // ⚡ 修正: 左辺が本当に「変数(identifier)」であるか確認し、数値の場合は変数名として扱わない
+      let isDynamicKey = false;
+      let isStaticKey = false;
+      let lName = "";
+      let lExpr = null;
+
+      // ⚡ 1. 動的キー判定 (@プレフィックス)
+      if (left && left.type === 'prefix' && (left.op === '@' || left.value === '@')) {
+        isDynamicKey = true;
+        lExpr = left.right || left.left || left.expr || left.argument || left.operand || left.base || left.value;
+      }
+      // ⚡ 2. 変数バインディングか、静的キーかの判定
+      else if (left && (left.type === 'identifier' || left.type === 'variable')) {
+        lName = String(left.name || left.value || left.text);
+        // 数値なら変数ではなくリテラルキーとして扱う
+        if (!isNaN(Number(lName))) {
+          isStaticKey = false;
+        } else {
+          const checkName = lName.startsWith('$') ? lName.slice(1) : lName;
+          // ローカル変数のリストになければ、辞書のキー（静的キー）と見なす
+          if (!this.locals || !this.locals.includes(checkName)) {
+            isStaticKey = true;
+          }
+        }
+      }
+
+      // ⚡ ペア(辞書エントリ)の生成処理
+      if (isDynamicKey || isStaticKey || (left && left.type === 'string') || (left && left.type === 'number')) {
+        if (isDynamicKey) {
+          this.visit(lExpr); // 変数を評価
+        } else if (isStaticKey) {
+          this.visit({ type: 'string', value: '\`' + lName + '\`' }); // 暗黙の文字列化
+        } else {
+          this.visit(left); // stringやnumberの場合はそのまま
+        }
+
+        this.visit(right);
+        this.emit(`    call $cons`);
+        this.emit(`    f64.const nan`);
+        this.emit(`    call $cons`);
+
+        if (this.typeStack) {
+          this.typeStack.push({ type: 'Dict' });
+        }
+        return;
+      }
+
+      // ⚡ ここから下は変数バインディング（代入）の処理 (最新コードを完全に維持)
       let isVar = left && (left.type === 'identifier' || left.type === 'variable');
       let rawVal = isVar ? (left.name || left.value || left.text) : null;
       let varName = rawVal != null ? String(rawVal) : null;
       let wasmName = varName ? (varName.startsWith('$') ? varName : '$' + varName) : null;
 
-      // ⚡ 事前登録: 自己再帰のために、中身を評価する「前」にカリー化シグネチャを登録する
+      // 事前登録: 自己再帰のために、中身を評価する「前」にカリー化シグネチャを登録する
       if (wasmName && right && right.type === 'infix' && right.op === '?') {
         right.assignedName = wasmName; // 自己参照キャプチャ用
         if (!this.typeEnv) this.typeEnv = {};
