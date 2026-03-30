@@ -131,7 +131,6 @@ a : 10
 a_address : $a
 @a_address
 [Main Result] 10
-★★要確認★★　[Main Result] 0
 
 `============================ 
 ` fix : map/fold
@@ -176,8 +175,7 @@ myGreet :
 	hello : `hello,`
 	welcome : `welcome,`
 myGreet ' hello
-[Main Result] `hello,`
-★★要確認★★　[Main Result] Unit
+> `hello,`
 
 ptr : $10
 ptr # 99
@@ -220,8 +218,8 @@ myDict :
 	`key1` : `value_one`
 	`key2` : `value_two`
 target : `key2`
-myDict ' target
-[Main Result] `value_two`
+myDict ' target~
+> `value_two`
 
 complexDict :
 	[1, 2] : `Pattern A`
@@ -379,6 +377,13 @@ fact: n ?
 	n * (fact (n-1))
 fact 5
 [Main Result] 120
+
+`#246追加テスト
+fact: n ?
+	n=0:1
+	n * (fact n - 1 )
+fact 5
+> 120
 
 `============================================
 ` 絶対値と中置or混在パターンの確認
@@ -648,4 +653,37 @@ gcd : x y ?
 	gcd1  x y (x % y)
 gcd 18 12
 > 6
+
+` ==========================================
+` 辞書型のget issue#244
+` ==========================================
+x : 3
+a : 1 2 3 4 5
+a ' x~
+> 4
+
+x : 3
+a : 1 2 3 4 5
+a ' x
+> Unit
+
+`リファレンスの'get演算子例
+car :
+	brand : `foo`, `Bar`, `Baz`
+car ' brand ' 0
+> `foo`
+
+` ==========================================
+` 相互再帰関数 issue#252
+` ==========================================
+f : x y ?
+	y > 20 : y
+	g x y
+
+g : x y ?
+	f x x + y
+
+f 2 2
+> 22
+
 

@@ -637,7 +637,15 @@ const parseBlock = (tokens) => {
 	// ----------------------------------------------------
 	let result;
 	if (exprs.length === 0) result = { type: 'unit' };
-	else if (exprs.length === 1) result = exprs[0];
+	else if (exprs.length === 1) {
+		// ★ 修正: 1要素であっても、それがペア/代入(:)である場合は、
+		// 辞書(A-List)のコンテキストを維持するためにブロックの殻を破棄しない
+		if (exprs[0] && exprs[0].type === 'infix' && exprs[0].op === ':') {
+			result = { type: 'block', body: exprs };
+		} else {
+			result = exprs[0];
+		}
+	}
 	else result = { type: 'block', body: exprs };
 
 	return result;

@@ -8,10 +8,26 @@ export class WatGenerator {
     this.code.push(line);
   }
 
+  // ⚡ 追加: 溜まった遅延パッチを一斉に適用するメソッド
+  flushPatches() {
+    if (this.patchQueue && this.patchQueue.length > 0) {
+      this.patchQueue.forEach(patch => {
+        this.emit(`    ;; Delayed Patch: ${patch.freeVar} into environment of ${patch.closureVar}`);
+        this.emit(`    local.get ${patch.closureVar}`);
+        this.emit(`    i64.reinterpret_f64`);
+        this.emit(`    i32.wrap_i64`); // 関数ポインタの下位32ビット(環境ポインタ)を取り出す
+        this.emit(`    local.get ${patch.freeVar}`);
+        this.emit(`    f64.store offset=${patch.offset}`); // 最新の実体で上書き！
+      });
+      this.patchQueue = []; // 適用後はクリア
+    }
+  }
+
   generate(ast) {
     // ★ 仮想型スタックなどの初期化を追加
     this.typeStack = [];
     this.typeEnv = {};   // ★ 追加：変数の型を記憶するノート（シンボルテーブル）
+    this.patchQueue = []; // ⚡ 追加: 相互再帰用の遅延パッチキュー
     this.functions = [];
     this.elemFuncs = [];
     this.lambdaCount = 0;
@@ -928,6 +944,7 @@ export class WatGenerator {
     }
 
     this.visit(ast);
+    this.flushPatches(); // ⚡ 追加: トップレベルでの取りこぼしパッチを適用
 
     // ★ JSエンジンの破壊から守る0番地メールボックス
     this.emit('    local.set $final_res');
@@ -979,6 +996,12 @@ export class WatGenerator {
 
       for (let i = 0; i < body.length; i++) {
         let expr = body[i];
+
+        // ⚡ 追加: 代入(:)以外の式を実行する直前に、未解決のパッチを一斉適用する
+        let isAssignment = expr.type === 'infix' && expr.op === ':';
+        if (!isAssignment) {
+          this.flushPatches();
+        }
 
         // ⚡ ガード節 ( 例: token = Unit ? Unit ) の検知
         let isGuard = false;
@@ -1500,7 +1523,30 @@ export class WatGenerator {
     // ==========================================
     if (op === "'") {
       this.visit(left);
-      this.visit(right);
+
+      // ⚡ 追加: 動的アクセスと静的アクセスの分岐
+      let isDynamic = false;
+      if (right && right.type === 'postfix' && (right.op === '~' || right.value === '~')) {
+        isDynamic = true;
+      }
+
+      if (isDynamic) {
+        // 動的アクセス (~ による強制評価)
+        const rExpr = right.left || right.right || right.expr || right.argument || right.operand || right.base || right.value;
+        this.visit(rExpr);
+      } else if (right && (right.type === 'identifier' || right.type === 'variable')) {
+        // 静的アクセス (暗黙の文字列化)
+        let rName = String(right.name || right.value || right.text);
+        // ⚡ ガード: test_all.txt にある list ' 0 などを壊さないため、数値は文字列化しない
+        if (!isNaN(Number(rName))) {
+          this.visit(right);
+        } else {
+          this.visit({ type: 'string', value: '\`' + rName + '\`' });
+        }
+      } else {
+        // その他 (文字列リテラルや数値など)
+        this.visit(right);
+      }
 
       let rightType = (this.typeStack && this.typeStack.length > 0) ? this.typeStack[this.typeStack.length - 1] : { type: 'Unknown' };
 
@@ -1554,13 +1600,59 @@ export class WatGenerator {
     }
 
     if (op === ':') {
-      // ⚡ 修正: 左辺が本当に「変数(identifier)」であるか確認し、数値の場合は変数名として扱わない
+      let isDynamicKey = false;
+      let isStaticKey = false;
+      let lName = "";
+      let lExpr = null;
+
+      // ⚡ 1. 動的キー判定 (@プレフィックス)
+      if (left && left.type === 'prefix' && (left.op === '@' || left.value === '@')) {
+        isDynamicKey = true;
+        lExpr = left.right || left.left || left.expr || left.argument || left.operand || left.base || left.value;
+      }
+      // ⚡ 2. 変数バインディングか、静的キーかの判定
+      else if (left && (left.type === 'identifier' || left.type === 'variable')) {
+        lName = String(left.name || left.value || left.text);
+        // 数値なら変数ではなくリテラルキーとして扱う
+        if (!isNaN(Number(lName))) {
+          isStaticKey = false;
+        } else {
+          const checkName = lName.startsWith('$') ? lName.slice(1) : lName;
+          // ローカル変数のリストになければ、辞書のキー（静的キー）と見なす
+          if (!this.locals || !this.locals.includes(checkName)) {
+            isStaticKey = true;
+          }
+        }
+      }
+
+      // ⚡ ペア(辞書エントリ)の生成処理
+      if (isDynamicKey || isStaticKey || (left && left.type === 'string') || (left && left.type === 'number')) {
+        if (isDynamicKey) {
+          this.visit(lExpr); // 変数を評価
+        } else if (isStaticKey) {
+          this.visit({ type: 'string', value: '\`' + lName + '\`' }); // 暗黙の文字列化
+        } else {
+          this.visit(left); // stringやnumberの場合はそのまま
+        }
+
+        this.visit(right);
+        this.emit(`    call $cons`);
+        this.emit(`    f64.const nan`);
+        this.emit(`    call $cons`);
+
+        if (this.typeStack) {
+          this.typeStack.push({ type: 'Dict' });
+        }
+        return;
+      }
+
+      // ⚡ ここから下は変数バインディング（代入）の処理 (最新コードを完全に維持)
       let isVar = left && (left.type === 'identifier' || left.type === 'variable');
       let rawVal = isVar ? (left.name || left.value || left.text) : null;
       let varName = rawVal != null ? String(rawVal) : null;
       let wasmName = varName ? (varName.startsWith('$') ? varName : '$' + varName) : null;
 
-      // ⚡ 事前登録: 自己再帰のために、中身を評価する「前」にカリー化シグネチャを登録する
+      // 事前登録: 自己再帰のために、中身を評価する「前」にカリー化シグネチャを登録する
       if (wasmName && right && right.type === 'infix' && right.op === '?') {
         right.assignedName = wasmName; // 自己参照キャプチャ用
         if (!this.typeEnv) this.typeEnv = {};
@@ -1881,6 +1973,21 @@ export class WatGenerator {
       this.emit(`    f64.store offset=${idx * 8}`);    // 環境内の自分自身のスロットを上書き！
       this.emit(`    local.get $tmp_l`);               // ポインタをスタックに戻す
     }
+
+    // ⚡ ここから追加: 相互再帰のための遅延パッチキューへの登録
+    if (assignedName) {
+      freeVars.forEach((v, idx) => {
+        // 自分自身以外(相互再帰の対象など)をパッチ候補としてキューに積む
+        if (v !== assignedName) {
+          this.patchQueue.push({
+            closureVar: assignedName,
+            freeVar: v,
+            offset: idx * 8
+          });
+        }
+      });
+    }
+    // ⚡ ここまで追加
 
     // ==========================================
     // ⚡ [LAMBDA] 内側の関数定義
