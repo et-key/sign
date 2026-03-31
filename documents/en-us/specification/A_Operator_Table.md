@@ -30,10 +30,10 @@
 | 4 | ` ` | infix | apply | Coproduct (concatenation) | Function application |
 | 5 | `?` | infixR※ | lambda | Question (what to do?) | Function definition |
 | 6 | `,` | infixR※ | product | Product (structural assembly) | Right-associative list construction |
-| 7 | ` ` | infix | compose | Coproduct (concatenation) | Left-associative function composition |
-| 8 | ` ` | infix | push | Coproduct (concatenation) | Add to list |
-| 8 | ` ` | infix | concat | Coproduct (concatenation) | List concatenation |
-| 8 | ` ` | infix | construct | Coproduct (concatenation) | Left-associative list construction |
+| 7 | ` ` | infix | push | Coproduct (concatenation) | Add to list |
+| 7 | ` ` | infix | concat | Coproduct (concatenation) | List concatenation |
+| 7 | ` ` | infix | construct | Coproduct (concatenation) | Left-associative list construction |
+| 8 | ` ` | infix | compose | Coproduct (concatenation) | Left-associative function composition |
 | 9 | `~` | infix | range | Around (range vicinity) | Range list construction |
 | 9 | `~+` | infix | range | Around (range vicinity) | Arithmetic progression specification |
 | 9 | `~-` | infix | range | Around (range vicinity) | Descending arithmetic progression specification |
