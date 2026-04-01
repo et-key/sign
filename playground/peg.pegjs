@@ -23,6 +23,10 @@ comment
 _
   = " "*
 
+// 一意な空白（必ず一つ以上ある）
+__
+  = " "+
+
 // ----------------------------------------------------
 // 式の優先順位階層 (Level 1 〜 31)
 // ----------------------------------------------------
@@ -42,20 +46,22 @@ expr_2
 
 // Level 3: output (中置 / 左結合)
 expr_3
-  = expr_4 (" " "#" " " expr_4)*
+  = expr_4 (__ "#" __ expr_4)*
 
 // Level 4: 余積 (apply)
 expr_4
   // 1. Map適用: カンマを伴うポイントフリーと後続引数（1つ以上）の厳密結合
-  = head:pf_map_block tail:(apply_coproduct expr_9)+ {
+  = head:pf_map_block tail:(apply_coproduct expr_6)+ {
       return { type: "MapApply", func: head, args: tail.map(t => t[1]) };
   }
+
   // 2. Fold適用: 単独演算子のポイントフリーと後続引数（1つ以上）の厳密結合
-  / head:pf_fold_block tail:(apply_coproduct expr_9)+ {
+  / head:pf_fold_block tail:(apply_coproduct expr_6)+ {
       return { type: "FoldApply", func: head, args: tail.map(t => t[1]) };
   }
+
   // 3. 一般的な余積（関数適用やリスト化） / 引数なしの単独クロージャ
-  / head:expr_5 tail:(apply_coproduct expr_9)* {
+  / head:expr_5 tail:(apply_coproduct expr_6)* {
       return tail.length > 0 ? { type: "ApplyList", elements: [head, ...tail.map(t => t[1])] } : head;
   }
   /expr_5
