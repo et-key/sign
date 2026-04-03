@@ -45,7 +45,7 @@ ApplyLevel = head:LambdaLevel tails:(__ LambdaLevel)* { return buildLeft(head, t
 LambdaLevel = params:ParameterList __ "?" __ body:LambdaLevel { return {type:"Lambda", params, body}; } / ProductLevel
 
 // 6. Product (中置・右結合※ - 積 / 持ち上げ)
-ProductLevel = head:PushLevel tails:(__ "," __ PushLevel)* { return buildRight(head, tails); } / PushLevel
+ProductLevel = head:PushLevel tails:(__ "," __ ProductLevel)* { return buildRight(head, tails); } / PushLevel
 
 // 7. Push/Concat/Construct (余積2 - リスト構築 / 左結合)
 PushLevel = head:ComposeLevel tails:(__ ComposeLevel)* { return buildLeft(head, tails.map(t => [""," ",t[1]])); }
@@ -90,29 +90,37 @@ AbsLevel = "|" inner:ArithmeticAddLevel "|" { return {type:"Absolute", body:inne
 ExpandLevel = inner:AddressLevel "~" { return {type:"Expand", body:inner}; } / AddressLevel
 
 // 21. Address (前置)
-AddressLevel = "$" inner:GetLevel { return {type:"Address", body:inner}; } / GetLevel
+AddressLevel = "$" inner:GetOfLevel { return {type:"Address", body:inner}; } / GetOfLevel
 
-// 22. Get (中置※ - 右結合/左結合混在を一旦整理)
-GetLevel = head:InputLevel tails:(_ ("'" / "@") _ InputLevel)* { return buildLeft(head, tails); } / InputLevel
+// 22. Get (中置 ' / 左結合)
+GetOfLevel = head:GetAtLevel tails:(_ "'" _ GetAtLevel)* { return buildLeft(head, tails); } / GetAtLevel
 
-// 23. Input (前置)
+// 23. Get (中置 @ / 右結合)
+GetAtLevel = left:InputLevel _ "@" _ right:GetAtLevel {
+  return { type: "BinaryOperation", operator: "@", left: left, right: right };
+}
+/ InputLevel
+
+// 24. Input (前置)
 InputLevel = "@" inner:BitShiftLevel { return {type:"Input", body:inner}; } / BitShiftLevel
 
-// 24. BitShift (中置)
+// 25. BitShift (中置)
 BitShiftLevel = head:BitOrLevel tails:(_ ("<<" / ">>") _ BitOrLevel)* { return buildLeft(head, tails); } / BitOrLevel
 
-// 25-27. Bitwise Ops (中置)
-BitOrLevel = head:BitXorLevel tails:(_ ("||" / ";;" / "&&") _ BitXorLevel)* { return buildLeft(head, tails); } / BitNotLevel
+// 26-28. Bitwise Ops (中置)
+BitOrLevel = head:BitXorLevel tails:(_ "||" _ BitXorLevel)* { return buildLeft(head, tails); } / BitXorLevel
 
-BitXOrLevel = head:BitAndLevel tails:(_ ("||" / ";;" / "&&") _ BitAndLevel)* { return buildLeft(head, tails); } / BitNotLevel
+BitXorLevel = head:BitAndLevel tails:(_ ";;" _ BitAndLevel)* { return buildLeft(head, tails); } / BitAndLevel
 
-// 28. BitNot (前置)
+BitAndLevel = head:BitNotLevel tails:(_ "&&" _ BitNotLevel)* { return buildLeft(head, tails); } / BitNotLevel
+
+// 29. BitNot (前置)
 BitNotLevel = "!!" inner:ImportLevel { return {type:"Unary", op:"!!", body:inner}; } / ImportLevel
 
-// 29. Import (後置)
+// 30. Import (後置)
 ImportLevel = inner:PrimaryLevel "@" { return {type:"Import", body:inner}; } / PrimaryLevel
 
-// 30. Block / Indent (囲み・インデント)
+// 31. Block / Indent (囲み・インデント)
 PrimaryLevel = 
     "(" _ inner:ExportLevel _ ")" { return inner; }
     / "{" _ inner:ExportLevel _ "}" { return inner; }
@@ -121,7 +129,7 @@ PrimaryLevel =
     / Literal
     / name:Identifier &{ return true; /* ここで型テーブルを参照してバックトラックを制御 */ }
 
-// 31. Escape (前置) - 字句レベルで処理
+// 32. Escape (前置) - 字句レベルで処理
 
 // ==================== 字句定義 ====================
 
