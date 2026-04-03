@@ -1,148 +1,205 @@
-{
-  // 左結合の木を構築するヘルパー
-  function buildLeft(head, tails) {
-    return tails.reduce((result, element) => ({
-      type: "BinaryOperation",
-      operator: element[1],
-      left: result,
-      right: element[3]
-    }), head);
-  }
+// ===================================================================
+// Sign Language Pure PEG Grammar (Context-Aware & Full Operator Table)
+// ===================================================================
 
-  // 余積（空白）用の左結合ヘルパー
-  function buildCoproduct(head, tails) {
-    return tails.reduce((result, element) => ({
-      type: "BinaryOperation",
-      operator: " ", // 空白を演算子とする
-      left: result,
-      right: element[1] // tailsの中身は [__, Node] なので1番目を参照
-    }), head);
-  }
-}
+Program = (Expression / Comment / _)*
 
-Start = Program
+Expression = Export / Define / Verification
 
-Program = (Statement _?)*
+// --- 優先順位 1-2: 定義系 ---
+Export = ("###" / "##" / "#") _ Define
 
-// ==================== 優先順位階層（1-31） ====================
+// ここで右辺の「構文のカタチ」を分離し、将来的な識別子の型確定を容易にする
+Define
+  = Identifier _ ":" _ Dictionary
+  / Identifier _ ":" _ List
+  / Identifier _ ":" _ Lambda
+  / Identifier _ ":" _ Verification
 
-// 1. Export (前置)
-ExportLevel = op:ExportSymbol _ inner:DefineLevel { return {type:"Export", level:op.length, body:inner}; } / DefineLevel
+Verification = Output
 
-// 2. Define (中置・右結合※)
-DefineLevel = name:Identifier __ ":" __ body:DefineLevel { return {type:"Define", name, body}; } / OutputLevel
+// --- 優先順位 3: 出力 (右結合) ---
+Output
+  = (Address / Identifier) __ "#" __ Output
+  / Apply
 
-// 3. Output (中置)
-OutputLevel = target:AddressOrId __ "#" __ value:ApplyLevel { return {type:"Output", target, value}; } / ApplyLevel
+// --- 優先順位 4: 関数適用 (余積1) ---
+// 左項が明確に Closure(Lambda等) である場合の適用
+Apply
+  = Closure __ DirectProduct
+  / Concat
 
-// 4. Apply (余積1 - 関数適用 / 左結合)
-ApplyLevel = head:LambdaLevel tails:(__ LambdaLevel)* { return buildCoproduct(head, tails); }
+// --- 優先順位 5: ラムダ (右結合) ---
+Lambda
+  = PointFree
+  / "[" _ Arguments _ "?" _ Expression _ "]"
+  / "{" _ Arguments _ "?" _ Expression _ "}"
+  / "(" _ Arguments _ "?" _ Expression _ ")"
 
-// 5. Lambda (中置・右結合※)
-LambdaLevel = params:ParameterList __ "?" __ body:LambdaLevel { return {type:"Lambda", params, body}; } / ProductLevel
+// --- 優先順位 6: 積 (右結合) ---
+DirectProduct
+  = DirectSum _ "," _ DirectProduct
+  / DirectSum
 
-// 6. Product (中置・右結合※ - 積 / 持ち上げ)
-ProductLevel = left:PushLevel __ "," __ right:ProductLevel { return { type: "BinaryOperation", operator: ",", left: left, right: right }; } / PushLevel
+// --- 優先順位 7: リスト構築・結合 (余積2) ---
+Concat
+  = List __ DirectSum
+  / Compose
 
-// 7. Push/Concat/Construct (余積2 - リスト構築 / 左結合)
-PushLevel = head:ComposeLevel tails:(__ ComposeLevel)* { return buildCoproduct(head, tails); }
+// --- 優先順位 8: 関数合成 (余積3) ---
+Compose
+  = Closure __ Closure
+  / Range
 
-// 8. Compose (余積3 - 関数合成 / 左結合)
-ComposeLevel = head:RangeLevel tails:(__ RangeLevel)* { return buildCoproduct(head, tails); }
+// --- 優先順位 9: 範囲 ---
+Range
+  = Continuous (_ ("~+" / "~-" / "~*" / "~/" / "~^" / "~") _ Continuous)*
 
-// 9. Range (中置 - 範囲構築)
-RangeLevel = head:ContinuousLevel tails:(__ RangeOperator __ ContinuousLevel)* { return buildLeft(head, tails); } / ContinuousLevel
+Continuous
+  = "~" _ Continuous
+  / LogicalXor
 
-// 10. Continuous (前置※)
-ContinuousLevel = "~" inner:LogicalXorLevel { return {type:"Continuous", body:inner}; } / LogicalXorLevel
+// --- 優先順位 11: 論理演算 (分離) ---
 
-// 11. XOR / OR (中置)
-LogicalXorLevel = head:LogicalAndLevel tails:(__ (";" / "|") __ LogicalAndLevel)* { return buildLeft(head, tails); } / LogicalAndLevel
+LogicalXor
+  = Or (_ ";" _ Or)*
 
-// 12. AND (中置)
-LogicalAndLevel = head:LogicalNotLevel tails:(__ "&" __ LogicalNotLevel)* { return buildLeft(head, tails); } / LogicalNotLevel
+LogicalOr
+  = LogicalAnd (_ "|" _ LogicalAnd)*
 
-// 13. NOT (前置)
-LogicalNotLevel = "!" inner:ComparisonLevel { return {type:"Unary", op:"!", body:inner}; } / ComparisonLevel
+// --- 優先順位 12: 論理積 ---
+LogicalAnd
+  = Not (_ "&" _ Not)*
 
-// 14. Comparison (中置 - 連鎖比較)
-ComparisonLevel = head:ArithmeticAddLevel tails:(__ ComparisonOperator __ ArithmeticAddLevel)* { return buildLeft(head, tails); } / ArithmeticAddLevel
+// --- 優先順位 13: 否定 (前置) ---
+Not
+  = "!"? Comparison
 
-// 15. Add/Sub (中置)
-ArithmeticAddLevel = head:ArithmeticMulLevel tails:(_ ("+" / "-") _ ArithmeticMulLevel)* { return buildLeft(head, tails); } / ArithmeticMulLevel
+// --- 優先順位 14: 比較 ---
+Comparison
+  = Additive (_ ("<=" / "==" / ">=" / "!=" / "<" / "=" / ">") _ Additive)*
 
-// 16. Mul/Div/Mod (中置)
-ArithmeticMulLevel = head:PowerLevel tails:(_ ("*" / "/" / "%") _ PowerLevel)* { return buildLeft(head, tails); } / PowerLevel
+// --- 優先順位 15: 加減算 ---
+Additive
+  = Multiplicative (_ ("+" / "-") _ Multiplicative)*
 
-// 17. Pow (中置・右結合※)
-PowerLevel = left:FactorialLevel _ "^" _ right:PowerLevel { return { type: "BinaryOperation", operator: "^", left: left, right: right }; } / FactorialLevel
+// --- 優先順位 16: 乗除余 ---
+Multiplicative
+  = Power (_ ("*" / "/" / "%") _ Multiplicative)*
 
-// 18. Factorial (後置)
-FactorialLevel = inner:AbsLevel "!" { return {type:"Postfix", op:"!", body:inner}; } / AbsLevel
+// --- 優先順位 17: 累乗 (右結合) ---
+Power
+  = Factorial _ "^" _ Power
+  / Factorial
 
-// 19. Absolute (囲み)
-AbsLevel = "|" inner:ArithmeticAddLevel "|" { return {type:"Absolute", body:inner}; } / ExpandLevel
+// --- 優先順位 18: 階乗 (後置) ---
+Factorial
+  = Absolute "!"*
 
-// 20. Expand (後置※)
-ExpandLevel = inner:AddressLevel "~" { return {type:"Expand", body:inner}; } / AddressLevel
+// --- 優先順位 19: 絶対値 (囲み) ---
+Absolute
+  = "|" _ Expression _ "|"
+  / Expand
 
-// 21. Address (前置)
-AddressLevel = "$" inner:GetOfLevel { return {type:"Address", body:inner}; } / GetOfLevel
+// --- 優先順位 20: 展開 (後置) ---
+Expand
+  = GetAddress "~"*
 
-// 22. Get (中置 ' / 左結合)
-GetOfLevel = head:GetAtLevel tails:(_ "'" _ GetAtLevel)* { return buildLeft(head, tails); } / GetAtLevel
+// --- 優先順位 21: アドレス取得 (前置) ---
+GetAddress
+  = "$" _ GetAddress
+  / GetSingleQuote
 
-// 23. Get (中置 @ / 右結合)
-GetAtLevel = left:InputLevel _ "@" _ right:GetAtLevel { return { type: "BinaryOperation", operator: "@", left: left, right: right }; } / InputLevel
+// --- 優先順位 22: 取得 (') ---
+GetSingleQuote
+  = GetAt (_ "'" _ GetAt)*
 
-// 24. Input (前置)
-InputLevel = "@" inner:BitShiftLevel { return {type:"Input", body:inner}; } / BitShiftLevel
+// --- 優先順位 23: 取得 (@, 右結合) ---
+GetAt
+  = Input _ "@" _ GetAt
+  / Input
 
-// 25. BitShift (中置)
-BitShiftLevel = head:BitOrLevel tails:(_ ("<<" / ">>") _ BitOrLevel)* { return buildLeft(head, tails); } / BitOrLevel
+// --- 優先順位 24: 入力 (@, 前置) ---
+Input
+  = "@" _ Input
+  / BitShift
 
-// 26-28. Bitwise Ops (中置)
-BitOrLevel = head:BitXorLevel tails:(_ "||" _ BitXorLevel)* { return buildLeft(head, tails); } / BitXorLevel
+// --- 優先順位 25: ビットシフト ---
+BitShift
+  = BitOr (_ ("<<" / ">>") _ BitOr)*
 
-BitXorLevel = head:BitAndLevel tails:(_ ";;" _ BitAndLevel)* { return buildLeft(head, tails); } / BitAndLevel
+// --- 優先順位 26: ビット和 ---
+BitOr
+  = BitXor (_ "||" _ BitXor)*
 
-BitAndLevel = head:BitNotLevel tails:(_ "&&" _ BitNotLevel)* { return buildLeft(head, tails); } / BitNotLevel
+// --- 優先順位 27: ビット排他 ---
+BitXor
+  = BitAnd (_ ";;" _ BitAnd)*
 
-// 29. BitNot (前置)
-BitNotLevel = "!!" inner:ImportLevel { return {type:"Unary", op:"!!", body:inner}; } / ImportLevel
+// --- 優先順位 28: ビット積 ---
+BitAnd
+  = BitNot (_ "&&" _ BitNot)*
 
-// 30. Import (後置)
-ImportLevel = inner:PrimaryLevel "@" { return {type:"Import", body:inner}; } / PrimaryLevel
+// --- 優先順位 29: ビット否定 (前置) ---
+BitNot
+  = "!!" _ BitNot
+  / Import
 
-// 31. Block / Indent (囲み・インデント)
-PrimaryLevel = 
-    "(" _ inner:ExportLevel _ ")" { return inner; }
-    / "{" _ inner:ExportLevel _ "}" { return inner; }
-    / "[" _ inner:ExportLevel _ "]" { return inner; }
-    / IndentBlock
-    / Literal
-    / name:Identifier &{ return true; /* ここで型テーブルを参照してバックトラックを制御 */ }
+// --- 優先順位 30: インポート (後置) ---
+Import
+  = Primary "@"*
 
-// ==================== 字句定義 ====================
+// --- 優先順位 31: ブロック・ポイントレス・基礎構造 ---
+Primary
+  = PointFree
+  / List
+  / Dictionary
+  / Block
+  / Atom
 
-Identifier = $([A-Za-z_][0-9A-Za-z_]*)
-AddressOrId = HexNumber / ("$" ? Identifier)
-ParameterList = head:Identifier tails:(__ Identifier)* { return [head].concat(tails.map(t => t[1])); }
-RangeOperator = "~" [+\-*/^]?
-ComparisonOperator = "<=" / ">=" / "!=" / "==" / "=" / "<" / ">"
-ExportSymbol = "###" / "##" / "#"
-Literal = Number / String / Character / "_"
+Block
+  = "[" _ Expression _ "]"
+  / "{" _ Expression _ "}"
+  / "(" _ Expression _ ")"
+  / IndentBlock
 
-_ = [ ]*
-__ = [ ]+
+IndentBlock = BlockStart Expression (EOL Expression)*
+
+// --- ポイントレス記法 ---
+PointFree = DirectMap / DirectFold
+
+DirectMap
+  = "[" _ PrefixOp _ "_" _ "," _ "]"
+  / "[" _ "_" _ PostfixOp _ "," _ "]"
+  / "[" _ Number _ InfixOp _ "," _ "]"
+  / "[" _ InfixOp _ Number _ "," _ "]"
+  // ({}や()も同様のパターン)
+
+DirectFold = "[" _ InfixOp _ "]" / "{" _ InfixOp _ "}" / "(" _ InfixOp _ ")"
+
+// --- 優先順位 32: アトム・リテラル ---
+Atom = Unit / Number / String / Character / Identifier
+
+List = "[" _ (Expression (_ "," _ Expression)*)? _ "]"
+
+Dictionary = "{" _ (KeyValuePair (_ "," _ KeyValuePair)*)? _ "}"
+
+KeyValuePair = (Identifier / String) _ ":" _ Expression
+
+// --- 字句規則 ---
+Arguments  = Identifier (_ Identifier)*
+Identifier = [a-zA-Z_][a-zA-Z0-9_]*
+Address    = "0x" [0-9a-fA-F]+
+Number     = "-"? [0-9]+ ("." [0-9]+)?
+String     = "`" [^`\r\n]* "`"
+Character  = "\\" . / "0u" [0-9a-fA-F]+
+
+PrefixOp   = "###" / "##" / "#" / "~" / "!!" / "!" / "$" / "@" / "\\"
+PostfixOp  = "!" / "~" / "@"
+InfixOp    = "~+" / "~-" / "~*" / "~/" / "~^" / "<<" / ">>" / "||" / ";;" / "&&" / "<=" / "==" / ">=" / "!=" / ":" / "#" / "?" / "," / "~" / ";" / "|" / "&" / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
+
+__ = [ \t]+
+_  = [ \t]*
 EOL = "\n" / "\r\n" / "\r"
-
-// ※必要に応じて以下のアノテーション未定義ルールを別ファイル等で補完してください
-IndentBlock = "DummyIndentBlock"
-Number = "DummyNumber"
-HexNumber = "DummyHexNumber"
-String = "DummyString"
-Character = "DummyCharacter"
-Statement = DummyStatement
-
-DummyStatement = ExportLevel
+BlockStart = $(EOL [ \t]+)
+Comment = "`" [^\r\n]*
