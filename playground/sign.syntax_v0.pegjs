@@ -12,7 +12,7 @@ __ = " "+
 //空白可
 _ = " "*
 
-Comment = { /^`[^\r\n]\n/gm }
+Comment = &{ /^`[^\r\n]\n/gm }
 
 Program = Expression* / Comment*
 
@@ -21,41 +21,40 @@ Expression
   / Verification
 
 Definition
-  = Export
-  / Define
+  = Export            //エクスポート
+  / Define            //定義（名前を付けてオブジェクトを束縛する）
 
 Verification
   = Output
-  / Applicate
-  / Construct
-  / Compose
-  / Calculate
-  / GetAddress
-  / Get
-  / Compute
-  / input
-  / Import
-  / Block
+  / Applicate         //関数適用
+  / Construct         //ラムダ、リスト、辞書型の構築
+  / Compose           //関数合成
+  / Calculate         //ALUで扱う演算の集合で、優先順位を定義する必要ある
+  / GetAddress        //メモリアドレスの取得
+  / Get               //辞書型やリストの中から値を取得
+  / Compute           //Bit演算だけ行う
+  / input             //アドレスから値を取得
+  / Import            //別ファイルからのインポート
+  / Block             //式のブロック
 
 
 Export = ("###" / "##" / "#") Define
 
 Define
   = identifier _ ":" _ (
-    right:Dictionary {
-      typeTable.dictionary.push(symbol)
-    }
-    / right:Closure {
-      typeTable.lambda.push(symbol)
-    }
-
+    Define                  //右結合である
+    / Dictionary            //DictionaryIdentifierになる
+    / Closure               //Functional_Identifierになる
+    / DirectProduct         //List_Identifierになる
   )
+
 
 Output
   = (address / identifier / Address) __ "#" __ (Applicate / Output)
 
 Apply
-  = (Closure / Get / identifier) __ DirectProduct
+  = (Closure / Get / functional_Identifier) (__ DirectProduct)*
+  / DirectProduct
 
 Closure
   = lambda
@@ -63,9 +62,9 @@ Closure
 
 Lambda
   = PointFree
-  / "[" Arguments _ "?" _ output "]"
-  / "{" Arguments _ "?" _ output "}"
-  / "(" Arguments _ "?" _ output ")"
+  / "[" Arguments _ "?" _ output / Lambda "]"
+  / "{" Arguments _ "?" _ output / Lambda "}"
+  / "(" Arguments _ "?" _ output / Lambda ")"
 
 PointFree
   = DirectMap
@@ -135,48 +134,29 @@ atom
 
 // 1. 文字列型
 // インデントされている、あるいは式の途中に現れるバッククォート囲みは文字列として確定します。
-string_literal
-  = "`" chars:[^`\r\n]* "`" { 
-    return { type: "String", value: chars.join("") }; 
-  }
+string_literal = "`" [^`\r\n]* "`"
 
 // 2. 浮動小数点
 // （整数部 . 小数部）
-float_literal
-  = "-"? int_part:[0-9]+ "." frac_part:[0-9]+ { 
-    return { type: "Float", value: int_part.join("") + "." + frac_part.join("") }; 
-  }
+float_literal = "-"? int_part:[0-9]+ "." frac_part:[0-9]+
 
 // 3. アドレス型 ("0x" Hex*)
 // ※ AArch64のメモリオペランド等に直接写像される
-address_literal
-  = "0x" hex:Hex+ { 
-    return { type: "Address", value: hex.join("") }; 
-  }
+address_literal = "0x" Hex+
 
 // 4. レジスタ即値型 ("0r" Hex*)
 // ※ AArch64の物理レジスタ（x0, v0など）や直値バインディングに写像される
-register_literal
-  = "0r" hex:Hex+ { 
-    return { type: "Register", value: hex.join("") }; 
-  }
+register_literal = "0r" Hex+
 
 // 5. UniCode型 ("0u" Hex*)
-unicode_literal
-  = "0u" hex:Hex+ { 
-    return { type: "Unicode", value: hex.join("") }; 
-  }
+unicode_literal = "0u" Hex+
 
 // 6. 識別子（変数名など）
-identifier
-  = chars:[a-zA-Z_][a-zA-Z0-9_]* { 
-    return { type: "Identifier", value: chars[0] + chars[1].join("") }; 
-  }
+identifier = [a-zA-Z_][a-zA-Z0-9_]*
 
 // --- ヘルパー規則 ---
 // 16進数の文字セット
-Hex
-  = [0-9a-fA-F]
+Hex = [0-9a-fA-F]
 
 
 prefix
@@ -210,5 +190,5 @@ additiveOp = "+" / "-"
 multiplexOp = "*" / "/" / "%"
 exponentialOp = "^"
 bitOp = "<<" / ">>" / "||" / ";;" / "&&"
-getOp =  "@" / "'"
+getOp =  "'" / "@"
 

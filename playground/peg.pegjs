@@ -2,19 +2,27 @@
 // Sign Language Pure PEG Grammar (Context-Aware & Full Operator Table)
 // ===================================================================
 
+__ = " "+
+_  = " "*
+
 Program = (Expression / Comment / _)*
 
-Expression = Export / Define / Verification
+Expression = Definition / Verification
+
+Definition = Export
 
 // --- 優先順位 1-2: 定義系 ---
+
 Export = ("###" / "##" / "#") _ Define
 
 // ここで右辺の「構文のカタチ」を分離し、将来的な識別子の型確定を容易にする
+
 Define
   = Identifier _ ":" _ Dictionary
   / Identifier _ ":" _ List
   / Identifier _ ":" _ Lambda
-  / Identifier _ ":" _ Verification
+  / Identifier _ ":" _ Define
+  / Verification
 
 Verification = Output
 
@@ -24,26 +32,25 @@ Output
   / Apply
 
 // --- 優先順位 4: 関数適用 (余積1) ---
-// 左項が明確に Closure(Lambda等) である場合の適用
+// 左項が Closure(Lambda等) 右項がListかDictionaryかAtomである場合は明確に適用
 Apply
-  = Closure __ DirectProduct
-  / Concat
+  = Closure (__ DirectProduct)*
+  / Identifier (__ DirectProduct)*
+  / DirectProduct
 
 // --- 優先順位 5: ラムダ (右結合) ---
-Lambda
+Closure
   = PointFree
-  / "[" _ Arguments _ "?" _ Expression _ "]"
-  / "{" _ Arguments _ "?" _ Expression _ "}"
-  / "(" _ Arguments _ "?" _ Expression _ ")"
+  / Lambda
 
 // --- 優先順位 6: 積 (右結合) ---
 DirectProduct
-  = DirectSum _ "," _ DirectProduct
-  / DirectSum
+  = Concat _ "," _ DirectProduct
+  / Concat
 
 // --- 優先順位 7: リスト構築・結合 (余積2) ---
 Concat
-  = List __ DirectSum
+  = (List / Atom) (__ Compose)*
   / Compose
 
 // --- 優先順位 8: 関数合成 (余積3) ---
@@ -69,7 +76,7 @@ LogicalOr
 
 // --- 優先順位 12: 論理積 ---
 LogicalAnd
-  = Not (_ "&" _ Not)*
+  = LogicalNot (_ "&" _ LogicalNot)*
 
 // --- 優先順位 13: 否定 (前置) ---
 Not
@@ -177,6 +184,12 @@ DirectMap
 
 DirectFold = "[" _ InfixOp _ "]" / "{" _ InfixOp _ "}" / "(" _ InfixOp _ ")"
 
+Lambda =
+  "[" Arguments "?" Expression "]"
+  / "{" _ Arguments "?" Expression _ "}"
+  / "(" _ Arguments "?" Expression _ ")"
+
+
 // --- 優先順位 32: アトム・リテラル ---
 Atom = Unit / Number / String / Character / Identifier
 
@@ -198,8 +211,6 @@ PrefixOp   = "###" / "##" / "#" / "~" / "!!" / "!" / "$" / "@" / "\\"
 PostfixOp  = "!" / "~" / "@"
 InfixOp    = "~+" / "~-" / "~*" / "~/" / "~^" / "<<" / ">>" / "||" / ";;" / "&&" / "<=" / "==" / ">=" / "!=" / ":" / "#" / "?" / "," / "~" / ";" / "|" / "&" / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
 
-__ = [ \t]+
-_  = [ \t]*
 EOL = "\n" / "\r\n" / "\r"
 BlockStart = $(EOL [ \t]+)
 Comment = "`" [^\r\n]*
