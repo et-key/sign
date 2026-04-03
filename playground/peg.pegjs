@@ -9,17 +9,14 @@
     }), head);
   }
 
-  // 右結合の木を構築するヘルパー
-  function buildRight(head, tails) {
-    if (tails.length === 0) return head;
-    const last = tails[tails.length - 1];
-    const rest = tails.slice(0, -1);
-    return {
+  // 余積（空白）用の左結合ヘルパー
+  function buildCoproduct(head, tails) {
+    return tails.reduce((result, element) => ({
       type: "BinaryOperation",
-      operator: last[1],
-      left: buildRight(head, rest),
-      right: last[3]
-    };
+      operator: " ", // 空白を演算子とする
+      left: result,
+      right: element[1] // tailsの中身は [__, Node] なので1番目を参照
+    }), head);
   }
 }
 
@@ -39,19 +36,19 @@ DefineLevel = name:Identifier __ ":" __ body:DefineLevel { return {type:"Define"
 OutputLevel = target:AddressOrId __ "#" __ value:ApplyLevel { return {type:"Output", target, value}; } / ApplyLevel
 
 // 4. Apply (余積1 - 関数適用 / 左結合)
-ApplyLevel = head:LambdaLevel tails:(__ LambdaLevel)* { return buildLeft(head, tails.map(t => [""," ",t[1]])); }
+ApplyLevel = head:LambdaLevel tails:(__ LambdaLevel)* { return buildCoproduct(head, tails); }
 
 // 5. Lambda (中置・右結合※)
 LambdaLevel = params:ParameterList __ "?" __ body:LambdaLevel { return {type:"Lambda", params, body}; } / ProductLevel
 
 // 6. Product (中置・右結合※ - 積 / 持ち上げ)
-ProductLevel = head:PushLevel tails:(__ "," __ ProductLevel)* { return buildRight(head, tails); } / PushLevel
+ProductLevel = left:PushLevel __ "," __ right:ProductLevel { return { type: "BinaryOperation", operator: ",", left: left, right: right }; } / PushLevel
 
 // 7. Push/Concat/Construct (余積2 - リスト構築 / 左結合)
-PushLevel = head:ComposeLevel tails:(__ ComposeLevel)* { return buildLeft(head, tails.map(t => [""," ",t[1]])); }
+PushLevel = head:ComposeLevel tails:(__ ComposeLevel)* { return buildCoproduct(head, tails); }
 
 // 8. Compose (余積3 - 関数合成 / 左結合)
-ComposeLevel = head:RangeLevel tails:(__ RangeLevel)* { return buildLeft(head, tails.map(t => [""," ",t[1]])); }
+ComposeLevel = head:RangeLevel tails:(__ RangeLevel)* { return buildCoproduct(head, tails); }
 
 // 9. Range (中置 - 範囲構築)
 RangeLevel = head:ContinuousLevel tails:(__ RangeOperator __ ContinuousLevel)* { return buildLeft(head, tails); } / ContinuousLevel
@@ -78,7 +75,7 @@ ArithmeticAddLevel = head:ArithmeticMulLevel tails:(_ ("+" / "-") _ ArithmeticMu
 ArithmeticMulLevel = head:PowerLevel tails:(_ ("*" / "/" / "%") _ PowerLevel)* { return buildLeft(head, tails); } / PowerLevel
 
 // 17. Pow (中置・右結合※)
-PowerLevel = head:FactorialLevel tails:(_ "^" _ PowerLevel)* { return buildRight(head, tails); } / FactorialLevel
+PowerLevel = left:FactorialLevel _ "^" _ right:PowerLevel { return { type: "BinaryOperation", operator: "^", left: left, right: right }; } / FactorialLevel
 
 // 18. Factorial (後置)
 FactorialLevel = inner:AbsLevel "!" { return {type:"Postfix", op:"!", body:inner}; } / AbsLevel
@@ -96,10 +93,7 @@ AddressLevel = "$" inner:GetOfLevel { return {type:"Address", body:inner}; } / G
 GetOfLevel = head:GetAtLevel tails:(_ "'" _ GetAtLevel)* { return buildLeft(head, tails); } / GetAtLevel
 
 // 23. Get (中置 @ / 右結合)
-GetAtLevel = left:InputLevel _ "@" _ right:GetAtLevel {
-  return { type: "BinaryOperation", operator: "@", left: left, right: right };
-}
-/ InputLevel
+GetAtLevel = left:InputLevel _ "@" _ right:GetAtLevel { return { type: "BinaryOperation", operator: "@", left: left, right: right }; } / InputLevel
 
 // 24. Input (前置)
 InputLevel = "@" inner:BitShiftLevel { return {type:"Input", body:inner}; } / BitShiftLevel
@@ -129,8 +123,6 @@ PrimaryLevel =
     / Literal
     / name:Identifier &{ return true; /* ここで型テーブルを参照してバックトラックを制御 */ }
 
-// 32. Escape (前置) - 字句レベルで処理
-
 // ==================== 字句定義 ====================
 
 Identifier = $([A-Za-z_][0-9A-Za-z_]*)
@@ -144,3 +136,13 @@ Literal = Number / String / Character / "_"
 _ = [ ]*
 __ = [ ]+
 EOL = "\n" / "\r\n" / "\r"
+
+// ※必要に応じて以下のアノテーション未定義ルールを別ファイル等で補完してください
+IndentBlock = "DummyIndentBlock"
+Number = "DummyNumber"
+HexNumber = "DummyHexNumber"
+String = "DummyString"
+Character = "DummyCharacter"
+Statement = DummyStatement
+
+DummyStatement = ExportLevel
