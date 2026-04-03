@@ -1,28 +1,63 @@
+{{
+  const typeTable = {
+    lambda : []
+    dictionary : []
+    list : []
+  }
+}}
+
 //空白必須
 __ = " "+
 
 //空白可
 _ = " "*
 
+Comment = { /^`[^\r\n]\n/gm }
 
-Program = Expression*
+Program = Expression* / Comment*
 
-Expression = Export
+Expression
+  = Definition
+  / Verification
+
+Definition
+  = Export
+  / Define
+
+Verification
+  = Output
+  / Applicate
+  / Construct
+  / Compose
+  / Calculate
+  / GetAddress
+  / Get
+  / Compute
+  / input
+  / Import
+  / Block
+
 
 Export = ("###" / "##" / "#") Define
 
 Define
-  = identifier _ ":" _ ( Dictionary / Define / Output)
-  / Output
+  = identifier _ ":" _ (
+    right:Dictionary {
+      typeTable.dictionary.push(symbol)
+    }
+    / right:Closure {
+      typeTable.lambda.push(symbol)
+    }
+
+  )
 
 Output
-  = (address / identifier / GetAddress) __ "#" __ Output
-  / Apply
+  = (address / identifier / Address) __ "#" __ (Applicate / Output)
 
-apply
+Apply
   = (Closure / Get / identifier) __ DirectProduct
 
-closure
+Closure
   = lambda
   / DirectProduct
 
