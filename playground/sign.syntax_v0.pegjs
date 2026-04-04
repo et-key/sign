@@ -17,7 +17,7 @@ __ = " "+
 //空白可
 _ = " "*
 
-Program = (Expression / Comment)*
+Program = (Expression / Comment)
 
 Comment = &{ /^`[^\r\n]\n/gm }
 
@@ -50,16 +50,16 @@ Define
     _ defineOp          //右結合である
     / [\n] Dictionary   //DictionaryIdentifierになる
     / Functional        //Functional_Identifierになる
-    / string_literal    //文字列型になる（内部的にはリスト） 
+    / string    //文字列型になる（内部的にはリスト） 
     / DirectProduct     //List_Identifierになる
-    / atom              //型推論の必要はなく、演算子での振る舞いに任せる
+    / Atom              //型推論の必要はなく、演算子での振る舞いに任せる
   )
 
 Dictionary
   = Indent identifier _ ":" (
-    / [\n] Dictionary   //DictionaryIdentifierになる
+     [\n] Dictionary   //DictionaryIdentifierになる
     / Functional        //Functional_Identifierになる
-    / string_literal    //文字列型になる（内部的にはリスト） 
+    / string    //文字列型になる（内部的にはリスト） 
     / DirectProduct     //List_Identifierになる
     / Atom              //型推論の必要はなく、演算子での振る舞いに任せる
   ) Dedent
@@ -79,8 +79,8 @@ Applicate
 
 Closure
   = "[" (Lambda / PointFree) "]"
-  = "{" (Lambda / PointFree) "}"
-  = "(" (Lambda / PointFree) ")"
+  / "{" (Lambda / PointFree) "}"
+  / "(" (Lambda / PointFree) ")"
 
 Lambda
   = Arguments _ "?" _ (output / Lambda)
@@ -106,6 +106,48 @@ DirectSum
   = Logical (__ Logical)*
   / Compose
 
+
+Block
+  = "[" Expression "]"
+  / "{" Expression "}"
+  / "(" Expression ")"
+  / Indent Expression Dedent
+
+Atom
+  = string
+  / float
+  / address
+  / register
+  / unicode
+  / identifier
+
+// 1. 文字列型
+// インデントされている、あるいは式の途中に現れるバッククォート囲みは文字列として確定します。
+string = "`" [^`\r\n]* "`"
+
+// 2. 浮動小数点
+// （整数部 . 小数部）
+float = "-"? int_part:[0-9]+ "." frac_part:[0-9]+
+
+// 3. アドレス型 ("0x" Hex*)
+// ※ AArch64のメモリオペランド等に直接写像される
+address = "0x" Hex+
+
+// 4. レジスタ即値型 ("0r" Hex*)
+// ※ AArch64の物理レジスタ（x0, v0など）や直値バインディングに写像される
+register = "0r" Hex+
+
+// 5. UniCode型 ("0u" Hex*)
+unicode = "0u" Hex+
+
+// 6. 識別子（変数名など）
+identifier = [a-zA-Z_][a-zA-Z0-9_]*
+
+// --- ヘルパー規則 ---
+// 16進数の文字セット
+Hex = [0-9a-fA-F]
+
+
 prefix
   = "###" / "##" / "#" / "~" / "!!" / "!" / "$" / "@"
 
@@ -119,78 +161,7 @@ infix
   / ":" / "#" / "?" / "," / "~" / ";" / "|" / "&"
   / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
 
-Block
-  = "[" Expression+ "]"
-  / "{" Expression+ "}"
-  / "(" Expression+ ")"
-  / Indent Expression Dedent
+Indent = [\t]+
+SameDent = [\t]*
 
-atom
-  = string_literal
-  / float_literal
-  / address_literal
-  / register_literal
-  / unicode_literal
-  / integer_literal
-  / identifier
-
-// 1. 文字列型
-// インデントされている、あるいは式の途中に現れるバッククォート囲みは文字列として確定します。
-string_literal = "`" [^`\r\n]* "`"
-
-// 2. 浮動小数点
-// （整数部 . 小数部）
-float_literal = "-"? int_part:[0-9]+ "." frac_part:[0-9]+
-
-// 3. アドレス型 ("0x" Hex*)
-// ※ AArch64のメモリオペランド等に直接写像される
-address_literal = "0x" Hex+
-
-// 4. レジスタ即値型 ("0r" Hex*)
-// ※ AArch64の物理レジスタ（x0, v0など）や直値バインディングに写像される
-register_literal = "0r" Hex+
-
-// 5. UniCode型 ("0u" Hex*)
-unicode_literal = "0u" Hex+
-
-// 6. 識別子（変数名など）
-identifier = [a-zA-Z_][a-zA-Z0-9_]*
-
-// --- ヘルパー規則 ---
-// 16進数の文字セット
-Hex = [0-9a-fA-F]
-
-
-prefix
-  = "###" / "##" / "#" / "~" / "!!" / "!" / "$" / "@" / "\\"
-
-postfix
-  = "!" / "~" / "@"
-
-infix
-  = defineOp
-  / outputOp
-  / lambdaOp
-  / productOp
-  / iteratorOp
-  / logicalOp
-  / comparisonOp
-  / additiveOp
-  / multiplexOp
-  / exponentialOp
-  / bitOp
-  / getOp
-
-defineOp = ":"
-outputOp = "#"
-lambdaOp = "?"
-productOp = ","
-iteratorOp = "~+" / "~-" / "~*" / "~/" / "~^" / "~"
-logicalOp = ";" / "|" / "&"
-comparisonOp = "<" / "<=" / "=" / "==" / ">=" / ">" / "!="
-additiveOp = "+" / "-"
-multiplexOp = "*" / "/" / "%"
-exponentialOp = "^"
-bitOp = "<<" / ">>" / "||" / ";;" / "&&"
-getOp =  "'" / "@"
-
+Dedent = "Dedent" //要、実装！
