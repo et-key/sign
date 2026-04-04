@@ -1,8 +1,13 @@
 {{
-  const typeTable = {
+  global.typeTable = {
     lambda : []
     dictionary : []
     list : []
+  }
+
+  global.context = {
+    indentStack : []
+    indent = ""
   }
 }}
 
@@ -12,13 +17,13 @@ __ = " "+
 //空白可
 _ = " "*
 
+Program = (Expression / Comment)*
+
 Comment = &{ /^`[^\r\n]\n/gm }
 
-Program = Expression* / Comment*
-
 Expression
-  = Definition
-  / Verification
+  = SOL Definition EOL
+  / SameDent Verification
 
 Definition
   = Export            //エクスポート
@@ -38,56 +43,60 @@ Verification
   / Block             //式のブロック
 
 
-Export = ("###" / "##" / "#") Define
+Export = ("###" / "##" / "#")? Define
 
 Define
-  = identifier _ ":" _ (
-    Define                  //右結合である
-    / Dictionary            //DictionaryIdentifierになる
-    / Closure               //Functional_Identifierになる
-    / DirectProduct         //List_Identifierになる
+  = identifier _ ":" (
+    _ defineOp          //右結合である
+    / [\n] Dictionary   //DictionaryIdentifierになる
+    / Functional        //Functional_Identifierになる
+    / string_literal    //文字列型になる（内部的にはリスト） 
+    / DirectProduct     //List_Identifierになる
+    / atom              //型推論の必要はなく、演算子での振る舞いに任せる
   )
 
+Dictionary
+  = Indent identifier _ ":" (
+    / [\n] Dictionary   //DictionaryIdentifierになる
+    / Functional        //Functional_Identifierになる
+    / string_literal    //文字列型になる（内部的にはリスト） 
+    / DirectProduct     //List_Identifierになる
+    / Atom              //型推論の必要はなく、演算子での振る舞いに任せる
+  ) Dedent
+
+Functional
+  = Lambda
+  / "[" PointFree "]"
+  / "{" PointFree "}"
+  / "(" PointFree ")"
 
 Output
   = (address / identifier / Address) __ "#" __ (Applicate / Output)
 
-Apply
+Applicate
   = (Closure / Get / functional_Identifier) (__ DirectProduct)*
   / DirectProduct
 
 Closure
-  = lambda
-  / DirectProduct
+  = "[" (Lambda / PointFree) "]"
+  = "{" (Lambda / PointFree) "}"
+  = "(" (Lambda / PointFree) ")"
 
 Lambda
-  = PointFree
-  / "[" Arguments _ "?" _ output / Lambda "]"
-  / "{" Arguments _ "?" _ output / Lambda "}"
-  / "(" Arguments _ "?" _ output / Lambda ")"
+  = Arguments _ "?" _ (output / Lambda)
+  / Arguments _ "?" "\n" Indent (Match_Case / Output) Dedent
 
 PointFree
   = DirectMap
   / DirectFold
 
 DirectMap
-  = "[" prefix "_" "," "]"
-  / "{" prefix "_" "," "}"
-  / "(" prefix "_" "," ")"
-  / "[" "_" postfix "," "]"
-  / "{" "_" postfix "," "}"
-  / "(" "_" postfix "," ")"
-  / "[" Number infix "," "]"
-  / "{" Number infix "," "}"
-  / "(" Number infix "," ")"
-  / "[" infix Number "," "]"
-  / "{" infix Number "," "}"
-  / "(" infix Number "," ")"
+  =  prefix "_" ","
+  / "_" postfix ","
+  / Number infix ","
+  / infix Number ","
 
-DirectFold
-  = "[" infix "]"
-  / "{" infix "}"
-  / "(" infix ")"
+DirectFold = infix
 
 DirectProduct
   = DirectSum _ "," _ DirectProduct
@@ -110,18 +119,11 @@ infix
   / ":" / "#" / "?" / "," / "~" / ";" / "|" / "&"
   / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
 
-inlineBlock
-  = "[" expression "]"
-  / "{" expression "}"
-  / "(" expression ")"
-
-IndentBlock = Indent expression+ Dedent
-
-closure =
-   "[" list _ "?" expression "]"
-  / "{" list _ "?" expression "}"
-  / "(" list _ "?" expression ")"
-
+Block
+  = "[" Expression+ "]"
+  / "{" Expression+ "}"
+  / "(" Expression+ ")"
+  / Indent Expression Dedent
 
 atom
   = string_literal
