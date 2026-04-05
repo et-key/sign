@@ -94,7 +94,19 @@ Closure
 
 Lambda
   = Arguments _ "?" _ (Output / Lambda)
-  / Arguments _ "?" "\n" Indent (Match_Case / Output) Dedent
+  / Arguments _ "?" "\n" Indent ((Match_Case / Output) EOL)* Dedent
+
+Arguments = Continuous / Defaultive
+
+Defaultive
+  = "[" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent "]"
+  / "{" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent "}"
+  / "(" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent ")"
+  / EOL Indent Indent (identifier _ ":" _ Verification EOL)+ Dedent Dedent
+
+Match_Case = Compare ":" Verification
+
+
 
 PointFree
   = DirectMap
@@ -150,10 +162,12 @@ ArithmeticBlock
   = "[" Arithmetic "]"
   / "{" Arithmetic "}"
   / "(" Arithmetic ")"
-  / Address
+  / number
+  / identifier
+  / Expand
 
 Expand
-  = (dictionary / list / string) "~"
+  = (identifier / dictionary / list / string) "~"
   / StringTypeExpand
 
 StringTypeExpand = stringType "~"
@@ -185,6 +199,7 @@ Block
   / "{" Verification "}"
   / "(" Verification ")"
   / Indent Verification Dedent
+  / Atom
 
 Atom
   = charactor
@@ -193,6 +208,10 @@ Atom
   / register
   / unicode
   / identifier
+  / function
+  / dictionary
+  / list
+  / stringType
 
 // 1. 文字列型
 // インデントされている、あるいは式の途中に現れるバッククォート囲みは文字列として確定します。
