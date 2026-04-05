@@ -3,7 +3,7 @@
   };
 
   global.context = {
-    indentStack : []
+    indentStack : [],
     indent = ""
   };
 }}
@@ -14,9 +14,11 @@ __ = " "+
 //空白可
 _ = " "*
 
-//行頭にマッチ
-SOL = o:"" &{ /^/gm.match(o); }
-EOL = [\n]
+//行頭
+SOL = &{ location().start.column === 1; }
+
+//行末
+EOL = "\r\n" / "\r" / "\n"
 
 Program = (Expression / Comment)
 
@@ -33,46 +35,33 @@ Definition
 Verification
   = Output
   / Applicate         //関数適用
-  / Construct         //ラムダ、リスト、辞書型の構築
-  / Compose           //関数合成
+  / Construct         //ラムダ、リスト、辞書型の構築、関数合成
   / Calculate         //ALUで扱う演算の集合で、優先順位を定義する必要ある
+  / Expand            //展開する
   / Address           //メモリアドレスの取得
   / Get               //辞書型やリストの中から値を取得
   / Compute           //Bit演算だけ行う
-  / input             //アドレスから値を取得
+  / Input             //アドレスから値を取得
   / Import            //別ファイルからのインポート
   / Block             //式のブロック
 
 Export = ("###" / "##" / "#")? Define
 
 Define
-  = Function
-  / Dictionary
-  / List
-  / StringType
-  / Symbolic
-
-Symbolic
-  = identifier _ ":" _ (Atom / Define) //型推論の必要はなく、演算子での振る舞いに任せる
-
-Function
-  = name:identifier _ ":" _ (PointFree / Lambda) { typeTable[name] = "function" }
-
-Dictionary
-  = name:identifier _ ":" _ EOL DictionaryInner { typeTable[name] = {} }
-
-List
-  = name:identifier _ ":" _ (DirectProduct / DirectSum) { typeTable[name] = [] }
-
-StringType
-  = name:identifier _ ":" _ string { typeTable[name] = "string" }
-
-DictionaryInner
-  = Indent
-  Dedent
+  = name:identifier _ ":" _ (
+    Expand
+    /  (PointFree / Lambda)  { typeTable[name] = "function"; }
+    / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
+    / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
+    / string { typeTable[name] = "string"; }
+    / Verification
+    / Atom
+    / Define
+  )
 
 Output
   = (address / identifier / Address) __ "#" __ (Applicate / Output)
+  / Applicate
 
 Applicate
   = (Closure / Get / function) (__ DirectProduct)*
@@ -83,6 +72,20 @@ Construct
   / Closure
   / DirectProduct
   / DirectSum
+  / Compose
+
+Dictionary
+  = name:identifier _ ":" _ (
+    Expand
+    /  (PointFree / Lambda)  { typeTable[name] = "function"; }
+    / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
+    / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
+    / string { typeTable[name] = "string"; }
+    / Verification
+    / Atom
+    / Define
+  )
+
 
 Closure
   = "[" (Lambda / PointFree) "]"
@@ -100,31 +103,92 @@ PointFree
 DirectMap
   =  prefix "_" ","
   / "_" postfix ","
-  / Number infix ","
-  / infix Number ","
+  / number infix ","
+  / infix number ","
 
 DirectFold = infix
 
 DirectProduct
-  = DirectSum _ "," _ DirectProduct
-  / DirectSum
-
-DirectSum
-  = Calculate (__ Calculate)*
+  = DirectSum (_ "," _ DirectProduct)?
   / Compose
+  / Sequence
+  / Continuous
 
-Compose = 
-  (Closure / function) (__ (Closure / function))*
+DirectSum = Calculate (__ Continuous)*
+
+Compose
+  = (Closure / function) (__ (Closure / function))*
+  / Sequence
+
+Sequence //無限リストも表現可能
+  = (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic)
+  / (number / Arithmetic) __ "~" __ (number / Arithmetic)
+  / (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic) __ "~" __ (number / Arithmetic)
+
+Continuous = "~"? Calculate (__ "~"? Calculate)*
+
+Calculate = Logical_Xor
+Logical_Xor = Logical_Or (_ ";" _ Logical_Or)*
+Logical_Or = Logical_And (__ "|" __ Logical_And)*
+Logical_And = Logical_Not (_ "&" _ Logical_Not)*
+Logical_Not = "!"? Compare
+
+Compare = Arithmetic (_ ("<" / "<=" / "=" / "==" /">=" / ">" / "!=") _ Arithmetic)*
+
+Arithmetic = Additive
+
+Additive = Multiply (_ ("+" / __ "-" __) _ Multiply)*
+Multiply = Expornential (_ ("*" / "/" / "%") _ Expornential)*
+Expornential = Factorial (_ "^" _ Factorial)*
+Factorial = Absolute "!"?
+
+Absolute
+  = "|" (Additive / ArithmeticBlock) "|"
+  / ArithmeticBlock
+
+ArithmeticBlock
+  = "[" Arithmetic "]"
+  / "{" Arithmetic "}"
+  / "(" Arithmetic ")"
+  / Address
+
+Expand
+  = (dictionary / list / string) "~"
+  / StringTypeExpand
+
+StringTypeExpand = stringType "~"
+
+Address
+  = address
+  / "$"? Get
+
+Get
+  = dictionary (_ "'" _ (identifier / string / StringTypeExpand))*
+  / list ( _ "'" _ (number / identifier))
+  / (identifier / string / StringTypeExpand) __ "@" __ Get
+  / Input
+
+Input = "@"? Compute
+
+Compute = BitShift
+
+BitShift = BitOr (_ ("<<" / ">>") _ BitOr)*
+BitOr = BitXor (_ "||" _ BitXor)*
+BitXor = BitAnd (_ ";;" _ BitAnd)*
+BitAnd = BitNot (_ "&&" _ BitNot)*
+BitNot = "!!"? (address / register)
+
+Import = (identifier / string / StringTypeExpand) "@"
 
 Block
-  = "[" Expression "]"
-  / "{" Expression "}"
-  / "(" Expression ")"
-  / Indent Expression Dedent
+  = "[" Verification "]"
+  / "{" Verification "}"
+  / "(" Verification ")"
+  / Indent Verification Dedent
 
 Atom
   = charactor
-  / float
+  / number
   / address
   / register
   / unicode
@@ -139,7 +203,7 @@ charactor = "\\" [\s\S]
 
 // 2. 浮動小数点
 // （整数部 . 小数部）
-float = "-"? int_part:[0-9]+ "." frac_part:[0-9]+
+number = "-"? int_part:[0-9]+ "." frac_part:[0-9]+
 
 // 3. アドレス型 ("0x" Hex*)
 // ※ AArch64のメモリオペランド等に直接写像される
@@ -147,7 +211,9 @@ address = "0x" Hex+
 
 // 4. レジスタ即値型 ("0r" Hex*)
 // ※ AArch64の物理レジスタ（x0, v0など）や直値バインディングに写像される
-register = "0r" Hex+
+register 
+  = "0r" Hex+
+  / "0b" ["0" / "1"]+
 
 // 5. UniCode型 ("0u" Hex*)
 unicode = "0u" Hex+
@@ -155,11 +221,19 @@ unicode = "0u" Hex+
 // 6. 識別子（変数名など）
 identifier = [a-zA-Z_][a-zA-Z0-9_]*
 
+function
+  = name:identifier &{ typeTable[name] === "function"; }
 
-// --- ヘルパー規則 ---
-// 16進数の文字セット
+dictionary
+  = name:identifier &{ typeTable[name].constructor === Object; }
+
+list
+  = name:identifier &{ !!typeTable[name].constructor === Array; }
+
+stringType
+  = name:identifier &{ typeTable[name] === "string"; }
+
 Hex = [0-9a-fA-F]
-
 
 prefix
   = "###" / "##" / "#" / "~" / "!!" / "!" / "$" / "@"
@@ -175,13 +249,13 @@ infix
   / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
 
 Indent = tab:[\t]+ {
-    
+  //要、実装！
 }
 
 SameDent = tab:[\t]* {
-
+  //要、実装！
 }
 
 Dedent = &{
-
-} //要、実装！
+  //要、実装！
+}
