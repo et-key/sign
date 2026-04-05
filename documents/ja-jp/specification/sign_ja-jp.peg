@@ -1,245 +1,275 @@
-// 完全なSign言語PEG.js構文解析仕様
-// 演算子記号表の優先順位1-16を完全実装
-// ポイントレス記法と余積表現の4つの意味を実装
+{{
+  global.typeTable = {
+  };
+
+  global.context = {
+    indentStack : [],
+    indent = ""
+  };
+}}
+
+//空白必須
+__ = " "+
+
+//空白可
+_ = " "*
+
+//行頭
+SOL = &{ location().start.column === 1; }
+
+//行末
+EOL = "\r\n" / "\r" / "\n"
+
+Program = (Expression / Comment)
+
+Comment = SOL "`" [^\r\n]* EOL
+
+Expression
+  = SOL Definition EOL
+  / SameDent Verification
+
+Definition
+  = Export            //エクスポート
+  / Define            //定義（名前を付けてオブジェクトを束縛する）
+
+Verification
+  = Output
+  / Applicate         //関数適用
+  / Construct         //ラムダ、リスト、辞書型の構築、関数合成
+  / Calculate         //ALUで扱う演算の集合で、優先順位を定義する必要ある
+  / Expand            //展開する
+  / Address           //メモリアドレスの取得
+  / Get               //辞書型やリストの中から値を取得
+  / Compute           //Bit演算だけ行う
+  / Input             //アドレスから値を取得
+  / Import            //別ファイルからのインポート
+  / Block             //式のブロック
+
+Export = ("###" / "##" / "#")? Define
+
+Define
+  = name:identifier _ ":" _ (
+    Expand
+    /  (PointFree / Lambda)  { typeTable[name] = "function"; }
+    / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
+    / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
+    / string { typeTable[name] = "string"; }
+    / Verification
+    / Atom
+    / Define
+  )
+
+Output
+  = (address / identifier / Address) __ "#" __ (Applicate / Output)
+  / Applicate
+
+Applicate
+  = (Closure / Get / function) (__ DirectProduct)*
+  / DirectProduct
+
+Construct
+  = Dictionary
+  / Closure
+  / DirectProduct
+  / DirectSum
+  / Compose
+
+Dictionary
+  = name:identifier _ ":" _ (
+    Expand
+    /  (PointFree / Lambda)  { typeTable[name] = "function"; }
+    / EOL Indent dict:Dictionary Dedent { typeTable[name] = {...dict}; }
+    / list:(DirectProduct / DirectSum) { typeTable[name] = list; }
+    / string { typeTable[name] = "string"; }
+    / Verification
+    / Atom
+    / Define
+  )
+
+
+Closure
+  = "[" (Lambda / PointFree) "]"
+  / "{" (Lambda / PointFree) "}"
+  / "(" (Lambda / PointFree) ")"
+
+Lambda
+  = Arguments _ "?" _ (Output / Lambda)
+  / Arguments _ "?" "\n" Indent ((Match_Case / Output) EOL)* Dedent
+
+Arguments = Continuous / Defaultive
+
+Defaultive
+  = "[" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent "]"
+  / "{" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent "}"
+  / "(" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent ")"
+  / EOL Indent Indent (identifier _ ":" _ Verification EOL)+ Dedent Dedent
+
+Match_Case = Compare ":" Verification
+
+PointFree
+  = DirectMap
+  / DirectFold
+
+DirectMap
+  =  prefix "_" ","
+  / "_" postfix ","
+  / number infix ","
+  / infix number ","
+
+DirectFold = infix
+
+DirectProduct
+  = DirectSum (_ "," _ DirectProduct)?
+  / Compose
+  / Sequence
+  / Continuous
+
+DirectSum = Calculate (__ Continuous)*
+
+Compose
+  = (Closure / function) (__ (Closure / function))*
+  / Sequence
+
+Sequence //無限リストも表現可能
+  = (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic)
+  / (number / Arithmetic) __ "~" __ (number / Arithmetic)
+  / (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic) __ "~" __ (number / Arithmetic)
+
+Continuous = "~"? Calculate (__ "~"? Calculate)*
+
+Calculate = Logical_Xor
+Logical_Xor = Logical_Or (_ ";" _ Logical_Or)*
+Logical_Or = Logical_And (__ "|" __ Logical_And)*
+Logical_And = Logical_Not (_ "&" _ Logical_Not)*
+Logical_Not = "!"? Compare
+
+Compare = Arithmetic (_ ("<" / "<=" / "=" / "==" /">=" / ">" / "!=") _ Arithmetic)*
+
+Arithmetic = Additive
+
+Additive = Multiply (_ ("+" / __ "-" __) _ Multiply)*
+Multiply = Expornential (_ ("*" / "/" / "%") _ Expornential)*
+Expornential = Factorial (_ "^" _ Factorial)*
+Factorial = Absolute "!"?
+
+Absolute
+  = "|" (Additive / ArithmeticBlock) "|"
+  / ArithmeticBlock
 
-Start = Program
+ArithmeticBlock
+  = "[" Arithmetic "]"
+  / "{" Arithmetic "}"
+  / "(" Arithmetic ")"
+  / number
+  / identifier
+  / Expand
+
+Expand
+  = (identifier / dictionary / list / string) "~"
+  / StringTypeExpand
+
+StringTypeExpand = stringType "~"
 
-// ==================== プログラム構造 ====================
+Address
+  = address
+  / "$"? Get
 
-Program = (Statement _?)*
+Get
+  = dictionary (_ "'" _ (identifier / string / StringTypeExpand))*
+  / list ( _ "'" _ (number / identifier))
+  / (identifier / string / StringTypeExpand) __ "@" __ Get
+  / Input
 
-Statement = 
-    ExportLevel 
-    / Comment
-    / EOL
+Input = "@"? Compute
 
-Comment = "`" [^\n\r`]* "`"?
+Compute = BitShift
 
-// ==================== 優先順位階層（1-16） ====================
+BitShift = BitOr (_ ("<<" / ">>") _ BitOr)*
+BitOr = BitXor (_ "||" _ BitXor)*
+BitXor = BitAnd (_ ";;" _ BitAnd)*
+BitAnd = BitNot (_ "&&" _ BitNot)*
+BitNot = "!!"? (address / register)
 
-// 優先順位1: Export（最低優先度）
-ExportLevel = 
-    ExportSymbol DefineLevel
-    / DefineLevel
+Import = (identifier / string / StringTypeExpand) "@"
 
-// 優先順位2: Define + Output
-DefineLevel = 
-    Identifier __ DefineSymbol __ OutputLevel
-    / OutputLevel
+Block
+  = "[" Verification "]"
+  / "{" Verification "}"
+  / "(" Verification ")"
+  / Indent Verification Dedent
+  / Atom
 
-OutputLevel = 
-    (HexNumber / AddressSymbol? Identifier) __ OutputSymbol __ FunctionApplyLevel
-    / FunctionApplyLevel
+Atom
+  = charactor
+  / number
+  / address
+  / register
+  / unicode
+  / identifier
+  / function
+  / dictionary
+  / list
+  / stringType
 
-// 優先順位3: 構築域（Coproduct, Lambda, Product, Range）
+// 1. 文字列型
+// インデントされている、あるいは式の途中に現れるバッククォート囲みは文字列として確定します。
 
-ListConstructLevel = 
-    (Number / Character / Identifier) (__ ConcatListLevel)*
-    / ConcatListLevel
+string = "`" [^`\r\n]* "`"
 
-ConcatListLevel = 
-    (ProductLevel / Number / String / Character / Unit / Identifier) (__ FunctionApplyLevel)*
-    / FunctionApplyLevel
+charactor = "\\" [\s\S]
 
-FunctionApplyLevel = 
-    (LambdaLevel / PointlessExpression / Unit / Identifier) (__ FunctionComposeLevel)*
-    / FunctionComposeLevel
+// 2. 浮動小数点
+// （整数部 . 小数部）
+number = "-"? int_part:[0-9]+ "." frac_part:[0-9]+
 
-FunctionComposeLevel = 
-    (LambdaLevel / PointlessExpression / Unit / Identifier) (__ LambdaLevel)*
-    / LambdaLevel
+// 3. アドレス型 ("0x" Hex*)
+// ※ AArch64のメモリオペランド等に直接写像される
+address = "0x" Hex+
 
-LambdaLevel = 
-    ParameterList __ LambdaSymbol __ ProductLevel
-    / ProductLevel
+// 4. レジスタ即値型 ("0r" Hex*)
+// ※ AArch64の物理レジスタ（x0, v0など）や直値バインディングに写像される
+register 
+  = "0r" Hex+
+  / "0b" ["0" / "1"]+
 
-ParameterList = 
-    Parameter (__ Parameter)*
+// 5. UniCode型 ("0u" Hex*)
+unicode = "0u" Hex+
 
-Parameter = 
-    ContinuousSymbol Identifier
-    / Identifier
+// 6. 識別子（変数名など）
+identifier = [a-zA-Z_][a-zA-Z0-9_]*
 
-ProductLevel = 
-    RangeLevel (__ ProductSymbol __ RangeLevel)*
+function
+  = name:identifier &{ typeTable[name] === "function"; }
 
-RangeLevel = 
-    LogicalXorLevel __ RangeSymbol __ LogicalXorLevel
-    / LogicalXorLevel
+dictionary
+  = name:identifier &{ typeTable[name].constructor === Object; }
 
-// 優先順位4-6: 論理域
-LogicalXorLevel = 
-    LogicalOrLevel (__ XorSymbol __ LogicalOrLevel)*
+list
+  = name:identifier &{ !!typeTable[name].constructor === Array; }
 
-// 優先順位13: 解決評価域（Expand, Address, Get）
-ResolveLevel = ExpandLevel
+stringType
+  = name:identifier &{ typeTable[name] === "string"; }
 
-ExpandLevel = 
-    AddressLevel ExpandSymbol
-    / AddressLevel
+Hex = [0-9a-fA-F]
 
-AddressLevel = 
-    AddressSymbol GetLevel
-    / GetLevel
+prefix
+  = "###" / "##" / "#" / "~" / "!!" / "!" / "$" / "@"
 
-GetLevel = GetRightExpression / GetLeftExpression / ImportLevel
+postfix
+  = "!" / "~" / "@"
 
-// 右単位元: key @ object（左結合）
-GetRightExpression = 
-    (Identifier / String / Integer) __ GetRightSymbol __ GetLeftExpression
-// 優先順位16: ブロック・基本要素
-PrimaryLevel = 
-    PointlessExpression
-    / BlockExpression
-    / Literal
-    / Identifier
+infix
+  = "~+" / "~-" / "~*" / "~/" / "~^"
+  / "<<" / ">>" / "||" / ";;" / "&&"
+  / "<=" / "==" / ">=" / "!="
+  / ":" / "#" / "?" / "," / "~" / ";" / "|" / "&"
+  / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
 
-// ==================== ポイントレス記法 ====================
+Indent = tab:[\t]+ {
+}
 
-PointlessExpression = 
-    ("[" _ PointlessContent _ "]")
-    / ("{" _ PointlessContent _ "}")
-    / ("(" _ PointlessContent _ ")")
+SameDent = tab:[\t]* {
+}
 
-PointlessContent = 
-    PartialApplication
-    / DirectFold
-
-PartialApplication = 
-    InfixOperator __ PrimaryLiteral _ ","?
-    / PrimaryLiteral __ InfixOperator _ ","?
-    / PrefixOperator
-    / ("_" PostfixOperator)
-DirectFold = 
-    InfixOperator
-
-PrimaryLiteral = Literal / Identifier
-
-// ==================== ブロック構築 ====================
-
-BlockExpression = 
-    ("(" _ ExportLevel _ ")")
-    / ("{" _ ExportLevel _ "}")
-    / ("[" _ ExportLevel _ "]")
-    / IndentBlock
-
-IndentBlock = BlockStart ExportLevel
-
-BlockStart = $(EOL TAB+)
-
-// ==================== リテラル ====================
-
-Literal = 
-    Unit
-    / Number
-    / String
-    / Character
-
-Unit = "_"
-
-Number = Float / Integer / HexNumber / regNumber / OctNumber / BinNumber
-
-Integer = "-"? UnsignedInteger
-
-UnsignedInteger = $([1-9] [0-9]*) / "0"
-
-Float = "-"? [0-9]+ "." [0-9]+
-
-HexNumber = $("0x" [0-9A-Fa-f]+)
-
-regNumber = $("0r" [0-9A-Fa-f]+)
-
-OctNumber = $("0o" [0-7]+)
-
-BinNumber = $("0b" [01]+)
-
-String =
-    "`" [^`\n\r]* "`"
-
-Character = 
-    "\\" .
-    / $("0u" [0-9A-Fa-f]+)
-
-Identifier = 
-    $([A-Za-z_] [0-9A-Za-z_]*)
-
-// ==================== 演算子の位置区別実装 ====================
-
-
-// # 演算子（Export vs Output）
-ExportSymbol = "#"
-OutputSymbol = "#"
-
-// ! 演算子（Not vs Factorial）
-NotSymbol = "!"
-FactorialSymbol = "!"
-
-// ~ 演算子（Continuous vs Range vs Expand）
-ContinuousSymbol = $"~"
-RangeSymbol = $"~"
-ExpandSymbol = $"~"
-
-// @ 演算子（Input vs GetRight vs Import）
-InputSymbol = "@"
-GetLeftSymbol = "'"
-GetRightSymbol = "@"
-ImportSymbol = "@"
-
-// その他の基本演算子
-DefineSymbol = ":"
-LambdaSymbol = "?"
-ProductSymbol = ","
-XorSymbol = ";"
-OrSymbol = "|"
-AndSymbol = "&"
-
-ComparisonOperator = "<=" / ">=" / "!=" / "<" / ">" / "="
-AdditiveOperator = "+" / "-"
-MultiplicativeOperator = "*" / "/" / "%"
-PowerSymbol = "^"
-
-AddressSymbol = "$"
-
-// ==================== ポイントレス記法用演算子分類 ====================
-
-AnyOperator = 
-    InfixOperator / PrefixOperator / PostfixOperator
-
-InfixOperator = 
-    DefineSymbol / ProductSymbol / RangeSymbol / XorSymbol / OrSymbol / AndSymbol
-    / ComparisonOperator / AdditiveOperator / MultiplicativeOperator / PowerSymbol / GetLeftSymbol / GetRightSymbol
-
-PrefixOperator = 
-    ExportSymbol / NotSymbol / ContinuousSymbol / AddressSymbol / InputSymbol
-
-PostfixOperator = 
-    FactorialSymbol / ExpandSymbol / ImportSymbol
-
-// ==================== 空白・制御文字 ====================
-
-_ = $(" "*) // 任意個の空白（トークン区切り）
-__ = $(" "+) // 1個以上の空白（優先順位3の余積演算子）
-
-TAB = "\t"
-EOL = "\n" / "\r\n" / "\r"
-EOF = !.
-
-// ==================== 余積表現の4つの意味論サポート ====================
-
-/*
- * 余積演算子（__）の4つの意味:
- * 1. 関数適用: func __ arg1 __ arg2
- * 2. リスト結合: list1 __ list2 __ list3  
- * 3. 関数合成: [f] __ [g] __ x
- * 4. 式の結合: expr1 __ expr2
- * 
- * 構文解析では CoproductExpression として統一的に処理し、
- * 意味解析段階で文脈に応じて4つの意味を区別する
- * 
- * 例:
- * add 5 3          -> 関数適用
- * [1,2] [3,4]      -> リスト結合  
- * [+1] [*2] 5      -> 関数合成
- * x y z            -> 一般的な余積
- */
- 
+Dedent = &{
+}
