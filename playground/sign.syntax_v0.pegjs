@@ -1,5 +1,5 @@
 {{
-  global.identTable = {
+  global.typeTable = {
   };
 
   global.context = {
@@ -49,29 +49,33 @@ Define
   = Function
   / Dictionary
   / List
-  / String
+  / StringType
   / Symbolic
 
-Symbolic = identifier _ ":" _ Define
+Symbolic
+  = identifier _ ":" _ (Atom / Define) //型推論の必要はなく、演算子での振る舞いに任せる
 
-Function = i:identifier _ ":" _ (PointFree / Lambda) { identTable[i] =  }
+Function
+  = name:identifier _ ":" _ (PointFree / Lambda) { typeTable[name] = "function" }
 
-Dictionary = identifier _ ":" 
+Dictionary
+  = name:identifier _ ":" _ EOL DictionaryInner { typeTable[name] = {} }
 
-KeyValue
-  = Indent (identifier / string) _ ":" (
-    [\n] KeyValue    //DictionaryIdentifierになる
-    / Function        //Functional_Identifierになる
-    / string            //文字列型になる（内部的にはリスト） 
-    / DirectProduct     //List_Identifierになる
-    / Atom              //型推論の必要はなく、演算子での振る舞いに任せる
-  ) Dedent
+List
+  = name:identifier _ ":" _ (DirectProduct / DirectSum) { typeTable[name] = [] }
+
+StringType
+  = name:identifier _ ":" _ string { typeTable[name] = "string" }
+
+DictionaryInner
+  = Indent
+  Dedent
 
 Output
   = (address / identifier / Address) __ "#" __ (Applicate / Output)
 
 Applicate
-  = (Closure / Get / functional_Identifier) (__ DirectProduct)*
+  = (Closure / Get / function) (__ DirectProduct)*
   / DirectProduct
 
 Construct
@@ -119,7 +123,7 @@ Block
   / Indent Expression Dedent
 
 Atom
-  = string
+  = charactor
   / float
   / address
   / register
@@ -128,7 +132,10 @@ Atom
 
 // 1. 文字列型
 // インデントされている、あるいは式の途中に現れるバッククォート囲みは文字列として確定します。
+
 string = "`" [^`\r\n]* "`"
+
+charactor = "\\" [\s\S]
 
 // 2. 浮動小数点
 // （整数部 . 小数部）
@@ -148,9 +155,6 @@ unicode = "0u" Hex+
 // 6. 識別子（変数名など）
 identifier = [a-zA-Z_][a-zA-Z0-9_]*
 
-function = i:identifier &{
-  typeTable.lambda[i]
-}
 
 // --- ヘルパー規則 ---
 // 16進数の文字セット
@@ -170,7 +174,14 @@ infix
   / ":" / "#" / "?" / "," / "~" / ";" / "|" / "&"
   / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
 
-Indent = [\t]+
-SameDent = [\t]*
+Indent = tab:[\t]+ {
+    
+}
 
-Dedent = "Dedent" //要、実装！
+SameDent = tab:[\t]* {
+
+}
+
+Dedent = &{
+
+} //要、実装！
