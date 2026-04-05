@@ -6,6 +6,8 @@ Expression
   / Apply
   / Lambda
   / Product
+  / (name / number)
+  / ""
   
   Define = name _ ":" _ Expression
 

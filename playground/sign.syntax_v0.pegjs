@@ -1,8 +1,5 @@
 {{
-  global.typeTable = {
-    lambda : []
-    dictionary : []
-    list : []
+  global.identTable = {
   };
 
   global.context = {
@@ -46,7 +43,6 @@ Verification
   / Import            //別ファイルからのインポート
   / Block             //式のブロック
 
-
 Export = ("###" / "##" / "#")? Define
 
 Define
@@ -58,7 +54,7 @@ Define
 
 Symbolic = identifier _ ":" _ Define
 
-Function = identifier _ ":" _ (PointFree / Lambda)
+Function = i:identifier _ ":" _ (PointFree / Lambda) { identTable[i] =  }
 
 Dictionary = identifier _ ":" 
 
@@ -114,7 +110,7 @@ DirectSum
   / Compose
 
 Compose = 
-  (Closure / functionalIdentifier)
+  (Closure / function) (__ (Closure / function))*
 
 Block
   = "[" Expression "]"
@@ -151,6 +147,10 @@ unicode = "0u" Hex+
 
 // 6. 識別子（変数名など）
 identifier = [a-zA-Z_][a-zA-Z0-9_]*
+
+function = i:identifier &{
+  typeTable.lambda[i]
+}
 
 // --- ヘルパー規則 ---
 // 16進数の文字セット
