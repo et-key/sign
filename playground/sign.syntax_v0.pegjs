@@ -3,12 +3,12 @@
     lambda : []
     dictionary : []
     list : []
-  }
+  };
 
   global.context = {
     indentStack : []
     indent = ""
-  }
+  };
 }}
 
 //空白必須
@@ -17,9 +17,13 @@ __ = " "+
 //空白可
 _ = " "*
 
+//行頭にマッチ
+SOL = o:"" &{ /^/gm.match(o); }
+EOL = [\n]
+
 Program = (Expression / Comment)
 
-Comment = &{ /^`[^\r\n]\n/gm }
+Comment = SOL "`" [^\r\n]* EOL
 
 Expression
   = SOL Definition EOL
@@ -35,7 +39,7 @@ Verification
   / Construct         //ラムダ、リスト、辞書型の構築
   / Compose           //関数合成
   / Calculate         //ALUで扱う演算の集合で、優先順位を定義する必要ある
-  / GetAddress        //メモリアドレスの取得
+  / Address           //メモリアドレスの取得
   / Get               //辞書型やリストの中から値を取得
   / Compute           //Bit演算だけ行う
   / input             //アドレスから値を取得
@@ -46,29 +50,26 @@ Verification
 Export = ("###" / "##" / "#")? Define
 
 Define
-  = identifier _ ":" (
-    _ defineOp          //右結合である
-    / [\n] Dictionary   //DictionaryIdentifierになる
-    / Functional        //Functional_Identifierになる
-    / string    //文字列型になる（内部的にはリスト） 
-    / DirectProduct     //List_Identifierになる
-    / Atom              //型推論の必要はなく、演算子での振る舞いに任せる
-  )
+  = Function
+  / Dictionary
+  / List
+  / String
+  / Symbolic
 
-Dictionary
-  = Indent identifier _ ":" (
-     [\n] Dictionary   //DictionaryIdentifierになる
-    / Functional        //Functional_Identifierになる
-    / string    //文字列型になる（内部的にはリスト） 
+Symbolic = identifier _ ":" _ Define
+
+Function = identifier _ ":" _ (PointFree / Lambda)
+
+Dictionary = identifier _ ":" 
+
+KeyValue
+  = Indent (identifier / string) _ ":" (
+    [\n] KeyValue    //DictionaryIdentifierになる
+    / Function        //Functional_Identifierになる
+    / string            //文字列型になる（内部的にはリスト） 
     / DirectProduct     //List_Identifierになる
     / Atom              //型推論の必要はなく、演算子での振る舞いに任せる
   ) Dedent
-
-Functional
-  = Lambda
-  / "[" PointFree "]"
-  / "{" PointFree "}"
-  / "(" PointFree ")"
 
 Output
   = (address / identifier / Address) __ "#" __ (Applicate / Output)
@@ -77,13 +78,19 @@ Applicate
   = (Closure / Get / functional_Identifier) (__ DirectProduct)*
   / DirectProduct
 
+Construct
+  = Dictionary
+  / Closure
+  / DirectProduct
+  / DirectSum
+
 Closure
   = "[" (Lambda / PointFree) "]"
   / "{" (Lambda / PointFree) "}"
   / "(" (Lambda / PointFree) ")"
 
 Lambda
-  = Arguments _ "?" _ (output / Lambda)
+  = Arguments _ "?" _ (Output / Lambda)
   / Arguments _ "?" "\n" Indent (Match_Case / Output) Dedent
 
 PointFree
@@ -103,9 +110,11 @@ DirectProduct
   / DirectSum
 
 DirectSum
-  = Logical (__ Logical)*
+  = Calculate (__ Calculate)*
   / Compose
 
+Compose = 
+  (Closure / functionalIdentifier)
 
 Block
   = "[" Expression "]"
