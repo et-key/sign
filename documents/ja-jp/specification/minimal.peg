@@ -6,15 +6,15 @@ Expression
   / Apply
   / Lambda
   / Product
-  / Value
+  / number
 
-Define  = name _ ":" _ Expression
+Define  = name _ ":" _ Expression               // 本当は型推論をロジックに含んでおく
 
-Apply   = Lambda __ Expression
+Apply   = (Lambda / name) __ Expression         // nameがfunctionである場合は推論可能
 
 Lambda  = name (__ name)* _ "?" _ Expression
 
-Product = Value (_ (__ / ",") _ Expression)?
+Product = Value _ (__ / ",") _ Expression
 
 Value   = name / number
 
