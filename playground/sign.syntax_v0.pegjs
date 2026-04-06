@@ -4,7 +4,7 @@
 
   global.context = {
     indentStack : [],
-    indent = ""
+    indent : ""
   };
 }}
 
@@ -229,7 +229,7 @@ address = "0x" Hex+
 // ※ AArch64の物理レジスタ（x0, v0など）や直値バインディングに写像される
 register 
   = "0r" Hex+
-  / "0b" ["0" / "1"]+
+  / "0b" ("0" / "1")+
 
 // 5. UniCode型 ("0u" Hex*)
 unicode = "0u" Hex+
