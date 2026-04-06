@@ -20,6 +20,8 @@ SOL = &{ location().start.column === 1; }
 //行末
 EOL = "\r\n" / "\r" / "\n"
 
+Start = Program
+
 Program = (Expression / Comment)
 
 Comment = SOL "`" [^\r\n]* EOL
@@ -241,10 +243,10 @@ function
   = name:identifier &{ typeTable[name] === "function"; }
 
 dictionary
-  = name:identifier &{ typeTable[name].constructor === Object; }
+  = name:identifier &{ typeTable[name] && typeTable[name].constructor === Object; }
 
 list
-  = name:identifier &{ !!typeTable[name].constructor === Array; }
+  = name:identifier &{ Array.isArray(typeTable[name]); }
 
 stringType
   = name:identifier &{ typeTable[name] === "string"; }
