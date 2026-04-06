@@ -93,7 +93,7 @@ Closure
 
 Lambda
   = Arguments _ "?" _ (Output / Lambda)
-  / Arguments _ "?" "\n" Indent ((Match_Case / Output) EOL)* Dedent
+  / Arguments _ "?" EOL Indent ((Match_Case / Output) EOL)* Dedent
 
 Arguments = Continuous / Defaultive
 
