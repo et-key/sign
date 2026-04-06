@@ -20,6 +20,8 @@ SOL = &{ location().start.column === 1; }
 //行末
 EOL = "\r\n" / "\r" / "\n"
 
+Start = Program
+
 Program = (Expression / Comment)
 
 Comment = SOL "`" [^\r\n]* EOL
@@ -85,7 +87,6 @@ Dictionary
     / Atom
   )
 
-
 Closure
   = "[" (Lambda / PointFree) "]"
   / "{" (Lambda / PointFree) "}"
@@ -130,9 +131,16 @@ Compose
   / Sequence
 
 Sequence //無限リストも表現可能
-  = (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic)
+  = "[" SequenceInner "]"
+  / "{" SequenceInner "}"
+  / "(" SequenceInner ")"
+
+SequenceInner
+  = (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic) __ "~" __ (number / Arithmetic)
+  / (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic)
   / (number / Arithmetic) __ "~" __ (number / Arithmetic)
-  / (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic) __ "~" __ (number / Arithmetic)
+  / (number / Arithmetic) __ "~"
+  / "~" __ (number / Arithmetic)
 
 Continuous = "~"? Calculate (__ "~"? Calculate)*
 
@@ -152,13 +160,13 @@ Expornential = Factorial (_ "^" _ Factorial)*
 Factorial = Absolute "!"?
 
 Absolute
-  = "|" (Additive / ArithmeticBlock) "|"
-  / ArithmeticBlock
+  = "|" (Additive / CalculateBlock) "|"
+  / CalculateBlock
 
-ArithmeticBlock
-  = "[" Arithmetic "]"
-  / "{" Arithmetic "}"
-  / "(" Arithmetic ")"
+CalculateBlock
+  = "[" Calculate "]"
+  / "{" Calculate "}"
+  / "(" Calculate ")"
   / number
   / identifier
   / Expand
@@ -241,10 +249,10 @@ function
   = name:identifier &{ typeTable[name] === "function"; }
 
 dictionary
-  = name:identifier &{ typeTable[name].constructor === Object; }
+  = name:identifier &{ typeTable[name] && typeTable[name].constructor === Object; }
 
 list
-  = name:identifier &{ !!typeTable[name].constructor === Array; }
+  = name:identifier &{ Array.isArray(typeTable[name]); }
 
 stringType
   = name:identifier &{ typeTable[name] === "string"; }
@@ -265,13 +273,44 @@ infix
   / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
 
 Indent = tab:[\t]+ {
-  //要、実装！
+// 現在のインデントレベル（スタックのトップ）を取得
+  const currentIndentLength = global.context.indentStack.length > 0 
+    ? global.context.indentStack[global.context.indentStack.length - 1] 
+    : 0;
+  
+  // 読み込んだタブの数が現在のインデントより深いかチェック
+  if (tab.length > currentIndentLength) {
+    global.context.indentStack.push(tab.length);
+    global.context.indent = tab.join("");
+    return true; // マッチ成功
+  }
+  return false; // マッチ失敗（インデントされていない）
 }
 
 SameDent = tab:[\t]* {
-  //要、実装！
+const currentIndentLength = global.context.indentStack.length > 0 
+    ? global.context.indentStack[global.context.indentStack.length - 1] 
+    : 0;
+
+  // 読み込んだタブの数が現在のインデントと「完全に一致」するかチェック
+  return tab.length === currentIndentLength;
 }
 
 Dedent = &{
-  //要、実装！
+// 実際には文字を消費せず（&述語）、インデントが浅くなったことを検知するロジック
+  // 次の行のタブ数を先読みして、スタックをpopするような処理が必要になります。
+  
+  // ※ ここは少し工夫が必要で、通常は行頭のパース時に先読み (lookahead) して、
+  // 現在のスタックトップよりもタブが少なければ pop しつつマッチ成功とする、という形にします。
+  
+  // とりあえず pop するだけのプレースホルダー
+  if (global.context.indentStack.length > 0) {
+     global.context.indentStack.pop();
+     const newLen = global.context.indentStack.length > 0 
+        ? global.context.indentStack[global.context.indentStack.length - 1] 
+        : 0;
+     global.context.indent = "\t".repeat(newLen);
+     return true;
+  }
+  return false;
 }
