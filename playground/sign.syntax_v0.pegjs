@@ -175,7 +175,7 @@ Address
 
 Get
   = dictionary (_ "'" _ (identifier / string / StringTypeExpand))*
-  / list ( _ "'" _ (number / identifier))
+  / list ( _ "'" _ (number / identifier / Sequence))
   / (identifier / string / StringTypeExpand) __ "@" __ Get
   / Input
 
