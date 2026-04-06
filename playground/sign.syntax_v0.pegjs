@@ -87,7 +87,6 @@ Dictionary
     / Atom
   )
 
-
 Closure
   = "[" (Lambda / PointFree) "]"
   / "{" (Lambda / PointFree) "}"
@@ -132,9 +131,16 @@ Compose
   / Sequence
 
 Sequence //無限リストも表現可能
-  = (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic)
+  = "[" SequenceInner "]"
+  / "{" SequenceInner "}"
+  / "(" SequenceInner ")"
+
+SequenceInner
+  = (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic) __ "~" __ (number / Arithmetic)
+  / (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic)
   / (number / Arithmetic) __ "~" __ (number / Arithmetic)
-  / (number / Arithmetic) _ ("~+" / "~-" / "~*" / "~/" / "~^") _ (number / Arithmetic) __ "~" __ (number / Arithmetic)
+  / (number / Arithmetic) __ "~"
+  / "~" __ (number / Arithmetic)
 
 Continuous = "~"? Calculate (__ "~"? Calculate)*
 
