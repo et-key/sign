@@ -103,7 +103,7 @@ Defaultive
   / "(" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent ")"
   / EOL Indent Indent (identifier _ ":" _ Verification EOL)+ Dedent Dedent
 
-Match_Case = Compare ":" Verification
+Match_Case = Calculate ":" Verification
 
 PointFree
   = DirectMap
