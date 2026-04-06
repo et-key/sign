@@ -160,13 +160,13 @@ Expornential = Factorial (_ "^" _ Factorial)*
 Factorial = Absolute "!"?
 
 Absolute
-  = "|" (Additive / ArithmeticBlock) "|"
-  / ArithmeticBlock
+  = "|" (Additive / CalculateBlock) "|"
+  / CalculateBlock
 
-ArithmeticBlock
-  = "[" Arithmetic "]"
-  / "{" Arithmetic "}"
-  / "(" Arithmetic ")"
+CalculateBlock
+  = "[" Calculate "]"
+  / "{" Calculate "}"
+  / "(" Calculate ")"
   / number
   / identifier
   / Expand
