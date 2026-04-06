@@ -4,7 +4,7 @@
 
   global.context = {
     indentStack : [],
-    indent = ""
+    indent : ""
   };
 }}
 
@@ -83,7 +83,6 @@ Dictionary
     / string { typeTable[name] = "string"; }
     / Verification
     / Atom
-    / Define
   )
 
 
@@ -94,7 +93,7 @@ Closure
 
 Lambda
   = Arguments _ "?" _ (Output / Lambda)
-  / Arguments _ "?" "\n" Indent ((Match_Case / Output) EOL)* Dedent
+  / Arguments _ "?" EOL Indent ((Match_Case / Output) EOL)* Dedent
 
 Arguments = Continuous / Defaultive
 
@@ -104,7 +103,7 @@ Defaultive
   / "(" EOL Indent (identifier _ ":" _ Verification EOL)+ Dedent ")"
   / EOL Indent Indent (identifier _ ":" _ Verification EOL)+ Dedent Dedent
 
-Match_Case = Compare ":" Verification
+Match_Case = Calculate ":" Verification
 
 PointFree
   = DirectMap
@@ -176,7 +175,7 @@ Address
 
 Get
   = dictionary (_ "'" _ (identifier / string / StringTypeExpand))*
-  / list ( _ "'" _ (number / identifier))
+  / list ( _ "'" _ (number / identifier / Sequence))
   / (identifier / string / StringTypeExpand) __ "@" __ Get
   / Input
 
@@ -230,7 +229,7 @@ address = "0x" Hex+
 // ※ AArch64の物理レジスタ（x0, v0など）や直値バインディングに写像される
 register 
   = "0r" Hex+
-  / "0b" ["0" / "1"]+
+  / "0b" ("0" / "1")+
 
 // 5. UniCode型 ("0u" Hex*)
 unicode = "0u" Hex+

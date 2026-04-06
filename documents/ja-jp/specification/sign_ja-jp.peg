@@ -83,7 +83,6 @@ Dictionary
     / string { typeTable[name] = "string"; }
     / Verification
     / Atom
-    / Define
   )
 
 
