@@ -1,0 +1,6 @@
+{
+  "type": "module",
+  "dependencies": {
+    "wabt": "^1.0.39"
+  }
+}
