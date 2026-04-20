@@ -6,7 +6,14 @@ export function preprocess(code) {
 
   for (let line of srcLines) {
     if (line.trim() === '') continue;
-    
+
+    // トップレベルコメントの完全除去
+    // 行の先頭（インデント0）が ` で始まる場合は、行全体をコメントとしてスキップする
+    // （閉じられていなくても無視されるため、PEGでのパースエラーが起きません）
+    if (line.startsWith('`')) {
+      continue;
+    }
+
     let indent = line.search(/\S/);
     if (indent === -1) indent = 0;
 
@@ -33,7 +40,7 @@ export function preprocess(code) {
     } else {
       output.push(line.trim());
     }
-    
+
     skipIndent = line.trim().endsWith('\\');
   }
 
