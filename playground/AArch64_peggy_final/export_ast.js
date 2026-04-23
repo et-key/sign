@@ -17,8 +17,6 @@ function runTest(srcLines) {
   const src = preprocess(srcLines);
   if (!src) return;
   testNo++;
-  
-  const flatSrc = src.replace(/\n/g, ' ↵ ');
 
   let mdOut = `## Test ${testNo}\n### Source\n\`\`\`\n${originalSrc}\n\`\`\`\n### Preprocessed\n\`\`\`\n${src}\n\`\`\`\n`;
 

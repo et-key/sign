@@ -39,7 +39,6 @@ Lambda
   = args:Arguments _ "?" _ body:(Lambda / Match_Case+) {
       return { type: "Lambda", arguments: args, body: body };
   }
-  / PointFree
   / Output
   / Construct
 
@@ -153,7 +152,7 @@ Logical_And = head:Compare tail:(_ "&" _ Compare)* {
   return tail.reduce((res, el) => ({ type: "BinaryExpression", operator: el[1], left: res, right: el[3] }), head);
 }
 
-Compare = head:Arithmetic tail:(_ ("<" / "<=" / "=" / "==" /">=" / ">" / "!=") _ Arithmetic)* {
+Compare = head:Arithmetic tail:(_ ("==" / "!=" / "<=" / ">=" / "<" / ">" / "=") _ Arithmetic)* {
   return tail.reduce((res, el) => ({ type: "BinaryExpression", operator: el[1], left: res, right: el[3] }), head);
 }
 
@@ -175,9 +174,9 @@ Absolute
   / CalculateBlock
 
 CalculateBlock
-  = "[" _ EOL* _ expr:Coproduct _ EOL* _ "]" { return expr; }
-  / "{" _ EOL* _ expr:Coproduct _ EOL* _ "}" { return expr; }
-  / "(" _ EOL* _ expr:Coproduct _ EOL* _ ")" { return expr; }
+  = "[" _ EOL* _ expr:(PointFree / Coproduct) _ EOL* _ "]" { return expr; }
+  / "{" _ EOL* _ expr:(PointFree / Coproduct) _ EOL* _ "}" { return expr; }
+  / "(" _ EOL* _ expr:(PointFree / Coproduct) _ EOL* _ ")" { return expr; }
   / Get
 
 Get
@@ -217,10 +216,10 @@ Prefix
 
 // --- Atoms & Literals ---
 Atom
-  = charactor / string / number / address / register / unicode / identifier / unit
+  = charactor / string / address / register / unicode / number / identifier / unit
 
 string = $("`" [^`\r\n]* "`") { return { type: "StringLiteral", value: text() }; }
-charactor = $("\\" [\s\S]) { return { type: "CharLiteral", value: text() }; }
+charactor = $("\\" .) { return { type: "CharLiteral", value: text() }; }
 number = $("-"? [0-9]+ "."? [0-9]*) { return { type: "NumberLiteral", value: parseFloat(text()) }; }
 address = $("0x" Hex+) { return { type: "AddressLiteral", value: text() }; }
 register = $("0r" Hex+ / "0b" ("0" / "1")+) { return { type: "RegisterLiteral", value: text() }; }
@@ -231,8 +230,16 @@ unit = "_" { return { type: "Unit" }; }
 Hex = [0-9a-fA-F]
 
 // --- Operators ---
-prefix = "###" / "##" / "#" / "~" / "!!" / "!" / "$" / "@"
-postfix = "!" / "~" / "@"
+
+prefix
+  = "~" / "!!" / "!" / "$" / "@"
+
+postfix
+  = "!" / "~" / "@"
+
 infix
-  = "~+" / "~-" / "~*" / "~/" / "~^" / "<<" / ">>" / "||" / ";;" / "&&" / "<=" / "==" / ">=" / "!="
-  / ":" / "#" / "?" / "," / "~" / ";" / "|" / "&" / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
+  = "~+" / "~-" / "~*" / "~/" / "~^"
+  / "<<" / ">>" / "||" / ";;" / "&&"
+  / "<=" / "==" / ">=" / "!="
+  / ":" / "#" / "?" / "," / "~" / ";" / "|" / "&"
+  / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"

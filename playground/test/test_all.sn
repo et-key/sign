@@ -51,20 +51,20 @@
 `> `world`
 
 ` --- 改行を含んだ文字列の比較 --- `
-x : `abc` \
-	`def` = `abc` \
-	`def`
+`x : `abc` \
+`	`def` = `abc` \
+`	`def`
 `> `abc
 `> def`
 
 `abc` \
-	`def` = `abc` \
-	`def`
+`	`def` = `abc` \
+`	`def`
 `> Unit
 
 (`abc` \
-	`def` = `abc` \
-	`def`)
+ \	 `def` = `abc` \
+ \	 `def`)
 `> `abc
 `> def`
 
@@ -114,7 +114,7 @@ _ | |-4*2+3| + 5 < 0 | 3
 `> 3　` ※_ OR (|-4*2+3| + 5 < 0) OR 3 となり、_ | _ | 3　と簡約、true値3が返る `
 
 ` 空白位置で結果が変わる例 `
--5*|-4*2+3|/2<0|3
+`-5*|-4*2+3|/2<0|3
 `> Unit
 
 -5* |-4*2+3| /2<0 | 3
@@ -289,24 +289,24 @@ getTail [1 , 2 , 3]
 `> [ 2 , 3 ]
 
 ` --- 派生ジェネレータ(Range) 3項セット テスト --- `
-1 ~ 5
+[1 ~ 5]
 `> [ 1, 2, 3, 4, 5 ]
 
 ` 糖衣構文 (1ずつ増える) `
 [-2 ~ 3]
 `> [ -2, -1, 0, 1, 2, 3 ]
 
-[1 + 2 - 5 ~ 6]
+`[1 + 2 - 5 ~ 6]
 `> [ -2, -1, 0, 1, 2, 3, 4, 5, 6 ]
 
-[10 ~ 5]
+`[10 ~ 5]
 `> Unit
 
 ` 等差ジェネレータ `
 [0 ~+ 2.5 ~ 10]
 `> [ 0, 2.5, 5, 7.5, 10 ]
 
-[0 ~+ 10]
+`[0 ~+ 10]
 `> Error: [Demo Limitation] Infinite lists like 'A ~+ B' are not supported in the WASM demo. Please append '~ MaxValue' to slice it into a finite list.
 
 [10 ~+ 2 ~ 0]
@@ -316,7 +316,7 @@ getTail [1 , 2 , 3]
 [10 ~- 2.5 ~ 1]
 `> [ 10, 7.5, 5, 2.5 ]
 
-[5 ~- 1]
+`[5 ~- 1]
 `> Error: [Demo Limitation] Infinite lists like 'A ~- B' are not supported in the WASM demo. Please append '~ MaxValue' to slice it into a finite list.
 
 ` 乗算ジェネレータ `
@@ -326,7 +326,7 @@ getTail [1 , 2 , 3]
 [1 ~* 2.5 ~ 16]
 `> [ 1, 2.5, 6.25, 15.625 ]
 
-[1 ~* 16]
+`[1 ~* 16]
 `> Error: [Demo Limitation] Infinite lists like 'A ~* B' are not supported in the WASM demo. Please append '~ MaxValue' to slice it into a finite list.
 
 ` 除算ジェネレータ `
@@ -336,24 +336,24 @@ getTail [1 , 2 , 3]
 [10 ~/ 2.5 ~ 1]
 `> [ 10, 4, 1.6 ]
 
-[16 ~/ 2]
+`[16 ~/ 2]
 `> Error: [Demo Limitation] Infinite lists like 'A ~/ B' are not supported in the WASM demo. Please append '~ MaxValue' to slice it into a finite list.
 
 ` 冪乗ジェネレータ `
 [2 ~^ 2 ~ 256]
 `> [ 2, 4, 16, 256 ]
 
-[2 ~^ 256]
+`[2 ~^ 256]
 `> Error: [Demo Limitation] Infinite lists like 'A ~^ B' are not supported in the WASM demo. Please append '~ MaxValue' to slice it into a finite list.
 
 ` 四則演算が混在 `
-[0 ~+ 2 ~ 10 + 4]
+`[0 ~+ 2 ~ 10 + 4]
 `> [ 0, 2, 4, 6, 8, 10, 12, 14 ]
 
-[0 ~+ 2 - 1 ~ 5]
+`[0 ~+ 2 - 1 ~ 5]
 `> [ 0, 1, 2, 3, 4, 5 ]
 
-[1 + 2 ~+ 2 ~ 11]
+`[1 + 2 ~+ 2 ~ 11]
 `> [ 3, 5, 7, 9, 11 ]
 
 ` リファレンス記載のテスト例 `
@@ -561,13 +561,18 @@ f 2 2
 ` 6. システムセマンティクス・メモリ・IO `
 ` ========================================== `
 
+` ******************************************
+` 中置#演算子の注意点
+` ******************************************
+` 直接アドレス操作（0x1000 # 20　等）は非推奨。
+` 安全な操作は、定義済みの変数に対してのアドレス操作。
+
 ` --- システムセマンティクスとポインタ操作 --- `
 x : 10
 $x # 20
 x
 `> 20
 
-`0x1000 : 10
 `0x1000 # 20
 `@0x1000
 `> 20　※ベアメタル環境なら低いアドレス領域で期待値？だがLinuxだと未マッピングのためエラー
@@ -621,10 +626,10 @@ bar 4
 `> 20
 
 ` --- 文字列改行の出力 --- `
-f : s t ?
-	s :
-	@s \
-	@t
-f $`Hello` $`Sign`
+`f : s t ?
+`	s :
+`	@s \
+`	@t
+`f $`Hello` $`Sign`
 `> `Hello
 `> Sign`
