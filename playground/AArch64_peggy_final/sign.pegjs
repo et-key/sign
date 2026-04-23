@@ -127,17 +127,17 @@ Sequence
   / "(" _ EOL* _ inner:SequenceInner _ EOL* _ ")" { return { type: "Sequence", inner: inner, bracket: "()" }; }
 
 SequenceInner
-  = left:(number / Arithmetic) _ op:("~+" / "~-" / "~*" / "~/" / "~^") _ right:(number / Arithmetic) __ "~" __ step:(number / Arithmetic) {
+  = left:(CalculateBlock / Atom) _ op:("~+" / "~-" / "~*" / "~/" / "~^") _ right:(CalculateBlock / Atom) __ "~" __ step:(CalculateBlock / Atom) {
       return { type: "SequenceGenerator", left: left, operator: op, right: right, step: step };
   }
-  / left:(number / Arithmetic) _ op:("~+" / "~-" / "~*" / "~/" / "~^") _ right:(number / Arithmetic) {
+  / left:(CalculateBlock / Atom) _ op:("~+" / "~-" / "~*" / "~/" / "~^") _ right:(CalculateBlock / Atom) {
       return { type: "SequenceGenerator", left: left, operator: op, right: right };
   }
-  / left:(number / Arithmetic) __ "~" __ right:(number / Arithmetic) {
+  / left:(CalculateBlock / Atom) __ "~" __ right:(CalculateBlock / Atom) {
       return { type: "SequenceRange", left: left, right: right };
   }
-  / left:(number / Arithmetic) __ "~" { return { type: "SequenceRange", left: left, right: null }; }
-  / "~" __ right:(number / Arithmetic) { return { type: "SequenceRange", left: null, right: right }; }
+  / left:(CalculateBlock / Atom) __ "~" { return { type: "SequenceRange", left: left, right: null }; }
+  / "~" __ right:(CalculateBlock / Atom) { return { type: "SequenceRange", left: null, right: right }; }
 
 // --- Priority 7: Calculations ---
 Calculate = Logical_Xor
