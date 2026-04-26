@@ -98,14 +98,14 @@ Sequence
   / Block __ "~"
   / "~" __ Block
 
-Coproduct = (Compare __)* Compare
+Coproduct = Compare (__ Compare)*
 
 
 Compare = Arithmetic (_ ("==" / "<=" / ">=" / "!=" / "<" / ">" / "=") _ Arithmetic)*
 
 Arithmetic = Additive
 
-Additive = Multiply (_ ("+" / __ "-" __) _ Multiply)*
+Additive = Multiply (_ ("+" / "-" ) _ Multiply)*
 Multiply = Exponential (_ ("*" / "/" / "%") _ Exponential)*
 
 Exponential
