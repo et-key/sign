@@ -42,7 +42,13 @@ Lambda
 
 Output
   = (address / identifier) (__ "#" __ Lambda)+
-  / Construct
+  / Consideration
+
+Consideration = Logical_Xor
+Logical_Xor = Logical_Or (_ ";" _ Logical_Or)*
+Logical_Or = Logical_And (__ "|" __ Logical_And)*
+Logical_And = Judgement (_ "&" _ Judgement)*
+Judgement =  Construct (_ ("==" / "!=" / "=") _ Construct)*
 
 Construct
   = Dictionary
@@ -60,7 +66,7 @@ Defaultive
 Inline
   = identifier (__ "~"? identifier)*
 
-Match_Case = Indent (Calculate ":" (Calculate / Dictionary / Lambda))+ Dedent
+Match_Case = EOL Indent (Consideration ":" (Arithmetic / Dictionary / Lambda / Match_Case) EOL)+ Dedent
  
 PointFree
   = DirectMap
@@ -92,12 +98,8 @@ Sequence
   / Block __ "~"
   / "~" __ Block
 
-Coproduct = (Calculate __)* Calculate
+Coproduct = (Compare __)* Compare
 
-Calculate = Logical_Xor
-Logical_Xor = Logical_Or (_ ";" _ Logical_Or)*
-Logical_Or = Logical_And (__ "|" __ Logical_And)*
-Logical_And = Compare (_ "&" _ Compare)*
 
 Compare = Arithmetic (_ ("==" / "<=" / ">=" / "!=" / "<" / ">" / "=") _ Arithmetic)*
 
