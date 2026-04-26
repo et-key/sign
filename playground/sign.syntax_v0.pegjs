@@ -48,7 +48,7 @@ Consideration = Logical_Xor
 Logical_Xor = Logical_Or (_ ";" _ Logical_Or)*
 Logical_Or = Logical_And (__ "|" __ Logical_And)*
 Logical_And = Judgement (_ "&" _ Judgement)*
-Judgement =  Construct (_ ("==" / "!=" / "=") _ Construct)*
+Judgement =  Construct (_ ("==" / "!==") _ Construct)*
 
 Construct
   = Dictionary
@@ -100,8 +100,7 @@ Sequence
 
 Coproduct = Compare (__ Compare)*
 
-
-Compare = Arithmetic (_ ("==" / "<=" / ">=" / "!=" / "<" / ">" / "=") _ Arithmetic)*
+Compare = Arithmetic (_ ("<=" / ">=" / "!=" / "<" / ">" / "=") _ Arithmetic)*
 
 Arithmetic = Additive
 
@@ -199,7 +198,7 @@ postfix
 infix
   = "~+" / "~-" / "~*" / "~/" / "~^"
   / "<<" / ">>" / "||" / ";;" / "&&"
-  / "<=" / "==" / ">=" / "!="
+  / "!==" / "<=" / "==" / ">=" / "!="
   / ":" / "#" / "?" / "," / "~" / ";" / "|" / "&"
   / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
 
