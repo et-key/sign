@@ -36,9 +36,9 @@ Define
   / Lambda
 
 Lambda
-  = Output
+  = Arguments _ "?" _ (Lambda / Match_Case+)
+  / Output
   / PointFree
-  / Arguments _ "?" _ (Lambda / Match_Case+)
 
 Output
   = (address / identifier) (__ "#" __ Lambda)+
