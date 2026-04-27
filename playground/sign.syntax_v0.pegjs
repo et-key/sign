@@ -66,7 +66,7 @@ Defaultive
 Inline
   = identifier (__ "~"? identifier)*
 
-Match_Case = EOL Indent (Consideration ":" (Arithmetic / Dictionary / Lambda / Match_Case) EOL)+ Dedent
+Match_Case = EOL Indent ((Consideration / Comparison) _ ":" _ (Arithmetic / Dictionary / Lambda / Match_Case) EOL)+ Dedent
  
 PointFree
   = DirectMap
@@ -98,9 +98,9 @@ Sequence
   / Block __ "~"
   / "~" __ Block
 
-Coproduct = Compare (__ Compare)*
+Coproduct = Comparison (__ Comparison)*
 
-Compare = Arithmetic (_ ("<=" / ">=" / "!=" / "<" / ">" / "=") _ Arithmetic)*
+Comparison = Arithmetic (_ ("<=" / ">=" / "!=" / "<" / ">" / "=") _ Arithmetic)*
 
 Arithmetic = Additive
 
@@ -116,9 +116,9 @@ Absolute
   / CalculateBlock
 
 CalculateBlock
-  = "[" Coproduct "]"
-  / "{" Coproduct "}"
-  / "(" Coproduct ")"
+  = "[" _ Coproduct _ "]"
+  / "{" _ Coproduct _ "}"
+  / "(" _ Coproduct _ ")"
   / Get
 
 Get
@@ -142,9 +142,9 @@ Prefix
   / Block
 
 Block
-  = "[" Expression* "]"
-  / "{" Expression* "}"
-  / "(" Expression* ")"
+  = "[" _ Expression* _ "]"
+  / "{" _ Expression* _ "}"
+  / "(" _ Expression* _ ")"
   / Indent Expression+ Dedent
   / Atom
 
