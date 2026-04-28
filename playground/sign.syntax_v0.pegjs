@@ -193,36 +193,15 @@ infix
 
 unit = "_"
 
-Indent = tab:[\t]+ &{
-// 現在のインデントレベル（スタックのトップ）を取得
-  const currentIndentLength = context.indentStack.length > 0 
-    ? context.indentStack[context.indentStack.length - 1] 
-    : 0;
-  
-  // 読み込んだタブの数が現在のインデントより深いかチェック
-  if (tab.length > currentIndentLength) {
-    context.indentStack.push(tab.length);
-    context.indent = tab.join("");
-    return true; // マッチ成功
-  }
-  return false; // マッチ失敗（インデントされていない）
-}
+Indent = i:[\t]+ &{
+        i.length > ctx.indent.length
+      }
+      {
+        ctx.indentStack.push(ctx.indent)
+        ctx.indent = i.join("")
+      }
 
 Dedent = &{
-// 実際には文字を消費せず（&述語）、インデントが浅くなったことを検知するロジック
-  // 次の行のタブ数を先読みして、スタックをpopするような処理が必要になります。
-  
-  // ※ ここは少し工夫が必要で、通常は行頭のパース時に先読み (lookahead) して、
-  // 現在のスタックトップよりもタブが少なければ pop しつつマッチ成功とする、という形にします。
-  
-  // とりあえず pop するだけのプレースホルダー
-  if (context.indentStack.length > 0) {
-     context.indentStack.pop();
-     const newLen = context.indentStack.length > 0 
-        ? context.indentStack[context.indentStack.length - 1] 
-        : 0;
-     context.indent = "\t".repeat(newLen);
-     return true;
+    ctx.indent = ctx.indentStack.pop()
   }
-  return false;
-}
+
