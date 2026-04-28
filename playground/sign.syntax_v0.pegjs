@@ -126,7 +126,7 @@ Postfix
   = Prefix postfix*
 
 Prefix
-  = prefix Prefix
+  = prefix+ Prefix
   / Block
 
 Block
