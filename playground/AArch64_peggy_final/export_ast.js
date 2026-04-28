@@ -1,62 +1,87 @@
-import fs from 'fs';
-import * as parser from './sign.js';
-import { SemanticAnalyzer } from './semantic_analyzer.js';
-import { preprocess } from './preprocessor.js';
+const fs = require('fs');
+const peggy = require('peggy');
+const { lex } = require('./lexer');
 
-const content = fs.readFileSync('../test/test_all.sn', 'utf8');
-const lines = content.split('\n');
+const GRAMMAR_FILE = 'sign.pegjs';
 
-const outputPath = 'ast_output.md';
-fs.writeFileSync(outputPath, '# Exported ASTs\n\n');
+function main() {
+	try {
+		const args = process.argv.slice(2);
+		const inputFile = args.length > 0 ? args[0] : '../test/test_all.sn';
 
-let currentTest = [];
-let testNo = 0;
+		if (!fs.existsSync(inputFile)) {
+			console.error(`Error: Input file '${inputFile}' not found.`);
+			process.exit(1);
+		}
 
-function runTest(srcLines) {
-  const originalSrc = srcLines.join('\n');
-  const src = preprocess(srcLines);
-  if (!src) return;
-  testNo++;
+		console.log(`Loading grammar: ${GRAMMAR_FILE}...`);
+		const grammar = fs.readFileSync(GRAMMAR_FILE, 'utf8');
+		const parser = peggy.generate(grammar);
 
-  let mdOut = `## Test ${testNo}\n### Source\n\`\`\`\n${originalSrc}\n\`\`\`\n### Preprocessed\n\`\`\`\n${src}\n\`\`\`\n`;
+		console.log(`Reading source file: ${inputFile}...`);
+		const content = fs.readFileSync(inputFile, 'utf8');
+		const lines = content.split('\n');
 
-  try {
-    const rawAst = parser.parse(src);
-    const analyzer = new SemanticAnalyzer();
-    const ast = analyzer.analyze(rawAst);
+		const outputPath = 'ast_output.md';
+		fs.writeFileSync(outputPath, '# Exported ASTs\n\n');
 
-    mdOut += '### AST\n```json\n' + JSON.stringify(ast, null, 2) + '\n```\n\n';
-    console.log(`[PASS] Test ${testNo} AST generated.`);
-  } catch (e) {
-    mdOut += '### AST Generation Error\n```\n' + e.message + '\n```\n\n';
-    console.log(`[FAIL] Test ${testNo} failed to generate AST.`);
-  }
-  fs.appendFileSync(outputPath, mdOut);
+		let currentTest = [];
+		let testNo = 0;
+
+		function runTest(srcLines) {
+			const originalSrc = srcLines.join('\n');
+			const lexedSource = lex(originalSrc);
+			if (!lexedSource) return;
+			testNo++;
+
+			let mdOut = `## Test ${testNo}\n### Source\n\`\`\`\n${originalSrc}\n\`\`\`\n### Lexed\n\`\`\`\n${lexedSource.replace(/\x02/g, '<STX>').replace(/\x03/g, '<ETX>')}\n\`\`\`\n`;
+
+			try {
+				const ast = parser.parse(lexedSource);
+				mdOut += '### AST\n```json\n' + JSON.stringify(ast, null, 2) + '\n```\n\n';
+				console.log(`[PASS] Test ${testNo} AST generated.`);
+			} catch (e) {
+				let errMsg = e.message;
+				if (e.location) {
+					errMsg = `Parse Error at line ${e.location.start.line}, col ${e.location.start.column}: ${e.message}`;
+				}
+				mdOut += '### AST Generation Error\n```\n' + errMsg + '\n```\n\n';
+				console.log(`[FAIL] Test ${testNo} failed to generate AST.`);
+			}
+			fs.appendFileSync(outputPath, mdOut);
+		}
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			const trimmed = line.trim();
+
+			if (trimmed.startsWith('` ') || trimmed === '`' || trimmed.startsWith('`>')) {
+				if (currentTest.length > 0) {
+					runTest(currentTest);
+					currentTest = [];
+				}
+			} else {
+				if (trimmed !== '') {
+					currentTest.push(line);
+				} else {
+					if (currentTest.length > 0) {
+						runTest(currentTest);
+						currentTest = [];
+					}
+				}
+			}
+		}
+
+		if (currentTest.length > 0) {
+			runTest(currentTest);
+		}
+
+		console.log(`\nAST output successfully written to: ${outputPath}`);
+
+	} catch (e) {
+		console.error("Error:", e);
+		process.exit(1);
+	}
 }
 
-for (let i = 0; i < lines.length; i++) {
-  const line = lines[i];
-  const trimmed = line.trim();
-
-  if (trimmed.startsWith('` ') || trimmed === '`' || trimmed.startsWith('`>')) {
-    if (currentTest.length > 0) {
-      runTest(currentTest);
-      currentTest = [];
-    }
-  } else {
-    if (trimmed !== '') {
-      currentTest.push(line);
-    } else {
-      if (currentTest.length > 0) {
-        runTest(currentTest);
-        currentTest = [];
-      }
-    }
-  }
-}
-
-if (currentTest.length > 0) {
-  runTest(currentTest);
-}
-
-console.log(`\nAST output successfully written to: ${outputPath}`);
+main();

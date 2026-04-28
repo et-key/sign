@@ -1,245 +1,259 @@
-// Sign Language Parser (v0 Strict Base)
+{
+  // 左結合の二項演算子を木構造（AST）に変換するためのヘルパー関数
+  function buildBinaryTree(head, tail, opIndex = 1, rightIndex = 3) {
+    return tail.reduce(function(result, element) {
+      return {
+        type: "BinaryOperation",
+        operator: element[opIndex],
+        left: result,
+        right: element[rightIndex]
+      };
+    }, head);
+  }
+}
 
 Start = Program
 
-// --- Whitespace & EOL ---
-__ = " "+ { return null; }
+//空白必須
+__ = sp:" "+ { return null; }
+
+//空白可
 _ = " "* { return null; }
+
+//行頭
 SOL = &{ return location().start.column === 1; }
+
+//行末
 EOL = "\r\n" / "\r" / "\n"
+
 EOF = !.
 
-// --- Root ---
-Program = lines:(SOL _ Expression _ (EOL / EOF))* {
-  return lines.map(l => l[2]).filter(e => e !== "");
+comment = ("`" [^\r\n]*) { return null; }
+
+// ファイルの終端で無限ループしないように、行末が EOL である行の繰り返しと、
+// 最後の行 (EOF で終わる行) に分割して定義します。
+Program = lines:Line* last:LastLine? {
+  return {
+    type: "Program",
+    body: [...lines, last].filter(l => l !== null && l !== undefined)
+  };
 }
 
-Expression
-  = Comment
-  / Export
+Line = SOL exp:(Expression / comment)? EOL { return exp; }
+LastLine = SOL exp:(Expression / comment)? EOF { return exp; }
 
-Comment = "`" [^\r\n]* { return ""; }
+Expression = Export
 
-Export = exportMod:("###" / "##" / "#")? _ def:Define {
-  if (exportMod && def) {
-    def.exportModifier = exportMod;
+Export = exportType:("###" / "##" / "#")? def:Define {
+  if (exportType) {
+    return { type: "Export", exportLevel: exportType, declaration: def };
   }
   return def;
 }
 
-// --- Priority 1: Define (:) ---
 Define
-  = id:identifier _ ":" _ body:Define {
-      return { type: "Define", identifier: id, body: body };
-  }
+  = id:identifier _ ":" _ def:Define {
+      return { type: "Define", identifier: id, definition: def };
+    }
   / Lambda
 
-// --- Priority 2: Lambda (?) ---
 Lambda
   = args:Arguments _ "?" _ body:(Lambda / Match_Case+) {
       return { type: "Lambda", arguments: args, body: body };
-  }
+    }
   / Output
-  / Construct
+  / PointFree
 
-// --- Priority 3: Output (#) ---
 Output
-  = target:(address / identifier) calls:(__ "#" __ Lambda)+ {
-      return { type: "Output", target: target, calls: calls.map(c => c[3]) };
-  }
-  / Construct
+  = target:(address / identifier) tail:(__ "#" __ Lambda)+ {
+      return { type: "Output", target: target, calls: tail.map(t => t[3]) };
+    }
+  / Consideration
 
-// --- Priority 4: Constructs ---
+Consideration = Logical_Xor
+
+Logical_Xor = head:Logical_Or tail:(_ ";" _ Logical_Or)* { return buildBinaryTree(head, tail); }
+Logical_Or = head:Logical_And tail:(__ "|" __ Logical_And)* { return buildBinaryTree(head, tail); }
+Logical_And = head:Judgement tail:(_ "&" _ Judgement)* { return buildBinaryTree(head, tail); }
+Judgement = head:Construct tail:(_ ("==" / "!==") _ Construct)* { return buildBinaryTree(head, tail); }
+
 Construct
   = Dictionary
   / Product
-  / Sequence
-  / Coproduct
 
-// --- v0 Explicit Structures ---
-Dictionary
-  = "{" _ EOL* _ pairs:((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct) _ EOL* _)+ "}" {
-      return { 
-          type: "Dictionary", 
-          // pairs: [[key, _1, ":", _2, value, _3], ...]
-          pairs: pairs.map(p => ({ key: p[0], value: p[4] }))
-      };
-  }
-
-Match_Case
-  = "{" _ EOL* _ cases:(Calculate _ ":" _ (Calculate / Dictionary / Lambda) _ EOL* _)+ "}" {
-      return {
-          type: "MatchCase",
-          // cases: [[condition, _1, ":", _2, body, _3], ...]
-          cases: cases.map(c => ({ condition: c[0], body: c[4] }))
-      };
-  }
+Dictionary = Indent entries:((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct))+ Dedent {
+    return {
+      type: "Dictionary",
+      entries: entries.map(e => ({
+        key: Array.isArray(e[0]) ? e[0].join("") : e[0],
+        value: e[4]
+      }))
+    };
+}
 
 Arguments = Inline / Defaultive
 
 Defaultive
-  = "[" _ EOL* _ args:DefaultiveArg* "]" { return { type: "ArgumentsDefaultive", args: args, bracket: "[]" }; }
-  / "{" _ EOL* _ args:DefaultiveArg* "}" { return { type: "ArgumentsDefaultive", args: args, bracket: "{}" }; }
-  / "(" _ EOL* _ args:DefaultiveArg* ")" { return { type: "ArgumentsDefaultive", args: args, bracket: "()" }; }
-
-DefaultiveArg
-  = arg:("~"? identifier (_ ":" _ Lambda)?) _ EOL* _ {
-      return arg;
-  }
+  = "[" EOL Indent entries:("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent "]" {
+      return { type: "Arguments", style: "bracket", items: entries.map(e => ({
+        lazy: e[0] === "~", identifier: e[1], defaultValue: e[2] ? e[2][3] : null
+      }))};
+    }
+  / "{" EOL Indent entries:("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent "}" {
+      return { type: "Arguments", style: "brace", items: entries.map(e => ({
+        lazy: e[0] === "~", identifier: e[1], defaultValue: e[2] ? e[2][3] : null
+      }))};
+    }
+  / "(" EOL Indent entries:("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent ")" {
+      return { type: "Arguments", style: "paren", items: entries.map(e => ({
+        lazy: e[0] === "~", identifier: e[1], defaultValue: e[2] ? e[2][3] : null
+      }))};
+    }
 
 Inline
-  = id:identifier rest:(__ "~"? identifier)* {
-      return { type: "ArgumentsInline", args: [id, ...rest.map(r => r[2])] };
-  }
+  = head:identifier tail:(__ "~"? identifier)* {
+      return {
+        type: "Arguments", style: "inline", items: [{ lazy: false, identifier: head }].concat(
+          tail.map(t => ({ lazy: t[1] === "~", identifier: t[2] }))
+        )
+      };
+    }
 
-// --- Priority 5: PointFree ---
+Match_Case = EOL Indent cases:((Consideration / Comparison) _ ":" _ (Arithmetic / Dictionary / Lambda / Match_Case) EOL)+ Dedent {
+    return {
+      type: "MatchCase",
+      cases: cases.map(c => ({ condition: c[0], body: c[4] }))
+    };
+}
+ 
 PointFree
   = DirectMap
   / Normal
   / DirectFold
 
 DirectMap
-  = pre:prefix "_" "," { return { type: "PointFreeMap", position: "prefix", operator: pre }; }
-  / "_" post:postfix "," { return { type: "PointFreeMap", position: "postfix", operator: post }; }
-  / arg:(number / address / register) _ inf:infix "," { return { type: "PointFreeMap", position: "infix_right", argument: arg, operator: inf }; }
-  / inf:infix _ arg:(number / address / register) "," { return { type: "PointFreeMap", position: "infix_left", argument: arg, operator: inf }; }
+  = pre:prefix u:unit _ "," { return { type: "DirectMap", prefix: pre, unit: u }; }
+  / u:unit post:postfix _ "," { return { type: "DirectMap", unit: u, postfix: post }; }
+  / target:(number / address / register) __ op:infix _ "," { return { type: "DirectMap", target: target, infix: op, position: "left" }; }
+  / op:infix __ target:(number / address / register) _ "," { return { type: "DirectMap", target: target, infix: op, position: "right" }; }
 
 Normal
-  = arg:(number / address / register) _ inf:infix { return { type: "PointFreeNormal", position: "infix_right", argument: arg, operator: inf }; }
-  / inf:infix _ arg:(number / address / register) { return { type: "PointFreeNormal", position: "infix_left", argument: arg, operator: inf }; }
+  = pre:prefix u:unit { return { type: "PointFreeNormal", prefix: pre, unit: u }; }
+  / u:unit post:postfix { return { type: "PointFreeNormal", unit: u, postfix: post }; }
+  / target:(number / address / register) __ op:infix { return { type: "PointFreeNormal", target: target, infix: op, position: "left" }; }
+  / op:infix __ target:(number / address / register) { return { type: "PointFreeNormal", target: target, infix: op, position: "right" }; }
+  
+DirectFold = op:infix { return { type: "DirectFold", infix: op }; }
 
-DirectFold = inf:infix { return { type: "PointFreeFold", operator: inf }; }
-
-// --- Priority 6: Lists (Product / Coproduct) ---
-Product = head:Coproduct tail:(_ "," _ Coproduct)* {
-    if (tail.length === 0) return head;
-    return { type: "Product", elements: [head, ...tail.map(t => t[3])] };
-}
-
-Coproduct = head:(Sequence / Calculate) tail:(__ (Sequence / Calculate))* {
-    if (tail.length === 0) return head;
-    return { type: "Coproduct", elements: [head, ...tail.map(t => t[1])] };
-}
+Product
+  = Sequence
+  / head:Coproduct tail:(_ "," _ Coproduct)* { 
+      if (tail.length === 0) return head;
+      return { type: "Coproduct", elements: [head].concat(tail.map(t => t[3])) };
+    }
 
 Sequence
-  = "[" _ EOL* _ inner:SequenceInner _ EOL* _ "]" { return { type: "Sequence", inner: inner, bracket: "[]" }; }
-  / "{" _ EOL* _ inner:SequenceInner _ EOL* _ "}" { return { type: "Sequence", inner: inner, bracket: "{}" }; }
-  / "(" _ EOL* _ inner:SequenceInner _ EOL* _ ")" { return { type: "Sequence", inner: inner, bracket: "()" }; }
+  = b1:Block _ op1:("~+" / "~-" / "~*" / "~/" / "~^") _ b2:Block __ "~" __ b3:Block {
+      return { type: "Sequence", blocks: [b1, b2, b3], operators: [op1, "~"] };
+    }
+  / b1:Block _ op:("~+" / "~-" / "~*" / "~/" / "~^") _ b2:Block {
+      return { type: "Sequence", blocks: [b1, b2], operators: [op] };
+    }
+  / b1:Block __ "~" __ b2:Block { return { type: "Sequence", blocks: [b1, b2], operators: ["~"] }; }
+  / b:Block __ "~" { return { type: "Sequence", blocks: [b], operators: ["~_postfix"] }; }
+  / "~" __ b:Block { return { type: "Sequence", blocks: [b], operators: ["~_prefix"] }; }
 
-SequenceInner
-  = left:(CalculateBlock / Atom) _ op:("~+" / "~-" / "~*" / "~/" / "~^") _ right:(CalculateBlock / Atom) __ "~" __ step:(CalculateBlock / Atom) {
-      return { type: "SequenceGenerator", left: left, operator: op, right: right, step: step };
+Coproduct = head:Comparison tail:(__ Comparison)* { 
+    if (tail.length === 0) return head;
+    return { type: "Coproduct", elements: [head].concat(tail.map(t => t[1])) };
   }
-  / left:(CalculateBlock / Atom) _ op:("~+" / "~-" / "~*" / "~/" / "~^") _ right:(CalculateBlock / Atom) {
-      return { type: "SequenceGenerator", left: left, operator: op, right: right };
-  }
-  / left:(CalculateBlock / Atom) __ "~" __ right:(CalculateBlock / Atom) {
-      return { type: "SequenceRange", left: left, right: right };
-  }
-  / left:(CalculateBlock / Atom) __ "~" { return { type: "SequenceRange", left: left, right: null }; }
-  / "~" __ right:(CalculateBlock / Atom) { return { type: "SequenceRange", left: null, right: right }; }
 
-// --- Priority 7: Calculations ---
-Calculate = Logical_Xor
-
-Logical_Xor = head:Logical_Or tail:(_ ";" _ Logical_Or)* {
-  return tail.reduce((res, el) => ({ type: "BinaryExpression", operator: el[1], left: res, right: el[3] }), head);
-}
-Logical_Or = head:Logical_And tail:(__ "|" __ Logical_And)* {
-  return tail.reduce((res, el) => ({ type: "BinaryExpression", operator: el[1], left: res, right: el[3] }), head);
-}
-Logical_And = head:Compare tail:(_ "&" _ Compare)* {
-  return tail.reduce((res, el) => ({ type: "BinaryExpression", operator: el[1], left: res, right: el[3] }), head);
-}
-
-Compare = head:Arithmetic tail:(_ ("==" / "!=" / "<=" / ">=" / "<" / ">" / "=") _ Arithmetic)* {
-  return tail.reduce((res, el) => ({ type: "BinaryExpression", operator: el[1], left: res, right: el[3] }), head);
-}
+Comparison = head:Arithmetic tail:(_ ("<=" / ">=" / "!=" / "<" / ">" / "=") _ Arithmetic)* { return buildBinaryTree(head, tail); }
 
 Arithmetic = Additive
 
-Additive = head:Multiply tail:(_ ("+" / (__ "-" __ {return "-"})) _ Multiply)* {
-  return tail.reduce((res, el) => ({ type: "BinaryExpression", operator: el[1], left: res, right: el[3] }), head);
-}
-Multiply = head:Exponential tail:(_ ("*" / "/" / "%") _ Exponential)* {
-  return tail.reduce((res, el) => ({ type: "BinaryExpression", operator: el[1], left: res, right: el[3] }), head);
-}
+Additive = head:Multiply tail:(_ ("+" / "-" ) _ Multiply)* { return buildBinaryTree(head, tail); }
+Multiply = head:Exponential tail:(_ ("*" / "/" / "%") _ Exponential)* { return buildBinaryTree(head, tail); }
 
-Exponential = left:Absolute _ "^" _ right:Exponential {
-  return { type: "BinaryExpression", operator: "^", left: left, right: right };
-} / Absolute
-
-Absolute
-  = "|" expr:(Additive / CalculateBlock) "|" { return { type: "AbsoluteExpression", expression: expr }; }
-  / CalculateBlock
-
-CalculateBlock
-  = "[" _ EOL* _ expr:(PointFree / Coproduct) _ EOL* _ "]" { return expr; }
-  / "{" _ EOL* _ expr:(PointFree / Coproduct) _ EOL* _ "}" { return expr; }
-  / "(" _ EOL* _ expr:(PointFree / Coproduct) _ EOL* _ ")" { return expr; }
+Exponential
+  = head:Get _ "^" _ tail:Exponential { return { type: "BinaryOperation", operator: "^", left: head, right: tail }; }
   / Get
 
 Get
-  = target:(identifier / Dictionary) steps:(_ "'" _ (identifier "~"? / string))* {
-      if (steps.length === 0) return target;
-      return { type: "GetExpression", target: target, steps: steps.map(s => s[3]) };
-  }
-  / target:(identifier "~"? / string) __ "@" __ source:Get {
-      return { type: "AddressGet", target: target, source: source };
-  }
+  = head:Compute tail:(_ "'" _ ((identifier "~"?) / string))* {
+      if (tail.length === 0) return head;
+      return { type: "Get", target: head, properties: tail.map(t => Array.isArray(t[3]) ? t[3].join("") : t[3]) };
+    }
+  / head:Compute tail:( _ "'" _ (Product / Sequence / number / (identifier "~"?)))* {
+      if (tail.length === 0) return head;
+      return { type: "GetComplex", target: head, properties: tail.map(t => t[3]) };
+    }
+  / id:(identifier "~"? / string) __ "@" __ tail:Get {
+      return { type: "GetAt", identifier: Array.isArray(id) ? id.join("") : id, target: tail };
+    }
   / Compute
 
 Compute = BitShift
 
-BitShift = head:BitOr tail:(_ ("<<" / ">>") _ BitOr)* {
-  return tail.reduce((res, el) => ({ type: "BinaryExpression", operator: el[1], left: res, right: el[3] }), head);
-}
-BitOr = head:BitXor tail:(_ "||" _ BitXor)* {
-  return tail.reduce((res, el) => ({ type: "BinaryExpression", operator: el[1], left: res, right: el[3] }), head);
-}
-BitXor = head:BitAnd tail:(_ ";;" _ BitAnd)* {
-  return tail.reduce((res, el) => ({ type: "BinaryExpression", operator: el[1], left: res, right: el[3] }), head);
-}
-BitAnd = head:Postfix tail:(_ "&&" _ Postfix)* {
-  return tail.reduce((res, el) => ({ type: "BinaryExpression", operator: el[1], left: res, right: el[3] }), head);
-}
+BitShift = head:BitOr tail:(_ ("<<" / ">>") _ BitOr)* { return buildBinaryTree(head, tail); }
+BitOr = head:BitXor tail:(_ "||" _ BitXor)* { return buildBinaryTree(head, tail); }
+BitXor = head:BitAnd tail:(_ ";;" _ BitAnd)* { return buildBinaryTree(head, tail); }
+BitAnd = head:Postfix tail:(_ "&&" _ Postfix)* { return buildBinaryTree(head, tail); }
 
 Postfix
-  = expr:Prefix ops:postfix* {
-      if (ops.length === 0) return expr;
-      return ops.reduce((res, op) => ({ type: "PostfixExpression", operator: op, expression: res }), expr);
-  }
+  = head:Prefix tail:postfix* {
+      if (tail.length === 0) return head;
+      return { type: "Postfix", expression: head, operators: tail };
+    }
 
 Prefix
-  = op:prefix expr:Prefix { return { type: "PrefixExpression", operator: op, expression: expr }; }
+  = ops:prefix+ exp:Prefix { return { type: "Prefix", operators: ops, expression: exp }; }
+  / Block
+
+Block
+  = "|" exps:Arithmetic+ "|" { return { type: "Block", style: "Arithmetic", expressions: exps }; }
+  / "[" _ exps:Expression* _ "]" { return { type: "Block", style: "Square", expressions: exps }; }
+  / "{" _ exps:Expression* _ "}" { return { type: "Block", style: "Curly", expressions: exps }; }
+  / "(" _ exps:Expression* _ ")" { return { type: "Block", style: "Paren", expressions: exps }; }
+  / Indent exps:Expression+ Dedent { return { type: "Block", style: "Indent", expressions: exps }; }
   / Atom
 
-// --- Atoms & Literals ---
 Atom
-  = charactor / string / address / register / unicode / number / identifier / unit
+  = val:charactor { return { type: "Atom", dataType: "charactor", value: val }; }
+  / val:string { return { type: "Atom", dataType: "string", value: val }; }
+  / val:address { return { type: "Atom", dataType: "address", value: val }; }
+  / val:register { return { type: "Atom", dataType: "register", value: val }; }
+  / val:unicode { return { type: "Atom", dataType: "unicode", value: val }; }
+  / val:number { return { type: "Atom", dataType: "number", value: val }; }
+  / val:identifier { return { type: "Atom", dataType: "identifier", value: val }; }
+  / val:unit { return { type: "Atom", dataType: "unit", value: val }; }
 
-string = $("`" [^`\r\n]* "`") { return { type: "StringLiteral", value: text() }; }
-charactor = $("\\" .) { return { type: "CharLiteral", value: text() }; }
-number = $("-"? [0-9]+ "."? [0-9]*) { return { type: "NumberLiteral", value: parseFloat(text()) }; }
-address = $("0x" Hex+) { return { type: "AddressLiteral", value: text() }; }
-register = $("0r" Hex+ / "0b" ("0" / "1")+) { return { type: "RegisterLiteral", value: text() }; }
-unicode = $("0u" Hex+) { return { type: "UnicodeLiteral", value: text() }; }
-identifier = $([a-zA-Z_][a-zA-Z0-9_]*) { return { type: "Identifier", name: text() }; }
-unit = "_" { return { type: "Unit" }; }
+string = val:$("`" [^`\r\n]* "`") { return val; }
+charactor = val:$("\\".) { return val; }
+number = val:$("-"? [0-9]+ "."? [0-9]*) { return val; }
+address = val:$("0x" Hex+) { return val; }
+register 
+  = val:$("0r" Hex+) { return val; }
+  / val:$("0b" ("0" / "1")+) { return val; }
+unicode = val:$("0u" Hex+) { return val; }
+
+identifier
+  = val:$([a-zA-Z][a-zA-Z0-9_]*) { return val; }
+  / val:$("_" [a-zA-Z0-9_]+) { return val; }
 
 Hex = [0-9a-fA-F]
 
-// --- Operators ---
-
-prefix
-  = "~" / "!!" / "!" / "$" / "@"
-
-postfix
-  = "!" / "~" / "@"
-
+prefix = "~" / "!!" / "!" / "$" / "@"
+postfix = "!" / "~" / "@"
 infix
   = "~+" / "~-" / "~*" / "~/" / "~^"
   / "<<" / ">>" / "||" / ";;" / "&&"
-  / "<=" / "==" / ">=" / "!="
+  / "!==" / "<=" / "==" / ">=" / "!="
   / ":" / "#" / "?" / "," / "~" / ";" / "|" / "&"
   / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "@" / "'"
+
+unit = "_" { return "_"; }
+
+// === Lexer連携：仮想カッコ ===
+Indent = "\x02" { return null; }
+Dedent = "\x03" { return null; }
