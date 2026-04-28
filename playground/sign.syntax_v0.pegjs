@@ -21,13 +21,11 @@ EOL = "\r\n" / "\r" / "\n"
 
 EOF = !.
 
-Program = (SOL Expression (EOL / EOF))*
+comment = ("`" [^\r\n]*) {return ""}
 
-Expression
-  = Comment
-  / Export
+Program = (SOL (Expression / comment) (EOL / EOF))*
 
-Comment = ("`" [^\r\n]*) {return ""}
+Expression = Export
 
 Export = ("###" / "##" / "#")? Define
 
@@ -108,17 +106,7 @@ Additive = Multiply (_ ("+" / "-" ) _ Multiply)*
 Multiply = Exponential (_ ("*" / "/" / "%") _ Exponential)*
 
 Exponential
-  = Absolute _ "^" _ Exponential
-  / Absolute
-
-Absolute
-  = "|" Additive "|"
-  / CalculateBlock
-
-CalculateBlock
-  = "[" _ Coproduct _ "]"
-  / "{" _ Coproduct _ "}"
-  / "(" _ Coproduct _ ")"
+  = Get _ "^" _ Exponential
   / Get
 
 Get
@@ -142,7 +130,8 @@ Prefix
   / Block
 
 Block
-  = "[" _ Expression* _ "]"
+  = "|" Arithmetic+ "|"
+  / "[" _ Expression* _ "]"
   / "{" _ Expression* _ "}"
   / "(" _ Expression* _ ")"
   / Indent Expression+ Dedent
