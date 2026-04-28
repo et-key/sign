@@ -110,8 +110,8 @@ Exponential
   / Get
 
 Get
-  = (identifier / Dictionary) (_ "'" _ (identifier "~"? / string))*
-  / identifier ( _ "'" _ (Product / Sequence / number / identifier))*
+  = Compute (_ "'" _ ((identifier "~"?) / string))*
+  / Compute ( _ "'" _ (Product / Sequence / number / (identifier "~"?)))*
   / (identifier "~"? / string) __ "@" __ Get
   / Compute
 
@@ -204,4 +204,3 @@ Indent = i:[\t]+ &{
 Dedent = &{
     ctx.indent = ctx.indentStack.pop()
   }
-
