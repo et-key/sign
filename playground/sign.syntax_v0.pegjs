@@ -25,7 +25,7 @@ comment = ("`" [^\r\n]*) {return ""}
 
 Program = (SOL (Expression / comment) (EOL / EOF))*
 
-Expression = Export
+Expression = Export / EOL
 
 Export = ("###" / "##" / "#")? Define
 
