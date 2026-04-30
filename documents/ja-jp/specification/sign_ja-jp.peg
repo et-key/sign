@@ -39,7 +39,7 @@ Lambda
   / PointFree
 
 Output
-  = (address / identifier) (__ "#" __ Lambda)+
+  = Compute (__ "#" __ Lambda)+
   / Consideration
 
 Consideration = Logical_Xor
@@ -110,8 +110,7 @@ Exponential
   / Get
 
 Get
-  = Compute (_ "'" _ ((identifier "~"?) / string))*
-  / Compute ( _ "'" _ (Product / Sequence / number / (identifier "~"?)))*
+  = Compute (_ "'" _ (Product / Sequence / number / string / (identifier "~"?)))*
   / (identifier "~"? / string) __ "@" __ Get
   / Compute
 
@@ -159,11 +158,11 @@ charactor = $("\\".)
 number = $("-"? int_part:[0-9]+ "."? frac_part:[0-9]*)
 
 // 3. アドレス型 ("0x" Hex*)
-// ※ AArch64のメモリオペランド等に直接写像される
+// ※ メモリオペランドやポートアドレスに直接写像される
 address = $("0x" Hex+)
 
 // 4. レジスタ即値型 ("0r" Hex*)
-// ※ AArch64の物理レジスタ（x0, v0など）や直値バインディングに写像される
+// ※ 物理レジスタ（x0, v0など）や直値バインディングに写像される
 register 
   = $("0r" Hex+)
   / $("0b" ("0" / "1")+)

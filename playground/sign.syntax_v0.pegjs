@@ -39,7 +39,7 @@ Lambda
   / PointFree
 
 Output
-  = (address / identifier) (__ "#" __ Lambda)+
+  = Compute (__ "#" __ Lambda)+
   / Consideration
 
 Consideration = Logical_Xor
@@ -110,8 +110,7 @@ Exponential
   / Get
 
 Get
-  = Compute (_ "'" _ ((identifier "~"?) / string))*
-  / Compute ( _ "'" _ (Product / Sequence / number / (identifier "~"?)))*
+  = Compute (_ "'" _ (Product / Sequence / number / string / (identifier "~"?)))*
   / (identifier "~"? / string) __ "@" __ Get
   / Compute
 
