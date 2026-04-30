@@ -34,7 +34,7 @@ Define
   / Lambda
 
 Lambda
-  = Arguments _ "?" _ (Lambda / Match_Case+)
+  = Arguments _ "?" _ ((EOL Indent)? Lambda / Match_Case+)
   / Output
   / PointFree
 
