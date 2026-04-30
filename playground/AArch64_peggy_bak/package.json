@@ -1,6 +1,6 @@
 {
+  "type": "module",
   "dependencies": {
-    "peggy": "^5.1.0",
     "wabt": "^1.0.39"
   }
 }
