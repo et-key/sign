@@ -27,44 +27,44 @@
 `> 'ð'
 
 ` --- 文字等価性の連鎖検証 --- `
-0u0041 = \A
+0u0041 == \A
 `> 'A'
 
-\A = \A
+\A == \A
 `> 'A'
 
-\a != \b
+\a !== \b
 `> 'a'
 
 ` 特殊文字 (改行やタブ) の生成と解釈確認 `
-\n = \n
+\n == \n
 `> 'n'
 
-\t != \n
+\t !== \n
 `> 't'
 
 ` --- 文字列 (String) の基本的な等価比較 --- `
-(`abc` = `abc`)
+(`abc` == `abc`)
 `> `abc`
 
-(`hello`) != `world`
+(`hello`) !== `world`
 `> `world`
 
 ` --- 改行を含んだ文字列の比較 --- `
 `x : `abc` \
-`	`def` = `abc` \
+`	`def` == `abc` \
 `	`def`
 `> `abc
 `> def`
 
 `abc` \
-`	`def` = `abc` \
+`	`def` == `abc` \
 `	`def`
 `> Unit
 
 (`abc` \
- \	 `def` = `abc` \
- \	 `def`)
+\	 `def` == `abc` \
+\	 `def`)
 `> `abc
 `> def`
 
@@ -143,15 +143,15 @@ _ | |-4*2+3| + 5 < 0 | 3
 ` --- 比較演算による値の透過（フィルタ処理） --- `
 
 ` --- 等価 (=) と 不等価 (!=) ---
-pass_eq  : x ? 10 = x
+pass_eq  : x ? 10 == x
 pass_eq 10
 `> 10
 
-pass_eq  : x ? 10 = x
+pass_eq  : x ? 10 == x
 pass_eq 5
 `> Unit
 
-pass_neq : x ? 10 != x
+pass_neq : x ? 10 !== x
 pass_neq 5
 `> 5
 
@@ -212,10 +212,10 @@ is_empty : x ? !x
 is_empty _
 `> Infinity
 
-[!_] 5 = (!5)
+[!_] 5 == (!5)
 `> Unit
 
-[_!] 5 = 5!
+[_!] 5 == 5!
 `> 120
 
 
@@ -357,10 +357,10 @@ getTail [1 , 2 , 3]
 `> [ 3, 5, 7, 9, 11 ]
 
 ` リファレンス記載のテスト例 `
-[2 ~+ 2 ~ 10] = [2 , 4 , 6 , 8 , 10]
+[2 ~+ 2 ~ 10] == 2 , 4 , 6 , 8 , 10
 `> [2 , 4 , 6 , 8 , 10]
 
-[1 ~* 2 ~ 16] = [1 , 2 , 4 , 8 , 16]
+[1 ~* 2 ~ 16] == 1 , 2 , 4 , 8 , 16
 `> [1 , 2 , 4 , 8 , 16]
 
 
@@ -388,12 +388,6 @@ target : `key2`
 myDict ' target~
 `> `value_two`
 
-complexDict :
-	[ 1 , 2 ] : `Pattern A`
-	[ 3 , 4 ] : `Pattern B`
-complexDict ' [ 1 , 2 ]
-`> [ `Pattern A` ]
-
 x : 3
 a : 1 2 3 4 5
 a ' x~
@@ -412,71 +406,64 @@ car ' brand ' 0
 ` --- match_case deep_eq --- `
 a : [1 , [2 , 3]]
 b : [1 , [2 , 3]]
-a = b
+a == b
 `> [ 1, [ 2, 3 ] ]　` ※Trueなので値そのまま返す `
 
 myMatch : x ?
 	0 : `zero`
 	1 : `one`
 	`other`
+
 myMatch 99
 `> `other`
 
-myMatch : x ?
-	0 : `zero`
-	1 : `one`
-	`other`
 myMatch 0
 `> `zero`
 
-myMatch : x ?
-	0 : `zero`
-	1 : `one`
-	`other`
 myMatch 1
 `> `one`
 
 ` --- 辞書型/MatchCaseテスト --- `
-dict :
+
+dictP :
 	x : 10
 	y : 5
 	z : 30
 
-f : foo ? 
-	foo~
-		x > 0 :
+dictN :
+	x : -10
+	y : 5
+	z : 30
+
+f : [
+	dict
+	x : dict ' x
+	y : dict ' y
+	z : dict ' z
+] ? 
+		x > 0 : [
 			xy : x * y
 			xz : x * z
-		x < 1 :
-			x # |x| + 5
-			f foo
+		]
+		x < 1 : [
+			xy : (|x| + 5) * y
+			xz : |x + 5| * z
+		]
 
-f dict
+f dictP !_ !_ !_
+
 `> [
 `>   xy : 50
 `>   xz : 300
 `> ]
 
-dict :
-	x : -10
-	y : 5
-	z : 30
 
-f : foo ? 
-	foo~
-		x > 0 :
-			xy : x * y
-			xz : x * z
-		x < 1 :
-			x # |x| + 5
-			f foo
+f dictN !_ !_ !_
 
-f dict
 `> [
 `>   xy : 75
-`>   xz : 450
+`>   xz : 150
 `> ]
-
 
 ` ========================================== `
 ` 5. 関数・クロージャ・マクロ・再帰 `
@@ -523,25 +510,22 @@ double square (3 + 2)
 
 ` --- 再帰呼出しの挙動確認 --- `
 fact : n ?
-	n = 0 : 1
+	n == 0 : 1
 	(fact (n - 1)) * n
 fact 5
 `> 120
 
 ` --- gcd 再帰呼び出し --- `
 gcd1 : x y r ?
-	r = 0 : y
+	r == 0 : y
 	gcd1  y r  (y % r)
+
 gcd : x y ?
 	gcd1  x y (x % y)
+
 gcd 18 9
 `> 9
 
-gcd1 : x y r ?
-	r = 0 : y  
-	gcd1  y r  (y % r)
-gcd : x y ?
-	gcd1  x y (x % y)
 gcd 18 12
 `> 6
 

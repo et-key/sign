@@ -58,14 +58,14 @@ Define
   / Lambda
 
 Lambda
-  = args:Arguments _ "?" _ body:(Lambda / Match_Case+) {
+  = args:Arguments _ "?" _ body:( Match_Case+ / ( (EOL Indent)? lam:Lambda { return lam; } ) ) {
       return { type: "Lambda", arguments: args, body: body };
     }
   / Output
   / PointFree
 
 Output
-  = target:(address / identifier) tail:(__ "#" __ Lambda)+ {
+  = target:Compute tail:(__ "#" __ Lambda)+ {
       return { type: "Output", target: target, calls: tail.map(t => t[3]) };
     }
   / Consideration
@@ -81,7 +81,7 @@ Construct
   = Dictionary
   / Product
 
-Dictionary = Indent entries:((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct))+ Dedent {
+Dictionary = EOL Indent entries:((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct) EOL)+ Dedent {
     return {
       type: "Dictionary",
       entries: entries.map(e => ({
@@ -94,17 +94,17 @@ Dictionary = Indent entries:((identifier "~"? / string) _ ":" _ (Lambda / Atom /
 Arguments = Inline / Defaultive
 
 Defaultive
-  = "[" EOL Indent entries:("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent "]" {
+  = EOL? "[" EOL Indent entries:("~"? identifier (_ ":" _ Lambda)? EOL)+ Dedent EOL? "]" {
       return { type: "Arguments", style: "bracket", items: entries.map(e => ({
         lazy: e[0] === "~", identifier: e[1], defaultValue: e[2] ? e[2][3] : null
       }))};
     }
-  / "{" EOL Indent entries:("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent "}" {
+  / EOL? "{" EOL Indent entries:("~"? identifier (_ ":" _ Lambda)? EOL)+ Dedent EOL? "}" {
       return { type: "Arguments", style: "brace", items: entries.map(e => ({
         lazy: e[0] === "~", identifier: e[1], defaultValue: e[2] ? e[2][3] : null
       }))};
     }
-  / "(" EOL Indent entries:("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent ")" {
+  / EOL? "(" EOL Indent entries:("~"? identifier (_ ":" _ Lambda)? EOL)+ Dedent EOL? ")" {
       return { type: "Arguments", style: "paren", items: entries.map(e => ({
         lazy: e[0] === "~", identifier: e[1], defaultValue: e[2] ? e[2][3] : null
       }))};
@@ -119,10 +119,13 @@ Inline
       };
     }
 
-Match_Case = EOL Indent cases:((Consideration / Comparison) _ ":" _ (Arithmetic / Dictionary / Lambda / Match_Case) EOL)+ Dedent {
+Match_Case = EOL Indent cases:(((Consideration / Comparison) _ ":" _)? (Lambda / Match_Case) EOL)+ Dedent {
     return {
       type: "MatchCase",
-      cases: cases.map(c => ({ condition: c[0], body: c[4] }))
+      cases: cases.map(c => ({
+        condition: c[0] ? c[0][0] : null,
+        body: c[1]
+      }))
     };
 }
  
@@ -180,13 +183,8 @@ Exponential
   / Get
 
 Get
-  = head:Compute tail:(_ "'" _ ((identifier "~"?) / string))* {
-      if (tail.length === 0) return head;
+  = head:Compute tail:(_ "'" _ (Product / Sequence / number / string / (identifier "~"?)))+ {
       return { type: "Get", target: head, properties: tail.map(t => Array.isArray(t[3]) ? t[3].join("") : t[3]) };
-    }
-  / head:Compute tail:( _ "'" _ (Product / Sequence / number / (identifier "~"?)))* {
-      if (tail.length === 0) return head;
-      return { type: "GetComplex", target: head, properties: tail.map(t => t[3]) };
     }
   / id:(identifier "~"? / string) __ "@" __ tail:Get {
       return { type: "GetAt", identifier: Array.isArray(id) ? id.join("") : id, target: tail };
@@ -212,9 +210,9 @@ Prefix
 
 Block
   = "|" exps:Arithmetic+ "|" { return { type: "Block", style: "Arithmetic", expressions: exps }; }
-  / "[" _ exps:Expression* _ "]" { return { type: "Block", style: "Square", expressions: exps }; }
-  / "{" _ exps:Expression* _ "}" { return { type: "Block", style: "Curly", expressions: exps }; }
-  / "(" _ exps:Expression* _ ")" { return { type: "Block", style: "Paren", expressions: exps }; }
+  / "[" _ exps:Expression* _ EOL? "]" { return { type: "Block", style: "Square", expressions: exps }; }
+  / "{" _ exps:Expression* _ EOL? "}" { return { type: "Block", style: "Curly", expressions: exps }; }
+  / "(" _ exps:Expression* _ EOL? ")" { return { type: "Block", style: "Paren", expressions: exps }; }
   / Indent exps:Expression+ Dedent { return { type: "Block", style: "Indent", expressions: exps }; }
   / Atom
 
