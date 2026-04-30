@@ -55,7 +55,7 @@ function main() {
 			const line = lines[i];
 			const trimmed = line.trim();
 
-			if (trimmed.startsWith('` ') || trimmed === '`' || trimmed.startsWith('`>')) {
+			if (line.startsWith('`')) {
 				if (currentTest.length > 0) {
 					runTest(currentTest);
 					currentTest = [];

@@ -17,6 +17,12 @@ function lex(source) {
 			continue;
 		}
 
+		// コメント行（行頭が ` の場合）は空行として扱い、インデント計算からは除外する
+		if (line.startsWith('`')) {
+			result.push("");
+			continue;
+		}
+
 		const match = line.match(/^[\t ]*/);
 		const currentIndent = match ? match[0].length : 0;
 		const lastIndent = indentStack[indentStack.length - 1];
@@ -32,7 +38,10 @@ function lex(source) {
 				indentStack.pop();
 				dedents += ETX;
 			}
-			result.push(dedents + line.substring(currentIndent));
+			if (dedents.length > 0) {
+				result.push(dedents);
+			}
+			result.push(line.substring(currentIndent));
 		} else {
 			// 同一インデント
 			result.push(line.substring(currentIndent));

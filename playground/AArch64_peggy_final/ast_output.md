@@ -164,11 +164,11 @@
 ## Test 8
 ### Source
 ```
-0u0041 = \A
+0u0041 == \A
 ```
 ### Lexed
 ```
-0u0041 = \A
+0u0041 == \A
 ```
 ### AST
 ```json
@@ -177,7 +177,7 @@
   "body": [
     {
       "type": "BinaryOperation",
-      "operator": "=",
+      "operator": "==",
       "left": {
         "type": "Atom",
         "dataType": "unicode",
@@ -196,11 +196,11 @@
 ## Test 9
 ### Source
 ```
-\A = \A
+\A == \A
 ```
 ### Lexed
 ```
-\A = \A
+\A == \A
 ```
 ### AST
 ```json
@@ -209,7 +209,7 @@
   "body": [
     {
       "type": "BinaryOperation",
-      "operator": "=",
+      "operator": "==",
       "left": {
         "type": "Atom",
         "dataType": "charactor",
@@ -228,11 +228,11 @@
 ## Test 10
 ### Source
 ```
-\a != \b
+\a !== \b
 ```
 ### Lexed
 ```
-\a != \b
+\a !== \b
 ```
 ### AST
 ```json
@@ -241,7 +241,7 @@
   "body": [
     {
       "type": "BinaryOperation",
-      "operator": "!=",
+      "operator": "!==",
       "left": {
         "type": "Atom",
         "dataType": "charactor",
@@ -260,11 +260,11 @@
 ## Test 11
 ### Source
 ```
-\n = \n
+\n == \n
 ```
 ### Lexed
 ```
-\n = \n
+\n == \n
 ```
 ### AST
 ```json
@@ -273,7 +273,7 @@
   "body": [
     {
       "type": "BinaryOperation",
-      "operator": "=",
+      "operator": "==",
       "left": {
         "type": "Atom",
         "dataType": "charactor",
@@ -292,11 +292,11 @@
 ## Test 12
 ### Source
 ```
-\t != \n
+\t !== \n
 ```
 ### Lexed
 ```
-\t != \n
+\t !== \n
 ```
 ### AST
 ```json
@@ -305,7 +305,7 @@
   "body": [
     {
       "type": "BinaryOperation",
-      "operator": "!=",
+      "operator": "!==",
       "left": {
         "type": "Atom",
         "dataType": "charactor",
@@ -324,11 +324,11 @@
 ## Test 13
 ### Source
 ```
-(`abc` = `abc`)
+(`abc` == `abc`)
 ```
 ### Lexed
 ```
-(`abc` = `abc`)
+(`abc` == `abc`)
 ```
 ### AST
 ```json
@@ -341,7 +341,7 @@
       "expressions": [
         {
           "type": "BinaryOperation",
-          "operator": "=",
+          "operator": "==",
           "left": {
             "type": "Atom",
             "dataType": "string",
@@ -362,11 +362,11 @@
 ## Test 14
 ### Source
 ```
-(`hello`) != `world`
+(`hello`) !== `world`
 ```
 ### Lexed
 ```
-(`hello`) != `world`
+(`hello`) !== `world`
 ```
 ### AST
 ```json
@@ -375,7 +375,7 @@
   "body": [
     {
       "type": "BinaryOperation",
-      "operator": "!=",
+      "operator": "!==",
       "left": {
         "type": "Block",
         "style": "Paren",
@@ -400,59 +400,96 @@
 ## Test 15
 ### Source
 ```
-`x : `abc` \
-`	`def` = `abc` \
-`	`def`
+(`abc` \
+\	 `def` == `abc` \
+\	 `def`)
 ```
 ### Lexed
 ```
-`x : `abc` \
-`	`def` = `abc` \
-`	`def`
+(`abc` \
+\	 `def` == `abc` \
+\	 `def`)
 ```
-### AST Generation Error
-```
-Parse Error at line 1, col 7: Expected " ", "!=", "!==", "&", "&&", "'", ",", ";", ";;", "<<", "<=", "==", ">=", ">>", "\r\n", "^", "||", "~*", "~+", "~-", "~/", "~^", [!@~], [%*/], [+\-], [<->], or [\n\r] but "a" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Block",
+      "style": "Paren",
+      "expressions": [
+        {
+          "type": "Coproduct",
+          "elements": [
+            {
+              "type": "Atom",
+              "dataType": "string",
+              "value": "`abc`"
+            },
+            {
+              "type": "Atom",
+              "dataType": "charactor",
+              "value": "\\\n"
+            }
+          ]
+        },
+        {
+          "type": "BinaryOperation",
+          "operator": "==",
+          "left": {
+            "type": "Coproduct",
+            "elements": [
+              {
+                "type": "Atom",
+                "dataType": "charactor",
+                "value": "\\\t"
+              },
+              {
+                "type": "Atom",
+                "dataType": "string",
+                "value": "`def`"
+              }
+            ]
+          },
+          "right": {
+            "type": "Coproduct",
+            "elements": [
+              {
+                "type": "Atom",
+                "dataType": "string",
+                "value": "`abc`"
+              },
+              {
+                "type": "Atom",
+                "dataType": "charactor",
+                "value": "\\\n"
+              }
+            ]
+          }
+        },
+        {
+          "type": "Coproduct",
+          "elements": [
+            {
+              "type": "Atom",
+              "dataType": "charactor",
+              "value": "\\\t"
+            },
+            {
+              "type": "Atom",
+              "dataType": "string",
+              "value": "`def`"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
 ```
 
 ## Test 16
-### Source
-```
-`abc` \
-`	`def` = `abc` \
-`	`def`
-```
-### Lexed
-```
-`abc` \
-`	`def` = `abc` \
-`	`def`
-```
-### AST Generation Error
-```
-Parse Error at line 2, col 1: Expected " ", "!=", "!==", "&", "&&", "'", ",", ";", ";;", "<<", "<=", "==", ">=", ">>", "\r\n", "^", "||", [!@~], [%*/], [+\-], [<->], or [\n\r] but "`" found.
-```
-
-## Test 17
-### Source
-```
-(`abc` \
- \	 `def` = `abc` \
- \	 `def`)
-```
-### Lexed
-```
-(`abc` \
-<STX>\	 `def` = `abc` \
-\	 `def`)
-<ETX>
-```
-### AST Generation Error
-```
-Parse Error at line 3, col 9: Expected " ", "!!", "!=", "!==", "#", "##", "###", "&", "&&", "'", "(", ",", "-", "0b", "0r", "0u", "0x", ";", ";;", "<<", "<=", "==", ">=", ">>", "[", "\\", "\x02", "\x03", "^", "_", "`", "{", "|", "||", "~", "~*", "~+", "~-", "~/", "~^", [!$@], [!@~], [#%-'*-\-/:-@\^|~], [%*/], [+\-], [0-9], [<->], or [a-zA-Z] but ")" found.
-```
-
-## Test 18
 ### Source
 ```
 \A , `bc`
@@ -485,7 +522,7 @@ Parse Error at line 3, col 9: Expected " ", "!!", "!=", "!==", "#", "##", "###",
 }
 ```
 
-## Test 19
+## Test 17
 ### Source
 ```
 (`Result: ` 123)
@@ -524,7 +561,7 @@ Parse Error at line 3, col 9: Expected " ", "!!", "!=", "!==", "#", "##", "###",
 }
 ```
 
-## Test 20
+## Test 18
 ### Source
 ```
 div : x y ? x / y
@@ -635,7 +672,7 @@ Result : div2 10
 }
 ```
 
-## Test 21
+## Test 19
 ### Source
 ```
 0 + `123`
@@ -667,7 +704,7 @@ Result : div2 10
 }
 ```
 
-## Test 22
+## Test 20
 ### Source
 ```
 x : `123` + 0
@@ -703,7 +740,7 @@ x : `123` + 0
 }
 ```
 
-## Test 23
+## Test 21
 ### Source
 ```
 x : `123` 0
@@ -740,7 +777,7 @@ x : `123` 0
 }
 ```
 
-## Test 24
+## Test 22
 ### Source
 ```
 0 & 1
@@ -772,7 +809,7 @@ x : `123` 0
 }
 ```
 
-## Test 25
+## Test 23
 ### Source
 ```
 !_
@@ -801,7 +838,7 @@ x : `123` 0
 }
 ```
 
-## Test 26
+## Test 24
 ### Source
 ```
 _ & 100
@@ -833,7 +870,7 @@ _ & 100
 }
 ```
 
-## Test 27
+## Test 25
 ### Source
 ```
 _ | |-4*2+3| + 5 < 0 | 3
@@ -916,281 +953,264 @@ _ | |-4*2+3| + 5 < 0 | 3
 }
 ```
 
-## Test 28
+## Test 26
 ### Source
 ```
-`-5*|-4*2+3|/2<0|3
+-5* |-4*2+3| /2<0 | 3
 ```
 ### Lexed
 ```
-`-5*|-4*2+3|/2<0|3
+-5* |-4*2+3| /2<0 | 3
 ```
 ### AST
 ```json
 {
   "type": "Program",
-  "body": []
+  "body": [
+    {
+      "type": "BinaryOperation",
+      "operator": "|",
+      "left": {
+        "type": "BinaryOperation",
+        "operator": "<",
+        "left": {
+          "type": "BinaryOperation",
+          "operator": "/",
+          "left": {
+            "type": "BinaryOperation",
+            "operator": "*",
+            "left": {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "-5"
+            },
+            "right": {
+              "type": "Block",
+              "style": "Arithmetic",
+              "expressions": [
+                {
+                  "type": "BinaryOperation",
+                  "operator": "+",
+                  "left": {
+                    "type": "BinaryOperation",
+                    "operator": "*",
+                    "left": {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "-4"
+                    },
+                    "right": {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "2"
+                    }
+                  },
+                  "right": {
+                    "type": "Atom",
+                    "dataType": "number",
+                    "value": "3"
+                  }
+                }
+              ]
+            }
+          },
+          "right": {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "2"
+          }
+        },
+        "right": {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "0"
+        }
+      },
+      "right": {
+        "type": "Atom",
+        "dataType": "number",
+        "value": "3"
+      }
+    }
+  ]
+}
+```
+
+## Test 27
+### Source
+```
+-5* |-4*2+3|/2<0 | 3
+```
+### Lexed
+```
+-5* |-4*2+3|/2<0 | 3
+```
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "BinaryOperation",
+      "operator": "|",
+      "left": {
+        "type": "BinaryOperation",
+        "operator": "<",
+        "left": {
+          "type": "BinaryOperation",
+          "operator": "/",
+          "left": {
+            "type": "BinaryOperation",
+            "operator": "*",
+            "left": {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "-5"
+            },
+            "right": {
+              "type": "Block",
+              "style": "Arithmetic",
+              "expressions": [
+                {
+                  "type": "BinaryOperation",
+                  "operator": "+",
+                  "left": {
+                    "type": "BinaryOperation",
+                    "operator": "*",
+                    "left": {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "-4"
+                    },
+                    "right": {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "2"
+                    }
+                  },
+                  "right": {
+                    "type": "Atom",
+                    "dataType": "number",
+                    "value": "3"
+                  }
+                }
+              ]
+            }
+          },
+          "right": {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "2"
+          }
+        },
+        "right": {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "0"
+        }
+      },
+      "right": {
+        "type": "Atom",
+        "dataType": "number",
+        "value": "3"
+      }
+    }
+  ]
+}
+```
+
+## Test 28
+### Source
+```
+-5*|-4*2+3|/2<0 | 3
+```
+### Lexed
+```
+-5*|-4*2+3|/2<0 | 3
+```
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "BinaryOperation",
+      "operator": "|",
+      "left": {
+        "type": "BinaryOperation",
+        "operator": "<",
+        "left": {
+          "type": "BinaryOperation",
+          "operator": "/",
+          "left": {
+            "type": "BinaryOperation",
+            "operator": "*",
+            "left": {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "-5"
+            },
+            "right": {
+              "type": "Block",
+              "style": "Arithmetic",
+              "expressions": [
+                {
+                  "type": "BinaryOperation",
+                  "operator": "+",
+                  "left": {
+                    "type": "BinaryOperation",
+                    "operator": "*",
+                    "left": {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "-4"
+                    },
+                    "right": {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "2"
+                    }
+                  },
+                  "right": {
+                    "type": "Atom",
+                    "dataType": "number",
+                    "value": "3"
+                  }
+                }
+              ]
+            }
+          },
+          "right": {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "2"
+          }
+        },
+        "right": {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "0"
+        }
+      },
+      "right": {
+        "type": "Atom",
+        "dataType": "number",
+        "value": "3"
+      }
+    }
+  ]
 }
 ```
 
 ## Test 29
 ### Source
 ```
--5* |-4*2+3| /2<0 | 3
-```
-### Lexed
-```
--5* |-4*2+3| /2<0 | 3
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": [
-    {
-      "type": "BinaryOperation",
-      "operator": "|",
-      "left": {
-        "type": "BinaryOperation",
-        "operator": "<",
-        "left": {
-          "type": "BinaryOperation",
-          "operator": "/",
-          "left": {
-            "type": "BinaryOperation",
-            "operator": "*",
-            "left": {
-              "type": "Atom",
-              "dataType": "number",
-              "value": "-5"
-            },
-            "right": {
-              "type": "Block",
-              "style": "Arithmetic",
-              "expressions": [
-                {
-                  "type": "BinaryOperation",
-                  "operator": "+",
-                  "left": {
-                    "type": "BinaryOperation",
-                    "operator": "*",
-                    "left": {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "-4"
-                    },
-                    "right": {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "2"
-                    }
-                  },
-                  "right": {
-                    "type": "Atom",
-                    "dataType": "number",
-                    "value": "3"
-                  }
-                }
-              ]
-            }
-          },
-          "right": {
-            "type": "Atom",
-            "dataType": "number",
-            "value": "2"
-          }
-        },
-        "right": {
-          "type": "Atom",
-          "dataType": "number",
-          "value": "0"
-        }
-      },
-      "right": {
-        "type": "Atom",
-        "dataType": "number",
-        "value": "3"
-      }
-    }
-  ]
-}
-```
-
-## Test 30
-### Source
-```
--5* |-4*2+3|/2<0 | 3
-```
-### Lexed
-```
--5* |-4*2+3|/2<0 | 3
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": [
-    {
-      "type": "BinaryOperation",
-      "operator": "|",
-      "left": {
-        "type": "BinaryOperation",
-        "operator": "<",
-        "left": {
-          "type": "BinaryOperation",
-          "operator": "/",
-          "left": {
-            "type": "BinaryOperation",
-            "operator": "*",
-            "left": {
-              "type": "Atom",
-              "dataType": "number",
-              "value": "-5"
-            },
-            "right": {
-              "type": "Block",
-              "style": "Arithmetic",
-              "expressions": [
-                {
-                  "type": "BinaryOperation",
-                  "operator": "+",
-                  "left": {
-                    "type": "BinaryOperation",
-                    "operator": "*",
-                    "left": {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "-4"
-                    },
-                    "right": {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "2"
-                    }
-                  },
-                  "right": {
-                    "type": "Atom",
-                    "dataType": "number",
-                    "value": "3"
-                  }
-                }
-              ]
-            }
-          },
-          "right": {
-            "type": "Atom",
-            "dataType": "number",
-            "value": "2"
-          }
-        },
-        "right": {
-          "type": "Atom",
-          "dataType": "number",
-          "value": "0"
-        }
-      },
-      "right": {
-        "type": "Atom",
-        "dataType": "number",
-        "value": "3"
-      }
-    }
-  ]
-}
-```
-
-## Test 31
-### Source
-```
--5*|-4*2+3|/2<0 | 3
-```
-### Lexed
-```
--5*|-4*2+3|/2<0 | 3
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": [
-    {
-      "type": "BinaryOperation",
-      "operator": "|",
-      "left": {
-        "type": "BinaryOperation",
-        "operator": "<",
-        "left": {
-          "type": "BinaryOperation",
-          "operator": "/",
-          "left": {
-            "type": "BinaryOperation",
-            "operator": "*",
-            "left": {
-              "type": "Atom",
-              "dataType": "number",
-              "value": "-5"
-            },
-            "right": {
-              "type": "Block",
-              "style": "Arithmetic",
-              "expressions": [
-                {
-                  "type": "BinaryOperation",
-                  "operator": "+",
-                  "left": {
-                    "type": "BinaryOperation",
-                    "operator": "*",
-                    "left": {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "-4"
-                    },
-                    "right": {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "2"
-                    }
-                  },
-                  "right": {
-                    "type": "Atom",
-                    "dataType": "number",
-                    "value": "3"
-                  }
-                }
-              ]
-            }
-          },
-          "right": {
-            "type": "Atom",
-            "dataType": "number",
-            "value": "2"
-          }
-        },
-        "right": {
-          "type": "Atom",
-          "dataType": "number",
-          "value": "0"
-        }
-      },
-      "right": {
-        "type": "Atom",
-        "dataType": "number",
-        "value": "3"
-      }
-    }
-  ]
-}
-```
-
-## Test 32
-### Source
-```
-pass_eq  : x ? 10 = x
+pass_eq  : x ? 10 == x
 pass_eq 10
 ```
 ### Lexed
 ```
-pass_eq  : x ? 10 = x
+pass_eq  : x ? 10 == x
 pass_eq 10
 ```
 ### AST
@@ -1215,7 +1235,7 @@ pass_eq 10
         },
         "body": {
           "type": "BinaryOperation",
-          "operator": "=",
+          "operator": "==",
           "left": {
             "type": "Atom",
             "dataType": "number",
@@ -1248,15 +1268,15 @@ pass_eq 10
 }
 ```
 
-## Test 33
+## Test 30
 ### Source
 ```
-pass_eq  : x ? 10 = x
+pass_eq  : x ? 10 == x
 pass_eq 5
 ```
 ### Lexed
 ```
-pass_eq  : x ? 10 = x
+pass_eq  : x ? 10 == x
 pass_eq 5
 ```
 ### AST
@@ -1281,7 +1301,7 @@ pass_eq 5
         },
         "body": {
           "type": "BinaryOperation",
-          "operator": "=",
+          "operator": "==",
           "left": {
             "type": "Atom",
             "dataType": "number",
@@ -1314,15 +1334,15 @@ pass_eq 5
 }
 ```
 
-## Test 34
+## Test 31
 ### Source
 ```
-pass_neq : x ? 10 != x
+pass_neq : x ? 10 !== x
 pass_neq 5
 ```
 ### Lexed
 ```
-pass_neq : x ? 10 != x
+pass_neq : x ? 10 !== x
 pass_neq 5
 ```
 ### AST
@@ -1347,7 +1367,7 @@ pass_neq 5
         },
         "body": {
           "type": "BinaryOperation",
-          "operator": "!=",
+          "operator": "!==",
           "left": {
             "type": "Atom",
             "dataType": "number",
@@ -1380,7 +1400,7 @@ pass_neq 5
 }
 ```
 
-## Test 35
+## Test 32
 ### Source
 ```
 pass_gt : x ? 5 < x
@@ -1446,7 +1466,7 @@ pass_gt 10
 }
 ```
 
-## Test 36
+## Test 33
 ### Source
 ```
 pass_lt : x ? 5 > x
@@ -1512,7 +1532,7 @@ pass_lt 2
 }
 ```
 
-## Test 37
+## Test 34
 ### Source
 ```
 pass_ge : x ? 5 <= x
@@ -1578,7 +1598,7 @@ pass_ge 5
 }
 ```
 
-## Test 38
+## Test 35
 ### Source
 ```
 pass_le : x ? 5 >= x
@@ -1644,7 +1664,7 @@ pass_le 5
 }
 ```
 
-## Test 39
+## Test 36
 ### Source
 ```
 set_default : x ? x | 100
@@ -1710,7 +1730,7 @@ set_default 50
 }
 ```
 
-## Test 40
+## Test 37
 ### Source
 ```
 set_default : x ? x | 100
@@ -1776,7 +1796,7 @@ set_default _
 }
 ```
 
-## Test 41
+## Test 38
 ### Source
 ```
 calc_if_exists : x ? x & (x * 10)
@@ -1857,7 +1877,7 @@ calc_if_exists 5
 }
 ```
 
-## Test 42
+## Test 39
 ### Source
 ```
 calc_if_exists : x ? x & (x * 10)
@@ -1938,7 +1958,7 @@ calc_if_exists _
 }
 ```
 
-## Test 43
+## Test 40
 ### Source
 ```
 is_empty : x ? !x
@@ -2001,7 +2021,7 @@ is_empty 100
 }
 ```
 
-## Test 44
+## Test 41
 ### Source
 ```
 is_empty : x ? !x
@@ -2064,14 +2084,14 @@ is_empty _
 }
 ```
 
-## Test 45
+## Test 42
 ### Source
 ```
-[!_] 5 = (!5)
+[!_] 5 == (!5)
 ```
 ### Lexed
 ```
-[!_] 5 = (!5)
+[!_] 5 == (!5)
 ```
 ### AST
 ```json
@@ -2079,36 +2099,14 @@ is_empty _
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Block",
-          "style": "Square",
-          "expressions": [
-            {
-              "type": "Prefix",
-              "operators": [
-                "!"
-              ],
-              "expression": {
-                "type": "Atom",
-                "dataType": "unit",
-                "value": "_"
-              }
-            }
-          ]
-        },
-        {
-          "type": "BinaryOperation",
-          "operator": "=",
-          "left": {
-            "type": "Atom",
-            "dataType": "number",
-            "value": "5"
-          },
-          "right": {
+      "type": "BinaryOperation",
+      "operator": "==",
+      "left": {
+        "type": "Coproduct",
+        "elements": [
+          {
             "type": "Block",
-            "style": "Paren",
+            "style": "Square",
             "expressions": [
               {
                 "type": "Prefix",
@@ -2117,27 +2115,49 @@ is_empty _
                 ],
                 "expression": {
                   "type": "Atom",
-                  "dataType": "number",
-                  "value": "5"
+                  "dataType": "unit",
+                  "value": "_"
                 }
               }
             ]
+          },
+          {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "5"
           }
-        }
-      ]
+        ]
+      },
+      "right": {
+        "type": "Block",
+        "style": "Paren",
+        "expressions": [
+          {
+            "type": "Prefix",
+            "operators": [
+              "!"
+            ],
+            "expression": {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "5"
+            }
+          }
+        ]
+      }
     }
   ]
 }
 ```
 
-## Test 46
+## Test 43
 ### Source
 ```
-[_!] 5 = 5!
+[_!] 5 == 5!
 ```
 ### Lexed
 ```
-[_!] 5 = 5!
+[_!] 5 == 5!
 ```
 ### AST
 ```json
@@ -2145,52 +2165,52 @@ is_empty _
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Block",
-          "style": "Square",
-          "expressions": [
-            {
-              "type": "Postfix",
-              "expression": {
-                "type": "Atom",
-                "dataType": "unit",
-                "value": "_"
-              },
-              "operators": [
-                "!"
-              ]
-            }
-          ]
-        },
-        {
-          "type": "BinaryOperation",
-          "operator": "=",
-          "left": {
+      "type": "BinaryOperation",
+      "operator": "==",
+      "left": {
+        "type": "Coproduct",
+        "elements": [
+          {
+            "type": "Block",
+            "style": "Square",
+            "expressions": [
+              {
+                "type": "Postfix",
+                "expression": {
+                  "type": "Atom",
+                  "dataType": "unit",
+                  "value": "_"
+                },
+                "operators": [
+                  "!"
+                ]
+              }
+            ]
+          },
+          {
             "type": "Atom",
             "dataType": "number",
             "value": "5"
-          },
-          "right": {
-            "type": "Postfix",
-            "expression": {
-              "type": "Atom",
-              "dataType": "number",
-              "value": "5"
-            },
-            "operators": [
-              "!"
-            ]
           }
-        }
-      ]
+        ]
+      },
+      "right": {
+        "type": "Postfix",
+        "expression": {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "5"
+        },
+        "operators": [
+          "!"
+        ]
+      }
     }
   ]
 }
 ```
 
-## Test 47
+## Test 44
 ### Source
 ```
 [1 2] [3 4]
@@ -2255,7 +2275,7 @@ is_empty _
 }
 ```
 
-## Test 48
+## Test 45
 ### Source
 ```
 list : 1 2 , 3 4
@@ -2312,7 +2332,7 @@ list : 1 2 , 3 4
 }
 ```
 
-## Test 49
+## Test 46
 ### Source
 ```
 [1 2 , 3 4]~
@@ -2377,7 +2397,7 @@ list : 1 2 , 3 4
 }
 ```
 
-## Test 50
+## Test 47
 ### Source
 ```
 [[1 2] [3 4]]~
@@ -2454,7 +2474,7 @@ list : 1 2 , 3 4
 }
 ```
 
-## Test 51
+## Test 48
 ### Source
 ```
 a : 1 2 3 4 5
@@ -2519,7 +2539,7 @@ a : 1 2 3 4 5
 }
 ```
 
-## Test 52
+## Test 49
 ### Source
 ```
 ~10
@@ -2548,7 +2568,7 @@ a : 1 2 3 4 5
 }
 ```
 
-## Test 53
+## Test 50
 ### Source
 ```
 10~
@@ -2577,7 +2597,7 @@ a : 1 2 3 4 5
 }
 ```
 
-## Test 54
+## Test 51
 ### Source
 ```
 [1 , [2 , 3]~ , 4]
@@ -2643,7 +2663,7 @@ a : 1 2 3 4 5
 }
 ```
 
-## Test 55
+## Test 52
 ### Source
 ```
 [1 , [2 , 3]~ 4]
@@ -2714,7 +2734,7 @@ a : 1 2 3 4 5
 }
 ```
 
-## Test 56
+## Test 53
 ### Source
 ```
 [1 [2 , 3]~ , 4]
@@ -2785,7 +2805,7 @@ a : 1 2 3 4 5
 }
 ```
 
-## Test 57
+## Test 54
 ### Source
 ```
 [1 [2 , 3]~ 4]
@@ -2851,7 +2871,7 @@ a : 1 2 3 4 5
 }
 ```
 
-## Test 58
+## Test 55
 ### Source
 ```
 1 2 , [3 4] , [5 6]
@@ -2920,6 +2940,243 @@ a : 1 2 3 4 5
                   "type": "Atom",
                   "dataType": "number",
                   "value": "6"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Test 56
+### Source
+```
+[1 , 2 , [3 , 4] , [5 , 6]]
+```
+### Lexed
+```
+[1 , 2 , [3 , 4] , [5 , 6]]
+```
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Block",
+      "style": "Square",
+      "expressions": [
+        {
+          "type": "Coproduct",
+          "elements": [
+            {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "1"
+            },
+            {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "2"
+            },
+            {
+              "type": "Block",
+              "style": "Square",
+              "expressions": [
+                {
+                  "type": "Coproduct",
+                  "elements": [
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "3"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "4"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "Block",
+              "style": "Square",
+              "expressions": [
+                {
+                  "type": "Coproduct",
+                  "elements": [
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "5"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "6"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Test 57
+### Source
+```
+1 , 2 , [3 4] , [5 6]
+```
+### Lexed
+```
+1 , 2 , [3 4] , [5 6]
+```
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Coproduct",
+      "elements": [
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "1"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "2"
+        },
+        {
+          "type": "Block",
+          "style": "Square",
+          "expressions": [
+            {
+              "type": "Coproduct",
+              "elements": [
+                {
+                  "type": "Atom",
+                  "dataType": "number",
+                  "value": "3"
+                },
+                {
+                  "type": "Atom",
+                  "dataType": "number",
+                  "value": "4"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Block",
+          "style": "Square",
+          "expressions": [
+            {
+              "type": "Coproduct",
+              "elements": [
+                {
+                  "type": "Atom",
+                  "dataType": "number",
+                  "value": "5"
+                },
+                {
+                  "type": "Atom",
+                  "dataType": "number",
+                  "value": "6"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Test 58
+### Source
+```
+[1 , 2 , [3 4] , [5 6]]
+```
+### Lexed
+```
+[1 , 2 , [3 4] , [5 6]]
+```
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Block",
+      "style": "Square",
+      "expressions": [
+        {
+          "type": "Coproduct",
+          "elements": [
+            {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "1"
+            },
+            {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "2"
+            },
+            {
+              "type": "Block",
+              "style": "Square",
+              "expressions": [
+                {
+                  "type": "Coproduct",
+                  "elements": [
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "3"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "4"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "Block",
+              "style": "Square",
+              "expressions": [
+                {
+                  "type": "Coproduct",
+                  "elements": [
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "5"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "6"
+                    }
+                  ]
                 }
               ]
             }
@@ -2934,11 +3191,11 @@ a : 1 2 3 4 5
 ## Test 59
 ### Source
 ```
-[1 , 2 , [3 , 4] , [5 , 6]]
+1 , 2 , [3 , 4] , [5 , 6]
 ```
 ### Lexed
 ```
-[1 , 2 , [3 , 4] , [5 , 6]]
+1 , 2 , [3 , 4] , [5 , 6]
 ```
 ### AST
 ```json
@@ -2946,61 +3203,55 @@ a : 1 2 3 4 5
   "type": "Program",
   "body": [
     {
-      "type": "Block",
-      "style": "Square",
-      "expressions": [
+      "type": "Coproduct",
+      "elements": [
         {
-          "type": "Coproduct",
-          "elements": [
+          "type": "Atom",
+          "dataType": "number",
+          "value": "1"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "2"
+        },
+        {
+          "type": "Block",
+          "style": "Square",
+          "expressions": [
             {
-              "type": "Atom",
-              "dataType": "number",
-              "value": "1"
-            },
-            {
-              "type": "Atom",
-              "dataType": "number",
-              "value": "2"
-            },
-            {
-              "type": "Block",
-              "style": "Square",
-              "expressions": [
+              "type": "Coproduct",
+              "elements": [
                 {
-                  "type": "Coproduct",
-                  "elements": [
-                    {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "3"
-                    },
-                    {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "4"
-                    }
-                  ]
+                  "type": "Atom",
+                  "dataType": "number",
+                  "value": "3"
+                },
+                {
+                  "type": "Atom",
+                  "dataType": "number",
+                  "value": "4"
                 }
               ]
-            },
+            }
+          ]
+        },
+        {
+          "type": "Block",
+          "style": "Square",
+          "expressions": [
             {
-              "type": "Block",
-              "style": "Square",
-              "expressions": [
+              "type": "Coproduct",
+              "elements": [
                 {
-                  "type": "Coproduct",
-                  "elements": [
-                    {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "5"
-                    },
-                    {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "6"
-                    }
-                  ]
+                  "type": "Atom",
+                  "dataType": "number",
+                  "value": "5"
+                },
+                {
+                  "type": "Atom",
+                  "dataType": "number",
+                  "value": "6"
                 }
               ]
             }
@@ -3015,11 +3266,11 @@ a : 1 2 3 4 5
 ## Test 60
 ### Source
 ```
-1 , 2 , [3 4] , [5 6]
+1 2 , [3 4 , 5 6]
 ```
 ### Lexed
 ```
-1 , 2 , [3 4] , [5 6]
+1 2 , [3 4 , 5 6]
 ```
 ### AST
 ```json
@@ -3030,33 +3281,17 @@ a : 1 2 3 4 5
       "type": "Coproduct",
       "elements": [
         {
-          "type": "Atom",
-          "dataType": "number",
-          "value": "1"
-        },
-        {
-          "type": "Atom",
-          "dataType": "number",
-          "value": "2"
-        },
-        {
-          "type": "Block",
-          "style": "Square",
-          "expressions": [
+          "type": "Coproduct",
+          "elements": [
             {
-              "type": "Coproduct",
-              "elements": [
-                {
-                  "type": "Atom",
-                  "dataType": "number",
-                  "value": "3"
-                },
-                {
-                  "type": "Atom",
-                  "dataType": "number",
-                  "value": "4"
-                }
-              ]
+              "type": "Atom",
+              "dataType": "number",
+              "value": "1"
+            },
+            {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "2"
             }
           ]
         },
@@ -3068,14 +3303,34 @@ a : 1 2 3 4 5
               "type": "Coproduct",
               "elements": [
                 {
-                  "type": "Atom",
-                  "dataType": "number",
-                  "value": "5"
+                  "type": "Coproduct",
+                  "elements": [
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "3"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "4"
+                    }
+                  ]
                 },
                 {
-                  "type": "Atom",
-                  "dataType": "number",
-                  "value": "6"
+                  "type": "Coproduct",
+                  "elements": [
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "5"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "6"
+                    }
+                  ]
                 }
               ]
             }
@@ -3088,241 +3343,6 @@ a : 1 2 3 4 5
 ```
 
 ## Test 61
-### Source
-```
-[1 , 2 , [3 4] , [5 6]]
-```
-### Lexed
-```
-[1 , 2 , [3 4] , [5 6]]
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": [
-    {
-      "type": "Block",
-      "style": "Square",
-      "expressions": [
-        {
-          "type": "Coproduct",
-          "elements": [
-            {
-              "type": "Atom",
-              "dataType": "number",
-              "value": "1"
-            },
-            {
-              "type": "Atom",
-              "dataType": "number",
-              "value": "2"
-            },
-            {
-              "type": "Block",
-              "style": "Square",
-              "expressions": [
-                {
-                  "type": "Coproduct",
-                  "elements": [
-                    {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "3"
-                    },
-                    {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "4"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "Block",
-              "style": "Square",
-              "expressions": [
-                {
-                  "type": "Coproduct",
-                  "elements": [
-                    {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "5"
-                    },
-                    {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "6"
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-## Test 62
-### Source
-```
-1 , 2 , [3 , 4] , [5 , 6]
-```
-### Lexed
-```
-1 , 2 , [3 , 4] , [5 , 6]
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": [
-    {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "number",
-          "value": "1"
-        },
-        {
-          "type": "Atom",
-          "dataType": "number",
-          "value": "2"
-        },
-        {
-          "type": "Block",
-          "style": "Square",
-          "expressions": [
-            {
-              "type": "Coproduct",
-              "elements": [
-                {
-                  "type": "Atom",
-                  "dataType": "number",
-                  "value": "3"
-                },
-                {
-                  "type": "Atom",
-                  "dataType": "number",
-                  "value": "4"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "Block",
-          "style": "Square",
-          "expressions": [
-            {
-              "type": "Coproduct",
-              "elements": [
-                {
-                  "type": "Atom",
-                  "dataType": "number",
-                  "value": "5"
-                },
-                {
-                  "type": "Atom",
-                  "dataType": "number",
-                  "value": "6"
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-## Test 63
-### Source
-```
-1 2 , [3 4 , 5 6]
-```
-### Lexed
-```
-1 2 , [3 4 , 5 6]
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": [
-    {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Coproduct",
-          "elements": [
-            {
-              "type": "Atom",
-              "dataType": "number",
-              "value": "1"
-            },
-            {
-              "type": "Atom",
-              "dataType": "number",
-              "value": "2"
-            }
-          ]
-        },
-        {
-          "type": "Block",
-          "style": "Square",
-          "expressions": [
-            {
-              "type": "Coproduct",
-              "elements": [
-                {
-                  "type": "Coproduct",
-                  "elements": [
-                    {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "3"
-                    },
-                    {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "4"
-                    }
-                  ]
-                },
-                {
-                  "type": "Coproduct",
-                  "elements": [
-                    {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "5"
-                    },
-                    {
-                      "type": "Atom",
-                      "dataType": "number",
-                      "value": "6"
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-## Test 64
 ### Source
 ```
 getHead : a ~b ? a
@@ -3404,7 +3424,7 @@ getHead [1 , 2 , 3]
 }
 ```
 
-## Test 65
+## Test 62
 ### Source
 ```
 getTail : a ~b ? b
@@ -3486,7 +3506,7 @@ getTail [1 , 2 , 3]
 }
 ```
 
-## Test 66
+## Test 63
 ### Source
 ```
 [1 ~ 5]
@@ -3528,7 +3548,7 @@ getTail [1 , 2 , 3]
 }
 ```
 
-## Test 67
+## Test 64
 ### Source
 ```
 [-2 ~ 3]
@@ -3570,41 +3590,7 @@ getTail [1 , 2 , 3]
 }
 ```
 
-## Test 68
-### Source
-```
-`[1 + 2 - 5 ~ 6]
-```
-### Lexed
-```
-`[1 + 2 - 5 ~ 6]
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": []
-}
-```
-
-## Test 69
-### Source
-```
-`[10 ~ 5]
-```
-### Lexed
-```
-`[10 ~ 5]
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": []
-}
-```
-
-## Test 70
+## Test 65
 ### Source
 ```
 [0 ~+ 2.5 ~ 10]
@@ -3652,24 +3638,7 @@ getTail [1 , 2 , 3]
 }
 ```
 
-## Test 71
-### Source
-```
-`[0 ~+ 10]
-```
-### Lexed
-```
-`[0 ~+ 10]
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": []
-}
-```
-
-## Test 72
+## Test 66
 ### Source
 ```
 [10 ~+ 2 ~ 0]
@@ -3717,7 +3686,7 @@ getTail [1 , 2 , 3]
 }
 ```
 
-## Test 73
+## Test 67
 ### Source
 ```
 [10 ~- 2.5 ~ 1]
@@ -3765,24 +3734,7 @@ getTail [1 , 2 , 3]
 }
 ```
 
-## Test 74
-### Source
-```
-`[5 ~- 1]
-```
-### Lexed
-```
-`[5 ~- 1]
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": []
-}
-```
-
-## Test 75
+## Test 68
 ### Source
 ```
 [1 ~* 2 ~ 16]
@@ -3830,7 +3782,7 @@ getTail [1 , 2 , 3]
 }
 ```
 
-## Test 76
+## Test 69
 ### Source
 ```
 [1 ~* 2.5 ~ 16]
@@ -3878,24 +3830,7 @@ getTail [1 , 2 , 3]
 }
 ```
 
-## Test 77
-### Source
-```
-`[1 ~* 16]
-```
-### Lexed
-```
-`[1 ~* 16]
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": []
-}
-```
-
-## Test 78
+## Test 70
 ### Source
 ```
 [16 ~/ 2 ~ 1]
@@ -3943,7 +3878,7 @@ getTail [1 , 2 , 3]
 }
 ```
 
-## Test 79
+## Test 71
 ### Source
 ```
 [10 ~/ 2.5 ~ 1]
@@ -3991,24 +3926,7 @@ getTail [1 , 2 , 3]
 }
 ```
 
-## Test 80
-### Source
-```
-`[16 ~/ 2]
-```
-### Lexed
-```
-`[16 ~/ 2]
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": []
-}
-```
-
-## Test 81
+## Test 72
 ### Source
 ```
 [2 ~^ 2 ~ 256]
@@ -4056,82 +3974,14 @@ getTail [1 , 2 , 3]
 }
 ```
 
-## Test 82
+## Test 73
 ### Source
 ```
-`[2 ~^ 256]
+[2 ~+ 2 ~ 10] == 2 , 4 , 6 , 8 , 10
 ```
 ### Lexed
 ```
-`[2 ~^ 256]
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": []
-}
-```
-
-## Test 83
-### Source
-```
-`[0 ~+ 2 ~ 10 + 4]
-```
-### Lexed
-```
-`[0 ~+ 2 ~ 10 + 4]
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": []
-}
-```
-
-## Test 84
-### Source
-```
-`[0 ~+ 2 - 1 ~ 5]
-```
-### Lexed
-```
-`[0 ~+ 2 - 1 ~ 5]
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": []
-}
-```
-
-## Test 85
-### Source
-```
-`[1 + 2 ~+ 2 ~ 11]
-```
-### Lexed
-```
-`[1 + 2 ~+ 2 ~ 11]
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": []
-}
-```
-
-## Test 86
-### Source
-```
-[2 ~+ 2 ~ 10] = [2 , 4 , 6 , 8 , 10]
-```
-### Lexed
-```
-[2 ~+ 2 ~ 10] = [2 , 4 , 6 , 8 , 10]
+[2 ~+ 2 ~ 10] == 2 , 4 , 6 , 8 , 10
 ```
 ### AST
 ```json
@@ -4140,7 +3990,7 @@ getTail [1 , 2 , 3]
   "body": [
     {
       "type": "BinaryOperation",
-      "operator": "=",
+      "operator": "==",
       "left": {
         "type": "Block",
         "style": "Square",
@@ -4172,38 +4022,32 @@ getTail [1 , 2 , 3]
         ]
       },
       "right": {
-        "type": "Block",
-        "style": "Square",
-        "expressions": [
+        "type": "Coproduct",
+        "elements": [
           {
-            "type": "Coproduct",
-            "elements": [
-              {
-                "type": "Atom",
-                "dataType": "number",
-                "value": "2"
-              },
-              {
-                "type": "Atom",
-                "dataType": "number",
-                "value": "4"
-              },
-              {
-                "type": "Atom",
-                "dataType": "number",
-                "value": "6"
-              },
-              {
-                "type": "Atom",
-                "dataType": "number",
-                "value": "8"
-              },
-              {
-                "type": "Atom",
-                "dataType": "number",
-                "value": "10"
-              }
-            ]
+            "type": "Atom",
+            "dataType": "number",
+            "value": "2"
+          },
+          {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "4"
+          },
+          {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "6"
+          },
+          {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "8"
+          },
+          {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "10"
           }
         ]
       }
@@ -4212,14 +4056,14 @@ getTail [1 , 2 , 3]
 }
 ```
 
-## Test 87
+## Test 74
 ### Source
 ```
-[1 ~* 2 ~ 16] = [1 , 2 , 4 , 8 , 16]
+[1 ~* 2 ~ 16] == 1 , 2 , 4 , 8 , 16
 ```
 ### Lexed
 ```
-[1 ~* 2 ~ 16] = [1 , 2 , 4 , 8 , 16]
+[1 ~* 2 ~ 16] == 1 , 2 , 4 , 8 , 16
 ```
 ### AST
 ```json
@@ -4228,7 +4072,7 @@ getTail [1 , 2 , 3]
   "body": [
     {
       "type": "BinaryOperation",
-      "operator": "=",
+      "operator": "==",
       "left": {
         "type": "Block",
         "style": "Square",
@@ -4260,9 +4104,62 @@ getTail [1 , 2 , 3]
         ]
       },
       "right": {
-        "type": "Block",
-        "style": "Square",
-        "expressions": [
+        "type": "Coproduct",
+        "elements": [
+          {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "1"
+          },
+          {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "2"
+          },
+          {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "4"
+          },
+          {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "8"
+          },
+          {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "16"
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+## Test 75
+### Source
+```
+list : 1 2 , 3 4
+list ' 0
+```
+### Lexed
+```
+list : 1 2 , 3 4
+list ' 0
+```
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "list",
+      "definition": {
+        "type": "Coproduct",
+        "elements": [
           {
             "type": "Coproduct",
             "elements": [
@@ -4275,48 +4172,47 @@ getTail [1 , 2 , 3]
                 "type": "Atom",
                 "dataType": "number",
                 "value": "2"
+              }
+            ]
+          },
+          {
+            "type": "Coproduct",
+            "elements": [
+              {
+                "type": "Atom",
+                "dataType": "number",
+                "value": "3"
               },
               {
                 "type": "Atom",
                 "dataType": "number",
                 "value": "4"
-              },
-              {
-                "type": "Atom",
-                "dataType": "number",
-                "value": "8"
-              },
-              {
-                "type": "Atom",
-                "dataType": "number",
-                "value": "16"
               }
             ]
           }
         ]
       }
+    },
+    {
+      "type": "Get",
+      "target": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "list"
+      },
+      "properties": [
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "0"
+        }
+      ]
     }
   ]
 }
 ```
 
-## Test 88
-### Source
-```
-list : 1 2 , 3 4
-list ' 0
-```
-### Lexed
-```
-list : 1 2 , 3 4
-list ' 0
-```
-### AST Generation Error
-```
-Parse Error at line 2, col 8: Expected " ", "_", "`", or [a-zA-Z] but "0" found.
-```
-
-## Test 89
+## Test 76
 ### Source
 ```
 list : 1 2 , 3 4
@@ -4327,12 +4223,70 @@ list ' 1
 list : 1 2 , 3 4
 list ' 1
 ```
-### AST Generation Error
-```
-Parse Error at line 2, col 8: Expected " ", "_", "`", or [a-zA-Z] but "1" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "list",
+      "definition": {
+        "type": "Coproduct",
+        "elements": [
+          {
+            "type": "Coproduct",
+            "elements": [
+              {
+                "type": "Atom",
+                "dataType": "number",
+                "value": "1"
+              },
+              {
+                "type": "Atom",
+                "dataType": "number",
+                "value": "2"
+              }
+            ]
+          },
+          {
+            "type": "Coproduct",
+            "elements": [
+              {
+                "type": "Atom",
+                "dataType": "number",
+                "value": "3"
+              },
+              {
+                "type": "Atom",
+                "dataType": "number",
+                "value": "4"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "Get",
+      "target": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "list"
+      },
+      "properties": [
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "1"
+        }
+      ]
+    }
+  ]
+}
 ```
 
-## Test 90
+## Test 77
 ### Source
 ```
 list : 1 2 , 3 4
@@ -4343,12 +4297,70 @@ list ' 3
 list : 1 2 , 3 4
 list ' 3
 ```
-### AST Generation Error
-```
-Parse Error at line 2, col 8: Expected " ", "_", "`", or [a-zA-Z] but "3" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "list",
+      "definition": {
+        "type": "Coproduct",
+        "elements": [
+          {
+            "type": "Coproduct",
+            "elements": [
+              {
+                "type": "Atom",
+                "dataType": "number",
+                "value": "1"
+              },
+              {
+                "type": "Atom",
+                "dataType": "number",
+                "value": "2"
+              }
+            ]
+          },
+          {
+            "type": "Coproduct",
+            "elements": [
+              {
+                "type": "Atom",
+                "dataType": "number",
+                "value": "3"
+              },
+              {
+                "type": "Atom",
+                "dataType": "number",
+                "value": "4"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "Get",
+      "target": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "list"
+      },
+      "properties": [
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "3"
+        }
+      ]
+    }
+  ]
+}
 ```
 
-## Test 91
+## Test 78
 ### Source
 ```
 myDict :
@@ -4362,35 +4374,75 @@ myDict ' target~
 myDict :
 <STX>`key1` : `value_one`
 `key2` : `value_two`
-<ETX>target : `key2`
+<ETX>
+target : `key2`
 myDict ' target~
 ```
-### AST Generation Error
-```
-Parse Error at line 1, col 9: Expected " ", "!!", "!=", "!==", "&&", "(", "-", "0b", "0r", "0u", "0x", ";;", "<<", "<=", "==", ">=", ">>", "[", "\\", "\x02", "_", "`", "{", "|", "||", "~", "~*", "~+", "~-", "~/", "~^", [!$@], [#%-'*-\-/:-@\^|~], [0-9], or [a-zA-Z] but "\n" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "myDict",
+      "definition": {
+        "type": "Dictionary",
+        "entries": [
+          {
+            "key": "`key1`",
+            "value": {
+              "type": "Atom",
+              "dataType": "string",
+              "value": "`value_one`"
+            }
+          },
+          {
+            "key": "`key2`",
+            "value": {
+              "type": "Atom",
+              "dataType": "string",
+              "value": "`value_two`"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Define",
+      "identifier": "target",
+      "definition": {
+        "type": "Atom",
+        "dataType": "string",
+        "value": "`key2`"
+      }
+    },
+    {
+      "type": "Get",
+      "target": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "myDict"
+      },
+      "properties": [
+        {
+          "type": "Postfix",
+          "expression": {
+            "type": "Atom",
+            "dataType": "identifier",
+            "value": "target"
+          },
+          "operators": [
+            "~"
+          ]
+        }
+      ]
+    }
+  ]
+}
 ```
 
-## Test 92
-### Source
-```
-complexDict :
-	[ 1 , 2 ] : `Pattern A`
-	[ 3 , 4 ] : `Pattern B`
-complexDict ' [ 1 , 2 ]
-```
-### Lexed
-```
-complexDict :
-<STX>[ 1 , 2 ] : `Pattern A`
-[ 3 , 4 ] : `Pattern B`
-<ETX>complexDict ' [ 1 , 2 ]
-```
-### AST Generation Error
-```
-Parse Error at line 1, col 14: Expected " ", "!!", "!=", "!==", "&&", "(", "-", "0b", "0r", "0u", "0x", ";;", "<<", "<=", "==", ">=", ">>", "[", "\\", "\x02", "_", "`", "{", "|", "||", "~", "~*", "~+", "~-", "~/", "~^", [!$@], [#%-'*-\-/:-@\^|~], [0-9], or [a-zA-Z] but "\n" found.
-```
-
-## Test 93
+## Test 79
 ### Source
 ```
 x : 3
@@ -4459,14 +4511,24 @@ a ' x~
         "value": "a"
       },
       "properties": [
-        "x~"
+        {
+          "type": "Postfix",
+          "expression": {
+            "type": "Atom",
+            "dataType": "identifier",
+            "value": "x"
+          },
+          "operators": [
+            "~"
+          ]
+        }
       ]
     }
   ]
 }
 ```
 
-## Test 94
+## Test 80
 ### Source
 ```
 x : 3
@@ -4535,14 +4597,18 @@ a ' x
         "value": "a"
       },
       "properties": [
-        "x"
+        {
+          "type": "Atom",
+          "dataType": "identifier",
+          "value": "x"
+        }
       ]
     }
   ]
 }
 ```
 
-## Test 95
+## Test 81
 ### Source
 ```
 car :
@@ -4553,25 +4619,87 @@ car ' brand ' 0
 ```
 car :
 <STX>brand : `foo` , `Bar` , `Baz`
-<ETX>car ' brand ' 0
+<ETX>
+car ' brand ' 0
 ```
-### AST Generation Error
-```
-Parse Error at line 1, col 6: Expected " ", "!!", "!=", "!==", "&&", "(", "-", "0b", "0r", "0u", "0x", ";;", "<<", "<=", "==", ">=", ">>", "[", "\\", "\x02", "_", "`", "{", "|", "||", "~", "~*", "~+", "~-", "~/", "~^", [!$@], [#%-'*-\-/:-@\^|~], [0-9], or [a-zA-Z] but "\n" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "car",
+      "definition": {
+        "type": "Dictionary",
+        "entries": [
+          {
+            "key": "brand",
+            "value": {
+              "type": "Coproduct",
+              "elements": [
+                {
+                  "type": "Atom",
+                  "dataType": "string",
+                  "value": "`foo`"
+                },
+                {
+                  "type": "Atom",
+                  "dataType": "string",
+                  "value": "`Bar`"
+                },
+                {
+                  "type": "Atom",
+                  "dataType": "string",
+                  "value": "`Baz`"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Get",
+      "target": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "car"
+      },
+      "properties": [
+        {
+          "type": "Get",
+          "target": {
+            "type": "Atom",
+            "dataType": "identifier",
+            "value": "brand"
+          },
+          "properties": [
+            {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "0"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
 ```
 
-## Test 96
+## Test 82
 ### Source
 ```
 a : [1 , [2 , 3]]
 b : [1 , [2 , 3]]
-a = b
+a == b
 ```
 ### Lexed
 ```
 a : [1 , [2 , 3]]
 b : [1 , [2 , 3]]
-a = b
+a == b
 ```
 ### AST
 ```json
@@ -4662,7 +4790,7 @@ a = b
     },
     {
       "type": "BinaryOperation",
-      "operator": "=",
+      "operator": "==",
       "left": {
         "type": "Atom",
         "dataType": "identifier",
@@ -4678,130 +4806,201 @@ a = b
 }
 ```
 
-## Test 97
+## Test 83
 ### Source
 ```
 myMatch : x ?
 	0 : `zero`
 	1 : `one`
 	`other`
+```
+### Lexed
+```
+myMatch : x ?
+<STX>0 : `zero`
+1 : `one`
+`other`
+<ETX>
+```
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "myMatch",
+      "definition": {
+        "type": "Lambda",
+        "arguments": {
+          "type": "Arguments",
+          "style": "inline",
+          "items": [
+            {
+              "lazy": false,
+              "identifier": "x"
+            }
+          ]
+        },
+        "body": [
+          {
+            "type": "MatchCase",
+            "cases": [
+              {
+                "condition": {
+                  "type": "Atom",
+                  "dataType": "number",
+                  "value": "0"
+                },
+                "body": {
+                  "type": "Atom",
+                  "dataType": "string",
+                  "value": "`zero`"
+                }
+              },
+              {
+                "condition": {
+                  "type": "Atom",
+                  "dataType": "number",
+                  "value": "1"
+                },
+                "body": {
+                  "type": "Atom",
+                  "dataType": "string",
+                  "value": "`one`"
+                }
+              },
+              {
+                "condition": null,
+                "body": {
+                  "type": "Atom",
+                  "dataType": "string",
+                  "value": "`other`"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+## Test 84
+### Source
+```
 myMatch 99
 ```
 ### Lexed
 ```
-myMatch : x ?
-<STX>0 : `zero`
-1 : `one`
-`other`
-<ETX>myMatch 99
+myMatch 99
 ```
-### AST Generation Error
-```
-Parse Error at line 4, col 8: Expected " ", "!=", "!==", "&", "&&", "'", ",", ":", ";", ";;", "<<", "<=", "==", ">=", ">>", "^", "||", "~*", "~+", "~-", "~/", "~^", [!@~], [%*/], [+\-], or [<->] but "\n" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Coproduct",
+      "elements": [
+        {
+          "type": "Atom",
+          "dataType": "identifier",
+          "value": "myMatch"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "99"
+        }
+      ]
+    }
+  ]
+}
 ```
 
-## Test 98
+## Test 85
 ### Source
 ```
-myMatch : x ?
-	0 : `zero`
-	1 : `one`
-	`other`
 myMatch 0
 ```
 ### Lexed
 ```
-myMatch : x ?
-<STX>0 : `zero`
-1 : `one`
-`other`
-<ETX>myMatch 0
+myMatch 0
 ```
-### AST Generation Error
-```
-Parse Error at line 4, col 8: Expected " ", "!=", "!==", "&", "&&", "'", ",", ":", ";", ";;", "<<", "<=", "==", ">=", ">>", "^", "||", "~*", "~+", "~-", "~/", "~^", [!@~], [%*/], [+\-], or [<->] but "\n" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Coproduct",
+      "elements": [
+        {
+          "type": "Atom",
+          "dataType": "identifier",
+          "value": "myMatch"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "0"
+        }
+      ]
+    }
+  ]
+}
 ```
 
-## Test 99
+## Test 86
 ### Source
 ```
-myMatch : x ?
-	0 : `zero`
-	1 : `one`
-	`other`
 myMatch 1
 ```
 ### Lexed
 ```
-myMatch : x ?
-<STX>0 : `zero`
-1 : `one`
-`other`
-<ETX>myMatch 1
+myMatch 1
 ```
-### AST Generation Error
-```
-Parse Error at line 4, col 8: Expected " ", "!=", "!==", "&", "&&", "'", ",", ":", ";", ";;", "<<", "<=", "==", ">=", ">>", "^", "||", "~*", "~+", "~-", "~/", "~^", [!@~], [%*/], [+\-], or [<->] but "\n" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Coproduct",
+      "elements": [
+        {
+          "type": "Atom",
+          "dataType": "identifier",
+          "value": "myMatch"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "1"
+        }
+      ]
+    }
+  ]
+}
 ```
 
-## Test 100
+## Test 87
 ### Source
 ```
-dict :
+dictP :
 	x : 10
 	y : 5
 	z : 30
 ```
 ### Lexed
 ```
-dict :
+dictP :
 <STX>x : 10
 y : 5
 z : 30
 <ETX>
-```
-### AST Generation Error
-```
-Parse Error at line 1, col 7: Expected " ", "!!", "!=", "!==", "&&", "(", "-", "0b", "0r", "0u", "0x", ";;", "<<", "<=", "==", ">=", ">>", "[", "\\", "\x02", "_", "`", "{", "|", "||", "~", "~*", "~+", "~-", "~/", "~^", [!$@], [#%-'*-\-/:-@\^|~], [0-9], or [a-zA-Z] but "\n" found.
-```
-
-## Test 101
-### Source
-```
-f : foo ? 
-	foo~
-		x > 0 :
-			xy : x * y
-			xz : x * z
-		x < 1 :
-			x # |x| + 5
-			f foo
-```
-### Lexed
-```
-f : foo ? 
-<STX>foo~
-<STX>x > 0 :
-<STX>xy : x * y
-xz : x * z
-<ETX>x < 1 :
-<STX>x # |x| + 5
-f foo
-<ETX><ETX><ETX>
-```
-### AST Generation Error
-```
-Parse Error at line 2, col 6: Expected " ", "!=", "!==", "&", "&&", "'", ",", ":", ";", ";;", "<<", "<=", "==", ">=", ">>", "^", "||", [!@~], [%*/], [+\-], or [<->] but "\n" found.
-```
-
-## Test 102
-### Source
-```
-f dict
-```
-### Lexed
-```
-f dict
 ```
 ### AST
 ```json
@@ -4809,82 +5008,396 @@ f dict
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "f"
-        },
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "dict"
-        }
-      ]
+      "type": "Define",
+      "identifier": "dictP",
+      "definition": {
+        "type": "Dictionary",
+        "entries": [
+          {
+            "key": "x",
+            "value": {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "10"
+            }
+          },
+          {
+            "key": "y",
+            "value": {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "5"
+            }
+          },
+          {
+            "key": "z",
+            "value": {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "30"
+            }
+          }
+        ]
+      }
     }
   ]
 }
 ```
 
-## Test 103
+## Test 88
 ### Source
 ```
-dict :
+dictN :
 	x : -10
 	y : 5
 	z : 30
 ```
 ### Lexed
 ```
-dict :
+dictN :
 <STX>x : -10
 y : 5
 z : 30
 <ETX>
 ```
-### AST Generation Error
-```
-Parse Error at line 1, col 7: Expected " ", "!!", "!=", "!==", "&&", "(", "-", "0b", "0r", "0u", "0x", ";;", "<<", "<=", "==", ">=", ">>", "[", "\\", "\x02", "_", "`", "{", "|", "||", "~", "~*", "~+", "~-", "~/", "~^", [!$@], [#%-'*-\-/:-@\^|~], [0-9], or [a-zA-Z] but "\n" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "dictN",
+      "definition": {
+        "type": "Dictionary",
+        "entries": [
+          {
+            "key": "x",
+            "value": {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "-10"
+            }
+          },
+          {
+            "key": "y",
+            "value": {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "5"
+            }
+          },
+          {
+            "key": "z",
+            "value": {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "30"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
 ```
 
-## Test 104
+## Test 89
 ### Source
 ```
-f : foo ? 
-	foo~
-		x > 0 :
+f : [
+	dict
+	x : dict ' x
+	y : dict ' y
+	z : dict ' z
+] ? 
+		x > 0 : [
 			xy : x * y
 			xz : x * z
-		x < 1 :
-			x # |x| + 5
-			f foo
+		]
+		x < 1 : [
+			xy : (|x| + 5) * y
+			xz : |x + 5| * z
+		]
 ```
 ### Lexed
 ```
-f : foo ? 
-<STX>foo~
-<STX>x > 0 :
+f : [
+<STX>dict
+x : dict ' x
+y : dict ' y
+z : dict ' z
+<ETX>
+] ? 
+<STX>x > 0 : [
 <STX>xy : x * y
 xz : x * z
-<ETX>x < 1 :
-<STX>x # |x| + 5
-f foo
-<ETX><ETX><ETX>
+<ETX>
+]
+x < 1 : [
+<STX>xy : (|x| + 5) * y
+xz : |x + 5| * z
+<ETX>
+]
+<ETX>
 ```
-### AST Generation Error
-```
-Parse Error at line 2, col 6: Expected " ", "!=", "!==", "&", "&&", "'", ",", ":", ";", ";;", "<<", "<=", "==", ">=", ">>", "^", "||", [!@~], [%*/], [+\-], or [<->] but "\n" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "f",
+      "definition": {
+        "type": "Lambda",
+        "arguments": {
+          "type": "Arguments",
+          "style": "bracket",
+          "items": [
+            {
+              "lazy": false,
+              "identifier": "dict",
+              "defaultValue": null
+            },
+            {
+              "lazy": false,
+              "identifier": "x",
+              "defaultValue": {
+                "type": "Get",
+                "target": {
+                  "type": "Atom",
+                  "dataType": "identifier",
+                  "value": "dict"
+                },
+                "properties": [
+                  {
+                    "type": "Atom",
+                    "dataType": "identifier",
+                    "value": "x"
+                  }
+                ]
+              }
+            },
+            {
+              "lazy": false,
+              "identifier": "y",
+              "defaultValue": {
+                "type": "Get",
+                "target": {
+                  "type": "Atom",
+                  "dataType": "identifier",
+                  "value": "dict"
+                },
+                "properties": [
+                  {
+                    "type": "Atom",
+                    "dataType": "identifier",
+                    "value": "y"
+                  }
+                ]
+              }
+            },
+            {
+              "lazy": false,
+              "identifier": "z",
+              "defaultValue": {
+                "type": "Get",
+                "target": {
+                  "type": "Atom",
+                  "dataType": "identifier",
+                  "value": "dict"
+                },
+                "properties": [
+                  {
+                    "type": "Atom",
+                    "dataType": "identifier",
+                    "value": "z"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "body": [
+          {
+            "type": "MatchCase",
+            "cases": [
+              {
+                "condition": {
+                  "type": "BinaryOperation",
+                  "operator": ">",
+                  "left": {
+                    "type": "Atom",
+                    "dataType": "identifier",
+                    "value": "x"
+                  },
+                  "right": {
+                    "type": "Atom",
+                    "dataType": "number",
+                    "value": "0"
+                  }
+                },
+                "body": {
+                  "type": "Block",
+                  "style": "Square",
+                  "expressions": [
+                    {
+                      "type": "Dictionary",
+                      "entries": [
+                        {
+                          "key": "xy",
+                          "value": {
+                            "type": "BinaryOperation",
+                            "operator": "*",
+                            "left": {
+                              "type": "Atom",
+                              "dataType": "identifier",
+                              "value": "x"
+                            },
+                            "right": {
+                              "type": "Atom",
+                              "dataType": "identifier",
+                              "value": "y"
+                            }
+                          }
+                        },
+                        {
+                          "key": "xz",
+                          "value": {
+                            "type": "BinaryOperation",
+                            "operator": "*",
+                            "left": {
+                              "type": "Atom",
+                              "dataType": "identifier",
+                              "value": "x"
+                            },
+                            "right": {
+                              "type": "Atom",
+                              "dataType": "identifier",
+                              "value": "z"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "condition": {
+                  "type": "BinaryOperation",
+                  "operator": "<",
+                  "left": {
+                    "type": "Atom",
+                    "dataType": "identifier",
+                    "value": "x"
+                  },
+                  "right": {
+                    "type": "Atom",
+                    "dataType": "number",
+                    "value": "1"
+                  }
+                },
+                "body": {
+                  "type": "Block",
+                  "style": "Square",
+                  "expressions": [
+                    {
+                      "type": "Dictionary",
+                      "entries": [
+                        {
+                          "key": "xy",
+                          "value": {
+                            "type": "BinaryOperation",
+                            "operator": "*",
+                            "left": {
+                              "type": "Block",
+                              "style": "Paren",
+                              "expressions": [
+                                {
+                                  "type": "BinaryOperation",
+                                  "operator": "+",
+                                  "left": {
+                                    "type": "Block",
+                                    "style": "Arithmetic",
+                                    "expressions": [
+                                      {
+                                        "type": "Atom",
+                                        "dataType": "identifier",
+                                        "value": "x"
+                                      }
+                                    ]
+                                  },
+                                  "right": {
+                                    "type": "Atom",
+                                    "dataType": "number",
+                                    "value": "5"
+                                  }
+                                }
+                              ]
+                            },
+                            "right": {
+                              "type": "Atom",
+                              "dataType": "identifier",
+                              "value": "y"
+                            }
+                          }
+                        },
+                        {
+                          "key": "xz",
+                          "value": {
+                            "type": "BinaryOperation",
+                            "operator": "*",
+                            "left": {
+                              "type": "Block",
+                              "style": "Arithmetic",
+                              "expressions": [
+                                {
+                                  "type": "BinaryOperation",
+                                  "operator": "+",
+                                  "left": {
+                                    "type": "Atom",
+                                    "dataType": "identifier",
+                                    "value": "x"
+                                  },
+                                  "right": {
+                                    "type": "Atom",
+                                    "dataType": "number",
+                                    "value": "5"
+                                  }
+                                }
+                              ]
+                            },
+                            "right": {
+                              "type": "Atom",
+                              "dataType": "identifier",
+                              "value": "z"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
 ```
 
-## Test 105
+## Test 90
 ### Source
 ```
-f dict
+f dictP !_ !_ !_
 ```
 ### Lexed
 ```
-f dict
+f dictP !_ !_ !_
 ```
 ### AST
 ```json
@@ -4902,7 +5415,40 @@ f dict
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "dict"
+          "value": "dictP"
+        },
+        {
+          "type": "Prefix",
+          "operators": [
+            "!"
+          ],
+          "expression": {
+            "type": "Atom",
+            "dataType": "unit",
+            "value": "_"
+          }
+        },
+        {
+          "type": "Prefix",
+          "operators": [
+            "!"
+          ],
+          "expression": {
+            "type": "Atom",
+            "dataType": "unit",
+            "value": "_"
+          }
+        },
+        {
+          "type": "Prefix",
+          "operators": [
+            "!"
+          ],
+          "expression": {
+            "type": "Atom",
+            "dataType": "unit",
+            "value": "_"
+          }
         }
       ]
     }
@@ -4910,7 +5456,73 @@ f dict
 }
 ```
 
-## Test 106
+## Test 91
+### Source
+```
+f dictN !_ !_ !_
+```
+### Lexed
+```
+f dictN !_ !_ !_
+```
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Coproduct",
+      "elements": [
+        {
+          "type": "Atom",
+          "dataType": "identifier",
+          "value": "f"
+        },
+        {
+          "type": "Atom",
+          "dataType": "identifier",
+          "value": "dictN"
+        },
+        {
+          "type": "Prefix",
+          "operators": [
+            "!"
+          ],
+          "expression": {
+            "type": "Atom",
+            "dataType": "unit",
+            "value": "_"
+          }
+        },
+        {
+          "type": "Prefix",
+          "operators": [
+            "!"
+          ],
+          "expression": {
+            "type": "Atom",
+            "dataType": "unit",
+            "value": "_"
+          }
+        },
+        {
+          "type": "Prefix",
+          "operators": [
+            "!"
+          ],
+          "expression": {
+            "type": "Atom",
+            "dataType": "unit",
+            "value": "_"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Test 92
 ### Source
 ```
 f : x ? y ? x + y
@@ -5010,7 +5622,7 @@ addTen 20
 }
 ```
 
-## Test 107
+## Test 93
 ### Source
 ```
 [+] 1 2 3 4 5
@@ -5068,7 +5680,7 @@ addTen 20
 }
 ```
 
-## Test 108
+## Test 94
 ### Source
 ```
 [* 2,] 1 2 3 4 5
@@ -5128,7 +5740,7 @@ addTen 20
 }
 ```
 
-## Test 109
+## Test 95
 ### Source
 ```
 [* 2,] [+] 1 2 3 4 5
@@ -5198,7 +5810,7 @@ addTen 20
 }
 ```
 
-## Test 110
+## Test 96
 ### Source
 ```
 foo : [+ 4]
@@ -5283,7 +5895,7 @@ foo bar baz
 }
 ```
 
-## Test 111
+## Test 97
 ### Source
 ```
 add_ten : [+ 10]
@@ -5380,7 +5992,7 @@ add_ten mul_two sub_five 5
 }
 ```
 
-## Test 112
+## Test 98
 ### Source
 ```
 [+ 4] [* 3] [/ 2] 10
@@ -5444,7 +6056,7 @@ add_ten mul_two sub_five 5
 }
 ```
 
-## Test 113
+## Test 99
 ### Source
 ```
 double : [* 2]
@@ -5533,75 +6145,427 @@ double square (3 + 2)
 }
 ```
 
-## Test 114
+## Test 100
 ### Source
 ```
 fact : n ?
-	n = 0 : 1
+	n == 0 : 1
 	(fact (n - 1)) * n
 fact 5
 ```
 ### Lexed
 ```
 fact : n ?
-<STX>n = 0 : 1
+<STX>n == 0 : 1
 (fact (n - 1)) * n
-<ETX>fact 5
+<ETX>
+fact 5
 ```
-### AST Generation Error
-```
-Parse Error at line 3, col 19: Expected " ", "!=", "!==", "&", "&&", "'", ",", ":", ";", ";;", "<<", "<=", "==", ">=", ">>", "^", "||", [!@~], [%*/], [+\-], [<->], or [a-zA-Z0-9_] but "\n" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "fact",
+      "definition": {
+        "type": "Lambda",
+        "arguments": {
+          "type": "Arguments",
+          "style": "inline",
+          "items": [
+            {
+              "lazy": false,
+              "identifier": "n"
+            }
+          ]
+        },
+        "body": [
+          {
+            "type": "MatchCase",
+            "cases": [
+              {
+                "condition": {
+                  "type": "BinaryOperation",
+                  "operator": "==",
+                  "left": {
+                    "type": "Atom",
+                    "dataType": "identifier",
+                    "value": "n"
+                  },
+                  "right": {
+                    "type": "Atom",
+                    "dataType": "number",
+                    "value": "0"
+                  }
+                },
+                "body": {
+                  "type": "Atom",
+                  "dataType": "number",
+                  "value": "1"
+                }
+              },
+              {
+                "condition": null,
+                "body": {
+                  "type": "BinaryOperation",
+                  "operator": "*",
+                  "left": {
+                    "type": "Block",
+                    "style": "Paren",
+                    "expressions": [
+                      {
+                        "type": "Coproduct",
+                        "elements": [
+                          {
+                            "type": "Atom",
+                            "dataType": "identifier",
+                            "value": "fact"
+                          },
+                          {
+                            "type": "Block",
+                            "style": "Paren",
+                            "expressions": [
+                              {
+                                "type": "BinaryOperation",
+                                "operator": "-",
+                                "left": {
+                                  "type": "Atom",
+                                  "dataType": "identifier",
+                                  "value": "n"
+                                },
+                                "right": {
+                                  "type": "Atom",
+                                  "dataType": "number",
+                                  "value": "1"
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "right": {
+                    "type": "Atom",
+                    "dataType": "identifier",
+                    "value": "n"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "Coproduct",
+      "elements": [
+        {
+          "type": "Atom",
+          "dataType": "identifier",
+          "value": "fact"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "5"
+        }
+      ]
+    }
+  ]
+}
 ```
 
-## Test 115
+## Test 101
 ### Source
 ```
 gcd1 : x y r ?
-	r = 0 : y
+	r == 0 : y
 	gcd1  y r  (y % r)
+```
+### Lexed
+```
+gcd1 : x y r ?
+<STX>r == 0 : y
+gcd1  y r  (y % r)
+<ETX>
+```
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "gcd1",
+      "definition": {
+        "type": "Lambda",
+        "arguments": {
+          "type": "Arguments",
+          "style": "inline",
+          "items": [
+            {
+              "lazy": false,
+              "identifier": "x"
+            },
+            {
+              "lazy": false,
+              "identifier": "y"
+            },
+            {
+              "lazy": false,
+              "identifier": "r"
+            }
+          ]
+        },
+        "body": [
+          {
+            "type": "MatchCase",
+            "cases": [
+              {
+                "condition": {
+                  "type": "BinaryOperation",
+                  "operator": "==",
+                  "left": {
+                    "type": "Atom",
+                    "dataType": "identifier",
+                    "value": "r"
+                  },
+                  "right": {
+                    "type": "Atom",
+                    "dataType": "number",
+                    "value": "0"
+                  }
+                },
+                "body": {
+                  "type": "Atom",
+                  "dataType": "identifier",
+                  "value": "y"
+                }
+              },
+              {
+                "condition": null,
+                "body": {
+                  "type": "Coproduct",
+                  "elements": [
+                    {
+                      "type": "Atom",
+                      "dataType": "identifier",
+                      "value": "gcd1"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "identifier",
+                      "value": "y"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "identifier",
+                      "value": "r"
+                    },
+                    {
+                      "type": "Block",
+                      "style": "Paren",
+                      "expressions": [
+                        {
+                          "type": "BinaryOperation",
+                          "operator": "%",
+                          "left": {
+                            "type": "Atom",
+                            "dataType": "identifier",
+                            "value": "y"
+                          },
+                          "right": {
+                            "type": "Atom",
+                            "dataType": "identifier",
+                            "value": "r"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+## Test 102
+### Source
+```
 gcd : x y ?
 	gcd1  x y (x % y)
+```
+### Lexed
+```
+gcd : x y ?
+<STX>gcd1  x y (x % y)
+<ETX>
+```
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "gcd",
+      "definition": {
+        "type": "Lambda",
+        "arguments": {
+          "type": "Arguments",
+          "style": "inline",
+          "items": [
+            {
+              "lazy": false,
+              "identifier": "x"
+            },
+            {
+              "lazy": false,
+              "identifier": "y"
+            }
+          ]
+        },
+        "body": [
+          {
+            "type": "MatchCase",
+            "cases": [
+              {
+                "condition": null,
+                "body": {
+                  "type": "Coproduct",
+                  "elements": [
+                    {
+                      "type": "Atom",
+                      "dataType": "identifier",
+                      "value": "gcd1"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "identifier",
+                      "value": "x"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "identifier",
+                      "value": "y"
+                    },
+                    {
+                      "type": "Block",
+                      "style": "Paren",
+                      "expressions": [
+                        {
+                          "type": "BinaryOperation",
+                          "operator": "%",
+                          "left": {
+                            "type": "Atom",
+                            "dataType": "identifier",
+                            "value": "x"
+                          },
+                          "right": {
+                            "type": "Atom",
+                            "dataType": "identifier",
+                            "value": "y"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+## Test 103
+### Source
+```
 gcd 18 9
 ```
 ### Lexed
 ```
-gcd1 : x y r ?
-<STX>r = 0 : y
-gcd1  y r  (y % r)
-<ETX>gcd : x y ?
-<STX>gcd1  x y (x % y)
-<ETX>gcd 18 9
+gcd 18 9
 ```
-### AST Generation Error
-```
-Parse Error at line 3, col 19: Expected " ", "!=", "!==", "&", "&&", "'", ",", ":", ";", ";;", "<<", "<=", "==", ">=", ">>", "^", "||", [!@~], [%*/], [+\-], or [<->] but "\n" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Coproduct",
+      "elements": [
+        {
+          "type": "Atom",
+          "dataType": "identifier",
+          "value": "gcd"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "18"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "9"
+        }
+      ]
+    }
+  ]
+}
 ```
 
-## Test 116
+## Test 104
 ### Source
 ```
-gcd1 : x y r ?
-	r = 0 : y  
-	gcd1  y r  (y % r)
-gcd : x y ?
-	gcd1  x y (x % y)
 gcd 18 12
 ```
 ### Lexed
 ```
-gcd1 : x y r ?
-<STX>r = 0 : y  
-gcd1  y r  (y % r)
-<ETX>gcd : x y ?
-<STX>gcd1  x y (x % y)
-<ETX>gcd 18 12
+gcd 18 12
 ```
-### AST Generation Error
-```
-Parse Error at line 2, col 13: Expected " ", "&&", "'", ";;", "<<", ">>", "^", "||", [%*/], or [+\-] but "\n" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Coproduct",
+      "elements": [
+        {
+          "type": "Atom",
+          "dataType": "identifier",
+          "value": "gcd"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "18"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "12"
+        }
+      ]
+    }
+  ]
+}
 ```
 
-## Test 117
+## Test 105
 ### Source
 ```
 f : x y ?
@@ -5615,12 +6579,88 @@ f : x y ?
 g x y
 <ETX>
 ```
-### AST Generation Error
-```
-Parse Error at line 3, col 6: Expected " ", "!=", "!==", "&", "&&", "'", ",", ":", ";", ";;", "<<", "<=", "==", ">=", ">>", "^", "||", [!@~], [%*/], [+\-], [<->], or [a-zA-Z0-9_] but "\r" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "f",
+      "definition": {
+        "type": "Lambda",
+        "arguments": {
+          "type": "Arguments",
+          "style": "inline",
+          "items": [
+            {
+              "lazy": false,
+              "identifier": "x"
+            },
+            {
+              "lazy": false,
+              "identifier": "y"
+            }
+          ]
+        },
+        "body": [
+          {
+            "type": "MatchCase",
+            "cases": [
+              {
+                "condition": {
+                  "type": "BinaryOperation",
+                  "operator": ">",
+                  "left": {
+                    "type": "Atom",
+                    "dataType": "identifier",
+                    "value": "y"
+                  },
+                  "right": {
+                    "type": "Atom",
+                    "dataType": "number",
+                    "value": "20"
+                  }
+                },
+                "body": {
+                  "type": "Atom",
+                  "dataType": "identifier",
+                  "value": "y"
+                }
+              },
+              {
+                "condition": null,
+                "body": {
+                  "type": "Coproduct",
+                  "elements": [
+                    {
+                      "type": "Atom",
+                      "dataType": "identifier",
+                      "value": "g"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "identifier",
+                      "value": "x"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "identifier",
+                      "value": "y"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
 ```
 
-## Test 118
+## Test 106
 ### Source
 ```
 g : x y ?
@@ -5632,12 +6672,76 @@ g : x y ?
 <STX>f x x + y
 <ETX>
 ```
-### AST Generation Error
-```
-Parse Error at line 2, col 11: Expected " ", "!=", "!==", "&", "&&", "'", ",", ":", ";", ";;", "<<", "<=", "==", ">=", ">>", "^", "||", [!@~], [%*/], [+\-], [<->], or [a-zA-Z0-9_] but "\r" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "g",
+      "definition": {
+        "type": "Lambda",
+        "arguments": {
+          "type": "Arguments",
+          "style": "inline",
+          "items": [
+            {
+              "lazy": false,
+              "identifier": "x"
+            },
+            {
+              "lazy": false,
+              "identifier": "y"
+            }
+          ]
+        },
+        "body": [
+          {
+            "type": "MatchCase",
+            "cases": [
+              {
+                "condition": null,
+                "body": {
+                  "type": "Coproduct",
+                  "elements": [
+                    {
+                      "type": "Atom",
+                      "dataType": "identifier",
+                      "value": "f"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "identifier",
+                      "value": "x"
+                    },
+                    {
+                      "type": "BinaryOperation",
+                      "operator": "+",
+                      "left": {
+                        "type": "Atom",
+                        "dataType": "identifier",
+                        "value": "x"
+                      },
+                      "right": {
+                        "type": "Atom",
+                        "dataType": "identifier",
+                        "value": "y"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
 ```
 
-## Test 119
+## Test 107
 ### Source
 ```
 f 2 2
@@ -5675,7 +6779,7 @@ f 2 2
 }
 ```
 
-## Test 120
+## Test 108
 ### Source
 ```
 x : 10
@@ -5688,50 +6792,51 @@ x : 10
 $x # 20
 x
 ```
-### AST Generation Error
-```
-Parse Error at line 2, col 4: Expected " ", "!!", "!=", "!==", "&", "&&", "'", "(", ",", "-", "0b", "0r", "0u", "0x", ";", ";;", "<<", "<=", "==", ">=", ">>", "[", "\\", "\x02", "^", "_", "`", "{", "|", "||", "~", [!$@], [%*/], [+\-], [0-9], [<->], or [a-zA-Z] but "#" found.
-```
-
-## Test 121
-### Source
-```
-`0x1000 # 20
-`@0x1000
-```
-### Lexed
-```
-`0x1000 # 20
-`@0x1000
-```
 ### AST
 ```json
 {
   "type": "Program",
-  "body": []
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "x",
+      "definition": {
+        "type": "Atom",
+        "dataType": "number",
+        "value": "10"
+      }
+    },
+    {
+      "type": "Output",
+      "target": {
+        "type": "Prefix",
+        "operators": [
+          "$"
+        ],
+        "expression": {
+          "type": "Atom",
+          "dataType": "identifier",
+          "value": "x"
+        }
+      },
+      "calls": [
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "20"
+        }
+      ]
+    },
+    {
+      "type": "Atom",
+      "dataType": "identifier",
+      "value": "x"
+    }
+  ]
 }
 ```
 
-## Test 122
-### Source
-```
-`0x100 # 777 
-`@0x100
-```
-### Lexed
-```
-`0x100 # 777 
-`@0x100
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": []
-}
-```
-
-## Test 123
+## Test 109
 ### Source
 ```
 $[1 2 3 4 5]
@@ -5791,7 +6896,7 @@ $[1 2 3 4 5]
 }
 ```
 
-## Test 124
+## Test 110
 ### Source
 ```
 foo : 1 2 3 4 5
@@ -5872,7 +6977,7 @@ $[foo 6]
 }
 ```
 
-## Test 125
+## Test 111
 ### Source
 ```
 foo : 1 2 3 4 5
@@ -5949,7 +7054,7 @@ $[foo~]
 }
 ```
 
-## Test 126
+## Test 112
 ### Source
 ```
 foo : 1 2 3 4 5
@@ -6014,7 +7119,7 @@ $foo
 }
 ```
 
-## Test 127
+## Test 113
 ### Source
 ```
 myGreet :
@@ -6027,14 +7132,59 @@ myGreet ' hello
 myGreet :
 <STX>hello : `hello,`
 welcome : `welcome,`
-<ETX>myGreet ' hello
+<ETX>
+myGreet ' hello
 ```
-### AST Generation Error
-```
-Parse Error at line 1, col 10: Expected " ", "!!", "!=", "!==", "&&", "(", "-", "0b", "0r", "0u", "0x", ";;", "<<", "<=", "==", ">=", ">>", "[", "\\", "\x02", "_", "`", "{", "|", "||", "~", "~*", "~+", "~-", "~/", "~^", [!$@], [#%-'*-\-/:-@\^|~], [0-9], or [a-zA-Z] but "\n" found.
+### AST
+```json
+{
+  "type": "Program",
+  "body": [
+    {
+      "type": "Define",
+      "identifier": "myGreet",
+      "definition": {
+        "type": "Dictionary",
+        "entries": [
+          {
+            "key": "hello",
+            "value": {
+              "type": "Atom",
+              "dataType": "string",
+              "value": "`hello,`"
+            }
+          },
+          {
+            "key": "welcome",
+            "value": {
+              "type": "Atom",
+              "dataType": "string",
+              "value": "`welcome,`"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Get",
+      "target": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "myGreet"
+      },
+      "properties": [
+        {
+          "type": "Atom",
+          "dataType": "identifier",
+          "value": "hello"
+        }
+      ]
+    }
+  ]
+}
 ```
 
-## Test 128
+## Test 114
 ### Source
 ```
 ptr : $10
@@ -6069,7 +7219,11 @@ ptr # 99
     },
     {
       "type": "Output",
-      "target": "ptr",
+      "target": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "ptr"
+      },
       "calls": [
         {
           "type": "Atom",
@@ -6093,7 +7247,7 @@ ptr # 99
 }
 ```
 
-## Test 129
+## Test 115
 ### Source
 ```
 @$10
@@ -6123,7 +7277,7 @@ ptr # 99
 }
 ```
 
-## Test 130
+## Test 116
 ### Source
 ```
 a : 10
@@ -6180,7 +7334,7 @@ a_address : $a
 }
 ```
 
-## Test 131
+## Test 117
 ### Source
 ```
 foo : [+ 10]
@@ -6264,27 +7418,5 @@ bar 4
     }
   ]
 }
-```
-
-## Test 132
-### Source
-```
-`f : s t ?
-`	s :
-`	@s \
-`	@t
-`f $`Hello` $`Sign`
-```
-### Lexed
-```
-`f : s t ?
-`	s :
-`	@s \
-`	@t
-`f $`Hello` $`Sign`
-```
-### AST Generation Error
-```
-Parse Error at line 5, col 6: Expected " ", "!=", "!==", "&", "&&", "'", ",", ";", ";;", "<<", "<=", "==", ">=", ">>", "\r\n", "^", "||", "~*", "~+", "~-", "~/", "~^", [!@~], [%*/], [+\-], [<->], or [\n\r] but "H" found.
 ```
 
