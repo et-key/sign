@@ -8,7 +8,7 @@
 Start = Program
 
 //空白必須
-__ = sp:" "+ { return }
+__ = " "+ { return }
 
 //空白可
 _ = " "* { return }
@@ -52,19 +52,19 @@ Construct
   = Dictionary
   / Product
 
-Dictionary = EOL Indent ((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct))+ Dedent
+Dictionary = EOL Indent ((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct) EOL)+ Dedent
 
 Arguments = Inline / Defaultive
 
 Defaultive
-  = EOL? "[" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent "]"
-  / EOL? "{" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent "}"
-  / EOL? "(" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent ")"
+  = EOL? "[" EOL Indent ("~"? identifier (_ ":" _ Lambda)? EOL)+ Dedent "]"
+  / EOL? "{" EOL Indent ("~"? identifier (_ ":" _ Lambda)? EOL)+ Dedent "}"
+  / EOL? "(" EOL Indent ("~"? identifier (_ ":" _ Lambda)? EOL)+ Dedent ")"
 
 Inline
   = identifier (__ "~"? identifier)*
 
-Match_Case = EOL Indent ((Consideration / Comparison) _ ":" _ (Arithmetic / Dictionary / Lambda / Match_Case) EOL)+ Dedent
+Match_Case = EOL Indent (((Consideration / Comparison) _ ":" _)? (Lambda / Match_Case) EOL)+ Dedent
  
 PointFree
   = DirectMap
