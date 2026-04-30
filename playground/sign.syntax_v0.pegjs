@@ -52,14 +52,14 @@ Construct
   = Dictionary
   / Product
 
-Dictionary = Indent ((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct))+ Dedent
+Dictionary = EOL Indent ((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct))+ Dedent
 
 Arguments = Inline / Defaultive
 
 Defaultive
-  = "[" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent "]"
-  / "{" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent "}"
-  / "(" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent ")"
+  = EOL? "[" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent "]"
+  / EOL? "{" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent "}"
+  / EOL? "(" EOL Indent ("~"? identifier (_ ":" _ Lambda EOL)?)+ Dedent ")"
 
 Inline
   = identifier (__ "~"? identifier)*
