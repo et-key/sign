@@ -1,6 +1,7 @@
 const fs = require('fs');
 const peggy = require('peggy');
 const { lex } = require('./lexer');
+const { SemanticAnalyzer } = require('./semantic_analyzer');
 
 const GRAMMAR_FILE = 'sign.pegjs';
 
@@ -27,6 +28,7 @@ function main() {
 
 		let currentTest = [];
 		let testNo = 0;
+        const analyzer = new SemanticAnalyzer();
 
 		function runTest(srcLines) {
 			const originalSrc = srcLines.join('\n');
@@ -37,7 +39,8 @@ function main() {
 			let mdOut = `## Test ${testNo}\n### Source\n\`\`\`\n${originalSrc}\n\`\`\`\n### Lexed\n\`\`\`\n${lexedSource.replace(/\x02/g, '<STX>').replace(/\x03/g, '<ETX>')}\n\`\`\`\n`;
 
 			try {
-				const ast = parser.parse(lexedSource);
+				let ast = parser.parse(lexedSource);
+                ast = analyzer.analyze(ast);
 				mdOut += '### AST\n```json\n' + JSON.stringify(ast, null, 2) + '\n```\n\n';
 				console.log(`[PASS] Test ${testNo} AST generated.`);
 			} catch (e) {

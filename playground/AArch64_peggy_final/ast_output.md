@@ -420,7 +420,7 @@
       "style": "Paren",
       "expressions": [
         {
-          "type": "Coproduct",
+          "type": "ListConstruct",
           "elements": [
             {
               "type": "Atom",
@@ -438,7 +438,7 @@
           "type": "BinaryOperation",
           "operator": "==",
           "left": {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
@@ -453,7 +453,7 @@
             ]
           },
           "right": {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
@@ -469,7 +469,7 @@
           }
         },
         {
-          "type": "Coproduct",
+          "type": "ListConstruct",
           "elements": [
             {
               "type": "Atom",
@@ -504,7 +504,7 @@
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Atom",
@@ -541,7 +541,7 @@
       "style": "Paren",
       "expressions": [
         {
-          "type": "Coproduct",
+          "type": "ListConstruct",
           "elements": [
             {
               "type": "Atom",
@@ -606,12 +606,16 @@ Result : div2 10
           "left": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           },
           "right": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "y"
+            "value": "y",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           }
         }
       }
@@ -620,24 +624,41 @@ Result : div2 10
       "type": "Define",
       "identifier": "div2",
       "definition": {
-        "type": "Coproduct",
-        "elements": [
-          {
+        "type": "Lambda",
+        "arguments": {
+          "type": "Arguments",
+          "style": "inline",
+          "items": [
+            {
+              "lazy": false,
+              "identifier": "__p_arg_1udkp"
+            }
+          ]
+        },
+        "body": {
+          "type": "FunctionCall",
+          "callee": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "div"
+            "value": "div",
+            "_semanticType": "Function",
+            "_tag": "function_ref"
           },
-          {
-            "type": "Atom",
-            "dataType": "unit",
-            "value": "_"
-          },
-          {
-            "type": "Atom",
-            "dataType": "number",
-            "value": "2"
-          }
-        ]
+          "arguments": [
+            {
+              "type": "Atom",
+              "dataType": "identifier",
+              "value": "__p_arg_1udkp",
+              "_semanticType": "Variable",
+              "_tag": "call"
+            },
+            {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "2"
+            }
+          ]
+        }
       }
     },
     {
@@ -646,20 +667,24 @@ Result : div2 10
       "definition": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "div2"
+        "value": "div2",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
       }
     },
     {
       "type": "Define",
       "identifier": "Result",
       "definition": {
-        "type": "Coproduct",
-        "elements": [
-          {
-            "type": "Atom",
-            "dataType": "identifier",
-            "value": "div2"
-          },
+        "type": "FunctionCall",
+        "callee": {
+          "type": "Atom",
+          "dataType": "identifier",
+          "value": "div2",
+          "_semanticType": "Function",
+          "_tag": "function_ref"
+        },
+        "arguments": [
           {
             "type": "Atom",
             "dataType": "number",
@@ -758,7 +783,7 @@ x : `123` 0
       "type": "Define",
       "identifier": "x",
       "definition": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
             "type": "Atom",
@@ -1244,19 +1269,23 @@ pass_eq 10
           "right": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           }
         }
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "pass_eq"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "pass_eq",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -1310,19 +1339,23 @@ pass_eq 5
           "right": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           }
         }
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "pass_eq"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "pass_eq",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -1376,19 +1409,23 @@ pass_neq 5
           "right": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           }
         }
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "pass_neq"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "pass_neq",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -1442,19 +1479,23 @@ pass_gt 10
           "right": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           }
         }
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "pass_gt"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "pass_gt",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -1508,19 +1549,23 @@ pass_lt 2
           "right": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           }
         }
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "pass_lt"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "pass_lt",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -1574,19 +1619,23 @@ pass_ge 5
           "right": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           }
         }
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "pass_ge"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "pass_ge",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -1640,19 +1689,23 @@ pass_le 5
           "right": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           }
         }
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "pass_le"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "pass_le",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -1701,7 +1754,9 @@ set_default 50
           "left": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           },
           "right": {
             "type": "Atom",
@@ -1712,13 +1767,15 @@ set_default 50
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "set_default"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "set_default",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -1767,7 +1824,9 @@ set_default _
           "left": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           },
           "right": {
             "type": "Atom",
@@ -1778,19 +1837,36 @@ set_default _
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
+      "type": "Lambda",
+      "arguments": {
+        "type": "Arguments",
+        "style": "inline",
+        "items": [
+          {
+            "lazy": false,
+            "identifier": "__p_arg_kmjrv"
+          }
+        ]
+      },
+      "body": {
+        "type": "FunctionCall",
+        "callee": {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "set_default"
+          "value": "set_default",
+          "_semanticType": "Function",
+          "_tag": "function_ref"
         },
-        {
-          "type": "Atom",
-          "dataType": "unit",
-          "value": "_"
-        }
-      ]
+        "arguments": [
+          {
+            "type": "Atom",
+            "dataType": "identifier",
+            "value": "__p_arg_kmjrv",
+            "_semanticType": "Variable",
+            "_tag": "call"
+          }
+        ]
+      }
     }
   ]
 }
@@ -1833,7 +1909,9 @@ calc_if_exists 5
           "left": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           },
           "right": {
             "type": "Block",
@@ -1845,7 +1923,9 @@ calc_if_exists 5
                 "left": {
                   "type": "Atom",
                   "dataType": "identifier",
-                  "value": "x"
+                  "value": "x",
+                  "_semanticType": "Variable",
+                  "_tag": "variable_ref"
                 },
                 "right": {
                   "type": "Atom",
@@ -1859,13 +1939,15 @@ calc_if_exists 5
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "calc_if_exists"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "calc_if_exists",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -1914,7 +1996,9 @@ calc_if_exists _
           "left": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           },
           "right": {
             "type": "Block",
@@ -1926,7 +2010,9 @@ calc_if_exists _
                 "left": {
                   "type": "Atom",
                   "dataType": "identifier",
-                  "value": "x"
+                  "value": "x",
+                  "_semanticType": "Variable",
+                  "_tag": "variable_ref"
                 },
                 "right": {
                   "type": "Atom",
@@ -1940,19 +2026,36 @@ calc_if_exists _
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
+      "type": "Lambda",
+      "arguments": {
+        "type": "Arguments",
+        "style": "inline",
+        "items": [
+          {
+            "lazy": false,
+            "identifier": "__p_arg_fb7op"
+          }
+        ]
+      },
+      "body": {
+        "type": "FunctionCall",
+        "callee": {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "calc_if_exists"
+          "value": "calc_if_exists",
+          "_semanticType": "Function",
+          "_tag": "function_ref"
         },
-        {
-          "type": "Atom",
-          "dataType": "unit",
-          "value": "_"
-        }
-      ]
+        "arguments": [
+          {
+            "type": "Atom",
+            "dataType": "identifier",
+            "value": "__p_arg_fb7op",
+            "_semanticType": "Variable",
+            "_tag": "call"
+          }
+        ]
+      }
     }
   ]
 }
@@ -1997,19 +2100,23 @@ is_empty 100
           "expression": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           }
         }
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "is_empty"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "is_empty",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -2060,25 +2167,44 @@ is_empty _
           "expression": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           }
         }
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
+      "type": "Lambda",
+      "arguments": {
+        "type": "Arguments",
+        "style": "inline",
+        "items": [
+          {
+            "lazy": false,
+            "identifier": "__p_arg_muze1"
+          }
+        ]
+      },
+      "body": {
+        "type": "FunctionCall",
+        "callee": {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "is_empty"
+          "value": "is_empty",
+          "_semanticType": "Function",
+          "_tag": "function_ref"
         },
-        {
-          "type": "Atom",
-          "dataType": "unit",
-          "value": "_"
-        }
-      ]
+        "arguments": [
+          {
+            "type": "Atom",
+            "dataType": "identifier",
+            "value": "__p_arg_muze1",
+            "_semanticType": "Variable",
+            "_tag": "call"
+          }
+        ]
+      }
     }
   ]
 }
@@ -2102,7 +2228,7 @@ is_empty _
       "type": "BinaryOperation",
       "operator": "==",
       "left": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
             "type": "Block",
@@ -2168,7 +2294,7 @@ is_empty _
       "type": "BinaryOperation",
       "operator": "==",
       "left": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
             "type": "Block",
@@ -2225,14 +2351,14 @@ is_empty _
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Block",
           "style": "Square",
           "expressions": [
             {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
                   "type": "Atom",
@@ -2253,7 +2379,7 @@ is_empty _
           "style": "Square",
           "expressions": [
             {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
                   "type": "Atom",
@@ -2293,10 +2419,10 @@ list : 1 2 , 3 4
       "type": "Define",
       "identifier": "list",
       "definition": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
@@ -2311,7 +2437,7 @@ list : 1 2 , 3 4
             ]
           },
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
@@ -2353,10 +2479,10 @@ list : 1 2 , 3 4
         "style": "Square",
         "expressions": [
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
-                "type": "Coproduct",
+                "type": "ListConstruct",
                 "elements": [
                   {
                     "type": "Atom",
@@ -2371,7 +2497,7 @@ list : 1 2 , 3 4
                 ]
               },
               {
-                "type": "Coproduct",
+                "type": "ListConstruct",
                 "elements": [
                   {
                     "type": "Atom",
@@ -2418,14 +2544,14 @@ list : 1 2 , 3 4
         "style": "Square",
         "expressions": [
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Block",
                 "style": "Square",
                 "expressions": [
                   {
-                    "type": "Coproduct",
+                    "type": "ListConstruct",
                     "elements": [
                       {
                         "type": "Atom",
@@ -2446,7 +2572,7 @@ list : 1 2 , 3 4
                 "style": "Square",
                 "expressions": [
                   {
-                    "type": "Coproduct",
+                    "type": "ListConstruct",
                     "elements": [
                       {
                         "type": "Atom",
@@ -2494,7 +2620,7 @@ a : 1 2 3 4 5
       "type": "Define",
       "identifier": "a",
       "definition": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
             "type": "Atom",
@@ -2532,7 +2658,9 @@ a : 1 2 3 4 5
       "expression": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "a"
+        "value": "a",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       }
     }
   ]
@@ -2616,7 +2744,7 @@ a : 1 2 3 4 5
       "style": "Square",
       "expressions": [
         {
-          "type": "Coproduct",
+          "type": "ListConstruct",
           "elements": [
             {
               "type": "Atom",
@@ -2630,7 +2758,7 @@ a : 1 2 3 4 5
                 "style": "Square",
                 "expressions": [
                   {
-                    "type": "Coproduct",
+                    "type": "ListConstruct",
                     "elements": [
                       {
                         "type": "Atom",
@@ -2682,7 +2810,7 @@ a : 1 2 3 4 5
       "style": "Square",
       "expressions": [
         {
-          "type": "Coproduct",
+          "type": "ListConstruct",
           "elements": [
             {
               "type": "Atom",
@@ -2690,7 +2818,7 @@ a : 1 2 3 4 5
               "value": "1"
             },
             {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
                   "type": "Postfix",
@@ -2699,7 +2827,7 @@ a : 1 2 3 4 5
                     "style": "Square",
                     "expressions": [
                       {
-                        "type": "Coproduct",
+                        "type": "ListConstruct",
                         "elements": [
                           {
                             "type": "Atom",
@@ -2753,10 +2881,10 @@ a : 1 2 3 4 5
       "style": "Square",
       "expressions": [
         {
-          "type": "Coproduct",
+          "type": "ListConstruct",
           "elements": [
             {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
                   "type": "Atom",
@@ -2770,7 +2898,7 @@ a : 1 2 3 4 5
                     "style": "Square",
                     "expressions": [
                       {
-                        "type": "Coproduct",
+                        "type": "ListConstruct",
                         "elements": [
                           {
                             "type": "Atom",
@@ -2824,7 +2952,7 @@ a : 1 2 3 4 5
       "style": "Square",
       "expressions": [
         {
-          "type": "Coproduct",
+          "type": "ListConstruct",
           "elements": [
             {
               "type": "Atom",
@@ -2838,7 +2966,7 @@ a : 1 2 3 4 5
                 "style": "Square",
                 "expressions": [
                   {
-                    "type": "Coproduct",
+                    "type": "ListConstruct",
                     "elements": [
                       {
                         "type": "Atom",
@@ -2886,10 +3014,10 @@ a : 1 2 3 4 5
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
-          "type": "Coproduct",
+          "type": "ListConstruct",
           "elements": [
             {
               "type": "Atom",
@@ -2908,7 +3036,7 @@ a : 1 2 3 4 5
           "style": "Square",
           "expressions": [
             {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
                   "type": "Atom",
@@ -2929,7 +3057,7 @@ a : 1 2 3 4 5
           "style": "Square",
           "expressions": [
             {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
                   "type": "Atom",
@@ -2970,7 +3098,7 @@ a : 1 2 3 4 5
       "style": "Square",
       "expressions": [
         {
-          "type": "Coproduct",
+          "type": "ListConstruct",
           "elements": [
             {
               "type": "Atom",
@@ -2987,7 +3115,7 @@ a : 1 2 3 4 5
               "style": "Square",
               "expressions": [
                 {
-                  "type": "Coproduct",
+                  "type": "ListConstruct",
                   "elements": [
                     {
                       "type": "Atom",
@@ -3008,7 +3136,7 @@ a : 1 2 3 4 5
               "style": "Square",
               "expressions": [
                 {
-                  "type": "Coproduct",
+                  "type": "ListConstruct",
                   "elements": [
                     {
                       "type": "Atom",
@@ -3047,7 +3175,7 @@ a : 1 2 3 4 5
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Atom",
@@ -3064,7 +3192,7 @@ a : 1 2 3 4 5
           "style": "Square",
           "expressions": [
             {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
                   "type": "Atom",
@@ -3085,7 +3213,7 @@ a : 1 2 3 4 5
           "style": "Square",
           "expressions": [
             {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
                   "type": "Atom",
@@ -3126,7 +3254,7 @@ a : 1 2 3 4 5
       "style": "Square",
       "expressions": [
         {
-          "type": "Coproduct",
+          "type": "ListConstruct",
           "elements": [
             {
               "type": "Atom",
@@ -3143,7 +3271,7 @@ a : 1 2 3 4 5
               "style": "Square",
               "expressions": [
                 {
-                  "type": "Coproduct",
+                  "type": "ListConstruct",
                   "elements": [
                     {
                       "type": "Atom",
@@ -3164,7 +3292,7 @@ a : 1 2 3 4 5
               "style": "Square",
               "expressions": [
                 {
-                  "type": "Coproduct",
+                  "type": "ListConstruct",
                   "elements": [
                     {
                       "type": "Atom",
@@ -3203,7 +3331,7 @@ a : 1 2 3 4 5
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Atom",
@@ -3220,7 +3348,7 @@ a : 1 2 3 4 5
           "style": "Square",
           "expressions": [
             {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
                   "type": "Atom",
@@ -3241,7 +3369,7 @@ a : 1 2 3 4 5
           "style": "Square",
           "expressions": [
             {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
                   "type": "Atom",
@@ -3278,10 +3406,10 @@ a : 1 2 3 4 5
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
-          "type": "Coproduct",
+          "type": "ListConstruct",
           "elements": [
             {
               "type": "Atom",
@@ -3300,10 +3428,10 @@ a : 1 2 3 4 5
           "style": "Square",
           "expressions": [
             {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
-                  "type": "Coproduct",
+                  "type": "ListConstruct",
                   "elements": [
                     {
                       "type": "Atom",
@@ -3318,7 +3446,7 @@ a : 1 2 3 4 5
                   ]
                 },
                 {
-                  "type": "Coproduct",
+                  "type": "ListConstruct",
                   "elements": [
                     {
                       "type": "Atom",
@@ -3380,24 +3508,28 @@ getHead [1 , 2 , 3]
         "body": {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "a"
+          "value": "a",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         }
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "getHead"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "getHead",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Block",
           "style": "Square",
           "expressions": [
             {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
                   "type": "Atom",
@@ -3462,24 +3594,28 @@ getTail [1 , 2 , 3]
         "body": {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "b"
+          "value": "b",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         }
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "getTail"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "getTail",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Block",
           "style": "Square",
           "expressions": [
             {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
                   "type": "Atom",
@@ -4022,7 +4158,7 @@ getTail [1 , 2 , 3]
         ]
       },
       "right": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
             "type": "Atom",
@@ -4104,7 +4240,7 @@ getTail [1 , 2 , 3]
         ]
       },
       "right": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
             "type": "Atom",
@@ -4158,10 +4294,10 @@ list ' 0
       "type": "Define",
       "identifier": "list",
       "definition": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
@@ -4176,7 +4312,7 @@ list ' 0
             ]
           },
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
@@ -4198,7 +4334,9 @@ list ' 0
       "target": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "list"
+        "value": "list",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       },
       "properties": [
         {
@@ -4232,10 +4370,10 @@ list ' 1
       "type": "Define",
       "identifier": "list",
       "definition": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
@@ -4250,7 +4388,7 @@ list ' 1
             ]
           },
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
@@ -4272,7 +4410,9 @@ list ' 1
       "target": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "list"
+        "value": "list",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       },
       "properties": [
         {
@@ -4306,10 +4446,10 @@ list ' 3
       "type": "Define",
       "identifier": "list",
       "definition": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
@@ -4324,7 +4464,7 @@ list ' 3
             ]
           },
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
@@ -4346,7 +4486,9 @@ list ' 3
       "target": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "list"
+        "value": "list",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       },
       "properties": [
         {
@@ -4422,7 +4564,9 @@ myDict ' target~
       "target": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "myDict"
+        "value": "myDict",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       },
       "properties": [
         {
@@ -4430,7 +4574,9 @@ myDict ' target~
           "expression": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "target"
+            "value": "target",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           },
           "operators": [
             "~"
@@ -4473,7 +4619,7 @@ a ' x~
       "type": "Define",
       "identifier": "a",
       "definition": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
             "type": "Atom",
@@ -4508,7 +4654,9 @@ a ' x~
       "target": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "a"
+        "value": "a",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       },
       "properties": [
         {
@@ -4516,7 +4664,9 @@ a ' x~
           "expression": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "x"
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           },
           "operators": [
             "~"
@@ -4559,7 +4709,7 @@ a ' x
       "type": "Define",
       "identifier": "a",
       "definition": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
             "type": "Atom",
@@ -4594,13 +4744,17 @@ a ' x
       "target": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "a"
+        "value": "a",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       },
       "properties": [
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "x"
+          "value": "x",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         }
       ]
     }
@@ -4636,7 +4790,7 @@ car ' brand ' 0
           {
             "key": "brand",
             "value": {
-              "type": "Coproduct",
+              "type": "ListConstruct",
               "elements": [
                 {
                   "type": "Atom",
@@ -4664,7 +4818,9 @@ car ' brand ' 0
       "target": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "car"
+        "value": "car",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       },
       "properties": [
         {
@@ -4672,7 +4828,9 @@ car ' brand ' 0
           "target": {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "brand"
+            "value": "brand",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
           },
           "properties": [
             {
@@ -4714,7 +4872,7 @@ a == b
         "style": "Square",
         "expressions": [
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
@@ -4726,7 +4884,7 @@ a == b
                 "style": "Square",
                 "expressions": [
                   {
-                    "type": "Coproduct",
+                    "type": "ListConstruct",
                     "elements": [
                       {
                         "type": "Atom",
@@ -4755,7 +4913,7 @@ a == b
         "style": "Square",
         "expressions": [
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
@@ -4767,7 +4925,7 @@ a == b
                 "style": "Square",
                 "expressions": [
                   {
-                    "type": "Coproduct",
+                    "type": "ListConstruct",
                     "elements": [
                       {
                         "type": "Atom",
@@ -4794,12 +4952,16 @@ a == b
       "left": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "a"
+        "value": "a",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       },
       "right": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "b"
+        "value": "b",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       }
     }
   ]
@@ -4902,13 +5064,15 @@ myMatch 99
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "myMatch"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "myMatch",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -4935,13 +5099,15 @@ myMatch 0
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "myMatch"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "myMatch",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -4968,13 +5134,15 @@ myMatch 1
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "myMatch"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "myMatch",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -5230,7 +5398,9 @@ xz : |x + 5| * z
                   "left": {
                     "type": "Atom",
                     "dataType": "identifier",
-                    "value": "x"
+                    "value": "x",
+                    "_semanticType": "Variable",
+                    "_tag": "variable_ref"
                   },
                   "right": {
                     "type": "Atom",
@@ -5253,12 +5423,16 @@ xz : |x + 5| * z
                             "left": {
                               "type": "Atom",
                               "dataType": "identifier",
-                              "value": "x"
+                              "value": "x",
+                              "_semanticType": "Variable",
+                              "_tag": "variable_ref"
                             },
                             "right": {
                               "type": "Atom",
                               "dataType": "identifier",
-                              "value": "y"
+                              "value": "y",
+                              "_semanticType": "Variable",
+                              "_tag": "variable_ref"
                             }
                           }
                         },
@@ -5270,12 +5444,16 @@ xz : |x + 5| * z
                             "left": {
                               "type": "Atom",
                               "dataType": "identifier",
-                              "value": "x"
+                              "value": "x",
+                              "_semanticType": "Variable",
+                              "_tag": "variable_ref"
                             },
                             "right": {
                               "type": "Atom",
                               "dataType": "identifier",
-                              "value": "z"
+                              "value": "z",
+                              "_semanticType": "Variable",
+                              "_tag": "variable_ref"
                             }
                           }
                         }
@@ -5291,7 +5469,9 @@ xz : |x + 5| * z
                   "left": {
                     "type": "Atom",
                     "dataType": "identifier",
-                    "value": "x"
+                    "value": "x",
+                    "_semanticType": "Variable",
+                    "_tag": "variable_ref"
                   },
                   "right": {
                     "type": "Atom",
@@ -5325,7 +5505,9 @@ xz : |x + 5| * z
                                       {
                                         "type": "Atom",
                                         "dataType": "identifier",
-                                        "value": "x"
+                                        "value": "x",
+                                        "_semanticType": "Variable",
+                                        "_tag": "variable_ref"
                                       }
                                     ]
                                   },
@@ -5340,7 +5522,9 @@ xz : |x + 5| * z
                             "right": {
                               "type": "Atom",
                               "dataType": "identifier",
-                              "value": "y"
+                              "value": "y",
+                              "_semanticType": "Variable",
+                              "_tag": "variable_ref"
                             }
                           }
                         },
@@ -5359,7 +5543,9 @@ xz : |x + 5| * z
                                   "left": {
                                     "type": "Atom",
                                     "dataType": "identifier",
-                                    "value": "x"
+                                    "value": "x",
+                                    "_semanticType": "Variable",
+                                    "_tag": "variable_ref"
                                   },
                                   "right": {
                                     "type": "Atom",
@@ -5372,7 +5558,9 @@ xz : |x + 5| * z
                             "right": {
                               "type": "Atom",
                               "dataType": "identifier",
-                              "value": "z"
+                              "value": "z",
+                              "_semanticType": "Variable",
+                              "_tag": "variable_ref"
                             }
                           }
                         }
@@ -5405,17 +5593,21 @@ f dictP !_ !_ !_
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
-      "elements": [
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "f",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "f"
-        },
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "dictP"
+          "value": "dictP",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         },
         {
           "type": "Prefix",
@@ -5471,17 +5663,21 @@ f dictN !_ !_ !_
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
-      "elements": [
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "f",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "f"
-        },
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "dictN"
+          "value": "dictN",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         },
         {
           "type": "Prefix",
@@ -5573,12 +5769,16 @@ addTen 20
             "left": {
               "type": "Atom",
               "dataType": "identifier",
-              "value": "x"
+              "value": "x",
+              "_semanticType": "Variable",
+              "_tag": "variable_ref"
             },
             "right": {
               "type": "Atom",
               "dataType": "identifier",
-              "value": "y"
+              "value": "y",
+              "_semanticType": "Variable",
+              "_tag": "variable_ref"
             }
           }
         }
@@ -5588,13 +5788,15 @@ addTen 20
       "type": "Define",
       "identifier": "addTen",
       "definition": {
-        "type": "Coproduct",
-        "elements": [
-          {
-            "type": "Atom",
-            "dataType": "identifier",
-            "value": "f"
-          },
+        "type": "FunctionCall",
+        "callee": {
+          "type": "Atom",
+          "dataType": "identifier",
+          "value": "f",
+          "_semanticType": "Function",
+          "_tag": "function_ref"
+        },
+        "arguments": [
           {
             "type": "Atom",
             "dataType": "number",
@@ -5604,12 +5806,14 @@ addTen 20
       }
     },
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "addTen"
+          "value": "addTen",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         },
         {
           "type": "Atom",
@@ -5637,7 +5841,7 @@ addTen 20
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Block",
@@ -5695,7 +5899,7 @@ addTen 20
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Block",
@@ -5755,7 +5959,7 @@ addTen 20
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Block",
@@ -5872,22 +6076,28 @@ foo bar baz
       }
     },
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "foo"
+          "value": "foo",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         },
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "bar"
+          "value": "bar",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         },
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "baz"
+          "value": "baz",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         }
       ]
     }
@@ -5964,22 +6174,28 @@ add_ten mul_two sub_five 5
       }
     },
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "add_ten"
+          "value": "add_ten",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         },
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "mul_two"
+          "value": "mul_two",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         },
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "sub_five"
+          "value": "sub_five",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         },
         {
           "type": "Atom",
@@ -6007,7 +6223,7 @@ add_ten mul_two sub_five 5
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Block",
@@ -6107,17 +6323,21 @@ double square (3 + 2)
       }
     },
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "double"
+          "value": "double",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         },
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "square"
+          "value": "square",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         },
         {
           "type": "Block",
@@ -6192,7 +6412,9 @@ fact 5
                   "left": {
                     "type": "Atom",
                     "dataType": "identifier",
-                    "value": "n"
+                    "value": "n",
+                    "_semanticType": "Variable",
+                    "_tag": "variable_ref"
                   },
                   "right": {
                     "type": "Atom",
@@ -6216,13 +6438,15 @@ fact 5
                     "style": "Paren",
                     "expressions": [
                       {
-                        "type": "Coproduct",
-                        "elements": [
-                          {
-                            "type": "Atom",
-                            "dataType": "identifier",
-                            "value": "fact"
-                          },
+                        "type": "FunctionCall",
+                        "callee": {
+                          "type": "Atom",
+                          "dataType": "identifier",
+                          "value": "fact",
+                          "_semanticType": "Function",
+                          "_tag": "function_ref"
+                        },
+                        "arguments": [
                           {
                             "type": "Block",
                             "style": "Paren",
@@ -6233,7 +6457,9 @@ fact 5
                                 "left": {
                                   "type": "Atom",
                                   "dataType": "identifier",
-                                  "value": "n"
+                                  "value": "n",
+                                  "_semanticType": "Variable",
+                                  "_tag": "variable_ref"
                                 },
                                 "right": {
                                   "type": "Atom",
@@ -6250,7 +6476,9 @@ fact 5
                   "right": {
                     "type": "Atom",
                     "dataType": "identifier",
-                    "value": "n"
+                    "value": "n",
+                    "_semanticType": "Variable",
+                    "_tag": "variable_ref"
                   }
                 }
               }
@@ -6260,13 +6488,15 @@ fact 5
       }
     },
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "fact"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "fact",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -6331,7 +6561,9 @@ gcd1  y r  (y % r)
                   "left": {
                     "type": "Atom",
                     "dataType": "identifier",
-                    "value": "r"
+                    "value": "r",
+                    "_semanticType": "Variable",
+                    "_tag": "variable_ref"
                   },
                   "right": {
                     "type": "Atom",
@@ -6342,28 +6574,36 @@ gcd1  y r  (y % r)
                 "body": {
                   "type": "Atom",
                   "dataType": "identifier",
-                  "value": "y"
+                  "value": "y",
+                  "_semanticType": "Variable",
+                  "_tag": "variable_ref"
                 }
               },
               {
                 "condition": null,
                 "body": {
-                  "type": "Coproduct",
-                  "elements": [
+                  "type": "FunctionCall",
+                  "callee": {
+                    "type": "Atom",
+                    "dataType": "identifier",
+                    "value": "gcd1",
+                    "_semanticType": "Function",
+                    "_tag": "function_ref"
+                  },
+                  "arguments": [
                     {
                       "type": "Atom",
                       "dataType": "identifier",
-                      "value": "gcd1"
+                      "value": "y",
+                      "_semanticType": "Variable",
+                      "_tag": "variable_ref"
                     },
                     {
                       "type": "Atom",
                       "dataType": "identifier",
-                      "value": "y"
-                    },
-                    {
-                      "type": "Atom",
-                      "dataType": "identifier",
-                      "value": "r"
+                      "value": "r",
+                      "_semanticType": "Variable",
+                      "_tag": "variable_ref"
                     },
                     {
                       "type": "Block",
@@ -6375,12 +6615,16 @@ gcd1  y r  (y % r)
                           "left": {
                             "type": "Atom",
                             "dataType": "identifier",
-                            "value": "y"
+                            "value": "y",
+                            "_semanticType": "Variable",
+                            "_tag": "variable_ref"
                           },
                           "right": {
                             "type": "Atom",
                             "dataType": "identifier",
-                            "value": "r"
+                            "value": "r",
+                            "_semanticType": "Variable",
+                            "_tag": "variable_ref"
                           }
                         }
                       ]
@@ -6440,22 +6684,28 @@ gcd : x y ?
               {
                 "condition": null,
                 "body": {
-                  "type": "Coproduct",
-                  "elements": [
+                  "type": "FunctionCall",
+                  "callee": {
+                    "type": "Atom",
+                    "dataType": "identifier",
+                    "value": "gcd1",
+                    "_semanticType": "Function",
+                    "_tag": "function_ref"
+                  },
+                  "arguments": [
                     {
                       "type": "Atom",
                       "dataType": "identifier",
-                      "value": "gcd1"
+                      "value": "x",
+                      "_semanticType": "Variable",
+                      "_tag": "variable_ref"
                     },
                     {
                       "type": "Atom",
                       "dataType": "identifier",
-                      "value": "x"
-                    },
-                    {
-                      "type": "Atom",
-                      "dataType": "identifier",
-                      "value": "y"
+                      "value": "y",
+                      "_semanticType": "Variable",
+                      "_tag": "variable_ref"
                     },
                     {
                       "type": "Block",
@@ -6467,12 +6717,16 @@ gcd : x y ?
                           "left": {
                             "type": "Atom",
                             "dataType": "identifier",
-                            "value": "x"
+                            "value": "x",
+                            "_semanticType": "Variable",
+                            "_tag": "variable_ref"
                           },
                           "right": {
                             "type": "Atom",
                             "dataType": "identifier",
-                            "value": "y"
+                            "value": "y",
+                            "_semanticType": "Variable",
+                            "_tag": "variable_ref"
                           }
                         }
                       ]
@@ -6504,13 +6758,15 @@ gcd 18 9
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "gcd"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "gcd",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -6542,13 +6798,15 @@ gcd 18 12
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "gcd"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "gcd",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -6614,7 +6872,9 @@ g x y
                   "left": {
                     "type": "Atom",
                     "dataType": "identifier",
-                    "value": "y"
+                    "value": "y",
+                    "_semanticType": "Variable",
+                    "_tag": "variable_ref"
                   },
                   "right": {
                     "type": "Atom",
@@ -6625,28 +6885,36 @@ g x y
                 "body": {
                   "type": "Atom",
                   "dataType": "identifier",
-                  "value": "y"
+                  "value": "y",
+                  "_semanticType": "Variable",
+                  "_tag": "variable_ref"
                 }
               },
               {
                 "condition": null,
                 "body": {
-                  "type": "Coproduct",
+                  "type": "ListConstruct",
                   "elements": [
                     {
                       "type": "Atom",
                       "dataType": "identifier",
-                      "value": "g"
+                      "value": "g",
+                      "_semanticType": "Variable",
+                      "_tag": "variable_ref"
                     },
                     {
                       "type": "Atom",
                       "dataType": "identifier",
-                      "value": "x"
+                      "value": "x",
+                      "_semanticType": "Variable",
+                      "_tag": "variable_ref"
                     },
                     {
                       "type": "Atom",
                       "dataType": "identifier",
-                      "value": "y"
+                      "value": "y",
+                      "_semanticType": "Variable",
+                      "_tag": "variable_ref"
                     }
                   ]
                 }
@@ -6703,17 +6971,21 @@ g : x y ?
               {
                 "condition": null,
                 "body": {
-                  "type": "Coproduct",
-                  "elements": [
+                  "type": "FunctionCall",
+                  "callee": {
+                    "type": "Atom",
+                    "dataType": "identifier",
+                    "value": "f",
+                    "_semanticType": "Function",
+                    "_tag": "function_ref"
+                  },
+                  "arguments": [
                     {
                       "type": "Atom",
                       "dataType": "identifier",
-                      "value": "f"
-                    },
-                    {
-                      "type": "Atom",
-                      "dataType": "identifier",
-                      "value": "x"
+                      "value": "x",
+                      "_semanticType": "Variable",
+                      "_tag": "variable_ref"
                     },
                     {
                       "type": "BinaryOperation",
@@ -6721,12 +6993,16 @@ g : x y ?
                       "left": {
                         "type": "Atom",
                         "dataType": "identifier",
-                        "value": "x"
+                        "value": "x",
+                        "_semanticType": "Variable",
+                        "_tag": "variable_ref"
                       },
                       "right": {
                         "type": "Atom",
                         "dataType": "identifier",
-                        "value": "y"
+                        "value": "y",
+                        "_semanticType": "Variable",
+                        "_tag": "variable_ref"
                       }
                     }
                   ]
@@ -6756,13 +7032,15 @@ f 2 2
   "type": "Program",
   "body": [
     {
-      "type": "Coproduct",
-      "elements": [
-        {
-          "type": "Atom",
-          "dataType": "identifier",
-          "value": "f"
-        },
+      "type": "FunctionCall",
+      "callee": {
+        "type": "Atom",
+        "dataType": "identifier",
+        "value": "f",
+        "_semanticType": "Function",
+        "_tag": "function_ref"
+      },
+      "arguments": [
         {
           "type": "Atom",
           "dataType": "number",
@@ -6816,7 +7094,9 @@ x
         "expression": {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "x"
+          "value": "x",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         }
       },
       "calls": [
@@ -6830,7 +7110,9 @@ x
     {
       "type": "Atom",
       "dataType": "identifier",
-      "value": "x"
+      "value": "x",
+      "_semanticType": "Variable",
+      "_tag": "variable_ref"
     }
   ]
 }
@@ -6860,7 +7142,7 @@ $[1 2 3 4 5]
         "style": "Square",
         "expressions": [
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
@@ -6916,7 +7198,7 @@ $[foo 6]
       "type": "Define",
       "identifier": "foo",
       "definition": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
             "type": "Atom",
@@ -6956,12 +7238,14 @@ $[foo 6]
         "style": "Square",
         "expressions": [
           {
-            "type": "Coproduct",
+            "type": "ListConstruct",
             "elements": [
               {
                 "type": "Atom",
                 "dataType": "identifier",
-                "value": "foo"
+                "value": "foo",
+                "_semanticType": "Variable",
+                "_tag": "variable_ref"
               },
               {
                 "type": "Atom",
@@ -6997,7 +7281,7 @@ $[foo~]
       "type": "Define",
       "identifier": "foo",
       "definition": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
             "type": "Atom",
@@ -7041,7 +7325,9 @@ $[foo~]
             "expression": {
               "type": "Atom",
               "dataType": "identifier",
-              "value": "foo"
+              "value": "foo",
+              "_semanticType": "Variable",
+              "_tag": "variable_ref"
             },
             "operators": [
               "~"
@@ -7074,7 +7360,7 @@ $foo
       "type": "Define",
       "identifier": "foo",
       "definition": {
-        "type": "Coproduct",
+        "type": "ListConstruct",
         "elements": [
           {
             "type": "Atom",
@@ -7112,7 +7398,9 @@ $foo
       "expression": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "foo"
+        "value": "foo",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       }
     }
   ]
@@ -7170,13 +7458,17 @@ myGreet ' hello
       "target": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "myGreet"
+        "value": "myGreet",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       },
       "properties": [
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "hello"
+          "value": "hello",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         }
       ]
     }
@@ -7222,7 +7514,9 @@ ptr # 99
       "target": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "ptr"
+        "value": "ptr",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       },
       "calls": [
         {
@@ -7240,7 +7534,9 @@ ptr # 99
       "expression": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "ptr"
+        "value": "ptr",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       }
     }
   ]
@@ -7315,7 +7611,9 @@ a_address : $a
         "expression": {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "a"
+          "value": "a",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         }
       }
     },
@@ -7327,7 +7625,9 @@ a_address : $a
       "expression": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "a_address"
+        "value": "a_address",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       }
     }
   ]
@@ -7387,12 +7687,14 @@ bar 4
       }
     },
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "foo"
+          "value": "foo",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         },
         {
           "type": "Atom",
@@ -7402,12 +7704,14 @@ bar 4
       ]
     },
     {
-      "type": "Coproduct",
+      "type": "ListConstruct",
       "elements": [
         {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "bar"
+          "value": "bar",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         },
         {
           "type": "Atom",
