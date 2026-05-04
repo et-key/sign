@@ -110,6 +110,44 @@ export class SemanticAnalyzer {
         const elements = node.elements.map(e => this.pass2(e));
         return this.reduceCoproduct(elements);
 
+      case "Sequence": {
+          let startNode = null, stepNode = null, endNode = null;
+          let mainOp = node.operators[0];
+
+          if (mainOp === "~_postfix") {
+              startNode = this.pass2(node.blocks[0]);
+              stepNode = { type: "Atom", dataType: "number", value: "1" };
+              endNode = { type: "Atom", dataType: "number", value: "9223372036854775807" }; // Max Int as Infinity
+          } else if (mainOp === "~_prefix") {
+              startNode = { type: "Atom", dataType: "number", value: "0" };
+              stepNode = { type: "Atom", dataType: "number", value: "1" };
+              endNode = this.pass2(node.blocks[0]);
+          } else if (mainOp === "~") {
+              startNode = this.pass2(node.blocks[0]);
+              stepNode = { type: "Atom", dataType: "number", value: "1" };
+              endNode = this.pass2(node.blocks[1]);
+              mainOp = "~+"; // Treat default ~ as addition
+          } else if (node.operators.length === 2 && node.operators[1] === "~") {
+              // 1 ~+ 2 ~ 10
+              startNode = this.pass2(node.blocks[0]);
+              stepNode = this.pass2(node.blocks[1]);
+              endNode = this.pass2(node.blocks[2]);
+          } else {
+              // 1 ~+ 2 (infinite sequence with step)
+              startNode = this.pass2(node.blocks[0]);
+              stepNode = this.pass2(node.blocks[1]);
+              endNode = { type: "Atom", dataType: "number", value: "9223372036854775807" };
+          }
+
+          return {
+              type: "RangeObject",
+              operator: mainOp,
+              start: startNode,
+              step: stepNode,
+              end: endNode
+          };
+      }
+
       case "PointFreeNormal":
         const argName = "__pf_arg_" + Math.random().toString(36).substr(2, 5);
         let body;

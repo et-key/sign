@@ -1,2 +1,3 @@
-F : f x ? @f x
-Result : F $[+ 2] 3
+Range1 : 1 ~* 2.5 ~ 16
+Res1 : Range1 ' 2
+Result : Res1 * 4
