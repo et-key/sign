@@ -1,2 +1,5 @@
-list : 1 , 2 , 3
+list : 1 2 , 3 4
 Result : list ' 1
+f : x ? x + 3
+g : x ? x * 2
+Result2 : f g 2

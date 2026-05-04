@@ -107,70 +107,8 @@ export class SemanticAnalyzer {
         break;
 
       case "Coproduct":
-        // Evaluate elements first
-        node.elements = node.elements.map(e => this.pass2(e));
-
-        // Check for partial application (Closure Lifting)
-        let unitIndex = -1;
-        for (let i = 0; i < node.elements.length; i++) {
-           const el = node.elements[i];
-           if (el.type === "Atom" && el.dataType === "unit" && el.value === "_") {
-               unitIndex = i;
-               break;
-           }
-        }
-
-        let isFunction = false;
-        const first = node.elements[0];
-        if (first.type === "Atom" && first.dataType === "identifier") {
-            if (this.resolveSymbol(first.value) === "Function") {
-                isFunction = true;
-            }
-        } else if (first.type === "Lambda") {
-            isFunction = true;
-        }
-
-        if (isFunction && unitIndex !== -1) {
-            // Transform into Lambda (Closure Lifting)
-            const argName = "__p_arg_" + Math.random().toString(36).substr(2, 5);
-            const newElements = [...node.elements];
-            newElements[unitIndex] = {
-                type: "Atom",
-                dataType: "identifier",
-                value: argName,
-                _semanticType: "Variable",
-                _tag: "call"
-            };
-
-            const innerCall = {
-                type: "FunctionCall",
-                callee: newElements[0],
-                arguments: newElements.slice(1)
-            };
-            
-            return {
-                type: "Lambda",
-                arguments: {
-                    type: "Arguments",
-                    style: "inline",
-                    items: [{ lazy: false, identifier: argName }]
-                },
-                body: innerCall
-            };
-        }
-
-        if (isFunction) {
-            // Create a standard FunctionCall node
-            return {
-                type: "FunctionCall",
-                callee: node.elements[0],
-                arguments: node.elements.slice(1)
-            };
-        } else {
-            // It's a list construct
-            node.type = "ListConstruct";
-        }
-        break;
+        const elements = node.elements.map(e => this.pass2(e));
+        return this.reduceCoproduct(elements);
 
       case "Atom":
         if (node.dataType === "identifier") {
@@ -197,5 +135,126 @@ export class SemanticAnalyzer {
     }
 
     return node;
+  }
+
+  // --- Pipeline Reduction Helpers ---
+  
+  isFunctionNode(node) {
+      if (!node) return false;
+      if (node.type === "Lambda") return true;
+      if (node.type === "Atom" && node.dataType === "identifier") {
+          const def = this.resolveSymbol(node.value);
+          if (def === "Function") return true;
+          return false;
+      }
+      return false; // FunctionCall, ListConstruct, Get, etc. are values.
+  }
+
+  reduceCoproduct(elements) {
+      let pipeline = [];
+      let args = [];
+
+      for (let e of elements) {
+          if (this.isFunctionNode(e)) {
+              if (args.length > 0 && pipeline.length > 0) {
+                  // Evaluate current pipeline and set result as first arg for next
+                  let res = this.applyPipeline(pipeline, args);
+                  args = [res];
+                  pipeline = [e];
+              } else if (args.length > 0 && pipeline.length === 0) {
+                  // Value followed by function: x f -> f(x)
+                  pipeline.push(e);
+              } else {
+                  // Function followed by function: f g -> pipeline [f, g]
+                  pipeline.push(e);
+              }
+          } else {
+              // It's a value
+              args.push(e);
+          }
+      }
+
+      let result = null;
+      if (pipeline.length > 0) {
+          if (args.length > 0) {
+              result = this.applyPipeline(pipeline, args);
+          } else {
+              result = this.composePipeline(pipeline);
+          }
+      } else {
+          if (args.length === 1) {
+              result = args[0];
+          } else if (args.length > 1) {
+              result = { type: "ListConstruct", elements: args };
+          }
+      }
+
+      return this.liftClosure(result);
+  }
+
+  applyPipeline(pipeline, args) {
+      // Apply f to args -> f(args)
+      let res = { type: "FunctionCall", callee: pipeline[0], arguments: args };
+      res = this.liftClosure(res); // Early lifting for nested calls if needed
+
+      for (let i = 1; i < pipeline.length; i++) {
+          res = { type: "FunctionCall", callee: pipeline[i], arguments: [res] };
+          res = this.liftClosure(res);
+      }
+      return res;
+  }
+
+  composePipeline(pipeline) {
+      if (pipeline.length === 1) return pipeline[0];
+      const argName = "__comp_arg_" + Math.random().toString(36).substr(2, 5);
+      let body = { type: "Atom", dataType: "identifier", value: argName };
+      body = this.applyPipeline(pipeline, [body]);
+      return {
+          type: "Lambda",
+          arguments: {
+              type: "Arguments",
+              style: "inline",
+              items: [{ lazy: false, identifier: argName }]
+          },
+          body: body
+      };
+  }
+
+  liftClosure(node) {
+      let unitNodeInfo = null;
+
+      const findUnit = (n, parent, index) => {
+          if (!n || typeof n !== 'object') return;
+          if (n.type === "Atom" && n.dataType === "unit" && n.value === "_") {
+              unitNodeInfo = { parent, index };
+              return;
+          }
+          if (n.type === "FunctionCall") {
+              n.arguments.forEach((arg, i) => findUnit(arg, n.arguments, i));
+          }
+      };
+
+      findUnit(node, null, -1);
+
+      if (unitNodeInfo) {
+          const argName = "__p_arg_" + Math.random().toString(36).substr(2, 5);
+          unitNodeInfo.parent[unitNodeInfo.index] = {
+              type: "Atom",
+              dataType: "identifier",
+              value: argName,
+              _semanticType: "Variable",
+              _tag: "variable_ref"
+          };
+          return {
+              type: "Lambda",
+              arguments: {
+                  type: "Arguments",
+                  style: "inline",
+                  items: [{ lazy: false, identifier: argName }]
+              },
+              body: node
+          };
+      }
+      return node;
   }
 }

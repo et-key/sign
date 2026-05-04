@@ -631,7 +631,7 @@ Result : div2 10
           "items": [
             {
               "lazy": false,
-              "identifier": "__p_arg_sddtr"
+              "identifier": "__p_arg_rc8wn"
             }
           ]
         },
@@ -648,9 +648,9 @@ Result : div2 10
             {
               "type": "Atom",
               "dataType": "identifier",
-              "value": "__p_arg_sddtr",
+              "value": "__p_arg_rc8wn",
               "_semanticType": "Variable",
-              "_tag": "call"
+              "_tag": "variable_ref"
             },
             {
               "type": "Atom",
@@ -1844,7 +1844,7 @@ set_default _
         "items": [
           {
             "lazy": false,
-            "identifier": "__p_arg_81i60"
+            "identifier": "__p_arg_zfxqv"
           }
         ]
       },
@@ -1861,9 +1861,9 @@ set_default _
           {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "__p_arg_81i60",
+            "value": "__p_arg_zfxqv",
             "_semanticType": "Variable",
-            "_tag": "call"
+            "_tag": "variable_ref"
           }
         ]
       }
@@ -2033,7 +2033,7 @@ calc_if_exists _
         "items": [
           {
             "lazy": false,
-            "identifier": "__p_arg_mnn0w"
+            "identifier": "__p_arg_y6cjl"
           }
         ]
       },
@@ -2050,9 +2050,9 @@ calc_if_exists _
           {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "__p_arg_mnn0w",
+            "value": "__p_arg_y6cjl",
             "_semanticType": "Variable",
-            "_tag": "call"
+            "_tag": "variable_ref"
           }
         ]
       }
@@ -2182,7 +2182,7 @@ is_empty _
         "items": [
           {
             "lazy": false,
-            "identifier": "__p_arg_dmvuj"
+            "identifier": "__p_arg_37f8x"
           }
         ]
       },
@@ -2199,9 +2199,9 @@ is_empty _
           {
             "type": "Atom",
             "dataType": "identifier",
-            "value": "__p_arg_dmvuj",
+            "value": "__p_arg_37f8x",
             "_semanticType": "Variable",
-            "_tag": "call"
+            "_tag": "variable_ref"
           }
         ]
       }
