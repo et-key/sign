@@ -2,7 +2,7 @@ export class AArch64Generator {
 	constructor() {
 		this.textSection = [];
 		this.dataSection = [];
-		this.freeRegs = [1, 2, 3, 4, 5, 6, 7];
+		this.freeRegs = [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15];
 		this.unitReg = 28;
 		this.env = {};
 		this.nextOffset = 0;
@@ -20,6 +20,21 @@ export class AArch64Generator {
 			this.freeRegs.unshift(regNum);
 		}
 	}
+
+    doubleToMovs(reg, n) {
+        const buf = new ArrayBuffer(8);
+        const view = new DataView(buf);
+        view.setFloat64(0, n, true);
+        const w0 = view.getUint16(0, true);
+        const w1 = view.getUint16(2, true);
+        const w2 = view.getUint16(4, true);
+        const w3 = view.getUint16(6, true);
+        
+        this.textSection.push(`    MOV x${reg}, #0x${w0.toString(16).padStart(4, '0')}`);
+        if (w1) this.textSection.push(`    MOVK x${reg}, #0x${w1.toString(16).padStart(4, '0')}, LSL #16`);
+        if (w2) this.textSection.push(`    MOVK x${reg}, #0x${w2.toString(16).padStart(4, '0')}, LSL #32`);
+        if (w3) this.textSection.push(`    MOVK x${reg}, #0x${w3.toString(16).padStart(4, '0')}, LSL #48`);
+    }
 
 	generate(ast) {
 		this.dataSection.push(".section .rodata");
@@ -60,7 +75,12 @@ export class AArch64Generator {
 		this.textSection.push("");
 		this.textSection.push("    // --- Check if Result is Unit ---");
 		this.textSection.push("    CMP x0, x28");
-		this.textSection.push("    B.NE .L_exit_normal");
+		this.textSection.push("    B.EQ .L_exit_unit");
+		this.textSection.push("    // Convert double to int for OS exit code (0-255)");
+		this.textSection.push("    FMOV d0, x0");
+		this.textSection.push("    FCVTZS x0, d0");
+		this.textSection.push("    B .L_exit_normal");
+		this.textSection.push(".L_exit_unit:");
 		this.textSection.push("    MOV x0, #255               // Unitの場合は終了コード 255 (Debug)");
 		this.textSection.push(".L_exit_normal:");
 
@@ -131,6 +151,9 @@ export class AArch64Generator {
 
 			case "Postfix":
 				return this.visitPostfix(node);
+
+			case "RangeObject":
+				return this.visitRangeObject(node);
 
 			default:
 				this.textSection.push(`    // TODO: Unhandled node -> ${node.type}`);
@@ -232,9 +255,9 @@ export class AArch64Generator {
 
 	visitAtom(node) {
         if (node.dataType === "number") {
-            const val = parseInt(node.value, 10);
+            const val = parseFloat(node.value);
             const reg = this.allocReg();
-            this.textSection.push(`    MOV x${reg}, #${val}`);
+            this.doubleToMovs(reg, val);
             return reg;
         } else if (node.dataType === "address") {
             const val = parseInt(node.value, 16);
@@ -381,26 +404,187 @@ export class AArch64Generator {
         
         for (let prop of node.properties) {
             if (typeof prop === "string") {
-                // Should not happen, but just in case
                 this.textSection.push(`    // TODO: Get string literal property ${prop}`);
                 continue;
             }
             
             const propReg = this.visit(prop);
             const resultReg = this.allocReg();
+            const tmpReg = this.allocReg();
             
-            // currentReg holds list base pointer.
-            // Elements start at offset 8. So element N is at base + 8 + N*8.
-            // Which is base + (N + 1) * 8.
+            // Load TypeTag (or Length header)
+            this.textSection.push(`    LDR x${tmpReg}, [x${currentReg}, #0]`);
+            
+            // Range Sentinel is 0xFFFFFFFFFFFFFFFE
+            const isRangeLabel = `.L_is_range_${Math.random().toString(36).substr(2, 5)}`;
+            const isListLabel = `.L_is_list_${Math.random().toString(36).substr(2, 5)}`;
+            const endLabel = `.L_get_end_${Math.random().toString(36).substr(2, 5)}`;
+            
+            const sentinelReg = this.allocReg();
+            this.textSection.push(`    MOV x${sentinelReg}, #0xFFFE`);
+            this.textSection.push(`    MOVK x${sentinelReg}, #0xFFFF, LSL #16`);
+            this.textSection.push(`    MOVK x${sentinelReg}, #0xFFFF, LSL #32`);
+            this.textSection.push(`    MOVK x${sentinelReg}, #0xFFFF, LSL #48`);
+            
+            this.textSection.push(`    CMP x${tmpReg}, x${sentinelReg}`);
+            this.textSection.push(`    B.EQ ${isRangeLabel}`);
+            
+            // --- List Access (Not a range) ---
+            this.textSection.push(`${isListLabel}:`);
+            this.textSection.push(`    FMOV d0, x${propReg}`);
+            this.textSection.push(`    FCVTZS x${propReg}, d0`); // propReg is now integer
             this.textSection.push(`    ADD x${propReg}, x${propReg}, #1 // Skip length header`);
             this.textSection.push(`    LSL x${propReg}, x${propReg}, #3 // Convert to byte offset (*8)`);
-            this.textSection.push(`    LDR x${resultReg}, [x${currentReg}, x${propReg}] // Get element`);
+            this.textSection.push(`    LDR x${resultReg}, [x${currentReg}, x${propReg}] // Get list element`);
+            this.textSection.push(`    B ${endLabel}`);
+            
+            // --- Range Access (O(1) Math) ---
+            this.textSection.push(`${isRangeLabel}:`);
+            const startR = this.allocReg();
+            const stepR = this.allocReg();
+            const opR = this.allocReg();
+            
+            this.textSection.push(`    LDR x${startR}, [x${currentReg}, #8]`);
+            this.textSection.push(`    LDR x${stepR}, [x${currentReg}, #16]`);
+            this.textSection.push(`    LDR x${opR}, [x${currentReg}, #32]`);
+            
+            // Move index to FPU
+            this.textSection.push(`    FMOV d0, x${propReg} // Index`);
+            this.textSection.push(`    FMOV d1, x${startR} // Start`);
+            this.textSection.push(`    FMOV d2, x${stepR} // Step`);
+            
+            // Check if ~+ or ~- (0 or 1)
+            this.textSection.push(`    CMP x${opR}, #2`);
+            const powLabel = `.L_range_pow_${Math.random().toString(36).substr(2, 5)}`;
+            this.textSection.push(`    B.GE ${powLabel} // If ~* or ~/ or ~^`);
+            
+            // --- Addition/Subtraction ---
+            this.textSection.push(`    FMUL d0, d0, d2 // d0 = index * step`);
+            this.textSection.push(`    CMP x${opR}, #1`);
+            this.textSection.push(`    B.EQ 1f // If subtraction (~-)`);
+            
+            // Addition (~+)
+            this.textSection.push(`    FADD d3, d1, d0 // start + (step * index)`);
+            this.textSection.push(`    FMOV x${resultReg}, d3`);
+            this.textSection.push(`    B ${endLabel}`);
+            
+            // Subtraction (~-)
+            this.textSection.push(`1:`);
+            this.textSection.push(`    FSUB d3, d1, d0 // start - (step * index)`);
+            this.textSection.push(`    FMOV x${resultReg}, d3`);
+            this.textSection.push(`    B ${endLabel}`);
+            
+            // --- Multiplication/Division/Power (Pow Loop) ---
+            const powLoopLabel = `.L_pow_loop_${Math.random().toString(36).substr(2, 5)}`;
+            const powEndLabel = `.L_pow_end_${Math.random().toString(36).substr(2, 5)}`;
+            
+            this.textSection.push(`${powLabel}:`);
+            // We need integer loop counter. Convert Index (d0) to Integer!
+            this.textSection.push(`    FCVTZS x${propReg}, d0`);
+            
+            const tmpReg2 = this.allocReg();
+            this.doubleToMovs(tmpReg2, 1.0);
+            this.textSection.push(`    FMOV d3, x${tmpReg2}`); // pow_res (d3) = 1.0
+            this.freeReg(tmpReg2);
+            
+            this.textSection.push(`    CBZ x${propReg}, ${powEndLabel} // if index == 0, skip loop`);
+            
+            this.textSection.push(`${powLoopLabel}:`);
+            this.textSection.push(`    FMUL d3, d3, d2 // pow_res *= step`);
+            this.textSection.push(`    SUB x${propReg}, x${propReg}, #1`);
+            this.textSection.push(`    CBNZ x${propReg}, ${powLoopLabel}`);
+            
+            this.textSection.push(`${powEndLabel}:`);
+            
+            this.textSection.push(`    CMP x${opR}, #3`);
+            this.textSection.push(`    B.EQ 3f // If division (~/)`);
+            this.textSection.push(`    B.GT 4f // If power (~^)`);
+            
+            // Multiplication (~*)
+            this.textSection.push(`    FMUL d4, d1, d3 // start * (step ^ index)`);
+            this.textSection.push(`    FMOV x${resultReg}, d4`);
+            this.textSection.push(`    B ${endLabel}`);
+            
+            // Division (~/)
+            this.textSection.push(`3:`);
+            this.textSection.push(`    FDIV d4, d1, d3 // start / (step ^ index)`);
+            this.textSection.push(`    FMOV x${resultReg}, d4`);
+            this.textSection.push(`    B ${endLabel}`);
+            
+            // Power (~^)
+            this.textSection.push(`4:`);
+            this.textSection.push(`    FCVTZS x${propReg}, d3 // inner loop counter = int(step^index)`);
+            
+            const tmpReg3 = this.allocReg();
+            this.doubleToMovs(tmpReg3, 1.0);
+            this.textSection.push(`    FMOV d4, x${tmpReg3} // res2 = 1.0`);
+            this.freeReg(tmpReg3);
+            
+            const powLoop2Label = `.L_pow2_loop_${Math.random().toString(36).substr(2, 5)}`;
+            const powEnd2Label = `.L_pow2_end_${Math.random().toString(36).substr(2, 5)}`;
+            
+            this.textSection.push(`    CBZ x${propReg}, ${powEnd2Label}`);
+            this.textSection.push(`${powLoop2Label}:`);
+            this.textSection.push(`    FMUL d4, d4, d1 // res2 *= start`);
+            this.textSection.push(`    SUB x${propReg}, x${propReg}, #1`);
+            this.textSection.push(`    CBNZ x${propReg}, ${powLoop2Label}`);
+            this.textSection.push(`${powEnd2Label}:`);
+            this.textSection.push(`    FMOV x${resultReg}, d4`);
+            
+            // fallthrough to endLabel
+            this.textSection.push(`${endLabel}:`);
+            
+            this.freeReg(startR);
+            this.freeReg(stepR);
+            this.freeReg(opR);
+            this.freeReg(tmpReg);
+            this.freeReg(sentinelReg);
             
             this.freeReg(currentReg);
             this.freeReg(propReg);
             currentReg = resultReg;
         }
         return currentReg;
+    }
+
+	visitRangeObject(node) {
+        const startReg = this.visit(node.start);
+        const stepReg = this.visit(node.step);
+        const endReg = this.visit(node.end);
+        
+        let opCode = 0; // ~+
+        if (node.operator === "~-") opCode = 1;
+        else if (node.operator === "~*") opCode = 2;
+        else if (node.operator === "~/") opCode = 3;
+        else if (node.operator === "~^") opCode = 4;
+        
+        const reg = this.allocReg();
+        const tmp = this.allocReg();
+        const opTmp = this.allocReg();
+
+        this.textSection.push(`    MOV x${tmp}, #0xFFFE`);
+        this.textSection.push(`    MOVK x${tmp}, #0xFFFF, LSL #16`);
+        this.textSection.push(`    MOVK x${tmp}, #0xFFFF, LSL #32`);
+        this.textSection.push(`    MOVK x${tmp}, #0xFFFF, LSL #48`);
+        
+        this.textSection.push(`    MOV x${opTmp}, #${opCode}`);
+
+        // Allocate 40 bytes in Arena
+        this.textSection.push(`    MOV x${reg}, x27 // Save range pointer`);
+        this.textSection.push(`    STR x${tmp}, [x27, #0] // TypeTag`);
+        this.textSection.push(`    STR x${startReg}, [x27, #8] // start`);
+        this.textSection.push(`    STR x${stepReg}, [x27, #16] // step`);
+        this.textSection.push(`    STR x${endReg}, [x27, #24] // end`);
+        this.textSection.push(`    STR x${opTmp}, [x27, #32] // operator`);
+        this.textSection.push(`    ADD x27, x27, #40 // Advance arena`);
+
+        this.freeReg(startReg);
+        this.freeReg(stepReg);
+        this.freeReg(endReg);
+        this.freeReg(tmp);
+        this.freeReg(opTmp);
+
+        return reg;
     }
 
 	visitBinaryOperation(node) {
@@ -445,40 +629,76 @@ export class AArch64Generator {
 		const resultReg = this.allocReg();
 
 		switch (node.operator) {
-			case "+": this.textSection.push(`    ADD x${resultReg}, x${leftReg}, x${rightReg}`); break;
-			case "-": this.textSection.push(`    SUB x${resultReg}, x${leftReg}, x${rightReg}`); break;
-			case "*": this.textSection.push(`    MUL x${resultReg}, x${leftReg}, x${rightReg}`); break;
-			case "/": this.textSection.push(`    SDIV x${resultReg}, x${leftReg}, x${rightReg}`); break;
+			case "+":
+				this.textSection.push(`    FMOV d0, x${leftReg}`);
+				this.textSection.push(`    FMOV d1, x${rightReg}`);
+				this.textSection.push(`    FADD d2, d0, d1`);
+				this.textSection.push(`    FMOV x${resultReg}, d2`);
+				break;
+			case "-":
+				this.textSection.push(`    FMOV d0, x${leftReg}`);
+				this.textSection.push(`    FMOV d1, x${rightReg}`);
+				this.textSection.push(`    FSUB d2, d0, d1`);
+				this.textSection.push(`    FMOV x${resultReg}, d2`);
+				break;
+			case "*":
+				this.textSection.push(`    FMOV d0, x${leftReg}`);
+				this.textSection.push(`    FMOV d1, x${rightReg}`);
+				this.textSection.push(`    FMUL d2, d0, d1`);
+				this.textSection.push(`    FMOV x${resultReg}, d2`);
+				break;
+			case "/":
+				this.textSection.push(`    FMOV d0, x${leftReg}`);
+				this.textSection.push(`    FMOV d1, x${rightReg}`);
+				this.textSection.push(`    FDIV d2, d0, d1`);
+				this.textSection.push(`    FMOV x${resultReg}, d2`);
+				break;
 			case "%":
-				const tempMod = this.allocReg();
-				this.textSection.push(`    SDIV x${tempMod}, x${leftReg}, x${rightReg}`);
-				this.textSection.push(`    MSUB x${resultReg}, x${tempMod}, x${rightReg}, x${leftReg}`);
-				this.freeReg(tempMod);
+				this.textSection.push(`    FMOV d0, x${leftReg}`);
+				this.textSection.push(`    FMOV d1, x${rightReg}`);
+				this.textSection.push(`    FCVTZS x2, d0`);
+				this.textSection.push(`    FCVTZS x3, d1`);
+				this.textSection.push(`    UDIV x4, x2, x3`);
+				this.textSection.push(`    MSUB x5, x4, x3, x2`);
+				this.textSection.push(`    SCVTF d2, x5`);
+				this.textSection.push(`    FMOV x${resultReg}, d2`);
 				break;
 			case "=":
 			case "==":
-				this.textSection.push(`    CMP x${leftReg}, x${rightReg}`);
+				this.textSection.push(`    FMOV d0, x${leftReg}`);
+				this.textSection.push(`    FMOV d1, x${rightReg}`);
+				this.textSection.push(`    FCMP d0, d1`);
 				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, EQ`);
 				break;
 			case "!=":
 			case "!==":
-				this.textSection.push(`    CMP x${leftReg}, x${rightReg}`);
+				this.textSection.push(`    FMOV d0, x${leftReg}`);
+				this.textSection.push(`    FMOV d1, x${rightReg}`);
+				this.textSection.push(`    FCMP d0, d1`);
 				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, NE`);
 				break;
 			case "<":
-				this.textSection.push(`    CMP x${leftReg}, x${rightReg}`);
-				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, LT`);
+				this.textSection.push(`    FMOV d0, x${leftReg}`);
+				this.textSection.push(`    FMOV d1, x${rightReg}`);
+				this.textSection.push(`    FCMP d0, d1`);
+				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, MI`);
 				break;
 			case ">":
-				this.textSection.push(`    CMP x${leftReg}, x${rightReg}`);
+				this.textSection.push(`    FMOV d0, x${leftReg}`);
+				this.textSection.push(`    FMOV d1, x${rightReg}`);
+				this.textSection.push(`    FCMP d0, d1`);
 				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, GT`);
 				break;
 			case "<=":
-				this.textSection.push(`    CMP x${leftReg}, x${rightReg}`);
-				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, LE`);
+				this.textSection.push(`    FMOV d0, x${leftReg}`);
+				this.textSection.push(`    FMOV d1, x${rightReg}`);
+				this.textSection.push(`    FCMP d0, d1`);
+				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, LS`);
 				break;
 			case ">=":
-				this.textSection.push(`    CMP x${leftReg}, x${rightReg}`);
+				this.textSection.push(`    FMOV d0, x${leftReg}`);
+				this.textSection.push(`    FMOV d1, x${rightReg}`);
+				this.textSection.push(`    FCMP d0, d1`);
 				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, GE`);
 				break;
 			default:
