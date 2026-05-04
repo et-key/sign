@@ -101,6 +101,11 @@ export class SemanticAnalyzer {
         this.exitScope();
         break;
 
+      case "Product":
+        node.elements = node.elements.map(e => this.pass2(e));
+        node.type = "ListConstruct";
+        break;
+
       case "Coproduct":
         // Evaluate elements first
         node.elements = node.elements.map(e => this.pass2(e));

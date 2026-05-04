@@ -152,7 +152,7 @@ Product
   = Sequence
   / head:Coproduct tail:(_ "," _ Coproduct)* { 
       if (tail.length === 0) return head;
-      return { type: "Coproduct", elements: [head].concat(tail.map(t => t[3])) };
+      return { type: "Product", elements: [head].concat(tail.map(t => t[3])) };
     }
 
 Sequence

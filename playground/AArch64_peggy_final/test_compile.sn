@@ -1,3 +1,2 @@
-div : x y ? x / y
-div2 : div _ 2
-Result : div2 20
+list : 1 , 2 , 3
+Result : list ' 1
