@@ -27,6 +27,11 @@ export class AArch64Generator {
 		this.dataSection.push("Sign_Unit_Sentinel:");
 		this.dataSection.push("    .quad 0x0000000000000000   // Unit (空リスト) の実体");
 
+		this.dataSection.push(".section .bss");
+		this.dataSection.push(".align 4");
+		this.dataSection.push("Sign_Project_Arena:");
+		this.dataSection.push("    .skip 1048576      // 1MB Arena");
+
 		this.textSection.push(".text");
 		this.textSection.push(".global _start");
 		this.textSection.push(".align 2");
@@ -35,6 +40,11 @@ export class AArch64Generator {
 		this.textSection.push("    // --- Init Unit Sentinel (x28) ---");
 		this.textSection.push("    ADRP x28, Sign_Unit_Sentinel");
 		this.textSection.push("    ADD  x28, x28, :lo12:Sign_Unit_Sentinel");
+		this.textSection.push("");
+
+		this.textSection.push("    // --- Init Project Arena (x27) ---");
+		this.textSection.push("    ADRP x27, Sign_Project_Arena");
+		this.textSection.push("    ADD  x27, x27, :lo12:Sign_Project_Arena");
 		this.textSection.push("");
 
 		this.textSection.push("    // --- Setup Place Space (Stack Memory) ---");
@@ -108,9 +118,10 @@ export class AArch64Generator {
 				return this.visitFunctionCall(node);
 
 			case "ListConstruct":
-                // 暫定的に最後の要素を返すか、未実装とする
-				this.textSection.push(`    // TODO: ListConstruct`);
-				return this.unitReg;
+				return this.visitListConstruct(node);
+                
+            case "Get":
+                return this.visitGet(node);
 
 			case "BinaryOperation":
 				return this.visitBinaryOperation(node);
@@ -232,6 +243,20 @@ export class AArch64Generator {
             return reg;
         } else if (node.dataType === "unit") {
             return this.unitReg;
+        } else if (node.dataType === "string") {
+            const cleanStr = node.value.replace(/^`|`$/g, "");
+            const label = `Sign_Str_${Math.random().toString(36).substr(2, 5)}`;
+            this.dataSection.push(`.align 3`);
+            this.dataSection.push(`${label}:`);
+            this.dataSection.push(`    .quad ${cleanStr.length} // Length`);
+            for (let i = 0; i < cleanStr.length; i++) {
+                this.dataSection.push(`    .quad ${cleanStr.charCodeAt(i)} // '${cleanStr[i]}'`);
+            }
+            
+            const reg = this.allocReg();
+            this.textSection.push(`    ADRP x${reg}, ${label}`);
+            this.textSection.push(`    ADD  x${reg}, x${reg}, :lo12:${label}`);
+            return reg;
         } else if (node.dataType === "identifier") {
             const name = node.value;
             // First check if it's a function we know
@@ -266,7 +291,6 @@ export class AArch64Generator {
 	}
 
 	visitFunctionCall(node) {
-        // callee and arguments
         // Evaluate arguments
         const argRegs = [];
         for (let arg of node.arguments) {
@@ -294,6 +318,90 @@ export class AArch64Generator {
         this.textSection.push(`    MOV x${resultReg}, x0`);
         return resultReg;
 	}
+
+    visitListConstruct(node) {
+        // Check for Static Promotion (Constant Folding)
+        const isStaticList = node.elements.every(e => 
+            e.type === "Atom" && (e.dataType === "number" || e.dataType === "unit")
+        );
+
+        if (isStaticList) {
+            const label = `Sign_ListStatic_${Math.random().toString(36).substr(2, 5)}`;
+            this.dataSection.push(`.section .rodata`);
+            this.dataSection.push(`.align 3`);
+            this.dataSection.push(`${label}:`);
+            this.dataSection.push(`    .quad ${node.elements.length} // Static List Length`);
+            
+            for (let e of node.elements) {
+                if (e.dataType === "number") {
+                    this.dataSection.push(`    .quad ${parseInt(e.value, 10)} // Element ${e.value}`);
+                } else if (e.dataType === "unit") {
+                    this.dataSection.push(`    .quad Sign_Unit_Sentinel // Element Unit`);
+                }
+            }
+            
+            const reg = this.allocReg();
+            this.textSection.push(`    ADRP x${reg}, ${label}`);
+            this.textSection.push(`    ADD  x${reg}, x${reg}, :lo12:${label}`);
+            return reg;
+        }
+
+        // Dynamic Allocation Fallback
+        // 1. Evaluate all elements
+        const elemRegs = node.elements.map(e => this.visit(e));
+        const len = elemRegs.length;
+
+        // 2. The pointer to the new list is in x27
+        const resultReg = this.allocReg();
+        this.textSection.push(`    MOV x${resultReg}, x27 // List pointer`);
+
+        // 3. Store length at offset 0
+        const lenReg = this.allocReg();
+        this.textSection.push(`    MOV x${lenReg}, #${len}`);
+        this.textSection.push(`    STR x${lenReg}, [x27] // Store length`);
+        this.freeReg(lenReg);
+
+        // 4. Store elements
+        elemRegs.forEach((r, i) => {
+            const offset = (i + 1) * 8;
+            this.textSection.push(`    STR x${r}, [x27, #${offset}] // Store element ${i}`);
+            this.freeReg(r);
+        });
+
+        // 5. Advance Arena pointer x27
+        const totalSize = (len + 1) * 8;
+        const alignedSize = Math.ceil(totalSize / 16) * 16;
+        this.textSection.push(`    ADD x27, x27, #${alignedSize} // Advance Arena`);
+
+        return resultReg;
+    }
+
+    visitGet(node) {
+        let currentReg = this.visit(node.target);
+        
+        for (let prop of node.properties) {
+            if (typeof prop === "string") {
+                // Should not happen, but just in case
+                this.textSection.push(`    // TODO: Get string literal property ${prop}`);
+                continue;
+            }
+            
+            const propReg = this.visit(prop);
+            const resultReg = this.allocReg();
+            
+            // currentReg holds list base pointer.
+            // Elements start at offset 8. So element N is at base + 8 + N*8.
+            // Which is base + (N + 1) * 8.
+            this.textSection.push(`    ADD x${propReg}, x${propReg}, #1 // Skip length header`);
+            this.textSection.push(`    LSL x${propReg}, x${propReg}, #3 // Convert to byte offset (*8)`);
+            this.textSection.push(`    LDR x${resultReg}, [x${currentReg}, x${propReg}] // Get element`);
+            
+            this.freeReg(currentReg);
+            this.freeReg(propReg);
+            currentReg = resultReg;
+        }
+        return currentReg;
+    }
 
 	visitBinaryOperation(node) {
         // 短絡評価 (Short-circuit evaluation)
@@ -382,6 +490,26 @@ export class AArch64Generator {
 	}
 
 	visitPrefix(node) {
+        if (node.operators.includes("$")) {
+            const exp = node.expression;
+            if (exp.type === "Block" && exp.expressions.length === 1 && exp.expressions[0].type === "Lambda") {
+                return this.visitLambda(exp.expressions[0]);
+            }
+            if (exp.type === "Atom" && exp.dataType === "identifier") {
+                const reg = this.allocReg();
+                this.textSection.push(`    ADRP x${reg}, .L_func_${exp.value}`);
+                this.textSection.push(`    ADD  x${reg}, x${reg}, :lo12:.L_func_${exp.value}`);
+                return reg;
+            }
+            return this.visit(exp);
+        }
+        
+        if (node.operators.includes("@")) {
+            // @ is a syntactic marker for function application on a pointer.
+            // The pointer value is just the evaluated expression.
+            return this.visit(node.expression);
+        }
+
         let currentReg = this.visit(node.expression);
         for (let i = node.operators.length - 1; i >= 0; i--) {
             const op = node.operators[i];

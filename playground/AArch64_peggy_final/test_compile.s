@@ -14,13 +14,10 @@ _start:
     // --- Setup Place Space (Stack Memory) ---
     SUB sp, sp, #256           // 変数領域を確保
 
-    MOV x2, #10
-    MOV x0, x2
-    BL .L_func_div2
-    MOV x2, x0
-    STR x2, [sp, #0] // Bind 'Result' to Memory
-    MOV x3, x2
-    MOV x0, x3      // 最終結果を x0 にセット
+    // TODO: ListConstruct
+    STR x28, [sp, #0] // Bind 'list' to Memory
+    MOV x1, x28
+    MOV x0, x1      // 最終結果を x0 にセット
 
     // --- Check if Result is Unit ---
     CMP x0, x28
@@ -31,37 +28,3 @@ _start:
     // --- Exit Syscall ---
     MOV x8, #93
     SVC #0
-
-    // --- Functions ---
-.L_func_div:
-    // Prologue
-    STP fp, lr, [sp, #-16]!
-    MOV fp, sp
-    STR x0, [sp, #-8]! // Save arg 'x'
-    STR x1, [sp, #-8]! // Save arg 'y'
-    LDR x1, [sp, #-8] // Load 'x'
-    LDR x2, [sp, #-16] // Load 'y'
-    SDIV x3, x1, x2
-    MOV x0, x3
-    // Epilogue
-    MOV sp, fp
-    LDP fp, lr, [sp], #16
-    RET
-
-.L_func_div2:
-    // Prologue
-    STP fp, lr, [sp, #-16]!
-    MOV fp, sp
-    STR x0, [sp, #-8]! // Save arg '__p_arg_vtsst'
-    LDR x3, [sp, #-8] // Load '__p_arg_vtsst'
-    MOV x2, #2
-    MOV x0, x3
-    MOV x1, x2
-    BL .L_func_div
-    MOV x2, x0
-    MOV x0, x2
-    // Epilogue
-    MOV sp, fp
-    LDP fp, lr, [sp], #16
-    RET
-

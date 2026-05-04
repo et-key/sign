@@ -1,3 +1,2 @@
-div : x y ? x / y
-div2 : div _ 2
-Result : div2 20
+F : f x ? @f x
+Result : F $[+ 2] 3
