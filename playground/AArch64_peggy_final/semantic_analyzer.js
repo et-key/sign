@@ -110,6 +110,45 @@ export class SemanticAnalyzer {
         const elements = node.elements.map(e => this.pass2(e));
         return this.reduceCoproduct(elements);
 
+      case "PointFreeNormal":
+        const argName = "__pf_arg_" + Math.random().toString(36).substr(2, 5);
+        let body;
+        
+        let targetNode = node.target;
+        if (typeof node.target === "string") {
+            if (node.target.startsWith("0x")) targetNode = { type: "Atom", dataType: "address", value: node.target };
+            else if (node.target.startsWith("0r") || node.target.startsWith("0b")) targetNode = { type: "Atom", dataType: "register", value: node.target };
+            else targetNode = { type: "Atom", dataType: "number", value: node.target };
+        }
+
+        if (node.position === "right") {
+            // x + target
+            body = {
+                type: "BinaryOperation",
+                operator: node.infix,
+                left: { type: "Atom", dataType: "identifier", value: argName, _semanticType: "Variable", _tag: "variable_ref" },
+                right: this.pass2(targetNode)
+            };
+        } else {
+            // target + x
+            body = {
+                type: "BinaryOperation",
+                operator: node.infix,
+                left: this.pass2(targetNode),
+                right: { type: "Atom", dataType: "identifier", value: argName, _semanticType: "Variable", _tag: "variable_ref" }
+            };
+        }
+        
+        return {
+            type: "Lambda",
+            arguments: {
+                type: "Arguments",
+                style: "inline",
+                items: [{ lazy: false, identifier: argName }]
+            },
+            body: body
+        };
+
       case "Atom":
         if (node.dataType === "identifier") {
            node._semanticType = this.resolveSymbol(node.value);
@@ -147,6 +186,7 @@ export class SemanticAnalyzer {
           if (def === "Function") return true;
           return false;
       }
+      if (node.type === "Prefix" && node.operators.includes("@")) return true;
       return false; // FunctionCall, ListConstruct, Get, etc. are values.
   }
 

@@ -490,6 +490,26 @@ export class AArch64Generator {
 	}
 
 	visitPrefix(node) {
+        if (node.operators.includes("$")) {
+            const exp = node.expression;
+            if (exp.type === "Block" && exp.expressions.length === 1 && exp.expressions[0].type === "Lambda") {
+                return this.visitLambda(exp.expressions[0]);
+            }
+            if (exp.type === "Atom" && exp.dataType === "identifier") {
+                const reg = this.allocReg();
+                this.textSection.push(`    ADRP x${reg}, .L_func_${exp.value}`);
+                this.textSection.push(`    ADD  x${reg}, x${reg}, :lo12:.L_func_${exp.value}`);
+                return reg;
+            }
+            return this.visit(exp);
+        }
+        
+        if (node.operators.includes("@")) {
+            // @ is a syntactic marker for function application on a pointer.
+            // The pointer value is just the evaluated expression.
+            return this.visit(node.expression);
+        }
+
         let currentReg = this.visit(node.expression);
         for (let i = node.operators.length - 1; i >= 0; i--) {
             const op = node.operators[i];
