@@ -28,7 +28,37 @@ It is designed to be used in various Anyone, such as data validation, integrity 
 - [日本語はこちら](./documents/License/sign-language-license.ja-jp.md)
 
 ## Concept view
+```mermaid
+---
+config:
+  theme: redux-dark
+---
+graph LR
 
+subgraph Lambda
+        identity([ _ : identity or Void ])
+end
+
+subgraph Object[ Object = True ]
+    Number([ - ... 0 ... +])
+    Letter([ UTF ... etc])
+    subgraph List [ List ...etc ]
+        False([ _ : false = Null])
+    end
+end
+
+Apply([ Default or Fulfilled Apply ])
+Partial([ Partial or Not Apply ])
+
+identity --> False
+Lambda --> Apply
+Lambda --> Partial --> False
+Partial --> Lambda
+
+Apply --> Number
+Apply --> Letter
+Apply --> List
+```
 ```mermaid
 ---
 config:
