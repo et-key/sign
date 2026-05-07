@@ -23,7 +23,7 @@ function lex(source) {
 			continue;
 		}
 
-		const match = line.match(/^[\t ]*/);
+		const match = line.match(/^\t*/);
 		const currentIndent = match ? match[0].length : 0;
 		const lastIndent = indentStack[indentStack.length - 1];
 

@@ -39,16 +39,56 @@ export class SemanticAnalyzer {
 
   inferType(node) {
     if (!node) return "Variable";
-    if (node.type === "Lambda") return "Function";
-    if (node.type === "Coproduct") {
-        // If it's a partial application (contains _) it returns a Function
-        if (node.elements.some(e => e.type === "Atom" && e.dataType === "unit" && e.value === "_")) {
-            return "Function";
+    
+    if (node.type === "Lambda") {
+        let arity = node.arguments && node.arguments.items ? node.arguments.items.length : 1;
+        // Check if body is another Lambda for curried arity
+        let bodyNode = node.body;
+        while (bodyNode && bodyNode.type === "Lambda") {
+            arity += bodyNode.arguments && bodyNode.arguments.items ? bodyNode.arguments.items.length : 1;
+            bodyNode = bodyNode.body;
         }
+        return `Function:${arity}`;
     }
+    
+    if (node.type === "Coproduct") {
+        let firstType = this.inferType(node.elements[0]);
+        if (typeof firstType === "string" && firstType.startsWith("Function")) {
+            let parts = firstType.split(":");
+            let arity = parts.length > 1 ? parseInt(parts[1], 10) : 1;
+            let argsGiven = node.elements.length - 1; // Everything after the first element is an argument
+            if (arity > argsGiven) {
+                return `Function:${arity - argsGiven}`;
+            }
+        }
+        // Fallback for explicit _ unit application
+        if (node.elements.some(e => e.type === "Atom" && e.dataType === "unit" && e.value === "_")) {
+            return "Function:1";
+        }
+        return "Variable";
+    }
+
+    if (node.type === "FunctionCall") {
+        let calleeType = this.inferType(node.callee);
+        if (typeof calleeType === "string" && calleeType.startsWith("Function")) {
+            let parts = calleeType.split(":");
+            let arity = parts.length > 1 ? parseInt(parts[1], 10) : 1;
+            let argsGiven = node.arguments ? node.arguments.length : 1;
+            if (arity > argsGiven) {
+                return `Function:${arity - argsGiven}`;
+            }
+        }
+        return "Variable";
+    }
+    
+    if (node.type === "Prefix" && node.operators.includes("@")) {
+        return "Function:Unknown"; // @ dereferences a closure, making it callable
+    }
+    
     if (node.type === "Atom" && node.dataType === "identifier") {
         return this.resolveSymbol(node.value);
     }
+    
     return "Variable";
   }
 
@@ -191,7 +231,7 @@ export class SemanticAnalyzer {
         if (node.dataType === "identifier") {
            node._semanticType = this.resolveSymbol(node.value);
            // We can add tags if it refers to a function or variable
-           if (node._semanticType === "Function") {
+           if (typeof node._semanticType === "string" && node._semanticType.startsWith("Function")) {
                node._tag = "function_ref";
            } else {
                node._tag = "variable_ref";
@@ -203,7 +243,7 @@ export class SemanticAnalyzer {
         for (let key of Object.keys(node)) {
           if (key === "type") continue;
           if (Array.isArray(node[key])) {
-             node[key] = node[key].map(n => this.pass2(n));
+             node[key] = node[key].map(n => this.pass2(n)).filter(n => n !== null);
           } else if (typeof node[key] === 'object') {
              node[key] = this.pass2(node[key]);
           }
@@ -221,7 +261,7 @@ export class SemanticAnalyzer {
       if (node.type === "Lambda") return true;
       if (node.type === "Atom" && node.dataType === "identifier") {
           const def = this.resolveSymbol(node.value);
-          if (def === "Function") return true;
+          if (typeof def === "string" && def.startsWith("Function")) return true;
           return false;
       }
       if (node.type === "Prefix" && node.operators.includes("@")) return true;
@@ -229,73 +269,68 @@ export class SemanticAnalyzer {
   }
 
   reduceCoproduct(elements) {
-      let pipeline = [];
-      let args = [];
+      if (!elements || elements.length === 0) return null;
 
-      for (let e of elements) {
-          if (this.isFunctionNode(e)) {
-              if (args.length > 0 && pipeline.length > 0) {
-                  // Evaluate current pipeline and set result as first arg for next
-                  let res = this.applyPipeline(pipeline, args);
-                  args = [res];
-                  pipeline = [e];
-              } else if (args.length > 0 && pipeline.length === 0) {
-                  // Value followed by function: x f -> f(x)
-                  pipeline.push(e);
-              } else {
-                  // Function followed by function: f g -> pipeline [f, g]
-                  pipeline.push(e);
+      let result = elements[0];
+      
+      for (let i = 1; i < elements.length; i++) {
+          let e = elements[i];
+          let typeOfResult = this.inferType(result);
+          let typeOfE = this.inferType(e);
+
+          let resultIsFunc = typeof typeOfResult === "string" && typeOfResult.startsWith("Function");
+          let eIsFunc = typeof typeOfE === "string" && typeOfE.startsWith("Function");
+
+          if (resultIsFunc && eIsFunc) {
+              // Function Composition: e ∘ result
+              let arity = parseInt(typeOfResult.split(":")[1] || "1", 10);
+              let args = [];
+              let callA = result;
+              
+              for(let k = 0; k < arity; k++) {
+                  let id = `__carg_${Math.random().toString(36).substr(2, 5)}_${k}`;
+                  args.push({ lazy: false, identifier: id });
+                  callA = {
+                      type: "FunctionCall",
+                      callee: callA,
+                      arguments: [{ type: "Atom", dataType: "identifier", value: id, _semanticType: "Variable", _tag: "variable_ref" }]
+                  };
               }
+              
+              result = {
+                  type: "Lambda",
+                  arguments: { type: "Arguments", style: "inline", items: args },
+                  body: {
+                      type: "FunctionCall",
+                      callee: e,
+                      arguments: [callA]
+                  }
+              };
+          } else if (resultIsFunc && !eIsFunc) {
+              // Function Application: result(e) (strict left-associative curried application)
+              result = {
+                  type: "FunctionCall",
+                  callee: result,
+                  arguments: [e]
+              };
           } else {
-              // It's a value
-              args.push(e);
-          }
-      }
+              // Value followed by anything -> Product (Flatten 1 level deep)
+              const extractElements = (node) => {
+                  if (node.type === "ListConstruct") return node.elements;
+                  if (node.type === "Block" && node.expressions && node.expressions.length === 1 && node.expressions[0].type === "ListConstruct") {
+                      return node.expressions[0].elements;
+                  }
+                  return [node];
+              };
 
-      let result = null;
-      if (pipeline.length > 0) {
-          if (args.length > 0) {
-              result = this.applyPipeline(pipeline, args);
-          } else {
-              result = this.composePipeline(pipeline);
-          }
-      } else {
-          if (args.length === 1) {
-              result = args[0];
-          } else if (args.length > 1) {
-              result = { type: "ListConstruct", elements: args };
+              let leftElements = extractElements(result);
+              let rightElements = extractElements(e);
+
+              result = { type: "ListConstruct", elements: leftElements.concat(rightElements) };
           }
       }
 
       return this.liftClosure(result);
-  }
-
-  applyPipeline(pipeline, args) {
-      // Apply f to args -> f(args)
-      let res = { type: "FunctionCall", callee: pipeline[0], arguments: args };
-      res = this.liftClosure(res); // Early lifting for nested calls if needed
-
-      for (let i = 1; i < pipeline.length; i++) {
-          res = { type: "FunctionCall", callee: pipeline[i], arguments: [res] };
-          res = this.liftClosure(res);
-      }
-      return res;
-  }
-
-  composePipeline(pipeline) {
-      if (pipeline.length === 1) return pipeline[0];
-      const argName = "__comp_arg_" + Math.random().toString(36).substr(2, 5);
-      let body = { type: "Atom", dataType: "identifier", value: argName };
-      body = this.applyPipeline(pipeline, [body]);
-      return {
-          type: "Lambda",
-          arguments: {
-              type: "Arguments",
-              style: "inline",
-              items: [{ lazy: false, identifier: argName }]
-          },
-          body: body
-      };
   }
 
   liftClosure(node) {
