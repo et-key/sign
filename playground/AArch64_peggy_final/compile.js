@@ -57,7 +57,15 @@ function main() {
 
         const outputFile = inputFile.replace(/\.sn$/, '.s');
         fs.writeFileSync(outputFile, asm);
-        console.log(`Compilation successful. Output written to ${outputFile}`);
+        
+        const outputTypeFile = inputFile.replace(/\.sn$/, '.st');
+        const typeSignature = analyzer.generateTypeSignature();
+        if (typeSignature.trim().length > 0) {
+            fs.writeFileSync(outputTypeFile, typeSignature);
+            console.log(`Compilation successful. Outputs written to ${outputFile} and ${outputTypeFile}`);
+        } else {
+            console.log(`Compilation successful. Output written to ${outputFile}`);
+        }
 
     } catch (e) {
         console.error("Compilation Error:", e);

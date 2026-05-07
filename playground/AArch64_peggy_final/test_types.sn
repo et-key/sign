@@ -1,0 +1,7 @@
+width :
+	x : 10
+
+weight :
+	y : 20
+
+BMI : weight width

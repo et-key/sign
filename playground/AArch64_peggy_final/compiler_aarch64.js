@@ -41,6 +41,9 @@ export class AArch64Generator {
 		this.dataSection.push(".align 3");
 		this.dataSection.push("Sign_Unit_Sentinel:");
 		this.dataSection.push("    .quad 0x0000000000000000   // Unit (空リスト) の実体");
+        
+		this.dataSection.push("Sign_Default_Trigger_Sentinel:");
+		this.dataSection.push("    .quad 0xFFFFFFFFFFFFFFFF   // Default Trigger (!_) の実体");
 
 		this.dataSection.push(".section .bss");
 		this.dataSection.push(".align 4");
@@ -298,6 +301,34 @@ export class AArch64Generator {
                     this.nextOffset -= 8;
                     this.textSection.push(`    STR x${index}, [fp, #${offset}] // Save arg '${argName}'`);
                     this.scopes[0][argName] = { offset: offset, base: "fp" };
+                }
+            });
+            
+            node.arguments.items.forEach((arg, index) => {
+                const argName = arg.identifier;
+                if (index < 8 && arg.defaultValue) {
+                    const offset = this.scopes[0][argName].offset;
+                    const skipDefLabel = `.L_skip_def_${Math.random().toString(36).substr(2, 5)}`;
+                    
+                    const tmpReg = this.allocReg();
+                    const defSentReg = this.allocReg();
+                    
+                    this.textSection.push(`    // Check default for '${argName}'`);
+                    this.textSection.push(`    LDR x${tmpReg}, [fp, #${offset}]`);
+                    this.textSection.push(`    ADRP x${defSentReg}, Sign_Default_Trigger_Sentinel`);
+                    this.textSection.push(`    ADD  x${defSentReg}, x${defSentReg}, :lo12:Sign_Default_Trigger_Sentinel`);
+                    this.textSection.push(`    CMP x${tmpReg}, x${defSentReg}`);
+                    
+                    this.freeReg(tmpReg);
+                    this.freeReg(defSentReg);
+                    
+                    this.textSection.push(`    B.NE ${skipDefLabel}`);
+                    
+                    const defReg = this.visit(arg.defaultValue);
+                    this.textSection.push(`    STR x${defReg}, [fp, #${offset}] // Update '${argName}' with default`);
+                    this.freeReg(defReg);
+                    
+                    this.textSection.push(`${skipDefLabel}:`);
                 }
             });
         }
@@ -1187,5 +1218,17 @@ export class AArch64Generator {
             }
         }
         return currentReg;
+    }
+
+    visitPrefix(node) {
+        if (node.operators.length === 1 && node.operators[0] === "!" && node.expression.type === "Atom" && node.expression.dataType === "unit") {
+            const reg = this.allocReg();
+            this.textSection.push(`    ADRP x${reg}, Sign_Default_Trigger_Sentinel`);
+            this.textSection.push(`    ADD  x${reg}, x${reg}, :lo12:Sign_Default_Trigger_Sentinel`);
+            return reg;
+        }
+        
+        this.textSection.push(`    // TODO: Unhandled Prefix -> ${node.operators.join()}`);
+        return this.unitReg;
     }
 }
