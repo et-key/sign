@@ -280,8 +280,40 @@ export class SemanticAnalyzer {
 
           let resultIsFunc = typeof typeOfResult === "string" && typeOfResult.startsWith("Function");
           let eIsFunc = typeof typeOfE === "string" && typeOfE.startsWith("Function");
+          let eIsPlaceholder = e.type === "Atom" && e.dataType === "unit";
 
-          if (resultIsFunc && eIsFunc) {
+          if (resultIsFunc && eIsPlaceholder) {
+              // Partial application with placeholder (unit): f _
+              // Shifts the first argument to the end of the argument list
+              let arity = parseInt(typeOfResult.split(":")[1] || "1", 10);
+              let args = [];
+              let callArgs = [];
+              
+              let delayedArg = { lazy: false, identifier: `__ph_${Math.random().toString(36).substr(2, 5)}_0` };
+              callArgs.push({ type: "Atom", dataType: "identifier", value: delayedArg.identifier, _semanticType: "Variable", _tag: "variable_ref" });
+              
+              for(let k = 1; k < arity; k++) {
+                  let id = `__ph_${Math.random().toString(36).substr(2, 5)}_${k}`;
+                  args.push({ lazy: false, identifier: id });
+                  callArgs.push({ type: "Atom", dataType: "identifier", value: id, _semanticType: "Variable", _tag: "variable_ref" });
+              }
+              args.push(delayedArg); // Put the delayed argument at the END
+
+              let callNode = result;
+              for(let k = 0; k < arity; k++) {
+                  callNode = {
+                      type: "FunctionCall",
+                      callee: callNode,
+                      arguments: [callArgs[k]]
+                  };
+              }
+              
+              result = {
+                  type: "Lambda",
+                  arguments: { type: "Arguments", style: "inline", items: args },
+                  body: callNode
+              };
+          } else if (resultIsFunc && eIsFunc) {
               // Function Composition: e ∘ result
               let arity = parseInt(typeOfResult.split(":")[1] || "1", 10);
               let args = [];
