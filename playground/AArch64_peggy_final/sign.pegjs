@@ -53,7 +53,7 @@ Define
   / Lambda
 
 Lambda
-  = args:Arguments _ "?" _ body:((EOL Indent)? lam:Lambda { return lam; } / Match_Case+) {
+  = args:Arguments _ "?" _ body:(Match_Case / ((EOL Indent)? lam:Lambda { return lam; })) {
       return { type: "Lambda", arguments: args, body: body };
     }
   / Output
@@ -76,7 +76,7 @@ Construct
   = Dictionary
   / Product
 
-Dictionary = EOL Indent entries:((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct) EOL)+ Dedent {
+Dictionary = EOL Indent entries:((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct) EOL)+ EOL* Dedent {
     return {
       type: "Dictionary",
       entries: entries.map(e => ({
@@ -89,18 +89,23 @@ Dictionary = EOL Indent entries:((identifier "~"? / string) _ ":" _ (Lambda / At
 Arguments = Inline / Defaultive
 
 Defaultive
-  = EOL? "[" EOL Indent entries:("~"? identifier (_ ":" _ Lambda)? EOL)+ Dedent "]" {
+  = EOL Indent "[" EOL Indent entries:("~"? identifier (_ ":" _ Lambda)? EOL)+ EOL* Dedent "]" EOL {
       return { type: "Arguments", style: "bracket", items: entries.map(e => ({
         lazy: e[0] === "~", identifier: e[1], defaultValue: e[2] ? e[2][3] : null
       }))};
     }
-  / EOL? "{" EOL Indent entries:("~"? identifier (_ ":" _ Lambda)? EOL)+ Dedent "}" {
+  / EOL Indent "{" EOL Indent entries:("~"? identifier (_ ":" _ Lambda)? EOL)+ EOL* Dedent "}" EOL {
       return { type: "Arguments", style: "brace", items: entries.map(e => ({
         lazy: e[0] === "~", identifier: e[1], defaultValue: e[2] ? e[2][3] : null
       }))};
     }
-  / EOL? "(" EOL Indent entries:("~"? identifier (_ ":" _ Lambda)? EOL)+ Dedent ")" {
+  / EOL Indent "(" EOL Indent entries:("~"? identifier (_ ":" _ Lambda)? EOL)+ EOL* Dedent ")" EOL {
       return { type: "Arguments", style: "paren", items: entries.map(e => ({
+        lazy: e[0] === "~", identifier: e[1], defaultValue: e[2] ? e[2][3] : null
+      }))};
+    }
+  / EOL Indent entries:("~"? identifier (_ ":" _ Lambda)? EOL)+ EOL* Dedent EOL {
+      return { type: "Arguments", style: "indent", items: entries.map(e => ({
         lazy: e[0] === "~", identifier: e[1], defaultValue: e[2] ? e[2][3] : null
       }))};
     }
@@ -114,13 +119,18 @@ Inline
       };
     }
 
-Match_Case = EOL Indent cases:(((Consideration / Comparison) _ ":" _)? (Lambda / Match_Case) EOL)+ Dedent {
+Match_Case_Item
+  = cond:((Consideration / Comparison) _ ":" _)? body:(Lambda / Match_Case) EOL {
+      return { condition: cond ? cond[0] : null, body: body };
+    }
+
+Match_Case = EOL Indent head:Match_Case_Item tail:Match_Case_Item* EOL* Dedent {
+    if (tail.length === 0 && !head.condition) {
+        return head.body;
+    }
     return {
       type: "MatchCase",
-      cases: cases.map(c => ({
-        condition: c[0] ? c[0][0] : null,
-        body: c[1]
-      }))
+      cases: [head].concat(tail)
     };
 }
  
