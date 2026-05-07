@@ -2,6 +2,8 @@ export class SemanticAnalyzer {
   constructor() {
     this.scopes = [{}];
     this.globalEnv = new Map();
+    this.typeRegistry = [];
+    this.dictDefinitions = new Map();
   }
 
   get currentScope() {
@@ -28,6 +30,8 @@ export class SemanticAnalyzer {
     if (this.scopes.length === 0) {
         this.scopes = [{}];
     }
+    this.typeRegistry = [];
+    this.dictDefinitions = new Map();
     
     // Pass 1: Global definitions
     this.pass1(ast);
@@ -102,6 +106,7 @@ export class SemanticAnalyzer {
     if (node.type === "Define") {
       const type = this.inferType(node.definition);
       this.defineSymbol(node.identifier, type);
+      this.extractStructuralTypes(node.identifier, node.definition);
     }
 
     // Continue traversing for other definitions
@@ -401,5 +406,71 @@ export class SemanticAnalyzer {
           };
       }
       return node;
+  }
+
+  extractStructuralTypes(prefix, node) {
+    if (!node || typeof node !== 'object') return;
+    
+    if (node.type === "Dictionary") {
+      let fields = new Map();
+      node.entries.forEach(entry => {
+        const key = entry.key;
+        let valueType = "Variable";
+        if (entry.value.type === "Dictionary") {
+           // Basic nested support, just mark as Dictionary for now
+           valueType = "Dictionary";
+        } else if (entry.value.type === "Atom" && entry.value.dataType === "number") {
+           valueType = "Number";
+        } else if (entry.value.type === "Atom" && entry.value.dataType === "string") {
+           valueType = "String";
+        } else if (entry.value.type === "Atom" && entry.value.dataType === "unit") {
+           valueType = "Unit";
+        } else {
+           valueType = this.inferType(entry.value);
+        }
+        fields.set(key, valueType);
+      });
+      this.dictDefinitions.set(prefix, fields);
+      
+    } else if (node.type === "Product" || node.type === "Coproduct" || node.type === "Logical_Or" || node.type === "Logical_And" || node.type === "Logical_Xor") {
+      let fields = new Map();
+      
+      const elements = node.elements || [node.left, node.right].filter(Boolean);
+      elements.forEach(elem => {
+          if (elem.type === "Atom" && elem.dataType === "identifier") {
+              const existing = this.dictDefinitions.get(elem.value);
+              if (existing) {
+                  existing.forEach((valType, k) => fields.set(k, valType));
+              }
+          }
+      });
+      if (fields.size > 0) {
+          this.dictDefinitions.set(prefix, fields);
+      } else {
+          this.typeRegistry.push(`${prefix} -> Variable`);
+      }
+    } else {
+       let valueType = "Variable";
+       if (node.type === "Atom" && node.dataType === "number") {
+           valueType = "Number";
+       } else if (node.type === "Atom" && node.dataType === "string") {
+           valueType = "String";
+       } else if (node.type === "Atom" && node.dataType === "unit") {
+           valueType = "Unit";
+       } else {
+           valueType = this.inferType(node);
+       }
+       this.typeRegistry.push(`${prefix} -> ${valueType}`);
+    }
+  }
+
+  generateTypeSignature() {
+    let lines = [...this.typeRegistry];
+    this.dictDefinitions.forEach((fields, prefix) => {
+        fields.forEach((valType, key) => {
+            lines.push(`${prefix} -> ${key} -> ${valType}`);
+        });
+    });
+    return lines.join("\n") + "\n";
   }
 }

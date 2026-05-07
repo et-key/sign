@@ -3,18 +3,18 @@
 ## Test 1
 ### Source
 ```
-f : x ?
-	x = 1 : 10
-	x = 2 : 20
-	30
+d:
+	name: 10
+	age: 42
+d'age
 ```
 ### Lexed
 ```
-f : x ?
-<STX>x = 1 : 10
-x = 2 : 20
-30
+d:
+<STX>name: 10
+age: 42
 <ETX>
+d'age
 ```
 ### AST
 ```json
@@ -23,112 +23,45 @@ x = 2 : 20
   "body": [
     {
       "type": "Define",
-      "identifier": "f",
+      "identifier": "d",
       "definition": {
-        "type": "Lambda",
-        "arguments": {
-          "type": "Arguments",
-          "style": "inline",
-          "items": [
-            {
-              "lazy": false,
-              "identifier": "x"
+        "type": "Dictionary",
+        "entries": [
+          {
+            "key": "name",
+            "value": {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "10"
             }
-          ]
-        },
-        "body": {
-          "type": "MatchCase",
-          "cases": [
-            {
-              "condition": {
-                "type": "BinaryOperation",
-                "operator": "=",
-                "left": {
-                  "type": "Atom",
-                  "dataType": "identifier",
-                  "value": "x",
-                  "_semanticType": "Variable",
-                  "_tag": "variable_ref"
-                },
-                "right": {
-                  "type": "Atom",
-                  "dataType": "number",
-                  "value": "1"
-                }
-              },
-              "body": {
-                "type": "Atom",
-                "dataType": "number",
-                "value": "10"
-              }
-            },
-            {
-              "condition": {
-                "type": "BinaryOperation",
-                "operator": "=",
-                "left": {
-                  "type": "Atom",
-                  "dataType": "identifier",
-                  "value": "x",
-                  "_semanticType": "Variable",
-                  "_tag": "variable_ref"
-                },
-                "right": {
-                  "type": "Atom",
-                  "dataType": "number",
-                  "value": "2"
-                }
-              },
-              "body": {
-                "type": "Atom",
-                "dataType": "number",
-                "value": "20"
-              }
-            },
-            {
-              "condition": null,
-              "body": {
-                "type": "Atom",
-                "dataType": "number",
-                "value": "30"
-              }
+          },
+          {
+            "key": "age",
+            "value": {
+              "type": "Atom",
+              "dataType": "number",
+              "value": "42"
             }
-          ]
-        }
+          }
+        ]
       }
-    }
-  ]
-}
-```
-
-## Test 2
-### Source
-```
-f 2
-```
-### Lexed
-```
-f 2
-```
-### AST
-```json
-{
-  "type": "Program",
-  "body": [
+    },
     {
-      "type": "FunctionCall",
-      "callee": {
+      "type": "Get",
+      "target": {
         "type": "Atom",
         "dataType": "identifier",
-        "value": "f",
-        "_semanticType": "Function:1",
-        "_tag": "function_ref"
+        "value": "d",
+        "_semanticType": "Variable",
+        "_tag": "variable_ref"
       },
-      "arguments": [
+      "properties": [
         {
           "type": "Atom",
-          "dataType": "number",
-          "value": "2"
+          "dataType": "identifier",
+          "value": "age",
+          "_semanticType": "Variable",
+          "_tag": "variable_ref"
         }
       ]
     }
