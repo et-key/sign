@@ -4,8 +4,8 @@ export class AArch64Generator {
 		this.dataSection = [];
 		this.freeRegs = [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15];
 		this.unitReg = 28;
-		this.env = {};
-		this.nextOffset = 0;
+		this.scopes = [{}];
+		this.nextOffset = -8;
         this.funcCount = 0;
         this.functions = []; // To store generated function assembly
 	}
@@ -63,6 +63,7 @@ export class AArch64Generator {
 		this.textSection.push("");
 
 		this.textSection.push("    // --- Setup Place Space (Stack Memory) ---");
+		this.textSection.push("    MOV fp, sp");
 		this.textSection.push("    SUB sp, sp, #256           // 変数領域を確保");
 		this.textSection.push("");
 
@@ -139,6 +140,9 @@ export class AArch64Generator {
 
 			case "ListConstruct":
 				return this.visitListConstruct(node);
+
+			case "Dictionary":
+				return this.visitDictionary(node);
                 
             case "Get":
                 return this.visitGet(node);
@@ -163,34 +167,101 @@ export class AArch64Generator {
 
 	// --- Handlers ---
 
+    resolveVar(name) {
+        for (let i = this.scopes.length - 1; i >= 0; i--) {
+            if (this.scopes[i][name]) return this.scopes[i][name];
+        }
+        return null;
+    }
+
+    getFreeVariables(node, localVars = new Set()) {
+        let freeVars = new Set();
+        if (!node) return freeVars;
+        
+        if (Array.isArray(node)) {
+            for (let n of node) {
+                for (let v of this.getFreeVariables(n, localVars)) freeVars.add(v);
+            }
+            return freeVars;
+        }
+
+        switch (node.type) {
+            case "Lambda":
+                let newLocals = new Set(localVars);
+                if (node.arguments && node.arguments.items) {
+                    node.arguments.items.forEach(a => newLocals.add(a.identifier));
+                }
+                return this.getFreeVariables(node.body, newLocals);
+            case "Atom":
+                if (node.dataType === "identifier") {
+                    if (!localVars.has(node.value)) freeVars.add(node.value);
+                }
+                return freeVars;
+            case "Define":
+                localVars.add(node.identifier);
+                return this.getFreeVariables(node.definition, localVars);
+            default:
+                for (let key of Object.keys(node)) {
+                    if (key === "type") continue;
+                    if (typeof node[key] === "object") {
+                        for (let v of this.getFreeVariables(node[key], localVars)) freeVars.add(v);
+                    }
+                }
+                return freeVars;
+        }
+    }
+
+    getLocalVariables(node, vars = []) {
+        if (!node) return vars;
+        if (Array.isArray(node)) {
+            for (let n of node) this.getLocalVariables(n, vars);
+            return vars;
+        }
+        if (node.type === "Define") {
+            if (!vars.includes(node.identifier)) vars.push(node.identifier);
+            this.getLocalVariables(node.definition, vars);
+        } else if (node.type !== "Lambda") {
+            for (let key of Object.keys(node)) {
+                if (key === "type") continue;
+                if (typeof node[key] === "object") this.getLocalVariables(node[key], vars);
+            }
+        }
+        return vars;
+    }
+
     visitDefine(node) {
         if (node.definition.type === "Lambda") {
-            // Compile Lambda and assign to identifier
-            const funcLabel = this.compileLambda(node.definition, node.identifier);
-            // We can optionally store the function address in environment if needed
-            return this.unitReg;
+            // Function definition
+            const closureReg = this.visitLambda(node.definition, node.identifier);
+            const name = node.identifier;
+            if (!this.scopes[0][name]) {
+                this.scopes[0][name] = { offset: this.nextOffset, base: "fp" };
+                this.nextOffset -= 8;
+            }
+            const v = this.scopes[0][name];
+            this.textSection.push(`    STR x${closureReg}, [${v.base}, #${v.offset}] // Bind function '${name}'`);
+            return closureReg;
         }
 
         // Constant / Variable definition
         const rightReg = this.visit(node.definition);
         const name = node.identifier;
-        if (this.env[name] === undefined) {
-            this.env[name] = this.nextOffset;
-            this.nextOffset += 8;
+        if (!this.scopes[0][name]) {
+            this.scopes[0][name] = { offset: this.nextOffset, base: "fp" };
+            this.nextOffset -= 8;
         }
-        const offset = this.env[name];
-        this.textSection.push(`    STR x${rightReg}, [sp, #${offset}] // Bind '${name}' to Memory`);
+        const v = this.scopes[0][name];
+        this.textSection.push(`    STR x${rightReg}, [${v.base}, #${v.offset}] // Bind '${name}'`);
         const resultReg = this.allocReg();
         this.textSection.push(`    MOV x${resultReg}, x${rightReg}`);
         this.freeReg(rightReg);
         return resultReg;
     }
 
-    compileLambda(node, name = null) {
+    compileLambda(node, capturedVars, name = null) {
         this.funcCount++;
         const funcLabel = name ? `.L_func_${name}` : `.L_func_anon_${this.funcCount}`;
         
-        // Push context to generate function assembly
         const oldTextSection = this.textSection;
         this.textSection = [];
 
@@ -199,15 +270,22 @@ export class AArch64Generator {
         this.textSection.push(`    STP fp, lr, [sp, #-16]!`);
         this.textSection.push(`    MOV fp, sp`);
         
-        // Save old env and setup new arg offsets
-        const oldEnv = { ...this.env };
-        let argCount = 0;
-        if (node.arguments && node.arguments.items) {
-            argCount = Math.min(8, node.arguments.items.length);
-        }
+        const oldScopes = this.scopes;
+        const oldNextOffset = this.nextOffset;
         
-        // Allocate 16-byte aligned stack space for arguments
-        let stackSpace = Math.ceil(argCount * 8 / 16) * 16;
+        this.scopes = [{}]; 
+        this.nextOffset = -8;
+
+        capturedVars.forEach((v, idx) => {
+            this.scopes[0][v.name] = { offset: idx * 8, base: "x8" };
+        });
+
+        const localVars = this.getLocalVariables(node.body);
+        let argCount = 0;
+        if (node.arguments && node.arguments.items) argCount = Math.min(8, node.arguments.items.length);
+        
+        const totalLocals = argCount + localVars.length;
+        let stackSpace = Math.ceil(totalLocals * 8 / 16) * 16;
         if (stackSpace > 0) {
             this.textSection.push(`    SUB sp, sp, #${stackSpace}`);
         }
@@ -215,18 +293,20 @@ export class AArch64Generator {
         if (node.arguments && node.arguments.items) {
             node.arguments.items.forEach((arg, index) => {
                 const argName = arg.identifier;
-                // Args are in x0, x1, ...
                 if (index < 8) {
-                    const offset = -8 * (index + 1);
+                    const offset = this.nextOffset;
+                    this.nextOffset -= 8;
                     this.textSection.push(`    STR x${index}, [fp, #${offset}] // Save arg '${argName}'`);
-                    this.env[argName] = offset; // relative to fp
+                    this.scopes[0][argName] = { offset: offset, base: "fp" };
                 }
             });
         }
 
         const bodyReg = this.visit(node.body);
-        if (bodyReg !== 0) {
+        if (bodyReg !== 0 && bodyReg !== this.unitReg) {
             this.textSection.push(`    MOV x0, x${bodyReg}`);
+        } else if (bodyReg === this.unitReg) {
+            this.textSection.push(`    MOV x0, x28 // Return Unit`);
         }
         this.freeReg(bodyReg);
 
@@ -236,21 +316,63 @@ export class AArch64Generator {
         this.textSection.push(`    RET`);
         this.textSection.push(``);
 
-        // Restore context
-        this.env = oldEnv;
+        this.scopes = oldScopes;
+        this.nextOffset = oldNextOffset;
         this.functions.push(...this.textSection);
         this.textSection = oldTextSection;
 
         return funcLabel;
     }
 
-	visitLambda(node) {
-        // Anonymous lambda, return its address
-        const funcLabel = this.compileLambda(node);
-        const reg = this.allocReg();
-        this.textSection.push(`    ADRP x${reg}, ${funcLabel}`);
-        this.textSection.push(`    ADD  x${reg}, x${reg}, :lo12:${funcLabel}`);
-        return reg;
+	visitLambda(node, name = null) {
+        const freeVars = Array.from(this.getFreeVariables(node));
+        const capturedVars = [];
+        for (let v of freeVars) {
+            const loc = this.resolveVar(v);
+            if (loc) {
+                capturedVars.push({ name: v, loc: loc });
+            }
+        }
+
+        const envReg = this.allocReg();
+        this.textSection.push(`    MOV x${envReg}, x27 // Env Ptr`);
+        const envSize = Math.ceil(capturedVars.length * 8 / 16) * 16;
+        
+        capturedVars.forEach((v, idx) => {
+            const vReg = this.allocReg();
+            this.textSection.push(`    LDR x${vReg}, [${v.loc.base}, #${v.loc.offset}] // capture '${v.name}'`);
+            this.textSection.push(`    STR x${vReg}, [x${envReg}, #${idx * 8}]`);
+            this.freeReg(vReg);
+        });
+        if (envSize > 0) {
+            this.textSection.push(`    ADD x27, x27, #${envSize}`);
+        }
+
+        const funcLabel = this.compileLambda(node, capturedVars, name);
+        
+        // Allocate Closure Object
+        const closureReg = this.allocReg();
+        this.textSection.push(`    MOV x${closureReg}, x27 // Closure Ptr`);
+        
+        const tmp = this.allocReg();
+        this.textSection.push(`    MOV x${tmp}, #0xFFFC`);
+        this.textSection.push(`    MOVK x${tmp}, #0xFFFF, LSL #16`);
+        this.textSection.push(`    MOVK x${tmp}, #0xFFFF, LSL #32`);
+        this.textSection.push(`    MOVK x${tmp}, #0xFFFF, LSL #48`);
+        this.textSection.push(`    STR x${tmp}, [x27, #0] // TypeTag_Closure`);
+        
+        this.textSection.push(`    ADRP x${tmp}, ${funcLabel}`);
+        this.textSection.push(`    ADD  x${tmp}, x${tmp}, :lo12:${funcLabel}`);
+        this.textSection.push(`    STR x${tmp}, [x27, #8] // Func Ptr`);
+        
+        this.textSection.push(`    STR x${envReg}, [x27, #16] // Env Ptr`);
+        
+        this.textSection.push(`    ADD x27, x27, #32 // Advance Arena`);
+        
+        this.freeReg(tmp);
+        this.freeReg(envReg);
+        
+        return closureReg;
 	}
 
 	visitAtom(node) {
@@ -269,6 +391,7 @@ export class AArch64Generator {
         } else if (node.dataType === "string") {
             const cleanStr = node.value.replace(/^`|`$/g, "");
             const label = `Sign_Str_${Math.random().toString(36).substr(2, 5)}`;
+            this.dataSection.push(`.section .rodata`);
             this.dataSection.push(`.align 3`);
             this.dataSection.push(`${label}:`);
             this.dataSection.push(`    .quad ${cleanStr.length} // Length`);
@@ -282,26 +405,12 @@ export class AArch64Generator {
             return reg;
         } else if (node.dataType === "identifier") {
             const name = node.value;
-            // First check if it's a function we know
-            // In a real compiler we'd resolve scope properly.
-            // Check memory environment
-            if (this.env[name] !== undefined) {
-                const offset = this.env[name];
+            const loc = this.resolveVar(name);
+            if (loc) {
                 const resultReg = this.allocReg();
-                if (offset < 0) {
-                    // Local argument relative to fp
-                    this.textSection.push(`    LDR x${resultReg}, [fp, #${offset}] // Load arg '${name}'`);
-                } else {
-                    // Top-level variable (Simplification: Assuming top-level sp didn't change much, 
-                    // though for correct global access we should use a global static base pointer)
-                    // Let's just output a warning for now and use sp.
-                    this.textSection.push(`    // Note: Global access assumes top-level SP here`);
-                    this.textSection.push(`    LDR x${resultReg}, [sp, #${offset}] // Load global '${name}'`);
-                }
+                this.textSection.push(`    LDR x${resultReg}, [${loc.base}, #${loc.offset}] // Load '${name}'`);
                 return resultReg;
             } else {
-                // It might be a global function.
-                // Load address of function label.
                 const resultReg = this.allocReg();
                 this.textSection.push(`    ADRP x${resultReg}, .L_func_${name}`);
                 this.textSection.push(`    ADD  x${resultReg}, x${resultReg}, :lo12:.L_func_${name} // Function Ref`);
@@ -314,13 +423,11 @@ export class AArch64Generator {
 	}
 
 	visitFunctionCall(node) {
-        // Evaluate arguments
         const argRegs = [];
         for (let arg of node.arguments) {
             argRegs.push(this.visit(arg));
         }
 
-        // Move args to x0..x7
         argRegs.forEach((r, i) => {
             if (i < 8) {
                 this.textSection.push(`    MOV x${i}, x${r}`);
@@ -328,12 +435,51 @@ export class AArch64Generator {
             this.freeReg(r);
         });
 
-        // Call the function
         if (node.callee.type === "Atom" && node.callee.dataType === "identifier") {
-            this.textSection.push(`    BL .L_func_${node.callee.value}`);
+            const loc = this.resolveVar(node.callee.value);
+            if (loc) {
+                // Variable that contains closure
+                const calleeReg = this.allocReg();
+                this.textSection.push(`    LDR x${calleeReg}, [${loc.base}, #${loc.offset}]`);
+                this.textSection.push(`    LDR x8, [x${calleeReg}, #16] // Env Ptr`);
+                this.textSection.push(`    LDR x${calleeReg}, [x${calleeReg}, #8] // Func Ptr`);
+                this.textSection.push(`    BLR x${calleeReg}`);
+                this.freeReg(calleeReg);
+            } else {
+                // Global direct call
+                this.textSection.push(`    BL .L_func_${node.callee.value}`);
+            }
         } else {
+            // Evaluated expression that returns a closure
             const calleeReg = this.visit(node.callee);
+            
+            const isClosureLabel = `.L_is_closure_${Math.random().toString(36).substr(2, 5)}`;
+            const callLabel = `.L_call_${Math.random().toString(36).substr(2, 5)}`;
+            
+            const typeReg = this.allocReg();
+            this.textSection.push(`    LDR x${typeReg}, [x${calleeReg}, #0]`);
+            
+            const closureSentinel = this.allocReg();
+            this.textSection.push(`    MOV x${closureSentinel}, #0xFFFC`);
+            this.textSection.push(`    MOVK x${closureSentinel}, #0xFFFF, LSL #16`);
+            this.textSection.push(`    MOVK x${closureSentinel}, #0xFFFF, LSL #32`);
+            this.textSection.push(`    MOVK x${closureSentinel}, #0xFFFF, LSL #48`);
+            
+            this.textSection.push(`    CMP x${typeReg}, x${closureSentinel}`);
+            this.textSection.push(`    B.EQ ${isClosureLabel}`);
+            
             this.textSection.push(`    BLR x${calleeReg}`);
+            this.textSection.push(`    B ${callLabel}`);
+            
+            this.textSection.push(`${isClosureLabel}:`);
+            this.textSection.push(`    LDR x8, [x${calleeReg}, #16] // Env Ptr`);
+            this.textSection.push(`    LDR x${calleeReg}, [x${calleeReg}, #8] // Func Ptr`);
+            this.textSection.push(`    BLR x${calleeReg}`);
+            
+            this.textSection.push(`${callLabel}:`);
+            
+            this.freeReg(typeReg);
+            this.freeReg(closureSentinel);
             this.freeReg(calleeReg);
         }
 
@@ -399,12 +545,200 @@ export class AArch64Generator {
         return resultReg;
     }
 
+    visitDictionary(node) {
+        const numEntries = node.entries.length;
+        const totalSize = (2 + numEntries * 2) * 8; // TypeTag + Length + (Key + Value)*N
+        const alignedSize = Math.ceil(totalSize / 16) * 16;
+        
+        // 1. Evaluate keys (strings) and values
+        const entryRegs = []; // [{ keyReg, valReg }]
+        for (let entry of node.entries) {
+            const cleanStr = entry.key.replace(/^`|`$/g, "");
+            const label = `Sign_Str_${Math.random().toString(36).substr(2, 5)}`;
+            this.dataSection.push(`.section .rodata`);
+            this.dataSection.push(`.align 3`);
+            this.dataSection.push(`${label}:`);
+            this.dataSection.push(`    .quad ${cleanStr.length} // Length`);
+            for (let i = 0; i < cleanStr.length; i++) {
+                this.dataSection.push(`    .quad ${cleanStr.charCodeAt(i)} // '${cleanStr[i]}'`);
+            }
+            
+            const keyReg = this.allocReg();
+            this.textSection.push(`    ADRP x${keyReg}, ${label}`);
+            this.textSection.push(`    ADD  x${keyReg}, x${keyReg}, :lo12:${label}`);
+            
+            const valReg = this.visit(entry.value);
+            entryRegs.push({ keyReg, valReg });
+        }
+
+        // 2. The pointer to the new dictionary is in x27
+        const resultReg = this.allocReg();
+        this.textSection.push(`    MOV x${resultReg}, x27 // Dict pointer`);
+
+        const tmp = this.allocReg();
+        // TypeTag 0xFFFD
+        this.textSection.push(`    MOV x${tmp}, #0xFFFD`);
+        this.textSection.push(`    MOVK x${tmp}, #0xFFFF, LSL #16`);
+        this.textSection.push(`    MOVK x${tmp}, #0xFFFF, LSL #32`);
+        this.textSection.push(`    MOVK x${tmp}, #0xFFFF, LSL #48`);
+        this.textSection.push(`    STR x${tmp}, [x27, #0] // TypeTag_Dict`);
+        
+        // Length
+        this.textSection.push(`    MOV x${tmp}, #${numEntries}`);
+        this.textSection.push(`    STR x${tmp}, [x27, #8] // Length`);
+        this.freeReg(tmp);
+
+        // Store Key-Value pairs
+        entryRegs.forEach((pair, i) => {
+            const keyOffset = 16 + i * 16;
+            const valOffset = 24 + i * 16;
+            this.textSection.push(`    STR x${pair.keyReg}, [x27, #${keyOffset}] // Store Key ${i}`);
+            this.textSection.push(`    STR x${pair.valReg}, [x27, #${valOffset}] // Store Value ${i}`);
+            this.freeReg(pair.keyReg);
+            this.freeReg(pair.valReg);
+        });
+
+        // Advance Arena pointer x27
+        this.textSection.push(`    ADD x27, x27, #${alignedSize} // Advance Arena`);
+
+        return resultReg;
+    }
+
     visitGet(node) {
         let currentReg = this.visit(node.target);
         
         for (let prop of node.properties) {
+            let propName = null;
             if (typeof prop === "string") {
-                this.textSection.push(`    // TODO: Get string literal property ${prop}`);
+                propName = prop;
+            } else if (prop.type === "Atom" && (prop.dataType === "identifier" || prop.dataType === "string")) {
+                propName = prop.value;
+            }
+
+            if (propName !== null) {
+                const cleanStr = propName.replace(/^`|`$/g, "");
+                const label = `Sign_Str_${Math.random().toString(36).substr(2, 5)}`;
+                this.dataSection.push(`.section .rodata`);
+                this.dataSection.push(`.align 3`);
+                this.dataSection.push(`${label}:`);
+                this.dataSection.push(`    .quad ${cleanStr.length} // Length`);
+                for (let i = 0; i < cleanStr.length; i++) {
+                    this.dataSection.push(`    .quad ${cleanStr.charCodeAt(i)} // '${cleanStr[i]}'`);
+                }
+                
+                const propKeyReg = this.allocReg();
+                this.textSection.push(`    ADRP x${propKeyReg}, ${label}`);
+                this.textSection.push(`    ADD  x${propKeyReg}, x${propKeyReg}, :lo12:${label}`);
+
+                const resultReg = this.allocReg();
+                const tmpReg = this.allocReg();
+                
+                this.textSection.push(`    LDR x${tmpReg}, [x${currentReg}, #0] // TypeTag`);
+                
+                const isDictLabel = `.L_is_dict_${Math.random().toString(36).substr(2, 5)}`;
+                const notFoundLabel = `.L_dict_not_found_${Math.random().toString(36).substr(2, 5)}`;
+                const endStrLabel = `.L_get_str_end_${Math.random().toString(36).substr(2, 5)}`;
+                const loopLabel = `.L_dict_loop_${Math.random().toString(36).substr(2, 5)}`;
+                
+                const sentinelReg = this.allocReg();
+                this.textSection.push(`    MOV x${sentinelReg}, #0xFFFD`);
+                this.textSection.push(`    MOVK x${sentinelReg}, #0xFFFF, LSL #16`);
+                this.textSection.push(`    MOVK x${sentinelReg}, #0xFFFF, LSL #32`);
+                this.textSection.push(`    MOVK x${sentinelReg}, #0xFFFF, LSL #48`);
+                
+                this.textSection.push(`    CMP x${tmpReg}, x${sentinelReg}`);
+                this.textSection.push(`    B.EQ ${isDictLabel}`);
+                
+                this.textSection.push(`    MOV x${resultReg}, x28 // Not a dict -> Unit`);
+                this.textSection.push(`    B ${endStrLabel}`);
+                
+                this.textSection.push(`${isDictLabel}:`);
+                this.freeReg(sentinelReg); // Free early
+                
+                const lenReg = this.allocReg();
+                const iReg = this.allocReg();
+                const ptrReg = this.allocReg();
+                
+                this.textSection.push(`    LDR x${lenReg}, [x${currentReg}, #8]`);
+                this.textSection.push(`    MOV x${iReg}, #0`);
+                this.textSection.push(`    ADD x${ptrReg}, x${currentReg}, #16`);
+                
+                this.textSection.push(`${loopLabel}:`);
+                this.textSection.push(`    CMP x${iReg}, x${lenReg}`);
+                this.textSection.push(`    B.GE ${notFoundLabel}`);
+                
+                const cmpStr1 = this.allocReg();
+                const cmpLen1 = this.allocReg();
+                const cmpLen2 = this.allocReg();
+                const cmpI = this.allocReg();
+                const cmpRes = this.allocReg();
+                const cmpLoopLabel = `.L_strcmp_loop_${Math.random().toString(36).substr(2, 5)}`;
+                const cmpEndLabel = `.L_strcmp_end_${Math.random().toString(36).substr(2, 5)}`;
+                
+                this.textSection.push(`    LDR x${cmpStr1}, [x${ptrReg}] // dict key ptr`);
+                
+                this.textSection.push(`    LDR x${cmpLen1}, [x${cmpStr1}]`);
+                this.textSection.push(`    LDR x${cmpLen2}, [x${propKeyReg}]`);
+                this.textSection.push(`    MOV x${cmpRes}, #0`);
+                this.textSection.push(`    CMP x${cmpLen1}, x${cmpLen2}`);
+                this.freeReg(cmpLen2); // Free early
+                
+                this.textSection.push(`    B.NE ${cmpEndLabel}`);
+                
+                this.textSection.push(`    MOV x${cmpI}, #0`);
+                this.textSection.push(`${cmpLoopLabel}:`);
+                this.textSection.push(`    CMP x${cmpI}, x${cmpLen1}`);
+                this.textSection.push(`    B.GE 1f // match!`);
+                
+                const char1 = this.allocReg();
+                const char2 = this.allocReg();
+                this.textSection.push(`    ADD x${tmpReg}, x${cmpI}, #1`);
+                this.textSection.push(`    LSL x${tmpReg}, x${tmpReg}, #3`);
+                this.textSection.push(`    LDR x${char1}, [x${cmpStr1}, x${tmpReg}]`);
+                this.textSection.push(`    LDR x${char2}, [x${propKeyReg}, x${tmpReg}]`);
+                this.textSection.push(`    CMP x${char1}, x${char2}`);
+                this.freeReg(char1);
+                this.freeReg(char2);
+                
+                this.textSection.push(`    B.NE ${cmpEndLabel} // char differs`);
+                
+                this.textSection.push(`    ADD x${cmpI}, x${cmpI}, #1`);
+                this.textSection.push(`    B ${cmpLoopLabel}`);
+                
+                this.textSection.push(`1:`);
+                this.textSection.push(`    MOV x${cmpRes}, #1 // match = true`);
+                this.textSection.push(`${cmpEndLabel}:`);
+                
+                this.freeReg(cmpStr1);
+                this.freeReg(cmpLen1);
+                this.freeReg(cmpI);
+                
+                this.textSection.push(`    CMP x${cmpRes}, #1`);
+                this.textSection.push(`    B.EQ 2f // matched!`);
+                
+                this.freeReg(cmpRes);
+                
+                this.textSection.push(`    ADD x${ptrReg}, x${ptrReg}, #16`);
+                this.textSection.push(`    ADD x${iReg}, x${iReg}, #1`);
+                this.textSection.push(`    B ${loopLabel}`);
+                
+                this.textSection.push(`${notFoundLabel}:`);
+                this.textSection.push(`    MOV x${resultReg}, x28 // Unit`);
+                this.textSection.push(`    B ${endStrLabel}`);
+                
+                this.textSection.push(`2: // Matched`);
+                this.textSection.push(`    LDR x${resultReg}, [x${ptrReg}, #8] // Value ptr`);
+                
+                this.textSection.push(`${endStrLabel}:`);
+                
+                this.freeReg(tmpReg);
+                this.freeReg(lenReg);
+                this.freeReg(iReg);
+                this.freeReg(ptrReg);
+                this.freeReg(propKeyReg);
+                
+                this.freeReg(currentReg);
+                currentReg = resultReg;
                 continue;
             }
             
@@ -701,6 +1035,69 @@ export class AArch64Generator {
 				this.textSection.push(`    FCMP d0, d1`);
 				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, GE`);
 				break;
+            case "<<":
+                this.textSection.push(`    FMOV d0, x${leftReg}`);
+                this.textSection.push(`    FMOV d1, x${rightReg}`);
+                this.textSection.push(`    FCVTZS x2, d0`); // Double to Int
+                this.textSection.push(`    FCVTZS x3, d1`); // Double to Int
+                this.textSection.push(`    LSL x4, x2, x3`);
+                this.textSection.push(`    SCVTF d2, x4`); // Int to Double
+                this.textSection.push(`    FMOV x${resultReg}, d2`);
+                break;
+            case ">>":
+                this.textSection.push(`    FMOV d0, x${leftReg}`);
+                this.textSection.push(`    FMOV d1, x${rightReg}`);
+                this.textSection.push(`    FCVTZS x2, d0`);
+                this.textSection.push(`    FCVTZS x3, d1`);
+                this.textSection.push(`    ASR x4, x2, x3`);
+                this.textSection.push(`    SCVTF d2, x4`);
+                this.textSection.push(`    FMOV x${resultReg}, d2`);
+                break;
+            case "||":
+                this.textSection.push(`    FMOV d0, x${leftReg}`);
+                this.textSection.push(`    FMOV d1, x${rightReg}`);
+                this.textSection.push(`    FCVTZS x2, d0`);
+                this.textSection.push(`    FCVTZS x3, d1`);
+                this.textSection.push(`    ORR x4, x2, x3`);
+                this.textSection.push(`    SCVTF d2, x4`);
+                this.textSection.push(`    FMOV x${resultReg}, d2`);
+                break;
+            case ";;":
+                this.textSection.push(`    FMOV d0, x${leftReg}`);
+                this.textSection.push(`    FMOV d1, x${rightReg}`);
+                this.textSection.push(`    FCVTZS x2, d0`);
+                this.textSection.push(`    FCVTZS x3, d1`);
+                this.textSection.push(`    EOR x4, x2, x3`);
+                this.textSection.push(`    SCVTF d2, x4`);
+                this.textSection.push(`    FMOV x${resultReg}, d2`);
+                break;
+            case "&&":
+                this.textSection.push(`    FMOV d0, x${leftReg}`);
+                this.textSection.push(`    FMOV d1, x${rightReg}`);
+                this.textSection.push(`    FCVTZS x2, d0`);
+                this.textSection.push(`    FCVTZS x3, d1`);
+                this.textSection.push(`    AND x4, x2, x3`);
+                this.textSection.push(`    SCVTF d2, x4`);
+                this.textSection.push(`    FMOV x${resultReg}, d2`);
+                break;
+            case "^":
+                const powLoop = `.L_pow_loop_${Math.random().toString(36).substr(2, 5)}`;
+                const powEnd = `.L_pow_end_${Math.random().toString(36).substr(2, 5)}`;
+                this.textSection.push(`    FMOV d0, x${leftReg}`);
+                this.textSection.push(`    FMOV d1, x${rightReg}`);
+                this.textSection.push(`    FCVTZS x3, d1`);
+                const tmpReg1 = this.allocReg();
+                this.doubleToMovs(tmpReg1, 1.0);
+                this.textSection.push(`    FMOV d2, x${tmpReg1} // res = 1.0`);
+                this.freeReg(tmpReg1);
+                this.textSection.push(`    CBZ x3, ${powEnd}`);
+                this.textSection.push(`${powLoop}:`);
+                this.textSection.push(`    FMUL d2, d2, d0`);
+                this.textSection.push(`    SUB x3, x3, #1`);
+                this.textSection.push(`    CBNZ x3, ${powLoop}`);
+                this.textSection.push(`${powEnd}:`);
+                this.textSection.push(`    FMOV x${resultReg}, d2`);
+                break;
 			default:
 				this.textSection.push(`    // TODO: Unhandled Binary -> ${node.operator}`);
 		}
@@ -735,11 +1132,23 @@ export class AArch64Generator {
             const op = node.operators[i];
             const resultReg = this.allocReg();
             if (op === "!") {
+                const reg1 = this.allocReg();
+                this.doubleToMovs(reg1, 1.0);
                 this.textSection.push(`    CMP x${currentReg}, x28`);
-                this.textSection.push(`    MOV x${resultReg}, #1`);
-                this.textSection.push(`    CSEL x${resultReg}, x${resultReg}, x28, EQ`);
+                this.textSection.push(`    CSEL x${resultReg}, x${reg1}, x28, EQ`);
+                this.freeReg(reg1);
+            } else if (op === "!!") {
+                this.textSection.push(`    FMOV d0, x${currentReg}`);
+                this.textSection.push(`    FCVTZS x2, d0`);
+                this.textSection.push(`    MVN x3, x2`);
+                this.textSection.push(`    SCVTF d2, x3`);
+                this.textSection.push(`    FMOV x${resultReg}, d2`);
             } else if (op === "$") {
-                this.textSection.push(`    // TODO: $ Address operator`);
+                this.textSection.push(`    SCVTF d0, x${currentReg}`);
+                this.textSection.push(`    FMOV x${resultReg}, d0`);
+            } else if (op === "~") {
+                this.textSection.push(`    // Prefix ~`);
+                this.textSection.push(`    MOV x${resultReg}, x${currentReg}`);
             } else if (op === "@") {
                 this.textSection.push(`    LDR x${resultReg}, [x${currentReg}]`);
             } else {
@@ -756,7 +1165,23 @@ export class AArch64Generator {
         for (let i = 0; i < node.operators.length; i++) {
             const op = node.operators[i];
             if (op === "~") {
-                this.textSection.push(`    // TODO: Flattening / Force Eval ~`);
+                this.textSection.push(`    // Postfix ~`);
+            } else if (op === "!") {
+                const factLoop = `.L_fact_loop_${Math.random().toString(36).substr(2, 5)}`;
+                const factEnd = `.L_fact_end_${Math.random().toString(36).substr(2, 5)}`;
+                this.textSection.push(`    FMOV d0, x${currentReg}`);
+                this.textSection.push(`    FCVTZS x2, d0 // n`);
+                this.textSection.push(`    MOV x3, #1 // result`);
+                this.textSection.push(`    CMP x2, #1`);
+                this.textSection.push(`    B.LE ${factEnd}`);
+                this.textSection.push(`${factLoop}:`);
+                this.textSection.push(`    MUL x3, x3, x2`);
+                this.textSection.push(`    SUB x2, x2, #1`);
+                this.textSection.push(`    CMP x2, #1`);
+                this.textSection.push(`    B.GT ${factLoop}`);
+                this.textSection.push(`${factEnd}:`);
+                this.textSection.push(`    SCVTF d2, x3`);
+                this.textSection.push(`    FMOV x${currentReg}, d2`);
             } else {
                 this.textSection.push(`    // TODO: Postfix ${op}`);
             }
