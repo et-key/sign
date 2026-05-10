@@ -113,6 +113,8 @@ export class SemanticAnalyzer {
         if (node.dataType === "number") return "Number";
         if (node.dataType === "string") return "String";
         if (node.dataType === "unit") return "Unit";
+        if (node.dataType === "address") return "Address";
+        if (node.dataType === "register") return "Register";
         if (node.dataType === "identifier") {
             let resolved = this.resolveSymbol(node.value);
             return resolved ? resolved : node.value;
