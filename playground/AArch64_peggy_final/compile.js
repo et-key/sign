@@ -52,7 +52,7 @@ function main() {
 
         // Step 4: Code Generation
         console.log(`Generating AArch64 Assembly...`);
-        const compiler = new AArch64Generator();
+        const compiler = new AArch64Generator(analyzer);
         const asm = compiler.generate(optimizedAst);
 
         const outputFile = inputFile.replace(/\.sn$/, '.s');
