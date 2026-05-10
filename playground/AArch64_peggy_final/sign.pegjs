@@ -30,14 +30,17 @@ EOF = !.
 
 comment = ("`" [^\r\n]*) { return null; }
 
-Program = lines:(SOL exp:(Expression / comment) (EOL / EOF) { return exp; })* {
+Program = lines:(
+    SOL exp:(Expression / comment) (EOL / EOF) { return exp; }
+  / SOL EOL { return null; }
+)* {
   return {
     type: "Program",
     body: lines.filter(l => l !== null && l !== undefined && l !== "")
   };
 }
 
-Expression = exp:Export { return exp; } / EOL { return null; }
+Expression = exp:Export { return exp; }
 
 Export = exportType:("###" / "##" / "#")? def:Define {
   if (exportType) {
