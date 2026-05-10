@@ -1,0 +1,3 @@
+a : 100
+ptr : $a
+addr : ptr + 8

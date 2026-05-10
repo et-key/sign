@@ -3,13 +3,11 @@
 ## Test 1
 ### Source
 ```
-identity : x ? x
-add : x y ? x + y
+1 2 3 4 5 6 7 8 9 ' [2 4 6]
 ```
 ### Lexed
 ```
-identity : x ? x
-add : x y ? x + y
+1 2 3 4 5 6 7 8 9 ' [2 4 6]
 ```
 ### AST
 ```json
@@ -17,67 +15,85 @@ add : x y ? x + y
   "type": "Program",
   "body": [
     {
-      "type": "Define",
-      "identifier": "identity",
-      "definition": {
-        "type": "Lambda",
-        "arguments": {
-          "type": "Arguments",
-          "style": "inline",
-          "items": [
-            {
-              "lazy": false,
-              "identifier": "x"
-            }
-          ]
-        },
-        "body": {
+      "type": "ListConstruct",
+      "elements": [
+        {
           "type": "Atom",
-          "dataType": "identifier",
-          "value": "x",
-          "_semanticType": "Variable",
-          "_tag": "variable_ref"
-        }
-      }
-    },
-    {
-      "type": "Define",
-      "identifier": "add",
-      "definition": {
-        "type": "Lambda",
-        "arguments": {
-          "type": "Arguments",
-          "style": "inline",
-          "items": [
+          "dataType": "number",
+          "value": "1"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "2"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "3"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "4"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "5"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "6"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "7"
+        },
+        {
+          "type": "Atom",
+          "dataType": "number",
+          "value": "8"
+        },
+        {
+          "type": "Get",
+          "target": {
+            "type": "Atom",
+            "dataType": "number",
+            "value": "9"
+          },
+          "properties": [
             {
-              "lazy": false,
-              "identifier": "x"
-            },
-            {
-              "lazy": false,
-              "identifier": "y"
+              "type": "Block",
+              "style": "Square",
+              "expressions": [
+                {
+                  "type": "ListConstruct",
+                  "elements": [
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "2"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "4"
+                    },
+                    {
+                      "type": "Atom",
+                      "dataType": "number",
+                      "value": "6"
+                    }
+                  ]
+                }
+              ]
             }
           ]
-        },
-        "body": {
-          "type": "BinaryOperation",
-          "operator": "+",
-          "left": {
-            "type": "Atom",
-            "dataType": "identifier",
-            "value": "x",
-            "_semanticType": "Variable",
-            "_tag": "variable_ref"
-          },
-          "right": {
-            "type": "Atom",
-            "dataType": "identifier",
-            "value": "y",
-            "_semanticType": "Variable",
-            "_tag": "variable_ref"
-          }
         }
-      }
+      ]
     }
   ]
 }

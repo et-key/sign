@@ -1,0 +1,6 @@
+p:
+	name: `Alice`
+	age: 20
+
+ptr : $p
+b : @ptr'age + 5

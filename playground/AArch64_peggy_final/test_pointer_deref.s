@@ -1,0 +1,160 @@
+.section .rodata
+.align 3
+Sign_Unit_Sentinel:
+    .quad 0x0000000000000000   // Unit (空リスト) の実体
+Sign_Default_Trigger_Sentinel:
+    .quad 0xFFFFFFFFFFFFFFFF   // Default Trigger (!_) の実体
+.section .bss
+.align 4
+Sign_Project_Arena:
+    .skip 1048576      // 1MB Arena
+.section .rodata
+.align 3
+Sign_Str_1lgi5:
+    .quad 4 // Length
+    .quad 110 // 'n'
+    .quad 97 // 'a'
+    .quad 109 // 'm'
+    .quad 101 // 'e'
+.section .rodata
+.align 3
+Sign_Str_sez4b:
+    .quad 5 // Length
+    .quad 65 // 'A'
+    .quad 108 // 'l'
+    .quad 105 // 'i'
+    .quad 99 // 'c'
+    .quad 101 // 'e'
+.section .rodata
+.align 3
+Sign_Str_d6zd7:
+    .quad 3 // Length
+    .quad 97 // 'a'
+    .quad 103 // 'g'
+    .quad 101 // 'e'
+.section .rodata
+.align 3
+Sign_Str_kl3ah:
+    .quad 3 // Length
+    .quad 97 // 'a'
+    .quad 103 // 'g'
+    .quad 101 // 'e'
+
+.text
+.global _start
+.align 2
+_start:
+    // --- Init Unit Sentinel (x28) ---
+    ADRP x28, Sign_Unit_Sentinel
+    ADD  x28, x28, :lo12:Sign_Unit_Sentinel
+
+    // --- Init Project Arena (x27) ---
+    ADRP x27, Sign_Project_Arena
+    ADD  x27, x27, :lo12:Sign_Project_Arena
+
+    // --- Setup Place Space (Stack Memory) ---
+    MOV fp, sp
+    SUB sp, sp, #256           // 変数領域を確保
+
+    ADRP x1, Sign_Str_1lgi5
+    ADD  x1, x1, :lo12:Sign_Str_1lgi5
+    ADRP x2, Sign_Str_sez4b
+    ADD  x2, x2, :lo12:Sign_Str_sez4b
+    ADRP x3, Sign_Str_d6zd7
+    ADD  x3, x3, :lo12:Sign_Str_d6zd7
+    MOV x4, #0x0000
+    MOVK x4, #0x4034, LSL #48
+    MOV x5, x27 // Dict pointer
+    MOV x6, #0xFFFD
+    MOVK x6, #0xFFFF, LSL #16
+    MOVK x6, #0xFFFF, LSL #32
+    MOVK x6, #0xFFFF, LSL #48
+    STR x6, [x27, #0] // TypeTag_Dict
+    MOV x6, #2
+    STR x6, [x27, #8] // Length
+    STR x1, [x27, #16] // Store Key 0
+    STR x2, [x27, #24] // Store Value 0
+    STR x3, [x27, #32] // Store Key 1
+    STR x4, [x27, #40] // Store Value 1
+    ADD x27, x27, #48 // Advance Arena
+    STR x5, [fp, #-8] // Bind 'p'
+    MOV x4, x5
+    SUB x4, fp, #8 // Address of 'p'
+    STR x4, [fp, #-16] // Bind 'ptr'
+    MOV x5, x4
+    LDR x5, [fp, #-16] // Load 'ptr'
+    LDR x4, [x5] // Dereference @
+    ADRP x5, Sign_Str_kl3ah
+    ADD  x5, x5, :lo12:Sign_Str_kl3ah
+    LDR x2, [x4, #0] // TypeTag
+    MOV x1, #0xFFFD
+    MOVK x1, #0xFFFF, LSL #16
+    MOVK x1, #0xFFFF, LSL #32
+    MOVK x1, #0xFFFF, LSL #48
+    CMP x2, x1
+    B.EQ .L_is_dict_1joxk
+    MOV x3, x28 // Not a dict -> Unit
+    B .L_get_str_end_xy0pa
+.L_is_dict_1joxk:
+    LDR x1, [x4, #8]
+    MOV x6, #0
+    ADD x7, x4, #16
+.L_dict_loop_78yna:
+    CMP x6, x1
+    B.GE .L_dict_not_found_wk5ro
+    LDR x9, [x7] // dict key ptr
+    LDR x10, [x9]
+    LDR x11, [x5]
+    MOV x13, #0
+    CMP x10, x11
+    B.NE .L_strcmp_end_hykpq
+    MOV x12, #0
+.L_strcmp_loop_amtia:
+    CMP x12, x10
+    B.GE 1f // match!
+    ADD x2, x12, #1
+    LSL x2, x2, #3
+    LDR x11, [x9, x2]
+    LDR x14, [x5, x2]
+    CMP x11, x14
+    B.NE .L_strcmp_end_hykpq // char differs
+    ADD x12, x12, #1
+    B .L_strcmp_loop_amtia
+1:
+    MOV x13, #1 // match = true
+.L_strcmp_end_hykpq:
+    CMP x13, #1
+    B.EQ 2f // matched!
+    ADD x7, x7, #16
+    ADD x6, x6, #1
+    B .L_dict_loop_78yna
+.L_dict_not_found_wk5ro:
+    MOV x3, x28 // Unit
+    B .L_get_str_end_xy0pa
+2: // Matched
+    LDR x3, [x7, #8] // Value ptr
+.L_get_str_end_xy0pa:
+    MOV x4, #0x0000
+    MOVK x4, #0x4014, LSL #48
+    FMOV d1, x4
+    FMOV d0, x3
+    FADD d2, d0, d1
+    FMOV x5, d2
+    STR x5, [fp, #-24] // Bind 'b'
+    MOV x4, x5
+    MOV x0, x4      // 最終結果を x0 にセット
+
+    // --- Check if Result is Unit ---
+    CMP x0, x28
+    B.EQ .L_exit_unit
+    // Convert double to int for OS exit code (0-255)
+    FMOV d0, x0
+    FCVTZS x0, d0
+    B .L_exit_normal
+.L_exit_unit:
+    MOV x0, #255               // Unitの場合は終了コード 255 (Debug)
+.L_exit_normal:
+
+    // --- Exit Syscall ---
+    MOV x8, #93
+    SVC #0

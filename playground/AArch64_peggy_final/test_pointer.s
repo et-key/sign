@@ -25,24 +25,22 @@ _start:
     MOV fp, sp
     SUB sp, sp, #256           // 変数領域を確保
 
-    MOV x1, #0
+    MOV x1, #0x0000
+    MOVK x1, #0x4059, LSL #48
+    STR x1, [fp, #-8] // Bind 'a'
+    MOV x2, x1
+    SUB x2, fp, #8 // Address of 'a'
+    STR x2, [fp, #-16] // Bind 'ptr'
+    MOV x1, x2
+    LDR x1, [fp, #-16] // Load 'ptr'
     MOV x2, #0x0000
     MOVK x2, #0x4020, LSL #48
     FMOV d1, x2
     FCVTZS x2, d1 // Cast Double to Int
     ADD x3, x1, x2
-    STR x3, [fp, #-8] // Bind 'a'
+    STR x3, [fp, #-24] // Bind 'addr'
     MOV x2, x3
-    MOV x2, #0x0000
-    MOVK x2, #0x4020, LSL #48
-    MOV x3, #0
-    SCVTF d1, x3 // Cast Int to Double
-    FMOV d0, x2
-    FADD d2, d0, d1
-    FMOV x1, d2
-    STR x1, [fp, #-16] // Bind 'b'
-    MOV x3, x1
-    MOV x0, x3      // 最終結果を x0 にセット
+    MOV x0, x2      // 最終結果を x0 にセット
 
     // --- Check if Result is Unit ---
     CMP x0, x28

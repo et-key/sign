@@ -23,6 +23,9 @@ export class SemanticAnalyzer {
   }
 
   resolveSymbol(name) {
+    if (this.dictDefinitions && this.dictDefinitions.has(name)) {
+        return name;
+    }
     return this.currentScope[name] || name;
   }
 
@@ -58,6 +61,13 @@ export class SemanticAnalyzer {
     
     if (node.type === "Lambda") {
         return this.inferCurriedType(node);
+    }
+    
+    if (node.type === "Block") {
+        if (node.expressions && node.expressions.length > 0) {
+            return this.inferType(node.expressions[node.expressions.length - 1]);
+        }
+        return "Variable";
     }
     
     if (node.type === "Coproduct" || node.type === "ListConstruct" || node.type === "Product") {
@@ -100,7 +110,15 @@ export class SemanticAnalyzer {
     }
     
     if (node.type === "Prefix" && node.operators.includes("@")) {
+        let baseType = this.inferType(node.expression);
+        if (baseType.startsWith("Address<") && baseType.endsWith(">")) {
+            return baseType.substring(8, baseType.length - 1);
+        }
         return "Function:Unknown"; // @ dereferences a closure, making it callable
+    }
+    if (node.type === "Prefix" && node.operators.includes("$")) {
+        let baseType = this.inferType(node.expression);
+        return `Address<${baseType}>`;
     }
     if (node.type === "BinaryOperation") {
         const cmpOps = ["=", "!=", "<", "<=", ">", ">="];
@@ -119,6 +137,21 @@ export class SemanticAnalyzer {
             let resolved = this.resolveSymbol(node.value);
             return resolved ? resolved : node.value;
         }
+    }
+    
+    if (node.type === "Get") {
+        let baseType = this.inferType(node.target);
+        if (this.dictDefinitions.has(baseType)) {
+            let fields = this.dictDefinitions.get(baseType);
+            let prop = node.properties && node.properties.length > 0 ? node.properties[0] : null;
+            if (prop && prop.type === "Atom" && prop.dataType === "identifier") {
+                let propName = prop.value;
+                if (fields.has(propName)) {
+                    return fields.get(propName);
+                }
+            }
+        }
+        return "Variant";
     }
     
     return "Variable";
@@ -571,9 +604,9 @@ export class SemanticAnalyzer {
            valueType = "Unit";
        } else {
            valueType = this.inferType(node);
-           console.log(`extractStructuralTypes: ${prefix} -> ${valueType}`);
-           this.typeRegistry.push(`${prefix} -> ${valueType}`);
        }
+       console.log(`extractStructuralTypes: ${prefix} -> ${valueType}`);
+       this.typeRegistry.push(`${prefix} -> ${valueType}`);
     }
   }
 

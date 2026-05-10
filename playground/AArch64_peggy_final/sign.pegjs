@@ -188,7 +188,7 @@ Exponential
   / Get
 
 Get
-  = head:Compute tail:(_ "'" _ (Product / Sequence / number / string / (identifier "~"?)))* {
+  = head:Compute tail:(_ "'" _ (Block / number / string / (identifier "~"?)))* {
       if (tail.length === 0) return head;
       return { type: "Get", target: head, properties: tail.map(t => Array.isArray(t[3]) ? t[3].join("") : t[3]) };
     }
