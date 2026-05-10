@@ -23,7 +23,10 @@ export class SemanticAnalyzer {
   }
 
   resolveSymbol(name) {
-    return this.currentScope[name] || "Variable";
+    if (this.dictDefinitions && this.dictDefinitions.has(name)) {
+        return name;
+    }
+    return this.currentScope[name] || name;
   }
 
   analyze(ast) {
@@ -33,6 +36,9 @@ export class SemanticAnalyzer {
     this.typeRegistry = [];
     this.dictDefinitions = new Map();
     
+    // Pass 0: AST Normalization (Lower purely syntactic sugars)
+    ast = this.normalizeAst(ast);
+
     // Pass 1: Global definitions
     this.pass1(ast);
     this.globalEnv = new Map(Object.entries(this.scopes[0]));
@@ -41,59 +47,374 @@ export class SemanticAnalyzer {
     return this.pass2(ast);
   }
 
+  normalizeAst(node) {
+      if (!node) return node;
+      
+      if (Array.isArray(node)) {
+          return node.map(n => this.normalizeAst(n)).filter(n => n !== null);
+      }
+
+      if (typeof node !== 'object') return node;
+
+      // First, normalize children
+      let cloned = {};
+      for (let key in node) {
+          if (key === 'location' || key === 'type') {
+              cloned[key] = node[key];
+              continue;
+          }
+          if (Array.isArray(node[key])) {
+              cloned[key] = node[key].map(n => this.normalizeAst(n)).filter(n => n !== null);
+          } else if (node[key] && typeof node[key] === 'object') {
+              cloned[key] = this.normalizeAst(node[key]);
+          } else {
+              cloned[key] = node[key];
+          }
+      }
+
+      // Now apply transformations
+      switch (cloned.type) {
+          case "Sequence": {
+              let startNode = null, stepNode = null, endNode = null;
+              let mainOp = cloned.operators[0];
+
+              if (mainOp === "~_postfix") {
+                  startNode = cloned.blocks[0];
+                  stepNode = { type: "Atom", dataType: "number", value: "1" };
+                  endNode = { type: "Atom", dataType: "number", value: "9223372036854775807" }; // Max Int as Infinity
+              } else if (mainOp === "~_prefix") {
+                  startNode = { type: "Atom", dataType: "number", value: "0" };
+                  stepNode = { type: "Atom", dataType: "number", value: "1" };
+                  endNode = cloned.blocks[0];
+              } else if (mainOp === "~") {
+                  startNode = cloned.blocks[0];
+                  stepNode = { type: "Atom", dataType: "number", value: "1" };
+                  endNode = cloned.blocks[1];
+                  mainOp = "~+"; // Treat default ~ as addition
+              } else if (cloned.operators.length === 2 && cloned.operators[1] === "~") {
+                  // 1 ~+ 2 ~ 10
+                  startNode = cloned.blocks[0];
+                  stepNode = cloned.blocks[1];
+                  endNode = cloned.blocks[2];
+              } else {
+                  // 1 ~+ 2 (infinite sequence with step)
+                  startNode = cloned.blocks[0];
+                  stepNode = cloned.blocks[1];
+                  endNode = { type: "Atom", dataType: "number", value: "9223372036854775807" };
+              }
+
+              return {
+                  type: "RangeObject",
+                  operator: mainOp,
+                  start: startNode,
+                  step: stepNode,
+                  end: endNode
+              };
+          }
+          
+          case "PointFreeNormal": {
+              const argName = "__pf_arg_" + Math.random().toString(36).substr(2, 5);
+              let body;
+              
+              let targetNode = cloned.target;
+              if (typeof cloned.target === "string") {
+                  if (cloned.target.startsWith("0x")) targetNode = { type: "Atom", dataType: "address", value: cloned.target };
+                  else if (cloned.target.startsWith("0r") || cloned.target.startsWith("0b")) targetNode = { type: "Atom", dataType: "register", value: cloned.target };
+                  else targetNode = { type: "Atom", dataType: "number", value: cloned.target };
+              }
+
+              if (cloned.position === "right") {
+                  // x + target
+                  body = {
+                      type: "BinaryOperation",
+                      operator: cloned.infix,
+                      left: { type: "Atom", dataType: "identifier", value: argName, _semanticType: "Variable", _tag: "variable_ref" },
+                      right: targetNode
+                  };
+              } else {
+                  // target + x
+                  body = {
+                      type: "BinaryOperation",
+                      operator: cloned.infix,
+                      left: targetNode,
+                      right: { type: "Atom", dataType: "identifier", value: argName, _semanticType: "Variable", _tag: "variable_ref" }
+                  };
+              }
+              
+              return {
+                  type: "Lambda",
+                  arguments: {
+                      type: "Arguments",
+                      style: "inline",
+                      items: [{ lazy: false, identifier: argName }]
+                  },
+                  body: body
+              };
+          }
+          
+          default:
+              return cloned;
+      }
+  }
+
+  getArity(typeStr) {
+      if (!typeStr) return 0;
+      if (typeof typeStr !== 'string') return 0;
+      if (typeStr.startsWith("Address")) return 0; // Pointers are values, not functions
+      if (typeStr.startsWith("Function")) return 1;
+      if (typeStr.startsWith("Deref")) return 1; // Dereferenced values can be closures
+      if (typeStr.startsWith("~")) return Infinity; // Variadic parameter consumes all remaining args
+      let parts = typeStr.split("->").map(p => p.trim());
+      return parts.length - 1;
+  }
+
+  substituteAndReduce(typeStr, mappings) {
+      if (!typeStr || typeof typeStr !== 'string') return typeStr;
+      
+      let result = typeStr;
+      for (let [key, val] of mappings.entries()) {
+          // Replace identifiers safely using word boundaries
+          let regex = new RegExp(`\\b${key}\\b`, 'g');
+          result = result.replace(regex, val);
+      }
+      
+      // Graph Reduction Phase
+      let prev;
+      do {
+          prev = result;
+          // Reduce Deref<Address<T>> -> T
+          let derefRegex = /Deref<Address<(.+?)>>/g;
+          result = result.replace(derefRegex, "$1");
+          
+          // Reduce Application Morphism: (A -> B)(A) -> B
+          let applyRegex = /\(([^()]+?)\s*->\s*(.+?)\)\(([^()]+)\)/g;
+          result = result.replace(applyRegex, (match, a, b, arg) => {
+              let aTrim = a.trim();
+              let bTrim = b.trim();
+              let argTrim = arg.trim();
+              
+              if (aTrim === argTrim) {
+                  return bTrim;
+              }
+              
+              if (argTrim.startsWith("Spread<")) {
+                  return match; // Cannot partially apply spread without knowing its length
+              }
+              
+              // If 'a' is a polymorphic variable (starts with lowercase or __pf_arg),
+              // we can substitute it with the applied argument 'arg' inside 'b'.
+              // In Sign, concrete types generally start with an uppercase letter.
+              if (!/^[A-Z]/.test(aTrim)) {
+                  let regex = new RegExp(`\\b${aTrim}\\b`, 'g');
+                  return bTrim.replace(regex, argTrim);
+              }
+              
+              return match;
+          });
+          
+          // Reduce Property Morphism: Property<Dict, Key> -> Type
+          let propRegex = /Property<([^,]+),\s*([^>]+)>/g;
+          result = result.replace(propRegex, (match, baseType, propName) => {
+              baseType = baseType.trim();
+              propName = propName.trim();
+              if (this.dictDefinitions.has(baseType)) {
+                  let fields = this.dictDefinitions.get(baseType);
+                  if (fields.has(propName)) {
+                      return fields.get(propName);
+                  }
+              }
+              return match;
+          });
+      } while (prev !== result);
+      
+      return result;
+  }
+
   inferType(node) {
     if (!node) return "Variable";
     
     if (node.type === "Lambda") {
-        let arity = node.arguments && node.arguments.items ? node.arguments.items.length : 1;
-        // Check if body is another Lambda for curried arity
-        let bodyNode = node.body;
-        while (bodyNode && bodyNode.type === "Lambda") {
-            arity += bodyNode.arguments && bodyNode.arguments.items ? bodyNode.arguments.items.length : 1;
-            bodyNode = bodyNode.body;
-        }
-        return `Function:${arity}`;
+        return this.inferCurriedType(node);
     }
     
-    if (node.type === "Coproduct") {
-        let firstType = this.inferType(node.elements[0]);
-        if (typeof firstType === "string" && firstType.startsWith("Function")) {
-            let parts = firstType.split(":");
-            let arity = parts.length > 1 ? parseInt(parts[1], 10) : 1;
-            let argsGiven = node.elements.length - 1; // Everything after the first element is an argument
-            if (arity > argsGiven) {
-                return `Function:${arity - argsGiven}`;
-            }
-        }
-        // Fallback for explicit _ unit application
-        if (node.elements.some(e => e.type === "Atom" && e.dataType === "unit" && e.value === "_")) {
-            return "Function:1";
+    if (node.type === "Block") {
+        if (node.expressions && node.expressions.length > 0) {
+            return this.inferType(node.expressions[node.expressions.length - 1]);
         }
         return "Variable";
+    }
+    
+    if (node.type === "Coproduct" || node.type === "ListConstruct" || node.type === "Product") {
+        let reduced = node.type === "Coproduct" ? this.reduceCoproduct(node.elements) : node;
+        
+        if (reduced && (reduced.type === "Product" || reduced.type === "ListConstruct")) {
+            let types = reduced.elements.map(e => this.inferType(e));
+            let flatTypes = [];
+            for (let t of types) {
+                if (typeof t === "string" && t.startsWith("List<") && t.endsWith(">")) {
+                    flatTypes.push(t.substring(5, t.length - 1));
+                } else {
+                    flatTypes.push(t);
+                }
+            }
+            let uniqueTypes = [...new Set(flatTypes)];
+            if (uniqueTypes.length === 1) {
+                return `List<${uniqueTypes[0]}>`;
+            }
+            return `Tuple<${types.join(", ")}>`;
+        }
+        return this.inferType(reduced);
     }
 
     if (node.type === "FunctionCall") {
-        let calleeType = this.inferType(node.callee);
-        if (typeof calleeType === "string" && calleeType.startsWith("Function")) {
-            let parts = calleeType.split(":");
-            let arity = parts.length > 1 ? parseInt(parts[1], 10) : 1;
-            let argsGiven = node.arguments ? node.arguments.length : 1;
-            if (arity > argsGiven) {
-                return `Function:${arity - argsGiven}`;
-            }
+        let calleeType = this.inferCurriedType(node.callee);
+        let arity = this.getArity(calleeType);
+        let argsGiven = node.arguments ? node.arguments.length : 1;
+        
+        let argTypes = [];
+        if (node.arguments) {
+            argTypes = node.arguments.map(a => this.inferType(a));
         }
-        return "Variable";
+
+        if (calleeType.startsWith("Deref<")) {
+            let match = calleeType.match(/Deref<(.+)>/);
+            if (match) calleeType = match[1];
+        }
+
+        if (calleeType.includes("->")) {
+            let hasSpread = argTypes.some(t => typeof t === "string" && t.startsWith("Spread<"));
+            if (hasSpread) {
+                let appStr = `(${calleeType})(${argTypes.join(", ")})`;
+                return this.substituteAndReduce(appStr, new Map());
+            }
+
+            let parts = calleeType.split("->").map(s => s.trim());
+            
+            let mappings = new Map();
+            for (let i = 0; i < argsGiven && i < parts.length - 1; i++) {
+                let paramName = parts[i];
+                if (paramName.startsWith("~")) paramName = paramName.substring(1);
+                mappings.set(paramName, argTypes[i]);
+            }
+            
+            let remainingParts = parts.slice(argsGiven).map(p => this.substituteAndReduce(p, mappings));
+            
+            if (remainingParts.length > 1) {
+                return remainingParts.join(" -> ");
+            }
+            return remainingParts[0];
+        }
+        
+        // Return an Application Morphism if the callee is an unresolved or graph-based type
+        if (argTypes.length > 0) {
+            let appStr = `(${calleeType})(${argTypes.join(", ")})`;
+            return this.substituteAndReduce(appStr, new Map()); // Reduce if possible
+        }
+        return calleeType;
     }
     
     if (node.type === "Prefix" && node.operators.includes("@")) {
-        return "Function:Unknown"; // @ dereferences a closure, making it callable
+        let baseType = this.inferType(node.expression);
+        if (baseType.startsWith("Address<") && baseType.endsWith(">")) {
+            return baseType.substring(8, baseType.length - 1);
+        }
+        return `Deref<${baseType}>`; // @ statically dereferences an address
+    }
+    if (node.type === "Prefix" && node.operators.includes("$")) {
+        let baseType = this.inferType(node.expression);
+        return `Address<${baseType}>`;
+    }
+    if (node.type === "Postfix" && node.operators.includes("~")) {
+        let baseType = this.inferType(node.expression);
+        return `Spread<${baseType}>`;
+    }
+    if (node.type === "BinaryOperation") {
+        const cmpOps = ["=", "!=", "<", "<=", ">", ">="];
+        if (!cmpOps.includes(node.operator)) {
+            return this.inferType(node.left);
+        }
     }
     
-    if (node.type === "Atom" && node.dataType === "identifier") {
-        return this.resolveSymbol(node.value);
+    if (node.type === "Atom") {
+        if (node.dataType === "number") return "Number";
+        if (node.dataType === "string") return "String";
+        if (node.dataType === "unit") return "Unit";
+        if (node.dataType === "address") return "Address";
+        if (node.dataType === "register") return "Register";
+        if (node.dataType === "identifier") {
+            let resolved = this.resolveSymbol(node.value);
+            return resolved ? resolved : node.value;
+        }
+    }
+    
+    if (node.type === "Get") {
+        let baseType = this.inferType(node.target);
+        let propName = null;
+        
+        let prop = node.properties && node.properties.length > 0 ? node.properties[0] : null;
+        if (prop && prop.type === "Atom" && prop.dataType === "identifier") {
+            propName = prop.value;
+        }
+
+        if (this.dictDefinitions.has(baseType)) {
+            let fields = this.dictDefinitions.get(baseType);
+            if (propName && fields.has(propName)) {
+                return fields.get(propName);
+            }
+        }
+        
+        if (propName) {
+            return `Property<${baseType}, ${propName}>`;
+        }
+        
+        return "Variant";
     }
     
     return "Variable";
+  }
+
+  inferCurriedType(node) {
+      if (!node) return "Variable";
+      if (node.type === "Lambda") {
+          let str = "";
+          let current = node;
+          
+          // Push a temporary scope for Lambda arguments
+          this.scopes.push({ ...this.currentScope });
+          
+          while (current && current.type === "Lambda") {
+              if (current.arguments && current.arguments.items) {
+                  current.arguments.items.forEach(arg => {
+                      if (arg.lazy) {
+                          str += `~${arg.identifier} -> `;
+                      } else {
+                          str += `${arg.identifier} -> `;
+                      }
+                      this.currentScope[arg.identifier] = arg.identifier; // Keep parameter name for polymorphic substitution
+                  });
+              } else {
+                  str += "_ -> ";
+              }
+              if (current.body && current.body.type === "Lambda") {
+                  current = current.body;
+              } else if (current.body && current.body.type === "MatchCase") {
+                  str += "MatchCase";
+                  break;
+              } else {
+                  let bodyType = "Variable";
+                  if (current.body && current.body.type === "Atom" && current.body.dataType === "number") bodyType = "Number";
+                  else if (current.body && current.body.type === "Atom" && current.body.dataType === "string") bodyType = "String";
+                  else if (current.body && current.body.type === "Atom" && current.body.dataType === "unit") bodyType = "Unit";
+                  else bodyType = this.inferType(current.body);
+                  str += bodyType;
+                  break;
+              }
+          }
+          // Pop the temporary scope
+          this.scopes.pop();
+          return str;
+      }
+      return this.inferType(node);
   }
 
   pass1(node) {
@@ -104,6 +425,20 @@ export class SemanticAnalyzer {
     }
 
     if (node.type === "Define") {
+      if (node.definition && node.definition.type === "Lambda") {
+          let sig = "";
+          let curr = node.definition;
+          while (curr && curr.type === "Lambda") {
+              if (curr.arguments && curr.arguments.items) {
+                  curr.arguments.items.forEach(a => sig += (a.lazy ? "~" : "") + a.identifier + " -> ");
+              } else {
+                  sig += "_ -> ";
+              }
+              curr = curr.body;
+          }
+          sig += "Variable";
+          this.defineSymbol(node.identifier, sig); // Pre-define for recursive calls
+      }
       const type = this.inferType(node.definition);
       this.defineSymbol(node.identifier, type);
       this.extractStructuralTypes(node.identifier, node.definition);
@@ -155,82 +490,10 @@ export class SemanticAnalyzer {
         const elements = node.elements.map(e => this.pass2(e));
         return this.reduceCoproduct(elements);
 
-      case "Sequence": {
-          let startNode = null, stepNode = null, endNode = null;
-          let mainOp = node.operators[0];
-
-          if (mainOp === "~_postfix") {
-              startNode = this.pass2(node.blocks[0]);
-              stepNode = { type: "Atom", dataType: "number", value: "1" };
-              endNode = { type: "Atom", dataType: "number", value: "9223372036854775807" }; // Max Int as Infinity
-          } else if (mainOp === "~_prefix") {
-              startNode = { type: "Atom", dataType: "number", value: "0" };
-              stepNode = { type: "Atom", dataType: "number", value: "1" };
-              endNode = this.pass2(node.blocks[0]);
-          } else if (mainOp === "~") {
-              startNode = this.pass2(node.blocks[0]);
-              stepNode = { type: "Atom", dataType: "number", value: "1" };
-              endNode = this.pass2(node.blocks[1]);
-              mainOp = "~+"; // Treat default ~ as addition
-          } else if (node.operators.length === 2 && node.operators[1] === "~") {
-              // 1 ~+ 2 ~ 10
-              startNode = this.pass2(node.blocks[0]);
-              stepNode = this.pass2(node.blocks[1]);
-              endNode = this.pass2(node.blocks[2]);
-          } else {
-              // 1 ~+ 2 (infinite sequence with step)
-              startNode = this.pass2(node.blocks[0]);
-              stepNode = this.pass2(node.blocks[1]);
-              endNode = { type: "Atom", dataType: "number", value: "9223372036854775807" };
-          }
-
-          return {
-              type: "RangeObject",
-              operator: mainOp,
-              start: startNode,
-              step: stepNode,
-              end: endNode
-          };
-      }
-
+      case "Sequence":
       case "PointFreeNormal":
-        const argName = "__pf_arg_" + Math.random().toString(36).substr(2, 5);
-        let body;
-        
-        let targetNode = node.target;
-        if (typeof node.target === "string") {
-            if (node.target.startsWith("0x")) targetNode = { type: "Atom", dataType: "address", value: node.target };
-            else if (node.target.startsWith("0r") || node.target.startsWith("0b")) targetNode = { type: "Atom", dataType: "register", value: node.target };
-            else targetNode = { type: "Atom", dataType: "number", value: node.target };
-        }
-
-        if (node.position === "right") {
-            // x + target
-            body = {
-                type: "BinaryOperation",
-                operator: node.infix,
-                left: { type: "Atom", dataType: "identifier", value: argName, _semanticType: "Variable", _tag: "variable_ref" },
-                right: this.pass2(targetNode)
-            };
-        } else {
-            // target + x
-            body = {
-                type: "BinaryOperation",
-                operator: node.infix,
-                left: this.pass2(targetNode),
-                right: { type: "Atom", dataType: "identifier", value: argName, _semanticType: "Variable", _tag: "variable_ref" }
-            };
-        }
-        
-        return {
-            type: "Lambda",
-            arguments: {
-                type: "Arguments",
-                style: "inline",
-                items: [{ lazy: false, identifier: argName }]
-            },
-            body: body
-        };
+          // These are handled in Pass 0 (normalizeAst)
+          break;
 
       case "Atom":
         if (node.dataType === "identifier") {
@@ -276,98 +539,104 @@ export class SemanticAnalyzer {
   reduceCoproduct(elements) {
       if (!elements || elements.length === 0) return null;
 
-      let result = elements[0];
+      let finalElements = [];
+      let acc = elements[0];
       
       for (let i = 1; i < elements.length; i++) {
           let e = elements[i];
-          let typeOfResult = this.inferType(result);
-          let typeOfE = this.inferType(e);
+          let arityAcc = this.getArity(this.inferCurriedType(acc));
+          let arityE = this.getArity(this.inferCurriedType(e));
 
-          let resultIsFunc = typeof typeOfResult === "string" && typeOfResult.startsWith("Function");
-          let eIsFunc = typeof typeOfE === "string" && typeOfE.startsWith("Function");
-          let eIsPlaceholder = e.type === "Atom" && e.dataType === "unit";
-
-          if (resultIsFunc && eIsPlaceholder) {
-              // Partial application with placeholder (unit): f _
-              // Shifts the first argument to the end of the argument list
-              let arity = parseInt(typeOfResult.split(":")[1] || "1", 10);
-              let args = [];
-              let callArgs = [];
-              
-              let delayedArg = { lazy: false, identifier: `__ph_${Math.random().toString(36).substr(2, 5)}_0` };
-              callArgs.push({ type: "Atom", dataType: "identifier", value: delayedArg.identifier, _semanticType: "Variable", _tag: "variable_ref" });
-              
-              for(let k = 1; k < arity; k++) {
-                  let id = `__ph_${Math.random().toString(36).substr(2, 5)}_${k}`;
-                  args.push({ lazy: false, identifier: id });
-                  callArgs.push({ type: "Atom", dataType: "identifier", value: id, _semanticType: "Variable", _tag: "variable_ref" });
-              }
-              args.push(delayedArg); // Put the delayed argument at the END
-
-              let callNode = result;
-              for(let k = 0; k < arity; k++) {
-                  callNode = {
-                      type: "FunctionCall",
-                      callee: callNode,
-                      arguments: [callArgs[k]]
-                  };
-              }
-              
-              result = {
-                  type: "Lambda",
-                  arguments: { type: "Arguments", style: "inline", items: args },
-                  body: callNode
-              };
-          } else if (resultIsFunc && eIsFunc) {
-              // Function Composition: e ∘ result
-              let arity = parseInt(typeOfResult.split(":")[1] || "1", 10);
-              let args = [];
-              let callA = result;
-              
-              for(let k = 0; k < arity; k++) {
-                  let id = `__carg_${Math.random().toString(36).substr(2, 5)}_${k}`;
-                  args.push({ lazy: false, identifier: id });
-                  callA = {
-                      type: "FunctionCall",
-                      callee: callA,
-                      arguments: [{ type: "Atom", dataType: "identifier", value: id, _semanticType: "Variable", _tag: "variable_ref" }]
-                  };
-              }
-              
-              result = {
-                  type: "Lambda",
-                  arguments: { type: "Arguments", style: "inline", items: args },
-                  body: {
-                      type: "FunctionCall",
-                      callee: e,
-                      arguments: [callA]
-                  }
-              };
-          } else if (resultIsFunc && !eIsFunc) {
-              // Function Application: result(e) (strict left-associative curried application)
-              result = {
+          if (arityAcc === Infinity) {
+              // This function expects a variadic Rest parameter (~y)
+              // We collect all remaining elements into a ListConstruct and apply it!
+              let restElements = elements.slice(i);
+              acc = {
                   type: "FunctionCall",
-                  callee: result,
-                  arguments: [e]
+                  callee: acc,
+                  arguments: [{ type: "ListConstruct", elements: restElements }]
               };
-          } else {
-              // Value followed by anything -> Product (Flatten 1 level deep)
-              const extractElements = (node) => {
-                  if (node.type === "ListConstruct") return node.elements;
-                  if (node.type === "Block" && node.expressions && node.expressions.length === 1 && node.expressions[0].type === "ListConstruct") {
-                      return node.expressions[0].elements;
+              break; // Consumed all remaining arguments!
+          }
+
+          if (arityAcc > 0) {
+              if (arityE > 0) {
+                  // Function Composition: acc ~> e
+                  let newArity = arityAcc + arityE - 1;
+                  let args = [];
+                  let callA = acc;
+                  
+                  // Arguments for acc
+                  for(let k = 0; k < arityAcc; k++) {
+                      let id = `__cargA_${Math.random().toString(36).substr(2, 5)}_${k}`;
+                      args.push({ lazy: false, identifier: id });
+                      callA = {
+                          type: "FunctionCall",
+                          callee: callA,
+                          arguments: [{ type: "Atom", dataType: "identifier", value: id, _semanticType: "Variable", _tag: "variable_ref" }]
+                      };
                   }
-                  return [node];
-              };
-
-              let leftElements = extractElements(result);
-              let rightElements = extractElements(e);
-
-              result = { type: "ListConstruct", elements: leftElements.concat(rightElements) };
+                  
+                  let callB = e;
+                  // First argument to e is the result of callA
+                  callB = {
+                      type: "FunctionCall",
+                      callee: callB,
+                      arguments: [callA]
+                  };
+                  
+                  // Remaining arguments for e
+                  for(let k = 1; k < arityE; k++) {
+                      let id = `__cargB_${Math.random().toString(36).substr(2, 5)}_${k}`;
+                      args.push({ lazy: false, identifier: id });
+                      callB = {
+                          type: "FunctionCall",
+                          callee: callB,
+                          arguments: [{ type: "Atom", dataType: "identifier", value: id, _semanticType: "Variable", _tag: "variable_ref" }]
+                      };
+                  }
+                  
+                  acc = {
+                      type: "Lambda",
+                      arguments: { type: "Arguments", style: "inline", items: args },
+                      body: callB
+                  };
+              } else {
+                  // Function Application: acc(e)
+                  acc = {
+                      type: "FunctionCall",
+                      callee: acc,
+                      arguments: [e]
+                  };
+              }
+          } else {
+              // acc is fully applied (Value), e is pushed to next iteration
+              finalElements.push(acc);
+              acc = e;
           }
       }
-
-      return this.liftClosure(result);
+      
+      finalElements.push(acc);
+      
+      if (finalElements.length === 1) {
+          return this.liftClosure(finalElements[0]);
+      }
+      
+      // Flatten 1 level deep if there are nested ListConstructs
+      const extractElements = (node) => {
+          if (node.type === "ListConstruct") return node.elements;
+          if (node.type === "Block" && node.expressions && node.expressions.length === 1 && node.expressions[0].type === "ListConstruct") {
+              return node.expressions[0].elements;
+          }
+          return [node];
+      };
+      
+      let flatElements = [];
+      finalElements.forEach(e => {
+          flatElements.push(...extractElements(e));
+      });
+      
+      return this.liftClosure({ type: "ListConstruct", elements: flatElements });
   }
 
   liftClosure(node) {
@@ -432,6 +701,62 @@ export class SemanticAnalyzer {
       });
       this.dictDefinitions.set(prefix, fields);
       
+    } else if (node.type === "Lambda") {
+        let curriedArgs = "";
+        let targetBody = node;
+        
+        while (targetBody && targetBody.type === "Lambda") {
+            if (targetBody.arguments && targetBody.arguments.items) {
+                targetBody.arguments.items.forEach(arg => {
+                    curriedArgs += `${arg.identifier} -> `;
+                });
+            } else {
+                curriedArgs += "_ -> ";
+            }
+            if (targetBody.body && targetBody.body.type === "Lambda") {
+                targetBody = targetBody.body;
+            } else {
+                targetBody = targetBody.body;
+                break;
+            }
+        }
+        
+        let newPrefix = prefix;
+        if (curriedArgs.length > 0) {
+            newPrefix = `${prefix} -> ${curriedArgs.slice(0, -4)}`;
+        }
+        
+        if (targetBody && targetBody.type === "MatchCase") {
+            let fields = new Map();
+            targetBody.cases.forEach(c => {
+                let key = "_";
+                if (c.condition && c.condition.type === "BinaryOperation" && c.condition.operator === "=") {
+                    if (c.condition.right && c.condition.right.type === "Atom") {
+                        key = c.condition.right.value;
+                    } else if (c.condition.right && c.condition.right.type === "FunctionCall") {
+                        // Sometimes types are parsed as function calls or identifiers if they are not primitives
+                        key = c.condition.right.value || "Type";
+                    } else if (c.condition.right && c.condition.right.identifier) {
+                        key = c.condition.right.identifier;
+                    }
+                }
+                
+                let valueType = "Variable";
+                if (c.body.type === "Atom" && c.body.dataType === "number") {
+                    valueType = "Number";
+                } else if (c.body.type === "Atom" && c.body.dataType === "string") {
+                    valueType = "String";
+                } else if (c.body.type === "Atom" && c.body.dataType === "unit") {
+                    valueType = "Unit";
+                } else {
+                    valueType = this.inferType(c.body);
+                }
+                fields.set(key, valueType);
+            });
+            this.dictDefinitions.set(newPrefix, fields);
+        } else {
+            this.typeRegistry.push(`${prefix} -> ${this.inferCurriedType(node)}`);
+        }
     } else if (node.type === "Product" || node.type === "Coproduct" || node.type === "Logical_Or" || node.type === "Logical_And" || node.type === "Logical_Xor") {
       let fields = new Map();
       
@@ -447,7 +772,8 @@ export class SemanticAnalyzer {
       if (fields.size > 0) {
           this.dictDefinitions.set(prefix, fields);
       } else {
-          this.typeRegistry.push(`${prefix} -> Variable`);
+          let valueType = this.inferType(node);
+          this.typeRegistry.push(`${prefix} -> ${valueType}`);
       }
     } else {
        let valueType = "Variable";
@@ -460,6 +786,7 @@ export class SemanticAnalyzer {
        } else {
            valueType = this.inferType(node);
        }
+       console.log(`extractStructuralTypes: ${prefix} -> ${valueType}`);
        this.typeRegistry.push(`${prefix} -> ${valueType}`);
     }
   }
@@ -467,8 +794,9 @@ export class SemanticAnalyzer {
   generateTypeSignature() {
     let lines = [...this.typeRegistry];
     this.dictDefinitions.forEach((fields, prefix) => {
+        lines.push(`${prefix} ->`);
         fields.forEach((valType, key) => {
-            lines.push(`${prefix} -> ${key} -> ${valType}`);
+            lines.push(`\t${key} -> ${valType}`);
         });
     });
     return lines.join("\n") + "\n";

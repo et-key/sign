@@ -30,14 +30,17 @@ EOF = !.
 
 comment = ("`" [^\r\n]*) { return null; }
 
-Program = lines:(SOL exp:(Expression / comment) (EOL / EOF) { return exp; })* {
+Program = lines:(
+    SOL exp:(Expression / comment) (EOL / EOF) { return exp; }
+  / SOL EOL { return null; }
+)* {
   return {
     type: "Program",
     body: lines.filter(l => l !== null && l !== undefined && l !== "")
   };
 }
 
-Expression = exp:Export { return exp; } / EOL { return null; }
+Expression = exp:Export { return exp; }
 
 Export = exportType:("###" / "##" / "#")? def:Define {
   if (exportType) {
@@ -188,7 +191,7 @@ Exponential
   / Get
 
 Get
-  = head:Compute tail:(_ "'" _ (Product / Sequence / number / string / (identifier "~"?)))* {
+  = head:Compute tail:(_ "'" _ (Block / number / string / (identifier "~"?)))* {
       if (tail.length === 0) return head;
       return { type: "Get", target: head, properties: tail.map(t => Array.isArray(t[3]) ? t[3].join("") : t[3]) };
     }

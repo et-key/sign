@@ -1,4 +1,7 @@
-width -> x -> Number
-weight -> y -> Number
-BMI -> y -> Number
-BMI -> x -> Number
+width ->
+	x -> Number
+weight ->
+	y -> Number
+BMI ->
+	y -> Number
+	x -> Number

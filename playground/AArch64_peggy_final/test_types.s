@@ -10,12 +10,12 @@ Sign_Project_Arena:
     .skip 1048576      // 1MB Arena
 .section .rodata
 .align 3
-Sign_Str_6rqf0:
+Sign_Str_3gran:
     .quad 1 // Length
     .quad 120 // 'x'
 .section .rodata
 .align 3
-Sign_Str_q5k13:
+Sign_Str_7st2e:
     .quad 1 // Length
     .quad 121 // 'y'
 
@@ -35,8 +35,8 @@ _start:
     MOV fp, sp
     SUB sp, sp, #256           // 変数領域を確保
 
-    ADRP x1, Sign_Str_6rqf0
-    ADD  x1, x1, :lo12:Sign_Str_6rqf0
+    ADRP x1, Sign_Str_3gran
+    ADD  x1, x1, :lo12:Sign_Str_3gran
     MOV x2, #0x0000
     MOVK x2, #0x4024, LSL #48
     MOV x3, x27 // Dict pointer
@@ -52,8 +52,8 @@ _start:
     ADD x27, x27, #32 // Advance Arena
     STR x3, [fp, #-8] // Bind 'width'
     MOV x2, x3
-    ADRP x2, Sign_Str_q5k13
-    ADD  x2, x2, :lo12:Sign_Str_q5k13
+    ADRP x2, Sign_Str_7st2e
+    ADD  x2, x2, :lo12:Sign_Str_7st2e
     MOV x3, #0x0000
     MOVK x3, #0x4034, LSL #48
     MOV x1, x27 // Dict pointer

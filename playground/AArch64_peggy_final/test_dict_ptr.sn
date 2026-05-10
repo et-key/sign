@@ -1,0 +1,7 @@
+Person :
+	name: "Alice"
+	age: 20
+
+F : obj ? @obj'age
+
+b : F $[Person]

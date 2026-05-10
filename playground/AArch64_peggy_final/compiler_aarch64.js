@@ -1,5 +1,6 @@
 export class AArch64Generator {
-	constructor() {
+	constructor(analyzer) {
+		this.analyzer = analyzer;
 		this.textSection = [];
 		this.dataSection = [];
 		this.freeRegs = [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15];
@@ -993,169 +994,253 @@ export class AArch64Generator {
 		const rightReg = this.visit(node.right);
 		const resultReg = this.allocReg();
 
-		switch (node.operator) {
-			case "+":
-				this.textSection.push(`    FMOV d0, x${leftReg}`);
-				this.textSection.push(`    FMOV d1, x${rightReg}`);
-				this.textSection.push(`    FADD d2, d0, d1`);
-				this.textSection.push(`    FMOV x${resultReg}, d2`);
-				break;
-			case "-":
-				this.textSection.push(`    FMOV d0, x${leftReg}`);
-				this.textSection.push(`    FMOV d1, x${rightReg}`);
-				this.textSection.push(`    FSUB d2, d0, d1`);
-				this.textSection.push(`    FMOV x${resultReg}, d2`);
-				break;
-			case "*":
-				this.textSection.push(`    FMOV d0, x${leftReg}`);
-				this.textSection.push(`    FMOV d1, x${rightReg}`);
-				this.textSection.push(`    FMUL d2, d0, d1`);
-				this.textSection.push(`    FMOV x${resultReg}, d2`);
-				break;
-			case "/":
-				this.textSection.push(`    FMOV d0, x${leftReg}`);
-				this.textSection.push(`    FMOV d1, x${rightReg}`);
-				this.textSection.push(`    FDIV d2, d0, d1`);
-				this.textSection.push(`    FMOV x${resultReg}, d2`);
-				break;
-			case "%":
-				this.textSection.push(`    FMOV d0, x${leftReg}`);
-				this.textSection.push(`    FMOV d1, x${rightReg}`);
-				this.textSection.push(`    FCVTZS x2, d0`);
-				this.textSection.push(`    FCVTZS x3, d1`);
-				this.textSection.push(`    UDIV x4, x2, x3`);
-				this.textSection.push(`    MSUB x5, x4, x3, x2`);
-				this.textSection.push(`    SCVTF d2, x5`);
-				this.textSection.push(`    FMOV x${resultReg}, d2`);
-				break;
-			case "=":
-			case "==":
-				this.textSection.push(`    FMOV d0, x${leftReg}`);
-				this.textSection.push(`    FMOV d1, x${rightReg}`);
-				this.textSection.push(`    FCMP d0, d1`);
-				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, EQ`);
-				break;
-			case "!=":
-			case "!==":
-				this.textSection.push(`    FMOV d0, x${leftReg}`);
-				this.textSection.push(`    FMOV d1, x${rightReg}`);
-				this.textSection.push(`    FCMP d0, d1`);
-				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, NE`);
-				break;
-			case "<":
-				this.textSection.push(`    FMOV d0, x${leftReg}`);
-				this.textSection.push(`    FMOV d1, x${rightReg}`);
-				this.textSection.push(`    FCMP d0, d1`);
-				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, MI`);
-				break;
-			case ">":
-				this.textSection.push(`    FMOV d0, x${leftReg}`);
-				this.textSection.push(`    FMOV d1, x${rightReg}`);
-				this.textSection.push(`    FCMP d0, d1`);
-				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, GT`);
-				break;
-			case "<=":
-				this.textSection.push(`    FMOV d0, x${leftReg}`);
-				this.textSection.push(`    FMOV d1, x${rightReg}`);
-				this.textSection.push(`    FCMP d0, d1`);
-				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, LS`);
-				break;
-			case ">=":
-				this.textSection.push(`    FMOV d0, x${leftReg}`);
-				this.textSection.push(`    FMOV d1, x${rightReg}`);
-				this.textSection.push(`    FCMP d0, d1`);
-				this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, GE`);
-				break;
-            case "<<":
-                this.textSection.push(`    FMOV d0, x${leftReg}`);
+        let leftType = this.analyzer ? this.analyzer.inferType(node.left) : "Number";
+        let rightType = this.analyzer ? this.analyzer.inferType(node.right) : "Number";
+
+        if (leftType.startsWith("Address") || leftType === "Register") {
+            // Integer Domain Arithmetic
+            // If right side is Float (Number), we must cast it to Int
+            if (rightType === "Number") {
                 this.textSection.push(`    FMOV d1, x${rightReg}`);
-                this.textSection.push(`    FCVTZS x2, d0`); // Double to Int
-                this.textSection.push(`    FCVTZS x3, d1`); // Double to Int
-                this.textSection.push(`    LSL x4, x2, x3`);
-                this.textSection.push(`    SCVTF d2, x4`); // Int to Double
-                this.textSection.push(`    FMOV x${resultReg}, d2`);
-                break;
-            case ">>":
-                this.textSection.push(`    FMOV d0, x${leftReg}`);
+                this.textSection.push(`    FCVTZS x${rightReg}, d1 // Cast Double to Int`);
+            }
+            
+            switch (node.operator) {
+                case "+":
+                    this.textSection.push(`    ADD x${resultReg}, x${leftReg}, x${rightReg}`);
+                    break;
+                case "-":
+                    this.textSection.push(`    SUB x${resultReg}, x${leftReg}, x${rightReg}`);
+                    break;
+                case "*":
+                    this.textSection.push(`    MUL x${resultReg}, x${leftReg}, x${rightReg}`);
+                    break;
+                case "/":
+                    this.textSection.push(`    SDIV x${resultReg}, x${leftReg}, x${rightReg}`);
+                    break;
+                case "%":
+                    this.textSection.push(`    SDIV x3, x${leftReg}, x${rightReg}`);
+                    this.textSection.push(`    MSUB x${resultReg}, x3, x${rightReg}, x${leftReg}`);
+                    break;
+                case "=":
+                case "==":
+                    this.textSection.push(`    CMP x${leftReg}, x${rightReg}`);
+                    this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, EQ`);
+                    break;
+                case "!=":
+                case "!==":
+                    this.textSection.push(`    CMP x${leftReg}, x${rightReg}`);
+                    this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, NE`);
+                    break;
+                case "<":
+                    this.textSection.push(`    CMP x${leftReg}, x${rightReg}`);
+                    this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, LT`);
+                    break;
+                case ">":
+                    this.textSection.push(`    CMP x${leftReg}, x${rightReg}`);
+                    this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, GT`);
+                    break;
+                case "<=":
+                    this.textSection.push(`    CMP x${leftReg}, x${rightReg}`);
+                    this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, LE`);
+                    break;
+                case ">=":
+                    this.textSection.push(`    CMP x${leftReg}, x${rightReg}`);
+                    this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, GE`);
+                    break;
+                case "<<":
+                    this.textSection.push(`    LSL x${resultReg}, x${leftReg}, x${rightReg}`);
+                    break;
+                case ">>":
+                    this.textSection.push(`    ASR x${resultReg}, x${leftReg}, x${rightReg}`);
+                    break;
+                case "||":
+                    this.textSection.push(`    ORR x${resultReg}, x${leftReg}, x${rightReg}`);
+                    break;
+                case ";;":
+                    this.textSection.push(`    EOR x${resultReg}, x${leftReg}, x${rightReg}`);
+                    break;
+                case "&&":
+                    this.textSection.push(`    AND x${resultReg}, x${leftReg}, x${rightReg}`);
+                    break;
+                case "^":
+                    const powLoop = `.L_pow_loop_${Math.random().toString(36).substr(2, 5)}`;
+                    const powEnd = `.L_pow_end_${Math.random().toString(36).substr(2, 5)}`;
+                    this.textSection.push(`    MOV x${resultReg}, #1`);
+                    this.textSection.push(`    CBZ x${rightReg}, ${powEnd}`);
+                    this.textSection.push(`${powLoop}:`);
+                    this.textSection.push(`    MUL x${resultReg}, x${resultReg}, x${leftReg}`);
+                    this.textSection.push(`    SUB x${rightReg}, x${rightReg}, #1`);
+                    this.textSection.push(`    CBNZ x${rightReg}, ${powLoop}`);
+                    this.textSection.push(`${powEnd}:`);
+                    break;
+                default:
+                    this.textSection.push(`    // TODO: Unhandled Integer Binary -> ${node.operator}`);
+            }
+        } else {
+            // Float Domain Arithmetic
+            // If right side is Int (Address/Register), we must cast it to Float
+            if (rightType.startsWith("Address") || rightType === "Register") {
+                this.textSection.push(`    SCVTF d1, x${rightReg} // Cast Int to Double`);
+            } else {
                 this.textSection.push(`    FMOV d1, x${rightReg}`);
-                this.textSection.push(`    FCVTZS x2, d0`);
-                this.textSection.push(`    FCVTZS x3, d1`);
-                this.textSection.push(`    ASR x4, x2, x3`);
-                this.textSection.push(`    SCVTF d2, x4`);
-                this.textSection.push(`    FMOV x${resultReg}, d2`);
-                break;
-            case "||":
-                this.textSection.push(`    FMOV d0, x${leftReg}`);
-                this.textSection.push(`    FMOV d1, x${rightReg}`);
-                this.textSection.push(`    FCVTZS x2, d0`);
-                this.textSection.push(`    FCVTZS x3, d1`);
-                this.textSection.push(`    ORR x4, x2, x3`);
-                this.textSection.push(`    SCVTF d2, x4`);
-                this.textSection.push(`    FMOV x${resultReg}, d2`);
-                break;
-            case ";;":
-                this.textSection.push(`    FMOV d0, x${leftReg}`);
-                this.textSection.push(`    FMOV d1, x${rightReg}`);
-                this.textSection.push(`    FCVTZS x2, d0`);
-                this.textSection.push(`    FCVTZS x3, d1`);
-                this.textSection.push(`    EOR x4, x2, x3`);
-                this.textSection.push(`    SCVTF d2, x4`);
-                this.textSection.push(`    FMOV x${resultReg}, d2`);
-                break;
-            case "&&":
-                this.textSection.push(`    FMOV d0, x${leftReg}`);
-                this.textSection.push(`    FMOV d1, x${rightReg}`);
-                this.textSection.push(`    FCVTZS x2, d0`);
-                this.textSection.push(`    FCVTZS x3, d1`);
-                this.textSection.push(`    AND x4, x2, x3`);
-                this.textSection.push(`    SCVTF d2, x4`);
-                this.textSection.push(`    FMOV x${resultReg}, d2`);
-                break;
-            case "^":
-                const powLoop = `.L_pow_loop_${Math.random().toString(36).substr(2, 5)}`;
-                const powEnd = `.L_pow_end_${Math.random().toString(36).substr(2, 5)}`;
-                this.textSection.push(`    FMOV d0, x${leftReg}`);
-                this.textSection.push(`    FMOV d1, x${rightReg}`);
-                this.textSection.push(`    FCVTZS x3, d1`);
-                const tmpReg1 = this.allocReg();
-                this.doubleToMovs(tmpReg1, 1.0);
-                this.textSection.push(`    FMOV d2, x${tmpReg1} // res = 1.0`);
-                this.freeReg(tmpReg1);
-                this.textSection.push(`    CBZ x3, ${powEnd}`);
-                this.textSection.push(`${powLoop}:`);
-                this.textSection.push(`    FMUL d2, d2, d0`);
-                this.textSection.push(`    SUB x3, x3, #1`);
-                this.textSection.push(`    CBNZ x3, ${powLoop}`);
-                this.textSection.push(`${powEnd}:`);
-                this.textSection.push(`    FMOV x${resultReg}, d2`);
-                break;
-			default:
-				this.textSection.push(`    // TODO: Unhandled Binary -> ${node.operator}`);
-		}
+            }
+            this.textSection.push(`    FMOV d0, x${leftReg}`);
+
+            switch (node.operator) {
+                case "+":
+                    this.textSection.push(`    FADD d2, d0, d1`);
+                    this.textSection.push(`    FMOV x${resultReg}, d2`);
+                    break;
+                case "-":
+                    this.textSection.push(`    FSUB d2, d0, d1`);
+                    this.textSection.push(`    FMOV x${resultReg}, d2`);
+                    break;
+                case "*":
+                    this.textSection.push(`    FMUL d2, d0, d1`);
+                    this.textSection.push(`    FMOV x${resultReg}, d2`);
+                    break;
+                case "/":
+                    this.textSection.push(`    FDIV d2, d0, d1`);
+                    this.textSection.push(`    FMOV x${resultReg}, d2`);
+                    break;
+                case "%":
+                    this.textSection.push(`    FCVTZS x2, d0`);
+                    this.textSection.push(`    FCVTZS x3, d1`);
+                    this.textSection.push(`    SDIV x4, x2, x3`);
+                    this.textSection.push(`    MSUB x5, x4, x3, x2`);
+                    this.textSection.push(`    SCVTF d2, x5`);
+                    this.textSection.push(`    FMOV x${resultReg}, d2`);
+                    break;
+                case "=":
+                case "==":
+                    this.textSection.push(`    FCMP d0, d1`);
+                    this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, EQ`);
+                    break;
+                case "!=":
+                case "!==":
+                    this.textSection.push(`    FCMP d0, d1`);
+                    this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, NE`);
+                    break;
+                case "<":
+                    this.textSection.push(`    FCMP d0, d1`);
+                    this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, MI`);
+                    break;
+                case ">":
+                    this.textSection.push(`    FCMP d0, d1`);
+                    this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, GT`);
+                    break;
+                case "<=":
+                    this.textSection.push(`    FCMP d0, d1`);
+                    this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, LS`);
+                    break;
+                case ">=":
+                    this.textSection.push(`    FCMP d0, d1`);
+                    this.textSection.push(`    CSEL x${resultReg}, x${rightReg}, x28, GE`);
+                    break;
+                case "<<":
+                    this.textSection.push(`    FCVTZS x2, d0`); // Double to Int
+                    this.textSection.push(`    FCVTZS x3, d1`); // Double to Int
+                    this.textSection.push(`    LSL x4, x2, x3`);
+                    this.textSection.push(`    SCVTF d2, x4`); // Int to Double
+                    this.textSection.push(`    FMOV x${resultReg}, d2`);
+                    break;
+                case ">>":
+                    this.textSection.push(`    FCVTZS x2, d0`);
+                    this.textSection.push(`    FCVTZS x3, d1`);
+                    this.textSection.push(`    ASR x4, x2, x3`);
+                    this.textSection.push(`    SCVTF d2, x4`);
+                    this.textSection.push(`    FMOV x${resultReg}, d2`);
+                    break;
+                case "||":
+                    this.textSection.push(`    FCVTZS x2, d0`);
+                    this.textSection.push(`    FCVTZS x3, d1`);
+                    this.textSection.push(`    ORR x4, x2, x3`);
+                    this.textSection.push(`    SCVTF d2, x4`);
+                    this.textSection.push(`    FMOV x${resultReg}, d2`);
+                    break;
+                case ";;":
+                    this.textSection.push(`    FCVTZS x2, d0`);
+                    this.textSection.push(`    FCVTZS x3, d1`);
+                    this.textSection.push(`    EOR x4, x2, x3`);
+                    this.textSection.push(`    SCVTF d2, x4`);
+                    this.textSection.push(`    FMOV x${resultReg}, d2`);
+                    break;
+                case "&&":
+                    this.textSection.push(`    FCVTZS x2, d0`);
+                    this.textSection.push(`    FCVTZS x3, d1`);
+                    this.textSection.push(`    AND x4, x2, x3`);
+                    this.textSection.push(`    SCVTF d2, x4`);
+                    this.textSection.push(`    FMOV x${resultReg}, d2`);
+                    break;
+                case "^":
+                    const powLoop = `.L_pow_loop_${Math.random().toString(36).substr(2, 5)}`;
+                    const powEnd = `.L_pow_end_${Math.random().toString(36).substr(2, 5)}`;
+                    this.textSection.push(`    FCVTZS x3, d1`);
+                    const tmpReg1 = this.allocReg();
+                    this.doubleToMovs(tmpReg1, 1.0);
+                    this.textSection.push(`    FMOV d2, x${tmpReg1} // res = 1.0`);
+                    this.freeReg(tmpReg1);
+                    this.textSection.push(`    CBZ x3, ${powEnd}`);
+                    this.textSection.push(`${powLoop}:`);
+                    this.textSection.push(`    FMUL d2, d2, d0`);
+                    this.textSection.push(`    SUB x3, x3, #1`);
+                    this.textSection.push(`    CBNZ x3, ${powLoop}`);
+                    this.textSection.push(`${powEnd}:`);
+                    this.textSection.push(`    FMOV x${resultReg}, d2`);
+                    break;
+                default:
+                    this.textSection.push(`    // TODO: Unhandled Float Binary -> ${node.operator}`);
+            }
+        }
 		this.freeReg(leftReg);
 		this.freeReg(rightReg);
 		return resultReg;
 	}
 
 	visitPrefix(node) {
+        if (node.operators.length === 1 && node.operators[0] === "!" && node.expression.type === "Atom" && node.expression.dataType === "unit") {
+            const reg = this.allocReg();
+            this.textSection.push(`    ADRP x${reg}, Sign_Default_Trigger_Sentinel`);
+            this.textSection.push(`    ADD  x${reg}, x${reg}, :lo12:Sign_Default_Trigger_Sentinel`);
+            return reg;
+        }
+
         if (node.operators.includes("$")) {
             const exp = node.expression;
             if (exp.type === "Block" && exp.expressions.length === 1 && exp.expressions[0].type === "Lambda") {
                 return this.visitLambda(exp.expressions[0]);
             }
             if (exp.type === "Atom" && exp.dataType === "identifier") {
+                const name = exp.value;
+                const loc = this.resolveVar(name);
                 const reg = this.allocReg();
-                this.textSection.push(`    ADRP x${reg}, .L_func_${exp.value}`);
-                this.textSection.push(`    ADD  x${reg}, x${reg}, :lo12:.L_func_${exp.value}`);
+                if (loc) {
+                    // Local variable address
+                    if (loc.offset === 0) {
+                        this.textSection.push(`    MOV x${reg}, ${loc.base} // Address of '${name}'`);
+                    } else if (loc.offset > 0) {
+                        this.textSection.push(`    ADD x${reg}, ${loc.base}, #${loc.offset} // Address of '${name}'`);
+                    } else {
+                        this.textSection.push(`    SUB x${reg}, ${loc.base}, #${-loc.offset} // Address of '${name}'`);
+                    }
+                } else {
+                    // Function address
+                    this.textSection.push(`    ADRP x${reg}, .L_func_${name}`);
+                    this.textSection.push(`    ADD  x${reg}, x${reg}, :lo12:.L_func_${name} // Address of func '${name}'`);
+                }
                 return reg;
             }
             return this.visit(exp);
         }
         
         if (node.operators.includes("@")) {
-            // @ is a syntactic marker for function application on a pointer.
-            // The pointer value is just the evaluated expression.
-            return this.visit(node.expression);
+            // @ dereferences a pointer (Address)
+            const expReg = this.visit(node.expression);
+            const resultReg = this.allocReg();
+            this.textSection.push(`    LDR x${resultReg}, [x${expReg}] // Dereference @`);
+            this.freeReg(expReg);
+            return resultReg;
         }
 
         let currentReg = this.visit(node.expression);
@@ -1220,15 +1305,4 @@ export class AArch64Generator {
         return currentReg;
     }
 
-    visitPrefix(node) {
-        if (node.operators.length === 1 && node.operators[0] === "!" && node.expression.type === "Atom" && node.expression.dataType === "unit") {
-            const reg = this.allocReg();
-            this.textSection.push(`    ADRP x${reg}, Sign_Default_Trigger_Sentinel`);
-            this.textSection.push(`    ADD  x${reg}, x${reg}, :lo12:Sign_Default_Trigger_Sentinel`);
-            return reg;
-        }
-        
-        this.textSection.push(`    // TODO: Unhandled Prefix -> ${node.operators.join()}`);
-        return this.unitReg;
-    }
 }
