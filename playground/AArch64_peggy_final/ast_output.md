@@ -3,18 +3,13 @@
 ## Test 1
 ### Source
 ```
-d:
-	name: 10
-	age: 42
-d'age
+identity : x ? x
+add : x y ? x + y
 ```
 ### Lexed
 ```
-d:
-<STX>name: 10
-age: 42
-<ETX>
-d'age
+identity : x ? x
+add : x y ? x + y
 ```
 ### AST
 ```json
@@ -23,47 +18,66 @@ d'age
   "body": [
     {
       "type": "Define",
-      "identifier": "d",
+      "identifier": "identity",
       "definition": {
-        "type": "Dictionary",
-        "entries": [
-          {
-            "key": "name",
-            "value": {
-              "type": "Atom",
-              "dataType": "number",
-              "value": "10"
+        "type": "Lambda",
+        "arguments": {
+          "type": "Arguments",
+          "style": "inline",
+          "items": [
+            {
+              "lazy": false,
+              "identifier": "x"
             }
-          },
-          {
-            "key": "age",
-            "value": {
-              "type": "Atom",
-              "dataType": "number",
-              "value": "42"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "Get",
-      "target": {
-        "type": "Atom",
-        "dataType": "identifier",
-        "value": "d",
-        "_semanticType": "Variable",
-        "_tag": "variable_ref"
-      },
-      "properties": [
-        {
+          ]
+        },
+        "body": {
           "type": "Atom",
           "dataType": "identifier",
-          "value": "age",
+          "value": "x",
           "_semanticType": "Variable",
           "_tag": "variable_ref"
         }
-      ]
+      }
+    },
+    {
+      "type": "Define",
+      "identifier": "add",
+      "definition": {
+        "type": "Lambda",
+        "arguments": {
+          "type": "Arguments",
+          "style": "inline",
+          "items": [
+            {
+              "lazy": false,
+              "identifier": "x"
+            },
+            {
+              "lazy": false,
+              "identifier": "y"
+            }
+          ]
+        },
+        "body": {
+          "type": "BinaryOperation",
+          "operator": "+",
+          "left": {
+            "type": "Atom",
+            "dataType": "identifier",
+            "value": "x",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
+          },
+          "right": {
+            "type": "Atom",
+            "dataType": "identifier",
+            "value": "y",
+            "_semanticType": "Variable",
+            "_tag": "variable_ref"
+          }
+        }
+      }
     }
   ]
 }

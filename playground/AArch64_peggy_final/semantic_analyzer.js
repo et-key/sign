@@ -23,7 +23,7 @@ export class SemanticAnalyzer {
   }
 
   resolveSymbol(name) {
-    return this.currentScope[name] || "Variable";
+    return this.currentScope[name] || name;
   }
 
   analyze(ast) {
@@ -41,46 +41,60 @@ export class SemanticAnalyzer {
     return this.pass2(ast);
   }
 
+  getArity(typeStr) {
+      if (typeof typeStr !== "string") return 0;
+      if (typeStr.startsWith("Function:")) {
+          let parts = typeStr.split(":");
+          return parts.length > 1 ? parseInt(parts[1], 10) : 1;
+      }
+      if (typeStr.includes("->")) {
+          return typeStr.split("->").length - 1;
+      }
+      return 0;
+  }
+
   inferType(node) {
     if (!node) return "Variable";
     
     if (node.type === "Lambda") {
-        let arity = node.arguments && node.arguments.items ? node.arguments.items.length : 1;
-        // Check if body is another Lambda for curried arity
-        let bodyNode = node.body;
-        while (bodyNode && bodyNode.type === "Lambda") {
-            arity += bodyNode.arguments && bodyNode.arguments.items ? bodyNode.arguments.items.length : 1;
-            bodyNode = bodyNode.body;
-        }
-        return `Function:${arity}`;
+        return this.inferCurriedType(node);
     }
     
-    if (node.type === "Coproduct") {
-        let firstType = this.inferType(node.elements[0]);
-        if (typeof firstType === "string" && firstType.startsWith("Function")) {
-            let parts = firstType.split(":");
-            let arity = parts.length > 1 ? parseInt(parts[1], 10) : 1;
-            let argsGiven = node.elements.length - 1; // Everything after the first element is an argument
-            if (arity > argsGiven) {
-                return `Function:${arity - argsGiven}`;
-            }
+    if (node.type === "Coproduct" || node.type === "ListConstruct" || node.type === "Product") {
+        let reduced = node.type === "Coproduct" ? this.reduceCoproduct(node.elements) : node;
+        
+        if (reduced && (reduced.type === "Product" || reduced.type === "ListConstruct")) {
+            let types = reduced.elements.map(e => this.inferType(e));
+            return types.join(" , ");
         }
-        // Fallback for explicit _ unit application
-        if (node.elements.some(e => e.type === "Atom" && e.dataType === "unit" && e.value === "_")) {
-            return "Function:1";
-        }
-        return "Variable";
+        return this.inferType(reduced);
     }
 
     if (node.type === "FunctionCall") {
-        let calleeType = this.inferType(node.callee);
-        if (typeof calleeType === "string" && calleeType.startsWith("Function")) {
-            let parts = calleeType.split(":");
-            let arity = parts.length > 1 ? parseInt(parts[1], 10) : 1;
-            let argsGiven = node.arguments ? node.arguments.length : 1;
-            if (arity > argsGiven) {
-                return `Function:${arity - argsGiven}`;
+        let calleeType = this.inferCurriedType(node.callee);
+        let arity = this.getArity(calleeType);
+        let argsGiven = node.arguments ? node.arguments.length : 1;
+        
+        if (calleeType.includes("->")) {
+            let parts = calleeType.split("->").map(s => s.trim());
+            
+            let mappings = new Map();
+            if (node.arguments) {
+                for (let i = 0; i < argsGiven && i < parts.length - 1; i++) {
+                    mappings.set(parts[i], this.inferType(node.arguments[i]));
+                }
             }
+            
+            let remainingParts = parts.slice(argsGiven).map(p => mappings.has(p) ? mappings.get(p) : p);
+            
+            if (remainingParts.length > 1) {
+                return remainingParts.join(" -> ");
+            }
+            return remainingParts[0] || "Variable";
+        }
+        
+        if (arity > argsGiven) {
+            return `Function:${arity - argsGiven}`;
         }
         return "Variable";
     }
@@ -88,12 +102,57 @@ export class SemanticAnalyzer {
     if (node.type === "Prefix" && node.operators.includes("@")) {
         return "Function:Unknown"; // @ dereferences a closure, making it callable
     }
+    if (node.type === "BinaryOperation") {
+        const cmpOps = ["=", "!=", "<", "<=", ">", ">="];
+        if (!cmpOps.includes(node.operator)) {
+            return this.inferType(node.left);
+        }
+    }
     
-    if (node.type === "Atom" && node.dataType === "identifier") {
-        return this.resolveSymbol(node.value);
+    if (node.type === "Atom") {
+        if (node.dataType === "number") return "Number";
+        if (node.dataType === "string") return "String";
+        if (node.dataType === "unit") return "Unit";
+        if (node.dataType === "identifier") {
+            let resolved = this.resolveSymbol(node.value);
+            return resolved ? resolved : node.value;
+        }
     }
     
     return "Variable";
+  }
+
+  inferCurriedType(node) {
+      if (!node) return "Variable";
+      if (node.type === "Lambda") {
+          let str = "";
+          let current = node;
+          while (current && current.type === "Lambda") {
+              if (current.arguments && current.arguments.items) {
+                  current.arguments.items.forEach(arg => {
+                      str += `${arg.identifier} -> `;
+                  });
+              } else {
+                  str += "_ -> ";
+              }
+              if (current.body && current.body.type === "Lambda") {
+                  current = current.body;
+              } else if (current.body && current.body.type === "MatchCase") {
+                  str += "MatchCase";
+                  break;
+              } else {
+                  let bodyType = "Variable";
+                  if (current.body && current.body.type === "Atom" && current.body.dataType === "number") bodyType = "Number";
+                  else if (current.body && current.body.type === "Atom" && current.body.dataType === "string") bodyType = "String";
+                  else if (current.body && current.body.type === "Atom" && current.body.dataType === "unit") bodyType = "Unit";
+                  else bodyType = this.inferType(current.body);
+                  str += bodyType;
+                  break;
+              }
+          }
+          return str;
+      }
+      return this.inferType(node);
   }
 
   pass1(node) {
@@ -276,98 +335,92 @@ export class SemanticAnalyzer {
   reduceCoproduct(elements) {
       if (!elements || elements.length === 0) return null;
 
-      let result = elements[0];
+      let finalElements = [];
+      let acc = elements[0];
       
       for (let i = 1; i < elements.length; i++) {
           let e = elements[i];
-          let typeOfResult = this.inferType(result);
-          let typeOfE = this.inferType(e);
+          let arityAcc = this.getArity(this.inferCurriedType(acc));
+          let arityE = this.getArity(this.inferCurriedType(e));
 
-          let resultIsFunc = typeof typeOfResult === "string" && typeOfResult.startsWith("Function");
-          let eIsFunc = typeof typeOfE === "string" && typeOfE.startsWith("Function");
-          let eIsPlaceholder = e.type === "Atom" && e.dataType === "unit";
-
-          if (resultIsFunc && eIsPlaceholder) {
-              // Partial application with placeholder (unit): f _
-              // Shifts the first argument to the end of the argument list
-              let arity = parseInt(typeOfResult.split(":")[1] || "1", 10);
-              let args = [];
-              let callArgs = [];
-              
-              let delayedArg = { lazy: false, identifier: `__ph_${Math.random().toString(36).substr(2, 5)}_0` };
-              callArgs.push({ type: "Atom", dataType: "identifier", value: delayedArg.identifier, _semanticType: "Variable", _tag: "variable_ref" });
-              
-              for(let k = 1; k < arity; k++) {
-                  let id = `__ph_${Math.random().toString(36).substr(2, 5)}_${k}`;
-                  args.push({ lazy: false, identifier: id });
-                  callArgs.push({ type: "Atom", dataType: "identifier", value: id, _semanticType: "Variable", _tag: "variable_ref" });
-              }
-              args.push(delayedArg); // Put the delayed argument at the END
-
-              let callNode = result;
-              for(let k = 0; k < arity; k++) {
-                  callNode = {
+          if (arityAcc > 0) {
+              if (arityE > 0) {
+                  // Function Composition: acc ~> e
+                  let newArity = arityAcc + arityE - 1;
+                  let args = [];
+                  let callA = acc;
+                  
+                  // Arguments for acc
+                  for(let k = 0; k < arityAcc; k++) {
+                      let id = `__cargA_${Math.random().toString(36).substr(2, 5)}_${k}`;
+                      args.push({ lazy: false, identifier: id });
+                      callA = {
+                          type: "FunctionCall",
+                          callee: callA,
+                          arguments: [{ type: "Atom", dataType: "identifier", value: id, _semanticType: "Variable", _tag: "variable_ref" }]
+                      };
+                  }
+                  
+                  let callB = e;
+                  // First argument to e is the result of callA
+                  callB = {
                       type: "FunctionCall",
-                      callee: callNode,
-                      arguments: [callArgs[k]]
-                  };
-              }
-              
-              result = {
-                  type: "Lambda",
-                  arguments: { type: "Arguments", style: "inline", items: args },
-                  body: callNode
-              };
-          } else if (resultIsFunc && eIsFunc) {
-              // Function Composition: e ∘ result
-              let arity = parseInt(typeOfResult.split(":")[1] || "1", 10);
-              let args = [];
-              let callA = result;
-              
-              for(let k = 0; k < arity; k++) {
-                  let id = `__carg_${Math.random().toString(36).substr(2, 5)}_${k}`;
-                  args.push({ lazy: false, identifier: id });
-                  callA = {
-                      type: "FunctionCall",
-                      callee: callA,
-                      arguments: [{ type: "Atom", dataType: "identifier", value: id, _semanticType: "Variable", _tag: "variable_ref" }]
-                  };
-              }
-              
-              result = {
-                  type: "Lambda",
-                  arguments: { type: "Arguments", style: "inline", items: args },
-                  body: {
-                      type: "FunctionCall",
-                      callee: e,
+                      callee: callB,
                       arguments: [callA]
+                  };
+                  
+                  // Remaining arguments for e
+                  for(let k = 1; k < arityE; k++) {
+                      let id = `__cargB_${Math.random().toString(36).substr(2, 5)}_${k}`;
+                      args.push({ lazy: false, identifier: id });
+                      callB = {
+                          type: "FunctionCall",
+                          callee: callB,
+                          arguments: [{ type: "Atom", dataType: "identifier", value: id, _semanticType: "Variable", _tag: "variable_ref" }]
+                      };
                   }
-              };
-          } else if (resultIsFunc && !eIsFunc) {
-              // Function Application: result(e) (strict left-associative curried application)
-              result = {
-                  type: "FunctionCall",
-                  callee: result,
-                  arguments: [e]
-              };
+                  
+                  acc = {
+                      type: "Lambda",
+                      arguments: { type: "Arguments", style: "inline", items: args },
+                      body: callB
+                  };
+              } else {
+                  // Function Application: acc(e)
+                  acc = {
+                      type: "FunctionCall",
+                      callee: acc,
+                      arguments: [e]
+                  };
+              }
           } else {
-              // Value followed by anything -> Product (Flatten 1 level deep)
-              const extractElements = (node) => {
-                  if (node.type === "ListConstruct") return node.elements;
-                  if (node.type === "Block" && node.expressions && node.expressions.length === 1 && node.expressions[0].type === "ListConstruct") {
-                      return node.expressions[0].elements;
-                  }
-                  return [node];
-              };
-
-              let leftElements = extractElements(result);
-              let rightElements = extractElements(e);
-
-              result = { type: "ListConstruct", elements: leftElements.concat(rightElements) };
+              // acc is fully applied (Value), e is pushed to next iteration
+              finalElements.push(acc);
+              acc = e;
           }
       }
-
-      return this.liftClosure(result);
+      
+      finalElements.push(acc);
+      
+      if (finalElements.length === 1) {
+          return this.liftClosure(finalElements[0]);
+      }
+      
+      // Flatten 1 level deep if there are nested ListConstructs
+      const extractElements = (node) => {
+          if (node.type === "ListConstruct") return node.elements;
+          if (node.type === "Block" && node.expressions && node.expressions.length === 1 && node.expressions[0].type === "ListConstruct") {
+              return node.expressions[0].elements;
+          }
+          return [node];
+      };
+      
+      let flatElements = [];
+      finalElements.forEach(e => {
+          flatElements.push(...extractElements(e));
+      });
+      
+      return this.liftClosure({ type: "ListConstruct", elements: flatElements });
   }
 
   liftClosure(node) {
@@ -432,6 +485,62 @@ export class SemanticAnalyzer {
       });
       this.dictDefinitions.set(prefix, fields);
       
+    } else if (node.type === "Lambda") {
+        let curriedArgs = "";
+        let targetBody = node;
+        
+        while (targetBody && targetBody.type === "Lambda") {
+            if (targetBody.arguments && targetBody.arguments.items) {
+                targetBody.arguments.items.forEach(arg => {
+                    curriedArgs += `${arg.identifier} -> `;
+                });
+            } else {
+                curriedArgs += "_ -> ";
+            }
+            if (targetBody.body && targetBody.body.type === "Lambda") {
+                targetBody = targetBody.body;
+            } else {
+                targetBody = targetBody.body;
+                break;
+            }
+        }
+        
+        let newPrefix = prefix;
+        if (curriedArgs.length > 0) {
+            newPrefix = `${prefix} -> ${curriedArgs.slice(0, -4)}`;
+        }
+        
+        if (targetBody && targetBody.type === "MatchCase") {
+            let fields = new Map();
+            targetBody.cases.forEach(c => {
+                let key = "_";
+                if (c.condition && c.condition.type === "BinaryOperation" && c.condition.operator === "=") {
+                    if (c.condition.right && c.condition.right.type === "Atom") {
+                        key = c.condition.right.value;
+                    } else if (c.condition.right && c.condition.right.type === "FunctionCall") {
+                        // Sometimes types are parsed as function calls or identifiers if they are not primitives
+                        key = c.condition.right.value || "Type";
+                    } else if (c.condition.right && c.condition.right.identifier) {
+                        key = c.condition.right.identifier;
+                    }
+                }
+                
+                let valueType = "Variable";
+                if (c.body.type === "Atom" && c.body.dataType === "number") {
+                    valueType = "Number";
+                } else if (c.body.type === "Atom" && c.body.dataType === "string") {
+                    valueType = "String";
+                } else if (c.body.type === "Atom" && c.body.dataType === "unit") {
+                    valueType = "Unit";
+                } else {
+                    valueType = this.inferType(c.body);
+                }
+                fields.set(key, valueType);
+            });
+            this.dictDefinitions.set(newPrefix, fields);
+        } else {
+            this.typeRegistry.push(`${prefix} -> ${this.inferCurriedType(node)}`);
+        }
     } else if (node.type === "Product" || node.type === "Coproduct" || node.type === "Logical_Or" || node.type === "Logical_And" || node.type === "Logical_Xor") {
       let fields = new Map();
       
@@ -447,7 +556,8 @@ export class SemanticAnalyzer {
       if (fields.size > 0) {
           this.dictDefinitions.set(prefix, fields);
       } else {
-          this.typeRegistry.push(`${prefix} -> Variable`);
+          let valueType = this.inferType(node);
+          this.typeRegistry.push(`${prefix} -> ${valueType}`);
       }
     } else {
        let valueType = "Variable";
@@ -459,16 +569,18 @@ export class SemanticAnalyzer {
            valueType = "Unit";
        } else {
            valueType = this.inferType(node);
+           console.log(`extractStructuralTypes: ${prefix} -> ${valueType}`);
+           this.typeRegistry.push(`${prefix} -> ${valueType}`);
        }
-       this.typeRegistry.push(`${prefix} -> ${valueType}`);
     }
   }
 
   generateTypeSignature() {
     let lines = [...this.typeRegistry];
     this.dictDefinitions.forEach((fields, prefix) => {
+        lines.push(`${prefix} ->`);
         fields.forEach((valType, key) => {
-            lines.push(`${prefix} -> ${key} -> ${valType}`);
+            lines.push(`\t${key} -> ${valType}`);
         });
     });
     return lines.join("\n") + "\n";
