@@ -1,8 +1,5 @@
 {
-  let context = {
-    indentStack : [],
-    indent : ""
-  };
+  let Depth = 0
 }
 
 Start = Program
@@ -23,7 +20,7 @@ EOF = !.
 
 comment = ("`" [^\r\n]*) {return ""}
 
-Program = (SOL (Expression / comment) (EOL / EOF))*
+Program = (SOL (Expression / comment) EOL)* EOF
 
 Expression = Export / EOL
 
@@ -34,37 +31,16 @@ Define
   / Lambda
 
 Lambda
-  = Arguments _ "?" _ ((EOL Indent)? Lambda / Match_Case+)
+  = Defaultive
+  / Inline
   / Output
   / PointFree
 
-Output
-  = Compute (__ "#" __ Lambda)+
-  / Consideration
-
-Consideration = Logical_Xor
-Logical_Xor = Logical_Or (_ ";" _ Logical_Or)*
-Logical_Or = Logical_And (__ "|" __ Logical_And)*
-Logical_And = Judgement (_ "&" _ Judgement)*
-Judgement =  Construct (_ ("==" / "!==") _ Construct)*
-
-Construct
-  = Dictionary
-  / Product
-
-Dictionary = EOL Indent ((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct) EOL)+ Dedent
-
-Arguments = Inline / Defaultive
-
 Defaultive
-  = EOL? "[" EOL Indent ("~"? identifier (_ ":" _ Lambda)? EOL)+ Dedent "]"
-  / EOL? "{" EOL Indent ("~"? identifier (_ ":" _ Lambda)? EOL)+ Dedent "}"
-  / EOL? "(" EOL Indent ("~"? identifier (_ ":" _ Lambda)? EOL)+ Dedent ")"
+  = EOL? Indent Indent ("~"? identifier (_ ":" _ Lambda)? EOL)+ Dedent EOL _ "?" _ (Match_Case Dedent) / (EOL Indent Lambda Dedent Dedent)
 
 Inline
-  = identifier (__ "~"? identifier)*
-
-Match_Case = EOL Indent (((Consideration / Comparison) _ ":" _)? (Lambda / Match_Case) EOL)+ Dedent
+  = identifier (__ "~"? identifier)* _ "?" _ (Match_Case / Lambda)
  
 PointFree
   = DirectMap
@@ -84,6 +60,27 @@ Normal
   / infix __ (number / address / register)
   
 DirectFold = infix
+
+Match_Case = EOL Indent head:Match_Case_Item tail:Match_Case_Item* EOL* Dedent
+
+Match_Case_Item
+  = cond:((Consideration / Comparison) _ ":" _)? body:(Lambda / Match_Case) EOL
+
+Output
+  = Compute (__ "#" __ Lambda)+
+  / Consideration
+
+Consideration = Logical_Xor
+Logical_Xor = Logical_Or (_ ";" _ Logical_Or)*
+Logical_Or = Logical_And (__ "|" __ Logical_And)*
+Logical_And = Judgement (_ "&" _ Judgement)*
+Judgement =  Construct (_ ("==" / "!==") _ Construct)*
+
+Construct
+  = Dictionary
+  / Product
+
+Dictionary = EOL Indent ((identifier "~"? / string) _ ":" _ (Lambda / Atom / Construct) EOL)+ Dedent
 
 Product
   = Sequence
@@ -110,7 +107,7 @@ Exponential
   / Get
 
 Get
-  = Compute (_ "'" _ (Product / Sequence / number / string / (identifier "~"?)))*
+  = Compute (_ "'" _ (Block / (identifier "~"?)))*
   / (identifier "~"? / string) __ "@" __ Get
   / Compute
 
@@ -192,14 +189,10 @@ infix
 
 unit = "_"
 
-Indent = i:[\t]+ &{
-        i.length > ctx.indent.length
-      }
-      {
-        ctx.indentStack.push(ctx.indent)
-        ctx.indent = i.join("")
-      }
+Indent = i:[\t] &{
+  if (Depth < i.length) Depth = i.length
+}
 
-Dedent = &{
-    ctx.indent = ctx.indentStack.pop()
-  }
+Dedent = [\r\n] i:[\t]* &{
+  if (Depth > i.length) Depth = i.length;
+}
