@@ -31,9 +31,9 @@ EOF = !.
 comment = ("`" [^\r\n]*) { return null; }
 
 Program = lines:(
-    SOL exp:(Expression / comment) (EOL / EOF) { return exp; }
+    SOL exp:(Expression / comment) EOL { return exp; }
   / SOL EOL { return null; }
-)* {
+)* EOF {
   return {
     type: "Program",
     body: lines.filter(l => l !== null && l !== undefined && l !== "")
