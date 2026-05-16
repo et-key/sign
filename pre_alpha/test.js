@@ -1,7 +1,7 @@
 import { preprocess } from './lexisize/lexer.js';
 import * as parser from './parse/minimal.js';
 import { buildAST } from './semanticize/shunting_yard.js';
-import { annotateContextualOperators, buildTypeEnvironment, resolveCoproducts, inferType, liftLambdas, generateST } from './semanticize/analyzer.js';
+import { annotateContextualOperators, buildTypeEnvironment, resolveCoproducts, inferType, liftLambdas, generateST } from './semanticize/analyzer/index.js';
 import util from 'util';
 import fs from 'fs';
 import path from 'path';

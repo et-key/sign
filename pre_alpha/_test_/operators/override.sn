@@ -1,0 +1,10 @@
+[+] : x y ? _
+[|/] : x y ? 
+
+// [+] is overridden to return unit (_)
+// Should be typed as unit
+1 + 2
+
+// [|/] is defined to return string
+// Should be typed as string
+3 |/ 8
