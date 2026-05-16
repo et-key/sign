@@ -1,0 +1,323 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<f>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": {
+        "type": "operation",
+        "operator": "concat",
+        "left": "<x>",
+        "right": "<y>",
+        "semantic_tag": "list_composition",
+        "inferred_type": "value"
+      },
+      "right": {
+        "type": "operation",
+        "operator": "+",
+        "left": "<x>",
+        "right": "<y>",
+        "type_detail": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      },
+      "type_detail": {
+        "type": "type_function",
+        "args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
+        "returnType": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      }
+    },
+    "type_detail": {
+      "type": "type_function",
+      "args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
+      "returnType": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<partial>",
+    "right": {
+      "type": "operation",
+      "operator": "apply",
+      "left": "<f>",
+      "right": {
+        "type": "operation",
+        "operator": "concat",
+        "left": "_",
+        "right": "3",
+        "semantic_tag": "list_composition",
+        "inferred_type": "value",
+        "type_detail": {
+          "type": "type_tuple",
+          "elements": [
+            {
+              "type": "type_unit"
+            },
+            {
+              "type": "type_primitive",
+              "name": "f64"
+            }
+          ]
+        }
+      },
+      "semantic_tag": "application",
+      "inferred_type": "unknown",
+      "type_detail": {
+        "type": "type_function",
+        "args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "remaining_args": [],
+        "holes": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          }
+        ],
+        "bound_env": {},
+        "returnType": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      }
+    },
+    "type_detail": {
+      "type": "type_function",
+      "args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "remaining_args": [],
+      "holes": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        }
+      ],
+      "bound_env": {},
+      "returnType": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<curried>",
+    "right": {
+      "type": "operation",
+      "operator": "apply",
+      "left": "<f>",
+      "right": "2",
+      "semantic_tag": "application",
+      "inferred_type": "unknown",
+      "type_detail": {
+        "type": "type_function",
+        "args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
+        "returnType": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      }
+    },
+    "type_detail": {
+      "type": "type_function",
+      "args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
+      "returnType": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result_curried>",
+    "right": {
+      "type": "operation",
+      "operator": "apply",
+      "left": "<curried>",
+      "right": "4",
+      "semantic_tag": "application",
+      "inferred_type": "unknown",
+      "type_detail": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    },
+    "type_detail": {
+      "type": "type_primitive",
+      "name": "f64"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<check>",
+    "right": {
+      "type": "operation",
+      "operator": "<",
+      "left": "10",
+      "right": "5",
+      "type_detail": {
+        "type": "type_coproduct",
+        "variants": [
+          {
+            "type": "type_primitive",
+            "name": "f64"
+          },
+          {
+            "type": "type_unit"
+          }
+        ]
+      }
+    },
+    "type_detail": {
+      "type": "type_coproduct",
+      "variants": [
+        {
+          "type": "type_primitive",
+          "name": "f64"
+        },
+        {
+          "type": "type_unit"
+        }
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<check2>",
+    "right": {
+      "type": "operation",
+      "operator": "==",
+      "left": "5",
+      "right": "5",
+      "type_detail": {
+        "type": "type_coproduct",
+        "variants": [
+          {
+            "type": "type_primitive",
+            "name": "f64"
+          },
+          {
+            "type": "type_unit"
+          }
+        ]
+      }
+    },
+    "type_detail": {
+      "type": "type_coproduct",
+      "variants": [
+        {
+          "type": "type_primitive",
+          "name": "f64"
+        },
+        {
+          "type": "type_unit"
+        }
+      ]
+    }
+  }
+]

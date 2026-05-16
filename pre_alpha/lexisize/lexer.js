@@ -68,26 +68,38 @@ function markBlock(input) {
     // 構文解析器(PEG)が未定義の \t でクラッシュしないよう、物理的なタブは出力から削除する
     let prefix = '';
 
-    if (currentIndent > indentStack[indentStack.length - 1]) {
+    // インデントが浅くなった場合、スタックをポップしてDEDENTマーカーを出力
+    while (indentStack.length > 1 && currentIndent < indentStack[indentStack.length - 1]) {
+      indentStack.pop();
+      if (lastContentLineIdx !== -1) {
+        result[lastContentLineIdx] += '\x03'; // DEDENTマーカー
+      }
+    }
+
+    // 継続行の判定 (行頭が中置演算子などで始まる場合)
+    // 括弧やカンマ、四則演算子などが該当する
+    const contentTrimmed = content.trim();
+    const isContinuation = /^[?+*\/\.,=<>!&~]/.test(contentTrimmed) || /^\|\s/.test(contentTrimmed);
+
+    if (isContinuation) {
+      // 継続行の場合は新しく行を分けず、直前の行末尾にスペース区切りで結合する
+      if (lastContentLineIdx !== -1) {
+        result[lastContentLineIdx] += ' ' + content;
+      } else {
+        result.push(prefix + content);
+        lastContentLineIdx = result.length - 1;
+      }
+    } else if (currentIndent > indentStack[indentStack.length - 1]) {
       // インデントが深くなった場合
       indentStack.push(currentIndent);
-      // 直前の有効な行末尾に INDENT マーカーと内容を結合する（改行を挟まない）
       if (lastContentLineIdx !== -1) {
-        result[lastContentLineIdx] += '\x02' + content;
+        result[lastContentLineIdx] += '\x02' + content; // INDENTマーカー
       } else {
         result.push('\x02' + content);
         lastContentLineIdx = result.length - 1;
       }
     } else {
-      if (currentIndent < indentStack[indentStack.length - 1]) {
-        // インデントが浅くなった場合
-        while (indentStack.length > 1 && currentIndent < indentStack[indentStack.length - 1]) {
-          indentStack.pop();
-          if (lastContentLineIdx !== -1) {
-            result[lastContentLineIdx] += '\x03'; // DEDENTマーカーを直前の有効行末尾に追加
-          }
-        }
-      }
+      // インデントが同じ場合
       result.push(prefix + content);
       lastContentLineIdx = result.length - 1;
     }
@@ -104,9 +116,16 @@ function markBlock(input) {
   return result.join('\n');
 }
 
+// 識別子としての絶対値囲み（|...|）と中置OR（|）を空白の有無で解決する関数
+export function resolveAbsoluteValue(input) {
+  return input.replace(/([^\s|])\|([^\s|])/g, '$1 | $2');
+}
+
 // 今後の拡張用（インデントに基づくブロック構築などの前処理）
 export function preprocess(input) {
   return separateInfix(
-    markBlock(input)
+    resolveAbsoluteValue(
+      markBlock(input)
+    )
   );
 }

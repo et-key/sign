@@ -1,0 +1,58 @@
+[
+  {
+    "type": "operation",
+    "operator": "|",
+    "left": {
+      "type": "operation",
+      "operator": "|",
+      "left": "<a>",
+      "right": {
+        "type": "operation",
+        "operator": "-",
+        "operand": "<b>",
+        "position": "prefix",
+        "type_detail": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      },
+      "type_detail": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    },
+    "right": "<c>",
+    "type_detail": {
+      "type": "type_ref",
+      "name": "c"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": "|",
+    "left": {
+      "type": "operation",
+      "operator": "|",
+      "left": "<a>",
+      "right": {
+        "type": "operation",
+        "operator": "-",
+        "operand": "<b>",
+        "position": "prefix",
+        "type_detail": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      },
+      "type_detail": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    },
+    "right": "<c>",
+    "type_detail": {
+      "type": "type_ref",
+      "name": "c"
+    }
+  }
+]

@@ -1,0 +1,10 @@
+func_with_defaults:
+		x: 1
+		y: x + 1
+	?
+		x + y
+
+result1 : func_with_defaults .. ..
+result2 : func_with_defaults 3 ..
+result3 : func_with_defaults .. 5
+result4 : func_with_defaults 3 5

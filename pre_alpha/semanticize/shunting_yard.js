@@ -19,7 +19,7 @@ function identifyToken(token, previousIsOperand) {
   }
 
   // 文字列の場合
-  if (token.startsWith('"') || token.startsWith('<')) {
+  if (token.startsWith('"') || (token.startsWith('<') && token.endsWith('>'))) {
     // 制御タグや識別子、値など
     return { type: 'operand', value: token };
   }
@@ -115,7 +115,17 @@ export function buildAST(tokens) {
     if (op.type === 'infix') {
       const right = outputStack.pop();
       const left = outputStack.pop();
-      outputStack.push({ type: 'operation', operator: op.symbol, left, right });
+      if (op.name === 'coproduct') {
+        // 余積（ただ並んでいる状態）は coproduct_block として束ねる
+        if (left && left.type === 'coproduct_block') {
+          left.statements.push(right);
+          outputStack.push(left);
+        } else {
+          outputStack.push({ type: 'coproduct_block', statements: [left, right] });
+        }
+      } else {
+        outputStack.push({ type: 'operation', operator: op.symbol, left, right });
+      }
     } else if (op.type === 'prefix' || op.type === 'postfix') {
       const operand = outputStack.pop();
       outputStack.push({ type: 'operation', operator: op.symbol, operand, position: op.type });
@@ -126,20 +136,29 @@ export function buildAST(tokens) {
 
   for (let i = 0; i < resolvedTokens.length; i++) {
     const token = resolvedTokens[i];
-
-    // 既にASTノード（オブジェクト）になっているものはオペランド
-    if (typeof token === 'object' && token !== null) {
-      outputStack.push(token);
-      previousIsOperand = true;
-      continue;
+    
+    // オブジェクト(すでに解決済みのASTノード)は operand として扱う
+    let info;
+    if (typeof token === 'object' && token !== null && !Array.isArray(token)) {
+      info = { type: 'operand', value: token };
+    } else {
+      info = identifyToken(token, previousIsOperand);
     }
 
-    const info = identifyToken(token, previousIsOperand);
-
     if (info.type === 'operand') {
-      // 暗黙の中置演算子（隣接する値）に対する処理を追加可能
+      // 暗黙の中置演算子（余積・適用）を挿入（プレセデンス10）
       if (previousIsOperand) {
-        // 例えば関数の適用(apply)として ' ' をスタックに積むなどの処理
+        const coproductOp = { type: 'infix', symbol: ' ', precedence: 10, name: 'coproduct' };
+        while (operatorStack.length > 0) {
+          const top = operatorStack[operatorStack.length - 1];
+          // プレセデンス値が大きいほど優先順位が高い。左結合なので >= 
+          if (top.precedence >= coproductOp.precedence) {
+            popOperator();
+          } else {
+            break;
+          }
+        }
+        operatorStack.push(coproductOp);
       }
       outputStack.push(info.value);
       previousIsOperand = true;
@@ -147,6 +166,24 @@ export function buildAST(tokens) {
     else if (info.type === 'prefix') {
       const opDef = getOperatorInfo(info.symbol, 'prefix');
       info.precedence = opDef.precedence;
+      
+      // もしオペランドの直後に前置演算子が来た場合（例: `f ~y`）、
+      // 間に暗黙の適用/余積があるものとして処理する
+      if (previousIsOperand) {
+        const coproductOp = { type: 'infix', symbol: ' ', precedence: 10, name: 'coproduct' };
+        while (operatorStack.length > 0) {
+          const top = operatorStack[operatorStack.length - 1];
+          if (top.type !== 'prefix' && top.symbol !== '(' && top.symbol !== '[' && top.symbol !== '{' && top.symbol !== '\x02' && top.symbol !== '\x04') {
+            if (top.precedence >= coproductOp.precedence) {
+              popOperator();
+              continue;
+            }
+          }
+          break;
+        }
+        operatorStack.push(coproductOp);
+      }
+      
       operatorStack.push(info);
       previousIsOperand = false;
     }
@@ -156,7 +193,7 @@ export function buildAST(tokens) {
       // 後置演算子は左結合としてすぐ処理するか、スタックに積む
       while (operatorStack.length > 0) {
         const top = operatorStack[operatorStack.length - 1];
-        if (top.precedence < info.precedence) { // 優先順位の数値が小さいほど優先度が高い
+        if (top.precedence >= info.precedence) { 
           popOperator();
         } else {
           break;
@@ -171,8 +208,7 @@ export function buildAST(tokens) {
 
       while (operatorStack.length > 0) {
         const top = operatorStack[operatorStack.length - 1];
-        // 優先順位の数値が小さいほど優先度が高い（例: 13(+) は 14(*) より優先度低いので pop しない）
-        if (top.precedence <= info.precedence) {
+        if (top.precedence >= info.precedence) {
           popOperator();
         } else {
           break;

@@ -1,0 +1,108 @@
+[
+  {
+    "type": "operation",
+    "operator": "+",
+    "left": {
+      "type": "block",
+      "kind": "abs",
+      "content": "<a>",
+      "type_detail": {
+        "type": "type_ref",
+        "name": "a"
+      }
+    },
+    "right": "1",
+    "type_detail": {
+      "type": "type_primitive",
+      "name": "f64"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": "+",
+    "left": "1",
+    "right": {
+      "type": "block",
+      "kind": "abs",
+      "content": "<a>",
+      "type_detail": {
+        "type": "type_ref",
+        "name": "a"
+      }
+    },
+    "type_detail": {
+      "type": "type_primitive",
+      "name": "f64"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": "*",
+    "left": {
+      "type": "block",
+      "kind": "abs",
+      "content": {
+        "type": "block",
+        "kind": "group",
+        "content": {
+          "type": "operation",
+          "operator": "+",
+          "left": "<x>",
+          "right": "<y>",
+          "type_detail": {
+            "type": "type_primitive",
+            "name": "f64"
+          }
+        },
+        "type_detail": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      },
+      "type_detail": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    },
+    "right": "3",
+    "type_detail": {
+      "type": "type_primitive",
+      "name": "f64"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": "*",
+    "left": "3",
+    "right": {
+      "type": "block",
+      "kind": "abs",
+      "content": {
+        "type": "block",
+        "kind": "group",
+        "content": {
+          "type": "operation",
+          "operator": "+",
+          "left": "<x>",
+          "right": "<y>",
+          "type_detail": {
+            "type": "type_primitive",
+            "name": "f64"
+          }
+        },
+        "type_detail": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      },
+      "type_detail": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    },
+    "type_detail": {
+      "type": "type_primitive",
+      "name": "f64"
+    }
+  }
+]

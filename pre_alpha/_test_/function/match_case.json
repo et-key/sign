@@ -1,0 +1,711 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<func_match>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": {
+        "type": "operation",
+        "operator": "concat",
+        "left": "<x>",
+        "right": "<y>",
+        "semantic_tag": "list_composition",
+        "inferred_type": "value"
+      },
+      "right": {
+        "type": "block",
+        "kind": "indent",
+        "content": {
+          "type": "operation",
+          "operator": "apply",
+          "left": {
+            "type": "operation",
+            "operator": ".",
+            "left": {
+              "type": "block",
+              "kind": "group",
+              "content": {
+                "type": "operation",
+                "operator": ":",
+                "left": {
+                  "type": "operation",
+                  "operator": "<",
+                  "left": "<x>",
+                  "right": "1"
+                },
+                "right": "<result1>",
+                "semantic_tag": "match_case",
+                "type_detail": {
+                  "type": "type_function",
+                  "args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "remaining_args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "holes": [],
+                  "bound_env": {},
+                  "returnType": {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_ref",
+                        "name": "result1"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "__fallback__"
+                      }
+                    ]
+                  }
+                }
+              },
+              "type_detail": {
+                "type": "type_function",
+                "args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "remaining_args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "holes": [],
+                "bound_env": {},
+                "returnType": {
+                  "type": "type_coproduct",
+                  "variants": [
+                    {
+                      "type": "type_ref",
+                      "name": "result1"
+                    },
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ]
+                }
+              }
+            },
+            "right": {
+              "type": "block",
+              "kind": "group",
+              "content": {
+                "type": "operation",
+                "operator": ":",
+                "left": {
+                  "type": "operation",
+                  "operator": "<",
+                  "left": "<y>",
+                  "right": "3"
+                },
+                "right": "<result2>",
+                "semantic_tag": "match_case",
+                "type_detail": {
+                  "type": "type_function",
+                  "args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "remaining_args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "holes": [],
+                  "bound_env": {},
+                  "returnType": {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_ref",
+                        "name": "result2"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "__fallback__"
+                      }
+                    ]
+                  }
+                }
+              },
+              "type_detail": {
+                "type": "type_function",
+                "args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "remaining_args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "holes": [],
+                "bound_env": {},
+                "returnType": {
+                  "type": "type_coproduct",
+                  "variants": [
+                    {
+                      "type": "type_ref",
+                      "name": "result2"
+                    },
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ]
+                }
+              }
+            },
+            "semantic_tag": "composition",
+            "inferred_type": "function",
+            "type_detail": {
+              "type": "type_function",
+              "args": [
+                {
+                  "type": "type_ref",
+                  "name": "__fallback__"
+                }
+              ],
+              "remaining_args": [
+                {
+                  "type": "type_ref",
+                  "name": "__fallback__"
+                }
+              ],
+              "holes": [],
+              "bound_env": {},
+              "returnType": {
+                "type": "type_coproduct",
+                "variants": [
+                  {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_ref",
+                        "name": "result1"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "result2"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_ref",
+                        "name": "result1"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "__fallback__"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "right": "3",
+          "semantic_tag": "application",
+          "inferred_type": "unknown",
+          "type_detail": {
+            "type": "type_coproduct",
+            "variants": [
+              {
+                "type": "type_ref",
+                "name": "result1"
+              },
+              {
+                "type": "type_ref",
+                "name": "result2"
+              },
+              {
+                "type": "type_primitive",
+                "name": "f64"
+              }
+            ]
+          }
+        },
+        "type_detail": {
+          "type": "type_coproduct",
+          "variants": [
+            {
+              "type": "type_ref",
+              "name": "result1"
+            },
+            {
+              "type": "type_ref",
+              "name": "result2"
+            },
+            {
+              "type": "type_primitive",
+              "name": "f64"
+            }
+          ]
+        }
+      },
+      "type_detail": {
+        "type": "type_function",
+        "args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
+        "returnType": {
+          "type": "type_coproduct",
+          "variants": [
+            {
+              "type": "type_ref",
+              "name": "result1"
+            },
+            {
+              "type": "type_ref",
+              "name": "result2"
+            },
+            {
+              "type": "type_primitive",
+              "name": "f64"
+            }
+          ]
+        }
+      }
+    },
+    "type_detail": {
+      "type": "type_function",
+      "args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
+      "returnType": {
+        "type": "type_coproduct",
+        "variants": [
+          {
+            "type": "type_ref",
+            "name": "result1"
+          },
+          {
+            "type": "type_ref",
+            "name": "result2"
+          },
+          {
+            "type": "type_primitive",
+            "name": "f64"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "block",
+    "kind": "indent",
+    "content": {
+      "type": "block",
+      "kind": "group",
+      "content": "\"__Lambda__[0]\"",
+      "type_detail": {
+        "type": "type_function",
+        "args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
+        "returnType": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      }
+    },
+    "type_detail": {
+      "type": "type_function",
+      "args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
+      "returnType": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "\"__Lambda__[0]\"",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": {
+        "type": "operation",
+        "operator": "concat",
+        "left": "<x>",
+        "right": "<y>",
+        "semantic_tag": "list_composition",
+        "inferred_type": "value"
+      },
+      "right": {
+        "type": "block",
+        "kind": "indent",
+        "content": {
+          "type": "operation",
+          "operator": "apply",
+          "left": {
+            "type": "operation",
+            "operator": ".",
+            "left": {
+              "type": "block",
+              "kind": "group",
+              "content": {
+                "type": "operation",
+                "operator": ":",
+                "left": "<x>",
+                "right": "1",
+                "semantic_tag": "match_case",
+                "type_detail": {
+                  "type": "type_function",
+                  "args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "remaining_args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "holes": [],
+                  "bound_env": {},
+                  "returnType": {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_primitive",
+                        "name": "f64"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "__fallback__"
+                      }
+                    ]
+                  }
+                }
+              },
+              "type_detail": {
+                "type": "type_function",
+                "args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "remaining_args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "holes": [],
+                "bound_env": {},
+                "returnType": {
+                  "type": "type_coproduct",
+                  "variants": [
+                    {
+                      "type": "type_primitive",
+                      "name": "f64"
+                    },
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ]
+                }
+              }
+            },
+            "right": {
+              "type": "block",
+              "kind": "group",
+              "content": {
+                "type": "operation",
+                "operator": ":",
+                "left": "<y>",
+                "right": "2",
+                "semantic_tag": "match_case",
+                "type_detail": {
+                  "type": "type_function",
+                  "args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "remaining_args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "holes": [],
+                  "bound_env": {},
+                  "returnType": {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_primitive",
+                        "name": "f64"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "__fallback__"
+                      }
+                    ]
+                  }
+                }
+              },
+              "type_detail": {
+                "type": "type_function",
+                "args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "remaining_args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "holes": [],
+                "bound_env": {},
+                "returnType": {
+                  "type": "type_coproduct",
+                  "variants": [
+                    {
+                      "type": "type_primitive",
+                      "name": "f64"
+                    },
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ]
+                }
+              }
+            },
+            "semantic_tag": "composition",
+            "inferred_type": "function",
+            "type_detail": {
+              "type": "type_function",
+              "args": [
+                {
+                  "type": "type_ref",
+                  "name": "__fallback__"
+                }
+              ],
+              "remaining_args": [
+                {
+                  "type": "type_ref",
+                  "name": "__fallback__"
+                }
+              ],
+              "holes": [],
+              "bound_env": {},
+              "returnType": {
+                "type": "type_coproduct",
+                "variants": [
+                  {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_primitive",
+                        "name": "f64"
+                      },
+                      {
+                        "type": "type_primitive",
+                        "name": "f64"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_primitive",
+                        "name": "f64"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "__fallback__"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "right": "3",
+          "semantic_tag": "application",
+          "inferred_type": "unknown",
+          "type_detail": {
+            "type": "type_primitive",
+            "name": "f64"
+          }
+        },
+        "type_detail": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      },
+      "type_detail": {
+        "type": "type_function",
+        "args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
+        "returnType": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      }
+    },
+    "type_detail": {
+      "type": "type_function",
+      "args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
+      "returnType": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    }
+  }
+]

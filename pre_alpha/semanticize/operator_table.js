@@ -184,7 +184,6 @@ export function buildLexerRegex() {
   // 例: (!==|!=|==|<=|>=|<<|>>|\|\||;;|&&|~\+|~-|~\*|~\/|~\^|...)
   const infixPattern = strictInfix.map(escapeRegExp).join('|');
 
-  // 前置専用だが、記号列の中に含まれると誤爆しやすいもの (例: !!) も保護対象に入れる
   // 今回はユーザーの `separateInfix` に合わせて、 `!!` などを保護対象に含める
   // （ユーザーの元の正規表現を踏襲しつつ、動的に生成する）
   const regexStr = `(\`[^\`\\r\\n]*\`|\`[^\\r\\n]*|\\\\.|!!)|(${infixPattern})`;
