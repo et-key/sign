@@ -125,121 +125,29 @@
     "left": "<mapped>",
     "right": {
       "type": "operation",
-      "operator": "concat",
-      "left": {
-        "type": "operation",
-        "operator": "concat",
-        "left": "<f>",
-        "right": "<maybe_val>",
-        "semantic_tag": "list_composition",
-        "inferred_type": "value",
-        "type_detail": {
-          "type": "type_coproduct",
-          "variants": [
-            {
-              "type": "type_function",
-              "args": [
-                {
-                  "type": "type_ref",
-                  "name": "y"
-                }
-              ],
-              "remaining_args": [
-                {
-                  "type": "type_ref",
-                  "name": "y"
-                }
-              ],
-              "holes": [],
-              "bound_env": {},
-              "returnType": {
-                "type": "type_primitive",
-                "name": "f64"
-              }
-            },
-            {
-              "type": "type_unit"
-            }
-          ]
-        }
-      },
-      "right": "3",
-      "semantic_tag": "list_composition",
-      "inferred_type": "value",
-      "type_detail": {
-        "type": "type_coproduct",
-        "variants": [
-          {
-            "type": "type_primitive",
-            "name": "f64"
-          },
-          {
-            "type": "type_unit"
-          }
-        ]
-      }
-    },
-    "type_detail": {
-      "type": "type_coproduct",
-      "variants": [
-        {
-          "type": "type_primitive",
-          "name": "f64"
-        },
-        {
-          "type": "type_unit"
-        }
-      ]
-    }
-  },
-  {
-    "type": "operation",
-    "operator": ":",
-    "left": "<overridden_op>",
-    "right": {
-      "type": "operation",
       "operator": "apply",
-      "left": {
-        "type": "block",
-        "kind": "group",
-        "content": {
-          "type": "operation",
-          "operator": "+",
-          "right": {
-            "type": "operation",
-            "operator": "/",
-            "semantic_tag": "point_free_function",
-            "inferred_type": "function",
-            "type_detail": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          },
-          "semantic_tag": "point_free_function",
-          "inferred_type": "function",
-          "type_detail": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
-        },
-        "type_detail": {
-          "type": "type_primitive",
-          "name": "f64"
-        }
-      },
+      "left": "<f>",
       "right": {
         "type": "operation",
         "operator": "concat",
-        "left": "1",
-        "right": "2",
+        "left": "<maybe_val>",
+        "right": "3",
         "semantic_tag": "list_composition",
         "inferred_type": "value",
         "type_detail": {
           "type": "type_tuple",
           "elements": [
             {
-              "type": "type_primitive",
-              "name": "f64"
+              "type": "type_coproduct",
+              "variants": [
+                {
+                  "type": "type_primitive",
+                  "name": "f64"
+                },
+                {
+                  "type": "type_unit"
+                }
+              ]
             },
             {
               "type": "type_primitive",
@@ -251,11 +159,13 @@
       "semantic_tag": "application",
       "inferred_type": "unknown",
       "type_detail": {
-        "type": "type_unknown"
+        "type": "type_primitive",
+        "name": "f64"
       }
     },
     "type_detail": {
-      "type": "type_unknown"
+      "type": "type_primitive",
+      "name": "f64"
     }
   },
   {
@@ -326,35 +236,19 @@
     "left": "<mapped_twice>",
     "right": {
       "type": "operation",
-      "operator": "concat",
+      "operator": "apply",
       "left": "<g>",
       "right": "<mapped>",
-      "semantic_tag": "list_composition",
-      "inferred_type": "value",
+      "semantic_tag": "application",
+      "inferred_type": "unknown",
       "type_detail": {
-        "type": "type_coproduct",
-        "variants": [
-          {
-            "type": "type_primitive",
-            "name": "f64"
-          },
-          {
-            "type": "type_unit"
-          }
-        ]
+        "type": "type_primitive",
+        "name": "f64"
       }
     },
     "type_detail": {
-      "type": "type_coproduct",
-      "variants": [
-        {
-          "type": "type_primitive",
-          "name": "f64"
-        },
-        {
-          "type": "type_unit"
-        }
-      ]
+      "type": "type_primitive",
+      "name": "f64"
     }
   }
 ]

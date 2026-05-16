@@ -90,59 +90,49 @@
     "left": "<partial>",
     "right": {
       "type": "operation",
-      "operator": "concat",
-      "left": {
+      "operator": "apply",
+      "left": "<f>",
+      "right": {
         "type": "operation",
         "operator": "concat",
-        "left": "<f>",
-        "right": "_",
+        "left": "<__>",
+        "right": "3",
         "semantic_tag": "list_composition",
         "inferred_type": "value",
         "type_detail": {
-          "type": "type_function",
-          "args": [
+          "type": "type_tuple",
+          "elements": [
             {
-              "type": "type_ref",
-              "name": "y"
-            }
-          ],
-          "remaining_args": [
+              "type": "type_unit"
+            },
             {
-              "type": "type_ref",
-              "name": "y"
+              "type": "type_primitive",
+              "name": "f64"
             }
-          ],
-          "holes": [
-            {
-              "type": "type_ref",
-              "name": "x"
-            }
-          ],
-          "bound_env": {},
-          "returnType": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
+          ]
         }
       },
-      "right": "3",
-      "semantic_tag": "list_composition",
-      "inferred_type": "value",
+      "semantic_tag": "application",
+      "inferred_type": "unknown",
       "type_detail": {
         "type": "type_function",
         "args": [
           {
             "type": "type_ref",
             "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
           }
         ],
-        "remaining_args": [
+        "remaining_args": [],
+        "holes": [
           {
             "type": "type_ref",
             "name": "x"
           }
         ],
-        "holes": [],
         "bound_env": {},
         "returnType": {
           "type": "type_primitive",
@@ -156,15 +146,19 @@
         {
           "type": "type_ref",
           "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
         }
       ],
-      "remaining_args": [
+      "remaining_args": [],
+      "holes": [
         {
           "type": "type_ref",
           "name": "x"
         }
       ],
-      "holes": [],
       "bound_env": {},
       "returnType": {
         "type": "type_primitive",
@@ -178,14 +172,18 @@
     "left": "<curried>",
     "right": {
       "type": "operation",
-      "operator": "concat",
+      "operator": "apply",
       "left": "<f>",
       "right": "2",
-      "semantic_tag": "list_composition",
-      "inferred_type": "value",
+      "semantic_tag": "application",
+      "inferred_type": "unknown",
       "type_detail": {
         "type": "type_function",
         "args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
           {
             "type": "type_ref",
             "name": "y"
@@ -208,6 +206,10 @@
     "type_detail": {
       "type": "type_function",
       "args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
         {
           "type": "type_ref",
           "name": "y"
@@ -233,11 +235,11 @@
     "left": "<result_curried>",
     "right": {
       "type": "operation",
-      "operator": "concat",
+      "operator": "apply",
       "left": "<curried>",
       "right": "4",
-      "semantic_tag": "list_composition",
-      "inferred_type": "value",
+      "semantic_tag": "application",
+      "inferred_type": "unknown",
       "type_detail": {
         "type": "type_primitive",
         "name": "f64"

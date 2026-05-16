@@ -1,8 +1,8 @@
-` 1. Partial Application using Hole (_)
+` 1. Partial Application using Hole (__)
 f : x y ? x + y
-partial : f _ 3
+partial : f __ 3
 
-` 2. Currying (applying one argument at a time without _)
+` 2. Currying (applying one argument at a time without __)
 curried : f 2
 result_curried : curried 4
 

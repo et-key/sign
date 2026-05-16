@@ -90,7 +90,7 @@ for (const filePath of files) {
     if (err.location) {
       errMsg = `[Parse Error] Expected ${err.expected.map(e=>e.text?`"${e.text}"`:`[${e.parts.join('')}]`).join(', ')} but "${err.found}" found.`;
     } else {
-      errMsg = `[Parse Error] ${err.message}`;
+      errMsg = `[Parse Error] ${err.stack || err.message}`;
     }
     console.error(errMsg);
     

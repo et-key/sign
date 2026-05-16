@@ -1,13 +1,14 @@
 ` 1. Monadic Mapping (Functor/Monad properties of Maybe)
 f : x y ? x + y
-maybe_val : 10 < 5  ` evaluates to f64 | unit
+
+` evaluates to f64 | unit
+maybe_val : 10 < 5
 mapped : f maybe_val 3
 
 ` 2. Absorbing Element (Short-circuit)
 ` We simulate a failed evaluation explicitly by using an operation that returns unit
 ` Wait, 10 < 5 evaluates to f64 | unit dynamically.
 ` But what if the evaluation is strictly unit?
-overridden_op : [+/] 1 2 ` This was returning _ in override.sn
 ` For this test, let's just see how mapped distributes the Maybe.
 
 ` 3. Nested Maybe

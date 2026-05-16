@@ -117,7 +117,7 @@ export function isFunction(node, env) {
   if (typeof node === 'string' && node.startsWith('<')) {
     const name = node.slice(1, -1);
     const typeInfo = env.get(name);
-    return typeInfo && typeInfo.kind === 'function';
+    return typeInfo && (typeInfo.kind === 'function' || typeInfo.type === 'type_function');
   }
   
   if (typeof node === 'object') {
@@ -126,6 +126,7 @@ export function isFunction(node, env) {
     if (node.semantic_tag === 'composition') return true;
     if (node.semantic_tag === 'point_free_function') return true;
     if (node.semantic_tag === 'vectorized_function') return true;
+    if (node.type === 'operation' && node.operator === '@') return true;
     
     // If it's a block, check if its content is a function
     if (node.type === 'block' && !Array.isArray(node.content)) {

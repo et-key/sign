@@ -119,132 +119,45 @@
               "semantic_tag": "list_composition",
               "inferred_type": "value",
               "type_detail": {
-                "type": "type_tuple",
-                "elements": [
-                  {
-                    "type": "type_primitive",
-                    "name": "string"
-                  },
-                  {
-                    "type": "type_primitive",
-                    "name": "string"
-                  }
-                ]
-              }
-            },
-            "type_detail": {
-              "type": "type_tuple",
-              "elements": [
-                {
+                "type": "type_array",
+                "elementType": {
                   "type": "type_primitive",
                   "name": "string"
                 },
-                {
-                  "type": "type_primitive",
-                  "name": "string"
-                }
-              ]
+                "length": 2
+              }
+            },
+            "type_detail": {
+              "type": "type_array",
+              "elementType": {
+                "type": "type_primitive",
+                "name": "string"
+              },
+              "length": 2
             }
           },
           "semantic_tag": "dictionary",
           "type_detail": {
-            "type": "type_tuple",
-            "elements": [
-              {
-                "type": "type_primitive",
-                "name": "string"
-              },
-              {
-                "type": "type_primitive",
-                "name": "string"
-              }
-            ]
-          }
-        },
-        "type_detail": {
-          "type": "type_tuple",
-          "elements": [
-            {
+            "type": "type_array",
+            "elementType": {
               "type": "type_primitive",
               "name": "string"
             },
-            {
-              "type": "type_primitive",
-              "name": "string"
-            }
-          ]
+            "length": 2
+          }
+        },
+        "type_detail": {
+          "type": "type_array",
+          "elementType": {
+            "type": "type_primitive",
+            "name": "string"
+          },
+          "length": 2
         }
       },
       "semantic_tag": "list_composition",
       "inferred_type": "value",
       "type_detail": {
-        "type": "type_tuple",
-        "elements": [
-          {
-            "type": "type_tuple",
-            "elements": [
-              {
-                "type": "type_primitive",
-                "name": "string"
-              },
-              {
-                "type": "type_primitive",
-                "name": "f64"
-              }
-            ]
-          },
-          {
-            "type": "type_tuple",
-            "elements": [
-              {
-                "type": "type_primitive",
-                "name": "string"
-              },
-              {
-                "type": "type_primitive",
-                "name": "string"
-              }
-            ]
-          }
-        ]
-      }
-    },
-    "type_detail": {
-      "type": "type_tuple",
-      "elements": [
-        {
-          "type": "type_tuple",
-          "elements": [
-            {
-              "type": "type_primitive",
-              "name": "string"
-            },
-            {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          ]
-        },
-        {
-          "type": "type_tuple",
-          "elements": [
-            {
-              "type": "type_primitive",
-              "name": "string"
-            },
-            {
-              "type": "type_primitive",
-              "name": "string"
-            }
-          ]
-        }
-      ]
-    }
-  },
-  "type_detail": {
-    "type": "type_tuple",
-    "elements": [
-      {
         "type": "type_tuple",
         "elements": [
           {
@@ -254,12 +167,7 @@
           {
             "type": "type_primitive",
             "name": "f64"
-          }
-        ]
-      },
-      {
-        "type": "type_tuple",
-        "elements": [
+          },
           {
             "type": "type_primitive",
             "name": "string"
@@ -269,6 +177,48 @@
             "name": "string"
           }
         ]
+      }
+    },
+    "type_detail": {
+      "type": "type_tuple",
+      "elements": [
+        {
+          "type": "type_primitive",
+          "name": "string"
+        },
+        {
+          "type": "type_primitive",
+          "name": "f64"
+        },
+        {
+          "type": "type_primitive",
+          "name": "string"
+        },
+        {
+          "type": "type_primitive",
+          "name": "string"
+        }
+      ]
+    }
+  },
+  "type_detail": {
+    "type": "type_tuple",
+    "elements": [
+      {
+        "type": "type_primitive",
+        "name": "string"
+      },
+      {
+        "type": "type_primitive",
+        "name": "f64"
+      },
+      {
+        "type": "type_primitive",
+        "name": "string"
+      },
+      {
+        "type": "type_primitive",
+        "name": "string"
       }
     ]
   }

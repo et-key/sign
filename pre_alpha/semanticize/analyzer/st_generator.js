@@ -13,6 +13,18 @@ export function formatTypeObj(t, genericMap = new Map(), genericCounter = { val:
   if (t.type === 'type_tuple') {
     return t.elements.map(e => formatTypeObj(e, genericMap, genericCounter)).join(' * ');
   }
+  if (t.type === 'type_array') {
+    return `[${formatTypeObj(t.elementType, genericMap, genericCounter)}; ${t.length}]`;
+  }
+  if (t.type === 'type_address') {
+    return `Address<${formatTypeObj(t.target, genericMap, genericCounter)}>`;
+  }
+  if (t.type === 'type_deref') {
+    return `Deref<${formatTypeObj(t.target, genericMap, genericCounter)}>`;
+  }
+  if (t.type === 'type_list') {
+    return `List<${t.name}>`;
+  }
   if (t.type === 'type_coproduct') {
     return t.variants.map(v => formatTypeObj(v, genericMap, genericCounter)).join(' | ');
   }

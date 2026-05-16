@@ -30,17 +30,12 @@
       "type": "type_tuple",
       "elements": [
         {
-          "type": "type_tuple",
-          "elements": [
-            {
-              "type": "type_ref",
-              "name": "a"
-            },
-            {
-              "type": "type_ref",
-              "name": "b"
-            }
-          ]
+          "type": "type_ref",
+          "name": "a"
+        },
+        {
+          "type": "type_ref",
+          "name": "b"
         },
         {
           "type": "type_ref",
@@ -80,17 +75,12 @@
       "type": "type_tuple",
       "elements": [
         {
-          "type": "type_tuple",
-          "elements": [
-            {
-              "type": "type_ref",
-              "name": "a"
-            },
-            {
-              "type": "type_ref",
-              "name": "b"
-            }
-          ]
+          "type": "type_ref",
+          "name": "a"
+        },
+        {
+          "type": "type_ref",
+          "name": "b"
         },
         {
           "type": "type_ref",

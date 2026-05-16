@@ -80,7 +80,8 @@ register = $("0r" Hex+) / $("0b" ("0" / "1")+)
 unicode = $("0u" Hex+)
 identifier = id:( $([a-zA-Z][a-zA-Z0-9_]*) / $("_" [a-zA-Z0-9_]+) ) {return `<${id}>`}
 Hex = [0-9a-fA-F]
-unit = "_"
+unit = "__"
+id = "_"
 
 // --- 演算子・記号（前置・後置・中置の振る舞い解決はShunting Yardへ） ---
 prefix
