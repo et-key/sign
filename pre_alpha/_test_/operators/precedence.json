@@ -56,7 +56,15 @@
     }
   },
   "type_detail": {
-    "type": "type_primitive",
-    "name": "f64"
+    "type": "type_coproduct",
+    "variants": [
+      {
+        "type": "type_primitive",
+        "name": "f64"
+      },
+      {
+        "type": "type_unit"
+      }
+    ]
   }
 }

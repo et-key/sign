@@ -19,7 +19,7 @@ function identifyToken(token, previousIsOperand) {
   }
 
   // 文字列の場合
-  if (token.startsWith('"') || token.startsWith('<')) {
+  if (token.startsWith('"') || (token.startsWith('<') && token.endsWith('>'))) {
     // 制御タグや識別子、値など
     return { type: 'operand', value: token };
   }

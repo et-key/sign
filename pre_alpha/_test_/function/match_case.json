@@ -31,29 +31,72 @@
                 "operator": ":",
                 "left": {
                   "type": "operation",
-                  "operator": "concat",
-                  "left": {
-                    "type": "operation",
-                    "operator": "concat",
-                    "left": "<x>",
-                    "right": "<",
-                    "semantic_tag": "list_composition",
-                    "inferred_type": "value"
-                  },
-                  "right": "1",
-                  "semantic_tag": "list_composition",
-                  "inferred_type": "value"
+                  "operator": "<",
+                  "left": "<x>",
+                  "right": "1"
                 },
                 "right": "<result1>",
                 "semantic_tag": "match_case",
                 "type_detail": {
-                  "type": "type_ref",
-                  "name": "result1"
+                  "type": "type_function",
+                  "args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "remaining_args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "holes": [],
+                  "bound_env": {},
+                  "returnType": {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_ref",
+                        "name": "result1"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "__fallback__"
+                      }
+                    ]
+                  }
                 }
               },
               "type_detail": {
-                "type": "type_ref",
-                "name": "result1"
+                "type": "type_function",
+                "args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "remaining_args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "holes": [],
+                "bound_env": {},
+                "returnType": {
+                  "type": "type_coproduct",
+                  "variants": [
+                    {
+                      "type": "type_ref",
+                      "name": "result1"
+                    },
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ]
+                }
               }
             },
             "right": {
@@ -64,47 +107,162 @@
                 "operator": ":",
                 "left": {
                   "type": "operation",
-                  "operator": "concat",
-                  "left": {
-                    "type": "operation",
-                    "operator": "concat",
-                    "left": "<y>",
-                    "right": "<",
-                    "semantic_tag": "list_composition",
-                    "inferred_type": "value"
-                  },
-                  "right": "3",
-                  "semantic_tag": "list_composition",
-                  "inferred_type": "value"
+                  "operator": "<",
+                  "left": "<y>",
+                  "right": "3"
                 },
                 "right": "<result2>",
                 "semantic_tag": "match_case",
                 "type_detail": {
-                  "type": "type_ref",
-                  "name": "result2"
+                  "type": "type_function",
+                  "args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "remaining_args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "holes": [],
+                  "bound_env": {},
+                  "returnType": {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_ref",
+                        "name": "result2"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "__fallback__"
+                      }
+                    ]
+                  }
                 }
               },
               "type_detail": {
-                "type": "type_ref",
-                "name": "result2"
+                "type": "type_function",
+                "args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "remaining_args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "holes": [],
+                "bound_env": {},
+                "returnType": {
+                  "type": "type_coproduct",
+                  "variants": [
+                    {
+                      "type": "type_ref",
+                      "name": "result2"
+                    },
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ]
+                }
               }
             },
             "semantic_tag": "composition",
             "inferred_type": "function",
             "type_detail": {
-              "type": "type_ref",
-              "name": "result2"
+              "type": "type_function",
+              "args": [
+                {
+                  "type": "type_ref",
+                  "name": "__fallback__"
+                }
+              ],
+              "remaining_args": [
+                {
+                  "type": "type_ref",
+                  "name": "__fallback__"
+                }
+              ],
+              "holes": [],
+              "bound_env": {},
+              "returnType": {
+                "type": "type_coproduct",
+                "variants": [
+                  {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_ref",
+                        "name": "result1"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "result2"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_ref",
+                        "name": "result1"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "__fallback__"
+                      }
+                    ]
+                  }
+                ]
+              }
             }
           },
           "right": "3",
           "semantic_tag": "application",
           "inferred_type": "unknown",
           "type_detail": {
-            "type": "type_unknown"
+            "type": "type_coproduct",
+            "variants": [
+              {
+                "type": "type_ref",
+                "name": "result1"
+              },
+              {
+                "type": "type_ref",
+                "name": "result2"
+              },
+              {
+                "type": "type_primitive",
+                "name": "f64"
+              }
+            ]
           }
         },
         "type_detail": {
-          "type": "type_unknown"
+          "type": "type_coproduct",
+          "variants": [
+            {
+              "type": "type_ref",
+              "name": "result1"
+            },
+            {
+              "type": "type_ref",
+              "name": "result2"
+            },
+            {
+              "type": "type_primitive",
+              "name": "f64"
+            }
+          ]
         }
       },
       "type_detail": {
@@ -119,8 +277,34 @@
             "name": "y"
           }
         ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
         "returnType": {
-          "type": "type_unknown"
+          "type": "type_coproduct",
+          "variants": [
+            {
+              "type": "type_ref",
+              "name": "result1"
+            },
+            {
+              "type": "type_ref",
+              "name": "result2"
+            },
+            {
+              "type": "type_primitive",
+              "name": "f64"
+            }
+          ]
         }
       }
     },
@@ -136,8 +320,34 @@
           "name": "y"
         }
       ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
       "returnType": {
-        "type": "type_unknown"
+        "type": "type_coproduct",
+        "variants": [
+          {
+            "type": "type_ref",
+            "name": "result1"
+          },
+          {
+            "type": "type_ref",
+            "name": "result2"
+          },
+          {
+            "type": "type_primitive",
+            "name": "f64"
+          }
+        ]
       }
     }
   },
@@ -160,8 +370,21 @@
             "name": "y"
           }
         ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
         "returnType": {
-          "type": "type_unknown"
+          "type": "type_primitive",
+          "name": "f64"
         }
       }
     },
@@ -177,8 +400,21 @@
           "name": "y"
         }
       ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
       "returnType": {
-        "type": "type_unknown"
+        "type": "type_primitive",
+        "name": "f64"
       }
     }
   },
@@ -216,13 +452,65 @@
                 "right": "1",
                 "semantic_tag": "match_case",
                 "type_detail": {
-                  "type": "type_primitive",
-                  "name": "f64"
+                  "type": "type_function",
+                  "args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "remaining_args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "holes": [],
+                  "bound_env": {},
+                  "returnType": {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_primitive",
+                        "name": "f64"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "__fallback__"
+                      }
+                    ]
+                  }
                 }
               },
               "type_detail": {
-                "type": "type_primitive",
-                "name": "f64"
+                "type": "type_function",
+                "args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "remaining_args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "holes": [],
+                "bound_env": {},
+                "returnType": {
+                  "type": "type_coproduct",
+                  "variants": [
+                    {
+                      "type": "type_primitive",
+                      "name": "f64"
+                    },
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ]
+                }
               }
             },
             "right": {
@@ -235,31 +523,129 @@
                 "right": "2",
                 "semantic_tag": "match_case",
                 "type_detail": {
-                  "type": "type_primitive",
-                  "name": "f64"
+                  "type": "type_function",
+                  "args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "remaining_args": [
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ],
+                  "holes": [],
+                  "bound_env": {},
+                  "returnType": {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_primitive",
+                        "name": "f64"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "__fallback__"
+                      }
+                    ]
+                  }
                 }
               },
               "type_detail": {
-                "type": "type_primitive",
-                "name": "f64"
+                "type": "type_function",
+                "args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "remaining_args": [
+                  {
+                    "type": "type_ref",
+                    "name": "__fallback__"
+                  }
+                ],
+                "holes": [],
+                "bound_env": {},
+                "returnType": {
+                  "type": "type_coproduct",
+                  "variants": [
+                    {
+                      "type": "type_primitive",
+                      "name": "f64"
+                    },
+                    {
+                      "type": "type_ref",
+                      "name": "__fallback__"
+                    }
+                  ]
+                }
               }
             },
             "semantic_tag": "composition",
             "inferred_type": "function",
             "type_detail": {
-              "type": "type_primitive",
-              "name": "f64"
+              "type": "type_function",
+              "args": [
+                {
+                  "type": "type_ref",
+                  "name": "__fallback__"
+                }
+              ],
+              "remaining_args": [
+                {
+                  "type": "type_ref",
+                  "name": "__fallback__"
+                }
+              ],
+              "holes": [],
+              "bound_env": {},
+              "returnType": {
+                "type": "type_coproduct",
+                "variants": [
+                  {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_primitive",
+                        "name": "f64"
+                      },
+                      {
+                        "type": "type_primitive",
+                        "name": "f64"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "type_coproduct",
+                    "variants": [
+                      {
+                        "type": "type_primitive",
+                        "name": "f64"
+                      },
+                      {
+                        "type": "type_ref",
+                        "name": "__fallback__"
+                      }
+                    ]
+                  }
+                ]
+              }
             }
           },
           "right": "3",
           "semantic_tag": "application",
           "inferred_type": "unknown",
           "type_detail": {
-            "type": "type_unknown"
+            "type": "type_primitive",
+            "name": "f64"
           }
         },
         "type_detail": {
-          "type": "type_unknown"
+          "type": "type_primitive",
+          "name": "f64"
         }
       },
       "type_detail": {
@@ -274,8 +660,21 @@
             "name": "y"
           }
         ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
         "returnType": {
-          "type": "type_unknown"
+          "type": "type_primitive",
+          "name": "f64"
         }
       }
     },
@@ -291,8 +690,21 @@
           "name": "y"
         }
       ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
       "returnType": {
-        "type": "type_unknown"
+        "type": "type_primitive",
+        "name": "f64"
       }
     }
   }

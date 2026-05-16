@@ -32,6 +32,18 @@
             "name": "y"
           }
         ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
         "returnType": {
           "type": "type_unit"
         }
@@ -49,6 +61,18 @@
           "name": "y"
         }
       ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
       "returnType": {
         "type": "type_unit"
       }
@@ -99,15 +123,25 @@
                               "left": {
                                 "type": "operation",
                                 "operator": "/",
-                                "left": {
-                                  "type": "block",
-                                  "kind": "group",
-                                  "content": {
-                                    "type": "operation",
-                                    "operator": "|",
-                                    "right": {
+                                "right": {
+                                  "type": "operation",
+                                  "operator": "/",
+                                  "left": {
+                                    "type": "block",
+                                    "kind": "group",
+                                    "content": {
                                       "type": "operation",
-                                      "operator": "/",
+                                      "operator": "|",
+                                      "right": {
+                                        "type": "operation",
+                                        "operator": "/",
+                                        "semantic_tag": "point_free_function",
+                                        "inferred_type": "function",
+                                        "type_detail": {
+                                          "type": "type_primitive",
+                                          "name": "f64"
+                                        }
+                                      },
                                       "semantic_tag": "point_free_function",
                                       "inferred_type": "function",
                                       "type_detail": {
@@ -115,22 +149,12 @@
                                         "name": "f64"
                                       }
                                     },
-                                    "semantic_tag": "point_free_function",
-                                    "inferred_type": "function",
                                     "type_detail": {
                                       "type": "type_primitive",
                                       "name": "f64"
                                     }
                                   },
-                                  "type_detail": {
-                                    "type": "type_primitive",
-                                    "name": "f64"
-                                  }
-                                },
-                                "right": {
-                                  "type": "operation",
-                                  "operator": "/",
-                                  "left": {
+                                  "right": {
                                     "type": "operation",
                                     "operator": "concat",
                                     "left": "<x>",
@@ -151,12 +175,13 @@
                                       ]
                                     }
                                   },
-                                  "right": "`nth_root`",
                                   "type_detail": {
                                     "type": "type_primitive",
                                     "name": "f64"
                                   }
                                 },
+                                "semantic_tag": "point_free_function",
+                                "inferred_type": "function",
                                 "type_detail": {
                                   "type": "type_primitive",
                                   "name": "f64"
@@ -476,6 +501,9 @@
       "type_detail": {
         "type": "type_function",
         "args": [],
+        "remaining_args": [],
+        "holes": [],
+        "bound_env": {},
         "returnType": {
           "type": "type_tuple",
           "elements": [
@@ -531,6 +559,9 @@
     "type_detail": {
       "type": "type_function",
       "args": [],
+      "remaining_args": [],
+      "holes": [],
+      "bound_env": {},
       "returnType": {
         "type": "type_tuple",
         "elements": [

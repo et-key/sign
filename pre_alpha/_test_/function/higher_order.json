@@ -25,6 +25,14 @@
             "name": "x"
           }
         ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
         "returnType": {
           "type": "type_primitive",
           "name": "f64"
@@ -39,6 +47,14 @@
           "name": "x"
         }
       ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
       "returnType": {
         "type": "type_primitive",
         "name": "f64"
@@ -179,6 +195,22 @@
             "name": "y"
           }
         ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "f"
+          },
+          {
+            "type": "type_ref",
+            "name": "x"
+          },
+          {
+            "type": "type_ref",
+            "name": "y"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
         "returnType": {
           "type": "type_unknown"
         }
@@ -200,6 +232,22 @@
           "name": "y"
         }
       ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "f"
+        },
+        {
+          "type": "type_ref",
+          "name": "x"
+        },
+        {
+          "type": "type_ref",
+          "name": "y"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
       "returnType": {
         "type": "type_unknown"
       }
@@ -236,123 +284,63 @@
               "semantic_tag": "list_composition",
               "inferred_type": "value",
               "type_detail": {
-                "type": "type_tuple",
-                "elements": [
+                "type": "type_function",
+                "args": [
                   {
-                    "type": "type_function",
-                    "args": [
-                      {
-                        "type": "type_ref",
-                        "name": "f"
-                      },
-                      {
-                        "type": "type_ref",
-                        "name": "x"
-                      },
-                      {
-                        "type": "type_ref",
-                        "name": "y"
-                      }
-                    ],
-                    "returnType": {
-                      "type": "type_unknown"
-                    }
+                    "type": "type_ref",
+                    "name": "x"
                   },
                   {
-                    "type": "type_unknown"
+                    "type": "type_ref",
+                    "name": "y"
                   }
-                ]
+                ],
+                "remaining_args": [
+                  {
+                    "type": "type_ref",
+                    "name": "x"
+                  },
+                  {
+                    "type": "type_ref",
+                    "name": "y"
+                  }
+                ],
+                "holes": [],
+                "bound_env": {},
+                "returnType": {
+                  "type": "type_unknown"
+                }
               }
             },
             "right": "1",
             "semantic_tag": "list_composition",
             "inferred_type": "value",
             "type_detail": {
-              "type": "type_tuple",
-              "elements": [
+              "type": "type_function",
+              "args": [
                 {
-                  "type": "type_tuple",
-                  "elements": [
-                    {
-                      "type": "type_function",
-                      "args": [
-                        {
-                          "type": "type_ref",
-                          "name": "f"
-                        },
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        },
-                        {
-                          "type": "type_ref",
-                          "name": "y"
-                        }
-                      ],
-                      "returnType": {
-                        "type": "type_unknown"
-                      }
-                    },
-                    {
-                      "type": "type_unknown"
-                    }
-                  ]
-                },
-                {
-                  "type": "type_primitive",
-                  "name": "f64"
+                  "type": "type_ref",
+                  "name": "y"
                 }
-              ]
+              ],
+              "remaining_args": [
+                {
+                  "type": "type_ref",
+                  "name": "y"
+                }
+              ],
+              "holes": [],
+              "bound_env": {},
+              "returnType": {
+                "type": "type_unknown"
+              }
             }
           },
           "right": "2",
           "semantic_tag": "list_composition",
           "inferred_type": "value",
           "type_detail": {
-            "type": "type_tuple",
-            "elements": [
-              {
-                "type": "type_tuple",
-                "elements": [
-                  {
-                    "type": "type_tuple",
-                    "elements": [
-                      {
-                        "type": "type_function",
-                        "args": [
-                          {
-                            "type": "type_ref",
-                            "name": "f"
-                          },
-                          {
-                            "type": "type_ref",
-                            "name": "x"
-                          },
-                          {
-                            "type": "type_ref",
-                            "name": "y"
-                          }
-                        ],
-                        "returnType": {
-                          "type": "type_unknown"
-                        }
-                      },
-                      {
-                        "type": "type_unknown"
-                      }
-                    ]
-                  },
-                  {
-                    "type": "type_primitive",
-                    "name": "f64"
-                  }
-                ]
-              },
-              {
-                "type": "type_primitive",
-                "name": "f64"
-              }
-            ]
+            "type": "type_unknown"
           }
         },
         "right": "3",
@@ -362,50 +350,7 @@
           "type": "type_tuple",
           "elements": [
             {
-              "type": "type_tuple",
-              "elements": [
-                {
-                  "type": "type_tuple",
-                  "elements": [
-                    {
-                      "type": "type_tuple",
-                      "elements": [
-                        {
-                          "type": "type_function",
-                          "args": [
-                            {
-                              "type": "type_ref",
-                              "name": "f"
-                            },
-                            {
-                              "type": "type_ref",
-                              "name": "x"
-                            },
-                            {
-                              "type": "type_ref",
-                              "name": "y"
-                            }
-                          ],
-                          "returnType": {
-                            "type": "type_unknown"
-                          }
-                        },
-                        {
-                          "type": "type_unknown"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "type_primitive",
-                      "name": "f64"
-                    }
-                  ]
-                },
-                {
-                  "type": "type_primitive",
-                  "name": "f64"
-                }
-              ]
+              "type": "type_unknown"
             },
             {
               "type": "type_primitive",
@@ -424,50 +369,7 @@
             "type": "type_tuple",
             "elements": [
               {
-                "type": "type_tuple",
-                "elements": [
-                  {
-                    "type": "type_tuple",
-                    "elements": [
-                      {
-                        "type": "type_tuple",
-                        "elements": [
-                          {
-                            "type": "type_function",
-                            "args": [
-                              {
-                                "type": "type_ref",
-                                "name": "f"
-                              },
-                              {
-                                "type": "type_ref",
-                                "name": "x"
-                              },
-                              {
-                                "type": "type_ref",
-                                "name": "y"
-                              }
-                            ],
-                            "returnType": {
-                              "type": "type_unknown"
-                            }
-                          },
-                          {
-                            "type": "type_unknown"
-                          }
-                        ]
-                      },
-                      {
-                        "type": "type_primitive",
-                        "name": "f64"
-                      }
-                    ]
-                  },
-                  {
-                    "type": "type_primitive",
-                    "name": "f64"
-                  }
-                ]
+                "type": "type_unknown"
               },
               {
                 "type": "type_primitive",
@@ -495,50 +397,7 @@
               "type": "type_tuple",
               "elements": [
                 {
-                  "type": "type_tuple",
-                  "elements": [
-                    {
-                      "type": "type_tuple",
-                      "elements": [
-                        {
-                          "type": "type_tuple",
-                          "elements": [
-                            {
-                              "type": "type_function",
-                              "args": [
-                                {
-                                  "type": "type_ref",
-                                  "name": "f"
-                                },
-                                {
-                                  "type": "type_ref",
-                                  "name": "x"
-                                },
-                                {
-                                  "type": "type_ref",
-                                  "name": "y"
-                                }
-                              ],
-                              "returnType": {
-                                "type": "type_unknown"
-                              }
-                            },
-                            {
-                              "type": "type_unknown"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "type_primitive",
-                          "name": "f64"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "type_primitive",
-                      "name": "f64"
-                    }
-                  ]
+                  "type": "type_unknown"
                 },
                 {
                   "type": "type_primitive",
@@ -596,6 +455,14 @@
                           "name": "x"
                         }
                       ],
+                      "remaining_args": [
+                        {
+                          "type": "type_ref",
+                          "name": "x"
+                        }
+                      ],
+                      "holes": [],
+                      "bound_env": {},
                       "returnType": {
                         "type": "type_primitive",
                         "name": "f64"
@@ -610,6 +477,14 @@
                         "name": "x"
                       }
                     ],
+                    "remaining_args": [
+                      {
+                        "type": "type_ref",
+                        "name": "x"
+                      }
+                    ],
+                    "holes": [],
+                    "bound_env": {},
                     "returnType": {
                       "type": "type_primitive",
                       "name": "f64"
@@ -624,123 +499,63 @@
               "semantic_tag": "list_composition",
               "inferred_type": "value",
               "type_detail": {
-                "type": "type_tuple",
-                "elements": [
+                "type": "type_function",
+                "args": [
                   {
-                    "type": "type_function",
-                    "args": [
-                      {
-                        "type": "type_ref",
-                        "name": "f"
-                      },
-                      {
-                        "type": "type_ref",
-                        "name": "x"
-                      },
-                      {
-                        "type": "type_ref",
-                        "name": "y"
-                      }
-                    ],
-                    "returnType": {
-                      "type": "type_unknown"
-                    }
+                    "type": "type_ref",
+                    "name": "x"
                   },
                   {
-                    "type": "type_unknown"
+                    "type": "type_ref",
+                    "name": "y"
                   }
-                ]
+                ],
+                "remaining_args": [
+                  {
+                    "type": "type_ref",
+                    "name": "x"
+                  },
+                  {
+                    "type": "type_ref",
+                    "name": "y"
+                  }
+                ],
+                "holes": [],
+                "bound_env": {},
+                "returnType": {
+                  "type": "type_unknown"
+                }
               }
             },
             "right": "1",
             "semantic_tag": "list_composition",
             "inferred_type": "value",
             "type_detail": {
-              "type": "type_tuple",
-              "elements": [
+              "type": "type_function",
+              "args": [
                 {
-                  "type": "type_tuple",
-                  "elements": [
-                    {
-                      "type": "type_function",
-                      "args": [
-                        {
-                          "type": "type_ref",
-                          "name": "f"
-                        },
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        },
-                        {
-                          "type": "type_ref",
-                          "name": "y"
-                        }
-                      ],
-                      "returnType": {
-                        "type": "type_unknown"
-                      }
-                    },
-                    {
-                      "type": "type_unknown"
-                    }
-                  ]
-                },
-                {
-                  "type": "type_primitive",
-                  "name": "f64"
+                  "type": "type_ref",
+                  "name": "y"
                 }
-              ]
+              ],
+              "remaining_args": [
+                {
+                  "type": "type_ref",
+                  "name": "y"
+                }
+              ],
+              "holes": [],
+              "bound_env": {},
+              "returnType": {
+                "type": "type_unknown"
+              }
             }
           },
           "right": "2",
           "semantic_tag": "list_composition",
           "inferred_type": "value",
           "type_detail": {
-            "type": "type_tuple",
-            "elements": [
-              {
-                "type": "type_tuple",
-                "elements": [
-                  {
-                    "type": "type_tuple",
-                    "elements": [
-                      {
-                        "type": "type_function",
-                        "args": [
-                          {
-                            "type": "type_ref",
-                            "name": "f"
-                          },
-                          {
-                            "type": "type_ref",
-                            "name": "x"
-                          },
-                          {
-                            "type": "type_ref",
-                            "name": "y"
-                          }
-                        ],
-                        "returnType": {
-                          "type": "type_unknown"
-                        }
-                      },
-                      {
-                        "type": "type_unknown"
-                      }
-                    ]
-                  },
-                  {
-                    "type": "type_primitive",
-                    "name": "f64"
-                  }
-                ]
-              },
-              {
-                "type": "type_primitive",
-                "name": "f64"
-              }
-            ]
+            "type": "type_unknown"
           }
         },
         "right": "3",
@@ -750,50 +565,7 @@
           "type": "type_tuple",
           "elements": [
             {
-              "type": "type_tuple",
-              "elements": [
-                {
-                  "type": "type_tuple",
-                  "elements": [
-                    {
-                      "type": "type_tuple",
-                      "elements": [
-                        {
-                          "type": "type_function",
-                          "args": [
-                            {
-                              "type": "type_ref",
-                              "name": "f"
-                            },
-                            {
-                              "type": "type_ref",
-                              "name": "x"
-                            },
-                            {
-                              "type": "type_ref",
-                              "name": "y"
-                            }
-                          ],
-                          "returnType": {
-                            "type": "type_unknown"
-                          }
-                        },
-                        {
-                          "type": "type_unknown"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "type_primitive",
-                      "name": "f64"
-                    }
-                  ]
-                },
-                {
-                  "type": "type_primitive",
-                  "name": "f64"
-                }
-              ]
+              "type": "type_unknown"
             },
             {
               "type": "type_primitive",
@@ -812,50 +584,7 @@
             "type": "type_tuple",
             "elements": [
               {
-                "type": "type_tuple",
-                "elements": [
-                  {
-                    "type": "type_tuple",
-                    "elements": [
-                      {
-                        "type": "type_tuple",
-                        "elements": [
-                          {
-                            "type": "type_function",
-                            "args": [
-                              {
-                                "type": "type_ref",
-                                "name": "f"
-                              },
-                              {
-                                "type": "type_ref",
-                                "name": "x"
-                              },
-                              {
-                                "type": "type_ref",
-                                "name": "y"
-                              }
-                            ],
-                            "returnType": {
-                              "type": "type_unknown"
-                            }
-                          },
-                          {
-                            "type": "type_unknown"
-                          }
-                        ]
-                      },
-                      {
-                        "type": "type_primitive",
-                        "name": "f64"
-                      }
-                    ]
-                  },
-                  {
-                    "type": "type_primitive",
-                    "name": "f64"
-                  }
-                ]
+                "type": "type_unknown"
               },
               {
                 "type": "type_primitive",
@@ -883,50 +612,7 @@
               "type": "type_tuple",
               "elements": [
                 {
-                  "type": "type_tuple",
-                  "elements": [
-                    {
-                      "type": "type_tuple",
-                      "elements": [
-                        {
-                          "type": "type_tuple",
-                          "elements": [
-                            {
-                              "type": "type_function",
-                              "args": [
-                                {
-                                  "type": "type_ref",
-                                  "name": "f"
-                                },
-                                {
-                                  "type": "type_ref",
-                                  "name": "x"
-                                },
-                                {
-                                  "type": "type_ref",
-                                  "name": "y"
-                                }
-                              ],
-                              "returnType": {
-                                "type": "type_unknown"
-                              }
-                            },
-                            {
-                              "type": "type_unknown"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "type_primitive",
-                          "name": "f64"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "type_primitive",
-                      "name": "f64"
-                    }
-                  ]
+                  "type": "type_unknown"
                 },
                 {
                   "type": "type_primitive",
@@ -1254,6 +940,14 @@
             "name": "x"
           }
         ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
         "returnType": {
           "type": "type_primitive",
           "name": "f64"
@@ -1268,6 +962,14 @@
           "name": "x"
         }
       ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
       "returnType": {
         "type": "type_primitive",
         "name": "f64"

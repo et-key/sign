@@ -13,6 +13,9 @@ export function formatTypeObj(t, genericMap = new Map(), genericCounter = { val:
   if (t.type === 'type_tuple') {
     return t.elements.map(e => formatTypeObj(e, genericMap, genericCounter)).join(' * ');
   }
+  if (t.type === 'type_coproduct') {
+    return t.variants.map(v => formatTypeObj(v, genericMap, genericCounter)).join(' | ');
+  }
   if (t.type === 'type_function') {
     const argsStr = t.args.map(a => {
        if (a.default_type) {

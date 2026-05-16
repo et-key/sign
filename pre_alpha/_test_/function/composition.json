@@ -25,6 +25,14 @@
             "name": "x"
           }
         ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
         "returnType": {
           "type": "type_primitive",
           "name": "f64"
@@ -39,6 +47,14 @@
           "name": "x"
         }
       ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
       "returnType": {
         "type": "type_primitive",
         "name": "f64"
@@ -71,6 +87,14 @@
             "name": "x"
           }
         ],
+        "remaining_args": [
+          {
+            "type": "type_ref",
+            "name": "x"
+          }
+        ],
+        "holes": [],
+        "bound_env": {},
         "returnType": {
           "type": "type_primitive",
           "name": "f64"
@@ -85,6 +109,14 @@
           "name": "x"
         }
       ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "x"
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
       "returnType": {
         "type": "type_primitive",
         "name": "f64"
@@ -102,35 +134,8 @@
       "semantic_tag": "list_composition",
       "inferred_type": "value",
       "type_detail": {
-        "type": "type_tuple",
-        "elements": [
-          {
-            "type": "type_function",
-            "args": [
-              {
-                "type": "type_ref",
-                "name": "x"
-              }
-            ],
-            "returnType": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          },
-          {
-            "type": "type_function",
-            "args": [
-              {
-                "type": "type_ref",
-                "name": "x"
-              }
-            ],
-            "returnType": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          }
-        ]
+        "type": "type_primitive",
+        "name": "f64"
       }
     },
     "right": "3",
@@ -140,35 +145,8 @@
       "type": "type_tuple",
       "elements": [
         {
-          "type": "type_tuple",
-          "elements": [
-            {
-              "type": "type_function",
-              "args": [
-                {
-                  "type": "type_ref",
-                  "name": "x"
-                }
-              ],
-              "returnType": {
-                "type": "type_primitive",
-                "name": "f64"
-              }
-            },
-            {
-              "type": "type_function",
-              "args": [
-                {
-                  "type": "type_ref",
-                  "name": "x"
-                }
-              ],
-              "returnType": {
-                "type": "type_primitive",
-                "name": "f64"
-              }
-            }
-          ]
+          "type": "type_primitive",
+          "name": "f64"
         },
         {
           "type": "type_primitive",

@@ -90,6 +90,26 @@
           }
         }
       ],
+      "remaining_args": [
+        {
+          "type": "type_ref",
+          "name": "x",
+          "default_type": {
+            "type": "type_primitive",
+            "name": "f64"
+          }
+        },
+        {
+          "type": "type_ref",
+          "name": "y",
+          "default_type": {
+            "type": "type_primitive",
+            "name": "f64"
+          }
+        }
+      ],
+      "holes": [],
+      "bound_env": {},
       "returnType": {
         "type": "type_primitive",
         "name": "f64"
@@ -116,6 +136,26 @@
         }
       }
     ],
+    "remaining_args": [
+      {
+        "type": "type_ref",
+        "name": "x",
+        "default_type": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      },
+      {
+        "type": "type_ref",
+        "name": "y",
+        "default_type": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      }
+    ],
+    "holes": [],
+    "bound_env": {},
     "returnType": {
       "type": "type_primitive",
       "name": "f64"
