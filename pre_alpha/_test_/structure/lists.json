@@ -1,40 +1,102 @@
-{
-  "type": "operation",
-  "operator": "concat",
-  "left": {
+[
+  {
     "type": "operation",
     "operator": "concat",
     "left": {
       "type": "operation",
       "operator": "concat",
-      "left": {
-        "type": "block",
-        "kind": "group",
-        "content": {
-          "type": "operation",
-          "operator": "concat",
-          "left": {
-            "type": "operation",
-            "operator": "concat",
-            "left": "<a>",
-            "right": "<b>",
-            "semantic_tag": "list_composition",
-            "inferred_type": "value"
-          },
-          "right": "<c>",
-          "semantic_tag": "list_composition",
-          "inferred_type": "value"
-        }
-      },
-      "right": "<a>",
+      "left": "<a>",
+      "right": "<b>",
       "semantic_tag": "list_composition",
-      "inferred_type": "value"
+      "inferred_type": "value",
+      "type_detail": {
+        "type": "type_tuple",
+        "elements": [
+          {
+            "type": "type_ref",
+            "name": "a"
+          },
+          {
+            "type": "type_ref",
+            "name": "b"
+          }
+        ]
+      }
     },
-    "right": "<b>",
+    "right": "<c>",
     "semantic_tag": "list_composition",
-    "inferred_type": "value"
+    "inferred_type": "value",
+    "type_detail": {
+      "type": "type_tuple",
+      "elements": [
+        {
+          "type": "type_tuple",
+          "elements": [
+            {
+              "type": "type_ref",
+              "name": "a"
+            },
+            {
+              "type": "type_ref",
+              "name": "b"
+            }
+          ]
+        },
+        {
+          "type": "type_ref",
+          "name": "c"
+        }
+      ]
+    }
   },
-  "right": "<c>",
-  "semantic_tag": "list_composition",
-  "inferred_type": "value"
-}
+  {
+    "type": "operation",
+    "operator": "concat",
+    "left": {
+      "type": "operation",
+      "operator": "concat",
+      "left": "<a>",
+      "right": "<b>",
+      "semantic_tag": "list_composition",
+      "inferred_type": "value",
+      "type_detail": {
+        "type": "type_tuple",
+        "elements": [
+          {
+            "type": "type_ref",
+            "name": "a"
+          },
+          {
+            "type": "type_ref",
+            "name": "b"
+          }
+        ]
+      }
+    },
+    "right": "<c>",
+    "semantic_tag": "list_composition",
+    "inferred_type": "value",
+    "type_detail": {
+      "type": "type_tuple",
+      "elements": [
+        {
+          "type": "type_tuple",
+          "elements": [
+            {
+              "type": "type_ref",
+              "name": "a"
+            },
+            {
+              "type": "type_ref",
+              "name": "b"
+            }
+          ]
+        },
+        {
+          "type": "type_ref",
+          "name": "c"
+        }
+      ]
+    }
+  }
+]

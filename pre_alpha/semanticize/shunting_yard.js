@@ -166,6 +166,24 @@ export function buildAST(tokens) {
     else if (info.type === 'prefix') {
       const opDef = getOperatorInfo(info.symbol, 'prefix');
       info.precedence = opDef.precedence;
+      
+      // もしオペランドの直後に前置演算子が来た場合（例: `f ~y`）、
+      // 間に暗黙の適用/余積があるものとして処理する
+      if (previousIsOperand) {
+        const coproductOp = { type: 'infix', symbol: ' ', precedence: 10, name: 'coproduct' };
+        while (operatorStack.length > 0) {
+          const top = operatorStack[operatorStack.length - 1];
+          if (top.type !== 'prefix' && top.symbol !== '(' && top.symbol !== '[' && top.symbol !== '{' && top.symbol !== '\x02' && top.symbol !== '\x04') {
+            if (top.precedence >= coproductOp.precedence) {
+              popOperator();
+              continue;
+            }
+          }
+          break;
+        }
+        operatorStack.push(coproductOp);
+      }
+      
       operatorStack.push(info);
       previousIsOperand = false;
     }

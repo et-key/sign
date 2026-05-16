@@ -9,7 +9,15 @@
       "type": "operation",
       "operator": "*",
       "left": "<b>",
-      "right": "<c>"
+      "right": "<c>",
+      "type_detail": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    },
+    "type_detail": {
+      "type": "type_primitive",
+      "name": "f64"
     }
   },
   "right": {
@@ -26,9 +34,29 @@
           "type": "operation",
           "operator": "*",
           "left": "<b>",
-          "right": "<c>"
+          "right": "<c>",
+          "type_detail": {
+            "type": "type_primitive",
+            "name": "f64"
+          }
+        },
+        "type_detail": {
+          "type": "type_primitive",
+          "name": "f64"
         }
+      },
+      "type_detail": {
+        "type": "type_primitive",
+        "name": "f64"
       }
+    },
+    "type_detail": {
+      "type": "type_primitive",
+      "name": "f64"
     }
+  },
+  "type_detail": {
+    "type": "type_primitive",
+    "name": "f64"
   }
 }

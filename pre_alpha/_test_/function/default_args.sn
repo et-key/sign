@@ -1,5 +1,5 @@
 func_with_defaults:
-		x: int = 0
-		y: int = 1
+		x: 0
+		y: x + 1
 	?
 		x + y

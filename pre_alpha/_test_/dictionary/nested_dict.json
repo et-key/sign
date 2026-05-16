@@ -19,7 +19,15 @@
             "operator": ":",
             "left": "<name>",
             "right": "`Sign`",
-            "semantic_tag": "dictionary"
+            "semantic_tag": "dictionary",
+            "type_detail": {
+              "type": "type_primitive",
+              "name": "string"
+            }
+          },
+          "type_detail": {
+            "type": "type_primitive",
+            "name": "string"
           }
         },
         "right": {
@@ -30,11 +38,32 @@
             "operator": ":",
             "left": "<version>",
             "right": "0.1",
-            "semantic_tag": "dictionary"
+            "semantic_tag": "dictionary",
+            "type_detail": {
+              "type": "type_primitive",
+              "name": "f64"
+            }
+          },
+          "type_detail": {
+            "type": "type_primitive",
+            "name": "f64"
           }
         },
         "semantic_tag": "list_composition",
-        "inferred_type": "value"
+        "inferred_type": "value",
+        "type_detail": {
+          "type": "type_tuple",
+          "elements": [
+            {
+              "type": "type_primitive",
+              "name": "string"
+            },
+            {
+              "type": "type_primitive",
+              "name": "f64"
+            }
+          ]
+        }
       },
       "right": {
         "type": "block",
@@ -57,7 +86,15 @@
                   "operator": ":",
                   "left": "<type>",
                   "right": "`Structural`",
-                  "semantic_tag": "dictionary"
+                  "semantic_tag": "dictionary",
+                  "type_detail": {
+                    "type": "type_primitive",
+                    "name": "string"
+                  }
+                },
+                "type_detail": {
+                  "type": "type_primitive",
+                  "name": "string"
                 }
               },
               "right": {
@@ -68,18 +105,171 @@
                   "operator": ":",
                   "left": "<backend>",
                   "right": "`AArch64`",
-                  "semantic_tag": "dictionary"
+                  "semantic_tag": "dictionary",
+                  "type_detail": {
+                    "type": "type_primitive",
+                    "name": "string"
+                  }
+                },
+                "type_detail": {
+                  "type": "type_primitive",
+                  "name": "string"
                 }
               },
               "semantic_tag": "list_composition",
-              "inferred_type": "value"
+              "inferred_type": "value",
+              "type_detail": {
+                "type": "type_tuple",
+                "elements": [
+                  {
+                    "type": "type_primitive",
+                    "name": "string"
+                  },
+                  {
+                    "type": "type_primitive",
+                    "name": "string"
+                  }
+                ]
+              }
+            },
+            "type_detail": {
+              "type": "type_tuple",
+              "elements": [
+                {
+                  "type": "type_primitive",
+                  "name": "string"
+                },
+                {
+                  "type": "type_primitive",
+                  "name": "string"
+                }
+              ]
             }
           },
-          "semantic_tag": "dictionary"
+          "semantic_tag": "dictionary",
+          "type_detail": {
+            "type": "type_tuple",
+            "elements": [
+              {
+                "type": "type_primitive",
+                "name": "string"
+              },
+              {
+                "type": "type_primitive",
+                "name": "string"
+              }
+            ]
+          }
+        },
+        "type_detail": {
+          "type": "type_tuple",
+          "elements": [
+            {
+              "type": "type_primitive",
+              "name": "string"
+            },
+            {
+              "type": "type_primitive",
+              "name": "string"
+            }
+          ]
         }
       },
       "semantic_tag": "list_composition",
-      "inferred_type": "value"
+      "inferred_type": "value",
+      "type_detail": {
+        "type": "type_tuple",
+        "elements": [
+          {
+            "type": "type_tuple",
+            "elements": [
+              {
+                "type": "type_primitive",
+                "name": "string"
+              },
+              {
+                "type": "type_primitive",
+                "name": "f64"
+              }
+            ]
+          },
+          {
+            "type": "type_tuple",
+            "elements": [
+              {
+                "type": "type_primitive",
+                "name": "string"
+              },
+              {
+                "type": "type_primitive",
+                "name": "string"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "type_detail": {
+      "type": "type_tuple",
+      "elements": [
+        {
+          "type": "type_tuple",
+          "elements": [
+            {
+              "type": "type_primitive",
+              "name": "string"
+            },
+            {
+              "type": "type_primitive",
+              "name": "f64"
+            }
+          ]
+        },
+        {
+          "type": "type_tuple",
+          "elements": [
+            {
+              "type": "type_primitive",
+              "name": "string"
+            },
+            {
+              "type": "type_primitive",
+              "name": "string"
+            }
+          ]
+        }
+      ]
     }
+  },
+  "type_detail": {
+    "type": "type_tuple",
+    "elements": [
+      {
+        "type": "type_tuple",
+        "elements": [
+          {
+            "type": "type_primitive",
+            "name": "string"
+          },
+          {
+            "type": "type_primitive",
+            "name": "f64"
+          }
+        ]
+      },
+      {
+        "type": "type_tuple",
+        "elements": [
+          {
+            "type": "type_primitive",
+            "name": "string"
+          },
+          {
+            "type": "type_primitive",
+            "name": "string"
+          }
+        ]
+      }
+    ]
   }
 }

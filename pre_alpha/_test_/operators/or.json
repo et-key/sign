@@ -1,38 +1,58 @@
-{
-  "type": "operation",
-  "operator": "|",
-  "left": {
+[
+  {
     "type": "operation",
     "operator": "|",
     "left": {
       "type": "operation",
       "operator": "|",
-      "left": {
-        "type": "operation",
-        "operator": "|",
-        "left": "<a>",
-        "right": {
-          "type": "operation",
-          "operator": "-",
-          "operand": "<b>",
-          "position": "prefix"
-        }
-      },
+      "left": "<a>",
       "right": {
         "type": "operation",
-        "operator": "concat",
-        "left": "<c>",
-        "right": "<a>",
-        "semantic_tag": "list_composition",
-        "inferred_type": "value"
+        "operator": "-",
+        "operand": "<b>",
+        "position": "prefix",
+        "type_detail": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      },
+      "type_detail": {
+        "type": "type_primitive",
+        "name": "f64"
       }
     },
-    "right": {
-      "type": "operation",
-      "operator": "-",
-      "operand": "<b>",
-      "position": "prefix"
+    "right": "<c>",
+    "type_detail": {
+      "type": "type_ref",
+      "name": "c"
     }
   },
-  "right": "<c>"
-}
+  {
+    "type": "operation",
+    "operator": "|",
+    "left": {
+      "type": "operation",
+      "operator": "|",
+      "left": "<a>",
+      "right": {
+        "type": "operation",
+        "operator": "-",
+        "operand": "<b>",
+        "position": "prefix",
+        "type_detail": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      },
+      "type_detail": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    },
+    "right": "<c>",
+    "type_detail": {
+      "type": "type_ref",
+      "name": "c"
+    }
+  }
+]

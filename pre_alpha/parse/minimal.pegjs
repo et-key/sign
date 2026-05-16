@@ -10,7 +10,7 @@ EOF = !.
 comment = "`" [^\r\n]* { return null; }
 
 // --- プログラムと行 ---
-Program = (SOL @Line EOL*)* EOF
+Program = lines:(SOL @Line EOL*)* EOF { return lines; }
 
 Line
   = _ expr:Expression _ comment? { return expr; }

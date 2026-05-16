@@ -18,12 +18,7 @@
             "type": "operation",
             "operator": ":",
             "left": "<x>",
-            "right": {
-              "type": "operation",
-              "operator": "=",
-              "left": "<int>",
-              "right": "0"
-            }
+            "right": "0"
           }
         },
         "right": {
@@ -35,9 +30,13 @@
             "left": "<y>",
             "right": {
               "type": "operation",
-              "operator": "=",
-              "left": "<int>",
-              "right": "1"
+              "operator": "+",
+              "left": "<x>",
+              "right": "1",
+              "type_detail": {
+                "type": "type_primitive",
+                "name": "f64"
+              }
             }
           }
         },
@@ -55,9 +54,71 @@
           "type": "operation",
           "operator": "+",
           "left": "<x>",
-          "right": "<y>"
+          "right": "<y>",
+          "type_detail": {
+            "type": "type_primitive",
+            "name": "f64"
+          }
+        },
+        "type_detail": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      },
+      "type_detail": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    },
+    "type_detail": {
+      "type": "type_function",
+      "args": [
+        {
+          "type": "type_ref",
+          "name": "x",
+          "default_type": {
+            "type": "type_primitive",
+            "name": "f64"
+          }
+        },
+        {
+          "type": "type_ref",
+          "name": "y",
+          "default_type": {
+            "type": "type_primitive",
+            "name": "f64"
+          }
+        }
+      ],
+      "returnType": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    }
+  },
+  "type_detail": {
+    "type": "type_function",
+    "args": [
+      {
+        "type": "type_ref",
+        "name": "x",
+        "default_type": {
+          "type": "type_primitive",
+          "name": "f64"
+        }
+      },
+      {
+        "type": "type_ref",
+        "name": "y",
+        "default_type": {
+          "type": "type_primitive",
+          "name": "f64"
         }
       }
+    ],
+    "returnType": {
+      "type": "type_primitive",
+      "name": "f64"
     }
   }
 }

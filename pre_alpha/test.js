@@ -1,7 +1,7 @@
 import { preprocess } from './lexisize/lexer.js';
 import * as parser from './parse/minimal.js';
 import { buildAST } from './semanticize/shunting_yard.js';
-import { annotateContextualOperators, buildTypeEnvironment, resolveCoproducts } from './semanticize/analyzer.js';
+import { annotateContextualOperators, buildTypeEnvironment, resolveCoproducts, inferType, liftLambdas, generateST } from './semanticize/analyzer.js';
 import util from 'util';
 import fs from 'fs';
 import path from 'path';
@@ -41,22 +41,49 @@ for (const filePath of files) {
     // 2. PEG Parser (構文解析)
     const astProgram = parser.parse(preprocessed);
     const astLines = astProgram.filter(line => line !== null && line !== undefined);
-    const astFlat = astLines.flat(2);
     
-    // 3. Shunting Yard (優先順位解決 -> AST)
-    let astTree = buildAST(Array.isArray(astFlat) && astFlat.length === 1 && Array.isArray(astFlat[0]) ? astFlat[0] : astFlat);
+    // ファイルスコープの型環境（Type Environment）を初期化
+    const typeEnv = new Map();
+    // ラムダリフティング用の状態を初期化
+    const lambdaState = { lambdas: [], counter: 0 };
     
-    // 4. Semantic Analyzer (意味解析: `:` のタグ付け)
-    astTree = annotateContextualOperators(astTree);
+    // トップレベルの「式のリスト（Statements Array）」として処理する
+    const astTrees = astLines.map(astLine => {
+      // 3. Shunting Yard (優先順位解決 -> AST)
+      // Lineが単一の配列を返した場合のアンラップ
+      let astTree = buildAST(Array.isArray(astLine) && astLine.length === 1 && Array.isArray(astLine[0]) ? astLine[0] : astLine);
+      
+      // 4. Semantic Analyzer (意味解析: `:` のタグ付け)
+      astTree = annotateContextualOperators(astTree);
 
-    // 5. Static Type Resolution (Coproductの解決)
-    const typeEnv = buildTypeEnvironment(astTree);
-    astTree = resolveCoproducts(astTree, typeEnv);
+      // 5. 型環境の更新（グローバル環境に登録）
+      buildTypeEnvironment(astTree, typeEnv);
+      
+      // 6. Static Type Resolution (Coproductの解決)
+      const resolved = resolveCoproducts(astTree, typeEnv);
+      
+      // 7. Type Inference (型の伝播と詳細推論)
+      inferType(resolved, typeEnv);
+      
+      // 8. Lambda Lifting (無名関数の平坦化)
+      return liftLambdas(resolved, lambdaState);
+    });
+    
+    // 抽出された無名関数をASTの末尾に結合する
+    if (lambdaState.lambdas.length > 0) {
+      astTrees.push(...lambdaState.lambdas);
+    }
     
     // Write JSON output
-    const outPath = filePath.replace(/\.(sign|sn)$/, '.json');
-    fs.writeFileSync(outPath, JSON.stringify(astTree, null, 2), 'utf-8');
-    console.log(`[Success] AST written to: ${outPath}`);
+    const outPathJson = filePath.replace(/\.(sign|sn)$/, '.json');
+    fs.writeFileSync(outPathJson, JSON.stringify(astTrees.length === 1 ? astTrees[0] : astTrees, null, 2), 'utf-8');
+    
+    // Write .st Type Signature output
+    const outPathSt = filePath.replace(/\.(sign|sn)$/, '.st');
+    const stContent = generateST(astTrees, lambdaState.lambdas);
+    fs.writeFileSync(outPathSt, stContent, 'utf-8');
+    
+    console.log(`[Success] AST written to: ${outPathJson} and ${outPathSt}`);
     
   } catch (err) {
     let errMsg = "";
