@@ -95,7 +95,7 @@
       "right": {
         "type": "operation",
         "operator": "concat",
-        "left": "<__>",
+        "left": "_",
         "right": "3",
         "semantic_tag": "list_composition",
         "inferred_type": "value",

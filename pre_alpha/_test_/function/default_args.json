@@ -174,8 +174,8 @@
       "right": {
         "type": "operation",
         "operator": "concat",
-        "left": "_",
-        "right": "_",
+        "left": "..",
+        "right": "..",
         "semantic_tag": "list_composition",
         "inferred_type": "value",
         "type_detail": {
@@ -289,7 +289,7 @@
         "type": "operation",
         "operator": "concat",
         "left": "3",
-        "right": "_",
+        "right": "..",
         "semantic_tag": "list_composition",
         "inferred_type": "value",
         "type_detail": {
@@ -390,7 +390,7 @@
       "right": {
         "type": "operation",
         "operator": "concat",
-        "left": "_",
+        "left": "..",
         "right": "5",
         "semantic_tag": "list_composition",
         "inferred_type": "value",

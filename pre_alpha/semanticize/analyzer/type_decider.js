@@ -169,15 +169,15 @@ export function inferType(node, env) {
   if (typeof node === 'string') {
     if (node.startsWith('<')) {
       const name = node.slice(1, -1);
-      if (name === '__') return { type: 'type_unit' };
-      if (name === '_') return { type: 'type_default_signal' };
+      if (name === '_') return { type: 'type_unit' };
+      if (name === '..') return { type: 'type_default_signal' };
       if (env.has(name)) {
         return env.get(name);
       }
       return { type: 'type_ref', name }; // Generic / Unbound Name
     }
-    if (node === '__') return { type: 'type_unit' };
-    if (node === '_') return { type: 'type_default_signal' };
+    if (node === '_') return { type: 'type_unit' };
+    if (node === '..') return { type: 'type_default_signal' };
     if (node.startsWith('`') && node.endsWith('`')) return { type: 'type_primitive', name: 'string' };
     if (node.startsWith('0x') || node.startsWith('0r') || node.startsWith('0b') || node.startsWith('0u')) {
       return { type: 'type_primitive', name: 'i64' };
@@ -220,13 +220,7 @@ export function inferType(node, env) {
         node.type_detail = derefType;
         return derefType;
       }
-      if (node.operator === '!') {
-        if (node.operand === '_') {
-          const defSig = { type: 'type_default_signal' };
-          node.type_detail = defSig;
-          return defSig;
-        }
-      }
+
       if (node.operator === '~') {
         const listType = { type: 'type_list', name: 'unknown' };
         node.type_detail = listType;
@@ -310,10 +304,16 @@ export function inferType(node, env) {
         } else if (argNode.type === 'operation' && argNode.position === 'prefix') {
           if (argNode.operator === '~') {
             let name = argNode.operand;
-            if (typeof name === 'string' && name.startsWith('<')) name = name.slice(1, -1);
-            const listType = { type: 'type_list', name };
-            childEnv.set(name, listType);
-            args.push(listType);
+            if (typeof name === 'object' && name.name) name = name.name;
+            else if (typeof name === 'string' && name.startsWith('<')) name = name.slice(1, -1);
+            // Variadic arguments are treated as generic arrays of type U and symbolic length L
+            const arrayType = { 
+               type: 'type_array', 
+               elementType: { type: 'type_ref', name: 'U' },
+               length: 'L'
+            };
+            childEnv.set(name, arrayType);
+            args.push(arrayType);
           } else {
             collectArgs(argNode.operand);
           }
@@ -387,8 +387,12 @@ export function inferType(node, env) {
           if (t && t.type === 'type_tuple') {
             t.elements.forEach(extractElements);
           } else if (t && t.type === 'type_array') {
-            for (let i = 0; i < t.length; i++) {
-              elements.push(t.elementType);
+            if (typeof t.length === 'number') {
+              for (let i = 0; i < t.length; i++) {
+                elements.push(t.elementType);
+              }
+            } else {
+              elements.push(t); // Keep symbolic array as a single element
             }
           } else if (t && t.type === 'type_default_signal') {
             // Id morphism (identity) for concatenation
@@ -415,13 +419,27 @@ export function inferType(node, env) {
         }
         
         let finalConcatType;
-        if (isArray) {
+        if (isArray && typeof elements.length === 'number') {
           finalConcatType = { type: 'type_array', elementType: firstType, length: elements.length };
         } else {
-          // If the list contains a `type_list`, we simplify it abstractly as `type_list`
-          const hasList = elements.some(e => e && e.type === 'type_list');
-          if (hasList) {
-             finalConcatType = { type: 'type_list', name: 'abstract_list' };
+          // If elements contain a symbolic array, try to collapse it
+          const symbolicArrays = elements.filter(e => e && e.type === 'type_array' && typeof e.length === 'string');
+          if (symbolicArrays.length > 0) {
+             const baseArray = symbolicArrays[0];
+             const concreteCount = elements.length - symbolicArrays.length;
+             
+             let newLength = baseArray.length;
+             if (concreteCount > 0) {
+                 const match = newLength.match(/L(?: \+ (\d+))?/);
+                 let currentOffset = match && match[1] ? parseInt(match[1]) : 0;
+                 newLength = `L + ${currentOffset + concreteCount}`;
+             }
+             
+             finalConcatType = {
+                type: 'type_array',
+                elementType: baseArray.elementType,
+                length: newLength
+             };
           } else {
              finalConcatType = { type: 'type_tuple', elements };
           }

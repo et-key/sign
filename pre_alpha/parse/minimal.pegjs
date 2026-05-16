@@ -70,7 +70,7 @@ Expressions
 
 // --- 値（Atom）の定義（既存の正規表現ルールを踏襲） ---
 Atom
-  = string / charactor / address / register / unicode / number / identifier / unit
+  = string / charactor / address / register / unicode / number / identifier / unit / default
 
 string = $("`" [^`\r\n]* "`")
 charactor = $("\\".)
@@ -80,8 +80,8 @@ register = $("0r" Hex+) / $("0b" ("0" / "1")+)
 unicode = $("0u" Hex+)
 identifier = id:( $([a-zA-Z][a-zA-Z0-9_]*) / $("_" [a-zA-Z0-9_]+) ) {return `<${id}>`}
 Hex = [0-9a-fA-F]
-unit = "__"
-id = "_"
+unit = "_"
+default = ".."
 
 // --- 演算子・記号（前置・後置・中置の振る舞い解決はShunting Yardへ） ---
 prefix
