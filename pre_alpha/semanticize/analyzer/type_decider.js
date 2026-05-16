@@ -304,16 +304,10 @@ export function inferType(node, env) {
         } else if (argNode.type === 'operation' && argNode.position === 'prefix') {
           if (argNode.operator === '~') {
             let name = argNode.operand;
-            if (typeof name === 'object' && name.name) name = name.name;
-            else if (typeof name === 'string' && name.startsWith('<')) name = name.slice(1, -1);
-            // Variadic arguments are treated as generic arrays of type U and symbolic length L
-            const arrayType = { 
-               type: 'type_array', 
-               elementType: { type: 'type_ref', name: 'U' },
-               length: 'L'
-            };
-            childEnv.set(name, arrayType);
-            args.push(arrayType);
+            if (typeof name === 'string' && name.startsWith('<')) name = name.slice(1, -1);
+            const listType = { type: 'type_list', name };
+            childEnv.set(name, listType);
+            args.push(listType);
           } else {
             collectArgs(argNode.operand);
           }
@@ -387,12 +381,8 @@ export function inferType(node, env) {
           if (t && t.type === 'type_tuple') {
             t.elements.forEach(extractElements);
           } else if (t && t.type === 'type_array') {
-            if (typeof t.length === 'number') {
-              for (let i = 0; i < t.length; i++) {
-                elements.push(t.elementType);
-              }
-            } else {
-              elements.push(t); // Keep symbolic array as a single element
+            for (let i = 0; i < t.length; i++) {
+              elements.push(t.elementType);
             }
           } else if (t && t.type === 'type_default_signal') {
             // Id morphism (identity) for concatenation
@@ -419,27 +409,13 @@ export function inferType(node, env) {
         }
         
         let finalConcatType;
-        if (isArray && typeof elements.length === 'number') {
+        if (isArray) {
           finalConcatType = { type: 'type_array', elementType: firstType, length: elements.length };
         } else {
-          // If elements contain a symbolic array, try to collapse it
-          const symbolicArrays = elements.filter(e => e && e.type === 'type_array' && typeof e.length === 'string');
-          if (symbolicArrays.length > 0) {
-             const baseArray = symbolicArrays[0];
-             const concreteCount = elements.length - symbolicArrays.length;
-             
-             let newLength = baseArray.length;
-             if (concreteCount > 0) {
-                 const match = newLength.match(/L(?: \+ (\d+))?/);
-                 let currentOffset = match && match[1] ? parseInt(match[1]) : 0;
-                 newLength = `L + ${currentOffset + concreteCount}`;
-             }
-             
-             finalConcatType = {
-                type: 'type_array',
-                elementType: baseArray.elementType,
-                length: newLength
-             };
+          // If the list contains a `type_list`, we simplify it abstractly as `type_list`
+          const hasList = elements.some(e => e && e.type === 'type_list');
+          if (hasList) {
+             finalConcatType = { type: 'type_list', name: 'abstract_list' };
           } else {
              finalConcatType = { type: 'type_tuple', elements };
           }

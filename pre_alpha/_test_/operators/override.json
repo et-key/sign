@@ -45,7 +45,7 @@
         "holes": [],
         "bound_env": {},
         "returnType": {
-          "type": "type_default_signal"
+          "type": "type_unit"
         }
       }
     },
@@ -74,7 +74,7 @@
       "holes": [],
       "bound_env": {},
       "returnType": {
-        "type": "type_default_signal"
+        "type": "type_unit"
       }
     }
   },
