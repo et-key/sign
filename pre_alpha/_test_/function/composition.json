@@ -1,0 +1,59 @@
+{
+  "type": "operation",
+  "operator": ":",
+  "left": {
+    "type": "operation",
+    "operator": ":",
+    "left": "<f>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": "<x>",
+      "right": {
+        "type": "operation",
+        "operator": "concat",
+        "left": {
+          "type": "operation",
+          "operator": "*",
+          "left": "<x>",
+          "right": "2"
+        },
+        "right": "<g>",
+        "semantic_tag": "list_composition",
+        "inferred_type": "value"
+      }
+    }
+  },
+  "right": {
+    "type": "operation",
+    "operator": "?",
+    "left": "<x>",
+    "right": {
+      "type": "operation",
+      "operator": "apply",
+      "left": {
+        "type": "operation",
+        "operator": "apply",
+        "left": {
+          "type": "operation",
+          "operator": "+",
+          "left": "<x>",
+          "right": "1"
+        },
+        "right": "<f>",
+        "semantic_tag": "application",
+        "inferred_type": "unknown"
+      },
+      "right": {
+        "type": "operation",
+        "operator": "concat",
+        "left": "<g>",
+        "right": "3",
+        "semantic_tag": "list_composition",
+        "inferred_type": "value"
+      },
+      "semantic_tag": "application",
+      "inferred_type": "unknown"
+    }
+  }
+}

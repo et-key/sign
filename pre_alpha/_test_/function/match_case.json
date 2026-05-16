@@ -1,0 +1,149 @@
+{
+  "type": "operation",
+  "operator": ":",
+  "left": "<func_match>",
+  "right": {
+    "type": "operation",
+    "operator": "?",
+    "left": {
+      "type": "operation",
+      "operator": "concat",
+      "left": "<x>",
+      "right": "<y>",
+      "semantic_tag": "list_composition",
+      "inferred_type": "value"
+    },
+    "right": {
+      "type": "operation",
+      "operator": "concat",
+      "left": {
+        "type": "block",
+        "kind": "indent",
+        "content": {
+          "type": "operation",
+          "operator": "concat",
+          "left": {
+            "type": "operation",
+            "operator": "concat",
+            "left": {
+              "type": "block",
+              "kind": "group",
+              "content": {
+                "type": "operation",
+                "operator": ":",
+                "left": {
+                  "type": "operation",
+                  "operator": "concat",
+                  "left": {
+                    "type": "operation",
+                    "operator": "concat",
+                    "left": "<x>",
+                    "right": "<",
+                    "semantic_tag": "list_composition",
+                    "inferred_type": "value"
+                  },
+                  "right": "1",
+                  "semantic_tag": "list_composition",
+                  "inferred_type": "value"
+                },
+                "right": "<result1>",
+                "semantic_tag": "match_case"
+              }
+            },
+            "right": {
+              "type": "block",
+              "kind": "group",
+              "content": {
+                "type": "operation",
+                "operator": ":",
+                "left": {
+                  "type": "operation",
+                  "operator": "concat",
+                  "left": {
+                    "type": "operation",
+                    "operator": "concat",
+                    "left": "<y>",
+                    "right": "<",
+                    "semantic_tag": "list_composition",
+                    "inferred_type": "value"
+                  },
+                  "right": "3",
+                  "semantic_tag": "list_composition",
+                  "inferred_type": "value"
+                },
+                "right": "<result2>",
+                "semantic_tag": "match_case"
+              }
+            },
+            "semantic_tag": "list_composition",
+            "inferred_type": "value"
+          },
+          "right": "3",
+          "semantic_tag": "list_composition",
+          "inferred_type": "value"
+        }
+      },
+      "right": {
+        "type": "block",
+        "kind": "indent",
+        "content": {
+          "type": "block",
+          "kind": "group",
+          "content": {
+            "type": "operation",
+            "operator": "?",
+            "left": {
+              "type": "operation",
+              "operator": "concat",
+              "left": "<x>",
+              "right": "<y>",
+              "semantic_tag": "list_composition",
+              "inferred_type": "value"
+            },
+            "right": {
+              "type": "block",
+              "kind": "indent",
+              "content": {
+                "type": "operation",
+                "operator": "concat",
+                "left": {
+                  "type": "operation",
+                  "operator": "concat",
+                  "left": {
+                    "type": "block",
+                    "kind": "group",
+                    "content": {
+                      "type": "operation",
+                      "operator": ":",
+                      "left": "<x>",
+                      "right": "1",
+                      "semantic_tag": "match_case"
+                    }
+                  },
+                  "right": {
+                    "type": "block",
+                    "kind": "group",
+                    "content": {
+                      "type": "operation",
+                      "operator": ":",
+                      "left": "<y>",
+                      "right": "2",
+                      "semantic_tag": "match_case"
+                    }
+                  },
+                  "semantic_tag": "list_composition",
+                  "inferred_type": "value"
+                },
+                "right": "3",
+                "semantic_tag": "list_composition",
+                "inferred_type": "value"
+              }
+            }
+          }
+        }
+      },
+      "semantic_tag": "list_composition",
+      "inferred_type": "value"
+    }
+  }
+}

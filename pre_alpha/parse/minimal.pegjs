@@ -54,13 +54,13 @@ Core
 
 // --- 空間的配置（ネスト構造） ---
 Block
-  = "[" _ exprs:Expressions _ "]" { return exprs; }
-  / "{" _ exprs:Expressions _ "}" { return exprs; }
-  / "(" _ exprs:Expressions _ ")" { return exprs; }
-  / "|" exprs:Expressions "|" &(__ / EOL / EOF / "]" / "}" / ")" / "\x03") { return [`"ABS_"`, ...exprs, `"_ABS"`]; }
-  // Lexerが挿入した制御用ASCIIコードによるインデントブロックの切り出し
-  // ※実際のLexerの実装に合わせて "\x02", "\x03" は変更してください
-  / "\x02" _ exprs:Expressions _ "\x03" { return [`"INDENT_"`, ...exprs, `"_DEDENT"`]; }
+  = "[" _ EOL* _ exprs:Expressions? _ EOL* _ "]" { return exprs || []; }
+  / "{" _ EOL* _ exprs:Expressions? _ EOL* _ "}" { return exprs || []; }
+  / "(" _ EOL* _ exprs:Expressions? _ EOL* _ ")" { return exprs || []; }
+  // Lexerが挿入した制御用ASCIIコードによる絶対値ブロックの切り出し (\x04, \x05)
+  / "|" expr:Expression "|" { return [`"ABS_"`, expr, `"_ABS"`]; }
+  // Lexerが挿入した制御用ASCIIコードによるインデントブロックの切り出し (\x02, \x03)
+  / "\x02" _ EOL* _ exprs:Expressions _ EOL* _ "\x03" { return [`"INDENT_"`, ...exprs, `"_DEDENT"`]; }
 
 // ブロック内で使われる複数行の式
 Expressions
@@ -84,10 +84,10 @@ unit = "_"
 
 // --- 演算子・記号（前置・後置・中置の振る舞い解決はShunting Yardへ） ---
 prefix
-  = "###" / "##" / "#" / ("-" &(Block / identifier)) / "~" / "!!" / "!" / "$" / "@"
+  = $( "###" / "##" / "#" / ("-" &(Block / identifier)) / "~" / "!!" / "!" / "$" / "@" )
 
 postfix
-  = "!" / "~" / "@"
+  = $( "!" / "~" / "@" )
 
 operator
   = $[!"#$%&'-=^~\|@;+:*,<>/?]+

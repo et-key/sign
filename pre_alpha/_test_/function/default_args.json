@@ -1,0 +1,63 @@
+{
+  "type": "operation",
+  "operator": ":",
+  "left": "<func_with_defaults>",
+  "right": {
+    "type": "operation",
+    "operator": "?",
+    "left": {
+      "type": "block",
+      "kind": "indent",
+      "content": {
+        "type": "operation",
+        "operator": "concat",
+        "left": {
+          "type": "block",
+          "kind": "group",
+          "content": {
+            "type": "operation",
+            "operator": ":",
+            "left": "<x>",
+            "right": {
+              "type": "operation",
+              "operator": "=",
+              "left": "<int>",
+              "right": "0"
+            }
+          }
+        },
+        "right": {
+          "type": "block",
+          "kind": "group",
+          "content": {
+            "type": "operation",
+            "operator": ":",
+            "left": "<y>",
+            "right": {
+              "type": "operation",
+              "operator": "=",
+              "left": "<int>",
+              "right": "1"
+            }
+          }
+        },
+        "semantic_tag": "list_composition",
+        "inferred_type": "value"
+      }
+    },
+    "right": {
+      "type": "block",
+      "kind": "indent",
+      "content": {
+        "type": "block",
+        "kind": "group",
+        "content": {
+          "type": "operation",
+          "operator": "+",
+          "left": "<x>",
+          "right": "<y>"
+        }
+      }
+    }
+  }
+}

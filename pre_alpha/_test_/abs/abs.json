@@ -1,0 +1,76 @@
+{
+  "type": "operation",
+  "operator": "concat",
+  "left": {
+    "type": "operation",
+    "operator": "concat",
+    "left": {
+      "type": "operation",
+      "operator": "concat",
+      "left": {
+        "type": "operation",
+        "operator": "+",
+        "left": {
+          "type": "block",
+          "kind": "abs",
+          "content": "<a>"
+        },
+        "right": "1"
+      },
+      "right": {
+        "type": "operation",
+        "operator": "+",
+        "left": "1",
+        "right": {
+          "type": "block",
+          "kind": "abs",
+          "content": "<a>"
+        }
+      },
+      "semantic_tag": "list_composition",
+      "inferred_type": "value"
+    },
+    "right": {
+      "type": "operation",
+      "operator": "*",
+      "left": {
+        "type": "block",
+        "kind": "abs",
+        "content": {
+          "type": "block",
+          "kind": "group",
+          "content": {
+            "type": "operation",
+            "operator": "+",
+            "left": "<x>",
+            "right": "<y>"
+          }
+        }
+      },
+      "right": "3"
+    },
+    "semantic_tag": "list_composition",
+    "inferred_type": "value"
+  },
+  "right": {
+    "type": "operation",
+    "operator": "*",
+    "left": "3",
+    "right": {
+      "type": "block",
+      "kind": "abs",
+      "content": {
+        "type": "block",
+        "kind": "group",
+        "content": {
+          "type": "operation",
+          "operator": "+",
+          "left": "<x>",
+          "right": "<y>"
+        }
+      }
+    }
+  },
+  "semantic_tag": "list_composition",
+  "inferred_type": "value"
+}

@@ -1,0 +1,38 @@
+{
+  "type": "operation",
+  "operator": "|",
+  "left": {
+    "type": "operation",
+    "operator": "|",
+    "left": {
+      "type": "operation",
+      "operator": "|",
+      "left": {
+        "type": "operation",
+        "operator": "|",
+        "left": "<a>",
+        "right": {
+          "type": "operation",
+          "operator": "-",
+          "operand": "<b>",
+          "position": "prefix"
+        }
+      },
+      "right": {
+        "type": "operation",
+        "operator": "concat",
+        "left": "<c>",
+        "right": "<a>",
+        "semantic_tag": "list_composition",
+        "inferred_type": "value"
+      }
+    },
+    "right": {
+      "type": "operation",
+      "operator": "-",
+      "operand": "<b>",
+      "position": "prefix"
+    }
+  },
+  "right": "<c>"
+}

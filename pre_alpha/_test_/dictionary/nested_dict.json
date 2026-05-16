@@ -1,0 +1,85 @@
+{
+  "type": "operation",
+  "operator": ":",
+  "left": "<my_dict>",
+  "right": {
+    "type": "block",
+    "kind": "indent",
+    "content": {
+      "type": "operation",
+      "operator": "concat",
+      "left": {
+        "type": "operation",
+        "operator": "concat",
+        "left": {
+          "type": "block",
+          "kind": "group",
+          "content": {
+            "type": "operation",
+            "operator": ":",
+            "left": "<name>",
+            "right": "`Sign`",
+            "semantic_tag": "dictionary"
+          }
+        },
+        "right": {
+          "type": "block",
+          "kind": "group",
+          "content": {
+            "type": "operation",
+            "operator": ":",
+            "left": "<version>",
+            "right": "0.1",
+            "semantic_tag": "dictionary"
+          }
+        },
+        "semantic_tag": "list_composition",
+        "inferred_type": "value"
+      },
+      "right": {
+        "type": "block",
+        "kind": "group",
+        "content": {
+          "type": "operation",
+          "operator": ":",
+          "left": "<features>",
+          "right": {
+            "type": "block",
+            "kind": "indent",
+            "content": {
+              "type": "operation",
+              "operator": "concat",
+              "left": {
+                "type": "block",
+                "kind": "group",
+                "content": {
+                  "type": "operation",
+                  "operator": ":",
+                  "left": "<type>",
+                  "right": "`Structural`",
+                  "semantic_tag": "dictionary"
+                }
+              },
+              "right": {
+                "type": "block",
+                "kind": "group",
+                "content": {
+                  "type": "operation",
+                  "operator": ":",
+                  "left": "<backend>",
+                  "right": "`AArch64`",
+                  "semantic_tag": "dictionary"
+                }
+              },
+              "semantic_tag": "list_composition",
+              "inferred_type": "value"
+            }
+          },
+          "semantic_tag": "dictionary"
+        }
+      },
+      "semantic_tag": "list_composition",
+      "inferred_type": "value"
+    }
+  }
+}
