@@ -83,7 +83,8 @@
           "type": "operation",
           "operator": "~",
           "operand": "<y>",
-          "position": "prefix"
+          "position": "prefix",
+          "semantic_tag": "inductive_boundary"
         },
         "semantic_tag": "list_composition",
         "inferred_type": "value"
@@ -153,6 +154,7 @@
                 "operator": "~",
                 "operand": "<y>",
                 "position": "postfix",
+                "semantic_tag": "inductive_expansion",
                 "type_detail": {
                   "type": "type_variadic_end"
                 }
@@ -257,7 +259,10 @@
         "bound_env": {},
         "returnType": {
           "type": "type_list",
-          "name": "abstract_list"
+          "name": "abstract_list",
+          "elementType": {
+            "type": "type_unknown"
+          }
         }
       }
     },
@@ -295,7 +300,10 @@
       "bound_env": {},
       "returnType": {
         "type": "type_list",
-        "name": "abstract_list"
+        "name": "abstract_list",
+        "elementType": {
+          "type": "type_unknown"
+        }
       }
     }
   },
@@ -327,6 +335,7 @@
                   "operator": "$",
                   "operand": "<f>",
                   "position": "prefix",
+                  "semantic_tag": "smart_pointer",
                   "type_detail": {
                     "type": "type_address",
                     "target": {
@@ -675,6 +684,7 @@
                     }
                   },
                   "position": "prefix",
+                  "semantic_tag": "smart_pointer",
                   "type_detail": {
                     "type": "type_address",
                     "target": {
@@ -1129,21 +1139,11 @@
       "semantic_tag": "application",
       "inferred_type": "unknown",
       "type_detail": {
-        "type": "type_array",
-        "elementType": {
-          "type": "type_primitive",
-          "name": "f64"
-        },
-        "length": 5
+        "type": "type_unknown"
       }
     },
     "type_detail": {
-      "type": "type_array",
-      "elementType": {
-        "type": "type_primitive",
-        "name": "f64"
-      },
-      "length": 5
+      "type": "type_unknown"
     }
   },
   {

@@ -45,10 +45,20 @@ export function annotateContextualOperators(ast, context = null) {
       // = の右辺に現れるブロックも、基本的に辞書扱い
       annotateContextualOperators(ast.right, 'dictionary');
 
+    } else if (ast.operator === '~' && ast.position === 'prefix') {
+      ast.semantic_tag = 'inductive_boundary';
+      if (ast.operand) annotateContextualOperators(ast.operand, context);
+    } else if (ast.operator === '~' && ast.position === 'postfix') {
+      ast.semantic_tag = 'inductive_expansion';
+      if (ast.operand) annotateContextualOperators(ast.operand, context);
+    } else if (ast.operator === '$' && ast.position === 'prefix') {
+      ast.semantic_tag = 'smart_pointer';
+      if (ast.operand) annotateContextualOperators(ast.operand, context);
     } else {
       // その他の演算子はコンテキストを維持して伝播
-      annotateContextualOperators(ast.left, context);
-      annotateContextualOperators(ast.right, context);
+      if (ast.left) annotateContextualOperators(ast.left, context);
+      if (ast.right) annotateContextualOperators(ast.right, context);
+      if (ast.operand) annotateContextualOperators(ast.operand, context);
     }
   } else if (ast.type === 'block') {
     if (Array.isArray(ast.content)) {

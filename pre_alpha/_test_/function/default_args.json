@@ -179,102 +179,23 @@
         "semantic_tag": "list_composition",
         "inferred_type": "value",
         "type_detail": {
-          "type": "type_tuple",
-          "elements": []
+          "type": "type_array",
+          "elementType": {
+            "type": "type_default_signal"
+          },
+          "length": 2
         }
       },
       "semantic_tag": "application",
       "inferred_type": "unknown",
       "type_detail": {
-        "type": "type_function",
-        "args": [
-          {
-            "type": "type_ref",
-            "name": "x",
-            "default_type": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          },
-          {
-            "type": "type_ref",
-            "name": "y",
-            "default_type": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          }
-        ],
-        "remaining_args": [
-          {
-            "type": "type_ref",
-            "name": "x",
-            "default_type": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          },
-          {
-            "type": "type_ref",
-            "name": "y",
-            "default_type": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          }
-        ],
-        "holes": [],
-        "bound_env": {},
-        "returnType": {
-          "type": "type_primitive",
-          "name": "f64"
-        }
-      }
-    },
-    "type_detail": {
-      "type": "type_function",
-      "args": [
-        {
-          "type": "type_ref",
-          "name": "x",
-          "default_type": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
-        },
-        {
-          "type": "type_ref",
-          "name": "y",
-          "default_type": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
-        }
-      ],
-      "remaining_args": [
-        {
-          "type": "type_ref",
-          "name": "x",
-          "default_type": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
-        },
-        {
-          "type": "type_ref",
-          "name": "y",
-          "default_type": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
-        }
-      ],
-      "holes": [],
-      "bound_env": {},
-      "returnType": {
         "type": "type_primitive",
         "name": "f64"
       }
+    },
+    "type_detail": {
+      "type": "type_primitive",
+      "name": "f64"
     }
   },
   {
@@ -293,90 +214,28 @@
         "semantic_tag": "list_composition",
         "inferred_type": "value",
         "type_detail": {
-          "type": "type_array",
-          "elementType": {
-            "type": "type_primitive",
-            "name": "f64"
-          },
-          "length": 1
+          "type": "type_tuple",
+          "elements": [
+            {
+              "type": "type_primitive",
+              "name": "f64"
+            },
+            {
+              "type": "type_default_signal"
+            }
+          ]
         }
       },
       "semantic_tag": "application",
       "inferred_type": "unknown",
       "type_detail": {
-        "type": "type_function",
-        "args": [
-          {
-            "type": "type_ref",
-            "name": "x",
-            "default_type": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          },
-          {
-            "type": "type_ref",
-            "name": "y",
-            "default_type": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          }
-        ],
-        "remaining_args": [
-          {
-            "type": "type_ref",
-            "name": "y",
-            "default_type": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          }
-        ],
-        "holes": [],
-        "bound_env": {},
-        "returnType": {
-          "type": "type_primitive",
-          "name": "f64"
-        }
-      }
-    },
-    "type_detail": {
-      "type": "type_function",
-      "args": [
-        {
-          "type": "type_ref",
-          "name": "x",
-          "default_type": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
-        },
-        {
-          "type": "type_ref",
-          "name": "y",
-          "default_type": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
-        }
-      ],
-      "remaining_args": [
-        {
-          "type": "type_ref",
-          "name": "y",
-          "default_type": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
-        }
-      ],
-      "holes": [],
-      "bound_env": {},
-      "returnType": {
         "type": "type_primitive",
         "name": "f64"
       }
+    },
+    "type_detail": {
+      "type": "type_primitive",
+      "name": "f64"
     }
   },
   {
@@ -395,90 +254,28 @@
         "semantic_tag": "list_composition",
         "inferred_type": "value",
         "type_detail": {
-          "type": "type_array",
-          "elementType": {
-            "type": "type_primitive",
-            "name": "f64"
-          },
-          "length": 1
+          "type": "type_tuple",
+          "elements": [
+            {
+              "type": "type_default_signal"
+            },
+            {
+              "type": "type_primitive",
+              "name": "f64"
+            }
+          ]
         }
       },
       "semantic_tag": "application",
       "inferred_type": "unknown",
       "type_detail": {
-        "type": "type_function",
-        "args": [
-          {
-            "type": "type_ref",
-            "name": "x",
-            "default_type": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          },
-          {
-            "type": "type_ref",
-            "name": "y",
-            "default_type": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          }
-        ],
-        "remaining_args": [
-          {
-            "type": "type_ref",
-            "name": "y",
-            "default_type": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          }
-        ],
-        "holes": [],
-        "bound_env": {},
-        "returnType": {
-          "type": "type_primitive",
-          "name": "f64"
-        }
-      }
-    },
-    "type_detail": {
-      "type": "type_function",
-      "args": [
-        {
-          "type": "type_ref",
-          "name": "x",
-          "default_type": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
-        },
-        {
-          "type": "type_ref",
-          "name": "y",
-          "default_type": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
-        }
-      ],
-      "remaining_args": [
-        {
-          "type": "type_ref",
-          "name": "y",
-          "default_type": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
-        }
-      ],
-      "holes": [],
-      "bound_env": {},
-      "returnType": {
         "type": "type_primitive",
         "name": "f64"
       }
+    },
+    "type_detail": {
+      "type": "type_primitive",
+      "name": "f64"
     }
   },
   {
@@ -501,6 +298,198 @@
           "elementType": {
             "type": "type_primitive",
             "name": "f64"
+          },
+          "length": 2
+        }
+      },
+      "semantic_tag": "application",
+      "inferred_type": "unknown",
+      "type_detail": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    },
+    "type_detail": {
+      "type": "type_primitive",
+      "name": "f64"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result5>",
+    "right": {
+      "type": "operation",
+      "operator": "apply",
+      "left": "<func_with_defaults>",
+      "right": {
+        "type": "operation",
+        "operator": "concat",
+        "left": {
+          "type": "block",
+          "kind": "group",
+          "content": {
+            "type": "operation",
+            "operator": "<",
+            "left": "3",
+            "right": "2",
+            "type_detail": {
+              "type": "type_coproduct",
+              "variants": [
+                {
+                  "type": "type_primitive",
+                  "name": "f64"
+                },
+                {
+                  "type": "type_unit"
+                }
+              ]
+            }
+          },
+          "type_detail": {
+            "type": "type_coproduct",
+            "variants": [
+              {
+                "type": "type_primitive",
+                "name": "f64"
+              },
+              {
+                "type": "type_unit"
+              }
+            ]
+          }
+        },
+        "right": "5",
+        "semantic_tag": "list_composition",
+        "inferred_type": "value",
+        "type_detail": {
+          "type": "type_tuple",
+          "elements": [
+            {
+              "type": "type_coproduct",
+              "variants": [
+                {
+                  "type": "type_primitive",
+                  "name": "f64"
+                },
+                {
+                  "type": "type_unit"
+                }
+              ]
+            },
+            {
+              "type": "type_primitive",
+              "name": "f64"
+            }
+          ]
+        }
+      },
+      "semantic_tag": "application",
+      "inferred_type": "unknown",
+      "type_detail": {
+        "type": "type_primitive",
+        "name": "f64"
+      }
+    },
+    "type_detail": {
+      "type": "type_primitive",
+      "name": "f64"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result6>",
+    "right": {
+      "type": "operation",
+      "operator": "apply",
+      "left": "<func_with_defaults>",
+      "right": {
+        "type": "operation",
+        "operator": "concat",
+        "left": {
+          "type": "block",
+          "kind": "group",
+          "content": {
+            "type": "operation",
+            "operator": "<",
+            "left": "3",
+            "right": "2",
+            "type_detail": {
+              "type": "type_coproduct",
+              "variants": [
+                {
+                  "type": "type_primitive",
+                  "name": "f64"
+                },
+                {
+                  "type": "type_unit"
+                }
+              ]
+            }
+          },
+          "type_detail": {
+            "type": "type_coproduct",
+            "variants": [
+              {
+                "type": "type_primitive",
+                "name": "f64"
+              },
+              {
+                "type": "type_unit"
+              }
+            ]
+          }
+        },
+        "right": {
+          "type": "block",
+          "kind": "group",
+          "content": {
+            "type": "operation",
+            "operator": "<",
+            "left": "5",
+            "right": "2",
+            "type_detail": {
+              "type": "type_coproduct",
+              "variants": [
+                {
+                  "type": "type_primitive",
+                  "name": "f64"
+                },
+                {
+                  "type": "type_unit"
+                }
+              ]
+            }
+          },
+          "type_detail": {
+            "type": "type_coproduct",
+            "variants": [
+              {
+                "type": "type_primitive",
+                "name": "f64"
+              },
+              {
+                "type": "type_unit"
+              }
+            ]
+          }
+        },
+        "semantic_tag": "list_composition",
+        "inferred_type": "value",
+        "type_detail": {
+          "type": "type_array",
+          "elementType": {
+            "type": "type_coproduct",
+            "variants": [
+              {
+                "type": "type_primitive",
+                "name": "f64"
+              },
+              {
+                "type": "type_unit"
+              }
+            ]
           },
           "length": 2
         }

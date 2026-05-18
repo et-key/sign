@@ -99,7 +99,9 @@ export function applyTypes(fType, aType, isExplicitHole) {
         if (nextArg.type === 'type_list') {
            // Rest parameter absorbs remaining args
            let restType;
-           if (aType && aType.type === 'type_array') {
+           if (argsToApply.length === 1 && argsToApply[0].type === 'type_list') {
+              restType = argsToApply[0]; // 境界と引数が共に抽象リストならそのまま吸収
+           } else if (aType && aType.type === 'type_array') {
               restType = { type: 'type_array', elementType: aType.elementType, length: argsToApply.length };
            } else {
               restType = { type: 'type_tuple', elements: [...argsToApply] };
@@ -109,7 +111,11 @@ export function applyTypes(fType, aType, isExplicitHole) {
         } else {
            const val = argsToApply.shift();
            if (val.type === 'type_unit') {
-              newHoles.push(nextArg);
+              if (nextArg.default_type) {
+                 newBoundEnv.set(nextArg.name, nextArg.default_type);
+              } else {
+                 newHoles.push(nextArg);
+              }
            } else if (val.type === 'type_default_signal') {
               if (nextArg.default_type) {
                  newBoundEnv.set(nextArg.name, nextArg.default_type);
@@ -117,7 +123,7 @@ export function applyTypes(fType, aType, isExplicitHole) {
                  return { type: 'type_default_signal' }; // Short-circuit termination
               }
            } else if (val.type === 'type_variadic_end') {
-              return { type: 'type_default_signal' }; // Terminate recursive list application
+              return { type: 'type_tuple', elements: [] }; // Terminate recursive list application
            } else {
               newBoundEnv.set(nextArg.name, val);
            }
@@ -155,12 +161,12 @@ export function applyTypes(fType, aType, isExplicitHole) {
     }
   }
 
-  if (fType.type === 'type_deref' || fType.type === 'type_unknown') {
+  if (fType.type === 'type_deref' || fType.type === 'type_unknown' || fType.type === 'type_ref') {
      // Abstract function application
      return { type: 'type_unknown' };
   }
 
-  return null; // fallback
+  return { type: 'type_unknown' }; // fallback
 }
 
 export function inferType(node, env) {
@@ -222,7 +228,8 @@ export function inferType(node, env) {
       }
 
       if (node.operator === '~') {
-        const listType = { type: 'type_list', name: 'unknown' };
+        const elementType = inferType(node.operand, env);
+        const listType = { type: 'type_list', name: 'unknown', elementType };
         node.type_detail = listType;
         return listType;
       }
@@ -265,6 +272,20 @@ export function inferType(node, env) {
     if (node.operator === ':') {
       let name = node.left;
       if (typeof name === 'string' && name.startsWith('<')) name = name.slice(1, -1);
+      
+      if (name && node.right && node.right.operator === '?') {
+         let preboundReturnType = { type: 'type_unknown' };
+         if (node.right.right && node.right.right.semantic_tag === 'list_composition') {
+             preboundReturnType = { type: 'type_list', name: 'abstract_list', elementType: { type: 'type_unknown' } };
+         }
+         env.set(name, { 
+             type: 'type_function', 
+             is_placeholder: true, 
+             name, 
+             args: [],
+             returnType: preboundReturnType 
+         });
+      }
       
       const rightType = inferType(node.right, env);
       if (name) {
@@ -384,13 +405,43 @@ export function inferType(node, env) {
             for (let i = 0; i < t.length; i++) {
               elements.push(t.elementType);
             }
-          } else if (t && t.type === 'type_default_signal') {
-            // Id morphism (identity) for concatenation
           } else {
             elements.push(t);
           }
         };
         extractElements(concatType);
+
+        // --- 冪等性・吸収則 (Idempotence of ~) ---
+        // 1. [~T, ~T] -> [~T]
+        // 2. [T, ~T] -> [~T]
+        // 3. [~T, T] -> [~T]
+        let collapsedElements = [];
+        for (let i = 0; i < elements.length; i++) {
+           const curr = elements[i];
+           if (collapsedElements.length > 0) {
+              const prev = collapsedElements[collapsedElements.length - 1];
+              
+              if (prev && prev.type === 'type_list') {
+                 // 1. [~T, ~T] -> [~T]
+                 if (curr && curr.type === 'type_list') {
+                    continue; // Absorb curr
+                 }
+                 // 3. [~T, T] -> [~T]
+                 const isSameType = curr && prev.elementType && (curr.type === prev.elementType.type || curr.type === 'type_unknown' || prev.elementType.type === 'type_unknown');
+                 if (isSameType) {
+                    continue; // Absorb curr
+                 }
+              } else if (curr && curr.type === 'type_list') {
+                 // 2. [T, ~T] -> [~T]
+                 const isSameType = prev && curr.elementType && (prev.type === curr.elementType.type || prev.type === 'type_unknown' || curr.elementType.type === 'type_unknown');
+                 if (isSameType) {
+                    collapsedElements.pop(); // Remove prev
+                 }
+              }
+           }
+           collapsedElements.push(curr);
+        }
+        elements = collapsedElements;
 
         let isArray = elements.length > 0;
         const firstType = elements[0];
@@ -409,16 +460,12 @@ export function inferType(node, env) {
         }
         
         let finalConcatType;
-        if (isArray) {
+        if (elements.length === 1) {
+          finalConcatType = elements[0];
+        } else if (isArray) {
           finalConcatType = { type: 'type_array', elementType: firstType, length: elements.length };
         } else {
-          // If the list contains a `type_list`, we simplify it abstractly as `type_list`
-          const hasList = elements.some(e => e && e.type === 'type_list');
-          if (hasList) {
-             finalConcatType = { type: 'type_list', name: 'abstract_list' };
-          } else {
-             finalConcatType = { type: 'type_tuple', elements };
-          }
+          finalConcatType = { type: 'type_tuple', elements };
         }
         
         node.type_detail = finalConcatType;
