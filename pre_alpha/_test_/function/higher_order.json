@@ -13,50 +13,30 @@
         "left": "<x>",
         "right": "2",
         "type_detail": {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         }
       },
       "type_detail": {
-        "type": "type_function",
-        "args": [
-          {
-            "type": "type_ref",
-            "name": "x"
-          }
-        ],
-        "remaining_args": [
-          {
-            "type": "type_ref",
-            "name": "x"
-          }
-        ],
-        "holes": [],
-        "bound_env": {},
-        "returnType": {
-          "type": "type_primitive",
+        "tag": "TFun",
+        "param": {
+          "tag": "TPrim",
+          "name": "f64"
+        },
+        "ret": {
+          "tag": "TPrim",
           "name": "f64"
         }
       }
     },
     "type_detail": {
-      "type": "type_function",
-      "args": [
-        {
-          "type": "type_ref",
-          "name": "x"
-        }
-      ],
-      "remaining_args": [
-        {
-          "type": "type_ref",
-          "name": "x"
-        }
-      ],
-      "holes": [],
-      "bound_env": {},
-      "returnType": {
-        "type": "type_primitive",
+      "tag": "TFun",
+      "param": {
+        "tag": "TPrim",
+        "name": "f64"
+      },
+      "ret": {
+        "tag": "TPrim",
         "name": "f64"
       }
     }
@@ -69,33 +49,178 @@
       "type": "operation",
       "operator": "?",
       "left": {
-        "type": "operation",
-        "operator": "concat",
-        "left": {
-          "type": "operation",
-          "operator": "concat",
-          "left": "<g>",
-          "right": "<x>",
-          "semantic_tag": "list_composition",
-          "inferred_type": "value"
-        },
-        "right": {
-          "type": "operation",
-          "operator": "~",
-          "operand": "<y>",
-          "position": "prefix"
-        },
-        "semantic_tag": "list_composition",
-        "inferred_type": "value"
+        "type": "coproduct_block",
+        "statements": [
+          "<g>",
+          "<x>",
+          {
+            "type": "operation",
+            "operator": "~",
+            "operand": "<y>",
+            "position": "prefix",
+            "semantic_tag": "inductive_boundary"
+          }
+        ]
       },
       "right": {
         "type": "operation",
+        "statements": [
+          {
+            "type": "block",
+            "kind": "group",
+            "content": {
+              "type": "operation",
+              "statements": [
+                {
+                  "type": "operation",
+                  "operator": "@",
+                  "operand": "<g>",
+                  "position": "prefix",
+                  "type_detail": {
+                    "tag": "TFun",
+                    "param": {
+                      "tag": "TPrim",
+                      "name": "f64"
+                    },
+                    "ret": {
+                      "tag": "TPrim",
+                      "name": "f64"
+                    }
+                  }
+                },
+                "<x>"
+              ],
+              "operator": "apply",
+              "left": {
+                "type": "operation",
+                "operator": "@",
+                "operand": "<g>",
+                "position": "prefix",
+                "type_detail": {
+                  "tag": "TFun",
+                  "param": {
+                    "tag": "TPrim",
+                    "name": "f64"
+                  },
+                  "ret": {
+                    "tag": "TPrim",
+                    "name": "f64"
+                  }
+                }
+              },
+              "right": "<x>",
+              "semantic_tag": "application",
+              "type_detail": {
+                "tag": "TPrim",
+                "name": "f64"
+              }
+            },
+            "type_detail": {
+              "tag": "TPrim",
+              "name": "f64"
+            }
+          },
+          {
+            "type": "block",
+            "kind": "group",
+            "content": {
+              "type": "operation",
+              "statements": [
+                "<map>",
+                "<g>",
+                {
+                  "type": "operation",
+                  "operator": "~",
+                  "operand": "<y>",
+                  "position": "postfix",
+                  "semantic_tag": "inductive_expansion",
+                  "type_detail": {
+                    "tag": "TList",
+                    "elem": {
+                      "tag": "TPrim",
+                      "name": "f64"
+                    }
+                  }
+                }
+              ],
+              "operator": "apply",
+              "left": {
+                "type": "operation",
+                "operator": "apply",
+                "left": "<map>",
+                "right": "<g>",
+                "semantic_tag": "application",
+                "type_detail": {
+                  "tag": "TFun",
+                  "param": {
+                    "tag": "TPrim",
+                    "name": "f64"
+                  },
+                  "ret": {
+                    "tag": "TFun",
+                    "param": {
+                      "tag": "TPrim",
+                      "name": "f64"
+                    },
+                    "ret": {
+                      "tag": "TVar",
+                      "id": 14
+                    }
+                  }
+                }
+              },
+              "right": {
+                "type": "operation",
+                "operator": "~",
+                "operand": "<y>",
+                "position": "postfix",
+                "semantic_tag": "inductive_expansion",
+                "type_detail": {
+                  "tag": "TList",
+                  "elem": {
+                    "tag": "TPrim",
+                    "name": "f64"
+                  }
+                }
+              },
+              "semantic_tag": "application",
+              "type_detail": {
+                "tag": "TVar",
+                "id": 14
+              }
+            },
+            "type_detail": {
+              "tag": "TVar",
+              "id": 14
+            }
+          }
+        ],
         "operator": "concat",
         "left": {
           "type": "block",
           "kind": "group",
           "content": {
             "type": "operation",
+            "statements": [
+              {
+                "type": "operation",
+                "operator": "@",
+                "operand": "<g>",
+                "position": "prefix",
+                "type_detail": {
+                  "tag": "TFun",
+                  "param": {
+                    "tag": "TPrim",
+                    "name": "f64"
+                  },
+                  "ret": {
+                    "tag": "TPrim",
+                    "name": "f64"
+                  }
+                }
+              },
+              "<x>"
+            ],
             "operator": "apply",
             "left": {
               "type": "operation",
@@ -103,37 +228,26 @@
               "operand": "<g>",
               "position": "prefix",
               "type_detail": {
-                "type": "type_function",
-                "args": [
-                  {
-                    "type": "type_ref",
-                    "name": "x"
-                  }
-                ],
-                "remaining_args": [
-                  {
-                    "type": "type_ref",
-                    "name": "x"
-                  }
-                ],
-                "holes": [],
-                "bound_env": {},
-                "returnType": {
-                  "type": "type_primitive",
+                "tag": "TFun",
+                "param": {
+                  "tag": "TPrim",
+                  "name": "f64"
+                },
+                "ret": {
+                  "tag": "TPrim",
                   "name": "f64"
                 }
               }
             },
             "right": "<x>",
             "semantic_tag": "application",
-            "inferred_type": "unknown",
             "type_detail": {
-              "type": "type_primitive",
+              "tag": "TPrim",
               "name": "f64"
             }
           },
           "type_detail": {
-            "type": "type_primitive",
+            "tag": "TPrim",
             "name": "f64"
           }
         },
@@ -142,160 +256,183 @@
           "kind": "group",
           "content": {
             "type": "operation",
-            "operator": "apply",
-            "left": "<map>",
-            "right": {
-              "type": "operation",
-              "operator": "concat",
-              "left": "<g>",
-              "right": {
+            "statements": [
+              "<map>",
+              "<g>",
+              {
                 "type": "operation",
                 "operator": "~",
                 "operand": "<y>",
                 "position": "postfix",
+                "semantic_tag": "inductive_expansion",
                 "type_detail": {
-                  "type": "type_variadic_end"
-                }
-              },
-              "semantic_tag": "list_composition",
-              "inferred_type": "value",
-              "type_detail": {
-                "type": "type_tuple",
-                "elements": [
-                  {
-                    "type": "type_address",
-                    "target": {
-                      "type": "type_function",
-                      "args": [
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        }
-                      ],
-                      "remaining_args": [
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        }
-                      ],
-                      "holes": [],
-                      "bound_env": {},
-                      "returnType": {
-                        "type": "type_primitive",
-                        "name": "f64"
-                      }
-                    }
-                  },
-                  {
-                    "type": "type_variadic_end"
+                  "tag": "TList",
+                  "elem": {
+                    "tag": "TPrim",
+                    "name": "f64"
                   }
-                ]
+                }
+              }
+            ],
+            "operator": "apply",
+            "left": {
+              "type": "operation",
+              "operator": "apply",
+              "left": "<map>",
+              "right": "<g>",
+              "semantic_tag": "application",
+              "type_detail": {
+                "tag": "TFun",
+                "param": {
+                  "tag": "TPrim",
+                  "name": "f64"
+                },
+                "ret": {
+                  "tag": "TFun",
+                  "param": {
+                    "tag": "TPrim",
+                    "name": "f64"
+                  },
+                  "ret": {
+                    "tag": "TVar",
+                    "id": 14
+                  }
+                }
+              }
+            },
+            "right": {
+              "type": "operation",
+              "operator": "~",
+              "operand": "<y>",
+              "position": "postfix",
+              "semantic_tag": "inductive_expansion",
+              "type_detail": {
+                "tag": "TList",
+                "elem": {
+                  "tag": "TPrim",
+                  "name": "f64"
+                }
               }
             },
             "semantic_tag": "application",
-            "inferred_type": "unknown",
             "type_detail": {
-              "type": "type_array",
-              "elementType": {
-                "type": "type_primitive",
-                "name": "f64"
-              },
-              "length": 4
+              "tag": "TVar",
+              "id": 14
             }
           },
           "type_detail": {
-            "type": "type_array",
-            "elementType": {
-              "type": "type_primitive",
-              "name": "f64"
-            },
-            "length": 4
+            "tag": "TVar",
+            "id": 14
           }
         },
         "semantic_tag": "list_composition",
-        "inferred_type": "value",
         "type_detail": {
-          "type": "type_array",
-          "elementType": {
-            "type": "type_primitive",
-            "name": "f64"
-          },
-          "length": 5
+          "tag": "TProd",
+          "elements": [
+            {
+              "tag": "TPrim",
+              "name": "f64"
+            },
+            {
+              "tag": "TVar",
+              "id": 14
+            }
+          ]
         }
       },
       "type_detail": {
-        "type": "type_function",
-        "args": [
-          {
-            "type": "type_ref",
-            "name": "g"
-          },
-          {
-            "type": "type_ref",
-            "name": "x"
-          },
-          {
-            "type": "type_list",
-            "name": "y"
+        "tag": "TFun",
+        "param": {
+          "tag": "TAddr",
+          "target": {
+            "tag": "TFun",
+            "param": {
+              "tag": "TPrim",
+              "name": "f64"
+            },
+            "ret": {
+              "tag": "TPrim",
+              "name": "f64"
+            }
           }
-        ],
-        "remaining_args": [
-          {
-            "type": "type_ref",
-            "name": "g"
+        },
+        "ret": {
+          "tag": "TFun",
+          "param": {
+            "tag": "TPrim",
+            "name": "f64"
           },
-          {
-            "type": "type_ref",
-            "name": "x"
-          },
-          {
-            "type": "type_list",
-            "name": "y"
+          "ret": {
+            "tag": "TFun",
+            "param": {
+              "tag": "TList",
+              "elem": {
+                "tag": "TPrim",
+                "name": "f64"
+              }
+            },
+            "ret": {
+              "tag": "TProd",
+              "elements": [
+                {
+                  "tag": "TPrim",
+                  "name": "f64"
+                },
+                {
+                  "tag": "TVar",
+                  "id": 14
+                }
+              ]
+            }
           }
-        ],
-        "holes": [],
-        "bound_env": {},
-        "returnType": {
-          "type": "type_list",
-          "name": "abstract_list"
         }
       }
     },
     "type_detail": {
-      "type": "type_function",
-      "args": [
-        {
-          "type": "type_ref",
-          "name": "g"
-        },
-        {
-          "type": "type_ref",
-          "name": "x"
-        },
-        {
-          "type": "type_list",
-          "name": "y"
+      "tag": "TFun",
+      "param": {
+        "tag": "TAddr",
+        "target": {
+          "tag": "TFun",
+          "param": {
+            "tag": "TPrim",
+            "name": "f64"
+          },
+          "ret": {
+            "tag": "TPrim",
+            "name": "f64"
+          }
         }
-      ],
-      "remaining_args": [
-        {
-          "type": "type_ref",
-          "name": "g"
+      },
+      "ret": {
+        "tag": "TFun",
+        "param": {
+          "tag": "TPrim",
+          "name": "f64"
         },
-        {
-          "type": "type_ref",
-          "name": "x"
-        },
-        {
-          "type": "type_list",
-          "name": "y"
+        "ret": {
+          "tag": "TFun",
+          "param": {
+            "tag": "TList",
+            "elem": {
+              "tag": "TPrim",
+              "name": "f64"
+            }
+          },
+          "ret": {
+            "tag": "TProd",
+            "elements": [
+              {
+                "tag": "TPrim",
+                "name": "f64"
+              },
+              {
+                "tag": "TVar",
+                "id": 14
+              }
+            ]
+          }
         }
-      ],
-      "holes": [],
-      "bound_env": {},
-      "returnType": {
-        "type": "type_list",
-        "name": "abstract_list"
       }
     }
   },
@@ -305,764 +442,91 @@
     "left": "<result_map1>",
     "right": {
       "type": "operation",
-      "operator": "apply",
-      "left": "<map>",
-      "right": {
-        "type": "operation",
-        "operator": "concat",
-        "left": {
+      "statements": [
+        "<map>",
+        {
           "type": "operation",
-          "operator": "concat",
-          "left": {
-            "type": "operation",
-            "operator": "concat",
-            "left": {
-              "type": "operation",
-              "operator": "concat",
-              "left": {
-                "type": "operation",
-                "operator": "concat",
-                "left": {
-                  "type": "operation",
-                  "operator": "$",
-                  "operand": "<f>",
-                  "position": "prefix",
-                  "type_detail": {
-                    "type": "type_address",
-                    "target": {
-                      "type": "type_function",
-                      "args": [
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        }
-                      ],
-                      "remaining_args": [
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        }
-                      ],
-                      "holes": [],
-                      "bound_env": {},
-                      "returnType": {
-                        "type": "type_primitive",
-                        "name": "f64"
-                      }
-                    }
-                  }
-                },
-                "right": "1",
-                "semantic_tag": "list_composition",
-                "inferred_type": "value",
-                "type_detail": {
-                  "type": "type_tuple",
-                  "elements": [
-                    {
-                      "type": "type_address",
-                      "target": {
-                        "type": "type_function",
-                        "args": [
-                          {
-                            "type": "type_ref",
-                            "name": "x"
-                          }
-                        ],
-                        "remaining_args": [
-                          {
-                            "type": "type_ref",
-                            "name": "x"
-                          }
-                        ],
-                        "holes": [],
-                        "bound_env": {},
-                        "returnType": {
-                          "type": "type_primitive",
-                          "name": "f64"
-                        }
-                      }
-                    },
-                    {
-                      "type": "type_primitive",
-                      "name": "f64"
-                    }
-                  ]
-                }
+          "operator": "$",
+          "operand": "<f>",
+          "position": "prefix",
+          "semantic_tag": "smart_pointer",
+          "type_detail": {
+            "tag": "TAddr",
+            "target": {
+              "tag": "TFun",
+              "param": {
+                "tag": "TPrim",
+                "name": "f64"
               },
-              "right": "2",
-              "semantic_tag": "list_composition",
-              "inferred_type": "value",
-              "type_detail": {
-                "type": "type_tuple",
-                "elements": [
-                  {
-                    "type": "type_address",
-                    "target": {
-                      "type": "type_function",
-                      "args": [
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        }
-                      ],
-                      "remaining_args": [
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        }
-                      ],
-                      "holes": [],
-                      "bound_env": {},
-                      "returnType": {
-                        "type": "type_primitive",
-                        "name": "f64"
-                      }
-                    }
-                  },
-                  {
-                    "type": "type_primitive",
-                    "name": "f64"
-                  },
-                  {
-                    "type": "type_primitive",
-                    "name": "f64"
-                  }
-                ]
+              "ret": {
+                "tag": "TPrim",
+                "name": "f64"
+              }
+            }
+          }
+        },
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "operator": "apply",
+      "left": {
+        "type": "operation",
+        "operator": "apply",
+        "left": "<map>",
+        "right": {
+          "type": "operation",
+          "operator": "$",
+          "operand": "<f>",
+          "position": "prefix",
+          "semantic_tag": "smart_pointer",
+          "type_detail": {
+            "tag": "TAddr",
+            "target": {
+              "tag": "TFun",
+              "param": {
+                "tag": "TPrim",
+                "name": "f64"
+              },
+              "ret": {
+                "tag": "TPrim",
+                "name": "f64"
+              }
+            }
+          }
+        },
+        "semantic_tag": "application",
+        "type_detail": {
+          "tag": "TFun",
+          "param": {
+            "tag": "TPrim",
+            "name": "f64"
+          },
+          "ret": {
+            "tag": "TFun",
+            "param": {
+              "tag": "TList",
+              "elem": {
+                "tag": "TPrim",
+                "name": "f64"
               }
             },
-            "right": "3",
-            "semantic_tag": "list_composition",
-            "inferred_type": "value",
-            "type_detail": {
-              "type": "type_tuple",
+            "ret": {
+              "tag": "TProd",
               "elements": [
                 {
-                  "type": "type_address",
-                  "target": {
-                    "type": "type_function",
-                    "args": [
-                      {
-                        "type": "type_ref",
-                        "name": "x"
-                      }
-                    ],
-                    "remaining_args": [
-                      {
-                        "type": "type_ref",
-                        "name": "x"
-                      }
-                    ],
-                    "holes": [],
-                    "bound_env": {},
-                    "returnType": {
-                      "type": "type_primitive",
-                      "name": "f64"
-                    }
-                  }
-                },
-                {
-                  "type": "type_primitive",
+                  "tag": "TPrim",
                   "name": "f64"
                 },
                 {
-                  "type": "type_primitive",
-                  "name": "f64"
-                },
-                {
-                  "type": "type_primitive",
-                  "name": "f64"
+                  "tag": "TVar",
+                  "id": 14
                 }
               ]
             }
-          },
-          "right": "4",
-          "semantic_tag": "list_composition",
-          "inferred_type": "value",
-          "type_detail": {
-            "type": "type_tuple",
-            "elements": [
-              {
-                "type": "type_address",
-                "target": {
-                  "type": "type_function",
-                  "args": [
-                    {
-                      "type": "type_ref",
-                      "name": "x"
-                    }
-                  ],
-                  "remaining_args": [
-                    {
-                      "type": "type_ref",
-                      "name": "x"
-                    }
-                  ],
-                  "holes": [],
-                  "bound_env": {},
-                  "returnType": {
-                    "type": "type_primitive",
-                    "name": "f64"
-                  }
-                }
-              },
-              {
-                "type": "type_primitive",
-                "name": "f64"
-              },
-              {
-                "type": "type_primitive",
-                "name": "f64"
-              },
-              {
-                "type": "type_primitive",
-                "name": "f64"
-              },
-              {
-                "type": "type_primitive",
-                "name": "f64"
-              }
-            ]
           }
-        },
-        "right": "5",
-        "semantic_tag": "list_composition",
-        "inferred_type": "value",
-        "type_detail": {
-          "type": "type_tuple",
-          "elements": [
-            {
-              "type": "type_address",
-              "target": {
-                "type": "type_function",
-                "args": [
-                  {
-                    "type": "type_ref",
-                    "name": "x"
-                  }
-                ],
-                "remaining_args": [
-                  {
-                    "type": "type_ref",
-                    "name": "x"
-                  }
-                ],
-                "holes": [],
-                "bound_env": {},
-                "returnType": {
-                  "type": "type_primitive",
-                  "name": "f64"
-                }
-              }
-            },
-            {
-              "type": "type_primitive",
-              "name": "f64"
-            },
-            {
-              "type": "type_primitive",
-              "name": "f64"
-            },
-            {
-              "type": "type_primitive",
-              "name": "f64"
-            },
-            {
-              "type": "type_primitive",
-              "name": "f64"
-            },
-            {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          ]
-        }
-      },
-      "semantic_tag": "application",
-      "inferred_type": "unknown",
-      "type_detail": {
-        "type": "type_array",
-        "elementType": {
-          "type": "type_primitive",
-          "name": "f64"
-        },
-        "length": 5
-      }
-    },
-    "type_detail": {
-      "type": "type_array",
-      "elementType": {
-        "type": "type_primitive",
-        "name": "f64"
-      },
-      "length": 5
-    }
-  },
-  {
-    "type": "operation",
-    "operator": ":",
-    "left": "<result_map2>",
-    "right": {
-      "type": "operation",
-      "operator": "apply",
-      "left": "<map>",
-      "right": {
-        "type": "operation",
-        "operator": "concat",
-        "left": {
-          "type": "operation",
-          "operator": "concat",
-          "left": {
-            "type": "operation",
-            "operator": "concat",
-            "left": {
-              "type": "operation",
-              "operator": "concat",
-              "left": {
-                "type": "operation",
-                "operator": "concat",
-                "left": {
-                  "type": "operation",
-                  "operator": "$",
-                  "operand": {
-                    "type": "block",
-                    "kind": "group",
-                    "content": {
-                      "type": "block",
-                      "kind": "group",
-                      "content": "\"__Lambda__[0]\"",
-                      "type_detail": {
-                        "type": "type_function",
-                        "args": [
-                          {
-                            "type": "type_ref",
-                            "name": "x"
-                          }
-                        ],
-                        "remaining_args": [
-                          {
-                            "type": "type_ref",
-                            "name": "x"
-                          }
-                        ],
-                        "holes": [],
-                        "bound_env": {},
-                        "returnType": {
-                          "type": "type_primitive",
-                          "name": "f64"
-                        }
-                      }
-                    },
-                    "type_detail": {
-                      "type": "type_function",
-                      "args": [
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        }
-                      ],
-                      "remaining_args": [
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        }
-                      ],
-                      "holes": [],
-                      "bound_env": {},
-                      "returnType": {
-                        "type": "type_primitive",
-                        "name": "f64"
-                      }
-                    }
-                  },
-                  "position": "prefix",
-                  "type_detail": {
-                    "type": "type_address",
-                    "target": {
-                      "type": "type_function",
-                      "args": [
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        }
-                      ],
-                      "remaining_args": [
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        }
-                      ],
-                      "holes": [],
-                      "bound_env": {},
-                      "returnType": {
-                        "type": "type_primitive",
-                        "name": "f64"
-                      }
-                    }
-                  }
-                },
-                "right": "1",
-                "semantic_tag": "list_composition",
-                "inferred_type": "value",
-                "type_detail": {
-                  "type": "type_tuple",
-                  "elements": [
-                    {
-                      "type": "type_address",
-                      "target": {
-                        "type": "type_function",
-                        "args": [
-                          {
-                            "type": "type_ref",
-                            "name": "x"
-                          }
-                        ],
-                        "remaining_args": [
-                          {
-                            "type": "type_ref",
-                            "name": "x"
-                          }
-                        ],
-                        "holes": [],
-                        "bound_env": {},
-                        "returnType": {
-                          "type": "type_primitive",
-                          "name": "f64"
-                        }
-                      }
-                    },
-                    {
-                      "type": "type_primitive",
-                      "name": "f64"
-                    }
-                  ]
-                }
-              },
-              "right": "2",
-              "semantic_tag": "list_composition",
-              "inferred_type": "value",
-              "type_detail": {
-                "type": "type_tuple",
-                "elements": [
-                  {
-                    "type": "type_address",
-                    "target": {
-                      "type": "type_function",
-                      "args": [
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        }
-                      ],
-                      "remaining_args": [
-                        {
-                          "type": "type_ref",
-                          "name": "x"
-                        }
-                      ],
-                      "holes": [],
-                      "bound_env": {},
-                      "returnType": {
-                        "type": "type_primitive",
-                        "name": "f64"
-                      }
-                    }
-                  },
-                  {
-                    "type": "type_primitive",
-                    "name": "f64"
-                  },
-                  {
-                    "type": "type_primitive",
-                    "name": "f64"
-                  }
-                ]
-              }
-            },
-            "right": "3",
-            "semantic_tag": "list_composition",
-            "inferred_type": "value",
-            "type_detail": {
-              "type": "type_tuple",
-              "elements": [
-                {
-                  "type": "type_address",
-                  "target": {
-                    "type": "type_function",
-                    "args": [
-                      {
-                        "type": "type_ref",
-                        "name": "x"
-                      }
-                    ],
-                    "remaining_args": [
-                      {
-                        "type": "type_ref",
-                        "name": "x"
-                      }
-                    ],
-                    "holes": [],
-                    "bound_env": {},
-                    "returnType": {
-                      "type": "type_primitive",
-                      "name": "f64"
-                    }
-                  }
-                },
-                {
-                  "type": "type_primitive",
-                  "name": "f64"
-                },
-                {
-                  "type": "type_primitive",
-                  "name": "f64"
-                },
-                {
-                  "type": "type_primitive",
-                  "name": "f64"
-                }
-              ]
-            }
-          },
-          "right": "4",
-          "semantic_tag": "list_composition",
-          "inferred_type": "value",
-          "type_detail": {
-            "type": "type_tuple",
-            "elements": [
-              {
-                "type": "type_address",
-                "target": {
-                  "type": "type_function",
-                  "args": [
-                    {
-                      "type": "type_ref",
-                      "name": "x"
-                    }
-                  ],
-                  "remaining_args": [
-                    {
-                      "type": "type_ref",
-                      "name": "x"
-                    }
-                  ],
-                  "holes": [],
-                  "bound_env": {},
-                  "returnType": {
-                    "type": "type_primitive",
-                    "name": "f64"
-                  }
-                }
-              },
-              {
-                "type": "type_primitive",
-                "name": "f64"
-              },
-              {
-                "type": "type_primitive",
-                "name": "f64"
-              },
-              {
-                "type": "type_primitive",
-                "name": "f64"
-              },
-              {
-                "type": "type_primitive",
-                "name": "f64"
-              }
-            ]
-          }
-        },
-        "right": "5",
-        "semantic_tag": "list_composition",
-        "inferred_type": "value",
-        "type_detail": {
-          "type": "type_tuple",
-          "elements": [
-            {
-              "type": "type_address",
-              "target": {
-                "type": "type_function",
-                "args": [
-                  {
-                    "type": "type_ref",
-                    "name": "x"
-                  }
-                ],
-                "remaining_args": [
-                  {
-                    "type": "type_ref",
-                    "name": "x"
-                  }
-                ],
-                "holes": [],
-                "bound_env": {},
-                "returnType": {
-                  "type": "type_primitive",
-                  "name": "f64"
-                }
-              }
-            },
-            {
-              "type": "type_primitive",
-              "name": "f64"
-            },
-            {
-              "type": "type_primitive",
-              "name": "f64"
-            },
-            {
-              "type": "type_primitive",
-              "name": "f64"
-            },
-            {
-              "type": "type_primitive",
-              "name": "f64"
-            },
-            {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          ]
-        }
-      },
-      "semantic_tag": "application",
-      "inferred_type": "unknown",
-      "type_detail": {
-        "type": "type_array",
-        "elementType": {
-          "type": "type_primitive",
-          "name": "f64"
-        },
-        "length": 5
-      }
-    },
-    "type_detail": {
-      "type": "type_array",
-      "elementType": {
-        "type": "type_primitive",
-        "name": "f64"
-      },
-      "length": 5
-    }
-  },
-  {
-    "type": "operation",
-    "operator": ":",
-    "right": {
-      "type": "operation",
-      "operator": "concat",
-      "left": {
-        "type": "operation",
-        "operator": "concat",
-        "left": {
-          "type": "operation",
-          "operator": "concat",
-          "left": {
-            "type": "operation",
-            "operator": "concat",
-            "left": {
-              "type": "operation",
-              "operator": "+",
-              "left": "<result_sum>",
-              "right": "1",
-              "type_detail": {
-                "type": "type_primitive",
-                "name": "f64"
-              }
-            },
-            "right": "2",
-            "semantic_tag": "list_composition",
-            "inferred_type": "value",
-            "type_detail": {
-              "type": "type_array",
-              "elementType": {
-                "type": "type_primitive",
-                "name": "f64"
-              },
-              "length": 2
-            }
-          },
-          "right": "3",
-          "semantic_tag": "list_composition",
-          "inferred_type": "value",
-          "type_detail": {
-            "type": "type_array",
-            "elementType": {
-              "type": "type_primitive",
-              "name": "f64"
-            },
-            "length": 3
-          }
-        },
-        "right": "4",
-        "semantic_tag": "list_composition",
-        "inferred_type": "value",
-        "type_detail": {
-          "type": "type_array",
-          "elementType": {
-            "type": "type_primitive",
-            "name": "f64"
-          },
-          "length": 4
-        }
-      },
-      "right": "5",
-      "semantic_tag": "list_composition",
-      "inferred_type": "value",
-      "type_detail": {
-        "type": "type_array",
-        "elementType": {
-          "type": "type_primitive",
-          "name": "f64"
-        },
-        "length": 5
-      }
-    },
-    "semantic_tag": "point_free_function",
-    "inferred_type": "function",
-    "type_detail": {
-      "type": "type_array",
-      "elementType": {
-        "type": "type_primitive",
-        "name": "f64"
-      },
-      "length": 5
-    }
-  },
-  {
-    "type": "operation",
-    "operator": ":",
-    "left": "<result_partial>",
-    "right": {
-      "type": "operation",
-      "operator": "apply",
-      "left": {
-        "type": "block",
-        "kind": "group",
-        "content": {
-          "type": "operation",
-          "operator": ",",
-          "right": {
-            "type": "operation",
-            "operator": "+",
-            "right": "2",
-            "semantic_tag": "point_free_function",
-            "inferred_type": "function",
-            "type_detail": {
-              "type": "type_primitive",
-              "name": "f64"
-            }
-          },
-          "semantic_tag": "vectorized_function",
-          "inferred_type": "function",
-          "type_detail": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
-        },
-        "type_detail": {
-          "type": "type_primitive",
-          "name": "f64"
         }
       },
       "right": {
@@ -1080,11 +544,10 @@
               "left": "1",
               "right": "2",
               "semantic_tag": "list_composition",
-              "inferred_type": "value",
               "type_detail": {
-                "type": "type_array",
-                "elementType": {
-                  "type": "type_primitive",
+                "tag": "TArray",
+                "elem": {
+                  "tag": "TPrim",
                   "name": "f64"
                 },
                 "length": 2
@@ -1092,11 +555,10 @@
             },
             "right": "3",
             "semantic_tag": "list_composition",
-            "inferred_type": "value",
             "type_detail": {
-              "type": "type_array",
-              "elementType": {
-                "type": "type_primitive",
+              "tag": "TArray",
+              "elem": {
+                "tag": "TPrim",
                 "name": "f64"
               },
               "length": 3
@@ -1104,11 +566,10 @@
           },
           "right": "4",
           "semantic_tag": "list_composition",
-          "inferred_type": "value",
           "type_detail": {
-            "type": "type_array",
-            "elementType": {
-              "type": "type_primitive",
+            "tag": "TArray",
+            "elem": {
+              "tag": "TPrim",
               "name": "f64"
             },
             "length": 4
@@ -1116,31 +577,374 @@
         },
         "right": "5",
         "semantic_tag": "list_composition",
-        "inferred_type": "value",
         "type_detail": {
-          "type": "type_array",
-          "elementType": {
-            "type": "type_primitive",
+          "tag": "TArray",
+          "elem": {
+            "tag": "TPrim",
             "name": "f64"
           },
           "length": 5
         }
       },
       "semantic_tag": "application",
-      "inferred_type": "unknown",
       "type_detail": {
-        "type": "type_array",
-        "elementType": {
-          "type": "type_primitive",
+        "tag": "TProd",
+        "elements": [
+          {
+            "tag": "TPrim",
+            "name": "f64"
+          },
+          {
+            "tag": "TVar",
+            "id": 14
+          }
+        ]
+      }
+    },
+    "type_detail": {
+      "tag": "TProd",
+      "elements": [
+        {
+          "tag": "TPrim",
+          "name": "f64"
+        },
+        {
+          "tag": "TVar",
+          "id": 14
+        }
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result_map2>",
+    "right": {
+      "type": "operation",
+      "statements": [
+        "<map>",
+        {
+          "type": "operation",
+          "operator": "$",
+          "operand": {
+            "type": "block",
+            "kind": "group",
+            "content": {
+              "type": "block",
+              "kind": "group",
+              "content": "\"__Lambda__[0]\"",
+              "type_detail": {
+                "tag": "TFun",
+                "param": {
+                  "tag": "TPrim",
+                  "name": "f64"
+                },
+                "ret": {
+                  "tag": "TPrim",
+                  "name": "f64"
+                }
+              }
+            },
+            "type_detail": {
+              "tag": "TFun",
+              "param": {
+                "tag": "TPrim",
+                "name": "f64"
+              },
+              "ret": {
+                "tag": "TPrim",
+                "name": "f64"
+              }
+            }
+          },
+          "position": "prefix",
+          "semantic_tag": "smart_pointer",
+          "type_detail": {
+            "tag": "TAddr",
+            "target": {
+              "tag": "TFun",
+              "param": {
+                "tag": "TPrim",
+                "name": "f64"
+              },
+              "ret": {
+                "tag": "TPrim",
+                "name": "f64"
+              }
+            }
+          }
+        },
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "operator": "apply",
+      "left": {
+        "type": "operation",
+        "operator": "apply",
+        "left": "<map>",
+        "right": {
+          "type": "operation",
+          "operator": "$",
+          "operand": {
+            "type": "block",
+            "kind": "group",
+            "content": {
+              "type": "block",
+              "kind": "group",
+              "content": "\"__Lambda__[0]\"",
+              "type_detail": {
+                "tag": "TFun",
+                "param": {
+                  "tag": "TPrim",
+                  "name": "f64"
+                },
+                "ret": {
+                  "tag": "TPrim",
+                  "name": "f64"
+                }
+              }
+            },
+            "type_detail": {
+              "tag": "TFun",
+              "param": {
+                "tag": "TPrim",
+                "name": "f64"
+              },
+              "ret": {
+                "tag": "TPrim",
+                "name": "f64"
+              }
+            }
+          },
+          "position": "prefix",
+          "semantic_tag": "smart_pointer",
+          "type_detail": {
+            "tag": "TAddr",
+            "target": {
+              "tag": "TFun",
+              "param": {
+                "tag": "TPrim",
+                "name": "f64"
+              },
+              "ret": {
+                "tag": "TPrim",
+                "name": "f64"
+              }
+            }
+          }
+        },
+        "semantic_tag": "application",
+        "type_detail": {
+          "tag": "TFun",
+          "param": {
+            "tag": "TPrim",
+            "name": "f64"
+          },
+          "ret": {
+            "tag": "TFun",
+            "param": {
+              "tag": "TList",
+              "elem": {
+                "tag": "TPrim",
+                "name": "f64"
+              }
+            },
+            "ret": {
+              "tag": "TProd",
+              "elements": [
+                {
+                  "tag": "TPrim",
+                  "name": "f64"
+                },
+                {
+                  "tag": "TVar",
+                  "id": 14
+                }
+              ]
+            }
+          }
+        }
+      },
+      "right": {
+        "type": "operation",
+        "operator": "concat",
+        "left": {
+          "type": "operation",
+          "operator": "concat",
+          "left": {
+            "type": "operation",
+            "operator": "concat",
+            "left": {
+              "type": "operation",
+              "operator": "concat",
+              "left": "1",
+              "right": "2",
+              "semantic_tag": "list_composition",
+              "type_detail": {
+                "tag": "TArray",
+                "elem": {
+                  "tag": "TPrim",
+                  "name": "f64"
+                },
+                "length": 2
+              }
+            },
+            "right": "3",
+            "semantic_tag": "list_composition",
+            "type_detail": {
+              "tag": "TArray",
+              "elem": {
+                "tag": "TPrim",
+                "name": "f64"
+              },
+              "length": 3
+            }
+          },
+          "right": "4",
+          "semantic_tag": "list_composition",
+          "type_detail": {
+            "tag": "TArray",
+            "elem": {
+              "tag": "TPrim",
+              "name": "f64"
+            },
+            "length": 4
+          }
+        },
+        "right": "5",
+        "semantic_tag": "list_composition",
+        "type_detail": {
+          "tag": "TArray",
+          "elem": {
+            "tag": "TPrim",
+            "name": "f64"
+          },
+          "length": 5
+        }
+      },
+      "semantic_tag": "application",
+      "type_detail": {
+        "tag": "TProd",
+        "elements": [
+          {
+            "tag": "TPrim",
+            "name": "f64"
+          },
+          {
+            "tag": "TVar",
+            "id": 14
+          }
+        ]
+      }
+    },
+    "type_detail": {
+      "tag": "TProd",
+      "elements": [
+        {
+          "tag": "TPrim",
+          "name": "f64"
+        },
+        {
+          "tag": "TVar",
+          "id": 14
+        }
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "right": {
+      "type": "operation",
+      "statements": [
+        {
+          "type": "operation",
+          "operator": "+",
+          "left": "<result_sum>",
+          "right": "1",
+          "type_detail": {
+            "tag": "TPrim",
+            "name": "f64"
+          }
+        },
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "operator": "concat",
+      "left": {
+        "type": "operation",
+        "operator": "concat",
+        "left": {
+          "type": "operation",
+          "operator": "concat",
+          "left": {
+            "type": "operation",
+            "operator": "concat",
+            "left": {
+              "type": "operation",
+              "operator": "+",
+              "left": "<result_sum>",
+              "right": "1",
+              "type_detail": {
+                "tag": "TPrim",
+                "name": "f64"
+              }
+            },
+            "right": "2",
+            "semantic_tag": "list_composition",
+            "type_detail": {
+              "tag": "TArray",
+              "elem": {
+                "tag": "TPrim",
+                "name": "f64"
+              },
+              "length": 2
+            }
+          },
+          "right": "3",
+          "semantic_tag": "list_composition",
+          "type_detail": {
+            "tag": "TArray",
+            "elem": {
+              "tag": "TPrim",
+              "name": "f64"
+            },
+            "length": 3
+          }
+        },
+        "right": "4",
+        "semantic_tag": "list_composition",
+        "type_detail": {
+          "tag": "TArray",
+          "elem": {
+            "tag": "TPrim",
+            "name": "f64"
+          },
+          "length": 4
+        }
+      },
+      "right": "5",
+      "semantic_tag": "list_composition",
+      "type_detail": {
+        "tag": "TArray",
+        "elem": {
+          "tag": "TPrim",
           "name": "f64"
         },
         "length": 5
       }
     },
+    "semantic_tag": "point_free_function",
+    "inferred_type": "function",
     "type_detail": {
-      "type": "type_array",
-      "elementType": {
-        "type": "type_primitive",
+      "tag": "TArray",
+      "elem": {
+        "tag": "TPrim",
         "name": "f64"
       },
       "length": 5
@@ -1149,9 +953,164 @@
   {
     "type": "operation",
     "operator": ":",
+    "left": "<result_partial>",
+    "right": {
+      "type": "operation",
+      "statements": [
+        {
+          "type": "block",
+          "kind": "group",
+          "content": {
+            "type": "operation",
+            "operator": ",",
+            "right": {
+              "type": "operation",
+              "operator": "+",
+              "right": "2",
+              "semantic_tag": "point_free_function",
+              "inferred_type": "function",
+              "type_detail": {
+                "tag": "TPrim",
+                "name": "f64"
+              }
+            },
+            "semantic_tag": "vectorized_function",
+            "inferred_type": "function",
+            "type_detail": {
+              "tag": "TPrim",
+              "name": "f64"
+            }
+          },
+          "type_detail": {
+            "tag": "TPrim",
+            "name": "f64"
+          }
+        },
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "operator": "concat",
+      "left": {
+        "type": "operation",
+        "operator": "concat",
+        "left": {
+          "type": "operation",
+          "operator": "concat",
+          "left": {
+            "type": "operation",
+            "operator": "concat",
+            "left": {
+              "type": "operation",
+              "operator": "concat",
+              "left": {
+                "type": "block",
+                "kind": "group",
+                "content": {
+                  "type": "operation",
+                  "operator": ",",
+                  "right": {
+                    "type": "operation",
+                    "operator": "+",
+                    "right": "2",
+                    "semantic_tag": "point_free_function",
+                    "inferred_type": "function",
+                    "type_detail": {
+                      "tag": "TPrim",
+                      "name": "f64"
+                    }
+                  },
+                  "semantic_tag": "vectorized_function",
+                  "inferred_type": "function",
+                  "type_detail": {
+                    "tag": "TPrim",
+                    "name": "f64"
+                  }
+                },
+                "type_detail": {
+                  "tag": "TPrim",
+                  "name": "f64"
+                }
+              },
+              "right": "1",
+              "semantic_tag": "list_composition",
+              "type_detail": {
+                "tag": "TArray",
+                "elem": {
+                  "tag": "TPrim",
+                  "name": "f64"
+                },
+                "length": 2
+              }
+            },
+            "right": "2",
+            "semantic_tag": "list_composition",
+            "type_detail": {
+              "tag": "TArray",
+              "elem": {
+                "tag": "TPrim",
+                "name": "f64"
+              },
+              "length": 3
+            }
+          },
+          "right": "3",
+          "semantic_tag": "list_composition",
+          "type_detail": {
+            "tag": "TArray",
+            "elem": {
+              "tag": "TPrim",
+              "name": "f64"
+            },
+            "length": 4
+          }
+        },
+        "right": "4",
+        "semantic_tag": "list_composition",
+        "type_detail": {
+          "tag": "TArray",
+          "elem": {
+            "tag": "TPrim",
+            "name": "f64"
+          },
+          "length": 5
+        }
+      },
+      "right": "5",
+      "semantic_tag": "list_composition",
+      "type_detail": {
+        "tag": "TArray",
+        "elem": {
+          "tag": "TPrim",
+          "name": "f64"
+        },
+        "length": 6
+      }
+    },
+    "type_detail": {
+      "tag": "TArray",
+      "elem": {
+        "tag": "TPrim",
+        "name": "f64"
+      },
+      "length": 6
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
     "left": "<test_array>",
     "right": {
       "type": "operation",
+      "statements": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
       "operator": "concat",
       "left": {
         "type": "operation",
@@ -1165,11 +1124,10 @@
             "left": "1",
             "right": "2",
             "semantic_tag": "list_composition",
-            "inferred_type": "value",
             "type_detail": {
-              "type": "type_array",
-              "elementType": {
-                "type": "type_primitive",
+              "tag": "TArray",
+              "elem": {
+                "tag": "TPrim",
                 "name": "f64"
               },
               "length": 2
@@ -1177,11 +1135,10 @@
           },
           "right": "3",
           "semantic_tag": "list_composition",
-          "inferred_type": "value",
           "type_detail": {
-            "type": "type_array",
-            "elementType": {
-              "type": "type_primitive",
+            "tag": "TArray",
+            "elem": {
+              "tag": "TPrim",
               "name": "f64"
             },
             "length": 3
@@ -1189,11 +1146,10 @@
         },
         "right": "4",
         "semantic_tag": "list_composition",
-        "inferred_type": "value",
         "type_detail": {
-          "type": "type_array",
-          "elementType": {
-            "type": "type_primitive",
+          "tag": "TArray",
+          "elem": {
+            "tag": "TPrim",
             "name": "f64"
           },
           "length": 4
@@ -1201,20 +1157,19 @@
       },
       "right": "5",
       "semantic_tag": "list_composition",
-      "inferred_type": "value",
       "type_detail": {
-        "type": "type_array",
-        "elementType": {
-          "type": "type_primitive",
+        "tag": "TArray",
+        "elem": {
+          "tag": "TPrim",
           "name": "f64"
         },
         "length": 5
       }
     },
     "type_detail": {
-      "type": "type_array",
-      "elementType": {
-        "type": "type_primitive",
+      "tag": "TArray",
+      "elem": {
+        "tag": "TPrim",
         "name": "f64"
       },
       "length": 5
@@ -1226,6 +1181,11 @@
     "left": "<test_tuple>",
     "right": {
       "type": "operation",
+      "statements": [
+        "1",
+        "<a>",
+        "3"
+      ],
       "operator": "concat",
       "left": {
         "type": "operation",
@@ -1233,55 +1193,53 @@
         "left": "1",
         "right": "<a>",
         "semantic_tag": "list_composition",
-        "inferred_type": "value",
         "type_detail": {
-          "type": "type_tuple",
+          "tag": "TProd",
           "elements": [
             {
-              "type": "type_primitive",
+              "tag": "TPrim",
               "name": "f64"
             },
             {
-              "type": "type_ref",
-              "name": "a"
+              "tag": "TVar",
+              "id": 31
             }
           ]
         }
       },
       "right": "3",
       "semantic_tag": "list_composition",
-      "inferred_type": "value",
       "type_detail": {
-        "type": "type_tuple",
+        "tag": "TProd",
         "elements": [
           {
-            "type": "type_primitive",
+            "tag": "TPrim",
             "name": "f64"
           },
           {
-            "type": "type_ref",
-            "name": "a"
+            "tag": "TVar",
+            "id": 31
           },
           {
-            "type": "type_primitive",
+            "tag": "TPrim",
             "name": "f64"
           }
         ]
       }
     },
     "type_detail": {
-      "type": "type_tuple",
+      "tag": "TProd",
       "elements": [
         {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         },
         {
-          "type": "type_ref",
-          "name": "a"
+          "tag": "TVar",
+          "id": 31
         },
         {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         }
       ]
@@ -1301,50 +1259,30 @@
         "left": "<x>",
         "right": "2",
         "type_detail": {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         }
       },
       "type_detail": {
-        "type": "type_function",
-        "args": [
-          {
-            "type": "type_ref",
-            "name": "x"
-          }
-        ],
-        "remaining_args": [
-          {
-            "type": "type_ref",
-            "name": "x"
-          }
-        ],
-        "holes": [],
-        "bound_env": {},
-        "returnType": {
-          "type": "type_primitive",
+        "tag": "TFun",
+        "param": {
+          "tag": "TVar",
+          "id": 33
+        },
+        "ret": {
+          "tag": "TPrim",
           "name": "f64"
         }
       }
     },
     "type_detail": {
-      "type": "type_function",
-      "args": [
-        {
-          "type": "type_ref",
-          "name": "x"
-        }
-      ],
-      "remaining_args": [
-        {
-          "type": "type_ref",
-          "name": "x"
-        }
-      ],
-      "holes": [],
-      "bound_env": {},
-      "returnType": {
-        "type": "type_primitive",
+      "tag": "TFun",
+      "param": {
+        "tag": "TVar",
+        "id": 33
+      },
+      "ret": {
+        "tag": "TPrim",
         "name": "f64"
       }
     }

@@ -11,12 +11,12 @@
       "left": "<b>",
       "right": "<c>",
       "type_detail": {
-        "type": "type_primitive",
+        "tag": "TPrim",
         "name": "f64"
       }
     },
     "type_detail": {
-      "type": "type_primitive",
+      "tag": "TPrim",
       "name": "f64"
     }
   },
@@ -36,34 +36,34 @@
           "left": "<b>",
           "right": "<c>",
           "type_detail": {
-            "type": "type_primitive",
+            "tag": "TPrim",
             "name": "f64"
           }
         },
         "type_detail": {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         }
       },
       "type_detail": {
-        "type": "type_primitive",
+        "tag": "TPrim",
         "name": "f64"
       }
     },
     "type_detail": {
-      "type": "type_primitive",
+      "tag": "TPrim",
       "name": "f64"
     }
   },
   "type_detail": {
-    "type": "type_coproduct",
+    "tag": "TSum",
     "variants": [
       {
-        "type": "type_primitive",
+        "tag": "TPrim",
         "name": "f64"
       },
       {
-        "type": "type_unit"
+        "tag": "TUnit"
       }
     ]
   }

@@ -13,50 +13,44 @@
         "left": "<x>",
         "right": "2",
         "type_detail": {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         }
       },
       "type_detail": {
-        "type": "type_function",
-        "args": [
-          {
-            "type": "type_ref",
-            "name": "x"
+        "tag": "TFun",
+        "param": {
+          "tag": "TFun",
+          "param": {
+            "tag": "TVar",
+            "id": 3
+          },
+          "ret": {
+            "tag": "TPrim",
+            "name": "f64"
           }
-        ],
-        "remaining_args": [
-          {
-            "type": "type_ref",
-            "name": "x"
-          }
-        ],
-        "holes": [],
-        "bound_env": {},
-        "returnType": {
-          "type": "type_primitive",
+        },
+        "ret": {
+          "tag": "TPrim",
           "name": "f64"
         }
       }
     },
     "type_detail": {
-      "type": "type_function",
-      "args": [
-        {
-          "type": "type_ref",
-          "name": "x"
+      "tag": "TFun",
+      "param": {
+        "tag": "TFun",
+        "param": {
+          "tag": "TVar",
+          "id": 3
+        },
+        "ret": {
+          "tag": "TPrim",
+          "name": "f64"
         }
-      ],
-      "remaining_args": [
-        {
-          "type": "type_ref",
-          "name": "x"
-        }
-      ],
-      "holes": [],
-      "bound_env": {},
-      "returnType": {
-        "type": "type_primitive",
+      },
+      "ret": {
+        "tag": "TPrim",
         "name": "f64"
       }
     }
@@ -75,50 +69,30 @@
         "left": "<x>",
         "right": "1",
         "type_detail": {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         }
       },
       "type_detail": {
-        "type": "type_function",
-        "args": [
-          {
-            "type": "type_ref",
-            "name": "x"
-          }
-        ],
-        "remaining_args": [
-          {
-            "type": "type_ref",
-            "name": "x"
-          }
-        ],
-        "holes": [],
-        "bound_env": {},
-        "returnType": {
-          "type": "type_primitive",
+        "tag": "TFun",
+        "param": {
+          "tag": "TVar",
+          "id": 3
+        },
+        "ret": {
+          "tag": "TPrim",
           "name": "f64"
         }
       }
     },
     "type_detail": {
-      "type": "type_function",
-      "args": [
-        {
-          "type": "type_ref",
-          "name": "x"
-        }
-      ],
-      "remaining_args": [
-        {
-          "type": "type_ref",
-          "name": "x"
-        }
-      ],
-      "holes": [],
-      "bound_env": {},
-      "returnType": {
-        "type": "type_primitive",
+      "tag": "TFun",
+      "param": {
+        "tag": "TVar",
+        "id": 3
+      },
+      "ret": {
+        "tag": "TPrim",
         "name": "f64"
       }
     }
@@ -129,46 +103,32 @@
     "left": "<result>",
     "right": {
       "type": "operation",
+      "statements": [
+        "<f>",
+        "<g>",
+        "3"
+      ],
       "operator": "apply",
       "left": {
         "type": "operation",
-        "operator": ".",
+        "operator": "apply",
         "left": "<f>",
         "right": "<g>",
-        "semantic_tag": "composition",
-        "inferred_type": "function",
+        "semantic_tag": "application",
         "type_detail": {
-          "type": "type_function",
-          "args": [
-            {
-              "type": "type_ref",
-              "name": "x"
-            }
-          ],
-          "remaining_args": [
-            {
-              "type": "type_ref",
-              "name": "x"
-            }
-          ],
-          "holes": [],
-          "bound_env": {},
-          "returnType": {
-            "type": "type_primitive",
-            "name": "f64"
-          }
+          "tag": "TPrim",
+          "name": "f64"
         }
       },
       "right": "3",
       "semantic_tag": "application",
-      "inferred_type": "unknown",
       "type_detail": {
-        "type": "type_primitive",
+        "tag": "TPrim",
         "name": "f64"
       }
     },
     "type_detail": {
-      "type": "type_primitive",
+      "tag": "TPrim",
       "name": "f64"
     }
   }

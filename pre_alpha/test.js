@@ -1,7 +1,7 @@
 import { preprocess } from './lexisize/lexer.js';
 import * as parser from './parse/minimal.js';
 import { buildAST } from './semanticize/shunting_yard.js';
-import { annotateContextualOperators, buildTypeEnvironment, resolveCoproducts, inferType, liftLambdas, generateST } from './semanticize/analyzer/index.js';
+import { annotateContextualOperators, liftLambdas, infer, generateST, Substitution, resetTVarCounter } from './semanticize/analyzer/index.js';
 import util from 'util';
 import fs from 'fs';
 import path from 'path';
@@ -42,36 +42,47 @@ for (const filePath of files) {
     const astProgram = parser.parse(preprocessed);
     const astLines = astProgram.filter(line => line !== null && line !== undefined);
     
-    // ファイルスコープの型環境（Type Environment）を初期化
+    // ファイルスコープの型環境と代入を初期化
     const typeEnv = new Map();
+    const subst = new Substitution();
+    resetTVarCounter();
+    
     // ラムダリフティング用の状態を初期化
     const lambdaState = { lambdas: [], counter: 0 };
     
-    // トップレベルの「式のリスト（Statements Array）」として処理する
+    // 新しいパイプライン:
+    // 1. buildAST (shunting yard)
+    // 2. annotateContextualOperators (意味タグ)
+    // 3. infer (型推論 + coproduct解決 — 型推論後に構造決定)
+    // 4. liftLambdas (ラムダリフティング)
     const astTrees = astLines.map(astLine => {
       // 3. Shunting Yard (優先順位解決 -> AST)
-      // Lineが単一の配列を返した場合のアンラップ
       let astTree = buildAST(Array.isArray(astLine) && astLine.length === 1 && Array.isArray(astLine[0]) ? astLine[0] : astLine);
       
-      // 4. Semantic Analyzer (意味解析: `:` のタグ付け)
+      // 4. Semantic Analyzer (意味タグ付与)
       astTree = annotateContextualOperators(astTree);
-
-      // 5. 型環境の更新（グローバル環境に登録）
-      buildTypeEnvironment(astTree, typeEnv);
       
-      // 6. Static Type Resolution (Coproductの解決)
-      const resolved = resolveCoproducts(astTree, typeEnv);
+      // 5. Type Inference (制約ベース型推論 + coproduct解決)
+      //    resolveCoproducts は型推論内部で実行される
+      infer(astTree, typeEnv, subst);
       
-      // 7. Type Inference (型の伝播と詳細推論)
-      inferType(resolved, typeEnv);
-      
-      // 8. Lambda Lifting (無名関数の平坦化)
-      return liftLambdas(resolved, lambdaState);
+      // 6. Lambda Lifting (無名関数の平坦化)
+      return liftLambdas(astTree, lambdaState);
     });
     
     // 抽出された無名関数をASTの末尾に結合する
     if (lambdaState.lambdas.length > 0) {
+      // ラムダの型推論も実行
+      for (const lambda of lambdaState.lambdas) {
+        infer(lambda, typeEnv, subst);
+      }
       astTrees.push(...lambdaState.lambdas);
+    }
+    
+    // 代入を最終解決
+    // (型変数を可能な限り解決する)
+    for (const tree of astTrees) {
+      resolveTypeDetails(tree, subst);
     }
     
     // Write JSON output
@@ -90,12 +101,37 @@ for (const filePath of files) {
     if (err.location) {
       errMsg = `[Parse Error] Expected ${err.expected.map(e=>e.text?`"${e.text}"`:`[${e.parts.join('')}]`).join(', ')} but "${err.found}" found.`;
     } else {
-      errMsg = `[Parse Error] ${err.stack || err.message}`;
+      errMsg = `[Error] ${err.stack || err.message}`;
     }
     console.error(errMsg);
     
     const outPath = filePath.replace(/\.(sign|sn)$/, '.json');
     fs.writeFileSync(outPath, JSON.stringify({ error: errMsg }, null, 2), 'utf-8');
     console.log(`[Error] Written to: ${outPath}`);
+  }
+}
+
+/**
+ * AST の type_detail を最終的な代入で解決する
+ */
+function resolveTypeDetails(node, subst) {
+  if (!node || typeof node !== 'object') return;
+  
+  if (node.type_detail) {
+    node.type_detail = subst.apply(node.type_detail);
+  }
+  
+  if (node.type === 'operation') {
+    resolveTypeDetails(node.left, subst);
+    resolveTypeDetails(node.right, subst);
+    if (node.operand) resolveTypeDetails(node.operand, subst);
+  } else if (node.type === 'block') {
+    if (Array.isArray(node.content)) {
+      node.content.forEach(c => resolveTypeDetails(c, subst));
+    } else {
+      resolveTypeDetails(node.content, subst);
+    }
+  } else if (node.type === 'coproduct_block' && node.statements) {
+    node.statements.forEach(s => resolveTypeDetails(s, subst));
   }
 }

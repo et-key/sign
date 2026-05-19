@@ -12,19 +12,19 @@
         "operand": "<b>",
         "position": "prefix",
         "type_detail": {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         }
       },
       "type_detail": {
-        "type": "type_primitive",
+        "tag": "TPrim",
         "name": "f64"
       }
     },
     "right": "<c>",
     "type_detail": {
-      "type": "type_ref",
-      "name": "c"
+      "tag": "TVar",
+      "id": 2
     }
   },
   {
@@ -40,19 +40,19 @@
         "operand": "<b>",
         "position": "prefix",
         "type_detail": {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         }
       },
       "type_detail": {
-        "type": "type_primitive",
+        "tag": "TPrim",
         "name": "f64"
       }
     },
     "right": "<c>",
     "type_detail": {
-      "type": "type_ref",
-      "name": "c"
+      "tag": "TVar",
+      "id": 2
     }
   }
 ]

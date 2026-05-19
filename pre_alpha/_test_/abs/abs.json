@@ -7,13 +7,13 @@
       "kind": "abs",
       "content": "<a>",
       "type_detail": {
-        "type": "type_ref",
-        "name": "a"
+        "tag": "TVar",
+        "id": 1
       }
     },
     "right": "1",
     "type_detail": {
-      "type": "type_primitive",
+      "tag": "TPrim",
       "name": "f64"
     }
   },
@@ -26,12 +26,12 @@
       "kind": "abs",
       "content": "<a>",
       "type_detail": {
-        "type": "type_ref",
-        "name": "a"
+        "tag": "TVar",
+        "id": 3
       }
     },
     "type_detail": {
-      "type": "type_primitive",
+      "tag": "TPrim",
       "name": "f64"
     }
   },
@@ -50,23 +50,23 @@
           "left": "<x>",
           "right": "<y>",
           "type_detail": {
-            "type": "type_primitive",
+            "tag": "TPrim",
             "name": "f64"
           }
         },
         "type_detail": {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         }
       },
       "type_detail": {
-        "type": "type_primitive",
+        "tag": "TPrim",
         "name": "f64"
       }
     },
     "right": "3",
     "type_detail": {
-      "type": "type_primitive",
+      "tag": "TPrim",
       "name": "f64"
     }
   },
@@ -86,22 +86,22 @@
           "left": "<x>",
           "right": "<y>",
           "type_detail": {
-            "type": "type_primitive",
+            "tag": "TPrim",
             "name": "f64"
           }
         },
         "type_detail": {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         }
       },
       "type_detail": {
-        "type": "type_primitive",
+        "tag": "TPrim",
         "name": "f64"
       }
     },
     "type_detail": {
-      "type": "type_primitive",
+      "tag": "TPrim",
       "name": "f64"
     }
   }

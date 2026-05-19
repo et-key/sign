@@ -8,3 +8,8 @@ result1 : func_with_defaults .. ..
 result2 : func_with_defaults 3 ..
 result3 : func_with_defaults .. 5
 result4 : func_with_defaults 3 5
+
+` Test fallback with unit (failed evaluation)
+` 3 < 2 is false, so it returns unit. It should trigger the default value for x.
+result5 : func_with_defaults [3 < 2] 5
+result6 : func_with_defaults [3 < 2] [5 < 2]

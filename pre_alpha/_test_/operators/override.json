@@ -12,69 +12,46 @@
       "type": "operation",
       "operator": "?",
       "left": {
-        "type": "operation",
-        "operator": "concat",
-        "left": "<x>",
-        "right": "<y>",
-        "semantic_tag": "list_composition",
-        "inferred_type": "value"
+        "type": "coproduct_block",
+        "statements": [
+          "<x>",
+          "<y>"
+        ]
       },
       "right": "_",
       "type_detail": {
-        "type": "type_function",
-        "args": [
-          {
-            "type": "type_ref",
-            "name": "x"
+        "tag": "TFun",
+        "param": {
+          "tag": "TVar",
+          "id": 1
+        },
+        "ret": {
+          "tag": "TFun",
+          "param": {
+            "tag": "TVar",
+            "id": 2
           },
-          {
-            "type": "type_ref",
-            "name": "y"
+          "ret": {
+            "tag": "TUnit"
           }
-        ],
-        "remaining_args": [
-          {
-            "type": "type_ref",
-            "name": "x"
-          },
-          {
-            "type": "type_ref",
-            "name": "y"
-          }
-        ],
-        "holes": [],
-        "bound_env": {},
-        "returnType": {
-          "type": "type_unit"
         }
       }
     },
     "type_detail": {
-      "type": "type_function",
-      "args": [
-        {
-          "type": "type_ref",
-          "name": "x"
+      "tag": "TFun",
+      "param": {
+        "tag": "TVar",
+        "id": 1
+      },
+      "ret": {
+        "tag": "TFun",
+        "param": {
+          "tag": "TVar",
+          "id": 2
         },
-        {
-          "type": "type_ref",
-          "name": "y"
+        "ret": {
+          "tag": "TUnit"
         }
-      ],
-      "remaining_args": [
-        {
-          "type": "type_ref",
-          "name": "x"
-        },
-        {
-          "type": "type_ref",
-          "name": "y"
-        }
-      ],
-      "holes": [],
-      "bound_env": {},
-      "returnType": {
-        "type": "type_unit"
       }
     }
   },
@@ -102,67 +79,56 @@
       },
       "right": {
         "type": "operation",
+        "statements": [
+          "<x>",
+          "<y>"
+        ],
         "operator": "concat",
         "left": "<x>",
         "right": "<y>",
         "semantic_tag": "list_composition",
-        "inferred_type": "value",
         "type_detail": {
-          "type": "type_tuple",
+          "tag": "TProd",
           "elements": [
             {
-              "type": "type_ref",
-              "name": "x"
+              "tag": "TVar",
+              "id": 3
             },
             {
-              "type": "type_ref",
-              "name": "y"
+              "tag": "TVar",
+              "id": 4
             }
           ]
         }
       },
       "type_detail": {
-        "type": "type_function",
-        "args": [],
-        "remaining_args": [],
-        "holes": [],
-        "bound_env": {},
-        "returnType": {
-          "type": "type_tuple",
-          "elements": [
-            {
-              "type": "type_ref",
-              "name": "x"
-            },
-            {
-              "type": "type_ref",
-              "name": "y"
-            }
-          ]
-        }
+        "tag": "TProd",
+        "elements": [
+          {
+            "tag": "TVar",
+            "id": 3
+          },
+          {
+            "tag": "TVar",
+            "id": 4
+          }
+        ]
       }
     },
     "semantic_tag": "point_free_function",
     "inferred_type": "function",
     "type_detail": {
-      "type": "type_function",
-      "args": [],
-      "remaining_args": [],
-      "holes": [],
-      "bound_env": {},
-      "returnType": {
-        "type": "type_tuple",
-        "elements": [
-          {
-            "type": "type_ref",
-            "name": "x"
-          },
-          {
-            "type": "type_ref",
-            "name": "y"
-          }
-        ]
-      }
+      "tag": "TProd",
+      "elements": [
+        {
+          "tag": "TVar",
+          "id": 3
+        },
+        {
+          "tag": "TVar",
+          "id": 4
+        }
+      ]
     }
   },
   {
@@ -171,7 +137,7 @@
     "left": "1",
     "right": "2",
     "type_detail": {
-      "type": "type_primitive",
+      "tag": "TPrim",
       "name": "f64"
     }
   },
@@ -184,14 +150,14 @@
       "left": "3",
       "right": "8",
       "type_detail": {
-        "type": "type_primitive",
+        "tag": "TPrim",
         "name": "f64"
       }
     },
     "semantic_tag": "point_free_function",
     "inferred_type": "function",
     "type_detail": {
-      "type": "type_primitive",
+      "tag": "TPrim",
       "name": "f64"
     }
   }
