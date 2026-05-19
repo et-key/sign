@@ -7,12 +7,11 @@
       "type": "operation",
       "operator": "?",
       "left": {
-        "type": "operation",
-        "operator": "concat",
-        "left": "<x>",
-        "right": "<y>",
-        "semantic_tag": "list_composition",
-        "inferred_type": "value"
+        "type": "coproduct_block",
+        "statements": [
+          "<x>",
+          "<y>"
+        ]
       },
       "right": {
         "type": "operation",
@@ -20,67 +19,61 @@
         "left": "<x>",
         "right": "<y>",
         "type_detail": {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         }
       },
       "type_detail": {
-        "type": "type_function",
-        "args": [
-          {
-            "type": "type_ref",
-            "name": "x"
+        "tag": "TFun",
+        "param": {
+          "tag": "TSum",
+          "variants": [
+            {
+              "tag": "TPrim",
+              "name": "f64"
+            },
+            {
+              "tag": "TUnit"
+            }
+          ]
+        },
+        "ret": {
+          "tag": "TFun",
+          "param": {
+            "tag": "TPrim",
+            "name": "f64"
           },
-          {
-            "type": "type_ref",
-            "name": "y"
+          "ret": {
+            "tag": "TPrim",
+            "name": "f64"
           }
-        ],
-        "remaining_args": [
-          {
-            "type": "type_ref",
-            "name": "x"
-          },
-          {
-            "type": "type_ref",
-            "name": "y"
-          }
-        ],
-        "holes": [],
-        "bound_env": {},
-        "returnType": {
-          "type": "type_primitive",
-          "name": "f64"
         }
       }
     },
     "type_detail": {
-      "type": "type_function",
-      "args": [
-        {
-          "type": "type_ref",
-          "name": "x"
+      "tag": "TFun",
+      "param": {
+        "tag": "TSum",
+        "variants": [
+          {
+            "tag": "TPrim",
+            "name": "f64"
+          },
+          {
+            "tag": "TUnit"
+          }
+        ]
+      },
+      "ret": {
+        "tag": "TFun",
+        "param": {
+          "tag": "TPrim",
+          "name": "f64"
         },
-        {
-          "type": "type_ref",
-          "name": "y"
+        "ret": {
+          "tag": "TPrim",
+          "name": "f64"
         }
-      ],
-      "remaining_args": [
-        {
-          "type": "type_ref",
-          "name": "x"
-        },
-        {
-          "type": "type_ref",
-          "name": "y"
-        }
-      ],
-      "holes": [],
-      "bound_env": {},
-      "returnType": {
-        "type": "type_primitive",
-        "name": "f64"
       }
     }
   },
@@ -94,27 +87,27 @@
       "left": "10",
       "right": "5",
       "type_detail": {
-        "type": "type_coproduct",
+        "tag": "TSum",
         "variants": [
           {
-            "type": "type_primitive",
+            "tag": "TPrim",
             "name": "f64"
           },
           {
-            "type": "type_unit"
+            "tag": "TUnit"
           }
         ]
       }
     },
     "type_detail": {
-      "type": "type_coproduct",
+      "tag": "TSum",
       "variants": [
         {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         },
         {
-          "type": "type_unit"
+          "tag": "TUnit"
         }
       ]
     }
@@ -125,6 +118,11 @@
     "left": "<mapped>",
     "right": {
       "type": "operation",
+      "statements": [
+        "<f>",
+        "<maybe_val>",
+        "3"
+      ],
       "operator": "apply",
       "left": "<f>",
       "right": {
@@ -133,38 +131,36 @@
         "left": "<maybe_val>",
         "right": "3",
         "semantic_tag": "list_composition",
-        "inferred_type": "value",
         "type_detail": {
-          "type": "type_tuple",
+          "tag": "TProd",
           "elements": [
             {
-              "type": "type_coproduct",
+              "tag": "TSum",
               "variants": [
                 {
-                  "type": "type_primitive",
+                  "tag": "TPrim",
                   "name": "f64"
                 },
                 {
-                  "type": "type_unit"
+                  "tag": "TUnit"
                 }
               ]
             },
             {
-              "type": "type_primitive",
+              "tag": "TPrim",
               "name": "f64"
             }
           ]
         }
       },
       "semantic_tag": "application",
-      "inferred_type": "unknown",
       "type_detail": {
-        "type": "type_primitive",
+        "tag": "TPrim",
         "name": "f64"
       }
     },
     "type_detail": {
-      "type": "type_primitive",
+      "tag": "TPrim",
       "name": "f64"
     }
   },
@@ -182,50 +178,30 @@
         "left": "<x>",
         "right": "2",
         "type_detail": {
-          "type": "type_primitive",
+          "tag": "TPrim",
           "name": "f64"
         }
       },
       "type_detail": {
-        "type": "type_function",
-        "args": [
-          {
-            "type": "type_ref",
-            "name": "x"
-          }
-        ],
-        "remaining_args": [
-          {
-            "type": "type_ref",
-            "name": "x"
-          }
-        ],
-        "holes": [],
-        "bound_env": {},
-        "returnType": {
-          "type": "type_primitive",
+        "tag": "TFun",
+        "param": {
+          "tag": "TPrim",
+          "name": "f64"
+        },
+        "ret": {
+          "tag": "TPrim",
           "name": "f64"
         }
       }
     },
     "type_detail": {
-      "type": "type_function",
-      "args": [
-        {
-          "type": "type_ref",
-          "name": "x"
-        }
-      ],
-      "remaining_args": [
-        {
-          "type": "type_ref",
-          "name": "x"
-        }
-      ],
-      "holes": [],
-      "bound_env": {},
-      "returnType": {
-        "type": "type_primitive",
+      "tag": "TFun",
+      "param": {
+        "tag": "TPrim",
+        "name": "f64"
+      },
+      "ret": {
+        "tag": "TPrim",
         "name": "f64"
       }
     }
@@ -236,18 +212,21 @@
     "left": "<mapped_twice>",
     "right": {
       "type": "operation",
+      "statements": [
+        "<g>",
+        "<mapped>"
+      ],
       "operator": "apply",
       "left": "<g>",
       "right": "<mapped>",
       "semantic_tag": "application",
-      "inferred_type": "unknown",
       "type_detail": {
-        "type": "type_primitive",
+        "tag": "TPrim",
         "name": "f64"
       }
     },
     "type_detail": {
-      "type": "type_primitive",
+      "tag": "TPrim",
       "name": "f64"
     }
   }

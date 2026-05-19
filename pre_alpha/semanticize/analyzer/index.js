@@ -1,19 +1,23 @@
 export {
   annotateContextualOperators,
-  buildTypeEnvironment,
-  containsLambda,
-  isFunction,
-  liftLambdas,
-  resolveCoproducts
+  liftLambdas
 } from './ast_transformer.js';
 
 export {
   createChildEnv,
-  inferType
-} from './type_decider.js';
+  infer
+} from './infer.js';
 
 export {
   formatTypeObj,
   extractSignature,
   generateST
 } from './st_generator.js';
+
+export {
+  Substitution
+} from './unifier.js';
+
+export {
+  resetTVarCounter
+} from './types.js';

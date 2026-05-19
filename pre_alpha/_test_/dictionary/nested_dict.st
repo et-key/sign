@@ -1,3 +1,3 @@
 // Auto-generated type signature file
 
-value my_dict : string * f64 * string * string
+value my_dict : string * f64 * [string; 2]
