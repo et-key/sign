@@ -7,179 +7,10 @@
     "kind": "indent",
     "content": {
       "type": "operation",
-      "statements": [
-        {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": ":",
-            "left": "<name>",
-            "right": "`Sign`",
-            "semantic_tag": "dictionary",
-            "type_detail": {
-              "tag": "TPrim",
-              "name": "string"
-            }
-          },
-          "type_detail": {
-            "tag": "TPrim",
-            "name": "string"
-          }
-        },
-        {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": ":",
-            "left": "<version>",
-            "right": "0.1",
-            "semantic_tag": "dictionary",
-            "type_detail": {
-              "tag": "TPrim",
-              "name": "f64"
-            }
-          },
-          "type_detail": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
-        },
-        {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": ":",
-            "left": "<features>",
-            "right": {
-              "type": "block",
-              "kind": "indent",
-              "content": {
-                "type": "operation",
-                "statements": [
-                  {
-                    "type": "block",
-                    "kind": "group",
-                    "content": {
-                      "type": "operation",
-                      "operator": ":",
-                      "left": "<type>",
-                      "right": "`Structural`",
-                      "semantic_tag": "dictionary",
-                      "type_detail": {
-                        "tag": "TPrim",
-                        "name": "string"
-                      }
-                    },
-                    "type_detail": {
-                      "tag": "TPrim",
-                      "name": "string"
-                    }
-                  },
-                  {
-                    "type": "block",
-                    "kind": "group",
-                    "content": {
-                      "type": "operation",
-                      "operator": ":",
-                      "left": "<backend>",
-                      "right": "`AArch64`",
-                      "semantic_tag": "dictionary",
-                      "type_detail": {
-                        "tag": "TPrim",
-                        "name": "string"
-                      }
-                    },
-                    "type_detail": {
-                      "tag": "TPrim",
-                      "name": "string"
-                    }
-                  }
-                ],
-                "operator": "concat",
-                "left": {
-                  "type": "block",
-                  "kind": "group",
-                  "content": {
-                    "type": "operation",
-                    "operator": ":",
-                    "left": "<type>",
-                    "right": "`Structural`",
-                    "semantic_tag": "dictionary",
-                    "type_detail": {
-                      "tag": "TPrim",
-                      "name": "string"
-                    }
-                  },
-                  "type_detail": {
-                    "tag": "TPrim",
-                    "name": "string"
-                  }
-                },
-                "right": {
-                  "type": "block",
-                  "kind": "group",
-                  "content": {
-                    "type": "operation",
-                    "operator": ":",
-                    "left": "<backend>",
-                    "right": "`AArch64`",
-                    "semantic_tag": "dictionary",
-                    "type_detail": {
-                      "tag": "TPrim",
-                      "name": "string"
-                    }
-                  },
-                  "type_detail": {
-                    "tag": "TPrim",
-                    "name": "string"
-                  }
-                },
-                "semantic_tag": "list_composition",
-                "type_detail": {
-                  "tag": "TArray",
-                  "elem": {
-                    "tag": "TPrim",
-                    "name": "string"
-                  },
-                  "length": 2
-                }
-              },
-              "type_detail": {
-                "tag": "TArray",
-                "elem": {
-                  "tag": "TPrim",
-                  "name": "string"
-                },
-                "length": 2
-              }
-            },
-            "semantic_tag": "dictionary",
-            "type_detail": {
-              "tag": "TArray",
-              "elem": {
-                "tag": "TPrim",
-                "name": "string"
-              },
-              "length": 2
-            }
-          },
-          "type_detail": {
-            "tag": "TArray",
-            "elem": {
-              "tag": "TPrim",
-              "name": "string"
-            },
-            "length": 2
-          }
-        }
-      ],
-      "operator": "concat",
+      "operator": " ",
       "left": {
         "type": "operation",
-        "operator": "concat",
+        "operator": " ",
         "left": {
           "type": "block",
           "kind": "group",
@@ -188,15 +19,12 @@
             "operator": ":",
             "left": "<name>",
             "right": "`Sign`",
-            "semantic_tag": "dictionary",
             "type_detail": {
-              "tag": "TPrim",
-              "name": "string"
+              "name": "String"
             }
           },
           "type_detail": {
-            "tag": "TPrim",
-            "name": "string"
+            "name": "String"
           }
         },
         "right": {
@@ -207,28 +35,22 @@
             "operator": ":",
             "left": "<version>",
             "right": "0.1",
-            "semantic_tag": "dictionary",
             "type_detail": {
-              "tag": "TPrim",
-              "name": "f64"
+              "name": "Number"
             }
           },
           "type_detail": {
-            "tag": "TPrim",
-            "name": "f64"
+            "name": "Number"
           }
         },
-        "semantic_tag": "list_composition",
+        "name": "concat",
         "type_detail": {
-          "tag": "TProd",
-          "elements": [
+          "types": [
             {
-              "tag": "TPrim",
-              "name": "string"
+              "name": "String"
             },
             {
-              "tag": "TPrim",
-              "name": "f64"
+              "name": "Number"
             }
           ]
         }
@@ -245,47 +67,7 @@
             "kind": "indent",
             "content": {
               "type": "operation",
-              "statements": [
-                {
-                  "type": "block",
-                  "kind": "group",
-                  "content": {
-                    "type": "operation",
-                    "operator": ":",
-                    "left": "<type>",
-                    "right": "`Structural`",
-                    "semantic_tag": "dictionary",
-                    "type_detail": {
-                      "tag": "TPrim",
-                      "name": "string"
-                    }
-                  },
-                  "type_detail": {
-                    "tag": "TPrim",
-                    "name": "string"
-                  }
-                },
-                {
-                  "type": "block",
-                  "kind": "group",
-                  "content": {
-                    "type": "operation",
-                    "operator": ":",
-                    "left": "<backend>",
-                    "right": "`AArch64`",
-                    "semantic_tag": "dictionary",
-                    "type_detail": {
-                      "tag": "TPrim",
-                      "name": "string"
-                    }
-                  },
-                  "type_detail": {
-                    "tag": "TPrim",
-                    "name": "string"
-                  }
-                }
-              ],
-              "operator": "concat",
+              "operator": " ",
               "left": {
                 "type": "block",
                 "kind": "group",
@@ -294,15 +76,12 @@
                   "operator": ":",
                   "left": "<type>",
                   "right": "`Structural`",
-                  "semantic_tag": "dictionary",
                   "type_detail": {
-                    "tag": "TPrim",
-                    "name": "string"
+                    "name": "String"
                   }
                 },
                 "type_detail": {
-                  "tag": "TPrim",
-                  "name": "string"
+                  "name": "String"
                 }
               },
               "right": {
@@ -313,118 +92,131 @@
                   "operator": ":",
                   "left": "<backend>",
                   "right": "`AArch64`",
-                  "semantic_tag": "dictionary",
                   "type_detail": {
-                    "tag": "TPrim",
-                    "name": "string"
+                    "name": "String"
                   }
                 },
                 "type_detail": {
-                  "tag": "TPrim",
-                  "name": "string"
+                  "name": "String"
                 }
               },
-              "semantic_tag": "list_composition",
+              "name": "concat",
               "type_detail": {
-                "tag": "TArray",
-                "elem": {
-                  "tag": "TPrim",
-                  "name": "string"
-                },
-                "length": 2
+                "types": [
+                  {
+                    "name": "String"
+                  },
+                  {
+                    "name": "String"
+                  }
+                ]
               }
             },
             "type_detail": {
-              "tag": "TArray",
-              "elem": {
-                "tag": "TPrim",
-                "name": "string"
-              },
-              "length": 2
+              "types": [
+                {
+                  "name": "String"
+                },
+                {
+                  "name": "String"
+                }
+              ]
             }
           },
-          "semantic_tag": "dictionary",
           "type_detail": {
-            "tag": "TArray",
-            "elem": {
-              "tag": "TPrim",
-              "name": "string"
-            },
-            "length": 2
+            "types": [
+              {
+                "name": "String"
+              },
+              {
+                "name": "String"
+              }
+            ]
           }
         },
         "type_detail": {
-          "tag": "TArray",
-          "elem": {
-            "tag": "TPrim",
-            "name": "string"
-          },
-          "length": 2
+          "types": [
+            {
+              "name": "String"
+            },
+            {
+              "name": "String"
+            }
+          ]
         }
       },
-      "semantic_tag": "list_composition",
+      "name": "concat",
       "type_detail": {
-        "tag": "TProd",
-        "elements": [
+        "types": [
           {
-            "tag": "TPrim",
-            "name": "string"
+            "types": [
+              {
+                "name": "String"
+              },
+              {
+                "name": "Number"
+              }
+            ]
           },
           {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          {
-            "tag": "TArray",
-            "elem": {
-              "tag": "TPrim",
-              "name": "string"
-            },
-            "length": 2
+            "types": [
+              {
+                "name": "String"
+              },
+              {
+                "name": "String"
+              }
+            ]
           }
         ]
       }
     },
     "type_detail": {
-      "tag": "TProd",
-      "elements": [
+      "types": [
         {
-          "tag": "TPrim",
-          "name": "string"
+          "types": [
+            {
+              "name": "String"
+            },
+            {
+              "name": "Number"
+            }
+          ]
         },
         {
-          "tag": "TPrim",
-          "name": "f64"
-        },
-        {
-          "tag": "TArray",
-          "elem": {
-            "tag": "TPrim",
-            "name": "string"
-          },
-          "length": 2
+          "types": [
+            {
+              "name": "String"
+            },
+            {
+              "name": "String"
+            }
+          ]
         }
       ]
     }
   },
   "type_detail": {
-    "tag": "TProd",
-    "elements": [
+    "types": [
       {
-        "tag": "TPrim",
-        "name": "string"
+        "types": [
+          {
+            "name": "String"
+          },
+          {
+            "name": "Number"
+          }
+        ]
       },
       {
-        "tag": "TPrim",
-        "name": "f64"
-      },
-      {
-        "tag": "TArray",
-        "elem": {
-          "tag": "TPrim",
-          "name": "string"
-        },
-        "length": 2
+        "types": [
+          {
+            "name": "String"
+          },
+          {
+            "name": "String"
+          }
+        ]
       }
     ]
   }

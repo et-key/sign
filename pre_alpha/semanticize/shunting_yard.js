@@ -67,11 +67,11 @@ export function buildAST(tokens) {
     const root = [];
     const stack = [root];
     for (const token of flatTokens) {
-      if (token === '"ABS_"' || token === '"INDENT_"') {
+      if (token === '"ABS_"' || token === '"INDENT_"' || token === '"["' || token === '"{"' || token === '"("') {
         const newGroup = [token];
         stack[stack.length - 1].push(newGroup);
         stack.push(newGroup);
-      } else if (token === '"_ABS"' || token === '"_DEDENT"') {
+      } else if (token === '"_ABS"' || token === '"_DEDENT"' || token === '"]"' || token === '"}"' || token === '")"') {
         if (stack.length > 1) {
           stack.pop();
         }
@@ -87,14 +87,23 @@ export function buildAST(tokens) {
   // 1. ネストされたブロックを再帰的にAST化する
   const resolvedTokens = nestedTokens.map(token => {
     if (Array.isArray(token)) {
-      // 制御タグ（ABS_ や INDENT_）の確認
+      // 制御タグ (ABS_ や INDENT_) の確認
       if (token[0] === '"ABS_"') {
-        // 絶対値ブロック（先頭のタグを除いて再帰）
+        // 絶対値ブロック。先頭のタグを除いて再帰。
         return { type: 'block', kind: 'abs', content: buildAST(token.slice(1)) };
       }
       if (token[0] === '"INDENT_"') {
-        // インデントブロック（先頭のタグを除いて再帰）
+        // インデントブロック。先頭のタグを除いて再帰。
         return { type: 'block', kind: 'indent', content: buildAST(token.slice(1)) };
+      }
+      if (token[0] === '"["') {
+        return { type: 'block', kind: 'bracket', content: buildAST(token.slice(1)) };
+      }
+      if (token[0] === '"{"') {
+        return { type: 'block', kind: 'brace', content: buildAST(token.slice(1)) };
+      }
+      if (token[0] === '"("') {
+        return { type: 'block', kind: 'paren', content: buildAST(token.slice(1)) };
       }
       // 通常の丸括弧・角括弧などのグループ
       return { type: 'block', kind: 'group', content: buildAST(token) };
@@ -115,17 +124,7 @@ export function buildAST(tokens) {
     if (op.type === 'infix') {
       const right = outputStack.pop();
       const left = outputStack.pop();
-      if (op.name === 'coproduct') {
-        // 余積（ただ並んでいる状態）は coproduct_block として束ねる
-        if (left && left.type === 'coproduct_block') {
-          left.statements.push(right);
-          outputStack.push(left);
-        } else {
-          outputStack.push({ type: 'coproduct_block', statements: [left, right] });
-        }
-      } else {
-        outputStack.push({ type: 'operation', operator: op.symbol, left, right });
-      }
+      outputStack.push({ type: 'operation', operator: op.symbol, left, right, name: op.name });
     } else if (op.type === 'prefix' || op.type === 'postfix') {
       const operand = outputStack.pop();
       outputStack.push({ type: 'operation', operator: op.symbol, operand, position: op.type });
@@ -148,7 +147,7 @@ export function buildAST(tokens) {
     if (info.type === 'operand') {
       // 暗黙の中置演算子（余積・適用）を挿入（プレセデンス10）
       if (previousIsOperand) {
-        const coproductOp = { type: 'infix', symbol: ' ', precedence: 10, name: 'coproduct' };
+        const coproductOp = { type: 'infix', symbol: ' ', precedence: 10, name: 'apply_or_concat' };
         while (operatorStack.length > 0) {
           const top = operatorStack[operatorStack.length - 1];
           // プレセデンス値が大きいほど優先順位が高い。左結合なので >= 
@@ -170,7 +169,7 @@ export function buildAST(tokens) {
       // もしオペランドの直後に前置演算子が来た場合（例: `f ~y`）、
       // 間に暗黙の適用/余積があるものとして処理する
       if (previousIsOperand) {
-        const coproductOp = { type: 'infix', symbol: ' ', precedence: 10, name: 'coproduct' };
+        const coproductOp = { type: 'infix', symbol: ' ', precedence: 10, name: 'apply_or_concat' };
         while (operatorStack.length > 0) {
           const top = operatorStack[operatorStack.length - 1];
           if (top.type !== 'prefix' && top.symbol !== '(' && top.symbol !== '[' && top.symbol !== '{' && top.symbol !== '\x02' && top.symbol !== '\x04') {

@@ -1,0 +1,1091 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<a>",
+    "right": "1",
+    "type_detail": {
+      "name": "Number"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<b>",
+    "right": "2",
+    "type_detail": {
+      "name": "Number"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<c>",
+    "right": "3",
+    "type_detail": {
+      "name": "Number"
+    }
+  },
+  {
+    "type": "block",
+    "kind": "bracket",
+    "content": {
+      "type": "block",
+      "kind": "group",
+      "content": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": "<a>",
+          "right": "<b>",
+          "name": "concat",
+          "type_detail": {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          }
+        },
+        "right": "<c>",
+        "name": "concat",
+        "type_detail": {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      },
+      "type_detail": {
+        "types": [
+          {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
+      }
+    },
+    "type_detail": {
+      "types": [
+        {
+          "types": [
+            {
+              "name": "Number"
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "name": "Number"
+        }
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": " ",
+    "left": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<a>",
+      "right": "<b>",
+      "name": "concat",
+      "type_detail": {
+        "types": [
+          {
+            "name": "Number"
+          },
+          {
+            "name": "Number"
+          }
+        ]
+      }
+    },
+    "right": "<c>",
+    "name": "concat",
+    "type_detail": {
+      "types": [
+        {
+          "types": [
+            {
+              "name": "Number"
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "name": "Number"
+        }
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ",",
+    "left": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": "<a>",
+        "right": "<b>",
+        "name": "concat",
+        "type_detail": {
+          "types": [
+            {
+              "name": "Number"
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      },
+      "right": "<c>",
+      "name": "concat",
+      "type_detail": {
+        "types": [
+          {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
+      }
+    },
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": "<a>",
+        "right": "<b>",
+        "name": "concat",
+        "type_detail": {
+          "types": [
+            {
+              "name": "Number"
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      },
+      "right": "<c>",
+      "name": "concat",
+      "type_detail": {
+        "types": [
+          {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
+      }
+    },
+    "type_detail": {
+      "types": [
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": " ",
+    "left": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "block",
+        "kind": "group",
+        "content": {
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "left": "<a>",
+            "right": "<b>",
+            "name": "concat",
+            "type_detail": {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            }
+          },
+          "right": "<c>",
+          "name": "concat",
+          "type_detail": {
+            "types": [
+              {
+                "types": [
+                  {
+                    "name": "Number"
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          }
+        },
+        "type_detail": {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      },
+      "type_detail": {
+        "types": [
+          {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
+      }
+    },
+    "right": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "block",
+        "kind": "group",
+        "content": {
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "left": "<a>",
+            "right": "<b>",
+            "name": "concat",
+            "type_detail": {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            }
+          },
+          "right": "<c>",
+          "name": "concat",
+          "type_detail": {
+            "types": [
+              {
+                "types": [
+                  {
+                    "name": "Number"
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          }
+        },
+        "type_detail": {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      },
+      "type_detail": {
+        "types": [
+          {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
+      }
+    },
+    "name": "concat",
+    "type_detail": {
+      "types": [
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ",",
+    "left": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "block",
+        "kind": "group",
+        "content": {
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "left": "<a>",
+            "right": "<b>",
+            "name": "concat",
+            "type_detail": {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            }
+          },
+          "right": "<c>",
+          "name": "concat",
+          "type_detail": {
+            "types": [
+              {
+                "types": [
+                  {
+                    "name": "Number"
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          }
+        },
+        "type_detail": {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      },
+      "type_detail": {
+        "types": [
+          {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
+      }
+    },
+    "right": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "block",
+        "kind": "group",
+        "content": {
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "left": "<a>",
+            "right": "<b>",
+            "name": "concat",
+            "type_detail": {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            }
+          },
+          "right": "<c>",
+          "name": "concat",
+          "type_detail": {
+            "types": [
+              {
+                "types": [
+                  {
+                    "name": "Number"
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          }
+        },
+        "type_detail": {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      },
+      "type_detail": {
+        "types": [
+          {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
+      }
+    },
+    "type_detail": {
+      "types": [
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": " ",
+    "left": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "block",
+        "kind": "group",
+        "content": {
+          "type": "operation",
+          "operator": ",",
+          "left": {
+            "type": "operation",
+            "operator": ",",
+            "left": "<a>",
+            "right": "<b>",
+            "type_detail": {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            }
+          },
+          "right": "<c>",
+          "type_detail": {
+            "types": [
+              {
+                "types": [
+                  {
+                    "name": "Number"
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          }
+        },
+        "type_detail": {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      },
+      "type_detail": {
+        "types": [
+          {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
+      }
+    },
+    "right": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "block",
+        "kind": "group",
+        "content": {
+          "type": "operation",
+          "operator": ",",
+          "left": {
+            "type": "operation",
+            "operator": ",",
+            "left": "<a>",
+            "right": "<b>",
+            "type_detail": {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            }
+          },
+          "right": "<c>",
+          "type_detail": {
+            "types": [
+              {
+                "types": [
+                  {
+                    "name": "Number"
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          }
+        },
+        "type_detail": {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      },
+      "type_detail": {
+        "types": [
+          {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
+      }
+    },
+    "name": "concat",
+    "type_detail": {
+      "types": [
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ",",
+    "left": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "block",
+        "kind": "group",
+        "content": {
+          "type": "operation",
+          "operator": ",",
+          "left": {
+            "type": "operation",
+            "operator": ",",
+            "left": "<a>",
+            "right": "<b>",
+            "type_detail": {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            }
+          },
+          "right": "<c>",
+          "type_detail": {
+            "types": [
+              {
+                "types": [
+                  {
+                    "name": "Number"
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          }
+        },
+        "type_detail": {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      },
+      "type_detail": {
+        "types": [
+          {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
+      }
+    },
+    "right": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "block",
+        "kind": "group",
+        "content": {
+          "type": "operation",
+          "operator": ",",
+          "left": {
+            "type": "operation",
+            "operator": ",",
+            "left": "<a>",
+            "right": "<b>",
+            "type_detail": {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            }
+          },
+          "right": "<c>",
+          "type_detail": {
+            "types": [
+              {
+                "types": [
+                  {
+                    "name": "Number"
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          }
+        },
+        "type_detail": {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      },
+      "type_detail": {
+        "types": [
+          {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
+      }
+    },
+    "type_detail": {
+      "types": [
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

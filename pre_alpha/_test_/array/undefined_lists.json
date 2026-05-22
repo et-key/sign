@@ -1,0 +1,162 @@
+[
+  {
+    "type": "block",
+    "kind": "bracket",
+    "content": {
+      "type": "block",
+      "kind": "group",
+      "content": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": "<a>",
+          "right": "<b>",
+          "name": "concat",
+          "type_detail": {
+            "types": [
+              {
+                "name": "a"
+              },
+              {
+                "name": "b"
+              }
+            ]
+          }
+        },
+        "right": "<c>",
+        "name": "concat",
+        "type_detail": {
+          "types": [
+            {
+              "types": [
+                {
+                  "name": "a"
+                },
+                {
+                  "name": "b"
+                }
+              ]
+            },
+            {
+              "name": "c"
+            }
+          ]
+        }
+      },
+      "type_detail": {
+        "types": [
+          {
+            "types": [
+              {
+                "name": "a"
+              },
+              {
+                "name": "b"
+              }
+            ]
+          },
+          {
+            "name": "c"
+          }
+        ]
+      }
+    },
+    "type_detail": {
+      "types": [
+        {
+          "types": [
+            {
+              "name": "a"
+            },
+            {
+              "name": "b"
+            }
+          ]
+        },
+        {
+          "name": "c"
+        }
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": " ",
+    "left": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<a>",
+      "right": "<b>",
+      "name": "concat",
+      "type_detail": {
+        "types": [
+          {
+            "name": "a"
+          },
+          {
+            "name": "b"
+          }
+        ]
+      }
+    },
+    "right": "<c>",
+    "name": "concat",
+    "type_detail": {
+      "types": [
+        {
+          "types": [
+            {
+              "name": "a"
+            },
+            {
+              "name": "b"
+            }
+          ]
+        },
+        {
+          "name": "c"
+        }
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ",",
+    "left": {
+      "type": "operation",
+      "operator": ",",
+      "left": "<a>",
+      "right": "<b>",
+      "type_detail": {
+        "types": [
+          {
+            "name": "a"
+          },
+          {
+            "name": "b"
+          }
+        ]
+      }
+    },
+    "right": "<c>",
+    "type_detail": {
+      "types": [
+        {
+          "types": [
+            {
+              "name": "a"
+            },
+            {
+              "name": "b"
+            }
+          ]
+        },
+        {
+          "name": "c"
+        }
+      ]
+    }
+  }
+]

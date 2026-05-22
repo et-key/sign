@@ -7,11 +7,21 @@
       "type": "operation",
       "operator": "?",
       "left": {
-        "type": "coproduct_block",
-        "statements": [
-          "<x>",
-          "<y>"
-        ]
+        "type": "operation",
+        "operator": " ",
+        "left": "<x>",
+        "right": "<y>",
+        "name": "apply_or_concat",
+        "type_detail": {
+          "types": [
+            {
+              "name": "Number"
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        }
       },
       "right": {
         "type": "operation",
@@ -19,61 +29,38 @@
         "left": "<x>",
         "right": "<y>",
         "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "Number"
         }
       },
       "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TSum",
-          "variants": [
+        "paramType": {
+          "types": [
             {
-              "tag": "TPrim",
-              "name": "f64"
+              "name": "Number"
             },
             {
-              "tag": "TUnit"
+              "name": "Number"
             }
           ]
         },
-        "ret": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "ret": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
+        "returnType": {
+          "name": "Number"
         }
       }
     },
     "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TSum",
-        "variants": [
+      "paramType": {
+        "types": [
           {
-            "tag": "TPrim",
-            "name": "f64"
+            "name": "Number"
           },
           {
-            "tag": "TUnit"
+            "name": "Number"
           }
         ]
       },
-      "ret": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TPrim",
-          "name": "f64"
-        },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+      "returnType": {
+        "name": "Number"
       }
     }
   },
@@ -87,27 +74,23 @@
       "left": "10",
       "right": "5",
       "type_detail": {
-        "tag": "TSum",
-        "variants": [
+        "types": [
           {
-            "tag": "TPrim",
-            "name": "f64"
+            "name": "Number"
           },
           {
-            "tag": "TUnit"
+            "name": "Unit"
           }
         ]
       }
     },
     "type_detail": {
-      "tag": "TSum",
-      "variants": [
+      "types": [
         {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "Number"
         },
         {
-          "tag": "TUnit"
+          "name": "Unit"
         }
       ]
     }
@@ -118,50 +101,51 @@
     "left": "<mapped>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<f>",
-        "<maybe_val>",
-        "3"
-      ],
-      "operator": "apply",
-      "left": "<f>",
-      "right": {
+      "operator": " ",
+      "left": {
         "type": "operation",
-        "operator": "concat",
-        "left": "<maybe_val>",
-        "right": "3",
-        "semantic_tag": "list_composition",
+        "operator": " ",
+        "left": "<f>",
+        "right": "<maybe_val>",
+        "name": "distribute",
         "type_detail": {
-          "tag": "TProd",
-          "elements": [
+          "types": [
             {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
+              "paramType": {
+                "name": "Number"
+              },
+              "returnType": {
+                "name": "Number"
+              }
             },
             {
-              "tag": "TPrim",
-              "name": "f64"
+              "name": "Unit"
             }
           ]
         }
       },
-      "semantic_tag": "application",
+      "right": "3",
+      "name": "distribute",
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "types": [
+          {
+            "name": "Number"
+          },
+          {
+            "name": "Unit"
+          }
+        ]
       }
     },
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "types": [
+        {
+          "name": "Number"
+        },
+        {
+          "name": "Unit"
+        }
+      ]
     }
   },
   {
@@ -178,31 +162,24 @@
         "left": "<x>",
         "right": "2",
         "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "Number"
         }
       },
       "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TPrim",
-          "name": "f64"
+        "paramType": {
+          "name": "Number"
         },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
+        "returnType": {
+          "name": "Number"
         }
       }
     },
     "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TPrim",
-        "name": "f64"
+      "paramType": {
+        "name": "Number"
       },
-      "ret": {
-        "tag": "TPrim",
-        "name": "f64"
+      "returnType": {
+        "name": "Number"
       }
     }
   },
@@ -212,22 +189,30 @@
     "left": "<mapped_twice>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<g>",
-        "<mapped>"
-      ],
-      "operator": "apply",
+      "operator": " ",
       "left": "<g>",
       "right": "<mapped>",
-      "semantic_tag": "application",
+      "name": "distribute",
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "types": [
+          {
+            "name": "Number"
+          },
+          {
+            "name": "Unit"
+          }
+        ]
       }
     },
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "types": [
+        {
+          "name": "Number"
+        },
+        {
+          "name": "Unit"
+        }
+      ]
     }
   }
 ]

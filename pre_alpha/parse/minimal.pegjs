@@ -54,9 +54,9 @@ Core
 
 // --- 空間的配置（ネスト構造） ---
 Block
-  = "[" _ EOL* _ exprs:Expressions? _ EOL* _ "]" { return exprs || []; }
-  / "{" _ EOL* _ exprs:Expressions? _ EOL* _ "}" { return exprs || []; }
-  / "(" _ EOL* _ exprs:Expressions? _ EOL* _ ")" { return exprs || []; }
+  = "[" _ EOL* _ exprs:Expressions? _ EOL* _ "]" { return [`"["`, ...(exprs || []), `"]"`]; }
+  / "{" _ EOL* _ exprs:Expressions? _ EOL* _ "}" { return [`"{"`, ...(exprs || []), `"}"`]; }
+  / "(" _ EOL* _ exprs:Expressions? _ EOL* _ ")" { return [`"("`, ...(exprs || []), `")"`]; }
   // Lexerが挿入した制御用ASCIIコードによる絶対値ブロックの切り出し (\x04, \x05)
   / "|" expr:Expression "|" { return [`"ABS_"`, expr, `"_ABS"`]; }
   // Lexerが挿入した制御用ASCIIコードによるインデントブロックの切り出し (\x02, \x03)

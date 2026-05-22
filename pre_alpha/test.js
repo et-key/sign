@@ -42,7 +42,6 @@ for (const filePath of files) {
     const astProgram = parser.parse(preprocessed);
     const astLines = astProgram.filter(line => line !== null && line !== undefined);
     
-    // ファイルスコープの型環境と代入を初期化
     const typeEnv = new Map();
     const subst = new Substitution();
     resetTVarCounter();

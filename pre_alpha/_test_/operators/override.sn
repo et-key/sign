@@ -1,5 +1,5 @@
 [+] : x y ? _
-[|/] : x y ? 
+[|/] : x y ? String
 
 `[+] is overridden to return id (_)
 `Should be typed as id

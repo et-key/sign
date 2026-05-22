@@ -7,14 +7,12 @@
       "kind": "abs",
       "content": "<a>",
       "type_detail": {
-        "tag": "TVar",
-        "id": 1
+        "name": "a"
       }
     },
     "right": "1",
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "name": "Number"
     }
   },
   {
@@ -26,13 +24,11 @@
       "kind": "abs",
       "content": "<a>",
       "type_detail": {
-        "tag": "TVar",
-        "id": 3
+        "name": "a"
       }
     },
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "name": "Number"
     }
   },
   {
@@ -50,24 +46,20 @@
           "left": "<x>",
           "right": "<y>",
           "type_detail": {
-            "tag": "TPrim",
-            "name": "f64"
+            "name": "Number"
           }
         },
         "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "Number"
         }
       },
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "name": "Number"
       }
     },
     "right": "3",
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "name": "Number"
     }
   },
   {
@@ -86,23 +78,19 @@
           "left": "<x>",
           "right": "<y>",
           "type_detail": {
-            "tag": "TPrim",
-            "name": "f64"
+            "name": "Number"
           }
         },
         "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "Number"
         }
       },
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "name": "Number"
       }
     },
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "name": "Number"
     }
   }
 ]

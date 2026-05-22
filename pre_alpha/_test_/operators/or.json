@@ -12,19 +12,33 @@
         "operand": "<b>",
         "position": "prefix",
         "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "Number"
         }
       },
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "types": [
+          {
+            "name": "a"
+          },
+          {
+            "name": "Number"
+          }
+        ]
       }
     },
     "right": "<c>",
     "type_detail": {
-      "tag": "TVar",
-      "id": 2
+      "types": [
+        {
+          "name": "a"
+        },
+        {
+          "name": "Number"
+        },
+        {
+          "name": "c"
+        }
+      ]
     }
   },
   {
@@ -40,19 +54,33 @@
         "operand": "<b>",
         "position": "prefix",
         "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "Number"
         }
       },
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "types": [
+          {
+            "name": "a"
+          },
+          {
+            "name": "Number"
+          }
+        ]
       }
     },
     "right": "<c>",
     "type_detail": {
-      "tag": "TVar",
-      "id": 2
+      "types": [
+        {
+          "name": "a"
+        },
+        {
+          "name": "Number"
+        },
+        {
+          "name": "c"
+        }
+      ]
     }
   }
 ]

@@ -10,38 +10,53 @@
         "type": "block",
         "kind": "indent",
         "content": {
-          "type": "coproduct_block",
-          "statements": [
-            {
-              "type": "block",
-              "kind": "group",
-              "content": {
-                "type": "operation",
-                "operator": ":",
-                "left": "<x>",
-                "right": "1"
-              }
-            },
-            {
-              "type": "block",
-              "kind": "group",
-              "content": {
-                "type": "operation",
-                "operator": ":",
-                "left": "<y>",
-                "right": {
-                  "type": "operation",
-                  "operator": "+",
-                  "left": "<x>",
-                  "right": "1",
-                  "type_detail": {
-                    "tag": "TPrim",
-                    "name": "f64"
-                  }
-                }
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "block",
+            "kind": "group",
+            "content": {
+              "type": "operation",
+              "operator": ":",
+              "left": "<x>",
+              "right": "1",
+              "type_detail": {
+                "name": "String"
               }
             }
-          ]
+          },
+          "right": {
+            "type": "block",
+            "kind": "group",
+            "content": {
+              "type": "operation",
+              "operator": ":",
+              "left": "<y>",
+              "right": {
+                "type": "operation",
+                "operator": "+",
+                "left": "<x>",
+                "right": "1",
+                "type_detail": {
+                  "name": "T4"
+                }
+              },
+              "type_detail": {
+                "name": "String"
+              }
+            }
+          },
+          "name": "apply_or_concat",
+          "type_detail": {
+            "types": [
+              {
+                "name": "String"
+              },
+              {
+                "name": "String"
+              }
+            ]
+          }
         }
       },
       "right": {
@@ -56,55 +71,46 @@
             "left": "<x>",
             "right": "<y>",
             "type_detail": {
-              "tag": "TPrim",
-              "name": "f64"
+              "name": "Number"
             }
           },
           "type_detail": {
-            "tag": "TPrim",
-            "name": "f64"
+            "name": "Number"
           }
         },
         "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "Number"
         }
       },
       "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TPrim",
-          "name": "f64"
+        "paramType": {
+          "types": [
+            {
+              "name": "String"
+            },
+            {
+              "name": "String"
+            }
+          ]
         },
-        "ret": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "ret": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
+        "returnType": {
+          "name": "Number"
         }
       }
     },
     "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TPrim",
-        "name": "f64"
+      "paramType": {
+        "types": [
+          {
+            "name": "String"
+          },
+          {
+            "name": "String"
+          }
+        ]
       },
-      "ret": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TPrim",
-          "name": "f64"
-        },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+      "returnType": {
+        "name": "Number"
       }
     }
   },
@@ -114,40 +120,30 @@
     "left": "<result1>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<func_with_defaults>",
-        "..",
-        ".."
-      ],
-      "operator": "apply",
+      "operator": " ",
       "left": {
         "type": "operation",
-        "operator": "apply",
+        "operator": " ",
         "left": "<func_with_defaults>",
         "right": "..",
-        "semantic_tag": "application",
+        "name": "apply_partial",
         "type_detail": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
+          "paramType": {
+            "name": "String"
           },
-          "ret": {
-            "tag": "TPrim",
-            "name": "f64"
+          "returnType": {
+            "name": "Number"
           }
         }
       },
       "right": "..",
-      "semantic_tag": "application",
+      "name": "apply",
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "name": "Number"
       }
     },
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "name": "Number"
     }
   },
   {
@@ -156,40 +152,96 @@
     "left": "<result2>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<func_with_defaults>",
-        "3",
-        ".."
-      ],
-      "operator": "apply",
+      "operator": " ",
       "left": {
         "type": "operation",
-        "operator": "apply",
+        "operator": " ",
         "left": "<func_with_defaults>",
         "right": "3",
-        "semantic_tag": "application",
+        "name": "concat",
         "type_detail": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "ret": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
+          "types": [
+            {
+              "paramType": {
+                "types": [
+                  {
+                    "name": "String"
+                  },
+                  {
+                    "name": "String"
+                  }
+                ]
+              },
+              "returnType": {
+                "name": "Number"
+              }
+            },
+            {
+              "name": "Number"
+            }
+          ]
         }
       },
       "right": "..",
-      "semantic_tag": "application",
+      "name": "concat",
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "types": [
+          {
+            "types": [
+              {
+                "paramType": {
+                  "types": [
+                    {
+                      "name": "String"
+                    },
+                    {
+                      "name": "String"
+                    }
+                  ]
+                },
+                "returnType": {
+                  "name": "Number"
+                }
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "String"
+          }
+        ]
       }
     },
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "types": [
+        {
+          "types": [
+            {
+              "paramType": {
+                "types": [
+                  {
+                    "name": "String"
+                  },
+                  {
+                    "name": "String"
+                  }
+                ]
+              },
+              "returnType": {
+                "name": "Number"
+              }
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "name": "String"
+        }
+      ]
     }
   },
   {
@@ -198,40 +250,54 @@
     "left": "<result3>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<func_with_defaults>",
-        "..",
-        "5"
-      ],
-      "operator": "apply",
+      "operator": " ",
       "left": {
         "type": "operation",
-        "operator": "apply",
+        "operator": " ",
         "left": "<func_with_defaults>",
         "right": "..",
-        "semantic_tag": "application",
+        "name": "apply_partial",
         "type_detail": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
+          "paramType": {
+            "name": "String"
           },
-          "ret": {
-            "tag": "TPrim",
-            "name": "f64"
+          "returnType": {
+            "name": "Number"
           }
         }
       },
       "right": "5",
-      "semantic_tag": "application",
+      "name": "concat",
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "types": [
+          {
+            "paramType": {
+              "name": "String"
+            },
+            "returnType": {
+              "name": "Number"
+            }
+          },
+          {
+            "name": "Number"
+          }
+        ]
       }
     },
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "types": [
+        {
+          "paramType": {
+            "name": "String"
+          },
+          "returnType": {
+            "name": "Number"
+          }
+        },
+        {
+          "name": "Number"
+        }
+      ]
     }
   },
   {
@@ -240,37 +306,96 @@
     "left": "<result4>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<func_with_defaults>",
-        "3",
-        "5"
-      ],
-      "operator": "apply",
-      "left": "<func_with_defaults>",
-      "right": {
+      "operator": " ",
+      "left": {
         "type": "operation",
-        "operator": "concat",
-        "left": "3",
-        "right": "5",
-        "semantic_tag": "list_composition",
+        "operator": " ",
+        "left": "<func_with_defaults>",
+        "right": "3",
+        "name": "concat",
         "type_detail": {
-          "tag": "TArray",
-          "elem": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "length": 2
+          "types": [
+            {
+              "paramType": {
+                "types": [
+                  {
+                    "name": "String"
+                  },
+                  {
+                    "name": "String"
+                  }
+                ]
+              },
+              "returnType": {
+                "name": "Number"
+              }
+            },
+            {
+              "name": "Number"
+            }
+          ]
         }
       },
-      "semantic_tag": "application",
+      "right": "5",
+      "name": "concat",
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "types": [
+          {
+            "types": [
+              {
+                "paramType": {
+                  "types": [
+                    {
+                      "name": "String"
+                    },
+                    {
+                      "name": "String"
+                    }
+                  ]
+                },
+                "returnType": {
+                  "name": "Number"
+                }
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
       }
     },
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "types": [
+        {
+          "types": [
+            {
+              "paramType": {
+                "types": [
+                  {
+                    "name": "String"
+                  },
+                  {
+                    "name": "String"
+                  }
+                ]
+              },
+              "returnType": {
+                "name": "Number"
+              }
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "name": "Number"
+        }
+      ]
     }
   },
   {
@@ -279,116 +404,160 @@
     "left": "<result5>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<func_with_defaults>",
-        {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": "<",
-            "left": "3",
-            "right": "2",
-            "type_detail": {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            }
-          },
-          "type_detail": {
-            "tag": "TSum",
-            "variants": [
-              {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              {
-                "tag": "TUnit"
-              }
-            ]
-          }
-        },
-        "5"
-      ],
-      "operator": "apply",
-      "left": "<func_with_defaults>",
-      "right": {
+      "operator": " ",
+      "left": {
         "type": "operation",
-        "operator": "concat",
-        "left": {
+        "operator": " ",
+        "left": "<func_with_defaults>",
+        "right": {
           "type": "block",
-          "kind": "group",
+          "kind": "bracket",
           "content": {
-            "type": "operation",
-            "operator": "<",
-            "left": "3",
-            "right": "2",
+            "type": "block",
+            "kind": "group",
+            "content": {
+              "type": "operation",
+              "operator": "<",
+              "left": "3",
+              "right": "2",
+              "type_detail": {
+                "types": [
+                  {
+                    "name": "Number"
+                  },
+                  {
+                    "name": "Unit"
+                  }
+                ]
+              }
+            },
             "type_detail": {
-              "tag": "TSum",
-              "variants": [
+              "types": [
                 {
-                  "tag": "TPrim",
-                  "name": "f64"
+                  "name": "Number"
                 },
                 {
-                  "tag": "TUnit"
+                  "name": "Unit"
                 }
               ]
             }
           },
           "type_detail": {
-            "tag": "TSum",
-            "variants": [
+            "types": [
               {
-                "tag": "TPrim",
-                "name": "f64"
+                "name": "Number"
               },
               {
-                "tag": "TUnit"
+                "name": "Unit"
               }
             ]
           }
         },
-        "right": "5",
-        "semantic_tag": "list_composition",
+        "name": "distribute",
         "type_detail": {
-          "tag": "TProd",
-          "elements": [
+          "types": [
             {
-              "tag": "TSum",
-              "variants": [
+              "types": [
                 {
-                  "tag": "TPrim",
-                  "name": "f64"
+                  "paramType": {
+                    "types": [
+                      {
+                        "name": "String"
+                      },
+                      {
+                        "name": "String"
+                      }
+                    ]
+                  },
+                  "returnType": {
+                    "name": "Number"
+                  }
                 },
                 {
-                  "tag": "TUnit"
+                  "name": "Number"
                 }
               ]
             },
             {
-              "tag": "TPrim",
-              "name": "f64"
+              "name": "Unit"
             }
           ]
         }
       },
-      "semantic_tag": "application",
+      "right": "5",
+      "name": "distribute",
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "types": [
+          {
+            "types": [
+              {
+                "types": [
+                  {
+                    "paramType": {
+                      "types": [
+                        {
+                          "name": "String"
+                        },
+                        {
+                          "name": "String"
+                        }
+                      ]
+                    },
+                    "returnType": {
+                      "name": "Number"
+                    }
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Unit"
+          }
+        ]
       }
     },
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "types": [
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "paramType": {
+                    "types": [
+                      {
+                        "name": "String"
+                      },
+                      {
+                        "name": "String"
+                      }
+                    ]
+                  },
+                  "returnType": {
+                    "name": "Number"
+                  }
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "name": "Unit"
+        }
+      ]
     }
   },
   {
@@ -397,190 +566,203 @@
     "left": "<result6>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<func_with_defaults>",
-        {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": "<",
-            "left": "3",
-            "right": "2",
-            "type_detail": {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            }
-          },
-          "type_detail": {
-            "tag": "TSum",
-            "variants": [
-              {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              {
-                "tag": "TUnit"
-              }
-            ]
-          }
-        },
-        {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": "<",
-            "left": "5",
-            "right": "2",
-            "type_detail": {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            }
-          },
-          "type_detail": {
-            "tag": "TSum",
-            "variants": [
-              {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              {
-                "tag": "TUnit"
-              }
-            ]
-          }
-        }
-      ],
-      "operator": "apply",
-      "left": "<func_with_defaults>",
-      "right": {
+      "operator": " ",
+      "left": {
         "type": "operation",
-        "operator": "concat",
-        "left": {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": "<",
-            "left": "3",
-            "right": "2",
-            "type_detail": {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            }
-          },
-          "type_detail": {
-            "tag": "TSum",
-            "variants": [
-              {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              {
-                "tag": "TUnit"
-              }
-            ]
-          }
-        },
+        "operator": " ",
+        "left": "<func_with_defaults>",
         "right": {
           "type": "block",
-          "kind": "group",
+          "kind": "bracket",
           "content": {
-            "type": "operation",
-            "operator": "<",
-            "left": "5",
-            "right": "2",
+            "type": "block",
+            "kind": "group",
+            "content": {
+              "type": "operation",
+              "operator": "<",
+              "left": "3",
+              "right": "2",
+              "type_detail": {
+                "types": [
+                  {
+                    "name": "Number"
+                  },
+                  {
+                    "name": "Unit"
+                  }
+                ]
+              }
+            },
             "type_detail": {
-              "tag": "TSum",
-              "variants": [
+              "types": [
                 {
-                  "tag": "TPrim",
-                  "name": "f64"
+                  "name": "Number"
                 },
                 {
-                  "tag": "TUnit"
+                  "name": "Unit"
                 }
               ]
             }
           },
           "type_detail": {
-            "tag": "TSum",
-            "variants": [
+            "types": [
               {
-                "tag": "TPrim",
-                "name": "f64"
+                "name": "Number"
               },
               {
-                "tag": "TUnit"
+                "name": "Unit"
               }
             ]
           }
         },
-        "semantic_tag": "list_composition",
+        "name": "distribute",
         "type_detail": {
-          "tag": "TProd",
-          "elements": [
+          "types": [
             {
-              "tag": "TSum",
-              "variants": [
+              "types": [
                 {
-                  "tag": "TPrim",
-                  "name": "f64"
+                  "paramType": {
+                    "types": [
+                      {
+                        "name": "String"
+                      },
+                      {
+                        "name": "String"
+                      }
+                    ]
+                  },
+                  "returnType": {
+                    "name": "Number"
+                  }
                 },
                 {
-                  "tag": "TUnit"
+                  "name": "Number"
                 }
               ]
             },
             {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
+              "name": "Unit"
             }
           ]
         }
       },
-      "semantic_tag": "application",
+      "right": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "block",
+          "kind": "group",
+          "content": {
+            "type": "operation",
+            "operator": "<",
+            "left": "5",
+            "right": "2",
+            "type_detail": {
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Unit"
+                }
+              ]
+            }
+          },
+          "type_detail": {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "Unit"
+              }
+            ]
+          }
+        },
+        "type_detail": {
+          "types": [
+            {
+              "name": "Number"
+            },
+            {
+              "name": "Unit"
+            }
+          ]
+        }
+      },
+      "name": "distribute",
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "types": [
+          {
+            "types": [
+              {
+                "types": [
+                  {
+                    "paramType": {
+                      "types": [
+                        {
+                          "name": "String"
+                        },
+                        {
+                          "name": "String"
+                        }
+                      ]
+                    },
+                    "returnType": {
+                      "name": "Number"
+                    }
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Unit"
+          }
+        ]
       }
     },
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "types": [
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "paramType": {
+                    "types": [
+                      {
+                        "name": "String"
+                      },
+                      {
+                        "name": "String"
+                      }
+                    ]
+                  },
+                  "returnType": {
+                    "name": "Number"
+                  }
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "name": "Unit"
+        }
+      ]
     }
   }
 ]

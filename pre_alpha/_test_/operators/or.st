@@ -1,2 +1,2 @@
-// Auto-generated type signature file
-
+<expression> : a | Number | c
+<expression> : a | Number | c

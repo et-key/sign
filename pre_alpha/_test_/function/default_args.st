@@ -1,9 +1,7 @@
-// Auto-generated type signature file
-
-type func_with_defaults : (x: f64, y: f64) -> f64
-value result1 : f64
-value result2 : f64
-value result3 : f64
-value result4 : f64
-value result5 : f64
-value result6 : f64
+func_with_defaults : (Tuple(String, String) -> Number)
+result1 : Number
+result2 : Tuple(Tuple((Tuple(String, String) -> Number), Number), String)
+result3 : Tuple((String -> Number), Number)
+result4 : Tuple(Tuple((Tuple(String, String) -> Number), Number), Number)
+result5 : Tuple(Tuple((Tuple(String, String) -> Number), Number), Number) | Unit
+result6 : Tuple(Tuple((Tuple(String, String) -> Number), Number), Number) | Unit

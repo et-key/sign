@@ -3,65 +3,88 @@
     "type": "operation",
     "operator": ":",
     "left": {
-      "type": "operation",
-      "operator": "+",
-      "semantic_tag": "point_free_function",
-      "inferred_type": "function"
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "operation",
+        "operator": "+",
+        "type_detail": {
+          "paramType": {
+            "types": [
+              {
+                "name": "T0"
+              },
+              {
+                "name": "T1"
+              }
+            ]
+          },
+          "returnType": {
+            "name": "String"
+          }
+        }
+      }
     },
     "right": {
       "type": "operation",
       "operator": "?",
       "left": {
-        "type": "coproduct_block",
-        "statements": [
-          "<x>",
-          "<y>"
-        ]
+        "type": "operation",
+        "operator": " ",
+        "left": "<x>",
+        "right": "<y>",
+        "name": "apply_or_concat",
+        "type_detail": {
+          "types": [
+            {
+              "name": "T0"
+            },
+            {
+              "name": "T1"
+            }
+          ]
+        }
       },
       "right": "_",
       "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 1
+        "paramType": {
+          "types": [
+            {
+              "name": "T0"
+            },
+            {
+              "name": "T1"
+            }
+          ]
         },
-        "ret": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TVar",
-            "id": 2
-          },
-          "ret": {
-            "tag": "TUnit"
-          }
+        "returnType": {
+          "name": "String"
         }
       }
     },
     "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TVar",
-        "id": 1
+      "paramType": {
+        "types": [
+          {
+            "name": "T0"
+          },
+          {
+            "name": "T1"
+          }
+        ]
       },
-      "ret": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 2
-        },
-        "ret": {
-          "tag": "TUnit"
-        }
+      "returnType": {
+        "name": "String"
       }
     }
   },
   {
     "type": "operation",
     "operator": ":",
-    "right": {
-      "type": "operation",
-      "operator": "?",
-      "left": {
+    "left": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
         "type": "block",
         "kind": "group",
         "content": {
@@ -70,65 +93,79 @@
           "right": {
             "type": "operation",
             "operator": "/",
-            "semantic_tag": "point_free_function",
-            "inferred_type": "function"
+            "type_detail": {
+              "name": "T5"
+            }
           },
-          "semantic_tag": "point_free_function",
-          "inferred_type": "function"
+          "type_detail": {
+            "paramType": {
+              "types": [
+                {
+                  "name": "T3"
+                },
+                {
+                  "name": "T4"
+                }
+              ]
+            },
+            "returnType": {
+              "name": "String"
+            }
+          }
         }
-      },
-      "right": {
+      }
+    },
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": {
         "type": "operation",
-        "statements": [
-          "<x>",
-          "<y>"
-        ],
-        "operator": "concat",
+        "operator": " ",
         "left": "<x>",
         "right": "<y>",
-        "semantic_tag": "list_composition",
+        "name": "apply_or_concat",
         "type_detail": {
-          "tag": "TProd",
-          "elements": [
+          "types": [
             {
-              "tag": "TVar",
-              "id": 3
+              "name": "T3"
             },
             {
-              "tag": "TVar",
-              "id": 4
+              "name": "T4"
             }
           ]
         }
       },
+      "right": "<String>",
       "type_detail": {
-        "tag": "TProd",
-        "elements": [
-          {
-            "tag": "TVar",
-            "id": 3
-          },
-          {
-            "tag": "TVar",
-            "id": 4
-          }
-        ]
+        "paramType": {
+          "types": [
+            {
+              "name": "T3"
+            },
+            {
+              "name": "T4"
+            }
+          ]
+        },
+        "returnType": {
+          "name": "String"
+        }
       }
     },
-    "semantic_tag": "point_free_function",
-    "inferred_type": "function",
     "type_detail": {
-      "tag": "TProd",
-      "elements": [
-        {
-          "tag": "TVar",
-          "id": 3
-        },
-        {
-          "tag": "TVar",
-          "id": 4
-        }
-      ]
+      "paramType": {
+        "types": [
+          {
+            "name": "T3"
+          },
+          {
+            "name": "T4"
+          }
+        ]
+      },
+      "returnType": {
+        "name": "String"
+      }
     }
   },
   {
@@ -137,8 +174,7 @@
     "left": "1",
     "right": "2",
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "name": "Number"
     }
   },
   {
@@ -150,15 +186,18 @@
       "left": "3",
       "right": "8",
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "name": "Number"
       }
     },
-    "semantic_tag": "point_free_function",
-    "inferred_type": "function",
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "types": [
+        {
+          "name": "Unit"
+        },
+        {
+          "name": "Number"
+        }
+      ]
     }
   }
 ]

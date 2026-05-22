@@ -13,45 +13,24 @@
         "left": "<x>",
         "right": "2",
         "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "Number"
         }
       },
       "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TVar",
-            "id": 3
-          },
-          "ret": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
+        "paramType": {
+          "name": "Number"
         },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
+        "returnType": {
+          "name": "Number"
         }
       }
     },
     "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 3
-        },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+      "paramType": {
+        "name": "Number"
       },
-      "ret": {
-        "tag": "TPrim",
-        "name": "f64"
+      "returnType": {
+        "name": "Number"
       }
     }
   },
@@ -69,31 +48,24 @@
         "left": "<x>",
         "right": "1",
         "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "Number"
         }
       },
       "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 3
+        "paramType": {
+          "name": "Number"
         },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
+        "returnType": {
+          "name": "Number"
         }
       }
     },
     "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TVar",
-        "id": 3
+      "paramType": {
+        "name": "Number"
       },
-      "ret": {
-        "tag": "TPrim",
-        "name": "f64"
+      "returnType": {
+        "name": "Number"
       }
     }
   },
@@ -103,33 +75,30 @@
     "left": "<result>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<f>",
-        "<g>",
-        "3"
-      ],
-      "operator": "apply",
+      "operator": " ",
       "left": {
         "type": "operation",
-        "operator": "apply",
+        "operator": " ",
         "left": "<f>",
         "right": "<g>",
-        "semantic_tag": "application",
+        "name": "compose",
         "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
+          "paramType": {
+            "name": "Number"
+          },
+          "returnType": {
+            "name": "Number"
+          }
         }
       },
       "right": "3",
-      "semantic_tag": "application",
+      "name": "apply",
       "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
+        "name": "Number"
       }
     },
     "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "name": "Number"
     }
   }
 ]

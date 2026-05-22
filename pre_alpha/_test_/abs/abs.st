@@ -1,2 +1,4 @@
-// Auto-generated type signature file
-
+<expression> : Number
+<expression> : Number
+<expression> : Number
+<expression> : Number

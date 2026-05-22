@@ -13,31 +13,24 @@
         "left": "<x>",
         "right": "2",
         "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "Number"
         }
       },
       "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TPrim",
-          "name": "f64"
+        "paramType": {
+          "name": "Number"
         },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
+        "returnType": {
+          "name": "Number"
         }
       }
     },
     "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TPrim",
-        "name": "f64"
+      "paramType": {
+        "name": "Number"
       },
-      "ret": {
-        "tag": "TPrim",
-        "name": "f64"
+      "returnType": {
+        "name": "Number"
       }
     }
   },
@@ -49,123 +42,234 @@
       "type": "operation",
       "operator": "?",
       "left": {
-        "type": "coproduct_block",
-        "statements": [
-          "<g>",
-          "<x>",
-          {
-            "type": "operation",
-            "operator": "~",
-            "operand": "<y>",
-            "position": "prefix",
-            "semantic_tag": "inductive_boundary"
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": "<g>",
+          "right": "<x>",
+          "name": "apply_or_concat",
+          "type_detail": {
+            "types": [
+              {
+                "name": "T2"
+              },
+              {
+                "name": "T3"
+              }
+            ]
           }
-        ]
+        },
+        "right": {
+          "type": "operation",
+          "operator": "~",
+          "operand": "<y>",
+          "position": "prefix",
+          "type_detail": {
+            "type": {
+              "name": "T4"
+            }
+          }
+        },
+        "name": "apply_or_concat",
+        "type_detail": {
+          "types": [
+            {
+              "name": "T2"
+            },
+            {
+              "name": "T3"
+            },
+            {
+              "type": {
+                "name": "T4"
+              }
+            }
+          ]
+        }
       },
       "right": {
         "type": "operation",
-        "statements": [
-          {
+        "operator": " ",
+        "left": {
+          "type": "block",
+          "kind": "bracket",
+          "content": {
             "type": "block",
             "kind": "group",
             "content": {
               "type": "operation",
-              "statements": [
-                {
-                  "type": "operation",
-                  "operator": "@",
-                  "operand": "<g>",
-                  "position": "prefix",
-                  "type_detail": {
-                    "tag": "TFun",
-                    "param": {
-                      "tag": "TPrim",
-                      "name": "f64"
-                    },
-                    "ret": {
-                      "tag": "TPrim",
-                      "name": "f64"
-                    }
-                  }
-                },
-                "<x>"
-              ],
-              "operator": "apply",
+              "operator": " ",
               "left": {
                 "type": "operation",
                 "operator": "@",
                 "operand": "<g>",
                 "position": "prefix",
                 "type_detail": {
-                  "tag": "TFun",
-                  "param": {
-                    "tag": "TPrim",
-                    "name": "f64"
+                  "paramType": {
+                    "name": "T3"
                   },
-                  "ret": {
-                    "tag": "TPrim",
-                    "name": "f64"
+                  "returnType": {
+                    "paramType": {
+                      "name": "T9"
+                    },
+                    "returnType": {
+                      "paramType": {
+                        "name": "Number"
+                      },
+                      "returnType": {
+                        "paramType": {
+                          "name": "Number"
+                        },
+                        "returnType": {
+                          "paramType": {
+                            "name": "Number"
+                          },
+                          "returnType": {
+                            "paramType": {
+                              "name": "Number"
+                            },
+                            "returnType": {
+                              "paramType": {
+                                "name": "Number"
+                              },
+                              "returnType": {
+                                "name": "T26"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               },
               "right": "<x>",
-              "semantic_tag": "application",
+              "name": "apply",
               "type_detail": {
-                "tag": "TPrim",
-                "name": "f64"
+                "paramType": {
+                  "name": "T9"
+                },
+                "returnType": {
+                  "paramType": {
+                    "name": "Number"
+                  },
+                  "returnType": {
+                    "paramType": {
+                      "name": "Number"
+                    },
+                    "returnType": {
+                      "paramType": {
+                        "name": "Number"
+                      },
+                      "returnType": {
+                        "paramType": {
+                          "name": "Number"
+                        },
+                        "returnType": {
+                          "paramType": {
+                            "name": "Number"
+                          },
+                          "returnType": {
+                            "name": "T26"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
               }
             },
             "type_detail": {
-              "tag": "TPrim",
-              "name": "f64"
+              "paramType": {
+                "name": "T9"
+              },
+              "returnType": {
+                "paramType": {
+                  "name": "Number"
+                },
+                "returnType": {
+                  "paramType": {
+                    "name": "Number"
+                  },
+                  "returnType": {
+                    "paramType": {
+                      "name": "Number"
+                    },
+                    "returnType": {
+                      "paramType": {
+                        "name": "Number"
+                      },
+                      "returnType": {
+                        "paramType": {
+                          "name": "Number"
+                        },
+                        "returnType": {
+                          "name": "T26"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           },
-          {
+          "type_detail": {
+            "paramType": {
+              "name": "T9"
+            },
+            "returnType": {
+              "paramType": {
+                "name": "Number"
+              },
+              "returnType": {
+                "paramType": {
+                  "name": "Number"
+                },
+                "returnType": {
+                  "paramType": {
+                    "name": "Number"
+                  },
+                  "returnType": {
+                    "paramType": {
+                      "name": "Number"
+                    },
+                    "returnType": {
+                      "paramType": {
+                        "name": "Number"
+                      },
+                      "returnType": {
+                        "name": "T26"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "right": {
+          "type": "block",
+          "kind": "bracket",
+          "content": {
             "type": "block",
             "kind": "group",
             "content": {
               "type": "operation",
-              "statements": [
-                "<map>",
-                "<g>",
-                {
-                  "type": "operation",
-                  "operator": "~",
-                  "operand": "<y>",
-                  "position": "postfix",
-                  "semantic_tag": "inductive_expansion",
-                  "type_detail": {
-                    "tag": "TList",
-                    "elem": {
-                      "tag": "TPrim",
-                      "name": "f64"
-                    }
-                  }
-                }
-              ],
-              "operator": "apply",
+              "operator": " ",
               "left": {
                 "type": "operation",
-                "operator": "apply",
+                "operator": " ",
                 "left": "<map>",
                 "right": "<g>",
-                "semantic_tag": "application",
+                "name": "apply",
                 "type_detail": {
-                  "tag": "TFun",
-                  "param": {
-                    "tag": "TPrim",
-                    "name": "f64"
+                  "paramType": {
+                    "name": "T8"
                   },
-                  "ret": {
-                    "tag": "TFun",
-                    "param": {
-                      "tag": "TPrim",
-                      "name": "f64"
-                    },
-                    "ret": {
-                      "tag": "TVar",
-                      "id": 14
-                    }
+                  "returnType": {
+                    "name": "T9"
                   }
                 }
               },
@@ -174,263 +278,140 @@
                 "operator": "~",
                 "operand": "<y>",
                 "position": "postfix",
-                "semantic_tag": "inductive_expansion",
                 "type_detail": {
-                  "tag": "TList",
-                  "elem": {
-                    "tag": "TPrim",
-                    "name": "f64"
-                  }
+                  "name": "T8"
                 }
               },
-              "semantic_tag": "application",
+              "name": "apply",
               "type_detail": {
-                "tag": "TVar",
-                "id": 14
+                "name": "T9"
               }
             },
             "type_detail": {
-              "tag": "TVar",
-              "id": 14
-            }
-          }
-        ],
-        "operator": "concat",
-        "left": {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "statements": [
-              {
-                "type": "operation",
-                "operator": "@",
-                "operand": "<g>",
-                "position": "prefix",
-                "type_detail": {
-                  "tag": "TFun",
-                  "param": {
-                    "tag": "TPrim",
-                    "name": "f64"
-                  },
-                  "ret": {
-                    "tag": "TPrim",
-                    "name": "f64"
-                  }
-                }
-              },
-              "<x>"
-            ],
-            "operator": "apply",
-            "left": {
-              "type": "operation",
-              "operator": "@",
-              "operand": "<g>",
-              "position": "prefix",
-              "type_detail": {
-                "tag": "TFun",
-                "param": {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                "ret": {
-                  "tag": "TPrim",
-                  "name": "f64"
-                }
-              }
-            },
-            "right": "<x>",
-            "semantic_tag": "application",
-            "type_detail": {
-              "tag": "TPrim",
-              "name": "f64"
+              "name": "T9"
             }
           },
           "type_detail": {
-            "tag": "TPrim",
-            "name": "f64"
+            "name": "T9"
           }
         },
-        "right": {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "statements": [
-              "<map>",
-              "<g>",
-              {
-                "type": "operation",
-                "operator": "~",
-                "operand": "<y>",
-                "position": "postfix",
-                "semantic_tag": "inductive_expansion",
-                "type_detail": {
-                  "tag": "TList",
-                  "elem": {
-                    "tag": "TPrim",
-                    "name": "f64"
-                  }
-                }
-              }
-            ],
-            "operator": "apply",
-            "left": {
-              "type": "operation",
-              "operator": "apply",
-              "left": "<map>",
-              "right": "<g>",
-              "semantic_tag": "application",
-              "type_detail": {
-                "tag": "TFun",
-                "param": {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                "ret": {
-                  "tag": "TFun",
-                  "param": {
-                    "tag": "TPrim",
-                    "name": "f64"
-                  },
-                  "ret": {
-                    "tag": "TVar",
-                    "id": 14
-                  }
-                }
-              }
-            },
-            "right": {
-              "type": "operation",
-              "operator": "~",
-              "operand": "<y>",
-              "position": "postfix",
-              "semantic_tag": "inductive_expansion",
-              "type_detail": {
-                "tag": "TList",
-                "elem": {
-                  "tag": "TPrim",
-                  "name": "f64"
-                }
-              }
-            },
-            "semantic_tag": "application",
-            "type_detail": {
-              "tag": "TVar",
-              "id": 14
-            }
-          },
-          "type_detail": {
-            "tag": "TVar",
-            "id": 14
-          }
-        },
-        "semantic_tag": "list_composition",
+        "name": "apply",
         "type_detail": {
-          "tag": "TProd",
-          "elements": [
-            {
-              "tag": "TPrim",
-              "name": "f64"
+          "paramType": {
+            "name": "Number"
+          },
+          "returnType": {
+            "paramType": {
+              "name": "Number"
             },
-            {
-              "tag": "TVar",
-              "id": 14
+            "returnType": {
+              "paramType": {
+                "name": "Number"
+              },
+              "returnType": {
+                "paramType": {
+                  "name": "Number"
+                },
+                "returnType": {
+                  "paramType": {
+                    "name": "Number"
+                  },
+                  "returnType": {
+                    "name": "T26"
+                  }
+                }
+              }
             }
-          ]
+          }
         }
       },
       "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TAddr",
-          "target": {
-            "tag": "TFun",
-            "param": {
-              "tag": "TPrim",
-              "name": "f64"
+        "paramType": {
+          "types": [
+            {
+              "name": "T2"
             },
-            "ret": {
-              "tag": "TPrim",
-              "name": "f64"
-            }
-          }
-        },
-        "ret": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "ret": {
-            "tag": "TFun",
-            "param": {
-              "tag": "TList",
-              "elem": {
-                "tag": "TPrim",
-                "name": "f64"
+            {
+              "name": "T3"
+            },
+            {
+              "type": {
+                "name": "T4"
               }
+            }
+          ]
+        },
+        "returnType": {
+          "paramType": {
+            "name": "Number"
+          },
+          "returnType": {
+            "paramType": {
+              "name": "Number"
             },
-            "ret": {
-              "tag": "TProd",
-              "elements": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
+            "returnType": {
+              "paramType": {
+                "name": "Number"
+              },
+              "returnType": {
+                "paramType": {
+                  "name": "Number"
                 },
-                {
-                  "tag": "TVar",
-                  "id": 14
+                "returnType": {
+                  "paramType": {
+                    "name": "Number"
+                  },
+                  "returnType": {
+                    "name": "T26"
+                  }
                 }
-              ]
+              }
             }
           }
         }
       }
     },
     "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TAddr",
-        "target": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
+      "paramType": {
+        "types": [
+          {
+            "name": "T2"
           },
-          "ret": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
-        }
-      },
-      "ret": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TPrim",
-          "name": "f64"
-        },
-        "ret": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TList",
-            "elem": {
-              "tag": "TPrim",
-              "name": "f64"
+          {
+            "name": "T3"
+          },
+          {
+            "type": {
+              "name": "T4"
             }
+          }
+        ]
+      },
+      "returnType": {
+        "paramType": {
+          "name": "Number"
+        },
+        "returnType": {
+          "paramType": {
+            "name": "Number"
           },
-          "ret": {
-            "tag": "TProd",
-            "elements": [
-              {
-                "tag": "TPrim",
-                "name": "f64"
+          "returnType": {
+            "paramType": {
+              "name": "Number"
+            },
+            "returnType": {
+              "paramType": {
+                "name": "Number"
               },
-              {
-                "tag": "TVar",
-                "id": 14
+              "returnType": {
+                "paramType": {
+                  "name": "Number"
+                },
+                "returnType": {
+                  "name": "T26"
+                }
               }
-            ]
+            }
           }
         }
       }
@@ -442,177 +423,156 @@
     "left": "<result_map1>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<map>",
-        {
-          "type": "operation",
-          "operator": "$",
-          "operand": "<f>",
-          "position": "prefix",
-          "semantic_tag": "smart_pointer",
-          "type_detail": {
-            "tag": "TAddr",
-            "target": {
-              "tag": "TFun",
-              "param": {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              "ret": {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            }
-          }
-        },
-        "1",
-        "2",
-        "3",
-        "4",
-        "5"
-      ],
-      "operator": "apply",
+      "operator": " ",
       "left": {
         "type": "operation",
-        "operator": "apply",
-        "left": "<map>",
-        "right": {
-          "type": "operation",
-          "operator": "$",
-          "operand": "<f>",
-          "position": "prefix",
-          "semantic_tag": "smart_pointer",
-          "type_detail": {
-            "tag": "TAddr",
-            "target": {
-              "tag": "TFun",
-              "param": {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              "ret": {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            }
-          }
-        },
-        "semantic_tag": "application",
-        "type_detail": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "ret": {
-            "tag": "TFun",
-            "param": {
-              "tag": "TList",
-              "elem": {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            },
-            "ret": {
-              "tag": "TProd",
-              "elements": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TVar",
-                  "id": 14
-                }
-              ]
-            }
-          }
-        }
-      },
-      "right": {
-        "type": "operation",
-        "operator": "concat",
+        "operator": " ",
         "left": {
           "type": "operation",
-          "operator": "concat",
+          "operator": " ",
           "left": {
             "type": "operation",
-            "operator": "concat",
+            "operator": " ",
             "left": {
               "type": "operation",
-              "operator": "concat",
-              "left": "1",
-              "right": "2",
-              "semantic_tag": "list_composition",
-              "type_detail": {
-                "tag": "TArray",
-                "elem": {
-                  "tag": "TPrim",
-                  "name": "f64"
+              "operator": " ",
+              "left": {
+                "type": "operation",
+                "operator": " ",
+                "left": "<map>",
+                "right": {
+                  "type": "operation",
+                  "operator": "$",
+                  "operand": "<f>",
+                  "position": "prefix",
+                  "type_detail": {
+                    "types": [
+                      {
+                        "name": "T2"
+                      },
+                      {
+                        "name": "T3"
+                      },
+                      {
+                        "type": {
+                          "name": "T4"
+                        }
+                      }
+                    ]
+                  }
                 },
-                "length": 2
+                "name": "apply",
+                "type_detail": {
+                  "paramType": {
+                    "name": "Number"
+                  },
+                  "returnType": {
+                    "paramType": {
+                      "name": "Number"
+                    },
+                    "returnType": {
+                      "paramType": {
+                        "name": "Number"
+                      },
+                      "returnType": {
+                        "paramType": {
+                          "name": "Number"
+                        },
+                        "returnType": {
+                          "paramType": {
+                            "name": "Number"
+                          },
+                          "returnType": {
+                            "name": "T26"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "right": "1",
+              "name": "apply",
+              "type_detail": {
+                "paramType": {
+                  "name": "Number"
+                },
+                "returnType": {
+                  "paramType": {
+                    "name": "Number"
+                  },
+                  "returnType": {
+                    "paramType": {
+                      "name": "Number"
+                    },
+                    "returnType": {
+                      "paramType": {
+                        "name": "Number"
+                      },
+                      "returnType": {
+                        "name": "T26"
+                      }
+                    }
+                  }
+                }
               }
             },
-            "right": "3",
-            "semantic_tag": "list_composition",
+            "right": "2",
+            "name": "apply",
             "type_detail": {
-              "tag": "TArray",
-              "elem": {
-                "tag": "TPrim",
-                "name": "f64"
+              "paramType": {
+                "name": "Number"
               },
-              "length": 3
+              "returnType": {
+                "paramType": {
+                  "name": "Number"
+                },
+                "returnType": {
+                  "paramType": {
+                    "name": "Number"
+                  },
+                  "returnType": {
+                    "name": "T26"
+                  }
+                }
+              }
             }
           },
-          "right": "4",
-          "semantic_tag": "list_composition",
+          "right": "3",
+          "name": "apply",
           "type_detail": {
-            "tag": "TArray",
-            "elem": {
-              "tag": "TPrim",
-              "name": "f64"
+            "paramType": {
+              "name": "Number"
             },
-            "length": 4
+            "returnType": {
+              "paramType": {
+                "name": "Number"
+              },
+              "returnType": {
+                "name": "T26"
+              }
+            }
           }
         },
-        "right": "5",
-        "semantic_tag": "list_composition",
+        "right": "4",
+        "name": "apply",
         "type_detail": {
-          "tag": "TArray",
-          "elem": {
-            "tag": "TPrim",
-            "name": "f64"
+          "paramType": {
+            "name": "Number"
           },
-          "length": 5
+          "returnType": {
+            "name": "T26"
+          }
         }
       },
-      "semantic_tag": "application",
+      "right": "5",
+      "name": "apply",
       "type_detail": {
-        "tag": "TProd",
-        "elements": [
-          {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          {
-            "tag": "TVar",
-            "id": 14
-          }
-        ]
+        "name": "T26"
       }
     },
     "type_detail": {
-      "tag": "TProd",
-      "elements": [
-        {
-          "tag": "TPrim",
-          "name": "f64"
-        },
-        {
-          "tag": "TVar",
-          "id": 14
-        }
-      ]
+      "name": "T26"
     }
   },
   {
@@ -621,333 +581,387 @@
     "left": "<result_map2>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<map>",
-        {
-          "type": "operation",
-          "operator": "$",
-          "operand": {
-            "type": "block",
-            "kind": "group",
-            "content": {
-              "type": "block",
-              "kind": "group",
-              "content": "\"__Lambda__[0]\"",
-              "type_detail": {
-                "tag": "TFun",
-                "param": {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                "ret": {
-                  "tag": "TPrim",
-                  "name": "f64"
-                }
-              }
-            },
-            "type_detail": {
-              "tag": "TFun",
-              "param": {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              "ret": {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            }
-          },
-          "position": "prefix",
-          "semantic_tag": "smart_pointer",
-          "type_detail": {
-            "tag": "TAddr",
-            "target": {
-              "tag": "TFun",
-              "param": {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              "ret": {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            }
-          }
-        },
-        "1",
-        "2",
-        "3",
-        "4",
-        "5"
-      ],
-      "operator": "apply",
+      "operator": " ",
       "left": {
         "type": "operation",
-        "operator": "apply",
-        "left": "<map>",
-        "right": {
-          "type": "operation",
-          "operator": "$",
-          "operand": {
-            "type": "block",
-            "kind": "group",
-            "content": {
-              "type": "block",
-              "kind": "group",
-              "content": "\"__Lambda__[0]\"",
-              "type_detail": {
-                "tag": "TFun",
-                "param": {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                "ret": {
-                  "tag": "TPrim",
-                  "name": "f64"
-                }
-              }
-            },
-            "type_detail": {
-              "tag": "TFun",
-              "param": {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              "ret": {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            }
-          },
-          "position": "prefix",
-          "semantic_tag": "smart_pointer",
-          "type_detail": {
-            "tag": "TAddr",
-            "target": {
-              "tag": "TFun",
-              "param": {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              "ret": {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            }
-          }
-        },
-        "semantic_tag": "application",
-        "type_detail": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "ret": {
-            "tag": "TFun",
-            "param": {
-              "tag": "TList",
-              "elem": {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            },
-            "ret": {
-              "tag": "TProd",
-              "elements": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TVar",
-                  "id": 14
-                }
-              ]
-            }
-          }
-        }
-      },
-      "right": {
-        "type": "operation",
-        "operator": "concat",
+        "operator": " ",
         "left": {
           "type": "operation",
-          "operator": "concat",
+          "operator": " ",
           "left": {
             "type": "operation",
-            "operator": "concat",
+            "operator": " ",
             "left": {
               "type": "operation",
-              "operator": "concat",
-              "left": "1",
-              "right": "2",
-              "semantic_tag": "list_composition",
-              "type_detail": {
-                "tag": "TArray",
-                "elem": {
-                  "tag": "TPrim",
-                  "name": "f64"
+              "operator": " ",
+              "left": {
+                "type": "operation",
+                "operator": " ",
+                "left": "<map>",
+                "right": {
+                  "type": "operation",
+                  "operator": "$",
+                  "operand": {
+                    "type": "block",
+                    "kind": "bracket",
+                    "content": {
+                      "type": "block",
+                      "kind": "group",
+                      "content": "<lambda_0>",
+                      "type_detail": {
+                        "paramType": {
+                          "name": "Number"
+                        },
+                        "returnType": {
+                          "name": "Number"
+                        }
+                      }
+                    },
+                    "type_detail": {
+                      "paramType": {
+                        "name": "Number"
+                      },
+                      "returnType": {
+                        "name": "Number"
+                      }
+                    }
+                  },
+                  "position": "prefix",
+                  "type_detail": {
+                    "types": [
+                      {
+                        "name": "T2"
+                      },
+                      {
+                        "name": "T3"
+                      },
+                      {
+                        "type": {
+                          "name": "T4"
+                        }
+                      }
+                    ]
+                  }
                 },
-                "length": 2
+                "name": "apply",
+                "type_detail": {
+                  "paramType": {
+                    "name": "Number"
+                  },
+                  "returnType": {
+                    "paramType": {
+                      "name": "Number"
+                    },
+                    "returnType": {
+                      "paramType": {
+                        "name": "Number"
+                      },
+                      "returnType": {
+                        "paramType": {
+                          "name": "Number"
+                        },
+                        "returnType": {
+                          "paramType": {
+                            "name": "Number"
+                          },
+                          "returnType": {
+                            "name": "T26"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "right": "1",
+              "name": "apply",
+              "type_detail": {
+                "paramType": {
+                  "name": "Number"
+                },
+                "returnType": {
+                  "paramType": {
+                    "name": "Number"
+                  },
+                  "returnType": {
+                    "paramType": {
+                      "name": "Number"
+                    },
+                    "returnType": {
+                      "paramType": {
+                        "name": "Number"
+                      },
+                      "returnType": {
+                        "name": "T26"
+                      }
+                    }
+                  }
+                }
               }
             },
-            "right": "3",
-            "semantic_tag": "list_composition",
+            "right": "2",
+            "name": "apply",
             "type_detail": {
-              "tag": "TArray",
-              "elem": {
-                "tag": "TPrim",
-                "name": "f64"
+              "paramType": {
+                "name": "Number"
               },
-              "length": 3
+              "returnType": {
+                "paramType": {
+                  "name": "Number"
+                },
+                "returnType": {
+                  "paramType": {
+                    "name": "Number"
+                  },
+                  "returnType": {
+                    "name": "T26"
+                  }
+                }
+              }
             }
           },
-          "right": "4",
-          "semantic_tag": "list_composition",
+          "right": "3",
+          "name": "apply",
           "type_detail": {
-            "tag": "TArray",
-            "elem": {
-              "tag": "TPrim",
-              "name": "f64"
+            "paramType": {
+              "name": "Number"
             },
-            "length": 4
+            "returnType": {
+              "paramType": {
+                "name": "Number"
+              },
+              "returnType": {
+                "name": "T26"
+              }
+            }
           }
         },
-        "right": "5",
-        "semantic_tag": "list_composition",
+        "right": "4",
+        "name": "apply",
         "type_detail": {
-          "tag": "TArray",
-          "elem": {
-            "tag": "TPrim",
-            "name": "f64"
+          "paramType": {
+            "name": "Number"
           },
-          "length": 5
+          "returnType": {
+            "name": "T26"
+          }
         }
       },
-      "semantic_tag": "application",
+      "right": "5",
+      "name": "apply",
       "type_detail": {
-        "tag": "TProd",
-        "elements": [
-          {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          {
-            "tag": "TVar",
-            "id": 14
-          }
-        ]
+        "name": "T26"
       }
     },
     "type_detail": {
-      "tag": "TProd",
-      "elements": [
-        {
-          "tag": "TPrim",
-          "name": "f64"
-        },
-        {
-          "tag": "TVar",
-          "id": 14
-        }
-      ]
+      "name": "T26"
     }
   },
   {
     "type": "operation",
     "operator": ":",
+    "left": "<result_sum>",
     "right": {
       "type": "operation",
-      "statements": [
-        {
-          "type": "operation",
-          "operator": "+",
-          "left": "<result_sum>",
-          "right": "1",
-          "type_detail": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
-        },
-        "2",
-        "3",
-        "4",
-        "5"
-      ],
-      "operator": "concat",
+      "operator": " ",
       "left": {
         "type": "operation",
-        "operator": "concat",
+        "operator": " ",
         "left": {
           "type": "operation",
-          "operator": "concat",
+          "operator": " ",
           "left": {
             "type": "operation",
-            "operator": "concat",
+            "operator": " ",
             "left": {
               "type": "operation",
-              "operator": "+",
-              "left": "<result_sum>",
+              "operator": " ",
+              "left": {
+                "type": "block",
+                "kind": "bracket",
+                "content": {
+                  "type": "operation",
+                  "operator": "+",
+                  "type_detail": {
+                    "name": "Number"
+                  }
+                },
+                "type_detail": {
+                  "name": "Number"
+                }
+              },
               "right": "1",
+              "name": "concat",
               "type_detail": {
-                "tag": "TPrim",
-                "name": "f64"
+                "types": [
+                  {
+                    "name": "Number"
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
               }
             },
             "right": "2",
-            "semantic_tag": "list_composition",
+            "name": "concat",
             "type_detail": {
-              "tag": "TArray",
-              "elem": {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              "length": 2
+              "types": [
+                {
+                  "types": [
+                    {
+                      "name": "Number"
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
+                },
+                {
+                  "name": "Number"
+                }
+              ]
             }
           },
           "right": "3",
-          "semantic_tag": "list_composition",
+          "name": "concat",
           "type_detail": {
-            "tag": "TArray",
-            "elem": {
-              "tag": "TPrim",
-              "name": "f64"
-            },
-            "length": 3
+            "types": [
+              {
+                "types": [
+                  {
+                    "types": [
+                      {
+                        "name": "Number"
+                      },
+                      {
+                        "name": "Number"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
           }
         },
         "right": "4",
-        "semantic_tag": "list_composition",
+        "name": "concat",
         "type_detail": {
-          "tag": "TArray",
-          "elem": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "length": 4
+          "types": [
+            {
+              "types": [
+                {
+                  "types": [
+                    {
+                      "types": [
+                        {
+                          "name": "Number"
+                        },
+                        {
+                          "name": "Number"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
         }
       },
       "right": "5",
-      "semantic_tag": "list_composition",
+      "name": "concat",
       "type_detail": {
-        "tag": "TArray",
-        "elem": {
-          "tag": "TPrim",
-          "name": "f64"
-        },
-        "length": 5
+        "types": [
+          {
+            "types": [
+              {
+                "types": [
+                  {
+                    "types": [
+                      {
+                        "types": [
+                          {
+                            "name": "Number"
+                          },
+                          {
+                            "name": "Number"
+                          }
+                        ]
+                      },
+                      {
+                        "name": "Number"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
       }
     },
-    "semantic_tag": "point_free_function",
-    "inferred_type": "function",
     "type_detail": {
-      "tag": "TArray",
-      "elem": {
-        "tag": "TPrim",
-        "name": "f64"
-      },
-      "length": 5
+      "types": [
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "types": [
+                    {
+                      "types": [
+                        {
+                          "name": "Number"
+                        },
+                        {
+                          "name": "Number"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "name": "Number"
+        }
+      ]
     }
   },
   {
@@ -956,146 +970,283 @@
     "left": "<result_partial>",
     "right": {
       "type": "operation",
-      "statements": [
-        {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": ",",
-            "right": {
-              "type": "operation",
-              "operator": "+",
-              "right": "2",
-              "semantic_tag": "point_free_function",
-              "inferred_type": "function",
-              "type_detail": {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            },
-            "semantic_tag": "vectorized_function",
-            "inferred_type": "function",
-            "type_detail": {
-              "tag": "TPrim",
-              "name": "f64"
-            }
-          },
-          "type_detail": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
-        },
-        "1",
-        "2",
-        "3",
-        "4",
-        "5"
-      ],
-      "operator": "concat",
+      "operator": " ",
       "left": {
         "type": "operation",
-        "operator": "concat",
+        "operator": " ",
         "left": {
           "type": "operation",
-          "operator": "concat",
+          "operator": " ",
           "left": {
             "type": "operation",
-            "operator": "concat",
+            "operator": " ",
             "left": {
               "type": "operation",
-              "operator": "concat",
+              "operator": " ",
               "left": {
                 "type": "block",
-                "kind": "group",
+                "kind": "bracket",
                 "content": {
-                  "type": "operation",
-                  "operator": ",",
-                  "right": {
+                  "type": "block",
+                  "kind": "group",
+                  "content": {
                     "type": "operation",
-                    "operator": "+",
-                    "right": "2",
-                    "semantic_tag": "point_free_function",
-                    "inferred_type": "function",
+                    "operator": ",",
+                    "right": {
+                      "type": "operation",
+                      "operator": "+",
+                      "right": "2",
+                      "type_detail": {
+                        "name": "Number"
+                      }
+                    },
                     "type_detail": {
-                      "tag": "TPrim",
-                      "name": "f64"
+                      "types": [
+                        {
+                          "name": "Unit"
+                        },
+                        {
+                          "name": "Number"
+                        }
+                      ]
                     }
                   },
-                  "semantic_tag": "vectorized_function",
-                  "inferred_type": "function",
                   "type_detail": {
-                    "tag": "TPrim",
-                    "name": "f64"
+                    "types": [
+                      {
+                        "name": "Unit"
+                      },
+                      {
+                        "name": "Number"
+                      }
+                    ]
                   }
                 },
                 "type_detail": {
-                  "tag": "TPrim",
-                  "name": "f64"
+                  "types": [
+                    {
+                      "name": "Unit"
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
                 }
               },
               "right": "1",
-              "semantic_tag": "list_composition",
+              "name": "concat",
               "type_detail": {
-                "tag": "TArray",
-                "elem": {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                "length": 2
+                "types": [
+                  {
+                    "types": [
+                      {
+                        "name": "Unit"
+                      },
+                      {
+                        "name": "Number"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
               }
             },
             "right": "2",
-            "semantic_tag": "list_composition",
+            "name": "concat",
             "type_detail": {
-              "tag": "TArray",
-              "elem": {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              "length": 3
+              "types": [
+                {
+                  "types": [
+                    {
+                      "types": [
+                        {
+                          "name": "Unit"
+                        },
+                        {
+                          "name": "Number"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
+                },
+                {
+                  "name": "Number"
+                }
+              ]
             }
           },
           "right": "3",
-          "semantic_tag": "list_composition",
+          "name": "concat",
           "type_detail": {
-            "tag": "TArray",
-            "elem": {
-              "tag": "TPrim",
-              "name": "f64"
-            },
-            "length": 4
+            "types": [
+              {
+                "types": [
+                  {
+                    "types": [
+                      {
+                        "types": [
+                          {
+                            "name": "Unit"
+                          },
+                          {
+                            "name": "Number"
+                          }
+                        ]
+                      },
+                      {
+                        "name": "Number"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
           }
         },
         "right": "4",
-        "semantic_tag": "list_composition",
+        "name": "concat",
         "type_detail": {
-          "tag": "TArray",
-          "elem": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "length": 5
+          "types": [
+            {
+              "types": [
+                {
+                  "types": [
+                    {
+                      "types": [
+                        {
+                          "types": [
+                            {
+                              "name": "Unit"
+                            },
+                            {
+                              "name": "Number"
+                            }
+                          ]
+                        },
+                        {
+                          "name": "Number"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
         }
       },
       "right": "5",
-      "semantic_tag": "list_composition",
+      "name": "concat",
       "type_detail": {
-        "tag": "TArray",
-        "elem": {
-          "tag": "TPrim",
-          "name": "f64"
-        },
-        "length": 6
+        "types": [
+          {
+            "types": [
+              {
+                "types": [
+                  {
+                    "types": [
+                      {
+                        "types": [
+                          {
+                            "types": [
+                              {
+                                "name": "Unit"
+                              },
+                              {
+                                "name": "Number"
+                              }
+                            ]
+                          },
+                          {
+                            "name": "Number"
+                          }
+                        ]
+                      },
+                      {
+                        "name": "Number"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
       }
     },
     "type_detail": {
-      "tag": "TArray",
-      "elem": {
-        "tag": "TPrim",
-        "name": "f64"
-      },
-      "length": 6
+      "types": [
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "types": [
+                    {
+                      "types": [
+                        {
+                          "types": [
+                            {
+                              "name": "Unit"
+                            },
+                            {
+                              "name": "Number"
+                            }
+                          ]
+                        },
+                        {
+                          "name": "Number"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "name": "Number"
+        }
+      ]
     }
   },
   {
@@ -1104,75 +1255,141 @@
     "left": "<test_array>",
     "right": {
       "type": "operation",
-      "statements": [
-        "1",
-        "2",
-        "3",
-        "4",
-        "5"
-      ],
-      "operator": "concat",
+      "operator": " ",
       "left": {
         "type": "operation",
-        "operator": "concat",
+        "operator": " ",
         "left": {
           "type": "operation",
-          "operator": "concat",
+          "operator": " ",
           "left": {
             "type": "operation",
-            "operator": "concat",
+            "operator": " ",
             "left": "1",
             "right": "2",
-            "semantic_tag": "list_composition",
+            "name": "concat",
             "type_detail": {
-              "tag": "TArray",
-              "elem": {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              "length": 2
+              "types": [
+                {
+                  "name": "Number"
+                },
+                {
+                  "name": "Number"
+                }
+              ]
             }
           },
           "right": "3",
-          "semantic_tag": "list_composition",
+          "name": "concat",
           "type_detail": {
-            "tag": "TArray",
-            "elem": {
-              "tag": "TPrim",
-              "name": "f64"
-            },
-            "length": 3
+            "types": [
+              {
+                "types": [
+                  {
+                    "name": "Number"
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
           }
         },
         "right": "4",
-        "semantic_tag": "list_composition",
+        "name": "concat",
         "type_detail": {
-          "tag": "TArray",
-          "elem": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "length": 4
+          "types": [
+            {
+              "types": [
+                {
+                  "types": [
+                    {
+                      "name": "Number"
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
         }
       },
       "right": "5",
-      "semantic_tag": "list_composition",
+      "name": "concat",
       "type_detail": {
-        "tag": "TArray",
-        "elem": {
-          "tag": "TPrim",
-          "name": "f64"
-        },
-        "length": 5
+        "types": [
+          {
+            "types": [
+              {
+                "types": [
+                  {
+                    "types": [
+                      {
+                        "name": "Number"
+                      },
+                      {
+                        "name": "Number"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
       }
     },
     "type_detail": {
-      "tag": "TArray",
-      "elem": {
-        "tag": "TPrim",
-        "name": "f64"
-      },
-      "length": 5
+      "types": [
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "types": [
+                    {
+                      "name": "Number"
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "name": "Number"
+        }
+      ]
     }
   },
   {
@@ -1181,66 +1398,58 @@
     "left": "<test_tuple>",
     "right": {
       "type": "operation",
-      "statements": [
-        "1",
-        "<a>",
-        "3"
-      ],
-      "operator": "concat",
+      "operator": " ",
       "left": {
         "type": "operation",
-        "operator": "concat",
+        "operator": " ",
         "left": "1",
         "right": "<a>",
-        "semantic_tag": "list_composition",
+        "name": "concat",
         "type_detail": {
-          "tag": "TProd",
-          "elements": [
+          "types": [
             {
-              "tag": "TPrim",
-              "name": "f64"
+              "name": "Number"
             },
             {
-              "tag": "TVar",
-              "id": 31
+              "name": "a"
             }
           ]
         }
       },
       "right": "3",
-      "semantic_tag": "list_composition",
+      "name": "concat",
       "type_detail": {
-        "tag": "TProd",
-        "elements": [
+        "types": [
           {
-            "tag": "TPrim",
-            "name": "f64"
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "name": "a"
+              }
+            ]
           },
           {
-            "tag": "TVar",
-            "id": 31
-          },
-          {
-            "tag": "TPrim",
-            "name": "f64"
+            "name": "Number"
           }
         ]
       }
     },
     "type_detail": {
-      "tag": "TProd",
-      "elements": [
+      "types": [
         {
-          "tag": "TPrim",
-          "name": "f64"
+          "types": [
+            {
+              "name": "Number"
+            },
+            {
+              "name": "a"
+            }
+          ]
         },
         {
-          "tag": "TVar",
-          "id": 31
-        },
-        {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "Number"
         }
       ]
     }
@@ -1248,7 +1457,7 @@
   {
     "type": "operation",
     "operator": ":",
-    "left": "\"__Lambda__[0]\"",
+    "left": "<lambda_0>",
     "right": {
       "type": "operation",
       "operator": "?",
@@ -1259,31 +1468,24 @@
         "left": "<x>",
         "right": "2",
         "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "Number"
         }
       },
       "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 33
+        "paramType": {
+          "name": "Number"
         },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
+        "returnType": {
+          "name": "Number"
         }
       }
     },
     "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TVar",
-        "id": 33
+      "paramType": {
+        "name": "Number"
       },
-      "ret": {
-        "tag": "TPrim",
-        "name": "f64"
+      "returnType": {
+        "name": "Number"
       }
     }
   }
