@@ -64,6 +64,13 @@
     }
   },
   "type_detail": {
-    "name": "Number"
+    "types": [
+      {
+        "name": "Number"
+      },
+      {
+        "name": "Unit"
+      }
+    ]
   }
 }

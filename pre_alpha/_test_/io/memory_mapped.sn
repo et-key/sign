@@ -1,0 +1,8 @@
+` Event loop mapped over generator
+map  :  g x ~y  ?  [@g x] [map g y~]
+
+` The IO handler that reads from 0x40000000 and writes to 0x40000004
+io_handler : x ? 0x40000004 # @0x40000000
+
+` Map IO handler over an infinite loop bounded by 10
+event_loop : map $io_handler [0 ~+ 1 ~ 10]~

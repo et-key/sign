@@ -1,1 +1,1 @@
-<expression> : Number
+<expression> : Number | Unit

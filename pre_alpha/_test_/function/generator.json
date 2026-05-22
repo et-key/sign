@@ -1,0 +1,490 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<f>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": "<x>",
+      "right": {
+        "type": "operation",
+        "operator": "*",
+        "left": "<x>",
+        "right": "2",
+        "type_detail": {
+          "name": "Number"
+        }
+      },
+      "type_detail": {
+        "paramType": {
+          "name": "Number"
+        },
+        "returnType": {
+          "name": "Number"
+        }
+      }
+    },
+    "type_detail": {
+      "paramType": {
+        "name": "Number"
+      },
+      "returnType": {
+        "name": "Number"
+      }
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<map>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": "<g>",
+          "right": "<x>",
+          "name": "apply_or_concat",
+          "type_detail": {
+            "types": [
+              {
+                "name": "Number"
+              },
+              {
+                "paramType": {
+                  "name": "Number"
+                },
+                "returnType": {
+                  "paramType": {
+                    "name": "T10"
+                  },
+                  "returnType": {
+                    "name": "T11"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "right": {
+          "type": "operation",
+          "operator": "~",
+          "operand": "<y>",
+          "position": "prefix",
+          "type_detail": {
+            "type": {
+              "name": "T4"
+            }
+          }
+        },
+        "name": "apply_or_concat",
+        "type_detail": {
+          "types": [
+            {
+              "name": "Number"
+            },
+            {
+              "paramType": {
+                "name": "Number"
+              },
+              "returnType": {
+                "paramType": {
+                  "name": "T10"
+                },
+                "returnType": {
+                  "name": "T11"
+                }
+              }
+            },
+            {
+              "type": {
+                "name": "T4"
+              }
+            }
+          ]
+        }
+      },
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "block",
+          "kind": "bracket",
+          "content": {
+            "type": "block",
+            "kind": "group",
+            "content": {
+              "type": "operation",
+              "operator": " ",
+              "left": {
+                "type": "operation",
+                "operator": "@",
+                "operand": "<g>",
+                "position": "prefix",
+                "type_detail": {
+                  "name": "Number"
+                }
+              },
+              "right": "<x>",
+              "name": "reverse_apply",
+              "type_detail": {
+                "paramType": {
+                  "name": "T10"
+                },
+                "returnType": {
+                  "name": "T11"
+                }
+              }
+            },
+            "type_detail": {
+              "paramType": {
+                "name": "T10"
+              },
+              "returnType": {
+                "name": "T11"
+              }
+            }
+          },
+          "type_detail": {
+            "paramType": {
+              "name": "T10"
+            },
+            "returnType": {
+              "name": "T11"
+            }
+          }
+        },
+        "right": {
+          "type": "block",
+          "kind": "bracket",
+          "content": {
+            "type": "block",
+            "kind": "group",
+            "content": {
+              "type": "operation",
+              "operator": " ",
+              "left": {
+                "type": "operation",
+                "operator": " ",
+                "left": "<map>",
+                "right": "<g>",
+                "name": "apply",
+                "type_detail": {
+                  "paramType": {
+                    "start": {
+                      "name": "Number"
+                    },
+                    "step": {
+                      "name": "Number"
+                    },
+                    "limit": {
+                      "name": "Number"
+                    }
+                  },
+                  "returnType": {
+                    "name": "T10"
+                  }
+                }
+              },
+              "right": {
+                "type": "operation",
+                "operator": "~",
+                "operand": "<y>",
+                "position": "postfix",
+                "type_detail": {
+                  "start": {
+                    "name": "Number"
+                  },
+                  "step": {
+                    "name": "Number"
+                  },
+                  "limit": {
+                    "name": "Number"
+                  }
+                }
+              },
+              "name": "apply",
+              "type_detail": {
+                "name": "T10"
+              }
+            },
+            "type_detail": {
+              "name": "T10"
+            }
+          },
+          "type_detail": {
+            "name": "T10"
+          }
+        },
+        "name": "apply",
+        "type_detail": {
+          "name": "T11"
+        }
+      },
+      "type_detail": {
+        "paramType": {
+          "types": [
+            {
+              "name": "Number"
+            },
+            {
+              "paramType": {
+                "name": "Number"
+              },
+              "returnType": {
+                "paramType": {
+                  "name": "T10"
+                },
+                "returnType": {
+                  "name": "T11"
+                }
+              }
+            },
+            {
+              "type": {
+                "name": "T4"
+              }
+            }
+          ]
+        },
+        "returnType": {
+          "name": "T11"
+        }
+      }
+    },
+    "type_detail": {
+      "paramType": {
+        "types": [
+          {
+            "name": "Number"
+          },
+          {
+            "paramType": {
+              "name": "Number"
+            },
+            "returnType": {
+              "paramType": {
+                "name": "T10"
+              },
+              "returnType": {
+                "name": "T11"
+              }
+            }
+          },
+          {
+            "type": {
+              "name": "T4"
+            }
+          }
+        ]
+      },
+      "returnType": {
+        "name": "T11"
+      }
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": "<map>",
+        "right": {
+          "type": "operation",
+          "operator": "$",
+          "operand": "<f>",
+          "position": "prefix",
+          "type_detail": {
+            "name": "Number"
+          }
+        },
+        "name": "apply_partial",
+        "type_detail": {
+          "paramType": {
+            "types": [
+              {
+                "paramType": {
+                  "name": "Number"
+                },
+                "returnType": {
+                  "paramType": {
+                    "name": "T10"
+                  },
+                  "returnType": {
+                    "name": "T11"
+                  }
+                }
+              },
+              {
+                "type": {
+                  "name": "T4"
+                }
+              }
+            ]
+          },
+          "returnType": {
+            "name": "T11"
+          }
+        }
+      },
+      "right": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "block",
+          "kind": "group",
+          "content": {
+            "type": "operation",
+            "operator": "~",
+            "left": {
+              "type": "operation",
+              "operator": "~+",
+              "left": "0",
+              "right": "2",
+              "type_detail": {
+                "start": {
+                  "name": "Number"
+                },
+                "step": {
+                  "name": "Number"
+                },
+                "limit": {
+                  "name": "Number"
+                }
+              }
+            },
+            "right": "10",
+            "type_detail": {
+              "start": {
+                "name": "Number"
+              },
+              "step": {
+                "name": "Number"
+              },
+              "limit": {
+                "name": "Number"
+              }
+            }
+          },
+          "type_detail": {
+            "start": {
+              "name": "Number"
+            },
+            "step": {
+              "name": "Number"
+            },
+            "limit": {
+              "name": "Number"
+            }
+          }
+        },
+        "type_detail": {
+          "start": {
+            "name": "Number"
+          },
+          "step": {
+            "name": "Number"
+          },
+          "limit": {
+            "name": "Number"
+          }
+        }
+      },
+      "name": "concat",
+      "type_detail": {
+        "types": [
+          {
+            "paramType": {
+              "types": [
+                {
+                  "paramType": {
+                    "name": "Number"
+                  },
+                  "returnType": {
+                    "paramType": {
+                      "name": "T10"
+                    },
+                    "returnType": {
+                      "name": "T11"
+                    }
+                  }
+                },
+                {
+                  "type": {
+                    "name": "T4"
+                  }
+                }
+              ]
+            },
+            "returnType": {
+              "name": "T11"
+            }
+          },
+          {
+            "start": {
+              "name": "Number"
+            },
+            "step": {
+              "name": "Number"
+            },
+            "limit": {
+              "name": "Number"
+            }
+          }
+        ]
+      }
+    },
+    "type_detail": {
+      "types": [
+        {
+          "paramType": {
+            "types": [
+              {
+                "paramType": {
+                  "name": "Number"
+                },
+                "returnType": {
+                  "paramType": {
+                    "name": "T10"
+                  },
+                  "returnType": {
+                    "name": "T11"
+                  }
+                }
+              },
+              {
+                "type": {
+                  "name": "T4"
+                }
+              }
+            ]
+          },
+          "returnType": {
+            "name": "T11"
+          }
+        },
+        {
+          "start": {
+            "name": "Number"
+          },
+          "step": {
+            "name": "Number"
+          },
+          "limit": {
+            "name": "Number"
+          }
+        }
+      ]
+    }
+  }
+]

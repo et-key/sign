@@ -60,6 +60,19 @@ export class TVariadic {
   }
 }
 
+export class TGenerator {
+  constructor(start, step, limit) {
+    this.start = start;
+    this.step = step;
+    this.limit = limit;
+  }
+  toString() {
+    return `Generator(${this.start.toString()}, ${this.step.toString()}, ${this.limit.toString()})`;
+  }
+  clone(tvarMap = new Map()) {
+    return new TGenerator(this.start.clone(tvarMap), this.step.clone(tvarMap), this.limit.clone(tvarMap));
+  }
+}
 
 export class TAtom {
   constructor(name) {
@@ -194,7 +207,7 @@ export function unify(t1, t2, subst) {
   if (t2 instanceof TVar) {
     return subst.bind(t2, t1);
   }
-  
+
   if (t1 instanceof TFunc && t2 instanceof TFunc) {
     return unify(t1.paramType, t2.paramType, subst) && unify(t1.returnType, t2.returnType, subst);
   }

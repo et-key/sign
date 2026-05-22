@@ -53,10 +53,20 @@
           "type_detail": {
             "types": [
               {
-                "name": "T2"
+                "name": "Number"
               },
               {
-                "name": "T3"
+                "paramType": {
+                  "name": "Number"
+                },
+                "returnType": {
+                  "paramType": {
+                    "name": "T10"
+                  },
+                  "returnType": {
+                    "name": "T11"
+                  }
+                }
               }
             ]
           }
@@ -76,10 +86,20 @@
         "type_detail": {
           "types": [
             {
-              "name": "T2"
+              "name": "Number"
             },
             {
-              "name": "T3"
+              "paramType": {
+                "name": "Number"
+              },
+              "returnType": {
+                "paramType": {
+                  "name": "T10"
+                },
+                "returnType": {
+                  "name": "T11"
+                }
+              }
             },
             {
               "type": {
@@ -107,145 +127,35 @@
                 "operand": "<g>",
                 "position": "prefix",
                 "type_detail": {
-                  "paramType": {
-                    "name": "T3"
-                  },
-                  "returnType": {
-                    "paramType": {
-                      "name": "T9"
-                    },
-                    "returnType": {
-                      "paramType": {
-                        "name": "Number"
-                      },
-                      "returnType": {
-                        "paramType": {
-                          "name": "Number"
-                        },
-                        "returnType": {
-                          "paramType": {
-                            "name": "Number"
-                          },
-                          "returnType": {
-                            "paramType": {
-                              "name": "Number"
-                            },
-                            "returnType": {
-                              "paramType": {
-                                "name": "Number"
-                              },
-                              "returnType": {
-                                "name": "T26"
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
+                  "name": "Number"
                 }
               },
               "right": "<x>",
-              "name": "apply",
+              "name": "reverse_apply",
               "type_detail": {
                 "paramType": {
-                  "name": "T9"
+                  "name": "T10"
                 },
                 "returnType": {
-                  "paramType": {
-                    "name": "Number"
-                  },
-                  "returnType": {
-                    "paramType": {
-                      "name": "Number"
-                    },
-                    "returnType": {
-                      "paramType": {
-                        "name": "Number"
-                      },
-                      "returnType": {
-                        "paramType": {
-                          "name": "Number"
-                        },
-                        "returnType": {
-                          "paramType": {
-                            "name": "Number"
-                          },
-                          "returnType": {
-                            "name": "T26"
-                          }
-                        }
-                      }
-                    }
-                  }
+                  "name": "T11"
                 }
               }
             },
             "type_detail": {
               "paramType": {
-                "name": "T9"
+                "name": "T10"
               },
               "returnType": {
-                "paramType": {
-                  "name": "Number"
-                },
-                "returnType": {
-                  "paramType": {
-                    "name": "Number"
-                  },
-                  "returnType": {
-                    "paramType": {
-                      "name": "Number"
-                    },
-                    "returnType": {
-                      "paramType": {
-                        "name": "Number"
-                      },
-                      "returnType": {
-                        "paramType": {
-                          "name": "Number"
-                        },
-                        "returnType": {
-                          "name": "T26"
-                        }
-                      }
-                    }
-                  }
-                }
+                "name": "T11"
               }
             }
           },
           "type_detail": {
             "paramType": {
-              "name": "T9"
+              "name": "T10"
             },
             "returnType": {
-              "paramType": {
-                "name": "Number"
-              },
-              "returnType": {
-                "paramType": {
-                  "name": "Number"
-                },
-                "returnType": {
-                  "paramType": {
-                    "name": "Number"
-                  },
-                  "returnType": {
-                    "paramType": {
-                      "name": "Number"
-                    },
-                    "returnType": {
-                      "paramType": {
-                        "name": "Number"
-                      },
-                      "returnType": {
-                        "name": "T26"
-                      }
-                    }
-                  }
-                }
-              }
+              "name": "T11"
             }
           }
         },
@@ -266,10 +176,18 @@
                 "name": "apply",
                 "type_detail": {
                   "paramType": {
-                    "name": "T8"
+                    "start": {
+                      "name": "Number"
+                    },
+                    "step": {
+                      "name": "Number"
+                    },
+                    "limit": {
+                      "name": "Number"
+                    }
                   },
                   "returnType": {
-                    "name": "T9"
+                    "name": "T10"
                   }
                 }
               },
@@ -279,60 +197,53 @@
                 "operand": "<y>",
                 "position": "postfix",
                 "type_detail": {
-                  "name": "T8"
+                  "start": {
+                    "name": "Number"
+                  },
+                  "step": {
+                    "name": "Number"
+                  },
+                  "limit": {
+                    "name": "Number"
+                  }
                 }
               },
               "name": "apply",
               "type_detail": {
-                "name": "T9"
+                "name": "T10"
               }
             },
             "type_detail": {
-              "name": "T9"
+              "name": "T10"
             }
           },
           "type_detail": {
-            "name": "T9"
+            "name": "T10"
           }
         },
         "name": "apply",
         "type_detail": {
-          "paramType": {
-            "name": "Number"
-          },
-          "returnType": {
-            "paramType": {
-              "name": "Number"
-            },
-            "returnType": {
-              "paramType": {
-                "name": "Number"
-              },
-              "returnType": {
-                "paramType": {
-                  "name": "Number"
-                },
-                "returnType": {
-                  "paramType": {
-                    "name": "Number"
-                  },
-                  "returnType": {
-                    "name": "T26"
-                  }
-                }
-              }
-            }
-          }
+          "name": "T11"
         }
       },
       "type_detail": {
         "paramType": {
           "types": [
             {
-              "name": "T2"
+              "name": "Number"
             },
             {
-              "name": "T3"
+              "paramType": {
+                "name": "Number"
+              },
+              "returnType": {
+                "paramType": {
+                  "name": "T10"
+                },
+                "returnType": {
+                  "name": "T11"
+                }
+              }
             },
             {
               "type": {
@@ -342,32 +253,7 @@
           ]
         },
         "returnType": {
-          "paramType": {
-            "name": "Number"
-          },
-          "returnType": {
-            "paramType": {
-              "name": "Number"
-            },
-            "returnType": {
-              "paramType": {
-                "name": "Number"
-              },
-              "returnType": {
-                "paramType": {
-                  "name": "Number"
-                },
-                "returnType": {
-                  "paramType": {
-                    "name": "Number"
-                  },
-                  "returnType": {
-                    "name": "T26"
-                  }
-                }
-              }
-            }
-          }
+          "name": "T11"
         }
       }
     },
@@ -375,10 +261,20 @@
       "paramType": {
         "types": [
           {
-            "name": "T2"
+            "name": "Number"
           },
           {
-            "name": "T3"
+            "paramType": {
+              "name": "Number"
+            },
+            "returnType": {
+              "paramType": {
+                "name": "T10"
+              },
+              "returnType": {
+                "name": "T11"
+              }
+            }
           },
           {
             "type": {
@@ -388,32 +284,7 @@
         ]
       },
       "returnType": {
-        "paramType": {
-          "name": "Number"
-        },
-        "returnType": {
-          "paramType": {
-            "name": "Number"
-          },
-          "returnType": {
-            "paramType": {
-              "name": "Number"
-            },
-            "returnType": {
-              "paramType": {
-                "name": "Number"
-              },
-              "returnType": {
-                "paramType": {
-                  "name": "Number"
-                },
-                "returnType": {
-                  "name": "T26"
-                }
-              }
-            }
-          }
-        }
+        "name": "T11"
       }
     }
   },
@@ -446,12 +317,25 @@
                   "operand": "<f>",
                   "position": "prefix",
                   "type_detail": {
+                    "name": "Number"
+                  }
+                },
+                "name": "apply_partial",
+                "type_detail": {
+                  "paramType": {
                     "types": [
                       {
-                        "name": "T2"
-                      },
-                      {
-                        "name": "T3"
+                        "paramType": {
+                          "name": "Number"
+                        },
+                        "returnType": {
+                          "paramType": {
+                            "name": "T10"
+                          },
+                          "returnType": {
+                            "name": "T11"
+                          }
+                        }
                       },
                       {
                         "type": {
@@ -459,120 +343,328 @@
                         }
                       }
                     ]
-                  }
-                },
-                "name": "apply",
-                "type_detail": {
-                  "paramType": {
-                    "name": "Number"
                   },
                   "returnType": {
-                    "paramType": {
-                      "name": "Number"
-                    },
-                    "returnType": {
-                      "paramType": {
-                        "name": "Number"
-                      },
-                      "returnType": {
-                        "paramType": {
-                          "name": "Number"
-                        },
-                        "returnType": {
-                          "paramType": {
-                            "name": "Number"
-                          },
-                          "returnType": {
-                            "name": "T26"
-                          }
-                        }
-                      }
-                    }
+                    "name": "T11"
                   }
                 }
               },
               "right": "1",
-              "name": "apply",
+              "name": "concat",
               "type_detail": {
-                "paramType": {
-                  "name": "Number"
-                },
-                "returnType": {
-                  "paramType": {
-                    "name": "Number"
-                  },
-                  "returnType": {
+                "types": [
+                  {
                     "paramType": {
-                      "name": "Number"
+                      "types": [
+                        {
+                          "paramType": {
+                            "name": "Number"
+                          },
+                          "returnType": {
+                            "paramType": {
+                              "name": "T10"
+                            },
+                            "returnType": {
+                              "name": "T11"
+                            }
+                          }
+                        },
+                        {
+                          "type": {
+                            "name": "T4"
+                          }
+                        }
+                      ]
                     },
                     "returnType": {
-                      "paramType": {
-                        "name": "Number"
-                      },
-                      "returnType": {
-                        "name": "T26"
-                      }
+                      "name": "T11"
                     }
+                  },
+                  {
+                    "name": "Number"
                   }
-                }
+                ]
               }
             },
             "right": "2",
-            "name": "apply",
+            "name": "concat",
             "type_detail": {
-              "paramType": {
-                "name": "Number"
-              },
-              "returnType": {
-                "paramType": {
-                  "name": "Number"
+              "types": [
+                {
+                  "types": [
+                    {
+                      "paramType": {
+                        "types": [
+                          {
+                            "paramType": {
+                              "name": "Number"
+                            },
+                            "returnType": {
+                              "paramType": {
+                                "name": "T10"
+                              },
+                              "returnType": {
+                                "name": "T11"
+                              }
+                            }
+                          },
+                          {
+                            "type": {
+                              "name": "T4"
+                            }
+                          }
+                        ]
+                      },
+                      "returnType": {
+                        "name": "T11"
+                      }
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
                 },
-                "returnType": {
-                  "paramType": {
-                    "name": "Number"
-                  },
-                  "returnType": {
-                    "name": "T26"
-                  }
+                {
+                  "name": "Number"
                 }
-              }
+              ]
             }
           },
           "right": "3",
-          "name": "apply",
+          "name": "concat",
           "type_detail": {
-            "paramType": {
-              "name": "Number"
-            },
-            "returnType": {
-              "paramType": {
-                "name": "Number"
+            "types": [
+              {
+                "types": [
+                  {
+                    "types": [
+                      {
+                        "paramType": {
+                          "types": [
+                            {
+                              "paramType": {
+                                "name": "Number"
+                              },
+                              "returnType": {
+                                "paramType": {
+                                  "name": "T10"
+                                },
+                                "returnType": {
+                                  "name": "T11"
+                                }
+                              }
+                            },
+                            {
+                              "type": {
+                                "name": "T4"
+                              }
+                            }
+                          ]
+                        },
+                        "returnType": {
+                          "name": "T11"
+                        }
+                      },
+                      {
+                        "name": "Number"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
               },
-              "returnType": {
-                "name": "T26"
+              {
+                "name": "Number"
               }
-            }
+            ]
           }
         },
         "right": "4",
-        "name": "apply",
+        "name": "concat",
         "type_detail": {
-          "paramType": {
-            "name": "Number"
-          },
-          "returnType": {
-            "name": "T26"
-          }
+          "types": [
+            {
+              "types": [
+                {
+                  "types": [
+                    {
+                      "types": [
+                        {
+                          "paramType": {
+                            "types": [
+                              {
+                                "paramType": {
+                                  "name": "Number"
+                                },
+                                "returnType": {
+                                  "paramType": {
+                                    "name": "T10"
+                                  },
+                                  "returnType": {
+                                    "name": "T11"
+                                  }
+                                }
+                              },
+                              {
+                                "type": {
+                                  "name": "T4"
+                                }
+                              }
+                            ]
+                          },
+                          "returnType": {
+                            "name": "T11"
+                          }
+                        },
+                        {
+                          "name": "Number"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
         }
       },
       "right": "5",
-      "name": "apply",
+      "name": "concat",
       "type_detail": {
-        "name": "T26"
+        "types": [
+          {
+            "types": [
+              {
+                "types": [
+                  {
+                    "types": [
+                      {
+                        "types": [
+                          {
+                            "paramType": {
+                              "types": [
+                                {
+                                  "paramType": {
+                                    "name": "Number"
+                                  },
+                                  "returnType": {
+                                    "paramType": {
+                                      "name": "T10"
+                                    },
+                                    "returnType": {
+                                      "name": "T11"
+                                    }
+                                  }
+                                },
+                                {
+                                  "type": {
+                                    "name": "T4"
+                                  }
+                                }
+                              ]
+                            },
+                            "returnType": {
+                              "name": "T11"
+                            }
+                          },
+                          {
+                            "name": "Number"
+                          }
+                        ]
+                      },
+                      {
+                        "name": "Number"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
       }
     },
     "type_detail": {
-      "name": "T26"
+      "types": [
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "types": [
+                    {
+                      "types": [
+                        {
+                          "paramType": {
+                            "types": [
+                              {
+                                "paramType": {
+                                  "name": "Number"
+                                },
+                                "returnType": {
+                                  "paramType": {
+                                    "name": "T10"
+                                  },
+                                  "returnType": {
+                                    "name": "T11"
+                                  }
+                                }
+                              },
+                              {
+                                "type": {
+                                  "name": "T4"
+                                }
+                              }
+                            ]
+                          },
+                          "returnType": {
+                            "name": "T11"
+                          }
+                        },
+                        {
+                          "name": "Number"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "name": "Number"
+        }
+      ]
     }
   },
   {
@@ -628,12 +720,25 @@
                   },
                   "position": "prefix",
                   "type_detail": {
+                    "name": "Number"
+                  }
+                },
+                "name": "apply_partial",
+                "type_detail": {
+                  "paramType": {
                     "types": [
                       {
-                        "name": "T2"
-                      },
-                      {
-                        "name": "T3"
+                        "paramType": {
+                          "name": "Number"
+                        },
+                        "returnType": {
+                          "paramType": {
+                            "name": "T10"
+                          },
+                          "returnType": {
+                            "name": "T11"
+                          }
+                        }
                       },
                       {
                         "type": {
@@ -641,120 +746,328 @@
                         }
                       }
                     ]
-                  }
-                },
-                "name": "apply",
-                "type_detail": {
-                  "paramType": {
-                    "name": "Number"
                   },
                   "returnType": {
-                    "paramType": {
-                      "name": "Number"
-                    },
-                    "returnType": {
-                      "paramType": {
-                        "name": "Number"
-                      },
-                      "returnType": {
-                        "paramType": {
-                          "name": "Number"
-                        },
-                        "returnType": {
-                          "paramType": {
-                            "name": "Number"
-                          },
-                          "returnType": {
-                            "name": "T26"
-                          }
-                        }
-                      }
-                    }
+                    "name": "T11"
                   }
                 }
               },
               "right": "1",
-              "name": "apply",
+              "name": "concat",
               "type_detail": {
-                "paramType": {
-                  "name": "Number"
-                },
-                "returnType": {
-                  "paramType": {
-                    "name": "Number"
-                  },
-                  "returnType": {
+                "types": [
+                  {
                     "paramType": {
-                      "name": "Number"
+                      "types": [
+                        {
+                          "paramType": {
+                            "name": "Number"
+                          },
+                          "returnType": {
+                            "paramType": {
+                              "name": "T10"
+                            },
+                            "returnType": {
+                              "name": "T11"
+                            }
+                          }
+                        },
+                        {
+                          "type": {
+                            "name": "T4"
+                          }
+                        }
+                      ]
                     },
                     "returnType": {
-                      "paramType": {
-                        "name": "Number"
-                      },
-                      "returnType": {
-                        "name": "T26"
-                      }
+                      "name": "T11"
                     }
+                  },
+                  {
+                    "name": "Number"
                   }
-                }
+                ]
               }
             },
             "right": "2",
-            "name": "apply",
+            "name": "concat",
             "type_detail": {
-              "paramType": {
-                "name": "Number"
-              },
-              "returnType": {
-                "paramType": {
-                  "name": "Number"
+              "types": [
+                {
+                  "types": [
+                    {
+                      "paramType": {
+                        "types": [
+                          {
+                            "paramType": {
+                              "name": "Number"
+                            },
+                            "returnType": {
+                              "paramType": {
+                                "name": "T10"
+                              },
+                              "returnType": {
+                                "name": "T11"
+                              }
+                            }
+                          },
+                          {
+                            "type": {
+                              "name": "T4"
+                            }
+                          }
+                        ]
+                      },
+                      "returnType": {
+                        "name": "T11"
+                      }
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
                 },
-                "returnType": {
-                  "paramType": {
-                    "name": "Number"
-                  },
-                  "returnType": {
-                    "name": "T26"
-                  }
+                {
+                  "name": "Number"
                 }
-              }
+              ]
             }
           },
           "right": "3",
-          "name": "apply",
+          "name": "concat",
           "type_detail": {
-            "paramType": {
-              "name": "Number"
-            },
-            "returnType": {
-              "paramType": {
-                "name": "Number"
+            "types": [
+              {
+                "types": [
+                  {
+                    "types": [
+                      {
+                        "paramType": {
+                          "types": [
+                            {
+                              "paramType": {
+                                "name": "Number"
+                              },
+                              "returnType": {
+                                "paramType": {
+                                  "name": "T10"
+                                },
+                                "returnType": {
+                                  "name": "T11"
+                                }
+                              }
+                            },
+                            {
+                              "type": {
+                                "name": "T4"
+                              }
+                            }
+                          ]
+                        },
+                        "returnType": {
+                          "name": "T11"
+                        }
+                      },
+                      {
+                        "name": "Number"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
               },
-              "returnType": {
-                "name": "T26"
+              {
+                "name": "Number"
               }
-            }
+            ]
           }
         },
         "right": "4",
-        "name": "apply",
+        "name": "concat",
         "type_detail": {
-          "paramType": {
-            "name": "Number"
-          },
-          "returnType": {
-            "name": "T26"
-          }
+          "types": [
+            {
+              "types": [
+                {
+                  "types": [
+                    {
+                      "types": [
+                        {
+                          "paramType": {
+                            "types": [
+                              {
+                                "paramType": {
+                                  "name": "Number"
+                                },
+                                "returnType": {
+                                  "paramType": {
+                                    "name": "T10"
+                                  },
+                                  "returnType": {
+                                    "name": "T11"
+                                  }
+                                }
+                              },
+                              {
+                                "type": {
+                                  "name": "T4"
+                                }
+                              }
+                            ]
+                          },
+                          "returnType": {
+                            "name": "T11"
+                          }
+                        },
+                        {
+                          "name": "Number"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
         }
       },
       "right": "5",
-      "name": "apply",
+      "name": "concat",
       "type_detail": {
-        "name": "T26"
+        "types": [
+          {
+            "types": [
+              {
+                "types": [
+                  {
+                    "types": [
+                      {
+                        "types": [
+                          {
+                            "paramType": {
+                              "types": [
+                                {
+                                  "paramType": {
+                                    "name": "Number"
+                                  },
+                                  "returnType": {
+                                    "paramType": {
+                                      "name": "T10"
+                                    },
+                                    "returnType": {
+                                      "name": "T11"
+                                    }
+                                  }
+                                },
+                                {
+                                  "type": {
+                                    "name": "T4"
+                                  }
+                                }
+                              ]
+                            },
+                            "returnType": {
+                              "name": "T11"
+                            }
+                          },
+                          {
+                            "name": "Number"
+                          }
+                        ]
+                      },
+                      {
+                        "name": "Number"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Number"
+                  }
+                ]
+              },
+              {
+                "name": "Number"
+              }
+            ]
+          },
+          {
+            "name": "Number"
+          }
+        ]
       }
     },
     "type_detail": {
-      "name": "T26"
+      "types": [
+        {
+          "types": [
+            {
+              "types": [
+                {
+                  "types": [
+                    {
+                      "types": [
+                        {
+                          "paramType": {
+                            "types": [
+                              {
+                                "paramType": {
+                                  "name": "Number"
+                                },
+                                "returnType": {
+                                  "paramType": {
+                                    "name": "T10"
+                                  },
+                                  "returnType": {
+                                    "name": "T11"
+                                  }
+                                }
+                              },
+                              {
+                                "type": {
+                                  "name": "T4"
+                                }
+                              }
+                            ]
+                          },
+                          "returnType": {
+                            "name": "T11"
+                          }
+                        },
+                        {
+                          "name": "Number"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "Number"
+                    }
+                  ]
+                },
+                {
+                  "name": "Number"
+                }
+              ]
+            },
+            {
+              "name": "Number"
+            }
+          ]
+        },
+        {
+          "name": "Number"
+        }
+      ]
     }
   },
   {

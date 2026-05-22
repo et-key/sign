@@ -2,7 +2,7 @@
  * index.js
  * Sign Language Analyzer Entry Point
  */
-import { TVar, TFunc, TTuple, TAtom, TUnion, THole, TVariadic, Substitution, unify, resetTVarCounter } from './types.js';
+import { TVar, TFunc, TTuple, TAtom, TUnion, THole, TVariadic, TGenerator, Substitution, unify, resetTVarCounter } from './types.js';
 
 export { Substitution, resetTVarCounter };
 
@@ -408,7 +408,22 @@ export function infer(node, env, subst) {
       if (t_left && t_right) {
         unify(t_left, t_right, subst);
       }
-      t_res = t_left || new TAtom('Unit');
+      t_res = new TUnion([new TAtom('Number'), new TAtom('Unit')]);
+    } else if (['~', '~+', '~-', '~*', '~/'].includes(op)) {
+      t_res = new TGenerator(new TAtom('Number'), new TAtom('Number'), new TAtom('Number'));
+    } else if (op === '#') {
+      // output: addr # val
+      t_res = new TAtom('Unit');
+    }
+
+    if (t_operand) {
+      if (op === '$') {
+        // Address of
+        t_res = new TAtom('Number');
+      } else if (op === '@') {
+        // Input from Address
+        t_res = new TAtom('Number');
+      }
     }
 
     node.type_detail = t_res;

@@ -1,0 +1,36 @@
+{
+  "type": "operation",
+  "operator": ":",
+  "left": "<loop>",
+  "right": {
+    "type": "operation",
+    "operator": "?",
+    "left": "<x>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<loop>",
+      "right": "<x>",
+      "name": "apply",
+      "type_detail": {
+        "name": "T1"
+      }
+    },
+    "type_detail": {
+      "paramType": {
+        "name": "T0"
+      },
+      "returnType": {
+        "name": "T1"
+      }
+    }
+  },
+  "type_detail": {
+    "paramType": {
+      "name": "T0"
+    },
+    "returnType": {
+      "name": "T1"
+    }
+  }
+}

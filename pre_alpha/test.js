@@ -2,6 +2,7 @@ import { preprocess } from './lexisize/lexer.js';
 import * as parser from './parse/minimal.js';
 import { buildAST } from './semanticize/shunting_yard.js';
 import { annotateContextualOperators, liftLambdas, infer, generateST, Substitution, resetTVarCounter } from './semanticize/analyzer/index.js';
+import { generateAArch64 } from './backend/aarch64.js';
 import util from 'util';
 import fs from 'fs';
 import path from 'path';
@@ -93,7 +94,12 @@ for (const filePath of files) {
     const stContent = generateST(astTrees, lambdaState.lambdas);
     fs.writeFileSync(outPathSt, stContent, 'utf-8');
     
-    console.log(`[Success] AST written to: ${outPathJson} and ${outPathSt}`);
+    // Write .s AArch64 output
+    const outPathS = filePath.replace(/\.(sign|sn)$/, '.s');
+    const asmContent = generateAArch64(astTrees);
+    fs.writeFileSync(outPathS, asmContent, 'utf-8');
+    
+    console.log(`[Success] Compiled to: ${outPathJson}, ${outPathSt}, and ${outPathS}`);
     
   } catch (err) {
     let errMsg = "";

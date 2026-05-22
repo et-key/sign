@@ -249,11 +249,25 @@
       "left": "5",
       "right": "5",
       "type_detail": {
-        "name": "Number"
+        "types": [
+          {
+            "name": "Number"
+          },
+          {
+            "name": "Unit"
+          }
+        ]
       }
     },
     "type_detail": {
-      "name": "Number"
+      "types": [
+        {
+          "name": "Number"
+        },
+        {
+          "name": "Unit"
+        }
+      ]
     }
   }
 ]
