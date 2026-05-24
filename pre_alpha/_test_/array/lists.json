@@ -3,271 +3,155 @@
     "type": "operation",
     "operator": ":",
     "left": "<a>",
-    "right": "1",
-    "type_detail": {
-      "name": "Number"
-    }
+    "right": "1"
   },
   {
     "type": "operation",
     "operator": ":",
     "left": "<b>",
-    "right": "2",
-    "type_detail": {
-      "name": "Number"
-    }
+    "right": "2"
   },
   {
     "type": "operation",
     "operator": ":",
     "left": "<c>",
-    "right": "3",
-    "type_detail": {
-      "name": "Number"
-    }
+    "right": "3"
   },
   {
     "type": "block",
     "kind": "bracket",
     "content": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": "1",
+        "right": "2",
+        "name": "concat"
+      },
+      "right": "3",
+      "name": "concat"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": " ",
+    "left": {
+      "type": "operation",
+      "operator": " ",
+      "left": "1",
+      "right": "2",
+      "name": "concat"
+    },
+    "right": "3",
+    "name": "concat"
+  },
+  {
+    "type": "operation",
+    "operator": ",",
+    "left": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": "1",
+        "right": "2",
+        "name": "concat"
+      },
+      "right": "3",
+      "name": "concat"
+    },
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": "1",
+        "right": "2",
+        "name": "concat"
+      },
+      "right": "3",
+      "name": "concat"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": " ",
+    "left": {
       "type": "block",
-      "kind": "group",
+      "kind": "bracket",
       "content": {
         "type": "operation",
         "operator": " ",
         "left": {
           "type": "operation",
           "operator": " ",
-          "left": "<a>",
-          "right": "<b>",
-          "name": "concat",
-          "type_detail": {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          }
+          "left": "1",
+          "right": "2",
+          "name": "concat"
         },
-        "right": "<c>",
-        "name": "concat",
-        "type_detail": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      },
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
+        "right": "3",
+        "name": "concat"
       }
     },
-    "type_detail": {
-      "types": [
-        {
-          "types": [
-            {
-              "name": "Number"
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        },
-        {
-          "name": "Number"
-        }
-      ]
-    }
-  },
-  {
-    "type": "operation",
-    "operator": " ",
-    "left": {
-      "type": "operation",
-      "operator": " ",
-      "left": "<a>",
-      "right": "<b>",
-      "name": "concat",
-      "type_detail": {
-        "types": [
-          {
-            "name": "Number"
-          },
-          {
-            "name": "Number"
-          }
-        ]
-      }
-    },
-    "right": "<c>",
-    "name": "concat",
-    "type_detail": {
-      "types": [
-        {
-          "types": [
-            {
-              "name": "Number"
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        },
-        {
-          "name": "Number"
-        }
-      ]
-    }
-  },
-  {
-    "type": "operation",
-    "operator": ",",
-    "left": {
-      "type": "operation",
-      "operator": " ",
-      "left": {
+    "right": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
         "type": "operation",
         "operator": " ",
-        "left": "<a>",
-        "right": "<b>",
-        "name": "concat",
-        "type_detail": {
-          "types": [
-            {
-              "name": "Number"
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      },
-      "right": "<c>",
-      "name": "concat",
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": "1",
+          "right": "2",
+          "name": "concat"
+        },
+        "right": "3",
+        "name": "concat"
       }
     },
-    "right": {
-      "type": "operation",
-      "operator": " ",
-      "left": {
+    "name": "concat"
+  },
+  {
+    "type": "operation",
+    "operator": ",",
+    "left": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
         "type": "operation",
         "operator": " ",
-        "left": "<a>",
-        "right": "<b>",
-        "name": "concat",
-        "type_detail": {
-          "types": [
-            {
-              "name": "Number"
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      },
-      "right": "<c>",
-      "name": "concat",
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": "1",
+          "right": "2",
+          "name": "concat"
+        },
+        "right": "3",
+        "name": "concat"
       }
     },
-    "type_detail": {
-      "types": [
-        {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
+    "right": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": "1",
+          "right": "2",
+          "name": "concat"
         },
-        {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      ]
+        "right": "3",
+        "name": "concat"
+      }
     }
   },
   {
@@ -277,205 +161,33 @@
       "type": "block",
       "kind": "bracket",
       "content": {
-        "type": "block",
-        "kind": "group",
-        "content": {
+        "type": "operation",
+        "operator": ",",
+        "left": {
           "type": "operation",
-          "operator": " ",
-          "left": {
-            "type": "operation",
-            "operator": " ",
-            "left": "<a>",
-            "right": "<b>",
-            "name": "concat",
-            "type_detail": {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            }
-          },
-          "right": "<c>",
-          "name": "concat",
-          "type_detail": {
-            "types": [
-              {
-                "types": [
-                  {
-                    "name": "Number"
-                  },
-                  {
-                    "name": "Number"
-                  }
-                ]
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          }
+          "operator": ",",
+          "left": "1",
+          "right": "2"
         },
-        "type_detail": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      },
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
+        "right": "3"
       }
     },
     "right": {
       "type": "block",
       "kind": "bracket",
       "content": {
-        "type": "block",
-        "kind": "group",
-        "content": {
+        "type": "operation",
+        "operator": ",",
+        "left": {
           "type": "operation",
-          "operator": " ",
-          "left": {
-            "type": "operation",
-            "operator": " ",
-            "left": "<a>",
-            "right": "<b>",
-            "name": "concat",
-            "type_detail": {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            }
-          },
-          "right": "<c>",
-          "name": "concat",
-          "type_detail": {
-            "types": [
-              {
-                "types": [
-                  {
-                    "name": "Number"
-                  },
-                  {
-                    "name": "Number"
-                  }
-                ]
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          }
+          "operator": ",",
+          "left": "1",
+          "right": "2"
         },
-        "type_detail": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      },
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
+        "right": "3"
       }
     },
-    "name": "concat",
-    "type_detail": {
-      "types": [
-        {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        },
-        {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      ]
-    }
+    "name": "compose"
   },
   {
     "type": "operation",
@@ -484,608 +196,31 @@
       "type": "block",
       "kind": "bracket",
       "content": {
-        "type": "block",
-        "kind": "group",
-        "content": {
+        "type": "operation",
+        "operator": ",",
+        "left": {
           "type": "operation",
-          "operator": " ",
-          "left": {
-            "type": "operation",
-            "operator": " ",
-            "left": "<a>",
-            "right": "<b>",
-            "name": "concat",
-            "type_detail": {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            }
-          },
-          "right": "<c>",
-          "name": "concat",
-          "type_detail": {
-            "types": [
-              {
-                "types": [
-                  {
-                    "name": "Number"
-                  },
-                  {
-                    "name": "Number"
-                  }
-                ]
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          }
+          "operator": ",",
+          "left": "1",
+          "right": "2"
         },
-        "type_detail": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      },
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
+        "right": "3"
       }
     },
     "right": {
       "type": "block",
       "kind": "bracket",
       "content": {
-        "type": "block",
-        "kind": "group",
-        "content": {
-          "type": "operation",
-          "operator": " ",
-          "left": {
-            "type": "operation",
-            "operator": " ",
-            "left": "<a>",
-            "right": "<b>",
-            "name": "concat",
-            "type_detail": {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            }
-          },
-          "right": "<c>",
-          "name": "concat",
-          "type_detail": {
-            "types": [
-              {
-                "types": [
-                  {
-                    "name": "Number"
-                  },
-                  {
-                    "name": "Number"
-                  }
-                ]
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          }
-        },
-        "type_detail": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      },
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
-      }
-    },
-    "type_detail": {
-      "types": [
-        {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        },
-        {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      ]
-    }
-  },
-  {
-    "type": "operation",
-    "operator": " ",
-    "left": {
-      "type": "block",
-      "kind": "bracket",
-      "content": {
-        "type": "block",
-        "kind": "group",
-        "content": {
+        "type": "operation",
+        "operator": ",",
+        "left": {
           "type": "operation",
           "operator": ",",
-          "left": {
-            "type": "operation",
-            "operator": ",",
-            "left": "<a>",
-            "right": "<b>",
-            "type_detail": {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            }
-          },
-          "right": "<c>",
-          "type_detail": {
-            "types": [
-              {
-                "types": [
-                  {
-                    "name": "Number"
-                  },
-                  {
-                    "name": "Number"
-                  }
-                ]
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          }
+          "left": "1",
+          "right": "2"
         },
-        "type_detail": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      },
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
+        "right": "3"
       }
-    },
-    "right": {
-      "type": "block",
-      "kind": "bracket",
-      "content": {
-        "type": "block",
-        "kind": "group",
-        "content": {
-          "type": "operation",
-          "operator": ",",
-          "left": {
-            "type": "operation",
-            "operator": ",",
-            "left": "<a>",
-            "right": "<b>",
-            "type_detail": {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            }
-          },
-          "right": "<c>",
-          "type_detail": {
-            "types": [
-              {
-                "types": [
-                  {
-                    "name": "Number"
-                  },
-                  {
-                    "name": "Number"
-                  }
-                ]
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          }
-        },
-        "type_detail": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      },
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
-      }
-    },
-    "name": "concat",
-    "type_detail": {
-      "types": [
-        {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        },
-        {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      ]
-    }
-  },
-  {
-    "type": "operation",
-    "operator": ",",
-    "left": {
-      "type": "block",
-      "kind": "bracket",
-      "content": {
-        "type": "block",
-        "kind": "group",
-        "content": {
-          "type": "operation",
-          "operator": ",",
-          "left": {
-            "type": "operation",
-            "operator": ",",
-            "left": "<a>",
-            "right": "<b>",
-            "type_detail": {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            }
-          },
-          "right": "<c>",
-          "type_detail": {
-            "types": [
-              {
-                "types": [
-                  {
-                    "name": "Number"
-                  },
-                  {
-                    "name": "Number"
-                  }
-                ]
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          }
-        },
-        "type_detail": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      },
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
-      }
-    },
-    "right": {
-      "type": "block",
-      "kind": "bracket",
-      "content": {
-        "type": "block",
-        "kind": "group",
-        "content": {
-          "type": "operation",
-          "operator": ",",
-          "left": {
-            "type": "operation",
-            "operator": ",",
-            "left": "<a>",
-            "right": "<b>",
-            "type_detail": {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            }
-          },
-          "right": "<c>",
-          "type_detail": {
-            "types": [
-              {
-                "types": [
-                  {
-                    "name": "Number"
-                  },
-                  {
-                    "name": "Number"
-                  }
-                ]
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          }
-        },
-        "type_detail": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      },
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
-      }
-    },
-    "type_detail": {
-      "types": [
-        {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        },
-        {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      ]
     }
   }
 ]

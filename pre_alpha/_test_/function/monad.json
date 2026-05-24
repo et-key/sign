@@ -11,56 +11,13 @@
         "operator": " ",
         "left": "<x>",
         "right": "<y>",
-        "name": "apply_or_concat",
-        "type_detail": {
-          "types": [
-            {
-              "name": "Number"
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
+        "name": "concat"
       },
       "right": {
         "type": "operation",
         "operator": "+",
         "left": "<x>",
-        "right": "<y>",
-        "type_detail": {
-          "name": "Number"
-        }
-      },
-      "type_detail": {
-        "paramType": {
-          "types": [
-            {
-              "name": "Number"
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        },
-        "returnType": {
-          "name": "Number"
-        }
-      }
-    },
-    "type_detail": {
-      "paramType": {
-        "types": [
-          {
-            "name": "Number"
-          },
-          {
-            "name": "Number"
-          }
-        ]
-      },
-      "returnType": {
-        "name": "Number"
+        "right": "<y>"
       }
     }
   },
@@ -69,30 +26,7 @@
     "operator": ":",
     "left": "<maybe_val>",
     "right": {
-      "type": "operation",
-      "operator": "<",
-      "left": "10",
-      "right": "5",
-      "type_detail": {
-        "types": [
-          {
-            "name": "Number"
-          },
-          {
-            "name": "Unit"
-          }
-        ]
-      }
-    },
-    "type_detail": {
-      "types": [
-        {
-          "name": "Number"
-        },
-        {
-          "name": "Unit"
-        }
-      ]
+      "type": "Unit"
     }
   },
   {
@@ -104,48 +38,31 @@
       "operator": " ",
       "left": {
         "type": "operation",
-        "operator": " ",
-        "left": "<f>",
-        "right": "<maybe_val>",
-        "name": "distribute",
-        "type_detail": {
-          "types": [
-            {
-              "paramType": {
-                "name": "Number"
-              },
-              "returnType": {
-                "name": "Number"
-              }
-            },
-            {
-              "name": "Unit"
-            }
-          ]
+        "operator": "?",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": "<x>",
+          "right": "<y>",
+          "name": "concat"
+        },
+        "right": {
+          "type": "operation",
+          "operator": "+",
+          "left": "<x>",
+          "right": "<y>"
         }
       },
-      "right": "3",
-      "name": "distribute",
-      "type_detail": {
-        "types": [
-          {
-            "name": "Number"
-          },
-          {
-            "name": "Unit"
-          }
-        ]
-      }
-    },
-    "type_detail": {
-      "types": [
-        {
-          "name": "Number"
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "Unit"
         },
-        {
-          "name": "Unit"
-        }
-      ]
+        "right": "3",
+        "name": "concat"
+      },
+      "name": "apply"
     }
   },
   {
@@ -160,26 +77,7 @@
         "type": "operation",
         "operator": "*",
         "left": "<x>",
-        "right": "2",
-        "type_detail": {
-          "name": "Number"
-        }
-      },
-      "type_detail": {
-        "paramType": {
-          "name": "Number"
-        },
-        "returnType": {
-          "name": "Number"
-        }
-      }
-    },
-    "type_detail": {
-      "paramType": {
-        "name": "Number"
-      },
-      "returnType": {
-        "name": "Number"
+        "right": "2"
       }
     }
   },
@@ -190,29 +88,49 @@
     "right": {
       "type": "operation",
       "operator": " ",
-      "left": "<g>",
-      "right": "<mapped>",
-      "name": "distribute",
-      "type_detail": {
-        "types": [
-          {
-            "name": "Number"
-          },
-          {
-            "name": "Unit"
-          }
-        ]
-      }
-    },
-    "type_detail": {
-      "types": [
-        {
-          "name": "Number"
-        },
-        {
-          "name": "Unit"
+      "left": {
+        "type": "operation",
+        "operator": "?",
+        "left": "<x>",
+        "right": {
+          "type": "operation",
+          "operator": "*",
+          "left": "<x>",
+          "right": "2"
         }
-      ]
+      },
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "operation",
+          "operator": "?",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "left": "<x>",
+            "right": "<y>",
+            "name": "concat"
+          },
+          "right": {
+            "type": "operation",
+            "operator": "+",
+            "left": "<x>",
+            "right": "<y>"
+          }
+        },
+        "right": {
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "Unit"
+          },
+          "right": "3",
+          "name": "concat"
+        },
+        "name": "apply"
+      },
+      "name": "apply"
     }
   }
 ]

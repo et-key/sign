@@ -9,68 +9,18 @@
       "type": "operation",
       "operator": "*",
       "left": "<b>",
-      "right": "<c>",
-      "type_detail": {
-        "name": "Number"
-      }
-    },
-    "type_detail": {
-      "name": "Number"
+      "right": "<c>"
     }
   },
   "right": {
-    "type": "block",
-    "kind": "paren",
-    "content": {
-      "type": "block",
-      "kind": "group",
-      "content": {
-        "type": "operation",
-        "operator": "+",
-        "left": "<a>",
-        "right": {
-          "type": "block",
-          "kind": "paren",
-          "content": {
-            "type": "block",
-            "kind": "group",
-            "content": {
-              "type": "operation",
-              "operator": "*",
-              "left": "<b>",
-              "right": "<c>",
-              "type_detail": {
-                "name": "Number"
-              }
-            },
-            "type_detail": {
-              "name": "Number"
-            }
-          },
-          "type_detail": {
-            "name": "Number"
-          }
-        },
-        "type_detail": {
-          "name": "Number"
-        }
-      },
-      "type_detail": {
-        "name": "Number"
-      }
-    },
-    "type_detail": {
-      "name": "Number"
+    "type": "operation",
+    "operator": "+",
+    "left": "<a>",
+    "right": {
+      "type": "operation",
+      "operator": "*",
+      "left": "<b>",
+      "right": "<c>"
     }
-  },
-  "type_detail": {
-    "types": [
-      {
-        "name": "Number"
-      },
-      {
-        "name": "Unit"
-      }
-    ]
   }
 }

@@ -11,26 +11,7 @@
         "type": "operation",
         "operator": "*",
         "left": "<x>",
-        "right": "2",
-        "type_detail": {
-          "name": "Number"
-        }
-      },
-      "type_detail": {
-        "paramType": {
-          "name": "Number"
-        },
-        "returnType": {
-          "name": "Number"
-        }
-      }
-    },
-    "type_detail": {
-      "paramType": {
-        "name": "Number"
-      },
-      "returnType": {
-        "name": "Number"
+        "right": "2"
       }
     }
   },
@@ -46,26 +27,7 @@
         "type": "operation",
         "operator": "+",
         "left": "<x>",
-        "right": "1",
-        "type_detail": {
-          "name": "Number"
-        }
-      },
-      "type_detail": {
-        "paramType": {
-          "name": "Number"
-        },
-        "returnType": {
-          "name": "Number"
-        }
-      }
-    },
-    "type_detail": {
-      "paramType": {
-        "name": "Number"
-      },
-      "returnType": {
-        "name": "Number"
+        "right": "1"
       }
     }
   },
@@ -79,26 +41,32 @@
       "left": {
         "type": "operation",
         "operator": " ",
-        "left": "<f>",
-        "right": "<g>",
-        "name": "compose",
-        "type_detail": {
-          "paramType": {
-            "name": "Number"
-          },
-          "returnType": {
-            "name": "Number"
+        "left": {
+          "type": "operation",
+          "operator": "?",
+          "left": "<x>",
+          "right": {
+            "type": "operation",
+            "operator": "*",
+            "left": "<x>",
+            "right": "2"
           }
-        }
+        },
+        "right": {
+          "type": "operation",
+          "operator": "?",
+          "left": "<x>",
+          "right": {
+            "type": "operation",
+            "operator": "+",
+            "left": "<x>",
+            "right": "1"
+          }
+        },
+        "name": "compose"
       },
       "right": "3",
-      "name": "apply",
-      "type_detail": {
-        "name": "Number"
-      }
-    },
-    "type_detail": {
-      "name": "Number"
+      "name": "apply"
     }
   }
 ]

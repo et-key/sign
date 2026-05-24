@@ -6,14 +6,9 @@
       "type": "block",
       "kind": "abs",
       "content": "<a>",
-      "type_detail": {
-        "name": "a"
-      }
+      "env": {}
     },
-    "right": "1",
-    "type_detail": {
-      "name": "Number"
-    }
+    "right": "1"
   },
   {
     "type": "operation",
@@ -23,12 +18,7 @@
       "type": "block",
       "kind": "abs",
       "content": "<a>",
-      "type_detail": {
-        "name": "a"
-      }
-    },
-    "type_detail": {
-      "name": "Number"
+      "env": {}
     }
   },
   {
@@ -38,29 +28,14 @@
       "type": "block",
       "kind": "abs",
       "content": {
-        "type": "block",
-        "kind": "group",
-        "content": {
-          "type": "operation",
-          "operator": "+",
-          "left": "<x>",
-          "right": "<y>",
-          "type_detail": {
-            "name": "Number"
-          }
-        },
-        "type_detail": {
-          "name": "Number"
-        }
+        "type": "operation",
+        "operator": "+",
+        "left": "<x>",
+        "right": "<y>"
       },
-      "type_detail": {
-        "name": "Number"
-      }
+      "env": {}
     },
-    "right": "3",
-    "type_detail": {
-      "name": "Number"
-    }
+    "right": "3"
   },
   {
     "type": "operation",
@@ -70,27 +45,12 @@
       "type": "block",
       "kind": "abs",
       "content": {
-        "type": "block",
-        "kind": "group",
-        "content": {
-          "type": "operation",
-          "operator": "+",
-          "left": "<x>",
-          "right": "<y>",
-          "type_detail": {
-            "name": "Number"
-          }
-        },
-        "type_detail": {
-          "name": "Number"
-        }
+        "type": "operation",
+        "operator": "+",
+        "left": "<x>",
+        "right": "<y>"
       },
-      "type_detail": {
-        "name": "Number"
-      }
-    },
-    "type_detail": {
-      "name": "Number"
+      "env": {}
     }
   }
 ]

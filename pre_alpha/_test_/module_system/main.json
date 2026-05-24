@@ -1,0 +1,39 @@
+[
+  {
+    "type": "expanded_dict",
+    "dict": {
+      "type": "block",
+      "kind": "brace",
+      "content": {
+        "<add>": {
+          "type": "block",
+          "kind": "bracket",
+          "content": {
+            "type": "operation",
+            "operator": "+"
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "operation",
+    "operator": " ",
+    "left": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "operation",
+        "operator": "+"
+      }
+    },
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "10",
+      "right": "5",
+      "name": "concat"
+    },
+    "name": "apply"
+  }
+]

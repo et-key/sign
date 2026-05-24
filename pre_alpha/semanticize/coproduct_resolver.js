@@ -86,7 +86,7 @@ function getCategory(node, env) {
     
     // 環境（env）に登録されていればそのカテゴリを優先
     if (env && env.has(node)) {
-      return env.get(node);
+      return env.get(node).category;
     }
     
     // 未定義の未知の識別子は変数（値）として Atom 扱いとする

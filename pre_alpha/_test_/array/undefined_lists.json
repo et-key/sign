@@ -3,82 +3,17 @@
     "type": "block",
     "kind": "bracket",
     "content": {
-      "type": "block",
-      "kind": "group",
-      "content": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
         "type": "operation",
         "operator": " ",
-        "left": {
-          "type": "operation",
-          "operator": " ",
-          "left": "<a>",
-          "right": "<b>",
-          "name": "concat",
-          "type_detail": {
-            "types": [
-              {
-                "name": "a"
-              },
-              {
-                "name": "b"
-              }
-            ]
-          }
-        },
-        "right": "<c>",
-        "name": "concat",
-        "type_detail": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "a"
-                },
-                {
-                  "name": "b"
-                }
-              ]
-            },
-            {
-              "name": "c"
-            }
-          ]
-        }
+        "left": "<a>",
+        "right": "<b>",
+        "name": "concat"
       },
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "a"
-              },
-              {
-                "name": "b"
-              }
-            ]
-          },
-          {
-            "name": "c"
-          }
-        ]
-      }
-    },
-    "type_detail": {
-      "types": [
-        {
-          "types": [
-            {
-              "name": "a"
-            },
-            {
-              "name": "b"
-            }
-          ]
-        },
-        {
-          "name": "c"
-        }
-      ]
+      "right": "<c>",
+      "name": "concat"
     }
   },
   {
@@ -89,37 +24,10 @@
       "operator": " ",
       "left": "<a>",
       "right": "<b>",
-      "name": "concat",
-      "type_detail": {
-        "types": [
-          {
-            "name": "a"
-          },
-          {
-            "name": "b"
-          }
-        ]
-      }
+      "name": "concat"
     },
     "right": "<c>",
-    "name": "concat",
-    "type_detail": {
-      "types": [
-        {
-          "types": [
-            {
-              "name": "a"
-            },
-            {
-              "name": "b"
-            }
-          ]
-        },
-        {
-          "name": "c"
-        }
-      ]
-    }
+    "name": "concat"
   },
   {
     "type": "operation",
@@ -128,35 +36,8 @@
       "type": "operation",
       "operator": ",",
       "left": "<a>",
-      "right": "<b>",
-      "type_detail": {
-        "types": [
-          {
-            "name": "a"
-          },
-          {
-            "name": "b"
-          }
-        ]
-      }
+      "right": "<b>"
     },
-    "right": "<c>",
-    "type_detail": {
-      "types": [
-        {
-          "types": [
-            {
-              "name": "a"
-            },
-            {
-              "name": "b"
-            }
-          ]
-        },
-        {
-          "name": "c"
-        }
-      ]
-    }
+    "right": "<c>"
   }
 ]

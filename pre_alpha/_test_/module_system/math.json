@@ -1,0 +1,28 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<add>",
+    "right": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "operation",
+        "operator": "+"
+      }
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<sub>",
+    "right": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "operation",
+        "operator": "-"
+      }
+    }
+  }
+]

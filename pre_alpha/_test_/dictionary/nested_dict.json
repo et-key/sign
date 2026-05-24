@@ -3,221 +3,47 @@
   "operator": ":",
   "left": "<my_dict>",
   "right": {
-    "type": "block",
-    "kind": "indent",
-    "content": {
+    "type": "operation",
+    "operator": " ",
+    "left": {
       "type": "operation",
       "operator": " ",
       "left": {
         "type": "operation",
-        "operator": " ",
-        "left": {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": ":",
-            "left": "<name>",
-            "right": "`Sign`",
-            "type_detail": {
-              "name": "String"
-            }
-          },
-          "type_detail": {
-            "name": "String"
-          }
-        },
-        "right": {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": ":",
-            "left": "<version>",
-            "right": "0.1",
-            "type_detail": {
-              "name": "Number"
-            }
-          },
-          "type_detail": {
-            "name": "Number"
-          }
-        },
-        "name": "concat",
-        "type_detail": {
-          "types": [
-            {
-              "name": "String"
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
+        "operator": ":",
+        "left": "<name>",
+        "right": "`Sign`"
       },
       "right": {
-        "type": "block",
-        "kind": "group",
-        "content": {
+        "type": "operation",
+        "operator": ":",
+        "left": "<version>",
+        "right": "0.1"
+      },
+      "name": "concat"
+    },
+    "right": {
+      "type": "operation",
+      "operator": ":",
+      "left": "<features>",
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
           "type": "operation",
           "operator": ":",
-          "left": "<features>",
-          "right": {
-            "type": "block",
-            "kind": "indent",
-            "content": {
-              "type": "operation",
-              "operator": " ",
-              "left": {
-                "type": "block",
-                "kind": "group",
-                "content": {
-                  "type": "operation",
-                  "operator": ":",
-                  "left": "<type>",
-                  "right": "`Structural`",
-                  "type_detail": {
-                    "name": "String"
-                  }
-                },
-                "type_detail": {
-                  "name": "String"
-                }
-              },
-              "right": {
-                "type": "block",
-                "kind": "group",
-                "content": {
-                  "type": "operation",
-                  "operator": ":",
-                  "left": "<backend>",
-                  "right": "`AArch64`",
-                  "type_detail": {
-                    "name": "String"
-                  }
-                },
-                "type_detail": {
-                  "name": "String"
-                }
-              },
-              "name": "concat",
-              "type_detail": {
-                "types": [
-                  {
-                    "name": "String"
-                  },
-                  {
-                    "name": "String"
-                  }
-                ]
-              }
-            },
-            "type_detail": {
-              "types": [
-                {
-                  "name": "String"
-                },
-                {
-                  "name": "String"
-                }
-              ]
-            }
-          },
-          "type_detail": {
-            "types": [
-              {
-                "name": "String"
-              },
-              {
-                "name": "String"
-              }
-            ]
-          }
+          "left": "<type>",
+          "right": "`Structural`"
         },
-        "type_detail": {
-          "types": [
-            {
-              "name": "String"
-            },
-            {
-              "name": "String"
-            }
-          ]
-        }
-      },
-      "name": "concat",
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "String"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "types": [
-              {
-                "name": "String"
-              },
-              {
-                "name": "String"
-              }
-            ]
-          }
-        ]
+        "right": {
+          "type": "operation",
+          "operator": ":",
+          "left": "<backend>",
+          "right": "`AArch64`"
+        },
+        "name": "concat"
       }
     },
-    "type_detail": {
-      "types": [
-        {
-          "types": [
-            {
-              "name": "String"
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        },
-        {
-          "types": [
-            {
-              "name": "String"
-            },
-            {
-              "name": "String"
-            }
-          ]
-        }
-      ]
-    }
-  },
-  "type_detail": {
-    "types": [
-      {
-        "types": [
-          {
-            "name": "String"
-          },
-          {
-            "name": "Number"
-          }
-        ]
-      },
-      {
-        "types": [
-          {
-            "name": "String"
-          },
-          {
-            "name": "String"
-          }
-        ]
-      }
-    ]
+    "name": "concat"
   }
 }

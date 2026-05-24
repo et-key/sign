@@ -11,56 +11,13 @@
         "operator": " ",
         "left": "<x>",
         "right": "<y>",
-        "name": "apply_or_concat",
-        "type_detail": {
-          "types": [
-            {
-              "name": "Number"
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
+        "name": "concat"
       },
       "right": {
         "type": "operation",
         "operator": "+",
         "left": "<x>",
-        "right": "<y>",
-        "type_detail": {
-          "name": "Number"
-        }
-      },
-      "type_detail": {
-        "paramType": {
-          "types": [
-            {
-              "name": "Number"
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        },
-        "returnType": {
-          "name": "Number"
-        }
-      }
-    },
-    "type_detail": {
-      "paramType": {
-        "types": [
-          {
-            "name": "Number"
-          },
-          {
-            "name": "Number"
-          }
-        ]
-      },
-      "returnType": {
-        "name": "Number"
+        "right": "<y>"
       }
     }
   },
@@ -73,93 +30,29 @@
       "operator": " ",
       "left": {
         "type": "operation",
-        "operator": " ",
-        "left": "<f>",
-        "right": "_",
-        "name": "concat",
-        "type_detail": {
-          "types": [
-            {
-              "paramType": {
-                "types": [
-                  {
-                    "name": "Number"
-                  },
-                  {
-                    "name": "Number"
-                  }
-                ]
-              },
-              "returnType": {
-                "name": "Number"
-              }
-            },
-            {
-              "name": "String"
-            }
-          ]
+        "operator": "?",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": "<x>",
+          "right": "<y>",
+          "name": "concat"
+        },
+        "right": {
+          "type": "operation",
+          "operator": "+",
+          "left": "<x>",
+          "right": "<y>"
         }
       },
-      "right": "3",
-      "name": "concat",
-      "type_detail": {
-        "types": [
-          {
-            "types": [
-              {
-                "paramType": {
-                  "types": [
-                    {
-                      "name": "Number"
-                    },
-                    {
-                      "name": "Number"
-                    }
-                  ]
-                },
-                "returnType": {
-                  "name": "Number"
-                }
-              },
-              {
-                "name": "String"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
-      }
-    },
-    "type_detail": {
-      "types": [
-        {
-          "types": [
-            {
-              "paramType": {
-                "types": [
-                  {
-                    "name": "Number"
-                  },
-                  {
-                    "name": "Number"
-                  }
-                ]
-              },
-              "returnType": {
-                "name": "Number"
-              }
-            },
-            {
-              "name": "String"
-            }
-          ]
-        },
-        {
-          "name": "Number"
-        }
-      ]
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": "_",
+        "right": "3",
+        "name": "concat"
+      },
+      "name": "apply"
     }
   },
   {
@@ -169,25 +62,25 @@
     "right": {
       "type": "operation",
       "operator": " ",
-      "left": "<f>",
-      "right": "2",
-      "name": "apply_partial",
-      "type_detail": {
-        "paramType": {
-          "name": "Number"
+      "left": {
+        "type": "operation",
+        "operator": "?",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": "<x>",
+          "right": "<y>",
+          "name": "concat"
         },
-        "returnType": {
-          "name": "Number"
+        "right": {
+          "type": "operation",
+          "operator": "+",
+          "left": "<x>",
+          "right": "<y>"
         }
-      }
-    },
-    "type_detail": {
-      "paramType": {
-        "name": "Number"
       },
-      "returnType": {
-        "name": "Number"
-      }
+      "right": "2",
+      "name": "apply"
     }
   },
   {
@@ -197,15 +90,31 @@
     "right": {
       "type": "operation",
       "operator": " ",
-      "left": "<curried>",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "operation",
+          "operator": "?",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "left": "<x>",
+            "right": "<y>",
+            "name": "concat"
+          },
+          "right": {
+            "type": "operation",
+            "operator": "+",
+            "left": "<x>",
+            "right": "<y>"
+          }
+        },
+        "right": "2",
+        "name": "apply"
+      },
       "right": "4",
-      "name": "apply",
-      "type_detail": {
-        "name": "Number"
-      }
-    },
-    "type_detail": {
-      "name": "Number"
+      "name": "concat"
     }
   },
   {
@@ -213,30 +122,7 @@
     "operator": ":",
     "left": "<check>",
     "right": {
-      "type": "operation",
-      "operator": "<",
-      "left": "10",
-      "right": "5",
-      "type_detail": {
-        "types": [
-          {
-            "name": "Number"
-          },
-          {
-            "name": "Unit"
-          }
-        ]
-      }
-    },
-    "type_detail": {
-      "types": [
-        {
-          "name": "Number"
-        },
-        {
-          "name": "Unit"
-        }
-      ]
+      "type": "Unit"
     }
   },
   {
@@ -247,27 +133,7 @@
       "type": "operation",
       "operator": "==",
       "left": "5",
-      "right": "5",
-      "type_detail": {
-        "types": [
-          {
-            "name": "Number"
-          },
-          {
-            "name": "Unit"
-          }
-        ]
-      }
-    },
-    "type_detail": {
-      "types": [
-        {
-          "name": "Number"
-        },
-        {
-          "name": "Unit"
-        }
-      ]
+      "right": "5"
     }
   }
 ]

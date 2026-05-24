@@ -3,6 +3,7 @@ import * as parser from './parse/minimal.js';
 import { buildAST } from './semanticize/shunting_yard.js';
 import { buildEnvironment } from './semanticize/builder.js';
 import { resolveCoproducts } from './semanticize/coproduct_resolver.js';
+import { evaluate } from './semanticize/evaluator.js';
 // import { annotateContextualOperators, liftLambdas, infer, generateST, Substitution, resetTVarCounter } from './semanticize/analyzer/index.js';
 // import { generateAArch64 } from './backend/aarch64.js';
 import util from 'util';
@@ -49,15 +50,21 @@ for (const filePath of files) {
     // 1. buildAST (shunting yard)
     // 2. buildEnvironment (スコープと型推測)
     // 3. resolveCoproducts (優先順位に基づくAST階層調整)
+    // 4. evaluate (型/値の評価とUnitへの還元)
+    let globalEnv = new Map();
+    
     const astTrees = astLines.map(astLine => {
       // 1. Shunting Yard (優先順位解決 -> AST)
       let astTree = buildAST(Array.isArray(astLine) && astLine.length === 1 && Array.isArray(astLine[0]) ? astLine[0] : astLine);
       
       // 2. 環境構築 (ローカルスコープとカテゴリ判定)
-      const env = buildEnvironment(astTree);
+      globalEnv = buildEnvironment(astTree, globalEnv);
       
       // 3. 優先順位解決 (coproduct_block の還元)
-      astTree = resolveCoproducts(astTree, env);
+      astTree = resolveCoproducts(astTree, globalEnv);
+
+      // 4. ASTの抽象評価 (型推論 / Unitへの還元)
+      astTree = evaluate(astTree, globalEnv);
       
       return astTree;
     });

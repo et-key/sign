@@ -11,182 +11,40 @@
         "operator": " ",
         "left": "<x>",
         "right": "<y>",
-        "name": "apply_or_concat",
-        "type_detail": {
-          "types": [
-            {
-              "name": "T0"
-            },
-            {
-              "name": "T1"
-            }
-          ]
-        }
+        "name": "concat"
       },
       "right": {
-        "type": "block",
-        "kind": "indent",
-        "content": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
           "type": "operation",
           "operator": " ",
           "left": {
             "type": "operation",
-            "operator": " ",
+            "operator": ":",
             "left": {
-              "type": "block",
-              "kind": "group",
-              "content": {
-                "type": "operation",
-                "operator": ":",
-                "left": {
-                  "type": "operation",
-                  "operator": "<",
-                  "left": "<x>",
-                  "right": "1",
-                  "type_detail": {
-                    "name": "result1"
-                  }
-                },
-                "right": "<result1>",
-                "type_detail": {
-                  "name": "result1"
-                }
-              },
-              "type_detail": {
-                "name": "result1"
-              }
+              "type": "operation",
+              "operator": "<",
+              "left": "<x>",
+              "right": "1"
             },
-            "right": {
-              "type": "block",
-              "kind": "group",
-              "content": {
-                "type": "operation",
-                "operator": ":",
-                "left": {
-                  "type": "operation",
-                  "operator": "<",
-                  "left": "<y>",
-                  "right": "3",
-                  "type_detail": {
-                    "name": "result2"
-                  }
-                },
-                "right": "<result2>",
-                "type_detail": {
-                  "name": "result2"
-                }
-              },
-              "type_detail": {
-                "name": "result2"
-              }
-            },
-            "name": "concat",
-            "type_detail": {
-              "types": [
-                {
-                  "name": "result1"
-                },
-                {
-                  "name": "result2"
-                }
-              ]
-            }
+            "right": "<result1>"
           },
-          "right": "3",
-          "name": "concat",
-          "type_detail": {
-            "types": [
-              {
-                "types": [
-                  {
-                    "name": "result1"
-                  },
-                  {
-                    "name": "result2"
-                  }
-                ]
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          }
+          "right": {
+            "type": "operation",
+            "operator": ":",
+            "left": {
+              "type": "operation",
+              "operator": "<",
+              "left": "<y>",
+              "right": "3"
+            },
+            "right": "<result2>"
+          },
+          "name": "concat"
         },
-        "type_detail": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "result1"
-                },
-                {
-                  "name": "result2"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      },
-      "type_detail": {
-        "paramType": {
-          "types": [
-            {
-              "name": "T0"
-            },
-            {
-              "name": "T1"
-            }
-          ]
-        },
-        "returnType": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "result1"
-                },
-                {
-                  "name": "result2"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      }
-    },
-    "type_detail": {
-      "paramType": {
-        "types": [
-          {
-            "name": "T0"
-          },
-          {
-            "name": "T1"
-          }
-        ]
-      },
-      "returnType": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "result1"
-              },
-              {
-                "name": "result2"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
+        "right": "3",
+        "name": "concat"
       }
     }
   },
@@ -194,107 +52,6 @@
     "type": "block",
     "kind": "bracket",
     "content": {
-      "type": "block",
-      "kind": "indent",
-      "content": {
-        "type": "block",
-        "kind": "group",
-        "content": "<lambda_0>",
-        "type_detail": {
-          "paramType": {
-            "types": [
-              {
-                "name": "T16"
-              },
-              {
-                "name": "T17"
-              }
-            ]
-          },
-          "returnType": {
-            "types": [
-              {
-                "types": [
-                  {
-                    "name": "Number"
-                  },
-                  {
-                    "name": "Number"
-                  }
-                ]
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          }
-        }
-      },
-      "type_detail": {
-        "paramType": {
-          "types": [
-            {
-              "name": "T16"
-            },
-            {
-              "name": "T17"
-            }
-          ]
-        },
-        "returnType": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      }
-    },
-    "type_detail": {
-      "paramType": {
-        "types": [
-          {
-            "name": "T16"
-          },
-          {
-            "name": "T17"
-          }
-        ]
-      },
-      "returnType": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
-      }
-    }
-  },
-  {
-    "type": "operation",
-    "operator": ":",
-    "left": "<lambda_0>",
-    "right": {
       "type": "operation",
       "operator": "?",
       "left": {
@@ -302,166 +59,30 @@
         "operator": " ",
         "left": "<x>",
         "right": "<y>",
-        "name": "apply_or_concat",
-        "type_detail": {
-          "types": [
-            {
-              "name": "T28"
-            },
-            {
-              "name": "T29"
-            }
-          ]
-        }
+        "name": "concat"
       },
       "right": {
-        "type": "block",
-        "kind": "indent",
-        "content": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
           "type": "operation",
           "operator": " ",
           "left": {
             "type": "operation",
-            "operator": " ",
-            "left": {
-              "type": "block",
-              "kind": "group",
-              "content": {
-                "type": "operation",
-                "operator": ":",
-                "left": "<x>",
-                "right": "1",
-                "type_detail": {
-                  "name": "Number"
-                }
-              },
-              "type_detail": {
-                "name": "Number"
-              }
-            },
-            "right": {
-              "type": "block",
-              "kind": "group",
-              "content": {
-                "type": "operation",
-                "operator": ":",
-                "left": "<y>",
-                "right": "2",
-                "type_detail": {
-                  "name": "Number"
-                }
-              },
-              "type_detail": {
-                "name": "Number"
-              }
-            },
-            "name": "concat",
-            "type_detail": {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            }
+            "operator": ":",
+            "left": "<x>",
+            "right": "1"
           },
-          "right": "3",
-          "name": "concat",
-          "type_detail": {
-            "types": [
-              {
-                "types": [
-                  {
-                    "name": "Number"
-                  },
-                  {
-                    "name": "Number"
-                  }
-                ]
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          }
+          "right": {
+            "type": "operation",
+            "operator": ":",
+            "left": "<y>",
+            "right": "2"
+          },
+          "name": "concat"
         },
-        "type_detail": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      },
-      "type_detail": {
-        "paramType": {
-          "types": [
-            {
-              "name": "T28"
-            },
-            {
-              "name": "T29"
-            }
-          ]
-        },
-        "returnType": {
-          "types": [
-            {
-              "types": [
-                {
-                  "name": "Number"
-                },
-                {
-                  "name": "Number"
-                }
-              ]
-            },
-            {
-              "name": "Number"
-            }
-          ]
-        }
-      }
-    },
-    "type_detail": {
-      "paramType": {
-        "types": [
-          {
-            "name": "T28"
-          },
-          {
-            "name": "T29"
-          }
-        ]
-      },
-      "returnType": {
-        "types": [
-          {
-            "types": [
-              {
-                "name": "Number"
-              },
-              {
-                "name": "Number"
-              }
-            ]
-          },
-          {
-            "name": "Number"
-          }
-        ]
+        "right": "3",
+        "name": "concat"
       }
     }
   }

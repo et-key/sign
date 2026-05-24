@@ -7,22 +7,7 @@
       "kind": "bracket",
       "content": {
         "type": "operation",
-        "operator": "+",
-        "type_detail": {
-          "paramType": {
-            "types": [
-              {
-                "name": "T0"
-              },
-              {
-                "name": "T1"
-              }
-            ]
-          },
-          "returnType": {
-            "name": "String"
-          }
-        }
+        "operator": "+"
       }
     },
     "right": {
@@ -33,49 +18,9 @@
         "operator": " ",
         "left": "<x>",
         "right": "<y>",
-        "name": "apply_or_concat",
-        "type_detail": {
-          "types": [
-            {
-              "name": "T0"
-            },
-            {
-              "name": "T1"
-            }
-          ]
-        }
+        "name": "concat"
       },
-      "right": "_",
-      "type_detail": {
-        "paramType": {
-          "types": [
-            {
-              "name": "T0"
-            },
-            {
-              "name": "T1"
-            }
-          ]
-        },
-        "returnType": {
-          "name": "String"
-        }
-      }
-    },
-    "type_detail": {
-      "paramType": {
-        "types": [
-          {
-            "name": "T0"
-          },
-          {
-            "name": "T1"
-          }
-        ]
-      },
-      "returnType": {
-        "name": "String"
-      }
+      "right": "_"
     }
   },
   {
@@ -92,25 +37,7 @@
           "operator": "|",
           "right": {
             "type": "operation",
-            "operator": "/",
-            "type_detail": {
-              "name": "T5"
-            }
-          },
-          "type_detail": {
-            "paramType": {
-              "types": [
-                {
-                  "name": "T3"
-                },
-                {
-                  "name": "T4"
-                }
-              ]
-            },
-            "returnType": {
-              "name": "String"
-            }
+            "operator": "/"
           }
         }
       }
@@ -123,81 +50,15 @@
         "operator": " ",
         "left": "<x>",
         "right": "<y>",
-        "name": "apply_or_concat",
-        "type_detail": {
-          "types": [
-            {
-              "name": "T3"
-            },
-            {
-              "name": "T4"
-            }
-          ]
-        }
+        "name": "concat"
       },
-      "right": "<String>",
-      "type_detail": {
-        "paramType": {
-          "types": [
-            {
-              "name": "T3"
-            },
-            {
-              "name": "T4"
-            }
-          ]
-        },
-        "returnType": {
-          "name": "String"
-        }
-      }
-    },
-    "type_detail": {
-      "paramType": {
-        "types": [
-          {
-            "name": "T3"
-          },
-          {
-            "name": "T4"
-          }
-        ]
-      },
-      "returnType": {
-        "name": "String"
-      }
+      "right": "<String>"
     }
   },
-  {
-    "type": "operation",
-    "operator": "+",
-    "left": "1",
-    "right": "2",
-    "type_detail": {
-      "name": "Number"
-    }
-  },
+  "3",
   {
     "type": "operation",
     "operator": "|",
-    "right": {
-      "type": "operation",
-      "operator": "/",
-      "left": "3",
-      "right": "8",
-      "type_detail": {
-        "name": "Number"
-      }
-    },
-    "type_detail": {
-      "types": [
-        {
-          "name": "Unit"
-        },
-        {
-          "name": "Number"
-        }
-      ]
-    }
+    "right": "0.375"
   }
 ]

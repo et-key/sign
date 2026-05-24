@@ -10,36 +10,10 @@
         "type": "operation",
         "operator": "-",
         "operand": "<b>",
-        "position": "prefix",
-        "type_detail": {
-          "name": "Number"
-        }
-      },
-      "type_detail": {
-        "types": [
-          {
-            "name": "a"
-          },
-          {
-            "name": "Number"
-          }
-        ]
+        "position": "prefix"
       }
     },
-    "right": "<c>",
-    "type_detail": {
-      "types": [
-        {
-          "name": "a"
-        },
-        {
-          "name": "Number"
-        },
-        {
-          "name": "c"
-        }
-      ]
-    }
+    "right": "<c>"
   },
   {
     "type": "operation",
@@ -52,35 +26,9 @@
         "type": "operation",
         "operator": "-",
         "operand": "<b>",
-        "position": "prefix",
-        "type_detail": {
-          "name": "Number"
-        }
-      },
-      "type_detail": {
-        "types": [
-          {
-            "name": "a"
-          },
-          {
-            "name": "Number"
-          }
-        ]
+        "position": "prefix"
       }
     },
-    "right": "<c>",
-    "type_detail": {
-      "types": [
-        {
-          "name": "a"
-        },
-        {
-          "name": "Number"
-        },
-        {
-          "name": "c"
-        }
-      ]
-    }
+    "right": "<c>"
   }
 ]

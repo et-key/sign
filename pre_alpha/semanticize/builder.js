@@ -11,12 +11,12 @@
  * @param {Map<string, string>} env - 識別子名からカテゴリ（'Lambda'|'Atom'）へのマップ
  * @returns {Map<string, string>}
  */
-export function buildEnvironment(node, env = new Map()) {
+export function buildEnvironment(node, env = new Map(), isExported = false) {
   if (!node) return env;
 
   if (Array.isArray(node)) {
     for (const item of node) {
-      buildEnvironment(item, env);
+      buildEnvironment(item, env, isExported);
     }
     return env;
   }
@@ -30,19 +30,31 @@ export function buildEnvironment(node, env = new Map()) {
       node.env = currentEnv;     // resolveCoproducts で参照できるようにノードに保存
     }
 
+    // export演算子 (`#`) の場合、子ノードに isExported = true を伝搬
+    if (node.type === 'operation' && node.operator === '#') {
+      if (node.operand) buildEnvironment(node.operand, currentEnv, true);
+      // `#` の他のプロパティも一応走査
+      for (const key of Object.keys(node)) {
+        if (key !== 'type' && key !== 'name' && key !== 'operator' && key !== 'kind' && key !== 'env' && key !== 'operand') {
+          buildEnvironment(node[key], currentEnv, isExported);
+        }
+      }
+      return env;
+    }
+
     // 定義演算子 (`:`) の場合、左辺の識別子を登録する
     if (node.type === 'operation' && node.operator === ':') {
       const identName = typeof node.left === 'string' ? node.left : (node.left.name || String(node.left));
       
       // 右辺の構文から、仮のカテゴリを推測する
       const rightCat = getInitialCategory(node.right, currentEnv);
-      currentEnv.set(identName, rightCat);
+      currentEnv.set(identName, { category: rightCat, ast: node.right, exported: isExported });
     }
 
     // 再帰的にブロックの内部などを走査
     for (const key of Object.keys(node)) {
       if (key !== 'type' && key !== 'name' && key !== 'operator' && key !== 'kind' && key !== 'env') {
-        buildEnvironment(node[key], currentEnv);
+        buildEnvironment(node[key], currentEnv, isExported);
       }
     }
   }
@@ -68,12 +80,12 @@ function isPartialOperation(node) {
  * 右辺の初期構文から、その定義が最終的に `Lambda` になるか `Atom` になるかを推測します。
  * （※coproduct解決前に実行されるため、近似的な判定を行います）
  */
-function getInitialCategory(node, env) {
+export function getInitialCategory(node, env) {
   if (!node) return 'Atom';
   if (node.isLambda) return 'Lambda';
   
   if (typeof node === 'string') {
-    if (env && env.has(node)) return env.get(node);
+    if (env && env.has(node)) return env.get(node).category;
     return 'Atom';
   }
 
