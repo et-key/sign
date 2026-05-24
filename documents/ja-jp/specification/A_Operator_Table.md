@@ -40,8 +40,8 @@
 | 8 | `==` | 中置 | equal | 等しい | 構造内比較演算 |
 | 8 | `!==` | 中置 | xnot_equal | 等しくない | 構造内比較演算 |
 | 9 | `,` | 中置※ | product | 積（構造的組み立て） | 右結合なリスト構築 |
-| 10.0 | ` ` | `Lambda` 中置 `Atom \| List` | apply | 適用 | 関数適用 |
-| 10.1 | ` ` | `Atom \| List` 中置 `Lambda` | apply | 逆適用 | 関数適用 |
+| 10.0 | ` ` | `Atom \| List` 中置 `Lambda` | apply | 逆適用 | 関数適用 |
+| 10.1 | ` ` | `Lambda` 中置 `Atom \| List` | apply | 適用 | 関数適用 |
 | 10.2 | ` ` | `Lambda` 中置 `Lambda` | compose | 左結合な関数合成 | 関数合成 |
 | 10.3 | ` ` | `Atom \| List` 中置 `Atom \| List` | unshift <br> push <br> concat <br> construct | 並べる（連接） | リストへ追加 または構築 |
 | 11 | `~` | 中置 | range | around（範囲のその辺り） | 範囲リスト構築 |
