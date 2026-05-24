@@ -11,5 +11,6 @@ my_dict:
   MOV X0, #0.1
   // Unknown identifier: `Structural`
   // Unknown identifier: `AArch64`
+L_block_end_0:
   RET
 

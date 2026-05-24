@@ -20,7 +20,7 @@ g:
 
 result:
   MOV X0, #3
-  BL g
-  BL f
+  BL lambda
+  BL lambda
   RET
 

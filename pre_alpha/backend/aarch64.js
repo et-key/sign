@@ -98,7 +98,7 @@ export class AArch64Generator {
     return regIndex;
   }
 
-  generateExpression(node, env, targetReg, currentFuncName = null, isTail = false) {
+  generateExpression(node, env, targetReg, currentFuncName = null, isTail = false, failLabel = null, blockEndLabel = null) {
     if (!node) return false;
     let didTailCall = false;
 
@@ -127,15 +127,60 @@ export class AArch64Generator {
 
 
     if (node.type === 'block') {
-      return this.generateExpression(node.content, env, targetReg, currentFuncName, isTail);
+      return this.generateExpression(node.content, env, targetReg, currentFuncName, isTail, failLabel, blockEndLabel);
+    }
+
+    if (node.type === 'coproduct_block') {
+      const cases = node.statements || [];
+      if (cases.length === 0) return;
+
+      const endLabel = `L_end_${this.labelCounter++}`;
+      
+      for (let i = 0; i < cases.length; i++) {
+        const isLast = i === cases.length - 1;
+        const nextLabel = isLast ? failLabel : `L_case_${this.labelCounter++}`;
+        
+        // Evaluate this case. If it yields Unit, it jumps to nextLabel.
+        this.generateExpression(cases[i], env, targetReg, currentFuncName, isTail && isLast, nextLabel);
+        
+        if (!isLast) {
+          // If it succeeds (didn't jump to nextLabel), jump to end!
+          this.asm.push(`  B ${endLabel}`);
+          this.asm.push(`${nextLabel}:`);
+        }
+      }
+      
+      if (cases.length > 1) {
+        this.asm.push(`${endLabel}:`);
+      }
+      return;
     }
 
     if (node.type === 'operation') {
       if (node.operator === ':') {
-        const varName = this.getIdentName(node.left);
-        this.generateExpression(node.right, env, targetReg, currentFuncName, false);
-        env.set(varName, targetReg);
-        return;
+        if (typeof node.left === 'string' || (node.left && node.left.type === 'operation' && node.left.operator === '#')) {
+          // Assignment or Export
+          const varName = this.getIdentName(node.left);
+          this.generateExpression(node.right, env, targetReg, currentFuncName, false, failLabel, blockEndLabel);
+          env.set(varName, targetReg);
+        } else {
+          // Match Case (left side is a condition expression)
+          const nextCaseLabel = `L_next_case_${this.labelCounter++}`;
+          this.generateExpression(node.left, env, 'X9', currentFuncName, false, nextCaseLabel, blockEndLabel);
+          
+          // Condition succeeded, evaluate result
+          const rightTail = this.generateExpression(node.right, env, targetReg, currentFuncName, isTail, failLabel, blockEndLabel);
+          if (rightTail) didTailCall = true;
+          
+          if (blockEndLabel) {
+            this.asm.push(`  B ${blockEndLabel}`);
+          } else if (!isTail && !rightTail) {
+            // Top level match case without block end? Unlikely, but just in case
+          }
+          
+          this.asm.push(`${nextCaseLabel}:`);
+        }
+        return didTailCall;
       }
 
       if (node.operator === '$') {
@@ -162,14 +207,83 @@ export class AArch64Generator {
 
       if (['+', '-', '*'].includes(node.operator)) {
         // We need scratch registers. X9 and X10
-        this.generateExpression(node.left, env, 'X9');
-        this.generateExpression(node.right, env, 'X10');
+        this.generateExpression(node.left, env, 'X9', currentFuncName, false, failLabel);
+        this.generateExpression(node.right, env, 'X10', currentFuncName, false, failLabel);
 
         switch (node.operator) {
           case '+': this.asm.push(`  ADD ${targetReg}, X9, X10`); break;
           case '-': this.asm.push(`  SUB ${targetReg}, X9, X10`); break;
           case '*': this.asm.push(`  MUL ${targetReg}, X9, X10`); break;
         }
+        return;
+      }
+
+      if (['||', '&&', ';;'].includes(node.operator)) {
+        this.generateExpression(node.left, env, 'X9', currentFuncName, false, failLabel);
+        this.generateExpression(node.right, env, 'X10', currentFuncName, false, failLabel);
+        switch (node.operator) {
+          case '||': this.asm.push(`  ORR ${targetReg}, X9, X10`); break;
+          case '&&': this.asm.push(`  AND ${targetReg}, X9, X10`); break;
+          case ';;': this.asm.push(`  EOR ${targetReg}, X9, X10`); break;
+        }
+        return;
+      }
+
+      if (node.operator === '!!' && node.position === 'prefix') {
+        this.generateExpression(node.operand, env, 'X9', currentFuncName, false, failLabel);
+        this.asm.push(`  MVN ${targetReg}, X9`);
+        return;
+      }
+
+      if (['<', '>', '==', '!=', '<=', '>='].includes(node.operator)) {
+        this.generateExpression(node.left, env, 'X9', currentFuncName, false, failLabel);
+        this.generateExpression(node.right, env, 'X10', currentFuncName, false, failLabel);
+        this.asm.push(`  CMP X9, X10`);
+        if (failLabel) {
+          switch (node.operator) {
+            case '<': this.asm.push(`  B.GE ${failLabel}`); break;
+            case '>': this.asm.push(`  B.LE ${failLabel}`); break;
+            case '==': this.asm.push(`  B.NE ${failLabel}`); break;
+            case '!=': this.asm.push(`  B.EQ ${failLabel}`); break;
+            case '<=': this.asm.push(`  B.GT ${failLabel}`); break;
+            case '>=': this.asm.push(`  B.LT ${failLabel}`); break;
+          }
+        } else {
+          this.asm.push(`  // No failLabel provided for Unit fallback`);
+        }
+        if (targetReg !== 'X9') {
+           this.asm.push(`  MOV ${targetReg}, X9`);
+        }
+        return;
+      }
+
+      if (node.operator === '|') {
+        const cases = this.flattenCoproduct(node);
+        if (cases.length === 0) return;
+
+        const endLabel = `L_end_${this.labelCounter++}`;
+        
+        for (let i = 0; i < cases.length; i++) {
+          const isLast = i === cases.length - 1;
+          const nextLabel = isLast ? failLabel : `L_case_${this.labelCounter++}`;
+          
+          this.generateExpression(cases[i], env, targetReg, currentFuncName, isTail && isLast, nextLabel);
+          
+          if (!isLast) {
+            this.asm.push(`  B ${endLabel}`);
+            this.asm.push(`${nextLabel}:`);
+          }
+        }
+        
+        if (cases.length > 1) {
+          this.asm.push(`${endLabel}:`);
+        }
+        return;
+      }
+
+      if (node.operator === '&') {
+        this.generateExpression(node.left, env, targetReg, currentFuncName, false, failLabel);
+        this.generateExpression(node.right, env, targetReg, currentFuncName, isTail, failLabel);
         return;
       }
 
@@ -211,6 +325,65 @@ export class AArch64Generator {
       if (isApply) {
         const { func, args } = this.flattenApply(node);
 
+        if (func && func.type === 'operation' && func.operator === '?') {
+          // Inline Lambda Application
+          const params = this.flattenParams(func.left);
+          const localEnv = new Map(env);
+          let regIdx = 0;
+          
+          for (let i = 0; i < params.length; i++) {
+            const p = params[i];
+            const arg = i < args.length ? args[i] : null;
+            const targetParamReg = `X${regIdx}`;
+            
+            const isExplicitHole = typeof arg === 'string' && arg === '_';
+            const isCompileTimeUnit = arg && (arg.type === 'Unit' || (arg.type === 'block' && arg.content && arg.content.type === 'Unit'));
+            
+            if (arg && !isExplicitHole && !isCompileTimeUnit) {
+              const argFailLabel = `L_arg_fail_${this.labelCounter++}`;
+              const argSuccessLabel = `L_arg_success_${this.labelCounter++}`;
+              
+              // Evaluate argument with argFailLabel
+              this.generateExpression(arg, localEnv, targetParamReg, currentFuncName, false, argFailLabel, blockEndLabel);
+              this.asm.push(`  B ${argSuccessLabel}`);
+              
+              this.asm.push(`${argFailLabel}:`);
+              if (p.defaultNode) {
+                this.generateExpression(p.defaultNode, localEnv, targetParamReg, currentFuncName, false, failLabel, blockEndLabel);
+              } else {
+                if (failLabel) {
+                  this.asm.push(`  B ${failLabel} // Implicit Unit short-circuit`);
+                } else {
+                  this.asm.push(`  // Implicit Unit short-circuit (no failLabel)`);
+                }
+              }
+              this.asm.push(`${argSuccessLabel}:`);
+            } else {
+              // Missing argument, explicit _, or compile-time Unit
+              if (p.defaultNode) {
+                this.generateExpression(p.defaultNode, localEnv, targetParamReg, currentFuncName, false, failLabel, blockEndLabel);
+              } else if (isCompileTimeUnit) {
+                if (failLabel) {
+                  this.asm.push(`  B ${failLabel} // Compile-time Unit short-circuit`);
+                } else {
+                  this.asm.push(`  // Compile-time Unit short-circuit (no failLabel)`);
+                }
+              } else {
+                this.asm.push(`  // Partial application of ${p.name} not dynamically supported yet`);
+              }
+            }
+            
+            localEnv.set(p.name, targetParamReg);
+            if (p.isGenerator) regIdx += 3; else regIdx++;
+          }
+          
+          // Evaluate the body
+          const rightTail = this.generateExpression(func.right, localEnv, targetReg, currentFuncName, isTail, failLabel, blockEndLabel);
+          if (rightTail) didTailCall = true;
+          return didTailCall;
+        }
+
+        // Call the function (normal global BL or pointer)
         // Evaluate arguments into X0, X1, etc.
         let regIdx = 0;
         for (let i = 0; i < args.length; i++) {
@@ -241,12 +414,11 @@ export class AArch64Generator {
               regIdx += 4;
             }
           } else {
-            this.generateExpression(arg, env, `X${regIdx}`);
+            this.generateExpression(arg, env, `X${regIdx}`, currentFuncName, false, failLabel, blockEndLabel);
             regIdx++;
           }
         }
 
-        // Call the function
         if (typeof func === 'string') {
           const funcName = this.getIdentName(func);
           if (isTail && funcName === currentFuncName) {
@@ -261,14 +433,11 @@ export class AArch64Generator {
             this.asm.push(`  BL ${funcName}`);
           }
         } else if (func.name === 'compose') {
-          // Inline compose: f g 3 -> call g, then call f
-          // Args are already in X0..
           const fName = this.getIdentName(func.left);
           const gName = this.getIdentName(func.right);
           this.asm.push(`  BL ${gName}`);
           this.asm.push(`  BL ${fName}`);
         } else if (func.name === 'apply_or_concat') {
-          // Complex apply not yet implemented
           this.asm.push(`  // Complex apply not yet implemented`);
         } else {
           this.asm.push(`  // Unknown apply target`);
@@ -281,9 +450,16 @@ export class AArch64Generator {
       }
 
       if (!isApply && (node.name === 'concat' || node.name === 'short_circuit')) {
-        // For a block/tuple/sequence, the last element is in tail position
-        this.generateExpression(node.left, env, targetReg, currentFuncName, false);
-        const rightTail = this.generateExpression(node.right, env, targetReg, currentFuncName, isTail);
+        // A block or tuple is a chain of concats. We generate a blockEndLabel if we don't have one.
+        const myBlockEnd = blockEndLabel || `L_block_end_${this.labelCounter++}`;
+        
+        this.generateExpression(node.left, env, targetReg, currentFuncName, false, failLabel, myBlockEnd);
+        const rightTail = this.generateExpression(node.right, env, targetReg, currentFuncName, isTail, failLabel, myBlockEnd);
+        
+        if (!blockEndLabel) {
+          this.asm.push(`${myBlockEnd}:`);
+        }
+        
         if (rightTail) didTailCall = true;
         return didTailCall;
       }
@@ -301,6 +477,44 @@ export class AArch64Generator {
       curr = curr.left;
     }
     return { func: curr, args };
+  }
+
+  flattenCoproduct(node) {
+    let cases = [];
+    if (node && node.type === 'operation' && node.operator === '|') {
+      cases = cases.concat(this.flattenCoproduct(node.left));
+      cases = cases.concat(this.flattenCoproduct(node.right));
+    } else {
+      cases.push(node);
+    }
+    return cases;
+  }
+
+  flattenParams(node) {
+    let params = [];
+    if (!node) return params;
+    
+    if (typeof node === 'string') {
+      params.push({ name: this.getIdentName(node), defaultNode: null });
+      return params;
+    }
+    
+    if (node.type === 'operation') {
+      if (node.operator === ':') {
+        params.push({ name: this.getIdentName(node.left), defaultNode: node.right });
+        return params;
+      }
+      if (node.operator === ' ' || node.name === 'concat') {
+        params = params.concat(this.flattenParams(node.left));
+        params = params.concat(this.flattenParams(node.right));
+        return params;
+      }
+      if (node.operator === '~' && node.position === 'prefix') {
+        params.push({ name: this.getIdentName(node.operand), defaultNode: null, isGenerator: true });
+        return params;
+      }
+    }
+    return params;
   }
 }
 
