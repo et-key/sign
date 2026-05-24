@@ -124,7 +124,18 @@ export function buildAST(tokens) {
     if (op.type === 'infix') {
       const right = outputStack.pop();
       const left = outputStack.pop();
-      outputStack.push({ type: 'operation', operator: op.symbol, left, right, name: op.name });
+      
+      // 空白演算子の場合は、二分木ではなく coproduct_block としてフラットな配列にまとめる
+      if (op.symbol === ' ') {
+        if (left && left.type === 'coproduct_block' && left.statements) {
+          left.statements.push(right);
+          outputStack.push(left);
+        } else {
+          outputStack.push({ type: 'coproduct_block', statements: [left, right] });
+        }
+      } else {
+        outputStack.push({ type: 'operation', operator: op.symbol, left, right, name: op.name });
+      }
     } else if (op.type === 'prefix' || op.type === 'postfix') {
       const operand = outputStack.pop();
       outputStack.push({ type: 'operation', operator: op.symbol, operand, position: op.type });
@@ -135,7 +146,7 @@ export function buildAST(tokens) {
 
   for (let i = 0; i < resolvedTokens.length; i++) {
     const token = resolvedTokens[i];
-    
+
     // オブジェクト(すでに解決済みのASTノード)は operand として扱う
     let info;
     if (typeof token === 'object' && token !== null && !Array.isArray(token)) {
@@ -147,7 +158,7 @@ export function buildAST(tokens) {
     if (info.type === 'operand') {
       // 暗黙の中置演算子（余積・適用）を挿入（プレセデンス10）
       if (previousIsOperand) {
-        const coproductOp = { type: 'infix', symbol: ' ', precedence: 10, name: 'apply_or_concat' };
+        const coproductOp = { type: 'infix', symbol: ' ', precedence: 10, name: 'coproduct' };
         while (operatorStack.length > 0) {
           const top = operatorStack[operatorStack.length - 1];
           // プレセデンス値が大きいほど優先順位が高い。左結合なので >= 
@@ -165,11 +176,11 @@ export function buildAST(tokens) {
     else if (info.type === 'prefix') {
       const opDef = getOperatorInfo(info.symbol, 'prefix');
       info.precedence = opDef.precedence;
-      
+
       // もしオペランドの直後に前置演算子が来た場合（例: `f ~y`）、
       // 間に暗黙の適用/余積があるものとして処理する
       if (previousIsOperand) {
-        const coproductOp = { type: 'infix', symbol: ' ', precedence: 10, name: 'apply_or_concat' };
+        const coproductOp = { type: 'infix', symbol: ' ', precedence: 10, name: 'coproduct' };
         while (operatorStack.length > 0) {
           const top = operatorStack[operatorStack.length - 1];
           if (top.type !== 'prefix' && top.symbol !== '(' && top.symbol !== '[' && top.symbol !== '{' && top.symbol !== '\x02' && top.symbol !== '\x04') {
@@ -182,7 +193,7 @@ export function buildAST(tokens) {
         }
         operatorStack.push(coproductOp);
       }
-      
+
       operatorStack.push(info);
       previousIsOperand = false;
     }
@@ -192,7 +203,7 @@ export function buildAST(tokens) {
       // 後置演算子は左結合としてすぐ処理するか、スタックに積む
       while (operatorStack.length > 0) {
         const top = operatorStack[operatorStack.length - 1];
-        if (top.precedence >= info.precedence) { 
+        if (top.precedence >= info.precedence) {
           popOperator();
         } else {
           break;

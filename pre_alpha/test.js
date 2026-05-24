@@ -1,8 +1,10 @@
 import { preprocess } from './lexisize/lexer.js';
 import * as parser from './parse/minimal.js';
 import { buildAST } from './semanticize/shunting_yard.js';
-import { annotateContextualOperators, liftLambdas, infer, generateST, Substitution, resetTVarCounter } from './semanticize/analyzer/index.js';
-import { generateAArch64 } from './backend/aarch64.js';
+import { buildEnvironment } from './semanticize/builder.js';
+import { resolveCoproducts } from './semanticize/coproduct_resolver.js';
+// import { annotateContextualOperators, liftLambdas, infer, generateST, Substitution, resetTVarCounter } from './semanticize/analyzer/index.js';
+// import { generateAArch64 } from './backend/aarch64.js';
 import util from 'util';
 import fs from 'fs';
 import path from 'path';
@@ -43,63 +45,38 @@ for (const filePath of files) {
     const astProgram = parser.parse(preprocessed);
     const astLines = astProgram.filter(line => line !== null && line !== undefined);
     
-    const typeEnv = new Map();
-    const subst = new Substitution();
-    resetTVarCounter();
-    
-    // ラムダリフティング用の状態を初期化
-    const lambdaState = { lambdas: [], counter: 0 };
-    
     // 新しいパイプライン:
     // 1. buildAST (shunting yard)
-    // 2. annotateContextualOperators (意味タグ)
-    // 3. infer (型推論 + coproduct解決 — 型推論後に構造決定)
-    // 4. liftLambdas (ラムダリフティング)
+    // 2. buildEnvironment (スコープと型推測)
+    // 3. resolveCoproducts (優先順位に基づくAST階層調整)
     const astTrees = astLines.map(astLine => {
-      // 3. Shunting Yard (優先順位解決 -> AST)
+      // 1. Shunting Yard (優先順位解決 -> AST)
       let astTree = buildAST(Array.isArray(astLine) && astLine.length === 1 && Array.isArray(astLine[0]) ? astLine[0] : astLine);
       
-      // 4. Semantic Analyzer (意味タグ付与)
-      astTree = annotateContextualOperators(astTree);
+      // 2. 環境構築 (ローカルスコープとカテゴリ判定)
+      const env = buildEnvironment(astTree);
       
-      // 5. Type Inference (制約ベース型推論 + coproduct解決)
-      //    resolveCoproducts は型推論内部で実行される
-      infer(astTree, typeEnv, subst);
+      // 3. 優先順位解決 (coproduct_block の還元)
+      astTree = resolveCoproducts(astTree, env);
       
-      // 6. Lambda Lifting (無名関数の平坦化)
-      return liftLambdas(astTree, lambdaState);
+      return astTree;
     });
-    
-    // 抽出された無名関数をASTの末尾に結合する
-    if (lambdaState.lambdas.length > 0) {
-      // ラムダの型推論も実行
-      for (const lambda of lambdaState.lambdas) {
-        infer(lambda, typeEnv, subst);
-      }
-      astTrees.push(...lambdaState.lambdas);
-    }
-    
-    // 代入を最終解決
-    // (型変数を可能な限り解決する)
-    for (const tree of astTrees) {
-      resolveTypeDetails(tree, subst);
-    }
     
     // Write JSON output
     const outPathJson = filePath.replace(/\.(sign|sn)$/, '.json');
     fs.writeFileSync(outPathJson, JSON.stringify(astTrees.length === 1 ? astTrees[0] : astTrees, null, 2), 'utf-8');
     
-    // Write .st Type Signature output
-    const outPathSt = filePath.replace(/\.(sign|sn)$/, '.st');
-    const stContent = generateST(astTrees, lambdaState.lambdas);
-    fs.writeFileSync(outPathSt, stContent, 'utf-8');
+    // Write .st Type Signature output (一時的にコメントアウト)
+    // const outPathSt = filePath.replace(/\.(sign|sn)$/, '.st');
+    // const stContent = generateST(astTrees, lambdaState.lambdas);
+    // fs.writeFileSync(outPathSt, stContent, 'utf-8');
     
-    // Write .s AArch64 output
-    const outPathS = filePath.replace(/\.(sign|sn)$/, '.s');
-    const asmContent = generateAArch64(astTrees);
-    fs.writeFileSync(outPathS, asmContent, 'utf-8');
+    // Write .s AArch64 output (一時的にコメントアウト)
+    // const outPathS = filePath.replace(/\.(sign|sn)$/, '.s');
+    // const asmContent = generateAArch64(astTrees);
+    // fs.writeFileSync(outPathS, asmContent, 'utf-8');
     
-    console.log(`[Success] Compiled to: ${outPathJson}, ${outPathSt}, and ${outPathS}`);
+    console.log(`[Success] Compiled to: ${outPathJson}`);
     
   } catch (err) {
     let errMsg = "";
