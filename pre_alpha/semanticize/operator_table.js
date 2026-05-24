@@ -38,7 +38,7 @@ export const OPERATOR_BY_PRECEDENCE = [
     ',': { position: 'infix', name: 'product' },
   },
   { // 10: 空白演算子（適用、リスト構築等）
-    ' ': { position: 'infix', name: 'apply_or_concat' },
+    ' ': { position: 'infix', name: 'coproduct' },
   },
   { // 11
     '~': { position: 'infix', name: 'range' },
