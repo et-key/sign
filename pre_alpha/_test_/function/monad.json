@@ -17,7 +17,19 @@
         "type": "operation",
         "operator": "+",
         "left": "<x>",
-        "right": "<y>"
+        "right": "<y>",
+        "name": "add"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": "Number",
+      "to": {
+        "type": "Func",
+        "from": "Number",
+        "to": "Number"
       }
     }
   },
@@ -26,6 +38,14 @@
     "operator": ":",
     "left": "<maybe_val>",
     "right": {
+      "type": "operation",
+      "operator": "<",
+      "left": "10",
+      "right": "5",
+      "name": "less"
+    },
+    "name": "define",
+    "inferredType": {
       "type": "Unit"
     }
   },
@@ -34,6 +54,20 @@
     "operator": ":",
     "left": "<mapped>",
     "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<f>",
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": "<maybe_val>",
+        "right": "3",
+        "name": "concat"
+      },
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
       "type": "Unit"
     }
   },
@@ -49,8 +83,16 @@
         "type": "operation",
         "operator": "*",
         "left": "<x>",
-        "right": "2"
-      }
+        "right": "2",
+        "name": "mul"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": "Number",
+      "to": "Number"
     }
   },
   {
@@ -58,6 +100,14 @@
     "operator": ":",
     "left": "<mapped_twice>",
     "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<g>",
+      "right": "<mapped>",
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
       "type": "Unit"
     }
   }

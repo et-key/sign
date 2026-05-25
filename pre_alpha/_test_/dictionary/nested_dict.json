@@ -3,47 +3,82 @@
   "operator": ":",
   "left": "<my_dict>",
   "right": {
-    "type": "operation",
-    "operator": " ",
-    "left": {
+    "type": "block",
+    "kind": "indent",
+    "content": {
       "type": "operation",
       "operator": " ",
       "left": {
-        "type": "operation",
-        "operator": ":",
-        "left": "<name>",
-        "right": "`Sign`"
-      },
-      "right": {
-        "type": "operation",
-        "operator": ":",
-        "left": "<version>",
-        "right": "0.1"
-      },
-      "name": "concat"
-    },
-    "right": {
-      "type": "operation",
-      "operator": ":",
-      "left": "<features>",
-      "right": {
         "type": "operation",
         "operator": " ",
         "left": {
           "type": "operation",
           "operator": ":",
-          "left": "<type>",
-          "right": "`Structural`"
+          "left": "<name>",
+          "right": "`Sign`",
+          "name": "define"
         },
         "right": {
           "type": "operation",
           "operator": ":",
-          "left": "<backend>",
-          "right": "`AArch64`"
+          "left": "<version>",
+          "right": "0.1",
+          "name": "define"
         },
         "name": "concat"
-      }
+      },
+      "right": {
+        "type": "operation",
+        "operator": ":",
+        "left": "<features>",
+        "right": {
+          "type": "block",
+          "kind": "indent",
+          "content": {
+            "type": "operation",
+            "operator": " ",
+            "left": {
+              "type": "operation",
+              "operator": ":",
+              "left": "<type>",
+              "right": "`Structural`",
+              "name": "define"
+            },
+            "right": {
+              "type": "operation",
+              "operator": ":",
+              "left": "<backend>",
+              "right": "`AArch64`",
+              "name": "define"
+            },
+            "name": "concat"
+          },
+          "env": {}
+        },
+        "name": "define"
+      },
+      "name": "concat"
     },
-    "name": "concat"
+    "env": {}
+  },
+  "name": "define",
+  "inferredType": {
+    "type": "operation",
+    "operator": " ",
+    "name": "concat",
+    "left": {
+      "type": "operation",
+      "operator": " ",
+      "name": "concat",
+      "left": "String",
+      "right": "Number"
+    },
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "name": "concat",
+      "left": "String",
+      "right": "String"
+    }
   }
 }

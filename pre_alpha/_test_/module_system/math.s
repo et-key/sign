@@ -6,9 +6,7 @@ _start:
   MOV X0, #0
   SVC #0
 
-add:
-  RET
-
 sub:
+  SUB X0, X9, X10
   RET
 

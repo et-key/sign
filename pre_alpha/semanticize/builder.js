@@ -92,7 +92,7 @@ export function getInitialCategory(node, env) {
   if (node.type === 'operation') {
     if (node.operator === '?') return 'Lambda';
     if (node.name === 'compose') return 'Lambda';
-    if (node.name === 'get_prop' || node.name === 'get_at') return 'Lambda';
+    if (node.name === 'get_prop' || node.name === 'get_at' || node.name === 'input') return 'Lambda';
     if (isPartialOperation(node)) return 'Lambda';
     return 'Atom';
   }

@@ -14,6 +14,35 @@
       },
       "right": "<c>",
       "name": "concat"
+    },
+    "inferredType": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "operation",
+        "operator": " ",
+        "name": "concat",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "name": "concat",
+          "left": {
+            "type": "tvar",
+            "id": "t1",
+            "instance": null
+          },
+          "right": {
+            "type": "tvar",
+            "id": "t2",
+            "instance": null
+          }
+        },
+        "right": {
+          "type": "tvar",
+          "id": "t3",
+          "instance": null
+        }
+      }
     }
   },
   {
@@ -27,7 +56,32 @@
       "name": "concat"
     },
     "right": "<c>",
-    "name": "concat"
+    "name": "concat",
+    "inferredType": {
+      "type": "operation",
+      "operator": " ",
+      "name": "concat",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "name": "concat",
+        "left": {
+          "type": "tvar",
+          "id": "t1",
+          "instance": null
+        },
+        "right": {
+          "type": "tvar",
+          "id": "t2",
+          "instance": null
+        }
+      },
+      "right": {
+        "type": "tvar",
+        "id": "t3",
+        "instance": null
+      }
+    }
   },
   {
     "type": "operation",
@@ -36,8 +90,33 @@
       "type": "operation",
       "operator": ",",
       "left": "<a>",
-      "right": "<b>"
+      "right": "<b>",
+      "name": "product"
     },
-    "right": "<c>"
+    "right": "<c>",
+    "name": "product",
+    "inferredType": {
+      "type": "operation",
+      "operator": ",",
+      "left": {
+        "type": "operation",
+        "operator": ",",
+        "left": {
+          "type": "tvar",
+          "id": "t1",
+          "instance": null
+        },
+        "right": {
+          "type": "tvar",
+          "id": "t2",
+          "instance": null
+        }
+      },
+      "right": {
+        "type": "tvar",
+        "id": "t3",
+        "instance": null
+      }
+    }
   }
 ]

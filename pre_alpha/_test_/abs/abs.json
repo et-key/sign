@@ -1,16 +1,82 @@
 [
   {
-    "type": "block",
-    "kind": "abs",
-    "content": "<a>",
-    "env": {}
+    "type": "operation",
+    "operator": "+",
+    "left": {
+      "type": "block",
+      "kind": "abs",
+      "content": "<a>",
+      "env": {}
+    },
+    "right": "1",
+    "name": "add",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t1",
+      "instance": null
+    }
   },
-  "Number",
   {
-    "type": "block",
-    "kind": "abs",
-    "content": "<x>",
-    "env": {}
+    "type": "operation",
+    "operator": "+",
+    "left": "1",
+    "right": {
+      "type": "block",
+      "kind": "abs",
+      "content": "<a>",
+      "env": {}
+    },
+    "name": "add",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t2",
+      "instance": null
+    }
   },
-  "Number"
+  {
+    "type": "operation",
+    "operator": "*",
+    "left": {
+      "type": "block",
+      "kind": "abs",
+      "content": {
+        "type": "operation",
+        "operator": "+",
+        "left": "<x>",
+        "right": "<y>",
+        "name": "add"
+      },
+      "env": {}
+    },
+    "right": "3",
+    "name": "mul",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t3",
+      "instance": null
+    }
+  },
+  {
+    "type": "operation",
+    "operator": "*",
+    "left": "3",
+    "right": {
+      "type": "block",
+      "kind": "abs",
+      "content": {
+        "type": "operation",
+        "operator": "+",
+        "left": "<x>",
+        "right": "<y>",
+        "name": "add"
+      },
+      "env": {}
+    },
+    "name": "mul",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t2",
+      "instance": null
+    }
+  }
 ]

@@ -11,8 +11,16 @@
         "type": "operation",
         "operator": "*",
         "left": "<x>",
-        "right": "2"
-      }
+        "right": "2",
+        "name": "mul"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": "Number",
+      "to": "Number"
     }
   },
   {
@@ -27,14 +35,40 @@
         "type": "operation",
         "operator": "+",
         "left": "<x>",
-        "right": "1"
-      }
+        "right": "1",
+        "name": "add"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": "Number",
+      "to": "Number"
     }
   },
   {
     "type": "operation",
     "operator": ":",
     "left": "<result>",
-    "right": "Number"
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": "<f>",
+        "right": "<g>",
+        "name": "compose"
+      },
+      "right": "3",
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t6",
+      "instance": null
+    }
   }
 ]

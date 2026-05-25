@@ -5,7 +5,8 @@ import { buildEnvironment } from './semanticize/builder.js';
 import { resolveCoproducts } from './semanticize/coproduct_resolver.js';
 import { evaluate } from './semanticize/evaluator.js';
 import { generateST } from './semanticize/st_generator.js';
-// import { annotateContextualOperators, liftLambdas, infer, Substitution, resetTVarCounter } from './semanticize/analyzer/index.js';
+import { infer, applySubst } from './semanticize/analyzer/infer.js';
+import { resetTVarCounter } from './semanticize/analyzer/unify.js';
 import { generateAArch64 } from './backend/aarch64.js';
 import util from 'util';
 import fs from 'fs';
@@ -49,10 +50,13 @@ for (const filePath of files) {
 
     // 新しいパイプライン:
     // 1. buildAST (shunting yard)
-    // 2. buildEnvironment (スコープと型推測)
+    // 2. buildEnvironment (スコープとカテゴリ判定)
     // 3. resolveCoproducts (優先順位に基づくAST階層調整)
-    // 4. evaluate (型/値の評価とUnitへの還元)
+    // 4. evaluate (値の評価)
+    // 5. infer (Algorithm Wによる型推論)
     let globalEnv = new Map();
+    let typeEnv = new Map();
+    resetTVarCounter();
 
     const astTrees = astLines.map(astLine => {
       // 1. Shunting Yard (優先順位解決 -> AST)
@@ -64,10 +68,43 @@ for (const filePath of files) {
       // 3. 優先順位解決 (coproduct_block の還元)
       astTree = resolveCoproducts(astTree, globalEnv);
 
-      // 4. ASTの抽象評価 (型推論 / Unitへの還元)
-      astTree = evaluate(astTree, globalEnv);
+      // 4. 値の抽象評価 (Partial Evaluation)
+      // ASTの部分適用や実行時の簡約を行います。（コード生成用）
+      const evalTree = evaluate(astTree, globalEnv);
+      if (filePath.endsWith('generator.sn')) {
+        console.log(`[DEBUG evalTree]`, JSON.stringify(evalTree, null, 2));
+      }
 
-      return astTree;
+      // 5. 型推論 (Algorithm W)
+      // evalTreeを入力として型を推論し、未解決の型変数やフラグを単一化します。
+      const inferredType = infer(evalTree, typeEnv);
+
+      // 推論された型から型変数を具体型に置換（解決）します
+      const resolvedType = applySubst(inferredType);
+      
+      // JSONやAssembly用には簡約済みのASTを返しつつ、型情報はST用に別管理すべきですが、
+      // ここではSTファイル出力のために resolvedType をASTとして扱います。
+      // astTreeの各statementに推論された型をアタッチします。
+      let updatedStatements;
+      if (astTree && Array.isArray(astTree.statements)) {
+        updatedStatements = astTree.statements.map((stmt, i) => {
+          if (resolvedType && resolvedType.type === 'coproduct_block' && resolvedType.statements) {
+            return { ...stmt, inferredType: resolvedType.statements[i] };
+          }
+          return stmt;
+        });
+        return { ...astTree, statements: updatedStatements, inferredType: resolvedType };
+      } else if (Array.isArray(astTree)) {
+        updatedStatements = astTree.map((stmt, i) => {
+          if (resolvedType && resolvedType.type === 'coproduct_block' && resolvedType.statements) {
+            return { ...stmt, inferredType: resolvedType.statements[i] };
+          }
+          return stmt;
+        });
+        return { type: 'file', statements: updatedStatements, inferredType: resolvedType };
+      }
+      
+      return { ...astTree, inferredType: resolvedType };
     });
 
     // Write JSON output
@@ -76,11 +113,20 @@ for (const filePath of files) {
 
     // Write .st Type Signature output
     const outPathSt = filePath.replace(/\.(sign|sn)$/, '.st');
-    const stContent = generateST(astTrees);
+    // .stには推論済みの型出力する
+    const stInput = astTrees.map(t => {
+      if (t.inferredType) return { type: 'operation', operator: ':', left: t.left || t.name, right: t.inferredType };
+      return t;
+    });
+    if (filePath.endsWith('generator.sn')) {
+      console.log(`[DEBUG stInput]`, JSON.stringify(stInput, null, 2));
+    }
+    const stContent = generateST(stInput);
     fs.writeFileSync(outPathSt, stContent, 'utf-8');
 
     // Write .s AArch64 output
     const outPathS = filePath.replace(/\.(sign|sn)$/, '.s');
+    // Assemblyは元のastTreeを使う（今回は簡易的にastTreeそのまま）
     const asmContent = generateAArch64(astTrees);
     fs.writeFileSync(outPathS, asmContent, 'utf-8');
 

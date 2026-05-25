@@ -1,2 +1,2 @@
-(a | (b)) | c
-(a | (b)) | c
+a | -b : 'a | Number -> Number -> Number | 'b
+a | -b : 'a | Number -> Number -> Number | 'b

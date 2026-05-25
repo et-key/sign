@@ -1,8 +1,8 @@
-f : x -> (x)
-map : ((g <> x) <> (y)) -> ([((g) <> x)] <> [(map <~ (g <> (y)))])
-result_map1 : [(((x -> (x)))) <> 1] <> [(y) -> ([((g) <> x)] <> [(map <~ (g <> (y)))])]
-result_map2 : [(([x -> (x)])) <> 1] <> [(y) -> ([((g) <> x)] <> [(map <~ (g <> (y)))])]
-result_sum : [_] <~ ((((1 <> 2) <> 3) <> 4) <> 5)
-result_partial : [_ , (_)] <~ ((((1 <> 2) <> 3) <> 4) <> 5)
-test_array : (((1 <> 2) <> 3) <> 4) <> 5
-test_tuple : (1 <> a) <> 3
+f : Number -> Number
+map : $'a -> 'b <> 'c~ -> 'd
+result_map1 : ['e] <> ['f]
+result_map2 : ['g] <> ['h]
+result_sum : 'i
+result_partial : (Number <> Number <> Number <> Number <> Number) , 'j -> 'j
+test_array : Number <> Number <> Number <> Number <> Number
+test_tuple : Number <> 'k <> Number

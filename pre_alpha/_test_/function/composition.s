@@ -19,6 +19,8 @@ g:
   RET
 
 result:
-  // Unknown identifier: Number
+  MOV X0, #3
+  BL g
+  BL f
   RET
 

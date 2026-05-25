@@ -23,34 +23,30 @@
             "type": "operation",
             "operator": " ",
             "left": {
-              "type": "block",
-              "kind": "group",
-              "content": {
+              "type": "operation",
+              "operator": ":",
+              "left": {
                 "type": "operation",
-                "operator": ":",
-                "left": {
-                  "type": "operation",
-                  "operator": "<",
-                  "left": "<x>",
-                  "right": "1"
-                },
-                "right": "<result1>"
-              }
+                "operator": "<",
+                "left": "<x>",
+                "right": "1",
+                "name": "less"
+              },
+              "right": "<result1>",
+              "name": "define"
             },
             "right": {
-              "type": "block",
-              "kind": "group",
-              "content": {
+              "type": "operation",
+              "operator": ":",
+              "left": {
                 "type": "operation",
-                "operator": ":",
-                "left": {
-                  "type": "operation",
-                  "operator": "<",
-                  "left": "<y>",
-                  "right": "3"
-                },
-                "right": "<result2>"
-              }
+                "operator": "<",
+                "left": "<y>",
+                "right": "3",
+                "name": "less"
+              },
+              "right": "<result2>",
+              "name": "define"
             },
             "name": "concat"
           },
@@ -58,6 +54,45 @@
           "name": "concat"
         },
         "env": {}
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": {
+        "type": "tvar",
+        "id": "t2",
+        "instance": null
+      },
+      "to": {
+        "type": "Func",
+        "from": {
+          "type": "tvar",
+          "id": "t3",
+          "instance": null
+        },
+        "to": {
+          "type": "operation",
+          "operator": " ",
+          "name": "concat",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "name": "concat",
+            "left": {
+              "type": "tvar",
+              "id": "t5",
+              "instance": null
+            },
+            "right": {
+              "type": "tvar",
+              "id": "t7",
+              "instance": null
+            }
+          },
+          "right": "Number"
+        }
       }
     }
   },
@@ -65,50 +100,83 @@
     "type": "block",
     "kind": "bracket",
     "content": {
-      "type": "operation",
-      "operator": "?",
-      "left": {
+      "type": "block",
+      "kind": "indent",
+      "content": {
         "type": "operation",
-        "operator": " ",
-        "left": "<x>",
-        "right": "<y>",
-        "name": "concat"
-      },
-      "right": {
-        "type": "block",
-        "kind": "indent",
-        "content": {
+        "operator": "?",
+        "left": {
           "type": "operation",
           "operator": " ",
-          "left": {
+          "left": "<x>",
+          "right": "<y>",
+          "name": "concat"
+        },
+        "right": {
+          "type": "block",
+          "kind": "indent",
+          "content": {
             "type": "operation",
             "operator": " ",
             "left": {
-              "type": "block",
-              "kind": "group",
-              "content": {
+              "type": "operation",
+              "operator": " ",
+              "left": {
                 "type": "operation",
                 "operator": ":",
                 "left": "<x>",
-                "right": "1"
-              }
-            },
-            "right": {
-              "type": "block",
-              "kind": "group",
-              "content": {
+                "right": "1",
+                "name": "define"
+              },
+              "right": {
                 "type": "operation",
                 "operator": ":",
                 "left": "<y>",
-                "right": "2"
-              }
+                "right": "2",
+                "name": "define"
+              },
+              "name": "concat"
             },
+            "right": "3",
             "name": "concat"
           },
-          "right": "3",
-          "name": "concat"
+          "env": {}
         },
-        "env": {}
+        "name": "lambda"
+      },
+      "env": {}
+    },
+    "inferredType": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "Func",
+        "from": {
+          "type": "tvar",
+          "id": "t8",
+          "instance": null
+        },
+        "to": {
+          "type": "Func",
+          "from": {
+            "type": "tvar",
+            "id": "t9",
+            "instance": null
+          },
+          "to": {
+            "type": "operation",
+            "operator": " ",
+            "name": "concat",
+            "left": {
+              "type": "operation",
+              "operator": " ",
+              "name": "concat",
+              "left": "Number",
+              "right": "Number"
+            },
+            "right": "Number"
+          }
+        }
       }
     }
   }

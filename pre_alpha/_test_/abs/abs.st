@@ -1,6 +1,6 @@
 
-  a
-Number
+  a : 'a
+1 : 'b
 
-  x
-Number
+  x : 'c
+3 : 'b

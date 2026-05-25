@@ -24,12 +24,12 @@ function identifyToken(token, previousIsOperand) {
     return { type: 'operand', value: token };
   }
 
-  // 演算子の判定
   // 1. 後置演算子 (先頭が _ で、_ 以外に文字がある場合)
   if (token.startsWith('_') && token.length > 1) {
     const symbol = token.slice(1);
-    if (getOperatorInfo(symbol, 'postfix')) {
-      return { type: 'postfix', symbol: symbol };
+    const def = getOperatorInfo(symbol, 'postfix');
+    if (def) {
+      return { type: 'postfix', symbol: symbol, name: def.name };
     }
   }
 
@@ -37,16 +37,18 @@ function identifyToken(token, previousIsOperand) {
   if (token.endsWith('_') && token.length > 1) {
     const symbol = token.slice(0, -1);
     // 制御タグ(INDENT_など)は上で処理済み
-    if (getOperatorInfo(symbol, 'prefix')) {
-      return { type: 'prefix', symbol: symbol };
+    const def = getOperatorInfo(symbol, 'prefix');
+    if (def) {
+      return { type: 'prefix', symbol: symbol, name: def.name };
     }
   }
 
   // 3. 中置演算子
-  if (getOperatorInfo(token, 'infix')) {
+  const infixDef = getOperatorInfo(token, 'infix');
+  if (infixDef) {
     // マイナス(-)などは前置と中置両方ある。
     // previousIsOperand が true なら中置、false なら前置(PEGで _ が付くはずだが念のため)
-    return { type: 'infix', symbol: token };
+    return { type: 'infix', symbol: token, name: infixDef.name };
   }
 
   // 該当しないものは値として扱う
@@ -105,8 +107,8 @@ export function buildAST(tokens) {
       if (token[0] === '"("') {
         return { type: 'block', kind: 'paren', content: buildAST(token.slice(1)) };
       }
-      // 通常の丸括弧・角括弧などのグループ
-      return { type: 'block', kind: 'group', content: buildAST(token) };
+      // 配列のまま渡されてきたものは単なる結合（concat）等としてそのまま処理
+      return buildAST(token);
     }
     return token;
   });
@@ -138,7 +140,7 @@ export function buildAST(tokens) {
       }
     } else if (op.type === 'prefix' || op.type === 'postfix') {
       const operand = outputStack.pop();
-      outputStack.push({ type: 'operation', operator: op.symbol, operand, position: op.type });
+      outputStack.push({ type: 'operation', operator: op.symbol, operand, position: op.type, name: op.name });
     }
   };
 

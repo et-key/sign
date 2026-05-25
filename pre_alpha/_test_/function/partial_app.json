@@ -17,7 +17,19 @@
         "type": "operation",
         "operator": "+",
         "left": "<x>",
-        "right": "<y>"
+        "right": "<y>",
+        "name": "add"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": "Number",
+      "to": {
+        "type": "Func",
+        "from": "Number",
+        "to": "Number"
       }
     }
   },
@@ -25,7 +37,25 @@
     "type": "operation",
     "operator": ":",
     "left": "<partial>",
-    "right": "_"
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<f>",
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": "_",
+        "right": "3",
+        "name": "concat"
+      },
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t5",
+      "instance": null
+    }
   },
   {
     "type": "operation",
@@ -33,28 +63,55 @@
     "left": "<curried>",
     "right": {
       "type": "operation",
-      "operator": "?",
-      "left": "<y>",
-      "right": {
-        "type": "operation",
-        "operator": "+",
-        "left": "<x>",
-        "right": "<y>"
-      },
-      "env": {}
+      "operator": " ",
+      "left": "<f>",
+      "right": "2",
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t7",
+      "instance": null
     }
   },
   {
     "type": "operation",
     "operator": ":",
     "left": "<result_curried>",
-    "right": "Number"
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<curried>",
+      "right": "4",
+      "name": "concat"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "operation",
+      "operator": " ",
+      "name": "concat",
+      "left": {
+        "type": "tvar",
+        "id": "t7",
+        "instance": null
+      },
+      "right": "Number"
+    }
   },
   {
     "type": "operation",
     "operator": ":",
     "left": "<check>",
     "right": {
+      "type": "operation",
+      "operator": "<",
+      "left": "10",
+      "right": "5",
+      "name": "less"
+    },
+    "name": "define",
+    "inferredType": {
       "type": "Unit"
     }
   },
@@ -66,7 +123,16 @@
       "type": "operation",
       "operator": "==",
       "left": "5",
-      "right": "5"
+      "right": "5",
+      "name": "equal"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "operation",
+      "operator": "==",
+      "left": "5",
+      "right": "5",
+      "name": "equal"
     }
   }
 ]

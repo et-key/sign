@@ -7,7 +7,8 @@
       "kind": "bracket",
       "content": {
         "type": "operation",
-        "operator": "+"
+        "operator": "+",
+        "name": "add"
       }
     },
     "right": {
@@ -20,7 +21,30 @@
         "right": "<y>",
         "name": "concat"
       },
-      "right": "_"
+      "right": "_",
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": {
+        "type": "tvar",
+        "id": "t2",
+        "instance": null
+      },
+      "to": {
+        "type": "Func",
+        "from": {
+          "type": "tvar",
+          "id": "t3",
+          "instance": null
+        },
+        "to": {
+          "type": "tvar",
+          "id": "t4",
+          "instance": null
+        }
+      }
     }
   },
   {
@@ -30,16 +54,14 @@
       "type": "block",
       "kind": "bracket",
       "content": {
-        "type": "block",
-        "kind": "group",
-        "content": {
+        "type": "operation",
+        "operator": "|",
+        "right": {
           "type": "operation",
-          "operator": "|",
-          "right": {
-            "type": "operation",
-            "operator": "/"
-          }
-        }
+          "operator": "/",
+          "name": "div"
+        },
+        "name": "or"
       }
     },
     "right": {
@@ -52,13 +74,76 @@
         "right": "<y>",
         "name": "concat"
       },
-      "right": "<String>"
+      "right": "<String>",
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": {
+        "type": "tvar",
+        "id": "t6",
+        "instance": null
+      },
+      "to": {
+        "type": "Func",
+        "from": {
+          "type": "tvar",
+          "id": "t7",
+          "instance": null
+        },
+        "to": {
+          "type": "tvar",
+          "id": "t8",
+          "instance": null
+        }
+      }
     }
   },
-  "Number",
+  {
+    "type": "operation",
+    "operator": "+",
+    "left": "1",
+    "right": "2",
+    "name": "add",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t9",
+      "instance": null
+    }
+  },
   {
     "type": "operation",
     "operator": "|",
-    "right": "Number"
+    "right": {
+      "type": "operation",
+      "operator": "/",
+      "left": "3",
+      "right": "8",
+      "name": "div"
+    },
+    "name": "or",
+    "inferredType": {
+      "type": "Func",
+      "from": {
+        "type": "tvar",
+        "id": "t10",
+        "instance": null
+      },
+      "to": {
+        "type": "operation",
+        "operator": "|",
+        "left": {
+          "type": "tvar",
+          "id": "t10",
+          "instance": null
+        },
+        "right": {
+          "type": "tvar",
+          "id": "t9",
+          "instance": null
+        }
+      }
+    }
   }
 ]

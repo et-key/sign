@@ -1,2 +1,2 @@
-{{"<add>":{"type":"block","kind":"bracket"}}}~
-([_] <> 10) <> 5
+expand : {{"<add>":{"type":"block","kind":"bracket"}}}~
+add <> 10 : [_] <> Number <> Number

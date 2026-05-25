@@ -1,13 +1,26 @@
 [
   {
-    "type": "expanded_dict",
-    "dict": {
-      "type": "block",
-      "kind": "brace",
-      "content": {
-        "<add>": {
-          "type": "block",
-          "kind": "bracket"
+    "type": "operation",
+    "operator": "~",
+    "operand": {
+      "type": "operation",
+      "operator": "@",
+      "operand": "<math>",
+      "position": "postfix",
+      "name": "import"
+    },
+    "position": "postfix",
+    "name": "expand",
+    "inferredType": {
+      "type": "expanded_dict",
+      "dict": {
+        "type": "block",
+        "kind": "brace",
+        "content": {
+          "<add>": {
+            "type": "block",
+            "kind": "bracket"
+          }
         }
       }
     }
@@ -18,17 +31,30 @@
     "left": {
       "type": "operation",
       "operator": " ",
-      "left": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "Unit"
-        }
-      },
+      "left": "<add>",
       "right": "10",
       "name": "concat"
     },
     "right": "5",
-    "name": "concat"
+    "name": "concat",
+    "inferredType": {
+      "type": "operation",
+      "operator": " ",
+      "name": "concat",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "name": "concat",
+        "left": {
+          "type": "block",
+          "kind": "bracket",
+          "content": {
+            "type": "Unit"
+          }
+        },
+        "right": "Number"
+      },
+      "right": "Number"
+    }
   }
 ]

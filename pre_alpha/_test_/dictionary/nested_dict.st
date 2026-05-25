@@ -1,1 +1,1 @@
-my_dict : ((name : `Sign`) <> (version : 0.1)) <> (features : (type : `Structural`) <> (backend : `AArch64`))
+my_dict : String <> Number <> (String <> String)

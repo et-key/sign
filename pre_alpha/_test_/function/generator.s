@@ -13,20 +13,20 @@ f:
   RET
 
 map:
-  // Unknown identifier: g
-  LDR X0, [X9]
   // Unknown identifier: x
+  // Unknown apply target
   // Unknown identifier: g
   B map
 L_block_end_0:
   RET
 
 result:
-  // Unknown identifier: g
-  LDR X0, [X9]
-  // Unknown identifier: x
-  // Unknown identifier: g
-  BL map
+  ADRP X0, f
+  ADD X0, X0, :lo12:f
+  MOV X0, #0
+  MOV X1, #2
+  MOV X2, #10
 L_block_end_1:
+  BL map
   RET
 

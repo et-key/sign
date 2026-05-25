@@ -14,19 +14,28 @@ f:
 
 partial:
   // Unknown identifier: _
+  MOV X0, #3
+L_block_end_0:
+  BL f
   RET
 
 curried:
-  // Unknown identifier: x
-  // Unknown identifier: y
-  ADD X0, X9, X10
+  MOV X0, #2
+  BL f
   RET
 
 result_curried:
-  // Unknown identifier: Number
+  // Unknown identifier: curried
+  MOV X0, #4
+L_block_end_1:
   RET
 
 check:
+  MOV X9, #10
+  MOV X10, #5
+  CMP X9, X10
+  // No failLabel provided for Unit fallback
+  MOV X0, X9
   RET
 
 check2:

@@ -1,6 +1,6 @@
-f : (x <> y) -> (x)
-partial : _
-curried : y -> (x)
-result_curried : Number
+f : Number -> Number -> Number
+partial : 'a
+curried : 'b
+result_curried : 'b <> Number
 check : _
 check2 : 5

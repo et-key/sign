@@ -13,28 +13,35 @@ f:
   RET
 
 map:
-  // Unknown identifier: g
-  LDR X0, [X9]
   // Unknown identifier: x
+  // Unknown apply target
   // Unknown identifier: g
   B map
 L_block_end_0:
   RET
 
 result_map1:
-  ADRP X9, lambda
-  ADD X9, X9, :lo12:lambda
-  LDR X0, [X9]
+  ADRP X0, f
+  ADD X0, X0, :lo12:f
   MOV X0, #1
+  MOV X0, #2
+  MOV X0, #3
+  MOV X0, #4
+  MOV X0, #5
 L_block_end_1:
+  BL map
   RET
 
 result_map2:
-  ADRP X9, [object Object]
-  ADD X9, X9, :lo12:[object Object]
-  LDR X0, [X9]
+  ADRP X0, [object Object]
+  ADD X0, X0, :lo12:[object Object]
   MOV X0, #1
+  MOV X0, #2
+  MOV X0, #3
+  MOV X0, #4
+  MOV X0, #5
 L_block_end_2:
+  BL map
   RET
 
 result_sum:

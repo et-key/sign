@@ -3,19 +3,25 @@
     "type": "operation",
     "operator": ":",
     "left": "<a>",
-    "right": "1"
+    "right": "1",
+    "name": "define",
+    "inferredType": "Number"
   },
   {
     "type": "operation",
     "operator": ":",
     "left": "<b>",
-    "right": "2"
+    "right": "2",
+    "name": "define",
+    "inferredType": "Number"
   },
   {
     "type": "operation",
     "operator": ":",
     "left": "<c>",
-    "right": "3"
+    "right": "3",
+    "name": "define",
+    "inferredType": "Number"
   },
   {
     "type": "block",
@@ -26,12 +32,29 @@
       "left": {
         "type": "operation",
         "operator": " ",
-        "left": "1",
-        "right": "2",
+        "left": "<a>",
+        "right": "<b>",
         "name": "concat"
       },
-      "right": "3",
+      "right": "<c>",
       "name": "concat"
+    },
+    "inferredType": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "operation",
+        "operator": " ",
+        "name": "concat",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "name": "concat",
+          "left": "Number",
+          "right": "Number"
+        },
+        "right": "Number"
+      }
     }
   },
   {
@@ -40,12 +63,25 @@
     "left": {
       "type": "operation",
       "operator": " ",
-      "left": "1",
-      "right": "2",
+      "left": "<a>",
+      "right": "<b>",
       "name": "concat"
     },
-    "right": "3",
-    "name": "concat"
+    "right": "<c>",
+    "name": "concat",
+    "inferredType": {
+      "type": "operation",
+      "operator": " ",
+      "name": "concat",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "name": "concat",
+        "left": "Number",
+        "right": "Number"
+      },
+      "right": "Number"
+    }
   },
   {
     "type": "operation",
@@ -56,11 +92,11 @@
       "left": {
         "type": "operation",
         "operator": " ",
-        "left": "1",
-        "right": "2",
+        "left": "<a>",
+        "right": "<b>",
         "name": "concat"
       },
-      "right": "3",
+      "right": "<c>",
       "name": "concat"
     },
     "right": {
@@ -69,12 +105,43 @@
       "left": {
         "type": "operation",
         "operator": " ",
-        "left": "1",
-        "right": "2",
+        "left": "<a>",
+        "right": "<b>",
         "name": "concat"
       },
-      "right": "3",
+      "right": "<c>",
       "name": "concat"
+    },
+    "name": "product",
+    "inferredType": {
+      "type": "operation",
+      "operator": ",",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "name": "concat",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "name": "concat",
+          "left": "Number",
+          "right": "Number"
+        },
+        "right": "Number"
+      },
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "name": "concat",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "name": "concat",
+          "left": "Number",
+          "right": "Number"
+        },
+        "right": "Number"
+      }
     }
   },
   {
@@ -89,11 +156,11 @@
         "left": {
           "type": "operation",
           "operator": " ",
-          "left": "1",
-          "right": "2",
+          "left": "<a>",
+          "right": "<b>",
           "name": "concat"
         },
-        "right": "3",
+        "right": "<c>",
         "name": "concat"
       }
     },
@@ -106,15 +173,54 @@
         "left": {
           "type": "operation",
           "operator": " ",
-          "left": "1",
-          "right": "2",
+          "left": "<a>",
+          "right": "<b>",
           "name": "concat"
         },
-        "right": "3",
+        "right": "<c>",
         "name": "concat"
       }
     },
-    "name": "concat"
+    "name": "concat",
+    "inferredType": {
+      "type": "operation",
+      "operator": " ",
+      "name": "concat",
+      "left": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": " ",
+          "name": "concat",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "name": "concat",
+            "left": "Number",
+            "right": "Number"
+          },
+          "right": "Number"
+        }
+      },
+      "right": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": " ",
+          "name": "concat",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "name": "concat",
+            "left": "Number",
+            "right": "Number"
+          },
+          "right": "Number"
+        }
+      }
+    }
   },
   {
     "type": "operation",
@@ -128,11 +234,11 @@
         "left": {
           "type": "operation",
           "operator": " ",
-          "left": "1",
-          "right": "2",
+          "left": "<a>",
+          "right": "<b>",
           "name": "concat"
         },
-        "right": "3",
+        "right": "<c>",
         "name": "concat"
       }
     },
@@ -145,12 +251,51 @@
         "left": {
           "type": "operation",
           "operator": " ",
-          "left": "1",
-          "right": "2",
+          "left": "<a>",
+          "right": "<b>",
           "name": "concat"
         },
-        "right": "3",
+        "right": "<c>",
         "name": "concat"
+      }
+    },
+    "name": "product",
+    "inferredType": {
+      "type": "operation",
+      "operator": ",",
+      "left": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": " ",
+          "name": "concat",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "name": "concat",
+            "left": "Number",
+            "right": "Number"
+          },
+          "right": "Number"
+        }
+      },
+      "right": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": " ",
+          "name": "concat",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "name": "concat",
+            "left": "Number",
+            "right": "Number"
+          },
+          "right": "Number"
+        }
       }
     }
   },
@@ -166,10 +311,12 @@
         "left": {
           "type": "operation",
           "operator": ",",
-          "left": "1",
-          "right": "2"
+          "left": "<a>",
+          "right": "<b>",
+          "name": "product"
         },
-        "right": "3"
+        "right": "<c>",
+        "name": "product"
       }
     },
     "right": {
@@ -181,13 +328,54 @@
         "left": {
           "type": "operation",
           "operator": ",",
-          "left": "1",
-          "right": "2"
+          "left": "<a>",
+          "right": "<b>",
+          "name": "product"
         },
-        "right": "3"
+        "right": "<c>",
+        "name": "product"
       }
     },
-    "name": "compose"
+    "name": "compose",
+    "inferredType": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": ",",
+          "left": {
+            "type": "operation",
+            "operator": ",",
+            "left": "1",
+            "right": "2",
+            "name": "product"
+          },
+          "right": "3",
+          "name": "product"
+        }
+      },
+      "right": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": ",",
+          "left": {
+            "type": "operation",
+            "operator": ",",
+            "left": "1",
+            "right": "2",
+            "name": "product"
+          },
+          "right": "3",
+          "name": "product"
+        }
+      },
+      "name": "compose"
+    }
   },
   {
     "type": "operation",
@@ -201,10 +389,12 @@
         "left": {
           "type": "operation",
           "operator": ",",
-          "left": "1",
-          "right": "2"
+          "left": "<a>",
+          "right": "<b>",
+          "name": "product"
         },
-        "right": "3"
+        "right": "<c>",
+        "name": "product"
       }
     },
     "right": {
@@ -216,10 +406,47 @@
         "left": {
           "type": "operation",
           "operator": ",",
-          "left": "1",
-          "right": "2"
+          "left": "<a>",
+          "right": "<b>",
+          "name": "product"
         },
-        "right": "3"
+        "right": "<c>",
+        "name": "product"
+      }
+    },
+    "name": "product",
+    "inferredType": {
+      "type": "operation",
+      "operator": ",",
+      "left": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": ",",
+          "left": {
+            "type": "operation",
+            "operator": ",",
+            "left": "Number",
+            "right": "Number"
+          },
+          "right": "Number"
+        }
+      },
+      "right": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": ",",
+          "left": {
+            "type": "operation",
+            "operator": ",",
+            "left": "Number",
+            "right": "Number"
+          },
+          "right": "Number"
+        }
       }
     }
   }

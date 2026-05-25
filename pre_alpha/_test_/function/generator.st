@@ -1,3 +1,3 @@
-f : x -> (x)
-map : ((g <> x) <> (y)) -> ([((g) <> x)] <> [(map <~ (g <> (y)))])
-result : (y) -> ([((g) <> x)] <> [(map <~ (g <> (y)))])
+f : Number -> Number
+map : $'a -> 'b <> 'c~ -> 'd
+result : [Number] <> ['e]

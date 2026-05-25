@@ -1,5 +1,5 @@
-f : (x <> y) -> (x)
+f : Number -> Number -> Number
 maybe_val : _
 mapped : _
-g : x -> (x)
+g : Number -> Number
 mapped_twice : _

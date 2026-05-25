@@ -1,1 +1,1 @@
-loop : x -> (loop <~ x)
+loop : 'a -> 'b

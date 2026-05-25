@@ -51,9 +51,9 @@ ApplyReverse
   }
 
 Apply
-  = head:Compose tail:(_ "<~" _ Compose)* {
+  = head:Compose tail:(_ "<=" _ Compose)* {
       return tail.reduce((result, element) => {
-          return { type: 'operation', operator: '<~', name: 'apply', left: result, right: element[3] };
+          return { type: 'operation', operator: '<=', name: 'apply', left: result, right: element[3] };
       }, head);
   }
 
@@ -72,8 +72,14 @@ Concat
   }
 
 Term
-  = Block
+  = ContinuousType
+  / Block
   / Atom
+
+// --- 連続型 (Continuous Types) ---
+ContinuousType
+  = "~" _ expr:Term { return { type: 'operation', operator: '~', operand: expr, position: 'prefix' }; }
+  / expr:(Block / Atom) _ "~" { return { type: 'operation', operator: '~', operand: expr, position: 'postfix' }; }
 
 // --- ブロックとグループ ---
 Block
@@ -88,7 +94,9 @@ Expressions
 
 // --- Atom（.snの終端記号をそのまま利用） ---
 Atom
-  = string / charactor / address / register / unicode / number / identifier / unit
+  = tvar / string / charactor / address / register / unicode / number / identifier / unit
+
+tvar = "'" id:$([a-zA-Z][a-zA-Z0-9_]*) { return { type: 'tvar', id: id }; }
 
 string = str:$("`" [^`\r\n]* "`") { return str; }
 charactor = ch:$("\\".) { return ch; }

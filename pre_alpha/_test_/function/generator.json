@@ -11,8 +11,16 @@
         "type": "operation",
         "operator": "*",
         "left": "<x>",
-        "right": "2"
-      }
+        "right": "2",
+        "name": "mul"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": "Number",
+      "to": "Number"
     }
   },
   {
@@ -36,7 +44,8 @@
           "type": "operation",
           "operator": "~",
           "operand": "<y>",
-          "position": "prefix"
+          "position": "prefix",
+          "name": "continuous"
         },
         "name": "concat"
       },
@@ -47,49 +56,95 @@
           "type": "block",
           "kind": "bracket",
           "content": {
-            "type": "block",
-            "kind": "group",
-            "content": {
+            "type": "operation",
+            "operator": " ",
+            "left": {
               "type": "operation",
-              "operator": " ",
-              "left": {
-                "type": "operation",
-                "operator": "@",
-                "operand": "<g>",
-                "position": "prefix"
-              },
-              "right": "<x>",
-              "name": "concat"
-            }
+              "operator": "@",
+              "operand": "<g>",
+              "position": "prefix",
+              "name": "input"
+            },
+            "right": "<x>",
+            "name": "apply"
           }
         },
         "right": {
           "type": "block",
           "kind": "bracket",
           "content": {
-            "type": "block",
-            "kind": "group",
-            "content": {
+            "type": "operation",
+            "operator": " ",
+            "left": "<map>",
+            "right": {
               "type": "operation",
               "operator": " ",
-              "left": "<map>",
+              "left": "<g>",
               "right": {
                 "type": "operation",
-                "operator": " ",
-                "left": "<g>",
-                "right": {
-                  "type": "operation",
-                  "operator": "~",
-                  "operand": "<y>",
-                  "position": "postfix"
-                },
-                "name": "concat"
+                "operator": "~",
+                "operand": "<y>",
+                "position": "postfix",
+                "name": "expand"
               },
-              "name": "apply"
-            }
+              "name": "concat"
+            },
+            "name": "apply"
           }
         },
         "name": "concat"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": {
+        "type": "operation",
+        "operator": " ",
+        "name": "concat",
+        "left": {
+          "type": "operation",
+          "operator": "$",
+          "position": "prefix",
+          "operand": {
+            "type": "Func",
+            "from": {
+              "type": "tvar",
+              "id": "t5",
+              "instance": null
+            },
+            "to": {
+              "type": "tvar",
+              "id": "t8",
+              "instance": null
+            }
+          }
+        },
+        "right": {
+          "type": "operation",
+          "operator": "~",
+          "operand": {
+            "type": "tvar",
+            "id": "t6",
+            "instance": {
+              "type": "tvar",
+              "id": "t13",
+              "instance": null
+            }
+          },
+          "position": "postfix",
+          "name": "expand"
+        }
+      },
+      "to": {
+        "type": "tvar",
+        "id": "t9",
+        "instance": {
+          "type": "tvar",
+          "id": "t14",
+          "instance": null
+        }
       }
     }
   },
@@ -99,65 +154,58 @@
     "left": "<result>",
     "right": {
       "type": "operation",
-      "operator": "?",
-      "left": {
-        "type": "operation",
-        "operator": "~",
-        "operand": "<y>",
-        "position": "prefix"
-      },
+      "operator": " ",
+      "left": "<map>",
       "right": {
         "type": "operation",
         "operator": " ",
         "left": {
-          "type": "block",
-          "kind": "bracket",
-          "content": {
-            "type": "block",
-            "kind": "group",
-            "content": {
-              "type": "operation",
-              "operator": " ",
-              "left": {
-                "type": "operation",
-                "operator": "@",
-                "operand": "<g>",
-                "position": "prefix"
-              },
-              "right": "<x>",
-              "name": "concat"
-            }
-          }
+          "type": "operation",
+          "operator": "$",
+          "operand": "<f>",
+          "position": "prefix",
+          "name": "address"
         },
         "right": {
           "type": "block",
           "kind": "bracket",
           "content": {
-            "type": "block",
-            "kind": "group",
-            "content": {
+            "type": "operation",
+            "operator": "~",
+            "left": {
               "type": "operation",
-              "operator": " ",
-              "left": "<map>",
-              "right": {
-                "type": "operation",
-                "operator": " ",
-                "left": "<g>",
-                "right": {
-                  "type": "operation",
-                  "operator": "~",
-                  "operand": "<y>",
-                  "position": "postfix"
-                },
-                "name": "concat"
-              },
-              "name": "apply"
-            }
+              "operator": "~+",
+              "left": "0",
+              "right": "2",
+              "name": "range_arithmetic"
+            },
+            "right": "10",
+            "name": "range"
           }
         },
         "name": "concat"
       },
-      "env": {}
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "operation",
+      "operator": " ",
+      "name": "concat",
+      "left": {
+        "type": "block",
+        "kind": "bracket",
+        "content": "Number"
+      },
+      "right": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "tvar",
+          "id": "t14",
+          "instance": null
+        }
+      }
     }
   }
 ]

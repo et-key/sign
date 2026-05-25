@@ -1,2 +1,2 @@
-io_handler : f -> (0x40000004)
-event_loop : [_ , (f -> (0x40000004))] <~ [0]
+io_handler : 'a -> 0x40000004
+event_loop : [0] , 'b -> 0x40000004
