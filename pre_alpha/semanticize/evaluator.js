@@ -17,8 +17,39 @@ import { buildAST } from './shunting_yard.js';
 import { buildEnvironment, getInitialCategory } from './builder.js';
 import { resolveCoproducts } from './coproduct_resolver.js';
 
-// キャッシュ: 一度読んだモジュールを保存する
 const moduleCache = new Map();
+
+/**
+ * パラメータノードから引数名（識別子）を抽出します
+ */
+function extractParamName(paramNode) {
+  if (!paramNode) return null;
+  if (typeof paramNode === 'string') return paramNode;
+  if (paramNode.type === 'block') return extractParamName(paramNode.content);
+  if (paramNode.operator === ':') return extractParamName(paramNode.left);
+  return paramNode.name || null;
+}
+
+/**
+ * concat の木をフラットな配列に展開します
+ */
+function flattenConcat(node) {
+  if (!node) return [];
+  if (node.name === 'concat' && node.operator === ' ') {
+    return [...flattenConcat(node.left), ...flattenConcat(node.right)];
+  }
+  return [node];
+}
+
+/**
+ * パラメータノードからデフォルト値のASTを抽出します
+ */
+function extractDefaultValue(paramNode) {
+  if (!paramNode) return undefined;
+  if (paramNode.type === 'block') return extractDefaultValue(paramNode.content);
+  if (paramNode.operator === ':') return paramNode.right;
+  return undefined;
+}
 
 /**
  * ファイルをモジュールとして読み込み、評価してエクスポート辞書を返します。
@@ -159,14 +190,22 @@ export function evaluate(node, env, visited = new Set()) {
   if (node.type === 'operation') {
     let evalLeft = undefined;
     
-    // 定義演算子(:) や エクスポート(#) の場合は、左辺（名前）を展開しない
     if (node.operator === ':' || node.operator === '#') {
+      evalLeft = node.left;
+    } else if (node.operator === '?') {
+      // ラムダの引数部分は評価しない（または変数名として保持）
       evalLeft = node.left;
     } else {
       evalLeft = node.left !== undefined ? evaluate(node.left, env, visited) : undefined;
     }
 
-    const evalRight = node.right !== undefined ? evaluate(node.right, env, visited) : undefined;
+    let evalRight = undefined;
+    if (node.operator === '?') {
+      // ラムダの本体は適用時まで評価しない (遅延評価)
+      evalRight = node.right;
+    } else {
+      evalRight = node.right !== undefined ? evaluate(node.right, env, visited) : undefined;
+    }
     const evalOperand = node.operand !== undefined ? evaluate(node.operand, env, visited) : undefined;
 
     // 比較演算子 (=, !=, >, <, >=, <=)
@@ -195,38 +234,99 @@ export function evaluate(node, env, visited = new Set()) {
           }
         }
       }
-      // 未解決の変数や未評価の射を含む比較は、一旦 Unit (解なし) へ還元
-      return { type: 'Unit' };
+      // 未解決の変数の場合は 型 (Left | Unit) へ還元する
+      let typeOfLeft = evalLeft !== undefined ? evalLeft : node.left;
+      if (typeof typeOfLeft === 'string' && !isNaN(typeOfLeft)) {
+        typeOfLeft = "Number";
+      }
+      return { type: 'operation', operator: '|', left: typeOfLeft, right: { type: 'Unit' } };
     }
 
     // 四則演算
     if (['+', '-', '*', '/'].includes(node.operator)) {
-      if (evalLeft !== undefined && evalRight !== undefined) {
-        const leftNum = Number(evalLeft);
-        const rightNum = Number(evalRight);
-        if (!isNaN(leftNum) && !isNaN(rightNum)) {
-          if (node.operator === '+') return String(leftNum + rightNum);
-          if (node.operator === '-') return String(leftNum - rightNum);
-          if (node.operator === '*') return String(leftNum * rightNum);
-          if (node.operator === '/') return String(leftNum / rightNum);
-        }
+      // 数値に評価せず、型へ還元する (２項演算は基本的に左辺の型を返す)
+      let typeOfLeft = evalLeft !== undefined ? evalLeft : node.left;
+      if (typeof typeOfLeft === 'string' && !isNaN(typeOfLeft)) {
+        typeOfLeft = "Number";
       }
-      // 数値に評価できない場合は未解決状態としてASTを残す
-      // (将来的な型変数を含む単一化などをここで行う)
-      return {
-        ...node,
-        left: evalLeft !== undefined ? evalLeft : node.left,
-        right: evalRight !== undefined ? evalRight : node.right
-      };
+      return typeOfLeft;
     }
 
     // apply (適用・評価: 射に対して対象を適用する)
     if (node.name === 'apply' && node.operator === ' ') {
-      // もし evalLeft が Lambda(関数構造)であれば展開・適用する処理を書く。
-      // 現段階では具体的なラムダ抽象の実体化まで踏み込まないため、
-      // 簡単な具体化（関数の実行）ができなければASTとして残す
+      if (evalLeft && evalLeft.operator === '?') {
+        const newEnv = evalLeft.env ? new Map(evalLeft.env) : new Map(env);
+        
+        // カリー化・部分適用の処理
+        let params = evalLeft.left;
+        while (params && params.type === 'block') {
+          params = params.content;
+        }
 
-      // ... 実装が複雑な場合は AST として残す
+        if (params && params.name === 'concat') {
+          const paramArray = flattenConcat(params);
+          const argArray = flattenConcat(evalRight);
+          
+          let i = 0;
+          for (; i < argArray.length && i < paramArray.length; i++) {
+            const pName = extractParamName(paramArray[i]);
+            let argVal = argArray[i];
+
+            // Unit 判定
+            const isUnit = argVal === undefined || argVal === '_' || argVal.type === 'Unit' || 
+                           (argVal.type === 'block' && argVal.kind === 'bracket' && argVal.content && argVal.content.type === 'Unit');
+            
+            if (isUnit) {
+              const defValAst = extractDefaultValue(paramArray[i]);
+              if (defValAst !== undefined) {
+                argVal = evaluate(defValAst, newEnv, visited);
+              }
+            }
+
+            if (pName) {
+              newEnv.set(pName, { ast: argVal, category: getInitialCategory(argVal, env) });
+            }
+          }
+
+          if (i < paramArray.length) {
+            // カリー化: 残りのパラメータで新しい Lambda を返す
+            const remainingParams = paramArray.slice(i);
+            let newParams = remainingParams[0];
+            for (let j = 1; j < remainingParams.length; j++) {
+              newParams = { type: 'operation', operator: ' ', name: 'concat', left: newParams, right: remainingParams[j] };
+            }
+            return {
+              type: 'operation',
+              operator: '?',
+              left: newParams,
+              right: evalLeft.right,
+              env: newEnv
+            };
+          } else {
+            // すべての引数が供給された場合
+            return evaluate(evalLeft.right, newEnv, visited);
+          }
+        } else {
+          // 単一引数の場合、束縛して本体を評価
+          const argName = extractParamName(params);
+          let argVal = evalRight;
+
+          const isUnit = argVal === undefined || argVal === '_' || argVal.type === 'Unit' || 
+                         (argVal.type === 'block' && argVal.kind === 'bracket' && argVal.content && argVal.content.type === 'Unit');
+
+          if (isUnit) {
+            const defValAst = extractDefaultValue(params);
+            if (defValAst !== undefined) {
+              argVal = evaluate(defValAst, newEnv, visited);
+            }
+          }
+
+          if (argName) {
+            newEnv.set(argName, { ast: argVal, category: getInitialCategory(argVal, env) });
+          }
+          return evaluate(evalLeft.right, newEnv, visited);
+        }
+      }
       return {
         ...node,
         left: evalLeft,
@@ -234,8 +334,48 @@ export function evaluate(node, env, visited = new Set()) {
       };
     }
 
-    // concat (積)
+    // compose (関数合成)
+    if (node.name === 'compose' && node.operator === ' ') {
+      // f g -> x ? g(f(x))
+      // evalLeft: f, evalRight: g
+      if (evalLeft && evalLeft.operator === '?' && evalRight && evalRight.operator === '?') {
+        return {
+          type: 'operation',
+          operator: '?',
+          left: evalLeft.left,
+          right: {
+            type: 'operation',
+            operator: ' ',
+            name: 'apply',
+            left: evalRight,
+            right: {
+              type: 'operation',
+              operator: ' ',
+              name: 'apply',
+              left: evalLeft,
+              right: evalLeft.left
+            }
+          },
+          env: env
+        };
+      }
+      return {
+        ...node,
+        left: evalLeft,
+        right: evalRight
+      };
+    }
+
+    // concat (連接)
     if (node.name === 'concat' && node.operator === ' ') {
+      // 動的解決: 左辺がLambdaだった場合、誤ってconcatと判定されたものをapplyとして処理する
+      if (evalLeft && evalLeft.operator === '?') {
+        const applyNode = { ...node, name: 'apply' };
+        return evaluate(applyNode, env, visited);
+      }
+      
+      // リスト/アトムの結合
+      // とりあえずそのままAST構造（Coproduct）を残すが、実行時には展開されるべき
       return {
         ...node,
         left: evalLeft,

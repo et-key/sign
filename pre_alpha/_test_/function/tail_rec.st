@@ -1,1 +1,1 @@
-loop : (T0 -> T1)
+loop : x -> (loop <~ x)

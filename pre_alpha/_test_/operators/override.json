@@ -55,10 +55,10 @@
       "right": "<String>"
     }
   },
-  "3",
+  "Number",
   {
     "type": "operation",
     "operator": "|",
-    "right": "0.375"
+    "right": "Number"
   }
 ]

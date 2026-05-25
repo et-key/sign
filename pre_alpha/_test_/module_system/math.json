@@ -5,11 +5,7 @@
     "left": "<add>",
     "right": {
       "type": "block",
-      "kind": "bracket",
-      "content": {
-        "type": "operation",
-        "operator": "+"
-      }
+      "kind": "bracket"
     }
   },
   {
@@ -18,11 +14,7 @@
     "left": "<sub>",
     "right": {
       "type": "block",
-      "kind": "bracket",
-      "content": {
-        "type": "operation",
-        "operator": "-"
-      }
+      "kind": "bracket"
     }
   }
 ]

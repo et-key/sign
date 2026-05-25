@@ -14,37 +14,50 @@
         "name": "concat"
       },
       "right": {
-        "type": "operation",
-        "operator": " ",
-        "left": {
+        "type": "block",
+        "kind": "indent",
+        "content": {
           "type": "operation",
           "operator": " ",
           "left": {
             "type": "operation",
-            "operator": ":",
+            "operator": " ",
             "left": {
-              "type": "operation",
-              "operator": "<",
-              "left": "<x>",
-              "right": "1"
+              "type": "block",
+              "kind": "group",
+              "content": {
+                "type": "operation",
+                "operator": ":",
+                "left": {
+                  "type": "operation",
+                  "operator": "<",
+                  "left": "<x>",
+                  "right": "1"
+                },
+                "right": "<result1>"
+              }
             },
-            "right": "<result1>"
-          },
-          "right": {
-            "type": "operation",
-            "operator": ":",
-            "left": {
-              "type": "operation",
-              "operator": "<",
-              "left": "<y>",
-              "right": "3"
+            "right": {
+              "type": "block",
+              "kind": "group",
+              "content": {
+                "type": "operation",
+                "operator": ":",
+                "left": {
+                  "type": "operation",
+                  "operator": "<",
+                  "left": "<y>",
+                  "right": "3"
+                },
+                "right": "<result2>"
+              }
             },
-            "right": "<result2>"
+            "name": "concat"
           },
+          "right": "3",
           "name": "concat"
         },
-        "right": "3",
-        "name": "concat"
+        "env": {}
       }
     }
   },
@@ -62,27 +75,40 @@
         "name": "concat"
       },
       "right": {
-        "type": "operation",
-        "operator": " ",
-        "left": {
+        "type": "block",
+        "kind": "indent",
+        "content": {
           "type": "operation",
           "operator": " ",
           "left": {
             "type": "operation",
-            "operator": ":",
-            "left": "<x>",
-            "right": "1"
+            "operator": " ",
+            "left": {
+              "type": "block",
+              "kind": "group",
+              "content": {
+                "type": "operation",
+                "operator": ":",
+                "left": "<x>",
+                "right": "1"
+              }
+            },
+            "right": {
+              "type": "block",
+              "kind": "group",
+              "content": {
+                "type": "operation",
+                "operator": ":",
+                "left": "<y>",
+                "right": "2"
+              }
+            },
+            "name": "concat"
           },
-          "right": {
-            "type": "operation",
-            "operator": ":",
-            "left": "<y>",
-            "right": "2"
-          },
+          "right": "3",
           "name": "concat"
         },
-        "right": "3",
-        "name": "concat"
+        "env": {}
       }
     }
   }

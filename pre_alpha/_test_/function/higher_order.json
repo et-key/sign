@@ -47,98 +47,46 @@
           "type": "block",
           "kind": "bracket",
           "content": {
-            "type": "operation",
-            "operator": " ",
-            "left": {
+            "type": "block",
+            "kind": "group",
+            "content": {
               "type": "operation",
-              "operator": "@",
-              "operand": "<g>",
-              "position": "prefix"
-            },
-            "right": "<x>",
-            "name": "concat"
+              "operator": " ",
+              "left": {
+                "type": "operation",
+                "operator": "@",
+                "operand": "<g>",
+                "position": "prefix"
+              },
+              "right": "<x>",
+              "name": "concat"
+            }
           }
         },
         "right": {
           "type": "block",
           "kind": "bracket",
           "content": {
-            "type": "operation",
-            "operator": " ",
-            "left": {
+            "type": "block",
+            "kind": "group",
+            "content": {
               "type": "operation",
-              "operator": "?",
-              "left": {
+              "operator": " ",
+              "left": "<map>",
+              "right": {
                 "type": "operation",
                 "operator": " ",
-                "left": {
-                  "type": "operation",
-                  "operator": " ",
-                  "left": "<g>",
-                  "right": "<x>",
-                  "name": "concat"
-                },
+                "left": "<g>",
                 "right": {
                   "type": "operation",
                   "operator": "~",
                   "operand": "<y>",
-                  "position": "prefix"
+                  "position": "postfix"
                 },
                 "name": "concat"
               },
-              "right": {
-                "type": "operation",
-                "operator": " ",
-                "left": {
-                  "type": "block",
-                  "kind": "bracket",
-                  "content": {
-                    "type": "operation",
-                    "operator": " ",
-                    "left": {
-                      "type": "operation",
-                      "operator": "@",
-                      "operand": "<g>",
-                      "position": "prefix"
-                    },
-                    "right": "<x>",
-                    "name": "concat"
-                  }
-                },
-                "right": {
-                  "type": "block",
-                  "kind": "bracket",
-                  "content": {
-                    "type": "operation",
-                    "operator": " ",
-                    "left": "<map>",
-                    "right": {
-                      "type": "operation",
-                      "operator": " ",
-                      "left": "<g>",
-                      "right": {
-                        "type": "expanded_dict",
-                        "dict": "<y>"
-                      },
-                      "name": "concat"
-                    },
-                    "name": "apply"
-                  }
-                },
-                "name": "concat"
-              }
-            },
-            "right": {
-              "type": "operation",
-              "operator": " ",
-              "left": "<g>",
-              "right": {
-                "type": "expanded_dict",
-                "dict": "<y>"
-              },
-              "name": "concat"
-            },
-            "name": "apply"
+              "name": "apply"
+            }
           }
         },
         "name": "concat"
@@ -153,115 +101,103 @@
       "type": "operation",
       "operator": " ",
       "left": {
-        "type": "operation",
-        "operator": "?",
-        "left": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
           "type": "operation",
           "operator": " ",
           "left": {
             "type": "operation",
-            "operator": " ",
-            "left": "<g>",
-            "right": "<x>",
-            "name": "concat"
+            "operator": "@",
+            "operand": {
+              "type": "operation",
+              "operator": "$",
+              "operand": {
+                "type": "operation",
+                "operator": "?",
+                "left": "<x>",
+                "right": {
+                  "type": "operation",
+                  "operator": "*",
+                  "left": "<x>",
+                  "right": "2"
+                }
+              },
+              "position": "prefix"
+            },
+            "position": "prefix"
           },
-          "right": {
+          "right": "1",
+          "name": "concat"
+        }
+      },
+      "right": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": "?",
+          "left": {
             "type": "operation",
             "operator": "~",
             "operand": "<y>",
             "position": "prefix"
           },
-          "name": "concat"
-        },
-        "right": {
-          "type": "operation",
-          "operator": " ",
-          "left": {
-            "type": "block",
-            "kind": "bracket",
-            "content": {
-              "type": "operation",
-              "operator": " ",
-              "left": {
-                "type": "operation",
-                "operator": "@",
-                "operand": "<g>",
-                "position": "prefix"
-              },
-              "right": "<x>",
-              "name": "concat"
-            }
-          },
           "right": {
-            "type": "block",
-            "kind": "bracket",
-            "content": {
-              "type": "operation",
-              "operator": " ",
-              "left": "<map>",
-              "right": {
-                "type": "operation",
-                "operator": " ",
-                "left": "<g>",
-                "right": {
-                  "type": "expanded_dict",
-                  "dict": "<y>"
-                },
-                "name": "concat"
-              },
-              "name": "apply"
-            }
-          },
-          "name": "concat"
-        }
-      },
-      "right": {
-        "type": "operation",
-        "operator": " ",
-        "left": {
-          "type": "operation",
-          "operator": " ",
-          "left": {
             "type": "operation",
             "operator": " ",
             "left": {
-              "type": "operation",
-              "operator": " ",
-              "left": {
-                "type": "operation",
-                "operator": " ",
-                "left": {
+              "type": "block",
+              "kind": "bracket",
+              "content": {
+                "type": "block",
+                "kind": "group",
+                "content": {
                   "type": "operation",
-                  "operator": "$",
-                  "operand": {
+                  "operator": " ",
+                  "left": {
                     "type": "operation",
-                    "operator": "?",
-                    "left": "<x>",
+                    "operator": "@",
+                    "operand": "<g>",
+                    "position": "prefix"
+                  },
+                  "right": "<x>",
+                  "name": "concat"
+                }
+              }
+            },
+            "right": {
+              "type": "block",
+              "kind": "bracket",
+              "content": {
+                "type": "block",
+                "kind": "group",
+                "content": {
+                  "type": "operation",
+                  "operator": " ",
+                  "left": "<map>",
+                  "right": {
+                    "type": "operation",
+                    "operator": " ",
+                    "left": "<g>",
                     "right": {
                       "type": "operation",
-                      "operator": "*",
-                      "left": "<x>",
-                      "right": "2"
-                    }
+                      "operator": "~",
+                      "operand": "<y>",
+                      "position": "postfix"
+                    },
+                    "name": "concat"
                   },
-                  "position": "prefix"
-                },
-                "right": "1",
-                "name": "concat"
-              },
-              "right": "2",
-              "name": "concat"
+                  "name": "apply"
+                }
+              }
             },
-            "right": "3",
             "name": "concat"
           },
-          "right": "4",
-          "name": "concat"
-        },
-        "right": "5",
-        "name": "concat"
+          "env": {}
+        }
       },
-      "name": "apply"
+      "name": "concat"
     }
   },
   {
@@ -272,119 +208,107 @@
       "type": "operation",
       "operator": " ",
       "left": {
-        "type": "operation",
-        "operator": "?",
-        "left": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
           "type": "operation",
           "operator": " ",
           "left": {
             "type": "operation",
-            "operator": " ",
-            "left": "<g>",
-            "right": "<x>",
-            "name": "concat"
+            "operator": "@",
+            "operand": {
+              "type": "operation",
+              "operator": "$",
+              "operand": {
+                "type": "block",
+                "kind": "bracket",
+                "content": {
+                  "type": "operation",
+                  "operator": "?",
+                  "left": "<x>",
+                  "right": {
+                    "type": "operation",
+                    "operator": "*",
+                    "left": "<x>",
+                    "right": "2"
+                  }
+                }
+              },
+              "position": "prefix"
+            },
+            "position": "prefix"
           },
-          "right": {
+          "right": "1",
+          "name": "concat"
+        }
+      },
+      "right": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": "?",
+          "left": {
             "type": "operation",
             "operator": "~",
             "operand": "<y>",
             "position": "prefix"
           },
-          "name": "concat"
-        },
-        "right": {
-          "type": "operation",
-          "operator": " ",
-          "left": {
-            "type": "block",
-            "kind": "bracket",
-            "content": {
-              "type": "operation",
-              "operator": " ",
-              "left": {
-                "type": "operation",
-                "operator": "@",
-                "operand": "<g>",
-                "position": "prefix"
-              },
-              "right": "<x>",
-              "name": "concat"
-            }
-          },
           "right": {
-            "type": "block",
-            "kind": "bracket",
-            "content": {
-              "type": "operation",
-              "operator": " ",
-              "left": "<map>",
-              "right": {
-                "type": "operation",
-                "operator": " ",
-                "left": "<g>",
-                "right": {
-                  "type": "expanded_dict",
-                  "dict": "<y>"
-                },
-                "name": "concat"
-              },
-              "name": "apply"
-            }
-          },
-          "name": "concat"
-        }
-      },
-      "right": {
-        "type": "operation",
-        "operator": " ",
-        "left": {
-          "type": "operation",
-          "operator": " ",
-          "left": {
             "type": "operation",
             "operator": " ",
             "left": {
-              "type": "operation",
-              "operator": " ",
-              "left": {
-                "type": "operation",
-                "operator": " ",
-                "left": {
+              "type": "block",
+              "kind": "bracket",
+              "content": {
+                "type": "block",
+                "kind": "group",
+                "content": {
                   "type": "operation",
-                  "operator": "$",
-                  "operand": {
-                    "type": "block",
-                    "kind": "bracket",
-                    "content": {
-                      "type": "operation",
-                      "operator": "?",
-                      "left": "<x>",
-                      "right": {
-                        "type": "operation",
-                        "operator": "*",
-                        "left": "<x>",
-                        "right": "2"
-                      }
-                    }
+                  "operator": " ",
+                  "left": {
+                    "type": "operation",
+                    "operator": "@",
+                    "operand": "<g>",
+                    "position": "prefix"
                   },
-                  "position": "prefix"
-                },
-                "right": "1",
-                "name": "concat"
-              },
-              "right": "2",
-              "name": "concat"
+                  "right": "<x>",
+                  "name": "concat"
+                }
+              }
             },
-            "right": "3",
+            "right": {
+              "type": "block",
+              "kind": "bracket",
+              "content": {
+                "type": "block",
+                "kind": "group",
+                "content": {
+                  "type": "operation",
+                  "operator": " ",
+                  "left": "<map>",
+                  "right": {
+                    "type": "operation",
+                    "operator": " ",
+                    "left": "<g>",
+                    "right": {
+                      "type": "operation",
+                      "operator": "~",
+                      "operand": "<y>",
+                      "position": "postfix"
+                    },
+                    "name": "concat"
+                  },
+                  "name": "apply"
+                }
+              }
+            },
             "name": "concat"
           },
-          "right": "4",
-          "name": "concat"
-        },
-        "right": "5",
-        "name": "concat"
+          "env": {}
+        }
       },
-      "name": "apply"
+      "name": "concat"
     }
   },
   {
@@ -396,11 +320,7 @@
       "operator": " ",
       "left": {
         "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "operation",
-          "operator": "+"
-        }
+        "kind": "bracket"
       },
       "right": {
         "type": "operation",

@@ -35,38 +35,6 @@
     "type": "operation",
     "operator": ":",
     "left": "<result>",
-    "right": {
-      "type": "operation",
-      "operator": " ",
-      "left": {
-        "type": "operation",
-        "operator": " ",
-        "left": {
-          "type": "operation",
-          "operator": "?",
-          "left": "<x>",
-          "right": {
-            "type": "operation",
-            "operator": "*",
-            "left": "<x>",
-            "right": "2"
-          }
-        },
-        "right": {
-          "type": "operation",
-          "operator": "?",
-          "left": "<x>",
-          "right": {
-            "type": "operation",
-            "operator": "+",
-            "left": "<x>",
-            "right": "1"
-          }
-        },
-        "name": "compose"
-      },
-      "right": "3",
-      "name": "apply"
-    }
+    "right": "Number"
   }
 ]

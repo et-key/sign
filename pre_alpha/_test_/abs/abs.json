@@ -1,56 +1,16 @@
 [
   {
-    "type": "operation",
-    "operator": "+",
-    "left": {
-      "type": "block",
-      "kind": "abs",
-      "content": "<a>",
-      "env": {}
-    },
-    "right": "1"
+    "type": "block",
+    "kind": "abs",
+    "content": "<a>",
+    "env": {}
   },
+  "Number",
   {
-    "type": "operation",
-    "operator": "+",
-    "left": "1",
-    "right": {
-      "type": "block",
-      "kind": "abs",
-      "content": "<a>",
-      "env": {}
-    }
+    "type": "block",
+    "kind": "abs",
+    "content": "<x>",
+    "env": {}
   },
-  {
-    "type": "operation",
-    "operator": "*",
-    "left": {
-      "type": "block",
-      "kind": "abs",
-      "content": {
-        "type": "operation",
-        "operator": "+",
-        "left": "<x>",
-        "right": "<y>"
-      },
-      "env": {}
-    },
-    "right": "3"
-  },
-  {
-    "type": "operation",
-    "operator": "*",
-    "left": "3",
-    "right": {
-      "type": "block",
-      "kind": "abs",
-      "content": {
-        "type": "operation",
-        "operator": "+",
-        "left": "<x>",
-        "right": "<y>"
-      },
-      "env": {}
-    }
-  }
+  "Number"
 ]

@@ -1,26 +1,6 @@
 {
   "type": "operation",
   "operator": "==",
-  "left": {
-    "type": "operation",
-    "operator": "+",
-    "left": "<a>",
-    "right": {
-      "type": "operation",
-      "operator": "*",
-      "left": "<b>",
-      "right": "<c>"
-    }
-  },
-  "right": {
-    "type": "operation",
-    "operator": "+",
-    "left": "<a>",
-    "right": {
-      "type": "operation",
-      "operator": "*",
-      "left": "<b>",
-      "right": "<c>"
-    }
-  }
+  "left": "<a>",
+  "right": "<a>"
 }

@@ -7,10 +7,8 @@ _start:
   SVC #0
 
 add:
-  ADD X0, X9, X10
   RET
 
 sub:
-  SUB X0, X9, X10
   RET
 

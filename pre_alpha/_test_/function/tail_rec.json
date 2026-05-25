@@ -9,18 +9,7 @@
     "right": {
       "type": "operation",
       "operator": " ",
-      "left": {
-        "type": "operation",
-        "operator": "?",
-        "left": "<x>",
-        "right": {
-          "type": "operation",
-          "operator": " ",
-          "left": "<loop>",
-          "right": "<x>",
-          "name": "apply"
-        }
-      },
+      "left": "<loop>",
       "right": "<x>",
       "name": "apply"
     }

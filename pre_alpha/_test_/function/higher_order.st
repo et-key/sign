@@ -1,9 +1,8 @@
-f : (Number -> Number)
-map : (Tuple(Number, (Number -> (T10 -> T11)), ~T4) -> T11)
-result_map1 : Tuple(Tuple(Tuple(Tuple(Tuple((Tuple((Number -> (T10 -> T11)), ~T4) -> T11), Number), Number), Number), Number), Number)
-result_map2 : Tuple(Tuple(Tuple(Tuple(Tuple((Tuple((Number -> (T10 -> T11)), ~T4) -> T11), Number), Number), Number), Number), Number)
-result_sum : Tuple(Tuple(Tuple(Tuple(Tuple(Number, Number), Number), Number), Number), Number)
-result_partial : Tuple(Tuple(Tuple(Tuple(Tuple(Tuple(Unit, Number), Number), Number), Number), Number), Number)
-test_array : Tuple(Tuple(Tuple(Tuple(Number, Number), Number), Number), Number)
-test_tuple : Tuple(Tuple(Number, a), Number)
-lambda_0 : (Number -> Number)
+f : x -> (x)
+map : ((g <> x) <> (y)) -> ([((g) <> x)] <> [(map <~ (g <> (y)))])
+result_map1 : [(((x -> (x)))) <> 1] <> [(y) -> ([((g) <> x)] <> [(map <~ (g <> (y)))])]
+result_map2 : [(([x -> (x)])) <> 1] <> [(y) -> ([((g) <> x)] <> [(map <~ (g <> (y)))])]
+result_sum : [_] <~ ((((1 <> 2) <> 3) <> 4) <> 5)
+result_partial : [_ , (_)] <~ ((((1 <> 2) <> 3) <> 4) <> 5)
+test_array : (((1 <> 2) <> 3) <> 4) <> 5
+test_tuple : (1 <> a) <> 3

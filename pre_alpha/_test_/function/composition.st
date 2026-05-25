@@ -1,3 +1,3 @@
-f : (Number -> Number)
-g : (Number -> Number)
+f : x -> (x)
+g : x -> (x)
 result : Number

@@ -4,7 +4,8 @@ import { buildAST } from './semanticize/shunting_yard.js';
 import { buildEnvironment } from './semanticize/builder.js';
 import { resolveCoproducts } from './semanticize/coproduct_resolver.js';
 import { evaluate } from './semanticize/evaluator.js';
-// import { annotateContextualOperators, liftLambdas, infer, generateST, Substitution, resetTVarCounter } from './semanticize/analyzer/index.js';
+import { generateST } from './semanticize/st_generator.js';
+// import { annotateContextualOperators, liftLambdas, infer, Substitution, resetTVarCounter } from './semanticize/analyzer/index.js';
 import { generateAArch64 } from './backend/aarch64.js';
 import util from 'util';
 import fs from 'fs';
@@ -73,10 +74,10 @@ for (const filePath of files) {
     const outPathJson = filePath.replace(/\.(sign|sn)$/, '.json');
     fs.writeFileSync(outPathJson, JSON.stringify(astTrees.length === 1 ? astTrees[0] : astTrees, null, 2), 'utf-8');
 
-    // Write .st Type Signature output (一時的にコメントアウト)
-    // const outPathSt = filePath.replace(/\.(sign|sn)$/, '.st');
-    // const stContent = generateST(astTrees, lambdaState.lambdas);
-    // fs.writeFileSync(outPathSt, stContent, 'utf-8');
+    // Write .st Type Signature output
+    const outPathSt = filePath.replace(/\.(sign|sn)$/, '.st');
+    const stContent = generateST(astTrees);
+    fs.writeFileSync(outPathSt, stContent, 'utf-8');
 
     // Write .s AArch64 output
     const outPathS = filePath.replace(/\.(sign|sn)$/, '.s');

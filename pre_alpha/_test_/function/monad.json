@@ -34,35 +34,7 @@
     "operator": ":",
     "left": "<mapped>",
     "right": {
-      "type": "operation",
-      "operator": " ",
-      "left": {
-        "type": "operation",
-        "operator": "?",
-        "left": {
-          "type": "operation",
-          "operator": " ",
-          "left": "<x>",
-          "right": "<y>",
-          "name": "concat"
-        },
-        "right": {
-          "type": "operation",
-          "operator": "+",
-          "left": "<x>",
-          "right": "<y>"
-        }
-      },
-      "right": {
-        "type": "operation",
-        "operator": " ",
-        "left": {
-          "type": "Unit"
-        },
-        "right": "3",
-        "name": "concat"
-      },
-      "name": "apply"
+      "type": "Unit"
     }
   },
   {
@@ -86,51 +58,7 @@
     "operator": ":",
     "left": "<mapped_twice>",
     "right": {
-      "type": "operation",
-      "operator": " ",
-      "left": {
-        "type": "operation",
-        "operator": "?",
-        "left": "<x>",
-        "right": {
-          "type": "operation",
-          "operator": "*",
-          "left": "<x>",
-          "right": "2"
-        }
-      },
-      "right": {
-        "type": "operation",
-        "operator": " ",
-        "left": {
-          "type": "operation",
-          "operator": "?",
-          "left": {
-            "type": "operation",
-            "operator": " ",
-            "left": "<x>",
-            "right": "<y>",
-            "name": "concat"
-          },
-          "right": {
-            "type": "operation",
-            "operator": "+",
-            "left": "<x>",
-            "right": "<y>"
-          }
-        },
-        "right": {
-          "type": "operation",
-          "operator": " ",
-          "left": {
-            "type": "Unit"
-          },
-          "right": "3",
-          "name": "concat"
-        },
-        "name": "apply"
-      },
-      "name": "apply"
+      "type": "Unit"
     }
   }
 ]

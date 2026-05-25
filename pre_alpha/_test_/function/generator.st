@@ -1,3 +1,3 @@
-f : (Number -> Number)
-map : (Tuple(Number, (Number -> (T10 -> T11)), ~T4) -> T11)
-result : Tuple((Tuple((Number -> (T10 -> T11)), ~T4) -> T11), Generator(Number, Number, Number))
+f : x -> (x)
+map : ((g <> x) <> (y)) -> ([((g) <> x)] <> [(map <~ (g <> (y)))])
+result : (y) -> ([((g) <> x)] <> [(map <~ (g <> (y)))])

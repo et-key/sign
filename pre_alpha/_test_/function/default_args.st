@@ -1,7 +1,12 @@
-func_with_defaults : (Tuple(String, String) -> Number)
-result1 : Number
-result2 : Tuple(Tuple((Tuple(String, String) -> Number), Number), String)
-result3 : Tuple((String -> Number), Number)
-result4 : Tuple(Tuple((Tuple(String, String) -> Number), Number), Number)
-result5 : Tuple(Tuple((Tuple(String, String) -> Number), Number), Number) | Unit
-result6 : Tuple(Tuple((Tuple(String, String) -> Number), Number), Number) | Unit
+func_with_defaults : 
+  (x : 1) <> (y : x) -> 
+  (x)
+result1_is_partial_applyed : (y : x) -> 
+  (x)
+result2_is_applied : (y : x) -> 
+  (x)
+result3_is_partial_applyed : ((y : x) -> 
+  (x)) , 5
+result4_is_applied : Number
+result5_is_applied : Number
+result6_is_applied : Number

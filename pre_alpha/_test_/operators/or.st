@@ -1,2 +1,2 @@
-<expression> : a | Number | c
-<expression> : a | Number | c
+(a | (b)) | c
+(a | (b)) | c

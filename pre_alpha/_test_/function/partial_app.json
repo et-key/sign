@@ -25,35 +25,7 @@
     "type": "operation",
     "operator": ":",
     "left": "<partial>",
-    "right": {
-      "type": "operation",
-      "operator": " ",
-      "left": {
-        "type": "operation",
-        "operator": "?",
-        "left": {
-          "type": "operation",
-          "operator": " ",
-          "left": "<x>",
-          "right": "<y>",
-          "name": "concat"
-        },
-        "right": {
-          "type": "operation",
-          "operator": "+",
-          "left": "<x>",
-          "right": "<y>"
-        }
-      },
-      "right": {
-        "type": "operation",
-        "operator": " ",
-        "left": "_",
-        "right": "3",
-        "name": "concat"
-      },
-      "name": "apply"
-    }
+    "right": "_"
   },
   {
     "type": "operation",
@@ -61,61 +33,22 @@
     "left": "<curried>",
     "right": {
       "type": "operation",
-      "operator": " ",
-      "left": {
+      "operator": "?",
+      "left": "<y>",
+      "right": {
         "type": "operation",
-        "operator": "?",
-        "left": {
-          "type": "operation",
-          "operator": " ",
-          "left": "<x>",
-          "right": "<y>",
-          "name": "concat"
-        },
-        "right": {
-          "type": "operation",
-          "operator": "+",
-          "left": "<x>",
-          "right": "<y>"
-        }
+        "operator": "+",
+        "left": "<x>",
+        "right": "<y>"
       },
-      "right": "2",
-      "name": "apply"
+      "env": {}
     }
   },
   {
     "type": "operation",
     "operator": ":",
     "left": "<result_curried>",
-    "right": {
-      "type": "operation",
-      "operator": " ",
-      "left": {
-        "type": "operation",
-        "operator": " ",
-        "left": {
-          "type": "operation",
-          "operator": "?",
-          "left": {
-            "type": "operation",
-            "operator": " ",
-            "left": "<x>",
-            "right": "<y>",
-            "name": "concat"
-          },
-          "right": {
-            "type": "operation",
-            "operator": "+",
-            "left": "<x>",
-            "right": "<y>"
-          }
-        },
-        "right": "2",
-        "name": "apply"
-      },
-      "right": "4",
-      "name": "concat"
-    }
+    "right": "Number"
   },
   {
     "type": "operation",

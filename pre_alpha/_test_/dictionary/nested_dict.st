@@ -1,1 +1,1 @@
-my_dict : Tuple(Tuple(String, Number), Tuple(String, String))
+my_dict : ((name : `Sign`) <> (version : 0.1)) <> (features : (type : `Structural`) <> (backend : `AArch64`))

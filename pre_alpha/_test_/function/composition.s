@@ -19,8 +19,6 @@ g:
   RET
 
 result:
-  MOV X0, #3
-  BL lambda
-  BL lambda
+  // Unknown identifier: Number
   RET
 

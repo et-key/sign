@@ -1,5 +1,5 @@
-f : (Tuple(Number, Number) -> Number)
-maybe_val : Number | Unit
-mapped : Number | Unit
-g : (Number -> Number)
-mapped_twice : Number | Unit
+f : (x <> y) -> (x)
+maybe_val : _
+mapped : _
+g : x -> (x)
+mapped_twice : _

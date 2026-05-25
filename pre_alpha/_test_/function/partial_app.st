@@ -1,6 +1,6 @@
-f : (Tuple(Number, Number) -> Number)
-partial : Tuple(Tuple((Tuple(Number, Number) -> Number), String), Number)
-curried : (Number -> Number)
+f : (x <> y) -> (x)
+partial : _
+curried : y -> (x)
 result_curried : Number
-check : Number | Unit
-check2 : Number | Unit
+check : _
+check2 : 5
