@@ -28,8 +28,8 @@ String を含む場合は `Atom` 含まない場合は `Scalar`
 | `==` | 中置 | `(L -> R) -> (L \| _)` |
 | `!==` | 中置 | `(L -> R) -> (L \| _)` |
 | `,` | 中置※ | `(L -> R) -> List` |
-| ` ` | `Atom \| List` 中置 `Lambda` | `((Atom \| List \| _) -> Lambda) -> (List \| _)` |
-| ` ` | `Lambda` 中置 `Atom \| List` | `(Lambda -> (Atom \| List \| _)) -> (List \| _)` |
+| ` ` | `Atom \| List` 中置 `Lambda` | `((Atom \| List \| _) -> Lambda) -> (List \| Lambda \| _)` |
+| ` ` | `Lambda` 中置 `Atom \| List` | `(Lambda -> (Atom \| List \| _)) -> (List \| Lambda \| _)` |
 | ` ` | `Lambda` 中置 `Lambda` | `(Lambda -> Lambda) -> Lambda` |
 | ` ` | `Atom \| List` 中置 `Atom \| List` | `((Atom \| List \| _) -> (Atom \| List \| _)) -> (List \| _)` |
 | `~` | 中置 | `(Scalar -> Scalar) -> Iterator -> Scalar` |
