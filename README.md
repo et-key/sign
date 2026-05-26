@@ -9,28 +9,28 @@ It is designed to be used in various Anyone, such as data validation, integrity 
 
 ## Manifesto
 
-- [Our Manifesto](./documents/manifesto/manifesto.en-us.md)
-- [日本語版はこちら](./documents/manifesto/manifesto.ja-jp.md)
+* [Our Manifesto](./documents/manifesto/manifesto.en-us.md)
+* [日本語版はこちら](./documents/manifesto/manifesto.ja-jp.md)
 
 ## Example
 
-- [language example](./documents/en-us/example.en-us.sn)
-- [日本語はこちら](./documents/ja-jp/example.ja-jp.sn)
+* [language example](./documents/en-us/example.en-us.sn)
+* [日本語はこちら](./documents/ja-jp/example.ja-jp.sn)
 
 ## Reference
 
-- [language reference](./documents/en-us/Sign_reference_en-us.md)
-- [日本語はこちら](./documents/ja-jp/Sign_reference_ja-jp.md)
+* [language reference](./documents/en-us/Sign_reference_en-us.md)
+* [日本語はこちら](./documents/ja-jp/Sign_reference_ja-jp.md)
 
 ## Specification
 
-- [language specification](./documents/en-us/specification/)
-- [日本語はこちら](./documents/ja-jp/specification/)
+* [language specification](./documents/en-us/specification/)
+* [日本語はこちら](./documents/ja-jp/specification/)
 
 ## License
 
-- [Language-License](./documents/License/sign-language-license.en-us.md)
-- [日本語はこちら](./documents/License/sign-language-license.ja-jp.md)
+* [Language-License](./documents/License/sign-language-license.en-us.md)
+* [日本語はこちら](./documents/License/sign-language-license.ja-jp.md)
 
 ## Concept view
 
