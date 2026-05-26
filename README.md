@@ -68,6 +68,10 @@ Apply --> List & Number & Letter
 config:
   theme: redux-dark
 ---
+---
+config:
+  theme: redux-dark
+---
 graph LR
  subgraph Product[" "]
         Syntax
@@ -85,18 +89,13 @@ graph LR
         Interpretation
   end
 
-  Syntax --> Semantics
-  Semantics --> Syntax
+  Syntax <===> Semantics
 
-  List --> Lambda
-  Lambda --> List
+  List <===> Lambda
 
-  Stack --> Stream
-  Stream --> Stack
+  Stack <===> Stream
 
-  Literal --> Operator
-  Operator --> Literal
+  Literal <===> Operator
 
-  Compilation --> Interpretation
-  Interpretation --> Compilation
+  Compilation <===> Interpretation
 ```
