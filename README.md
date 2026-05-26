@@ -68,10 +68,6 @@ Apply --> List & Number & Letter
 config:
   theme: redux-dark
 ---
----
-config:
-  theme: redux-dark
----
 graph LR
  subgraph Product[" "]
         Syntax
