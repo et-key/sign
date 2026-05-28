@@ -11,7 +11,7 @@
         "kind": "indent",
         "content": {
           "type": "operation",
-          "operator": " ",
+          "operator": "\\n",
           "left": {
             "type": "operation",
             "operator": ":",
@@ -32,7 +32,7 @@
             },
             "name": "define"
           },
-          "name": "concat"
+          "name": "newline"
         },
         "env": {}
       },
@@ -52,21 +52,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Func",
-      "from": {
-        "type": "tvar",
-        "id": "t2",
-        "instance": null
-      },
-      "to": {
-        "type": "Func",
-        "from": {
-          "type": "tvar",
-          "id": "t3",
-          "instance": null
-        },
-        "to": "Number"
-      }
+      "type": "Lambda",
+      "returns": "Number"
     }
   },
   {
@@ -82,13 +69,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Func",
-      "from": {
-        "type": "tvar",
-        "id": "t7",
-        "instance": null
-      },
-      "to": "Number"
+      "type": "Lambda",
+      "returns": "Number"
     }
   },
   {
@@ -104,9 +86,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "tvar",
-      "id": "t11",
-      "instance": null
+      "type": "Variable",
+      "name": "<x>"
     }
   },
   {
@@ -128,18 +109,14 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "operation",
-      "operator": ",",
-      "left": {
-        "type": "Func",
-        "from": {
-          "type": "tvar",
-          "id": "t13",
-          "instance": null
+      "type": "List",
+      "elements": [
+        {
+          "type": "Lambda",
+          "returns": "Number"
         },
-        "to": "Number"
-      },
-      "right": "Number"
+        "Number"
+      ]
     }
   },
   {
@@ -161,9 +138,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "tvar",
-      "id": "t11",
-      "instance": null
+      "type": "Variable",
+      "name": "<x>"
     }
   },
   {
@@ -195,9 +171,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "tvar",
-      "id": "t11",
-      "instance": null
+      "type": "Variable",
+      "name": "<x>"
     }
   },
   {
@@ -239,9 +214,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "tvar",
-      "id": "t11",
-      "instance": null
+      "type": "Variable",
+      "name": "<x>"
     }
   }
 ]

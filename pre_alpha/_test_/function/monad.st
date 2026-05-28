@@ -1,5 +1,5 @@
-f : Number -> Number -> Number
+f : Lambda(Number)
 maybe_val : _
 mapped : _
-g : Number -> Number
+g : Lambda(Number)
 mapped_twice : _

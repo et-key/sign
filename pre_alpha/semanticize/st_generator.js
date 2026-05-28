@@ -60,8 +60,10 @@ export function resetTVarFormatter() {
   tvarNameMap.clear();
 }
 
-export function formatTypeObj(node) {
-  if (node === undefined || node === null) return 'Unknown';
+export function formatTypeObj(node, indentLevel = 0) {
+  const indentStr = '  '.repeat(indentLevel);
+  const nextIndent = '  '.repeat(indentLevel + 1);
+  if (node === undefined || node === null) return '_';
 
   if (typeof node === 'string') {
     // <name> のようなタグが付いている場合は外す
@@ -79,11 +81,11 @@ export function formatTypeObj(node) {
     return getTVarName(node.id);
   }
 
-  if (node.type === 'Unit') return '_';
+  if (node.type === 'Unit' || node.type === 'Unknown') return '_';
 
   if (node.type === 'Func') {
-    let fromStr = formatTypeObj(node.from);
-    let toStr = formatTypeObj(node.to);
+    let fromStr = formatTypeObj(node.from, indentLevel);
+    let toStr = formatTypeObj(node.to, indentLevel);
     
     // Parenthesize the from side if it is also a Func
     if (node.from && node.from.type === 'Func') {
@@ -110,9 +112,9 @@ export function formatTypeObj(node) {
       else if (rightInfo.prec === currentInfo.prec && currentInfo.assoc === 'left') rightNeedsParen = true;
     }
 
-    let leftStr = node.left !== undefined ? formatTypeObj(node.left) : '';
-    let rightStr = node.right !== undefined ? formatTypeObj(node.right) : '';
-    let operandStr = node.operand !== undefined ? formatTypeObj(node.operand) : '';
+    let leftStr = node.left !== undefined ? formatTypeObj(node.left, indentLevel) : '';
+    let rightStr = node.right !== undefined ? formatTypeObj(node.right, indentLevel) : '';
+    let operandStr = node.operand !== undefined ? formatTypeObj(node.operand, indentLevel) : '';
 
     if (leftNeedsParen) leftStr = `(${leftStr})`;
     if (rightNeedsParen) rightStr = `(${rightStr})`;
@@ -156,9 +158,9 @@ export function formatTypeObj(node) {
   if (node.type === 'block') {
     let contentStr = '';
     if (Array.isArray(node.content)) {
-      contentStr = node.content.map(c => formatTypeObj(c)).join(' ');
+      contentStr = node.content.map(c => formatTypeObj(c, indentLevel)).join(' ');
     } else {
-      contentStr = formatTypeObj(node.content);
+      contentStr = formatTypeObj(node.content, indentLevel);
     }
 
     if (node.kind === 'paren' || node.kind === 'group') return `(${contentStr})`;
@@ -173,14 +175,34 @@ export function formatTypeObj(node) {
   if (node.type === 'coproduct_block' && Array.isArray(node.statements)) {
     // Statements are usually separated by newlines in the original source,
     // but represented as coproduct_block.
-    return node.statements.map(s => formatTypeObj(s)).join(' ; ');
+    return node.statements.map(s => formatTypeObj(s, indentLevel)).join(' ; ');
   }
 
   if (node.type === 'expanded_dict') {
-    return `${formatTypeObj(node.dict)}~`;
+    return `${formatTypeObj(node.dict, indentLevel)}~`;
   }
 
-  return JSON.stringify(node);
+  // 新しい構造型のフォーマット
+  if (node.type === 'Variable') return node.name;
+  if (node.type === 'Lambda') return `Lambda(${formatTypeObj(node.returns, indentLevel)})`;
+  if (node.type === 'List') {
+    const elems = node.elements || [];
+    if (elems.length === 0) return '[]';
+    const formatted = elems.map(e => formatTypeObj(e, indentLevel + 1)).join(`\n${nextIndent}`);
+    return `[\n${nextIndent}${formatted}\n${indentStr}]`;
+  }
+  if (node.type === 'Apply') return `(${formatTypeObj(node.left, indentLevel)} <= ${formatTypeObj(node.right, indentLevel)})`;
+  if (node.type === 'Compose') return `(${formatTypeObj(node.left, indentLevel)} => ${formatTypeObj(node.right, indentLevel)})`;
+  if (node.type === 'Deref') return `@${formatTypeObj(node.target, indentLevel)}`;
+  if (node.type === 'Implicit') return `Implicit(${formatTypeObj(node.target, indentLevel)})`;
+
+  // 未知のオブジェクトがJSONとして出力されるのを防ぎ、Signの辞書（ブロック）に近い形式にする
+  if (typeof node === 'object') {
+    const entries = Object.entries(node).map(([k, v]) => `${k} : ${formatTypeObj(v, indentLevel + 1)}`);
+    return `{\n${nextIndent}${entries.join(`\n${nextIndent}`)}\n${indentStr}}`;
+  }
+
+  return String(node);
 }
 
 export function generateST(astTrees) {

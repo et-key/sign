@@ -11,9 +11,8 @@
     "right": "1",
     "name": "add",
     "inferredType": {
-      "type": "tvar",
-      "id": "t1",
-      "instance": null
+      "type": "Variable",
+      "name": "<a>"
     }
   },
   {
@@ -28,9 +27,8 @@
     },
     "name": "add",
     "inferredType": {
-      "type": "tvar",
-      "id": "t2",
-      "instance": null
+      "type": "Variable",
+      "name": "Number"
     }
   },
   {
@@ -51,9 +49,8 @@
     "right": "3",
     "name": "mul",
     "inferredType": {
-      "type": "tvar",
-      "id": "t3",
-      "instance": null
+      "type": "Variable",
+      "name": "<x>"
     }
   },
   {
@@ -74,9 +71,8 @@
     },
     "name": "mul",
     "inferredType": {
-      "type": "tvar",
-      "id": "t2",
-      "instance": null
+      "type": "Variable",
+      "name": "Number"
     }
   }
 ]

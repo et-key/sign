@@ -1,2 +1,11 @@
-func_match : 'a -> 'b -> 'c <> 'd <> Number
- : ['e -> 'f -> Number <> Number <> Number]
+func_match : Lambda({
+  type : Union
+  types : {
+    0 : String
+    1 : String
+    2 : [
+      String
+      Number
+    ]
+  }
+})

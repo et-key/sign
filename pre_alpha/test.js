@@ -5,8 +5,7 @@ import { buildEnvironment } from './semanticize/builder.js';
 import { resolveCoproducts } from './semanticize/coproduct_resolver.js';
 import { evaluate } from './semanticize/evaluator.js';
 import { generateST } from './semanticize/st_generator.js';
-import { infer, applySubst } from './semanticize/analyzer/infer.js';
-import { resetTVarCounter } from './semanticize/analyzer/unify.js';
+import { evaluateType } from './semanticize/type_evaluator.js';
 import { generateAArch64 } from './backend/aarch64.js';
 import util from 'util';
 import fs from 'fs';
@@ -56,7 +55,6 @@ for (const filePath of files) {
     // 5. infer (Algorithm Wによる型推論)
     let globalEnv = new Map();
     let typeEnv = new Map();
-    resetTVarCounter();
 
     const astTrees = astLines.map(astLine => {
       // 1. Shunting Yard (優先順位解決 -> AST)
@@ -75,12 +73,9 @@ for (const filePath of files) {
         console.log(`[DEBUG evalTree]`, JSON.stringify(evalTree, null, 2));
       }
 
-      // 5. 型推論 (Algorithm W)
-      // evalTreeを入力として型を推論し、未解決の型変数やフラグを単一化します。
-      const inferredType = infer(evalTree, typeEnv);
-
-      // 推論された型から型変数を具体型に置換（解決）します
-      const resolvedType = applySubst(inferredType);
+      // 5. ボトムアップ型評価
+      // evalTreeを入力として型を演算子シグネチャに基づいて決定します。
+      const resolvedType = evaluateType(evalTree, typeEnv);
       
       // JSONやAssembly用には簡約済みのASTを返しつつ、型情報はST用に別管理すべきですが、
       // ここではSTファイル出力のために resolvedType をASTとして扱います。
@@ -114,10 +109,12 @@ for (const filePath of files) {
     // Write .st Type Signature output
     const outPathSt = filePath.replace(/\.(sign|sn)$/, '.st');
     // .stには推論済みの型出力する
-    const stInput = astTrees.map(t => {
-      if (t.inferredType) return { type: 'operation', operator: ':', left: t.left || t.name, right: t.inferredType };
-      return t;
-    });
+    const stInput = astTrees
+      .filter(t => t && t.type === 'operation' && t.operator === ':')
+      .map(t => {
+        if (t.inferredType) return { type: 'operation', operator: ':', left: t.left || t.name, right: t.inferredType };
+        return t;
+      });
     if (filePath.endsWith('generator.sn')) {
       console.log(`[DEBUG stInput]`, JSON.stringify(stInput, null, 2));
     }

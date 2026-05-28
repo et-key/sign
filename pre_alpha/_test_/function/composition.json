@@ -18,9 +18,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Func",
-      "from": "Number",
-      "to": "Number"
+      "type": "Lambda",
+      "returns": "Number"
     }
   },
   {
@@ -42,9 +41,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Func",
-      "from": "Number",
-      "to": "Number"
+      "type": "Lambda",
+      "returns": "Number"
     }
   },
   {
@@ -65,10 +63,6 @@
       "name": "apply"
     },
     "name": "define",
-    "inferredType": {
-      "type": "tvar",
-      "id": "t6",
-      "instance": null
-    }
+    "inferredType": "Number"
   }
 ]

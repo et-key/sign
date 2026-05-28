@@ -14,11 +14,20 @@ export class AArch64Generator {
     this.asm.push('.global _start');
     this.asm.push('');
 
+    // Check if main or result is defined
+    const hasMain = asts.some(node => node && node.type === 'operation' && node.operator === ':' && this.getIdentName(node.left) === 'main');
+    const hasResult = asts.some(node => node && node.type === 'operation' && node.operator === ':' && this.getIdentName(node.left) === 'result');
+
     // Generate _start
     this.asm.push('_start:');
-    // For now, _start just exits cleanly
+    if (hasMain) {
+      this.asm.push('  BL main'); // Call main
+    } else if (hasResult) {
+      this.asm.push('  BL result'); // Call result to get exit code in X0
+    } else {
+      this.asm.push('  MOV X0, #0');
+    }
     this.asm.push('  MOV X8, #93 // sys_exit');
-    this.asm.push('  MOV X0, #0');
     this.asm.push('  SVC #0');
     this.asm.push('');
 
@@ -56,6 +65,11 @@ export class AArch64Generator {
   generateFunction(node) {
     const name = this.getIdentName(node.left);
     this.asm.push(`${name}:`);
+    
+    // プロローグ: リンクレジスタ(LR=X30)とフレームポインタ(FP=X29)を退避
+    this.asm.push(`  STP X29, X30, [SP, #-16]!`);
+    this.asm.push(`  MOV X29, SP`);
+    this.asm.push(`${name}_body:`);
 
     // We assume arguments are in X0, X1, etc.
     // The body is node.right
@@ -75,6 +89,8 @@ export class AArch64Generator {
     }
 
     if (!didTailCall) {
+      // エピローグ: 復元してリターン
+      this.asm.push(`  LDP X29, X30, [SP], #16`);
       this.asm.push('  RET');
     }
     this.asm.push('');
@@ -82,11 +98,18 @@ export class AArch64Generator {
 
   extractParams(node, env, regIndex) {
     if (!node) return regIndex;
+    if (node.type === 'block') {
+      return this.extractParams(node.content, env, regIndex);
+    }
+    if (node.type === 'operation' && node.operator === ':') {
+      // parameter with default value or dependent type (e.g. y: x+1)
+      return this.extractParams(node.left, env, regIndex);
+    }
     if (typeof node === 'string') {
-      env.set(node, `X${regIndex}`);
+      env.set(this.getIdentName(node), `X${regIndex}`);
       return regIndex + 1;
     }
-    if (node.type === 'operation' && node.operator === ' ') {
+    if (node.type === 'operation' && (node.operator === ' ' || node.operator === '\\n')) {
       let nextIdx = this.extractParams(node.left, env, regIndex);
       return this.extractParams(node.right, env, nextIdx);
     }
@@ -191,19 +214,34 @@ export class AArch64Generator {
       }
 
       if (node.operator === '@' && node.position === 'prefix') {
-        // Input: Load from address
-        this.generateExpression(node.operand, env, 'X9');
-        this.asm.push(`  LDR ${targetReg}, [X9]`);
-        return;
-      }
-
-      if (node.operator === '#' && (!node.position || node.position === 'infix')) {
-        // Output: Store value to address
-        this.generateExpression(node.left, env, 'X11'); // Address
-        this.generateExpression(node.right, env, 'X12'); // Value
-        this.asm.push(`  STR X12, [X11]`);
-        return;
-      }
+            // Input (Comonad extract)
+            this.generateExpression(node.operand, env, 'X9');
+            // TODO: If X9 is < 256, it's a Linux file descriptor (Syscall), otherwise Memory Mapped.
+            // For now, we assume Memory Mapped LDR.
+            this.asm.push(`  LDR ${targetReg}, [X9]`);
+            return;
+          }
+    
+          if (node.operator === '#' && (!node.position || node.position === 'infix')) {
+            // Output (Monad bind)
+            this.generateExpression(node.left, env, 'X11'); // Stream / Address
+            this.generateExpression(node.right, env, 'X12'); // Value
+            // TODO: Syscall write if X11 < 256
+            this.asm.push(`  STR X12, [X11]`);
+            if (targetReg !== 'X11') {
+                this.asm.push(`  MOV ${targetReg}, X11 // Return updated stream state`);
+            }
+            return;
+          }
+          
+          if (node.operator === '~' && node.position === 'postfix') {
+            // Advance stream (Comonad step)
+            this.generateExpression(node.operand, env, 'X9');
+            if (targetReg !== 'X9') {
+              this.asm.push(`  MOV ${targetReg}, X9 // Advance state (stub)`);
+            }
+            return;
+          }
 
       if (['+', '-', '*'].includes(node.operator)) {
         // We need scratch registers. X9 and X10
@@ -235,19 +273,23 @@ export class AArch64Generator {
         return;
       }
 
-      if (['<', '>', '==', '!=', '<=', '>='].includes(node.operator)) {
+      if (['<', '>', '==', '!=', '<=', '>=', '='].includes(node.operator)) {
         this.generateExpression(node.left, env, 'X9', currentFuncName, false, failLabel);
         this.generateExpression(node.right, env, 'X10', currentFuncName, false, failLabel);
         this.asm.push(`  CMP X9, X10`);
+        // We branch to nextCaseLabel if condition fails!
+        let condStr = '';
+        switch(node.operator) {
+          case '==': condStr = 'NE'; break;
+          case '=':  condStr = 'NE'; break; // Pattern match equality
+          case '!=': condStr = 'EQ'; break;
+          case '<':  condStr = 'GE'; break;
+          case '>':  condStr = 'LE'; break;
+          case '<=': condStr = 'GT'; break;
+          case '>=': condStr = 'LT'; break;
+        }
         if (failLabel) {
-          switch (node.operator) {
-            case '<': this.asm.push(`  B.GE ${failLabel}`); break;
-            case '>': this.asm.push(`  B.LE ${failLabel}`); break;
-            case '==': this.asm.push(`  B.NE ${failLabel}`); break;
-            case '!=': this.asm.push(`  B.EQ ${failLabel}`); break;
-            case '<=': this.asm.push(`  B.GT ${failLabel}`); break;
-            case '>=': this.asm.push(`  B.LT ${failLabel}`); break;
-          }
+          this.asm.push(`  B.${condStr} ${failLabel}`);
         } else {
           this.asm.push(`  // No failLabel provided for Unit fallback`);
         }
@@ -257,7 +299,7 @@ export class AArch64Generator {
         return;
       }
 
-      if (node.operator === '|') {
+      if (node.operator === '|' || node.operator === '\\n') {
         const cases = this.flattenCoproduct(node);
         if (cases.length === 0) return;
 
@@ -422,7 +464,8 @@ export class AArch64Generator {
         if (typeof func === 'string') {
           const funcName = this.getIdentName(func);
           if (isTail && funcName === currentFuncName) {
-            this.asm.push(`  B ${funcName}`);
+            // 真のTCO: プロローグをスキップし、スタックをいじらずにボディの先頭へ直接ジャンプ
+            this.asm.push(`  B ${funcName}_body`);
             didTailCall = true;
           } else if (env.has(funcName)) {
             // Function pointer in register (higher-order function argument)
@@ -472,7 +515,7 @@ export class AArch64Generator {
     let curr = node;
     while (curr && curr.type === 'operation' && 
           (curr.name === 'apply' || curr.name === 'apply_partial' || 
-          (curr.name === 'concat' && curr.left && (curr.left.name === 'apply' || curr.left.name === 'apply_partial')))) {
+          ((curr.name === 'concat' || curr.name === 'newline') && curr.left && (curr.left.name === 'apply' || curr.left.name === 'apply_partial')))) {
       args.unshift(curr.right);
       curr = curr.left;
     }
@@ -481,7 +524,7 @@ export class AArch64Generator {
 
   flattenCoproduct(node) {
     let cases = [];
-    if (node && node.type === 'operation' && node.operator === '|') {
+    if (node && node.type === 'operation' && (node.operator === '|' || node.operator === '\\n')) {
       cases = cases.concat(this.flattenCoproduct(node.left));
       cases = cases.concat(this.flattenCoproduct(node.right));
     } else {

@@ -19,6 +19,11 @@ function identifyToken(token, previousIsOperand) {
   }
 
   // 文字列の場合
+  if (token === '"\\n"') {
+    const def = getOperatorInfo('\\n', 'infix');
+    if (def) return { type: 'infix', symbol: '\\n', name: def.name };
+  }
+  
   if (token.startsWith('"') || (token.startsWith('<') && token.endsWith('>'))) {
     // 制御タグや識別子、値など
     return { type: 'operand', value: token };

@@ -1,2 +1,1 @@
-export_internal : [_]
-sub : [_]
+sub : _

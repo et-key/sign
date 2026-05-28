@@ -1,0 +1,164 @@
+{
+  "type": "operation",
+  "operator": ":",
+  "left": "<all_func>",
+  "right": {
+    "type": "operation",
+    "operator": "?",
+    "left": {
+      "type": "block",
+      "kind": "indent",
+      "content": {
+        "type": "operation",
+        "operator": "\\n",
+        "left": {
+          "type": "operation",
+          "operator": "\\n",
+          "left": "<x>",
+          "right": {
+            "type": "operation",
+            "operator": ":",
+            "left": "<y>",
+            "right": {
+              "type": "operation",
+              "operator": "+",
+              "left": "<x>",
+              "right": "1",
+              "name": "add"
+            },
+            "name": "define"
+          },
+          "name": "newline"
+        },
+        "right": {
+          "type": "operation",
+          "operator": "~",
+          "operand": "<z>",
+          "position": "prefix",
+          "name": "continuous"
+        },
+        "name": "newline"
+      },
+      "env": {}
+    },
+    "right": {
+      "type": "block",
+      "kind": "indent",
+      "content": {
+        "type": "operation",
+        "operator": "\\n",
+        "left": {
+          "type": "operation",
+          "operator": "\\n",
+          "left": {
+            "type": "operation",
+            "operator": "\\n",
+            "left": {
+              "type": "operation",
+              "operator": ":",
+              "left": {
+                "type": "operation",
+                "operator": "=",
+                "left": "<x>",
+                "right": "0",
+                "name": "assign_equal"
+              },
+              "right": {
+                "type": "operation",
+                "operator": " ",
+                "left": "<all_func>",
+                "right": {
+                  "type": "operation",
+                  "operator": " ",
+                  "left": "2",
+                  "right": {
+                    "type": "operation",
+                    "operator": "~",
+                    "operand": "<z>",
+                    "position": "postfix",
+                    "name": "expand"
+                  },
+                  "name": "concat"
+                },
+                "name": "apply"
+              },
+              "name": "define"
+            },
+            "right": {
+              "type": "operation",
+              "operator": ":",
+              "left": {
+                "type": "operation",
+                "operator": "=",
+                "left": "<x>",
+                "right": "1",
+                "name": "assign_equal"
+              },
+              "right": "<x>",
+              "name": "define"
+            },
+            "name": "newline"
+          },
+          "right": {
+            "type": "operation",
+            "operator": ":",
+            "left": {
+              "type": "operation",
+              "operator": "=",
+              "left": "<y>",
+              "right": "0",
+              "name": "assign_equal"
+            },
+            "right": "<y>",
+            "name": "define"
+          },
+          "name": "newline"
+        },
+        "right": {
+          "type": "operation",
+          "operator": "*",
+          "left": "<x>",
+          "right": "<y>",
+          "name": "mul"
+        },
+        "name": "newline"
+      },
+      "env": {}
+    },
+    "name": "lambda"
+  },
+  "name": "define",
+  "inferredType": {
+    "type": "Lambda",
+    "returns": {
+      "type": "Union",
+      "types": [
+        {
+          "type": "Apply",
+          "left": {
+            "type": "Variable",
+            "name": "<all_func>"
+          },
+          "right": {
+            "type": "List",
+            "elements": [
+              "Number",
+              {
+                "type": "List"
+              }
+            ]
+          }
+        },
+        {
+          "type": "Variable",
+          "name": "<x>"
+        },
+        {
+          "type": "Variable",
+          "name": "<y>"
+        },
+        "Number"
+      ]
+    }
+  }
+}

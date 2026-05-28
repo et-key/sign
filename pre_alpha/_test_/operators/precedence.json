@@ -37,10 +37,7 @@
   },
   "name": "equal",
   "inferredType": {
-    "type": "operation",
-    "operator": "==",
-    "left": "<a>",
-    "right": "<a>",
-    "name": "equal"
+    "type": "Variable",
+    "name": "<a>"
   }
 }

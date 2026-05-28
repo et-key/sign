@@ -18,31 +18,8 @@
     "right": "<c>",
     "name": "or",
     "inferredType": {
-      "type": "operation",
-      "operator": "|",
-      "left": {
-        "type": "operation",
-        "operator": "|",
-        "left": {
-          "type": "tvar",
-          "id": "t1",
-          "instance": null
-        },
-        "right": {
-          "type": "Func",
-          "from": "Number",
-          "to": {
-            "type": "Func",
-            "from": "Number",
-            "to": "Number"
-          }
-        }
-      },
-      "right": {
-        "type": "tvar",
-        "id": "t2",
-        "instance": null
-      }
+      "type": "Variable",
+      "name": "<a>"
     }
   },
   {
@@ -64,31 +41,8 @@
     "right": "<c>",
     "name": "or",
     "inferredType": {
-      "type": "operation",
-      "operator": "|",
-      "left": {
-        "type": "operation",
-        "operator": "|",
-        "left": {
-          "type": "tvar",
-          "id": "t1",
-          "instance": null
-        },
-        "right": {
-          "type": "Func",
-          "from": "Number",
-          "to": {
-            "type": "Func",
-            "from": "Number",
-            "to": "Number"
-          }
-        }
-      },
-      "right": {
-        "type": "tvar",
-        "id": "t2",
-        "instance": null
-      }
+      "type": "Variable",
+      "name": "<a>"
     }
   }
 ]

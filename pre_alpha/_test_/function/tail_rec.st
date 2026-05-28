@@ -1,1 +1,1 @@
-loop : 'a -> 'b
+loop : Lambda((<loop> <= <x>))

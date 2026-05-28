@@ -24,25 +24,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Func",
-      "from": {
-        "type": "tvar",
-        "id": "t2",
-        "instance": null
-      },
-      "to": {
-        "type": "operation",
-        "operator": "#",
-        "left": "0x40000004",
-        "right": {
-          "type": "operation",
-          "operator": "@",
-          "operand": "0x40000000",
-          "position": "prefix",
-          "name": "input"
-        },
-        "name": "output"
-      }
+      "type": "Lambda",
+      "returns": "Number"
     }
   },
   {
@@ -77,40 +60,20 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "operation",
-      "operator": ",",
+      "type": "Apply",
       "left": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "operation",
-          "operator": "~+",
-          "left": "0",
-          "right": "1",
-          "name": "range_arithmetic"
-        }
-      },
-      "right": {
-        "type": "Func",
-        "from": {
-          "type": "tvar",
-          "id": "t5",
-          "instance": null
-        },
-        "to": {
-          "type": "operation",
-          "operator": "#",
-          "left": "0x40000004",
-          "right": {
-            "type": "operation",
-            "operator": "@",
-            "operand": "0x40000000",
-            "position": "prefix",
-            "name": "input"
+        "type": "List",
+        "elements": [
+          {
+            "type": "Unit"
           },
-          "name": "output"
-        }
-      }
+          {
+            "type": "Lambda",
+            "returns": "Number"
+          }
+        ]
+      },
+      "right": "Scalar"
     }
   }
 ]

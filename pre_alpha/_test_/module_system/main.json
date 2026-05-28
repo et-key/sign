@@ -12,17 +12,7 @@
     "position": "postfix",
     "name": "expand",
     "inferredType": {
-      "type": "expanded_dict",
-      "dict": {
-        "type": "block",
-        "kind": "brace",
-        "content": {
-          "<add>": {
-            "type": "block",
-            "kind": "bracket"
-          }
-        }
-      }
+      "type": "Unknown"
     }
   },
   {
@@ -38,23 +28,19 @@
     "right": "5",
     "name": "concat",
     "inferredType": {
-      "type": "operation",
-      "operator": " ",
-      "name": "concat",
-      "left": {
-        "type": "operation",
-        "operator": " ",
-        "name": "concat",
-        "left": {
-          "type": "block",
-          "kind": "bracket",
-          "content": {
-            "type": "Unit"
-          }
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "Unknown"
+            },
+            "Number"
+          ]
         },
-        "right": "Number"
-      },
-      "right": "Number"
+        "Number"
+      ]
     }
   }
 ]
