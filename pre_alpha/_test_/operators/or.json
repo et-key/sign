@@ -11,20 +11,38 @@
         "operator": "-",
         "operand": "<b>",
         "position": "prefix",
-        "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+        "name": "negate"
       },
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "name": "or"
     },
     "right": "<c>",
-    "type_detail": {
-      "tag": "TVar",
-      "id": 2
+    "name": "or",
+    "inferredType": {
+      "type": "operation",
+      "operator": "|",
+      "left": {
+        "type": "operation",
+        "operator": "|",
+        "left": {
+          "type": "tvar",
+          "id": "t1",
+          "instance": null
+        },
+        "right": {
+          "type": "Func",
+          "from": "Number",
+          "to": {
+            "type": "Func",
+            "from": "Number",
+            "to": "Number"
+          }
+        }
+      },
+      "right": {
+        "type": "tvar",
+        "id": "t2",
+        "instance": null
+      }
     }
   },
   {
@@ -39,20 +57,38 @@
         "operator": "-",
         "operand": "<b>",
         "position": "prefix",
-        "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+        "name": "negate"
       },
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "name": "or"
     },
     "right": "<c>",
-    "type_detail": {
-      "tag": "TVar",
-      "id": 2
+    "name": "or",
+    "inferredType": {
+      "type": "operation",
+      "operator": "|",
+      "left": {
+        "type": "operation",
+        "operator": "|",
+        "left": {
+          "type": "tvar",
+          "id": "t1",
+          "instance": null
+        },
+        "right": {
+          "type": "Func",
+          "from": "Number",
+          "to": {
+            "type": "Func",
+            "from": "Number",
+            "to": "Number"
+          }
+        }
+      },
+      "right": {
+        "type": "tvar",
+        "id": "t2",
+        "instance": null
+      }
     }
   }
 ]

@@ -10,577 +10,238 @@
         "type": "block",
         "kind": "indent",
         "content": {
-          "type": "coproduct_block",
-          "statements": [
-            {
-              "type": "block",
-              "kind": "group",
-              "content": {
-                "type": "operation",
-                "operator": ":",
-                "left": "<x>",
-                "right": "1"
-              }
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "operation",
+            "operator": ":",
+            "left": "<x>",
+            "right": "1",
+            "name": "define"
+          },
+          "right": {
+            "type": "operation",
+            "operator": ":",
+            "left": "<y>",
+            "right": {
+              "type": "operation",
+              "operator": "+",
+              "left": "<x>",
+              "right": "1",
+              "name": "add"
             },
-            {
-              "type": "block",
-              "kind": "group",
-              "content": {
-                "type": "operation",
-                "operator": ":",
-                "left": "<y>",
-                "right": {
-                  "type": "operation",
-                  "operator": "+",
-                  "left": "<x>",
-                  "right": "1",
-                  "type_detail": {
-                    "tag": "TPrim",
-                    "name": "f64"
-                  }
-                }
-              }
-            }
-          ]
-        }
+            "name": "define"
+          },
+          "name": "concat"
+        },
+        "env": {}
       },
       "right": {
         "type": "block",
         "kind": "indent",
         "content": {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": "+",
-            "left": "<x>",
-            "right": "<y>",
-            "type_detail": {
-              "tag": "TPrim",
-              "name": "f64"
-            }
-          },
-          "type_detail": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
+          "type": "operation",
+          "operator": "+",
+          "left": "<x>",
+          "right": "<y>",
+          "name": "add"
         },
-        "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+        "env": {}
       },
-      "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TPrim",
-          "name": "f64"
-        },
-        "ret": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "ret": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
-        }
-      }
+      "name": "lambda"
     },
-    "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TPrim",
-        "name": "f64"
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": {
+        "type": "tvar",
+        "id": "t2",
+        "instance": null
       },
-      "ret": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TPrim",
-          "name": "f64"
+      "to": {
+        "type": "Func",
+        "from": {
+          "type": "tvar",
+          "id": "t3",
+          "instance": null
         },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+        "to": "Number"
       }
     }
   },
   {
     "type": "operation",
     "operator": ":",
-    "left": "<result1>",
+    "left": "<result1_is_partial_applyed>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<func_with_defaults>",
-        "..",
-        ".."
-      ],
-      "operator": "apply",
-      "left": {
-        "type": "operation",
-        "operator": "apply",
-        "left": "<func_with_defaults>",
-        "right": "..",
-        "semantic_tag": "application",
-        "type_detail": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "ret": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
-        }
-      },
-      "right": "..",
-      "semantic_tag": "application",
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "operator": " ",
+      "left": "<func_with_defaults>",
+      "right": "_",
+      "name": "apply"
     },
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": {
+        "type": "tvar",
+        "id": "t7",
+        "instance": null
+      },
+      "to": "Number"
     }
   },
   {
     "type": "operation",
     "operator": ":",
-    "left": "<result2>",
+    "left": "<result2_is_applied>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<func_with_defaults>",
-        "3",
-        ".."
-      ],
-      "operator": "apply",
-      "left": {
-        "type": "operation",
-        "operator": "apply",
-        "left": "<func_with_defaults>",
-        "right": "3",
-        "semantic_tag": "application",
-        "type_detail": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "ret": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
-        }
-      },
-      "right": "..",
-      "semantic_tag": "application",
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "operator": " ",
+      "left": "<func_with_defaults>",
+      "right": "3",
+      "name": "apply"
     },
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "define",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t11",
+      "instance": null
     }
   },
   {
     "type": "operation",
     "operator": ":",
-    "left": "<result3>",
+    "left": "<result3_is_partial_applyed>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<func_with_defaults>",
-        "..",
-        "5"
-      ],
-      "operator": "apply",
+      "operator": ",",
       "left": {
         "type": "operation",
-        "operator": "apply",
+        "operator": " ",
         "left": "<func_with_defaults>",
-        "right": "..",
-        "semantic_tag": "application",
-        "type_detail": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "ret": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
-        }
+        "right": "_",
+        "name": "apply"
       },
       "right": "5",
-      "semantic_tag": "application",
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "name": "product"
     },
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "define",
+    "inferredType": {
+      "type": "operation",
+      "operator": ",",
+      "left": {
+        "type": "Func",
+        "from": {
+          "type": "tvar",
+          "id": "t13",
+          "instance": null
+        },
+        "to": "Number"
+      },
+      "right": "Number"
     }
   },
   {
     "type": "operation",
     "operator": ":",
-    "left": "<result4>",
+    "left": "<result4_is_applied>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<func_with_defaults>",
-        "3",
-        "5"
-      ],
-      "operator": "apply",
+      "operator": " ",
       "left": "<func_with_defaults>",
       "right": {
         "type": "operation",
-        "operator": "concat",
+        "operator": " ",
         "left": "3",
         "right": "5",
-        "semantic_tag": "list_composition",
-        "type_detail": {
-          "tag": "TArray",
-          "elem": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "length": 2
-        }
+        "name": "concat"
       },
-      "semantic_tag": "application",
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "name": "apply"
     },
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "define",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t11",
+      "instance": null
     }
   },
   {
     "type": "operation",
     "operator": ":",
-    "left": "<result5>",
+    "left": "<result5_is_applied>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<func_with_defaults>",
-        {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": "<",
-            "left": "3",
-            "right": "2",
-            "type_detail": {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            }
-          },
-          "type_detail": {
-            "tag": "TSum",
-            "variants": [
-              {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              {
-                "tag": "TUnit"
-              }
-            ]
-          }
-        },
-        "5"
-      ],
-      "operator": "apply",
+      "operator": " ",
       "left": "<func_with_defaults>",
       "right": {
         "type": "operation",
-        "operator": "concat",
+        "operator": " ",
         "left": {
           "type": "block",
-          "kind": "group",
+          "kind": "bracket",
           "content": {
             "type": "operation",
             "operator": "<",
             "left": "3",
             "right": "2",
-            "type_detail": {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            }
-          },
-          "type_detail": {
-            "tag": "TSum",
-            "variants": [
-              {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              {
-                "tag": "TUnit"
-              }
-            ]
+            "name": "less"
           }
         },
         "right": "5",
-        "semantic_tag": "list_composition",
-        "type_detail": {
-          "tag": "TProd",
-          "elements": [
-            {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            },
-            {
-              "tag": "TPrim",
-              "name": "f64"
-            }
-          ]
-        }
+        "name": "concat"
       },
-      "semantic_tag": "application",
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "name": "apply"
     },
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "define",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t11",
+      "instance": null
     }
   },
   {
     "type": "operation",
     "operator": ":",
-    "left": "<result6>",
+    "left": "<result6_is_applied>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<func_with_defaults>",
-        {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": "<",
-            "left": "3",
-            "right": "2",
-            "type_detail": {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            }
-          },
-          "type_detail": {
-            "tag": "TSum",
-            "variants": [
-              {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              {
-                "tag": "TUnit"
-              }
-            ]
-          }
-        },
-        {
-          "type": "block",
-          "kind": "group",
-          "content": {
-            "type": "operation",
-            "operator": "<",
-            "left": "5",
-            "right": "2",
-            "type_detail": {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            }
-          },
-          "type_detail": {
-            "tag": "TSum",
-            "variants": [
-              {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              {
-                "tag": "TUnit"
-              }
-            ]
-          }
-        }
-      ],
-      "operator": "apply",
+      "operator": " ",
       "left": "<func_with_defaults>",
       "right": {
         "type": "operation",
-        "operator": "concat",
+        "operator": " ",
         "left": {
           "type": "block",
-          "kind": "group",
+          "kind": "bracket",
           "content": {
             "type": "operation",
             "operator": "<",
             "left": "3",
             "right": "2",
-            "type_detail": {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            }
-          },
-          "type_detail": {
-            "tag": "TSum",
-            "variants": [
-              {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              {
-                "tag": "TUnit"
-              }
-            ]
+            "name": "less"
           }
         },
         "right": {
           "type": "block",
-          "kind": "group",
+          "kind": "bracket",
           "content": {
             "type": "operation",
             "operator": "<",
             "left": "5",
             "right": "2",
-            "type_detail": {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            }
-          },
-          "type_detail": {
-            "tag": "TSum",
-            "variants": [
-              {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              {
-                "tag": "TUnit"
-              }
-            ]
+            "name": "less"
           }
         },
-        "semantic_tag": "list_composition",
-        "type_detail": {
-          "tag": "TProd",
-          "elements": [
-            {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            },
-            {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            }
-          ]
-        }
+        "name": "concat"
       },
-      "semantic_tag": "application",
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "name": "apply"
     },
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "define",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t11",
+      "instance": null
     }
   }
 ]

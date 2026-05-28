@@ -1,0 +1,2 @@
+` Pure tail recursive function
+loop : x ? loop x

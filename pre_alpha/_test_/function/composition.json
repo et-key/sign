@@ -12,47 +12,15 @@
         "operator": "*",
         "left": "<x>",
         "right": "2",
-        "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+        "name": "mul"
       },
-      "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TVar",
-            "id": 3
-          },
-          "ret": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
-        },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
-      }
+      "name": "lambda"
     },
-    "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 3
-        },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
-      },
-      "ret": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": "Number",
+      "to": "Number"
     }
   },
   {
@@ -68,33 +36,15 @@
         "operator": "+",
         "left": "<x>",
         "right": "1",
-        "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+        "name": "add"
       },
-      "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 3
-        },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
-      }
+      "name": "lambda"
     },
-    "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TVar",
-        "id": 3
-      },
-      "ret": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": "Number",
+      "to": "Number"
     }
   },
   {
@@ -103,33 +53,22 @@
     "left": "<result>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<f>",
-        "<g>",
-        "3"
-      ],
-      "operator": "apply",
+      "operator": " ",
       "left": {
         "type": "operation",
-        "operator": "apply",
+        "operator": " ",
         "left": "<f>",
         "right": "<g>",
-        "semantic_tag": "application",
-        "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+        "name": "compose"
       },
       "right": "3",
-      "semantic_tag": "application",
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "name": "apply"
     },
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "define",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t6",
+      "instance": null
     }
   }
 ]

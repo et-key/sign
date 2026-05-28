@@ -4,12 +4,12 @@ func_with_defaults:
 	?
 		x + y
 
-result1 : func_with_defaults .. ..
-result2 : func_with_defaults 3 ..
-result3 : func_with_defaults .. 5
-result4 : func_with_defaults 3 5
+result1_is_partial_applyed : func_with_defaults _
+result2_is_applied : func_with_defaults 3
+result3_is_partial_applyed : func_with_defaults _ , 5
+result4_is_applied : func_with_defaults 3 5
 
 ` Test fallback with unit (failed evaluation)
 ` 3 < 2 is false, so it returns unit. It should trigger the default value for x.
-result5 : func_with_defaults [3 < 2] 5
-result6 : func_with_defaults [3 < 2] [5 < 2]
+result5_is_applied : func_with_defaults [3 < 2] 5
+result6_is_applied : func_with_defaults [3 < 2] [5 < 2]

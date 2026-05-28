@@ -1,0 +1,32 @@
+{
+  "type": "operation",
+  "operator": ":",
+  "left": "<loop>",
+  "right": {
+    "type": "operation",
+    "operator": "?",
+    "left": "<x>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<loop>",
+      "right": "<x>",
+      "name": "apply"
+    },
+    "name": "lambda"
+  },
+  "name": "define",
+  "inferredType": {
+    "type": "Func",
+    "from": {
+      "type": "tvar",
+      "id": "t2",
+      "instance": null
+    },
+    "to": {
+      "type": "tvar",
+      "id": "t3",
+      "instance": null
+    }
+  }
+}

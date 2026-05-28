@@ -10,61 +10,37 @@
       "operator": "*",
       "left": "<b>",
       "right": "<c>",
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "name": "mul"
     },
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
-    }
+    "name": "add"
   },
   "right": {
     "type": "block",
-    "kind": "group",
+    "kind": "paren",
     "content": {
       "type": "operation",
       "operator": "+",
       "left": "<a>",
       "right": {
         "type": "block",
-        "kind": "group",
+        "kind": "paren",
         "content": {
           "type": "operation",
           "operator": "*",
           "left": "<b>",
           "right": "<c>",
-          "type_detail": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
-        },
-        "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
+          "name": "mul"
         }
       },
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
-    },
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+      "name": "add"
     }
   },
-  "type_detail": {
-    "tag": "TSum",
-    "variants": [
-      {
-        "tag": "TPrim",
-        "name": "f64"
-      },
-      {
-        "tag": "TUnit"
-      }
-    ]
+  "name": "equal",
+  "inferredType": {
+    "type": "operation",
+    "operator": "==",
+    "left": "<a>",
+    "right": "<a>",
+    "name": "equal"
   }
 }

@@ -1,4 +1,4 @@
-// Auto-generated type signature file
-
-type [object Object] : (x: T, y: U) -> unit
-value undefined : T * U
+[] : 'a -> 'b -> 'c
+[ | ] : 'd -> 'e -> 'f
+1 : 'g
+or : 'h -> 'h | 'g

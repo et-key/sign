@@ -54,9 +54,9 @@ Core
 
 // --- 空間的配置（ネスト構造） ---
 Block
-  = "[" _ EOL* _ exprs:Expressions? _ EOL* _ "]" { return exprs || []; }
-  / "{" _ EOL* _ exprs:Expressions? _ EOL* _ "}" { return exprs || []; }
-  / "(" _ EOL* _ exprs:Expressions? _ EOL* _ ")" { return exprs || []; }
+  = "[" _ EOL* _ exprs:Expressions? _ EOL* _ "]" { return [`"["`, ...(exprs || []), `"]"`]; }
+  / "{" _ EOL* _ exprs:Expressions? _ EOL* _ "}" { return [`"{"`, ...(exprs || []), `"}"`]; }
+  / "(" _ EOL* _ exprs:Expressions? _ EOL* _ ")" { return [`"("`, ...(exprs || []), `")"`]; }
   // Lexerが挿入した制御用ASCIIコードによる絶対値ブロックの切り出し (\x04, \x05)
   / "|" expr:Expression "|" { return [`"ABS_"`, expr, `"_ABS"`]; }
   // Lexerが挿入した制御用ASCIIコードによるインデントブロックの切り出し (\x02, \x03)
@@ -70,7 +70,7 @@ Expressions
 
 // --- 値（Atom）の定義（既存の正規表現ルールを踏襲） ---
 Atom
-  = string / charactor / address / register / unicode / number / identifier / unit / default
+  = string / charactor / address / register / unicode / number / identifier / unit
 
 string = $("`" [^`\r\n]* "`")
 charactor = $("\\".)
@@ -81,7 +81,6 @@ unicode = $("0u" Hex+)
 identifier = id:( $([a-zA-Z][a-zA-Z0-9_]*) / $("_" [a-zA-Z0-9_]+) ) {return `<${id}>`}
 Hex = [0-9a-fA-F]
 unit = "_"
-default = ".."
 
 // --- 演算子・記号（前置・後置・中置の振る舞い解決はShunting Yardへ） ---
 prefix

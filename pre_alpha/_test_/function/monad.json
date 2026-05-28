@@ -7,73 +7,29 @@
       "type": "operation",
       "operator": "?",
       "left": {
-        "type": "coproduct_block",
-        "statements": [
-          "<x>",
-          "<y>"
-        ]
+        "type": "operation",
+        "operator": " ",
+        "left": "<x>",
+        "right": "<y>",
+        "name": "concat"
       },
       "right": {
         "type": "operation",
         "operator": "+",
         "left": "<x>",
         "right": "<y>",
-        "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+        "name": "add"
       },
-      "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TSum",
-          "variants": [
-            {
-              "tag": "TPrim",
-              "name": "f64"
-            },
-            {
-              "tag": "TUnit"
-            }
-          ]
-        },
-        "ret": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "ret": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
-        }
-      }
+      "name": "lambda"
     },
-    "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TSum",
-        "variants": [
-          {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          {
-            "tag": "TUnit"
-          }
-        ]
-      },
-      "ret": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TPrim",
-          "name": "f64"
-        },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": "Number",
+      "to": {
+        "type": "Func",
+        "from": "Number",
+        "to": "Number"
       }
     }
   },
@@ -86,30 +42,11 @@
       "operator": "<",
       "left": "10",
       "right": "5",
-      "type_detail": {
-        "tag": "TSum",
-        "variants": [
-          {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          {
-            "tag": "TUnit"
-          }
-        ]
-      }
+      "name": "less"
     },
-    "type_detail": {
-      "tag": "TSum",
-      "variants": [
-        {
-          "tag": "TPrim",
-          "name": "f64"
-        },
-        {
-          "tag": "TUnit"
-        }
-      ]
+    "name": "define",
+    "inferredType": {
+      "type": "Unit"
     }
   },
   {
@@ -118,50 +55,20 @@
     "left": "<mapped>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<f>",
-        "<maybe_val>",
-        "3"
-      ],
-      "operator": "apply",
+      "operator": " ",
       "left": "<f>",
       "right": {
         "type": "operation",
-        "operator": "concat",
+        "operator": " ",
         "left": "<maybe_val>",
         "right": "3",
-        "semantic_tag": "list_composition",
-        "type_detail": {
-          "tag": "TProd",
-          "elements": [
-            {
-              "tag": "TSum",
-              "variants": [
-                {
-                  "tag": "TPrim",
-                  "name": "f64"
-                },
-                {
-                  "tag": "TUnit"
-                }
-              ]
-            },
-            {
-              "tag": "TPrim",
-              "name": "f64"
-            }
-          ]
-        }
+        "name": "concat"
       },
-      "semantic_tag": "application",
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "name": "apply"
     },
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "define",
+    "inferredType": {
+      "type": "Unit"
     }
   },
   {
@@ -177,33 +84,15 @@
         "operator": "*",
         "left": "<x>",
         "right": "2",
-        "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+        "name": "mul"
       },
-      "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TPrim",
-          "name": "f64"
-        },
-        "ret": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
-      }
+      "name": "lambda"
     },
-    "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TPrim",
-        "name": "f64"
-      },
-      "ret": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": "Number",
+      "to": "Number"
     }
   },
   {
@@ -212,22 +101,14 @@
     "left": "<mapped_twice>",
     "right": {
       "type": "operation",
-      "statements": [
-        "<g>",
-        "<mapped>"
-      ],
-      "operator": "apply",
+      "operator": " ",
       "left": "<g>",
       "right": "<mapped>",
-      "semantic_tag": "application",
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "name": "apply"
     },
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "define",
+    "inferredType": {
+      "type": "Unit"
     }
   }
 ]

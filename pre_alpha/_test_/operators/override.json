@@ -3,54 +3,46 @@
     "type": "operation",
     "operator": ":",
     "left": {
-      "type": "operation",
-      "operator": "+",
-      "semantic_tag": "point_free_function",
-      "inferred_type": "function"
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "operation",
+        "operator": "+",
+        "name": "add"
+      }
     },
     "right": {
       "type": "operation",
       "operator": "?",
       "left": {
-        "type": "coproduct_block",
-        "statements": [
-          "<x>",
-          "<y>"
-        ]
+        "type": "operation",
+        "operator": " ",
+        "left": "<x>",
+        "right": "<y>",
+        "name": "concat"
       },
       "right": "_",
-      "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 1
-        },
-        "ret": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TVar",
-            "id": 2
-          },
-          "ret": {
-            "tag": "TUnit"
-          }
-        }
-      }
+      "name": "lambda"
     },
-    "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TVar",
-        "id": 1
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": {
+        "type": "tvar",
+        "id": "t2",
+        "instance": null
       },
-      "ret": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 2
+      "to": {
+        "type": "Func",
+        "from": {
+          "type": "tvar",
+          "id": "t3",
+          "instance": null
         },
-        "ret": {
-          "tag": "TUnit"
+        "to": {
+          "type": "tvar",
+          "id": "t4",
+          "instance": null
         }
       }
     }
@@ -58,77 +50,54 @@
   {
     "type": "operation",
     "operator": ":",
+    "left": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "operation",
+        "operator": "|",
+        "right": {
+          "type": "operation",
+          "operator": "/",
+          "name": "div"
+        },
+        "name": "or"
+      }
+    },
     "right": {
       "type": "operation",
       "operator": "?",
       "left": {
-        "type": "block",
-        "kind": "group",
-        "content": {
-          "type": "operation",
-          "operator": "|",
-          "right": {
-            "type": "operation",
-            "operator": "/",
-            "semantic_tag": "point_free_function",
-            "inferred_type": "function"
-          },
-          "semantic_tag": "point_free_function",
-          "inferred_type": "function"
-        }
-      },
-      "right": {
         "type": "operation",
-        "statements": [
-          "<x>",
-          "<y>"
-        ],
-        "operator": "concat",
+        "operator": " ",
         "left": "<x>",
         "right": "<y>",
-        "semantic_tag": "list_composition",
-        "type_detail": {
-          "tag": "TProd",
-          "elements": [
-            {
-              "tag": "TVar",
-              "id": 3
-            },
-            {
-              "tag": "TVar",
-              "id": 4
-            }
-          ]
-        }
+        "name": "concat"
       },
-      "type_detail": {
-        "tag": "TProd",
-        "elements": [
-          {
-            "tag": "TVar",
-            "id": 3
-          },
-          {
-            "tag": "TVar",
-            "id": 4
-          }
-        ]
-      }
+      "right": "<String>",
+      "name": "lambda"
     },
-    "semantic_tag": "point_free_function",
-    "inferred_type": "function",
-    "type_detail": {
-      "tag": "TProd",
-      "elements": [
-        {
-          "tag": "TVar",
-          "id": 3
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": {
+        "type": "tvar",
+        "id": "t6",
+        "instance": null
+      },
+      "to": {
+        "type": "Func",
+        "from": {
+          "type": "tvar",
+          "id": "t7",
+          "instance": null
         },
-        {
-          "tag": "TVar",
-          "id": 4
+        "to": {
+          "type": "tvar",
+          "id": "t8",
+          "instance": null
         }
-      ]
+      }
     }
   },
   {
@@ -136,9 +105,11 @@
     "operator": "+",
     "left": "1",
     "right": "2",
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "add",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t9",
+      "instance": null
     }
   },
   {
@@ -149,16 +120,30 @@
       "operator": "/",
       "left": "3",
       "right": "8",
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "name": "div"
     },
-    "semantic_tag": "point_free_function",
-    "inferred_type": "function",
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "or",
+    "inferredType": {
+      "type": "Func",
+      "from": {
+        "type": "tvar",
+        "id": "t10",
+        "instance": null
+      },
+      "to": {
+        "type": "operation",
+        "operator": "|",
+        "left": {
+          "type": "tvar",
+          "id": "t10",
+          "instance": null
+        },
+        "right": {
+          "type": "tvar",
+          "id": "t9",
+          "instance": null
+        }
+      }
     }
   }
 ]

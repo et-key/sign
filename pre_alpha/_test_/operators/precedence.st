@@ -1,2 +1,1 @@
-// Auto-generated type signature file
-
+a : a

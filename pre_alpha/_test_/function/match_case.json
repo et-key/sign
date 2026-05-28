@@ -7,464 +7,175 @@
       "type": "operation",
       "operator": "?",
       "left": {
-        "type": "coproduct_block",
-        "statements": [
-          "<x>",
-          "<y>"
-        ]
+        "type": "operation",
+        "operator": " ",
+        "left": "<x>",
+        "right": "<y>",
+        "name": "concat"
       },
       "right": {
         "type": "block",
         "kind": "indent",
         "content": {
           "type": "operation",
-          "statements": [
-            {
-              "type": "block",
-              "kind": "group",
-              "content": {
-                "type": "operation",
-                "operator": ":",
-                "left": {
-                  "type": "operation",
-                  "operator": "<",
-                  "left": "<x>",
-                  "right": "1"
-                },
-                "right": "<result1>",
-                "semantic_tag": "match_case",
-                "type_detail": {
-                  "tag": "TVar",
-                  "id": 13
-                }
-              },
-              "type_detail": {
-                "tag": "TVar",
-                "id": 13
-              }
-            },
-            {
-              "type": "block",
-              "kind": "group",
-              "content": {
-                "type": "operation",
-                "operator": ":",
-                "left": {
-                  "type": "operation",
-                  "operator": "<",
-                  "left": "<y>",
-                  "right": "3"
-                },
-                "right": "<result2>",
-                "semantic_tag": "match_case",
-                "type_detail": {
-                  "tag": "TVar",
-                  "id": 15
-                }
-              },
-              "type_detail": {
-                "tag": "TVar",
-                "id": 15
-              }
-            },
-            "3"
-          ],
-          "operator": "concat",
+          "operator": " ",
           "left": {
             "type": "operation",
-            "operator": "concat",
+            "operator": " ",
             "left": {
-              "type": "block",
-              "kind": "group",
-              "content": {
+              "type": "operation",
+              "operator": ":",
+              "left": {
                 "type": "operation",
-                "operator": ":",
-                "left": {
-                  "type": "operation",
-                  "operator": "<",
-                  "left": "<x>",
-                  "right": "1"
-                },
-                "right": "<result1>",
-                "semantic_tag": "match_case",
-                "type_detail": {
-                  "tag": "TVar",
-                  "id": 13
-                }
+                "operator": "<",
+                "left": "<x>",
+                "right": "1",
+                "name": "less"
               },
-              "type_detail": {
-                "tag": "TVar",
-                "id": 13
-              }
+              "right": "<result1>",
+              "name": "define"
             },
             "right": {
-              "type": "block",
-              "kind": "group",
-              "content": {
+              "type": "operation",
+              "operator": ":",
+              "left": {
                 "type": "operation",
-                "operator": ":",
-                "left": {
-                  "type": "operation",
-                  "operator": "<",
-                  "left": "<y>",
-                  "right": "3"
-                },
-                "right": "<result2>",
-                "semantic_tag": "match_case",
-                "type_detail": {
-                  "tag": "TVar",
-                  "id": 15
-                }
+                "operator": "<",
+                "left": "<y>",
+                "right": "3",
+                "name": "less"
               },
-              "type_detail": {
-                "tag": "TVar",
-                "id": 15
-              }
+              "right": "<result2>",
+              "name": "define"
             },
-            "semantic_tag": "list_composition",
-            "type_detail": {
-              "tag": "TProd",
-              "elements": [
-                {
-                  "tag": "TVar",
-                  "id": 13
-                },
-                {
-                  "tag": "TVar",
-                  "id": 15
-                }
-              ]
-            }
+            "name": "concat"
           },
           "right": "3",
-          "semantic_tag": "list_composition",
-          "type_detail": {
-            "tag": "TProd",
-            "elements": [
-              {
-                "tag": "TVar",
-                "id": 13
-              },
-              {
-                "tag": "TVar",
-                "id": 15
-              },
-              {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            ]
-          }
+          "name": "concat"
         },
-        "type_detail": {
-          "tag": "TProd",
-          "elements": [
-            {
-              "tag": "TVar",
-              "id": 13
-            },
-            {
-              "tag": "TVar",
-              "id": 15
-            },
-            {
-              "tag": "TPrim",
-              "name": "f64"
-            }
-          ]
-        }
+        "env": {}
       },
-      "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 1
-        },
-        "ret": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TVar",
-            "id": 2
-          },
-          "ret": {
-            "tag": "TProd",
-            "elements": [
-              {
-                "tag": "TVar",
-                "id": 13
-              },
-              {
-                "tag": "TVar",
-                "id": 15
-              },
-              {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            ]
-          }
-        }
-      }
+      "name": "lambda"
     },
-    "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TVar",
-        "id": 1
+    "name": "define",
+    "inferredType": {
+      "type": "Func",
+      "from": {
+        "type": "tvar",
+        "id": "t2",
+        "instance": null
       },
-      "ret": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 2
+      "to": {
+        "type": "Func",
+        "from": {
+          "type": "tvar",
+          "id": "t3",
+          "instance": null
         },
-        "ret": {
-          "tag": "TProd",
-          "elements": [
-            {
-              "tag": "TVar",
-              "id": 13
+        "to": {
+          "type": "operation",
+          "operator": " ",
+          "name": "concat",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "name": "concat",
+            "left": {
+              "type": "tvar",
+              "id": "t5",
+              "instance": null
             },
-            {
-              "tag": "TVar",
-              "id": 15
-            },
-            {
-              "tag": "TPrim",
-              "name": "f64"
+            "right": {
+              "type": "tvar",
+              "id": "t7",
+              "instance": null
             }
-          ]
+          },
+          "right": "Number"
         }
       }
     }
   },
   {
     "type": "block",
-    "kind": "indent",
+    "kind": "bracket",
     "content": {
       "type": "block",
-      "kind": "group",
-      "content": "\"__Lambda__[0]\"",
-      "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 18
-        },
-        "ret": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TVar",
-            "id": 19
-          },
-          "ret": {
-            "tag": "TArray",
-            "elem": {
-              "tag": "TPrim",
-              "name": "f64"
-            },
-            "length": 3
-          }
-        }
-      }
-    },
-    "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TVar",
-        "id": 18
-      },
-      "ret": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 19
-        },
-        "ret": {
-          "tag": "TArray",
-          "elem": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "length": 3
-        }
-      }
-    }
-  },
-  {
-    "type": "operation",
-    "operator": ":",
-    "left": "\"__Lambda__[0]\"",
-    "right": {
-      "type": "operation",
-      "operator": "?",
-      "left": {
-        "type": "coproduct_block",
-        "statements": [
-          "<x>",
-          "<y>"
-        ]
-      },
-      "right": {
-        "type": "block",
-        "kind": "indent",
-        "content": {
+      "kind": "indent",
+      "content": {
+        "type": "operation",
+        "operator": "?",
+        "left": {
           "type": "operation",
-          "statements": [
-            {
-              "type": "block",
-              "kind": "group",
-              "content": {
-                "type": "operation",
-                "operator": ":",
-                "left": "<x>",
-                "right": "1",
-                "semantic_tag": "match_case",
-                "type_detail": {
-                  "tag": "TPrim",
-                  "name": "f64"
-                }
-              },
-              "type_detail": {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            },
-            {
-              "type": "block",
-              "kind": "group",
-              "content": {
-                "type": "operation",
-                "operator": ":",
-                "left": "<y>",
-                "right": "2",
-                "semantic_tag": "match_case",
-                "type_detail": {
-                  "tag": "TPrim",
-                  "name": "f64"
-                }
-              },
-              "type_detail": {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            },
-            "3"
-          ],
-          "operator": "concat",
-          "left": {
+          "operator": " ",
+          "left": "<x>",
+          "right": "<y>",
+          "name": "concat"
+        },
+        "right": {
+          "type": "block",
+          "kind": "indent",
+          "content": {
             "type": "operation",
-            "operator": "concat",
+            "operator": " ",
             "left": {
-              "type": "block",
-              "kind": "group",
-              "content": {
+              "type": "operation",
+              "operator": " ",
+              "left": {
                 "type": "operation",
                 "operator": ":",
                 "left": "<x>",
                 "right": "1",
-                "semantic_tag": "match_case",
-                "type_detail": {
-                  "tag": "TPrim",
-                  "name": "f64"
-                }
+                "name": "define"
               },
-              "type_detail": {
-                "tag": "TPrim",
-                "name": "f64"
-              }
-            },
-            "right": {
-              "type": "block",
-              "kind": "group",
-              "content": {
+              "right": {
                 "type": "operation",
                 "operator": ":",
                 "left": "<y>",
                 "right": "2",
-                "semantic_tag": "match_case",
-                "type_detail": {
-                  "tag": "TPrim",
-                  "name": "f64"
-                }
+                "name": "define"
               },
-              "type_detail": {
-                "tag": "TPrim",
-                "name": "f64"
-              }
+              "name": "concat"
             },
-            "semantic_tag": "list_composition",
-            "type_detail": {
-              "tag": "TArray",
-              "elem": {
-                "tag": "TPrim",
-                "name": "f64"
-              },
-              "length": 2
-            }
+            "right": "3",
+            "name": "concat"
           },
-          "right": "3",
-          "semantic_tag": "list_composition",
-          "type_detail": {
-            "tag": "TArray",
-            "elem": {
-              "tag": "TPrim",
-              "name": "f64"
-            },
-            "length": 3
-          }
+          "env": {}
         },
-        "type_detail": {
-          "tag": "TArray",
-          "elem": {
-            "tag": "TPrim",
-            "name": "f64"
-          },
-          "length": 3
-        }
+        "name": "lambda"
       },
-      "type_detail": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 28
-        },
-        "ret": {
-          "tag": "TFun",
-          "param": {
-            "tag": "TVar",
-            "id": 29
-          },
-          "ret": {
-            "tag": "TArray",
-            "elem": {
-              "tag": "TPrim",
-              "name": "f64"
-            },
-            "length": 3
-          }
-        }
-      }
+      "env": {}
     },
-    "type_detail": {
-      "tag": "TFun",
-      "param": {
-        "tag": "TVar",
-        "id": 28
-      },
-      "ret": {
-        "tag": "TFun",
-        "param": {
-          "tag": "TVar",
-          "id": 29
+    "inferredType": {
+      "type": "block",
+      "kind": "bracket",
+      "content": {
+        "type": "Func",
+        "from": {
+          "type": "tvar",
+          "id": "t8",
+          "instance": null
         },
-        "ret": {
-          "tag": "TArray",
-          "elem": {
-            "tag": "TPrim",
-            "name": "f64"
+        "to": {
+          "type": "Func",
+          "from": {
+            "type": "tvar",
+            "id": "t9",
+            "instance": null
           },
-          "length": 3
+          "to": {
+            "type": "operation",
+            "operator": " ",
+            "name": "concat",
+            "left": {
+              "type": "operation",
+              "operator": " ",
+              "name": "concat",
+              "left": "Number",
+              "right": "Number"
+            },
+            "right": "Number"
+          }
         }
       }
     }

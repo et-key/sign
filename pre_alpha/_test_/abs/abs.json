@@ -6,15 +6,14 @@
       "type": "block",
       "kind": "abs",
       "content": "<a>",
-      "type_detail": {
-        "tag": "TVar",
-        "id": 1
-      }
+      "env": {}
     },
     "right": "1",
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "add",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t1",
+      "instance": null
     }
   },
   {
@@ -25,14 +24,13 @@
       "type": "block",
       "kind": "abs",
       "content": "<a>",
-      "type_detail": {
-        "tag": "TVar",
-        "id": 3
-      }
+      "env": {}
     },
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "add",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t2",
+      "instance": null
     }
   },
   {
@@ -42,32 +40,20 @@
       "type": "block",
       "kind": "abs",
       "content": {
-        "type": "block",
-        "kind": "group",
-        "content": {
-          "type": "operation",
-          "operator": "+",
-          "left": "<x>",
-          "right": "<y>",
-          "type_detail": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
-        },
-        "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+        "type": "operation",
+        "operator": "+",
+        "left": "<x>",
+        "right": "<y>",
+        "name": "add"
       },
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "env": {}
     },
     "right": "3",
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "mul",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t3",
+      "instance": null
     }
   },
   {
@@ -78,31 +64,19 @@
       "type": "block",
       "kind": "abs",
       "content": {
-        "type": "block",
-        "kind": "group",
-        "content": {
-          "type": "operation",
-          "operator": "+",
-          "left": "<x>",
-          "right": "<y>",
-          "type_detail": {
-            "tag": "TPrim",
-            "name": "f64"
-          }
-        },
-        "type_detail": {
-          "tag": "TPrim",
-          "name": "f64"
-        }
+        "type": "operation",
+        "operator": "+",
+        "left": "<x>",
+        "right": "<y>",
+        "name": "add"
       },
-      "type_detail": {
-        "tag": "TPrim",
-        "name": "f64"
-      }
+      "env": {}
     },
-    "type_detail": {
-      "tag": "TPrim",
-      "name": "f64"
+    "name": "mul",
+    "inferredType": {
+      "type": "tvar",
+      "id": "t2",
+      "instance": null
     }
   }
 ]
