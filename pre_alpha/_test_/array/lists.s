@@ -9,6 +9,7 @@ _start:
 a:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+a_body:
   MOV X0, #1
   LDP X29, X30, [SP], #16
   RET
@@ -16,6 +17,7 @@ a:
 b:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+b_body:
   MOV X0, #2
   LDP X29, X30, [SP], #16
   RET
@@ -23,6 +25,7 @@ b:
 c:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+c_body:
   MOV X0, #3
   LDP X29, X30, [SP], #16
   RET

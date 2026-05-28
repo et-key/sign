@@ -9,6 +9,7 @@ _start:
 func_with_defaults:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+func_with_defaults_body:
   MOV X9, X0
   MOV X10, X1
   ADD X0, X9, X10
@@ -18,6 +19,7 @@ func_with_defaults:
 result1_is_partial_applyed:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+result1_is_partial_applyed_body:
   // Unknown identifier: _
   BL func_with_defaults
   LDP X29, X30, [SP], #16
@@ -26,6 +28,7 @@ result1_is_partial_applyed:
 result2_is_applied:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+result2_is_applied_body:
   MOV X0, #3
   BL func_with_defaults
   LDP X29, X30, [SP], #16
@@ -34,12 +37,14 @@ result2_is_applied:
 result3_is_partial_applyed:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+result3_is_partial_applyed_body:
   LDP X29, X30, [SP], #16
   RET
 
 result4_is_applied:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+result4_is_applied_body:
   MOV X0, #3
   MOV X0, #5
 L_block_end_0:
@@ -50,6 +55,7 @@ L_block_end_0:
 result5_is_applied:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+result5_is_applied_body:
   MOV X9, #3
   MOV X10, #2
   CMP X9, X10
@@ -64,6 +70,7 @@ L_block_end_1:
 result6_is_applied:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+result6_is_applied_body:
   MOV X9, #3
   MOV X10, #2
   CMP X9, X10

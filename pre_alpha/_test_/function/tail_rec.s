@@ -9,8 +9,8 @@ _start:
 loop:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
-  LDP X29, X30, [SP], #16
-  B loop
+loop_body:
+  B loop_body
   LDP X29, X30, [SP], #16
   RET
 

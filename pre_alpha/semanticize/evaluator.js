@@ -251,7 +251,11 @@ export function evaluate(node, env, visited = new Set()) {
           nextVisited.add(node);
           // 未解決の coproduct_block を含んでいる可能性があるので、解決してから評価する
           const resolvedAst = resolveCoproducts(definedObj.ast, env);
-          return evaluate(resolvedAst, env, nextVisited);
+          const evaled = evaluate(resolvedAst, env, nextVisited);
+          if (evaled && typeof evaled === 'object' && !evaled.__sourceIdent) {
+            evaled.__sourceIdent = node;
+          }
+          return evaled;
         }
       }
     }
@@ -444,15 +448,23 @@ export function evaluate(node, env, visited = new Set()) {
         
         if (remainingParams.length > 0) {
           // Curry: Still have parameters left
-          return {
+          const lambdaResult = {
             type: 'Lambda',
             params: remainingParams,
             body: body,
             env: newEnv
           };
+          if (evalLeft.__sourceIdent) {
+            lambdaResult.__sourceIdent = evalLeft.__sourceIdent;
+          }
+          return lambdaResult;
         } else {
           // Fully applied
-          return evaluate(body, newEnv, visited);
+          const bodyVisited = new Set(visited);
+          if (evalLeft.__sourceIdent) {
+            bodyVisited.add(evalLeft.__sourceIdent);
+          }
+          return evaluate(body, newEnv, bodyVisited);
         }
       }
       return {

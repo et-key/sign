@@ -9,6 +9,7 @@ _start:
 func_match:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+func_match_body:
   MOV X9, X0
   MOV X10, #1
   CMP X9, X10

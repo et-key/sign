@@ -1,0 +1,5 @@
+` Pure infinite IO loop
+echo_loop : stdin stdout ? echo_loop stdin~ (stdout # @stdin)
+
+` Initialize with standard file descriptors
+echo_loop 0 1

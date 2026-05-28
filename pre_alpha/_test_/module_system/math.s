@@ -9,6 +9,7 @@ _start:
 sub:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+sub_body:
   SUB X0, X9, X10
   LDP X29, X30, [SP], #16
   RET

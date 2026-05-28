@@ -9,6 +9,7 @@ _start:
 f:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+f_body:
   MOV X9, X0
   MOV X10, X1
   ADD X0, X9, X10
@@ -18,6 +19,7 @@ f:
 maybe_val:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+maybe_val_body:
   MOV X9, #10
   MOV X10, #5
   CMP X9, X10
@@ -29,6 +31,7 @@ maybe_val:
 mapped:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+mapped_body:
   // Unknown identifier: maybe_val
   MOV X0, #3
 L_block_end_0:
@@ -39,6 +42,7 @@ L_block_end_0:
 g:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+g_body:
   MOV X9, X0
   MOV X10, #2
   MUL X0, X9, X10
@@ -48,6 +52,7 @@ g:
 mapped_twice:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+mapped_twice_body:
   // Unknown identifier: mapped
   BL g
   LDP X29, X30, [SP], #16

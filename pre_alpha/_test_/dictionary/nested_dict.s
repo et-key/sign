@@ -9,6 +9,7 @@ _start:
 my_dict:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+my_dict_body:
   // Unknown identifier: `Sign`
   B L_end_0
 L_case_1:

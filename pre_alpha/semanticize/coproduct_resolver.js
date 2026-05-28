@@ -6,25 +6,25 @@
  * 優先順位（10.3 〜 10.0）に従って、最も優先度の高いペアから順次結合（Reduction）を行います。
  */
 
-export function resolveCoproducts(node, env = new Map()) {
+export function resolveCoproducts(node, env = new Map(), depth = 0, pathTrace = []) {
   if (!node) return node;
 
   if (Array.isArray(node)) {
-    return node.map(n => resolveCoproducts(n, env));
+    return node.map((n, i) => resolveCoproducts(n, env, depth + 1, [...pathTrace, `[${i}]`]));
   }
 
   if (typeof node === 'object') {
     // 1. coproduct_block のフラットな配列を優先順位順に結合
     if (node.type === 'coproduct_block') {
-      const resolvedStatements = node.statements.map(s => resolveCoproducts(s, env));
+      const resolvedStatements = node.statements.map((s, i) => resolveCoproducts(s, env, depth + 1, [...pathTrace, `statements[${i}]`]));
       return reduceCoproductBlock(resolvedStatements, env);
     }
 
     // 2. 既存の operation ノードの子要素を解決
     if (node.type === 'operation') {
-      const left = resolveCoproducts(node.left, env);
-      const right = resolveCoproducts(node.right, env);
-      const operand = resolveCoproducts(node.operand, env);
+      const left = resolveCoproducts(node.left, env, depth + 1, [...pathTrace, 'left']);
+      const right = resolveCoproducts(node.right, env, depth + 1, [...pathTrace, 'right']);
+      const operand = resolveCoproducts(node.operand, env, depth + 1, [...pathTrace, 'operand']);
 
       // 旧形式で operation の coproduct が残っていた場合のフォールバック（通常は通らない）
       if (node.name === 'coproduct') {
@@ -37,14 +37,14 @@ export function resolveCoproducts(node, env = new Map()) {
     // 3. ブロックノードの子要素を解決
     if (node.type === 'block') {
       const currentEnv = node.env || env; // builder.js が作成したローカルスコープがあれば使用
-      return { ...node, content: resolveCoproducts(node.content, currentEnv) };
+      return { ...node, content: resolveCoproducts(node.content, currentEnv, depth + 1, [...pathTrace, 'content']) };
     } 
     
     // その他のノードの深いコピー
     const newNode = { ...node };
     for (const key of Object.keys(newNode)) {
       if (key !== 'type' && key !== 'name' && key !== 'operator' && key !== 'kind') {
-        newNode[key] = resolveCoproducts(newNode[key], env);
+        newNode[key] = resolveCoproducts(newNode[key], env, depth + 1, [...pathTrace, key]);
       }
     }
     return newNode;

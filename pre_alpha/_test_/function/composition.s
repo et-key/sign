@@ -9,6 +9,7 @@ _start:
 f:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+f_body:
   MOV X9, X0
   MOV X10, #2
   MUL X0, X9, X10
@@ -18,6 +19,7 @@ f:
 g:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+g_body:
   MOV X9, X0
   MOV X10, #1
   ADD X0, X9, X10
@@ -27,6 +29,7 @@ g:
 result:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+result_body:
   MOV X0, #3
   BL g
   BL f

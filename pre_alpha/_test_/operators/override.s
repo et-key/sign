@@ -9,6 +9,7 @@ _start:
 [object Object]:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+[object Object]_body:
   // Unknown identifier: _
   LDP X29, X30, [SP], #16
   RET
@@ -16,6 +17,7 @@ _start:
 [object Object]:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+[object Object]_body:
   // Unknown identifier: String
   LDP X29, X30, [SP], #16
   RET

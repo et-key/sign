@@ -9,11 +9,14 @@ _start:
 all_func:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+all_func_body:
   MOV X9, X0
   MOV X10, #0
   CMP X9, X10
   B.NE L_next_case_2
   MOV X0, #2
+  MOV X9, X2
+  MOV X0, X9 // Advance state (stub)
 L_block_end_3:
   BL all_func
 L_next_case_2:

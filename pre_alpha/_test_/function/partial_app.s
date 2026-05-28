@@ -9,6 +9,7 @@ _start:
 f:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+f_body:
   MOV X9, X0
   MOV X10, X1
   ADD X0, X9, X10
@@ -18,6 +19,7 @@ f:
 partial:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+partial_body:
   // Unknown identifier: _
   MOV X0, #3
 L_block_end_0:
@@ -28,6 +30,7 @@ L_block_end_0:
 curried:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+curried_body:
   MOV X0, #2
   BL f
   LDP X29, X30, [SP], #16
@@ -36,6 +39,7 @@ curried:
 result_curried:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+result_curried_body:
   // Unknown identifier: curried
   MOV X0, #4
 L_block_end_1:
@@ -45,6 +49,7 @@ L_block_end_1:
 check:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+check_body:
   MOV X9, #10
   MOV X10, #5
   CMP X9, X10
@@ -56,6 +61,7 @@ check:
 check2:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
+check2_body:
   MOV X9, #5
   MOV X10, #5
   CMP X9, X10

@@ -1,0 +1,109 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<echo_loop>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": "<stdin>",
+        "right": "<stdout>",
+        "name": "concat"
+      },
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": "<echo_loop>",
+        "right": {
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "operation",
+            "operator": "~",
+            "operand": "<stdin>",
+            "position": "postfix",
+            "name": "expand"
+          },
+          "right": {
+            "type": "block",
+            "kind": "paren",
+            "content": {
+              "type": "operation",
+              "operator": "#",
+              "left": "<stdout>",
+              "right": {
+                "type": "operation",
+                "operator": "@",
+                "operand": "<stdin>",
+                "position": "prefix",
+                "name": "input"
+              },
+              "name": "output"
+            }
+          },
+          "name": "concat"
+        },
+        "name": "apply"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": {
+        "type": "Apply",
+        "left": {
+          "type": "Variable",
+          "name": "<echo_loop>"
+        },
+        "right": {
+          "type": "List",
+          "elements": [
+            {
+              "type": "List"
+            },
+            {
+              "type": "Variable",
+              "name": "<stdout>"
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "type": "operation",
+    "operator": " ",
+    "left": "<echo_loop>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "0",
+      "right": "1",
+      "name": "concat"
+    },
+    "name": "apply",
+    "inferredType": {
+      "type": "Apply",
+      "left": {
+        "type": "Variable",
+        "name": "<echo_loop>"
+      },
+      "right": {
+        "type": "List",
+        "elements": [
+          {
+            "type": "List"
+          },
+          {
+            "type": "Variable",
+            "name": "<stdout>"
+          }
+        ]
+      }
+    }
+  }
+]

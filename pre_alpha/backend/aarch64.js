@@ -14,12 +14,15 @@ export class AArch64Generator {
     this.asm.push('.global _start');
     this.asm.push('');
 
-    // Check if result is defined
+    // Check if main or result is defined
+    const hasMain = asts.some(node => node && node.type === 'operation' && node.operator === ':' && this.getIdentName(node.left) === 'main');
     const hasResult = asts.some(node => node && node.type === 'operation' && node.operator === ':' && this.getIdentName(node.left) === 'result');
 
     // Generate _start
     this.asm.push('_start:');
-    if (hasResult) {
+    if (hasMain) {
+      this.asm.push('  BL main'); // Call main
+    } else if (hasResult) {
       this.asm.push('  BL result'); // Call result to get exit code in X0
     } else {
       this.asm.push('  MOV X0, #0');
@@ -66,6 +69,7 @@ export class AArch64Generator {
     // プロローグ: リンクレジスタ(LR=X30)とフレームポインタ(FP=X29)を退避
     this.asm.push(`  STP X29, X30, [SP, #-16]!`);
     this.asm.push(`  MOV X29, SP`);
+    this.asm.push(`${name}_body:`);
 
     // We assume arguments are in X0, X1, etc.
     // The body is node.right
@@ -210,19 +214,34 @@ export class AArch64Generator {
       }
 
       if (node.operator === '@' && node.position === 'prefix') {
-        // Input: Load from address
-        this.generateExpression(node.operand, env, 'X9');
-        this.asm.push(`  LDR ${targetReg}, [X9]`);
-        return;
-      }
-
-      if (node.operator === '#' && (!node.position || node.position === 'infix')) {
-        // Output: Store value to address
-        this.generateExpression(node.left, env, 'X11'); // Address
-        this.generateExpression(node.right, env, 'X12'); // Value
-        this.asm.push(`  STR X12, [X11]`);
-        return;
-      }
+            // Input (Comonad extract)
+            this.generateExpression(node.operand, env, 'X9');
+            // TODO: If X9 is < 256, it's a Linux file descriptor (Syscall), otherwise Memory Mapped.
+            // For now, we assume Memory Mapped LDR.
+            this.asm.push(`  LDR ${targetReg}, [X9]`);
+            return;
+          }
+    
+          if (node.operator === '#' && (!node.position || node.position === 'infix')) {
+            // Output (Monad bind)
+            this.generateExpression(node.left, env, 'X11'); // Stream / Address
+            this.generateExpression(node.right, env, 'X12'); // Value
+            // TODO: Syscall write if X11 < 256
+            this.asm.push(`  STR X12, [X11]`);
+            if (targetReg !== 'X11') {
+                this.asm.push(`  MOV ${targetReg}, X11 // Return updated stream state`);
+            }
+            return;
+          }
+          
+          if (node.operator === '~' && node.position === 'postfix') {
+            // Advance stream (Comonad step)
+            this.generateExpression(node.operand, env, 'X9');
+            if (targetReg !== 'X9') {
+              this.asm.push(`  MOV ${targetReg}, X9 // Advance state (stub)`);
+            }
+            return;
+          }
 
       if (['+', '-', '*'].includes(node.operator)) {
         // We need scratch registers. X9 and X10
@@ -445,9 +464,8 @@ export class AArch64Generator {
         if (typeof func === 'string') {
           const funcName = this.getIdentName(func);
           if (isTail && funcName === currentFuncName) {
-            // 末尾再帰の直前にエピローグを実行（スタックを戻す）
-            this.asm.push(`  LDP X29, X30, [SP], #16`);
-            this.asm.push(`  B ${funcName}`);
+            // 真のTCO: プロローグをスキップし、スタックをいじらずにボディの先頭へ直接ジャンプ
+            this.asm.push(`  B ${funcName}_body`);
             didTailCall = true;
           } else if (env.has(funcName)) {
             // Function pointer in register (higher-order function argument)
