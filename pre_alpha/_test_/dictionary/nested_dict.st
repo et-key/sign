@@ -1,1 +1,10 @@
-my_dict : String <> Number <> (String <> String)
+my_dict : [
+  [
+    String
+    Number
+  ]
+  [
+    String
+    String
+  ]
+]

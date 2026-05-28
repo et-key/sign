@@ -24,13 +24,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Func",
-      "from": "Number",
-      "to": {
-        "type": "Func",
-        "from": "Number",
-        "to": "Number"
-      }
+      "type": "Lambda",
+      "returns": "Number"
     }
   },
   {
@@ -46,7 +41,7 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Unit"
+      "type": "Unknown"
     }
   },
   {
@@ -68,7 +63,7 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Unit"
+      "type": "Unknown"
     }
   },
   {
@@ -90,9 +85,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Func",
-      "from": "Number",
-      "to": "Number"
+      "type": "Lambda",
+      "returns": "Number"
     }
   },
   {
@@ -108,7 +102,7 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Unit"
+      "type": "Unknown"
     }
   }
 ]

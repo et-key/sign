@@ -1,6 +1,9 @@
-f : Number -> Number -> Number
-partial : 'a
-curried : 'b
-result_curried : 'b <> Number
+f : Lambda(Number)
+partial : _
+curried : Number
+result_curried : [
+  Number
+  Number
+]
 check : _
-check2 : 5
+check2 : Number

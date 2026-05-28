@@ -1,2 +1,10 @@
-func_match : 'a -> 'b -> 'c <> 'd <> Number
- : ['e -> 'f -> Number <> Number <> Number]
+func_match : Lambda([
+  [
+    String
+    String
+  ]
+  [
+    String
+    Number
+  ]
+])

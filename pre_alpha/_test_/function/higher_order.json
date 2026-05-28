@@ -18,9 +18,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Func",
-      "from": "Number",
-      "to": "Number"
+      "type": "Lambda",
+      "returns": "Number"
     }
   },
   {
@@ -98,57 +97,44 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Func",
-      "from": {
-        "type": "operation",
-        "operator": " ",
-        "name": "concat",
-        "left": {
-          "type": "operation",
-          "operator": "$",
-          "position": "prefix",
-          "operand": {
-            "type": "Func",
-            "from": {
-              "type": "tvar",
-              "id": "t5",
-              "instance": null
+      "type": "Lambda",
+      "returns": {
+        "type": "List",
+        "elements": [
+          {
+            "type": "Apply",
+            "left": {
+              "type": "Deref",
+              "target": {
+                "type": "Variable",
+                "name": "<g>"
+              }
             },
-            "to": {
-              "type": "tvar",
-              "id": "t8",
-              "instance": null
-            }
-          }
-        },
-        "right": {
-          "type": "operation",
-          "operator": "~",
-          "operand": {
-            "type": "tvar",
-            "id": "t6",
-            "instance": {
-              "type": "tvar",
-              "id": "t14",
-              "instance": null
+            "right": {
+              "type": "Variable",
+              "name": "<x>"
             }
           },
-          "position": "postfix",
-          "name": "expand"
-        }
-      },
-      "to": {
-        "type": "tvar",
-        "id": "t9",
-        "instance": {
-          "type": "tvar",
-          "id": "t15",
-          "instance": {
-            "type": "tvar",
-            "id": "t20",
-            "instance": null
+          {
+            "type": "Apply",
+            "left": {
+              "type": "Variable",
+              "name": "<map>"
+            },
+            "right": {
+              "type": "List",
+              "elements": [
+                {
+                  "type": "Variable",
+                  "name": "<g>"
+                },
+                {
+                  "type": "List"
+                }
+              ]
+            }
           }
-        }
+        ]
       }
     }
   },
@@ -201,31 +187,82 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "operation",
-      "operator": " ",
-      "name": "concat",
-      "left": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "tvar",
-          "id": "t12",
-          "instance": null
+      "type": "List",
+      "elements": [
+        {
+          "type": "Apply",
+          "left": {
+            "type": "Deref",
+            "target": {
+              "type": "List",
+              "elements": [
+                {
+                  "type": "List",
+                  "elements": [
+                    {
+                      "type": "List",
+                      "elements": [
+                        {
+                          "type": "List",
+                          "elements": [
+                            {
+                              "type": "Implicit",
+                              "target": "Lambda"
+                            },
+                            "Number"
+                          ]
+                        },
+                        "Number"
+                      ]
+                    },
+                    "Number"
+                  ]
+                },
+                "Number"
+              ]
+            }
+          },
+          "right": "Number"
+        },
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "Apply",
+              "left": {
+                "type": "Deref",
+                "target": {
+                  "type": "Variable",
+                  "name": "<g>"
+                }
+              },
+              "right": {
+                "type": "Variable",
+                "name": "<x>"
+              }
+            },
+            {
+              "type": "Apply",
+              "left": {
+                "type": "Variable",
+                "name": "<map>"
+              },
+              "right": {
+                "type": "List",
+                "elements": [
+                  {
+                    "type": "Variable",
+                    "name": "<g>"
+                  },
+                  {
+                    "type": "List"
+                  }
+                ]
+              }
+            }
+          ]
         }
-      },
-      "right": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "tvar",
-          "id": "t15",
-          "instance": {
-            "type": "tvar",
-            "id": "t20",
-            "instance": null
-          }
-        }
-      }
+      ]
     }
   },
   {
@@ -293,27 +330,82 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "operation",
-      "operator": " ",
-      "name": "concat",
-      "left": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "tvar",
-          "id": "t19",
-          "instance": null
+      "type": "List",
+      "elements": [
+        {
+          "type": "Apply",
+          "left": {
+            "type": "Deref",
+            "target": {
+              "type": "List",
+              "elements": [
+                {
+                  "type": "List",
+                  "elements": [
+                    {
+                      "type": "List",
+                      "elements": [
+                        {
+                          "type": "List",
+                          "elements": [
+                            {
+                              "type": "Implicit",
+                              "target": "Lambda"
+                            },
+                            "Number"
+                          ]
+                        },
+                        "Number"
+                      ]
+                    },
+                    "Number"
+                  ]
+                },
+                "Number"
+              ]
+            }
+          },
+          "right": "Number"
+        },
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "Apply",
+              "left": {
+                "type": "Deref",
+                "target": {
+                  "type": "Variable",
+                  "name": "<g>"
+                }
+              },
+              "right": {
+                "type": "Variable",
+                "name": "<x>"
+              }
+            },
+            {
+              "type": "Apply",
+              "left": {
+                "type": "Variable",
+                "name": "<map>"
+              },
+              "right": {
+                "type": "List",
+                "elements": [
+                  {
+                    "type": "Variable",
+                    "name": "<g>"
+                  },
+                  {
+                    "type": "List"
+                  }
+                ]
+              }
+            }
+          ]
         }
-      },
-      "right": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "tvar",
-          "id": "t20",
-          "instance": null
-        }
-      }
+      ]
     }
   },
   {
@@ -361,9 +453,35 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "tvar",
-      "id": "t22",
-      "instance": null
+      "type": "Apply",
+      "left": {
+        "type": "Unit"
+      },
+      "right": {
+        "type": "List",
+        "elements": [
+          {
+            "type": "List",
+            "elements": [
+              {
+                "type": "List",
+                "elements": [
+                  {
+                    "type": "List",
+                    "elements": [
+                      "Number",
+                      "Number"
+                    ]
+                  },
+                  "Number"
+                ]
+              },
+              "Number"
+            ]
+          },
+          "Number"
+        ]
+      }
     }
   },
   {
@@ -417,50 +535,42 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "operation",
-      "operator": ",",
+      "type": "Apply",
       "left": {
-        "type": "operation",
-        "operator": " ",
-        "name": "concat",
-        "left": {
-          "type": "operation",
-          "operator": " ",
-          "name": "concat",
-          "left": {
-            "type": "operation",
-            "operator": " ",
-            "name": "concat",
-            "left": {
-              "type": "operation",
-              "operator": " ",
-              "name": "concat",
-              "left": "Number",
-              "right": "Number"
-            },
-            "right": "Number"
+        "type": "List",
+        "elements": [
+          {
+            "type": "Unit"
           },
-          "right": "Number"
-        },
-        "right": "Number"
+          {
+            "type": "Unit"
+          }
+        ]
       },
       "right": {
-        "type": "Func",
-        "from": {
-          "type": "tvar",
-          "id": "t25",
-          "instance": null
-        },
-        "to": {
-          "type": "operation",
-          "operator": "+",
-          "left": {
-            "type": "tvar",
-            "id": "t25",
-            "instance": null
+        "type": "List",
+        "elements": [
+          {
+            "type": "List",
+            "elements": [
+              {
+                "type": "List",
+                "elements": [
+                  {
+                    "type": "List",
+                    "elements": [
+                      "Number",
+                      "Number"
+                    ]
+                  },
+                  "Number"
+                ]
+              },
+              "Number"
+            ]
           },
-          "right": "Number"
-        }
+          "Number"
+        ]
       }
     }
   },
@@ -495,29 +605,29 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "operation",
-      "operator": " ",
-      "name": "concat",
-      "left": {
-        "type": "operation",
-        "operator": " ",
-        "name": "concat",
-        "left": {
-          "type": "operation",
-          "operator": " ",
-          "name": "concat",
-          "left": {
-            "type": "operation",
-            "operator": " ",
-            "name": "concat",
-            "left": "Number",
-            "right": "Number"
-          },
-          "right": "Number"
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "List",
+              "elements": [
+                {
+                  "type": "List",
+                  "elements": [
+                    "Number",
+                    "Number"
+                  ]
+                },
+                "Number"
+              ]
+            },
+            "Number"
+          ]
         },
-        "right": "Number"
-      },
-      "right": "Number"
+        "Number"
+      ]
     }
   },
   {
@@ -539,21 +649,20 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "operation",
-      "operator": " ",
-      "name": "concat",
-      "left": {
-        "type": "operation",
-        "operator": " ",
-        "name": "concat",
-        "left": "Number",
-        "right": {
-          "type": "tvar",
-          "id": "t29",
-          "instance": null
-        }
-      },
-      "right": "Number"
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            "Number",
+            {
+              "type": "Variable",
+              "name": "<a>"
+            }
+          ]
+        },
+        "Number"
+      ]
     }
   }
 ]

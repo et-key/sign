@@ -63,22 +63,22 @@
   },
   "name": "define",
   "inferredType": {
-    "type": "operation",
-    "operator": " ",
-    "name": "concat",
-    "left": {
-      "type": "operation",
-      "operator": " ",
-      "name": "concat",
-      "left": "String",
-      "right": "Number"
-    },
-    "right": {
-      "type": "operation",
-      "operator": " ",
-      "name": "concat",
-      "left": "String",
-      "right": "String"
-    }
+    "type": "List",
+    "elements": [
+      {
+        "type": "List",
+        "elements": [
+          "String",
+          "Number"
+        ]
+      },
+      {
+        "type": "List",
+        "elements": [
+          "String",
+          "String"
+        ]
+      }
+    ]
   }
 }

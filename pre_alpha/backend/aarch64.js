@@ -14,11 +14,17 @@ export class AArch64Generator {
     this.asm.push('.global _start');
     this.asm.push('');
 
+    // Check if result is defined
+    const hasResult = asts.some(node => node && node.type === 'operation' && node.operator === ':' && this.getIdentName(node.left) === 'result');
+
     // Generate _start
     this.asm.push('_start:');
-    // For now, _start just exits cleanly
+    if (hasResult) {
+      this.asm.push('  BL result'); // Call result to get exit code in X0
+    } else {
+      this.asm.push('  MOV X0, #0');
+    }
     this.asm.push('  MOV X8, #93 // sys_exit');
-    this.asm.push('  MOV X0, #0');
     this.asm.push('  SVC #0');
     this.asm.push('');
 
@@ -56,6 +62,10 @@ export class AArch64Generator {
   generateFunction(node) {
     const name = this.getIdentName(node.left);
     this.asm.push(`${name}:`);
+    
+    // プロローグ: リンクレジスタ(LR=X30)とフレームポインタ(FP=X29)を退避
+    this.asm.push(`  STP X29, X30, [SP, #-16]!`);
+    this.asm.push(`  MOV X29, SP`);
 
     // We assume arguments are in X0, X1, etc.
     // The body is node.right
@@ -75,6 +85,8 @@ export class AArch64Generator {
     }
 
     if (!didTailCall) {
+      // エピローグ: 復元してリターン
+      this.asm.push(`  LDP X29, X30, [SP], #16`);
       this.asm.push('  RET');
     }
     this.asm.push('');
@@ -83,7 +95,7 @@ export class AArch64Generator {
   extractParams(node, env, regIndex) {
     if (!node) return regIndex;
     if (typeof node === 'string') {
-      env.set(node, `X${regIndex}`);
+      env.set(this.getIdentName(node), `X${regIndex}`);
       return regIndex + 1;
     }
     if (node.type === 'operation' && node.operator === ' ') {
@@ -422,6 +434,8 @@ export class AArch64Generator {
         if (typeof func === 'string') {
           const funcName = this.getIdentName(func);
           if (isTail && funcName === currentFuncName) {
+            // 末尾再帰の直前にエピローグを実行（スタックを戻す）
+            this.asm.push(`  LDP X29, X30, [SP], #16`);
             this.asm.push(`  B ${funcName}`);
             didTailCall = true;
           } else if (env.has(funcName)) {

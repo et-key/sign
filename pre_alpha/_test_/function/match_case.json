@@ -32,7 +32,7 @@
                 "right": "1",
                 "name": "less"
               },
-              "right": "<result1>",
+              "right": "`result1`",
               "name": "define"
             },
             "right": {
@@ -45,12 +45,24 @@
                 "right": "3",
                 "name": "less"
               },
-              "right": "<result2>",
+              "right": "`result2`",
               "name": "define"
             },
             "name": "concat"
           },
-          "right": "3",
+          "right": {
+            "type": "operation",
+            "operator": " ",
+            "left": "``",
+            "right": {
+              "type": "operation",
+              "operator": "*",
+              "left": "<x>",
+              "right": "<y>",
+              "name": "mul"
+            },
+            "name": "concat"
+          },
           "name": "concat"
         },
         "env": {}
@@ -59,40 +71,25 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Func",
-      "from": {
-        "type": "tvar",
-        "id": "t2",
-        "instance": null
-      },
-      "to": {
-        "type": "Func",
-        "from": {
-          "type": "tvar",
-          "id": "t3",
-          "instance": null
-        },
-        "to": {
-          "type": "operation",
-          "operator": " ",
-          "name": "concat",
-          "left": {
-            "type": "operation",
-            "operator": " ",
-            "name": "concat",
-            "left": {
-              "type": "tvar",
-              "id": "t5",
-              "instance": null
-            },
-            "right": {
-              "type": "tvar",
-              "id": "t7",
-              "instance": null
-            }
+      "type": "Lambda",
+      "returns": {
+        "type": "List",
+        "elements": [
+          {
+            "type": "List",
+            "elements": [
+              "String",
+              "String"
+            ]
           },
-          "right": "Number"
-        }
+          {
+            "type": "List",
+            "elements": [
+              "String",
+              "Number"
+            ]
+          }
+        ]
       }
     }
   },
@@ -124,20 +121,44 @@
               "left": {
                 "type": "operation",
                 "operator": ":",
-                "left": "<x>",
-                "right": "1",
+                "left": {
+                  "type": "operation",
+                  "operator": "<",
+                  "left": "<x>",
+                  "right": "1",
+                  "name": "less"
+                },
+                "right": "`result1`",
                 "name": "define"
               },
               "right": {
                 "type": "operation",
                 "operator": ":",
-                "left": "<y>",
-                "right": "2",
+                "left": {
+                  "type": "operation",
+                  "operator": "<",
+                  "left": "<y>",
+                  "right": "3",
+                  "name": "less"
+                },
+                "right": "`result2`",
                 "name": "define"
               },
               "name": "concat"
             },
-            "right": "3",
+            "right": {
+              "type": "operation",
+              "operator": " ",
+              "left": "``",
+              "right": {
+                "type": "operation",
+                "operator": "*",
+                "left": "<x>",
+                "right": "<y>",
+                "name": "mul"
+              },
+              "name": "concat"
+            },
             "name": "concat"
           },
           "env": {}
@@ -147,36 +168,25 @@
       "env": {}
     },
     "inferredType": {
-      "type": "block",
-      "kind": "bracket",
-      "content": {
-        "type": "Func",
-        "from": {
-          "type": "tvar",
-          "id": "t8",
-          "instance": null
-        },
-        "to": {
-          "type": "Func",
-          "from": {
-            "type": "tvar",
-            "id": "t9",
-            "instance": null
+      "type": "Lambda",
+      "returns": {
+        "type": "List",
+        "elements": [
+          {
+            "type": "List",
+            "elements": [
+              "String",
+              "String"
+            ]
           },
-          "to": {
-            "type": "operation",
-            "operator": " ",
-            "name": "concat",
-            "left": {
-              "type": "operation",
-              "operator": " ",
-              "name": "concat",
-              "left": "Number",
-              "right": "Number"
-            },
-            "right": "Number"
+          {
+            "type": "List",
+            "elements": [
+              "String",
+              "Number"
+            ]
           }
-        }
+        ]
       }
     }
   }

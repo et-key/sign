@@ -17,16 +17,17 @@
   },
   "name": "define",
   "inferredType": {
-    "type": "Func",
-    "from": {
-      "type": "tvar",
-      "id": "t2",
-      "instance": null
-    },
-    "to": {
-      "type": "tvar",
-      "id": "t3",
-      "instance": null
+    "type": "Lambda",
+    "returns": {
+      "type": "Apply",
+      "left": {
+        "type": "Variable",
+        "name": "<loop>"
+      },
+      "right": {
+        "type": "Variable",
+        "name": "<x>"
+      }
     }
   }
 }

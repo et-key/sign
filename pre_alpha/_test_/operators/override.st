@@ -1,4 +1,2 @@
-[] : 'a -> 'b -> 'c
-[ | ] : 'd -> 'e -> 'f
-1 : 'g
-or : 'h -> 'h | 'g
+[] : Lambda(_)
+[ | ] : Lambda(<String>)

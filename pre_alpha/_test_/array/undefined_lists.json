@@ -16,33 +16,26 @@
       "name": "concat"
     },
     "inferredType": {
-      "type": "block",
-      "kind": "bracket",
-      "content": {
-        "type": "operation",
-        "operator": " ",
-        "name": "concat",
-        "left": {
-          "type": "operation",
-          "operator": " ",
-          "name": "concat",
-          "left": {
-            "type": "tvar",
-            "id": "t1",
-            "instance": null
-          },
-          "right": {
-            "type": "tvar",
-            "id": "t2",
-            "instance": null
-          }
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "Variable",
+              "name": "<a>"
+            },
+            {
+              "type": "Variable",
+              "name": "<b>"
+            }
+          ]
         },
-        "right": {
-          "type": "tvar",
-          "id": "t3",
-          "instance": null
+        {
+          "type": "Variable",
+          "name": "<c>"
         }
-      }
+      ]
     }
   },
   {
@@ -58,29 +51,26 @@
     "right": "<c>",
     "name": "concat",
     "inferredType": {
-      "type": "operation",
-      "operator": " ",
-      "name": "concat",
-      "left": {
-        "type": "operation",
-        "operator": " ",
-        "name": "concat",
-        "left": {
-          "type": "tvar",
-          "id": "t1",
-          "instance": null
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "Variable",
+              "name": "<a>"
+            },
+            {
+              "type": "Variable",
+              "name": "<b>"
+            }
+          ]
         },
-        "right": {
-          "type": "tvar",
-          "id": "t2",
-          "instance": null
+        {
+          "type": "Variable",
+          "name": "<c>"
         }
-      },
-      "right": {
-        "type": "tvar",
-        "id": "t3",
-        "instance": null
-      }
+      ]
     }
   },
   {
@@ -96,27 +86,26 @@
     "right": "<c>",
     "name": "product",
     "inferredType": {
-      "type": "operation",
-      "operator": ",",
-      "left": {
-        "type": "operation",
-        "operator": ",",
-        "left": {
-          "type": "tvar",
-          "id": "t1",
-          "instance": null
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "Variable",
+              "name": "<a>"
+            },
+            {
+              "type": "Variable",
+              "name": "<b>"
+            }
+          ]
         },
-        "right": {
-          "type": "tvar",
-          "id": "t2",
-          "instance": null
+        {
+          "type": "Variable",
+          "name": "<c>"
         }
-      },
-      "right": {
-        "type": "tvar",
-        "id": "t3",
-        "instance": null
-      }
+      ]
     }
   }
 ]

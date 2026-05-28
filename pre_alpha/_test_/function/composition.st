@@ -1,3 +1,3 @@
-f : Number -> Number
-g : Number -> Number
-result : 'a
+f : Lambda(Number)
+g : Lambda(Number)
+result : Number

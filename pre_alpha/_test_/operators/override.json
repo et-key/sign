@@ -26,24 +26,10 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Func",
-      "from": {
-        "type": "tvar",
-        "id": "t2",
-        "instance": null
-      },
-      "to": {
-        "type": "Func",
-        "from": {
-          "type": "tvar",
-          "id": "t3",
-          "instance": null
-        },
-        "to": {
-          "type": "tvar",
-          "id": "t4",
-          "instance": null
-        }
+      "type": "Lambda",
+      "returns": {
+        "type": "Variable",
+        "name": "_"
       }
     }
   },
@@ -79,24 +65,10 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Func",
-      "from": {
-        "type": "tvar",
-        "id": "t6",
-        "instance": null
-      },
-      "to": {
-        "type": "Func",
-        "from": {
-          "type": "tvar",
-          "id": "t7",
-          "instance": null
-        },
-        "to": {
-          "type": "tvar",
-          "id": "t8",
-          "instance": null
-        }
+      "type": "Lambda",
+      "returns": {
+        "type": "Variable",
+        "name": "<String>"
       }
     }
   },
@@ -107,9 +79,8 @@
     "right": "2",
     "name": "add",
     "inferredType": {
-      "type": "tvar",
-      "id": "t9",
-      "instance": null
+      "type": "Variable",
+      "name": "Number"
     }
   },
   {
@@ -124,26 +95,7 @@
     },
     "name": "or",
     "inferredType": {
-      "type": "Func",
-      "from": {
-        "type": "tvar",
-        "id": "t10",
-        "instance": null
-      },
-      "to": {
-        "type": "operation",
-        "operator": "|",
-        "left": {
-          "type": "tvar",
-          "id": "t10",
-          "instance": null
-        },
-        "right": {
-          "type": "tvar",
-          "id": "t9",
-          "instance": null
-        }
-      }
+      "type": "Unit"
     }
   }
 ]

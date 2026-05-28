@@ -1,2 +1,5 @@
-io_handler : 'a -> 0x40000004
-event_loop : [0] , 'b -> 0x40000004
+io_handler : Lambda(Number)
+event_loop : ([
+  _
+  Lambda(Number)
+] <= Scalar)

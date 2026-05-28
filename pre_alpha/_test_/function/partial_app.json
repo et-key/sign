@@ -24,13 +24,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Func",
-      "from": "Number",
-      "to": {
-        "type": "Func",
-        "from": "Number",
-        "to": "Number"
-      }
+      "type": "Lambda",
+      "returns": "Number"
     }
   },
   {
@@ -52,9 +47,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "tvar",
-      "id": "t5",
-      "instance": null
+      "type": "Variable",
+      "name": "_"
     }
   },
   {
@@ -70,9 +64,8 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "tvar",
-      "id": "t7",
-      "instance": null
+      "type": "Variable",
+      "name": "Number"
     }
   },
   {
@@ -88,15 +81,14 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "operation",
-      "operator": " ",
-      "name": "concat",
-      "left": {
-        "type": "tvar",
-        "id": "t7",
-        "instance": null
-      },
-      "right": "Number"
+      "type": "List",
+      "elements": [
+        {
+          "type": "Variable",
+          "name": "Number"
+        },
+        "Number"
+      ]
     }
   },
   {
@@ -112,7 +104,7 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "Unit"
+      "type": "Unknown"
     }
   },
   {
@@ -127,12 +119,6 @@
       "name": "equal"
     },
     "name": "define",
-    "inferredType": {
-      "type": "operation",
-      "operator": "==",
-      "left": "5",
-      "right": "5",
-      "name": "equal"
-    }
+    "inferredType": "Number"
   }
 ]

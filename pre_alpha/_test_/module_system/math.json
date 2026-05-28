@@ -20,11 +20,7 @@
     "position": "prefix",
     "name": "export_internal",
     "inferredType": {
-      "type": "block",
-      "kind": "bracket",
-      "content": {
-        "type": "Unit"
-      }
+      "type": "Unit"
     }
   },
   {
@@ -42,11 +38,7 @@
     },
     "name": "define",
     "inferredType": {
-      "type": "block",
-      "kind": "bracket",
-      "content": {
-        "type": "Unit"
-      }
+      "type": "Unit"
     }
   }
 ]

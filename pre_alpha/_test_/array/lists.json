@@ -40,21 +40,17 @@
       "name": "concat"
     },
     "inferredType": {
-      "type": "block",
-      "kind": "bracket",
-      "content": {
-        "type": "operation",
-        "operator": " ",
-        "name": "concat",
-        "left": {
-          "type": "operation",
-          "operator": " ",
-          "name": "concat",
-          "left": "Number",
-          "right": "Number"
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            "Number",
+            "Number"
+          ]
         },
-        "right": "Number"
-      }
+        "Number"
+      ]
     }
   },
   {
@@ -70,17 +66,17 @@
     "right": "<c>",
     "name": "concat",
     "inferredType": {
-      "type": "operation",
-      "operator": " ",
-      "name": "concat",
-      "left": {
-        "type": "operation",
-        "operator": " ",
-        "name": "concat",
-        "left": "Number",
-        "right": "Number"
-      },
-      "right": "Number"
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            "Number",
+            "Number"
+          ]
+        },
+        "Number"
+      ]
     }
   },
   {
@@ -114,34 +110,35 @@
     },
     "name": "product",
     "inferredType": {
-      "type": "operation",
-      "operator": ",",
-      "left": {
-        "type": "operation",
-        "operator": " ",
-        "name": "concat",
-        "left": {
-          "type": "operation",
-          "operator": " ",
-          "name": "concat",
-          "left": "Number",
-          "right": "Number"
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "List",
+              "elements": [
+                "Number",
+                "Number"
+              ]
+            },
+            "Number"
+          ]
         },
-        "right": "Number"
-      },
-      "right": {
-        "type": "operation",
-        "operator": " ",
-        "name": "concat",
-        "left": {
-          "type": "operation",
-          "operator": " ",
-          "name": "concat",
-          "left": "Number",
-          "right": "Number"
-        },
-        "right": "Number"
-      }
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "List",
+              "elements": [
+                "Number",
+                "Number"
+              ]
+            },
+            "Number"
+          ]
+        }
+      ]
     }
   },
   {
@@ -183,43 +180,35 @@
     },
     "name": "concat",
     "inferredType": {
-      "type": "operation",
-      "operator": " ",
-      "name": "concat",
-      "left": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "operation",
-          "operator": " ",
-          "name": "concat",
-          "left": {
-            "type": "operation",
-            "operator": " ",
-            "name": "concat",
-            "left": "Number",
-            "right": "Number"
-          },
-          "right": "Number"
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "List",
+              "elements": [
+                "Number",
+                "Number"
+              ]
+            },
+            "Number"
+          ]
+        },
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "List",
+              "elements": [
+                "Number",
+                "Number"
+              ]
+            },
+            "Number"
+          ]
         }
-      },
-      "right": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "operation",
-          "operator": " ",
-          "name": "concat",
-          "left": {
-            "type": "operation",
-            "operator": " ",
-            "name": "concat",
-            "left": "Number",
-            "right": "Number"
-          },
-          "right": "Number"
-        }
-      }
+      ]
     }
   },
   {
@@ -261,42 +250,35 @@
     },
     "name": "product",
     "inferredType": {
-      "type": "operation",
-      "operator": ",",
-      "left": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "operation",
-          "operator": " ",
-          "name": "concat",
-          "left": {
-            "type": "operation",
-            "operator": " ",
-            "name": "concat",
-            "left": "Number",
-            "right": "Number"
-          },
-          "right": "Number"
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "List",
+              "elements": [
+                "Number",
+                "Number"
+              ]
+            },
+            "Number"
+          ]
+        },
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "List",
+              "elements": [
+                "Number",
+                "Number"
+              ]
+            },
+            "Number"
+          ]
         }
-      },
-      "right": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "operation",
-          "operator": " ",
-          "name": "concat",
-          "left": {
-            "type": "operation",
-            "operator": " ",
-            "name": "concat",
-            "left": "Number",
-            "right": "Number"
-          },
-          "right": "Number"
-        }
-      }
+      ]
     }
   },
   {
@@ -338,43 +320,36 @@
     },
     "name": "compose",
     "inferredType": {
-      "type": "operation",
-      "operator": " ",
-      "left": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "operation",
-          "operator": ",",
-          "left": {
-            "type": "operation",
-            "operator": ",",
-            "left": "1",
-            "right": "2",
-            "name": "product"
-          },
-          "right": "3",
-          "name": "product"
+      "type": "Lambda",
+      "returns": {
+        "type": "Compose",
+        "left": {
+          "type": "List",
+          "elements": [
+            {
+              "type": "List",
+              "elements": [
+                "Number",
+                "Number"
+              ]
+            },
+            "Number"
+          ]
+        },
+        "right": {
+          "type": "List",
+          "elements": [
+            {
+              "type": "List",
+              "elements": [
+                "Number",
+                "Number"
+              ]
+            },
+            "Number"
+          ]
         }
-      },
-      "right": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "operation",
-          "operator": ",",
-          "left": {
-            "type": "operation",
-            "operator": ",",
-            "left": "1",
-            "right": "2",
-            "name": "product"
-          },
-          "right": "3",
-          "name": "product"
-        }
-      },
-      "name": "compose"
+      }
     }
   },
   {
@@ -416,38 +391,35 @@
     },
     "name": "product",
     "inferredType": {
-      "type": "operation",
-      "operator": ",",
-      "left": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "operation",
-          "operator": ",",
-          "left": {
-            "type": "operation",
-            "operator": ",",
-            "left": "Number",
-            "right": "Number"
-          },
-          "right": "Number"
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "List",
+              "elements": [
+                "Number",
+                "Number"
+              ]
+            },
+            "Number"
+          ]
+        },
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "List",
+              "elements": [
+                "Number",
+                "Number"
+              ]
+            },
+            "Number"
+          ]
         }
-      },
-      "right": {
-        "type": "block",
-        "kind": "bracket",
-        "content": {
-          "type": "operation",
-          "operator": ",",
-          "left": {
-            "type": "operation",
-            "operator": ",",
-            "left": "Number",
-            "right": "Number"
-          },
-          "right": "Number"
-        }
-      }
+      ]
     }
   }
 ]
