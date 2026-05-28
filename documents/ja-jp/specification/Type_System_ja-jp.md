@@ -12,7 +12,7 @@ Signでは、データの型ではなく、関数に型が存在する。
 String を含む場合は `Atom` 含まない場合は `Scalar`
 
 `List` は、 `(Array | Struct)` であり、多相リストは `Struct` とする。
-`Implicit` は `Implicit Address` とする
+`Implicit` は `Implicit Address` とする。
 
 | 記号 | 位置（型の組み合わせ） | 型 |
 | :------: | :------: | ------ |
@@ -20,7 +20,7 @@ String を含む場合は `Atom` 含まない場合は `Scalar`
 | `##` | 前置※ | / |
 | `###` | 前置※ | / |
 | `:` | 中置※ | `(Identifier -> R) -> R` |
-| `?` | 中置※ | `(List -> R) -> Lambda` |
+| `?` | 中置※ | `(List -> R) -> Lambda(R)` |
 | `#` | 中置※ | `(Address -> R) -> (Address \| _)` |
 | `;` | 中置 | `(L -> R) -> (L \| _)` |
 | `\|` | 中置 | `(L -> R) -> (L \| _)` |
@@ -66,3 +66,9 @@ String を含む場合は `Atom` 含まない場合は `Scalar`
 | `$` | 前置※ | `Lambda -> Implicit(Lambda)` |
 | `@` | 前置※ | `Implicit(Lambda) -> deref(Implicit)` |
 | `!!` | 前置※ | `Scalar -> Scalar` |
+
+## ラムダの型
+
+### ラムダ演算子、`?` の型は、なぜ右辺で解決可能なのか？
+
+結論：**右辺が全て式の塊として定まり、式の塊の型は常に演算子の型の遷移で証明されるため。**
