@@ -9,8 +9,8 @@ _start:
 func_with_defaults:
   STP X29, X30, [SP, #-16]!
   MOV X29, SP
-  // Unknown identifier: x
-  // Unknown identifier: y
+  MOV X9, X0
+  MOV X10, X1
   ADD X0, X9, X10
   LDP X29, X30, [SP], #16
   RET

@@ -18,10 +18,10 @@
         "kind": "indent",
         "content": {
           "type": "operation",
-          "operator": " ",
+          "operator": "\\n",
           "left": {
             "type": "operation",
-            "operator": " ",
+            "operator": "\\n",
             "left": {
               "type": "operation",
               "operator": ":",
@@ -48,7 +48,7 @@
               "right": "`result2`",
               "name": "define"
             },
-            "name": "concat"
+            "name": "newline"
           },
           "right": {
             "type": "operation",
@@ -63,7 +63,7 @@
             },
             "name": "concat"
           },
-          "name": "concat"
+          "name": "newline"
         },
         "env": {}
       },
@@ -73,15 +73,10 @@
     "inferredType": {
       "type": "Lambda",
       "returns": {
-        "type": "List",
-        "elements": [
-          {
-            "type": "List",
-            "elements": [
-              "String",
-              "String"
-            ]
-          },
+        "type": "Union",
+        "types": [
+          "String",
+          "String",
           {
             "type": "List",
             "elements": [
@@ -114,10 +109,10 @@
           "kind": "indent",
           "content": {
             "type": "operation",
-            "operator": " ",
+            "operator": "\\n",
             "left": {
               "type": "operation",
-              "operator": " ",
+              "operator": "\\n",
               "left": {
                 "type": "operation",
                 "operator": ":",
@@ -144,7 +139,7 @@
                 "right": "`result2`",
                 "name": "define"
               },
-              "name": "concat"
+              "name": "newline"
             },
             "right": {
               "type": "operation",
@@ -159,7 +154,7 @@
               },
               "name": "concat"
             },
-            "name": "concat"
+            "name": "newline"
           },
           "env": {}
         },
@@ -170,15 +165,10 @@
     "inferredType": {
       "type": "Lambda",
       "returns": {
-        "type": "List",
-        "elements": [
-          {
-            "type": "List",
-            "elements": [
-              "String",
-              "String"
-            ]
-          },
+        "type": "Union",
+        "types": [
+          "String",
+          "String",
           {
             "type": "List",
             "elements": [

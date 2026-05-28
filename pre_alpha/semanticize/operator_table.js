@@ -8,6 +8,7 @@
 export const OPERATOR_BY_PRECEDENCE = [
   null, // 0: 未使用
   { // 1
+    '\\n': { position: 'infix', name: 'newline' },
     '#': { position: 'prefix', name: 'export_internal' },
     '##': { position: 'prefix', name: 'export_external' },
     '###': { position: 'prefix', name: 'export_pin' },

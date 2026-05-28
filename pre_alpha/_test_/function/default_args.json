@@ -11,7 +11,7 @@
         "kind": "indent",
         "content": {
           "type": "operation",
-          "operator": " ",
+          "operator": "\\n",
           "left": {
             "type": "operation",
             "operator": ":",
@@ -32,7 +32,7 @@
             },
             "name": "define"
           },
-          "name": "concat"
+          "name": "newline"
         },
         "env": {}
       },
@@ -87,7 +87,7 @@
     "name": "define",
     "inferredType": {
       "type": "Variable",
-      "name": "Number"
+      "name": "<x>"
     }
   },
   {
@@ -139,7 +139,7 @@
     "name": "define",
     "inferredType": {
       "type": "Variable",
-      "name": "Number"
+      "name": "<x>"
     }
   },
   {
@@ -172,7 +172,7 @@
     "name": "define",
     "inferredType": {
       "type": "Variable",
-      "name": "Number"
+      "name": "<x>"
     }
   },
   {
@@ -215,7 +215,7 @@
     "name": "define",
     "inferredType": {
       "type": "Variable",
-      "name": "Number"
+      "name": "<x>"
     }
   }
 ]

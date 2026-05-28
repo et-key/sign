@@ -65,7 +65,14 @@ Block
 // ブロック内で使われる複数行の式
 Expressions
   = head:Expression tail:(EOL _ @Expression)* {
-      return [head, ...tail].filter(e => e !== null);
+      let result = [head];
+      for (let e of tail) {
+          if (e !== null) {
+              result.push('"\\n"');
+              result.push(e);
+          }
+      }
+      return result.filter(e => e !== null);
   }
 
 // --- 値（Atom）の定義（既存の正規表現ルールを踏襲） ---

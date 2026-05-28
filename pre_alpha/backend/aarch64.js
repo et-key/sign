@@ -94,11 +94,18 @@ export class AArch64Generator {
 
   extractParams(node, env, regIndex) {
     if (!node) return regIndex;
+    if (node.type === 'block') {
+      return this.extractParams(node.content, env, regIndex);
+    }
+    if (node.type === 'operation' && node.operator === ':') {
+      // parameter with default value or dependent type (e.g. y: x+1)
+      return this.extractParams(node.left, env, regIndex);
+    }
     if (typeof node === 'string') {
       env.set(this.getIdentName(node), `X${regIndex}`);
       return regIndex + 1;
     }
-    if (node.type === 'operation' && node.operator === ' ') {
+    if (node.type === 'operation' && (node.operator === ' ' || node.operator === '\\n')) {
       let nextIdx = this.extractParams(node.left, env, regIndex);
       return this.extractParams(node.right, env, nextIdx);
     }
@@ -247,19 +254,23 @@ export class AArch64Generator {
         return;
       }
 
-      if (['<', '>', '==', '!=', '<=', '>='].includes(node.operator)) {
+      if (['<', '>', '==', '!=', '<=', '>=', '='].includes(node.operator)) {
         this.generateExpression(node.left, env, 'X9', currentFuncName, false, failLabel);
         this.generateExpression(node.right, env, 'X10', currentFuncName, false, failLabel);
         this.asm.push(`  CMP X9, X10`);
+        // We branch to nextCaseLabel if condition fails!
+        let condStr = '';
+        switch(node.operator) {
+          case '==': condStr = 'NE'; break;
+          case '=':  condStr = 'NE'; break; // Pattern match equality
+          case '!=': condStr = 'EQ'; break;
+          case '<':  condStr = 'GE'; break;
+          case '>':  condStr = 'LE'; break;
+          case '<=': condStr = 'GT'; break;
+          case '>=': condStr = 'LT'; break;
+        }
         if (failLabel) {
-          switch (node.operator) {
-            case '<': this.asm.push(`  B.GE ${failLabel}`); break;
-            case '>': this.asm.push(`  B.LE ${failLabel}`); break;
-            case '==': this.asm.push(`  B.NE ${failLabel}`); break;
-            case '!=': this.asm.push(`  B.EQ ${failLabel}`); break;
-            case '<=': this.asm.push(`  B.GT ${failLabel}`); break;
-            case '>=': this.asm.push(`  B.LT ${failLabel}`); break;
-          }
+          this.asm.push(`  B.${condStr} ${failLabel}`);
         } else {
           this.asm.push(`  // No failLabel provided for Unit fallback`);
         }
@@ -269,7 +280,7 @@ export class AArch64Generator {
         return;
       }
 
-      if (node.operator === '|') {
+      if (node.operator === '|' || node.operator === '\\n') {
         const cases = this.flattenCoproduct(node);
         if (cases.length === 0) return;
 
@@ -486,7 +497,7 @@ export class AArch64Generator {
     let curr = node;
     while (curr && curr.type === 'operation' && 
           (curr.name === 'apply' || curr.name === 'apply_partial' || 
-          (curr.name === 'concat' && curr.left && (curr.left.name === 'apply' || curr.left.name === 'apply_partial')))) {
+          ((curr.name === 'concat' || curr.name === 'newline') && curr.left && (curr.left.name === 'apply' || curr.left.name === 'apply_partial')))) {
       args.unshift(curr.right);
       curr = curr.left;
     }
@@ -495,7 +506,7 @@ export class AArch64Generator {
 
   flattenCoproduct(node) {
     let cases = [];
-    if (node && node.type === 'operation' && node.operator === '|') {
+    if (node && node.type === 'operation' && (node.operator === '|' || node.operator === '\\n')) {
       cases = cases.concat(this.flattenCoproduct(node.left));
       cases = cases.concat(this.flattenCoproduct(node.right));
     } else {

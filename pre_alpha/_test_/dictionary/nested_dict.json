@@ -7,10 +7,10 @@
     "kind": "indent",
     "content": {
       "type": "operation",
-      "operator": " ",
+      "operator": "\\n",
       "left": {
         "type": "operation",
-        "operator": " ",
+        "operator": "\\n",
         "left": {
           "type": "operation",
           "operator": ":",
@@ -25,7 +25,7 @@
           "right": "0.1",
           "name": "define"
         },
-        "name": "concat"
+        "name": "newline"
       },
       "right": {
         "type": "operation",
@@ -36,7 +36,7 @@
           "kind": "indent",
           "content": {
             "type": "operation",
-            "operator": " ",
+            "operator": "\\n",
             "left": {
               "type": "operation",
               "operator": ":",
@@ -51,34 +51,24 @@
               "right": "`AArch64`",
               "name": "define"
             },
-            "name": "concat"
+            "name": "newline"
           },
           "env": {}
         },
         "name": "define"
       },
-      "name": "concat"
+      "name": "newline"
     },
     "env": {}
   },
   "name": "define",
   "inferredType": {
-    "type": "List",
-    "elements": [
-      {
-        "type": "List",
-        "elements": [
-          "String",
-          "Number"
-        ]
-      },
-      {
-        "type": "List",
-        "elements": [
-          "String",
-          "String"
-        ]
-      }
+    "type": "Union",
+    "types": [
+      "String",
+      "Number",
+      "String",
+      "String"
     ]
   }
 }

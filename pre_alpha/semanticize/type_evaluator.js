@@ -61,7 +61,6 @@ export function evaluateType(node, env = new Map()) {
     } 
     // 中置演算子の型解決
     else {
-      // `:` 演算子の場合は特別な環境の更新を行う (L : R)
       if (node.operator === ':') {
         const rightType = evaluateType(node.right, env);
         if (typeof node.left === 'string') {
@@ -70,6 +69,19 @@ export function evaluateType(node, env = new Map()) {
         }
         typeFn = OPERATOR_TYPES[':'];
         return typeFn ? typeFn(null, rightType) : rightType;
+      }
+
+      if (node.operator === '\\n') {
+        const leftType = evaluateType(node.left, env);
+        const rightType = evaluateType(node.right, env);
+        let types = [];
+        if (leftType && leftType.type === 'Union') types.push(...leftType.types);
+        else types.push(leftType);
+        
+        if (rightType && rightType.type === 'Union') types.push(...rightType.types);
+        else types.push(rightType);
+        
+        return { type: 'Union', types };
       }
 
       // その他の中置演算子は、左右の型を評価して型関数に適用するだけ
