@@ -1,0 +1,68 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<f>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": "<x>",
+      "right": {
+        "type": "operation",
+        "operator": "*",
+        "left": "<x>",
+        "right": "2",
+        "name": "mul"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": "Number"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<g>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": "<x>",
+      "right": {
+        "type": "operation",
+        "operator": "+",
+        "left": "<x>",
+        "right": "1",
+        "name": "add"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": "Number"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": "<f>",
+        "right": "<g>",
+        "name": "compose"
+      },
+      "right": "3",
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": "Number"
+  }
+]

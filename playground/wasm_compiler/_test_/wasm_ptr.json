@@ -1,0 +1,77 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<add10>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": "<x>",
+      "right": {
+        "type": "operation",
+        "operator": "+",
+        "left": "<x>",
+        "right": "10",
+        "name": "add"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": "Number"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<apply_to_20>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": "<f>",
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": "<f>",
+        "right": "20",
+        "name": "concat"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": {
+        "type": "List",
+        "elements": [
+          {
+            "type": "Variable",
+            "name": "<f>"
+          },
+          "Number"
+        ]
+      }
+    }
+  },
+  {
+    "type": "operation",
+    "operator": " ",
+    "left": "<apply_to_20>",
+    "right": "<add10>",
+    "name": "compose",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": {
+        "type": "List",
+        "elements": [
+          {
+            "type": "Variable",
+            "name": "<f>"
+          },
+          "Number"
+        ]
+      }
+    }
+  }
+]

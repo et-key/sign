@@ -1,0 +1,668 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<f>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": "<x>",
+      "right": {
+        "type": "operation",
+        "operator": "*",
+        "left": "<x>",
+        "right": "2",
+        "name": "mul"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": "Number"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<map>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": "<g>",
+          "right": "<x>",
+          "name": "concat"
+        },
+        "right": {
+          "type": "operation",
+          "operator": "~",
+          "operand": "<y>",
+          "position": "prefix",
+          "name": "continuous"
+        },
+        "name": "concat"
+      },
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "block",
+          "kind": "bracket",
+          "content": {
+            "type": "operation",
+            "operator": " ",
+            "left": {
+              "type": "operation",
+              "operator": "@",
+              "operand": "<g>",
+              "position": "prefix",
+              "name": "input"
+            },
+            "right": "<x>",
+            "name": "apply"
+          }
+        },
+        "right": {
+          "type": "block",
+          "kind": "bracket",
+          "content": {
+            "type": "operation",
+            "operator": " ",
+            "left": "<map>",
+            "right": {
+              "type": "operation",
+              "operator": " ",
+              "left": "<g>",
+              "right": {
+                "type": "operation",
+                "operator": "~",
+                "operand": "<y>",
+                "position": "postfix",
+                "name": "expand"
+              },
+              "name": "concat"
+            },
+            "name": "apply"
+          }
+        },
+        "name": "concat"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": {
+        "type": "List",
+        "elements": [
+          {
+            "type": "Apply",
+            "left": {
+              "type": "Deref",
+              "target": {
+                "type": "Variable",
+                "name": "<g>"
+              }
+            },
+            "right": {
+              "type": "Variable",
+              "name": "<x>"
+            }
+          },
+          {
+            "type": "Apply",
+            "left": {
+              "type": "Variable",
+              "name": "<map>"
+            },
+            "right": {
+              "type": "List",
+              "elements": [
+                {
+                  "type": "Variable",
+                  "name": "<g>"
+                },
+                {
+                  "type": "List"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result_map1>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<map>",
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "left": {
+              "type": "operation",
+              "operator": " ",
+              "left": {
+                "type": "operation",
+                "operator": " ",
+                "left": {
+                  "type": "operation",
+                  "operator": "$",
+                  "operand": "<f>",
+                  "position": "prefix",
+                  "name": "address"
+                },
+                "right": "1",
+                "name": "concat"
+              },
+              "right": "2",
+              "name": "concat"
+            },
+            "right": "3",
+            "name": "concat"
+          },
+          "right": "4",
+          "name": "concat"
+        },
+        "right": "5",
+        "name": "concat"
+      },
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "List",
+      "elements": [
+        {
+          "type": "Apply",
+          "left": {
+            "type": "Deref",
+            "target": {
+              "type": "List",
+              "elements": [
+                {
+                  "type": "List",
+                  "elements": [
+                    {
+                      "type": "List",
+                      "elements": [
+                        {
+                          "type": "List",
+                          "elements": [
+                            {
+                              "type": "Implicit",
+                              "target": "Lambda"
+                            },
+                            "Number"
+                          ]
+                        },
+                        "Number"
+                      ]
+                    },
+                    "Number"
+                  ]
+                },
+                "Number"
+              ]
+            }
+          },
+          "right": "Number"
+        },
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "Apply",
+              "left": {
+                "type": "Deref",
+                "target": {
+                  "type": "Variable",
+                  "name": "<g>"
+                }
+              },
+              "right": {
+                "type": "Variable",
+                "name": "<x>"
+              }
+            },
+            {
+              "type": "Apply",
+              "left": {
+                "type": "Variable",
+                "name": "<map>"
+              },
+              "right": {
+                "type": "List",
+                "elements": [
+                  {
+                    "type": "Variable",
+                    "name": "<g>"
+                  },
+                  {
+                    "type": "List"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result_map2>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<map>",
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "left": {
+              "type": "operation",
+              "operator": " ",
+              "left": {
+                "type": "operation",
+                "operator": " ",
+                "left": {
+                  "type": "operation",
+                  "operator": "$",
+                  "operand": {
+                    "type": "block",
+                    "kind": "bracket",
+                    "content": {
+                      "type": "operation",
+                      "operator": "?",
+                      "left": "<x>",
+                      "right": {
+                        "type": "operation",
+                        "operator": "*",
+                        "left": "<x>",
+                        "right": "2",
+                        "name": "mul"
+                      },
+                      "name": "lambda"
+                    }
+                  },
+                  "position": "prefix",
+                  "name": "address"
+                },
+                "right": "1",
+                "name": "concat"
+              },
+              "right": "2",
+              "name": "concat"
+            },
+            "right": "3",
+            "name": "concat"
+          },
+          "right": "4",
+          "name": "concat"
+        },
+        "right": "5",
+        "name": "concat"
+      },
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "List",
+      "elements": [
+        {
+          "type": "Apply",
+          "left": {
+            "type": "Deref",
+            "target": {
+              "type": "List",
+              "elements": [
+                {
+                  "type": "List",
+                  "elements": [
+                    {
+                      "type": "List",
+                      "elements": [
+                        {
+                          "type": "List",
+                          "elements": [
+                            {
+                              "type": "Implicit",
+                              "target": "Lambda"
+                            },
+                            "Number"
+                          ]
+                        },
+                        "Number"
+                      ]
+                    },
+                    "Number"
+                  ]
+                },
+                "Number"
+              ]
+            }
+          },
+          "right": "Number"
+        },
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "Apply",
+              "left": {
+                "type": "Deref",
+                "target": {
+                  "type": "Variable",
+                  "name": "<g>"
+                }
+              },
+              "right": {
+                "type": "Variable",
+                "name": "<x>"
+              }
+            },
+            {
+              "type": "Apply",
+              "left": {
+                "type": "Variable",
+                "name": "<map>"
+              },
+              "right": {
+                "type": "List",
+                "elements": [
+                  {
+                    "type": "Variable",
+                    "name": "<g>"
+                  },
+                  {
+                    "type": "List"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result_sum>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": "+",
+          "name": "add"
+        }
+      },
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "left": {
+              "type": "operation",
+              "operator": " ",
+              "left": "1",
+              "right": "2",
+              "name": "concat"
+            },
+            "right": "3",
+            "name": "concat"
+          },
+          "right": "4",
+          "name": "concat"
+        },
+        "right": "5",
+        "name": "concat"
+      },
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Apply",
+      "left": {
+        "type": "Unit"
+      },
+      "right": {
+        "type": "List",
+        "elements": [
+          {
+            "type": "List",
+            "elements": [
+              {
+                "type": "List",
+                "elements": [
+                  {
+                    "type": "List",
+                    "elements": [
+                      "Number",
+                      "Number"
+                    ]
+                  },
+                  "Number"
+                ]
+              },
+              "Number"
+            ]
+          },
+          "Number"
+        ]
+      }
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result_partial>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": ",",
+          "right": {
+            "type": "operation",
+            "operator": "+",
+            "right": "2",
+            "name": "add"
+          },
+          "name": "product"
+        }
+      },
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "left": {
+              "type": "operation",
+              "operator": " ",
+              "left": "1",
+              "right": "2",
+              "name": "concat"
+            },
+            "right": "3",
+            "name": "concat"
+          },
+          "right": "4",
+          "name": "concat"
+        },
+        "right": "5",
+        "name": "concat"
+      },
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Apply",
+      "left": {
+        "type": "List",
+        "elements": [
+          {
+            "type": "Unit"
+          },
+          {
+            "type": "Unit"
+          }
+        ]
+      },
+      "right": {
+        "type": "List",
+        "elements": [
+          {
+            "type": "List",
+            "elements": [
+              {
+                "type": "List",
+                "elements": [
+                  {
+                    "type": "List",
+                    "elements": [
+                      "Number",
+                      "Number"
+                    ]
+                  },
+                  "Number"
+                ]
+              },
+              "Number"
+            ]
+          },
+          "Number"
+        ]
+      }
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<test_array>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "operation",
+            "operator": " ",
+            "left": "1",
+            "right": "2",
+            "name": "concat"
+          },
+          "right": "3",
+          "name": "concat"
+        },
+        "right": "4",
+        "name": "concat"
+      },
+      "right": "5",
+      "name": "concat"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "List",
+              "elements": [
+                {
+                  "type": "List",
+                  "elements": [
+                    "Number",
+                    "Number"
+                  ]
+                },
+                "Number"
+              ]
+            },
+            "Number"
+          ]
+        },
+        "Number"
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<test_tuple>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": "1",
+        "right": "<a>",
+        "name": "concat"
+      },
+      "right": "3",
+      "name": "concat"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            "Number",
+            {
+              "type": "Variable",
+              "name": "<a>"
+            }
+          ]
+        },
+        "Number"
+      ]
+    }
+  }
+]

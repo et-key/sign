@@ -1,0 +1,33 @@
+{
+  "type": "operation",
+  "operator": ":",
+  "left": "<loop>",
+  "right": {
+    "type": "operation",
+    "operator": "?",
+    "left": "<x>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<loop>",
+      "right": "<x>",
+      "name": "apply"
+    },
+    "name": "lambda"
+  },
+  "name": "define",
+  "inferredType": {
+    "type": "Lambda",
+    "returns": {
+      "type": "Apply",
+      "left": {
+        "type": "Variable",
+        "name": "<loop>"
+      },
+      "right": {
+        "type": "Variable",
+        "name": "<x>"
+      }
+    }
+  }
+}

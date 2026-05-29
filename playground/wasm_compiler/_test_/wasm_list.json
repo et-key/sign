@@ -1,0 +1,26 @@
+{
+  "type": "operation",
+  "operator": " ",
+  "left": {
+    "type": "operation",
+    "operator": " ",
+    "left": "1",
+    "right": "2",
+    "name": "concat"
+  },
+  "right": "3",
+  "name": "concat",
+  "inferredType": {
+    "type": "List",
+    "elements": [
+      {
+        "type": "List",
+        "elements": [
+          "Number",
+          "Number"
+        ]
+      },
+      "Number"
+    ]
+  }
+}

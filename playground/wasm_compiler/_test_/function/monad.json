@@ -1,0 +1,108 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<f>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": "<x>",
+        "right": "<y>",
+        "name": "concat"
+      },
+      "right": {
+        "type": "operation",
+        "operator": "+",
+        "left": "<x>",
+        "right": "<y>",
+        "name": "add"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": "Number"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<maybe_val>",
+    "right": {
+      "type": "operation",
+      "operator": "<",
+      "left": "10",
+      "right": "5",
+      "name": "less"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Unknown"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<mapped>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<f>",
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": "<maybe_val>",
+        "right": "3",
+        "name": "concat"
+      },
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Unknown"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<g>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": "<x>",
+      "right": {
+        "type": "operation",
+        "operator": "*",
+        "left": "<x>",
+        "right": "2",
+        "name": "mul"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": "Number"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<mapped_twice>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<g>",
+      "right": "<mapped>",
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Unknown"
+    }
+  }
+]

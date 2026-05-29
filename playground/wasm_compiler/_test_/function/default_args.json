@@ -1,0 +1,221 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<func_with_defaults>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": {
+        "type": "block",
+        "kind": "indent",
+        "content": {
+          "type": "operation",
+          "operator": "\\n",
+          "left": {
+            "type": "operation",
+            "operator": ":",
+            "left": "<x>",
+            "right": "1",
+            "name": "define"
+          },
+          "right": {
+            "type": "operation",
+            "operator": ":",
+            "left": "<y>",
+            "right": {
+              "type": "operation",
+              "operator": "+",
+              "left": "<x>",
+              "right": "1",
+              "name": "add"
+            },
+            "name": "define"
+          },
+          "name": "newline"
+        },
+        "env": {}
+      },
+      "right": {
+        "type": "block",
+        "kind": "indent",
+        "content": {
+          "type": "operation",
+          "operator": "+",
+          "left": "<x>",
+          "right": "<y>",
+          "name": "add"
+        },
+        "env": {}
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": "Number"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result1_is_partial_applyed>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<func_with_defaults>",
+      "right": "_",
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": "Number"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result2_is_applied>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<func_with_defaults>",
+      "right": "3",
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Variable",
+      "name": "<x>"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result3_is_partial_applyed>",
+    "right": {
+      "type": "operation",
+      "operator": ",",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": "<func_with_defaults>",
+        "right": "_",
+        "name": "apply"
+      },
+      "right": "5",
+      "name": "product"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "List",
+      "elements": [
+        {
+          "type": "Lambda",
+          "returns": "Number"
+        },
+        "Number"
+      ]
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result4_is_applied>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<func_with_defaults>",
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": "3",
+        "right": "5",
+        "name": "concat"
+      },
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Variable",
+      "name": "<x>"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result5_is_applied>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<func_with_defaults>",
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "block",
+          "kind": "bracket",
+          "content": {
+            "type": "operation",
+            "operator": "<",
+            "left": "3",
+            "right": "2",
+            "name": "less"
+          }
+        },
+        "right": "5",
+        "name": "concat"
+      },
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Variable",
+      "name": "<x>"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<result6_is_applied>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<func_with_defaults>",
+      "right": {
+        "type": "operation",
+        "operator": " ",
+        "left": {
+          "type": "block",
+          "kind": "bracket",
+          "content": {
+            "type": "operation",
+            "operator": "<",
+            "left": "3",
+            "right": "2",
+            "name": "less"
+          }
+        },
+        "right": {
+          "type": "block",
+          "kind": "bracket",
+          "content": {
+            "type": "operation",
+            "operator": "<",
+            "left": "5",
+            "right": "2",
+            "name": "less"
+          }
+        },
+        "name": "concat"
+      },
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Variable",
+      "name": "<x>"
+    }
+  }
+]

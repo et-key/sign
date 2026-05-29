@@ -1,0 +1,10 @@
+fib : Lambda({
+  type : Union
+  types : {
+    0 : <n>
+    1 : [
+      String
+      (<fib> <= Number)
+    ]
+  }
+})

@@ -1,0 +1,43 @@
+{
+  "type": "operation",
+  "operator": "==",
+  "left": {
+    "type": "operation",
+    "operator": "+",
+    "left": "<a>",
+    "right": {
+      "type": "operation",
+      "operator": "*",
+      "left": "<b>",
+      "right": "<c>",
+      "name": "mul"
+    },
+    "name": "add"
+  },
+  "right": {
+    "type": "block",
+    "kind": "paren",
+    "content": {
+      "type": "operation",
+      "operator": "+",
+      "left": "<a>",
+      "right": {
+        "type": "block",
+        "kind": "paren",
+        "content": {
+          "type": "operation",
+          "operator": "*",
+          "left": "<b>",
+          "right": "<c>",
+          "name": "mul"
+        }
+      },
+      "name": "add"
+    }
+  },
+  "name": "equal",
+  "inferredType": {
+    "type": "Variable",
+    "name": "<a>"
+  }
+}
