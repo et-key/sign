@@ -131,13 +131,18 @@ export function buildAST(tokens) {
     if (op.type === 'infix') {
       const right = outputStack.pop();
       const left = outputStack.pop();
-      outputStack.push({
-        type: 'operation',
-        operator: op.symbol,
-        name: op.name,
-        left: left,
-        right: right
-      });
+      
+      // 空白演算子の場合は、二分木ではなく coproduct_block としてフラットな配列にまとめる
+      if (op.symbol === ' ') {
+        if (left && left.type === 'coproduct_block' && left.statements) {
+          left.statements.push(right);
+          outputStack.push(left);
+        } else {
+          outputStack.push({ type: 'coproduct_block', statements: [left, right] });
+        }
+      } else {
+        outputStack.push({ type: 'operation', operator: op.symbol, left, right, name: op.name });
+      }
     } else if (op.type === 'prefix' || op.type === 'postfix') {
       const operand = outputStack.pop();
       outputStack.push({ type: 'operation', operator: op.symbol, operand, position: op.type, name: op.name });

@@ -27,7 +27,11 @@ export class WasmGenerator {
     const topLevelExpressions = [];
 
     for (const node of asts) {
-      if (!node || typeof node !== 'object') continue;
+      if (node === null || node === undefined) continue;
+      if (typeof node !== 'object') {
+        topLevelExpressions.push(node);
+        continue;
+      }
       if (node.type === 'operation' && node.operator === ':') {
         topLevelBindings.push(node);
         const name = this.getIdentName(node.left);
@@ -70,12 +74,22 @@ export class WasmGenerator {
     const env = new Map();
     for (const l of mainLocals) env.set(l, 'local');
 
-    if (topLevelExpressions.length === 0) {
+    // Filter top-level expressions for Dead Code Elimination (DCE)
+    // Keep the last expression (for implicit return) and any expressions with side effects
+    const filteredExpressions = [];
+    for (let i = 0; i < topLevelExpressions.length; i++) {
+      const expr = topLevelExpressions[i];
+      if (i === topLevelExpressions.length - 1 || this.hasSideEffects(expr, env)) {
+        filteredExpressions.push(expr);
+      }
+    }
+
+    if (filteredExpressions.length === 0) {
       this.out.push(`    i32.const 0`);
     } else {
-      for (let i = 0; i < topLevelExpressions.length; i++) {
-        this.generateExpression(topLevelExpressions[i], env);
-        if (i < topLevelExpressions.length - 1) {
+      for (let i = 0; i < filteredExpressions.length; i++) {
+        this.generateExpression(filteredExpressions[i], env);
+        if (i < filteredExpressions.length - 1) {
           this.out.push(`    drop`); // Drop all but the last expression's result
         }
       }
@@ -84,6 +98,39 @@ export class WasmGenerator {
 
     this.out.push(')');
     return this.out.join('\n') + '\n';
+  }
+
+  hasSideEffects(node, env) {
+    if (!node) return false;
+    if (typeof node === 'string') return false;
+    
+    if (node.type === 'operation') {
+      if (node.operator === '#') return true; // IO Store
+      if (node.name === 'apply' || node.name === 'apply_partial' || node.name === 'compose') {
+        // Function calls might have side effects, but we must check if it's a Map operation 
+        // A pure map without a Sink has no side effects!
+        const { func, args } = this.flattenApply(node);
+        if (func && func.kind === 'bracket') {
+          const opNode = func.content;
+          if (opNode && opNode.operator === ',') {
+            return false; // Map has no side effects unless piped to a Sink!
+          }
+        }
+        return true; 
+      }
+      if (node.operator === ':') return true; // Bindings
+      
+      return this.hasSideEffects(node.left, env) || 
+             this.hasSideEffects(node.right, env) || 
+             this.hasSideEffects(node.operand, env);
+    }
+    if (node.type === 'block') {
+      return this.hasSideEffects(node.content, env);
+    }
+    if (node.type === 'coproduct_block') {
+      return node.statements && node.statements.some(stmt => this.hasSideEffects(stmt, env));
+    }
+    return false;
   }
 
   getIdentName(node) {
@@ -372,9 +419,37 @@ export class WasmGenerator {
       }
 
       if (node.operator === '#' && (!node.position || node.position === 'infix')) {
-        this.generateExpression(node.left, env);
-        this.generateExpression(node.right, env);
-        this.out.push(`    i32.store`);
+        // Stream Fusion Sink: Memory Store
+        // ptr # stream -> Stores values sequentially starting at ptr
+        
+        // Ensure ptr is evaluated and kept in a local for sequential writing
+        const ptrLocalId = this.labelCounter++;
+        const ptrLocal = `__stream_ptr_${ptrLocalId}`;
+        
+        // Define local dynamically if we need it (using a hack for MVP or pre-allocated locals)
+        // Since collectLocals doesn't know about ptrLocal dynamically, we should allocate it.
+        // Wait, collectLocals can do it! For now, we reuse the generic generator approach or pre-allocate in main.
+        // Actually, we can generate a loop using the stack if we are careful, but using a local is safer.
+        // For zero-cost stream fusion, we provide a callback:
+        const sinkCallback = (valueNode, envInner) => {
+          this.out.push(`    ;; Sink # store element`);
+          // Evaluate pointer
+          this.generateExpression(node.left, envInner); // Note: For static loops we re-evaluate ptr, but we should add offset!
+          // We need a loop index! 
+          // Since our current generateStream unrolls statically, we can just use an offset.
+        };
+        // Let's implement static unrolling first for simple streams.
+        let offset = 0;
+        this.generateStream(node.right, env, (valNode) => {
+          this.generateExpression(node.left, env); // Base ptr
+          if (offset > 0) {
+            this.out.push(`    i32.const ${offset * 4}`);
+            this.out.push(`    i32.add`);
+          }
+          this.generateExpression(valNode, env); // Value
+          this.out.push(`    i32.store`);
+          offset++;
+        });
         this.out.push(`    i32.const 0 ;; store returns unit`);
         return;
       }
@@ -392,31 +467,25 @@ export class WasmGenerator {
 
         if (func.kind === 'bracket') {
           // Reduce syntax: [+] (10 20 30)
-          const listNode = args[0];
+          const opNode = func.content;
           
-          let listLength = 0;
-          let content = listNode;
-          if (content && content.kind === 'paren') content = content.content;
-          const elements = this.flattenConcat(content);
-          
-          if (elements.length > 0) {
-            // First element is the initial accumulator
-            this.generateExpression(elements[0], env);
-            
-            // Loop over remaining elements and apply operator
-            for (let i = 1; i < elements.length; i++) {
-              this.generateExpression(elements[i], env);
-              const opNode = func.content;
-              if (opNode.operator === '+') {
-                this.out.push(`    i32.add`);
-              } else if (opNode.operator === '*') {
-                this.out.push(`    i32.mul`);
-              } else if (opNode.operator === '-') {
-                this.out.push(`    i32.sub`);
+          if (args.length > 0) {
+            const listNode = args[0];
+            let isFirst = true;
+            this.generateStream(listNode, env, (valNode) => {
+              this.generateExpression(valNode, env);
+              if (!isFirst) {
+                if (opNode.operator === '+') this.out.push(`    i32.add`);
+                else if (opNode.operator === '*') this.out.push(`    i32.mul`);
+                else if (opNode.operator === '-') this.out.push(`    i32.sub`);
               }
+              isFirst = false;
+            });
+            if (isFirst) {
+              this.out.push(`    i32.const 0 ;; empty reduce`);
             }
           } else {
-            this.out.push(`    i32.const 0 ;; empty reduce`);
+             this.out.push(`    i32.const 0 ;; empty reduce`);
           }
           return;
         }
@@ -437,6 +506,16 @@ export class WasmGenerator {
             this.out.push(`    local.get $${funcName}`);
             this.out.push(`    call_indirect (type $func_sig)`);
           }
+        } else if (func && func.type === 'operation' && ['+', '-', '*'].includes(func.operator)) {
+          // Inline partial application (e.g. `* 2`)
+          if (func.right) {
+            this.generateExpression(func.right, env);
+            if (func.operator === '+') this.out.push(`    i32.add`);
+            else if (func.operator === '*') this.out.push(`    i32.mul`);
+            else if (func.operator === '-') this.out.push(`    i32.sub`);
+          } else {
+            this.out.push(`    ;; Unhandled left-partial operator inline`);
+          }
         } else {
           // Dynamic expression evaluating to a function pointer
           this.generateExpression(func, env);
@@ -446,21 +525,21 @@ export class WasmGenerator {
       }
 
       if (node.name === 'concat' || node.name === 'short_circuit') {
-        const elements = this.flattenConcat(node);
-        
-        if (elements.length === 0) {
-          this.out.push(`    i32.const 0`);
-          return;
-        }
-
-        for (let i = 0; i < elements.length; i++) {
-          this.generateExpression(elements[i], env);
-          if (i < elements.length - 1) {
-            // Drop intermediate values for MVP if concat is used directly
+        // Standalone concat (not fused into a Sink)
+        // Just evaluate and drop intermediate values
+        let lastNode = null;
+        this.generateStream(node, env, (valNode) => {
+          if (lastNode !== null) {
+            this.generateExpression(lastNode, env);
             this.out.push(`    drop`);
           }
+          lastNode = valNode;
+        });
+        if (lastNode !== null) {
+          this.generateExpression(lastNode, env);
+        } else {
+          this.out.push(`    i32.const 0`);
         }
-        
         return;
       }
 
@@ -468,6 +547,62 @@ export class WasmGenerator {
     
     this.out.push(`    ;; Unhandled node: ${node.type} ${node.operator || node.name || ''}`);
     this.out.push(`    i32.const 0`);
+  }
+
+  /**
+   * generateStream: Implements Stream Fusion (CPS style)
+   * Instead of pushing values to the stack or memory, this iterates over a stream source 
+   * and passes each element to emitSink.
+   */
+  generateStream(node, env, emitSink) {
+    if (!node) return;
+    
+    // 1. Transformer: Map (apply)
+    if (node.type === 'operation' && node.name === 'apply') {
+       const { func, args } = this.flattenApply(node);
+       if (func && func.kind === 'bracket') {
+         const opNode = func.content;
+         if (opNode.operator === ',') {
+           // Map syntax: [* 2,] list
+           const transformerFunc = opNode.right; // e.g. `* 2` (partial application)
+           const listNode = args[0];
+           
+           // We create a Mapped Sink that applies the function before calling the original Sink
+           const mappedSink = (valNode) => {
+             // For now, since Map applies a function, we construct an AST node for the application 
+             // and pass it to emitSink. This allows inline evaluation!
+             const applyNode = {
+               type: 'operation',
+               operator: ' ',
+               name: 'apply',
+               left: transformerFunc,
+               right: valNode
+             };
+             emitSink(applyNode);
+           };
+           
+           // Delegate back to the source stream
+           this.generateStream(listNode, env, mappedSink);
+           return;
+         }
+       }
+    }
+
+    // 2. Source: Concat (Static Unrolled List)
+    if (node.type === 'operation' && (node.name === 'concat' || node.name === 'short_circuit' || node.name === 'newline' || node.operator === ' ')) {
+       this.generateStream(node.left, env, emitSink);
+       this.generateStream(node.right, env, emitSink);
+       return;
+    }
+    
+    // 3. Block Content Wrapper
+    if (node.type === 'block' && (node.kind === 'paren' || node.kind === 'group')) {
+       this.generateStream(node.content, env, emitSink);
+       return;
+    }
+
+    // Default: Single Element Source
+    emitSink(node);
   }
 
   isCallableBase(node, env) {
