@@ -6,15 +6,13 @@ import { evaluate } from './semanticize/evaluator.js';
 import { resolveCoproducts } from './semanticize/coproduct_resolver.js';
 import { generateWasm } from './backend/wasm.js';
 
-// Test 1: Pure literals (should be eliminated)
-// Test 2: Pure Map (should be eliminated)
-// Test 3: Store unrolled list directly to memory (No arrays, No Map)
-// Test 4: Map over unrolled list and store to memory (Zero-cost Stream Fusion)
-// Test 5: Final pure expression (should be retained as implicit return)
-const code = `10
-[* 2,] 10 20 30
-0x4000 # 10 20 30
-0x5000 # [* 2,] 10 20 30
+// Test 1: Compile-time stream aliasing and zero-cost expansion
+const code = `list : 10 20 30
+0x4000 # list
+mapped : [* 2,] list
+0x5000 # mapped
+0x6000 # \`\` 65 66 67
+0x7000 # [0 ~+ 1 ~ 5]
 999`;
 
 try {

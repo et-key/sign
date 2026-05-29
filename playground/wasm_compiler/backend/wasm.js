@@ -9,9 +9,16 @@ export class WasmGenerator {
     this.out = [];
     this.labelCounter = 0;
     this.funcNames = [];
+    this.aliasEnv = new Map(); // Stores compile-time aliases for streams and structs
   }
 
   generate(asts) {
+    this.out = [];
+    this.labelCounter = 0;
+    this.funcNames = [];
+    this.funcArities = new Map(); // Store arity for top-level functions
+    this.aliasEnv = new Map();
+
     this.out.push('(module');
     
     // I/O Import
@@ -20,6 +27,7 @@ export class WasmGenerator {
     // Core Memory Architecture
     this.out.push('  (memory 1) ;; 1 page = 64KB');
     this.out.push('  (export "memory" (memory 0))');
+    this.out.push('  (type $func_sig (func (param i32) (result i32)))');
     this.out.push('');
 
     // Separate top-level bindings (functions) and expressions
@@ -33,10 +41,17 @@ export class WasmGenerator {
         continue;
       }
       if (node.type === 'operation' && node.operator === ':') {
-        topLevelBindings.push(node);
-        const name = this.getIdentName(node.left);
-        if (name && !this.funcNames.includes(name)) {
-          this.funcNames.push(name);
+        const isLambda = node.left && node.left.type === 'operation' && node.left.operator === '?';
+        const rightIsLambda = node.right && node.right.type === 'operation' && node.right.operator === '?';
+        if (!isLambda && !rightIsLambda && this.isCompileTimeAlias(node.right)) {
+          // Store as compile-time alias instead of top-level function
+          this.aliasEnv.set(this.getIdentName(node.left), node.right);
+        } else {
+          topLevelBindings.push(node);
+          const name = this.getIdentName(node.left);
+          if (name && !this.funcNames.includes(name)) {
+            this.funcNames.push(name);
+          }
         }
       } else {
         topLevelExpressions.push(node);
@@ -44,7 +59,6 @@ export class WasmGenerator {
     }
 
     if (this.funcNames.length > 0) {
-      this.out.push(`  (type $func_sig (func (param i32) (result i32)))`);
       this.out.push(`  (table ${this.funcNames.length} funcref)`);
       let elemStr = `  (elem (i32.const 0)`;
       for (const fn of this.funcNames) {
@@ -133,6 +147,24 @@ export class WasmGenerator {
     return false;
   }
 
+  isCompileTimeAlias(node) {
+    if (!node) return false;
+    if (typeof node === 'string') {
+      const name = this.getIdentName(node);
+      return this.aliasEnv.has(name);
+    }
+    if (node.type === 'operation') {
+      if (['concat', 'short_circuit', 'newline'].includes(node.name)) return true; // Streams
+      if (['apply', 'apply_partial', 'compose'].includes(node.name)) {
+        return this.isCompileTimeAlias(node.right) || this.isCompileTimeAlias(node.left);
+      }
+    }
+    if (node.type === 'block') {
+      return this.isCompileTimeAlias(node.content);
+    }
+    return false;
+  }
+
   getIdentName(node) {
     if (!node) return '';
     if (typeof node === 'string') {
@@ -141,8 +173,8 @@ export class WasmGenerator {
       }
       return node;
     }
+    if (node.type === 'operation' && node.operator === '?') return this.getIdentName(node.left);
     if (node.name) return node.name;
-    if (node.type === 'operation' && node.operator === '?') return 'lambda';
     return String(node);
   }
 
@@ -163,9 +195,13 @@ export class WasmGenerator {
     // First pass to collect locals
     this.collectLocals(body, params, locals);
     
+    this.funcArities.set(name, params.length);
+    
     let funcDecl = `  (func $${name}`;
     if (params.length > 0) {
-      funcDecl += ` (param $${params[0]} i32)`;
+      for (const p of params) {
+        funcDecl += ` (param $${p} i32)`;
+      }
     } else {
       funcDecl += ` (param $__dummy i32)`;
     }
@@ -193,7 +229,19 @@ export class WasmGenerator {
       this.extractParams(node.content, params);
       return;
     }
+    if (node.type === 'coproduct_block') {
+      if (node.statements) {
+        for (const stmt of node.statements) {
+          this.extractParams(stmt, params);
+        }
+      }
+      return;
+    }
     if (node.type === 'operation' && node.operator === ':') {
+      this.extractParams(node.left, params);
+      return;
+    }
+    if (node.type === 'operation' && node.operator === '?') {
       this.extractParams(node.left, params);
       return;
     }
@@ -242,6 +290,26 @@ export class WasmGenerator {
     }
     
     if (node.type === 'operation') {
+      if (node.operator === '#') {
+        if (node.reduceId === undefined) {
+          node.reduceId = this.labelCounter++;
+          locals.add(`__sink_ptr_${node.reduceId}`);
+        }
+      }
+      if (node.operator === '~') {
+        if (node.reduceId === undefined) {
+          node.reduceId = this.labelCounter++;
+          locals.add(`__loop_val_${node.reduceId}`);
+          locals.add(`__loop_step_${node.reduceId}`);
+          locals.add(`__loop_limit_${node.reduceId}`);
+        }
+      }
+      if (node.operator === '\\n') {
+        if (node.reduceId === undefined) {
+          node.reduceId = this.labelCounter++;
+          locals.add(`__fallback_tmp_${node.reduceId}`);
+        }
+      }
       if (node.operator === ':') {
         if (typeof node.left === 'string' || (node.left && node.left.type === 'operation' && node.left.operator === '#')) {
           const varName = this.getIdentName(node.left);
@@ -272,6 +340,11 @@ export class WasmGenerator {
       }
 
       const name = this.getIdentName(node);
+      if (this.aliasEnv.has(name)) {
+        this.generateExpression(this.aliasEnv.get(name), env);
+        return;
+      }
+      
       if (env.has(name)) {
         this.out.push(`    local.get $${name}`);
       } else if (this.funcNames.includes(name)) {
@@ -324,15 +397,19 @@ export class WasmGenerator {
       if (node.operator === ':') {
         if (typeof node.left === 'string' || (node.left && node.left.type === 'operation' && node.left.operator === '#')) {
           const varName = this.getIdentName(node.left);
-          this.generateExpression(node.right, env);
-          this.out.push(`    local.set $${varName}`);
-          this.out.push(`    local.get $${varName}`);
+          if (this.isCompileTimeAlias(node.right)) {
+            this.aliasEnv.set(varName, node.right);
+          } else {
+            this.generateExpression(node.right, env);
+            this.out.push(`    local.set $${varName}`);
+            this.out.push(`    local.get $${varName}`);
+          }
         } else {
           this.generateExpression(node.left, env);
           this.out.push(`    if (result i32)`);
           this.generateExpression(node.right, env);
           this.out.push(`    else`);
-          this.out.push(`      i32.const 0`);
+          this.out.push(`      i32.const -2147483648 ;; Unit`);
           this.out.push(`    end`);
         }
         return;
@@ -368,22 +445,17 @@ export class WasmGenerator {
       }
 
       if (node.operator === '\\n') {
-        const fallback = node.right && node.right.operator === ' ' && node.right.left === '``';
-        if (fallback && node.left && node.left.operator === ':') {
-          // Translate pattern match fallback to if/else
-          this.generateExpression(node.left.left, env); // Condition
-          this.out.push(`    if (result i32)`);
-          this.generateExpression(node.left.right, env); // True branch
-          this.out.push(`    else`);
-          this.generateExpression(node.right.right, env); // Fallback branch
-          this.out.push(`    end`);
-          return;
-        }
-        
-        // Normal sequence
+        const tmpLocal = `__fallback_tmp_${node.reduceId}`;
         this.generateExpression(node.left, env);
-        this.out.push(`    drop`);
+        this.out.push(`    local.set $${tmpLocal}`);
+        this.out.push(`    local.get $${tmpLocal}`);
+        this.out.push(`    i32.const -2147483648 ;; Unit check`);
+        this.out.push(`    i32.ne`);
+        this.out.push(`    if (result i32)`);
+        this.out.push(`      local.get $${tmpLocal}`);
+        this.out.push(`    else`);
         this.generateExpression(node.right, env);
+        this.out.push(`    end`);
         return;
       }
 
@@ -419,36 +491,29 @@ export class WasmGenerator {
       }
 
       if (node.operator === '#' && (!node.position || node.position === 'infix')) {
-        // Stream Fusion Sink: Memory Store
-        // ptr # stream -> Stores values sequentially starting at ptr
+        // Stream Fusion Sink: Memory Store (Dynamic Runtime Pointer)
+        if (node.reduceId === undefined) {
+           node.reduceId = this.labelCounter++;
+        }
+        const ptrLocal = `__sink_ptr_${node.reduceId}`;
         
-        // Ensure ptr is evaluated and kept in a local for sequential writing
-        const ptrLocalId = this.labelCounter++;
-        const ptrLocal = `__stream_ptr_${ptrLocalId}`;
-        
-        // Define local dynamically if we need it (using a hack for MVP or pre-allocated locals)
-        // Since collectLocals doesn't know about ptrLocal dynamically, we should allocate it.
-        // Wait, collectLocals can do it! For now, we reuse the generic generator approach or pre-allocate in main.
-        // Actually, we can generate a loop using the stack if we are careful, but using a local is safer.
-        // For zero-cost stream fusion, we provide a callback:
-        const sinkCallback = (valueNode, envInner) => {
-          this.out.push(`    ;; Sink # store element`);
-          // Evaluate pointer
-          this.generateExpression(node.left, envInner); // Note: For static loops we re-evaluate ptr, but we should add offset!
-          // We need a loop index! 
-          // Since our current generateStream unrolls statically, we can just use an offset.
-        };
-        // Let's implement static unrolling first for simple streams.
-        let offset = 0;
-        this.generateStream(node.right, env, (valNode) => {
-          this.generateExpression(node.left, env); // Base ptr
-          if (offset > 0) {
-            this.out.push(`    i32.const ${offset * 4}`);
-            this.out.push(`    i32.add`);
-          }
+        this.generateExpression(node.left, env);
+        this.out.push(`    local.set $${ptrLocal}`);
+
+        const streamContext = { isString: false };
+        this.generateStream(node.right, env, streamContext, (valNode) => {
+          this.out.push(`    local.get $${ptrLocal}`);
           this.generateExpression(valNode, env); // Value
-          this.out.push(`    i32.store`);
-          offset++;
+          if (streamContext.isString) {
+             this.out.push(`    i32.store ;; string cast`);
+          } else {
+             this.out.push(`    i32.store`);
+          }
+          // Dynamic pointer increment (fixed width 4 bytes for MVP)
+          this.out.push(`    local.get $${ptrLocal}`);
+          this.out.push(`    i32.const 4`);
+          this.out.push(`    i32.add`);
+          this.out.push(`    local.set $${ptrLocal}`);
         });
         this.out.push(`    i32.const 0 ;; store returns unit`);
         return;
@@ -472,7 +537,7 @@ export class WasmGenerator {
           if (args.length > 0) {
             const listNode = args[0];
             let isFirst = true;
-            this.generateStream(listNode, env, (valNode) => {
+            this.generateStream(listNode, env, streamContext, (valNode) => {
               this.generateExpression(valNode, env);
               if (!isFirst) {
                 if (opNode.operator === '+') this.out.push(`    i32.add`);
@@ -490,10 +555,20 @@ export class WasmGenerator {
           return;
         }
         
-        if (args.length > 0) {
-           this.generateExpression(args[0], env);
-        } else {
-           this.out.push(`    i32.const 0 ;; dummy arg for MVP`);
+        let arity = 1;
+        if (typeof func === 'string') {
+          const funcName = this.getIdentName(func);
+          if (this.funcArities.has(funcName)) {
+            arity = this.funcArities.get(funcName);
+          }
+        }
+        
+        for (let i = 0; i < arity; i++) {
+          if (i < args.length) {
+            this.generateExpression(args[i], env);
+          } else {
+            this.out.push(`    i32.const 0 ;; missing arg`);
+          }
         }
         
         if (typeof func === 'string') {
@@ -528,7 +603,7 @@ export class WasmGenerator {
         // Standalone concat (not fused into a Sink)
         // Just evaluate and drop intermediate values
         let lastNode = null;
-        this.generateStream(node, env, (valNode) => {
+        this.generateStream(node, env, { isString: false }, (valNode) => {
           if (lastNode !== null) {
             this.generateExpression(lastNode, env);
             this.out.push(`    drop`);
@@ -554,8 +629,20 @@ export class WasmGenerator {
    * Instead of pushing values to the stack or memory, this iterates over a stream source 
    * and passes each element to emitSink.
    */
-  generateStream(node, env, emitSink) {
+  generateStream(node, env, streamContext, emitSink) {
     if (!node) return;
+    
+    if (typeof node === 'string') {
+      if (node === '``') {
+        streamContext.isString = true;
+        return; // Empty string `_` evaluates to nothing
+      }
+      const name = this.getIdentName(node);
+      if (this.aliasEnv.has(name)) {
+        this.generateStream(this.aliasEnv.get(name), env, streamContext, emitSink);
+        return;
+      }
+    }
     
     // 1. Transformer: Map (apply)
     if (node.type === 'operation' && node.name === 'apply') {
@@ -564,13 +651,10 @@ export class WasmGenerator {
          const opNode = func.content;
          if (opNode.operator === ',') {
            // Map syntax: [* 2,] list
-           const transformerFunc = opNode.right; // e.g. `* 2` (partial application)
+           const transformerFunc = opNode.right; 
            const listNode = args[0];
            
-           // We create a Mapped Sink that applies the function before calling the original Sink
            const mappedSink = (valNode) => {
-             // For now, since Map applies a function, we construct an AST node for the application 
-             // and pass it to emitSink. This allows inline evaluation!
              const applyNode = {
                type: 'operation',
                operator: ' ',
@@ -581,8 +665,7 @@ export class WasmGenerator {
              emitSink(applyNode);
            };
            
-           // Delegate back to the source stream
-           this.generateStream(listNode, env, mappedSink);
+           this.generateStream(listNode, env, streamContext, mappedSink);
            return;
          }
        }
@@ -590,15 +673,52 @@ export class WasmGenerator {
 
     // 2. Source: Concat (Static Unrolled List)
     if (node.type === 'operation' && (node.name === 'concat' || node.name === 'short_circuit' || node.name === 'newline' || node.operator === ' ')) {
-       this.generateStream(node.left, env, emitSink);
-       this.generateStream(node.right, env, emitSink);
+       this.generateStream(node.left, env, streamContext, emitSink);
+       this.generateStream(node.right, env, streamContext, emitSink);
        return;
     }
     
     // 3. Block Content Wrapper
     if (node.type === 'block' && (node.kind === 'paren' || node.kind === 'group')) {
-       this.generateStream(node.content, env, emitSink);
+       this.generateStream(node.content, env, streamContext, emitSink);
        return;
+    }
+
+    // 4. Dynamic Loops (e.g. [0 ~+ 1 ~ 5])
+    if (node.type === 'block' && node.kind === 'bracket') {
+      if (node.content && node.content.type === 'operation' && node.content.operator === '~') {
+        const loopNode = node.content;
+        const startNode = loopNode.left && loopNode.left.operator === '~+' ? loopNode.left.left : loopNode.left;
+        const stepNode = loopNode.left && loopNode.left.operator === '~+' ? loopNode.left.right : '1';
+        const limitNode = loopNode.right;
+        const loopId = loopNode.reduceId;
+
+        this.generateExpression(startNode, env);
+        this.out.push(`    local.set $__loop_val_${loopId}`);
+        this.generateExpression(stepNode, env);
+        this.out.push(`    local.set $__loop_step_${loopId}`);
+        this.generateExpression(limitNode, env);
+        this.out.push(`    local.set $__loop_limit_${loopId}`);
+
+        this.out.push(`    loop $L${loopId}`);
+        
+        // Emit current loop value
+        emitSink(`__loop_val_${loopId}`);
+
+        // Increment value
+        this.out.push(`    local.get $__loop_val_${loopId}`);
+        this.out.push(`    local.get $__loop_step_${loopId}`);
+        this.out.push(`    i32.add`);
+        this.out.push(`    local.set $__loop_val_${loopId}`);
+
+        // Check condition (le_s)
+        this.out.push(`    local.get $__loop_val_${loopId}`);
+        this.out.push(`    local.get $__loop_limit_${loopId}`);
+        this.out.push(`    i32.le_s`);
+        this.out.push(`    br_if $L${loopId}`);
+        this.out.push(`    end`);
+        return;
+      }
     }
 
     // Default: Single Element Source
