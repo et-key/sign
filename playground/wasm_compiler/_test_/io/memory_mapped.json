@@ -1,0 +1,79 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<io_handler>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": "<f>",
+      "right": {
+        "type": "operation",
+        "operator": "#",
+        "left": "0x40000004",
+        "right": {
+          "type": "operation",
+          "operator": "@",
+          "operand": "0x40000000",
+          "position": "prefix",
+          "name": "input"
+        },
+        "name": "output"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": "Number"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<event_loop>",
+    "right": {
+      "type": "operation",
+      "operator": " ",
+      "left": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": ",",
+          "right": "<io_handler>",
+          "name": "product"
+        }
+      },
+      "right": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": "~+",
+          "left": "0",
+          "right": "1",
+          "name": "range_arithmetic"
+        }
+      },
+      "name": "apply"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Apply",
+      "left": {
+        "type": "List",
+        "elements": [
+          {
+            "type": "Unit"
+          },
+          {
+            "type": "Lambda",
+            "returns": "Number"
+          }
+        ]
+      },
+      "right": "Scalar"
+    }
+  }
+]

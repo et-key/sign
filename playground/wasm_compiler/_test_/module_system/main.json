@@ -1,0 +1,47 @@
+[
+  {
+    "type": "operation",
+    "operator": "~",
+    "operand": {
+      "type": "operation",
+      "operator": "@",
+      "operand": "<math>",
+      "position": "postfix",
+      "name": "import"
+    },
+    "position": "postfix",
+    "name": "expand",
+    "inferredType": {
+      "type": "Unknown"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": " ",
+    "left": {
+      "type": "operation",
+      "operator": " ",
+      "left": "<add>",
+      "right": "10",
+      "name": "concat"
+    },
+    "right": "5",
+    "name": "concat",
+    "inferredType": {
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            {
+              "type": "Variable",
+              "name": "<add>"
+            },
+            "Number"
+          ]
+        },
+        "Number"
+      ]
+    }
+  }
+]

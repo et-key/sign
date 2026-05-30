@@ -53,11 +53,11 @@ String を含む場合は `Atom` 含まない場合は `Scalar`
 | `\|...\|` | 囲み | `(L -> L) -> L` |
 | `'` | 中置 | `(L -> R) -> Implicit(Atom \| List \| Lambda) -> Deref(Implicit -> (Atom \| List \| Lambda))` |
 | `@` | 中置※ | `(R -> L) -> Implicit(Atom \| List \| Lambda) -> Deref(Implicit -> (Atom \| List \| Lambda))` |
-| `<<` | 中置 | `(Scalar -> Number) -> Scalar` |
-| `>>` | 中置 | `(Scalar -> Number) -> Scalar` |
-| `\|\|` | 中置 | `(Scalar -> Scalar) -> Scalar` |
-| `;;` | 中置 | `(Scalar -> Scalar) -> Scalar` |
-| `&&` | 中置 | `(Scalar -> Scalar) -> Scalar` |
+| `<<` | 中置 | `((Address | Register) -> Number) -> (Address | Register)` |
+| `>>` | 中置 | `((Address | Register) -> Number) -> (Address | Register)` |
+| `\|\|` | 中置 | `((Address | Register) -> Scalar) -> (Address | Register)` |
+| `;;` | 中置 | `((Address | Register) -> Scalar) -> (Address | Register)` |
+| `&&` | 中置 | `((Address | Register) -> Scalar) -> (Address | Register)` |
 | `!` | 後置 | `Number -> Number` |
 | `~` | 後置 | `Deref(Implicit -> List)` |
 | `@` | 後置 | `Implicit -> Deref(Implicit -> Lambda)` |

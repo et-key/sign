@@ -1,0 +1,183 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<func_match>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": {
+        "type": "operation",
+        "operator": " ",
+        "left": "<x>",
+        "right": "<y>",
+        "name": "concat"
+      },
+      "right": {
+        "type": "block",
+        "kind": "indent",
+        "content": {
+          "type": "operation",
+          "operator": "\\n",
+          "left": {
+            "type": "operation",
+            "operator": "\\n",
+            "left": {
+              "type": "operation",
+              "operator": ":",
+              "left": {
+                "type": "operation",
+                "operator": "<",
+                "left": "<x>",
+                "right": "1",
+                "name": "less"
+              },
+              "right": "`result1`",
+              "name": "define"
+            },
+            "right": {
+              "type": "operation",
+              "operator": ":",
+              "left": {
+                "type": "operation",
+                "operator": "<",
+                "left": "<y>",
+                "right": "3",
+                "name": "less"
+              },
+              "right": "`result2`",
+              "name": "define"
+            },
+            "name": "newline"
+          },
+          "right": {
+            "type": "operation",
+            "operator": " ",
+            "left": "``",
+            "right": {
+              "type": "operation",
+              "operator": "*",
+              "left": "<x>",
+              "right": "<y>",
+              "name": "mul"
+            },
+            "name": "concat"
+          },
+          "name": "newline"
+        },
+        "env": {}
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": {
+        "type": "Union",
+        "types": [
+          "String",
+          "String",
+          {
+            "type": "List",
+            "elements": [
+              "String",
+              "Number"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "block",
+    "kind": "bracket",
+    "content": {
+      "type": "block",
+      "kind": "indent",
+      "content": {
+        "type": "operation",
+        "operator": "?",
+        "left": {
+          "type": "operation",
+          "operator": " ",
+          "left": "<x>",
+          "right": "<y>",
+          "name": "concat"
+        },
+        "right": {
+          "type": "block",
+          "kind": "indent",
+          "content": {
+            "type": "operation",
+            "operator": "\\n",
+            "left": {
+              "type": "operation",
+              "operator": "\\n",
+              "left": {
+                "type": "operation",
+                "operator": ":",
+                "left": {
+                  "type": "operation",
+                  "operator": "<",
+                  "left": "<x>",
+                  "right": "1",
+                  "name": "less"
+                },
+                "right": "`result1`",
+                "name": "define"
+              },
+              "right": {
+                "type": "operation",
+                "operator": ":",
+                "left": {
+                  "type": "operation",
+                  "operator": "<",
+                  "left": "<y>",
+                  "right": "3",
+                  "name": "less"
+                },
+                "right": "`result2`",
+                "name": "define"
+              },
+              "name": "newline"
+            },
+            "right": {
+              "type": "operation",
+              "operator": " ",
+              "left": "``",
+              "right": {
+                "type": "operation",
+                "operator": "*",
+                "left": "<x>",
+                "right": "<y>",
+                "name": "mul"
+              },
+              "name": "concat"
+            },
+            "name": "newline"
+          },
+          "env": {}
+        },
+        "name": "lambda"
+      },
+      "env": {}
+    },
+    "inferredType": {
+      "type": "Lambda",
+      "returns": {
+        "type": "Union",
+        "types": [
+          "String",
+          "String",
+          {
+            "type": "List",
+            "elements": [
+              "String",
+              "Number"
+            ]
+          }
+        ]
+      }
+    }
+  }
+]

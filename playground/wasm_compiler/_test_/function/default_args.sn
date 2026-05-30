@@ -1,0 +1,15 @@
+func_with_defaults:
+		x: 1
+		y: x + 1
+	?
+		x + y
+
+result1_is_partial_applyed : func_with_defaults _
+result2_is_applied : func_with_defaults 3
+result3_is_partial_applyed : func_with_defaults _ , 5
+result4_is_applied : func_with_defaults 3 5
+
+` Test fallback with unit (failed evaluation)
+` 3 < 2 is false, so it returns unit. It should trigger the default value for x.
+result5_is_applied : func_with_defaults [3 < 2] 5
+result6_is_applied : func_with_defaults [3 < 2] [5 < 2]

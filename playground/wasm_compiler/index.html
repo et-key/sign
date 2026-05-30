@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Playground</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="style.css">
+    <!-- Load WABT from CDN -->
+    <script src="https://unpkg.com/wabt@1.0.32/index.js"></script>
+    <script type="module" src="app.js"></script>
+</head>
+<body>
+    <header>
+        <div class="logo">Sign Playground</div>
+        <button id="run-btn">Compile & Run</button>
+    </header>
+    <main>
+        <div class="panel editor-panel">
+            <div class="panel-header">Source Code (.sn)</div>
+            <textarea id="editor" spellcheck="false">
+fib : n ?
+	n < 2 : n
+	[fib n - 1] + [fib n - 2]
+
+fib 10
+            </textarea>
+        </div>
+        <div class="panel-group right-panels">
+            <div class="panel wat-panel">
+                <div class="panel-header">WebAssembly Text (.wat)</div>
+                <pre id="wat-output"></pre>
+            </div>
+            <div class="panel console-panel">
+                <div class="panel-header">Console Output</div>
+                <pre id="console-output"></pre>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

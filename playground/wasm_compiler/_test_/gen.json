@@ -1,0 +1,46 @@
+{
+  "type": "operation",
+  "operator": " ",
+  "left": {
+    "type": "block",
+    "kind": "bracket",
+    "content": {
+      "type": "operation",
+      "operator": "+",
+      "name": "add"
+    }
+  },
+  "right": {
+    "type": "operation",
+    "operator": " ",
+    "left": {
+      "type": "operation",
+      "operator": " ",
+      "left": "10",
+      "right": "20",
+      "name": "concat"
+    },
+    "right": "30",
+    "name": "concat"
+  },
+  "name": "apply",
+  "inferredType": {
+    "type": "Apply",
+    "left": {
+      "type": "Unit"
+    },
+    "right": {
+      "type": "List",
+      "elements": [
+        {
+          "type": "List",
+          "elements": [
+            "Number",
+            "Number"
+          ]
+        },
+        "Number"
+      ]
+    }
+  }
+}

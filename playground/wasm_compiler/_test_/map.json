@@ -1,0 +1,71 @@
+[
+  {
+    "type": "operation",
+    "operator": ":",
+    "left": "<add10>",
+    "right": {
+      "type": "operation",
+      "operator": "?",
+      "left": "<x>",
+      "right": {
+        "type": "operation",
+        "operator": "+",
+        "left": "<x>",
+        "right": "10",
+        "name": "add"
+      },
+      "name": "lambda"
+    },
+    "name": "define",
+    "inferredType": {
+      "type": "Lambda",
+      "returns": "Number"
+    }
+  },
+  {
+    "type": "operation",
+    "operator": "'",
+    "left": {
+      "type": "block",
+      "kind": "paren",
+      "content": {
+        "type": "block",
+        "kind": "bracket",
+        "content": {
+          "type": "operation",
+          "operator": " ",
+          "left": {
+            "type": "operation",
+            "operator": ",",
+            "right": "<add10>",
+            "name": "product"
+          },
+          "right": {
+            "type": "block",
+            "kind": "paren",
+            "content": {
+              "type": "operation",
+              "operator": " ",
+              "left": {
+                "type": "operation",
+                "operator": " ",
+                "left": "10",
+                "right": "20",
+                "name": "concat"
+              },
+              "right": "30",
+              "name": "concat"
+            }
+          },
+          "name": "apply"
+        }
+      }
+    },
+    "right": "1",
+    "name": "get_prop",
+    "inferredType": {
+      "type": "Deref",
+      "target": "Number"
+    }
+  }
+]
