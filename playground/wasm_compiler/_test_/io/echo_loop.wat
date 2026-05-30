@@ -1,29 +1,32 @@
 (module
+  (import "env" "print" (func $print (param i32)))
   (memory 1) ;; 1 page = 64KB
   (export "memory" (memory 0))
-  (global $hp (mut i32) (i32.const 0)) ;; Heap Pointer for bump allocation
+  (type $func_sig (func (param f64) (result f64)))
 
-  ;; Helper function for Bump Allocation
-  (func $alloc (param $size i32) (result i32)
-    (local $ptr i32)
-    global.get $hp
-    local.set $ptr
-    global.get $hp
-    local.get $size
-    i32.add
-    global.set $hp
-    local.get $ptr
+  (table 1 funcref)
+  (elem (i32.const 0) $echo_loop)
+
+  (func $echo_loop (param $stdin f64) (param $stdout f64) (result f64)
+    (local $<echo_loop> f64)
+    (local $__loop_val_0 f64)
+    (local $__loop_step_0 f64)
+    (local $__loop_limit_0 f64)
+    (local $__sink_ptr_1 f64)
+    (local $__list_ptr f64)
+    local.get $stdin_current
+    local.get $stdin_step
+    f64.add
+    local.get $stdin_current
+    local.get $stdin_step
+    f64.add
+    local.get $stdin_step
+    local.get $stdin_limit
+    call $echo_loop
   )
-
-  (func $echo_loop (param $stdin i32) (param $stdout i32) (result i32)
-    ;; Unhandled node: operation ~
-    i32.const 0
-    drop
-    local.get $stdout
-    local.get $stdin
-    i32.load
-    i32.store
-    i32.const 0 ;; store returns unit
+  (func $main (export "main") (result f64)
+    f64.const 0
+    f64.const 1
     call $echo_loop
   )
 )

@@ -5,14 +5,14 @@
   (type $func_sig (func (param f64) (result f64)))
 
   (func $main (export "main") (result f64)
-    (local $__loop_val_0 f64)
-    (local $__loop_step_0 f64)
-    (local $__loop_limit_0 f64)
-    ;; Unknown identifier: add
-    f64.const 0
-    drop
+    (local $__reduce_ptr_0 f64)
+    (local $__reduce_end_0 f64)
+    (local $__reduce_acc_0 f64)
+    (local $__map_start_0 f64)
     f64.const 10
-    drop
-    f64.const 5
+    f64.const 20
+    f64.add
+    f64.const 30
+    f64.add
   )
 )

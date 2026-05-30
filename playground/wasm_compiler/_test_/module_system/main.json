@@ -34,7 +34,8 @@
           "type": "List",
           "elements": [
             {
-              "type": "Unknown"
+              "type": "Variable",
+              "name": "<add>"
             },
             "Number"
           ]

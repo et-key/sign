@@ -5,14 +5,17 @@
   (type $func_sig (func (param f64) (result f64)))
 
   (func $main (export "main") (result f64)
-    (local $__loop_val_0 f64)
-    (local $__loop_step_0 f64)
-    (local $__loop_limit_0 f64)
-    ;; Unknown identifier: add
-    f64.const 0
-    drop
     f64.const 10
     drop
-    f64.const 5
+    f64.const 20
+    drop
+    f64.const 30
+    i32.trunc_f64_s
+    f64.const 1
+    i32.trunc_f64_s
+    i32.const 3
+    i32.shl
+    i32.add
+    f64.load
   )
 )

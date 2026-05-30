@@ -1,22 +1,19 @@
 (module
+  (import "env" "print" (func $print (param i32)))
   (memory 1) ;; 1 page = 64KB
   (export "memory" (memory 0))
-  (global $hp (mut i32) (i32.const 0)) ;; Heap Pointer for bump allocation
+  (type $func_sig (func (param f64) (result f64)))
 
-  ;; Helper function for Bump Allocation
-  (func $alloc (param $size i32) (result i32)
-    (local $ptr i32)
-    global.get $hp
-    local.set $ptr
-    global.get $hp
-    local.get $size
-    i32.add
-    global.set $hp
-    local.get $ptr
-  )
+  (table 1 funcref)
+  (elem (i32.const 0) $loop)
 
-  (func $loop (param $x i32) (result i32)
+  (func $loop (param $x f64) (result f64)
+    (local $<loop> f64)
+    (local $__list_ptr f64)
     local.get $x
     call $loop
+  )
+  (func $main (export "main") (result f64)
+    f64.const 0
   )
 )

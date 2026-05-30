@@ -1,42 +1,55 @@
 (module
+  (import "env" "print" (func $print (param i32)))
   (memory 1) ;; 1 page = 64KB
   (export "memory" (memory 0))
-  (global $hp (mut i32) (i32.const 0)) ;; Heap Pointer for bump allocation
+  (type $func_sig (func (param f64) (result f64)))
 
-  ;; Helper function for Bump Allocation
-  (func $alloc (param $size i32) (result i32)
-    (local $ptr i32)
-    global.get $hp
-    local.set $ptr
-    global.get $hp
-    local.get $size
-    i32.add
-    global.set $hp
-    local.get $ptr
-  )
+  (table 2 funcref)
+  (elem (i32.const 0) $f $map)
 
-  (export "result" (func $result))
-  (func $f (param $x i32) (result i32)
+  (func $f (param $x f64) (result f64)
+    (local $<f> f64)
+    (local $__list_ptr f64)
     local.get $x
-    i32.const 2
-    i32.mul
+    f64.const 2
+    f64.mul
   )
-  (func $map (param $g i32) (param $x i32) (param $y_current i32) (param $y_step i32) (param $y_limit i32) (result i32)
+  (func $map (param $g f64) (param $x f64) (param $y_current f64) (param $y_step f64) (param $y_limit f64) (result f64)
+    (local $<map> f64)
+    (local $__loop_val_0 f64)
+    (local $__loop_step_0 f64)
+    (local $__loop_limit_0 f64)
+    (local $__reduce_ptr_1 f64)
+    (local $__reduce_end_1 f64)
+    (local $__reduce_acc_1 f64)
+    (local $__map_start_1 f64)
+    (local $__reduce_ptr_2 f64)
+    (local $__reduce_end_2 f64)
+    (local $__reduce_acc_2 f64)
+    (local $__map_start_2 f64)
+    (local $__loop_val_3 f64)
+    (local $__loop_step_3 f64)
+    (local $__loop_limit_3 f64)
+    (local $__list_ptr f64)
     local.get $x
-    ;; TODO: Dynamic function call / apply
+    local.get $g
+    i32.trunc_f64_s
+    f64.load
+    i32.trunc_f64_s
+    call_indirect (type $func_sig)
     drop
     local.get $g
-    drop
-    ;; Unhandled node: operation ~
-    i32.const 0
+    local.get $y_current
+    local.get $y_step
+    f64.add
+    local.get $y_current
+    local.get $y_step
+    f64.add
+    local.get $y_step
+    local.get $y_limit
     call $map
   )
-  (func $result (param $result i32) (result i32)
-    ;; Unhandled node: operation $
-    i32.const 0
-    drop
-    ;; Unhandled node: operation ~
-    i32.const 0
-    call $map
+  (func $main (export "main") (result f64)
+    f64.const 0
   )
 )

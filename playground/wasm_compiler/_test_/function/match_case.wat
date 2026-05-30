@@ -1,22 +1,66 @@
 (module
+  (import "env" "print" (func $print (param i32)))
   (memory 1) ;; 1 page = 64KB
   (export "memory" (memory 0))
-  (global $hp (mut i32) (i32.const 0)) ;; Heap Pointer for bump allocation
+  (type $func_sig (func (param f64) (result f64)))
 
-  ;; Helper function for Bump Allocation
-  (func $alloc (param $size i32) (result i32)
-    (local $ptr i32)
-    global.get $hp
-    local.set $ptr
-    global.get $hp
-    local.get $size
-    i32.add
-    global.set $hp
-    local.get $ptr
-  )
+  (table 1 funcref)
+  (elem (i32.const 0) $func_match)
 
-  (func $func_match (param $x i32) (param $y i32) (result i32)
-    ;; Unhandled node: operation \n
-    i32.const 0
+  (func $func_match (param $x f64) (param $y f64) (result f64)
+    (local $<func_match> f64)
+    (local $__fallback_tmp_0 i64)
+    (local $__fallback_tmp_1 i64)
+    (local $__list_ptr f64)
+    local.get $x
+    f64.const 1
+    f64.lt
+    f64.convert_i32_s
+    i32.trunc_f64_s
+    if (result i64)
+    i64.const 1024
+    else
+      i64.const 0 ;; Unit for i64
+    end
+    local.set $__fallback_tmp_1
+    local.get $__fallback_tmp_1
+    i64.eqz ;; Unit (0) check for i64
+    if (result i64)
+    local.get $y
+    f64.const 3
+    f64.lt
+    f64.convert_i32_s
+    i32.trunc_f64_s
+    if (result i64)
+    i64.const 1080
+    else
+      i64.const 0 ;; Unit for i64
+    end
+    else
+      local.get $__fallback_tmp_1
+    end
+    local.set $__fallback_tmp_0
+    local.get $__fallback_tmp_0
+    i64.eqz ;; Unit (0) check for i64
+    if (result i64)
+    local.get $x
+    local.get $y
+    f64.mul
+    else
+      local.get $__fallback_tmp_0
+    end
   )
+  (func $main (export "main") (result f64)
+    (local $__reduce_ptr_2 f64)
+    (local $__reduce_end_2 f64)
+    (local $__reduce_acc_2 f64)
+    (local $__map_start_2 f64)
+    (local $__fallback_tmp_3 i64)
+    (local $__fallback_tmp_4 i64)
+    ;; Unhandled node: operation ?
+    f64.const 0
+  )
+  (data (i32.const 1024) "\00\00\00\00\00\80\5c\40\00\00\00\00\00\40\59\40\00\00\00\00\00\c0\5c\40\00\00\00\00\00\40\5d\40\00\00\00\00\00\00\5b\40\00\00\00\00\00\00\5d\40\00\00\00\00\00\80\48\40")
+  (data (i32.const 1080) "\00\00\00\00\00\80\5c\40\00\00\00\00\00\40\59\40\00\00\00\00\00\c0\5c\40\00\00\00\00\00\40\5d\40\00\00\00\00\00\00\5b\40\00\00\00\00\00\00\5d\40\00\00\00\00\00\00\49\40")
+
 )

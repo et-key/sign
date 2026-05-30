@@ -1,60 +1,43 @@
 (module
+  (import "env" "print" (func $print (param i32)))
   (memory 1) ;; 1 page = 64KB
   (export "memory" (memory 0))
-  (global $hp (mut i32) (i32.const 0)) ;; Heap Pointer for bump allocation
+  (type $func_sig (func (param f64) (result f64)))
 
-  ;; Helper function for Bump Allocation
-  (func $alloc (param $size i32) (result i32)
-    (local $ptr i32)
-    global.get $hp
-    local.set $ptr
-    global.get $hp
-    local.get $size
-    i32.add
-    global.set $hp
-    local.get $ptr
-  )
+  (table 4 funcref)
+  (elem (i32.const 0) $func_with_defaults $result1_is_partial_applyed $result2_is_applied $result3_is_partial_applyed)
 
-  (func $func_with_defaults (param $x i32) (param $y i32) (result i32)
+  (func $func_with_defaults (param $x f64) (param $y f64) (result f64)
+    (local $<func_with_defaults> f64)
+    (local $__fallback_tmp_0 f64)
+    (local $<x> f64)
+    (local $<y> f64)
+    (local $__list_ptr f64)
     local.get $x
     local.get $y
-    i32.add
+    f64.add
   )
-  (func $result1_is_partial_applyed (param $result1_is_partial_applyed i32) (result i32)
-    ;; Unknown identifier: _
-    i32.const 0
+  (func $result1_is_partial_applyed (param $result1_is_partial_applyed f64) (result f64)
+    (local $<result1_is_partial_applyed> f64)
+    (local $__list_ptr f64)
+    f64.const nan ;; Unit (default argument or omitted)
+    f64.const nan ;; Unit (default argument or omitted)
     call $func_with_defaults
   )
-  (func $result2_is_applied (param $result2_is_applied i32) (result i32)
-    i32.const 3
+  (func $result2_is_applied (param $result2_is_applied f64) (result f64)
+    (local $<result2_is_applied> f64)
+    (local $__list_ptr f64)
+    f64.const 3
+    f64.const nan ;; Unit (default argument or omitted)
     call $func_with_defaults
   )
-  (func $result3_is_partial_applyed (param $result3_is_partial_applyed i32) (result i32)
+  (func $result3_is_partial_applyed (param $result3_is_partial_applyed f64) (result f64)
+    (local $<result3_is_partial_applyed> f64)
+    (local $__list_ptr f64)
     ;; Unhandled node: operation ,
-    i32.const 0
+    f64.const 0
   )
-  (func $result4_is_applied (param $result4_is_applied i32) (result i32)
-    i32.const 3
-    drop
-    i32.const 5
-    call $func_with_defaults
-  )
-  (func $result5_is_applied (param $result5_is_applied i32) (result i32)
-    i32.const 3
-    i32.const 2
-    i32.lt_s
-    drop
-    i32.const 5
-    call $func_with_defaults
-  )
-  (func $result6_is_applied (param $result6_is_applied i32) (result i32)
-    i32.const 3
-    i32.const 2
-    i32.lt_s
-    drop
-    i32.const 5
-    i32.const 2
-    i32.lt_s
-    call $func_with_defaults
+  (func $main (export "main") (result f64)
+    f64.const 0
   )
 )

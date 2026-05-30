@@ -1,33 +1,33 @@
 (module
+  (import "env" "print" (func $print (param i32)))
   (memory 1) ;; 1 page = 64KB
   (export "memory" (memory 0))
-  (global $hp (mut i32) (i32.const 0)) ;; Heap Pointer for bump allocation
+  (type $func_sig (func (param f64) (result f64)))
 
-  ;; Helper function for Bump Allocation
-  (func $alloc (param $size i32) (result i32)
-    (local $ptr i32)
-    global.get $hp
-    local.set $ptr
-    global.get $hp
-    local.get $size
-    i32.add
-    global.set $hp
-    local.get $ptr
-  )
+  (table 3 funcref)
+  (elem (i32.const 0) $f $g $result)
 
-  (export "result" (func $result))
-  (func $f (param $x i32) (result i32)
+  (func $f (param $x f64) (result f64)
+    (local $<f> f64)
+    (local $__list_ptr f64)
     local.get $x
-    i32.const 2
-    i32.mul
+    f64.const 2
+    f64.mul
   )
-  (func $g (param $x i32) (result i32)
+  (func $g (param $x f64) (result f64)
+    (local $<g> f64)
+    (local $__list_ptr f64)
     local.get $x
-    i32.const 1
-    i32.add
+    f64.const 1
+    f64.add
   )
-  (func $result (param $result i32) (result i32)
-    i32.const 3
-    ;; TODO: Dynamic function call / apply
+  (func $result (param $result f64) (result f64)
+    (local $<result> f64)
+    (local $__list_ptr f64)
+    f64.const 1 ;; Function pointer to g
+    call $f
+  )
+  (func $main (export "main") (result f64)
+    f64.const 0
   )
 )

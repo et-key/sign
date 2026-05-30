@@ -17,6 +17,7 @@ export class WasmGenerator {
     this.labelCounter = 0;
     this.funcNames = [];
     this.funcArities = new Map(); // Store arity for top-level functions
+    this.funcDefaults = new Map(); // Track which parameters have defaults
     this.aliasEnv = new Map();
 
     this.out.push('(module');
@@ -27,8 +28,11 @@ export class WasmGenerator {
     // Core Memory Architecture
     this.out.push('  (memory 1) ;; 1 page = 64KB');
     this.out.push('  (export "memory" (memory 0))');
-    this.out.push('  (type $func_sig (func (param i32) (result i32)))');
+    this.out.push('  (type $func_sig (func (param f64) (result f64)))');
     this.out.push('');
+
+    this.stringPool = new Map(); // string literal -> offset
+    this.dataOffset = 1024; // Start allocating strings at 1024
 
     // Separate top-level bindings (functions) and expressions
     const topLevelBindings = [];
@@ -75,17 +79,18 @@ export class WasmGenerator {
     }
 
     // Generate implicit main function for top-level expressions
-    this.out.push('  (func $main (export "main") (result i32)');
-    const mainLocals = new Set();
+    this.out.push('  (func $main (export "main") (result f64)');
+    const mainLocals = new Map();
     const mainParams = [];
+    const mainTypeEnv = new Map();
     for (const expr of topLevelExpressions) {
-      this.collectLocals(expr, mainParams, mainLocals);
+      this.collectLocals(expr, mainParams, mainLocals, mainTypeEnv);
     }
-    for (const l of mainLocals) {
-      this.out.push(`    (local $${l} i32)`);
+    for (const [l, type] of mainLocals.entries()) {
+      this.out.push(`    (local $${l} ${type})`);
     }
     
-    const env = new Map();
+    const env = mainTypeEnv;
     for (const l of mainLocals) env.set(l, 'local');
 
     // Filter top-level expressions for Dead Code Elimination (DCE)
@@ -99,7 +104,7 @@ export class WasmGenerator {
     }
 
     if (filteredExpressions.length === 0) {
-      this.out.push(`    i32.const 0`);
+      this.out.push(`    f64.const 0`);
     } else {
       for (let i = 0; i < filteredExpressions.length; i++) {
         this.generateExpression(filteredExpressions[i], env);
@@ -109,6 +114,33 @@ export class WasmGenerator {
       }
     }
     this.out.push('  )');
+
+    if (this.thunks && this.thunks.length > 0) {
+      this.out.push('');
+      for (const thunk of this.thunks) {
+        this.out.push(thunk);
+      }
+    }
+
+    // Output Data Section (Strings) at the end of the module
+    for (const [str, offset] of this.stringPool.entries()) {
+      // Encode string as f64 array (8 bytes per char)
+      let bytes = [];
+      for (let i = 0; i < str.length; i++) {
+        const code = str.charCodeAt(i);
+        // Little endian f64 encoding of the integer value
+        const buffer = new ArrayBuffer(8);
+        const view = new DataView(buffer);
+        view.setFloat64(0, code, true); // true = little endian
+        for (let j = 0; j < 8; j++) {
+          let hex = view.getUint8(j).toString(16);
+          if (hex.length === 1) hex = '0' + hex;
+          bytes.push('\\' + hex);
+        }
+      }
+      this.out.push(`  (data (i32.const ${offset}) "${bytes.join('')}")`);
+    }
+    if (this.stringPool.size > 0) this.out.push('');
 
     this.out.push(')');
     return this.out.join('\n') + '\n';
@@ -183,39 +215,44 @@ export class WasmGenerator {
     let body = node.right;
     
     const params = [];
-    const locals = new Set();
-    
+    const defaults = [];
+    const locals = new Map();
+
     if (body && body.type === 'operation' && body.operator === '?') {
-      this.extractParams(body.left, params);
+      this.extractParams(body.left, params, defaults);
       body = body.right;
     } else {
-      this.extractParams(node.left, params);
+      this.extractParams(node.left, params, defaults);
     }
     
-    // First pass to collect locals
-    this.collectLocals(body, params, locals);
-    
+    this.funcDefaults.set(name, defaults);
     this.funcArities.set(name, params.length);
+    
+    const typeEnv = new Map();
+    for (const p of params) typeEnv.set(p, 'f64'); // Functions params are currently f64
+    this.collectLocals(node, params, locals, typeEnv);
     
     let funcDecl = `  (func $${name}`;
     if (params.length > 0) {
       for (const p of params) {
-        funcDecl += ` (param $${p} i32)`;
+        funcDecl += ` (param $${p} f64)`;
       }
     } else {
-      funcDecl += ` (param $__dummy i32)`;
+      funcDecl += ` (param $__dummy f64)`;
     }
-    funcDecl += ` (result i32)`; // Assume every function returns i32 for MVP
+    // Return type inference: check the body of the function
+    const returnType = node.body ? this.getType(node.body, typeEnv) : 'f64';
+    funcDecl += ` (result ${returnType})`; 
     this.out.push(funcDecl);
     
-    for (const l of locals) {
-      this.out.push(`    (local $${l} i32)`);
+    for (const [l, type] of locals.entries()) {
+      this.out.push(`    (local $${l} ${type})`);
     }
-    this.out.push(`    (local $__list_ptr i32)`);
+    this.out.push(`    (local $__list_ptr f64)`); // Default
 
-    const env = new Map();
-    for (const p of params) env.set(p, 'param');
-    for (const l of locals) env.set(l, 'local');
+    const env = typeEnv;
+    for (const p of params) env.set(p, 'f64');
+    for (const l of locals.keys()) env.set(l, 'local');
 
     // Generate Body
     this.generateExpression(body, env);
@@ -223,141 +260,199 @@ export class WasmGenerator {
     this.out.push('  )');
   }
 
-  extractParams(node, params) {
+  extractParams(node, params, defaults, hasDefault = false) {
     if (!node) return;
     if (node.type === 'block') {
-      this.extractParams(node.content, params);
+      this.extractParams(node.content, params, defaults, hasDefault);
       return;
     }
     if (node.type === 'coproduct_block') {
       if (node.statements) {
         for (const stmt of node.statements) {
-          this.extractParams(stmt, params);
+          this.extractParams(stmt, params, defaults, hasDefault);
         }
       }
       return;
     }
     if (node.type === 'operation' && node.operator === ':') {
-      this.extractParams(node.left, params);
+      this.extractParams(node.left, params, defaults, true);
       return;
     }
     if (node.type === 'operation' && node.operator === '?') {
-      this.extractParams(node.left, params);
+      this.extractParams(node.left, params, defaults, hasDefault);
       return;
     }
     if (typeof node === 'string') {
       params.push(this.getIdentName(node));
+      defaults.push(hasDefault);
       return;
     }
     if (node.type === 'operation' && (node.operator === ' ' || node.operator === '\\n')) {
-      this.extractParams(node.left, params);
-      this.extractParams(node.right, params);
+      this.extractParams(node.left, params, defaults, hasDefault);
+      this.extractParams(node.right, params, defaults, hasDefault);
       return;
     }
     if (node.type === 'operation' && node.operator === '~' && node.position === 'prefix') {
       const baseName = this.getIdentName(node.operand);
-      params.push(`${baseName}_current`);
-      params.push(`${baseName}_step`);
-      params.push(`${baseName}_limit`);
+      params.push(`${baseName}_current`); defaults.push(hasDefault);
+      params.push(`${baseName}_step`); defaults.push(hasDefault);
+      params.push(`${baseName}_limit`); defaults.push(hasDefault);
       return;
     }
   }
 
-  collectLocals(node, params, locals) {
+  collectLocals(node, params, locals, typeEnv = new Map()) {
     if (!node) return;
     
-    if (typeof node === 'string') return;
-    
-    if (node.type === 'block') {
-      if (node.kind === 'bracket' && node.reduceId === undefined) {
-        node.reduceId = this.labelCounter++;
-        locals.add(`__reduce_ptr_${node.reduceId}`);
-        locals.add(`__reduce_end_${node.reduceId}`);
-        locals.add(`__reduce_acc_${node.reduceId}`);
-        locals.add(`__map_start_${node.reduceId}`);
-      }
-      this.collectLocals(node.content, params, locals);
+    if (typeof node === 'string') {
       return;
     }
-    
-    if (node.type === 'coproduct_block') {
-      if (node.statements) {
-        for (const stmt of node.statements) {
-          this.collectLocals(stmt, params, locals);
-        }
-      }
-      return;
-    }
-    
+
     if (node.type === 'operation') {
+      if (node.operator === ':') {
+        const type = this.getType(node.right, typeEnv);
+        if (typeof node.left === 'string') {
+          locals.set(node.left, type);
+          typeEnv.set(node.left, type);
+        }
+        this.collectLocals(node.right, params, locals, typeEnv);
+        return;
+      }
       if (node.operator === '#') {
         if (node.reduceId === undefined) {
           node.reduceId = this.labelCounter++;
-          locals.add(`__sink_ptr_${node.reduceId}`);
+          const type = this.getType(node.left, typeEnv);
+          locals.set(`__sink_ptr_${node.reduceId}`, type);
         }
       }
       if (node.operator === '~') {
         if (node.reduceId === undefined) {
           node.reduceId = this.labelCounter++;
-          locals.add(`__loop_val_${node.reduceId}`);
-          locals.add(`__loop_step_${node.reduceId}`);
-          locals.add(`__loop_limit_${node.reduceId}`);
+          const type = this.getType(node.left, typeEnv);
+          locals.set(`__loop_val_${node.reduceId}`, type);
+          locals.set(`__loop_step_${node.reduceId}`, type);
+          locals.set(`__loop_limit_${node.reduceId}`, type);
         }
       }
       if (node.operator === '\\n') {
         if (node.reduceId === undefined) {
           node.reduceId = this.labelCounter++;
-          locals.add(`__fallback_tmp_${node.reduceId}`);
+          const type = this.getType(node.left, typeEnv);
+          locals.set(`__fallback_tmp_${node.reduceId}`, type);
         }
-      }
-      if (node.operator === ':') {
-        if (typeof node.left === 'string' || (node.left && node.left.type === 'operation' && node.left.operator === '#')) {
-          const varName = this.getIdentName(node.left);
-          if (!params.includes(varName)) {
-            locals.add(varName);
-          }
-          this.collectLocals(node.right, params, locals);
-        } else {
-          this.collectLocals(node.left, params, locals);
-          this.collectLocals(node.right, params, locals);
-        }
-        return;
       }
       
-      this.collectLocals(node.left, params, locals);
-      this.collectLocals(node.right, params, locals);
-      if (node.operand) this.collectLocals(node.operand, params, locals);
+      this.collectLocals(node.left, params, locals, typeEnv);
+      this.collectLocals(node.right, params, locals, typeEnv);
+      this.collectLocals(node.operand, params, locals, typeEnv);
+    } else if (node.type === 'block') {
+      if (node.kind === 'bracket' && node.reduceId === undefined) {
+        node.reduceId = this.labelCounter++;
+        locals.set(`__reduce_ptr_${node.reduceId}`, 'f64');
+        locals.set(`__reduce_end_${node.reduceId}`, 'f64');
+        locals.set(`__reduce_acc_${node.reduceId}`, 'f64');
+        locals.set(`__map_start_${node.reduceId}`, 'f64');
+      }
+      this.collectLocals(node.content, params, locals, typeEnv);
+    } else if (node.type === 'Lambda') {
+      this.collectLocals(node.body, params, locals, typeEnv);
+    } else if (node.type === 'coproduct_block') {
+      if (node.statements) {
+        for (const stmt of node.statements) {
+          this.collectLocals(stmt, params, locals, typeEnv);
+        }
+      }
     }
+  }
+
+  getType(node, env) {
+    if (!node) return 'f64';
+    if (typeof node === 'string') {
+      if (node.startsWith('0x') || node.startsWith('0r') || node.startsWith('0u') || (node.startsWith('`') && node.endsWith('`')) || node.startsWith('\\')) return 'i64';
+      if (!isNaN(node)) return 'f64';
+      return env.get(node) || 'f64';
+    }
+    if (node.type === 'block') {
+      if (node.kind === 'abs') return this.getType(node.content, env);
+      return this.getType(node.content, env);
+    }
+    if (node.type === 'operation') {
+      if ([':', '=', '+=', '-=', '*=', '/='].includes(node.operator)) return this.getType(node.right, env);
+      if (['||', '&&', ';;', '<<', '>>'].includes(node.operator)) return 'i64';
+      if (['<', '>', '==', '!=', '<=', '>=', '='].includes(node.operator)) return 'f64'; // Comparison ops are converted to f64 in generateExpression
+      if (['+', '-', '*'].includes(node.operator)) {
+        const leftType = this.getType(node.left, env);
+        const rightType = this.getType(node.right, env);
+        if (leftType === 'i64' && rightType === 'i64') return 'i64';
+        return 'f64';
+      }
+      if (node.operator === '\\n') {
+         return this.getType(node.left, env); // Fallback operator, assume left type dominates
+      }
+    }
+    return 'f64'; // Default to f64 for MVP
   }
 
   generateExpression(node, env) {
     if (!node) return;
 
     if (typeof node === 'string') {
-      if (!isNaN(node) || node.startsWith('0x')) {
-        this.out.push(`    i32.const ${Number(node)}`);
+      if (node.startsWith('`') && node.endsWith('`')) {
+        const strVal = node.slice(1, -1);
+        if (!this.stringPool.has(strVal)) {
+          this.stringPool.set(strVal, this.dataOffset);
+          this.dataOffset += strVal.length * 8; // 8 bytes per char
+        }
+        this.out.push(`    i64.const ${this.stringPool.get(strVal)}`); // String pointer is Address (i64)
+        return;
+      }
+      if (node.startsWith('\\')) {
+        const char = node.slice(1);
+        const code = char.length === 1 ? char.charCodeAt(0) : 0;
+        this.out.push(`    i64.const ${code}`); // Char is i64
+        return;
+      }
+      if (node.startsWith('0x') || node.startsWith('0r') || node.startsWith('0u')) {
+        let valStr = node;
+        if (node.startsWith('0r') || node.startsWith('0u')) {
+          valStr = node.slice(2);
+        }
+        this.out.push(`    i64.const ${Number(valStr)}`); // Address/Register is i64
+        return;
+      }
+      if (!isNaN(node)) {
+        this.out.push(`    f64.const ${Number(node)}`); // Normal number is f64
         return;
       }
 
       const name = this.getIdentName(node);
-      if (this.aliasEnv.has(name)) {
-        this.generateExpression(this.aliasEnv.get(name), env);
-        return;
-      }
-      
       if (env.has(name)) {
-        this.out.push(`    local.get $${name}`);
+        this.out.push(`    local.get $${name}`); // Local variable (could be i64 or f64)
       } else if (this.funcNames.includes(name)) {
         const idx = this.funcNames.indexOf(name);
-        this.out.push(`    i32.const ${idx} ;; Function pointer to ${name}`);
+        this.out.push(`    f64.const ${idx} ;; Function pointer to ${name}`); // Function pointer as f64 for now
       } else {
         this.out.push(`    ;; Unknown identifier: ${name}`);
-        this.out.push(`    i32.const 0`); // Fallback
+        this.out.push(`    f64.const 0`);
       }
       return;
     }
 
     if (node.type === 'block') {
+      if (node.kind === 'abs') {
+        const type = this.getType(node.content, env);
+        this.generateExpression(node.content, env);
+        if (type === 'f64') {
+           this.out.push(`    f64.abs`);
+        } else {
+           // i64 abs: (x ^ (x >> 63)) - (x >> 63)
+           this.out.push(`    ;; i64 abs not natively supported in WASM, using generic fallback`);
+           this.out.push(`    ;; Need local to do i64 abs cleanly, but for now we just mask sign bit if user expects bitwise abs`);
+           this.out.push(`    i64.const 0x7FFFFFFFFFFFFFFF`);
+           this.out.push(`    i64.and`);
+        }
+        return;
+      }
       if (node.kind === 'bracket') {
         const content = node.content;
         if (content && content.type === 'operation' && (content.name === 'apply' || content.name === 'apply_partial' || content.name === 'compose')) {
@@ -367,7 +462,7 @@ export class WasmGenerator {
             // Memory allocation for Map is disabled. 
             // In the future, Map will be compiled as a pure stream transformer connected to a Sink.
             this.out.push(`    ;; Map without Sink is not supported yet in zero-cost stream mode`);
-            this.out.push(`    i32.const 0`);
+            this.out.push(`    f64.const 0`);
             return;
           }
         }
@@ -381,7 +476,7 @@ export class WasmGenerator {
       if (cases.length === 0) return;
       
       const blockId = this.labelCounter++;
-      this.out.push(`    block $B${blockId} (result i32)`);
+      this.out.push(`    block $B${blockId} (result f64)`);
       
       for (let i = 0; i < cases.length; i++) {
         this.generateExpression(cases[i], env);
@@ -405,88 +500,174 @@ export class WasmGenerator {
             this.out.push(`    local.get $${varName}`);
           }
         } else {
+          const condType = this.getType(node.left, env);
           this.generateExpression(node.left, env);
-          this.out.push(`    if (result i32)`);
+          if (condType === 'f64') {
+             this.out.push(`    i32.trunc_f64_s`); // convert f64 condition to i32 for if
+          } else if (condType === 'i64') {
+             this.out.push(`    i32.wrap_i64`); // convert i64 condition to i32 for if
+          }
+          const blockType = this.getType(node.right, env);
+          this.out.push(`    if (result ${blockType})`);
           this.generateExpression(node.right, env);
           this.out.push(`    else`);
-          this.out.push(`      i32.const -2147483648 ;; Unit`);
+          if (blockType === 'f64') {
+            this.out.push(`      f64.const nan ;; Unit`);
+          } else {
+            this.out.push(`      i64.const 0 ;; Unit for i64`);
+          }
           this.out.push(`    end`);
         }
         return;
       }
 
       if (['+', '-', '*'].includes(node.operator)) {
+        const leftType = this.getType(node.left, env);
+        const rightType = this.getType(node.right, env);
         this.generateExpression(node.left, env);
+        if (leftType === 'i64' && rightType === 'f64') this.out.push(`    f64.convert_i64_s`);
+        
         this.generateExpression(node.right, env);
-        switch (node.operator) {
-          case '+': this.out.push(`    i32.add`); break;
-          case '-': this.out.push(`    i32.sub`); break;
-          case '*': this.out.push(`    i32.mul`); break;
+        if (leftType === 'f64' && rightType === 'i64') this.out.push(`    f64.convert_i64_s`);
+
+        if (leftType === 'i64' && rightType === 'i64') {
+          switch (node.operator) {
+            case '+': this.out.push(`    i64.add`); break;
+            case '-': this.out.push(`    i64.sub`); break;
+            case '*': this.out.push(`    i64.mul`); break;
+          }
+        } else {
+          switch (node.operator) {
+            case '+': this.out.push(`    f64.add`); break;
+            case '-': this.out.push(`    f64.sub`); break;
+            case '*': this.out.push(`    f64.mul`); break;
+          }
         }
         return;
       }
 
-      if (['||', '&&', ';;'].includes(node.operator)) {
+      if (['||', '&&', ';;', '<<', '>>'].includes(node.operator)) {
+        const leftType = this.getType(node.left, env);
         this.generateExpression(node.left, env);
+        if (leftType === 'f64') this.out.push(`    i64.trunc_f64_s`);
+
+        const rightType = this.getType(node.right, env);
         this.generateExpression(node.right, env);
+        if (rightType === 'f64') this.out.push(`    i64.trunc_f64_s`);
+
         switch (node.operator) {
-          case '||': this.out.push(`    i32.or`); break;
-          case '&&': this.out.push(`    i32.and`); break;
-          case ';;': this.out.push(`    i32.xor`); break;
+          case '||': this.out.push(`    i64.or`); break;
+          case '&&': this.out.push(`    i64.and`); break;
+          case ';;': this.out.push(`    i64.xor`); break;
+          case '<<': this.out.push(`    i64.shl`); break;
+          case '>>': this.out.push(`    i64.shr_s`); break;
         }
+        // Result is kept as i64 (pure Register/Address)
         return;
       }
       
       if (node.operator === '!!' && node.position === 'prefix') {
-        this.out.push(`    i32.const -1`);
+        this.out.push(`    i64.const -1`);
+        const opType = this.getType(node.operand, env);
         this.generateExpression(node.operand, env);
-        this.out.push(`    i32.xor`);
+        if (opType === 'f64') this.out.push(`    i64.trunc_f64_s`);
+        this.out.push(`    i64.xor`);
+        // Keeps i64
         return;
       }
 
       if (node.operator === '\\n') {
         const tmpLocal = `__fallback_tmp_${node.reduceId}`;
+        const type = this.getType(node.left, env); // Assume fallback block uses the same type
         this.generateExpression(node.left, env);
         this.out.push(`    local.set $${tmpLocal}`);
         this.out.push(`    local.get $${tmpLocal}`);
-        this.out.push(`    i32.const -2147483648 ;; Unit check`);
-        this.out.push(`    i32.ne`);
-        this.out.push(`    if (result i32)`);
-        this.out.push(`      local.get $${tmpLocal}`);
+        
+        if (type === 'f64') {
+          this.out.push(`    local.get $${tmpLocal}`);
+          this.out.push(`    f64.ne ;; Unit (NaN) check: x != x`);
+          this.out.push(`    if (result f64)`); // If it IS NOT NaN
+        } else {
+          this.out.push(`    i64.eqz ;; Unit (0) check for i64`);
+          this.out.push(`    if (result i64)`);
+        }
+        
+        this.generateExpression(node.right, env); // Evaluate fallback
         this.out.push(`    else`);
-        this.generateExpression(node.right, env);
+        this.out.push(`      local.get $${tmpLocal}`);
         this.out.push(`    end`);
         return;
       }
 
       if (['<', '>', '==', '!=', '<=', '>=', '='].includes(node.operator)) {
+        const isLambda = (n) => {
+          if (typeof n === 'string') {
+             const name = this.getIdentName(n);
+             return this.funcNames.includes(name) && !env.has(name);
+          }
+          if (n && n.type === 'operation' && n.operator === '?') return true;
+          return false;
+        };
+
+        if (isLambda(node.left) || isLambda(node.right)) {
+           this.out.push(`    f64.const nan ;; Lambda comparison yields Unit`);
+           return;
+        }
+
         this.generateExpression(node.left, env);
         this.generateExpression(node.right, env);
         switch(node.operator) {
-          case '==': this.out.push(`    i32.eq`); break;
-          case '=':  this.out.push(`    i32.eq`); break;
-          case '!=': this.out.push(`    i32.ne`); break;
-          case '<':  this.out.push(`    i32.lt_s`); break;
-          case '>':  this.out.push(`    i32.gt_s`); break;
-          case '<=': this.out.push(`    i32.le_s`); break;
-          case '>=': this.out.push(`    i32.ge_s`); break;
+          case '==': this.out.push(`    f64.eq`); break;
+          case '=':  this.out.push(`    f64.eq`); break;
+          case '!=': this.out.push(`    f64.ne`); break;
+          case '<':  this.out.push(`    f64.lt`); break;
+          case '>':  this.out.push(`    f64.gt`); break;
+          case '<=': this.out.push(`    f64.le`); break;
+          case '>=': this.out.push(`    f64.ge`); break;
         }
+        this.out.push(`    f64.convert_i32_s`);
         return;
       }
       
       if (node.operator === '@' && node.position === 'prefix') {
+        const opType = this.getType(node.operand, env);
         this.generateExpression(node.operand, env);
-        this.out.push(`    i32.load`);
+        if (opType === 'f64') this.out.push(`    i32.trunc_f64_s`); 
+        else if (opType === 'i64') this.out.push(`    i32.wrap_i64`);
+        this.out.push(`    f64.load`); // MVP Load assumes reading an f64
         return;
       }
       
+      if (node.operator === '~' && node.position === 'postfix') {
+        const baseName = this.getIdentName(node.operand);
+        this.out.push(`    local.get $${baseName}_current`);
+        this.out.push(`    local.get $${baseName}_step`);
+        this.out.push(`    f64.add`); // Extracted element (next value)
+        
+        this.out.push(`    local.get $${baseName}_current`);
+        this.out.push(`    local.get $${baseName}_step`);
+        this.out.push(`    f64.add`); // New stream current value
+        
+        this.out.push(`    local.get $${baseName}_step`);
+        this.out.push(`    local.get $${baseName}_limit`);
+        return;
+      }
+
       if (node.operator === "'") {
+        const leftType = this.getType(node.left, env);
         this.generateExpression(node.left, env); // pointer
+        if (leftType === 'f64') this.out.push(`    i32.trunc_f64_s`);
+        else if (leftType === 'i64') this.out.push(`    i32.wrap_i64`);
+        
+        const rightType = this.getType(node.right, env);
         this.generateExpression(node.right, env); // index
-        this.out.push(`    i32.const 2`); // scale index
+        if (rightType === 'f64') this.out.push(`    i32.trunc_f64_s`);
+        else if (rightType === 'i64') this.out.push(`    i32.wrap_i64`);
+
+        this.out.push(`    i32.const 3`); // scale index by 8 (2^3) for f64 size
         this.out.push(`    i32.shl`);
         this.out.push(`    i32.add`); // pointer + offset
-        this.out.push(`    i32.load`); // get the value
+        this.out.push(`    f64.load`); // get the value
         return;
       }
 
@@ -496,6 +677,7 @@ export class WasmGenerator {
            node.reduceId = this.labelCounter++;
         }
         const ptrLocal = `__sink_ptr_${node.reduceId}`;
+        const ptrType = this.getType(node.left, env);
         
         this.generateExpression(node.left, env);
         this.out.push(`    local.set $${ptrLocal}`);
@@ -503,19 +685,27 @@ export class WasmGenerator {
         const streamContext = { isString: false };
         this.generateStream(node.right, env, streamContext, (valNode) => {
           this.out.push(`    local.get $${ptrLocal}`);
-          this.generateExpression(valNode, env); // Value
-          if (streamContext.isString) {
-             this.out.push(`    i32.store ;; string cast`);
-          } else {
-             this.out.push(`    i32.store`);
-          }
-          // Dynamic pointer increment (fixed width 4 bytes for MVP)
+          if (ptrType === 'f64') this.out.push(`    i32.trunc_f64_s`);
+          else if (ptrType === 'i64') this.out.push(`    i32.wrap_i64`);
+          
+          const valType = this.getType(valNode, env);
+          this.generateExpression(valNode, env); 
+          if (valType === 'i64') this.out.push(`    f64.convert_i64_s`); // Store expects f64 for MVP
+          this.out.push(`    f64.store`);
+          
           this.out.push(`    local.get $${ptrLocal}`);
-          this.out.push(`    i32.const 4`);
-          this.out.push(`    i32.add`);
+          if (ptrType === 'f64') {
+             this.out.push(`    f64.const 8`);
+             this.out.push(`    f64.add`);
+          } else {
+             this.out.push(`    i64.const 8`);
+             this.out.push(`    i64.add`);
+          }
           this.out.push(`    local.set $${ptrLocal}`);
         });
-        this.out.push(`    i32.const 0 ;; store returns unit`);
+        
+        if (ptrType === 'f64') this.out.push(`    f64.const nan`);
+        else this.out.push(`    i64.const 0`);
         return;
       }
 
@@ -537,38 +727,164 @@ export class WasmGenerator {
           if (args.length > 0) {
             const listNode = args[0];
             let isFirst = true;
+            const streamContext = { isString: false };
             this.generateStream(listNode, env, streamContext, (valNode) => {
               this.generateExpression(valNode, env);
               if (!isFirst) {
-                if (opNode.operator === '+') this.out.push(`    i32.add`);
-                else if (opNode.operator === '*') this.out.push(`    i32.mul`);
-                else if (opNode.operator === '-') this.out.push(`    i32.sub`);
+                if (opNode.operator === '+') this.out.push(`    f64.add`);
+                else if (opNode.operator === '*') this.out.push(`    f64.mul`);
+                else if (opNode.operator === '-') this.out.push(`    f64.sub`);
               }
               isFirst = false;
             });
             if (isFirst) {
-              this.out.push(`    i32.const 0 ;; empty reduce`);
+              this.out.push(`    f64.const 0 ;; empty reduce`);
             }
           } else {
-             this.out.push(`    i32.const 0 ;; empty reduce`);
+             this.out.push(`    f64.const 0 ;; empty reduce`);
           }
           return;
         }
         
+        let actualArgs = [];
+        if (args.length > 0) {
+           const extractArgs = (node) => {
+              if (!node) return;
+              if (node.type === 'operation' && (node.operator === ' ' || node.name === 'concat' || node.operator === '\\n')) {
+                 extractArgs(node.left);
+                 extractArgs(node.right);
+              } else {
+                 actualArgs.push(node);
+              }
+           };
+           for (const arg of args) {
+              extractArgs(arg);
+           }
+        }
+        
         let arity = 1;
+        let defaults = [];
+        let isDirectTopLevelCall = false;
+        
         if (typeof func === 'string') {
           const funcName = this.getIdentName(func);
-          if (this.funcArities.has(funcName)) {
+          if (this.funcArities.has(funcName) && !env.has(funcName)) {
             arity = this.funcArities.get(funcName);
+            defaults = this.funcDefaults.get(funcName) || [];
+            isDirectTopLevelCall = true;
           }
         }
         
-        for (let i = 0; i < arity; i++) {
-          if (i < args.length) {
-            this.generateExpression(args[i], env);
-          } else {
-            this.out.push(`    i32.const 0 ;; missing arg`);
-          }
+        const providedArgs = [];
+        let isPartial = false;
+        
+        let paramIdx = 0;
+        let argIdx = 0;
+        
+        while (paramIdx < arity) {
+           const isOmitted = argIdx >= actualArgs.length;
+           let isPlaceholder = false;
+           if (!isOmitted) {
+              const argNode = actualArgs[argIdx];
+              if (typeof argNode === 'string' && this.getIdentName(argNode) === '_') {
+                 isPlaceholder = true;
+              }
+           }
+           
+           if (isDirectTopLevelCall) {
+              const hasDefault = defaults[paramIdx] || false;
+              if (isOmitted || isPlaceholder) {
+                 if (hasDefault) {
+                    providedArgs.push({ type: 'unit' });
+                    paramIdx++;
+                    if (isPlaceholder) argIdx++;
+                 } else {
+                    providedArgs.push({ type: 'unbound', originalParamIndex: paramIdx });
+                    isPartial = true;
+                    paramIdx++;
+                    if (isPlaceholder) argIdx++;
+                 }
+              } else {
+                 const argNode = actualArgs[argIdx];
+                 if (argNode && argNode.type === 'operation' && argNode.operator === '~' && argNode.position === 'postfix') {
+                    providedArgs.push({ type: 'node', node: argNode, count: 4 });
+                    paramIdx += 4;
+                    argIdx++;
+                 } else {
+                    providedArgs.push({ type: 'node', node: argNode, count: 1 });
+                    paramIdx++;
+                    argIdx++;
+                 }
+              }
+           } else {
+              // Dynamic call: everything omitted is Unit, _ is Unit. No static partial application!
+              if (isOmitted || isPlaceholder) {
+                 providedArgs.push({ type: 'unit' });
+                 paramIdx++;
+                 if (isPlaceholder) argIdx++;
+              } else {
+                 const argNode = actualArgs[argIdx];
+                 if (argNode && argNode.type === 'operation' && argNode.operator === '~' && argNode.position === 'postfix') {
+                    providedArgs.push({ type: 'node', node: argNode, count: 4 });
+                    paramIdx += 4;
+                    argIdx++;
+                 } else {
+                    providedArgs.push({ type: 'node', node: argNode, count: 1 });
+                    paramIdx++;
+                    argIdx++;
+                 }
+              }
+           }
+        }
+        
+        if (isPartial) {
+           const funcName = this.getIdentName(func);
+           const thunkName = `__partial_${funcName}_${this.labelCounter++}`;
+           
+           let thunkCode = `  (func $${thunkName}`;
+           // Params
+           for (const pArg of providedArgs) {
+              if (pArg.type === 'unbound') {
+                 thunkCode += ` (param $p${pArg.originalParamIndex} f64)`;
+              }
+           }
+           thunkCode += ` (result f64)\n`;
+           
+           // Body
+           for (const pArg of providedArgs) {
+              if (pArg.type === 'unit') {
+                 thunkCode += `    f64.const nan\n`;
+              } else if (pArg.type === 'unbound') {
+                 thunkCode += `    local.get $p${pArg.originalParamIndex}\n`;
+              } else if (pArg.type === 'node') {
+                 const node = pArg.node;
+                 const val = Number(node);
+                 if (!isNaN(val)) {
+                    thunkCode += `    f64.const ${val}\n`;
+                 } else {
+                    throw new Error(`Dynamic closure capture is not supported in MVP. Captured argument must be a constant. Node: ${JSON.stringify(node)}`);
+                 }
+              }
+           }
+           thunkCode += `    call $${funcName}\n`;
+           thunkCode += `  )`;
+           
+           if (!this.thunks) this.thunks = [];
+           this.thunks.push(thunkCode);
+           
+           this.funcNames.push(thunkName);
+           const thunkIndex = this.funcNames.length - 1;
+           this.out.push(`    f64.const ${thunkIndex} ;; Partial application thunk`);
+           return;
+        }
+
+        // Generate normal call arguments
+        for (const pArg of providedArgs) {
+           if (pArg.type === 'unit') {
+              this.out.push(`    f64.const nan ;; Unit (default argument or omitted)`);
+           } else {
+              this.generateExpression(pArg.node, env);
+           }
         }
         
         if (typeof func === 'string') {
@@ -579,21 +895,23 @@ export class WasmGenerator {
           } else {
             // Local variable holding a function pointer
             this.out.push(`    local.get $${funcName}`);
+            this.out.push(`    i32.trunc_f64_s`);
             this.out.push(`    call_indirect (type $func_sig)`);
           }
         } else if (func && func.type === 'operation' && ['+', '-', '*'].includes(func.operator)) {
           // Inline partial application (e.g. `* 2`)
           if (func.right) {
             this.generateExpression(func.right, env);
-            if (func.operator === '+') this.out.push(`    i32.add`);
-            else if (func.operator === '*') this.out.push(`    i32.mul`);
-            else if (func.operator === '-') this.out.push(`    i32.sub`);
+            if (func.operator === '+') this.out.push(`    f64.add`);
+            else if (func.operator === '*') this.out.push(`    f64.mul`);
+            else if (func.operator === '-') this.out.push(`    f64.sub`);
           } else {
             this.out.push(`    ;; Unhandled left-partial operator inline`);
           }
         } else {
           // Dynamic expression evaluating to a function pointer
           this.generateExpression(func, env);
+          this.out.push(`    i32.trunc_f64_s`);
           this.out.push(`    call_indirect (type $func_sig)`);
         }
         return;
@@ -613,7 +931,7 @@ export class WasmGenerator {
         if (lastNode !== null) {
           this.generateExpression(lastNode, env);
         } else {
-          this.out.push(`    i32.const 0`);
+          this.out.push(`    f64.const 0`);
         }
         return;
       }
@@ -621,7 +939,7 @@ export class WasmGenerator {
     }
     
     this.out.push(`    ;; Unhandled node: ${node.type} ${node.operator || node.name || ''}`);
-    this.out.push(`    i32.const 0`);
+    this.out.push(`    f64.const 0`);
   }
 
   /**
@@ -708,13 +1026,13 @@ export class WasmGenerator {
         // Increment value
         this.out.push(`    local.get $__loop_val_${loopId}`);
         this.out.push(`    local.get $__loop_step_${loopId}`);
-        this.out.push(`    i32.add`);
+        this.out.push(`    f64.add`);
         this.out.push(`    local.set $__loop_val_${loopId}`);
 
-        // Check condition (le_s)
+        // Check condition (le)
         this.out.push(`    local.get $__loop_val_${loopId}`);
         this.out.push(`    local.get $__loop_limit_${loopId}`);
-        this.out.push(`    i32.le_s`);
+        this.out.push(`    f64.le`);
         this.out.push(`    br_if $L${loopId}`);
         this.out.push(`    end`);
         return;

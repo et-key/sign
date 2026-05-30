@@ -1,45 +1,35 @@
 (module
+  (import "env" "print" (func $print (param i32)))
   (memory 1) ;; 1 page = 64KB
   (export "memory" (memory 0))
-  (global $hp (mut i32) (i32.const 0)) ;; Heap Pointer for bump allocation
+  (type $func_sig (func (param f64) (result f64)))
 
-  ;; Helper function for Bump Allocation
-  (func $alloc (param $size i32) (result i32)
-    (local $ptr i32)
-    global.get $hp
-    local.set $ptr
-    global.get $hp
-    local.get $size
-    i32.add
-    global.set $hp
-    local.get $ptr
-  )
+  (table 3 funcref)
+  (elem (i32.const 0) $f $maybe_val $g)
 
-  (func $f (param $x i32) (param $y i32) (result i32)
+  (func $f (param $x f64) (param $y f64) (result f64)
+    (local $<f> f64)
+    (local $__list_ptr f64)
     local.get $x
     local.get $y
-    i32.add
+    f64.add
   )
-  (func $maybe_val (param $maybe_val i32) (result i32)
-    i32.const 10
-    i32.const 5
-    i32.lt_s
+  (func $maybe_val (param $maybe_val f64) (result f64)
+    (local $<maybe_val> f64)
+    (local $__list_ptr f64)
+    f64.const 10
+    f64.const 5
+    f64.lt
+    f64.convert_i32_s
   )
-  (func $mapped (param $mapped i32) (result i32)
-    ;; Unknown identifier: maybe_val
-    i32.const 0
-    drop
-    i32.const 3
-    call $f
-  )
-  (func $g (param $x i32) (result i32)
+  (func $g (param $x f64) (result f64)
+    (local $<g> f64)
+    (local $__list_ptr f64)
     local.get $x
-    i32.const 2
-    i32.mul
+    f64.const 2
+    f64.mul
   )
-  (func $mapped_twice (param $mapped_twice i32) (result i32)
-    ;; Unknown identifier: mapped
-    i32.const 0
-    call $g
+  (func $main (export "main") (result f64)
+    f64.const 0
   )
 )

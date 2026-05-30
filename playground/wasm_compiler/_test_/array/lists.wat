@@ -1,27 +1,65 @@
 (module
+  (import "env" "print" (func $print (param i32)))
   (memory 1) ;; 1 page = 64KB
   (export "memory" (memory 0))
-  (global $hp (mut i32) (i32.const 0)) ;; Heap Pointer for bump allocation
+  (type $func_sig (func (param f64) (result f64)))
 
-  ;; Helper function for Bump Allocation
-  (func $alloc (param $size i32) (result i32)
-    (local $ptr i32)
-    global.get $hp
-    local.set $ptr
-    global.get $hp
-    local.get $size
-    i32.add
-    global.set $hp
-    local.get $ptr
-  )
+  (table 3 funcref)
+  (elem (i32.const 0) $a $b $c)
 
-  (func $a (param $a i32) (result i32)
-    i32.const 1
+  (func $a (param $a f64) (result f64)
+    (local $<a> f64)
+    (local $__list_ptr f64)
+    f64.const 1
   )
-  (func $b (param $b i32) (result i32)
-    i32.const 2
+  (func $b (param $b f64) (result f64)
+    (local $<b> f64)
+    (local $__list_ptr f64)
+    f64.const 2
   )
-  (func $c (param $c i32) (result i32)
-    i32.const 3
+  (func $c (param $c f64) (result f64)
+    (local $<c> f64)
+    (local $__list_ptr f64)
+    f64.const 3
+  )
+  (func $main (export "main") (result f64)
+    (local $__reduce_ptr_0 f64)
+    (local $__reduce_end_0 f64)
+    (local $__reduce_acc_0 f64)
+    (local $__map_start_0 f64)
+    (local $__reduce_ptr_1 f64)
+    (local $__reduce_end_1 f64)
+    (local $__reduce_acc_1 f64)
+    (local $__map_start_1 f64)
+    (local $__reduce_ptr_2 f64)
+    (local $__reduce_end_2 f64)
+    (local $__reduce_acc_2 f64)
+    (local $__map_start_2 f64)
+    (local $__reduce_ptr_3 f64)
+    (local $__reduce_end_3 f64)
+    (local $__reduce_acc_3 f64)
+    (local $__map_start_3 f64)
+    (local $__reduce_ptr_4 f64)
+    (local $__reduce_end_4 f64)
+    (local $__reduce_acc_4 f64)
+    (local $__map_start_4 f64)
+    (local $__reduce_ptr_5 f64)
+    (local $__reduce_end_5 f64)
+    (local $__reduce_acc_5 f64)
+    (local $__map_start_5 f64)
+    (local $__reduce_ptr_6 f64)
+    (local $__reduce_end_6 f64)
+    (local $__reduce_acc_6 f64)
+    (local $__map_start_6 f64)
+    (local $__reduce_ptr_7 f64)
+    (local $__reduce_end_7 f64)
+    (local $__reduce_acc_7 f64)
+    (local $__map_start_7 f64)
+    (local $__reduce_ptr_8 f64)
+    (local $__reduce_end_8 f64)
+    (local $__reduce_acc_8 f64)
+    (local $__map_start_8 f64)
+    ;; Unhandled node: operation ,
+    f64.const 0
   )
 )

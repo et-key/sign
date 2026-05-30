@@ -26,11 +26,7 @@ function findTestFiles(dir) {
     if (stat && stat.isDirectory()) {
       results = results.concat(findTestFiles(filePath));
     } else if (filePath.endsWith('.sign') || filePath.endsWith('.sn')) {
-      const fileName = path.basename(filePath);
-      const whitelist = ['wasm_binop.sn', 'wasm_list.sn', 'wasm_fib.sn', 'wasm_index.sn', 'wasm_ptr.sn', 'wasm_gen.sn', 'wasm_map.sn']; // WASM tests whitelist
-      if (whitelist.includes(fileName)) {
-        results.push(filePath);
-      }
+      results.push(filePath);
     }
   }
   return results;
