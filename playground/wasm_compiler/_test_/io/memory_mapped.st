@@ -1,5 +1,5 @@
-io_handler : Lambda(Number)
+io_handler : Lambda(Address)
 event_loop : ([
   _
-  Lambda(Number)
+  Lambda(Address)
 ] <= Scalar)

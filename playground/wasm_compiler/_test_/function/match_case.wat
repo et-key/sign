@@ -8,41 +8,61 @@
   (elem (i32.const 0) $func_match)
 
   (func $func_match (param $x f64) (param $y f64) (result f64)
-    (local $<func_match> f64)
-    (local $__fallback_tmp_0 i64)
-    (local $__fallback_tmp_1 i64)
+    (local $func_match f64)
+    (local $__fallback_tmp_0 f64)
+    (local $__fallback_tmp_1 f64)
     (local $__list_ptr f64)
+    local.get $x
+    local.get $x
+    f64.ne
+    if
+      f64.const 0
+      f64.const 0
+      f64.div
+      return
+    end
+    local.get $y
+    local.get $y
+    f64.ne
+    if
+      f64.const 0
+      f64.const 0
+      f64.div
+      return
+    end
     local.get $x
     f64.const 1
     f64.lt
     f64.convert_i32_s
     i32.trunc_f64_s
-    if (result i64)
-    i64.const 1024
+    if (result f64)
+    f64.const 1024
     else
-      i64.const 0 ;; Unit for i64
+      f64.const nan ;; Unit
     end
     local.set $__fallback_tmp_1
     local.get $__fallback_tmp_1
-    i64.eqz ;; Unit (0) check for i64
-    if (result i64)
+    local.get $__fallback_tmp_1
+    f64.ne ;; Unit (NaN) check: x != x
+    if (result f64)
     local.get $y
     f64.const 3
     f64.lt
     f64.convert_i32_s
     i32.trunc_f64_s
-    if (result i64)
-    i64.const 1080
+    if (result f64)
+    f64.const 1080
     else
-      i64.const 0 ;; Unit for i64
+      f64.const nan ;; Unit
     end
     else
       local.get $__fallback_tmp_1
     end
     local.set $__fallback_tmp_0
     local.get $__fallback_tmp_0
-    i64.eqz ;; Unit (0) check for i64
-    if (result i64)
+    local.get $__fallback_tmp_0
+    f64.ne ;; Unit (NaN) check: x != x
+    if (result f64)
     local.get $x
     local.get $y
     f64.mul
@@ -55,8 +75,8 @@
     (local $__reduce_end_2 f64)
     (local $__reduce_acc_2 f64)
     (local $__map_start_2 f64)
-    (local $__fallback_tmp_3 i64)
-    (local $__fallback_tmp_4 i64)
+    (local $__fallback_tmp_3 f64)
+    (local $__fallback_tmp_4 f64)
     ;; Unhandled node: operation ?
     f64.const 0
   )

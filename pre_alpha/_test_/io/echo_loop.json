@@ -63,11 +63,10 @@
           "type": "List",
           "elements": [
             {
-              "type": "List"
+              "type": "Unit"
             },
             {
-              "type": "Variable",
-              "name": "<stdout>"
+              "type": "Unit"
             }
           ]
         }
@@ -96,11 +95,10 @@
         "type": "List",
         "elements": [
           {
-            "type": "List"
+            "type": "Unit"
           },
           {
-            "type": "Variable",
-            "name": "<stdout>"
+            "type": "Unit"
           }
         ]
       }

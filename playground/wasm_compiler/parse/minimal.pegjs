@@ -53,18 +53,20 @@ Core
   / Atom
 
 // --- 空間的配置（ネスト構造） ---
+Layout = ("\x02" / "\x03" / EOL)*
+
 Block
-  = "[" _ EOL* _ exprs:Expressions? _ EOL* _ "]" { return [`"["`, ...(exprs || []), `"]"`]; }
-  / "{" _ EOL* _ exprs:Expressions? _ EOL* _ "}" { return [`"{"`, ...(exprs || []), `"}"`]; }
-  / "(" _ EOL* _ exprs:Expressions? _ EOL* _ ")" { return [`"("`, ...(exprs || []), `")"`]; }
+  = "[" Layout exprs:Expressions? Layout "]" { return [`"["`, ...(exprs || []), `"]"`]; }
+  / "{" Layout exprs:Expressions? Layout "}" { return [`"{"`, ...(exprs || []), `"}"`]; }
+  / "(" Layout exprs:Expressions? Layout ")" { return [`"("`, ...(exprs || []), `")"`]; }
   // Lexerが挿入した制御用ASCIIコードによる絶対値ブロックの切り出し (\x04, \x05)
   / "|" expr:Expression "|" { return [`"ABS_"`, expr, `"_ABS"`]; }
   // Lexerが挿入した制御用ASCIIコードによるインデントブロックの切り出し (\x02, \x03)
-  / "\x02" _ EOL* _ exprs:Expressions _ EOL* _ "\x03" { return [`"INDENT_"`, ...exprs, `"_DEDENT"`]; }
+  / "\x02" Layout exprs:Expressions Layout "\x03" { return [`"INDENT_"`, ...exprs, `"_DEDENT"`]; }
 
 // ブロック内で使われる複数行の式
 Expressions
-  = head:Expression tail:(EOL _ @Expression)* {
+  = head:Expression tail:(Layout @Expression)* {
       let result = [head];
       for (let e of tail) {
           if (e !== null) {

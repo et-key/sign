@@ -13,7 +13,10 @@ export function evaluateType(node, env = new Map()) {
   }
 
   if (typeof node === 'string') {
-    if (!isNaN(node) || node.startsWith('0x')) return 'Number';
+    if (node.startsWith('0x')) return 'Address';
+    if (node.startsWith('0r') || node.startsWith('0b')) return 'Register';
+    if (node.startsWith('0u')) return 'String'; // Or Char
+    if (!isNaN(node)) return 'Number';
     if (node.startsWith('`') || node.startsWith('"')) return 'String';
     
     // 環境に存在する場合はその型を返す

@@ -32,8 +32,8 @@ function findTestFiles(dir) {
   return results;
 }
 
-const files = fs.existsSync(testDir) ? findTestFiles(testDir) : [];
-
+const argFile = process.argv[2];
+const files = argFile ? [argFile] : (fs.existsSync(testDir) ? findTestFiles(testDir) : []);
 if (files.length === 0) {
   console.log(`No .sn test files found in ${testDir}`);
 }
@@ -41,9 +41,10 @@ if (files.length === 0) {
 for (const filePath of files) {
   const tc = fs.readFileSync(filePath, 'utf-8');
   console.log(`\n=== File: ${filePath} ===`);
+  let preprocessed = "";
   try {
     // 1. Lexer (前処理)
-    const preprocessed = preprocess(tc);
+    preprocessed = preprocess(tc);
     const visible = preprocessed.replace(/\x02/g, '<INDENT>').replace(/\x03/g, '<DEDENT>').replace(/\x04/g, '<ABS_START>').replace(/\x05/g, '<ABS_END>');
     console.log(`[Lexer output]: ${visible.replace(/\n/g, '\\n')}`);
 
@@ -141,17 +142,22 @@ for (const filePath of files) {
 
     console.log(`[Success] Compiled to: ${outPathJson}, ${outPathS}, and ${outPathWat}`);
 
-  } catch (err) {
-    let errMsg = "";
-    if (err.location) {
-      errMsg = `[Parse Error] Expected ${err.expected.map(e => e.text ? `"${e.text}"` : `[${e.parts.join('')}]`).join(', ')} but "${err.found}" found.`;
+  } catch (e) {
+    if (e.name === 'SyntaxError') {
+       console.log(`[Parse Error] ${e.message}`);
+       const loc = e.location;
+       if (loc) {
+         const lines = preprocessed.split(/\r?\n/);
+         console.log(`Error at line ${loc.start.line}, column ${loc.start.column}:`);
+         console.log(lines[loc.start.line - 1]);
+         console.log('^'.padStart(loc.start.column));
+       }
     } else {
-      errMsg = `[Error] ${err.stack || err.message}`;
+       console.log(`[Error] ${e.message}`);
     }
-    console.error(errMsg);
 
     const outPath = filePath.replace(/\.(sign|sn)$/, '.json');
-    fs.writeFileSync(outPath, JSON.stringify({ error: errMsg }, null, 2), 'utf-8');
+    fs.writeFileSync(outPath, JSON.stringify({ error: e.message }, null, 2), 'utf-8');
     console.log(`[Error] Written to: ${outPath}`);
   }
 }
@@ -187,7 +193,7 @@ function resolveTypeDetails(node, subst) {
 async function compileAndRunWasm(watFilePath) {
   try {
     const watText = fs.readFileSync(watFilePath, 'utf8');
-    const wasmModule = wabt.parseWat(path.basename(watFilePath), watText, { exceptions: true, mutable_globals: true, simd: true });
+    const wasmModule = wabt.parseWat(path.basename(watFilePath), watText, { exceptions: true, mutable_globals: true, simd: true, memory64: true });
     wasmModule.resolveNames();
     wasmModule.validate();
     const binaryOutput = wasmModule.toBinary({ log: true, write_debug_names: true });

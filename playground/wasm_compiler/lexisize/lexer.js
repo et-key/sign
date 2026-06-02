@@ -48,6 +48,7 @@ function markBlock(input) {
   const indentStack = [0];
   let result = [];
   let lastContentLineIdx = -1;
+  let bracketDepth = 0;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -69,10 +70,13 @@ function markBlock(input) {
     let prefix = '';
 
     // インデントが浅くなった場合、スタックをポップしてDEDENTマーカーを出力
-    while (indentStack.length > 1 && currentIndent < indentStack[indentStack.length - 1]) {
-      indentStack.pop();
-      if (lastContentLineIdx !== -1) {
-        result[lastContentLineIdx] += '\x03'; // DEDENTマーカー
+    // ただし、ブラケットの内部ではインデントマーカーを生成しない
+    if (bracketDepth === 0) {
+      while (indentStack.length > 1 && currentIndent < indentStack[indentStack.length - 1]) {
+        indentStack.pop();
+        if (lastContentLineIdx !== -1) {
+          result[lastContentLineIdx] += '\x03'; // DEDENTマーカー
+        }
       }
     }
 
@@ -89,7 +93,7 @@ function markBlock(input) {
         result.push(prefix + content);
         lastContentLineIdx = result.length - 1;
       }
-    } else if (currentIndent > indentStack[indentStack.length - 1]) {
+    } else if (bracketDepth === 0 && currentIndent > indentStack[indentStack.length - 1]) {
       // インデントが深くなった場合
       indentStack.push(currentIndent);
       if (lastContentLineIdx !== -1) {
@@ -99,9 +103,21 @@ function markBlock(input) {
         lastContentLineIdx = result.length - 1;
       }
     } else {
-      // インデントが同じ場合
+      // インデントが同じ場合、またはブラケット内部の場合
       result.push(prefix + content);
       lastContentLineIdx = result.length - 1;
+    }
+
+    // 行内のブラケットをカウントして深さを更新
+    for (let j = 0; j < content.length; j++) {
+      const char = content[j];
+      // 文字列やコメント内は無視する必要があるが、とりあえず簡易的にカウント
+      // （※本来的には文字列リテラル内を無視すべきだが、ここでは簡単に）
+      if (char === '[' || char === '{' || char === '(') {
+        bracketDepth++;
+      } else if (char === ']' || char === '}' || char === ')') {
+        bracketDepth--;
+      }
     }
   }
 

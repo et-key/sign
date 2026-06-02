@@ -28,7 +28,7 @@
           },
           "right": {
             "type": "block",
-            "kind": "paren",
+            "kind": "bracket",
             "content": {
               "type": "operation",
               "operator": "+",
@@ -47,7 +47,7 @@
               },
               "right": {
                 "type": "block",
-                "kind": "paren",
+                "kind": "bracket",
                 "content": {
                   "type": "operation",
                   "operator": " ",

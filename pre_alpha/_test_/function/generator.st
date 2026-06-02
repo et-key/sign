@@ -1,18 +1,18 @@
 f : Lambda(Number)
 map : Lambda([
-  (@<g> <= <x>)
+  (_ <= <x>)
   (<map> <= [
     <g>
-    []
+    _
   ])
 ])
 result : [
   (@Implicit(Lambda) <= Number)
   [
-    (@<g> <= <x>)
+    (_ <= <x>)
     (<map> <= [
       <g>
-      []
+      _
     ])
   ]
 ]

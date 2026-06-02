@@ -3,7 +3,7 @@ all_func : Lambda({
   types : {
     0 : (<all_func> <= [
       Number
-      []
+      _
     ])
     1 : <x>
     2 : <y>

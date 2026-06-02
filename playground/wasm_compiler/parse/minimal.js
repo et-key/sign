@@ -248,21 +248,21 @@ function peg$parse(input, options) {
   function peg$f5(expr) {    return expr;  }
   function peg$f6() {    return null;  }
   function peg$f7(head, tail) {
-    if (tail.length === 0) {
-        // 単一の要素のみの場合（すでに配列化されている密着演算子なども含む）
-        return head;
-    }
-    // flat() によって、密着結合で生成された小さな配列（例: ["@_", "x"]）を
-    // 親のリストに同じ次元で展開（フラット化）します。
-    return [head, ...tail].flat();
+      if (tail.length === 0) {
+          // 単一の要素のみの場合（すでに配列化されている密着演算子なども含む）
+          return head;
+      }
+      // flat() によって、密着結合で生成された小さな配列（例: ["@_", "x"]）を
+      // 親のリストに同じ次元で展開（フラット化）します。
+      return [head, ...tail].flat();
   }
   function peg$f8(pre, core, post) {
-    // プレフィックスもポストフィックスもない場合は、単一の要素を返す
-    if (pre.length === 0 && post.length === 0) return core;
-    
-    // 密着している場合はフラットな配列として返す
-    // Expression層の flat() によって全体のリストに溶け込みます
-    return [...pre, core, ...post];
+      // プレフィックスもポストフィックスもない場合は、単一の要素を返す
+      if (pre.length === 0 && post.length === 0) return core;
+      
+      // 密着している場合はフラットな配列として返す
+      // Expression層の flat() によって全体のリストに溶け込みます
+      return [...pre, core, ...post];
   }
   function peg$f9(pre) {    return pre.map(p => p + "_");  }
   function peg$f10(post) {    return post.map(p => "_" + p);  }
@@ -272,14 +272,14 @@ function peg$parse(input, options) {
   function peg$f14(expr) {    return [`"ABS_"`, expr, `"_ABS"`];  }
   function peg$f15(exprs) {    return [`"INDENT_"`, ...exprs, `"_DEDENT"`];  }
   function peg$f16(head, tail) {
-    let result = [head];
-    for (let e of tail) {
-        if (e !== null) {
-            result.push('"\\n"');
-            result.push(e);
-        }
-    }
-    return result.filter(e => e !== null);
+      let result = [head];
+      for (let e of tail) {
+          if (e !== null) {
+              result.push('"\\n"');
+              result.push(e);
+          }
+      }
+      return result.filter(e => e !== null);
   }
   function peg$f17(id) {return `<${id}>`  }
   let peg$currPos = options.peg$currPos | 0;

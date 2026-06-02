@@ -25,7 +25,9 @@
     "name": "define",
     "inferredType": {
       "type": "Lambda",
-      "returns": "Number"
+      "returns": {
+        "type": "Unit"
+      }
     }
   },
   {
@@ -69,7 +71,9 @@
           },
           {
             "type": "Lambda",
-            "returns": "Number"
+            "returns": {
+              "type": "Unit"
+            }
           }
         ]
       },

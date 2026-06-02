@@ -104,11 +104,7 @@
           {
             "type": "Apply",
             "left": {
-              "type": "Deref",
-              "target": {
-                "type": "Variable",
-                "name": "<g>"
-              }
+              "type": "Unit"
             },
             "right": {
               "type": "Variable",
@@ -129,7 +125,7 @@
                   "name": "<g>"
                 },
                 {
-                  "type": "List"
+                  "type": "Unit"
                 }
               ]
             }
@@ -192,35 +188,7 @@
         {
           "type": "Apply",
           "left": {
-            "type": "Deref",
-            "target": {
-              "type": "List",
-              "elements": [
-                {
-                  "type": "List",
-                  "elements": [
-                    {
-                      "type": "List",
-                      "elements": [
-                        {
-                          "type": "List",
-                          "elements": [
-                            {
-                              "type": "Implicit",
-                              "target": "Lambda"
-                            },
-                            "Number"
-                          ]
-                        },
-                        "Number"
-                      ]
-                    },
-                    "Number"
-                  ]
-                },
-                "Number"
-              ]
-            }
+            "type": "Unit"
           },
           "right": "Number"
         },
@@ -230,11 +198,7 @@
             {
               "type": "Apply",
               "left": {
-                "type": "Deref",
-                "target": {
-                  "type": "Variable",
-                  "name": "<g>"
-                }
+                "type": "Unit"
               },
               "right": {
                 "type": "Variable",
@@ -255,7 +219,7 @@
                     "name": "<g>"
                   },
                   {
-                    "type": "List"
+                    "type": "Unit"
                   }
                 ]
               }
@@ -335,35 +299,7 @@
         {
           "type": "Apply",
           "left": {
-            "type": "Deref",
-            "target": {
-              "type": "List",
-              "elements": [
-                {
-                  "type": "List",
-                  "elements": [
-                    {
-                      "type": "List",
-                      "elements": [
-                        {
-                          "type": "List",
-                          "elements": [
-                            {
-                              "type": "Implicit",
-                              "target": "Lambda"
-                            },
-                            "Number"
-                          ]
-                        },
-                        "Number"
-                      ]
-                    },
-                    "Number"
-                  ]
-                },
-                "Number"
-              ]
-            }
+            "type": "Unit"
           },
           "right": "Number"
         },
@@ -373,11 +309,7 @@
             {
               "type": "Apply",
               "left": {
-                "type": "Deref",
-                "target": {
-                  "type": "Variable",
-                  "name": "<g>"
-                }
+                "type": "Unit"
               },
               "right": {
                 "type": "Variable",
@@ -398,7 +330,7 @@
                     "name": "<g>"
                   },
                   {
-                    "type": "List"
+                    "type": "Unit"
                   }
                 ]
               }

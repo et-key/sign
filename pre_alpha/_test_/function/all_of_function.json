@@ -144,7 +144,7 @@
             "elements": [
               "Number",
               {
-                "type": "List"
+                "type": "Unit"
               }
             ]
           }

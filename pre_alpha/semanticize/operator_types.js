@@ -10,27 +10,58 @@ function resolveArithmetic(L, R) {
   return L;
 }
 
+function getTypeName(t) {
+  if (typeof t === 'string') return t;
+  if (t && typeof t === 'object') {
+    if (t.type === 'Implicit' || t.type === 'Deref') return getTypeName(t.target);
+    return t.type;
+  }
+  return null;
+}
+
 export const OPERATOR_TYPES = {
   // --- 前置演算子 ---
-  'prefix_#': (R) => R,
-  'prefix_##': (R) => R,
-  'prefix_###': (R) => R,
-  'prefix_~': (R) => ({ type: 'Implicit', target: 'List' }),
+  'prefix_#': (R) => ({ type: 'Implicit', target: R }),
+  'prefix_##': (R) => ({ type: 'Implicit', target: R }),
+  'prefix_###': (R) => ({ type: 'Implicit', target: R }),
+  'prefix_~': (R) => {
+    return getTypeName(R) === 'List' ? { type: 'Implicit', target: 'List' } : { type: 'Unit' };
+  },
   'prefix_!': (R) => R,
-  'prefix_$': (R) => ({ type: 'Implicit', target: 'Lambda' }),
-  'prefix_@': (R) => ({ type: 'Deref', target: R }),
+  'prefix_$': (R) => {
+    return getTypeName(R) === 'Lambda' ? { type: 'Implicit', target: 'Lambda' } : { type: 'Unit' };
+  },
+  'prefix_@': (R) => {
+    if (typeof R === 'object' && R?.type === 'Implicit' && getTypeName(R) === 'Lambda') {
+      return { type: 'Deref', target: R };
+    }
+    return { type: 'Unit' };
+  },
   'prefix_!!': (R) => 'Scalar',
   'prefix_-': (R) => R,
 
   // --- 後置演算子 ---
-  'postfix_!': (L) => 'Number',
-  'postfix_~': (L) => ({ type: 'List' }),
-  'postfix_@': (L) => ({ type: 'Lambda' }),
+  'postfix_!': (L) => getTypeName(L) === 'Number' || isVariable(L) ? 'Number' : { type: 'Unit' },
+  'postfix_~': (L) => {
+    if (typeof L === 'object' && L?.type === 'Implicit') {
+      const tName = getTypeName(L);
+      if (tName === 'List' || tName === 'Dictionary' || tName === 'Atom' || tName === 'String' || tName === 'Number') {
+        return { type: 'Deref', target: L.target };
+      }
+    }
+    return { type: 'Unit' };
+  },
+  'postfix_@': (L) => {
+    if (typeof L === 'object' && L?.type === 'Implicit' && getTypeName(L) === 'Dictionary') {
+      return { type: 'Deref', target: L };
+    }
+    return { type: 'Unit' };
+  },
 
   // --- 中置演算子 ---
   ':': (L, R) => R,
-  '?': (L, R) => ({ type: 'Lambda', returns: R }),
-  '#': (L, R) => (L === 'Address' ? 'Address' : L),
+  '?': (L, R) => getTypeName(L) === 'List' ? { type: 'Lambda', returns: R } : { type: 'Unit' },
+  '#': (L, R) => getTypeName(L) === 'Address' ? 'Address' : { type: 'Unit' },
   ';': (L, R) => L,
   '|': (L, R) => L,
   '&': (L, R) => L,
@@ -40,14 +71,8 @@ export const OPERATOR_TYPES = {
   // 空白演算子（coproduct_resolver で解決された後の名前を使用）
   'concat': (L, R) => ({ type: 'List', elements: [L, R] }),
   'compose': (L, R) => ({ type: 'Lambda', returns: L?.returns || { type: 'Compose', left: L, right: R } }),
-  'apply': (L, R) => {
-    // LがLambdaであればその戻り値型、未知なら型の適用（関手の適用）そのものを型とする
-    return L?.returns || { type: 'Apply', left: L, right: R };
-  },
-  'apply_reverse': (L, R) => {
-    // RがLambdaであればその戻り値型、未知なら型の適用そのものを型とする
-    return R?.returns || { type: 'Apply', left: R, right: L };
-  },
+  'apply': (L, R) => L?.returns || { type: 'Apply', left: L, right: R },
+  'apply_reverse': (L, R) => R?.returns || { type: 'Apply', left: R, right: L },
   '~': (L, R) => 'Scalar',
   '~-': (L, R) => 'Scalar',
   '~+': (L, R) => 'Scalar',
@@ -69,9 +94,9 @@ export const OPERATOR_TYPES = {
   '|...|': (L, R) => L,
   "'": (L, R) => ({ type: 'Deref', target: R }),
   '@': (L, R) => ({ type: 'Deref', target: L }),
-  '<<': (L, R) => 'Scalar',
-  '>>': (L, R) => 'Scalar',
-  '||': (L, R) => 'Scalar',
-  ';;': (L, R) => 'Scalar',
-  '&&': (L, R) => 'Scalar',
+  '<<': (L, R) => (getTypeName(L) === 'Address' || getTypeName(L) === 'Register') ? L : { type: 'Unit' },
+  '>>': (L, R) => (getTypeName(L) === 'Address' || getTypeName(L) === 'Register') ? L : { type: 'Unit' },
+  '||': (L, R) => (getTypeName(L) === 'Address' || getTypeName(L) === 'Register') ? L : { type: 'Unit' },
+  ';;': (L, R) => (getTypeName(L) === 'Address' || getTypeName(L) === 'Register') ? L : { type: 'Unit' },
+  '&&': (L, R) => (getTypeName(L) === 'Address' || getTypeName(L) === 'Register') ? L : { type: 'Unit' },
 };

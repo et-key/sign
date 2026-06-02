@@ -2,7 +2,7 @@
 
 ## 基本的な型の扱いについて
 
-全ての型は、`Unit`を継承する。
+全ての型は、`Unit`を根拠とする。
 Unitの値は、`Unit`のみ。
 Unitのサイズは、0とする。
 Unitは、`_`で表現される。
@@ -35,9 +35,9 @@ String を含む場合は `Atom` 含まない場合は `Scalar`
 
 | 記号 | 位置（型の組み合わせ） | 型 |
 | :------: | :------: | ------ |
-| `#` | 前置※ | / |
-| `##` | 前置※ | / |
-| `###` | 前置※ | / |
+| `#` | 前置※ | `R -> Implicit(R)` |
+| `##` | 前置※ | `R -> Implicit(R)` |
+| `###` | 前置※ | `R -> Implicit(R)` |
 | `:` | 中置※ | `(Identifier -> R) -> R` |
 | `?` | 中置※ | `(List -> R) -> Lambda(R)` |
 | `#` | 中置※ | `(Address -> R) -> (Address \| _)` |
@@ -78,10 +78,10 @@ String を含む場合は `Atom` 含まない場合は `Scalar`
 | `;;` | 中置 | `((Address | Register) -> Scalar) -> (Address | Register)` |
 | `&&` | 中置 | `((Address | Register) -> Scalar) -> (Address | Register)` |
 | `!` | 後置 | `Number -> Number` |
-| `~` | 後置 | `Deref(Implicit -> List)` |
+| `~` | 後置 | `Deref(Implicit -> (List \| Dictionary \| Atom))` |
 | `@` | 後置 | `Implicit(Dictionary) -> Deref(Implicit -> Dictionary)` |
 | `~` | 前置※ | `List -> Implicit(List)` |
-| `!` | 前置※ | `L -> L` |
+| `!` | 前置※ | `R -> R` |
 | `$` | 前置※ | `Lambda -> Implicit(Lambda)` |
 | `@` | 前置※ | `Implicit(Lambda) -> Deref(Implicit(Lambda))` |
 | `!!` | 前置※ | `Scalar -> Scalar` |

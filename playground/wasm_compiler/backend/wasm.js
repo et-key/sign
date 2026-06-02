@@ -10,6 +10,8 @@ export class WasmGenerator {
     this.labelCounter = 0;
     this.funcNames = [];
     this.aliasEnv = new Map(); // Stores compile-time aliases for streams and structs
+    this.funcParams = new Map();
+    this.structFields = new Map();
   }
 
   generate(asts) {
@@ -18,17 +20,42 @@ export class WasmGenerator {
     this.funcNames = [];
     this.funcArities = new Map(); // Store arity for top-level functions
     this.funcDefaults = new Map(); // Track which parameters have defaults
+    this.funcRestParams = new Set(); // Track functions that have a rest parameter
+    this.funcParams = new Map();
+    this.structFields = new Map();
     this.aliasEnv = new Map();
 
     this.out.push('(module');
     
     // I/O Import
-    this.out.push('  (import "env" "print" (func $print (param i32)))');
+    this.out.push('  (import "env" "print" (func $print (param f64)))');
     
-    // Core Memory Architecture
-    this.out.push('  (memory 1) ;; 1 page = 64KB');
+    // Core Memory Architecture (WASM64)
+    this.out.push('  (memory i64 1) ;; 1 page = 64KB');
     this.out.push('  (export "memory" (memory 0))');
-    this.out.push('  (type $func_sig (func (param f64) (result f64)))');
+    this.out.push('  (global $arena_ptr (mut i64) (i64.const 2048))');
+    // Signature for all dynamically called functions (closures)
+    // First arg is the environment pointer (closure struct), second is the actual argument
+    this.out.push(`  (type $func_sig (func (param f64) (param f64) (result f64)))`);
+    this.out.push('');
+    
+    // Built-in helper for slicing structs (Arena allocation)
+    this.out.push(`  (func $__slice (param $ptr i64) (param $offset i64) (result f64)`);
+    this.out.push(`    (local $new_len i64) (local $new_ptr i64) (local $src_ptr i64) (local $dst_ptr i64)`);
+    this.out.push(`    local.get $ptr\n    f64.load\n    i64.trunc_f64_u\n    local.get $offset\n    i64.sub\n    local.set $new_len`);
+    this.out.push(`    local.get $new_len\n    i64.const 0\n    i64.lt_s\n    if\n      i64.const 0\n      local.set $new_len\n    end`);
+    this.out.push(`    global.get $arena_ptr\n    local.set $new_ptr`);
+    this.out.push(`    local.get $new_ptr\n    local.get $new_len\n    f64.convert_i64_u\n    f64.store`);
+    this.out.push(`    local.get $new_ptr\n    i64.const 8\n    i64.add\n    local.set $dst_ptr`);
+    this.out.push(`    local.get $ptr\n    i64.const 8\n    i64.add\n    local.get $offset\n    i64.const 8\n    i64.mul\n    i64.add\n    local.set $src_ptr`);
+    this.out.push(`    block $end\n    loop $loop\n      local.get $new_len\n      i64.eqz\n      br_if $end`);
+    this.out.push(`      local.get $dst_ptr\n      local.get $src_ptr\n      f64.load\n      f64.store`);
+    this.out.push(`      local.get $dst_ptr\n      i64.const 8\n      i64.add\n      local.set $dst_ptr`);
+    this.out.push(`      local.get $src_ptr\n      i64.const 8\n      i64.add\n      local.set $src_ptr`);
+    this.out.push(`      local.get $new_len\n      i64.const 1\n      i64.sub\n      local.set $new_len\n      br $loop\n    end\n    end`);
+    this.out.push(`    local.get $dst_ptr\n    global.set $arena_ptr`);
+    this.out.push(`    local.get $new_ptr\n    f64.convert_i64_u`);
+    this.out.push(`  )`);
     this.out.push('');
 
     this.stringPool = new Map(); // string literal -> offset
@@ -56,22 +83,16 @@ export class WasmGenerator {
           if (name && !this.funcNames.includes(name)) {
             this.funcNames.push(name);
           }
+          if (this.isStructBlock(node.right, this.aliasEnv)) {
+             this.structFields.set(name, this.extractStructKeys(node.right));
+          }
         }
       } else {
         topLevelExpressions.push(node);
       }
     }
 
-    if (this.funcNames.length > 0) {
-      this.out.push(`  (table ${this.funcNames.length} funcref)`);
-      let elemStr = `  (elem (i32.const 0)`;
-      for (const fn of this.funcNames) {
-        elemStr += ` $${fn}`;
-      }
-      elemStr += `)`;
-      this.out.push(elemStr);
-      this.out.push('');
-    }
+
 
     // Process all top-level bindings
     for (const node of topLevelBindings) {
@@ -138,12 +159,136 @@ export class WasmGenerator {
           bytes.push('\\' + hex);
         }
       }
-      this.out.push(`  (data (i32.const ${offset}) "${bytes.join('')}")`);
+      this.out.push(`  (data (i64.const ${offset}) "${bytes.join('')}")`);
     }
-    if (this.stringPool.size > 0) this.out.push('');
+    if (this.stringPool.size > 0) this.out.push('');    if (this.funcNames.length > 0) {
+      this.out.push(`  (table ${this.funcNames.length} funcref)`);
+      let elemStr = `  (elem (i32.const 0)`;
+      for (const fn of this.funcNames) {
+        elemStr += ` $${fn}`;
+      }
+      elemStr += `)`;
+      this.out.push(elemStr);
+    }
 
     this.out.push(')');
     return this.out.join('\n') + '\n';
+  }
+
+  canReturnUnit(node, env) {
+    if (!node) return false;
+    if (typeof node === 'string') return false; // Identifiers never return Unit
+    if (node.type === 'operation') {
+      if (node.operator === ':') {
+        // If LHS is a string, it's a binding (Struct key), it never returns Unit.
+        // If LHS is an expression (e.g. x < 1), it's a guard, so it CAN return Unit.
+        if (typeof node.left !== 'string') return true;
+        return this.canReturnUnit(node.right, env);
+      }
+      if (node.operator === '#') return true; // Sink always returns Unit
+      if (node.operator === '\\n') {
+        return this.canReturnUnit(node.left, env) || this.canReturnUnit(node.right, env);
+      }
+      return this.canReturnUnit(node.left, env) || this.canReturnUnit(node.right, env) || this.canReturnUnit(node.operand, env);
+    }
+    if (node.type === 'block') {
+      return this.canReturnUnit(node.content, env);
+    }
+    if (node.type === 'coproduct_block') {
+      if (!node.statements) return false;
+      return node.statements.some(stmt => this.canReturnUnit(stmt, env));
+    }
+    return false;
+  }
+
+  isStructBlock(node, env) {
+    if (!node || node.type !== 'block') return false;
+    
+    const isDictionaryStyle = (content) => {
+        if (!content) return false;
+        if (content.type === 'operation' && content.operator === ':') return true;
+        if (content.type === 'operation' && (content.operator === '\\n' || content.operator === ',')) {
+            return !this.canReturnUnit(content, env);
+        }
+        return false;
+    };
+    
+    return isDictionaryStyle(node.content);
+  }
+
+  extractStructKeys(node) {
+    if (!node) return [];
+    if (typeof node === 'string') return [this.getIdentName(node)];
+    if (node.type === 'operation') {
+      if (node.operator === ':') return [this.getIdentName(node.left)];
+      if (node.operator === '\\n' || node.operator === ',') {
+        return [...this.extractStructKeys(node.left), ...this.extractStructKeys(node.right)];
+      }
+    }
+    if (node.type === 'block') return this.extractStructKeys(node.content);
+    return [];
+  }
+
+  getFreeVariables(node, env, freeVars = new Set()) {
+    if (!node) return freeVars;
+    if (typeof node === 'string') {
+      const name = this.getIdentName(node);
+      if (!env.has(name) && !this.funcArities.has(name) && !['+', '-', '*', '/', '==', '<', '>', ',', 'print'].includes(name) && isNaN(name)) {
+        freeVars.add(name);
+      }
+      return freeVars;
+    }
+    if (node.type === 'operation') {
+      this.getFreeVariables(node.left, env, freeVars);
+      this.getFreeVariables(node.right, env, freeVars);
+      if (node.operand) this.getFreeVariables(node.operand, env, freeVars);
+      return freeVars;
+    }
+    if (node.type === 'juxtaposition') {
+      this.getFreeVariables(node.left, env, freeVars);
+      this.getFreeVariables(node.right, env, freeVars);
+      return freeVars;
+    }
+    if (node.type === 'block') {
+      const blockEnv = new Set(env);
+      const isDict = this.isStructBlock(node, env);
+      if (isDict) {
+        const keys = this.extractStructKeys(node);
+        keys.forEach(k => blockEnv.add(k));
+      }
+      
+      let content = node.content;
+      if (content && content.type === 'operation' && content.operator === '\\n') {
+        const statements = [];
+        const flatten = (n) => {
+            if (!n) return;
+            if (n.type === 'operation' && n.operator === '\\n') {
+                flatten(n.left);
+                flatten(n.right);
+            } else {
+                statements.push(n);
+            }
+        };
+        flatten(content);
+        for (const stmt of statements) {
+            if (stmt.type === 'operation' && stmt.operator === ':') {
+                blockEnv.add(this.getIdentName(stmt.left));
+                this.getFreeVariables(stmt.right, blockEnv, freeVars);
+            } else {
+                this.getFreeVariables(stmt, blockEnv, freeVars);
+            }
+        }
+      } else {
+        this.getFreeVariables(content, blockEnv, freeVars);
+      }
+      return freeVars;
+    }
+    if (node.type === 'coproduct_block') {
+      if (node.statements) {
+        node.statements.forEach(stmt => this.getFreeVariables(stmt, env, freeVars));
+      }
+    }
+    return freeVars;
   }
 
   hasSideEffects(node, env) {
@@ -192,6 +337,7 @@ export class WasmGenerator {
       }
     }
     if (node.type === 'block') {
+      if (this.isStructBlock(node, new Map())) return false; // Struct allocations are values/functions, not aliases
       return this.isCompileTimeAlias(node.content);
     }
     return false;
@@ -210,7 +356,7 @@ export class WasmGenerator {
     return String(node);
   }
 
-  generateFunction(node) {
+  generateFunction(node, freeVars = []) {
     const name = this.getIdentName(node.left);
     let body = node.right;
     
@@ -219,20 +365,33 @@ export class WasmGenerator {
     const locals = new Map();
 
     if (body && body.type === 'operation' && body.operator === '?') {
+      this.currentHasRest = false;
       this.extractParams(body.left, params, defaults);
+      if (this.currentHasRest) this.funcRestParams.add(name);
       body = body.right;
+    } else if (body && body.type === 'block' && body.kind === 'bracket' && body.content && body.content.type === 'operation') {
+      const op = body.content;
+      if (op.left === undefined) {
+         params.push('__p0');
+         op.left = '__p0';
+      }
+      if (op.right === undefined && !['~', '#', '!', '!!', '$', '@'].includes(op.operator)) {
+         params.push('__p1');
+         op.right = '__p1';
+      }
     } else {
-      this.extractParams(node.left, params, defaults);
+      // It's a zero-parameter function (constant binding), do not extract params from the name.
     }
     
     this.funcDefaults.set(name, defaults);
     this.funcArities.set(name, params.length);
+    this.funcParams.set(name, params);
     
     const typeEnv = new Map();
     for (const p of params) typeEnv.set(p, 'f64'); // Functions params are currently f64
-    this.collectLocals(node, params, locals, typeEnv);
+    this.collectLocals(body, params, locals, typeEnv);
     
-    let funcDecl = `  (func $${name}`;
+    let funcDecl = `  (func $${name} (param $__env_ptr f64)`;
     if (params.length > 0) {
       for (const p of params) {
         funcDecl += ` (param $${p} f64)`;
@@ -249,10 +408,48 @@ export class WasmGenerator {
       this.out.push(`    (local $${l} ${type})`);
     }
     this.out.push(`    (local $__list_ptr f64)`); // Default
+    for (const f of freeVars) {
+      if (!locals.has(f) && !params.includes(f)) {
+        this.out.push(`    (local $${f} f64)`);
+      }
+    }
+    
+    // Load free variables from closure struct (env_ptr)
+    for (let i = 0; i < freeVars.length; i++) {
+      this.out.push(`    local.get $__env_ptr`);
+      this.out.push(`    i64.trunc_f64_u`);
+      this.out.push(`    i64.const ${8 * (i + 1)}`);
+      this.out.push(`    i64.add`);
+      this.out.push(`    f64.load`);
+      this.out.push(`    local.set $${freeVars[i]}`);
+    }
 
     const env = typeEnv;
     for (const p of params) env.set(p, 'f64');
     for (const l of locals.keys()) env.set(l, 'local');
+
+    // Generate Default Arguments and NaN checks
+    for (let i = 0; i < params.length; i++) {
+      const p = params[i];
+      const defaultNode = defaults[i];
+      
+      this.out.push(`    local.get $${p}`);
+      this.out.push(`    local.get $${p}`);
+      this.out.push(`    f64.ne`); // f64.ne returns 1 if NaN
+      this.out.push(`    if`);
+      
+      if (defaultNode) {
+        this.generateExpression(defaultNode, env);
+        this.out.push(`      local.set $${p}`);
+      } else {
+        // Monadic short-circuit: return NaN immediately
+        this.out.push(`      f64.const 0`);
+        this.out.push(`      f64.const 0`);
+        this.out.push(`      f64.div`); // Generate NaN
+        this.out.push(`      return`);
+      }
+      this.out.push(`    end`);
+    }
 
     // Generate Body
     this.generateExpression(body, env);
@@ -260,43 +457,42 @@ export class WasmGenerator {
     this.out.push('  )');
   }
 
-  extractParams(node, params, defaults, hasDefault = false) {
+  extractParams(node, params, defaults, defaultExpr = null) {
     if (!node) return;
     if (node.type === 'block') {
-      this.extractParams(node.content, params, defaults, hasDefault);
+      this.extractParams(node.content, params, defaults, defaultExpr);
       return;
     }
     if (node.type === 'coproduct_block') {
       if (node.statements) {
         for (const stmt of node.statements) {
-          this.extractParams(stmt, params, defaults, hasDefault);
+          this.extractParams(stmt, params, defaults, defaultExpr);
         }
       }
       return;
     }
     if (node.type === 'operation' && node.operator === ':') {
-      this.extractParams(node.left, params, defaults, true);
+      this.extractParams(node.left, params, defaults, node.right);
       return;
     }
     if (node.type === 'operation' && node.operator === '?') {
-      this.extractParams(node.left, params, defaults, hasDefault);
+      this.extractParams(node.left, params, defaults, defaultExpr);
       return;
     }
     if (typeof node === 'string') {
       params.push(this.getIdentName(node));
-      defaults.push(hasDefault);
+      defaults.push(defaultExpr);
       return;
     }
     if (node.type === 'operation' && (node.operator === ' ' || node.operator === '\\n')) {
-      this.extractParams(node.left, params, defaults, hasDefault);
-      this.extractParams(node.right, params, defaults, hasDefault);
+      this.extractParams(node.left, params, defaults, defaultExpr);
+      this.extractParams(node.right, params, defaults, defaultExpr);
       return;
     }
     if (node.type === 'operation' && node.operator === '~' && node.position === 'prefix') {
       const baseName = this.getIdentName(node.operand);
-      params.push(`${baseName}_current`); defaults.push(hasDefault);
-      params.push(`${baseName}_step`); defaults.push(hasDefault);
-      params.push(`${baseName}_limit`); defaults.push(hasDefault);
+      params.push(baseName); defaults.push(defaultExpr);
+      this.currentHasRest = true;
       return;
     }
   }
@@ -312,8 +508,14 @@ export class WasmGenerator {
       if (node.operator === ':') {
         const type = this.getType(node.right, typeEnv);
         if (typeof node.left === 'string') {
-          locals.set(node.left, type);
-          typeEnv.set(node.left, type);
+          const varName = this.getIdentName(node.left);
+          if (!params.includes(varName)) {
+            locals.set(varName, type);
+          }
+          typeEnv.set(varName, type);
+          if (this.isStructBlock(node.right, typeEnv)) {
+             this.structFields.set(varName, this.extractStructKeys(node.right));
+          }
         }
         this.collectLocals(node.right, params, locals, typeEnv);
         return;
@@ -341,11 +543,32 @@ export class WasmGenerator {
           locals.set(`__fallback_tmp_${node.reduceId}`, type);
         }
       }
+      if (node.operator === ',') {
+        if (!node.reduceId) node.reduceId = this.labelCounter++;
+        locals.set(`__struct_ptr_${node.reduceId}`, 'i64');
+        locals.set(`__current_ptr_${node.reduceId}`, 'i64');
+        locals.set(`__struct_len_${node.reduceId}`, 'i64');
+        locals.set(`__tmp_ptr_${node.reduceId}`, 'i64');
+        locals.set(`__tmp_len_${node.reduceId}`, 'i64');
+      }
+      if (node.operator === '@') {
+        locals.set(`__fallback_tmp_1`, 'f64');
+      }
       
       this.collectLocals(node.left, params, locals, typeEnv);
       this.collectLocals(node.right, params, locals, typeEnv);
       this.collectLocals(node.operand, params, locals, typeEnv);
     } else if (node.type === 'block') {
+      if (this.isStructBlock(node, typeEnv)) {
+        if (node.reduceId === undefined) {
+          node.reduceId = this.labelCounter++;
+          locals.set(`__struct_ptr_${node.reduceId}`, 'i64');
+          locals.set(`__current_ptr_${node.reduceId}`, 'i64');
+          locals.set(`__struct_len_${node.reduceId}`, 'i64');
+          locals.set(`__tmp_ptr_${node.reduceId}`, 'i64');
+          locals.set(`__tmp_len_${node.reduceId}`, 'i64');
+        }
+      }
       if (node.kind === 'bracket' && node.reduceId === undefined) {
         node.reduceId = this.labelCounter++;
         locals.set(`__reduce_ptr_${node.reduceId}`, 'f64');
@@ -354,8 +577,6 @@ export class WasmGenerator {
         locals.set(`__map_start_${node.reduceId}`, 'f64');
       }
       this.collectLocals(node.content, params, locals, typeEnv);
-    } else if (node.type === 'Lambda') {
-      this.collectLocals(node.body, params, locals, typeEnv);
     } else if (node.type === 'coproduct_block') {
       if (node.statements) {
         for (const stmt of node.statements) {
@@ -368,29 +589,179 @@ export class WasmGenerator {
   getType(node, env) {
     if (!node) return 'f64';
     if (typeof node === 'string') {
-      if (node.startsWith('0x') || node.startsWith('0r') || node.startsWith('0u') || (node.startsWith('`') && node.endsWith('`')) || node.startsWith('\\')) return 'i64';
-      if (!isNaN(node)) return 'f64';
-      return env.get(node) || 'f64';
+      return 'f64'; // Everything is f64
     }
     if (node.type === 'block') {
       if (node.kind === 'abs') return this.getType(node.content, env);
       return this.getType(node.content, env);
     }
     if (node.type === 'operation') {
-      if ([':', '=', '+=', '-=', '*=', '/='].includes(node.operator)) return this.getType(node.right, env);
-      if (['||', '&&', ';;', '<<', '>>'].includes(node.operator)) return 'i64';
-      if (['<', '>', '==', '!=', '<=', '>=', '='].includes(node.operator)) return 'f64'; // Comparison ops are converted to f64 in generateExpression
+      if (node.operator === ':') return this.getType(node.right, env);
+      if (['||', '&&', ';;', '<<', '>>'].includes(node.operator)) return 'f64';
+      if (['<', '>', '==', '!=', '<=', '>='].includes(node.operator)) return 'f64';
       if (['+', '-', '*'].includes(node.operator)) {
-        const leftType = this.getType(node.left, env);
-        const rightType = this.getType(node.right, env);
-        if (leftType === 'i64' && rightType === 'i64') return 'i64';
         return 'f64';
       }
       if (node.operator === '\\n') {
-         return this.getType(node.left, env); // Fallback operator, assume left type dominates
+         return this.getType(node.right, env); // Fallback operator, right side dominates the return value
+      }
+    }
+    if (node.type === 'coproduct_block') {
+      if (node.statements && node.statements.length > 0) {
+        return this.getType(node.statements[0], env);
       }
     }
     return 'f64'; // Default to f64 for MVP
+  }
+
+  generateSpreadArgument(funcName, baseName, pArgCount, env) {
+     const hasRest = this.funcRestParams.has(funcName);
+     const fParams = this.funcParams.get(funcName) || [];
+     const sFields = this.structFields.get(baseName) || [];
+     
+     if (fParams.length > 0 && sFields.length > 0) {
+         const mappedIndices = [];
+         const unmatchedFields = [];
+         
+         for (let j = 0; j < fParams.length; j++) {
+             if (hasRest && j === fParams.length - 1) break;
+             const pName = fParams[j];
+             const sIdx = sFields.indexOf(pName);
+             mappedIndices.push(sIdx);
+         }
+         
+         for (let j = 0; j < sFields.length; j++) {
+             if (!fParams.includes(sFields[j])) {
+                 unmatchedFields.push({ name: sFields[j], index: j });
+             }
+         }
+         
+         for (let i = 0; i < pArgCount; i++) {
+             if (i === pArgCount - 1 && hasRest) {
+                 this.out.push(`    ;; Spread Rest pack (${unmatchedFields.length} fields)`);
+                 if (unmatchedFields.length === 0) {
+                     this.out.push(`    global.get $arena_ptr`);
+                     this.out.push(`    i64.const 0`);
+                     this.out.push(`    f64.convert_i64_u`);
+                     this.out.push(`    f64.store`);
+                     this.out.push(`    global.get $arena_ptr`);
+                     this.out.push(`    global.get $arena_ptr`);
+                     this.out.push(`    i64.const 8`);
+                     this.out.push(`    i64.add`);
+                     this.out.push(`    global.set $arena_ptr`);
+                     this.out.push(`    f64.convert_i64_u`);
+                 } else {
+                     const numFields = unmatchedFields.length;
+                     this.out.push(`    global.get $arena_ptr`);
+                     this.out.push(`    i64.const ${numFields}`);
+                     this.out.push(`    f64.convert_i64_u`);
+                     this.out.push(`    f64.store`);
+                     
+                     for (let j = 0; j < numFields; j++) {
+                         const uf = unmatchedFields[j];
+                         this.out.push(`    global.get $arena_ptr`);
+                         this.out.push(`    i64.const ${8 + j * 8}`);
+                         this.out.push(`    i64.add`);
+                         
+                         if (env.has(baseName)) {
+                             this.out.push(`    local.get $${baseName}`);
+                         } else {
+                             const arity = this.funcArities.get(baseName) || 0;
+                             if (arity === 0) this.out.push(`    f64.const 0`);
+                             this.out.push(`    call $${baseName}`);
+                         }
+                         this.out.push(`    i64.trunc_f64_u`);
+                         this.out.push(`    i64.const 8`);
+                         this.out.push(`    i64.add`);
+                         this.out.push(`    i64.const ${uf.index * 8}`);
+                         this.out.push(`    i64.add`);
+                         this.out.push(`    f64.load`);
+                         this.out.push(`    f64.store`);
+                     }
+                     
+                     this.out.push(`    global.get $arena_ptr`);
+                     this.out.push(`    f64.convert_i64_u`);
+                     
+                     this.out.push(`    global.get $arena_ptr`);
+                     this.out.push(`    i64.const ${8 + numFields * 8}`);
+                     this.out.push(`    i64.add`);
+                     this.out.push(`    global.set $arena_ptr`);
+                 }
+             } else {
+                 const targetIdx = mappedIndices[i];
+                 this.out.push(`    ;; Spread named element ${i} (mapped to struct index ${targetIdx})`);
+                 if (targetIdx === -1) {
+                     this.out.push(`    f64.const nan ;; Compile error: named argument not found`);
+                 } else {
+                     if (env.has(baseName)) {
+                        this.out.push(`    local.get $${baseName}`);
+                     } else {
+                        const arity = this.funcArities.get(baseName) || 0;
+                        if (arity === 0) this.out.push(`    f64.const 0`);
+                        this.out.push(`    call $${baseName}`);
+                     }
+                     this.out.push(`    i64.trunc_f64_u`);
+                     this.out.push(`    i64.const 8`);
+                     this.out.push(`    i64.add`);
+                     this.out.push(`    i64.const ${targetIdx * 8}`);
+                     this.out.push(`    i64.add`);
+                     this.out.push(`    f64.load`);
+                 }
+             }
+         }
+     } else {
+         for (let i = 0; i < pArgCount; i++) {
+            if (i === pArgCount - 1 && hasRest) {
+               this.out.push(`    ;; Spread Rest slice`);
+               if (env.has(baseName)) {
+                  this.out.push(`    local.get $${baseName}`);
+               } else {
+                  const arity = this.funcArities.get(baseName) || 0;
+                  if (arity === 0) this.out.push(`    f64.const 0`);
+                  this.out.push(`    call $${baseName}`);
+               }
+               this.out.push(`    i64.trunc_f64_u`);
+               this.out.push(`    i64.const ${i}`);
+               this.out.push(`    call $__slice`);
+            } else {
+                this.out.push(`    ;; Spread element ${i}`);
+                if (env.has(baseName)) {
+                   this.out.push(`    local.get $${baseName}`);
+                } else {
+                   const arity = this.funcArities.get(baseName) || 0;
+                   if (arity === 0) this.out.push(`    f64.const 0`);
+                   this.out.push(`    call $${baseName}`);
+                }
+                
+                // At this point, the pointer is on the stack.
+                // We need to save it to a temp local to use it multiple times.
+                this.out.push(`    local.set $__fallback_tmp_1`);
+                
+                // Check if i < length
+                this.out.push(`    local.get $__fallback_tmp_1`);
+                this.out.push(`    i64.trunc_f64_u`);
+                this.out.push(`    f64.load`);
+                this.out.push(`    i64.trunc_f64_u`);
+                this.out.push(`    i64.const ${i}`);
+                this.out.push(`    i64.gt_s`);
+                this.out.push(`    if (result f64)`);
+                
+                // Element exists, load it
+                this.out.push(`      local.get $__fallback_tmp_1`);
+                this.out.push(`      i64.trunc_f64_u`);
+                this.out.push(`      i64.const 8`);
+                this.out.push(`      i64.add`);
+                this.out.push(`      i64.const ${i * 8}`);
+                this.out.push(`      i64.add`);
+                this.out.push(`      f64.load`);
+                
+                this.out.push(`    else`);
+                // Element missing, push NaN
+                this.out.push(`      f64.const nan`);
+                this.out.push(`    end`);
+            }
+         }
+     }
   }
 
   generateExpression(node, env) {
@@ -403,13 +774,13 @@ export class WasmGenerator {
           this.stringPool.set(strVal, this.dataOffset);
           this.dataOffset += strVal.length * 8; // 8 bytes per char
         }
-        this.out.push(`    i64.const ${this.stringPool.get(strVal)}`); // String pointer is Address (i64)
+        this.out.push(`    f64.const ${this.stringPool.get(strVal)}`); // String pointer as f64
         return;
       }
       if (node.startsWith('\\')) {
         const char = node.slice(1);
         const code = char.length === 1 ? char.charCodeAt(0) : 0;
-        this.out.push(`    i64.const ${code}`); // Char is i64
+        this.out.push(`    f64.const ${code}`); // Char as f64
         return;
       }
       if (node.startsWith('0x') || node.startsWith('0r') || node.startsWith('0u')) {
@@ -417,7 +788,7 @@ export class WasmGenerator {
         if (node.startsWith('0r') || node.startsWith('0u')) {
           valStr = node.slice(2);
         }
-        this.out.push(`    i64.const ${Number(valStr)}`); // Address/Register is i64
+        this.out.push(`    f64.const ${Number(valStr)}`); // Address/Register as f64
         return;
       }
       if (!isNaN(node)) {
@@ -467,6 +838,136 @@ export class WasmGenerator {
           }
         }
       }
+      if (this.isStructBlock(node, env)) {
+        const structPtr = `__struct_ptr_${node.reduceId}`;
+        const currentPtr = `__current_ptr_${node.reduceId}`;
+        const structLen = `__struct_len_${node.reduceId}`;
+        const tmpPtr = `__tmp_ptr_${node.reduceId}`;
+        const tmpLen = `__tmp_len_${node.reduceId}`;
+
+        // Initialize struct length to 0
+        this.out.push(`    i64.const 0`);
+        this.out.push(`    local.set $${structLen}`);
+
+        // Save current arena pointer
+        this.out.push(`    global.get $arena_ptr`);
+        this.out.push(`    local.set $${structPtr}`);
+        
+        // currentPtr = arena_ptr + 8 (leave room for length)
+        this.out.push(`    local.get $${structPtr}`);
+        this.out.push(`    i64.const 8`);
+        this.out.push(`    i64.add`);
+        this.out.push(`    local.set $${currentPtr}`);
+
+        const processStructElements = (contentNode) => {
+           if (!contentNode) return;
+           if (contentNode.type === 'operation' && (contentNode.operator === '\\n' || contentNode.operator === ',')) {
+              processStructElements(contentNode.left);
+              processStructElements(contentNode.right);
+              return;
+           }
+           
+           if (contentNode.type === 'operation' && contentNode.operator === '~' && contentNode.position === 'postfix') {
+              // Spread operator: copy elements from another struct
+              const baseName = this.getIdentName(contentNode.operand);
+              
+              // Load struct pointer (f64 -> i32)
+              this.out.push(`    local.get $${baseName}`);
+              this.out.push(`    i64.trunc_f64_u`);
+              this.out.push(`    local.set $${tmpPtr}`);
+              
+              // Load struct length
+              this.out.push(`    local.get $${tmpPtr}`);
+              this.out.push(`    f64.load`);
+              this.out.push(`    i64.trunc_f64_u`);
+              this.out.push(`    local.set $${tmpLen}`);
+              
+              // Add to total struct length
+              this.out.push(`    local.get $${structLen}`);
+              this.out.push(`    local.get $${tmpLen}`);
+              this.out.push(`    i64.add`);
+              this.out.push(`    local.set $${structLen}`);
+              
+              // Advance tmpPtr to first element
+              this.out.push(`    local.get $${tmpPtr}`);
+              this.out.push(`    i64.const 8`);
+              this.out.push(`    i64.add`);
+              this.out.push(`    local.set $${tmpPtr}`);
+              
+              const loopId = this.labelCounter++;
+              // Loop to copy elements
+              this.out.push(`    block $copy_end_${loopId}`);
+              this.out.push(`    loop $copy_loop_${loopId}`);
+              
+              // if tmpLen == 0, break
+              this.out.push(`      local.get $${tmpLen}`);
+              this.out.push(`      i64.eqz`);
+              this.out.push(`      br_if $copy_end_${loopId}`);
+              
+              // currentPtr[0] = tmpPtr[0]
+              this.out.push(`      local.get $${currentPtr}`);
+              this.out.push(`      local.get $${tmpPtr}`);
+              this.out.push(`      f64.load`);
+              this.out.push(`      f64.store`);
+              
+              // Advance both pointers
+              this.out.push(`      local.get $${currentPtr}`);
+              this.out.push(`      i64.const 8`);
+              this.out.push(`      i64.add`);
+              this.out.push(`      local.set $${currentPtr}`);
+              
+              this.out.push(`      local.get $${tmpPtr}`);
+              this.out.push(`      i64.const 8`);
+              this.out.push(`      i64.add`);
+              this.out.push(`      local.set $${tmpPtr}`);
+              
+              // Decrement tmpLen
+              this.out.push(`      local.get $${tmpLen}`);
+              this.out.push(`      i64.const 1`);
+              this.out.push(`      i64.sub`);
+              this.out.push(`      local.set $${tmpLen}`);
+              
+              this.out.push(`      br $copy_loop_${loopId}`);
+              this.out.push(`    end`);
+              this.out.push(`    end`);
+           } else {
+              // Normal element
+              this.out.push(`    local.get $${currentPtr}`);
+              this.generateExpression(contentNode, env);
+              this.out.push(`    f64.store`);
+              
+              // Advance pointer
+              this.out.push(`    local.get $${currentPtr}`);
+              this.out.push(`    i64.const 8`);
+              this.out.push(`    i64.add`);
+              this.out.push(`    local.set $${currentPtr}`);
+              
+              // Increment length
+              this.out.push(`    local.get $${structLen}`);
+              this.out.push(`    i64.const 1`);
+              this.out.push(`    i64.add`);
+              this.out.push(`    local.set $${structLen}`);
+           }
+        };
+
+        processStructElements(node.content);
+        
+        // Store total length at structPtr
+        this.out.push(`    local.get $${structPtr}`);
+        this.out.push(`    local.get $${structLen}`);
+        this.out.push(`    f64.convert_i64_u`); // store as f64
+        this.out.push(`    f64.store`);
+        
+        // Update global arena pointer to currentPtr (allocation complete)
+        this.out.push(`    local.get $${currentPtr}`);
+        this.out.push(`    global.set $arena_ptr`);
+        
+        // Return struct pointer (as f64)
+        this.out.push(`    local.get $${structPtr}`);
+        this.out.push(`    f64.convert_i64_u`);
+        return;
+      }
+
       this.generateExpression(node.content, env);
       return;
     }
@@ -475,14 +976,36 @@ export class WasmGenerator {
       const cases = node.statements || [];
       if (cases.length === 0) return;
       
+      const blockType = this.getType(cases[0], env); // Assume first case defines the coproduct return type
       const blockId = this.labelCounter++;
-      this.out.push(`    block $B${blockId} (result f64)`);
+      this.out.push(`    block $B_end_${blockId} (result ${blockType})`);
       
       for (let i = 0; i < cases.length; i++) {
-        this.generateExpression(cases[i], env);
-        if (i < cases.length - 1) {
-          this.out.push(`    ;; TODO: Coproduct branching`);
+        const stmt = cases[i];
+        if (stmt && stmt.type === 'operation' && stmt.operator === ':' && typeof stmt.left !== 'string' && !(stmt.left && stmt.left.type === 'operation' && stmt.left.operator === '#')) {
+          // Conditional case
+          const condType = this.getType(stmt.left, env);
+          this.generateExpression(stmt.left, env);
+          if (condType === 'f64') {
+             this.out.push(`    i32.trunc_f64_s`);
+          } else if (condType === 'i64') {
+             this.out.push(`    i32.wrap_i64`);
+          }
+          this.out.push(`    if`);
+          this.generateExpression(stmt.right, env);
+          this.out.push(`      br $B_end_${blockId}`);
+          this.out.push(`    end`);
+        } else {
+          // Default case / Terminal value
+          this.generateExpression(stmt, env);
+          this.out.push(`    br $B_end_${blockId}`);
         }
+      }
+      // If no default case was hit, return Unit (NaN)
+      if (blockType === 'f64') {
+        this.out.push(`    f64.const nan`);
+      } else {
+        this.out.push(`    i64.const 0`);
       }
       this.out.push(`    end`);
       return;
@@ -566,6 +1089,74 @@ export class WasmGenerator {
         return;
       }
       
+      if (node.operator === '@') {
+          // Closure invocation / Memory Dereference
+          const opType = this.getType(node.operand, env);
+          this.generateExpression(node.operand, env);
+          if (opType === 'f64') this.out.push(`    i64.trunc_f64_s`);
+          this.out.push(`    f64.load`);
+          return;
+      }
+      if (node.operator === '$') {
+          // Closure Allocation: $[body]
+          const body = node.operand;
+          const freeVars = Array.from(this.getFreeVariables(body, env));
+          
+          // Generate a top-level WASM function for the closure block
+          const closureName = `__closure_${this.funcNames.length}`;
+          this.funcNames.push(closureName);
+          const closureIndex = this.funcNames.length - 1;
+          
+          // Temporarily redirect output to generate the closure function
+          const oldOut = this.out;
+          this.out = [];
+          
+          const mockAST = {
+              type: 'operation',
+              operator: ':',
+              left: closureName,
+              right: body
+          };
+          this.generateFunction(mockAST, freeVars);
+          
+          if (!this.thunks) this.thunks = [];
+          this.thunks.push(this.out.join('\n'));
+          
+          this.out = oldOut;
+          
+          // Create the closure struct in Arena: [func_ptr, freeVar1, freeVar2...]
+          this.out.push(`    ;; Allocate Closure Struct for ${closureName}`);
+          this.out.push(`    global.get $arena_ptr`);
+          // Store func_ptr
+          this.out.push(`    global.get $arena_ptr`);
+          this.out.push(`    f64.const ${closureIndex}`);
+          this.out.push(`    f64.store`);
+          // Store free variables
+          for (let i = 0; i < freeVars.length; i++) {
+              this.out.push(`    global.get $arena_ptr`);
+              this.out.push(`    i64.const ${8 * (i + 1)}`);
+              this.out.push(`    i64.add`);
+              this.out.push(`    local.get $${freeVars[i]}`);
+              this.out.push(`    f64.store`);
+          }
+          // Increment Arena
+          this.out.push(`    global.get $arena_ptr`);
+          this.out.push(`    i64.const ${8 * (freeVars.length + 1)}`);
+          this.out.push(`    i64.add`);
+          this.out.push(`    global.set $arena_ptr`);
+          // Return the pointer to the closure struct
+          this.out.push(`    f64.convert_i64_u`);
+          return;
+      }
+
+      if (node.operator === ',') {
+          // Top-level comma creates an array allocation
+          // The reduceId was assigned in collectLocals
+          const structNode = { type: 'block', kind: 'bracket', content: node, reduceId: node.reduceId };
+          this.generateExpression(structNode, env);
+          return;
+      }
+
       if (node.operator === '!!' && node.position === 'prefix') {
         this.out.push(`    i64.const -1`);
         const opType = this.getType(node.operand, env);
@@ -618,7 +1209,6 @@ export class WasmGenerator {
         this.generateExpression(node.right, env);
         switch(node.operator) {
           case '==': this.out.push(`    f64.eq`); break;
-          case '=':  this.out.push(`    f64.eq`); break;
           case '!=': this.out.push(`    f64.ne`); break;
           case '<':  this.out.push(`    f64.lt`); break;
           case '>':  this.out.push(`    f64.gt`); break;
@@ -632,8 +1222,8 @@ export class WasmGenerator {
       if (node.operator === '@' && node.position === 'prefix') {
         const opType = this.getType(node.operand, env);
         this.generateExpression(node.operand, env);
-        if (opType === 'f64') this.out.push(`    i32.trunc_f64_s`); 
-        else if (opType === 'i64') this.out.push(`    i32.wrap_i64`);
+        if (opType === 'f64') this.out.push(`    i64.trunc_f64_s`); 
+        // if opType === 'i64', it's already i64, so do nothing for MVP memory64
         this.out.push(`    f64.load`); // MVP Load assumes reading an f64
         return;
       }
@@ -656,17 +1246,15 @@ export class WasmGenerator {
       if (node.operator === "'") {
         const leftType = this.getType(node.left, env);
         this.generateExpression(node.left, env); // pointer
-        if (leftType === 'f64') this.out.push(`    i32.trunc_f64_s`);
-        else if (leftType === 'i64') this.out.push(`    i32.wrap_i64`);
+        if (leftType === 'f64') this.out.push(`    i64.trunc_f64_s`);
         
         const rightType = this.getType(node.right, env);
         this.generateExpression(node.right, env); // index
-        if (rightType === 'f64') this.out.push(`    i32.trunc_f64_s`);
-        else if (rightType === 'i64') this.out.push(`    i32.wrap_i64`);
+        if (rightType === 'f64') this.out.push(`    i64.trunc_f64_s`);
 
-        this.out.push(`    i32.const 3`); // scale index by 8 (2^3) for f64 size
-        this.out.push(`    i32.shl`);
-        this.out.push(`    i32.add`); // pointer + offset
+        this.out.push(`    i64.const 3`); // scale index by 8 (2^3) for f64 size
+        this.out.push(`    i64.shl`);
+        this.out.push(`    i64.add`); // pointer + offset
         this.out.push(`    f64.load`); // get the value
         return;
       }
@@ -685,8 +1273,7 @@ export class WasmGenerator {
         const streamContext = { isString: false };
         this.generateStream(node.right, env, streamContext, (valNode) => {
           this.out.push(`    local.get $${ptrLocal}`);
-          if (ptrType === 'f64') this.out.push(`    i32.trunc_f64_s`);
-          else if (ptrType === 'i64') this.out.push(`    i32.wrap_i64`);
+          if (ptrType === 'f64') this.out.push(`    i64.trunc_f64_s`);
           
           const valType = this.getType(valNode, env);
           this.generateExpression(valNode, env); 
@@ -709,7 +1296,7 @@ export class WasmGenerator {
         return;
       }
 
-      let isApply = node.name === 'apply' || node.name === 'apply_partial' || node.name === 'compose';
+      let isApply = node.name === 'apply' || node.name === 'apply_partial' || node.name === 'compose' || node.operator === ' ';
       
       if (node.name === 'concat') {
         if (this.isCallableBase(node, env)) {
@@ -807,8 +1394,9 @@ export class WasmGenerator {
               } else {
                  const argNode = actualArgs[argIdx];
                  if (argNode && argNode.type === 'operation' && argNode.operator === '~' && argNode.position === 'postfix') {
-                    providedArgs.push({ type: 'node', node: argNode, count: 4 });
-                    paramIdx += 4;
+                    const remaining = arity - paramIdx;
+                    providedArgs.push({ type: 'node', node: argNode, count: remaining });
+                    paramIdx += remaining;
                     argIdx++;
                  } else {
                     providedArgs.push({ type: 'node', node: argNode, count: 1 });
@@ -843,6 +1431,7 @@ export class WasmGenerator {
            
            let thunkCode = `  (func $${thunkName}`;
            // Params
+           let unboundParamCount = 0;
            for (const pArg of providedArgs) {
               if (pArg.type === 'unbound') {
                  thunkCode += ` (param $p${pArg.originalParamIndex} f64)`;
@@ -878,12 +1467,28 @@ export class WasmGenerator {
            return;
         }
 
+        let isClosureInvoke = false;
+        if (func && func.type === 'operation' && func.operator === '@') {
+            isClosureInvoke = true;
+            this.generateExpression(func.operand, env);
+            this.out.push(`    local.set $__fallback_tmp_1 ;; save closure ptr`);
+            this.out.push(`    local.get $__fallback_tmp_1 ;; push env_ptr arg`);
+        } else {
+            this.out.push(`    f64.const 0 ;; dummy env_ptr`);
+        }
+
         // Generate normal call arguments
         for (const pArg of providedArgs) {
            if (pArg.type === 'unit') {
               this.out.push(`    f64.const nan ;; Unit (default argument or omitted)`);
            } else {
-              this.generateExpression(pArg.node, env);
+              if (pArg.node && pArg.node.operator === '~' && pArg.node.position === 'postfix') {
+                 const funcName = this.getIdentName(func);
+                 const baseName = this.getIdentName(pArg.node.operand);
+                 this.generateSpreadArgument(funcName, baseName, pArg.count, env);
+              } else {
+                 this.generateExpression(pArg.node, env);
+              }
            }
         }
         
@@ -893,7 +1498,7 @@ export class WasmGenerator {
             // Direct call to top-level function
             this.out.push(`    call $${funcName}`);
           } else {
-            // Local variable holding a function pointer
+            // Local variable holding a raw function pointer
             this.out.push(`    local.get $${funcName}`);
             this.out.push(`    i32.trunc_f64_s`);
             this.out.push(`    call_indirect (type $func_sig)`);
@@ -908,6 +1513,13 @@ export class WasmGenerator {
           } else {
             this.out.push(`    ;; Unhandled left-partial operator inline`);
           }
+        } else if (isClosureInvoke) {
+          // Closure invocation: @f x
+          this.out.push(`    local.get $__fallback_tmp_1 ;; closure ptr`);
+          this.out.push(`    i64.trunc_f64_s`);
+          this.out.push(`    f64.load ;; get function index`);
+          this.out.push(`    i32.trunc_f64_s`);
+          this.out.push(`    call_indirect (type $func_sig)`);
         } else {
           // Dynamic expression evaluating to a function pointer
           this.generateExpression(func, env);
@@ -915,9 +1527,6 @@ export class WasmGenerator {
           this.out.push(`    call_indirect (type $func_sig)`);
         }
         return;
-      }
-
-      if (node.name === 'concat' || node.name === 'short_circuit') {
         // Standalone concat (not fused into a Sink)
         // Just evaluate and drop intermediate values
         let lastNode = null;
@@ -1030,11 +1639,11 @@ export class WasmGenerator {
         this.out.push(`    local.set $__loop_val_${loopId}`);
 
         // Check condition (le)
-        this.out.push(`    local.get $__loop_val_${loopId}`);
-        this.out.push(`    local.get $__loop_limit_${loopId}`);
-        this.out.push(`    f64.le`);
-        this.out.push(`    br_if $L${loopId}`);
-        this.out.push(`    end`);
+        this.out.push(`    local.get $${sinkPtr}`);
+        this.out.push(`    i64.const 8`);
+        this.out.push(`    i64.add`);
+        this.out.push(`    local.set $${sinkPtr}`);
+        this.out.push(`    f64.const nan`); // Return Unit (NaN) for Sink
         return;
       }
     }

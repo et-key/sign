@@ -1,52 +1,28 @@
 f : Lambda(Number)
 map : Lambda([
-  (@<g> <= <x>)
+  (_ <= <x>)
   (<map> <= [
     <g>
-    []
+    _
   ])
 ])
 result_map1 : [
-  (@[
-    [
-      [
-        [
-          Implicit(Lambda)
-          Number
-        ]
-        Number
-      ]
-      Number
-    ]
-    Number
-  ] <= Number)
+  (_ <= Number)
   [
-    (@<g> <= <x>)
+    (_ <= <x>)
     (<map> <= [
       <g>
-      []
+      _
     ])
   ]
 ]
 result_map2 : [
-  (@[
-    [
-      [
-        [
-          Implicit(Lambda)
-          Number
-        ]
-        Number
-      ]
-      Number
-    ]
-    Number
-  ] <= Number)
+  (_ <= Number)
   [
-    (@<g> <= <x>)
+    (_ <= <x>)
     (<map> <= [
       <g>
-      []
+      _
     ])
   ]
 ]

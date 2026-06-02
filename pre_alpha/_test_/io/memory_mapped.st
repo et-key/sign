@@ -1,5 +1,5 @@
-io_handler : Lambda(Number)
+io_handler : Lambda(_)
 event_loop : ([
   _
-  Lambda(Number)
+  Lambda(_)
 ] <= Scalar)
