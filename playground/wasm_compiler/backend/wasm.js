@@ -297,7 +297,13 @@ export class WasmGenerator {
     
     if (node.type === 'operation') {
       if (node.operator === '#') return true; // IO Store
-      if (node.name === 'apply' || node.name === 'apply_partial' || node.name === 'compose') {
+      let isApply = node.name === 'apply' || node.name === 'apply_partial' || node.name === 'compose' || node.operator === ' ';
+      if (node.name === 'concat') {
+        if (this.isCallableBase(node, env)) {
+          isApply = true;
+        }
+      }
+      if (isApply) {
         // Function calls might have side effects, but we must check if it's a Map operation 
         // A pure map without a Sink has no side effects!
         const { func, args } = this.flattenApply(node);
@@ -319,6 +325,7 @@ export class WasmGenerator {
       return this.hasSideEffects(node.content, env);
     }
     if (node.type === 'coproduct_block') {
+      if (node.statements && node.statements.length > 1) return true; // Juxtaposition (function call)
       return node.statements && node.statements.some(stmt => this.hasSideEffects(stmt, env));
     }
     return false;
@@ -326,8 +333,10 @@ export class WasmGenerator {
 
   isCompileTimeAlias(node) {
     if (!node) return false;
+    if (typeof node === 'number') return true;
     if (typeof node === 'string') {
       const name = this.getIdentName(node);
+      if (!isNaN(Number(name))) return true;
       return this.aliasEnv.has(name);
     }
     if (node.type === 'operation') {
@@ -542,6 +551,13 @@ export class WasmGenerator {
           const type = this.getType(node.left, typeEnv);
           locals.set(`__fallback_tmp_${node.reduceId}`, type);
         }
+      }
+      if (['<', '>', '==', '!=', '<=', '>=', '='].includes(node.operator)) {
+        if (node.reduceId === undefined) {
+          node.reduceId = this.labelCounter++;
+        }
+        locals.set(`__cmp_tmp_L_${node.reduceId}`, 'f64');
+        locals.set(`__cmp_tmp_R_${node.reduceId}`, 'f64');
       }
       if (node.operator === ',') {
         if (!node.reduceId) node.reduceId = this.labelCounter++;
@@ -795,8 +811,12 @@ export class WasmGenerator {
         this.out.push(`    f64.const ${Number(node)}`); // Normal number is f64
         return;
       }
-
+      
       const name = this.getIdentName(node);
+      if (this.aliasEnv.has(name)) {
+        this.generateExpression(this.aliasEnv.get(name), env);
+        return;
+      }
       if (env.has(name)) {
         this.out.push(`    local.get $${name}`); // Local variable (could be i64 or f64)
       } else if (this.funcNames.includes(name)) {
@@ -1194,6 +1214,7 @@ export class WasmGenerator {
         const isLambda = (n) => {
           if (typeof n === 'string') {
              const name = this.getIdentName(n);
+             if (this.aliasEnv.has(name)) return false;
              return this.funcNames.includes(name) && !env.has(name);
           }
           if (n && n.type === 'operation' && n.operator === '?') return true;
@@ -1205,17 +1226,45 @@ export class WasmGenerator {
            return;
         }
 
+        const isVarL = typeof node.left === 'string' ? isNaN(Number(node.left)) : (node.left && node.left.type === 'operation');
+        const isVarR = typeof node.right === 'string' ? isNaN(Number(node.right)) : (node.right && node.right.type === 'operation');
+
+        let returnLeft = true;
+        if (isVarL && !isVarR) {
+            returnLeft = true;
+        } else if (!isVarL && isVarR) {
+            returnLeft = false;
+        } else if (isVarL && isVarR) {
+            returnLeft = false;
+        } else {
+            returnLeft = true;
+        }
+
         this.generateExpression(node.left, env);
+        this.out.push(`    local.set $__cmp_tmp_L_${node.reduceId}`);
+        
         this.generateExpression(node.right, env);
+        this.out.push(`    local.set $__cmp_tmp_R_${node.reduceId}`);
+        
+        if (returnLeft) {
+            this.out.push(`    local.get $__cmp_tmp_L_${node.reduceId}`);
+        } else {
+            this.out.push(`    local.get $__cmp_tmp_R_${node.reduceId}`);
+        }
+        this.out.push(`    f64.const nan`);
+        
+        this.out.push(`    local.get $__cmp_tmp_L_${node.reduceId}`);
+        this.out.push(`    local.get $__cmp_tmp_R_${node.reduceId}`);
+        
         switch(node.operator) {
-          case '==': this.out.push(`    f64.eq`); break;
+          case '==': case '=': this.out.push(`    f64.eq`); break;
           case '!=': this.out.push(`    f64.ne`); break;
           case '<':  this.out.push(`    f64.lt`); break;
           case '>':  this.out.push(`    f64.gt`); break;
           case '<=': this.out.push(`    f64.le`); break;
           case '>=': this.out.push(`    f64.ge`); break;
         }
-        this.out.push(`    f64.convert_i32_s`);
+        this.out.push(`    select`);
         return;
       }
       
@@ -1560,14 +1609,15 @@ export class WasmGenerator {
     if (!node) return;
     
     if (typeof node === 'string') {
+      const name = this.getIdentName(node);
+      if (name === 'x') console.log("Evaluating x in generateExpression! aliasEnv has x:", this.aliasEnv.has('x'));
+      if (this.aliasEnv.has(name)) {
+        this.generateExpression(this.aliasEnv.get(name), env);
+        return;
+      }
       if (node === '``') {
         streamContext.isString = true;
         return; // Empty string `_` evaluates to nothing
-      }
-      const name = this.getIdentName(node);
-      if (this.aliasEnv.has(name)) {
-        this.generateStream(this.aliasEnv.get(name), env, streamContext, emitSink);
-        return;
       }
     }
     

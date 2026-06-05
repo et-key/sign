@@ -2,7 +2,7 @@ import fs from 'fs';
 import { parse } from '../parse/minimal.js';
 import { buildAST } from '../semanticize/shunting_yard.js';
 
-const rawAST = parse("map : f x ~y ? @f x , map f y~\n");
+const rawAST = parse(fs.readFileSync(process.argv[2], 'utf-8'));
 const astTrees = rawAST.filter(l => l != null).map(astLine => {
     return buildAST(Array.isArray(astLine) && astLine.length === 1 && Array.isArray(astLine[0]) ? astLine[0] : astLine);
 });
