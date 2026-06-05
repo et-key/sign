@@ -79,7 +79,7 @@ for (const filePath of files) {
       }
 
       // 5. ボトムアップ型評価
-      // evalTreeを入力として型を演算子シグネチャに基づいて決定します。
+      fs.writeFileSync('scratch/fib_evalTree.json', JSON.stringify(evalTree, null, 2));
       const resolvedType = evaluateType(evalTree, typeEnv);
       
       // JSONやAssembly用には簡約済みのASTを返しつつ、型情報はST用に別管理すべきですが、
@@ -144,7 +144,7 @@ for (const filePath of files) {
 
   } catch (e) {
     if (e.name === 'SyntaxError') {
-       console.log(`[Parse Error] ${e.message}`);
+       console.log(`[Parse Error] ${e.stack}`);
        const loc = e.location;
        if (loc) {
          const lines = preprocessed.split(/\r?\n/);
@@ -153,11 +153,11 @@ for (const filePath of files) {
          console.log('^'.padStart(loc.start.column));
        }
     } else {
-       console.log(`[Error] ${e.message}`);
+       console.log(`[Error] ${e.stack}`);
     }
 
     const outPath = filePath.replace(/\.(sign|sn)$/, '.json');
-    fs.writeFileSync(outPath, JSON.stringify({ error: e.message }, null, 2), 'utf-8');
+    fs.writeFileSync(outPath, JSON.stringify({ error: e.stack }, null, 2), 'utf-8');
     console.log(`[Error] Written to: ${outPath}`);
   }
 }
@@ -219,6 +219,6 @@ async function compileAndRunWasm(watFilePath) {
       console.log(`[WASM Exec ${path.basename(watFilePath)}] No main or result exported.`);
     }
   } catch (e) {
-    console.error(`[WASM Error] Failed to compile or run ${watFilePath}:`, e.message);
+    console.error(`[WASM Error] Failed to compile or run ${watFilePath}:`, e.stack);
   }
 }

@@ -89,6 +89,8 @@ function getCategory(node, env) {
       return env.get(node).category;
     }
     
+    if (['print', '<print>'].includes(node)) return 'Lambda';
+    
     // 未定義の未知の識別子は変数（値）として Atom 扱いとする
     return 'Atom';
   }
@@ -96,8 +98,6 @@ function getCategory(node, env) {
   if (node.type === 'operation') {
     if (node.operator === '?') return 'Lambda';
     if (node.name === 'compose') return 'Lambda';
-    // プロパティ・配列アクセスは関数を返す可能性を考慮し Lambda 扱い
-    if (node.name === 'get_prop' || node.name === 'get_at' || node.name === 'input') return 'Lambda';
     if (isPartialOperation(node)) return 'Lambda';
     // apply, concat, 算術演算などは一旦 Atom（値）扱い
     return 'Atom';

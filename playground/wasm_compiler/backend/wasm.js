@@ -372,6 +372,7 @@ export class WasmGenerator {
     const params = [];
     const defaults = [];
     const locals = new Map();
+    locals.set('__if_cond', 'f64');
 
     if (body && body.type === 'operation' && body.operator === '?') {
       this.currentHasRest = false;
@@ -525,6 +526,8 @@ export class WasmGenerator {
           if (this.isStructBlock(node.right, typeEnv)) {
              this.structFields.set(varName, this.extractStructKeys(node.right));
           }
+        } else {
+          this.collectLocals(node.left, params, locals, typeEnv);
         }
         this.collectLocals(node.right, params, locals, typeEnv);
         return;
@@ -575,6 +578,32 @@ export class WasmGenerator {
       this.collectLocals(node.right, params, locals, typeEnv);
       this.collectLocals(node.operand, params, locals, typeEnv);
     } else if (node.type === 'block') {
+      if (node.kind === 'bracket') {
+        const content = node.content;
+        if (content && content.type === 'operation' && (content.name === 'apply' || content.name === 'apply_partial' || content.name === 'compose')) {
+          const { func, args } = this.flattenApply(content);
+          if (func && func.operator === ',' && func.right && args.length > 0) {
+            const mapFunc = func.right;
+            const listArgs = this.flattenConcat(args[0]);
+            let newStream = null;
+            for (let i = 0; i < listArgs.length; i++) {
+                const applyNode = { ...mapFunc };
+                if (applyNode.position === 'prefix' || applyNode.position === 'postfix') {
+                    applyNode.operand = listArgs[i];
+                } else {
+                    if (applyNode.left === undefined) applyNode.left = listArgs[i];
+                    else applyNode.right = listArgs[i];
+                }
+                if (!newStream) {
+                    newStream = applyNode;
+                } else {
+                    newStream = { type: 'operation', operator: ',', name: 'product', left: newStream, right: applyNode };
+                }
+            }
+            node.content = newStream;
+          }
+        }
+      }
       if (this.isStructBlock(node, typeEnv)) {
         if (node.reduceId === undefined) {
           node.reduceId = this.labelCounter++;
@@ -849,12 +878,34 @@ export class WasmGenerator {
         if (content && content.type === 'operation' && (content.name === 'apply' || content.name === 'apply_partial' || content.name === 'compose')) {
           const { func, args } = this.flattenApply(content);
           if (func && func.operator === ',' && func.right && args.length > 0) {
-            // Map syntax: [func,] list
-            // Memory allocation for Map is disabled. 
-            // In the future, Map will be compiled as a pure stream transformer connected to a Sink.
-            this.out.push(`    ;; Map without Sink is not supported yet in zero-cost stream mode`);
-            this.out.push(`    f64.const 0`);
-            return;
+            // Compile-time Map unwrolling for statically known sequences
+            const mapFunc = func.right;
+            const listArgs = this.flattenConcat(args[0]);
+            
+            let newStream = null;
+            for (let i = 0; i < listArgs.length; i++) {
+                const applyNode = { ...mapFunc };
+                if (applyNode.position === 'prefix' || applyNode.position === 'postfix') {
+                    applyNode.operand = listArgs[i];
+                } else {
+                    if (applyNode.left === undefined) applyNode.left = listArgs[i];
+                    else applyNode.right = listArgs[i];
+                }
+                
+                if (!newStream) {
+                    newStream = applyNode;
+                } else {
+                    newStream = {
+                        type: 'operation',
+                        operator: ',',
+                        name: 'product',
+                        left: newStream,
+                        right: applyNode
+                    };
+                }
+            }
+            // Replace the bracket content with the distributed stream and fall through to isStructBlock
+            node.content = newStream;
           }
         }
       }
@@ -1007,7 +1058,9 @@ export class WasmGenerator {
           const condType = this.getType(stmt.left, env);
           this.generateExpression(stmt.left, env);
           if (condType === 'f64') {
-             this.out.push(`    i32.trunc_f64_s`);
+            this.out.push(`    local.tee $__if_cond`);
+            this.out.push(`    local.get $__if_cond`);
+            this.out.push(`    f64.eq`);
           } else if (condType === 'i64') {
              this.out.push(`    i32.wrap_i64`);
           }
@@ -1043,23 +1096,34 @@ export class WasmGenerator {
             this.out.push(`    local.get $${varName}`);
           }
         } else {
-          const condType = this.getType(node.left, env);
-          this.generateExpression(node.left, env);
-          if (condType === 'f64') {
-             this.out.push(`    i32.trunc_f64_s`); // convert f64 condition to i32 for if
-          } else if (condType === 'i64') {
-             this.out.push(`    i32.wrap_i64`); // convert i64 condition to i32 for if
-          }
           const blockType = this.getType(node.right, env);
-          this.out.push(`    if (result ${blockType})`);
-          this.generateExpression(node.right, env);
-          this.out.push(`    else`);
           if (blockType === 'f64') {
+            this.generateExpression(node.left, env);
+            this.out.push(`    local.tee $__if_cond`);
+            this.out.push(`    local.get $__if_cond`);
+            this.out.push(`    f64.eq`);
+            this.out.push(`    if (result f64)`);
+            this.generateExpression(node.right, env);
+            this.out.push(`    else`);
             this.out.push(`      f64.const nan ;; Unit`);
+            this.out.push(`    end`);
+            return;
           } else {
+            const condType = this.getType(node.left, env);
+            this.generateExpression(node.left, env);
+            if (condType === 'f64') {
+              this.out.push(`    local.tee $__if_cond`);
+              this.out.push(`    local.get $__if_cond`);
+              this.out.push(`    f64.eq`);
+            } else if (condType === 'i64') {
+               this.out.push(`    i32.wrap_i64`); // convert i64 condition to i32 for if
+            }
+            this.out.push(`    if (result ${blockType})`);
+            this.generateExpression(node.right, env);
+            this.out.push(`    else`);
             this.out.push(`      i64.const 0 ;; Unit for i64`);
+            this.out.push(`    end`);
           }
-          this.out.push(`    end`);
         }
         return;
       }
