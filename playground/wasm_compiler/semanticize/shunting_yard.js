@@ -18,16 +18,21 @@ function identifyToken(token, previousIsOperand) {
     return { type: 'operand', value: token }; // ネストされた配列はオペランド（ASTノード）として扱う
   }
 
-  // 文字列の場合
-  if (token === '"\\n"') {
-    const def = getOperatorInfo('\\n', 'infix');
-    if (def) return { type: 'infix', symbol: '\\n', name: def.name };
-  }
-  
-  if (token.startsWith('"') || (token.startsWith('<') && token.endsWith('>'))) {
-    // 制御タグや識別子、値など
+  if (typeof token === 'object' && token.type === 'Identifier') {
     return { type: 'operand', value: token };
   }
+
+  // 文字列の場合
+  if (typeof token === 'string') {
+    if (token === '"\\n"') {
+      const def = getOperatorInfo('\\n', 'infix');
+      if (def) return { type: 'infix', symbol: '\\n', name: def.name };
+    }
+    
+    if (token.startsWith('"')) {
+      // 制御タグや値など
+      return { type: 'operand', value: token };
+    }
 
   // 1. 後置演算子 (先頭が _ で、_ 以外に文字がある場合)
   if (token.startsWith('_') && token.length > 1) {
@@ -55,6 +60,8 @@ function identifyToken(token, previousIsOperand) {
     // previousIsOperand が true なら中置、false なら前置(PEGで _ が付くはずだが念のため)
     return { type: 'infix', symbol: token, name: infixDef.name };
   }
+
+  } // end of typeof token === 'string'
 
   // 該当しないものは値として扱う
   return { type: 'operand', value: token };

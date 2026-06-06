@@ -1,0 +1,21 @@
+obj : [
+  x: 10
+  y: 20
+]
+a : obj'y
+
+f : x ? x + 1
+b : f [
+  x: 100
+  y: 200
+]
+
+g : obj ? obj'x + obj'y
+c : g [
+  x: 5
+  y: 5
+]
+
+a
+b
+c

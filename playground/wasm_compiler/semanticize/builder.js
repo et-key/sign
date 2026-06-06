@@ -44,6 +44,9 @@ export function buildEnvironment(node, env = new Map(), isExported = false) {
 
     // 定義演算子 (`:`) の場合、左辺の識別子を登録する
     if (node.type === 'operation' && node.operator === ':') {
+      if (!node.left) {
+        console.log("builder error node:", JSON.stringify(node, null, 2));
+      }
       const identName = typeof node.left === 'string' ? node.left : (node.left.name || String(node.left));
       
       // 右辺の構文から、仮のカテゴリを推測する

@@ -281,7 +281,7 @@ function peg$parse(input, options) {
       }
       return result.filter(e => e !== null);
   }
-  function peg$f17(id) {return `<${id}>`  }
+  function peg$f17(id) {return { type: 'Identifier', name: id };  }
   let peg$currPos = options.peg$currPos | 0;
   let peg$savedPos = peg$currPos;
   const peg$posDetailsCache = [{ line: 1, column: 1 }];

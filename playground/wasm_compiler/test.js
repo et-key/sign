@@ -6,8 +6,9 @@ import { resolveCoproducts } from './semanticize/coproduct_resolver.js';
 import { evaluate } from './semanticize/evaluator.js';
 import { generateST } from './semanticize/st_generator.js';
 import { evaluateType } from './semanticize/type_evaluator.js';
-import { generateAArch64 } from './backend/aarch64.js';
-import { generateWasm } from './backend/wasm.js';
+
+import { analyzeSemantics } from './backend/semantic_analyzer.js';
+import { generateWasm } from './backend/wasm_emitter.js';
 import wabtFactory from 'wabt';
 import util from 'util';
 
@@ -89,6 +90,9 @@ for (const filePath of files) {
       if (astTree && Array.isArray(astTree.statements)) {
         updatedStatements = astTree.statements.map((stmt, i) => {
           if (resolvedType && resolvedType.type === 'coproduct_block' && resolvedType.statements) {
+            if (typeof stmt === 'string') {
+                return { type: 'Identifier', name: stmt, inferredType: resolvedType.statements[i] };
+            }
             return { ...stmt, inferredType: resolvedType.statements[i] };
           }
           return stmt;
@@ -97,6 +101,12 @@ for (const filePath of files) {
       } else if (Array.isArray(astTree)) {
         updatedStatements = astTree.map((stmt, i) => {
           if (resolvedType && resolvedType.type === 'coproduct_block' && resolvedType.statements) {
+            if (typeof stmt === 'string') {
+              // Can't spread strings easily without turning them into objects,
+              // but we want to attach inferredType... 
+              // Wait, primitive strings in AST don't hold properties well. Let's wrap it.
+              return { type: 'Identifier', name: stmt, inferredType: resolvedType.statements[i] };
+            }
             return { ...stmt, inferredType: resolvedType.statements[i] };
           }
           return stmt;
@@ -104,6 +114,9 @@ for (const filePath of files) {
         return { type: 'file', statements: updatedStatements, inferredType: resolvedType };
       }
       
+      if (typeof astTree === 'string') {
+          return { type: 'Identifier', name: astTree, inferredType: resolvedType };
+      }
       return { ...astTree, inferredType: resolvedType };
     });
 
@@ -113,34 +126,24 @@ for (const filePath of files) {
 
     // Write .st Type Signature output
     const outPathSt = filePath.replace(/\.(sign|sn)$/, '.st');
-    // .stには推論済みの型出力する
-    const stInput = astTrees
-      .filter(t => t && t.type === 'operation' && t.operator === ':')
-      .map(t => {
-        if (t.inferredType) return { type: 'operation', operator: ':', left: t.left || t.name, right: t.inferredType };
-        return t;
-      });
-    if (filePath.endsWith('generator.sn')) {
-      console.log(`[DEBUG stInput]`, JSON.stringify(stInput, null, 2));
-    }
-    const stContent = generateST(stInput);
-    fs.writeFileSync(outPathSt, stContent, 'utf-8');
+    fs.writeFileSync(outPathSt, JSON.stringify(astTrees, null, 2), 'utf-8');
 
-    // Write .s AArch64 output
-    const outPathS = filePath.replace(/\.(sign|sn)$/, '.s');
-    // Assemblyは元のastTreeを使う（今回は簡易的にastTreeそのまま）
-    const asmContent = generateAArch64(astTrees);
-    fs.writeFileSync(outPathS, asmContent, 'utf-8');
+    // 6. Semantic Analysis & IR Generation
+    const irProgram = analyzeSemantics(astTrees);
+    
+    // Write .ir output for debugging
+    const outPathIr = filePath.replace(/\.(sign|sn)$/, '.ir.json');
+    fs.writeFileSync(outPathIr, JSON.stringify(irProgram, null, 2), 'utf-8');
 
-    // Write .wat WebAssembly output
+    // 7. WASM Emission
     const outPathWat = filePath.replace(/\.(sign|sn)$/, '.wat');
-    const watContent = generateWasm(astTrees);
+    const watContent = generateWasm(irProgram);
     fs.writeFileSync(outPathWat, watContent, 'utf-8');
 
     // Compile WAT to WASM and execute
     await compileAndRunWasm(outPathWat);
 
-    console.log(`[Success] Compiled to: ${outPathJson}, ${outPathS}, and ${outPathWat}`);
+    console.log(`[Success] Compiled to: ${outPathJson}, ${outPathSt}, and ${outPathWat}`);
 
   } catch (e) {
     if (e.name === 'SyntaxError') {
@@ -206,7 +209,11 @@ async function compileAndRunWasm(watFilePath) {
     const importObject = {
       env: {
         print: (val) => {
-          console.log(`[WASM Print] ${val}`);
+          if (val === -1) {
+             console.log(`[WASM Print] !_`);
+          } else {
+             console.log(`[WASM Print] ${val}`);
+          }
         }
       }
     };

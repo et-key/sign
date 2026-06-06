@@ -104,6 +104,6 @@ number = num:$("-"? [0-9]+ "."? [0-9]*) { return num; }
 address = addr:$("0x" Hex+) { return addr; }
 register = reg:($("0r" Hex+) / $("0b" ("0" / "1")+)) { return reg; }
 unicode = uni:$("0u" Hex+) { return uni; }
-identifier = id:( $([a-zA-Z][a-zA-Z0-9_]*) / $("_" [a-zA-Z0-9_]+) ) { return `<${id}>`; }
+identifier = id:( $([a-zA-Z][a-zA-Z0-9_]*) / $("_" [a-zA-Z0-9_]+) ) { return { type: 'Identifier', name: id }; }
 Hex = [0-9a-fA-F]
 unit = "_" { return { type: 'Unit' }; }

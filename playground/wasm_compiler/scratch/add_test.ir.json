@@ -1,0 +1,51 @@
+{
+  "functions": [
+    {
+      "id": "__func_0",
+      "funcIndex": 0,
+      "params": [
+        "__env_ptr",
+        "x",
+        "y"
+      ],
+      "locals": [],
+      "freeVars": [],
+      "body": {
+        "type": "BinOp",
+        "operator": "+",
+        "left": {
+          "type": "LocalGet",
+          "name": "x"
+        },
+        "right": {
+          "type": "LocalGet",
+          "name": "y"
+        }
+      }
+    }
+  ],
+  "main": [
+    {
+      "type": "ProjectDef",
+      "name": "add",
+      "value": {
+        "type": "PureFuncPtr",
+        "funcIndex": 0
+      }
+    },
+    {
+      "type": "CallDirect",
+      "funcName": "add",
+      "args": [
+        {
+          "type": "NumberLiteral",
+          "value": 3
+        },
+        {
+          "type": "NumberLiteral",
+          "value": 4
+        }
+      ]
+    }
+  ]
+}

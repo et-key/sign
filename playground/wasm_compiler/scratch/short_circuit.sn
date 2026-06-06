@@ -1,0 +1,14 @@
+left : 1
+right : 0
+
+a : left | right
+b : right | left
+c : left & right
+d : right & left
+e : left ; right
+
+a
+b
+c
+d
+e

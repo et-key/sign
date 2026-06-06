@@ -5,7 +5,8 @@ import { buildEnvironment } from './semanticize/builder.js';
 import { resolveCoproducts } from './semanticize/coproduct_resolver.js';
 import { evaluate } from './semanticize/evaluator.js';
 import { evaluateType } from './semanticize/type_evaluator.js';
-import { generateWasm } from './backend/wasm.js';
+import { analyzeSemantics } from './backend/semantic_analyzer.js';
+import { generateWasm } from './backend/wasm_emitter.js';
 
 let wabtInstance = null;
 
@@ -52,8 +53,11 @@ async function compileAndRun() {
             return { ...astTree, inferredType: resolvedType };
         });
 
-        // 4. Generate WebAssembly Text (WAT)
-        const watContent = generateWasm(astTrees);
+        // 4. Generate IR
+        const irProgram = analyzeSemantics(astTrees);
+
+        // 5. Generate WebAssembly Text (WAT)
+        const watContent = generateWasm(irProgram);
         watOutput.textContent = watContent;
 
         // 5. Assemble to WASM Binary

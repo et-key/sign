@@ -1,9 +1,9 @@
 (module
-  (import "env" "print" (func $print (param i32)))
+  (import "env" "print" (func $print (param f64)))
   (memory i64 1) ;; 1 page = 64KB
   (export "memory" (memory 0))
   (global $arena_ptr (mut i64) (i64.const 2048))
-  (type $func_sig (func (param f64) (result f64)))
+  (type $func_sig (func (param f64) (param f64) (result f64)))
 
   (func $__slice (param $ptr i64) (param $offset i64) (result f64)
     (local $new_len i64) (local $new_ptr i64) (local $src_ptr i64) (local $dst_ptr i64)
@@ -68,10 +68,8 @@
     f64.convert_i64_u
   )
 
-  (table 1 funcref)
-  (elem (i32.const 0) $f)
-
-  (func $f (param $x f64) (result f64)
+  (func $f (param $__env_ptr f64) (param $x f64) (result f64)
+    (local $__if_cond f64)
     (local $__struct_ptr_0 i64)
     (local $__current_ptr_0 i64)
     (local $__struct_len_0 i64)
@@ -112,6 +110,7 @@
     i64.add
     local.set $__struct_len_0
     local.get $__current_ptr_0
+    f64.const 0 ;; dummy env_ptr
     f64.const 5
     local.get $g
     i32.trunc_f64_s
@@ -135,7 +134,10 @@
     f64.convert_i64_u
   )
   (func $main (export "main") (result f64)
+    f64.const 0 ;; dummy env_ptr
     f64.const 10
     call $f
   )
+  (table 1 funcref)
+  (elem (i32.const 0) $f)
 )

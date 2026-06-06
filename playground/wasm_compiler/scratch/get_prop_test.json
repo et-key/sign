@@ -1,76 +1,59 @@
 {
   "type": "operation",
-  "operator": " ",
-  "left": "<print>",
-  "right": {
+  "operator": "'",
+  "left": {
     "type": "block",
-    "kind": "paren",
+    "kind": "bracket",
     "content": {
       "type": "block",
       "kind": "bracket",
       "content": {
         "type": "operation",
-        "operator": "'",
+        "operator": " ",
         "left": {
-          "type": "block",
-          "kind": "bracket",
-          "content": {
+          "type": "operation",
+          "operator": ",",
+          "right": {
+            "type": "operation",
+            "operator": "+",
+            "right": "2",
+            "name": "add"
+          },
+          "name": "product"
+        },
+        "right": {
+          "type": "operation",
+          "operator": " ",
+          "left": {
             "type": "operation",
             "operator": " ",
             "left": {
-              "type": "operation",
-              "operator": ",",
-              "right": {
-                "type": "operation",
-                "operator": "*",
-                "right": "2",
-                "name": "mul"
-              },
-              "name": "product"
-            },
-            "right": {
               "type": "operation",
               "operator": " ",
               "left": {
                 "type": "operation",
                 "operator": " ",
-                "left": {
-                  "type": "operation",
-                  "operator": " ",
-                  "left": {
-                    "type": "operation",
-                    "operator": " ",
-                    "left": "1",
-                    "right": "2",
-                    "name": "concat"
-                  },
-                  "right": "3",
-                  "name": "concat"
-                },
-                "right": "4",
+                "left": "1",
+                "right": "2",
                 "name": "concat"
               },
-              "right": "5",
+              "right": "3",
               "name": "concat"
             },
-            "name": "apply"
-          }
+            "right": "4",
+            "name": "concat"
+          },
+          "right": "5",
+          "name": "concat"
         },
-        "right": "2",
-        "name": "get_prop"
+        "name": "apply"
       }
     }
   },
-  "name": "apply",
+  "right": "2",
+  "name": "get_prop",
   "inferredType": {
-    "type": "Apply",
-    "left": {
-      "type": "Variable",
-      "name": "<print>"
-    },
-    "right": {
-      "type": "Deref",
-      "target": "Number"
-    }
+    "type": "Deref",
+    "target": "Number"
   }
 }

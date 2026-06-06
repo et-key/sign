@@ -274,7 +274,7 @@ function peg$parse(input, options) {
   function peg$f19(addr) {    return addr;  }
   function peg$f20(reg) {    return reg;  }
   function peg$f21(uni) {    return uni;  }
-  function peg$f22(id) {    return `<${id}>`;  }
+  function peg$f22(id) {    return { type: 'Identifier', name: id };  }
   function peg$f23() {    return { type: 'Unit' };  }
   let peg$currPos = options.peg$currPos | 0;
   let peg$savedPos = peg$currPos;

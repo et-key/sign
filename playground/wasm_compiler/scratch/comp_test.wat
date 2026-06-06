@@ -1,0 +1,31 @@
+(module
+  (import "env" "print" (func $print (param f64)))
+  (memory i64 1)
+  (export "memory" (memory 0))
+  (global $arena_ptr (mut i64) (i64.const 2048))
+  (type $func_sig (func (param f64) (param f64) (result f64)))
+  (func $main (export "main") (result f64)
+    (local $__env_ptr f64)
+    (local $__tmp_ptr i64)
+    (local $__tmp_f64 f64)
+    (local $a f64)
+    (local $b f64)
+    (local.set $__env_ptr (f64.const 0))
+    (local.set $a (block (result f64) (local.set $__tmp_f64 (f64.const 3)) (if (result f64) (f64.lt (local.get $__tmp_f64) (f64.const 5)) (then (local.get $__tmp_f64)) (else (f64.const 0)))))
+    (local.set $b (block (result f64) (local.set $__tmp_f64 (f64.const 5)) (if (result f64) (f64.lt (local.get $__tmp_f64) (f64.const 3)) (then (local.get $__tmp_f64)) (else (f64.const 0)))))
+    (call $print (local.get $a))
+    (call $print (local.get $b))
+    (f64.const 0)
+  )
+  (table 1 funcref)
+  (func $alloc_partial_1 (param $func_idx f64) (param $arg0 f64) (result f64)
+    (local $ptr i64)
+    (local.set $ptr (global.get $arena_ptr))
+    (i32.store (local.get $ptr) (i32.const 1)) ;; tag=1
+    (i32.store offset=4 (local.get $ptr) (i32.trunc_f64_u (local.get $func_idx))) ;; func_index
+    (i32.store offset=8 (local.get $ptr) (i32.const 1)) ;; missing_args=1
+    (f64.store offset=16 (local.get $ptr) (local.get $arg0)) ;; arg0
+    (global.set $arena_ptr (i64.add (global.get $arena_ptr) (i64.const 24)))
+    (f64.convert_i64_u (local.get $ptr))
+  )
+)

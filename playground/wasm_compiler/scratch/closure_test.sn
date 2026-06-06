@@ -1,0 +1,4 @@
+maker : a ? $[x ? x + a]
+f : maker 10
+b : @f 5
+b

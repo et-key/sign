@@ -98,7 +98,6 @@
     (local $__struct_len_5 i64)
     (local $__tmp_ptr_5 i64)
     (local $__tmp_len_5 i64)
-    f64.const 0 ;; dummy env_ptr
     i64.const 0
     local.set $__struct_len_1
     global.get $arena_ptr
@@ -110,7 +109,7 @@
     local.get $__current_ptr_1
     f64.const 1
     f64.const 2
-    f64.mul
+    f64.add
     f64.store
     local.get $__current_ptr_1
     i64.const 8
@@ -123,7 +122,7 @@
     local.get $__current_ptr_1
     f64.const 2
     f64.const 2
-    f64.mul
+    f64.add
     f64.store
     local.get $__current_ptr_1
     i64.const 8
@@ -136,7 +135,7 @@
     local.get $__current_ptr_1
     f64.const 3
     f64.const 2
-    f64.mul
+    f64.add
     f64.store
     local.get $__current_ptr_1
     i64.const 8
@@ -149,7 +148,7 @@
     local.get $__current_ptr_1
     f64.const 4
     f64.const 2
-    f64.mul
+    f64.add
     f64.store
     local.get $__current_ptr_1
     i64.const 8
@@ -162,7 +161,7 @@
     local.get $__current_ptr_1
     f64.const 5
     f64.const 2
-    f64.mul
+    f64.add
     f64.store
     local.get $__current_ptr_1
     i64.const 8
@@ -187,6 +186,5 @@
     i64.shl
     i64.add
     f64.load
-    call $print
   )
 )

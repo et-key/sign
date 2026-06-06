@@ -1,0 +1,178 @@
+{
+  "functions": [
+    {
+      "id": "__builtin_id",
+      "funcIndex": 0,
+      "freeVars": [],
+      "params": [
+        "x"
+      ],
+      "body": {
+        "type": "LocalGet",
+        "name": "x",
+        "category": "Atom"
+      }
+    }
+  ],
+  "main": [
+    {
+      "type": "ProjectDef",
+      "name": "arr",
+      "value": {
+        "type": "ArrayAlloc",
+        "elements": [
+          {
+            "type": "NumberLiteral",
+            "value": 10,
+            "category": "Atom"
+          },
+          {
+            "type": "NumberLiteral",
+            "value": 20,
+            "category": "Atom"
+          },
+          {
+            "type": "NumberLiteral",
+            "value": 30,
+            "category": "Atom"
+          }
+        ],
+        "category": "Atom"
+      }
+    },
+    {
+      "type": "ProjectDef",
+      "name": "a",
+      "value": {
+        "type": "StructLoad",
+        "ptr": {
+          "type": "ProjectGet",
+          "name": "arr",
+          "category": "Atom"
+        },
+        "index": 0,
+        "category": "Atom"
+      }
+    },
+    {
+      "type": "ProjectDef",
+      "name": "b",
+      "value": {
+        "type": "StructLoad",
+        "ptr": {
+          "type": "ProjectGet",
+          "name": "arr",
+          "category": "Atom"
+        },
+        "index": 1,
+        "category": "Atom"
+      }
+    },
+    {
+      "type": "ProjectDef",
+      "name": "c",
+      "value": {
+        "type": "StructLoad",
+        "ptr": {
+          "type": "ProjectGet",
+          "name": "arr",
+          "category": "Atom"
+        },
+        "index": 2,
+        "category": "Atom"
+      }
+    },
+    {
+      "type": "ProjectDef",
+      "name": "d",
+      "value": {
+        "type": "StructLoad",
+        "ptr": {
+          "type": "ProjectGet",
+          "name": "arr",
+          "category": "Atom"
+        },
+        "index": 3,
+        "category": "Atom"
+      }
+    },
+    {
+      "type": "ProjectDef",
+      "name": "arr_y",
+      "value": {
+        "type": "ArrayAlloc",
+        "elements": [
+          {
+            "type": "NumberLiteral",
+            "value": 100,
+            "category": "Atom"
+          },
+          {
+            "type": "NumberLiteral",
+            "value": 200,
+            "category": "Atom"
+          },
+          {
+            "type": "NumberLiteral",
+            "value": 300,
+            "category": "Atom"
+          }
+        ],
+        "category": "Atom"
+      }
+    },
+    {
+      "type": "ProjectDef",
+      "name": "e",
+      "value": {
+        "type": "StructLoad",
+        "ptr": {
+          "type": "ProjectGet",
+          "name": "arr_y",
+          "category": "Atom"
+        },
+        "index": 1,
+        "category": "Atom"
+      }
+    },
+    {
+      "type": "BinOp",
+      "operator": "+",
+      "left": {
+        "type": "BinOp",
+        "operator": "+",
+        "left": {
+          "type": "BinOp",
+          "operator": "+",
+          "left": {
+            "type": "ProjectGet",
+            "name": "a",
+            "category": "Atom"
+          },
+          "right": {
+            "type": "ProjectGet",
+            "name": "b",
+            "category": "Atom"
+          },
+          "category": "Atom"
+        },
+        "right": {
+          "type": "ProjectGet",
+          "name": "c",
+          "category": "Atom"
+        },
+        "category": "Atom"
+      },
+      "right": {
+        "type": "ProjectGet",
+        "name": "e",
+        "category": "Atom"
+      },
+      "category": "Atom"
+    }
+  ],
+  "propertyRegistry": {
+    "propertyMap": {},
+    "nextPropertyIndex": 0
+  }
+}
