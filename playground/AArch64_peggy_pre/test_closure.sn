@@ -1,3 +1,0 @@
-makeAdder: x y ? x + y
-add10: makeAdder 10
-add10 32

@@ -1,2 +1,0 @@
-a -> Address
-b -> Number

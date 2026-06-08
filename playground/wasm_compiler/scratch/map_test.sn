@@ -1,2 +1,0 @@
-map : f x ~y ? @f x , map f y~
-print [map $[* 2] 1 2 3 4 5]

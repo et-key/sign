@@ -32,14 +32,14 @@ export function resolveCoproducts(node, env = new Map(), depth = 0, pathTrace = 
       }
 
       return { ...node, left, right, operand };
-    } 
-    
+    }
+
     // 3. ブロックノードの子要素を解決
     if (node.type === 'block') {
       const currentEnv = node.env || env; // builder.js が作成したローカルスコープがあれば使用
       return { ...node, content: resolveCoproducts(node.content, currentEnv, depth + 1, [...pathTrace, 'content']) };
-    } 
-    
+    }
+
     // その他のノードの深いコピー
     const newNode = { ...node };
     for (const key of Object.keys(newNode)) {
@@ -74,30 +74,34 @@ function isPartialOperation(node) {
 function getCategory(node, env) {
   if (!node) return 'Atom';
   if (node.isLambda) return 'Lambda';
-  
+
   if (typeof node === 'string') {
     if (!isNaN(node) || node.startsWith('0x')) return 'Atom';
-    
+
     // 文字列リテラルは Atom
-    if ((node.startsWith('"') && node.endsWith('"')) || 
-        (node.startsWith('`') && node.endsWith('`'))) {
+    if (node.startsWith('`') && node.endsWith('`')) {
       return 'Atom';
     }
-    
-    // 環境（env）に登録されていればそのカテゴリを優先
-    if (env && env.has(node)) {
-      return env.get(node).category;
-    }
-    
+
     // 未定義の未知の識別子は変数（値）として Atom 扱いとする
     return 'Atom';
   }
 
+  if (node.type === 'Identifier' || node.type === 'Variable') {
+    if (env && env.has(node.name)) {
+      return env.get(node.name).category;
+    }
+    if (['print', '<print>', '_'].includes(node.name)) return 'Lambda';
+    return 'Atom';
+  }
+
   if (node.type === 'operation') {
+    if (node.position === 'prefix') {
+      if (node.operator === '@') return 'Lambda';
+      return 'Atom';
+    }
     if (node.operator === '?') return 'Lambda';
     if (node.name === 'compose') return 'Lambda';
-    // プロパティ・配列アクセスは関数を返す可能性を考慮し Lambda 扱い
-    if (node.name === 'get_prop' || node.name === 'get_at' || node.name === 'input') return 'Lambda';
     if (isPartialOperation(node)) return 'Lambda';
     // apply, concat, 算術演算などは一旦 Atom（値）扱い
     return 'Atom';
@@ -142,22 +146,22 @@ function reduceCoproductBlock(statements, env) {
       for (let i = 0; i < items.length - 1; i++) {
         const left = items[i];
         const right = items[i + 1];
-        
+
         const catL = getCategory(left, env);
         const catR = getCategory(right, env);
 
         if (catL === prec.leftCat && catR === prec.rightCat) {
           let newNode;
-          
+
           if (prec.name === 'concat') {
             newNode = { type: 'operation', operator: ' ', left, right, name: 'concat' };
-          } 
+          }
           else if (prec.name === 'compose') {
             newNode = { type: 'operation', operator: ' ', left, right, name: 'compose' };
-          } 
+          }
           else if (prec.name === 'apply') {
             newNode = { type: 'operation', operator: ' ', left, right, name: 'apply' };
-          } 
+          }
           else if (prec.name === 'apply_reverse') {
             // 逆適用: 右辺(Lambda)に左辺(Atom)を適用する
             newNode = { type: 'operation', operator: ' ', left: right, right: left, name: 'apply' };

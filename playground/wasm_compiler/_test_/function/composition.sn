@@ -1,4 +1,0 @@
-f: x ? x * 2
-g: x ? x + 1
-
-result : f g 3

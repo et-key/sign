@@ -1,3 +1,0 @@
-Range1 : 1 ~* 2.5 ~ 16
-Res1 : Range1 ' 2
-Result : Res1 * 4

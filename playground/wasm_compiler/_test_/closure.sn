@@ -1,3 +1,0 @@
-make_adder : x y ? x + y
-add5 : make_adder 5
-add5 10

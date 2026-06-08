@@ -1,4 +1,0 @@
-f  :  x  ?  x  *  2
-map  :  g x ~y  ?  [@g x] [map g y~]
-
-result  :  map $f [0 ~+ 2 ~ 10]

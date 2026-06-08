@@ -1,3 +1,0 @@
-add10 : x ? x + 10
-apply_to_20 : f ? f 20
-apply_to_20 add10
