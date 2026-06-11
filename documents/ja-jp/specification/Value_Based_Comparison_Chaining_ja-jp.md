@@ -81,9 +81,9 @@ flowchart TD
 ```mermaid
 flowchart TD
     Start2(["式: a < 5 < 10 (a : 1)"]) --> Step2_1["(a < 5) の評価"]
-    Step2_1 -->|左辺 a の値 1 は単位元| Ret2_1["右辺の値 5 を返す"]
+    Step2_1 -->|左辺 a の値が4以下ならば| Ret2_1["右辺の値 5 を返す"]
     Ret2_1 --> Step2_2["(5 < 10) の評価"]
-    Step2_2 -->|左辺 5 は非単位元| End2["左辺の値 5 を返す"]
+    Step2_2 -->|左辺 5 は| End2["左辺の値 5 を返す"]
 
     style End2 fill:#9f9,stroke:#333,stroke-width:2px
 ```
