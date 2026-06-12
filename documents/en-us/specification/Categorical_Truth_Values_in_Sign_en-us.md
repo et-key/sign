@@ -1,62 +1,81 @@
-# Sign Language Boolean Design: Specification Based on Categorical Approach
+# Categorical Truth Values in Sign: Specification Based on a Category-Theoretic Approach
 
 ## 1. Overview
 
-This document presents specifications for handling boolean values in Sign language to enhance mathematical foundations and consistency in language design.
+This document specifies the handling of logical truth values in the Sign language to enhance mathematical consistency and design coherence.
 
-**Specification**:
-- Unit(`_`)/empty lists and unevaluated function literals are false
-- All other values (including 0) are true
+- Unit (`_`): Empty lists and unevaluated function literals are `false` (falsy).
+- All other values (including `0`) are `true` (truthy).
 
-## 2. Theoretical Foundation
+## 2. Theoretical Background
 
-### 2.1 Categorical Perspective
+### 2.1 Category-Theoretic Perspective
 
-In category theory, 0 plays an important role as the "initial object." The initial object is a special entity that has unique morphisms to any object, and should be treated as "something" (having function) rather than "nothing."
+In category theory, `0` plays an important role as the "initial object". The initial object is a special entity that has a unique morphism to any other object, meaning it is treated as "something" (possessing functionality/structure) rather than "nothing".
 
-On the other hand, Unit/empty lists represent a state of "nothing," so it's natural to treat them as logical "false." This also aligns with the concept of Nothing in monad theory.
+On the other hand, Unit / empty list represents the state of "nothingness", so it is natural to treat it as a logical "false". This aligns with the concept of `Nothing` in monad theory.
 
 ### 2.2 Mathematical Consistency
 
-In ZFC set theory, 0 has a special role as the additive identity element in a Ring. From a categorical perspective, 0 functions as an initial object. Since Sign language's characteristics such as "invisible strong typing" and "unified data model based on lists" are closer to categorical thinking, treating 0 as true provides a more consistent mathematical foundation.
+In ZFC set theory, `0` has a special role as the additive identity element in a Ring. In category theory, however, `0` functions as the initial object. Since Sign's characteristics—such as "invisible strong typing" and "list-based unified data model"—are closer to category-theoretic thinking, treating `0` as `true` provides a more consistent mathematical foundation.
 
 ## 3. Practical Benefits
 
 ### 3.1 Clear Semantics
 
-- The distinction between "whether a value exists" and "whether a value is 0" becomes clear
-- The concept of 0 as a result of numerical computation and logical "false" are clearly separated
-- Affinity with mathematical expressions is enhanced (since 0 is treated as a valid number in mathematics)
+- The distinction between "whether a value exists" and "whether a value is 0" becomes clear.
+- The concept of `0` as a calculation result is clearly separated from the logical concept of "false".
+- Affinities with mathematical expressions are enhanced (since mathematics treats `0` as a valid number).
 
-### 3.2 Language Design Consistency
+### 3.2 Consistency in Language Design
 
-In Sign language's "unified data model based on lists," treating the "empty" state of lists as false clarifies the relationship between the data model and boolean values. Numbers should be treated as a separate concept.
+In Sign's "list-based unified data model", treating the "empty" state of a list as `false` establishes a clear relationship between the data model and logical truth values. Numbers should be treated as a separate concept.
 
 ## 4. Concrete Examples
 
-### Logical Operation Examples
+### Logical Operations
 
-```
+```sign
 ` 0 is true, so returns x
 0 & x
-` Empty list is false, so returns Unit(`_`)
+
+` Empty list is false, so returns Unit (`_`)
 [] & x
+
 ` 1 is true, so returns x
 1 & x
 ```
 
-### Conditional Branch Examples
+### Comparison Operations
 
+```sign
+` If comparison is true, return LHS.
+` In this example, evaluates to 2
+2 < 3
+
+` Comparison operations allow up to three terms. If true, return the middle term.
+` In this example, evaluates to 3
+1 < 3 < 5
+
+` If comparison fails, return Unit.
+3 < 2
 ```
-checkValue : x ?
-	!x : `Value does not exist`
-	x = 0 : `Value is zero`
-	x > 0 : `Positive value`
-	`Negative value`
+
+### Partial Application and Short-Circuit Evaluation
+
+```sign
+` Function definition
+f : x y ? x + y
+
+` Explicit Unit represents partial application
+f _ 4 == [+ 4]
+
+` If a value that evaluates to Unit is passed, it can short-circuit to Unit
+f 3 > 2 4
 ```
 
 ## 5. Conclusion
 
-The design of treating Unit(`_`)/empty lists as false and other values including 0 as true enhances consistency with Sign language's mathematical foundations (especially category theory) and provides more intuitive and clear semantics. This specification enables Sign language to function as a more expressive and mathematically robust language.
+Designing Unit (`_`) / empty lists as `false` and all other values including `0` as `true` enhances consistency with Sign's mathematical foundation (especially category theory) and provides a more intuitive and clear semantics. Through this specification, Sign functions as a more expressive and mathematically robust language.
 
-Particularly important is providing a consistent logical system that programmers can intuitively understand by clearly distinguishing between the numerical 0 and logical "nothing."
+Most importantly, clearly separating the numeric `0` from the logical "nothingness" provides an intuitive and consistent logical system for programmers to understand.

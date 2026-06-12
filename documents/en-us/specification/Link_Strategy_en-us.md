@@ -1,36 +1,36 @@
-# Sign Language Module Design Eliminating Memory Waste
+# Sign Language Module Design: Eliminating Memory Waste
 
-## Problems with C/C++ Include Model
+## The Problem of C/C++ Include Model
 
-1. **Duplicate Code Generation**:
-   - Headers are expanded in each translation unit
-   - Many duplicate codes are generated during compilation stage
-   - Duplicates are eliminated at link time, but this leads to inefficiency in the overall build process
+1. **Generation of Duplicate Code**:
+   - Headers are expanded in each translation unit.
+   - A vast amount of duplicate code is generated during the compilation phase.
+   - Duplicates are eliminated during the linking phase, but this leads to overall inefficiency in the build process.
 
-2. **Static Data Ambiguity**:
-   - `static` variables may be replicated in each translation unit
-   - Unexpected behavior from combinations of inline functions and static data
+2. **Ambiguity of Static Data**:
+   - `static` variables may be duplicated in each translation unit.
+   - Unexpected behavior occurs when combining inline functions with static data.
 
-3. **Preprocessor Limitations**:
-   - Primitive mechanism based on text substitution
-   - Macro name conflicts and scope issues
+3. **Limits of the Preprocessor**:
+   - A primitive mechanism based on text substitution.
+   - Name collisions and scope problems of macros.
 
-## Sign Language Solutions
+## Solution in the Sign Language
 
-Sign language can adopt a fundamentally different approach centered on `@` import and `#` export operators:
+The Sign language can adopt a fundamentally different approach centered around the `@` import and `#` export operators:
 
-1. **Symbol-based Import**:
-   - Import only necessary symbols, not entire files
-   - No code duplication, only one instance in memory
+1. **Symbol-Based Import**:
+   - Import only the necessary symbols instead of the entire file.
+   - No code duplication; only a single instance exists in memory.
 
-2. **Explicit Export Only**:
-   - Only symbols marked with `#` operator are accessible externally
-   - No unintended symbol leakage
+2. **Explicit Exports Only**:
+   - Only symbols marked with the `#` operator can be referenced externally.
+   - Prevents unintended symbol leakage.
 
-3. **Entity-based Compilation**:
-   - No separation between headers and sources, always compile entities
-   - Binary contains only necessary code
+3. **Entity-Based Compilation**:
+   - No separation of headers and sources; entities are always compiled directly.
+   - Only the code necessary for the binary is included.
 
-This model fundamentally eliminates the problem of "having two stdio instances in memory" and enables more efficient memory usage and build processes.
+Under this model, the problem of "having two instances of stdio in memory" is fundamentally eliminated, achieving more efficient memory usage and building processes.
 
-Sign language can provide a sophisticated solution to this long-standing programming language challenge through clear hierarchical organization of memory regions and simplification of module design.
+By simplifying module design and clearly layering memory areas, Sign offers a refined solution to this long-standing programming language challenge.

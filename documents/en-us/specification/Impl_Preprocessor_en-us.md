@@ -1,11 +1,11 @@
 # Sign Language Preprocessor Design: Syntax Candidates
 
-## 1. Argument Name Standardization and Position-based Conversion
+## 1. Standardization of Argument Names and Position-Based Translation
 
-Sign language's preprocessor automatically converts user-written argument names to position-based standard identifiers (`_0`, `_1`, `_2`...). This unifies processing within the compiler and facilitates optimization.
+The Sign language preprocessor automatically converts user-written argument names to position-based standard identifiers (`_0`, `_1`, `_2`...). This unifies processing inside the compiler and simplifies optimization.
 
 ```sign
-`Original syntax
+` Original Syntax
 increment : n ? n + 1
 add : x y ? x + y
 
@@ -15,7 +15,7 @@ R : _ ~x ? x
 map : f x ~y ? @f x , map y~
 map $[* 2] 1 2 3 4 5
 
-`After conversion
+` After Translation
 increment : _0 ? _0 + 1
 add : _0 _1 ? _0 + _1
 
@@ -26,85 +26,85 @@ map : _0 _1 ~_2 ? @_0 _1 , map _2~
 map $[* 2] 1 2 3 4 5
 ```
 
-This conversion realizes conflict avoidance of argument names and unification of compiler internal processing.
+This translation prevents argument name conflicts and unifies the internal processing of the compiler.
 
-## 2. Partial Application and Argument Order Conversion
+## 2. Partial Application and Argument Order Reordering
 
 ```
-`Original syntax
+` Original Syntax
 twice : f ? f f
 flip : f x y ? f y x
 f : x y z ? x * y + z
 g : f 2 _ 3
 
-`After conversion
+` After Translation
 twice : _0 ? _0 _0
 flip : _0 ? _1 _2 ? _0 _2 _1
 f : _0 _1 _2 ? _0 * _1 + _2
 g : _0 ? f 2 _0 3
 ```
 
-## 3. Preprocessing Optimization Strategy Based on Memory Size and Usage Count (Postponed in Minimal Implementation!)
+## 3. Preprocessing Optimization Strategy Based on Memory Size and Usage Count (Deferred for Minimum Implementation!)
 
-Sign language's preprocessor applies optimal conversion strategies based on memory size and usage count of defined literals:
+The Sign language preprocessor applies an optimal translation strategy based on the memory size and usage count of defined literals:
 
 | Classification | Usage Count = 1 | Usage Count > 1 |
-|----------------|-----------------|-----------------|
-| Small Literals (<32B) | Complete inline expansion | Complete inline expansion |
-| Medium/Large Literals (≥32B) | Complete inline expansion | Table reference sharing |
-| Recursive Functions (all sizes) | Table reference | Table reference |
-| Export Definitions | Table reference | Table reference |
+|-----------------|---------------------|----------------------|
+| Small Literal (<32B) | Complete Inline Expansion | Complete Inline Expansion |
+| Medium/Large Literal (≥32B) | Complete Inline Expansion | Sharing via Table Reference |
+| Recursive Function (All Sizes) | Table Reference | Table Reference |
+| Export Definition | Table Reference | Table Reference |
 
-As shown in the table, a table showing identifiers and their locations is necessary.
+As shown in the table, a table indicating identifiers and their locations is necessary.
 
-Inline expansion means...
+What is inline expansion...
 
 ```
-`Original syntax
+` Original Syntax
 add : [+]
 add 2 3
 
-`After conversion
+` After Translation
 [+] 2 3
 ```
 
-## 4. Optimal Conversion of Comparison Operation Polynomials (Needed in Initial Phase, but Unnecessary in Optimization Phase?)
+## 4. Optimal Translation of Comparison Polynomials (Required in early stages, but unnecessary in optimization phase?)
 
-Sign language comparison polynomials have a special structure where each comparison result is used as input for the next comparison, rather than simple comparison chains:
+Comparison polynomials in the Sign language have a special structure where each comparison result is used as the input for the subsequent comparison, rather than being a simple chain of comparisons:
 
-### Basic Conversion Rules
+### Basic Translation Rules
 
 ```sign
-`Original syntax
+` Original Syntax
 3 < x = y < 20
 
-`After conversion
+` After Translation
 [[[3 < x & x] = y & y] < 20] & y
 ```
 
 ```sign
-`Original syntax
+` Original Syntax
 1 <= x <= 100
 
-`After conversion
+` After Translation
 [[1 <= x & x] <= 100] & x
 ```
 
-## 5. Conditional Branching with Block Syntax (Match Case Support)
+## 5. Conditional Branching by Block Syntax (match case support)
 
-Conditional branching with Sign language block syntax is converted to short-circuit evaluation chains without temporary variables.
+Conditional branching using the block syntax of the Sign language is translated into a short-circuit evaluation chain without using temporary variables.
 
-### 5.1 Basic Conversion Pattern
+### 5.1 Basic Translation Patterns
 
 ```
-`Original syntax
+` Original Syntax
 func : x ?
 	condition1 : result1
 	condition2 : result2
 	condition3 : result3
 	default_result
 
-`After conversion
+` After Translation
 func : _0 ?
 	condition1 & result1 |
 	condition2 & result2 |
@@ -112,32 +112,32 @@ func : _0 ?
 	default_result
 ```
 
-### 5.2 Utilizing Sign Language's Short-circuit Evaluation Characteristics
+### 5.2 Leveraging Short-Circuit Evaluation Characteristics of the Sign Language
 
-- Comparison operations: Return variable value on true, Unit(`_`) on false
-- `condition & result`: If condition is true, return `result`; if false, return `_`
-- `_ | next_condition`: If left side is `_`, evaluate right side
+- Comparison operations: Return the variable value when true, and Unit (`_`) when false.
+- `condition & result`: If the condition is true, it evaluates to `result`; if false, it evaluates to `_`.
+- `_ | next_condition`: If the LHS evaluates to `_`, evaluate the RHS.
 
-### 5.3 Conversion Examples
+### 5.3 Translation Examples
 
-#### Number Classification
+#### Numeric Classification
 ```
-`Original syntax
+` Original Syntax
 classify : n ?
 	n = 0 : `zero`
 	n > 0 : `positive`
 	n < 0 : `negative`
 
-`After conversion
+` After Translation
 classify : _0 ?
 	_0 = 0 & `zero` |
 	_0 > 0 & `positive` |
 	_0 < 0 & `negative`
 ```
 
-#### Range Check
+#### Range Checks
 ```
-`Original syntax
+` Original Syntax
 grade : score ?
 	score >= 90 : `A`
 	score >= 80 : `B`
@@ -145,7 +145,7 @@ grade : score ?
 	score >= 60 : `D`
 	`F`
 
-`After conversion
+` After Translation
 grade : _0 ?
 	_0 >= 90 & `A` |
 	_0 >= 80 & `B` |
@@ -156,13 +156,13 @@ grade : _0 ?
 
 #### Conditional Branching with Multiple Arguments
 ```
-`Original syntax
+` Original Syntax
 compare : x y ?
 	x > y : `greater`
 	x = y : `equal`
 	x < y : `less`
 
-`After conversion
+` After Translation
 compare : _0 _1 ?
 	_0 > _1 & `greater` |
 	_0 = _1 & `equal` |
@@ -171,37 +171,38 @@ compare : _0 _1 ?
 
 #### Complex Conditions
 ```
-`Original syntax
+` Original Syntax
 access_check : user role ?
 	user = `admin` : `full_access`
 	role = `moderator` & user != `guest` : `moderate_access`
 	user != _ : `basic_access`
 	`no_access`
 
-`After conversion
+` After Translation
 access_check : _0 _1 ?
 	_0 = `admin` & `full_access` |
 	_1 = `moderator` & _0 != `guest` & `moderate_access` |
 	_0 != _ & `basic_access` |
 	`no_access`
 ```
-## 6. General Block Syntax List Conversion (Automatic Insertion of `,` at End of Blocks)
 
-For pure list construction in block syntax, automatic insertion of `,` product operators at the end of each line is performed.
+## 6. Translation of General Block Syntax to Lists (Automatic insertion of `,` at the end of block lines)
 
-### 6.1 Basic Conversion Rules
+When constructing pure lists using block syntax, the `,` product operator is automatically inserted at the end of each line.
 
-In pure list construction blocks that don't contain conditional expressions (`:` operator), `,` is automatically inserted at the end of each line.
+### 6.1 Basic Translation Rules
+
+In a pure list construction block that does not contain conditional expressions (using the `:` operator), `,` is automatically inserted at the end of each line.
 
 ```sign
-`Original syntax
+` Original Syntax
 buildData :
 	readFile `data1.txt`
 	processRaw input
 	validateData processed
 	saveResult final
 
-`After conversion
+` After Translation
 buildData :
 	(readFile `data1.txt`),
 	(processRaw input),
@@ -209,49 +210,49 @@ buildData :
 	(saveResult final)
 ```
 
-### 6.2 Final Line Processing
+### 6.2 Handling the Final Line
 
-`,` is not inserted for the last element of the list.
+No `,` is inserted after the last element of the list.
 
 ```sign
-`Original syntax
+` Original Syntax
 simpleList :
 	1 + 2
 	3 * 4
 	5 - 1
 
-`After conversion
+` After Translation
 simpleList :
 	[1 + 2],
 	[3 * 4],
 	[5 - 1]
 ```
 
-### 6.3 Automatic Parenthesis Insertion
+### 6.3 Automatic Insertion of Brackets
 
-Complex expressions are automatically surrounded by parentheses to guarantee evaluation order.
+Complex expressions are automatically enclosed in brackets to guarantee the evaluation order.
 
 ```sign
-`Original syntax
+` Original Syntax
 calculations :
 	x + y * z
 	func a b c
 	simpleValue
 
-`After conversion
+` After Translation
 calculations :
 	[x + y * z],
 	[func a b c],
 	simpleValue
 ```
 
-## 7. Clarification of Problematic Patterns vs Allowed Patterns
+## 7. Clarification of Problematic and Allowed Patterns
 
 ### 7.1 Allowed Patterns
 
 #### Pattern A: Pure Conditional Branching
 ```sign
-`✅ Valid: Block with only conditional branching
+` ✅ Normal: Block consisting only of conditional branches
 classify : x ?
 	x < 0 : `negative`
 	x = 0 : `zero`
@@ -260,25 +261,25 @@ classify : x ?
 
 #### Pattern B: Pure List Construction
 ```sign
-`✅ Valid: Block with only general processing
+` ✅ Normal: Block consisting only of general processing
 processSteps :
 	step1 data
 	step2 result
 	step3 final
 ```
 
-#### Pattern C: Single Expression Evaluation
+#### Pattern C: Evaluation of a Single Expression
 ```sign
-`✅ Valid: Single complex expression
+` ✅ Normal: A single complex expression
 complexCalc : x ?
 	calculateSomethingComplex x y z w
 ```
 
-### 7.2 Problematic Patterns (Anti-patterns)
+### 7.2 Problematic Patterns (Anti-Patterns)
 
 #### Problematic Mixed Pattern
 ```sign
-`❌ Problem: Conditional expressions and general processing mixed at same level
+` ❌ Problem: Conditional expressions and general processing are mixed at the same level of hierarchy
 processData : x ?
 	preProcess x
 	x < 0 : `negative`
@@ -287,10 +288,10 @@ processData : x ?
 	finalize x
 ```
 
-### 7.3 Judgment Criteria
+### 7.3 Decision Criteria
 
-- **Allowed**: Block contains only conditional expressions or only general processing
-- **Problem**: Conditional expressions (`:` operator) and general processing mixed at the same level within a block
-- **Conversion**: For general processing only, automatic list conversion by `,` insertion
+- **Allowed**: The block contains either only conditional expressions, or only general processing.
+- **Problematic**: The block contains both conditional expressions (using the `:` operator) and general processing mixed at the same level of hierarchy.
+- **Translation**: If the block contains only general processing, it is automatically converted to a list by inserting `,`.
 
-This specification maintains Sign language's "invisible strength" and design purity.
+This specification preserves the "invisible power" and design purity of the Sign language.

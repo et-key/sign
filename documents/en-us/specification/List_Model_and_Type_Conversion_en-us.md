@@ -1,30 +1,30 @@
-# Sign Language: List Model, Type Conversion, and Multidimensional Arrays
+# Sign Language List Model, Type Conversion, and Multidimensional Array Specification
 
-## 1. Core Principle: All List Operations Expressed with Just Two Operators
+## 1. Basic Principles: Representing All List Operations with Just Two Operators
 
-All list operations in Sign are expressed through the combination of just two operators.
+List operations in the Sign language are completed using a combination of only two operators:
 
 | Operator | Name | Category-Theoretic Meaning | Intuitive Meaning |
-|----------|------|---------------------------|-------------------|
-| ` ` (space) | Coproduct | Juxtaposition / concatenation | "place side by side" |
-| `,` (comma) | Product | Structural composition | "combine together" |
+|---|---|---|---|
+| ` ` (Space) | Coproduct | Juxtaposition / Concatenation | "Arrange" |
+| `,` (Comma) | Product | Structural Assembly | "Combine" |
 
-These two operators stand in the relationship of **adjoint functors** in category theory. Coproduct and product are designed as mathematical duals of each other — once one is determined, the other follows naturally.
+These two form an **adjoint functor** relationship in category theory. That is, the coproduct and product are designed as mathematically dual entities, meaning if one is defined, the other is naturally determined.
 
 ---
 
-## 2. Coproduct (Space): Building and Concatenating 1-Dimensional Lists
+## 2. Coproduct (Space): 1D List Construction and Concatenation
 
 ### 2.1 Juxtaposition of Scalar Values
 
 ```sign
-` Comma-separated (comma may be omitted for scalar types)
+` Comma-separated (for scalar types, commas are optional)
 1, 2, 3, 4, 5
 
-` Space-separated also forms a 1-dimensional list
+` Arranging with spaces also forms a 1D list
 1 2 3 4 5
 
-` The following three are all equivalent
+` The following three are all equivalent:
 myPairs  : 1 2 3 4 5
 myPairs0 : [,] 1 2 3 4 5
 myPairs1 : 1, 2, 3, 4, 5
@@ -35,29 +35,46 @@ myPairs = myPairs0 = myPairs1
 ### 2.2 List Concatenation
 
 ```sign
-` List concatenation via space (coproduct) = flat concatenation
+` List concatenation via spaces (Coproduct) = Flatly concatenated
 [1 2] [3 4] = 1 2 3 4
 
 ` Results in a flat list
-1 , 2 3 , 4 = 1 2 3 4
+[1 , 2] [3 , 4] = 1 2 3 4
 ```
 
 ---
 
-## 3. Product (Comma): Constructing Dimensions
+### 2.3 Range List Construction and Evaluation Strategy via Derived Operators
 
-### 3.1 Comma as a "Dimension-Raising" Operator
+In the Sign language, by using derived operators (`~+`, `~-`, `~*`, `~/`, `~^`) that combine `~` with arithmetic operators, regular range lists such as arithmetic or geometric progressions can be constructed with natural syntax.
+In this range list construction, the design paradigms of **strict evaluation** and **lazy evaluation** are clearly separated based on the number of terms.
 
-Where space "places elements in the same dimension," comma "combines them as a new dimension."
+* **Strict Evaluation (Instantiation) via 3-term Sets**
+  When written as a 3-term set consisting of "Initial Value, Operator, Next Value, Operator, End Value", evaluation is forced (strict evaluation), and it is constructed in memory as a physical 1D list.
+  (Example) `[2 ~+ 2 ~ 10]` $\rightarrow$ Instantiated as `2 4 6 8 10`.
+
+* **Lazy Evaluation (Generator) via 2-term Specification**
+  *Design specification in native compiler main implementation
+  When written as a 2-term specification (e.g., an infinite list without an end value), it is treated as a "lazy evaluation generator (stream)" instead of a physical list. Values are generated only when needed (pulled), and are not instantiated until the postfix `~` (expansion/force evaluation) is applied.
+
+This design enables programmers to intuitively control memory-consuming static list construction and memory-safe infinite stream processing simply by the number of terms written.
+
+---
+
+## 3. Product (Comma): Dimensional Construction
+
+### 3.1 Comma is a "Dimension-Lifting" Operator
+
+While space "arranges items in the same dimension", comma "combines items into a new dimension".
 
 ```sign
-` This is a 1-dimensional list (coproduct: just placing side by side)
+` This is a 1D list (Coproduct: simply arranging)
 1 2 3 4
 
-` This is a 2-dimensional array (product: raises the dimension)
+` This is a 2D array (Product: lifting dimension)
 1 2 , 3 4
 
-` The same structure written in block notation
+` The same meaning written in block notation
 s :
 	1 2 ,
 	3 4
@@ -68,140 +85,126 @@ s :
 Nesting commas naturally corresponds to n-dimensional arrays.
 
 ```sign
-` 2-dimensional (2×3)
+` 2-dimensional (2x3)
 1 2 3 , 4 5 6
 
-` 3-dimensional (2×2×2)
+` 3-dimensional (2x2x2)
 [1 2 , 3 4] , [5 6 , 7 8]
 
-` 3-dimensional (2×2×2) in block notation
+` 3-dimensional (2x2x2) in block notation
 v3 :
 	1 2 , 3 4 ,
 	5 6 , 7 8
 
-` List copy (corresponds to multiplication) = flat copy
+` List copying (corresponding to multiplication) = flatly copied
 [1 2 3 4] * 2 = 1 2 3 4 1 2 3 4
 
-` List lift (corresponds to exponentiation) = copy with dimension raised
+` List lifting (corresponding to exponentiation) = copied by lifting dimensions
 [1 2 3 4] ^ 2 = 1 2 3 4 , 1 2 3 4
 
-` List split (corresponds to division)
+` List splitting (corresponding to division)
 [1 2 3 4] / 2 = 1 2 , 3 4
 
-` Expand operator: expands the inner structure one level, then coproduct is auto-evaluated
-` Inner structure expanded one level → product is dissolved into coproduct
+` Expansion operator: expands the inner layer by 1 level, then the coproduct (space) is automatically evaluated.
+` The inner layer is expanded by 1 level -> product is resolved into coproduct.
 [1 2 , 3 4]~   = [1 2 3 4] = 1 2 3 4
 
-` Since prefix ~ is the "lift" operator, the following identity holds
-` between the comma function and the unit element
+` Since the prefix ~ is the "lifting" operator, the following equation holds with the comma function and the unit element:
 [,] = [~_]
 
-` This gives rise to the following algebra for scalar types
+` Thus, the following algebra holds for scalar types:
 [,] 1 2 3 4 5 = [~_] 1 2 3 4 5 = ~[1 2 3 4 5] = 1, 2, 3, 4, 5 = 1 2 3 4 5
 ```
 
-This algebra, in which `[,]` (product) and coproduct (space) converge to the same thing for scalar types, is the natural manifestation of the adjoint functor theorem in the language's behavior. Prefix `~` (lift) and postfix `~` (expand) are adjoint pairs — mutually inverse operations — and applying both returns the original structure. This is also the moment where the rule "comma may be omitted for scalar types" is proven algebraically.
+This algebra, where `[,]` (product) and coproduct (space) converge to the same result for scalar types, is a natural consequence of the adjoint functor theorem manifesting as language behavior. The prefix `~` (lifting) and postfix `~` (expansion) are an adjoint pair of inverse operations; applying both returns to the original structure. This is also the moment where the specification "commas are optional for scalar types" is algebraically proven.
 
-Postfix `~` is an operator that **expands the inner structure by exactly one level**. Prefix `~` lifts, postfix `~` expands — the same symbol carries mutually inverse operations depending on its position.
+`~` (postfix) is an operator that **expands the inner layer by exactly one level**. Prefix `~` is lifting, postfix `~` is expansion—the same symbol handles inverse operations depending on its position.
 
 ### 3.3 Symmetry of Coproduct and Product
 
 ```sign
-` Coproduct: flat concatenation (brackets cause inner coproduct to evaluate first)
+` Coproduct: flat concatenation (surrounding with brackets evaluates the coproduct inside first)
 [1 2] [3 4]   = 1 2 3 4
 
-` Product: preserved as-is as a 2-dimensional structure
-` (writing [[1 2] [3 4]] is different — the inner parts evaluate as coproduct first)
+` Product: preserved as a 2D structure
+` (Writing [[1 2] [3 4]] would evaluate the coproduct inside first, resulting in something else)
 1 2 , 3 4     = 1 2 , 3 4
 
-` Only the expand operator turns it into a coproduct
+` Becomes coproduct only after the expansion operator is applied
 [1 2 , 3 4]~  = [1 2 3 4] = 1 2 3 4
 
-` Since prefix ~ (lift) and postfix ~ (expand) are mutually inverse, the following holds
+` Since prefix ~ (lifting) and postfix ~ (expansion) are inverse operations, the following holds:
 ~[1 2 , 3 4]~
-= [[1 2 , 3 4]]~    ` prefix ~ lifts (coproduct evaluation is suspended one level)
-= 1 2 , 3 4         ` postfix ~ expands → original structure restored
+= [[1 2 , 3 4]]~    ` Lifted by prefix ~ (coproduct waits in suspension once)
+= 1 2 , 3 4         ` Expanded by postfix ~ -> returns to original
 ```
 
-`1 2 , 3 4` and `[[1 2] [3 4]]` are different. The latter is a two-step expression where `1 2` and `3 4` inside the brackets are each evaluated as coproduct first, and then combined with comma as product. The former directly describes a 2-dimensional structure.
+`1 2 , 3 4` is different from `[[1 2] [3 4]]`. The latter is a two-step expression where `1 2` and `3 4` inside the brackets are evaluated as coproducts first, and then the product is taken via commas. The former directly describes a 2D structure.
 
 ---
 
-## 4. Left-Side Priority Rule for Type Conversion
+## 4. Left-Priority Rules of Type Conversion
 
-### 4.1 Core Principle
+### 4.1 Basic Principle
 
-In binary operations in Sign, **the type of the left-hand side determines the type of the entire operation**. The right-hand side is automatically converted to match the left-hand side's type. If conversion is not possible, a compile error occurs.
+In binary operations of the Sign language, **the type of the left-hand side (LHS) determines the type of the entire operation**. The right-hand side (RHS) is automatically converted to the LHS type. If it cannot be converted, a compile-time error occurs.
 
-The rationale for this design is that "the right-hand side of a binary operation acts as the object of the verb (operator), governed by the left-hand side."
+The basis for this design is the concept that "the RHS of a binary operation acts on the LHS as the object of the verb (operation)".
 
 ```sign
-` Left side is numeric → right-side string is interpreted as a number
+` LHS is number -> RHS string is interpreted as number
 0 + `123` = 123
 
-` Left side is string → right-side number is interpreted as a character
+` LHS is string -> RHS number is interpreted as characters
 `123` + 0 = 0u31 0u32 0u33
 ```
 
-### 4.2 Behavior Determined by Operator Type: Coproduct vs Arithmetic
+### 4.2 Behavior Varies by Operator: Coproduct vs. Arithmetic Operators
 
-The kind of type conversion is determined by the combination of "the left-hand side's type" and "the kind of operator (coproduct or arithmetic)."
+The type of conversion is determined by the combination of the "LHS type" and the "operator type (coproduct or arithmetic)".
 
-**Space (coproduct): structural concatenation**
+**Space (Coproduct): Concatenation of Structures**
+
 ```sign
-` Left side is string → number is stringified and concatenated
+` LHS is string -> numbers are stringified and concatenated
 `123` 0 = `1230`
 
-` Left side is numeric → simply forms a tuple
+` LHS is number -> simply becomes a tuple
 1 2 `34` = 1 2 `34`
 ```
 
-**Arithmetic operators (`+` `-` `*` `/` etc.): when left side is string, each character is operated on element-wise as a code point**
+**Arithmetic Operators (`+`, `-`, `*`, `/`, etc.): If LHS is a string, operates on each character as a code point**
+
 ```sign
-` Additive identity (+0) exposes code points
+` Exposes code points with the additive identity (+0)
 `123` + 0 = 0u31 0u32 0u33
 
-` Multiplicative identity (*1) gives the same result ← +0 and *1 are equivalent
+` Same result with the multiplicative identity (*1) <- +0 and *1 are equivalent
 `123` * 1 = 0u31 0u32 0u33
 
-` Non-identity values can also be applied
-`123` + 1 = 0u32 0u33 0u34   ` each code point +1
-`123` * 2 = 0u62 0u64 0u66   ` each code point ×2
+` Operations can be performed with values other than identity elements
+`123` + 1 = 0u32 0u33 0u34   ` +1 to each code point
+`123` * 2 = 0u62 0u64 0u66   ` multiplies each code point by 2
 ```
 
-**Arithmetic operators: when left side is numeric**
+**Arithmetic Operators: If LHS is a number**
+
 ```sign
-` Right-side string is parsed as a number
+` Parses RHS string as a number
 0 + `123` = 123
 ```
 
-What is significant here is that `"123" + 0` and `"123" * 1` are equivalent. `+0` is the additive identity, `*1` is the multiplicative identity — both are "numerically do-nothing operations," yet **the very act of applying an arithmetic operator to a string** exposes the code points. Space (coproduct) is the sole exception that treats strings as strings.
+Here, it is important to note that `"123" + 0` and `"123" * 1` are equivalent. `+0` is the additive identity, `*1` is the multiplicative identity—both are "numerically no-op operations", but **the act of applying an arithmetic operator to a string itself** exposes the code points. Space (coproduct) is the only exception, acting as an operator that "treats it as a string".
 
-### 4.3 Type Conversion on Lists
+### 4.4 The Moment the Essence of Character Type Appears
 
-```sign
-` Adding a string to an int list (coproduct) → the string is interpreted as a number
-1 2 `34` = 1 2 34
-
-` Adding a numeric list to a string (coproduct) → numbers are concatenated as string representations
-`hello` [32 119 111 114 108 100] = `hello32 119 111 114 108 100`
-```
-
-### 4.4 The Moment the True Nature of Characters Is Revealed
-
-When an arithmetic operator is applied to a string on the left-hand side, the layer of type abstraction peels away, exposing **the hardware-level reality of each character (code point type `0u`)**.
+When the `+` operator hits the LHS of a string, the layer of type abstraction is peeled off, exposing the **entity of each character at the hardware level (address type `0x`)**.
 
 ```sign
 ` A string is a list of characters
 `abc` = \a \b \c
 
-` Arithmetic operators reveal the true nature of strings (result is 0u type: character code point type)
-`123` + 0 = 0u31 0u32 0u33
-`123` - 0 = 0u31 0u32 0u33
-`123` * 1 = 0u31 0u32 0u33
-`123` / 1 = 0u31 0u32 0u33
-
-` Space (coproduct) concatenates as a string
+` Concatenated as strings via space (coproduct)
 `123` 123 = `123123`
 ```
 
@@ -209,23 +212,23 @@ When an arithmetic operator is applied to a string on the left-hand side, the la
 
 ## 5. Heterogeneous Lists
 
-### 5.1 A Design Question
+### 5.1 Design Inquiry
 
-It is syntactically possible to combine elements of different types using the product operator.
+It is syntactically possible to combine elements of different types using products.
 
 ```sign
-` A mixed-type tuple of numbers and strings
+` Mixed tuple of numbers and strings
 1, `a`, 2, `b`
 ```
 
-However, it is important to ask: **how often does such a tuple actually arise in a meaningful context?**
+However, it is important to raise the question: **how often are such tuples actually useful in practice?**
 
-### 5.2 Design Guidance
+### 5.2 Design Guidelines
 
-Sign's list model is fundamentally based on "a collection of values of the same type." When mixed types are needed, using a dictionary (key-value structure) as shown below provides clearer intent.
+Sign's list model is fundamentally based on "collections of values of the same type". In situations where mixed types are necessary, using a dictionary type (key-value structure) provides much clearer semantics:
 
 ```sign
-` A dictionary expresses intent more clearly than a mixed-type list
+` Dictionary type makes intentions clearer than a heterogeneous list
 person :
 	name : `Alice`
 	age  : 30
@@ -234,19 +237,17 @@ person :
 
 ### 5.3 Relationship with Type Inference
 
-When operating on a heterogeneous list, the left-side priority rule applies with the type of the first element as the baseline. This naturally encourages "structuring explicitly with a dictionary" over "operating on a heterogeneous list as-is."
+When operations are performed on heterogeneous lists, the type of the first element serves as the baseline according to the left-priority rule. This naturally encourages "explicitly structuring with a dictionary type" rather than "dealing with heterogeneous lists directly".
 
 ---
 
-## 6. Summary: The Unified List Model
+## 6. Conclusion: Unity of the List Model
 
-Sign's list model rests on the following consistent principles.
+Sign's list model consists of the following consistent principles:
 
-```
-Space (coproduct)      =  place side by side  =  flat concatenation in 1 dimension
-Comma (product)        =  combine together    =  raise the dimension
-Left-side priority     =  type is determined naturally from the operation's context
-Characters as 0u type  =  peeling back the abstraction reveals the hardware beneath
-```
+* Space (Coproduct) = Arrange = Concatenation in 1D
+* Comma (Product) = Combine = Lifting dimensions
+* Left-Priority Rule = Type is self-evidently determined by the context of the operation
+* Character is Address Type = Peeling off type abstraction reveals the hardware form
 
-All of these are expressions of the design philosophy of "abstracting over types and the language itself," providing a foundation on which programmers can perform mathematically consistent operations without ever thinking about types.
+All of these are expressions of the design philosophy to "abstract types and languages", providing a foundation where programmers can perform mathematically consistent operations without having to consciously worry about types.

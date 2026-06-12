@@ -1,60 +1,43 @@
-# Sign Language Commenting Rules (Revised Edition)
+# Sign Comment Rules (Revised Edition)
 
-## Basic Principle
+## Basic Principles
 
-Comments in the Sign language are defined **not as "special syntactic markers" but as "literals whose evaluation results are not used"**.
-This allows the structure of the code itself to function as documentation.
+Comments in the Sign language are synonymous with string literals starting at the beginning of a line.
+Therefore, if a backtick (`` ` ``) exists at the beginning of a line, it becomes a comment, and a closing backtick (`` ` ``) is not required.
 
 ## Rule Definitions
 
-### 1. String literals are always "values"
-Strings enclosed in backquotes (`` ` ``), or strings from an unclosed backquote to the end of the line, are all parsed as "string literals".
-
-### 2. "Unused" literals are considered comments
-In the execution of a program, if a value is not bound to anything, has no side effects (such as output), and is not a return value, that literal essentially becomes a comment.
-
-## Application Examples
-
-### A. Inside a block (`\t` indent)
-A block is a sequence of multiple expressions, and **only the last expression** becomes the return value of the block.
-If any expression before it is an isolated literal without any effect, it is ignored.
+A backtick ` must be specified at the beginning of the line.
 
 ```sign
 calc_func : x ?
-	`This functions as the documentation (comment) for the function`
-	`↓This becomes the return value. Placing a string on the last line makes that string the return value`
+`	This functions as the function documentation (comment)`
+	`↓ If you place a string on the last line of the return value block, that string becomes the return value`
 	x * 2
 ```
--> The strings above are evaluated, but since they are discarded, they function as comments.
+-> The above string is evaluated but discarded, so it functions as a comment.
 
-### B. Top level
-The top level can also be considered as one large block (or module definition).
+### B. Top Level
+The top level can also be regarded as a single large block (or module definition).
 
 ```sign
 `Module description`
 x : 1
 ```
 -> This string also does not affect the definition of `x`, so it functions as documentation.
-(However, in environments like REPL, the evaluation result may be displayed)
+(However, in a REPL environment, etc., the evaluation result might be displayed.)
 
-### C. Interpretation of user-presented examples
+### C. Concrete Examples
 
 ```sign
-    `This is not treated as a comment`
+	`This is not treated as a comment`
 	 `This is not a comment`
-	`This is a comment`
-	`This becomes the return value`
+`	This is a comment`
+	`The last line becomes the return value`
 ```
 
-1. **No indent (or spaces)**: Depending on the context, it is evaluated as an expression. If it is on the right side of a definition, it becomes a value.
-2. **`\t` Indent**: Indicates the start of a block. A string **at the beginning** of a block becomes a "discarded value" if there is a subsequent expression, making it a comment.
+## Grammar Specification (refer to PEG)
 
-## Resolution of Contradictions
-In the old version, we stated that "indented string literals are errors", but this has been abolished.
-Currently, **"it is valid to write string literals within an indented block, and they are treated as comments as long as they are not the return value"**.
-
-## Grammar Specification (See PEG)
-
-Everything is parsed as an `Expression`.
-- There is no independent syntax node called `Comment` (except for comments that disappear at the lexical analysis level).
-- It is recommended that Syntax highlighting and Language Servers display **"string literals other than the last one in a block"** in comment colors.
+- In the current PEG, all comments are parsed as `Comment`.
+- Removing comments at the lexical analysis level is perfectly acceptable.
+- Syntax highlighting and Language Server are recommended to display the text in comment colors **"when a backtick ` is specified at the very beginning of the line"**.

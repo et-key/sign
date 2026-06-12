@@ -1,151 +1,92 @@
-# Sign Language Type System
+# Type System and Type Inference
 
-## 1. The Essence of "Invisible Strong Static Typing"
+## Basic Handling of Types
 
-Sign language's type system adopts a different approach from conventional programming languages. In particular, the concept of "invisible strong static typing" aims to ensure type safety without making programmers conscious of the existence of types.
-The essence of this type is guaranteed as follows:
+All types are grounded in `Unit`.
+The only value of the Unit type is `Unit`.
+The size of Unit is 0.
+Unit is represented as `_`.
+The left identity of Unit is `Identity`.
+The right identity of Unit is the empty list.
+All types can have their relations clearly explained by delegation.
+Unit is the identity of both the coproduct and the product.
+Since Unit is the identity of the bialgebra, it is also the identity of all functions.
+The definition of Unit is precisely the Identity of Sign.
+Sign is `Self-referential` and represents an `Incomplete` expression.
+A `Complete` expression is `Unit` and is represented as `_`.
+A `Self-referential` expression can be reduced to a `Complete` expression.
+Therefore, Sign is a philosophically valid "language" that can explain Sign using Sign itself.
+This is the foundation of the type system.
+SignType `*.st` is simply Sign with the addition of the `->` operator.
+The `->` operator is not defined in standard Sign `*.sn`.
+This allows `*.st` to extensionally guarantee the validity of Sign's self-reference.
 
-- **Type declarations are unnecessary** because **the concept of type itself is abstracted**
-- **There are no reserved words** because **the concept of language itself is abstracted**
-- It is **zero-cost** not because abstraction layers were added, but because **redundant layers were removed**
-- **Name = Type**: The name of an identifier itself expresses the type, making explicit type declarations unnecessary
-- **Value = Type**: Values themselves have types, and type mismatches are detected at compile time
-- **Syntax = Type**: The language syntax guarantees types, allowing programmers to code without being conscious of types
+### Operators and Types
 
-## 2. List-Based Unified Data Model
+In Sign, types do not exist on the data itself, but rather on functions.
+Therefore, type casting is also performed based on operators.
+The table below summarizes the types when operators are treated as functions.
 
-Sign language's type system is built around the unified concept of lists:
+Generics notation: **L represents the left-hand type, R represents the right-hand type.**
+`Atom` represents types containing String; `Scalar` represents types not containing String.
+`List` represents `(Array | Struct)`; polymorphic lists are `Struct`.
+`Implicit` represents `Implicit Address`.
 
-- **Strings** = List of characters ("lists of characters are treated as strings")
-- **Boolean evaluation** = Pattern matching of values ("empty lists and unevaluated lambda terms are false")
-- **Functions** = List of operations, or functionalization of operators
-- **Collections** = List of values, or list of key-value pairs
+| Symbol | Position (Type Combination) | Type |
+| :---: | :---: | --- |
+| `#` | prefix※ | `R -> Implicit(R)` |
+| `##` | prefix※ | `R -> Implicit(R)` |
+| `###` | prefix※ | `R -> Implicit(R)` |
+| `:` | infix※ | `(Identifier -> R) -> R` |
+| `?` | infix※ | `(List -> R) -> Lambda(R)` |
+| `#` | infix※ | `(Address -> R) -> (Address \| _)` |
+| `;` | infix | `(L -> R) -> (L \| _)` |
+| `\|` | infix | `(L -> R) -> (L \| _)` |
+| `&` | infix | `(L -> R) -> (L \| _)` |
+| `==` | infix | `(L -> R) -> (L \| _)` |
+| `!==` | infix | `(L -> R) -> (L \| _)` |
+| `,` | infix※ | `(L -> R) -> List` |
+| ` ` | `Atom \| List` infix `Lambda` | `((Atom \| List \| _) -> Lambda) -> (List \| Lambda \| _)` |
+| ` ` | `Lambda` infix `Atom \| List` | `(Lambda -> (Atom \| List \| _)) -> (List \| Lambda \| _)` |
+| ` ` | `Lambda` infix `Lambda` | `(Lambda -> Lambda) -> Lambda` |
+| ` ` | `Atom \| List` infix `Atom \| List` | `((Atom \| List \| _) -> (Atom \| List \| _)) -> (List \| _)` |
+| `~` | infix | `(Scalar -> Scalar) -> Iterator -> Scalar` |
+| `~-` | infix | `(Scalar -> Scalar) -> Iterator -> Scalar` |
+| `~+` | infix | `(Scalar -> Scalar) -> Iterator -> Scalar` |
+| `~*` | infix | `(Scalar -> Scalar) -> Iterator -> Scalar` |
+| `~/` | infix | `(Scalar -> Scalar) -> Iterator -> Scalar` |
+| `~^` | infix | `(Scalar -> Scalar) -> Iterator -> Scalar` |
+| `<` | infix | `(L -> R) -> (L \| _)` |
+| `<=` | infix | `(L -> R) -> (L \| _)` |
+| `=` | infix | `(L -> R) -> (L \| _)` |
+| `>=` | infix | `(L -> R) -> (L \| _)` |
+| `>` | infix | `(L -> R) -> (L \| _)` |
+| `!=` | infix | `(L -> R) -> (L \| _)` |
+| `+` | infix | `(L -> R) -> L` |
+| `-` | infix | `(L -> R) -> L` |
+| `*` | infix | `(L -> R) -> L` |
+| `/` | infix | `(L -> R) -> L` |
+| `%` | infix | `(L -> R) -> L` |
+| `^` | infix※ | `(L -> R) -> L` |
+| `\|...\|` | surrounding | `(L -> L) -> L` |
+| `'` | infix | `(L -> R) -> Implicit(Atom \| List \| Lambda) -> Deref(Implicit -> (Atom \| List \| Lambda))` |
+| `@` | infix※ | `(R -> L) -> Implicit(Atom \| List \| Lambda) -> Deref(Implicit -> (Atom \| List \| Lambda))` |
+| `<<` | infix | `((Address | Register) -> Number) -> (Address | Register)` |
+| `>>` | infix | `((Address | Register) -> Number) -> (Address | Register)` |
+| `\|\|` | infix | `((Address | Register) -> Scalar) -> (Address | Register)` |
+| `;;` | infix | `((Address | Register) -> Scalar) -> (Address | Register)` |
+| `&&` | infix | `((Address | Register) -> Scalar) -> (Address | Register)` |
+| `!` | postfix | `Number -> Number` |
+| `~` | postfix | `Deref(Implicit -> (List \| Dictionary \| Atom))` |
+| `@` | postfix | `Implicit(Dictionary) -> Deref(Implicit -> Dictionary)` |
+| `~` | prefix※ | `List -> Implicit(List)` |
+| `!` | prefix※ | `R -> R` |
+| `$` | prefix※ | `Lambda -> Implicit(Lambda)` |
+| `@` | prefix※ | `Implicit(Lambda) -> Deref(Implicit(Lambda))` |
+| `!!` | prefix※ | `Scalar -> Scalar` |
 
-This consistent approach minimizes special case handling and makes the language easier to learn and understand.
+## Lambda Types
 
-## 3. Numeric Literals and Hardware Type Correspondence
+### Why can the type of the lambda operator `?` be resolved on the right-hand side?
 
-Numeric literals in Sign language function not just as values, but as types corresponding to hardware operations:
-
-- **0x** (hexadecimal): Architecture address type, dedicated to memory access
-- **0o** (octal): Special type for mainframe compatibility
-- **0b** (binary): Register direct manipulation type (e.g., `0b0000` is 4-bit CPU register reset... for OS description purposes)
-- **Regular numbers**: Numeric type that can be optimally delegated to FPU, SIMD, etc.
-
-This distinction enables safe and intuitive expression of low-level hardware operations without type declarations.
-
-## 4. Value Return Characteristics of Comparison Operations
-
-### 4.1 Basic Principle
-
-- Ideally, when a comparison condition evaluates to `true`, the comparison operation returns **the value of the variable term**
-  - Usually the value of the left side (especially variables) is returned
-  - When the left side is a constant literal, the variable value on the right side is returned
-  - Essentially, it returns the variable that is "meaningful as a value" in the comparison
-- When a comparison condition evaluates to `false`, the comparison operation returns **Unit (`_`)**
-- This mechanism allows conditional branching to be treated directly as values without boolean conversion
-- As a result, everything except Unit and unevaluated lambdas can be treated as true, including 0.
-
-### 4.2 Evaluation Order and Variable Value Return in Polynomial Comparisons (Continuous up to 2 comparisons)
-
-Polynomials containing comparison operations are evaluated sequentially from left to right, with the result of each comparison becoming the input for the next comparison:
-
-```
-3 < x < 20
-```
-
-This expression is equivalent to:
-
-```
-[3 < x & x] < 20 & x
-```
-
-Evaluation process:
-1. If `3 < x` is `true`, **the value of variable x** is returned and becomes the left side of the next comparison
-3. If `x < 20` is `true`, the final result is **the value of variable x**
-4. If any condition is `false`, `_` (Unit) is returned at that point, and subsequent evaluations are short-circuited
-
-### 4.3 Practical Examples
-
-This characteristic allows conditional branching to be described concisely and expressively:
-
-```sign
-getValue : x ?
-` If x < 0 is true, the value of x itself is returned and used for -x calculation
-	x < 0 : -x
-` If x > 100 is true, the value of x itself is returned, then ignored and 100 is returned
-	x > 100 : 100
-` Default returns x itself
-	x
-
-inRange : x ?
-` If 0 <= x and x <= 100, return x itself
-	0 <= x <= 100 & x
-` Otherwise return Unit (_)
-```
-
-## 5. Left-Side Priority Rule for Type Conversion
-
-When types differ in binary operations, Sign language always converts the right side to match **the type of the left side**.
-
-### 5.1 Basic Principle
-
-- When the left and right sides of a binary operation have different types, the right side is converted to the type of the left side
-- If conversion is not possible, a compile error occurs
-- Type matching is verified at compile time as part of "invisible strong static typing"
-
-### 5.2 Type Conversion Examples
-
-```sign
-` Result: `123456` (evaluated as string concatenation)
-`123` + 456
-
-` Result: 579 (evaluated as numeric addition, "456" converted to numeric 456)
-123 + `456`
-```
-
-### 5.3 Theoretical Foundation of Operations
-
-Sign language's type system basically adopts the type of the left side when operations involve different types.
-This provides convenient functionality such as natural type conversion when you want to concatenate numbers as digits within strings.
-This is because there is the concept that the right side of a binary operation acts as an object that applies to the verb when considering the operation as a verb.
-
-## 6. Relationship Between Identifiers and Types
-
-Identifiers in Sign language have characteristics different from traditional type systems. The identifier names themselves function as type names, enabling flexible type expression.
-This design allows natural expression of type information through identifiers without explicit type declarations.
-
-## 7. Safe Design of Division Processing
-
-### 7.1 Constraint Removal in Division Operators
-
-Sign language adopts an innovative approach to avoid traditional "division by zero errors" in division processing:
-
-- In division operations of the form `a / b`, the result should be a floating-point type with the best precision available on that architecture
-- When the denominator is 0, it is treated as division by the smallest representable value on that architecture
-- This specification is based on the zero element in differentiable space and the assumption that a true physical vacuum does not exist
-- In most cases, the above is expected to result in register overflow
-
-### 7.2 Philosophy of Safety
-
-Programmers are protected from potential runtime errors while using intuitive mathematical notation.
-
-By extending Sign language's philosophy that "syntax guarantees types," the powerful characteristic that "syntax also guarantees safety" can be realized.
-
-## 8. Type Safety and Hardware Optimization
-
-Sign language's type system balances both safety and efficiency:
-
-Compile-time type verification: Strong static typing prevents runtime errors
-Type information-based optimization: The compiler uses type information to select appropriate processing
-
-This design allows programmers to write safe and efficient code without being conscious of types.
-
-## 9. Innovative Approach to Language Design
-
-Sign language walks the opposite path from conventional language design:
-
-- **Conventional languages**: Abstract computer operations and add complex safety mechanisms
-- **Sign language**: Abstract the language itself and make computer operations intuitively expressible
-
-The type system also reflects this philosophy, taking the innovative approach of "achieving simplicity by not showing types while maintaining powerful type safety behind the scenes."
+**Conclusion:** Because the right-hand side is fully determined as a chunk of expressions, and the type of a chunk of expressions is always proven by the transition of function (operator) types.
