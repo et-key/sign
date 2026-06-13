@@ -31,8 +31,8 @@ result:
   MOV X29, SP
 result_body:
   MOV X0, #3
-  BL g
   BL f
+  BL g
   LDP X29, X30, [SP], #16
   RET
 

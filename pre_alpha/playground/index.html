@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Language Playground</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="playground.css">
+</head>
+<body>
+  <div class="glass-bg"></div>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="logo-area">
+        <svg class="app-logo" viewBox="0 0 100 100" width="48" height="48">
+          <defs>
+            <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#818cf8" />
+              <stop offset="100%" stop-color="#38bdf8" />
+            </linearGradient>
+            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="6" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+          <polygon points="50,15 85,75 15,75" fill="none" stroke="url(#logoGrad)" stroke-width="6" stroke-linejoin="round" filter="url(#glow)" />
+          <circle cx="50" cy="55" r="10" fill="url(#logoGrad)" filter="url(#glow)" />
+        </svg>
+        <div class="title-text">
+          <h1>Sign</h1>
+          <span class="badge">Playground</span>
+        </div>
+      </div>
+      
+      <div class="controls-area">
+        <div class="control-group">
+          <label for="exampleSelect">Template</label>
+          <select id="exampleSelect" class="custom-select">
+            <option value="composition">Function Composition</option>
+            <option value="partial_app">Partial Application</option>
+            <option value="generator">Generator / Lazy Mapping</option>
+            <option value="lists">Lists & Tuples</option>
+            <option value="higher_order">Higher Order Function</option>
+          </select>
+        </div>
+        <button id="runBtn" class="btn btn-primary">
+          <span class="btn-text">Transpile & Run</span>
+          <span class="loader"></span>
+        </button>
+      </div>
+    </header>
+
+    <main class="playground-layout">
+      <!-- Left Pane: Editor -->
+      <section class="panel editor-panel">
+        <div class="panel-header">
+          <h2>Sign Source</h2>
+          <span class="panel-subtitle">Sign v0a Grammar</span>
+        </div>
+        <div class="panel-body editor-wrapper">
+          <div class="line-numbers" id="lineNumbers">1</div>
+          <textarea id="sourceEditor" spellcheck="false" placeholder="Write Sign code here..."></textarea>
+        </div>
+      </section>
+
+      <!-- Right Layout: Split into AST and JS/Console -->
+      <div class="output-split">
+        <!-- AST Panel -->
+        <section class="panel ast-panel">
+          <div class="panel-header">
+            <h2>Resolved AST</h2>
+            <span class="panel-subtitle">JSON Representation</span>
+          </div>
+          <div class="panel-body code-view">
+            <pre><code id="astOutput" class="language-json">{}</code></pre>
+          </div>
+        </section>
+
+        <!-- Transpiled JS & Console -->
+        <div class="js-console-group">
+          <section class="panel js-panel">
+            <div class="panel-header">
+              <h2>Transpiled JavaScript</h2>
+              <span class="panel-subtitle">white_cats ESM Target</span>
+            </div>
+            <div class="panel-body code-view">
+              <pre><code id="jsOutput" class="language-javascript">// Transpiled code will appear here...</code></pre>
+            </div>
+          </section>
+
+          <section class="panel console-panel">
+            <div class="panel-header">
+              <h2>Execution Output</h2>
+              <span class="panel-subtitle">Browser Console Logs</span>
+              <button id="clearConsoleBtn" class="btn btn-icon-text">Clear</button>
+            </div>
+            <div class="panel-body console-view" id="consoleOutput">
+              <div class="console-line system-msg">Console initialized. Ready to execute code.</div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+  
+  <!-- Import white_cats and core playground logic -->
+  <script src="/cat.js"></script>
+  <script type="module" src="playground.js"></script>
+</body>
+</html>

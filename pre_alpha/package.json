@@ -2,5 +2,8 @@
   "type": "module",
   "devDependencies": {
     "peggy": "^5.1.0"
+  },
+  "dependencies": {
+    "white_cats": "^0.1.54"
   }
 }

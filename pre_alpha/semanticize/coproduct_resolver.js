@@ -83,15 +83,23 @@ function getCategory(node, env) {
       return 'Atom';
     }
 
-    // 未定義の未知の識別子は変数（値）として Atom 扱いとする
+    if (env && env.has(node)) {
+      const entry = env.get(node);
+      return typeof entry === 'string' ? entry : (entry.category || 'Atom');
+    }
+
+    if (['print', '<print>', '_'].includes(node)) return 'Lambda';
+
     return 'Atom';
   }
 
   if (node.type === 'Identifier' || node.type === 'Variable') {
-    if (env && env.has(node.name)) {
-      return env.get(node.name).category;
+    const name = node.name;
+    if (env && env.has(name)) {
+      const entry = env.get(name);
+      return typeof entry === 'string' ? entry : (entry.category || 'Atom');
     }
-    if (['print', '<print>', '_'].includes(node.name)) return 'Lambda';
+    if (['print', '<print>', '_'].includes(name)) return 'Lambda';
     return 'Atom';
   }
 
