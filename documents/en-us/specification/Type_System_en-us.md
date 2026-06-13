@@ -50,32 +50,32 @@ Generics notation: **L represents the left-hand type, R represents the right-han
 | ` ` | `Lambda` infix `Atom \| List` | `(Lambda -> (Atom \| List \| _)) -> (List \| Lambda \| _)` |
 | ` ` | `Lambda` infix `Lambda` | `(Lambda -> Lambda) -> Lambda` |
 | ` ` | `Atom \| List` infix `Atom \| List` | `((Atom \| List \| _) -> (Atom \| List \| _)) -> (List \| _)` |
-| `~` | infix | `(Scalar -> Scalar) -> Iterator -> Scalar` |
-| `~-` | infix | `(Scalar -> Scalar) -> Iterator -> Scalar` |
-| `~+` | infix | `(Scalar -> Scalar) -> Iterator -> Scalar` |
-| `~*` | infix | `(Scalar -> Scalar) -> Iterator -> Scalar` |
-| `~/` | infix | `(Scalar -> Scalar) -> Iterator -> Scalar` |
-| `~^` | infix | `(Scalar -> Scalar) -> Iterator -> Scalar` |
-| `<` | infix | `(L -> R) -> (L \| _)` |
-| `<=` | infix | `(L -> R) -> (L \| _)` |
-| `=` | infix | `(L -> R) -> (L \| _)` |
-| `>=` | infix | `(L -> R) -> (L \| _)` |
-| `>` | infix | `(L -> R) -> (L \| _)` |
-| `!=` | infix | `(L -> R) -> (L \| _)` |
-| `+` | infix | `(L -> R) -> L` |
-| `-` | infix | `(L -> R) -> L` |
-| `*` | infix | `(L -> R) -> L` |
-| `/` | infix | `(L -> R) -> L` |
-| `%` | infix | `(L -> R) -> L` |
-| `^` | infix※ | `(L -> R) -> L` |
-| `\|...\|` | surrounding | `(L -> L) -> L` |
+| `~` | infix | `(Scalar -> Scalar) -> Iterator -> List` |
+| `~-` | infix | `(Scalar -> Scalar) -> Iterator` |
+| `~+` | infix | `(Scalar -> Scalar) -> Iterator` |
+| `~*` | infix | `(Scalar -> Scalar) -> Iterator` |
+| `~/` | infix | `(Scalar -> Scalar) -> Iterator` |
+| `~^` | infix | `(Scalar -> Scalar) -> Iterator` |
+| `<` | infix | `(L(Scalar) -> R(Scalar)) -> L \| _` |
+| `<=` | infix | `(L(Scalar) -> R(Scalar)) -> L \| _` |
+| `=` | infix | `(L(Scalar) -> R(Scalar)) -> L \| _` |
+| `>=` | infix | `(L(Scalar) -> R(Scalar)) -> L \| _` |
+| `>` | infix | `(L(Scalar) -> R(Scalar)) -> L \| _` |
+| `!=` | infix | `(L(Scalar) -> R(Scalar)) -> L \| _` |
+| `+` | infix | `(L(Scalar) -> R(Scalar)) -> L` |
+| `-` | infix | `(L(Scalar) -> R(Scalar)) -> L` |
+| `*` | infix | `(L(Scalar) -> R(Scalar)) -> L` |
+| `/` | infix | `(L(Scalar) -> R(Scalar)) -> L` |
+| `%` | infix | `(L(Scalar) -> R(Scalar)) -> L` |
+| `^` | infix※ | `(L(Scalar) -> R(Scalar)) -> L` |
+| `\|...\|` | surrounding | `L(Scalar) -> L` |
 | `'` | infix | `(L -> R) -> Implicit(Atom \| List \| Lambda) -> Deref(Implicit -> (Atom \| List \| Lambda))` |
 | `@` | infix※ | `(R -> L) -> Implicit(Atom \| List \| Lambda) -> Deref(Implicit -> (Atom \| List \| Lambda))` |
-| `<<` | infix | `((Address | Register) -> Number) -> (Address | Register)` |
-| `>>` | infix | `((Address | Register) -> Number) -> (Address | Register)` |
-| `\|\|` | infix | `((Address | Register) -> Scalar) -> (Address | Register)` |
-| `;;` | infix | `((Address | Register) -> Scalar) -> (Address | Register)` |
-| `&&` | infix | `((Address | Register) -> Scalar) -> (Address | Register)` |
+| `<<` | infix | `(L(Address \| Register) -> Number) -> L` |
+| `>>` | infix | `(L(Address \| Register) -> Number) -> L` |
+| `\|\|` | infix | `(L(Address \| Register) -> Scalar) -> L` |
+| `;;` | infix | `(L(Address \| Register) -> Scalar) -> L` |
+| `&&` | infix | `(L(Address \| Register) -> Scalar) -> L` |
 | `!` | postfix | `Number -> Number` |
 | `~` | postfix | `Deref(Implicit -> (List \| Dictionary \| Atom))` |
 | `@` | postfix | `Implicit(Dictionary) -> Deref(Implicit -> Dictionary)` |

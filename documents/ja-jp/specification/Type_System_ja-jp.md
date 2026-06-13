@@ -51,32 +51,32 @@ String を含む場合は `Atom` 含まない場合は `Scalar`
 | ` ` | `Lambda` 中置 `Atom \| List` | `(Lambda -> (Atom \| List \| _)) -> (List \| Lambda \| _)` |
 | ` ` | `Lambda` 中置 `Lambda` | `(Lambda -> Lambda) -> Lambda` |
 | ` ` | `Atom \| List` 中置 `Atom \| List` | `((Atom \| List \| _) -> (Atom \| List \| _)) -> (List \| _)` |
-| `~` | 中置 | `(Scalar -> Scalar) -> Iterator -> Scalar` |
-| `~-` | 中置 | `(Scalar -> Scalar) -> Iterator -> Scalar` |
-| `~+` | 中置 | `(Scalar -> Scalar) -> Iterator -> Scalar` |
-| `~*` | 中置 | `(Scalar -> Scalar) -> Iterator -> Scalar` |
-| `~/` | 中置 | `(Scalar -> Scalar) -> Iterator -> Scalar` |
-| `~^` | 中置 | `(Scalar -> Scalar) -> Iterator -> Scalar` |
-| `<` | 中置 | `(L -> R) -> (L \| _)` |
-| `<=` | 中置 | `(L -> R) -> (L \| _)` |
-| `=` | 中置 | `(L -> R) -> (L \| _)` |
-| `>=` | 中置 | `(L -> R) -> (L \| _)` |
-| `>` | 中置 | `(L -> R) -> (L \| _)` |
-| `!=` | 中置 | `(L -> R) -> (L \| _)` |
-| `+` | 中置 | `(L -> R) -> L` |
-| `-` | 中置 | `(L -> R) -> L` |
-| `*` | 中置 | `(L -> R) -> L` |
-| `/` | 中置 | `(L -> R) -> L` |
-| `%` | 中置 | `(L -> R) -> L` |
-| `^` | 中置※ | `(L -> R) -> L` |
-| `\|...\|` | 囲み | `(L -> L) -> L` |
+| `~` | 中置 | `(Scalar -> Scalar) -> Iterator -> List` |
+| `~-` | 中置 | `(Scalar -> Scalar) -> Iterator` |
+| `~+` | 中置 | `(Scalar -> Scalar) -> Iterator` |
+| `~*` | 中置 | `(Scalar -> Scalar) -> Iterator` |
+| `~/` | 中置 | `(Scalar -> Scalar) -> Iterator` |
+| `~^` | 中置 | `(Scalar -> Scalar) -> Iterator` |
+| `<` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| _` |
+| `<=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| _` |
+| `=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| _` |
+| `>=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| _` |
+| `>` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| _` |
+| `!=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| _` |
+| `+` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
+| `-` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
+| `*` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
+| `/` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
+| `%` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
+| `^` | 中置※ | `(L(Scalar) -> R(Scalar)) -> L` |
+| `\|...\|` | 囲み | `L(Scalar) -> L` |
 | `'` | 中置 | `(L -> R) -> Implicit(Atom \| List \| Lambda) -> Deref(Implicit -> (Atom \| List \| Lambda))` |
 | `@` | 中置※ | `(R -> L) -> Implicit(Atom \| List \| Lambda) -> Deref(Implicit -> (Atom \| List \| Lambda))` |
-| `<<` | 中置 | `((Address | Register) -> Number) -> (Address | Register)` |
-| `>>` | 中置 | `((Address | Register) -> Number) -> (Address | Register)` |
-| `\|\|` | 中置 | `((Address | Register) -> Scalar) -> (Address | Register)` |
-| `;;` | 中置 | `((Address | Register) -> Scalar) -> (Address | Register)` |
-| `&&` | 中置 | `((Address | Register) -> Scalar) -> (Address | Register)` |
+| `<<` | 中置 | `(L(Address \| Register) -> Number) -> L` |
+| `>>` | 中置 | `(L(Address \| Register) -> Number) -> L` |
+| `\|\|` | 中置 | `(L(Address \| Register) -> Scalar) -> L` |
+| `;;` | 中置 | `(L(Address \| Register) -> Scalar) -> L` |
+| `&&` | 中置 | `(L(Address \| Register) -> Scalar) -> L` |
 | `!` | 後置 | `Number -> Number` |
 | `~` | 後置 | `Deref(Implicit -> (List \| Dictionary \| Atom))` |
 | `@` | 後置 | `Implicit(Dictionary) -> Deref(Implicit -> Dictionary)` |
