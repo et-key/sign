@@ -1,5 +1,0 @@
-{
-    "target": "arm64",
-    "linking": "static",
-    "output_format": "executable"
-}

@@ -1,6 +1,0 @@
-lib : `complex.sn`@
-comp : compose @ lib
-dbl : double @ lib
-
-my_func : comp dbl dbl
-my_func 5
