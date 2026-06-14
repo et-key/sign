@@ -20,11 +20,8 @@ export function transpile(node) {
   }
 
   if (node.type === 'block') {
-    // Check for point-free operators, e.g., [+]
-    if (node.kind === 'bracket' && node.content && node.content.type === 'operation' && 
-        node.content.left === undefined && node.content.right === undefined) {
-      return transpilePointFree(node.content);
-    }
+    const pfCode = tryTranspilePointFree(node);
+    if (pfCode !== null) return pfCode;
 
     if (node.kind === 'paren' || node.kind === 'group') {
       return `(${transpile(node.content)})`;
@@ -40,7 +37,22 @@ export function transpile(node) {
     }
     if (node.kind === 'indent') {
       const stmts = flattenStatements(node.content);
+      const allDefs = stmts.length > 0 && stmts.every(s => s.type === 'operation' && s.operator === ':');
+      const defNames = [];
       const parts = stmts.map((s, idx) => {
+        if (s.type === 'operation' && s.operator === ':') {
+          const rawLhs = s.left;
+          let name = null;
+          if (typeof rawLhs === 'string') {
+            name = transpile(rawLhs);
+          } else if (rawLhs && rawLhs.type === 'Identifier') {
+            name = transpile(rawLhs.name);
+          }
+          if (name && !name.startsWith('(') && !name.startsWith('[')) {
+            defNames.push(name);
+          }
+        }
+
         if (isMatchCase(s)) {
           return `if (_isTrue(${transpile(s.left)})) return ${transpile(s.right)};`;
         }
@@ -48,6 +60,9 @@ export function transpile(node) {
         if (idx === stmts.length - 1) {
           if (s.type === 'operation' && s.operator === ':') {
             const varName = transpile(s.left);
+            if (allDefs && defNames.length > 0) {
+              return `${code}\n  return { ${defNames.map(n => `${n}: ${n}, [Symbol.for('${n}')]: ${n}`).join(', ')} };`;
+            }
             return `${code}\n  return ${varName};`;
           } else {
             return `return ${code};`;
@@ -78,10 +93,28 @@ export function transpile(node) {
       }
 
       if (node.operator === '?') {
-        const args = getArgNames(node.left);
-        const hasRest = args.some(arg => arg.startsWith('...'));
-        const fnExpr = `(${args.join(', ')}) => {\n  return ${transpile(node.right)};\n}`;
-        return `(() => {\n  const _fn = ${fnExpr};\n  _fn.expectedLength = ${args.length};\n  _fn.hasRest = ${hasRest};\n  return _fn;\n})()`;
+        const specs = getParameterSpecs(node.left);
+        const argsStr = specs.map(p => p.isRest ? `...${p.name}` : p.name).join(', ');
+        
+        // Build maybe checks and default replacements
+        const bodyLines = [];
+        specs.forEach(p => {
+          if (p.isRest) return;
+          if (p.defaultValue !== null) {
+            bodyLines.push(`  if (${p.name} === undefined || ${p.name} === __hole) ${p.name} = ${p.defaultValue};`);
+          }
+        });
+        
+        // If any parameter is still __hole, return __hole (Maybe monad propagation)
+        const checkHoles = specs.filter(p => !p.isRest).map(p => `${p.name} === __hole`).join(' || ');
+        if (checkHoles) {
+          bodyLines.push(`  if (${checkHoles}) return __hole;`);
+        }
+        
+        const bodyCode = bodyLines.length > 0 ? bodyLines.join('\n') + '\n' : '';
+        const hasRest = specs.some(p => p.isRest);
+        const fnExpr = `(${argsStr}) => {\n${bodyCode}  return ${transpile(node.right)};\n}`;
+        return `(() => {\n  const _fn = ${fnExpr};\n  _fn.expectedLength = ${specs.length};\n  _fn.hasRest = ${hasRest};\n  _fn.paramSpecs = ${JSON.stringify(specs)};\n  return _fn;\n})()`;
       }
 
       if (node.operator !== ',') {
@@ -195,18 +228,69 @@ export function transpile(node) {
   return String(node);
 }
 
-function transpilePointFree(opNode) {
-  const op = opNode.operator;
-  if (op === '+') return '((x, y) => x + y)';
-  if (op === '-') return '((x, y) => x - y)';
-  if (op === '*') return '((x, y) => x * y)';
-  if (op === '/') return '((x, y) => x / y)';
-  if (op === '==') return '((x, y) => Object.is(x, y))';
-  if (op === '<') return '((x, y) => x < y)';
-  if (op === '>') return '((x, y) => x > y)';
-  if (op === '<=') return '((x, y) => x <= y)';
-  if (op === '>=') return '((x, y) => x >= y)';
-  return `((x, y) => x ${op} y)`;
+function tryTranspilePointFree(node) {
+  if (node.type !== 'block') return null;
+  const content = node.content;
+  if (!content || typeof content !== 'object') return null;
+  
+  // Only handle bracket, paren, brace blocks for point-free
+  if (!['bracket', 'paren', 'brace'].includes(node.kind)) return null;
+
+  // 1. Prefix point-free: [!_]
+  if (content.type === 'operation' && content.position === 'prefix' && content.operand === '_') {
+    const fnBody = transpile({ ...content, operand: 'x' });
+    return `((x) => ${fnBody})`;
+  }
+
+  // 2. Postfix point-free: [_!]
+  if (content.type === 'operation' && content.position === 'postfix' && content.operand === '_') {
+    const fnBody = transpile({ ...content, operand: 'x' });
+    return `((x) => ${fnBody})`;
+  }
+
+  // 3. Binary point-free: [+]
+  if (content.type === 'operation' && content.position !== 'prefix' && content.position !== 'postfix' &&
+      content.left === undefined && content.right === undefined) {
+    const fnBody = transpile({ ...content, left: 'x', right: 'y' });
+    return `_makePointFreeBinary((x, y) => ${fnBody})`;
+  }
+
+  // 4. Map/Filter point-free: [* 2,] or [2 +,]
+  if (content.type === 'operation' && content.operator === ',') {
+    // Case 4a: [2 +,] -> content.left is defined, content.right is undefined
+    if (content.left !== undefined && content.right === undefined) {
+      const innerOp = content.left;
+      if (innerOp && innerOp.type === 'operation') {
+        const isComp = ['<', '>', '<=', '>=', '==', '!=', '!==', '='].includes(innerOp.operator);
+        const fnBody = transpile({ ...innerOp, right: 'x' });
+        return `_makePointFreeMapFilter(((x) => ${fnBody}), ${isComp})`;
+      }
+    }
+    // Case 4b: [* 2,] -> content.right is defined, content.left is undefined
+    if (content.right !== undefined && content.left === undefined) {
+      const innerOp = content.right;
+      if (innerOp && innerOp.type === 'operation') {
+        const isComp = ['<', '>', '<=', '>=', '==', '!=', '!==', '='].includes(innerOp.operator);
+        const fnBody = transpile({ ...innerOp, left: 'x' });
+        return `_makePointFreeMapFilter(((x) => ${fnBody}), ${isComp})`;
+      }
+    }
+  }
+
+  // 5. Comma-less partial binary point-free: [* 2] or [2 +]
+  if (content.type === 'operation' && content.operator !== ',' &&
+      content.position !== 'prefix' && content.position !== 'postfix') {
+    if (content.left === undefined && content.right !== undefined) {
+      const fnBody = transpile({ ...content, left: 'x' });
+      return `((x) => ${fnBody})`;
+    }
+    if (content.right === undefined && content.left !== undefined) {
+      const fnBody = transpile({ ...content, right: 'x' });
+      return `((x) => ${fnBody})`;
+    }
+  }
+
+  return null;
 }
 
 function flattenStatements(node) {
@@ -280,4 +364,45 @@ function getArgNames(node) {
     }
   }
   return [transpile(node)];
+}
+
+function getParameterSpecs(node) {
+  if (!node) return [];
+  if (typeof node === 'string') {
+    const name = transpile(node);
+    return [{ name, defaultValue: null, isRest: false }];
+  }
+  if (node.type === 'block') {
+    return getParameterSpecs(node.content);
+  }
+  if (node.type === 'coproduct_block') {
+    return (node.statements || []).flatMap(getParameterSpecs);
+  }
+  if (node.type === 'operation') {
+    if (node.operator === '\\n') {
+      return [...getParameterSpecs(node.left), ...getParameterSpecs(node.right)];
+    }
+    if (node.operator === ' ' || node.operator === ',') {
+      return [...getParameterSpecs(node.left), ...getParameterSpecs(node.right)];
+    }
+    if (node.operator === ':') {
+      const name = transpile(node.left);
+      const defaultValue = transpile(node.right);
+      return [{ name, defaultValue, isRest: false }];
+    }
+    if (node.operator === '~' && node.position === 'prefix') {
+      return getParameterSpecs(node.operand).map(p => ({ ...p, isRest: true }));
+    }
+    if (node.operator === '~' && node.position === 'postfix') {
+      return getParameterSpecs(node.operand).map(p => ({ ...p, isRest: true }));
+    }
+    if (node.operator === '~' && node.left && node.right) {
+      // In parameters, "x ~y" is parsed as range(x, y). Treat it as x and prefix ~y.
+      return [
+        ...getParameterSpecs(node.left),
+        ...getParameterSpecs({ type: 'operation', operator: '~', operand: node.right, position: 'prefix' })
+      ];
+    }
+  }
+  return [{ name: transpile(node), defaultValue: null, isRest: false }];
 }

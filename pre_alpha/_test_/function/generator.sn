@@ -2,3 +2,4 @@ f  :  x  ?  x  *  2
 map  :  g x ~y  ?  [@g x] [map g y~]
 
 result  :  map $f [0 ~+ 2 ~ 10]
+result_map2  :  map $[* 2] 1 2 3 4 5

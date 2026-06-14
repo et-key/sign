@@ -24,7 +24,8 @@ const pre = preprocess(sourceCode);
 const astProg = parser.parse(pre);
 
 let globalEnv = new Map();
-const astLines = astProg.filter(line => line !== null && line !== undefined);
+const rawLines = astProg.filter(line => line !== null && line !== undefined);
+const astLines = rawLines.map(desugarHoles);
 
 // Build Environment Map
 astLines.forEach(astLine => {
@@ -116,7 +117,96 @@ const _product = (left, right) => {
   return [left, right];
 };
 
-const _expand = (a) => Array.isArray(a) ? a.flat(1) : a;
+class ExpandedObject {
+  constructor(obj) {
+    this.obj = obj;
+  }
+}
+const _expand = (a) => {
+  if (Array.isArray(a)) return a.flat(1);
+  if (a && typeof a === 'object' && !(a instanceof Address) && !(a instanceof ExpandedObject)) {
+    return [new ExpandedObject(a)];
+  }
+  return a;
+};
+
+function _resolveNamedArgs(fn, args) {
+  const hasExpanded = args.some(arg => arg instanceof ExpandedObject);
+  if (!hasExpanded) return args;
+
+  const isCurried = fn.__isCurried;
+  const target = isCurried ? fn.target : fn;
+  const specs = target.paramSpecs || [];
+  
+  if (specs.length === 0) {
+    return args.map(arg => arg instanceof ExpandedObject ? arg.obj : arg);
+  }
+
+  const resolvedArgs = [];
+  const expandedArg = args.find(arg => arg instanceof ExpandedObject);
+  const obj = expandedArg.obj || {};
+  const consumedKeys = new Set();
+
+  specs.forEach(spec => {
+    const pName = spec.name;
+    if (spec.isRest) {
+      const restObj = {};
+      for (const key of Object.keys(obj)) {
+        if (!consumedKeys.has(key)) {
+          restObj[key] = obj[key];
+          restObj[Symbol.for(key)] = obj[key];
+        }
+      }
+      resolvedArgs.push(restObj);
+      consumedKeys.add(pName);
+    } else {
+      if (pName in obj) {
+        resolvedArgs.push(obj[pName]);
+        consumedKeys.add(pName);
+      } else if (Symbol.for(pName) in obj) {
+        resolvedArgs.push(obj[Symbol.for(pName)]);
+        consumedKeys.add(pName);
+      } else {
+        resolvedArgs.push(__hole);
+      }
+    }
+  });
+
+  return resolvedArgs;
+}
+
+function _makePointFreeBinary(opFn) {
+  const fn = (...args) => {
+    if (args.length === 1 && Array.isArray(args[0])) {
+      if (args[0].length === 0) return __hole;
+      return args[0].reduce(opFn);
+    }
+    return args.reduce(opFn);
+  };
+  fn.__isPointFreeBinary = true;
+  fn.target = opFn;
+  return fn;
+}
+
+function _makePointFreeMapFilter(innerFn, isComparison) {
+  const fn = (...args) => {
+    const applyToArr = (arr) => {
+      if (isComparison) {
+        return arr.filter(x => _isTrue(innerFn(x)));
+      } else {
+        return arr.map(x => innerFn(x));
+      }
+    };
+    if (args.length === 1 && Array.isArray(args[0])) {
+      return applyToArr(args[0]);
+    }
+    return applyToArr(args);
+  };
+  fn.__isPointFreeMapFilter = true;
+  fn.target = innerFn;
+  fn.isComparison = isComparison;
+  return fn;
+}
 
 function _makeCurried(fn, expectedLength, argsSoFar) {
   const wrapper = (...nextArgs) => {
@@ -133,44 +223,28 @@ function _makeCurried(fn, expectedLength, argsSoFar) {
 }
 
 function _applyArgs(fn, args) {
-  const holeIndices = [];
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === __hole) {
-      holeIndices.push(i);
-    }
-  }
-  if (holeIndices.length === 0) {
-    return fn(...args);
-  }
-  const fillHoles = (...fillValues) => {
-    const newArgs = [...args];
-    let fillIdx = 0;
-    for (let i = 0; i < newArgs.length; i++) {
-      if (newArgs[i] === __hole && fillIdx < fillValues.length) {
-        newArgs[i] = fillValues[fillIdx++];
-      }
-    }
-    const remainingHoles = newArgs.filter(x => x === __hole).length;
-    if (remainingHoles === 0) {
-      const extra = fillValues.slice(fillIdx);
-      return fn(...newArgs, ...extra);
-    } else {
-      return _applyArgs(fn, newArgs);
-    }
-  };
-  Object.defineProperty(fillHoles, 'length', { value: holeIndices.length });
-  if (fn.hasRest) {
-    fillHoles.hasRest = true;
-    fillHoles.expectedLength = holeIndices.length;
-  }
-  return fillHoles;
+  return fn(...args);
 }
 
 function _call(left, ...args) {
+  const resolvedArgs = _resolveNamedArgs(left, args);
+  return _callInternal(left, ...resolvedArgs);
+}
+
+function _callInternal(left, ...args) {
   if (args.length === 0) return left;
   
-  if (left === __hole) {
-    return _call(args[0], ...args.slice(1));
+  if (typeof left === 'function') {
+    if (left.__isPointFreeBinary) {
+      if (args.length === 1 && Array.isArray(args[0])) {
+        if (args[0].length === 0) return __hole;
+        return args[0].reduce(left.target);
+      }
+      return args.reduce(left.target);
+    }
+    if (left.__isPointFreeMapFilter) {
+      return left(...args);
+    }
   }
 
   if (Array.isArray(left)) {
@@ -432,4 +506,56 @@ function collectIdentifiers(node, set) {
       }
     }
   }
+}
+
+function desugarHoles(node) {
+  if (!node) return node;
+  if (typeof node !== 'object') return node;
+  if (Array.isArray(node)) {
+    return node.map(desugarHoles);
+  }
+
+  if (node.type === 'coproduct_block' && node.statements) {
+    const holeIndices = [];
+    node.statements.forEach((stmt, idx) => {
+      if (stmt === '_') {
+        holeIndices.push(idx);
+      }
+    });
+
+    if (holeIndices.length > 0) {
+      const paramNames = holeIndices.map((_, i) => `<$p${i}>`);
+      const newStatements = [...node.statements];
+      holeIndices.forEach((stmtIdx, i) => {
+        newStatements[stmtIdx] = paramNames[i];
+      });
+
+      const lambdaLHS = paramNames.length === 1 
+        ? paramNames[0]
+        : { type: 'coproduct_block', statements: paramNames };
+
+      const lambdaRHS = {
+        type: 'coproduct_block',
+        statements: newStatements
+      };
+
+      const lambdaNode = {
+        type: 'operation',
+        operator: '?',
+        left: lambdaLHS,
+        right: lambdaRHS,
+        name: 'lambda'
+      };
+
+      return desugarHoles(lambdaNode);
+    }
+  }
+
+  const newNode = { ...node };
+  for (const key of Object.keys(newNode)) {
+    if (key !== 'env') {
+      newNode[key] = desugarHoles(newNode[key]);
+    }
+  }
+  return newNode;
 }

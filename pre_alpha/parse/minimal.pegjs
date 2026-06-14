@@ -363,7 +363,7 @@ Block
     }
 
 PointFree
-  = op:all_operators _ right:Comparison _ "," {
+  = op:all_operators __ right:Comparison _ "," {
       return {
         type: "operation",
         operator: ",",
@@ -376,7 +376,7 @@ PointFree
         name: "product"
       };
     }
-  / left:Comparison _ op:all_operators _ "," {
+  / left:Comparison __ op:all_operators _ "," {
       return {
         type: "operation",
         operator: ",",
@@ -389,12 +389,28 @@ PointFree
         name: "product"
       };
     }
+  / op:all_operators __ right:Comparison &(_ EOL* _ ("]" / ")" / "}" / "," / EOL / EOF)) {
+      return {
+        type: "operation",
+        operator: op.operator || op,
+        right: right,
+        name: OP_NAMES[op.operator || op] || "unknown"
+      };
+    }
+  / left:Comparison __ op:all_operators &(_ EOL* _ ("]" / ")" / "}" / "," / EOL / EOF)) {
+      return {
+        type: "operation",
+        operator: op.operator || op,
+        left: left,
+        name: OP_NAMES[op.operator || op] || "unknown"
+      };
+    }
 
 // --- Atoms ---
 Atom
   = string / charactor / address / register / unicode / number / identifier / unit
 
-string = $("`" [^\r\n]* "`")
+string = $("`" [^`\r\n]* "`")
 charactor = $("\\".)
 number = $("-"? [0-9]+ "."? [0-9]*)
 address = $("0x" Hex+)
