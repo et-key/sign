@@ -490,8 +490,11 @@ function buildEnvironment(node, env = new Map()) {
     }
     if (node.type === 'operation' && node.operator === ':') {
       const identName = typeof node.left === 'string' ? node.left : (node.left.name || String(node.left));
-      const rightCat = getInitialCategory(node.right, currentEnv);
+      let rightCat = getInitialCategory(node.right, currentEnv);
       const arity = getArity(node.right);
+      if (arity > 0) {
+        rightCat = 'Lambda';
+      }
       currentEnv.set(identName, { category: rightCat, arity: arity });
     }
     for (const key of Object.keys(node)) {

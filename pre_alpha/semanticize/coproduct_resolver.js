@@ -116,8 +116,12 @@ function getCategory(node, env) {
       while (targetNode && targetNode.type === 'block') {
         targetNode = targetNode.content;
       }
-      if (targetNode && targetNode.type === 'operation' && targetNode.operator === '?') {
-        arity = getArity(targetNode.left);
+      if (targetNode && targetNode.type === 'operation') {
+        if (targetNode.operator === '?') {
+          arity = getArity(targetNode.left);
+        } else {
+          arity = getArity(targetNode);
+        }
       } else if (typeof targetNode === 'string') {
         let entry = null;
         if (env && env.has(targetNode)) {
@@ -245,6 +249,38 @@ export function getArity(node) {
     return (node.statements || []).reduce((acc, s) => acc + getArity(s), 0);
   }
   if (node.type === 'operation') {
+    // 0. Compose operation: f g (syntactic composition)
+    if (node.name === 'compose') {
+      return getArity(node.right);
+    }
+    // 1. Map/Filter point-free: [2 +,] or [* 2,]
+    if (node.operator === ',') {
+      if (node.left === undefined || node.right === undefined) {
+        return 1;
+      }
+      return getArity(node.left) + getArity(node.right);
+    }
+    // 2. Lambda: parameters ? body
+    if (node.operator === '?') {
+      return getArity(node.left);
+    }
+    // 3. Binary point-free: [+]
+    if (node.position !== 'prefix' && node.position !== 'postfix') {
+      if (node.left === undefined && node.right === undefined) {
+        return 2;
+      }
+      // 4. Partial binary point-free: [* 2] or [2 +]
+      if (node.left === undefined || node.right === undefined) {
+        return 1;
+      }
+    }
+    // 5. Prefix/Postfix point-free: [!_] or [_!]
+    if (node.position === 'prefix' || node.position === 'postfix') {
+      if (node.operand === '_' || node.operand === undefined) {
+        return 1;
+      }
+    }
+
     if (node.operator === '\\n' || node.operator === ' ' || node.operator === ',') {
       return getArity(node.left) + getArity(node.right);
     }
@@ -252,7 +288,7 @@ export function getArity(node) {
       return getArity(node.left);
     }
     if (node.operator === '~') {
-      return 0; // Restパラメータはアリティに含めない
+      return 0; // Rest parameter doesn't count towards required arity
     }
   }
   return 1;
