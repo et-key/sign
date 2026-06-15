@@ -1,7 +1,7 @@
 // playground.js
 import { preprocess } from '../pre_alpha/lexisize/lexer.js';
 import * as parser from '../pre_alpha/parse/minimal.js';
-import { resolveCoproducts } from '../pre_alpha/semanticize/coproduct_resolver.js';
+import { resolveCoproducts, getArity } from '../pre_alpha/semanticize/coproduct_resolver.js';
 import { transpile } from '../pre_alpha/backend/js_codegen.js';
 
 // DOM References
@@ -285,14 +285,14 @@ class ExpandedObject {
 }
 const _expand = (a) => {
   if (Array.isArray(a)) {
-    if (a.length === 0) return [__hole];
+    if (a.length === 0) return [];
     return a.flat(1);
   }
   if (a && typeof a === 'object' && !(a instanceof Address) && !(a instanceof ExpandedObject)) {
     return [new ExpandedObject(a)];
   }
   if (a === __hole || a === undefined || a === null) {
-    return [__hole];
+    return [];
   }
   return [a];
 };
@@ -666,7 +666,8 @@ function buildEnvironment(node, env = new Map()) {
     if (node.type === 'operation' && node.operator === ':') {
       const identName = typeof node.left === 'string' ? node.left : (node.left.name || String(node.left));
       const rightCat = getInitialCategory(node.right, currentEnv);
-      currentEnv.set(identName, rightCat);
+      const arity = getArity(node.right);
+      currentEnv.set(identName, { category: rightCat, arity: arity });
     }
     for (const key of Object.keys(node)) {
       if (key !== 'type' && key !== 'name' && key !== 'operator' && key !== 'kind' && key !== 'env') {
