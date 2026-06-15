@@ -85,6 +85,20 @@ sourceEditor.addEventListener('scroll', () => {
   lineNumbers.scrollTop = sourceEditor.scrollTop;
 });
 
+// Intercept Tab key to insert a physical tab character
+sourceEditor.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const start = sourceEditor.selectionStart;
+    const end = sourceEditor.selectionEnd;
+    const value = sourceEditor.value;
+    sourceEditor.value = value.substring(0, start) + '\t' + value.substring(end);
+    sourceEditor.selectionStart = sourceEditor.selectionEnd = start + 1;
+    updateLineNumbers();
+  }
+});
+
+
 // Example Loader
 exampleSelect.addEventListener('change', () => {
   const selected = exampleSelect.value;
