@@ -495,6 +495,9 @@ function _callInternal(left, ...args) {
     const target = isCurried ? left.target : left;
     const argsSoFar = isCurried ? left.args : [];
     const expectedLength = isCurried ? left.expectedLength : (left.expectedLength !== undefined ? left.expectedLength : left.length);
+    const requiredLength = isCurried ?
+      (left.target.requiredLength !== undefined ? left.target.requiredLength : expectedLength) :
+      (left.requiredLength !== undefined ? left.requiredLength : expectedLength);
     const hasRest = isCurried ? left.target.hasRest : left.hasRest;
     
     let totalArgs = [...argsSoFar, ...args];
@@ -508,12 +511,12 @@ function _callInternal(left, ...args) {
     }
     
     if (hasRest) {
-      if (totalArgs.length >= expectedLength - 1) {
+      if (totalArgs.length >= requiredLength) {
         return _applyArgs(target, totalArgs);
       }
       return _makeCurried(target, expectedLength, totalArgs);
     } else {
-      if (totalArgs.length >= expectedLength) {
+      if (totalArgs.length >= requiredLength) {
         const invokeArgs = totalArgs.slice(0, expectedLength);
         const remainingArgs = totalArgs.slice(expectedLength);
         const res = _applyArgs(target, invokeArgs);
@@ -596,6 +599,9 @@ const _compare = (op, left, right) => {
   }
   if (cond) {
     if (left === 0 || left === 1 || left === __hole || left === __unit) {
+      if (right === 0 || right === 1 || right === __hole || right === __unit) {
+        return 1;
+      }
       return right;
     }
     return left;

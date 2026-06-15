@@ -11,7 +11,7 @@ export function transpile(node) {
     // Unwrap identifier brackets like <map_func> to map_func
     if (node.startsWith('<') && node.endsWith('>')) {
       const name = node.slice(1, -1);
-      if (name === '_') return '__hole';
+      if (name === '_') return '__unit';
       return name;
     }
     // Character literals: \a -> "a"
@@ -23,7 +23,7 @@ export function transpile(node) {
       return `0x${node.slice(2)}`;
     }
     // Number, String, or variables remain as is
-    if (node === '_') return '__hole';
+    if (node === '_') return '__unit';
     return node;
   }
 
@@ -116,7 +116,8 @@ export function transpile(node) {
         const bodyCode = bodyLines.length > 0 ? bodyLines.join('\n') + '\n' : '';
         const hasRest = specs.some(p => p.isRest);
         const fnExpr = `(${argsStr}) => {\n${bodyCode}  return ${transpile(node.right)};\n}`;
-        return `(() => {\n  const _fn = ${fnExpr};\n  _fn.expectedLength = ${specs.length};\n  _fn.hasRest = ${hasRest};\n  _fn.paramSpecs = ${JSON.stringify(specs)};\n  return _fn;\n})()`;
+        const reqLen = specs.filter(p => p.defaultValue === null && !p.isRest).length;
+        return `(() => {\n  const _fn = ${fnExpr};\n  _fn.expectedLength = ${specs.length};\n  _fn.requiredLength = ${reqLen};\n  _fn.hasRest = ${hasRest};\n  _fn.paramSpecs = ${JSON.stringify(specs)};\n  return _fn;\n})()`;
       }
 
       if (node.operator !== ',') {
