@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "playground": "node run_playground.js"
+  },
   "dependencies": {
     "white_cats": "^0.1.54"
   }

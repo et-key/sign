@@ -110,6 +110,7 @@ function getCategory(node, env) {
     }
     if (node.operator === '?') return 'Lambda';
     if (node.name === 'compose') return 'Lambda';
+    if (node.name === 'apply') return getCategory(node.left, env);
     if (isPartialOperation(node)) return 'Lambda';
     // apply, concat, 算術演算などは一旦 Atom（値）扱い
     return 'Atom';
@@ -140,9 +141,9 @@ function reduceCoproductBlock(statements, env) {
   // A_Operator_Table.md に基づく優先順位定義
   // 優先順位が高い（先に結合される）順に処理
   const PRECEDENCES = [
+    { level: 10.5, leftCat: 'Lambda', rightCat: 'Lambda', name: 'compose' },
+    { level: 10.4, leftCat: 'Lambda', rightCat: 'Atom', name: 'apply' },
     { level: 10.3, leftCat: 'Atom', rightCat: 'Atom', name: 'concat' },
-    { level: 10.2, leftCat: 'Lambda', rightCat: 'Lambda', name: 'compose' },
-    { level: 10.1, leftCat: 'Lambda', rightCat: 'Atom', name: 'apply' },
     { level: 10.0, leftCat: 'Atom', rightCat: 'Lambda', name: 'apply_reverse' }
   ];
 
@@ -163,19 +164,29 @@ function reduceCoproductBlock(statements, env) {
 
           if (prec.name === 'concat') {
             newNode = { type: 'operation', operator: ' ', left, right, name: 'concat' };
+            items.splice(i, 2, newNode);
           }
           else if (prec.name === 'compose') {
             newNode = { type: 'operation', operator: ' ', left, right, name: 'compose' };
+            items.splice(i, 2, newNode);
           }
           else if (prec.name === 'apply') {
-            newNode = { type: 'operation', operator: ' ', left, right, name: 'apply' };
+            const args = [right];
+            let j = i + 2;
+            while (j < items.length && getCategory(items[j], env) === 'Atom') {
+              args.push(items[j]);
+              j++;
+            }
+            const rightNode = args.length === 1 ? args[0] : { type: 'coproduct_block', statements: args };
+            newNode = { type: 'operation', operator: ' ', left, right: rightNode, name: 'apply' };
+            items.splice(i, 1 + args.length, newNode);
           }
           else if (prec.name === 'apply_reverse') {
             // 逆適用: 右辺(Lambda)に左辺(Atom)を適用する
             newNode = { type: 'operation', operator: ' ', left: right, right: left, name: 'apply' };
+            items.splice(i, 2, newNode);
           }
 
-          items.splice(i, 2, newNode);
           changed = true;
           break; // 左結合を担保するため、リストの先頭から再度走査
         }

@@ -6,7 +6,7 @@ import { exec } from 'child_process';
 
 const PORT = 3000;
 const WORKSPACE_DIR = process.cwd();
-const PLAYGROUND_DIR = path.join(WORKSPACE_DIR, 'pre_alpha', 'playground');
+const PLAYGROUND_DIR = path.join(WORKSPACE_DIR, 'playground');
 
 const MIME_TYPES = {
   '.html': 'text/html',

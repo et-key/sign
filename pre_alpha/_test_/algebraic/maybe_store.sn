@@ -1,16 +1,16 @@
 f : x y ? x + y
-res_f1 : f (3 < 2) 2
-res_f2 : f (3 > 2) 2
+res_f1 : f 3 < 2 2
+res_f2 : f 3 > 2 2
 
-g : (
-	x : 0
-	y : 0
-) ? (
-	x + y
-)
+g :
+		x : 0
+		y : 0
+	?
+		x + y
 
-res_g1 : g (3 < 2) 2
+res_g1 : g 3 < 2 2
 res_g2 : g 2 3
+res_g3 : [g _ 2] 3
 
 get_age : age ~obj ? age
 dict :

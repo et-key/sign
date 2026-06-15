@@ -14,6 +14,14 @@ export function transpile(node) {
       if (name === '_') return '__hole';
       return name;
     }
+    // Character literals: \a -> "a"
+    if (node.startsWith('\\') && node.length === 2) {
+      return JSON.stringify(node[1]);
+    }
+    // Unicode literals: 0u31 -> 0x31
+    if (node.startsWith('0u')) {
+      return `0x${node.slice(2)}`;
+    }
     // Number, String, or variables remain as is
     if (node === '_') return '__hole';
     return node;
@@ -23,14 +31,8 @@ export function transpile(node) {
     const pfCode = tryTranspilePointFree(node);
     if (pfCode !== null) return pfCode;
 
-    if (node.kind === 'paren' || node.kind === 'group') {
+    if (node.kind === 'paren' || node.kind === 'group' || node.kind === 'bracket' || node.kind === 'brace') {
       return `(${transpile(node.content)})`;
-    }
-    if (node.kind === 'bracket') {
-      return `[${transpile(node.content)}]`;
-    }
-    if (node.kind === 'brace') {
-      return `{ ${transpile(node.content)} }`;
     }
     if (node.kind === 'abs') {
       return `Math.abs(${transpile(node.content)})`;
@@ -130,6 +132,16 @@ export function transpile(node) {
 
       // Space operator (resolved operations)
       if (node.operator === ' ') {
+        if (node.name === 'concat') {
+          return `_concat(${transpile(node.left)}, ${transpile(node.right)})`;
+        }
+        if (node.name === 'apply') {
+          if (node.right && node.right.type === 'coproduct_block') {
+            const args = node.right.statements.map(s => transpile(s)).join(', ');
+            return `_call(${transpile(node.left)}, ${args})`;
+          }
+          return `_call(${transpile(node.left)}, ${transpile(node.right)})`;
+        }
         return `_call(${transpile(node.left)}, ${transpile(node.right)})`;
       }
 
@@ -177,12 +189,17 @@ export function transpile(node) {
 
       // Exponentiation in Sign: ^
       if (node.operator === '^') {
-        return `Math.pow(${transpile(node.left)}, ${transpile(node.right)})`;
+        return `_arithmetic('^', ${transpile(node.left)}, ${transpile(node.right)})`;
       }
 
       // Comparisons in Sign: <, >, <=, >=, ==, !==, =, !=
       if (['<', '>', '<=', '>=', '==', '!==', '=', '!='].includes(node.operator)) {
         return `_compare('${node.operator}', ${transpile(node.left)}, ${transpile(node.right)})`;
+      }
+
+      // Standard arithmetic binary ops: +, -, *, /, %
+      if (['+', '-', '*', '/', '%'].includes(node.operator)) {
+        return `_arithmetic('${node.operator}', ${transpile(node.left)}, ${transpile(node.right)})`;
       }
 
       // Standard binary ops

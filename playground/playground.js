@@ -1,8 +1,8 @@
 // playground.js
-import { preprocess } from '/pre_alpha/lexisize/lexer.js';
-import * as parser from '/pre_alpha/parse/minimal.js';
-import { resolveCoproducts } from '/pre_alpha/semanticize/coproduct_resolver.js';
-import { transpile } from '/pre_alpha/backend/js_codegen.js';
+import { preprocess } from '../pre_alpha/lexisize/lexer.js';
+import * as parser from '../pre_alpha/parse/minimal.js';
+import { resolveCoproducts } from '../pre_alpha/semanticize/coproduct_resolver.js';
+import { transpile } from '../pre_alpha/backend/js_codegen.js';
 
 // DOM References
 const sourceEditor = document.getElementById('sourceEditor');
@@ -24,6 +24,7 @@ result : f g 3
   partial_app: `\` 1. Partial Application using Hole (_)
 f : x y ? x + y
 partial : f _ 3
+partial_result : partial 4
 
 \` 2. Currying
 curried : f 2
@@ -44,14 +45,14 @@ result : map $f [0 ~+ 2 ~ 10]
 b : 2
 c : 3
 
-[a b c]
-a b c
-a b c , a b c
-[a b c] [a b c]
-[a b c] , [a b c]
+list1 : [a b c]
+list2 : a b c
+list3 : a b c , a b c
+list4 : [a b c] [a b c]
+list5 : [a b c] , [a b c]
 
-[a , b , c] [a , b , c]
-[a , b , c] , [a , b , c]
+list6 : [a , b , c] [a , b , c]
+list7 : [a , b , c] , [a , b , c]
 `,
   higher_order: `f : x ? x * 2
 map : g x ~y ? [@g x] [map g y~]
@@ -138,7 +139,7 @@ function inspect(val, depth = 0) {
     }
     try {
       return JSON.stringify(val);
-    } catch(e) {
+    } catch (e) {
       return String(val);
     }
   }
@@ -156,32 +157,32 @@ runBtn.addEventListener('click', async () => {
   runBtn.classList.add('loading');
   clearOutputViews();
   logToConsole('Starting compilation...', 'system-msg');
-  
+
   const sourceCode = sourceEditor.value;
-  
+
   try {
     // 1. Preprocess
     const preprocessed = preprocess(sourceCode);
-    
+
     // 2. PEG Parse
     const astProg = parser.parse(preprocessed);
-    
+
     let globalEnv = new Map();
     const rawLines = astProg.filter(line => line !== null && line !== undefined);
     const astLines = rawLines.map(desugarHoles);
-    
+
     // Build Environment Map
     astLines.forEach(astLine => {
       buildEnvironment(astLine, globalEnv);
     });
-    
+
     // Resolve Coproducts and Transpile Statements
     const jsStatements = [];
     const definedVars = [];
-    
+
     astLines.forEach(astLine => {
       const resolved = resolveCoproducts(astLine, globalEnv);
-      
+
       // Collect defined variables for execution inspection
       if (resolved && resolved.type === 'operation' && resolved.operator === ':') {
         const identName = typeof resolved.left === 'string' ? resolved.left : (resolved.left.name || String(resolved.left));
@@ -189,7 +190,7 @@ runBtn.addEventListener('click', async () => {
           definedVars.push(identName.slice(1, -1));
         }
       }
-      
+
       const jsCode = transpile(resolved);
       if (jsCode) {
         jsStatements.push(jsCode);
@@ -211,7 +212,7 @@ runBtn.addEventListener('click', async () => {
 
     // Build the AST JSON Output
     astOutput.textContent = JSON.stringify(astLines.length === 1 ? astLines[0] : astLines, null, 2);
-    
+
     // 3. Assemble full JS script
     const runtimeHelpers = `
 const __hole = Symbol.for('hole');
@@ -230,12 +231,15 @@ const _isTrue = (val) => {
 };
 
 const _concat = (a, b) => {
-  if (typeof a === 'string') {
-    return a + String(b);
-  }
+  if (a === __hole) return b;
+  if (b === __hole) return a;
   const flatA = Array.isArray(a) ? a.flat(1) : [a];
   const flatB = Array.isArray(b) ? b.flat(1) : [b];
-  return flatA.concat(flatB);
+  const combined = flatA.concat(flatB);
+  if (combined.some(x => typeof x === 'string')) {
+    return combined.map(x => x === __hole ? '' : String(x)).join('');
+  }
+  return combined;
 };
 
 const _product = (left, right) => {
@@ -266,11 +270,17 @@ class ExpandedObject {
   }
 }
 const _expand = (a) => {
-  if (Array.isArray(a)) return a.flat(1);
+  if (Array.isArray(a)) {
+    if (a.length === 0) return [__hole];
+    return a.flat(1);
+  }
   if (a && typeof a === 'object' && !(a instanceof Address) && !(a instanceof ExpandedObject)) {
     return [new ExpandedObject(a)];
   }
-  return a;
+  if (a === __hole || a === undefined || a === null) {
+    return [__hole];
+  }
+  return [a];
 };
 
 function _resolveNamedArgs(fn, args) {
@@ -484,6 +494,38 @@ function _callInternal(left, ...args) {
   return _call(res, ...args.slice(1));
 }
 
+const _arithmetic = (op, left, right) => {
+  if (left === __hole || right === __hole) return __hole;
+
+  if (typeof left === 'string') {
+    throw new TypeError("Type Error: Arithmetic operation not supported on String");
+  }
+
+  if (Array.isArray(left)) {
+    return left.map(x => _arithmetic(op, x, right));
+  }
+
+  if (typeof right === 'string') {
+    const parsed = parseFloat(right);
+    const val = isNaN(parsed) ? 0 : parsed;
+    return _arithmetic(op, left, val);
+  }
+
+  if (Array.isArray(right)) {
+    return right.map(y => _arithmetic(op, left, y));
+  }
+
+  switch (op) {
+    case '+': return left + right;
+    case '-': return left - right;
+    case '*': return left * right;
+    case '/': return left / right;
+    case '%': return left % right;
+    case '^': return Math.pow(left, right);
+    default: return left;
+  }
+};
+
 const _compare = (op, left, right) => {
   let cond = false;
   switch (op) {
@@ -548,18 +590,18 @@ const _factorial = (n) => {
 
     const generatedCodeOnly = `${undefinedDeclarations}\n${jsStatements.map(s => s + ';').join('\n')}`;
     jsOutput.textContent = generatedCodeOnly;
-    
+
     logToConsole('Compilation successful!', 'success-msg');
-    
+
     // 4. Run transpiled code in browser
     logToConsole('Executing code...', 'system-msg');
-    
+
     // Intercept standard console.log inside run block
     window.console.log = (msg) => {
       logToConsole(msg, 'log-msg');
       originalConsoleLog(msg);
     };
-    
+
     const executionCode = `
 (() => {
   const _ = window._;
@@ -574,17 +616,17 @@ const _factorial = (n) => {
   ${definedVars.map(v => `try { console.log("${v} = " + util.inspect(${v})); } catch(e) {}`).join('\n')}
 })()
     `;
-    
+
     try {
       // Direct eval in IIFE scope
       eval(executionCode);
       logToConsole('Execution completed successfully.', 'success-msg');
-    } catch(err) {
+    } catch (err) {
       logToConsole(`Runtime Error: ${err.message}`, 'error-msg');
       originalConsoleError(err);
     }
-    
-  } catch(err) {
+
+  } catch (err) {
     logToConsole(`Compiler Error: ${err.message}`, 'error-msg');
     originalConsoleError(err);
   } finally {
@@ -635,6 +677,7 @@ function getInitialCategory(node, env) {
   if (node.type === 'operation') {
     if (node.operator === '?') return 'Lambda';
     if (node.name === 'compose') return 'Lambda';
+    if (node.name === 'apply') return getInitialCategory(node.left, env);
     if (node.name === 'get_prop' || node.name === 'get_at') return 'Lambda';
     return 'Atom';
   }
@@ -693,7 +736,7 @@ function desugarHoles(node) {
         newStatements[stmtIdx] = paramNames[i];
       });
 
-      const lambdaLHS = paramNames.length === 1 
+      const lambdaLHS = paramNames.length === 1
         ? paramNames[0]
         : { type: 'coproduct_block', statements: paramNames };
 

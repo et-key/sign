@@ -1,0 +1,12 @@
+str1 : \a \b \c
+str2 : str1 \d
+str3 : `123` 123
+str4 : 123 `123`
+list : 1 2 `34`
+
+` Arithmetic operations on String left-hand side throw TypeError now
+
+res_parse_add : 0 + `123`
+res_parse_mul : 2 * `10`
+
+uni : 0u0061

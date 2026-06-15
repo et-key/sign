@@ -95,3 +95,23 @@ graph LR
 
   Compilation <===> Interpretation
 ```
+
+## Playground
+
+You can launch the interactive web-based playground locally using any of the following:
+
+- **npm script**:
+  ```bash
+  npm run playground
+  ```
+- **Shell script** (for macOS/Linux/Git Bash):
+  ```bash
+  ./sign_web.sh
+  ```
+- **PowerShell script** (for Windows PowerShell):
+  ```powershell
+  .\sign_web.ps1
+  ```
+
+This will start the local development server at `http://localhost:3000` and automatically open your default web browser.
+
