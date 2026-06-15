@@ -196,6 +196,8 @@ function _makePointFreeBinary(opFn) {
   };
   fn.__isPointFreeBinary = true;
   fn.target = opFn;
+	fn.expectedLength = 2;
+	fn.hasRest = true;
   return fn;
 }
 
@@ -216,6 +218,8 @@ function _makePointFreeMapFilter(innerFn, isComparison) {
   fn.__isPointFreeMapFilter = true;
   fn.target = innerFn;
   fn.isComparison = isComparison;
+	fn.expectedLength = 1;
+	fn.hasRest = true;
   return fn;
 }
 
@@ -237,6 +241,19 @@ function _applyArgs(fn, args) {
   return fn(...args);
 }
 
+function _compose(left, right) {
+  const composedFn = (...args) => {
+    return _call(right, _call(left, ...args));
+  };
+  const rightLength = right.__isCurried ? right.length : (right.expectedLength !== undefined ? right.expectedLength : right.length);
+  const hasRest = (left.hasRest || left.__isPointFreeBinary || left.__isPointFreeMapFilter) ||
+                  (right.hasRest || right.__isPointFreeBinary || right.__isPointFreeMapFilter);
+  Object.defineProperty(composedFn, 'length', { value: rightLength });
+  composedFn.expectedLength = rightLength;
+  composedFn.hasRest = hasRest;
+  return composedFn;
+}
+
 function _call(left, ...args) {
   const resolvedArgs = _resolveNamedArgs(left, args);
   return _callInternal(left, ...resolvedArgs);
@@ -245,7 +262,29 @@ function _call(left, ...args) {
 function _callInternal(left, ...args) {
   if (args.length === 0) return left;
   
-  if (typeof left === 'function') {
+  const typeL = typeof left;
+  
+  if (typeL === 'function') {
+    // 1. Check composition first
+    if (args.length === 1 && typeof args[0] === 'function') {
+      const expectedL = left.__isCurried ? left.length : (left.expectedLength !== undefined ? left.expectedLength : left.length);
+      if (expectedL === 1) {
+        const right = args[0];
+        const composedFn = (...nextArgs) => {
+          return _call(right, _call(left, ...nextArgs));
+        };
+        const rightLength = right.__isCurried ? right.length : (right.expectedLength !== undefined ? right.expectedLength : right.length);
+        const hasRest = (left.hasRest || left.__isPointFreeBinary || left.__isPointFreeMapFilter) ||
+                        (right.hasRest || right.__isPointFreeBinary || right.__isPointFreeMapFilter);
+        Object.defineProperty(composedFn, 'length', { value: rightLength });
+        composedFn.expectedLength = rightLength;
+        composedFn.hasRest = hasRest;
+        return composedFn;
+      }
+    }
+  }
+
+  if (typeL === 'function') {
     if (left.__isPointFreeBinary) {
       if (args.length === 1 && Array.isArray(args[0])) {
         if (args[0].length === 0) return __unit;
@@ -292,22 +331,7 @@ function _callInternal(left, ...args) {
     }
   }
   
-  const typeL = typeof left;
-  
   if (typeL === 'function') {
-    // 1. Check composition first
-    if (args.length === 1 && typeof args[0] === 'function') {
-      const expectedL = left.__isCurried ? left.length : (left.expectedLength !== undefined ? left.expectedLength : left.length);
-      if (expectedL === 1) {
-        const right = args[0];
-        const composedFn = (x) => {
-          return _call(right, _call(left, x));
-        };
-        Object.defineProperty(composedFn, 'length', { value: right.length });
-        return composedFn;
-      }
-    }
-    
     // 2. Standard Application / Currying
     const isCurried = left.__isCurried;
     const target = isCurried ? left.target : left;

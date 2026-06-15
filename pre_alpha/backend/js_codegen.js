@@ -135,6 +135,9 @@ export function transpile(node) {
         if (node.name === 'concat') {
           return `_concat(${transpile(node.left)}, ${transpile(node.right)})`;
         }
+        if (node.name === 'compose') {
+          return `_compose(${transpile(node.left)}, ${transpile(node.right)})`;
+        }
         if (node.name === 'apply') {
           if (node.right && node.right.type === 'coproduct_block') {
             const args = node.right.statements.map(s => transpile(s)).join(', ');
