@@ -98,20 +98,23 @@ graph LR
 
 ## Playground
 
-You can launch the interactive web-based playground locally using any of the following:
+You can launch the interactive web-based playground locally using any of the following (defaults to port `3980`):
 
 - **npm script**:
   ```bash
-  npm run playground
+  npm run playground [-- <port>]
+  # Example: npm run playground -- 8080
   ```
 - **Shell script** (for macOS/Linux/Git Bash):
   ```bash
-  ./sign_web.sh
+  ./sign_web.sh [<port>]
+  # Example: ./sign_web.sh 8080
   ```
 - **PowerShell script** (for Windows PowerShell):
   ```powershell
-  .\sign_web.ps1
+  .\sign_web.ps1 [<port>]
+  # Example: .\sign_web.ps1 8080
   ```
 
-This will start the local development server at `http://localhost:3000` and automatically open your default web browser.
+This will start the local development server at the selected port (default `http://localhost:3980`) and automatically open your default web browser.
 

@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 
-const PORT = 3000;
+const PORT = parseInt(process.argv[2], 10) || 3980;
 const WORKSPACE_DIR = process.cwd();
 const PLAYGROUND_DIR = path.join(WORKSPACE_DIR, 'playground');
 

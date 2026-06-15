@@ -1,2 +1,2 @@
 #!/bin/bash
-node run_playground.js
+node run_playground.js "$@"
