@@ -230,6 +230,7 @@ runBtn.addEventListener('click', async () => {
     // 3. Assemble full JS script
     const runtimeHelpers = `
 const __hole = Symbol.for('hole');
+const __unit = Symbol.for('unit');
 
 class Address {
   constructor(value) {
@@ -239,19 +240,20 @@ class Address {
 const _deref = (x) => x instanceof Address ? x.value : x;
 
 const _isTrue = (val) => {
-  if (val === __hole) return false;
+  if (val === __hole || val === __unit) return false;
   if (Array.isArray(val) && val.length === 0) return false;
   return true;
 };
 
 const _concat = (a, b) => {
-  if (a === __hole) return b;
-  if (b === __hole) return a;
-  const flatA = Array.isArray(a) ? a.flat(1) : [a];
-  const flatB = Array.isArray(b) ? b.flat(1) : [b];
+  if (a === __unit) return b;
+  if (b === __unit) return a;
+  const flatA = (Array.isArray(a) ? a.flat(1) : [a]).filter(x => x !== __unit);
+  const flatB = (Array.isArray(b) ? b.flat(1) : [b]).filter(x => x !== __unit);
   const combined = flatA.concat(flatB);
+  if (combined.length === 0) return __unit;
   if (combined.some(x => typeof x === 'string')) {
-    return combined.map(x => x === __hole ? '' : String(x)).join('');
+    return combined.map(x => (x === __hole || x === __unit) ? '' : String(x)).join('');
   }
   return combined;
 };
@@ -291,7 +293,7 @@ const _expand = (a) => {
   if (a && typeof a === 'object' && !(a instanceof Address) && !(a instanceof ExpandedObject)) {
     return [new ExpandedObject(a)];
   }
-  if (a === __hole || a === undefined || a === null) {
+  if (a === __unit || a === __hole || a === undefined || a === null) {
     return [];
   }
   return [a];
@@ -345,7 +347,7 @@ function _resolveNamedArgs(fn, args) {
 function _makePointFreeBinary(opFn) {
   const fn = (...args) => {
     if (args.length === 1 && Array.isArray(args[0])) {
-      if (args[0].length === 0) return __hole;
+      if (args[0].length === 0) return __unit;
       return args[0].reduce(opFn);
     }
     return args.reduce(opFn);
@@ -402,11 +404,10 @@ function _callInternal(left, ...args) {
   if (args.length === 0) return left;
   
 
-
   if (typeof left === 'function') {
     if (left.__isPointFreeBinary) {
       if (args.length === 1 && Array.isArray(args[0])) {
-        if (args[0].length === 0) return __hole;
+        if (args[0].length === 0) return __unit;
         return args[0].reduce(left.target);
       }
       return args.reduce(left.target);
@@ -509,7 +510,9 @@ function _callInternal(left, ...args) {
 }
 
 const _arithmetic = (op, left, right) => {
-  if (left === __hole || right === __hole) return __hole;
+  if (left === __hole || right === __hole || left === __unit || right === __unit) {
+    return left === __hole || right === __hole ? __hole : __unit;
+  }
 
   if (typeof left === 'string') {
     throw new TypeError("Type Error: Arithmetic operation not supported on String");
@@ -567,16 +570,16 @@ const _compare = (op, left, right) => {
       cond = false;
   }
   if (cond) {
-    if (left === 0 || left === 1 || left === __hole) {
+    if (left === 0 || left === 1 || left === __hole || left === __unit) {
       return right;
     }
     return left;
   }
-  return __hole;
+  return __unit;
 };
 
 const _and = (left, right) => {
-  if (!_isTrue(left)) return __hole;
+  if (!_isTrue(left)) return __unit;
   return right;
 };
 
@@ -590,10 +593,10 @@ const _xor = (left, right) => {
   const trueR = _isTrue(right);
   if (trueL && !trueR) return left;
   if (!trueL && trueR) return right;
-  return __hole;
+  return __unit;
 };
 
-const _not = (x) => _isTrue(x) ? __hole : 1;
+const _not = (x) => _isTrue(x) ? __unit : 1;
 
 const _factorial = (n) => {
   let r = 1;
