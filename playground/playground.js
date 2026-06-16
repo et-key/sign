@@ -67,6 +67,24 @@ result_partial : [+ 2,] 1 2 3 4 5
 
 test_array : 1 2 3 4 5
 test_tuple : 1 a 3
+`,
+  factorial: `\` Recursive Factorial (Packrat Parsing Test)
+fact : x ?
+	x = 0 : 1
+	x = 1 : 1
+	x * [fact [x - 1]]
+
+result : fact 5
+`,
+  fold: `\` Recursive Fold using Maybe Type matching
+f : x ? x * 2
+add : x y ? x + y
+
+fold : f a x ~y ?
+	y == __ : [@f a x]
+	fold f [@f a x] y~
+
+result : fold $[+] 0 1 2 3 4 5
 `
 };
 
