@@ -100,6 +100,21 @@ graph LR
 
 You can launch the interactive web-based playground locally using any of the following (defaults to port `3980`):
 
+### Windows ユーザー向けのかんたんセットアップ (For Windows Users)
+
+初めて実行される方や、Node.js や npm の操作に不慣れな方は、専用のインストールスクリプトをご用意しております。
+
+1. エクスプローラーで `install.ps1` を右クリックし、「PowerShell で実行」を選択してください。（またはターミナルから `./install.ps1` を実行します）
+2. Node.js がインストールされていない場合は、画面の指示に従って自動インストールが可能です。
+3. 必要なデータのダウンロードが完了すると、自動的に Playground が起動いたします。
+
+**※2回目以降の起動について**
+セットアップ完了後は、`sign_web.ps1` を実行していただくだけで、いつでも Playground を起動できます。
+
+---
+
+### その他の起動方法 (Manual Launch Methods)
+
 - **npm script**:
   ```bash
   npm run playground [-- <port>]
