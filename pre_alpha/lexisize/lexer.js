@@ -79,7 +79,7 @@ function markBlock(input) {
     // 継続行の判定 (行頭が中置演算子などで始まる場合)
     // 括弧やカンマ、四則演算子などが該当する
     const contentTrimmed = content.trim();
-    const isContinuation = /^[?+*\/\.,=<>!&]/.test(contentTrimmed) || /^\|\s/.test(contentTrimmed) || /^~(?:\s|[+*\/\^-])/.test(contentTrimmed);
+    const isContinuation = /^[?+*\/\.,=<>;%&^]/.test(contentTrimmed) || /^!=(?:=)?/.test(contentTrimmed) || /^\|(?:\s|\|)/.test(contentTrimmed) || /^~(?:\s|[+*\/\^-])/.test(contentTrimmed);
 
     if (isContinuation) {
       // 継続行の場合は新しく行を分けず、直前の行末尾にスペース区切りで結合する

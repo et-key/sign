@@ -38,7 +38,9 @@ check2 : 5 == 5
 `,
   generator: `\` 1. Higher Order Function Recursive Mapping on Lazy Generator
 f : x ? x * 2
-map : g x ~y ? [@g x] [map g y~]
+map : g x ~y ?
+	y == __ : [@g x]
+	[@g x] [map g y~]
 
 \` Range evaluation produces [0, 2, 4, 6, 8, 10]
 result : map $f [0 ~+ 2 ~ 10]
@@ -57,7 +59,9 @@ list6 : [a , b , c] [a , b , c]
 list7 : [a , b , c] , [a , b , c]
 `,
   higher_order: `f : x ? x * 2
-map : g x ~y ? [@g x] [map g y~]
+map : g x ~y ?
+	y == __ : [@g x]
+	[@g x] [map g y~]
 
 result_map1 : map $f 1 2 3 4 5
 result_map2 : map $[x ? x * 2] 1 2 3 4 5
