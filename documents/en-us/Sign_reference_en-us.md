@@ -169,7 +169,7 @@ A list is, in principle, literals separated by commas.
 * For literals other than functions, they can also be separated by spaces
 * Lists are, in principle, tuple lists
 * A list of characters is treated as a string
-* `_` is the same as an empty list
+* `__` is the same as an empty list
 * The comma `,` used as a separator is an operator that creates a product
 
 ## Functions []({#functions})
@@ -218,9 +218,9 @@ Since there are no reserved words in this language, any word can be used as an i
 The identity element for lists and functions.
 Normally used in the sense of Null, and also used in the sense of false. Details are as follows:
 
-* Represented by the single character `_`
-* When only `_` is evaluated, it naturally returns `_`
-* `_` stands as a symbol of the identity law, so it returns the first argument
+* Represented by the single character `__`
+* When only `__` is evaluated, it naturally returns `__`
+* `__` stands as a symbol of the identity law, so it returns the first argument
 
 # Operators []({#operators})
 
@@ -329,8 +329,8 @@ Define always takes the following form, so it can be regarded as similar to an a
 
 (Example: About normal definitions)
 ```javascript
-nop : _
-yep : !_
+nop : __
+yep : !__
 ```
 
 (Example: Dictionary type definition)
@@ -588,7 +588,7 @@ tail : x ~y ? y
 (Example 2: Writing a function that returns the length of a list, using the \~ postfix operator)
 ```javascript
 length : [x y ~z ?
-	y = _ : x
+	y = __ : x
 	length x + 1, z~
 ] 0
 ```
@@ -752,17 +752,17 @@ i : `hello`
 @$i = `hello`
 
 `So @$ is ID (equivalent to doing nothing, but @$ can also be said to be a self-functor for the inclusion value)
-@$ = _
+@$ = __
 
 `Dangerous overwrite (memory release)
-$i # _
+$i # __
 
 `Safe memory release
-i : _
+i : __
 
 `Reverse operation is unsolvable since i is not hex
-@i = _
-$@i = _
+@i = __
+$@i = __
 ```
 ```
 a : 0x8000
@@ -866,11 +866,11 @@ The block construction prefix operator is the construction of blocks by indentat
 (Example: After the tab, the newline becomes the same as the expression enclosed in parentheses)
 ```javascript
 [x y ?
-	x = y = _ & `Nothing` |
+	x = y = __ & `Nothing` |
 	x + y
 ]
 
-[x y ? [[x = y = _ & `Nothing`] | [x + y]]]
+[x y ? [[x = y = __ & `Nothing`] | [x + y]]]
 ```
 The following inline block construction with parentheses has the same meaning, so it's omitted.
 
@@ -959,7 +959,7 @@ bit.sn@
 
 `Once you exit the imported block, it cannot be used.
 
-0b1100 && 0b1010 = _
+0b1100 && 0b1010 = __
 
 ```
 

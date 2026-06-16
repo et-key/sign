@@ -1,8 +1,8 @@
-# Unit (`_`) Specification in the Sign Language: Bialgebraic Foundation
+# Unit (`__`) Specification in the Sign Language: Bialgebraic Foundation
 
 ## 1. Introduction
 
-The Unit value (`_`) in the Sign language is a core concept of the language design, possessing mathematically consistent characteristics as the identity element of the bialgebra.
+The Unit value (`__`) in the Sign language is a core concept of the language design, possessing mathematically consistent characteristics as the identity element of the bialgebra.
 This document provides a comprehensive explanation ranging from the category-theoretic foundation of Unit to its implementation details.
 
 ## 2. Mathematical Foundation as a Bialgebra
@@ -10,10 +10,10 @@ This document provides a comprehensive explanation ranging from the category-the
 ### 2.1 Basic Properties
 
 - **Bialgebra Identity**: The identity of both the list structure (coalgebra) and function composition (algebra).
-- **Behavior as a Value**: Equivalent to the empty list (`_ = []`).
+- **Behavior as a Value**: Equivalent to the empty list (`__ = []`).
 - **Behavior as a Function**: Functions as the identity morphism.
 - **Logical Evaluation**: Evaluated as `false` (auxiliary property).
-- **Crucial Distinction**: Distinct from numeric zero (`_ ≠ 0`).
+- **Crucial Distinction**: Distinct from numeric zero (`__ ≠ 0`).
 
 ### 2.2 Definition of Bialgebra Structure
 
@@ -26,42 +26,42 @@ The list structure in the Sign language forms a bialgebra `(List, unit, join, ex
 
 #### Coalgebraic Structure (Comonad)
 
-- `extract : List A → A` where `extract([x]) = x`, `extract([]) = _`
+- `extract : List A → A` where `extract([x]) = x`, `extract([]) = __`
 - `duplicate : List A → List(List A)` where `duplicate([a, b]) = [[a], [b]]`, `duplicate([]) = [[]]`
 
-### 2.3 Category-Theoretic Proof: Bialgebra Identity of `_`
+### 2.3 Category-Theoretic Proof: Bialgebra Identity of `__`
 
-**Theorem**: `_` is the identity element of the bialgebra `(List, unit, join, extract, duplicate)`
+**Theorem**: `__` is the identity element of the bialgebra `(List, unit, join, extract, duplicate)`
 
 **Proof**:
 
 #### Monad Identity Proof
 
 ```haskell
-_ >>= f = f(_) = f([])     // left unit law
-m >>= (\x → _) = _         // right unit law
+__ >>= f = f(__) = f([])     // left unit law
+m >>= (\x → __) = __         // right unit law
 
 Concrete Example:
-_ >>= [+ 2] = [+ 2](_) = [+ 2]
-[1,2,3] >>= (\x → _) = _
+__ >>= [+ 2] = [+ 2](__) = [+ 2]
+[1,2,3] >>= (\x → __) = __
 ```
 
 #### Comonad Identity Proof
 
 ```haskell
-extract(_) = extract([]) = _           // extraction law
-duplicate(_) = duplicate([]) = [[]] = [_]   // duplication law
+extract(__) = extract([]) = __           // extraction law
+duplicate(__) = duplicate([]) = [[]] = [__]   // duplication law
 ```
 
 #### Verification of Bialgebra Compatibility Conditions
 
 ```haskell
 extract ∘ unit = id:
-extract(unit(_)) = extract([_]) = _ = id(_) ✓
+extract(unit(__)) = extract([__]) = __ = id(__) ✓
 
 duplicate ∘ unit = unit ∘ unit:
-duplicate(unit(_)) = duplicate([_]) = [[_]]
-unit(unit(_)) = unit([_]) = [[_]] ✓
+duplicate(unit(__)) = duplicate([__]) = [[__]]
+unit(unit(__)) = unit([__]) = [[__]] ✓
 ```
 
 ---
@@ -74,37 +74,37 @@ unit(unit(_)) = unit([_]) = [[_]] ✓
 
 ```sign
 ` Generates partial application as function identity
-_ + X → [+ X]
-X + _ → [X +]
+__ + X → [+ X]
+X + __ → [X +]
 
 ` Similarly for other operators:
-_ - X → [- X]    X - _ → [X -]
-_ * X → [* X]    X * _ → [X *]
-_ / X → [/ X]    X / _ → [X /]
-_ % X → [% X]    X % _ → [X %]
-_ ^ X → [^ X]    X ^ _ → [X ^]
+__ - X → [- X]    X - __ → [X -]
+__ * X → [* X]    X * __ → [X *]
+__ / X → [/ X]    X / __ → [X /]
+__ % X → [% X]    X % __ → [X %]
+__ ^ X → [^ X]    X ^ __ → [X ^]
 ```
 
 #### 3.1.2 Interaction with Comparison Operators
 
 ```sign
 ` Generates comparison function as function identity
-_ < X → [< X]    X < _ → [X <]
-_ <= X → [<= X]  X <= _ → [X <=]
-_ = X → [= X]    X = _ → [X =]
-_ >= X → [>= X]  X >= _ → [X >=]
-_ > X → [> X]    X > _ → [X >]
-_ != X → [!= X]  X != _ → [X !=]
+__ < X → [< X]    X < __ → [X <]
+__ <= X → [<= X]  X <= __ → [X <=]
+__ = X → [= X]    X = __ → [X =]
+__ >= X → [>= X]  X >= __ → [X >=]
+__ > X → [> X]    X > __ → [X >]
+__ != X → [!= X]  X != __ → [X !=]
 ```
 
 #### 3.1.3 Function Application
 
 ```sign
 ` Functions as identity morphism
-_ X → [X]
+__ X → [X]
 
 ` Explicit application to functions acts as identity morphism (partial application)
-F _ → F
+F __ → F
 ```
 
 ### 3.2 Operations in the List Context
@@ -113,11 +113,11 @@ F _ → F
 
 ```sign
 ` Identity as empty list
-_ [X] → [X]
-[X] _ → [X]
+__ [X] → [X]
+[X] __ → [X]
 
 ` Explicit arithmetic operations between lists result in TypeError
-[_] + [X] → TypeError
+[__] + [X] → TypeError
 [A] * [B] → TypeError
 ```
 
@@ -125,10 +125,10 @@ _ [X] → [X]
 
 ```sign
 ` Map of empty list is empty list
-map f _ → _
+map f __ → __
 
 ` Fold of empty list is initial value
-fold f init _ → init
+fold f init __ → init
 ```
 
 ### 3.3 Operations in the Logical Context
@@ -138,41 +138,41 @@ In logical operations, Unit serves auxiliary as `false`:
 #### 3.3.1 Logical AND (`&`)
 
 ```sign
-_ & X → _    ` Short-circuit evaluation
-X & _ → _    ` Evaluated up to RHS
+__ & X → __    ` Short-circuit evaluation
+X & __ → __    ` Evaluated up to RHS
 ```
 
 #### 3.3.2 Logical OR (`|`)
 
 ```sign
-_ | X → X    ` LHS is false, so evaluate RHS
-X | _ → X    ` If LHS is true, short-circuit
+__ | X → X    ` LHS is false, so evaluate RHS
+X | __ → X    ` If LHS is true, short-circuit
 ```
 
 #### 3.3.3 Exclusive OR (`;`)
 
 ```sign
-_ ; X → X
-X ; _ → X
+__ ; X → X
+X ; __ → X
 ```
 
 #### 3.3.4 Negation (`!`)
 
 ```sign
-!_ → equivalent to true
+!__ → equivalent to true
 ```
 
 ### 3.4 Address and Input/Output Operations
 
 ```sign
 ` Reference to Unit itself
-$_ → _
+$__ → __
 
 ` Input from Unit is absorbed
-@_ → _
+@__ → __
 
 ` Output to Unit is invalidated (equivalent to /dev/null)
-_ # X → _
+__ # X → __
 ```
 
 ---
@@ -186,8 +186,8 @@ Functionalization of operators in the Sign language is expressed as the distribu
 (+ ⊗ *)(unit(x)) = unit(+(x)) ⊗ unit(*(x))
 
 Concrete Example:
-_ + 3 → [+ 3]    ` Generates unit(+(3))
-_ * 5 → [* 5]    ` Generates unit(*(5))
+__ + 3 → [+ 3]    ` Generates unit(+(3))
+__ * 5 → [* 5]    ` Generates unit(*(5))
 ```
 
 Through this distributive law, natural functionalization and partial application of operators are derived from the structure of the bialgebra.
@@ -205,7 +205,7 @@ Through this distributive law, natural functionalization and partial application
 ### 5.2 Optimization of Bialgebra Operations
 
 ```assembly
-// Example implementation of: _ + X
+// Example implementation of: __ + X
 cmp x0, #0               // Unit check
 b.eq .generate_partial   // If Unit, generate partial application
 // Normal addition process
@@ -250,9 +250,9 @@ result : add_then_multiply 3 5  ` → (5 + 3) * 2 = 16
 ```sign
 ` Leveraging logical properties of Unit
 safe_divide : x y ?
-    y = 0 & _ | [x / y]
+    y = 0 & __ | [x / y]
 
-result : safe_divide 10 0   ` → _ (Unit)
+result : safe_divide 10 0   ` → __ (Unit)
 result : safe_divide 10 2   ` → [5] (result list)
 ```
 
@@ -261,7 +261,7 @@ result : safe_divide 10 2   ` → [5] (result list)
 ```sign
 ` Unit as natural transformation
 natural_transform : f list ?
-    f _ ` processing for empty case
+    f __ ` processing for empty case
     f list      ` normal processing
 
 example : natural_transform [* 2,] 1, 2, 3
@@ -289,6 +289,6 @@ example : natural_transform [* 2,] 1, 2, 3
 
 ## 8. Conclusion
 
-Unit (`_`) in the Sign language is not merely a "convenient symbol", but is a foundational element of the language possessing deep mathematical structures as the identity element of the bialgebra. By functioning as the identity of both monads and comonads, it enables unified representation of functional programming and list processing, providing the theoretical basis for "invisible strong typing" and "zero-cost abstraction".
+Unit (`__`) in the Sign language is not merely a "convenient symbol", but is a foundational element of the language possessing deep mathematical structures as the identity element of the bialgebra. By functioning as the identity of both monads and comonads, it enables unified representation of functional programming and list processing, providing the theoretical basis for "invisible strong typing" and "zero-cost abstraction".
 
 Through this bialgebraic design, Sign is realized as a theoretically beautiful, implementation-efficient, and intuitive language for programmers.

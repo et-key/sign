@@ -91,7 +91,7 @@ When the position alone is insufficient, the combinations of types are also desc
 
 | Symbol | Function | Natural Meaning | Operational Semantics |
 | :---: | :---: | --- | --- |
-| `_` | unit | Visible null value (explicit empty) | Empty list / identity morphism / unit element |
+| `__` | unit | Visible null value (explicit empty) | Empty list / identity morphism / unit element |
 | `"..."` | meta description | Meta description | ASM_Volatile if immediately followed by block start, otherwise under verification |
 
 ## Design Philosophy
