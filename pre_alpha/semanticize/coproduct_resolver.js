@@ -22,9 +22,10 @@ export function resolveCoproducts(node, env = new Map(), depth = 0, pathTrace = 
 
     // 2. 既存の operation ノードの子要素を解決
     if (node.type === 'operation') {
-      const left = resolveCoproducts(node.left, env, depth + 1, [...pathTrace, 'left']);
-      const right = resolveCoproducts(node.right, env, depth + 1, [...pathTrace, 'right']);
-      const operand = resolveCoproducts(node.operand, env, depth + 1, [...pathTrace, 'operand']);
+      const currentEnv = node.env || env;
+      const left = resolveCoproducts(node.left, currentEnv, depth + 1, [...pathTrace, 'left']);
+      const right = resolveCoproducts(node.right, currentEnv, depth + 1, [...pathTrace, 'right']);
+      const operand = resolveCoproducts(node.operand, currentEnv, depth + 1, [...pathTrace, 'operand']);
 
       // 旧形式で operation の coproduct が残っていた場合のフォールバック（通常は通らない）
       if (node.name === 'coproduct') {
