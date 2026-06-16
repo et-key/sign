@@ -103,7 +103,11 @@ export function transpile(node) {
         // Build maybe checks and default replacements
         const bodyLines = [];
         specs.forEach(p => {
-          if (p.isRest) return;
+          if (p.isRest) {
+            bodyLines.push(`  if (${p.name}.length === 0) ${p.name} = __unit;`);
+            bodyLines.push(`  else if (${p.name}.length === 1) ${p.name} = ${p.name}[0];`);
+            return;
+          }
           if (p.defaultValue !== null) {
             bodyLines.push(`  if (${p.name} === undefined || ${p.name} === __hole) ${p.name} = ${p.defaultValue};`);
           }
