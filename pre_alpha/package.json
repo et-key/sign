@@ -1,5 +1,8 @@
 {
   "type": "module",
+  "scripts": {
+    "build:parser": "npx peggy --cache --format es parse/minimal.pegjs && npx peggy --cache --format es parse/st_grammar.pegjs"
+  },
   "devDependencies": {
     "peggy": "^5.1.0"
   },
