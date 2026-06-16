@@ -1,0 +1,8 @@
+f : x ? x * 2
+add : x y ? x + y
+
+fold : f a x ~y ? fold f [@f a x] y~
+
+result1 : fold $[+] 0 1 2 3 4 5
+result2 : fold $[*] 1 1 2 3 4 5
+result3 : fold $[-] 100 1 2 3 4 5

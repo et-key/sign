@@ -1,5 +1,42 @@
 import { getArity } from './coproduct_resolver.js';
 
+export function getParameterNames(node, names = new Set()) {
+  if (!node) return names;
+  if (typeof node === 'string') {
+    names.add(node);
+    return names;
+  }
+  if (node.type === 'coproduct_block') {
+    (node.statements || []).forEach(stmt => getParameterNames(stmt, names));
+    return names;
+  }
+  if (node.type === 'operation') {
+    if (node.operator === ':') {
+      getParameterNames(node.left, names);
+      return names;
+    }
+    if (node.operator === '\\n' || node.operator === ' ' || node.operator === ',') {
+      getParameterNames(node.left, names);
+      getParameterNames(node.right, names);
+      return names;
+    }
+    if (node.operator === '~' && node.position === 'prefix') {
+      getParameterNames(node.operand, names);
+      return names;
+    }
+    if (node.operator === '~' && node.position === 'postfix') {
+      getParameterNames(node.operand, names);
+      return names;
+    }
+    if (node.operator === '~' && node.left && node.right) {
+      getParameterNames(node.left, names);
+      getParameterNames({ type: 'operation', operator: '~', operand: node.right, position: 'prefix' }, names);
+      return names;
+    }
+  }
+  return names;
+}
+
 export function buildEnvironment(node, env = new Map()) {
   if (!node) return env;
   if (Array.isArray(node)) {
@@ -11,6 +48,22 @@ export function buildEnvironment(node, env = new Map()) {
     if (node.type === 'block' && (node.kind === 'indent' || node.kind === 'abs')) {
       currentEnv = new Map(env);
       node.env = currentEnv;
+    }
+    if (node.type === 'operation' && node.operator === '?') {
+      currentEnv = new Map(env);
+      node.env = currentEnv;
+      
+      const paramNames = getParameterNames(node.left);
+      paramNames.forEach(name => {
+        currentEnv.set(name, { category: 'Atom', arity: 1 });
+        if (name.startsWith('<') && name.endsWith('>')) {
+          currentEnv.set(name.slice(1, -1), { category: 'Atom', arity: 1 });
+        }
+      });
+      
+      buildEnvironment(node.left, currentEnv);
+      buildEnvironment(node.right, currentEnv);
+      return env;
     }
     if (node.type === 'operation' && node.operator === ':') {
       const identName = typeof node.left === 'string' ? node.left : (node.left.name || String(node.left));

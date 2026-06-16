@@ -408,7 +408,7 @@ PointFree
 
 // --- Atoms ---
 Atom
-  = string / charactor / address / register / unicode / number / identifier / unit
+  = string / charactor / address / register / unicode / number / identifier / unit / ub
 
 string = $("`" [^`\r\n]* "`")
 charactor = $("\\".)
@@ -418,7 +418,8 @@ register = $("0r" Hex+) / $("0b" ("0" / "1")+)
 unicode = $("0u" Hex+)
 identifier = id:( $([a-zA-Z][a-zA-Z0-9_]*) / $("_" [a-zA-Z0-9_]+) ) { return `<${id}>`; }
 Hex = [0-9a-fA-F]
-unit = "_"
+unit = "__"
+ub = "_"
 
 // --- Prefix/Postfix Operators ---
 prefix

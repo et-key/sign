@@ -1,55 +1,48 @@
+import fs from 'fs';
+import path from 'path';
 import { preprocess } from './pre_alpha/lexisize/lexer.js';
 import * as parser from './pre_alpha/parse/minimal.js';
-import { buildEnvironment } from './pre_alpha/semanticize/builder.js';
-import { resolveCoproducts } from './pre_alpha/semanticize/coproduct_resolver.js';
-import { evaluateType } from './pre_alpha/semanticize/type_evaluator.js';
+import { resolveCoproducts, getArity } from './pre_alpha/semanticize/coproduct_resolver.js';
+import { transpile } from './pre_alpha/backend/js_codegen.js';
 import util from 'util';
+import { buildEnvironment, desugarHoles, collectIdentifiers } from './pre_alpha/semanticize/ast_helpers.js';
 
-const code = `map_func: $f
-list_bound: ~[a]
-eval_res: @map_func [a]~
-list1: ~a
-list2: ~a
-concat_res: list1 list2`;
+const fileArg = process.argv[2] || 'pre_alpha/_test_/function/fold.sn';
+const filePath = path.resolve(fileArg);
 
-console.log("=== Source Code ===");
-console.log(code);
+if (!fs.existsSync(filePath)) {
+  console.error(`File not found: ${filePath}`);
+  process.exit(1);
+}
+
+console.log(`=== Debugging: ${fileArg} ===`);
+const sourceCode = fs.readFileSync(filePath, 'utf8');
 
 try {
-  const pre = preprocess(code);
+  const pre = preprocess(sourceCode);
   const astProg = parser.parse(pre);
-  let globalEnv = new Map();
-  const typeEnv = new Map();
   
-  const astLines = astProg.filter(line => line !== null && line !== undefined);
+  let globalEnv = new Map();
+  const rawLines = astProg.filter(line => line !== null && line !== undefined);
+  const astLines = rawLines.map(desugarHoles);
   
   astLines.forEach(astLine => {
-    let astTree = astLine;
-    console.log("Parsed AST Line:", util.inspect(astTree, { depth: null, colors: true }));
-    
-    try {
-      globalEnv = buildEnvironment(astTree, globalEnv);
-    } catch (err) {
-      console.error("buildEnvironment failed for node:", util.inspect(astTree, { depth: null, colors: true }));
-      throw err;
-    }
-    
-    // Resolve coproducts (10.0 - 10.3) at compile-time/parse-time
-    const resolved = resolveCoproducts(astTree, globalEnv);
-    
-    // Infer/Evaluate type
-    const inferred = evaluateType(resolved, typeEnv);
-    
-    console.log("--- AST Node ---");
-    console.log(util.inspect(resolved, { depth: null, colors: true }));
-    console.log("--- Inferred Type ---");
-    console.log(util.inspect(inferred, { depth: null, colors: true }));
+    buildEnvironment(astLine, globalEnv);
   });
   
-  console.log("--- Type Environment ---");
-  for (const [k, v] of typeEnv.entries()) {
-    console.log(`${k} = ${util.inspect(v, { depth: null, colors: true })}`);
-  }
+  astLines.forEach((astLine, idx) => {
+    console.log(`\n--- AST Line ${idx + 1} ---`);
+    console.log(util.inspect(astLine, { depth: null, colors: true }));
+    
+    const resolved = resolveCoproducts(astLine, globalEnv);
+    console.log(`\n--- Resolved Coproducts ---`);
+    console.log(util.inspect(resolved, { depth: null, colors: true }));
+    
+    const jsCode = transpile(resolved);
+    console.log(`\n--- Transpiled JS ---`);
+    console.log(jsCode);
+  });
+  
 } catch (e) {
   console.error("Error:", e);
 }

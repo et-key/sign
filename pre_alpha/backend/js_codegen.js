@@ -11,7 +11,8 @@ export function transpile(node) {
     // Unwrap identifier brackets like <map_func> to map_func
     if (node.startsWith('<') && node.endsWith('>')) {
       const name = node.slice(1, -1);
-      if (name === '_') return '__unit';
+      if (name === '_') return '__hole';
+      if (name === '__') return '__unit';
       return name;
     }
     // Character literals: \a -> "a"
@@ -23,7 +24,8 @@ export function transpile(node) {
       return `0x${node.slice(2)}`;
     }
     // Number, String, or variables remain as is
-    if (node === '_') return '__unit';
+    if (node === '_') return '__hole';
+    if (node === '__') return '__unit';
     return node;
   }
 
@@ -216,6 +218,9 @@ export function transpile(node) {
         return `${transpile(node.operand)}`;
       }
       if (node.operator === '$') {
+        if (node.operand === '_') {
+          return `new Address(__unit)`;
+        }
         return `new Address(${transpile(node.operand)})`;
       }
       if (node.operator === '@') {
