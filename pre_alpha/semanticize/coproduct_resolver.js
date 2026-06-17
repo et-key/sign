@@ -61,7 +61,6 @@ function isPartialOperation(node) {
     return isPartialOperation(node.content);
   }
   if (node.type !== 'operation') return false;
-  if (node.operator === ',') return true;
   if (node.position === 'prefix' || node.position === 'postfix') {
     return node.operand === undefined;
   }
@@ -242,28 +241,58 @@ function reduceCoproductBlock(statements, env) {
   return items[0];
 }
 
-export function getArity(node) {
+export function getParamCount(node) {
   if (!node) return 0;
   if (typeof node === 'string') return 1;
-  if (node.type === 'block') return getArity(node.content);
+  if (node.type === 'block') return getParamCount(node.content);
   if (node.type === 'coproduct_block') {
-    return (node.statements || []).reduce((acc, s) => acc + getArity(s), 0);
+    return (node.statements || []).reduce((acc, s) => acc + getParamCount(s), 0);
+  }
+  if (node.type === 'operation') {
+    if (node.operator === '\\n' || node.operator === ' ' || node.operator === ',') {
+      return getParamCount(node.left) + getParamCount(node.right);
+    }
+    if (node.operator === ':') {
+      return getParamCount(node.left);
+    }
+    if (node.operator === '~') {
+      return 0; // Rest parameter doesn't count towards required arity
+    }
+  }
+  return 1;
+}
+
+export function getArity(node, env) {
+  if (!node) return 0;
+  if (typeof node === 'number' || typeof node === 'boolean') return 0;
+  if (typeof node === 'string') {
+    if (env && env.has(node)) {
+      const entry = env.get(node);
+      if (entry && typeof entry === 'object' && entry.arity !== undefined) {
+        return entry.arity;
+      }
+    }
+    if (['print', '<print>'].includes(node)) return 1;
+    return 0; // Default for unknown atoms is 0
+  }
+  if (node.type === 'block') return getArity(node.content, env);
+  if (node.type === 'coproduct_block') {
+    return 0;
   }
   if (node.type === 'operation') {
     // 0. Compose operation: f g (syntactic composition)
     if (node.name === 'compose') {
       return getArity(node.right);
     }
-    // 1. Map/Filter point-free: [2 +,] or [* 2,]
     if (node.operator === ',') {
       if (node.left === undefined || node.right === undefined) {
         return 1;
       }
-      return getArity(node.left) + getArity(node.right);
+      return getArity(node.left, env) + getArity(node.right, env);
     }
     // 2. Lambda: parameters ? body
     if (node.operator === '?') {
-      return getArity(node.left);
+      return getParamCount(node.left);
     }
     // 3. Binary point-free: [+]
     if (node.position !== 'prefix' && node.position !== 'postfix') {
@@ -281,16 +310,10 @@ export function getArity(node) {
         return 1;
       }
     }
-
     if (node.operator === '\\n' || node.operator === ' ' || node.operator === ',') {
-      return getArity(node.left) + getArity(node.right);
-    }
-    if (node.operator === ':') {
-      return getArity(node.left);
-    }
-    if (node.operator === '~') {
-      return 0; // Rest parameter doesn't count towards required arity
+      // These operators shouldn't appear here, but just in case, their arity is 0 (evaluated value).
+      return 0;
     }
   }
-  return 1;
+  return 0;
 }

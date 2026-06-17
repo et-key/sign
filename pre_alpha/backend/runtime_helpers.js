@@ -7,7 +7,13 @@ class Address {
     this.value = value;
   }
 }
-const _deref = (x) => x instanceof Address ? x.value : x;
+const _deref = (x) => {
+  if (x instanceof Address) return x.value;
+  if (Array.isArray(x) && x.length > 0 && x[0] instanceof Address) {
+    return [x[0].value, ...x.slice(1)];
+  }
+  return x;
+};
 
 const _isTrue = (val) => {
   if (val === __hole || val === __unit) return false;
@@ -15,20 +21,19 @@ const _isTrue = (val) => {
   return true;
 };
 
-const _concat = (a, b) => {
-  if (a === __unit) return b;
-  if (b === __unit) return a;
-  const flatA = (Array.isArray(a) ? a.flat(1) : [a]).filter(x => x !== __unit);
-  const flatB = (Array.isArray(b) ? b.flat(1) : [b]).filter(x => x !== __unit);
-  const combined = flatA.concat(flatB);
-  if (combined.length === 0) return __unit;
-  if (combined.some(x => typeof x === 'string')) {
-    return combined.map(x => (x === __hole || x === __unit) ? '' : String(x)).join('');
+const _concat = (...args) => {
+  const flats = args.map(a => Array.isArray(a) ? a.flat(1) : [a]).flat(1).filter(x => x !== __unit);
+  if (flats.length === 0) return __unit;
+  if (flats.some(x => typeof x === 'string')) {
+    return flats.map(x => (x === __hole || x === __unit) ? '' : String(x)).join('');
   }
-  return combined;
+  return flats;
 };
 
 const _product = (left, right) => {
+  if (left === __unit && right === __unit) return __unit;
+  if (left === __unit) return right;
+  if (right === __unit) return left;
   const isArrayL = Array.isArray(left);
   const isArrayR = Array.isArray(right);
   if (!isArrayL && !isArrayR) {
@@ -57,14 +62,17 @@ class ExpandedObject {
 }
 const _expand = (a) => {
   if (Array.isArray(a)) {
-    if (a.length === 0) return [];
+    if (a.length === 0) return [__unit];
     return a.flat(1);
   }
   if (a && typeof a === 'object' && !(a instanceof Address) && !(a instanceof ExpandedObject)) {
     return [new ExpandedObject(a)];
   }
-  if (a === __unit || a === __hole || a === undefined || a === null) {
+  if (a === undefined || a === null) {
     return [];
+  }
+  if (a === __hole || a === __unit) {
+    return [__unit];
   }
   return [a];
 };
@@ -169,7 +177,10 @@ function _applyArgs(fn, args) {
   return fn(...args);
 }
 
-function _compose(left, right) {
+const _compose = (left, right) => {
+  if (left === __unit && right === __unit) return __unit;
+  if (left === __unit) return right;
+  if (right === __unit) return left;
   const composedFn = (...args) => {
     return _call(right, _call(left, ...args));
   };
@@ -190,6 +201,51 @@ function _call(left, ...args) {
 function _callInternal(left, ...args) {
   if (args.length === 0) return left;
   
+  if (Array.isArray(left)) {
+    if (left.length > 0 && typeof left[0] === 'function') {
+      return _callInternal(left[0], ...left.slice(1), ...args);
+    }
+    const hasFuncOrHole = left.some(x => typeof x === 'function' || x === __hole);
+    if (hasFuncOrHole) {
+      const flatArgs = args.flatMap(x => Array.isArray(x) ? x : [x]);
+      let argIdx = 0;
+      const result = [];
+      for (const e of left) {
+        if (typeof e === 'function') {
+          const expectedLength = e.__isCurried ? e.length : (e.expectedLength !== undefined ? e.expectedLength : e.length);
+          const k = expectedLength || 1;
+          const subArgs = flatArgs.slice(argIdx, argIdx + k);
+          while (subArgs.length < k) {
+            subArgs.push(__hole);
+          }
+          result.push(_call(e, ...subArgs));
+          argIdx += k;
+        } else if (e === __hole) {
+          if (argIdx < flatArgs.length) {
+            result.push(flatArgs[argIdx]);
+            argIdx++;
+          } else {
+            result.push(__hole);
+          }
+        } else {
+          result.push(e);
+        }
+      }
+      if (argIdx < flatArgs.length) {
+        result.push(...flatArgs.slice(argIdx));
+      }
+      return result;
+    }
+  }
+
+  if (args.includes(__unit)) {
+    const fnObj = left.__isCurried ? left.target : left;
+    if (fnObj && fnObj._extractIndex !== undefined && fnObj._extractIndex >= 0) {
+      return args[fnObj._extractIndex];
+    }
+    return __unit;
+  }
+
   const typeL = typeof left;
   
   if (typeL === 'function') {
@@ -225,40 +281,7 @@ function _callInternal(left, ...args) {
     }
   }
 
-  if (Array.isArray(left)) {
-    const hasFuncOrHole = left.some(x => typeof x === 'function' || x === __hole);
-    if (hasFuncOrHole) {
-      const flatArgs = args.flatMap(x => Array.isArray(x) ? x : [x]);
-      let argIdx = 0;
-      const result = [];
-      for (const e of left) {
-        if (typeof e === 'function') {
-          const expectedLength = e.__isCurried ? e.length : (e.expectedLength !== undefined ? e.expectedLength : e.length);
-          const k = expectedLength || 1;
-          const subArgs = flatArgs.slice(argIdx, argIdx + k);
-          while (subArgs.length < k) {
-            subArgs.push(__hole);
-          }
-          result.push(_call(e, ...subArgs));
-          argIdx += k;
-        } else if (e === __hole) {
-          if (argIdx < flatArgs.length) {
-            result.push(flatArgs[argIdx]);
-            argIdx++;
-          } else {
-            result.push(__hole);
-          }
-        } else {
-          result.push(e);
-        }
-      }
-      if (argIdx < flatArgs.length) {
-        result.push(...flatArgs.slice(argIdx));
-      }
-      return result;
-    }
-  }
-  
+
   if (typeL === 'function') {
     // 2. Standard Application / Currying
     const isCurried = left.__isCurried;
@@ -280,23 +303,26 @@ function _callInternal(left, ...args) {
       }
     }
     
-    if (hasRest) {
-      if (totalArgs.length >= requiredLength) {
-        return _applyArgs(target, totalArgs);
-      }
-      return _makeCurried(target, expectedLength, totalArgs);
-    } else {
-      if (totalArgs.length >= requiredLength) {
-        const invokeArgs = totalArgs.slice(0, expectedLength);
-        const remainingArgs = totalArgs.slice(expectedLength);
-        const res = _applyArgs(target, invokeArgs);
-        if (remainingArgs.length > 0) {
-          return _call(res, ...remainingArgs);
-        }
-        return res;
-      }
-      return _makeCurried(target, expectedLength, totalArgs);
+    totalArgs = totalArgs.filter(x => x !== __hole);
+    
+    while (totalArgs.length < requiredLength) {
+      totalArgs.push(__hole);
     }
+    
+    if (totalArgs.includes(__hole)) {
+      return [left, ...totalArgs];
+    }
+    
+    if (hasRest) {
+      return _applyArgs(target, totalArgs);
+    }
+    const invokeArgs = totalArgs.slice(0, expectedLength);
+    const remainingArgs = totalArgs.slice(expectedLength);
+    const res = _applyArgs(target, invokeArgs);
+    if (remainingArgs.length > 0) {
+      return _call(res, ...remainingArgs);
+    }
+    return res;
   }
   
   if (typeof args[0] === 'function') {
@@ -308,8 +334,11 @@ function _callInternal(left, ...args) {
 }
 
 const _arithmetic = (op, left, right) => {
-  if (left === __hole || right === __hole || left === __unit || right === __unit) {
-    return left === __hole || right === __hole ? __hole : __unit;
+  if (left === __unit || right === __unit) {
+    return left === __unit ? right : left;
+  }
+  if (left === __hole || right === __hole) {
+    return [Symbol.for(op), left, right];
   }
 
   if (typeof left === 'string') {

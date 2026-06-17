@@ -1,8 +1,8 @@
 f : x ? x * 2
 add : x y ? x + y
 
-fold : f a x ~y ?
-	y == __ : [@f a x]
+fold : f a x (~y:__) ?
+	!y : [@f a x]
 	fold f [@f a x] y~
 
 a : fold $[+] 0 1 2 3 4 5

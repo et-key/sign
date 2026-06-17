@@ -4,6 +4,8 @@
  * Translates resolved Sign AST to clean, executable JavaScript utilizing white_cats.
  */
 
+const functionContextStack = [false];
+
 export function transpile(node) {
   if (node === undefined || node === null) return '';
 
@@ -34,10 +36,16 @@ export function transpile(node) {
     if (pfCode !== null) return pfCode;
 
     if (node.kind === 'paren' || node.kind === 'group' || node.kind === 'bracket' || node.kind === 'brace') {
-      return `(${transpile(node.content)})`;
+      functionContextStack.push(false);
+      const res = `(${transpile(node.content)})`;
+      functionContextStack.pop();
+      return res;
     }
     if (node.kind === 'abs') {
-      return `Math.abs(${transpile(node.content)})`;
+      functionContextStack.push(false);
+      const res = `Math.abs(${transpile(node.content)})`;
+      functionContextStack.pop();
+      return res;
     }
     if (node.kind === 'indent') {
       const stmts = flattenStatements(node.content);
@@ -57,7 +65,8 @@ export function transpile(node) {
           }
         }
 
-        if (isMatchCase(s)) {
+        const isFuncBody = functionContextStack[functionContextStack.length - 1];
+        if (isMatchCase(s, isFuncBody)) {
           return `if (_isTrue(${transpile(s.left)})) return ${transpile(s.right)};`;
         }
         let code = transpile(s);
@@ -74,7 +83,8 @@ export function transpile(node) {
         }
         return code + (code.endsWith(';') ? '' : ';');
       });
-      if (stmts.length > 0 && isMatchCase(stmts[stmts.length - 1])) {
+      const isFuncBody = functionContextStack[functionContextStack.length - 1];
+      if (stmts.length > 0 && isMatchCase(stmts[stmts.length - 1], isFuncBody)) {
         parts.push(`return __hole;`);
       }
       return `(() => {\n  ${parts.join('\n  ')}\n})()`;
@@ -100,6 +110,25 @@ export function transpile(node) {
         const specs = getParameterSpecs(node.left);
         const argsStr = specs.map(p => p.isRest ? `...${p.name}` : p.name).join(', ');
         
+        // Find _extractIndex from RHS
+        function extractTerms(n) {
+          if (!n) return [];
+          if (n.type === 'operation' && n.operator === ' ') {
+            return [...extractTerms(n.left), ...extractTerms(n.right)];
+          }
+          if (n.type === 'coproduct_block') {
+            return (n.statements || []).flatMap(extractTerms);
+          }
+          return [n];
+        }
+        
+        let extractIndexCode = 'undefined';
+        const rhsElems = extractTerms(node.right);
+        const blockIdx = rhsElems.findIndex(s => s && s.type === 'block' && s.kind === 'bracket');
+        if (blockIdx !== -1) {
+          extractIndexCode = `${blockIdx - 1}`;
+        }
+
         // Build maybe checks and default replacements
         const bodyLines = [];
         specs.forEach(p => {
@@ -113,17 +142,14 @@ export function transpile(node) {
           }
         });
         
-        // If any parameter is still __hole, return __hole (Maybe monad propagation)
-        const checkHoles = specs.filter(p => !p.isRest).map(p => `${p.name} === __hole`).join(' || ');
-        if (checkHoles) {
-          bodyLines.push(`  if (${checkHoles}) return __hole;`);
-        }
-        
         const bodyCode = bodyLines.length > 0 ? bodyLines.join('\n') + '\n' : '';
         const hasRest = specs.some(p => p.isRest);
-        const fnExpr = `(${argsStr}) => {\n${bodyCode}  return ${transpile(node.right)};\n}`;
+        functionContextStack.push(true);
+        const rightCode = transpile(node.right);
+        functionContextStack.pop();
+        const fnExpr = `(${argsStr}) => {\n${bodyCode}  return ${rightCode};\n}`;
         const reqLen = specs.filter(p => p.defaultValue === null && !p.isRest).length;
-        return `(() => {\n  const _fn = ${fnExpr};\n  _fn.expectedLength = ${specs.length};\n  _fn.requiredLength = ${reqLen};\n  _fn.hasRest = ${hasRest};\n  _fn.paramSpecs = ${JSON.stringify(specs)};\n  return _fn;\n})()`;
+        return `(() => {\n  const _fn = ${fnExpr};\n  _fn.expectedLength = ${specs.length};\n  _fn.requiredLength = ${reqLen};\n  _fn.hasRest = ${hasRest};\n  _fn.paramSpecs = ${JSON.stringify(specs)};\n  _fn._extractIndex = ${extractIndexCode};\n  return _fn;\n})()`;
       }
 
       if (node.operator !== ',') {
@@ -348,9 +374,10 @@ function getDefineLHS(left) {
   return transpile(left);
 }
 
-function isMatchCase(node) {
+function isMatchCase(node, isFuncBody = false) {
   if (!node) return false;
   if (node.type === 'operation' && node.operator === ':') {
+    if (isFuncBody) return true;
     const left = node.left;
     if (left && typeof left === 'object' && left.type === 'operation') {
       return true;
@@ -416,9 +443,11 @@ function getParameterSpecs(node) {
       return [...getParameterSpecs(node.left), ...getParameterSpecs(node.right)];
     }
     if (node.operator === ':') {
-      const name = transpile(node.left);
+      const leftSpecs = getParameterSpecs(node.left);
+      const name = leftSpecs.length > 0 ? leftSpecs[0].name : transpile(node.left);
+      const isRest = leftSpecs.length > 0 ? leftSpecs[0].isRest : false;
       const defaultValue = transpile(node.right);
-      return [{ name, defaultValue, isRest: false }];
+      return [{ name, defaultValue, isRest }];
     }
     if (node.operator === '~' && node.position === 'prefix') {
       return getParameterSpecs(node.operand).map(p => ({ ...p, isRest: true }));

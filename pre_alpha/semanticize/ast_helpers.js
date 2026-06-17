@@ -68,7 +68,7 @@ export function buildEnvironment(node, env = new Map()) {
     if (node.type === 'operation' && node.operator === ':') {
       const identName = typeof node.left === 'string' ? node.left : (node.left.name || String(node.left));
       let rightCat = getInitialCategory(node.right, currentEnv);
-      const arity = getArity(node.right);
+      const arity = getArity(node.right, currentEnv);
       if (arity > 0) {
         rightCat = 'Lambda';
       }

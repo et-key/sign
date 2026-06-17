@@ -38,14 +38,13 @@ check2 : 5 == 5
 `,
   generator: `\` 1. Higher Order Function Recursive Mapping on Lazy Generator
 f : x ? x * 2
-map : g x ~y ?
-	y == __ : [@g x]
-	[@g x] [map g y~]
+map : g x ~y ? [@g x] [map g y~]
 
 \` Range evaluation produces [0, 2, 4, 6, 8, 10]
-result : map $f [0 ~+ 2 ~ 10]
+result : map $[* 2,] [0 ~+ 2 ~ 10]
 `,
-  lists: `a : 1
+  lists: `\` Atom vs Function Coproduct Resolution
+a : 1
 b : 2
 c : 3
 
@@ -58,19 +57,14 @@ list5 : [a b c] , [a b c]
 list6 : [a , b , c] [a , b , c]
 list7 : [a , b , c] , [a , b , c]
 `,
-  higher_order: `f : x ? x * 2
-map : g x ~y ?
-	y == __ : [@g x]
-	[@g x] [map g y~]
+  higher_order: `\` Recursive Map using Coproduct and Partial Application
+f : x ? x * 2
+map : g x ~y ? @g x , map g y~
 
 result_map1 : map $f 1 2 3 4 5
 result_map2 : map $[x ? x * 2] 1 2 3 4 5
 
-result_sum : [+] 1 2 3 4 5
-result_partial : [+ 2,] 1 2 3 4 5
-
-test_array : 1 2 3 4 5
-test_tuple : 1 a 3
+result : result_map1
 `,
   factorial: `\` Recursive Factorial (Packrat Parsing Test)
 fact : x ?
@@ -80,15 +74,18 @@ fact : x ?
 
 result : fact 5
 `,
-  fold: `\` Recursive Fold using Maybe Type matching
-f : x ? x * 2
+  fold: `\` 1. Eager Fold (Trampoline Extraction)
 add : x y ? x + y
+fold_eager : f a x ~y ? fold_eager f [@f a x] y~
 
-fold : f a x ~y ?
-	y == __ : [@f a x]
-	fold f [@f a x] y~
+result_eager : fold_eager $add 0 1 2 3 4 5
 
-result : fold $[+] 0 1 2 3 4 5
+\` 2. Lazy Fold (Thunk / Double Algebra)
+fold_lazy : f a x ~y ? $fold_lazy f [@f a x] y~
+
+step0 : fold_lazy $add 0 1 2 3
+step1 : @step0 __
+step2 : @step1 __
 `
 };
 
