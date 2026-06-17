@@ -446,4 +446,58 @@ const _factorial = (n) => {
   for (let i = 2; i <= n; i++) r *= i;
   return r;
 };
+
+const _get_prop = (obj, prop) => {
+  if (obj === undefined || obj === null) return __unit;
+  const val = obj[prop];
+  return val === undefined ? __unit : val;
+};
+
+const _overwrite = (obj, val) => {
+  if (Array.isArray(val) && val.length >= 2) {
+    const key = val[0];
+    const value = val.length === 2 ? val[1] : val.slice(1);
+    return { ...obj, [key]: value };
+  }
+  if (typeof val === 'object' && val !== null) {
+    return { ...obj, ...val };
+  }
+  return obj;
+};
+
+const importModule = (name) => {
+  if (name === 'javascript') {
+    return typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
+  }
+  // Dummy module implementation for playground
+  return { __moduleName: name };
+};
+
+const _range = (start, end, step, type) => {
+  const result = [];
+  if (type === 'arithmetic') {
+    const s = step || (start <= end ? 1 : -1);
+    if (s > 0) {
+      for (let i = start; i <= end; i += s) result.push(i);
+    } else {
+      for (let i = start; i >= end; i += s) result.push(i);
+    }
+  } else if (type === 'geometric') {
+    const s = step || 2;
+    if (start === 0) return [0];
+    if (start <= end) {
+      for (let i = start; i <= end; i *= s) result.push(i);
+    } else {
+      for (let i = start; i >= end; i /= s) result.push(i);
+    }
+  } else if (type === 'power') {
+    const s = step || 2;
+    if (start === 0) return [0];
+    for (let i = start; i <= end; i = Math.pow(i, s)) {
+      result.push(i);
+      if (i === 1) break; // prevent infinite loop
+    }
+  }
+  return result;
+};
 `;

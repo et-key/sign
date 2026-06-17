@@ -188,16 +188,26 @@ export function transpile(node) {
       }
 
       // Range operators
+      // Range operators
       if (node.operator === '~') {
         if (node.left && node.left.type === 'operation') {
           if (node.left.operator === '~+') {
-            return `[..._._(${transpile(node.left.left)}, ${transpile(node.right)}, ${transpile(node.left.right)})]`;
+            return `_range(${transpile(node.left.left)}, ${transpile(node.right)}, ${transpile(node.left.right)}, 'arithmetic')`;
           }
           if (node.left.operator === '~-') {
-            return `[..._._(${transpile(node.left.left)}, ${transpile(node.right)}, -${transpile(node.left.right)})]`;
+            return `_range(${transpile(node.left.left)}, ${transpile(node.right)}, -(${transpile(node.left.right)}), 'arithmetic')`;
+          }
+          if (node.left.operator === '~*') {
+            return `_range(${transpile(node.left.left)}, ${transpile(node.right)}, ${transpile(node.left.right)}, 'geometric')`;
+          }
+          if (node.left.operator === '~/') {
+            return `_range(${transpile(node.left.left)}, ${transpile(node.right)}, 1/(${transpile(node.left.right)}), 'geometric')`;
+          }
+          if (node.left.operator === '~^') {
+            return `_range(${transpile(node.left.left)}, ${transpile(node.right)}, ${transpile(node.left.right)}, 'power')`;
           }
         }
-        return `[..._._(${transpile(node.left)}, ${transpile(node.right)})]`;
+        return `_range(${transpile(node.left)}, ${transpile(node.right)}, null, 'arithmetic')`;
       }
 
 
@@ -212,7 +222,7 @@ export function transpile(node) {
         return `_xor(${transpile(node.left)}, ${transpile(node.right)})`;
       }
 
-      // Bitwise operators in Sign: && (bitwise AND), || (bitwise OR), ;; (bitwise XOR)
+      // Bitwise operators in Sign: && (bitwise AND), || (bitwise OR), ;; (bitwise XOR), << (shift left), >> (shift right)
       if (node.operator === '&&') {
         return `(${transpile(node.left)} & ${transpile(node.right)})`;
       }
@@ -221,6 +231,12 @@ export function transpile(node) {
       }
       if (node.operator === ';;') {
         return `(${transpile(node.left)} ^ ${transpile(node.right)})`;
+      }
+      if (node.operator === '<<') {
+        return `(${transpile(node.left)} << ${transpile(node.right)})`;
+      }
+      if (node.operator === '>>') {
+        return `(${transpile(node.left)} >> ${transpile(node.right)})`;
       }
 
       // Exponentiation in Sign: ^
@@ -236,6 +252,18 @@ export function transpile(node) {
       // Standard arithmetic binary ops: +, -, *, /, %
       if (['+', '-', '*', '/', '%'].includes(node.operator)) {
         return `_arithmetic('${node.operator}', ${transpile(node.left)}, ${transpile(node.right)})`;
+      }
+
+      // Object / Property / Module access
+      if (node.operator === "'") {
+        return `_get_prop(${transpile(node.left)}, ${transpile(node.right)})`;
+      }
+      if (node.operator === '@') {
+        // Swap left and right for @
+        return `_get_prop(${transpile(node.right)}, ${transpile(node.left)})`;
+      }
+      if (node.operator === '#') {
+        return `_overwrite(${transpile(node.left)}, ${transpile(node.right)})`;
       }
 
       // Standard binary ops

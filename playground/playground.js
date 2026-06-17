@@ -86,6 +86,33 @@ fold_lazy : f a x ~y ? $fold_lazy f [@f a x] y~
 step0 : fold_lazy $add 0 1 2 3
 step1 : @step0 __
 step2 : @step1 __
+`,
+  operators: `\` 1. Range Operators (Eager Arrays)
+arithmetic_range : 0 ~+ 2 ~ 10
+geometric_range : 1 ~* 2 ~ 16
+
+\` 2. Spread Import
+js : javascript@
+math : js'Math
+
+\` 3. Property Access and Reverse Access
+PI_val : math'PI
+PI_val_reverse : PI @ math
+
+\` 4. Object Overwrite (Shallow Copy)
+base_obj : js'Object
+updated_obj : base_obj # prop 42
+
+\` 5. Logical, Bitwise, Math
+logic_and : 1 & 1
+bitwise_xor : 5 ;; 3
+shift_left : 1 << 3
+abs_val : |-5|
+factorial_val : 5!
+
+\` 6. Expand Array
+arr : 1 , 2 , 3
+expanded : arr~
 `
 };
 
