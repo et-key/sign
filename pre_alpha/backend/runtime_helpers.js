@@ -240,10 +240,23 @@ function _callInternal(left, ...args) {
 
   if (args.includes(__unit)) {
     const fnObj = left.__isCurried ? left.target : left;
-    if (fnObj && fnObj._extractIndex !== undefined && fnObj._extractIndex >= 0) {
-      return args[fnObj._extractIndex];
+    if (fnObj && fnObj.paramSpecs) {
+      const restIdx = fnObj.paramSpecs.findIndex(p => p.isRest);
+      const itemIdx = restIdx > 0 ? restIdx - 1 : -1;
+      if (itemIdx >= 0 && args[itemIdx] !== __unit) {
+        // Defer extraction: the current item being processed is not __unit yet.
+      } else {
+        if (fnObj._extractIndex !== undefined && fnObj._extractIndex >= 0) {
+          return args[fnObj._extractIndex];
+        }
+        return __unit;
+      }
+    } else {
+      if (fnObj && fnObj._extractIndex !== undefined && fnObj._extractIndex >= 0) {
+        return args[fnObj._extractIndex];
+      }
+      return __unit;
     }
-    return __unit;
   }
 
   const typeL = typeof left;

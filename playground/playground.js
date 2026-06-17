@@ -217,6 +217,9 @@ runBtn.addEventListener('click', async () => {
 
     astLines.forEach(astLine => {
       const resolved = resolveCoproducts(astLine, globalEnv);
+      
+      // Update the environment with the resolved AST to accurately track arity of partial applications
+      buildEnvironment(resolved, globalEnv);
 
       // Collect defined variables for execution inspection
       if (resolved && resolved.type === 'operation' && resolved.operator === ':') {

@@ -282,7 +282,15 @@ export function getArity(node, env) {
   if (node.type === 'operation') {
     // 0. Compose operation: f g (syntactic composition)
     if (node.name === 'compose') {
-      return getArity(node.right);
+      return getArity(node.right, env);
+    }
+    // 1. Apply operation: f x
+    if (node.name === 'apply') {
+      let appliedCount = 1;
+      if (node.right && node.right.type === 'coproduct_block') {
+        appliedCount = node.right.statements.length;
+      }
+      return Math.max(0, getArity(node.left, env) - appliedCount);
     }
     if (node.operator === ',') {
       if (node.left === undefined || node.right === undefined) {

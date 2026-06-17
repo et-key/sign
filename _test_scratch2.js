@@ -1,33 +1,20 @@
-import { resolveCoproducts } from './pre_alpha/semanticize/coproduct_resolver.js';
-import { buildEnvironment, desugarHoles } from './pre_alpha/semanticize/ast_helpers.js';
-import { transpile } from './pre_alpha/backend/js_codegen.js';
-import { RUNTIME_HELPERS_CODE } from './pre_alpha/backend/runtime_helpers.js';
-import { preprocess } from './pre_alpha/lexisize/lexer.js';
-import * as parser from './pre_alpha/parse/minimal.js';
+const { parse } = require('./pre_alpha/parse/minimal.js');
+const { preprocess } = require('./pre_alpha/lexisize/lexer.js');
+const { transpile } = require('./pre_alpha/backend/js_codegen.js');
+const { buildEnvironment, desugarHoles } = require('./pre_alpha/semanticize/ast_helpers.js');
+const { resolveCoproducts, getArity } = require('./pre_alpha/semanticize/coproduct_resolver.js');
 
 const source = `
-f : x ? x * 2
-map : g x ~y ? @g x , map g y~
-result_map1 : map $f 1 2 3 4 5
+f : x y ? x * y
+curried : f 2
+result_curried : curried 4
 `;
-
-const preprocessed = preprocess(source);
-const ast = parser.parse(preprocessed);
-
-let globalEnv = new Map();
-const rawLines = ast.filter(line => line !== null && line !== undefined);
-const astLines = rawLines.map(desugarHoles);
-
-astLines.forEach(astLine => {
-	buildEnvironment(astLine, globalEnv);
+const ast = parse(preprocess(source)).filter(Boolean).map(desugarHoles);
+let env = new Map();
+ast.forEach(n => {
+  buildEnvironment(n, env);
+  const r = resolveCoproducts(n, env);
+  buildEnvironment(r, env);
 });
-
-const resolvedAst = astLines.map(astLine => resolveCoproducts(astLine, globalEnv));
-const transpiledCode = resolvedAst.map(s => transpile(s)).join(';\n') + ';';
-console.log("--- TRANSPILED CODE ---");
-console.log(transpiledCode);
-
-const fullCode = RUNTIME_HELPERS_CODE + '\n' + transpiledCode + '\nconsole.log("result_map1:", result_map1);';
-
-console.log("--- EXECUTION ---");
-eval(fullCode);
+const code = ast.map(a => transpile(resolveCoproducts(a, env))).join(';\n');
+console.log(code);
