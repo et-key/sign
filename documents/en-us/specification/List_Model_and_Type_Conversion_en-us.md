@@ -59,6 +59,28 @@ In this range list construction, the design paradigms of **strict evaluation** a
 
 This design enables programmers to intuitively control memory-consuming static list construction and memory-safe infinite stream processing simply by the number of terms written.
 
+### 2.4 Explicit Distinction between List Passing (Eager) and Stream Passing (Lazy)
+
+In function calls and recursion, whether to treat data as an "instantiated concrete list" or a "lazy-evaluated stream (thunk)" is explicitly controlled by both **how the argument list is received (pattern matching)** and **how the return value is passed**. This design is based on the adjoint relationship between List (Monad / Algebra) and Stream (Comonad / Coalgebra).
+
+#### ① Distinction in Receiving Argument Lists (Consumer Side / Pattern Matching)
+
+* **Receive as a List (Strict Evaluation / Instantiation)**: `f : [x ~xs] ?`
+  When arguments are pattern-matched surrounded by brackets `[ ]`, it acts as an algebraic boundary. The passed data is forcibly evaluated (Pulled) as a concrete list and then destructured into the head `x` and the remaining concrete list `~xs`.
+
+* **Receive as a Stream (Lazy Evaluation / Suspend)**: `f : x ~xs ?`
+  When arguments are received without brackets, they are treated as a stream (generator). `~xs` is passed into the function suspended as a lazy stream containing all remaining elements, preventing unnecessary memory expansion.
+
+#### ② Distinction in Return Values (Producer Side)
+
+* **List Passing (Strict Evaluation / Instantiation)**: `x (append xs (y ys))`
+  If an operation or recursive call is written directly, it is evaluated immediately (Eager Evaluation) to form an instantiated, concrete list in memory (a 1D coproduct).
+
+* **Stream Passing (Lazy Evaluation / Suspend)**: `@x y ys`
+  If the value is returned prefixed with the dereference operator `@` (the `extract` of a Comonad), it is passed as a suspended "stream (thunk)". The next value is generated only when the consumer demands (Pulls) it.
+
+This clear distinction allows the programmer to fully control the boundary between lazy and strict evaluation using pure syntax alone (the presence or absence of brackets and `@`).
+
 ---
 
 ## 3. Product (Comma): Dimensional Construction

@@ -97,14 +97,26 @@ __ > X → [> X]    X > __ → [X >]
 __ != X → [!= X]  X != __ → [X !=]
 ```
 
-#### 3.1.3 Function Application
+#### 3.1.3 Function Application and Arity-Based Behavioral Branching
+
+When Unit (`__`) is explicitly passed as an argument, its behavior distinctly changes its bialgebraic role depending on the arity (degree of saturation) of the target function.
 
 ```sign
-` Functions as identity morphism
+` 0. Functions as an identity morphism (applied to a value)
 __ X → [X]
 
-` Explicit application to functions acts as identity morphism (partial application)
-F __ → F
+` 1. For unsaturated functions (arity remaining)
+` → Unit (__) acts as an absorbing element, triggering Unit propagation and instantly collapsing the expression
+F_unsaturated __ → __
+
+` 1.5. [Comparison] When Hole (_) is passed
+` → Hole (_) acts as an "identity morphism (placeholder)", generating a partial application (closure)
+F_unsaturated _ → F_unsaturated
+
+` 2. For saturated functions (all arguments fulfilled)
+` → Unit (__) acts as an "isomorphism to extract" of the comonad, triggering function evaluation (forced execution)
+` (This is mathematically equivalent to driving evaluation via the dereference operator @)
+F_saturated __ → Result (function is executed)
 ```
 
 ### 3.2 Operations in the List Context
