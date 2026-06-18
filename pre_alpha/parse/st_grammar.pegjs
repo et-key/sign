@@ -1,6 +1,5 @@
 // st_grammar.pegjs
-// .st (Type Signature) ファイル用のPEG.js文法定義
-// 圏論的な矢印表現を予約語として扱い、.sn 由来のリテラル演算子は "..." で囲んで区別する。
+// .st (Type Signature) ファイル用のPEG.js文法定義 (Grothendieck Universe準拠)
 
 Start = Program
 
@@ -12,98 +11,85 @@ EOF = !.
 
 comment = "`" [^\r\n]* { return null; }
 
-Program = lines:(SOL @Line EOL*)* EOF { return lines; }
+Program = lines:(Line? EOL)* last:Line? EOF { return [...lines.map(l => l[0]), last].filter(l => l !== null); }
 
 Line
-  = _ expr:Expression _ comment? { return expr; }
-  / comment { return null; }
+  = _ expr:Definition _ comment? { return expr; }
+  / _ comment { return null; }
 
-Expression = CategoricalExpr
-
-// --- 圏論的演算子（予約語）の定義 ---
-// 結合度順に定義する（実際には一律のASTとして構築されるため、簡略化して左結合などで処理）
-// ここでは単純にASTを復元できればよいため、演算子の階層を定義する。
-// 優先度:
-// 1. : (Definition)
-// 2. -> (Exponential)
-// 3. =>, <=, <>, ~> (Coproduct Operations)
-// 4. "," (Product) や その他のリテラル演算子
-
-CategoricalExpr = TypeDefinition
-
-TypeDefinition
-  = left:Lambda _ ":" _ right:CategoricalExpr {
+Definition
+  = left:Identifier _ ":" _ right:TypeExpr {
       return { type: 'operation', operator: ':', left: left, right: right };
   }
-  / Lambda
+  / TypeExpr
 
-Lambda
-  = left:ApplyReverse _ "->" _ right:Lambda {
-      return { type: 'operation', operator: '?', left: left, right: right };
-  }
-  / ApplyReverse
+TypeExpr
+  = FunctionType
+  / ApplyExpr
 
-ApplyReverse
-  = head:Apply tail:(_ "~>" _ Apply)* {
-      return tail.reduce((result, element) => {
-          return { type: 'operation', operator: '~>', name: 'apply_reverse', left: result, right: element[3] };
-      }, head);
-  }
-
-Apply
-  = head:Compose tail:(_ "<=" _ Compose)* {
-      return tail.reduce((result, element) => {
-          return { type: 'operation', operator: '<=', name: 'apply', left: result, right: element[3] };
-      }, head);
+// T U -> Atom のような関数の表現
+FunctionType
+  = args:TermList _ "->" _ ret:TypeExpr {
+      // args が複数ある場合、カリー化された関数のネストとして表現する
+      return args.reduceRight((acc, arg) => {
+          return { type: 'operation', operator: '->', left: arg, right: acc };
+      }, ret);
   }
 
-Compose
-  = head:Concat tail:(_ "=>" _ Concat)* {
-      return tail.reduce((result, element) => {
-          return { type: 'operation', operator: '=>', name: 'compose', left: result, right: element[3] };
-      }, head);
+TermList
+  = head:Term tail:(__ Term)* {
+      return [head, ...tail.map(t => t[1])];
   }
 
-Concat
-  = head:Term tail:(_ "<>" _ Term)* {
+// A B C のようなスペース区切りの型適用（Categorical Apply）または型リスト
+ApplyExpr
+  = head:Term tail:(__ Term)* {
+      if (tail.length === 0) return head;
       return tail.reduce((result, element) => {
-          return { type: 'operation', operator: '<>', name: 'concat', left: result, right: element[3] };
+          return { type: 'operation', operator: ' ', left: result, right: element[1] };
       }, head);
   }
 
 Term
   = ContinuousType
   / Block
-  / Atom
+  / UniverseType
+  / TypeVariable
 
-// --- 連続型 (Continuous Types) ---
+// --- 連続型 (Continuous Types / ストリーム・可変長引数) ---
+// ~T は配列(List)のアンパックや残余引数を表す
 ContinuousType
   = "~" _ expr:Term { return { type: 'operation', operator: '~', operand: expr, position: 'prefix' }; }
-  / expr:(Block / Atom) _ "~" { return { type: 'operation', operator: '~', operand: expr, position: 'postfix' }; }
+  / expr:(Block / UniverseType / TypeVariable) "~" { return { type: 'operation', operator: '~', operand: expr, position: 'postfix' }; }
 
 // --- ブロックとグループ ---
 Block
-  = "(" _ expr:Expression _ ")" { return { type: 'block', kind: 'paren', content: expr }; }
-  / "[" _ expr:Expression _ "]" { return { type: 'block', kind: 'bracket', content: expr }; }
-  / "{" _ EOL* _ exprs:Expressions? _ EOL* _ "}" { return { type: 'block', kind: 'brace', content: exprs }; }
+  = "(" _ expr:TypeExpr _ ")" { return { type: 'block', kind: 'paren', content: expr }; }
+  / "[" _ expr:TypeExpr _ "]" { return { type: 'block', kind: 'bracket', content: expr }; }
 
-Expressions
-  = head:Expression tail:(EOL _ @Expression)* {
-      return [head, ...tail].filter(e => e !== null);
-  }
+// --- Universe Built-in Types ---
+// Grothendieck Universe に準拠した基礎型
+UniverseType
+  = "Atom" { return { type: 'UniverseType', name: 'Atom' }; }
+  / "List" { return { type: 'UniverseType', name: 'List' }; }
+  / "Lambda" { return { type: 'UniverseType', name: 'Lambda' }; }
+  / "SignValue" { return { type: 'UniverseType', name: 'SignValue' }; }
+  / "Scalar" { return { type: 'UniverseType', name: 'Scalar' }; }
+  / "Number" { return { type: 'UniverseType', name: 'Number' }; }
+  / "String" { return { type: 'UniverseType', name: 'String' }; }
+  / "Boolean" { return { type: 'UniverseType', name: 'Boolean' }; }
+  / "Address" { return { type: 'UniverseType', name: 'Address' }; }
+  / "Unit" { return { type: 'UniverseType', name: 'Unit' }; }
+  / "_" { return { type: 'UniverseType', name: 'Unit' }; }
+  / "Hole" { return { type: 'UniverseType', name: 'Hole' }; }
 
-// --- Atom（.snの終端記号をそのまま利用） ---
-Atom
-  = tvar / string / charactor / address / register / unicode / number / identifier / unit
+// --- 型変数 (大文字始まりのIdentifier) ---
+TypeVariable
+  = id:$([A-Z][a-zA-Z0-9_]*) { return { type: 'TypeVariable', name: id }; }
 
-tvar = "'" id:$([a-zA-Z][a-zA-Z0-9_]*) { return { type: 'tvar', id: id }; }
+// --- 通常のIdentifier (関数名など) ---
+Identifier
+  = id:$([a-z_][a-zA-Z0-9_]*) { return id; }
 
-string = str:$("`" [^`\r\n]* "`") { return str; }
-charactor = ch:$("\\".) { return ch; }
-number = num:$("-"? [0-9]+ "."? [0-9]*) { return num; }
-address = addr:$("0x" Hex+) { return addr; }
-register = reg:($("0r" Hex+) / $("0b" ("0" / "1")+)) { return reg; }
-unicode = uni:$("0u" Hex+) { return uni; }
-identifier = id:( $([a-zA-Z][a-zA-Z0-9_]*) / $("_" [a-zA-Z0-9_]+) ) { return `<${id}>`; }
-Hex = [0-9a-fA-F]
-unit = "_" { return { type: 'Unit' }; }
+// ベースとなる型（再帰の底）
+BaseType = Term

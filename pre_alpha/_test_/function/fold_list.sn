@@ -1,0 +1,11 @@
+` Test for array destructuring in parameters
+f : x ? x * 2
+add : x y ? x + y
+
+fold : f a [x ~xs] ?
+	xs == __ : [@f a x]
+	fold f [@f a x] xs
+
+` Calling with a packaged list
+a : fold $[+] 0 [1 2 3 4 5]
+b : fold $[+] 0 [10 20]

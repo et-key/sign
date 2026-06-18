@@ -1,4 +1,8 @@
-export const RUNTIME_HELPERS_CODE = `
+
+import _ from 'white_cats';
+import util from 'util';
+
+
 const __hole = Symbol.for('hole');
 const __unit = Symbol.for('unit');
 
@@ -311,11 +315,7 @@ function _callInternal(left, ...args) {
     if (totalArgs.length > 0 && Array.isArray(totalArgs[totalArgs.length - 1])) {
       const lastIdx = totalArgs.length - 1;
       const argsBeforeLast = totalArgs.slice(0, lastIdx);
-      
-      const specs = target.paramSpecs || [];
-      const isDestruct = specs[lastIdx] && specs[lastIdx].isDestructured;
-      
-      if (!isDestruct && argsBeforeLast.length < expectedLength) {
+      if (argsBeforeLast.length < expectedLength) {
         totalArgs = [...argsBeforeLast, ...totalArgs[lastIdx]];
       }
     }
@@ -504,4 +504,34 @@ const _range = (start, end, step, type) => {
   }
   return result;
 };
-`;
+
+
+const x = Symbol.for('x');
+const f = (() => {
+  const _fn = (x) => {
+  return _arithmetic('*', x, 2);
+};
+  _fn.expectedLength = 1;
+  _fn.requiredLength = 1;
+  _fn.hasRest = false;
+  _fn.paramSpecs = [{"name":"x","defaultValue":null,"isRest":false}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+const g = (() => {
+  const _fn = (x) => {
+  return _arithmetic('+', x, 1);
+};
+  _fn.expectedLength = 1;
+  _fn.requiredLength = 1;
+  _fn.hasRest = false;
+  _fn.paramSpecs = [{"name":"x","defaultValue":null,"isRest":false}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+const result = _call(_compose(f, g), 3);
+
+console.log("=== Transpiled Execution Results ===");
+try { console.log("f = ", util.inspect(f, { depth: null, colors: true })); } catch(e) {}
+try { console.log("g = ", util.inspect(g, { depth: null, colors: true })); } catch(e) {}
+try { console.log("result = ", util.inspect(result, { depth: null, colors: true })); } catch(e) {}

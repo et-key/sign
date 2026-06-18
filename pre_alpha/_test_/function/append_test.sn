@@ -1,0 +1,6 @@
+append : [x ~xs] [y ~ys] ?
+	xs == __ : @x y ys
+	x (append xs (y ys))
+
+a : append [1 2] [3 4 5]
+b : append $__ [3 4 5]

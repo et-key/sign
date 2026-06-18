@@ -8,6 +8,7 @@ import { execSync } from 'child_process';
 import util from 'util';
 import { RUNTIME_HELPERS_CODE } from './pre_alpha/backend/runtime_helpers.js';
 import { buildEnvironment, desugarHoles, collectIdentifiers } from './pre_alpha/semanticize/ast_helpers.js';
+import { generateTypeScriptDef } from './pre_alpha/backend/ts_codegen.js';
 
 // 1. Get the source file argument
 const fileArg = process.argv[2] || 'pre_alpha/_test_/function/composition.sn';
@@ -49,6 +50,9 @@ astLines.forEach(astLine => {
     }
   }
   
+  // Re-build env with resolved tree for accurate type inference later
+  buildEnvironment(resolved, globalEnv);
+  
   const jsCode = transpile(resolved);
   if (jsCode) {
     jsStatements.push(jsCode);
@@ -86,18 +90,26 @@ const fullJsCode = `${runtimeHelpers}\n${undefinedDeclarations}\n${jsStatements.
 console.log("=== Generated JavaScript Code ===");
 console.log(fullJsCode);
 
-// 4. Write to a temporary file and execute it
-const tempFilePath = path.join(process.cwd(), 'temp_transpiled_run.js');
-fs.writeFileSync(tempFilePath, fullJsCode, 'utf8');
+// 4. Generate TypeScript Definitions
+const resolvedLines = astLines.map(astLine => resolveCoproducts(astLine, globalEnv));
+const dtsCode = generateTypeScriptDef(resolvedLines, globalEnv);
 
+// 5. Write to files
+const jsFilePath = filePath.replace(/\.(sign|sn)$/, '.js');
+const dtsFilePath = filePath.replace(/\.(sign|sn)$/, '.d.ts');
+
+fs.writeFileSync(jsFilePath, fullJsCode, 'utf8');
+fs.writeFileSync(dtsFilePath, dtsCode, 'utf8');
+
+console.log(`\nFiles generated:`);
+console.log(`  JS: ${jsFilePath}`);
+console.log(`  TS: ${dtsFilePath}`);
+
+// 6. Execute the transpiled JS
 try {
-  const output = execSync(`node ${tempFilePath}`, { encoding: 'utf8' });
+  console.log("\n=== Execution Output ===");
+  const output = execSync(`node ${jsFilePath}`, { encoding: 'utf8' });
   console.log(output);
 } catch (err) {
   console.error("Execution error:", err.stdout || err.stderr || err.message);
-} finally {
-  // Clean up
-  if (fs.existsSync(tempFilePath)) {
-    fs.unlinkSync(tempFilePath);
-  }
 }

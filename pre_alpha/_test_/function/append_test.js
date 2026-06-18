@@ -1,4 +1,8 @@
-export const RUNTIME_HELPERS_CODE = `
+
+import _ from 'white_cats';
+import util from 'util';
+
+
 const __hole = Symbol.for('hole');
 const __unit = Symbol.for('unit');
 
@@ -504,4 +508,39 @@ const _range = (start, end, step, type) => {
   }
   return result;
 };
-`;
+
+
+const x = Symbol.for('x');
+const xs = Symbol.for('xs');
+const y = Symbol.for('y');
+const ys = Symbol.for('ys');
+const __ = Symbol.for('__');
+const append = (() => {
+  const _fn = (_d0, _d1) => {
+  const _d0_val = _expand(_d0);
+  let [x, ...xs] = _d0_val;
+  if (xs.length === 0) xs = __unit;
+  else if (xs.length === 1) xs = xs[0];
+  const _d1_val = _expand(_d1);
+  let [y, ...ys] = _d1_val;
+  if (ys.length === 0) ys = __unit;
+  else if (ys.length === 1) ys = ys[0];
+  return (() => {
+  if (_isTrue(_compare('==', xs, __unit))) return _call(_deref(x), y, ys);
+  return _concat(x, (_call(append, xs, (_concat(y, ys)))));
+})();
+};
+  _fn.expectedLength = 2;
+  _fn.requiredLength = 0;
+  _fn.hasRest = false;
+  _fn.paramSpecs = [{"name":"_destruct_pattern","defaultValue":null,"isRest":false,"isDestructured":true,"innerSpecs":[{"name":"x","defaultValue":null,"isRest":false},{"name":"xs","defaultValue":null,"isRest":true}]},{"name":"_destruct_pattern","defaultValue":null,"isRest":false,"isDestructured":true,"innerSpecs":[{"name":"y","defaultValue":null,"isRest":false},{"name":"ys","defaultValue":null,"isRest":true}]}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+const a = _call(append, (_concat(1, 2)), (_concat(_concat(3, 4), 5)));
+const b = _call(append, new Address(__unit), (_concat(_concat(3, 4), 5)));
+
+console.log("=== Transpiled Execution Results ===");
+try { console.log("append = ", util.inspect(append, { depth: null, colors: true })); } catch(e) {}
+try { console.log("a = ", util.inspect(a, { depth: null, colors: true })); } catch(e) {}
+try { console.log("b = ", util.inspect(b, { depth: null, colors: true })); } catch(e) {}

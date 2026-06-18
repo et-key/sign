@@ -1,4 +1,8 @@
-export const RUNTIME_HELPERS_CODE = `
+
+import _ from 'white_cats';
+import util from 'util';
+
+
 const __hole = Symbol.for('hole');
 const __unit = Symbol.for('unit');
 
@@ -504,4 +508,31 @@ const _range = (start, end, step, type) => {
   }
   return result;
 };
-`;
+
+
+const a = Symbol.for('a');
+const b = Symbol.for('b');
+const c = Symbol.for('c');
+const __ = Symbol.for('__');
+const func = (() => {
+  const _fn = (a, b, ...c) => {
+  if (c.length === 0) c = __unit;
+  else if (c.length === 1) c = c[0];
+  return (() => {
+  return (_concat(_concat(a, b), c));
+})();
+};
+  _fn.expectedLength = 3;
+  _fn.requiredLength = 2;
+  _fn.hasRest = true;
+  _fn.paramSpecs = [{"name":"a","defaultValue":null,"isRest":false},{"name":"b","defaultValue":null,"isRest":false},{"name":"c","defaultValue":"__unit","isRest":true}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+const res = _call(func, 1, 2);
+const res2 = _call(func, 1, 2, 3);
+
+console.log("=== Transpiled Execution Results ===");
+try { console.log("func = ", util.inspect(func, { depth: null, colors: true })); } catch(e) {}
+try { console.log("res = ", util.inspect(res, { depth: null, colors: true })); } catch(e) {}
+try { console.log("res2 = ", util.inspect(res2, { depth: null, colors: true })); } catch(e) {}

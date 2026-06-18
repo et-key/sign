@@ -1,0 +1,5 @@
+func : a b (~c:__) ?
+	[a b c]
+
+res : func 1 2
+res2 : func 1 2 3

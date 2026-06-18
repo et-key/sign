@@ -108,7 +108,13 @@ export function transpile(node) {
 
       if (node.operator === '?') {
         const specs = getParameterSpecs(node.left);
-        const argsStr = specs.map(p => p.isRest ? `...${p.name}` : p.name).join(', ');
+        let destructCounter = 0;
+        const argsStr = specs.map(p => {
+          if (p.isDestructured) {
+            return `_d${destructCounter++}`;
+          }
+          return p.isRest ? `...${p.name}` : p.name;
+        }).join(', ');
         
         // Find _extractIndex from RHS
         function extractTerms(n) {
@@ -129,9 +135,27 @@ export function transpile(node) {
           extractIndexCode = `${blockIdx - 1}`;
         }
 
-        // Build maybe checks and default replacements
+        // Build maybe checks, default replacements, and destructuring unpacks
         const bodyLines = [];
+        let dIdx = 0;
         specs.forEach(p => {
+          if (p.isDestructured) {
+            const tempVar = `_d${dIdx++}`;
+            const valVar = `${tempVar}_val`;
+            bodyLines.push(`  const ${valVar} = _expand(${tempVar});`);
+            const patternStr = '[' + p.innerSpecs.map(ip => ip.isRest ? `...${ip.name}` : ip.name).join(', ') + ']';
+            bodyLines.push(`  let ${patternStr} = ${valVar};`);
+            // Add rest checks for inner specs
+            p.innerSpecs.forEach(ip => {
+              if (ip.isRest) {
+                bodyLines.push(`  if (${ip.name}.length === 0) ${ip.name} = __unit;`);
+                bodyLines.push(`  else if (${ip.name}.length === 1) ${ip.name} = ${ip.name}[0];`);
+              } else if (ip.defaultValue !== null) {
+                bodyLines.push(`  if (${ip.name} === undefined || ${ip.name} === __hole) ${ip.name} = ${ip.defaultValue};`);
+              }
+            });
+            return;
+          }
           if (p.isRest) {
             bodyLines.push(`  if (${p.name}.length === 0) ${p.name} = __unit;`);
             bodyLines.push(`  else if (${p.name}.length === 1) ${p.name} = ${p.name}[0];`);
@@ -148,7 +172,7 @@ export function transpile(node) {
         const rightCode = transpile(node.right);
         functionContextStack.pop();
         const fnExpr = `(${argsStr}) => {\n${bodyCode}  return ${rightCode};\n}`;
-        const reqLen = specs.filter(p => p.defaultValue === null && !p.isRest).length;
+        const reqLen = specs.filter(p => !p.isDestructured && p.defaultValue === null && !p.isRest).length;
         return `(() => {\n  const _fn = ${fnExpr};\n  _fn.expectedLength = ${specs.length};\n  _fn.requiredLength = ${reqLen};\n  _fn.hasRest = ${hasRest};\n  _fn.paramSpecs = ${JSON.stringify(specs)};\n  _fn._extractIndex = ${extractIndexCode};\n  return _fn;\n})()`;
       }
 
@@ -276,9 +300,6 @@ export function transpile(node) {
         return `${transpile(node.operand)}`;
       }
       if (node.operator === '$') {
-        if (node.operand === '_') {
-          return `new Address(__unit)`;
-        }
         return `new Address(${transpile(node.operand)})`;
       }
       if (node.operator === '@') {
@@ -458,6 +479,11 @@ function getParameterSpecs(node) {
     return [{ name, defaultValue: null, isRest: false }];
   }
   if (node.type === 'block') {
+    if (node.kind === 'bracket') {
+      const innerSpecs = getParameterSpecs(node.content);
+      const patternName = `_destruct_pattern`; // We'll just flag it and use innerSpecs to build it
+      return [{ name: patternName, defaultValue: null, isRest: false, isDestructured: true, innerSpecs }];
+    }
     return getParameterSpecs(node.content);
   }
   if (node.type === 'coproduct_block') {

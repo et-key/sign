@@ -1,4 +1,8 @@
-export const RUNTIME_HELPERS_CODE = `
+
+import _ from 'white_cats';
+import util from 'util';
+
+
 const __hole = Symbol.for('hole');
 const __unit = Symbol.for('unit');
 
@@ -311,11 +315,7 @@ function _callInternal(left, ...args) {
     if (totalArgs.length > 0 && Array.isArray(totalArgs[totalArgs.length - 1])) {
       const lastIdx = totalArgs.length - 1;
       const argsBeforeLast = totalArgs.slice(0, lastIdx);
-      
-      const specs = target.paramSpecs || [];
-      const isDestruct = specs[lastIdx] && specs[lastIdx].isDestructured;
-      
-      if (!isDestruct && argsBeforeLast.length < expectedLength) {
+      if (argsBeforeLast.length < expectedLength) {
         totalArgs = [...argsBeforeLast, ...totalArgs[lastIdx]];
       }
     }
@@ -504,4 +504,53 @@ const _range = (start, end, step, type) => {
   }
   return result;
 };
-`;
+
+
+const x = Symbol.for('x');
+const y = Symbol.for('y');
+const __ = Symbol.for('__');
+const f = (() => {
+  const _fn = (x) => {
+  return _arithmetic('*', x, 2);
+};
+  _fn.expectedLength = 1;
+  _fn.requiredLength = 1;
+  _fn.hasRest = false;
+  _fn.paramSpecs = [{"name":"x","defaultValue":null,"isRest":false}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+const add = (() => {
+  const _fn = (x, y) => {
+  return _arithmetic('+', x, y);
+};
+  _fn.expectedLength = 2;
+  _fn.requiredLength = 2;
+  _fn.hasRest = false;
+  _fn.paramSpecs = [{"name":"x","defaultValue":null,"isRest":false},{"name":"y","defaultValue":null,"isRest":false}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+const fold = (() => {
+  const _fn = (f, a, x, ...y) => {
+  if (y.length === 0) y = __unit;
+  else if (y.length === 1) y = y[0];
+  return (() => {
+  if (_isTrue(_not(y))) return (_call(_deref(f), a, x));
+  return _call(fold, f, (_call(_deref(f), a, x)), ..._expand(y));
+})();
+};
+  _fn.expectedLength = 4;
+  _fn.requiredLength = 3;
+  _fn.hasRest = true;
+  _fn.paramSpecs = [{"name":"f","defaultValue":null,"isRest":false},{"name":"a","defaultValue":null,"isRest":false},{"name":"x","defaultValue":null,"isRest":false},{"name":"y","defaultValue":"__unit","isRest":true}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+const a = _call(fold, new Address(_makePointFreeBinary((x, y) => _arithmetic('+', x, y))), 0, 1, 2, 3, 4, 5);
+
+console.log("=== Transpiled Execution Results ===");
+try { console.log("f = ", util.inspect(f, { depth: null, colors: true })); } catch(e) {}
+try { console.log("add = ", util.inspect(add, { depth: null, colors: true })); } catch(e) {}
+try { console.log("fold = ", util.inspect(fold, { depth: null, colors: true })); } catch(e) {}
+try { console.log("a = ", util.inspect(a, { depth: null, colors: true })); } catch(e) {}
