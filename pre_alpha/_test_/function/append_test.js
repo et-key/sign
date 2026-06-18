@@ -510,11 +510,11 @@ const _range = (start, end, step, type) => {
 };
 
 
-const x = Symbol.for('x');
-const xs = Symbol.for('xs');
-const y = Symbol.for('y');
-const ys = Symbol.for('ys');
-const __ = Symbol.for('__');
+const x = __unit;
+const xs = __unit;
+const y = __unit;
+const ys = __unit;
+const __ = __unit;
 const append = (() => {
   const _fn = (_d0, _d1) => {
   const _d0_val = _expand(_d0);

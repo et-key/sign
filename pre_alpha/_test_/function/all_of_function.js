@@ -512,54 +512,26 @@ const _range = (start, end, step, type) => {
 
 const x = __unit;
 const y = __unit;
-const xs = __unit;
-const __ = __unit;
-const f = (() => {
-  const _fn = (x) => {
-  return _arithmetic('*', x, 2);
-};
-  _fn.expectedLength = 1;
-  _fn.requiredLength = 1;
-  _fn.hasRest = false;
-  _fn.paramSpecs = [{"name":"x","defaultValue":null,"isRest":false}];
-  _fn._extractIndex = undefined;
-  return _fn;
-})();
-const add = (() => {
-  const _fn = (x, y) => {
-  return _arithmetic('+', x, y);
-};
-  _fn.expectedLength = 2;
-  _fn.requiredLength = 2;
-  _fn.hasRest = false;
-  _fn.paramSpecs = [{"name":"x","defaultValue":null,"isRest":false},{"name":"y","defaultValue":null,"isRest":false}];
-  _fn._extractIndex = undefined;
-  return _fn;
-})();
-const fold = (() => {
-  const _fn = (f, a, _d0) => {
-  const _d0_val = _expand(_d0);
-  let [x, ...xs] = _d0_val;
-  if (xs.length === 0) xs = __unit;
-  else if (xs.length === 1) xs = xs[0];
+const z = __unit;
+const all_func = (() => {
+  const _fn = (x, y, ...z) => {
+  if (y === undefined || y === __hole) y = _arithmetic('+', x, 1);
+  if (z.length === 0) z = __unit;
+  else if (z.length === 1) z = z[0];
   return (() => {
-  if (_isTrue(_compare('==', xs, __unit))) return (_call(_deref(f), a, x));
-  return _call(fold, f, (_call(_deref(f), a, x)), xs);
+  if (_isTrue(_compare('=', x, 0))) return _call(all_func, 2, ..._expand(z));
+  if (_isTrue(_compare('=', x, 1))) return x;
+  if (_isTrue(_compare('=', y, 0))) return y;
+  return _arithmetic('*', x, y);
 })();
 };
   _fn.expectedLength = 3;
-  _fn.requiredLength = 2;
-  _fn.hasRest = false;
-  _fn.paramSpecs = [{"name":"f","defaultValue":null,"isRest":false},{"name":"a","defaultValue":null,"isRest":false},{"name":"_destruct_pattern","defaultValue":null,"isRest":false,"isDestructured":true,"innerSpecs":[{"name":"x","defaultValue":null,"isRest":false},{"name":"xs","defaultValue":null,"isRest":true}]}];
+  _fn.requiredLength = 1;
+  _fn.hasRest = true;
+  _fn.paramSpecs = [{"name":"x","defaultValue":null,"isRest":false},{"name":"y","defaultValue":"_arithmetic('+', x, 1)","isRest":false},{"name":"z","defaultValue":null,"isRest":true}];
   _fn._extractIndex = undefined;
   return _fn;
 })();
-const a = _call(fold, new Address(_makePointFreeBinary((x, y) => _arithmetic('+', x, y))), 0, (_concat(_concat(_concat(_concat(1, 2), 3), 4), 5)));
-const b = _call(fold, new Address(_makePointFreeBinary((x, y) => _arithmetic('+', x, y))), 0, (_concat(10, 20)));
 
 console.log("=== Transpiled Execution Results ===");
-try { console.log("f = ", util.inspect(f, { depth: null, colors: true })); } catch(e) {}
-try { console.log("add = ", util.inspect(add, { depth: null, colors: true })); } catch(e) {}
-try { console.log("fold = ", util.inspect(fold, { depth: null, colors: true })); } catch(e) {}
-try { console.log("a = ", util.inspect(a, { depth: null, colors: true })); } catch(e) {}
-try { console.log("b = ", util.inspect(b, { depth: null, colors: true })); } catch(e) {}
+try { console.log("all_func = ", util.inspect(all_func, { depth: null, colors: true })); } catch(e) {}

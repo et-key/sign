@@ -273,7 +273,7 @@ runBtn.addEventListener('click', async () => {
       }
     });
 
-    const undefinedDeclarations = undefinedIdents.map(id => `const ${id} = Symbol.for('${id}');`).join('\n');
+    const undefinedDeclarations = undefinedIdents.map(id => `const ${id} = __unit;`).join('\n');
 
     // Build the AST JSON Output
     astOutput.textContent = JSON.stringify(astLines.length === 1 ? astLines[0] : astLines, null, 2);

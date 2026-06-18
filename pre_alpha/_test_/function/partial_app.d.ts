@@ -12,8 +12,9 @@ export type List = (Atom | List | Unit)[];
 export type Lambda = (...args: SignValue[]) => SignValue;
 export type SignValue = Atom | List | Lambda | Unit;
 
-export declare const f: <T extends SignValue>(x: T | Hole) => Atom;
-export declare const add: <T extends SignValue, U extends SignValue>(x: T | Hole, y: U | Hole) => Atom;
-export declare const fold: <T extends SignValue, U extends SignValue, V extends SignValue, W extends SignValue>(f: T | Hole, a: U | Hole, x: V | Hole, ...xs: W[]) => SignValue;
-export declare const a: SignValue;
-export declare const b: SignValue;
+export declare const f: <T extends SignValue, U extends SignValue>(x: T | Hole, y: U | Hole) => Atom;
+export declare const partial: <T extends SignValue>($p0: T | Hole) => SignValue;
+export declare const curried: SignValue;
+export declare const result_curried: SignValue;
+export declare const check: Atom;
+export declare const check2: Atom;

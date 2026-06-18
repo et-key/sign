@@ -510,10 +510,10 @@ const _range = (start, end, step, type) => {
 };
 
 
-const a = Symbol.for('a');
-const b = Symbol.for('b');
-const c = Symbol.for('c');
-const __ = Symbol.for('__');
+const a = __unit;
+const b = __unit;
+const c = __unit;
+const __ = __unit;
 const func = (() => {
   const _fn = (a, b, ...c) => {
   if (c.length === 0) c = __unit;

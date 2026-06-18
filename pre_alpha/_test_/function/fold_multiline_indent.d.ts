@@ -9,8 +9,8 @@ export type String = string;
 export type Address = number;
 export type Atom = Scalar | String | Hole | Address;
 export type List = (Atom | List | Unit)[];
-export type Lambda = (...args: any[]) => SignValue;
+export type Lambda = (...args: SignValue[]) => SignValue;
 export type SignValue = Atom | List | Lambda | Unit;
 
-export declare const fold: <T, U, V, W>(f: T | Hole, a: U | Hole, x: V | Hole, ...xs: W[]) => SignValue;
+export declare const fold: <T extends SignValue, U extends SignValue, V extends SignValue, W extends SignValue>(f: T | Hole, a: U | Hole, x: V | Hole, ...xs: W[]) => SignValue;
 export declare const a: SignValue;

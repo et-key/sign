@@ -12,8 +12,10 @@ export type List = (Atom | List | Unit)[];
 export type Lambda = (...args: SignValue[]) => SignValue;
 export type SignValue = Atom | List | Lambda | Unit;
 
-export declare const f: <T extends SignValue>(x: T | Hole) => Atom;
-export declare const add: <T extends SignValue, U extends SignValue>(x: T | Hole, y: U | Hole) => Atom;
-export declare const fold: <T extends SignValue, U extends SignValue, V extends SignValue, W extends SignValue>(f: T | Hole, a: U | Hole, x: V | Hole, ...xs: W[]) => SignValue;
-export declare const a: SignValue;
-export declare const b: SignValue;
+export declare const func_with_defaults: <T extends SignValue, U extends SignValue>(x: T | Hole, y: U | Hole) => Atom;
+export declare const result1_is_partial_applyed: <T extends SignValue>($p0: T | Hole) => SignValue;
+export declare const result2_is_applied: SignValue;
+export declare const result3_is_partial_applyed: List;
+export declare const result4_is_applied: SignValue;
+export declare const result5_is_applied: SignValue;
+export declare const result6_is_applied: SignValue;

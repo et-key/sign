@@ -9,9 +9,9 @@ export type String = string;
 export type Address = number;
 export type Atom = Scalar | String | Hole | Address;
 export type List = (Atom | List | Unit)[];
-export type Lambda = (...args: any[]) => SignValue;
+export type Lambda = (...args: SignValue[]) => SignValue;
 export type SignValue = Atom | List | Lambda | Unit;
 
-export declare const func: <T, U, V>(a: T | Hole, b: U | Hole, ...c: V[]) => List;
+export declare const func: <T extends SignValue, U extends SignValue, V extends SignValue>(a: T | Hole, b: U | Hole, ...c: V[]) => List;
 export declare const res: SignValue;
 export declare const res2: SignValue;

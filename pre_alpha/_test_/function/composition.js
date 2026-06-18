@@ -315,7 +315,11 @@ function _callInternal(left, ...args) {
     if (totalArgs.length > 0 && Array.isArray(totalArgs[totalArgs.length - 1])) {
       const lastIdx = totalArgs.length - 1;
       const argsBeforeLast = totalArgs.slice(0, lastIdx);
-      if (argsBeforeLast.length < expectedLength) {
+      
+      const specs = target.paramSpecs || [];
+      const isDestruct = specs[lastIdx] && specs[lastIdx].isDestructured;
+      
+      if (!isDestruct && argsBeforeLast.length < expectedLength) {
         totalArgs = [...argsBeforeLast, ...totalArgs[lastIdx]];
       }
     }
@@ -506,7 +510,7 @@ const _range = (start, end, step, type) => {
 };
 
 
-const x = Symbol.for('x');
+const x = __unit;
 const f = (() => {
   const _fn = (x) => {
   return _arithmetic('*', x, 2);

@@ -13,7 +13,7 @@ export type String = string;
 export type Address = number;
 export type Atom = Scalar | String | Hole | Address;
 export type List = (Atom | List | Unit)[];
-export type Lambda = (...args: any[]) => SignValue;
+export type Lambda = (...args: SignValue[]) => SignValue;
 export type SignValue = Atom | List | Lambda | Unit;
 
 `;
@@ -62,7 +62,7 @@ function inferTypeSignature(node, env) {
 
     specs.forEach((p, i) => {
       const typeVar = String.fromCharCode(84 + i); // T, U, V, W...
-      typeParams.push(typeVar);
+      typeParams.push(`${typeVar} extends SignValue`);
       if (p.isRest) {
         params.push(`...${p.name}: ${typeVar}[]`);
       } else {

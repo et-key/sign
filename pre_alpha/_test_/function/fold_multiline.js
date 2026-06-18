@@ -510,9 +510,9 @@ const _range = (start, end, step, type) => {
 };
 
 
-const x = Symbol.for('x');
-const xs = Symbol.for('xs');
-const __ = Symbol.for('__');
+const x = __unit;
+const xs = __unit;
+const __ = __unit;
 const f = (() => {
   const _fn = (x) => {
   return _arithmetic('*', x, 2);

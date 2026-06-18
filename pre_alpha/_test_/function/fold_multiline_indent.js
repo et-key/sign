@@ -510,10 +510,10 @@ const _range = (start, end, step, type) => {
 };
 
 
-const f = Symbol.for('f');
-const x = Symbol.for('x');
-const xs = Symbol.for('xs');
-const __ = Symbol.for('__');
+const f = __unit;
+const x = __unit;
+const xs = __unit;
+const __ = __unit;
 const fold = (() => {
   const _fn = (f, a, _d0) => {
   const _d0_val = _expand(_d0);

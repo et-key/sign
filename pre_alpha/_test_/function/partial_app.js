@@ -512,20 +512,8 @@ const _range = (start, end, step, type) => {
 
 const x = __unit;
 const y = __unit;
-const xs = __unit;
-const __ = __unit;
+const $p0 = __unit;
 const f = (() => {
-  const _fn = (x) => {
-  return _arithmetic('*', x, 2);
-};
-  _fn.expectedLength = 1;
-  _fn.requiredLength = 1;
-  _fn.hasRest = false;
-  _fn.paramSpecs = [{"name":"x","defaultValue":null,"isRest":false}];
-  _fn._extractIndex = undefined;
-  return _fn;
-})();
-const add = (() => {
   const _fn = (x, y) => {
   return _arithmetic('+', x, y);
 };
@@ -536,30 +524,26 @@ const add = (() => {
   _fn._extractIndex = undefined;
   return _fn;
 })();
-const fold = (() => {
-  const _fn = (f, a, _d0) => {
-  const _d0_val = _expand(_d0);
-  let [x, ...xs] = _d0_val;
-  if (xs.length === 0) xs = __unit;
-  else if (xs.length === 1) xs = xs[0];
-  return (() => {
-  if (_isTrue(_compare('==', xs, __unit))) return (_call(_deref(f), a, x));
-  return _call(fold, f, (_call(_deref(f), a, x)), xs);
-})();
+const partial = (() => {
+  const _fn = ($p0) => {
+  return _call(f, $p0, 3);
 };
-  _fn.expectedLength = 3;
-  _fn.requiredLength = 2;
+  _fn.expectedLength = 1;
+  _fn.requiredLength = 1;
   _fn.hasRest = false;
-  _fn.paramSpecs = [{"name":"f","defaultValue":null,"isRest":false},{"name":"a","defaultValue":null,"isRest":false},{"name":"_destruct_pattern","defaultValue":null,"isRest":false,"isDestructured":true,"innerSpecs":[{"name":"x","defaultValue":null,"isRest":false},{"name":"xs","defaultValue":null,"isRest":true}]}];
+  _fn.paramSpecs = [{"name":"$p0","defaultValue":null,"isRest":false}];
   _fn._extractIndex = undefined;
   return _fn;
 })();
-const a = _call(fold, new Address(_makePointFreeBinary((x, y) => _arithmetic('+', x, y))), 0, (_concat(_concat(_concat(_concat(1, 2), 3), 4), 5)));
-const b = _call(fold, new Address(_makePointFreeBinary((x, y) => _arithmetic('+', x, y))), 0, (_concat(10, 20)));
+const curried = _call(f, 2);
+const result_curried = _call(curried, 4);
+const check = _compare('<', 10, 5);
+const check2 = _compare('==', 5, 5);
 
 console.log("=== Transpiled Execution Results ===");
 try { console.log("f = ", util.inspect(f, { depth: null, colors: true })); } catch(e) {}
-try { console.log("add = ", util.inspect(add, { depth: null, colors: true })); } catch(e) {}
-try { console.log("fold = ", util.inspect(fold, { depth: null, colors: true })); } catch(e) {}
-try { console.log("a = ", util.inspect(a, { depth: null, colors: true })); } catch(e) {}
-try { console.log("b = ", util.inspect(b, { depth: null, colors: true })); } catch(e) {}
+try { console.log("partial = ", util.inspect(partial, { depth: null, colors: true })); } catch(e) {}
+try { console.log("curried = ", util.inspect(curried, { depth: null, colors: true })); } catch(e) {}
+try { console.log("result_curried = ", util.inspect(result_curried, { depth: null, colors: true })); } catch(e) {}
+try { console.log("check = ", util.inspect(check, { depth: null, colors: true })); } catch(e) {}
+try { console.log("check2 = ", util.inspect(check2, { depth: null, colors: true })); } catch(e) {}

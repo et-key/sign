@@ -512,54 +512,39 @@ const _range = (start, end, step, type) => {
 
 const x = __unit;
 const y = __unit;
-const xs = __unit;
-const __ = __unit;
-const f = (() => {
-  const _fn = (x) => {
-  return _arithmetic('*', x, 2);
-};
-  _fn.expectedLength = 1;
-  _fn.requiredLength = 1;
-  _fn.hasRest = false;
-  _fn.paramSpecs = [{"name":"x","defaultValue":null,"isRest":false}];
-  _fn._extractIndex = undefined;
-  return _fn;
-})();
-const add = (() => {
-  const _fn = (x, y) => {
-  return _arithmetic('+', x, y);
+const car = (() => {
+  const _fn = (x, ...y) => {
+  if (y.length === 0) y = __unit;
+  else if (y.length === 1) y = y[0];
+  return x;
 };
   _fn.expectedLength = 2;
-  _fn.requiredLength = 2;
-  _fn.hasRest = false;
-  _fn.paramSpecs = [{"name":"x","defaultValue":null,"isRest":false},{"name":"y","defaultValue":null,"isRest":false}];
+  _fn.requiredLength = 1;
+  _fn.hasRest = true;
+  _fn.paramSpecs = [{"name":"x","defaultValue":null,"isRest":false},{"name":"y","defaultValue":null,"isRest":true}];
   _fn._extractIndex = undefined;
   return _fn;
 })();
-const fold = (() => {
-  const _fn = (f, a, _d0) => {
-  const _d0_val = _expand(_d0);
-  let [x, ...xs] = _d0_val;
-  if (xs.length === 0) xs = __unit;
-  else if (xs.length === 1) xs = xs[0];
-  return (() => {
-  if (_isTrue(_compare('==', xs, __unit))) return (_call(_deref(f), a, x));
-  return _call(fold, f, (_call(_deref(f), a, x)), xs);
-})();
+const cdr = (() => {
+  const _fn = (x, ...y) => {
+  if (y.length === 0) y = __unit;
+  else if (y.length === 1) y = y[0];
+  return y;
 };
-  _fn.expectedLength = 3;
-  _fn.requiredLength = 2;
-  _fn.hasRest = false;
-  _fn.paramSpecs = [{"name":"f","defaultValue":null,"isRest":false},{"name":"a","defaultValue":null,"isRest":false},{"name":"_destruct_pattern","defaultValue":null,"isRest":false,"isDestructured":true,"innerSpecs":[{"name":"x","defaultValue":null,"isRest":false},{"name":"xs","defaultValue":null,"isRest":true}]}];
+  _fn.expectedLength = 2;
+  _fn.requiredLength = 1;
+  _fn.hasRest = true;
+  _fn.paramSpecs = [{"name":"x","defaultValue":null,"isRest":false},{"name":"y","defaultValue":null,"isRest":true}];
   _fn._extractIndex = undefined;
   return _fn;
 })();
-const a = _call(fold, new Address(_makePointFreeBinary((x, y) => _arithmetic('+', x, y))), 0, (_concat(_concat(_concat(_concat(1, 2), 3), 4), 5)));
-const b = _call(fold, new Address(_makePointFreeBinary((x, y) => _arithmetic('+', x, y))), 0, (_concat(10, 20)));
+const res1 = _call(cdr, 1, 2, 3);
+const res2 = _call(cdr, 1, 2);
+const res3 = _call(cdr, 1);
 
 console.log("=== Transpiled Execution Results ===");
-try { console.log("f = ", util.inspect(f, { depth: null, colors: true })); } catch(e) {}
-try { console.log("add = ", util.inspect(add, { depth: null, colors: true })); } catch(e) {}
-try { console.log("fold = ", util.inspect(fold, { depth: null, colors: true })); } catch(e) {}
-try { console.log("a = ", util.inspect(a, { depth: null, colors: true })); } catch(e) {}
-try { console.log("b = ", util.inspect(b, { depth: null, colors: true })); } catch(e) {}
+try { console.log("car = ", util.inspect(car, { depth: null, colors: true })); } catch(e) {}
+try { console.log("cdr = ", util.inspect(cdr, { depth: null, colors: true })); } catch(e) {}
+try { console.log("res1 = ", util.inspect(res1, { depth: null, colors: true })); } catch(e) {}
+try { console.log("res2 = ", util.inspect(res2, { depth: null, colors: true })); } catch(e) {}
+try { console.log("res3 = ", util.inspect(res3, { depth: null, colors: true })); } catch(e) {}

@@ -70,7 +70,7 @@ usedIdents.forEach(id => {
   }
 });
 
-const undefinedDeclarations = undefinedIdents.map(id => `const ${id} = Symbol.for('${id}');`).join('\n');
+const undefinedDeclarations = undefinedIdents.map(id => `const ${id} = __unit;`).join('\n');
 
 // 3. Assemble the full executable JS file content
 const runtimeHelpers = `
