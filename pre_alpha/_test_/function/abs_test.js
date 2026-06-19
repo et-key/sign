@@ -1,4 +1,8 @@
-export const RUNTIME_HELPERS_CODE = `
+
+import _ from 'white_cats';
+import util from 'util';
+
+
 const __hole = Symbol.for('hole');
 const __unit = Symbol.for('unit');
 
@@ -22,28 +26,6 @@ const _isTrue = (val) => {
 };
 
 const _concat = (...args) => {
-  const isPlainObj = (o) => typeof o === 'object' && o !== null && !Array.isArray(o) && !(o instanceof ExpandedObject) && !(o instanceof Address) && !(typeof Promise !== 'undefined' && o instanceof Promise);
-  
-  if (args.length > 0 && args.every(isPlainObj)) {
-    const merged = {};
-    let typeMismatch = false;
-    for (const obj of args) {
-      for (const key of Object.keys(obj)) {
-        if (key in merged) {
-          const tL = typeof merged[key];
-          const tR = typeof obj[key];
-          if (tL !== tR && merged[key] !== __hole && obj[key] !== __hole && merged[key] !== __unit && obj[key] !== __unit) {
-            typeMismatch = true;
-            break;
-          }
-        }
-        merged[key] = obj[key];
-      }
-      if (typeMismatch) return __unit;
-    }
-    return merged;
-  }
-
   const flats = args.map(a => Array.isArray(a) ? a.flat(1) : [a]).flat(1).filter(x => x !== __unit);
   if (flats.length === 0) return __unit;
   if (flats.some(x => typeof x === 'string')) {
@@ -123,6 +105,7 @@ function _resolveNamedArgs(fn, args) {
       for (const key of Object.keys(obj)) {
         if (!consumedKeys.has(key)) {
           restObj[key] = obj[key];
+          restObj[Symbol.for(key)] = obj[key];
         }
       }
       resolvedArgs.push(restObj);
@@ -367,7 +350,6 @@ function _callInternal(left, ...args) {
     const res = _call(args[0], left);
     return _call(res, ...args.slice(1));
   }
-
   const res = _concat(left, args[0]);
   return _call(res, ...args.slice(1));
 }
@@ -548,4 +530,20 @@ const _range = (start, end, step, type) => {
   }
   return result;
 };
-`;
+
+
+const __ = __unit;
+const a = _abs(-5);
+const b = _abs(10);
+const c = _abs(_arithmetic('*', -3, 5));
+const d = _abs((_concat(_concat(1, 2), 3)));
+const e = _abs(__unit);
+const f = _abs(`hello`);
+
+console.log("=== Transpiled Execution Results ===");
+try { console.log("a = ", util.inspect(a, { depth: null, colors: true })); } catch(e) {}
+try { console.log("b = ", util.inspect(b, { depth: null, colors: true })); } catch(e) {}
+try { console.log("c = ", util.inspect(c, { depth: null, colors: true })); } catch(e) {}
+try { console.log("d = ", util.inspect(d, { depth: null, colors: true })); } catch(e) {}
+try { console.log("e = ", util.inspect(e, { depth: null, colors: true })); } catch(e) {}
+try { console.log("f = ", util.inspect(f, { depth: null, colors: true })); } catch(e) {}

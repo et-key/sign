@@ -232,9 +232,44 @@ When the `+` operator hits the LHS of a string, the layer of type abstraction is
 
 ---
 
-## 5. Heterogeneous Lists
+## 5. Dictionary (Struct) Pattern Matching and Destructuring
 
-### 5.1 Design Inquiry
+When receiving a dictionary (struct) in a function call, you can perform destructuring by key name using the same `[ ]` syntax as lists.
+
+### 5.1 The Difference Between Expanding (Keyword Args) and Passing as a Chunk (Struct)
+
+* **When Passing Expanded (Conventional)**: `f [ foo : 1, bar : 2 ]~`
+  The postfix `~` expands the dictionary by one level, passing it as a sequence of keyword arguments `foo: 1, bar: 2`. The function receives them directly as `f : foo bar ? ...`.
+
+* **When Passing as a Chunk (Struct)**: `f [ foo : 1, bar : 2 ]`
+  Without `~`, the dictionary is passed as a single chunk (a single argument). This notation is essential when passing it alongside other arguments (e.g., `f x [foo: 1, bar: 2] y`).
+
+### 5.2 Pattern Matching Syntax for Receiving as a Chunk
+
+When you want to extract specific keys from an argument passed as a single dictionary and group the remaining elements (Rest extraction), you can use the exact same intuitive syntax as the list's `[x ~xs]`.
+
+```sign
+` Extract the value of the 'foo' key from the entire dictionary, and bind the rest to 'obj'
+f : x [foo ~obj] y ?
+    ...
+
+` Call example
+f 10 [ foo : 1, bar : 2, baz : 3 ] 20
+```
+
+In the example above, the bindings inside the function will be:
+* `x` = 10
+* `foo` = 1
+* `obj` = `[ bar : 2, baz : 3 ]` (the remaining dictionary elements)
+* `y` = 20
+
+While lists are split into extracted values and the rest by "position (index)", dictionaries are split by "key name". Sharing this notation results in a highly consistent and beautiful design for both list and dictionary pattern matching.
+
+---
+
+## 6. Heterogeneous Lists
+
+### 6.1 Design Inquiry
 
 It is syntactically possible to combine elements of different types using products.
 
@@ -263,7 +298,7 @@ When operations are performed on heterogeneous lists, the type of the first elem
 
 ---
 
-## 6. Conclusion: Unity of the List Model
+## 7. Conclusion: Unity of the List Model
 
 Sign's list model consists of the following consistent principles:
 

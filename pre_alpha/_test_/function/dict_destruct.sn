@@ -1,0 +1,48 @@
+` Test for dictionary destructuring in parameters
+f : [foo ~obj] ? obj
+g : [foo bar ~obj] ? obj
+
+val1 : f [
+	foo : 100
+	bar : 200
+	baz : 300
+]
+
+val2 : g [
+	foo : 100
+	bar : 200
+	baz : 300
+]
+
+
+` Test for dictionary destructuring in parameters
+h : foo ~obj ? obj
+i : foo bar ~obj ? obj
+
+val3 : h [
+	foo : 100
+	bar : 200
+	baz : 300
+]~
+
+val4 : i [
+	foo : 100
+	bar : 200
+	baz : 300
+]~
+
+` Test for dictionary merging through coproduct (application)
+dict_merge_test : [
+	foo : 100
+	bar : 200
+] [
+	fooo : 100
+	bar : 500
+	baz : 300
+]
+
+dict_type_error_test : [
+	foo : 100
+] [
+	foo : `string`
+]

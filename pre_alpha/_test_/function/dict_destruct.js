@@ -1,4 +1,8 @@
-export const RUNTIME_HELPERS_CODE = `
+
+import _ from 'white_cats';
+import util from 'util';
+
+
 const __hole = Symbol.for('hole');
 const __unit = Symbol.for('unit');
 
@@ -548,4 +552,143 @@ const _range = (start, end, step, type) => {
   }
   return result;
 };
-`;
+
+
+const foo = __unit;
+const obj = __unit;
+const bar = __unit;
+const baz = __unit;
+const fooo = __unit;
+const f = (() => {
+  const _fn = (_d0) => {
+  const _d0_val = _expand(_d0);
+  let foo, obj;
+  if (Array.isArray(_d0_val) && _d0_val.length === 1 && _d0_val[0] && typeof _d0_val[0] === 'object' && _d0_val[0].constructor.name === 'ExpandedObject') {
+    const _dict = _d0_val[0].obj;
+    foo = ('foo' in _dict) ? _dict['foo'] : __hole;
+    obj = { ..._dict };
+    delete obj['foo'];
+  } else if (Array.isArray(_d0_val)) {
+    [foo, ...obj] = _d0_val;
+  } else {
+    foo = _d0_val;
+    obj = __unit;
+  }
+  if (obj.length === 0) obj = __unit;
+  else if (obj.length === 1) obj = obj[0];
+  return obj;
+};
+  _fn.expectedLength = 1;
+  _fn.requiredLength = 0;
+  _fn.hasRest = false;
+  _fn.paramSpecs = [{"name":"_destruct_pattern","defaultValue":null,"isRest":false,"isDestructured":true,"innerSpecs":[{"name":"foo","defaultValue":null,"isRest":false},{"name":"obj","defaultValue":null,"isRest":true}]}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+const g = (() => {
+  const _fn = (_d0) => {
+  const _d0_val = _expand(_d0);
+  let foo, bar, obj;
+  if (Array.isArray(_d0_val) && _d0_val.length === 1 && _d0_val[0] && typeof _d0_val[0] === 'object' && _d0_val[0].constructor.name === 'ExpandedObject') {
+    const _dict = _d0_val[0].obj;
+    foo = ('foo' in _dict) ? _dict['foo'] : __hole;
+    bar = ('bar' in _dict) ? _dict['bar'] : __hole;
+    obj = { ..._dict };
+    delete obj['foo'];
+    delete obj['bar'];
+  } else if (Array.isArray(_d0_val)) {
+    [foo, bar, ...obj] = _d0_val;
+  } else {
+    foo = _d0_val;
+    obj = __unit;
+  }
+  if (obj.length === 0) obj = __unit;
+  else if (obj.length === 1) obj = obj[0];
+  return obj;
+};
+  _fn.expectedLength = 1;
+  _fn.requiredLength = 0;
+  _fn.hasRest = false;
+  _fn.paramSpecs = [{"name":"_destruct_pattern","defaultValue":null,"isRest":false,"isDestructured":true,"innerSpecs":[{"name":"foo","defaultValue":null,"isRest":false},{"name":"bar","defaultValue":null,"isRest":false},{"name":"obj","defaultValue":null,"isRest":true}]}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+const val1 = _call(f, ((() => {
+  const foo = 100;
+  const bar = 200;
+  const baz = 300
+  return { foo: foo, bar: bar, baz: baz };
+})()));
+const val2 = _call(g, ((() => {
+  const foo = 100;
+  const bar = 200;
+  const baz = 300
+  return { foo: foo, bar: bar, baz: baz };
+})()));
+const h = (() => {
+  const _fn = (foo, ...obj) => {
+  if (obj.length === 0) obj = __unit;
+  else if (obj.length === 1) obj = obj[0];
+  return obj;
+};
+  _fn.expectedLength = 2;
+  _fn.requiredLength = 1;
+  _fn.hasRest = true;
+  _fn.paramSpecs = [{"name":"foo","defaultValue":null,"isRest":false},{"name":"obj","defaultValue":null,"isRest":true}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+const i = (() => {
+  const _fn = (foo, bar, ...obj) => {
+  if (obj.length === 0) obj = __unit;
+  else if (obj.length === 1) obj = obj[0];
+  return obj;
+};
+  _fn.expectedLength = 3;
+  _fn.requiredLength = 2;
+  _fn.hasRest = true;
+  _fn.paramSpecs = [{"name":"foo","defaultValue":null,"isRest":false},{"name":"bar","defaultValue":null,"isRest":false},{"name":"obj","defaultValue":null,"isRest":true}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+const val3 = _call(h, ..._expand(((() => {
+  const foo = 100;
+  const bar = 200;
+  const baz = 300
+  return { foo: foo, bar: bar, baz: baz };
+})())));
+const val4 = _call(i, ..._expand(((() => {
+  const foo = 100;
+  const bar = 200;
+  const baz = 300
+  return { foo: foo, bar: bar, baz: baz };
+})())));
+const dict_merge_test = _concat(((() => {
+  const foo = 100;
+  const bar = 200
+  return { foo: foo, bar: bar };
+})()), ((() => {
+  const fooo = 100;
+  const bar = 500;
+  const baz = 300
+  return { fooo: fooo, bar: bar, baz: baz };
+})()));
+const dict_type_error_test = _concat(((() => {
+  const foo = 100
+  return { foo: foo };
+})()), ((() => {
+  const foo = `string`
+  return { foo: foo };
+})()));
+
+console.log("=== Transpiled Execution Results ===");
+try { console.log("f = ", util.inspect(f, { depth: null, colors: true })); } catch(e) {}
+try { console.log("g = ", util.inspect(g, { depth: null, colors: true })); } catch(e) {}
+try { console.log("val1 = ", util.inspect(val1, { depth: null, colors: true })); } catch(e) {}
+try { console.log("val2 = ", util.inspect(val2, { depth: null, colors: true })); } catch(e) {}
+try { console.log("h = ", util.inspect(h, { depth: null, colors: true })); } catch(e) {}
+try { console.log("i = ", util.inspect(i, { depth: null, colors: true })); } catch(e) {}
+try { console.log("val3 = ", util.inspect(val3, { depth: null, colors: true })); } catch(e) {}
+try { console.log("val4 = ", util.inspect(val4, { depth: null, colors: true })); } catch(e) {}
+try { console.log("dict_merge_test = ", util.inspect(dict_merge_test, { depth: null, colors: true })); } catch(e) {}
+try { console.log("dict_type_error_test = ", util.inspect(dict_type_error_test, { depth: null, colors: true })); } catch(e) {}

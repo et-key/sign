@@ -38,11 +38,11 @@ The list structure in the Sign language forms a bialgebra `(List, unit, join, ex
 #### Monad Identity Proof
 
 ```haskell
-__ >>= f = f(__) = f([])     // left unit law
+__ >>= f = __                // left unit law (empty list so result is also empty list __)
 m >>= (\x → __) = __         // right unit law
 
 Concrete Example:
-__ >>= [+ 2] = [+ 2](__) = [+ 2]
+__ >>= [+ 2] = [+ 2](__) = __
 [1,2,3] >>= (\x → __) = __
 ```
 
@@ -74,27 +74,37 @@ unit(unit(__)) = unit([__]) = [[__]] ✓
 
 ```sign
 ` Generates partial application as function identity
-__ + X → [+ X]
-X + __ → [X +]
+` Acts as an absorbing element (tombstone / short-circuit), collapsing the expression to __
+__ + X → __
+X + __ → __
 
-` Similarly for other operators:
-__ - X → [- X]    X - __ → [X -]
-__ * X → [* X]    X * __ → [X *]
-__ / X → [/ X]    X / __ → [X /]
-__ % X → [% X]    X % __ → [X %]
-__ ^ X → [^ X]    X ^ __ → [X ^]
+` [Comparison] Hole (_) generates partial application (placeholder function identity)
+_ + X → [+ X]     ` (e.g., (_x) => _x + X)
+X + _ → [X +]     ` (e.g., (_x) => X + _x)
+
+` Similarly for other operators (Unit collapses, while Hole generates partial applications):
+__ - X → __       _ - X → [- X]
+__ * X → __       _ * X → [* X]
+__ / X → __       _ / X → [/ X]
+__ % X → __       _ % X → [% X]
+__ ^ X → __       _ ^ X → [^ X]
 ```
 
 #### 3.1.2 Interaction with Comparison Operators
 
 ```sign
-` Generates comparison function as function identity
-__ < X → [< X]    X < __ → [X <]
-__ <= X → [<= X]  X <= __ → [X <=]
-__ = X → [= X]    X = __ → [X =]
-__ >= X → [>= X]  X >= __ → [X >=]
-__ > X → [> X]    X > __ → [X >]
-__ != X → [!= X]  X != __ → [X !=]
+` Absorption and evaluation in comparisons (processed as a value, no partial applications generated)
+__ < X → __       X < __ → __
+__ <= X → __      X <= __ → __
+__ = X → __       X = __ → __  ` (returns __ since equality is false)
+__ != X → X       X != __ → X  ` (returns X since equality is true, assuming X != 0, 1)
+
+` [Comparison] Hole (_) generates partial application (comparison function)
+_ < X → [< X]     X < _ → [X <]
+_ <= X → [<= X]   X <= _ → [X <=]
+_ = X → [= X]     X = _ → [X =]
+_ != X → [!= X]   X != _ → [X !=]
+
 ```
 
 #### 3.1.3 Function Application and Arity-Based Behavioral Branching
@@ -198,8 +208,8 @@ Functionalization of operators in the Sign language is expressed as the distribu
 (+ ⊗ *)(unit(x)) = unit(+(x)) ⊗ unit(*(x))
 
 Concrete Example:
-__ + 3 → [+ 3]    ` Generates unit(+(3))
-__ * 5 → [* 5]    ` Generates unit(*(5))
+_ + 3 → [+ 3]    ` Hole-based partial application generation
+_ * 5 → [* 5]    ` Generates unit(*(5))
 ```
 
 Through this distributive law, natural functionalization and partial application of operators are derived from the structure of the bialgebra.

@@ -25,6 +25,8 @@ const sourceCode = fs.readFileSync(filePath, 'utf8');
 // 2. Preprocess, Parse, and Resolve Coproducts
 const pre = preprocess(sourceCode);
 const astProg = parser.parse(pre);
+console.log("=== AST ===");
+console.log(JSON.stringify(astProg, null, 2));
 
 let globalEnv = new Map();
 const rawLines = astProg.filter(line => line !== null && line !== undefined);

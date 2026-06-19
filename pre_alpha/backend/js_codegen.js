@@ -5,6 +5,7 @@
  */
 
 const functionContextStack = [false];
+const inArgumentListStack = [false];
 
 export function transpile(node) {
   if (node === undefined || node === null) return '';
@@ -43,7 +44,7 @@ export function transpile(node) {
     }
     if (node.kind === 'abs') {
       functionContextStack.push(false);
-      const res = `Math.abs(${transpile(node.content)})`;
+      const res = `_abs(${transpile(node.content)})`;
       functionContextStack.pop();
       return res;
     }
@@ -74,7 +75,7 @@ export function transpile(node) {
           if (s.type === 'operation' && s.operator === ':') {
             const varName = transpile(s.left);
             if (allDefs && defNames.length > 0) {
-              return `${code}\n  return { ${defNames.map(n => `${n}: ${n}, [Symbol.for('${n}')]: ${n}`).join(', ')} };`;
+              return `${code}\n  return { ${defNames.map(n => `${n}: ${n}`).join(', ')} };`;
             }
             return `${code}\n  return ${varName};`;
           } else {
@@ -103,7 +104,8 @@ export function transpile(node) {
     if (node.position !== 'prefix' && node.position !== 'postfix') {
       if (node.operator === ':') {
         const lhs = getDefineLHS(node.left);
-        return `const ${lhs} = ${transpile(node.right)}`;
+        const rhs = transpile(node.right);
+        return `const ${lhs} = ${rhs}`;
       }
 
       if (node.operator === '?') {
@@ -143,8 +145,28 @@ export function transpile(node) {
             const tempVar = `_d${dIdx++}`;
             const valVar = `${tempVar}_val`;
             bodyLines.push(`  const ${valVar} = _expand(${tempVar});`);
-            const patternStr = '[' + p.innerSpecs.map(ip => ip.isRest ? `...${ip.name}` : ip.name).join(', ') + ']';
-            bodyLines.push(`  let ${patternStr} = ${valVar};`);
+            const patternNames = p.innerSpecs.map(ip => ip.name);
+            const restName = p.innerSpecs.find(ip => ip.isRest)?.name;
+            bodyLines.push(`  let ${patternNames.join(', ')};`);
+            bodyLines.push(`  if (Array.isArray(${valVar}) && ${valVar}.length === 1 && ${valVar}[0] && typeof ${valVar}[0] === 'object' && ${valVar}[0].constructor.name === 'ExpandedObject') {`);
+            bodyLines.push(`    const _dict = ${valVar}[0].obj;`);
+            p.innerSpecs.forEach(ip => {
+              if (ip.isRest) {
+                bodyLines.push(`    ${ip.name} = { ..._dict };`);
+                p.innerSpecs.filter(other => !other.isRest).forEach(other => {
+                  bodyLines.push(`    delete ${ip.name}['${other.name}'];`);
+                });
+              } else {
+                bodyLines.push(`    ${ip.name} = ('${ip.name}' in _dict) ? _dict['${ip.name}'] : __hole;`);
+              }
+            });
+            bodyLines.push(`  } else if (Array.isArray(${valVar})) {`);
+            bodyLines.push(`    [${p.innerSpecs.map(ip => ip.isRest ? `...${ip.name}` : ip.name).join(', ')}] = ${valVar};`);
+            bodyLines.push(`  } else {`);
+            bodyLines.push(`    ${patternNames[0]} = ${valVar};`);
+            if (restName) bodyLines.push(`    ${restName} = __unit;`);
+            bodyLines.push(`  }`);
+            
             // Add rest checks for inner specs
             p.innerSpecs.forEach(ip => {
               if (ip.isRest) {
@@ -196,13 +218,33 @@ export function transpile(node) {
           return `_compose(${transpile(node.left)}, ${transpile(node.right)})`;
         }
         if (node.name === 'apply') {
+          inArgumentListStack.push(true);
+          let argsCode;
           if (node.right && node.right.type === 'coproduct_block') {
-            const args = node.right.statements.map(s => transpile(s)).join(', ');
-            return `_call(${transpile(node.left)}, ${args})`;
+            argsCode = (node.right.statements || []).map(s => {
+              const code = transpile(s);
+              if (s.type === 'operation' && s.operator === '~' && s.position === 'postfix') {
+                return `...${code}`;
+              }
+              return code;
+            }).join(', ');
+          } else {
+            const code = transpile(node.right);
+            if (node.right && node.right.type === 'operation' && node.right.operator === '~' && node.right.position === 'postfix') {
+              argsCode = `...${code}`;
+            } else {
+              argsCode = code;
+            }
           }
-          return `_call(${transpile(node.left)}, ${transpile(node.right)})`;
+          inArgumentListStack.pop();
+          return `_call(${transpile(node.left)}, ${argsCode})`;
         }
-        return `_call(${transpile(node.left)}, ${transpile(node.right)})`;
+        
+        // Unresolved space operator (should be resolved by semanticize, but handle safely)
+        inArgumentListStack.push(true);
+        const rightEval = transpile(node.right);
+        inArgumentListStack.pop();
+        return `_call(${transpile(node.left)}, ${rightEval})`;
       }
 
       if (node.operator === ',') {
@@ -314,7 +356,7 @@ export function transpile(node) {
     // Prefix Operators
     if (node.position === 'prefix') {
       if (node.operator === '~') {
-        return `${transpile(node.operand)}`;
+        return `[${transpile(node.operand)}]`;
       }
       if (node.operator === '$') {
         return `new Address(${transpile(node.operand)})`;
@@ -334,7 +376,7 @@ export function transpile(node) {
     // Postfix Operators
     if (node.position === 'postfix') {
       if (node.operator === '~') {
-        return `..._expand(${transpile(node.operand)})`;
+        return `_expand(${transpile(node.operand)})`;
       }
       if (node.operator === '!') {
         return `_factorial(${transpile(node.operand)})`;

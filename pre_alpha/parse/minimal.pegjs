@@ -53,8 +53,8 @@ Program
     }
 
 Line
-  = _ expr:Expression _ { return expr; }
-  / _ comment { return null; }
+  = _ comment { return null; }
+  / _ expr:Expression _ { return expr; }
 
 // --- 式の優先順位階層 (低い順から高い順) ---
 
@@ -355,7 +355,7 @@ Block
   / "{" _ EOL* _ contents:(PointFree / op:all_operators &(_ EOL* _ "}") { return getOperatorNode(op); } / BlockContentsOpt) _ EOL* _ "}" {
       return { type: "block", kind: "brace", content: contents };
     }
-  / "|" _ expr:Expression _ "|" {
+  / "|" expr:Expression "|" {
       return { type: "block", kind: "abs", content: expr };
     }
   / "\x02" _ EOL* _ contents:BlockContents _ EOL* _ "\x03" {

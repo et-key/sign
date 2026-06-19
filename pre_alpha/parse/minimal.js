@@ -307,8 +307,8 @@ function peg$parse(input, options) {
       }
       return result;
   }
-  function peg$f5(expr) {    return expr;  }
-  function peg$f6() {    return null;  }
+  function peg$f5() {    return null;  }
+  function peg$f6(expr) {    return expr;  }
   function peg$f7(op, expr) {
       let name = op === "###" ? "export_pin" : op === "##" ? "export_external" : "export_internal";
       return {
@@ -1106,11 +1106,10 @@ function peg$parse(input, options) {
 
     s0 = peg$currPos;
     s1 = peg$parse_();
-    s2 = peg$parseExport();
+    s2 = peg$parsecomment();
     if (s2 !== peg$FAILED) {
-      s3 = peg$parse_();
       peg$savedPos = s0;
-      s0 = peg$f5(s2);
+      s0 = peg$f5();
     } else {
       peg$currPos = s0;
       s0 = peg$FAILED;
@@ -1118,10 +1117,11 @@ function peg$parse(input, options) {
     if (s0 === peg$FAILED) {
       s0 = peg$currPos;
       s1 = peg$parse_();
-      s2 = peg$parsecomment();
+      s2 = peg$parseExport();
       if (s2 !== peg$FAILED) {
+        s3 = peg$parse_();
         peg$savedPos = s0;
-        s0 = peg$f6();
+        s0 = peg$f6(s2);
       } else {
         peg$currPos = s0;
         s0 = peg$FAILED;
@@ -3226,20 +3226,18 @@ function peg$parse(input, options) {
             if (peg$silentFails === 0) { peg$fail(peg$e12); }
           }
           if (s1 !== peg$FAILED) {
-            s2 = peg$parse_();
-            s3 = peg$parseExport();
-            if (s3 !== peg$FAILED) {
-              s4 = peg$parse_();
+            s2 = peg$parseExport();
+            if (s2 !== peg$FAILED) {
               if (input.charCodeAt(peg$currPos) === 124) {
-                s5 = peg$c9;
+                s3 = peg$c9;
                 peg$currPos++;
               } else {
-                s5 = peg$FAILED;
+                s3 = peg$FAILED;
                 if (peg$silentFails === 0) { peg$fail(peg$e12); }
               }
-              if (s5 !== peg$FAILED) {
+              if (s3 !== peg$FAILED) {
                 peg$savedPos = s0;
-                s0 = peg$f38(s3);
+                s0 = peg$f38(s2);
               } else {
                 peg$currPos = s0;
                 s0 = peg$FAILED;

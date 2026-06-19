@@ -1,4 +1,8 @@
-export const RUNTIME_HELPERS_CODE = `
+
+import _ from 'white_cats';
+import util from 'util';
+
+
 const __hole = Symbol.for('hole');
 const __unit = Symbol.for('unit');
 
@@ -22,28 +26,6 @@ const _isTrue = (val) => {
 };
 
 const _concat = (...args) => {
-  const isPlainObj = (o) => typeof o === 'object' && o !== null && !Array.isArray(o) && !(o instanceof ExpandedObject) && !(o instanceof Address) && !(typeof Promise !== 'undefined' && o instanceof Promise);
-  
-  if (args.length > 0 && args.every(isPlainObj)) {
-    const merged = {};
-    let typeMismatch = false;
-    for (const obj of args) {
-      for (const key of Object.keys(obj)) {
-        if (key in merged) {
-          const tL = typeof merged[key];
-          const tR = typeof obj[key];
-          if (tL !== tR && merged[key] !== __hole && obj[key] !== __hole && merged[key] !== __unit && obj[key] !== __unit) {
-            typeMismatch = true;
-            break;
-          }
-        }
-        merged[key] = obj[key];
-      }
-      if (typeMismatch) return __unit;
-    }
-    return merged;
-  }
-
   const flats = args.map(a => Array.isArray(a) ? a.flat(1) : [a]).flat(1).filter(x => x !== __unit);
   if (flats.length === 0) return __unit;
   if (flats.some(x => typeof x === 'string')) {
@@ -123,6 +105,7 @@ function _resolveNamedArgs(fn, args) {
       for (const key of Object.keys(obj)) {
         if (!consumedKeys.has(key)) {
           restObj[key] = obj[key];
+          restObj[Symbol.for(key)] = obj[key];
         }
       }
       resolvedArgs.push(restObj);
@@ -367,7 +350,6 @@ function _callInternal(left, ...args) {
     const res = _call(args[0], left);
     return _call(res, ...args.slice(1));
   }
-
   const res = _concat(left, args[0]);
   return _call(res, ...args.slice(1));
 }
@@ -486,15 +468,6 @@ const _factorial = (n) => {
   return r;
 };
 
-const _abs = (x) => {
-  if (x === __unit) return __unit;
-  if (x === __hole) return __hole;
-  if (Array.isArray(x)) return x.length;
-  if (typeof x === 'string') return x.length;
-  if (typeof x === 'number') return Math.abs(x);
-  return x;
-};
-
 const _get_prop = (obj, prop) => {
   if (obj === undefined || obj === null) return __unit;
   const val = obj[prop];
@@ -548,4 +521,14 @@ const _range = (start, end, step, type) => {
   }
   return result;
 };
-`;
+
+
+
+const a = [(_concat(_concat(1, 2), 3))];
+const b = [1];
+const c = (_product(0, _expand([(_product(1, _product(2, 3)))])));
+
+console.log("=== Transpiled Execution Results ===");
+try { console.log("a = ", util.inspect(a, { depth: null, colors: true })); } catch(e) {}
+try { console.log("b = ", util.inspect(b, { depth: null, colors: true })); } catch(e) {}
+try { console.log("c = ", util.inspect(c, { depth: null, colors: true })); } catch(e) {}
