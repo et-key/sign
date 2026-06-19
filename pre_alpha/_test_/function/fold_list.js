@@ -356,7 +356,7 @@ function _callInternal(left, ...args) {
 
 const _arithmetic = (op, left, right) => {
   if (left === __unit || right === __unit) {
-    return left === __unit ? right : left;
+    return __unit;
   }
   if (left === __hole || right === __hole) {
     return [Symbol.for(op), left, right];
@@ -392,6 +392,11 @@ const _arithmetic = (op, left, right) => {
 };
 
 const _compare = (op, left, right) => {
+  if (op !== '==' && op !== '=' && op !== '!==' && op !== '!=') {
+    if (left === __unit || right === __unit) {
+      return __unit;
+    }
+  }
   let cond = false;
   switch (op) {
     case '==':

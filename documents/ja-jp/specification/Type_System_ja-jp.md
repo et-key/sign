@@ -5,7 +5,7 @@
 全ての型は、`Unit`を根拠とする。
 Unitの値は、`Unit`のみ。
 Unitのサイズは、0とする。
-Unitは、`_`で表現される。
+Unitは、`__`で表現される。
 Unitは、左単位元性は`Identity`である。
 Unitは、右単位元性は空のリストである。
 全ての型は、delegationによりその関係性を明快に説明可能である。
@@ -13,7 +13,7 @@ Unitは、余積の単位元であり、積の単位元である。
 Unitは、双代数の単位元であるため、全ての関数の単位元でもある。
 Unitの定義が、まさしくSignのIdentityである。
 Signは、`Self-referential`であり、`Incomplete`な表現である。
-`Complete`な表現は、`Unit`であり、`_`で表現される。
+`Complete`な表現は、`Unit`であり、`__`で表現される。
 `Self-referential`な表現は、`Complete`な表現に帰着できる。
 よって、SignをSignで説明できるという哲学として正当な「言語」である。
 これが、型システムの根拠である。
@@ -40,29 +40,29 @@ String を含む場合は `Atom` 含まない場合は `Scalar`
 | `###` | 前置※ | `R -> Implicit(R)` |
 | `:` | 中置※ | `(Identifier -> R) -> R` |
 | `?` | 中置※ | `(List -> R) -> Lambda(R)` |
-| `#` | 中置※ | `(Address -> R) -> (Address \| _)` |
-| `;` | 中置 | `(L -> R) -> (L \| _)` |
-| `\|` | 中置 | `(L -> R) -> (L \| _)` |
-| `&` | 中置 | `(L -> R) -> (L \| _)` |
-| `==` | 中置 | `(L -> R) -> (L \| _)` |
-| `!==` | 中置 | `(L -> R) -> (L \| _)` |
+| `#` | 中置※ | `(Address -> R) -> (Address \| __)` |
+| `;` | 中置 | `(L -> R) -> (L \| __)` |
+| `\|` | 中置 | `(L -> R) -> (L \| __)` |
+| `&` | 中置 | `(L -> R) -> (L \| __)` |
+| `==` | 中置 | `(L -> R) -> (L \| __)` |
+| `!==` | 中置 | `(L -> R) -> (L \| __)` |
 | `,` | 中置※ | `(L -> R) -> List` |
-| ` ` | `Atom \| List` 中置 `Lambda` | `((Atom \| List \| _) -> Lambda) -> (List \| Lambda \| _)` |
-| ` ` | `Lambda` 中置 `Atom \| List` | `(Lambda -> (Atom \| List \| _)) -> (List \| Lambda \| _)` |
+| ` ` | `Atom \| List` 中置 `Lambda` | `((Atom \| List \| __) -> Lambda) -> (List \| Lambda \| __)` |
+| ` ` | `Lambda` 中置 `Atom \| List` | `(Lambda -> (Atom \| List \| __)) -> (List \| Lambda \| __)` |
 | ` ` | `Lambda` 中置 `Lambda` | `(Lambda -> Lambda) -> Lambda` |
-| ` ` | `Atom \| List` 中置 `Atom \| List` | `((Atom \| List \| _) -> (Atom \| List \| _)) -> (List \| _)` |
+| ` ` | `Atom \| List` 中置 `Atom \| List` | `((Atom \| List \| __) -> (Atom \| List \| __)) -> (List \| __)` |
 | `~` | 中置 | `(Scalar -> Scalar) -> Iterator -> List` |
 | `~-` | 中置 | `(Scalar -> Scalar) -> Iterator` |
 | `~+` | 中置 | `(Scalar -> Scalar) -> Iterator` |
 | `~*` | 中置 | `(Scalar -> Scalar) -> Iterator` |
 | `~/` | 中置 | `(Scalar -> Scalar) -> Iterator` |
 | `~^` | 中置 | `(Scalar -> Scalar) -> Iterator` |
-| `<` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| _` |
-| `<=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| _` |
-| `=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| _` |
-| `>=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| _` |
-| `>` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| _` |
-| `!=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| _` |
+| `<` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| __` |
+| `<=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| __` |
+| `=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| __` |
+| `>=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| __` |
+| `>` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| __` |
+| `!=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| __` |
 | `+` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
 | `-` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
 | `*` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |

@@ -1,4 +1,8 @@
-export const RUNTIME_HELPERS_CODE = `
+
+import _ from 'white_cats';
+import util from 'util';
+
+
 const __hole = Symbol.for('hole');
 const __unit = Symbol.for('unit');
 
@@ -517,4 +521,34 @@ const _range = (start, end, step, type) => {
   }
   return result;
 };
-`;
+
+
+
+const a = _compareChain(['<', '<'], [1, 5, 10]);
+const b = _compareChain(['<', '<'], [1, 0, 10]);
+const c = _compareChain(['>', '>'], [10, 5, 1]);
+const d = _compareChain(['>', '>'], [10, 15, 1]);
+const e = _compare('<', 1, 5);
+const f = _compare('<', 5, 10);
+const g = _compare('>', 10, 5);
+const h = _compare('>', 1, 0);
+const i = _compareChain(['>', '>'], [1, 0, -5]);
+const j = _compareChain(['<', '<'], [0, 1, 5]);
+const k = _compareChain(['=', '=', '='], [5, 5, 5, 5]);
+const l = _compareChain(['=', '=', '=', '='], [5, 5, 5, 5, 5]);
+const m = _compareChain(['==', '==', '=='], [5, 5, 5, 5]);
+
+console.log("=== Transpiled Execution Results ===");
+try { console.log("a = ", util.inspect(a, { depth: null, colors: true })); } catch(e) {}
+try { console.log("b = ", util.inspect(b, { depth: null, colors: true })); } catch(e) {}
+try { console.log("c = ", util.inspect(c, { depth: null, colors: true })); } catch(e) {}
+try { console.log("d = ", util.inspect(d, { depth: null, colors: true })); } catch(e) {}
+try { console.log("e = ", util.inspect(e, { depth: null, colors: true })); } catch(e) {}
+try { console.log("f = ", util.inspect(f, { depth: null, colors: true })); } catch(e) {}
+try { console.log("g = ", util.inspect(g, { depth: null, colors: true })); } catch(e) {}
+try { console.log("h = ", util.inspect(h, { depth: null, colors: true })); } catch(e) {}
+try { console.log("i = ", util.inspect(i, { depth: null, colors: true })); } catch(e) {}
+try { console.log("j = ", util.inspect(j, { depth: null, colors: true })); } catch(e) {}
+try { console.log("k = ", util.inspect(k, { depth: null, colors: true })); } catch(e) {}
+try { console.log("l = ", util.inspect(l, { depth: null, colors: true })); } catch(e) {}
+try { console.log("m = ", util.inspect(m, { depth: null, colors: true })); } catch(e) {}

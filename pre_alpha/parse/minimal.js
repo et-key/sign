@@ -1093,7 +1093,7 @@ function peg$parse(input, options) {
   }
 
   function peg$parseLine() {
-    let s0, s1, s2, s3, s4;
+    let s0, s1, s2, s3;
 
     const key = peg$currPos * 50 + 8;
     const cached = peg$resultsCache[key];
@@ -1109,10 +1109,6 @@ function peg$parse(input, options) {
     s2 = peg$parseExport();
     if (s2 !== peg$FAILED) {
       s3 = peg$parse_();
-      s4 = peg$parsecomment();
-      if (s4 === peg$FAILED) {
-        s4 = null;
-      }
       peg$savedPos = s0;
       s0 = peg$f5(s2);
     } else {

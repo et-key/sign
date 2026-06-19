@@ -53,7 +53,7 @@ Program
     }
 
 Line
-  = _ expr:Expression _ comment? { return expr; }
+  = _ expr:Expression _ { return expr; }
   / _ comment { return null; }
 
 // --- 式の優先順位階層 (低い順から高い順) ---

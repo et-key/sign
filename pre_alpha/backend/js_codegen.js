@@ -270,6 +270,23 @@ export function transpile(node) {
 
       // Comparisons in Sign: <, >, <=, >=, ==, !==, =, !=
       if (['<', '>', '<=', '>=', '==', '!==', '=', '!='].includes(node.operator)) {
+        const chain = destructureCompareChain(node);
+        if (chain.ops.length > 1) {
+          const firstOp = chain.ops[0];
+          const allIdentical = chain.ops.every(op => op === firstOp);
+          if (!allIdentical) {
+            throw new Error(`Compile Error: Comparison operators in a chain must be identical. Got mixed operators: ${chain.ops.join(', ')}`);
+          }
+
+          const isEquality = (firstOp === '=' || firstOp === '==');
+          if (!isEquality && chain.ops.length >= 3) {
+            throw new Error(`Compile Error: Comparison chaining of 4 or more terms is not supported for operator '${firstOp}'.`);
+          }
+
+          const opsStr = chain.ops.map(op => `'${op}'`).join(', ');
+          const exprsStr = chain.exprs.map(e => transpile(e)).join(', ');
+          return `_compareChain([${opsStr}], [${exprsStr}])`;
+        }
         return `_compare('${node.operator}', ${transpile(node.left)}, ${transpile(node.right)})`;
       }
 
@@ -518,4 +535,23 @@ function getParameterSpecs(node) {
     }
   }
   return [{ name: transpile(node), defaultValue: null, isRest: false }];
+}
+
+function destructureCompareChain(node) {
+  const ops = [];
+  const exprs = [];
+  const compOps = ['<', '>', '<=', '>=', '==', '!==', '=', '!='];
+
+  function traverse(n) {
+    if (n && n.type === 'operation' && compOps.includes(n.operator)) {
+      traverse(n.left);
+      ops.push(n.operator);
+      exprs.push(n.right);
+    } else {
+      exprs.push(n);
+    }
+  }
+
+  traverse(node);
+  return { ops, exprs };
 }
