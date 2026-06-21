@@ -1,6 +1,18 @@
-my_dict:
+option :
 	name: `Sign`
 	version: 0.1
-	features:
-		type: `Structural`
-		backend: `AArch64`
+	type: `Structural`
+	backend: `AArch64`
+
+data:
+	type: `Structural`
+	backend: `javascript`
+
+update : [~option] [type backend] ?
+	option # [
+		$type # type
+		$backend # backend
+	]
+
+update option data
+
