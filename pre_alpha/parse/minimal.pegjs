@@ -294,7 +294,7 @@ Postfix
       }, head);
     }
 
-// Level 23: Prefix (~, !, $, @, !!, -)
+// Level 23: Prefix (~, !, $, @, !!, -, ><)
 Prefix
   = op:prefix expr:Prefix {
       let name;
@@ -307,6 +307,7 @@ Prefix
       else if (op === "@") name = "input";
       else if (op === "!!") name = "bit_not";
       else if (op === "-") name = "negate";
+      else if (op === "><") name = "reverse";
       return {
         type: "operation",
         operator: op,
@@ -408,9 +409,15 @@ PointFree
 
 // --- Atoms ---
 Atom
-  = string / charactor / address / register / unicode / number / identifier / unit / ub
+  = string / inline_code / charactor / address / register / unicode / number / identifier / unit / ub
 
 string = $("`" [^`\r\n]* "`")
+
+inline_code = "\"" chars:inline_char* "\"" { return { type: "inline_code", value: chars.join("") }; }
+
+inline_char
+  = "\\" escape:[^\r\n] { return escape; }
+  / [^\"\r\n]
 charactor = $("\\".)
 number = $("-"? [0-9]+ "."? [0-9]*)
 address = $("0x" Hex+)
@@ -423,7 +430,7 @@ ub = "_"
 
 // --- Prefix/Postfix Operators ---
 prefix
-  = "###" / "##" / "#" / "~" / "!!" / "!" / "$" / "@" / ("-" &(Block / identifier))
+  = "###" / "##" / "#" / "><" / "~" / "!!" / "!" / "$" / "@" / ("-" &(Block / identifier))
 
 postfix
   = "!" / "~" / "@"
@@ -431,4 +438,4 @@ postfix
 all_operators
   = "###" / "##" / "#"
   / "!==" / "==" / "!=" / "<=" / ">=" / "<<" / ">>" / "||" / ";;" / "&&" / "!!" / "~+" / "~-" / "~*" / "~/" / "~^"
-  / ":" / "?" / ";" / "|" / "&" / "," / "~" / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "'" / "@" / "!" / "$"
+  / ":" / "?" / ";" / "|" / "&" / "," / "~" / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "'" / "@" / "!" / "$" / "><"

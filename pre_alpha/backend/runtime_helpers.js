@@ -87,6 +87,18 @@ const _expand = (a) => {
     if (a.length === 0) return [__unit];
     return a.flat(1);
   }
+  if (typeof a === 'number') {
+    return {
+      [Symbol.iterator]: function* () {
+        let current = a;
+        while (true) {
+          yield current++;
+        }
+      },
+      isStream: true,
+      start: a
+    };
+  }
   if (a && typeof a === 'object' && !(a instanceof Address) && !(a instanceof ExpandedObject)) {
     return [new ExpandedObject(a)];
   }
@@ -167,8 +179,13 @@ function _makePointFreeMapFilter(innerFn, isComparison) {
         return arr.map(x => innerFn(x));
       }
     };
-    if (args.length === 1 && Array.isArray(args[0])) {
-      return applyToArr(args[0]);
+    if (args.length === 1) {
+      if (Array.isArray(args[0])) {
+        return applyToArr(args[0]);
+      }
+      if (typeof args[0] === 'string') {
+        return applyToArr([...args[0]]);
+      }
     }
     return applyToArr(args);
   };
@@ -380,8 +397,38 @@ const _arithmetic = (op, left, right) => {
     return [Symbol.for(op), left, right];
   }
 
+  if (typeof left === 'string' && left.length === 1) {
+    const codePoint = left.codePointAt(0);
+    return _arithmetic(op, codePoint, right);
+  }
+
   if (typeof left === 'string') {
     throw new TypeError("Type Error: Arithmetic operation not supported on String");
+  }
+
+  if (Array.isArray(left) && typeof right === 'number') {
+    if (op === '*') {
+      const res = [];
+      for (let i = 0; i < right; i++) {
+        res.push(...left);
+      }
+      return res;
+    }
+    if (op === '^') {
+      const res = [];
+      for (let i = 0; i < right; i++) {
+        res.push([...left]);
+      }
+      return res;
+    }
+    if (op === '/') {
+      const res = [];
+      const chunkSize = Math.ceil(left.length / right);
+      for (let i = 0; i < left.length; i += chunkSize) {
+        res.push(left.slice(i, i + chunkSize));
+      }
+      return res;
+    }
   }
 
   if (Array.isArray(left)) {
@@ -495,8 +542,81 @@ const _abs = (x) => {
   return x;
 };
 
+const _reverse = (x) => {
+  if (Array.isArray(x)) {
+    return [...x].reverse();
+  }
+  if (typeof x === 'string') {
+    return [...x].reverse().join('');
+  }
+  return x;
+};
+
 const _get_prop = (obj, prop) => {
   if (obj === undefined || obj === null) return __unit;
+  
+  if (Array.isArray(obj)) {
+    if (typeof prop === 'number' && prop < 0) {
+      const idx = obj.length + prop;
+      return (idx >= 0 && idx < obj.length) ? obj[idx] : __unit;
+    }
+    if (Array.isArray(prop)) {
+      const res = [];
+      for (const p of prop) {
+        if (p === __unit) continue;
+        const val = _get_prop(obj, p);
+        if (val !== __unit) {
+          res.push(val);
+        }
+      }
+      return res.length === 0 ? __unit : res;
+    }
+    if (prop && typeof prop === 'object' && prop.isStream) {
+      const res = [];
+      const iterator = prop[Symbol.iterator]();
+      while (true) {
+        const { value, done } = iterator.next();
+        if (done) break;
+        if (typeof value !== 'number' || value < 0 || value >= obj.length) {
+          break;
+        }
+        res.push(obj[value]);
+      }
+      return res.length === 0 ? __unit : res;
+    }
+  }
+  
+  if (typeof obj === 'string') {
+    if (typeof prop === 'number' && prop < 0) {
+      const idx = obj.length + prop;
+      return (idx >= 0 && idx < obj.length) ? obj[idx] : __unit;
+    }
+    if (Array.isArray(prop)) {
+      let res = '';
+      for (const p of prop) {
+        if (p === __unit) continue;
+        const val = _get_prop(obj, p);
+        if (val !== __unit) {
+          res += val;
+        }
+      }
+      return res.length === 0 ? __unit : res;
+    }
+    if (prop && typeof prop === 'object' && prop.isStream) {
+      const res = [];
+      const iterator = prop[Symbol.iterator]();
+      while (true) {
+        const { value, done } = iterator.next();
+        if (done) break;
+        if (typeof value !== 'number' || value < 0 || value >= obj.length) {
+          break;
+        }
+        res.push(obj[value]);
+      }
+      return res.length === 0 ? __unit : res.join('');
+    }
+  }
+
   const val = obj[prop];
   return val === undefined ? __unit : val;
 };
@@ -522,6 +642,35 @@ const importModule = (name) => {
 };
 
 const _range = (start, end, step, type) => {
+  if (end === null || end === undefined || end === __unit) {
+    let nextFn;
+    if (type === 'arithmetic') {
+      const s = step === null || step === undefined ? 1 : step;
+      nextFn = (curr) => curr + s;
+    } else if (type === 'geometric') {
+      const s = step === null || step === undefined ? 2 : step;
+      nextFn = (curr) => curr * s;
+    } else if (type === 'power') {
+      const s = step === null || step === undefined ? 2 : step;
+      nextFn = (curr) => Math.pow(curr, s);
+    }
+    
+    return {
+      [Symbol.iterator]: function* () {
+        let current = start;
+        while (true) {
+          yield current;
+          current = nextFn(current);
+        }
+      },
+      isStream: true,
+      start: start,
+      step: step,
+      type: type,
+      nextFn: nextFn
+    };
+  }
+
   const result = [];
   if (type === 'arithmetic') {
     const s = step || (start <= end ? 1 : -1);

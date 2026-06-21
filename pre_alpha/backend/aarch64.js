@@ -102,6 +102,16 @@ export class AArch64Generator {
     if (!node) return false;
     let didTailCall = false;
 
+    if (node.type === 'inline_code') {
+      const val = node.value.trim();
+      if (val.startsWith('aarch64:')) {
+        this.asm.push(`  ${val.slice(8).trim()}`);
+      } else if (val.startsWith('asm:')) {
+        this.asm.push(`  ${val.slice(4).trim()}`);
+      }
+      return false;
+    }
+
     if (typeof node === 'string') {
       if (!isNaN(node) || node.startsWith('0x')) {
         if (node.startsWith('0x') || Number(node) > 65535 || Number(node) < 0) {

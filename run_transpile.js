@@ -55,7 +55,7 @@ astLines.forEach(astLine => {
   // Re-build env with resolved tree for accurate type inference later
   buildEnvironment(resolved, globalEnv);
   
-  const jsCode = transpile(resolved);
+  const jsCode = transpile(resolved, globalEnv);
   if (jsCode) {
     jsStatements.push(jsCode);
   }

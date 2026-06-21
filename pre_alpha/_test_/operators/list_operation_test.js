@@ -91,6 +91,18 @@ const _expand = (a) => {
     if (a.length === 0) return [__unit];
     return a.flat(1);
   }
+  if (typeof a === 'number') {
+    return {
+      [Symbol.iterator]: function* () {
+        let current = a;
+        while (true) {
+          yield current++;
+        }
+      },
+      isStream: true,
+      start: a
+    };
+  }
   if (a && typeof a === 'object' && !(a instanceof Address) && !(a instanceof ExpandedObject)) {
     return [new ExpandedObject(a)];
   }
@@ -398,6 +410,31 @@ const _arithmetic = (op, left, right) => {
     throw new TypeError("Type Error: Arithmetic operation not supported on String");
   }
 
+  if (Array.isArray(left) && typeof right === 'number') {
+    if (op === '*') {
+      const res = [];
+      for (let i = 0; i < right; i++) {
+        res.push(...left);
+      }
+      return res;
+    }
+    if (op === '^') {
+      const res = [];
+      for (let i = 0; i < right; i++) {
+        res.push([...left]);
+      }
+      return res;
+    }
+    if (op === '/') {
+      const res = [];
+      const chunkSize = Math.ceil(left.length / right);
+      for (let i = 0; i < left.length; i += chunkSize) {
+        res.push(left.slice(i, i + chunkSize));
+      }
+      return res;
+    }
+  }
+
   if (Array.isArray(left)) {
     return left.map(x => _arithmetic(op, x, right));
   }
@@ -509,8 +546,81 @@ const _abs = (x) => {
   return x;
 };
 
+const _reverse = (x) => {
+  if (Array.isArray(x)) {
+    return [...x].reverse();
+  }
+  if (typeof x === 'string') {
+    return [...x].reverse().join('');
+  }
+  return x;
+};
+
 const _get_prop = (obj, prop) => {
   if (obj === undefined || obj === null) return __unit;
+  
+  if (Array.isArray(obj)) {
+    if (typeof prop === 'number' && prop < 0) {
+      const idx = obj.length + prop;
+      return (idx >= 0 && idx < obj.length) ? obj[idx] : __unit;
+    }
+    if (Array.isArray(prop)) {
+      const res = [];
+      for (const p of prop) {
+        if (p === __unit) continue;
+        const val = _get_prop(obj, p);
+        if (val !== __unit) {
+          res.push(val);
+        }
+      }
+      return res.length === 0 ? __unit : res;
+    }
+    if (prop && typeof prop === 'object' && prop.isStream) {
+      const res = [];
+      const iterator = prop[Symbol.iterator]();
+      while (true) {
+        const { value, done } = iterator.next();
+        if (done) break;
+        if (typeof value !== 'number' || value < 0 || value >= obj.length) {
+          break;
+        }
+        res.push(obj[value]);
+      }
+      return res.length === 0 ? __unit : res;
+    }
+  }
+  
+  if (typeof obj === 'string') {
+    if (typeof prop === 'number' && prop < 0) {
+      const idx = obj.length + prop;
+      return (idx >= 0 && idx < obj.length) ? obj[idx] : __unit;
+    }
+    if (Array.isArray(prop)) {
+      let res = '';
+      for (const p of prop) {
+        if (p === __unit) continue;
+        const val = _get_prop(obj, p);
+        if (val !== __unit) {
+          res += val;
+        }
+      }
+      return res.length === 0 ? __unit : res;
+    }
+    if (prop && typeof prop === 'object' && prop.isStream) {
+      const res = [];
+      const iterator = prop[Symbol.iterator]();
+      while (true) {
+        const { value, done } = iterator.next();
+        if (done) break;
+        if (typeof value !== 'number' || value < 0 || value >= obj.length) {
+          break;
+        }
+        res.push(obj[value]);
+      }
+      return res.length === 0 ? __unit : res.join('');
+    }
+  }
+
   const val = obj[prop];
   return val === undefined ? __unit : val;
 };
@@ -536,6 +646,35 @@ const importModule = (name) => {
 };
 
 const _range = (start, end, step, type) => {
+  if (end === null || end === undefined || end === __unit) {
+    let nextFn;
+    if (type === 'arithmetic') {
+      const s = step === null || step === undefined ? 1 : step;
+      nextFn = (curr) => curr + s;
+    } else if (type === 'geometric') {
+      const s = step === null || step === undefined ? 2 : step;
+      nextFn = (curr) => curr * s;
+    } else if (type === 'power') {
+      const s = step === null || step === undefined ? 2 : step;
+      nextFn = (curr) => Math.pow(curr, s);
+    }
+    
+    return {
+      [Symbol.iterator]: function* () {
+        let current = start;
+        while (true) {
+          yield current;
+          current = nextFn(current);
+        }
+      },
+      isStream: true,
+      start: start,
+      step: step,
+      type: type,
+      nextFn: nextFn
+    };
+  }
+
   const result = [];
   if (type === 'arithmetic') {
     const s = step || (start <= end ? 1 : -1);
@@ -564,18 +703,34 @@ const _range = (start, end, step, type) => {
 };
 
 
-const __ = __unit;
-const a = _abs(-5);
-const b = _abs(10);
-const c = _abs(_arithmetic('*', -3, 5));
-const d = _abs((_concat(_concat(1, 2), 3)));
-const e = _abs(__unit);
-const f = _abs(`hello`);
+
+const list = _concat(_concat(_concat(_concat(_concat(_concat(_concat(_concat(_concat(_concat(10, 20), 30), 40), 50), 60), 70), 80), 90), 100), 110);
+const size = _abs(list);
+const first_item = _get_prop(list, 0);
+const last_item = _get_prop(list, -1);
+const last_item_at = _get_prop(list, -1);
+const slice_range = _get_prop(list, (_range(1, 3, null, 'arithmetic')));
+const residual = _get_prop(list, _expand(1));
+const arith_range_slice = _get_prop(list, (_range(0, 10, 2, 'arithmetic')));
+const geom_range_slice = _get_prop(list, (_range(1, 8, 2, 'geometric')));
+const infinite_range_slice = _get_prop(list, (_range(0, null, 2, 'arithmetic')));
+const repeated = _arithmetic('*', (_concat(0, 1)), 3);
+const lifted = _arithmetic('^', (_concat(0, 1)), 3);
+const divided = _arithmetic('/', (_concat(_concat(_concat(1, 2), 3), 4)), 2);
+const reversed = _reverse(list);
 
 console.log("=== Transpiled Execution Results ===");
-try { console.log("a = ", util.inspect(a, { depth: null, colors: true })); } catch(e) {}
-try { console.log("b = ", util.inspect(b, { depth: null, colors: true })); } catch(e) {}
-try { console.log("c = ", util.inspect(c, { depth: null, colors: true })); } catch(e) {}
-try { console.log("d = ", util.inspect(d, { depth: null, colors: true })); } catch(e) {}
-try { console.log("e = ", util.inspect(e, { depth: null, colors: true })); } catch(e) {}
-try { console.log("f = ", util.inspect(f, { depth: null, colors: true })); } catch(e) {}
+try { console.log("list = ", util.inspect(list, { depth: null, colors: true })); } catch(e) {}
+try { console.log("size = ", util.inspect(size, { depth: null, colors: true })); } catch(e) {}
+try { console.log("first_item = ", util.inspect(first_item, { depth: null, colors: true })); } catch(e) {}
+try { console.log("last_item = ", util.inspect(last_item, { depth: null, colors: true })); } catch(e) {}
+try { console.log("last_item_at = ", util.inspect(last_item_at, { depth: null, colors: true })); } catch(e) {}
+try { console.log("slice_range = ", util.inspect(slice_range, { depth: null, colors: true })); } catch(e) {}
+try { console.log("residual = ", util.inspect(residual, { depth: null, colors: true })); } catch(e) {}
+try { console.log("arith_range_slice = ", util.inspect(arith_range_slice, { depth: null, colors: true })); } catch(e) {}
+try { console.log("geom_range_slice = ", util.inspect(geom_range_slice, { depth: null, colors: true })); } catch(e) {}
+try { console.log("infinite_range_slice = ", util.inspect(infinite_range_slice, { depth: null, colors: true })); } catch(e) {}
+try { console.log("repeated = ", util.inspect(repeated, { depth: null, colors: true })); } catch(e) {}
+try { console.log("lifted = ", util.inspect(lifted, { depth: null, colors: true })); } catch(e) {}
+try { console.log("divided = ", util.inspect(divided, { depth: null, colors: true })); } catch(e) {}
+try { console.log("reversed = ", util.inspect(reversed, { depth: null, colors: true })); } catch(e) {}

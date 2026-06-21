@@ -127,6 +127,14 @@ export function collectIdentifiers(node, set) {
     return;
   }
   if (typeof node === 'object') {
+    if (node.type === 'operation' && node.operator === "'") {
+      collectIdentifiers(node.left, set);
+      return;
+    }
+    if (node.type === 'operation' && node.operator === "@" && node.position !== 'postfix') {
+      collectIdentifiers(node.right, set);
+      return;
+    }
     for (const key of Object.keys(node)) {
       if (key !== 'env') {
         collectIdentifiers(node[key], set);

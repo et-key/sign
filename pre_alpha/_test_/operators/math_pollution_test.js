@@ -564,18 +564,16 @@ const _range = (start, end, step, type) => {
 };
 
 
-const __ = __unit;
-const a = _abs(-5);
-const b = _abs(10);
-const c = _abs(_arithmetic('*', -3, 5));
-const d = _abs((_concat(_concat(1, 2), 3)));
-const e = _abs(__unit);
-const f = _abs(`hello`);
+const javascript = __unit;
+const js = importModule("javascript");
+const math = _get_prop(js, "Math");
+const PI_val = _get_prop(math, "PI");
+const PI_val_reverse = _get_prop(math, "PI");
+const abs_val = _abs(-5);
 
 console.log("=== Transpiled Execution Results ===");
-try { console.log("a = ", util.inspect(a, { depth: null, colors: true })); } catch(e) {}
-try { console.log("b = ", util.inspect(b, { depth: null, colors: true })); } catch(e) {}
-try { console.log("c = ", util.inspect(c, { depth: null, colors: true })); } catch(e) {}
-try { console.log("d = ", util.inspect(d, { depth: null, colors: true })); } catch(e) {}
-try { console.log("e = ", util.inspect(e, { depth: null, colors: true })); } catch(e) {}
-try { console.log("f = ", util.inspect(f, { depth: null, colors: true })); } catch(e) {}
+try { console.log("js = ", util.inspect(js, { depth: null, colors: true })); } catch(e) {}
+try { console.log("math = ", util.inspect(math, { depth: null, colors: true })); } catch(e) {}
+try { console.log("PI_val = ", util.inspect(PI_val, { depth: null, colors: true })); } catch(e) {}
+try { console.log("PI_val_reverse = ", util.inspect(PI_val_reverse, { depth: null, colors: true })); } catch(e) {}
+try { console.log("abs_val = ", util.inspect(abs_val, { depth: null, colors: true })); } catch(e) {}

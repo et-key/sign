@@ -1,0 +1,25 @@
+` 1. Setup list
+list: 10 20 30 40 50 60 70 80 90 100 110
+
+` 2. Size and Index Access
+size: |list|
+first_item: list ' 0
+last_item: list ' -1
+last_item_at: -1 @ list
+
+` 3. Slice and Residual
+slice_range: list ' [1 ~ 3]
+residual: list ' 1~
+
+` 4. Advanced Range Slices (Custom Step & Infinite)
+arith_range_slice: list ' [0 ~+ 2 ~ 10]
+geom_range_slice: list ' [1 ~* 2 ~ 8]
+infinite_range_slice: list ' [0 ~+ 2]
+
+` 5. Arithmetic List Operations
+repeated: [0 1] * 3
+lifted: [0 1] ^ 3
+divided: [1 2 3 4] / 2
+
+` 6. Reverse
+reversed: ><list

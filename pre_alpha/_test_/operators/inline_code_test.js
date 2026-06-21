@@ -564,18 +564,8 @@ const _range = (start, end, step, type) => {
 };
 
 
-const __ = __unit;
-const a = _abs(-5);
-const b = _abs(10);
-const c = _abs(_arithmetic('*', -3, 5));
-const d = _abs((_concat(_concat(1, 2), 3)));
-const e = _abs(__unit);
-const f = _abs(`hello`);
+
+console.log('inline JS works!');
 
 console.log("=== Transpiled Execution Results ===");
-try { console.log("a = ", util.inspect(a, { depth: null, colors: true })); } catch(e) {}
-try { console.log("b = ", util.inspect(b, { depth: null, colors: true })); } catch(e) {}
-try { console.log("c = ", util.inspect(c, { depth: null, colors: true })); } catch(e) {}
-try { console.log("d = ", util.inspect(d, { depth: null, colors: true })); } catch(e) {}
-try { console.log("e = ", util.inspect(e, { depth: null, colors: true })); } catch(e) {}
-try { console.log("f = ", util.inspect(f, { depth: null, colors: true })); } catch(e) {}
+

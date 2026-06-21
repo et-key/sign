@@ -7,8 +7,49 @@
 const functionContextStack = [false];
 const inArgumentListStack = [false];
 
-export function transpile(node) {
+let currentEnv = null;
+
+export function transpile(node, env = null) {
   if (node === undefined || node === null) return '';
+
+  const savedEnv = currentEnv;
+  if (env !== null) {
+    currentEnv = env;
+  }
+  if (node && node.env) {
+    currentEnv = node.env;
+  }
+
+  try {
+    return _transpile(node);
+  } finally {
+    currentEnv = savedEnv;
+  }
+}
+
+function transpilePropertyKey(propNode) {
+  if (typeof propNode === 'string') {
+    if (propNode.startsWith('<') && propNode.endsWith('>')) {
+      const name = propNode.slice(1, -1);
+      const hasDef = currentEnv && (currentEnv.has(propNode) || currentEnv.has(`<${name}>`) || currentEnv.has(name));
+      if (!hasDef) {
+        return JSON.stringify(name);
+      }
+    }
+  }
+  return transpile(propNode);
+}
+
+function _transpile(node) {
+  if (node === undefined || node === null) return '';
+
+  if (node.type === 'inline_code') {
+    const val = node.value.trim();
+    if (val.startsWith('js:')) {
+      return val.slice(3).trim();
+    }
+    return '';
+  }
 
   if (typeof node === 'string') {
     // Unwrap identifier brackets like <map_func> to map_func
@@ -38,13 +79,13 @@ export function transpile(node) {
 
     if (node.kind === 'paren' || node.kind === 'group' || node.kind === 'bracket' || node.kind === 'brace') {
       functionContextStack.push(false);
-      const res = `(${transpile(node.content)})`;
+      const res = `(${_transpile(node.content)})`;
       functionContextStack.pop();
       return res;
     }
     if (node.kind === 'abs') {
       functionContextStack.push(false);
-      const res = `_abs(${transpile(node.content)})`;
+      const res = `_abs(${_transpile(node.content)})`;
       functionContextStack.pop();
       return res;
     }
@@ -57,9 +98,9 @@ export function transpile(node) {
           const rawLhs = s.left;
           let name = null;
           if (typeof rawLhs === 'string') {
-            name = transpile(rawLhs);
+            name = _transpile(rawLhs);
           } else if (rawLhs && rawLhs.type === 'Identifier') {
-            name = transpile(rawLhs.name);
+            name = _transpile(rawLhs.name);
           }
           if (name && !name.startsWith('(') && !name.startsWith('[')) {
             defNames.push(name);
@@ -68,12 +109,12 @@ export function transpile(node) {
 
         const isFuncBody = functionContextStack[functionContextStack.length - 1];
         if (isMatchCase(s, isFuncBody)) {
-          return `if (_isTrue(${transpile(s.left)})) return ${transpile(s.right)};`;
+          return `if (_isTrue(${_transpile(s.left)})) return ${_transpile(s.right)};`;
         }
-        let code = transpile(s);
+        let code = _transpile(s);
         if (idx === stmts.length - 1) {
           if (s.type === 'operation' && s.operator === ':') {
-            const varName = transpile(s.left);
+            const varName = _transpile(s.left);
             if (allDefs && defNames.length > 0) {
               return `${code}\n  return { ${defNames.map(n => `${n}: ${n}`).join(', ')} };`;
             }
@@ -95,7 +136,7 @@ export function transpile(node) {
   if (node.type === 'coproduct_block') {
     // If we encounter an unresolved coproduct block (which shouldn't happen after resolution),
     // we default to array representation
-    const elems = (node.statements || []).map(s => transpile(s));
+    const elems = (node.statements || []).map(s => _transpile(s));
     return `[${elems.join(', ')}]`;
   }
 
@@ -104,7 +145,7 @@ export function transpile(node) {
     if (node.position !== 'prefix' && node.position !== 'postfix') {
       if (node.operator === ':') {
         const lhs = getDefineLHS(node.left);
-        const rhs = transpile(node.right);
+        const rhs = _transpile(node.right);
         return `const ${lhs} = ${rhs}`;
       }
 
@@ -191,7 +232,7 @@ export function transpile(node) {
         const bodyCode = bodyLines.length > 0 ? bodyLines.join('\n') + '\n' : '';
         const hasRest = specs.some(p => p.isRest);
         functionContextStack.push(true);
-        const rightCode = transpile(node.right);
+        const rightCode = _transpile(node.right);
         functionContextStack.pop();
         const fnExpr = `(${argsStr}) => {\n${bodyCode}  return ${rightCode};\n}`;
         const reqLen = specs.filter(p => !p.isDestructured && p.defaultValue === null && !p.isRest).length;
@@ -201,35 +242,35 @@ export function transpile(node) {
       if (node.operator !== ',') {
         if (node.left === undefined || node.left === null) {
           const tempNode = { ...node, left: '<_x>' };
-          return `((_x) => ${transpile(tempNode)})`;
+          return `((_x) => ${_transpile(tempNode)})`;
         }
         if (node.right === undefined || node.right === null) {
           const tempNode = { ...node, right: '<_x>' };
-          return `((_x) => ${transpile(tempNode)})`;
+          return `((_x) => ${_transpile(tempNode)})`;
         }
       }
 
       // Space operator (resolved operations)
       if (node.operator === ' ') {
         if (node.name === 'concat') {
-          return `_concat(${transpile(node.left)}, ${transpile(node.right)})`;
+          return `_concat(${_transpile(node.left)}, ${_transpile(node.right)})`;
         }
         if (node.name === 'compose') {
-          return `_compose(${transpile(node.left)}, ${transpile(node.right)})`;
+          return `_compose(${_transpile(node.left)}, ${_transpile(node.right)})`;
         }
         if (node.name === 'apply') {
           inArgumentListStack.push(true);
           let argsCode;
           if (node.right && node.right.type === 'coproduct_block') {
             argsCode = (node.right.statements || []).map(s => {
-              const code = transpile(s);
+              const code = _transpile(s);
               if (s.type === 'operation' && s.operator === '~' && s.position === 'postfix') {
                 return `...${code}`;
               }
               return code;
             }).join(', ');
           } else {
-            const code = transpile(node.right);
+            const code = _transpile(node.right);
             if (node.right && node.right.type === 'operation' && node.right.operator === '~' && node.right.position === 'postfix') {
               argsCode = `...${code}`;
             } else {
@@ -237,77 +278,92 @@ export function transpile(node) {
             }
           }
           inArgumentListStack.pop();
-          return `_call(${transpile(node.left)}, ${argsCode})`;
+          return `_call(${_transpile(node.left)}, ${argsCode})`;
         }
         
         // Unresolved space operator (should be resolved by semanticize, but handle safely)
         inArgumentListStack.push(true);
-        const rightEval = transpile(node.right);
+        const rightEval = _transpile(node.right);
         inArgumentListStack.pop();
-        return `_call(${transpile(node.left)}, ${rightEval})`;
+        return `_call(${_transpile(node.left)}, ${rightEval})`;
       }
 
       if (node.operator === ',') {
-        const lhs = node.left !== undefined && node.left !== null ? transpile(node.left) : '__hole';
-        const rhs = node.right !== undefined && node.right !== null ? transpile(node.right) : '__hole';
+        const lhs = node.left !== undefined && node.left !== null ? _transpile(node.left) : '__hole';
+        const rhs = node.right !== undefined && node.right !== null ? _transpile(node.right) : '__hole';
         return `_product(${lhs}, ${rhs})`;
       }
 
       // Range operators
-      // Range operators
+      if (['~+', '~-', '~*', '~/', '~^'].includes(node.operator)) {
+        let type = 'arithmetic';
+        let step = _transpile(node.right);
+        if (node.operator === '~-') {
+          step = `-(${step})`;
+        } else if (node.operator === '~*') {
+          type = 'geometric';
+        } else if (node.operator === '~/') {
+          type = 'geometric';
+          step = `1/(${step})`;
+        } else if (node.operator === '~^') {
+          type = 'power';
+        }
+        return `_range(${_transpile(node.left)}, null, ${step}, '${type}')`;
+      }
+
       if (node.operator === '~') {
         if (node.left && node.left.type === 'operation') {
           if (node.left.operator === '~+') {
-            return `_range(${transpile(node.left.left)}, ${transpile(node.right)}, ${transpile(node.left.right)}, 'arithmetic')`;
+            return `_range(${_transpile(node.left.left)}, ${_transpile(node.right)}, ${_transpile(node.left.right)}, 'arithmetic')`;
           }
           if (node.left.operator === '~-') {
-            return `_range(${transpile(node.left.left)}, ${transpile(node.right)}, -(${transpile(node.left.right)}), 'arithmetic')`;
+            return `_range(${_transpile(node.left.left)}, ${_transpile(node.right)}, -(${_transpile(node.left.right)}), 'arithmetic')`;
           }
           if (node.left.operator === '~*') {
-            return `_range(${transpile(node.left.left)}, ${transpile(node.right)}, ${transpile(node.left.right)}, 'geometric')`;
+            return `_range(${_transpile(node.left.left)}, ${_transpile(node.right)}, ${_transpile(node.left.right)}, 'geometric')`;
           }
           if (node.left.operator === '~/') {
-            return `_range(${transpile(node.left.left)}, ${transpile(node.right)}, 1/(${transpile(node.left.right)}), 'geometric')`;
+            return `_range(${_transpile(node.left.left)}, ${_transpile(node.right)}, 1/(${_transpile(node.left.right)}), 'geometric')`;
           }
           if (node.left.operator === '~^') {
-            return `_range(${transpile(node.left.left)}, ${transpile(node.right)}, ${transpile(node.left.right)}, 'power')`;
+            return `_range(${_transpile(node.left.left)}, ${_transpile(node.right)}, ${_transpile(node.left.right)}, 'power')`;
           }
         }
-        return `_range(${transpile(node.left)}, ${transpile(node.right)}, null, 'arithmetic')`;
+        return `_range(${_transpile(node.left)}, ${_transpile(node.right)}, null, 'arithmetic')`;
       }
 
 
       // Logical operators in Sign: & (and), | (or), ; (xor)
       if (node.operator === '&') {
-        return `_and(${transpile(node.left)}, ${transpile(node.right)})`;
+        return `_and(${_transpile(node.left)}, ${_transpile(node.right)})`;
       }
       if (node.operator === '|') {
-        return `_or(${transpile(node.left)}, ${transpile(node.right)})`;
+        return `_or(${_transpile(node.left)}, ${_transpile(node.right)})`;
       }
       if (node.operator === ';') {
-        return `_xor(${transpile(node.left)}, ${transpile(node.right)})`;
+        return `_xor(${_transpile(node.left)}, ${_transpile(node.right)})`;
       }
 
       // Bitwise operators in Sign: && (bitwise AND), || (bitwise OR), ;; (bitwise XOR), << (shift left), >> (shift right)
       if (node.operator === '&&') {
-        return `(${transpile(node.left)} & ${transpile(node.right)})`;
+        return `(${_transpile(node.left)} & ${_transpile(node.right)})`;
       }
       if (node.operator === '||') {
-        return `(${transpile(node.left)} | ${transpile(node.right)})`;
+        return `(${_transpile(node.left)} | ${_transpile(node.right)})`;
       }
       if (node.operator === ';;') {
-        return `(${transpile(node.left)} ^ ${transpile(node.right)})`;
+        return `(${_transpile(node.left)} ^ ${_transpile(node.right)})`;
       }
       if (node.operator === '<<') {
-        return `(${transpile(node.left)} << ${transpile(node.right)})`;
+        return `(${_transpile(node.left)} << ${_transpile(node.right)})`;
       }
       if (node.operator === '>>') {
-        return `(${transpile(node.left)} >> ${transpile(node.right)})`;
+        return `(${_transpile(node.left)} >> ${_transpile(node.right)})`;
       }
 
       // Exponentiation in Sign: ^
       if (node.operator === '^') {
-        return `_arithmetic('^', ${transpile(node.left)}, ${transpile(node.right)})`;
+        return `_arithmetic('^', ${_transpile(node.left)}, ${_transpile(node.right)})`;
       }
 
       // Comparisons in Sign: <, >, <=, >=, ==, !==, =, !=
@@ -326,27 +382,28 @@ export function transpile(node) {
           }
 
           const opsStr = chain.ops.map(op => `'${op}'`).join(', ');
-          const exprsStr = chain.exprs.map(e => transpile(e)).join(', ');
+          const exprsStr = chain.exprs.map(e => _transpile(e)).join(', ');
           return `_compareChain([${opsStr}], [${exprsStr}])`;
         }
-        return `_compare('${node.operator}', ${transpile(node.left)}, ${transpile(node.right)})`;
+        return `_compare('${node.operator}', ${_transpile(node.left)}, ${_transpile(node.right)})`;
       }
 
       // Standard arithmetic binary ops: +, -, *, /, %
       if (['+', '-', '*', '/', '%'].includes(node.operator)) {
-        return `_arithmetic('${node.operator}', ${transpile(node.left)}, ${transpile(node.right)})`;
+        return `_arithmetic('${node.operator}', ${_transpile(node.left)}, ${_transpile(node.right)})`;
       }
 
       // Object / Property / Module access
       if (node.operator === "'") {
-        return `_get_prop(${transpile(node.left)}, ${transpile(node.right)})`;
+        const propCode = transpilePropertyKey(node.right);
+        return `_get_prop(${_transpile(node.left)}, ${propCode})`;
       }
       if (node.operator === '@') {
-        // Swap left and right for @
-        return `_get_prop(${transpile(node.right)}, ${transpile(node.left)})`;
+        const propCode = transpilePropertyKey(node.left);
+        return `_get_prop(${_transpile(node.right)}, ${propCode})`;
       }
       if (node.operator === '#') {
-        return `_overwrite(${transpile(node.left)}, ${transpile(node.right)})`;
+        return `_overwrite(${_transpile(node.left)}, ${_transpile(node.right)})`;
       }
 
       // Standard binary ops
@@ -355,6 +412,9 @@ export function transpile(node) {
 
     // Prefix Operators
     if (node.position === 'prefix') {
+      if (node.operator === '><') {
+        return `_reverse(${transpile(node.operand)})`;
+      }
       if (node.operator === '~') {
         return `[${transpile(node.operand)}]`;
       }
@@ -383,7 +443,8 @@ export function transpile(node) {
       }
       if (node.operator === '@') {
         // Module import: convert file to import
-        return `importModule(${transpile(node.operand)})`;
+        const moduleCode = transpilePropertyKey(node.operand);
+        return `importModule(${moduleCode})`;
       }
       return `${transpile(node.operand)}${node.operator}`;
     }

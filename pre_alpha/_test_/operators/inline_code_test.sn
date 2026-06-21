@@ -1,0 +1,6 @@
+` JS Inline test
+"js: console.log('inline JS works!')"
+
+` AArch64 Assembly Inline test
+my_asm_func: x ?
+	"aarch64: MOV X0, #42"

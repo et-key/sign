@@ -1,0 +1,10 @@
+` Spread Import
+js : javascript@
+math : js'Math
+
+` Property Access
+PI_val : math'PI
+PI_val_reverse : PI @ math
+
+` Logical, Bitwise, Math
+abs_val : |-5|

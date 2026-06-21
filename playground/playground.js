@@ -256,7 +256,7 @@ runBtn.addEventListener('click', async () => {
         }
       }
 
-      const jsCode = transpile(resolved);
+      const jsCode = transpile(resolved, globalEnv);
       if (jsCode) {
         jsStatements.push(jsCode);
       }

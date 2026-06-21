@@ -1,0 +1,6 @@
+` Test character arithmetic and point-free mapping over a string
+char_val : \a + 0
+char_val_shifted : \a + 1
+
+` Point-free mapping to get unicode code points of a string
+codepoints : [+ 0,] `abc`

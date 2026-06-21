@@ -1,3 +1,18 @@
+﻿=== Compiling and Transpiling: pre_alpha/_test_/operators/inline_code_test.sn ===
+=== AST ===
+[
+  null,
+  {
+    "type": "inline_code",
+    "value": "js: console.log('inline JS works!')"
+  },
+  null,
+  {
+    "type": "inline_code",
+    "value": "aarch64: MOV X0, #42"
+  }
+]
+=== Generated JavaScript Code ===
 
 import _ from 'white_cats';
 import util from 'util';
@@ -564,18 +579,18 @@ const _range = (start, end, step, type) => {
 };
 
 
-const __ = __unit;
-const a = _abs(-5);
-const b = _abs(10);
-const c = _abs(_arithmetic('*', -3, 5));
-const d = _abs((_concat(_concat(1, 2), 3)));
-const e = _abs(__unit);
-const f = _abs(`hello`);
+
+console.log('inline JS works!');
 
 console.log("=== Transpiled Execution Results ===");
-try { console.log("a = ", util.inspect(a, { depth: null, colors: true })); } catch(e) {}
-try { console.log("b = ", util.inspect(b, { depth: null, colors: true })); } catch(e) {}
-try { console.log("c = ", util.inspect(c, { depth: null, colors: true })); } catch(e) {}
-try { console.log("d = ", util.inspect(d, { depth: null, colors: true })); } catch(e) {}
-try { console.log("e = ", util.inspect(e, { depth: null, colors: true })); } catch(e) {}
-try { console.log("f = ", util.inspect(f, { depth: null, colors: true })); } catch(e) {}
+
+
+
+Files generated:
+  JS: C:\Users\johnn\project\Sign\pre_alpha\_test_\operators\inline_code_test.js
+  TS: C:\Users\johnn\project\Sign\pre_alpha\_test_\operators\inline_code_test.d.ts
+
+=== Execution Output ===
+inline JS works!
+=== Transpiled Execution Results ===
+

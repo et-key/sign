@@ -26,6 +26,28 @@ const _isTrue = (val) => {
 };
 
 const _concat = (...args) => {
+  const isPlainObj = (o) => typeof o === 'object' && o !== null && !Array.isArray(o) && !(o instanceof ExpandedObject) && !(o instanceof Address) && !(typeof Promise !== 'undefined' && o instanceof Promise);
+  
+  if (args.length > 0 && args.every(isPlainObj)) {
+    const merged = {};
+    let typeMismatch = false;
+    for (const obj of args) {
+      for (const key of Object.keys(obj)) {
+        if (key in merged) {
+          const tL = typeof merged[key];
+          const tR = typeof obj[key];
+          if (tL !== tR && merged[key] !== __hole && obj[key] !== __hole && merged[key] !== __unit && obj[key] !== __unit) {
+            typeMismatch = true;
+            break;
+          }
+        }
+        merged[key] = obj[key];
+      }
+      if (typeMismatch) return __unit;
+    }
+    return merged;
+  }
+
   const flats = args.map(a => Array.isArray(a) ? a.flat(1) : [a]).flat(1).filter(x => x !== __unit);
   if (flats.length === 0) return __unit;
   if (flats.some(x => typeof x === 'string')) {
@@ -105,7 +127,6 @@ function _resolveNamedArgs(fn, args) {
       for (const key of Object.keys(obj)) {
         if (!consumedKeys.has(key)) {
           restObj[key] = obj[key];
-          restObj[Symbol.for(key)] = obj[key];
         }
       }
       resolvedArgs.push(restObj);
@@ -350,13 +371,14 @@ function _callInternal(left, ...args) {
     const res = _call(args[0], left);
     return _call(res, ...args.slice(1));
   }
+
   const res = _concat(left, args[0]);
   return _call(res, ...args.slice(1));
 }
 
 const _arithmetic = (op, left, right) => {
   if (left === __unit || right === __unit) {
-    return left === __unit ? right : left;
+    return __unit;
   }
   if (left === __hole || right === __hole) {
     return [Symbol.for(op), left, right];
@@ -392,6 +414,11 @@ const _arithmetic = (op, left, right) => {
 };
 
 const _compare = (op, left, right) => {
+  if (op !== '==' && op !== '=' && op !== '!==' && op !== '!=') {
+    if (left === __unit || right === __unit) {
+      return __unit;
+    }
+  }
   let cond = false;
   switch (op) {
     case '==':
@@ -429,6 +456,14 @@ const _compare = (op, left, right) => {
   return __unit;
 };
 
+const _compareChain = (ops, vals) => {
+  for (let i = 0; i < ops.length; i++) {
+    const res = _compare(ops[i], vals[i], vals[i+1]);
+    if (res === __unit) return __unit;
+  }
+  return vals[1];
+};
+
 const _and = (left, right) => {
   if (!_isTrue(left)) return __unit;
   return right;
@@ -453,6 +488,15 @@ const _factorial = (n) => {
   let r = 1;
   for (let i = 2; i <= n; i++) r *= i;
   return r;
+};
+
+const _abs = (x) => {
+  if (x === __unit) return __unit;
+  if (x === __hole) return __hole;
+  if (Array.isArray(x)) return x.length;
+  if (typeof x === 'string') return x.length;
+  if (typeof x === 'number') return Math.abs(x);
+  return x;
 };
 
 const _get_prop = (obj, prop) => {

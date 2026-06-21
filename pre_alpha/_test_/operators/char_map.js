@@ -564,18 +564,12 @@ const _range = (start, end, step, type) => {
 };
 
 
-const __ = __unit;
-const a = _abs(-5);
-const b = _abs(10);
-const c = _abs(_arithmetic('*', -3, 5));
-const d = _abs((_concat(_concat(1, 2), 3)));
-const e = _abs(__unit);
-const f = _abs(`hello`);
+
+const char_val = _arithmetic('+', "a", 0);
+const char_val_shifted = _arithmetic('+', "a", 1);
+const codepoints = _call(_makePointFreeMapFilter(((x) => _arithmetic('+', x, 0)), false), `abc`);
 
 console.log("=== Transpiled Execution Results ===");
-try { console.log("a = ", util.inspect(a, { depth: null, colors: true })); } catch(e) {}
-try { console.log("b = ", util.inspect(b, { depth: null, colors: true })); } catch(e) {}
-try { console.log("c = ", util.inspect(c, { depth: null, colors: true })); } catch(e) {}
-try { console.log("d = ", util.inspect(d, { depth: null, colors: true })); } catch(e) {}
-try { console.log("e = ", util.inspect(e, { depth: null, colors: true })); } catch(e) {}
-try { console.log("f = ", util.inspect(f, { depth: null, colors: true })); } catch(e) {}
+try { console.log("char_val = ", util.inspect(char_val, { depth: null, colors: true })); } catch(e) {}
+try { console.log("char_val_shifted = ", util.inspect(char_val_shifted, { depth: null, colors: true })); } catch(e) {}
+try { console.log("codepoints = ", util.inspect(codepoints, { depth: null, colors: true })); } catch(e) {}

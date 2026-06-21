@@ -101,6 +101,7 @@ export const OPERATOR_BY_PRECEDENCE = [
     '@': { position: 'prefix', name: 'input' },
     '!!': { position: 'prefix', name: 'bit_not' },
     '-': { position: 'prefix', name: 'negate' }, // 仕様書に明記は無いが事実上の前置演算子
+    '><': { position: 'prefix', name: 'reverse' },
   },
   { // 24
     '(...)': { position: 'enclosure', name: 'block_paren' },
@@ -187,7 +188,7 @@ export function buildLexerRegex() {
 
   // 今回はユーザーの `separateInfix` に合わせて、 `!!` などを保護対象に含める
   // （ユーザーの元の正規表現を踏襲しつつ、動的に生成する）
-  const regexStr = `(\`[^\`\\r\\n]*\`|\`[^\\r\\n]*|\\\\.|!!)|(${infixPattern})`;
+  const regexStr = `(\`[^\`\\r\\n]*\`|\`[^\\r\\n]*|"(\\\\.|[^"\\r\\n])*"|\\\\.|!!)|(${infixPattern})`;
 
   return new RegExp(regexStr, 'g');
 }
