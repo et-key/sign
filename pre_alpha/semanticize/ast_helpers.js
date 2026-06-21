@@ -66,7 +66,13 @@ export function buildEnvironment(node, env = new Map()) {
       return env;
     }
     if (node.type === 'operation' && node.operator === ':') {
-      const identName = typeof node.left === 'string' ? node.left : (node.left.name || String(node.left));
+      let identName = typeof node.left === 'string' ? node.left : (node.left.name || String(node.left));
+      if (node.left && node.left.type === 'block' && node.left.kind === 'bracket') {
+        const content = node.left.content;
+        if (content && content.type === 'operation') {
+          identName = `[${content.operator}]`;
+        }
+      }
       let rightCat = getInitialCategory(node.right, currentEnv);
       const arity = getArity(node.right, currentEnv);
       if (arity > 0) {

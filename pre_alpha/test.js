@@ -1,15 +1,13 @@
-import { preprocess } from './lexisize/lexer.js';
-import * as parser from './parse/minimal.js';
-import { buildAST } from './semanticize/shunting_yard.js';
-import { buildEnvironment } from './semanticize/builder.js';
-import { resolveCoproducts } from './semanticize/coproduct_resolver.js';
-import { evaluate } from './semanticize/evaluator.js';
-import { generateST } from './semanticize/st_generator.js';
-import { evaluateType } from './semanticize/type_evaluator.js';
-import { generateAArch64 } from './backend/aarch64.js';
-import util from 'util';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
+import { preprocess } from './lexisize/lexer.js';
+import * as parser from './parse/minimal.js';
+import { resolveCoproducts } from './semanticize/coproduct_resolver.js';
+import { transpile } from './backend/js_codegen.js';
+import { RUNTIME_HELPERS_CODE } from './backend/runtime_helpers.js';
+import { buildEnvironment, desugarHoles, collectIdentifiers } from './semanticize/ast_helpers.js';
+import { generateTypeScriptDef } from './backend/ts_codegen.js';
 
 const testDir = './_test_';
 
@@ -32,139 +30,149 @@ const files = fs.existsSync(testDir) ? findTestFiles(testDir) : [];
 
 if (files.length === 0) {
   console.log(`No .sn test files found in ${testDir}`);
+  process.exit(0);
 }
 
+console.log(`Found ${files.length} test files. Starting compilation phase...`);
+
+const generatedFiles = [];
+const compilationErrors = {};
+
+// Phase 1: Compile all files first to allow cross-module imports
 for (const filePath of files) {
-  const tc = fs.readFileSync(filePath, 'utf-8');
-  console.log(`\n=== File: ${filePath} ===`);
   try {
-    // 1. Lexer (前処理)
-    const preprocessed = preprocess(tc);
-    const visible = preprocessed.replace(/\x02/g, '<INDENT>').replace(/\x03/g, '<DEDENT>').replace(/\x04/g, '<ABS_START>').replace(/\x05/g, '<ABS_END>');
-    console.log(`[Lexer output]: ${visible.replace(/\n/g, '\\n')}`);
+    const sourceCode = fs.readFileSync(filePath, 'utf8');
+    const pre = preprocess(sourceCode);
+    const astProg = parser.parse(pre);
 
-    // 2. PEG Parser (構文解析)
-    const astProgram = parser.parse(preprocessed);
-    const astLines = astProgram.filter(line => line !== null && line !== undefined);
-
-    // 新しいパイプライン:
-    // 1. buildAST (shunting yard)
-    // 2. buildEnvironment (スコープとカテゴリ判定)
-    // 3. resolveCoproducts (優先順位に基づくAST階層調整)
-    // 4. evaluate (値の評価)
-    // 5. infer (Algorithm Wによる型推論)
     let globalEnv = new Map();
-    let typeEnv = new Map();
+    const rawLines = astProg.filter(line => line !== null && line !== undefined);
+    const astLines = rawLines.map(desugarHoles);
 
-    const astTrees = astLines.map(astLine => {
-      // 1. Shunting Yard (優先順位解決 -> AST)
-      let astTree = buildAST(Array.isArray(astLine) && astLine.length === 1 && Array.isArray(astLine[0]) ? astLine[0] : astLine);
-
-      // 2. 環境構築 (ローカルスコープとカテゴリ判定)
-      globalEnv = buildEnvironment(astTree, globalEnv);
-
-      // 3. 優先順位解決 (coproduct_block の還元)
-      astTree = resolveCoproducts(astTree, globalEnv);
-
-      // 4. 値の抽象評価 (Partial Evaluation)
-      // ASTの部分適用や実行時の簡約を行います。（コード生成用）
-      const evalTree = evaluate(astTree, globalEnv);
-      if (filePath.endsWith('generator.sn')) {
-        console.log(`[DEBUG evalTree]`, JSON.stringify(evalTree, null, 2));
-      }
-
-      // 5. ボトムアップ型評価
-      // evalTreeを入力として型を演算子シグネチャに基づいて決定します。
-      const resolvedType = evaluateType(evalTree, typeEnv);
-      
-      // JSONやAssembly用には簡約済みのASTを返しつつ、型情報はST用に別管理すべきですが、
-      // ここではSTファイル出力のために resolvedType をASTとして扱います。
-      // astTreeの各statementに推論された型をアタッチします。
-      let updatedStatements;
-      if (astTree && Array.isArray(astTree.statements)) {
-        updatedStatements = astTree.statements.map((stmt, i) => {
-          if (resolvedType && resolvedType.type === 'coproduct_block' && resolvedType.statements) {
-            return { ...stmt, inferredType: resolvedType.statements[i] };
-          }
-          return stmt;
-        });
-        return { ...astTree, statements: updatedStatements, inferredType: resolvedType };
-      } else if (Array.isArray(astTree)) {
-        updatedStatements = astTree.map((stmt, i) => {
-          if (resolvedType && resolvedType.type === 'coproduct_block' && resolvedType.statements) {
-            return { ...stmt, inferredType: resolvedType.statements[i] };
-          }
-          return stmt;
-        });
-        return { type: 'file', statements: updatedStatements, inferredType: resolvedType };
-      }
-      
-      return { ...astTree, inferredType: resolvedType };
+    astLines.forEach(astLine => {
+      buildEnvironment(astLine, globalEnv);
     });
 
-    // Write JSON output
-    const outPathJson = filePath.replace(/\.(sign|sn)$/, '.json');
-    fs.writeFileSync(outPathJson, JSON.stringify(astTrees.length === 1 ? astTrees[0] : astTrees, null, 2), 'utf-8');
+    const jsStatements = [];
+    const definedVars = [];
 
-    // Write .st Type Signature output
-    const outPathSt = filePath.replace(/\.(sign|sn)$/, '.st');
-    // .stには推論済みの型出力する
-    const stInput = astTrees
-      .filter(t => t && t.type === 'operation' && t.operator === ':')
-      .map(t => {
-        if (t.inferredType) return { type: 'operation', operator: ':', left: t.left || t.name, right: t.inferredType };
-        return t;
-      });
-    if (filePath.endsWith('generator.sn')) {
-      console.log(`[DEBUG stInput]`, JSON.stringify(stInput, null, 2));
+    astLines.forEach(astLine => {
+      const resolved = resolveCoproducts(astLine, globalEnv);
+      if (resolved && resolved.type === 'operation' && resolved.operator === ':') {
+        const identName = typeof resolved.left === 'string' ? resolved.left : (resolved.left.name || String(resolved.left));
+        if (identName.startsWith('<') && identName.endsWith('>')) {
+          definedVars.push(identName.slice(1, -1));
+        }
+      }
+      buildEnvironment(resolved, globalEnv);
+      const jsCode = transpile(resolved, globalEnv);
+      if (jsCode) {
+        jsStatements.push(jsCode);
+      }
+    });
+
+    const usedIdents = new Set();
+    astLines.forEach(line => collectIdentifiers(line, usedIdents));
+
+    const undefinedIdents = [];
+    usedIdents.forEach(id => {
+      if (!globalEnv.has(`<${id}>`) && id !== '_' && id !== 'print') {
+        undefinedIdents.push(id);
+      }
+    });
+
+    const undefinedDeclarations = undefinedIdents.map(id => `const ${id} = __unit;`).join('\n');
+
+    const runtimeHelpers = `
+import _ from 'white_cats';
+import util from 'util';
+import fs from 'fs';
+
+${RUNTIME_HELPERS_CODE}
+`;
+
+    const loggingBlock = `
+console.log("=== Transpiled Execution Results ===");
+${definedVars.map(v => `try { console.log("${v} = ", util.inspect(${v}, { depth: null, colors: true })); } catch(e) {}`).join('\n')}
+`;
+
+    const fullJsCode = `${runtimeHelpers}\n${undefinedDeclarations}\n${jsStatements.map(s => s + ';').join('\n')}\n${loggingBlock}`;
+
+    // Output files
+    const jsFilePath = filePath.replace(/\.(sign|sn)$/, '.js');
+    const dtsFilePath = filePath.replace(/\.(sign|sn)$/, '.d.ts');
+
+    fs.writeFileSync(jsFilePath, fullJsCode, 'utf8');
+    generatedFiles.push(jsFilePath);
+    generatedFiles.push(dtsFilePath);
+
+    // Try to generate TS defs just to make sure it doesn't crash
+    try {
+      const resolvedLines = astLines.map(astLine => resolveCoproducts(astLine, globalEnv));
+      const dtsCode = generateTypeScriptDef(resolvedLines, globalEnv);
+      fs.writeFileSync(dtsFilePath, dtsCode, 'utf8');
+    } catch (e) {
+      // TS def generation is secondary, log but don't fail compile
+      console.warn(`[Warning] TS definition generation failed for ${filePath}: ${e.message}`);
     }
-    const stContent = generateST(stInput);
-    fs.writeFileSync(outPathSt, stContent, 'utf-8');
-
-    // Write .s AArch64 output
-    const outPathS = filePath.replace(/\.(sign|sn)$/, '.s');
-    // Assemblyは元のastTreeを使う（今回は簡易的にastTreeそのまま）
-    const asmContent = generateAArch64(astTrees);
-    fs.writeFileSync(outPathS, asmContent, 'utf-8');
-
-    console.log(`[Success] Compiled to: ${outPathJson} and ${outPathS}`);
 
   } catch (err) {
-    let errMsg = "";
-    if (err.location) {
-      errMsg = `[Parse Error] Expected ${err.expected.map(e => e.text ? `"${e.text}"` : `[${e.parts.join('')}]`).join(', ')} but "${err.found}" found.`;
-    } else {
-      errMsg = `[Error] ${err.stack || err.message}`;
-    }
-    console.error(errMsg);
-
-    const outPath = filePath.replace(/\.(sign|sn)$/, '.json');
-    fs.writeFileSync(outPath, JSON.stringify({ error: errMsg }, null, 2), 'utf-8');
-    console.log(`[Error] Written to: ${outPath}`);
+    compilationErrors[filePath] = err.stack || err.message;
   }
 }
 
-/**
- * AST の type_detail を最終的な代入で解決する
- */
-function resolveTypeDetails(node, subst) {
-  if (!node || typeof node !== 'object') return;
+console.log(`\nCompilation phase complete. Starting execution phase...`);
 
-  if (node.type_detail) {
-    node.type_detail = subst.apply(node.type_detail);
+const successList = [];
+const failList = [];
+
+// Phase 2: Execute all compiled tests
+for (const filePath of files) {
+  if (compilationErrors[filePath]) {
+    failList.push({
+      path: filePath,
+      phase: 'Compile',
+      error: compilationErrors[filePath]
+    });
+    continue;
   }
 
-  if (node.type === 'operation') {
-    resolveTypeDetails(node.left, subst);
-    resolveTypeDetails(node.right, subst);
-    if (node.operand) resolveTypeDetails(node.operand, subst);
-  } else if (node.type === 'block') {
-    if (Array.isArray(node.content)) {
-      node.content.forEach(c => resolveTypeDetails(c, subst));
-    } else {
-      resolveTypeDetails(node.content, subst);
-    }
-  } else if (node.type === 'coproduct_block' && node.statements) {
-    node.statements.forEach(s => resolveTypeDetails(s, subst));
+  const jsFilePath = filePath.replace(/\.(sign|sn)$/, '.js');
+
+  try {
+    execSync(`node ${jsFilePath}`, { encoding: 'utf8', stdio: 'pipe' });
+    successList.push(filePath);
+  } catch (err) {
+    failList.push({
+      path: filePath,
+      phase: 'Execute',
+      error: err.stdout || err.stderr || err.message
+    });
   }
+}
+
+// Phase 3: Cleanup generated files
+console.log(`\nCleaning up temporary generated files...`);
+for (const gFile of generatedFiles) {
+  if (fs.existsSync(gFile)) {
+    fs.unlinkSync(gFile);
+  }
+}
+
+// Output final results
+console.log(`\n=== Test Suite Results ===`);
+console.log(`Total tests run: ${files.length}`);
+console.log(`Success: ${successList.length}`);
+console.log(`Fail: ${failList.length}`);
+
+if (failList.length > 0) {
+  console.log(`\n--- Failed Tests Details ---`);
+  failList.forEach(fail => {
+    console.log(`\n[FAIL] [${fail.phase} Phase] ${fail.path}`);
+    console.log(fail.error);
+  });
+  process.exit(1);
+} else {
+  console.log(`\nAll tests passed successfully!`);
+  process.exit(0);
 }

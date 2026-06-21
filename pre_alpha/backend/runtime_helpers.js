@@ -15,6 +15,12 @@ const _deref = (x) => {
   return x;
 };
 
+const _negate = (x) => {
+  if (x === __unit || x === __hole) return x;
+  if (Array.isArray(x)) return x.map(_negate);
+  return -x;
+};
+
 const _isTrue = (val) => {
   if (val === __hole || val === __unit) return false;
   if (Array.isArray(val) && val.length === 0) return false;
@@ -22,16 +28,6 @@ const _isTrue = (val) => {
 };
 
 const _concat = (...args) => {
-  if (args.length > 0) {
-    const first = args[0];
-    if (typeof first === 'function') {
-      return _call(first, ...args.slice(1));
-    }
-    if (Array.isArray(first) && first.length > 0 && typeof first[0] === 'function') {
-      return _call(first[0], ...first.slice(1), ...args.slice(1));
-    }
-  }
-
   const isPlainObj = (o) => typeof o === 'object' && o !== null && !Array.isArray(o) && !(o instanceof ExpandedObject) && !(o instanceof Address) && !(typeof Promise !== 'undefined' && o instanceof Promise);
   
   if (args.length > 0 && args.every(isPlainObj)) {
@@ -87,15 +83,44 @@ const _product = (left, right) => {
   return [left, right];
 };
 
+class ExpandedStream {
+  constructor(stream) {
+    this.stream = stream;
+  }
+}
 class ExpandedObject {
   constructor(obj) {
     this.obj = obj;
   }
 }
 const _expand = (a) => {
+  if (a && a.isStream) {
+    return a;
+  }
   if (Array.isArray(a)) {
+    if (a.length === 1 && a[0] && a[0].isStream) {
+      return a[0];
+    }
     if (a.length === 0) return [__unit];
     return a.flat(1);
+  }
+  if (a === 0) {
+    return {
+      [Symbol.iterator]: function* () {
+        const buffer = Buffer.alloc(1);
+        while (true) {
+          try {
+            const bytesRead = fs.readSync(0, buffer, 0, 1, null);
+            if (bytesRead === 0) break;
+            yield buffer.toString('utf8', 0, bytesRead);
+          } catch (e) {
+            break;
+          }
+        }
+      },
+      isStream: true,
+      start: a
+    };
   }
   if (typeof a === 'number') {
     return {
@@ -248,6 +273,45 @@ function _call(left, ...args) {
 
 function _callInternal(left, ...args) {
   if (args.length === 0) return left;
+
+  const hasExpandedStream = args.some(x => x instanceof ExpandedStream);
+  if (hasExpandedStream) {
+    const fnObj = left.__isCurried ? left.target : left;
+    const specs = (fnObj && fnObj.paramSpecs) || [];
+    const resolvedArgs = [];
+    
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      if (arg instanceof ExpandedStream) {
+        const iterator = arg.stream[Symbol.iterator]();
+        
+        while (true) {
+          const currentSpec = specs[resolvedArgs.length];
+          if (!currentSpec) {
+            break;
+          }
+          
+          if (currentSpec.isRest) {
+            resolvedArgs.push({
+              [Symbol.iterator]: () => iterator,
+              isStream: true
+            });
+            break;
+          } else {
+            const { value, done } = iterator.next();
+            if (done) {
+              resolvedArgs.push(__unit);
+            } else {
+              resolvedArgs.push(value);
+            }
+          }
+        }
+      } else {
+        resolvedArgs.push(arg);
+      }
+    }
+    args = resolvedArgs;
+  }
   
   if (Array.isArray(left)) {
     if (left.length > 0 && typeof left[0] === 'function') {

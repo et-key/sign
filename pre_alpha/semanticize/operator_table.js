@@ -27,6 +27,7 @@ export const OPERATOR_BY_PRECEDENCE = [
   },
   { // 6
     '|': { position: 'infix', name: 'or' },
+    '|/': { position: 'infix', name: 'div_or' },
   },
   { // 7
     '&': { position: 'infix', name: 'and' },

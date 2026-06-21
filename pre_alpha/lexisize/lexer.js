@@ -118,7 +118,7 @@ function markBlock(input) {
 
 // 識別子としての絶対値囲み（|...|）と中置OR（|）を空白の有無で解決する関数
 export function resolveAbsoluteValue(input) {
-  return input.replace(/([^\s|])\|([^\s|])/g, '$1 | $2');
+  return input.replace(/([^\s|])\|([^\s|/])/g, '$1 | $2');
 }
 
 // 今後の拡張用（インデントに基づくブロック構築などの前処理）

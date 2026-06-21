@@ -1,22 +1,36 @@
 import fs from 'fs';
 import { preprocess } from './lexisize/lexer.js';
 import * as parser from './parse/minimal.js';
-import { buildAST } from './semanticize/shunting_yard.js';
+import { resolveCoproducts } from './semanticize/coproduct_resolver.js';
+import { transpile } from './backend/js_codegen.js';
+import { buildEnvironment, desugarHoles } from './semanticize/ast_helpers.js';
 
-const rawCode = fs.readFileSync('_test_/io/memory_mapped.sn', 'utf8');
-const processedCode = preprocess(rawCode);
-const tokens = parser.tokenize(processedCode);
-const ast = buildAST(tokens);
+const source = `a | -b | c`;
+console.log('--- Source ---');
+console.log(source);
 
-function walk(n) {
-  if (!n) return;
-  if (n.operator === ':') {
-     console.log('DEFINE:', n);
-  }
-  if (n.left) walk(n.left);
-  if (n.right) walk(n.right);
-  if (n.content) walk(n.content);
-  if (n.statements) n.statements.forEach(walk);
-}
+const pre = preprocess(source);
+console.log('--- Preprocessed ---');
+console.log(JSON.stringify(pre));
 
-walk(ast);
+const astProg = parser.parse(pre);
+console.log('--- Parsed AST ---');
+console.log(JSON.stringify(astProg, null, 2));
+
+const rawLines = astProg.filter(line => line !== null && line !== undefined);
+const astLines = rawLines.map(desugarHoles);
+
+let globalEnv = new Map();
+astLines.forEach(astLine => {
+  buildEnvironment(astLine, globalEnv);
+});
+
+astLines.forEach(astLine => {
+  const resolved = resolveCoproducts(astLine, globalEnv);
+  console.log('--- Resolved AST ---');
+  console.log(JSON.stringify(resolved, null, 2));
+  
+  const jsCode = transpile(resolved, globalEnv);
+  console.log('--- Transpiled Code ---');
+  console.log(jsCode);
+});

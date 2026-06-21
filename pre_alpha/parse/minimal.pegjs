@@ -103,8 +103,18 @@ LogicalXor
 
 // Level 6: Logical OR (|)
 LogicalOr
-  = head:LogicalAnd tail:(_ "|" _ LogicalAnd)* {
-      return buildBinaryTree(head, tail, "or");
+  = head:LogicalAnd tail:(_ op:("|/" / "|") _ LogicalAnd)* {
+      return tail.reduce(function(result, element) {
+        const op = element[1];
+        const name = op === "|/" ? "div_or" : "or";
+        return {
+          type: "operation",
+          operator: op,
+          left: result,
+          right: element[3],
+          name: name
+        };
+      }, head);
     }
 
 // Level 7: Logical AND (&)
@@ -430,7 +440,7 @@ ub = "_"
 
 // --- Prefix/Postfix Operators ---
 prefix
-  = "><" / "~" / "!!" / "!" / "$" / "@" / ("-" &(Block / identifier))
+  = "><" / "~" / "!!" / "!" / "$" / "@" / ("-" &(Block / identifier)) { return "-"; }
 
 postfix
   = "!" / "~" / "@"
@@ -438,4 +448,4 @@ postfix
 all_operators
   = "###" / "##" / "#"
   / "!==" / "==" / "!=" / "<=" / ">=" / "<<" / ">>" / "||" / ";;" / "&&" / "!!" / "~+" / "~-" / "~*" / "~/" / "~^"
-  / ":" / "?" / ";" / "|" / "&" / "," / "~" / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "'" / "@" / "!" / "$" / "><"
+  / ":" / "?" / ";" / "|/" / "|" / "&" / "," / "~" / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "'" / "@" / "!" / "$" / "><"

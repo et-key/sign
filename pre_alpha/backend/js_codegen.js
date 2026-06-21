@@ -4,6 +4,29 @@
  * Translates resolved Sign AST to clean, executable JavaScript utilizing white_cats.
  */
 
+const operatorVarNames = {
+  '+': 'op_add',
+  '-': 'op_sub',
+  '*': 'op_mul',
+  '/': 'op_div',
+  '|': 'op_or',
+  '|/': 'op_or_div',
+};
+function getOperatorVarName(op) {
+  if (operatorVarNames[op]) return operatorVarNames[op];
+  const charMap = {
+    '+': 'add', '-': 'sub', '*': 'mul', '/': 'div', '%': 'mod', '^': 'pow',
+    '=': 'eq', '<': 'lt', '>': 'gt', '|': 'or', '&': 'and', ';': 'xor',
+    '!': 'not', '~': 'range', '@': 'at', '#': 'hash', '?': 'question',
+    ':': 'colon', "'": 'quote'
+  };
+  let name = 'op';
+  for (const char of op) {
+    name += '_' + (charMap[char] || char.charCodeAt(0).toString(16));
+  }
+  return name;
+}
+
 const functionContextStack = [false];
 const inArgumentListStack = [false];
 
@@ -143,6 +166,13 @@ function _transpile(node) {
   if (node.type === 'operation') {
     // Infix Operators
     if (node.position !== 'prefix' && node.position !== 'postfix') {
+      if (node.operator !== ':' && node.operator !== '?' && node.operator !== ',' && node.operator !== ' ') {
+        const opKey = `[${node.operator}]`;
+        if (currentEnv && (currentEnv.has(opKey) || currentEnv.has(`<${opKey}>`))) {
+          const varName = getOperatorVarName(node.operator);
+          return `_call(${varName}, ${_transpile(node.left)}, ${_transpile(node.right)})`;
+        }
+      }
       if (node.operator === ':') {
         const lhs = getDefineLHS(node.left);
         if (node.right && node.right.type === 'operation' && node.right.operator === '@' && node.right.position === 'postfix') {
@@ -219,7 +249,6 @@ function _transpile(node) {
             p.innerSpecs.forEach(ip => {
               if (ip.isRest) {
                 bodyLines.push(`  if (${ip.name}.length === 0) ${ip.name} = __unit;`);
-                bodyLines.push(`  else if (${ip.name}.length === 1) ${ip.name} = ${ip.name}[0];`);
               } else if (ip.defaultValue !== null) {
                 bodyLines.push(`  if (${ip.name} === undefined || ${ip.name} === __hole) ${ip.name} = ${ip.defaultValue};`);
               }
@@ -228,7 +257,6 @@ function _transpile(node) {
           }
           if (p.isRest) {
             bodyLines.push(`  if (${p.name}.length === 0) ${p.name} = __unit;`);
-            bodyLines.push(`  else if (${p.name}.length === 1) ${p.name} = ${p.name}[0];`);
             return;
           }
           if (p.defaultValue !== null) {
@@ -272,14 +300,14 @@ function _transpile(node) {
             argsCode = (node.right.statements || []).map(s => {
               const code = _transpile(s);
               if (s.type === 'operation' && s.operator === '~' && s.position === 'postfix') {
-                return `...${code}`;
+                return `new ExpandedStream(_expand(${_transpile(s.operand)}))`;
               }
               return code;
             }).join(', ');
           } else {
             const code = _transpile(node.right);
             if (node.right && node.right.type === 'operation' && node.right.operator === '~' && node.right.position === 'postfix') {
-              argsCode = `...${code}`;
+              argsCode = `new ExpandedStream(_expand(${_transpile(node.right.operand)}))`;
             } else {
               argsCode = code;
             }
@@ -441,6 +469,9 @@ function _transpile(node) {
       if (node.operator === '!') {
         return `_not(${transpile(node.operand)})`;
       }
+      if (node.operator === '-') {
+        return `_negate(${transpile(node.operand)})`;
+      }
       return `${node.operator}${transpile(node.operand)}`;
     }
 
@@ -544,11 +575,7 @@ function getDefineLHS(left) {
   if (left.type === 'block' && left.kind === 'bracket') {
     const content = left.content;
     if (content && content.type === 'operation') {
-      if (content.operator === '+') return 'op_add';
-      if (content.operator === '-') return 'op_sub';
-      if (content.operator === '*') return 'op_mul';
-      if (content.operator === '/') return 'op_div';
-      if (content.operator === '|') return 'op_or';
+      return getOperatorVarName(content.operator);
     }
   }
   return transpile(left);

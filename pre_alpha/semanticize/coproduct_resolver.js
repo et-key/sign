@@ -153,6 +153,10 @@ function getCategory(node, env) {
       }
       return getCategory(node.left, env);
     }
+    if (node.operator === "'") return 'Lambda';
+    if (node.operator === '@' && node.position !== 'prefix' && node.position !== 'postfix') {
+      return 'Lambda';
+    }
     if (isPartialOperation(node)) return 'Lambda';
     // apply, concat, 算術演算などは一旦 Atom（値）扱い
     return 'Atom';
