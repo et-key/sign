@@ -145,6 +145,13 @@ function _transpile(node) {
     if (node.position !== 'prefix' && node.position !== 'postfix') {
       if (node.operator === ':') {
         const lhs = getDefineLHS(node.left);
+        if (node.right && node.right.type === 'operation' && node.right.operator === '@' && node.right.position === 'postfix') {
+          const moduleName = _transpile(node.right.operand);
+          if (moduleName === 'javascript') {
+            return `const ${lhs} = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global)`;
+          }
+          return `import * as ${lhs} from './${moduleName}.js'`;
+        }
         const rhs = _transpile(node.right);
         return `const ${lhs} = ${rhs}`;
       }
@@ -412,6 +419,10 @@ function _transpile(node) {
 
     // Prefix Operators
     if (node.position === 'prefix') {
+      if (['#', '##', '###'].includes(node.operator)) {
+        const inner = _transpile(node.operand);
+        return `export ${inner}`;
+      }
       if (node.operator === '><') {
         return `_reverse(${transpile(node.operand)})`;
       }

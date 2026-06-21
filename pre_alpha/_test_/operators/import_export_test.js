@@ -1,4 +1,8 @@
-export const RUNTIME_HELPERS_CODE = `
+
+import _ from 'white_cats';
+import util from 'util';
+
+
 const __hole = Symbol.for('hole');
 const __unit = Symbol.for('unit');
 
@@ -707,4 +711,14 @@ const _range = (start, end, step, type) => {
   }
   return result;
 };
-`;
+
+
+const my_math_module = __unit;
+import * as my_math from './my_math_module.js';
+const pi_val = _get_prop(my_math, "PI");
+const doubled = _concat(_get_prop(my_math, "double"), 10);
+
+console.log("=== Transpiled Execution Results ===");
+try { console.log("my_math = ", util.inspect(my_math, { depth: null, colors: true })); } catch(e) {}
+try { console.log("pi_val = ", util.inspect(pi_val, { depth: null, colors: true })); } catch(e) {}
+try { console.log("doubled = ", util.inspect(doubled, { depth: null, colors: true })); } catch(e) {}

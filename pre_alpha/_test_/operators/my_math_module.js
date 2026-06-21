@@ -1,4 +1,8 @@
-export const RUNTIME_HELPERS_CODE = `
+
+import _ from 'white_cats';
+import util from 'util';
+
+
 const __hole = Symbol.for('hole');
 const __unit = Symbol.for('unit');
 
@@ -22,16 +26,6 @@ const _isTrue = (val) => {
 };
 
 const _concat = (...args) => {
-  if (args.length > 0) {
-    const first = args[0];
-    if (typeof first === 'function') {
-      return _call(first, ...args.slice(1));
-    }
-    if (Array.isArray(first) && first.length > 0 && typeof first[0] === 'function') {
-      return _call(first[0], ...first.slice(1), ...args.slice(1));
-    }
-  }
-
   const isPlainObj = (o) => typeof o === 'object' && o !== null && !Array.isArray(o) && !(o instanceof ExpandedObject) && !(o instanceof Address) && !(typeof Promise !== 'undefined' && o instanceof Promise);
   
   if (args.length > 0 && args.every(isPlainObj)) {
@@ -707,4 +701,23 @@ const _range = (start, end, step, type) => {
   }
   return result;
 };
-`;
+
+
+const x = __unit;
+export const PI = 3.1415926535;
+export const double = (() => {
+  const _fn = (x) => {
+  return (() => {
+  return _arithmetic('*', x, 2);
+})();
+};
+  _fn.expectedLength = 1;
+  _fn.requiredLength = 1;
+  _fn.hasRest = false;
+  _fn.paramSpecs = [{"name":"x","defaultValue":null,"isRest":false}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+
+console.log("=== Transpiled Execution Results ===");
+

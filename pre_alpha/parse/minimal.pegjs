@@ -62,7 +62,7 @@ Expression = Export
 
 // Level 1: Export (###, ##, #)
 Export
-  = op:("###" / "##" / "#") _ expr:Export {
+  = op:("###" / "##" / "#") expr:Export {
       let name = op === "###" ? "export_pin" : op === "##" ? "export_external" : "export_internal";
       return {
         type: "operation",
@@ -430,7 +430,7 @@ ub = "_"
 
 // --- Prefix/Postfix Operators ---
 prefix
-  = "###" / "##" / "#" / "><" / "~" / "!!" / "!" / "$" / "@" / ("-" &(Block / identifier))
+  = "><" / "~" / "!!" / "!" / "$" / "@" / ("-" &(Block / identifier))
 
 postfix
   = "!" / "~" / "@"

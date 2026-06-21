@@ -1,0 +1,6 @@
+` Export PI (No space after #)
+#PI: 3.1415926535
+
+` Export double function (No space after ##)
+##double: x ?
+	x * 2

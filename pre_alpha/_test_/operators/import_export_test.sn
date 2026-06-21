@@ -1,0 +1,6 @@
+` Import my_math_module
+my_math: my_math_module@
+
+` Use exported values
+pi_val: my_math'PI
+doubled: my_math'double 10
