@@ -72,7 +72,7 @@ for (const filePath of files) {
     });
 
     const usedIdents = new Set();
-    astLines.forEach(line => collectIdentifiers(line, usedIdents));
+    astLines.forEach(line => collectIdentifiers(line, usedIdents, globalEnv));
 
     const undefinedIdents = [];
     usedIdents.forEach(id => {
@@ -92,7 +92,7 @@ ${RUNTIME_HELPERS_CODE}
 `;
 
     const loggingBlock = `
-console.log("=== Transpiled Execution Results ===");
+console.log("=== Execution Result ===");
 ${definedVars.map(v => `try { console.log("${v} = ", util.inspect(${v}, { depth: null, colors: true })); } catch(e) {}`).join('\n')}
 `;
 

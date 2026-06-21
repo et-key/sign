@@ -39,18 +39,8 @@ astLines.forEach(astLine => {
 
 // Resolve Coproducts and Transpile Statements
 const jsStatements = [];
-const definedVars = [];
-
 astLines.forEach(astLine => {
   const resolved = resolveCoproducts(astLine, globalEnv);
-  
-  // Collect defined variables for execution inspection
-  if (resolved && resolved.type === 'operation' && resolved.operator === ':') {
-    const identName = typeof resolved.left === 'string' ? resolved.left : (resolved.left.name || String(resolved.left));
-    if (identName.startsWith('<') && identName.endsWith('>')) {
-      definedVars.push(identName.slice(1, -1));
-    }
-  }
   
   // Re-build env with resolved tree for accurate type inference later
   buildEnvironment(resolved, globalEnv);
@@ -63,7 +53,7 @@ astLines.forEach(astLine => {
 
 // Collect used identifiers to find undefined ones
 const usedIdents = new Set();
-astLines.forEach(line => collectIdentifiers(line, usedIdents));
+astLines.forEach(line => collectIdentifiers(line, usedIdents, globalEnv));
 
 const undefinedIdents = [];
 usedIdents.forEach(id => {
@@ -83,8 +73,7 @@ ${RUNTIME_HELPERS_CODE}
 `;
 
 const loggingBlock = `
-console.log("=== Transpiled Execution Results ===");
-${definedVars.map(v => `try { console.log("${v} = ", util.inspect(${v}, { depth: null, colors: true })); } catch(e) {}`).join('\n')}
+console.log("=== Execution Result ===");
 `;
 
 const fullJsCode = `${runtimeHelpers}\n${undefinedDeclarations}\n${jsStatements.map(s => s + ';').join('\n')}\n${loggingBlock}`;

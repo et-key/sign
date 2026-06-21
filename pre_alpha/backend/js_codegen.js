@@ -71,7 +71,11 @@ function _transpile(node) {
     if (val.startsWith('js:')) {
       return val.slice(3).trim();
     }
-    return '';
+    const match = val.match(/^([a-zA-Z0-9_]+):/);
+    if (match && match[1] !== 'js') {
+      return '';
+    }
+    return val;
   }
 
   if (typeof node === 'string') {

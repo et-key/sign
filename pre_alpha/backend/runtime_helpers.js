@@ -374,6 +374,22 @@ function _callInternal(left, ...args) {
   const typeL = typeof left;
   
   if (typeL === 'function') {
+    const isCurried = left.__isCurried;
+    const target = isCurried ? left.target : left;
+    const argsSoFar = isCurried ? left.args : [];
+    if (target.expectedLength === undefined && target.hasRest === undefined) {
+      if (typeof console !== 'undefined' && (
+        target === console.log ||
+        target === console.error ||
+        target === console.warn ||
+        target === console.info ||
+        target === console.debug
+      )) {
+        return target.apply(console, [...argsSoFar, ...args]);
+      }
+      return target(...argsSoFar, ...args);
+    }
+
     // 1. Check composition first
     if (args.length === 1 && typeof args[0] === 'function') {
       const expectedL = left.__isCurried ? left.length : (left.expectedLength !== undefined ? left.expectedLength : left.length);

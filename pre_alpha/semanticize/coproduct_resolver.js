@@ -74,6 +74,7 @@ function isPartialOperation(node) {
 function getCategory(node, env) {
   if (!node) return 'Atom';
   if (node.isLambda) return 'Lambda';
+  if (node.type === 'inline_code') return 'Lambda';
 
   if (typeof node === 'string') {
     if (!isNaN(node) || node.startsWith('0x')) return 'Atom';
@@ -269,6 +270,7 @@ export function getParamCount(node) {
 export function getArity(node, env) {
   if (!node) return 0;
   if (typeof node === 'number' || typeof node === 'boolean') return 0;
+  if (node.type === 'inline_code') return Infinity;
   if (typeof node === 'string') {
     if (env && env.has(node)) {
       const entry = env.get(node);

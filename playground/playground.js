@@ -240,31 +240,30 @@ runBtn.addEventListener('click', async () => {
 
     // Resolve Coproducts and Transpile Statements
     const jsStatements = [];
-    const definedVars = [];
-
     astLines.forEach(astLine => {
       const resolved = resolveCoproducts(astLine, globalEnv);
       
       // Update the environment with the resolved AST to accurately track arity of partial applications
       buildEnvironment(resolved, globalEnv);
 
-      // Collect defined variables for execution inspection
-      if (resolved && resolved.type === 'operation' && resolved.operator === ':') {
-        const identName = typeof resolved.left === 'string' ? resolved.left : (resolved.left.name || String(resolved.left));
-        if (identName.startsWith('<') && identName.endsWith('>')) {
-          definedVars.push(identName.slice(1, -1));
-        }
-      }
-
       const jsCode = transpile(resolved, globalEnv);
       if (jsCode) {
-        jsStatements.push(jsCode);
+        if (resolved && resolved.type === 'operation' && resolved.operator === ':') {
+          jsStatements.push(jsCode);
+        } else {
+          jsStatements.push(`try {
+            const _res = ${jsCode};
+            if (_res !== undefined && _res !== __unit) {
+              console.log(util.inspect(_res));
+            }
+          } catch(e) {}`);
+        }
       }
     });
 
     // Collect used identifiers to find undefined ones
     const usedIdents = new Set();
-    astLines.forEach(line => collectIdentifiers(line, usedIdents));
+    astLines.forEach(line => collectIdentifiers(line, usedIdents, globalEnv));
 
     const undefinedIdents = [];
     usedIdents.forEach(id => {
@@ -302,11 +301,9 @@ runBtn.addEventListener('click', async () => {
   
   ${runtimeHelpers}
   
-  ${generatedCodeOnly}
+  console.log("=== Execution Result ===");
   
-  // Custom Logging Block
-  console.log("=== Transpiled Execution Results ===");
-  ${definedVars.map(v => `try { console.log("${v} = " + util.inspect(${v})); } catch(e) {}`).join('\n')}
+  ${generatedCodeOnly}
 })()
     `;
 

@@ -92,6 +92,7 @@ export function buildEnvironment(node, env = new Map()) {
 export function getInitialCategory(node, env) {
   if (!node) return 'Atom';
   if (node.isLambda) return 'Lambda';
+  if (node.type === 'inline_code') return 'Lambda';
   if (typeof node === 'string') {
     if (env && env.has(node)) {
       const entry = env.get(node);
@@ -116,34 +117,43 @@ export function getInitialCategory(node, env) {
   return 'Atom';
 }
 
-export function collectIdentifiers(node, set) {
+export function collectIdentifiers(node, set, env = new Map()) {
   if (!node) return;
+
+  let currentEnv = env;
+  if (node && node.env) {
+    currentEnv = node.env;
+  }
+
   if (typeof node === 'string') {
     if (node.startsWith('<') && node.endsWith('>')) {
       const name = node.slice(1, -1);
       // Ignore numeric strings or anything like numbers
       if (isNaN(name)) {
-        set.add(name);
+        const hasDef = currentEnv.has(node) || currentEnv.has(`<${name}>`) || currentEnv.has(name);
+        if (!hasDef) {
+          set.add(name);
+        }
       }
     }
     return;
   }
   if (Array.isArray(node)) {
-    node.forEach(n => collectIdentifiers(n, set));
+    node.forEach(n => collectIdentifiers(n, set, currentEnv));
     return;
   }
   if (typeof node === 'object') {
     if (node.type === 'operation' && node.operator === "'") {
-      collectIdentifiers(node.left, set);
+      collectIdentifiers(node.left, set, currentEnv);
       return;
     }
     if (node.type === 'operation' && node.operator === "@" && node.position !== 'postfix') {
-      collectIdentifiers(node.right, set);
+      collectIdentifiers(node.right, set, currentEnv);
       return;
     }
     for (const key of Object.keys(node)) {
       if (key !== 'env') {
-        collectIdentifiers(node[key], set);
+        collectIdentifiers(node[key], set, currentEnv);
       }
     }
   }
