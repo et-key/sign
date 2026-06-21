@@ -21,50 +21,48 @@ const EXAMPLES = {
   composition: `\` 1. Function Composition using Space ' '
 f : x ? x * 2
 g : x ? x + 1
-result : f g 3
+f g 3
 `,
   partial_app: `\` 1. Partial Application using Hole (_)
 f : x y ? x + y
 partial : f _ 3
-partial_result : partial 4
+partial 4
 
 \` 2. Currying
 curried : f 2
-result_curried : curried 4
+curried 4
 
 \` 3. Conditional Maybe Value (Value-based comparisons)
-check : 10 < 5
-check2 : 5 == 5
+10 < 5
+5 == 5
 `,
   generator: `\` 1. Higher Order Function Recursive Mapping on Lazy Generator
 f : x ? x * 2
 map : g x ~y ? [@g x] [map g y~]
 
 \` Range evaluation produces [0, 2, 4, 6, 8, 10]
-result : map $[* 2,] [0 ~+ 2 ~ 10]
+map $[* 2,] [0 ~+ 2 ~ 10]
 `,
   lists: `\` Atom vs Function Coproduct Resolution
 a : 1
 b : 2
 c : 3
 
-list1 : [a b c]
-list2 : a b c
-list3 : a b c , a b c
-list4 : [a b c] [a b c]
-list5 : [a b c] , [a b c]
+[a b c]
+a b c
+a b c , a b c
+[a b c] [a b c]
+[a b c] , [a b c]
 
-list6 : [a , b , c] [a , b , c]
-list7 : [a , b , c] , [a , b , c]
+[a , b , c] [a , b , c]
+[a , b , c] , [a , b , c]
 `,
   higher_order: `\` Recursive Map using Coproduct and Partial Application
 f : x ? x * 2
 map : g x ~y ? @g x , map g y~
 
-result_map1 : map $f 1 2 3 4 5
-result_map2 : map $[x ? x * 2] 1 2 3 4 5
-
-result : result_map1
+map $f 1 2 3 4 5
+map $[x ? x * 2] 1 2 3 4 5
 `,
   factorial: `\` Recursive Factorial (Packrat Parsing Test)
 fact : x ?
@@ -72,47 +70,52 @@ fact : x ?
 	x = 1 : 1
 	x * [fact [x - 1]]
 
-result : fact 5
+fact 5
 `,
   fold: `\` 1. Eager Fold (Trampoline Extraction)
 add : x y ? x + y
 fold_eager : f a x ~y ? fold_eager f [@f a x] y~
 
-result_eager : fold_eager $add 0 1 2 3 4 5
+fold_eager $add 0 1 2 3 4 5
 
 \` 2. Lazy Fold (Thunk / Double Algebra)
 fold_lazy : f a x ~y ? $fold_lazy f [@f a x] y~
 
 step0 : fold_lazy $add 0 1 2 3
 step1 : @step0 __
-step2 : @step1 __
+@step1 __
 `,
-  operators: `\` 1. Range Operators (Eager Arrays)
-arithmetic_range : 0 ~+ 2 ~ 10
-geometric_range : 1 ~* 2 ~ 16
+  operators: `\` 1. Inline JavaScript Code
+say : "console.log"
+say \`hello\` \`world\` 123
 
-\` 2. Spread Import
+\` 2. Range Operators (Eager Arrays)
+0 ~+ 2 ~ 10
+1 ~* 2 ~ 16
+
+\` 3. Spread Import
 js : javascript@
 math : js'Math
 
-\` 3. Property Access and Reverse Access
+\` 4. Property Access and Reverse Access
+math'PI
 PI_val : math'PI
-PI_val_reverse : PI @ math
+PI_val @ math
 
-\` 4. Object Overwrite (Shallow Copy)
+\` 5. Object Overwrite (Shallow Copy)
 base_obj : js'Object
-updated_obj : base_obj # prop 42
+base_obj # prop 42
 
-\` 5. Logical, Bitwise, Math
-logic_and : 1 & 1
-bitwise_xor : 5 ;; 3
-shift_left : 1 << 3
-abs_val : |-5|
-factorial_val : 5!
+\` 6. Logical, Bitwise, Math
+1 & 1
+5 ;; 3
+1 << 3
+|-5|
+5!
 
-\` 6. Expand Array
+\` 7. Expand Array
 arr : 1 , 2 , 3
-expanded : arr~
+arr~
 `
 };
 

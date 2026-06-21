@@ -1,4 +1,4 @@
 assert : "(cond, msg) => { if (!cond) throw new Error(msg); }"
 max : "Math.max"
 val : max 10 20 30 5
-assert (val == 30) "val should be 30"
+assert (val == 30) `val should be 30`
