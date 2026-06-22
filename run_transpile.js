@@ -9,6 +9,8 @@ import util from 'util';
 import { RUNTIME_HELPERS_CODE } from './pre_alpha/backend/runtime_helpers.js';
 import { buildEnvironment, desugarHoles, collectIdentifiers } from './pre_alpha/semanticize/ast_helpers.js';
 import { generateTypeScriptDef } from './pre_alpha/backend/ts_codegen.js';
+import { transpileToWasm, getMemoryMap, getStructFields } from './pre_alpha/backend/wasm_codegen.js';
+import wabt from 'wabt';
 
 // 1. Get the source file argument
 const fileArg = process.argv[2] || 'pre_alpha/_test_/function/composition.sn';
@@ -88,19 +90,136 @@ const dtsCode = generateTypeScriptDef(resolvedLines, globalEnv);
 // 5. Write to files
 const jsFilePath = filePath.replace(/\.(sign|sn)$/, '.js');
 const dtsFilePath = filePath.replace(/\.(sign|sn)$/, '.d.ts');
+const watFilePath = filePath.replace(/\.(sign|sn)$/, '.wat');
+const wasmFilePath = filePath.replace(/\.(sign|sn)$/, '.wasm');
 
 fs.writeFileSync(jsFilePath, fullJsCode, 'utf8');
 fs.writeFileSync(dtsFilePath, dtsCode, 'utf8');
 
+// Generate WAT
+let watCode = '';
+try {
+  watCode = transpileToWasm(resolvedLines, globalEnv);
+  fs.writeFileSync(watFilePath, watCode, 'utf8');
+} catch (e) {
+  console.error("WASM codegen error:", e.stack || e.message);
+}
+
 console.log(`\nFiles generated:`);
 console.log(`  JS: ${jsFilePath}`);
 console.log(`  TS: ${dtsFilePath}`);
+if (watCode) console.log(`  WAT: ${watFilePath}`);
 
 // 6. Execute the transpiled JS
 try {
-  console.log("\n=== Execution Output ===");
+  console.log("\n=== Execution Output (JS) ===");
   const output = execSync(`node ${jsFilePath}`, { encoding: 'utf8' });
   console.log(output);
 } catch (err) {
-  console.error("Execution error:", err.stdout || err.stderr || err.message);
+  console.error("JS Execution error:", err.stdout || err.stderr || err.message);
+}
+
+// 7. Compile and Execute WASM
+if (watCode) {
+  try {
+    console.log("=== Compiling WAT to WASM (using wabt npm package) ===");
+    const wabtInstance = await wabt();
+    const wasmModule = wabtInstance.parseWat(watFilePath, watCode, {
+      memory64: true
+    });
+    const { buffer } = wasmModule.toBinary({});
+    fs.writeFileSync(wasmFilePath, buffer);
+    console.log(`  WASM generated: ${wasmFilePath}`);
+
+    console.log("\n=== Execution Output (WASM64) ===");
+    
+    // Instantiate WASM module (Node.js requires --experimental-wasm-64 for wasm64)
+    const wasmInstanced = await WebAssembly.instantiate(buffer, {
+      js: {
+        pow: (x, y) => Math.pow(x, y)
+      }
+    });
+    const exports = wasmInstanced.instance.exports;
+
+    // Run main entry
+    exports.main();
+
+    // Dump linear memory state
+    const memory = exports.memory;
+    const view = new DataView(memory.buffer);
+    const u8 = new Uint8Array(memory.buffer);
+
+    function readWasmString(addr) {
+      if (addr === 0n || addr === 0) return 'null';
+      let str = '';
+      let ptr = Number(addr);
+      while (u8[ptr] !== 0 && ptr < u8.length) {
+        str += String.fromCharCode(u8[ptr]);
+        ptr++;
+      }
+      return str;
+    }
+
+    console.log("\n--- WASM64 Memory Dump (Variables) ---");
+    const memoryMap = getMemoryMap();
+    const structFields = getStructFields();
+    
+    // Sort variables by their memory address
+    const vars = Array.from(memoryMap.entries()).sort((a, b) => a[1] - b[1]);
+    
+    vars.forEach(([name, addr]) => {
+      const fields = structFields.get(name);
+      if (fields) {
+        console.log(`${name} (struct):`);
+        Object.entries(fields).forEach(([fName, fMeta]) => {
+          const fAddr = addr + fMeta.offset;
+          dumpValue(`  .${fName}`, fAddr);
+        });
+      } else {
+        dumpValue(name, addr);
+      }
+    });
+
+    function dumpValue(label, address) {
+      const rawI64 = view.getBigInt64(address, true);
+      const rawF64 = view.getFloat64(address, true);
+      
+      let extra = '';
+      
+      // Is it a potential string pointer?
+      if (rawI64 >= 1024n && rawI64 < 2048n) {
+        const str = readWasmString(rawI64);
+        if (str && /^[a-zA-Z0-9_\-\.\:\/ ]*$/.test(str)) {
+          extra += ` -> String: "${str}"`;
+        }
+      }
+      
+      // Is it a potential heap object (closure)?
+      if (rawI64 >= 2048n && rawI64 < 65536n && (rawI64 % 8n === 0n)) {
+        const ptr = Number(rawI64);
+        try {
+          const tableIdx = view.getBigInt64(ptr + 0, true);
+          const expArity = view.getBigInt64(ptr + 8, true);
+          const appCount = view.getBigInt64(ptr + 16, true);
+          const argsPtr = view.getBigInt64(ptr + 24, true);
+          
+          if (expArity >= 1n && expArity <= 10n && appCount >= 0n && appCount <= expArity) {
+            const argsList = [];
+            for (let i = 0n; i < appCount; i++) {
+              const argAddr = Number(argsPtr + i * 8n);
+              const argVal = view.getBigInt64(argAddr, true);
+              const argValF64 = view.getFloat64(argAddr, true);
+              argsList.push(`${argVal} (f64: ${argValF64})`);
+            }
+            extra += ` -> Closure(table_idx: ${tableIdx}, arity: ${appCount}/${expArity}, args: [${argsList.join(', ')}])`;
+          }
+        } catch(e) {}
+      }
+
+      console.log(`  ${label}: raw i64: ${rawI64}, f64: ${rawF64}${extra}`);
+    }
+
+  } catch (err) {
+    console.error("WASM Execution error:", err.message);
+  }
 }

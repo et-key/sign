@@ -10,9 +10,8 @@ data:
 
 update : [~option] [type backend] ?
 	option # [
-		$type # type
-		$backend # backend
+		type # type
+		backend # backend
 	]
 
 update option data
-

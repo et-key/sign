@@ -3,6 +3,7 @@
  * 
  * Translates resolved Sign AST to clean, executable JavaScript utilizing white_cats.
  */
+import { inferType } from '../semanticize/ast_helpers.js';
 
 const operatorVarNames = {
   '+': 'op_add',
@@ -209,6 +210,10 @@ function _transpile(node) {
           if (n.type === 'coproduct_block') {
             return (n.statements || []).flatMap(extractTerms);
           }
+          // Support unwrapping prefix operators like $ or @ to find the bracket block inside
+          if (n.type === 'operation' && n.position === 'prefix') {
+            return extractTerms(n.operand);
+          }
           return [n];
         }
         
@@ -298,6 +303,35 @@ function _transpile(node) {
           return `_compose(${_transpile(node.left)}, ${_transpile(node.right)})`;
         }
         if (node.name === 'apply') {
+          let leftNode = node.left;
+          while (leftNode && leftNode.type === 'block') {
+            leftNode = leftNode.content;
+          }
+          let fnName = typeof leftNode === 'string' ? leftNode : (leftNode.name || '');
+          if (fnName.startsWith('<') && fnName.endsWith('>')) {
+            fnName = fnName.slice(1, -1);
+          }
+          const entry = currentEnv && (currentEnv.get(fnName) || currentEnv.get(`<${fnName}>`));
+          const staticArity = entry ? entry.arity : undefined;
+          const isRealFunction = entry ? entry.isRealFunction : false;
+
+          const args = [];
+          if (node.right && node.right.type === 'coproduct_block') {
+            args.push(...node.right.statements);
+          } else if (node.right !== undefined && node.right !== null) {
+            args.push(node.right);
+          }
+
+          const hasExpandArg = args.some(arg => arg && arg.type === 'operation' && arg.operator === '~' && arg.position === 'postfix');
+          const canDirectCall = (staticArity !== undefined && isRealFunction && !hasExpandArg && args.length === staticArity);
+
+          if (canDirectCall) {
+            inArgumentListStack.push(true);
+            const argsCode = args.map(arg => _transpile(arg)).join(', ');
+            inArgumentListStack.pop();
+            return `${_transpile(node.left)}(${argsCode})`;
+          }
+
           inArgumentListStack.push(true);
           let argsCode;
           if (node.right && node.right.type === 'coproduct_block') {
@@ -406,7 +440,13 @@ function _transpile(node) {
       }
 
       // Comparisons in Sign: <, >, <=, >=, ==, !==, =, !=
-      if (['<', '>', '<=', '>=', '==', '!==', '=', '!='].includes(node.operator)) {
+      if (['<', '>', '<=', '>=', '==', '!=', '!==', '='].includes(node.operator)) {
+        if (['<', '>', '<=', '>=', '=', '!='].includes(node.operator)) {
+          const typeL = inferType(node.left, currentEnv);
+          if (typeL === 'List') {
+            throw new Error(`Compile Error: Operator '${node.operator}' cannot be applied to List types. Use structural comparison '==' or '!==' instead.`);
+          }
+        }
         const chain = destructureCompareChain(node);
         if (chain.ops.length > 1) {
           const firstOp = chain.ops[0];
@@ -424,21 +464,58 @@ function _transpile(node) {
           const exprsStr = chain.exprs.map(e => _transpile(e)).join(', ');
           return `_compareChain([${opsStr}], [${exprsStr}])`;
         }
+        
+        const typeL = inferType(node.left, currentEnv);
+        const typeR = inferType(node.right, currentEnv);
+        if (typeL === 'Scalar' && typeR === 'Scalar') {
+          let jsOp = node.operator;
+          if (jsOp === '=') jsOp = '===';
+          if (jsOp === '!=') jsOp = '!==';
+          return `((_l, _r) => (_l === __unit || _r === __unit) ? __unit : (_l ${jsOp} _r ? _l : 0))(${_transpile(node.left)}, ${_transpile(node.right)})`;
+        }
         return `_compare('${node.operator}', ${_transpile(node.left)}, ${_transpile(node.right)})`;
       }
 
       // Standard arithmetic binary ops: +, -, *, /, %
       if (['+', '-', '*', '/', '%'].includes(node.operator)) {
+        const typeL = inferType(node.left, currentEnv);
+        const typeR = inferType(node.right, currentEnv);
+        if (['+', '-'].includes(node.operator) && typeL === 'List') {
+          throw new Error(`Compile Error: Arithmetic operator '${node.operator}' cannot be applied to List types directly.`);
+        }
+        if (typeL === 'Scalar' && typeR === 'Scalar') {
+          return `((_l, _r) => (_l === __unit || _r === __unit) ? __unit : _l ${node.operator} _r)(${_transpile(node.left)}, ${_transpile(node.right)})`;
+        }
         return `_arithmetic('${node.operator}', ${_transpile(node.left)}, ${_transpile(node.right)})`;
       }
 
       // Object / Property / Module access
       if (node.operator === "'") {
+        const typeL = inferType(node.left, currentEnv);
         const propCode = transpilePropertyKey(node.right);
+        if (typeL === 'Dict' || (typeof node.left === 'string' && currentEnv && currentEnv.has(node.left) && currentEnv.get(node.left).category === 'Lambda')) {
+          if (propCode.startsWith('"') && propCode.endsWith('"')) {
+            const field = propCode.slice(1, -1);
+            if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(field)) {
+              return `${_transpile(node.left)}.${field}`;
+            }
+          }
+          return `${_transpile(node.left)}[${propCode}]`;
+        }
         return `_get_prop(${_transpile(node.left)}, ${propCode})`;
       }
       if (node.operator === '@') {
+        const typeR = inferType(node.right, currentEnv);
         const propCode = transpilePropertyKey(node.left);
+        if (typeR === 'Dict') {
+          if (propCode.startsWith('"') && propCode.endsWith('"')) {
+            const field = propCode.slice(1, -1);
+            if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(field)) {
+              return `${_transpile(node.right)}.${field}`;
+            }
+          }
+          return `${_transpile(node.right)}[${propCode}]`;
+        }
         return `_get_prop(${_transpile(node.right)}, ${propCode})`;
       }
       if (node.operator === '#') {

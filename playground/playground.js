@@ -5,6 +5,7 @@ import { resolveCoproducts, getArity } from '../pre_alpha/semanticize/coproduct_
 import { transpile } from '../pre_alpha/backend/js_codegen.js';
 import { RUNTIME_HELPERS_CODE } from '../pre_alpha/backend/runtime_helpers.js';
 import { buildEnvironment, desugarHoles, collectIdentifiers } from '../pre_alpha/semanticize/ast_helpers.js';
+import { transpileToWasm, getMemoryMap, getStructFields } from '../pre_alpha/backend/wasm_codegen.js';
 
 // DOM References
 const sourceEditor = document.getElementById('sourceEditor');
@@ -15,6 +16,33 @@ const consoleOutput = document.getElementById('consoleOutput');
 const runBtn = document.getElementById('runBtn');
 const exampleSelect = document.getElementById('exampleSelect');
 const clearConsoleBtn = document.getElementById('clearConsoleBtn');
+const targetJSRadio = document.getElementById('targetJS');
+const targetWASMRadio = document.getElementById('targetWASM');
+const transpiledTitle = document.getElementById('transpiledTitle');
+const transpiledSubtitle = document.getElementById('transpiledSubtitle');
+
+// Toggle target modes
+targetJSRadio.addEventListener('change', updateTargetMode);
+targetWASMRadio.addEventListener('change', updateTargetMode);
+
+function updateTargetMode() {
+  const isWASM = targetWASMRadio.checked;
+  if (isWASM) {
+    transpiledTitle.textContent = "Transpiled WebAssembly (WAT)";
+    transpiledSubtitle.textContent = "wasm64 Text Format";
+    jsOutput.className = "language-wasm";
+    if (jsOutput.textContent === '// Transpiled code will appear here...' || jsOutput.textContent === '// Ready to transpile...') {
+      jsOutput.textContent = ';; Ready to transpile to WAT...';
+    }
+  } else {
+    transpiledTitle.textContent = "Transpiled JavaScript";
+    transpiledSubtitle.textContent = "white_cats ESM Target";
+    jsOutput.className = "language-javascript";
+    if (jsOutput.textContent === ';; Ready to transpile to WAT...') {
+      jsOutput.textContent = '// Ready to transpile...';
+    }
+  }
+}
 
 // Templates definitions for Example Loaders
 const EXAMPLES = {
@@ -182,7 +210,8 @@ clearConsoleBtn.addEventListener('click', () => {
 
 function clearOutputViews() {
   astOutput.textContent = '{}';
-  jsOutput.textContent = '// Ready to transpile...';
+  const isWASM = targetWASMRadio.checked;
+  jsOutput.textContent = isWASM ? ';; Ready to transpile to WAT...' : '// Ready to transpile...';
 }
 
 // Custom inspect for browser execution representation
@@ -224,6 +253,7 @@ runBtn.addEventListener('click', async () => {
   logToConsole('Starting compilation...', 'system-msg');
 
   const sourceCode = sourceEditor.value;
+  const isWASM = targetWASMRadio.checked;
 
   try {
     // 1. Preprocess
@@ -241,63 +271,174 @@ runBtn.addEventListener('click', async () => {
       buildEnvironment(astLine, globalEnv);
     });
 
-    // Resolve Coproducts and Transpile Statements
-    const jsStatements = [];
-    astLines.forEach(astLine => {
-      const resolved = resolveCoproducts(astLine, globalEnv);
-      
-      // Update the environment with the resolved AST to accurately track arity of partial applications
+    const resolvedLines = astLines.map(astLine => resolveCoproducts(astLine, globalEnv));
+    
+    // Build updated env with resolved tree for accurate types
+    resolvedLines.forEach(resolved => {
       buildEnvironment(resolved, globalEnv);
-
-      const jsCode = transpile(resolved, globalEnv);
-      if (jsCode) {
-        if (resolved && resolved.type === 'operation' && resolved.operator === ':') {
-          jsStatements.push(jsCode);
-        } else {
-          jsStatements.push(`try {
-            const _res = ${jsCode};
-            if (_res !== undefined && _res !== __unit) {
-              console.log(util.inspect(_res));
-            }
-          } catch(e) {}`);
-        }
-      }
     });
-
-    // Collect used identifiers to find undefined ones
-    const usedIdents = new Set();
-    astLines.forEach(line => collectIdentifiers(line, usedIdents, globalEnv));
-
-    const undefinedIdents = [];
-    usedIdents.forEach(id => {
-      if (!globalEnv.has(`<${id}>`) && id !== '_' && id !== 'print') {
-        undefinedIdents.push(id);
-      }
-    });
-
-    const undefinedDeclarations = undefinedIdents.map(id => `const ${id} = __unit;`).join('\n');
 
     // Build the AST JSON Output
     astOutput.textContent = JSON.stringify(astLines.length === 1 ? astLines[0] : astLines, null, 2);
 
-    // 3. Assemble full JS script
-    const runtimeHelpers = RUNTIME_HELPERS_CODE;
+    if (isWASM) {
+      // --- WebAssembly Target Execution Flow ---
+      const watCode = transpileToWasm(resolvedLines, globalEnv);
+      jsOutput.textContent = watCode;
 
-    const generatedCodeOnly = `${undefinedDeclarations}\n${jsStatements.map(s => s + ';').join('\n')}`;
-    jsOutput.textContent = generatedCodeOnly;
+      logToConsole('Compilation to WAT successful!', 'success-msg');
+      logToConsole('Compiling WAT to WASM in browser...', 'system-msg');
 
-    logToConsole('Compilation successful!', 'success-msg');
+      if (typeof window.wabt === 'undefined' && typeof window.WabtModule === 'undefined') {
+        throw new Error('WABT (WebAssembly Binary Toolkit) was not loaded. Please ensure the local /wabt.js is correctly served.');
+      }
 
-    // 4. Run transpiled code in browser
-    logToConsole('Executing code...', 'system-msg');
+      const wabtFn = window.wabt || window.WabtModule;
+      const wabtInstance = await wabtFn();
+      let binary;
+      try {
+        const wasmModule = wabtInstance.parseWat("playground.wat", watCode, { memory64: true });
+        const binaryObj = wasmModule.toBinary({});
+        binary = binaryObj.buffer;
+      } catch (compileErr) {
+        throw new Error(`WABT Compile Error:\n${compileErr.message || compileErr}`);
+      }
 
-    // Intercept standard console.log inside run block
-    window.console.log = (msg) => {
-      logToConsole(msg, 'log-msg');
-      originalConsoleLog(msg);
-    };
+      logToConsole('WASM binary generation successful!', 'success-msg');
+      logToConsole('Instantiating WebAssembly module...', 'system-msg');
 
-    const executionCode = `
+      const wasmInstanced = await WebAssembly.instantiate(binary, {
+        js: {
+          pow: (x, y) => Math.pow(x, y)
+        }
+      });
+
+      logToConsole('Executing WASM main entry...', 'system-msg');
+      const exports = wasmInstanced.instance.exports;
+      
+      // Run main
+      exports.main();
+      logToConsole('WASM Execution completed successfully.', 'success-msg');
+
+      // Dump variables memory state
+      logToConsole('--- WASM64 Memory Dump (Variables) ---', 'system-msg');
+      
+      const memory = exports.memory;
+      const view = new DataView(memory.buffer);
+      const u8 = new Uint8Array(memory.buffer);
+
+      function readWasmString(addr) {
+        if (addr === 0n || addr === 0) return 'null';
+        let str = '';
+        let ptr = Number(addr);
+        while (u8[ptr] !== 0 && ptr < u8.length) {
+          str += String.fromCharCode(u8[ptr]);
+          ptr++;
+        }
+        return str;
+      }
+
+      const memoryMap = getMemoryMap();
+      const structFields = getStructFields();
+      const vars = Array.from(memoryMap.entries()).sort((a, b) => Number(a[1]) - Number(b[1]));
+
+      vars.forEach(([name, addr]) => {
+        const fields = structFields.get(name);
+        if (fields) {
+          logToConsole(`${name} (struct):`, 'log-msg');
+          Object.entries(fields).forEach(([fName, fMeta]) => {
+            const fAddr = addr + fMeta.offset;
+            dumpValue(`  .${fName}`, fAddr);
+          });
+        } else {
+          dumpValue(name, addr);
+        }
+      });
+
+      function dumpValue(label, address) {
+        const rawI64 = view.getBigInt64(address, true);
+        const rawF64 = view.getFloat64(address, true);
+        
+        let extra = '';
+        
+        // Potential string
+        if (rawI64 >= 1024n && rawI64 < 2048n) {
+          const str = readWasmString(rawI64);
+          if (str && /^[a-zA-Z0-9_\-\.\:\/ ]*$/.test(str)) {
+            extra += ` -> String: "${str}"`;
+          }
+        }
+        
+        // Potential Heap Object (Closure)
+        if (rawI64 >= 2048n && rawI64 < 65536n && (rawI64 % 8n === 0n)) {
+          const ptr = Number(rawI64);
+          try {
+            const tableIdx = view.getBigInt64(ptr + 0, true);
+            const expArity = view.getBigInt64(ptr + 8, true);
+            const appCount = view.getBigInt64(ptr + 16, true);
+            const argsPtr = view.getBigInt64(ptr + 24, true);
+            
+            if (expArity >= 1n && expArity <= 10n && appCount >= 0n && appCount <= expArity) {
+              const argsList = [];
+              for (let i = 0n; i < appCount; i++) {
+                const argAddr = Number(argsPtr + i * 8n);
+                const argVal = view.getBigInt64(argAddr, true);
+                const argValF64 = view.getFloat64(argAddr, true);
+                argsList.push(`${argVal} (f64: ${argValF64})`);
+              }
+              extra += ` -> Closure(table_idx: ${tableIdx}, arity: ${appCount}/${expArity}, args: [${argsList.join(', ')}])`;
+            }
+          } catch(e) {}
+        }
+
+        logToConsole(`  ${label}: raw i64: ${rawI64}, f64: ${rawF64}${extra}`, 'log-msg');
+      }
+
+    } else {
+      // --- JavaScript Target Execution Flow ---
+      const jsStatements = [];
+      resolvedLines.forEach(resolved => {
+        const jsCode = transpile(resolved, globalEnv);
+        if (jsCode) {
+          if (resolved && resolved.type === 'operation' && resolved.operator === ':') {
+            jsStatements.push(jsCode);
+          } else {
+            jsStatements.push(`try {
+              const _res = ${jsCode};
+              if (_res !== undefined && _res !== __unit) {
+                console.log(util.inspect(_res));
+              }
+            } catch(e) {}`);
+          }
+        }
+      });
+
+      // Collect used identifiers to find undefined ones
+      const usedIdents = new Set();
+      astLines.forEach(line => collectIdentifiers(line, usedIdents, globalEnv));
+
+      const undefinedIdents = [];
+      usedIdents.forEach(id => {
+        if (!globalEnv.has(`<${id}>`) && id !== '_' && id !== 'print') {
+          undefinedIdents.push(id);
+        }
+      });
+
+      const undefinedDeclarations = undefinedIdents.map(id => `const ${id} = __unit;`).join('\n');
+      const generatedCodeOnly = `${undefinedDeclarations}\n${jsStatements.map(s => s + ';').join('\n')}`;
+      jsOutput.textContent = generatedCodeOnly;
+
+      logToConsole('Compilation successful!', 'success-msg');
+      logToConsole('Executing code...', 'system-msg');
+
+      // Intercept standard console.log inside run block
+      window.console.log = (msg) => {
+        logToConsole(msg, 'log-msg');
+        originalConsoleLog(msg);
+      };
+
+      const runtimeHelpers = RUNTIME_HELPERS_CODE;
+      const executionCode = `
 (() => {
   const _ = window._;
   const util = { inspect: window.inspect };
@@ -308,15 +449,15 @@ runBtn.addEventListener('click', async () => {
   
   ${generatedCodeOnly}
 })()
-    `;
+      `;
 
-    try {
-      // Direct eval in IIFE scope
-      eval(executionCode);
-      logToConsole('Execution completed successfully.', 'success-msg');
-    } catch (err) {
-      logToConsole(`Runtime Error: ${err.message}`, 'error-msg');
-      originalConsoleError(err);
+      try {
+        eval(executionCode);
+        logToConsole('Execution completed successfully.', 'success-msg');
+      } catch (err) {
+        logToConsole(`Runtime Error: ${err.message}`, 'error-msg');
+        originalConsoleError(err);
+      }
     }
 
   } catch (err) {

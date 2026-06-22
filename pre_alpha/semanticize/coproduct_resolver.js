@@ -261,6 +261,9 @@ export function getParamCount(node) {
       return getParamCount(node.left);
     }
     if (node.operator === '~') {
+      if (node.left && node.right) {
+        return getParamCount(node.left) + getParamCount({ type: 'operation', operator: '~', operand: node.right, position: 'prefix' });
+      }
       return 0; // Rest parameter doesn't count towards required arity
     }
   }

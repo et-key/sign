@@ -3,6 +3,7 @@
     "playground": "node run_playground.js"
   },
   "dependencies": {
+    "wabt": "^1.0.39",
     "white_cats": "^0.1.54"
   }
 }

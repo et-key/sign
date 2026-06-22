@@ -1,0 +1,18 @@
+` Test remaining operators in WASM64
+val_pow: 2 ^ 3
+val_shl: 2 << 2
+val_shr: 8 >> 1
+val_or: 2 || 1
+val_xor: 3 ;; 1
+val_and: 3 && 2
+val_not: !!0
+val_fact: 5!
+val_abs: |-42|
+
+` Test property access
+option:
+	type: 123
+	backend: 456
+
+val_prop_1: option ' type
+val_prop_2: backend @ option

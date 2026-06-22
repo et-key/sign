@@ -36,6 +36,16 @@
       
       <div class="controls-area">
         <div class="control-group">
+          <label>Target</label>
+          <div class="target-toggle">
+            <input type="radio" id="targetJS" name="targetMode" value="js" checked>
+            <label for="targetJS">JS</label>
+            <input type="radio" id="targetWASM" name="targetMode" value="wasm">
+            <label for="targetWASM">WASM</label>
+            <div class="toggle-slider"></div>
+          </div>
+        </div>
+        <div class="control-group">
           <label for="exampleSelect">Template</label>
           <select id="exampleSelect" class="custom-select">
             <option value="composition">Function Composition</option>
@@ -85,8 +95,8 @@
         <div class="js-console-group">
           <section class="panel js-panel">
             <div class="panel-header">
-              <h2>Transpiled JavaScript</h2>
-              <span class="panel-subtitle">white_cats ESM Target</span>
+              <h2 id="transpiledTitle">Transpiled JavaScript</h2>
+              <span class="panel-subtitle" id="transpiledSubtitle">white_cats ESM Target</span>
             </div>
             <div class="panel-body code-view">
               <pre><code id="jsOutput" class="language-javascript">// Transpiled code will appear here...</code></pre>
@@ -108,7 +118,8 @@
     </main>
   </div>
   
-  <!-- Import white_cats and core playground logic -->
+  <!-- Import WABT and white_cats / playground logic -->
+  <script src="/wabt.js"></script>
   <script src="/cat.js"></script>
   <script type="module" src="playground.js"></script>
 </body>

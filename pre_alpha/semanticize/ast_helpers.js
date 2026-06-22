@@ -37,6 +37,94 @@ export function getParameterNames(node, names = new Set()) {
   return names;
 }
 
+export function inferType(node, env) {
+  if (!node) return 'Unit';
+  
+  if (typeof node === 'string') {
+    if (node.startsWith('`') && node.endsWith('`')) return 'List';
+    if (node.startsWith('\\') && node.length === 2) return 'Scalar';
+    if (node.startsWith('0x') || node.startsWith('0u')) return 'Scalar';
+    if (node === '__hole' || node === '_') return 'Unknown';
+    if (node === '__unit' || node === '__') return 'Unit';
+    if (!isNaN(node)) return 'Scalar';
+    
+    const clean = node.startsWith('<') && node.endsWith('>') ? node.slice(1, -1) : node;
+    if (env && env.has(clean)) {
+      const entry = env.get(clean);
+      return entry.typeTag || 'Unknown';
+    }
+    if (env && env.has(`<${clean}>`)) {
+      return env.get(`<${clean}>`).typeTag || 'Unknown';
+    }
+    
+    if (['print', 'free', 'reduce_add', 'reduce_sub', 'reduce_mul', 'reduce_div'].includes(clean)) return 'Lambda';
+    return 'Unknown';
+  }
+  
+  if (node.type === 'block') {
+    if (node.kind === 'bracket') {
+      return 'List';
+    }
+    return inferType(node.content, env);
+  }
+  
+  if (node.type === 'coproduct_block') {
+    if (node.statements && node.statements.length === 1) {
+      return inferType(node.statements[0], env);
+    }
+    return 'List';
+  }
+  
+  if (node.type === 'operation') {
+    if (node.operator === ':') {
+      return inferType(node.right, env);
+    }
+    if (node.operator === '?') {
+      return 'Lambda';
+    }
+    if (node.operator === "'") {
+      return 'Unknown'; 
+    }
+    if (node.operator === ',') {
+      return 'List';
+    }
+    if (['+', '-', '*', '/', '%', '^', '<', '>', '<=', '>=', '=', '!='].includes(node.operator)) {
+      return 'Scalar';
+    }
+    if (['&', '|', ';', '&&', '||', ';;', '<<', '>>'].includes(node.operator)) {
+      return 'Scalar';
+    }
+    if (node.position === 'prefix') {
+      if (node.operator === '$') return 'Scalar';
+      if (node.operator === '@') return 'Unknown';
+      if (node.operator === '~') return 'List';
+      if (['!', '!!', '-'].includes(node.operator)) return 'Scalar';
+    }
+    if (node.position === 'postfix') {
+      if (node.operator === '~') return 'Unknown';
+      if (node.operator === '!') return 'Scalar';
+    }
+    if (node.operator === ' ') {
+      if (node.name === 'concat') return 'List';
+      if (node.name === 'compose') return 'Lambda';
+      if (node.name === 'apply') {
+        const leftType = inferType(node.left, env);
+        if (leftType === 'Lambda') {
+          const leftName = typeof node.left === 'string' ? node.left : (node.left.name || '');
+          const clean = leftName.startsWith('<') && leftName.endsWith('>') ? leftName.slice(1, -1) : leftName;
+          if (env && env.has(clean)) {
+            const entry = env.get(clean);
+            if (entry.returnType) return entry.returnType;
+          }
+        }
+        return 'Unknown';
+      }
+    }
+  }
+  
+  return 'Unknown';
+}
+
 export function buildEnvironment(node, env = new Map()) {
   if (!node) return env;
   if (Array.isArray(node)) {
@@ -55,14 +143,27 @@ export function buildEnvironment(node, env = new Map()) {
       
       const paramNames = getParameterNames(node.left);
       paramNames.forEach(name => {
-        currentEnv.set(name, { category: 'Atom', arity: 1 });
+        let typeTag = 'Scalar';
+        let cleanName = name;
         if (name.startsWith('<') && name.endsWith('>')) {
-          currentEnv.set(name.slice(1, -1), { category: 'Atom', arity: 1 });
+          cleanName = name.slice(1, -1);
+        }
+        if (cleanName.startsWith('~')) {
+          typeTag = 'List';
+        }
+        
+        currentEnv.set(name, { category: 'Atom', arity: 1, typeTag });
+        if (name.startsWith('<') && name.endsWith('>')) {
+          currentEnv.set(cleanName, { category: 'Atom', arity: 1, typeTag });
         }
       });
       
       buildEnvironment(node.left, currentEnv);
       buildEnvironment(node.right, currentEnv);
+      
+      const retType = inferType(node.right, currentEnv);
+      node.returnType = retType;
+      
       return env;
     }
     if (node.type === 'operation' && node.operator === ':') {
@@ -78,7 +179,27 @@ export function buildEnvironment(node, env = new Map()) {
       if (arity > 0) {
         rightCat = 'Lambda';
       }
-      currentEnv.set(identName, { category: rightCat, arity: arity });
+      
+      const typeTag = inferType(node.right, currentEnv);
+      let isRealFunction = false;
+      let targetR = node.right;
+      while (targetR && targetR.type === 'block') {
+        targetR = targetR.content;
+      }
+      if (targetR && targetR.type === 'operation' && targetR.operator === '?') {
+        isRealFunction = true;
+      } else if (targetR && targetR.type === 'inline_code') {
+        isRealFunction = true;
+      }
+      const entry = { category: rightCat, arity: arity, typeTag, isRealFunction };
+      if (node.right && node.right.returnType) {
+        entry.returnType = node.right.returnType;
+      }
+      
+      currentEnv.set(identName, entry);
+      if (identName.startsWith('<') && identName.endsWith('>')) {
+        currentEnv.set(identName.slice(1, -1), entry);
+      }
     }
     for (const key of Object.keys(node)) {
       if (key !== 'type' && key !== 'name' && key !== 'operator' && key !== 'kind' && key !== 'env') {

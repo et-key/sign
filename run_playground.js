@@ -29,6 +29,8 @@ const server = http.createServer((req, res) => {
   let filePath;
   if (reqPath === '/cat.js') {
     filePath = path.join(WORKSPACE_DIR, 'cat.js');
+  } else if (reqPath === '/wabt.js') {
+    filePath = path.join(WORKSPACE_DIR, 'node_modules', 'wabt', 'index.js');
   } else if (reqPath.startsWith('/pre_alpha/')) {
     filePath = path.join(WORKSPACE_DIR, reqPath);
   } else {
