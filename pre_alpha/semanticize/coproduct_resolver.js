@@ -193,10 +193,10 @@ function reduceCoproductBlock(statements, env) {
   // A_Operator_Table.md に基づく優先順位定義
   // 優先順位が高い（先に結合される）順に処理
   const PRECEDENCES = [
-    { level: 10.3, leftCat: 'Lambda', rightCat: 'Lambda', name: 'compose' },
-    { level: 10.2, leftCat: 'Lambda', rightCat: 'Atom', name: 'apply' },
-    { level: 10.1, leftCat: 'Atom', rightCat: 'Lambda', name: 'apply_reverse' },
-    { level: 10.0, leftCat: 'Atom', rightCat: 'Atom', name: 'concat' }
+    { level: 10.3, leftCat: 'Atom', rightCat: 'Atom', name: 'concat' },
+    { level: 10.2, leftCat: 'Lambda', rightCat: 'Lambda', name: 'compose' },
+    { level: 10.1, leftCat: 'Lambda', rightCat: 'Atom', name: 'apply' },
+    { level: 10.0, leftCat: 'Atom', rightCat: 'Lambda', name: 'apply_reverse' }
   ];
 
   // 各優先順位レベルについて、左結合で適用可能なペアを探して還元
@@ -217,10 +217,20 @@ function reduceCoproductBlock(statements, env) {
           if (prec.name === 'concat') {
             const typeL = inferType(left, env);
             const typeR = inferType(right, env);
-            const isListL = (typeL === 'List' || (left && left.type === 'block' && left.kind === 'bracket') || (left && left.type === 'coproduct_block'));
-            const isListR = (typeR === 'List' || (right && right.type === 'block' && right.kind === 'bracket') || (right && right.type === 'coproduct_block'));
+            const isListL = (
+              (typeL === 'List' && !(left && left.type === 'operation' && left.name === 'concat')) ||
+              typeL === 'Dict' ||
+              (left && left.type === 'block' && (left.kind === 'bracket' || left.kind === 'brace')) ||
+              (left && left.type === 'coproduct_block')
+            );
+            const isListR = (
+              (typeR === 'List' && !(right && right.type === 'operation' && right.name === 'concat')) ||
+              typeR === 'Dict' ||
+              (right && right.type === 'block' && (right.kind === 'bracket' || right.kind === 'brace')) ||
+              (right && right.type === 'coproduct_block')
+            );
 
-            if (isListL && isListR) {
+            if (isListL || isListR) {
               const leftHasTilde = (left && left.type === 'operation' && left.operator === '~' && left.position === 'postfix');
               const rightHasTilde = (right && right.type === 'operation' && right.operator === '~' && right.position === 'postfix');
               if (leftHasTilde && rightHasTilde) {
