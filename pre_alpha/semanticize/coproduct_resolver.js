@@ -214,7 +214,7 @@ function reduceCoproductBlock(statements, env) {
         if (catL === prec.leftCat && catR === prec.rightCat) {
           let newNode;
 
-          if (prec.name === 'concat') {
+            if (prec.name === 'concat') {
             const typeL = inferType(left, env);
             const typeR = inferType(right, env);
             const isListL = (
@@ -230,18 +230,25 @@ function reduceCoproductBlock(statements, env) {
               (right && right.type === 'coproduct_block')
             );
 
+            const leftHasTilde = (left && left.type === 'operation' && left.operator === '~' && left.position === 'postfix');
+            const rightHasTilde = (right && right.type === 'operation' && right.operator === '~' && right.position === 'postfix');
+
+            let allowConcat = false;
             if (isListL && isListR) {
-              const leftHasTilde = (left && left.type === 'operation' && left.operator === '~' && left.position === 'postfix');
-              const rightHasTilde = (right && right.type === 'operation' && right.operator === '~' && right.position === 'postfix');
-              if (leftHasTilde && rightHasTilde) {
-                newNode = { type: 'operation', operator: ' ', left, right, name: 'concat' };
-                items.splice(i, 2, newNode);
-              } else {
-                continue;
-              }
+              allowConcat = leftHasTilde && rightHasTilde;
+            } else if (isListL && !isListR) {
+              allowConcat = leftHasTilde;
+            } else if (!isListL && isListR) {
+              allowConcat = rightHasTilde;
             } else {
+              allowConcat = true;
+            }
+
+            if (allowConcat) {
               newNode = { type: 'operation', operator: ' ', left, right, name: 'concat' };
               items.splice(i, 2, newNode);
+            } else {
+              continue;
             }
           }
           else if (prec.name === 'compose') {

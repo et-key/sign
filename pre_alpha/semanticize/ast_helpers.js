@@ -212,7 +212,7 @@ export function buildEnvironment(node, env = new Map()) {
         }
       }
       let rightCat = getInitialCategory(node.right, currentEnv);
-      const arity = getArity(node.right, currentEnv);
+      let arity = getArity(node.right, currentEnv);
       if (arity > 0) {
         rightCat = 'Lambda';
       }
@@ -225,6 +225,7 @@ export function buildEnvironment(node, env = new Map()) {
       }
       if (targetR && targetR.type === 'operation' && targetR.operator === '?') {
         isRealFunction = true;
+        arity = getParameterNames(targetR.left).size;
       } else if (targetR && targetR.type === 'inline_code') {
         isRealFunction = true;
       }

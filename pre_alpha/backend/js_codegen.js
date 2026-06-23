@@ -307,10 +307,50 @@ function _transpile(node) {
       // Space operator (resolved operations)
       if (node.operator === ' ') {
         if (node.name === 'concat') {
-          return `_concat(${_transpile(node.left)}, ${_transpile(node.right)})`;
+          const typeL = inferType(node.left, currentEnv);
+          const typeR = inferType(node.right, currentEnv);
+
+          const leftHasTilde = (node.left && node.left.type === 'operation' && node.left.operator === '~' && node.left.position === 'postfix');
+          const rightHasTilde = (node.right && node.right.type === 'operation' && node.right.operator === '~' && node.right.position === 'postfix');
+
+          const lVal = leftHasTilde ? _transpile(node.left.operand) : _transpile(node.left);
+          const rVal = rightHasTilde ? _transpile(node.right.operand) : _transpile(node.right);
+
+          if (typeL === 'List' && typeR === 'List' && leftHasTilde && rightHasTilde) {
+            return `[..._expand(${lVal}), ..._expand(${rVal})]`;
+          }
+          if (typeL === 'Dict' && typeR === 'Dict' && leftHasTilde && rightHasTilde) {
+            return `{ ...(_expand(${lVal})[0]?.obj || {}), ...(_expand(${rVal})[0]?.obj || {}) }`;
+          }
+          if ((typeL === 'Dict' || typeR === 'Dict') && leftHasTilde && rightHasTilde) {
+            return `{ ...(_expand(${lVal})[0]?.obj || {}), ...(_expand(${rVal})[0]?.obj || {}) }`;
+          }
+          if (typeL === 'Scalar' && typeR === 'List' && rightHasTilde) {
+            return `[${lVal}, ..._expand(${rVal})]`;
+          }
+          if (typeL === 'List' && typeR === 'Scalar' && leftHasTilde) {
+            return `[..._expand(${lVal}), ${rVal}]`;
+          }
+          if (typeL === 'Scalar' && typeR === 'Scalar' && !leftHasTilde && !rightHasTilde) {
+            return `[${lVal}, ${rVal}]`;
+          }
+
+          return `((l, r) => {
+            const isPlainObj = (o) => typeof o === 'object' && o !== null && !Array.isArray(o) && !(o instanceof Address);
+            const hasObj = isPlainObj(l) || isPlainObj(r) || (Array.isArray(l) && l[0] && l[0].constructor && l[0].constructor.name === 'ExpandedObject') || (Array.isArray(r) && r[0] && r[0].constructor && r[0].constructor.name === 'ExpandedObject');
+            if (hasObj) {
+              const getObj = (x) => {
+                if (Array.isArray(x)) return x[0] && typeof x[0] === 'object' && x[0].constructor && x[0].constructor.name === 'ExpandedObject' ? x[0].obj : {};
+                return isPlainObj(x) ? x : {};
+              };
+              return { ...getObj(l), ...getObj(r) };
+            }
+            const toArr = (x) => Array.isArray(x) ? x : [x];
+            return [...toArr(l), ...toArr(r)];
+          })(${_transpile(node.left)}, ${_transpile(node.right)})`;
         }
         if (node.name === 'compose') {
-          return `_compose(${_transpile(node.left)}, ${_transpile(node.right)})`;
+          return `((...args) => ${_transpile(node.right)}(${_transpile(node.left)}(...args)))`;
         }
         if (node.name === 'apply') {
           let leftNode = node.left;
@@ -333,15 +373,58 @@ function _transpile(node) {
           }
 
           const hasExpandArg = args.some(arg => arg && arg.type === 'operation' && arg.operator === '~' && arg.position === 'postfix');
-          const canDirectCall = (staticArity !== undefined && isRealFunction && !hasExpandArg && args.length === staticArity);
+          const hasHole = args.some(arg => arg === '_' || arg === '__hole' || (arg && arg.type === 'Identifier' && arg.name === '_'));
 
-          if (canDirectCall) {
-            inArgumentListStack.push(true);
-            const argsCode = args.map(arg => _transpile(arg)).join(', ');
-            inArgumentListStack.pop();
-            return `${_transpile(node.left)}(${argsCode})`;
+          if (staticArity !== undefined && isRealFunction && !hasExpandArg) {
+            const isVariadic = staticArity === Infinity;
+            // (1) 引数の数が一致する（または可変引数）で、Holeがない場合は直接呼び出し
+            if ((args.length === staticArity || isVariadic) && !hasHole) {
+              inArgumentListStack.push(true);
+              const transpiledArgs = args.map(arg => _transpile(arg));
+              inArgumentListStack.pop();
+
+              const params = args.map((_, idx) => `_a${idx}`);
+              const checks = params.map(p => `${p} === __unit`).join(' || ');
+              const fnCall = `${_transpile(node.left)}(${params.join(', ')})`;
+              if (params.length === 0) {
+                return fnCall;
+              }
+              return `((${params.join(', ')}) => (${checks}) ? __unit : ${fnCall})(${transpiledArgs.join(', ')})`;
+            }
+
+            // (2) 引数が不足しているか、Holeがある場合は部分適用アロー関数
+            if (args.length < staticArity || hasHole) {
+              inArgumentListStack.push(true);
+              const arrowParams = [];
+              const callArgs = [];
+              let pIdx = 0;
+
+              args.forEach(arg => {
+                const isHole = arg === '_' || arg === '__hole' || (arg && arg.type === 'Identifier' && arg.name === '_');
+                if (isHole) {
+                  const paramName = `_p${pIdx++}`;
+                  arrowParams.push(paramName);
+                  callArgs.push(paramName);
+                } else {
+                  callArgs.push(_transpile(arg));
+                }
+              });
+
+              const missingCount = isVariadic ? 0 : staticArity - args.length;
+              for (let k = 0; k < missingCount; k++) {
+                const paramName = `_p${pIdx++}`;
+                arrowParams.push(paramName);
+                callArgs.push(paramName);
+              }
+              inArgumentListStack.pop();
+
+              const checks = callArgs.map(a => `${a} === __unit`).join(' || ');
+              const fnCall = `${_transpile(node.left)}(${callArgs.join(', ')})`;
+              return `((${arrowParams.join(', ')}) => (${checks}) ? __unit : ${fnCall})`;
+            }
           }
 
+          // (3) 過剰適用、または静的 arity 不明な場合は軽量 _call
           inArgumentListStack.push(true);
           let argsCode;
           if (node.right && node.right.type === 'coproduct_block') {
@@ -363,8 +446,8 @@ function _transpile(node) {
           inArgumentListStack.pop();
           return `_call(${_transpile(node.left)}, ${argsCode})`;
         }
-        
-        // Unresolved space operator (should be resolved by semanticize, but handle safely)
+
+        // Unresolved space operator
         inArgumentListStack.push(true);
         const rightEval = _transpile(node.right);
         inArgumentListStack.pop();
@@ -374,7 +457,7 @@ function _transpile(node) {
       if (node.operator === ',') {
         const lhs = node.left !== undefined && node.left !== null ? _transpile(node.left) : '__hole';
         const rhs = node.right !== undefined && node.right !== null ? _transpile(node.right) : '__hole';
-        return `_product(${lhs}, ${rhs})`;
+        return `((l, r) => (l === __unit && r === __unit) ? __unit : (l === __unit ? r : (r === __unit ? l : [l, r])))(${lhs}, ${rhs})`;
       }
 
       // Range operators

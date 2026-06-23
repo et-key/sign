@@ -27,75 +27,7 @@ const _isTrue = (val) => {
   return true;
 };
 
-const _concat = (...args) => {
-  const isPlainObj = (o) => typeof o === 'object' && o !== null && !Array.isArray(o) && !(o instanceof ExpandedObject) && !(o instanceof Address) && !(typeof Promise !== 'undefined' && o instanceof Promise);
-  
-  const hasObj = args.some(isPlainObj);
-  if (hasObj) {
-    const merged = {};
-    let typeMismatch = false;
-    for (const obj of args) {
-      if (obj === __unit || obj === __hole) {
-        continue;
-      }
-      let currentObj = obj;
-      if (Array.isArray(obj)) {
-        currentObj = {};
-        obj.forEach((val, idx) => {
-          currentObj[idx] = val;
-        });
-      } else if (!isPlainObj(obj)) {
-        currentObj = { 0: obj };
-      }
-      
-      for (const key of Object.keys(currentObj)) {
-        if (key in merged) {
-          const tL = typeof merged[key];
-          const tR = typeof currentObj[key];
-          if (tL !== tR && merged[key] !== __hole && currentObj[key] !== __hole && merged[key] !== __unit && currentObj[key] !== __unit) {
-            typeMismatch = true;
-            break;
-          }
-        }
-        merged[key] = currentObj[key];
-      }
-      if (typeMismatch) return __unit;
-    }
-    return merged;
-  }
 
-  const flats = args.map(a => Array.isArray(a) ? a.flat(1) : [a]).flat(1).filter(x => x !== __unit);
-  if (flats.length === 0) return __unit;
-  if (flats.some(x => typeof x === 'string')) {
-    return flats.map(x => (x === __hole || x === __unit) ? '' : String(x)).join('');
-  }
-  return flats;
-};
-
-const _product = (left, right) => {
-  if (left === __unit && right === __unit) return __unit;
-  if (left === __unit) return right;
-  if (right === __unit) return left;
-  const isArrayL = Array.isArray(left);
-  const isArrayR = Array.isArray(right);
-  if (!isArrayL && !isArrayR) {
-    return [left, right];
-  }
-  if (!isArrayL && isArrayR) {
-    const is1D = right.every(x => !Array.isArray(x));
-    return is1D ? [left, ...right] : [[left], ...right];
-  }
-  if (isArrayL && !isArrayR) {
-    const is1D = left.every(x => !Array.isArray(x));
-    return is1D ? [...left, right] : [...left, [right]];
-  }
-  const is1DL = left.every(x => !Array.isArray(x));
-  const is1DR = right.every(x => !Array.isArray(x));
-  if (is1DL && is1DR) {
-    return [left, right];
-  }
-  return [left, right];
-};
 
 class ExpandedStream {
   constructor(stream) {
@@ -160,49 +92,7 @@ const _expand = (a) => {
   return [a];
 };
 
-function _resolveNamedArgs(fn, args) {
-  const hasExpanded = args.some(arg => arg instanceof ExpandedObject);
-  if (!hasExpanded) return args;
 
-  const isCurried = fn.__isCurried;
-  const target = isCurried ? fn.target : fn;
-  const specs = target.paramSpecs || [];
-  
-  if (specs.length === 0) {
-    return args.map(arg => arg instanceof ExpandedObject ? arg.obj : arg);
-  }
-
-  const resolvedArgs = [];
-  const expandedArg = args.find(arg => arg instanceof ExpandedObject);
-  const obj = expandedArg.obj || {};
-  const consumedKeys = new Set();
-
-  specs.forEach(spec => {
-    const pName = spec.name;
-    if (spec.isRest) {
-      const restObj = {};
-      for (const key of Object.keys(obj)) {
-        if (!consumedKeys.has(key)) {
-          restObj[key] = obj[key];
-        }
-      }
-      resolvedArgs.push(restObj);
-      consumedKeys.add(pName);
-    } else {
-      if (pName in obj) {
-        resolvedArgs.push(obj[pName]);
-        consumedKeys.add(pName);
-      } else if (Symbol.for(pName) in obj) {
-        resolvedArgs.push(obj[Symbol.for(pName)]);
-        consumedKeys.add(pName);
-      } else {
-        resolvedArgs.push(__hole);
-      }
-    }
-  });
-
-  return resolvedArgs;
-}
 
 function _makePointFreeBinary(opFn) {
   const fn = (...args) => {
@@ -260,261 +150,28 @@ function _makeCurried(fn, expectedLength, argsSoFar) {
   return wrapper;
 }
 
-function _applyArgs(fn, args) {
-  return fn(...args);
-}
+function _call(fn, ...args) {
+  if (typeof fn !== 'function') return __unit;
+  if (args.includes(__unit)) return __unit;
 
-const _compose = (left, right) => {
-  if (left === __unit && right === __unit) return __unit;
-  if (left === __unit) return right;
-  if (right === __unit) return left;
-  const composedFn = (...args) => {
-    return _call(right, _call(left, ...args));
-  };
-  const rightLength = right.__isCurried ? right.length : (right.expectedLength !== undefined ? right.expectedLength : right.length);
-  const hasRest = (left.hasRest || left.__isPointFreeBinary || left.__isPointFreeMapFilter) ||
-                  (right.hasRest || right.__isPointFreeBinary || right.__isPointFreeMapFilter);
-  Object.defineProperty(composedFn, 'length', { value: rightLength });
-  composedFn.expectedLength = rightLength;
-  composedFn.hasRest = hasRest;
-  return composedFn;
-}
+  const isCurried = fn.__isCurried;
+  const target = isCurried ? fn.target : fn;
+  const argsSoFar = isCurried ? fn.args : [];
+  const expected = isCurried ? fn.expectedLength : (fn.expectedLength !== undefined ? fn.expectedLength : fn.length);
 
-function _call(left, ...args) {
-  const resolvedArgs = _resolveNamedArgs(left, args);
-  return _callInternal(left, ...resolvedArgs);
-}
+  const totalArgs = [...argsSoFar, ...args];
 
-function _callInternal(left, ...args) {
-  if (args.length === 0) return left;
-
-  if (Array.isArray(left)) {
-    if (left.length > 0 && typeof left[0] === 'function') {
-      return _callInternal(left[0], ...left.slice(1), ...args);
-    }
-    const hasFuncOrHole = left.some(x => typeof x === 'function' || x === __hole);
-    if (hasFuncOrHole) {
-      const flatArgs = args.flatMap(x => Array.isArray(x) ? x : [x]);
-      let argIdx = 0;
-      const result = [];
-      for (const e of left) {
-        if (typeof e === 'function') {
-          const expectedLength = e.__isCurried ? e.length : (e.expectedLength !== undefined ? e.expectedLength : e.length);
-          const k = expectedLength || 1;
-          const subArgs = flatArgs.slice(argIdx, argIdx + k);
-          while (subArgs.length < k) {
-            subArgs.push(__hole);
-          }
-          result.push(_call(e, ...subArgs));
-          argIdx += k;
-        } else if (e === __hole) {
-          if (argIdx < flatArgs.length) {
-            result.push(flatArgs[argIdx]);
-            argIdx++;
-          } else {
-            result.push(__hole);
-          }
-        } else {
-          result.push(e);
-        }
-      }
-      if (argIdx < flatArgs.length) {
-        result.push(...flatArgs.slice(argIdx));
-      }
-      return result;
-    }
+  if (totalArgs.length < expected) {
+    return _makeCurried(target, expected, totalArgs);
   }
 
-  if (args.includes(__unit)) {
-    const fnObj = left.__isCurried ? left.target : left;
-    if (fnObj && fnObj.paramSpecs) {
-      const restIdx = fnObj.paramSpecs.findIndex(p => p.isRest);
-      const itemIdx = restIdx > 0 ? restIdx - 1 : -1;
-      if (itemIdx >= 0 && args[itemIdx] !== __unit) {
-        // Defer extraction: the current item being processed is not __unit yet.
-      } else {
-        if (fnObj._extractIndex !== undefined && fnObj._extractIndex >= 0) {
-          return args[fnObj._extractIndex];
-        }
-        return __unit;
-      }
-    } else {
-      if (fnObj && fnObj._extractIndex !== undefined && fnObj._extractIndex >= 0) {
-        return args[fnObj._extractIndex];
-      }
-      return __unit;
-    }
+  const invokeArgs = totalArgs.slice(0, expected);
+  const remaining = totalArgs.slice(expected);
+  const res = target(...invokeArgs);
+  if (remaining.length > 0) {
+    return _call(res, ...remaining);
   }
-
-  const typeL = typeof left;
-  
-  if (typeL === 'function') {
-    const isCurried = left.__isCurried;
-    const target = isCurried ? left.target : left;
-    const argsSoFar = isCurried ? left.args : [];
-    if (target.expectedLength === undefined && target.hasRest === undefined) {
-      if (typeof console !== 'undefined' && (
-        target === console.log ||
-        target === console.error ||
-        target === console.warn ||
-        target === console.info ||
-        target === console.debug
-      )) {
-        return target.apply(console, [...argsSoFar, ...args]);
-      }
-      return target(...argsSoFar, ...args);
-    }
-
-    // 1. Check composition first
-    if (args.length === 1 && typeof args[0] === 'function') {
-      const expectedL = left.__isCurried ? left.length : (left.expectedLength !== undefined ? left.expectedLength : left.length);
-      if (expectedL === 1) {
-        const right = args[0];
-        const composedFn = (...nextArgs) => {
-          return _call(right, _call(left, ...nextArgs));
-        };
-        const rightLength = right.__isCurried ? right.length : (right.expectedLength !== undefined ? right.expectedLength : right.length);
-        const hasRest = (left.hasRest || left.__isPointFreeBinary || left.__isPointFreeMapFilter) ||
-                        (right.hasRest || right.__isPointFreeBinary || right.__isPointFreeMapFilter);
-        Object.defineProperty(composedFn, 'length', { value: rightLength });
-        composedFn.expectedLength = rightLength;
-        composedFn.hasRest = hasRest;
-        return composedFn;
-      }
-    }
-
-    if (left.__isPointFreeBinary) {
-      if (args.length === 1 && Array.isArray(args[0])) {
-        if (args[0].length === 0) return __unit;
-        return args[0].reduce(left.target);
-      }
-      return args.reduce(left.target);
-    }
-    if (left.__isPointFreeMapFilter) {
-      return left(...args);
-    }
-
-    // 2. Standard Application / Currying
-    const expectedLength = isCurried ? left.expectedLength : (left.expectedLength !== undefined ? left.expectedLength : left.length);
-    const requiredLength = isCurried ?
-      (left.target.requiredLength !== undefined ? left.target.requiredLength : expectedLength) :
-      (left.requiredLength !== undefined ? left.requiredLength : expectedLength);
-    const hasRest = isCurried ? left.target.hasRest : left.hasRest;
-    
-    // (a) Hole filling
-    let totalArgs = [...argsSoFar];
-    let argIdx = 0;
-    for (let i = 0; i < totalArgs.length; i++) {
-      if (totalArgs[i] === __hole && argIdx < args.length) {
-        totalArgs[i] = args[argIdx];
-        argIdx++;
-      }
-    }
-    if (argIdx < args.length) {
-      totalArgs.push(...args.slice(argIdx));
-    }
-    
-    // Destructuring / array arguments expansion
-    if (totalArgs.length > 0 && Array.isArray(totalArgs[totalArgs.length - 1])) {
-      const lastIdx = totalArgs.length - 1;
-      const argsBeforeLast = totalArgs.slice(0, lastIdx);
-      
-      const specs = target.paramSpecs || [];
-      const isDestruct = specs[lastIdx] && specs[lastIdx].isDestructured;
-      
-      if (!isDestruct && argsBeforeLast.length < expectedLength) {
-        totalArgs = [...argsBeforeLast, ...totalArgs[lastIdx]];
-      }
-    }
-
-    // (b) ExpandedStream expansion
-    const hasStream = totalArgs.some(x => x instanceof ExpandedStream);
-    if (hasStream) {
-      const specs = target.paramSpecs || [];
-      const resolvedArgs = [];
-      for (let i = 0; i < totalArgs.length; i++) {
-        const arg = totalArgs[i];
-        if (arg instanceof ExpandedStream) {
-          const iterator = arg.stream[Symbol.iterator]();
-          while (true) {
-            const currentSpec = specs[resolvedArgs.length];
-            if (!currentSpec) {
-              const { value, done } = iterator.next();
-              if (done) break;
-              resolvedArgs.push(value);
-              continue;
-            }
-            if (currentSpec.isRest) {
-              resolvedArgs.push({
-                [Symbol.iterator]: () => iterator,
-                isStream: true
-              });
-              break;
-            } else {
-              const { value, done } = iterator.next();
-              if (done) {
-                resolvedArgs.push(__unit);
-              } else {
-                resolvedArgs.push(value);
-              }
-            }
-          }
-        } else {
-          resolvedArgs.push(arg);
-        }
-      }
-      totalArgs = resolvedArgs;
-    }
-
-    // (c) Check for __unit after expansion
-    if (totalArgs.includes(__unit)) {
-      if (target.paramSpecs) {
-        const restIdx = target.paramSpecs.findIndex(p => p.isRest);
-        const itemIdx = restIdx > 0 ? restIdx - 1 : -1;
-        if (itemIdx >= 0 && totalArgs[itemIdx] !== __unit) {
-          // Defer extraction
-        } else {
-          if (target._extractIndex !== undefined && target._extractIndex >= 0) {
-            return totalArgs[target._extractIndex];
-          }
-          return __unit;
-        }
-      } else {
-        if (target._extractIndex !== undefined && target._extractIndex >= 0) {
-          return totalArgs[target._extractIndex];
-        }
-        return __unit;
-      }
-    }
-    
-    // (d) Determine currying or execution
-    while (totalArgs.length < requiredLength) {
-      totalArgs.push(__hole);
-    }
-    
-    if (totalArgs.includes(__hole)) {
-      return _makeCurried(target, expectedLength, totalArgs);
-    }
-    
-    if (hasRest) {
-      return _applyArgs(target, totalArgs);
-    }
-    const invokeArgs = totalArgs.slice(0, expectedLength);
-    const remainingArgs = totalArgs.slice(expectedLength);
-    const res = _applyArgs(target, invokeArgs);
-    if (remainingArgs.length > 0) {
-      return _call(res, ...remainingArgs);
-    }
-    return res;
-  }
-  
-  if (typeof args[0] === 'function') {
-    const res = _call(args[0], left);
-    return _call(res, ...args.slice(1));
-  }
-
-  const res = _concat(left, args[0]);
-  return _call(res, ...args.slice(1));
+  return res;
 }
 
 const _arithmetic = (op, left, right) => {
