@@ -125,7 +125,12 @@ export function inferType(node, env) {
       if (node.operator === '!') return 'Scalar';
     }
     if (node.operator === ' ') {
-      if (node.name === 'concat') return 'List';
+      if (node.name === 'concat') {
+        const typeL = inferType(node.left, env);
+        const typeR = inferType(node.right, env);
+        if (typeL === 'Dict' || typeR === 'Dict') return 'Dict';
+        return 'List';
+      }
       if (node.name === 'compose') return 'Lambda';
       if (node.name === 'apply') {
         const leftType = inferType(node.left, env);

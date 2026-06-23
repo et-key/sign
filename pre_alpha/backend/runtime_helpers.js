@@ -30,20 +30,34 @@ const _isTrue = (val) => {
 const _concat = (...args) => {
   const isPlainObj = (o) => typeof o === 'object' && o !== null && !Array.isArray(o) && !(o instanceof ExpandedObject) && !(o instanceof Address) && !(typeof Promise !== 'undefined' && o instanceof Promise);
   
-  if (args.length > 0 && args.every(isPlainObj)) {
+  const hasObj = args.some(isPlainObj);
+  if (hasObj) {
     const merged = {};
     let typeMismatch = false;
     for (const obj of args) {
-      for (const key of Object.keys(obj)) {
+      if (obj === __unit || obj === __hole) {
+        continue;
+      }
+      let currentObj = obj;
+      if (Array.isArray(obj)) {
+        currentObj = {};
+        obj.forEach((val, idx) => {
+          currentObj[idx] = val;
+        });
+      } else if (!isPlainObj(obj)) {
+        currentObj = { 0: obj };
+      }
+      
+      for (const key of Object.keys(currentObj)) {
         if (key in merged) {
           const tL = typeof merged[key];
-          const tR = typeof obj[key];
-          if (tL !== tR && merged[key] !== __hole && obj[key] !== __hole && merged[key] !== __unit && obj[key] !== __unit) {
+          const tR = typeof currentObj[key];
+          if (tL !== tR && merged[key] !== __hole && currentObj[key] !== __hole && merged[key] !== __unit && currentObj[key] !== __unit) {
             typeMismatch = true;
             break;
           }
         }
-        merged[key] = obj[key];
+        merged[key] = currentObj[key];
       }
       if (typeMismatch) return __unit;
     }
