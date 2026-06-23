@@ -1438,24 +1438,40 @@ function scanMetadata(node) {
 
 function registerGlobals(node) {
   if (!node) return;
-  if (node.type === 'operation' && ['#', '##', '###'].includes(node.operator) && node.position === 'prefix') {
-    node = node.operand;
-  }
-  if (!node || node.type !== 'operation' || node.operator !== ':') return;
   
-  const lhs = getLHSName(node.left);
+  let isGlobal = false;
+  let targetNode = node;
+  
+  if (targetNode.type === 'operation' && ['#', '##', '###'].includes(targetNode.operator) && targetNode.position === 'prefix') {
+    isGlobal = true;
+    targetNode = targetNode.operand;
+  }
+  
+  if (!targetNode || targetNode.type !== 'operation' || targetNode.operator !== ':') return;
+  
+  // Also check if rhs has prefix '#'
+  if (targetNode.right && targetNode.right.type === 'operation' && ['#', '##', '###'].includes(targetNode.right.operator) && targetNode.right.position === 'prefix') {
+    isGlobal = true;
+  }
+
+  const lhs = getLHSName(targetNode.left);
   // Functions don't need memory layout, but variables/dicts do
-  if (node.right && node.right.type === 'operation' && node.right.operator === '?') {
+  if (targetNode.right && targetNode.right.type === 'operation' && targetNode.right.operator === '?') {
     return; // Will be compiled as WASM function
   }
 
-  // Allocate in linear memory
-  const size = structFields.has(lhs) ? Object.keys(structFields.get(lhs)).length * 8 + 8 : 8;
-  const addr = memoryOffset;
-  memoryMap.set(lhs, addr);
-  memoryOffset += Math.ceil(size / 8) * 8; // 8-byte aligned
+  if (isGlobal) {
+    // Allocate in linear memory
+    const size = structFields.has(lhs) ? Object.keys(structFields.get(lhs)).length * 8 + 8 : 8;
+    const addr = memoryOffset;
+    memoryMap.set(lhs, addr);
+    memoryOffset += Math.ceil(size / 8) * 8; // 8-byte aligned
 
-  watGlobals.push(`  (global $${lhs} i64 (i64.const ${addr}))`);
+    watGlobals.push(`  (global $${lhs} i64 (i64.const ${addr}))`);
+  } else {
+    // Register as main local instead of global
+    mainLocals.set(lhs, 'i64');
+  }
 }
 
 function getLHSName(node) {
@@ -1504,11 +1520,17 @@ function flattenStatements(node) {
 }
 
 function compileLine(node) {
-  if (node && node.type === 'operation' && ['#', '##', '###'].includes(node.operator) && node.position === 'prefix') {
-    node = node.operand;
+  if (!node) return;
+  
+  let isGlobal = false;
+  let targetNode = node;
+  
+  if (targetNode.type === 'operation' && ['#', '##', '###'].includes(targetNode.operator) && targetNode.position === 'prefix') {
+    isGlobal = true;
+    targetNode = targetNode.operand;
   }
   
-  if (!node || node.type !== 'operation' || node.operator !== ':') {
+  if (!targetNode || targetNode.type !== 'operation' || targetNode.operator !== ':') {
     // Top-level execution statement
     const insts = compileExpression(node, mainLocals);
     if (insts.length > 0) {
@@ -1518,44 +1540,84 @@ function compileLine(node) {
     return;
   }
 
-  const lhs = getLHSName(node.left);
-  const rhs = node.right;
+  // Also check if rhs has prefix '#'
+  let rhs = targetNode.right;
+  if (rhs && rhs.type === 'operation' && ['#', '##', '###'].includes(rhs.operator) && rhs.position === 'prefix') {
+    isGlobal = true;
+    rhs = rhs.operand;
+  }
+
+  const lhs = getLHSName(targetNode.left);
   if (rhs && rhs.type === 'operation' && rhs.operator === '?') {
     // Compile function
     compileFunction(lhs, rhs);
   } else {
-    // Initialize global struct/variable in main
-    if (rhs && rhs.type === 'block' && rhs.kind === 'indent') {
-      const stmts = flattenStatements(rhs.content);
-      const fields = structFields.get(lhs);
-      const validFields = stmts.filter(s => s && s.type === 'operation' && s.operator === ':');
-      
-      mainInstructions.push(`  global.get $${lhs}`);
-      mainInstructions.push(`  i64.const ${validFields.length}`);
-      mainInstructions.push(`  i64.store`);
-
-      validFields.forEach(s => {
-        const fName = getLHSName(s.left);
-        const fMeta = fields[fName];
+    if (isGlobal) {
+      // Global variable/struct initialization (on linear memory)
+      if (rhs && rhs.type === 'block' && rhs.kind === 'indent') {
+        const stmts = flattenStatements(rhs.content);
+        const fields = structFields.get(lhs);
+        const validFields = stmts.filter(s => s && s.type === 'operation' && s.operator === ':');
         
-        // Calculate target offset address
         mainInstructions.push(`  global.get $${lhs}`);
-        mainInstructions.push(`  i64.const ${fMeta.offset + 8}`);
-        mainInstructions.push(`  i64.add`);
-        
-        // Compile right-hand side value
-        const valInsts = compileExpression(s.right, mainLocals);
-        mainInstructions.push(...valInsts);
-        
-        // Store
+        mainInstructions.push(`  i64.const ${validFields.length}`);
         mainInstructions.push(`  i64.store`);
-      });
+
+        validFields.forEach(s => {
+          const fName = getLHSName(s.left);
+          const fMeta = fields[fName];
+          
+          mainInstructions.push(`  global.get $${lhs}`);
+          mainInstructions.push(`  i64.const ${fMeta.offset + 8}`);
+          mainInstructions.push(`  i64.add`);
+          
+          const valInsts = compileExpression(s.right, mainLocals);
+          mainInstructions.push(...valInsts);
+          mainInstructions.push(`  i64.store`);
+        });
+      } else {
+        // Simple global variable initialization
+        mainInstructions.push(`  global.get $${lhs}`);
+        const valInsts = compileExpression(rhs, mainLocals);
+        mainInstructions.push(...valInsts);
+        mainInstructions.push(`  i64.store`);
+      }
     } else {
-      // Simple variable initialization
-      mainInstructions.push(`  global.get $${lhs}`);
-      const valInsts = compileExpression(rhs, mainLocals);
-      mainInstructions.push(...valInsts);
-      mainInstructions.push(`  i64.store`);
+      // Local variable/struct initialization (WASM local)
+      if (rhs && rhs.type === 'block' && rhs.kind === 'indent') {
+        const stmts = flattenStatements(rhs.content);
+        const validFields = stmts.filter(s => s && s.type === 'operation' && s.operator === ':');
+        const fields = structFields.get(lhs);
+        const size = validFields.length * 8 + 8;
+        
+        markHelperNeeded('alloc_mem');
+        mainInstructions.push(`  i64.const ${size}`);
+        mainInstructions.push(`  call $alloc_mem`);
+        mainInstructions.push(`  local.set $${lhs}`);
+        
+        mainInstructions.push(`  local.get $${lhs}`);
+        mainInstructions.push(`  i64.const ${validFields.length}`);
+        mainInstructions.push(`  i64.store`);
+        
+        validFields.forEach((s, idx) => {
+          const fName = getLHSName(s.left);
+          const fMeta = fields ? fields[fName] : null;
+          const offsetVal = (fMeta ? fMeta.offset : idx * 8) + 8;
+          
+          mainInstructions.push(`  local.get $${lhs}`);
+          mainInstructions.push(`  i64.const ${offsetVal}`);
+          mainInstructions.push(`  i64.add`);
+          
+          const valInsts = compileExpression(s.right, mainLocals);
+          mainInstructions.push(...valInsts);
+          mainInstructions.push(`  i64.store`);
+        });
+      } else {
+        // Simple local variable initialization
+        const valInsts = compileExpression(rhs, mainLocals);
+        mainInstructions.push(...valInsts);
+        mainInstructions.push(`  local.set $${lhs}`);
+      }
     }
   }
 }
