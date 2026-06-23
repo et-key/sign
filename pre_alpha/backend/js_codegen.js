@@ -384,9 +384,11 @@ function _transpile(node) {
 
           const args = [];
           if (node.right && node.right.type === 'coproduct_block') {
-            args.push(...node.right.statements);
+            node.right.statements.forEach(s => {
+              args.push(...flattenConcat(s));
+            });
           } else if (node.right !== undefined && node.right !== null) {
-            args.push(node.right);
+            args.push(...flattenConcat(node.right));
           }
 
           const hasExpandArg = args.some(arg => arg && arg.type === 'operation' && arg.operator === '~' && arg.position === 'postfix');
@@ -896,4 +898,12 @@ function destructureCompareChain(node) {
 
   traverse(node);
   return { ops, exprs };
+}
+
+function flattenConcat(node) {
+  if (!node) return [];
+  if (node.type === 'operation' && node.name === 'concat') {
+    return [...flattenConcat(node.left), ...flattenConcat(node.right)];
+  }
+  return [node];
 }

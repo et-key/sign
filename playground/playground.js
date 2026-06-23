@@ -83,10 +83,11 @@ c : 3
 say [a b c]
 say (a b c)
 say (a b c , a b c)
+say ([a b c]~ [a b c]~)
 say ([a b c] [a b c])
 say ([a b c] , [a b c])
 
-say ([a , b , c] [a , b , c])
+say ([a , b , c]~ [a , b , c]~)
 say ([a , b , c] , [a , b , c])
 `,
   higher_order: `\` Recursive Map using Coproduct and Partial Application
@@ -322,14 +323,14 @@ runBtn.addEventListener('click', async () => {
 
       logToConsole('Executing WASM main entry...', 'system-msg');
       const exports = wasmInstanced.instance.exports;
-      
+
       // Run main
       exports.main();
       logToConsole('WASM Execution completed successfully.', 'success-msg');
 
       // Dump variables memory state
       logToConsole('--- WASM64 Memory Dump (Variables) ---', 'system-msg');
-      
+
       const memory = exports.memory;
       const view = new DataView(memory.buffer);
       const u8 = new Uint8Array(memory.buffer);
@@ -366,9 +367,9 @@ runBtn.addEventListener('click', async () => {
       function dumpValue(label, address) {
         const rawI64 = view.getBigInt64(address, true);
         const rawF64 = view.getFloat64(address, true);
-        
+
         let extra = '';
-        
+
         // Potential string
         if (rawI64 >= 1024n && rawI64 < 2048n) {
           const str = readWasmString(rawI64);
@@ -376,7 +377,7 @@ runBtn.addEventListener('click', async () => {
             extra += ` -> String: "${str}"`;
           }
         }
-        
+
         // Potential Function Pointer (Table Index Reference)
         if (rawI64 >= 0n && rawI64 < BigInt(tableFunctions.length)) {
           const funcName = tableFunctions[Number(rawI64)];
