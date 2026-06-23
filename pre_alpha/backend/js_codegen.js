@@ -418,10 +418,14 @@ function _transpile(node) {
 
       // Logical operators in Sign: & (and), | (or), ; (xor)
       if (node.operator === '&') {
-        return `_and(${_transpile(node.left)}, ${_transpile(node.right)})`;
+        const left = _transpile(node.left);
+        const right = _transpile(node.right);
+        return `((_l) => _isTrue(_l) ? ${right} : __unit)(${left})`;
       }
       if (node.operator === '|') {
-        return `_or(${_transpile(node.left)}, ${_transpile(node.right)})`;
+        const left = _transpile(node.left);
+        const right = _transpile(node.right);
+        return `((_l) => _isTrue(_l) ? _l : ${right})(${left})`;
       }
       if (node.operator === ';') {
         return `_xor(${_transpile(node.left)}, ${_transpile(node.right)})`;

@@ -1679,8 +1679,8 @@ function compileFunction(name, node) {
     // Always i64
     paramDefs.push(`(param $${pName} i64)`);
     
-    // Unit propagation guard: if a non-rest argument is 0 (__unit), return 0 immediately.
-    if (!p.isRest) {
+    // Unit propagation guard: if a non-rest, non-destructured argument is 0 (__unit), return 0 immediately.
+    if (!p.isRest && !p.isDestructured) {
       bodyInstructions.push(`  local.get $${pName}`);
       bodyInstructions.push(`  i64.eqz`);
       bodyInstructions.push(`  (if (then i64.const 0 return))`);
@@ -1735,12 +1735,9 @@ function compileFunction(name, node) {
   });
 
   const paramDefsStr = paramDefs.join(' ');
-  const stmts = flattenStatements(node.right);
 
   // Compile function body expressions
-  stmts.forEach(s => {
-    bodyInstructions.push(...compileExpression(s, locals, paramNames));
-  });
+  bodyInstructions.push(...compileExpression(node.right, locals, paramNames));
 
   const localDefs = [];
   localDefs.push(`  (local $tmp_l i64) (local $tmp_r i64)`);
@@ -2156,6 +2153,15 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
       insts.push(`(if (result i64)`);
       insts.push(`  (then`);
       insts.push(`    local.get $tmp_l`);
+      insts.push(`    i64.eqz`);
+      insts.push(`    (if (result i64)`);
+      insts.push(`      (then`);
+      insts.push(`        i64.const 4607182418800017408 ;; f64: 1.0 (true)`);
+      insts.push(`      )`);
+      insts.push(`      (else`);
+      insts.push(`        local.get $tmp_l`);
+      insts.push(`      )`);
+      insts.push(`    )`);
       insts.push(`  )`);
       insts.push(`  (else`);
       insts.push(`    i64.const 0`);
@@ -2367,6 +2373,13 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
         return insts;
       }
       if (node.name === 'apply') {
+        if (!isStaticLambda(node.left, locals, paramNames)) {
+          markHelperNeeded('concat');
+          insts.push(...compileExpression(node.left, locals, paramNames));
+          insts.push(...compileExpression(node.right, locals, paramNames));
+          insts.push(`call $concat`);
+          return insts;
+        }
         let leftNode = node.left;
         while (leftNode && leftNode.type === 'block') {
           leftNode = leftNode.content;
@@ -2382,9 +2395,11 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
         
         const args = [];
         if (node.right && node.right.type === 'coproduct_block') {
-          args.push(...node.right.statements);
+          node.right.statements.forEach(s => {
+            args.push(...flattenConcat(s));
+          });
         } else if (node.right !== undefined && node.right !== null) {
-          args.push(node.right);
+          args.push(...flattenConcat(node.right));
         }
 
         const staticArity = functionArities.get(fnName);
@@ -2596,6 +2611,31 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
         return insts;
       }
     }
+    if (node.kind === 'indent') {
+      const stmts = flattenStatements(node.content);
+      stmts.forEach((s, idx) => {
+        if (isMatchCase(s, true)) {
+          insts.push(...compileExpression(s.left, locals, paramNames));
+          insts.push(`i64.const 0`);
+          insts.push(`i64.ne`);
+          insts.push(`(if`);
+          insts.push(`  (then`);
+          insts.push(...compileExpression(s.right, locals, paramNames));
+          insts.push(`    return`);
+          insts.push(`  )`);
+          insts.push(`)`);
+        } else {
+          insts.push(...compileExpression(s, locals, paramNames));
+          if (idx < stmts.length - 1) {
+            insts.push(`drop`);
+          }
+        }
+      });
+      if (stmts.length > 0 && isMatchCase(stmts[stmts.length - 1], true)) {
+        insts.push(`i64.const 0 ;; fallback unit`);
+      }
+      return insts;
+    }
     return compileExpression(node.content, locals, paramNames);
   }
 
@@ -2649,5 +2689,62 @@ export function getMemoryMap() {
 
 export function getStructFields() {
   return structFields;
+}
+
+function isMatchCase(node, isFuncBody = false) {
+  if (!node) return false;
+  if (node.type === 'operation' && node.operator === ':') {
+    if (isFuncBody) return true;
+    const left = node.left;
+    if (left && typeof left === 'object' && left.type === 'operation') {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isStaticLambda(node, locals = new Map(), paramNames = []) {
+  if (!node) return false;
+
+  let leftNode = node;
+  while (leftNode && leftNode.type === 'block') {
+    leftNode = leftNode.content;
+  }
+
+  if (leftNode && leftNode.type === 'operation' && leftNode.operator === '@' && leftNode.position === 'prefix') {
+    return isStaticLambda(leftNode.operand, locals, paramNames);
+  }
+
+  if (typeof leftNode === 'string') {
+    const cleanNode = getLHSName(leftNode);
+    if (locals.has(cleanNode)) {
+      const type = locals.get(cleanNode);
+      if (type === 'i64' || type === 'list') {
+        return false;
+      }
+    }
+    const isKnownFunc = watFunctions.some(f => f.includes(`(func $${cleanNode}`)) || 
+                         tableFunctions.includes(cleanNode) ||
+                         (currentEnv && (currentEnv.has(cleanNode) || currentEnv.has(`<${cleanNode}>`)));
+    if (isKnownFunc) {
+      return true;
+    }
+    return false;
+  }
+
+  if (leftNode.type === 'operation') {
+    if (leftNode.operator === '?') return true;
+    if (leftNode.operator === ' ' && leftNode.name === 'compose') return true;
+  }
+
+  return false;
+}
+
+function flattenConcat(node) {
+  if (!node) return [];
+  if (node.type === 'operation' && node.name === 'concat') {
+    return [...flattenConcat(node.left), ...flattenConcat(node.right)];
+  }
+  return [node];
 }
 

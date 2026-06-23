@@ -230,7 +230,7 @@ function reduceCoproductBlock(statements, env) {
               (right && right.type === 'coproduct_block')
             );
 
-            if (isListL || isListR) {
+            if (isListL && isListR) {
               const leftHasTilde = (left && left.type === 'operation' && left.operator === '~' && left.position === 'postfix');
               const rightHasTilde = (right && right.type === 'operation' && right.operator === '~' && right.position === 'postfix');
               if (leftHasTilde && rightHasTilde) {

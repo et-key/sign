@@ -1,0 +1,8 @@
+` 右辺が先行評価されると無限再帰でクラッシュする関数
+loop_forever : __ ?
+	loop_forever __
+
+test_and : cond ?
+	cond & loop_forever __ | `passed`
+
+test_and __
