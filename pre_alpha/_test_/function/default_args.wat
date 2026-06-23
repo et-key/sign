@@ -8,81 +8,40 @@
   (type $t_arity_3 (func (param i64 i64 i64) (result i64)))
   (type $t_arity_4 (func (param i64 i64 i64 i64) (result i64)))
 
-  (table (export "table") 2 funcref)
-  (elem (i32.const 0) $f $g)
+  (table (export "table") 3 funcref)
+  (elem (i32.const 0) $func_with_defaults $result1_is_partial_applyed $lambda_0)
   ;; Export 64-bit linear memory
   (memory (export "memory") i64 100)
 
   (global $hp (mut i64) (i64.const 2048))
-  (global $result i64 (i64.const 0))
+  (global $result2_is_applied i64 (i64.const 0))
+  (global $result3_is_partial_applyed i64 (i64.const 8))
+  (global $result4_is_applied i64 (i64.const 16))
+  (global $result5_is_applied i64 (i64.const 24))
+  (global $result6_is_applied i64 (i64.const 32))
 
 
 
-  (func $f (param $x i64) (result i64)
+  (func $func_with_defaults (param $unknown i64) (result i64)
   (local $tmp_l i64) (local $tmp_r i64)
-    local.get $x
+    local.get $unknown
     i64.eqz
     (if (then i64.const 0 return))
-  local.get $x
+  i64.const 0 ;; fallback for x
   f64.reinterpret_i64
-  i64.const 4611686018427387904 ;; f64: 2
-  f64.reinterpret_i64
-  f64.mul
-  i64.reinterpret_f64
-  )
-
-  (func $g (param $x i64) (result i64)
-  (local $tmp_l i64) (local $tmp_r i64)
-    local.get $x
-    i64.eqz
-    (if (then i64.const 0 return))
-  local.get $x
-  f64.reinterpret_i64
-  i64.const 4607182418800017408 ;; f64: 1
+  i64.const 0 ;; fallback for y
   f64.reinterpret_i64
   f64.add
   i64.reinterpret_f64
   )
 
-  (func $make_compose_closure (param $left i64) (param $right i64) (result i64)
-    (local $cl_ptr i64)
-    (local $args_ptr i64)
-    i64.const 32
-    call $alloc_mem
-    local.set $cl_ptr
-    local.get $cl_ptr
-    i64.const -1
-    i64.store offset=0
-    local.get $cl_ptr
-    i64.const 1
-    i64.store offset=8
-    local.get $cl_ptr
-    i64.const 0
-    i64.store offset=16
-    i64.const 16
-    call $alloc_mem
-    local.set $args_ptr
-    local.get $args_ptr
-    local.get $left
-    i64.store offset=0
-    local.get $args_ptr
-    local.get $right
-    i64.store offset=8
-    local.get $cl_ptr
-    local.get $args_ptr
-    i64.store offset=24
-    local.get $cl_ptr
-  )
-
-  (func $alloc_mem (param $size i64) (result i64)
-    (local $addr i64)
-    global.get $hp
-    local.set $addr
-    global.get $hp
-    local.get $size
-    i64.add
-    global.set $hp
-    local.get $addr
+  (func $result1_is_partial_applyed (param $$p0 i64) (result i64)
+  (local $tmp_l i64) (local $tmp_r i64)
+    local.get $$p0
+    i64.eqz
+    (if (then i64.const 0 return))
+  local.get $$p0
+  call $func_with_defaults
   )
 
   (func $make_closure (param $func_idx i64) (param $arity i64) (result i64)
@@ -107,6 +66,17 @@
     local.get $args_ptr
     i64.store offset=24
     local.get $cl_ptr
+  )
+
+  (func $alloc_mem (param $size i64) (result i64)
+    (local $addr i64)
+    global.get $hp
+    local.set $addr
+    global.get $hp
+    local.get $size
+    i64.add
+    global.set $hp
+    local.get $addr
   )
 
   (func $apply_and_eval_closure (param $cl_ptr i64) (param $arg i64) (result i64)
@@ -313,15 +283,85 @@
   ;; Main entry function
   (func (export "main")
     (local $tmp_l i64) (local $tmp_r i64)
-      global.get $result
-    i64.const 0 ;; func_idx
-    i64.const 1 ;; arity
-    call $make_closure
-    i64.const 1 ;; func_idx
-    i64.const 1 ;; arity
-    call $make_closure
-    call $make_compose_closure
+      global.get $result2_is_applied
     i64.const 4613937818241073152 ;; f64: 3
+    call $func_with_defaults
+      i64.store
+      global.get $result3_is_partial_applyed
+      i64.store
+      global.get $result4_is_applied
+    i64.const 0
+    i64.const 1
+    call $make_closure
+    i64.const 4613937818241073152 ;; f64: 3
+    call $apply_and_eval_closure
+    i64.const 4617315517961601024 ;; f64: 5
+    call $apply_and_eval_closure
+      i64.store
+      global.get $result5_is_applied
+    i64.const 0
+    i64.const 1
+    call $make_closure
+    i64.const 4613937818241073152 ;; f64: 3
+    local.set $tmp_l
+    i64.const 4611686018427387904 ;; f64: 2
+    local.set $tmp_r
+    local.get $tmp_l
+    f64.reinterpret_i64
+    local.get $tmp_r
+    f64.reinterpret_i64
+    f64.lt
+    (if (result i64)
+      (then
+        local.get $tmp_l
+      )
+      (else
+        i64.const 0
+      )
+    )
+    call $apply_and_eval_closure
+    i64.const 4617315517961601024 ;; f64: 5
+    call $apply_and_eval_closure
+      i64.store
+      global.get $result6_is_applied
+    i64.const 0
+    i64.const 1
+    call $make_closure
+    i64.const 4613937818241073152 ;; f64: 3
+    local.set $tmp_l
+    i64.const 4611686018427387904 ;; f64: 2
+    local.set $tmp_r
+    local.get $tmp_l
+    f64.reinterpret_i64
+    local.get $tmp_r
+    f64.reinterpret_i64
+    f64.lt
+    (if (result i64)
+      (then
+        local.get $tmp_l
+      )
+      (else
+        i64.const 0
+      )
+    )
+    call $apply_and_eval_closure
+    i64.const 4617315517961601024 ;; f64: 5
+    local.set $tmp_l
+    i64.const 4611686018427387904 ;; f64: 2
+    local.set $tmp_r
+    local.get $tmp_l
+    f64.reinterpret_i64
+    local.get $tmp_r
+    f64.reinterpret_i64
+    f64.lt
+    (if (result i64)
+      (then
+        local.get $tmp_l
+      )
+      (else
+        i64.const 0
+      )
+    )
     call $apply_and_eval_closure
       i64.store
   )

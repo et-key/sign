@@ -1,12 +1,12 @@
 f : x ? x * 2
 
 fold : (
- f
- a
- [
-  x
-  ~xs : __
- ]
+	f
+	a
+	[
+		x
+		~xs : __
+	]
 ) ?
 	xs == __ : [@f a x]
 	fold f [@f a x] xs

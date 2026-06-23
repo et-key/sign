@@ -81,7 +81,7 @@ console.log("=== Execution Result ===");
 const fullJsCode = `${runtimeHelpers}\n${undefinedDeclarations}\n${jsStatements.map(s => s + ';').join('\n')}\n${loggingBlock}`;
 
 console.log("=== Generated JavaScript Code ===");
-console.log(fullJsCode);
+// console.log(fullJsCode);
 
 // 4. Generate TypeScript Definitions
 const resolvedLines = astLines.map(astLine => resolveCoproducts(astLine, globalEnv));

@@ -21,6 +21,8 @@ let mainInstructions = [];
 let currentEnv = null;
 
 let lambdaCounter = 0;
+let rangeCounter = 0;
+const mainLocals = new Map();
 const tableFunctions = [];
 const functionArities = new Map();
 const functionHasRest = new Map();
@@ -210,6 +212,10 @@ function desugarPointFree(node) {
   }
 
   if (node.type === 'operation') {
+    if (node.operator === ':') {
+      node.right = desugarPointFree(node.right);
+      return node;
+    }
     node.left = desugarPointFree(node.left);
     node.right = desugarPointFree(node.right);
     node.operand = desugarPointFree(node.operand);
@@ -1234,6 +1240,67 @@ const helperDefs = {
     )
     local.get $res
     i64.reinterpret_f64
+  )`,
+
+  list_reverse: `  (func $list_reverse (param $list_ptr i64) (result i64)
+    (local $is_l i32)
+    (local $len i64)
+    (local $new_list i64)
+    (local $i i64)
+    local.get $list_ptr
+    call $is_list
+    local.set $is_l
+    local.get $is_l
+    (if (result i64)
+      (then
+        local.get $list_ptr
+        i64.load offset=8
+        local.set $len
+        local.get $len
+        call $make_list
+        local.set $new_list
+        
+        i64.const 0
+        local.set $i
+        (block $break
+          (loop $top
+            local.get $i
+            local.get $len
+            i64.ge_s
+            br_if $break
+            
+            local.get $new_list
+            local.get $i
+            i64.const 8
+            i64.mul
+            i64.add
+            
+            local.get $list_ptr
+            local.get $len
+            i64.const 1
+            i64.sub
+            local.get $i
+            i64.sub
+            i64.const 8
+            i64.mul
+            i64.add
+            i64.load offset=16
+            
+            i64.store offset=16
+            
+            local.get $i
+            i64.const 1
+            i64.add
+            local.set $i
+            br $top
+          )
+        )
+        local.get $new_list
+      )
+      (else
+        local.get $list_ptr
+      )
+    )
   )`
 };
 
@@ -1255,6 +1322,11 @@ function markHelperNeeded(helper) {
       markHelperNeeded('make_list');
       markHelperNeeded('alloc_mem');
     }
+  }
+  if (helper === 'list_reverse') {
+    markHelperNeeded('is_list');
+    markHelperNeeded('make_list');
+    markHelperNeeded('alloc_mem');
   }
   if (helper === 'apply_expanded_list') {
     markHelperNeeded('is_list');
@@ -1295,6 +1367,8 @@ export function transpileToWasm(resolvedLines, env) {
   stringOffset = 1024;
   
   lambdaCounter = 0;
+  rangeCounter = 0;
+  mainLocals.clear();
   tableFunctions.length = 0;
   functionArities.clear();
   functionHasRest.clear();
@@ -1365,7 +1439,8 @@ export function transpileToWasm(resolvedLines, env) {
     ``,
     `  ;; Main entry function`,
     `  (func (export "main")`,
-    `    (local $tmp_l i64) (local $tmp_r i64)`,
+    `    (local $tmp_l i64) (local $tmp_r i64)` + 
+    (mainLocals.size > 0 ? '\n' + Array.from(mainLocals.keys()).map(name => `    (local $${name} i64)`).join('\n') : ''),
     mainInstructions.map(i => `    ${i}`).join('\n'),
     `  )`,
     `)`
@@ -1375,7 +1450,7 @@ export function transpileToWasm(resolvedLines, env) {
 }
 
 function escapeString(str) {
-  return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return str.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
 }
 
 function scanMetadata(node) {
@@ -1427,6 +1502,7 @@ function scanMetadata(node) {
     if (node.operator === '?') {
       if (!node.lambdaName) {
         const name = `lambda_${lambdaCounter++}`;
+        console.log("DEBUG scanMetadata lambda generated:", name, "for node:", JSON.stringify(node));
         node.lambdaName = name;
         tableFunctions.push(name);
       }
@@ -1452,6 +1528,10 @@ function scanMetadata(node) {
 }
 
 function registerGlobals(node) {
+  if (!node) return;
+  if (node.type === 'operation' && ['#', '##', '###'].includes(node.operator) && node.position === 'prefix') {
+    node = node.operand;
+  }
   if (!node || node.type !== 'operation' || node.operator !== ':') return;
   
   const lhs = getLHSName(node.left);
@@ -1476,6 +1556,11 @@ function getLHSName(node) {
       return node.slice(1, -1);
     }
     return node;
+  }
+  if (node.type === 'operation') {
+    if (['#', '##', '###'].includes(node.operator) && node.position === 'prefix') {
+      return getLHSName(node.operand);
+    }
   }
   if (node.type === 'Identifier') return node.name;
   if (node.type === 'block' && node.kind === 'bracket') {
@@ -1503,16 +1588,20 @@ function flattenStatements(node) {
   if (node.type === 'block') {
     return flattenStatements(node.content);
   }
-  if (node.type === 'operation' && node.operator === '\\n') {
+  if (node.type === 'operation' && node.operator === "\\n") {
     return [...flattenStatements(node.left), ...flattenStatements(node.right)];
   }
   return [node];
 }
 
 function compileLine(node) {
+  if (node && node.type === 'operation' && ['#', '##', '###'].includes(node.operator) && node.position === 'prefix') {
+    node = node.operand;
+  }
+  
   if (!node || node.type !== 'operation' || node.operator !== ':') {
     // Top-level execution statement
-    const insts = compileExpression(node);
+    const insts = compileExpression(node, mainLocals);
     if (insts.length > 0) {
       mainInstructions.push(...insts);
       mainInstructions.push(`  drop`);
@@ -1522,7 +1611,6 @@ function compileLine(node) {
 
   const lhs = getLHSName(node.left);
   const rhs = node.right;
-
   if (rhs && rhs.type === 'operation' && rhs.operator === '?') {
     // Compile function
     compileFunction(lhs, rhs);
@@ -1542,7 +1630,7 @@ function compileLine(node) {
           mainInstructions.push(`  i64.add`);
           
           // Compile right-hand side value
-          const valInsts = compileExpression(s.right);
+          const valInsts = compileExpression(s.right, mainLocals);
           mainInstructions.push(...valInsts);
           
           // Store
@@ -1552,7 +1640,7 @@ function compileLine(node) {
     } else {
       // Simple variable initialization
       mainInstructions.push(`  global.get $${lhs}`);
-      const valInsts = compileExpression(rhs);
+      const valInsts = compileExpression(rhs, mainLocals);
       mainInstructions.push(...valInsts);
       mainInstructions.push(`  i64.store`);
     }
@@ -1598,18 +1686,43 @@ function compileFunction(name, node) {
       const targetStruct = findStructForPattern(patternFields);
       const fieldsMap = targetStruct ? structFields.get(targetStruct) : null;
 
-      p.innerSpecs.forEach(ip => {
-        const fieldMeta = fieldsMap ? fieldsMap[ip.name] : findFieldMeta(ip.name);
-        if (fieldMeta) {
-          locals.set(ip.name, fieldMeta.type);
-          bodyInstructions.push(`  ;; Destructure ${ip.name} from $${pName}`);
+      if (!targetStruct) {
+        // List destructuring pattern: [x ~xs]
+        let firstSpec = p.innerSpecs[0];
+        let restSpec = p.innerSpecs[1];
+        
+        if (firstSpec) {
+          locals.set(firstSpec.name, 'i64');
+          bodyInstructions.push(`  ;; Destructure list head ${firstSpec.name} from $${pName}`);
           bodyInstructions.push(`  local.get $${pName}`);
-          bodyInstructions.push(`  i64.const ${fieldMeta.offset}`);
-          bodyInstructions.push(`  i64.add`);
-          bodyInstructions.push(`  ${fieldMeta.type}.load`);
-          bodyInstructions.push(`  local.set $${ip.name}`);
+          markHelperNeeded('list_head');
+          bodyInstructions.push(`  call $list_head`);
+          bodyInstructions.push(`  local.set $${firstSpec.name}`);
         }
-      });
+        
+        if (restSpec) {
+          locals.set(restSpec.name, 'list');
+          bodyInstructions.push(`  ;; Destructure list tail ${restSpec.name} from $${pName}`);
+          bodyInstructions.push(`  local.get $${pName}`);
+          markHelperNeeded('list_tail');
+          bodyInstructions.push(`  call $list_tail`);
+          bodyInstructions.push(`  local.set $${restSpec.name}`);
+        }
+      } else {
+        // Struct/Dict destructuring pattern
+        p.innerSpecs.forEach(ip => {
+          const fieldMeta = fieldsMap ? fieldsMap[ip.name] : findFieldMeta(ip.name);
+          if (fieldMeta) {
+            locals.set(ip.name, fieldMeta.type);
+            bodyInstructions.push(`  ;; Destructure ${ip.name} from $${pName}`);
+            bodyInstructions.push(`  local.get $${pName}`);
+            bodyInstructions.push(`  i64.const ${fieldMeta.offset}`);
+            bodyInstructions.push(`  i64.add`);
+            bodyInstructions.push(`  ${fieldMeta.type}.load`);
+            bodyInstructions.push(`  local.set $${ip.name}`);
+          }
+        });
+      }
     }
   });
 
@@ -1624,7 +1737,8 @@ function compileFunction(name, node) {
   const localDefs = [];
   localDefs.push(`  (local $tmp_l i64) (local $tmp_r i64)`);
   locals.forEach((type, name) => {
-    localDefs.push(`  (local $${name} ${type})`);
+    if (paramNames.includes(name)) return;
+    localDefs.push(`  (local $${name} i64)`);
   });
 
   const fnWat = [
@@ -1671,6 +1785,29 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
     return insts;
   }
 
+  if (node.type === 'inline_code') {
+    const val = node.value.trim();
+    if (val.startsWith('wat:') || val.startsWith('wasm:')) {
+      const match = val.match(/^(wat|wasm):/);
+      const codeStr = val.slice(match[0].length).trim();
+      insts.push(codeStr);
+    } else {
+      insts.push(`i64.const 0 ;; unsupported inline code: ${val.replace(/\n/g, ' ')}`);
+    }
+    return insts;
+  }
+
+  if (node.type === 'coproduct_block') {
+    const stmts = node.statements || [];
+    stmts.forEach((s, idx) => {
+      insts.push(...compileExpression(s, locals, paramNames));
+      if (idx < stmts.length - 1) {
+        insts.push(`drop`);
+      }
+    });
+    return insts;
+  }
+
   if (typeof node === 'string') {
     if (node.startsWith('`') && node.endsWith('`')) {
       const val = node.slice(1, -1);
@@ -1701,7 +1838,7 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
       insts.push(`call $make_closure`);
     } else {
       // Character literal check
-      if (cleanNode.startsWith('\\') && cleanNode.length === 2) {
+      if (cleanNode.startsWith("\\") && cleanNode.length === 2) {
         const codePoint = cleanNode.charCodeAt(1);
         const bits = doubleToRawBits(codePoint);
         insts.push(`i64.const ${bits} ;; char: ${cleanNode} (${codePoint})`);
@@ -1793,6 +1930,179 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
         insts.push(...compileExpression(node.operand, locals, paramNames));
         insts.push(`i64.const -1`);
         insts.push(`i64.xor`);
+        return insts;
+      }
+      if (node.operator === '~') {
+        markHelperNeeded('make_list');
+        insts.push(`i64.const 1`);
+        insts.push(`call $make_list`);
+        insts.push(`local.set $tmp_l`);
+        insts.push(`local.get $tmp_l`);
+        insts.push(`i64.const 16`);
+        insts.push(`i64.add`);
+        insts.push(...compileExpression(node.operand, locals, paramNames));
+        insts.push(`i64.store`);
+        insts.push(`local.get $tmp_l`);
+        return insts;
+      }
+      if (node.operator === '><') {
+        markHelperNeeded('list_reverse');
+        insts.push(...compileExpression(node.operand, locals, paramNames));
+        insts.push(`call $list_reverse`);
+        return insts;
+      }
+    }
+
+    if (['~', '~+', '~-', '~*', '~/', '~/^', '~^'].includes(node.operator)) {
+      if (node.position !== 'prefix' && node.position !== 'postfix') {
+        let startNode, stepNode, stepOp, endNode;
+        if (node.left && node.left.type === 'operation' && ['~+', '~-', '~*', '~/', '~^', '~/^'].includes(node.left.operator)) {
+          startNode = node.left.left;
+          stepNode = node.left.right;
+          stepOp = node.left.operator.slice(1);
+          if (stepOp.startsWith('/')) stepOp = '^';
+          endNode = node.right;
+        } else {
+          startNode = node.left;
+          stepNode = "1";
+          stepOp = '+';
+          endNode = node.right;
+        }
+
+        const rId = rangeCounter++;
+        const vStart = `range_start_${rId}`;
+        const vStep = `range_step_${rId}`;
+        const vEnd = `range_end_${rId}`;
+        const vCurr = `range_curr_${rId}`;
+        const vLen = `range_len_${rId}`;
+        const vI = `range_i_${rId}`;
+        const vList = `range_list_${rId}`;
+
+        locals.set(vStart, 'i64');
+        locals.set(vStep, 'i64');
+        locals.set(vEnd, 'i64');
+        locals.set(vCurr, 'i64');
+        locals.set(vLen, 'i64');
+        locals.set(vI, 'i64');
+        locals.set(vList, 'i64');
+
+        markHelperNeeded('make_list');
+        if (stepOp === '^') {
+          markHelperNeeded('f64_pow');
+        }
+
+        // 1. Evaluate start, step, end
+        insts.push(...compileExpression(startNode, locals, paramNames));
+        insts.push(`local.set $${vStart}`);
+        insts.push(...compileExpression(stepNode, locals, paramNames));
+        insts.push(`local.set $${vStep}`);
+        insts.push(...compileExpression(endNode, locals, paramNames));
+        insts.push(`local.set $${vEnd}`);
+
+        // 2. Count elements loop
+        insts.push(`local.get $${vStart}`);
+        insts.push(`local.set $${vCurr}`);
+        insts.push(`i64.const 0`);
+        insts.push(`local.set $${vLen}`);
+
+        insts.push(`(block $break_cnt_${rId}`);
+        insts.push(`  (loop $top_cnt_${rId}`);
+        // Loop safety guard
+        insts.push(`    local.get $${vLen}`);
+        insts.push(`    i64.const 10000`);
+        insts.push(`    i64.ge_s`);
+        insts.push(`    br_if $break_cnt_${rId}`);
+
+        // Condition check
+        insts.push(`    local.get $${vCurr}`);
+        insts.push(`    f64.reinterpret_i64`);
+        insts.push(`    local.get $${vEnd}`);
+        insts.push(`    f64.reinterpret_i64`);
+        if (stepOp === '-' || stepOp === '/') {
+          insts.push(`    f64.ge`);
+        } else {
+          insts.push(`    f64.le`);
+        }
+        insts.push(`    i32.eqz`);
+        insts.push(`    br_if $break_cnt_${rId}`);
+
+        // Increment length
+        insts.push(`    local.get $${vLen}`);
+        insts.push(`    i64.const 1`);
+        insts.push(`    i64.add`);
+        insts.push(`    local.set $${vLen}`);
+
+        // Update curr
+        insts.push(`    local.get $${vCurr}`);
+        insts.push(`    f64.reinterpret_i64`);
+        insts.push(`    local.get $${vStep}`);
+        insts.push(`    f64.reinterpret_i64`);
+        if (stepOp === '+') insts.push(`    f64.add`);
+        else if (stepOp === '-') insts.push(`    f64.sub`);
+        else if (stepOp === '*') insts.push(`    f64.mul`);
+        else if (stepOp === '/') insts.push(`    f64.div`);
+        else if (stepOp === '^') insts.push(`    call $f64_pow`);
+        insts.push(`    i64.reinterpret_f64`);
+        insts.push(`    local.set $${vCurr}`);
+
+        insts.push(`    br $top_cnt_${rId}`);
+        insts.push(`  )`);
+        insts.push(`)`);
+
+        // 3. Make List
+        insts.push(`local.get $${vLen}`);
+        insts.push(`call $make_list`);
+        insts.push(`local.set $${vList}`);
+
+        // 4. Fill List loop
+        insts.push(`local.get $${vStart}`);
+        insts.push(`local.set $${vCurr}`);
+        insts.push(`i64.const 0`);
+        insts.push(`local.set $${vI}`);
+
+        insts.push(`(block $break_fill_${rId}`);
+        insts.push(`  (loop $top_fill_${rId}`);
+        // Loop condition: range_i < range_len
+        insts.push(`    local.get $${vI}`);
+        insts.push(`    local.get $${vLen}`);
+        insts.push(`    i64.lt_s`);
+        insts.push(`    i32.eqz`);
+        insts.push(`    br_if $break_fill_${rId}`);
+
+        // Store curr in list
+        insts.push(`    local.get $${vList}`);
+        insts.push(`    local.get $${vI}`);
+        insts.push(`    i64.const 8`);
+        insts.push(`    i64.mul`);
+        insts.push(`    i64.add`);
+        insts.push(`    local.get $${vCurr}`);
+        insts.push(`    i64.store offset=16`);
+
+        // Update curr
+        insts.push(`    local.get $${vCurr}`);
+        insts.push(`    f64.reinterpret_i64`);
+        insts.push(`    local.get $${vStep}`);
+        insts.push(`    f64.reinterpret_i64`);
+        if (stepOp === '+') insts.push(`    f64.add`);
+        else if (stepOp === '-') insts.push(`    f64.sub`);
+        else if (stepOp === '*') insts.push(`    f64.mul`);
+        else if (stepOp === '/') insts.push(`    f64.div`);
+        else if (stepOp === '^') insts.push(`    call $f64_pow`);
+        insts.push(`    i64.reinterpret_f64`);
+        insts.push(`    local.set $${vCurr}`);
+
+        // Increment range_i
+        insts.push(`    local.get $${vI}`);
+        insts.push(`    i64.const 1`);
+        insts.push(`    i64.add`);
+        insts.push(`    local.set $${vI}`);
+
+        insts.push(`    br $top_fill_${rId}`);
+        insts.push(`  )`);
+        insts.push(`)`);
+
+        // 5. Push List ptr to stack
+        insts.push(`local.get $${vList}`);
         return insts;
       }
     }
@@ -1899,9 +2209,6 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
     }
 
     if (node.operator === '%') {
-      if (isStaticListType(node.left, locals, paramNames)) {
-        throw new Error(`Compile Error: Operator '%' cannot be applied to List types.`);
-      }
       markHelperNeeded('f64_mod');
       insts.push(...compileExpression(node.left, locals, paramNames));
       insts.push(...compileExpression(node.right, locals, paramNames));
@@ -1910,15 +2217,20 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
     }
 
     if (node.operator === '^') {
-      if (isStaticListType(node.left, locals, paramNames)) {
-        throw new Error(`Compile Error: Operator '^' cannot be applied to List types.`);
-      }
       insts.push(...compileExpression(node.left, locals, paramNames));
       insts.push(`f64.reinterpret_i64`);
       insts.push(...compileExpression(node.right, locals, paramNames));
       insts.push(`f64.reinterpret_i64`);
       insts.push(`call $f64_pow`);
       insts.push(`i64.reinterpret_f64`);
+      return insts;
+    }
+
+    if (node.operator === ',') {
+      markHelperNeeded('concat');
+      insts.push(...compileExpression(node.left, locals, paramNames));
+      insts.push(...compileExpression(node.right, locals, paramNames));
+      insts.push(`call $concat`);
       return insts;
     }
 
@@ -1944,6 +2256,8 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
         insts.push(`local.get $${targetName}`);
       } else if (memoryMap.has(targetName)) {
         insts.push(`global.get $${targetName}`);
+      } else if (targetName.startsWith('0x') || targetName.startsWith('0u') || !isNaN(targetName)) {
+        insts.push(`i64.const ${targetName}`);
       } else {
         insts.push(`i64.const 0`);
       }
@@ -1971,6 +2285,8 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
         insts.push(`local.get $${targetName}`);
       } else if (memoryMap.has(targetName)) {
         insts.push(`global.get $${targetName}`);
+      } else if (targetName.startsWith('0x') || targetName.startsWith('0u') || !isNaN(targetName)) {
+        insts.push(`i64.const ${targetName}`);
       } else {
         insts.push(`i64.const 0`);
       }
@@ -1994,8 +2310,12 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
             // Push base address (option / parameter / local)
             if (paramNames.includes(targetName) || locals.has(targetName)) {
               insts.push(`local.get $${targetName}`);
-            } else {
+            } else if (memoryMap.has(targetName)) {
               insts.push(`global.get $${targetName}`);
+            } else if (targetName.startsWith('0x') || targetName.startsWith('0u') || !isNaN(targetName)) {
+              insts.push(`i64.const ${targetName}`);
+            } else {
+              insts.push(`i64.const 0`);
             }
             insts.push(`i64.const ${fieldMeta.offset}`);
             insts.push(`i64.add`);
@@ -2007,6 +2327,18 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
             insts.push(`${fieldMeta.type}.store`);
           }
         });
+      }
+      
+      // Return the updated object pointer as the expression result
+      if (paramNames.includes(targetName) || locals.has(targetName)) {
+        insts.push(`local.get $${targetName}`);
+      } else if (memoryMap.has(targetName)) {
+        insts.push(`global.get $${targetName}`);
+        insts.push(`i64.load`);
+      } else if (targetName.startsWith('0x') || targetName.startsWith('0u') || !isNaN(targetName)) {
+        insts.push(`i64.const ${targetName}`);
+      } else {
+        insts.push(`i64.const 0`);
       }
       return insts;
     }
@@ -2222,6 +2554,40 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
       insts.push(`i64.reinterpret_f64`);
       return insts;
     }
+    if (node.kind === 'bracket') {
+      let content = node.content;
+      while (content && content.type === 'block') {
+        content = content.content;
+      }
+      const stmts = flattenStatements(content);
+      const isDict = stmts.length > 0 && stmts.every(s => s && s.type === 'operation' && s.operator === ':');
+      if (isDict) {
+        const fieldNames = stmts.map(s => getLHSName(s.left));
+        const targetStruct = findStructForPattern(fieldNames);
+        const fieldsMap = targetStruct ? structFields.get(targetStruct) : null;
+        
+        const size = fieldNames.length * 8;
+        markHelperNeeded('alloc_mem');
+        insts.push(`i64.const ${size}`);
+        insts.push(`call $alloc_mem`);
+        insts.push(`local.set $tmp_l`);
+        
+        stmts.forEach(s => {
+          const fName = getLHSName(s.left);
+          const fieldMeta = fieldsMap ? fieldsMap[fName] : findFieldMeta(fName);
+          
+          insts.push(`local.get $tmp_l`);
+          insts.push(`i64.const ${fieldMeta.offset}`);
+          insts.push(`i64.add`);
+          
+          insts.push(...compileExpression(s.right, locals, paramNames));
+          insts.push(`${fieldMeta.type}.store`);
+        });
+        
+        insts.push(`local.get $tmp_l`);
+        return insts;
+      }
+    }
     return compileExpression(node.content, locals, paramNames);
   }
 
@@ -2248,8 +2614,14 @@ function getParameterSpecs(node) {
     return (node.statements || []).flatMap(getParameterSpecs);
   }
   if (node.type === 'operation') {
-    if (node.operator === ' ' || node.operator === ',') {
+    if (node.operator === '\\n' || node.operator === ' ' || node.operator === ',') {
       return [...getParameterSpecs(node.left), ...getParameterSpecs(node.right)];
+    }
+    if (node.operator === ':') {
+      const leftSpecs = getParameterSpecs(node.left);
+      const name = leftSpecs.length > 0 ? leftSpecs[0].name : getLHSName(node.left);
+      const isRest = leftSpecs.length > 0 ? leftSpecs[0].isRest : false;
+      return [{ name, isRest }];
     }
     if (node.operator === '~') {
       if (node.operand) {

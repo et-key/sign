@@ -6,6 +6,8 @@
  * 優先順位（10.3 〜 10.0）に従って、最も優先度の高いペアから順次結合（Reduction）を行います。
  */
 
+import { inferType } from './ast_helpers.js';
+
 export function resolveCoproducts(node, env = new Map(), depth = 0, pathTrace = []) {
   if (!node) return node;
 
@@ -119,9 +121,9 @@ function getCategory(node, env) {
       }
       if (targetNode && targetNode.type === 'operation') {
         if (targetNode.operator === '?') {
-          arity = getArity(targetNode.left);
+          arity = getArity(targetNode.left, env);
         } else {
-          arity = getArity(targetNode);
+          arity = getArity(targetNode, env);
         }
       } else if (typeof targetNode === 'string') {
         let entry = null;
@@ -164,6 +166,9 @@ function getCategory(node, env) {
   }
 
   if (node.type === 'block') {
+    if (node.kind === 'bracket') {
+      return 'Atom';
+    }
     return getCategory(node.content, env);
   }
 
@@ -188,9 +193,9 @@ function reduceCoproductBlock(statements, env) {
   // A_Operator_Table.md に基づく優先順位定義
   // 優先順位が高い（先に結合される）順に処理
   const PRECEDENCES = [
-    { level: 10.5, leftCat: 'Lambda', rightCat: 'Lambda', name: 'compose' },
-    { level: 10.4, leftCat: 'Lambda', rightCat: 'Atom', name: 'apply' },
     { level: 10.3, leftCat: 'Atom', rightCat: 'Atom', name: 'concat' },
+    { level: 10.2, leftCat: 'Lambda', rightCat: 'Lambda', name: 'compose' },
+    { level: 10.1, leftCat: 'Lambda', rightCat: 'Atom', name: 'apply' },
     { level: 10.0, leftCat: 'Atom', rightCat: 'Lambda', name: 'apply_reverse' }
   ];
 
@@ -210,8 +215,24 @@ function reduceCoproductBlock(statements, env) {
           let newNode;
 
           if (prec.name === 'concat') {
-            newNode = { type: 'operation', operator: ' ', left, right, name: 'concat' };
-            items.splice(i, 2, newNode);
+            const typeL = inferType(left, env);
+            const typeR = inferType(right, env);
+            const isListL = (typeL === 'List' || (left && left.type === 'block' && left.kind === 'bracket') || (left && left.type === 'coproduct_block'));
+            const isListR = (typeR === 'List' || (right && right.type === 'block' && right.kind === 'bracket') || (right && right.type === 'coproduct_block'));
+
+            if (isListL && isListR) {
+              const leftHasTilde = (left && left.type === 'operation' && left.operator === '~' && left.position === 'postfix');
+              const rightHasTilde = (right && right.type === 'operation' && right.operator === '~' && right.position === 'postfix');
+              if (leftHasTilde && rightHasTilde) {
+                newNode = { type: 'operation', operator: ' ', left, right, name: 'concat' };
+                items.splice(i, 2, newNode);
+              } else {
+                continue;
+              }
+            } else {
+              newNode = { type: 'operation', operator: ' ', left, right, name: 'concat' };
+              items.splice(i, 2, newNode);
+            }
           }
           else if (prec.name === 'compose') {
             newNode = { type: 'operation', operator: ' ', left, right, name: 'compose' };
@@ -241,9 +262,10 @@ function reduceCoproductBlock(statements, env) {
     }
   }
 
-  // 4つのルールで (Atom|Lambda) × (Atom|Lambda) を網羅しているため、
-  // 必ず1つのノードに収束する。
-  return items[0];
+  if (items.length === 1) {
+    return items[0];
+  }
+  return { type: 'coproduct_block', statements: items };
 }
 
 export function getParamCount(node) {

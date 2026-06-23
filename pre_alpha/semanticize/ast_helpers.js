@@ -6,6 +6,9 @@ export function getParameterNames(node, names = new Set()) {
     names.add(node);
     return names;
   }
+  if (node.type === 'block') {
+    return getParameterNames(node.content, names);
+  }
   if (node.type === 'coproduct_block') {
     (node.statements || []).forEach(stmt => getParameterNames(stmt, names));
     return names;
@@ -21,16 +24,19 @@ export function getParameterNames(node, names = new Set()) {
       return names;
     }
     if (node.operator === '~' && node.position === 'prefix') {
-      getParameterNames(node.operand, names);
+      const innerNames = getParameterNames(node.operand);
+      innerNames.forEach(n => names.add(n.startsWith('~') ? n : '~' + n));
       return names;
     }
     if (node.operator === '~' && node.position === 'postfix') {
-      getParameterNames(node.operand, names);
+      const innerNames = getParameterNames(node.operand);
+      innerNames.forEach(n => names.add(n.startsWith('~') ? n : '~' + n));
       return names;
     }
     if (node.operator === '~' && node.left && node.right) {
       getParameterNames(node.left, names);
-      getParameterNames({ type: 'operation', operator: '~', operand: node.right, position: 'prefix' }, names);
+      const innerNames = getParameterNames({ type: 'operation', operator: '~', operand: node.right, position: 'prefix' });
+      innerNames.forEach(n => names.add(n.startsWith('~') ? n : '~' + n));
       return names;
     }
   }
@@ -57,6 +63,20 @@ export function inferType(node, env) {
       return env.get(`<${clean}>`).typeTag || 'Unknown';
     }
     
+    if (['print', 'free', 'reduce_add', 'reduce_sub', 'reduce_mul', 'reduce_div'].includes(clean)) return 'Lambda';
+    return 'Unknown';
+  }
+
+  if (node.type === 'Identifier' || node.type === 'Variable') {
+    const nodeName = node.name;
+    const clean = nodeName.startsWith('<') && nodeName.endsWith('>') ? nodeName.slice(1, -1) : nodeName;
+    if (env && env.has(clean)) {
+      const entry = env.get(clean);
+      return entry.typeTag || 'Unknown';
+    }
+    if (env && env.has(`<${clean}>`)) {
+      return env.get(`<${clean}>`).typeTag || 'Unknown';
+    }
     if (['print', 'free', 'reduce_add', 'reduce_sub', 'reduce_mul', 'reduce_div'].includes(clean)) return 'Lambda';
     return 'Unknown';
   }
@@ -148,13 +168,17 @@ export function buildEnvironment(node, env = new Map()) {
         if (name.startsWith('<') && name.endsWith('>')) {
           cleanName = name.slice(1, -1);
         }
+        let strippedName = cleanName;
         if (cleanName.startsWith('~')) {
           typeTag = 'List';
+          strippedName = cleanName.slice(1);
         }
         
         currentEnv.set(name, { category: 'Atom', arity: 1, typeTag });
-        if (name.startsWith('<') && name.endsWith('>')) {
-          currentEnv.set(cleanName, { category: 'Atom', arity: 1, typeTag });
+        currentEnv.set(cleanName, { category: 'Atom', arity: 1, typeTag });
+        if (strippedName !== cleanName) {
+          currentEnv.set(strippedName, { category: 'Atom', arity: 1, typeTag });
+          currentEnv.set(`<${strippedName}>`, { category: 'Atom', arity: 1, typeTag });
         }
       });
       
