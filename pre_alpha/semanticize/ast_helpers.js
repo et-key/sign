@@ -130,6 +130,14 @@ export function inferType(node, env) {
       if (node.name === 'apply') {
         const leftType = inferType(node.left, env);
         if (leftType === 'Lambda') {
+          const arity = getArity(node.left, env);
+          let appliedCount = 1;
+          if (node.right && node.right.type === 'coproduct_block') {
+            appliedCount = node.right.statements.length;
+          }
+          if (appliedCount < arity) {
+            return 'Lambda';
+          }
           const leftName = typeof node.left === 'string' ? node.left : (node.left.name || '');
           const clean = leftName.startsWith('<') && leftName.endsWith('>') ? leftName.slice(1, -1) : leftName;
           if (env && env.has(clean)) {

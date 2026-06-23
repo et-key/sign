@@ -81,7 +81,11 @@ for (const filePath of files) {
       }
     });
 
-    const undefinedDeclarations = undefinedIdents.map(id => `const ${id} = __unit;`).join('\n');
+    const undefinedDeclarations = undefinedIdents.map(id => {
+      const builtins = ['print', 'free', 'reduce_add', 'reduce_sub', 'reduce_mul', 'reduce_div'];
+      const name = builtins.includes(id) ? id : `_sig_${id}`;
+      return `const ${name} = __unit;`;
+    }).join('\n');
 
     const runtimeHelpers = `
 import _ from 'white_cats';
@@ -93,7 +97,11 @@ ${RUNTIME_HELPERS_CODE}
 
     const loggingBlock = `
 console.log("=== Execution Result ===");
-${definedVars.map(v => `try { console.log("${v} = ", util.inspect(${v}, { depth: null, colors: true })); } catch(e) {}`).join('\n')}
+${definedVars.map(v => {
+  const builtins = ['print', 'free', 'reduce_add', 'reduce_sub', 'reduce_mul', 'reduce_div'];
+  const name = builtins.includes(v) ? v : `_sig_${v}`;
+  return `try { console.log("${v} = ", util.inspect(${name}, { depth: null, colors: true })); } catch(e) {}`;
+}).join('\n')}
 `;
 
     const fullJsCode = `${runtimeHelpers}\n${undefinedDeclarations}\n${jsStatements.map(s => s + ';').join('\n')}\n${loggingBlock}`;

@@ -274,45 +274,6 @@ function _call(left, ...args) {
 function _callInternal(left, ...args) {
   if (args.length === 0) return left;
 
-  const hasExpandedStream = args.some(x => x instanceof ExpandedStream);
-  if (hasExpandedStream) {
-    const fnObj = left.__isCurried ? left.target : left;
-    const specs = (fnObj && fnObj.paramSpecs) || [];
-    const resolvedArgs = [];
-    
-    for (let i = 0; i < args.length; i++) {
-      const arg = args[i];
-      if (arg instanceof ExpandedStream) {
-        const iterator = arg.stream[Symbol.iterator]();
-        
-        while (true) {
-          const currentSpec = specs[resolvedArgs.length];
-          if (!currentSpec) {
-            break;
-          }
-          
-          if (currentSpec.isRest) {
-            resolvedArgs.push({
-              [Symbol.iterator]: () => iterator,
-              isStream: true
-            });
-            break;
-          } else {
-            const { value, done } = iterator.next();
-            if (done) {
-              resolvedArgs.push(__unit);
-            } else {
-              resolvedArgs.push(value);
-            }
-          }
-        }
-      } else {
-        resolvedArgs.push(arg);
-      }
-    }
-    args = resolvedArgs;
-  }
-  
   if (Array.isArray(left)) {
     if (left.length > 0 && typeof left[0] === 'function') {
       return _callInternal(left[0], ...left.slice(1), ...args);
@@ -407,9 +368,7 @@ function _callInternal(left, ...args) {
         return composedFn;
       }
     }
-  }
 
-  if (typeL === 'function') {
     if (left.__isPointFreeBinary) {
       if (args.length === 1 && Array.isArray(args[0])) {
         if (args[0].length === 0) return __unit;
@@ -420,22 +379,28 @@ function _callInternal(left, ...args) {
     if (left.__isPointFreeMapFilter) {
       return left(...args);
     }
-  }
 
-
-  if (typeL === 'function') {
     // 2. Standard Application / Currying
-    const isCurried = left.__isCurried;
-    const target = isCurried ? left.target : left;
-    const argsSoFar = isCurried ? left.args : [];
     const expectedLength = isCurried ? left.expectedLength : (left.expectedLength !== undefined ? left.expectedLength : left.length);
     const requiredLength = isCurried ?
       (left.target.requiredLength !== undefined ? left.target.requiredLength : expectedLength) :
       (left.requiredLength !== undefined ? left.requiredLength : expectedLength);
     const hasRest = isCurried ? left.target.hasRest : left.hasRest;
     
-    let totalArgs = [...argsSoFar, ...args];
+    // (a) Hole filling
+    let totalArgs = [...argsSoFar];
+    let argIdx = 0;
+    for (let i = 0; i < totalArgs.length; i++) {
+      if (totalArgs[i] === __hole && argIdx < args.length) {
+        totalArgs[i] = args[argIdx];
+        argIdx++;
+      }
+    }
+    if (argIdx < args.length) {
+      totalArgs.push(...args.slice(argIdx));
+    }
     
+    // Destructuring / array arguments expansion
     if (totalArgs.length > 0 && Array.isArray(totalArgs[totalArgs.length - 1])) {
       const lastIdx = totalArgs.length - 1;
       const argsBeforeLast = totalArgs.slice(0, lastIdx);
@@ -447,15 +412,74 @@ function _callInternal(left, ...args) {
         totalArgs = [...argsBeforeLast, ...totalArgs[lastIdx]];
       }
     }
+
+    // (b) ExpandedStream expansion
+    const hasStream = totalArgs.some(x => x instanceof ExpandedStream);
+    if (hasStream) {
+      const specs = target.paramSpecs || [];
+      const resolvedArgs = [];
+      for (let i = 0; i < totalArgs.length; i++) {
+        const arg = totalArgs[i];
+        if (arg instanceof ExpandedStream) {
+          const iterator = arg.stream[Symbol.iterator]();
+          while (true) {
+            const currentSpec = specs[resolvedArgs.length];
+            if (!currentSpec) {
+              const { value, done } = iterator.next();
+              if (done) break;
+              resolvedArgs.push(value);
+              continue;
+            }
+            if (currentSpec.isRest) {
+              resolvedArgs.push({
+                [Symbol.iterator]: () => iterator,
+                isStream: true
+              });
+              break;
+            } else {
+              const { value, done } = iterator.next();
+              if (done) {
+                resolvedArgs.push(__unit);
+              } else {
+                resolvedArgs.push(value);
+              }
+            }
+          }
+        } else {
+          resolvedArgs.push(arg);
+        }
+      }
+      totalArgs = resolvedArgs;
+    }
+
+    // (c) Check for __unit after expansion
+    if (totalArgs.includes(__unit)) {
+      if (target.paramSpecs) {
+        const restIdx = target.paramSpecs.findIndex(p => p.isRest);
+        const itemIdx = restIdx > 0 ? restIdx - 1 : -1;
+        if (itemIdx >= 0 && totalArgs[itemIdx] !== __unit) {
+          // Defer extraction
+        } else {
+          if (target._extractIndex !== undefined && target._extractIndex >= 0) {
+            return totalArgs[target._extractIndex];
+          }
+          return __unit;
+        }
+      } else {
+        if (target._extractIndex !== undefined && target._extractIndex >= 0) {
+          return totalArgs[target._extractIndex];
+        }
+        return __unit;
+      }
+    }
     
-    totalArgs = totalArgs.filter(x => x !== __hole);
-    
+    // (d) Determine currying or execution
     while (totalArgs.length < requiredLength) {
       totalArgs.push(__hole);
     }
     
     if (totalArgs.includes(__hole)) {
-      return [left, ...totalArgs];
+      return _makeCurried(target, expectedLength, totalArgs);
     }
     
     if (hasRest) {

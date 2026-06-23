@@ -271,11 +271,11 @@ runBtn.addEventListener('click', async () => {
       buildEnvironment(astLine, globalEnv);
     });
 
-    const resolvedLines = astLines.map(astLine => resolveCoproducts(astLine, globalEnv));
-    
-    // Build updated env with resolved tree for accurate types
-    resolvedLines.forEach(resolved => {
+    const resolvedLines = [];
+    astLines.forEach(astLine => {
+      const resolved = resolveCoproducts(astLine, globalEnv);
       buildEnvironment(resolved, globalEnv);
+      resolvedLines.push(resolved);
     });
 
     // Build the AST JSON Output
@@ -424,7 +424,11 @@ runBtn.addEventListener('click', async () => {
         }
       });
 
-      const undefinedDeclarations = undefinedIdents.map(id => `const ${id} = __unit;`).join('\n');
+      const undefinedDeclarations = undefinedIdents.map(id => {
+        const builtins = ['print', 'free', 'reduce_add', 'reduce_sub', 'reduce_mul', 'reduce_div'];
+        const name = builtins.includes(id) ? id : `_sig_${id}`;
+        return `const ${name} = __unit;`;
+      }).join('\n');
       const generatedCodeOnly = `${undefinedDeclarations}\n${jsStatements.map(s => s + ';').join('\n')}`;
       jsOutput.textContent = generatedCodeOnly;
 

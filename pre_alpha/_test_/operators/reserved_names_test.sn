@@ -1,0 +1,3 @@
+let : 42
+class : 100
+result : let + class

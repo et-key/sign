@@ -64,7 +64,11 @@ usedIdents.forEach(id => {
   }
 });
 
-const undefinedDeclarations = undefinedIdents.map(id => `const ${id} = __unit;`).join('\n');
+const undefinedDeclarations = undefinedIdents.map(id => {
+  const builtins = ['print', 'free', 'reduce_add', 'reduce_sub', 'reduce_mul', 'reduce_div'];
+  const name = builtins.includes(id) ? id : `_sig_${id}`;
+  return `const ${name} = __unit;`;
+}).join('\n');
 
 // 3. Assemble the full executable JS file content
 const runtimeHelpers = `

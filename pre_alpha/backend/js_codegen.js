@@ -85,7 +85,11 @@ function _transpile(node) {
       const name = node.slice(1, -1);
       if (name === '_') return '__hole';
       if (name === '__') return '__unit';
-      return name;
+      const builtins = ['print', 'free', 'reduce_add', 'reduce_sub', 'reduce_mul', 'reduce_div'];
+      if (builtins.includes(name)) {
+        return name;
+      }
+      return `_sig_${name}`;
     }
     // Character literals: \a -> "a"
     if (node.startsWith('\\') && node.length === 2) {
@@ -181,7 +185,13 @@ function _transpile(node) {
       if (node.operator === ':') {
         const lhs = getDefineLHS(node.left);
         if (node.right && node.right.type === 'operation' && node.right.operator === '@' && node.right.position === 'postfix') {
-          const moduleName = _transpile(node.right.operand);
+          let moduleName = '';
+          const operand = node.right.operand;
+          if (typeof operand === 'string' && operand.startsWith('<') && operand.endsWith('>')) {
+            moduleName = operand.slice(1, -1);
+          } else {
+            moduleName = _transpile(operand);
+          }
           if (moduleName === 'javascript') {
             return `const ${lhs} = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global)`;
           }
@@ -471,7 +481,7 @@ function _transpile(node) {
           let jsOp = node.operator;
           if (jsOp === '=') jsOp = '===';
           if (jsOp === '!=') jsOp = '!==';
-          return `((_l, _r) => (_l === __unit || _r === __unit) ? __unit : (_l ${jsOp} _r ? _l : 0))(${_transpile(node.left)}, ${_transpile(node.right)})`;
+          return `((_l, _r) => (_l === __unit || _r === __unit) ? __unit : (_l ${jsOp} _r ? _l : __unit))(${_transpile(node.left)}, ${_transpile(node.right)})`;
         }
         return `_compare('${node.operator}', ${_transpile(node.left)}, ${_transpile(node.right)})`;
       }
@@ -566,7 +576,13 @@ function _transpile(node) {
       }
       if (node.operator === '@') {
         // Module import: convert file to import
-        const moduleCode = transpilePropertyKey(node.operand);
+        let moduleCode = '';
+        const operand = node.operand;
+        if (typeof operand === 'string' && operand.startsWith('<') && operand.endsWith('>')) {
+          moduleCode = JSON.stringify(operand.slice(1, -1));
+        } else {
+          moduleCode = transpilePropertyKey(operand);
+        }
         return `importModule(${moduleCode})`;
       }
       return `${transpile(node.operand)}${node.operator}`;

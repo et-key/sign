@@ -8,18 +8,14 @@
   (type $t_arity_3 (func (param i64 i64 i64) (result i64)))
   (type $t_arity_4 (func (param i64 i64 i64 i64) (result i64)))
 
-  (table (export "table") 7 funcref)
-  (elem (i32.const 0) $f $map $lambda_0 $lambda_1 $lambda_2 $lambda_3 $reduce_add)
+  (table (export "table") 3 funcref)
+  (elem (i32.const 0) $f $map $lambda_0)
   ;; Export 64-bit linear memory
   (memory (export "memory") i64 100)
 
   (global $hp (mut i64) (i64.const 2048))
-  (global $result_map1 i64 (i64.const 0))
+  (global $result i64 (i64.const 0))
   (global $result_map2 i64 (i64.const 8))
-  (global $result_sum i64 (i64.const 16))
-  (global $result_partial i64 (i64.const 24))
-  (global $test_array i64 (i64.const 32))
-  (global $test_tuple i64 (i64.const 40))
 
 
 
@@ -48,68 +44,26 @@
   local.get $x
   call $apply_and_eval_closure
   drop
+  i64.const 1
+  i64.const 3
+  call $make_closure
   local.get $g
+  call $apply_and_eval_closure
   local.get $y
-  local.set $tmp_l
-  local.get $tmp_l
-  call $list_head
-  local.get $tmp_l
-  call $list_tail
-  call $map
+  call $apply_expanded_list
   )
 
-  (func $lambda_0 (param $x i64) (result i64)
+  (func $lambda_0 (param $_x i64) (result i64)
   (local $tmp_l i64) (local $tmp_r i64)
-    local.get $x
+    local.get $_x
     i64.eqz
     (if (then i64.const 0 return))
-  local.get $x
+  local.get $_x
   f64.reinterpret_i64
   i64.const 4611686018427387904 ;; f64: 2
   f64.reinterpret_i64
   f64.mul
   i64.reinterpret_f64
-  )
-
-  (func $lambda_1 (param $_x i64) (param $_xs i64) (result i64)
-  (local $tmp_l i64) (local $tmp_r i64)
-    local.get $_x
-    i64.eqz
-    (if (then i64.const 0 return))
-  i64.const 6 ;; func_idx
-  i64.const 2 ;; arity
-  call $make_closure
-  local.get $_x
-  call $apply_and_eval_closure
-  local.get $_xs
-  call $apply_and_eval_closure
-  )
-
-  (func $lambda_3 (param $_x i64) (result i64)
-  (local $tmp_l i64) (local $tmp_r i64)
-    local.get $_x
-    i64.eqz
-    (if (then i64.const 0 return))
-  local.get $_x
-  f64.reinterpret_i64
-  i64.const 4611686018427387904 ;; f64: 2
-  f64.reinterpret_i64
-  f64.add
-  i64.reinterpret_f64
-  )
-
-  (func $lambda_2 (param $_xs i64) (result i64)
-  (local $tmp_l i64) (local $tmp_r i64)
-  i64.const 5 ;; lambda func_idx
-  i64.const 1 ;; arity
-  call $make_closure
-  local.get $_xs
-  local.set $tmp_l
-  local.get $tmp_l
-  call $list_head
-  local.get $tmp_l
-  call $list_tail
-  call $map
   )
 
   (func $apply_and_eval_closure (param $cl_ptr i64) (param $arg i64) (result i64)
@@ -324,27 +278,92 @@
     )
   )
 
-  (func $list_head (param $list_ptr i64) (result i64)
+  (func $make_closure (param $func_idx i64) (param $arity i64) (result i64)
+    (local $cl_ptr i64)
+    (local $args_ptr i64)
+    i64.const 32
+    call $alloc_mem
+    local.set $cl_ptr
+    local.get $cl_ptr
+    local.get $func_idx
+    i64.store offset=0
+    local.get $cl_ptr
+    local.get $arity
+    i64.store offset=8
+    local.get $cl_ptr
+    i64.const 0
+    i64.store offset=16
+    i64.const 32
+    call $alloc_mem
+    local.set $args_ptr
+    local.get $cl_ptr
+    local.get $args_ptr
+    i64.store offset=24
+    local.get $cl_ptr
+  )
+
+  (func $apply_expanded_list (param $cl_ptr i64) (param $list_ptr i64) (result i64)
+    (local $is_l i32)
+    (local $len i64)
+    (local $i i64)
+    (local $curr_cl i64)
+
     local.get $list_ptr
-    call $is_list
+    i64.eqz
     (if (result i64)
       (then
+        local.get $cl_ptr
+      )
+      (else
+        local.get $cl_ptr
+        local.set $curr_cl
+
         local.get $list_ptr
-        i64.load offset=8
-        i64.const 0
-        i64.gt_s
+        call $is_list
+        local.set $is_l
+
+        local.get $is_l
         (if (result i64)
           (then
             local.get $list_ptr
-            i64.load offset=16
+            i64.load offset=8
+            local.set $len
+            
+            i64.const 0
+            local.set $i
+            
+            (block $break
+              (loop $top
+                local.get $i
+                local.get $len
+                i64.ge_s
+                br_if $break
+
+                local.get $curr_cl
+                local.get $list_ptr
+                local.get $i
+                i64.const 8
+                i64.mul
+                i64.add
+                i64.load offset=16
+                call $apply_and_eval_closure
+                local.set $curr_cl
+
+                local.get $i
+                i64.const 1
+                i64.add
+                local.set $i
+                br $top
+              )
+            )
+            local.get $curr_cl
           )
           (else
-            i64.const 0 ;; __unit
+            local.get $curr_cl
+            local.get $list_ptr
+            call $apply_and_eval_closure
           )
         )
-      )
-      (else
-        local.get $list_ptr
       )
     )
   )
@@ -391,118 +410,6 @@
       )
       (else i32.const 0)
     )
-  )
-
-  (func $list_tail (param $list_ptr i64) (result i64)
-    (local $len i64)
-    (local $new_list i64)
-    (local $i i64)
-    local.get $list_ptr
-    call $is_list
-    (if (result i64)
-      (then
-        local.get $list_ptr
-        i64.load offset=8
-        local.set $len
-        local.get $len
-        i64.const 1
-        i64.le_s
-        (if (result i64)
-          (then
-            i64.const 0
-          )
-          (else
-            local.get $len
-            i64.const 1
-            i64.sub
-            call $make_list
-            local.set $new_list
-            
-            i64.const 0
-            local.set $i
-            (block $break
-              (loop $top
-                local.get $i
-                local.get $len
-                i64.const 1
-                i64.sub
-                i64.ge_s
-                br_if $break
-                
-                local.get $new_list
-                local.get $i
-                i64.const 8
-                i64.mul
-                i64.add
-                
-                local.get $list_ptr
-                local.get $i
-                i64.const 1
-                i64.add
-                i64.const 8
-                i64.mul
-                i64.add
-                i64.load offset=16
-                
-                i64.store offset=16
-                
-                local.get $i
-                i64.const 1
-                i64.add
-                local.set $i
-                br $top
-              )
-            )
-            local.get $new_list
-          )
-        )
-      )
-      (else
-        i64.const 0
-      )
-    )
-  )
-
-  (func $make_list (param $len i64) (result i64)
-    (local $addr i64)
-    local.get $len
-    i64.const 8
-    i64.mul
-    i64.const 16
-    i64.add
-    call $alloc_mem
-    local.set $addr
-    local.get $addr
-    i64.const 101 ;; List type tag
-    i64.store offset=0
-    local.get $addr
-    local.get $len
-    i64.store offset=8
-    local.get $addr
-  )
-
-  (func $make_closure (param $func_idx i64) (param $arity i64) (result i64)
-    (local $cl_ptr i64)
-    (local $args_ptr i64)
-    i64.const 32
-    call $alloc_mem
-    local.set $cl_ptr
-    local.get $cl_ptr
-    local.get $func_idx
-    i64.store offset=0
-    local.get $cl_ptr
-    local.get $arity
-    i64.store offset=8
-    local.get $cl_ptr
-    i64.const 0
-    i64.store offset=16
-    i64.const 32
-    call $alloc_mem
-    local.set $args_ptr
-    local.get $cl_ptr
-    local.get $args_ptr
-    i64.store offset=24
-    local.get $cl_ptr
   )
 
   (func $concat (param $left i64) (param $right i64) (result i64)
@@ -664,106 +571,125 @@
     local.get $new_list
   )
 
-  (func $reduce_add (param $init i64) (param $list_ptr i64) (result i64)
-    (local $is_l i32)
-    (local $len i64)
-    (local $i i64)
-    (local $acc f64)
-    local.get $list_ptr
-    call $is_list
-    local.set $is_l
-    local.get $init
-    f64.reinterpret_i64
-    local.set $acc
-    local.get $is_l
-    (if (result i64)
-      (then
-        local.get $list_ptr
-        i64.load offset=8
-        local.set $len
-        i64.const 0
-        local.set $i
-        (block $break
-          (loop $top
-            local.get $i
-            local.get $len
-            i64.ge_s
-            br_if $break
-            local.get $acc
-            local.get $list_ptr
-            local.get $i
-            i64.const 8
-            i64.mul
-            i64.add
-            i64.load offset=16
-            f64.reinterpret_i64
-            f64.add
-            local.set $acc
-            local.get $i
-            i64.const 1
-            i64.add
-            local.set $i
-            br $top
-          )
-        )
-        local.get $acc
-        i64.reinterpret_f64
-      )
-      (else
-        local.get $list_ptr
-        i64.eqz
-        (if (result i64)
-          (then
-            local.get $init
-          )
-          (else
-            local.get $acc
-            local.get $list_ptr
-            f64.reinterpret_i64
-            f64.add
-            i64.reinterpret_f64
-          )
-        )
-      )
-    )
+  (func $make_list (param $len i64) (result i64)
+    (local $addr i64)
+    local.get $len
+    i64.const 8
+    i64.mul
+    i64.const 16
+    i64.add
+    call $alloc_mem
+    local.set $addr
+    local.get $addr
+    i64.const 101 ;; List type tag
+    i64.store offset=0
+    local.get $addr
+    local.get $len
+    i64.store offset=8
+    local.get $addr
   )
 
   ;; Main entry function
   (func (export "main")
     (local $tmp_l i64) (local $tmp_r i64)
-      global.get $result_map1
+    (local $range_start_0 i64)
+    (local $range_step_0 i64)
+    (local $range_end_0 i64)
+    (local $range_curr_0 i64)
+    (local $range_len_0 i64)
+    (local $range_i_0 i64)
+    (local $range_list_0 i64)
+      global.get $result
+    i64.const 1
+    i64.const 3
+    call $make_closure
     i64.const 0 ;; func_idx
     i64.const 1 ;; arity
     call $make_closure
-    i64.const 4607182418800017408 ;; f64: 1
+    i64.const 0 ;; f64: 0
+    local.set $range_start_0
     i64.const 4611686018427387904 ;; f64: 2
-    i64.const 4613937818241073152 ;; f64: 3
+    local.set $range_step_0
+    i64.const 4621819117588971520 ;; f64: 10
+    local.set $range_end_0
+    local.get $range_start_0
+    local.set $range_curr_0
+    i64.const 0
+    local.set $range_len_0
+    (block $break_cnt_0
+      (loop $top_cnt_0
+        local.get $range_len_0
+        i64.const 10000
+        i64.ge_s
+        br_if $break_cnt_0
+        local.get $range_curr_0
+        f64.reinterpret_i64
+        local.get $range_end_0
+        f64.reinterpret_i64
+        f64.le
+        i32.eqz
+        br_if $break_cnt_0
+        local.get $range_len_0
+        i64.const 1
+        i64.add
+        local.set $range_len_0
+        local.get $range_curr_0
+        f64.reinterpret_i64
+        local.get $range_step_0
+        f64.reinterpret_i64
+        f64.add
+        i64.reinterpret_f64
+        local.set $range_curr_0
+        br $top_cnt_0
+      )
+    )
+    local.get $range_len_0
+    call $make_list
+    local.set $range_list_0
+    local.get $range_start_0
+    local.set $range_curr_0
+    i64.const 0
+    local.set $range_i_0
+    (block $break_fill_0
+      (loop $top_fill_0
+        local.get $range_i_0
+        local.get $range_len_0
+        i64.lt_s
+        i32.eqz
+        br_if $break_fill_0
+        local.get $range_list_0
+        local.get $range_i_0
+        i64.const 8
+        i64.mul
+        i64.add
+        local.get $range_curr_0
+        i64.store offset=16
+        local.get $range_curr_0
+        f64.reinterpret_i64
+        local.get $range_step_0
+        f64.reinterpret_i64
+        f64.add
+        i64.reinterpret_f64
+        local.set $range_curr_0
+        local.get $range_i_0
+        i64.const 1
+        i64.add
+        local.set $range_i_0
+        br $top_fill_0
+      )
+    )
+    local.get $range_list_0
     call $concat
-    i64.const 4616189618054758400 ;; f64: 4
-    call $concat
-    i64.const 4617315517961601024 ;; f64: 5
-    call $concat
-    call $map
+    call $apply_and_eval_closure
       i64.store
       global.get $result_map2
+    i64.const 1
+    i64.const 3
+    call $make_closure
     i64.const 2 ;; lambda func_idx
     i64.const 1 ;; arity
     call $make_closure
     i64.const 4607182418800017408 ;; f64: 1
-    i64.const 4611686018427387904 ;; f64: 2
-    i64.const 4613937818241073152 ;; f64: 3
-    call $concat
-    i64.const 4616189618054758400 ;; f64: 4
-    call $concat
-    i64.const 4617315517961601024 ;; f64: 5
-    call $concat
-    call $map
-      i64.store
-      global.get $result_sum
-    i64.const 3 ;; lambda func_idx
-    i64.const 2 ;; arity
-    call $make_closure
-    i64.const 4607182418800017408 ;; f64: 1
     call $concat
     i64.const 4611686018427387904 ;; f64: 2
     call $concat
@@ -773,39 +699,7 @@
     call $concat
     i64.const 4617315517961601024 ;; f64: 5
     call $concat
-      i64.store
-      global.get $result_partial
-    i64.const 4 ;; lambda func_idx
-    i64.const 1 ;; arity
-    call $make_closure
-    i64.const 4607182418800017408 ;; f64: 1
-    call $concat
-    i64.const 4611686018427387904 ;; f64: 2
-    call $concat
-    i64.const 4613937818241073152 ;; f64: 3
-    call $concat
-    i64.const 4616189618054758400 ;; f64: 4
-    call $concat
-    i64.const 4617315517961601024 ;; f64: 5
-    call $concat
-      i64.store
-      global.get $test_array
-    i64.const 4607182418800017408 ;; f64: 1
-    i64.const 4611686018427387904 ;; f64: 2
-    call $concat
-    i64.const 4613937818241073152 ;; f64: 3
-    call $concat
-    i64.const 4616189618054758400 ;; f64: 4
-    call $concat
-    i64.const 4617315517961601024 ;; f64: 5
-    call $concat
-      i64.store
-      global.get $test_tuple
-    i64.const 4607182418800017408 ;; f64: 1
-    i64.const 0 ;; fallback for a
-    call $concat
-    i64.const 4613937818241073152 ;; f64: 3
-    call $concat
+    call $apply_and_eval_closure
       i64.store
   )
 )

@@ -193,10 +193,10 @@ function reduceCoproductBlock(statements, env) {
   // A_Operator_Table.md に基づく優先順位定義
   // 優先順位が高い（先に結合される）順に処理
   const PRECEDENCES = [
-    { level: 10.3, leftCat: 'Atom', rightCat: 'Atom', name: 'concat' },
-    { level: 10.2, leftCat: 'Lambda', rightCat: 'Lambda', name: 'compose' },
-    { level: 10.1, leftCat: 'Lambda', rightCat: 'Atom', name: 'apply' },
-    { level: 10.0, leftCat: 'Atom', rightCat: 'Lambda', name: 'apply_reverse' }
+    { level: 10.3, leftCat: 'Lambda', rightCat: 'Lambda', name: 'compose' },
+    { level: 10.2, leftCat: 'Lambda', rightCat: 'Atom', name: 'apply' },
+    { level: 10.1, leftCat: 'Atom', rightCat: 'Lambda', name: 'apply_reverse' },
+    { level: 10.0, leftCat: 'Atom', rightCat: 'Atom', name: 'concat' }
   ];
 
   // 各優先順位レベルについて、左結合で適用可能なペアを探して還元
