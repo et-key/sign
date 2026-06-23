@@ -378,6 +378,35 @@ runBtn.addEventListener('click', async () => {
           }
         }
 
+        // Potential List Pointer
+        if (rawI64 >= 2048n && rawI64 < BigInt(memory.buffer.byteLength) && (rawI64 % 8n === 0n)) {
+          const ptr = Number(rawI64);
+          try {
+            const len = Number(view.getBigInt64(ptr, true));
+            if (len >= 0 && len <= 1000000 && ptr + 8 + len * 8 <= memory.buffer.byteLength) {
+              const elems = [];
+              for (let i = 0; i < len; i++) {
+                const elemAddr = ptr + 8 + i * 8;
+                const valI64 = view.getBigInt64(elemAddr, true);
+                const valF64 = view.getFloat64(elemAddr, true);
+                if (valI64 >= 1024n && valI64 < 2048n) {
+                  const s = readWasmString(valI64);
+                  if (s && /^[a-zA-Z0-9_\-\.\:\/ ]*$/.test(s)) {
+                    elems.push(`"${s}"`);
+                  } else {
+                    elems.push(String(valF64));
+                  }
+                } else if (valI64 === 0n) {
+                  elems.push('__unit');
+                } else {
+                  elems.push(String(valF64));
+                }
+              }
+              extra += ` -> List: [ ${elems.join(', ')} ]`;
+            }
+          } catch(e) {}
+        }
+
         // Potential Function Pointer (Table Index Reference)
         if (rawI64 >= 0n && rawI64 < BigInt(tableFunctions.length)) {
           const funcName = tableFunctions[Number(rawI64)];

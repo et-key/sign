@@ -474,9 +474,14 @@ function _transpile(node) {
       }
 
       if (node.operator === ',') {
-        const lhs = node.left !== undefined && node.left !== null ? _transpile(node.left) : '__hole';
-        const rhs = node.right !== undefined && node.right !== null ? _transpile(node.right) : '__hole';
-        return `((l, r) => (l === __unit && r === __unit) ? __unit : (l === __unit ? r : (r === __unit ? l : [l, r])))(${lhs}, ${rhs})`;
+        const leaves = flattenProduct(node);
+        const transpiledLeaves = leaves.map(leaf => leaf !== undefined && leaf !== null ? _transpile(leaf) : '__hole');
+        return `((...elems) => {
+          const filtered = elems.filter(x => x !== __unit);
+          if (filtered.length === 0) return __unit;
+          if (filtered.length === 1) return filtered[0];
+          return filtered;
+        })(${transpiledLeaves.join(', ')})`;
       }
 
       // Range operators
@@ -904,6 +909,14 @@ function flattenConcat(node) {
   if (!node) return [];
   if (node.type === 'operation' && node.name === 'concat') {
     return [...flattenConcat(node.left), ...flattenConcat(node.right)];
+  }
+  return [node];
+}
+
+function flattenProduct(node) {
+  if (!node) return [];
+  if (node.type === 'operation' && node.operator === ',') {
+    return [...flattenProduct(node.left), ...flattenProduct(node.right)];
   }
   return [node];
 }

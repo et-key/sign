@@ -297,21 +297,17 @@ const helperDefs = {
     local.get $len
     i64.const 8
     i64.mul
-    i64.const 16
+    i64.const 8
     i64.add
     call $alloc_mem
     local.set $addr
     local.get $addr
-    i64.const 101 ;; List type tag
-    i64.store offset=0
-    local.get $addr
     local.get $len
-    i64.store offset=8
+    i64.store offset=0
     local.get $addr
   )`,
 
   is_list: `  (func $is_list (param $val i64) (result i32)
-    (local $is_ptr i32)
     local.get $val
     i64.const 2048
     i64.ge_u
@@ -336,22 +332,6 @@ const helperDefs = {
       )
       (else i32.const 0)
     )
-    local.set $is_ptr
-
-    local.get $is_ptr
-    (if (result i32)
-      (then
-        local.get $val
-        i64.load offset=0
-        i64.const 101
-        i64.eq
-        (if (result i32)
-          (then i32.const 1)
-          (else i32.const 0)
-        )
-      )
-      (else i32.const 0)
-    )
   )`,
 
   list_head: `  (func $list_head (param $list_ptr i64) (result i64)
@@ -360,13 +340,13 @@ const helperDefs = {
     (if (result i64)
       (then
         local.get $list_ptr
-        i64.load offset=8
+        i64.load offset=0
         i64.const 0
         i64.gt_s
         (if (result i64)
           (then
             local.get $list_ptr
-            i64.load offset=16
+            i64.load offset=8
           )
           (else
             i64.const 0 ;; __unit
@@ -388,7 +368,7 @@ const helperDefs = {
     (if (result i64)
       (then
         local.get $list_ptr
-        i64.load offset=8
+        i64.load offset=0
         local.set $len
         local.get $len
         i64.const 1
@@ -428,9 +408,9 @@ const helperDefs = {
                 i64.const 8
                 i64.mul
                 i64.add
-                i64.load offset=16
+                i64.load offset=8
                 
-                i64.store offset=16
+                i64.store offset=8
                 
                 local.get $i
                 i64.const 1
@@ -464,7 +444,7 @@ const helperDefs = {
     (if (result i64)
       (then
         local.get $list_ptr
-        i64.load offset=8
+        i64.load offset=0
         local.set $len
         i64.const 0
         local.set $i
@@ -480,7 +460,7 @@ const helperDefs = {
             i64.const 8
             i64.mul
             i64.add
-            i64.load offset=16
+            i64.load offset=8
             f64.reinterpret_i64
             f64.add
             local.set $acc
@@ -528,7 +508,7 @@ const helperDefs = {
     (if (result i64)
       (then
         local.get $list_ptr
-        i64.load offset=8
+        i64.load offset=0
         local.set $len
         i64.const 0
         local.set $i
@@ -544,7 +524,7 @@ const helperDefs = {
             i64.const 8
             i64.mul
             i64.add
-            i64.load offset=16
+            i64.load offset=8
             f64.reinterpret_i64
             f64.sub
             local.set $acc
@@ -592,7 +572,7 @@ const helperDefs = {
     (if (result i64)
       (then
         local.get $list_ptr
-        i64.load offset=8
+        i64.load offset=0
         local.set $len
         i64.const 0
         local.set $i
@@ -608,7 +588,7 @@ const helperDefs = {
             i64.const 8
             i64.mul
             i64.add
-            i64.load offset=16
+            i64.load offset=8
             f64.reinterpret_i64
             f64.mul
             local.set $acc
@@ -656,7 +636,7 @@ const helperDefs = {
     (if (result i64)
       (then
         local.get $list_ptr
-        i64.load offset=8
+        i64.load offset=0
         local.set $len
         i64.const 0
         local.set $i
@@ -672,7 +652,7 @@ const helperDefs = {
             i64.const 8
             i64.mul
             i64.add
-            i64.load offset=16
+            i64.load offset=8
             f64.reinterpret_i64
             f64.div
             local.set $acc
@@ -731,7 +711,7 @@ const helperDefs = {
     (if
       (then
         local.get $left
-        i64.load offset=8
+        i64.load offset=0
         local.set $l_len
       )
       (else
@@ -748,7 +728,7 @@ const helperDefs = {
     (if
       (then
         local.get $right
-        i64.load offset=8
+        i64.load offset=0
         local.set $r_len
       )
       (else
@@ -768,7 +748,7 @@ const helperDefs = {
 
     i64.const 0
     local.set $i
-    i64.const 16
+    i64.const 8
     local.set $dst_offset
 
     local.get $l_is_list
@@ -790,7 +770,7 @@ const helperDefs = {
             i64.const 8
             i64.mul
             i64.add
-            i64.load offset=16
+            i64.load offset=8
             
             i64.store
 
@@ -843,7 +823,7 @@ const helperDefs = {
             i64.const 8
             i64.mul
             i64.add
-            i64.load offset=16
+            i64.load offset=8
             
             i64.store
 
@@ -889,11 +869,11 @@ const helperDefs = {
     (if (then local.get $left return))
 
     local.get $left
-    i64.load offset=8
+    i64.load offset=0
     local.set $l_len
 
     local.get $right
-    i64.load offset=8
+    i64.load offset=0
     local.set $r_len
 
     local.get $l_len
@@ -907,7 +887,7 @@ const helperDefs = {
 
     i64.const 0
     local.set $i
-    i64.const 16
+    i64.const 8
     local.set $dst_offset
 
     (block $break_l
@@ -926,7 +906,7 @@ const helperDefs = {
         i64.const 8
         i64.mul
         i64.add
-        i64.load offset=16
+        i64.load offset=8
         
         i64.store
 
@@ -962,7 +942,7 @@ const helperDefs = {
         i64.const 8
         i64.mul
         i64.add
-        i64.load offset=16
+        i64.load offset=8
         
         i64.store
 
@@ -996,12 +976,12 @@ const helperDefs = {
         local.set $new_list
         local.get $new_list
         local.get $val
-        i64.store offset=16
+        i64.store offset=8
         local.get $new_list
       )
       (else
         local.get $list
-        i64.load offset=8
+        i64.load offset=0
         local.set $len
 
         local.get $len
@@ -1012,7 +992,7 @@ const helperDefs = {
 
         local.get $new_list
         local.get $val
-        i64.store offset=16
+        i64.store offset=8
 
         i64.const 0
         local.set $i
@@ -1034,9 +1014,9 @@ const helperDefs = {
             i64.const 8
             i64.mul
             i64.add
-            i64.load offset=16
+            i64.load offset=8
             
-            i64.store offset=24
+            i64.store offset=16
 
             local.get $i
             i64.const 1
@@ -1064,12 +1044,12 @@ const helperDefs = {
         local.set $new_list
         local.get $new_list
         local.get $val
-        i64.store offset=16
+        i64.store offset=8
         local.get $new_list
       )
       (else
         local.get $list
-        i64.load offset=8
+        i64.load offset=0
         local.set $len
 
         local.get $len
@@ -1098,9 +1078,9 @@ const helperDefs = {
             i64.const 8
             i64.mul
             i64.add
-            i64.load offset=16
+            i64.load offset=8
             
-            i64.store offset=16
+            i64.store offset=8
 
             local.get $i
             i64.const 1
@@ -1116,7 +1096,7 @@ const helperDefs = {
         i64.mul
         i64.add
         local.get $val
-        i64.store offset=16
+        i64.store offset=8
 
         local.get $new_list
       )
@@ -1192,7 +1172,7 @@ const helperDefs = {
     (if (result i64)
       (then
         local.get $list_ptr
-        i64.load offset=8
+        i64.load offset=0
         local.set $len
         local.get $len
         call $make_list
@@ -1222,9 +1202,9 @@ const helperDefs = {
             i64.const 8
             i64.mul
             i64.add
-            i64.load offset=16
+            i64.load offset=8
             
-            i64.store offset=16
+            i64.store offset=8
             
             local.get $i
             i64.const 1
@@ -1470,7 +1450,7 @@ function registerGlobals(node) {
   }
 
   // Allocate in linear memory
-  const size = structFields.has(lhs) ? Object.keys(structFields.get(lhs)).length * 8 : 8;
+  const size = structFields.has(lhs) ? Object.keys(structFields.get(lhs)).length * 8 + 8 : 8;
   const addr = memoryOffset;
   memoryMap.set(lhs, addr);
   memoryOffset += Math.ceil(size / 8) * 8; // 8-byte aligned
@@ -1548,23 +1528,27 @@ function compileLine(node) {
     if (rhs && rhs.type === 'block' && rhs.kind === 'indent') {
       const stmts = flattenStatements(rhs.content);
       const fields = structFields.get(lhs);
-      stmts.forEach(s => {
-        if (s.type === 'operation' && s.operator === ':') {
-          const fName = getLHSName(s.left);
-          const fMeta = fields[fName];
-          
-          // Calculate target offset address
-          mainInstructions.push(`  global.get $${lhs}`);
-          mainInstructions.push(`  i64.const ${fMeta.offset}`);
-          mainInstructions.push(`  i64.add`);
-          
-          // Compile right-hand side value
-          const valInsts = compileExpression(s.right, mainLocals);
-          mainInstructions.push(...valInsts);
-          
-          // Store
-          mainInstructions.push(`  i64.store`);
-        }
+      const validFields = stmts.filter(s => s && s.type === 'operation' && s.operator === ':');
+      
+      mainInstructions.push(`  global.get $${lhs}`);
+      mainInstructions.push(`  i64.const ${validFields.length}`);
+      mainInstructions.push(`  i64.store`);
+
+      validFields.forEach(s => {
+        const fName = getLHSName(s.left);
+        const fMeta = fields[fName];
+        
+        // Calculate target offset address
+        mainInstructions.push(`  global.get $${lhs}`);
+        mainInstructions.push(`  i64.const ${fMeta.offset + 8}`);
+        mainInstructions.push(`  i64.add`);
+        
+        // Compile right-hand side value
+        const valInsts = compileExpression(s.right, mainLocals);
+        mainInstructions.push(...valInsts);
+        
+        // Store
+        mainInstructions.push(`  i64.store`);
       });
     } else {
       // Simple variable initialization
@@ -1611,8 +1595,8 @@ function compileFunction(name, node) {
     
     // Destructuring unpacks
     if (p.isDestructured) {
-      const patternFields = p.innerSpecs.map(ip => ip.name);
-      const targetStruct = findStructForPattern(patternFields);
+      const nonRestFields = p.innerSpecs.filter(ip => !ip.isRest).map(ip => ip.name);
+      const targetStruct = findStructForPattern(nonRestFields);
       const fieldsMap = targetStruct ? structFields.get(targetStruct) : null;
 
       if (!targetStruct) {
@@ -1645,7 +1629,7 @@ function compileFunction(name, node) {
             locals.set(ip.name, fieldMeta.type);
             bodyInstructions.push(`  ;; Destructure ${ip.name} from $${pName}`);
             bodyInstructions.push(`  local.get $${pName}`);
-            bodyInstructions.push(`  i64.const ${fieldMeta.offset}`);
+            bodyInstructions.push(`  i64.const ${fieldMeta.offset + 8}`);
             bodyInstructions.push(`  i64.add`);
             bodyInstructions.push(`  ${fieldMeta.type}.load`);
             bodyInstructions.push(`  local.set $${ip.name}`);
@@ -1731,18 +1715,19 @@ function compileStaticConcat(node, locals, paramNames) {
   // パターン A: スカラー同士の結合 (どちらもチルダなし) 
   // または カンマ演算子（常に要素数2のポインタリストを新規作成）
   if (node.operator === ',' || (!leftHasTilde && !rightHasTilde && !isListL && !isListR)) {
+    const leaves = node.operator === ',' ? flattenProduct(node) : [leftNode, rightNode];
+    const len = leaves.length;
+    
     markHelperNeeded('make_list');
-    insts.push(`i64.const 2`);
+    insts.push(`i64.const ${len}`);
     insts.push(`call $make_list`);
     insts.push(`local.set $tmp_l`);
 
-    insts.push(`local.get $tmp_l`);
-    insts.push(...compileExpression(leftNode, locals, paramNames));
-    insts.push(`i64.store offset=16`);
-
-    insts.push(`local.get $tmp_l`);
-    insts.push(...compileExpression(rightNode, locals, paramNames));
-    insts.push(`i64.store offset=24`);
+    leaves.forEach((leaf, idx) => {
+      insts.push(`local.get $tmp_l`);
+      insts.push(...compileExpression(leaf, locals, paramNames));
+      insts.push(`i64.store offset=${8 + idx * 8}`);
+    });
 
     insts.push(`local.get $tmp_l`);
     return insts;
@@ -2256,7 +2241,7 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
       } else {
         insts.push(`i64.const 0`);
       }
-      insts.push(`i64.const ${fieldMeta.offset}`);
+      insts.push(`i64.const ${fieldMeta.offset + 8}`);
       insts.push(`i64.add`);
       insts.push(`${fieldMeta.type}.load`);
       return insts;
@@ -2285,7 +2270,7 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
       } else {
         insts.push(`i64.const 0`);
       }
-      insts.push(`i64.const ${fieldMeta.offset}`);
+      insts.push(`i64.const ${fieldMeta.offset + 8}`);
       insts.push(`i64.add`);
       insts.push(`${fieldMeta.type}.load`);
       return insts;
@@ -2312,7 +2297,7 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
             } else {
               insts.push(`i64.const 0`);
             }
-            insts.push(`i64.const ${fieldMeta.offset}`);
+            insts.push(`i64.const ${fieldMeta.offset + 8}`);
             insts.push(`i64.add`);
             
             // Push value to store
@@ -2689,22 +2674,37 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
         const targetStruct = findStructForPattern(fieldNames);
         const fieldsMap = targetStruct ? structFields.get(targetStruct) : null;
         
-        const size = fieldNames.length * 8;
+        const size = fieldNames.length * 8 + 8;
         markHelperNeeded('alloc_mem');
         insts.push(`i64.const ${size}`);
         insts.push(`call $alloc_mem`);
         insts.push(`local.set $tmp_l`);
+
+        // Store struct fields count as length header at offset 0
+        insts.push(`local.get $tmp_l`);
+        insts.push(`i64.const ${fieldNames.length}`);
+        insts.push(`i64.store`);
         
-        stmts.forEach(s => {
+        stmts.forEach((s, idx) => {
           const fName = getLHSName(s.left);
-          const fieldMeta = fieldsMap ? fieldsMap[fName] : findFieldMeta(fName);
+          let offsetVal = 0;
+          let fieldType = 'i64';
+          if (fieldsMap && fieldsMap[fName]) {
+            offsetVal = fieldsMap[fName].offset + 8;
+            fieldType = fieldsMap[fName].type;
+          } else {
+            const meta = findFieldMeta(fName);
+            // If findFieldMeta falls back to 0, use idx * 8 to avoid collision
+            offsetVal = (meta.offset === 0 ? idx * 8 : meta.offset) + 8;
+            fieldType = meta.type;
+          }
           
           insts.push(`local.get $tmp_l`);
-          insts.push(`i64.const ${fieldMeta.offset}`);
+          insts.push(`i64.const ${offsetVal}`);
           insts.push(`i64.add`);
           
           insts.push(...compileExpression(s.right, locals, paramNames));
-          insts.push(`${fieldMeta.type}.store`);
+          insts.push(`${fieldType}.store`);
         });
         
         insts.push(`local.get $tmp_l`);
@@ -2848,6 +2848,14 @@ function flattenConcat(node) {
   if (!node) return [];
   if (node.type === 'operation' && node.name === 'concat') {
     return [...flattenConcat(node.left), ...flattenConcat(node.right)];
+  }
+  return [node];
+}
+
+function flattenProduct(node) {
+  if (!node) return [];
+  if (node.type === 'operation' && node.operator === ',') {
+    return [...flattenProduct(node.left), ...flattenProduct(node.right)];
   }
   return [node];
 }

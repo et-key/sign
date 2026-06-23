@@ -6,16 +6,16 @@
   --bg-secondary: #111827;
   --text-main: #f3f4f6;
   --text-muted: #9ca3af;
-  
+
   --primary-glow: rgba(99, 102, 241, 0.15);
   --accent-blue: #38bdf8;
   --accent-indigo: #6366f1;
   --accent-indigo-glow: rgba(99, 102, 241, 0.4);
-  
+
   --panel-bg: rgba(17, 24, 39, 0.65);
   --panel-border: rgba(99, 102, 241, 0.08);
   --panel-border-hover: rgba(56, 189, 248, 0.2);
-  
+
   --console-info: #38bdf8;
   --console-error: #ef4444;
   --console-success: #10b981;
@@ -45,7 +45,7 @@ body {
   left: -10%;
   width: 120%;
   height: 120%;
-  background: 
+  background:
     radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.12) 0%, transparent 40%),
     radial-gradient(circle at 85% 85%, rgba(56, 189, 248, 0.1) 0%, transparent 40%),
     radial-gradient(circle at 50% 50%, rgba(30, 27, 75, 0.4) 0%, transparent 60%);
@@ -86,8 +86,17 @@ body {
 }
 
 @keyframes logoPulse {
-  0%, 100% { filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.4)); transform: scale(1); }
-  50% { filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.8)); transform: scale(1.05); }
+
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.4));
+    transform: scale(1);
+  }
+
+  50% {
+    filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.8));
+    transform: scale(1.05);
+  }
 }
 
 .title-text h1 {
@@ -95,7 +104,7 @@ body {
   font-weight: 700;
   letter-spacing: -0.025em;
   background: linear-gradient(135deg, #a5b4fc, var(--accent-blue));
-  -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   display: inline-block;
 }
@@ -155,7 +164,8 @@ body {
   transition: all 0.2s ease;
 }
 
-.custom-select:hover, .custom-select:focus {
+.custom-select:hover,
+.custom-select:focus {
   border-color: var(--panel-border-hover);
   background-color: rgba(31, 41, 55, 0.9);
   box-shadow: 0 0 0 2px var(--primary-glow);
@@ -225,7 +235,9 @@ body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .btn.loading .btn-text {
@@ -416,21 +428,21 @@ code {
     height: auto;
     overflow: auto;
   }
-  
+
   .app-container {
     height: auto;
     overflow: auto;
   }
-  
+
   .output-split {
     grid-template-rows: auto auto;
     height: auto;
   }
-  
+
   .js-console-group {
     grid-template-columns: 1fr;
   }
-  
+
   .panel {
     height: 380px;
   }
@@ -465,7 +477,7 @@ code {
   transition: color 0.25s ease;
 }
 
-.target-toggle input[type="radio"]:checked + label {
+.target-toggle input[type="radio"]:checked+label {
   color: #fff;
 }
 
@@ -482,6 +494,6 @@ code {
   box-shadow: 0 2px 8px rgba(56, 189, 248, 0.2);
 }
 
-.target-toggle input[type="radio"]#targetWASM:checked ~ .toggle-slider {
+.target-toggle input[type="radio"]#targetWASM:checked~.toggle-slider {
   transform: translateX(100%);
 }
