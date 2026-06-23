@@ -121,7 +121,7 @@ function getCategory(node, env) {
       }
       if (targetNode && targetNode.type === 'operation') {
         if (targetNode.operator === '?') {
-          arity = getArity(targetNode.left, env);
+          arity = getParamCount(targetNode.left);
         } else {
           arity = getArity(targetNode, env);
         }
@@ -135,21 +135,32 @@ function getCategory(node, env) {
             entry = env.get(entryName);
           }
         }
-        if (entry && typeof entry === 'object' && entry.arity !== undefined) {
-          arity = entry.arity;
+        if (entry && typeof entry === 'object') {
+          arity = entry.requiredLength !== undefined ? entry.requiredLength : (entry.arity !== undefined ? entry.arity : Infinity);
         }
       } else if (targetNode && (targetNode.type === 'Identifier' || targetNode.type === 'Variable')) {
         const name = targetNode.name;
         if (env && env.has(name)) {
           const entry = env.get(name);
-          if (entry && typeof entry === 'object' && entry.arity !== undefined) {
-            arity = entry.arity;
+          if (entry && typeof entry === 'object') {
+            arity = entry.requiredLength !== undefined ? entry.requiredLength : (entry.arity !== undefined ? entry.arity : Infinity);
           }
         }
       }
       let appliedCount = 1;
-      if (node.right && node.right.type === 'coproduct_block') {
-        appliedCount = node.right.statements.length;
+      if (node.right) {
+        if (node.right.type === 'coproduct_block') {
+          appliedCount = node.right.statements.length;
+        } else {
+          const countArgs = (n) => {
+            if (!n) return 0;
+            if (n.type === 'operation' && n.name === 'concat') {
+              return countArgs(n.left) + countArgs(n.right);
+            }
+            return 1;
+          };
+          appliedCount = countArgs(node.right);
+        }
       }
       if (appliedCount >= arity) {
         return 'Atom';

@@ -1,0 +1,5 @@
+say : "console.log"
+f : x ? x * 2
+map : g x ~y ? @g x , map g y~
+
+say (map $f 1 2 3 4 5)

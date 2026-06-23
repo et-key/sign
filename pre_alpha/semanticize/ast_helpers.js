@@ -1,4 +1,4 @@
-import { getArity } from './coproduct_resolver.js';
+import { getArity, getParamCount } from './coproduct_resolver.js';
 
 export function getParameterNames(node, names = new Set()) {
   if (!node) return names;
@@ -223,13 +223,15 @@ export function buildEnvironment(node, env = new Map()) {
       while (targetR && targetR.type === 'block') {
         targetR = targetR.content;
       }
+      let requiredLength = arity;
       if (targetR && targetR.type === 'operation' && targetR.operator === '?') {
         isRealFunction = true;
         arity = getParameterNames(targetR.left).size;
+        requiredLength = getParamCount(targetR.left);
       } else if (targetR && targetR.type === 'inline_code') {
         isRealFunction = true;
       }
-      const entry = { category: rightCat, arity: arity, typeTag, isRealFunction };
+      const entry = { category: rightCat, arity: arity, requiredLength, typeTag, isRealFunction };
       if (node.right && node.right.returnType) {
         entry.returnType = node.right.returnType;
       }

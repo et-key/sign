@@ -380,6 +380,7 @@ function _transpile(node) {
           }
           const entry = currentEnv && (currentEnv.get(fnName) || currentEnv.get(`<${fnName}>`));
           const staticArity = entry ? entry.arity : undefined;
+          const staticRequired = entry ? (entry.requiredLength !== undefined ? entry.requiredLength : entry.arity) : undefined;
           const isRealFunction = entry ? entry.isRealFunction : false;
 
           const args = [];
@@ -396,8 +397,8 @@ function _transpile(node) {
 
           if (staticArity !== undefined && staticArity > 0 && !hasExpandArg) {
             const isVariadic = staticArity === Infinity;
-            // (1) 引数の数が一致する（または可変引数）で、Holeがない場合は直接呼び出し
-            if ((args.length === staticArity || isVariadic) && !hasHole) {
+            // (1) 引数の数が staticRequired 以上（または可変引数）で、Holeがない場合は直接呼び出し
+            if ((args.length >= staticRequired || isVariadic) && !hasHole) {
               inArgumentListStack.push(true);
               const transpiledArgs = args.map(arg => _transpile(arg));
               inArgumentListStack.pop();
@@ -412,7 +413,7 @@ function _transpile(node) {
             }
 
             // (2) 引数が不足しているか、Holeがある場合は部分適用アロー関数
-            if (args.length < staticArity || hasHole) {
+            if (args.length < staticRequired || hasHole) {
               inArgumentListStack.push(true);
               const arrowParams = [];
               const callArgs = [];
@@ -429,7 +430,7 @@ function _transpile(node) {
                 }
               });
 
-              const missingCount = isVariadic ? 0 : staticArity - args.length;
+              const missingCount = isVariadic ? 0 : staticRequired - args.length;
               for (let k = 0; k < missingCount; k++) {
                 const paramName = `_p${pIdx++}`;
                 arrowParams.push(paramName);
@@ -445,23 +446,22 @@ function _transpile(node) {
 
           // (3) 過剰適用、または静的 arity 不明な場合は軽量 _call
           inArgumentListStack.push(true);
-          let argsCode;
+          let flatArgs = [];
           if (node.right && node.right.type === 'coproduct_block') {
-            argsCode = (node.right.statements || []).map(s => {
-              const code = _transpile(s);
-              if (s.type === 'operation' && s.operator === '~' && s.position === 'postfix') {
-                return `new ExpandedStream(_expand(${_transpile(s.operand)}))`;
-              }
-              return code;
-            }).join(', ');
-          } else {
-            const code = _transpile(node.right);
-            if (node.right && node.right.type === 'operation' && node.right.operator === '~' && node.right.position === 'postfix') {
-              argsCode = `new ExpandedStream(_expand(${_transpile(node.right.operand)}))`;
-            } else {
-              argsCode = code;
-            }
+            (node.right.statements || []).forEach(s => {
+              flatArgs.push(...flattenConcat(s));
+            });
+          } else if (node.right !== undefined && node.right !== null) {
+            flatArgs.push(...flattenConcat(node.right));
           }
+
+          const argsCode = flatArgs.map(s => {
+            const code = _transpile(s);
+            if (s && s.type === 'operation' && s.operator === '~' && s.position === 'postfix') {
+              return `new ExpandedStream(_expand(${_transpile(s.operand)}))`;
+            }
+            return code;
+          }).join(', ');
           inArgumentListStack.pop();
           return `_call(${_transpile(node.left)}, ${argsCode})`;
         }
@@ -480,7 +480,17 @@ function _transpile(node) {
           const filtered = elems.filter(x => x !== __unit);
           if (filtered.length === 0) return __unit;
           if (filtered.length === 1) return filtered[0];
-          return filtered;
+          const allArrays = filtered.every(x => Array.isArray(x));
+          if (allArrays) return filtered;
+          const flat = [];
+          for (const x of filtered) {
+            if (Array.isArray(x)) {
+              flat.push(...x);
+            } else {
+              flat.push(x);
+            }
+          }
+          return flat;
         })(${transpiledLeaves.join(', ')})`;
       }
 

@@ -1,4 +1,8 @@
-export const RUNTIME_HELPERS_CODE = `
+
+import _ from 'white_cats';
+import util from 'util';
+
+
 const __hole = Symbol.for('hole');
 const __unit = Symbol.for('unit');
 
@@ -9,12 +13,8 @@ class Address {
 }
 const _deref = (x) => {
   if (x instanceof Address) return x.value;
-  if (Array.isArray(x)) {
-    const flat = x.flat(Infinity);
-    if (flat.length > 0 && flat[0] instanceof Address) {
-      return [flat[0].value, ...flat.slice(1)];
-    }
-    return flat;
+  if (Array.isArray(x) && x.length > 0 && x[0] instanceof Address) {
+    return [x[0].value, ...x.slice(1)];
   }
   return x;
 };
@@ -148,67 +148,29 @@ function _makeCurried(fn, expectedLength, argsSoFar) {
     __isCurried: { value: true },
     target: { value: fn },
     expectedLength: { value: expectedLength },
-    requiredLength: { value: fn.requiredLength !== undefined ? fn.requiredLength : expectedLength },
     args: { value: argsSoFar },
-    hasRest: { value: !!fn.hasRest },
     length: { value: Math.max(0, expectedLength - argsSoFar.length) }
   });
   return wrapper;
 }
 
 function _call(fn, ...args) {
-  if (Array.isArray(fn)) {
-    if (fn.length > 0 && typeof fn[0] === 'function') {
-      return _call(fn[0], ...fn.slice(1), ...args);
-    }
-  }
   if (typeof fn !== 'function') return __unit;
-
-  const flattenedArgs = [];
-  for (const arg of args) {
-    if (arg instanceof ExpandedStream) {
-      flattenedArgs.push(...arg.stream);
-    } else {
-      flattenedArgs.push(arg);
-    }
-  }
+  if (args.includes(__unit)) return __unit;
 
   const isCurried = fn.__isCurried;
   const target = isCurried ? fn.target : fn;
   const argsSoFar = isCurried ? fn.args : [];
   const expected = isCurried ? fn.expectedLength : (fn.expectedLength !== undefined ? fn.expectedLength : fn.length);
-  const required = isCurried ? fn.requiredLength : (fn.requiredLength !== undefined ? fn.requiredLength : expected);
-  const hasRest = !!target.hasRest;
 
-  const totalArgs = [...argsSoFar, ...flattenedArgs];
+  const totalArgs = [...argsSoFar, ...args];
 
-  if (totalArgs.includes(__unit)) {
-    const fnObj = fn.__isCurried ? fn.target : fn;
-    if (fnObj && fnObj.paramSpecs) {
-      const restIdx = fnObj.paramSpecs.findIndex(p => p.isRest);
-      const itemIdx = restIdx > 0 ? restIdx - 1 : -1;
-      if (itemIdx >= 0 && totalArgs[itemIdx] !== __unit) {
-        // Defer extraction: the current item being processed is not __unit yet.
-      } else {
-        if (fnObj._extractIndex !== undefined && fnObj._extractIndex >= 0) {
-          return totalArgs[fnObj._extractIndex];
-        }
-        return __unit;
-      }
-    } else {
-      if (fnObj && fnObj._extractIndex !== undefined && fnObj._extractIndex >= 0) {
-        return totalArgs[fnObj._extractIndex];
-      }
-      return __unit;
-    }
-  }
-
-  if (totalArgs.length < required) {
+  if (totalArgs.length < expected) {
     return _makeCurried(target, expected, totalArgs);
   }
 
-  const invokeArgs = hasRest ? totalArgs : totalArgs.slice(0, expected);
-  const remaining = hasRest ? [] : totalArgs.slice(expected);
+  const invokeArgs = totalArgs.slice(0, expected);
+  const remaining = totalArgs.slice(expected);
   const res = target(...invokeArgs);
   if (remaining.length > 0) {
     return _call(res, ...remaining);
@@ -524,4 +486,32 @@ const _range = (start, end, step, type) => {
   }
   return result;
 };
-`;
+
+
+
+const _sig_say = console.log;
+const _sig_f = (() => {
+  const _fn = (_sig_x) => {
+  return _arithmetic('*', _sig_x, 2);
+};
+  _fn.expectedLength = 1;
+  _fn.requiredLength = 1;
+  _fn.hasRest = false;
+  _fn.paramSpecs = [{"name":"_sig_x","defaultValue":null,"isRest":false}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+const _sig_g = (() => {
+  const _fn = (_sig_x) => {
+  return _arithmetic('+', _sig_x, 1);
+};
+  _fn.expectedLength = 1;
+  _fn.requiredLength = 1;
+  _fn.hasRest = false;
+  _fn.paramSpecs = [{"name":"_sig_x","defaultValue":null,"isRest":false}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+((_a0) => (_a0 === __unit) ? __unit : _sig_say(_a0))((((_a0) => (_a0 === __unit) ? __unit : _sig_g(_a0))(((_a0) => (_a0 === __unit) ? __unit : _sig_f(_a0))(3))));
+
+console.log("=== Execution Result ===");

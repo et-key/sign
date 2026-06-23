@@ -1,4 +1,8 @@
-export const RUNTIME_HELPERS_CODE = `
+
+import _ from 'white_cats';
+import util from 'util';
+
+
 const __hole = Symbol.for('hole');
 const __unit = Symbol.for('unit');
 
@@ -524,4 +528,60 @@ const _range = (start, end, step, type) => {
   }
   return result;
 };
-`;
+
+
+const _sig___ = __unit;
+const _sig_say = console.log;
+const _sig_add = (() => {
+  const _fn = (_sig_x, _sig_y) => {
+  return _arithmetic('+', _sig_x, _sig_y);
+};
+  _fn.expectedLength = 2;
+  _fn.requiredLength = 2;
+  _fn.hasRest = false;
+  _fn.paramSpecs = [{"name":"_sig_x","defaultValue":null,"isRest":false},{"name":"_sig_y","defaultValue":null,"isRest":false}];
+  _fn._extractIndex = undefined;
+  return _fn;
+})();
+const _sig_fold_eager = (() => {
+  const _fn = (_sig_f, _sig_a, _sig_x, ..._sig_y) => {
+  if (_sig_y.length === 0) _sig_y = __unit;
+  return _call(_sig_fold_eager, _sig_f, (_call(_deref(_sig_f), _sig_a, _sig_x)), new ExpandedStream(_expand(_sig_y)));
+};
+  _fn.expectedLength = 4;
+  _fn.requiredLength = 3;
+  _fn.hasRest = true;
+  _fn.paramSpecs = [{"name":"_sig_f","defaultValue":null,"isRest":false},{"name":"_sig_a","defaultValue":null,"isRest":false},{"name":"_sig_x","defaultValue":null,"isRest":false},{"name":"_sig_y","defaultValue":null,"isRest":true}];
+  _fn._extractIndex = 1;
+  return _fn;
+})();
+((_a0) => (_a0 === __unit) ? __unit : _sig_say(_a0))((((_a0, _a1, _a2, _a3, _a4, _a5, _a6) => (_a0 === __unit || _a1 === __unit || _a2 === __unit || _a3 === __unit || _a4 === __unit || _a5 === __unit || _a6 === __unit) ? __unit : _sig_fold_eager(_a0, _a1, _a2, _a3, _a4, _a5, _a6))(new Address(_sig_add), 0, 1, 2, 3, 4, 5)));
+const _sig_fold_lazy = (() => {
+  const _fn = (_sig_f, _sig_a, _sig_x, ..._sig_y) => {
+  if (_sig_y.length === 0) _sig_y = __unit;
+  return [((l, r) => {
+            const isPlainObj = (o) => typeof o === 'object' && o !== null && !Array.isArray(o) && !(o instanceof Address);
+            const hasObj = isPlainObj(l) || isPlainObj(r) || (Array.isArray(l) && l[0] && l[0].constructor && l[0].constructor.name === 'ExpandedObject') || (Array.isArray(r) && r[0] && r[0].constructor && r[0].constructor.name === 'ExpandedObject');
+            if (hasObj) {
+              const getObj = (x) => {
+                if (Array.isArray(x)) return x[0] && typeof x[0] === 'object' && x[0].constructor && x[0].constructor.name === 'ExpandedObject' ? x[0].obj : {};
+                return isPlainObj(x) ? x : {};
+              };
+              return { ...getObj(l), ...getObj(r) };
+            }
+            const toArr = (x) => Array.isArray(x) ? x : [x];
+            return [...toArr(l), ...toArr(r)];
+          })(new Address(_sig_fold_lazy), _sig_f), (_call(_deref(_sig_f), _sig_a, _sig_x)), _expand(_sig_y)];
+};
+  _fn.expectedLength = 4;
+  _fn.requiredLength = 3;
+  _fn.hasRest = true;
+  _fn.paramSpecs = [{"name":"_sig_f","defaultValue":null,"isRest":false},{"name":"_sig_a","defaultValue":null,"isRest":false},{"name":"_sig_x","defaultValue":null,"isRest":false},{"name":"_sig_y","defaultValue":null,"isRest":true}];
+  _fn._extractIndex = 1;
+  return _fn;
+})();
+const _sig_step0 = ((_a0, _a1, _a2, _a3, _a4) => (_a0 === __unit || _a1 === __unit || _a2 === __unit || _a3 === __unit || _a4 === __unit) ? __unit : _sig_fold_lazy(_a0, _a1, _a2, _a3, _a4))(new Address(_sig_add), 0, 1, 2, 3);
+const _sig_step1 = _call(_deref(_sig_step0), __unit);
+((_a0) => (_a0 === __unit) ? __unit : _sig_say(_a0))((_call(_deref(_sig_step1), __unit)));
+
+console.log("=== Execution Result ===");
