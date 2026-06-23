@@ -5,7 +5,7 @@ import { resolveCoproducts, getArity } from '../pre_alpha/semanticize/coproduct_
 import { transpile } from '../pre_alpha/backend/js_codegen.js';
 import { RUNTIME_HELPERS_CODE } from '../pre_alpha/backend/runtime_helpers.js';
 import { buildEnvironment, desugarHoles, collectIdentifiers } from '../pre_alpha/semanticize/ast_helpers.js';
-import { transpileToWasm, getMemoryMap, getStructFields } from '../pre_alpha/backend/wasm_codegen.js';
+import { transpileToWasm, getMemoryMap, getStructFields, getTableFunctions } from '../pre_alpha/backend/wasm_codegen.js';
 
 // DOM References
 const sourceEditor = document.getElementById('sourceEditor');
@@ -47,103 +47,110 @@ function updateTargetMode() {
 // Templates definitions for Example Loaders
 const EXAMPLES = {
   composition: `\` 1. Function Composition using Space ' '
+say : "console.log"
 f : x ? x * 2
 g : x ? x + 1
-f g 3
+say (f g 3)
 `,
   partial_app: `\` 1. Partial Application using Hole (_)
+say : "console.log"
 f : x y ? x + y
 partial : f _ 3
-partial 4
+say (partial 4)
 
 \` 2. Currying
 curried : f 2
-curried 4
+say (curried 4)
 
 \` 3. Conditional Maybe Value (Value-based comparisons)
-10 < 5
-5 == 5
+say (10 < 5)
+say (5 == 5)
 `,
   generator: `\` 1. Higher Order Function Recursive Mapping on Lazy Generator
+say : "console.log"
 f : x ? x * 2
 map : g x ~y ? [@g x] [map g y~]
 
 \` Range evaluation produces [0, 2, 4, 6, 8, 10]
-map $[* 2,] [0 ~+ 2 ~ 10]
+say (map $[* 2,] [0 ~+ 2 ~ 10])
 `,
   lists: `\` Atom vs Function Coproduct Resolution
+say : "console.log"
 a : 1
 b : 2
 c : 3
 
-[a b c]
-a b c
-a b c , a b c
-[a b c] [a b c]
-[a b c] , [a b c]
+say [a b c]
+say (a b c)
+say (a b c , a b c)
+say ([a b c] [a b c])
+say ([a b c] , [a b c])
 
-[a , b , c] [a , b , c]
-[a , b , c] , [a , b , c]
+say ([a , b , c] [a , b , c])
+say ([a , b , c] , [a , b , c])
 `,
   higher_order: `\` Recursive Map using Coproduct and Partial Application
+say : "console.log"
 f : x ? x * 2
 map : g x ~y ? @g x , map g y~
 
-map $f 1 2 3 4 5
-map $[x ? x * 2] 1 2 3 4 5
+say (map $f 1 2 3 4 5)
+say (map $[x ? x * 2] 1 2 3 4 5)
 `,
   factorial: `\` Recursive Factorial (Packrat Parsing Test)
+say : "console.log"
 fact : x ?
 	x = 0 : 1
 	x = 1 : 1
 	x * [fact [x - 1]]
 
-fact 5
+say (fact 5)
 `,
   fold: `\` 1. Eager Fold (Trampoline Extraction)
+say : "console.log"
 add : x y ? x + y
 fold_eager : f a x ~y ? fold_eager f [@f a x] y~
 
-fold_eager $add 0 1 2 3 4 5
+say (fold_eager $add 0 1 2 3 4 5)
 
 \` 2. Lazy Fold (Thunk / Double Algebra)
 fold_lazy : f a x ~y ? $fold_lazy f [@f a x] y~
 
 step0 : fold_lazy $add 0 1 2 3
 step1 : @step0 __
-@step1 __
+say (@step1 __)
 `,
   operators: `\` 1. Inline JavaScript Code
 say : "console.log"
 say \`hello\` \`world\` 123
 
 \` 2. Range Operators (Eager Arrays)
-0 ~+ 2 ~ 10
-1 ~* 2 ~ 16
+say (0 ~+ 2 ~ 10)
+say (1 ~* 2 ~ 16)
 
 \` 3. Spread Import
 js : javascript@
 math : js'Math
 
 \` 4. Property Access and Reverse Access
-math'PI
+say (math'PI)
 PI_val : math'PI
-PI_val @ math
+say (PI_val @ math)
 
 \` 5. Object Overwrite (Shallow Copy)
 base_obj : js'Object
-base_obj # prop 42
+say (base_obj # prop 42)
 
 \` 6. Logical, Bitwise, Math
-1 & 1
-5 ;; 3
-1 << 3
-|-5|
-5!
+say (1 & 1)
+say (5 ;; 3)
+say (1 << 3)
+say (|-5|)
+say (5!)
 
 \` 7. Expand Array
 arr : 1 , 2 , 3
-arr~
+say (arr~)
 `
 };
 
@@ -340,6 +347,7 @@ runBtn.addEventListener('click', async () => {
 
       const memoryMap = getMemoryMap();
       const structFields = getStructFields();
+      const tableFunctions = getTableFunctions();
       const vars = Array.from(memoryMap.entries()).sort((a, b) => Number(a[1]) - Number(b[1]));
 
       vars.forEach(([name, addr]) => {
@@ -369,26 +377,10 @@ runBtn.addEventListener('click', async () => {
           }
         }
         
-        // Potential Heap Object (Closure)
-        if (rawI64 >= 2048n && rawI64 < 65536n && (rawI64 % 8n === 0n)) {
-          const ptr = Number(rawI64);
-          try {
-            const tableIdx = view.getBigInt64(ptr + 0, true);
-            const expArity = view.getBigInt64(ptr + 8, true);
-            const appCount = view.getBigInt64(ptr + 16, true);
-            const argsPtr = view.getBigInt64(ptr + 24, true);
-            
-            if (expArity >= 1n && expArity <= 10n && appCount >= 0n && appCount <= expArity) {
-              const argsList = [];
-              for (let i = 0n; i < appCount; i++) {
-                const argAddr = Number(argsPtr + i * 8n);
-                const argVal = view.getBigInt64(argAddr, true);
-                const argValF64 = view.getFloat64(argAddr, true);
-                argsList.push(`${argVal} (f64: ${argValF64})`);
-              }
-              extra += ` -> Closure(table_idx: ${tableIdx}, arity: ${appCount}/${expArity}, args: [${argsList.join(', ')}])`;
-            }
-          } catch(e) {}
+        // Potential Function Pointer (Table Index Reference)
+        if (rawI64 >= 0n && rawI64 < BigInt(tableFunctions.length)) {
+          const funcName = tableFunctions[Number(rawI64)];
+          extra += ` -> Function Pointer: ${funcName} (table_idx: ${rawI64})`;
         }
 
         logToConsole(`  ${label}: raw i64: ${rawI64}, f64: ${rawF64}${extra}`, 'log-msg');
@@ -400,16 +392,7 @@ runBtn.addEventListener('click', async () => {
       resolvedLines.forEach(resolved => {
         const jsCode = transpile(resolved, globalEnv);
         if (jsCode) {
-          if (resolved && resolved.type === 'operation' && resolved.operator === ':') {
-            jsStatements.push(jsCode);
-          } else {
-            jsStatements.push(`try {
-              const _res = ${jsCode};
-              if (_res !== undefined && _res !== __unit) {
-                console.log(util.inspect(_res));
-              }
-            } catch(e) {}`);
-          }
+          jsStatements.push(jsCode);
         }
       });
 

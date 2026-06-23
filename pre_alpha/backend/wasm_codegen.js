@@ -3,9 +3,9 @@
  * 
  * Translates resolved Sign AST to WebAssembly Text Format (WAT) for wasm64.
  * - Pointers/Addresses/TypePrefix (0x, 0u) are i64.
- * - Standard numbers are f64.
  * - Structs are aligned on 8-byte boundaries in linear memory.
  */
+import { inferType } from '../semanticize/ast_helpers.js';
 
 let memoryOffset = 0;
 const memoryMap = new Map(); // name -> baseAddress
@@ -872,325 +872,255 @@ const helperDefs = {
     local.get $new_list
   )`,
 
-  apply_expanded_list: `  (func $apply_expanded_list (param $cl_ptr i64) (param $list_ptr i64) (result i64)
-    (local $is_l i32)
-    (local $len i64)
+  list_merge: `  (func $list_merge (param $left i64) (param $right i64) (result i64)
+    (local $l_len i64)
+    (local $r_len i64)
+    (local $total_len i64)
+    (local $new_list i64)
     (local $i i64)
-    (local $curr_cl i64)
+    (local $dst_offset i64)
 
-    local.get $list_ptr
+    local.get $left
     i64.eqz
-    (if (result i64)
-      (then
-        local.get $cl_ptr
-      )
-      (else
-        local.get $cl_ptr
-        local.set $curr_cl
+    (if (then local.get $right return))
 
-        local.get $list_ptr
-        call $is_list
-        local.set $is_l
+    local.get $right
+    i64.eqz
+    (if (then local.get $left return))
 
-        local.get $is_l
-        (if (result i64)
-          (then
-            local.get $list_ptr
-            i64.load offset=8
-            local.set $len
-            
-            i64.const 0
-            local.set $i
-            
-            (block $break
-              (loop $top
-                local.get $i
-                local.get $len
-                i64.ge_s
-                br_if $break
-
-                local.get $curr_cl
-                local.get $list_ptr
-                local.get $i
-                i64.const 8
-                i64.mul
-                i64.add
-                i64.load offset=16
-                call $apply_and_eval_closure
-                local.set $curr_cl
-
-                local.get $i
-                i64.const 1
-                i64.add
-                local.set $i
-                br $top
-              )
-            )
-            local.get $curr_cl
-          )
-          (else
-            local.get $curr_cl
-            local.get $list_ptr
-            call $apply_and_eval_closure
-          )
-        )
-      )
-    )
-  )`,
-
-  make_closure: `  (func $make_closure (param $func_idx i64) (param $arity i64) (result i64)
-    (local $cl_ptr i64)
-    (local $args_ptr i64)
-    i64.const 32
-    call $alloc_mem
-    local.set $cl_ptr
-    local.get $cl_ptr
-    local.get $func_idx
-    i64.store offset=0
-    local.get $cl_ptr
-    local.get $arity
-    i64.store offset=8
-    local.get $cl_ptr
-    i64.const 0
-    i64.store offset=16
-    i64.const 32
-    call $alloc_mem
-    local.set $args_ptr
-    local.get $cl_ptr
-    local.get $args_ptr
-    i64.store offset=24
-    local.get $cl_ptr
-  )`,
-
-  apply_closure: `  (func $apply_closure (param $cl_ptr i64) (param $arg i64) (result i64)
-    (local $new_cl i64)
-    (local $new_args i64)
-    (local $old_args i64)
-    (local $count i64)
-    (local $i i64)
-    i64.const 32
-    call $alloc_mem
-    local.set $new_cl
-    local.get $new_cl
-    local.get $cl_ptr
-    i64.load offset=0
-    i64.store offset=0
-    local.get $new_cl
-    local.get $cl_ptr
+    local.get $left
     i64.load offset=8
-    i64.store offset=8
-    local.get $cl_ptr
-    i64.load offset=16
-    local.set $count
-    local.get $new_cl
-    local.get $count
-    i64.const 1
+    local.set $l_len
+
+    local.get $right
+    i64.load offset=8
+    local.set $r_len
+
+    local.get $l_len
+    local.get $r_len
     i64.add
-    i64.store offset=16
-    i64.const 32
-    call $alloc_mem
-    local.set $new_args
-    local.get $new_cl
-    local.get $new_args
-    i64.store offset=24
-    local.get $cl_ptr
-    i64.load offset=24
-    local.set $old_args
+    local.set $total_len
+
+    local.get $total_len
+    call $make_list
+    local.set $new_list
+
     i64.const 0
     local.set $i
-    (block $break
-      (loop $top
+    i64.const 16
+    local.set $dst_offset
+
+    (block $break_l
+      (loop $top_l
         local.get $i
-        local.get $count
+        local.get $l_len
         i64.ge_s
-        br_if $break
-        local.get $new_args
+        br_if $break_l
+
+        local.get $new_list
+        local.get $dst_offset
+        i64.add
+        
+        local.get $left
         local.get $i
         i64.const 8
         i64.mul
         i64.add
-        local.get $old_args
-        local.get $i
-        i64.const 8
-        i64.mul
-        i64.add
-        i64.load
+        i64.load offset=16
+        
         i64.store
+
+        local.get $dst_offset
+        i64.const 8
+        i64.add
+        local.set $dst_offset
+
+        local.get $i
+        i64.const 1
+         i64.add
+        local.set $i
+        br $top_l
+      )
+    )
+
+    i64.const 0
+    local.set $i
+
+    (block $break_r
+      (loop $top_r
+        local.get $i
+        local.get $r_len
+        i64.ge_s
+        br_if $break_r
+
+        local.get $new_list
+        local.get $dst_offset
+        i64.add
+        
+        local.get $right
+        local.get $i
+        i64.const 8
+        i64.mul
+        i64.add
+        i64.load offset=16
+        
+        i64.store
+
+        local.get $dst_offset
+        i64.const 8
+        i64.add
+        local.set $dst_offset
+
         local.get $i
         i64.const 1
         i64.add
         local.set $i
-        br $top
+        br $top_r
       )
     )
-    local.get $new_args
-    local.get $count
-    i64.const 8
-    i64.mul
-    i64.add
-    local.get $arg
-    i64.store
-    local.get $new_cl
+
+    local.get $new_list
   )`,
 
-  invoke_closure: `  (func $invoke_closure (param $cl_ptr i64) (result i64)
-    (local $func_idx i64)
-    (local $arity i64)
-    (local $args i64)
-    local.get $cl_ptr
-    i64.load offset=0
-    local.set $func_idx
-    local.get $cl_ptr
-    i64.load offset=8
-    local.set $arity
-    local.get $cl_ptr
-    i64.load offset=24
-    local.set $args
-    local.get $arity
-    i64.const 1
-    i64.eq
+  list_push_front: `  (func $list_push_front (param $val i64) (param $list i64) (result i64)
+    (local $len i64)
+    (local $new_list i64)
+    (local $i i64)
+
+    local.get $list
+    i64.eqz
     (if (result i64)
       (then
-        local.get $args
-        i64.load offset=0
-        local.get $func_idx
-        i32.wrap_i64
-        call_indirect (type $t_arity_1)
+        i64.const 1
+        call $make_list
+        local.set $new_list
+        local.get $new_list
+        local.get $val
+        i64.store offset=16
+        local.get $new_list
       )
       (else
-        local.get $arity
-        i64.const 2
-        i64.eq
-        (if (result i64)
-          (then
-            local.get $args
-            i64.load offset=0
-            local.get $args
-            i64.load offset=8
-            local.get $func_idx
-            i32.wrap_i64
-            call_indirect (type $t_arity_2)
-          )
-          (else
-            local.get $arity
-            i64.const 3
-            i64.eq
-            (if (result i64)
-              (then
-                local.get $args
-                i64.load offset=0
-                local.get $args
-                i64.load offset=8
-                local.get $args
-                i64.load offset=16
-                local.get $func_idx
-                i32.wrap_i64
-                call_indirect (type $t_arity_3)
-              )
-              (else
-                local.get $args
-                i64.load offset=0
-                local.get $args
-                i64.load offset=8
-                local.get $args
-                i64.load offset=16
-                local.get $args
-                i64.load offset=24
-                local.get $func_idx
-                i32.wrap_i64
-                call_indirect (type $t_arity_4)
-              )
-            )
+        local.get $list
+        i64.load offset=8
+        local.set $len
+
+        local.get $len
+        i64.const 1
+        i64.add
+        call $make_list
+        local.set $new_list
+
+        local.get $new_list
+        local.get $val
+        i64.store offset=16
+
+        i64.const 0
+        local.set $i
+        (block $break
+          (loop $top
+            local.get $i
+            local.get $len
+            i64.ge_s
+            br_if $break
+
+            local.get $new_list
+            local.get $i
+            i64.const 8
+            i64.mul
+            i64.add
+            
+            local.get $list
+            local.get $i
+            i64.const 8
+            i64.mul
+            i64.add
+            i64.load offset=16
+            
+            i64.store offset=24
+
+            local.get $i
+            i64.const 1
+            i64.add
+            local.set $i
+            br $top
           )
         )
+        local.get $new_list
       )
     )
   )`,
 
-  apply_and_eval_closure: `  (func $apply_and_eval_closure (param $cl_ptr i64) (param $arg i64) (result i64)
-    (local $new_cl i64)
-    (local $left i64)
-    (local $right i64)
-    (local $mid_res i64)
-    (local $args_ptr i64)
-    local.get $cl_ptr
-    i64.load offset=0
-    i64.const -1
-    i64.eq
+  list_push_back: `  (func $list_push_back (param $list i64) (param $val i64) (result i64)
+    (local $len i64)
+    (local $new_list i64)
+    (local $i i64)
+
+    local.get $list
+    i64.eqz
     (if (result i64)
       (then
-        local.get $cl_ptr
-        i64.load offset=24
-        local.set $args_ptr
-        
-        local.get $args_ptr
-        i64.load offset=0
-        local.set $left
-        
-        local.get $args_ptr
-        i64.load offset=8
-        local.set $right
-        
-        local.get $left
-        local.get $arg
-        call $apply_and_eval_closure
-        local.set $mid_res
-        
-        local.get $right
-        local.get $mid_res
-        call $apply_and_eval_closure
+        i64.const 1
+        call $make_list
+        local.set $new_list
+        local.get $new_list
+        local.get $val
+        i64.store offset=16
+        local.get $new_list
       )
       (else
-        local.get $cl_ptr
-        local.get $arg
-        call $apply_closure
-        local.set $new_cl
-        local.get $new_cl
-        i64.load offset=16
-        local.get $new_cl
+        local.get $list
         i64.load offset=8
-        i64.eq
-        (if (result i64)
-          (then
-            local.get $new_cl
-            call $invoke_closure
-          )
-          (else
-            local.get $new_cl
+        local.set $len
+
+        local.get $len
+        i64.const 1
+        i64.add
+        call $make_list
+        local.set $new_list
+
+        i64.const 0
+        local.set $i
+        (block $break
+          (loop $top
+            local.get $i
+            local.get $len
+            i64.ge_s
+            br_if $break
+
+            local.get $new_list
+            local.get $i
+            i64.const 8
+            i64.mul
+            i64.add
+            
+            local.get $list
+            local.get $i
+            i64.const 8
+            i64.mul
+            i64.add
+            i64.load offset=16
+            
+            i64.store offset=16
+
+            local.get $i
+            i64.const 1
+            i64.add
+            local.set $i
+            br $top
           )
         )
+
+        local.get $new_list
+        local.get $len
+        i64.const 8
+        i64.mul
+        i64.add
+        local.get $val
+        i64.store offset=16
+
+        local.get $new_list
       )
     )
-  )`,
-
-  make_compose_closure: `  (func $make_compose_closure (param $left i64) (param $right i64) (result i64)
-    (local $cl_ptr i64)
-    (local $args_ptr i64)
-    i64.const 32
-    call $alloc_mem
-    local.set $cl_ptr
-    local.get $cl_ptr
-    i64.const -1
-    i64.store offset=0
-    local.get $cl_ptr
-    i64.const 1
-    i64.store offset=8
-    local.get $cl_ptr
-    i64.const 0
-    i64.store offset=16
-    i64.const 16
-    call $alloc_mem
-    local.set $args_ptr
-    local.get $args_ptr
-    local.get $left
-    i64.store offset=0
-    local.get $args_ptr
-    local.get $right
-    i64.store offset=8
-    local.get $cl_ptr
-    local.get $args_ptr
-    i64.store offset=24
-    local.get $cl_ptr
   )`,
 
   f64_mod: `  (func $f64_mod (param $x i64) (param $y i64) (result i64)
@@ -1324,6 +1254,14 @@ function markHelperNeeded(helper) {
     markHelperNeeded('make_list');
     markHelperNeeded('alloc_mem');
   }
+  if (helper === 'list_merge') {
+    markHelperNeeded('make_list');
+    markHelperNeeded('alloc_mem');
+  }
+  if (helper === 'list_push_front' || helper === 'list_push_back') {
+    markHelperNeeded('make_list');
+    markHelperNeeded('alloc_mem');
+  }
   if (helper === 'list_head' || helper === 'list_tail') {
     markHelperNeeded('is_list');
     if (helper === 'list_tail') {
@@ -1336,24 +1274,7 @@ function markHelperNeeded(helper) {
     markHelperNeeded('make_list');
     markHelperNeeded('alloc_mem');
   }
-  if (helper === 'apply_expanded_list') {
-    markHelperNeeded('is_list');
-    markHelperNeeded('apply_and_eval_closure');
-  }
-  if (helper === 'make_closure') {
-    markHelperNeeded('alloc_mem');
-  }
-  if (helper === 'apply_closure') {
-    markHelperNeeded('alloc_mem');
-  }
-  if (helper === 'apply_and_eval_closure') {
-    markHelperNeeded('apply_closure');
-    markHelperNeeded('invoke_closure');
-    markHelperNeeded('alloc_mem');
-  }
-  if (helper === 'make_compose_closure') {
-    markHelperNeeded('alloc_mem');
-  }
+
   if (['reduce_add', 'reduce_sub', 'reduce_mul', 'reduce_div'].includes(helper)) {
     if (!tableFunctions.includes(helper)) {
       functionArities.set(helper, 2);
@@ -1783,6 +1704,85 @@ function findFieldMeta(fieldName) {
   return { offset: 0, type: 'i64' }; // Fallback
 }
 
+function compileStaticConcat(node, locals, paramNames) {
+  const insts = [];
+  const typeL = inferType(node.left, currentEnv);
+  const typeR = inferType(node.right, currentEnv);
+
+  const leftHasTilde = (node.left && node.left.type === 'operation' && node.left.operator === '~' && node.left.position === 'postfix');
+  const rightHasTilde = (node.right && node.right.type === 'operation' && node.right.operator === '~' && node.right.position === 'postfix');
+
+  const leftNode = leftHasTilde ? node.left.operand : node.left;
+  const rightNode = rightHasTilde ? node.right.operand : node.right;
+
+  const isListL = (
+    (typeL === 'List' && !(leftNode && leftNode.type === 'operation' && leftNode.name === 'concat')) ||
+    typeL === 'Dict' ||
+    (leftNode && leftNode.type === 'block' && (leftNode.kind === 'bracket' || leftNode.kind === 'brace')) ||
+    (leftNode && leftNode.type === 'coproduct_block')
+  );
+  const isListR = (
+    (typeR === 'List' && !(rightNode && rightNode.type === 'operation' && rightNode.name === 'concat')) ||
+    typeR === 'Dict' ||
+    (rightNode && rightNode.type === 'block' && (rightNode.kind === 'bracket' || rightNode.kind === 'brace')) ||
+    (rightNode && rightNode.type === 'coproduct_block')
+  );
+
+  // パターン A: スカラー同士の結合 (どちらもチルダなし) 
+  // または カンマ演算子（常に要素数2のポインタリストを新規作成）
+  if (node.operator === ',' || (!leftHasTilde && !rightHasTilde && !isListL && !isListR)) {
+    markHelperNeeded('make_list');
+    insts.push(`i64.const 2`);
+    insts.push(`call $make_list`);
+    insts.push(`local.set $tmp_l`);
+
+    insts.push(`local.get $tmp_l`);
+    insts.push(...compileExpression(leftNode, locals, paramNames));
+    insts.push(`i64.store offset=16`);
+
+    insts.push(`local.get $tmp_l`);
+    insts.push(...compileExpression(rightNode, locals, paramNames));
+    insts.push(`i64.store offset=24`);
+
+    insts.push(`local.get $tmp_l`);
+    return insts;
+  }
+
+  // パターン B: リスト同士の連接 (双方に後置チルダあり)
+  if (isListL && isListR && leftHasTilde && rightHasTilde) {
+    markHelperNeeded('list_merge');
+    insts.push(...compileExpression(leftNode, locals, paramNames));
+    insts.push(...compileExpression(rightNode, locals, paramNames));
+    insts.push(`call $list_merge`);
+    return insts;
+  }
+
+  // パターン C: スカラーとリストの連接 (右辺にのみ後置チルダあり)
+  if (isListR && rightHasTilde) {
+    markHelperNeeded('list_push_front');
+    insts.push(...compileExpression(leftNode, locals, paramNames));
+    insts.push(...compileExpression(rightNode, locals, paramNames));
+    insts.push(`call $list_push_front`);
+    return insts;
+  }
+
+  // パターン D: リストとスカラーの連接 (左辺にのみ後置チルダあり)
+  if (isListL && leftHasTilde) {
+    markHelperNeeded('list_push_back');
+    insts.push(...compileExpression(leftNode, locals, paramNames));
+    insts.push(...compileExpression(rightNode, locals, paramNames));
+    insts.push(`call $list_push_back`);
+    return insts;
+  }
+
+  // パターン E: 静的に型が特定できない場合の動的フォールバック
+  markHelperNeeded('concat');
+  insts.push(...compileExpression(node.left, locals, paramNames));
+  insts.push(...compileExpression(node.right, locals, paramNames));
+  insts.push(`call $concat`);
+  return insts;
+}
+
 function compileExpression(node, locals = new Map(), paramNames = []) {
   const insts = [];
   if (node === undefined || node === null) {
@@ -1830,17 +1830,10 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
     } else if (['reduce_add', 'reduce_sub', 'reduce_mul', 'reduce_div'].includes(cleanNode)) {
       markHelperNeeded(cleanNode);
       const idx = tableFunctions.indexOf(cleanNode);
-      const arity = functionArities.get(cleanNode) || 1;
-      insts.push(`i64.const ${idx} ;; func_idx`);
-      insts.push(`i64.const ${arity} ;; arity`);
-      insts.push(`call $make_closure`);
+      insts.push(`i64.const ${idx} ;; func_idx (${cleanNode})`);
     } else if (tableFunctions.includes(cleanNode)) {
-      markHelperNeeded('make_closure');
       const idx = tableFunctions.indexOf(cleanNode);
-      const arity = functionArities.get(cleanNode) || 1;
-      insts.push(`i64.const ${idx} ;; func_idx`);
-      insts.push(`i64.const ${arity} ;; arity`);
-      insts.push(`call $make_closure`);
+      insts.push(`i64.const ${idx} ;; func_idx (${cleanNode})`);
     } else {
       // Character literal check
       if (cleanNode.startsWith("\\") && cleanNode.length === 2) {
@@ -1883,12 +1876,8 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
 
     if (node.operator === '?') {
       compileFunction(node.lambdaName, node);
-      markHelperNeeded('make_closure');
       const idx = tableFunctions.indexOf(node.lambdaName);
-      const arity = functionArities.get(node.lambdaName) || 1;
-      insts.push(`i64.const ${idx} ;; lambda func_idx`);
-      insts.push(`i64.const ${arity} ;; arity`);
-      insts.push(`call $make_closure`);
+      insts.push(`i64.const ${idx} ;; lambda func_idx (${node.lambdaName})`);
       return insts;
     }
 
@@ -1898,11 +1887,7 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
         const funcName = getLHSName(node.operand);
         const idx = tableFunctions.indexOf(funcName);
         if (idx !== -1) {
-          markHelperNeeded('make_closure');
-          const arity = functionArities.get(funcName) || 1;
-          insts.push(`i64.const ${idx} ;; func_idx`);
-          insts.push(`i64.const ${arity} ;; arity`);
-          insts.push(`call $make_closure`);
+          insts.push(`i64.const ${idx} ;; func_idx (${funcName})`);
         } else if (node.operand && node.operand.type === 'operation' && node.operand.operator === '?') {
           insts.push(...compileExpression(node.operand, locals, paramNames));
         } else {
@@ -2241,11 +2226,7 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
     }
 
     if (node.operator === ',') {
-      markHelperNeeded('concat');
-      insts.push(...compileExpression(node.left, locals, paramNames));
-      insts.push(...compileExpression(node.right, locals, paramNames));
-      insts.push(`call $concat`);
-      return insts;
+      return compileStaticConcat(node, locals, paramNames);
     }
 
     // Bitwise Operators
@@ -2359,58 +2340,103 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
 
     if (node.operator === ' ') {
       if (node.name === 'concat') {
-        markHelperNeeded('concat');
-        insts.push(...compileExpression(node.left, locals, paramNames));
-        insts.push(...compileExpression(node.right, locals, paramNames));
-        insts.push(`call $concat`);
-        return insts;
+        return compileStaticConcat(node, locals, paramNames);
       }
       if (node.name === 'compose') {
-        markHelperNeeded('make_compose_closure');
-        insts.push(...compileExpression(node.left, locals, paramNames));
-        insts.push(...compileExpression(node.right, locals, paramNames));
-        insts.push(`call $make_compose_closure`);
+        const newLambdaName = `lambda_compose_${lambdaCounter++}`;
+        const wrapperAst = {
+          type: 'operation',
+          operator: '?',
+          left: 'p0',
+          right: {
+            type: 'operation',
+            operator: ' ',
+            name: 'apply',
+            left: node.left,
+            right: {
+              type: 'operation',
+              operator: ' ',
+              name: 'apply',
+              left: node.right,
+              right: 'p0'
+            }
+          },
+          lambdaName: newLambdaName
+        };
+        tableFunctions.push(newLambdaName);
+        functionArities.set(newLambdaName, 1);
+        functionHasRest.set(newLambdaName, false);
+        
+        compileFunction(newLambdaName, wrapperAst);
+        
+        const idx = tableFunctions.indexOf(newLambdaName);
+        insts.push(`i64.const ${idx} ;; compose func_idx (${newLambdaName})`);
         return insts;
       }
       if (node.name === 'apply') {
-        if (!isStaticLambda(node.left, locals, paramNames)) {
-          markHelperNeeded('concat');
-          insts.push(...compileExpression(node.left, locals, paramNames));
-          insts.push(...compileExpression(node.right, locals, paramNames));
-          insts.push(`call $concat`);
-          return insts;
+        if (node.left && node.left.type === 'operation' && node.left.name === 'compose') {
+          const desugaredApply = {
+            type: 'operation',
+            operator: ' ',
+            left: node.left.right,
+            right: {
+              type: 'operation',
+              operator: ' ',
+              left: node.left.left,
+              right: node.right,
+              name: 'apply'
+            },
+            name: 'apply'
+          };
+          return compileExpression(desugaredApply, locals, paramNames);
         }
+
+
         let leftNode = node.left;
         while (leftNode && leftNode.type === 'block') {
           leftNode = leftNode.content;
         }
-        let fnName = getLHSName(leftNode);
-        if (leftNode && leftNode.type === 'operation' && leftNode.operator === '?' && leftNode.lambdaName) {
-          fnName = leftNode.lambdaName;
-          compileFunction(leftNode.lambdaName, leftNode);
+
+        // 1. Try currying flattening (collecting all nested apply arguments)
+        const collectedArgs = [];
+        let current = node;
+        while (current && current.type === 'operation' && current.name === 'apply') {
+          const innerArgs = [];
+          if (current.right && current.right.type === 'coproduct_block') {
+            current.right.statements.forEach(s => {
+              innerArgs.push(...flattenConcat(s));
+            });
+          } else if (current.right !== undefined && current.right !== null) {
+            innerArgs.push(...flattenConcat(current.right));
+          }
+          collectedArgs.unshift(...innerArgs);
+          
+          current = current.left;
+          while (current && current.type === 'block') {
+            current = current.content;
+          }
         }
+
+        const flatLeft = current;
+        const flatFnName = getLHSName(flatLeft);
+        let fnName = flatFnName;
+        if (flatLeft && flatLeft.type === 'operation' && flatLeft.operator === '?' && flatLeft.lambdaName) {
+          fnName = flatLeft.lambdaName;
+          compileFunction(flatLeft.lambdaName, flatLeft);
+        }
+
         const isStaticKnown = watFunctions.some(f => f.includes(`(func $${fnName}`)) || 
                               tableFunctions.includes(fnName) ||
                               (currentEnv && (currentEnv.has(fnName) || currentEnv.has(`<${fnName}>`)));
         
-        const args = [];
-        if (node.right && node.right.type === 'coproduct_block') {
-          node.right.statements.forEach(s => {
-            args.push(...flattenConcat(s));
-          });
-        } else if (node.right !== undefined && node.right !== null) {
-          args.push(...flattenConcat(node.right));
-        }
-
         const staticArity = functionArities.get(fnName);
         const hasRest = functionHasRest.get(fnName) || false;
-        
-        const hasExpandArg = args.some(arg => arg && arg.type === 'operation' && arg.operator === '~' && arg.position === 'postfix');
+        const hasExpandArg = collectedArgs.some(arg => arg && arg.type === 'operation' && arg.operator === '~' && arg.position === 'postfix');
         
         let canStaticCall = false;
         if (isStaticKnown && staticArity !== undefined) {
           if (!hasExpandArg) {
-            canStaticCall = (!hasRest ? args.length === staticArity : args.length >= staticArity - 1);
+            canStaticCall = (!hasRest ? collectedArgs.length === staticArity : collectedArgs.length >= staticArity - 1);
           } else {
             if (hasRest) {
               canStaticCall = true;
@@ -2419,6 +2445,8 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
         }
 
         if (canStaticCall) {
+          // Use flattened arguments for optimized direct call
+          const args = collectedArgs;
           if (!hasExpandArg) {
             // Optimized direct static call without expansion
             if (!hasRest) {
@@ -2540,29 +2568,101 @@ function compileExpression(node, locals = new Map(), paramNames = []) {
           }
           insts.push(`call $${fnName}`);
         } else {
-          // Dynamic or Curried call
-          if (isStaticKnown && staticArity !== undefined) {
-            markHelperNeeded('make_closure');
-            const idx = tableFunctions.indexOf(fnName);
-            insts.push(`i64.const ${idx}`);
-            insts.push(`i64.const ${staticArity}`);
-            insts.push(`call $make_closure`);
-          } else {
-            insts.push(...compileExpression(node.left, locals, paramNames));
+          // If flat flattening is not statically callable, compile the original non-flat expression (for partial/dynamic apply)
+          const args = [];
+          if (node.right && node.right.type === 'coproduct_block') {
+            node.right.statements.forEach(s => {
+              args.push(...flattenConcat(s));
+            });
+          } else if (node.right !== undefined && node.right !== null) {
+            args.push(...flattenConcat(node.right));
           }
-          
-          args.forEach(arg => {
-            const isExpand = arg && arg.type === 'operation' && arg.operator === '~' && arg.position === 'postfix';
-            if (isExpand) {
-              insts.push(...compileExpression(arg.operand, locals, paramNames));
-              markHelperNeeded('apply_expanded_list');
-              insts.push(`call $apply_expanded_list`);
-            } else {
+
+          let origFnName = getLHSName(leftNode);
+          if (leftNode && leftNode.type === 'operation' && leftNode.operator === '?' && leftNode.lambdaName) {
+            origFnName = leftNode.lambdaName;
+            compileFunction(leftNode.lambdaName, leftNode);
+          }
+          const isOrigStaticKnown = watFunctions.some(f => f.includes(`(func $${origFnName}`)) || 
+                                tableFunctions.includes(origFnName) ||
+                                (currentEnv && (currentEnv.has(origFnName) || currentEnv.has(`<${origFnName}>`)));
+          const origStaticArity = functionArities.get(origFnName);
+          const origHasExpandArg = args.some(arg => arg && arg.type === 'operation' && arg.operator === '~' && arg.position === 'postfix');
+
+          // 静的既知関数だが引数が不足している場合 (部分適用)
+          if (isOrigStaticKnown && origStaticArity !== undefined && args.length < origStaticArity && !origHasExpandArg) {
+            const missingCount = origStaticArity - args.length;
+            const newLambdaName = `lambda_part_${lambdaCounter++}`;
+
+            const wrapperParams = [];
+            const callArgs = [];
+
+            // 1. バインドされた引数を退避するためのグローバル変数を生成・代入
+            args.forEach((arg, idx) => {
+              const globalName = `part_arg_${newLambdaName}_${idx}`;
+              watGlobals.push(`  (global $${globalName} (mut i64) (i64.const 0))`);
+              
               insts.push(...compileExpression(arg, locals, paramNames));
-              markHelperNeeded('apply_and_eval_closure');
-              insts.push(`call $apply_and_eval_closure`);
+              insts.push(`global.set $${globalName}`);
+              
+              callArgs.push(`global.get $${globalName}`);
+            });
+
+            // 2. 不足しているパラメータ
+            for (let k = 0; k < missingCount; k++) {
+              const paramName = `p${k}`;
+              wrapperParams.push({ name: paramName, isRest: false });
+              callArgs.push(`local.get $${paramName}`);
             }
+
+            // 3. ラッパー関数の WAT 生成
+            const paramDefsStr = wrapperParams.map(p => `(param $${p.name} i64)`).join(' ');
+            const bodyInsts = [];
+            
+            wrapperParams.forEach(p => {
+              bodyInsts.push(`  local.get $${p.name}`);
+              bodyInsts.push(`  i64.eqz`);
+              bodyInsts.push(`  (if (then i64.const 0 return))`);
+            });
+            
+            callArgs.forEach(argCmd => {
+              bodyInsts.push(`  ${argCmd}`);
+            });
+            bodyInsts.push(`  call $${origFnName}`);
+
+            const fnWat = [
+              `  (func $${newLambdaName} ${paramDefsStr} (result i64)`,
+              `    (local $tmp_l i64) (local $tmp_r i64)`,
+              bodyInsts.join('\n'),
+              `  )`
+            ].join('\n');
+
+            watFunctions.push(fnWat);
+            tableFunctions.push(newLambdaName);
+            functionArities.set(newLambdaName, missingCount);
+            functionHasRest.set(newLambdaName, false);
+
+            const idx = tableFunctions.indexOf(newLambdaName);
+            insts.push(`i64.const ${idx}`);
+            return insts;
+          }
+
+          // それ以外の動的な適用 (間接呼び出し)
+          insts.push(...compileExpression(node.left, locals, paramNames));
+          insts.push(`local.set $tmp_l`);
+          insts.push(`local.get $tmp_l`);
+          insts.push(`i64.eqz`);
+          insts.push(`(if (result i64)`);
+          insts.push(`  (then i64.const 0)`);
+          insts.push(`  (else`);
+          args.forEach(arg => {
+            insts.push(...compileExpression(arg, locals, paramNames));
           });
+          insts.push(`    local.get $tmp_l`);
+          insts.push(`    i32.wrap_i64`);
+          insts.push(`    call_indirect (type $t_arity_${args.length})`);
+          insts.push(`  )`);
+          insts.push(`)`);
         }
         return insts;
       }
@@ -2689,6 +2789,10 @@ export function getMemoryMap() {
 
 export function getStructFields() {
   return structFields;
+}
+
+export function getTableFunctions() {
+  return tableFunctions;
 }
 
 function isMatchCase(node, isFuncBody = false) {

@@ -5,7 +5,7 @@ import { desugarHoles, buildEnvironment } from './semanticize/ast_helpers.js';
 import { resolveCoproducts } from './semanticize/coproduct_resolver.js';
 import { transpileToWasm } from './backend/wasm_codegen.js';
 
-const filePath = './_test_/function/fold_multiline_paren.sn';
+const filePath = './_test_/function/append_test.sn';
 const sourceCode = fs.readFileSync(filePath, 'utf8');
 const pre = preprocess(sourceCode);
 const astProg = parser.parse(pre);

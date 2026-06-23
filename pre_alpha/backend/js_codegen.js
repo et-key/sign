@@ -353,6 +353,23 @@ function _transpile(node) {
           return `((...args) => ${_transpile(node.right)}(${_transpile(node.left)}(...args)))`;
         }
         if (node.name === 'apply') {
+          if (node.left && node.left.type === 'operation' && node.left.name === 'compose') {
+            const desugaredApply = {
+              type: 'operation',
+              operator: ' ',
+              left: node.left.right,
+              right: {
+                type: 'operation',
+                operator: ' ',
+                left: node.left.left,
+                right: node.right,
+                name: 'apply'
+              },
+              name: 'apply'
+            };
+            return _transpile(desugaredApply);
+          }
+
           let leftNode = node.left;
           while (leftNode && leftNode.type === 'block') {
             leftNode = leftNode.content;
@@ -375,7 +392,7 @@ function _transpile(node) {
           const hasExpandArg = args.some(arg => arg && arg.type === 'operation' && arg.operator === '~' && arg.position === 'postfix');
           const hasHole = args.some(arg => arg === '_' || arg === '__hole' || (arg && arg.type === 'Identifier' && arg.name === '_'));
 
-          if (staticArity !== undefined && isRealFunction && !hasExpandArg) {
+          if (staticArity !== undefined && staticArity > 0 && !hasExpandArg) {
             const isVariadic = staticArity === Infinity;
             // (1) 引数の数が一致する（または可変引数）で、Holeがない場合は直接呼び出し
             if ((args.length === staticArity || isVariadic) && !hasHole) {
