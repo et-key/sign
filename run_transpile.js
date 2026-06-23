@@ -198,24 +198,36 @@ if (watCode) {
         }
       }
       
-      // Is it a potential heap object (closure)?
+      // Is it a potential heap object (closure or list)?
       if (rawI64 >= 2048n && rawI64 < 65536n && (rawI64 % 8n === 0n)) {
         const ptr = Number(rawI64);
         try {
-          const tableIdx = view.getBigInt64(ptr + 0, true);
-          const expArity = view.getBigInt64(ptr + 8, true);
-          const appCount = view.getBigInt64(ptr + 16, true);
-          const argsPtr = view.getBigInt64(ptr + 24, true);
-          
-          if (expArity >= 1n && expArity <= 10n && appCount >= 0n && appCount <= expArity) {
-            const argsList = [];
-            for (let i = 0n; i < appCount; i++) {
-              const argAddr = Number(argsPtr + i * 8n);
-              const argVal = view.getBigInt64(argAddr, true);
-              const argValF64 = view.getFloat64(argAddr, true);
-              argsList.push(`${argVal} (f64: ${argValF64})`);
+          const typeTag = view.getBigInt64(ptr + 0, true);
+          if (typeTag === 101n) {
+            const len = view.getBigInt64(ptr + 8, true);
+            const items = [];
+            for (let i = 0n; i < len; i++) {
+              const itemAddr = ptr + 16 + Number(i) * 8;
+              const valF64 = view.getFloat64(itemAddr, true);
+              items.push(valF64);
             }
-            extra += ` -> Closure(table_idx: ${tableIdx}, arity: ${appCount}/${expArity}, args: [${argsList.join(', ')}])`;
+            extra += ` -> List(len: ${len}, items: [${items.join(', ')}])`;
+          } else {
+            const tableIdx = view.getBigInt64(ptr + 0, true);
+            const expArity = view.getBigInt64(ptr + 8, true);
+            const appCount = view.getBigInt64(ptr + 16, true);
+            const argsPtr = view.getBigInt64(ptr + 24, true);
+            
+            if (expArity >= 1n && expArity <= 10n && appCount >= 0n && appCount <= expArity) {
+              const argsList = [];
+              for (let i = 0n; i < appCount; i++) {
+                const argAddr = Number(argsPtr + i * 8n);
+                const argVal = view.getBigInt64(argAddr, true);
+                const argValF64 = view.getFloat64(argAddr, true);
+                argsList.push(`${argVal} (f64: ${argValF64})`);
+              }
+              extra += ` -> Closure(table_idx: ${tableIdx}, arity: ${appCount}/${expArity}, args: [${argsList.join(', ')}])`;
+            }
           }
         } catch(e) {}
       }

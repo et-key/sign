@@ -716,6 +716,14 @@ const helperDefs = {
     (local $dst_offset i64)
 
     local.get $left
+    i64.eqz
+    (if (then local.get $right return))
+
+    local.get $right
+    i64.eqz
+    (if (then local.get $left return))
+
+    local.get $left
     call $is_list
     local.set $l_is_list
 
