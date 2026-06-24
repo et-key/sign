@@ -303,8 +303,12 @@ result : safe_divide 10 2   `→ [5] (結果のリスト)
 ```sign
 `自然変換としてのUnit
 natural_transform : f list ?
-    f __ ` list  `空の場合の処理
-    f list      `通常の処理
+
+`   空の場合の処理
+    f __ list
+
+`   通常の処理
+    f list
 
 example : natural_transform [* 2,] 1, 2, 3
 ```
