@@ -1,39 +1,158 @@
-# 型システムと型推論について
+# Sign言語 型システム仕様
 
-## 基本的な型の扱いについて
+## 1. 設計原則：型は演算子と構文から自明に決まる
 
-全ての型は、`Unit`を根拠とする。
-Unitの値は、`Unit`のみ。
-Unitのサイズは、0とする。
-Unitは、`__`で表現される。
-Unitは、左単位元性は`Identity`である。
-Unitは、右単位元性は空のリストである。
-全ての型は、delegationによりその関係性を明快に説明可能である。
-Unitは、余積の単位元であり、積の単位元である。
-Unitは、双代数の単位元であるため、全ての関数の単位元でもある。
-Unitの定義が、まさしくSignのIdentityである。
-Signは、`Self-referential`であり、`Incomplete`な表現である。
-`Complete`な表現は、`Unit`であり、`__`で表現される。
-`Self-referential`な表現は、`Complete`な表現に帰着できる。
-よって、SignをSignで説明できるという哲学として正当な「言語」である。
-これが、型システムの根拠である。
-SignType`*.st`はSignを参考に `->` 演算子を追加しただけのSignである。
-`*.sn`では `->` 演算子が定義されていない。
-これにより、`*.st`によって外延的に自己言及するSignの正当性を保証することができる。
+Sign言語の型システムには以下の根本的な性質があります。
 
-### 演算子と型
+> **型はデータに付与されるラベルではなく、演算子と構文木の形状から一意に決定される。**
 
-Signでは、データの型ではなく、関数に型が存在する。  
-よって、型キャストも演算子をベースに行われる。  
-以下、演算子を関数とみなした場合の型についてをまとめる。  
+これにより、Hindley-Milnerのような制約ソルビングは不要であり、型推論はASTの線形スキャン（O(n)）で完結します。
 
-ジェネリクスは、**Lは左辺の型、Rは右辺の型とする**
-String を含む場合は `Atom` 含まない場合は `Scalar`
+---
 
-`List` は、 `(Array | Struct)` であり、多相リストは `Struct` とする。
-`Implicit` は `Implicit Address` とする。
+## 2. 型の階層（2レイヤー構造）
 
-| 記号 | 位置（型の組み合わせ） | 型 |
+Sign の型システムは、独立した2つのレイヤーで構成されます。
+
+### Layer 1: 構造型（Structural Type）
+
+スペース演算子のセマンティクスを決定するための型。**構文から一意に決定される**。
+
+| 構造型 | 定義 |
+|:---:|---|
+| `Lambda` | `?` 演算子を含む式、または部分適用を生成するブラケット式 |
+| `Atom` | それ以外のすべての値・式（数値・文字列・リスト・Unit など） |
+
+**Layer 1 の決定規則（構文から直読み）：**
+
+```sign
+x y ? body          → Lambda  (`?` があるから確定)
+[+ 2]               → Lambda  (部分操作のブラケット)
+[f]                 → Lambda  (関数のアドレス化)
+$expr               → Lambda  (アドレス取得)
+@expr               → Lambda  (deref / 入力)
+
+42                  → Atom    (数値リテラル)
+`hello`             → Atom    (文字列リテラル)
+x + y               → Atom    (算術演算の結果)
+[1 2 3]             → Atom    (値のブラケット)
+__                  → Atom    (Unit値)
+```
+
+**識別子の場合：**
+識別子の構造型は、その定義がある行の構文から決定します。`?` を含む定義は `Lambda`、それ以外は `Atom` です。
+
+```sign
+f : x y ? x + y     → f は Lambda（arity: 2）
+val : 42            → val は Atom
+```
+
+### Layer 2: Atom 内部型（Atom Subtype）
+
+演算の意味（型変換）を決定するための型。`Atom` の内部分類。
+
+| Atom 内部型 | 説明 | リテラル例 |
+|:---:|---|---|
+| `Number` | 数値（整数・浮動小数点） | `42`, `3.14`, `0xFF` |
+| `String` | Unicode 文字列（文字のリスト） | `` `hello` ``, `\a` |
+| `List` | 同一型の値の1次元配列 | `1 2 3`, `[1 2 3]` |
+| `Struct` | 多相リスト / 直積構造 | `1, 2, 3` |
+| `Dict` | キー・バリュー構造 | `[key : val]` |
+| `Unit` | 単位元・空・無 | `__` |
+| `Address` | 暗黙のアドレス（ポインタ） | `$expr` |
+
+---
+
+## 3. 型規則
+
+### 3.1 スペース演算子の4分類（Layer 1 に依存）
+
+Layer 1 の構造型が確定した後、スペース演算子は以下の4つのセマンティクスを持ちます。
+
+| 優先順位 | 左辺 | 右辺 | セマンティクス | 型規則 |
+|:---:|:---:|:---:|---|---|
+| 10.0 | `Atom` | `Lambda` | apply_reverse（逆適用） | `Lambda(A→B) → B \| Lambda` |
+| 10.1 | `Lambda` | `Atom` | apply（適用） | `Lambda(A→B) → B \| Lambda` |
+| 10.2 | `Lambda` | `Lambda` | compose（合成） | `Lambda(A→B) → Lambda` |
+| 10.3 | `Atom` | `Atom` | concat（連接） | `Atom → List` |
+
+> [!IMPORTANT]
+> スペースのセマンティクスは **Layer 1 の構造型が確定してから**決まります。
+> 構文解析段階でこれを正確に決定するには、全識別子の構造型を事前に収集する「プリパス」が必要です（→ 5節参照）。
+
+### 3.2 左辺優先ルール（Layer 2 に依存）
+
+**二項演算の型は、左辺の Atom 内部型が決定する**。右辺は左辺の型に合わせて変換されます。
+
+```
+typeof(L op R) = typeof(L)
+```
+
+これは型注釈なしで動作する単相型推論であり、制約ソルビングを必要としません。
+
+**具体例：**
+
+```sign
+5 + x       → Number   (左辺が Number リテラル → 右辺も Number として扱う)
+`abc` + x   → String   (左辺が String → 右辺を文字コードとして扱う)
+[1 2] * 2   → List     (左辺が List → リストのコピー)
+x + y       → typeof(x) (識別子 → 識別子テーブルで解決)
+```
+
+**左辺優先ルールの型変換テーブル：**
+
+| 左辺型 | 演算子 | 右辺の扱い | 結果型 |
+|:---:|:---:|---|:---:|
+| `Number` | 算術 | 右辺を `Number` としてパース | `Number` |
+| `String` | 算術 | 右辺を各文字のコードポイントとして扱う | `String` |
+| `String` | スペース | 右辺を文字列化して連結 | `String` |
+| `List` | `*` | 右辺 `Number` 回コピー | `List` |
+| `List` | `^` | 右辺 `Number` 回次元を上げてコピー | `List` |
+| `List` | `/` | 右辺 `Number` 個のチャンクに分割 | `List` |
+
+### 3.3 Unit の型規則（零対象の双対性）
+
+`__`（Unit）は**零対象（Zero Object）**として、積と余積で異なる役割を担います。これは例外ではなく、零対象の定義（初対象＝終対象）から必然的に導出される振る舞いです。
+
+```
+積（Product）における零対象:
+  __ & x = __      (終対象として積に吸収: 0 × x = 0)
+  __ + x = __      (算術においても同様)
+  __ * x = __
+
+余積（Coproduct）における零対象:
+  __ | x = x       (初対象として余積の単位元: 0 + x = x)
+  __ ; x = x       (対称差においても同様)
+```
+
+| 演算 | 圏論的役割 | `__` の振る舞い |
+|:---:|:---:|---|
+| `&`（AND）| 積（Product） | 吸収元（零元）: `__ & x = __` |
+| `\|`（OR） | 余積（Coproduct） | 単位元: `__ \| x = x` |
+| `;`（XOR）| 余積の対称差 | 単位元: `__ ; x = x` |
+| `+`, `*`, ... | 算術 | 吸収元: `__ + x = __` |
+
+
+> [!NOTE]
+> **`__`（単位元）と `[__ ]` / `[ __]`（恒等射）の区別**
+>
+> - `__` 単体は **Unit 値（Atom）** として振る舞い、吸収元として機能します。
+> - `[__ ]` は静的脱糖により `$p0 ? __ $p0` → `$p0 ? $p0` と等価な**恒等関数（Lambda）**です。
+> - `[ __]` は静的脱糖により `$p0 ? $p0 __` → `$p0 ? $p0` と等価な**恒等関数（Lambda）**です。
+>
+> これは Haskell における `mempty`（モノイド単位元）と `id`（恒等関数）の区別に相当します。
+
+---
+
+## 4. 演算子別型シグネチャ一覧
+
+> **記法**: `L` = 左辺の型、`R` = 右辺の型  
+> `Scalar` = String を**含まない** Atom（Number など）  
+> `Atom` = String を**含む**スカラー  
+> `List` = `Array | Struct`（多相リストは `Struct`）  
+> `Implicit` = 暗黙のアドレス（Implicit Address）
+
+| 記号 | 位置 | 型シグネチャ |
 | :------: | :------: | ------ |
 | `#` | 前置※ | `R -> Implicit(R)` |
 | `##` | 前置※ | `R -> Implicit(R)` |
@@ -52,31 +171,16 @@ String を含む場合は `Atom` 含まない場合は `Scalar`
 | ` ` | `Lambda` 中置 `Lambda` | `(Lambda -> Lambda) -> Lambda` |
 | ` ` | `Atom \| List` 中置 `Atom \| List` | `((Atom \| List \| __) -> (Atom \| List \| __)) -> (List \| __)` |
 | `~` | 中置 | `(Scalar -> Scalar) -> Iterator -> List` |
-| `~-` | 中置 | `(Scalar -> Scalar) -> Iterator` |
-| `~+` | 中置 | `(Scalar -> Scalar) -> Iterator` |
-| `~*` | 中置 | `(Scalar -> Scalar) -> Iterator` |
-| `~/` | 中置 | `(Scalar -> Scalar) -> Iterator` |
-| `~^` | 中置 | `(Scalar -> Scalar) -> Iterator` |
-| `<` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| __` |
-| `<=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| __` |
-| `=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| __` |
-| `>=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| __` |
-| `>` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| __` |
-| `!=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| __` |
-| `+` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
-| `-` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
-| `*` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
-| `/` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
-| `%` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
+| `~+` `~-` `~*` `~/` `~^` | 中置 | `(Scalar -> Scalar) -> Iterator` |
+| `<` `<=` `=` `>=` `>` `!=` | 中置 | `(L(Scalar) -> R(Scalar)) -> L \| __` |
+| `+` `-` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
+| `*` `/` `%` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
 | `^` | 中置※ | `(L(Scalar) -> R(Scalar)) -> L` |
 | `\|...\|` | 囲み | `L(Scalar) -> L` |
 | `'` | 中置 | `(L -> R) -> Implicit(Atom \| List \| Lambda) -> Deref(Implicit -> (Atom \| List \| Lambda))` |
 | `@` | 中置※ | `(R -> L) -> Implicit(Atom \| List \| Lambda) -> Deref(Implicit -> (Atom \| List \| Lambda))` |
-| `<<` | 中置 | `(L(Address \| Register) -> Number) -> L` |
-| `>>` | 中置 | `(L(Address \| Register) -> Number) -> L` |
-| `\|\|` | 中置 | `(L(Address \| Register) -> Scalar) -> L` |
-| `;;` | 中置 | `(L(Address \| Register) -> Scalar) -> L` |
-| `&&` | 中置 | `(L(Address \| Register) -> Scalar) -> L` |
+| `<<` `>>` | 中置 | `(L(Address \| Register) -> Number) -> L` |
+| `\|\|` `;;` `&&` | 中置 | `(L(Address \| Register) -> Scalar) -> L` |
 | `!` | 後置 | `Number -> Number` |
 | `~` | 後置 | `Deref(Implicit -> (List \| Dictionary \| Atom))` |
 | `@` | 後置 | `Implicit(Dictionary) -> Deref(Implicit -> Dictionary)` |
@@ -86,8 +190,115 @@ String を含む場合は `Atom` 含まない場合は `Scalar`
 | `@` | 前置※ | `Implicit(Lambda) -> Deref(Implicit(Lambda))` |
 | `!!` | 前置※ | `Scalar -> Scalar` |
 
-## ラムダの型
+---
 
-### ラムダ演算子、`?` の型は、なぜ右辺で解決可能なのか？
+## 5. 型決定アルゴリズム（コンパイラ実装指針）
 
-結論：**右辺が全て式の塊として定まり、式の塊の型は常に関数（演算子）の型の遷移で証明されるため。**
+### Pass 1: 識別子テーブルの収集（プリパス）
+
+ソースを線形スキャンして、全識別子の構造型とアリティを収集します。
+
+```
+for each definition `name : expr`:
+  if expr contains `?` at top level:
+    table[name] = { category: 'Lambda', arity: count_params(left_of_?) }
+  else:
+    table[name] = { category: 'Atom', atom_type: infer_literal_type(expr) }
+```
+
+このプリパスにより、**前方参照を含む全識別子の構造型が確定**します。
+
+> [!NOTE]
+> このプリパスの出力は `.st` ファイル（SignType 形式）として保存することで、
+> 外部モジュールからも型情報を参照可能になります。
+
+### Pass 2: 余積（スペース）の解決
+
+完全な識別子テーブルを用いて、スペース演算子のセマンティクスを確定し、ASTを2分木に変換します。
+
+```
+for each space between L and R:
+  catL = table[L].category or infer_from_syntax(L)
+  catR = table[R].category or infer_from_syntax(R)
+  
+  if catL == 'Atom'   and catR == 'Lambda': → apply_reverse
+  if catL == 'Lambda' and catR == 'Atom':   → apply
+  if catL == 'Lambda' and catR == 'Lambda': → compose
+  if catL == 'Atom'   and catR == 'Atom':   → concat
+```
+
+**Pass 1 を先に完了させることで、この判定に曖昧さがなくなります。**
+
+### Pass 3: Layer 2 型の伝播
+
+左辺優先ルールに従い、各ノードの Atom 内部型を伝播させます。
+
+```
+typeof(L op R):
+  if L is a literal:    → typeof(L)
+  if L is an identifier: → table[L].atom_type
+  if L is an expression: → typeof(recursive(L))
+```
+
+---
+
+## 6. `.st` ファイル（型シグネチャファイル）
+
+`SignType` 形式（`.st`）は、Sign に `->` 演算子を追加した型シグネチャ専用の構文です。
+
+```signtype
+` 関数の型シグネチャ
+f : (Number -> Number) -> Number
+
+` ジェネリックな関数（Atom 型パラメータ）
+map : (Lambda -> List) -> List
+
+` 識別子の Atom 型
+pi : Number
+greeting : String
+```
+
+`.st` ファイルの役割：
+1. **Pass 1 の高速化** — プリパスの代わりに `.st` を読み込むだけで識別子テーブルが確定
+2. **外部モジュールの型情報提供** — 別ファイルの識別子を参照する際の型根拠
+3. **型の自己文書化** — 実装（`.sn`）と型（`.st`）の分離による可読性向上
+
+---
+
+## 7. ラムダの型解決
+
+### なぜ `?` の型は右辺で解決可能か
+
+`?` 演算子の型は右辺（本体）が決定します。
+
+```sign
+f : x y ? x + y
+```
+
+右辺 `x + y` は `+` 演算子を含む式であり、型は `(L(Scalar) -> R(Scalar)) -> L` です。
+左辺 `x` が `Scalar` であれば式全体の型も `Scalar` となります。
+
+**結論：右辺が式の塊として定まり、式の塊の型は演算子の型遷移として一意に証明されるため。**
+
+---
+
+## 8. 型システムの完全性
+
+以上の仕様により、Sign の型システムは以下の性質を持ちます。
+
+| 性質 | 状態 |
+|---|:---:|
+| Layer 1（Lambda/Atom）の静的決定 | ✅ 構文から自明 |
+| スペース演算子のセマンティクス確定 | ✅ Pass 1+2 で完全 |
+| Layer 2（Atom 内部型）の静的決定 | ✅ 左辺優先ルールで線形解決 |
+| 前方参照の解決 | ✅ Pass 1（プリパス）で解決 |
+| 型推論の計算量 | ✅ O(n)（線形スキャン） |
+| 型注釈の必須性 | ✅ 不要（`.st` はオプション） |
+
+> [!NOTE]
+> **型システムの根拠**
+>
+> 全ての型は `Unit`（`__`）を根拠とします。
+> Unit は双代数の単位元であり、全ての演算に対して一貫した単位元・吸収元として機能します。
+> `Self-referential` な Sign の表現は常に `Unit` に帰着できるため、
+> SignType（`.st`）による外延的な自己言及を通じて、型システムの無矛盾性が保証されます。
