@@ -20,7 +20,7 @@ export const OPERATOR_BY_PRECEDENCE = [
     '?': { position: 'infix', name: 'lambda' },
   },
   { // 4
-    '#': { position: 'infix', name: 'bind' },
+    '#': { position: 'infix', name: 'output' },
   },
   { // 5
     ';': { position: 'infix', name: 'xor' },
@@ -99,8 +99,7 @@ export const OPERATOR_BY_PRECEDENCE = [
     '~': { position: 'prefix', name: 'continuous' },
     '!': { position: 'prefix', name: 'not' },
     '$': { position: 'prefix', name: 'address' },
-    '@': { position: 'prefix', name: 'apply' },
-    '@@': { position: 'prefix', name: 'run' },
+    '@': { position: 'prefix', name: 'input' },
     '!!': { position: 'prefix', name: 'bit_not' },
     '-': { position: 'prefix', name: 'negate' }, // 仕様書に明記は無いが事実上の前置演算子
     '><': { position: 'prefix', name: 'reverse' },
