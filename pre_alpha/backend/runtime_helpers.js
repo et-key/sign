@@ -19,6 +19,38 @@ const _deref = (x) => {
   return x;
 };
 
+// @@ : run-to-completion — Thunkを__unitで繰り返し駆動して最終値を得る
+const _run = (x) => {
+  let result = _deref(x);
+  let limit = 100000; // 無限ループ防止
+  while (limit-- > 0) {
+    if (result === __unit) break;
+    if (typeof result !== 'function' && !(result && result.__isCurried) && !(result instanceof Address)) break;
+    const next = _call(_deref(result), __unit);
+    if (next === result) break; // 進展なし
+    result = next;
+  }
+  return result;
+};
+
+// # (infix bind) : Apply∘Store — 右辺を実行し結果を左辺のアドレスに格納する
+// 左辺が__unitのときは結果を破棄（/dev/null相当）
+const _bind = (dest, computation) => {
+  // 右辺を実行（thunk/functionなら__unitで駆動、plain valueなら恒等）
+  const raw = _deref(computation);
+  const result = (typeof raw === 'function' || (raw && raw.__isCurried))
+    ? _call(raw, __unit)
+    : raw;
+  // 左辺がAddressなら格納、__unitなら破棄
+  if (dest === __unit) return __unit;
+  if (dest instanceof Address) {
+    dest.value = result;
+    return dest;
+  }
+  // plain objectなら_overwriteとして旧来の振る舞いを保持
+  return _overwrite(dest, computation);
+};
+
 const _negate = (x) => {
   if (x === __unit || x === __hole) return x;
   if (Array.isArray(x)) return x.map(_negate);

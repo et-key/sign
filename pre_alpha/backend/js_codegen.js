@@ -370,6 +370,19 @@ function _transpile(node) {
             return _transpile(desugaredApply);
           }
 
+          // @f x → _call(_deref(f), x) : 二重適用を避けるためleftのprefix @を展開する
+          if (node.left && node.left.type === 'operation' && node.left.position === 'prefix' && node.left.operator === '@') {
+            const derefExpr = `_deref(${_transpile(node.left.operand)})`;
+            let flatArgs = [];
+            if (node.right && node.right.type === 'coproduct_block') {
+              (node.right.statements || []).forEach(s => flatArgs.push(...flattenConcat(s)));
+            } else if (node.right !== undefined && node.right !== null) {
+              flatArgs.push(...flattenConcat(node.right));
+            }
+            const argsCode = flatArgs.map(s => _transpile(s)).join(', ');
+            return `_call(${derefExpr}, ${argsCode})`;
+          }
+
           let leftNode = node.left;
           while (leftNode && leftNode.type === 'block') {
             leftNode = leftNode.content;
@@ -650,7 +663,7 @@ function _transpile(node) {
         return `_get_prop(${_transpile(node.right)}, ${propCode})`;
       }
       if (node.operator === '#') {
-        return `_overwrite(${_transpile(node.left)}, ${_transpile(node.right)})`;
+        return `_bind(${_transpile(node.left)}, ${_transpile(node.right)})`;
       }
 
       // Standard binary ops
@@ -672,8 +685,12 @@ function _transpile(node) {
       if (node.operator === '$') {
         return `new Address(${transpile(node.operand)})`;
       }
+      if (node.operator === '@@') {
+        return `_run(${transpile(node.operand)})`;
+      }
       if (node.operator === '@') {
-        return `_deref(${transpile(node.operand)})`;
+        // @f 単体: Deref∘Apply — derefして__unitで駆動する（@f x のケースはapply側で処理済み）
+        return `_call(_deref(${transpile(node.operand)}), __unit)`;
       }
       if (node.operator === '!!') {
         return `~${transpile(node.operand)}`;

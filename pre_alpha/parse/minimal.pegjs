@@ -12,13 +12,13 @@
   }
 
   const OP_NAMES = {
-    ":": "define", "?": "lambda", "#": "output", ";": "xor", "|": "or", "&": "and",
+    ":": "define", "?": "lambda", "#": "bind", ";": "xor", "|": "or", "&": "and",
     "==": "equal", "!==": "not_equal", ",": "product", " ": "coproduct",
     "~+": "range_arithmetic", "~-": "range_arithmetic_rev", "~*": "range_geometric",
     "~/": "range_geometric_rev", "~^": "range_power", "~": "range",
     "<": "less", "<=": "less_equal", "=": "assign_equal", ">=": "more_equal", ">": "more", "!=": "not_equal",
     "+": "add", "-": "sub", "*": "mul", "/": "div", "%": "mod", "^": "pow",
-    "'": "get_prop", "@": "get_at", "<<": "bit_shift_left", ">>": "bit_shift_right",
+    "'": "get_prop", "@": "get_at", "@@": "run", "<<": "bit_shift_left", ">>": "bit_shift_right",
     "||": "bit_or", ";;": "bit_xor", "&&": "bit_and", "!": "factorial"
   };
 
@@ -314,7 +314,8 @@ Prefix
       else if (op === "#") name = "export_internal";
       else if (op === "!") name = "not";
       else if (op === "$") name = "address";
-      else if (op === "@") name = "input";
+      else if (op === "@@") name = "run";
+      else if (op === "@") name = "apply";
       else if (op === "!!") name = "bit_not";
       else if (op === "-") name = "negate";
       else if (op === "><") name = "reverse";
@@ -440,7 +441,7 @@ ub = "_"
 
 // --- Prefix/Postfix Operators ---
 prefix
-  = "><" / "~" / "!!" / "!" / "$" / "@" / ("-" &(Block / identifier)) { return "-"; }
+  = "><" / "~" / "!!" / "!" / "$" / "@@" / "@" / ("-" &(Block / identifier)) { return "-"; }
 
 postfix
   = "!" / "~" / "@"
@@ -448,4 +449,4 @@ postfix
 all_operators
   = "###" / "##" / "#"
   / "!==" / "==" / "!=" / "<=" / ">=" / "<<" / ">>" / "||" / ";;" / "&&" / "!!" / "~+" / "~-" / "~*" / "~/" / "~^"
-  / ":" / "?" / ";" / "|/" / "|" / "&" / "," / "~" / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "'" / "@" / "!" / "$" / "><"
+  / ":" / "?" / ";" / "|/" / "|" / "&" / "," / "~" / "<" / "=" / ">" / "+" / "-" / "*" / "/" / "%" / "^" / "'" / "@@" / "@" / "!" / "$" / "><"

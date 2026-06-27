@@ -1,0 +1,15 @@
+#operators :
+	prefix :
+		`#` : `export_local`
+		`##`: `export_global`
+		`###: `export_global_static`
+	infix :
+		`:` : `define`
+		`?` : `lambda`
+		
+
+	\+ : `add`
+	\* : `mul`
+	\< : `lt`
+
+
