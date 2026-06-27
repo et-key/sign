@@ -134,12 +134,39 @@ This consistency ensures that Sign eliminates all object-oriented encapsulation 
 On top of the static algebraic foundation of "Static Land", operations specialized for each algebraic domain (numeric or logical) are defined.
 In Sign, operators such as addition `+`, multiplication `*`, and comparison `<` are not merely independent operations, but are defined and proven as **"derived functors" obtained from the basic bialgebraic operations (`?`, ` `, `,`) of Static Land**.
 
-Specifically, the domain-specific identity elements of the following arithmetic and logical operations are structurally derived from the absolute zero object `_` (complex $\mathbf{0}^\bullet$) of the general category through universal resolutions and projections of limits/colimits to each local algebraic domain.
+Specifically, Sign's basic bialgebraic operations (coproduct ` ` and product `,`) are mapped to each local algebraic domain, defining the following arithmetic and logical operators as **derived functors with domain-specific operational structure**.
+
+> [!IMPORTANT]
+> **`_` (Unit) is the absolute zero object *outside* the arithmetic domain, and is NOT identical to `0` (the additive identity).**
+> When `_` encounters an arithmetic operation, it does NOT "become" `0` — it propagates as an absorbing element.
+> ```sign
+> _ + 2 → _    ` ← does NOT become 2. _ propagates across the arithmetic layer
+> 0 + 2 → 2    ` ← 0 is a local unit element within the numeric domain
+> ```
+> What the derived functor maps is the **structure of the operation**, not `_` itself.
+
+> [!NOTE]
+> **`_` has a derived category with respect to the logical domain.**
+>
+> `_` directly functions as logical "false", and its image in the logical layer is `_` itself (identity zero morphism).
+> When comparison is true, rather than returning `!_` (negated Unit), it returns the value itself as a **unit morphism (η: Id → F)**.
+> This is the "unit" of a **Unital Derived Functor**.
+> ```sign
+> 3 < 2  → _    ` ← comparison fails = false = _ (zero morphism)
+> 3 < 5  → 3    ` ← comparison succeeds = true = value unchanged (unit morphism η: Id → F)
+> ```
+> Conversely, `_` has no derived category with respect to arithmetic. It absorbs and stays `_`, without mapping to `0` or `1`.
+> This asymmetry is the foundation of why `_` is "equivalent to a truth value" yet "not equivalent to a number", and why no Boolean type is needed.
 
 * **Addition `+`**:
-  The **left derived functor** of the coproduct (space ` `) onto the numeric domain. It possesses the additive identity `0` defined through a structural derivation process of left adjoint/colimit starting from the absolute zero object `_`.
+  The **derived functor** of the coproduct (space ` `) onto the numeric domain. Within the numeric domain, it has additive identity `0` — but this is NOT a mapping from `_`; it is a local unit element specific to the numeric domain. When `_` appears as an argument to `+`, it does not enter the arithmetic operation and absorbs (`_ + x → _`).
 * **Multiplication `*`**:
-  The **right derived functor** of the product (comma `,`) onto the numeric domain. It possesses the multiplicative identity `1` defined through a structural derivation process of right adjoint/limit (tensor product) starting from the absolute zero object `_`.
+  The **derived functor** of the product (comma `,`) onto the numeric domain. Within the numeric domain, it has multiplicative identity `1` — likewise NOT a mapping from `_`. When `_` appears as an argument to `*`, it absorbs (`_ * x → _`).
+* **Comparison `<`**:
+  A **Unital Derived Functor** derived from measurement of the complete sequence in a biproduct structure.
+  - **On failure**: returns `_` (zero morphism — mapping to logical "false")
+  - **On success**: returns the middle value as-is (unit morphism η: Id → F — value unchanged)
+  Since the true case returns the value itself as a unit morphism, no Boolean type is required (see `Value_Based_Comparison_Chaining_en-us.md`).
 
 #### 3.5.4 Runtime Semantics: Property of `_` as an Absorbing Element (Maybe Propagation)
 
@@ -242,7 +269,7 @@ The type checker verifies the correctness of operations according to the followi
 1. **Verification of Cocommutator Relationships (Commutative Diagrams) of Input and Output Morphisms**:
    For all operations (composition by space), determine whether they satisfy the universal property of the Left Kan Extension (or Right Kan Extension), meaning a unique morphism can be factored through.
 2. **Verification of Unit Descent**:
-   Prove that `_`, the $id$ morphism of the general category, is correctly mapped to the identity of Lan (`0`) or the identity of Ran (`1`) in each algebraic domain when applied.
+   Verify that `_` correctly functions as the absorbing element across all domains, while local unit elements (`0`, `1`) of each algebraic domain are independently defined within those domains and are NOT images of `_`.
 
 ## 5. Conclusion
 
