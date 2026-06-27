@@ -1,4 +1,4 @@
-# Categorical Truth Values in Sign: Specification Based on a Category-Theoretic Approach
+# Categorical Truth Values in Sign: Specification Described from a Category-Theoretic Perspective
 
 ## 1. Overview
 
@@ -17,7 +17,7 @@ On the other hand, Unit / empty list represents the state of "nothingness", so i
 
 ### 2.2 Mathematical Consistency
 
-In ZFC set theory, `0` has a special role as the additive identity element in a Ring. In category theory, however, `0` functions as the initial object. Since Sign's characteristics—such as "invisible strong typing" and "list-based unified data model"—are closer to category-theoretic thinking, treating `0` as `true` provides a more consistent mathematical foundation.
+In ZFC set theory, `0` has a special role as the additive identity element in a Ring. In category theory, however, `0` functions as the initial object. Sign's characteristics—such as "invisible strong typing" and "list-based unified data model"—are consistent when described in category-theoretic terms, so treating `0` as `true` provides a more coherent mathematical basis.
 
 ## 3. Practical Benefits
 
@@ -76,6 +76,6 @@ f 3 > 2 4
 
 ## 5. Conclusion
 
-Designing Unit (`_`) / empty lists as `false` and all other values including `0` as `true` enhances consistency with Sign's mathematical foundation (especially category theory) and provides a more intuitive and clear semantics. Through this specification, Sign functions as a more expressive and mathematically robust language.
+Designing Unit (`_`) / empty lists as `false` and all other values including `0` as `true` is consistent when described in category-theoretic terms, and provides a more intuitive and clear semantics. Through this specification, Sign functions as a more expressive and mathematically coherent language.
 
 Most importantly, clearly separating the numeric `0` from the logical "nothingness" provides an intuitive and consistent logical system for programmers to understand.

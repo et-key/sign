@@ -1,18 +1,18 @@
-# Unit (`__`) Specification in the Sign Language: Bialgebraic Foundation
+# Unit (`__`) Specification in the Sign Language: Zero Object as First Principle
 
 ## 1. Introduction
 
-The Unit value (`__`) in the Sign language is a core concept of the language design, possessing mathematically consistent characteristics as the identity element of the bialgebra.
-This document provides a comprehensive explanation ranging from the category-theoretic foundation of Unit to its implementation details.
+The Unit value (`__`) in the Sign language is a foundational element born from the first principles of its evaluation rules.
+This document explains its behavior comprehensively, and shows how it can be described coherently in category-theoretic terms.
 
 ## 2. Mathematical Foundation as a Bialgebra
 
 ### 2.1 Basic Properties
 
-- **Bialgebra Identity**: The identity of both the list structure (coalgebra) and function composition (algebra).
+- **Zero Object** *(first principle)*: The coincidence of the initial object and terminal object that is needed to describe Sign as a category.
+- **Bialgebra Identity**: The identity of both the list structure (coalgebra) and function composition (algebra) — derived from the zero object.
 - **Behavior as a Value**: Equivalent to the empty list (`__ = []`).
-- **Behavior as a Function**: Functions as the identity morphism.
-- **Logical Evaluation**: Evaluated as `false` (auxiliary property).
+- **Behavior as a Function**: Functions as the identity morphism of the coproduct.
 - **Crucial Distinction**: Distinct from numeric zero (`__ ≠ 0`).
 
 ### 2.2 Definition of Bialgebra Structure
@@ -184,7 +184,7 @@ X ; __ → X
 !__ → equivalent to true
 ```
 
-### 3.4 Address and Input/Output Operations
+#### 3.4 Address and Input/Output Operations
 
 ```sign
 ` Reference to Unit itself
@@ -302,7 +302,7 @@ example : natural_transform [* 2,] 1, 2, 3
 
 ### 7.2 Integration with Implementation Efficiency
 
-- **Theoretical Purity**: Designed based on a deep mathematical foundation.
+- **Theoretical Clarity**: Describable and verifiable in category-theoretic terms.
 - **Implementation Efficiency**: Highly efficient machine code generation on ARM64.
 - **Type Safety**: Verification of bialgebraic structures at compile time.
 - **Optimizability**: Automatic optimizations leveraging properties of bialgebras.
@@ -311,6 +311,6 @@ example : natural_transform [* 2,] 1, 2, 3
 
 ## 8. Conclusion
 
-Unit (`__`) in the Sign language is not merely a "convenient symbol", but is a foundational element of the language possessing deep mathematical structures as the identity element of the bialgebra. By functioning as the identity of both monads and comonads, it enables unified representation of functional programming and list processing, providing the theoretical basis for "invisible strong typing" and "zero-cost abstraction".
+Unit (`__`) in the Sign language is not merely a "convenient symbol", but a foundational element arising from the first principles of the language's evaluation rules. Described in category-theoretic terms, it exhibits behavior isomorphic to the identity element of a bialgebra, and can be coherently explained from both monad and comonad perspectives. This enables unified representation of functional programming and list processing, and provides the basis for "invisible strong typing" and "zero-cost abstraction".
 
-Through this bialgebraic design, Sign is realized as a theoretically beautiful, implementation-efficient, and intuitive language for programmers.
+Viewed through a category-theoretic lens, this bialgebraically structured design achieves both implementation efficiency and theoretical coherence, functioning as an intuitive language for programmers.

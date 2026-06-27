@@ -1,6 +1,6 @@
-# Sign Language: The Innovation of Zero Cost Domain Abstraction
+# Sign Language: Zero Cost Domain Abstraction
 
-Sign's "Zero Cost Domain Abstraction" perfectly captures the ambitious vision of the Sign language.
+This document describes the design principles of "Zero Cost Domain Abstraction" in the Sign language.
 
 ## Expansion and Evolution of the Concept
 
@@ -30,4 +30,4 @@ The group of bitwise operators in the Sign language (`<<`, `>>`, `||`, `&&`, `;;
 These operators are designed to map directly to native register manipulation instructions and SIMD instructions of the target processor in compilers (such as WASM or AArch64).
 By completely bypassing the overhead of Sign's high-level data structures like lists and dictionaries, they provide the "invisible strength" for programmers to directly control hardware behavior in processes requiring bare-metal performance equivalent to C (such as cryptography, image processing, and hardware control).
 
-This concept of Zero Cost Domain Abstraction demonstrates that Sign goes beyond being a mere programming language, aiming for a unified theory of computational expression. The ambitious vision of bridging different computational models at "zero cost" points the way to the future of computing.
+This concept of Zero Cost Domain Abstraction enables Sign to bridge different computational models without overhead, combining high-level description with low-level execution efficiency within the same syntax.

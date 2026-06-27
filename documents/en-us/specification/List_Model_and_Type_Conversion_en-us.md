@@ -9,7 +9,7 @@ List operations in the Sign language are completed using a combination of only t
 | ` ` (Space) | Coproduct | Juxtaposition / Concatenation | "Arrange" |
 | `,` (Comma) | Product | Structural Assembly | "Combine" |
 
-These two form an **adjoint functor** relationship in category theory. That is, the coproduct and product are designed as mathematically dual entities, meaning if one is defined, the other is naturally determined.
+These two can be described as having an **adjoint functor** relationship in category theory. The coproduct and product are mathematically dual, and this symmetry is reflected in Sign's evaluation rules.
 
 ---
 
