@@ -166,10 +166,40 @@ function _transpile(node) {
   }
 
   if (node.type === 'coproduct_block') {
-    // If we encounter an unresolved coproduct block (which shouldn't happen after resolution),
-    // we default to array representation
     const elems = (node.statements || []).map(s => _transpile(s));
-    return `[${elems.join(', ')}]`;
+    if (elems.length === 0) return '[]';
+
+    // 静的最適化: 先頭が文字列リテラル（バッククォート等）の場合は、直接JSの文字列結合式にする
+    const isStringLiteral = (s) => /^['"`]/.test(s) || s.startsWith('String(');
+
+    if (isStringLiteral(elems[0])) {
+      let joined = elems[0];
+      for (let i = 1; i < elems.length; i++) {
+        joined += ` + String(${elems[i]})`;
+      }
+      return `(${joined})`;
+    }
+
+    // それ以外（変数など）の場合は、実行時に左辺優先規則をシミュレートするIIFEを出力
+    return `((arr) => {
+      if (arr.length === 1) return arr[0];
+      return arr.reduce((l, r) => {
+        if (typeof l === 'string' || l instanceof String) {
+          return l + String(r);
+        }
+        const isPlainObj = (o) => typeof o === 'object' && o !== null && !Array.isArray(o) && !(o instanceof Address);
+        const hasObj = isPlainObj(l) || isPlainObj(r) || (Array.isArray(l) && l[0] && l[0].constructor && l[0].constructor.name === 'ExpandedObject') || (Array.isArray(r) && r[0] && r[0].constructor && r[0].constructor.name === 'ExpandedObject');
+        if (hasObj) {
+          const getObj = (x) => {
+            if (Array.isArray(x)) return x[0] && typeof x[0] === 'object' && x[0].constructor && x[0].constructor.name === 'ExpandedObject' ? x[0].obj : {};
+            return isPlainObj(x) ? x : {};
+          };
+          return { ...getObj(l), ...getObj(r) };
+        }
+        const toArr = (x) => Array.isArray(x) ? x : [x];
+        return [...toArr(l), ...toArr(r)];
+      });
+    })([${elems.join(', ')}])`;
   }
 
   if (node.type === 'operation') {
@@ -210,7 +240,7 @@ function _transpile(node) {
           }
           return p.isRest ? `...${p.name}` : p.name;
         }).join(', ');
-        
+
         // Find _extractIndex from RHS
         function extractTerms(n) {
           if (!n) return [];
@@ -226,7 +256,7 @@ function _transpile(node) {
           }
           return [n];
         }
-        
+
         let extractIndexCode = 'undefined';
         const rhsElems = extractTerms(node.right);
         const blockIdx = rhsElems.findIndex(s => s && s.type === 'block' && s.kind === 'bracket');
@@ -263,7 +293,7 @@ function _transpile(node) {
             bodyLines.push(`    ${patternNames[0]} = ${valVar};`);
             if (restName) bodyLines.push(`    ${restName} = __unit;`);
             bodyLines.push(`  }`);
-            
+
             // Add rest checks for inner specs
             p.innerSpecs.forEach(ip => {
               if (ip.isRest) {
@@ -282,7 +312,7 @@ function _transpile(node) {
             bodyLines.push(`  if (${p.name} === undefined || ${p.name} === __hole) ${p.name} = ${p.defaultValue};`);
           }
         });
-        
+
         const bodyCode = bodyLines.length > 0 ? bodyLines.join('\n') + '\n' : '';
         const hasRest = specs.some(p => p.isRest);
         functionContextStack.push(true);
@@ -595,7 +625,7 @@ function _transpile(node) {
           const exprsStr = chain.exprs.map(e => _transpile(e)).join(', ');
           return `_compareChain([${opsStr}], [${exprsStr}])`;
         }
-        
+
         const typeL = inferType(node.left, currentEnv);
         const typeR = inferType(node.right, currentEnv);
         if (typeL === 'Scalar' && typeR === 'Scalar') {
@@ -717,7 +747,7 @@ function tryTranspilePointFree(node) {
   if (node.type !== 'block') return null;
   const content = node.content;
   if (!content || typeof content !== 'object') return null;
-  
+
   // Only handle bracket, paren, brace blocks for point-free
   if (!['bracket', 'paren', 'brace'].includes(node.kind)) return null;
 
@@ -735,7 +765,7 @@ function tryTranspilePointFree(node) {
 
   // 3. Binary point-free: [+]
   if (content.type === 'operation' && content.position !== 'prefix' && content.position !== 'postfix' &&
-      content.left === undefined && content.right === undefined) {
+    content.left === undefined && content.right === undefined) {
     const fnBody = transpile({ ...content, left: 'x', right: 'y' });
     return `_makePointFreeBinary((x, y) => ${fnBody})`;
   }
@@ -764,7 +794,7 @@ function tryTranspilePointFree(node) {
 
   // 5. Comma-less partial binary point-free: [* 2] or [2 +]
   if (content.type === 'operation' && content.operator !== ',' &&
-      content.position !== 'prefix' && content.position !== 'postfix') {
+    content.position !== 'prefix' && content.position !== 'postfix') {
     if (content.left === undefined && content.right !== undefined) {
       const fnBody = transpile({ ...content, left: 'x' });
       return `((x) => ${fnBody})`;

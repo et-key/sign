@@ -78,7 +78,7 @@ const _expand = (a) => {
     return a.flat(1);
   }
   if (typeof a === 'string') {
-    return [...a];
+    return a;
   }
   if (a === 0) {
     return {
