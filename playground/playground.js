@@ -117,9 +117,7 @@ say (fold_eager $add 0 1 2 3 4 5)
 \` 2. Lazy Fold (Thunk / Double Algebra)
 fold_lazy : f a x ~y ? $fold_lazy f [@f a x] y~
 
-step0 : fold_lazy $add 0 1 2 3
-step1 : @step0 __
-say (@step1 __)
+say [[fold_lazy $add 0 1 2 3]~]
 `,
   operators: `\` 1. Inline JavaScript Code
 say : "console.log"
@@ -404,7 +402,7 @@ runBtn.addEventListener('click', async () => {
               }
               extra += ` -> List: [ ${elems.join(', ')} ]`;
             }
-          } catch(e) {}
+          } catch (e) { }
         }
 
         // Potential Function Pointer (Table Index Reference)
