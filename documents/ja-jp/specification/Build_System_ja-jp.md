@@ -25,9 +25,9 @@ JSON との比較：
 | `"key": value` | `key : value` |
 | `"string"` 必須 | 識別子はそのまま、文字列はバッククォート |
 | `null` / `false` | `__`（Unit に収束） |
-| コメント不可（標準） | バッククォート `` ` `` でコメント |
+| コメント不可（標準） | 行頭バッククォート `` ` `` でコメント記述 |
 | 動的追加可能 | スキーマ固定・静的のみ |
-| `[1, 2, 3]` | `[1, 2, 3]` または改行インデント |
+| `[1, 2, 3]` | `1 2 3` または `1,2,3` など、Sign の積、余積の仕様に従う|
 
 ### 記法例
 
@@ -35,9 +35,10 @@ JSON との比較：
 ` option.son — Sign Object Notation のサンプル
 
 target  : `rust`
-layer   : `std`
+` std レイヤー
+layer   : 2
 optimize : 2
-entry   : `main`
+entry   : `main.sn`
 output  : `app`
 
 features :
@@ -59,17 +60,17 @@ project/
   option.son              ← ルート設定（全体のデフォルト）
   │
   ├── kernel/
-  │     option.son        ← bare レイヤーに特化
+  │     option.son        ← layer: 0 に変更あり → 要る
   │     ├── drivers/
-  │     │     option.son  ← kernel/ を継承（明示的変更なし）
+  │     │    └── uart.sn   ← option.sonなし（kernel/の設定をそのまま継承）
   │     └── mm/
-  │           option.son  ← アロケータ実装。特殊フラグを追加
+  │           option.son  ← allow_raw_alloc 追加あり → 要る
   │
   ├── userspace/
-  │     option.son        ← std レイヤーに戻す
+  │     option.son        ← layer: 2 に戻す変更あり → 要る
   │
   └── lib/
-        option.son        ← target: wasm など別ターゲット
+        option.son        ← target: wasm など別ターゲットへ変更あり → 要る
 ```
 
 ### 3.2 継承ルール
@@ -80,12 +81,12 @@ project/
 
 ```son
 ` kernel/option.son
-
-layer    : `bare`
-optimize : 2
+` bare metal layer
+layer    : 0
+optimize : 3
 features :
-    volatile    ` @! / #! を有効化
-    no_alloc    ` # / ## をコンパイルエラーとする
+` # / ## をコンパイルエラーとする
+    no_alloc
 ```
 
 ```son
@@ -93,7 +94,7 @@ features :
 ` アロケータ実装フォルダ — ここだけ生ポインタ操作を許可
 
 features :
-    allow_raw_alloc   ` このフォルダのみ、アロケータ実装として許可
+    raw_alloc   ` このフォルダのみ、アロケータ実装として許可
 ```
 
 ---
@@ -103,7 +104,7 @@ features :
 Sign のビルドは `layer` キーによって3段階に分かれる。
 **`layer` は数値で指定する。** 別名（bare / alloc / std）はドキュメント上の呼称であり、コンパイラは数値で解釈する。
 
-| 数値 | 別名 | 使用可能なもの | 禁止されるもの | 対応Rustモデル |
+| 数値 | 意味 | 使用可能なもの | 禁止されるもの | 対応Rustモデル |
 |------|------|---------------|----------------|---------------|
 | `0` | bare | `$`, `@`, `#`(store), `###` | `#`(Rc), `##`(Arc), クロージャ確保 | `#![no_std]` + `#![no_main]` |
 | `1` | alloc | layer 0 の全て + `#`(Rc), `##`(Arc) | OS依存IO | `#![no_std]` + `extern crate alloc` |
@@ -174,9 +175,8 @@ status : @ 0xFEA00004        ` → ptr::read_volatile(0xFEA00004)
 ` option.son — 完全フィールド一覧（すべてオプション）
 
 ` ─── ターゲット ───────────────────────────────────────────
-target   : `rust`    ` rust | wasm | js | aarch64（デフォルト: rust）
+target   : `rust`    ` rust | wasm | js | x86_64 | aarch64 | riscv64 | wasm32 | wasm64（デフォルト: rust）
 layer    : 2         ` 0=bare | 1=alloc | 2=std（デフォルト: 2）
-arch     : `x86_64`  ` x86_64 | aarch64 | riscv64 | wasm32
 
 ` ─── ビルド ────────────────────────────────────────────────
 entry    : `main`    ` エントリポイント関数名
