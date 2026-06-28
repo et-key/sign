@@ -31,7 +31,22 @@ const _isTrue = (val) => {
   return true;
 };
 
+const _isLazyStream = (val) => {
+  if (!Array.isArray(val) || val.length === 0) return false;
+  const first = val[0];
+  if (first instanceof Address) return true;
+  if (Array.isArray(first) && first.length > 0 && first[0] instanceof Address) return true;
+  return false;
+};
 
+const _evaluateLazyStream = (stream) => {
+  let current = stream;
+  while (_isLazyStream(current)) {
+    const fn = _deref(current);
+    current = _call(fn, __unit);
+  }
+  return current;
+};
 
 class ExpandedStream {
   constructor(stream) {
@@ -44,6 +59,14 @@ class ExpandedObject {
   }
 }
 const _expand = (a) => {
+  if (_isLazyStream(a)) {
+    const val = _evaluateLazyStream(a);
+    if (Array.isArray(val)) {
+      if (val.length === 0) return [__unit];
+      return val.flat(1);
+    }
+    return val;
+  }
   if (a && a.isStream) {
     return a;
   }

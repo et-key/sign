@@ -178,7 +178,7 @@ function getCategory(node, env) {
 
   if (node.type === 'block') {
     if (node.kind === 'bracket') {
-      return 'Atom';
+      return getCategory(node.content, env);
     }
     return getCategory(node.content, env);
   }

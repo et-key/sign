@@ -1,4 +1,0 @@
-say : "console.log"
-f : x ? x * 2
-g : x ? x + 1
-say (f g 3)
