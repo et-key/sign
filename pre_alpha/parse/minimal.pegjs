@@ -103,7 +103,7 @@ LogicalXor
 
 // Level 6: Logical OR (|)
 LogicalOr
-  = head:LogicalAnd tail:(_ op:("|/" / "|") _ LogicalAnd)* {
+  = head:LogicalAnd tail:(__ op:("|/" / "|") __ LogicalAnd)* {
       return tail.reduce(function(result, element) {
         const op = element[1];
         const name = op === "|/" ? "div_or" : "or";

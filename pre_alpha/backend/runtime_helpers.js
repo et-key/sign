@@ -234,7 +234,16 @@ function _call(fn, ...args) {
   const remaining = hasRest ? [] : totalArgs.slice(expected);
   const res = target(...invokeArgs);
   if (remaining.length > 0) {
-    return _call(res, ...remaining);
+    if (typeof res === 'function') {
+      return _call(res, ...remaining);
+    } else {
+      const toArr = (x) => {
+        if (x === __unit) return [];
+        return Array.isArray(x) ? x.flat(Infinity) : [x];
+      };
+      const flatRemaining = remaining.flatMap(x => toArr(x));
+      return [...toArr(res), ...flatRemaining];
+    }
   }
   return res;
 }
