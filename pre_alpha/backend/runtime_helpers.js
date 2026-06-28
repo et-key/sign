@@ -77,6 +77,9 @@ const _expand = (a) => {
     if (a.length === 0) return [__unit];
     return a.flat(1);
   }
+  if (typeof a === 'string') {
+    return [...a];
+  }
   if (a === 0) {
     return {
       [Symbol.iterator]: function* () {
@@ -315,6 +318,24 @@ const _arithmetic = (op, left, right) => {
   }
 };
 
+const _valEquals = (a, b) => {
+  if (Object.is(a, b)) return true;
+  
+  const isStringOrArray = (x) => typeof x === 'string' || Array.isArray(x);
+  if (isStringOrArray(a) && isStringOrArray(b)) {
+    const toArr = (x) => typeof x === 'string' ? [...x] : x.flat(Infinity);
+    const arrA = toArr(a);
+    const arrB = toArr(b);
+    if (arrA.length !== arrB.length) return false;
+    for (let i = 0; i < arrA.length; i++) {
+      if (!_valEquals(arrA[i], arrB[i])) return false;
+    }
+    return true;
+  }
+  
+  return false;
+};
+
 const _compare = (op, left, right) => {
   if (op !== '==' && op !== '=' && op !== '!==' && op !== '!=') {
     if (left === __unit || right === __unit) {
@@ -325,11 +346,11 @@ const _compare = (op, left, right) => {
   switch (op) {
     case '==':
     case '=':
-      cond = Object.is(left, right);
+      cond = _valEquals(left, right);
       break;
     case '!==':
     case '!=':
-      cond = !Object.is(left, right);
+      cond = !_valEquals(left, right);
       break;
     case '<':
       cond = left < right;
