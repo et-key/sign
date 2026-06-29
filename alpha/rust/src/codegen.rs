@@ -122,6 +122,11 @@ fn register_definition(table: &mut SymbolTable, id: &str, def: &AstNode) {
 pub fn transpile_program(ast: &[AstNode], layer: usize) -> Result<String, String> {
     let table = build_symbol_table(ast);
     let mut top_level_code = String::new();
+    
+    if layer == 2 {
+        top_level_code.push_str("#![allow(unused_parens)]\n#![allow(unused_variables)]\n#![allow(non_upper_case_globals)]\n\n");
+    }
+    
     let mut main_statements = Vec::new();
     for node in ast {
         match node {
@@ -610,7 +615,7 @@ fn transpile_identifier(id: &str, table: &SymbolTable) -> Result<String, String>
     }
 }
 
-fn transpile_coproduct(node: &AstNode, list: &[AstNode], layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+fn transpile_coproduct(_node: &AstNode, list: &[AstNode], layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
     if list.is_empty() {
         return Ok("()".to_string());
     }
