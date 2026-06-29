@@ -127,6 +127,25 @@ pub fn transpile_program(ast: &[AstNode], layer: usize) -> Result<String, String
     
     if layer == 2 {
         top_level_code.push_str("#![allow(unused_parens)]\n#![allow(unused_variables)]\n#![allow(non_upper_case_globals)]\n#![allow(dead_code)]\n\n");
+        let eval_compare_decl = r#"fn eval_compare<F>(lhs: Option<f64>, rhs: Option<f64>, op: F) -> Option<f64>
+where
+    F: Fn(f64, f64) -> bool,
+{
+    let l_val = lhs?;
+    let r_val = rhs?;
+    if op(l_val, r_val) {
+        if l_val == 0.0 || l_val == 1.0 {
+            Some(r_val)
+        } else {
+            Some(l_val)
+        }
+    } else {
+        None
+    }
+}
+
+"#;
+        top_level_code.push_str(eval_compare_decl);
     }
     
     let mut main_statements = Vec::new();
@@ -720,7 +739,7 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &s
     if ["<", ">", "<=", ">=", "==", "!="].contains(&operator) {
         let left_str = transpile_node(left, layer, in_main, table)?;
         let right_str = transpile_node(right, layer, in_main, table)?;
-        return Ok(format!("match {} {} {} {{ true => Some(1.0), false => None }}", left_str, operator, right_str));
+        return Ok(format!("eval_compare(Option::from({}), Option::from({}), |l, r| l {} r)", left_str, right_str, operator));
     }
 
     if operator == "&" {

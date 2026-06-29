@@ -75,6 +75,12 @@ list_loop : x ~y ?
 list_loop 1.0 2.0 3.0 4.0 5.0
 list_len : @c
 
+` === 値ベースの比較（単位元ルール）と3項チェイン評価のテスト ===
+val_cmp_non_unit : 2.0 < 5.0
+val_cmp_unit : 1.0 < 5.0
+val_cmp_chain : 1.0 < 3.0 < 5.0
+val_cmp_chain_fail : 2.0 < 1.0 < 5.0
+
 ` === Hole（_）による静的脱糖部分適用のテスト ===
 hole_partial : add _ 5.0
 hole_partial_result : hole_partial 10.0
@@ -96,6 +102,10 @@ hole_op_result : hole_op 50.0
 "println!(\"list_len = {}\", @{list_len})"
 "println!(\"hole_partial_result = {}\", @{hole_partial_result})"
 "println!(\"hole_op_result = {}\", @{hole_op_result})"
+"println!(\"val_cmp_non_unit = {:?}\", @{val_cmp_non_unit})"
+"println!(\"val_cmp_unit = {:?}\", @{val_cmp_unit})"
+"println!(\"val_cmp_chain = {:?}\", @{val_cmp_chain})"
+"println!(\"val_cmp_chain_fail = {:?}\", @{val_cmp_chain_fail})"
 "#;
 
     let source_code_bare = r#"
