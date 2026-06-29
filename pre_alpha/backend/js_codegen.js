@@ -68,13 +68,27 @@ function _transpile(node) {
   if (node === undefined || node === null) return '';
 
   if (node.type === 'inline_code') {
-    const val = node.value.trim();
+    let val = node.value.trim();
     if (val.startsWith('js:')) {
-      return val.slice(3).trim();
+      val = val.slice(3).trim();
+    } else {
+      const match = val.match(/^([a-zA-Z0-9_]+):/);
+      if (match && match[1] !== 'js') {
+        return '';
+      }
     }
-    const match = val.match(/^([a-zA-Z0-9_]+):/);
-    if (match && match[1] !== 'js') {
-      return '';
+    
+    const matches = val.match(/\\(\d+)/g);
+    if (matches) {
+      const nums = matches.map(m => parseInt(m.slice(1), 10));
+      const maxParam = Math.max(...nums);
+      const args = [];
+      for (let i = 1; i <= maxParam; i++) {
+        args.push(`_a${i}`);
+      }
+      const argsStr = args.join(', ');
+      const body = val.replace(/\\(\d+)/g, (m, num) => `_a${num}`);
+      return `((${argsStr}) => ${body})`;
     }
     return val;
   }
@@ -169,6 +183,14 @@ function _transpile(node) {
     const elems = (node.statements || []).map(s => _transpile(s));
     if (elems.length === 0) return '[]';
 
+    // 静的最適化: 全要素が静的な文字列リテラルである場合は、コンパイル時に結合する
+    const isStaticString = (s) => /^(['"`]).*\1$/.test(s);
+    if (elems.length > 0 && elems.every(isStaticString)) {
+      const combined = elems.map(s => s.slice(1, -1)).join('');
+      const quote = elems[0][0];
+      return `${quote}${combined}${quote}`;
+    }
+
     // 静的最適化: 先頭が文字列リテラル（バッククォート等）の場合は、直接JSの文字列結合式にする
     const isStringLiteral = (s) => /^['"`]/.test(s) || s.startsWith('String(');
 
@@ -197,7 +219,11 @@ function _transpile(node) {
           return { ...getObj(l), ...getObj(r) };
         }
         const toArr = (x) => Array.isArray(x) ? x : [x];
-        return [...toArr(l), ...toArr(r)];
+        const merged = [...toArr(l), ...toArr(r)];
+        if (merged.length > 0 && merged.every(x => typeof x === 'string')) {
+          return merged.join('');
+        }
+        return merged;
       });
     })([${elems.join(', ')}])`;
   }
@@ -366,6 +392,9 @@ function _transpile(node) {
           }
 
           return `((l, r) => {
+            if (typeof l === 'string' || l instanceof String) {
+              return l + String(r);
+            }
             const isPlainObj = (o) => typeof o === 'object' && o !== null && !Array.isArray(o) && !(o instanceof Address);
             const hasObj = isPlainObj(l) || isPlainObj(r) || (Array.isArray(l) && l[0] && l[0].constructor && l[0].constructor.name === 'ExpandedObject') || (Array.isArray(r) && r[0] && r[0].constructor && r[0].constructor.name === 'ExpandedObject');
             if (hasObj) {
@@ -376,7 +405,11 @@ function _transpile(node) {
               return { ...getObj(l), ...getObj(r) };
             }
             const toArr = (x) => Array.isArray(x) ? x : [x];
-            return [...toArr(l), ...toArr(r)];
+            const merged = [...toArr(l), ...toArr(r)];
+            if (merged.length > 0 && merged.every(x => typeof x === 'string')) {
+              return merged.join('');
+            }
+            return merged;
           })(${_transpile(node.left)}, ${_transpile(node.right)})`;
         }
         if (node.name === 'compose') {

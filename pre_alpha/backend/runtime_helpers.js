@@ -75,10 +75,14 @@ const _expand = (a) => {
       return a[0];
     }
     if (a.length === 0) return [__unit];
-    return a.flat(1);
+    const flat = a.flat(1);
+    if (flat.length > 0 && flat.every(x => typeof x === 'string')) {
+      return flat.join('');
+    }
+    return flat;
   }
   if (typeof a === 'string') {
-    return a;
+    return [...a];
   }
   if (a === 0) {
     return {

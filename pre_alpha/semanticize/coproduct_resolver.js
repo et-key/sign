@@ -323,7 +323,15 @@ export function getParamCount(node) {
 export function getArity(node, env) {
   if (!node) return 0;
   if (typeof node === 'number' || typeof node === 'boolean') return 0;
-  if (node.type === 'inline_code') return Infinity;
+  if (node.type === 'inline_code') {
+    const val = node.value || '';
+    const matches = val.match(/\\(\d+)/g);
+    if (matches) {
+      const nums = matches.map(m => parseInt(m.slice(1), 10));
+      return Math.max(...nums);
+    }
+    return 0;
+  }
   if (typeof node === 'string') {
     if (env && env.has(node)) {
       const entry = env.get(node);
