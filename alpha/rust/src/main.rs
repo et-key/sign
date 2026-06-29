@@ -75,6 +75,10 @@ list_loop : x ~y ?
 list_loop 1.0 2.0 3.0 4.0 5.0
 list_len : @c
 
+` === 4コア（IO/Heap/Stack/Arith）オーバーフロー引き回しパイプラインのテスト ===
+` IO領域（0x0001番地）へ入力値 100.0 を送信してカスケード処理を開始する
+route_msg 1.0 100.0
+
 ` 結果を出力する
 "println!(\"partial_add 20 = {}\", @{partial_add 20.0})"
 "println!(\"cond_result = {:?}\", @{cond_result})"
@@ -87,6 +91,7 @@ list_len : @c
 "println!(\"reverse_result = {}\", @{reverse_result})"
 "println!(\"high_order_result = {}\", @{high_order_result})"
 "println!(\"list_len = {}\", @{list_len})"
+"println!(\"Result from 4-core pipeline = {}\", res_rx.recv().unwrap())"
 "#;
 
     let source_code_bare = r#"

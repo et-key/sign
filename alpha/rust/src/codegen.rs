@@ -122,6 +122,116 @@ fn register_definition(table: &mut SymbolTable, id: &str, def: &AstNode) {
 pub fn transpile_program(ast: &[AstNode], layer: usize) -> Result<String, String> {
     let table = build_symbol_table(ast);
     let mut top_level_code = String::new();
+    
+    if layer == 2 {
+        let preamble = r#"use std::sync::mpsc::{Sender, Receiver, channel};
+use std::thread;
+use std::sync::OnceLock;
+
+const IO_MAX: usize = 16383;
+const HEAP_MAX: usize = 32767;
+const STACK_MAX: usize = 49151;
+const ARITH_MAX: usize = 65535;
+
+#[derive(Debug)]
+enum TaskMsg {
+    Data(usize, f64),
+    Shutdown,
+}
+
+static IO_TX: OnceLock<Sender<TaskMsg>> = OnceLock::new();
+static HEAP_TX: OnceLock<Sender<TaskMsg>> = OnceLock::new();
+static STACK_TX: OnceLock<Sender<TaskMsg>> = OnceLock::new();
+static ARITH_TX: OnceLock<Sender<TaskMsg>> = OnceLock::new();
+static RESULT_TX: OnceLock<Sender<f64>> = OnceLock::new();
+
+fn route_msg(addr: usize, val: f64) {
+    let base_addr = addr & 65535;
+    if base_addr <= IO_MAX {
+        if let Some(tx) = IO_TX.get() { tx.send(TaskMsg::Data(base_addr, val)).ok(); }
+    } else if base_addr <= HEAP_MAX {
+        if let Some(tx) = HEAP_TX.get() { tx.send(TaskMsg::Data(base_addr, val)).ok(); }
+    } else if base_addr <= STACK_MAX {
+        if let Some(tx) = STACK_TX.get() { tx.send(TaskMsg::Data(base_addr, val)).ok(); }
+    } else {
+        if let Some(tx) = ARITH_TX.get() { tx.send(TaskMsg::Data(base_addr, val)).ok(); }
+    }
+}
+
+fn init_runtime() {
+    let (io_tx, io_rx) = channel();
+    let (heap_tx, heap_rx) = channel();
+    let (stack_tx, stack_rx) = channel();
+    let (arith_tx, arith_rx) = channel();
+
+    IO_TX.set(io_tx).unwrap();
+    HEAP_TX.set(heap_tx).unwrap();
+    STACK_TX.set(stack_tx).unwrap();
+    ARITH_TX.set(arith_tx).unwrap();
+
+    thread::Builder::new().name("Core 0 (IO)".to_string()).spawn(move || {
+        while let Ok(msg) = io_rx.recv() {
+            match msg {
+                TaskMsg::Data(addr, val) => {
+                    println!("[{:?}] IO Access at addr {}, val = {}. Triggering Heap overflow...", thread::current().name().unwrap(), addr, val);
+                    route_msg(IO_MAX + 1, val);
+                }
+                TaskMsg::Shutdown => break,
+            }
+        }
+    }).unwrap();
+
+    thread::Builder::new().name("Core 1 (Heap)".to_string()).spawn(move || {
+        while let Ok(msg) = heap_rx.recv() {
+            match msg {
+                TaskMsg::Data(addr, val) => {
+                    println!("[{:?}] Heap Allocate at addr {}, val = {}. Triggering Stack overflow...", thread::current().name().unwrap(), addr, val);
+                    route_msg(HEAP_MAX + 1, val);
+                }
+                TaskMsg::Shutdown => break,
+            }
+        }
+    }).unwrap();
+
+    thread::Builder::new().name("Core 2 (Stack)".to_string()).spawn(move || {
+        while let Ok(msg) = stack_rx.recv() {
+            match msg {
+                TaskMsg::Data(addr, val) => {
+                    println!("[{:?}] Stack Apply at addr {}, val = {}. Triggering Arithmetic overflow...", thread::current().name().unwrap(), addr, val);
+                    route_msg(STACK_MAX + 1, val);
+                }
+                TaskMsg::Shutdown => break,
+            }
+        }
+    }).unwrap();
+
+    thread::Builder::new().name("Core 3 (Arithmetic)".to_string()).spawn(move || {
+        while let Ok(msg) = arith_rx.recv() {
+            match msg {
+                TaskMsg::Data(addr, val) => {
+                    let result = val * 2.0 + 10.0;
+                    println!("[{:?}] Arithmetic Calc at addr {}, val = {} -> result = {}", thread::current().name().unwrap(), addr, val, result);
+                    if let Some(tx) = RESULT_TX.get() {
+                        tx.send(result).ok();
+                    }
+                }
+                TaskMsg::Shutdown => break,
+            }
+        }
+    }).unwrap();
+}
+
+fn shutdown_runtime() {
+    if let Some(tx) = IO_TX.get() { tx.send(TaskMsg::Shutdown).ok(); }
+    if let Some(tx) = HEAP_TX.get() { tx.send(TaskMsg::Shutdown).ok(); }
+    if let Some(tx) = STACK_TX.get() { tx.send(TaskMsg::Shutdown).ok(); }
+    if let Some(tx) = ARITH_TX.get() { tx.send(TaskMsg::Shutdown).ok(); }
+}
+"#;
+        top_level_code.push_str(preamble);
+        top_level_code.push_str("\n");
+    }
+
     let mut main_statements = Vec::new();
     for node in ast {
         match node {
@@ -201,8 +311,14 @@ pub fn transpile_program(ast: &[AstNode], layer: usize) -> Result<String, String
         output.push_str("    // Running in Layer 0 (Bare Metal)\n");
     } else {
         output.push_str("    // Running in Layer 2 (OS Std)\n");
+        output.push_str("    let (res_tx, res_rx) = channel();\n");
+        output.push_str("    RESULT_TX.set(res_tx).unwrap();\n");
+        output.push_str("    init_runtime();\n\n");
     }
     output.push_str(&main_statements.join("\n"));
+    if layer == 2 {
+        output.push_str("\n    shutdown_runtime();\n");
+    }
     output.push_str("\n}\n");
 
     Ok(output)
@@ -411,7 +527,7 @@ fn get_category(node: &AstNode, table: &SymbolTable) -> TypeCategory {
         AstNode::Identifier(id) => {
             if table.functions.contains_key(id) {
                 TypeCategory::Lambda
-            } else if id == "print" || id == "println" {
+            } else if id == "print" || id == "println" || id == "route_msg" {
                 TypeCategory::Lambda
             } else {
                 TypeCategory::Atom
@@ -728,6 +844,12 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &s
             let mut applied_args = Vec::new();
             if let Some(func_name) = extract_applied_func_and_args(left, &mut applied_args) {
                 collect_coproduct_items(right, &mut applied_args);
+                
+                if func_name == "route_msg" {
+                    let addr_str = transpile_node(&applied_args[0], layer, in_main, table)?;
+                    let val_str = transpile_node(&applied_args[1], layer, in_main, table)?;
+                    return Ok(format!("route_msg({} as usize, {})", addr_str, val_str));
+                }
                 
                 if let Some(sig) = table.functions.get(&func_name) {
                     // スプレッド展開があるかチェックし、あれば静的脱糖する
