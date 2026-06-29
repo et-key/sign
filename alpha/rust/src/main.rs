@@ -59,15 +59,15 @@ compose_result : (add 1.0) (mul 2.0) 5.0
 reverse_result : 5.0 (add 1.0)
 
 ` 結果を出力する
-"println!(\"partial_add 20 = {}\", partial_add(20.0))"
-"println!(\"cond_result = {:?}\", cond_result)"
-"println!(\"ternary_result = {:?}\", ternary_result)"
-"println!(\"match_result = {:?}\", match_result)"
-"println!(\"sum_result = {}\", sum_result)"
-"println!(\"map_result = {:?}\", map_result)"
-"println!(\"concat_result = {:?}\", concat_result)"
-"println!(\"compose_result = {}\", compose_result)"
-"println!(\"reverse_result = {}\", reverse_result)"
+"println!(\"partial_add 20 = {}\", @{partial_add 20.0})"
+"println!(\"cond_result = {:?}\", @{cond_result})"
+"println!(\"ternary_result = {:?}\", @{ternary_result})"
+"println!(\"match_result = {:?}\", @{match_result})"
+"println!(\"sum_result = {}\", @{sum_result})"
+"println!(\"map_result = {:?}\", @{map_result})"
+"println!(\"concat_result = {:?}\", @{concat_result})"
+"println!(\"compose_result = {}\", @{compose_result})"
+"println!(\"reverse_result = {}\", @{reverse_result})"
 "#;
 
     let source_code_bare = r#"

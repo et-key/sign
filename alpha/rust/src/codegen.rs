@@ -456,7 +456,7 @@ pub fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &Symbo
         AstNode::Unit => Ok("None".to_string()),
         AstNode::Hole => Ok("None".to_string()),
         AstNode::Identifier(id) => transpile_identifier(id, table),
-        AstNode::InlineCode(code) => Ok(code.clone()),
+        AstNode::InlineCode(code) => transpile_inline_code(code, layer, in_main, table),
         AstNode::Coproduct(list) => transpile_coproduct(node, list, layer, in_main, table),
         AstNode::BinaryOperation { operator, left, right, name } => {
             transpile_binary_op(operator, left, right, name, layer, in_main, table)
@@ -755,6 +755,48 @@ fn collect_lines(node: &AstNode, lines: &mut Vec<String>, layer: usize, in_main:
     }
     lines.push(transpile_node(node, layer, in_main, table)?);
     Ok(())
+}
+
+fn transpile_inline_code(code: &str, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+    let mut result = String::new();
+    let mut chars = code.chars().peekable();
+    
+    while let Some(c) = chars.next() {
+        if c == '@' && chars.peek() == Some(&'{') {
+            chars.next(); // '{' を消費
+            
+            // 閉じる '}' を見つけるまで切り出す
+            let mut inner = String::new();
+            let mut depth = 1;
+            while let Some(ic) = chars.next() {
+                if ic == '{' {
+                    depth += 1;
+                } else if ic == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                inner.push(ic);
+            }
+            
+            // inner を Sign の式としてパース
+            let pre = crate::lexer::preprocess(&inner);
+            match crate::parser::sign_parser::expression(&pre) {
+                Ok(ast) => {
+                    let transpiled = transpile_node(&ast, layer, in_main, table)?;
+                    result.push_str(&transpiled);
+                }
+                Err(e) => {
+                    return Err(format!("Parse error in inline code interpolant '{}': {:?}", inner, e));
+                }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    
+    Ok(result)
 }
 
 #[cfg(test)]
