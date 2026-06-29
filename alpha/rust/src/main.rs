@@ -20,8 +20,27 @@ add : x y ?
 ` 部分適用のテスト
 partial_add : add 10
 
-` インラインコードで Rust の println! マクロを呼び出す
+` 比較と短絡評価のテスト
+a : 10.0
+b : 20.0
+
+` a が 5 より大きく、かつ b が 15 より大きい場合、Some(1.0) を返す。そうでなければ __ (None)
+cond_result : (a > 5.0) & (b > 15.0) | __
+
+` 比較3項演算 (match_case と同じ match 展開で解決される)
+ternary_result : (a > 5.0) ? 99.0 : 88.0
+
+` 複数行の match_case ブロック (同じ match 展開)
+match_result :
+	a == 5.0 : 50.0
+	b == 20.0 : 200.0
+	999.0
+
+` 結果を出力する
 "println!(\"partial_add 20 = {}\", partial_add(20.0))"
+"println!(\"cond_result = {:?}\", cond_result)"
+"println!(\"ternary_result = {:?}\", ternary_result)"
+"println!(\"match_result = {:?}\", match_result)"
 "#;
 
     let source_code_bare = r#"
@@ -71,10 +90,9 @@ fn run_transpile(source: &str, layer: usize, name: &str) {
                         Ok(status) if status.success() => {
                             println!("Compilation successful! Created {}", exe_filename);
 
-                            // 3. バイナリの実行 (layer 2 のみ安全に実行)
+                            // 3. バイナリの実行
                             if layer == 2 {
                                 println!("Running {} ...", exe_filename);
-                                // Windowsでのパス実行のため、カレントディレクトリを指定して実行
                                 let run_output = Command::new(format!("./{}", name)).output();
                                 match run_output {
                                     Ok(output) => {

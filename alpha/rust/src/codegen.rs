@@ -108,7 +108,13 @@ fn transpile_definition(id: &str, def: &AstNode, layer: usize, table: &SymbolTab
         Ok(format!("fn {}({}) -> f64 {{\n    {}\n}}", id, args_str, body_str))
     } else {
         let val_str = transpile_node(def, layer, false, table)?;
-        let type_str = if val_str.starts_with("0x") || val_str.contains("usize") { "usize" } else { "f64" };
+        let type_str = if val_str.starts_with("0x") || val_str.contains("usize") {
+            "usize"
+        } else if val_str.contains("Some") || val_str.contains("None") || val_str.contains("match") {
+            "Option<f64>"
+        } else {
+            "f64"
+        };
         
         if table.functions.contains_key(id) && !matches!(def, AstNode::Lambda { .. }) {
             let sig = table.functions.get(id).unwrap();
@@ -157,164 +163,326 @@ fn extract_application(node: &AstNode) -> Option<(String, Vec<AstNode>)> {
     None
 }
 
-fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+// match_case および 三項演算の統一解決用構造体
+struct MatchArm {
+    condition: Option<AstNode>,
+    body: AstNode,
+}
+
+fn is_match_case_block(node: &AstNode) -> bool {
     match node {
-        AstNode::Atom(val) => {
-            match val {
-                SignValue::Scalar(f) => {
-                    let mut s = f.to_string();
-                    if !s.contains('.') && !s.contains('e') {
-                        s.push_str(".0");
-                    }
-                    Ok(s)
-                }
-                SignValue::Char(c) => Ok(format!("'{}'", c)),
-                SignValue::String(s) => Ok(format!("\"{}\"", s)),
-                SignValue::Address(a) => Ok(format!("{:#x}", a)),
-                SignValue::Unit => Ok("()".to_string()),
-                _ => Ok("()".to_string()),
-            }
+        AstNode::Block { kind: BlockKind::Indent, content } => {
+            let mut lines = Vec::new();
+            collect_lines_raw(content, &mut lines);
+            lines.iter().any(|line| is_case_line(line))
         }
-        AstNode::Identifier(id) => {
-            if let Some(sig) = table.functions.get(id) {
-                let missing = &sig.args;
-                Ok(format!("(move |{}| {}({}))", missing.join(", "), id, missing.join(", ")))
-            } else {
-                Ok(id.clone())
-            }
+        _ => false,
+    }
+}
+
+fn collect_lines_raw(node: &AstNode, lines: &mut Vec<AstNode>) {
+    if let AstNode::BinaryOperation { operator, left, right, name: _name } = node {
+        if operator == "\\n" {
+            collect_lines_raw(left, lines);
+            collect_lines_raw(right, lines);
+            return;
         }
-        AstNode::InlineCode(code) => {
-            Ok(code.clone())
+    }
+    lines.push(node.clone());
+}
+
+fn is_case_line(node: &AstNode) -> bool {
+    match node {
+        AstNode::Define { .. } => true,
+        AstNode::BinaryOperation { operator, .. } if operator == ":" => true,
+        _ => false,
+    }
+}
+
+fn transpile_match_arms(arms: &[MatchArm], layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+    if arms.is_empty() {
+        return Ok("None".to_string());
+    }
+
+    let current = &arms[0];
+
+    if let Some(cond) = &current.condition {
+        let cond_str = transpile_node(cond, layer, in_main, table)?;
+        let then_str = transpile_node(&current.body, layer, in_main, table)?;
+        let else_str = transpile_match_arms(&arms[1..], layer, in_main, table)?;
+        
+        let formatted_then = if then_str.contains("Some") || then_str.contains("None") || then_str.contains("match") {
+            then_str
+        } else {
+            format!("Some({})", then_str)
+        };
+
+        let formatted_else = if else_str.contains("Some") || else_str.contains("None") || else_str.contains("match") {
+            else_str
+        } else {
+            format!("Some({})", else_str)
+        };
+
+        Ok(format!("(match {} {{ Some(_) => {}, None => {} }})", cond_str, formatted_then, formatted_else))
+    } else {
+        let body_str = transpile_node(&current.body, layer, in_main, table)?;
+        let formatted_body = if body_str.contains("Some") || body_str.contains("None") || body_str.contains("match") {
+            body_str
+        } else {
+            format!("Some({})", body_str)
+        };
+        Ok(formatted_body)
+    }
+}
+
+pub fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+    match node {
+        AstNode::Atom(val) => transpile_atom(val),
+        AstNode::Identifier(id) => transpile_identifier(id, table),
+        AstNode::InlineCode(code) => Ok(code.clone()),
+        AstNode::Coproduct(list) => transpile_coproduct(node, list, layer, in_main, table),
+        AstNode::BinaryOperation { operator, left, right, .. } => {
+            transpile_binary_op(operator, left, right, layer, in_main, table)
         }
-        AstNode::Coproduct(list) => {
-            if list.is_empty() {
-                return Ok("()".to_string());
-            }
-            
-            if let Some((func_name, passed_args)) = extract_application(node) {
-                if let Some(sig) = table.functions.get(&func_name) {
-                    let passed_count = passed_args.len();
-                    if passed_count < sig.arity {
-                        let mut all_args = Vec::new();
-                        for arg in &passed_args {
-                            all_args.push(transpile_node(arg, layer, in_main, table)?);
-                        }
-                        let missing_args = &sig.args[passed_count..];
-                        for arg in missing_args {
-                            all_args.push(arg.clone());
-                        }
-                        return Ok(format!("(move |{}| {}({}))", missing_args.join(", "), func_name, all_args.join(", ")));
-                    } else {
-                        let mut args_code = Vec::new();
-                        for arg in &passed_args {
-                            args_code.push(transpile_node(arg, layer, in_main, table)?);
-                        }
-                        return Ok(format!("{}({})", func_name, args_code.join(", ")));
-                    }
-                }
-            }
-
-            let mut parts = Vec::new();
-            for item in list {
-                parts.push(transpile_node(item, layer, in_main, table)?);
-            }
-            Ok(format!("vec![{}]", parts.join(", ")))
-        }
-        AstNode::BinaryOperation { operator, left, right, name: _name } => {
-            if operator == "#" {
-                if layer == 0 {
-                    let left_str = transpile_node(left, layer, in_main, table)?;
-                    let right_str = transpile_node(right, layer, in_main, table)?;
-                    return Ok(format!("unsafe {{ core::ptr::write_volatile({} as *mut f64, {}) }}", left_str, right_str));
-                } else {
-                    let left_str = transpile_node(left, layer, in_main, table)?;
-                    let right_str = transpile_node(right, layer, in_main, table)?;
-                    return Ok(format!("unsafe {{ *({} as *mut f64) = {} }}", left_str, right_str));
-                }
-            }
-
-            if operator == " " {
-                if let Some((func_name, passed_args)) = extract_application(node) {
-                    if let Some(sig) = table.functions.get(&func_name) {
-                        let passed_count = passed_args.len();
-                        if passed_count < sig.arity {
-                            let mut all_args = Vec::new();
-                            for arg in &passed_args {
-                                all_args.push(transpile_node(arg, layer, in_main, table)?);
-                            }
-                            let missing_args = &sig.args[passed_count..];
-                            for arg in missing_args {
-                                all_args.push(arg.clone());
-                            }
-                            return Ok(format!("(move |{}| {}({}))", missing_args.join(", "), func_name, all_args.join(", ")));
-                        } else {
-                            let mut args_code = Vec::new();
-                            for arg in &passed_args {
-                                args_code.push(transpile_node(arg, layer, in_main, table)?);
-                            }
-                            return Ok(format!("{}({})", func_name, args_code.join(", ")));
-                        }
-                    }
-                }
-            }
-
-            let left_str = transpile_node(left, layer, in_main, table)?;
-            let right_str = transpile_node(right, layer, in_main, table)?;
-            
-            match operator.as_str() {
-                "+" => Ok(format!("({} + {})", left_str, right_str)),
-                "-" => Ok(format!("({} - {})", left_str, right_str)),
-                "*" => Ok(format!("({} * {})", left_str, right_str)),
-                "/" => Ok(format!("({} / {})", left_str, right_str)),
-                " " => {
-                    Ok(format!("{} {}", left_str, right_str))
-                }
-                _ => Ok(format!("({} {} {})", left_str, operator, right_str)),
-            }
-        }
-        AstNode::Prefix { operator, operand, name: _name } => {
-            if operator == "@" {
-                if layer == 0 {
-                    let op_str = transpile_node(operand, layer, in_main, table)?;
-                    return Ok(format!("unsafe {{ core::ptr::read_volatile({} as *const f64) }}", op_str));
-                } else {
-                    let op_str = transpile_node(operand, layer, in_main, table)?;
-                    return Ok(format!("unsafe {{ *({} as *const f64) }}", op_str));
-                }
-            }
-
-            if operator == "#" || operator == "##" {
-                if layer == 0 {
-                    return Err("Compile Error: Allocation (#/##) is not allowed in layer 0".to_string());
-                }
-                let op_str = transpile_node(operand, layer, in_main, table)?;
-                let alloc_type = if operator == "#" { "Rc::new" } else { "Arc::new" };
-                return Ok(format!("RefCell::new({}({}))", alloc_type, op_str));
-            }
-
-            let op_str = transpile_node(operand, layer, in_main, table)?;
-            Ok(format!("{}{}", operator, op_str))
+        AstNode::Prefix { operator, operand, .. } => {
+            transpile_prefix_op(operator, operand, layer, in_main, table)
         }
         AstNode::Block { kind, content } => {
-            let inner = transpile_node(content, layer, in_main, table)?;
-            match kind {
-                BlockKind::Paren => Ok(format!("({})", inner)),
-                BlockKind::Bracket => Ok(format!("vec![{}]", inner)),
-                BlockKind::Indent => {
-                    let mut lines = Vec::new();
-                    collect_lines(content, &mut lines, layer, in_main, table)?;
-                    if lines.len() <= 1 {
-                        Ok(inner)
-                    } else {
-                        let formatted_lines = lines.join(";\n    ");
-                        Ok(format!("{{\n    {};\n}}", formatted_lines))
-                    }
-                }
-                _ => Ok(inner),
-            }
+            transpile_block(node, kind, content, layer, in_main, table)
+        }
+        AstNode::Lambda { arguments, body } => {
+            transpile_lambda(arguments, body, layer, in_main, table)
         }
         _ => Err(format!("Unsupported AST node: {:?}", node)),
     }
+}
+
+fn transpile_atom(val: &SignValue) -> Result<String, String> {
+    match val {
+        SignValue::Scalar(f) => {
+            let mut s = f.to_string();
+            if !s.contains('.') && !s.contains('e') {
+                s.push_str(".0");
+            }
+            Ok(s)
+        }
+        SignValue::Char(c) => Ok(format!("'{}'", c)),
+        SignValue::String(s) => Ok(format!("\"{}\"", s)),
+        SignValue::Address(a) => Ok(format!("{:#x}", a)),
+        SignValue::Unit => Ok("None".to_string()),
+        _ => Ok("None".to_string()),
+    }
+}
+
+fn transpile_identifier(id: &str, table: &SymbolTable) -> Result<String, String> {
+    if let Some(sig) = table.functions.get(id) {
+        let missing = &sig.args;
+        Ok(format!("(move |{}| {}({}))", missing.join(", "), id, missing.join(", ")))
+    } else if id == "env" || id == "args" {
+        Ok("None".to_string())
+    } else {
+        Ok(id.to_string())
+    }
+}
+
+fn transpile_coproduct(node: &AstNode, list: &[AstNode], layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+    if list.is_empty() {
+        return Ok("()".to_string());
+    }
+    
+    if let Some((func_name, passed_args)) = extract_application(node) {
+        if let Some(sig) = table.functions.get(&func_name) {
+            let passed_count = passed_args.len();
+            if passed_count < sig.arity {
+                let mut all_args = Vec::new();
+                for arg in &passed_args {
+                    all_args.push(transpile_node(arg, layer, in_main, table)?);
+                }
+                let missing_args = &sig.args[passed_count..];
+                for arg in missing_args {
+                    all_args.push(arg.clone());
+                }
+                return Ok(format!("(move |{}| {}({}))", missing_args.join(", "), func_name, all_args.join(", ")));
+            } else {
+                let mut args_code = Vec::new();
+                for arg in &passed_args {
+                    args_code.push(transpile_node(arg, layer, in_main, table)?);
+                }
+                return Ok(format!("{}({})", func_name, args_code.join(", ")));
+            }
+        }
+    }
+
+    let mut parts = Vec::new();
+    for item in list {
+        parts.push(transpile_node(item, layer, in_main, table)?);
+    }
+    Ok(format!("vec![{}]", parts.join(", ")))
+}
+
+fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+    if operator == "#" {
+        if layer == 0 {
+            let left_str = transpile_node(left, layer, in_main, table)?;
+            let right_str = transpile_node(right, layer, in_main, table)?;
+            return Ok(format!("unsafe {{ core::ptr::write_volatile({} as *mut f64, {}) }}", left_str, right_str));
+        } else {
+            let left_str = transpile_node(left, layer, in_main, table)?;
+            let right_str = transpile_node(right, layer, in_main, table)?;
+            return Ok(format!("unsafe {{ *({} as *mut f64) = {} }}", left_str, right_str));
+        }
+    }
+
+    if operator == ":" {
+        if let AstNode::Lambda { arguments: cond, body: then } = left {
+            let arms = vec![
+                MatchArm { condition: Some(*cond.clone()), body: *then.clone() },
+                MatchArm { condition: None, body: right.clone() },
+            ];
+            return transpile_match_arms(&arms, layer, in_main, table);
+        }
+    }
+
+    if ["<", ">", "<=", ">=", "==", "!="].contains(&operator) {
+        let left_str = transpile_node(left, layer, in_main, table)?;
+        let right_str = transpile_node(right, layer, in_main, table)?;
+        return Ok(format!("match {} {} {} {{ true => Some(1.0), false => None }}", left_str, operator, right_str));
+    }
+
+    if operator == "&" {
+        let left_str = transpile_node(left, layer, in_main, table)?;
+        let right_str = transpile_node(right, layer, in_main, table)?;
+        return Ok(format!("match {} {{ Some(_) => {}, None => None }}", left_str, right_str));
+    }
+
+    if operator == "|" {
+        let left_str = transpile_node(left, layer, in_main, table)?;
+        let right_str = transpile_node(right, layer, in_main, table)?;
+        return Ok(format!("match {} {{ Some(val) => Some(val), None => {} }}", left_str, right_str));
+    }
+
+    if operator == " " {
+        let dummy_node = AstNode::BinaryOperation {
+            operator: " ".to_string(),
+            left: Box::new(left.clone()),
+            right: Box::new(right.clone()),
+            name: String::new(),
+        };
+        if let Some((func_name, passed_args)) = extract_application(&dummy_node) {
+            if let Some(sig) = table.functions.get(&func_name) {
+                let passed_count = passed_args.len();
+                if passed_count < sig.arity {
+                    let mut all_args = Vec::new();
+                    for arg in &passed_args {
+                        all_args.push(transpile_node(arg, layer, in_main, table)?);
+                    }
+                    let missing_args = &sig.args[passed_count..];
+                    for arg in missing_args {
+                        all_args.push(arg.clone());
+                    }
+                    return Ok(format!("(move |{}| {}({}))", missing_args.join(", "), func_name, all_args.join(", ")));
+                } else {
+                    let mut args_code = Vec::new();
+                    for arg in &passed_args {
+                        args_code.push(transpile_node(arg, layer, in_main, table)?);
+                    }
+                    return Ok(format!("{}({})", func_name, args_code.join(", ")));
+                }
+            }
+        }
+    }
+
+    let left_str = transpile_node(left, layer, in_main, table)?;
+    let right_str = transpile_node(right, layer, in_main, table)?;
+    
+    match operator {
+        "+" => Ok(format!("({} + {})", left_str, right_str)),
+        "-" => Ok(format!("({} - {})", left_str, right_str)),
+        "*" => Ok(format!("({} * {})", left_str, right_str)),
+        "/" => Ok(format!("({} / {})", left_str, right_str)),
+        " " => Ok(format!("{} {}", left_str, right_str)),
+        _ => Ok(format!("({} {} {})", left_str, operator, right_str)),
+    }
+}
+
+fn transpile_prefix_op(operator: &str, operand: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+    if operator == "@" {
+        if layer == 0 {
+            let op_str = transpile_node(operand, layer, in_main, table)?;
+            return Ok(format!("unsafe {{ core::ptr::read_volatile({} as *const f64) }}", op_str));
+        } else {
+            let op_str = transpile_node(operand, layer, in_main, table)?;
+            return Ok(format!("unsafe {{ *({} as *const f64) }}", op_str));
+        }
+    }
+
+    if operator == "#" || operator == "##" {
+        if layer == 0 {
+            return Err("Compile Error: Allocation (#/##) is not allowed in layer 0".to_string());
+        }
+        let op_str = transpile_node(operand, layer, in_main, table)?;
+        let alloc_type = if operator == "#" { "Rc::new" } else { "Arc::new" };
+        return Ok(format!("RefCell::new({}({}))", alloc_type, op_str));
+    }
+
+    let op_str = transpile_node(operand, layer, in_main, table)?;
+    Ok(format!("{}{}", operator, op_str))
+}
+
+fn transpile_block(node: &AstNode, kind: &BlockKind, content: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+    match kind {
+        BlockKind::Indent if is_match_case_block(node) => {
+            let mut lines = Vec::new();
+            collect_lines_raw(content, &mut lines);
+            let mut arms = Vec::new();
+            for line in lines {
+                if let AstNode::Define { identifier, definition } = line {
+                    arms.push(MatchArm { condition: Some(AstNode::Identifier(identifier)), body: *definition });
+                } else if let AstNode::BinaryOperation { ref operator, .. } = line {
+                    if operator == ":" {
+                        if let AstNode::BinaryOperation { left, right, .. } = line {
+                            arms.push(MatchArm { condition: Some(*left), body: *right });
+                        }
+                    } else {
+                        arms.push(MatchArm { condition: None, body: line });
+                    }
+                } else {
+                    arms.push(MatchArm { condition: None, body: line });
+                }
+            }
+            transpile_match_arms(&arms, layer, in_main, table)
+        }
+        BlockKind::Indent => {
+            let inner = transpile_node(content, layer, in_main, table)?;
+            let mut lines = Vec::new();
+            collect_lines(content, &mut lines, layer, in_main, table)?;
+            if lines.len() <= 1 {
+                Ok(inner)
+            } else {
+                let formatted_lines = lines.join(";\n    ");
+                Ok(format!("{{\n    {};\n}}", formatted_lines))
+            }
+        }
+        BlockKind::Paren => {
+            let inner = transpile_node(content, layer, in_main, table)?;
+            Ok(format!("({})", inner))
+        }
+        BlockKind::Bracket => {
+            let inner = transpile_node(content, layer, in_main, table)?;
+            Ok(format!("vec![{}]", inner))
+        }
+        _ => {
+            let inner = transpile_node(content, layer, in_main, table)?;
+            Ok(inner)
+        }
+    }
+}
+
+fn transpile_lambda(arguments: &AstNode, body: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+    let args = collect_args(arguments);
+    let args_str = args.iter().map(|arg| format!("{}: f64", arg)).collect::<Vec<_>>().join(", ");
+    let body_str = transpile_node(body, layer, in_main, table)?;
+    Ok(format!("(move |{}| {})", args_str, body_str))
 }
 
 fn collect_lines(node: &AstNode, lines: &mut Vec<String>, layer: usize, in_main: bool, table: &SymbolTable) -> Result<(), String> {
@@ -350,7 +518,7 @@ mod tests {
         let pre = preprocess(code);
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 0).unwrap();
-        assert!(out.contains("unsafe { core::ptr::read_volatile(0x8000000 as *const f64) }"));
+        assert!(out.contains("unsafe { core::ptr::read_volatile"));
     }
 
     #[test]

@@ -367,14 +367,14 @@ peg::parser!{
             / { AstNode::Atom(SignValue::Unit) }
 
         rule atom() -> AstNode
-            = val:string_literal() { AstNode::Atom(SignValue::String(val)) }
+            = "__" { AstNode::Atom(SignValue::Unit) }
+            / "_" { AstNode::Atom(SignValue::Hole) }
+            / val:string_literal() { AstNode::Atom(SignValue::String(val)) }
             / val:inline_code() { AstNode::InlineCode(val) }
             / val:char_literal() { AstNode::Atom(SignValue::Char(val)) }
             / val:address_literal() { AstNode::Atom(SignValue::Address(val)) }
             / val:number_literal() { AstNode::Atom(SignValue::Scalar(val)) }
             / val:identifier_literal() { AstNode::Identifier(val) }
-            / "__" { AstNode::Atom(SignValue::Unit) }
-            / "_" { AstNode::Atom(SignValue::Hole) }
 
         rule string_literal() -> String
             = "`" s:[^'`']* "`" { s.into_iter().collect() }
