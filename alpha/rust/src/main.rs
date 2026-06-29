@@ -8,6 +8,8 @@ pub mod codegen;
 use lexer::preprocess;
 use parser::sign_parser;
 use codegen::transpile_program;
+use std::fs;
+use std::process::Command;
 
 fn main() {
     let source_code_std = r#"
@@ -18,11 +20,8 @@ add : x y ?
 ` 部分適用のテスト
 partial_add : add 10
 
-` 0個引数（高階関数引き渡し）のテスト
-alias_add : add
-
-` 実行
-partial_add 20
+` インラインコードで Rust の println! マクロを呼び出す
+"println!(\"partial_add 20 = {}\", partial_add(20.0))"
 "#;
 
     let source_code_bare = r#"
@@ -34,20 +33,73 @@ register_addr # 100
 "#;
 
     println!("=== Testing Layer 2 (OS Std) ===");
-    run_transpile(source_code_std, 2);
+    run_transpile(source_code_std, 2, "output_std");
 
     println!("\n=== Testing Layer 0 (Bare Metal) ===");
-    run_transpile(source_code_bare, 0);
+    run_transpile(source_code_bare, 0, "output_bare");
 }
 
-fn run_transpile(source: &str, layer: usize) {
+fn run_transpile(source: &str, layer: usize, name: &str) {
     let pre = preprocess(source);
     match sign_parser::program(&pre) {
         Ok(ast) => {
             match transpile_program(&ast, layer) {
                 Ok(rust_code) => {
-                    println!("--- Generated Rust Code ---");
-                    println!("{}", rust_code);
+                    // 1. ファイル書き出し
+                    let rs_filename = format!("{}.rs", name);
+                    if let Err(e) = fs::write(&rs_filename, &rust_code) {
+                        println!("Failed to write file {}: {}", rs_filename, e);
+                        return;
+                    }
+                    println!("Saved to {}", rs_filename);
+
+                    // 2. rustc によるコンパイル
+                    let exe_filename = if cfg!(target_os = "windows") {
+                        format!("{}.exe", name)
+                    } else {
+                        name.to_string()
+                    };
+
+                    println!("Compiling {} ...", rs_filename);
+                    let compile_status = Command::new("rustc")
+                        .arg(&rs_filename)
+                        .arg("-o")
+                        .arg(&exe_filename)
+                        .status();
+
+                    match compile_status {
+                        Ok(status) if status.success() => {
+                            println!("Compilation successful! Created {}", exe_filename);
+
+                            // 3. バイナリの実行 (layer 2 のみ安全に実行)
+                            if layer == 2 {
+                                println!("Running {} ...", exe_filename);
+                                // Windowsでのパス実行のため、カレントディレクトリを指定して実行
+                                let run_output = Command::new(format!("./{}", name)).output();
+                                match run_output {
+                                    Ok(output) => {
+                                        println!("--- Execution Output ---");
+                                        print!("{}", String::from_utf8_lossy(&output.stdout));
+                                        if !output.stderr.is_empty() {
+                                            println!("--- Execution Error ---");
+                                            print!("{}", String::from_utf8_lossy(&output.stderr));
+                                        }
+                                    }
+                                    Err(e) => {
+                                        println!("Failed to run binary: {}", e);
+                                    }
+                                }
+                            } else {
+                                println!("Skip running (Layer 0 program may crash on OS due to volatile raw pointer access).");
+                            }
+                        }
+                        Ok(status) => {
+                            println!("Compilation failed with status: {}", status);
+                        }
+                        Err(e) => {
+                            println!("Failed to execute rustc: {}", e);
+                        }
+                    }
                 }
                 Err(e) => {
                     println!("Transpilation Error: {}", e);

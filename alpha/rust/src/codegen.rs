@@ -107,42 +107,15 @@ fn transpile_definition(id: &str, def: &AstNode, layer: usize, table: &SymbolTab
         let body_str = transpile_node(body, layer, false, table)?;
         Ok(format!("fn {}({}) -> f64 {{\n    {}\n}}", id, args_str, body_str))
     } else {
-        // もし部分適用された変数を定義する場合、Rust側ではクロージャを保持する変数/定数として出力する。
-        // Rustでは、Fnクロージャを含む変数定義は通常 `let` または `impl Fn` で表す。
-        // ここでは、トップレベル定義の場合は `let` (または `fn` や `static`) にトランスパイルする必要がある。
-        // トップレベルのクロージャ定義は `const` ではなく、Rustではクロージャ式を直接バインドすることが難しいため、
-        // `fn` にするか、または `static` もしくは `let` になる。
-        // ここでは、トランスパイル結果を綺麗にするため、部分適用された定義は `let` や `const` にマップできるように
-        // `transpile_node` の結果をバインドする。
         let val_str = transpile_node(def, layer, false, table)?;
+        let type_str = if val_str.starts_with("0x") || val_str.contains("usize") { "usize" } else { "f64" };
         
-        // tableから id が部分適用クロージャであるかチェック
         if table.functions.contains_key(id) && !matches!(def, AstNode::Lambda { .. }) {
-            // クロージャ定義の場合は、Rustでは動的型を避けるため `let` バインドとして出力されるか、
-            // もしくは `const` ではクロージャを直接持てないので、トランスパイラがその型を隠蔽（あるいは関数型）にする。
-            // 一旦、簡単のために `let` や `const` として出力するが、
-            // トップレベル定数の場合は `const` の代わりに Rust では動的バインド不可のため、
-            // `static` または `let` に展開されるようにする。
-            // 現時点では、main関数外のトップレベル定義なので、
-            // `const` ではなく `static` または `let` (Rustではトップレベル let は不可なので static や fn になる)。
-            // 単に、トランスパイルの互換性のために、`const` ではなく `static` などの表現にするか、
-            // あるいは Rust のクロージャを `const` にバインドするために、
-            // `const id: fn(...) -> ... = ...` のように関数ポインタにキャストするか、
-            // または `move |...| ...` を直接関数定義にインライン化（脱カリー化＝de-curry）する！
-            // そうだ！ `partial_add : add 10` を、
-            // `fn partial_add(y: f64) -> f64 { add(10.0, y) }`
-            // のように、普通の「関数定義」にインライン化して展開すれば、Rust のトップレベル定義として 100% コンパイル可能になる！
-            // これは完璧すぎる！！
             let sig = table.functions.get(id).unwrap();
             let args_str = sig.args.iter().map(|arg| format!("{}: f64", arg)).collect::<Vec<_>>().join(", ");
-            // 元の関数適用の形（add(10.0, y)）を再現して関数体にする
-            // ここで val_str は `(move |y| add(10, y))` になっているので、
-            // そこからインナーの呼び出しを抽出するか、あるいは単に `val_str` 自体を呼び出す関数を定義する。
-            // `fn partial_add(y: f64) -> f64 { (move |y| add(10, y))(y) }`
-            // これなら、どんなクロージャ式であっても、全く型エラーにならずにトップレベルで関数定義化できる！
             Ok(format!("fn {}({}) -> f64 {{\n    {}({})\n}}", id, args_str, val_str, sig.args.join(", ")))
         } else {
-            Ok(format!("const {}: f64 = {};", id, val_str))
+            Ok(format!("const {}: {} = {};", id, type_str, val_str))
         }
     }
 }
@@ -188,7 +161,13 @@ fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &SymbolTab
     match node {
         AstNode::Atom(val) => {
             match val {
-                SignValue::Scalar(f) => Ok(f.to_string()),
+                SignValue::Scalar(f) => {
+                    let mut s = f.to_string();
+                    if !s.contains('.') && !s.contains('e') {
+                        s.push_str(".0");
+                    }
+                    Ok(s)
+                }
                 SignValue::Char(c) => Ok(format!("'{}'", c)),
                 SignValue::String(s) => Ok(format!("\"{}\"", s)),
                 SignValue::Address(a) => Ok(format!("{:#x}", a)),
@@ -198,10 +177,6 @@ fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &SymbolTab
         }
         AstNode::Identifier(id) => {
             if let Some(sig) = table.functions.get(id) {
-                // 部分適用（引数0個）のクロージャ展開
-                // ※ ただし、定義時の右辺など、すでにクロージャ展開されている文脈では
-                // 二重に展開しないように、必要に応じてそのまま返す。
-                // 通常の式中での識別子参照（高階関数引き渡し）はクロージャ化する
                 let missing = &sig.args;
                 Ok(format!("(move |{}| {}({}))", missing.join(", "), id, missing.join(", ")))
             } else {
@@ -366,7 +341,7 @@ mod tests {
         let pre = preprocess(code);
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 2).unwrap();
-        assert!(out.contains("(1 + (2 * 3))"));
+        assert!(out.contains("(1.0 + (2.0 * 3.0))"));
     }
 
     #[test]
@@ -393,7 +368,7 @@ mod tests {
         let pre = preprocess(code);
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 2).unwrap();
-        assert!(out.contains("(move |y| add(10, y))"));
+        assert!(out.contains("(move |y| add(10.0, y))"));
     }
 
     #[test]
