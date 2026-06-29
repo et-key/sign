@@ -79,6 +79,19 @@ list_len : @c
 ` IO領域（0x0001番地）へ入力値 100.0 を送信してカスケード処理を開始する
 route_msg 1.0 100.0
 
+` === 値ベースの比較（単位元ルール）と3項チェイン評価のテスト ===
+val_cmp_non_unit : 2.0 < 5.0
+val_cmp_unit : 1.0 < 5.0
+val_cmp_chain : 1.0 < 3.0 < 5.0
+val_cmp_chain_fail : 2.0 < 1.0 < 5.0
+
+` === Hole（_）による静的脱糖部分適用のテスト ===
+hole_partial : add _ 5.0
+hole_partial_result : hole_partial 10.0
+
+hole_op : _ + 100.0
+hole_op_result : hole_op 50.0
+
 ` 結果を出力する
 "println!(\"partial_add 20 = {}\", @{partial_add 20.0})"
 "println!(\"cond_result = {:?}\", @{cond_result})"
@@ -92,6 +105,12 @@ route_msg 1.0 100.0
 "println!(\"high_order_result = {}\", @{high_order_result})"
 "println!(\"list_len = {}\", @{list_len})"
 "println!(\"Result from 4-core pipeline = {}\", res_rx.recv().unwrap())"
+"println!(\"hole_partial_result = {}\", @{hole_partial_result})"
+"println!(\"hole_op_result = {}\", @{hole_op_result})"
+"println!(\"val_cmp_non_unit = {:?}\", @{val_cmp_non_unit})"
+"println!(\"val_cmp_unit = {:?}\", @{val_cmp_unit})"
+"println!(\"val_cmp_chain = {:?}\", @{val_cmp_chain})"
+"println!(\"val_cmp_chain_fail = {:?}\", @{val_cmp_chain_fail})"
 "#;
 
     let source_code_bare = r#"
