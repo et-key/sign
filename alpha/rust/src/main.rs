@@ -75,6 +75,13 @@ list_loop : x ~y ?
 list_loop 1.0 2.0 3.0 4.0 5.0
 list_len : @c
 
+` === Hole（_）による静的脱糖部分適用のテスト ===
+hole_partial : add _ 5.0
+hole_partial_result : hole_partial 10.0
+
+hole_op : _ + 100.0
+hole_op_result : hole_op 50.0
+
 ` 結果を出力する
 "println!(\"partial_add 20 = {}\", @{partial_add 20.0})"
 "println!(\"cond_result = {:?}\", @{cond_result})"
@@ -87,6 +94,8 @@ list_len : @c
 "println!(\"reverse_result = {}\", @{reverse_result})"
 "println!(\"high_order_result = {}\", @{high_order_result})"
 "println!(\"list_len = {}\", @{list_len})"
+"println!(\"hole_partial_result = {}\", @{hole_partial_result})"
+"println!(\"hole_op_result = {}\", @{hole_op_result})"
 "#;
 
     let source_code_bare = r#"

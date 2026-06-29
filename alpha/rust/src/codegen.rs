@@ -120,15 +120,17 @@ fn register_definition(table: &mut SymbolTable, id: &str, def: &AstNode) {
 }
 
 pub fn transpile_program(ast: &[AstNode], layer: usize) -> Result<String, String> {
-    let table = build_symbol_table(ast);
+    // まずプログラム全体の Hole をコンパイル前に静的脱糖する
+    let desugared_ast: Vec<AstNode> = ast.iter().map(|node| desugar_holes(node)).collect();
+    let table = build_symbol_table(&desugared_ast);
     let mut top_level_code = String::new();
     
     if layer == 2 {
-        top_level_code.push_str("#![allow(unused_parens)]\n#![allow(unused_variables)]\n#![allow(non_upper_case_globals)]\n\n");
+        top_level_code.push_str("#![allow(unused_parens)]\n#![allow(unused_variables)]\n#![allow(non_upper_case_globals)]\n#![allow(dead_code)]\n\n");
     }
     
     let mut main_statements = Vec::new();
-    for node in ast {
+    for node in &desugared_ast {
         match node {
             AstNode::Define { identifier, definition } => {
                 if let AstNode::Lambda { .. } = &**definition {
@@ -568,6 +570,13 @@ fn extract_applied_func_and_args(node: &AstNode, args: &mut Vec<AstNode>) -> Opt
 // ----------------------------------------------------
 
 pub fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+    if has_hole(node) {
+        let desugared = desugar_holes(node);
+        if &desugared != node {
+            return transpile_node(&desugared, layer, in_main, table);
+        }
+    }
+
     match node {
         AstNode::Scalar(f) => {
             let mut s = f.to_string();
@@ -1194,6 +1203,114 @@ fn is_high_order_function(sig: &FuncSignature) -> bool {
         }
     }
     false
+}
+
+fn has_hole(node: &AstNode) -> bool {
+    match node {
+        AstNode::Hole => true,
+        AstNode::Coproduct(list) => list.iter().any(has_hole),
+        AstNode::Block { content, .. } => has_hole(content),
+        AstNode::Prefix { operand, .. } => has_hole(operand),
+        AstNode::Postfix { operand, .. } => has_hole(operand),
+        AstNode::BinaryOperation { left, right, .. } => has_hole(left) || has_hole(right),
+        AstNode::Lambda { body, .. } => has_hole(body),
+        AstNode::Define { definition, .. } => has_hole(definition),
+        _ => false,
+    }
+}
+
+fn desugar_holes(node: &AstNode) -> AstNode {
+    if !has_hole(node) {
+        return node.clone();
+    }
+
+    if let AstNode::Define { identifier, definition } = node {
+        return AstNode::Define {
+            identifier: identifier.clone(),
+            definition: Box::new(desugar_holes(definition)),
+        };
+    }
+
+    if let AstNode::Lambda { arguments, body } = node {
+        return AstNode::Lambda {
+            arguments: arguments.clone(),
+            body: Box::new(desugar_holes(body)),
+        };
+    }
+
+    let mut vars = Vec::new();
+    let desugared_body = replace_holes_with_vars(node, &mut vars);
+    
+    if vars.is_empty() {
+        return desugared_body;
+    }
+
+    let args_node = if vars.len() == 1 {
+        AstNode::Identifier(vars[0].clone())
+    } else {
+        AstNode::Coproduct(vars.into_iter().map(AstNode::Identifier).collect())
+    };
+
+    AstNode::Lambda {
+        arguments: Box::new(args_node),
+        body: Box::new(desugared_body),
+    }
+}
+
+fn replace_holes_with_vars(node: &AstNode, vars: &mut Vec<String>) -> AstNode {
+    match node {
+        AstNode::Hole => {
+            let var_name = format!("_p{}", vars.len());
+            vars.push(var_name.clone());
+            AstNode::Identifier(var_name)
+        }
+        AstNode::Coproduct(list) => {
+            let mut new_list = Vec::new();
+            for item in list {
+                new_list.push(replace_holes_with_vars(item, vars));
+            }
+            AstNode::Coproduct(new_list)
+        }
+        AstNode::Block { kind, content } => {
+            AstNode::Block {
+                kind: kind.clone(),
+                content: Box::new(replace_holes_with_vars(content, vars)),
+            }
+        }
+        AstNode::Prefix { operator, operand, name } => {
+            AstNode::Prefix {
+                operator: operator.clone(),
+                operand: Box::new(replace_holes_with_vars(operand, vars)),
+                name: name.clone(),
+            }
+        }
+        AstNode::Postfix { operator, operand, name } => {
+            AstNode::Postfix {
+                operator: operator.clone(),
+                operand: Box::new(replace_holes_with_vars(operand, vars)),
+                name: name.clone(),
+            }
+        }
+        AstNode::BinaryOperation { operator, left, right, name } => {
+            AstNode::BinaryOperation {
+                operator: operator.clone(),
+                left: Box::new(replace_holes_with_vars(left, vars)),
+                right: Box::new(replace_holes_with_vars(right, vars)),
+                name: name.clone(),
+            }
+        }
+        AstNode::Lambda { .. } => {
+            // ネストした Lambda はこのレベルでは置換せず、脱糖して丸ごと返す
+            desugar_holes(node)
+        }
+        AstNode::Define { identifier, definition } => {
+            AstNode::Define {
+                identifier: identifier.clone(),
+                definition: Box::new(replace_holes_with_vars(definition, vars)),
+            }
+        }
+        _ => node.clone(),
+    }
 }
 
 #[cfg(test)]
