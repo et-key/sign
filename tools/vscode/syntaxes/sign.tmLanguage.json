@@ -21,7 +21,7 @@
       "patterns": [
         {
           "name": "comment.line.sign",
-          "match": "^[ \\t]*`.*$"
+          "match": "^`.*$"
         }
       ]
     },
