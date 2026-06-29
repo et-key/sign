@@ -58,6 +58,23 @@ compose_result : (add 1.0) (mul 2.0) 5.0
 ` 5.0 に (+1.0) する -> 6.0
 reverse_result : 5.0 (add 1.0)
 
+` === 高階関数 ＆ 前置$サスペンド・遅延評価のテスト ===
+` 関数 f を受け取って 5.0 を適用する
+apply_five : f ?
+	(@f) 5.0
+
+` (add 10.0) をサスペンドして高階関数に引数として渡す
+high_order_result : apply_five ($(add 10.0))
+
+` === 可変長(Rest)引数とスプレッド展開再帰のテスト ===
+c : #0.0
+list_loop : x ~y ?
+	c # (@c) + 1.0
+	list_loop y~
+
+list_loop 1.0 2.0 3.0 4.0 5.0
+list_len : @c
+
 ` 結果を出力する
 "println!(\"partial_add 20 = {}\", @{partial_add 20.0})"
 "println!(\"cond_result = {:?}\", @{cond_result})"
@@ -68,6 +85,8 @@ reverse_result : 5.0 (add 1.0)
 "println!(\"concat_result = {:?}\", @{concat_result})"
 "println!(\"compose_result = {}\", @{compose_result})"
 "println!(\"reverse_result = {}\", @{reverse_result})"
+"println!(\"high_order_result = {}\", @{high_order_result})"
+"println!(\"list_len = {}\", @{list_len})"
 "#;
 
     let source_code_bare = r#"
@@ -87,6 +106,8 @@ register_addr # 100
 
 fn run_transpile(source: &str, layer: usize, name: &str) {
     let pre = preprocess(source);
+    // デバッグ出力
+    println!("Preprocessed Source:\n{}", pre);
     match sign_parser::program(&pre) {
         Ok(ast) => {
             match transpile_program(&ast, layer) {
