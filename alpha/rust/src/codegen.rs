@@ -1,6 +1,5 @@
 // alpha/rust/src/codegen.rs
 use crate::ast::{AstNode, BlockKind, PointFreeKind};
-use crate::runtime::SignValue;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
@@ -349,7 +348,7 @@ fn collect_coproduct_items(node: &AstNode, items: &mut Vec<AstNode>) {
 
 fn resolve_coproduct(list: &[AstNode], table: &SymbolTable) -> Result<AstNode, String> {
     if list.is_empty() {
-        return Ok(AstNode::Atom(SignValue::Unit));
+        return Ok(AstNode::Unit);
     }
     let mut items = list.to_vec();
 
@@ -444,7 +443,18 @@ fn extract_applied_func_and_args(node: &AstNode, args: &mut Vec<AstNode>) -> Opt
 
 pub fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
     match node {
-        AstNode::Atom(val) => transpile_atom(val),
+        AstNode::Scalar(f) => {
+            let mut s = f.to_string();
+            if !s.contains('.') && !s.contains('e') {
+                s.push_str(".0");
+            }
+            Ok(s)
+        }
+        AstNode::Char(c) => Ok(format!("'{}'", c)),
+        AstNode::String(s) => Ok(format!("\"{}\"", s)),
+        AstNode::Address(a) => Ok(format!("{:#x}", a)),
+        AstNode::Unit => Ok("None".to_string()),
+        AstNode::Hole => Ok("None".to_string()),
         AstNode::Identifier(id) => transpile_identifier(id, table),
         AstNode::InlineCode(code) => Ok(code.clone()),
         AstNode::Coproduct(list) => transpile_coproduct(node, list, layer, in_main, table),
@@ -462,23 +472,6 @@ pub fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &Symbo
         }
         AstNode::PointFree(kind) => transpile_point_free(kind, layer, in_main, table),
         _ => Err(format!("Unsupported AST node: {:?}", node)),
-    }
-}
-
-fn transpile_atom(val: &SignValue) -> Result<String, String> {
-    match val {
-        SignValue::Scalar(f) => {
-            let mut s = f.to_string();
-            if !s.contains('.') && !s.contains('e') {
-                s.push_str(".0");
-            }
-            Ok(s)
-        }
-        SignValue::Char(c) => Ok(format!("'{}'", c)),
-        SignValue::String(s) => Ok(format!("\"{}\"", s)),
-        SignValue::Address(a) => Ok(format!("{:#x}", a)),
-        SignValue::Unit => Ok("None".to_string()),
-        _ => Ok("None".to_string()),
     }
 }
 

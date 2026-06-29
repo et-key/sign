@@ -1,6 +1,4 @@
-// alpha/rust/src/parser.rs
 use crate::ast::{AstNode, BlockKind};
-use crate::runtime::SignValue;
 
 peg::parser!{
     pub grammar sign_parser() for str {
@@ -384,16 +382,16 @@ peg::parser!{
 
         rule block_contents_opt() -> AstNode
             = contents:block_contents() { contents }
-            / { AstNode::Atom(SignValue::Unit) }
+            / { AstNode::Unit }
 
         rule atom() -> AstNode
-            = "__" { AstNode::Atom(SignValue::Unit) }
-            / "_" { AstNode::Atom(SignValue::Hole) }
-            / val:string_literal() { AstNode::Atom(SignValue::String(val)) }
+            = "__" { AstNode::Unit }
+            / "_" { AstNode::Hole }
+            / val:string_literal() { AstNode::String(val) }
             / val:inline_code() { AstNode::InlineCode(val) }
-            / val:char_literal() { AstNode::Atom(SignValue::Char(val)) }
-            / val:address_literal() { AstNode::Atom(SignValue::Address(val)) }
-            / val:number_literal() { AstNode::Atom(SignValue::Scalar(val)) }
+            / val:char_literal() { AstNode::Char(val) }
+            / val:address_literal() { AstNode::Address(val) }
+            / val:number_literal() { AstNode::Scalar(val) }
             / val:identifier_literal() { AstNode::Identifier(val) }
 
         rule string_literal() -> String

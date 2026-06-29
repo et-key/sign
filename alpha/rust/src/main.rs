@@ -1,5 +1,4 @@
 // alpha/rust/src/main.rs
-pub mod runtime;
 pub mod ast;
 pub mod lexer;
 pub mod parser;

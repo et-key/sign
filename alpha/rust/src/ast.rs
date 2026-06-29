@@ -1,5 +1,4 @@
 // alpha/rust/src/ast.rs
-use crate::runtime::SignValue;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BlockKind {
@@ -20,7 +19,12 @@ pub enum PointFreeKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AstNode {
-    Atom(SignValue),
+    Scalar(f64),
+    Char(char),
+    String(String),
+    Address(usize),
+    Unit,
+    Hole,
     Identifier(String),
     InlineCode(String),
     Block {
