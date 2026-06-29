@@ -337,6 +337,7 @@ peg::parser!{
             = "(" whitespace() contents:block_contents_opt() whitespace() ")" {
                 AstNode::Block { kind: BlockKind::Paren, content: Box::new(contents) }
             }
+            / "[" whitespace() node:point_free() whitespace() "]" { node }
             / "[" whitespace() contents:block_contents_opt() whitespace() "]" {
                 AstNode::Block { kind: BlockKind::Bracket, content: Box::new(contents) }
             }
@@ -348,6 +349,25 @@ peg::parser!{
             }
             / "\x02" whitespace() contents:block_contents() whitespace() "\x03" {
                 AstNode::Block { kind: BlockKind::Indent, content: Box::new(contents) }
+            }
+
+        rule point_free() -> AstNode
+            = op:operator_symbol() whitespace() right:expression() whitespace() "," {
+                AstNode::PointFree(crate::ast::PointFreeKind::BinaryOpMap(op, Box::new(right)))
+            }
+            / op:operator_symbol() whitespace() "_" {
+                AstNode::PointFree(crate::ast::PointFreeKind::PrefixOp(op))
+            }
+            / "_" whitespace() op:operator_symbol() {
+                AstNode::PointFree(crate::ast::PointFreeKind::PostfixOp(op))
+            }
+            / op:operator_symbol() {
+                AstNode::PointFree(crate::ast::PointFreeKind::BinaryOp(op))
+            }
+
+        rule operator_symbol() -> String
+            = op:$("+" / "-" / "*" / "/" / "%" / "^" / "<<" / ">>" / "||" / ";;" / "&&" / "==" / "!=" / "<=" / ">=" / "<" / ">" / "!" / "~" / "@" / "#" / "&" / "|" / ":") {
+                op.to_string()
             }
 
         rule block_contents() -> AstNode

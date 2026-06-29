@@ -11,10 +11,18 @@ pub enum BlockKind {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum PointFreeKind {
+    BinaryOp(String),                  // [+]
+    BinaryOpMap(String, Box<AstNode>), // [* 2,] （演算子と右オペランド）
+    PrefixOp(String),                  // [!_]
+    PostfixOp(String),                 // [_!]
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum AstNode {
     Atom(SignValue),
     Identifier(String),
-    InlineCode(String), // 追加: ダブルクォーテーションのインラインコード
+    InlineCode(String),
     Block {
         kind: BlockKind,
         content: Box<AstNode>,
@@ -48,4 +56,5 @@ pub enum AstNode {
     MatchCase {
         cases: Vec<(Option<AstNode>, AstNode)>,
     },
+    PointFree(PointFreeKind),
 }

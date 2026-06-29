@@ -1,5 +1,5 @@
 // alpha/rust/src/codegen.rs
-use crate::ast::{AstNode, BlockKind};
+use crate::ast::{AstNode, BlockKind, PointFreeKind};
 use crate::runtime::SignValue;
 use std::collections::HashMap;
 
@@ -65,16 +65,35 @@ pub fn transpile_program(ast: &[AstNode], layer: usize) -> Result<String, String
     for node in ast {
         match node {
             AstNode::Define { identifier, definition } => {
-                let def_code = transpile_definition(identifier, definition, layer, &table)?;
-                top_level_code.push_str(&def_code);
-                top_level_code.push_str("\n\n");
+                if let AstNode::Lambda { .. } = &**definition {
+                    let def_code = transpile_definition(identifier, definition, layer, &table)?;
+                    top_level_code.push_str(&def_code);
+                    top_level_code.push_str("\n\n");
+                } else if let AstNode::PointFree(_) = &**definition {
+                    let def_code = transpile_definition(identifier, definition, layer, &table)?;
+                    top_level_code.push_str(&def_code);
+                    top_level_code.push_str("\n\n");
+                } else {
+                    let val_str = transpile_node(definition, layer, true, &table)?;
+                    main_statements.push(format!("    let {} = {};", identifier, val_str));
+                }
             }
             AstNode::Prefix { operator, operand, name: _name } if operator == "#" || operator == "##" || operator == "###" => {
                 if let AstNode::Define { identifier, definition } = &**operand {
-                    let def_code = transpile_definition(identifier, definition, layer, &table)?;
-                    top_level_code.push_str("pub ");
-                    top_level_code.push_str(&def_code);
-                    top_level_code.push_str("\n\n");
+                    if let AstNode::Lambda { .. } = &**definition {
+                        let def_code = transpile_definition(identifier, definition, layer, &table)?;
+                        top_level_code.push_str("pub ");
+                        top_level_code.push_str(&def_code);
+                        top_level_code.push_str("\n\n");
+                    } else if let AstNode::PointFree(_) = &**definition {
+                        let def_code = transpile_definition(identifier, definition, layer, &table)?;
+                        top_level_code.push_str("pub ");
+                        top_level_code.push_str(&def_code);
+                        top_level_code.push_str("\n\n");
+                    } else {
+                        let val_str = transpile_node(definition, layer, true, &table)?;
+                        main_statements.push(format!("    let {} = {};", identifier, val_str));
+                    }
                 } else {
                     let expr_code = transpile_node(node, layer, true, &table)?;
                     main_statements.push(format!("    {};", expr_code));
@@ -108,10 +127,25 @@ fn transpile_definition(id: &str, def: &AstNode, layer: usize, table: &SymbolTab
         Ok(format!("fn {}({}) -> f64 {{\n    {}\n}}", id, args_str, body_str))
     } else {
         let val_str = transpile_node(def, layer, false, table)?;
+        
+        // ポイントフリーノードが直接代入されている場合の特別ラッパー
+        if let AstNode::PointFree(kind) = def {
+            match kind {
+                PointFreeKind::BinaryOp(_) | PointFreeKind::BinaryOpMap(_, _) => {
+                    return Ok(format!("// Point-free wrapper\nfn {}(xs: Vec<f64>) -> Vec<f64> {{\n    ({}) (xs)\n}}", id, val_str));
+                }
+                _ => {
+                    return Ok(format!("// Point-free wrapper\nfn {}(x: f64) -> f64 {{\n    ({}) (x)\n}}", id, val_str));
+                }
+            }
+        }
+
         let type_str = if val_str.starts_with("0x") || val_str.contains("usize") {
             "usize"
         } else if val_str.contains("Some") || val_str.contains("None") || val_str.contains("match") {
             "Option<f64>"
+        } else if val_str.contains("vec!") {
+            "Vec<f64>"
         } else {
             "f64"
         };
@@ -204,36 +238,209 @@ fn transpile_match_arms(arms: &[MatchArm], layer: usize, in_main: bool, table: &
         return Ok("None".to_string());
     }
 
-    let current = &arms[0];
-
-    if let Some(cond) = &current.condition {
-        let cond_str = transpile_node(cond, layer, in_main, table)?;
-        let then_str = transpile_node(&current.body, layer, in_main, table)?;
-        let else_str = transpile_match_arms(&arms[1..], layer, in_main, table)?;
-        
-        let formatted_then = if then_str.contains("Some") || then_str.contains("None") || then_str.contains("match") {
-            then_str
-        } else {
-            format!("Some({})", then_str)
-        };
-
-        let formatted_else = if else_str.contains("Some") || else_str.contains("None") || else_str.contains("match") {
-            else_str
-        } else {
-            format!("Some({})", else_str)
-        };
-
-        Ok(format!("(match {} {{ Some(_) => {}, None => {} }})", cond_str, formatted_then, formatted_else))
-    } else {
-        let body_str = transpile_node(&current.body, layer, in_main, table)?;
-        let formatted_body = if body_str.contains("Some") || body_str.contains("None") || body_str.contains("match") {
+    let mut parts = Vec::new();
+    for (i, arm) in arms.iter().enumerate() {
+        let body_str = transpile_node(&arm.body, layer, in_main, table)?;
+        let formatted_body = if body_str.contains("Some") || body_str.contains("None") || body_str.contains("match") || body_str.contains("if ") {
             body_str
         } else {
             format!("Some({})", body_str)
         };
-        Ok(formatted_body)
+
+        if let Some(cond) = &arm.condition {
+            let cond_str = transpile_node(cond, layer, in_main, table)?;
+            let prefix = if i == 0 { "if" } else { "else if" };
+            parts.push(format!("{} {}.is_some() {{\n        {}\n    }}", prefix, cond_str, formatted_body));
+        } else {
+            if i == 0 {
+                return Ok(formatted_body);
+            }
+            parts.push(format!("else {{\n        {}\n    }}", formatted_body));
+        }
+    }
+
+    if arms.last().unwrap().condition.is_some() {
+        parts.push("else {\n        None\n    }".to_string());
+    }
+
+    Ok(format!("(\n    {}\n)", parts.join(" ")))
+}
+
+// ----------------------------------------------------
+// Coproduct Resolver (余積解決器) 実装
+// ----------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum TypeCategory {
+    Lambda,
+    Atom,
+}
+
+fn get_category(node: &AstNode, table: &SymbolTable) -> TypeCategory {
+    match node {
+        AstNode::Block { kind: BlockKind::Paren, content } => get_category(content, table),
+        AstNode::Coproduct(list) => {
+            let flat_items = {
+                let mut flat = Vec::new();
+                for item in list {
+                    collect_coproduct_items(item, &mut flat);
+                }
+                flat
+            };
+            if let Ok(reduced) = resolve_coproduct(&flat_items, table) {
+                if !matches!(reduced, AstNode::Coproduct(_)) {
+                    return get_category(&reduced, table);
+                }
+            }
+            TypeCategory::Atom
+        }
+        AstNode::Lambda { .. } => TypeCategory::Lambda,
+        AstNode::PointFree(_) => TypeCategory::Lambda,
+        AstNode::Identifier(id) => {
+            if table.functions.contains_key(id) {
+                TypeCategory::Lambda
+            } else if id == "print" || id == "println" {
+                TypeCategory::Lambda
+            } else {
+                TypeCategory::Atom
+            }
+        }
+        AstNode::Prefix { operator, .. } if operator == "@" => TypeCategory::Lambda,
+        AstNode::BinaryOperation { operator, name, .. } if operator == " " && name == "resolved" => {
+            let mut applied_args = Vec::new();
+            if let Some(func_name) = extract_applied_func_and_args(node, &mut applied_args) {
+                if let Some(sig) = table.functions.get(&func_name) {
+                    if applied_args.len() < sig.arity {
+                        return TypeCategory::Lambda;
+                    }
+                }
+            }
+            TypeCategory::Atom
+        }
+        _ => TypeCategory::Atom,
     }
 }
+
+fn get_reduction_priority(left: TypeCategory, right: TypeCategory) -> usize {
+    match (left, right) {
+        (TypeCategory::Atom, TypeCategory::Atom) => 3,     // 10.3: concat (リスト連接)
+        (TypeCategory::Lambda, TypeCategory::Lambda) => 2, // 10.2: compose (関数合成)
+        (TypeCategory::Lambda, TypeCategory::Atom) => 1,   // 10.1: apply (関数適用)
+        (TypeCategory::Atom, TypeCategory::Lambda) => 0,   // 10.0: apply_reverse (逆適用)
+    }
+}
+
+fn collect_coproduct_items(node: &AstNode, items: &mut Vec<AstNode>) {
+    match node {
+        AstNode::Coproduct(list) => {
+            for item in list {
+                collect_coproduct_items(item, items);
+            }
+        }
+        AstNode::BinaryOperation { operator, left, right, name } if operator == " " && name != "resolved" => {
+            collect_coproduct_items(left, items);
+            collect_coproduct_items(right, items);
+        }
+        _ => {
+            items.push(node.clone());
+        }
+    }
+}
+
+fn resolve_coproduct(list: &[AstNode], table: &SymbolTable) -> Result<AstNode, String> {
+    if list.is_empty() {
+        return Ok(AstNode::Atom(SignValue::Unit));
+    }
+    let mut items = list.to_vec();
+
+    // 優先度 3 (concat) から 0 (apply_reverse) へ
+    for priority in (0..=3).rev() {
+        let mut i = 0;
+        while i < items.len().saturating_sub(1) {
+            let cat_l = get_category(&items[i], table);
+            let cat_r = get_category(&items[i + 1], table);
+            let p = get_reduction_priority(cat_l, cat_r);
+            if p == priority {
+                let left = items.remove(i);
+                let right = items.remove(i);
+                
+                let reduced = match priority {
+                    3 => {
+                        AstNode::BinaryOperation {
+                            operator: ",".to_string(),
+                            left: Box::new(left),
+                            right: Box::new(right),
+                            name: "concat".to_string(),
+                        }
+                    }
+                    2 => {
+                        // compose (左結合な関数合成): x ? RHS(LHS(x))
+                        let x_id = AstNode::Identifier("comp_arg".to_string());
+                        let apply_left = AstNode::BinaryOperation {
+                            operator: " ".to_string(),
+                            left: Box::new(left),
+                            right: Box::new(x_id.clone()),
+                            name: "resolved".to_string(),
+                        };
+                        let apply_right = AstNode::BinaryOperation {
+                            operator: " ".to_string(),
+                            left: Box::new(right),
+                            right: Box::new(apply_left),
+                            name: "resolved".to_string(),
+                        };
+                        AstNode::Lambda {
+                            arguments: Box::new(x_id),
+                            body: Box::new(apply_right),
+                        }
+                    }
+                    1 => {
+                        AstNode::BinaryOperation {
+                            operator: " ".to_string(),
+                            left: Box::new(left),
+                            right: Box::new(right),
+                            name: "resolved".to_string(),
+                        }
+                    }
+                    0 => {
+                        AstNode::BinaryOperation {
+                            operator: " ".to_string(),
+                            left: Box::new(right),
+                            right: Box::new(left),
+                            name: "resolved".to_string(),
+                        }
+                    }
+                    _ => unreachable!(),
+                };
+                items.insert(i, reduced);
+                i = 0;
+                continue;
+            }
+            i += 1;
+        }
+    }
+
+    if items.len() == 1 {
+        Ok(items.remove(0))
+    } else {
+        Err("Failed to resolve coproduct to a single node".to_string())
+    }
+}
+
+// 解決済み二分木から、適用関数名と適用済み引数リストを再帰的に抽出するヘルパー
+fn extract_applied_func_and_args(node: &AstNode, args: &mut Vec<AstNode>) -> Option<String> {
+    match node {
+        AstNode::Identifier(id) => Some(id.clone()),
+        AstNode::Block { kind: BlockKind::Paren, content } => extract_applied_func_and_args(content, args),
+        AstNode::BinaryOperation { operator, left, right, name } if operator == " " && name == "resolved" => {
+            let func_name = extract_applied_func_and_args(left, args)?;
+            args.push(*right.clone());
+            Some(func_name)
+        }
+        _ => None,
+    }
+}
+
+// ----------------------------------------------------
 
 pub fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
     match node {
@@ -241,8 +448,8 @@ pub fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &Symbo
         AstNode::Identifier(id) => transpile_identifier(id, table),
         AstNode::InlineCode(code) => Ok(code.clone()),
         AstNode::Coproduct(list) => transpile_coproduct(node, list, layer, in_main, table),
-        AstNode::BinaryOperation { operator, left, right, .. } => {
-            transpile_binary_op(operator, left, right, layer, in_main, table)
+        AstNode::BinaryOperation { operator, left, right, name } => {
+            transpile_binary_op(operator, left, right, name, layer, in_main, table)
         }
         AstNode::Prefix { operator, operand, .. } => {
             transpile_prefix_op(operator, operand, layer, in_main, table)
@@ -253,6 +460,7 @@ pub fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &Symbo
         AstNode::Lambda { arguments, body } => {
             transpile_lambda(arguments, body, layer, in_main, table)
         }
+        AstNode::PointFree(kind) => transpile_point_free(kind, layer, in_main, table),
         _ => Err(format!("Unsupported AST node: {:?}", node)),
     }
 }
@@ -289,30 +497,54 @@ fn transpile_coproduct(node: &AstNode, list: &[AstNode], layer: usize, in_main: 
     if list.is_empty() {
         return Ok("()".to_string());
     }
-    
-    if let Some((func_name, passed_args)) = extract_application(node) {
-        if let Some(sig) = table.functions.get(&func_name) {
-            let passed_count = passed_args.len();
-            if passed_count < sig.arity {
-                let mut all_args = Vec::new();
-                for arg in &passed_args {
-                    all_args.push(transpile_node(arg, layer, in_main, table)?);
+
+    // 先頭要素が PointFree の場合は、Coproduct Resolver をバイパスし、
+    // 従来のポイントフリー静的展開ルールを適用する
+    if let AstNode::PointFree(pf_kind) = &list[0] {
+        match pf_kind {
+            PointFreeKind::BinaryOp(op) => {
+                let mut parts = Vec::new();
+                for item in &list[1..] {
+                    parts.push(transpile_node(item, layer, in_main, table)?);
                 }
-                let missing_args = &sig.args[passed_count..];
-                for arg in missing_args {
-                    all_args.push(arg.clone());
+                return Ok(format!("({})", parts.join(&format!(" {} ", op))));
+            }
+            PointFreeKind::BinaryOpMap(op, right_node) => {
+                let right_str = transpile_node(right_node, layer, in_main, table)?;
+                let mut parts = Vec::new();
+                for item in &list[1..] {
+                    let item_str = transpile_node(item, layer, in_main, table)?;
+                    parts.push(format!("({} {} {})", item_str, op, right_str));
                 }
-                return Ok(format!("(move |{}| {}({}))", missing_args.join(", "), func_name, all_args.join(", ")));
-            } else {
-                let mut args_code = Vec::new();
-                for arg in &passed_args {
-                    args_code.push(transpile_node(arg, layer, in_main, table)?);
+                return Ok(format!("vec![{}]", parts.join(", ")));
+            }
+            PointFreeKind::PrefixOp(op) => {
+                if list.len() >= 2 {
+                    let operand_str = transpile_node(&list[1], layer, in_main, table)?;
+                    return Ok(format!("({}{})", op, operand_str));
                 }
-                return Ok(format!("{}({})", func_name, args_code.join(", ")));
+            }
+            PointFreeKind::PostfixOp(op) => {
+                if list.len() >= 2 {
+                    let operand_str = transpile_node(&list[1], layer, in_main, table)?;
+                    return Ok(format!("({}{})", operand_str, op));
+                }
             }
         }
     }
 
+    // それ以外は Coproduct Resolver にかけて単一ノードに縮約
+    let flat_items = {
+        let mut flat = Vec::new();
+        collect_coproduct_items(node, &mut flat);
+        flat
+    };
+    
+    let reduced = resolve_coproduct(&flat_items, table)?;
+    if !matches!(reduced, AstNode::Coproduct(_)) {
+        return transpile_node(&reduced, layer, in_main, table);
+    }
+    
     let mut parts = Vec::new();
     for item in list {
         parts.push(transpile_node(item, layer, in_main, table)?);
@@ -320,7 +552,7 @@ fn transpile_coproduct(node: &AstNode, list: &[AstNode], layer: usize, in_main: 
     Ok(format!("vec![{}]", parts.join(", ")))
 }
 
-fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &str, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
     if operator == "#" {
         if layer == 0 {
             let left_str = transpile_node(left, layer, in_main, table)?;
@@ -352,44 +584,60 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, layer: u
     if operator == "&" {
         let left_str = transpile_node(left, layer, in_main, table)?;
         let right_str = transpile_node(right, layer, in_main, table)?;
-        return Ok(format!("match {} {{ Some(_) => {}, None => None }}", left_str, right_str));
+        return Ok(format!("{}.and({})", left_str, right_str));
     }
 
     if operator == "|" {
         let left_str = transpile_node(left, layer, in_main, table)?;
         let right_str = transpile_node(right, layer, in_main, table)?;
-        return Ok(format!("match {} {{ Some(val) => Some(val), None => {} }}", left_str, right_str));
+        return Ok(format!("{}.or_else(|| {})", left_str, right_str));
     }
 
+    // 中置スペースによる適用/合成の解決
     if operator == " " {
-        let dummy_node = AstNode::BinaryOperation {
-            operator: " ".to_string(),
-            left: Box::new(left.clone()),
-            right: Box::new(right.clone()),
-            name: String::new(),
-        };
-        if let Some((func_name, passed_args)) = extract_application(&dummy_node) {
-            if let Some(sig) = table.functions.get(&func_name) {
-                let passed_count = passed_args.len();
-                if passed_count < sig.arity {
-                    let mut all_args = Vec::new();
-                    for arg in &passed_args {
-                        all_args.push(transpile_node(arg, layer, in_main, table)?);
+        if name == "resolved" {
+            // 関数名と、これまでに適用された全引数リストを抽出
+            let mut applied_args = Vec::new();
+            if let Some(func_name) = extract_applied_func_and_args(left, &mut applied_args) {
+                // 今回適用する right も追加
+                applied_args.push(right.clone());
+                
+                if let Some(sig) = table.functions.get(&func_name) {
+                    let passed_count = applied_args.len();
+                    if passed_count < sig.arity {
+                        // 部分適用！ クロージャ (move |y| func(passed, y)) を出力
+                        let mut all_args_code = Vec::new();
+                        for arg in &applied_args {
+                            all_args_code.push(transpile_node(arg, layer, in_main, table)?);
+                        }
+                        let missing_args = &sig.args[passed_count..];
+                        for arg in missing_args {
+                            all_args_code.push(arg.clone());
+                        }
+                        return Ok(format!("(move |{}| {}({}))", missing_args.join(", "), func_name, all_args_code.join(", ")));
+                    } else {
+                        // 完全適用！ 通常の関数呼び出し func(args...)
+                        let mut args_code = Vec::new();
+                        for arg in &applied_args {
+                            args_code.push(transpile_node(arg, layer, in_main, table)?);
+                        }
+                        return Ok(format!("{}({})", func_name, args_code.join(", ")));
                     }
-                    let missing_args = &sig.args[passed_count..];
-                    for arg in missing_args {
-                        all_args.push(arg.clone());
-                    }
-                    return Ok(format!("(move |{}| {}({}))", missing_args.join(", "), func_name, all_args.join(", ")));
-                } else {
-                    let mut args_code = Vec::new();
-                    for arg in &passed_args {
-                        args_code.push(transpile_node(arg, layer, in_main, table)?);
-                    }
-                    return Ok(format!("{}({})", func_name, args_code.join(", ")));
                 }
             }
+
+            // フォールバック：通常の適用
+            let left_str = transpile_node(left, layer, in_main, table)?;
+            let right_str = transpile_node(right, layer, in_main, table)?;
+            return Ok(format!("{}({})", left_str, right_str));
         }
+
+        let mut flat_items = Vec::new();
+        collect_coproduct_items(left, &mut flat_items);
+        collect_coproduct_items(right, &mut flat_items);
+        
+        let reduced = resolve_coproduct(&flat_items, table)?;
+        return transpile_node(&reduced, layer, in_main, table);
     }
 
     let left_str = transpile_node(left, layer, in_main, table)?;
@@ -400,7 +648,7 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, layer: u
         "-" => Ok(format!("({} - {})", left_str, right_str)),
         "*" => Ok(format!("({} * {})", left_str, right_str)),
         "/" => Ok(format!("({} / {})", left_str, right_str)),
-        " " => Ok(format!("{} {}", left_str, right_str)),
+        "," => Ok(format!("vec![{}, {}]", left_str, right_str)),
         _ => Ok(format!("({} {} {})", left_str, operator, right_str)),
     }
 }
@@ -483,6 +731,25 @@ fn transpile_lambda(arguments: &AstNode, body: &AstNode, layer: usize, in_main: 
     let args_str = args.iter().map(|arg| format!("{}: f64", arg)).collect::<Vec<_>>().join(", ");
     let body_str = transpile_node(body, layer, in_main, table)?;
     Ok(format!("(move |{}| {})", args_str, body_str))
+}
+
+fn transpile_point_free(kind: &PointFreeKind, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+    match kind {
+        PointFreeKind::BinaryOp(op) => {
+            let init_val = if op == "+" || op == "-" { "0.0" } else { "1.0" };
+            Ok(format!("(move |xs: Vec<f64>| xs.into_iter().fold({}, |acc, x| (acc {} x)))", init_val, op))
+        }
+        PointFreeKind::BinaryOpMap(op, right_node) => {
+            let right_str = transpile_node(right_node, layer, in_main, table)?;
+            Ok(format!("(move |xs: Vec<f64>| xs.into_iter().map(|x| (x {} {})).collect::<Vec<_>>())", op, right_str))
+        }
+        PointFreeKind::PrefixOp(op) => {
+            Ok(format!("(move |x: f64| {}x)", op))
+        }
+        PointFreeKind::PostfixOp(op) => {
+            Ok(format!("(move |x: f64| x{})", op))
+        }
+    }
 }
 
 fn collect_lines(node: &AstNode, lines: &mut Vec<String>, layer: usize, in_main: bool, table: &SymbolTable) -> Result<(), String> {

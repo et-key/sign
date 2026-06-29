@@ -17,6 +17,9 @@ fn main() {
 add : x y ?
 	x + y
 
+mul : x y ?
+	x * y
+
 ` 部分適用のテスト
 partial_add : add 10
 
@@ -30,17 +33,42 @@ cond_result : (a > 5.0) & (b > 15.0) | __
 ` 比較3項演算 (match_case と同じ match 展開で解決される)
 ternary_result : (a > 5.0) ? 99.0 : 88.0
 
-` 複数行の match_case ブロック (同じ match 展開)
+` 複数行 of match_case ブロック (同じ match 展開)
 match_result :
 	a == 5.0 : 50.0
 	b == 20.0 : 200.0
 	999.0
+
+` ポイントフリー：すべて足し算 (Sum)
+sum_result : [+] 1.0 2.0 3.0 4.0 5.0
+
+` ポイントフリー：各要素に2.0を掛ける (Map)
+map_result : [* 2.0,] 1.0 2.0 3.0
+
+` === Coproduct Resolver (余積解決器) 全レベルのテスト ===
+
+` 10.3: Atom + Atom -> concat (リスト連接)
+concat_result : 1.0 2.0
+
+` 10.2: Lambda + Lambda -> compose (左結合関数合成)
+` 10.1: Lambda + Atom -> apply (関数適用)
+` 5.0 に (+1.0) して (*2.0) する -> (5 + 1) * 2 = 12.0
+compose_result : (add 1.0) (mul 2.0) 5.0
+
+` 10.0: Atom + Lambda -> apply_reverse (逆適用)
+` 5.0 に (+1.0) する -> 6.0
+reverse_result : 5.0 (add 1.0)
 
 ` 結果を出力する
 "println!(\"partial_add 20 = {}\", partial_add(20.0))"
 "println!(\"cond_result = {:?}\", cond_result)"
 "println!(\"ternary_result = {:?}\", ternary_result)"
 "println!(\"match_result = {:?}\", match_result)"
+"println!(\"sum_result = {}\", sum_result)"
+"println!(\"map_result = {:?}\", map_result)"
+"println!(\"concat_result = {:?}\", concat_result)"
+"println!(\"compose_result = {}\", compose_result)"
+"println!(\"reverse_result = {}\", reverse_result)"
 "#;
 
     let source_code_bare = r#"
