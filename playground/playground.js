@@ -47,13 +47,13 @@ function updateTargetMode() {
 // Templates definitions for Example Loaders
 const EXAMPLES = {
   composition: `\` 1. Function Composition using Space ' '
-say : "console.log(\\1)"
+say : "console.log"
 f : x ? x * 2
 g : x ? x + 1
 say (f g 3)
 `,
   partial_app: `\` 1. Partial Application using Hole (_)
-say : "console.log(\\1)"
+say : "console.log"
 f : x y ? x + y
 partial : f _ 3
 say (partial 4)
@@ -67,7 +67,7 @@ say (10 < 5)
 say (5 == 5)
 `,
   generator: `\` 1. Higher Order Function Recursive Mapping on Lazy Generator
-say : "console.log(\\1)"
+say : "console.log"
 f : x ? x * 2
 map : g x ~y ? [@g x] [map g y~]
 
@@ -75,7 +75,7 @@ map : g x ~y ? [@g x] [map g y~]
 say (map $[* 2,] [0 ~+ 2 ~ 10])
 `,
   lists: `\` Atom vs Function Coproduct Resolution
-say : "console.log(\\1)"
+say : "console.log"
 a : 1
 b : 2
 c : 3
@@ -91,7 +91,7 @@ say ([a , b , c]~ [a , b , c]~)
 say ([a , b , c] , [a , b , c])
 `,
   higher_order: `\` Recursive Map using Coproduct and Partial Application
-say : "console.log(\\1)"
+say : "console.log"
 f : x ? x * 2
 map : g x ~y ? @g x , map g y~
 
@@ -99,7 +99,7 @@ say (map $f 1 2 3 4 5)
 say (map $[x ? x * 2] 1 2 3 4 5)
 `,
   factorial: `\` Recursive Factorial (Packrat Parsing Test)
-say : "console.log(\\1)"
+say : "console.log"
 fact : x ?
 	x = 0 : 1
 	x = 1 : 1
@@ -108,7 +108,7 @@ fact : x ?
 say (fact 5)
 `,
   fold: `\` 1. Eager Fold (Trampoline Extraction)
-say : "console.log(\\1)"
+say : "console.log"
 add : x y ? x + y
 fold_eager : f a x ~y ? fold_eager f [@f a x] y~
 
@@ -120,7 +120,7 @@ fold_lazy : f a x ~y ? $fold_lazy f [@f a x] y~
 say [[fold_lazy $add 0 1 2 3]~]
 `,
   operators: `\` 1. Inline JavaScript Code
-say : "console.log(\\1, \\2, \\3)"
+say : "console.log"
 say \`hello\` \`world\` 123
 
 \` 2. Range Operators (Eager Arrays)
