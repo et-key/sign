@@ -1,0 +1,16 @@
+node_modules
+GEMINI.md
+
+# Rust build artifacts
+alpha/rust/target/
+experimental/rust/target/
+
+# Transpiled Outputs
+alpha/rust/output_std.rs
+alpha/rust/output_std.exe
+alpha/rust/output_bare.rs
+alpha/rust/output_bare.exe
+experimental/rust/output_std.rs
+experimental/rust/output_std.exe
+experimental/rust/output_bare.rs
+experimental/rust/output_bare.exe

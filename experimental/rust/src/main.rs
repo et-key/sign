@@ -75,6 +75,10 @@ list_loop : x ~y ?
 list_loop 1.0 2.0 3.0 4.0 5.0
 list_len : @c
 
+` === 4コア（IO/Heap/Stack/Arith）オーバーフロー引き回しパイプラインのテスト ===
+` IO領域（0x0001番地）へ入力値 100.0 を送信してカスケード処理を開始する
+route_msg 1.0 100.0
+
 ` === 値ベースの比較（単位元ルール）と3項チェイン評価のテスト ===
 val_cmp_non_unit : 2.0 < 5.0
 val_cmp_unit : 1.0 < 5.0
@@ -113,9 +117,9 @@ Item :
 
 ItemA : Item `apple` 150.0
 
-ItemB : Item "banana" 80.0
+ItemB : Item `banana` 80.0
 
-ItemC : Item "orange" 300.0
+ItemC : Item `orange` 300.0
 
 check_limit : limit [price ~Item] ?
 	(price > limit) & price | __
@@ -145,6 +149,7 @@ list_destruct_result : g [10.0 20.0 30.0]
 "println!(\"reverse_result = {}\", @{reverse_result})"
 "println!(\"high_order_result = {}\", @{high_order_result})"
 "println!(\"list_len = {}\", @{list_len})"
+"println!(\"Result from 4-core pipeline = {}\", res_rx.recv().unwrap())"
 "println!(\"hole_partial_result = {}\", @{hole_partial_result})"
 "println!(\"hole_op_result = {}\", @{hole_op_result})"
 "println!(\"val_cmp_non_unit = {:?}\", @{val_cmp_non_unit})"
