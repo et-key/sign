@@ -46,8 +46,8 @@ subgraph Lambda
 end
 
 subgraph Object[ Object = True ]
-    Number([ - ... 0 ... +])
-    Letter([ UTF ... etc])
+    Number([ -x ... 0 ... +x ])
+    Letter([ UTF ... etc ])
 
     subgraph List [ List ...etc ]
         False( __ : false = Null)
