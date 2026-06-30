@@ -94,26 +94,31 @@ Foo :
 	bar : 200.0
 
 extract_foo : foo ~Foo ? @foo + 100.0
-struct_extract_success : extract_foo Foo
+struct_extract_success : extract_foo Foo~
 
 extract_foo_fail : baz ~Foo ? baz
-struct_extract_fail : extract_foo_fail Foo
+struct_extract_fail : extract_foo_fail Foo~
 
 ` === 統合的関数のテスト（オブジェクト、暗黙抽出、可変長再帰、部分適用、3項チェイン） ===
+
 Item :
-	price : 0.0
+		name
+		price : 0.0
+	?
+		name !== `` & price != 0.0 : [
+			name
+			price
+		]
 
-ItemA : Item :
-	price : 150.0
 
-ItemB : Item :
-	price : 80.0
+ItemA : Item `apple` 150.0
 
-ItemC : Item :
-	price : 300.0
+ItemB : Item "banana" 80.0
 
-check_limit : limit price ~Item ?
-	(@price > limit) & price | __
+ItemC : Item "orange" 300.0
+
+check_limit : limit [price ~Item] ?
+	(price > limit) & price | __
 
 check_over_100 : item ? check_limit 100.0 item | 0.0
 
@@ -176,7 +181,7 @@ fn run_transpile(source: &str, layer: usize, name: &str) {
             match transpile_program(&ast, layer) {
                 Ok(rust_code) => {
                     // 1. ファイル書き出し
-                    let rs_filename = format!("{}.rs", name);
+                    let rs_filename = format!("C:/Users/johnn/project/Sign/alpha/rust/{}.rs", name);
                     if let Err(e) = fs::write(&rs_filename, &rust_code) {
                         println!("Failed to write file {}: {}", rs_filename, e);
                         return;
@@ -185,9 +190,9 @@ fn run_transpile(source: &str, layer: usize, name: &str) {
 
                     // 2. rustc によるコンパイル
                     let exe_filename = if cfg!(target_os = "windows") {
-                        format!("{}.exe", name)
+                        format!("C:/Users/johnn/project/Sign/alpha/rust/{}.exe", name)
                     } else {
-                        name.to_string()
+                        format!("C:/Users/johnn/project/Sign/alpha/rust/{}", name)
                     };
 
                     println!("Compiling {} ...", rs_filename);

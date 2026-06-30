@@ -116,12 +116,17 @@ fn register_definition(table: &mut SymbolTable, id: &str, def: &AstNode) {
         collect_destructured_args(arguments, &mut dest_args);
         table.functions.insert(id.to_string(), FuncSignature {
             arity: args.len(),
-            args,
+            args: args.clone(),
             body: Some(*body.clone()),
             is_recursive: is_rec,
             rest_idx,
             destructured_args: dest_args,
         });
+        if let Some(first_char) = id.chars().next() {
+            if first_char.is_uppercase() {
+                table.objects.insert(id.to_string(), args.iter().cloned().collect());
+            }
+        }
     } else if let Some((func_name, passed_args)) = extract_application(def) {
         if let Some(sig) = table.functions.get(&func_name) {
             let passed_count = passed_args.len();
@@ -157,7 +162,7 @@ fn register_definition(table: &mut SymbolTable, id: &str, def: &AstNode) {
         }
     }
 
-    if !is_instance_creation {
+    if !is_instance_creation && !table.objects.contains_key(id) {
         let mut members = HashSet::new();
         collect_object_members(def, &mut members);
         if !members.is_empty() {
@@ -216,7 +221,32 @@ pub fn transpile_program(ast: &[AstNode], layer: usize) -> Result<String, String
     // 2. シンボルテーブルの構築
     let table = build_symbol_table(&hole_desugared);
     // 3. 暗黙メンバ抽出の静的脱糖
-    let desugared_ast: Vec<AstNode> = hole_desugared.iter().map(|node| desugar_destructuring(node, &table)).collect();
+    let mut desugared_ast: Vec<AstNode> = hole_desugared.iter().map(|node| desugar_destructuring(node, &table)).collect();
+    
+    // Quick Fix to restore destroyed arguments
+    for node in &mut desugared_ast {
+        if let AstNode::Define { identifier, definition } = node {
+            if let AstNode::Lambda { arguments, body: _ } = &mut **definition {
+                if let AstNode::Identifier(arg_id) = &**arguments {
+                    if arg_id == identifier {
+                        if let Some(sig) = table.functions.get(identifier) {
+                            let mut orig_args = Vec::new();
+                            for arg in &sig.args {
+                                orig_args.push(AstNode::Identifier(arg.clone()));
+                            }
+                            let new_args_node = if orig_args.len() == 1 {
+                                orig_args[0].clone()
+                            } else {
+                                AstNode::Coproduct(orig_args)
+                            };
+                            *arguments = Box::new(new_args_node);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let mut top_level_code = String::new();
     
     let mut all_members = std::collections::HashSet::new();
@@ -313,7 +343,11 @@ where
                     top_level_code.push_str(&def_code);
                     top_level_code.push_str("\n\n");
                 } else {
-                    let val_str = transpile_node(definition, layer, true, &table)?;
+                    let mut val_str = transpile_node(definition, layer, true, &table)?;
+                    let is_obj_instance = table.objects.keys().any(|obj| identifier.starts_with(obj));
+                    if is_obj_instance && (val_str.contains("Some") || val_str.contains("None") || val_str.contains("if ") || val_str.contains("Item(")) {
+                        val_str = format!("({}).unwrap()", val_str);
+                    }
                     if table.global_allocs.contains(identifier) {
                         let inner_type = if val_str.contains("vec!") { "Vec<f64>" } else { "f64" };
                         let thread_local_decl = format!(
@@ -381,35 +415,59 @@ where
 
     Ok(output)
 }
-
 fn transpile_definition(id: &str, def: &AstNode, layer: usize, table: &SymbolTable) -> Result<String, String> {
     if table.objects.contains_key(id) {
-        let mut mapping = HashMap::new();
-        collect_member_definitions(def, &mut mapping, layer, table)?;
-        
         let struct_name = format!("{}Struct", id);
         let mut struct_fields = Vec::new();
-        let mut struct_inits = Vec::new();
         
         let mut sorted_fields: Vec<_> = table.objects.get(id).unwrap().iter().collect();
         sorted_fields.sort();
         
-        for field in sorted_fields {
+        for field in &sorted_fields {
             struct_fields.push(format!("    pub {}: f64,", field));
-            let val = mapping.get(field).cloned().unwrap_or_else(|| "0.0".to_string());
-            struct_inits.push(format!("    {}: {},", field, val));
         }
-        
-        let struct_decl = format!(
-            "#[derive(Clone, Debug, PartialEq)]\npub struct {} {{\n{}\n}}\n\npub const {}: {} = {} {{\n{}\n}};",
-            struct_name,
-            struct_fields.join("\n"),
-            id,
-            struct_name,
-            struct_name,
-            struct_inits.join("\n")
-        );
-        return Ok(struct_decl);
+
+        if let AstNode::Lambda { arguments, body } = def {
+            let args = collect_args(arguments);
+            let args_decl = args.iter().map(|arg| format!("{}: f64", arg)).collect::<Vec<_>>().join(", ");
+            
+            let mut struct_inits = Vec::new();
+            for field in &sorted_fields {
+                struct_inits.push(format!("        {}: {},", field, field));
+            }
+            
+            let struct_decl = format!(
+                "#[derive(Clone, Debug, PartialEq)]\npub struct {} {{\n{}\n}}\n\nfn {}({}) -> {} {{\n    {} {{\n{}\n    }}\n}}",
+                struct_name,
+                struct_fields.join("\n"),
+                id,
+                args_decl,
+                struct_name,
+                struct_name,
+                struct_inits.join("\n")
+            );
+            return Ok(struct_decl);
+        } else {
+            let mut mapping = HashMap::new();
+            collect_member_definitions(def, &mut mapping, layer, table)?;
+            
+            let mut struct_inits = Vec::new();
+            for field in sorted_fields {
+                let val = mapping.get(field).cloned().unwrap_or_else(|| "0.0".to_string());
+                struct_inits.push(format!("    {}: {},", field, val));
+            }
+            
+            let struct_decl = format!(
+                "#[derive(Clone, Debug, PartialEq)]\npub struct {} {{\n{}\n}}\n\npub const {}: {} = {} {{\n{}\n}};",
+                struct_name,
+                struct_fields.join("\n"),
+                id,
+                struct_name,
+                struct_name,
+                struct_inits.join("\n")
+            );
+            return Ok(struct_decl);
+        }
     }
 
     if let AstNode::Lambda { arguments, body } = def {
@@ -590,6 +648,17 @@ fn collect_args(node: &AstNode) -> Vec<String> {
         }
         AstNode::Block { kind, .. } if *kind == BlockKind::Bracket => {
             vec!["list_arg".to_string()]
+        }
+        AstNode::Block { kind, content } if *kind == BlockKind::Indent => {
+            collect_args(content)
+        }
+        AstNode::Define { identifier, .. } => {
+            vec![identifier.clone()]
+        }
+        AstNode::BinaryOperation { operator, left, right, .. } if operator == "\\n" || operator == "\n" || operator == "," || operator == " " => {
+            let mut res = collect_args(left);
+            res.extend(collect_args(right));
+            res
         }
         _ => Vec::new(),
     }
@@ -1204,7 +1273,8 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &s
                     } else {
                         // 完全適用！
                         let has_list_arg = sig.args.iter().any(|arg| arg.starts_with("list_arg"));
-                        if !sig.is_recursive && sig.destructured_args.is_empty() && !has_list_arg {
+                        let is_constructor = func_name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+                        if !sig.is_recursive && sig.destructured_args.is_empty() && !has_list_arg && !is_constructor {
                             if let Some(body_ast) = &sig.body {
                                 let mut mapping = HashMap::new();
                                 for (i, arg_name) in sig.args.iter().enumerate() {

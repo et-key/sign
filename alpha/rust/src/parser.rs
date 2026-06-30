@@ -50,14 +50,32 @@ peg::parser!{
             }
             / lambda()
 
+        rule def_arg_expr() -> AstNode
+            = left:output() opt_ws() ":" opt_ws() right:def_arg_expr() {
+                if let AstNode::Identifier(ref id) = left {
+                    AstNode::Define {
+                        identifier: id.clone(),
+                        definition: Box::new(right),
+                    }
+                } else {
+                    AstNode::BinaryOperation {
+                        operator: ":".to_string(),
+                        left: Box::new(left),
+                        right: Box::new(right),
+                        name: "define".to_string(),
+                    }
+                }
+            }
+            / output()
+
         rule lambda() -> AstNode
-            = left:output() whitespace() "?" whitespace() right:lambda() {
+            = left:def_arg_expr() opt_ws() "?" opt_ws() right:lambda() {
                 AstNode::Lambda {
                     arguments: Box::new(left),
                     body: Box::new(right),
                 }
             }
-            / output()
+            / def_arg_expr()
 
         rule output() -> AstNode
             = left:logical_xor() whitespace() "#" whitespace() right:output() {
@@ -331,15 +349,17 @@ peg::parser!{
             = block()
             / atom()
 
+        rule opt_ws() = ([' ']+ / EOL() / comment())*
+
         rule block() -> AstNode
-            = "(" whitespace() contents:block_contents_opt() whitespace() ")" {
+            = "(" opt_ws() contents:block_contents_opt() opt_ws() ")" {
                 AstNode::Block { kind: BlockKind::Paren, content: Box::new(contents) }
             }
-            / "[" whitespace() node:point_free() whitespace() "]" { node }
-            / "[" whitespace() contents:block_contents_opt() whitespace() "]" {
+            / "[" opt_ws() node:point_free() opt_ws() "]" { node }
+            / "[" opt_ws() contents:block_contents_opt() opt_ws() "]" {
                 AstNode::Block { kind: BlockKind::Bracket, content: Box::new(contents) }
             }
-            / "{" whitespace() contents:block_contents_opt() whitespace() "}" {
+            / "{" opt_ws() contents:block_contents_opt() opt_ws() "}" {
                 AstNode::Block { kind: BlockKind::Brace, content: Box::new(contents) }
             }
             / "|" whitespace() expr:expression() whitespace() "|" {
