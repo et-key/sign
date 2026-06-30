@@ -325,7 +325,7 @@ peg::parser!{
             / primary()
 
         rule prefix_op() -> String
-            = op:$("><" / "~" / "!!" / "!" / "$" / "@" / "-") { op.to_string() }
+            = op:$("><" / "##" / "#" / "~" / "!!" / "!" / "$" / "@" / "-") { op.to_string() }
 
         rule primary() -> AstNode
             = block()

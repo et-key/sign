@@ -58,6 +58,76 @@ compose_result : (add 1.0) (mul 2.0) 5.0
 ` 5.0 に (+1.0) する -> 6.0
 reverse_result : 5.0 (add 1.0)
 
+` === 高階関数 ＆ 前置$サスペンド・遅延評価のテスト ===
+` 関数 f を受け取って 5.0 を適用する
+apply_five : f ?
+	(@f) 5.0
+
+` (add 10.0) をサスペンドして高階関数に引数として渡す
+high_order_result : apply_five ($(add 10.0))
+
+` === 可変長(Rest)引数とスプレッド展開再帰のテスト ===
+c : #0.0
+list_loop : x ~y ?
+	c # (@c) + 1.0
+	list_loop y~
+
+list_loop 1.0 2.0 3.0 4.0 5.0
+list_len : @c
+
+` === 値ベースの比較（単位元ルール）と3項チェイン評価のテスト ===
+val_cmp_non_unit : 2.0 < 5.0
+val_cmp_unit : 1.0 < 5.0
+val_cmp_chain : 1.0 < 3.0 < 5.0
+val_cmp_chain_fail : 2.0 < 1.0 < 5.0
+
+` === Hole（_）による静的脱糖部分適用のテスト ===
+hole_partial : add _ 5.0
+hole_partial_result : hole_partial 10.0
+
+hole_op : _ + 100.0
+hole_op_result : hole_op 50.0
+
+` === オブジェクト定義と構造体メンバ暗黙抽出のテスト ===
+Foo :
+	foo : 500.0
+	bar : 200.0
+
+extract_foo : foo ~Foo ? @foo + 100.0
+struct_extract_success : extract_foo Foo
+
+extract_foo_fail : baz ~Foo ? baz
+struct_extract_fail : extract_foo_fail Foo
+
+` === 統合的関数のテスト（オブジェクト、暗黙抽出、可変長再帰、部分適用、3項チェイン） ===
+Item :
+	price : 0.0
+
+ItemA : Item :
+	price : 150.0
+
+ItemB : Item :
+	price : 80.0
+
+ItemC : Item :
+	price : 300.0
+
+check_limit : limit price ~Item ?
+	(@price > limit) & price | __
+
+check_over_100 : item ? check_limit 100.0 item | 0.0
+
+sum_filtered : item ~ys ?
+	(check_over_100 item) + (sum_filtered ys~)
+
+total_expensive : sum_filtered ItemA ItemB ItemC
+
+` === リスト分割代入（デストラクト）と参照渡しのテスト ===
+g : [x ~y] ?
+	x
+
+list_destruct_result : g [10.0 20.0 30.0]
+
 ` 結果を出力する
 "println!(\"partial_add 20 = {}\", @{partial_add 20.0})"
 "println!(\"cond_result = {:?}\", @{cond_result})"
@@ -68,6 +138,18 @@ reverse_result : 5.0 (add 1.0)
 "println!(\"concat_result = {:?}\", @{concat_result})"
 "println!(\"compose_result = {}\", @{compose_result})"
 "println!(\"reverse_result = {}\", @{reverse_result})"
+"println!(\"high_order_result = {}\", @{high_order_result})"
+"println!(\"list_len = {}\", @{list_len})"
+"println!(\"hole_partial_result = {}\", @{hole_partial_result})"
+"println!(\"hole_op_result = {}\", @{hole_op_result})"
+"println!(\"val_cmp_non_unit = {:?}\", @{val_cmp_non_unit})"
+"println!(\"val_cmp_unit = {:?}\", @{val_cmp_unit})"
+"println!(\"val_cmp_chain = {:?}\", @{val_cmp_chain})"
+"println!(\"val_cmp_chain_fail = {:?}\", @{val_cmp_chain_fail})"
+"println!(\"struct_extract_success = {:?}\", @{struct_extract_success})"
+"println!(\"struct_extract_fail = {:?}\", {struct_extract_fail})"
+"println!(\"total_expensive = {}\", @{total_expensive})"
+"println!(\"list_destruct_result = {}\", @{list_destruct_result})"
 "#;
 
     let source_code_bare = r#"
@@ -87,6 +169,8 @@ register_addr # 100
 
 fn run_transpile(source: &str, layer: usize, name: &str) {
     let pre = preprocess(source);
+    // デバッグ出力
+    println!("Preprocessed Source:\n{}", pre);
     match sign_parser::program(&pre) {
         Ok(ast) => {
             match transpile_program(&ast, layer) {

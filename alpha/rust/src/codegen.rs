@@ -1,16 +1,22 @@
 // alpha/rust/src/codegen.rs
 use crate::ast::{AstNode, BlockKind, PointFreeKind};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug)]
 pub struct FuncSignature {
     pub arity: usize,
     pub args: Vec<String>,
+    pub body: Option<AstNode>,
+    pub is_recursive: bool,
+    pub rest_idx: Option<usize>,
+    pub destructured_args: HashSet<String>,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct SymbolTable {
     pub functions: HashMap<String, FuncSignature>,
+    pub global_allocs: HashSet<String>,
+    pub objects: HashMap<String, HashSet<String>>,
 }
 
 pub fn build_symbol_table(ast: &[AstNode]) -> SymbolTable {
@@ -19,10 +25,16 @@ pub fn build_symbol_table(ast: &[AstNode]) -> SymbolTable {
         match node {
             AstNode::Define { identifier, definition } => {
                 register_definition(&mut table, identifier, definition);
+                if let AstNode::Prefix { operator, .. } = &**definition {
+                    if operator == "#" || operator == "##" || operator == "###" {
+                        table.global_allocs.insert(identifier.clone());
+                    }
+                }
             }
             AstNode::Prefix { operator, operand, name: _name } if operator == "#" || operator == "##" || operator == "###" => {
                 if let AstNode::Define { identifier, definition } = &**operand {
                     register_definition(&mut table, identifier, definition);
+                    table.global_allocs.insert(identifier.clone());
                 }
             }
             _ => {}
@@ -31,21 +43,104 @@ pub fn build_symbol_table(ast: &[AstNode]) -> SymbolTable {
     table
 }
 
+fn collect_arg_nodes(node: &AstNode, res: &mut Vec<AstNode>) {
+    match node {
+        AstNode::Coproduct(list) => {
+            for item in list {
+                collect_arg_nodes(item, res);
+            }
+        }
+        AstNode::BinaryOperation { operator, left, right, .. } if operator == "~" => {
+            if let AstNode::Identifier(id) = &**right {
+                if id.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                    collect_arg_nodes(right, res);
+                    return;
+                }
+            }
+            collect_arg_nodes(left, res);
+            if let AstNode::Identifier(id) = &**right {
+                res.push(AstNode::Prefix {
+                    operator: "~".to_string(),
+                    operand: Box::new(AstNode::Identifier(id.clone())),
+                    name: "continuous".to_string(),
+                });
+            } else {
+                collect_arg_nodes(right, res);
+            }
+        }
+        _ => {
+            res.push(node.clone());
+        }
+    }
+}
+
+fn find_rest_idx(arguments: &AstNode) -> Option<usize> {
+    let mut nodes = Vec::new();
+    collect_arg_nodes(arguments, &mut nodes);
+    for (i, node) in nodes.iter().enumerate() {
+        if let AstNode::Prefix { operator, .. } = node {
+            if operator == "~" {
+                return Some(i);
+            }
+        }
+    }
+    None
+}
+
+fn collect_destructured_args(node: &AstNode, set: &mut HashSet<String>) {
+    match node {
+        AstNode::BinaryOperation { operator, left, right, .. } if operator == "~" => {
+            if let AstNode::Identifier(obj_name) = &**right {
+                if obj_name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                    if let AstNode::Identifier(var_name) = &**left {
+                        set.insert(var_name.clone());
+                    }
+                }
+            }
+        }
+        AstNode::Coproduct(list) => {
+            for item in list {
+                collect_destructured_args(item, set);
+            }
+        }
+        _ => {}
+    }
+}
+
 fn register_definition(table: &mut SymbolTable, id: &str, def: &AstNode) {
-    if let AstNode::Lambda { arguments, body: _body } = def {
+    if let AstNode::Lambda { arguments, body } = def {
         let args = collect_args(arguments);
+        let is_rec = contains_identifier(body, id);
+        let rest_idx = find_rest_idx(arguments);
+        let mut dest_args = HashSet::new();
+        collect_destructured_args(arguments, &mut dest_args);
         table.functions.insert(id.to_string(), FuncSignature {
             arity: args.len(),
             args,
+            body: Some(*body.clone()),
+            is_recursive: is_rec,
+            rest_idx,
+            destructured_args: dest_args,
         });
     } else if let Some((func_name, passed_args)) = extract_application(def) {
         if let Some(sig) = table.functions.get(&func_name) {
             let passed_count = passed_args.len();
             if passed_count < sig.arity {
                 let missing_args = sig.args[passed_count..].to_vec();
+                let new_rest_idx = sig.rest_idx.and_then(|r_idx| {
+                    if r_idx >= passed_count {
+                        Some(r_idx - passed_count)
+                    } else {
+                        None
+                    }
+                });
                 table.functions.insert(id.to_string(), FuncSignature {
                     arity: missing_args.len(),
                     args: missing_args,
+                    body: None,
+                    is_recursive: false,
+                    rest_idx: new_rest_idx,
+                    destructured_args: sig.destructured_args.clone(),
                 });
             }
         }
@@ -54,36 +149,195 @@ fn register_definition(table: &mut SymbolTable, id: &str, def: &AstNode) {
             table.functions.insert(id.to_string(), sig.clone());
         }
     }
+
+    let mut is_instance_creation = false;
+    if let AstNode::Define { identifier: obj_name, .. } = def {
+        if table.objects.contains_key(obj_name) {
+            is_instance_creation = true;
+        }
+    }
+
+    if !is_instance_creation {
+        let mut members = HashSet::new();
+        collect_object_members(def, &mut members);
+        if !members.is_empty() {
+            table.objects.insert(id.to_string(), members);
+        }
+    }
+}
+
+fn collect_object_members(node: &AstNode, members: &mut HashSet<String>) {
+    match node {
+        AstNode::Define { identifier, .. } => {
+            members.insert(identifier.clone());
+        }
+        AstNode::BinaryOperation { operator, left, right, .. } if operator == "\\n" || operator == "," || operator == " " => {
+            collect_object_members(left, members);
+            collect_object_members(right, members);
+        }
+        AstNode::Coproduct(list) => {
+            for item in list {
+                collect_object_members(item, members);
+            }
+        }
+        AstNode::Block { content, .. } => {
+            collect_object_members(content, members);
+        }
+        _ => {}
+    }
+}
+
+fn collect_member_definitions(node: &AstNode, mapping: &mut HashMap<String, String>, layer: usize, table: &SymbolTable) -> Result<(), String> {
+    match node {
+        AstNode::Define { identifier, definition } => {
+            let val_str = transpile_node(definition, layer, false, table)?;
+            mapping.insert(identifier.clone(), val_str);
+        }
+        AstNode::BinaryOperation { operator, left, right, .. } if operator == "\\n" || operator == "," || operator == " " => {
+            collect_member_definitions(left, mapping, layer, table)?;
+            collect_member_definitions(right, mapping, layer, table)?;
+        }
+        AstNode::Coproduct(list) => {
+            for item in list {
+                collect_member_definitions(item, mapping, layer, table)?;
+            }
+        }
+        AstNode::Block { content, .. } => {
+            collect_member_definitions(content, mapping, layer, table)?;
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 pub fn transpile_program(ast: &[AstNode], layer: usize) -> Result<String, String> {
-    let table = build_symbol_table(ast);
+    // 1. Hole の静的脱糖
+    let hole_desugared: Vec<AstNode> = ast.iter().map(|node| desugar_holes(node)).collect();
+    // 2. シンボルテーブルの構築
+    let table = build_symbol_table(&hole_desugared);
+    // 3. 暗黙メンバ抽出の静的脱糖
+    let desugared_ast: Vec<AstNode> = hole_desugared.iter().map(|node| desugar_destructuring(node, &table)).collect();
     let mut top_level_code = String::new();
-    let mut main_statements = Vec::new();
+    
+    let mut all_members = std::collections::HashSet::new();
+    for members in table.objects.values() {
+        for m in members {
+            all_members.insert(m.clone());
+        }
+    }
+    for sig in table.functions.values() {
+        for m in &sig.destructured_args {
+            all_members.insert(m.clone());
+        }
+    }
+    
+    if layer == 2 {
+        top_level_code.push_str("#![allow(unused_parens)]\n#![allow(unused_variables)]\n#![allow(non_upper_case_globals)]\n#![allow(dead_code)]\n#![allow(non_snake_case)]\n\n");
+        let eval_compare_decl = r#"fn eval_compare<F>(lhs: Option<f64>, rhs: Option<f64>, op: F) -> Option<f64>
+where
+    F: Fn(f64, f64) -> bool,
+{
+    let l_val = lhs?;
+    let r_val = rhs?;
+    if op(l_val, r_val) {
+        if l_val == 0.0 || l_val == 1.0 {
+            Some(r_val)
+        } else {
+            Some(l_val)
+        }
+    } else {
+        None
+    }
+}
 
-    for node in ast {
+"#;
+        top_level_code.push_str(eval_compare_decl);
+
+        // HasMemberトレイト定義の自動生成
+        for mem in &all_members {
+            let cap_mem = if let Some(c) = mem.chars().next() {
+                format!("{}{}", c.to_uppercase(), &mem[1..])
+            } else {
+                mem.clone()
+            };
+            top_level_code.push_str(&format!(
+                "pub trait HasMember{} {{\n    fn get_{}(&self) -> Option<f64>;\n}}\n\n",
+                cap_mem, mem
+            ));
+            top_level_code.push_str(&format!(
+                "impl<'a, T: HasMember{}> HasMember{} for &'a T {{\n    fn get_{}(&self) -> Option<f64> {{\n        (**self).get_{}()\n    }}\n}}\n\n",
+                cap_mem, cap_mem, mem, mem
+            ));
+        }
+
+        // 各オブジェクト構造体に対するすべてのトレイトの実装
+        for obj in table.objects.keys() {
+            for mem in &all_members {
+                let cap_mem = if let Some(c) = mem.chars().next() {
+                    format!("{}{}", c.to_uppercase(), &mem[1..])
+                } else {
+                    mem.clone()
+                };
+                let has_member = table.objects.get(obj).map(|m| m.contains(mem)).unwrap_or(false);
+                let impl_body = if has_member {
+                    format!("Some(self.{})", mem)
+                } else {
+                    "None".to_string()
+                };
+                top_level_code.push_str(&format!(
+                    "impl HasMember{} for {}Struct {{\n    fn get_{}(&self) -> Option<f64> {{\n        {}\n    }}\n}}\n\n",
+                    cap_mem, obj, mem, impl_body
+                ));
+            }
+        }
+    }
+    
+    let mut main_statements = Vec::new();
+    for node in &desugared_ast {
         match node {
             AstNode::Define { identifier, definition } => {
-                if let AstNode::Lambda { .. } = &**definition {
+                if table.objects.contains_key(identifier) {
                     let def_code = transpile_definition(identifier, definition, layer, &table)?;
                     top_level_code.push_str(&def_code);
                     top_level_code.push_str("\n\n");
+                } else if let AstNode::Lambda { .. } = &**definition {
+                    if let Some(sig) = table.functions.get(identifier) {
+                        if !is_high_order_function(sig) {
+                            let def_code = transpile_definition(identifier, definition, layer, &table)?;
+                            top_level_code.push_str(&def_code);
+                            top_level_code.push_str("\n\n");
+                        }
+                    }
                 } else if let AstNode::PointFree(_) = &**definition {
                     let def_code = transpile_definition(identifier, definition, layer, &table)?;
                     top_level_code.push_str(&def_code);
                     top_level_code.push_str("\n\n");
                 } else {
                     let val_str = transpile_node(definition, layer, true, &table)?;
-                    main_statements.push(format!("    let {} = {};", identifier, val_str));
+                    if table.global_allocs.contains(identifier) {
+                        let inner_type = if val_str.contains("vec!") { "Vec<f64>" } else { "f64" };
+                        let thread_local_decl = format!(
+                            "thread_local! {{\n    static {}: std::cell::OnceCell<std::rc::Rc<std::cell::RefCell<{}>>> = std::cell::OnceCell::new();\n}}\n\n",
+                            identifier, inner_type
+                        );
+                        top_level_code.push_str(&thread_local_decl);
+                        main_statements.push(format!("    {}.with(|cell| cell.set({}).unwrap());", identifier, val_str));
+                    } else {
+                        main_statements.push(format!("    let {} = {};", identifier, val_str));
+                    }
                 }
             }
             AstNode::Prefix { operator, operand, name: _name } if operator == "#" || operator == "##" || operator == "###" => {
                 if let AstNode::Define { identifier, definition } = &**operand {
                     if let AstNode::Lambda { .. } = &**definition {
-                        let def_code = transpile_definition(identifier, definition, layer, &table)?;
-                        top_level_code.push_str("pub ");
-                        top_level_code.push_str(&def_code);
-                        top_level_code.push_str("\n\n");
+                        if let Some(sig) = table.functions.get(identifier) {
+                            if !is_high_order_function(sig) {
+                                let def_code = transpile_definition(identifier, definition, layer, &table)?;
+                                top_level_code.push_str("pub ");
+                                top_level_code.push_str(&def_code);
+                                top_level_code.push_str("\n\n");
+                            }
+                        }
                     } else if let AstNode::PointFree(_) = &**definition {
                         let def_code = transpile_definition(identifier, definition, layer, &table)?;
                         top_level_code.push_str("pub ");
@@ -91,7 +345,17 @@ pub fn transpile_program(ast: &[AstNode], layer: usize) -> Result<String, String
                         top_level_code.push_str("\n\n");
                     } else {
                         let val_str = transpile_node(definition, layer, true, &table)?;
-                        main_statements.push(format!("    let {} = {};", identifier, val_str));
+                        if table.global_allocs.contains(identifier) {
+                            let inner_type = if val_str.contains("vec!") { "Vec<f64>" } else { "f64" };
+                            let thread_local_decl = format!(
+                                "thread_local! {{\n    pub static {}: std::cell::OnceCell<std::rc::Rc<std::cell::RefCell<{}>>> = std::cell::OnceCell::new();\n}}\n\n",
+                                identifier, inner_type
+                            );
+                            top_level_code.push_str(&thread_local_decl);
+                            main_statements.push(format!("    {}.with(|cell| cell.set({}).unwrap());", identifier, val_str));
+                        } else {
+                            main_statements.push(format!("    pub let {} = {};", identifier, val_str));
+                        }
                     }
                 } else {
                     let expr_code = transpile_node(node, layer, true, &table)?;
@@ -119,11 +383,155 @@ pub fn transpile_program(ast: &[AstNode], layer: usize) -> Result<String, String
 }
 
 fn transpile_definition(id: &str, def: &AstNode, layer: usize, table: &SymbolTable) -> Result<String, String> {
+    if table.objects.contains_key(id) {
+        let mut mapping = HashMap::new();
+        collect_member_definitions(def, &mut mapping, layer, table)?;
+        
+        let struct_name = format!("{}Struct", id);
+        let mut struct_fields = Vec::new();
+        let mut struct_inits = Vec::new();
+        
+        let mut sorted_fields: Vec<_> = table.objects.get(id).unwrap().iter().collect();
+        sorted_fields.sort();
+        
+        for field in sorted_fields {
+            struct_fields.push(format!("    pub {}: f64,", field));
+            let val = mapping.get(field).cloned().unwrap_or_else(|| "0.0".to_string());
+            struct_inits.push(format!("    {}: {},", field, val));
+        }
+        
+        let struct_decl = format!(
+            "#[derive(Clone, Debug, PartialEq)]\npub struct {} {{\n{}\n}}\n\npub const {}: {} = {} {{\n{}\n}};",
+            struct_name,
+            struct_fields.join("\n"),
+            id,
+            struct_name,
+            struct_name,
+            struct_inits.join("\n")
+        );
+        return Ok(struct_decl);
+    }
+
     if let AstNode::Lambda { arguments, body } = def {
         let args = collect_args(arguments);
-        let args_str = args.iter().map(|arg| format!("{}: f64", arg)).collect::<Vec<_>>().join(", ");
+        let sig = table.functions.get(id);
+        let mut generics = Vec::new();
+        let args_str = args.iter().enumerate().map(|(i, arg)| {
+            if arg.starts_with("list_arg") {
+                return format!("{}: &[f64]", arg);
+            }
+
+            let opt_obj_type = if let Some(first_char) = arg.chars().next() {
+                let capitalized = format!("{}{}", first_char.to_uppercase(), &arg[1..]);
+                if table.objects.contains_key(&capitalized) {
+                    Some(capitalized)
+                } else if table.objects.contains_key(arg) {
+                    Some(arg.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            if let Some(s) = sig {
+                if s.rest_idx == Some(i) {
+                    let mut elem_type = "f64".to_string();
+                    for other_arg in &s.args {
+                        let other_obj_type = if let Some(fc) = other_arg.chars().next() {
+                            let cap = format!("{}{}", fc.to_uppercase(), &other_arg[1..]);
+                            if table.objects.contains_key(&cap) {
+                                Some(cap)
+                            } else if table.objects.contains_key(other_arg) {
+                                Some(other_arg.clone())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                        if let Some(obj) = other_obj_type {
+                            elem_type = format!("{}Struct", obj);
+                            break;
+                        }
+                    }
+                    return format!("{}: &[{}]", arg, elem_type);
+                }
+            }
+
+            if let Some(obj_type) = opt_obj_type {
+                let mut bounds = Vec::new();
+                if let Some(s) = sig {
+                    if let Some(members) = table.objects.get(&obj_type) {
+                        let mut sorted_dest: Vec<_> = s.destructured_args.iter().collect();
+                        sorted_dest.sort();
+                        for dest_arg in sorted_dest {
+                            if members.contains(dest_arg) {
+                                let cap_dest = if let Some(c) = dest_arg.chars().next() {
+                                    format!("{}{}", c.to_uppercase(), &dest_arg[1..])
+                                } else {
+                                    dest_arg.clone()
+                                };
+                                bounds.push(format!("HasMember{}", cap_dest));
+                            }
+                        }
+                    }
+                }
+                
+                if bounds.is_empty() {
+                    if arg == &obj_type {
+                        return format!("_{}: &{}Struct", arg, arg);
+                    } else {
+                        return format!("{}: &{}Struct", arg, obj_type);
+                    }
+                } else {
+                    let cap_arg = if let Some(c) = arg.chars().next() {
+                        format!("{}{}", c.to_uppercase(), &arg[1..])
+                    } else {
+                        arg.clone()
+                    };
+                    let g_name = format!("T{}", cap_arg);
+                    generics.push(format!("{}: {}", g_name, bounds.join(" + ")));
+                    if arg == &obj_type {
+                        return format!("_{}: &{}", arg, g_name);
+                    } else {
+                        return format!("{}: &{}", arg, g_name);
+                    }
+                }
+            }
+            format!("{}: f64", arg)
+        }).collect::<Vec<_>>().join(", ");
         let body_str = transpile_node(body, layer, false, table)?;
-        Ok(format!("fn {}({}) -> f64 {{\n    {}\n}}", id, args_str, body_str))
+        let ret_type = if sig.map(|s| s.is_recursive).unwrap_or(false) {
+            "f64"
+        } else if body_str.contains("vec!") || body_str.contains("Vec<") {
+            "Vec<f64>"
+        } else {
+            let last_line = body_str.lines()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty() && *s != "}")
+                .last()
+                .unwrap_or("");
+            let last_unwrap_pos = last_line.rfind("unwrap()")
+                .or_else(|| last_line.rfind("unwrap_or"));
+            let is_unwrap = if let Some(pos) = last_unwrap_pos {
+                let right_part = &last_line[pos..];
+                !right_part.contains(".and(") && !right_part.contains(".or_else(")
+            } else {
+                false
+            };
+            if (body_str.contains("Some") || body_str.contains("None") || body_str.contains("Option::from") || body_str.contains(".and(") || body_str.contains(".get_")) && !is_unwrap {
+                "Option<f64>"
+            } else {
+                "f64"
+            }
+        };
+        let generics_str = if generics.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", generics.join(", "))
+        };
+        Ok(format!("fn {}{}({}) -> {} {{\n    {}\n}}", id, generics_str, args_str, ret_type, body_str))
     } else {
         let val_str = transpile_node(def, layer, false, table)?;
         
@@ -162,12 +570,26 @@ fn transpile_definition(id: &str, def: &AstNode, layer: usize, table: &SymbolTab
 fn collect_args(node: &AstNode) -> Vec<String> {
     match node {
         AstNode::Identifier(id) => vec![id.clone()],
+        AstNode::Prefix { operator, operand, .. } if operator == "~" => collect_args(operand),
+        AstNode::BinaryOperation { operator, left, right, .. } if operator == "~" => {
+            if let AstNode::Identifier(id) = &**right {
+                if id.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                    return collect_args(right);
+                }
+            }
+            let mut res = collect_args(left);
+            res.extend(collect_args(right));
+            res
+        }
         AstNode::Coproduct(list) => {
             let mut res = Vec::new();
             for item in list {
                 res.extend(collect_args(item));
             }
             res
+        }
+        AstNode::Block { kind, .. } if *kind == BlockKind::Bracket => {
+            vec!["list_arg".to_string()]
         }
         _ => Vec::new(),
     }
@@ -304,7 +726,15 @@ fn get_category(node: &AstNode, table: &SymbolTable) -> TypeCategory {
                 TypeCategory::Atom
             }
         }
-        AstNode::Prefix { operator, .. } if operator == "@" => TypeCategory::Lambda,
+        AstNode::Prefix { operator, operand, .. } if operator == "@" => {
+            if let AstNode::Prefix { operator: inner_op, operand: inner_operand, .. } = &**operand {
+                if inner_op == "$" {
+                    return get_category(inner_operand, table);
+                }
+            }
+            TypeCategory::Lambda
+        }
+        AstNode::Prefix { operator, .. } if operator == "$" => TypeCategory::Atom,
         AstNode::BinaryOperation { operator, name, .. } if operator == " " && name == "resolved" => {
             let mut applied_args = Vec::new();
             if let Some(func_name) = extract_applied_func_and_args(node, &mut applied_args) {
@@ -336,7 +766,7 @@ fn collect_coproduct_items(node: &AstNode, items: &mut Vec<AstNode>) {
                 collect_coproduct_items(item, items);
             }
         }
-        AstNode::BinaryOperation { operator, left, right, name } if operator == " " && name != "resolved" => {
+        AstNode::BinaryOperation { operator, left, right, name } if (operator == " " && name != "resolved") || operator == "," => {
             collect_coproduct_items(left, items);
             collect_coproduct_items(right, items);
         }
@@ -442,6 +872,13 @@ fn extract_applied_func_and_args(node: &AstNode, args: &mut Vec<AstNode>) -> Opt
 // ----------------------------------------------------
 
 pub fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+    if has_hole(node) {
+        let desugared = desugar_holes(node);
+        if &desugared != node {
+            return transpile_node(&desugared, layer, in_main, table);
+        }
+    }
+
     match node {
         AstNode::Scalar(f) => {
             let mut s = f.to_string();
@@ -458,8 +895,47 @@ pub fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &Symbo
         AstNode::Identifier(id) => transpile_identifier(id, table),
         AstNode::InlineCode(code) => transpile_inline_code(code, layer, in_main, table),
         AstNode::Coproduct(list) => transpile_coproduct(node, list, layer, in_main, table),
+        AstNode::Define { identifier, definition } => {
+            if table.objects.contains_key(identifier) {
+                let mut mapping = HashMap::new();
+                collect_member_definitions(definition, &mut mapping, layer, table)?;
+                let struct_name = format!("{}Struct", identifier);
+                let mut struct_inits = Vec::new();
+                let mut sorted_fields: Vec<_> = table.objects.get(identifier).unwrap().iter().collect();
+                sorted_fields.sort();
+                for field in sorted_fields {
+                    let val = mapping.get(field).cloned().unwrap_or_else(|| "0.0".to_string());
+                    struct_inits.push(format!("{}: {}", field, val));
+                }
+                return Ok(format!("{} {{ {} }}", struct_name, struct_inits.join(", ")));
+            }
+            let val_str = transpile_node(definition, layer, in_main, table)?;
+            Ok(format!("let {} = {}", identifier, val_str))
+        }
         AstNode::BinaryOperation { operator, left, right, name } => {
-            transpile_binary_op(operator, left, right, name, layer, in_main, table)
+            if operator == "\\n" {
+                let mut lines = Vec::new();
+                collect_lines(node, &mut lines, layer, in_main, table)?;
+                if lines.len() <= 1 {
+                    Ok(lines.first().cloned().unwrap_or_else(|| "None".to_string()))
+                } else {
+                    let last_idx = lines.len() - 1;
+                    let mut block_body = String::new();
+                    for i in 0..last_idx {
+                        block_body.push_str("    ");
+                        block_body.push_str(&lines[i]);
+                        if !lines[i].ends_with(';') && !lines[i].ends_with('}') {
+                            block_body.push_str(";");
+                        }
+                        block_body.push_str("\n");
+                    }
+                    block_body.push_str("    ");
+                    block_body.push_str(&lines[last_idx]);
+                    Ok(format!("{{\n{}\n}}", block_body))
+                }
+            } else {
+                transpile_binary_op(operator, left, right, name, layer, in_main, table)
+            }
         }
         AstNode::Prefix { operator, operand, .. } => {
             transpile_prefix_op(operator, operand, layer, in_main, table)
@@ -471,6 +947,9 @@ pub fn transpile_node(node: &AstNode, layer: usize, in_main: bool, table: &Symbo
             transpile_lambda(arguments, body, layer, in_main, table)
         }
         AstNode::PointFree(kind) => transpile_point_free(kind, layer, in_main, table),
+        AstNode::Postfix { operator, operand, .. } => {
+            transpile_postfix_op(operator, operand, layer, in_main, table)
+        }
         _ => Err(format!("Unsupported AST node: {:?}", node)),
     }
 }
@@ -486,7 +965,7 @@ fn transpile_identifier(id: &str, table: &SymbolTable) -> Result<String, String>
     }
 }
 
-fn transpile_coproduct(node: &AstNode, list: &[AstNode], layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+fn transpile_coproduct(_node: &AstNode, list: &[AstNode], layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
     if list.is_empty() {
         return Ok("()".to_string());
     }
@@ -527,11 +1006,20 @@ fn transpile_coproduct(node: &AstNode, list: &[AstNode], layer: usize, in_main: 
     }
 
     // それ以外は Coproduct Resolver にかけて単一ノードに縮約
-    let flat_items = {
-        let mut flat = Vec::new();
-        collect_coproduct_items(node, &mut flat);
-        flat
-    };
+    let mut flat_items = Vec::new();
+    for item in list {
+        collect_coproduct_items(item, &mut flat_items);
+    }
+    flat_items.retain(|item| *item != AstNode::Unit);
+    
+    let has_lambda = flat_items.iter().any(|item| get_category(item, table) == TypeCategory::Lambda);
+    if !has_lambda {
+        let mut parts = Vec::new();
+        for item in &flat_items {
+            parts.push(transpile_node(item, layer, in_main, table)?);
+        }
+        return Ok(format!("vec![{}]", parts.join(", ")));
+    }
     
     let reduced = resolve_coproduct(&flat_items, table)?;
     if !matches!(reduced, AstNode::Coproduct(_)) {
@@ -547,18 +1035,37 @@ fn transpile_coproduct(node: &AstNode, list: &[AstNode], layer: usize, in_main: 
 
 fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &str, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
     if operator == "#" {
+        let left_str = transpile_node(left, layer, in_main, table)?;
+        let right_str = transpile_node(right, layer, in_main, table)?;
         if layer == 0 {
-            let left_str = transpile_node(left, layer, in_main, table)?;
-            let right_str = transpile_node(right, layer, in_main, table)?;
             return Ok(format!("unsafe {{ core::ptr::write_volatile({} as *mut f64, {}) }}", left_str, right_str));
         } else {
-            let left_str = transpile_node(left, layer, in_main, table)?;
-            let right_str = transpile_node(right, layer, in_main, table)?;
+            if let AstNode::Identifier(id) = left {
+                if table.global_allocs.contains(id) {
+                    return Ok(format!("{}.with(|cell| *cell.get().unwrap().borrow_mut() = {})", id, right_str));
+                }
+            }
             return Ok(format!("unsafe {{ *({} as *mut f64) = {} }}", left_str, right_str));
         }
     }
 
     if operator == ":" {
+        if let AstNode::Identifier(id) = left {
+            if table.objects.contains_key(id) {
+                let mut mapping = HashMap::new();
+                collect_member_definitions(right, &mut mapping, layer, table)?;
+                let struct_name = format!("{}Struct", id);
+                let mut struct_inits = Vec::new();
+                let mut sorted_fields: Vec<_> = table.objects.get(id).unwrap().iter().collect();
+                sorted_fields.sort();
+                for field in sorted_fields {
+                    let val = mapping.get(field).cloned().unwrap_or_else(|| "0.0".to_string());
+                    struct_inits.push(format!("{}: {}", field, val));
+                }
+                return Ok(format!("{} {{ {} }}", struct_name, struct_inits.join(", ")));
+            }
+        }
+
         if let AstNode::Lambda { arguments: cond, body: then } = left {
             let arms = vec![
                 MatchArm { condition: Some(*cond.clone()), body: *then.clone() },
@@ -571,7 +1078,7 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &s
     if ["<", ">", "<=", ">=", "==", "!="].contains(&operator) {
         let left_str = transpile_node(left, layer, in_main, table)?;
         let right_str = transpile_node(right, layer, in_main, table)?;
-        return Ok(format!("match {} {} {} {{ true => Some(1.0), false => None }}", left_str, operator, right_str));
+        return Ok(format!("eval_compare(Option::from({}), Option::from({}), |l, r| l {} r)", left_str, right_str, operator));
     }
 
     if operator == "&" {
@@ -583,25 +1090,111 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &s
     if operator == "|" {
         let left_str = transpile_node(left, layer, in_main, table)?;
         let right_str = transpile_node(right, layer, in_main, table)?;
-        return Ok(format!("{}.or_else(|| {})", left_str, right_str));
+        let is_primitive = matches!(right, AstNode::Scalar(_)) || right_str.parse::<f64>().is_ok();
+        if is_primitive {
+            return Ok(format!("{}.unwrap_or({})", left_str, right_str));
+        } else {
+            return Ok(format!("{}.or_else(|| Option::from({}))", left_str, right_str));
+        }
     }
 
     // 中置スペースによる適用/合成の解決
     if operator == " " {
+
         if name == "resolved" {
             // 関数名と、これまでに適用された全引数リストを抽出
             let mut applied_args = Vec::new();
             if let Some(func_name) = extract_applied_func_and_args(left, &mut applied_args) {
-                // 今回適用する right も追加
-                applied_args.push(right.clone());
+                collect_coproduct_items(right, &mut applied_args);
+                applied_args.retain(|item| *item != AstNode::Unit);
                 
                 if let Some(sig) = table.functions.get(&func_name) {
+                    // スプレッド展開があるかチェックし、あれば静的脱糖する
+                    let mut has_spread = false;
+                    let mut spread_var = String::new();
+                    let mut spread_idx = 0;
+                    for (i, arg) in applied_args.iter().enumerate() {
+                        if let AstNode::Postfix { operator, operand, .. } = arg {
+                            if operator == "~" {
+                                has_spread = true;
+                                spread_var = transpile_node(operand, layer, in_main, table)?;
+                                spread_idx = i;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if has_spread {
+                        if sig.arity == 2 && sig.rest_idx == Some(1) {
+                            let mut final_args = Vec::new();
+                            for i in 0..spread_idx {
+                                let mut arg_str = transpile_node(&applied_args[i], layer, in_main, table)?;
+                                let param_name = &sig.args[i];
+                                let is_obj = if let Some(first_char) = param_name.chars().next() {
+                                    let cap = format!("{}{}", first_char.to_uppercase(), &param_name[1..]);
+                                    table.objects.contains_key(&cap) || table.objects.contains_key(param_name)
+                                } else {
+                                    false
+                                };
+                                if is_obj && !arg_str.starts_with('&') {
+                                    arg_str = format!("&{}", arg_str);
+                                }
+                                final_args.push(arg_str);
+                            }
+                            if spread_idx == 1 {
+                                final_args.push(spread_var.clone());
+                            } else {
+                                let head_param = &sig.args[0];
+                                let is_head_obj = if let Some(first_char) = head_param.chars().next() {
+                                    let cap = format!("{}{}", first_char.to_uppercase(), &head_param[1..]);
+                                    table.objects.contains_key(&cap) || table.objects.contains_key(head_param)
+                                } else {
+                                    false
+                                };
+                                let head_ref = if is_head_obj { "&" } else { "" };
+                                final_args.push(format!("{}{}[0]", head_ref, spread_var));
+                                final_args.push(format!("&{}[1..]", spread_var));
+                            }
+                            let call_code = format!(
+                                "if {}.is_empty() {{ 0.0 }} else {{ {}({}) }}",
+                                spread_var, func_name, final_args.join(", ")
+                            );
+                            return Ok(call_code);
+                        }
+                    }
+                    
+                    // Rest 引数パッケージング処理
+                    let mut applied_args = applied_args;
+                    if let Some(r_idx) = sig.rest_idx {
+                        if applied_args.len() >= r_idx {
+                            let rest_args = applied_args.split_off(r_idx);
+                            let pkg_node = AstNode::Coproduct(rest_args);
+                            applied_args.push(pkg_node);
+                        }
+                    }
+
                     let passed_count = applied_args.len();
                     if passed_count < sig.arity {
                         // 部分適用！ クロージャ (move |y| func(passed, y)) を出力
                         let mut all_args_code = Vec::new();
-                        for arg in &applied_args {
-                            all_args_code.push(transpile_node(arg, layer, in_main, table)?);
+                        for (i, arg) in applied_args.iter().enumerate() {
+                            let mut arg_str = transpile_node(arg, layer, in_main, table)?;
+                            let is_ref = if i < sig.args.len() {
+                                let param_name = &sig.args[i];
+                                let is_obj = if let Some(first_char) = param_name.chars().next() {
+                                    let cap = format!("{}{}", first_char.to_uppercase(), &param_name[1..]);
+                                    table.objects.contains_key(&cap) || table.objects.contains_key(param_name)
+                                } else {
+                                    false
+                                };
+                                is_obj || sig.rest_idx == Some(i) || param_name.starts_with("list_arg")
+                            } else {
+                                false
+                            };
+                            if is_ref && !arg_str.starts_with('&') {
+                                arg_str = format!("&{}", arg_str);
+                            }
+                            all_args_code.push(arg_str);
                         }
                         let missing_args = &sig.args[passed_count..];
                         for arg in missing_args {
@@ -609,10 +1202,38 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &s
                         }
                         return Ok(format!("(move |{}| {}({}))", missing_args.join(", "), func_name, all_args_code.join(", ")));
                     } else {
-                        // 完全適用！ 通常の関数呼び出し func(args...)
+                        // 完全適用！
+                        let has_list_arg = sig.args.iter().any(|arg| arg.starts_with("list_arg"));
+                        if !sig.is_recursive && sig.destructured_args.is_empty() && !has_list_arg {
+                            if let Some(body_ast) = &sig.body {
+                                let mut mapping = HashMap::new();
+                                for (i, arg_name) in sig.args.iter().enumerate() {
+                                    mapping.insert(arg_name.clone(), applied_args[i].clone());
+                                }
+                                let substituted = substitute_args(body_ast, &mapping);
+                                return transpile_node(&substituted, layer, in_main, table);
+                            }
+                        }
+                        // 再帰関数の場合は通常の関数呼び出し func(args...)
                         let mut args_code = Vec::new();
-                        for arg in &applied_args {
-                            args_code.push(transpile_node(arg, layer, in_main, table)?);
+                        for (i, arg) in applied_args.iter().enumerate() {
+                            let mut arg_str = transpile_node(arg, layer, in_main, table)?;
+                            let is_ref = if i < sig.args.len() {
+                                let param_name = &sig.args[i];
+                                let is_obj = if let Some(first_char) = param_name.chars().next() {
+                                    let cap = format!("{}{}", first_char.to_uppercase(), &param_name[1..]);
+                                    table.objects.contains_key(&cap) || table.objects.contains_key(param_name)
+                                } else {
+                                    false
+                                };
+                                is_obj || sig.rest_idx == Some(i) || param_name.starts_with("list_arg")
+                            } else {
+                                false
+                            };
+                            if is_ref && !arg_str.starts_with('&') {
+                                arg_str = format!("&{}", arg_str);
+                            }
+                            args_code.push(arg_str);
                         }
                         return Ok(format!("{}({})", func_name, args_code.join(", ")));
                     }
@@ -636,6 +1257,8 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &s
     let left_str = transpile_node(left, layer, in_main, table)?;
     let right_str = transpile_node(right, layer, in_main, table)?;
     
+    
+
     match operator {
         "+" => Ok(format!("({} + {})", left_str, right_str)),
         "-" => Ok(format!("({} - {})", left_str, right_str)),
@@ -652,9 +1275,24 @@ fn transpile_prefix_op(operator: &str, operand: &AstNode, layer: usize, in_main:
             let op_str = transpile_node(operand, layer, in_main, table)?;
             return Ok(format!("unsafe {{ core::ptr::read_volatile({} as *const f64) }}", op_str));
         } else {
-            let op_str = transpile_node(operand, layer, in_main, table)?;
-            return Ok(format!("unsafe {{ *({} as *const f64) }}", op_str));
+            if let AstNode::Identifier(id) = operand {
+                if table.global_allocs.contains(id) {
+                    return Ok(format!("{}.with(|cell| *cell.get().unwrap().borrow())", id));
+                }
+            }
+            if let AstNode::Address(_) = operand {
+                let op_str = transpile_node(operand, layer, in_main, table)?;
+                return Ok(format!("unsafe {{ *({} as *const f64) }}", op_str));
+            } else {
+                let op_str = transpile_node(operand, layer, in_main, table)?;
+                return Ok(format!("{}()", op_str));
+            }
         }
+    }
+
+    if operator == "$" {
+        let op_str = transpile_node(operand, layer, in_main, table)?;
+        return Ok(format!("(move || {{ {} }})", op_str));
     }
 
     if operator == "#" || operator == "##" {
@@ -662,12 +1300,24 @@ fn transpile_prefix_op(operator: &str, operand: &AstNode, layer: usize, in_main:
             return Err("Compile Error: Allocation (#/##) is not allowed in layer 0".to_string());
         }
         let op_str = transpile_node(operand, layer, in_main, table)?;
-        let alloc_type = if operator == "#" { "Rc::new" } else { "Arc::new" };
-        return Ok(format!("RefCell::new({}({}))", alloc_type, op_str));
+        let wrapper = if operator == "#" {
+            "std::rc::Rc::new(std::cell::RefCell::new"
+        } else {
+            "std::sync::Arc::new(std::sync::Mutex::new"
+        };
+        return Ok(format!("{}({}))", wrapper, op_str));
     }
 
     let op_str = transpile_node(operand, layer, in_main, table)?;
     Ok(format!("{}{}", operator, op_str))
+}
+
+fn transpile_postfix_op(operator: &str, operand: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
+    if operator == "~" {
+        return transpile_node(operand, layer, in_main, table);
+    }
+    let op_str = transpile_node(operand, layer, in_main, table)?;
+    Ok(format!("{}{}", op_str, operator))
 }
 
 fn transpile_block(node: &AstNode, kind: &BlockKind, content: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
@@ -700,8 +1350,17 @@ fn transpile_block(node: &AstNode, kind: &BlockKind, content: &AstNode, layer: u
             if lines.len() <= 1 {
                 Ok(inner)
             } else {
-                let formatted_lines = lines.join(";\n    ");
-                Ok(format!("{{\n    {};\n}}", formatted_lines))
+                let last_idx = lines.len() - 1;
+                let mut block_body = String::new();
+                for i in 0..last_idx {
+                    block_body.push_str("    ");
+                    block_body.push_str(&lines[i]);
+                    block_body.push_str(";\n");
+                }
+                block_body.push_str("    ");
+                block_body.push_str(&lines[last_idx]);
+                block_body.push_str("\n");
+                Ok(format!("{{\n{}}}", block_body))
             }
         }
         BlockKind::Paren => {
@@ -710,7 +1369,11 @@ fn transpile_block(node: &AstNode, kind: &BlockKind, content: &AstNode, layer: u
         }
         BlockKind::Bracket => {
             let inner = transpile_node(content, layer, in_main, table)?;
-            Ok(format!("vec![{}]", inner))
+            if inner.starts_with("vec![") {
+                Ok(inner)
+            } else {
+                Ok(format!("vec![{}]", inner))
+            }
         }
         _ => {
             let inner = transpile_node(content, layer, in_main, table)?;
@@ -721,7 +1384,30 @@ fn transpile_block(node: &AstNode, kind: &BlockKind, content: &AstNode, layer: u
 
 fn transpile_lambda(arguments: &AstNode, body: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
     let args = collect_args(arguments);
-    let args_str = args.iter().map(|arg| format!("{}: f64", arg)).collect::<Vec<_>>().join(", ");
+    let args_str = args.iter().map(|arg| {
+        let opt_obj_type = if let Some(first_char) = arg.chars().next() {
+            let capitalized = format!("{}{}", first_char.to_uppercase(), &arg[1..]);
+            if table.objects.contains_key(&capitalized) {
+                Some(capitalized)
+            } else if table.objects.contains_key(arg) {
+                Some(arg.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if let Some(obj_type) = opt_obj_type {
+            if arg == &obj_type {
+                format!("_{}: {}Struct", arg, arg)
+            } else {
+                format!("{}: {}Struct", arg, obj_type)
+            }
+        } else {
+            format!("{}: f64", arg)
+        }
+    }).collect::<Vec<_>>().join(", ");
     let body_str = transpile_node(body, layer, in_main, table)?;
     Ok(format!("(move |{}| {})", args_str, body_str))
 }
@@ -797,6 +1483,509 @@ fn transpile_inline_code(code: &str, layer: usize, in_main: bool, table: &Symbol
     }
     
     Ok(result)
+}
+
+fn contains_identifier(node: &AstNode, target_id: &str) -> bool {
+    match node {
+        AstNode::Scalar(_) | AstNode::Char(_) | AstNode::String(_) | AstNode::Address(_) | AstNode::Unit | AstNode::Hole => false,
+        AstNode::Identifier(id) => id == target_id,
+        AstNode::Block { content, .. } => contains_identifier(content, target_id),
+        AstNode::BinaryOperation { left, right, .. } => {
+            contains_identifier(left, target_id) || contains_identifier(right, target_id)
+        }
+        AstNode::Prefix { operand, .. } => contains_identifier(operand, target_id),
+        AstNode::Postfix { operand, .. } => contains_identifier(operand, target_id),
+        AstNode::Coproduct(list) => list.iter().any(|item| contains_identifier(item, target_id)),
+        AstNode::Product(list) => list.iter().any(|item| contains_identifier(item, target_id)),
+        AstNode::Lambda { arguments, body } => {
+            if contains_identifier(arguments, target_id) {
+                false
+            } else {
+                contains_identifier(body, target_id)
+            }
+        }
+        AstNode::Define { identifier, definition } => {
+            identifier == target_id || contains_identifier(definition, target_id)
+        }
+        AstNode::MatchCase { cases } => {
+            cases.iter().any(|(cond, body)| {
+                cond.as_ref().map_or(false, |c| contains_identifier(c, target_id))
+                    || contains_identifier(body, target_id)
+            })
+        }
+        AstNode::PointFree(kind) => {
+            match kind {
+                PointFreeKind::BinaryOpMap(_, right) => contains_identifier(right, target_id),
+                _ => false
+            }
+        }
+        _ => false,
+    }
+}
+
+fn substitute_args(node: &AstNode, mapping: &HashMap<String, AstNode>) -> AstNode {
+    match node {
+        AstNode::Identifier(id) => {
+            if let Some(replacement) = mapping.get(id) {
+                replacement.clone()
+            } else {
+                node.clone()
+            }
+        }
+        AstNode::Block { kind, content } => {
+            AstNode::Block {
+                kind: kind.clone(),
+                content: Box::new(substitute_args(content, mapping)),
+            }
+        }
+        AstNode::BinaryOperation { operator, left, right, name } => {
+            AstNode::BinaryOperation {
+                operator: operator.clone(),
+                left: Box::new(substitute_args(left, mapping)),
+                right: Box::new(substitute_args(right, mapping)),
+                name: name.clone(),
+            }
+        }
+        AstNode::Prefix { operator, operand, name } => {
+            AstNode::Prefix {
+                operator: operator.clone(),
+                operand: Box::new(substitute_args(operand, mapping)),
+                name: name.clone(),
+            }
+        }
+        AstNode::Postfix { operator, operand, name } => {
+            AstNode::Postfix {
+                operator: operator.clone(),
+                operand: Box::new(substitute_args(operand, mapping)),
+                name: name.clone(),
+            }
+        }
+        AstNode::Coproduct(list) => {
+            let new_list = list.iter().map(|item| substitute_args(item, mapping)).collect();
+            AstNode::Coproduct(new_list)
+        }
+        AstNode::Product(list) => {
+            let new_list = list.iter().map(|item| substitute_args(item, mapping)).collect();
+            AstNode::Product(new_list)
+        }
+        AstNode::Lambda { arguments, body } => {
+            let args_list = collect_args(arguments);
+            let mut sub_mapping = mapping.clone();
+            for arg in args_list {
+                sub_mapping.remove(&arg);
+            }
+            AstNode::Lambda {
+                arguments: Box::new(substitute_args(arguments, &sub_mapping)),
+                body: Box::new(substitute_args(body, &sub_mapping)),
+            }
+        }
+        AstNode::Define { identifier, definition } => {
+            let mut sub_mapping = mapping.clone();
+            sub_mapping.remove(identifier);
+            AstNode::Define {
+                identifier: identifier.clone(),
+                definition: Box::new(substitute_args(definition, &sub_mapping)),
+            }
+        }
+        AstNode::MatchCase { cases } => {
+            let new_cases = cases.iter().map(|(cond, body)| {
+                let new_cond = cond.as_ref().map(|c| substitute_args(c, mapping));
+                let new_body = substitute_args(body, mapping);
+                (new_cond, new_body)
+            }).collect();
+            AstNode::MatchCase { cases: new_cases }
+        }
+        AstNode::PointFree(kind) => {
+            match kind {
+                PointFreeKind::BinaryOpMap(op, right) => {
+                    AstNode::PointFree(PointFreeKind::BinaryOpMap(op.clone(), Box::new(substitute_args(right, mapping))))
+                }
+                _ => node.clone()
+            }
+        }
+        _ => node.clone(),
+    }
+}
+
+fn has_deref_of_arg(node: &AstNode, arg_name: &str) -> bool {
+    match node {
+        AstNode::Prefix { operator, operand, .. } if operator == "@" => {
+            if let AstNode::Identifier(id) = &**operand {
+                if id == arg_name {
+                    return true;
+                }
+            }
+            has_deref_of_arg(operand, arg_name)
+        }
+        AstNode::Block { content, .. } => has_deref_of_arg(content, arg_name),
+        AstNode::BinaryOperation { left, right, .. } => {
+            has_deref_of_arg(left, arg_name) || has_deref_of_arg(right, arg_name)
+        }
+        AstNode::Prefix { operand, .. } => has_deref_of_arg(operand, arg_name),
+        AstNode::Postfix { operand, .. } => has_deref_of_arg(operand, arg_name),
+        AstNode::Coproduct(list) => list.iter().any(|item| has_deref_of_arg(item, arg_name)),
+        AstNode::Product(list) => list.iter().any(|item| has_deref_of_arg(item, arg_name)),
+        AstNode::Lambda { arguments, body } => {
+            if let AstNode::Identifier(id) = &**arguments {
+                if id == arg_name {
+                    return false;
+                }
+            }
+            has_deref_of_arg(body, arg_name)
+        }
+        AstNode::Define { definition, .. } => has_deref_of_arg(definition, arg_name),
+        _ => false,
+    }
+}
+
+fn is_high_order_function(sig: &FuncSignature) -> bool {
+    if let Some(body) = &sig.body {
+        for arg in &sig.args {
+            if sig.destructured_args.contains(arg) {
+                continue;
+            }
+            if has_deref_of_arg(body, arg) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn has_hole(node: &AstNode) -> bool {
+    match node {
+        AstNode::Hole => true,
+        AstNode::Coproduct(list) => list.iter().any(has_hole),
+        AstNode::Block { content, .. } => has_hole(content),
+        AstNode::Prefix { operand, .. } => has_hole(operand),
+        AstNode::Postfix { operand, .. } => has_hole(operand),
+        AstNode::BinaryOperation { left, right, .. } => has_hole(left) || has_hole(right),
+        AstNode::Lambda { body, .. } => has_hole(body),
+        AstNode::Define { definition, .. } => has_hole(definition),
+        _ => false,
+    }
+}
+
+fn desugar_holes(node: &AstNode) -> AstNode {
+    if !has_hole(node) {
+        return node.clone();
+    }
+
+    if let AstNode::Define { identifier, definition } = node {
+        return AstNode::Define {
+            identifier: identifier.clone(),
+            definition: Box::new(desugar_holes(definition)),
+        };
+    }
+
+    if let AstNode::Lambda { arguments, body } = node {
+        return AstNode::Lambda {
+            arguments: arguments.clone(),
+            body: Box::new(desugar_holes(body)),
+        };
+    }
+
+    let mut vars = Vec::new();
+    let desugared_body = replace_holes_with_vars(node, &mut vars);
+    
+    if vars.is_empty() {
+        return desugared_body;
+    }
+
+    let args_node = if vars.len() == 1 {
+        AstNode::Identifier(vars[0].clone())
+    } else {
+        AstNode::Coproduct(vars.into_iter().map(AstNode::Identifier).collect())
+    };
+
+    AstNode::Lambda {
+        arguments: Box::new(args_node),
+        body: Box::new(desugared_body),
+    }
+}
+
+fn replace_holes_with_vars(node: &AstNode, vars: &mut Vec<String>) -> AstNode {
+    match node {
+        AstNode::Hole => {
+            let var_name = format!("_p{}", vars.len());
+            vars.push(var_name.clone());
+            AstNode::Identifier(var_name)
+        }
+        AstNode::Coproduct(list) => {
+            let mut new_list = Vec::new();
+            for item in list {
+                new_list.push(replace_holes_with_vars(item, vars));
+            }
+            AstNode::Coproduct(new_list)
+        }
+        AstNode::Block { kind, content } => {
+            AstNode::Block {
+                kind: kind.clone(),
+                content: Box::new(replace_holes_with_vars(content, vars)),
+            }
+        }
+        AstNode::Prefix { operator, operand, name } => {
+            AstNode::Prefix {
+                operator: operator.clone(),
+                operand: Box::new(replace_holes_with_vars(operand, vars)),
+                name: name.clone(),
+            }
+        }
+        AstNode::Postfix { operator, operand, name } => {
+            AstNode::Postfix {
+                operator: operator.clone(),
+                operand: Box::new(replace_holes_with_vars(operand, vars)),
+                name: name.clone(),
+            }
+        }
+        AstNode::BinaryOperation { operator, left, right, name } => {
+            AstNode::BinaryOperation {
+                operator: operator.clone(),
+                left: Box::new(replace_holes_with_vars(left, vars)),
+                right: Box::new(replace_holes_with_vars(right, vars)),
+                name: name.clone(),
+            }
+        }
+        AstNode::Lambda { .. } => {
+            // ネストした Lambda はこのレベルでは置換せず、脱糖して丸ごと返す
+            desugar_holes(node)
+        }
+        AstNode::Define { identifier, definition } => {
+            AstNode::Define {
+                identifier: identifier.clone(),
+                definition: Box::new(replace_holes_with_vars(definition, vars)),
+            }
+        }
+        _ => node.clone(),
+    }
+}
+
+fn collect_list_destructures(node: &AstNode, res: &mut Vec<(usize, AstNode)>) {
+    collect_list_destructures_rec(node, res, &mut 0);
+}
+
+fn collect_list_destructures_rec(node: &AstNode, res: &mut Vec<(usize, AstNode)>, index: &mut usize) {
+    match node {
+        AstNode::Block { kind, content } if *kind == BlockKind::Bracket => {
+            res.push((*index, *content.clone()));
+            *index += 1;
+        }
+        AstNode::Coproduct(list) => {
+            for item in list {
+                collect_list_destructures_rec(item, res, index);
+            }
+        }
+        AstNode::BinaryOperation { operator, left, right, .. } if operator == "," || operator == " " => {
+            collect_list_destructures_rec(left, res, index);
+            collect_list_destructures_rec(right, res, index);
+        }
+        _ => {
+            *index += 1;
+        }
+    }
+}
+
+fn desugar_destructuring(node: &AstNode, table: &SymbolTable) -> AstNode {
+    match node {
+        AstNode::Lambda { arguments, body } => {
+            let mut list_destructures = Vec::new();
+            collect_list_destructures(arguments, &mut list_destructures);
+
+            let mut destructures = Vec::new();
+            let new_args = rewrite_destructuring_args(arguments, &mut destructures, table);
+            
+            let mut desugared_body = desugar_destructuring(body, table);
+
+            // 1. リストデストラクト展開
+            for (index, list_pat) in list_destructures.into_iter().rev() {
+                let arg_name = if index == 0 {
+                    "list_arg".to_string()
+                } else {
+                    format!("list_arg_{}", index)
+                };
+                
+                if let AstNode::BinaryOperation { operator, left, right, .. } = &list_pat {
+                    if operator == "~" {
+                        if let AstNode::Identifier(head_var) = &**left {
+                            if let AstNode::Identifier(tail_var) = &**right {
+                                let head_def = AstNode::InlineCode(format!("{}[0]", arg_name));
+                                let tail_def = AstNode::InlineCode(format!("&{}[1..]", arg_name));
+                                
+                                desugared_body = AstNode::BinaryOperation {
+                                    operator: "\\n".to_string(),
+                                    left: Box::new(AstNode::Define {
+                                        identifier: tail_var.clone(),
+                                        definition: Box::new(tail_def),
+                                    }),
+                                    right: Box::new(desugared_body),
+                                    name: "newline".to_string(),
+                                };
+                                
+                                desugared_body = AstNode::BinaryOperation {
+                                    operator: "\\n".to_string(),
+                                    left: Box::new(AstNode::Define {
+                                        identifier: head_var.clone(),
+                                        definition: Box::new(head_def),
+                                    }),
+                                    right: Box::new(desugared_body),
+                                    name: "newline".to_string(),
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. オブジェクトデストラクト展開
+            for (var_name, obj_name) in destructures.into_iter().rev() {
+                desugared_body = replace_destructured_reads(&desugared_body, &var_name);
+                let definition = AstNode::InlineCode(format!("_{}.get_{}()", obj_name, var_name));
+                
+                desugared_body = AstNode::BinaryOperation {
+                    operator: "\\n".to_string(),
+                    left: Box::new(AstNode::Define {
+                        identifier: var_name,
+                        definition: Box::new(definition),
+                    }),
+                    right: Box::new(desugared_body),
+                    name: "newline".to_string(),
+                };
+            }
+            
+            AstNode::Lambda {
+                arguments: Box::new(new_args),
+                body: Box::new(desugared_body),
+            }
+        }
+        AstNode::Define { identifier, definition } => {
+            AstNode::Define {
+                identifier: identifier.clone(),
+                definition: Box::new(desugar_destructuring(definition, table)),
+            }
+        }
+        AstNode::Coproduct(list) => {
+            AstNode::Coproduct(list.iter().map(|item| desugar_destructuring(item, table)).collect())
+        }
+        AstNode::Block { kind, content } => {
+            AstNode::Block {
+                kind: kind.clone(),
+                content: Box::new(desugar_destructuring(content, table)),
+            }
+        }
+        AstNode::BinaryOperation { operator, left, right, name } => {
+            AstNode::BinaryOperation {
+                operator: operator.clone(),
+                left: Box::new(desugar_destructuring(left, table)),
+                right: Box::new(desugar_destructuring(right, table)),
+                name: name.clone(),
+            }
+        }
+        AstNode::Prefix { operator, operand, name } => {
+            AstNode::Prefix {
+                operator: operator.clone(),
+                operand: Box::new(desugar_destructuring(operand, table)),
+                name: name.clone(),
+            }
+        }
+        AstNode::Postfix { operator, operand, name } => {
+            AstNode::Postfix {
+                operator: operator.clone(),
+                operand: Box::new(desugar_destructuring(operand, table)),
+                name: name.clone(),
+            }
+        }
+        _ => node.clone(),
+    }
+}
+
+fn rewrite_destructuring_args(node: &AstNode, destructures: &mut Vec<(String, String)>, table: &SymbolTable) -> AstNode {
+    rewrite_destructuring_args_idx(node, destructures, table, &mut 0)
+}
+
+fn rewrite_destructuring_args_idx(node: &AstNode, destructures: &mut Vec<(String, String)>, table: &SymbolTable, list_arg_count: &mut usize) -> AstNode {
+    match node {
+        AstNode::BinaryOperation { operator, left, right, .. } if operator == "~" => {
+            if let (AstNode::Identifier(var_name), AstNode::Identifier(obj_name)) = (&**left, &**right) {
+                if table.objects.contains_key(obj_name) {
+                    destructures.push((var_name.clone(), obj_name.clone()));
+                    AstNode::Identifier(obj_name.clone())
+                } else {
+                    node.clone()
+                }
+            } else {
+                node.clone()
+            }
+        }
+        AstNode::Coproduct(list) => {
+            let mut new_list = Vec::new();
+            for item in list {
+                new_list.push(rewrite_destructuring_args_idx(item, destructures, table, list_arg_count));
+            }
+            AstNode::Coproduct(new_list)
+        }
+        AstNode::Block { kind, .. } if *kind == BlockKind::Bracket => {
+            let name = if *list_arg_count == 0 {
+                "list_arg".to_string()
+            } else {
+                format!("list_arg_{}", list_arg_count)
+            };
+            *list_arg_count += 1;
+            AstNode::Identifier(name)
+        }
+        _ => node.clone(),
+    }
+}
+
+fn replace_destructured_reads(node: &AstNode, var_name: &str) -> AstNode {
+    match node {
+        AstNode::Prefix { operator, operand, .. } if operator == "@" => {
+            if let AstNode::Identifier(id) = &**operand {
+                if id == var_name {
+                    return AstNode::InlineCode(format!("{}.unwrap()", var_name));
+                }
+            }
+            AstNode::Prefix {
+                operator: operator.clone(),
+                operand: Box::new(replace_destructured_reads(operand, var_name)),
+                name: "deref".to_string(),
+            }
+        }
+        AstNode::Coproduct(list) => {
+            AstNode::Coproduct(list.iter().map(|item| replace_destructured_reads(item, var_name)).collect())
+        }
+        AstNode::Block { kind, content } => {
+            AstNode::Block {
+                kind: kind.clone(),
+                content: Box::new(replace_destructured_reads(content, var_name)),
+            }
+        }
+        AstNode::BinaryOperation { operator, left, right, name } => {
+            AstNode::BinaryOperation {
+                operator: operator.clone(),
+                left: Box::new(replace_destructured_reads(left, var_name)),
+                right: Box::new(replace_destructured_reads(right, var_name)),
+                name: name.clone(),
+            }
+        }
+        AstNode::Define { identifier, definition } => {
+            AstNode::Define {
+                identifier: identifier.clone(),
+                definition: Box::new(replace_destructured_reads(definition, var_name)),
+            }
+        }
+        AstNode::Lambda { arguments, body } => {
+            let shadowed = collect_args(arguments).contains(&var_name.to_string());
+            if shadowed {
+                node.clone()
+            } else {
+                AstNode::Lambda {
+                    arguments: arguments.clone(),
+                    body: Box::new(replace_destructured_reads(body, var_name)),
+                }
+            }
+        }
+        _ => node.clone(),
+    }
 }
 
 #[cfg(test)]
