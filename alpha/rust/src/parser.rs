@@ -50,32 +50,14 @@ peg::parser!{
             }
             / lambda()
 
-        rule def_arg_expr() -> AstNode
-            = left:output() opt_ws() ":" opt_ws() right:def_arg_expr() {
-                if let AstNode::Identifier(ref id) = left {
-                    AstNode::Define {
-                        identifier: id.clone(),
-                        definition: Box::new(right),
-                    }
-                } else {
-                    AstNode::BinaryOperation {
-                        operator: ":".to_string(),
-                        left: Box::new(left),
-                        right: Box::new(right),
-                        name: "define".to_string(),
-                    }
-                }
-            }
-            / output()
-
         rule lambda() -> AstNode
-            = left:def_arg_expr() opt_ws() "?" opt_ws() right:lambda() {
+            = left:output() opt_ws() "?" opt_ws() right:lambda() {
                 AstNode::Lambda {
                     arguments: Box::new(left),
                     body: Box::new(right),
                 }
             }
-            / def_arg_expr()
+            / output()
 
         rule output() -> AstNode
             = left:logical_xor() whitespace() "#" whitespace() right:output() {
