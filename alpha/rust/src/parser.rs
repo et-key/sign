@@ -51,7 +51,7 @@ peg::parser!{
             / lambda()
 
         rule lambda() -> AstNode
-            = left:output() whitespace() "?" whitespace() right:lambda() {
+            = left:output() opt_ws() "?" opt_ws() right:lambda() {
                 AstNode::Lambda {
                     arguments: Box::new(left),
                     body: Box::new(right),
@@ -331,15 +331,17 @@ peg::parser!{
             = block()
             / atom()
 
+        rule opt_ws() = ([' ']+ / EOL() / comment())*
+
         rule block() -> AstNode
-            = "(" whitespace() contents:block_contents_opt() whitespace() ")" {
+            = "(" opt_ws() contents:block_contents_opt() opt_ws() ")" {
                 AstNode::Block { kind: BlockKind::Paren, content: Box::new(contents) }
             }
-            / "[" whitespace() node:point_free() whitespace() "]" { node }
-            / "[" whitespace() contents:block_contents_opt() whitespace() "]" {
+            / "[" opt_ws() node:point_free() opt_ws() "]" { node }
+            / "[" opt_ws() contents:block_contents_opt() opt_ws() "]" {
                 AstNode::Block { kind: BlockKind::Bracket, content: Box::new(contents) }
             }
-            / "{" whitespace() contents:block_contents_opt() whitespace() "}" {
+            / "{" opt_ws() contents:block_contents_opt() opt_ws() "}" {
                 AstNode::Block { kind: BlockKind::Brace, content: Box::new(contents) }
             }
             / "|" whitespace() expr:expression() whitespace() "|" {

@@ -42,15 +42,15 @@ config:
 graph LR
 
 subgraph Lambda
-        identity( _ : identity or Void )
+        identity( __ : identity or Void )
 end
 
 subgraph Object[ Object = True ]
-    Number([ - ... 0 ... +])
-    Letter([ UTF ... etc])
+    Number([ -x ... 0 ... +x ])
+    Letter([ UTF ... etc ])
 
     subgraph List [ List ...etc ]
-        False( _ : false = Null)
+        False( __ : false = Null)
     end
 end
 

@@ -92,6 +92,51 @@ hole_partial_result : hole_partial 10.0
 hole_op : _ + 100.0
 hole_op_result : hole_op 50.0
 
+` === オブジェクト定義と構造体メンバ暗黙抽出のテスト ===
+Foo :
+	foo : 500.0
+	bar : 200.0
+
+extract_foo : foo ~Foo ? @foo + 100.0
+struct_extract_success : extract_foo Foo~
+
+extract_foo_fail : baz ~Foo ? baz
+struct_extract_fail : extract_foo_fail Foo~
+
+` === 統合的関数のテスト（オブジェクト、暗黙抽出、可変長再帰、部分適用、3項チェイン） ===
+
+Item :
+		name
+		price : 0.0
+	?
+		name !== `` & price != 0.0 : [
+			name
+			price
+		]
+
+
+ItemA : Item `apple` 150.0
+
+ItemB : Item "banana" 80.0
+
+ItemC : Item "orange" 300.0
+
+check_limit : limit [price ~Item] ?
+	(price > limit) & price | __
+
+check_over_100 : item ? check_limit 100.0 item | 0.0
+
+sum_filtered : item ~ys ?
+	(check_over_100 item) + (sum_filtered ys~)
+
+total_expensive : sum_filtered ItemA ItemB ItemC
+
+` === リスト分割代入（デストラクト）と参照渡しのテスト ===
+g : [x ~y] ?
+	x
+
+list_destruct_result : g [10.0 20.0 30.0]
+
 ` 結果を出力する
 "println!(\"partial_add 20 = {}\", @{partial_add 20.0})"
 "println!(\"cond_result = {:?}\", @{cond_result})"
@@ -111,6 +156,10 @@ hole_op_result : hole_op 50.0
 "println!(\"val_cmp_unit = {:?}\", @{val_cmp_unit})"
 "println!(\"val_cmp_chain = {:?}\", @{val_cmp_chain})"
 "println!(\"val_cmp_chain_fail = {:?}\", @{val_cmp_chain_fail})"
+"println!(\"struct_extract_success = {:?}\", @{struct_extract_success})"
+"println!(\"struct_extract_fail = {:?}\", {struct_extract_fail})"
+"println!(\"total_expensive = {}\", @{total_expensive})"
+"println!(\"list_destruct_result = {}\", @{list_destruct_result})"
 "#;
 
     let source_code_bare = r#"
@@ -137,7 +186,7 @@ fn run_transpile(source: &str, layer: usize, name: &str) {
             match transpile_program(&ast, layer) {
                 Ok(rust_code) => {
                     // 1. ファイル書き出し
-                    let rs_filename = format!("{}.rs", name);
+                    let rs_filename = format!("C:/Users/johnn/project/Sign/alpha/rust/{}.rs", name);
                     if let Err(e) = fs::write(&rs_filename, &rust_code) {
                         println!("Failed to write file {}: {}", rs_filename, e);
                         return;
@@ -146,9 +195,9 @@ fn run_transpile(source: &str, layer: usize, name: &str) {
 
                     // 2. rustc によるコンパイル
                     let exe_filename = if cfg!(target_os = "windows") {
-                        format!("{}.exe", name)
+                        format!("C:/Users/johnn/project/Sign/alpha/rust/{}.exe", name)
                     } else {
-                        name.to_string()
+                        format!("C:/Users/johnn/project/Sign/alpha/rust/{}", name)
                     };
 
                     println!("Compiling {} ...", rs_filename);
