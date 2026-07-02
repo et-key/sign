@@ -23,6 +23,7 @@ pub enum AstNode {
     Char(char),
     String(String),
     Address(usize),
+    Register(isize),
     Unit,
     Hole,
     Identifier(String),

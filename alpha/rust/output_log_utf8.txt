@@ -1,0 +1,290 @@
+﻿cargo :    Compiling rust v0.1.0 (C:\Users\johnn\project\Sign\alpha\rust)
+発生場所 行:1 文字:1
++ cargo run 2>&1 | Out-File -FilePath output_log_utf8.txt -Encoding utf ...
++ ~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling ru...ign\alpha\rust):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.66s
+     Running `target\debug\rust.exe`
+=== Testing Layer 2 (OS Std) ===
+Preprocessed Source:
+
+` 繝・せ繝医さ繝ｼ繝・(std繝ｬ繧､繝､繝ｼ)
+add  :  x y  ? x  +  y
+
+mul  :  x y  ? x  *  y
+
+` 驛ｨ蛻・←逕ｨ縺ｮ繝・せ繝・partial_add  :  add 10
+
+` 豈碑ｼ・→遏ｭ邨｡隧穂ｾ｡縺ｮ繝・せ繝・a  :  10.0
+b  :  20.0
+
+` a 縺・5 繧医ｊ螟ｧ縺阪￥縲√°縺､ b 縺・15 繧医ｊ螟ｧ縺阪＞蝣ｴ蜷医ヾome(1.0) 繧定ｿ斐☆縲ゅ◎縺・〒縺ｪ縺代ｌ縺ｰ __ (None)
+cond_result  :  (a  >  5.0) & (b  >  15.0) | __
+
+` 豈碑ｼ・鬆・ｼ皮ｮ・(match_case 縺ｨ蜷後§ match 螻暮幕縺ｧ隗｣豎ｺ縺輔ｌ繧・
+ternary_result  :  (a  >  5.0)  ?  99.0  :  88.0
+
+` 隍・焚陦・of match_case 繝悶Ο繝・け (蜷後§ match 螻暮幕)
+match_result  : a  ==  5.0  :  50.0
+b  ==  20.0  :  200.0
+999.0
+
+` 繝昴う繝ｳ繝医ヵ繝ｪ繝ｼ・壹☆縺ｹ縺ｦ雜ｳ縺礼ｮ・(Sum)
+sum_result  :  [ + ] 1.0 2.0 3.0 4.0 5.0
+
+` 繝昴う繝ｳ繝医ヵ繝ｪ繝ｼ・壼推隕∫ｴ縺ｫ2.0繧呈寺縺代ｋ (Map)
+map_result  :  [ *  2.0 , ] 1.0 2.0 3.0
+
+` === Coproduct Resolver (菴咏ｩ崎ｧ｣豎ｺ蝎ｨ) 蜈ｨ繝ｬ繝吶Ν縺ｮ繝・せ繝・===
+
+` 10.3: Atom + Atom -> concat (繝ｪ繧ｹ繝磯｣謗･)
+concat_result  :  1.0 2.0
+
+` 10.2: Lambda + Lambda -> compose (蟾ｦ邨仙粋髢｢謨ｰ蜷域・)
+` 10.1: Lambda + Atom -> apply (髢｢謨ｰ驕ｩ逕ｨ)
+` 5.0 縺ｫ (+1.0) 縺励※ (*2.0) 縺吶ｋ -> (5 + 1) * 2 = 12.0
+compose_result  :  (add 1.0) (mul 2.0) 5.0
+
+` 10.0: Atom + Lambda -> apply_reverse (騾・←逕ｨ)
+` 5.0 縺ｫ (+1.0) 縺吶ｋ -> 6.0
+reverse_result  :  5.0 (add 1.0)
+
+` === 鬮倬嚴髢｢謨ｰ ・・蜑咲ｽｮ$繧ｵ繧ｹ繝壹Φ繝峨・驕・ｻｶ隧穂ｾ｡縺ｮ繝・せ繝・===
+` 髢｢謨ｰ f 繧貞女縺大叙縺｣縺ｦ 5.0 繧帝←逕ｨ縺吶ｋ
+apply_five  :  f  ? (@f) 5.0
+
+` (add 10.0) 繧偵し繧ｹ繝壹Φ繝峨＠縺ｦ鬮倬嚴髢｢謨ｰ縺ｫ蠑墓焚縺ｨ縺励※貂｡縺・high_order_result  :  apply_five ($(add 10.0))
+
+` === 蜿ｯ螟蛾聞(Rest)蠑墓焚縺ｨ繧ｹ繝励Ξ繝・ラ螻暮幕蜀榊ｸｰ縺ｮ繝・せ繝・===
+c  :  #0.0
+list_loop  :  x ~y  ? c # (@c)  +  1.0
+list_loop y~
+
+list_loop 1.0 2.0 3.0 4.0 5.0
+list_len  :  @c
+
+` === Range 騾ｲ陦檎ｳｻ貍皮ｮ怜ｭ舌・繝・せ繝・(C-3) ===
+arith_range  :  [2  ~+  2 ~ 10]
+arith_range_second  :  [2  ~+  4  ~+  10]
+arith_range_rev  :  [10  ~-  2 ~ 2]
+geom_range  :  [1  ~*  2 ~ 16]
+geom_range_rev  :  [16  ~/  2 ~ 1]
+
+` === Bit貍皮ｮ怜ｭ舌・繝・せ繝・===
+bit_shl  :  2.0  <<  3.0
+bit_shr  :  16.0  >>  2.0
+bit_or   :  5.0  ||  3.0
+bit_xor  :  5.0  ;;  3.0
+bit_and  :  5.0  &&  3.0
+bit_not  :  !!5.0
+addr_shift  :  134217728.0  <<  2.0
+reg_decimal  :  0r0C
+reg_shift  :  reg_decimal  <<  2.0
+reg_dec_lit  :  0d12
+reg_dec_shift  :  reg_dec_lit  <<  2.0
+
+` === 蛟､繝吶・繧ｹ縺ｮ豈碑ｼ・ｼ亥腰菴榊・繝ｫ繝ｼ繝ｫ・峨→3鬆・メ繧ｧ繧､繝ｳ隧穂ｾ｡縺ｮ繝・せ繝・===
+val_cmp_non_unit  :  2.0  <  5.0
+val_cmp_unit  :  1.0  <  5.0
+val_cmp_chain  :  1.0  <  3.0  <  5.0
+val_cmp_chain_fail  :  2.0  <  1.0  <  5.0
+
+` === Hole・・・峨↓繧医ｋ髱咏噪閼ｱ邉夜Κ蛻・←逕ｨ縺ｮ繝・せ繝・===
+hole_partial  :  add _ 5.0
+hole_partial_result  :  hole_partial 10.0
+
+hole_op  :  _  +  100.0
+hole_op_result  :  hole_op 50.0
+
+` === 繧ｪ繝悶ず繧ｧ繧ｯ繝亥ｮ夂ｾｩ縺ｨ讒矩菴薙Γ繝ｳ繝先囓鮟呎歓蜃ｺ縺ｮ繝・せ繝・===
+Foo  : foo  :  500.0
+bar  :  200.0
+
+extract_foo  :  foo ~Foo  ?  @foo  +  100.0
+struct_extract_success  :  extract_foo Foo~
+
+extract_foo_fail  :  baz ~Foo  ?  baz
+struct_extract_fail  :  extract_foo_fail Foo~
+
+` === 邨ｱ蜷育噪髢｢謨ｰ縺ｮ繝・せ繝茨ｼ医が繝悶ず繧ｧ繧ｯ繝医∵囓鮟呎歓蜃ｺ縲∝庄螟蛾聞蜀榊ｸｰ縲・Κ蛻・←逕ｨ縲・鬆・メ繧ｧ繧､繝ｳ・・===
+
+Item  :  name (price  :  0.0)  ? (name  !==  `` & price  !=  0.0)  ?  [name
+price
+]
+
+
+ItemA  :  Item `apple` 150.0
+
+ItemB  :  Item `banana` 80.0
+
+ItemC  :  Item `orange` 300.0
+
+check_limit  :  limit [price ~Item]  ? (price  >  limit) & price | __
+
+check_over_100  :  item  ?  check_limit 100.0 item | 0.0
+
+sum_filtered  :  item ~ys  ? (check_over_100 item)  +  (sum_filtered ys~)
+
+total_expensive  :  sum_filtered ItemA ItemB ItemC
+
+` === 繝ｪ繧ｹ繝亥・蜑ｲ莉｣蜈･・医ョ繧ｹ繝医Λ繧ｯ繝茨ｼ峨→蜿ら・貂｡縺励・繝・せ繝・===
+g  :  [x ~y]  ? x
+
+list_destruct_result  :  g [10.0 20.0 30.0]
+
+` 邨先棡繧貞・蜉帙☆繧・"println!(\"partial_add 20 = {}\", @{partial_add 20.0})"
+"println!(\"cond_result = {:?}\", @{cond_result})"
+"println!(\"ternary_result = {:?}\", @{ternary_result})"
+"println!(\"match_result = {:?}\", @{match_result})"
+"println!(\"sum_result = {}\", @{sum_result})"
+"println!(\"map_result = {:?}\", @{map_result})"
+"println!(\"concat_result = {:?}\", @{concat_result})"
+"println!(\"compose_result = {}\", @{compose_result})"
+"println!(\"reverse_result = {}\", @{reverse_result})"
+"println!(\"high_order_result = {}\", @{high_order_result})"
+"println!(\"list_len = {}\", @{list_len})"
+"println!(\"hole_partial_result = {}\", @{hole_partial_result})"
+"println!(\"hole_op_result = {}\", @{hole_op_result})"
+"println!(\"val_cmp_non_unit = {:?}\", @{val_cmp_non_unit})"
+"println!(\"val_cmp_unit = {:?}\", @{val_cmp_unit})"
+"println!(\"val_cmp_chain = {:?}\", @{val_cmp_chain})"
+"println!(\"val_cmp_chain_fail = {:?}\", @{val_cmp_chain_fail})"
+"println!(\"struct_extract_success = {:?}\", @{struct_extract_success})"
+"println!(\"struct_extract_fail = {:?}\", {struct_extract_fail})"
+"println!(\"total_expensive = {}\", @{total_expensive})"
+"println!(\"list_destruct_result = {}\", @{list_destruct_result})"
+"println!(\"arith_range = {:?}\", @{arith_range})"
+"println!(\"arith_range_second = {:?}\", @{arith_range_second})"
+"println!(\"arith_range_rev = {:?}\", @{arith_range_rev})"
+"println!(\"geom_range = {:?}\", @{geom_range})"
+"println!(\"geom_range_rev = {:?}\", @{geom_range_rev})"
+"println!(\"bit_shl = {}\", @{bit_shl})"
+"println!(\"bit_shr = {}\", @{bit_shr})"
+"println!(\"bit_or = {}\", @{bit_or})"
+"println!(\"bit_xor = {}\", @{bit_xor})"
+"println!(\"bit_and = {}\", @{bit_and})"
+"println!(\"bit_not = {}\", @{bit_not})"
+"println!(\"addr_shift = {}\", @{addr_shift})"
+"println!(\"reg_decimal = {}\", @{reg_decimal})"
+"println!(\"reg_shift = {}\", @{reg_shift})"
+"println!(\"reg_dec_lit = {}\", @{reg_dec_lit})"
+"println!(\"reg_dec_shift = {}\", @{reg_dec_shift})"
+
+register_definition for add: Lambda { arguments: Coproduct([Identifier("x"), Identifier("y")]), body: Block { kind: Indent, content: BinaryOperation { operator: "+", left: Identifier("x"), right: Identifier("y"), name: "add" } } }
+register_definition for mul: Lambda { arguments: Coproduct([Identifier("x"), Identifier("y")]), body: Block { kind: Indent, content: BinaryOperation { operator: "*", left: Identifier("x"), right: Identifier("y"), name: "mul" } } }
+register_definition for partial_add: Coproduct([Identifier("add"), Scalar(10.0)])
+register_definition for a: Scalar(10.0)
+register_definition for b: Scalar(20.0)
+register_definition for cond_result: BinaryOperation { operator: "|", left: BinaryOperation { operator: "&", left: Block { kind: Paren, content: BinaryOperation { operator: ">", left: Identifier("a"), right: Scalar(5.0), name: "more" } }, right: Block { kind: Paren, content: BinaryOperation { operator: ">", left: Identifier("b"), right: Scalar(15.0), name: "more" } }, name: "and" }, right: Unit, name: "or" }
+register_definition for ternary_result: BinaryOperation { operator: ":", left: Lambda { arguments: Block { kind: Paren, content: BinaryOperation { operator: ">", left: Identifier("a"), right: Scalar(5.0), name: "more" } }, body: Scalar(99.0) }, right: Scalar(88.0), name: "define" }
+register_definition for match_result: BinaryOperation { operator: "\\n", left: BinaryOperation { operator: "\\n", left: BinaryOperation { operator: ":", left: BinaryOperation { operator: "==", left: Identifier("a"), right: Scalar(5.0), name: "equal" }, right: Scalar(50.0), name: "define" }, right: BinaryOperation { operator: ":", left: BinaryOperation { operator: "==", left: Identifier("b"), right: Scalar(20.0), name: "equal" }, right: Scalar(200.0), name: "define" }, name: "newline" }, right: Scalar(999.0), name: "newline" }
+register_definition for sum_result: Coproduct([PointFree(BinaryOp("+")), Scalar(1.0), Scalar(2.0), Scalar(3.0), Scalar(4.0), Scalar(5.0)])
+register_definition for map_result: Coproduct([PointFree(BinaryOpMap("*", Scalar(2.0))), Scalar(1.0), Scalar(2.0), Scalar(3.0)])
+register_definition for concat_result: Coproduct([Scalar(1.0), Scalar(2.0)])
+register_definition for compose_result: Coproduct([Block { kind: Paren, content: Coproduct([Identifier("add"), Scalar(1.0)]) }, Block { kind: Paren, content: Coproduct([Identifier("mul"), Scalar(2.0)]) }, Scalar(5.0)])
+register_definition for reverse_result: Coproduct([Scalar(5.0), Block { kind: Paren, content: Coproduct([Identifier("add"), Scalar(1.0)]) }])
+register_definition for apply_five: Lambda { arguments: Identifier("f"), body: Block { kind: Indent, content: Coproduct([Block { kind: Paren, content: Prefix { operator: "@", operand: Identifier("f"), name: "input" } }, Scalar(5.0)]) } }
+register_definition for high_order_result: Coproduct([Identifier("apply_five"), Block { kind: Paren, content: Prefix { operator: "$", operand: Block { kind: Paren, content: Coproduct([Identifier("add"), Scalar(10.0)]) }, name: "address" } }])
+register_definition for c: Prefix { operator: "#", operand: Scalar(0.0), name: "reverse" }
+register_definition for list_loop: Lambda { arguments: BinaryOperation { operator: "~", left: Identifier("x"), right: Identifier("y"), name: "range" }, body: Block { kind: Indent, content: BinaryOperation { operator: "\\n", left: BinaryOperation { operator: "#", left: Identifier("c"), right: BinaryOperation { operator: "+", left: Block { kind: Paren, content: Prefix { operator: "@", operand: Identifier("c"), name: "input" } }, right: Scalar(1.0), name: "add" }, name: "output" }, right: Coproduct([Identifier("list_loop"), Postfix { operator: "~", operand: Identifier("y"), name: "expand" }]), name: "newline" } } }
+register_definition for list_len: Prefix { operator: "@", operand: Identifier("c"), name: "input" }
+register_definition for arith_range: BinaryOperation { operator: "~", left: BinaryOperation { operator: "~+", left: Scalar(2.0), right: Scalar(2.0), name: "range_arithmetic" }, right: Scalar(10.0), name: "range" }
+register_definition for arith_range_second: BinaryOperation { operator: "~+", left: BinaryOperation { operator: "~+", left: Scalar(2.0), right: Scalar(4.0), name: "range_arithmetic" }, right: Scalar(10.0), name: "range_arithmetic" }
+register_definition for arith_range_rev: BinaryOperation { operator: "~", left: BinaryOperation { operator: "~-", left: Scalar(10.0), right: Scalar(2.0), name: "range_arithmetic_rev" }, right: Scalar(2.0), name: "range" }
+register_definition for geom_range: BinaryOperation { operator: "~", left: BinaryOperation { operator: "~*", left: Scalar(1.0), right: Scalar(2.0), name: "range_geometric" }, right: Scalar(16.0), name: "range" }
+register_definition for geom_range_rev: BinaryOperation { operator: "~", left: BinaryOperation { operator: "~/", left: Scalar(16.0), right: Scalar(2.0), name: "range_geometric_rev" }, right: Scalar(1.0), name: "range" }
+register_definition for bit_shl: BinaryOperation { operator: "<<", left: Scalar(2.0), right: Scalar(3.0), name: "bit_shift_left" }
+register_definition for bit_shr: BinaryOperation { operator: ">>", left: Scalar(16.0), right: Scalar(2.0), name: "bit_shift_right" }
+register_definition for bit_or: BinaryOperation { operator: "||", left: Scalar(5.0), right: Scalar(3.0), name: "bit_or" }
+register_definition for bit_xor: BinaryOperation { operator: ";;", left: Scalar(5.0), right: Scalar(3.0), name: "bit_xor" }
+register_definition for bit_and: BinaryOperation { operator: "&&", left: Scalar(5.0), right: Scalar(3.0), name: "bit_and" }
+register_definition for bit_not: Prefix { operator: "!!", operand: Scalar(5.0), name: "bit_not" }
+register_definition for addr_shift: BinaryOperation { operator: "<<", left: Scalar(134217728.0), right: Scalar(2.0), name: "bit_shift_left" }
+register_definition for reg_decimal: Register(12)
+register_definition for reg_shift: BinaryOperation { operator: "<<", left: Identifier("reg_decimal"), right: Scalar(2.0), name: "bit_shift_left" }
+register_definition for reg_dec_lit: Register(12)
+register_definition for reg_dec_shift: BinaryOperation { operator: "<<", left: Identifier("reg_dec_lit"), right: Scalar(2.0), name: "bit_shift_left" }
+register_definition for val_cmp_non_unit: BinaryOperation { operator: "<", left: Scalar(2.0), right: Scalar(5.0), name: "less" }
+register_definition for val_cmp_unit: BinaryOperation { operator: "<", left: Scalar(1.0), right: Scalar(5.0), name: "less" }
+register_definition for val_cmp_chain: BinaryOperation { operator: "<", left: BinaryOperation { operator: "<", left: Scalar(1.0), right: Scalar(3.0), name: "less" }, right: Scalar(5.0), name: "less" }
+register_definition for val_cmp_chain_fail: BinaryOperation { operator: "<", left: BinaryOperation { operator: "<", left: Scalar(2.0), right: Scalar(1.0), name: "less" }, right: Scalar(5.0), name: "less" }
+register_definition for hole_partial: Lambda { arguments: Identifier("_p0"), body: Coproduct([Identifier("add"), Identifier("_p0"), Scalar(5.0)]) }
+register_definition for hole_partial_result: Coproduct([Identifier("hole_partial"), Scalar(10.0)])
+register_definition for hole_op: Lambda { arguments: Identifier("_p0"), body: BinaryOperation { operator: "+", left: Identifier("_p0"), right: Scalar(100.0), name: "add" } }
+register_definition for hole_op_result: Coproduct([Identifier("hole_op"), Scalar(50.0)])
+register_definition for Foo: BinaryOperation { operator: "\\n", left: Define { identifier: "foo", definition: Scalar(500.0) }, right: Define { identifier: "bar", definition: Scalar(200.0) }, name: "newline" }
+register_definition for extract_foo: Lambda { arguments: BinaryOperation { operator: "~", left: Identifier("foo"), right: Identifier("Foo"), name: "range" }, body: BinaryOperation { operator: "+", left: Prefix { operator: "@", operand: Identifier("foo"), name: "input" }, right: Scalar(100.0), name: "add" } }
+register_definition for struct_extract_success: Coproduct([Identifier("extract_foo"), Postfix { operator: "~", operand: Identifier("Foo"), name: "expand" }])
+register_definition for extract_foo_fail: Lambda { arguments: BinaryOperation { operator: "~", left: Identifier("baz"), right: Identifier("Foo"), name: "range" }, body: Identifier("baz") }
+register_definition for struct_extract_fail: Coproduct([Identifier("extract_foo_fail"), Postfix { operator: "~", operand: Identifier("Foo"), name: "expand" }])
+register_definition for Item: Lambda { arguments: Coproduct([Identifier("name"), Block { kind: Paren, content: Define { identifier: "price", definition: Scalar(0.0) } }]), body: Block { kind: Indent, content: Lambda { arguments: Block { kind: Paren, content: BinaryOperation { operator: "&", left: BinaryOperation { operator: "!==", left: Identifier("name"), right: String(""), name: "not_equal" }, right: BinaryOperation { operator: "!=", left: Identifier("price"), right: Scalar(0.0), name: "not_equal" }, name: "and" } }, body: Block { kind: Bracket, content: Block { kind: Indent, content: BinaryOperation { operator: "\\n", left: Identifier("name"), right: Identifier("price"), name: "newline" } } } } } }
+register_definition for ItemA: Coproduct([Identifier("Item"), String("apple"), Scalar(150.0)])
+register_definition for ItemB: Coproduct([Identifier("Item"), String("banana"), Scalar(80.0)])
+register_definition for ItemC: Coproduct([Identifier("Item"), String("orange"), Scalar(300.0)])
+register_definition for check_limit: Lambda { arguments: Coproduct([Identifier("limit"), Block { kind: Bracket, content: BinaryOperation { operator: "~", left: Identifier("price"), right: Identifier("Item"), name: "range" } }]), body: Block { kind: Indent, content: BinaryOperation { operator: "|", left: BinaryOperation { operator: "&", left: Block { kind: Paren, content: BinaryOperation { operator: ">", left: Identifier("price"), right: Identifier("limit"), name: "more" } }, right: Identifier("price"), name: "and" }, right: Unit, name: "or" } } }
+register_definition for check_over_100: Lambda { arguments: Identifier("item"), body: BinaryOperation { operator: "|", left: Coproduct([Identifier("check_limit"), Scalar(100.0), Identifier("item")]), right: Scalar(0.0), name: "or" } }
+register_definition for sum_filtered: Lambda { arguments: BinaryOperation { operator: "~", left: Identifier("item"), right: Identifier("ys"), name: "range" }, body: Block { kind: Indent, content: BinaryOperation { operator: "+", left: Block { kind: Paren, content: Coproduct([Identifier("check_over_100"), Identifier("item")]) }, right: Block { kind: Paren, content: Coproduct([Identifier("sum_filtered"), Postfix { operator: "~", operand: Identifier("ys"), name: "expand" }]) }, name: "add" } } }
+register_definition for total_expensive: Coproduct([Identifier("sum_filtered"), Identifier("ItemA"), Identifier("ItemB"), Identifier("ItemC")])
+register_definition for g: Lambda { arguments: Block { kind: Bracket, content: BinaryOperation { operator: "~", left: Identifier("x"), right: Identifier("y"), name: "range" } }, body: Block { kind: Indent, content: Identifier("x") } }
+register_definition for list_destruct_result: Coproduct([Identifier("g"), Block { kind: Bracket, content: Coproduct([Scalar(10.0), Scalar(20.0), Scalar(30.0)]) }])
+actual_def for Foo: BinaryOperation { operator: "\\n", left: Define { identifier: "foo", definition: Scalar(500.0) }, right: Define { identifier: "bar", definition: Scalar(200.0) }, name: "newline" }
+actual_def for Item: Lambda { arguments: Coproduct([Identifier("name"), Block { kind: Paren, content: Define { identifier: "price", definition: Scalar(0.0) } }]), body: Block { kind: Indent, content: Lambda { arguments: Block { kind: Paren, content: BinaryOperation { operator: "&", left: BinaryOperation { operator: "!==", left: Identifier("name"), right: String(""), name: "not_equal" }, right: BinaryOperation { operator: "!=", left: Identifier("price"), right: Scalar(0.0), name: "not_equal" }, name: "and" } }, body: Block { kind: Bracket, content: Block { kind: Indent, content: BinaryOperation { operator: "\\n", left: Identifier("name"), right: Identifier("price"), name: "newline" } } } } } }
+Saved to C:/Users/johnn/project/Sign/alpha/rust/output_std.rs
+Compiling C:/Users/johnn/project/Sign/alpha/rust/output_std.rs ...
+Compilation successful! Created C:/Users/johnn/project/Sign/alpha/rust/output_std.exe
+Running C:/Users/johnn/project/Sign/alpha/rust/output_std.exe ...
+--- Execution Output ---
+partial_add 20 = 30
+cond_result = Some(20.0)
+ternary_result = Some(99.0)
+match_result = Some(200.0)
+sum_result = 15
+map_result = [2.0, 4.0, 6.0]
+concat_result = [1.0, 2.0]
+compose_result = 12
+reverse_result = 6
+high_order_result = 15
+list_len = 5
+hole_partial_result = 15
+hole_op_result = 150
+val_cmp_non_unit = Some(2.0)
+val_cmp_unit = Some(5.0)
+val_cmp_chain = Some(3.0)
+val_cmp_chain_fail = None
+struct_extract_success = 600.0
+struct_extract_fail = None
+total_expensive = 450
+list_destruct_result = 10
+arith_range = [2.0, 4.0, 6.0, 8.0, 10.0]
+arith_range_second = [2.0, 6.0, 10.0]
+arith_range_rev = [10.0, 8.0, 6.0, 4.0, 2.0]
+geom_range = [1.0, 2.0, 4.0, 8.0, 16.0]
+geom_range_rev = [16.0, 8.0, 4.0, 2.0, 1.0]
+bit_shl = 16
+bit_shr = 4
+bit_or = 7
+bit_xor = 6
+bit_and = 1
+bit_not = -6
+addr_shift = 536870912
+reg_decimal = 12
+reg_shift = 48
+reg_dec_lit = 12
+reg_dec_shift = 48
+
+=== Testing Layer 0 (Bare Metal) ===
+Preprocessed Source:
+
+` 繝・せ繝医さ繝ｼ繝・(bare繝ｬ繧､繝､繝ｼ)
+register_addr  :  0x08000000
+
+@register_addr
+register_addr # 100
+
+register_definition for register_addr: Address(134217728)
+Saved to C:/Users/johnn/project/Sign/alpha/rust/output_bare.rs
+Compiling C:/Users/johnn/project/Sign/alpha/rust/output_bare.rs ...
+Compilation successful! Created C:/Users/johnn/project/Sign/alpha/rust/output_bare.exe
+Skip running (Layer 0 program may crash on OS due to volatile raw pointer access).

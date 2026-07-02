@@ -1453,6 +1453,7 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &s
         "-" => Ok(format!("({} - {})", left_str, right_str)),
         "*" => Ok(format!("({} * {})", left_str, right_str)),
         "/" => Ok(format!("({} / {})", left_str, right_str)),
+        "^" => Ok(format!("({}).powf({})", left_str, right_str)),
         "," => Ok(format!("vec![{}, {}]", left_str, right_str)),
         _ => Ok(format!("({} {} {})", left_str, operator, right_str)),
     }

@@ -83,14 +83,13 @@ peg::parser!{
             }
 
         rule logical_or() -> AstNode
-            = head:logical_and() tail:(whitespace() op:$("|/" / "|") whitespace() right:logical_and() { (op, right) })* {
-                tail.into_iter().fold(head, |left, (op, right)| {
-                    let name = if op == "|/" { "div_or" } else { "or" };
+            = head:logical_and() tail:(whitespace() "|" whitespace() right:logical_and() { right })* {
+                tail.into_iter().fold(head, |left, right| {
                     AstNode::BinaryOperation {
-                        operator: op.to_string(),
+                        operator: "|".to_string(),
                         left: Box::new(left),
                         right: Box::new(right),
-                        name: name.to_string(),
+                        name: "or".to_string(),
                     }
                 })
             }
@@ -393,6 +392,8 @@ peg::parser!{
             / val:inline_code() { AstNode::InlineCode(val) }
             / val:char_literal() { AstNode::Char(val) }
             / val:address_literal() { AstNode::Address(val) }
+            / val:register_literal() { AstNode::Register(val) }
+            / val:register_decimal_literal() { AstNode::Register(val) }
             / val:number_literal() { AstNode::Scalar(val) }
             / val:identifier_literal() { AstNode::Identifier(val) }
 
@@ -412,8 +413,15 @@ peg::parser!{
         rule address_literal() -> usize
             = "0x" h:$(hex()+) { usize::from_str_radix(h, 16).unwrap() }
 
+        rule register_literal() -> isize
+            = "0r" h:$(hex()+) { usize::from_str_radix(h, 16).unwrap() as isize }
+
+        rule register_decimal_literal() -> isize
+            = "0d" n:$("-"? ['0'..='9']+) { n.parse().unwrap() }
+
         rule number_literal() -> f64
             = n:$("-"? ['0'..='9']+ ("." ['0'..='9']*)?) { n.parse().unwrap() }
+        
 
         rule identifier_literal() -> String
             = id:$(['a'..='z' | 'A'..='Z'] ['a'..='z' | 'A'..='Z' | '0'..='9' | '_']*) { id.to_string() }

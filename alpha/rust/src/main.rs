@@ -2,6 +2,7 @@
 pub mod ast;
 pub mod lexer;
 pub mod parser;
+pub mod types;
 pub mod codegen;
 
 use lexer::preprocess;
@@ -75,6 +76,26 @@ list_loop : x ~y ?
 list_loop 1.0 2.0 3.0 4.0 5.0
 list_len : @c
 
+` === Range 進行系演算子のテスト (C-3) ===
+arith_range : [2 ~+ 2 ~ 10]
+arith_range_second : [2 ~+ 4 ~+ 10]
+arith_range_rev : [10 ~- 2 ~ 2]
+geom_range : [1 ~* 2 ~ 16]
+geom_range_rev : [16 ~/ 2 ~ 1]
+
+` === Bit演算子のテスト ===
+bit_shl : 2.0 << 3.0
+bit_shr : 16.0 >> 2.0
+bit_or  : 5.0 || 3.0
+bit_xor : 5.0 ;; 3.0
+bit_and : 5.0 && 3.0
+bit_not : !!5.0
+addr_shift : 134217728.0 << 2.0
+reg_decimal : 0r0C
+reg_shift : reg_decimal << 2.0
+reg_dec_lit : 0d12
+reg_dec_shift : reg_dec_lit << 2.0
+
 ` === 値ベースの比較（単位元ルール）と3項チェイン評価のテスト ===
 val_cmp_non_unit : 2.0 < 5.0
 val_cmp_unit : 1.0 < 5.0
@@ -101,21 +122,18 @@ struct_extract_fail : extract_foo_fail Foo~
 
 ` === 統合的関数のテスト（オブジェクト、暗黙抽出、可変長再帰、部分適用、3項チェイン） ===
 
-Item :
+Item : name (price : 0.0) ?
+	(name !== `` & price != 0.0) ? [
 		name
-		price : 0.0
-	?
-		name !== `` & price != 0.0 : [
-			name
-			price
-		]
+		price
+	]
 
 
 ItemA : Item `apple` 150.0
 
-ItemB : Item "banana" 80.0
+ItemB : Item `banana` 80.0
 
-ItemC : Item "orange" 300.0
+ItemC : Item `orange` 300.0
 
 check_limit : limit [price ~Item] ?
 	(price > limit) & price | __
@@ -155,6 +173,22 @@ list_destruct_result : g [10.0 20.0 30.0]
 "println!(\"struct_extract_fail = {:?}\", {struct_extract_fail})"
 "println!(\"total_expensive = {}\", @{total_expensive})"
 "println!(\"list_destruct_result = {}\", @{list_destruct_result})"
+"println!(\"arith_range = {:?}\", @{arith_range})"
+"println!(\"arith_range_second = {:?}\", @{arith_range_second})"
+"println!(\"arith_range_rev = {:?}\", @{arith_range_rev})"
+"println!(\"geom_range = {:?}\", @{geom_range})"
+"println!(\"geom_range_rev = {:?}\", @{geom_range_rev})"
+"println!(\"bit_shl = {}\", @{bit_shl})"
+"println!(\"bit_shr = {}\", @{bit_shr})"
+"println!(\"bit_or = {}\", @{bit_or})"
+"println!(\"bit_xor = {}\", @{bit_xor})"
+"println!(\"bit_and = {}\", @{bit_and})"
+"println!(\"bit_not = {}\", @{bit_not})"
+"println!(\"addr_shift = {}\", @{addr_shift})"
+"println!(\"reg_decimal = {}\", @{reg_decimal})"
+"println!(\"reg_shift = {}\", @{reg_shift})"
+"println!(\"reg_dec_lit = {}\", @{reg_dec_lit})"
+"println!(\"reg_dec_shift = {}\", @{reg_dec_shift})"
 "#;
 
     let source_code_bare = r#"

@@ -1,0 +1,228 @@
+﻿
+> Preprocessed Source:
+  
+  ` 繝・せ繝医さ繝ｼ繝・(std繝ｬ繧､繝､繝ｼ)
+  add  :  x y  ? x  +  y
+  
+  mul  :  x y  ? x  *  y
+  
+  ` 驛ｨ蛻・←逕ｨ縺ｮ繝・せ繝・partial_add  :  add 10
+  
+  ` 豈碑ｼ・→遏ｭ邨｡隧穂ｾ｡縺ｮ繝・せ繝・a  :  10.0
+  b  :  20.0
+  
+  ` a 縺・5 繧医ｊ螟ｧ縺阪￥縲√°縺､ b 縺・15 繧医ｊ螟ｧ縺阪＞蝣ｴ蜷医ヾome(1.0) 繧定ｿ斐☆縲ゅ◎縺・〒縺ｪ縺代ｌ縺ｰ __ (None)
+  cond_result  :  (a  >  5.0) & (b  >  15.0) | __
+  
+  ` 豈碑ｼ・鬆・ｼ皮ｮ・(match_case 縺ｨ蜷後§ match 螻暮幕縺ｧ隗｣豎ｺ縺輔ｌ繧・
+  ternary_result  :  (a  >  5.0)  ?  99.0  :  88.0
+  
+  ` 隍・焚陦・of match_case 繝悶Ο繝・け (蜷後§ match 螻暮幕)
+  match_result  : a  ==  5.0  :  50.0
+  b  ==  20.0  :  200.0
+  999.0
+  
+  ` 繝昴う繝ｳ繝医ヵ繝ｪ繝ｼ・壹☆縺ｹ縺ｦ雜ｳ縺礼ｮ・(Sum)
+  sum_result  :  [ + ] 1.0 2.0 3.0 4.0 5.0
+  
+  ` 繝昴う繝ｳ繝医ヵ繝ｪ繝ｼ・壼推隕∫ｴ縺ｫ2.0繧呈寺縺代ｋ (Map)
+  map_result  :  [ *  2.0 , ] 1.0 2.0 3.0
+  
+  ` === Coproduct Resolver (菴咏ｩ崎ｧ｣豎ｺ蝎ｨ) 蜈ｨ繝ｬ繝吶Ν縺ｮ繝・せ繝・===
+  
+  ` 10.3: Atom + Atom -> concat (繝ｪ繧ｹ繝磯｣謗･)
+  concat_result  :  1.0 2.0
+  
+  ` 10.2: Lambda + Lambda -> compose (蟾ｦ邨仙粋髢｢謨ｰ蜷域・)
+  ` 10.1: Lambda + Atom -> apply (髢｢謨ｰ驕ｩ逕ｨ)
+  ` 5.0 縺ｫ (+1.0) 縺励※ (*2.0) 縺吶ｋ -> (5 + 1) * 2 = 12.0
+  compose_result  :  (add 1.0) (mul 2.0) 5.0
+  
+  ` 10.0: Atom + Lambda -> apply_reverse (騾・←逕ｨ)
+  ` 5.0 縺ｫ (+1.0) 縺吶ｋ -> 6.0
+  reverse_result  :  5.0 (add 1.0)
+  
+  ` === 鬮倬嚴髢｢謨ｰ ・・蜑咲ｽｮ$繧ｵ繧ｹ繝壹Φ繝峨・驕・ｻｶ隧穂ｾ｡縺ｮ繝・せ繝・===
+  ` 髢｢謨ｰ f 繧貞女縺大叙縺｣縺ｦ 5.0 繧帝←逕ｨ縺吶ｋ
+  apply_five  :  f  ? (@f) 5.0
+  
+  ` (add 10.0) 繧偵し繧ｹ繝壹Φ繝峨＠縺ｦ鬮倬嚴髢｢謨ｰ縺ｫ蠑墓焚縺ｨ縺励※貂｡縺・high_order_result  :  apply_five ($(add 10.0))
+  
+  ` === 蜿ｯ螟蛾聞(Rest)蠑墓焚縺ｨ繧ｹ繝励Ξ繝・ラ螻暮幕蜀榊ｸｰ縺ｮ繝・せ繝・===
+  c  :  #0.0
+  list_loop  :  x ~y  ? c # (@c)  +  1.0
+  list_loop y~
+  
+  list_loop 1.0 2.0 3.0 4.0 5.0
+  list_len  :  @c
+  
+  ` === 蛟､繝吶・繧ｹ縺ｮ豈碑ｼ・ｼ亥腰菴榊・繝ｫ繝ｼ繝ｫ・峨→3鬆・メ繧ｧ繧､繝ｳ隧穂ｾ｡縺ｮ繝・せ繝・===
+  val_cmp_non_unit  :  2.0  <  5.0
+  val_cmp_unit  :  1.0  <  5.0
+  val_cmp_chain  :  1.0  <  3.0  <  5.0
+  val_cmp_chain_fail  :  2.0  <  1.0  <  5.0
+  
+  ` === Hole・・・峨↓繧医ｋ髱咏噪閼ｱ邉夜Κ蛻・←逕ｨ縺ｮ繝・せ繝・===
+  hole_partial  :  add _ 5.0
+  hole_partial_result  :  hole_partial 10.0
+  
+  hole_op  :  _  +  100.0
+  hole_op_result  :  hole_op 50.0
+  
+  ` === 繧ｪ繝悶ず繧ｧ繧ｯ繝亥ｮ夂ｾｩ縺ｨ讒矩菴薙Γ繝ｳ繝先囓鮟呎歓蜃ｺ縺ｮ繝・せ繝・===
+  Foo  : foo  :  500.0
+  bar  :  200.0
+  
+  extract_foo  :  foo ~Foo  ?  @foo  +  100.0
+  struct_extract_success  :  extract_foo Foo~
+  
+  extract_foo_fail  :  baz ~Foo  ?  baz
+  struct_extract_fail  :  extract_foo_fail Foo~
+  
+  ` === 邨ｱ蜷育噪髢｢謨ｰ縺ｮ繝・せ繝茨ｼ医が繝悶ず繧ｧ繧ｯ繝医∵囓鮟呎歓蜃ｺ縲∝庄螟蛾聞蜀榊ｸｰ縲・Κ蛻・←逕ｨ縲・鬆・メ繧ｧ繧､繝ｳ・・===
+  
+  Item  : name
+  price  :  0.0  ? 
+  name  !==  `` & price  !=  0.0  :  [name
+  price
+  ]
+  
+  
+  ItemA  :  Item `apple` 150.0
+  
+  ItemB  :  Item `banana` 80.0
+  
+  ItemC  :  Item `orange` 300.0
+  
+  check_limit  :  limit [price ~Item]  ? (price  >  limit) & price | __
+  
+  check_over_100  :  item  ?  check_limit 100.0 item | 0.0
+  
+  sum_filtered  :  item ~ys  ? (check_over_100 item)  +  (sum_filtered ys~)
+  
+  total_expensive  :  sum_filtered ItemA ItemB ItemC
+  
+  ` === 繝ｪ繧ｹ繝亥・蜑ｲ莉｣蜈･・医ョ繧ｹ繝医Λ繧ｯ繝茨ｼ峨→蜿ら・貂｡縺励・繝・せ繝・===
+  g  :  [x ~y]  ? x
+  
+  list_destruct_result  :  g [10.0 20.0 30.0]
+  
+  ` 邨先棡繧貞・蜉帙☆繧・"println!(\"partial_add 20 = {}\", @{partial_add 20.0})"
+  "println!(\"cond_result = {:?}\", @{cond_result})"
+  "println!(\"ternary_result = {:?}\", @{ternary_result})"
+  "println!(\"match_result = {:?}\", @{match_result})"
+  "println!(\"sum_result = {}\", @{sum_result})"
+  "println!(\"map_result = {:?}\", @{map_result})"
+  "println!(\"concat_result = {:?}\", @{concat_result})"
+  "println!(\"compose_result = {}\", @{compose_result})"
+  "println!(\"reverse_result = {}\", @{reverse_result})"
+  "println!(\"high_order_result = {}\", @{high_order_result})"
+  "println!(\"list_len = {}\", @{list_len})"
+  "println!(\"hole_partial_result = {}\", @{hole_partial_result})"
+  "println!(\"hole_op_result = {}\", @{hole_op_result})"
+  "println!(\"val_cmp_non_unit = {:?}\", @{val_cmp_non_unit})"
+  "println!(\"val_cmp_unit = {:?}\", @{val_cmp_unit})"
+  "println!(\"val_cmp_chain = {:?}\", @{val_cmp_chain})"
+  "println!(\"val_cmp_chain_fail = {:?}\", @{val_cmp_chain_fail})"
+  "println!(\"struct_extract_success = {:?}\", @{struct_extract_success})"
+  "println!(\"struct_extract_fail = {:?}\", {struct_extract_fail})"
+  "println!(\"total_expensive = {}\", @{total_expensive})"
+  "println!(\"list_destruct_result = {}\", @{list_destruct_result})"
+  
+  actual_def for Foo: BinaryOperation { operator: "\\n", left: Define { identifier: "foo", definition: Scalar(500.0) },
+ right: Define { identifier: "bar", definition: Scalar(200.0) }, name: "newline" }
+  actual_def for Item: BinaryOperation { operator: "\\n", left: Identifier("name"), right: Define { identifier: "price"
+, definition: BinaryOperation { operator: ":", left: Lambda { arguments: Scalar(0.0), body: BinaryOperation { operator:
+ "&", left: BinaryOperation { operator: "!==", left: Identifier("name"), right: String(""), name: "not_equal" }, right:
+ BinaryOperation { operator: "!=", left: Identifier("price"), right: Scalar(0.0), name: "not_equal" }, name: "and" } },
+ right: Block { kind: Bracket, content: Block { kind: Indent, content: BinaryOperation { operator: "\\n", left: Identif
+ier("name"), right: Identifier("price"), name: "newline" } } }, name: "define" } }, name: "newline" }
+  Saved to C:/Users/johnn/project/Sign/alpha/rust/output_std.rs
+  Compiling C:/Users/johnn/project/Sign/alpha/rust/output_std.rs ...
+  error[E0599]: no method named `is_some` found for type `{float}` in the current scope
+     --> C:/Users/johnn/project/Sign/alpha/rust/output_std.rs:171:12
+      |
+  171 |     if 0.0.is_some() {
+      |            ^^^^^^^ method not found in `{float}`
+  System.Management.Automation.RemoteException
+  error[E0308]: mismatched types
+     --> C:/Users/johnn/project/Sign/alpha/rust/output_std.rs:172:42
+      |
+  172 | ...   eval_compare(Option::from(None), Option::from(""), |l, r| l != r).and(eval_compare(Option::from(None), Op
+tion::from(0.0), |l,...
+      |       ------------                     ^^^^^^^^^^^^^^^^ expected `Option<f64>`, found `Option<&str>`
+      |       |
+      |       arguments to this function are incorrect
+      |
+      = note: expected enum `Option<f64>`
+                 found enum `Option<&str>`
+  note: function defined here
+     --> C:/Users/johnn/project/Sign/alpha/rust/output_std.rs:7:4
+      |
+    7 | fn eval_compare<F>(lhs: Option<f64>, rhs: Option<f64>, op: F) -> Option<f64>
+      |    ^^^^^^^^^^^^                      ----------------
+  System.Management.Automation.RemoteException
+  error[E0308]: mismatched types
+     --> C:/Users/johnn/project/Sign/alpha/rust/output_std.rs:172:9
+      |
+  172 | ...   eval_compare(Option::from(None), Option::from(""), |l, r| l != r).and(eval_compare(Option::from(None), Op
+tion::from(0.0), |l, r| l != r))
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `f64`, found `Option<f64>`
+      |
+      = note: expected type `f64`
+                 found enum `Option<f64>`
+  help: consider using `Option::expect` to unwrap the `Option<f64>` value, panicking if the value is an `Option::None`
+      |
+  172 |         eval_compare(Option::from(None), Option::from(""), |l, r| l != r).and(eval_compare(Option::from(None), 
+Option::from(0.0), |l, r| l != r)).expect("REASON")
+      |                                                                                                                
+                                  +++++++++++++++++
+  System.Management.Automation.RemoteException
+  error[E0308]: mismatched types
+     --> C:/Users/johnn/project/Sign/alpha/rust/output_std.rs:174:9
+      |
+  174 | /         vec![{
+  175 | |     None;
+  176 | |     None
+  177 | | }]
+      | |__^ expected `f64`, found `Vec<Option<_>>`
+      |
+      = note: expected type `f64`
+               found struct `Vec<Option<_>>`
+  System.Management.Automation.RemoteException
+  error[E0618]: expected function, found `ItemStruct`
+     --> C:/Users/johnn/project/Sign/alpha/rust/output_std.rs:185:5
+      |
+  185 |       ItemStruct { price: 0.0 }
+      |       -^^^^^^^^^^^^^^^^^^^^^^^^- help: consider using a semicolon here to finish the statement: `;`
+      |  _____|
+      | |
+  186 | |     (eval_compare(Option::from(None), Option::from(limit), |l, r| l > r)).and(None).or_else(|| Option::from(N
+one))
+      | |_________________________________________________________________________- call expression requires function
+  System.Management.Automation.RemoteException
+  error[E0308]: mismatched types
+     --> C:/Users/johnn/project/Sign/alpha/rust/output_std.rs:191:24
+      |
+  191 |     check_limit(100.0, &item).unwrap_or(0.0)
+      |     -----------        ^^^^^ expected `&[f64]`, found `&&ItemStruct`
+      |     |
+      |     arguments to this function are incorrect
+      |
+      = note: expected reference `&[f64]`
+                 found reference `&&ItemStruct`
+> Preprocessed Source:
+  
+  ` 繝・せ繝医さ繝ｼ繝・(bare繝ｬ繧､繝､繝ｼ)
+  register_addr  :  0x08000000
+  
+  @register_addr
+  register_addr # 100
+  
+  Saved to C:/Users/johnn/project/Sign/alpha/rust/output_bare.rs
+  Compiling C:/Users/johnn/project/Sign/alpha/rust/output_bare.rs ...
+  Compilation successful! Created C:/Users/johnn/project/Sign/alpha/rust/output_bare.exe
+  Skip running (Layer 0 program may crash on OS due to volatile raw pointer access).
+
+

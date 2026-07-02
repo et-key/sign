@@ -83,14 +83,13 @@ peg::parser!{
             }
 
         rule logical_or() -> AstNode
-            = head:logical_and() tail:(whitespace() op:$("|/" / "|") whitespace() right:logical_and() { (op, right) })* {
-                tail.into_iter().fold(head, |left, (op, right)| {
-                    let name = if op == "|/" { "div_or" } else { "or" };
+            = head:logical_and() tail:(whitespace() "|" whitespace() right:logical_and() { right })* {
+                tail.into_iter().fold(head, |left, right| {
                     AstNode::BinaryOperation {
-                        operator: op.to_string(),
+                        operator: "|".to_string(),
                         left: Box::new(left),
                         right: Box::new(right),
-                        name: name.to_string(),
+                        name: "or".to_string(),
                     }
                 })
             }
