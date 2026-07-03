@@ -81,7 +81,7 @@ fn is_continuation_line(s: &str) -> bool {
         return false;
     }
     let first_char = s.chars().next().unwrap();
-    if "?+*/.,=<>;%&^".contains(first_char) {
+    if "+*/.,=<>;%&^".contains(first_char) {
         return true;
     }
     if s.starts_with("!=") || s.starts_with("||") {

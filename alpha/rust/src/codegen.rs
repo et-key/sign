@@ -141,6 +141,32 @@ fn infer_field_type(field: &str, body: &AstNode) -> AtomType {
     }
 }
 
+fn find_default_value(node: &AstNode, arg_name: &str) -> Option<AstNode> {
+    match node {
+        AstNode::Define { identifier, definition } if identifier == arg_name => {
+            Some(*definition.clone())
+        }
+        AstNode::Coproduct(list) => {
+            for item in list {
+                if let Some(val) = find_default_value(item, arg_name) {
+                    return Some(val);
+                }
+            }
+            None
+        }
+        AstNode::Block { kind, content } if *kind == BlockKind::Paren || *kind == BlockKind::Indent => {
+            find_default_value(content, arg_name)
+        }
+        AstNode::BinaryOperation { left, right, .. } => {
+            if let Some(val) = find_default_value(left, arg_name) {
+                return Some(val);
+            }
+            find_default_value(right, arg_name)
+        }
+        _ => None,
+    }
+}
+
 fn find_default_value_type(node: &AstNode, arg_name: &str, table: &SymbolTable) -> Option<AtomType> {
     match node {
         AstNode::Define { identifier, definition } if identifier == arg_name => {
@@ -174,8 +200,14 @@ fn register_definition(table: &mut SymbolTable, id: &str, def: &AstNode) {
         let mut dest_args = HashSet::new();
         collect_destructured_args(arguments, &mut dest_args);
         let return_type = infer_atom_type(body, table);
+        let mut required_arity = 0;
+        for arg in &args {
+            if find_default_value(arguments, arg).is_none() {
+                required_arity += 1;
+            }
+        }
         table.functions.insert(id.to_string(), FuncSignature {
-            arity: args.len(),
+            arity: required_arity,
             args: args.clone(),
             body: Some(*body.clone()),
             is_recursive: is_rec,
@@ -298,7 +330,7 @@ fn collect_object_members(node: &AstNode, members: &mut HashSet<String>) {
         AstNode::Define { identifier, .. } => {
             members.insert(identifier.clone());
         }
-        AstNode::BinaryOperation { operator, left, right, .. } if operator == "\\n" || operator == "," || operator == " " => {
+        AstNode::BinaryOperation { operator, left, right, .. } if operator == "\\n" || operator == "," => {
             collect_object_members(left, members);
             collect_object_members(right, members);
         }
@@ -307,7 +339,7 @@ fn collect_object_members(node: &AstNode, members: &mut HashSet<String>) {
                 collect_object_members(item, members);
             }
         }
-        AstNode::Block { content, .. } => {
+        AstNode::Block { kind, content } if *kind == BlockKind::Paren || *kind == BlockKind::Indent => {
             collect_object_members(content, members);
         }
         _ => {}
@@ -402,6 +434,14 @@ where
     }
 }
 
+fn factorial(n: f64) -> f64 {
+    if n <= 1.0 {
+        1.0
+    } else {
+        n * factorial(n - 1.0)
+    }
+}
+
 "#;
         top_level_code.push_str(eval_compare_decl);
 
@@ -418,6 +458,10 @@ where
             ));
             top_level_code.push_str(&format!(
                 "impl<'a, T: HasMember{}> HasMember{} for &'a T {{\n    type Output = <T as HasMember{}>::Output;\n    fn get_{}(&self) -> Option<Self::Output> {{\n        (**self).get_{}()\n    }}\n}}\n\n",
+                cap_mem, cap_mem, cap_mem, mem, mem
+            ));
+            top_level_code.push_str(&format!(
+                "impl<T: HasMember{}> HasMember{} for Option<T> {{\n    type Output = <T as HasMember{}>::Output;\n    fn get_{}(&self) -> Option<Self::Output> {{\n        self.as_ref().and_then(|x| x.get_{}())\n    }}\n}}\n\n",
                 cap_mem, cap_mem, cap_mem, mem, mem
             ));
         }
@@ -727,9 +771,28 @@ fn transpile_definition(id: &str, def: &AstNode, layer: usize, table: &SymbolTab
                     }
                 }
             }
-            format!("{}: f64", arg)
+            if find_default_value(arguments, arg).is_some() {
+                format!("{}: Option<f64>", arg)
+            } else {
+                format!("{}: f64", arg)
+            }
         }).collect::<Vec<_>>().join(", ");
         let body_str = transpile_node(body, layer, false, table)?;
+        let mut prepend_code = String::new();
+        for arg in &args {
+            if let Some(default_node) = find_default_value(arguments, arg) {
+                let default_str = transpile_node(&default_node, layer, false, table)?;
+                prepend_code.push_str(&format!(
+                    "    let {} = {}.or(Option::from({})).unwrap_or(0.0);\n",
+                    arg, arg, default_str
+                ));
+            }
+        }
+        let body_str = if prepend_code.is_empty() {
+            body_str
+        } else {
+            format!("{}{}", prepend_code, body_str)
+        };
         let ret_type = if sig.map(|s| s.is_recursive).unwrap_or(false) {
             "f64"
         } else if body_str.contains("vec!") || body_str.contains("Vec<") {
@@ -948,11 +1011,15 @@ fn transpile_match_arms(arms: &[MatchArm], layer: usize, in_main: bool, table: &
 enum TypeCategory {
     Lambda,
     Atom,
+    ListOrStruct,
 }
 
 fn get_category(node: &AstNode, table: &SymbolTable) -> TypeCategory {
     match node {
         AstNode::Block { kind: BlockKind::Paren, content } => get_category(content, table),
+        AstNode::Block { kind: BlockKind::Bracket, .. } => TypeCategory::ListOrStruct,
+        AstNode::Prefix { operator, operand, .. } if operator == "~" => get_category(operand, table),
+        AstNode::Postfix { operator, operand, .. } if operator == "~" => get_category(operand, table),
         AstNode::Coproduct(list) => {
             let flat_items = {
                 let mut flat = Vec::new();
@@ -1005,10 +1072,14 @@ fn get_category(node: &AstNode, table: &SymbolTable) -> TypeCategory {
 
 fn get_reduction_priority(left: TypeCategory, right: TypeCategory) -> usize {
     match (left, right) {
-        (TypeCategory::Atom, TypeCategory::Atom) => 3,     // 10.3: concat (リスト連接)
-        (TypeCategory::Lambda, TypeCategory::Lambda) => 2, // 10.2: compose (関数合成)
-        (TypeCategory::Lambda, TypeCategory::Atom) => 1,   // 10.1: apply (関数適用)
-        (TypeCategory::Atom, TypeCategory::Lambda) => 0,   // 10.0: apply_reverse (逆適用)
+        (TypeCategory::Atom, TypeCategory::Atom) => 4,           // 10.4: concat (数値などのアトム連接)
+        (TypeCategory::Lambda, TypeCategory::Lambda) => 3,       // 10.3: compose
+        (TypeCategory::Lambda, TypeCategory::Atom) => 2,         // 10.2: apply
+        (TypeCategory::Lambda, TypeCategory::ListOrStruct) => 2,   // 10.2: apply (リスト/構造体適用)
+        (TypeCategory::ListOrStruct, TypeCategory::ListOrStruct) => 1, // 10.1: concat_list (List/Struct同士の連接、applyより低い優先度)
+        (TypeCategory::Atom, TypeCategory::Lambda) => 0,         // 10.0: apply_reverse
+        (TypeCategory::ListOrStruct, TypeCategory::Lambda) => 0,   // 10.0: apply_reverse
+        _ => 1,
     }
 }
 
@@ -1035,8 +1106,8 @@ fn resolve_coproduct(list: &[AstNode], table: &SymbolTable) -> Result<AstNode, S
     }
     let mut items = list.to_vec();
 
-    // 優先度 3 (concat) から 0 (apply_reverse) へ
-    for priority in (0..=3).rev() {
+    // 優先度 4 (concat) から 0 (apply_reverse) へ
+    for priority in (0..=4).rev() {
         let mut i = 0;
         while i < items.len().saturating_sub(1) {
             let cat_l = get_category(&items[i], table);
@@ -1047,7 +1118,7 @@ fn resolve_coproduct(list: &[AstNode], table: &SymbolTable) -> Result<AstNode, S
                 let right = items.remove(i);
                 
                 let reduced = match priority {
-                    3 => {
+                    4 => {
                         AstNode::BinaryOperation {
                             operator: ",".to_string(),
                             left: Box::new(left),
@@ -1055,7 +1126,7 @@ fn resolve_coproduct(list: &[AstNode], table: &SymbolTable) -> Result<AstNode, S
                             name: "concat".to_string(),
                         }
                     }
-                    2 => {
+                    3 => {
                         // compose (左結合な関数合成): x ? RHS(LHS(x))
                         let x_id = AstNode::Identifier("comp_arg".to_string());
                         let apply_left = AstNode::BinaryOperation {
@@ -1075,12 +1146,20 @@ fn resolve_coproduct(list: &[AstNode], table: &SymbolTable) -> Result<AstNode, S
                             body: Box::new(apply_right),
                         }
                     }
-                    1 => {
+                    2 => {
                         AstNode::BinaryOperation {
                             operator: " ".to_string(),
                             left: Box::new(left),
                             right: Box::new(right),
                             name: "resolved".to_string(),
+                        }
+                    }
+                    1 => {
+                        AstNode::BinaryOperation {
+                            operator: ",".to_string(),
+                            left: Box::new(left),
+                            right: Box::new(right),
+                            name: "concat".to_string(),
                         }
                     }
                     0 => {
@@ -1417,10 +1496,30 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &s
         }
     }
 
-    if ["<", ">", "<=", ">=", "==", "!=", "!=="].contains(&operator) {
+    if operator == ";" {
         let left_str = transpile_node(left, layer, in_main, table)?;
         let right_str = transpile_node(right, layer, in_main, table)?;
-        let rust_op = if operator == "!==" { "!=" } else { operator };
+        let wrapped_right = if right_str.starts_with("Option::from") || right_str.starts_with("Some(") || right_str.starts_with("None") || right_str.contains(".and") || right_str.contains("eval_compare") {
+            right_str
+        } else {
+            format!("Option::from({})", right_str)
+        };
+        return Ok(format!("{}.xor({})", left_str, wrapped_right));
+    }
+
+    if operator == "'" {
+        let left_str = transpile_node(left, layer, in_main, table)?;
+        if let AstNode::Identifier(ref id) = *right {
+            return Ok(format!("{}.get_{}()", left_str, id));
+        } else {
+            return Err(format!("Property access key must be an identifier, found {:?}", right));
+        }
+    }
+
+    if ["<", ">", "<=", ">=", "==", "!=", "!==", "="].contains(&operator) {
+        let left_str = transpile_node(left, layer, in_main, table)?;
+        let right_str = transpile_node(right, layer, in_main, table)?;
+        let rust_op = if operator == "!==" { "!=" } else if operator == "=" { "==" } else { operator };
         return Ok(format!("eval_compare(Option::from({}), Option::from({}), |l, r| l {} r)", left_str, right_str, rust_op));
     }
 
@@ -1564,7 +1663,7 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &s
                         // 完全適用！
                         let has_list_arg = sig.args.iter().any(|arg| arg.starts_with("list_arg"));
                         let is_constructor = func_name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
-                        if !sig.is_recursive && sig.destructured_args.is_empty() && !has_list_arg && !is_constructor {
+                        if !sig.is_recursive && sig.destructured_args.is_empty() && !has_list_arg && !is_constructor && applied_args.len() == sig.args.len() {
                             if let Some(body_ast) = &sig.body {
                                 let mut mapping = HashMap::new();
                                 for (i, arg_name) in sig.args.iter().enumerate() {
@@ -1605,6 +1704,10 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &s
                                 arg_str = format!("std::slice::from_ref({})", arg_without_ref);
                             }
                             args_code.push(arg_str);
+                        }
+                        // 不足しているデフォルト引数に対して None を補填する
+                        for _ in applied_args.len()..sig.args.len() {
+                            args_code.push("None".to_string());
                         }
                         return Ok(format!("{}({})", func_name, args_code.join(", ")));
                     }
@@ -1665,17 +1768,17 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &s
         }
 
         // --- 3. 左辺が Number (数値) またはその他のデフォルトの場合 ---
-        ("+", _) => Ok(format!("({} + {})", left_str, right_str)),
-        ("-", _) => Ok(format!("({} - {})", left_str, right_str)),
-        ("*", _) => Ok(format!("({} * {})", left_str, right_str)),
-        ("/", _) => Ok(format!("({} / {})", left_str, right_str)),
-        ("^", _) => Ok(format!("({}).powf({})", left_str, right_str)),
+        ("+", _) => Ok(format!("Option::from({}).zip(Option::from({})).map(|(l, r)| l + r)", left_str, right_str)),
+        ("-", _) => Ok(format!("Option::from({}).zip(Option::from({})).map(|(l, r)| l - r)", left_str, right_str)),
+        ("*", _) => Ok(format!("Option::from({}).zip(Option::from({})).map(|(l, r)| l * r)", left_str, right_str)),
+        ("/", _) => Ok(format!("Option::from({}).zip(Option::from({})).map(|(l, r)| l / r)", left_str, right_str)),
+        ("^", _) => Ok(format!("Option::from({}).zip(Option::from({})).map(|(l, r)| l.powf(r))", left_str, right_str)),
         (",", _) => Ok(format!("vec![{}, {}]", left_str, right_str)),
-        ("<<", _) => Ok(format!("((({} as i64) << ({} as i64)) as f64)", left_str, right_str)),
-        (">>", _) => Ok(format!("((({} as i64) >> ({} as i64)) as f64)", left_str, right_str)),
-        ("||", _) => Ok(format!("((({} as i64) | ({} as i64)) as f64)", left_str, right_str)),
-        (";;", _) => Ok(format!("((({} as i64) ^ ({} as i64)) as f64)", left_str, right_str)),
-        ("&&", _) => Ok(format!("((({} as i64) & ({} as i64)) as f64)", left_str, right_str)),
+        ("<<", _) => Ok(format!("Option::from({}).zip(Option::from({})).map(|(l, r)| (((l as i64) << (r as i64)) as f64))", left_str, right_str)),
+        (">>", _) => Ok(format!("Option::from({}).zip(Option::from({})).map(|(l, r)| (((l as i64) >> (r as i64)) as f64))", left_str, right_str)),
+        ("||", _) => Ok(format!("Option::from({}).zip(Option::from({})).map(|(l, r)| (((l as i64) | (r as i64)) as f64))", left_str, right_str)),
+        (";;", _) => Ok(format!("Option::from({}).zip(Option::from({})).map(|(l, r)| (((l as i64) ^ (r as i64)) as f64))", left_str, right_str)),
+        ("&&", _) => Ok(format!("Option::from({}).zip(Option::from({})).map(|(l, r)| (((l as i64) & (r as i64)) as f64))", left_str, right_str)),
         _ => Ok(format!("({} {} {})", left_str, operator, right_str)),
     }
 }
@@ -1683,7 +1786,17 @@ fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name: &s
 fn transpile_prefix_op(operator: &str, operand: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
     if operator == "!!" {
         let op_str = transpile_node(operand, layer, in_main, table)?;
-        return Ok(format!("((!({} as i64)) as f64)", op_str));
+        return Ok(format!("Option::from({}).map(|op| (((!(op as i64)) as f64)))", op_str));
+    }
+
+    if operator == "!" {
+        let op_str = transpile_node(operand, layer, in_main, table)?;
+        return Ok(format!("if Option::from({}).is_none() {{ Some(0.0) }} else {{ None }}", op_str));
+    }
+
+    if operator == "-" {
+        let op_str = transpile_node(operand, layer, in_main, table)?;
+        return Ok(format!("Option::from({}).map(|op| -op)", op_str));
     }
 
     if operator == "@" {
@@ -1733,11 +1846,21 @@ fn transpile_postfix_op(operator: &str, operand: &AstNode, layer: usize, in_main
         return transpile_node(operand, layer, in_main, table);
     }
     let op_str = transpile_node(operand, layer, in_main, table)?;
+    if operator == "!" {
+        return Ok(format!("factorial({})", op_str));
+    }
+    if operator == "@" {
+        return Err("Compile Error: Module Import is not implemented".to_string());
+    }
     Ok(format!("{}{}", op_str, operator))
 }
 
 fn transpile_block(node: &AstNode, kind: &BlockKind, content: &AstNode, layer: usize, in_main: bool, table: &SymbolTable) -> Result<String, String> {
     match kind {
+        BlockKind::Abs => {
+            let inner = transpile_node(content, layer, in_main, table)?;
+            Ok(format!("({}).abs()", inner))
+        }
         BlockKind::Indent if is_match_case_block(node) => {
             let mut lines = Vec::new();
             collect_lines_raw(content, &mut lines);
@@ -1825,10 +1948,29 @@ fn transpile_lambda(arguments: &AstNode, body: &AstNode, layer: usize, in_main: 
                 format!("{}: {}Struct", arg, obj_type)
             }
         } else {
-            format!("{}: f64", arg)
+            if find_default_value(arguments, arg).is_some() {
+                format!("{}: Option<f64>", arg)
+            } else {
+                format!("{}: f64", arg)
+            }
         }
     }).collect::<Vec<_>>().join(", ");
     let body_str = transpile_node(body, layer, in_main, table)?;
+    let mut prepend_code = String::new();
+    for arg in &args {
+        if let Some(default_node) = find_default_value(arguments, arg) {
+            let default_str = transpile_node(&default_node, layer, in_main, table)?;
+            prepend_code.push_str(&format!(
+                "let {} = {}.or(Option::from({})).unwrap_or(0.0); ",
+                arg, arg, default_str
+            ));
+        }
+    }
+    let body_str = if prepend_code.is_empty() {
+        body_str
+    } else {
+        format!("{{ {}{} }}", prepend_code, body_str)
+    };
     Ok(format!("(move |{}| {})", args_str, body_str))
 }
 
@@ -2448,7 +2590,7 @@ mod tests {
         let pre = preprocess(code);
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 2).unwrap();
-        assert!(out.contains("(1.0 + (2.0 * 3.0))"));
+        assert!(out.contains("Option::from(1.0).zip(Option::from(Option::from(2.0).zip(Option::from(3.0)).map(|(l, r)| l * r))).map(|(l, r)| l + r)"));
     }
 
     #[test]
@@ -2485,5 +2627,129 @@ mod tests {
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 2).unwrap();
         assert!(out.contains("(move |x, y| add(x, y))"));
+    }
+
+    #[test]
+    fn test_transpile_p0_fixes() {
+        // 1. XOR (;)
+        let code = "a ; b";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains(".xor("));
+
+        // 2. get_prop (')
+        let code = "Point : x y ? x\np : Point 10 20\np ' x";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("p.get_x()"));
+
+        // 3. equal (=)
+        let code = "a = b";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("eval_compare("));
+        assert!(out.contains("=="));
+
+        // 4. absolute value (|...|)
+        let code = "|x|";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains(".abs()"));
+
+        // 5. factorial (!)
+        let code = "5!";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("factorial(5.0)"));
+        assert!(out.contains("fn factorial("));
+
+        // 6. import (@)
+        let code = "file@";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2);
+        assert!(out.is_err());
+        assert!(out.unwrap_err().contains("Module Import is not implemented"));
+    }
+
+    #[test]
+    fn test_transpile_unit_propagation() {
+        // 1. 中置の算術演算 (zip.map)
+        let code = "__ + 5";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("Option::from(None).zip(Option::from(5.0)).map(|(l, r)| l + r)"));
+
+        // 2. 中置のマイナス演算 (zip.map)
+        let code = "val_a : 10\nval_b : 20\nval_a - val_b";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("Option::from(val_a).zip(Option::from(val_b)).map(|(l, r)| l - r)"));
+
+        // 3. 中置のビット演算
+        let code = "val_a : 10\nval_b : 20\nval_a || val_b";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("Option::from(val_a).zip(Option::from(val_b)).map(|(l, r)| (((l as i64) | (r as i64)) as f64))"));
+
+        // 4. 前置否定 (!)
+        let code = "!__";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("if Option::from(None).is_none() { Some(0.0) } else { None }"));
+
+        // 5. 前置ビット否定 (!!)
+        let code = "!!__";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("Option::from(None).map(|op| (((!(op as i64)) as f64)))"));
+    }
+
+    #[test]
+    fn test_transpile_default_args() {
+        let code = "g :\n\t\tx\n\t\ty : x + 1\n\t\tz : y + 1\n? x y z\nres1 : g 1\nres2 : g 1 (3 < 2)";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        
+        assert!(out.contains("fn g(x: f64, y: Option<f64>, z: Option<f64>) -> Vec<f64>"));
+        assert!(out.contains("let y = y.or(Option::from(Option::from(x).zip(Option::from(1.0)).map(|(l, r)| l + r))).unwrap_or(0.0);"));
+        assert!(out.contains("let z = z.or(Option::from(Option::from(y).zip(Option::from(1.0)).map(|(l, r)| l + r))).unwrap_or(0.0);"));
+        assert!(out.contains("g(1.0, None, None)"));
+        assert!(out.contains("g(1.0, (eval_compare("));
+    }
+
+    #[test]
+    fn test_transpile_coproduct_priority() {
+        // 1. f [1 2] [3 4] -> apply 優先 (2つの引数が個別に渡される)
+        let code = "f : [x ~xs] [y ~ys] ? x\nres : f [1 2] [3 4]";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("f(&vec![1.0, 2.0], &vec![3.0, 4.0])"));
+
+        // 2. F (Point [x: 10]) (Point [y: 20]) -> apply 優先 (2つの構造体インスタンスが個別に渡される)
+        let code = "Point : x y ? x\nF : a b ? a\nres : F (Point [x: 10]) (Point [y: 20])";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("F("));
+
+        // 3. f [[1 2] [3 4]] -> concat 優先 (カッコ内で連接され、1つの引数になる)
+        let code = "f : [x ~xs] ? x\nres : f [[1 2] [3 4]]";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("f(&vec![vec![1.0, 2.0], vec![3.0, 4.0]])"));
     }
 }

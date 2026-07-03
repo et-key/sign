@@ -83,7 +83,7 @@ peg::parser!{
             }
 
         rule logical_or() -> AstNode
-            = head:logical_and() tail:(whitespace() "|" whitespace() right:logical_and() { right })* {
+            = head:logical_and() tail:(" "+ "|" " "+ right:logical_and() { right })* {
                 tail.into_iter().fold(head, |left, right| {
                     AstNode::BinaryOperation {
                         operator: "|".to_string(),
