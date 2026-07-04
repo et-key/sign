@@ -96,6 +96,10 @@ reg_shift : reg_decimal << 2.0
 reg_dec_lit : 0d12
 reg_dec_shift : reg_dec_lit << 2.0
 
+` === 剰余演算子 (%) と前置連続リスト演算子 (~) のテスト ===
+modulo_res : 17.0 % 5.0
+cont_range : ~5.0
+
 ` === 値ベースの比較（単位元ルール）と3項チェイン評価のテスト ===
 val_cmp_non_unit : 2.0 < 5.0
 val_cmp_unit : 1.0 < 5.0
@@ -152,43 +156,45 @@ g : [x ~y] ?
 list_destruct_result : g [10.0 20.0 30.0]
 
 ` 結果を出力する
-"println!(\"partial_add 20 = {}\", @{partial_add 20.0})"
+"println!(\"partial_add 20 = {:?}\", @{partial_add 20.0})"
 "println!(\"cond_result = {:?}\", @{cond_result})"
 "println!(\"ternary_result = {:?}\", @{ternary_result})"
 "println!(\"match_result = {:?}\", @{match_result})"
-"println!(\"sum_result = {}\", @{sum_result})"
+"println!(\"sum_result = {:?}\", @{sum_result})"
 "println!(\"map_result = {:?}\", @{map_result})"
 "println!(\"concat_result = {:?}\", @{concat_result})"
-"println!(\"compose_result = {}\", @{compose_result})"
-"println!(\"reverse_result = {}\", @{reverse_result})"
-"println!(\"high_order_result = {}\", @{high_order_result})"
+"println!(\"compose_result = {:?}\", @{compose_result})"
+"println!(\"reverse_result = {:?}\", @{reverse_result})"
+"println!(\"high_order_result = {:?}\", @{high_order_result})"
 "println!(\"list_len = {}\", @{list_len})"
-"println!(\"hole_partial_result = {}\", @{hole_partial_result})"
-"println!(\"hole_op_result = {}\", @{hole_op_result})"
+"println!(\"hole_partial_result = {:?}\", @{hole_partial_result})"
+"println!(\"hole_op_result = {:?}\", @{hole_op_result})"
 "println!(\"val_cmp_non_unit = {:?}\", @{val_cmp_non_unit})"
 "println!(\"val_cmp_unit = {:?}\", @{val_cmp_unit})"
 "println!(\"val_cmp_chain = {:?}\", @{val_cmp_chain})"
 "println!(\"val_cmp_chain_fail = {:?}\", @{val_cmp_chain_fail})"
 "println!(\"struct_extract_success = {:?}\", @{struct_extract_success})"
 "println!(\"struct_extract_fail = {:?}\", {struct_extract_fail})"
-"println!(\"total_expensive = {}\", @{total_expensive})"
+"println!(\"total_expensive = {:?}\", @{total_expensive})"
 "println!(\"list_destruct_result = {}\", @{list_destruct_result})"
 "println!(\"arith_range = {:?}\", @{arith_range})"
 "println!(\"arith_range_second = {:?}\", @{arith_range_second})"
 "println!(\"arith_range_rev = {:?}\", @{arith_range_rev})"
 "println!(\"geom_range = {:?}\", @{geom_range})"
 "println!(\"geom_range_rev = {:?}\", @{geom_range_rev})"
-"println!(\"bit_shl = {}\", @{bit_shl})"
-"println!(\"bit_shr = {}\", @{bit_shr})"
-"println!(\"bit_or = {}\", @{bit_or})"
-"println!(\"bit_xor = {}\", @{bit_xor})"
-"println!(\"bit_and = {}\", @{bit_and})"
-"println!(\"bit_not = {}\", @{bit_not})"
-"println!(\"addr_shift = {}\", @{addr_shift})"
+"println!(\"bit_shl = {:?}\", @{bit_shl})"
+"println!(\"bit_shr = {:?}\", @{bit_shr})"
+"println!(\"bit_or = {:?}\", @{bit_or})"
+"println!(\"bit_xor = {:?}\", @{bit_xor})"
+"println!(\"bit_and = {:?}\", @{bit_and})"
+"println!(\"bit_not = {:?}\", @{bit_not})"
+"println!(\"addr_shift = {:?}\", @{addr_shift})"
 "println!(\"reg_decimal = {}\", @{reg_decimal})"
-"println!(\"reg_shift = {}\", @{reg_shift})"
+"println!(\"reg_shift = {:?}\", @{reg_shift})"
 "println!(\"reg_dec_lit = {}\", @{reg_dec_lit})"
-"println!(\"reg_dec_shift = {}\", @{reg_dec_shift})"
+"println!(\"reg_dec_shift = {:?}\", @{reg_dec_shift})"
+"println!(\"modulo_res = {:?}\", @{modulo_res})"
+"println!(\"cont_range = {:?}\", @{cont_range})"
 "#;
 
     let source_code_bare = r#"
