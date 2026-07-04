@@ -440,9 +440,7 @@ where
 {
     match (lhs, rhs) {
         (Some(l), Some(r)) => Some(op(l, r)),
-        (Some(l), None) => Some(l),
-        (None, Some(r)) => Some(r),
-        (None, None) => None,
+        _ => None,
     }
 }
 

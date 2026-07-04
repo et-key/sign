@@ -145,7 +145,7 @@ check_limit : limit [price ~Item] ?
 check_over_100 : item ? check_limit 100.0 item | 0.0
 
 sum_filtered : item ~ys ?
-	(check_over_100 item) + (sum_filtered ys~)
+	(check_over_100 item) + (sum_filtered ys~ | 0.0)
 
 total_expensive : sum_filtered ItemA ItemB ItemC
 
