@@ -42,7 +42,7 @@ pub fn desugar_destructuring(node: &AstNode, table: &SymbolTable) -> AstNode {
                                     // 通常の head/tail 展開
                                     let split_name = format!("__split_{}", index);
                                     let split_def = AstNode::InlineCode(format!(
-                                        "eval_split(Option::from({}.to_vec()))",
+                                        "OpSplitList::split(Option::from({}.to_vec()))",
                                         arg_name
                                     ));
                                     let head_def = AstNode::InlineCode(format!(

@@ -61,13 +61,7 @@ pub fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name
 
         // 2. 積/連接演算子 `,`
         if operator == "," {
-            if left_is_unit && right_is_unit {
-                return Ok("None".to_string());
-            } else if left_is_unit {
-                return transpile_node(right, layer, in_main, table);
-            } else {
-                return transpile_node(left, layer, in_main, table);
-            }
+            return crate::product::transpile_product(left, right, layer, in_main, table);
         }
 
         // 3. 論理演算子 & (and)
@@ -183,12 +177,9 @@ pub fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name
     if operator == ";" {
         let left_str = transpile_node(left, layer, in_main, table)?;
         let right_str = transpile_node(right, layer, in_main, table)?;
-        let wrapped_right = if is_option_type(&right_str, table) {
-            right_str
-        } else {
-            format!("Option::from({})", right_str)
-        };
-        return Ok(format!("{}.xor({})", left_str, wrapped_right));
+        let l_wrap = if is_option_type(&left_str, table) { left_str } else { format!("Option::from({})", left_str) };
+        let r_wrap = if is_option_type(&right_str, table) { right_str } else { format!("Option::from({})", right_str) };
+        return Ok(format!("OpXor::combine({}, {})", l_wrap, r_wrap));
     }
 
     if operator == "'" {
@@ -203,25 +194,27 @@ pub fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name
     if ["<", ">", "<=", ">=", "==", "!=", "!==", "="].contains(&operator) {
         let left_str = transpile_node(left, layer, in_main, table)?;
         let right_str = transpile_node(right, layer, in_main, table)?;
-        let rust_op = if operator == "!==" { "!=" } else if operator == "=" { "==" } else { operator };
         let l_wrap = if is_option_type(&left_str, table) { left_str } else { format!("Option::from({})", left_str) };
         let r_wrap = if is_option_type(&right_str, table) { right_str } else { format!("Option::from({})", right_str) };
-        if ["==", "!=="].contains(&operator) {
-            return Ok(format!("eval_eq({}, {}, |l, r| l {} r)", l_wrap, r_wrap, rust_op));
-        } else {
-            return Ok(format!("eval_compare({}, {}, |l, r| l {} r)", l_wrap, r_wrap, rust_op));
-        }
+        let op_struct = match operator {
+            "<" => "OpLess",
+            ">" => "OpGreater",
+            "<=" => "OpLessEq",
+            ">=" => "OpGreaterEq",
+            "==" | "=" => "OpEq",
+            "!=" => "OpNotEq",
+            "!==" => "OpNotEqGeneric",
+            _ => unreachable!(),
+        };
+        return Ok(format!("{}::combine({}, {})", op_struct, l_wrap, r_wrap));
     }
 
     if operator == "&" {
         let left_str = transpile_node(left, layer, in_main, table)?;
         let right_str = transpile_node(right, layer, in_main, table)?;
-        let wrapped_right = if is_option_type(&right_str, table) {
-            right_str
-        } else {
-            format!("Option::from({})", right_str)
-        };
-        return Ok(format!("{}.and({})", left_str, wrapped_right));
+        let l_wrap = if is_option_type(&left_str, table) { left_str } else { format!("Option::from({})", left_str) };
+        let r_wrap = if is_option_type(&right_str, table) { right_str } else { format!("Option::from({})", right_str) };
+        return Ok(format!("OpAnd::combine({}, {})", l_wrap, r_wrap));
     }
 
     if operator == "|" {
@@ -229,7 +222,7 @@ pub fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name
         let right_str = transpile_node(right, layer, in_main, table)?;
         let l_wrap = if is_option_type(&left_str, table) { left_str } else { format!("Option::from({})", left_str) };
         let r_wrap = if is_option_type(&right_str, table) { right_str } else { format!("Option::from({})", right_str) };
-        return Ok(format!("{}.or_else(|| {})", l_wrap, r_wrap));
+        return Ok(format!("OpOr::combine({}, {})", l_wrap, r_wrap));
     }
 
     // 中置スペースによる適用/合成の解決
@@ -471,68 +464,42 @@ pub fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name
         // --- 1. 左辺が String (文字列) の場合 ---
         ("+", AtomType::String) => {
             if right_type == AtomType::Number {
-                // Number を文字コードポイントとして扱い、結合する
-                Ok(format!(
-                    "eval_binary({}, {}, |l, r| format!(\"{}{}\", l, (r as u32).try_into().unwrap_or('\\0')))",
-                    l_wrap, r_wrap, "{}", "{}"
-                ))
+                Ok(format!("OpConcatStringChar::combine({}, {})", l_wrap, r_wrap))
             } else {
-                Ok(format!(
-                    "eval_binary({}, {}, |l, r| format!(\"{}{}\", l, r))",
-                    l_wrap, r_wrap, "{}", "{}"
-                ))
+                Ok(format!("OpConcatString::combine({}, {})", l_wrap, r_wrap))
             }
         }
         ("*", AtomType::String) => {
-            Ok(format!(
-                "eval_binary({}, {}, |l, r| l.repeat(r as usize))",
-                l_wrap, r_wrap
-            ))
+            Ok(format!("OpRepeatString::combine({}, {})", l_wrap, r_wrap))
         }
         
         // --- 2. 左辺が List の場合 ---
         ("+", AtomType::List) => {
-            // リストの結合
-            Ok(format!(
-                "eval_binary({}, {}, |mut l, r| {{ l.extend(r); l }})",
-                l_wrap, r_wrap
-            ))
+            Ok(format!("OpConcatList::combine({}, {})", l_wrap, r_wrap))
         }
         ("*", AtomType::List) => {
-            // リストを Number 回複製する
-            Ok(format!(
-                "eval_binary({}, {}, |l, r| {{ let mut temp = Vec::new(); for _ in 0..(r as usize) {{ temp.extend(l.clone()); }}; temp }})",
-                l_wrap, r_wrap
-            ))
+            Ok(format!("OpRepeatList::combine({}, {})", l_wrap, r_wrap))
         }
         ("/", AtomType::List) => {
-            // リストを Number 個 of チャンクに分割
-            Ok(format!(
-                "eval_binary({}, {}, |l, r| l.chunks(r as usize).map(|c| c.to_vec()).collect::<Vec<_>>())",
-                l_wrap, r_wrap
-            ))
+            Ok(format!("OpChunksList::combine({}, {})", l_wrap, r_wrap))
         }
         ("^", AtomType::List) => {
-            // 次元を上げて複製
-            Ok(format!(
-                "eval_binary({}, {}, |l, r| vec![l.clone(); r as usize])",
-                l_wrap, r_wrap
-            ))
+            Ok(format!("OpPowList::combine({}, {})", l_wrap, r_wrap))
         }
 
         // --- 3. 左辺が Number (数値) またはその他のデフォルトの場合 ---
-        ("+", _) => Ok(format!("eval_binary({}, {}, |l, r| l + r)", l_wrap, r_wrap)),
-        ("-", _) => Ok(format!("eval_binary({}, {}, |l, r| l - r)", l_wrap, r_wrap)),
-        ("*", _) => Ok(format!("eval_binary({}, {}, |l, r| l * r)", l_wrap, r_wrap)),
-        ("/", _) => Ok(format!("eval_binary({}, {}, |l, r| l / r)", l_wrap, r_wrap)),
-        ("^", _) => Ok(format!("eval_binary({}, {}, |l, r| l.powf(r))", l_wrap, r_wrap)),
-        ("%", _) => Ok(format!("eval_binary({}, {}, |l, r| l % r)", l_wrap, r_wrap)),
-        (",", _) => Ok(format!("vec![{}, {}]", left_str, right_str)),
-        ("<<", _) => Ok(format!("eval_binary({}, {}, |l, r| (((l as i64) << (r as i64)) as f64))", l_wrap, r_wrap)),
-        (">>", _) => Ok(format!("eval_binary({}, {}, |l, r| (((l as i64) >> (r as i64)) as f64))", l_wrap, r_wrap)),
-        ("||", _) => Ok(format!("eval_binary({}, {}, |l, r| (((l as i64) | (r as i64)) as f64))", l_wrap, r_wrap)),
-        (";;", _) => Ok(format!("eval_binary({}, {}, |l, r| (((l as i64) ^ (r as i64)) as f64))", l_wrap, r_wrap)),
-        ("&&", _) => Ok(format!("eval_binary({}, {}, |l, r| (((l as i64) & (r as i64)) as f64))", l_wrap, r_wrap)),
+        ("+", _) => Ok(format!("OpAdd::combine({}, {})", l_wrap, r_wrap)),
+        ("-", _) => Ok(format!("OpSub::combine({}, {})", l_wrap, r_wrap)),
+        ("*", _) => Ok(format!("OpMul::combine({}, {})", l_wrap, r_wrap)),
+        ("/", _) => Ok(format!("OpDiv::combine({}, {})", l_wrap, r_wrap)),
+        ("^", _) => Ok(format!("OpPow::combine({}, {})", l_wrap, r_wrap)),
+        ("%", _) => Ok(format!("OpMod::combine({}, {})", l_wrap, r_wrap)),
+        (",", _) => crate::product::transpile_product(left, right, layer, in_main, table),
+        ("<<", _) => Ok(format!("OpShl::combine({}, {})", l_wrap, r_wrap)),
+        (">>", _) => Ok(format!("OpShr::combine({}, {})", l_wrap, r_wrap)),
+        ("||", _) => Ok(format!("OpBitOr::combine({}, {})", l_wrap, r_wrap)),
+        (";;", _) => Ok(format!("OpBitXor::combine({}, {})", l_wrap, r_wrap)),
+        ("&&", _) => Ok(format!("OpBitAnd::combine({}, {})", l_wrap, r_wrap)),
         _ => Ok(format!("({} {} {})", left_str, operator, right_str)),
     }
 }
@@ -546,24 +513,19 @@ pub fn transpile_prefix_op(operator: &str, operand: &AstNode, layer: usize, in_m
         }
     }
 
-    if operator == "!!" {
+    if ["!!", "!", "-", "~"].contains(&operator) {
         let op_str = transpile_node(operand, layer, in_main, table)?;
-        return Ok(format!("Option::from({}).map(|op| (((!(op as i64)) as f64)))", op_str));
-    }
-
-    if operator == "!" {
-        let op_str = transpile_node(operand, layer, in_main, table)?;
-        return Ok(format!("if Option::from({}).is_none() {{ Some(0.0) }} else {{ None }}", op_str));
-    }
-
-    if operator == "-" {
-        let op_str = transpile_node(operand, layer, in_main, table)?;
-        return Ok(format!("Option::from({}).map(|op| -op)", op_str));
-    }
-
-    if operator == "~" {
-        let op_str = transpile_node(operand, layer, in_main, table)?;
-        return Ok(format!("{{ let end = {}; let mut v = Vec::new(); let mut cur = 0.0; if cur <= end {{ while cur <= end {{ v.push(cur); cur += 1.0; }} }} else {{ while cur >= end {{ v.push(cur); cur -= 1.0; }} }} v }}", op_str));
+        let wrap = if is_option_type(&op_str, table) { op_str } else { format!("Option::from({})", op_str) };
+        if operator == "~" {
+            return Ok(format!("Some(move |y: f64| OpContinuous::combine(Some(y), {}))", wrap));
+        }
+        let op_struct = match operator {
+            "!!" => "OpBitNot",
+            "!" => "OpNot",
+            "-" => "OpNeg",
+            _ => unreachable!(),
+        };
+        return Ok(format!("{}::eval({})", op_struct, wrap));
     }
 
     if operator == "@" {
@@ -624,7 +586,8 @@ pub fn transpile_postfix_op(operator: &str, operand: &AstNode, layer: usize, in_
     }
     let op_str = transpile_node(operand, layer, in_main, table)?;
     if operator == "!" {
-        return Ok(format!("factorial({})", op_str));
+        let wrap = if is_option_type(&op_str, table) { op_str } else { format!("Option::from({})", op_str) };
+        return Ok(format!("OpFactorial::eval({})", wrap));
     }
     if operator == "@" {
         return Err("Compile Error: Module Import is not implemented".to_string());
@@ -674,7 +637,7 @@ pub fn is_option_type(expr: &str, table: &SymbolTable) -> bool {
     if trimmed.starts_with("__func(") || trimmed.starts_with("__val(") || trimmed.starts_with("__cv") {
         return true;
     }
-    if trimmed.starts_with("Some(") || trimmed.starts_with("None") || trimmed.contains("Option::from") || trimmed.contains(".and(") || trimmed.contains(".and_then(") || trimmed.contains(".zip(") || trimmed.contains(".map(") || trimmed.contains("eval_compare") || trimmed.contains("eval_binary") || trimmed.contains("eval_eq") || trimmed.contains("eval_split") {
+    if trimmed.starts_with("Some(") || trimmed.starts_with("None") || trimmed.contains("Option::from") || trimmed.contains(".and(") || trimmed.contains(".and_then(") || trimmed.contains(".zip(") || trimmed.contains(".map(") || trimmed.contains("::combine") || trimmed.contains("::split") || trimmed.contains("::eval") {
         let is_unwrap = {
             let pos_unwrap = trimmed.rfind("unwrap()");
             let pos_unwrap_or = trimmed.rfind("unwrap_or(");

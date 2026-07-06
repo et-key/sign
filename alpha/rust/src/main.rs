@@ -8,6 +8,7 @@ pub mod symbol_analysis;
 pub mod coproduct;
 pub mod destructuring;
 pub mod operators;
+pub mod product;
 pub mod blocks;
 pub mod codegen;
 
@@ -104,7 +105,7 @@ reg_dec_shift : reg_dec_lit << 2.0
 
 ` === 剰余演算子 (%) と前置連続リスト演算子 (~) のテスト ===
 modulo_res : 17.0 % 5.0
-cont_range : ~5.0
+cont_range : 0.0 ~ 5.0
 
 ` === 値ベースの比較（単位元ルール）と3項チェイン評価のテスト ===
 val_cmp_non_unit : 2.0 < 5.0
