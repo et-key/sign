@@ -3,6 +3,12 @@ pub mod ast;
 pub mod lexer;
 pub mod parser;
 pub mod types;
+pub mod ast_helpers;
+pub mod symbol_analysis;
+pub mod coproduct;
+pub mod destructuring;
+pub mod operators;
+pub mod blocks;
 pub mod codegen;
 
 use lexer::preprocess;
