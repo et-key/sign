@@ -9,6 +9,7 @@ pub mod coproduct;
 pub mod destructuring;
 pub mod operators;
 pub mod product;
+pub mod algebra_meta;
 pub mod blocks;
 pub mod codegen;
 

@@ -54,7 +54,7 @@ pub fn get_category(node: &AstNode, table: &SymbolTable) -> TypeCategory {
             let mut applied_args = Vec::new();
             if let Some(func_name) = extract_applied_func_and_args(node, &mut applied_args) {
                 if let Some(sig) = table.functions.get(&func_name) {
-                    if applied_args.len() < sig.arity {
+                    if applied_args.len() < sig.args.len() {
                         return TypeCategory::Lambda;
                     }
                 }
@@ -67,13 +67,13 @@ pub fn get_category(node: &AstNode, table: &SymbolTable) -> TypeCategory {
 
 pub fn get_reduction_priority(left: TypeCategory, right: TypeCategory) -> usize {
     match (left, right) {
-        (TypeCategory::Atom, TypeCategory::Atom) => 4,           // 10.4: concat (数値などのアトム連接)
-        (TypeCategory::Lambda, TypeCategory::Lambda) => 3,       // 10.3: compose
-        (TypeCategory::Lambda, TypeCategory::Atom) => 2,         // 10.2: apply
-        (TypeCategory::Lambda, TypeCategory::ListOrStruct) => 2,   // 10.2: apply (リスト/構造体適用)
-        (TypeCategory::ListOrStruct, TypeCategory::ListOrStruct) => 1, // 10.1: concat_list (List/Struct同士の連接、applyより低い優先度)
-        (TypeCategory::Atom, TypeCategory::Lambda) => 0,         // 10.0: apply_reverse
-        (TypeCategory::ListOrStruct, TypeCategory::Lambda) => 0,   // 10.0: apply_reverse
+        (TypeCategory::Lambda, TypeCategory::Atom) => 4,           // apply (射の適用)
+        (TypeCategory::Lambda, TypeCategory::ListOrStruct) => 4,   // apply (リスト/構造体適用)
+        (TypeCategory::Atom, TypeCategory::Lambda) => 3,           // apply_reverse (逆適用)
+        (TypeCategory::ListOrStruct, TypeCategory::Lambda) => 3,   // apply_reverse (逆適用)
+        (TypeCategory::Lambda, TypeCategory::Lambda) => 2,         // compose (射の合成)
+        (TypeCategory::Atom, TypeCategory::Atom) => 1,             // concat (値の連接)
+        (TypeCategory::ListOrStruct, TypeCategory::ListOrStruct) => 0, // concat_list (リスト同士の連接)
         _ => 1,
     }
 }
@@ -114,14 +114,24 @@ pub fn resolve_coproduct(list: &[AstNode], table: &SymbolTable) -> Result<AstNod
                 
                 let reduced = match priority {
                     4 => {
+                        // apply
                         AstNode::BinaryOperation {
-                            operator: ",".to_string(),
+                            operator: " ".to_string(),
                             left: Box::new(left),
                             right: Box::new(right),
-                            name: "concat".to_string(),
+                            name: "resolved".to_string(),
                         }
                     }
                     3 => {
+                        // apply_reverse
+                        AstNode::BinaryOperation {
+                            operator: " ".to_string(),
+                            left: Box::new(right),
+                            right: Box::new(left),
+                            name: "resolved".to_string(),
+                        }
+                    }
+                    2 => {
                         // compose (左結合な関数合成): x ? RHS(LHS(x))
                         let x_id = AstNode::Identifier("comp_arg".to_string());
                         let apply_left = AstNode::BinaryOperation {
@@ -141,28 +151,13 @@ pub fn resolve_coproduct(list: &[AstNode], table: &SymbolTable) -> Result<AstNod
                             body: Box::new(apply_right),
                         }
                     }
-                    2 => {
-                        AstNode::BinaryOperation {
-                            operator: " ".to_string(),
-                            left: Box::new(left),
-                            right: Box::new(right),
-                            name: "resolved".to_string(),
-                        }
-                    }
-                    1 => {
+                    1 | 0 => {
+                        // concat / concat_list
                         AstNode::BinaryOperation {
                             operator: ",".to_string(),
                             left: Box::new(left),
                             right: Box::new(right),
                             name: "concat".to_string(),
-                        }
-                    }
-                    0 => {
-                        AstNode::BinaryOperation {
-                            operator: " ".to_string(),
-                            left: Box::new(right),
-                            right: Box::new(left),
-                            name: "resolved".to_string(),
                         }
                     }
                     _ => unreachable!(),

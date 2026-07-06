@@ -2,6 +2,18 @@ use crate::ast::AstNode;
 use crate::types::SymbolTable;
 use crate::codegen::transpile_node;
 
+fn collect_product_items(node: &AstNode, items: &mut Vec<AstNode>) {
+    match node {
+        AstNode::BinaryOperation { operator, left, right, .. } if operator == "," => {
+            collect_product_items(left, items);
+            collect_product_items(right, items);
+        }
+        _ => {
+            items.push(node.clone());
+        }
+    }
+}
+
 pub fn transpile_product(
     left: &AstNode,
     right: &AstNode,
@@ -21,8 +33,15 @@ pub fn transpile_product(
         return transpile_node(left, layer, in_main, table);
     }
 
-    // 2. 通常の直積構築 (vec![l, r])
-    let left_str = transpile_node(left, layer, in_main, table)?;
-    let right_str = transpile_node(right, layer, in_main, table)?;
-    Ok(format!("vec![{}, {}]", left_str, right_str))
+    // 2. 平坦化（左辺・右辺がさらに `,` の場合にフラットなリストにする）
+    let mut flat = Vec::new();
+    collect_product_items(left, &mut flat);
+    collect_product_items(right, &mut flat);
+
+    let mut parts = Vec::new();
+    for item in flat {
+        parts.push(transpile_node(&item, layer, in_main, table)?);
+    }
+    
+    Ok(format!("vec![{}]", parts.join(", ")))
 }

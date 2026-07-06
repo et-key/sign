@@ -218,10 +218,9 @@ fn register_definition(table: &mut SymbolTable, id: &str, def: &AstNode) {
             return_type,
         });
         // Lambda 引数名をスコープマーカーとして atom_types に登録
-        // (Unknown = 「定義されているが型はまだ不明」を意味する)
-        // transpile_identifier はこれを見て「未定義ではない」と判断する
-        for arg in &args {
-            table.atom_types.entry(arg.clone()).or_insert(AtomType::Unknown);
+        for (i, arg) in args.iter().enumerate() {
+            let t = if rest_idx == Some(i) { AtomType::List } else { AtomType::Unknown };
+            table.atom_types.entry(arg.clone()).or_insert(t);
         }
         if let Some(first_char) = id.chars().next() {
             if first_char.is_uppercase() {

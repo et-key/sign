@@ -99,6 +99,7 @@ pub fn infer_atom_type(node: &AstNode, table: &SymbolTable) -> AtomType {
         }
         AstNode::Prefix { operator, operand, .. } => match operator.as_str() {
             "$" => AtomType::Address,
+            "~" => AtomType::List,
             "@" => infer_atom_type(operand, table), // deref: オペランドが指す型
             "!" | "!!" => {
                 let ot = infer_atom_type(operand, table);

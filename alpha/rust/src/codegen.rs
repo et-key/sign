@@ -57,338 +57,30 @@ pub fn transpile_program(ast: &[AstNode], layer: usize) -> Result<String, String
     
     if layer == 2 {
         top_level_code.push_str("#![allow(unused_parens)]\n#![allow(unused_variables)]\n#![allow(non_upper_case_globals)]\n#![allow(dead_code)]\n#![allow(non_snake_case)]\n\n");
-        let eval_compare_decl = r#"pub trait Algebra<T> {
-    fn combine(lhs: Option<T>, rhs: Option<T>) -> Option<T>;
+        let eval_compare_decl = r#"fn factorial(n: f64) -> f64 {
+    if n <= 1.0 {
+        1.0
+    } else {
+        n * factorial(n - 1.0)
+    }
 }
 
-pub trait Coalgebra<T> {
+pub trait Expandable {
     type Output;
-    fn split(val: Option<T>) -> Option<Self::Output>;
+    fn expand(self) -> Self::Output;
 }
-
-pub struct OpAdd;
-impl Algebra<f64> for OpAdd {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        Some(lhs? + rhs?)
-    }
-}
-
-pub struct OpSub;
-impl Algebra<f64> for OpSub {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        Some(lhs? - rhs?)
-    }
-}
-
-pub struct OpMul;
-impl Algebra<f64> for OpMul {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        Some(lhs? * rhs?)
-    }
-}
-
-pub struct OpDiv;
-impl Algebra<f64> for OpDiv {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        Some(lhs? / rhs?)
-    }
-}
-
-pub struct OpPow;
-impl Algebra<f64> for OpPow {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        Some(lhs?.powf(rhs?))
-    }
-}
-
-pub struct OpMod;
-impl Algebra<f64> for OpMod {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        Some(lhs? % rhs?)
-    }
-}
-
-pub struct OpShl;
-impl Algebra<f64> for OpShl {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        Some((((lhs? as i64) << (rhs? as i64)) as f64))
-    }
-}
-
-pub struct OpShr;
-impl Algebra<f64> for OpShr {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        Some((((lhs? as i64) >> (rhs? as i64)) as f64))
-    }
-}
-
-pub struct OpBitOr;
-impl Algebra<f64> for OpBitOr {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        Some((((lhs? as i64) | (rhs? as i64)) as f64))
-    }
-}
-
-pub struct OpBitXor;
-impl Algebra<f64> for OpBitXor {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        Some((((lhs? as i64) ^ (rhs? as i64)) as f64))
-    }
-}
-
-pub struct OpBitAnd;
-impl Algebra<f64> for OpBitAnd {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        Some((((lhs? as i64) & (rhs? as i64)) as f64))
-    }
-}
-
-pub struct OpOr;
-impl<T> Algebra<T> for OpOr {
-    fn combine(lhs: Option<T>, rhs: Option<T>) -> Option<T> {
-        lhs.or(rhs)
-    }
-}
-
-pub struct OpAnd;
-impl<T> Algebra<T> for OpAnd {
-    fn combine(lhs: Option<T>, rhs: Option<T>) -> Option<T> {
-        lhs.and(rhs)
-    }
-}
-
-pub struct OpXor;
-impl<T> Algebra<T> for OpXor {
-    fn combine(lhs: Option<T>, rhs: Option<T>) -> Option<T> {
-        lhs.xor(rhs)
-    }
-}
-
-pub struct OpConcatList;
-impl<T: Clone> Algebra<Vec<T>> for OpConcatList {
-    fn combine(lhs: Option<Vec<T>>, rhs: Option<Vec<T>>) -> Option<Vec<T>> {
-        let mut l = lhs?;
-        l.extend(rhs?);
-        Some(l)
-    }
-}
-
-pub struct OpRepeatList;
-impl OpRepeatList {
-    pub fn combine<T: Clone>(lhs: Option<Vec<T>>, rhs: Option<f64>) -> Option<Vec<T>> {
-        let l = lhs?;
-        let r = rhs? as usize;
-        let mut temp = Vec::new();
-        for _ in 0..r {
-            temp.extend(l.clone());
-        }
-        Some(temp)
-    }
-}
-
-pub struct OpChunksList;
-impl OpChunksList {
-    pub fn combine<T: Clone>(lhs: Option<Vec<T>>, rhs: Option<f64>) -> Option<Vec<Vec<T>>> {
-        let l = lhs?;
-        let r = rhs? as usize;
-        Some(l.chunks(r).map(|chunk| chunk.to_vec()).collect())
-    }
-}
-
-pub struct OpPowList;
-impl OpPowList {
-    pub fn combine<T: Clone>(lhs: Option<Vec<T>>, rhs: Option<f64>) -> Option<Vec<Vec<T>>> {
-        let l = lhs?;
-        let r = rhs? as usize;
-        Some(vec![l; r])
-    }
-}
-
-pub struct OpConcatString;
-impl Algebra<String> for OpConcatString {
-    fn combine(lhs: Option<String>, rhs: Option<String>) -> Option<String> {
-        Some(format!("{}{}", lhs?, rhs?))
-    }
-}
-
-pub struct OpConcatStringChar;
-impl OpConcatStringChar {
-    pub fn combine(lhs: Option<String>, rhs: Option<f64>) -> Option<String> {
-        let char_val = char::from_u32(rhs? as u32).unwrap_or('\0');
-        Some(format!("{}{}", lhs?, char_val))
-    }
-}
-
-pub struct OpRepeatString;
-impl OpRepeatString {
-    pub fn combine(lhs: Option<String>, rhs: Option<f64>) -> Option<String> {
-        Some(lhs?.repeat(rhs? as usize))
-    }
-}
-
-pub struct OpLess;
-impl Algebra<f64> for OpLess {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        let l = lhs?;
-        let r = rhs?;
-        if l < r {
-            if l == 0.0 || l == 1.0 { Some(r) } else { Some(l) }
-        } else {
-            None
-        }
-    }
-}
-
-pub struct OpGreater;
-impl Algebra<f64> for OpGreater {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        let l = lhs?;
-        let r = rhs?;
-        if l > r {
-            if l == 0.0 || l == 1.0 { Some(r) } else { Some(l) }
-        } else {
-            None
-        }
-    }
-}
-
-pub struct OpLessEq;
-impl Algebra<f64> for OpLessEq {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        let l = lhs?;
-        let r = rhs?;
-        if l <= r {
-            if l == 0.0 || l == 1.0 { Some(r) } else { Some(l) }
-        } else {
-            None
-        }
-    }
-}
-
-pub struct OpGreaterEq;
-impl Algebra<f64> for OpGreaterEq {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        let l = lhs?;
-        let r = rhs?;
-        if l >= r {
-            if l == 0.0 || l == 1.0 { Some(r) } else { Some(l) }
-        } else {
-            None
-        }
-    }
-}
-
-pub struct OpNotEq;
-impl Algebra<f64> for OpNotEq {
-    fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-        let l = lhs?;
-        let r = rhs?;
-        if l != r {
-            if l == 0.0 || l == 1.0 { Some(r) } else { Some(l) }
-        } else {
-            None
-        }
-    }
-}
-
-pub struct OpEq;
-impl<T: PartialEq> Algebra<T> for OpEq {
-    fn combine(lhs: Option<T>, rhs: Option<T>) -> Option<T> {
-        let l = lhs?;
-        let r = rhs?;
-        if l == r { Some(l) } else { None }
-    }
-}
-
-pub struct OpNotEqGeneric;
-impl<T: PartialEq> Algebra<T> for OpNotEqGeneric {
-    fn combine(lhs: Option<T>, rhs: Option<T>) -> Option<T> {
-        let l = lhs?;
-        let r = rhs?;
-        if l != r { Some(l) } else { None }
-    }
-}
-
-pub struct OpSplitList;
-impl<T: Clone> Coalgebra<Vec<T>> for OpSplitList {
-    type Output = (T, Vec<T>);
-    fn split(val: Option<Vec<T>>) -> Option<(T, Vec<T>)> {
-        let mut v = val?;
-        if v.is_empty() {
-            None
-        } else {
-            let head = v.remove(0);
-            Some((head, v))
-        }
-    }
-}
-
-pub trait UnaryAlgebra<T> {
-    type Output;
-    fn eval(val: Option<T>) -> Option<Self::Output>;
-}
-
-pub struct OpNot;
-impl UnaryAlgebra<f64> for OpNot {
+impl Expandable for f64 {
     type Output = f64;
-    fn eval(val: Option<f64>) -> Option<f64> {
-        if val.is_none() {
-            Some(0.0)
-        } else {
-            None
-        }
-    }
+    fn expand(self) -> f64 { self }
 }
-
-pub struct OpBitNot;
-impl UnaryAlgebra<f64> for OpBitNot {
-    type Output = f64;
-    fn eval(val: Option<f64>) -> Option<f64> {
-        Some((!(val? as i64)) as f64)
-    }
+impl<T: Clone> Expandable for Vec<T> {
+    type Output = Vec<T>;
+    fn expand(self) -> Vec<T> { self }
 }
-
-pub struct OpNeg;
-impl UnaryAlgebra<f64> for OpNeg {
-    type Output = f64;
-    fn eval(val: Option<f64>) -> Option<f64> {
-        Some(-val?)
-    }
+impl<T: Clone> Expandable for Vec<Vec<T>> {
+    type Output = Vec<T>;
+    fn expand(self) -> Vec<T> { self.into_iter().flatten().collect() }
 }
-
-pub struct OpContinuous;
-impl OpContinuous {
-    pub fn combine(lhs: Option<f64>, rhs: Option<f64>) -> Option<Vec<f64>> {
-        let start = lhs?;
-        let end = rhs?;
-        let mut v = Vec::new();
-        let mut cur = start;
-        if cur <= end {
-            while cur <= end {
-                v.push(cur);
-                cur += 1.0;
-            }
-        } else {
-            while cur >= end {
-                v.push(cur);
-                cur -= 1.0;
-            }
-        }
-        Some(v)
-    }
-}
-
-pub struct OpFactorial;
-impl UnaryAlgebra<f64> for OpFactorial {
-    type Output = f64;
-    fn eval(val: Option<f64>) -> Option<f64> {
-        fn fact(n: f64) -> f64 {
-            if n <= 1.0 { 1.0 } else { n * fact(n - 1.0) }
-        }
-        Some(fact(val?))
-    }
-}
-
 "#;
         top_level_code.push_str(eval_compare_decl);
 
@@ -762,7 +454,7 @@ fn transpile_definition(id: &str, def: &AstNode, layer: usize, table: &SymbolTab
                     false
                 }
             };
-            let is_opt = (body_str.contains("Some") || body_str.contains("None") || body_str.contains("Option::from") || body_str.contains(".and(") || body_str.contains(".get_") || body_str.contains("::combine") || body_str.contains("::split") || body_str.contains("::eval")) && !is_unwrap;
+            let is_opt = (body_str.contains("Some") || body_str.contains("None") || body_str.contains("Option::from") || body_str.contains(".and(") || body_str.contains(".get_") || body_str.contains(".zip(") || body_str.contains(".or(") || body_str.contains(".xor(")) && !is_unwrap;
             
             match ret_atom {
                 AtomType::List | AtomType::Struct => {
@@ -1133,7 +825,7 @@ mod tests {
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 2).unwrap();
         // 右辺 (2 * 3) はすでに Option<f64> を返すので Option::from で二重に包まない
-        assert!(out.contains("OpAdd::combine(Option::from(1.0), OpMul::combine(Option::from(2.0), Option::from(3.0)))"));
+        assert!(out.contains("Option::from(1.0).zip(Option::from(2.0).zip(Option::from(3.0)).map(|(l, r)| l * r)).map(|(l, r)| l + r)"));
     }
 
     #[test]
@@ -1179,7 +871,7 @@ mod tests {
         let pre = preprocess(code);
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 2).unwrap();
-        assert!(out.contains("OpXor::combine("));
+        assert!(out.contains("None.xor(None)"));
 
         // 2. get_prop (')
         let code = "Point : x y ? x\np : Point 10 20\np ' x";
@@ -1193,7 +885,7 @@ mod tests {
         let pre = preprocess(code);
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 2).unwrap();
-        assert!(out.contains("OpEq::combine("));
+        assert!(out.contains("None.zip(None).and_then(|(l, r)| if l == r { Some(l) } else { None })"));
 
         // 4. absolute value (|...|)
         let code = "|x|";
@@ -1207,7 +899,7 @@ mod tests {
         let pre = preprocess(code);
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 2).unwrap();
-        assert!(out.contains("OpFactorial::eval("));
+        assert!(out.contains("Option::from(5.0).map(|op| factorial(op))"));
 
         // 6. import (@)
         let code = "file@";
@@ -1233,14 +925,14 @@ mod tests {
         let pre = preprocess(code);
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 2).unwrap();
-        assert!(out.contains("OpSub::combine(Option::from(val_a), Option::from(val_b))"));
+        assert!(out.contains("Option::from(val_a).zip(Option::from(val_b)).map(|(l, r)| l - r)"));
 
         // 3. 中置のビット演算
         let code = "val_a : 10\nval_b : 20\nval_a || val_b";
         let pre = preprocess(code);
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 2).unwrap();
-        assert!(out.contains("OpBitOr::combine(Option::from(val_a), Option::from(val_b))"));
+        assert!(out.contains("Option::from(val_a).zip(Option::from(val_b)).map(|(l, r)| (((l as i64) | (r as i64)) as f64))"));
 
         // 4. 前置否定 (!)
         // 静的最適化により、!__ が Some(0.0) に直接変換される
@@ -1266,10 +958,10 @@ mod tests {
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 2).unwrap();
         assert!(out.contains("fn g(x: f64, y: Option<f64>, z: Option<f64>) -> Option<Vec<f64>>"));
-        assert!(out.contains("let y = y.or(Option::from(OpAdd::combine(Option::from(x), Option::from(1.0)))).unwrap_or(0.0);"));
-        assert!(out.contains("let z = z.or(Option::from(OpAdd::combine(Option::from(y), Option::from(1.0)))).unwrap_or(0.0);"));
+        assert!(out.contains("let y = y.or(Option::from(Option::from(x).zip(Option::from(1.0)).map(|(l, r)| l + r))).unwrap_or(0.0);"));
+        assert!(out.contains("let z = z.or(Option::from(Option::from(y).zip(Option::from(1.0)).map(|(l, r)| l + r))).unwrap_or(0.0);"));
         assert!(out.contains("g(1.0, None, None)"));
-        assert!(out.contains("g(1.0, (OpLess::combine("));
+        assert!(out.contains("g(1.0, (Option::from(3.0).zip(Option::from(2.0)).and_then(|(l, r)| if l < r { Some(if l == 0.0 || l == 1.0 { r } else { l }) } else { None })), None)"));
     }
 
     #[test]
@@ -1294,5 +986,70 @@ mod tests {
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 2).unwrap();
         assert!(out.contains("f(&vec![vec![1.0, 2.0], vec![3.0, 4.0]])"));
+    }
+
+    #[test]
+    fn test_transpile_coproduct_priority_bug() {
+        let code = "f : x ? x + 1\nres : 1 f 2 3 4";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("vec![1.0,"));
+        assert!(out.contains("3.0, 4.0]"));
+    }
+
+    #[test]
+    fn test_transpile_prefix_lift() {
+        // 1. a : ~[1 2 3] (リストを持ち上げて [[1, 2, 3]] にする)
+        let code = "a : ~[1 2 3]";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("let a = Option::from(vec![1.0, 2.0, 3.0]).map(|op| vec![op]);"));
+
+        // 2. b : ~1 (スカラーを持ち上げて [1] にする)
+        let code = "b : ~1";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("let b = Option::from(1.0).map(|op| vec![op]);"));
+
+        // 3. c : [ 0 , ~[1, 2, 3]~ ] (持ち上げて展開)
+        let code = "c : [ 0 , ~[1, 2, 3]~ ]";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("let c = vec![0.0, Option::from(vec![1.0, 2.0, 3.0]).map(|op| vec![op]).map(|op| op.expand())];"));
+    }
+
+    #[test]
+    fn test_transpile_hole_range() {
+        let code = "res : _ ~ 10";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        // Hole (_) が desugar_holes によって _p0 ? _p0 ~ 10 に変換され、関数定義に脱糖される
+        assert!(out.contains("fn res(_p0: f64) -> Vec<f64>"));
+        assert!(out.contains("let mut v = Vec::new();"));
+    }
+
+    #[test]
+    fn test_transpile_list_destructuring_cdr() {
+        let code = "car : x ~y ? x\ncdr : x ~y ? y\nres1 : cdr 1 2 3";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("fn cdr(x: f64, y: &[f64]) -> Vec<f64>"));
+        assert!(out.contains("let res1 = vec![2.0, 3.0];"));
+    }
+
+    #[test]
+    fn test_transpile_list_append() {
+        let code = "append : [x ~xs] [y ~ys] ?\n\txs == __ : @x~ (y ys)~\n\tx (append xs (y ys))~\nres : append [1 2] [3 4 5]";
+        let pre = preprocess(code);
+        let ast = sign_parser::program(&pre).unwrap();
+        let out = transpile_program(&ast, 2).unwrap();
+        assert!(out.contains("fn append("));
+        assert!(out.contains("append(&vec![1.0, 2.0], &vec![3.0, 4.0, 5.0])"));
     }
 }

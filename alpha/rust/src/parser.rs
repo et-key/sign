@@ -3,6 +3,7 @@ use crate::ast::{AstNode, BlockKind};
 peg::parser!{
     pub grammar sign_parser() for str {
         rule whitespace() = [' ']*
+        rule spaced_ws() = [' ']+
         rule EOL() = "\r\n" / "\r" / "\n"
         rule comment() = "`" [^'\r' | '\n']*
         rule hex() = ['0'..='9' | 'a'..='f' | 'A'..='F']
@@ -71,7 +72,7 @@ peg::parser!{
             / logical_xor()
 
         rule logical_xor() -> AstNode
-            = head:logical_or() tail:(whitespace() ";" whitespace() right:logical_or() { right })* {
+            = head:logical_or() tail:(spaced_ws() ";" spaced_ws() right:logical_or() { right })* {
                 tail.into_iter().fold(head, |left, right| {
                     AstNode::BinaryOperation {
                         operator: ";".to_string(),
@@ -95,7 +96,7 @@ peg::parser!{
             }
 
         rule logical_and() -> AstNode
-            = head:equal() tail:(whitespace() "&" whitespace() right:equal() { right })* {
+            = head:equal() tail:(spaced_ws() "&" spaced_ws() right:equal() { right })* {
                 tail.into_iter().fold(head, |left, right| {
                     AstNode::BinaryOperation {
                         operator: "&".to_string(),
@@ -107,7 +108,7 @@ peg::parser!{
             }
 
         rule equal() -> AstNode
-            = head:product() tail:(whitespace() op:$("==" / "!==") whitespace() right:product() { (op, right) })* {
+            = head:product() tail:(spaced_ws() op:$("==" / "!==") spaced_ws() right:product() { (op, right) })* {
                 tail.into_iter().fold(head, |left, (op, right)| {
                     let name = if op == "==" { "equal" } else { "not_equal" };
                     AstNode::BinaryOperation {
@@ -120,7 +121,7 @@ peg::parser!{
             }
 
         rule product() -> AstNode
-            = left:coproduct() whitespace() "," whitespace() right:product() {
+            = left:coproduct() spaced_ws() "," spaced_ws() right:product() {
                 AstNode::BinaryOperation {
                     operator: ",".to_string(),
                     left: Box::new(left),
@@ -139,7 +140,7 @@ peg::parser!{
             / range()
 
         rule range() -> AstNode
-            = head:comparison() tail:(whitespace() op:$("~+" / "~-" / "~*" / "~/" / "~^" / "~") whitespace() right:comparison() { (op, right) })* {
+            = head:comparison() tail:(spaced_ws() op:$("~+" / "~-" / "~*" / "~/" / "~^" / "~") spaced_ws() right:comparison() { (op, right) })* {
                 tail.into_iter().fold(head, |left, (op, right)| {
                     let name = match op {
                         "~+" => "range_arithmetic",
@@ -159,7 +160,7 @@ peg::parser!{
             }
 
         rule comparison() -> AstNode
-            = head:additive() tail:(whitespace() op:$("<=" / ">=" / "==" / "!=" / "<" / "=" / ">") whitespace() right:additive() { (op, right) })* {
+            = head:additive() tail:(spaced_ws() op:$("<=" / ">=" / "==" / "!=" / "<" / "=" / ">") spaced_ws() right:additive() { (op, right) })* {
                 tail.into_iter().fold(head, |left, (op, right)| {
                     let name = match op {
                         "<" => "less",
@@ -180,7 +181,7 @@ peg::parser!{
             }
 
         rule additive() -> AstNode
-            = head:multiplicative() tail:(whitespace() op:$("+" / "-") whitespace() right:multiplicative() { (op, right) })* {
+            = head:multiplicative() tail:(spaced_ws() op:$("+" / "-") spaced_ws() right:multiplicative() { (op, right) })* {
                 tail.into_iter().fold(head, |left, (op, right)| {
                     let name = if op == "+" { "add" } else { "sub" };
                     AstNode::BinaryOperation {
@@ -193,7 +194,7 @@ peg::parser!{
             }
 
         rule multiplicative() -> AstNode
-            = head:exponential() tail:(whitespace() op:$("*" / "/" / "%") whitespace() right:exponential() { (op, right) })* {
+            = head:exponential() tail:(spaced_ws() op:$("*" / "/" / "%") spaced_ws() right:exponential() { (op, right) })* {
                 tail.into_iter().fold(head, |left, (op, right)| {
                     let name_str = match op {
                         "*" => "mul",
@@ -210,7 +211,7 @@ peg::parser!{
             }
 
         rule exponential() -> AstNode
-            = head:get_prop() tail:(whitespace() "^" whitespace() right:exponential() { right })? {
+            = head:get_prop() tail:(spaced_ws() "^" spaced_ws() right:exponential() { right })? {
                 if let Some(right) = tail {
                     AstNode::BinaryOperation {
                         operator: "^".to_string(),
@@ -224,7 +225,7 @@ peg::parser!{
             }
 
         rule get_prop() -> AstNode
-            = head:bitwise_shift() tail:(whitespace() op:$("'" / "@") whitespace() right:bitwise_shift() { (op, right) })* {
+            = head:bitwise_shift() tail:(spaced_ws() op:$("'" / "@") spaced_ws() right:bitwise_shift() { (op, right) })* {
                 tail.into_iter().fold(head, |left, (op, right)| {
                     let name = if op == "'" { "get_prop" } else { "get_at" };
                     AstNode::BinaryOperation {
@@ -237,7 +238,7 @@ peg::parser!{
             }
 
         rule bitwise_shift() -> AstNode
-            = head:bitwise_or() tail:(whitespace() op:$("<<" / ">>") whitespace() right:bitwise_or() { (op, right) })* {
+            = head:bitwise_or() tail:(spaced_ws() op:$("<<" / ">>") spaced_ws() right:bitwise_or() { (op, right) })* {
                 tail.into_iter().fold(head, |left, (op, right)| {
                     let name = if op == "<<" { "bit_shift_left" } else { "bit_shift_right" };
                     AstNode::BinaryOperation {
@@ -250,7 +251,7 @@ peg::parser!{
             }
 
         rule bitwise_or() -> AstNode
-            = head:bitwise_xor() tail:(whitespace() "||" whitespace() right:bitwise_xor() { right })* {
+            = head:bitwise_xor() tail:(spaced_ws() "||" spaced_ws() right:bitwise_xor() { right })* {
                 tail.into_iter().fold(head, |left, right| {
                     AstNode::BinaryOperation {
                         operator: "||".to_string(),
@@ -262,7 +263,7 @@ peg::parser!{
             }
 
         rule bitwise_xor() -> AstNode
-            = head:bitwise_and() tail:(whitespace() ";;" whitespace() right:bitwise_and() { right })* {
+            = head:bitwise_and() tail:(spaced_ws() ";;" spaced_ws() right:bitwise_and() { right })* {
                 tail.into_iter().fold(head, |left, right| {
                     AstNode::BinaryOperation {
                         operator: ";;".to_string(),
@@ -274,7 +275,7 @@ peg::parser!{
             }
 
         rule bitwise_and() -> AstNode
-            = head:postfix() tail:(whitespace() "&&" whitespace() right:postfix() { right })* {
+            = head:postfix() tail:(spaced_ws() "&&" spaced_ws() right:postfix() { right })* {
                 tail.into_iter().fold(head, |left, right| {
                     AstNode::BinaryOperation {
                         operator: "&&".to_string(),
