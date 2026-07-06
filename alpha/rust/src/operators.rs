@@ -183,7 +183,7 @@ pub fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name
     if operator == ";" {
         let left_str = transpile_node(left, layer, in_main, table)?;
         let right_str = transpile_node(right, layer, in_main, table)?;
-        let wrapped_right = if right_str.starts_with("Option::from") || right_str.starts_with("Some(") || right_str.starts_with("None") || right_str.contains(".and") || right_str.contains("eval_compare") {
+        let wrapped_right = if is_option_type(&right_str, table) {
             right_str
         } else {
             format!("Option::from({})", right_str)
@@ -204,13 +204,19 @@ pub fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name
         let left_str = transpile_node(left, layer, in_main, table)?;
         let right_str = transpile_node(right, layer, in_main, table)?;
         let rust_op = if operator == "!==" { "!=" } else if operator == "=" { "==" } else { operator };
-        return Ok(format!("eval_compare(Option::from({}), Option::from({}), |l, r| l {} r)", left_str, right_str, rust_op));
+        let l_wrap = if is_option_type(&left_str, table) { left_str } else { format!("Option::from({})", left_str) };
+        let r_wrap = if is_option_type(&right_str, table) { right_str } else { format!("Option::from({})", right_str) };
+        if ["==", "!=="].contains(&operator) {
+            return Ok(format!("eval_eq({}, {}, |l, r| l {} r)", l_wrap, r_wrap, rust_op));
+        } else {
+            return Ok(format!("eval_compare({}, {}, |l, r| l {} r)", l_wrap, r_wrap, rust_op));
+        }
     }
 
     if operator == "&" {
         let left_str = transpile_node(left, layer, in_main, table)?;
         let right_str = transpile_node(right, layer, in_main, table)?;
-        let wrapped_right = if right_str.starts_with("Option::from") || right_str.starts_with("Some(") || right_str.starts_with("None") || right_str.contains(".and") || right_str.contains("eval_compare") {
+        let wrapped_right = if is_option_type(&right_str, table) {
             right_str
         } else {
             format!("Option::from({})", right_str)
@@ -466,31 +472,52 @@ pub fn transpile_binary_op(operator: &str, left: &AstNode, right: &AstNode, name
         ("+", AtomType::String) => {
             if right_type == AtomType::Number {
                 // Number を文字コードポイントとして扱い、結合する
-                Ok(format!("format!(\"{}{}\", {}, ({} as u32).try_into().unwrap_or('\\0'))", "{}", "{}", left_str, right_str))
+                Ok(format!(
+                    "eval_binary({}, {}, |l, r| format!(\"{}{}\", l, (r as u32).try_into().unwrap_or('\\0')))",
+                    l_wrap, r_wrap, "{}", "{}"
+                ))
             } else {
-                Ok(format!("format!(\"{}{}\", {}, {})", "{}", "{}", left_str, right_str))
+                Ok(format!(
+                    "eval_binary({}, {}, |l, r| format!(\"{}{}\", l, r))",
+                    l_wrap, r_wrap, "{}", "{}"
+                ))
             }
         }
         ("*", AtomType::String) => {
-            Ok(format!("{}.repeat({} as usize)", left_str, right_str))
+            Ok(format!(
+                "eval_binary({}, {}, |l, r| l.repeat(r as usize))",
+                l_wrap, r_wrap
+            ))
         }
         
         // --- 2. 左辺が List の場合 ---
         ("+", AtomType::List) => {
             // リストの結合
-            Ok(format!("{{ let mut temp = {}.clone(); temp.extend({}); temp }}", left_str, right_str))
+            Ok(format!(
+                "eval_binary({}, {}, |mut l, r| {{ l.extend(r); l }})",
+                l_wrap, r_wrap
+            ))
         }
         ("*", AtomType::List) => {
             // リストを Number 回複製する
-            Ok(format!("{{ let mut temp = Vec::new(); for _ in 0..({} as usize) {{ temp.extend({}.clone()); }}; temp }}", right_str, left_str))
+            Ok(format!(
+                "eval_binary({}, {}, |l, r| {{ let mut temp = Vec::new(); for _ in 0..(r as usize) {{ temp.extend(l.clone()); }}; temp }})",
+                l_wrap, r_wrap
+            ))
         }
         ("/", AtomType::List) => {
             // リストを Number 個 of チャンクに分割
-            Ok(format!("{}.chunks({} as usize).map(|c| c.to_vec()).collect::<Vec<_>>()", left_str, right_str))
+            Ok(format!(
+                "eval_binary({}, {}, |l, r| l.chunks(r as usize).map(|c| c.to_vec()).collect::<Vec<_>>())",
+                l_wrap, r_wrap
+            ))
         }
         ("^", AtomType::List) => {
             // 次元を上げて複製
-            Ok(format!("vec![{}.clone(); {} as usize]", left_str, right_str))
+            Ok(format!(
+                "eval_binary({}, {}, |l, r| vec![l.clone(); r as usize])",
+                l_wrap, r_wrap
+            ))
         }
 
         // --- 3. 左辺が Number (数値) またはその他のデフォルトの場合 ---
@@ -647,7 +674,7 @@ pub fn is_option_type(expr: &str, table: &SymbolTable) -> bool {
     if trimmed.starts_with("__func(") || trimmed.starts_with("__val(") || trimmed.starts_with("__cv") {
         return true;
     }
-    if trimmed.starts_with("Some(") || trimmed.starts_with("None") || trimmed.contains("Option::from") || trimmed.contains(".and(") || trimmed.contains(".and_then(") || trimmed.contains(".zip(") || trimmed.contains(".map(") || trimmed.contains("eval_compare") || trimmed.contains("eval_binary") {
+    if trimmed.starts_with("Some(") || trimmed.starts_with("None") || trimmed.contains("Option::from") || trimmed.contains(".and(") || trimmed.contains(".and_then(") || trimmed.contains(".zip(") || trimmed.contains(".map(") || trimmed.contains("eval_compare") || trimmed.contains("eval_binary") || trimmed.contains("eval_eq") || trimmed.contains("eval_split") {
         let is_unwrap = {
             let pos_unwrap = trimmed.rfind("unwrap()");
             let pos_unwrap_or = trimmed.rfind("unwrap_or(");

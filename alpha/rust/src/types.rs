@@ -48,6 +48,16 @@ pub fn infer_atom_type(node: &AstNode, table: &SymbolTable) -> AtomType {
         AstNode::Address(_) => AtomType::Address,
         AstNode::Register(_) => AtomType::Register,
         AstNode::Block { kind: BlockKind::Bracket, .. } => AtomType::List,
+        AstNode::Coproduct(list) => {
+            if !list.is_empty() {
+                if let AstNode::Identifier(func_name) = &list[0] {
+                    if let Some(sig) = table.functions.get(func_name) {
+                        return sig.return_type.clone();
+                    }
+                }
+            }
+            AtomType::List
+        }
         AstNode::Lambda { .. } => AtomType::Lambda,
         AstNode::Identifier(id) => {
             if table.functions.contains_key(id) {
@@ -59,6 +69,19 @@ pub fn infer_atom_type(node: &AstNode, table: &SymbolTable) -> AtomType {
         AstNode::BinaryOperation { operator, left, .. } => {
             // 左辺優先ルール: 演算結果の型は左辺の型
             match operator.as_str() {
+                " " => {
+                    if let AstNode::Identifier(func_name) = &**left {
+                        if let Some(sig) = table.functions.get(func_name) {
+                            return sig.return_type.clone();
+                        }
+                    }
+                    let lt = infer_atom_type(left, table);
+                    if lt == AtomType::Lambda {
+                        lt
+                    } else {
+                        AtomType::List
+                    }
+                }
                 "+" | "-" | "*" | "/" | "%" | "^" => infer_atom_type(left, table),
                 "<" | "<=" | "=" | ">=" | ">" | "!=" | "==" => AtomType::Number, // Unit or Number
                 "," => AtomType::Struct,

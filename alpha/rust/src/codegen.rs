@@ -74,13 +74,37 @@ where
     }
 }
 
-fn eval_binary<F>(lhs: Option<f64>, rhs: Option<f64>, op: F) -> Option<f64>
+fn eval_eq<T, F>(lhs: Option<T>, rhs: Option<T>, op: F) -> Option<T>
 where
-    F: Fn(f64, f64) -> f64,
+    T: PartialEq,
+    F: Fn(&T, &T) -> bool,
+{
+    let l_val = lhs?;
+    let r_val = rhs?;
+    if op(&l_val, &r_val) {
+        Some(l_val)
+    } else {
+        None
+    }
+}
+
+fn eval_binary<T, F>(lhs: Option<T>, rhs: Option<T>, op: F) -> Option<T>
+where
+    F: Fn(T, T) -> T,
 {
     match (lhs, rhs) {
         (Some(l), Some(r)) => Some(op(l, r)),
         _ => None,
+    }
+}
+
+fn eval_split<T: Clone>(val: Option<Vec<T>>) -> Option<(T, Vec<T>)> {
+    let mut v = val?;
+    if v.is_empty() {
+        None
+    } else {
+        let head = v.remove(0);
+        Some((head, v))
     }
 }
 
@@ -443,9 +467,9 @@ fn transpile_definition(id: &str, def: &AstNode, layer: usize, table: &SymbolTab
         } else {
             format!("{}{}", prepend_code, body_str)
         };
-        let ret_type = if body_str.contains("vec!") || body_str.contains("Vec<") {
-            "Vec<f64>"
-        } else {
+        let ret_type = {
+            let sig = table.functions.get(id);
+            let ret_atom = sig.map(|s| &s.return_type).unwrap_or(&AtomType::Unknown);
             let last_line = body_str.lines()
                 .map(|s| s.trim())
                 .filter(|s| !s.is_empty() && *s != "}")
@@ -465,10 +489,18 @@ fn transpile_definition(id: &str, def: &AstNode, layer: usize, table: &SymbolTab
                     false
                 }
             };
-            if (body_str.contains("Some") || body_str.contains("None") || body_str.contains("Option::from") || body_str.contains(".and(") || body_str.contains(".get_") || body_str.contains("eval_binary")) && !is_unwrap {
-                "Option<f64>"
-            } else {
-                "f64"
+            let is_opt = (body_str.contains("Some") || body_str.contains("None") || body_str.contains("Option::from") || body_str.contains(".and(") || body_str.contains(".get_") || body_str.contains("eval_binary") || body_str.contains("eval_compare") || body_str.contains("eval_eq") || body_str.contains("eval_split")) && !is_unwrap;
+            
+            match ret_atom {
+                AtomType::List | AtomType::Struct => {
+                    if is_opt { "Option<Vec<f64>>" } else { "Vec<f64>" }
+                }
+                AtomType::String => {
+                    if is_opt { "Option<String>" } else { "String" }
+                }
+                _ => {
+                    if is_opt { "Option<f64>" } else { "f64" }
+                }
             }
         };
         let body_str = body_str;
@@ -962,8 +994,7 @@ mod tests {
         let pre = preprocess(code);
         let ast = sign_parser::program(&pre).unwrap();
         let out = transpile_program(&ast, 2).unwrap();
-        
-        assert!(out.contains("fn g(x: f64, y: Option<f64>, z: Option<f64>) -> Vec<f64>"));
+        assert!(out.contains("fn g(x: f64, y: Option<f64>, z: Option<f64>) -> Option<Vec<f64>>"));
         assert!(out.contains("let y = y.or(Option::from(eval_binary(Option::from(x), Option::from(1.0), |l, r| l + r))).unwrap_or(0.0);"));
         assert!(out.contains("let z = z.or(Option::from(eval_binary(Option::from(y), Option::from(1.0), |l, r| l + r))).unwrap_or(0.0);"));
         assert!(out.contains("g(1.0, None, None)"));

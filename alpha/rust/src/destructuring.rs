@@ -40,8 +40,19 @@ pub fn desugar_destructuring(node: &AstNode, table: &SymbolTable) -> AstNode {
                                     };
                                 } else {
                                     // 通常の head/tail 展開
-                                    let head_def = AstNode::InlineCode(format!("{}[0]", arg_name));
-                                    let tail_def = AstNode::InlineCode(format!("&{}[1..]", arg_name));
+                                    let split_name = format!("__split_{}", index);
+                                    let split_def = AstNode::InlineCode(format!(
+                                        "eval_split(Option::from({}.to_vec()))",
+                                        arg_name
+                                    ));
+                                    let head_def = AstNode::InlineCode(format!(
+                                        "{}.as_ref().map(|(h, _)| *h)",
+                                        split_name
+                                    ));
+                                    let tail_def = AstNode::InlineCode(format!(
+                                        "{}.as_ref().map(|(_, t)| t.clone()).unwrap_or_default()",
+                                        split_name
+                                    ));
                                     
                                     desugared_body = AstNode::BinaryOperation {
                                         operator: "\\n".to_string(),
@@ -58,6 +69,16 @@ pub fn desugar_destructuring(node: &AstNode, table: &SymbolTable) -> AstNode {
                                         left: Box::new(AstNode::Define {
                                             identifier: head_var.clone(),
                                             definition: Box::new(head_def),
+                                        }),
+                                        right: Box::new(desugared_body),
+                                        name: "newline".to_string(),
+                                    };
+
+                                    desugared_body = AstNode::BinaryOperation {
+                                        operator: "\\n".to_string(),
+                                        left: Box::new(AstNode::Define {
+                                            identifier: split_name,
+                                            definition: Box::new(split_def),
                                         }),
                                         right: Box::new(desugared_body),
                                         name: "newline".to_string(),

@@ -182,7 +182,7 @@ list_destruct_result : g [10.0 20.0 30.0]
 "println!(\"struct_extract_success = {:?}\", @{struct_extract_success})"
 "println!(\"struct_extract_fail = {:?}\", {struct_extract_fail})"
 "println!(\"total_expensive = {:?}\", @{total_expensive})"
-"println!(\"list_destruct_result = {}\", @{list_destruct_result})"
+"println!(\"list_destruct_result = {:?}\", @{list_destruct_result})"
 "println!(\"arith_range = {:?}\", @{arith_range})"
 "println!(\"arith_range_second = {:?}\", @{arith_range_second})"
 "println!(\"arith_range_rev = {:?}\", @{arith_range_rev})"
