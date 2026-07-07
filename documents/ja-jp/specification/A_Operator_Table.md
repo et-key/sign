@@ -41,10 +41,10 @@
 | 8 | `==` | 中置 | equal | 等しい | 構造内比較演算 | 吸収元 | 吸収元 |
 | 8 | `!==` | 中置 | xnot_equal | 等しくない | 構造内比較演算 | 吸収元 | 吸収元 |
 | 9 | `,` | 中置※ | product | 積（構造的組み立て） | 右結合なリスト構築 | 単位元 | 単位元 |
-| 10.0 | ` ` | `Atom \| List` 中置 `Lambda` | apply | 逆適用 | 関数適用 | 単位元 | 単位元 |
-| 10.1 | ` ` | `Lambda` 中置 `Atom \| List` | apply | 適用 | 関数適用 | 単位元 | 単位元 |
-| 10.2 | ` ` | `Lambda` 中置 `Lambda` | compose | 左結合な関数合成 | 関数合成 | 単位元 | 単位元 |
-| 10.3 | ` ` | `Atom \| List` 中置 `Atom \| List` | unshift <br> push <br> concat <br> construct | 並べる（連接） | リストへ追加 または構築 | 単位元 | 単位元 |
+| 10.0 | ` ` | `Atom \| List` 中置 `Atom \| List` | unshift <br> push <br> concat <br> construct | 並べる（連接） | リストへ追加 または構築 | 単位元 | 単位元 |
+| 10.1 | ` ` | `Atom \| List` 中置 `Lambda` | apply | 逆適用 | 関数適用 | 単位元 | 単位元 |
+| 10.2 | ` ` | `Lambda` 中置 `Atom \| List` | apply | 適用 | 関数適用 | 単位元 | 単位元 |
+| 10.3 | ` ` | `Lambda` 中置 `Lambda` | compose | 左結合な関数合成 | 関数合成 | 単位元 | 単位元 |
 | 11 | `~` | 中置 | range | around（範囲のその辺り） | 範囲リスト構築 | 吸収元 | 吸収元 |
 | 11 | `~+` | 中置 | range | around（範囲のその辺り） | 等差数列指定 | 吸収元 | 吸収元 |
 | 11 | `~-` | 中置 | range | around（範囲のその辺り） | 等差逆数列指定 | 吸収元 | 吸収元 |
