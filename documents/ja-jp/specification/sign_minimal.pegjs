@@ -12,10 +12,10 @@ SOL = &{ return location().start.column === 1; }
 EOL = "\r\n" / "\r" / "\n"
 EOF = !.
 
-comment = "`" [^\r\n]* { return null; }
+comment = SOL "`" [^\r\n]* EOL  { return null; }
 
 // --- プログラムと行 ---
-Program = (SOL @Line EOL*)* EOF
+Program = (SOL @Line EOL*)* EOF / comment*
 
 Line
   = _ expr:Expression _ comment? { return expr; }
