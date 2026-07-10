@@ -15,11 +15,10 @@ EOF = !.
 comment = SOL "`" [^\r\n]* EOL  { return null; }
 
 // --- プログラムと行 ---
-Program = (SOL @Line EOL*)* EOF / comment*
+Program = (SOL @Line EOL*)* / comment* EOF
 
 Line
-  = _ expr:Expression _ comment? { return expr; }
-  / comment { return null; }
+  = _ expr:Expression _ { return expr; }
 
 // --- コプロダクト（空白）によるフラットリスト化の核心 ---
 Expression
