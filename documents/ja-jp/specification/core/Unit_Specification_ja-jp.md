@@ -154,8 +154,16 @@ F_unsaturated _ → F_unsaturated
 ` → 完全性公理（Type_System_ja-jp.md §3.4）に従い、__ は吸収元として機能する（ __ を返す）
 ` 例外： 前置 @ によるデリファレンスは、右辺が飽和時に評価を駆動する
 ` （遅延評価の 1step 進行と一致）
-F_saturated __ → __   `（完全性公理）
-@F_saturated __ → Result `（@ が適用を駆動）
+
+` saturarated functionは、参照で渡されることになることが自明であるため、@前置演算子のみで評価を駆動する。
+` このため、引数にUnitやholeを渡す必要がない。
+
+@F_saturated
+`→ 1step評価後、飽和関数または結果が返る。
+
+` 当然、全てを連続して評価するなら、後置~による呼び出しとなる。
+F_saturated~
+`→ Result
 
 ```
 
