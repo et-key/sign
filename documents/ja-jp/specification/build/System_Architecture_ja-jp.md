@@ -71,6 +71,10 @@ Signでは、ビルドオプションの `layer`（`0`: bare, `1`: alloc, `2`: s
 
 ## 4. ビルドシステム（`option.ms`）との統合
 
+> [!IMPORTANT]
+> **`option.ms` の全フィールド仕様は [`Option_MS_Spec_ja-jp.md`](Option_MS_Spec_ja-jp.md) を参照すること。**
+> 本ドキュメントは `#`/`@` 演算子の layer 別意味論と随伴関係によるリンク自動導出の数学的基盤を記述する。
+
 システムレイヤーを記述する際、これらの振る舞いはすべて `option.ms` のシンプルな定義に集約される。
 
 ### 4.1 静的配置におけるメモリ境界 (link: static)
