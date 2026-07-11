@@ -155,6 +155,11 @@ _start :
 
 ## 5. `option.ms` スキーマ全フィールド一覧
 
+> [!IMPORTANT]
+> **`option.ms` の全フィールド仕様は [`Option_MS_Spec_ja-jp.md`](Option_MS_Spec_ja-jp.md) を参照すること。**
+> 本ドキュメントはビルドシステムの設計思想と継承モデルを中心に記述する。
+> 全フィールド一覧・`target` 別デフォルト値・実用テンプレートは統合仕様書を参照。
+
 ```son
 ` option.ms — 完全フィールド一覧（すべてオプション）
 
