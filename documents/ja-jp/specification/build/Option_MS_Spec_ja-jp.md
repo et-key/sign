@@ -29,7 +29,7 @@
 
 ## 2. 全フィールド一覧
 
-```son
+```ms
 ` option.ms — 完全フィールド一覧
 ` （すべてオプション。省略時はデフォルト値が適用される）
 
@@ -149,7 +149,7 @@ link     : dynamic
 
 OS のダイナミックローダーに委ねる。`layer: 4`（std）のみで有効。
 
-```son
+```ms
 link : dynamic
 ```
 
@@ -157,7 +157,7 @@ link : dynamic
 
 物理メモリ境界を手動で決定する場合。
 
-```son
+```ms
 link :
     static :
         memory :
@@ -169,7 +169,7 @@ link :
 
 UEFI やデバイスツリー経由で実行時にメモリサイズが決定される場合。
 
-```son
+```ms
 link :
     static :
         memory :
@@ -181,9 +181,9 @@ link :
 
 `layer: 1` 以上で動的メモリ管理を行う場合、`heap: max` で起動時に一括確保。
 内部はバンプポインタアリーナとして管理（O(1) アロケーション、`free` 不要）。
-alloca のサイズが確定した残りの領域を `max` で指定してヒープとして取る。
+ヒープの必要サイズは、ソースコード内で前置 `#` や `##` 系の演算子（アロケーション操作）を使用した箇所からコンパイラが静的に導出・決定する。
 
-```son
+```ms
 layer : 1
 link :
     static :
@@ -273,7 +273,7 @@ project/
 
 ### 9.1 ホスト向けアプリケーション（デフォルト）
 
-```son
+```ms
 ` option.ms — ホスト向け（省略可能：すべてデフォルト値）
 target   : rust
 layer    : 4
@@ -282,7 +282,7 @@ optimize : 0
 
 ### 9.2 BIOS ブートローダー
 
-```son
+```ms
 target   : x86_bios
 layer    : 0
 link :
@@ -294,7 +294,7 @@ link :
 
 ### 9.3 UEFI 代替ファームウェア
 
-```son
+```ms
 target   : x86_firmware
 layer    : 0
 link :
@@ -306,7 +306,7 @@ link :
 
 ### 9.4 Raspberry Pi 4 ベアメタル
 
-```son
+```ms
 target   : aarch64_rpi
 layer    : 0
 link :
@@ -318,7 +318,7 @@ link :
 
 ### 9.5 STM32 Cortex-M マイコン
 
-```son
+```ms
 target   : cortex_m
 layer    : 1
 optimize : 2
@@ -332,7 +332,7 @@ link :
 
 ### 9.6 WebAssembly モジュール
 
-```son
+```ms
 target   : wasm
 layer    : 4
 output   : `module`
@@ -340,7 +340,7 @@ output   : `module`
 
 ### 9.7 OS カーネル（マルチレイヤー構成）
 
-```son
+```ms
 ` kernel/option.ms — カーネルコア（bare metal）
 target   : x86_firmware
 layer    : 0
@@ -351,7 +351,7 @@ link :
             ram : auto
 ```
 
-```son
+```ms
 ` kernel/mm/option.ms — メモリ管理モジュール（alloca 有効）
 layer    : 1
 link :
@@ -360,7 +360,7 @@ link :
             heap : max 128K
 ```
 
-```son
+```ms
 ` userspace/option.ms — ユーザースペース
 layer    : 4
 link     : dynamic
