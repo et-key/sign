@@ -65,34 +65,34 @@ arm の `:` （優先度2）は arm セパレータとして使われるが、
 
 ```sign
 compare : x y ?
-	x = y : "equal"
-	x < y : "less"
-	"greater"           ` デフォルト（x > y の場合）
+	x = y : `equal`
+	x < y : `less`
+	`greater`           ` デフォルト（x > y の場合）
 ```
 
 デシュガー後：
 
 ```sign
 compare : x y ?
-    x = y & "equal" |
-    x < y & "less"  |
-    "greater"
+    x = y & `equal` |
+    x < y & `less`  |
+    `greater`
 ```
 
 ### 構造比較を含む場合
 
 ```sign
 check : a b ?
-	a == b : "same structure"
-	"different"
+	a == b : `same structure`
+	`different`
 ```
 
 デシュガー後：
 
 ```sign
 check : a b ?
-    a == b & "same structure" |
-    "different"
+    a == b & `same structure` |
+    `different`
 ```
 
 ### 再帰 + match_case（TCO 自動適用）
@@ -147,8 +147,8 @@ is_odd  : n ? n = 0 & __ | is_even (n - 1)
 ```sign
 ` エラー例
 f : x ?
-	"default"   ` ← 最初にデフォルトを置くと後の arm が unreachable
-	x = 0 : "zero"
+	`default`   ` ← 最初にデフォルトを置くと後の arm が unreachable
+	x = 0 : `zero`
 ```
 
 ---
