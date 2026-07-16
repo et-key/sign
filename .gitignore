@@ -16,3 +16,4 @@ experimental/rust/output_bare.rs
 experimental/rust/output_bare.exe
 
 documents/note
+tools/w64devkit
