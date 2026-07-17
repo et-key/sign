@@ -1,18 +1,21 @@
 // 演算子の型定義（Type_System_ja-jp.md に基づく）
+// JavaScript の型判定には .constructor を使用する
+// - typeof null === 'object' などの罠を回避できる
+// - null/undefined は ?. で安全にアクセスできる
 
-function isVariable(t) {
-  return typeof t === 'object' && t !== null && t.type === 'Variable';
-}
 
 function resolveArithmetic(L, R) {
-  // Lが未推論の変数の場合は、算術演算子であることを考慮し Number を仮定する
-  if (L.constructor === Number) return 'Number';
+  // JS の生の数値 (Number) が来た場合は 'Scalar' として返す
+  if (L?.constructor === Number) return 'Scalar';
   return L;
 }
 
 function getTypeName(t) {
-  if (typeof t === 'string') return t;
-  if (t && typeof t === 'object') {
+  if (t == null) return 'Unit';               // null / undefined → Unit
+  if (t.constructor === Number) return 'Scalar';  // JS number リテラル → Scalar
+  if (t.constructor === String) return t;     // Sign 型名文字列 → そのまま返す
+  if (t.constructor === Array) return 'List';    // JS 配列 → List
+  if (t.constructor === Object) {
     if (t.type === 'Implicit' || t.type === 'Deref') return getTypeName(t.target);
     return t.type;
   }
@@ -54,18 +57,18 @@ export const OPERATOR_TYPES = {
   '-_': (R) => R,
 
   // --- 後置演算子 ---
-  '_!': (L) => getTypeName(L) === 'Number' || isVariable(L) ? 'Number' : { type: 'Unit' },
+  '_!': (L) => getTypeName(L) === 'Scalar' ? 'Scalar' : { type: 'Unit' },
   '_~': (L) => {
-    if (typeof L === 'object' && L?.type === 'Implicit') {
+    if (L?.constructor === Object && L.type === 'Implicit') {
       const tName = getTypeName(L);
-      if (tName === 'List' || tName === 'Dictionary' || tName === 'Atom' || tName === 'String' || tName === 'Number') {
+      if (tName === 'List' || tName === 'Dictionary' || tName === 'Atom' || tName === 'String' || tName === 'Scalar') {
         return { type: 'Deref', target: L.target };
       }
     }
     return { type: 'Unit' };
   },
   '_@': (L) => {
-    if (typeof L === 'object' && L?.type === 'Implicit' && getTypeName(L) === 'Dictionary') {
+    if (L?.constructor === Object && L.type === 'Implicit' && getTypeName(L) === 'Dictionary') {
       return { type: 'Deref', target: L };
     }
     return { type: 'Unit' };
