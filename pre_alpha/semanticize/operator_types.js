@@ -11,10 +11,10 @@ function resolveArithmetic(L, R) {
 }
 
 function getTypeName(t) {
-  if (t == null) return 'Unit';               // null / undefined → Unit
+  if (t == null) return 'Unit';                   // null / undefined → Unit
   if (t.constructor === Number) return 'Scalar';  // JS number リテラル → Scalar
-  if (t.constructor === String) return t;     // Sign 型名文字列 → そのまま返す
-  if (t.constructor === Array) return 'List';    // JS 配列 → List
+  if (t.constructor === String) return 'String';  // Sign 型名文字列 → そのまま返す
+  if (t.constructor === Array) return 'List';     // JS 配列 → List
   if (t.constructor === Object) {
     if (t.type === 'Implicit' || t.type === 'Deref') return getTypeName(t.target);
     return t.type;
