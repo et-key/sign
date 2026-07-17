@@ -6,7 +6,6 @@
 // 逆引き用: 優先順位順の配列 (precedens順)
 // 配列のインデックスがそのまま優先順位 (precedence) を表します。インデックス0は未使用。
 export const OPERATOR_BY_PRECEDENCE = [
-  null, // 0: 未使用
   { // 1
     '\\n': { position: 'infix', name: 'newline' },
     '#': { position: 'prefix', name: 'export_internal' },
@@ -163,7 +162,7 @@ export function getStrictInfixOperators() {
   for (const [symbol, defs] of Object.entries(OPERATOR_DICT)) {
     // 空白は除外。また、| は絶対値ブロックと記号が被るため、自動空白挿入の対象外とする
     if (symbol === ' ' || symbol === '|') continue;
-    
+
     const positions = new Set(defs.map(d => d.position));
     if (positions.size === 1 && positions.has('infix')) {
       strictInfix.push(symbol);

@@ -6,7 +6,7 @@ function isVariable(t) {
 
 function resolveArithmetic(L, R) {
   // Lが未推論の変数の場合は、算術演算子であることを考慮し Number を仮定する
-  if (isVariable(L)) return 'Number';
+  if (L.constructor === Number) return 'Number';
   return L;
 }
 
@@ -21,28 +21,41 @@ function getTypeName(t) {
 
 export const OPERATOR_TYPES = {
   // --- 前置演算子 ---
-  'prefix_#': (R) => ({ type: 'Implicit', target: R }),
-  'prefix_##': (R) => ({ type: 'Implicit', target: R }),
-  'prefix_###': (R) => ({ type: 'Implicit', target: R }),
-  'prefix_~': (R) => {
+  '#_': (R) => ({ type: 'Implicit', target: R }),
+  '##_': (R) => ({ type: 'Implicit', target: R }),
+  '###_': (R) => ({ type: 'Implicit', target: R }),
+  '~_': (R) => {
     return getTypeName(R) === 'List' ? { type: 'Implicit', target: 'List' } : { type: 'Unit' };
   },
-  'prefix_!': (R) => R,
-  'prefix_$': (R) => {
-    return getTypeName(R) === 'Lambda' ? { type: 'Implicit', target: 'Lambda' } : { type: 'Unit' };
+  '!_': (R) => R,
+  '$_': (R) => {
+    // $ は任意の型 T に適用でき Implicit(T) を返す
+    // Lambda → Implicit(Lambda): Lambda を Atom として扱う（高階関数渡し）
+    // Atom/Address → Implicit(Atom): データのアドレス取得（C言語の &var に相当）
+    // $__ も有効: Implicit(Unit) = Unit のアドレス（非Unit、遅延サスペンド用）
+    return { type: 'Implicit', target: R };
   },
-  'prefix_@': (R) => {
-    if (typeof R === 'object' && R?.type === 'Implicit' && getTypeName(R) === 'Lambda') {
+  '@_': (R) => {
+    if (typeof R !== 'object' || R === null) return { type: 'Unit' };
+    if (R.type === 'Implicit') {
+      const tName = getTypeName(R);
+      if (tName === 'Lambda') {
+        // @Implicit(Lambda<returns:T>) = 遅延評価の駆動 → 返値型 T を返す
+        return R.target?.returns || { type: 'Deref', target: R };
+      }
+      // @Implicit(Address/Register/その他) = メモリ読み出し
       return { type: 'Deref', target: R };
     }
+    // @__ = __（Unit の読み出しは Unit）
+    if (getTypeName(R) === 'Unit') return { type: 'Unit' };
     return { type: 'Unit' };
   },
-  'prefix_!!': (R) => 'Scalar',
-  'prefix_-': (R) => R,
+  '!!_': (R) => 'Scalar',
+  '-_': (R) => R,
 
   // --- 後置演算子 ---
-  'postfix_!': (L) => getTypeName(L) === 'Number' || isVariable(L) ? 'Number' : { type: 'Unit' },
-  'postfix_~': (L) => {
+  '_!': (L) => getTypeName(L) === 'Number' || isVariable(L) ? 'Number' : { type: 'Unit' },
+  '_~': (L) => {
     if (typeof L === 'object' && L?.type === 'Implicit') {
       const tName = getTypeName(L);
       if (tName === 'List' || tName === 'Dictionary' || tName === 'Atom' || tName === 'String' || tName === 'Number') {
@@ -51,7 +64,7 @@ export const OPERATOR_TYPES = {
     }
     return { type: 'Unit' };
   },
-  'postfix_@': (L) => {
+  '_@': (L) => {
     if (typeof L === 'object' && L?.type === 'Implicit' && getTypeName(L) === 'Dictionary') {
       return { type: 'Deref', target: L };
     }
@@ -59,7 +72,7 @@ export const OPERATOR_TYPES = {
   },
 
   // --- 中置演算子 ---
-  ':': (L, R) => R,
+  ':': (_, R) => R,
   '?': (L, R) => getTypeName(L) === 'List' ? { type: 'Lambda', returns: R } : { type: 'Unit' },
   '#': (L, R) => getTypeName(L) === 'Address' ? 'Address' : { type: 'Unit' },
   ';': (L, R) => L,
@@ -73,25 +86,25 @@ export const OPERATOR_TYPES = {
   'compose': (L, R) => ({ type: 'Lambda', returns: L?.returns || { type: 'Compose', left: L, right: R } }),
   'apply': (L, R) => L?.returns || { type: 'Apply', left: L, right: R },
   'apply_reverse': (L, R) => R?.returns || { type: 'Apply', left: R, right: L },
-  '~': (L, R) => 'Scalar',
-  '~-': (L, R) => 'Scalar',
-  '~+': (L, R) => 'Scalar',
-  '~*': (L, R) => 'Scalar',
-  '~/': (L, R) => 'Scalar',
-  '~^': (L, R) => 'Scalar',
-  '<': (L, R) => L,
-  '<=': (L, R) => L,
-  '=': (L, R) => L,
-  '>=': (L, R) => L,
-  '>': (L, R) => L,
-  '!=': (L, R) => L,
+  '~': (L, R) => (L === 'Scalar' || L === 'Iterator') && R === 'Scalar' ? 'Stream' : 'Unit',
+  '~-': (L, R) => L === 'Scalar' && R === 'Scalar' ? 'Iterator' : 'Unit',
+  '~+': (L, R) => L === 'Scalar' && R === 'Scalar' ? 'Iterator' : 'Unit',
+  '~*': (L, R) => L === 'Scalar' && R === 'Scalar' ? 'Iterator' : 'Unit',
+  '~/': (L, R) => L === 'Scalar' && R === 'Scalar' ? 'Iterator' : 'Unit',
+  '~^': (L, R) => L === 'Scalar' && R === 'Scalar' ? 'Iterator' : 'Unit',
+  '<': (L, R) => L === 'Scalar' && R === 'Scalar' ? 'Number' : 'Unit',
+  '<=': (L, R) => L === 'Scalar' && R === 'Scalar' ? 'Number' : 'Unit',
+  '=': (L, R) => L === 'Scalar' && R === 'Scalar' ? 'Number' : 'Unit',
+  '>=': (L, R) => L === 'Scalar' && R === 'Scalar' ? 'Number' : 'Unit',
+  '>': (L, R) => L === 'Scalar' && R === 'Scalar' ? 'Number' : 'Unit',
+  '!=': (L, R) => L === 'Scalar' && R === 'Scalar' ? 'Number' : 'Unit',
   '+': resolveArithmetic,
   '-': resolveArithmetic,
   '*': resolveArithmetic,
   '/': resolveArithmetic,
   '%': resolveArithmetic,
   '^': resolveArithmetic,
-  '|...|': (L, R) => L,
+  'abs': (L, R) => L,
   "'": (L, R) => ({ type: 'Deref', target: R }),
   '@': (L, R) => ({ type: 'Deref', target: L }),
   '<<': (L, R) => (getTypeName(L) === 'Address' || getTypeName(L) === 'Register') ? L : { type: 'Unit' },
