@@ -108,9 +108,10 @@ typeof(L op R) = typeof(L)
 
 ```sign
 5 + x       → Number   (左辺が Number リテラル → 右辺も Number として扱う)
-`abc` + x   → String   (左辺が String → 右辺を文字コードとして扱う)
 [1 2] * 2   → List     (左辺が List → リストのコピー)
 x + y       → typeof(x) (識別子 → 識別子テーブルで解決)
+|`abc`|     → Length
+|1 2 3|     → Length
 ```
 
 **左辺優先ルールの型変換テーブル：**
@@ -428,16 +429,6 @@ add 1 2
 > 文脈（位置）によって始対象（initial object）と終対象（terminal object）の
 > どちらとして振る舞うかが、一意かつ決定論的に解決されます。
 
-**フォールバックパターン：**
-
-インポート失敗時の挙動を制御したい場合は `|` 演算子でフォールバックを設定します。
-
-```sign
-result : add 1 2 | 0    ` インポート失敗時は 0 にフォールバック
-```
-
----
-
 ### 6.2 型＝コンストラクタ関数の設計原則
 
 > [!IMPORTANT]
@@ -481,14 +472,14 @@ point2 : Point 5 7
 #### enum（直和型）のコンストラクタ
 
 ```sign
-` 値を持たない enum（定数タグ）
-#Red   : __
-#Green : __
-#Blue  : __
 
-` データ付き variant
-#Ok  : value ? [value : value]
-#Err : msg   ? [msg   : msg]
+#RGB : Red | Green | Blue
+
+`!__はid射（Unitの否定はid射としての機能がある。）
+`よって、以下は関数によるScalar値のコンストラクタになっていることに着目。
+Red : !__
+Green : !__
+Blue : !__
 
 ` 使い方
 col  : Red
@@ -503,6 +494,7 @@ res2 : Err `not found`
 
 ```sign
 ` 型による分岐（コンストラクタタグを利用）
+` 構造比較を使う点に注意！
 describe : col ?
   col == Red   : `red`
   col == Green : `green`
@@ -511,13 +503,13 @@ describe : col ?
 
 #### 配列（List of struct）
 
+`[Point,]` は「コンストラクタ関数 Point をカンマ（直積）区切りの各グループに適用するコンビネータ」。
+カンマ演算子 `,` を Point に置き換えて各行を構築する、Sign 独自の map パターン。
+
 ```sign
-` Point のリスト
-points : [
-  Point 0 0
-  Point 3 4
-  Point 5 7
-]
+` [Point,] 1 2 , 3 4 , 5 6
+`  → Point 1 2 , Point 3 4 , Point 5 6（3要素の Pointリスト）
+points : [Point,] 1 2 , 3 4 , 5 6
 
 ` アクセス
 points ' 1 ' x   ` → 3（2番目の要素の x フィールド）
@@ -531,8 +523,6 @@ points ' 1 ' x   ` → 3（2番目の要素の x フィールド）
 ```signtype
 ` point.st — コンパイラが自動生成
 Point : Int Int -> Point
-Ok    : a -> Ok
-Err   : String -> Err
 ```
 
 #### 命名規則まとめ
@@ -541,7 +531,7 @@ Err   : String -> Err
 |------|------|------|
 | `#Point : x y ? [...]` | `.sn` | コンストラクタ関数の定義（型定義） |
 | `Point 1 2` | `.sn` | インスタンス生成（関数適用） |
-| `[Point 0 0, Point 1 2]` | `.sn` | Point のリスト |
+| `[Point,] 1 2 , 3 4` | `.sn` | Point のリスト（コンストラクタマップ） |
 | `point` | `.sn` | インスタンス名（小文字） |
 | `Point` | `.st` | コンストラクタのシグネチャ宣言（自動生成） |
 
@@ -627,15 +617,29 @@ Sign の関数は：
 コンストラクタ関数も同じ：
 
 ```sign
-#Ok  : value ? [value : value]   ` Lambda<returns: Ok>
-#Err : msg   ? [msg   : msg]     ` Lambda<returns: Err>
+` ペイロードなし enum（id射）
+Red   : !__   ` Lambda<returns: Red>（id射）
+Green : !__   ` Lambda<returns: Green>
+Blue  : !__   ` Lambda<returns: Blue>
 
-#parse : src ?                   ` Lambda<returns: Ok | Err>（match_case）
-  valid src : Ok  src
-  Err `invalid`
+` match_case → 返値型が直和（String）になる例
+#classify : col ?               ` Lambda<returns: String>
+  col == Red   : `red`
+  col == Green : `green`
+  `blue`
 ```
 
-`parse` の返値型は `Ok | Err` — これが Sign における Result 型の自然な表現。
+Sign における「成功/失敗」のパターンは、データ付き variant ではなく **Unit 伝播** で実現する。
+成功時は値、失敗時は `__` を返し、呼び出し元が `|` でフォールバックするのが Sign のイディオム。
+
+```sign
+` ✅ Sign の Result パターン（Ok/Err は不要）
+#parse : src ?
+  valid src & src | __   ` 成功: src を返す、失敗: __ に収束
+
+` 呼び出し元
+result : parse input | `default`
+```
 
 ---
 
