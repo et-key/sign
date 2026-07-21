@@ -22,7 +22,7 @@ Sign では `?` 演算子の右辺（本体）全体が評価対象であり、
 ```sign
 ` f の呼び出しが末尾位置にある
 loop : n acc ?
-    n == 0 & acc |          ` ← acc が末尾（再帰でない → TCO不要）
+    n = 0 & acc |          ` ← acc が末尾（再帰でない → TCO不要）
     loop (n - 1) (acc + n)  ` ← loop が末尾位置 → TCO対象
 ```
 
@@ -51,15 +51,15 @@ cond が Unit       → else を評価して返す
 ` &/| の各節が末尾位置
 classify : n ?
     n < 0  & neg  |    ` neg が末尾（リテラル、TCO不要）
-    n == 0 & zero |    ` zero が末尾（リテラル、TCO不要）
+    n = 0 & zero |    ` zero が末尾（リテラル、TCO不要）
     pos              ` pos が末尾（リテラル、TCO不要）
 ```
 
 ```sign
 ` 再帰呼び出しが各節の末尾にある
 collatz : n steps ?
-    n == 1     & steps            |  ` 基底ケース
-    n % 2 == 0 & collatz (n / 2)  (steps + 1) |  ` 偶数 → TCO
+    n = 1     & steps            |  ` 基底ケース
+    n % 2 = 0 & collatz (n / 2)  (steps + 1) |  ` 偶数 → TCO
                  collatz (n * 3 + 1) (steps + 1)   ` 奇数 → TCO
 ```
 
@@ -73,8 +73,8 @@ collatz : n steps ?
 
 ```sign
 ` 相互再帰（どちらの呼び出しも末尾位置）
-is_even : n ? n == 0 & 1  | is_odd  (n - 1)
-is_odd  : n ? n == 0 & __ | is_even (n - 1)
+is_even : n ? n = 0 & 1  | is_odd  (n - 1)
+is_odd  : n ? n = 0 & __ | is_even (n - 1)
 ```
 
 ```
@@ -153,7 +153,7 @@ f : n ?
 sum : [1 ~ n] $[acc x ? acc + x] 0
 
 ` 再帰（TCO が必要）
-sum_rec : n acc ? n == 0 & acc | sum_rec (n - 1) (acc + n)
+sum_rec : n acc ? n = 0 & acc | sum_rec (n - 1) (acc + n)
 ```
 
 レンジ式はコンパイラが直接ループ命令（`LOOP`/`JNZ` 等）に変換するため、
