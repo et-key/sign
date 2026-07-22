@@ -297,7 +297,7 @@ Coproduct Resolver が曖昧さなく決定論的に解決できます。
 | `~` | 後置 | `Deref(Implicit -> (List \| Dictionary \| Atom))` |
 | `@` | 後置 | `Implicit(Dictionary) -> Deref(Implicit -> Dictionary)` |
 | `~` | 前置※ | `List -> Implicit(List)` |
-| `!` | 前置※ | `R -> R` |
+| `!` | 前置※ | `R -> (R \| __)` |
 | `$` | 前置※ | `Lambda -> Implicit(Lambda)` |
 | `@` | 前置※ | `Implicit(Lambda) -> Deref(Implicit(Lambda))` |
 | `!!` | 前置※ | `Scalar -> Scalar` |
