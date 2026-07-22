@@ -92,9 +92,9 @@ func : _0 ?
 
 ### 4.2 Sign言語の短絡評価特性の活用
 
-- 比較演算：true時に変数値、false時にUnit(`_`)を返す
-- `condition & result`：条件がtrueなら`result`、falseなら`_`
-- `_ | next_condition`：左辺が`_`なら右辺を評価
+- 比較演算：true時に変数値、false時にUnit(`__`)を返す
+- `condition & result`：条件がtrueなら`result`、falseなら`__`
+- `__ | next_condition`：左辺が`__`なら右辺を評価
 
 ### 4.3 変換例
 
@@ -153,14 +153,14 @@ compare : _0 _1 ?
 access_check : user role ?
 	user = `admin` : `full_access`
 	role = `moderator` & user != `guest` : `moderate_access`
-	user != _ : `basic_access`
+	user != __ : `basic_access`
 	`no_access`
 
 `変換後
 access_check : _0 _1 ?
 	_0 = `admin` & `full_access` |
 	_1 = `moderator` & _0 != `guest` & `moderate_access` |
-	_0 != _ & `basic_access` |
+	_0 != __ & `basic_access` |
 	`no_access`
 ```
 ## 5. 一般ブロック構文のリスト化変換（ブロック末尾の`,`自動挿入）
