@@ -35,10 +35,12 @@ Sign言語において、スペースによる並置は「余積（Coproduct）�
 
 | 優先度（降順） | 左辺型 (`leftCat`) | 右辺型 (`rightCat`) | 還元先ノード | 意味 |
 | :--- | :--- | :--- | :--- | :--- |
-| **10.3** | `Lambda` | `Lambda` | `compose` | 射の合成（関数合成） |
-| **10.2** | `Lambda` | `Atom` | `apply` | 射の適用（関数適用） |
-| **10.1** | `Atom` | `Lambda` | `apply_reverse` | 逆適用（右辺の関数に左辺の値を適用） |
-| **10.0** | `Atom` | `Atom` | `concat` | 直和/双積（リストの連接） |
+| **10.5** | `Lambda` | `Lambda` | `compose` | 射の合成（関数合成） |
+| **10.4** | `Lambda` | `Atom` | `apply` | 射の適用（関数適用） |
+| **10.3** | `Atom` | `Lambda` | `apply_reverse` | 逆適用（右辺の関数に左辺の値を適用） |
+| **10.2** | `List~ \| Struct~` | `List~ \| Struct~` | `concat` | リストの結合 | 
+| **10.1** | `Atom \| List~` | `Atom \| List~` | `Unshift \| push` | リストへの追加 | 
+| **10.0** | `Atom` | `Atom` | `construct` | 直和/双積（リストの連接） |
 
 > [!NOTE]
 > 優先度の数値は `A_Operator_Table.md` の優先順位欄（低い順→高い順）と対応する。
