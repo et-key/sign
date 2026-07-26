@@ -486,17 +486,19 @@ point2 : Point 5 7
 > 割り当てる。「由来を静的に遡る」必要はない——値そのものが最初から区別されているからである。**
 
 ```sign
-#RGB : Red | Green | Blue
+#RGB : Red | Green | Blue   ` Red=0, Green=1, Blue=2
 
-` コンパイラが自動展開する上の定義のイメージ
-` Red   : 0
-` Green : 1
-` Blue  : 2
+Red   : !__   ` Lambda<returns: Red>（id射）
+Green : !__   ` Lambda<returns: Green>
+Blue  : !__   ` Lambda<returns: Blue>
 
-` 使い方
-col  : Red
-res1 : Ok  42
-res2 : Err `not found`
+col  : Red 0xFF
+
+`型がRedであるため、colが返る
+col === Red 0xFF
+`型がRedであるため、 col === Green は__となる
+col === Green 0xFF
+
 ```
 
 これは RTTI ではない。RTTI は「値から型を後から問い合わせる」機能だが、これはただ
@@ -696,7 +698,6 @@ Sign の関数は：
 コンストラクタ関数も同じ：
 
 ```sign
-` ペイロードなし enum（C同様の自動番号付け）
 #RGB : Red | Green | Blue   ` Red=0, Green=1, Blue=2
 
 Red   : !__   ` Lambda<returns: Red>（id射）
