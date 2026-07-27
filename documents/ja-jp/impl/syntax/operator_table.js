@@ -32,6 +32,7 @@ export const OPERATOR_BY_PRECEDENCE = [
     '&': { position: 'infix', name: 'and' },
   },
   { // 8
+    '===': { position: 'infix', name: 'same' },
     '==': { position: 'infix', name: 'equal' },
     '!==': { position: 'infix', name: 'not_equal' },
   },
