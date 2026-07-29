@@ -60,22 +60,28 @@ impl/
 
 ## コンパイルパイプライン
 
+> [!NOTE]
+> 下記はLexer/Parser実装ファイル名との対応を示す概要図。型解決のPass構成（Pass 1～4）の
+> 正確な定義は [`type/type_system.md` §5](type/type_system.md#5-型決定アルゴリズムコンパイラ実装指針) と
+> [`core/compiler_pipeline.md`](core/compiler_pipeline.md) を参照。型推論はHindley-Milner/Algorithm Wの
+> 制約ソルビングではなく、演算子テーブルに基づくO(n)の線形スキャンで完結する（§7.1参照）。
+
 ```
 .sn ファイル
   ↓
-[1. Lexer]         lexer.js
+[Pass 1 の一部: Lexer]         lexer.js
   前処理：中置演算子前後に空白挿入、インデント→\x02/\x03
   ↓
-[2. Parser]        parse/minimal.pegjs → minimal.js
-  PEG構文解析 → AST生成
+[Pass 1 の一部: Parser と識別子テーブル収集]  parse/minimal.pegjs → minimal.js
+  PEG構文解析 → AST生成。全識別子の構造型（Lambda/Atom）とアリティを線形スキャンで確定（`.ist`をメモリ上に構築）
   ↓
-[3. Coproduct Resolver]   semanticize/coproduct_resolver.js
+[Pass 2: Coproduct Resolver]   semanticize/coproduct_resolver.js
   スペース演算子の型ベース意味解決（apply/compose/concat/reverse_apply）
   ↓
-[4. Type Checker]  （実装中）
-  Algorithm W による型推論
+[Pass 3: Type Propagation]  （実装中）
+  左辺優先ルールによる Layer 2 型伝播
   ↓
-[5. Code Generator]
+[Pass 4: Code Generator]
   wasm_codegen.js / aarch64.js / js_codegen.js
   ↓
 .wasm / .o / .js
