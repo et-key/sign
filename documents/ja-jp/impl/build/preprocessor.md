@@ -39,7 +39,7 @@ g : f 2 _ 3
 
 `変換後
 twice : _0 ? _0 _0
-flip : _0 ? _1 _2 ? _0 _2 _1
+flip : _0 _1 _2 ? _0 _2 _1
 f : _0 _1 _2 ? _0 * _1 + _2
 g : _0 ? f 2 _0 3
 ```
@@ -84,10 +84,12 @@ func : x ?
 
 `変換後
 func : _0 ?
-	condition1 & result1 |
-	condition2 & result2 |
-	condition3 & result3 |
-	default_result
+	@[
+		condition1 & $result1 |
+		condition2 & $result2 |
+		condition3 & $result3 |
+		$default_result
+	]
 ```
 
 ### 4.2 Sign言語の短絡評価特性の活用
@@ -108,9 +110,11 @@ classify : n ?
 
 `変換後
 classify : _0 ?
-	_0 = 0 & `zero` |
-	_0 > 0 & `positive` |
-	_0 < 0 & `negative`
+	@[
+		_0 = 0 & $`zero` |
+		_0 > 0 & $`positive` |
+		_0 < 0 & $`negative`
+	]
 ```
 
 #### 範囲チェック
@@ -125,11 +129,13 @@ grade : score ?
 
 `変換後
 grade : _0 ?
-	_0 >= 90 & `A` |
-	_0 >= 80 & `B` |
-	_0 >= 70 & `C` |
-	_0 >= 60 & `D` |
-	`F`
+	@[
+		_0 >= 90 & $`A` |
+		_0 >= 80 & $`B` |
+		_0 >= 70 & $`C` |
+		_0 >= 60 & $`D` |
+		$`F`
+	]
 ```
 
 #### 複数引数での条件分岐
@@ -142,26 +148,30 @@ compare : x y ?
 
 `変換後
 compare : _0 _1 ?
-	_0 > _1 & `greater` |
-	_0 = _1 & `equal` |
-	_0 < _1 & `less`
+	@[ 
+		_0 > _1 & $`greater` |
+		_0 = _1 & $`equal` |
+		_0 < _1 & $`less`
+	]
 ```
 
 #### 複雑な条件
 ```
 `原始構文
 access_check : user role ?
-	user = `admin` : `full_access`
-	role = `moderator` & user != `guest` : `moderate_access`
-	user != __ : `basic_access`
+	user == `admin` : `full_access`
+	role == `moderator` & user !== `guest` : `moderate_access`
+	user !== __ : `basic_access`
 	`no_access`
 
 `変換後
 access_check : _0 _1 ?
-	_0 = `admin` & `full_access` |
-	_1 = `moderator` & _0 != `guest` & `moderate_access` |
-	_0 != __ & `basic_access` |
-	`no_access`
+	@[ 
+		_0 == `admin` & $`full_access` |
+		_1 == `moderator` & _0 !== `guest` & $`moderate_access` |
+		_0 !== __ & $`basic_access` |
+		$`no_access`
+	]
 ```
 ## 5. 一般ブロック構文のリスト化変換（ブロック末尾の`,`自動挿入）
 
