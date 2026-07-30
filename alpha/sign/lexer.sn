@@ -1,0 +1,45 @@
+` Sign Language Self-Hosted Preprocessor / Lexer (alpha/sign/lexer.sn)
+`
+` 役割:
+` 1. SOL (column 1) の ` コメント行の認識
+` 2. 先頭の \t タブ数のカウント (インデントレベル)
+` 3. バッククォート文字列 (`...`) 内の保護および単義的中置演算子の安全な自動空白分離
+
+` タブインデント数のカウント
+count_indent : line ?
+	line ' 0 == \t : 1 + count_indent (line ~ 1)
+	0
+
+is_sol_comment : line ?
+	line ' 0 == \` : 1
+	__
+
+is_infix_op : c ?
+	c == \+ : 1
+	c == \* : 1
+	c == \/ : 1
+	c == \% : 1
+	c == \= : 1
+	c == \< : 1
+	c == \> : 1
+	c == \& : 1
+	c == \; : 1
+	c == \, : 1
+	__
+
+separate_infix_rec : cs in_str ?
+	head : cs ' 0
+	tail : cs ~ 1
+	next_str : !in_str
+	head == \` : head (separate_infix_rec tail next_str)
+	in_str : head (separate_infix_rec tail in_str)
+	is_infix_op head : ` ` head ` ` (separate_infix_rec tail 0)
+	head (separate_infix_rec tail 0)
+
+process_line : line indent_stack ?
+	is_sol_comment line : line
+	count : count_indent line
+	separate_infix_rec line 0
+
+preprocess_sign : input ?
+	input

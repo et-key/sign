@@ -1,0 +1,17 @@
+{
+  "name": "@sign/alpha-javascript",
+  "version": "0.1.0",
+  "description": "Sign language compiler & runtime implementation in JavaScript (Alpha)",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "sign": "bin/cli.js"
+  },
+  "scripts": {
+    "test": "node bin/cli.js ../../pre_alpha/_test_/function/composition.sn"
+  },
+  "dependencies": {
+    "peggy": "^4.0.0",
+    "white_cats": "file:../../node_modules/white_cats"
+  }
+}
