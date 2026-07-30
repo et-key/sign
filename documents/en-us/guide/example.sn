@@ -1,0 +1,63 @@
+` Strings are enclosed in backticks `
+` Non-evaluating single literal lines are ignored. `
+
+` Variables and Literals `
+x : -353.15134
+y : 4001.35364502
+
+hex_val : 0xAF8534
+bin_val : 0b00101001
+regA : 0rA
+uni_a : 0u3042  ` Unicode 'あ' `
+
+Hello : `Hello`
+World : `World`
+
+` Truthy values are valid non-Unit values. Falsey values are empty lists or Unit __ `
+yep : 0
+nop : _
+
+none : _
+unit : _
+id : _
+
+` Comparison operations `
+[x < 4] = [x < 4 & x]
+[x = 4] = [x == 4 & x]
+
+` Ternary Comparison Chaining `
+[1 <= x <= 9] = [[x >= 1] & [x <= 9]]
+
+` Functions and Lambdas `
+[x y ? (x + y) ^ 2]
+
+` Point-free and function composition `
+[+] [^ 2]
+
+` Explicit address retrieval for higher-order function arguments `
+Filter : f x ~y ? @f x , Filter f y~
+Filter $[> 0] [-2 ~ 3]
+
+` Conditional match_case expression `
+[ x ?
+	x = 0 : 0
+	x > 0 : `more`
+	x < 0 : `less`
+	`otherwise`
+] 3
+
+` Dict and Struct definitions `
+#MyGame :
+	State :
+		Existence
+		Durability
+
+#Mob : MyGame~
+	Base : State~
+	State~
+
+` Logical short-circuit `
+_ & `me` = _
+1 & `me` = `me`
+_ | `me` = `me`
+1 | `me` = 1
