@@ -68,116 +68,11 @@ add 2 3
 [+] 2 3
 ```
 
-## 4. ブロック構文による条件分岐（match case対応）
-
-Sign言語のブロック構文による条件分岐は、一時変数を使わない短絡評価チェーンに変換されます。
-
-### 4.1 基本変換パターン
-
-```
-`原始構文
-func : x ?
-	condition1 : result1
-	condition2 : result2
-	condition3 : result3
-	default_result
-
-`変換後
-func : _0 ?
-	@[
-		condition1 & $result1 |
-		condition2 & $result2 |
-		condition3 & $result3 |
-		$default_result
-	]
-```
-
-### 4.2 Sign言語の短絡評価特性の活用
-
-- 比較演算：true時に変数値、false時にUnit(`__`)を返す
-- `condition & result`：条件がtrueなら`result`、falseなら`__`
-- `__ | next_condition`：左辺が`__`なら右辺を評価
-
-### 4.3 変換例
-
-#### 数値分類
-```
-`原始構文
-classify : n ?
-	n = 0 : `zero`
-	n > 0 : `positive`
-	n < 0 : `negative`
-
-`変換後
-classify : _0 ?
-	@[
-		_0 = 0 & $`zero` |
-		_0 > 0 & $`positive` |
-		_0 < 0 & $`negative`
-	]
-```
-
-#### 範囲チェック
-```
-`原始構文
-grade : score ?
-	score >= 90 : `A`
-	score >= 80 : `B`
-	score >= 70 : `C`
-	score >= 60 : `D`
-	`F`
-
-`変換後
-grade : _0 ?
-	@[
-		_0 >= 90 & $`A` |
-		_0 >= 80 & $`B` |
-		_0 >= 70 & $`C` |
-		_0 >= 60 & $`D` |
-		$`F`
-	]
-```
-
-#### 複数引数での条件分岐
-```
-`原始構文
-compare : x y ?
-	x > y : `greater`
-	x = y : `equal`
-	x < y : `less`
-
-`変換後
-compare : _0 _1 ?
-	@[ 
-		_0 > _1 & $`greater` |
-		_0 = _1 & $`equal` |
-		_0 < _1 & $`less`
-	]
-```
-
-#### 複雑な条件
-```
-`原始構文
-access_check : user role ?
-	user == `admin` : `full_access`
-	role == `moderator` & user !== `guest` : `moderate_access`
-	user !== __ : `basic_access`
-	`no_access`
-
-`変換後
-access_check : _0 _1 ?
-	@[ 
-		_0 == `admin` & $`full_access` |
-		_1 == `moderator` & _0 !== `guest` & $`moderate_access` |
-		_0 !== __ & $`basic_access` |
-		$`no_access`
-	]
-```
-## 5. 一般ブロック構文のリスト化変換（ブロック末尾の`,`自動挿入）
+## 4. 一般ブロック構文のリスト化変換（ブロック末尾の`,`自動挿入）
 
 ブロック構文で純粋なリスト構築を行う場合、各行末に`,`積演算子の自動挿入を行います。
 
-### 5.1 基本変換ルール
+### 4.1 基本変換ルール
 
 条件式（`:`演算子）を含まない純粋なリスト構築ブロックでは、各行末に`,`を自動挿入します。
 
@@ -197,7 +92,7 @@ buildData :
 	(saveResult final)
 ```
 
-### 5.2 最終行の処理
+### 4.2 最終行の処理
 
 リストの最後の要素には`,`を挿入しません。
 
@@ -215,7 +110,7 @@ simpleList :
 	[5 - 1]
 ```
 
-### 5.3 括弧の自動挿入
+### 4.3 括弧の自動挿入
 
 複雑な式は評価順序を保証するため括弧で自動的に囲みます。
 
@@ -233,9 +128,9 @@ calculations :
 	simpleValue
 ```
 
-## 6. 問題のあるパターンと許可されるパターンの明確化
+## 5. 問題のあるパターンと許可されるパターンの明確化
 
-### 6.1 許可されるパターン
+### 5.1 許可されるパターン
 
 #### パターンA: 純粋な条件分岐
 ```sign
@@ -262,7 +157,7 @@ complexCalc : x ?
 	calculateSomethingComplex x y z w
 ```
 
-### 6.2 問題のあるパターン（アンチパターン）
+### 5.2 問題のあるパターン（アンチパターン）
 
 #### 問題のある混在パターン
 ```sign
@@ -275,7 +170,7 @@ processData : x ?
 	finalize x
 ```
 
-### 6.3 判定基準
+### 5.3 判定基準
 
 - **許可**: ブロック内が条件式のみ、または一般処理のみ
 - **問題**: ブロック内で条件式（`:`演算子）と一般処理が同一階層で混在
