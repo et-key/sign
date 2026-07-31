@@ -37,9 +37,10 @@ Sign の型システムは、独立した2つのレイヤーで構成されま�
 ```sign
 x y ? body          → Lambda  (`?` があるから確定)
 [+ 2]               → Lambda  (部分操作のブラケット)
-[f]                 → Lambda  (関数のアドレス化)
-$expr               → Lambda  (アドレス取得)
-@expr               → Lambda  (deref / 入力)
+[f]                  → Lambda  (関数のアドレス化)
+$expr                → Atom    (Address。`$`は常に「アドレスという値」を返すだけの操作であり、
+                                中身がLambdaかAtomかを問わない)
+@expr                → 参照先の圏を継承（下記参照）
 
 42                  → Atom    (数値リテラル)
 `hello`             → Atom    (文字列リテラル)
@@ -47,6 +48,21 @@ x + y               → Atom    (算術演算の結果)
 [1 2 3]             → Atom    (値のブラケット)
 __                  → Atom    (Unit値)
 ```
+
+> [!IMPORTANT]
+> **`$`/`@` の非対称性**
+>
+> `$expr` は常に `Atom(Address)` を返す。凍結対象が関数（`$map_lazy`）であろうとデータへの
+> パス（`$[array ' 0]`）であろうと、`$` 自身がやっていることは「その式が指す場所のアドレスを
+> 取る」だけであり、場合分けを必要としない。
+>
+> 一方 `@expr` は、そのアドレスの先に何があるか（呼び出し可能な `Lambda` か、ただの `Atom`
+> データか）を継承する。これは `$` の時点では決まらず、`@` によって参照・強制されたときに
+> 初めて意味を持つ。多くの場合は静的に一意に決まる（`@handler` で `handler` の定義が既知なら
+> 構文から読める）が、`f : ref ? @ref 1 2 3` のようにジェネリックな仮引数を介する場合は
+> 定義サイト単体では決まらない。この場合は Rust/C++ のモノモーフィ化と同様、**各呼び出し
+> サイトで実引数の具体的な型を用いて `.ist` 上に具体化する**ことで解決する（呼び出しサイトの
+> ない `#export` はコンパイルエラー。[`compiler_pipeline.md` §4](../core/compiler_pipeline.md#4-ist内部と-st公開の分離生成方針)参照）。
 
 **識別子の場合：**
 識別子の構造型は、その定義がある行の構文から決定します。`?` を含む定義は `Lambda`、それ以外は `Atom` です。
@@ -243,10 +259,14 @@ apply : g x ? g x   ` g は Lambda パラメータ
 
 **解決策: `$` 演算子で Lambda を Address (Atom) に降格する**
 
+> [!NOTE]
+> §2で確認した通り、`$` は入力がLambdaであろうとAtomであろうに関係なく常に `Atom(Address)` を返す。
+> ここでは高階関数の文脈上、入力がLambdaであるケースを例に取っている。
+
 | 演算子 | 変換方向 | 型カテゴリの変化 |
 |:---:|---|---|
-| `$` | Lambda → Address | Lambda → **Atom** （Coproduct Resolver の対象として正しく扱われる） |
-| `@` | Address → 呼び出し | Atom(Address) → **Lambda** として実行 |
+| `$` | Lambda → Address（一般には任意の式 → Address） | Lambda → **Atom** （Coproduct Resolver の対象として正しく扱われる） |
+| `@` | Address → 参照先の圏を継承 | Atom(Address) → 参照先が `Lambda` なら呼び出し、`Atom` ならメモリ読み出し |
 
 ```sign
 apply_five : f ?
@@ -307,8 +327,8 @@ Coproduct Resolver が曖昧さなく決定論的に解決できます。
 | `@` | 後置 | `Implicit(Dictionary) -> Deref(Implicit -> Dictionary)` |
 | `~` | 前置※ | `List -> Implicit(List)` |
 | `!` | 前置※ | `R -> (R \| __)` |
-| `$` | 前置※ | `Lambda -> Implicit(Lambda)` |
-| `@` | 前置※ | `Implicit(Lambda) -> Deref(Implicit(Lambda))` |
+| `$` | 前置※ | `Any -> Atom(Address)` （§2参照。入力のLambda/Atomを問わず常にAddressを返す） |
+| `@` | 前置※ | `Atom(Address) -> (Lambda \| Atom)` （参照先の圏を継承。静的に一意でなければ呼び出しサイト単位で具体化） |
 | `!!` | 前置※ | `Scalar -> Scalar` |
 
 > [!NOTE]
@@ -738,22 +758,22 @@ result : parse input | `default`
 
 ```sign
 #func : x ? x + 1             ` Lambda<returns: Scalar>
-$func → Implicit(Lambda<returns: Scalar>)
-@$func → Scalar               ` 遅延評価の駆動 → 返値型を返す
+$func → Atom(Address)           ` §2の通り、$は常にAddressを返す
+@$func → Scalar               ` @が参照先（funcのLambda値）を継承し、遅延評価を駆動
 
 handler : 0xFF00              ` Atom(Address)（? なし）
-@handler → Deref(Address)     ` メモリ読み出し（関数呼び出しではない）
+@handler → Deref(Address)     ` 参照先がAtomなのでメモリ読み出し（関数呼び出しではない）
 ```
 
-**`@_` の型解決ロジック：**
+**`@_` の型解決ロジック（参照先の圏を継承）：**
 
 ```
-@Implicit(Lambda<returns: T>) → T      （評価駆動）
-@Implicit(Address)            → Deref  （メモリ読み出し）
-@__                           → __     （Unit の読み出し = Unit）
+@Atom(Address → 参照先がLambda<returns: T>)  → T      （評価駆動）
+@Atom(Address → 参照先がAtom)                → Deref  （メモリ読み出し）
+@__                                            → __     （Unit の読み出し = Unit）
 ```
 
-Pass 1 の識別子テーブルにより、各識別子が Lambda か Atom（Address 等）かは **コンパイル時に確定している**。`@` が「遅延評価の駆動」か「メモリ読み出し」かは実行時ではなく静的に決まる。
+Pass 1 の識別子テーブルにより、各識別子が Lambda か Atom（Address 等）かは多くの場合 **コンパイル時に確定している**。`@` が「遅延評価の駆動」か「メモリ読み出し」かは実行時ではなく静的に決まる。ただし `f : ref ? @ref ...` のように引数経由で参照先が変わる場合は、§2で述べた通り呼び出しサイト単位の具体化で解決する。
 
 ---
 
