@@ -1,138 +1,155 @@
 # Sign Language Type System Specification
 
-## 1. Design Principle: Types Derive Trivially from Operators and Syntax
+## 1. Design Principles: Types Emerge Deterministically from Syntax
 
-The Sign type system is governed by a fundamental principle:
+The type system of Sign possesses a fundamental invariant:
 
-> **Types are not labels attached to data; they are uniquely determined by operators and AST structure.**
+> **Types are not labels annotated onto data; they are determined uniquely and deterministically from operators and AST topology.**
 
-Because of this, constraint-solving algorithms like Hindley-Milner are unnecessary. Type inference completes in a linear scan ($O(n)$) over the AST.
+Consequently, constraint-solving algorithms like Hindley-Milner are absent. Type inference resolves via a single linear $O(n)$ scan across the AST.
 
-> **Types are not subjects of declaration, but reflections of actual operations performed by code.**
+> **Types are not declared targets; they are the static reflection of computational operations performed by code.**
 >
-> Sign lacks declaration syntax for traits/interfaces. This is not a missing feature.
-> The capability set of an identifier is already fully declared by the consuming code. `.st` files simply statically reflect and copy this information rather than "declaring" it.
+> Dedicated declaration syntax for traits/interfaces does not exist in Sign. This is not an omission. Information regarding what operations an identifier permits is expressed directly by the code consuming that identifier. `.st` signature files do not "declare" types; they simply extract and record static information from code.
 
 ---
 
-## 2. Type Hierarchy (2-Layer Structure)
+## 2. Two-Layer Type Hierarchy
 
-The Sign type system consists of two independent layers:
+Sign's type system consists of two independent layers:
 
-### Layer 1: Structural Type
+### Layer 1: Structural Types
 
-Determines space operator semantics. **Uniquely determined by syntax.**
+Structural types govern space-operator resolution and are **determined directly from syntax**:
 
-| Structural Type | Definition |
+| Structural Type | Definition / Condition |
 |:---:|---|
-| `Lambda` | Expressions containing `?` operator, or bracket expressions generating partial applications |
-| `Atom` | All other values and expressions (numbers, strings, lists, Unit, etc.) |
+| `Lambda` | Expressions containing `?` (lambda definition) or brackets forming partial applications |
+| `Atom` | All other values and expressions (Numbers, Strings, Lists, Structs, Addresses, Unit) |
 
-**Layer 1 Determination Rules:**
+#### Structural Resolution Rules:
 
 ```sign
-x y ? body          → Lambda  (Determined by `?`)
-[+ 2]               → Lambda  (Partial operation bracket)
-[f]                 → Lambda  (Function address)
-$expr               → Lambda  (Address retrieval)
-@expr               → Lambda  (Deref / Input)
+x y ? body          → Lambda  (Presence of ?)
+[+ 2]               → Lambda  (Partial application bracket)
+[f]                 → Lambda  (Function address encapsulation)
+$expr               → Atom    (Address-Of always yields Atom(Address))
+@expr               → Inherits target domain
 
 42                  → Atom    (Numeric literal)
 `hello`             → Atom    (String literal)
 x + y               → Atom    (Arithmetic result)
-[1 2 3]             → Atom    (Value bracket)
-__                  → Atom    (Unit value)
+[1 2 3]             → Atom    (Value list block)
+__                  → Atom    (Unit)
 ```
 
-For identifiers: If the defining line contains `?`, the identifier is `Lambda`; otherwise, it is `Atom`.
+> [!IMPORTANT]
+> **Asymmetry of `$` and `@`**
+>
+> `$expr` always returns `Atom(Address)` regardless of whether `expr` is a Lambda or Atom.
+> `@expr` dereferences the address and inherits the structural domain of the target (returns `Lambda` if calling a function, or `Atom` if loading data).
 
-### Layer 2: Atom Subtype
+### Layer 2: Atom Subtypes
 
-Determines operational behavior (type casting) inside `Atom`.
+Atom Subtypes govern binary operator semantics and type casts:
 
-| Atom Subtype | Description | Example | Allowed Layer |
+| Subtype | Description | Example Literal | Minimum `layer` Required |
 |:---:|---|---|:---:|
-| `Int` | Signed / Unsigned integer | `42`, `-1` | Layer 0+ |
-| `Float` | Floating-point number | `3.14`, `1.0` | Layer 2+ |
-| `String` | Unicode string (Isomorphic to `List(0u)`) | `` `hello` `` | Layer 0+ |
-| `Vector` | SIMD Vector | `[1.0 2.0 3.0 4.0]` | Layer 3+ |
-| `List` | 1D array of identical types | `1 2 3`, `[1 2 3]` | Layer 0+ |
-| `Struct` | Heterogeneous list / Product structure | `1, 2, 3` | Layer 0+ |
-| `Dict` | Key-value dictionary | `[key : val]` | Layer 0+ |
-| `Unit` | Unit element / Empty / Nothing | `__` | Layer 0+ |
-| `Address` | Address pointer | `0x00`, `0xFF` | Layer 0+ |
+| `Int` | Integer (Signed / Unsigned) | `42`, `-1` | **0+** |
+| `Float` | Floating-point number | `3.14`, `1.0` | **2+** |
+| `String` | Unicode string (Isomorphic to `List(0u)`) | `` `hello` ``, `\a` | 0+ |
+| `Vector` | SIMD Vector type | `[1.0 2.0 3.0 4.0]` | **3+** |
+| `List` | Homogeneous 1D array | `1 2 3`, `[1 2 3]` | 0+ |
+| `Struct` | Heterogeneous Product structure | `1, 2, 3` | 0+ |
+| `Dict` | Key-Value structure | `[key : val]` | 0+ |
+| `Unit` | Zero object / Empty / Null | `__` | 0+ |
+| `Address` | Pointer location | `0x00`, `$expr` | 0+ |
 
 ---
 
 ## 3. Typing Rules
 
-### 3.1 Space Operator Semantics (Layer 1 Dependent)
+### 3.1 Four Semantics of the Space Operator (Layer 1 Dependent)
 
-Once Layer 1 structural types are determined, space operators fall into one of 4 semantics:
+After resolving Layer 1 Structural Types, space juxtaposition resolves into one of four operations:
 
-| Priority | Left-Hand Side | Right-Hand Side | Semantics | Typing Rule |
+| Precedence | Left Type | Right Type | Resolved Semantics | Typing Rule |
 |:---:|:---:|:---:|---|---|
-| 10.3 | `Lambda` | `Lambda` | compose | `Lambda(A→B) → Lambda` |
-| 10.2 | `Lambda` | `Atom` | apply | `Lambda(A→B) → B \| Lambda` |
-| 10.1 | `Atom` | `Lambda` | apply_reverse | `Lambda(A→B) → B \| Lambda` |
-| 10.0 | `Atom` | `Atom` | concat | `Atom → List` |
+| 10.5 | `Lambda` | `Lambda` | `compose` (Function composition) | $\text{Lambda}(A \to B) \to \text{Lambda}$ |
+| 10.4 | `Lambda` | `Atom` | `apply` (Function application) | $\text{Lambda}(A \to B) \to B$ |
+| 10.3 | `Atom` | `Lambda` | `apply_reverse` (Reverse application) | $\text{Lambda}(A \to B) \to B$ |
+| 10.0 | `Atom` | `Atom` | `concat` (List / Tuple concatenation) | $\text{Atom} \to \text{List}$ |
 
-### 3.2 LHS-Priority Rule (Layer 2 Dependent)
+### 3.2 Left-Hand Priority Rule (Layer 2 Dependent)
 
-**The result type of a binary operation is determined by the LHS Atom Subtype.** The RHS is converted to match the LHS type.
+**The return type of a binary operation is determined by the Atom Subtype of the left-hand operand ($LHS$).**
 
 $$\text{typeof}(L \text{ op } R) = \text{typeof}(L)$$
 
-| LHS Type | Operator | RHS Treatment | Result Type |
-|:---:|:---:|---|:---:|
-| `Int` | Arithmetic | Parsed as `Int` | `Int` |
-| `Float` | Arithmetic | Parsed as `Float` | `Float` |
-| `String` | Space | Stringified & concatenated | `String` |
-| `String` | Arithmetic (`+`) | **TypeError (`__` collapse)** | `__` |
-| `List` | `*` | Repeated RHS `Int` times | `List` |
-| `List` | `/` | Split into RHS `Int` chunks | `List` |
+### 3.3 Asymmetric Unit Propagation Rules
 
-### 3.3 Unit Typing Rules & Asymmetric Propagation
+- **Zero Object Absorption**:
+  - `__ & x = __` / `x & __ = __` (Terminal object in Product)
+  - `__ | x = x` / `x | __ = x` (Initial object in Coproduct)
+  - `__ ; x = x` / `x ; __ = x` (Initial object in XOR)
 
-- **Logical Operations (`&`, `|`, `;`)**: `__` acts as absorber in Product (`&`), and identity element in Coproduct (`|`, `;`).
-- **Arithmetic Operations (`+`, `-`, `*`, `/`, `%`, `^`)**:
-  - `__ + X = __` (LHS Unit acts as error absorber / zero morphism).
-  - `X + __ = X` (RHS Unit acts as missing value / identity morphism).
-- **Comparison Operations (`<`, `<=`, `=`, `>=`, `>`)**:
-  - Both sides act as absorbers (`__ < X = __`, `X < __ = __`).
-  - Exception: `X != __ = X` (Evaluating whether a valid value is non-Unit is logically truthy, returning LHS `X`).
+- **Asymmetric Arithmetic Propagation**:
+  - `__ + x = __` (LHS Unit acts as zero morphism / error propagation)
+  - `x + __ = x` (RHS Unit acts as identity morphism / transparent pass-through)
 
-### 3.4 Completeness Axiom of Function Application
+### 3.4 The Completeness Axiom ($f\ \mathbf{1} = \mathbf{1}$)
 
-> [!IMPORTANT]
-> **Completeness Axiom:** $\forall f, f \, \text{\_\_} = \text{\_\_}$
-> A function application evaluates to a valid value **only if all required owned arguments are fulfilled with non-Unit valid values.**
+> **Any function application whose argument evaluates to `__` (Unit) in an unsaturated state collapses to `__`.**
 
-Passing `__` as an unfulfilled argument causes the function call to evaluate to `__`.
+$$\forall f, f\ \mathbf{1} = \mathbf{1}$$
 
-#### Interaction with Default Arguments
-Functions with default parameters fall back to default values when `__` is passed for those specific arguments:
-
-```sign
-g :
-    x
-    y : x + 1
-  ? x + y
-
-g 3      ` → 7  (y defaults to 3+1=4)
-g 3 __   ` → 7  (y = __ falls back to default 4)
-g __ 5   ` → __ (x = __ has no default -> Completeness Axiom triggers -> __)
-```
-
-### 3.5 Lambda ↔ Atom Conversion via `$` and `@`
-
-Coproduct Resolver uses `$` to demote a `Lambda` into an `Address` (`Atom`) when passing functions as arguments to higher-order functions, preventing unintended `Lambda + Lambda` function composition.
+Functions with declared default arguments represent an exception: passing `__` triggers fallback to declared default parameter expressions.
 
 ---
 
-## 4. Passes and Compiler Pipeline
+## 4. Complete Operator Type Signatures
 
-1. **Pass 1 (Pre-pass)**: Linearly scans source code to collect identifier categories (`Lambda` or `Atom`) and arities into `.ist` (internal symbol table in memory).
-2. **Pass 2 (Space Resolution)**: Resolves spaces deterministically into `compose`, `apply`, `apply_reverse`, or `concat`.
-3. **Pass 3 (Layer 2 Propagation)**: Propagates Atom Subtypes according to LHS-Priority.
-4. **Pass 4 (Code Generation)**: Consumes typed AST to emit machine target instructions.
+| Symbol | Position | Type Signature |
+| :------: | :------: | ------ |
+| `#` | Prefix* | `R -> Implicit(R)` |
+| `##` | Prefix* | `R -> Implicit(R)` |
+| `###` | Prefix* | `R -> Implicit(R)` |
+| `:` | Infix* | `(Identifier -> R) -> R` |
+| `?` | Infix* | `(List -> R) -> Lambda(R)` |
+| `#` | Infix* | `(Address -> R) -> (Address \| __)` |
+| `;` | Infix | `(L -> R) -> (L \| R \| __)` |
+| `\|` | Infix | `(L -> R) -> (L \| R \| __)` |
+| `&` | Infix | `(L -> R) -> (R \| __)` |
+| `==` | Infix | `(L -> R) -> (L \| __)` |
+| `!==` | Infix | `(L -> R) -> (L \| __)` |
+| `,` | Infix* | `(L -> R) -> List` |
+| `<` `<=` `=` `>=` `>` `!=` | Infix | `(L(Scalar) -> R(Scalar)) -> (L \| R \| __)` |
+| `+` `-` | Infix | `(L(Scalar) -> R(Scalar)) -> L` |
+| `*` `/` `%` | Infix | `(L(Scalar) -> R(Scalar)) -> L` |
+| `^` | Infix* | `(L(Scalar) -> R(Scalar)) -> L` |
+| `$` | Prefix* | `Any -> Atom(Address)` |
+| `@` | Prefix* | `Atom(Address) -> (Lambda \| Atom)` |
+
+---
+
+## 5. Type Resolution Algorithm (Compiler Implementation Guidelines)
+
+### Pass 1: Identifier Table Pre-pass
+Scans source linearly to collect structural types (`Lambda` vs `Atom`) and parameter arities for all identifiers into an in-memory `.ist` table.
+
+### Pass 2: Coproduct Space Resolution
+Resolves space juxtaposition into `compose`, `apply`, `apply_reverse`, or `concat` AST nodes based on Pass 1 categories.
+
+### Pass 3: Layer 2 Atom Type Propagation
+Propagates concrete Layer 2 Atom subtypes across AST nodes using Left-Hand Priority rules.
+
+### Pass 4: Code Generation
+Emits ISA machine instructions by consuming the type ledger.
+
+---
+
+## 6. `.st` Files & Structural Hom-Set Equivalence
+
+- **`.st` (Public Signature Files)**: Written to disk upon build completion for exported `#` symbols.
+- **Structural `==` Comparison**: Structural comparison `==` checks Hom-set equivalence (matching fields/properties), independent of constructor names.
+- **Constructor Origin Opt-In (`' !__`)**: Inspects whether an instance originated from a specific constructor binding address (`p ' !__ = $Point`).

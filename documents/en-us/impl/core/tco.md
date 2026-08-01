@@ -1,59 +1,61 @@
-# Tail Call Optimization (TCO) Specification
+# Sign Tail Call Optimization (TCO / TCE) Specification
 
 ## Overview
 
-Sign lacks loop keywords (`for`/`while`). Iteration is expressed exclusively via **recursion** and **range expressions**.
+Sign lacks dedicated imperative loop keywords (`for` / `while`). Iteration is expressed via **recursion** and **range expressions**.
 
-Preventing stack overflows in recursion is a language specification guarantee. The compiler converts tail-position function calls into `JMP` instead of `CALL` (**Tail Call Elimination / TCE**).
+Guaranteeing that tail recursion never causes stack overflow is a **core architectural invariant of the language**. The compiler converts calls in tail positions to unconditional jump instructions (`JMP`) rather than subroutine calls (`CALL`) (**Tail Call Elimination - TCE**).
 
 ---
 
 ## 1. Tail Position Definition
 
-In function `f`, any expression whose evaluation result becomes the direct return value of `f` is in **tail position**.
+In a function body, a call is in **tail position** if its evaluation result is directly returned as the function's return value.
 
-In Sign, the right-hand side of `?` (the function body) is evaluated, and the last expression evaluated in each `&`/`|` clause resides in tail position.
+In Sign, the right-hand side of `?` forms the evaluation body, and expressions evaluated at the termination of `&` / `|` branches are tail positions.
+
+### Tail Position Example
 
 ```sign
+` Tail-recursive loop
 loop : n acc ?
-    n = 0 & acc |         ` acc is tail position (value -> no TCO needed)
-    loop (n - 1) (acc + n) ` loop is in tail position -> TCO target
+    n = 0 & acc |          ` ← acc returned (base case)
+    loop (n - 1) (acc + n)  ` ← loop is in tail position → TCE applied
 ```
 
----
-
-## 2. `&`/`|` Clauses and Tail Positions
-
-Both `then` and `else` clauses in `cond & then | else` reside in tail positions. Therefore, recursive calls in either clause are TCO targets.
+### Non-Tail Position Example
 
 ```sign
-collatz : n steps ?
-    n = 1     & steps                           | ` Base case
-    n % 2 = 0 & collatz (n / 2)      (steps + 1) | ` Even -> TCO
-                collatz (n * 3 + 1) (steps + 1)   ` Odd  -> TCO
+` Result used in subsequent operation
+bad : n ?
+    (f n) + 1   ` ← Result of f n is added to 1 → Not in tail position
 ```
 
 ---
 
-## 3. Mutual Recursion TCO
+## 2. Short-Circuit Logic (`&` / `|`) and Tail Positions
 
-Mutual recursion between multiple functions is also subject to TCO if in tail position:
+Sign conditional branching `cond & then | else` evaluates both `then` and `else` branches in **tail position**.
+
+```sign
+` Tail-recursive Collatz sequence
+collatz : n steps ?
+    n = 1     & steps            |  ` Base case
+    n % 2 = 0 & collatz (n / 2)  (steps + 1) |  ` Even branch → TCE applied
+                 collatz (n * 3 + 1) (steps + 1)   ` Odd branch → TCE applied
+```
+
+Every tail call in individual `|` clauses is optimized independently.
+
+---
+
+## 3. Mutual Tail Recursion
+
+Mutual recursion between multiple functions is also fully optimized via TCE when calls reside in tail positions:
 
 ```sign
 is_even : n ? n = 0 & 1  | is_odd  (n - 1)
 is_odd  : n ? n = 0 & __ | is_even (n - 1)
 ```
 
-Stack depth remains constant at $O(1)$ regardless of iteration count.
-
----
-
-## 4. Range Expressions vs Recursion
-
-Range expressions (`[1 ~ n]`) are directly compiled into target hardware loop instructions (`LOOP`/`JNZ`), serving as the preferred representation for sequence processing.
-
----
-
-## 5. Specification Guarantee
-
-TCO application for tail-position recursion is a **language specification guarantee**, not an optional optimization pass. No `@tailrec` annotations are required.
+Both calls transform into unconditional jumps, consuming a constant single stack frame ($O(1)$ stack space).

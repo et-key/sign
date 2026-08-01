@@ -1,0 +1,98 @@
+# Sign List Model & N-Dimensional Matrix Specification
+
+## 1. Core Principles: Two Operators Represent All List Operations
+
+All list operations in Sign are expressed using two fundamental operators:
+
+| Operator | Symbol | Categorical Meaning | Operational Semantics |
+|--------|------|-----------|-----------|
+| Space ` ` | Coproduct ($\amalg$) | Juxtaposition / Concatenation | "Prepend / Append" |
+| Comma `,` | Product ($\times$) | Structural Construction | "Construct Pair / N-dim matrix" |
+
+Coproduct (Space) and Product (Comma) form an **Adjunction Pair** in Category Theory ($L \dashv R$).
+
+---
+
+## 2. Coproduct (Space): 1D List Construction & Concatenation
+
+### 2.1 Scalar Juxtaposition
+
+```sign
+` Comma separated (for scalar types, commas can be omitted)
+1, 2, 3, 4, 5
+
+` Space juxtaposition yields identical 1D list
+1 2 3 4 5
+
+` All three forms are equivalent
+myPairs  : 1 2 3 4 5
+myPairs0 : [,] 1 2 3 4 5
+myPairs1 : 1, 2, 3, 4, 5
+
+myPairs = myPairs0 = myPairs1
+```
+
+### 2.2 List Concatenation & Postfix Tilde (`~`)
+
+```sign
+` Bare lists (Preserved as 2D matrix structure)
+[1 2] [3 4]   = 1 2 , 3 4
+
+` With Postfix Tildes (Flattens and concatenates)
+[1 2]~ [3 4]~ = 1 2 3 4
+```
+
+---
+
+## 3. Product (Comma): Multi-Dimensional Matrices
+
+Commas `,` lift dimensions to form multi-dimensional matrices:
+
+```sign
+` 2D Matrix (2x3)
+1 2 3 , 4 5 6
+
+` 3D Matrix (2x2x2)
+[1 2 , 3 4] , [5 6 , 7 8]
+
+` Tensor multiplication and exponentiation
+[1 2 3 4] * 2 = 1 2 3 4 1 2 3 4    ` Flat duplication
+[1 2 3 4] ^ 2 = 1 2 3 4 , 1 2 3 4  ` Dimension lifting
+```
+
+---
+
+## 4. Left-Hand Priority Type Conversion Rule
+
+In binary operations, **the left-hand operand type determines the type of the operation**:
+
+$$\text{typeof}(L \text{ op } R) = \text{typeof}(L)$$
+
+```sign
+` Numeric LHS converts String RHS to integer
+0 + `123` = 123
+
+` String LHS + Number fails arithmetic (collapses to __)
+`123` + 0 = __
+```
+
+---
+
+## 5. Struct / Dict Destructuring Pattern Matching & Safe Merging
+
+### 5.1 Destructuring Arguments
+
+```sign
+` Extracting key 'foo' and collecting remainder into 'obj'
+f : x [foo ~obj] y ?
+    ...
+
+f 10 [ foo : 1, bar : 2, baz : 3 ] 20
+```
+
+### 5.2 Struct Merging via Coproduct
+
+```sign
+dict3 : [ foo : 100, bar : 200 ]~ [ fooo : 100, bar : 500, baz : 300 ]~
+```
+Duplicate keys (`bar`) are merged safely at compile-time if their types match. Conflicting types trigger static compile-time errors.

@@ -1,82 +1,62 @@
-# Sign Execution Model: Everything is an Internal Function of Main
+# Sign Execution Model: Every Function is an Inlined Inner Function of `main`
 
 ## Core Principle
 
-> **Every function in Sign is statically inlined and defined as an internal nested function of a single top-level `main.sn`.**
+> **Every function in Sign is statically inlined as an inner function of a single top-level entry function: `main.sn`.**
 
-This is the most fundamental property of Sign, underpinning all architectural decisions.
-
----
-
-## 1. Filename = Entry Point = Function Name
-
-In Sign, `.sn` files are function definitions where the filename equals the function name:
-
-```
-add.sn       → Definition of function add
-multiply.sn  → Definition of function multiply
-main.sn      → Program entry point (equivalent to C's main())
-```
-
-`main.sn` serves as the outermost global scope. All imported `.sn` files are incorporated as nested internal functions within `main`.
+This is the foundational invariant of Sign's execution model.
 
 ---
 
-## 2. Imports are Internal Function Definitions
+## 1. File Name = Entry Point = Function Name
+
+In Sign, `.sn` files are function definitions. The file name dictates the function identifier.
+
+```
+add.sn       →  Definition of function `add`
+multiply.sn  →  Definition of function `multiply`
+main.sn      →  Program entry point
+```
+
+`main.sn` forms the outermost scope of the binary. All imported `.sn` files are brought into scope as inner functions nested inside `main`.
+
+---
+
+## 2. Imports as Inner Function Definitions
 
 ```sign
-`add.sn`@~   ` "Imports" add.sn
+`add.sn`@~   ← Imports add.sn
 ```
 
-Importing is not reading a file at runtime; it statically defines the nested internal function `add` within the current scope.
+This operation does not dynamically load a file at runtime; it statically binds `add` as an inner function in the local scope.
 
 ---
 
-## 3. Partial Applications as Compile-Time Specialization
+## 3. Partial Application via Compile-Time Monomorphization
 
 ```sign
 add3 : add 3
 add3 5   ` → 8
 ```
 
-`add3` does not create a dynamic closure struct on the heap at runtime. Instead, the compiler statically specializes `add` with argument `3`, generating a specialized nested function `add3` inside `main`.
-
-No heap allocation, closure objects, or runtime environments exist.
+`add3` does not allocate a runtime closure object. Instead, the compiler generates a specialized static function `add3` inlined into `main`.
 
 ---
 
-## 4. Absence of Closure Escaping Issues
+## 4. Elimination of Closure Escaping Issues
 
 Dangling pointer issues caused by closures outliving stack frames do not exist in Sign:
-
-- All closures are compile-time specialized nested functions.
-- The lifetime of nested functions equals `main`'s lifetime (the entire program duration).
-- Stack frame escaping is architecturally impossible.
-
----
-
-## 5. Consequence: Complete Heaplessness
-
-This execution model allows Sign to operate without a heap (in Layer 1 and above):
-
-| Feature | Allocation Method | Rationale |
-|---|---|---|
-| Saturated Function Call | Register passing | Statically determined |
-| Partial Application | Compile-time specialization | No runtime closure needed |
-| Arrays / Structs (Layer 1+) | `alloca` contiguous block | Automatically reclaimed at scope end |
-| Module Variables | `main` stack frame | Lifetime equals entire program |
-
-No Garbage Collector (GC), `free`, or ownership annotations are required.
-
-> [!IMPORTANT]
-> **In Layer 0, `alloca` is unavailable** because RAM and stack are not yet initialized. Layer 0 code relies strictly on register passing and volatile `#`/`@` raw memory operations to bootstrap RAM/stack.
+- All "closures" are static functions monomorphized during compilation.
+- Inner function lifetime = `main` lifetime = Duration of program execution.
+- Heap allocation and GC are absent by design.
 
 ---
 
-## 6. Interaction with Execution Layers
+## 5. Result: Zero Heap Allocation
 
-```
-layer: 0  → Register passing and #/@ only. RAM/Stack requires manual initialization (alloca prohibited).
-layer: 1  → RAM available (alloca contiguous block available).
-layer: 2+ → FPU, SIMD, and advanced execution capabilities enabled.
-```
+| Construct | Allocation Mechanism | Rationale |
+|------|---------|------|
+| Fully-Applied Function Calls | Register Passing | Statically determined |
+| Partial Application | Compile-Time Monomorphization | Zero runtime closure objects |
+| Arrays / Structs (`layer >= 1`) | `alloca` Contiguous Block | Automatically reclaimed at scope exit |
+| Scoped Variables | `main` Stack Frame | Lifetime equals program execution |

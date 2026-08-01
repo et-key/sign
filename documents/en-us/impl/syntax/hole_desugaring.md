@@ -1,77 +1,34 @@
-# Static Desugaring Specification for Hole (`_`) and Partial Application
+# Partial Application (Hole `_`) Static Desugaring Specification
 
-## 1. Separation of Syntactic Hole (`_`) and Runtime Unit (`__`)
+## 1. Background & Purpose
 
-In Sign, the role of partial application placeholders and runtime unit values are cleanly separated:
+In early Sign iterations, `_` served a dual role:
+1. **Unit as Value**: Empty lists, logical "false", Nothing (absence of value).
+2. **Hole for Partial Application**: Placeholder inside function applications, creating closures/lambdas.
 
-- **Lexically Written Hole (`_`)**: A single underscore written directly in source code is statically desugared at compile time into a lambda expression (`?`) representing an explicit partial application placeholder.
-- **Runtime Unit Value (`__`)**: Double underscores represent the runtime Unit value (empty list / Nothing / falsy), flowing purely as a value at execution time.
-
-This separation guarantees that dynamic expressions evaluating to Unit (e.g. `3 < 2`) never accidentally trigger runtime closure creation.
-
----
-
-## 2. Specification
-
-### 2.1 Compile-Time: Static Desugaring Rules
-
-During AST construction, the compiler inspects argument slots of function application nodes.
-
-If an argument slot contains a **lexically written `_` (Hole)**, it is transformed into a lambda expression (`?`) as follows:
-
-#### Transformation Algorithm
-1. Count the number of `_` (Holes) in the application expression ($N$).
-2. Generate $N$ unique compiler variables $P_0, \dots, P_{N-1}$ (e.g. `$p0`, `$p1`).
-3. Replace the $i$-th `_` in the original expression with $P_i$.
-4. Wrap the entire expression in a lambda taking $P_0, \dots, P_{N-1}$ as parameter list.
-
-#### Transformation Examples
-
-| Source Code | Desugared AST | Description |
-|---|---|---|
-| `f _ 3` | `$p0 ? f $p0 3` | Single hole transformation |
-| `f _ _` | `$p0 $p1 ? f $p0 $p1` | Multiple holes transformation (currying) |
-| `[+ 1,] _` | `$p0 ? [+ 1,] $p0` | Combination with point-free form |
+To resolve semantic conflicts between runtime values (`__`) and syntactic placeholders (`_`), Sign enforces strict separation:
+- **Syntactically written `_`** is desugared at compile time into lambda expressions (`?`) representing Holes.
+- **Runtime values** are represented by `__` (Unit).
 
 ---
 
-### 2.2 Runtime: Value Semantics
+## 2. Specification Rules
 
-Values evaluated as `__` at runtime are treated strictly as **pure values (Unit/Nothing)**.
+### 2.1 Compile-Time: Static Desugaring Algorithm
 
-When a dynamic expression (such as `3 < 2` or `dict ' missing_key`) evaluates to `__`, it is passed to the target function as a normal value argument, triggering default argument evaluation or Unit propagation instead of creating a partial application.
+During AST construction, the compiler inspects argument slots of function application nodes:
 
-#### Execution Example 1 (Runtime Value Semantics):
-```sign
-g :
-    x
-    y : x + 1
-  ? y
+- If a slot contains **literal `_` (Hole)**, it is treated as a partial application placeholder.
+- The expression is desugared into a lambda:
 
-result : g 1 (3 < 2)
-```
-- `(3 < 2)` is evaluated at runtime to `__`.
-- `g 1 __` is executed.
-- `y = __` triggers default parameter fallback ($y = x + 1 = 2$).
-- Returns `2`.
+#### Algorithm:
+1. Count holes $N$ in the application expression.
+2. Generate $N$ unique compiler variables $P_0, \dots, P_{N-1}$ (e.g., `$p0`, `$p1`).
+3. Replace each $i$-th `_` with $P_i$.
+4. Wrap the expression in a lambda taking $P_0, \dots, P_{N-1}$.
 
-#### Execution Example 2 (Static Desugaring Partial Application):
-```sign
-g :
-    x
-    y : x + 1
-  ? y
-
-h : g _ 5
-```
-- Lexical `_` is statically desugared to `h : $p0 ? g $p0 5`.
-- Calling `h 10` binds `$p0 = 10` and executes `g 10 5`.
-- Returns `5`.
-
----
-
-## 3. Design Benefits
-
-1. **Semantic Consistency & Safety**: Eliminates bugs caused by dynamic values accidentally generating closures.
-2. **Zero Runtime Overhead**: All partial applications are converted to standard lambda functions at compile-time.
-3. **IDE & Static Tooling Alignment**: Arity and function types are statically determined during parsing.
+| Authored Source | Desugared AST Representation |
+|--------------|----------------|
+| `f _ 3` | `$p0 ? f $p0 3` |
+| `f _ _` | `$p0 $p1 ? f $p0 $p1` |
+| `[+ 1,] _` | `$p0 ? [+ 1,] $p0` |

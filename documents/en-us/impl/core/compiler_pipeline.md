@@ -1,40 +1,38 @@
-# Sign Compiler Pipeline: Design Motivation and Pass Structure
+# Sign Compiler Pipeline: Design Motivation & Multi-Pass Architecture
 
 ## 1. Design Motivation: As-Is Compiler for RISC Processors
 
-The symbol choices in Sign's operator table are designed to be **as-is** relative to target RISC architectures (ARM, AVR, SPARC, RISC-V, etc.) — meaning operator sequences map directly to target instruction streams without intermediate smoothing.
+The symbol selections in Sign's operator table ([operator_table.md](../../guide/operator_table.md)) are chosen to map **as-is** to target RISC processors (AArch64, RISC-V, AVR, SPARC) without intermediate representation normalization layers.
 
-The language permits `asm_volatile` expressions (direct backend assembly insertion), based on the premise that all behavior can ultimately be explicitly written by the user.
-
----
-
-## 2. Type System Positioning: Heapless Principle & RISC Constraints
-
-> **Heapless principles and static monomorphic typing are linguistic expressions of the hardware constraint: "RISC processors have only fixed-width registers and fixed-length memory."**
-
-- Types act as **zero-cost compilation ledgers** at runtime, disappearing completely after compilation.
-- Type safety guarantees are not enforced for struct misinterpretations (e.g. `Point` vs `Vector2D` with identical field shapes), leaving responsibility to the caller (similar to C unions).
+The language permits `"..."` (direct backend assembly injection), assuming that "all behavior can ultimately be directly specified by the user at the instruction level." Whether an individual operator maps directly to a single instruction does not impede language design. Because `"..."` is always available, distinguishing core operators from syntactic sugar depends on Principles 2 and 3 rather than strict 1-to-1 ISA mapping.
 
 ---
 
-## 3. Pass Structure: Frontend (Pass 1–3) and Backend (Pass 4)
+## 2. Type System Positioning: Types as Ledger, RISC Fixed-Width as Truth
+
+> Principles like heapless allocation and static monomorphic typing are analytical descriptions, not ultimate ends. The physical truth is that RISC hardware only possesses fixed-width registers and fixed-width memory; heapless guarantees and type safety are simply high-level linguistic reframings of these physical constraints.
+
+From this perspective, the type system is positioned as follows:
+
+- Types are a **zero-cost compile-time ledger** (transient accounting records existing exclusively during compilation). They do not exist at runtime and carry zero execution overhead.
+- Absolute static type safety guarantees are intentionally eschewed at structural boundaries (e.g., distinguishing between `Point` and `Vector2D` sharing identical field layouts is the caller's explicit responsibility, treated similarly to C unions).
+
+---
+
+## 3. Pass Configuration: Frontend (Passes 1–3) and Backend (Pass 4)
+
+Passes 1–3 (Accounting) reduce user-defined types into "how many bytes wide is this word, and is it signed/unsigned?" before passing data to Pass 4. Pass 4 consumes this ledger, selecting fixed-width register operations and jump instruction templates without inheriting high-level semantic type names.
 
 | Pass | Layer | Responsibility | Output |
 |:---:|---|---|---|
-| **Pass 1** | Frontend | Identifier Table Collection (Pre-pass). Linear scan determining structural types (`Lambda`/`Atom`) and arities | `.ist` (In-memory, all identifiers) |
-| **Pass 2** | Frontend | Coproduct (Space) Resolution. Fixes space semantics into binary AST nodes using `.ist` | Typed AST |
-| **Pass 3** | Frontend | Layer 2 Type Propagation. Propagates Atom Subtypes according to LHS-Priority rules | Fully Typed AST |
-| **Pass 4** | Backend | Code Generation. Consumes type ledgers, emitting target register operations and jump instruction templates | Target Instruction Stream |
+| **Pass 1** | Frontend | Identifier Table Collection (Prep pass). Determines structural type (Lambda/Atom) and arity for all identifiers in linear scan. | `.ist` (In-memory table) |
+| **Pass 2** | Frontend | Coproduct Resolution. Resolves whitespace semantics using Pass 1 table and converts AST to binary tree. | Typed AST |
+| **Pass 3** | Frontend | Layer 2 Type Propagation. Propagates Atom internal types via Left-Hand Priority rules. | Fully Typed AST |
+| **Pass 4** | Backend | Code Generation. Consumes compile-time type ledger, discarding semantic names. Selects ISA register ops and jump templates. | Target Machine Binary |
 
 ---
 
-## 4. Separation of `.ist` (Internal) and `.st` (Public)
+## 4. In-Memory `.ist` and Disk `.st` Separation
 
-| Artifact | Content | Substance | Lifetime |
-|---|---|---|---|
-| **`.ist`** | All internal type information used by Passes 1–3 | **In-memory data structure only** (Never written to disk) | Compilation process duration only |
-| **`.st`** | Exported identifiers via `#`/`##`/`###` | Physical file on disk | Persistent build artifact |
-
-### 4.1 Generation Timing and Scope
-- **Timing**: Constructed in bulk at the end of Pass 1. Enables unified cycle detection and clean target offset calculations.
-- **Scope**: Reachable type universe from entry point. Unused code is never scanned, resulting in zero dead code type-checking or code emission.
+- **`.ist` (Internal Symbol Table)**: Holds all type information managed during Passes 1–3. Exists **exclusively in compiler process memory** (never written to disk) for security and simplicity.
+- **`.st` (Public Symbol Type File)**: Stores type signatures for symbols exported via `#`/`##`/`###`. Written to disk upon build completion.

@@ -1,63 +1,355 @@
-` Strings are enclosed in backticks `
-` Non-evaluating single literal lines are ignored. `
+` Strings are written with backticks `
+` Unclosed literal lines or intermediate lines without expressions are not executed. Thus, the line above is not executed. `
+` Even for literal-only lines, if it is the final line of a function or file, it serves as the return value. `
+` Therefore, comments are written as backtick strings. `
 
-` Variables and Literals `
+` Newline acts as a postfix evaluation operator. `
+` If you want a newline NOT to act as an evaluation boundary, use backslash \ for line continuation. `
+` Indentation at SOL forms a block. `
+
+` The evaluation strategy of this language is Pull-based evaluation. `
+` All computations are treated as Generators / Iterators, generating values on demand. `
+` Short-circuit evaluation and lazy branching are determined statically from syntax. `
+
+` ":" means "namely" in English, serving as the binding operator. "=" is purely a comparison operator. `
+` For operator precedence and semantics, refer to specification docs. `
+
 x : -353.15134
 y : 4001.35364502
 
+` Various numeric literal examples (Hex, Binary, Register type, Unicode, etc.) `
 hex_val : 0xAF8534
 bin_val : 0b00101001
 regA : 0rA
-uni_a : 0u3042  ` Unicode 'あ' `
+uni_a : 0u3042  ` Represents Unicode 'あ' `
 
 Hello : `Hello`
 World : `World`
 
-` Truthy values are valid non-Unit values. Falsey values are empty lists or Unit __ `
+` true is any non-Unit valid value; false is an empty list or unevaluated lambda expression. `
+` _ retains its function as identity morphism as well. `
+
 yep : 0
 nop : _
 
+` Unblocked definition bindings act as right identities. `
+
+unit : none : []
+
+` The above is semantically equivalent to: `
+
+none : []
+unit : []
+
 none : _
 unit : _
+
 id : _
 
-` Comparison operations `
+` Comparison returns the left-hand operand on True, and _ (Unit) on False. `
+` Equality "=" compares scalar values, while "==" compares structural equality recursively. `
+
 [x < 4] = [x < 4 & x]
 [x = 4] = [x == 4 & x]
+[x > 4] = [x > 4 & x]
+[x = 4] = [x = 4 & x]
+[x <= 4] = [x <= 4 & x]
+[x >= 4] = [x >= 4 & x]
 
-` Ternary Comparison Chaining `
+` Comparison shorthand allows ternary comparisons as follows: `
 [1 <= x <= 9] = [[x >= 1] & [x <= 9]]
 
-` Functions and Lambdas `
+` Lambda term definition `
+` The primary method for defining a lambda is using ? `
+` Anonymous functions must be enclosed in brackets/parentheses. `
+
+[x y ? x ^ 2 + 2 * x * y + y ^ 2]
+
+` Factorization makes the above expression equivalent to: `
+` Brackets represent block boundaries, expressing operator precedence naturally. `
+
 [x y ? (x + y) ^ 2]
 
-` Point-free and function composition `
+` Point-free notation and function composition simplify code further. `
+` Point-free expressions use direct operators, so their types are self-evident. `
+` Once converted into functions, operator precedence disappears and composition acts as left identity. `
+
 [+] [^ 2]
 
-` Explicit address retrieval for higher-order function arguments `
+` To prioritize [^ 2] in point-free style: `
+
+[^ 2] [+]
+
+` Is the resulting composition. `
+
+` To suppress immediate function application or composition, prefix with $ to take an address pointer. `
+
+$[+ 2] 2
+
+` Product expressions are also not evaluated immediately: `
+
+[+ 2], 2
+
+` The following IS evaluated immediately: `
+
+[+ 2] 2
+
+` Postfix tilde ~ forces immediate evaluation: `
+
+list : [+ 2], 2
+evaluate : list~
+evaluate = 4
+
+[[+ 2], 2]~ = 4
+
+` Function pointer example: `
+
 Filter : f x ~y ? @f x , Filter f y~
 Filter $[> 0] [-2 ~ 3]
 
-` Conditional match_case expression `
+` Function evaluation precedence is lower than lambda definition precedence. `
+` Function composition is a left identity, but standard application acts as right identity. `
+` Enclosing bracket types (parens/brackets/braces) behave identically. `
+
+[+ 1] [* 2] 5 = [* 2]([+ 1] 5) = 12
+
+` The following acts as a head function: `
+
+[x ? x] 1 2 3 == 1
+[x ? x] 1, 2, 3 == 1
+
+_ 1 2 3 == 1
+_ 1, 2, 3 == 1
+
+[1 2 3] ' 0 = 1
+[1, 2, 3] ' 0 = 1
+
+` The following acts as a tail function: `
+
+[_ ~y ? y] 1 2 3 == 2 3
+[_ ~y ? y] 1, 2, 3 == 2 3
+
+[1 2 3] ' 1~ == 2 3
+[1, 2, 3] ' 1~ == 2 3
+
+` Higher-order function arguments use products (,) to control evaluation vs deferred execution. `
+` For side effects inside functions, : cannot be used since it implies pure bindings. `
+` Side-effectful IO uses # and @ as specified in system_semantics.md. `
+
+[ x ?
+	$y # 1
+	x + @y
+]
+
+` match_case with block syntax is written as follows: `
+` Anonymous lambdas used directly must be enclosed in brackets. `
+
 [ x ?
 	x = 0 : 0
 	x > 0 : `more`
 	x < 0 : `less`
-	`otherwise`
+	`other_wise`
 ] 3
 
-` Dict and Struct definitions `
+` The above desugaring transforms to short-circuit logic: `
+` Crucial rule: `
+` 0 is True (valid value) `
+` _, empty list, and unevaluated functions are False (__ Unit) `
+
+[ x ?
+	x = 0 |
+	x > 0 & `more` |
+	x < 0 & `less` |
+	`other_wise`
+] 3
+
+` Struct / Record Constructor pattern `
+` Dynamic key assignment is supported via pass-by-reference. `
+
+Person : name age etc x ?
+	name
+	age
+	@etc : x
+
+john : Person `john` 18 $`Like` `Sushi`
+
+` Infix ' operator treats identifiers, numbers, characters, strings, and types uniformly: `
+
+john ' name = john ' `name`
+
+` match_case simulates if-then logic: `
+` If no default branch matches, Unit law returns the passed input unchanged. `
+
+[> 3 : [+ 3]] 3 4 = 4
+
+` Data class pattern `
+
 #MyGame :
 	State :
 		Existence
 		Durability
+		Mentality
+		Wisdom
+		Agility
+		Equipment
+		Bag
+
+` Postfix ~ flattens lists and forces evaluation. `
+` Applied to dictionaries, it spreads elements. `
 
 #Mob : MyGame~
 	Base : State~
 	State~
 
-` Logical short-circuit `
+#Magician : Mob~
+	Base :
+		Existence : 1
+		Durability : 3
+		Mentality : 10
+		Wisdom : 8
+		agility : 5
+	State : Magician ' Base~
+
+myMagician : Magician~
+
+` --- Bitwise Operations --- `
+flags : 0b1100
+mask  : 0b1010
+bitwise_and : flags && mask  ` Result: 0b1000 `
+
+` --- Range List Construction with Stepped Operators --- `
+even_numbers : [2 ~+ 4 ~+ 10]  ` 2, 4, 6, 8, 10 `
+
+` Let-in binding pattern: `
+
+myValue :
+	3
+	[+ 4]
+	[* 2]
+
+` List definition uses comma separation. `
+` "," represents product / strong boundary. `
+` " " (space) represents coproduct / sum. `
+` For scalar coproducts, commas can be omitted. `
+
+myPairs: 1 2 3 4 5
+myPairs0: [,] 1 2 3 4 5
+myPairs1: 1, 2, 3, 4, 5
+
+myPairs == myPairs0 == myPairs1
+
+` Range indexing on lists: `
+
+myPairs'[1 ~ 3] == 2 3 4
+
+` Higher-order list operations: `
+
+[[,],] myPairs = [1], [2], [3], [4], [5]
+[+] myPairs == 15
+
+` Map operation: `
+
+[* 2,] myPairs == 2 4 6 8 10
+
+` Filter operation: `
+
+[> 2,] myPairs == 3 4 5
+
+` Coproduct / Array concatenation: `
+
+r: [1 2] [3 4]
+
+` Product / 2D Matrix: `
+
+s0 : 1 2 , 3 4
+s1 :
+	1 2 ,
+	3 4
+
+` Dictionary / Struct syntax: `
+
+myGreet :
+	greet : 
+		hello : `hello,`
+		welcome : `welcome,`
+	world : ` world`
+
+myGreet ' greet ' hello == `hello,`
+
+` Block scope field access: `
+
+myGreet
+	'greet
+		'welcome
+	'world
+ == `welcome, world`
+
+` Modifying struct values: `
+
+myGreet
+	'greet
+		'welcome : `welcome to our `
+	'world : `metaverse!`
+
+` ~ operator spreads dictionaries in the target scope. `
+
+[
+	y: 1
+	n: 0
+]~
+
+y = 1
+
+` Postfix @ operator imports from file path: `
+
+io@~
+	say Hello World
+
+say Hello World  ` Returns error if not imported into file scope `
+
+` Importing into file scope: `
+
+io@~
+
+[* 4,] [+] [1 ~ 5] = 60
+
+` Strings are lists of characters. `
+` Literal concatenation uses backslash or space juxtaposition. `
+
+M: \M
+
+My: M \y\ \D\o\m\e\s\t\i\c
+My = M \y \  \D \o \m \e \s \t \i \c = `My Domestic`
+
+	`Hello ` `World!` = `Hello World!`
+	`Hello` \ `World!` = `Hello World!`
+	\H `ello` \ `World` \! = `Hello World!`
+	`Hello ` My `World!` = `Hello My Domestic World!`
+	Hello \ My \ `World` \! = `Hello My Domestic World!`
+	`Hello` \!\ My World \! = `Hello! My Domestic World!`
+
+` Multiline string using block formatting: `
+
+InEnter :
+ `Hello` \
+ `World!`
+
+` Prefix # exports identifiers. `
+
+#myDict : name value ? name~ : value
+#gets : name ? myDict ' name~
+
+` Logical short-circuiting: `
+
 _ & `me` = _
 1 & `me` = `me`
+
 _ | `me` = `me`
 1 | `me` = 1
+
+` XOR does not short-circuit: `
+
+1 ; `me` = _
+_ ; `me` = `me`
+1 ; _ = 1
+_ ; _ = _

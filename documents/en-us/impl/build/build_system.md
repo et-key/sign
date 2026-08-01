@@ -1,28 +1,62 @@
-# Sign Build System Specification: `option.ms` and Compilation Layers
+# Sign Build System Specification: `option.ms` & Compilation Layers
 
 ## 1. Overview
 
 > [!IMPORTANT]
-> **Sign compiler configuration is managed via `option.ms` (MetaObjectForSign) files rather than command-line flags.**
+> **Build configurations in Sign are governed exclusively by `option.ms` (MetaObjectForSign) files.**
+> This is a natural consequence of Sign's self-hosting philosophy: using Sign's data representation syntax to configure its own compiler.
 
-Principles:
-1. **Declared via files**: Command-line arguments are used only for emergency overrides.
-2. **Directory-scoped**: Placed only in directories requiring custom settings.
-3. **Lexical Inheritance**: Subdirectories implicitly inherit parent configurations.
+Core principles:
+1. **Declarative File Configuration**: CLI arguments serve purely for temporary overrides.
+2. **Directory-Scoped Rules**: `option.ms` is placed only in directories requiring configuration changes.
+3. **Lexical Inheritance**: Child subdirectories implicitly inherit parent configurations and override specified keys.
+4. **Static Schema Isolation**: Dynamic options are prohibited; option keys are defined by strict static schemas.
 
 ---
 
-## 2. Compilation Layers (`layer`) and Hardware Constraints
+## 2. The `ms` Format (MetaObjectForSign)
 
-The `layer` field declares allowed language feature sets during compilation based on hardware initialization state:
+`ms` uses Sign's Product type syntax to represent build metadata.
 
-| Layer | Alias | Description | `alloca` | `Int` | `Float` | `Vector` | Dynamic Modules | Supported Linking |
-|:---:|:---:|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| `0` | bare | Lowest baremetal layer prior to RAM initialization. `@`/`#` are volatile. | ✗ | ✓ | ✗ | ✗ | ✗ | Static only |
-| `1` | alloc | RAM initialized; `alloca` contiguous blocks available. | ✓ | ✓ | ✗ | ✗ | ✗ | Static only |
-| `2` | fpu | FPU initialized. `Float` literals enabled. | ✓ | ✓ | ✓ | ✗ | ✗ | Static only |
-| `3` | simd | SIMD initialized. `Vector` operations enabled. | ✓ | ✓ | ✓ | ✓ | ✗ | Static only |
-| `4` | std | Full OS-dependent layer with dynamic modules. | ✓ | ✓ | ✓ | ✓ | ✓ | Dynamic / Static |
+| JSON | `ms` Equivalent |
+|---|---|
+| `"key": value` | `key : value` |
+| Quoted string required | Identifiers as bare words, strings enclosed in backticks (`` `string` ``) |
+| `null` / `false` | `__` (Unit) |
+| Comments prohibited | Backtick comments at line start (`` ` Comment ``) |
+
+---
+
+## 3. Directory Inheritance Model
+
+```
+project/
+  option.ms              ← Root config (Project defaults)
+  │
+  ├── kernel/
+  │     option.ms        ← Overrides layer: 0 for kernel
+  │     ├── drivers/
+  │     │    └── uart.sn ← Inherits kernel/ settings
+  │     └── mm/
+  │           option.ms  ← Overrides optimize: 3
+  │
+  └── userspace/
+        option.ms        ← Resets layer: 4 for host applications
+```
+
+---
+
+## 4. Hardware Capability Layers (`layer`)
+
+The `layer` configuration declares the hardware abstraction capabilities available to the compiler. Using capabilities disabled in a layer triggers a static compile-time error.
+
+| Layer Number | Alias | Floating-Point | SIMD / Vector | Dynamic Allocations | Dynamic Linking |
+|:---:|---|:---:|:---:|:---:|:---:|
+| **0** | `bare` | ❌ Compile Error | ❌ Compile Error | ❌ Compile Error | ❌ Prohibited |
+| **1** | `alloc` | ❌ Compile Error | ❌ Compile Error | ✅ `heap: max` | ❌ Prohibited |
+| **2** | `fpu` | ✅ `Float` enabled | ❌ Compile Error | ✅ Enabled | ❌ Prohibited |
+| **3** | `simd` | ✅ `Float` enabled | ✅ `Vector` enabled | ✅ Enabled | ❌ Prohibited |
+| **4** | `std` | ✅ `Float` enabled | ✅ `Vector` enabled | ✅ Enabled | ✅ Dynamic / Static |
 
 > [!IMPORTANT]
-> Attempting to use `Float` literals in `layer < 2` or `Vector` types in `layer < 3` results in a **Compile Error**, structurally preventing access to uninitialized hardware.
+> **Inter-Layer Import Invariant**: A module cannot import another module with a higher `layer` requirement than its own.
