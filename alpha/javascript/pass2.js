@@ -2,11 +2,9 @@
  * Pass2: coproduct_resolver.md のアルゴリズム実装。
  * Pass1相当(peggyパーサー)が返すフラットなTerm列を、二分木ASTへ縮約する。
  *
- * 【既知の制限】getCategory は本来 Pass1 が構築する識別子環境（env）を参照して
- * Lambda/Atom を判定するが、Pass1（識別子解決・スコープ検査）自体が未実装のため、
- * ここでは識別子をすべて暫定的に Atom 扱いしている（組み込み `<print>` のみ Lambda）。
- * このため `f g x`（関数適用）のような、識別子の実際の型に依存する coproduct 解決は
- * 正しく動作しない（`apply` ではなく `construct` に落ちる）。Pass1実装が次の前提条件。
+ * getCategory は第2引数に env（pass1.js の buildEnv が返す識別子→カテゴリのMap）を
+ * 受け取れる。env未指定、またはenvに無い識別子は Atom にフォールバックする
+ * （組み込み `<print>` のみ例外的に Lambda）。
  *
  * 実装にあたって仕様書(coproduct_resolver.md)に明記がなく、以下の点は仮定を置いた（要レビュー）:
  * 1. 複数の前置/後置演算子が連続する場合（例: `!$x`）の結合順序。
@@ -17,6 +15,10 @@
  * 3. Block（[...] {...} (...)）の種別（paren/brace/bracket）は grammar.pegjs が
  *    区別を保持しないため、AST上でも区別できていない（kindは "paren" 固定、または
  *    indent/absのみ判別）。
+ *
+ * 【既知の制限】ブロック内部の行（[...]や{...}の中身）はenvを引き継いで解決されるが、
+ * pass1.js の buildEnv 自体はトップレベルの行しか見ていないため、ブロック内で定義された
+ * 識別子はenvに登録されない。
  */
 
 import { OPERATOR_DICT } from "./operator_table.js";
@@ -110,7 +112,8 @@ function lookup(symbol, position) {
 }
 
 // ---- getCategory (coproduct_resolver.md §2) ----
-function getCategory(node) {
+// env: Pass1が構築した識別子→カテゴリのMap（未指定ならすべてAtom扱いにフォールバック）
+function getCategory(node, env) {
   if (!node || typeof node !== "object") return "Atom";
   if (node.type === "operation") {
     if (node.op === "?") return "Lambda"; // 関数定義
@@ -122,7 +125,8 @@ function getCategory(node) {
   }
   if (node.type === "atom") {
     if (node.kind === "identifier") {
-      // 【既知の制限】env（Pass1の識別子環境）未実装のため、組み込み関数名のみLambda扱い
+      if (env && env.has(node.value)) return env.get(node.value);
+      // envに無い場合、組み込み関数名のみLambda扱い
       if (["<print>"].includes(node.value)) return "Lambda";
       return "Atom";
     }
@@ -144,8 +148,8 @@ function mk(name, left, right) {
 }
 
 // coproduct_resolver.md §3の優先度表（10.5〜10.0）
-function coproductReduce(a, b) {
-  const catA = getCategory(a), catB = getCategory(b);
+function coproductReduce(a, b, env) {
+  const catA = getCategory(a, env), catB = getCategory(b, env);
   if (catA === "Lambda" && catB === "Lambda") return mk("compose", a, b);
   if (catA === "Lambda" && catB === "Atom") return mk("apply", a, b);
   if (catA === "Atom" && catB === "Lambda") return mk("apply_reverse", a, b);
@@ -167,7 +171,7 @@ function coproductReduce(a, b) {
 }
 
 // ---- Step2: 優先順位に基づく総当たり縮約（coproduct_resolver.md §4） ----
-function reduceOnce(items, tier) {
+function reduceOnce(items, tier, env) {
   for (let i = 0; i < items.length - 1; i++) {
     const a = items[i];
     const b = items[i + 1];
@@ -185,7 +189,7 @@ function reduceOnce(items, tier) {
     if (tier === 10 && !isBareOperatorToken(a) && !isBareOperatorToken(b)) {
       const left = toNode(a);
       const right = toNode(b);
-      const node = coproductReduce(left, right);
+      const node = coproductReduce(left, right, env);
       if (node) {
         items.splice(i, 2, node);
         return true;
@@ -195,14 +199,14 @@ function reduceOnce(items, tier) {
   return false;
 }
 
-function reduceAll(rawItems) {
+function reduceAll(rawItems, env) {
   // 演算子トークン（裸の記号文字列）は reduceOnce の走査で判定する必要があるため、
   // ここでは atom/block のみを変換し、演算子文字列はそのまま残す。
   let items = resolveDensity(rawItems).map((x) => (isBareOperatorToken(x) ? x : toNode(x)));
   // tier 26(escape) から 1(export) まで、高い方から低い方へ処理
   for (let tier = 26; tier >= 1; tier--) {
     let guard = 0;
-    while (reduceOnce(items, tier)) {
+    while (reduceOnce(items, tier, env)) {
       if (++guard > 10000) throw new Error("reduceAll: possible infinite loop at tier " + tier);
     }
   }
@@ -214,7 +218,7 @@ function reduceAll(rawItems) {
 }
 
 // ---- ブロック（[...] {...} (...) インデント／絶対値）の解決 ----
-function resolveBlock(exprsArray) {
+function resolveBlock(exprsArray, env) {
   // grammarのBlockは配列を返す。INDENT/ABSは特殊マーカー文字列が先頭・末尾に入る。
   let kind = "paren"; // 【既知の制限】paren/brace/bracketはgrammar.pegjs側で区別されないため固定値
   let arr = exprsArray;
@@ -225,7 +229,7 @@ function resolveBlock(exprsArray) {
     kind = "abs";
     arr = arr.slice(1);
   }
-  const lines = arr.map((line) => (Array.isArray(line) ? reduceAll(line) : toNode(line)));
+  const lines = arr.map((line) => (Array.isArray(line) ? reduceAll(line, env) : toNode(line)));
   return { type: "block", kind, lines };
 }
 

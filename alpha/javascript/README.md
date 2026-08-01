@@ -16,17 +16,20 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
 - `operator_table.js` — 演算子定義。`documents/ja-jp/impl/syntax/operator_table.js`から移植（正式仕様）。
 - `sign.pegjs` — `documents/ja-jp/impl/syntax/grammar.pegjs`そのもの（正式仕様）。**peggy記法**（`@`ラベル等）
   を使用しているため、`pegjs`ではなく`peggy`パッケージでビルドする必要がある。
+- `pass1.js` — Pass1（最小実装）。識別子環境（env）を構築し、Pass2のgetCategoryに渡す。
 - `pass2.js` — Pass2（`coproduct_resolver.md`）の実装。フラットなTerm列を二分木ASTへ縮約する。
 - `test/run.js` — Pass1相当（パーサー）単体の動作確認。フラットなTerm列の検証。
-- `test/pass2.test.js` — Pass1+Pass2を通した動作確認。二分木ASTへの縮約結果を検証。
+- `test/pass2.test.js` — Pass2単体（envなし）の動作確認。
+- `test/pass1_pass2.test.js` — Pass1＋Pass2を通した動作確認。複数行のソースで、先行するdefineが後続行の解決に影響することを検証。
 
 ## セットアップ
 
 ```
 npm install
-npm test                    # test/run.js を実行
-node test/pass2.test.js     # Pass2の検証
-npm run build:parser        # sign.pegjs から parser.js を生成（--format es、都度生成、コミット対象外）
+npm test                         # test/run.js を実行
+node test/pass2.test.js          # Pass2単体の検証
+node test/pass1_pass2.test.js    # Pass1+Pass2の検証
+npm run build:parser             # sign.pegjs から parser.js を生成（--format es、都度生成、コミット対象外）
 ```
 
 ## 現状（動作確認済み）
@@ -42,18 +45,26 @@ npm run build:parser        # sign.pegjs から parser.js を生成（--format e
 - Lambda/Atomカテゴリの判定（`getCategory`）とcompose/apply/apply_reverse/concatの優先度
   10.5〜10.0での総当たり縮約（`coproduct_resolver.md`§3-4）
 - List/Structの`~`必須マージルール（`coproduct_resolver.md`§5）
-- `$expr → Atom(Address)` / `@expr → 参照先の圏を継承`（`type_system.md`§2、今回のセッションで
-  修正済み）を踏まえた、`$`/`@`の意味論的な扱い
+- `$expr → Atom(Address)` / `@expr → 参照先の圏を継承`（`type_system.md`§2）を踏まえた、
+  `$`/`@`の意味論的な扱い
 - 実例：`1+2*3`の優先順位、`f : x ? x + 1`のdefine/lambdaネスト、`$[array ' 0] # 3`の
   非対称性、GetLeft、比較演算子・構造比較（`==`）
 
-## 既知の制限（次のステップの前提）
+**Pass1（最小実装）**：2/2 pass。`getCategory`が必要とする識別子環境（env）を構築する最小限の
+実装。トップレベルの各行を見て、`<id> : ... ? ...`（`?`を含む定義）なら`env[id] = 'Lambda'`、
+`<id> : ...`（`?`を含まない定義）なら`env[id] = 'Atom'`として登録する。
 
-**`getCategory`はPass1が構築する識別子環境（env）を必要とするが、Pass1（識別子解決・
-スコープ検査）自体が未実装**。そのため現状は識別子をすべて暫定的にAtom扱いしている
-（組み込み`<print>`のみLambda）。この結果、`f g x`のような、識別子の実際の型（Lambdaか
-Atomか）に依存するcoproduct解決は正しく動作しない（`apply`ではなく`construct`に縮約されて
-しまう）。**Pass2を正しく完成させるにはPass1が先に必要、という依存関係が実装を通じて判明した。**
+`test/pass1_pass2.test.js`で、`f : x ? x + 1` の後に続く `f y` が `apply[f, y]` として正しく
+解決されること、`x : 5` の後に続く `x y` は `construct[x, y]`（Atom同士の直和）に解決
+されることを実測確認済み。**Pass2が正しく機能するにはPass1が先に必要、という依存関係が
+実装を通じて実証された。**
+
+## Pass1の既知の制限
+
+- ブロック内部（`[...]`や`{...}`、インデントブロック）で定義された識別子はenvに登録されない
+  （トップレベルの行のみを走査）。
+- 本来のPass1（`compiler_pipeline.md`）が持つべきスコープ検査・`.ist`/`.st`生成等は一切実装
+  していない。あくまでPass2を動かすための最小限。
 
 ## `pass2.js`実装時に置いた仮定（仕様に明記なし、要レビュー）
 
