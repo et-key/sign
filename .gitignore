@@ -1,5 +1,6 @@
 node_modules
 GEMINI.md
+scripts
 
 # Rust build artifacts
 alpha/rust/target/
