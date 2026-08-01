@@ -1,13 +1,13 @@
 {
 	"name": "sign-alpha-js",
-	"version": "0.1.0",
-	"description": "Sign言語 lexer/parser 再実装（alpha, JavaScript版）",
+	"version": "0.2.0",
+	"description": "Sign言語 lexer/parser 再実装（alpha, JavaScript版）。documents/ja-jp/impl/syntax/grammar.pegjs（正式仕様、peggy記法）を採用。",
 	"type": "module",
 	"scripts": {
-		"build:parser": "pegjs -o parser.js sign.pegjs",
+		"build:parser": "peggy -o parser.js --format es sign.pegjs",
 		"test": "node test/run.js"
 	},
 	"dependencies": {
-		"pegjs": "^0.10.0"
+		"peggy": "^4.0.0"
 	}
 }

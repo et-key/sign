@@ -1,10 +1,8 @@
 /**
  * Sign言語 演算子テーブル (正引き・逆引き)
- * pre_alpha/semanticize/operator_table.js から移植（変更なし）
+ * documents/ja-jp/impl/syntax/operator_table.js から移植（正式仕様、変更なし）
  */
 
-// 逆引き用: 優先順位順の配列 (precedens順)
-// 配列のインデックスがそのまま優先順位 (precedence) を表します。インデックス0は未使用。
 export const OPERATOR_BY_PRECEDENCE = [
   { // 1
     '\\n': { position: 'infix', name: 'newline' },
@@ -26,12 +24,12 @@ export const OPERATOR_BY_PRECEDENCE = [
   },
   { // 6
     '|': { position: 'infix', name: 'or' },
-    '|/': { position: 'infix', name: 'div_or' },
   },
   { // 7
     '&': { position: 'infix', name: 'and' },
   },
   { // 8
+    '===': { position: 'infix', name: 'same' },
     '==': { position: 'infix', name: 'equal' },
     '!==': { position: 'infix', name: 'not_equal' },
   },
@@ -100,7 +98,7 @@ export const OPERATOR_BY_PRECEDENCE = [
     '$': { position: 'prefix', name: 'address' },
     '@': { position: 'prefix', name: 'input' },
     '!!': { position: 'prefix', name: 'bit_not' },
-    '-': { position: 'prefix', name: 'negate' }, // 仕様書に明記は無いが事実上の前置演算子
+    '-': { position: 'prefix', name: 'negate' },
     '><': { position: 'prefix', name: 'reverse' },
   },
   { // 24
@@ -116,8 +114,6 @@ export const OPERATOR_BY_PRECEDENCE = [
   }
 ];
 
-// 正引き用: 記号をキーとした辞書型 (symbol -> definitions array)
-// 逆引きの配列から動的に生成する
 export const OPERATOR_DICT = {};
 
 for (let prec = 1; prec < OPERATOR_BY_PRECEDENCE.length; prec++) {
@@ -128,7 +124,6 @@ for (let prec = 1; prec < OPERATOR_BY_PRECEDENCE.length; prec++) {
     if (!OPERATOR_DICT[symbol]) {
       OPERATOR_DICT[symbol] = [];
     }
-    // 元の構造と同等のオブジェクトを再構築して正引き辞書に追加
     OPERATOR_DICT[symbol].push({
       precedence: prec,
       symbol: symbol,
@@ -137,32 +132,23 @@ for (let prec = 1; prec < OPERATOR_BY_PRECEDENCE.length; prec++) {
   }
 }
 
-/**
- * ユーティリティ: 多義的演算子（複数の position を持つか、enclosure として機能するもの）を取得する
- */
 export function getPolysemousOperators() {
   const polysemous = new Set();
   for (const [symbol, defs] of Object.entries(OPERATOR_DICT)) {
-    if (symbol === ' ' || symbol === '\t') continue; // 空白系は除外
+    if (symbol === ' ' || symbol === '\t') continue;
     const positions = new Set(defs.map(d => d.position));
     if (positions.size > 1 || positions.has('enclosure')) {
       polysemous.add(symbol);
     }
   }
-  // 絶対値ブロック |...| の存在により、中置演算子の | も実質的に多義的な振る舞いをするため追加
   polysemous.add('|');
   return Array.from(polysemous);
 }
 
-/**
- * ユーティリティ: 純粋な中置演算子（中置機能しか持たないもの）を取得する
- */
 export function getStrictInfixOperators() {
   const strictInfix = [];
   for (const [symbol, defs] of Object.entries(OPERATOR_DICT)) {
-    // 空白は除外。また、| は絶対値ブロックと記号が被るため、自動空白挿入の対象外とする
     if (symbol === ' ' || symbol === '|') continue;
-
     const positions = new Set(defs.map(d => d.position));
     if (positions.size === 1 && positions.has('infix')) {
       strictInfix.push(symbol);
@@ -171,24 +157,11 @@ export function getStrictInfixOperators() {
   return strictInfix;
 }
 
-/**
- * ユーティリティ: Lexer用の正規表現生成器
- * strict infix のみを長い順にマッチさせる正規表現などを生成できる
- */
 export function buildLexerRegex() {
   const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-  // 多義的演算子などを除いた、確実に前後に空白を挿入してよい演算子のリスト
   const strictInfix = getStrictInfixOperators();
-  // 長い順にソート (例: !== が != や = より先にマッチするように)
   strictInfix.sort((a, b) => b.length - a.length);
-
-  // 例: (!==|!=|==|<=|>=|<<|>>|\|\||;;|&&|~\+|~-|~\*|~\/|~\^|...)
   const infixPattern = strictInfix.map(escapeRegExp).join('|');
-
-  // 今回はユーザーの `separateInfix` に合わせて、 `!!` などを保護対象に含める
-  // （ユーザーの元の正規表現を踏襲しつつ、動的に生成する）
   const regexStr = `(\`[^\`\\r\\n]*\`|\`[^\\r\\n]*|"(\\\\.|[^"\\r\\n])*"|\\\\.|!!)|(${infixPattern})`;
-
   return new RegExp(regexStr, 'g');
 }

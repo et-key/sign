@@ -1,9 +1,14 @@
 /**
  * 動作確認用テストランナー。
- * sign.pegjs を都度ビルドし、lexer.js の preprocess() を通してからパースする。
+ * sign.pegjs（正式仕様: documents/ja-jp/impl/syntax/grammar.pegjs 準拠、peggy記法）を都度ビルドし、
+ * lexer.js の preprocess() を通してからパースする。
+ * このパーサーの出力は「フラットなTerm列」であり、演算子の優先順位解決（Shunting Yard、
+ * apply/compose/concatの区別）は行わない。それは意味論フェーズ（Pass2, coproduct_resolver.md）
+ * の責務であり、Pass2はまだ未実装。
+ *
  * 実行: npm install && npm test
  */
-import peg from "pegjs";
+import peggy from "peggy";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -12,41 +17,34 @@ import { preprocess } from "../lexer.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const grammarPath = path.join(__dirname, "..", "sign.pegjs");
 const grammar = fs.readFileSync(grammarPath, "utf8");
-const parser = peg.generate(grammar);
+const parser = peggy.generate(grammar);
 
 const cases = [
-	{
-		name: "空白区切りインライン形（デフォルト無し）",
-		input: "x y ? x + y",
-	},
-	{
-		name: "インデントブロック形（デフォルト引数、function_guide.mdの例）",
-		input: "f :\n\t\tx\n\t\ty : x + 1\n\t\tz : y + 1\n\t\t~rest\n\t? x y z rest~",
-	},
-	{
-		name: "bracket形（構造的分解・[]）",
-		input: "[x ~xs] ? x",
-	},
-	{
-		name: "bracket形（括弧の等価性・()版）",
-		input: "(x ~xs) ? x",
-	},
-	{
-		name: "bracket形（括弧の等価性・{}版）",
-		input: "{x ~xs} ? x",
-	},
+	{ name: "コプロダクト（空白）によるフラットリスト化", input: "x y ? x + y", expect: ["<x>", "<y>", "?", "<x>", "+", "<y>"] },
+	{ name: "define", input: "f : x ? x + 1", expect: ["<f>", ":", "<x>", "?", "<x>", "+", "1"] },
+	{ name: "前置（密着）: @x", input: "@x", expect: ["@_", "<x>"] },
+	{ name: "後置（密着）: x@", input: "x@", expect: ["<x>", "_@"] },
+	{ name: "GetLeft: x ' y", input: "x ' y", expect: ["<x>", "'", "<y>"] },
+	{ name: "$/#の非対称性: $[array ' 0] # 3", input: "$[array ' 0] # 3", expect: ["$_", [["<array>", "'", "0"]], "#", "3"] },
 ];
 
 let passed = 0;
 for (const c of cases) {
 	const pre = preprocess(c.input);
 	try {
-		parser.parse(pre);
-		console.log(`OK   ${c.name}`);
-		passed++;
+		const ast = parser.parse(pre);
+		const got = JSON.stringify(ast[0]);
+		const want = JSON.stringify(c.expect);
+		if (got === want) {
+			console.log(`OK   ${c.name}`);
+			passed++;
+		} else {
+			console.log(`FAIL ${c.name}`);
+			console.log(`     got:  ${got}`);
+			console.log(`     want: ${want}`);
+		}
 	} catch (e) {
 		console.log(`FAIL ${c.name}`);
-		console.log(`     input:        ${JSON.stringify(c.input)}`);
 		console.log(`     preprocessed: ${JSON.stringify(pre)}`);
 		console.log(`     error:        ${e.message}`);
 	}
