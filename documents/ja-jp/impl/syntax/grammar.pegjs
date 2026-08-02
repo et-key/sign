@@ -10,7 +10,7 @@ Start = Program
 // 1つ以上の半角スペース = Sign言語におけるコプロダクト（余積）演算子
 // この「演算子としてのスペース」が Expression 層でフラットリストを生成し、
 // Shunting Yard（演算子テーブル）に渡される入力となる。
-__ = " "+ { return null; } // coproduct operator
+__ = " "+ { return null; } / &"\x02" { return null; } // coproduct operator（演算子直後に空白なしでインデントブロックが続くケースを先読みで許容（\x02自体は消費しない、Block側が消費する）
 _  = " "* { return null; } // optional (used only at line edges)
 SOL = &{ return location().start.column === 1; }
 EOL = "\r\n" / "\r" / "\n"

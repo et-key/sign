@@ -2,9 +2,12 @@
  * Pass2: coproduct_resolver.md のアルゴリズム実装。
  * Pass1相当(peggyパーサー)が返すフラットなTerm列を、二分木ASTへ縮約する。
  *
- * getCategory は第2引数に env（pass1.js の buildEnv が返す識別子→カテゴリのMap）を
- * 受け取れる。env未指定、またはenvに無い識別子は Atom にフォールバックする
- * （組み込み `<print>` のみ例外的に Lambda）。
+ * getCategory は第2引数に env（pass1.js の childEnv/buildEnv が返す、ブロック階層に
+ * 沿ってネストしたスコープ連鎖）を受け取る。env未指定、またはenv連鎖のどこにも無い
+ * 識別子は Atom にフォールバックする（組み込み `<print>` のみ例外的に Lambda）。
+ * ブロック（[...] {...} (...) やインデントブロック）を再帰的に解決する際、
+ * resolveBlock がそのブロック内の行だけを対象にした子スコープ（親=呼び出し時のenv）を
+ * 自動生成するため、外側スコープの識別子は内側のブロックから常に参照できる。
  *
  * 実装にあたって仕様書(coproduct_resolver.md)に明記がなく、以下の点は仮定を置いた（要レビュー）:
  * 1. 複数の前置/後置演算子が連続する場合（例: `!$x`）の結合順序。
@@ -16,12 +19,21 @@
  *    区別を保持しないため、AST上でも区別できていない（kindは "paren" 固定、または
  *    indent/absのみ判別）。
  *
- * 【既知の制限】ブロック内部の行（[...]や{...}の中身）はenvを引き継いで解決されるが、
- * pass1.js の buildEnv 自体はトップレベルの行しか見ていないため、ブロック内で定義された
- * 識別子はenvに登録されない。
+ * 【grammar.pegjs 既知のバグとその回避策】
+ * Expression の `.flat()` が、密着演算子グループ（本来展開されるべき配列）とBlockそのもの
+ * （展開されてはいけない配列）を区別できない。Blockが式の唯一の項なら発生しないが、他の項
+ * （`?`など）と同じExpression内に混在すると、Blockの `["INDENT_", ...中身, "_DEDENT"]` が
+ * 親のフラットリストへ展開されてしまう（例: `f : y ? \x02g y\x03` で発生）。
+ * ここでは repairLeakedBlocks() でこの「漏れたマーカー」パターンを検出し、正しい入れ子の
+ * Block配列へ復元することで当座を凌いでいる。根本修正は grammar.pegjs 側の Term/Expression の
+ * 配列ラップ規約の見直しが必要（Block内容が密着グループと同じ「単なる配列」として扱われている
+ * ことが原因。要提案・要レビュー）。
+ * 【既知の制限】ネストしたインデントブロック（インデントの中にさらにインデント）が同時に
+ * 漏れるケースは未検証。
  */
 
-import { OPERATOR_DICT } from "./operator_table.js";
+import { OPERATOR_DICT } from './operator_table.js';
+import { childEnv, envLookup } from './pass1.js';
 
 // ---- ユーティリティ ----
 
@@ -39,10 +51,10 @@ function isBareOperatorToken(x) {
   return typeof x === "string" && OPERATOR_SYMBOL_RE.test(x) && !isMarkedPrefix(x) && !isMarkedPostfix(x);
 }
 
-function toNode(x) {
+function toNode(x, env) {
   // すでにoperation/blockノードならそのまま、そうでなければAtomリーフとして包む
   if (x && typeof x === "object" && !Array.isArray(x)) return x;
-  if (Array.isArray(x)) return resolveBlock(x);
+  if (Array.isArray(x)) return resolveBlock(x, env);
   return { type: "atom", kind: classifyAtom(x), value: x };
 }
 
@@ -59,11 +71,34 @@ function classifyAtom(s) {
   return "unknown";
 }
 
+// ---- grammar.pegjs のBlock展開バグの回避策 ----
+function repairLeakedBlocks(items) {
+  const out = [];
+  let i = 0;
+  while (i < items.length) {
+    if (items[i] === `"INDENT_"`) {
+      const bodyItems = [];
+      i++;
+      while (i < items.length && items[i] !== `"_DEDENT"`) {
+        bodyItems.push(items[i]);
+        i++;
+      }
+      i++; // "_DEDENT" をスキップ
+      out.push([`"INDENT_"`, ...bodyItems, `"_DEDENT"`]);
+      continue;
+    }
+    out.push(items[i]);
+    i++;
+  }
+  return out;
+}
+
 // ---- Step1: 密着した前置/後置演算子の解決 ----
 // pre:Prefixes core:Core post:Postfixes は既に隣接した1つのTermとして
 // 平坦化されているため、"X_"が連続する塊 → core → "_X"が連続する塊、という
 // 隣接パターンを左から右へ貪欲に見つけて畳み込む。
-function resolveDensity(items) {
+function resolveDensity(rawItems, env) {
+  const items = repairLeakedBlocks(rawItems);
   const out = [];
   let i = 0;
   while (i < items.length) {
@@ -83,7 +118,7 @@ function resolveDensity(items) {
       for (const op of preOps) out.push({ type: "operation", op, name: lookup(op, "prefix")?.name, position: "prefix", partial: true });
       break;
     }
-    let core = toNode(items[i]);
+    let core = toNode(items[i], env);
     i++;
     const postOps = [];
     while (i < items.length && isMarkedPostfix(items[i])) {
@@ -112,7 +147,8 @@ function lookup(symbol, position) {
 }
 
 // ---- getCategory (coproduct_resolver.md §2) ----
-// env: Pass1が構築した識別子→カテゴリのMap（未指定ならすべてAtom扱いにフォールバック）
+// env: pass1.js が構築した識別子環境の連鎖（{bindings, parent}）。
+// 未指定ならすべてAtom扱いにフォールバック。
 function getCategory(node, env) {
   if (!node || typeof node !== "object") return "Atom";
   if (node.type === "operation") {
@@ -125,7 +161,10 @@ function getCategory(node, env) {
   }
   if (node.type === "atom") {
     if (node.kind === "identifier") {
-      if (env && env.has(node.value)) return env.get(node.value);
+      if (env) {
+        const found = envLookup(env, node.value);
+        if (found !== undefined) return found;
+      }
       // envに無い場合、組み込み関数名のみLambda扱い
       if (["<print>"].includes(node.value)) return "Lambda";
       return "Atom";
@@ -178,8 +217,8 @@ function reduceOnce(items, tier, env) {
     if (isBareOperatorToken(b)) {
       const entry = lookup(b, "infix");
       if (entry && entry.precedence === tier && i + 2 < items.length && !isBareOperatorToken(items[i + 2])) {
-        const left = toNode(a);
-        const right = toNode(items[i + 2]);
+        const left = toNode(a, env);
+        const right = toNode(items[i + 2], env);
         const node = { type: "operation", op: b, name: entry.name, position: "infix", left, right };
         items.splice(i, 3, node);
         return true;
@@ -187,8 +226,8 @@ function reduceOnce(items, tier, env) {
       continue;
     }
     if (tier === 10 && !isBareOperatorToken(a) && !isBareOperatorToken(b)) {
-      const left = toNode(a);
-      const right = toNode(b);
+      const left = toNode(a, env);
+      const right = toNode(b, env);
       const node = coproductReduce(left, right, env);
       if (node) {
         items.splice(i, 2, node);
@@ -202,7 +241,7 @@ function reduceOnce(items, tier, env) {
 function reduceAll(rawItems, env) {
   // 演算子トークン（裸の記号文字列）は reduceOnce の走査で判定する必要があるため、
   // ここでは atom/block のみを変換し、演算子文字列はそのまま残す。
-  let items = resolveDensity(rawItems).map((x) => (isBareOperatorToken(x) ? x : toNode(x)));
+  let items = resolveDensity(rawItems, env).map((x) => (isBareOperatorToken(x) ? x : toNode(x, env)));
   // tier 26(escape) から 1(export) まで、高い方から低い方へ処理
   for (let tier = 26; tier >= 1; tier--) {
     let guard = 0;
@@ -229,7 +268,9 @@ function resolveBlock(exprsArray, env) {
     kind = "abs";
     arr = arr.slice(1);
   }
-  const lines = arr.map((line) => (Array.isArray(line) ? reduceAll(line, env) : toNode(line)));
+  // このブロック内の行だけを対象にした子スコープを作る（ネストしたスコープ連鎖）
+  const inner = childEnv(arr.filter(Array.isArray), env);
+  const lines = arr.map((line) => (Array.isArray(line) ? reduceAll(line, inner) : toNode(line, inner)));
   return { type: "block", kind, lines };
 }
 
