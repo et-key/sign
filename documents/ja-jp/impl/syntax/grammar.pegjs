@@ -30,12 +30,9 @@ Line
 // 意味解決（apply/compose/concat の区別）はこの後の意味論フェーズで行う。
 Expression
   = head:Term tail:(__ @Term)* {
-      if (tail.length === 0) {
-          // 単一の要素のみの場合（すでに配列化されている密着演算子なども含む）
-          return head;
-      }
-      // flat() によって、密着結合で生成された小さな配列（例: ["@_", "x"]）を
-      // 親のリストに同じ次元で展開（フラット化）します。
+      // 【修正済み】soloかどうかに関わらず常にflat()する（Termの返り値のwrapルールと対にするため。
+      // 以前はsolo時にflat()をスキップしており、Blockが唯一の項の場合とそうでない場合とで
+      // 結果の構造が一貫しなかった）。
       return [head, ...tail].flat();
   }
 
@@ -49,8 +46,13 @@ Expression
 // Shunting Yard がフラットリスト内での役割を一意に識別できる。
 Term
   = pre:Prefixes core:Core post:Postfixes {
-      // プレフィックスもポストフィックスもない場合は、単一の要素を返す
-      if (pre.length === 0 && post.length === 0) return core;
+      // プレフィックスもポストフィックスもない場合
+      if (pre.length === 0 && post.length === 0) {
+          // 【修正済み】coreが配列（Block）の場合、Expression側の.flat()で
+          // 中身が漏れないよう1階層ラップする。（以前はcoreをそのまま返しており、
+          // Blockが他の項と同じExpression内に混在すると flat() で中身が漏れるバグがあった）。
+          return Array.isArray(core) ? [core] : core;
+      }
       
       // 密着している場合はフラットな配列として返す
       // Expression層の flat() によって全体のリストに溶け込みます
@@ -77,10 +79,14 @@ Block
   = "[" _ exprs:Expressions _ "]" { return exprs; }
   / "{" _ exprs:Expressions _ "}" { return exprs; }
   / "(" _ exprs:Expressions _ ")" { return exprs; }
-  / "|" exprs:Expressions "|" &(__ / EOL / EOF / "]" / "}" / ")" / "\x03") { return [`"ABS_"`, ...exprs]; }
+  / "|" exprs:Expressions "|" &(__ / EOL / EOF / "]" / "}" / ")" / "\x03") { return [`"ABS_"`, exprs]; }
   // Lexerが挿入した制御用ASCIIコードによるインデントブロックの切り出し
   // ※実際のLexerの実装に合わせて "\x02", "\x03" は変更してください
-  / "\x02" _ exprs:Expressions _ "\x03" { return [`"INDENT_"`, ...exprs, `"_DEDENT"`]; }
+  // 【修正済み】以前は ...exprs と展開しており、bracket系(exprsをそのまま返す)より
+  // 保護膜が1階層薄く、Expressionの.flat()で他の項と混在した際に中身が漏れる原因に
+  // なっていた。exprs を展開せず1つの要素として保持することで、bracket系と同じ
+  // 「1階層の保護」に揃える。
+  / "\x02" _ exprs:Expressions _ "\x03" { return [`"INDENT_"`, exprs, `"_DEDENT"`]; }
 
 // ブロック内で使われる複数行の式
 Expressions
