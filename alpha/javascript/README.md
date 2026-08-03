@@ -14,29 +14,45 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
 
 - `lexer.js` — 前処理（`separateInfix` + `markBlock`）。`pre_alpha/lexisize/lexer.js`から移植、動作確認済み。
 - `operator_table.js` — 演算子定義。`documents/ja-jp/impl/syntax/operator_table.js`から移植（正式仕様）。
-- `sign.pegjs` — `documents/ja-jp/impl/syntax/grammar.pegjs`そのもの（正式仕様）。**peggy記法**（`@`ラベル等）
-  を使用しているため、`pegjs`ではなく`peggy`パッケージでビルドする必要がある。
-- `pass1.js` — Pass1（最小実装）。識別子環境（env）を構築し、Pass2のgetCategoryに渡す。
+- `sign.pegjs` — `documents/ja-jp/impl/syntax/grammar.pegjs`そのもの（正式仕様、**根本バグ修正済み**）。
+  **peggy記法**（`@`ラベル等）を使用しているため、`pegjs`ではなく`peggy`パッケージでビルドする必要がある。
+- `pass1.js` — Pass1（最小実装）。ブロック階層に沿ってネストした識別子環境（env連鎖）を構築し、Pass2のgetCategoryに渡す。
 - `pass2.js` — Pass2（`coproduct_resolver.md`）の実装。フラットなTerm列を二分木ASTへ縮約する。
-- `test/run.js` — Pass1相当（パーサー）単体の動作確認。フラットなTerm列の検証。
-- `test/pass2.test.js` — Pass2単体（envなし）の動作確認。
-- `test/pass1_pass2.test.js` — Pass1＋Pass2を通した動作確認。複数行のソースで、先行するdefineが後続行の解決に影響することを検証。
+- `test/pass2.test.js` — Pass2単体（envなし）の動作確認。9/9 pass。
+- `test/nested_scope.test.js` — Pass1+Pass2を通した、ブロックスコープの連鎖の動作確認。
+- `test/multiline_block.test.js` — 複数行ブロックが1つのブロック内の複数文として正しく解決されることの確認。
 
 ## セットアップ
 
 ```
 npm install
-npm test                         # test/run.js を実行
 node test/pass2.test.js          # Pass2単体の検証
-node test/pass1_pass2.test.js    # Pass1+Pass2の検証
+node test/nested_scope.test.js   # ブロックスコープ連鎖の検証
+node test/multiline_block.test.js  # 複数行ブロックの検証
 npm run build:parser             # sign.pegjs から parser.js を生成（--format es、都度生成、コミット対象外）
 ```
 
-## 現状（動作確認済み）
+## `grammar.pegjs`の根本修正（正式仕様ファイル自体を修正済み）
 
-**Pass1相当（パーサー）**：6/6 pass。フラットなTerm列を返す（`x y ? x + y` →
-`["<x>","<y>","?","<x>","+","<y>"]`）。密着結合の前置/後置は`@_`/`_@`のようにマーカー付きの
-文字列として表現される。
+実装を進める中で、正式仕様`documents/ja-jp/impl/syntax/grammar.pegjs`自体に、**Blockが他の項と
+同じExpression内に混在すると中身が漏れる**というバグを発見した。原因は`Term`/`Expression`/`Block`の
+3箇所にまたがる「配列ラップの非対称性」で、以下の3点をセットで修正することで根本的に解消した
+（`documents/ja-jp/impl/syntax/grammar.pegjs`本体・`alpha/javascript/sign.pegjs`の両方に反映済み）。
+
+1. **`Term`**：`pre`/`post`が空でも、`core`が配列（Block）なら1階層ラップして返す
+2. **`Expression`**：soloかどうかに関わらず常に`.flat()`する（以前はsolo時にスキップしていた）
+3. **`Block`**：indent/abs系も`exprs`を`...`展開せず1要素として保持する（bracket系と対称に。
+   以前はindent/abs系だけ`...exprs`と展開しており、bracket系より保護膜が1階層薄かった）
+
+この修正により、単一行ブロックだけでなく複数行ブロックも正しく「1つのブロック内の複数文」として
+解決されるようになった（`test/multiline_block.test.js`で確認—以前は単一行ブロックがたまたま
+正しく見えていただけで、複数行ブロックは誤解釈されていた可能性がある、未検証のまま埋もれていた懸念だった）。
+
+以前このファイルにあった`repairLeakedBlocks()`という対症療法的な回避策（漏れたマーカーを
+検出して復元する）は、この根本修正により不要になり撤去済み。`resolveBlock`も新しい一貫した
+構造（bracket系: `term`がそのまま`exprs`、indent/abs系: `term[1]`が`exprs`）に合わせて書き直した。
+
+## 現状（動作確認済み）
 
 **Pass2（`coproduct_resolver.md`実装）**：9/9 pass。フラットなTerm列を二分木ASTへ縮約する。
 
@@ -62,7 +78,7 @@ npm run build:parser             # sign.pegjs から parser.js を生成（--for
 ### ブロックスコープの設計根拠（`execution_model.md`/`tco.md`との整合）
 
 - **ファイル単位スコープ vs main.sn統括**は、`execution_model.md`が既に「Signの全関数は`main.sn`の内部関数として静的展開される」と明言しているため、**main.sn統括で既に決着済み**（ファイルごとの独立した名前空間は存在しない、`` `add.sn`@~ `` はファイル読み込みではなく内部関数の静的定義）
-- **ストレージ/寿命の面はTCOによってほぼスタックポインタの挙動整理だけで説明できる**：末尾再帰は`JMP`に変換され深さO(1)に収束し、レンジ式は`LOOP`/`JNZ`に直接変換されスタックを使わない。部分適用クロージャの`alloca`も「静的サイズの単一mainアリーナ」（`tco.md`§8.2、実験的提案）に収まる。例外は**末尾位置でない再帰**だけで、ここは本物の`CALL`/`RET`で動的にスタックが伸びる（言語仕様上エラーにするはしていない、warningで議論中）
+- **ストレージ/寿命の面はTCOによってほぼスタックポインタの挙動整理だけで説明できる**：末尾再帰は`JMP`に変換され深さO(1)に収束し、レンジ式は`LOOP`/`JNZ`に直接変換されスタックを使わない。部分適用クロージャの`alloca`も「静的サイズの単一mainアリーナ」（`tco.md`§8.2、実験的提案）に収まる。例外は**末尾位置でない再帰**だけで、ここは本物の`CALL`/`RET`で動的にスタックが伸びる（言語仕様上エラーにはしていない、warningで議論中）
 - この上で残っているのは**名前解決（シャドーイングルール、可視性）**の面で、こちらはスタックポインタとは独立なコンパイル時シンボルテーブルの話であり、今回実装した`pass1.js`の連鎖envはまさにこの面を担う
 
 ### Pass1の既知の制限
@@ -82,7 +98,6 @@ npm run build:parser             # sign.pegjs から parser.js を生成（--for
 
 ## 未解決・要確認の疑問点（過去分）
 
-1. Pass1（意味解析）は未着手。デフォルト式のスコープチェック、`~rest`末尾固定の検証、識別子の
-   Lambda/Atomカテゴリ環境（`env`）の構築等が残っている。上記の通りPass2完成の前提条件。
+1. `~rest`末尾固定の検証、デフォルト式のスコープチェック（n番目・後ろからm番目等の拡張パターンマッチ含む）は将来の別issue。
 2. `LanguageServer/`は現段階ではコンパイラパイプラインを実装しない方針のため、`server.js`への
    前処理・新文法の統合は行っていない（`sign.v0.pegjs`ベースのまま）。

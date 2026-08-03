@@ -19,17 +19,13 @@
  *    区別を保持しないため、AST上でも区別できていない（kindは "paren" 固定、または
  *    indent/absのみ判別）。
  *
- * 【grammar.pegjs 既知のバグとその回避策】
- * Expression の `.flat()` が、密着演算子グループ（本来展開されるべき配列）とBlockそのもの
- * （展開されてはいけない配列）を区別できない。Blockが式の唯一の項なら発生しないが、他の項
- * （`?`など）と同じExpression内に混在すると、Blockの `["INDENT_", ...中身, "_DEDENT"]` が
- * 親のフラットリストへ展開されてしまう（例: `f : y ? \x02g y\x03` で発生）。
- * ここでは repairLeakedBlocks() でこの「漏れたマーカー」パターンを検出し、正しい入れ子の
- * Block配列へ復元することで当座を凌いでいる。根本修正は grammar.pegjs 側の Term/Expression の
- * 配列ラップ規約の見直しが必要（Block内容が密着グループと同じ「単なる配列」として扱われている
- * ことが原因。要提案・要レビュー）。
- * 【既知の制限】ネストしたインデントブロック（インデントの中にさらにインデント）が同時に
- * 漏れるケースは未検証。
+ * 【grammar.pegjs 根本修正済み】以前は Expression の `.flat()` が密着演算子グループと
+ * Blockを区別できず、Blockが他の項と混在すると中身が漏れる問題があった（Pass2側の
+ * repairLeakedBlocks()という回避策で当座を凌いでいた）。grammar.pegjs 側で以下の3点を
+ * 修正したことで根本的に解消し、Pass2側の回避策は不要になった:
+ *   - Term: coreが配列（Block）の場合、1階層ラップして返す
+ *   - Expression: soloかどうかに関わらず常にflat()する
+ *   - Block: indent/abs系もexprsを展開せず1要素として保持する（bracket系と対称に）
  */
 
 import { OPERATOR_DICT } from './operator_table.js';
@@ -71,34 +67,12 @@ function classifyAtom(s) {
   return "unknown";
 }
 
-// ---- grammar.pegjs のBlock展開バグの回避策 ----
-function repairLeakedBlocks(items) {
-  const out = [];
-  let i = 0;
-  while (i < items.length) {
-    if (items[i] === `"INDENT_"`) {
-      const bodyItems = [];
-      i++;
-      while (i < items.length && items[i] !== `"_DEDENT"`) {
-        bodyItems.push(items[i]);
-        i++;
-      }
-      i++; // "_DEDENT" をスキップ
-      out.push([`"INDENT_"`, ...bodyItems, `"_DEDENT"`]);
-      continue;
-    }
-    out.push(items[i]);
-    i++;
-  }
-  return out;
-}
-
 // ---- Step1: 密着した前置/後置演算子の解決 ----
 // pre:Prefixes core:Core post:Postfixes は既に隣接した1つのTermとして
 // 平坦化されているため、"X_"が連続する塊 → core → "_X"が連続する塊、という
 // 隣接パターンを左から右へ貪欲に見つけて畳み込む。
 function resolveDensity(rawItems, env) {
-  const items = repairLeakedBlocks(rawItems);
+  const items = rawItems;
   const out = [];
   let i = 0;
   while (i < items.length) {
@@ -257,20 +231,25 @@ function reduceAll(rawItems, env) {
 }
 
 // ---- ブロック（[...] {...} (...) インデント／絶対値）の解決 ----
-function resolveBlock(exprsArray, env) {
-  // grammarのBlockは配列を返す。INDENT/ABSは特殊マーカー文字列が先頭・末尾に入る。
+// grammar.pegjs修正後: bracket系(`[` `{` `(`)は exprs をそのまま返し、
+// indent/abs系は [MARKER, exprs, MARKER?] という「exprsを1要素として保持した」
+// 配列を返す（以前は ...exprs と展開しており、bracket系と保護膜の厚みが
+// 非対称でExpressionのflat()で漏れる原因になっていたが、修正済み）。
+function resolveBlock(term, env) {
   let kind = "paren"; // 【既知の制限】paren/brace/bracketはgrammar.pegjs側で区別されないため固定値
-  let arr = exprsArray;
-  if (arr[0] === '"INDENT_"' && arr[arr.length - 1] === '"_DEDENT"') {
+  let exprsArray;
+  if (Array.isArray(term) && term[0] === '"INDENT_"') {
     kind = "indent";
-    arr = arr.slice(1, -1);
-  } else if (arr[0] === '"ABS_"') {
+    exprsArray = term[1];
+  } else if (Array.isArray(term) && term[0] === '"ABS_"') {
     kind = "abs";
-    arr = arr.slice(1);
+    exprsArray = term[1];
+  } else {
+    exprsArray = term; // bracket系: term がそのまま exprs
   }
   // このブロック内の行だけを対象にした子スコープを作る（ネストしたスコープ連鎖）
-  const inner = childEnv(arr.filter(Array.isArray), env);
-  const lines = arr.map((line) => (Array.isArray(line) ? reduceAll(line, inner) : toNode(line, inner)));
+  const inner = childEnv(exprsArray.filter(Array.isArray), env);
+  const lines = exprsArray.map((line) => (Array.isArray(line) ? reduceAll(line, inner) : toNode(line, inner)));
   return { type: "block", kind, lines };
 }
 
