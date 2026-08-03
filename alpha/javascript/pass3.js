@@ -75,4 +75,65 @@ function inferAtomType(node, env) {
   return null;
 }
 
-export { inferAtomType };
+// ---- 仮引数のatomType自動導出（type_system.md §7.1） ----
+//
+// `f : x y ? x + y` の x/y のように、仮引数自身は `<id> : expr` という定義行を持たないため
+// pass1.js の buildEnvScope（リテラルからの静的読み取り）では atomType を解決できない。
+// §7.1 はこれを「本体の演算子使用箇所から逆算する」——`x + y` の `x` は `+` の左辺、
+// `y` は右辺なので、どちらも `+` のシグネチャ（§4: `(L(Scalar) -> R(Scalar)) -> L`）が
+// 要求する `Scalar` だと仮定できる、としている。
+//
+// 【制限】算術演算子（+ - * / % ^）による使用箇所のみを見る。HM流の単一化はせず、
+// 最初に見つかった制約を採用する（Pass 1a が前提とする「線形スキャンで完結する」という
+// 設計方針に合わせた、早い者勝ちの単純な走査）。比較演算子・`'`（get_prop）等、
+// 他の演算子からの逆算は未対応（要拡張）。
+
+const SCALAR_ARITHMETIC_OPS = ARITHMETIC_OPS;
+
+function inferParamTypesFromUsage(bodyNode, paramNames) {
+  const inferred = new Map();
+
+  function visit(node) {
+    if (!node || typeof node !== "object") return;
+
+    if (node.type === "operation" && node.position === "infix" && SCALAR_ARITHMETIC_OPS.has(node.name)) {
+      for (const side of [node.left, node.right]) {
+        if (
+          side &&
+          side.type === "atom" &&
+          side.kind === "identifier" &&
+          paramNames.has(side.value) &&
+          !inferred.has(side.value)
+        ) {
+          inferred.set(side.value, "Scalar");
+        }
+      }
+    }
+
+    if (node.left) visit(node.left);
+    if (node.right) visit(node.right);
+    if (node.operand) visit(node.operand);
+    if (node.type === "block" && Array.isArray(node.lines)) node.lines.forEach(visit);
+  }
+
+  visit(bodyNode);
+  return inferred;
+}
+
+// paramNode（resolveLambdaLineが返すlambdaノードのleft: 単一identifierノード or params[]ノード）
+// から仮引数名の一覧を取り出す。
+function paramNamesOf(paramNode) {
+  if (!paramNode) return [];
+  if (paramNode.type === "atom" && paramNode.kind === "identifier") return [paramNode.value];
+  if (paramNode.type === "params") return paramNode.entries.map((e) => e.name);
+  return [];
+}
+
+// lambdaNode（{type:"operation", name:"lambda", left: params, right: body}）から、
+// 本体の使用箇所に基づく仮引数のatomType推定結果を Map<識別子, atomType> で返す。
+function inferLambdaParamTypes(lambdaNode) {
+  const names = new Set(paramNamesOf(lambdaNode.left));
+  return inferParamTypesFromUsage(lambdaNode.right, names);
+}
+
+export { inferAtomType, inferLambdaParamTypes, inferParamTypesFromUsage };

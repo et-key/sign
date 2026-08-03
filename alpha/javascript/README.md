@@ -33,6 +33,8 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
 - `test/pass2.test.js` — Pass2単体（envなし）の動作確認。9/9 pass。
 - `test/pass3.test.js` — Pass3の型伝播（左辺優先ルール、String+算術演算子→Unit、リテラルからの
   atomType解決）の動作確認。6/6 pass。
+- `test/pass3_param_usage.test.js` — 仮引数のatomType自動導出（本体の算術演算子使用箇所からの
+  Scalar逆算、`type_system.md`§7.1）の動作確認。4/4 pass。
 - `test/nested_scope.test.js` — Pass1+Pass2を通した、ブロックスコープの連鎖の動作確認。
 - `test/multiline_block.test.js` — 複数行ブロックが1つのブロック内の複数文として正しく解決されることの確認。
 - `test/rest_param_typecheck.test.js` — 裸のrestパラメータ（`x ~xs ? ...`）への`~`なしList渡しが
@@ -168,11 +170,17 @@ Layer 2 Atom内部型（`Address`/`Float`/`String`/`List`/`Unit`等）を推論�
   文字リテラルは`String`、`__`は`Unit`とする。
 - **識別子のatomType解決**：`pass1.js`の`buildEnvScope`が`<id> : <リテラル1個>`という最も単純な
   定義行から静的に読み取ったものだけを解決できる（`test/pass3.test.js`で確認）。
+- **仮引数のatomType自動導出**（`inferLambdaParamTypes`、`type_system.md`§7.1）：仮引数自身は
+  `<id> : expr`という定義行を持たないため、本体の算術演算子（`+ - * / % ^`）使用箇所（左辺・右辺
+  どちらも）から`Scalar`と逆算する。最初に見つかった制約を採用する単純な線形スキャンで、HM流の
+  単一化は行わない（`test/pass3_param_usage.test.js`で確認）。
 
 **既知の制限**：
 
-- ラムダの仮引数のatomType（本体の使用箇所から逆算する必要がある、`type_system.md`§7.1の
-  `x`/`y`の例、いわゆる「自動導出」）は未対応。パラメータは常にatomType不明（`null`）として扱われる。
+- 仮引数のatomType逆算は算術演算子のみ対応。比較演算子・`'`（get_prop）等、他の演算子からの
+  逆算は未対応。
+- 逆算結果は`Scalar`という抽象カテゴリまでで、具体的な`Address`/`Float`の区別までは決まらない
+  （§4の`+`/`-`シグネチャ自体が`Scalar`までしか要求しないため）。
 - 比較演算子・空間演算子（余積）等、算術演算子以外は一律で左辺優先ルールにフォールバックしており、
   §4の個別の型シグネチャとの細かい整合は未検証。
 - block（List/Struct/Dictの区別、`coproduct_resolver.md`§5）は未対応。暫定的に一律`List`とする。
