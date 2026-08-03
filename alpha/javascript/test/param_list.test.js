@@ -71,7 +71,10 @@ const cases = [
 ];
 
 let passed = 0;
+let total = 0;
+
 for (const c of cases) {
+	total++;
 	const got = resolveSource(c.source);
 	const ok = JSON.stringify(got) === JSON.stringify(c.want);
 	if (ok) {
@@ -85,5 +88,53 @@ for (const c of cases) {
 	}
 }
 
-console.log(`\n${passed}/${cases.length} passed`);
-process.exit(passed === cases.length ? 0 : 1);
+// let*的な逐次スコープの強制: 前方参照・自己参照はReferenceErrorになる
+const throwCases = [
+	{
+		source: "f :\n\tx\n\ty : z + 1\n\tz : 1\n ? x y z",
+		note: "前方参照: y のデフォルト式が、まだ束縛されていない後ろの z を参照 → ReferenceError",
+	},
+	{
+		source: "f :\n\tx\n\ty : y + 1\n ? x y",
+		note: "自己参照: y のデフォルト式が自分自身の y を参照 → ReferenceError",
+	},
+];
+
+for (const c of throwCases) {
+	total++;
+	let threw = false;
+	try {
+		resolveSource(c.source);
+	} catch (e) {
+		threw = e instanceof ReferenceError;
+	}
+	if (threw) {
+		console.log(`OK   ${c.note}`);
+		passed++;
+	} else {
+		console.log(`FAIL ${c.note}`);
+		console.log(`     source: ${JSON.stringify(c.source)}`);
+		console.log(`     expected ReferenceError, got threw=${threw}`);
+	}
+}
+
+// requiredArity: デフォルト・rest以外の仮引数の数が正しく計算されること
+{
+	total++;
+	const pre = preprocess("f :\n\tx\n\ty : x + 1\n\tz : y + 1\n\t~rest\n ? x y z rest~");
+	const lines = parser.parse(pre);
+	const env = buildEnv(lines);
+	const defineNode = reduceAll(lines[0], env);
+	const requiredArity = defineNode.right.left.requiredArity;
+	const note = "requiredArity: x のみデフォルト・rest無しなので 1 になる（y,z はデフォルト、rest は rest）";
+	if (requiredArity === 1) {
+		console.log(`OK   ${note}`);
+		passed++;
+	} else {
+		console.log(`FAIL ${note}`);
+		console.log(`     got requiredArity: ${requiredArity}, want: 1`);
+	}
+}
+
+console.log(`\n${passed}/${total} passed`);
+process.exit(passed === total ? 0 : 1);

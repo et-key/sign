@@ -324,15 +324,45 @@ function buildParameterList(paramTokens, env) {
     rawEntries = splitBareParamTokens(paramTokens);
   }
 
+  const allNames = new Set(rawEntries.map((e) => e.name));
+  const boundSoFar = new Set();
   let scope = env;
   const entries = [];
   for (const raw of rawEntries) {
+    if (raw.defaultTokens) {
+      // let*的な逐次スコープの強制: デフォルト式は自分より前に束縛済みのパラメータのみ
+      // 参照できる。同一パラメータリスト内の「まだ束縛されていない」識別子
+      // （自分自身、または後ろのパラメータ）への参照は前方参照としてエラーにする
+      // （7月30日の設計スレッドが意図した「通常の未定義識別子エラーとしてPass1で弾ける」）。
+      checkNoForwardReference(raw.defaultTokens, raw.name, allNames, boundSoFar);
+    }
     // デフォルト式は「自分より前に束縛済みのパラメータ」+外側スコープのみ参照できる（let*）。
     const defaultNode = raw.defaultTokens ? reduceAll(raw.defaultTokens, scope) : null;
     entries.push({ name: raw.name, rest: raw.rest, default: defaultNode });
     scope = bindEnv([raw.name], scope); // このパラメータ自身を、次のパラメータ以降から見えるようにする
+    boundSoFar.add(raw.name);
   }
-  return { node: { type: "params", entries }, scope };
+  // デフォルトを持つ仮引数は、実際の評価（未実装）ではアリティ計算から除外される
+  // （function_guide.md「関数適用時」節）。値の評価をしなくても構造だけから機械的に
+  // 求まる部分として、実質アリティ（デフォルト・rest以外の仮引数の数）だけ先に持たせておく。
+  const requiredArity = entries.filter((e) => !e.rest && e.default === null).length;
+  return { node: { type: "params", entries, requiredArity }, scope };
+}
+
+// 同一パラメータリスト内で、まだ束縛されていない識別子（自分自身 or 後ろのパラメータ）への
+// 前方参照を検出する。tokens は defaultTokens の生トークン列（ネストした配列も再帰的に見る）。
+function checkNoForwardReference(tokens, paramName, allNames, boundSoFar) {
+  for (const t of tokens) {
+    if (Array.isArray(t)) {
+      checkNoForwardReference(t, paramName, allNames, boundSoFar);
+      continue;
+    }
+    if (isIdentifierToken(t) && allNames.has(t) && !boundSoFar.has(t)) {
+      throw new ReferenceError(
+        `パラメータ '${paramName}' のデフォルト式が、まだ束縛されていない識別子 '${t}' を参照しています（let*的な逐次スコープでは、自分より前に宣言されたパラメータのみ参照できます）`
+      );
+    }
+  }
 }
 
 function resolveLambdaLine(rawItems, qIdx, env) {
