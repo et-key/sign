@@ -63,6 +63,30 @@ const cases = [
 		want: "Unit",
 		note: "__ 単体 → Unit",
 	},
+	{
+		source: "[1, 2, 3]",
+		pick: (nodes) => nodes[0],
+		want: "Struct",
+		note: "[1, 2, 3] → Struct（カンマ＝直積、type_system.md §2の`1, 2, 3`の例）",
+	},
+	{
+		source: "[\n\tfoo : 1\n\tbar : 2\n]",
+		pick: (nodes) => nodes[0],
+		want: "Dict",
+		note: "改行区切りのkey:valの並び → Dict（list_model.md §5.3 / pattern_guide.mdのdict例）",
+	},
+	{
+		source: "[foo : 1]",
+		pick: (nodes) => nodes[0],
+		want: "Dict",
+		note: "単一のkey:valペアもDictとして扱う",
+	},
+	{
+		source: "f : y ?\x02x : 1\n2\x03",
+		pick: (nodes) => nodes[0].right.right,
+		want: "Address",
+		note: "関数本体（複数行だが全行がdefineではない: define→numberの並び）はDict化せず、最後の文(2)の型に委譲する",
+	},
 ];
 
 let passed = 0;

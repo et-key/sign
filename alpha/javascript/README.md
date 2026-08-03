@@ -20,6 +20,11 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   同様、ブラケットが未クローズの間はインデント/デデントの意味を一時的に無効化することで解消
   （`test/param_list.test.js`で確認）。
 - `operator_table.js` — 演算子定義。`documents/ja-jp/impl/syntax/operator_table.js`から移植（正式仕様）。
+  **`buildLexerRegex()`のバグを修正済み**：ダブルクォート文字列内の`(\\.|[^"\r\n])*`が捕捉
+  グループのままだったため、`lexer.js`の`separateInfix`が読むグループ番号が1つずれ、
+  演算子（`,`・`+`・`<`等）の前後への自動スペース挿入が**事実上ずっと機能していなかった**
+  （既存テストは全てソース側に手でスペースを入れていたため気づかれていなかった）。非捕捉
+  グループ`(?:...)`に変更して解消。
 - `sign.pegjs` — `documents/ja-jp/impl/syntax/grammar.pegjs`そのもの（正式仕様、**根本バグ修正済み**）。
   **peggy記法**（`@`ラベル等）を使用しているため、`pegjs`ではなく`peggy`パッケージでビルドする必要がある。
   **`identifier`規則のバグも修正済み**：`"_" [a-zA-Z0-9_]+`が`__`（Unit）にもマッチしてしまい
@@ -32,9 +37,9 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   左辺優先ルール（`typeof(L op R) = typeof(L)`）でLayer 2型を推論する。
 - `test/pass2.test.js` — Pass2単体（envなし）の動作確認。9/9 pass。
 - `test/pass3.test.js` — Pass3の型伝播（左辺優先ルール、String+算術演算子→Unit、リテラルからの
-  atomType解決）の動作確認。6/6 pass。
-- `test/pass3_param_usage.test.js` — 仮引数のatomType自動導出（本体の算術演算子使用箇所からの
-  Scalar逆算、`type_system.md`§7.1）の動作確認。4/4 pass。
+  atomType解決、List/Struct/Dictの区別）の動作確認。10/10 pass。
+- `test/pass3_param_usage.test.js` — 仮引数のatomType自動導出（本体の算術演算子・比較演算子
+  使用箇所からのScalar逆算、`type_system.md`§7.1）の動作確認。6/6 pass。
 - `test/nested_scope.test.js` — Pass1+Pass2を通した、ブロックスコープの連鎖の動作確認。
 - `test/multiline_block.test.js` — 複数行ブロックが1つのブロック内の複数文として正しく解決されることの確認。
 - `test/rest_param_typecheck.test.js` — 裸のrestパラメータ（`x ~xs ? ...`）への`~`なしList渡しが
@@ -178,6 +183,19 @@ Layer 2 Atom内部型（`Address`/`Float`/`String`/`List`/`Unit`等）を推論�
   - 比較演算子は`node.name`ではなく`node.op`（記号）で判定する：`!=`（§4対象、precedence 12）と
     `!==`（構造比較、precedence 8）は`name`が両方"not_equal"で衝突するため。`==`/`===`/`!==`は
     Scalarに限定されない構造比較（§4 NOTE）なので逆算の対象外。
+- **List/Struct/Dictの区別**（type_system.md §2、list_model.md）：
+  - スペース（余積）でAtom同士が結合された演算（`construct`/`concat`/`push`/`unshift`）は`List`。
+  - カンマ（`product`、直積）で結合された要素列は、全要素が`define`（key:val）なら`Dict`、
+    そうでなければ`Struct`（`1, 2, 3`のような多相リスト/直積構造、type_system.md §2の例）。
+  - 単一の`key:val`（`define`）1個だけの場合も`Dict`とする（例: `[foo:1]`）。
+  - 複数行のブロックで全行が`define`なら`Dict`（`list_model.md`§5.3・`pattern_guide.md`の
+    改行区切り辞書リテラルの形）。それ以外の複数行（関数本体等）は、Dict化せず「ブロックの値＝
+    最後の文の値」という通常のブロック式のセマンティクスにフォールバックする
+    （`test/pass3.test.js`で確認）。
+  - **Dict判定は改行区切りの形のみ対応**。カンマと`:`を1行に混在させる形
+    （例: `[foo:1, bar:2]`、ドキュメントに例が無い）はPass2側の演算子優先順位
+    （`:`が`,`より優先度が低いため、`,`が先に隣接トークンを誤って結合する）の都合で
+    現状うまく解決できない、既知の別課題。
 
 **既知の制限**：
 
@@ -187,7 +205,7 @@ Layer 2 Atom内部型（`Address`/`Float`/`String`/`List`/`Unit`等）を推論�
   （§4の`+`/`-`シグネチャ自体が`Scalar`までしか要求しないため）。
 - 比較演算子・空間演算子（余積）等、算術演算子以外は一律で左辺優先ルールにフォールバックしており、
   §4の個別の型シグネチャとの細かい整合は未検証。
-- block（List/Struct/Dictの区別、`coproduct_resolver.md`§5）は未対応。暫定的に一律`List`とする。
+- カンマと`:`を1行に混在させたDict/Struct（上記参照）は未対応。
 - Pass 1b（`@ref`のジェネリック具体化）・`.st`生成・実際のコード生成（Pass4）は未実装のまま。
 
 ## `pass2.js`実装時に置いた仮定（仕様に明記なし、要レビュー）

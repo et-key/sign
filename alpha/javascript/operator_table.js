@@ -162,6 +162,11 @@ export function buildLexerRegex() {
   const strictInfix = getStrictInfixOperators();
   strictInfix.sort((a, b) => b.length - a.length);
   const infixPattern = strictInfix.map(escapeRegExp).join('|');
-  const regexStr = `(\`[^\`\\r\\n]*\`|\`[^\\r\\n]*|"(\\\\.|[^"\\r\\n])*"|\\\\.|!!)|(${infixPattern})`;
+  // 【修正済み】ダブルクォート文字列の内側 `(\\.|[^"\r\n])*` が捕捉グループのままだと、
+  // 呼び出し側（lexer.jsのseparateInfix）が想定する「1番目=protect、2番目=operator」という
+  // グループ番号が1つずれてしまい、operator側が常にundefinedになる（strictInfixによる
+  // 演算子前後への自動スペース挿入が事実上一切機能しなくなる）バグがあった。
+  // 非捕捉グループ `(?:...)` に変更して解消。
+  const regexStr = `(\`[^\`\\r\\n]*\`|\`[^\\r\\n]*|"(?:\\\\.|[^"\\r\\n])*"|\\\\.|!!)|(${infixPattern})`;
   return new RegExp(regexStr, 'g');
 }

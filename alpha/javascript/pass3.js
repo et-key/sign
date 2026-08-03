@@ -15,15 +15,38 @@
  *   「`<id> : <リテラル1個>` という最も単純な定義行」から静的に読み取れた場合のみ解決できる。
  *   ラムダの仮引数（本体の使用箇所から逆算する必要がある、type_system.md §7.1 の x/y の例、
  *   Pass 1b の `@ref` ジェネリック具体化）は未対応。
- * - 比較演算子（< <= = >= > !=）・空間演算子（余積）等、算術演算子以外は一律で
- *   左辺優先ルールにフォールバックしており、§4の個別の型シグネチャとの細かい整合は未検証。
- * - block（List/Struct/Dict）の区別（coproduct_resolver.md §5）は未対応。暫定的に
- *   一律 "List" として扱う。
+ * - 比較演算子（< <= = >= > !=）等、算術演算子以外は一律で左辺優先ルールにフォールバック
+ *   しており、§4の個別の型シグネチャとの細かい整合は未検証。
+ * - Dict判定は「複数行、全行がdefine(key:val)」という形（list_model.md §5.3、
+ *   pattern_guide.mdの`dict`例が示す改行区切りの形）のみを見る。カンマと`:`を1行に
+ *   混在させる形（例: `foo:1, bar:2`、ドキュメントに例が無い）は非対応・未定義動作。
  */
 
 import { envLookup } from './pass1.js';
 
 const ARITHMETIC_OPS = new Set(["add", "sub", "mul", "div", "mod", "pow"]);
+// coproduct_resolver.md §3-4: Atom-Atom間の余積（スペース）が縮約される演算。
+// これらの結果はList（1次元配列）そのものであり、左辺の個別の型を素通しすべきではない。
+const LIST_BUILDING_OPS = new Set(["construct", "concat", "push", "unshift"]);
+
+function isDefineNode(n) {
+  return !!n && n.type === "operation" && n.name === "define";
+}
+
+// カンマ（product, 直積）で左結合に連なったチェーンを、末端の要素配列へ展開する。
+function flattenProduct(node) {
+  if (node && node.type === "operation" && node.name === "product") {
+    return [...flattenProduct(node.left), ...flattenProduct(node.right)];
+  }
+  return [node];
+}
+
+// カンマ（,）で結合された要素列のLayer 2型を判定する（type_system.md §2）。
+// 全要素が define（key:val）なら Dict、そうでなければ Struct（多相リスト/直積構造）。
+function productShape(node) {
+  const elems = flattenProduct(node);
+  return elems.length > 0 && elems.every(isDefineNode) ? "Dict" : "Struct";
+}
 
 function literalAtomTypeFromKind(node) {
   switch (node.kind) {
@@ -53,11 +76,27 @@ function inferAtomType(node, env) {
   }
 
   if (node.type === "block") {
-    // 【簡略化】List/Struct/Dictの区別は未対応、暫定的にListとする。
-    return "List";
+    if (!Array.isArray(node.lines) || node.lines.length === 0) return "List";
+    // 複数行、かつ全行がdefine(key:val) → Dict（list_model.md §5.3、pattern_guide.mdの
+    // 改行区切り辞書リテラルの形）。それ以外の複数行（関数本体等）は「ブロックの値＝
+    // 最後の文の値」という通常のブロック式のセマンティクスにフォールバックする。
+    if (node.lines.length > 1 && node.lines.every(isDefineNode)) return "Dict";
+    return inferAtomType(node.lines[node.lines.length - 1], env);
   }
 
   if (node.type === "operation") {
+    if (node.name === "product") {
+      // カンマ（直積）: 全要素がdefineならDict、そうでなければStruct（type_system.md §2）
+      return productShape(node);
+    }
+    if (node.name === "define") {
+      // 単一のkey:valペア（例: [foo:1]）自体を値として問われた場合、単一エントリのDictとする。
+      return "Dict";
+    }
+    if (LIST_BUILDING_OPS.has(node.name)) {
+      // スペース（余積）でAtom同士が結合された結果はList自体（左辺の型を素通ししない）
+      return "List";
+    }
     if (node.position === "infix" && node.left) {
       const leftType = inferAtomType(node.left, env);
       // §3.2 NOTE: String型の左辺に算術演算子が来ると型エラーで__に収束する
