@@ -12,7 +12,13 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
 
 ## 構成
 
-- `lexer.js` — 前処理（`separateInfix` + `markBlock`）。`pre_alpha/lexisize/lexer.js`から移植、動作確認済み。
+- `lexer.js` — 前処理（`separateInfix` + `markBlock`）。`pre_alpha/lexisize/lexer.js`から移植。
+  **ブラケット深さ追跡を追加**（`bracketDelta`）：`markBlock`はタブ深さの変化のみでINDENT/DEDENTを
+  挿入するためブラケットの存在を考慮しておらず、`function_guide.md`の`func_mixed`例のように
+  `[`を定義行より深くインデントして複数行で書くと、ブラケットの中に本来無いはずのインデント
+  ブロックが二重に差し込まれてパースが壊れる問題があった。他の多くの言語のオフサイドルールと
+  同様、ブラケットが未クローズの間はインデント/デデントの意味を一時的に無効化することで解消
+  （`test/param_list.test.js`で確認）。
 - `operator_table.js` — 演算子定義。`documents/ja-jp/impl/syntax/operator_table.js`から移植（正式仕様）。
 - `sign.pegjs` — `documents/ja-jp/impl/syntax/grammar.pegjs`そのもの（正式仕様、**根本バグ修正済み**）。
   **peggy記法**（`@`ラベル等）を使用しているため、`pegjs`ではなく`peggy`パッケージでビルドする必要がある。
@@ -116,6 +122,10 @@ npm run build:parser             # sign.pegjs から parser.js を生成（--for
   `test/param_list.test.js`で確認）に従う（例: `z : y + 1`が直前の`y`を正しく参照する）
 - 単一の裸パラメータ（デフォルト・rest無し、例: `f : x ? x + 1`）は既存の出力形状
   （`identifier(<x>)`単体）を保つよう後方互換を維持している
+- ブラケットを仮引数リストの定義行より深くインデントして複数行で書く形式（`func_mixed`例）は、
+  grammarのTerm規則（単独のブロックcoreは1階層ラップされる）により仮引数部が余分に入れ子に
+  なるため、`flattenParamStatements`で再帰的にラップを剥がして実際のパラメータ行の並びに
+  正規化している
 
 - let*的な逐次スコープは、後ろ（または自分自身）の未束縛パラメータへのデフォルト式からの
   参照を`ReferenceError`として拒否する（7月30日の設計スレッドが意図した「通常の未定義識別子
@@ -133,7 +143,8 @@ npm run build:parser             # sign.pegjs から parser.js を生成（--for
 - 裸形式（ブラケット・インデントブロックで囲まれていない）でのデフォルト式は現行仕様に例が
   無いため未対応（`splitBareParamTokens`はrestのみ扱う）
 - ブラケット形式とデフォルト引数を組み合わせた複数行の例（`function_guide.md`の`func_mixed`）は
-  未検証（テスト未追加）
+  `flattenParamStatements`（Termの配列ラップを再帰的に剥がす）と`lexer.js`のブラケット深さ
+  追跡により解決済み（`test/param_list.test.js`で確認）
 
 ## `pass2.js`実装時に置いた仮定（仕様に明記なし、要レビュー）
 

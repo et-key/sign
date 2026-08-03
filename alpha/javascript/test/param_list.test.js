@@ -47,9 +47,17 @@ function resolveSource(source) {
 
 const cases = [
 	{
-		source: "apply : g x ? g x",
-		want: ["define[identifier(<apply>), lambda[params[<g>, <x>], construct[identifier(<g>), identifier(<x>)]]]"],
+		// 関数名を「apply」にしなかったのは意図的: `g` は `@` を付けない限り Atom 扱いのため、
+		// 本体 `g x` は関数適用ではなく construct[g,x]（ただのタプル作成）にしかならない
+		// （type_system.md §3.5）。実際に g を x に適用する正しい書き方は次のケース（@g x）。
+		source: "pair : g x ? g x",
+		want: ["define[identifier(<pair>), lambda[params[<g>, <x>], construct[identifier(<g>), identifier(<x>)]]]"],
 		note: "裸の複数仮引数 (g x) が params[] として構造化される（以前は construct[g,x] に誤って縮約されていた）",
+	},
+	{
+		source: "apply : g x ? @g x",
+		want: ["define[identifier(<apply>), lambda[params[<g>, <x>], apply[input(identifier(<g>)), identifier(<x>)]]]"],
+		note: "@g x（前置@で明示的に呼び出す）は正しく apply[g, x] に解決される。g x（@無し）とは違う挙動になることの確認",
 	},
 	{
 		source: "f : x ~xs ? x",
@@ -67,6 +75,18 @@ const cases = [
 			"define[identifier(<f>), lambda[params[<x>, <y>:add[identifier(<x>), number(1)], <z>:add[identifier(<y>), number(1)], ~<rest>], construct[construct[construct[identifier(<x>), identifier(<y>)], identifier(<z>)], expand(identifier(<rest>))]]]",
 		],
 		note: "インデントブロック形のデフォルト引数: y:x+1 は add[x,1] として（define扱いされずに）解決され、z:y+1 は let* 的にひとつ前の y を正しく参照する",
+	},
+	{
+		source: "f :\n\t[\n\t\tx\n\t\t~y\n\t]\n ? x",
+		want: ["define[identifier(<f>), lambda[params[<x>, ~<y>], identifier(<x>)]]"],
+		note: "ブラケットを定義行より深くインデントして複数行で書いても（lexer.jsのbracketDepth対応）正しくパースされる",
+	},
+	{
+		source: "func_mixed :\n\t[\n\t\tx\n\t\ty : x + 1\n\t\t~z\n\t]\n ? x",
+		want: [
+			"define[identifier(<func_mixed>), lambda[params[<x>, <y>:add[identifier(<x>), number(1)], ~<z>], identifier(<x>)]]",
+		],
+		note: "function_guide.mdのfunc_mixed例: ブラケット形式（複数行）とデフォルト引数の組み合わせが正しく解決される",
 	},
 ];
 

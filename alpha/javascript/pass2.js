@@ -283,6 +283,29 @@ function extractParamLines(token) {
   return token; // bracket系: tokenそのものがexprs（行の配列）
 }
 
+function isTaggedBlock(x) {
+  return Array.isArray(x) && (x[0] === '"INDENT_"' || x[0] === '"ABS_"');
+}
+function isFlatTokenLine(x) {
+  return Array.isArray(x) && x.every((t) => typeof t === "string");
+}
+
+// extractParamLinesが返す「文の並び」を、1文=1識別子宣言の生トークン列（flat token line）の
+// 配列へ正規化する。grammarのTerm規則（配列coreを持つ単独の項は1階層ラップされる）により、
+// 仮引数部がインデントブロックの中に単独のブラケット（例: function_guide.mdのfunc_mixed、
+// `[`を定義行より深くインデントして書く形式）を1文として含む場合、その1文はさらに
+// 「本来のブラケットのExpressions（複数の実パラメータ行）」を1階層ラップした形で現れる。
+// 再帰的にラップを剥がして、最終的に全ての要素がflat token lineになるまで平坦化する。
+function flattenParamStatements(node) {
+  if (isFlatTokenLine(node)) return [node];
+  return node.flatMap((stmt) => {
+    if (isFlatTokenLine(stmt)) return [stmt];
+    if (isTaggedBlock(stmt)) return flattenParamStatements(stmt[1]);
+    // 文字列以外の要素を含む配列 = さらに複数文（またはラップされた1文）としてネストしている
+    return flattenParamStatements(stmt);
+  });
+}
+
 // 裸の（ブラケット／インデントで囲まれていない）仮引数トークン列を、1識別子=1エントリに分割する。
 // デフォルト式は裸形式では現行仕様に例が無いため未対応（bracket/indent形式のみ対応）。
 function splitBareParamTokens(tokens) {
@@ -318,7 +341,7 @@ function buildParameterList(paramTokens, env) {
   let rawEntries;
   if (paramTokens.length === 1 && Array.isArray(paramTokens[0])) {
     // ブラケット([x ~xs])形式、またはインデントブロック（デフォルト引数）形式
-    rawEntries = extractParamLines(paramTokens[0]).flatMap(parseParamLine);
+    rawEntries = flattenParamStatements(extractParamLines(paramTokens[0])).flatMap(parseParamLine);
   } else {
     // 裸の空白区切り形式（例: g x, x ~xs）
     rawEntries = splitBareParamTokens(paramTokens);
