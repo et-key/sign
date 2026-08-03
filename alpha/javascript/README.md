@@ -21,6 +21,8 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
 - `test/pass2.test.js` — Pass2単体（envなし）の動作確認。9/9 pass。
 - `test/nested_scope.test.js` — Pass1+Pass2を通した、ブロックスコープの連鎖の動作確認。
 - `test/multiline_block.test.js` — 複数行ブロックが1つのブロック内の複数文として正しく解決されることの確認。
+- `test/rest_param_typecheck.test.js` — 裸のrestパラメータ（`x ~xs ? ...`）への`~`なしList渡しが
+  TypeErrorになること（`coproduct_resolver.md`§5.4）の確認。
 
 ## セットアップ
 
@@ -61,6 +63,8 @@ npm run build:parser             # sign.pegjs から parser.js を生成（--for
 - Lambda/Atomカテゴリの判定（`getCategory`）とcompose/apply/apply_reverse/concatの優先度
   10.5〜10.0での総当たり縮約（`coproduct_resolver.md`§3-4）
 - List/Structの`~`必須マージルール（`coproduct_resolver.md`§5）
+- 裸のrestパラメータ（`x ~xs ? ...`）への`~`なしList渡しをTypeErrorで拒否（`coproduct_resolver.md`§5.4、
+  `test/rest_param_typecheck.test.js`で確認）。ブラケット形式（`[x ~xs] ? ...`、Eager）は対象外
 - `$expr → Atom(Address)` / `@expr → 参照先の圏を継承`（`type_system.md`§2）を踏まえた、
   `$`/`@`の意味論的な扱い
 - 実例：`1+2*3`の優先順位、`f : x ? x + 1`のdefine/lambdaネスト、`$[array ' 0] # 3`の
@@ -85,7 +89,10 @@ npm run build:parser             # sign.pegjs から parser.js を生成（--for
 
 - スコープ検査（未定義識別子の参照エラー等）は一切行っていない。
 - 同一スコープ内での再定義は後勝ちで単純に上書きする。
-- 本来のPass1（`compiler_pipeline.md`）が持つべきスコープ検査・`.ist`/`.st`生成等は一切実装していない。あくまでPass2を動かすための最小限。
+- 本来のPass1（`compiler_pipeline.md`）が持つべき`.ist`（`type_system.md`§5 Pass1a）は
+  `{ category, restParam }`という一部分のみを先取り実装済み（`restParam`は仮引数列の
+  `~xs`が裸かブラケット内かを見て`'bare'|'bracket'|null`を判定、`coproduct_resolver.md`§5.4で使用）。
+  `arity`・`atom_type`・`callsites`（Pass1b、`@ref`のジェネリック具体化）・export印（`#`/`##`/`###`）は未実装。
 
 ## `pass2.js`実装時に置いた仮定（仕様に明記なし、要レビュー）
 

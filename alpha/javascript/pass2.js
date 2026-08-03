@@ -137,7 +137,7 @@ function getCategory(node, env) {
     if (node.kind === "identifier") {
       if (env) {
         const found = envLookup(env, node.value);
-        if (found !== undefined) return found;
+        if (found !== undefined) return found.category;
       }
       // envに無い場合、組み込み関数名のみLambda扱い
       if (["<print>"].includes(node.value)) return "Lambda";
@@ -147,6 +147,22 @@ function getCategory(node, env) {
   }
   if (node.type === "block") return "Atom";
   return "Atom";
+}
+
+// identifierノードのenv上のBinding（{category, restParam}）を取得する。
+// getCategoryと違い、Lambdaのrestパラメータ形状（coproduct_resolver.md §5.4）を
+// 見るために生のBindingそのものが必要な箇所（coproductReduceのapply分岐）で使う。
+function identifierBinding(node, env) {
+  if (!env || !node || node.type !== "atom" || node.kind !== "identifier") return undefined;
+  return envLookup(env, node.value);
+}
+
+// bの「List性」を判定する。素のブロック（[1 2 3]等）か、後置~でマークされたブロックかを見て、
+// { isList, tilde } を返す（tilde=trueなら意図的な展開渡し、falseなら素の塊渡し）。
+function listShape(node) {
+  if (isListLike(node)) return { isList: true, tilde: false };
+  if (hasPostfixTilde(node) && isListLike(node.operand)) return { isList: true, tilde: true };
+  return { isList: false, tilde: false };
 }
 
 function isListLike(node) {
@@ -164,7 +180,22 @@ function mk(name, left, right) {
 function coproductReduce(a, b, env) {
   const catA = getCategory(a, env), catB = getCategory(b, env);
   if (catA === "Lambda" && catB === "Lambda") return mk("compose", a, b);
-  if (catA === "Lambda" && catB === "Atom") return mk("apply", a, b);
+  if (catA === "Lambda" && catB === "Atom") {
+    // coproduct_resolver.md §5.4: 裸のrestパラメータ（`x ~xs ? ...`）を持つLambdaに
+    // 後置~なしでListを渡すのは、意図（各要素を位置引数に分配）と乖離した挙動
+    // （list全体が単一のxに束縛されxsが空になる）になるため、TypeErrorで拒否する。
+    // ブラケット形式（`[x ~xs] ? ...`）はrestParam==='bracket'であり対象外。
+    const binding = identifierBinding(a, env);
+    if (binding && binding.restParam === "bare") {
+      const shape = listShape(b);
+      if (shape.isList && !shape.tilde) {
+        throw new TypeError(
+          `coproduct_resolver.md §5.4違反: 裸のrestパラメータ ('${a.value} ~xs' 形式) を持つ関数に、List を後置 ~ なしで渡すことはできません（意図: 各要素を位置引数に分配するなら 後置~ を付けてください）`
+        );
+      }
+    }
+    return mk("apply", a, b);
+  }
   if (catA === "Atom" && catB === "Lambda") return mk("apply_reverse", a, b);
   if (catA === "Atom" && catB === "Atom") {
     const listA = isListLike(a) || (hasPostfixTilde(a) && isListLike(a.operand));
