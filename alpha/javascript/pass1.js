@@ -82,4 +82,14 @@ function buildEnv(lines) {
   return childEnv(lines, null);
 }
 
-export { buildEnv, buildEnvScope, childEnv, envLookup };
+// 仮引数名だけを{category:'Atom', restParam:null}として登録する軽量スコープ生成。
+// buildEnvScopeと違い、`<id> : ... ? ...`という定義行の形を要求しない
+// （仮引数はそもそもそのような定義行を持たない裸の識別子のため）。
+// pass2.jsのbuildParameterList（let*的な逐次スコープ構築）から使う。
+function bindEnv(names, parent) {
+  const bindings = new Map();
+  for (const name of names) bindings.set(name, { category: "Atom", restParam: null });
+  return { bindings, parent: parent || null };
+}
+
+export { buildEnv, buildEnvScope, childEnv, envLookup, bindEnv };

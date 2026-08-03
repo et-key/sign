@@ -23,6 +23,9 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
 - `test/multiline_block.test.js` — 複数行ブロックが1つのブロック内の複数文として正しく解決されることの確認。
 - `test/rest_param_typecheck.test.js` — 裸のrestパラメータ（`x ~xs ? ...`）への`~`なしList渡しが
   TypeErrorになること（`coproduct_resolver.md`§5.4）の確認。
+- `test/param_list.test.js` — Lambda定義行の仮引数部（`params[]`）が総当たり縮約に誤って
+  素通しされず、専用処理されることの確認（裸の複数仮引数・rest・ブラケット形式・
+  インデントブロック形のデフォルト引数とlet*的な逐次スコープ）。
 
 ## セットアップ
 
@@ -93,6 +96,36 @@ npm run build:parser             # sign.pegjs から parser.js を生成（--for
   `{ category, restParam }`という一部分のみを先取り実装済み（`restParam`は仮引数列の
   `~xs`が裸かブラケット内かを見て`'bare'|'bracket'|null`を判定、`coproduct_resolver.md`§5.4で使用）。
   `arity`・`atom_type`・`callsites`（Pass1b、`@ref`のジェネリック具体化）・export印（`#`/`##`/`###`）は未実装。
+
+## Lambda仮引数部の専用処理（`params[]`ノード、デフォルト引数対応）
+
+`:`(define, precedence=1)と`?`(lambda, precedence=2)は演算子テーブル上もっとも低い優先度で
+処理されるため、仮引数部をそのまま総当たり縮約に素通しすると、`?`が実際に処理される**前**に
+仮引数部の中身が既存の汎用ルールで誤って確定してしまう問題があった
+（`g x` → `construct[g,x]`、`y : x + 1` → `define[y, add[x,1]]`——どちらも「仮引数の宣言」を
+「値の式」と誤解決していた）。
+
+`reduceAll`（pass2.js）に、行の中にトップレベルの`?`があれば仮引数部を先に切り出す分岐
+（`resolveLambdaLine` / `buildParameterList`）を追加し、以下を実装した。
+
+- 裸の複数仮引数（`g x`）・裸のrestパラメータ（`x ~xs`）・ブラケット形式（`[x ~xs]`、1行に
+  複数の裸パラメータが同居するケース含む）が、`params[]`という専用ノードとして正しく構造化される
+- インデントブロック形のデフォルト引数（`function_guide.md`の`y : x + 1`構文）が、`define`文と
+  誤解釈されずに「デフォルト式」として解決される
+- デフォルト式はlet*的な逐次スコープ（自分より前に束縛済みのパラメータ + 外側スコープのみ参照可能、
+  `test/param_list.test.js`で確認）に従う（例: `z : y + 1`が直前の`y`を正しく参照する）
+- 単一の裸パラメータ（デフォルト・rest無し、例: `f : x ? x + 1`）は既存の出力形状
+  （`identifier(<x>)`単体）を保つよう後方互換を維持している
+
+**未実装（`.ist`/`.st`）関連の既知の限界**：
+
+- デフォルト引数を持つ関数のアリティ計算からの除外・`__`渡し時のデフォルト値フォールバック
+  （`function_guide.md`「関数適用時」節の意味論）は、`params[]`ノードを構築するところまでで、
+  実際の適用（apply）時の意味論としてはまだ実装していない
+- 裸形式（ブラケット・インデントブロックで囲まれていない）でのデフォルト式は現行仕様に例が
+  無いため未対応（`splitBareParamTokens`はrestのみ扱う）
+- ブラケット形式とデフォルト引数を組み合わせた複数行の例（`function_guide.md`の`func_mixed`）は
+  未検証（テスト未追加）
 
 ## `pass2.js`実装時に置いた仮定（仕様に明記なし、要レビュー）
 

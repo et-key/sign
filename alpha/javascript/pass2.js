@@ -29,7 +29,7 @@
  */
 
 import { OPERATOR_DICT } from './operator_table.js';
-import { childEnv, envLookup } from './pass1.js';
+import { childEnv, envLookup, bindEnv } from './pass1.js';
 
 // ---- ユーティリティ ----
 
@@ -243,7 +243,125 @@ function reduceOnce(items, tier, env) {
   return false;
 }
 
+// ---- Lambda定義行（トップレベルに `?` を持つ行）の専用処理 ----
+//
+// `:`(define, precedence=1)と`?`(lambda, precedence=2)は演算子テーブル上もっとも低い
+// 優先度で、reduceAllは26→1の順で処理するため、この2つは総当たり縮約の最後の最後に
+// しか処理されない。一方スペース(余積)はtier=10で固定的に先に処理される。
+// そのため、仮引数部をそのまま総当たり縮約に素通しすると、`?`が実際に処理される
+// 「前」に、仮引数部の中身が既存の汎用ルールで誤って確定してしまう
+// （例: `g x` → construct[g,x]、`y : x + 1` → define[y, add[x,1]]、
+//   どちらも「仮引数の宣言」であって「値の式」ではないのに、区別なく解決されてしまう）。
+// これを避けるため、行の中にトップレベルの `?` があれば、総当たり縮約に渡す前に
+// 仮引数部を切り出し、buildParameterList で専用に処理する。
+
+function isIdentifierToken(x) {
+  return typeof x === "string" && x.startsWith("<") && x.endsWith(">");
+}
+
+// ブラケット／インデントブロックの仮引数部の「1行」を解析する。1行が常に1エントリとは
+// 限らない——`[x ~xs]`のように、デフォルトを持たない複数の裸パラメータが1行に同居する
+// ケースがあるため、配列（複数エントリ）を返す。
+//   ["<y>", ":", "<x>", "+", "1"] → [{ name: "<y>", rest: false, defaultTokens: ["<x>","+","1"] }]
+//   ["<x>"]                       → [{ name: "<x>", rest: false, defaultTokens: null }]
+//   ["<x>", "~_", "<xs>"]         → [{name:"<x>",...}, { name: "<xs>", rest: true, defaultTokens: null }]
+function parseParamLine(tokens) {
+  const colonIdx = tokens.indexOf(":");
+  if (colonIdx !== -1) {
+    // "name : defaultExpr..." という1エントリ（rest付きデフォルトは現行仕様に例が無く未対応）
+    return [{ name: tokens[0], rest: false, defaultTokens: tokens.slice(colonIdx + 1) }];
+  }
+  // ":" が無ければ、裸の複数パラメータが1行に並んでいる可能性がある（例: "x ~xs"）
+  return splitBareParamTokens(tokens);
+}
+
+// ブラケット（[x ~xs]等）／インデントブロック（デフォルト引数）の仮引数部から、
+// 「1行=1エントリ」の行配列を取り出す。resolveBlockのkind判定と対称。
+function extractParamLines(token) {
+  if (Array.isArray(token) && token[0] === '"INDENT_"') return token[1];
+  if (Array.isArray(token) && token[0] === '"ABS_"') return token[1];
+  return token; // bracket系: tokenそのものがexprs（行の配列）
+}
+
+// 裸の（ブラケット／インデントで囲まれていない）仮引数トークン列を、1識別子=1エントリに分割する。
+// デフォルト式は裸形式では現行仕様に例が無いため未対応（bracket/indent形式のみ対応）。
+function splitBareParamTokens(tokens) {
+  const entries = [];
+  let i = 0;
+  while (i < tokens.length) {
+    if (tokens[i] === "~_") {
+      entries.push({ name: tokens[i + 1], rest: true, defaultTokens: null });
+      i += 2;
+    } else {
+      entries.push({ name: tokens[i], rest: false, defaultTokens: null });
+      i += 1;
+    }
+  }
+  return entries;
+}
+
+// 仮引数部の生トークン列を解析し、{ node, scope } を返す。
+// scope は let* 的な逐次束縛（自分より前のパラメータ + 外側スコープのみ参照可能）を
+// 反映した子スコープで、後続のデフォルト式・関数本体の両方から使われる。
+function buildParameterList(paramTokens, env) {
+  // 単一の裸パラメータ（デフォルト・rest無し）は既存挙動をそのまま保つ
+  // （identifierノード1つを返す。9/9テスト等、既存の出力形状との後方互換のため）。
+  if (paramTokens.length === 1 && isIdentifierToken(paramTokens[0])) {
+    const name = paramTokens[0];
+    const scope = bindEnv([name], env);
+    return { node: toNode(name, scope), scope };
+  }
+  if (paramTokens.length === 0) {
+    return { node: null, scope: env };
+  }
+
+  let rawEntries;
+  if (paramTokens.length === 1 && Array.isArray(paramTokens[0])) {
+    // ブラケット([x ~xs])形式、またはインデントブロック（デフォルト引数）形式
+    rawEntries = extractParamLines(paramTokens[0]).flatMap(parseParamLine);
+  } else {
+    // 裸の空白区切り形式（例: g x, x ~xs）
+    rawEntries = splitBareParamTokens(paramTokens);
+  }
+
+  let scope = env;
+  const entries = [];
+  for (const raw of rawEntries) {
+    // デフォルト式は「自分より前に束縛済みのパラメータ」+外側スコープのみ参照できる（let*）。
+    const defaultNode = raw.defaultTokens ? reduceAll(raw.defaultTokens, scope) : null;
+    entries.push({ name: raw.name, rest: raw.rest, default: defaultNode });
+    scope = bindEnv([raw.name], scope); // このパラメータ自身を、次のパラメータ以降から見えるようにする
+  }
+  return { node: { type: "params", entries }, scope };
+}
+
+function resolveLambdaLine(rawItems, qIdx, env) {
+  let nameToken = null;
+  let paramsStart = 0;
+  if (isIdentifierToken(rawItems[0]) && rawItems[1] === ":") {
+    nameToken = rawItems[0];
+    paramsStart = 2;
+  }
+  const paramTokens = rawItems.slice(paramsStart, qIdx);
+  const bodyTokens = rawItems.slice(qIdx + 1);
+
+  const { node: paramNode, scope } = buildParameterList(paramTokens, env);
+  const bodyNode = reduceAll(bodyTokens, scope);
+  const lambdaNode = { type: "operation", op: "?", name: "lambda", position: "infix", left: paramNode, right: bodyNode };
+
+  if (nameToken) {
+    return { type: "operation", op: ":", name: "define", position: "infix", left: toNode(nameToken, env), right: lambdaNode };
+  }
+  return lambdaNode;
+}
+
 function reduceAll(rawItems, env) {
+  // ラムダ定義行（トップレベルに `?` を持つ行）は、仮引数部が総当たり縮約に誤って
+  // 素通しされないよう、先に専用ロジックへ分岐する（上記コメント参照）。
+  const qIdx = rawItems.indexOf("?");
+  if (qIdx !== -1) {
+    return resolveLambdaLine(rawItems, qIdx, env);
+  }
   // 演算子トークン（裸の記号文字列）は reduceOnce の走査で判定する必要があるため、
   // ここでは atom/block のみを変換し、演算子文字列はそのまま残す。
   let items = resolveDensity(rawItems, env).map((x) => (isBareOperatorToken(x) ? x : toNode(x, env)));
