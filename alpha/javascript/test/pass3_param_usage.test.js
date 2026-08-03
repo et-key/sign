@@ -52,6 +52,16 @@ const cases = [
 		want: {},
 		note: "算術演算子で使われていないパラメータは推定されない（空のMap）",
 	},
+	{
+		source: "f : x y ? x < y",
+		want: { "<x>": "Scalar", "<y>": "Scalar" },
+		note: "比較演算子 (<) の左辺・右辺からもScalarと逆算される（type_system.md §4）",
+	},
+	{
+		source: "f : x y ? x !== y",
+		want: {},
+		note: "!==（構造比較、==/===/!==はScalarに限定されない）からは逆算しない。!=との名前衝突を symbol(op) で区別",
+	},
 ];
 
 let passed = 0;

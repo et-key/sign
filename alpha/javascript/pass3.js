@@ -83,12 +83,18 @@ function inferAtomType(node, env) {
 // `y` は右辺なので、どちらも `+` のシグネチャ（§4: `(L(Scalar) -> R(Scalar)) -> L`）が
 // 要求する `Scalar` だと仮定できる、としている。
 //
-// 【制限】算術演算子（+ - * / % ^）による使用箇所のみを見る。HM流の単一化はせず、
-// 最初に見つかった制約を採用する（Pass 1a が前提とする「線形スキャンで完結する」という
-// 設計方針に合わせた、早い者勝ちの単純な走査）。比較演算子・`'`（get_prop）等、
-// 他の演算子からの逆算は未対応（要拡張）。
+// 【制限】算術演算子（+ - * / % ^）・比較演算子（< <= = >= > !=、§4）による使用箇所のみを
+// 見る。HM流の単一化はせず、最初に見つかった制約を採用する（Pass 1a が前提とする
+// 「線形スキャンで完結する」という設計方針に合わせた、早い者勝ちの単純な走査）。
+// `'`（get_prop）等、他の演算子からの逆算は未対応（要拡張）。
+//
+// 比較演算子は symbol（node.op）で判定する。`!=`（§4の比較演算子、precedence 12）と
+// `!==`（構造比較、precedence 8、`node.name`は共に"not_equal"）は名前が衝突するため、
+// nameではなくopで区別する必要がある。`==`/`===`/`!==`はScalarに限定されない
+// 構造比較（type_system.md §4 NOTE: 「リストや構造体の比較には==を使用」）なので対象外。
 
 const SCALAR_ARITHMETIC_OPS = ARITHMETIC_OPS;
+const SCALAR_COMPARISON_OP_SYMBOLS = new Set(["<", "<=", "=", ">=", ">", "!="]);
 
 function inferParamTypesFromUsage(bodyNode, paramNames) {
   const inferred = new Map();
@@ -96,7 +102,12 @@ function inferParamTypesFromUsage(bodyNode, paramNames) {
   function visit(node) {
     if (!node || typeof node !== "object") return;
 
-    if (node.type === "operation" && node.position === "infix" && SCALAR_ARITHMETIC_OPS.has(node.name)) {
+    const isScalarOp =
+      node.type === "operation" &&
+      node.position === "infix" &&
+      (SCALAR_ARITHMETIC_OPS.has(node.name) || SCALAR_COMPARISON_OP_SYMBOLS.has(node.op));
+
+    if (isScalarOp) {
       for (const side of [node.left, node.right]) {
         if (
           side &&
