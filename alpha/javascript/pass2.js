@@ -415,6 +415,15 @@ function reduceAll(rawItems, env) {
   if (qIdx !== -1) {
     return resolveLambdaLine(rawItems, qIdx, env);
   }
+
+  // 【意図的に対応しない】カンマと`:`を1行に混在させる形（例: `foo : 1, bar : 2`）は、
+  // `:`(precedence=1)が`,`(precedence=8)より優先度が低いことに起因して総当たり縮約が
+  // 誤って隣接トークンを結合してしまう。一時期トップレベルの","を先に分割する回避策を
+  // 入れたが、この書き方自体がlist_model.md/pattern_guide.mdの辞書リテラル例（すべて
+  // 改行区切り）のどこにも登場しない、こちらで作った未定義入力への対症療法だったため
+  // 撤去した。「一つのことを表現する方法は一つ」という方針により、辞書は改行区切りの
+  // 形だけをサポートする（`pass3.js`のinferAtomTypeも改行区切りの形のみ判定）。
+
   // 演算子トークン（裸の記号文字列）は reduceOnce の走査で判定する必要があるため、
   // ここでは atom/block のみを変換し、演算子文字列はそのまま残す。
   let items = resolveDensity(rawItems, env).map((x) => (isBareOperatorToken(x) ? x : toNode(x, env)));
