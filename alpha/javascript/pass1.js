@@ -48,6 +48,22 @@ function detectRestParamShape(paramTokens) {
   return null;
 }
 
+// リテラル1個だけの生トークンから、Layer 2 Atom内部型（type_system.md §2）を判定する。
+// pass2.js の classifyAtom と同じ判定基準（循環import回避のためここで別途最小実装）。
+// 小数点の有無で Address/Float を区別する（§2「リテラルのlayer制約」）。
+function literalAtomType(token) {
+  if (typeof token !== "string") return null;
+  if (token === "__" || token === "\x00") return "Unit";
+  if (token.startsWith("`")) return "String";
+  if (token.startsWith("\\")) return "String"; // 文字リテラルはStringと同型
+  if (/^0x[0-9a-fA-F]+$/.test(token)) return "Address";
+  if (/^(0r[0-9a-fA-F]+|0b[01]+)$/.test(token)) return "Address";
+  if (/^0u[0-9a-fA-F]+$/.test(token)) return "Address";
+  if (/^-?[0-9]+\.[0-9]*$/.test(token)) return "Float"; // 小数点あり
+  if (/^-?[0-9]+$/.test(token)) return "Address"; // 小数点なし整数
+  return null;
+}
+
 function buildEnvScope(lines) {
   const bindings = new Map();
   for (const line of lines) {
@@ -59,7 +75,11 @@ function buildEnvScope(lines) {
     const qIdx = line.indexOf("?", defineIdx + 1);
     const hasLambda = qIdx !== -1;
     const restParam = hasLambda ? detectRestParamShape(line.slice(defineIdx + 1, qIdx)) : null;
-    bindings.set(first, { category: hasLambda ? "Lambda" : "Atom", restParam });
+    // atomType: `<id> : <リテラル1個>` という最も単純な形のみ、Pass1aで静的に読み取る。
+    // 仮引数（本体の使用箇所から逆算が必要、type_system.md §7.1）は未対応・既知の制限。
+    const rhs = line.slice(defineIdx + 1);
+    const atomType = !hasLambda && rhs.length === 1 ? literalAtomType(rhs[0]) : null;
+    bindings.set(first, { category: hasLambda ? "Lambda" : "Atom", restParam, atomType });
   }
   return bindings;
 }
@@ -88,8 +108,8 @@ function buildEnv(lines) {
 // pass2.jsのbuildParameterList（let*的な逐次スコープ構築）から使う。
 function bindEnv(names, parent) {
   const bindings = new Map();
-  for (const name of names) bindings.set(name, { category: "Atom", restParam: null });
+  for (const name of names) bindings.set(name, { category: "Atom", restParam: null, atomType: null });
   return { bindings, parent: parent || null };
 }
 
-export { buildEnv, buildEnvScope, childEnv, envLookup, bindEnv };
+export { buildEnv, buildEnvScope, childEnv, envLookup, bindEnv, literalAtomType };

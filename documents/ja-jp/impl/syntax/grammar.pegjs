@@ -104,7 +104,9 @@ number = $("-"? [0-9]+ "."? [0-9]*)
 address = $("0x" Hex+)
 register = $("0r" Hex+) / $("0b" ("0" / "1")+)
 unicode = $("0u" Hex+)
-identifier = id:( $([a-zA-Z][a-zA-Z0-9_]*) / $("_" [a-zA-Z0-9_]+) ) {return `<${id}>`}
+// "__"（Unit）だけは識別子ではなくunitへ回す（&{}述語で除外し、Atomの次の選択肢へフォールスルー）。
+// これが無いと "_" [a-zA-Z0-9_]+ が "__" にもマッチしてしまい、unitに一生到達しなくなる。
+identifier = id:( $([a-zA-Z][a-zA-Z0-9_]*) / $("_" [a-zA-Z0-9_]+) ) &{ return id !== "__"; } {return `<${id}>`}
 Hex = [0-9a-fA-F]
 unit = "__" / "\x00"
 hole = "_"

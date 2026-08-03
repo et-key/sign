@@ -22,9 +22,17 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
 - `operator_table.js` — 演算子定義。`documents/ja-jp/impl/syntax/operator_table.js`から移植（正式仕様）。
 - `sign.pegjs` — `documents/ja-jp/impl/syntax/grammar.pegjs`そのもの（正式仕様、**根本バグ修正済み**）。
   **peggy記法**（`@`ラベル等）を使用しているため、`pegjs`ではなく`peggy`パッケージでビルドする必要がある。
+  **`identifier`規則のバグも修正済み**：`"_" [a-zA-Z0-9_]+`が`__`（Unit）にもマッチしてしまい
+  `unit`規則へ一生到達しなかった問題を、`&{ id !== "__" }`述語で除外して解消
+  （`documents/ja-jp/impl/syntax/grammar.pegjs`本体にも同時反映済み）。
 - `pass1.js` — Pass1（最小実装）。ブロック階層に沿ってネストした識別子環境（env連鎖）を構築し、Pass2のgetCategoryに渡す。
+  `<id> : <リテラル1個>`という単純な定義行からLayer 2 Atom内部型（`atomType`）も静的に読み取る。
 - `pass2.js` — Pass2（`coproduct_resolver.md`）の実装。フラットなTerm列を二分木ASTへ縮約する。
+- `pass3.js` — Pass3（`type_system.md`§2〜§3.2の型伝播）の実装。Pass2が返す二分木ASTを歩いて
+  左辺優先ルール（`typeof(L op R) = typeof(L)`）でLayer 2型を推論する。
 - `test/pass2.test.js` — Pass2単体（envなし）の動作確認。9/9 pass。
+- `test/pass3.test.js` — Pass3の型伝播（左辺優先ルール、String+算術演算子→Unit、リテラルからの
+  atomType解決）の動作確認。6/6 pass。
 - `test/nested_scope.test.js` — Pass1+Pass2を通した、ブロックスコープの連鎖の動作確認。
 - `test/multiline_block.test.js` — 複数行ブロックが1つのブロック内の複数文として正しく解決されることの確認。
 - `test/rest_param_typecheck.test.js` — 裸のrestパラメータ（`x ~xs ? ...`）への`~`なしList渡しが
@@ -145,6 +153,30 @@ npm run build:parser             # sign.pegjs から parser.js を生成（--for
 - ブラケット形式とデフォルト引数を組み合わせた複数行の例（`function_guide.md`の`func_mixed`）は
   `flattenParamStatements`（Termの配列ラップを再帰的に剥がす）と`lexer.js`のブラケット深さ
   追跡により解決済み（`test/param_list.test.js`で確認）
+
+## Pass3: 型伝播（`type_system.md`§2〜§3.2）
+
+`pass3.js`が`inferAtomType(node, env)`を実装する。Pass2が返す二分木ASTのノードを受け取り、
+Layer 2 Atom内部型（`Address`/`Float`/`String`/`List`/`Unit`等）を推論する。
+
+- **左辺優先ルール**（§3.2）：`typeof(L op R) = typeof(L)`。中置演算ノードは左辺の型を
+  再帰的に推論してそのまま結果とする。
+- **`String`+算術演算子の例外**（§3.2 NOTE）：左辺が`String`のとき算術演算子（`+ - * / % ^`）が
+  来ると、リストに対して算術は効かないため型エラーとして`Unit`に収束する
+  （例: `` `123` + 0 → Unit``）。
+- **リテラルからのatomType解決**：数値リテラルは小数点の有無で`Address`/`Float`を判定、文字列・
+  文字リテラルは`String`、`__`は`Unit`とする。
+- **識別子のatomType解決**：`pass1.js`の`buildEnvScope`が`<id> : <リテラル1個>`という最も単純な
+  定義行から静的に読み取ったものだけを解決できる（`test/pass3.test.js`で確認）。
+
+**既知の制限**：
+
+- ラムダの仮引数のatomType（本体の使用箇所から逆算する必要がある、`type_system.md`§7.1の
+  `x`/`y`の例、いわゆる「自動導出」）は未対応。パラメータは常にatomType不明（`null`）として扱われる。
+- 比較演算子・空間演算子（余積）等、算術演算子以外は一律で左辺優先ルールにフォールバックしており、
+  §4の個別の型シグネチャとの細かい整合は未検証。
+- block（List/Struct/Dictの区別、`coproduct_resolver.md`§5）は未対応。暫定的に一律`List`とする。
+- Pass 1b（`@ref`のジェネリック具体化）・`.st`生成・実際のコード生成（Pass4）は未実装のまま。
 
 ## `pass2.js`実装時に置いた仮定（仕様に明記なし、要レビュー）
 
