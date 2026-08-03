@@ -116,7 +116,16 @@ export const OPERATOR_BY_PRECEDENCE = [
 
 export const OPERATOR_DICT = {};
 
-for (let prec = 1; prec < OPERATOR_BY_PRECEDENCE.length; prec++) {
+// 【修正済み】以前は `prec = 1` から始めていたため、配列index 0（コメント上の優先順位"1"：
+// 改行・前置export `#`/`##`/`###`）が一生 OPERATOR_DICT に登録されなかった。しかも
+// `precedence: prec` は配列indexをそのまま使っていたため、他の全演算子もコメントの
+// 優先順位表記より1つ小さい値で格納されていた（例: `:`はコメント"2"だが precedence=1
+// として格納）。tier間の相対順序（どれがどれより先に処理されるか）はズレが一律だった
+// ため偶然壊れずに動いていたが、pass2.js の reduceOnce が余積（スペース）を判定する
+// ハードコードされた `tier === 10`（コメント通りの優先順位10を前提にしている）が、
+// このバグにより実際にはコメント優先順位"11"のレンジ演算子（`~+`等）の格納値と衝突していた。
+// `prec`を配列indexそのまま(0始まり)にし、`precedence: prec + 1`でコメント表記と一致させて解消。
+for (let prec = 0; prec < OPERATOR_BY_PRECEDENCE.length; prec++) {
   const opsAtPrec = OPERATOR_BY_PRECEDENCE[prec];
   if (!opsAtPrec) continue;
 
@@ -125,7 +134,7 @@ for (let prec = 1; prec < OPERATOR_BY_PRECEDENCE.length; prec++) {
       OPERATOR_DICT[symbol] = [];
     }
     OPERATOR_DICT[symbol].push({
-      precedence: prec,
+      precedence: prec + 1,
       symbol: symbol,
       ...opsAtPrec[symbol]
     });

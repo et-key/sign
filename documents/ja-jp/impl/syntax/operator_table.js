@@ -120,7 +120,12 @@ export const OPERATOR_BY_PRECEDENCE = [
 // 逆引きの配列から動的に生成する
 export const OPERATOR_DICT = {};
 
-for (let prec = 1; prec < OPERATOR_BY_PRECEDENCE.length; prec++) {
+// 【修正済み】以前は `prec = 1` から始めていたため、配列index 0（コメント上の優先順位"1"：
+// 改行・前置export `#`/`##`/`###`）が一生 OPERATOR_DICT に登録されなかった。しかも
+// `precedence: prec` は配列indexをそのまま使っていたため、他の全演算子もコメントの
+// 優先順位表記より1つ小さい値で格納されていた。`prec`を配列indexそのまま(0始まり)にし、
+// `precedence: prec + 1`でコメント表記と一致させて解消。
+for (let prec = 0; prec < OPERATOR_BY_PRECEDENCE.length; prec++) {
   const opsAtPrec = OPERATOR_BY_PRECEDENCE[prec];
   if (!opsAtPrec) continue;
 
@@ -130,7 +135,7 @@ for (let prec = 1; prec < OPERATOR_BY_PRECEDENCE.length; prec++) {
     }
     // 元の構造と同等のオブジェクトを再構築して正引き辞書に追加
     OPERATOR_DICT[symbol].push({
-      precedence: prec,
+      precedence: prec + 1,
       symbol: symbol,
       ...opsAtPrec[symbol]
     });

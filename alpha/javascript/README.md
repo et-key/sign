@@ -25,6 +25,14 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   演算子（`,`・`+`・`<`等）の前後への自動スペース挿入が**事実上ずっと機能していなかった**
   （既存テストは全てソース側に手でスペースを入れていたため気づかれていなかった）。非捕捉
   グループ`(?:...)`に変更して解消。
+  **`OPERATOR_DICT`構築ループのオフバイワンも修正済み**：`for (let prec = 1; ...)`が配列
+  index 0（コメント上の優先順位"1"：改行・前置export`#`/`##`/`###`）を一生読み飛ばしていた
+  ため、これらが`OPERATOR_DICT`に一切登録されず、かつ他の全演算子もコメント表記より
+  1つ小さい優先順位で格納されていた（相対順序は一律ズレのため偶然壊れなかったが、
+  `pass2.js`の`reduceOnce`がハードコードする`tier === 10`（余積/スペース）が、本来は
+  コメント優先順位"11"のレンジ演算子`~+`等と衝突していた）。`prec = 0`から開始し
+  `precedence: prec + 1`でコメント表記と一致させて解消（`documents/ja-jp/impl/syntax/
+  operator_table.js`本体にも同時反映済み）。
 - `sign.pegjs` — `documents/ja-jp/impl/syntax/grammar.pegjs`そのもの（正式仕様、**根本バグ修正済み**）。
   **peggy記法**（`@`ラベル等）を使用しているため、`pegjs`ではなく`peggy`パッケージでビルドする必要がある。
   **`identifier`規則のバグも修正済み**：`"_" [a-zA-Z0-9_]+`が`__`（Unit）にもマッチしてしまい
@@ -32,6 +40,7 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   （`documents/ja-jp/impl/syntax/grammar.pegjs`本体にも同時反映済み）。
 - `pass1.js` — Pass1（最小実装）。ブロック階層に沿ってネストした識別子環境（env連鎖）を構築し、Pass2のgetCategoryに渡す。
   `<id> : <リテラル1個>`という単純な定義行からLayer 2 Atom内部型（`atomType`）も静的に読み取る。
+  前置export記号（`#`/`##`/`###`）も検出し、Bindingの`exported`フィールドに記録する。
 - `pass2.js` — Pass2（`coproduct_resolver.md`）の実装。フラットなTerm列を二分木ASTへ縮約する。
 - `pass3.js` — Pass3（`type_system.md`§2〜§3.2の型伝播）の実装。Pass2が返す二分木ASTを歩いて
   左辺優先ルール（`typeof(L op R) = typeof(L)`）でLayer 2型を推論する。
@@ -43,8 +52,8 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   atomType解決、List/Struct/Dictの区別）の動作確認。10/10 pass。
 - `test/pass3_param_usage.test.js` — 仮引数のatomType自動導出（本体の算術演算子・比較演算子
   使用箇所からのScalar逆算、`type_system.md`§7.1）の動作確認。6/6 pass。
-- `test/pass1b.test.js` — Pass1b（`@ref`ジェネリック仮引数の検出と呼び出しサイト収集）の
-  動作確認。3/3 pass。
+- `test/pass1b.test.js` — Pass1b（`@ref`ジェネリック仮引数の検出、呼び出しサイト収集、
+  exportされたジェネリック関数に呼び出しサイトが無い場合のコンパイルエラー）の動作確認。4/4 pass。
 - `test/nested_scope.test.js` — Pass1+Pass2を通した、ブロックスコープの連鎖の動作確認。
 - `test/multiline_block.test.js` — 複数行ブロックが1つのブロック内の複数文として正しく解決されることの確認。
 - `test/rest_param_typecheck.test.js` — 裸のrestパラメータ（`x ~xs ? ...`）への`~`なしList渡しが
@@ -224,18 +233,23 @@ Layer 2 Atom内部型（`Address`/`Float`/`String`/`List`/`Unit`等）を推論�
   `apply[fnName, arg]`という形の呼び出しを全て集める。
 - **具体化**：集めた呼び出しサイトの実引数を`pass2.js`の`getCategory`でカテゴリ分けし、
   観測されたカテゴリの集合を返す（`test/pass1b.test.js`で確認）。
+- **exportされたジェネリック関数に呼び出しサイトが無い場合はコンパイルエラー**（§5、
+  `compiler_pipeline.md`§6.3）：`defineNode.exported`（前置export記号、`pass1.js`/`pass2.js`
+  が検出）が真かつ呼び出しサイトが0件なら`TypeError`を投げる。exportされていなければ
+  デッドコードとして単純に discard（空の結果を返すのみ、エラーにしない）。
 
 **現状の実装範囲・既知の制限**：
 
 - 呼び出しサイトの収集は、`compiler_pipeline.md`§6が定義する「debugビルドで`test`フォルダを
   実行して得るトレース」ではなく、**`src`（プログラム全体の解決済みAST）に対する静的走査のみ**
   で行う（テストフォルダを実行するインタプリタ自体がまだ存在しないため）。
-- export印（`#`/`##`/`###`）の判定は未実装のため、「exportされているのに呼び出しサイトが
-  無い場合はコンパイルエラー」（§5、`compiler_pipeline.md`§6.3）は未実装——呼び出しサイトが
-  見つからなければ空の結果を返すのみ。
 - 引数が複数あるLambdaへの呼び出しサイトのうち、ジェネリック仮引数以外の位置の対応付けは
   未対応（単一引数の関数を想定した簡易実装）。
 - 相互再帰するジェネリック関数同士の具体化（§5「本節は将来の検討事項」）は未対応。
+- 非Lambdaの単純なexport定義（例: `#add : [+]`）は、`?`が無いため汎用の縮約経路を通り、
+  export記号が`define`ノードの`exported`フィールドではなく、`left`側の前置演算ノード
+  （`export_internal(...)`等）として現れる（Lambda定義のexportとAST形状が異なる）。
+  ただし`env`のBinding（`pass1.js`）は両ケースとも`exported`フィールドで統一的に引ける。
 
 ## `pass2.js`実装時に置いた仮定（仕様に明記なし、要レビュー）
 

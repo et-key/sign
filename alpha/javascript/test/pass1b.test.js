@@ -65,15 +65,35 @@ function check(note, got, want) {
 }
 
 {
-	// 呼び出しサイトが無い場合は空配列（コンパイルエラーにはしない、既知の制限）
+	// 呼び出しサイトが無く、exportもされていない場合はデッドコードとして空配列（エラーにしない）
 	const source = "apply_five : f ?\n\t@f 5";
 	const { nodes, env } = resolveProgram(source);
 	const result = specializeGenericParams(nodes[0], nodes, env);
 	check(
-		"呼び出しサイトが無い場合、callsiteCount=0・categories=[]（exportの有無に関わらずコンパイルエラーにはしない、既知の制限）",
+		"呼び出しサイトが無く非exportの場合、callsiteCount=0・categories=[]（デッドコードとして許容、エラーにしない）",
 		Object.fromEntries([...result].map(([k, v]) => [k, v])),
 		{ "<f>": { callsiteCount: 0, categories: [] } }
 	);
+}
+
+{
+	// exportされているのに呼び出しサイトが無い場合はコンパイルエラー（§5・compiler_pipeline.md §6.3）
+	const source = "#apply_five : f ?\n\t@f 5";
+	const { nodes, env } = resolveProgram(source);
+	total++;
+	let threw = false;
+	try {
+		specializeGenericParams(nodes[0], nodes, env);
+	} catch (e) {
+		threw = e instanceof TypeError;
+	}
+	if (threw) {
+		console.log("OK   exportされているのに呼び出しサイトが無い場合はTypeError（§5・compiler_pipeline.md §6.3）");
+		passed++;
+	} else {
+		console.log("FAIL exportされているのに呼び出しサイトが無い場合はTypeError（§5・compiler_pipeline.md §6.3）");
+		console.log(`     expected TypeError, got threw=${threw}`);
+	}
 }
 
 console.log(`\n${passed}/${total} passed`);

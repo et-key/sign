@@ -9,13 +9,14 @@
  * 【現状の実装範囲】呼び出しサイトの収集は、compiler_pipeline.md §6 が定義する
  * 「debugビルドで`test`フォルダを実行して得るトレース」ではなく、**`src`（プログラム全体の
  * 解決済みAST）に対する静的走査**のみで行う（テストフォルダを実行するインタプリタ自体が
- * まだ存在しないため）。したがって「呼び出しサイトが無い場合はコンパイルエラー（exportされて
- * いれば）」という§5・compiler_pipeline.md §6.3の規則のうち、コンパイルエラーにする部分は
- * 未実装——呼び出しサイトが見つからなければ空の結果を返すのみ。
+ * まだ存在しないため）。
+ *
+ * export印（`#`/`##`/`###`）が付いたジェネリック関数に呼び出しサイトが1つも無い場合は
+ * コンパイルエラーとする（§5・compiler_pipeline.md §6.3「呼び出しサイトの無いexportは
+ * コンパイルエラー」）。exportされていない場合は、単純にデッドコードとして空の結果を返す
+ * （§5「呼び出しサイトの無いジェネリック関数はexportされていなければdiscard」）。
  *
  * 【既知の制限】
- * - export印（`#`/`##`/`###`）の判定は未実装のため、「exportされているのに呼び出しサイトが
- *   無い場合はコンパイルエラー」は実装していない。
  * - 引数が複数あるLambda（`params[]`）への呼び出しサイトのうち、ジェネリック仮引数以外の
  *   位置の対応付けは未対応（単一引数の関数、または最初の引数のみを想定）。
  * - 相互再帰するジェネリック関数同士の具体化（§5 Pass1bの「本節は将来の検討事項」）は未対応。
@@ -103,6 +104,14 @@ function specializeGenericParams(defineNode, resolvedNodes, env) {
 
   const sites = collectCallsites(resolvedNodes, fnName);
   const categories = [...new Set(sites.map((argNode) => getCategory(argNode, env)))];
+
+  if (sites.length === 0 && defineNode.exported) {
+    // §5・compiler_pipeline.md §6.3: exportされているのに呼び出しサイトが無い
+    // ジェネリック関数は具体化しようがないため、コンパイルエラーとする。
+    throw new TypeError(
+      `'${fnName}'（${defineNode.exported} export）はジェネリックな仮引数を持つが、呼び出しサイトが1つも見つからないため具体化できません`
+    );
+  }
 
   for (const paramName of genericParams) {
     result.set(paramName, { callsiteCount: sites.length, categories });

@@ -29,7 +29,7 @@
  */
 
 import { OPERATOR_DICT } from './operator_table.js';
-import { childEnv, envLookup, bindEnv } from './pass1.js';
+import { childEnv, envLookup, bindEnv, EXPORT_MARKERS } from './pass1.js';
 
 // ---- ユーティリティ ----
 
@@ -389,11 +389,20 @@ function checkNoForwardReference(tokens, paramName, allNames, boundSoFar) {
 }
 
 function resolveLambdaLine(rawItems, qIdx, env) {
+  // 先頭が前置export記号（#/##/###）なら、その分だけ識別子の位置をずらす
+  // （pass1.jsのbuildEnvScopeと対称。例: `##f : x ? x + 1` → ["##_","<f>",":",...]）。
+  let idx = 0;
+  let exported = null;
+  if (typeof rawItems[0] === "string" && EXPORT_MARKERS[rawItems[0]]) {
+    exported = EXPORT_MARKERS[rawItems[0]];
+    idx = 1;
+  }
+
   let nameToken = null;
-  let paramsStart = 0;
-  if (isIdentifierToken(rawItems[0]) && rawItems[1] === ":") {
-    nameToken = rawItems[0];
-    paramsStart = 2;
+  let paramsStart = idx;
+  if (isIdentifierToken(rawItems[idx]) && rawItems[idx + 1] === ":") {
+    nameToken = rawItems[idx];
+    paramsStart = idx + 2;
   }
   const paramTokens = rawItems.slice(paramsStart, qIdx);
   const bodyTokens = rawItems.slice(qIdx + 1);
@@ -403,7 +412,7 @@ function resolveLambdaLine(rawItems, qIdx, env) {
   const lambdaNode = { type: "operation", op: "?", name: "lambda", position: "infix", left: paramNode, right: bodyNode };
 
   if (nameToken) {
-    return { type: "operation", op: ":", name: "define", position: "infix", left: toNode(nameToken, env), right: lambdaNode };
+    return { type: "operation", op: ":", name: "define", position: "infix", left: toNode(nameToken, env), right: lambdaNode, exported };
   }
   return lambdaNode;
 }

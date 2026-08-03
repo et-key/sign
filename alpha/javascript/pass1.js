@@ -2,8 +2,10 @@
  * Pass1（最小実装）: ブロック階層に沿ってネストした識別子環境（env）の構築。
  *
  * env は { bindings: Map<識別子, Binding>, parent: env|null } という連鎖構造。
- * Binding は { category: 'Lambda'|'Atom', restParam: 'bare'|'bracket'|null } という
- * .ist（type_system.md §5 Pass1a）のごく一部を先取りした最小スキーマ。
+ * Binding は { category: 'Lambda'|'Atom', restParam: 'bare'|'bracket'|null,
+ * atomType, exported: '#'|'##'|'###'|null } という .ist（type_system.md §5 Pass1a）の
+ * ごく一部を先取りした最小スキーマ。exportedは前置export記号（#/##/###）の有無を示す
+ * （Pass1b、compiler_pipeline.md §6.3「呼び出しサイトの無いexportはコンパイルエラー」で使う）。
  * 予約語が存在しないため、"<...>"で囲まれた文字列は常に識別子と判定できる
  * （classifyAtom と同じ判定基準）。
  *
@@ -64,14 +66,27 @@ function literalAtomType(token) {
   return null;
 }
 
+// 前置export記号のマーク済みトークン（peggyパーサーが `#add` を ["#_", "<add>"] という
+// 隣接ペアで返す）→ 記号そのものへの対応表。
+const EXPORT_MARKERS = { "#_": "#", "##_": "##", "###_": "###" };
+
 function buildEnvScope(lines) {
   const bindings = new Map();
   for (const line of lines) {
     if (!Array.isArray(line) || line.length < 2) continue;
-    const first = line[0];
+
+    // 先頭が前置export記号（#/##/###）なら、その分だけ識別子の位置をずらす。
+    let idOffset = 0;
+    let exported = null;
+    if (typeof line[0] === "string" && EXPORT_MARKERS[line[0]]) {
+      exported = EXPORT_MARKERS[line[0]];
+      idOffset = 1;
+    }
+
+    const first = line[idOffset];
     if (typeof first !== "string" || !first.startsWith("<") || !first.endsWith(">")) continue;
     const defineIdx = line.indexOf(":");
-    if (defineIdx !== 1) continue; // "<id> :" の形（先頭2要素）のみ対象
+    if (defineIdx !== idOffset + 1) continue; // "[export]<id> :" の形のみ対象
     const qIdx = line.indexOf("?", defineIdx + 1);
     const hasLambda = qIdx !== -1;
     const restParam = hasLambda ? detectRestParamShape(line.slice(defineIdx + 1, qIdx)) : null;
@@ -79,7 +94,7 @@ function buildEnvScope(lines) {
     // 仮引数（本体の使用箇所から逆算が必要、type_system.md §7.1）は未対応・既知の制限。
     const rhs = line.slice(defineIdx + 1);
     const atomType = !hasLambda && rhs.length === 1 ? literalAtomType(rhs[0]) : null;
-    bindings.set(first, { category: hasLambda ? "Lambda" : "Atom", restParam, atomType });
+    bindings.set(first, { category: hasLambda ? "Lambda" : "Atom", restParam, atomType, exported });
   }
   return bindings;
 }
@@ -108,8 +123,8 @@ function buildEnv(lines) {
 // pass2.jsのbuildParameterList（let*的な逐次スコープ構築）から使う。
 function bindEnv(names, parent) {
   const bindings = new Map();
-  for (const name of names) bindings.set(name, { category: "Atom", restParam: null, atomType: null });
+  for (const name of names) bindings.set(name, { category: "Atom", restParam: null, atomType: null, exported: null });
   return { bindings, parent: parent || null };
 }
 
-export { buildEnv, buildEnvScope, childEnv, envLookup, bindEnv, literalAtomType };
+export { buildEnv, buildEnvScope, childEnv, envLookup, bindEnv, literalAtomType, EXPORT_MARKERS };
