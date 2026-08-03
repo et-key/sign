@@ -35,11 +35,16 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
 - `pass2.js` — Pass2（`coproduct_resolver.md`）の実装。フラットなTerm列を二分木ASTへ縮約する。
 - `pass3.js` — Pass3（`type_system.md`§2〜§3.2の型伝播）の実装。Pass2が返す二分木ASTを歩いて
   左辺優先ルール（`typeof(L op R) = typeof(L)`）でLayer 2型を推論する。
+- `pass1b.js` — Pass1b（`type_system.md`§5、`@ref`ジェネリック仮引数の具体化）の実装。
+  `@`前置演算子で参照される仮引数を検出し、プログラム全体の呼び出しサイトから実引数の
+  カテゴリ（Lambda/Atom）を静的に収集する。
 - `test/pass2.test.js` — Pass2単体（envなし）の動作確認。9/9 pass。
 - `test/pass3.test.js` — Pass3の型伝播（左辺優先ルール、String+算術演算子→Unit、リテラルからの
   atomType解決、List/Struct/Dictの区別）の動作確認。10/10 pass。
 - `test/pass3_param_usage.test.js` — 仮引数のatomType自動導出（本体の算術演算子・比較演算子
   使用箇所からのScalar逆算、`type_system.md`§7.1）の動作確認。6/6 pass。
+- `test/pass1b.test.js` — Pass1b（`@ref`ジェネリック仮引数の検出と呼び出しサイト収集）の
+  動作確認。3/3 pass。
 - `test/nested_scope.test.js` — Pass1+Pass2を通した、ブロックスコープの連鎖の動作確認。
 - `test/multiline_block.test.js` — 複数行ブロックが1つのブロック内の複数文として正しく解決されることの確認。
 - `test/rest_param_typecheck.test.js` — 裸のrestパラメータ（`x ~xs ? ...`）への`~`なしList渡しが
@@ -206,7 +211,31 @@ Layer 2 Atom内部型（`Address`/`Float`/`String`/`List`/`Unit`等）を推論�
 - 比較演算子・空間演算子（余積）等、算術演算子以外は一律で左辺優先ルールにフォールバックしており、
   §4の個別の型シグネチャとの細かい整合は未検証。
 - カンマと`:`を1行に混在させたDict/Struct（上記参照）は未対応。
-- Pass 1b（`@ref`のジェネリック具体化）・`.st`生成・実際のコード生成（Pass4）は未実装のまま。
+- `.st`生成・実際のコード生成（Pass4）は未実装のまま。
+
+## Pass1b: `@ref`ジェネリック仮引数の具体化（`type_system.md`§5）
+
+`pass1b.js`が`specializeGenericParams(defineNode, resolvedNodes, env)`を実装する。
+
+- **ジェネリック仮引数の検出**（`detectGenericParams`）：本体で`@`前置演算子が直接かかっている
+  仮引数（例: `apply_five : f ? @f 5`の`f`）は、参照先がLambdaかAtomか定義サイト単体では
+  決まらないため、ジェネリックとみなす。
+- **呼び出しサイトの収集**（`collectCallsites`）：プログラム全体の解決済みASTを走査し、
+  `apply[fnName, arg]`という形の呼び出しを全て集める。
+- **具体化**：集めた呼び出しサイトの実引数を`pass2.js`の`getCategory`でカテゴリ分けし、
+  観測されたカテゴリの集合を返す（`test/pass1b.test.js`で確認）。
+
+**現状の実装範囲・既知の制限**：
+
+- 呼び出しサイトの収集は、`compiler_pipeline.md`§6が定義する「debugビルドで`test`フォルダを
+  実行して得るトレース」ではなく、**`src`（プログラム全体の解決済みAST）に対する静的走査のみ**
+  で行う（テストフォルダを実行するインタプリタ自体がまだ存在しないため）。
+- export印（`#`/`##`/`###`）の判定は未実装のため、「exportされているのに呼び出しサイトが
+  無い場合はコンパイルエラー」（§5、`compiler_pipeline.md`§6.3）は未実装——呼び出しサイトが
+  見つからなければ空の結果を返すのみ。
+- 引数が複数あるLambdaへの呼び出しサイトのうち、ジェネリック仮引数以外の位置の対応付けは
+  未対応（単一引数の関数を想定した簡易実装）。
+- 相互再帰するジェネリック関数同士の具体化（§5「本節は将来の検討事項」）は未対応。
 
 ## `pass2.js`実装時に置いた仮定（仕様に明記なし、要レビュー）
 
