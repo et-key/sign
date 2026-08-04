@@ -101,5 +101,16 @@ check(
 	"123123"
 );
 
+check(
+	// type_system.md §3.3の再帰例。括弧必須（+の優先順位13はスペース適用10より高いため、
+	// 括弧無しだと x と sum（関数値）が直接結合されてしまう、既知の食い違いとして
+	// §3.3コメントに追記済み）。
+	// 後置~（xs~）は複数の位置引数へ展開される（pattern_guide.md）——これが無いと
+	// xsが配列のまま1個の引数として渡り続け、再帰が終端しない。
+	"sum : x ~xs ? x + (sum xs~)  /  sum 1 2 3 → 6（再帰、xs~の展開でrestが正しく終端する）",
+	run("sum : x ~xs ? x + (sum xs~)\nsum 1 2 3"),
+	6
+);
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

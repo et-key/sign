@@ -236,7 +236,19 @@ function evaluate(node, env) {
       case "apply": {
         const { calleeNode, argNodes } = collectApplyChain(node);
         const callee = evaluate(calleeNode, env);
-        const argValues = argNodes.map((a) => evaluate(a, env));
+        // 後置~（expand）で渡された引数は、1個のList値としてではなく複数の位置引数へ
+        // 展開する（pattern_guide.md「関数にListを渡すときは必ず後置~を使う」「後置~を
+        // 使ったときに、それぞれの引数リストに分配して渡される」）。これが無いと
+        // 裸のrestパラメータでの再帰（xs~の展開）が終端せず無限再帰する。
+        const argValues = [];
+        for (const a of argNodes) {
+          if (a.type === "operation" && a.position === "postfix" && a.name === "expand") {
+            const v = evaluate(a.operand, env);
+            argValues.push(...(Array.isArray(v) ? v : [v]));
+          } else {
+            argValues.push(evaluate(a, env));
+          }
+        }
         return applyClosure(callee, argValues);
       }
       case "compose": {
