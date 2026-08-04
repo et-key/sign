@@ -80,5 +80,11 @@ check("__ | 5 → 5（|は短絡評価、左辺Unitなら右辺を評価して�
 
 check("3 | 5 → 3（|は短絡評価、左辺が非Unitならそのまま返す）", run("3 | 5"), 3);
 
+check(
+	"double inc 5 → 12（関数合成 double∘inc、(f∘g)(x)=f(g(x))：inc(5)=6, double(6)=12）",
+	run("double : x ? x * 2\ninc : x ? x + 1\ndouble inc 5"),
+	12
+);
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

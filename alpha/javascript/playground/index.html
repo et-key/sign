@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<title>Sign alpha/javascript Playground</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #1e1e1e; color: #ddd; }
+  h1 { font-size: 1.1rem; margin: 0 0 0.75rem; }
+  .row { display: flex; gap: 1rem; height: 70vh; }
+  .col { flex: 1; display: flex; flex-direction: column; }
+  textarea, pre { flex: 1; font-family: "Cascadia Code", Consolas, monospace; font-size: 14px; background: #111; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 0.5rem; overflow: auto; white-space: pre-wrap; }
+  button { margin: 0.5rem 0; padding: 0.4rem 1rem; cursor: pointer; }
+  label { font-size: 0.85rem; color: #aaa; }
+  .err { color: #ff6b6b; }
+</style>
+</head>
+<body>
+<h1>Sign alpha/javascript Playground（lexer → Pass1/1b/2/3 → interpreter）</h1>
+<button id="runBtn">実行（Ctrl+Enter）</button>
+<div class="row">
+  <div class="col">
+    <label>ソース</label>
+    <textarea id="src" spellcheck="false">f : x y ? x + y
+f 3 5</textarea>
+  </div>
+  <div class="col">
+    <label>結果（各行を順に評価、最後の値も表示）</label>
+    <pre id="out"></pre>
+  </div>
+  <div class="col">
+    <label>AST（各行）</label>
+    <pre id="ast"></pre>
+  </div>
+</div>
+<script type="module" src="/playground/playground.js"></script>
+</body>
+</html>

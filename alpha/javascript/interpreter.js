@@ -128,10 +128,23 @@ function makeClosure(paramsNode, bodyNode, env) {
   return { __lambda__: true, params: paramsNode, body: bodyNode, env };
 }
 
+// 関数合成（coproduct_resolver.md §3: Lambda Lambda → compose）。
+// (f g) は「fの後にg」ではなく数学的合成と同じ「gしてからf」（(f∘g)(x) = f(g(x))）とする。
+function makeComposed(f, g) {
+  return { __lambda__: true, __compose__: [f, g] };
+}
+
 function applyClosure(closure, argValues) {
   if (typeof closure === "function") return closure(...argValues); // 組み込み関数
   if (!closure || !closure.__lambda__) {
     throw new TypeError("Lambdaではない値を関数として適用しようとしました");
+  }
+  if (closure.__compose__) {
+    const [f, g] = closure.__compose__;
+    // 完全性公理はチェーン全体に効く：gの結果がUnitならfを呼ばず即座にUnit。
+    const mid = applyClosure(g, argValues);
+    if (isUnit(mid)) return UNIT;
+    return applyClosure(f, [mid]);
   }
   const callEnv = bindParams(closure.params, argValues, closure.env);
   if (callEnv === null) return UNIT;
@@ -211,6 +224,11 @@ function evaluate(node, env) {
         const callee = evaluate(calleeNode, env);
         const argValues = argNodes.map((a) => evaluate(a, env));
         return applyClosure(callee, argValues);
+      }
+      case "compose": {
+        const f = evaluate(node.left, env);
+        const g = evaluate(node.right, env);
+        return makeComposed(f, g);
       }
       case "and": {
         // §3.3・AGENTS.md: 短絡評価。左辺がUnitなら右辺を評価せず即座にUnit。

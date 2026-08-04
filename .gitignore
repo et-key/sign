@@ -19,3 +19,6 @@ experimental/rust/output_bare.exe
 
 documents/note
 tools/w64devkit
+
+# peggyから都度生成されるパーサー（npm run build:parser、コミット対象外）
+alpha/javascript/parser.js
