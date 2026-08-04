@@ -70,6 +70,64 @@ function literalAtomType(token) {
 // 隣接ペアで返す）→ 記号そのものへの対応表。
 const EXPORT_MARKERS = { "#_": "#", "##_": "##", "###_": "###" };
 
+// 仮引数の生トークン列から、消費すべき引数の数（アリティ）を数える。
+// 裸の空白区切り形（`x y z`）・ブラケット/インデント形（改行区切り、デフォルト付き含む）の
+// どちらにも対応する。restが登場したら Infinity（可変長、常に受け付ける）を返す。
+// 単一パラメータ（配列でない裸の1トークン）は null（対象外）を返す——1個適用した時点で
+// 元々Atomになるため、この判定が無くても正しく動く（pass2.jsのapply連鎖飽和判定を参照）。
+function countArity(paramTokens) {
+  if (paramTokens.length === 0) return null;
+  if (paramTokens.length === 1 && Array.isArray(paramTokens[0])) {
+    return countNestedArity(paramTokens[0]);
+  }
+  if (paramTokens.length === 1) return null; // 単一の裸パラメータ
+  return countBareArity(paramTokens);
+}
+
+// 裸の（改行/ブラケット区切りでない）トークン列を1エントリずつ数える。
+// "name : default..." は1エントリ（":"以降は読み飛ばす）、"~_ name" が現れたら
+// 以降は可変長なのでInfinityを返す。
+function countBareArity(tokens) {
+  let count = 0;
+  let i = 0;
+  while (i < tokens.length) {
+    if (tokens[i] === "~_") return Infinity;
+    count++;
+    if (tokens[i + 1] === ":") {
+      i = tokens.length; // 残り全部がこのエントリのデフォルト式
+      break;
+    }
+    i++;
+  }
+  return count;
+}
+
+function isFlatLine(x) {
+  return Array.isArray(x) && x.every((t) => typeof t === "string");
+}
+
+// 「文の並び」（またはラップされた1文）を再帰的に数える。pass2.jsのflattenParamStatements
+// と同じ構造を、生トークンの段階で軽量に再現する（循環import回避のためここで別途最小実装）。
+function countStatements(node) {
+  if (isFlatLine(node)) return countBareArity(node);
+  let total = 0;
+  for (const stmt of node) {
+    let c;
+    if (isFlatLine(stmt)) c = countBareArity(stmt);
+    else if (Array.isArray(stmt) && (stmt[0] === '"INDENT_"' || stmt[0] === '"ABS_"')) c = countStatements(stmt[1]);
+    else c = countStatements(stmt); // さらにネストした1文（例: func_mixedのブラケット単独文）
+    if (c === Infinity) return Infinity;
+    total += c;
+  }
+  return total;
+}
+
+// インデント/ブラケット形の仮引数部のエントリ数を数える。
+function countNestedArity(token) {
+  const lines = Array.isArray(token) && (token[0] === '"INDENT_"' || token[0] === '"ABS_"') ? token[1] : token;
+  return countStatements(lines);
+}
+
 function buildEnvScope(lines) {
   const bindings = new Map();
   for (const line of lines) {
@@ -89,12 +147,14 @@ function buildEnvScope(lines) {
     if (defineIdx !== idOffset + 1) continue; // "[export]<id> :" の形のみ対象
     const qIdx = line.indexOf("?", defineIdx + 1);
     const hasLambda = qIdx !== -1;
-    const restParam = hasLambda ? detectRestParamShape(line.slice(defineIdx + 1, qIdx)) : null;
+    const paramTokens = hasLambda ? line.slice(defineIdx + 1, qIdx) : null;
+    const restParam = hasLambda ? detectRestParamShape(paramTokens) : null;
+    const arity = hasLambda ? countArity(paramTokens) : null;
     // atomType: `<id> : <リテラル1個>` という最も単純な形のみ、Pass1aで静的に読み取る。
     // 仮引数（本体の使用箇所から逆算が必要、type_system.md §7.1）は未対応・既知の制限。
     const rhs = line.slice(defineIdx + 1);
     const atomType = !hasLambda && rhs.length === 1 ? literalAtomType(rhs[0]) : null;
-    bindings.set(first, { category: hasLambda ? "Lambda" : "Atom", restParam, atomType, exported });
+    bindings.set(first, { category: hasLambda ? "Lambda" : "Atom", restParam, atomType, exported, arity });
   }
   return bindings;
 }
@@ -123,7 +183,7 @@ function buildEnv(lines) {
 // pass2.jsのbuildParameterList（let*的な逐次スコープ構築）から使う。
 function bindEnv(names, parent) {
   const bindings = new Map();
-  for (const name of names) bindings.set(name, { category: "Atom", restParam: null, atomType: null, exported: null });
+  for (const name of names) bindings.set(name, { category: "Atom", restParam: null, atomType: null, exported: null, arity: null });
   return { bindings, parent: parent || null };
 }
 

@@ -120,6 +120,18 @@ function lookup(symbol, position) {
   return defs.find((d) => d.position === position) || null;
 }
 
+// apply[apply[apply[f, a1], a2], a3] のような左結合のapplyチェーンを遡り、
+// 消費済みの引数の数（depth）と、根本の呼び出し先ノード（base、通常は識別子）を返す。
+function applyChainInfo(node) {
+  let depth = 0;
+  let n = node;
+  while (n && n.type === "operation" && n.name === "apply") {
+    depth++;
+    n = n.left;
+  }
+  return { depth, base: n };
+}
+
 // ---- getCategory (coproduct_resolver.md §2) ----
 // env: pass1.js が構築した識別子環境の連鎖（{bindings, parent}）。
 // 未指定ならすべてAtom扱いにフォールバック。
@@ -130,6 +142,21 @@ function getCategory(node, env) {
     if (node.name === "compose") return "Lambda";
     if (node.partial) return "Lambda"; // オペランド不足の部分適用
     if (node.position === "prefix" && node.op === "@") return "Lambda"; // 前置@（Input）
+    if (node.name === "apply") {
+      // 多引数関数（params[]が複数エントリ、pass1.jsのarity）は、1回のapplyでは
+      // 飽和しない場合がある。左に伸びるapplyチェーンの深さ（=消費済みの引数の数）が
+      // 呼び出し先のarityにまだ届いていなければ、まだ引数を受け取れるLambdaのまま
+      // 扱う（次のAtomとの結合が construct ではなく apply になるように）。
+      // アリティが不明（単一パラメータ・rest・ブラケット等）な場合は、従来通り
+      // 1回の適用で即座にAtom（飽和済み）として扱う。
+      const { depth, base } = applyChainInfo(node);
+      if (base && base.type === "atom" && base.kind === "identifier" && env) {
+        const binding = envLookup(env, base.value);
+        if (binding && typeof binding.arity === "number" && depth < binding.arity) {
+          return "Lambda";
+        }
+      }
+    }
     // 通常の演算ノード（算術・concat等）はAtom
     return "Atom";
   }

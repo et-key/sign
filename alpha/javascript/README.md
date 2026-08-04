@@ -40,14 +40,35 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   （`documents/ja-jp/impl/syntax/grammar.pegjs`本体にも同時反映済み）。
 - `pass1.js` — Pass1（最小実装）。ブロック階層に沿ってネストした識別子環境（env連鎖）を構築し、Pass2のgetCategoryに渡す。
   `<id> : <リテラル1個>`という単純な定義行からLayer 2 Atom内部型（`atomType`）も静的に読み取る。
-  前置export記号（`#`/`##`/`###`）も検出し、Bindingの`exported`フィールドに記録する。
+  前置export記号（`#`/`##`/`###`）も検出し、Bindingの`exported`フィールドに記録する。単純な
+  空白区切りの複数パラメータ（rest・ブラケット無し）の**アリティ**も`arity`フィールドに記録する。
 - `pass2.js` — Pass2（`coproduct_resolver.md`）の実装。フラットなTerm列を二分木ASTへ縮約する。
+  **多引数関数の呼び出しが正しく飽和するよう修正済み**：`getCategory`が`apply`ノードを
+  問答無用でAtom扱いしていたため、`f : x y ? x + y`に対し`f 3 5`が
+  `construct[apply[f,3], 5]`（fを3だけに適用した結果と5をタプル化）に誤って縮約されて
+  いた（単一パラメータの関数では表面化しない、多引数特有のバグ）。`applyChainInfo`で
+  左に伸びるapplyチェーンの深さを数え、`pass1.js`の`arity`に届くまでLambdaのまま扱う
+  ことで、`apply[apply[f,3],5]`という正しく飽和したチェーンになるよう修正
+  （`test/multi_arg_apply.test.js`で確認）。アリティを超える余分な引数は、飽和した
+  呼び出し結果の後ろに`construct`でタプル化される（仕様として意図された挙動）。
 - `pass3.js` — Pass3（`type_system.md`§2〜§3.2の型伝播）の実装。Pass2が返す二分木ASTを歩いて
   左辺優先ルール（`typeof(L op R) = typeof(L)`）でLayer 2型を推論する。
 - `pass1b.js` — Pass1b（`type_system.md`§5、`@ref`ジェネリック仮引数の具体化）の実装。
   `@`前置演算子で参照される仮引数を検出し、プログラム全体の呼び出しサイトから実引数の
   カテゴリ（Lambda/Atom）を静的に収集する。
+- `interpreter.js` — 最小インタプリタ（初実装）。`evaluate(node, runtimeEnv)`でPass2/Pass1bの
+  ASTを実際に評価する。完全性公理（`f __ = __`）、デフォルト引数・restパラメータへのUnit
+  フォールバック、算術/比較演算子のUnit伝播則、`&`/`|`/`;`の短絡評価、多引数関数の一括適用
+  （apply連鎖を遡って引数を集めてから1回だけ本体を評価）を実装。`$`/`@`/`#`（アドレス操作）は
+  メモリモデルが未設計のため未対応。type_system.md §3.3/§3.4の具体例をそのまま実行して
+  値が一致することを確認（`test/interpreter.test.js`、10/10 pass）。
+  **副産物のバグ修正**：`pass1.js`の`arity`計算がインデントブロック形のデフォルト引数
+  （`g :\n x\n y:x+1\n ? x+y`のような形）に対応してなかった（裸の`x y z`形のみ対応）ため、
+  デフォルト引数を持つ多引数関数の呼び出しが多引数バグと同様に壊れていた。`countArity`が
+  ネストした仮引数部も再帰的に数えるよう拡張して解消。
 - `test/pass2.test.js` — Pass2単体（envなし）の動作確認。9/9 pass。
+- `test/multi_arg_apply.test.js` — 多引数関数の呼び出しがapplyチェーンとして正しく飽和し、
+  余分な引数がconstructでタプル化されることの確認。3/3 pass。
 - `test/pass3.test.js` — Pass3の型伝播（左辺優先ルール、String+算術演算子→Unit、リテラルからの
   atomType解決、List/Struct/Dictの区別）の動作確認。10/10 pass。
 - `test/pass3_param_usage.test.js` — 仮引数のatomType自動導出（本体の算術演算子・比較演算子
