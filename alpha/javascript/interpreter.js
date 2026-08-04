@@ -129,7 +129,10 @@ function makeClosure(paramsNode, bodyNode, env) {
 }
 
 // 関数合成（coproduct_resolver.md §3: Lambda Lambda → compose）。
-// (f g) は「fの後にg」ではなく数学的合成と同じ「gしてからf」（(f∘g)(x) = f(g(x))）とする。
+// 【重要】数学的合成記法(f∘g)(x)=f(g(x))とは逆で、Signの `f g` は左→右のパイプライン順。
+// documents/ja-jp/guide/example.sn: `[+ 1] [* 2] 5 = [* 2]([+ 1] 5) = 12`
+// （左の[+1]が先に5へ適用され6、その結果に右の[*2]が適用され12。"関数合成は左単位元"）。
+// つまり (f g)(x) = g(f(x)) ——fを先に、その結果にgを適用する。
 function makeComposed(f, g) {
   return { __lambda__: true, __compose__: [f, g] };
 }
@@ -141,10 +144,11 @@ function applyClosure(closure, argValues) {
   }
   if (closure.__compose__) {
     const [f, g] = closure.__compose__;
-    // 完全性公理はチェーン全体に効く：gの結果がUnitならfを呼ばず即座にUnit。
-    const mid = applyClosure(g, argValues);
+    // 完全性公理はチェーン全体に効く：fの結果がUnitならgを呼ばず即座にUnit。
+    // 左(f)を先に適用し、その結果に右(g)を適用する（左→右パイプライン順、上記参照）。
+    const mid = applyClosure(f, argValues);
     if (isUnit(mid)) return UNIT;
-    return applyClosure(f, [mid]);
+    return applyClosure(g, [mid]);
   }
   const callEnv = bindParams(closure.params, argValues, closure.env);
   if (callEnv === null) return UNIT;

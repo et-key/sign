@@ -81,9 +81,12 @@ check("__ | 5 → 5（|は短絡評価、左辺Unitなら右辺を評価して�
 check("3 | 5 → 3（|は短絡評価、左辺が非Unitならそのまま返す）", run("3 | 5"), 3);
 
 check(
-	"double inc 5 → 12（関数合成 double∘inc、(f∘g)(x)=f(g(x))：inc(5)=6, double(6)=12）",
+	// documents/ja-jp/guide/example.sn: `[+ 1] [* 2] 5 = [* 2]([+ 1] 5) = 12`
+	// （左が先に適用され、その結果に右が適用される＝左→右パイプライン順）。
+	// ブラケット部分適用（[+1]の穴埋め展開）は別の未実装機能のため、名前付きLambdaで確認する。
+	"double inc 5 → 11（double=x*2 が先に5へ適用され10、その結果にinc=x+1 が適用され11）",
 	run("double : x ? x * 2\ninc : x ? x + 1\ndouble inc 5"),
-	12
+	11
 );
 
 console.log(`\n${passed}/${total} passed`);
