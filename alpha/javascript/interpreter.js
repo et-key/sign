@@ -175,6 +175,11 @@ const COMPARE_OPS = {
 function evalArith(name, leftNode, rightNode, env) {
   const l = evaluate(leftNode, env);
   if (isUnit(l)) return UNIT; // 左辺Unit = 吸収元
+  // §3.2: String（Listと同型）の左辺に算術演算子は効かない → 型エラーで__に収束。
+  // 注: list_model.md §4.4の文面は「+でコードポイントが露出する」としているが、
+  // 自身の例(`123` 123 = `123123`)はスペース連結でありこの主張を実証していない。
+  // type_system.md §3.2の明示的な表（String+算術演算子→型エラー(__消去)）を正とする。
+  if (typeof l === "string") return UNIT;
   const r = evaluate(rightNode, env);
   if (isUnit(r)) return l; // 右辺Unit = 単位元（id射、素通し）
   return ARITH_OPS[name](l, r);
@@ -197,6 +202,11 @@ function evalCompare(name, op, leftNode, rightNode, env) {
 // ---- construct/concat/product（List/Struct構築） ----
 function asList(v) {
   return Array.isArray(v) ? v : [v];
+}
+function stringifyForConcat(v) {
+  if (typeof v === "string") return v;
+  if (isUnit(v)) return "";
+  return String(v);
 }
 
 function evaluate(node, env) {
@@ -257,6 +267,10 @@ function evaluate(node, env) {
       case "concat": {
         const l = evaluate(node.left, env);
         const r = evaluate(node.right, env);
+        // §3.2 左辺優先規則: 左辺が文字列（Stringは`\a \b \c`のような文字の並びとも同型）
+        // なら、右辺を文字列化してテキストとして連結する（`123` 123 = `123123`、
+        // list_model.md §2.1/§4.4）。それ以外は通常のList構築。
+        if (typeof l === "string") return l + stringifyForConcat(r);
         return [...asList(l), ...asList(r)];
       }
       case "product": {
