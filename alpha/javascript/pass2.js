@@ -242,7 +242,30 @@ function coproductReduce(a, b, env) {
 }
 
 // ---- Step2: 優先順位に基づく総当たり縮約（coproduct_resolver.md §4） ----
-function reduceOnce(items, tier, env) {
+//
+// coproduct_resolver.md §4は「10.5(compose)→10.4(apply)→10.3(apply_reverse)→10.2〜10.0
+// (concat/push/unshift/construct)の順に、各優先度をリスト全体に対して使い尽くしてから
+// 次へ進む」という段階的マルチパスを規定している。以前はtier===10をひとまとめにし、
+// 隣接ペアを左から見て最初にマッチしたものを即座に縮約する単一グリーディスキャンに
+// なっていたため、この優先順位が守られていなかった（例: `5 inc 3` で本来10.4(apply)が
+// 先に `inc 3` を縮約すべきところ、実際は左端の `5 inc` が10.3(apply_reverse)として
+// 先に縮約されてしまっていた）。COPRODUCT_PHASESで4段階に明示的に分割し、各段階を
+// 使い尽くしてから次へ進むことで仕様通りの優先順位を保証する。
+//
+// これにより、apply_reverse（UFCS的な `receiver method` 記法、`f : [foo bar ~this] ? ...`
+// のようなオブジェクト指向的呼び出しを意図）は「そのLambdaが右側に通常適用できるAtomを
+// 持たない場合のみ」発動するフォールバックになる——両隣にAtomがあるLambdaは常にapply
+// （右のAtomへの通常適用）が先に確定するため、apply_reverseが途中のAtomを横取りすることはない。
+// concat/push/unshift/constructの3つ（10.2〜10.0）はcoproductReduce内部でリスト形状のみから
+// 相互排他的に決まり、tier間の競合が無いため、引き続き1フェーズにまとめている。
+const COPRODUCT_PHASES = [
+  (catA, catB) => catA === "Lambda" && catB === "Lambda", // 10.5: compose
+  (catA, catB) => catA === "Lambda" && catB === "Atom", // 10.4: apply
+  (catA, catB) => catA === "Atom" && catB === "Lambda", // 10.3: apply_reverse
+  (catA, catB) => catA === "Atom" && catB === "Atom", // 10.2〜10.0: concat/push/unshift/construct
+];
+
+function reduceOnce(items, tier, env, phaseFilter) {
   for (let i = 0; i < items.length - 1; i++) {
     const a = items[i];
     const b = items[i + 1];
@@ -260,6 +283,7 @@ function reduceOnce(items, tier, env) {
     if (tier === 10 && !isBareOperatorToken(a) && !isBareOperatorToken(b)) {
       const left = toNode(a, env);
       const right = toNode(b, env);
+      if (phaseFilter && !phaseFilter(getCategory(left, env), getCategory(right, env))) continue;
       const node = coproductReduce(left, right, env);
       if (node) {
         items.splice(i, 2, node);
@@ -466,6 +490,16 @@ function reduceAll(rawItems, env) {
   // tier 26(escape) から 1(export) まで、高い方から低い方へ処理
   for (let tier = 26; tier >= 1; tier--) {
     let guard = 0;
+    if (tier === 10) {
+      // coproduct_resolver.md §4: compose→apply→apply_reverse→concat/push/constructの
+      // 4段階を、それぞれ使い尽くしてから次へ進む（COPRODUCT_PHASES参照）。
+      for (const phaseFilter of COPRODUCT_PHASES) {
+        while (reduceOnce(items, tier, env, phaseFilter)) {
+          if (++guard > 10000) throw new Error("reduceAll: possible infinite loop at tier " + tier);
+        }
+      }
+      continue;
+    }
     while (reduceOnce(items, tier, env)) {
       if (++guard > 10000) throw new Error("reduceAll: possible infinite loop at tier " + tier);
     }

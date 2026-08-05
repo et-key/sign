@@ -21,6 +21,11 @@
  * - 多引数関数（`params[]`）の一括適用：pass2.jsのapplyChainInfoと対称に、apply連鎖を
  *   遡って引数を全部集めてから一度だけ本体を評価する（カリー化された中間クロージャは
  *   生成しない、今日合意した「単一`?`＝一括束縛・タダ」という設計に対応）。
+ * - 未定義識別子のUnit収束（unit.md §0.1）：どのスコープにも見つからない識別子は例外を
+ *   投げず`__`へフォールバックする。この収束は非ブロッキングな"information"診断として
+ *   `env.diagnostics`（ルート env から共有される配列）に記録する。仮想キーワードとしての
+ *   意図的な利用（`@lazy tick`等）を委縮させないため、warning/cautionへは格上げしない
+ *   （末尾位置の警告はtco.md §3の領域でありTCO解析が無い本インタプリタでは対象外）。
  */
 
 // Unit（__）の実行時における一意な番人（sentinel）。Symbolなので他のどんな値とも衝突しない。
@@ -36,8 +41,9 @@ function isDefineNode(n) {
 }
 
 // ---- 実行時環境（Pass1の静的envとは別物、実際の値を保持する） ----
+// diagnosticsは子envにも同じ配列参照を引き継ぐ（ルートenvに一元的に蓄積される）。
 function newRuntimeEnv(parent) {
-  return { bindings: new Map(), parent: parent || null };
+  return { bindings: new Map(), parent: parent || null, diagnostics: parent ? parent.diagnostics : [] };
 }
 function envDefine(env, name, value) {
   env.bindings.set(name, value);
@@ -48,7 +54,9 @@ function envGet(env, name) {
     if (e.bindings.has(name)) return e.bindings.get(name);
     e = e.parent;
   }
-  return UNIT; // 未定義識別子はUnitへ収束（AGENTS.md）
+  // 未定義識別子はUnitへ収束（unit.md §0.1）。診断はinformationレベルに留め、実行は止めない。
+  env.diagnostics.push({ level: "information", message: `未定義識別子 '${name}' は Unit(__) に収束しました`, identifier: name });
+  return UNIT;
 }
 
 // ---- リテラルの評価 ----
@@ -83,6 +91,16 @@ function collectApplyChain(node) {
     n = n.left;
   }
   return { calleeNode: n, argNodes };
+}
+
+// 実引数ノード1個を評価して値配列にする。後置~（expand）付きなら複数の位置引数へ展開する
+// （apply/apply_reverse共通、pattern_guide.md「関数にListを渡すときは必ず後置~を使う」）。
+function evalArgValues(argNode, env) {
+  if (argNode.type === "operation" && argNode.position === "postfix" && argNode.name === "expand") {
+    const v = evaluate(argNode.operand, env);
+    return Array.isArray(v) ? v : [v];
+  }
+  return [evaluate(argNode, env)];
 }
 
 function paramEntriesOf(paramsNode) {
@@ -259,14 +277,21 @@ function evaluate(node, env) {
         // 裸のrestパラメータでの再帰（xs~の展開）が終端せず無限再帰する。
         const argValues = [];
         for (const a of argNodes) {
-          if (a.type === "operation" && a.position === "postfix" && a.name === "expand") {
-            const v = evaluate(a.operand, env);
-            argValues.push(...(Array.isArray(v) ? v : [v]));
-          } else {
-            argValues.push(evaluate(a, env));
-          }
+          argValues.push(...evalArgValues(a, env));
         }
         return applyClosure(callee, argValues);
+      }
+      case "apply_reverse": {
+        // `x f`（UFCS的なreceiver記法、coproduct_resolver.md §3の10.3）。左のxは常に
+        // ちょうど1個のreceiver値としてのみ渡す（8/5の設計合意：複数引数は取れない）。
+        // applyと違い後置~による複数位置引数への展開は行わない——xが`~`付きList等でも
+        // 展開せず「1個の値」としてそのまま渡す（evaluate側のexpandケースは非spread時
+        // 単なる素通しなので、ここでevalArgValuesを使わず直接evaluateするだけで済む）。
+        // それ以外はapplyと全く同じ経路（bindParams・完全性公理）を通す——
+        // `f : [foo bar ~this] ? ...`のような構造体destructuringも通常呼び出しと同じ
+        // 仕組みで解決される。
+        const callee = evaluate(node.right, env);
+        return applyClosure(callee, [evaluate(node.left, env)]);
       }
       case "compose": {
         const f = evaluate(node.left, env);

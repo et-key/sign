@@ -51,6 +51,19 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   ことで、`apply[apply[f,3],5]`という正しく飽和したチェーンになるよう修正
   （`test/multi_arg_apply.test.js`で確認）。アリティを超える余分な引数は、飽和した
   呼び出し結果の後ろに`construct`でタプル化される（仕様として意図された挙動）。
+  **tier=10（余積）の縮約を、仕様通りの段階的マルチパス（compose→apply→apply_reverse→
+  concat/push/construct）に修正済み**：以前はcompose/apply/apply_reverse/concat/push/construct
+  の区別なく、隣接ペアを左から見て最初にマッチしたものを即座に縮約する単一グリーディ
+  スキャンになっており、`coproduct_resolver.md`§4が規定する優先順位（10.5→10.0）が
+  守られていなかった（例: `inc:x?x+1`として`5 inc 3`が、本来tier10.4(apply)で先に
+  `inc 3`が縮約され`construct[5, apply[inc,3]]`になるべきところ、実際は左端の`5 inc`が
+  tier10.3(apply_reverse)として先に縮約されてしまっていた）。`COPRODUCT_PHASES`で
+  4段階に明示的に分割し、各段階を使い尽くしてから次へ進むよう修正（`test/interpreter.test.js`
+  で確認）。8/5の設計討論で、apply_reverse（`x f`記法）はSVOの中置呼び出し（主語=第1引数、
+  Option A）ではなく、UFCS的なreceiver記法（`f : [foo bar ~this] ? ...`のようなオブジェクト
+  指向的呼び出しを想定、Option B）と結論づけた——この修正により、apply_reverseは「そのLambda
+  が右側に通常適用できるAtomを持たない場合のみ」発動するフォールバックになり、両隣にAtomが
+  あるLambda（`5 inc 3`）ではapplyが先に確定してapply_reverseが途中のAtomを横取りしない。
 - `pass3.js` — Pass3（`type_system.md`§2〜§3.2の型伝播）の実装。Pass2が返す二分木ASTを歩いて
   左辺優先ルール（`typeof(L op R) = typeof(L)`）でLayer 2型を推論する。
 - `pass1b.js` — Pass1b（`type_system.md`§5、`@ref`ジェネリック仮引数の具体化）の実装。
@@ -88,6 +101,25 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   bar:2]`改行形）は、以前は「ブロックの値＝最後の文の値」として評価してしまい、辞書
   オブジェクトにならず`foo`/`bar`が呼び出し元のenvへ漏れていた（`pass3.js`のDict判定と
   同じ基準：全行defineなら独立した子envで評価しJSオブジェクトとして返す、キーは漏れない）。
+  **未定義識別子のUnit収束をinformation診断として記録**：`unit.md`§0.1「未定義識別子は
+  `__`として評価される」を実装済み（`envGet`が例外を投げず`UNIT`にフォールバック）。加えて
+  この収束が起きた箇所を`env.diagnostics`（ルートenvから子envへ共有される配列、`{level:
+  "information", message, identifier}`）に記録するようにした。仮想キーワードとしての意図的な
+  利用（`@lazy tick`等）を妨げないよう、warning/cautionへは格上げしない（`test/interpreter.test.js`
+  で確認）。末尾位置での未定義識別子呼び出しをwarningにする規則（`tco.md`§3）はTCO解析が
+  無い本インタプリタでは対象外。
+  **`apply_reverse`の評価を追加**：`pass2.js`のtier=10マルチパス化と対で、`x f`（UFCS的な
+  receiver記法）の評価が今まで未対応（`未対応の演算 'apply_reverse'`）だったのを実装した。
+  `applyClosure(evaluate(f), [x])`——通常の`apply`と全く同じ`bindParams`経路（完全性公理・
+  デフォルト引数フォールバック込み）を通すだけで、receiver専用の特別なロジックは無い
+  （`f : [foo bar ~this] ? ...`のような構造体destructuringも通常呼び出しと同じ仕組みで
+  解決される、という8/5の設計合意通り）。
+  **左側は常に1個の値に制限（複数引数化しない）**：`apply`は後置~（expand）で渡された
+  引数をList内容へ展開して複数の位置引数に分配するが、`apply_reverse`は同じ展開を行わない
+  ——`[1 2]~ pair`（`pair:a b?a`）は`pair`に`[1,2]`を**1個の値**として渡すだけで、
+  `pair(1,2)`のように展開されない（bが埋まらず完全性公理で`__`に収束、
+  `test/interpreter.test.js`で確認）。8/5の設計合意「apply_reverseは複数引数を取らない」
+  を反映。
   **`'`（get_prop）を追加**：`d ' foo`のように、右辺が識別子の場合は変数として評価せず
   「キー名そのもの」として辞書から引く（数値なら通常通り評価してListのインデックスに使う）。
 - `test/pass2.test.js` — Pass2単体（envなし）の動作確認。9/9 pass。

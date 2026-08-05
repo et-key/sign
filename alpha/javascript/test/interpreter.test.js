@@ -38,7 +38,7 @@ function check(note, got, want) {
 	total++;
 	const gotDisplay = isUnit(got) ? "__" : got;
 	const wantDisplay = want === "__" ? "__" : want;
-	const ok = want === "__" ? isUnit(got) : got === want;
+	const ok = want === "__" ? isUnit(got) : Array.isArray(want) ? JSON.stringify(got) === JSON.stringify(want) : got === want;
 	if (ok) {
 		console.log(`OK   ${note}`);
 		passed++;
@@ -148,6 +148,66 @@ check(
 );
 
 check("d ' bar → 2（同上、2件目のキー）", run("d : [\n\tfoo : 1\n\tbar : 2\n]\nd ' bar"), 2);
+
+// 未定義識別子のUnit収束は診断上informationとして記録される（unit.md §0.1、非ブロッキング）。
+function runDiag(source) {
+	const pre = preprocess(source);
+	const lines = parser.parse(pre);
+	const staticEnv = buildEnv(lines);
+	const nodes = lines.map((line) => reduceAll(line, staticEnv));
+	const runtimeEnv = newRuntimeEnv(null);
+	let result = UNIT;
+	for (const node of nodes) result = evaluate(node, runtimeEnv);
+	return { result, diagnostics: runtimeEnv.diagnostics };
+}
+
+function checkTrue(note, cond) {
+	total++;
+	if (cond) {
+		console.log(`OK   ${note}`);
+		passed++;
+	} else {
+		console.log(`FAIL ${note}`);
+	}
+}
+
+{
+	const { result, diagnostics } = runDiag("tick");
+	checkTrue("未定義識別子 tick → __ に収束しつつ例外を投げない", isUnit(result));
+	checkTrue(
+		"未定義識別子 tick → diagnosticsに1件、level='information'（仮想キーワード利用を委縮させないためwarningへ格上げしない）",
+		diagnostics.length === 1 && diagnostics[0].level === "information" && diagnostics[0].identifier === "<tick>"
+	);
+}
+
+{
+	const { diagnostics } = runDiag("x : 5\nx + 1");
+	checkTrue("定義済み識別子 x の参照 → diagnosticsは空", diagnostics.length === 0);
+}
+
+// apply_reverse（UFCS的な `receiver method` 記法、coproduct_resolver.md §3の10.3）。
+// pass2.jsのtier=10縮約をcompose→apply→apply_reverse→concat/push/constructの4段階マルチパスに
+// 直したことで、apply_reverseは「そのLambdaが右側に通常適用できるAtomを持たない場合のみ」
+// 発動するフォールバックになった（8/5の設計合意：主語は必ずしも第1引数ではなくUFCSのreceiver）。
+check("5 inc → 6（レシーバをinc(x?x+1)へ1個だけ渡すUFCS的呼び出し）", run("inc : x ? x + 1\n5 inc"), 6);
+
+check(
+	"5 inc inc → 7（Lambda-Lambdaのcompose(inc,inc)が先に確定し、その合成へ5をreverse apply。UFCSメソッドチェーン）",
+	run("inc : x ? x + 1\n5 inc inc"),
+	7
+);
+
+check(
+	"5 inc 3 → [5, 4]（apply(inc,3)がtier10.4で先に確定し、apply_reverseが5を横取りしない。arity1のincが両隣のAtomに挟まれても通常適用が優先される）",
+	run("inc : x ? x + 1\n5 inc 3"),
+	[5, 4]
+);
+
+check(
+	"[1 2]~ pair → __（apply_reverseは後置~でも展開せず常に1個のreceiver値として渡す。pair(a b?a)のbが埋まらず完全性公理で崩壊）",
+	run("pair : a b ? a\n[1 2]~ pair"),
+	"__"
+);
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
