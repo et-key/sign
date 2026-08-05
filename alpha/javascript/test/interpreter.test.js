@@ -112,5 +112,42 @@ check(
 	6
 );
 
+{
+	// 辞書リテラル：全行がdefineのブロックは独立したスコープで評価され、キーが
+	// 呼び出し元のenvへ漏れないことを確認する（以前はブロックの値＝最後の文の値、として
+	// 評価してしまい、辞書オブジェクトにならず foo/bar が外側スコープに漏れていた）。
+	total++;
+	const { nodes, env } = (() => {
+		const source = "d : [\n\tfoo : 1\n\tbar : 2\n]\nfoo";
+		const pre = preprocess(source);
+		const lines = parser.parse(pre);
+		const staticEnv = buildEnv(lines);
+		const runtimeEnv = newRuntimeEnv(null);
+		const results = [];
+		for (const line of lines) results.push(evaluate(reduceAll(line, staticEnv), runtimeEnv));
+		return { nodes: results, env: runtimeEnv };
+	})();
+	const dictValue = nodes[0];
+	const fooLeaked = !isUnit(nodes[1]);
+	const note = "辞書リテラル [foo:1, bar:2]（改行形）→ {foo:1,bar:2} になり、foo は外側スコープに漏れない";
+	const ok = JSON.stringify(dictValue) === JSON.stringify({ foo: 1, bar: 2 }) && !fooLeaked;
+	if (ok) {
+		console.log(`OK   ${note}`);
+		passed++;
+	} else {
+		console.log(`FAIL ${note}`);
+		console.log(`     dictValue: ${JSON.stringify(dictValue)}, fooLeaked: ${fooLeaked}`);
+	}
+}
+
+check(
+	// get_prop（'）: 右辺の識別子は変数として評価せず、キー名そのものとして辞書から引く。
+	"d ' foo → 1（get_prop、右辺の識別子はキー名として扱う。変数参照ではない）",
+	run("d : [\n\tfoo : 1\n\tbar : 2\n]\nd ' foo"),
+	1
+);
+
+check("d ' bar → 2（同上、2件目のキー）", run("d : [\n\tfoo : 1\n\tbar : 2\n]\nd ' bar"), 2);
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

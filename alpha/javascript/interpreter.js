@@ -30,6 +30,11 @@ function isUnit(v) {
   return v === UNIT || v === undefined;
 }
 
+// pass3.jsのisDefineNodeと同じ判定（循環import回避のためここで別途最小実装）。
+function isDefineNode(n) {
+  return !!n && n.type === "operation" && n.name === "define";
+}
+
 // ---- 実行時環境（Pass1の静的envとは別物、実際の値を保持する） ----
 function newRuntimeEnv(parent) {
   return { bindings: new Map(), parent: parent || null };
@@ -218,7 +223,19 @@ function evaluate(node, env) {
   }
 
   if (node.type === "block") {
-    // ブロックの値＝最後の文の値（順に評価、同じenvのまま逐次実行）
+    // Dict判定はpass3.jsのinferAtomTypeと同じ基準（全行がdefine）。辞書は独立した
+    // スコープで評価し、キーが呼び出し元のenvへ漏れないようにする（let*的に、後の
+    // キーのデフォルト式的な参照は前のキーを見られる）。
+    if (node.lines.length >= 1 && node.lines.every(isDefineNode)) {
+      const dictEnv = newRuntimeEnv(env);
+      const dict = {};
+      for (const line of node.lines) {
+        const value = evaluate(line, dictEnv); // define評価：dictEnvに束縛しつつ値を返す
+        dict[line.left.value.slice(1, -1)] = value; // "<foo>" -> "foo"
+      }
+      return dict;
+    }
+    // 通常のブロックの値＝最後の文の値（順に評価、同じenvのまま逐次実行）
     let result = UNIT;
     for (const line of node.lines) result = evaluate(line, env);
     return result;
@@ -289,6 +306,24 @@ function evaluate(node, env) {
         const l = evaluate(node.left, env);
         const r = evaluate(node.right, env);
         return [...asList(l), r];
+      }
+      case "get_prop": {
+        // `d ' foo`: 右辺が識別子の場合、変数として評価せず「キー名そのもの」として扱う
+        // （Dict/Structのフィールドアクセス）。数値等なら通常通り評価してListのインデックスに使う。
+        const l = evaluate(node.left, env);
+        if (isUnit(l)) return UNIT;
+        if (node.right.type === "atom" && node.right.kind === "identifier") {
+          const key = node.right.value.slice(1, -1); // "<foo>" -> "foo"
+          if (l && typeof l === "object" && !Array.isArray(l)) {
+            return Object.prototype.hasOwnProperty.call(l, key) ? l[key] : UNIT;
+          }
+          return UNIT;
+        }
+        const r = evaluate(node.right, env);
+        if (Array.isArray(l) && typeof r === "number") {
+          return r >= 0 && r < l.length ? l[r] : UNIT;
+        }
+        return UNIT;
       }
     }
 
