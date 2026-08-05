@@ -59,6 +59,16 @@ function run() {
 runBtn.addEventListener("click", run);
 srcEl.addEventListener("keydown", (e) => {
   if (e.ctrlKey && e.key === "Enter") run();
+  // Signのインデントは厳密にタブ文字のみ（lexer.jsのmarkBlockは/^\t*/でタブしか見ない、
+  // スペースは意味を持たない）。素のtextareaはTabキーでフォーカス移動してしまい
+  // タブ文字を入力できないため、ここで明示的にタブ文字を挿入する。
+  if (e.key === "Tab") {
+    e.preventDefault();
+    const start = srcEl.selectionStart;
+    const end = srcEl.selectionEnd;
+    srcEl.value = srcEl.value.slice(0, start) + "\t" + srcEl.value.slice(end);
+    srcEl.selectionStart = srcEl.selectionEnd = start + 1;
+  }
 });
 
 run();

@@ -97,6 +97,17 @@ function markBlock(input) {
     const leadingWs = leadingWsMatch ? leadingWsMatch[0] : '';
     const content = line.substring(leadingWs.length);
 
+    // タブを全部消費してもなお行頭にスペースが残っている＝スペースインデント（またはタブ+
+    // スペース混在）の疑い。スペース1個までは（grammarの`_`が元々許容する程度の余白として）
+    // 黙って無視するが、2個以上はスペースインデントの意図とみなし明確な構文エラーにする
+    // （黙って独立したトップレベル文として誤解釈されるのを防ぐ）。ブラケット内
+    // （bracketDepth>0）ではインデント自体が意味を持たない（整形用の空白は無害）ため対象外。
+    if (bracketDepth === 0 && content.startsWith('  ')) {
+      throw new SyntaxError(
+        `Signのインデントは厳密にタブ文字(\\t)のみです。スペース2個以上によるインデントは使用できません: ${JSON.stringify(line)}`
+      );
+    }
+
     if (bracketDepth > 0) {
       const newDepth = bracketDepth + bracketDelta(content);
       if (justOpenedBracket || newDepth <= 0) {
