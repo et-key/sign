@@ -261,6 +261,29 @@ const COMPARE_OPS = {
   more: (l, r) => l > r,
 };
 
+// list_cheat_sheet.md「重複した要素の作成/リフト/分割」: `*`（repeat）・`^`（lift）・
+// `/`（split）はList左辺に対して固有の意味を持つ。それ以外の算術演算子（+ - %）は
+// Stringの場合（下記）と同様、Listに対しては未定義のため型エラーとしてUnitへ収束する。
+function listRepeat(l, r) {
+  // [0 1] * 3 → [0 1 0 1 0 1]（lをr回連結）
+  const out = [];
+  for (let i = 0; i < r; i++) out.push(...l);
+  return out;
+}
+function listLift(l, r) {
+  // [0 1] ^ 3 → [[0 1] [0 1] [0 1]]（lのコピーをr個、要素として持ち上げる）
+  const out = [];
+  for (let i = 0; i < r; i++) out.push([...l]);
+  return out;
+}
+function listSplit(l, r) {
+  // [1 2 3 4] / 2 → [[1 2] [3 4]]（lをr個のグループへ均等分割）
+  const out = [];
+  const size = Math.ceil(l.length / r);
+  for (let i = 0; i < l.length; i += size) out.push(l.slice(i, i + size));
+  return out;
+}
+
 function evalArith(name, leftNode, rightNode, env) {
   const l = evaluate(leftNode, env);
   if (isUnit(l)) return UNIT; // 左辺Unit = 吸収元
@@ -271,7 +294,44 @@ function evalArith(name, leftNode, rightNode, env) {
   if (typeof l === "string") return UNIT;
   const r = evaluate(rightNode, env);
   if (isUnit(r)) return l; // 右辺Unit = 単位元（id射、素通し）
+  if (Array.isArray(l)) {
+    if (name === "mul") return listRepeat(l, r);
+    if (name === "pow") return listLift(l, r);
+    if (name === "div") return listSplit(l, r);
+    return UNIT; // list_cheat_sheet.mdに無い組み合わせ（+ - %）はStringと同様に型エラー
+  }
   return ARITH_OPS[name](l, r);
+}
+
+// list_model.md §2.3の派生演算子（`~+`/`~-`/`~*`/`~/`/`~^`）に対応するstep関数を返す。
+function rangeStepFn(op, step) {
+  switch (op) {
+    case "~-":
+      return (v) => v - step;
+    case "~*":
+      return (v) => v * step;
+    case "~/":
+      return (v) => v / step;
+    case "~^":
+      return (v) => Math.pow(v, step);
+    default:
+      return (v) => v + step; // "~+" またはstep省略の単純形式
+  }
+}
+
+// start から end まで（終端を含む）、stepFnを繰り返し適用して配列へ実体化する。
+// 昇順・降順どちらもstart/endの大小関係だけから判定する（呼び出し元でstepの符号を揃える）。
+function buildRange(start, end, stepFn) {
+  const out = [];
+  let v = start;
+  let guard = 0;
+  const ascending = start <= end;
+  while (ascending ? v <= end : v >= end) {
+    out.push(v);
+    v = stepFn(v);
+    if (++guard > 1000000) throw new Error("interpreter: range: 要素数が多すぎます（stepが0または終端に向かっていない可能性）");
+  }
+  return out;
 }
 
 function evalCompare(name, op, leftNode, rightNode, env) {
@@ -307,6 +367,17 @@ function evaluate(node, env) {
   }
 
   if (node.type === "block") {
+    // |list|（abs）: list_cheat_sheet.md「要素数の取得」。ブロックとしては通常通り解決される
+    // （中身を逐次評価、最後の文の値）が、kind==='abs'の場合だけ絶対値/要素数へ変換する
+    // ——List/StringならJSの.length、数値ならMath.abs（"absolute"の名の通り、リストの
+    // 要素数と数値の絶対値を同じ記号で表す設計、list_cheat_sheet.mdの命名）。
+    if (node.kind === "abs") {
+      let inner = UNIT;
+      for (const line of node.lines) inner = evaluate(line, env);
+      if (Array.isArray(inner) || typeof inner === "string") return inner.length;
+      if (isUnit(inner)) return UNIT;
+      return Math.abs(inner);
+    }
     // Dict判定はpass3.jsのinferAtomTypeと同じ基準（全行がdefineかつ左辺が識別子）。
     // 左辺が識別子でないdefine行（下記match_case）と区別するため、identifierNode
     // 判定も併せて要求する——さもないと「フォールバック行の無いmatch_case連鎖」
@@ -408,10 +479,61 @@ function evaluate(node, env) {
         if (typeof l === "string") return l + stringifyForConcat(r);
         return [...asList(l), ...asList(r)];
       }
+      // list_cheat_sheet.md「先頭/末尾に要素追加」（10.1、pass2.jsのcoproductReduce参照）。
+      // pass2.js側の命名はJS配列メソッドのpush/unshiftとは意味が逆——push(a,b)はb側が
+      // List（右がList~）で「aを先頭へ」、unshift(a,b)はa側がList（左がList~）で
+      // 「bを末尾へ」（pass2.js冒頭コメント「優先度10.1の具体的な演算子名」参照、
+      // 仕様は方向性を明記していないため実装時に決めた仮定）。
+      case "push": {
+        // 0 [1 2 3] → [0 1 2 3]（aを先頭に追加）
+        const a = evaluate(node.left, env);
+        const b = evaluate(node.right, env);
+        return [a, ...asList(b)];
+      }
+      case "unshift": {
+        // [1 2 3] 4 → [1 2 3 4]（bを末尾に追加）
+        const a = evaluate(node.left, env);
+        const b = evaluate(node.right, env);
+        return [...asList(a), b];
+      }
+      // list_model.md §2.3「派生演算子による範囲リストの構築」。仕様上レンジ式の実体は
+      // 常にイテレータ（{start,step,end}の固定サイズ構造体、終端の無い2項指定はPull型の
+      // 無限ストリームにもなれる）だが、本インタプリタは全ての値をJS配列へ実体化する
+      // 単純な評価器のため、ここでは常に即座に配列へ展開する（3項セット「即座に全消費」
+      // の挙動のみ再現、2項指定の遅延・無限ストリームは未対応——下記参照）。
+      case "range": {
+        // 3項形式 [start ~+ step ~ end]（node.leftがrange_arithmeticノード）と、
+        // 単純形式 [start ~ end]（step省略、昇順なら+1・降順なら-1）の両方を扱う。
+        if (node.left && node.left.type === "operation" && node.left.name === "range_arithmetic") {
+          const start = evaluate(node.left.left, env);
+          const step = evaluate(node.left.right, env);
+          const end = evaluate(node.right, env);
+          return buildRange(start, end, rangeStepFn(node.left.op, step));
+        }
+        const start = evaluate(node.left, env);
+        const end = evaluate(node.right, env);
+        const step = start <= end ? 1 : -1;
+        return buildRange(start, end, (v) => v + step);
+      }
+      case "range_arithmetic": {
+        // 2項形式 [start ~+ step]（終端なし）は仕様上、終端を持たない無限のPull型
+        // ストリーム（list_model.md §2.3「2項指定」）。本インタプリタは実体化された
+        // 値しか扱えないため、無限生成を試みず明示的に未対応として拒否する。
+        throw new Error(
+          "interpreter: 終端の無い範囲式（2項指定の~+等）は無限のPull型ストリームのため、値を全て実体化する本インタプリタでは未対応です（list_model.md §2.3）"
+        );
+      }
       case "product": {
+        // list_model.md §2.1: `1,2,3,4,5`（スカラーのカンマ連鎖）は`1 2 3 4 5`と等価な
+        // フラットリストだが、§(n次元配列の構築)の`1 2 3 , 4 5 6`は[[1,2,3],[4,5,6]]という
+        // 入れ子。`,`は左結合（product[product[1,2],3]の形）で連鎖するため、左辺自身が
+        // 同じproductノード（＝連鎖の続き）の場合だけ展開して連結し、そうでない場合
+        // （スペースで構築された塊やリテラル単体が左辺の場合）は互いに対等な要素として
+        // 2要素のリストにする。
         const l = evaluate(node.left, env);
         const r = evaluate(node.right, env);
-        return [...asList(l), r];
+        const isChain = node.left && node.left.type === "operation" && node.left.name === "product";
+        return isChain ? [...asList(l), r] : [l, r];
       }
       case "get_prop": {
         // `d ' foo`: 右辺が識別子の場合、変数として評価せず「キー名そのもの」として扱う
@@ -428,6 +550,11 @@ function evaluate(node, env) {
         const r = evaluate(node.right, env);
         if (Array.isArray(l) && typeof r === "number") {
           return r >= 0 && r < l.length ? l[r] : UNIT;
+        }
+        // list_cheat_sheet.md「範囲で要素取得」: `[1 2 3 4] ' [1 ~ 3]` → `[2 3 4]`。
+        // rangeが実体化したインデックス列（配列）で、該当位置の値をまとめて取り出す。
+        if (Array.isArray(l) && Array.isArray(r)) {
+          return r.map((i) => (typeof i === "number" && i >= 0 && i < l.length ? l[i] : UNIT));
         }
         return UNIT;
       }
