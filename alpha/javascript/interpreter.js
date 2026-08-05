@@ -39,6 +39,9 @@ function isUnit(v) {
 function isDefineNode(n) {
   return !!n && n.type === "operation" && n.name === "define";
 }
+function isIdentifierNode(n) {
+  return !!n && n.type === "atom" && n.kind === "identifier";
+}
 
 // ---- 実行時環境（Pass1の静的envとは別物、実際の値を保持する） ----
 // diagnosticsは子envにも同じ配列参照を引き継ぐ（ルートenvに一元的に蓄積される）。
@@ -112,10 +115,73 @@ function paramEntriesOf(paramsNode) {
   return [];
 }
 
+// ブラケット仮引数リスト（`[x ~xs]`等、list_model.md §2.4のEagerパターン）へ、呼び出し側が
+// 渡した単一のList/Dict実引数を分割代入できる値かどうか判定する。Lambda（クロージャ）は
+// 除外する——`f`をそのまま1個の不透明な値として渡すケースを構造体扱いしないため。
+function isDestructurable(v) {
+  return Array.isArray(v) || (v !== null && typeof v === "object" && !v.__lambda__);
+}
+
+// ブラケット仮引数リストへ、単一のList/Dict実引数を分割代入する（8/5の設計合意）。
+// List: 先頭から非restエントリへ位置的に配り、restエントリは残り全部をスライスで受け取る
+// （sum_list等、list_model.md §2.4のEagerパターン）。
+// Dict: エントリ名とキー名の一致で（順序に関わらず）値を引く（構造体メンバーの一致による
+// 自動バインディング、function_guide.md）。restエントリがあれば、名前が一致しなかった
+// 残りのキーをまとめた新しいオブジェクトを渡す（pattern_guide.mdのStore「~objは...渡した
+// 構造体以下の構造体を保持したい場合に使う」）。
+// 【.st/.istへの含み】ここで「どのフィールド名にアクセスしたか」がentriesの名前列挙に
+// 集約されているため、将来.st生成（type_system.md §6.2「関数仮引数のフィールド要求」）を
+// 実装する際、このentries列挙をそのまま構造的フィールド要求集合として再利用できる想定。
+function bindBracketParams(entries, value, env) {
+  if (Array.isArray(value)) {
+    let idx = 0;
+    for (const entry of entries) {
+      if (entry.rest) {
+        envDefine(env, entry.name, value.slice(idx));
+        idx = value.length;
+        continue;
+      }
+      let v = idx < value.length ? value[idx] : UNIT;
+      idx++;
+      if (isUnit(v)) {
+        if (entry.default) v = evaluate(entry.default, env);
+        else return null; // 完全性公理
+      }
+      envDefine(env, entry.name, v);
+    }
+    return env;
+  }
+  // Dict（構造体）: entry名とキー名の一致で分割代入
+  const claimedKeys = new Set();
+  for (const entry of entries) {
+    if (entry.rest) continue; // restは全エントリ処理後にまとめて扱う
+    const key = entry.name.slice(1, -1); // "<foo>" -> "foo"
+    claimedKeys.add(key);
+    let v = Object.prototype.hasOwnProperty.call(value, key) ? value[key] : UNIT;
+    if (isUnit(v)) {
+      if (entry.default) v = evaluate(entry.default, env);
+      else return null; // 完全性公理
+    }
+    envDefine(env, entry.name, v);
+  }
+  const restEntry = entries.find((e) => e.rest);
+  if (restEntry) {
+    const rest = {};
+    for (const k of Object.keys(value)) if (!claimedKeys.has(k)) rest[k] = value[k];
+    envDefine(env, restEntry.name, rest);
+  }
+  return env;
+}
+
 // 仮引数を実引数に束縛した新しい実行時envを返す。完全性公理により崩壊する場合は null を返す。
 function bindParams(paramsNode, argValues, closureEnv) {
   const entries = paramEntriesOf(paramsNode);
   const env = newRuntimeEnv(closureEnv);
+
+  if (paramsNode && paramsNode.type === "params" && paramsNode.bracket && argValues.length === 1 && isDestructurable(argValues[0])) {
+    return bindBracketParams(entries, argValues[0], env);
+  }
+
   let argIdx = 0;
 
   for (const entry of entries) {
@@ -241,10 +307,13 @@ function evaluate(node, env) {
   }
 
   if (node.type === "block") {
-    // Dict判定はpass3.jsのinferAtomTypeと同じ基準（全行がdefine）。辞書は独立した
-    // スコープで評価し、キーが呼び出し元のenvへ漏れないようにする（let*的に、後の
-    // キーのデフォルト式的な参照は前のキーを見られる）。
-    if (node.lines.length >= 1 && node.lines.every(isDefineNode)) {
+    // Dict判定はpass3.jsのinferAtomTypeと同じ基準（全行がdefineかつ左辺が識別子）。
+    // 左辺が識別子でないdefine行（下記match_case）と区別するため、identifierNode
+    // 判定も併せて要求する——さもないと「フォールバック行の無いmatch_case連鎖」
+    // （全行がcond:result）がDict扱いされてしまう。辞書は独立したスコープで評価し、
+    // キーが呼び出し元のenvへ漏れないようにする（let*的に、後のキーのデフォルト式的な
+    // 参照は前のキーを見られる）。
+    if (node.lines.length >= 1 && node.lines.every((l) => isDefineNode(l) && isIdentifierNode(l.left))) {
       const dictEnv = newRuntimeEnv(env);
       const dict = {};
       for (const line of node.lines) {
@@ -253,9 +322,21 @@ function evaluate(node, env) {
       }
       return dict;
     }
-    // 通常のブロックの値＝最後の文の値（順に評価、同じenvのまま逐次実行）
+    // 通常のブロックの逐次評価。match_case（function_guide.md「?の右辺を改行・インデント
+    // ブロックを挟むことで、本体内の:演算子はmatch_caseとなる」）：defineノードで左辺が
+    // 識別子でない（＝実質的には条件式）行は、「条件:結果」の短絡評価テストとして扱う。
+    // 条件を評価し非Unit（真）なら即座にその行の右辺（結果）を返してブロック全体を
+    // 打ち切る。Unit（偽）なら束縛は一切行わず次の行へ進む。左辺が識別子の行は今まで
+    // 通りevaluate（defineとしてenvDefineし、その値をブロックの現在の結果とする）。
     let result = UNIT;
-    for (const line of node.lines) result = evaluate(line, env);
+    for (const line of node.lines) {
+      if (isDefineNode(line) && !isIdentifierNode(line.left)) {
+        const cond = evaluate(line.left, env);
+        if (!isUnit(cond)) return evaluate(line.right, env);
+        continue;
+      }
+      result = evaluate(line, env);
+    }
     return result;
   }
 

@@ -120,6 +120,46 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   `pair(1,2)`のように展開されない（bが埋まらず完全性公理で`__`に収束、
   `test/interpreter.test.js`で確認）。8/5の設計合意「apply_reverseは複数引数を取らない」
   を反映。
+  **ブラケット仮引数リスト（`[x ~xs]`等、list_model.md §2.4のEagerパターン）への単一
+  List/Dict実引数の分割代入を実装**：以前は`bindParams`がブラケット形式か裸形式かを
+  区別せず、渡された実引数を単純に位置順で束縛していたため、`sum_list : [x ~xs] ? ...`に
+  `sum_list [1 2 3 4 5]`を渡すと（本来 x=1, xs=[2,3,4,5] に分割されるべきところ）List
+  **全体**が最初の仮引数`x`にまるごと束縛され、restが常に空になって再帰が終端せず
+  スタックオーバーフローしていた。同根の原因で`calc_diff : [foo bar ~obj] ? ...`への
+  辞書渡し（キー名一致の自動バインド、function_guide.md「構造体メンバーの一致による
+  自動バインディング」）も`__`に崩壊していた。
+  `pass2.js`側に`isBracketParamList()`を追加し、`params`ノードへ`bracket: true/false`
+  フラグを持たせるようにした（func_mixedのようにブラケットが定義行より深くインデントされ、
+  grammarのTerm規則で1階層余分にラップされるケースも正しく判定——README「Lambda仮引数部
+  の専用処理」参照）。裸の複数行デフォルト引数形式（`g:\n x\n y:x+1\n?...`）は`bracket:
+  false`のままで、既存のstream/pull型の位置引数束縛を維持する（8/5の設計合意：ブラケット
+  無しは参照ではなくストリームとして処理する）。
+  `interpreter.js`の`bindParams`は、`bracket:true`かつ実引数がちょうど1個でList/Dict
+  （非Lambda）なら`bindBracketParams`へ分岐する。Listは先頭から非restエントリへ位置的に
+  配り、restエントリが残り全部をスライスで受け取る。Dictはエントリ名とキー名の一致で
+  （順序に関わらず）値を引き、restエントリがあれば名前が一致しなかった残りのキーを
+  まとめた新しいオブジェクトを渡す。`test/interpreter.test.js`で`sum_list [1 2 3 4 5]
+  → 15`・`calc_diff`のキー順不同渡し`→ 80`・`pattern_guide.md`のStore例（`get_age dict
+  → 20`）を確認、既存のList destructuring（`get_age [1 2 3] → 1`）・裸の複数引数
+  （`f 3 5 → 8`）にも回帰なし。
+  【`.st`/`.ist`への含み、8/5の設計合意】`bindBracketParams`が参照する`entries`の名前列挙は、
+  将来`.st`生成（`type_system.md`§6.2「関数仮引数のフィールド要求」、`{x, y}`のような
+  構造的フィールド要求集合）を実装する際、そのまま再利用できる想定で実装した。
+  **match_caseを実装**：`function_guide.md`「`?`の右辺を改行・インデントブロックを挟むことで、
+  本体内の`:`演算子はmatch_caseとなる」を実装した。以前は本体ブロック内の`cond : result`行
+  （例: `x > 3 : x - y`）が、左辺が識別子でない普通の`define`ノードとしてAST上は正しく
+  構築されていたが、`envDefine(env, undefined, ...)`という無意味な副作用を起こすだけで
+  評価結果は捨てられ、ブロック評価は常に「最後の行の値」を返すだけだった（`func_mixed [5]`が
+  `-1`ではなく`6`になっていた）。ブロック評価で、defineノードのうち左辺が識別子でない
+  （＝実質的には条件式の）行を「条件:結果」の短絡評価テストとして扱うよう修正：条件を評価し
+  非Unit（真）なら即座にその行の右辺を返してブロック全体を打ち切り、Unit（偽）なら束縛を
+  一切行わず次の行へ進む。左辺が識別子の行は今まで通り変数定義として扱う。
+  **副産物のバグ修正**：Dict判定（`node.lines.every(isDefineNode)`）が左辺の識別子チェックを
+  していなかったため、フォールバック行の無いmatch_case連鎖（全行が`cond:result`）を
+  Dictと誤判定して`line.left.value`（存在しない）にアクセスしクラッシュしうる状態だった
+  ——`isIdentifierNode(l.left)`も要求するよう修正。
+  `test/interpreter.test.js`で`func_mixed`（3パターン）・`pattern_guide.md`のEither例
+  （3パターン、条件の短絡確認込み）・辞書リテラルの回帰なしを確認。
   **`'`（get_prop）を追加**：`d ' foo`のように、右辺が識別子の場合は変数として評価せず
   「キー名そのもの」として辞書から引く（数値なら通常通り評価してListのインデックスに使う）。
 - `test/pass2.test.js` — Pass2単体（envなし）の動作確認。9/9 pass。

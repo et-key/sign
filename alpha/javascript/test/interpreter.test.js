@@ -209,5 +209,64 @@ check(
 	"__"
 );
 
+// ブラケット仮引数リスト（`[x ~xs]`等）への単一List/Dict実引数の分割代入（8/5の設計合意、
+// list_model.md §2.4のEagerパターン）。以前はbindParamsが位置引数と区別せず扱っていたため、
+// Listの場合は先頭要素ではなくList全体が最初の仮引数に丸ごと束縛され、restパラメータが
+// 常に空になって再帰が終端しなかった（function_guide.mdのsum_list例でスタックオーバーフロー）。
+check(
+	"sum_list [1 2 3 4 5] → 15（[x ~xs]がListを要素ごとに分割代入する、function_guide.md）",
+	run("sum_list : [x ~xs] ? xs & x + (sum_list xs) | x\nsum_list [1 2 3 4 5]"),
+	15
+);
+
+check(
+	"calc_diff dict渡し → 80（[foo bar ~obj]がキー名一致で辞書を自動バインドする、順序に依らない）",
+	run("calc_diff : [foo bar ~obj] ? foo - bar\ncalc_diff [\n\tbar : 20\n\tfoo : 100\n]"),
+	80
+);
+
+check(
+	"get_age dict渡し → 20（pattern_guide.mdのStore例、~objは未使用でも問題ない）",
+	run("get_age : [age ~obj] ? age\ndict :\n\tname : `Johnny`\n\tage : 20\nget_age dict"),
+	20
+);
+
+check(
+	"get_age [1 2 3] → 1（既存のList destructuringは回帰なし）",
+	run("get_age : [x ~xs] ? x\nget_age [1 2 3]"),
+	1
+);
+
+// match_case（function_guide.md「?の右辺を改行・インデントブロックを挟むことで、本体内の
+// :演算子はmatch_caseとなる」）。以前は本体内の`cond : result`行が普通のdefine（左辺が
+// 識別子でないため envDefine(env, undefined, ...) という無意味な副作用のみ）として処理され、
+// ブロック評価は常に最後の行の値を返すだけだった。左辺が識別子でないdefine行を「条件:結果」の
+// 短絡評価テストとして扱うよう修正（左辺が識別子の行は今まで通りの変数定義のまま）。
+{
+	const func_mixed =
+		"func_mixed :\n\t[\n\t\tx\n\t\ty : x + 1\n\t\t~z\n\t]\n ?\n\tx > 3 : x - y\n\ty\n";
+	check("func_mixed [5] → -1（x=5,y=6、x>3が真なのでx-yで短絡）", run(func_mixed + "func_mixed [5]"), -1);
+	check("func_mixed [2] → 3（x=2,y=3、x>3が偽なのでフォールバックのyへ）", run(func_mixed + "func_mixed [2]"), 3);
+	check("func_mixed [2 10] → 10（x=2,y=10、x>3が偽なのでフォールバックのyへ）", run(func_mixed + "func_mixed [2 10]"), 10);
+}
+
+{
+	const either =
+		"f : x y ?\n\tx < 0 : `Error : x is negative`\n\ty < 0 : `Error : y is negative`\n\tx * y\n";
+	check("Either例 f 2 3 → 6（どちらの条件も偽、フォールバックのx*y）", run(either + "f 2 3"), 6);
+	check(
+		"Either例 f -1 -1 → Error : x is negative（最初に真になった条件で短絡、2番目は評価されない）",
+		run(either + "f -1 -1"),
+		"Error : x is negative"
+	);
+	check("Either例 f 2 -1 → Error : y is negative（1番目は偽、2番目が真で短絡）", run(either + "f 2 -1"), "Error : y is negative");
+}
+
+check(
+	"辞書リテラル（全行が識別子キーのdefine）は引き続きDictとして評価される（match_case誤判定の回帰なし）",
+	run("d : [\n\tfoo : 1\n\tbar : 2\n]\nd ' foo"),
+	1
+);
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

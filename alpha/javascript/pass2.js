@@ -374,6 +374,32 @@ function splitBareParamTokens(tokens) {
   return entries;
 }
 
+// paramTokens[0]（`[x ~xs]`のような単一要素）が、真の意味でのブラケット仮引数リスト
+// （list_model.md §2.4のEagerパターン、実引数を分割代入で受け取る）か、単に複数行に
+// またがって書かれた裸のデフォルト引数形式（`g:\n x\n y:x+1\n?...`）かを判定する。
+// どちらも生トークンの形はINDENT_タグの有無だけでは区別しきれない——func_mixed
+// （function_guide.md）のようにブラケットが定義行より深くインデントされて単独の1文として
+// 書かれると、grammarのTerm規則で1階層余分にラップされ、外側だけ見るとINDENT_タグ付きに
+// 見えてしまうため（README「Lambda仮引数部の専用処理」参照）。
+// 判定方法: INDENT_/ABS_タグが無ければ直接ブラケット。タグ付きなら、その中身が
+// 「唯一の要素で、かつさらに入れ子になった（flat token lineでもタグ付きでもない）配列」で
+// ある限り再帰的に剥がしていき（flattenParamStatementsと同じTerm-wrap剥がしロジック）、
+// 実際に1回でも剥がせて、かつ最終的に「複数のflat token line（＝ブラケットの各行）」に
+// 行き着いた場合のみブラケットとみなす。単に「1個の裸パラメータだけがインデントブロックに
+// 単独で書かれている」ケース（それ自体がflat token line）や、「複数の裸パラメータ行が
+// 直接並んでいる」通常のデフォルト引数形式は、どちらもfalseになる。
+function isBracketParamList(token) {
+  if (!Array.isArray(token)) return false;
+  if (!isTaggedBlock(token)) return true;
+  let inner = token[1];
+  let peeled = false;
+  while (Array.isArray(inner) && inner.length === 1 && Array.isArray(inner[0]) && !isFlatTokenLine(inner[0]) && !isTaggedBlock(inner[0])) {
+    inner = inner[0];
+    peeled = true;
+  }
+  return peeled && Array.isArray(inner) && inner.length >= 1 && inner.every((line) => isFlatTokenLine(line) || isTaggedBlock(line));
+}
+
 // 仮引数部の生トークン列を解析し、{ node, scope } を返す。
 // scope は let* 的な逐次束縛（自分より前のパラメータ + 外側スコープのみ参照可能）を
 // 反映した子スコープで、後続のデフォルト式・関数本体の両方から使われる。
@@ -390,8 +416,10 @@ function buildParameterList(paramTokens, env) {
   }
 
   let rawEntries;
+  let isBracket = false;
   if (paramTokens.length === 1 && Array.isArray(paramTokens[0])) {
     // ブラケット([x ~xs])形式、またはインデントブロック（デフォルト引数）形式
+    isBracket = isBracketParamList(paramTokens[0]);
     rawEntries = flattenParamStatements(extractParamLines(paramTokens[0])).flatMap(parseParamLine);
   } else {
     // 裸の空白区切り形式（例: g x, x ~xs）
@@ -420,7 +448,11 @@ function buildParameterList(paramTokens, env) {
   // （function_guide.md「関数適用時」節）。値の評価をしなくても構造だけから機械的に
   // 求まる部分として、実質アリティ（デフォルト・rest以外の仮引数の数）だけ先に持たせておく。
   const requiredArity = entries.filter((e) => !e.rest && e.default === null).length;
-  return { node: { type: "params", entries, requiredArity }, scope };
+  // bracket: true の場合、interpreter.js の bindParams は「呼び出し側が渡した単一の
+  // List/Dict実引数を、この仮引数リストへ分割代入する」という別経路（Eagerパターン、
+  // list_model.md §2.4）を通る。裸の複数行デフォルト引数形式（isBracketParamList参照）
+  // ではfalseのままで、既存の位置引数ストリーム的な束縛（stream/pull型）を維持する。
+  return { node: { type: "params", entries, requiredArity, bracket: isBracket }, scope };
 }
 
 // 同一パラメータリスト内で、まだ束縛されていない識別子（自分自身 or 後ろのパラメータ）への
