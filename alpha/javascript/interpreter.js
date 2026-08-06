@@ -226,6 +226,14 @@ function makeComposed(f, g) {
   return { __lambda__: true, __compose__: [f, g] };
 }
 
+// ポイントフリー記述（function_guide.md）: `[+]`（左右とも欠落）・`[+ 1]`（右辺だけ束縛）
+// のような、演算子を直接値として扱うLambda。nodeはpass2.jsが作るpartialな中置演算
+// ノード（{op, name, partial:true, left, right}）で、left/rightのうち欠けている側が
+// 呼び出し引数で埋まる。
+function makePointfreeClosure(node, env) {
+  return { __lambda__: true, __pointfree__: node, env };
+}
+
 function applyClosure(closure, argValues) {
   if (typeof closure === "function") return closure(...argValues); // 組み込み関数
   if (!closure || !closure.__lambda__) {
@@ -239,6 +247,7 @@ function applyClosure(closure, argValues) {
     if (isUnit(mid)) return UNIT;
     return applyClosure(g, [mid]);
   }
+  if (closure.__pointfree__) return applyPointfree(closure.__pointfree__, closure.env, argValues);
   const callEnv = bindParams(closure.params, argValues, closure.env);
   if (callEnv === null) return UNIT;
   return evaluate(closure.body, callEnv);
@@ -348,6 +357,80 @@ function evalCompare(name, op, leftNode, rightNode, env) {
   return truthy ? (l === 0 || l === 1 ? r : l) : UNIT; // §4: 左辺が算術単位元(0/1)なら右辺、それ以外は左辺を返す
 }
 
+// 前置/後置の単項演算（すでに評価済みの値vに対して行う）。通常のevaluate()経路
+// （node.operandを評価してここへ渡す）と、ポイントフリーのhole適用（下記applyPointfree、
+// 呼び出し引数を直接vとして渡す）の両方から共有する。
+function evalUnaryOp(name, v) {
+  switch (name) {
+    case "negate":
+      return isUnit(v) ? UNIT : -v;
+    case "not":
+      return isUnit(v) ? true : UNIT; // §4: !__ = id射（真）、!非Unit = __（偽）
+    case "expand":
+      // 後置~：1段階展開。今回の簡易値表現ではリストはそのままJS配列のため、
+      // 展開はconstruct/concat側（配列のspread）に委ねてそのまま値を通す。
+      return v;
+    case "continuous":
+      // 前置~（rest記法用の密着マーカー）。値としてはオペランドをそのまま返す。
+      return v;
+    case "factorial": {
+      if (isUnit(v)) return UNIT;
+      let r = 1;
+      for (let i = 2; i <= v; i++) r *= i;
+      return r;
+    }
+    case "export_internal":
+    case "export_external":
+    case "export_pin":
+      return v;
+  }
+  throw new Error(`interpreter: 未対応の前置/後置演算 '${name}'（$/@/#はアドレス操作のため未対応）`);
+}
+
+// ポイントフリー演算子（`[+]`/`[+ 1]`/`[!_]`/`[_!]`等）を呼び出し引数へ適用する。
+// 中置（op/left/right）と前置/後置（op/operand=hole）の両方に対応する
+// （function_guide.md「全ての演算子を関数として扱う」、演算子の種類を問わない）。
+// - 前置/後置（`[!_]`/`[_!]`）: holeの位置に呼び出し引数をそのまま充てる（arity=1固定）。
+// - 中置・完全に裸（left/right両方null）: 貪欲に複数引数を畳み込む（function_guide.md
+//   「ポイントフリー記述の二項演算子は、複数の引数を貪欲に演算する」、[+] 1 2 3 4 5 → 15）。
+//   後置~による展開（evalArgValues）と組み合わせれば、[+] [1 2 3 4]~ のような畳み込み
+//   関数（list_cheat_sheet.md）としても機能する。
+// - 中置・右辺だけ束縛（left=null, right=非null）: 呼び出し引数が欠けている左辺を埋める
+//   （[+ 1] 5 = 5 + 1、documents/ja-jp/guide/example.snの合成連鎖の例）。
+function applyPointfree(node, closureEnv, argValues) {
+  if (node.position === "prefix" || node.position === "postfix") {
+    const x = argValues.length > 0 ? argValues[0] : UNIT;
+    return evalUnaryOp(node.name, x);
+  }
+
+  const combine = (a, b) => {
+    if (ARITH_OPS[node.name]) return ARITH_OPS[node.name](a, b);
+    if (COMPARE_OPS[node.name]) {
+      // §4と同じ「真なら値(左辺 or 右辺)、偽ならUnit」規則（Unit伝播はevalCompare同様）。
+      if (isUnit(a) || isUnit(b)) return UNIT;
+      const truthy = COMPARE_OPS[node.name](a, b);
+      return truthy ? (a === 0 || a === 1 ? b : a) : UNIT;
+    }
+    throw new Error(`interpreter: pointfree: 未対応の演算子 '${node.name}'`);
+  };
+
+  const rightBound = node.right !== null && node.right !== undefined;
+  const leftBound = node.left !== null && node.left !== undefined;
+
+  if (!leftBound && !rightBound) {
+    if (argValues.length === 0) return UNIT;
+    return argValues.reduce((acc, v) => (isUnit(acc) ? UNIT : combine(acc, v)));
+  }
+  if (rightBound && !leftBound) {
+    const bound = evaluate(node.right, closureEnv);
+    const x = argValues.length > 0 ? argValues[0] : UNIT;
+    if (isUnit(x)) return UNIT;
+    return combine(x, bound);
+  }
+  // left束縛・right欠落（例が仕様に無いため未対応）。
+  throw new Error("interpreter: pointfree: この形の部分適用（左辺束縛・右辺欠落）は未対応です");
+}
+
 // ---- construct/concat/product（List/Struct構築） ----
 function asList(v) {
   return Array.isArray(v) ? v : [v];
@@ -412,6 +495,11 @@ function evaluate(node, env) {
   }
 
   if (node.type === "operation") {
+    // ポイントフリー記述（`[+]`/`[+ 1]`等、pass2.jsが作るpartialな中置演算ノード）は
+    // 値として評価される場面では即座に演算しようとせず、クロージャ値として返す
+    // （下のARITH_OPS/COMPARE_OPS分岐に落ちるとnode.left===nullをUnit扱いして
+    // 誤った結果になるため、switch/算術分岐より前でここで捕捉する）。
+    if (node.partial) return makePointfreeClosure(node, env);
     switch (node.name) {
       case "define": {
         const value = node.right.name === "lambda" ? makeClosure(node.right.left, node.right.right, env) : evaluate(node.right, env);
@@ -564,36 +652,7 @@ function evaluate(node, env) {
     if (COMPARE_OPS[node.name]) return evalCompare(node.name, node.op, node.left, node.right, env);
 
     if (node.position === "prefix" || node.position === "postfix") {
-      switch (node.name) {
-        case "negate": {
-          const v = evaluate(node.operand, env);
-          return isUnit(v) ? UNIT : -v;
-        }
-        case "not": {
-          const v = evaluate(node.operand, env);
-          return isUnit(v) ? true : UNIT; // §4: !__ = id射（真）、!非Unit = __（偽）
-        }
-        case "expand": {
-          // 後置~：1段階展開。今回の簡易値表現ではリストはそのままJS配列のため、
-          // 展開はconstruct/concat側（配列のspread）に委ねてそのまま値を通す。
-          return evaluate(node.operand, env);
-        }
-        case "continuous":
-          // 前置~（rest記法用の密着マーカー）。値としてはオペランドをそのまま返す。
-          return evaluate(node.operand, env);
-        case "factorial": {
-          const v = evaluate(node.operand, env);
-          if (isUnit(v)) return UNIT;
-          let r = 1;
-          for (let i = 2; i <= v; i++) r *= i;
-          return r;
-        }
-        case "export_internal":
-        case "export_external":
-        case "export_pin":
-          return evaluate(node.operand, env);
-      }
-      throw new Error(`interpreter: 未対応の前置/後置演算 '${node.name}'（$/@/#はアドレス操作のため未対応）`);
+      return evalUnaryOp(node.name, evaluate(node.operand, env));
     }
 
     // 未対応の演算（$/@/#等）

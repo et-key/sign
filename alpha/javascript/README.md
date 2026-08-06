@@ -199,10 +199,58 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   例外になることを確認）。`get_prop`（`'`）もrange（配列）を右辺に取れるよう拡張し、
   `[1 2 3 4] ' [1 ~ 3] → [2 3 4]`（範囲インデックスでの一括取得、list_cheat_sheet.md）
   を実装。
+  **ポイントフリー記述（function_guide.md「任意のカッコで演算子を囲むことで関数として扱う」）
+  を実装**：`[+]`（左右とも欠落）・`[+ 1]`（右辺だけ束縛）が全く機能していなかった
+  ——縮約しきれず残った裸の中置演算子トークン（`"+"`という生の文字列）は`getCategory`に
+  一度も拾われず常にAtom扱いで、`1 2 [+] 3 4`のような式は`+`を一度も呼ばずに静かに
+  変な値を返していた。`pass2.js`の`reduceAll`終端に、縮約しきれず残った「演算子1個
+  だけ」「演算子＋右オペランド1個（左辺無し）」を`partial:true`の中置演算ノードへ
+  変換する処理を追加（`getCategory`の既存の`if (node.partial) return "Lambda"`則で
+  自動的にLambda扱いになる）。`getCategory`のblock判定も、1行だけのbracket系ブロック
+  （`[+]`はブロック{lines:[partialノード]}という形になる）なら中身のカテゴリを継承する
+  よう修正（`unwrapSoloBlock`）。
+  **複数引数の貪欲な畳み込み（`[+] 1 2 3 4 5 → 15`）はPhase2（apply）専用の特例として
+  実装**：完全に裸な演算子（left/right両方null）は「アリティ不定」であり、`getCategory`
+  本体で「常にLambda」にしてしまうとPhase2で消費し切った後もPhase3（apply_reverse）で
+  誤ってLambda扱いされ続け、既に確定した計算結果（`[+](3)(4)`）がまた関数として呼ばれ
+  ようとして例外になる（`1 2 [+] 3 4`で実際に踏んだ）。`COPRODUCT_PHASES`のPhase2側にだけ
+  `extendPointfree`という特例フラグを持たせ、`reduceOnce`が「基点が裸のポイントフリー
+  演算子なら、getCategoryの答えに関わらず右のAtomを取り込む」を直接処理するようにした
+  （`coproductReduce`やgetCategory本体は変更しない）。これにより、Phase2が使い切った
+  時点（＝これ以上右にAtomが無い時点）で自然にAtomへ確定し、Phase3・Phase4へ正しく
+  引き継がれる。
+  **ポイントフリー由来のLambdaはapply_reverse（Phase3）の対象から除外**（8/5の設計合意、
+  演算子の種類を問わず一律）：ポイントフリーは常に前置適用（`[+ 1] 5`）という一つの
+  呼び出し方だけを持ち、UFCS的なreceiver記法（`x f`）という別経路を重ねない——
+  `isPointfreeLambda`でapply連鎖の根本まで遡って判定し、Phase3のmatch関数から除外する。
+  `interpreter.js`側は`makePointfreeClosure`/`applyPointfree`を追加：`evaluate()`は
+  `node.partial`なノードを見たら即座にクロージャ値として返す（算術演算のディスパッチへ
+  素通りしてUnitに収束するのを防ぐ）。適用時は、両辺欠落なら`Array.reduce`で複数引数を
+  畳み込み、右辺だけ束縛なら欠けている左辺を呼び出し引数で埋める（`combine`は
+  `ARITH_OPS`/`COMPARE_OPS`両対応、後者は§4の真偽/値返却規則を再現）。
+  `test/interpreter.test.js`で畳み込み・部分適用・合成連鎖の例（`documents/ja-jp/guide/
+  example.sn`）・元凶だった`1 2 [+] 3 4`・apply_reverse除外の動作・既存のapply_reverse
+  （`5 inc`系）や通常の多引数関数への回帰なしを確認。
   **既知の追加課題（未着手）**：後置`~`（expand）が単なる素通しの実装のため、`[1 2,3 4]~`
   のようなネストしたリストのフラット化（list_cheat_sheet.md「リストのフラット」）は
   1階層剥がれない（`[[1 2] [3 4]]`のまま）。`[1 2 3] ' -1`（負のインデックスで末尾要素を
   取得）も`get_prop`が負数を考慮しておらず未対応のまま（list_cheat_sheet.md「末尾要素の取得」）。
+  末尾カンマによる写像/選択写像糖衣構文（`[* 2,]`＝map、`[< 3,]`＝比較の結果Unitを
+  自然にフィルタするselect、list_cheat_sheet.md）はまだ未着手。
+  **ポイントフリー記述の前置/後置版（`[!_]`＝前置否定、`[_!]`＝後置階乗、
+  function_guide.md「前置演算子は`[<op>_]` 後置演算子は`[_<op>]`」）を実装**：`_`（hole）は
+  `resolveDensity`で既に普通の前置/後置演算ノードのoperandとしてそのまま構造化されていた
+  （中置と違い、ブラケットのアンラップも新規ノード形状も不要）——operandが直接holeの
+  場合にその演算子ノードへ`partial:true`を付けるだけで、既存の`getCategory`のpartial判定に
+  乗った。`interpreter.js`は前置/後置の単項演算ロジックを`evalUnaryOp(name, v)`として
+  抽出し、通常の評価経路（`node.operand`を評価してから渡す）と`applyPointfree`のhole適用
+  経路（呼び出し引数をそのまま`v`として渡す）の両方から共有する。`[!_] 2 < 3`は
+  `2 < 3`という比較式全体を1引数として受け取ってから否定する（比較演算子の優先順位が
+  スペース適用より高いため、`([!_] 2) < 3`ではなく`[!_] (2 < 3)`という意図通りの結合に
+  なる、`test/interpreter.test.js`で確認）。中置と違いarityは常に1固定（holeは1個だけ）
+  なので、Phase2の貪欲消費特例（`isBarePointfreeChainBase`）は対象外——通常のarity-1
+  Lambdaと同じ経路で自然に飽和する。apply_reverse除外（`isPointfreeLambda`）は位置を
+  問わず判定するため、前置/後置のポイントフリーにも変更無く適用される。
 - `test/pass2.test.js` — Pass2単体（envなし）の動作確認。9/9 pass。
 - `test/multi_arg_apply.test.js` — 多引数関数の呼び出しがapplyチェーンとして正しく飽和し、
   余分な引数がconstructでタプル化されることの確認。3/3 pass。

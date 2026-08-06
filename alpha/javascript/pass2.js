@@ -103,11 +103,18 @@ function resolveDensity(rawItems, env) {
     let node = core;
     for (let k = postOps.length - 1; k >= 0; k--) {
       const op = postOps[k];
-      node = { type: "operation", op, name: lookup(op, "postfix")?.name, position: "postfix", operand: node };
+      const operand = node;
+      node = { type: "operation", op, name: lookup(op, "postfix")?.name, position: "postfix", operand };
+      // ポイントフリー記述の前置/後置版（function_guide.md「前置演算子は`[<op>_]`
+      // 後置演算子は`[_<op>]`」）: operandが直接hole（`_`）なら、この演算子は
+      // まだ値を待っている部分適用とみなす（getCategoryの既存のpartial判定に乗る）。
+      if (operand.type === "atom" && operand.kind === "hole") node.partial = true;
     }
     for (let k = preOps.length - 1; k >= 0; k--) {
       const op = preOps[k];
-      node = { type: "operation", op, name: lookup(op, "prefix")?.name, position: "prefix", operand: node };
+      const operand = node;
+      node = { type: "operation", op, name: lookup(op, "prefix")?.name, position: "prefix", operand };
+      if (operand.type === "atom" && operand.kind === "hole") node.partial = true;
     }
     out.push(node);
   }
@@ -130,6 +137,17 @@ function applyChainInfo(node) {
     n = n.left;
   }
   return { depth, base: n };
+}
+
+// bracket系ブロック（indent/absを除く）が1行だけを保持している場合、その1行を再帰的に
+// 覗く（`[+]`のような、演算子1個だけを囲んだブロックの中身を取り出す）。
+// `[1 2 3]`のような複数トークンの行は`lines.length===1`のまま（1行の中で構築済みの
+// construct連鎖になっているだけ）なので、中身の種類で自然に区別される。
+function unwrapSoloBlock(node) {
+  while (node && node.type === "block" && node.kind !== "indent" && node.kind !== "abs" && node.lines.length === 1) {
+    node = node.lines[0];
+  }
+  return node;
 }
 
 // ---- getCategory (coproduct_resolver.md §2) ----
@@ -156,6 +174,14 @@ function getCategory(node, env) {
           return "Lambda";
         }
       }
+      // 【注意】ポイントフリー記述の完全に裸な中置演算子（`[+]`）が複数引数を貪欲に
+      // 取り込む挙動は、ここ（getCategory）ではなくreduceOnceのPhase2（apply）専用の
+      // 特例として実装している（isBarePointfreeChainBase参照）。ここで「常にLambda」に
+      // してしまうと、Phase2で使い切った後のPhase3（apply_reverse）でも依然Lambdaと
+      // 誤判定され、既に確定した計算結果（`[+](3)(4)`のような値）がまた関数として
+      // 呼ばれようとしてしまう（`1 2 [+] 3 4`で実際に踏んだ）。apply連鎖は、名前付き
+      // 識別子と同様に既知のarityが無い限り、1回の適用で即座にAtom（飽和済み）として
+      // 扱うのが正しい——ポイントフリーの多引数消費はPhase2内で完結させる。
     }
     // 通常の演算ノード（算術・concat等）はAtom
     return "Atom";
@@ -172,7 +198,17 @@ function getCategory(node, env) {
     }
     return "Atom";
   }
-  if (node.type === "block") return "Atom";
+  if (node.type === "block") {
+    // ポイントフリー記述（function_guide.md「任意のカッコで演算子を囲むことで関数として
+    // 扱う」）: `[+]`はbracketブロック{lines:[partialノード1個]}という形になるため、
+    // 中身を見ずに常にAtomを返すと外側の余積解決でLambdaとして扱われない。1行だけの
+    // bracket系ブロック（indent/absを除く）は、中身のカテゴリをそのまま継承する
+    // （`[1 2 3]`のような通常のListは中身がconstructでAtomのままなので影響なし）。
+    if (node.kind !== "indent" && node.kind !== "abs" && node.lines.length === 1) {
+      return getCategory(node.lines[0], env);
+    }
+    return "Atom";
+  }
   return "Atom";
 }
 
@@ -258,14 +294,57 @@ function coproductReduce(a, b, env) {
 // （右のAtomへの通常適用）が先に確定するため、apply_reverseが途中のAtomを横取りすることはない。
 // concat/push/unshift/constructの3つ（10.2〜10.0）はcoproductReduce内部でリスト形状のみから
 // 相互排他的に決まり、tier間の競合が無いため、引き続き1フェーズにまとめている。
+// ポイントフリー記述の完全に裸な中置演算子（`[+]`、left/right両方null）のapply連鎖の
+// 根本（base）かどうかを判定する。`[+]`のようにbracketブロックでラップされたまま
+// 渡ってくる場合はunwrapSoloBlockで中身を覗く。Phase2（apply）専用の特例判定にのみ
+// 使う——getCategory本体には反映しない（下記COPRODUCT_PHASESのコメント参照）。
+function isBarePointfreeChainBase(node) {
+  const { base } = applyChainInfo(node);
+  const unwrapped = unwrapSoloBlock(base);
+  return !!(unwrapped && unwrapped.type === "operation" && unwrapped.partial && unwrapped.left === null && unwrapped.right === null);
+}
+
+// ポイントフリー記述由来のLambda（`[+]`のような裸の演算子、`[+ 1]`のような部分適用、
+// およびそのapply連鎖）かどうかを判定する。演算子の種類（算術・比較・前置・後置いずれも
+// ポイントフリー記述できる、function_guide.md）を問わず一律で判定する。
+function isPointfreeLambda(node) {
+  const unwrapped = unwrapSoloBlock(node);
+  if (!unwrapped || unwrapped.type !== "operation") return false;
+  if (unwrapped.partial) return true;
+  if (unwrapped.name === "apply") {
+    const { base } = applyChainInfo(unwrapped);
+    const unwrappedBase = unwrapSoloBlock(base);
+    return !!(unwrappedBase && unwrappedBase.type === "operation" && unwrappedBase.partial);
+  }
+  return false;
+}
+
 const COPRODUCT_PHASES = [
-  (catA, catB) => catA === "Lambda" && catB === "Lambda", // 10.5: compose
-  (catA, catB) => catA === "Lambda" && catB === "Atom", // 10.4: apply
-  (catA, catB) => catA === "Atom" && catB === "Lambda", // 10.3: apply_reverse
-  (catA, catB) => catA === "Atom" && catB === "Atom", // 10.2〜10.0: concat/push/unshift/construct
+  { match: (catA, catB) => catA === "Lambda" && catB === "Lambda" }, // 10.5: compose
+  {
+    match: (catA, catB) => catA === "Lambda" && catB === "Atom",
+    // ポイントフリー記述の完全に裸な中置演算子（`[+]`）は「複数の引数を貪欲に演算する」
+    // （function_guide.md）——getCategoryでは通常のarity判定と同様1回の適用で即座に
+    // Atom（飽和済み）として扱うが、Phase2（apply）だけはこの特例で「まだ右にAtomが
+    // あれば貪欲に食う」を許可する。これをgetCategory本体に持ち込むと、Phase2で使い
+    // 切った後のPhase3（apply_reverse）でも依然Lambdaと誤判定され、既に確定した計算
+    // 結果（`[+](3)(4)`）がまた関数として呼ばれようとしてしまう（`1 2 [+] 3 4`で実際に
+    // 踏んだバグ）。Phase2内だけで完結させることで、Phase2が尽きた時点（＝これ以上
+    // 右にAtomが無い時点）で自然にAtomへ確定する。
+    extendPointfree: true,
+  }, // 10.4: apply
+  {
+    // 10.3: apply_reverse。ポイントフリー由来のLambda（`[+]`/`[+ 1]`等、演算子の種類を
+    // 問わない）はapply_reverseの対象から除外する（8/5の設計合意）。ポイントフリーは
+    // 常に前置適用（`[+ 1] 5`）という一つの呼び出し方だけを持ち、UFCS的なreceiver記法
+    // （`x f`）という別経路を重ねない——「一つのことを表現する方法は一つ」の方針、かつ
+    // `5 [+]`のような曖昧な読み（5をどちら側の被演算子とみなすか不定）を防ぐ。
+    match: (catA, catB, a, b) => catA === "Atom" && catB === "Lambda" && !isPointfreeLambda(b),
+  },
+  { match: (catA, catB) => catA === "Atom" && catB === "Atom" }, // 10.2〜10.0: concat/push/unshift/construct
 ];
 
-function reduceOnce(items, tier, env, phaseFilter) {
+function reduceOnce(items, tier, env, phase) {
   for (let i = 0; i < items.length - 1; i++) {
     const a = items[i];
     const b = items[i + 1];
@@ -283,7 +362,12 @@ function reduceOnce(items, tier, env, phaseFilter) {
     if (tier === 10 && !isBareOperatorToken(a) && !isBareOperatorToken(b)) {
       const left = toNode(a, env);
       const right = toNode(b, env);
-      if (phaseFilter && !phaseFilter(getCategory(left, env), getCategory(right, env))) continue;
+      const catA = getCategory(left, env), catB = getCategory(right, env);
+      if (phase && phase.extendPointfree && catB === "Atom" && isBarePointfreeChainBase(left)) {
+        items.splice(i, 2, mk("apply", left, right));
+        return true;
+      }
+      if (phase && !phase.match(catA, catB, left, right)) continue;
       const node = coproductReduce(left, right, env);
       if (node) {
         items.splice(i, 2, node);
@@ -525,8 +609,8 @@ function reduceAll(rawItems, env) {
     if (tier === 10) {
       // coproduct_resolver.md §4: compose→apply→apply_reverse→concat/push/constructの
       // 4段階を、それぞれ使い尽くしてから次へ進む（COPRODUCT_PHASES参照）。
-      for (const phaseFilter of COPRODUCT_PHASES) {
-        while (reduceOnce(items, tier, env, phaseFilter)) {
+      for (const phase of COPRODUCT_PHASES) {
+        while (reduceOnce(items, tier, env, phase)) {
           if (++guard > 10000) throw new Error("reduceAll: possible infinite loop at tier " + tier);
         }
       }
@@ -536,6 +620,23 @@ function reduceAll(rawItems, env) {
       if (++guard > 10000) throw new Error("reduceAll: possible infinite loop at tier " + tier);
     }
   }
+  // ポイントフリー記述（function_guide.md「ポイントフリー記述」）: 総当たり縮約後も
+  // 縮約しきれず残った「裸の中置演算子トークン単体」（例: `[+]`）、または「裸の中置演算子
+  // トークン＋右オペランド1個・左オペランド無し」（例: `[+ 1]`）は、部分適用の
+  // Lambdaとして扱う。reduceOnceの汎用中置演算子マッチは「オペランド 演算子 オペランド」
+  // の並び（items[i]=左辺, items[i+1]=演算子, items[i+2]=右辺）しか見ないため、演算子が
+  // 列の先頭に来るこの形は総当たり縮約の対象外のまま残る——ここで拾ってpartialノードに
+  // 変換する。getCategoryの既存ルール（`if (node.partial) return "Lambda"`）でLambdaに
+  // 分類される。
+  if (items.length === 1 && typeof items[0] === "string" && isBareOperatorToken(items[0])) {
+    const entry = lookup(items[0], "infix");
+    if (entry) return { type: "operation", op: items[0], name: entry.name, position: "infix", partial: true, left: null, right: null };
+  }
+  if (items.length === 2 && typeof items[0] === "string" && isBareOperatorToken(items[0])) {
+    const entry = lookup(items[0], "infix");
+    if (entry) return { type: "operation", op: items[0], name: entry.name, position: "infix", partial: true, left: null, right: items[1] };
+  }
+
   if (items.length !== 1) {
     // 未縮約の要素が残っている（未対応の演算子等）。診断のためそのまま返す。
     return { type: "unresolved", items };
