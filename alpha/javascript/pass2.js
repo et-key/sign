@@ -266,7 +266,13 @@ function coproductReduce(a, b, env) {
     if (listA && listB) {
       const tA = hasPostfixTilde(a), tB = hasPostfixTilde(b);
       if (tA && tB) return mk("concat", a, b); // §5.2-1: 双方~ → concat
-      return null; // §5.2-2: ~なし → マージしない、独立したAtomのまま
+      // §5.2-2: ~なし → マージしない、独立したAtom（2つの参照のリスト）として保たれる。
+      // list_model.md §2.2が明言する等価性「[1 2] [3 4] = 1 2 , 3 4」通り、product
+      // （カンマ）と同じノードとして扱う——以前はnullを返して「そのまま未縮約で放置」
+      // していたため、この2項だけが行全体だった場合にitems.length!==1のまま
+      // unresolvedへ落ち、評価側で静かにUnitへ収束してしまっていた
+      // （`[1 2 3] [1 2 3]`が2次元配列にならずUnitになるバグ）。
+      return mk("product", a, b);
     }
     if ((listA && !listB) || (!listA && listB)) {
       // 10.1: Atom|List~ の組み合わせ → Unshift/push（仕様に方向の明記なし、上記コメント参照）

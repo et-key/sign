@@ -90,7 +90,6 @@ export const OPERATOR_BY_PRECEDENCE = [
   { // 22
     '!': { position: 'postfix', name: 'factorial' },
     '~': { position: 'postfix', name: 'expand' },
-    '@': { position: 'postfix', name: 'import' },
   },
   { // 23
     '~': { position: 'prefix', name: 'continuous' },
@@ -99,17 +98,22 @@ export const OPERATOR_BY_PRECEDENCE = [
     '@': { position: 'prefix', name: 'input' },
     '!!': { position: 'prefix', name: 'bit_not' },
     '-': { position: 'prefix', name: 'negate' },
-    '><': { position: 'prefix', name: 'reverse' },
+    // 【8/6 撤去】'><' (reverse)。documents/ja-jp/impl/syntax/operator_table.js と同時に
+    // 撤去——list_model.md §2.5のrest記法の位置一般化で代替できるため不要と判断。
   },
-  { // 24
+  { // 24: postfix @（import）は単独tier（8/6、documents/ja-jp/impl/syntax/operator_table.js
+    // と同時に修正——「importしてからinput」の意図とtier番号の慣習の整合性のため）。
+    '@': { position: 'postfix', name: 'import' },
+  },
+  { // 25（旧24から繰り下げ）
     '(...)': { position: 'enclosure', name: 'block_paren' },
     '{...}': { position: 'enclosure', name: 'block_brace' },
     '[...]': { position: 'enclosure', name: 'block_bracket' },
   },
-  { // 25
+  { // 26（旧25から繰り下げ）
     '\t': { position: 'prefix', name: 'indent' },
   },
-  { // 26
+  { // 27（旧26から繰り下げ）
     '\\': { position: 'prefix', name: 'escape' },
   }
 ];

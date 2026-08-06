@@ -123,8 +123,11 @@ function isDestructurable(v) {
 }
 
 // ブラケット仮引数リストへ、単一のList/Dict実引数を分割代入する（8/5の設計合意）。
-// List: 先頭から非restエントリへ位置的に配り、restエントリは残り全部をスライスで受け取る
-// （sum_list等、list_model.md §2.4のEagerパターン）。
+// List: list_model.md §2.5「rest記法の位置一般化」——`~name`はブラケット内のどの位置にも
+// 置ける。`~name`より前の非restエントリは先頭から、`~name`より後の非restエントリは
+// **末尾から**順に対応し、`~name`自身はその間に残った要素全部を受け取る
+// （`[x ~xs]`＝従来通り先頭分割、`[~head tail]`＝末尾からのpop、`[first ~mid last]`＝
+// 両端からの分割代入、いずれも同じロジックで自然に表現される）。
 // Dict: エントリ名とキー名の一致で（順序に関わらず）値を引く（構造体メンバーの一致による
 // 自動バインディング、function_guide.md）。restエントリがあれば、名前が一致しなかった
 // 残りのキーをまとめた新しいオブジェクトを渡す（pattern_guide.mdのStore「~objは...渡した
@@ -134,13 +137,12 @@ function isDestructurable(v) {
 // 実装する際、このentries列挙をそのまま構造的フィールド要求集合として再利用できる想定。
 function bindBracketParams(entries, value, env) {
   if (Array.isArray(value)) {
+    const restIdx = entries.findIndex((e) => e.rest);
+    const before = restIdx === -1 ? entries : entries.slice(0, restIdx);
+    const after = restIdx === -1 ? [] : entries.slice(restIdx + 1);
+
     let idx = 0;
-    for (const entry of entries) {
-      if (entry.rest) {
-        envDefine(env, entry.name, value.slice(idx));
-        idx = value.length;
-        continue;
-      }
+    for (const entry of before) {
       let v = idx < value.length ? value[idx] : UNIT;
       idx++;
       if (isUnit(v)) {
@@ -148,6 +150,22 @@ function bindBracketParams(entries, value, env) {
         else return null; // 完全性公理
       }
       envDefine(env, entry.name, v);
+    }
+
+    if (restIdx !== -1) {
+      // afterの分だけ末尾を確保してから、間に残った部分をrestへ渡す。
+      const restEnd = Math.max(idx, value.length - after.length);
+      envDefine(env, entries[restIdx].name, value.slice(idx, restEnd));
+      for (let i = 0; i < after.length; i++) {
+        const entry = after[i];
+        const pos = restEnd + i;
+        let v = pos < value.length ? value[pos] : UNIT;
+        if (isUnit(v)) {
+          if (entry.default) v = evaluate(entry.default, env);
+          else return null; // 完全性公理
+        }
+        envDefine(env, entry.name, v);
+      }
     }
     return env;
   }
@@ -667,7 +685,13 @@ function evaluate(node, env) {
     }
 
     if (ARITH_OPS[node.name]) return evalArith(node.name, node.left, node.right, env);
-    if (COMPARE_OPS[node.name]) return evalCompare(node.name, node.op, node.left, node.right, env);
+    // `!=`（tier12）は名前が"not_equal"だが、tier8の`!==`（構造比較、xnot_equal相当）と
+    // 同名衝突しているためCOMPARE_OPSにキーを持たない（他所と同じくnode.opで区別する
+    // 慣習、test/pass3_param_usage.test.js参照）。evalCompare側は既にop==="!="の専用
+    // 分岐を持っているため、ここでnode.opを見て個別に通す（COMPARE_OPS[node.name]の
+    // 判定だけに頼ると"not_equal"というキーが無いため一生evalCompareに到達しなかった
+    // ——8/6発見。`!==`はここではまだ未対応のまま、別途構造比較の実装が必要）。
+    if (COMPARE_OPS[node.name] || node.op === "!=") return evalCompare(node.name, node.op, node.left, node.right, env);
 
     if (node.position === "prefix" || node.position === "postfix") {
       return evalUnaryOp(node.name, evaluate(node.operand, env));

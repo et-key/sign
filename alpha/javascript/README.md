@@ -270,6 +270,44 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   §4規則とは目的が異なるため。`evalCompare`本体（通常の中置比較）は変更していない
   ——`1 < 3`は引き続き`3`を返す。`[< 3,] [1 2 3]~ → [1,2]`（list_cheat_sheet.md通り）を
   `test/interpreter.test.js`で確認。
+  **List同士を後置~無しで並べたとき、静かにUnitへ収束するバグを修正**：`coproduct_resolver.md`
+  §5.2-2「~なしのList同士の並置はマージせず、独立したAtom（2つの参照のリスト）として保たれる」
+  の実装（`coproductReduce`）が、この「保たれる」を「そのまま未縮約で放置する」（`null`を
+  返す）と誤って実装していた。`[1 2 3] [1 2 3]`のようにこの2項だけで行全体が構成される
+  場合、`items.length !== 1`のまま`unresolved`へ落ち、評価側で静かに`__`へ収束していた
+  （2次元配列にならず消えるバグ、johnnyさんの指摘で発覚）。`list_model.md`§2.2が明言する
+  等価性「`[1 2] [3 4]` = `1 2 , 3 4`」に従い、`null`ではなくproduct（カンマ）と同じ
+  ノードを返すよう修正——`[1 2] [3 4]`と`1 2 , 3 4`が完全に同じ結果になる
+  （`test/interpreter.test.js`で確認、双方~のconcatや`sum_list`等の既存挙動に回帰なし）。
+  **`~`（rest記法）の位置一般化（list_model.md §2.5、末尾・両端からの分割代入）を実装**：
+  `><`（リスト反転）を導入するかの議論の中で、「リストを反転する専用演算子」ではなく
+  「リストを末尾から辿るための分割代入パターン」の方が本質的に必要なものだった、という
+  結論に至った（johnnyさんの発案）。`bindBracketParams`のList分割代入を、`~name`が
+  entries内のどの位置にあってもよいよう一般化：`~name`より前の非restエントリは先頭から、
+  後の非restエントリは**末尾から**順に対応し、`~name`自身はその間の残り全部を受け取る。
+  `[x ~xs]`（従来通り先頭分割）・`[~head tail]`（末尾からのpop）・`[first ~mid last]`
+  （両端からの分割代入）が同じロジックで自然に表現される。`test/interpreter.test.js`で、
+  末尾からの再帰的な畳み込み（`sum_rev : [~head tail] ? head & (sum_rev head) + tail | tail`）
+  がリスト反転無しで動くことを確認、`[x ~xs]`の既存挙動にも回帰なし。
+  **`><`（リスト反転）を演算子テーブルから撤去**：上記の結論を受け、`documents/ja-jp/impl/
+  syntax/operator_table.js`・`alpha/javascript/operator_table.js`の両方からtier23の`><`
+  エントリを削除した（元々interpreter.js側の評価ケースも無く動いていなかった機能）。加えて
+  `><`（`<>`の鏡像）は古いBASIC/Pascal/SQLで「等しくない」を表す記号として広く定着して
+  おり、Signの「記号の自然な意味と操作的意味の一致」という設計原則にも反していた
+  （そもそも「等しくない」はSignでは`!=`が既に担っている）ため、二重の理由で撤去が妥当と
+  判断。`documents/ja-jp/guide/list_cheat_sheet.md`の「リストの反転」行も削除し、代わりに
+  §2.5への参照と`reference.md`の再帰的な`reverse`関数の例を案内するノートを追加した。
+  **`!=`（tier12）が一度もevalCompareへ到達しないバグを修正**：`test/pass2.test.js`が
+  "x == y"のAST構築だけ確認して「動作確認済み」と誤認させていたが、実は`==`/`===`/`!==`/
+  `!=`は評価層（`evaluate()`）では**一つも実装されていなかった**（`><`撤去の確認作業中に
+  `1 != 2`が例外になることに気付いて発覚）。`!=`は`node.name`が"not_equal"で、tier8の
+  `!==`と名前が衝突するため`COMPARE_OPS`にキーを持たせられず（既存の`.op`で区別する慣習、
+  `test/pass3_param_usage.test.js`参照）、`if (COMPARE_OPS[node.name])`という外側の
+  ディスパッチ判定だけでは`!=`が一生`evalCompare`に到達しなかった。`evalCompare`自体は
+  既に`op === "!="`専用の分岐（§4の例外規則、`x != __ = x`単位元・`__ != x = __`吸収元）を
+  持っていたため、ディスパッチ条件に`node.op === "!="`を追加するだけの狙い撃ちの修正で
+  済んだ。`!==`（構造比較）・`==`・`===`は依然未実装のまま——スコープを広げず`!=`だけを
+  直した（`test/interpreter.test.js`で§4の例外規則込みで確認）。
 - `test/pass2.test.js` — Pass2単体（envなし）の動作確認。9/9 pass。
 - `test/multi_arg_apply.test.js` — 多引数関数の呼び出しがapplyチェーンとして正しく飽和し、
   余分な引数がconstructでタプル化されることの確認。3/3 pass。

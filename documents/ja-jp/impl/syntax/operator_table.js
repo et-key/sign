@@ -92,7 +92,6 @@ export const OPERATOR_BY_PRECEDENCE = [
   { // 22
     '!': { position: 'postfix', name: 'factorial' },
     '~': { position: 'postfix', name: 'expand' },
-    '@': { position: 'postfix', name: 'import' },
   },
   { // 23
     '~': { position: 'prefix', name: 'continuous' },
@@ -100,18 +99,32 @@ export const OPERATOR_BY_PRECEDENCE = [
     '$': { position: 'prefix', name: 'address' },
     '@': { position: 'prefix', name: 'input' },
     '!!': { position: 'prefix', name: 'bit_not' },
-    '-': { position: 'prefix', name: 'negate' }, // 仕様書に明記は無いが事実上の前置演算子
-    '><': { position: 'prefix', name: 'reverse' },
+    '-': { position: 'prefix', name: 'negate' }, // 仕様書に明記は無いが事実上の前置演算子（8/6: 符号反転は算術演算のため、代数式の優先順位に従いpow(15)より上に置く。この点はoperator_table.mdへの明記が必要）
+    // 【8/6 撤去】'><': reverse（リスト反転）。専用演算子を新設せずとも、rest記法の
+    // 位置一般化（list_model.md §2.5、`[~head tail]`のような末尾からの分割代入）で
+    // リストを末尾から辿る計算は表現できるため不要と判断。加えて`><`（`<>`の鏡像）は
+    // 古いBASIC/Pascal/SQLで「等しくない」を表す記号として広く定着しており、Signの
+    // 「記号の自然な意味と操作的意味の一致」という設計原則にも反していた
+    // （そもそも「等しくない」はSignでは`!=`が既に担っている）。
   },
-  { // 24
+  { // 24: postfix @（import）は単独tier。8/6: 以前はtier22（factorial/expandと同居）に
+    // 間借りしていたが、operator_table.mdは単独tier(24、prefix @/inputのtier23より上)を
+    // 割り当てており、「importしてからinput」（`@`\`add.sn\`@`` → `input(import(...))`、
+    // 実際にresolveDensityで確認済み）という意図と、tier番号を大きい方が優先＝先に
+    // 結合されるという慣習に、.mdの配置の方が整合していたため、こちらに合わせた
+    // （resolveDensityは前置/後置演算子ではprecedence数値自体を参照しないため、この
+    // 修正は現状のパース挙動には影響しない——あくまで仕様記述としての正確さの修正）。
+    '@': { position: 'postfix', name: 'import' },
+  },
+  { // 25（旧24から繰り下げ）
     '(...)': { position: 'enclosure', name: 'block_paren' },
     '{...}': { position: 'enclosure', name: 'block_brace' },
     '[...]': { position: 'enclosure', name: 'block_bracket' },
   },
-  { // 25
+  { // 26（旧25から繰り下げ）
     '\t': { position: 'prefix', name: 'indent' },
   },
-  { // 26
+  { // 27（旧26から繰り下げ）
     '\\': { position: 'prefix', name: 'escape' },
   }
 ];
