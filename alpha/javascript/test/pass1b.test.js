@@ -96,5 +96,31 @@ function check(note, got, want) {
 	}
 }
 
+{
+	// 8/6修正: 多引数関数の呼び出しサイトで、ジェネリック仮引数が先頭以外の位置にあっても
+	// 正しく対応する実引数を拾えることの確認。以前はcollectCallsitesが`apply[fnName, arg]`
+	// という単一階層しか見ておらず、多引数呼び出し（`g 10 $inc` → apply[apply[g,10],$inc]
+	// というapply連鎖）では常に最初の引数（10）だけが拾われ、2番目以降の位置にある
+	// ジェネリック仮引数（ref）の実引数が一度も収集されていなかった。
+	const source = "inc : x ? x + 1\ng : x ref ? x + @ref 5\ng 10 $inc";
+	const { nodes } = resolveProgram(source);
+	const sites = collectCallsites(nodes, "<g>");
+	check("多引数呼び出し g 10 $inc → 呼び出しサイト1件、各サイトが位置順の実引数2個を持つ", sites.length === 1 && sites[0].length === 2, true);
+	check("1番目の位置引数はnumber(10)", sites[0] && sites[0][0].kind, "number");
+	check("2番目の位置引数は$inc（前置addressノード）", sites[0] && sites[0][1].name, "address");
+}
+
+{
+	// 3引数関数でも全ての位置引数が正しい順序で拾えることの確認。
+	const source = "h : a b c ? a + b + c\nh 1 2 3";
+	const { nodes } = resolveProgram(source);
+	const sites = collectCallsites(nodes, "<h>");
+	check(
+		"3引数呼び出し h 1 2 3 → 呼び出しサイト1件、位置順に[1,2,3]が並ぶ",
+		sites.length === 1 && sites[0].map((n) => n.value).join(","),
+		"1,2,3"
+	);
+}
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

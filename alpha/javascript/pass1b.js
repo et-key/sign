@@ -17,9 +17,19 @@
  * （§5「呼び出しサイトの無いジェネリック関数はexportされていなければdiscard」）。
  *
  * 【既知の制限】
- * - 引数が複数あるLambda（`params[]`）への呼び出しサイトのうち、ジェネリック仮引数以外の
- *   位置の対応付けは未対応（単一引数の関数、または最初の引数のみを想定）。
  * - 相互再帰するジェネリック関数同士の具体化（§5 Pass1bの「本節は将来の検討事項」）は未対応。
+ *
+ * 【8/6修正】以前は「引数が複数あるLambdaへの呼び出しサイトのうち、ジェネリック仮引数以外の
+ * 位置の対応付けは未対応（単一引数の関数、または最初の引数のみを想定）」という制限があった。
+ * `collectCallsites`が`apply[fnName, arg]`という単一階層のみを見ており、多引数関数の呼び出し
+ * （`f 3 5` → `apply[apply[f,3],5]`というapply連鎖、pass2.js/interpreter.jsのapplyChainInfoと
+ * 同じ形）では、内側の`apply[f,3]`にしか`isIdentifierAtom(node.left,fnName)`がマッチせず、
+ * 常に**最初の引数だけ**が呼び出しサイトの実引数として拾われていた——ジェネリック仮引数が
+ * 2番目以降の位置にある場合、正しい実引数カテゴリが一度も収集されなかった。
+ * `collectCallsites`をapply連鎖の根本まで遡ってから判定するよう修正し、各サイトを
+ * 「位置ごとの実引数ノード配列」として返すようにした上で、`specializeGenericParams`が
+ * ジェネリック仮引数の宣言順の位置（`paramNamesOf`のindex）で対応する実引数を選ぶように
+ * 修正（`test/pass1b.test.js`で確認）。
  */
 
 import { getCategory } from './pass2.js';
@@ -61,20 +71,39 @@ function detectGenericParams(bodyNode, paramNames) {
   return generic;
 }
 
-// resolvedNodes（Pass2で解決済みのASTの並び、プログラム全体）を走査し、
-// `fnName`という名前の関数への apply[fnName, arg] という呼び出しサイトを全て集めて、
-// 実引数ノードの配列を返す（単一引数の関数を想定した簡易実装）。
+// apply[apply[apply[f, a1], a2], a3] のような左結合のapplyチェーンを根本まで遡り、
+// 呼び出し先ノード（calleeNode）と、位置順の実引数ノード配列（argNodes）を返す。
+// pass2.jsのapplyChainInfo/interpreter.jsのcollectApplyChainと同じロジック
+// （循環import回避のためここで別途最小実装）。
+function collectApplyChain(node) {
+  const argNodes = [];
+  let n = node;
+  while (n && n.type === "operation" && n.name === "apply") {
+    argNodes.unshift(n.right);
+    n = n.left;
+  }
+  return { calleeNode: n, argNodes };
+}
+
+// resolvedNodes（Pass2で解決済みのASTの並び、プログラム全体）を走査し、`fnName`という
+// 名前の関数へのapply連鎖の呼び出しサイトを全て集めて、各サイトの「位置順の実引数ノード
+// 配列」を返す（多引数呼び出し `f 3 5` → apply[apply[f,3],5] のチェーンも正しく遡る）。
 function collectCallsites(resolvedNodes, fnName) {
   const sites = [];
 
   function visit(node) {
     if (!node || typeof node !== "object") return;
-    if (
-      node.type === "operation" &&
-      node.name === "apply" &&
-      isIdentifierAtom(node.left, fnName)
-    ) {
-      sites.push(node.right);
+    if (node.type === "operation" && node.name === "apply") {
+      const { calleeNode, argNodes } = collectApplyChain(node);
+      if (isIdentifierAtom(calleeNode, fnName)) {
+        sites.push(argNodes);
+        // チェーン全体を1サイトとして数えたので、内側のapply（例: apply[f,3]）を
+        // 別の呼び出しサイトとして二重に走査しないよう、ここで打ち切る。
+        // ただし引数ノードの中に別の呼び出しサイトが含まれる可能性はあるため、
+        // 引数それぞれは個別に再帰する。
+        argNodes.forEach(visit);
+        return;
+      }
     }
     if (node.left) visit(node.left);
     if (node.right) visit(node.right);
@@ -98,12 +127,12 @@ function specializeGenericParams(defineNode, resolvedNodes, env) {
   const lambdaNode = defineNode.right;
   if (!fnName || !lambdaNode || lambdaNode.name !== "lambda") return result;
 
-  const paramNames = new Set(paramNamesOf(lambdaNode.left));
-  const genericParams = detectGenericParams(lambdaNode.right, paramNames);
+  const paramNameList = paramNamesOf(lambdaNode.left); // 宣言順（位置対応に使う）
+  const paramNameSet = new Set(paramNameList);
+  const genericParams = detectGenericParams(lambdaNode.right, paramNameSet);
   if (genericParams.size === 0) return result;
 
-  const sites = collectCallsites(resolvedNodes, fnName);
-  const categories = [...new Set(sites.map((argNode) => getCategory(argNode, env)))];
+  const sites = collectCallsites(resolvedNodes, fnName); // Array<位置順の実引数ノード配列>
 
   if (sites.length === 0 && defineNode.exported) {
     // §5・compiler_pipeline.md §6.3: exportされているのに呼び出しサイトが無い
@@ -114,6 +143,16 @@ function specializeGenericParams(defineNode, resolvedNodes, env) {
   }
 
   for (const paramName of genericParams) {
+    // ジェネリック仮引数の宣言順の位置に対応する実引数だけを、各呼び出しサイトから選ぶ
+    // （8/6修正：以前は位置を区別せず全サイトの「最初の引数」だけを見ていた）。
+    const position = paramNameList.indexOf(paramName);
+    const categories = [
+      ...new Set(
+        sites
+          .filter((argNodes) => position < argNodes.length)
+          .map((argNodes) => getCategory(argNodes[position], env))
+      ),
+    ];
     result.set(paramName, { callsiteCount: sites.length, categories });
   }
   return result;
