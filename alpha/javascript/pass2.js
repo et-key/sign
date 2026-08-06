@@ -294,14 +294,19 @@ function coproductReduce(a, b, env) {
 // （右のAtomへの通常適用）が先に確定するため、apply_reverseが途中のAtomを横取りすることはない。
 // concat/push/unshift/constructの3つ（10.2〜10.0）はcoproductReduce内部でリスト形状のみから
 // 相互排他的に決まり、tier間の競合が無いため、引き続き1フェーズにまとめている。
-// ポイントフリー記述の完全に裸な中置演算子（`[+]`、left/right両方null）のapply連鎖の
-// 根本（base）かどうかを判定する。`[+]`のようにbracketブロックでラップされたまま
-// 渡ってくる場合はunwrapSoloBlockで中身を覗く。Phase2（apply）専用の特例判定にのみ
-// 使う——getCategory本体には反映しない（下記COPRODUCT_PHASESのコメント参照）。
+// ポイントフリー記述で「複数の実引数を貪欲に消費し続けるべき」apply連鎖の根本（base）
+// かどうかを判定する。対象は2パターン: (1) 完全に裸な中置演算子（`[+]`、left/right両方
+// null、function_guide.md「複数の引数を貪欲に演算する」）、(2) 末尾カンマの写像糖衣構文
+// （`[* 2,]`、pointfreeMap、function_guide.md「そのすべてに適用される」——`[* 2,] 1 2 3
+// 4 5`のように複数の位置引数へ写像する場合、そのすべてをapply連鎖で集めきる必要がある）。
+// `[+]`のようにbracketブロックでラップされたまま渡ってくる場合はunwrapSoloBlockで
+// 中身を覗く。Phase2（apply）専用の特例判定にのみ使う——getCategory本体には反映しない
+// （下記COPRODUCT_PHASESのコメント参照）。
 function isBarePointfreeChainBase(node) {
   const { base } = applyChainInfo(node);
   const unwrapped = unwrapSoloBlock(base);
-  return !!(unwrapped && unwrapped.type === "operation" && unwrapped.partial && unwrapped.left === null && unwrapped.right === null);
+  if (!unwrapped || unwrapped.type !== "operation" || !unwrapped.partial) return false;
+  return unwrapped.pointfreeMap === true || (unwrapped.left === null && unwrapped.right === null);
 }
 
 // ポイントフリー記述由来のLambda（`[+]`のような裸の演算子、`[+ 1]`のような部分適用、
@@ -635,6 +640,19 @@ function reduceAll(rawItems, env) {
   if (items.length === 2 && typeof items[0] === "string" && isBareOperatorToken(items[0])) {
     const entry = lookup(items[0], "infix");
     if (entry) return { type: "operation", op: items[0], name: entry.name, position: "infix", partial: true, left: null, right: items[1] };
+  }
+  // 末尾カンマによる写像糖衣構文（function_guide.md「単項式の後ろに`,`を付けたポイント
+  // フリー記述は、そのすべてに適用される」、例: `[* 2,]`）。「演算子＋右オペランド1個＋
+  // 末尾の裸カンマ」という形（`,`自体は右にオペランドが無いため通常のproduct縮約が
+  // 素通りする）を拾い、pointfreeMapフラグを立てる。
+  if (
+    items.length === 3 &&
+    typeof items[0] === "string" &&
+    isBareOperatorToken(items[0]) &&
+    items[2] === ","
+  ) {
+    const entry = lookup(items[0], "infix");
+    if (entry) return { type: "operation", op: items[0], name: entry.name, position: "infix", partial: true, left: null, right: items[1], pointfreeMap: true };
   }
 
   if (items.length !== 1) {

@@ -406,16 +406,34 @@ function applyPointfree(node, closureEnv, argValues) {
   const combine = (a, b) => {
     if (ARITH_OPS[node.name]) return ARITH_OPS[node.name](a, b);
     if (COMPARE_OPS[node.name]) {
-      // §4と同じ「真なら値(左辺 or 右辺)、偽ならUnit」規則（Unit伝播はevalCompare同様）。
+      // ポイントフリーはList側のfold/map/filterが前提（8/5の設計合意）のため、単位元の
+      // 見方も算術側（0/1）ではなくList側に移る——真なら常に要素そのもの(a)を残す。
+      // evalCompare（通常の中置比較）の§4規則「左辺が算術単位元(0/1)なら右辺、それ以外は
+      // 左辺」は、算術チェーンの中で「次に運ぶ値」を選ぶための規則であり、fold/map/filter
+      // で「元の要素を残す/捨てる」ことが目的のポイントフリー文脈にはそぐわない
+      // （`[< 3,] [1 2 3]~`が要素の1,2ではなく評価結果の3,2になってしまう）。
       if (isUnit(a) || isUnit(b)) return UNIT;
       const truthy = COMPARE_OPS[node.name](a, b);
-      return truthy ? (a === 0 || a === 1 ? b : a) : UNIT;
+      return truthy ? a : UNIT;
     }
     throw new Error(`interpreter: pointfree: 未対応の演算子 '${node.name}'`);
   };
 
   const rightBound = node.right !== null && node.right !== undefined;
   const leftBound = node.left !== null && node.left !== undefined;
+
+  if (node.pointfreeMap) {
+    // 末尾カンマの写像糖衣構文（`[* 2,]`、function_guide.md「そのすべてに適用される」）。
+    // 複数の位置引数（`[* 2,] 1 2 3 4 5`、Phase2の貪欲消費でここへ集約済み）・後置~で
+    // 展開されたList（`[* 2,] [1 2 3]~`、evalArgValuesが既に展開済み）のどちらでも、
+    // argValuesは「写像対象の値がフラットに並んだ配列」として届く。各要素へ演算を適用し、
+    // 結果からUnitを取り除く——比較演算子（`[< 3,]`）は真の場合のみ値を返す（§4）ため、
+    // このUnit除去だけで「選択写像」（select、偽だった要素の除外）が自然に得られる
+    // （list_cheat_sheet.md「選択写像」、余積のUnit除去則、type_system.mdの輸入失敗例と同型）。
+    const bound = rightBound ? evaluate(node.right, closureEnv) : undefined;
+    const results = argValues.map((v) => (isUnit(v) ? UNIT : combine(v, bound)));
+    return results.filter((r) => !isUnit(r));
+  }
 
   if (!leftBound && !rightBound) {
     if (argValues.length === 0) return UNIT;
