@@ -8,6 +8,45 @@ const srcEl = document.getElementById("src");
 const outEl = document.getElementById("out");
 const astEl = document.getElementById("ast");
 const runBtn = document.getElementById("runBtn");
+const fontSelectEl = document.getElementById("fontSelect");
+const fontSizeEl = document.getElementById("fontSize");
+const fontSizeLabelEl = document.getElementById("fontSizeLabel");
+const ligaturesEl = document.getElementById("ligatures");
+
+// フォント表示（フォント種別・サイズ・合字の有無）を選べるようにする。Signは`~+`/`!=`/
+// `<=`のような複合記号が多く、合字（ligature）でグリフが結合されると個々の記号が読み
+// 取りにくくなる場合があるため、デフォルトは無効（`--code-ligatures: none`、index.html）
+// にしつつ、フォントによっては合字表示を見たい場合もあるためON/OFFを選べるようにした。
+// 選択内容はlocalStorageへ保存し、リロードをまたいで保持する。
+const FONT_PREF_KEY = "sign-playground-font-prefs";
+function loadFontPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(FONT_PREF_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+function saveFontPrefs(prefs) {
+  localStorage.setItem(FONT_PREF_KEY, JSON.stringify(prefs));
+}
+function applyFontPrefs() {
+  const root = document.documentElement.style;
+  root.setProperty("--code-font", fontSelectEl.value);
+  root.setProperty("--code-size", `${fontSizeEl.value}px`);
+  root.setProperty("--code-ligatures", ligaturesEl.checked ? "normal" : "none");
+  fontSizeLabelEl.textContent = `${fontSizeEl.value}px`;
+  saveFontPrefs({ font: fontSelectEl.value, size: fontSizeEl.value, ligatures: ligaturesEl.checked });
+}
+(function initFontPrefs() {
+  const prefs = loadFontPrefs();
+  if (prefs.font) fontSelectEl.value = prefs.font;
+  if (prefs.size) fontSizeEl.value = prefs.size;
+  if (prefs.ligatures) ligaturesEl.checked = true;
+  applyFontPrefs();
+})();
+fontSelectEl.addEventListener("change", applyFontPrefs);
+fontSizeEl.addEventListener("input", applyFontPrefs);
+ligaturesEl.addEventListener("change", applyFontPrefs);
 
 function showValue(v) {
   if (isUnit(v)) return "__ (Unit)";
