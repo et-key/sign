@@ -127,10 +127,11 @@ function inferAtomType(node, env) {
 // 「線形スキャンで完結する」という設計方針に合わせた、早い者勝ちの単純な走査）。
 // `'`（get_prop）等、他の演算子からの逆算は未対応（要拡張）。
 //
-// 比較演算子は symbol（node.op）で判定する。`!=`（§4の比較演算子、precedence 12）と
-// `!==`（構造比較、precedence 8、`node.name`は共に"not_equal"）は名前が衝突するため、
-// nameではなくopで区別する必要がある。`==`/`===`/`!==`はScalarに限定されない
-// 構造比較（type_system.md §4 NOTE: 「リストや構造体の比較には==を使用」）なので対象外。
+// 比較演算子は symbol（node.op）で判定する。`!=`（§4の比較演算子、precedence 12、
+// name="not_equal"）と`!==`（構造比較、precedence 8、name="xnot_equal"、8/6に
+// operator_table.jsを改名して名前衝突は解消済み）は記号で区別する。`==`/`===`/`!==`は
+// Scalarに限定されない構造比較（type_system.md §4 NOTE: 「リストや構造体の比較には
+// ==を使用」）なので対象外。
 
 const SCALAR_ARITHMETIC_OPS = ARITHMETIC_OPS;
 const SCALAR_COMPARISON_OP_SYMBOLS = new Set(["<", "<=", "=", ">=", ">", "!="]);

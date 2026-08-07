@@ -685,12 +685,12 @@ function evaluate(node, env) {
     }
 
     if (ARITH_OPS[node.name]) return evalArith(node.name, node.left, node.right, env);
-    // `!=`（tier12）は名前が"not_equal"だが、tier8の`!==`（構造比較、xnot_equal相当）と
-    // 同名衝突しているためCOMPARE_OPSにキーを持たない（他所と同じくnode.opで区別する
-    // 慣習、test/pass3_param_usage.test.js参照）。evalCompare側は既にop==="!="の専用
-    // 分岐を持っているため、ここでnode.opを見て個別に通す（COMPARE_OPS[node.name]の
-    // 判定だけに頼ると"not_equal"というキーが無いため一生evalCompareに到達しなかった
-    // ——8/6発見。`!==`はここではまだ未対応のまま、別途構造比較の実装が必要）。
+    // `!=`（tier12、name="not_equal"）はCOMPARE_OPSにキーを持たない——8/6にoperator_table.js
+    // 側のtier8`!==`をname="xnot_equal"へ改名して名前衝突自体は解消したが、COMPARE_OPS
+    // （evalCompareの汎用フォールバックが呼ぶテーブル）には依然not_equalを追加していない。
+    // evalCompareは既にop==="!="専用の分岐（§4の例外規則）を持っているため、ここで
+    // node.opを見て個別に通す。`!==`（構造比較、xnot_equal）はここではまだ未対応のまま
+    // ——別途、構造的な深い等価性比較の実装が必要（==/===とセットで、要検討）。
     if (COMPARE_OPS[node.name] || node.op === "!=") return evalCompare(node.name, node.op, node.left, node.right, env);
 
     if (node.position === "prefix" || node.position === "postfix") {

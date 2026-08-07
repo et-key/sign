@@ -33,7 +33,10 @@ export const OPERATOR_BY_PRECEDENCE = [
   { // 8
     '===': { position: 'infix', name: 'same' },
     '==': { position: 'infix', name: 'equal' },
-    '!==': { position: 'infix', name: 'not_equal' },
+    // 8/6修正: 以前は'!='(tier12)と同じ'not_equal'だったため、この演算子テーブル自身の
+    // 中で.nameが衝突していた（`documents/ja-jp/impl/syntax/operator_table.md`が元々
+    // 使っていた'xnot_equal'に改名して解消）。
+    '!==': { position: 'infix', name: 'xnot_equal' },
   },
   { // 9
     ',': { position: 'infix', name: 'product' },

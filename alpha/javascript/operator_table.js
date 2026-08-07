@@ -31,7 +31,12 @@ export const OPERATOR_BY_PRECEDENCE = [
   { // 8
     '===': { position: 'infix', name: 'same' },
     '==': { position: 'infix', name: 'equal' },
-    '!==': { position: 'infix', name: 'not_equal' },
+    // 8/6修正: 以前は'!='(tier12)と同じ'not_equal'だったため、operator_table.js自身の
+    // 中で.nameが衝突しており、コード側は.op（記号そのもの）で区別する回避策に頼っていた
+    // （pass3.js/interpreter.js参照）。operator_table.mdが元々使っていた'xnot_equal'に
+    // 改名し、衝突そのものを解消した（既存の.opベースの区別ロジックは引き続き正しく動く
+    // ため、この改名による挙動の変化は無い——念のため残してある）。
+    '!==': { position: 'infix', name: 'xnot_equal' },
   },
   { // 9
     ',': { position: 'infix', name: 'product' },

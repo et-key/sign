@@ -33,6 +33,28 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   コメント優先順位"11"のレンジ演算子`~+`等と衝突していた）。`prec = 0`から開始し
   `precedence: prec + 1`でコメント表記と一致させて解消（`documents/ja-jp/impl/syntax/
   operator_table.js`本体にも同時反映済み）。
+  **後置`@`（import）の優先順位を22→24に修正**（`documents/ja-jp/impl/syntax/
+  operator_table.js`本体にも同時反映済み）：`.md`表記（tier24、前置`@`のtier23より
+  高い）と`.js`実装（tier22、tier23より低い）が食い違っていた。「importしてから
+  input」（`@\`add.sn\`@` → `input(import(...))`、resolveDensityで実測確認）という
+  意図と、tier番号が大きいほど先に結合される（優先度が高い）という慣習には`.md`側の
+  配置の方が整合するため、`.js`側を`.md`に合わせた（resolveDensityは前置/後置演算子では
+  precedence数値自体を参照しないため、この修正は現状のパース挙動には影響しない——
+  あくまで仕様記述としての正確さの修正）。同時に前置`-`（negate）の行を`.md`側
+  （`impl/syntax/operator_table.md`・`guide/operator_table.md`の両方）に追加：
+  符号反転は算術演算のため、代数式の優先順位に従いべき乗（tier15）より優先度が高い
+  tier23に位置する。
+  **`!==`（tier8、構造比較）の内部名を"not_equal"→"xnot_equal"に改名**：以前は
+  tier12の`!=`と`.name`が完全に衝突しており（`.op`で区別する既存の回避策で凌いでいた、
+  `pass3.js`/`interpreter.js`参照）、`documents/ja-jp/impl/syntax/operator_table.md`が
+  元々使っていた"xnot_equal"という名前と食い違っていた。`.js`側を`.md`に合わせて改名し、
+  実装内の名前衝突・`.js`と`.md`の食い違いを同時に解消した（既存の`.op`ベースの区別
+  ロジックは引き続き正しく動くため挙動に影響は無い、`1 !== 2`のエラーメッセージが
+  `未対応の演算 'not_equal'`から`未対応の演算 'xnot_equal'`へ変わっただけ）。
+  なお、`=`（tier12、"assign_equal"）・`'`/`@`（tier17、"get_prop"/"get_at"）も
+  `.md`の「機能」欄では同じ単語（それぞれ"equal"・"get"）が複数行で使い回されているが、
+  `.js`側は元々別名になっており実装上の衝突は無い——`.md`の自然文としての語の再利用に
+  過ぎないため、これらは修正不要と判断した。
 - `sign.pegjs` — `documents/ja-jp/impl/syntax/grammar.pegjs`そのもの（正式仕様、**根本バグ修正済み**）。
   **peggy記法**（`@`ラベル等）を使用しているため、`pegjs`ではなく`peggy`パッケージでビルドする必要がある。
   **`identifier`規則のバグも修正済み**：`"_" [a-zA-Z0-9_]+`が`__`（Unit）にもマッチしてしまい
