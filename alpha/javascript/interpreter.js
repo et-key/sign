@@ -689,13 +689,21 @@ function evaluate(node, env) {
         // スカラー ≅ 1要素リスト（asListと同じ同型性）。非Array値も長さ1のリストとして
         // インデックスアクセスできる（`5 ' 0` = 5、`5 ' 1` = __）。
         const asIndexable = Array.isArray(l) ? l : [l];
+        // 負のインデックスは末尾から数える（`-1`=最後の要素、length+indexへ写像）。
+        // 正側は0始まり、負側は-1始まり（-0が無いため対称にはならない）。
+        const resolveIndex = (i) => (i < 0 ? asIndexable.length + i : i);
         if (typeof r === "number") {
-          return r >= 0 && r < asIndexable.length ? asIndexable[r] : UNIT;
+          const idx = resolveIndex(r);
+          return idx >= 0 && idx < asIndexable.length ? asIndexable[idx] : UNIT;
         }
         // list_cheat_sheet.md「範囲で要素取得」: `[1 2 3 4] ' [1 ~ 3]` → `[2 3 4]`。
         // rangeが実体化したインデックス列（配列）で、該当位置の値をまとめて取り出す。
         if (Array.isArray(r)) {
-          return r.map((i) => (typeof i === "number" && i >= 0 && i < asIndexable.length ? asIndexable[i] : UNIT));
+          return r.map((i) => {
+            if (typeof i !== "number") return UNIT;
+            const idx = resolveIndex(i);
+            return idx >= 0 && idx < asIndexable.length ? asIndexable[idx] : UNIT;
+          });
         }
         return UNIT;
       }
