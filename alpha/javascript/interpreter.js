@@ -395,10 +395,14 @@ function evalUnaryOp(name, v) {
       return isUnit(v) ? UNIT : -v;
     case "not":
       return isUnit(v) ? true : UNIT; // §4: !__ = id射（真）、!非Unit = __（偽）
-    case "expand":
-      // 後置~：1段階展開。今回の簡易値表現ではリストはそのままJS配列のため、
-      // 展開はconstruct/concat側（配列のspread）に委ねてそのまま値を通す。
-      return v;
+    case "expand": {
+      // 後置~：1段階展開（list_cheat_sheet.md「リストのフラット」、`[1 2,3 4]~ → [1 2 3 4]`）。
+      // 呼び出し引数位置での展開（複数の位置引数へのspread）はevalArgValues側が
+      // 独自に処理する別経路なので、ここは「値としての」1段階フラット化のみを担う。
+      // ネストした要素（配列）だけをspreadし、非配列の要素はそのまま残す。
+      if (!Array.isArray(v)) return v;
+      return v.flatMap((x) => (Array.isArray(x) ? x : [x]));
+    }
     case "continuous":
       // 前置~（rest記法用の密着マーカー）。値としてはオペランドをそのまま返す。
       return v;
