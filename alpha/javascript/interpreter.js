@@ -31,8 +31,13 @@
 // Unit（__）の実行時における一意な番人（sentinel）。Symbolなので他のどんな値とも衝突しない。
 const UNIT = Symbol("Sign.Unit");
 
+// unit.md 103行目「`__ = []`（空リストと等価）」: 空配列はUnitと同型として扱う。
+// これが無いと、`[h ~t]`型の再帰でリストを完全に消費し尽くした終端（restが正しく[]に
+// なった状態）が`!placed`/`placed & ...`のようなUnit判定で検出できず、範囲外アクセスが
+// 静かにUNITへ吸収されたまま再帰が終端しないまま数値の偶然の一致に頼って停止する、
+// といった見た目上は動くが誤った挙動を招く（8-Queens監査で発見、2026-08-08）。
 function isUnit(v) {
-  return v === UNIT || v === undefined;
+  return v === UNIT || v === undefined || (Array.isArray(v) && v.length === 0);
 }
 
 // pass3.jsのisDefineNodeと同じ判定（循環import回避のためここで別途最小実装）。
