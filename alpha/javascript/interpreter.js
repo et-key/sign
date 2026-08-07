@@ -468,7 +468,10 @@ function applyPointfree(node, closureEnv, argValues) {
 }
 
 // ---- construct/concat/product（List/Struct構築） ----
+// unit.md 91-92行目: 空白/カンマ等の余積演算における __ は単位元（`__ op x = x`）であり、
+// 103行目「`__ = []`（空リストと等価）」の通り、値として並べず消去（フィルタ）する。
 function asList(v) {
+  if (isUnit(v)) return [];
   return Array.isArray(v) ? v : [v];
 }
 function stringifyForConcat(v) {
@@ -609,16 +612,16 @@ function evaluate(node, env) {
       // 「bを末尾へ」（pass2.js冒頭コメント「優先度10.1の具体的な演算子名」参照、
       // 仕様は方向性を明記していないため実装時に決めた仮定）。
       case "push": {
-        // 0 [1 2 3] → [0 1 2 3]（aを先頭に追加）
+        // 0 [1 2 3] → [0 1 2 3]（aを先頭に追加）。aがUnit（単位元）なら素通しでbのみ返す。
         const a = evaluate(node.left, env);
         const b = evaluate(node.right, env);
-        return [a, ...asList(b)];
+        return isUnit(a) ? asList(b) : [a, ...asList(b)];
       }
       case "unshift": {
-        // [1 2 3] 4 → [1 2 3 4]（bを末尾に追加）
+        // [1 2 3] 4 → [1 2 3 4]（bを末尾に追加）。bがUnit（単位元）なら素通しでaのみ返す。
         const a = evaluate(node.left, env);
         const b = evaluate(node.right, env);
-        return [...asList(a), b];
+        return isUnit(b) ? asList(a) : [...asList(a), b];
       }
       // list_model.md §2.3「派生演算子による範囲リストの構築」。仕様上レンジ式の実体は
       // 常にイテレータ（{start,step,end}の固定サイズ構造体、終端の無い2項指定はPull型の
