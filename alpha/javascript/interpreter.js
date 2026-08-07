@@ -346,6 +346,19 @@ function evalArith(name, leftNode, rightNode, env) {
   return ARITH_OPS[name](l, r);
 }
 
+// list_model.md §2.3の派生演算子5種（`~+`/`~-`/`~*`/`~/`/`~^`）が、pass2.js/operator_table.js
+// でそれぞれ別名のASTノードになったもの（`~+`のみrange_arithmetic、他4種はrange_arithmetic_rev/
+// range_geometric/range_geometric_rev/range_power）。rangeStepFn自体は5種全てのstep関数を
+// 既に持っているが、evaluate側の"range"ケースが"range_arithmetic"の1つしか認識しておらず、
+// 残り4種は3項形式（終端あり）ですら「未対応の演算」として弾かれていた（8-Queens監査で発見）。
+const RANGE_ARITHMETIC_NAMES = new Set([
+  "range_arithmetic",
+  "range_arithmetic_rev",
+  "range_geometric",
+  "range_geometric_rev",
+  "range_power",
+]);
+
 // list_model.md §2.3の派生演算子（`~+`/`~-`/`~*`/`~/`/`~^`）に対応するstep関数を返す。
 function rangeStepFn(op, step) {
   switch (op) {
@@ -649,9 +662,10 @@ function evaluate(node, env) {
       // 単純な評価器のため、ここでは常に即座に配列へ展開する（3項セット「即座に全消費」
       // の挙動のみ再現、2項指定の遅延・無限ストリームは未対応——下記参照）。
       case "range": {
-        // 3項形式 [start ~+ step ~ end]（node.leftがrange_arithmeticノード）と、
+        // 3項形式 [start ~op step ~ end]（node.leftが5種の派生演算子いずれかのノード。
+        // list_model.md §2.3: ~+/~-/~*/~/~^、rangeStepFnが全種のstep関数を持つ）と、
         // 単純形式 [start ~ end]（step省略、昇順なら+1・降順なら-1）の両方を扱う。
-        if (node.left && node.left.type === "operation" && node.left.name === "range_arithmetic") {
+        if (node.left && node.left.type === "operation" && RANGE_ARITHMETIC_NAMES.has(node.left.name)) {
           const start = evaluate(node.left.left, env);
           const step = evaluate(node.left.right, env);
           const end = evaluate(node.right, env);
@@ -662,10 +676,16 @@ function evaluate(node, env) {
         const step = start <= end ? 1 : -1;
         return buildRange(start, end, (v) => v + step);
       }
-      case "range_arithmetic": {
-        // 2項形式 [start ~+ step]（終端なし）は仕様上、終端を持たない無限のPull型
-        // ストリーム（list_model.md §2.3「2項指定」）。本インタプリタは実体化された
-        // 値しか扱えないため、無限生成を試みず明示的に未対応として拒否する。
+      case "range_arithmetic":
+      case "range_arithmetic_rev":
+      case "range_geometric":
+      case "range_geometric_rev":
+      case "range_power": {
+        // 2項形式 [start ~op step]（終端なし、5種いずれも）は仕様上、終端を持たない
+        // 無限のPull型ストリーム（list_model.md §2.3「2項指定」）。本インタプリタは
+        // 実体化された値しか扱えないため、無限生成を試みず明示的に未対応として拒否する。
+        // （3項形式 [start ~op step ~ end] は上の"range"ケースが処理する——このケースに
+        // 来るのは、外側に終端"~ end"が付いていない生の2項ノードのみ。）
         throw new Error(
           "interpreter: 終端の無い範囲式（2項指定の~+等）は無限のPull型ストリームのため、値を全て実体化する本インタプリタでは未対応です（list_model.md §2.3）"
         );
