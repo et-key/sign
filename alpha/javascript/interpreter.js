@@ -675,13 +675,16 @@ function evaluate(node, env) {
           return UNIT;
         }
         const r = evaluate(node.right, env);
-        if (Array.isArray(l) && typeof r === "number") {
-          return r >= 0 && r < l.length ? l[r] : UNIT;
+        // スカラー ≅ 1要素リスト（asListと同じ同型性）。非Array値も長さ1のリストとして
+        // インデックスアクセスできる（`5 ' 0` = 5、`5 ' 1` = __）。
+        const asIndexable = Array.isArray(l) ? l : [l];
+        if (typeof r === "number") {
+          return r >= 0 && r < asIndexable.length ? asIndexable[r] : UNIT;
         }
         // list_cheat_sheet.md「範囲で要素取得」: `[1 2 3 4] ' [1 ~ 3]` → `[2 3 4]`。
         // rangeが実体化したインデックス列（配列）で、該当位置の値をまとめて取り出す。
-        if (Array.isArray(l) && Array.isArray(r)) {
-          return r.map((i) => (typeof i === "number" && i >= 0 && i < l.length ? l[i] : UNIT));
+        if (Array.isArray(r)) {
+          return r.map((i) => (typeof i === "number" && i >= 0 && i < asIndexable.length ? asIndexable[i] : UNIT));
         }
         return UNIT;
       }
