@@ -136,6 +136,9 @@ function isDestructurable(v) {
 // 集約されているため、将来.st生成（type_system.md §6.2「関数仮引数のフィールド要求」）を
 // 実装する際、このentries列挙をそのまま構造的フィールド要求集合として再利用できる想定。
 function bindBracketParams(entries, value, env) {
+  // スカラー ≅ 1要素リスト（asList/get_propと同じ同型性）。Dict（プレーンオブジェクト）
+  // ではない非Array値は、長さ1のリストとして分割代入できる。
+  if (!isDestructurable(value)) value = [value];
   if (Array.isArray(value)) {
     const restIdx = entries.findIndex((e) => e.rest);
     const before = restIdx === -1 ? entries : entries.slice(0, restIdx);
@@ -224,6 +227,14 @@ function bindParams(paramsNode, argValues, closureEnv) {
       } else {
         return null; // 完全性公理：デフォルト無しのパラメータにUnit → 呼び出し全体が崩壊
       }
+    }
+
+    if (entry.pattern) {
+      // 混在パラメータ内のブラケット分割代入エントリ（pass2.jsのparseParamStatements/
+      // splitBareParamTokens参照、例: `f : a [h ~t] ? ...`）。対応する1個の実引数を
+      // そのままこのenvへ分割代入する（ネストした完全性公理の崩壊は呼び出し全体へ伝播）。
+      if (bindBracketParams(entry.pattern, value, env) === null) return null;
+      continue;
     }
     envDefine(env, entry.name, value);
   }

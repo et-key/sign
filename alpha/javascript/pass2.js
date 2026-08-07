@@ -452,8 +452,53 @@ function flattenParamStatements(node) {
   });
 }
 
+// tokenが「複数の裸パラメータの中の1エントリとして書かれたブラケット分割代入パターン」
+// （例: `dist [h ~t]`の`[h ~t]`、`walk :\n\tdist\n\t[h ~t]\n ?`の`[h ~t]`行）かどうかを判定し、
+// そうであれば中身（flat token lineの配列＝そのブラケット自身の各行）を返す。そうでなければnull。
+// isBracketParamListと同じTerm-wrap剥がしロジックだが、対象が「パラメータリスト全体」では
+// なく「その中の1エントリ」である点が異なる（剥がす前の段階でTerm-wrapが1段少ないため、
+// 剥がし回数は0回で済むこともある——単一行`dist [h ~t]`の場合がそれ）。
+function peelBracketEntryToken(token) {
+  if (!Array.isArray(token)) return null;
+  let cur = token;
+  while (Array.isArray(cur) && cur.length === 1 && Array.isArray(cur[0]) && !isFlatTokenLine(cur[0]) && !isTaggedBlock(cur[0])) {
+    cur = cur[0];
+  }
+  if (Array.isArray(cur) && cur.length >= 1 && cur.every((line) => isFlatTokenLine(line) || isTaggedBlock(line))) {
+    return cur;
+  }
+  return null;
+}
+
+// peelBracketEntryTokenが返した「ブラケットの中身の各行」から、そのブラケット自身の
+// サブエントリ列（[x ~xs]と同じ形の{name,rest,defaultTokens}配列）を作る。
+function parseBracketSubEntries(lines) {
+  return flattenParamStatements(lines).flatMap(parseParamLine);
+}
+
+// extractParamLinesが返す「文の並び」を、1文=1エントリに変換する。flattenParamStatements
+// と違い、ブラケット分割代入パターン（peelBracketEntryTokenで判定できる文）に出会ったら
+// それ以上剥がさず、{name:null, pattern:[...]}という1個のネストしたエントリとして扱う
+// （他の裸パラメータと混在する1エントリとしてのブラケット分割代入、list_model.md §2.4/2.5の
+// 「1個の実引数をブラケットへ分割代入する」パターンを、複数パラメータの中の1個の位置にも
+// 一般化したもの）。
+function parseParamStatements(lines) {
+  if (isFlatTokenLine(lines)) return parseParamLine(lines);
+  return lines.flatMap((stmt) => {
+    if (isFlatTokenLine(stmt)) return parseParamLine(stmt);
+    if (isTaggedBlock(stmt)) return parseParamStatements(stmt[1]);
+    const bracketLines = peelBracketEntryToken(stmt);
+    if (bracketLines) {
+      return [{ name: null, pattern: parseBracketSubEntries(bracketLines), rest: false, defaultTokens: null }];
+    }
+    return parseParamStatements(stmt);
+  });
+}
+
 // 裸の（ブラケット／インデントで囲まれていない）仮引数トークン列を、1識別子=1エントリに分割する。
 // デフォルト式は裸形式では現行仕様に例が無いため未対応（bracket/indent形式のみ対応）。
+// 個々のトークンがさらに配列（`dist [h ~t]`の`[h ~t]`のような、1エントリとしてのブラケット
+// 分割代入パターン）の場合は、ブラケット自身のサブエントリ列を持つ1個のパターンエントリにする。
 function splitBareParamTokens(tokens) {
   const entries = [];
   let i = 0;
@@ -461,6 +506,12 @@ function splitBareParamTokens(tokens) {
     if (tokens[i] === "~_") {
       entries.push({ name: tokens[i + 1], rest: true, defaultTokens: null });
       i += 2;
+    } else if (Array.isArray(tokens[i])) {
+      const bracketLines = peelBracketEntryToken(tokens[i]);
+      if (bracketLines) {
+        entries.push({ name: null, pattern: parseBracketSubEntries(bracketLines), rest: false, defaultTokens: null });
+      }
+      i += 1;
     } else {
       entries.push({ name: tokens[i], rest: false, defaultTokens: null });
       i += 1;
@@ -515,9 +566,14 @@ function buildParameterList(paramTokens, env) {
   if (paramTokens.length === 1 && Array.isArray(paramTokens[0])) {
     // ブラケット([x ~xs])形式、またはインデントブロック（デフォルト引数）形式
     isBracket = isBracketParamList(paramTokens[0]);
-    rawEntries = flattenParamStatements(extractParamLines(paramTokens[0])).flatMap(parseParamLine);
+    const paramLines = extractParamLines(paramTokens[0]);
+    // isBracket（パラメータリスト全体が1個のブラケット）の場合はそのブラケット自身の
+    // 各行をそのまま完全に平坦化する（従来通り）。isBracket=falseの複数行デフォルト引数
+    // 形式では、途中に混在するブラケット分割代入パターン（1エントリとしての`[h ~t]`）を
+    // 平坦化で潰さないよう、parseParamStatementsを使う。
+    rawEntries = isBracket ? flattenParamStatements(paramLines).flatMap(parseParamLine) : parseParamStatements(paramLines);
   } else {
-    // 裸の空白区切り形式（例: g x, x ~xs）
+    // 裸の空白区切り形式（例: g x, x ~xs, dist [h ~t]）
     rawEntries = splitBareParamTokens(paramTokens);
   }
 
@@ -526,6 +582,17 @@ function buildParameterList(paramTokens, env) {
   let scope = env;
   const entries = [];
   for (const raw of rawEntries) {
+    if (raw.pattern) {
+      // 混在パラメータ内のブラケット分割代入エントリ（例: `dist [h ~t]`の`[h ~t]`）。
+      // 名前を持たず、対応する1個の実引数をpattern（サブエントリ列）へ分割代入する
+      // （interpreter.jsのbindParams参照）。デフォルトは現行未対応。
+      entries.push({ name: null, pattern: raw.pattern, rest: false, default: null });
+      // パターン内の各サブエントリ名も、後続パラメータのデフォルト式から参照できるよう
+      // スコープへ加える（let*的な逐次スコープの一貫性のため）。
+      const patternNames = raw.pattern.map((e) => e.name).filter((n) => typeof n === "string");
+      if (patternNames.length > 0) scope = bindEnv(patternNames, scope);
+      continue;
+    }
     if (raw.defaultTokens) {
       // let*的な逐次スコープの強制: デフォルト式は自分より前に束縛済みのパラメータのみ
       // 参照できる。同一パラメータリスト内の「まだ束縛されていない」識別子

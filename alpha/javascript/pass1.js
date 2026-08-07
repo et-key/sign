@@ -106,6 +106,24 @@ function isFlatLine(x) {
   return Array.isArray(x) && x.every((t) => typeof t === "string");
 }
 
+function isTaggedBlockToken(x) {
+  return Array.isArray(x) && (x[0] === '"INDENT_"' || x[0] === '"ABS_"');
+}
+
+// pass2.jsのpeelBracketEntryTokenと同じロジック（循環import回避のためここで別途最小実装）。
+// 複数の裸パラメータの中の1エントリとして書かれたブラケット分割代入パターン
+// （例: `dist [h ~t]`の`[h ~t]`）かどうかを判定する。そうであれば、その中身の"~_"等は
+// このブラケット自身のサブエントリ用であり、外側の関数のアリティには影響しない
+// （＝1個の引数スロットとして数える。countStatements参照）。
+function isBracketEntryToken(token) {
+  if (!Array.isArray(token)) return false;
+  let cur = token;
+  while (Array.isArray(cur) && cur.length === 1 && Array.isArray(cur[0]) && !isFlatLine(cur[0]) && !isTaggedBlockToken(cur[0])) {
+    cur = cur[0];
+  }
+  return Array.isArray(cur) && cur.length >= 1 && cur.every((line) => isFlatLine(line) || isTaggedBlockToken(line));
+}
+
 // 「文の並び」（またはラップされた1文）を再帰的に数える。pass2.jsのflattenParamStatements
 // と同じ構造を、生トークンの段階で軽量に再現する（循環import回避のためここで別途最小実装）。
 function countStatements(node) {
@@ -114,7 +132,8 @@ function countStatements(node) {
   for (const stmt of node) {
     let c;
     if (isFlatLine(stmt)) c = countBareArity(stmt);
-    else if (Array.isArray(stmt) && (stmt[0] === '"INDENT_"' || stmt[0] === '"ABS_"')) c = countStatements(stmt[1]);
+    else if (isBracketEntryToken(stmt)) c = 1; // 1エントリとしてのブラケット分割代入は1スロット分
+    else if (isTaggedBlockToken(stmt)) c = countStatements(stmt[1]);
     else c = countStatements(stmt); // さらにネストした1文（例: func_mixedのブラケット単独文）
     if (c === Infinity) return Infinity;
     total += c;
