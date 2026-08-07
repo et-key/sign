@@ -694,10 +694,19 @@ function evaluate(node, env) {
           }
           return UNIT;
         }
-        const r = evaluate(node.right, env);
         // スカラー ≅ 1要素リスト（asListと同じ同型性）。非Array値も長さ1のリストとして
         // インデックスアクセスできる（`5 ' 0` = 5、`5 ' 1` = __）。
         const asIndexable = Array.isArray(l) ? l : [l];
+        // get-rest: `list ' N~`（数値インデックスへ後置~）は、Nから末尾までの部分リストを
+        // 返す（既存のList/Scalar同型性・負インデックス変換をそのまま流用できる。
+        // Array.prototype.sliceの負start解釈がSignの「末尾から数える」規約と一致するため
+        // 追加変換は不要）。呼び出し引数位置での展開（複数の位置引数へのspread）を担う
+        // evalArgValuesとは別経路——ここはget_propの右辺としての`~`のみを扱う。
+        if (node.right.type === "operation" && node.right.position === "postfix" && node.right.name === "expand") {
+          const n = evaluate(node.right.operand, env);
+          return typeof n === "number" ? asIndexable.slice(n) : UNIT;
+        }
+        const r = evaluate(node.right, env);
         // 負のインデックスは末尾から数える（`-1`=最後の要素、length+indexへ写像）。
         // 正側は0始まり、負側は-1始まり（-0が無いため対称にはならない）。
         const resolveIndex = (i) => (i < 0 ? asIndexable.length + i : i);
