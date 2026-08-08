@@ -9,9 +9,7 @@ import peggy from "peggy";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { preprocess } from "../lexer.js";
-import { reduceAll } from "../pass2.js";
-import { buildEnv } from "../pass1.js";
+import { compile } from "../compile.js";
 import { evaluate, newRuntimeEnv, envGet, UNIT, isUnit } from "../interpreter.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,11 +18,11 @@ const grammar = fs.readFileSync(grammarPath, "utf8");
 const parser = peggy.generate(grammar);
 
 // プログラム全体（複数行）を静的解決＋実行時評価し、最後の行の評価結果を返す。
+// 静的側は compile()（Pass 1〜3 の単一ドライバ）に一本化した。パーサーだけは
+// sign.pegjs（正式仕様）から都度ビルドしたものを渡す——ビルド済みparser.jsの
+// staleness をテストが見逃さないようにするため（compile.js の注記参照）。
 function run(source) {
-	const pre = preprocess(source);
-	const lines = parser.parse(pre);
-	const staticEnv = buildEnv(lines);
-	const nodes = lines.map((line) => reduceAll(line, staticEnv));
+	const { nodes } = compile(source, { parse: parser.parse });
 	const runtimeEnv = newRuntimeEnv(null);
 	let result = UNIT;
 	for (const node of nodes) result = evaluate(node, runtimeEnv);
@@ -142,12 +140,9 @@ check(
 	total++;
 	const { nodes, env } = (() => {
 		const source = "d : [\n\tfoo : 1\n\tbar : 2\n]\nfoo";
-		const pre = preprocess(source);
-		const lines = parser.parse(pre);
-		const staticEnv = buildEnv(lines);
+		const compiled = compile(source, { parse: parser.parse });
 		const runtimeEnv = newRuntimeEnv(null);
-		const results = [];
-		for (const line of lines) results.push(evaluate(reduceAll(line, staticEnv), runtimeEnv));
+		const results = compiled.nodes.map((node) => evaluate(node, runtimeEnv));
 		return { nodes: results, env: runtimeEnv };
 	})();
 	const dictValue = nodes[0];
@@ -174,10 +169,7 @@ check("d ' bar → 2（同上、2件目のキー）", run("d : [\n\tfoo : 1\n\tb
 
 // 未定義識別子のUnit収束は診断上informationとして記録される（unit.md §0.1、非ブロッキング）。
 function runDiag(source) {
-	const pre = preprocess(source);
-	const lines = parser.parse(pre);
-	const staticEnv = buildEnv(lines);
-	const nodes = lines.map((line) => reduceAll(line, staticEnv));
+	const { nodes } = compile(source, { parse: parser.parse });
 	const runtimeEnv = newRuntimeEnv(null);
 	let result = UNIT;
 	for (const node of nodes) result = evaluate(node, runtimeEnv);

@@ -12,6 +12,22 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
 
 ## 構成
 
+- `compile.js` — **Pass 1〜3 の単一ドライバ**（`compiler_pipeline.md` §3 のフロントエンド）。
+  `compile(source)` が `preprocess → parse → buildEnv(Pass 1a) → reduceAll(Pass 2) →
+  specializeGenericParams(Pass 1b) → annotateTypes(Pass 3)` を通し、
+  `{ nodes, env, specializations, diagnostics }` を返す。**各ノードには `atomType`
+  （Layer 2 型）が載る**。
+  これを作るまで、各テストと playground が同じ手順をそれぞれコピーして持っており、
+  **`pass1b.js` と `pass3.js` はどこからも呼ばれていなかった**（型を出しても消費者が
+  存在しない状態）。パーサーは `options.parse` で差し替え可能——テストは
+  `sign.pegjs`（正式仕様）から peggy で都度ビルドしたものを渡す。ビルド済み `parser.js`
+  は実際に一度8/4時点で止まったまま `sign.pegjs` の修正が反映されていなかったことがあり、
+  テストが文法ソースを直接検証する性質は保つ必要があるため。
+  **Passの順序が `type_system.md` §5 と食い違っている点**：§5 は Pass 1a → 1b → 2 → 3 の
+  順を書いているが、実装では Pass 1b が Pass 2 の**後**に走る。呼び出しサイトが何であるかは、
+  Pass 2 が余積を apply/compose/concat のどれに解決するか決めるまで確定しないため
+  （トークン列の段階では `f x` が関数適用かリスト構築か判定できない）。
+  B-1・B-3 と同じ「§5 の記述が実装より単純化されている」系の食い違いで、仕様側の修正候補。
 - `lexer.js` — 前処理（`separateInfix` + `markBlock`）。`pre_alpha/lexisize/lexer.js`から移植。
   **ブラケット深さ追跡を追加**（`bracketDelta`）：`markBlock`はタブ深さの変化のみでINDENT/DEDENTを
   挿入するためブラケットの存在を考慮しておらず、`function_guide.md`の`func_mixed`例のように
@@ -330,6 +346,9 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   持っていたため、ディスパッチ条件に`node.op === "!="`を追加するだけの狙い撃ちの修正で
   済んだ。`!==`（構造比較）・`==`・`===`は依然未実装のまま——スコープを広げず`!=`だけを
   直した（`test/interpreter.test.js`で§4の例外規則込みで確認）。
+- `test/compile.test.js` — `compile.js`（Pass 1〜3 の単一ドライバ）の動作確認。全ノードへの
+  `atomType` 注釈、数値の昇格格子（識別子経由を含む）、算術族の型不一致、List左辺の算術、
+  余積族、`&`/`|`、define/lambda/Dict判定、Pass 1b がパイプラインに載っていること。24/24 pass。
 - `test/pass2.test.js` — Pass2単体（envなし）の動作確認。9/9 pass。
 - `test/multi_arg_apply.test.js` — 多引数関数の呼び出しがapplyチェーンとして正しく飽和し、
   余分な引数がconstructでタプル化されることの確認。3/3 pass。

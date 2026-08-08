@@ -1,7 +1,4 @@
-import { parse } from "../parser.js";
-import { preprocess } from "../lexer.js";
-import { reduceAll } from "../pass2.js";
-import { buildEnv } from "../pass1.js";
+import { compile } from "../compile.js";
 import { evaluate, newRuntimeEnv, UNIT, isUnit } from "../interpreter.js";
 
 const srcEl = document.getElementById("src");
@@ -142,14 +139,13 @@ function run() {
   const astLines = [];
   let hadError = false;
   try {
-    const pre = preprocess(source);
-    const lines = parse(pre);
-    const staticEnv = buildEnv(lines);
+    // 静的解決は compile()（Pass 1〜3 の単一ドライバ）に一本化。
+    // 各ノードには pass3 が Layer 2 型（atomType）を注釈済みなので、AST表示にも出す。
+    const { nodes } = compile(source);
     const runtimeEnv = newRuntimeEnv(null);
     let last = UNIT;
-    for (const line of lines) {
-      const node = reduceAll(line, staticEnv);
-      astLines.push(showAst(node));
+    for (const node of nodes) {
+      astLines.push(`${showAst(node)}\n  :: ${node.atomType ?? "?"}`);
       last = evaluate(node, runtimeEnv);
       outLines.push(showValue(last));
     }
@@ -163,13 +159,19 @@ function run() {
 }
 
 // ボタンのローディング表示（評価自体は同期処理のため一瞬だが、クリックへ視覚的な
-// フィードバックを返すためrAFで1フレーム分だけ挟む）。
+// フィードバックを返すため1ティックだけ挟む）。
+// 【requestAnimationFrameを使わない理由】rAFはタブが非表示・非コンポジット状態だと
+// 発火しないため、「実行を押しても何も起きない」という状態になる（実際に踏んだ）。
+// setTimeoutはその状態でも発火するので、描画の間引きに巻き込まれない。
 function runWithFeedback() {
   runBtn.classList.add("loading");
-  requestAnimationFrame(() => {
-    run();
-    runBtn.classList.remove("loading");
-  });
+  setTimeout(() => {
+    try {
+      run();
+    } finally {
+      runBtn.classList.remove("loading");
+    }
+  }, 0);
 }
 
 runBtn.addEventListener("click", runWithFeedback);

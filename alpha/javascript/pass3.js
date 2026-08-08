@@ -33,6 +33,10 @@ function isDefineNode(n) {
   return !!n && n.type === "operation" && n.name === "define";
 }
 
+function isIdentifierNode(n) {
+  return !!n && n.type === "atom" && n.kind === "identifier";
+}
+
 // カンマ（product, 直積）で左結合に連なったチェーンを、末端の要素配列へ展開する。
 function flattenProduct(node) {
   if (node && node.type === "operation" && node.name === "product") {
@@ -46,6 +50,31 @@ function flattenProduct(node) {
 function productShape(node) {
   const elems = flattenProduct(node);
   return elems.length > 0 && elems.every(isDefineNode) ? "Dict" : "Struct";
+}
+
+// type_system.md §3.2「数値の昇格格子」と算術族の型変換テーブルの実装。
+// 左辺は「どの規則を使うか」を選ぶだけで、数値同士の結果型は昇格格子が決める
+// （＝左辺の型がそのまま結果型になるとは限らない）。
+const NUMERIC_TYPES = new Set(["Address", "Float", "Vector"]);
+// List左辺で固有の意味を持つのは `*`(repeat)・`^`(lift)・`/`(split) だけ。
+// `+`・`-`・`%` はList/Stringと同様に型エラーで __ へ収束する。
+const LIST_ARITHMETIC_OPS = new Set(["mul", "pow", "div"]);
+
+function arithmeticResultType(node, leftType, env) {
+  const rightType = inferAtomType(node.right, env);
+  // §3.2: Stringは左右どちらに来ても算術の型エラー（両方向とも __ 消去）
+  if (leftType === "String" || rightType === "String") return "Unit";
+  if (leftType === "List" || leftType === "Struct") {
+    return LIST_ARITHMETIC_OPS.has(node.name) ? leftType : "Unit";
+  }
+  // 数値の昇格格子: 精度の高い側へ昇格する（降格しない）
+  if (NUMERIC_TYPES.has(leftType) && NUMERIC_TYPES.has(rightType)) {
+    if (leftType === "Vector" || rightType === "Vector") return "Vector";
+    if (leftType === "Float" || rightType === "Float") return "Float";
+    return "Address";
+  }
+  // どちらかの型が未解決（識別子のatom_typeが読めない等）なら、従来通り左辺を通す
+  return leftType;
 }
 
 function literalAtomTypeFromKind(node) {
@@ -63,9 +92,20 @@ function literalAtomTypeFromKind(node) {
 
 // node（Pass2が返す二分木ASTのノード）のLayer 2 Atom内部型を推論する。
 // env は識別子のatom_type解決のため（pass1.jsのBinding.atomTypeを参照）。
+//
+// 結果はノード自身の `atomType` フィールドへ載せる（メモ化＋注釈を兼ねる）。
+// type_system.md §5 の Pass 3 は出力を「完全型付きAST」と定めており、原理2の
+// 「型は実行時ゼロコストの帳簿」に照らせば、**ASTそのものが帳簿の担体**である
+// （汚染ではない）。Pass 4 も同じノードから型を読んで命令を選ぶことになる。
 function inferAtomType(node, env) {
   if (!node || typeof node !== "object") return null;
+  if (node.atomType !== undefined) return node.atomType;
+  const inferred = computeAtomType(node, env);
+  node.atomType = inferred;
+  return inferred;
+}
 
+function computeAtomType(node, env) {
   if (node.type === "atom") {
     if (node.kind === "identifier") {
       if (!env) return null;
@@ -77,10 +117,12 @@ function inferAtomType(node, env) {
 
   if (node.type === "block") {
     if (!Array.isArray(node.lines) || node.lines.length === 0) return "List";
-    // 複数行、かつ全行がdefine(key:val) → Dict（list_model.md §5.3、pattern_guide.mdの
-    // 改行区切り辞書リテラルの形）。それ以外の複数行（関数本体等）は「ブロックの値＝
-    // 最後の文の値」という通常のブロック式のセマンティクスにフォールバックする。
-    if (node.lines.length > 1 && node.lines.every(isDefineNode)) return "Dict";
+    // 全行が define(key:val) かつ左辺が識別子 → Dict（list_model.md §5.3、
+    // pattern_guide.mdの改行区切り辞書リテラルの形）。単一エントリの `[foo : 1]` も含む。
+    // 左辺が識別子でない define 行（match_caseの `cond : result`）はDictではないので
+    // 除外する——interpreter.jsのDict判定と同じ基準に揃えてある。
+    // それ以外（関数本体等）は「ブロックの値＝最後の文の値」にフォールバックする。
+    if (node.lines.every((l) => isDefineNode(l) && isIdentifierNode(l.left))) return "Dict";
     return inferAtomType(node.lines[node.lines.length - 1], env);
   }
 
@@ -90,8 +132,16 @@ function inferAtomType(node, env) {
       return productShape(node);
     }
     if (node.name === "define") {
-      // 単一のkey:valペア（例: [foo:1]）自体を値として問われた場合、単一エントリのDictとする。
-      return "Dict";
+      // 定義の値は「束縛される値そのもの」（interpreter.jsのdefineも右辺の値を返す）。
+      // 以前は無条件に "Dict" を返していたが、それは `[foo : 1]` のような辞書リテラルの
+      // 単一エントリを想定した規則であり、トップレベルの定義行（`f : x ? x + 1`）まで
+      // Dict と誤判定していた。辞書リテラルの判定は上のblock分岐が担う。
+      return inferAtomType(node.right, env);
+    }
+    if (node.name === "lambda") {
+      // Layer 2 は「Atom の内部分類」（§2）であり、Lambda は Layer 1 のカテゴリ。
+      // Atom内部型は持たないので null を返す（未解決ではなく「該当なし」）。
+      return null;
     }
     if (LIST_BUILDING_OPS.has(node.name)) {
       // 余積族（§3.2の族別テーブル）: 左辺がStringならテキスト連結でString、
@@ -104,9 +154,8 @@ function inferAtomType(node, env) {
       // 左辺は短絡（Unitなら全体がUnit）を決めるだけで、値として返るのは右辺。
       if (node.name === "and") return inferAtomType(node.right, env);
       const leftType = inferAtomType(node.left, env);
-      // §3.2 算術族: String型の左辺に算術演算子が来ると型エラーで__に収束する
-      if (leftType === "String" && ARITHMETIC_OPS.has(node.name)) return "Unit";
-      return leftType; // 左辺が規則を選ぶ（§3.2）。算術・比較・構造比較族は左辺の型が結果型
+      if (ARITHMETIC_OPS.has(node.name)) return arithmeticResultType(node, leftType, env);
+      return leftType; // 左辺が規則を選ぶ（§3.2）。比較・構造比較族は左辺の型が結果型
     }
     if (node.operand) {
       // 前置/後置演算子は§4に個別の型シグネチャがあるが、今回は簡略化して
@@ -192,4 +241,28 @@ function inferLambdaParamTypes(lambdaNode) {
   return inferParamTypesFromUsage(lambdaNode.right, names);
 }
 
-export { inferAtomType, inferLambdaParamTypes, inferParamTypesFromUsage };
+// AST全体を歩いて、全ノードに `atomType` を載せる（type_system.md §5 Pass 3 の
+// 出力＝「完全型付きAST」）。inferAtomType自身がメモ化するため、各ノードの型は
+// 一度しか計算されない。
+//
+// 【既知の制限】ブロックの中身も呼び出し元と同じenvで解決する。pass2.jsのresolveBlockは
+// 縮約中に子スコープを作るが、それをノードへ残していないため、ここから辿れない
+// （inferAtomTypeが元々持っていた制限と同じ。ブロック内で新たに定義された識別子の
+// atomTypeは解決できず null になる）。
+function annotateTypes(node, env) {
+  if (!node || typeof node !== "object") return node;
+  inferAtomType(node, env);
+  if (node.left) annotateTypes(node.left, env);
+  if (node.middle) annotateTypes(node.middle, env); // chain_compare（§4の三項連鎖比較）
+  if (node.right) annotateTypes(node.right, env);
+  if (node.operand) annotateTypes(node.operand, env);
+  if (node.type === "block" && Array.isArray(node.lines)) {
+    for (const line of node.lines) annotateTypes(line, env);
+  }
+  if (node.type === "params" && Array.isArray(node.entries)) {
+    for (const e of node.entries) if (e.default) annotateTypes(e.default, env);
+  }
+  return node;
+}
+
+export { inferAtomType, annotateTypes, inferLambdaParamTypes, inferParamTypesFromUsage };
