@@ -94,14 +94,19 @@ function inferAtomType(node, env) {
       return "Dict";
     }
     if (LIST_BUILDING_OPS.has(node.name)) {
-      // スペース（余積）でAtom同士が結合された結果はList自体（左辺の型を素通ししない）
-      return "List";
+      // 余積族（§3.2の族別テーブル）: 左辺がStringならテキスト連結でString、
+      // それ以外はList構築。以前は無条件に"List"を返していたが、interpreter.jsの
+      // concatは左辺がstringならテキスト連結する（`ab` 1 → "ab1"）ため食い違っていた。
+      return inferAtomType(node.left, env) === "String" ? "String" : "List";
     }
     if (node.position === "infix" && node.left) {
+      // 論理・圏論族の`&`（§4: `(L -> R) -> (R | __)`）だけは右辺の型を返す。
+      // 左辺は短絡（Unitなら全体がUnit）を決めるだけで、値として返るのは右辺。
+      if (node.name === "and") return inferAtomType(node.right, env);
       const leftType = inferAtomType(node.left, env);
-      // §3.2 NOTE: String型の左辺に算術演算子が来ると型エラーで__に収束する
+      // §3.2 算術族: String型の左辺に算術演算子が来ると型エラーで__に収束する
       if (leftType === "String" && ARITHMETIC_OPS.has(node.name)) return "Unit";
-      return leftType; // 左辺優先ルール（§3.2）
+      return leftType; // 左辺が規則を選ぶ（§3.2）。算術・比較・構造比較族は左辺の型が結果型
     }
     if (node.operand) {
       // 前置/後置演算子は§4に個別の型シグネチャがあるが、今回は簡略化して

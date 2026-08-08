@@ -87,6 +87,31 @@ const cases = [
 		want: "Address",
 		note: "関数本体（複数行だが全行がdefineではない: define→numberの並び）はDict化せず、最後の文(2)の型に委譲する",
 	},
+	// ---- §3.2 族別テーブル（「左辺優先」＝結果型ではなく規則の選択） ----
+	{
+		source: "`ab` 1",
+		pick: (nodes) => nodes[0],
+		want: "String",
+		note: "余積族: 左辺がStringならテキスト連結でString（interpreter.jsの`ab` 1 → \"ab1\"と一致）",
+	},
+	{
+		source: "1 `ab`",
+		pick: (nodes) => nodes[0],
+		want: "List",
+		note: "余積族: 左辺がString以外ならList構築（Stringが勝つのは左辺のときだけ）",
+	},
+	{
+		source: "1 & `abc`",
+		pick: (nodes) => nodes[0],
+		want: "String",
+		note: "論理・圏論族: `&`は§4のシグネチャ`(L -> R) -> (R | __)`通り右辺の型を返す（左辺優先の反例）",
+	},
+	{
+		source: "1 | `abc`",
+		pick: (nodes) => nodes[0],
+		want: "Address",
+		note: "論理・圏論族: `|`は左辺が非Unitなら左辺を返すため左辺の型",
+	},
 ];
 
 let passed = 0;

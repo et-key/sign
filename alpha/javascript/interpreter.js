@@ -483,15 +483,20 @@ function evalArith(name, leftNode, rightNode, env) {
   const r = evaluate(rightNode, env);
   if (isUnit(r)) return l; // 右辺Unit = 単位元（id射、素通し）
   if (Array.isArray(l)) {
+    // §3.2の算術族テーブル: List左辺の `*`/`^`/`/` は右辺を「回数・個数」として使うため
+    // Address（数値）でなければならない。それ以外は型エラーで__へ収束する。
+    if (typeof r !== "number") return UNIT;
     if (name === "mul") return listRepeat(l, r);
     if (name === "pow") return listLift(l, r);
     if (name === "div") return listSplit(l, r);
     return UNIT; // list_cheat_sheet.mdに無い組み合わせ（+ - %）はStringと同様に型エラー
   }
-  // Lambda（`!__`のId射、クロージャ、ポイントフリー等）に算術演算は定義されていない
-  // ——String/Listと同様に型エラーとして__へ収束させる。これが無いとJSのオブジェクト→
-  // 文字列強制が働いて `"[object Object]1"` のような値が静かに出てくる。
-  if ((l !== null && typeof l === "object") || (r !== null && typeof r === "object")) return UNIT;
+  // §3.2 数値の昇格格子: 算術族に数値以外が混ざったら型エラーとして__へ収束する（両方向）。
+  // 左辺Stringは上で弾いているが、右辺が String/List/Lambda のケースはここまで落ちてくる。
+  // この判定が無いとJSの型強制がそのまま漏れ、「もっともらしく見える間違った値」が
+  // 静かに出てくる——`1 + \`abc\`` → "1abc"、`1 + [2 3]` → "12,3"、
+  // `x : !__` の `x + 1` → "[object Object]1" は全てこの経路だった。
+  if (typeof l !== "number" || typeof r !== "number") return UNIT;
   return ARITH_OPS[name](l, r);
 }
 
