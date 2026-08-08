@@ -347,7 +347,12 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   素通しされず、専用処理されることの確認（裸の複数仮引数・rest・ブラケット形式・
   インデントブロック形のデフォルト引数とlet*的な逐次スコープ）。
 - `playground/` — ブラウザ上でソース→AST→評価結果を確認できる簡易UI（`node playground/serve.mjs`
-  で起動）。**フォント（種別・サイズ・合字の有無）を選べるツールバーを追加**：Signは
+  で起動、またはリポジトリルートの`install_alpha.ps1`/`sign_alpha_web.ps1`を使う——詳細は
+  ルートの`README.md`「Playground」節を参照）。**見た目はpre-alpha期のroot `playground/`と
+  同じデザイン言語（ガラス背景・Sign ロゴ・パネルカード、`playground.css`）に統一**しつつ、
+  出力パネルはalphaの実態に合わせてResult/ASTの2分割、Templateドロップダウンもalphaで
+  実際に動く機能だけで作り直した（2026-08-08）。**フォント（種別・サイズ・合字の有無）を
+  選べるツールバーを追加**：Signは
   `~+`/`!=`/`<=`のような複合記号が多く、合字（ligature）でグリフが結合されると個々の記号が
   読み取りにくくなる場合があるため、合字はデフォルト無効（`font-variant-ligatures: none`）
   にしつつ、フォントによっては合字表示を見たい場合もあるためチェックボックスでON/OFFを

@@ -5,7 +5,8 @@
 	"type": "module",
 	"scripts": {
 		"build:parser": "peggy -o parser.js --format es sign.pegjs",
-		"test": "node test/run.js"
+		"test": "node test/run.js",
+		"playground": "node playground/serve.mjs"
 	},
 	"dependencies": {
 		"peggy": "^4.0.0"

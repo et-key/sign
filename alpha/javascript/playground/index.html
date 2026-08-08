@@ -2,66 +2,100 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sign alpha/javascript Playground</title>
-<style>
-  :root { --code-font: "Cascadia Code", Consolas, monospace; --code-size: 14px; --code-ligatures: none; }
-  body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #1e1e1e; color: #ddd; }
-  h1 { font-size: 1.1rem; margin: 0 0 0.75rem; }
-  .toolbar { display: flex; align-items: center; gap: 1rem; margin: 0 0 0.5rem; flex-wrap: wrap; }
-  .toolbar label { font-size: 0.85rem; color: #aaa; display: flex; align-items: center; gap: 0.35rem; }
-  .toolbar select, .toolbar input[type="range"] { font-family: inherit; }
-  .row { display: flex; gap: 1rem; height: 70vh; }
-  .col { flex: 1; display: flex; flex-direction: column; }
-  textarea, pre {
-    flex: 1;
-    font-family: var(--code-font);
-    font-size: var(--code-size);
-    font-variant-ligatures: var(--code-ligatures);
-    background: #111; color: #eee; border: 1px solid #444; border-radius: 4px;
-    padding: 0.5rem; overflow: auto; white-space: pre-wrap;
-  }
-  button { margin: 0.5rem 0; padding: 0.4rem 1rem; cursor: pointer; }
-  label { font-size: 0.85rem; color: #aaa; }
-  .err { color: #ff6b6b; }
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/playground/playground.css">
+<link rel="icon" type="image/svg+xml" href="/playground/Sign_logo_dark.svg">
 </head>
 <body>
-<h1>Sign alpha/javascript Playground（lexer → Pass1/1b/2/3 → interpreter）</h1>
-<div class="toolbar">
-  <button id="runBtn">実行（Ctrl+Enter）</button>
-  <label>フォント
-    <select id="fontSelect">
-      <option value='"Cascadia Code", Consolas, monospace'>Cascadia Code</option>
-      <option value='"JetBrains Mono", monospace'>JetBrains Mono</option>
-      <option value='"Fira Code", monospace'>Fira Code</option>
-      <option value='"Source Code Pro", monospace'>Source Code Pro</option>
-      <option value='Menlo, Monaco, monospace'>Menlo / Monaco</option>
-      <option value='Consolas, monospace'>Consolas</option>
-      <option value='"Courier New", monospace'>Courier New</option>
-      <option value='ui-monospace, monospace'>システム標準（monospace）</option>
-    </select>
-  </label>
-  <label>サイズ
-    <input type="range" id="fontSize" min="11" max="22" step="1" value="14" />
-    <span id="fontSizeLabel">14px</span>
-  </label>
-  <label><input type="checkbox" id="ligatures" /> 合字（ligature）を有効化</label>
+<div class="glass-bg"></div>
+<div class="app-container">
+  <header class="app-header">
+    <div class="logo-area">
+      <img src="/playground/Sign_logo_dark.svg" class="app-logo" width="63" height="36" alt="Sign Logo">
+      <div class="title-text">
+        <h1>Sign</h1>
+        <span class="badge">alpha/javascript</span>
+      </div>
+    </div>
+
+    <div class="controls-area">
+      <div class="control-group">
+        <label for="exampleSelect">Template</label>
+        <select id="exampleSelect" class="custom-select">
+          <option value="composition">Function Composition</option>
+          <option value="currying">Auto Currying</option>
+          <option value="pointfree">Pointfree</option>
+          <option value="match_case">Match Case</option>
+          <option value="rest_recursion">Rest Param Recursion</option>
+          <option value="chain_compare">Chain Comparison</option>
+          <option value="manual_curry">Manual Curry ($/@/#)</option>
+        </select>
+      </div>
+      <div class="control-group font-group">
+        <label for="fontSelect">Font</label>
+        <select id="fontSelect" class="custom-select">
+          <option value='"JetBrains Mono", monospace'>JetBrains Mono</option>
+          <option value='"Cascadia Code", Consolas, monospace'>Cascadia Code</option>
+          <option value='"Fira Code", monospace'>Fira Code</option>
+          <option value='"Source Code Pro", monospace'>Source Code Pro</option>
+          <option value='Menlo, Monaco, monospace'>Menlo / Monaco</option>
+          <option value='Consolas, monospace'>Consolas</option>
+          <option value='"Courier New", monospace'>Courier New</option>
+          <option value='ui-monospace, monospace'>システム標準</option>
+        </select>
+        <input type="range" id="fontSize" min="11" max="22" step="1" value="14" />
+        <span id="fontSizeLabel" class="range-label">14px</span>
+        <label class="checkbox-label"><input type="checkbox" id="ligatures" /> 合字</label>
+      </div>
+      <button id="runBtn" class="btn btn-primary">
+        <span class="btn-text">実行 (Ctrl+Enter)</span>
+        <span class="loader"></span>
+      </button>
+    </div>
+  </header>
+
+  <main class="playground-layout">
+    <!-- Left Pane: Editor -->
+    <section class="panel editor-panel">
+      <div class="panel-header">
+        <h2>Sign Source</h2>
+        <span class="panel-subtitle">lexer → Pass1/1b/2/3 → interpreter</span>
+      </div>
+      <div class="panel-body editor-wrapper">
+        <div class="line-numbers" id="lineNumbers"><div>1</div></div>
+        <textarea id="src" spellcheck="false"></textarea>
+      </div>
+    </section>
+
+    <!-- Right Layout: Result + AST -->
+    <div class="output-split">
+      <section class="panel result-panel">
+        <div class="panel-header">
+          <h2>Evaluated Result</h2>
+          <span class="panel-subtitle">各行を順に評価</span>
+        </div>
+        <div class="panel-body code-view">
+          <pre><code id="out"></code></pre>
+        </div>
+      </section>
+
+      <section class="panel ast-panel">
+        <div class="panel-header">
+          <h2>Resolved AST</h2>
+          <span class="panel-subtitle">Pass1/Pass2 出力（各行）</span>
+        </div>
+        <div class="panel-body code-view">
+          <pre><code id="ast"></code></pre>
+        </div>
+      </section>
+    </div>
+  </main>
 </div>
-<div class="row">
-  <div class="col">
-    <label>ソース</label>
-    <textarea id="src" spellcheck="false">f : x y ? x + y
-f 3 5</textarea>
-  </div>
-  <div class="col">
-    <label>結果（各行を順に評価、最後の値も表示）</label>
-    <pre id="out"></pre>
-  </div>
-  <div class="col">
-    <label>AST（各行）</label>
-    <pre id="ast"></pre>
-  </div>
-</div>
+
 <script type="module" src="/playground/playground.js"></script>
 </body>
 </html>
