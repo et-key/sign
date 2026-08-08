@@ -300,23 +300,114 @@ function makePartialClosure(closure, suppliedArgs) {
   return { __lambda__: true, params: remainingParams, body: closure.body, env: capturedEnv };
 }
 
+// ---- 末尾呼び出し最適化（TCO） ----
+// Signはif/while/forを持たず反復を再帰でのみ表現する設計（0_design_principles.md）だが、
+// このインタプリタは素朴に木を歩くだけで、JS自身もES6仕様のProper Tail Callsを実装して
+// いない（V8は結局実装しなかった）ため、深い再帰がJSの呼び出しスタック上限に直撃する
+// （8-Queens監査後の相互再帰テストでn=2000程度からMaximum call stack size exceeded）。
+// トランポリン方式で対処する: 末尾位置での関数呼び出しをTailCallという「まだ実行して
+// いない呼び出しの予約」として返し、applyClosure側のwhileループがそれを検出したら
+// 新しいJSスタックフレームを積まずに同じフレーム内でループを継続する。
+
+// TailCallマーカー: 末尾位置で見つかったLambda呼び出し（未実行）を表す。
+class TailCall {
+  constructor(closure, argValues) {
+    this.closure = closure;
+    this.argValues = argValues;
+  }
+}
+
+// インデントブロック（match_case含む）の逐次評価。tailEvalは「ブロックの最終結果と
+// なる式」をどう評価するかのコールバック——通常のevaluate()からはevaluate自身を渡す
+// （常に値を完全に確定させる、従来通りの挙動）。末尾呼び出し検出用のevaluateTailからは
+// evaluateTail自身を渡すことで、末尾位置の判定ロジックをこの1箇所だけに保つ。
+function evalIndentBlock(node, env, tailEval) {
+  const lines = node.lines;
+  let result = UNIT;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (isDefineNode(line) && !isIdentifierNode(line.left)) {
+      const cond = evaluate(line.left, env);
+      if (!isUnit(cond)) return tailEval(line.right, env);
+      continue;
+    }
+    if (i === lines.length - 1) return tailEval(line, env);
+    result = evaluate(line, env);
+  }
+  return result;
+}
+
+// nodeを「末尾位置」として評価する。末尾位置とは、この式の値がそのまま関数呼び出し
+// 全体の返値になる位置——ブロックの最終行・発火したmatch_case分岐の右辺・`|`/`&`の
+// 右辺（短絡評価で右へ進んだ場合、その結果に対して何も後処理をしないため）。
+// これらの位置を再帰的に辿った先が既知のLambdaへの素朴なapply呼び出しであれば、
+// その場でapplyClosureを再帰呼び出しする代わりにTailCallマーカーを返す——
+// JSのスタックフレームを消費しない。それ以外の形（compose・pointfree・組み込み関数・
+// 算術式など）は通常のevaluate()にそのまま委譲する（正しく動くが最適化はされない）。
+function evaluateTail(node, env) {
+  if (!node || typeof node !== "object") return evaluate(node, env);
+  if (
+    node.type === "block" &&
+    node.kind === "indent" &&
+    !(node.lines.length >= 1 && node.lines.every((l) => isDefineNode(l) && isIdentifierNode(l.left)))
+  ) {
+    // Dict型（全行define+識別子キー）はここでは対象外——evaluate()のDict分岐へ委譲。
+    return evalIndentBlock(node, env, evaluateTail);
+  }
+  if (node.type === "operation") {
+    if (node.name === "or") {
+      const l = evaluate(node.left, env);
+      if (!isUnit(l)) return l;
+      return evaluateTail(node.right, env);
+    }
+    if (node.name === "and") {
+      const l = evaluate(node.left, env);
+      if (isUnit(l)) return UNIT;
+      return evaluateTail(node.right, env);
+    }
+    if (node.name === "apply") {
+      const { calleeNode, argNodes } = collectApplyChain(node);
+      const callee = evaluate(calleeNode, env);
+      const argValues = [];
+      for (const a of argNodes) argValues.push(...evalArgValues(a, env));
+      // compose/pointfree/組み込み関数（JS function）は素朴なLambda呼び出しではないため
+      // トランポリンの対象外——安全側に倒して通常のapplyClosureへ委譲する。
+      if (callee && callee.__lambda__ && !callee.__compose__ && !callee.__pointfree__) {
+        return new TailCall(callee, argValues);
+      }
+      return applyClosure(callee, argValues);
+    }
+  }
+  return evaluate(node, env);
+}
+
 function applyClosure(closure, argValues) {
-  if (typeof closure === "function") return closure(...argValues); // 組み込み関数
-  if (!closure || !closure.__lambda__) {
-    throw new TypeError("Lambdaではない値を関数として適用しようとしました");
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (typeof closure === "function") return closure(...argValues); // 組み込み関数
+    if (!closure || !closure.__lambda__) {
+      throw new TypeError("Lambdaではない値を関数として適用しようとしました");
+    }
+    if (closure.__compose__) {
+      const [f, g] = closure.__compose__;
+      // 完全性公理はチェーン全体に効く：fの結果がUnitならgを呼ばず即座にUnit。
+      // 左(f)を先に適用し、その結果に右(g)を適用する（左→右パイプライン順、上記参照）。
+      const mid = applyClosure(f, argValues);
+      if (isUnit(mid)) return UNIT;
+      return applyClosure(g, [mid]);
+    }
+    if (closure.__pointfree__) return applyPointfree(closure.__pointfree__, closure.env, argValues);
+    const callEnv = bindParams(closure.params, argValues, closure.env);
+    if (callEnv === null) return UNIT;
+    const result = evaluateTail(closure.body, callEnv);
+    if (result instanceof TailCall) {
+      // 末尾呼び出し: 新しいJSフレームを積まず、同じループの中で継続する。
+      closure = result.closure;
+      argValues = result.argValues;
+      continue;
+    }
+    return result;
   }
-  if (closure.__compose__) {
-    const [f, g] = closure.__compose__;
-    // 完全性公理はチェーン全体に効く：fの結果がUnitならgを呼ばず即座にUnit。
-    // 左(f)を先に適用し、その結果に右(g)を適用する（左→右パイプライン順、上記参照）。
-    const mid = applyClosure(f, argValues);
-    if (isUnit(mid)) return UNIT;
-    return applyClosure(g, [mid]);
-  }
-  if (closure.__pointfree__) return applyPointfree(closure.__pointfree__, closure.env, argValues);
-  const callEnv = bindParams(closure.params, argValues, closure.env);
-  if (callEnv === null) return UNIT;
-  return evaluate(closure.body, callEnv);
 }
 
 // ---- 算術・比較演算子のUnit伝播ルール（type_system.md §3.3） ----
@@ -633,22 +724,11 @@ function evaluate(node, env) {
       }
       return dict;
     }
-    // 通常のブロックの逐次評価。match_case（function_guide.md「?の右辺を改行・インデント
-    // ブロックを挟むことで、本体内の:演算子はmatch_caseとなる」）：defineノードで左辺が
-    // 識別子でない（＝実質的には条件式）行は、「条件:結果」の短絡評価テストとして扱う。
-    // 条件を評価し非Unit（真）なら即座にその行の右辺（結果）を返してブロック全体を
-    // 打ち切る。Unit（偽）なら束縛は一切行わず次の行へ進む。左辺が識別子の行は今まで
-    // 通りevaluate（defineとしてenvDefineし、その値をブロックの現在の結果とする）。
-    let result = UNIT;
-    for (const line of node.lines) {
-      if (isDefineNode(line) && !isIdentifierNode(line.left)) {
-        const cond = evaluate(line.left, env);
-        if (!isUnit(cond)) return evaluate(line.right, env);
-        continue;
-      }
-      result = evaluate(line, env);
-    }
-    return result;
+    // 通常のブロックの逐次評価（match_case含む）。evalIndentBlock参照——末尾呼び出し
+    // 検出（evaluateTail）と評価ロジックを共有するため、ここではevaluateを
+    // 「ブロックの最終結果をどう評価するか」のコールバックとして渡す（通常のevaluate()
+    // から呼ぶ限りは以前と全く同じ挙動）。
+    return evalIndentBlock(node, env, evaluate);
   }
 
   if (node.type === "operation") {
