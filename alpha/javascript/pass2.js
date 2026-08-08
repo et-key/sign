@@ -29,7 +29,7 @@
  */
 
 import { OPERATOR_DICT } from './operator_table.js';
-import { childEnv, envLookup, bindEnv, EXPORT_MARKERS } from './pass1.js';
+import { childEnv, envLookup, envLookupScope, bindEnv, EXPORT_MARKERS } from './pass1.js';
 
 // ---- ユーティリティ ----
 
@@ -155,7 +155,11 @@ function resolveKnownArity(node, env) {
   if (!node) return null;
   if (node.type === "atom" && node.kind === "identifier") {
     if (!env) return null;
-    const binding = envLookup(env, node.value);
+    const found = envLookupScope(env, node.value);
+    // エイリアス（`k : f`）や部分適用（`g : f 1`）は、カテゴリ解決の副産物として
+    // 残りアリティが束縛へ書き込まれる。読む前に必ず解決しておく。
+    if (found) resolveBindingCategory(found.binding, found.scope);
+    const binding = found ? found.binding : undefined;
     // Infinity（rest引数）もここでは許可する——typeof Infinity==="number"なので、
     // getCategoryの「同じ式内でチェーンを伸ばし続けてよいか」判定（depth<arityが
     // 常に真になるべき）にはInfinityが必要。カリー化すべきでない（rest引数は本質的に
@@ -240,6 +244,61 @@ function markUndersaturatedApplies(node, env) {
 // 覗く（`[+]`のような、演算子1個だけを囲んだブロックの中身を取り出す）。
 // `[1 2 3]`のような複数トークンの行は`lines.length===1`のまま（1行の中で構築済みの
 // construct連鎖になっているだけ）なので、中身の種類で自然に区別される。
+// Layer 1（type_system.md §2）の識別子カテゴリを「右辺式のカテゴリ」として解決する。
+// pass1.jsのbuildEnvScopeはトークン列しか見られないため、`?` の有無だけで暫定的に
+// Atomと置いた束縛に右辺のトークン列（binding.rhsTokens）を持たせてある。ここで初めて
+// 参照されたときに一度だけ縮約し、getCategoryで本当のカテゴリを求めてメモ化する。
+//   inc : [+ 1]  → 部分操作のブラケット（§2の表）        → Lambda
+//   h   : f g    → Lambda∘Lambda（§3.1のcompose）        → Lambda
+//   k   : f      → Lambdaのエイリアス                     → Lambda
+//   g   : f 1    → アリティ不足の部分適用（partial_apply）→ Lambda
+//   d   : 1 2 3  → concat                                 → Atom（従来通り）
+// 遅延にしているのは前方参照のため——定義行より前の行から参照されても、参照された
+// その時点で解決すればよく、行順への依存が生まれない（Pass1aの「前方参照を含む全識別子の
+// 構造型が確定する」という性質を壊さない）。
+// 自己参照（`f : f`、相互参照する2つの定義）は解決中フラグで打ち切ってAtomに倒す
+// ——このケースは元々値としても循環しており、Lambdaと見なす根拠が無い。
+function resolveBindingCategory(binding, scope) {
+  if (!binding || !binding.rhsTokens) return binding ? binding.category : "Atom";
+  if (binding.__resolving) return "Atom";
+  binding.__resolving = true;
+  try {
+    const node = reduceAll(binding.rhsTokens, scope);
+    const category = getCategory(node, scope);
+    binding.category = category;
+    binding.rhsNode = node;
+    if (category === "Lambda") {
+      // アリティも右辺から引き継ぐ（`k : f` のエイリアスや `g : f 1` の部分適用が、
+      // 残りの引数を受け取れる回数を正しく知るため）。consumedは既に適用済みの数。
+      const info = resolveKnownArity(node, scope);
+      if (info) {
+        binding.arity = info.arity - info.consumed;
+        binding.requiredArity = info.requiredArity - info.consumed;
+      }
+    }
+    return category;
+  } catch (e) {
+    // 右辺が単独では縮約できない形（縮約器が例外を投げる形）だった場合は、
+    // 従来通りAtomのまま扱う——ここは分類のための先読みであり、本番の縮約は
+    // 定義行そのものを処理するときに改めて行われる（そこで出るべき例外はそこで出る）。
+    return "Atom";
+  } finally {
+    binding.__resolving = false;
+    binding.rhsTokens = null; // 解決済み（成否によらず一度きり）
+  }
+}
+
+// 識別子ノードなら、その束縛の右辺ノード（resolveBindingCategoryがメモ化したもの）へ
+// 置き換える。ポイントフリー判定（isBarePointfreeChainBase / isPointfreeLambda）が
+// `add : [+]` のように名前を経由したポイントフリーも見抜けるようにするため。
+function derefBoundNode(node, env) {
+  if (!env || !node || node.type !== "atom" || node.kind !== "identifier") return node;
+  const found = envLookupScope(env, node.value);
+  if (!found) return node;
+  resolveBindingCategory(found.binding, found.scope);
+  return found.binding.rhsNode || node;
+}
+
 function unwrapSoloBlock(node) {
   while (node && node.type === "block" && node.kind !== "indent" && node.kind !== "abs" && node.lines.length === 1) {
     node = node.lines[0];
@@ -257,6 +316,10 @@ function getCategory(node, env) {
     if (node.name === "compose") return "Lambda";
     if (node.partial) return "Lambda"; // オペランド不足の部分適用
     if (node.position === "prefix" && node.op === "@") return "Lambda"; // 前置@（Input）
+    // `!__` は Id射（categorical_truth.md §6）＝呼び出せる恒等射なのでLambda。
+    // これが無いと `!__ 5`（guide/operator_table.md 147行目の `__ 5 == !__ 5`）が
+    // apply ではなく concat に解決されてしまう。`!<非Unit>` は `__` に落ちるのでAtomのまま。
+    if (node.position === "prefix" && node.op === "!" && node.operand && node.operand.type === "atom" && node.operand.kind === "unit") return "Lambda";
     // 自動カリー化（markUndersaturatedApplies）が既にアリティ不足と静的判定して
     // リネーム済みのノード。定義上つねに「まだ引数を受け取れる」ため、無条件にLambda
     // （depthとarityの再チェックは不要——ここへ来る時点でpass2が既に判定済み）。
@@ -291,8 +354,10 @@ function getCategory(node, env) {
   if (node.type === "atom") {
     if (node.kind === "identifier") {
       if (env) {
-        const found = envLookup(env, node.value);
-        if (found !== undefined) return found.category;
+        const found = envLookupScope(env, node.value);
+        // 右辺のカテゴリがまだ未解決（pass1が `?` の有無だけで暫定的にAtomと置いた）なら
+        // ここで解決する。解決済み・元からLambdaならそのまま返る。
+        if (found !== null) return resolveBindingCategory(found.binding, found.scope);
       }
       // envに無い場合、組み込み関数名のみLambda扱い
       if (["<print>"].includes(node.value)) return "Lambda";
@@ -410,9 +475,11 @@ function coproductReduce(a, b, env) {
 // `[+]`のようにbracketブロックでラップされたまま渡ってくる場合はunwrapSoloBlockで
 // 中身を覗く。Phase2（apply）専用の特例判定にのみ使う——getCategory本体には反映しない
 // （下記COPRODUCT_PHASESのコメント参照）。
-function isBarePointfreeChainBase(node) {
+function isBarePointfreeChainBase(node, env) {
   const { base } = applyChainInfo(node);
-  const unwrapped = unwrapSoloBlock(base);
+  // `add : [+]` のように名前を経由していても同じ貪欲消費が要る（type_system.md §6.1の
+  // `#add : [+]` → `add 1 2` = 3）。束縛の右辺ノードまで透かして見る。
+  const unwrapped = unwrapSoloBlock(derefBoundNode(unwrapSoloBlock(base), env));
   if (!unwrapped || unwrapped.type !== "operation" || !unwrapped.partial) return false;
   return unwrapped.pointfreeMap === true || (unwrapped.left === null && unwrapped.right === null);
 }
@@ -420,13 +487,13 @@ function isBarePointfreeChainBase(node) {
 // ポイントフリー記述由来のLambda（`[+]`のような裸の演算子、`[+ 1]`のような部分適用、
 // およびそのapply連鎖）かどうかを判定する。演算子の種類（算術・比較・前置・後置いずれも
 // ポイントフリー記述できる、function_guide.md）を問わず一律で判定する。
-function isPointfreeLambda(node) {
-  const unwrapped = unwrapSoloBlock(node);
+function isPointfreeLambda(node, env) {
+  const unwrapped = unwrapSoloBlock(derefBoundNode(unwrapSoloBlock(node), env));
   if (!unwrapped || unwrapped.type !== "operation") return false;
   if (unwrapped.partial) return true;
   if (unwrapped.name === "apply") {
     const { base } = applyChainInfo(unwrapped);
-    const unwrappedBase = unwrapSoloBlock(base);
+    const unwrappedBase = unwrapSoloBlock(derefBoundNode(unwrapSoloBlock(base), env));
     return !!(unwrappedBase && unwrappedBase.type === "operation" && unwrappedBase.partial);
   }
   return false;
@@ -452,10 +519,14 @@ const COPRODUCT_PHASES = [
     // 常に前置適用（`[+ 1] 5`）という一つの呼び出し方だけを持ち、UFCS的なreceiver記法
     // （`x f`）という別経路を重ねない——「一つのことを表現する方法は一つ」の方針、かつ
     // `5 [+]`のような曖昧な読み（5をどちら側の被演算子とみなすか不定）を防ぐ。
-    match: (catA, catB, a, b) => catA === "Atom" && catB === "Lambda" && !isPointfreeLambda(b),
+    match: (catA, catB, a, b, env) => catA === "Atom" && catB === "Lambda" && !isPointfreeLambda(b, env),
   },
   { match: (catA, catB) => catA === "Atom" && catB === "Atom" }, // 10.2〜10.0: concat/push/unshift/construct
 ];
+
+// 連鎖比較（comparison.md §4）の対象となる比較演算子（tier12）。構造比較の
+// `==`/`!==`（tier8）は §2.1 が明示的にこの規則の適用外としているため含めない。
+const CHAIN_COMPARE_OPS = new Set(["<", "<=", "=", ">=", ">", "!="]);
 
 function reduceOnce(items, tier, env, phase) {
   for (let i = 0; i < items.length - 1; i++) {
@@ -464,6 +535,39 @@ function reduceOnce(items, tier, env, phase) {
     if (isBareOperatorToken(b)) {
       const entry = lookup(b, "infix");
       if (entry && entry.precedence === tier && i + 2 < items.length && !isBareOperatorToken(items[i + 2])) {
+        // 三項連鎖比較（comparison.md §4）。`L < C < R` は二項の左結合
+        // （`(L < C) < R`）ではなく、パース段階で単一のノードへまとめる——左結合だと
+        // 「左辺が算術単位元(0/1)なら右辺」という§2.1の規則を1段目が食ってしまい、
+        // 中央の項が返らない（`5 < 7 < 10` が 7 ではなく 5 になる）。
+        // ここ（tier12の縮約時点）は、より高い優先順位の演算子が既にノードへ畳まれ、
+        // より低い優先順位の演算子（`&`等）はまだ裸のトークンのまま残っている段階なので、
+        // 「隣り合う2つの比較演算子」＝連鎖、で正しく判定できる（`x < 3 & y > 4` の
+        // `<` と `>` は間に `&` を挟むため隣り合わず、連鎖と誤認しない）。
+        const op2 = items[i + 3];
+        if (CHAIN_COMPARE_OPS.has(b) && typeof op2 === "string" && CHAIN_COMPARE_OPS.has(op2)) {
+          // §4.1「同一の比較演算子の連鎖のみが許容」（`A < B > C` は構文エラー）。
+          if (op2 !== b) {
+            throw new SyntaxError(`comparison.md §4.1違反: 連鎖比較は同一の比較演算子のみ許容されます（'${b}' と '${op2}' が混在）`);
+          }
+          if (i + 4 >= items.length || isBareOperatorToken(items[i + 4])) {
+            throw new SyntaxError(`連鎖比較 '${b}' の右辺がありません`);
+          }
+          if (typeof items[i + 5] === "string" && CHAIN_COMPARE_OPS.has(items[i + 5])) {
+            throw new SyntaxError(`comparison.md §4は三項までの連鎖比較（L ${b} C ${b} R）を定義しています（4項以上は未定義）`);
+          }
+          const node = {
+            type: "operation",
+            op: b,
+            name: "chain_compare",
+            compareName: entry.name,
+            position: "infix",
+            left: toNode(a, env),
+            middle: toNode(items[i + 2], env),
+            right: toNode(items[i + 4], env),
+          };
+          items.splice(i, 5, node);
+          return true;
+        }
         const left = toNode(a, env);
         const right = toNode(items[i + 2], env);
         const node = { type: "operation", op: b, name: entry.name, position: "infix", left, right };
@@ -476,11 +580,11 @@ function reduceOnce(items, tier, env, phase) {
       const left = toNode(a, env);
       const right = toNode(b, env);
       const catA = getCategory(left, env), catB = getCategory(right, env);
-      if (phase && phase.extendPointfree && catB === "Atom" && isBarePointfreeChainBase(left)) {
+      if (phase && phase.extendPointfree && catB === "Atom" && isBarePointfreeChainBase(left, env)) {
         items.splice(i, 2, mk("apply", left, right));
         return true;
       }
-      if (phase && !phase.match(catA, catB, left, right)) continue;
+      if (phase && !phase.match(catA, catB, left, right, env)) continue;
       const node = coproductReduce(left, right, env);
       if (node) {
         items.splice(i, 2, node);
@@ -770,6 +874,19 @@ function reduceAll(rawItems, env) {
   const qIdx = rawItems.indexOf("?");
   if (qIdx !== -1) {
     return resolveLambdaLine(rawItems, qIdx, env);
+  }
+
+  // 前置export記号つきの「非ラムダ」定義行（`#pi : 3`、`#add : [+]`）。ラムダ定義行は
+  // resolveLambdaLineが記号を剥がして define.exported に畳んでいたが、こちらは総当たり
+  // 縮約に素通しされ `define(export_internal(<pi>), 3)` という形になっていた——
+  // interpreter.jsのdefineはleftを識別子atomと決め打ちして`node.left.value`を読むため、
+  // 名前がundefinedのまま束縛され「定義したのに未定義」という状態になっていた
+  // （type_system.md §6.1の`#add : [+]`がまさにこの形）。ラムダ側と同じく、ここで
+  // 記号を剥がして exported として畳み、defineノードの形をラムダ/非ラムダで揃える。
+  if (typeof rawItems[0] === "string" && EXPORT_MARKERS[rawItems[0]] && isIdentifierToken(rawItems[1]) && rawItems[2] === ":") {
+    const node = reduceAll(rawItems.slice(1), env);
+    if (node && node.type === "operation" && node.name === "define") node.exported = EXPORT_MARKERS[rawItems[0]];
+    return node;
   }
 
   // 【意図的に対応しない】カンマと`:`を1行に混在させる形（例: `foo : 1, bar : 2`）は、

@@ -254,6 +254,17 @@ function makeClosure(paramsNode, bodyNode, env) {
   return { __lambda__: true, params: paramsNode, body: bodyNode, env };
 }
 
+// `!__` が返す Id射（categorical_truth.md §6、guide/operator_table.md 141行目）。
+// SKIのKコンビネータ（λx.λy.x、引数をそのまま返す恒等射）がSignにおける「真」であり、
+// `__`（K*、引数を吸収する void 関数）が「偽」である。
+// 【重要】ここで `1` や `true` のような具体的な値を返してはいけない——それは Boolean 型を
+// 暗黙に再導入することであり、「Signに真偽値型は存在しない」という設計原則と矛盾する
+// （categorical_truth.md の IMPORTANT ブロックが明示的に禁じている）。返すのは
+// 「Unitでない何か」＝副作用を持たないことが静的に確定している恒等射そのもの。
+// 未評価のラムダはUnitと同型（副作用の可能性があり評価予定が確定しない）だが、この
+// Id射だけはその例外——純粋な恒等関数なので評価予定が静的に確定し、非Unitとして扱える。
+const IDENTITY = { __lambda__: true, __identity__: true };
+
 // 関数合成（coproduct_resolver.md §3: Lambda Lambda → compose）。
 // 【重要】数学的合成記法(f∘g)(x)=f(g(x))とは逆で、Signの `f g` は左→右のパイプライン順。
 // documents/ja-jp/guide/example.sn: `[+ 1] [* 2] 5 = [* 2]([+ 1] 5) = 12`
@@ -385,6 +396,14 @@ function applyClosure(closure, argValues) {
   // eslint-disable-next-line no-constant-condition
   while (true) {
     if (typeof closure === "function") return closure(...argValues); // 組み込み関数
+    // 関数の位置に来たUnitは余積の初対象（単位元）として引数を素通しする
+    // （type_system.md §6.1の表「関数の位置 (`__ x`) → 引数を素通しにする」、
+    // 同§のimport失敗例が示す通りクラッシュさせない）。Pass2が静的にLambdaと判定した
+    // 呼び出し先が、実行時にはまだ束縛されていない・未定義でUnitに収束していた、という
+    // 場合にここへ来る——unit.md §0.1の「未定義識別子はUnitへ収束、実行は止めない」に
+    // 揃える。Id射（`!__`）への適用と同じ結果になるのは偶然ではなく、
+    // guide/operator_table.md 147行目の `__ 5 == !__ 5` が言っていることそのもの。
+    if (isUnit(closure)) return argValues.length === 1 ? argValues[0] : argValues;
     if (!closure || !closure.__lambda__) {
       throw new TypeError("Lambdaではない値を関数として適用しようとしました");
     }
@@ -396,6 +415,9 @@ function applyClosure(closure, argValues) {
       if (isUnit(mid)) return UNIT;
       return applyClosure(g, [mid]);
     }
+    // Id射（`!__`）への適用は引数をそのまま返す。引数がUnitなら完全性公理がそのまま
+    // 効いてUnitになる（categorical_truth.md「`!__ __` は理論的に正しく `__` を返す」）。
+    if (closure.__identity__) return argValues.length > 0 ? argValues[0] : UNIT;
     if (closure.__pointfree__) return applyPointfree(closure.__pointfree__, closure.env, argValues);
     const callEnv = bindParams(closure.params, argValues, closure.env);
     if (callEnv === null) return UNIT;
@@ -466,6 +488,10 @@ function evalArith(name, leftNode, rightNode, env) {
     if (name === "div") return listSplit(l, r);
     return UNIT; // list_cheat_sheet.mdに無い組み合わせ（+ - %）はStringと同様に型エラー
   }
+  // Lambda（`!__`のId射、クロージャ、ポイントフリー等）に算術演算は定義されていない
+  // ——String/Listと同様に型エラーとして__へ収束させる。これが無いとJSのオブジェクト→
+  // 文字列強制が働いて `"[object Object]1"` のような値が静かに出てくる。
+  if ((l !== null && typeof l === "object") || (r !== null && typeof r === "object")) return UNIT;
   return ARITH_OPS[name](l, r);
 }
 
@@ -547,7 +573,10 @@ function evalCompare(name, op, leftNode, rightNode, env) {
     // 例外: x != __ = x（単位元）、__ != x = __（吸収元）
     if (isUnit(l)) return UNIT;
     if (isUnit(r)) return l;
-    return l !== r ? l : UNIT; // 比較演算子は真の場合、値(左辺 or 右辺)を返す（§4）
+    // 真の場合の返値選択は他の比較演算子と同じ §2.1 の規則に従う（comparison.md §1が
+    // `!=` を対象の比較演算子として列挙しており、§2.1の適用外とされているのは
+    // 構造比較の `==`/`!==` だけ）。ここだけ左辺固定になっていた。
+    return l !== r ? (l === 0 || l === 1 ? r : l) : UNIT;
   }
   if (op === "==") {
     // type_system.md §6.2: 型シグネチャ (L -> R) -> (L | __)。真なら左辺、偽ならUnit
@@ -577,7 +606,7 @@ function evalUnaryOp(name, v) {
     case "negate":
       return isUnit(v) ? UNIT : -v;
     case "not":
-      return isUnit(v) ? true : UNIT; // §4: !__ = id射（真）、!非Unit = __（偽）
+      return isUnit(v) ? IDENTITY : UNIT; // §4: !__ = Id射（真）、!非Unit = __（偽）
     case "input":
       // 前置@（参照外し）。$で作った参照セルはget()で読み取る。それ以外の値
       // （$を経由せず直接Lambda等が束縛された識別子）はそのまま素通しする——
@@ -740,6 +769,10 @@ function evaluate(node, env) {
   }
 
   if (node.type === "block") {
+    // 空ブロック（`[]`/`{}`/`()`）は空リスト。unit.md「`__ = []`（空リストと等価）」の
+    // 通りUnitと同型（isUnit([])が真）なので、Unit判定を要求する箇所ではそのまま
+    // Unitとして振る舞いつつ、`|[]|`が0になる等の「リストとしての」性質も保てる。
+    if (node.kind !== "abs" && node.lines.length === 0) return [];
     // |list|（abs）: list_cheat_sheet.md「要素数の取得」。ブロックとしては通常通り解決される
     // （中身を逐次評価、最後の文の値）が、kind==='abs'の場合だけ絶対値/要素数へ変換する
     // ——List/StringならJSの.length、数値ならMath.abs（"absolute"の名の通り、リストの
@@ -749,6 +782,9 @@ function evaluate(node, env) {
       for (const line of node.lines) inner = evaluate(line, env);
       if (Array.isArray(inner) || typeof inner === "string") return inner.length;
       if (isUnit(inner)) return UNIT;
+      // Lambda（Id射・クロージャ等）や辞書には要素数/絶対値が定義されていない——
+      // Math.absへ渡すとNaNが静かに出るため、型エラーとして__へ収束させる。
+      if (inner !== null && typeof inner === "object") return UNIT;
       return Math.abs(inner);
     }
     // Dict判定はpass3.jsのinferAtomTypeと同じ基準（全行がdefineかつ左辺が識別子）。
@@ -867,6 +903,15 @@ function evaluate(node, env) {
       case "concat": {
         const l = evaluate(node.left, env);
         const r = evaluate(node.right, env);
+        // 余積の単位元則（type_system.md §6.1「関数の位置の `__` は余積の初対象＝単位元、
+        // 引数を素通しにする」）。Unit側を消した結果が1項だけになったら、それを
+        // 1要素リストで包み直さずそのまま返す——`[5]`（1行ブロック）が5そのものに
+        // 評価されるのと同じで、この言語では1要素リストとスカラーは同型。
+        // これが無いと `__ 5` が `[5]` になり、guide/operator_table.md 147行目の
+        // `__ 5 == !__ 5`（両方5）が成立しない。2項以上（`__ 1 2` → `[1 2]`、§6.1の
+        // 輸入失敗例）は左結合で `(__ 1) 2` → `1 2` と畳まれるため従来通り。
+        if (isUnit(l)) return r;
+        if (isUnit(r)) return l;
         // §3.2 左辺優先規則: 左辺が文字列（Stringは`\a \b \c`のような文字の並びとも同型）
         // なら、右辺を文字列化してテキストとして連結する（`123` 123 = `123123`、
         // list_model.md §2.1/§4.4）。それ以外は通常のList構築。
@@ -1002,6 +1047,19 @@ function evaluate(node, env) {
         if (addr && addr.__address__) addr.set(value);
         return value;
       }
+    }
+
+    // 三項連鎖比較（comparison.md §4、pass2.jsが単一ノードへまとめたもの）。
+    // 隣接ペアが全て真なら「無条件で中央の項」を返し、ひとつでも偽なら即座にUnit。
+    // 二項比較の§2.1「左辺が算術単位元(0/1)なら右辺」は連鎖には適用しない——
+    // §4はまさにその規則に依存せず中央を取り出すための仕組みとして定義されている。
+    if (node.name === "chain_compare") {
+      const l = evaluate(node.left, env);
+      const c = evaluate(node.middle, env);
+      const r = evaluate(node.right, env);
+      if (isUnit(l) || isUnit(c) || isUnit(r)) return UNIT; // 比較演算子の吸収則（§3.3）
+      if (node.op === "!=") return l !== c && c !== r ? c : UNIT;
+      return COMPARE_OPS[node.compareName](l, c) && COMPARE_OPS[node.compareName](c, r) ? c : UNIT;
     }
 
     if (ARITH_OPS[node.name]) return evalArith(node.name, node.left, node.right, env);

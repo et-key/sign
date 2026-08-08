@@ -226,7 +226,18 @@ function buildEnvScope(lines) {
     // 仮引数（本体の使用箇所から逆算が必要、type_system.md §7.1）は未対応・既知の制限。
     const rhs = line.slice(defineIdx + 1);
     const atomType = !hasLambda && rhs.length === 1 ? literalAtomType(rhs[0]) : null;
-    bindings.set(first, { category: hasLambda ? "Lambda" : "Atom", restParam, atomType, exported, arity, requiredArity });
+    // Layer 1（type_system.md §2）の識別子カテゴリは「右辺式のカテゴリ」であって、
+    // 「その行にトップレベルの `?` があるか」ではない——`?` だけを見ると
+    // `inc : [+ 1]`（部分操作のブラケット＝§2の表でLambda）・`h : f g`（compose＝
+    // §3.1でLambda）・`k : f`（Lambdaのエイリアス）・`g : f 1`（アリティ不足の
+    // 部分適用）が全部Atomになり、`inc 3` が apply ではなく concat に解決されてしまう。
+    // ただし右辺のカテゴリはトークン列のままでは判定できない（縮約後のノードに対する
+    // pass2.jsのgetCategoryが唯一の判定器）ため、ここでは右辺のトークン列を持たせるに
+    // とどめ、実際の解決はpass2.js側のresolveBindingCategoryが最初の参照時に一度だけ
+    // 行ってここへメモ化する（遅延なので前方参照でも順序に依存しない）。
+    // 単独のリテラル（atomTypeが読めた形）は確実にAtomなので、保持せず打ち切る。
+    const rhsTokens = !hasLambda && atomType === null && rhs.length > 0 ? rhs : null;
+    bindings.set(first, { category: hasLambda ? "Lambda" : "Atom", restParam, atomType, exported, arity, requiredArity, rhsTokens });
   }
   return bindings;
 }
@@ -244,6 +255,18 @@ function envLookup(env, id) {
   return undefined;
 }
 
+// envLookupと同じ探索だが、見つかったスコープ自身も返す。遅延カテゴリ解決
+// （pass2.jsのresolveBindingCategory）が、右辺のトークン列を「その束縛が書かれた
+// スコープ」で縮約する必要があるため（参照側の現在のenvではない）。
+function envLookupScope(env, id) {
+  let e = env;
+  while (e) {
+    if (e.bindings.has(id)) return { binding: e.bindings.get(id), scope: e };
+    e = e.parent;
+  }
+  return null;
+}
+
 // 後方互換: 従来の buildEnv(lines) はトップレベルの env（parent:null）を返す
 function buildEnv(lines) {
   return childEnv(lines, null);
@@ -259,4 +282,4 @@ function bindEnv(names, parent) {
   return { bindings, parent: parent || null };
 }
 
-export { buildEnv, buildEnvScope, childEnv, envLookup, bindEnv, literalAtomType, EXPORT_MARKERS };
+export { buildEnv, buildEnvScope, childEnv, envLookup, envLookupScope, bindEnv, literalAtomType, EXPORT_MARKERS };

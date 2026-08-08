@@ -171,6 +171,18 @@ function checkTrue(note, cond) {
 	}
 }
 
+function checkThrows(note, fn) {
+	total++;
+	try {
+		fn();
+		console.log(`FAIL ${note}`);
+		console.log(`     例外が投げられなかった`);
+	} catch (e) {
+		console.log(`OK   ${note}`);
+		passed++;
+	}
+}
+
 {
 	const { result, diagnostics } = runDiag("tick");
 	checkTrue("未定義識別子 tick → __ に収束しつつ例外を投げない", isUnit(result));
@@ -386,7 +398,14 @@ check(
 	run("[!_] 2 < 3"),
 	"__"
 );
-check("[!_] 5 < 3 → true（5<3が偽=Unitなので、その否定は真）", run("[!_] 5 < 3"), true);
+// `!__`の返値はId射（categorical_truth.md §6）。`1`のような具体値を返すとBoolean型を
+// 暗黙に再導入することになるため、「Unitでない何か（引数をそのまま返す恒等射）」である
+// ことだけを確認する。
+checkTrue("[!_] 5 < 3 → Id射（5<3が偽=Unitなので、その否定は真）", !isUnit(run("[!_] 5 < 3")));
+// Id射は恒等射なので、呼べば引数を素通しする（`!__`はPass2でLambdaに分類されるため、
+// スペースが concat ではなく apply に解決される）。
+check("(!__) 42 → 42（Id射への適用）", run("(!__) 42"), 42);
+check("!__ __ → __（Id射にUnitを渡すと完全性公理）", run("!__ __"), "__");
 check("[_!] 5 → 120（後置演算子のポイントフリー版、階乗関数）", run("[_!] 5"), 120);
 checkTrue(
 	"[!_] 単体 → クロージャのまま（値として評価しても即座に演算しようとしない）",
@@ -471,10 +490,56 @@ check(
 // （8/6発見）。node.nameが"not_equal"で、tier8の`!==`と衝突するためCOMPARE_OPSに
 // キーを持たせられず、COMPARE_OPS[node.name]だけの判定漏れていた。node.op==="!="の
 // 場合だけ個別に通すよう修正——`!==`自体はまだ未対応のまま（別の構造比較の実装が必要）。
-check("1 != 2 → 1（真の場合は左辺値、§4）", run("1 != 2"), 1);
+// 真の場合の返値選択はcomparison.md §2.1の規則（左辺が算術単位元0/1なら右辺、
+// それ以外は左辺）。§1が`!=`を対象の比較演算子として列挙しており、§2.1の適用外と
+// 明示されているのは構造比較の`==`/`!==`だけ。
+check("1 != 2 → 2（左辺が乗算単位元1なので右辺、§2.1）", run("1 != 2"), 2);
+check("0 != 5 → 5（左辺が加法単位元0なので右辺、§2.1）", run("0 != 5"), 5);
+check("2 != 5 → 2（左辺が単位元でないので左辺、§2.1）", run("2 != 5"), 2);
 check("1 != 1 → __（等しいので偽）", run("1 != 1"), "__");
 check("__ != 5 → __（左辺Unitは吸収元）", run("__ != 5"), "__");
 check("5 != __ → 5（右辺Unitは単位元、素通し）", run("5 != __"), 5);
+
+// ---- Layer 1 識別子カテゴリ = 右辺式のカテゴリ（type_system.md §2） ----
+// pass1.jsは以前「その行にトップレベルの `?` があるか」だけでLambda/Atomを決めていた。
+// §2の表は `[+ 2]`（部分操作のブラケット）・§3.1のcompose も Lambda と定めているため、
+// 名前に束縛した途端にそれらがAtom扱いになり、適用が concat に解決されていた。
+check("inc : [+ 1] / inc 3 → 4（部分操作のブラケットはLambda）", run("inc : [+ 1]\ninc 3"), 4);
+check("add : [+] / add 1 2 → 3（裸のポイントフリーも名前経由で貪欲消費）", run("add : [+]\nadd 1 2"), 3);
+check("h : f g / h 3 → 8（composeはLambda、左→右パイプライン順）", run("f : x ? x + 1\ng : x ? x * 2\nh : f g\nh 3"), 8);
+check("k : f / k 3 → 4（Lambdaのエイリアスも Lambda）", run("f : x ? x + 1\nk : f\nk 3"), 4);
+check("g : f 1 / g 2 3 → 6（アリティ不足の部分適用、残りアリティも引き継ぐ）", run("f : x y z ? x + y + z\ng : f 1\ng 2 3"), 6);
+check("d : 1 2 3 → concatのままAtom（Lambdaに誤判定しない）", run("d : 1 2 3\nd"), [1, 2, 3]);
+// 前方参照: 後ろの行で定義される `u` のカテゴリ（Lambda）も、参照側の縮約時点で
+// 解決される（Pass1aの「前方参照を含む全識別子の構造型が確定する」性質を保つ）。
+// 遅延解決なので、行順ではなく「最初に参照されたとき」に決まる。
+check("前方参照: 後の行で定義されるポイントフリーも apply に解決される", run("r : x ? u x\nu : [+ 1]\nr 3"), 4);
+
+// ---- 前置export記号つきの非ラムダ定義（type_system.md §6.1） ----
+check("#pi : 3 → pi は 3（exportしても束縛される）", run("#pi : 3\npi"), 3);
+check("##pi / ###pi も同じ", run("###pi : 3\npi"), 3);
+check("#add : [+] / add 1 2 → 3（§6.1のimport成功時の形）", run("#add : [+]\nadd 1 2"), 3);
+
+// ---- 空リスト（unit.md「__ = []」） ----
+check("[] は空リスト（Unitと同型）", run("[]"), "__");
+check("|[]| → 0（空でもリストとしての長さは取れる）", run("|[]|"), 0);
+check("none : [] と書ける（guide/example.sn 37行目）", run("none : []\nnone"), "__");
+
+// ---- 三項連鎖比較（comparison.md §4） ----
+check("5 < 7 < 10 → 7（中央の項。左結合なら5になってしまう）", run("5 < 7 < 10"), 7);
+check("x:7 / 5 < x < 10 → 7", run("x : 7\n5 < x < 10"), 7);
+check("5 < 3 < 10 → __（1つでも偽なら即Unit）", run("5 < 3 < 10"), "__");
+check("5 < 7 < 6 → __", run("5 < 7 < 6"), "__");
+checkThrows("1 < 2 > 0 → 構文エラー（§4.1: 同一演算子の連鎖のみ）", () => run("1 < 2 > 0"));
+checkThrows("4項の連鎖は未定義（§4は三項まで）", () => run("1 < 2 < 3 < 4"));
+check("x < 3 & y > 4 は連鎖と誤認しない（間に低優先の & がある）", run("x : 2\ny : 5\nx < 3 & y > 4"), 5);
+
+// ---- `!__` = Id射（categorical_truth.md §6 / guide/operator_table.md 141行目） ----
+checkTrue("!__ != __（__ と !__ は等しくない）", !isUnit(run("!__ != __")));
+checkTrue("!__ !== __（構造比較しても等しくない）", !isUnit(run("!__ !== __")));
+check("__ 5 == !__ 5（余積の左単位元とId射、双方5）", run("__ 5 == !__ 5"), 5);
+check("5 __ == 5 !__（余積の右単位元とId射、双方5）", run("5 __ == 5 !__"), 5);
+check("__ 1 2 → [1 2]（2項以上は従来通りList、§6.1の輸入失敗例）", run("__ 1 2"), [1, 2]);
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

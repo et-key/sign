@@ -93,6 +93,14 @@ Block
   = "[" _ exprs:Expressions _ "]" { return exprs; }
   / "{" _ exprs:Expressions _ "}" { return exprs; }
   / "(" _ exprs:Expressions _ ")" { return exprs; }
+  // 空ブロック（`[]` / `{}` / `()`）。unit.md「`__ = []`（空リストと等価）」の通り
+  // 空リストはUnitと同型であり、`none : []` のように書けなければならない
+  // （guide/example.sn 37行目）。Expressionsは1個以上を要求するため、非空の
+  // 選択肢の「後ろ」に空専用の選択肢を置いて拾う（PEGは順序付き選択なので、
+  // 非空の解釈が先に試される順序は変わらない）。
+  / "[" _ "]" { return []; }
+  / "{" _ "}" { return []; }
+  / "(" _ ")" { return []; }
   / "|" exprs:Expressions "|" &(__ / EOL / EOF / "]" / "}" / ")" / "\x03") { return [`"ABS_"`, exprs]; }
   // Lexerが挿入した制御用ASCIIコードによるインデントブロックの切り出し
   // ※実際のLexerの実装に合わせて "\x02", "\x03" は変更してください
