@@ -413,6 +413,13 @@ function evalUnaryOp(name, v) {
       return isUnit(v) ? UNIT : -v;
     case "not":
       return isUnit(v) ? true : UNIT; // §4: !__ = id射（真）、!非Unit = __（偽）
+    case "input":
+      // 前置@（参照外し）。$で作った参照セルはget()で読み取る。それ以外の値
+      // （$を経由せず直接Lambda等が束縛された識別子）はそのまま素通しする——
+      // `@f 1`が「fを参照外ししてから呼ぶ」と「fを直接呼ぶ」の両方で同じ記法になるように
+      // （手動カリー化`@(f 1) 2`の継続呼び出しと、通常のLambda呼び出しを区別しない）。
+      // unit.md §0.4: @__ = __（Unitもそのまま吸収元として素通し）。
+      return v && v.__address__ ? v.get() : v;
     case "expand": {
       // 後置~：1段階展開（list_cheat_sheet.md「リストのフラット」、`[1 2,3 4]~ → [1 2 3 4]`）。
       // 呼び出し引数位置での展開（複数の位置引数へのspread）はevalArgValues側が
@@ -435,7 +442,7 @@ function evalUnaryOp(name, v) {
     case "export_pin":
       return v;
   }
-  throw new Error(`interpreter: 未対応の前置/後置演算 '${name}'（$/@/#はアドレス操作のため未対応）`);
+  throw new Error(`interpreter: 未対応の前置/後置演算 '${name}'`);
 }
 
 // ポイントフリー演算子（`[+]`/`[+ 1]`/`[!_]`/`[_!]`等）を呼び出し引数へ適用する。
@@ -511,6 +518,52 @@ function stringifyForConcat(v) {
   if (typeof v === "string") return v;
   if (isUnit(v)) return "";
   return String(v);
+}
+
+// ---- $/@/#（アドレス操作） ----
+// unit.md §0.4「$__、@__の挙動：UnitはすべてのUnitを吸収する」。
+// アドレス値は { __address__:true, get, set } という参照セル（getter/setter）として表現する。
+// get()で参照先を読み、set(v)で書き込む（`#`＝output、pattern_guide.mdの`$[array ' 0] # 3`）。
+// 識別子・配列要素（get_prop）は実体（env/配列）への本物の参照（書き込みが反映される）、
+// それ以外の式は評価結果のスナップショットを読み取り専用で包むだけ
+// （新規に作った値自体はどこにも「格納」されていないため、書き込む先が無い）。
+function makeAddress(getFn, setFn) {
+  return { __address__: true, get: getFn, set: setFn || (() => {}) };
+}
+
+// pass2.jsのunwrapSoloBlockと同じロジック（循環import回避のためここで別途最小実装）。
+// `$[expr]`のようにブラケット/括弧で1個の式を囲んだだけの中身を覗く。
+function unwrapParenNode(node) {
+  while (node && node.type === "block" && node.kind !== "indent" && node.kind !== "abs" && node.lines.length === 1) {
+    node = node.lines[0];
+  }
+  return node;
+}
+
+// `$operand`（前置address）を、operandの構文形に応じた参照セルへ解決する。
+function evalAddress(operandNode, env) {
+  const inner = unwrapParenNode(operandNode);
+  if (inner.type === "atom" && inner.kind === "identifier") {
+    // $x: xが束縛されているスコープを辿り、そのバインディングへの本物の参照を作る
+    // （代入すればxそのものが書き変わる）。未束縛ならUnit（アドレスの取りようが無い）。
+    const name = inner.value;
+    let e = env;
+    while (e && !e.bindings.has(name)) e = e.parent;
+    if (!e) return UNIT;
+    return makeAddress(() => e.bindings.get(name), (v) => e.bindings.set(name, v));
+  }
+  if (inner.type === "operation" && inner.name === "get_prop") {
+    // $[list ' idx]: リスト要素への本物の参照（list_cheat_sheet.mdのget_prop対象）。
+    const l = evaluate(inner.left, env);
+    const idx = evaluate(inner.right, env);
+    if (!Array.isArray(l) || typeof idx !== "number" || idx < 0 || idx >= l.length) return UNIT;
+    return makeAddress(() => l[idx], (v) => { l[idx] = v; });
+  }
+  // それ以外（リテラル・ラムダ式など、その場で作った値）: 書き込み先を持たない
+  // スナップショット参照。カリー化の手動形`f : x ? $[y ? ...]`はここを通る——
+  // 継続クロージャそのものをアドレス化するだけで、書き込みは意味を持たない。
+  const snapshot = evaluate(inner, env);
+  return makeAddress(() => snapshot);
 }
 
 function evaluate(node, env) {
@@ -744,6 +797,20 @@ function evaluate(node, env) {
           });
         }
         return UNIT;
+      }
+      case "address":
+        // 前置$。node.operandはまだ評価せず、その構文形（識別子/get_prop/その他）に
+        // 応じてevalAddressが参照セルを組み立てる（evalUnaryOpの「先に評価済みの値を
+        // 受け取る」経路には乗せられない——参照先の束縛そのものが必要なため）。
+        return evalAddress(node.operand, env);
+      case "output": {
+        // `addr # value`（後置#、pattern_guide.mdの`$[array ' 0] # 3`）。
+        // 左辺は$で作った参照セルである必要がある——それ以外（Unitや普通の値）は
+        // 書き込み先を持たないため吸収し、右辺の値をそのまま返す（unit.mdのUnit吸収則に倣う）。
+        const addr = evaluate(node.left, env);
+        const value = evaluate(node.right, env);
+        if (addr && addr.__address__) addr.set(value);
+        return value;
       }
     }
 
