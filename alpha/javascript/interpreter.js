@@ -472,6 +472,14 @@ function listSplit(l, r) {
   return out;
 }
 
+// type_system.md §3.2/§4.1 の丸め規則: 四捨五入（最近接、タイは0から遠ざける）。
+// AArch64の`fcvtas`/`fcvtau`が1命令で行う丸めと同じ方向。JSの`Math.round`は
+// タイを+∞方向へ倒す（`Math.round(-2.5)`が`-2`になる）ため、負側は符号を外して
+// 丸めてから戻す必要がある。
+function roundHalfAwayFromZero(x) {
+  return x < 0 ? -Math.round(-x) : Math.round(x);
+}
+
 function evalArith(name, leftNode, rightNode, env) {
   const l = evaluate(leftNode, env);
   if (isUnit(l)) return UNIT; // 左辺Unit = 吸収元
@@ -1021,7 +1029,16 @@ function evaluate(node, env) {
         const r = evaluate(node.right, env);
         // 負のインデックスは末尾から数える（`-1`=最後の要素、length+indexへ写像）。
         // 正側は0始まり、負側は-1始まり（-0が無いため対称にはならない）。
-        const resolveIndex = (i) => (i < 0 ? asIndexable.length + i : i);
+        // type_system.md §4.1: `'` は Address（位置）を構造的に要求するため、Float が
+        // 来たら四捨五入する（AArch64の`fcvtas`＝最近接・タイは0から遠ざける、1命令）。
+        // 位置は整数でしか存在しないので、`list ' 1.5` は補間ではなく `list ' 2` になる。
+        // 既に整数ならroundHalfAwayFromZeroは恒等なので、この丸めに静的な型情報は要らない
+        // （除算の丸めは Address同士かFloat混在かで挙動が変わるため pass3 が必要、という
+        // 点で対照的）。
+        const resolveIndex = (i) => {
+          const n = roundHalfAwayFromZero(i);
+          return n < 0 ? asIndexable.length + n : n;
+        };
         if (typeof r === "number") {
           const idx = resolveIndex(r);
           return idx >= 0 && idx < asIndexable.length ? asIndexable[idx] : UNIT;
