@@ -389,15 +389,41 @@ function identifierBinding(node, env) {
 
 // bの「List性」を判定する。素のブロック（[1 2 3]等）か、後置~でマークされたブロックかを見て、
 // { isList, tilde } を返す（tilde=trueなら意図的な展開渡し、falseなら素の塊渡し）。
+// §5.4の検査専用。isRealListValueを使い、`(col + 1)`のような単なるグルーピングの括弧を
+// Listと誤判定しない（下のAtom-Atom分岐のpush/concat判定は従来通りisListLikeを直接使う
+// ——あちらは「並置された両辺の構造をどう結合するか」の判断で、意味が異なる）。
 function listShape(node) {
-  if (isListLike(node)) return { isList: true, tilde: false };
-  if (hasPostfixTilde(node) && isListLike(node.operand)) return { isList: true, tilde: true };
+  if (isRealListValue(node)) return { isList: true, tilde: false };
+  if (hasPostfixTilde(node) && isRealListValue(node.operand)) return { isList: true, tilde: true };
   return { isList: false, tilde: false };
 }
 
 function isListLike(node) {
   return node && node.type === "block" && (node.kind === "bracket" || node.kind === "brace" || node.kind === "paren");
 }
+
+// 中身がList値を構築する演算（余積・直積・範囲）かどうか。isRealListValueが使う。
+const LIST_PRODUCING_NAMES = new Set([
+  "construct", "concat", "push", "unshift", "product",
+  "range", "range_arithmetic", "range_arithmetic_rev",
+  "range_geometric", "range_geometric_rev", "range_power",
+]);
+
+// ブロックが「本当にList値」なのか、単なる式のグルーピングなのかを判定する。
+// isListLikeは中身を一切見ずに括弧ブロックを全てList扱いするため、`(col + 1)` のような
+// 優先順位のためだけの括弧までListと見なしてしまう。§5.4の検査（Listを後置~なしで
+// 裸rest関数へ渡す誤用の拒否）にそれを使うと、正当な `f (a + 1)` が誤ってTypeErrorに
+// なる（8-Queensをrestパラメータで書き直そうとして発覚）。
+// 複数行のブロックはList/Dictリテラル、1行なら中身が余積/直積/範囲の構築演算である
+// 場合のみList——単一のリテラル・識別子・算術式はスカラーのグルーピングに過ぎない。
+function isRealListValue(node) {
+  if (!isListLike(node)) return false;
+  if (!Array.isArray(node.lines) || node.lines.length !== 1) return true;
+  const inner = node.lines[0];
+  if (!inner || inner.type !== "operation") return false;
+  return LIST_PRODUCING_NAMES.has(inner.name);
+}
+
 function hasPostfixTilde(node) {
   return node && node.type === "operation" && node.op === "~" && node.position === "postfix";
 }
@@ -702,7 +728,12 @@ function parseParamStatements(lines) {
 }
 
 // 裸の（ブラケット／インデントで囲まれていない）仮引数トークン列を、1識別子=1エントリに分割する。
-// デフォルト式は裸形式では現行仕様に例が無いため未対応（bracket/indent形式のみ対応）。
+// デフォルト式は裸形式では**仕様違反**のため非対応（bracket/indent形式のみ対応）。
+// デフォルト引数を書くときは必ずインデントブロック形式にする:
+//   f :
+//       x
+//       y : __
+//    ? ...
 // 個々のトークンがさらに配列（`dist [h ~t]`の`[h ~t]`のような、1エントリとしてのブラケット
 // 分割代入パターン）の場合は、ブラケット自身のサブエントリ列を持つ1個のパターンエントリにする。
 function splitBareParamTokens(tokens) {
