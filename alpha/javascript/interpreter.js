@@ -36,8 +36,11 @@ const UNIT = Symbol("Sign.Unit");
 // なった状態）が`!placed`/`placed & ...`のようなUnit判定で検出できず、範囲外アクセスが
 // 静かにUNITへ吸収されたまま再帰が終端しないまま数値の偶然の一致に頼って停止する、
 // といった見た目上は動くが誤った挙動を招く（8-Queens監査で発見、2026-08-08）。
+// string_and_comment.md §1「空文字列は`__`（Unit）と同型」: 同じ理屈をStringドメインにも
+// 適用する——空文字列は文字列連結の単位元（`"" + s = s`）であり、空リストが余積の単位元
+// であるのと同じ位置づけ。
 function isUnit(v) {
-  return v === UNIT || v === undefined || (Array.isArray(v) && v.length === 0);
+  return v === UNIT || v === undefined || (Array.isArray(v) && v.length === 0) || v === "";
 }
 
 // pass3.jsのisDefineNodeと同じ判定（循環import回避のためここで別途最小実装）。
@@ -825,7 +828,13 @@ function evaluate(node, env) {
         }
         // スカラー ≅ 1要素リスト（asListと同じ同型性）。非Array値も長さ1のリストとして
         // インデックスアクセスできる（`5 ' 0` = 5、`5 ' 1` = __）。
-        const asIndexable = Array.isArray(l) ? l : [l];
+        // string_and_comment.md §6「文字列は0uリテラルのシーケンスとして扱える」:
+        // Stringは文字のListと同型（list_model.md）なので、文字ごとに分解してインデックス
+        // アクセスする（`hello ' 0` = `h`）。get-rest・複数インデックス取得の結果は
+        // 文字の配列のままではなく文字列へ戻す（isString、Stringとして返す方が同型性に
+        // 合う——List側の`[1 2 3 4] ' [1~3] → [2 3 4]`と対称）。
+        const isString = typeof l === "string";
+        const asIndexable = Array.isArray(l) ? l : isString ? l.split("") : [l];
         // get-rest: `list ' N~`（数値インデックスへ後置~）は、Nから末尾までの部分リストを
         // 返す（既存のList/Scalar同型性・負インデックス変換をそのまま流用できる。
         // Array.prototype.sliceの負start解釈がSignの「末尾から数える」規約と一致するため
@@ -833,7 +842,9 @@ function evaluate(node, env) {
         // evalArgValuesとは別経路——ここはget_propの右辺としての`~`のみを扱う。
         if (node.right.type === "operation" && node.right.position === "postfix" && node.right.name === "expand") {
           const n = evaluate(node.right.operand, env);
-          return typeof n === "number" ? asIndexable.slice(n) : UNIT;
+          if (typeof n !== "number") return UNIT;
+          const sliced = asIndexable.slice(n);
+          return isString ? sliced.join("") : sliced;
         }
         const r = evaluate(node.right, env);
         // 負のインデックスは末尾から数える（`-1`=最後の要素、length+indexへ写像）。
@@ -846,11 +857,12 @@ function evaluate(node, env) {
         // list_cheat_sheet.md「範囲で要素取得」: `[1 2 3 4] ' [1 ~ 3]` → `[2 3 4]`。
         // rangeが実体化したインデックス列（配列）で、該当位置の値をまとめて取り出す。
         if (Array.isArray(r)) {
-          return r.map((i) => {
+          const mapped = r.map((i) => {
             if (typeof i !== "number") return UNIT;
             const idx = resolveIndex(i);
             return idx >= 0 && idx < asIndexable.length ? asIndexable[idx] : UNIT;
           });
+          return isString ? mapped.map((v) => (isUnit(v) ? "" : v)).join("") : mapped;
         }
         return UNIT;
       }
