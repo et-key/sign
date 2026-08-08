@@ -1,0 +1,41 @@
+`Nクイーン問題。N×Nの盤に、互いに攻撃し合わないようN個のクイーンを配置する。`
+`盤の状態 placed は「上の行から順に置いたクイーンの列番号」のリスト。先頭が直前の行。`
+
+`conflict: col へ置こうとしたとき、既に置いた各クイーンと衝突するかを調べる。`
+`dist は「何行上か」。縦の衝突は col の一致、斜めの衝突は列差が dist と一致すること。`
+`盤が空（placed が __）なら [h ~t] は h を束縛できず、完全性公理で呼び出しごと __ に落ちる。`
+`つまり「もう調べる相手が居ない＝衝突なし」という終了条件が自動的に得られるため、`
+`終了条件の行を明示的に書く必要がない。`
+conflict : col dist [h ~t] ?
+	h = col : !__
+	h - col = dist : !__
+	col - h = dist : !__
+	conflict col (dist + 1) t
+
+`try_col: row 行目のクイーンを col 列から順に試す。`
+`col > n なら候補を使い切ったので失敗（__）。衝突するなら次の列へ進む。`
+`衝突しないなら次の行を解き、そこが失敗（__）したら | で次の列へ戻る（バックトラック）。`
+try_col :
+	col
+	row
+	n
+	placed : __
+ ?
+	col > n : __
+	(conflict col 1 placed) : try_col (col + 1) row n placed
+	(solve (row + 1) n (col placed)) | try_col (col + 1) row n placed
+
+`solve: row 行目以降を解く。全ての行を置き終えたら（row > n）placed がそのまま答えになる。`
+`placed に明示的な初期値を渡す必要はない——省略された引数は既に Unit であり、`
+`Unit は空リストと同型（__ = []）だから、それがそのまま「空の盤」を意味する。`
+solve :
+	row
+	n
+	placed : __
+ ?
+	row > n : placed
+	try_col 1 row n placed
+
+`8クイーンの解の一つが返る。`
+`解が存在しない盤面（N=2、N=3）では __ が返る。`
+solve 1 8

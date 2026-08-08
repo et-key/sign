@@ -42,7 +42,9 @@ guide/
 ├── string_and_comment.md  文字列・コメントの書き方
 ├── pattern_guide.md       慣用パターン集（Maybe/List/Either/IO等）
 ├── reference.md           Sign言語リファレンス（完全版）
-└── example.sn             動くサンプルコード
+├── example.sn             動くサンプルコード（機能ごとの断片集）
+└── examples/              完結した実プログラムの例
+    └── n_queens.sn        Nクイーン問題（バックトラック探索）
 ```
 
 ---
