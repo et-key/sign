@@ -513,6 +513,33 @@ function buildRange(start, end, stepFn) {
   return out;
 }
 
+// type_system.md §6.2「`==` は常に純粋な構造比較（Hom集合の一致）であり、コンストラクタ名を
+// 一切参照しない」: 値の「形」（Scalar/String/List/Struct）と中身だけを再帰的に比較する。
+// どのコンストラクタ関数経由で作られたかは一切問わない（それを問うのは`===`/`' !__`の役目——
+// Pass1レベルでの構造体の生成元追跡が必要になる別機能で、今回は対象外）。
+// Unit同型の値（__・空配列・空文字列、いずれもisUnit）は互いに構造的に等しいとみなす
+// （零対象は1つしかない、というunit.mdの立場と一貫させる）。
+function structuralEqual(l, r) {
+  if (isUnit(l) && isUnit(r)) return true;
+  if (isUnit(l) || isUnit(r)) return false;
+  if (Array.isArray(l) && Array.isArray(r)) {
+    return l.length === r.length && l.every((v, i) => structuralEqual(v, r[i]));
+  }
+  if (Array.isArray(l) || Array.isArray(r)) return false;
+  const lIsPlainObject = l !== null && typeof l === "object" && !l.__lambda__;
+  const rIsPlainObject = r !== null && typeof r === "object" && !r.__lambda__;
+  if (lIsPlainObject && rIsPlainObject) {
+    const lKeys = Object.keys(l);
+    const rKeys = Object.keys(r);
+    return (
+      lKeys.length === rKeys.length &&
+      lKeys.every((k) => Object.prototype.hasOwnProperty.call(r, k) && structuralEqual(l[k], r[k]))
+    );
+  }
+  if (typeof l === "object" || typeof r === "object") return l === r; // Lambda等は参照同一性のみ
+  return l === r; // Scalar/String
+}
+
 function evalCompare(name, op, leftNode, rightNode, env) {
   const l = evaluate(leftNode, env);
   const r = evaluate(rightNode, env);
@@ -521,6 +548,11 @@ function evalCompare(name, op, leftNode, rightNode, env) {
     if (isUnit(l)) return UNIT;
     if (isUnit(r)) return l;
     return l !== r ? l : UNIT; // 比較演算子は真の場合、値(左辺 or 右辺)を返す（§4）
+  }
+  if (op === "==") {
+    // type_system.md §6.2: 型シグネチャ (L -> R) -> (L | __)。真なら左辺、偽ならUnit
+    // （他の比較演算子・§4の慣習と同じ「返値が情報を運ぶ」規約）。
+    return structuralEqual(l, r) ? l : UNIT;
   }
   if (isUnit(l) || isUnit(r)) return UNIT; // 両辺とも吸収元
   const truthy = COMPARE_OPS[name](l, r);
@@ -963,13 +995,14 @@ function evaluate(node, env) {
     }
 
     if (ARITH_OPS[node.name]) return evalArith(node.name, node.left, node.right, env);
-    // `!=`（tier12、name="not_equal"）はCOMPARE_OPSにキーを持たない——8/6にoperator_table.js
-    // 側のtier8`!==`をname="xnot_equal"へ改名して名前衝突自体は解消したが、COMPARE_OPS
-    // （evalCompareの汎用フォールバックが呼ぶテーブル）には依然not_equalを追加していない。
-    // evalCompareは既にop==="!="専用の分岐（§4の例外規則）を持っているため、ここで
-    // node.opを見て個別に通す。`!==`（構造比較、xnot_equal）はここではまだ未対応のまま
-    // ——別途、構造的な深い等価性比較の実装が必要（==/===とセットで、要検討）。
-    if (COMPARE_OPS[node.name] || node.op === "!=") return evalCompare(node.name, node.op, node.left, node.right, env);
+    // `!=`（tier12、name="not_equal"）・`==`（name="equal"）はCOMPARE_OPSにキーを持たない
+    // ——8/6にoperator_table.js側のtier8`!==`をname="xnot_equal"へ改名して名前衝突自体は
+    // 解消したが、COMPARE_OPS（evalCompareの汎用フォールバックが呼ぶテーブル）には元々
+    // not_equal/equalを追加していない。evalCompareは既にop==="!="/op==="=="それぞれの
+    // 専用分岐を持っているため、ここでnode.opを見て個別に通す。`===`/`!==`（同一性・構造
+    // 不等価、same/xnot_equal）はコンストラクタ由来の追跡（type_system.md §6.2の`' !__`）が
+    // 必要な別機能のため、まだ未対応のまま。
+    if (COMPARE_OPS[node.name] || node.op === "!=" || node.op === "==") return evalCompare(node.name, node.op, node.left, node.right, env);
 
     if (node.position === "prefix" || node.position === "postfix") {
       return evalUnaryOp(node.name, evaluate(node.operand, env));
