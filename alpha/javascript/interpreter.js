@@ -268,6 +268,35 @@ function makePointfreeClosure(node, env) {
   return { __lambda__: true, __pointfree__: node, env };
 }
 
+// 自動カリー化（project memory: project-sign-currying-design、pass2.jsのmarkUndersaturatedApplies
+// が"partial_apply"と静的に判定した呼び出し）を、部分適用クロージャへ変換する。
+// 既に渡された分の実引数を新しいenvへ束縛し（完全性公理はここでも健在——供給された値が
+// 明示的にUnitなら、デフォルトが無い限りやはり崩壊する。これは「値がUnit」の話であり、
+// pass2が判定した「引数の個数が足りない」とは別軸——ここへ来る時点で個数の判断は
+// 既に済んでいる）、残りの仮引数だけを持つ新しいLambdaを返す。
+function makePartialClosure(closure, suppliedArgs) {
+  const entries = paramEntriesOf(closure.params);
+  const bound = entries.slice(0, suppliedArgs.length);
+  const remaining = entries.slice(suppliedArgs.length);
+  const capturedEnv = newRuntimeEnv(closure.env);
+  for (let i = 0; i < bound.length; i++) {
+    const entry = bound[i];
+    let value = suppliedArgs[i];
+    if (isUnit(value)) {
+      if (entry.default) value = evaluate(entry.default, capturedEnv);
+      else return UNIT; // 完全性公理：デフォルト無しのパラメータに明示的なUnitが来た場合は崩壊
+    }
+    envDefine(capturedEnv, entry.name, value);
+  }
+  const remainingParams = {
+    type: "params",
+    entries: remaining,
+    requiredArity: remaining.filter((e) => !e.rest && e.default === null).length,
+    bracket: false,
+  };
+  return { __lambda__: true, params: remainingParams, body: closure.body, env: capturedEnv };
+}
+
 function applyClosure(closure, argValues) {
   if (typeof closure === "function") return closure(...argValues); // 組み込み関数
   if (!closure || !closure.__lambda__) {
@@ -645,6 +674,33 @@ function evaluate(node, env) {
           argValues.push(...evalArgValues(a, env));
         }
         return applyClosure(callee, argValues);
+      }
+      case "partial_apply": {
+        // 自動カリー化。pass2.jsが「既知のアリティに対して引数の個数が足りない」と
+        // 静的に判定済みのapplyチェーン——ここでは完全性公理による崩壊(bindParams経由の
+        // 通常のapplyClosure)を一切通さず、無条件に部分適用クロージャを構築する。
+        // collectApplyChainは"apply"という名前だけを見てチェーンを遡るため使えない
+        // （pass2は連鎖の最も外側だけを"partial_apply"へリネームする——自分自身をそのまま
+        // 渡すと無限再帰する）。最初の1段（自分自身）だけ別扱いし、以降は通常の"apply"
+        // チェーンとして遡る。
+        const argNodes = [node.right];
+        let n = node.left;
+        while (n && n.type === "operation" && n.name === "apply") {
+          argNodes.unshift(n.right);
+          n = n.left;
+        }
+        const calleeNode = n;
+        const callee = evaluate(calleeNode, env);
+        const argValues = [];
+        for (const a of argNodes) {
+          argValues.push(...evalArgValues(a, env));
+        }
+        if (!callee || !callee.__lambda__ || callee.__compose__ || callee.__pointfree__) {
+          // pass2の静的判定は素のLambda識別子のみを対象にしているため通常来ないはずだが、
+          // 想定外の形なら安全側の通常apply経路へフォールバックする。
+          return applyClosure(callee, argValues);
+        }
+        return makePartialClosure(callee, argValues);
       }
       case "apply_reverse": {
         // `x f`（UFCS的なreceiver記法、coproduct_resolver.md §3の10.3）。左のxは常に

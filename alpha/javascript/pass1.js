@@ -147,6 +147,58 @@ function countNestedArity(token) {
   return countStatements(lines);
 }
 
+// 必須アリティ（デフォルト・rest以外の仮引数の数、pass2.jsのbuildParameterListが計算する
+// requiredArityと同じ基準）を数える。countArity（総スロット数、デフォルト付きも含めて
+// 数える）とは別軸——自動カリー化（markUndersaturatedApplies、project memory:
+// project-sign-currying-design）が「デフォルトで埋まる分」を「まだ足りないので部分適用に
+// すべき」と誤判定しないために必要。countArity自体は「同じ式内でまだ引数を続けて
+// 受け取れるか」の判定に使われ続けるため、そちらの基準は変えない。
+function countRequiredArity(paramTokens) {
+  if (paramTokens.length === 0) return 0;
+  if (paramTokens.length === 1 && Array.isArray(paramTokens[0])) {
+    return countNestedRequiredArity(paramTokens[0]);
+  }
+  if (paramTokens.length === 1) return 1; // 単一の裸パラメータ（デフォルト無し前提）
+  return countBareRequiredArity(paramTokens);
+}
+
+function countBareRequiredArity(tokens) {
+  let count = 0;
+  let i = 0;
+  while (i < tokens.length) {
+    if (tokens[i] === "~_") {
+      i += 2; // rest（"~_"+名前）は必須に数えない
+      continue;
+    }
+    if (tokens[i + 1] === ":") {
+      i = tokens.length; // デフォルト付きエントリ：必須に数えない
+      break;
+    }
+    count++;
+    i++;
+  }
+  return count;
+}
+
+function countRequiredStatements(node) {
+  if (isFlatLine(node)) return countBareRequiredArity(node);
+  let total = 0;
+  for (const stmt of node) {
+    let c;
+    if (isFlatLine(stmt)) c = countBareRequiredArity(stmt);
+    else if (isBracketEntryToken(stmt)) c = 1; // ブラケット分割代入は常に1個の必須スロット
+    else if (isTaggedBlockToken(stmt)) c = countRequiredStatements(stmt[1]);
+    else c = countRequiredStatements(stmt);
+    total += c;
+  }
+  return total;
+}
+
+function countNestedRequiredArity(token) {
+  const lines = Array.isArray(token) && isTaggedBlockToken(token) ? token[1] : token;
+  return countRequiredStatements(lines);
+}
+
 function buildEnvScope(lines) {
   const bindings = new Map();
   for (const line of lines) {
@@ -169,11 +221,12 @@ function buildEnvScope(lines) {
     const paramTokens = hasLambda ? line.slice(defineIdx + 1, qIdx) : null;
     const restParam = hasLambda ? detectRestParamShape(paramTokens) : null;
     const arity = hasLambda ? countArity(paramTokens) : null;
+    const requiredArity = hasLambda ? countRequiredArity(paramTokens) : null;
     // atomType: `<id> : <リテラル1個>` という最も単純な形のみ、Pass1aで静的に読み取る。
     // 仮引数（本体の使用箇所から逆算が必要、type_system.md §7.1）は未対応・既知の制限。
     const rhs = line.slice(defineIdx + 1);
     const atomType = !hasLambda && rhs.length === 1 ? literalAtomType(rhs[0]) : null;
-    bindings.set(first, { category: hasLambda ? "Lambda" : "Atom", restParam, atomType, exported, arity });
+    bindings.set(first, { category: hasLambda ? "Lambda" : "Atom", restParam, atomType, exported, arity, requiredArity });
   }
   return bindings;
 }

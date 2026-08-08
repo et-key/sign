@@ -139,6 +139,103 @@ function applyChainInfo(node) {
   return { depth, base: n };
 }
 
+// 自動カリー化（project memory: project-sign-currying-design）が「丸括弧を跨いだ段階的な
+// 適用」（`(f 1) 2 3`のように、部分適用の結果へさらに引数を重ねていく形）でも正しく
+// アリティを追跡できるようにするための解決器。素の識別子なら{arity, requiredArity,
+// consumed:0}を返す。arity（総スロット数、デフォルト付きも含む）は「同じ式内でまだ
+// 引数を続けて受け取れるか」の判定に、requiredArity（デフォルト・rest以外の必須数）は
+// 「この呼び出しはカリー化すべきか」の判定に、それぞれ別の目的で使われる（pass1.jsの
+// countArity/countRequiredArityの区別と対応）。1行だけのparenブロック（`(...)`）なら
+// 中身を再帰的に覗く。apply/partial_applyチェーン（既にいくらか引数が適用された状態）
+// なら、そのチェーン自身の深さを「既に消費済み」に加算しつつ、根本の識別子まで再帰的に
+// 遡る。既知の有限アリティを持つ識別子へ辿り着けない場合（rest引数・単一裸パラメータ・
+// 識別子でない値など）はnullを返す——その場合は元々の「1回の適用で飽和する」既存挙動の
+// まま何も変えない。
+function resolveKnownArity(node, env) {
+  if (!node) return null;
+  if (node.type === "atom" && node.kind === "identifier") {
+    if (!env) return null;
+    const binding = envLookup(env, node.value);
+    // Infinity（rest引数）もここでは許可する——typeof Infinity==="number"なので、
+    // getCategoryの「同じ式内でチェーンを伸ばし続けてよいか」判定（depth<arityが
+    // 常に真になるべき）にはInfinityが必要。カリー化すべきでない（rest引数は本質的に
+    // 可変長でカリー化の概念に合わない）という判断は、呼び出し側のmarkUndersaturatedApplies
+    // が個別にInfinityを除外する。
+    if (binding && typeof binding.arity === "number") {
+      const requiredArity = typeof binding.requiredArity === "number" ? binding.requiredArity : binding.arity;
+      return { arity: binding.arity, requiredArity, consumed: 0 };
+    }
+    return null;
+  }
+  if (node.type === "block" && node.kind !== "indent" && node.kind !== "abs" && node.lines.length === 1) {
+    return resolveKnownArity(node.lines[0], env);
+  }
+  if (node.type === "operation" && (node.name === "apply" || node.name === "partial_apply")) {
+    let depth = 0;
+    let n = node;
+    while (n && n.type === "operation" && (n.name === "apply" || n.name === "partial_apply")) {
+      depth++;
+      n = n.left;
+    }
+    const inner = resolveKnownArity(n, env);
+    if (!inner) return null;
+    return { arity: inner.arity, requiredArity: inner.requiredArity, consumed: inner.consumed + depth };
+  }
+  return null;
+}
+
+// 自動カリー化（project memory: project-sign-currying-design）: 完全な木を静的に走査し、
+// 「既知の（有限）アリティを持つ識別子への apply チェーンで、消費済みの引数の数が
+// アリティに届いていない」ノードを見つけたら、その場で node.name を "partial_apply" へ
+// リネームする——「アリティ不足を検出したら、その場で構造体＋関数ポインタ相当のものを
+// 合成する」という設計を、実行時のinterpreter.jsに判断させず、ここ（コンパイル時に
+// 相当するPass2）で完結させるための印付け。interpreter.js側は"partial_apply"を見たら、
+// 完全性公理による崩壊（bindParamsの通常経路）を一切通さず、無条件に部分適用クロージャを
+// 構築するだけ——「アリティが足りているか」という判断そのものは、もうここで終わっている。
+// rest（arity===Infinity）や単一裸パラメータ（arity===null、未追跡）の呼び出し先は対象外
+// （元々1回の適用で飽和したものとして正しく動く既存の挙動を変えない）。
+// depthが同じ「1本のapplyチェーン」内では最も外側（呼び出し全体の完成形）だけを見ればよく、
+// チェーンの内側（.left側）は既にそのdepth計算に含まれているため再帰しない——ただし各段の
+// 引数（.right）や呼び出し先（base）自身は、別の独立したapply式を含みうるため再帰する。
+function markUndersaturatedApplies(node, env) {
+  if (!node || typeof node !== "object") return node;
+  if (node.type === "operation" && node.name === "apply") {
+    const argNodes = [];
+    let n = node;
+    while (n && n.type === "operation" && n.name === "apply") {
+      argNodes.unshift(n.right);
+      n = n.left;
+    }
+    const base = n;
+    for (const a of argNodes) markUndersaturatedApplies(a, env);
+    markUndersaturatedApplies(base, env);
+    // resolveKnownArityはbaseが素の識別子の場合だけでなく、丸括弧越しの部分適用
+    // （`(f 1) 2 3`のbase＝`(f 1)`という1行parenブロック）も透かして見る——
+    // これにより複数段の丸括弧を跨いだ段階的な適用でも、最終的に飽和したかどうかを
+    // 正しく判定できる（跨いだ先のarity情報が既にmarkUndersaturatedAppliesの再帰で
+    // 中の"partial_apply"リネームとして確定済みなので、resolveKnownArityはそれを読むだけ）。
+    // カリー化すべきかどうかはrequiredArity（デフォルト・rest以外の必須数）で判定する
+    // ——デフォルトで埋まる分は「まだ足りない」とみなさない（例: `g : x\n y:x+1 ?...`
+    // に対して`g 3`はrequiredArity=1を満たしているので、カリー化せず通常のデフォルト
+    // フォールバックに委ねる）。
+    // arity===Infinity（rest引数）はカリー化の対象外——restは本質的に可変長で
+    // 「あと何個必須で足りないか」という概念に合わない（0個でも合法に完結する）。
+    const info = resolveKnownArity(base, env);
+    if (info && info.arity !== Infinity && argNodes.length + info.consumed < info.requiredArity) {
+      node.name = "partial_apply";
+    }
+    return node;
+  }
+  if (node.type === "block") {
+    if (Array.isArray(node.lines)) node.lines.forEach((l) => markUndersaturatedApplies(l, env));
+    return node;
+  }
+  if (node.left !== undefined) markUndersaturatedApplies(node.left, env);
+  if (node.right !== undefined) markUndersaturatedApplies(node.right, env);
+  if (node.operand !== undefined) markUndersaturatedApplies(node.operand, env);
+  return node;
+}
+
 // bracket系ブロック（indent/absを除く）が1行だけを保持している場合、その1行を再帰的に
 // 覗く（`[+]`のような、演算子1個だけを囲んだブロックの中身を取り出す）。
 // `[1 2 3]`のような複数トークンの行は`lines.length===1`のまま（1行の中で構築済みの
@@ -160,6 +257,10 @@ function getCategory(node, env) {
     if (node.name === "compose") return "Lambda";
     if (node.partial) return "Lambda"; // オペランド不足の部分適用
     if (node.position === "prefix" && node.op === "@") return "Lambda"; // 前置@（Input）
+    // 自動カリー化（markUndersaturatedApplies）が既にアリティ不足と静的判定して
+    // リネーム済みのノード。定義上つねに「まだ引数を受け取れる」ため、無条件にLambda
+    // （depthとarityの再チェックは不要——ここへ来る時点でpass2が既に判定済み）。
+    if (node.name === "partial_apply") return "Lambda";
     if (node.name === "apply") {
       // 多引数関数（params[]が複数エントリ、pass1.jsのarity）は、1回のapplyでは
       // 飽和しない場合がある。左に伸びるapplyチェーンの深さ（=消費済みの引数の数）が
@@ -168,11 +269,12 @@ function getCategory(node, env) {
       // アリティが不明（単一パラメータ・rest・ブラケット等）な場合は、従来通り
       // 1回の適用で即座にAtom（飽和済み）として扱う。
       const { depth, base } = applyChainInfo(node);
-      if (base && base.type === "atom" && base.kind === "identifier" && env) {
-        const binding = envLookup(env, base.value);
-        if (binding && typeof binding.arity === "number" && depth < binding.arity) {
-          return "Lambda";
-        }
+      // resolveKnownArityはbaseが素の識別子の場合だけでなく、丸括弧を挟んだ部分適用の
+      // 結果（`(f 1) 2`のbase＝`(f 1)`という1行parenブロック）も透かして見る——
+      // 自動カリー化が複数段の丸括弧を跨いでも正しくLambdaのまま扱われるように。
+      const info = resolveKnownArity(base, env);
+      if (info && depth + info.consumed < info.arity) {
+        return "Lambda";
       }
       // 【注意】ポイントフリー記述の完全に裸な中置演算子（`[+]`）が複数引数を貪欲に
       // 取り込む挙動は、ここ（getCategory）ではなくreduceOnceのPhase2（apply）専用の
@@ -732,7 +834,7 @@ function reduceAll(rawItems, env) {
     // 未縮約の要素が残っている（未対応の演算子等）。診断のためそのまま返す。
     return { type: "unresolved", items };
   }
-  return items[0];
+  return markUndersaturatedApplies(items[0], env);
 }
 
 // ---- ブロック（[...] {...} (...) インデント／絶対値）の解決 ----
