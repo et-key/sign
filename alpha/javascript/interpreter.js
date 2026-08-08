@@ -554,6 +554,16 @@ function evalCompare(name, op, leftNode, rightNode, env) {
     // （他の比較演算子・§4の慣習と同じ「返値が情報を運ぶ」規約）。
     return structuralEqual(l, r) ? l : UNIT;
   }
+  if (op === "!==") {
+    // `!==`は`==`の否定——ただしUnit規則は`!=`とは別物（operator_table.md 56行目）:
+    // 左辺Unit→右辺値を返す、右辺Unit→左辺値を返す（どちらも素通し。`!=`の「左辺Unitは
+    // 吸収元」のような非対称な吸収は無い）。両辺ともUnitなら構造的に等しい（__ == __）
+    // ので「等しくない」は偽＝Unitを返す。
+    if (isUnit(l) && isUnit(r)) return UNIT;
+    if (isUnit(l)) return r;
+    if (isUnit(r)) return l;
+    return structuralEqual(l, r) ? UNIT : l;
+  }
   if (isUnit(l) || isUnit(r)) return UNIT; // 両辺とも吸収元
   const truthy = COMPARE_OPS[name](l, r);
   return truthy ? (l === 0 || l === 1 ? r : l) : UNIT; // §4: 左辺が算術単位元(0/1)なら右辺、それ以外は左辺を返す
@@ -995,14 +1005,15 @@ function evaluate(node, env) {
     }
 
     if (ARITH_OPS[node.name]) return evalArith(node.name, node.left, node.right, env);
-    // `!=`（tier12、name="not_equal"）・`==`（name="equal"）はCOMPARE_OPSにキーを持たない
-    // ——8/6にoperator_table.js側のtier8`!==`をname="xnot_equal"へ改名して名前衝突自体は
-    // 解消したが、COMPARE_OPS（evalCompareの汎用フォールバックが呼ぶテーブル）には元々
-    // not_equal/equalを追加していない。evalCompareは既にop==="!="/op==="=="それぞれの
-    // 専用分岐を持っているため、ここでnode.opを見て個別に通す。`===`/`!==`（同一性・構造
-    // 不等価、same/xnot_equal）はコンストラクタ由来の追跡（type_system.md §6.2の`' !__`）が
-    // 必要な別機能のため、まだ未対応のまま。
-    if (COMPARE_OPS[node.name] || node.op === "!=" || node.op === "==") return evalCompare(node.name, node.op, node.left, node.right, env);
+    // `!=`（tier12、name="not_equal"）・`==`（name="equal"）・`!==`（tier8、name="xnot_equal"、
+    // ==の構造比較を否定したもの）はCOMPARE_OPSにキーを持たない——8/6にoperator_table.js側の
+    // tier8`!==`をname="xnot_equal"へ改名して名前衝突自体は解消したが、COMPARE_OPS
+    // （evalCompareの汎用フォールバックが呼ぶテーブル）には元々not_equal/equal/xnot_equalを
+    // 追加していない。evalCompareは既にop==="!="/"=="/"!=="それぞれの専用分岐を持っている
+    // ため、ここでnode.opを見て個別に通す。`===`（same、同一性）はコンストラクタ由来の
+    // 追跡（type_system.md §6.2の`' !__`）が必要な別機能のため、まだ未対応のまま。
+    if (COMPARE_OPS[node.name] || node.op === "!=" || node.op === "==" || node.op === "!==")
+      return evalCompare(node.name, node.op, node.left, node.right, env);
 
     if (node.position === "prefix" || node.position === "postfix") {
       return evalUnaryOp(node.name, evaluate(node.operand, env));
