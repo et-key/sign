@@ -480,18 +480,18 @@ function roundHalfAwayFromZero(x) {
   return x < 0 ? -Math.round(-x) : Math.round(x);
 }
 
-function evalArith(node, env) {
-  const name = node.name;
-  const leftNode = node.left;
-  const rightNode = node.right;
-  const l = evaluate(leftNode, env);
+// 算術族の型規則を**値に対して**適用する（type_system.md §3.2）。
+// 通常の中置（evalArith）とポイントフリー（applyPointfree の combine）の両方から呼ぶ——
+// 以前は後者が ARITH_OPS を直に叩いており型ガードを丸ごと迂回していたため、
+// `[+ 1] [1 2 3]` が `"1,2,31"`（JSの配列→文字列強制）、`[* 2,] \`abc\`` が NaN を
+// 静かに返していた。算術が何を意味するかを決める場所は1つでなければならない。
+function arithOnValues(name, l, r) {
   if (isUnit(l)) return UNIT; // 左辺Unit = 吸収元
   // §3.2: String（Listと同型）の左辺に算術演算子は効かない → 型エラーで__に収束。
   // 注: list_model.md §4.4の文面は「+でコードポイントが露出する」としているが、
   // 自身の例(`123` 123 = `123123`)はスペース連結でありこの主張を実証していない。
   // type_system.md §3.2の明示的な表（String+算術演算子→型エラー(__消去)）を正とする。
   if (typeof l === "string") return UNIT;
-  const r = evaluate(rightNode, env);
   if (isUnit(r)) return l; // 右辺Unit = 単位元（id射、素通し）
   if (Array.isArray(l)) {
     // §3.2の算術族テーブル: List左辺の `*`/`^`/`/` は右辺を「回数・個数」として使うため
@@ -508,7 +508,17 @@ function evalArith(node, env) {
   // 静かに出てくる——`1 + \`abc\`` → "1abc"、`1 + [2 3]` → "12,3"、
   // `x : !__` の `x + 1` → "[object Object]1" は全てこの経路だった。
   if (typeof l !== "number" || typeof r !== "number") return UNIT;
-  const value = ARITH_OPS[name](l, r);
+  return ARITH_OPS[name](l, r);
+}
+
+function evalArith(node, env) {
+  const name = node.name;
+  const l = evaluate(node.left, env);
+  // 左辺がUnit/Stringの時点で右辺を評価せずに済ませる（短絡、既存の挙動を保つ）
+  if (isUnit(l) || typeof l === "string") return arithOnValues(name, l, undefined);
+  const r = evaluate(node.right, env);
+  const value = arithOnValues(name, l, r);
+  if (typeof value !== "number") return value;
   // §3.2「除算だけは Address 同士でも丸めが起きる」: 結果型が Address（＝両辺とも
   // Address）なのに非整数が出たら四捨五入する。丸めるべきかどうかは**値**からは
   // 決められない——JSのNumberでは `5` と `5.0` が同一なので、`5 / 2`（→3）と
@@ -712,7 +722,10 @@ function applyPointfree(node, closureEnv, argValues) {
   }
 
   const combine = (a, b) => {
-    if (ARITH_OPS[node.name]) return ARITH_OPS[node.name](a, b);
+    // 算術は通常の中置と同じ型規則を通す（arithOnValues）。以前はARITH_OPSを直に
+    // 叩いており、`[+ 1] [1 2 3]` → "1,2,31"（JSの配列→文字列強制）や
+    // `[* 2,] \`abc\`` → NaN といった silent-wrong-value が漏れていた。
+    if (ARITH_OPS[node.name]) return arithOnValues(node.name, a, b);
     if (COMPARE_OPS[node.name]) {
       // ポイントフリーはList側のfold/map/filterが前提（8/5の設計合意）のため、単位元の
       // 見方も算術側（0/1）ではなくList側に移る——真なら常に要素そのもの(a)を残す。

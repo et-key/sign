@@ -503,10 +503,21 @@ function coproductReduce(a, b, env) {
 // （下記COPRODUCT_PHASESのコメント参照）。
 function isBarePointfreeChainBase(node, env) {
   const { base } = applyChainInfo(node);
-  // `add : [+]` のように名前を経由していても同じ貪欲消費が要る（type_system.md §6.1の
-  // `#add : [+]` → `add 1 2` = 3）。束縛の右辺ノードまで透かして見る。
-  const unwrapped = unwrapSoloBlock(derefBoundNode(unwrapSoloBlock(base), env));
-  if (!unwrapped || unwrapped.type !== "operation" || !unwrapped.partial) return false;
+  return isGreedyPointfree(base, env);
+}
+
+// 「複数の実引数を貪欲に消費し続けるべき」ポイントフリーかどうか。
+// `add : [+]` のように名前を経由していても同じ判定が要る（type_system.md §6.1の
+// `#add : [+]` → `add 1 2` = 3）ため、束縛の右辺ノードまで透かして見る。
+function isGreedyPointfree(node, env) {
+  const unwrapped = unwrapSoloBlock(derefBoundNode(unwrapSoloBlock(node), env));
+  if (!unwrapped || unwrapped.type !== "operation") return false;
+  // 合成（`f g`）は左→右のパイプライン順（`(f g)(x) = g(f(x))`）なので、実引数は
+  // **左の関数**へ渡る。左が貪欲なポイントフリーなら合成全体も貪欲でなければならない。
+  // これが無いと `[* 2,] [+] 1 2 3 4 5` が、合成へ引数を1個だけ渡して残りを
+  // concat してしまう（`[2 2 3 4 5]`）。
+  if (unwrapped.name === "compose") return isGreedyPointfree(unwrapped.left, env);
+  if (!unwrapped.partial) return false;
   return unwrapped.pointfreeMap === true || (unwrapped.left === null && unwrapped.right === null);
 }
 
