@@ -150,7 +150,10 @@ function computeAtomType(node, env) {
     // それ以外（関数本体等）は「ブロックの値＝最後の文の値」にフォールバックする。
     if (node.lines.every((l) => isDefineNode(l) && isIdentifierNode(l.left))) return "Dict";
     const last = node.lines[node.lines.length - 1];
-    const lastType = inferAtomType(last, env);
+    // pass2 が残した子スコープで最終行を解決する。外側のenvで先に評価すると、
+    // ブロック内で定義された識別子が解決できないまま**メモ化されてしまう**
+    // （後から annotateTypes が正しいスコープで歩いても、もう上書きされない）。
+    const lastType = inferAtomType(last, node.scope || env);
     // `[1 2 3]` のようにブロックが List を包んでいる場合、要素型もブロックへ引き継ぐ
     // （そうしないと `[1 2] [3 4]` のように List 同士を余積で繋いだとき、外側から
     // 中身の要素型が見えなくなる）。
@@ -311,20 +314,67 @@ function inferLambdaParamTypes(lambdaNode) {
 // 縮約中に子スコープを作るが、それをノードへ残していないため、ここから辿れない
 // （inferAtomTypeが元々持っていた制限と同じ。ブロック内で新たに定義された識別子の
 // atomTypeは解決できず null になる）。
-function annotateTypes(node, env) {
+function annotateTypes(node, env, diagnostics) {
   if (!node || typeof node !== "object") return node;
   inferAtomType(node, env);
-  if (node.left) annotateTypes(node.left, env);
-  if (node.middle) annotateTypes(node.middle, env); // chain_compare（§4の三項連鎖比較）
-  if (node.right) annotateTypes(node.right, env);
-  if (node.operand) annotateTypes(node.operand, env);
+  if (diagnostics) collectUnitReason(node, env, diagnostics);
+  // ブロック・ラムダは pass2 が残した子スコープで中身を歩く（無ければ現在のenv）。
+  // これが無いと仮引数やブロック内の定義が「未定義識別子」になってしまう。
+  const inner = node.scope || env;
+  if (node.left) annotateTypes(node.left, node.name === "lambda" ? env : inner, diagnostics);
+  if (node.middle) annotateTypes(node.middle, inner, diagnostics); // chain_compare（§4の三項連鎖比較）
+  if (node.right) annotateTypes(node.right, inner, diagnostics);
+  if (node.operand) annotateTypes(node.operand, inner, diagnostics);
   if (node.type === "block" && Array.isArray(node.lines)) {
-    for (const line of node.lines) annotateTypes(line, env);
+    for (const line of node.lines) annotateTypes(line, inner, diagnostics);
   }
   if (node.type === "params" && Array.isArray(node.entries)) {
-    for (const e of node.entries) if (e.default) annotateTypes(e.default, env);
+    for (const e of node.entries) if (e.default) annotateTypes(e.default, inner, diagnostics);
   }
   return node;
+}
+
+// ---- Pass 3b: `__` へ収束する経路の静的記録（type_system.md §5 Pass 3b） ----
+//
+// `__` は零対象なのであらゆる崩壊が同じ `__` に潰れる。実行時にはこの一様性こそが
+// 価値だが（オーバーヘッドゼロの収束）、「なぜ潰れたか」は互いに全く異なる。
+// Sign の真理は Boolean ではなく値そのものを証拠として返す（原理6）ため、真の側は
+// witness を運ぶのに偽の側は何も運ばない、という非対称がある。それを**値ではなく
+// 帳簿の側で**埋めるのが本節の役割。
+//
+// 記録するのは静的に判定できた分だけで、実行時には一切残らない（原理2）。
+// 実行時側の対応物は unit.md §7.3（デバッグ層の Unit Payload）。
+//
+// `reason` は機械可読なコード、`message` は人間向け。形式手法へ橋を架けるとき
+// （Lean/Coq への変換など）に読むのは `reason` の方であり、日本語文ではない。
+function collectUnitReason(node, env, diagnostics) {
+  if (!node || node.type !== "operation" || node.position !== "infix") return;
+  if (node.atomType !== "Unit") return;
+  if (!ARITHMETIC_OPS.has(node.name)) return;
+
+  const leftType = inferAtomType(node.left, env);
+  const rightType = inferAtomType(node.right, env);
+  // 左辺Unitは§3.3の吸収則（`__ + x = __`）であり、型の不一致ではない——
+  // 意図された伝播なので診断しない。
+  if (leftType === "Unit" || rightType === "Unit") return;
+
+  if (leftType === "String" || rightType === "String") {
+    diagnostics.push({
+      level: "information",
+      reason: "arithmetic-type-mismatch",
+      spec: "type_system.md §3.2",
+      message: `算術演算 '${node.op}' の被演算子に String（左辺=${leftType}, 右辺=${rightType}）が含まれるため __ に収束します。文字列を数値として扱いたい場合は明示的な変換が必要です`,
+    });
+    return;
+  }
+  if (leftType === "List" || leftType === "Struct") {
+    diagnostics.push({
+      level: "information",
+      reason: "list-arithmetic-undefined",
+      spec: "type_system.md §3.2",
+      message: `List 左辺に対する '${node.op}' は定義されていないため __ に収束します（List で意味を持つ算術は '*'（複製）・'^'（次元上げ）・'/'（分割）のみ）`,
+    });
+  }
 }
 
 export { inferAtomType, annotateTypes, inferLambdaParamTypes, inferParamTypesFromUsage };

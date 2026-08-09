@@ -16,7 +16,13 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   `compile(source)` が `preprocess → parse → buildEnv(Pass 1a) → reduceAll(Pass 2) →
   specializeGenericParams(Pass 1b) → annotateTypes(Pass 3)` を通し、
   `{ nodes, env, specializations, diagnostics }` を返す。**各ノードには `atomType`
-  （Layer 2 型）が載る**。
+  （Layer 2 型）が載り、`diagnostics` には Pass 3b（`__` へ収束する経路の静的記録）が入る**。
+  Pass 3b の各項目は機械可読な `reason`（`arithmetic-type-mismatch` 等）と人間向けの
+  `message` を持つ——形式手法へ橋を架けるとき読むのは前者。`__` は零対象なので
+  あらゆる崩壊が同じ値に潰れるが「なぜ潰れたか」は全く異なる、という非対称を
+  値ではなく帳簿の側で埋めるのが役割（`type_system.md` §5 Pass 3b）。
+  実行時側の対応物は `unit.md` §7.3（デバッグ層の Unit Payload）で、こちらは
+  `runtimeEnv.diagnostics` に入る。両者は補完関係にある。
   これを作るまで、各テストと playground が同じ手順をそれぞれコピーして持っており、
   **`pass1b.js` と `pass3.js` はどこからも呼ばれていなかった**（型を出しても消費者が
   存在しない状態）。パーサーは `options.parse` で差し替え可能——テストは

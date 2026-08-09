@@ -67,8 +67,10 @@ function compile(source, options = {}) {
   const env = buildEnv(lines);
   const nodes = lines.map((line) => reduceAll(line, env));
   const specializations = runPass1b(nodes, env);
-  for (const node of nodes) annotateTypes(node, env);
-  return { nodes, env, specializations, diagnostics: [] };
+  // Pass 3 の型注釈と Pass 3b（`__` へ収束する経路の静的記録）は同じ走査で行う。
+  const diagnostics = [];
+  for (const node of nodes) annotateTypes(node, env, diagnostics);
+  return { nodes, env, specializations, diagnostics };
 }
 
 export { compile };

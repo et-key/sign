@@ -86,6 +86,45 @@ check(
 	null // Lambda なので Layer 2 型なし
 );
 
+// ---- Pass 3b: `__` へ収束する経路の静的記録（§5 Pass 3b） ----
+// 実行前に「この式は __ になる」と、その理由が帳簿へ載ることを確認する。
+// reason は機械可読なコード（形式手法へ橋を架けるとき読むのはこちら）、message は人間向け。
+function reasons(source) {
+	return run(source).diagnostics.map((d) => d.reason);
+}
+function checkReasons(note, source, want) {
+	total++;
+	const got = reasons(source);
+	if (JSON.stringify(got) === JSON.stringify(want)) {
+		console.log(`OK   ${note}`);
+		passed++;
+	} else {
+		console.log(`FAIL ${note}`);
+		console.log(`     got: ${JSON.stringify(got)}, want: ${JSON.stringify(want)}`);
+	}
+}
+
+checkReasons("1 + `abc` → 算術族の型不一致を記録", "1 + `abc`", ["arithmetic-type-mismatch"]);
+checkReasons("`abc` + 1 → 同上（両方向とも）", "`abc` + 1", ["arithmetic-type-mismatch"]);
+checkReasons("識別子経由でも追える（x : `abc` / x * 2）", "x : `abc`\nx * 2", ["arithmetic-type-mismatch"]);
+checkReasons("[1 2] + [3 4] → List左辺の算術が未定義", "[1 2] + [3 4]", ["list-arithmetic-undefined"]);
+checkReasons("5 + 2 → 診断なし", "5 + 2", []);
+// §3.3 の非対称Unit伝播則は「意図された伝播」であって型の不一致ではないので診断しない
+// （再帰の底打ちがこれに乗っている——原理5。ここで鳴らすとログのゴミ山になる）。
+checkReasons("__ + 5 → 診断なし（§3.3の吸収則は意図された伝播）", "__ + 5", []);
+checkReasons("5 + __ → 診断なし（右辺Unitは単位元）", "5 + __", []);
+
+// ---- ブロックの子スコープが注釈時にも使われること ----
+{
+	const { nodes } = run("d :\n\ta : 5\n\tb : 1.5\n\ta + b");
+	const block = nodes[0].right;
+	const add = block.lines[block.lines.length - 1];
+	check("ブロック内で定義した識別子の型が解決する（a → Address）", add.left.atomType, "Address");
+	check("同（b → Float）", add.right.atomType, "Float");
+	check("ブロック内の演算にも昇格格子が効く（a + b → Float）", add.atomType, "Float");
+	check("ブロックの値＝最終行の型", block.atomType, "Float");
+}
+
 // ---- Pass 1b がパイプラインに載っていること ----
 {
 	// `@ref` を持つジェネリック関数と、その呼び出しサイト2つ。

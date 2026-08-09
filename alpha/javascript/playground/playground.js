@@ -141,13 +141,20 @@ function run() {
   try {
     // 静的解決は compile()（Pass 1〜3 の単一ドライバ）に一本化。
     // 各ノードには pass3 が Layer 2 型（atomType）を注釈済みなので、AST表示にも出す。
-    const { nodes } = compile(source);
+    const { nodes, diagnostics } = compile(source);
     const runtimeEnv = newRuntimeEnv(null);
     let last = UNIT;
     for (const node of nodes) {
       astLines.push(`${showAst(node)}\n  :: ${node.atomType ?? "?"}`);
       last = evaluate(node, runtimeEnv);
       outLines.push(showValue(last));
+    }
+    // Pass 3b（コンパイル時）と実行時（unit.md §7.3相当のenv.diagnostics）の両方を出す。
+    // 前者は「実行しなくても __ になると分かった」もの、後者は実行して初めて分かったもの。
+    const all = [...diagnostics, ...runtimeEnv.diagnostics];
+    if (all.length > 0) {
+      outLines.push("");
+      for (const d of all) outLines.push(`[${d.level}] ${d.message}`);
     }
   } catch (e) {
     outLines.push("エラー: " + e.message);

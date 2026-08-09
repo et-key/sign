@@ -891,7 +891,9 @@ function resolveLambdaLine(rawItems, qIdx, env) {
 
   const { node: paramNode, scope } = buildParameterList(paramTokens, env);
   const bodyNode = reduceAll(bodyTokens, scope);
-  const lambdaNode = { type: "operation", op: "?", name: "lambda", position: "infix", left: paramNode, right: bodyNode };
+  // scope（仮引数を束縛した子スコープ）をノードへ残す。resolveBlockと同じ理由——
+  // 本体を後から歩く側が、仮引数を「未定義識別子」と誤検出しないようにするため。
+  const lambdaNode = { type: "operation", op: "?", name: "lambda", position: "infix", left: paramNode, right: bodyNode, scope };
 
   if (nameToken) {
     return { type: "operation", op: ":", name: "define", position: "infix", left: toNode(nameToken, env), right: lambdaNode, exported };
@@ -1005,7 +1007,11 @@ function resolveBlock(term, env) {
   // このブロック内の行だけを対象にした子スコープを作る（ネストしたスコープ連鎖）
   const inner = childEnv(exprsArray.filter(Array.isArray), env);
   const lines = exprsArray.map((line) => (Array.isArray(line) ? reduceAll(line, inner) : toNode(line, inner)));
-  return { type: "block", kind, lines };
+  // 子スコープをノードへ残す。これが無いと、縮約が終わった後にASTを歩く側（pass3の
+  // annotateTypes、Pass 3b の未定義識別子検出）が「ブロック内の識別子を外側のenvで
+  // 解決してしまう」——ブロック内で定義された識別子のatomTypeが読めないだけでなく、
+  // 未定義識別子の静的検出が偽陽性だらけになる。
+  return { type: "block", kind, lines, scope: inner };
 }
 
 export { reduceAll, getCategory, resolveDensity };
