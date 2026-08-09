@@ -20,6 +20,12 @@
  * - Dict判定は「複数行、全行がdefine(key:val)」という形（list_model.md §5.3、
  *   pattern_guide.mdの`dict`例が示す改行区切りの形）のみを見る。カンマと`:`を1行に
  *   混在させる形（例: `foo:1, bar:2`、ドキュメントに例が無い）は非対応・未定義動作。
+ * - `Implicit(T)`（場所）と `Iterator(T)`（ストリーム）は type_system.md §2 に型として
+ *   定義されたが、ここではまだ推論しない。仮引数の形による割り当て
+ *   （`f : [x ~xs]` → `Implicit(List(T))` / `f : x ~xs` → `Iterator(T)`、list_model.md §2.4）も、
+ *   `'`・前置`~`・前置`#` が `Implicit` を返すことも未実装。
+ *   これが入ると原理4の静的拒否ルール「`[...]`内でのstream型識別子の使用」が
+ *   初めて強制可能になる（stream型が型として存在するため）。
  */
 
 import { envLookup } from './pass1.js';
