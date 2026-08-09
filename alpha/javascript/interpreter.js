@@ -480,7 +480,10 @@ function roundHalfAwayFromZero(x) {
   return x < 0 ? -Math.round(-x) : Math.round(x);
 }
 
-function evalArith(name, leftNode, rightNode, env) {
+function evalArith(node, env) {
+  const name = node.name;
+  const leftNode = node.left;
+  const rightNode = node.right;
   const l = evaluate(leftNode, env);
   if (isUnit(l)) return UNIT; // 左辺Unit = 吸収元
   // §3.2: String（Listと同型）の左辺に算術演算子は効かない → 型エラーで__に収束。
@@ -505,7 +508,26 @@ function evalArith(name, leftNode, rightNode, env) {
   // 静かに出てくる——`1 + \`abc\`` → "1abc"、`1 + [2 3]` → "12,3"、
   // `x : !__` の `x + 1` → "[object Object]1" は全てこの経路だった。
   if (typeof l !== "number" || typeof r !== "number") return UNIT;
-  return ARITH_OPS[name](l, r);
+  const value = ARITH_OPS[name](l, r);
+  // §3.2「除算だけは Address 同士でも丸めが起きる」: 結果型が Address（＝両辺とも
+  // Address）なのに非整数が出たら四捨五入する。丸めるべきかどうかは**値**からは
+  // 決められない——JSのNumberでは `5` と `5.0` が同一なので、`5 / 2`（→3）と
+  // `5.0 / 2`（→2.5）を値だけで区別できない。pass3 がノードへ載せた Layer 2 型
+  // （compile.js のパイプライン）を読んで初めて判定できる。
+  if (node.atomType === "Address" && !Number.isInteger(value)) {
+    const rounded = roundHalfAwayFromZero(value);
+    // 精度が失われたことを information として記録する（unit.md §7.3 と同じ非ブロッキング
+    // 診断のレベル）。昇格格子のおかげで Float が絡む算術は精度を落とさないため、
+    // 黙って丸めが起きるのは Address 同士の除算だけ——ここだけに診断を置けば足りる。
+    if (env && env.diagnostics) {
+      env.diagnostics.push({
+        level: "information",
+        message: `整数除算 ${l} / ${r} の結果を四捨五入して ${rounded} にしました。精度が必要なら左辺を ${l}.0 と書いてください`,
+      });
+    }
+    return rounded;
+  }
+  return value;
 }
 
 // list_model.md §2.3の派生演算子5種（`~+`/`~-`/`~*`/`~/`/`~^`）が、pass2.js/operator_table.js
@@ -579,7 +601,27 @@ function structuralEqual(l, r) {
   return l === r; // Scalar/String
 }
 
-function evalCompare(name, op, leftNode, rightNode, env) {
+// comparison.md §2.1: 真のとき左辺と右辺のどちらを返すかは「左辺の値が**算術単位元**か」で
+// 決まる。対象は Layer 2 型が数値（Address/Float/Vector）であるものに限る——
+// リストや文字列は数値的に 0 に見えても算術ドメインではないため対象外。
+//
+// Float も対象に含む（ℝ は体であり 0 が加法単位元・1 が乗算単位元として ℤ と同格に
+// 存在する。2026-08-09 に comparison.md の Float 除外を撤回した）。値だけでは
+// リスト・文字列との区別がつかない場面があるため、pass3 がノードへ載せた Layer 2 型
+// （compile.js のパイプライン）を読む。
+function isArithmeticUnitElement(value, leftNode) {
+  if (value !== 0 && value !== 1) return false;
+  const type = leftNode && leftNode.atomType;
+  // 型注釈が無い（pass3を通していない経路）の場合は、値が0/1である時点で数値とみなす
+  if (type === undefined || type === null) return true;
+  return type === "Address" || type === "Float" || type === "Vector";
+}
+
+function evalCompare(node, env) {
+  const name = node.name;
+  const op = node.op;
+  const leftNode = node.left;
+  const rightNode = node.right;
   const l = evaluate(leftNode, env);
   const r = evaluate(rightNode, env);
   if (op === "!=") {
@@ -589,7 +631,7 @@ function evalCompare(name, op, leftNode, rightNode, env) {
     // 真の場合の返値選択は他の比較演算子と同じ §2.1 の規則に従う（comparison.md §1が
     // `!=` を対象の比較演算子として列挙しており、§2.1の適用外とされているのは
     // 構造比較の `==`/`!==` だけ）。ここだけ左辺固定になっていた。
-    return l !== r ? (l === 0 || l === 1 ? r : l) : UNIT;
+    return l !== r ? (isArithmeticUnitElement(l, leftNode) ? r : l) : UNIT;
   }
   if (op === "==") {
     // type_system.md §6.2: 型シグネチャ (L -> R) -> (L | __)。真なら左辺、偽ならUnit
@@ -608,7 +650,8 @@ function evalCompare(name, op, leftNode, rightNode, env) {
   }
   if (isUnit(l) || isUnit(r)) return UNIT; // 両辺とも吸収元
   const truthy = COMPARE_OPS[name](l, r);
-  return truthy ? (l === 0 || l === 1 ? r : l) : UNIT; // §4: 左辺が算術単位元(0/1)なら右辺、それ以外は左辺を返す
+  // §2.1: 左辺が算術単位元(0/1、Intドメインに限る)なら右辺、それ以外は左辺を返す
+  return truthy ? (isArithmeticUnitElement(l, leftNode) ? r : l) : UNIT;
 }
 
 // 前置/後置の単項演算（すでに評価済みの値vに対して行う）。通常のevaluate()経路
@@ -1084,7 +1127,7 @@ function evaluate(node, env) {
       return COMPARE_OPS[node.compareName](l, c) && COMPARE_OPS[node.compareName](c, r) ? c : UNIT;
     }
 
-    if (ARITH_OPS[node.name]) return evalArith(node.name, node.left, node.right, env);
+    if (ARITH_OPS[node.name]) return evalArith(node, env);
     // `!=`（tier12、name="not_equal"）・`==`（name="equal"）・`!==`（tier8、name="xnot_equal"、
     // ==の構造比較を否定したもの）はCOMPARE_OPSにキーを持たない——8/6にoperator_table.js側の
     // tier8`!==`をname="xnot_equal"へ改名して名前衝突自体は解消したが、COMPARE_OPS
@@ -1093,7 +1136,7 @@ function evaluate(node, env) {
     // ため、ここでnode.opを見て個別に通す。`===`（same、同一性）はコンストラクタ由来の
     // 追跡（type_system.md §6.2の`' !__`）が必要な別機能のため、まだ未対応のまま。
     if (COMPARE_OPS[node.name] || node.op === "!=" || node.op === "==" || node.op === "!==")
-      return evalCompare(node.name, node.op, node.left, node.right, env);
+      return evalCompare(node, env);
 
     if (node.position === "prefix" || node.position === "postfix") {
       return evalUnaryOp(node.name, evaluate(node.operand, env));
