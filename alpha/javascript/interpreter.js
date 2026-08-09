@@ -392,6 +392,15 @@ function evaluateTail(node, env) {
   return evaluate(node, env);
 }
 
+// 「複数の実引数を貪欲に消費する」ポイントフリークロージャかどうか（実行時版）。
+// pass2.js の isGreedyPointfree と同じ判定を、縮約後のクロージャに対して行う
+// ——合成の中間をストリームとして展開すべきかどうかの判断に使う。
+function isGreedyPointfreeClosure(closure) {
+  const node = closure && closure.__pointfree__;
+  if (!node || !node.partial) return false;
+  return node.pointfreeMap === true || (node.left === null && node.right === null);
+}
+
 function applyClosure(closure, argValues) {
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -413,6 +422,12 @@ function applyClosure(closure, argValues) {
       // 左(f)を先に適用し、その結果に右(g)を適用する（左→右パイプライン順、上記参照）。
       const mid = applyClosure(f, argValues);
       if (isUnit(mid)) return UNIT;
+      // **ポイントフリーはストリームを食う。** 合成の中間は「1個のList値」ではなく
+      // 流れていくストリームなので、次段が貪欲なポイントフリー（`[+]`/`[* 2,]`）なら
+      // 展開して渡す——`[* 2,] [+] 1 2 3 4 5` は「2倍の写像 → 畳み込み」で30になる。
+      // 括弧で括った場合（`([* 2,] 1 2 3 4 5)`）はそこで値（List）に固まるため、
+      // 畳み込むには後置`~`が要る、という区別がそのまま効く。
+      if (Array.isArray(mid) && isGreedyPointfreeClosure(g)) return applyClosure(g, mid);
       return applyClosure(g, [mid]);
     }
     // Id射（`!__`）への適用は引数をそのまま返す。引数がUnitなら完全性公理がそのまま
