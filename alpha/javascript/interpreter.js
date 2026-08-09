@@ -968,10 +968,15 @@ function evaluate(node, env) {
         // 輸入失敗例）は左結合で `(__ 1) 2` → `1 2` と畳まれるため従来通り。
         if (isUnit(l)) return r;
         if (isUnit(r)) return l;
-        // §3.2 左辺優先規則: 左辺が文字列（Stringは`\a \b \c`のような文字の並びとも同型）
-        // なら、右辺を文字列化してテキストとして連結する（`123` 123 = `123123`、
-        // list_model.md §2.1/§4.4）。それ以外は通常のList構築。
-        if (typeof l === "string") return l + stringifyForConcat(r);
+        // §3.2 余積族: どちらかが文字列ならテキストとして連結する
+        // （`123` 123 = `123123`、list_model.md §2.1/§4.4）。
+        // Stringは余積の**吸収元**——あらゆる値がテキスト表現を持つため、Stringとの
+        // 結合は常に成立する。左辺だけを見ていると `` `ab` 1 `` → "ab1" なのに
+        // `1 `ab`` は [1, "ab"] という別物になり、同じ演算子が引数の順序で挙動を
+        // 変えてしまっていた。それ以外は通常のList構築。
+        if (typeof l === "string" || typeof r === "string") {
+          return stringifyForConcat(l) + stringifyForConcat(r);
+        }
         return [...asList(l), ...asList(r)];
       }
       // list_cheat_sheet.md「先頭/末尾に要素追加」（10.1、pass2.jsのcoproductReduce参照）。

@@ -60,6 +60,32 @@ const NUMERIC_TYPES = new Set(["Address", "Float", "Vector"]);
 // `+`・`-`・`%` はList/Stringと同様に型エラーで __ へ収束する。
 const LIST_ARITHMETIC_OPS = new Set(["mul", "pow", "div"]);
 
+// type_system.md §3.2「要素型の join」: 余積で構築される List の要素型を求める。
+// join は数値の昇格格子そのもの。戻り値の意味を3値で区別する：
+//   型名   … join が求まった
+//   null   … どちらかが未解決（静的に判定できないのでエラーにしない、原理4）
+//   NO_JOIN … join が存在しない（コンパイルエラー）
+const NO_JOIN = Symbol("no-join");
+
+function joinElementTypes(a, b) {
+  if (a === null || a === undefined || b === null || b === undefined) return null;
+  if (a === b) return a;
+  if (NUMERIC_TYPES.has(a) && NUMERIC_TYPES.has(b)) {
+    if (a === "Vector" || b === "Vector") return "Vector";
+    if (a === "Float" || b === "Float") return "Float";
+    return "Address";
+  }
+  return NO_JOIN;
+}
+
+// ノードが表す「値の要素型」を返す。List なら要素型、それ以外はその値自身の型
+// （スカラーは1要素リストと同型なので、自分自身が要素になる）。
+function elementTypeOf(node, env) {
+  const type = inferAtomType(node, env);
+  if (type === "List") return node.elementType ?? null;
+  return type;
+}
+
 function arithmeticResultType(node, leftType, env) {
   const rightType = inferAtomType(node.right, env);
   // §3.2: Stringは左右どちらに来ても算術の型エラー（両方向とも __ 消去）
@@ -123,7 +149,13 @@ function computeAtomType(node, env) {
     // 除外する——interpreter.jsのDict判定と同じ基準に揃えてある。
     // それ以外（関数本体等）は「ブロックの値＝最後の文の値」にフォールバックする。
     if (node.lines.every((l) => isDefineNode(l) && isIdentifierNode(l.left))) return "Dict";
-    return inferAtomType(node.lines[node.lines.length - 1], env);
+    const last = node.lines[node.lines.length - 1];
+    const lastType = inferAtomType(last, env);
+    // `[1 2 3]` のようにブロックが List を包んでいる場合、要素型もブロックへ引き継ぐ
+    // （そうしないと `[1 2] [3 4]` のように List 同士を余積で繋いだとき、外側から
+    // 中身の要素型が見えなくなる）。
+    if (lastType === "List") node.elementType = last.elementType ?? null;
+    return lastType;
   }
 
   if (node.type === "operation") {
@@ -147,7 +179,37 @@ function computeAtomType(node, env) {
       // 余積族（§3.2の族別テーブル）: 左辺がStringならテキスト連結でString、
       // それ以外はList構築。以前は無条件に"List"を返していたが、interpreter.jsの
       // concatは左辺がstringならテキスト連結する（`ab` 1 → "ab1"）ため食い違っていた。
-      return inferAtomType(node.left, env) === "String" ? "String" : "List";
+      const leftType = inferAtomType(node.left, env);
+      const rightType = inferAtomType(node.right, env);
+      // §3.2の余積族テーブル: どちらかがStringならテキスト連結でString。
+      // Stringは余積の**吸収元**として振る舞う——あらゆる値がテキスト表現を持つため、
+      // String との join は常に存在する（「レンダリングする」という全域の操作がある）。
+      // 左辺だけを見ると `` `ab` 1 `` → "ab1" なのに `1 `ab`` はエラー、という
+      // 引数の順序で挙動が変わる非対称が生じてしまう。
+      if (leftType === "String" || rightType === "String") return "String";
+      // §3.2の余積族テーブル / §6.1: 余積の単位元。片側がUnitなら他方を素通しする
+      // （`__ x = x`、`x __ = x`）。Unitは要素型の join には参加しない——
+      // 「無い」ものと型が合わないという判定は成立しないため。
+      if (leftType === "Unit") {
+        node.elementType = node.right.elementType ?? null;
+        return rightType;
+      }
+      if (rightType === "Unit") {
+        node.elementType = node.left.elementType ?? null;
+        return leftType;
+      }
+      // §2「Listは同一型」: 要素型のjoinを取る。join が存在しない組み合わせ
+      // （`[1 \`abc\`]` 等）は原理4に従いコンパイルエラーにする——混在させたい場合は
+      // カンマで Struct（tuple）だと明示する必要がある。
+      const joined = joinElementTypes(elementTypeOf(node.left, env), elementTypeOf(node.right, env));
+      if (joined === NO_JOIN) {
+        throw new TypeError(
+          `type_system.md §2違反: List の要素型が揃っていません（${elementTypeOf(node.left, env)} と ${elementTypeOf(node.right, env)}）。` +
+            `混在させたい場合はカンマ区切りの Struct（tuple）にしてください`
+        );
+      }
+      node.elementType = joined;
+      return "List";
     }
     if (node.position === "infix" && node.left) {
       // 論理・圏論族の`&`（§4: `(L -> R) -> (R | __)`）だけは右辺の型を返す。

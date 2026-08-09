@@ -95,10 +95,16 @@ const cases = [
 		note: "余積族: 左辺がStringならテキスト連結でString（interpreter.jsの`ab` 1 → \"ab1\"と一致）",
 	},
 	{
-		source: "1 `ab`",
+		source: "1 2",
 		pick: (nodes) => nodes[0],
 		want: "List",
 		note: "余積族: 左辺がString以外ならList構築（Stringが勝つのは左辺のときだけ）",
+	},
+	{
+		source: "1 2.5",
+		pick: (nodes) => nodes[0],
+		want: "List",
+		note: "§2 要素型のjoin: Address ⊕ Float は Float へ昇格するので List のまま（エラーにならない）",
 	},
 	{
 		source: "1 & `abc`",
@@ -129,5 +135,43 @@ for (const c of cases) {
 	}
 }
 
-console.log(`\n${passed}/${cases.length} passed`);
-process.exit(passed === cases.length ? 0 : 1);
+// ---- §2「Listは同一型」: join が存在しない要素の混在はコンパイルエラー ----
+// 混在させたい場合はカンマ区切りの Struct（tuple）にする、という設計（原理3）。
+let extra = 0;
+let extraPassed = 0;
+function checkThrows(note, source) {
+	extra++;
+	try {
+		const { nodes, env } = resolveLines(source);
+		const got = inferAtomType(nodes[0], env);
+		console.log(`FAIL ${note}`);
+		console.log(`     例外が投げられず ${JSON.stringify(got)} が返った`);
+	} catch (e) {
+		console.log(`OK   ${note}`);
+		extraPassed++;
+	}
+}
+function checkNoThrow(note, source, want) {
+	extra++;
+	const { nodes, env } = resolveLines(source);
+	const got = inferAtomType(nodes[0], env);
+	if (got === want) {
+		console.log(`OK   ${note}`);
+		extraPassed++;
+	} else {
+		console.log(`FAIL ${note}`);
+		console.log(`     got: ${JSON.stringify(got)}, want: ${JSON.stringify(want)}`);
+	}
+}
+
+// Stringは余積の吸収元（あらゆる値がテキスト表現を持つのでjoinが常に存在する）。
+// 左右どちらに来てもテキスト連結になり、要素型のjoin判定には入らない。
+checkNoThrow("`ab` 1 → String（String左辺）", "`ab` 1", "String");
+checkNoThrow("1 `ab` → String（String右辺でも同じ。引数の順序で挙動を変えない）", "1 `ab`", "String");
+checkNoThrow("[1 `abc`] → String（ブラケットでも同じ）", "[1 `abc`]", "String");
+// joinが本当に存在しない組み合わせ（数値とDict/List）だけがコンパイルエラーになる。
+checkThrows("1 [x : 1] → コンパイルエラー（Address と Dict に join が無い）", "1 [x : 1]");
+checkNoThrow("1 , `abc` → Struct（カンマなら混在は正当）", "1 , `abc`", "Struct");
+
+console.log(`\n${passed + extraPassed}/${cases.length + extra} passed`);
+process.exit(passed === cases.length && extraPassed === extra ? 0 : 1);
