@@ -865,8 +865,17 @@ function evaluate(node, env) {
     if (node.kind === "abs") {
       let inner = UNIT;
       for (const line of node.lines) inner = evaluate(line, env);
+      // Unitのときだけ値では決まらない——`__ = []`（unit.md）の同一視により「空リスト
+      // ＝要素数0」とも「値の不在」とも読めるため、pass3が記録したオペランド型で決める。
+      // List/Stringの位置なら空コレクションなので0、それ以外（不在・型不明）は吸収元。
+      // 型が付かない側を0に倒さないのは、不在がもっともらしい値に化けるのを防ぐため
+      // ——「不在」と「うっかり使える値」を混ぜないという一点が、null参照の失敗の核心
+      // だったので、Signは常に吸収元側へ倒す（narrowingは呼び出し側が明示的に行う）。
+      if (isUnit(inner)) {
+        const operand = node.operandType;
+        return operand === "List" || operand === "String" ? 0 : UNIT;
+      }
       if (Array.isArray(inner) || typeof inner === "string") return inner.length;
-      if (isUnit(inner)) return UNIT;
       // Lambda（Id射・クロージャ等）や構造体には要素数/絶対値が定義されていない——
       // Math.absへ渡すとNaNが静かに出るため、型エラーとして__へ収束させる。
       if (inner !== null && typeof inner === "object") return UNIT;

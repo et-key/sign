@@ -139,6 +139,19 @@ function computeAtomType(node, env) {
   }
 
   if (node.type === "block") {
+    // `|x|`（abs）は「数値の絶対値」と「リストの要素数」を兼ねる多重定義である。
+    // オペランドがUnitのとき、`__ = []`（unit.md）の同一視によって「空リスト＝要素数0」
+    // とも「値の不在」とも読めてしまい、**値だけでは決まらない**。これは `5 / 2` と
+    // `5.0 / 2` を型で分けたのと同じ構図なので、型で決める（原理2：型はゼロコストの帳簿）。
+    // ここではオペランドの型を記録するだけで、Unitの読み替えは評価器が行う。
+    // 結果型は絶対値・要素数のいずれも非負の機械語1語に収まるため Address とする。
+    if (node.kind === "abs") {
+      node.operandType =
+        Array.isArray(node.lines) && node.lines.length > 0
+          ? inferAtomType(node.lines[node.lines.length - 1], node.scope || env)
+          : "List";
+      return "Address";
+    }
     if (!Array.isArray(node.lines) || node.lines.length === 0) return "List";
     // 全行が define(key:val) かつ左辺が識別子 → Struct（list_model.md §5.3、
     // pattern_guide.mdの改行区切り構造体リテラルの形）。単一エントリの `[foo : 1]` も含む。
