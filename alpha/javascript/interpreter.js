@@ -434,7 +434,19 @@ function applyClosure(closure, argValues) {
     // Id射（`!__`）への適用は引数をそのまま返す。引数がUnitなら完全性公理がそのまま
     // 効いてUnitになる（categorical_truth.md「`!__ __` は理論的に正しく `__` を返す」）。
     if (closure.__identity__) return argValues.length > 0 ? argValues[0] : UNIT;
-    if (closure.__pointfree__) return applyPointfree(closure.__pointfree__, closure.env, argValues);
+    if (closure.__pointfree__) {
+      // ホール由来のポイントフリー（`[!_]`）は hole_desugaring.md により静的に
+      // `$p0 ? !$p0` へ脱糖される——すなわち**ラムダ**であり、完全性公理の対象である。
+      // 演算子としての `!`（`!(5 < 3)`）は構文であって関数値ではないため、ここを通らず
+      // 演算子表のUnit欄（`!` の右辺Unit → Id射）が支配する。この区別が無いと、同じ否定が
+      // 「演算子・ポイントフリー・明示ラムダ」の3通りで別々の答えを返していた。
+      //
+      // 一方、貪欲なポイントフリー（`[+]`）は引数スロットではなく**余積のストリーム**を
+      // 食う（tier 10.0）。ストリーム中の `__` は余積の単位元として消えるべきものであり、
+      // 引数スロットへUnitが来たわけではないので公理の対象ではない（`[+] 1 __` は 1）。
+      if (!isGreedyPointfreeClosure(closure) && argValues.some((v) => isUnit(v))) return UNIT;
+      return applyPointfree(closure.__pointfree__, closure.env, argValues);
+    }
     const callEnv = bindParams(closure.params, argValues, closure.env);
     if (callEnv === null) return UNIT;
     const result = evaluateTail(closure.body, callEnv);
