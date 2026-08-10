@@ -1006,6 +1006,18 @@ function evaluate(node, env) {
         // 輸入失敗例）は左結合で `(__ 1) 2` → `1 2` と畳まれるため従来通り。
         if (isUnit(l)) return r;
         if (isUnit(r)) return l;
+        // tier 10.4（`Lambda` 中置 `Atom` → apply）は演算子表の上では**型による分岐**であり、
+        // pass2 は静的に解けた場合だけ apply ノードを作る。ところが「適用の結果が Lambda に
+        // なる式」（`[!_] __` → Id射）は、静的には arity 1 が飽和した Atom にしか見えないため
+        // construct へ落ちてしまい、`([!_] __) 5` が `[Id射, 5]` になっていた。
+        // 生の `(!__) 5` は getCategory が前置`!`+unit を直接 Lambda と判定するので 5 を返す。
+        // 同じ Id射が、作られ方によって射になったり値として並んだりするのは誤り。
+        // 実行時には左辺の実際の値が分かるので、ここで表どおりの分岐へ戻す。
+        // 右辺も Lambda の場合は tier 10.5（compose）であってここでの apply ではないため除く。
+        if (l !== null && typeof l === "object" && l.__lambda__ &&
+            !(r !== null && typeof r === "object" && r.__lambda__)) {
+          return applyClosure(l, [r]);
+        }
         // §3.2 余積族: どちらかが文字列ならテキストとして連結する
         // （`123` 123 = `123123`、list_model.md §2.1/§4.4）。
         // Stringは余積の**吸収元**——あらゆる値がテキスト表現を持つため、Stringとの
