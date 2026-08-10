@@ -82,6 +82,18 @@ check(
 	["a", ["b", null]]
 );
 
+// 文字リテラルは直後の1バイトをそのまま取るため、空白・タブ・改行が同じ形で書ける
+// （`\n` のようなエスケープシーケンスは存在しない）。lexer.sn の is_space はこの3種を見る。
+const TAB = String.fromCharCode(9);
+check(
+	"lexer.sn: タブ区切りも空白として扱う",
+	runWith("lexer.sn", "tokens `a" + TAB + "b`"),
+	["a", ["b", null]]
+);
+check("lexer.sn: is_space がタブに真を返す", runWith("lexer.sn", "is_space tab"), TAB);
+check("lexer.sn: is_space が改行に真を返す", runWith("lexer.sn", "is_space newline"), "\n");
+check("lexer.sn: is_space は通常文字に __ を返す", isUnit(runWith("lexer.sn", "is_space \\a")), true);
+
 // ---- parser.sn ----
 // 優先順位（* が + より内側）と左結合を確認する。
 check(
