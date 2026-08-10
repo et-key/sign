@@ -75,13 +75,13 @@ check("String 以外の余積 → List", lastType("1 2"), "List");
 check("`&` は右辺の型を返す（§4: (L -> R) -> (R | __)）", lastType("1 & `abc`"), "String");
 check("`|` は左辺の型を返す", lastType("1 | `abc`"), "Address");
 
-// ---- define / lambda / Dict の判定 ----
+// ---- define / lambda / Struct の判定 ----
 check("define の型は束縛される値の型", lastType("x : 5"), "Address");
 check("Lambda は Layer 2 型を持たない（Layer 1 のカテゴリなので null）", lastType("f : x ? x + 1"), null);
-check("改行区切りの辞書リテラル → Dict", lastType("d :\n\tfoo : 1\n\tbar : 2"), "Dict");
-check("単一エントリの辞書も Dict", lastType("d : [foo : 1]"), "Dict");
+check("改行区切りの構造体リテラル → Struct", lastType("d :\n\tfoo : 1\n\tbar : 2"), "Struct");
+check("単一エントリの構造体も Struct", lastType("d : [foo : 1]"), "Struct");
 check(
-	"match_case（左辺が識別子でない define 行）は Dict ではない",
+	"match_case（左辺が識別子でない define 行）は Struct ではない",
 	lastType("f : x ?\n\tx < 0 : `neg`\n\t`pos`"),
 	null // Lambda なので Layer 2 型なし
 );

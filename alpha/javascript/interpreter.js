@@ -4,7 +4,7 @@
  * 【スコープ】今回の最初の実装は以下に限定する（既知の制限）：
  * - `$`/`@`/`#`（アドレス取得・デリファレンス・ストア）は未対応。メモリモデルが必要な
  *   ため別途の設計課題とする。
- * - block（List/Struct/Dict）の評価はシンプルなJS配列/オブジェクトへのマッピングに留める。
+ * - block（List/Struct/Struct）の評価はシンプルなJS配列/オブジェクトへのマッピングに留める。
  * - TCO・末尾呼び出し最適化は行わない（JSの通常の再帰呼び出しに委ねる）。
  *
  * 【実装した中核の意味論】
@@ -124,19 +124,19 @@ function paramEntriesOf(paramsNode) {
 }
 
 // ブラケット仮引数リスト（`[x ~xs]`等、list_model.md §2.4のEagerパターン）へ、呼び出し側が
-// 渡した単一のList/Dict実引数を分割代入できる値かどうか判定する。Lambda（クロージャ）は
+// 渡した単一のList/Struct実引数を分割代入できる値かどうか判定する。Lambda（クロージャ）は
 // 除外する——`f`をそのまま1個の不透明な値として渡すケースを構造体扱いしないため。
 function isDestructurable(v) {
   return Array.isArray(v) || (v !== null && typeof v === "object" && !v.__lambda__);
 }
 
-// ブラケット仮引数リストへ、単一のList/Dict実引数を分割代入する（8/5の設計合意）。
+// ブラケット仮引数リストへ、単一のList/Struct実引数を分割代入する（8/5の設計合意）。
 // List: list_model.md §2.5「rest記法の位置一般化」——`~name`はブラケット内のどの位置にも
 // 置ける。`~name`より前の非restエントリは先頭から、`~name`より後の非restエントリは
 // **末尾から**順に対応し、`~name`自身はその間に残った要素全部を受け取る
 // （`[x ~xs]`＝従来通り先頭分割、`[~head tail]`＝末尾からのpop、`[first ~mid last]`＝
 // 両端からの分割代入、いずれも同じロジックで自然に表現される）。
-// Dict: エントリ名とキー名の一致で（順序に関わらず）値を引く（構造体メンバーの一致による
+// Struct: エントリ名とキー名の一致で（順序に関わらず）値を引く（構造体メンバーの一致による
 // 自動バインディング、function_guide.md）。restエントリがあれば、名前が一致しなかった
 // 残りのキーをまとめた新しいオブジェクトを渡す（pattern_guide.mdのStore「~objは...渡した
 // 構造体以下の構造体を保持したい場合に使う」）。
@@ -144,7 +144,7 @@ function isDestructurable(v) {
 // 集約されているため、将来.st生成（type_system.md §6.2「関数仮引数のフィールド要求」）を
 // 実装する際、このentries列挙をそのまま構造的フィールド要求集合として再利用できる想定。
 function bindBracketParams(entries, value, env) {
-  // スカラー ≅ 1要素リスト（asList/get_propと同じ同型性）。Dict（プレーンオブジェクト）
+  // スカラー ≅ 1要素リスト（asList/get_propと同じ同型性）。Struct（プレーンオブジェクト）
   // ではない非Array値は、長さ1のリストとして分割代入できる。
   if (!isDestructurable(value)) value = [value];
   if (Array.isArray(value)) {
@@ -180,7 +180,7 @@ function bindBracketParams(entries, value, env) {
     }
     return env;
   }
-  // Dict（構造体）: entry名とキー名の一致で分割代入
+  // Struct（構造体）: entry名とキー名の一致で分割代入
   const claimedKeys = new Set();
   for (const entry of entries) {
     if (entry.rest) continue; // restは全エントリ処理後にまとめて扱う
@@ -362,7 +362,7 @@ function evaluateTail(node, env) {
     node.kind === "indent" &&
     !(node.lines.length >= 1 && node.lines.every((l) => isDefineNode(l) && isIdentifierNode(l.left)))
   ) {
-    // Dict型（全行define+識別子キー）はここでは対象外——evaluate()のDict分岐へ委譲。
+    // Struct型（全行define+識別子キー）はここでは対象外——evaluate()のStruct分岐へ委譲。
     return evalIndentBlock(node, env, evaluateTail);
   }
   if (node.type === "operation") {
@@ -867,22 +867,22 @@ function evaluate(node, env) {
       for (const line of node.lines) inner = evaluate(line, env);
       if (Array.isArray(inner) || typeof inner === "string") return inner.length;
       if (isUnit(inner)) return UNIT;
-      // Lambda（Id射・クロージャ等）や辞書には要素数/絶対値が定義されていない——
+      // Lambda（Id射・クロージャ等）や構造体には要素数/絶対値が定義されていない——
       // Math.absへ渡すとNaNが静かに出るため、型エラーとして__へ収束させる。
       if (inner !== null && typeof inner === "object") return UNIT;
       return Math.abs(inner);
     }
-    // Dict判定はpass3.jsのinferAtomTypeと同じ基準（全行がdefineかつ左辺が識別子）。
+    // 構造体判定はpass3.jsのinferAtomTypeと同じ基準（全行がdefineかつ左辺が識別子）。
     // 左辺が識別子でないdefine行（下記match_case）と区別するため、identifierNode
     // 判定も併せて要求する——さもないと「フォールバック行の無いmatch_case連鎖」
-    // （全行がcond:result）がDict扱いされてしまう。辞書は独立したスコープで評価し、
+    // （全行がcond:result）がStruct扱いされてしまう。構造体は独立したスコープで評価し、
     // キーが呼び出し元のenvへ漏れないようにする（let*的に、後のキーのデフォルト式的な
     // 参照は前のキーを見られる）。
     if (node.lines.length >= 1 && node.lines.every((l) => isDefineNode(l) && isIdentifierNode(l.left))) {
-      const dictEnv = newRuntimeEnv(env);
+      const structEnv = newRuntimeEnv(env);
       const dict = {};
       for (const line of node.lines) {
-        const value = evaluate(line, dictEnv); // define評価：dictEnvに束縛しつつ値を返す
+        const value = evaluate(line, structEnv); // define評価：structEnvに束縛しつつ値を返す
         dict[line.left.value.slice(1, -1)] = value; // "<foo>" -> "foo"
       }
       return dict;
@@ -1073,7 +1073,7 @@ function evaluate(node, env) {
       }
       case "get_prop": {
         // `d ' foo`: 右辺が識別子の場合、変数として評価せず「キー名そのもの」として扱う
-        // （Dict/Structのフィールドアクセス）。数値等なら通常通り評価してListのインデックスに使う。
+        // （Struct/Structのフィールドアクセス）。数値等なら通常通り評価してListのインデックスに使う。
         const l = evaluate(node.left, env);
         if (isUnit(l)) return UNIT;
         if (node.right.type === "atom" && node.right.kind === "identifier") {

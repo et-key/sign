@@ -2,7 +2,7 @@
  * Pass3（型伝播、type_system.md §2〜§3.2の実装）
  *
  * Pass2（coproduct_resolver.md）が構築した二分木ASTを歩いて、各ノードの
- * Layer 2型（Atom内部型: Address/Float/String/Vector/List/Struct/Dict/Unit）を推論する。
+ * Layer 2型（Atom内部型: Address/Float/String/Vector/List/Struct/Implicit/Iterator/Unit）を推論する。
  *
  * 左辺優先ルール（§3.2）:
  *   typeof(L op R) = typeof(L)
@@ -17,7 +17,7 @@
  *   Pass 1b の `@ref` ジェネリック具体化）は未対応。
  * - 比較演算子（< <= = >= > !=）等、算術演算子以外は一律で左辺優先ルールにフォールバック
  *   しており、§4の個別の型シグネチャとの細かい整合は未検証。
- * - Dict判定は「複数行、全行がdefine(key:val)」という形（list_model.md §5.3、
+ * - 構造体判定は「複数行、全行がdefine(key:val)」という形（list_model.md §5.3、
  *   pattern_guide.mdの`dict`例が示す改行区切りの形）のみを見る。カンマと`:`を1行に
  *   混在させる形（例: `foo:1, bar:2`、ドキュメントに例が無い）は非対応・未定義動作。
  * - `Implicit(T)`（場所）と `Iterator(T)`（ストリーム）は type_system.md §2 に型として
@@ -43,20 +43,11 @@ function isIdentifierNode(n) {
   return !!n && n.type === "atom" && n.kind === "identifier";
 }
 
-// カンマ（product, 直積）で左結合に連なったチェーンを、末端の要素配列へ展開する。
-function flattenProduct(node) {
-  if (node && node.type === "operation" && node.name === "product") {
-    return [...flattenProduct(node.left), ...flattenProduct(node.right)];
-  }
-  return [node];
-}
-
-// カンマ（,）で結合された要素列のLayer 2型を判定する（type_system.md §2）。
-// 全要素が define（key:val）なら Dict、そうでなければ Struct（多相リスト/直積構造）。
-function productShape(node) {
-  const elems = flattenProduct(node);
-  return elems.length > 0 && elems.every(isDefineNode) ? "Dict" : "Struct";
-}
+// 【2026-08-09】以前ここには productShape() があり、カンマ結合の要素列を
+// 「全要素が define(key:val) なら Dict、そうでなければ Struct」と振り分けていた。
+// type_system.md §2 で `Dict` を `Struct` へ統合したため、この振り分けは不要になった
+// ——名前付きスロット（`[key : val]`）と連番スロット（`1, 2, 3`）は同じ構造であり、
+// 名前がコンパイル時にオフセットへ解決されて Pass 4 に残らない点も同じだからである。
 
 // type_system.md §3.2「数値の昇格格子」と算術族の型変換テーブルの実装。
 // 左辺は「どの規則を使うか」を選ぶだけで、数値同士の結果型は昇格格子が決める
@@ -149,12 +140,12 @@ function computeAtomType(node, env) {
 
   if (node.type === "block") {
     if (!Array.isArray(node.lines) || node.lines.length === 0) return "List";
-    // 全行が define(key:val) かつ左辺が識別子 → Dict（list_model.md §5.3、
-    // pattern_guide.mdの改行区切り辞書リテラルの形）。単一エントリの `[foo : 1]` も含む。
-    // 左辺が識別子でない define 行（match_caseの `cond : result`）はDictではないので
-    // 除外する——interpreter.jsのDict判定と同じ基準に揃えてある。
+    // 全行が define(key:val) かつ左辺が識別子 → Struct（list_model.md §5.3、
+    // pattern_guide.mdの改行区切り構造体リテラルの形）。単一エントリの `[foo : 1]` も含む。
+    // 左辺が識別子でない define 行（match_caseの `cond : result`）は構造体ではないので
+    // 除外する——interpreter.jsの構造体判定と同じ基準に揃えてある。
     // それ以外（関数本体等）は「ブロックの値＝最後の文の値」にフォールバックする。
-    if (node.lines.every((l) => isDefineNode(l) && isIdentifierNode(l.left))) return "Dict";
+    if (node.lines.every((l) => isDefineNode(l) && isIdentifierNode(l.left))) return "Struct";
     const last = node.lines[node.lines.length - 1];
     // pass2 が残した子スコープで最終行を解決する。外側のenvで先に評価すると、
     // ブロック内で定義された識別子が解決できないまま**メモ化されてしまう**
@@ -169,14 +160,15 @@ function computeAtomType(node, env) {
 
   if (node.type === "operation") {
     if (node.name === "product") {
-      // カンマ（直積）: 全要素がdefineならDict、そうでなければStruct（type_system.md §2）
-      return productShape(node);
+      // カンマ（直積）は常に Struct（type_system.md §2）。名前付きスロットも
+      // 連番スロットも同じ「固定オフセットで並ぶ連続ブロック」であり、区別しない。
+      return "Struct";
     }
     if (node.name === "define") {
       // 定義の値は「束縛される値そのもの」（interpreter.jsのdefineも右辺の値を返す）。
-      // 以前は無条件に "Dict" を返していたが、それは `[foo : 1]` のような辞書リテラルの
-      // 単一エントリを想定した規則であり、トップレベルの定義行（`f : x ? x + 1`）まで
-      // Dict と誤判定していた。辞書リテラルの判定は上のblock分岐が担う。
+      // 以前は無条件に "Struct"（旧 Dict）を返していたが、それは `[foo : 1]` のような
+      // 構造体リテラルの単一エントリを想定した規則であり、トップレベルの定義行
+      // （`f : x ? x + 1`）まで誤判定していた。リテラルの判定は上のblock分岐が担う。
       return inferAtomType(node.right, env);
     }
     if (node.name === "lambda") {

@@ -72,20 +72,20 @@ const cases = [
 	{
 		source: "[\n\tfoo : 1\n\tbar : 2\n]",
 		pick: (nodes) => nodes[0],
-		want: "Dict",
-		note: "改行区切りのkey:valの並び → Dict（list_model.md §5.3 / pattern_guide.mdのdict例）",
+		want: "Struct",
+		note: "改行区切りのkey:valの並び → Struct（list_model.md §5.3 / pattern_guide.mdのdict例）",
 	},
 	{
 		source: "[foo : 1]",
 		pick: (nodes) => nodes[0],
-		want: "Dict",
-		note: "単一のkey:valペアもDictとして扱う",
+		want: "Struct",
+		note: "単一のkey:valペアもStructとして扱う",
 	},
 	{
 		source: "f : y ?\x02x : 1\n2\x03",
 		pick: (nodes) => nodes[0].right.right,
 		want: "Address",
-		note: "関数本体（複数行だが全行がdefineではない: define→numberの並び）はDict化せず、最後の文(2)の型に委譲する",
+		note: "関数本体（複数行だが全行がdefineではない: define→numberの並び）は構造体化せず、最後の文(2)の型に委譲する",
 	},
 	// ---- §3.2 族別テーブル（「左辺優先」＝結果型ではなく規則の選択） ----
 	{
@@ -169,8 +169,8 @@ function checkNoThrow(note, source, want) {
 checkNoThrow("`ab` 1 → String（String左辺）", "`ab` 1", "String");
 checkNoThrow("1 `ab` → String（String右辺でも同じ。引数の順序で挙動を変えない）", "1 `ab`", "String");
 checkNoThrow("[1 `abc`] → String（ブラケットでも同じ）", "[1 `abc`]", "String");
-// joinが本当に存在しない組み合わせ（数値とDict/List）だけがコンパイルエラーになる。
-checkThrows("1 [x : 1] → コンパイルエラー（Address と Dict に join が無い）", "1 [x : 1]");
+// joinが本当に存在しない組み合わせ（数値とStruct/List）だけがコンパイルエラーになる。
+checkThrows("1 [x : 1] → コンパイルエラー（Address と Struct に join が無い）", "1 [x : 1]");
 checkNoThrow("1 , `abc` → Struct（カンマなら混在は正当）", "1 , `abc`", "Struct");
 
 console.log(`\n${passed + extraPassed}/${cases.length + extra} passed`);

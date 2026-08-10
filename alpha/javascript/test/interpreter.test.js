@@ -187,9 +187,9 @@ check(
 );
 
 {
-	// 辞書リテラル：全行がdefineのブロックは独立したスコープで評価され、キーが
+	// 構造体リテラル：全行がdefineのブロックは独立したスコープで評価され、キーが
 	// 呼び出し元のenvへ漏れないことを確認する（以前はブロックの値＝最後の文の値、として
-	// 評価してしまい、辞書オブジェクトにならず foo/bar が外側スコープに漏れていた）。
+	// 評価してしまい、構造体オブジェクトにならず foo/bar が外側スコープに漏れていた）。
 	total++;
 	const { nodes, env } = (() => {
 		const source = "d : [\n\tfoo : 1\n\tbar : 2\n]\nfoo";
@@ -200,7 +200,7 @@ check(
 	})();
 	const dictValue = nodes[0];
 	const fooLeaked = !isUnit(nodes[1]);
-	const note = "辞書リテラル [foo:1, bar:2]（改行形）→ {foo:1,bar:2} になり、foo は外側スコープに漏れない";
+	const note = "構造体リテラル [foo:1, bar:2]（改行形）→ {foo:1,bar:2} になり、foo は外側スコープに漏れない";
 	const ok = JSON.stringify(dictValue) === JSON.stringify({ foo: 1, bar: 2 }) && !fooLeaked;
 	if (ok) {
 		console.log(`OK   ${note}`);
@@ -212,7 +212,7 @@ check(
 }
 
 check(
-	// get_prop（'）: 右辺の識別子は変数として評価せず、キー名そのものとして辞書から引く。
+	// get_prop（'）: 右辺の識別子は変数として評価せず、キー名そのものとして構造体から引く。
 	"d ' foo → 1（get_prop、右辺の識別子はキー名として扱う。変数参照ではない）",
 	run("d : [\n\tfoo : 1\n\tbar : 2\n]\nd ' foo"),
 	1
@@ -289,7 +289,7 @@ check(
 	"__"
 );
 
-// ブラケット仮引数リスト（`[x ~xs]`等）への単一List/Dict実引数の分割代入（8/5の設計合意、
+// ブラケット仮引数リスト（`[x ~xs]`等）への単一List/Struct実引数の分割代入（8/5の設計合意、
 // list_model.md §2.4のEagerパターン）。以前はbindParamsが位置引数と区別せず扱っていたため、
 // Listの場合は先頭要素ではなくList全体が最初の仮引数に丸ごと束縛され、restパラメータが
 // 常に空になって再帰が終端しなかった（function_guide.mdのsum_list例でスタックオーバーフロー）。
@@ -300,7 +300,7 @@ check(
 );
 
 check(
-	"calc_diff dict渡し → 80（[foo bar ~obj]がキー名一致で辞書を自動バインドする、順序に依らない）",
+	"calc_diff dict渡し → 80（[foo bar ~obj]がキー名一致で構造体を自動バインドする、順序に依らない）",
 	run("calc_diff : [foo bar ~obj] ? foo - bar\ncalc_diff [\n\tbar : 20\n\tfoo : 100\n]"),
 	80
 );
@@ -343,7 +343,7 @@ check(
 }
 
 check(
-	"辞書リテラル（全行が識別子キーのdefine）は引き続きDictとして評価される（match_case誤判定の回帰なし）",
+	"構造体リテラル（全行が識別子キーのdefine）は引き続きStructとして評価される（match_case誤判定の回帰なし）",
 	run("d : [\n\tfoo : 1\n\tbar : 2\n]\nd ' foo"),
 	1
 );

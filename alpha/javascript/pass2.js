@@ -414,7 +414,7 @@ const LIST_PRODUCING_NAMES = new Set([
 // 優先順位のためだけの括弧までListと見なしてしまう。§5.4の検査（Listを後置~なしで
 // 裸rest関数へ渡す誤用の拒否）にそれを使うと、正当な `f (a + 1)` が誤ってTypeErrorに
 // なる（8-Queensをrestパラメータで書き直そうとして発覚）。
-// 複数行のブロックはList/Dictリテラル、1行なら中身が余積/直積/範囲の構築演算である
+// 複数行のブロックはList/構造体リテラル、1行なら中身が余積/直積/範囲の構築演算である
 // 場合のみList——単一のリテラル・識別子・算術式はスカラーのグルーピングに過ぎない。
 function isRealListValue(node) {
   if (!isListLike(node)) return false;
@@ -859,7 +859,7 @@ function buildParameterList(paramTokens, env) {
   // 求まる部分として、実質アリティ（デフォルト・rest以外の仮引数の数）だけ先に持たせておく。
   const requiredArity = entries.filter((e) => !e.rest && e.default === null).length;
   // bracket: true の場合、interpreter.js の bindParams は「呼び出し側が渡した単一の
-  // List/Dict実引数を、この仮引数リストへ分割代入する」という別経路（Eagerパターン、
+  // List/Struct実引数を、この仮引数リストへ分割代入する」という別経路（Eagerパターン、
   // list_model.md §2.4）を通る。裸の複数行デフォルト引数形式（isBracketParamList参照）
   // ではfalseのままで、既存の位置引数ストリーム的な束縛（stream/pull型）を維持する。
   return { node: { type: "params", entries, requiredArity, bracket: isBracket }, scope };
@@ -936,9 +936,9 @@ function reduceAll(rawItems, env) {
   // 【意図的に対応しない】カンマと`:`を1行に混在させる形（例: `foo : 1, bar : 2`）は、
   // `:`(precedence=1)が`,`(precedence=8)より優先度が低いことに起因して総当たり縮約が
   // 誤って隣接トークンを結合してしまう。一時期トップレベルの","を先に分割する回避策を
-  // 入れたが、この書き方自体がlist_model.md/pattern_guide.mdの辞書リテラル例（すべて
+  // 入れたが、この書き方自体がlist_model.md/pattern_guide.mdの構造体リテラル例（すべて
   // 改行区切り）のどこにも登場しない、こちらで作った未定義入力への対症療法だったため
-  // 撤去した。「一つのことを表現する方法は一つ」という方針により、辞書は改行区切りの
+  // 撤去した。「一つのことを表現する方法は一つ」という方針により、構造体は改行区切りの
   // 形だけをサポートする（`pass3.js`のinferAtomTypeも改行区切りの形のみ判定）。
 
   // 演算子トークン（裸の記号文字列）は reduceOnce の走査で判定する必要があるため、
