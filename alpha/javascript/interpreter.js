@@ -434,7 +434,19 @@ function applyClosure(closure, argValues) {
     // Id射（`!__`）への適用は引数をそのまま返す。引数がUnitなら完全性公理がそのまま
     // 効いてUnitになる（categorical_truth.md「`!__ __` は理論的に正しく `__` を返す」）。
     if (closure.__identity__) return argValues.length > 0 ? argValues[0] : UNIT;
-    if (closure.__pointfree__) return applyPointfree(closure.__pointfree__, closure.env, argValues);
+    if (closure.__pointfree__) {
+      // ホール由来のポイントフリー（`[!_]`）は hole_desugaring.md により静的に
+      // `$p0 ? !$p0` へ脱糖される——すなわち**ラムダ**であり、完全性公理の対象である。
+      // 演算子としての `!`（`!(5 < 3)`）は構文であって関数値ではないため、ここを通らず
+      // 演算子表のUnit欄（`!` の右辺Unit → Id射）が支配する。この区別が無いと、同じ否定が
+      // 「演算子・ポイントフリー・明示ラムダ」の3通りで別々の答えを返していた。
+      //
+      // 一方、貪欲なポイントフリー（`[+]`）は引数スロットではなく**余積のストリーム**を
+      // 食う（tier 10.0）。ストリーム中の `__` は余積の単位元として消えるべきものであり、
+      // 引数スロットへUnitが来たわけではないので公理の対象ではない（`[+] 1 __` は 1）。
+      if (!isGreedyPointfreeClosure(closure) && argValues.some((v) => isUnit(v))) return UNIT;
+      return applyPointfree(closure.__pointfree__, closure.env, argValues);
+    }
     const callEnv = bindParams(closure.params, argValues, closure.env);
     if (callEnv === null) return UNIT;
     const result = evaluateTail(closure.body, callEnv);
@@ -865,8 +877,17 @@ function evaluate(node, env) {
     if (node.kind === "abs") {
       let inner = UNIT;
       for (const line of node.lines) inner = evaluate(line, env);
+      // Unitのときだけ値では決まらない——`__ = []`（unit.md）の同一視により「空リスト
+      // ＝要素数0」とも「値の不在」とも読めるため、pass3が記録したオペランド型で決める。
+      // List/Stringの位置なら空コレクションなので0、それ以外（不在・型不明）は吸収元。
+      // 型が付かない側を0に倒さないのは、不在がもっともらしい値に化けるのを防ぐため
+      // ——「不在」と「うっかり使える値」を混ぜないという一点が、null参照の失敗の核心
+      // だったので、Signは常に吸収元側へ倒す（narrowingは呼び出し側が明示的に行う）。
+      if (isUnit(inner)) {
+        const operand = node.operandType;
+        return operand === "List" || operand === "String" ? 0 : UNIT;
+      }
       if (Array.isArray(inner) || typeof inner === "string") return inner.length;
-      if (isUnit(inner)) return UNIT;
       // Lambda（Id射・クロージャ等）や構造体には要素数/絶対値が定義されていない——
       // Math.absへ渡すとNaNが静かに出るため、型エラーとして__へ収束させる。
       if (inner !== null && typeof inner === "object") return UNIT;
@@ -997,6 +1018,18 @@ function evaluate(node, env) {
         // 輸入失敗例）は左結合で `(__ 1) 2` → `1 2` と畳まれるため従来通り。
         if (isUnit(l)) return r;
         if (isUnit(r)) return l;
+        // tier 10.4（`Lambda` 中置 `Atom` → apply）は演算子表の上では**型による分岐**であり、
+        // pass2 は静的に解けた場合だけ apply ノードを作る。ところが「適用の結果が Lambda に
+        // なる式」（`[!_] __` → Id射）は、静的には arity 1 が飽和した Atom にしか見えないため
+        // construct へ落ちてしまい、`([!_] __) 5` が `[Id射, 5]` になっていた。
+        // 生の `(!__) 5` は getCategory が前置`!`+unit を直接 Lambda と判定するので 5 を返す。
+        // 同じ Id射が、作られ方によって射になったり値として並んだりするのは誤り。
+        // 実行時には左辺の実際の値が分かるので、ここで表どおりの分岐へ戻す。
+        // 右辺も Lambda の場合は tier 10.5（compose）であってここでの apply ではないため除く。
+        if (l !== null && typeof l === "object" && l.__lambda__ &&
+            !(r !== null && typeof r === "object" && r.__lambda__)) {
+          return applyClosure(l, [r]);
+        }
         // §3.2 余積族: どちらかが文字列ならテキストとして連結する
         // （`123` 123 = `123123`、list_model.md §2.1/§4.4）。
         // Stringは余積の**吸収元**——あらゆる値がテキスト表現を持つため、Stringとの

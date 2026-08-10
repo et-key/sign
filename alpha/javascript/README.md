@@ -352,6 +352,13 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   持っていたため、ディスパッチ条件に`node.op === "!="`を追加するだけの狙い撃ちの修正で
   済んだ。`!==`（構造比較）・`==`・`===`は依然未実装のまま——スコープを広げず`!=`だけを
   直した（`test/interpreter.test.js`で§4の例外規則込みで確認）。
+- `test/sign_programs.test.js` — **`alpha/sign/` に置いた「Sign 自身で書いたプログラム」**
+  （字句解析器・再帰下降パーサ）の動作確認。9/9 pass。処理系の単体テストと違い、まとまった量の
+  実プログラムが壊れていないかを見る（8-Queensと同じ役割）。実際この2本を書く過程で
+  `pass2.js` の余積解決のバグが1件見つかった——`isListLike` が中身を見ずに括弧を全て
+  List 扱いしていたため `` `x` (`y`) `` が construct ではなく push へ落ち、String の
+  連結が起きなかった。同じ問題は8-Queensの時にも一度発覚して `isRealListValue` が
+  作られていたが、`coproductReduce` の 10.1/10.2 判定だけ古い判定のまま残っていた。
 - `test/compile.test.js` — `compile.js`（Pass 1〜3 の単一ドライバ）の動作確認。全ノードへの
   `atomType` 注釈、数値の昇格格子（識別子経由を含む）、算術族の型不一致、List左辺の算術、
   余積族、`&`/`|`、define/lambda/Dict判定、Pass 1b がパイプラインに載っていること。24/24 pass。
