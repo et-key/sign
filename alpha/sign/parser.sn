@@ -1,0 +1,57 @@
+`Sign で書いた再帰下降パーサ`
+`四則演算の優先順位と左結合を扱う`
+
+`文法`
+`  expr   := term (PLUS | MINUS) term ...`
+`  term   := factor (MUL | DIV) factor ...`
+`  factor := token`
+
+`各関数は 結果AST と 残りトークン のペアを返す`
+
+fst : p ? p ' 0
+snd : p ? p ' 1
+
+`--- トークン列の消費 ---`
+
+`【要点1】1要素リストはスカラーと同型（list_model.md）。`
+`残りが1個になった時点でリストではなく素の値になるため、長さで場合分けする`
+
+`【要点2】尽きたことを __ で表すと、次の呼び出しが完全性公理で丸ごと崩壊する`
+`（0_design_principles.md 原理5）。再帰を続けたい場面では番兵の値を返す`
+
+sentinel : `end`
+
+peek : ts ?
+	|ts| = 1 : ts
+	ts ' 0
+
+rest : ts ?
+	|ts| = 1 : sentinel
+	ts ' 1~
+
+factor : ts ? (peek ts) , (rest ts)
+
+`--- 乗除（優先順位が高い側）---`
+`左結合で畳む`
+
+mul_go : acc ts ?
+	(peek ts) = `*` : mul_go ((acc , `*`) , (fst (factor (rest ts)))) (snd (factor (rest ts)))
+	(peek ts) = `/` : mul_go ((acc , `/`) , (fst (factor (rest ts)))) (snd (factor (rest ts)))
+	acc , ts
+
+mul_lv : ts ? mul_go (fst (factor ts)) (snd (factor ts))
+
+`--- 加減（優先順位が低い側）---`
+
+add_go : acc ts ?
+	(peek ts) = `+` : add_go ((acc , `+`) , (fst (mul_lv (rest ts)))) (snd (mul_lv (rest ts)))
+	(peek ts) = `-` : add_go ((acc , `-`) , (fst (mul_lv (rest ts)))) (snd (mul_lv (rest ts)))
+	acc , ts
+
+expr : ts ? add_go (fst (mul_lv ts)) (snd (mul_lv ts))
+
+`実行例`
+`トークン列はカンマで積む。スペースで並べると String の吸収則で連結されてしまうため`
+`1 + 2 * 3 は 1 と 2 * 3 の和として構造化される`
+
+fst (expr [`1` , `+` , `2` , `*` , `3`])

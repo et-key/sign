@@ -454,8 +454,16 @@ function coproductReduce(a, b, env) {
   }
   if (catA === "Atom" && catB === "Lambda") return mk("apply_reverse", a, b);
   if (catA === "Atom" && catB === "Atom") {
-    const listA = isListLike(a) || (hasPostfixTilde(a) && isListLike(a.operand));
-    const listB = isListLike(b) || (hasPostfixTilde(b) && isListLike(b.operand));
+    // 10.1/10.2 の判定には isRealListValue を使う（isListLike ではない）。
+    // isListLike は中身を見ずに括弧ブロックを全て List 扱いするため、
+    // `(col + 1)` のような優先順位のためだけの括弧まで List と誤認する。
+    // その結果 `` `x` (`y`) `` が construct ではなく push に落ち、String 同士の
+    // 連結（§3.2 の余積族）が起きずに2要素のリストになっていた——Sign で
+    // 字句解析器を書こうとして発覚（`(s ' 0) (f (s ' 1~))` が文字列を連結せず
+    // ペアを積み上げる）。§5.4 の検査では既に isRealListValue へ移行済みだったが、
+    // ここだけ古い判定のまま残っていた。
+    const listA = isRealListValue(a) || (hasPostfixTilde(a) && isRealListValue(a.operand));
+    const listB = isRealListValue(b) || (hasPostfixTilde(b) && isRealListValue(b.operand));
     if (listA && listB) {
       const tA = hasPostfixTilde(a), tB = hasPostfixTilde(b);
       if (tA && tB) return mk("concat", a, b); // §5.2-1: 双方~ → concat
