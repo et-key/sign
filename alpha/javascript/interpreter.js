@@ -207,8 +207,20 @@ function bindParams(paramsNode, argValues, closureEnv) {
   const entries = paramEntriesOf(paramsNode);
   const env = newRuntimeEnv(closureEnv);
 
-  if (paramsNode && paramsNode.type === "params" && paramsNode.bracket && argValues.length === 1 && isDestructurable(argValues[0])) {
-    return bindBracketParams(entries, argValues[0], env);
+  if (paramsNode && paramsNode.type === "params" && paramsNode.bracket && argValues.length === 1) {
+    // ブラケット仮引数リストは「渡された1個の実引数を分解する」という宣言である。
+    // Unit には分解すべき構造が無いため、完全性公理により呼び出しごと崩壊させる。
+    //
+    // これが無いと、崩壊するかどうかがエントリの形に依存してしまっていた——
+    // `[p ~ps]` は先頭が非restのためUnitを受けて崩壊する一方、`[~b]` は唯一のエントリが
+    // restなので「可変長引数のUnitフォールバック」に落ちて空リストを束縛し、
+    // 失敗して `__` になった値がそのまま素通りしていた（混在形 `f : x [~b] ?` では
+    // 逆に崩壊するため、同じ宣言が置かれる位置で挙動が割れていた）。
+    //
+    // `~rest` のUnitフォールバック（function_guide.md）は「末尾の実引数が0個」を
+    // 空リストとして扱う規則であって、**1個の実引数を分解する**話ではない。
+    if (isUnit(argValues[0])) return null;
+    if (isDestructurable(argValues[0])) return bindBracketParams(entries, argValues[0], env);
   }
 
   let argIdx = 0;

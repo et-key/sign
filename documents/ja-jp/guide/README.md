@@ -44,7 +44,9 @@ guide/
 ├── reference.md           Sign言語リファレンス（完全版）
 ├── example.sn             動くサンプルコード（機能ごとの断片集）
 └── examples/              完結した実プログラムの例
-    └── n_queens.sn        Nクイーン問題（バックトラック探索）
+    └── n-queen/           Nクイーン問題（バックトラック探索）
+        ├── n_queens.sn            解説コメント付き
+        └── n_queens.nocomment.sn  コードのみ
 ```
 
 ---
