@@ -36,7 +36,11 @@ function check(note, got, want) {
 	total++;
 	const gotDisplay = isUnit(got) ? "__" : got;
 	const wantDisplay = want === "__" ? "__" : want;
-	const ok = want === "__" ? isUnit(got) : Array.isArray(want) ? JSON.stringify(got) === JSON.stringify(want) : got === want;
+	// List だけでなく Struct（プレーンオブジェクト）も構造比較する。
+	// 以前は配列しか JSON 比較しておらず、期待値に構造体を書くと参照比較になって
+	// 必ず落ちていた（値は一致しているのに FAIL になる）。
+	const isStructural = want !== null && typeof want === "object";
+	const ok = want === "__" ? isUnit(got) : isStructural ? JSON.stringify(got) === JSON.stringify(want) : got === want;
 	if (ok) {
 		console.log(`OK   ${note}`);
 		passed++;
@@ -85,6 +89,30 @@ check("(f 3) 99 → [4,99]（カッコで閉じたら値として確定し、99�
 check("h (f 3) → 40（引数位置でも値として渡る。composeに化けない）", run(withDefault + "h : x ? x * 10\nh (f 3)"), 40);
 check("自動カリー化は回帰なし: (c 1) 2 → 3", run("c : a b ? a + b\n(c 1) 2"), 3);
 check("自動カリー化は回帰なし: h (c 1 2) → 30", run("c : a b ? a + b\nh : x ? x * 10\nh (c 1 2)"), 30);
+
+// 関数本体のインデント行は全て match_case である（function_guide.md）。
+// 同じ `識別子 : 値` が、本体では「条件が真なら右辺」、カッコの中では「構造体の
+// フィールド」を意味する——境界はカッコであって、ブロックの見た目ではない。
+//
+// 以前は本体の `識別子 : 値` を定義として扱っていたため、最も分岐させたい対象である
+// 仮引数を条件に書けなかった。`ready : send` が「準備できていれば送る」ではなく
+// ready の再束縛になり、しかも無言で別の意味になるため気づけなかった。
+const dev = "f :\n\tout\n\tready : 7\n ?\n\tready : `SENT`\n\t`BUSY`\n";
+check("本体の `ready : X` は match_case（真）", run(dev + "f 42"), "SENT");
+check("本体の `ready : X` は match_case（偽）", run("f :\n\tout\n\tready : __\n ?\n\tready : `SENT`\n\t`BUSY`\nf 42"), "BUSY");
+check("本体は構造体にならない（全行 `識別子 : 値` でも match_case 連鎖）", run("f : x y ?\n\ta : x\n\tb : y\nf 1 2"), "__");
+check("構造体を返すにはカッコで囲む", run("f : x y ? [\n\ta : x\n\tb : y\n]\nf 1 2"), { a: 1, b: 2 });
+// 定義の右辺のインデントブロック（設定宣言など）はラムダ本体ではないので構造体のまま。
+check("本体以外のインデントブロックは構造体のまま", run("link :\n\trom : 4\n\tram : 8\nlink"), { rom: 4, ram: 8 });
+
+// 構造体のフィールドは `a : x`（明示）と `x`（省略記法）の2通り。省略記法は2行以上の
+// ブロックでのみ有効——`[x]` は「1要素リスト ≅ スカラー」として既に広く使われている形で、
+// 単独の識別子をフィールド1個の構造体へ読み替えると `(f 1)` のような括弧が全て壊れる。
+check("フィールド名の省略記法 [x / y]", run("f : x y ? [\n\tx\n\ty\n]\nf 1 2"), { x: 1, y: 2 });
+check("省略記法と明示の混在", run("f : x y ? [\n\tx\n\tb : y\n]\nf 1 2"), { x: 1, b: 2 });
+check("省略記法した構造体のフィールドアクセス", run("f : x y ? [\n\tx\n\ty\n]\n(f 7 9) ' x"), 7);
+check("`[x]` 単独は1要素リスト ≅ スカラーのまま（回帰なし）", run("x : 5\n[x]"), 5);
+check("`(g 1)` のような括弧は回帰なし", run("g : a ? a * 2\n(g 1)"), 2);
 
 check("__ + 5 → __（算術演算子の左辺Unitは吸収元）", run("__ + 5"), "__");
 

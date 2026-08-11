@@ -158,7 +158,15 @@ function computeAtomType(node, env) {
     // 左辺が識別子でない define 行（match_caseの `cond : result`）は構造体ではないので
     // 除外する——interpreter.jsの構造体判定と同じ基準に揃えてある。
     // それ以外（関数本体等）は「ブロックの値＝最後の文の値」にフォールバックする。
-    if (node.lines.every((l) => isDefineNode(l) && isIdentifierNode(l.left))) return "Struct";
+    // 関数本体（pass2 が isFunctionBody を立てたインデントブロック）は構造体にならない。
+    // そこでの `識別子 : 値` は match_case であり、構造体を返すにはカッコで囲む。
+    // フィールドは `a : x`（明示）と `x`（省略記法）の2通り。省略記法は2行以上のときだけ
+    // 有効で、`[x]` が1要素リスト ≅ スカラーであることを壊さない（interpreter.jsと同基準）。
+    if (!node.isFunctionBody) {
+      const explicit = (l) => isDefineNode(l) && isIdentifierNode(l.left);
+      if (node.lines.every(explicit)) return "Struct";
+      if (node.lines.length >= 2 && node.lines.every((l) => explicit(l) || isIdentifierNode(l))) return "Struct";
+    }
     const last = node.lines[node.lines.length - 1];
     // pass2 が残した子スコープで最終行を解決する。外側のenvで先に評価すると、
     // ブロック内で定義された識別子が解決できないまま**メモ化されてしまう**

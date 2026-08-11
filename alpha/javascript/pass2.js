@@ -923,6 +923,14 @@ function resolveLambdaLine(rawItems, qIdx, env) {
 
   const { node: paramNode, scope } = buildParameterList(paramTokens, env);
   const bodyNode = reduceAll(bodyTokens, scope);
+  // 関数本体のインデントブロックは match_case の連鎖である（function_guide.md）。
+  // 同じ `識別子 : 値` という行が、本体では「条件が真なら右辺」、カッコの中では
+  // 「構造体のフィールド」を意味する——境界はカッコであって、ブロックの見た目ではない。
+  // 印を付けておかないと評価器から区別できず、本体の `ready : send` が条件分岐ではなく
+  // ready の再束縛になってしまう（仮引数を条件にできない）。
+  // 定義の右辺のインデントブロック（`link :` 直下の設定宣言など）はラムダ本体では
+  // ないため、この印が付かず従来通り構造体になれる。
+  if (bodyNode && bodyNode.type === "block" && bodyNode.kind === "indent") bodyNode.isFunctionBody = true;
   // scope（仮引数を束縛した子スコープ）をノードへ残す。resolveBlockと同じ理由——
   // 本体を後から歩く側が、仮引数を「未定義識別子」と誤検出しないようにするため。
   const lambdaNode = { type: "operation", op: "?", name: "lambda", position: "infix", left: paramNode, right: bodyNode, scope };
