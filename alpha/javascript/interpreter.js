@@ -51,6 +51,21 @@ function isIdentifierNode(n) {
   return !!n && n.type === "atom" && n.kind === "identifier";
 }
 
+// 構造体のフィールド行かどうか。`a : x`（明示）と `x`（省略記法：フィールド名も値も
+// その識別子から取る）の2通りを認める。省略記法は2行以上のブロックでのみ有効にする
+// ——`[x]` は「1要素リスト ≅ スカラー」として既に広く使われている形であり、
+// 単独の識別子をフィールド1個の構造体へ読み替えると `(f 1)` のような括弧が全て壊れる。
+function isStructFieldLine(n) {
+  return (isDefineNode(n) && isIdentifierNode(n.left)) || isIdentifierNode(n);
+}
+function isStructBlock(node) {
+  if (node.isFunctionBody) return false; // 関数本体は match_case であって構造体ではない
+  const lines = node.lines;
+  if (!Array.isArray(lines) || lines.length === 0) return false;
+  if (lines.every((l) => isDefineNode(l) && isIdentifierNode(l.left))) return true;
+  return lines.length >= 2 && lines.every(isStructFieldLine);
+}
+
 // ---- 実行時環境（Pass1の静的envとは別物、実際の値を保持する） ----
 // diagnosticsは子envにも同じ配列参照を引き継ぐ（ルートenvに一元的に蓄積される）。
 function newRuntimeEnv(parent) {
@@ -349,7 +364,12 @@ function evalIndentBlock(node, env, tailEval) {
   let result = UNIT;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (isDefineNode(line) && !isIdentifierNode(line.left)) {
+    // 関数本体のインデントブロックでは、`識別子 : 値` も match_case である
+    // （function_guide.md）。ここを定義として扱うと、最も分岐させたい対象である
+    // 仮引数を条件に書けない——`ready : send` が「準備できていれば送る」ではなく
+    // ready の再束縛になり、しかも無言で別の意味になるため気づけなかった。
+    // 本体以外のインデントブロック（定義の右辺の設定宣言など）は従来通り。
+    if (isDefineNode(line) && (node.isFunctionBody || !isIdentifierNode(line.left))) {
       const cond = evaluate(line.left, env);
       if (!isUnit(cond)) return tailEval(line.right, env);
       continue;
@@ -372,7 +392,7 @@ function evaluateTail(node, env) {
   if (
     node.type === "block" &&
     node.kind === "indent" &&
-    !(node.lines.length >= 1 && node.lines.every((l) => isDefineNode(l) && isIdentifierNode(l.left)))
+    !isStructBlock(node)
   ) {
     // Struct型（全行define+識別子キー）はここでは対象外——evaluate()のStruct分岐へ委譲。
     return evalIndentBlock(node, env, evaluateTail);
@@ -911,10 +931,21 @@ function evaluate(node, env) {
     // （全行がcond:result）がStruct扱いされてしまう。構造体は独立したスコープで評価し、
     // キーが呼び出し元のenvへ漏れないようにする（let*的に、後のキーのデフォルト式的な
     // 参照は前のキーを見られる）。
-    if (node.lines.length >= 1 && node.lines.every((l) => isDefineNode(l) && isIdentifierNode(l.left))) {
+    // 関数本体は構造体にならない。構造体を返したいならカッコで囲む
+    // （`f : x y ? [ / a : x / b : y / ]`）——境界はカッコである。
+    if (isStructBlock(node)) {
       const structEnv = newRuntimeEnv(env);
       const dict = {};
       for (const line of node.lines) {
+        if (isIdentifierNode(line)) {
+          // 省略記法（`[x / y]`）: フィールド名も値もその識別子から取る。
+          // 値は外側のenvに既にある束縛（仮引数など）を読む。
+          const name = line.value.slice(1, -1);
+          const value = evaluate(line, structEnv);
+          envDefine(structEnv, line.value, value);
+          dict[name] = value;
+          continue;
+        }
         const value = evaluate(line, structEnv); // define評価：structEnvに束縛しつつ値を返す
         dict[line.left.value.slice(1, -1)] = value; // "<foo>" -> "foo"
       }

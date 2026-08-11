@@ -151,11 +151,18 @@ next_st : st d ?
 `再帰の終端は呼び出し側で |rest| = 0 として捕まえる`
 `空文字列を引数に渡すと完全性公理で呼び出しごと消えてしまうためである`
 
-walk : s st ?
+`行から取り出す4つは仮引数リストで宣言する。関数本体のインデント行は全て match_case`
+`であり、そこに 識別子 : 値 と書いても分岐にしかならない。ローカル変数を置く場所は`
+`仮引数リストの側である`
+
+walk :
+	s
+	st
 	line : head_line s
 	rest : tail_line s
 	b : body_of line
 	d : depth_of line
+ ?
 	(|rest| = 0) & (|b| = 0) : newline (close_all st)
 	|rest| = 0 : (gap st d) b (close_all (next_st st d))
 	|b| = 0 : newline (walk rest st)

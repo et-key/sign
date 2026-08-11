@@ -309,7 +309,12 @@ function unwrapSoloBlock(node) {
 // ---- getCategory (coproduct_resolver.md §2) ----
 // env: pass1.js が構築した識別子環境の連鎖（{bindings, parent}）。
 // 未指定ならすべてAtom扱いにフォールバック。
-function getCategory(node, env) {
+// closed: この式が**カッコで閉じられている**か。閉じられていれば、既に requiredArity を
+// 満たした適用はそこで値に確定する（デフォルト引数が埋まって呼び出しが発火する）。
+// 閉じられていない裸の連鎖は、同じ式の中でさらに引数を取ってデフォルトを上書きできるため、
+// arity（総スロット数）まで Lambda のままにしておく必要がある——`f 3 99` の 99 が
+// デフォルト `b` を上書きする形がこれにあたる。
+function getCategory(node, env, closed = false) {
   if (!node || typeof node !== "object") return "Atom";
   if (node.type === "operation") {
     if (node.op === "?") return "Lambda"; // 関数定義
@@ -336,7 +341,13 @@ function getCategory(node, env) {
       // 結果（`(f 1) 2`のbase＝`(f 1)`という1行parenブロック）も透かして見る——
       // 自動カリー化が複数段の丸括弧を跨いでも正しくLambdaのまま扱われるように。
       const info = resolveKnownArity(base, env);
-      if (info && depth + info.consumed < info.arity) {
+      // カッコで閉じられている場合だけ requiredArity で判定する。閉じた時点で
+      // デフォルトが埋まって呼び出しが発火するため、結果は値（Atom）である。
+      // これが無いと、デフォルトを持つ関数を必須引数だけで呼んだ括弧付きの式が
+      // 「まだ引数を取れる Lambda」と誤判定され、`g (f 3)` が compose に化けたり
+      // `(f 3) 99` が「Lambdaではない値を関数として適用」で落ちたりしていた。
+      const limit = closed && typeof info?.requiredArity === "number" ? info.requiredArity : info?.arity;
+      if (info && depth + info.consumed < limit) {
         return "Lambda";
       }
       // 【注意】ポイントフリー記述の完全に裸な中置演算子（`[+]`）が複数引数を貪欲に
@@ -372,7 +383,9 @@ function getCategory(node, env) {
     // bracket系ブロック（indent/absを除く）は、中身のカテゴリをそのまま継承する
     // （`[1 2 3]`のような通常のListは中身がconstructでAtomのままなので影響なし）。
     if (node.kind !== "indent" && node.kind !== "abs" && node.lines.length === 1) {
-      return getCategory(node.lines[0], env);
+      // カッコは**引数リストを閉じる**。中身が既に requiredArity を満たした適用なら、
+      // そこで値に確定する（closed=true を渡してarityではなくrequiredArityで判定させる）。
+      return getCategory(node.lines[0], env, true);
     }
     return "Atom";
   }
@@ -910,6 +923,14 @@ function resolveLambdaLine(rawItems, qIdx, env) {
 
   const { node: paramNode, scope } = buildParameterList(paramTokens, env);
   const bodyNode = reduceAll(bodyTokens, scope);
+  // 関数本体のインデントブロックは match_case の連鎖である（function_guide.md）。
+  // 同じ `識別子 : 値` という行が、本体では「条件が真なら右辺」、カッコの中では
+  // 「構造体のフィールド」を意味する——境界はカッコであって、ブロックの見た目ではない。
+  // 印を付けておかないと評価器から区別できず、本体の `ready : send` が条件分岐ではなく
+  // ready の再束縛になってしまう（仮引数を条件にできない）。
+  // 定義の右辺のインデントブロック（`link :` 直下の設定宣言など）はラムダ本体では
+  // ないため、この印が付かず従来通り構造体になれる。
+  if (bodyNode && bodyNode.type === "block" && bodyNode.kind === "indent") bodyNode.isFunctionBody = true;
   // scope（仮引数を束縛した子スコープ）をノードへ残す。resolveBlockと同じ理由——
   // 本体を後から歩く側が、仮引数を「未定義識別子」と誤検出しないようにするため。
   const lambdaNode = { type: "operation", op: "?", name: "lambda", position: "infix", left: paramNode, right: bodyNode, scope };
