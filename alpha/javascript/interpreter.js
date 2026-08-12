@@ -688,12 +688,16 @@ function isArithmeticUnitElement(value, leftNode) {
 }
 
 function evalCompare(node, env) {
-  const name = node.name;
-  const op = node.op;
-  const leftNode = node.left;
-  const rightNode = node.right;
-  const l = evaluate(leftNode, env);
-  const r = evaluate(rightNode, env);
+  return compareOnValues(node.name, node.op, evaluate(node.left, env), evaluate(node.right, env), node.left);
+}
+
+// 比較族の型規則を**値に対して**適用する。通常の中置（evalCompare）とポイントフリー
+// （`[== 2]` 等）の両方から呼ぶ——arithOnValues と同じ役割で、算術が既にそうなっている
+// のに比較だけが evaluate と癒着していたため、ポイントフリー側から再利用できなかった。
+// leftNode は `isArithmeticUnitElement` の型判定にだけ使う。ポイントフリーの右辺束縛
+// （`[== 2] 6`）では左辺値がストリームから届きノードが無いので null を渡す——
+// その場合 isArithmeticUnitElement は「値が0/1なら数値」とみなすフォールバックへ落ちる。
+function compareOnValues(name, op, l, r, leftNode) {
   if (op === "!=") {
     // 例外: x != __ = x（単位元）、__ != x = __（吸収元）
     if (isUnit(l)) return UNIT;
@@ -775,6 +779,82 @@ function evalUnaryOp(name, v) {
 //   関数（list_cheat_sheet.md）としても機能する。
 // - 中置・右辺だけ束縛（left=null, right=非null）: 呼び出し引数が欠けている左辺を埋める
 //   （[+ 1] 5 = 5 + 1、documents/ja-jp/guide/example.snの合成連鎖の例）。
+// `list ' index` / `struct ' field` の本体。左辺は評価済みの値を、右辺は**ノードのまま**
+// 受け取る——右辺が識別子のときはフィールド名そのものとして扱うため、値へ評価しては
+// ならないからである。通常の中置（evaluateのget_prop）とポイントフリー（`[' 0]`）の
+// 両方から呼ぶ。以前はevaluateの中にインラインで書かれており、ポイントフリー側から
+// 再利用できなかったため `[' 0]` が「未対応の演算子」で落ちていた。
+function getPropValue(l, rightNode, env) {
+  // `d ' foo`: 右辺が識別子の場合、変数として評価せず「キー名そのもの」として扱う
+  // （Struct/Structのフィールドアクセス）。数値等なら通常通り評価してListのインデックスに使う。
+  if (isUnit(l)) return UNIT;
+  if (rightNode.type === "atom" && rightNode.kind === "identifier") {
+    const key = rightNode.value.slice(1, -1); // "<foo>" -> "foo"
+    if (l && typeof l === "object" && !Array.isArray(l)) {
+      return Object.prototype.hasOwnProperty.call(l, key) ? l[key] : UNIT;
+    }
+    return UNIT;
+  }
+  // スカラー ≅ 1要素リスト（asListと同じ同型性）。非Array値も長さ1のリストとして
+  // インデックスアクセスできる（`5 ' 0` = 5、`5 ' 1` = __）。
+  // string_and_comment.md §6「文字列は0uリテラルのシーケンスとして扱える」:
+  // Stringは文字のListと同型（list_model.md）なので、文字ごとに分解してインデックス
+  // アクセスする（`hello ' 0` = `h`）。get-rest・複数インデックス取得の結果は
+  // 文字の配列のままではなく文字列へ戻す（isString、Stringとして返す方が同型性に
+  // 合う——List側の`[1 2 3 4] ' [1~3] → [2 3 4]`と対称）。
+  const isString = typeof l === "string";
+  const asIndexable = Array.isArray(l) ? l : isString ? l.split("") : [l];
+  // get-rest: `list ' N~`（数値インデックスへ後置~）は、Nから末尾までの部分リストを
+  // 返す（既存のList/Scalar同型性・負インデックス変換をそのまま流用できる。
+  // Array.prototype.sliceの負start解釈がSignの「末尾から数える」規約と一致するため
+  // 追加変換は不要）。呼び出し引数位置での展開（複数の位置引数へのspread）を担う
+  // evalArgValuesとは別経路——ここはget_propの右辺としての`~`のみを扱う。
+  if (rightNode.type === "operation" && rightNode.position === "postfix" && rightNode.name === "expand") {
+    const n = evaluate(rightNode.operand, env);
+    if (typeof n !== "number") return UNIT;
+    const sliced = asIndexable.slice(n);
+    return isString ? sliced.join("") : sliced;
+  }
+  return getPropByValue(l, evaluate(rightNode, env));
+}
+
+// 添字が**値として**確定している場合の取得。フィールド名（識別子）と get-rest（後置~）は
+// 右辺のノード形を見ないと決まらないため getPropValue 側に残し、ここは数値・範囲だけを扱う。
+// 左辺束縛のポイントフリー（`[[3 , 4] ']` に添字を渡す形）は右辺がノードとして存在しない
+// ——ストリームから値で届く——ため、この入口が要る。
+function getPropByValue(l, r) {
+  if (isUnit(l)) return UNIT;
+  const isString = typeof l === "string";
+  const asIndexable = Array.isArray(l) ? l : isString ? l.split("") : [l];
+  // 負のインデックスは末尾から数える（`-1`=最後の要素、length+indexへ写像）。
+  // 正側は0始まり、負側は-1始まり（-0が無いため対称にはならない）。
+  // type_system.md §4.1: `'` は Address（位置）を構造的に要求するため、Float が
+  // 来たら四捨五入する（AArch64の`fcvtas`＝最近接・タイは0から遠ざける、1命令）。
+  // 位置は整数でしか存在しないので、`list ' 1.5` は補間ではなく `list ' 2` になる。
+  // 既に整数ならroundHalfAwayFromZeroは恒等なので、この丸めに静的な型情報は要らない
+  // （除算の丸めは Address同士かFloat混在かで挙動が変わるため pass3 が必要、という
+  // 点で対照的）。
+  const resolveIndex = (i) => {
+    const n = roundHalfAwayFromZero(i);
+    return n < 0 ? asIndexable.length + n : n;
+  };
+  if (typeof r === "number") {
+    const idx = resolveIndex(r);
+    return idx >= 0 && idx < asIndexable.length ? asIndexable[idx] : UNIT;
+  }
+  // list_cheat_sheet.md「範囲で要素取得」: `[1 2 3 4] ' [1 ~ 3]` → `[2 3 4]`。
+  // rangeが実体化したインデックス列（配列）で、該当位置の値をまとめて取り出す。
+  if (Array.isArray(r)) {
+    const mapped = r.map((i) => {
+      if (typeof i !== "number") return UNIT;
+      const idx = resolveIndex(i);
+      return idx >= 0 && idx < asIndexable.length ? asIndexable[idx] : UNIT;
+    });
+    return isString ? mapped.map((v) => (isUnit(v) ? "" : v)).join("") : mapped;
+  }
+  return UNIT;
+}
+
 function applyPointfree(node, closureEnv, argValues) {
   if (node.position === "prefix" || node.position === "postfix") {
     const x = argValues.length > 0 ? argValues[0] : UNIT;
@@ -796,6 +876,30 @@ function applyPointfree(node, closureEnv, argValues) {
       if (isUnit(a) || isUnit(b)) return UNIT;
       const truthy = COMPARE_OPS[node.name](a, b);
       return truthy ? a : UNIT;
+    }
+    // `[' 0]`（インデックス取得）・`[' foo]`（フィールド取得）のポイントフリー。
+    // 右辺は**ノードのまま** getPropValue へ渡す——識別子はフィールド名そのものとして
+    // 扱うため、値へ評価してはならない（`[' foo]` の foo は変数ではなくキー名）。
+    // これが無いと `[' 0] [3 , 4]` が「未対応の演算子」で落ち、`[_ ' 0]` という
+    // ホールを使った回避形を書かざるを得なかった。
+    if (node.name === "get_prop") {
+      // 右辺束縛（`[' 0]` / `[' foo]`）は右辺のノードをそのまま使う。
+      // 左辺束縛（`[[3 , 4] ']`）は添字がストリームから値で届くので値版へ回す。
+      return node.right !== null && node.right !== undefined
+        ? getPropValue(a, node.right, closureEnv)
+        : getPropByValue(a, b);
+    }
+    // 論理族（`;` `|` `&`）。中置は短絡評価だが、ポイントフリーでは束縛側が既に評価済みで
+    // 両辺の値が揃っているため、短絡は観測されない——値だけで決まる。返り値は中置と同じ
+    // 規約に従う（`[| 0]` は「既定値の補完」、`[& 1]` は「ガード」として自然に読める）。
+    if (node.name === "and") return isUnit(a) || isUnit(b) ? UNIT : b;
+    if (node.name === "or") return isUnit(a) ? b : a;
+    if (node.name === "xor") return isUnit(a) ? b : isUnit(b) ? a : UNIT;
+    // 等価族（`==` `!==` `!=`）。真偽の判定は中置と同じ compareOnValues へ委ね、返す値だけを
+    // List 側の規約へ揃える（真なら要素そのものを残す）——上の COMPARE_OPS 分岐と同じ理由で、
+    // fold/map/filter が前提のポイントフリー文脈では「元の要素を残す/捨てる」ことが目的。
+    if (node.op === "==" || node.op === "!==" || node.op === "!=") {
+      return isUnit(compareOnValues(node.name, node.op, a, b, null)) ? UNIT : a;
     }
     throw new Error(`interpreter: pointfree: 未対応の演算子 '${node.name}'`);
   };
@@ -826,8 +930,15 @@ function applyPointfree(node, closureEnv, argValues) {
     if (isUnit(x)) return UNIT;
     return combine(x, bound);
   }
-  // left束縛・right欠落（例が仕様に無いため未対応）。
-  throw new Error("interpreter: pointfree: この形の部分適用（左辺束縛・右辺欠落）は未対応です");
+  // 左辺束縛・右辺欠落（`[1 -]` = `x ? 1 - x`）。右辺束縛（`[- 1]`）と対称で、
+  // 非可換な演算子では両方が必要になる。オペランドの順序だけが逆になる。
+  if (leftBound && !rightBound) {
+    const bound = evaluate(node.left, closureEnv);
+    const x = argValues.length > 0 ? argValues[0] : UNIT;
+    if (isUnit(x)) return UNIT;
+    return combine(bound, x);
+  }
+  return UNIT;
 }
 
 // ---- construct/concat/product（List/Struct構築） ----
@@ -1147,67 +1258,8 @@ function evaluate(node, env) {
         const isChain = node.left && node.left.type === "operation" && node.left.name === "product";
         return isChain ? [...asList(l), r] : [l, r];
       }
-      case "get_prop": {
-        // `d ' foo`: 右辺が識別子の場合、変数として評価せず「キー名そのもの」として扱う
-        // （Struct/Structのフィールドアクセス）。数値等なら通常通り評価してListのインデックスに使う。
-        const l = evaluate(node.left, env);
-        if (isUnit(l)) return UNIT;
-        if (node.right.type === "atom" && node.right.kind === "identifier") {
-          const key = node.right.value.slice(1, -1); // "<foo>" -> "foo"
-          if (l && typeof l === "object" && !Array.isArray(l)) {
-            return Object.prototype.hasOwnProperty.call(l, key) ? l[key] : UNIT;
-          }
-          return UNIT;
-        }
-        // スカラー ≅ 1要素リスト（asListと同じ同型性）。非Array値も長さ1のリストとして
-        // インデックスアクセスできる（`5 ' 0` = 5、`5 ' 1` = __）。
-        // string_and_comment.md §6「文字列は0uリテラルのシーケンスとして扱える」:
-        // Stringは文字のListと同型（list_model.md）なので、文字ごとに分解してインデックス
-        // アクセスする（`hello ' 0` = `h`）。get-rest・複数インデックス取得の結果は
-        // 文字の配列のままではなく文字列へ戻す（isString、Stringとして返す方が同型性に
-        // 合う——List側の`[1 2 3 4] ' [1~3] → [2 3 4]`と対称）。
-        const isString = typeof l === "string";
-        const asIndexable = Array.isArray(l) ? l : isString ? l.split("") : [l];
-        // get-rest: `list ' N~`（数値インデックスへ後置~）は、Nから末尾までの部分リストを
-        // 返す（既存のList/Scalar同型性・負インデックス変換をそのまま流用できる。
-        // Array.prototype.sliceの負start解釈がSignの「末尾から数える」規約と一致するため
-        // 追加変換は不要）。呼び出し引数位置での展開（複数の位置引数へのspread）を担う
-        // evalArgValuesとは別経路——ここはget_propの右辺としての`~`のみを扱う。
-        if (node.right.type === "operation" && node.right.position === "postfix" && node.right.name === "expand") {
-          const n = evaluate(node.right.operand, env);
-          if (typeof n !== "number") return UNIT;
-          const sliced = asIndexable.slice(n);
-          return isString ? sliced.join("") : sliced;
-        }
-        const r = evaluate(node.right, env);
-        // 負のインデックスは末尾から数える（`-1`=最後の要素、length+indexへ写像）。
-        // 正側は0始まり、負側は-1始まり（-0が無いため対称にはならない）。
-        // type_system.md §4.1: `'` は Address（位置）を構造的に要求するため、Float が
-        // 来たら四捨五入する（AArch64の`fcvtas`＝最近接・タイは0から遠ざける、1命令）。
-        // 位置は整数でしか存在しないので、`list ' 1.5` は補間ではなく `list ' 2` になる。
-        // 既に整数ならroundHalfAwayFromZeroは恒等なので、この丸めに静的な型情報は要らない
-        // （除算の丸めは Address同士かFloat混在かで挙動が変わるため pass3 が必要、という
-        // 点で対照的）。
-        const resolveIndex = (i) => {
-          const n = roundHalfAwayFromZero(i);
-          return n < 0 ? asIndexable.length + n : n;
-        };
-        if (typeof r === "number") {
-          const idx = resolveIndex(r);
-          return idx >= 0 && idx < asIndexable.length ? asIndexable[idx] : UNIT;
-        }
-        // list_cheat_sheet.md「範囲で要素取得」: `[1 2 3 4] ' [1 ~ 3]` → `[2 3 4]`。
-        // rangeが実体化したインデックス列（配列）で、該当位置の値をまとめて取り出す。
-        if (Array.isArray(r)) {
-          const mapped = r.map((i) => {
-            if (typeof i !== "number") return UNIT;
-            const idx = resolveIndex(i);
-            return idx >= 0 && idx < asIndexable.length ? asIndexable[idx] : UNIT;
-          });
-          return isString ? mapped.map((v) => (isUnit(v) ? "" : v)).join("") : mapped;
-        }
-        return UNIT;
-      }
+      case "get_prop":
+        return getPropValue(evaluate(node.left, env), node.right, env);
       case "address":
         // 前置$。node.operandはまだ評価せず、その構文形（識別子/get_prop/その他）に
         // 応じてevalAddressが参照セルを組み立てる（evalUnaryOpの「先に評価済みの値を

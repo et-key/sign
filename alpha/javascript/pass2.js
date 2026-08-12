@@ -47,6 +47,17 @@ function isBareOperatorToken(x) {
   return typeof x === "string" && OPERATOR_SYMBOL_RE.test(x) && !isMarkedPrefix(x) && !isMarkedPostfix(x);
 }
 
+// range 族は部分適用に参加しない。
+// list_model.md §2.2 が定める通り、レンジ式の**項の数は「いつ消費するか」の宣言**である
+// ——3項（`[2 ~+ 2 ~ 10]`）なら即時消費、2項（`[1 ~+ 1]`）なら終端の無い Pull 型
+// イテレータになる。つまり項が欠けた形は既に「終端の無い範囲」という意味を持っており、
+// そこへ「引数待ちの関数」という意味を重ねると、同じ記法に2つの読みが乗ってしまう。
+// `[1 ~]` のような形は部分適用ではなく、解決できない式として弾く。
+const RANGE_OPERATORS = new Set(["~", "~+", "~-", "~*", "~/", "~^"]);
+function isPartialCapableOperator(x) {
+  return isBareOperatorToken(x) && !RANGE_OPERATORS.has(x);
+}
+
 function toNode(x, env) {
   // すでにoperation/blockノードならそのまま、そうでなければAtomリーフとして包む
   if (x && typeof x === "object" && !Array.isArray(x)) return x;
@@ -184,6 +195,17 @@ function resolveKnownArity(node, env) {
     const inner = resolveKnownArity(n, env);
     if (!inner) return null;
     return { arity: inner.arity, requiredArity: inner.requiredArity, consumed: inner.consumed + depth };
+  }
+  // ラムダノードそのもの。pass1 は束縛のアリティをトークン列から数えるため、`?` を含まない
+  // 右辺（ホール脱糖が作ったラムダ、`p : f _ _` など）ではアリティが読めない。pass2 が
+  // 組んだ params ノードから直接数えることで、`p 1 2` が2引数の適用として解決される。
+  // 単一の裸パラメータは pass1 の countArity と同じく null を返す（1回の適用で飽和する
+  // 既存挙動のまま）。rest があれば Infinity——上のコメントの通りここでは許可する。
+  if (node.type === "operation" && node.op === "?" && node.left && node.left.type === "params") {
+    const entries = node.left.entries || [];
+    const arity = entries.some((e) => e.rest) ? Infinity : entries.length;
+    const requiredArity = typeof node.left.requiredArity === "number" ? node.left.requiredArity : arity;
+    return { arity, requiredArity, consumed: 0 };
   }
   return null;
 }
@@ -998,13 +1020,26 @@ function reduceAll(rawItems, env) {
   // 列の先頭に来るこの形は総当たり縮約の対象外のまま残る——ここで拾ってpartialノードに
   // 変換する。getCategoryの既存ルール（`if (node.partial) return "Lambda"`）でLambdaに
   // 分類される。
-  if (items.length === 1 && typeof items[0] === "string" && isBareOperatorToken(items[0])) {
+  if (items.length === 1 && typeof items[0] === "string" && isPartialCapableOperator(items[0])) {
     const entry = lookup(items[0], "infix");
     if (entry) return { type: "operation", op: items[0], name: entry.name, position: "infix", partial: true, left: null, right: null };
   }
-  if (items.length === 2 && typeof items[0] === "string" && isBareOperatorToken(items[0])) {
+  if (items.length === 2 && typeof items[0] === "string" && isPartialCapableOperator(items[0])) {
     const entry = lookup(items[0], "infix");
     if (entry) return { type: "operation", op: items[0], name: entry.name, position: "infix", partial: true, left: null, right: items[1] };
+  }
+  // 左辺束縛（`[1 -]` = `x ? 1 - x`）。上の右辺束縛（`[- 1]` = `x ? x - 1`）と対称で、
+  // 非可換な演算子（`-` `/` `'` 等）では両方が必要になる——位置形が片側しか無いと、
+  // もう片方はホール（`[1 - _]`）でしか書けず、同じ概念に2つの書き方が生まれてしまう。
+  //
+  // 曖昧さは空白の規則が既に消している（operator_table.md 基本原則）。後置演算子は
+  // 対象値に密着していなければならないため、`[5!]` は後置の階乗（完成した式）、
+  // `[5 !]` は中置として読まれる。`!` に中置の定義は無いので後者はここで拾われず
+  // unresolved のまま残る——`x ! y` という中置が存在しない以上それが正しい。
+  // 後置と中置を兼ねる `~` `@` も同じ規則で分かれる。
+  if (items.length === 2 && typeof items[1] === "string" && isPartialCapableOperator(items[1])) {
+    const entry = lookup(items[1], "infix");
+    if (entry) return { type: "operation", op: items[1], name: entry.name, position: "infix", partial: true, left: items[0], right: null };
   }
   // 末尾カンマによる写像糖衣構文（function_guide.md「単項式の後ろに`,`を付けたポイント
   // フリー記述は、そのすべてに適用される」、例: `[* 2,]`）。「演算子＋右オペランド1個＋
@@ -1013,7 +1048,7 @@ function reduceAll(rawItems, env) {
   if (
     items.length === 3 &&
     typeof items[0] === "string" &&
-    isBareOperatorToken(items[0]) &&
+    isPartialCapableOperator(items[0]) &&
     items[2] === ","
   ) {
     const entry = lookup(items[0], "infix");
@@ -1024,7 +1059,97 @@ function reduceAll(rawItems, env) {
     // 未縮約の要素が残っている（未対応の演算子等）。診断のためそのまま返す。
     return { type: "unresolved", items };
   }
-  return markUndersaturatedApplies(items[0], env);
+  // 字句として書かれた `_` はここでラムダへ静的脱糖する（hole_desugaring.md）。
+  // ラムダ定義行（上の qIdx 分岐）は本体が内側の reduceAll を通るため、ここには来ない。
+  return desugarHoles(markUndersaturatedApplies(items[0], env), env);
+}
+
+// --- 部分適用のホール（`_`）の静的脱糖（hole_desugaring.md） ---
+//
+// 字句として直接書かれた `_` は「まだ値の決まっていない引数スロット」であり、
+// コンパイル時にラムダへ変換する。実行時に流通する `__`（Unit）とは別物である
+// ——動的な計算の結果 Unit になった値が部分適用を誘発しないよう、両者は分離されている
+// （`g 1 (3 < 2)` は部分適用ではなくデフォルト引数へのフォールバックになる）。
+//
+// **作用域はカッコで区切られる。** ブロックの各行は resolveBlock → reduceAll を通るため、
+// ブロック内のホールはその行のレベルで包まれ、外側へは漏れない。
+//
+//   `[_ ' 0] [3 , 4]`  ホールはブロックの中 → `[$p0 ? $p0 ' 0] [3 , 4]`  → 3
+//   `[+] _ _ 3 4 5`    ホールはブロックの外 → `$p0 $p1 ? [+] $p0 $p1 3 4 5`
+//   `h : g _ 5`        定義行は右辺だけを包む → `h : $p0 ? g $p0 5`
+function isHoleNode(n) {
+  return !!n && n.type === "atom" && n.kind === "hole";
+}
+
+// ホールを見つけて生成識別子へ置き換え、その名前を names へ左から順に積む。
+// ブロックの中へは降りない——各ブロックが自分の行で処理済みだからである。
+// `partial` が立ったノード（`[!_]` のようなポイントフリーの前置/後置）も対象外で、
+// そちらは既にポイントフリーの機構が「引数待ち」として扱っている。
+// 空白（適用・構造構築）とカンマは「引数や要素が並ぶ位置」なので、そこへ置かれた `_` は
+// 引数のプレースホルダとして正しい（`add _ 10`、`t 1 _ 3`）。それ以外の中置演算子は、
+// 欠けている側を**位置で**示せる——右辺を束縛するなら `[OP c]`、左辺なら `[c OP]`。
+// したがって `[_ ' 0]` や `[1 - _]` はホールを使う理由が無く、同じ概念に2通りの書き方を
+// 生むだけなので原理4 で弾く。前置/後置（`[!_]` `[_!]`）のホールは、オペランドが1つしか
+// 無いためどちらの固定位置かを示すのに要る——そちらは partial が立っており下の早期returnで
+// この検査に到達しない。
+const STRUCTURAL_INFIX = new Set([
+  "construct",
+  "concat",
+  "push",
+  "unshift",
+  "apply",
+  "apply_reverse",
+  "compose",
+  "product",
+]);
+
+function replaceHoles(node, names) {
+  if (!node || typeof node !== "object") return;
+  if (node.type !== "operation" || node.partial) return;
+  for (const side of ["left", "right", "operand"]) {
+    const child = node[side];
+    if (child === undefined || child === null) continue;
+    if (isHoleNode(child)) {
+      if (node.position === "infix" && !STRUCTURAL_INFIX.has(node.name)) {
+        throw new SyntaxError(
+          `中置演算子 '${node.op}' のオペランドに '_' は書けません。` +
+            `欠けている側は位置で示します——右辺を束縛するなら [${node.op} c]、` +
+            `左辺なら [c ${node.op}] と書きます`
+        );
+      }
+      const name = "<$p" + names.length + ">";
+      names.push(name);
+      node[side] = { type: "atom", kind: "identifier", value: name };
+    } else {
+      replaceHoles(child, names);
+    }
+  }
+}
+
+function desugarHoles(node, env) {
+  if (!node || typeof node !== "object") return node;
+  // 定義行は右辺だけが対象。左辺（定義される名前）まで包むと定義そのものが消える。
+  if (node.type === "operation" && node.name === "define") {
+    node.right = desugarHoles(node.right, env);
+    return node;
+  }
+  if (isHoleNode(node)) return node; // 単独の `_` は包む意味が無いのでそのまま
+  const names = [];
+  replaceHoles(node, names);
+  if (names.length === 0) return node;
+  const scope = bindEnv(names, env);
+  // 単一パラメータは identifier ノード、複数は params ノード
+  // （buildParameterList が返す形と揃える——interpreter の paramEntriesOf が両方を扱う）。
+  const paramNode =
+    names.length === 1
+      ? { type: "atom", kind: "identifier", value: names[0] }
+      : {
+          type: "params",
+          entries: names.map((n) => ({ name: n, rest: false, default: null })),
+          requiredArity: names.length,
+          bracket: false,
+        };
+  return { type: "operation", op: "?", name: "lambda", position: "infix", left: paramNode, right: node, scope };
 }
 
 // ---- ブロック（[...] {...} (...) インデント／絶対値）の解決 ----
