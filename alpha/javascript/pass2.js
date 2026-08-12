@@ -47,6 +47,17 @@ function isBareOperatorToken(x) {
   return typeof x === "string" && OPERATOR_SYMBOL_RE.test(x) && !isMarkedPrefix(x) && !isMarkedPostfix(x);
 }
 
+// range 族は部分適用に参加しない。
+// list_model.md §2.2 が定める通り、レンジ式の**項の数は「いつ消費するか」の宣言**である
+// ——3項（`[2 ~+ 2 ~ 10]`）なら即時消費、2項（`[1 ~+ 1]`）なら終端の無い Pull 型
+// イテレータになる。つまり項が欠けた形は既に「終端の無い範囲」という意味を持っており、
+// そこへ「引数待ちの関数」という意味を重ねると、同じ記法に2つの読みが乗ってしまう。
+// `[1 ~]` のような形は部分適用ではなく、解決できない式として弾く。
+const RANGE_OPERATORS = new Set(["~", "~+", "~-", "~*", "~/", "~^"]);
+function isPartialCapableOperator(x) {
+  return isBareOperatorToken(x) && !RANGE_OPERATORS.has(x);
+}
+
 function toNode(x, env) {
   // すでにoperation/blockノードならそのまま、そうでなければAtomリーフとして包む
   if (x && typeof x === "object" && !Array.isArray(x)) return x;
@@ -998,11 +1009,11 @@ function reduceAll(rawItems, env) {
   // 列の先頭に来るこの形は総当たり縮約の対象外のまま残る——ここで拾ってpartialノードに
   // 変換する。getCategoryの既存ルール（`if (node.partial) return "Lambda"`）でLambdaに
   // 分類される。
-  if (items.length === 1 && typeof items[0] === "string" && isBareOperatorToken(items[0])) {
+  if (items.length === 1 && typeof items[0] === "string" && isPartialCapableOperator(items[0])) {
     const entry = lookup(items[0], "infix");
     if (entry) return { type: "operation", op: items[0], name: entry.name, position: "infix", partial: true, left: null, right: null };
   }
-  if (items.length === 2 && typeof items[0] === "string" && isBareOperatorToken(items[0])) {
+  if (items.length === 2 && typeof items[0] === "string" && isPartialCapableOperator(items[0])) {
     const entry = lookup(items[0], "infix");
     if (entry) return { type: "operation", op: items[0], name: entry.name, position: "infix", partial: true, left: null, right: items[1] };
   }
@@ -1015,7 +1026,7 @@ function reduceAll(rawItems, env) {
   // `[5 !]` は中置として読まれる。`!` に中置の定義は無いので後者はここで拾われず
   // unresolved のまま残る——`x ! y` という中置が存在しない以上それが正しい。
   // 後置と中置を兼ねる `~` `@` も同じ規則で分かれる。
-  if (items.length === 2 && typeof items[1] === "string" && isBareOperatorToken(items[1])) {
+  if (items.length === 2 && typeof items[1] === "string" && isPartialCapableOperator(items[1])) {
     const entry = lookup(items[1], "infix");
     if (entry) return { type: "operation", op: items[1], name: entry.name, position: "infix", partial: true, left: items[0], right: null };
   }
@@ -1026,7 +1037,7 @@ function reduceAll(rawItems, env) {
   if (
     items.length === 3 &&
     typeof items[0] === "string" &&
-    isBareOperatorToken(items[0]) &&
+    isPartialCapableOperator(items[0]) &&
     items[2] === ","
   ) {
     const entry = lookup(items[0], "infix");

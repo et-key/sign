@@ -61,11 +61,48 @@ function runPass1b(nodes, env) {
  *   specializations Pass 1b の具体化結果 Map<関数名, Map<仮引数名, {callsiteCount, categories}>>
  *   diagnostics     コンパイル時に検出した診断（Pass 3b の Unit 収束理由など。現状は空）
  */
+// 縮約しきれずに残った式（pass2 が `{type:"unresolved"}` として返したもの）を探す。
+// pass2 側のコメントが言う通りこれは「未対応の演算子等」であり、静的に判定できる
+// 構文の誤りである。原理4（静的に決定可能な違反は自己責任に丸投げせず弾く）に従って
+// ここで止める——以前はどこにも消費されず、評価時に静かに無視されていたため、
+// `[5 !] 1` が 1 を返すなど、解決できていない式が無言で別の値になっていた。
+function findUnresolved(node) {
+  if (!node || typeof node !== "object") return null;
+  if (node.type === "unresolved") return node;
+  for (const key of ["left", "right", "operand"]) {
+    const found = findUnresolved(node[key]);
+    if (found) return found;
+  }
+  if (Array.isArray(node.lines)) {
+    for (const line of node.lines) {
+      const found = findUnresolved(line);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function describeUnresolved(node) {
+  return node.items
+    .map((x) => (typeof x === "string" ? x : x && x.type === "atom" ? x.value : "(式)"))
+    .join(" ");
+}
+
 function compile(source, options = {}) {
   const parseFn = options.parse || parse;
   const lines = parseFn(preprocess(source));
   const env = buildEnv(lines);
   const nodes = lines.map((line) => reduceAll(line, env));
+  for (const node of nodes) {
+    const bad = findUnresolved(node);
+    if (bad) {
+      throw new SyntaxError(
+        `解決できない式です: ${describeUnresolved(bad)}` +
+          `（演算子の位置・空白の付け方を確認してください。中置演算子は空白で区切り、` +
+          `前置・後置演算子は対象値に密着させます）`
+      );
+    }
+  }
   const specializations = runPass1b(nodes, env);
   // Pass 3 の型注釈と Pass 3b（`__` へ収束する経路の静的記録）は同じ走査で行う。
   const diagnostics = [];
