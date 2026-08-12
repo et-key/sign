@@ -196,6 +196,17 @@ function resolveKnownArity(node, env) {
     if (!inner) return null;
     return { arity: inner.arity, requiredArity: inner.requiredArity, consumed: inner.consumed + depth };
   }
+  // ラムダノードそのもの。pass1 は束縛のアリティをトークン列から数えるため、`?` を含まない
+  // 右辺（ホール脱糖が作ったラムダ、`p : f _ _` など）ではアリティが読めない。pass2 が
+  // 組んだ params ノードから直接数えることで、`p 1 2` が2引数の適用として解決される。
+  // 単一の裸パラメータは pass1 の countArity と同じく null を返す（1回の適用で飽和する
+  // 既存挙動のまま）。rest があれば Infinity——上のコメントの通りここでは許可する。
+  if (node.type === "operation" && node.op === "?" && node.left && node.left.type === "params") {
+    const entries = node.left.entries || [];
+    const arity = entries.some((e) => e.rest) ? Infinity : entries.length;
+    const requiredArity = typeof node.left.requiredArity === "number" ? node.left.requiredArity : arity;
+    return { arity, requiredArity, consumed: 0 };
+  }
   return null;
 }
 
@@ -1074,6 +1085,24 @@ function isHoleNode(n) {
 // ブロックの中へは降りない——各ブロックが自分の行で処理済みだからである。
 // `partial` が立ったノード（`[!_]` のようなポイントフリーの前置/後置）も対象外で、
 // そちらは既にポイントフリーの機構が「引数待ち」として扱っている。
+// 空白（適用・構造構築）とカンマは「引数や要素が並ぶ位置」なので、そこへ置かれた `_` は
+// 引数のプレースホルダとして正しい（`add _ 10`、`t 1 _ 3`）。それ以外の中置演算子は、
+// 欠けている側を**位置で**示せる——右辺を束縛するなら `[OP c]`、左辺なら `[c OP]`。
+// したがって `[_ ' 0]` や `[1 - _]` はホールを使う理由が無く、同じ概念に2通りの書き方を
+// 生むだけなので原理4 で弾く。前置/後置（`[!_]` `[_!]`）のホールは、オペランドが1つしか
+// 無いためどちらの固定位置かを示すのに要る——そちらは partial が立っており下の早期returnで
+// この検査に到達しない。
+const STRUCTURAL_INFIX = new Set([
+  "construct",
+  "concat",
+  "push",
+  "unshift",
+  "apply",
+  "apply_reverse",
+  "compose",
+  "product",
+]);
+
 function replaceHoles(node, names) {
   if (!node || typeof node !== "object") return;
   if (node.type !== "operation" || node.partial) return;
@@ -1081,6 +1110,13 @@ function replaceHoles(node, names) {
     const child = node[side];
     if (child === undefined || child === null) continue;
     if (isHoleNode(child)) {
+      if (node.position === "infix" && !STRUCTURAL_INFIX.has(node.name)) {
+        throw new SyntaxError(
+          `中置演算子 '${node.op}' のオペランドに '_' は書けません。` +
+            `欠けている側は位置で示します——右辺を束縛するなら [${node.op} c]、` +
+            `左辺なら [c ${node.op}] と書きます`
+        );
+      }
       const name = "<$p" + names.length + ">";
       names.push(name);
       node[side] = { type: "atom", kind: "identifier", value: name };
