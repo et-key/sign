@@ -699,8 +699,14 @@ function evalCompare(node, env) {
 // その場合 isArithmeticUnitElement は「値が0/1なら数値」とみなすフォールバックへ落ちる。
 function compareOnValues(name, op, l, r, leftNode) {
   if (op === "!=") {
-    // 例外: x != __ = x（単位元）、__ != x = __（吸収元）
-    if (isUnit(l)) return UNIT;
+    // 例外: 比較族は両辺とも吸収元だが、`!=` だけは**両辺とも単位元**である
+    // （operator_table.md tier 12）。片方が Unit なら「等しくない」ことが確定して真になり、
+    // 真のときに情報を運ぶのは非Unit側の値なので、そちらを返す。
+    // 以前は左辺Unitだけ `__`（吸収元）を返しており、`5 != __` が 5 を返すのに
+    // `__ != 5` は `__` という非対称になっていた——同じ演算子が引数の順序で挙動を
+    // 変えていたことになる。`!==` は元から両辺とも非Unit側を返しており、そちらが正しい。
+    // 両辺ともUnitの場合は r（＝Unit）が返り、「等しいので偽」という正しい結果になる。
+    if (isUnit(l)) return r;
     if (isUnit(r)) return l;
     // 真の場合の返値選択は他の比較演算子と同じ §2.1 の規則に従う（comparison.md §1が
     // `!=` を対象の比較演算子として列挙しており、§2.1の適用外とされているのは
