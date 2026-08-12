@@ -781,6 +781,35 @@ check("__ !== 5 → 5（`!==` は元から対称）", run("__ !== 5"), 5);
 check("5 !== __ → 5", run("5 !== __"), 5);
 check("__ !== __ → __（両辺Unitは等しいので偽）", run("__ !== __"), "__");
 
+// 継続の規則（operator_table.md「Unit 欄の読み方」）: 左辺が零射へ落ちる演算子は、その時点で
+// 結果が `__` に確定するため右辺を評価しない。算術（`+` 等）や `'` は元からそうだったが、
+// 比較だけが両辺を評価していた。Sign は副作用と非停止を持つため、右辺を評価するか否かは
+// 観測可能な差である（`__ < ($UART # x)` で書き込みが起きるかどうかが変わる）。
+//
+// `!!` は未実装の bit_not なので、評価されれば必ず例外になる——短絡したかどうかの検出に使う。
+const evaluatesRight = (src) => {
+	try {
+		run(src);
+		return false; // 例外が出ない＝右辺を評価していない＝短絡した
+	} catch (e) {
+		return /未対応の前置\/後置演算/.test(e.message);
+	}
+};
+checkTrue("`<` は左辺Unitで右辺を評価しない", !evaluatesRight("__ < (!!1)"));
+checkTrue("`=` は左辺Unitで右辺を評価しない", !evaluatesRight("__ = (!!1)"));
+checkTrue("`==` は左辺Unitで右辺を評価しない", !evaluatesRight("__ == (!!1)"));
+// `!=`／`!==` は左辺Unitでも零射ではなく恒等射（非Unit側を返す）なので、右辺の値が要る。
+checkTrue("`!=` は左辺Unitでも右辺を評価する", evaluatesRight("__ != (!!1)"));
+checkTrue("`!==` は左辺Unitでも右辺を評価する", evaluatesRight("__ !== (!!1)"));
+checkTrue("左辺が非Unitなら右辺を評価する", evaluatesRight("5 < (!!1)"));
+
+// 三項連鎖も同じ規則に従う。左から順に評価し、零射へ落ちた時点でそれより右を評価しない。
+checkTrue("連鎖: 左辺Unitで中央以降を評価しない", !evaluatesRight("__ < (!!1) < 3"));
+checkTrue("連鎖: 中央Unitで右辺を評価しない", !evaluatesRight("1 < __ < (!!1)"));
+checkTrue("連鎖: 左が真なら右辺は要る", evaluatesRight("1 < 2 < (!!1)"));
+check("連鎖の値は回帰なし: 1 < 2 < 3 → 2", run("1 < 2 < 3"), 2);
+check("連鎖の値は回帰なし: 5 < 3 < 10 → __", run("5 < 3 < 10"), "__");
+
 // ---- Layer 1 識別子カテゴリ = 右辺式のカテゴリ（type_system.md §2） ----
 // pass1.jsは以前「その行にトップレベルの `?` があるか」だけでLambda/Atomを決めていた。
 // §2の表は `[+ 2]`（部分操作のブラケット）・§3.1のcompose も Lambda と定めているため、

@@ -688,7 +688,17 @@ function isArithmeticUnitElement(value, leftNode) {
 }
 
 function evalCompare(node, env) {
-  return compareOnValues(node.name, node.op, evaluate(node.left, env), evaluate(node.right, env), node.left);
+  const l = evaluate(node.left, env);
+  // 継続の規則（operator_table.md「Unit 欄の読み方」）: 左辺が零射へ落ちる演算子は、
+  // その時点で結果が `__` に確定する。零射との合成は零であり右辺の値は結果に寄与しえない
+  // ため、右辺を評価してはならない。算術（`+` 等）や `'` は既にそうなっており、比較だけが
+  // 両辺を評価していた——Sign は副作用と非停止を持つので、`__ < ($UART # x)` で書き込みが
+  // 起きるかどうかが変わる観測可能な差である。
+  //
+  // `!=` と `!==` だけは左辺Unitでも零射ではなく恒等射（非Unit側の値を返す）なので、
+  // 右辺の値が要る。ここで短絡させてはならない。
+  if (isUnit(l) && node.op !== "!=" && node.op !== "!==") return UNIT;
+  return compareOnValues(node.name, node.op, l, evaluate(node.right, env), node.left);
 }
 
 // 比較族の型規則を**値に対して**適用する。通常の中置（evalCompare）とポイントフリー
@@ -1287,8 +1297,15 @@ function evaluate(node, env) {
     // 二項比較の§2.1「左辺が算術単位元(0/1)なら右辺」は連鎖には適用しない——
     // §4はまさにその規則に依存せず中央を取り出すための仕組みとして定義されている。
     if (node.name === "chain_compare") {
+      // 連鎖も二項と同じ継続の規則に従う——零射へ落ちた時点で結果が `__` に確定するため、
+      // それより右の項を評価しない。`!=` の連鎖だけは除く（`__ != x != y` の扱いが二項の
+      // 「非Unit側を返す」と揃っておらず、連鎖では吸収したままである。ここを変えると
+      // 値まで変わるため、短絡の導入とは分けて別途決める）。
+      const shortCircuits = node.op !== "!=";
       const l = evaluate(node.left, env);
+      if (shortCircuits && isUnit(l)) return UNIT;
       const c = evaluate(node.middle, env);
+      if (shortCircuits && isUnit(c)) return UNIT;
       const r = evaluate(node.right, env);
       if (isUnit(l) || isUnit(c) || isUnit(r)) return UNIT; // 比較演算子の吸収則（§3.3）
       if (node.op === "!=") return l !== c && c !== r ? c : UNIT;
