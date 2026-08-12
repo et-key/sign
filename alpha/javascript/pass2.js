@@ -1006,6 +1006,19 @@ function reduceAll(rawItems, env) {
     const entry = lookup(items[0], "infix");
     if (entry) return { type: "operation", op: items[0], name: entry.name, position: "infix", partial: true, left: null, right: items[1] };
   }
+  // 左辺束縛（`[1 -]` = `x ? 1 - x`）。上の右辺束縛（`[- 1]` = `x ? x - 1`）と対称で、
+  // 非可換な演算子（`-` `/` `'` 等）では両方が必要になる——位置形が片側しか無いと、
+  // もう片方はホール（`[1 - _]`）でしか書けず、同じ概念に2つの書き方が生まれてしまう。
+  //
+  // 曖昧さは空白の規則が既に消している（operator_table.md 基本原則）。後置演算子は
+  // 対象値に密着していなければならないため、`[5!]` は後置の階乗（完成した式）、
+  // `[5 !]` は中置として読まれる。`!` に中置の定義は無いので後者はここで拾われず
+  // unresolved のまま残る——`x ! y` という中置が存在しない以上それが正しい。
+  // 後置と中置を兼ねる `~` `@` も同じ規則で分かれる。
+  if (items.length === 2 && typeof items[1] === "string" && isBareOperatorToken(items[1])) {
+    const entry = lookup(items[1], "infix");
+    if (entry) return { type: "operation", op: items[1], name: entry.name, position: "infix", partial: true, left: items[0], right: null };
+  }
   // 末尾カンマによる写像糖衣構文（function_guide.md「単項式の後ろに`,`を付けたポイント
   // フリー記述は、そのすべてに適用される」、例: `[* 2,]`）。「演算子＋右オペランド1個＋
   // 末尾の裸カンマ」という形（`,`自体は右にオペランドが無いため通常のproduct縮約が

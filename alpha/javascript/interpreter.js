@@ -811,7 +811,17 @@ function getPropValue(l, rightNode, env) {
     const sliced = asIndexable.slice(n);
     return isString ? sliced.join("") : sliced;
   }
-  const r = evaluate(rightNode, env);
+  return getPropByValue(l, evaluate(rightNode, env));
+}
+
+// 添字が**値として**確定している場合の取得。フィールド名（識別子）と get-rest（後置~）は
+// 右辺のノード形を見ないと決まらないため getPropValue 側に残し、ここは数値・範囲だけを扱う。
+// 左辺束縛のポイントフリー（`[[3 , 4] ']` に添字を渡す形）は右辺がノードとして存在しない
+// ——ストリームから値で届く——ため、この入口が要る。
+function getPropByValue(l, r) {
+  if (isUnit(l)) return UNIT;
+  const isString = typeof l === "string";
+  const asIndexable = Array.isArray(l) ? l : isString ? l.split("") : [l];
   // 負のインデックスは末尾から数える（`-1`=最後の要素、length+indexへ写像）。
   // 正側は0始まり、負側は-1始まり（-0が無いため対称にはならない）。
   // type_system.md §4.1: `'` は Address（位置）を構造的に要求するため、Float が
@@ -868,8 +878,12 @@ function applyPointfree(node, closureEnv, argValues) {
     // 扱うため、値へ評価してはならない（`[' foo]` の foo は変数ではなくキー名）。
     // これが無いと `[' 0] [3 , 4]` が「未対応の演算子」で落ち、`[_ ' 0]` という
     // ホールを使った回避形を書かざるを得なかった。
-    if (node.name === "get_prop" && node.right !== null && node.right !== undefined) {
-      return getPropValue(a, node.right, closureEnv);
+    if (node.name === "get_prop") {
+      // 右辺束縛（`[' 0]` / `[' foo]`）は右辺のノードをそのまま使う。
+      // 左辺束縛（`[[3 , 4] ']`）は添字がストリームから値で届くので値版へ回す。
+      return node.right !== null && node.right !== undefined
+        ? getPropValue(a, node.right, closureEnv)
+        : getPropByValue(a, b);
     }
     throw new Error(`interpreter: pointfree: 未対応の演算子 '${node.name}'`);
   };
@@ -900,8 +914,15 @@ function applyPointfree(node, closureEnv, argValues) {
     if (isUnit(x)) return UNIT;
     return combine(x, bound);
   }
-  // left束縛・right欠落（例が仕様に無いため未対応）。
-  throw new Error("interpreter: pointfree: この形の部分適用（左辺束縛・右辺欠落）は未対応です");
+  // 左辺束縛・右辺欠落（`[1 -]` = `x ? 1 - x`）。右辺束縛（`[- 1]`）と対称で、
+  // 非可換な演算子では両方が必要になる。オペランドの順序だけが逆になる。
+  if (leftBound && !rightBound) {
+    const bound = evaluate(node.left, closureEnv);
+    const x = argValues.length > 0 ? argValues[0] : UNIT;
+    if (isUnit(x)) return UNIT;
+    return combine(bound, x);
+  }
+  return UNIT;
 }
 
 // ---- construct/concat/product（List/Struct構築） ----
