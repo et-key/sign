@@ -688,12 +688,16 @@ function isArithmeticUnitElement(value, leftNode) {
 }
 
 function evalCompare(node, env) {
-  const name = node.name;
-  const op = node.op;
-  const leftNode = node.left;
-  const rightNode = node.right;
-  const l = evaluate(leftNode, env);
-  const r = evaluate(rightNode, env);
+  return compareOnValues(node.name, node.op, evaluate(node.left, env), evaluate(node.right, env), node.left);
+}
+
+// 比較族の型規則を**値に対して**適用する。通常の中置（evalCompare）とポイントフリー
+// （`[== 2]` 等）の両方から呼ぶ——arithOnValues と同じ役割で、算術が既にそうなっている
+// のに比較だけが evaluate と癒着していたため、ポイントフリー側から再利用できなかった。
+// leftNode は `isArithmeticUnitElement` の型判定にだけ使う。ポイントフリーの右辺束縛
+// （`[== 2] 6`）では左辺値がストリームから届きノードが無いので null を渡す——
+// その場合 isArithmeticUnitElement は「値が0/1なら数値」とみなすフォールバックへ落ちる。
+function compareOnValues(name, op, l, r, leftNode) {
   if (op === "!=") {
     // 例外: x != __ = x（単位元）、__ != x = __（吸収元）
     if (isUnit(l)) return UNIT;
@@ -884,6 +888,18 @@ function applyPointfree(node, closureEnv, argValues) {
       return node.right !== null && node.right !== undefined
         ? getPropValue(a, node.right, closureEnv)
         : getPropByValue(a, b);
+    }
+    // 論理族（`;` `|` `&`）。中置は短絡評価だが、ポイントフリーでは束縛側が既に評価済みで
+    // 両辺の値が揃っているため、短絡は観測されない——値だけで決まる。返り値は中置と同じ
+    // 規約に従う（`[| 0]` は「既定値の補完」、`[& 1]` は「ガード」として自然に読める）。
+    if (node.name === "and") return isUnit(a) || isUnit(b) ? UNIT : b;
+    if (node.name === "or") return isUnit(a) ? b : a;
+    if (node.name === "xor") return isUnit(a) ? b : isUnit(b) ? a : UNIT;
+    // 等価族（`==` `!==` `!=`）。真偽の判定は中置と同じ compareOnValues へ委ね、返す値だけを
+    // List 側の規約へ揃える（真なら要素そのものを残す）——上の COMPARE_OPS 分岐と同じ理由で、
+    // fold/map/filter が前提のポイントフリー文脈では「元の要素を残す/捨てる」ことが目的。
+    if (node.op === "==" || node.op === "!==" || node.op === "!=") {
+      return isUnit(compareOnValues(node.name, node.op, a, b, null)) ? UNIT : a;
     }
     throw new Error(`interpreter: pointfree: 未対応の演算子 '${node.name}'`);
   };
