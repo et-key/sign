@@ -1024,7 +1024,72 @@ function reduceAll(rawItems, env) {
     // 未縮約の要素が残っている（未対応の演算子等）。診断のためそのまま返す。
     return { type: "unresolved", items };
   }
-  return markUndersaturatedApplies(items[0], env);
+  // 字句として書かれた `_` はここでラムダへ静的脱糖する（hole_desugaring.md）。
+  // ラムダ定義行（上の qIdx 分岐）は本体が内側の reduceAll を通るため、ここには来ない。
+  return desugarHoles(markUndersaturatedApplies(items[0], env), env);
+}
+
+// --- 部分適用のホール（`_`）の静的脱糖（hole_desugaring.md） ---
+//
+// 字句として直接書かれた `_` は「まだ値の決まっていない引数スロット」であり、
+// コンパイル時にラムダへ変換する。実行時に流通する `__`（Unit）とは別物である
+// ——動的な計算の結果 Unit になった値が部分適用を誘発しないよう、両者は分離されている
+// （`g 1 (3 < 2)` は部分適用ではなくデフォルト引数へのフォールバックになる）。
+//
+// **作用域はカッコで区切られる。** ブロックの各行は resolveBlock → reduceAll を通るため、
+// ブロック内のホールはその行のレベルで包まれ、外側へは漏れない。
+//
+//   `[_ ' 0] [3 , 4]`  ホールはブロックの中 → `[$p0 ? $p0 ' 0] [3 , 4]`  → 3
+//   `[+] _ _ 3 4 5`    ホールはブロックの外 → `$p0 $p1 ? [+] $p0 $p1 3 4 5`
+//   `h : g _ 5`        定義行は右辺だけを包む → `h : $p0 ? g $p0 5`
+function isHoleNode(n) {
+  return !!n && n.type === "atom" && n.kind === "hole";
+}
+
+// ホールを見つけて生成識別子へ置き換え、その名前を names へ左から順に積む。
+// ブロックの中へは降りない——各ブロックが自分の行で処理済みだからである。
+// `partial` が立ったノード（`[!_]` のようなポイントフリーの前置/後置）も対象外で、
+// そちらは既にポイントフリーの機構が「引数待ち」として扱っている。
+function replaceHoles(node, names) {
+  if (!node || typeof node !== "object") return;
+  if (node.type !== "operation" || node.partial) return;
+  for (const side of ["left", "right", "operand"]) {
+    const child = node[side];
+    if (child === undefined || child === null) continue;
+    if (isHoleNode(child)) {
+      const name = "<$p" + names.length + ">";
+      names.push(name);
+      node[side] = { type: "atom", kind: "identifier", value: name };
+    } else {
+      replaceHoles(child, names);
+    }
+  }
+}
+
+function desugarHoles(node, env) {
+  if (!node || typeof node !== "object") return node;
+  // 定義行は右辺だけが対象。左辺（定義される名前）まで包むと定義そのものが消える。
+  if (node.type === "operation" && node.name === "define") {
+    node.right = desugarHoles(node.right, env);
+    return node;
+  }
+  if (isHoleNode(node)) return node; // 単独の `_` は包む意味が無いのでそのまま
+  const names = [];
+  replaceHoles(node, names);
+  if (names.length === 0) return node;
+  const scope = bindEnv(names, env);
+  // 単一パラメータは identifier ノード、複数は params ノード
+  // （buildParameterList が返す形と揃える——interpreter の paramEntriesOf が両方を扱う）。
+  const paramNode =
+    names.length === 1
+      ? { type: "atom", kind: "identifier", value: names[0] }
+      : {
+          type: "params",
+          entries: names.map((n) => ({ name: n, rest: false, default: null })),
+          requiredArity: names.length,
+          bracket: false,
+        };
+  return { type: "operation", op: "?", name: "lambda", position: "infix", left: paramNode, right: node, scope };
 }
 
 // ---- ブロック（[...] {...} (...) インデント／絶対値）の解決 ----
