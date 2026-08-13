@@ -115,8 +115,10 @@ BIOS/UEFIレベルの開発では、`option.ms` と `.sn` コードが役割を�
 ` Int/UInt のみ使用可能。Float/SIMDはコンパイルエラー
 
 ddr_init :
-    0xFED10000 # 0x12345678   ` メモリコントローラ設定
-    0xFED10004 # 0x87654321   ` タイミングパラメータ
+    ` メモリコントローラ設定
+    0xFED10000 # 0x12345678
+    ` タイミングパラメータ
+    0xFED10004 # 0x87654321
 
 fpu_init :
     ` CR0.EMをクリア、CR0.MPをセット（アドレス操作のみ）
@@ -127,9 +129,12 @@ simd_init :
     0xCR4 # (@ 0xCR4 | 0x00000600)
 
 _start :
-    ddr_init    ` → layer 1（alloca有効）相当
-    fpu_init    ` → layer 2（Float有効）相当
-    simd_init   ` → layer 3（SIMD有効）相当
+    ` → layer 1（alloca有効）相当
+    ddr_init
+    ` → layer 2（Float有効）相当
+    fpu_init
+    ` → layer 3（SIMD有効）相当
+    simd_init
     ` 以降は全型が使用可能
 ```
 
@@ -150,7 +155,7 @@ _start :
 | layer: 2 | layer: 1 | ✅ 可（下位はインポート可） |
 | layer: 2 | layer: 3 | ❌ コンパイルエラー |
 
-```sign
+```text
 ` layer: 0 のコードから layer: 1 のモジュールをインポート → エラー
 ` kernel/ の option.ms： layer: 0
 ` lib/ の option.ms： layer: 1

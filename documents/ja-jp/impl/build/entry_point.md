@@ -17,10 +17,13 @@ Sign の実行モデルでは `main.sn` が論理的なエントリポイント�
 > 本ドキュメントは `entry`/`stack` フィールドの意味とスタートアップスタブ生成の詳細を記述する。
 
 ```son
-target : x86_bios       ` ターゲット（デフォルト値の供給元）
+` ターゲット（デフォルト値の供給元）
+target : x86_bios
 layer  : 0
-entry  : 0x7C00         ` 物理エントリアドレス（省略時はtargetのデフォルト）
-stack  : 0x9000         ` 初期スタックポインタ（省略時はtargetのデフォルト）
+` 物理エントリアドレス（省略時はtargetのデフォルト）
+entry  : 0x7C00
+` 初期スタックポインタ（省略時はtargetのデフォルト）
+stack  : 0x9000
 link :
     static :
         memory :
@@ -176,8 +179,10 @@ layer  : 0
 link :
     static :
         memory :
-            rom : origin 0xFFFFF000  length 64K   ` フラッシュROM領域
-            ram : origin 0x00000000  length auto   ` POST後にメモリマップ確定
+            ` フラッシュROM領域
+            rom : origin 0xFFFFF000  length 64K
+            ` POST後にメモリマップ確定
+            ram : origin 0x00000000  length auto
 ```
 
 ### `x86_bios` との違い

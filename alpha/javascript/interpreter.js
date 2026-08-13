@@ -688,7 +688,17 @@ function isArithmeticUnitElement(value, leftNode) {
 }
 
 function evalCompare(node, env) {
-  return compareOnValues(node.name, node.op, evaluate(node.left, env), evaluate(node.right, env), node.left);
+  const l = evaluate(node.left, env);
+  // 継続の規則（operator_table.md「Unit 欄の読み方」）: 左辺が零射へ落ちる演算子は、
+  // その時点で結果が `__` に確定する。零射との合成は零であり右辺の値は結果に寄与しえない
+  // ため、右辺を評価してはならない。算術（`+` 等）や `'` は既にそうなっており、比較だけが
+  // 両辺を評価していた——Sign は副作用と非停止を持つので、`__ < ($UART # x)` で書き込みが
+  // 起きるかどうかが変わる観測可能な差である。
+  //
+  // `!=` と `!==` だけは左辺Unitでも零射ではなく恒等射（非Unit側の値を返す）なので、
+  // 右辺の値が要る。ここで短絡させてはならない。
+  if (isUnit(l) && node.op !== "!=" && node.op !== "!==") return UNIT;
+  return compareOnValues(node.name, node.op, l, evaluate(node.right, env), node.left);
 }
 
 // 比較族の型規則を**値に対して**適用する。通常の中置（evalCompare）とポイントフリー
@@ -699,8 +709,14 @@ function evalCompare(node, env) {
 // その場合 isArithmeticUnitElement は「値が0/1なら数値」とみなすフォールバックへ落ちる。
 function compareOnValues(name, op, l, r, leftNode) {
   if (op === "!=") {
-    // 例外: x != __ = x（単位元）、__ != x = __（吸収元）
-    if (isUnit(l)) return UNIT;
+    // 例外: 比較族は両辺とも吸収元だが、`!=` だけは**両辺とも単位元**である
+    // （operator_table.md tier 12）。片方が Unit なら「等しくない」ことが確定して真になり、
+    // 真のときに情報を運ぶのは非Unit側の値なので、そちらを返す。
+    // 以前は左辺Unitだけ `__`（吸収元）を返しており、`5 != __` が 5 を返すのに
+    // `__ != 5` は `__` という非対称になっていた——同じ演算子が引数の順序で挙動を
+    // 変えていたことになる。`!==` は元から両辺とも非Unit側を返しており、そちらが正しい。
+    // 両辺ともUnitの場合は r（＝Unit）が返り、「等しいので偽」という正しい結果になる。
+    if (isUnit(l)) return r;
     if (isUnit(r)) return l;
     // 真の場合の返値選択は他の比較演算子と同じ §2.1 の規則に従う（comparison.md §1が
     // `!=` を対象の比較演算子として列挙しており、§2.1の適用外とされているのは
@@ -1256,7 +1272,11 @@ function evaluate(node, env) {
         const l = evaluate(node.left, env);
         const r = evaluate(node.right, env);
         const isChain = node.left && node.left.type === "operation" && node.left.name === "product";
-        return isChain ? [...asList(l), r] : [l, r];
+        const items = isChain ? [...asList(l), r] : [l, r];
+        // `,` の単位元は `__` である。零対象は終対象でもあるため直積では `A × __ ≅ A` が
+        // 成り立つ——スロットは生まれない。余積（空白）が連接の単位元として `__` を落とすのと
+        // 同じ理屈が、直積では終対象としての性質から出てくる。
+        return items.filter((v) => !isUnit(v));
       }
       case "get_prop":
         return getPropValue(evaluate(node.left, env), node.right, env);
@@ -1281,8 +1301,15 @@ function evaluate(node, env) {
     // 二項比較の§2.1「左辺が算術単位元(0/1)なら右辺」は連鎖には適用しない——
     // §4はまさにその規則に依存せず中央を取り出すための仕組みとして定義されている。
     if (node.name === "chain_compare") {
+      // 連鎖も二項と同じ継続の規則に従う——零射へ落ちた時点で結果が `__` に確定するため、
+      // それより右の項を評価しない。`!=` の連鎖だけは除く（`__ != x != y` の扱いが二項の
+      // 「非Unit側を返す」と揃っておらず、連鎖では吸収したままである。ここを変えると
+      // 値まで変わるため、短絡の導入とは分けて別途決める）。
+      const shortCircuits = node.op !== "!=";
       const l = evaluate(node.left, env);
+      if (shortCircuits && isUnit(l)) return UNIT;
       const c = evaluate(node.middle, env);
+      if (shortCircuits && isUnit(c)) return UNIT;
       const r = evaluate(node.right, env);
       if (isUnit(l) || isUnit(c) || isUnit(r)) return UNIT; // 比較演算子の吸収則（§3.3）
       if (node.op === "!=") return l !== c && c !== r ? c : UNIT;

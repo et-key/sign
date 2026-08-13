@@ -22,8 +22,10 @@ Sign では `?` 演算子の右辺（本体）全体が評価対象であり、
 ```sign
 ` f の呼び出しが末尾位置にある
 loop : n acc ?
-    n = 0 & acc |          ` ← acc が末尾（再帰でない → TCO不要）
-    loop (n - 1) (acc + n)  ` ← loop が末尾位置 → TCO対象
+    ` ← acc が末尾（再帰でない → TCO不要）
+    n = 0 & acc |
+    ` ← loop が末尾位置 → TCO対象
+    loop (n - 1) (acc + n)
 ```
 
 ### 末尾位置でない例
@@ -31,7 +33,8 @@ loop : n acc ?
 ```sign
 ` 呼び出しの結果をさらに演算に使う → 末尾位置でない
 bad : n ?
-    (f n) + 1   ` ← f n の結果に +1 している → f n は末尾位置でない
+    ` ← f n の結果に +1 している → f n は末尾位置でない
+    (f n) + 1
 ```
 
 ---
@@ -50,17 +53,23 @@ cond が Unit       → else を評価して返す
 ```sign
 ` &/| の各節が末尾位置
 classify : n ?
-    n < 0  & neg  |    ` neg が末尾（リテラル、TCO不要）
-    n = 0 & zero |    ` zero が末尾（リテラル、TCO不要）
-    pos              ` pos が末尾（リテラル、TCO不要）
+    ` neg が末尾（リテラル、TCO不要）
+    n < 0  & neg  |
+    ` zero が末尾（リテラル、TCO不要）
+    n = 0 & zero |
+    ` pos が末尾（リテラル、TCO不要）
+    pos
 ```
 
 ```sign
 ` 再帰呼び出しが各節の末尾にある
 collatz : n steps ?
-    n = 1     & steps            |  ` 基底ケース
-    n % 2 = 0 & collatz (n / 2)  (steps + 1) |  ` 偶数 → TCO
-                 collatz (n * 3 + 1) (steps + 1)   ` 奇数 → TCO
+    ` 基底ケース
+    n = 1     & steps            |
+    ` 偶数 → TCO
+    n % 2 = 0 & collatz (n / 2)  (steps + 1) |
+                 ` 奇数 → TCO
+                 collatz (n * 3 + 1) (steps + 1)
 ```
 
 各 `|` 節の末尾呼び出しは**すべて独立に TCO 対象**となる。

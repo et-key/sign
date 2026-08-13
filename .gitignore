@@ -22,3 +22,6 @@ tools/w64devkit
 
 # peggyから都度生成されるパーサー（npm run build:parser、コミット対象外）
 alpha/javascript/parser.js
+# pre-alpha のアーカイブ（documents/ja-jp/impl/appendix/pre_alpha.md 参照）
+# 履歴には残っているため、リポジトリには含めない
+pre_alpha_archive.zip
