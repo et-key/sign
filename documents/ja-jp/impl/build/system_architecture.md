@@ -100,7 +100,8 @@ link :
 	static :
 		memory :
 			rom : origin 0x00000000  length 4M
-			ram : auto   ` UEFI等のシステムコール/パラメータから起動時に自動マッピング
+			` UEFI等のシステムコール/パラメータから起動時に自動マッピング
+			ram : auto
 ```
 
 ### 4.3 ヒープ領域の一括確保 (heap: max)
@@ -116,7 +117,8 @@ link :
 	static :
 		memory :
 			ram  : origin 0x20000000  length 128K
-			heap : max 64K   ` 起動時に 64K を一括確保、内部はアリーナで管理
+			` 起動時に 64K を一括確保、内部はアリーナで管理
+			heap : max 64K
 ```
 
 **動作：**
@@ -131,8 +133,10 @@ link :
 "
 	` heap: max 64K の定義から
 	ヒープ領域を alloca で一括確保
-	heap_base : alloca 65536   ` 64K
-	heap_ptr  : heap_base      ` バンプポインタ
+	` 64K
+	heap_base : alloca 65536
+	` バンプポインタ
+	heap_ptr  : heap_base
 "
 ```
 

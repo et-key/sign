@@ -50,9 +50,12 @@ cond が Unit       → else を評価して返す
 ```sign
 ` &/| の各節が末尾位置
 classify : n ?
-    n < 0  & neg  |    ` neg が末尾（リテラル、TCO不要）
-    n = 0 & zero |    ` zero が末尾（リテラル、TCO不要）
-    pos              ` pos が末尾（リテラル、TCO不要）
+    ` neg が末尾（リテラル、TCO不要）
+    n < 0  & neg  |
+    ` zero が末尾（リテラル、TCO不要）
+    n = 0 & zero |
+    ` pos が末尾（リテラル、TCO不要）
+    pos
 ```
 
 ```sign

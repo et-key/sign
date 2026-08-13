@@ -123,9 +123,12 @@ val : 42            → val は Atom
 > 添字が静的に確定していなければスロットの型が決まらず、命令が選べないためである。
 >
 > ```sign
-> list ' i        ` OK: i が実行時変数でよい（要素型が一つなので命令が決まる）
-> struct ' 0      ` OK: リテラルなのでオフセットも型もコンパイル時に確定する
-> struct ' i      ` NG: スロットの型が決まらず命令を選べない
+> ` OK: i が実行時変数でよい（要素型が一つなので命令が決まる）
+> list ' i
+> ` OK: リテラルなのでオフセットも型もコンパイル時に確定する
+> struct ' 0
+> ` NG: スロットの型が決まらず命令を選べない
+> struct ' i
 > ```
 >
 > 物理レイアウトの詳細は [`stack_abi.md` §7.1](../memory/stack_abi.md) を参照。
@@ -613,9 +616,12 @@ Address の降格」は Layer 1 のカテゴリ変換であり、ここで言う
 変換が現実に必要になるのは「**添字にしたい**」場合であって、「**番地にしたい**」場合ではない：
 
 ```sign
-pixels ' (u * width)       ` 正規化座標から画素位置へ
-samples ' (t * rate)       ` 時刻からサンプル位置へ
-bins ' (value / bin_width) ` 値からヒストグラムのビンへ
+` 正規化座標から画素位置へ
+pixels ' (u * width)
+` 時刻からサンプル位置へ
+samples ' (t * rate)
+` 値からヒストグラムのビンへ
+bins ' (value / bin_width)
 ```
 
 浮動小数点で番地そのものを計算する動機は存在しない。番地は `base + index * stride` という
@@ -993,11 +999,15 @@ point2 : Point 5 7
 > 割り当てる。「由来を静的に遡る」必要はない——値そのものが最初から区別されているからである。**
 
 ```sign
-#RGB : Red | Green | Blue   ` Red=0, Green=1, Blue=2
+` Red=0, Green=1, Blue=2
+#RGB : Red | Green | Blue
 
-Red   : !__   ` Lambda<returns: Red>（id射）
-Green : !__   ` Lambda<returns: Green>
-Blue  : !__   ` Lambda<returns: Blue>
+` Lambda<returns: Red>（id射）
+Red   : !__
+` Lambda<returns: Green>
+Green : !__
+` Lambda<returns: Blue>
+Blue  : !__
 
 col  : Red 0xFF
 
@@ -1169,7 +1179,8 @@ HM は型変数を導入して制約ソルビングを行うが、Sign は演算
 ```sign
 classify : x ?
   x < 0 : `negative`   ` arm 1: String
-  x = 0 : 0             ` arm 2: Int（Unit と同型の 0）
+  ` arm 2: Int（Unit と同型の 0）
+  x = 0 : 0
   `positive`            ` arm 3: String（デフォルト）
 ```
 
@@ -1225,7 +1236,8 @@ Sign における「成功/失敗」のパターンは、データ付き variant
 ```sign
 ` ✅ Sign の Result パターン（Ok/Err は不要）
 #parse : src ?
-  valid src & src | __   ` 成功: src を返す、失敗: __ に収束
+  ` 成功: src を返す、失敗: __ に収束
+  valid src & src | __
 
 ` 呼び出し元
 result : parse input | `default`
