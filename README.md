@@ -98,10 +98,8 @@ graph LR
 
 ## Playground
 
-There are two playgrounds in this repo:
-
-- **`alpha/javascript` playground (active implementation)** — the interpreter currently under development (lexer → Pass1/1b/2/3 → interpreter). Use this one to try the language as it actually behaves today.
-- **Root playground (pre-alpha, deferred)** — an older WASM/JS-transpiler prototype, kept for reference only.
+The playground lives in `alpha/javascript` — the interpreter currently under development
+(lexer → Pass1/1b/2/3 → interpreter). Use it to try the language as it actually behaves today.
 
 ### alpha/javascript Playground（アクティブな実装。基本こちらを使ってください）
 
@@ -129,39 +127,4 @@ There are two playgrounds in this repo:
 - **PowerShell script** (for Windows PowerShell): `.\sign_alpha_web.ps1`
 
 This starts a local server at `http://localhost:5183` and automatically opens your default web browser. `sign.pegjs`（正式仕様）を編集した場合は、`npm run build:parser` を再実行しないと Playground に反映されない点に注意してください。
-
----
-
-### Root Playground（pre-alpha、参考用）
-
-You can launch the interactive web-based playground locally using any of the following (defaults to port `3980`):
-
-#### Windows ユーザー向けのかんたんセットアップ (For Windows Users)
-
-1. エクスプローラーで `install.ps1` を右クリックし、「PowerShell で実行」を選択してください。（またはターミナルから `./install.ps1` を実行します）
-2. Node.js がインストールされていない場合は、画面の指示に従って自動インストールが可能です。
-3. 必要なデータのダウンロードが完了すると、自動的に Playground が起動いたします。
-
-**※2回目以降の起動について**
-セットアップ完了後は、`sign_web.ps1` を実行していただくだけで、いつでも Playground を起動できます。
-
-#### その他の起動方法 (Manual Launch Methods)
-
-- **npm script**:
-  ```bash
-  npm run playground [-- <port>]
-  # Example: npm run playground -- 8080
-  ```
-- **Shell script** (for macOS/Linux/Git Bash):
-  ```bash
-  ./sign_web.sh [<port>]
-  # Example: ./sign_web.sh 8080
-  ```
-- **PowerShell script** (for Windows PowerShell):
-  ```powershell
-  .\sign_web.ps1 [<port>]
-  # Example: .\sign_web.ps1 8080
-  ```
-
-This will start the local development server at the selected port (default `http://localhost:3980`) and automatically open your default web browser.
 

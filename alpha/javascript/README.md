@@ -4,7 +4,7 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
 `documents/ja-jp/impl/syntax/grammar.pegjs`**（peggy記法、優先順位をPEGに埋め込まず
 フラットな空白区切りリストを構築する方式）＋`coproduct_resolver.md`（Pass2: フラットリスト→
 二分木ASTへの縮約アルゴリズム）であり、ここではそれをそのまま実装する。
-`pre_alpha/`は無改変のまま独立して残す。
+pre-alpha 実装はアーカイブへ退避した（`documents/ja-jp/impl/appendix/pre_alpha.md` 参照）。
 
 以前このディレクトリに置いていた「16段階優先順位を手でエンコードする古典的PEG方式」の
 `sign.pegjs`は不採用の遺物（`LanguageServer/src/sign.pegjs`と同じ立ち位置）と判明したため、
@@ -34,7 +34,7 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   Pass 2 が余積を apply/compose/concat のどれに解決するか決めるまで確定しないため
   （トークン列の段階では `f x` が関数適用かリスト構築か判定できない）。
   B-1・B-3 と同じ「§5 の記述が実装より単純化されている」系の食い違いで、仕様側の修正候補。
-- `lexer.js` — 前処理（`separateInfix` + `markBlock`）。`pre_alpha/lexisize/lexer.js`から移植。
+- `lexer.js` — 前処理（`separateInfix` + `markBlock`）。pre-alpha 実装から無改変で移植（引き継いだ唯一の資産。appendix/pre_alpha.md 参照）。
   **ブラケット深さ追跡を追加**（`bracketDelta`）：`markBlock`はタブ深さの変化のみでINDENT/DEDENTを
   挿入するためブラケットの存在を考慮しておらず、`function_guide.md`の`func_mixed`例のように
   `[`を定義行より深くインデントして複数行で書くと、ブラケットの中に本来無いはずのインデント
@@ -380,7 +380,7 @@ Sign言語の lexer/parser 再実装（JavaScript版）。**正式仕様は
   インデントブロック形のデフォルト引数とlet*的な逐次スコープ）。
 - `playground/` — ブラウザ上でソース→AST→評価結果を確認できる簡易UI（`node playground/serve.mjs`
   で起動、またはリポジトリルートの`install_alpha.ps1`/`sign_alpha_web.ps1`を使う——詳細は
-  ルートの`README.md`「Playground」節を参照）。**見た目はpre-alpha期のroot `playground/`と
+  ルートの`README.md`「Playground」節を参照）。**見た目はpre-alpha期のplaygroundと
   同じデザイン言語（ガラス背景・Sign ロゴ・パネルカード、`playground.css`）に統一**しつつ、
   出力パネルはalphaの実態に合わせてResult/ASTの2分割、Templateドロップダウンもalphaで
   実際に動く機能だけで作り直した（2026-08-08）。**フォント（種別・サイズ・合字の有無）を

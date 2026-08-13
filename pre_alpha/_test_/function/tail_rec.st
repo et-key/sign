@@ -1,1 +1,0 @@
-loop : Lambda((<loop> <= <x>))

@@ -21,7 +21,7 @@ impl/
 │   ├── grammar.pegjs        PEG文法仕様（パーサーの原型）
 │   ├── hole_desugaring.md   Hole（_）の静的脱糖アルゴリズム
 │   ├── match_case.md        match_case の脱糖・実装
-│   └── operator_table.js    演算子テーブル実装参照（pre_alpha と同期）
+│   └── operator_table.js    演算子テーブル実装参照
 │
 ├── core/              ← 意味論フェーズ
 │   ├── unit.md              Unit（__）完全仕様（数学的基盤 + 実装規則）
