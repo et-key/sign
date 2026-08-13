@@ -1,7 +1,7 @@
 # pre-alpha 実装の記録
 
-pre-alpha（`pre_alpha/`）は alpha より前の実装であり、アーカイブとして `pre_alpha.zip` に
-退避した。本文書はその構成と、alpha との差異、そして**なぜ続かなかったか**を記録する。
+pre-alpha（`pre_alpha/`）は alpha より前の実装であり、アーカイブとして
+`pre_alpha_archive.zip` に退避した。本文書はその構成と、alpha との差異、そして**なぜ続かなかったか**を記録する。
 
 > [!IMPORTANT]
 > **pre-alpha のコードを設計の参考にしないこと。** 下記の通り、型層を持たないまま
@@ -118,7 +118,8 @@ Pass 4 はまだ無いが、**何を出すべきかは型が既に決めてい�
 
 ## 5. アーカイブの取り扱い
 
-- `pre_alpha.zip` にまとめてある（`node_modules` は含まない）
+- `pre_alpha_archive.zip` にまとめてある（`node_modules` は含まない）。
+  リポジトリには含めず、`.gitignore` で除外している
 - ルートにあった `playground/`・`run_debug.js`・`run_transpile.js`・`run_playground.js` は
   pre-alpha のフロントエンドであり、同じアーカイブに含む
 - 履歴は git に残っているため、必要になれば当該コミットから取り出せる
