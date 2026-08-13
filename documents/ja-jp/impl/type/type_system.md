@@ -40,7 +40,7 @@ Sign の型システムは、独立した2つのレイヤーで構成されま�
 
 **Layer 1 の決定規則（構文から直読み）：**
 
-```sign
+```text
 x y ? body          → Lambda  (`?` があるから確定)
 [+ 2]               → Lambda  (部分操作のブラケット)
 [f]                  → Lambda  (関数のアドレス化)
@@ -73,7 +73,7 @@ __                  → Atom    (Unit値)
 **識別子の場合：**
 識別子の構造型は、その定義がある行の構文から決定します。`?` を含む定義は `Lambda`、それ以外は `Atom` です。
 
-```sign
+```text
 f : x y ? x + y     → f は Lambda（arity: 2）
 val : 42            → val は Atom
 ```
@@ -361,9 +361,12 @@ Layer 1 の構造型が確定した後、スペース演算子は以下の4つ�
 > このとき結果は **四捨五入（最近接、タイは 0 から遠ざける）** で `Address` に丸める。
 >
 > ```sign
-> 5 / 2    ` → 3   （2.5 → 3）
-> -5 / 2   ` → -3  （-2.5 → -3。0 から遠ざけるので -2 ではない）
-> 7 / 2    ` → 4   （3.5 → 4）
+> ` → 3   （2.5 → 3）
+> 5 / 2
+> ` → -3  （-2.5 → -3。0 から遠ざけるので -2 ではない）
+> -5 / 2
+> ` → 4   （3.5 → 4）
+> 7 / 2
 > ```
 >
 > この丸め方向は AArch64 の `fcvtas`/`fcvtau`（最近接、タイは0から遠ざける）に1命令で対応する。
@@ -492,10 +495,14 @@ Sign の関数仕様では、**引数が全て有効値（非 Unit）で評価�
 ```sign
 f : x y ? x + y
 
-f 3 5    ` → 8      （完全評価）
-f 3 __   ` → __     （y が Unit → 完全評価でない → __）
-f __ 5   ` → __     （x が Unit → 完全評価でない → __）
-f 3 (2 < 1)  ` → __ （2 < 1 = __ → f 3 __ → __）
+` → 8      （完全評価）
+f 3 5
+` → __     （y が Unit → 完全評価でない → __）
+f 3 __
+` → __     （x が Unit → 完全評価でない → __）
+f __ 5
+` → __ （2 < 1 = __ → f 3 __ → __）
+f 3 (2 < 1)
 ```
 
 **デフォルト引数との連携：**
@@ -507,9 +514,12 @@ g :
     y : x + 1
   ? x + y
 
-g 3      ` → 7   （y はデフォルト値 3+1=4 を使用）
-g 3 __   ` → 7   （y = __ → デフォルト値 4 にフォールバック）
-g __ 5   ` → __  （x = __ → デフォルトなし → 完全評価不能 → __）
+` → 7   （y はデフォルト値 3+1=4 を使用）
+g 3
+` → 7   （y = __ → デフォルト値 4 にフォールバック）
+g 3 __
+` → __  （x = __ → デフォルトなし → 完全評価不能 → __）
+g __ 5
 ```
 
 ### 3.5 高階関数と `$`/`@` による Lambda ↔ Atom 変換
@@ -519,7 +529,8 @@ Coproduct Resolver は余積の各要素を **Lambda** か **Atom** に分類し
 同じ余積列に Lambda が複数並ぶと「関数合成（compose）」と解釈されてしまいます。
 
 ```sign
-apply : g x ? g x   ` g は Lambda パラメータ
+` g は Lambda パラメータ
+apply : g x ? g x
 
 ` 問題: apply (add 3) 5 の余積を Resolver にかけると
 ` [Lambda(apply), Lambda(add3), Atom(5)]
@@ -540,7 +551,8 @@ apply : g x ? g x   ` g は Lambda パラメータ
 
 ```sign
 apply_five : f ?
-    (@f) 5.0        ` @f で Address を Lambda として呼び出す
+    ` @f で Address を Lambda として呼び出す
+    (@f) 5.0
 
 high_order_result : apply_five ($(add 10.0))
 ` $(add 10.0) → Address(Atom)
@@ -914,7 +926,8 @@ apply_five$Lambda_Lambda : Lambda(Number -> Number) Lambda(Number -> Number) -> 
 #add : [+]
 
 `add.sn`@~
-add 1 2    ` → 3  （add は Lambda として解決される）
+` → 3  （add は Lambda として解決される）
+add 1 2
 ```
 
 **インポートが失敗した場合：**
@@ -979,7 +992,7 @@ point2 : Point 5 7
 > **`?` の直後にインデントブロック（TAB）を使うと `match_case` 構文になる。**
 > コンストラクタのように複数フィールドの値を返す場合は、必ず `[...]` ブロックで明示する。
 >
-> ```sign
+> ```text
 > ` ❌ match_case と衝突する（NG）
 > Point : x y ?
 >   x : x     ← パーサーが条件 `x`、結果 `x` と解釈してしまう
@@ -1083,7 +1096,8 @@ describe : col ?
 points : [Point,] 1 2 , 3 4 , 5 6
 
 ` アクセス
-points ' 1 ' x   ` → 3（2番目の要素の x フィールド）
+` → 3（2番目の要素の x フィールド）
+points ' 1 ' x
 ```
 
 #### `.st` ファイルの役割（変更なし）
@@ -1217,14 +1231,19 @@ Sign の関数は：
 コンストラクタ関数も同じ：
 
 ```sign
-#RGB : Red | Green | Blue   ` Red=0, Green=1, Blue=2
+` Red=0, Green=1, Blue=2
+#RGB : Red | Green | Blue
 
-Red   : !__   ` Lambda<returns: Red>（id射）
-Green : !__   ` Lambda<returns: Green>
-Blue  : !__   ` Lambda<returns: Blue>
+` Lambda<returns: Red>（id射）
+Red   : !__
+` Lambda<returns: Green>
+Green : !__
+` Lambda<returns: Blue>
+Blue  : !__
 
 ` match_case → 返値型が直和（String）になる例
-#classify : col ?               ` Lambda<returns: String>
+` Lambda<returns: String>
+#classify : col ?
   col == Red   : `red`
   col == Green : `green`
   `blue`
@@ -1249,7 +1268,7 @@ result : parse input | `default`
 
 `?` 演算子により Lambda の返値型が静的に確定するため、`$`/`@` の意味が一意に決まる：
 
-```sign
+```text
 #func : x ? x + 1             ` Lambda<returns: Scalar>
 $func → Atom(Address)           ` §2の通り、$は常にAddressを返す
 @$func → Scalar               ` @が参照先（funcのLambda値）を継承し、遅延評価を駆動
