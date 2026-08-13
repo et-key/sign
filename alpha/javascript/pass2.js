@@ -606,7 +606,18 @@ const COPRODUCT_PHASES = [
 
 // 連鎖比較（comparison.md §4）の対象となる比較演算子（tier12）。構造比較の
 // `==`/`!==`（tier8）は §2.1 が明示的にこの規則の適用外としているため含めない。
+//
+// `!=` は「連鎖として検出はするが、連鎖として組み立てず構文エラーにする」——
+// §4.1 が要求する推移性を持たないため（下の NON_TRANSITIVE_CHAIN_OPS 参照）。
+// ここから外してしまうと連鎖と検出されず、左結合の二項（`(a != b) != c`）として
+// 黙って値を返してしまう（`3 != 5 != 7` が 3 になる）ので、集合には残す。
 const CHAIN_COMPARE_OPS = new Set(["<", "<=", "=", ">=", ">", "!="]);
+
+// 推移的でない比較演算子。`a R b` かつ `b R c` から `a R c` が導けないため、
+// 隣接ペアが単一の関係へ畳めず、§4 の連鎖（＝畳めることを前提に中央の項を
+// 取り出す仕組み）が成り立たない。`3 != 5 != 3` は「隣接ペアが両方真」だが
+// 両端は等しく、これを「3つとも相異なる」と読んだ側が黙って間違える。
+const NON_TRANSITIVE_CHAIN_OPS = new Set(["!="]);
 
 function reduceOnce(items, tier, env, phase) {
   for (let i = 0; i < items.length - 1; i++) {
@@ -628,6 +639,15 @@ function reduceOnce(items, tier, env, phase) {
           // §4.1「同一の比較演算子の連鎖のみが許容」（`A < B > C` は構文エラー）。
           if (op2 !== b) {
             throw new SyntaxError(`comparison.md §4.1違反: 連鎖比較は同一の比較演算子のみ許容されます（'${b}' と '${op2}' が混在）`);
+          }
+          // §4.1「連鎖できるのは推移的な比較のみ」。
+          if (NON_TRANSITIVE_CHAIN_OPS.has(b)) {
+            throw new SyntaxError(
+              `comparison.md §4.1違反: '${b}' は推移的でないため連鎖できません` +
+                `（'a ${b} b' かつ 'b ${b} c' でも 'a ${b} c' とは限らない）。` +
+                `中央が両端のどちらとも異なることを見たいなら '(a ${b} b) & (b ${b} c)'、` +
+                `3項が相異なることを見たいなら '(a ${b} b) & (b ${b} c) & (a ${b} c)' と明示的に書いてください`
+            );
           }
           if (i + 4 >= items.length || isBareOperatorToken(items[i + 4])) {
             throw new SyntaxError(`連鎖比較 '${b}' の右辺がありません`);

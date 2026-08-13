@@ -1302,17 +1302,15 @@ function evaluate(node, env) {
     // §4はまさにその規則に依存せず中央を取り出すための仕組みとして定義されている。
     if (node.name === "chain_compare") {
       // 連鎖も二項と同じ継続の規則に従う——零射へ落ちた時点で結果が `__` に確定するため、
-      // それより右の項を評価しない。`!=` の連鎖だけは除く（`__ != x != y` の扱いが二項の
-      // 「非Unit側を返す」と揃っておらず、連鎖では吸収したままである。ここを変えると
-      // 値まで変わるため、短絡の導入とは分けて別途決める）。
-      const shortCircuits = node.op !== "!=";
+      // それより右の項を評価しない。連鎖できるのは推移的な比較（`<` `<=` `=` `>=` `>`）
+      // だけであり、どれも左辺Unitで零射になるため例外は無い。推移的でない `!=` は
+      // pass2.js が連鎖として組み立てず構文エラーにするので、ここへは来ない。
       const l = evaluate(node.left, env);
-      if (shortCircuits && isUnit(l)) return UNIT;
+      if (isUnit(l)) return UNIT;
       const c = evaluate(node.middle, env);
-      if (shortCircuits && isUnit(c)) return UNIT;
+      if (isUnit(c)) return UNIT;
       const r = evaluate(node.right, env);
-      if (isUnit(l) || isUnit(c) || isUnit(r)) return UNIT; // 比較演算子の吸収則（§3.3）
-      if (node.op === "!=") return l !== c && c !== r ? c : UNIT;
+      if (isUnit(r)) return UNIT; // 比較演算子の吸収則（§3.3）
       return COMPARE_OPS[node.compareName](l, c) && COMPARE_OPS[node.compareName](c, r) ? c : UNIT;
     }
 

@@ -45,5 +45,6 @@ $$\text{Given } a = 1 \implies \text{eval}(1 < 5) = \text{eval}(a < 5) = 5$$
 
 Ternary chains (`L < C < R`) parse into dedicated AST nodes: `ChainCompare(L, <, C, <, R)`:
 1. Validated statically: All operators in chain must be identical.
-2. If all adjacent comparisons evaluate to True, unconditionally return **Central Term $C$**.
-3. If any comparison evaluates to False, immediately return **`__`** (Unit).
+2. Validated statically: The operator must be **transitive**, so that `a R b` and `b R c` imply `a R c`. Only `<` `<=` `=` `>=` `>` qualify; **`!=` cannot be chained** (syntax error), since `3 != 5 != 3` satisfies both adjacent pairs while the outer terms are equal. Write `(a != b) & (b != c)` explicitly instead.
+3. If all adjacent comparisons evaluate to True, unconditionally return **Central Term $C$**.
+4. If any comparison evaluates to False, immediately return **`__`** (Unit). Evaluation short-circuits at the first zero morphism, so terms to its right are not evaluated.
