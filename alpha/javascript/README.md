@@ -352,8 +352,15 @@ pre-alpha 実装はアーカイブへ退避した（`documents/ja-jp/impl/append
   持っていたため、ディスパッチ条件に`node.op === "!="`を追加するだけの狙い撃ちの修正で
   済んだ。`!==`（構造比較）・`==`・`===`は依然未実装のまま——スコープを広げず`!=`だけを
   直した（`test/interpreter.test.js`で§4の例外規則込みで確認）。
+- `test/run.js` — テストランナー。`test/*.test.js` を列挙して1本ずつ別プロセスで実行し、
+  ファイル数とケース数を集計する。落ちたテストだけ全出力を表示する。新しいテストは
+  `test/` に `*.test.js` として置けばよく、ここへの登録は要らない。
+- `test/parser.test.js` — パーサー単体の動作確認。`preprocess()` を通した入力が
+  フラットなTerm列になること（コプロダクト、define、前置・後置の密着、`'`、`$`/`#`の非対称性）。
+- `test/interpreter.test.js` — 評価器の動作確認。最大のテストで、演算子表の各欄・Unitの
+  振る舞い・ポイントフリー・部分適用・分割代入・短絡評価・TCOなど、言語の挙動全般を見る。
 - `test/sign_programs.test.js` — **`alpha/sign/` に置いた「Sign 自身で書いたプログラム」**
-  （字句解析器・再帰下降パーサ）の動作確認。9/9 pass。処理系の単体テストと違い、まとまった量の
+  （字句解析器・再帰下降パーサ）の動作確認。処理系の単体テストと違い、まとまった量の
   実プログラムが壊れていないかを見る（8-Queensと同じ役割）。実際この2本を書く過程で
   `pass2.js` の余積解決のバグが1件見つかった——`isListLike` が中身を見ずに括弧を全て
   List 扱いしていたため `` `x` (`y`) `` が construct ではなく push へ落ち、String の
@@ -361,16 +368,16 @@ pre-alpha 実装はアーカイブへ退避した（`documents/ja-jp/impl/append
   作られていたが、`coproductReduce` の 10.1/10.2 判定だけ古い判定のまま残っていた。
 - `test/compile.test.js` — `compile.js`（Pass 1〜3 の単一ドライバ）の動作確認。全ノードへの
   `atomType` 注釈、数値の昇格格子（識別子経由を含む）、算術族の型不一致、List左辺の算術、
-  余積族、`&`/`|`、define/lambda/Dict判定、Pass 1b がパイプラインに載っていること。24/24 pass。
-- `test/pass2.test.js` — Pass2単体（envなし）の動作確認。9/9 pass。
+  余積族、`&`/`|`、define/lambda/Dict判定、Pass 1b がパイプラインに載っていること。
+- `test/pass2.test.js` — Pass2単体（envなし）の動作確認。
 - `test/multi_arg_apply.test.js` — 多引数関数の呼び出しがapplyチェーンとして正しく飽和し、
-  余分な引数がconstructでタプル化されることの確認。3/3 pass。
+  余分な引数がconstructでタプル化されることの確認。
 - `test/pass3.test.js` — Pass3の型伝播（左辺優先ルール、String+算術演算子→Unit、リテラルからの
-  atomType解決、List/Struct/Dictの区別）の動作確認。10/10 pass。
+  atomType解決、List/Struct/Dictの区別）の動作確認。
 - `test/pass3_param_usage.test.js` — 仮引数のatomType自動導出（本体の算術演算子・比較演算子
-  使用箇所からのScalar逆算、`type_system.md`§7.1）の動作確認。6/6 pass。
+  使用箇所からのScalar逆算、`type_system.md`§7.1）の動作確認。
 - `test/pass1b.test.js` — Pass1b（`@ref`ジェネリック仮引数の検出、呼び出しサイト収集、
-  exportされたジェネリック関数に呼び出しサイトが無い場合のコンパイルエラー）の動作確認。4/4 pass。
+  exportされたジェネリック関数に呼び出しサイトが無い場合のコンパイルエラー）の動作確認。
 - `test/nested_scope.test.js` — Pass1+Pass2を通した、ブロックスコープの連鎖の動作確認。
 - `test/multiline_block.test.js` — 複数行ブロックが1つのブロック内の複数文として正しく解決されることの確認。
 - `test/rest_param_typecheck.test.js` — 裸のrestパラメータ（`x ~xs ? ...`）への`~`なしList渡しが
@@ -394,11 +401,16 @@ pre-alpha 実装はアーカイブへ退避した（`documents/ja-jp/impl/append
 
 ```
 npm install
-node test/pass2.test.js          # Pass2単体の検証
-node test/nested_scope.test.js   # ブロックスコープ連鎖の検証
-node test/multiline_block.test.js  # 複数行ブロックの検証
+npm test                         # test/*.test.js を全て実行（件数は実行結果を見ること）
+node test/pass2.test.js          # 個別に実行することもできる
 npm run build:parser             # sign.pegjs から parser.js を生成（--format es、都度生成、コミット対象外）
 ```
+
+`npm test`（`test/run.js`）は `test/` 配下の `*.test.js` を列挙して1本ずつ別プロセスで
+実行し、最後にファイル数とケース数を集計する。落ちたテストだけ全出力を表示する。
+テストは各自 `sign.pegjs` を peggy で都度ビルドしており（ビルド済み `parser.js` には
+依存しない）グローバルな状態も持たないため、プロセスを分けても取りこぼしは無い。
+**新しいテストは `test/` に `*.test.js` という名前で置けばよく、ランナーへの登録は要らない。**
 
 ## `grammar.pegjs`の根本修正（正式仕様ファイル自体を修正済み）
 

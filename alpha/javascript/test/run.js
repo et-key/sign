@@ -1,54 +1,63 @@
 /**
- * 動作確認用テストランナー。
- * sign.pegjs（正式仕様: documents/ja-jp/impl/syntax/grammar.pegjs 準拠、peggy記法）を都度ビルドし、
- * lexer.js の preprocess() を通してからパースする。
- * このパーサーの出力は「フラットなTerm列」であり、演算子の優先順位解決（Shunting Yard、
- * apply/compose/concatの区別）は行わない。それは意味論フェーズ（Pass2, coproduct_resolver.md）
- * の責務であり、Pass2はまだ未実装。
+ * テストランナー。test/ 配下の *.test.js をすべて実行する。
  *
- * 実行: npm install && npm test
+ * 各テストファイルは独立したプロセスとして起動する。テストごとに peggy で
+ * sign.pegjs を都度ビルドしており（ビルド済み parser.js には依存しない）、
+ * グローバルな状態も持たないため、プロセスを分けても取りこぼしは無い。
+ * 逆にプロセスを分けることで、1本が落ちても残りの結果が取れる。
+ *
+ * テストファイル側の規約:
+ *   - 最終行に `N/M passed` を出力する
+ *   - 全件通れば終了コード0、1件でも落ちれば非0
+ * 新しいテストは test/ に `*.test.js` として置けば、ここへの登録は要らない。
+ *
+ * 実行: npm test
  */
-import peggy from "peggy";
+import { spawnSync } from "child_process";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { preprocess } from "../lexer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const grammarPath = path.join(__dirname, "..", "sign.pegjs");
-const grammar = fs.readFileSync(grammarPath, "utf8");
-const parser = peggy.generate(grammar);
+const files = fs.readdirSync(__dirname).filter((f) => f.endsWith(".test.js")).sort();
 
-const cases = [
-	{ name: "コプロダクト（空白）によるフラットリスト化", input: "x y ? x + y", expect: ["<x>", "<y>", "?", "<x>", "+", "<y>"] },
-	{ name: "define", input: "f : x ? x + 1", expect: ["<f>", ":", "<x>", "?", "<x>", "+", "1"] },
-	{ name: "前置（密着）: @x", input: "@x", expect: ["@_", "<x>"] },
-	{ name: "後置（密着）: x@", input: "x@", expect: ["<x>", "_@"] },
-	{ name: "GetLeft: x ' y", input: "x ' y", expect: ["<x>", "'", "<y>"] },
-	{ name: "$/#の非対称性: $[array ' 0] # 3", input: "$[array ' 0] # 3", expect: ["$_", [["<array>", "'", "0"]], "#", "3"] },
-];
+if (files.length === 0) {
+	console.log("テストファイルが1つも見つかりません（test/*.test.js）");
+	process.exit(1);
+}
 
+const width = Math.max(...files.map((f) => f.length));
+let failedFiles = 0;
 let passed = 0;
-for (const c of cases) {
-	const pre = preprocess(c.input);
-	try {
-		const ast = parser.parse(pre);
-		const got = JSON.stringify(ast[0]);
-		const want = JSON.stringify(c.expect);
-		if (got === want) {
-			console.log(`OK   ${c.name}`);
-			passed++;
-		} else {
-			console.log(`FAIL ${c.name}`);
-			console.log(`     got:  ${got}`);
-			console.log(`     want: ${want}`);
-		}
-	} catch (e) {
-		console.log(`FAIL ${c.name}`);
-		console.log(`     preprocessed: ${JSON.stringify(pre)}`);
-		console.log(`     error:        ${e.message}`);
+let total = 0;
+let unsummarized = 0;
+
+for (const file of files) {
+	const started = Date.now();
+	const result = spawnSync(process.execPath, [path.join(__dirname, file)], { encoding: "utf8" });
+	const elapsed = Date.now() - started;
+	const output = (result.stdout || "") + (result.stderr || "");
+	// 規約の `N/M passed` を拾う。最後のものを採る（テスト本文が同じ形を出す場合に備えて）
+	const summary = [...output.matchAll(/^(\d+)\/(\d+) passed$/gm)].pop();
+	if (summary) {
+		passed += Number(summary[1]);
+		total += Number(summary[2]);
+	} else {
+		unsummarized++;
+	}
+
+	const ok = result.status === 0 && !result.error;
+	if (!ok) failedFiles++;
+	const count = summary ? `${summary[1]}/${summary[2]}` : "集計行なし";
+	console.log(`${ok ? "OK  " : "FAIL"} ${file.padEnd(width)}  ${count.padStart(11)}  ${String(elapsed).padStart(5)}ms`);
+
+	// 落ちたときだけ全出力を見せる。通ったテストの詳細は個別実行で見ればよい
+	if (!ok) {
+		if (result.error) console.log(`     起動に失敗: ${result.error.message}`);
+		console.log(output.replace(/\r/g, "").replace(/^/gm, "     ").replace(/\s+$/, ""));
 	}
 }
 
-console.log(`\n${passed}/${cases.length} passed`);
-process.exit(passed === cases.length ? 0 : 1);
+console.log(`\n${files.length - failedFiles}/${files.length} ファイル / ${passed}/${total} ケース`);
+if (unsummarized > 0) console.log(`（うち ${unsummarized} 本は \`N/M passed\` を出しておらず、ケース数に含まれていない）`);
+process.exit(failedFiles === 0 ? 0 : 1);

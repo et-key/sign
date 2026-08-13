@@ -37,12 +37,14 @@ const want = "paren{add[number(1), number(2)]; mul[number(3), number(4)]}";
 const ast = parser.parse(source);
 const got = show(reduceAll(ast[0]));
 
-if (got === want) {
+const passed = got === want ? 1 : 0;
+if (passed) {
 	console.log("OK   複数行ブロックが1つのブロック内の2つの文として正しく解決される");
-	process.exit(0);
 } else {
 	console.log("FAIL 複数行ブロック");
 	console.log("     got: ", got);
 	console.log("     want:", want);
-	process.exit(1);
 }
+
+console.log(`\n${passed}/1 passed`);
+process.exit(passed === 1 ? 0 : 1);
