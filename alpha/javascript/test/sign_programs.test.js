@@ -62,16 +62,18 @@ function check(note, got, want) {
 
 // ---- lexer.sn ----
 // トークン列はカンマ（直積）で積むため、右結合の入れ子として返る。
+// 直積の Unit は恒等射（`A × __ ≅ A`、operator_table.md ※3）なので、末尾で残りが空に
+// なった cons セルはスロットを作らず `[token]` に潰れる——終端に `__` は現れない。
 check(
 	"lexer.sn: `foo 123 + bar42` を5トークンへ分割する",
 	runFile("lexer.sn"),
-	["foo", ["123", ["+", ["bar", ["42", null]]]]]
+	["foo", ["123", ["+", ["bar", ["42"]]]]]
 );
 
 check(
 	"lexer.sn: 数字と識別子の境界を正しく切る（bar42 → bar , 42）",
 	runWith("lexer.sn", "tokens `bar42`"),
-	["bar", ["42", null]]
+	["bar", ["42"]]
 );
 
 check("lexer.sn: 空文字列 → __", isUnit(runWith("lexer.sn", "tokens ``")), true);
@@ -79,7 +81,7 @@ check("lexer.sn: 空文字列 → __", isUnit(runWith("lexer.sn", "tokens ``")),
 check(
 	"lexer.sn: 連続する空白を読み飛ばす",
 	runWith("lexer.sn", "tokens `a   b`"),
-	["a", ["b", null]]
+	["a", ["b"]]
 );
 
 // 文字リテラルは直後の1バイトをそのまま取るため、空白・タブ・改行が同じ形で書ける
@@ -88,7 +90,7 @@ const TAB = String.fromCharCode(9);
 check(
 	"lexer.sn: タブ区切りも空白として扱う",
 	runWith("lexer.sn", "tokens `a" + TAB + "b`"),
-	["a", ["b", null]]
+	["a", ["b"]]
 );
 check("lexer.sn: is_space がタブに真を返す", runWith("lexer.sn", "is_space tab"), TAB);
 check("lexer.sn: is_space が改行に真を返す", runWith("lexer.sn", "is_space newline"), "\n");
