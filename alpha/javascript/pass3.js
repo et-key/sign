@@ -399,6 +399,26 @@ function annotateTypes(node, env, diagnostics) {
   // ブロック・ラムダは pass2 が残した子スコープで中身を歩く（無ければ現在のenv）。
   // これが無いと仮引数やブロック内の定義が「未定義識別子」になってしまう。
   const inner = node.scope || env;
+  // 仮引数の atomType を、本体を歩く**前に**その子スコープへ書き込む（§7.1）。
+  //
+  // 仮引数には型注釈スロットが無いが、本体でどの演算子に渡されているかから型が逆算できる
+  // ——§7.1 の表がそのまま「`x + y` の `x` は `+` のシグネチャが要求する `Scalar`」と
+  // 述べている。inferParamTypesFromUsage はその実装として既に存在しテストもあったが、
+  // 自身のテストからしか呼ばれておらずパイプラインに載っていなかった（pass3 自身が
+  // compile.js 以前にそうだったのと同じ形）。ここで繋ぐ。
+  //
+  // 本体より先に書き込む必要がある。inferAtomType は結果をノードへメモ化するため、
+  // 型の付いていない状態で本体を先に歩くと null が焼き付いて後から直らない。
+  //
+  // ここで入る `Scalar` は「String を含まない Atom」という**族**であり（§4 の記法定義）、
+  // Layer 2 の具体型（Address / Float / Vector）ではない。呼び出しサイトで具体化される
+  // までの暫定形であり、§7.1 が `Lambda<returns: Scalar>` と書いているのと同じ粒度である。
+  if (node.name === "lambda" && node.scope) {
+    for (const [name, atomType] of inferLambdaParamTypes(node)) {
+      const binding = envLookup(node.scope, name);
+      if (binding && !binding.atomType) binding.atomType = atomType;
+    }
+  }
   if (node.left) annotateTypes(node.left, node.name === "lambda" ? env : inner, diagnostics);
   if (node.middle) annotateTypes(node.middle, inner, diagnostics); // chain_compare（§4の三項連鎖比較）
   if (node.right) annotateTypes(node.right, inner, diagnostics);

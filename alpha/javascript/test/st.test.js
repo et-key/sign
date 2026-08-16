@@ -44,11 +44,15 @@ function check(note, got, want) {
 check("Atom はリテラルの Layer 2 型がそのまま出る", entries("pi : 3.14"), ["pi : Float"]);
 check("String も同様", entries("greeting : `hello`"), ["greeting : String"]);
 check("本体が式なら返値型が出る", entries("f : x ?\n\tx > 3 : 1\n\t2"), ["f : Scalar -> Address"]);
-check(
-	"仮引数の型は本体の演算子から逆算する（§7.1、Scalar）",
-	entries("add : a b ? a + b").map((l) => l.split("->")[0].trim()),
-	["add : Scalar Scalar"]
-);
+// §7.1 の表がそのまま述べている: `f : x y ? x + y` の `x`/`y` は `+` のシグネチャが
+// 要求する `Scalar` であり、`f` は `Lambda<returns: Scalar>` になる。ここで言う `Scalar` は
+// 「String を含まない Atom」という**族**（§4 の記法定義）であって Layer 2 の具体型では
+// なく、呼び出しサイトで具体化されるまでの暫定形である。
+check("仮引数の型を本体の演算子から逆算し、返値まで通る（§7.1）", entries("add : a b ? a + b"), [
+	"add : Scalar Scalar -> Scalar",
+]);
+check("単項でも同じ", entries("f : x ? x + 1"), ["f : Scalar -> Scalar"]);
+check("比較演算子からも逆算される", entries("f : x ? x > 3"), ["f : Scalar -> Scalar"]);
 check(
 	"`'` でアクセスしたフィールドを要求集合として集める（§6.2）",
 	entries("distance : p1 p2 ? p1 ' x - p2 ' x").map((l) => l.split("->")[0].trim()),
@@ -80,12 +84,14 @@ check("`.ist` は全識別子を出す", entries("#a : 1\nb : 2", "ist"), ["#a :
 // 仕様であるかのように見えてしまう。埋まっていない事実は `emit_st.mjs` が出す
 // 「未解決 N 箇所」がそのまま示すので、観測手段としてはそちらで足りる。
 //
-// 届いていない原因は3つ重なっており、いずれか1つでも欠けると `_` になる。
+// 届いていない原因は2つ残っており、いずれか1つでも欠けると `_` になる。
 //
-//   1. 仮引数に atomType が付かない。inferParamTypesFromUsage は実装済み・テスト済みだが
-//      パイプライン（inferAtomType）から一度も呼ばれていない
-//   2. apply に結果型が無い。呼び先の返値型を引く仕組みが無い（Layer 2 に Lambda が居ない
-//      ため §2 と §7.1/§8 が矛盾しており、まず仕様側の決着が要る）
+//   （原因1 の「仮引数に atomType が付かない」は解消済み。inferParamTypesFromUsage を
+//     annotateTypes から呼ぶようにした——上の §7.1 のテストがその結果を固定している）
+//
+//   2. apply に結果型が無い。呼び先の返値型を引く仕組みが無い。返値型は識別子テーブル側に
+//      置く方針（射そのものは場所を持たないが、射の適用結果は場所を持つ）。再帰では
+//      不動点計算になるが、`__` が零対象なので束の底として自然に取れる
 //   3. match_case が最終行の型だけを取る。分岐の join を取っていない（§7.3 の「和」）
 //
 // 実装が仕様へ届いたら、上の「書き写せている型」の側にテストを足すこと。
