@@ -105,6 +105,42 @@ function paramTypeText(entry, usageTypes, fieldReqs) {
 }
 
 /**
+ * `Struct` を、名前付きスロットか連番スロットかが分かる形で書く。
+ *
+ * 両者は同じ構造（固定オフセットで並ぶ連続ブロック）だが**関心事が違う**（§2）。
+ * 名前付きは「何が在るか」が関心事で、物理オフセットは名前でソートした正規順に
+ * 割り当てられる——ただしその順序は言語から観測できない（`==` は Hom集合の一致で
+ * 宣言順を問わず、位置アクセスも持たない）。連番は「どこに在るか」が関心事で、
+ * 宣言順がそのまま物理配置になる。バイト並びを書くのはこちらである。
+ *
+ *   Struct{a b}    名前付き。順序は不問
+ *   Struct(_ _ _)  連番。順序が意味そのもの
+ */
+function structTypeText(node, atomType) {
+  if (atomType !== "Struct" || !node) return atomType;
+  if (node.slotKind === "named") {
+    const names = (node.lines || [])
+      .map((l) => (isDefineNode(l) && isIdentifierNode(l.left) ? bareName(l.left.value) : isIdentifierNode(l) ? bareName(l.value) : null))
+      .filter(Boolean);
+    return names.length > 0 ? `Struct{${names.sort().join(" ")}}` : "Struct";
+  }
+  if (node.slotKind === "positional") {
+    const slots = [];
+    const walk = (n) => {
+      if (n && n.type === "operation" && n.name === "product") {
+        walk(n.left);
+        slots.push(n.right && n.right.atomType ? n.right.atomType : UNKNOWN);
+        return;
+      }
+      slots.push(n && n.atomType ? n.atomType : UNKNOWN);
+    };
+    walk(node);
+    return `Struct(${slots.join(" ")})`;
+  }
+  return atomType;
+}
+
+/**
  * 1つの定義行から SignType の1エントリを組み立てる。
  * @returns {{ name: string, text: string, unresolved: number } | null}
  */
@@ -116,7 +152,7 @@ function entryFor(defineNode) {
   if (!isLambdaNode(rhs)) {
     // Atom: 右辺式の Layer 2 型がそのまま識別子の型になる（§5 Pass 1a）。
     const t = rhs && rhs.atomType ? rhs.atomType : UNKNOWN;
-    return { name, text: `${name} : ${t}`, unresolved: t === UNKNOWN ? 1 : 0 };
+    return { name, text: `${name} : ${structTypeText(rhs, t)}`, unresolved: t === UNKNOWN ? 1 : 0 };
   }
 
   const entries = paramEntries(rhs.left);

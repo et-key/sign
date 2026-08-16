@@ -219,10 +219,22 @@ function computeAtomType(node, env) {
     // そこでの `識別子 : 値` は match_case であり、構造体を返すにはカッコで囲む。
     // フィールドは `a : x`（明示）と `x`（省略記法）の2通り。省略記法は2行以上のときだけ
     // 有効で、`[x]` が1要素リスト ≅ スカラーであることを壊さない（interpreter.jsと同基準）。
+    //
+    // 名前付きスロットには `slotKind: "named"` を立てる。物理オフセットは名前でソートした
+    // 正規順で割り当てられるが（stack_abi.md §7.1）、**その順序は言語から観測できない**
+    // ——`==` は Hom集合の一致で宣言順を問わず、位置アクセスも持たない。順序が意味を持つ
+    // のは連番スロット（`slotKind: "positional"`）の側であり、両者は互いの順序を漏らさない。
+    // 「名前が関心事か、順序が関心事か」がこの2つを分ける唯一の軸である（§2）。
     if (!node.isFunctionBody) {
       const explicit = (l) => isDefineNode(l) && isIdentifierNode(l.left);
-      if (node.lines.every(explicit)) return "Struct";
-      if (node.lines.length >= 2 && node.lines.every((l) => explicit(l) || isIdentifierNode(l))) return "Struct";
+      if (node.lines.every(explicit)) {
+        node.slotKind = "named";
+        return "Struct";
+      }
+      if (node.lines.length >= 2 && node.lines.every((l) => explicit(l) || isIdentifierNode(l))) {
+        node.slotKind = "named";
+        return "Struct";
+      }
     }
     const last = node.lines[node.lines.length - 1];
     // pass2 が残した子スコープで最終行を解決する。外側のenvで先に評価すると、
@@ -239,7 +251,11 @@ function computeAtomType(node, env) {
   if (node.type === "operation") {
     if (node.name === "product") {
       // カンマ（直積）は常に Struct（type_system.md §2）。名前付きスロットも
-      // 連番スロットも同じ「固定オフセットで並ぶ連続ブロック」であり、区別しない。
+      // 連番スロットも同じ「固定オフセットで並ぶ連続ブロック」である。
+      // ただし**関心事が違う**ので slotKind で区別する——カンマは名前を持たないため
+      // 順序が意味そのものであり、宣言順がそのまま物理配置になる。名前ソートの
+      // 正規順（stack_abi.md §7.1）は名前付きスロットにのみ適用される規則である。
+      node.slotKind = "positional";
       return "Struct";
     }
     if (node.name === "define") {
