@@ -156,6 +156,11 @@ function countNestedArity(token) {
 function countRequiredArity(paramTokens) {
   if (paramTokens.length === 0) return 0;
   if (paramTokens.length === 1 && Array.isArray(paramTokens[0])) {
+    // 仮引数部全体が1個のブラケット（`[a b]`、`[x ~xs]`）なら、**要求する実引数は1個**
+    // ——ブラケットは渡された単一の List/Struct をその場で分割代入する（Eagerパターン、
+    // list_model.md §2.4）。エントリ数は分解後の束縛の数であって実引数の数ではない。
+    // インデントブロック形（デフォルト引数）は別物なので従来通り数える。
+    if (!isTaggedBlockToken(paramTokens[0]) && isBracketEntryToken(paramTokens[0])) return 1;
     return countNestedRequiredArity(paramTokens[0]);
   }
   if (paramTokens.length === 1) return 1; // 単一の裸パラメータ（デフォルト無し前提）

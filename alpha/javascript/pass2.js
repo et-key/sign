@@ -949,7 +949,14 @@ function buildParameterList(paramTokens, env) {
   // デフォルトを持つ仮引数は、実際の評価（未実装）ではアリティ計算から除外される
   // （function_guide.md「関数適用時」節）。値の評価をしなくても構造だけから機械的に
   // 求まる部分として、実質アリティ（デフォルト・rest以外の仮引数の数）だけ先に持たせておく。
-  const requiredArity = entries.filter((e) => !e.rest && e.default === null).length;
+  // ブラケット形式（`[a b]`, `[x ~xs]`）は**実引数を1個だけ食って分解する**（Eagerパターン、
+  // list_model.md §2.4）。エントリ数は分解後の束縛の数であって、要求する実引数の数ではない。
+  // ここを entries の数にしていたため、`pair : [a b] ? a + b` を `pair [1 2]` と呼ぶと
+  // 「2個必要なのに1個」と誤判定され、markUndersaturatedApplies が部分適用として印付けて
+  // しまい、bindParams の分割代入経路へ一度も到達しなかった（＝固定アリティのブラケット
+  // 仮引数は呼べなかった）。rest を含む形（`[x ~xs]`）が動いていたのは、rest が必須から
+  // 外れて偶然 1 になっていたためで、規則が正しかったからではない。
+  const requiredArity = isBracket ? 1 : entries.filter((e) => !e.rest && e.default === null).length;
   // bracket: true の場合、interpreter.js の bindParams は「呼び出し側が渡した単一の
   // List/Struct実引数を、この仮引数リストへ分割代入する」という別経路（Eagerパターン、
   // list_model.md §2.4）を通る。裸の複数行デフォルト引数形式（isBracketParamList参照）
