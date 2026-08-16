@@ -818,10 +818,21 @@ function parseBracketSubEntries(lines) {
 // （他の裸パラメータと混在する1エントリとしてのブラケット分割代入、list_model.md §2.4/2.5の
 // 「1個の実引数をブラケットへ分割代入する」パターンを、複数パラメータの中の1個の位置にも
 // 一般化したもの）。
+// `name : デフォルト式` の形をした1行か。
+//
+// isFlatTokenLine は全要素が文字列であることを要求するため、デフォルト式が括弧や
+// ブラケットを含む（`x : (2 + 3)`）と中に配列が現れて false になる。それだけを見て
+// 「行ではなくブロックだ」と判断すると、parseParamStatements が同じ構造へ再帰し続けて
+// スタックを溢れさせる——実際にデフォルト引数の中で括弧が一切使えなくなっていた。
+// 先頭が識別子で、トップレベルに `:` があれば、中身が入れ子でも1エントリの行である。
+function isParamEntryLine(x) {
+  return Array.isArray(x) && isIdentifierToken(x[0]) && x.indexOf(":") > 0;
+}
+
 function parseParamStatements(lines) {
-  if (isFlatTokenLine(lines)) return parseParamLine(lines);
+  if (isFlatTokenLine(lines) || isParamEntryLine(lines)) return parseParamLine(lines);
   return lines.flatMap((stmt) => {
-    if (isFlatTokenLine(stmt)) return parseParamLine(stmt);
+    if (isFlatTokenLine(stmt) || isParamEntryLine(stmt)) return parseParamLine(stmt);
     if (isTaggedBlock(stmt)) return parseParamStatements(stmt[1]);
     const bracketLines = peelBracketEntryToken(stmt);
     if (bracketLines) {

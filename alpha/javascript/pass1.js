@@ -106,6 +106,18 @@ function isFlatLine(x) {
   return Array.isArray(x) && x.every((t) => typeof t === "string");
 }
 
+// `name : デフォルト式` の形をした1行か（pass2.js の isParamEntryLine と同じ判定）。
+//
+// isFlatLine は全要素が文字列であることを要求するため、デフォルト式が括弧やブラケットを
+// 含む（`x : (2 + 3)`）と中に配列が現れて false になる。それだけを見て「行ではなく
+// 文の並びだ」と扱うと、countStatements が行の中身へ降りていき、最終的に**文字列**を
+// 受け取る。文字列に対する `for...of` は1文字ずつ回るため、そこから自分自身を呼び直して
+// 無限再帰する——デフォルト引数の中で括弧が一切使えなくなっていた原因がこれである。
+// 先頭が識別子で、トップレベルに `:` があれば、中身が入れ子でも1エントリの行である。
+function isParamEntryLine(x) {
+  return Array.isArray(x) && typeof x[0] === "string" && x[0].startsWith("<") && x.indexOf(":") > 0;
+}
+
 function isTaggedBlockToken(x) {
   return Array.isArray(x) && (x[0] === '"INDENT_"' || x[0] === '"ABS_"');
 }
@@ -128,10 +140,16 @@ function isBracketEntryToken(token) {
 // と同じ構造を、生トークンの段階で軽量に再現する（循環import回避のためここで別途最小実装）。
 function countStatements(node) {
   if (isFlatLine(node)) return countBareArity(node);
+  if (isParamEntryLine(node)) return 1;
+  // 配列でないもの（文字列トークン等）がここへ来たら1トークンとして数え、降りない。
+  // 文字列に対する `for...of` は1文字ずつ回るため、降りると自分自身を呼び直して
+  // 無限再帰する（デフォルト式の括弧で実際に踏んだ）。
+  if (!Array.isArray(node)) return 1;
   let total = 0;
   for (const stmt of node) {
     let c;
     if (isFlatLine(stmt)) c = countBareArity(stmt);
+    else if (isParamEntryLine(stmt)) c = 1; // `name : 式` は括弧を含んでも1スロット
     else if (isBracketEntryToken(stmt)) c = 1; // 1エントリとしてのブラケット分割代入は1スロット分
     else if (isTaggedBlockToken(stmt)) c = countStatements(stmt[1]);
     else c = countStatements(stmt); // さらにネストした1文（例: func_mixedのブラケット単独文）
@@ -187,10 +205,13 @@ function countBareRequiredArity(tokens) {
 
 function countRequiredStatements(node) {
   if (isFlatLine(node)) return countBareRequiredArity(node);
+  if (isParamEntryLine(node)) return 0; // デフォルト付きエントリは必須に数えない
+  if (!Array.isArray(node)) return 0; // countStatements と同じ理由の防御
   let total = 0;
   for (const stmt of node) {
     let c;
     if (isFlatLine(stmt)) c = countBareRequiredArity(stmt);
+    else if (isParamEntryLine(stmt)) c = 0; // デフォルト付きエントリは必須に数えない
     else if (isBracketEntryToken(stmt)) c = 1; // ブラケット分割代入は常に1個の必須スロット
     else if (isTaggedBlockToken(stmt)) c = countRequiredStatements(stmt[1]);
     else c = countRequiredStatements(stmt);

@@ -191,10 +191,40 @@ checkOperationError("デフォルト式の `#` は OperationError", "ptr : 0x400
 checkOperationError("デフォルト式の `@`（Input）は許可（状態の初期化）", "ptr : 0x40011000\ng :\n\tx : @ptr\n ? x", false);
 checkOperationError("本体の `#` は許可（無条件に評価される）", "ptr : 0x40011000\ng :\n\tx\n ? ptr # x", false);
 checkOperationError("構造体リテラルの `#` は許可（スロットは無条件に1回評価）", "ptr : 0x40011000\ns : [\n\tx : ptr # 5\n\ty : 2\n]", false);
-// 入れ子の式に隠れていても見つける。なおカッコやブラケットで包んだ形
-// （`x : 1 + (ptr # 42)`）はここでは使えない——デフォルト式の中で括弧を使うと
-// reduceAll が無限再帰する既知のバグがあるため（この検査とは無関係、HEAD でも再現する）。
 checkOperationError("入れ子の式に隠れた `#` も見つける", "ptr : 0x40011000\nbad :\n\tx : ptr # 42 + 1\n ? x", true);
+checkOperationError("括弧で包んだ `#` も見つける", "ptr : 0x40011000\nbad :\n\tx : 1 + (ptr # 42)\n ? x", true);
+
+// デフォルト式の中で括弧・ブラケットが使えること。
+//
+// pass1 の countStatements は「全要素が文字列」でなければ行ではなく文の並びと判断し、
+// 中身へ降りていた。デフォルト式に括弧が入ると中に配列が現れて平坦でなくなるため、
+// 最終的に**文字列**トークンを受け取る。文字列に対する `for...of` は1文字ずつ回るので、
+// そこから自分自身を呼び直して無限再帰していた——デフォルト引数の中で括弧が一切
+// 使えず、スタックオーバーフローになっていた。デフォルト引数は仕様上ローカル変数の
+// 置き場（function_guide.md「仮引数リストは関数の状態ベクタである」）なので、
+// そこで括弧が書けないのは実用上かなり痛い。
+function checkDefaultValue(note, source, want) {
+	total++;
+	let got;
+	try {
+		const env = buildEnv(parser.parse(preprocess(source)));
+		const nodes = parser.parse(preprocess(source)).map((n) => reduceAll(n, env));
+		got = nodes.length > 0 ? "ok" : "empty";
+	} catch (e) {
+		got = `${e.name}: ${e.message.slice(0, 40)}`;
+	}
+	if (got === want) {
+		console.log(`OK   ${note}`);
+		passed++;
+	} else {
+		console.log(`FAIL ${note}`);
+		console.log(`     got: ${got}, want: ${want}`);
+	}
+}
+
+checkDefaultValue("デフォルト式のカッコ（`x : (2 + 3)`）が縮約できる", "f :\n\ta\n\tx : (2 + 3)\n ? a + x", "ok");
+checkDefaultValue("デフォルト式のブラケット（`x : [2 + 3]`）も同様", "f :\n\ta\n\tx : [2 + 3]\n ? a + x", "ok");
+checkDefaultValue("let* で前のパラメータを括弧越しに参照できる", "f :\n\ta\n\tx : a + (a * 2)\n ? x", "ok");
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
