@@ -60,7 +60,9 @@ function literalAtomType(token) {
   if (token.startsWith("\\")) return "String"; // 文字リテラルはStringと同型
   if (/^0x[0-9a-fA-F]+$/.test(token)) return "Address";
   if (/^(0r[0-9a-fA-F]+|0b[01]+)$/.test(token)) return "Address";
-  if (/^0u[0-9a-fA-F]+$/.test(token)) return "Address";
+  // `0u` は Char（String の要素型、`String ≅ List(0u)`）。`\a` と同じく String であり、
+  // U+0000 は Char の値域から除外された niche なので Unit（pass3.js と同じ判定）。
+  if (/^0u[0-9a-fA-F]+$/.test(token)) return parseInt(token.slice(2), 16) === 0 ? "Unit" : "String";
   if (/^-?[0-9]+\.[0-9]*$/.test(token)) return "Float"; // 小数点あり
   if (/^-?[0-9]+$/.test(token)) return "Address"; // 小数点なし整数
   return null;

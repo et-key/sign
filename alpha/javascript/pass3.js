@@ -162,7 +162,9 @@ function literalAtomTypeFromKind(node) {
     case "char": return "String"; // 文字リテラルはStringと同型（type_system.md: Stringは文字のリスト）
     case "address": return "Address";
     case "register": return "Address";
-    case "unicode": return "Address";
+    // `0u` は Char（String の要素型）。`String ≅ List(0u)`（§2）である以上、
+    // `\a` と同じく String である。U+0000 は Char の値域から除外された niche なので Unit。
+    case "unicode": return parseInt(node.value.slice(2), 16) === 0 ? "Unit" : "String";
     case "unit": return "Unit";
     default: return null; // identifier/hole/unknown はここでは扱わない
   }

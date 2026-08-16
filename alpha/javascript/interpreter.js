@@ -96,8 +96,18 @@ function evalLiteral(node) {
       return node.value.slice(1); // "\a" -> "a"
     case "address":
       return parseInt(node.value.slice(2), 16);
-    case "unicode":
-      return parseInt(node.value.slice(2), 16);
+    case "unicode": {
+      // `0u` は Char（String の要素型）のリテラルである——`String ≅ List(0u)` であり、
+      // guide/example.sn も `uni_a : 0u3042` を「Unicodeで 'あ' を表現」と説明している。
+      // したがって符号位置の数値ではなく**文字そのもの**へ評価する（`\a` と同じ）。
+      // 同じ文字を指す2つの記法が別の型・別の値になっていると、Byte 列を Char 列へ
+      // 変換する境界（value_representation.md §4）が型として書けない。
+      //
+      // U+0000 は Char の値域から除外された niche であり、`__`（Unit）そのものである
+      // （value_representation.md §3、system_semantics.md）。
+      const cp = parseInt(node.value.slice(2), 16);
+      return cp === 0 ? UNIT : String.fromCodePoint(cp);
+    }
     case "register":
       return node.value.startsWith("0b") ? parseInt(node.value.slice(2), 2) : parseInt(node.value.slice(2), 16);
     case "unit":
