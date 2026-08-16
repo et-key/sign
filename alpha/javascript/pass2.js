@@ -29,6 +29,7 @@
  */
 
 import { OPERATOR_DICT } from './operator_table.js';
+import { OperationError } from './errors.js';
 import { childEnv, envLookup, envLookupScope, bindEnv, EXPORT_MARKERS } from './pass1.js';
 
 // ---- ユーティリティ ----
@@ -889,6 +890,35 @@ function isBracketParamList(token) {
 // 仮引数部の生トークン列を解析し、{ node, scope } を返す。
 // scope は let* 的な逐次束縛（自分より前のパラメータ + 外側スコープのみ参照可能）を
 // 反映した子スコープで、後続のデフォルト式・関数本体の両方から使われる。
+// 原理4 ルール3: 仮引数部のデフォルト式に `#`（Output）を書くことを禁じる。
+//
+// デフォルト式は、その引数が省略されたときにだけ評価される。ここに Store を書くと
+// **書き込みが起きるか否かが呼び出し側の引数の個数で決まる**——呼び出し側からは見えない
+// 制御フローであり、原理3 の「危険は明示的なオプトインでのみ」に反する。
+//
+// Input（前置 `@`）は状態の初期化にあたるため対象外。禁じるのは Store だけである。
+// 構造体リテラル（`[x : ptr # 5]`）でも禁じてはならない——そちらのスロットは無条件に
+// 1回だけ評価されるので、この危険は生じない。同じ `name : 値` の形をしていても評価が
+// 条件付きかどうかが正反対であり、それがこの規則の根拠そのものである。
+function checkNoOutputInDefault(node, paramName) {
+  if (!node || typeof node !== "object") return;
+  if (node.type === "operation" && node.name === "output") {
+    throw new OperationError(
+      `仮引数 '${paramName}' のデフォルト式に '#'（Output）は書けません。` +
+        `デフォルト式はその引数が省略されたときにだけ評価されるため、書き込みが起きるか否かが` +
+        `呼び出し側の引数の個数で決まってしまいます（呼び出し側から見えない制御フロー）。` +
+        `Output は関数本体（'?' の右辺）に書いてください——本体は無条件に評価されます。` +
+        `Input（前置 '@'）は状態の初期化にあたるため許可されています`,
+      { spec: "0_design_principles.md 原理4", reason: "output-in-parameter-default" }
+    );
+  }
+  for (const key of ["left", "right", "operand", "middle"]) checkNoOutputInDefault(node[key], paramName);
+  for (const line of node.lines || []) checkNoOutputInDefault(line, paramName);
+  for (const entry of node.entries || []) {
+    checkNoOutputInDefault(entry.default, paramName);
+  }
+}
+
 function buildParameterList(paramTokens, env) {
   // 単一の裸パラメータ（デフォルト・rest無し）は既存挙動をそのまま保つ
   // （identifierノード1つを返す。9/9テスト等、既存の出力形状との後方互換のため）。
@@ -942,6 +972,7 @@ function buildParameterList(paramTokens, env) {
     }
     // デフォルト式は「自分より前に束縛済みのパラメータ」+外側スコープのみ参照できる（let*）。
     const defaultNode = raw.defaultTokens ? reduceAll(raw.defaultTokens, scope) : null;
+    if (defaultNode) checkNoOutputInDefault(defaultNode, raw.name);
     entries.push({ name: raw.name, rest: raw.rest, default: defaultNode });
     scope = bindEnv([raw.name], scope); // このパラメータ自身を、次のパラメータ以降から見えるようにする
     boundSoFar.add(raw.name);

@@ -156,5 +156,45 @@ for (const c of throwCases) {
 	}
 }
 
+// 原理4 ルール3: 仮引数部のデフォルト式での `#`（Output）を静的に拒否する。
+//
+// これは「型が合わない」違反ではない——`ptr # 42` は式として正当である。位置が許されて
+// いない。今日の方針では型の不一致は停止させず `__` へ収束させるため、`TypeError` では
+// なく `OperationError` を使い、停止する違反と `__` へ落ちる収束を種別で見分けられるようにする。
+//
+// 禁じる根拠は評価が条件付きであること。デフォルト式はその引数が省略されたときにだけ
+// 評価されるため、Store を書くと書き込みが起きるか否かが呼び出し側の引数の個数で決まる。
+// 同じ `name : 値` の形をしていても、構造体リテラルのスロットは無条件に1回だけ評価される
+// ので、そちらでは禁じてはならない（評価が条件付きかどうかが正反対）。
+function checkOperationError(note, source, shouldThrow) {
+	total++;
+	let threw = false;
+	let name = null;
+	try {
+		const env = buildEnv(parser.parse(preprocess(source)));
+		for (const node of parser.parse(preprocess(source))) reduceAll(node, env);
+	} catch (e) {
+		threw = true;
+		name = e.name;
+	}
+	const ok = shouldThrow ? threw && name === "OperationError" : !threw;
+	if (ok) {
+		console.log(`OK   ${note}`);
+		passed++;
+	} else {
+		console.log(`FAIL ${note}`);
+		console.log(`     threw: ${threw}（${name}）, shouldThrow: ${shouldThrow}`);
+	}
+}
+
+checkOperationError("デフォルト式の `#` は OperationError", "ptr : 0x40011000\nbad :\n\tx : ptr # 42\n ? x", true);
+checkOperationError("デフォルト式の `@`（Input）は許可（状態の初期化）", "ptr : 0x40011000\ng :\n\tx : @ptr\n ? x", false);
+checkOperationError("本体の `#` は許可（無条件に評価される）", "ptr : 0x40011000\ng :\n\tx\n ? ptr # x", false);
+checkOperationError("構造体リテラルの `#` は許可（スロットは無条件に1回評価）", "ptr : 0x40011000\ns : [\n\tx : ptr # 5\n\ty : 2\n]", false);
+// 入れ子の式に隠れていても見つける。なおカッコやブラケットで包んだ形
+// （`x : 1 + (ptr # 42)`）はここでは使えない——デフォルト式の中で括弧を使うと
+// reduceAll が無限再帰する既知のバグがあるため（この検査とは無関係、HEAD でも再現する）。
+checkOperationError("入れ子の式に隠れた `#` も見つける", "ptr : 0x40011000\nbad :\n\tx : ptr # 42 + 1\n ? x", true);
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
