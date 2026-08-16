@@ -999,6 +999,13 @@ function asList(v) {
 function stringifyForConcat(v) {
   if (typeof v === "string") return v;
   if (isUnit(v)) return "";
+  // List は要素を順に描画して連結する。`String([1,2,3])` が `"1,2,3"` になるのは
+  // JS の Array.prototype.toString がカンマ区切りを挟むためで、Sign の意味論ではない
+  // （`String ≅ List(0u)` である以上、リストのテキスト化は要素の描画の連結である）。
+  // 左結合で1要素ずつ畳まれる `` `abc` 1 2 3 `` が "abc123" になるのと揃う——
+  // 左辺が先に List へ確定している `1 2 3 \`abc\`` だけカンマが混ざるのは、
+  // 同じ演算子が畳まれ方によって別の結果を出していたということである。
+  if (Array.isArray(v)) return v.map(stringifyForConcat).join("");
   return String(v);
 }
 
@@ -1211,8 +1218,19 @@ function evaluate(node, env) {
         // これが無いと `__ 5` が `[5]` になり、guide/operator_table.md 147行目の
         // `__ 5 == !__ 5`（両方5）が成立しない。2項以上（`__ 1 2` → `[1 2]`、§6.1の
         // 輸入失敗例）は左結合で `(__ 1) 2` → `1 2` と畳まれるため従来通り。
-        if (isUnit(l)) return r;
-        if (isUnit(r)) return l;
+        //
+        // ただし**空文字列は単位元として落とさない**。値としては Unit と同型だが、
+        // 型は String である（pass3 は `` `` 1 2 3 `` を既に String と注釈している）。
+        // 余積に置かれた `` は「以降をテキストとして連結する」という宣言であり、
+        // 落とすと型が String と言っているのに値が List になる——型と値が食い違う。
+        // 値だけでは決まらないので型で決める。`5 / 2` と `5.0 / 2` を型で分けたのと
+        // 同じ構図であり（原理2: 型はゼロコストの帳簿）、`|xs|` のオペランド型判定と同じ。
+        //
+        //   `` 1 2 3   → `123`（テキストとして連結する宣言）
+        //   __ 1 2 3   → [1 2 3]（Unit は余積の単位元なので落ちる）
+        const isTextSeed = (v, n) => isUnit(v) && !!n && n.atomType === "String";
+        if (isUnit(l) && !isTextSeed(l, node.left)) return r;
+        if (isUnit(r) && !isTextSeed(r, node.right)) return l;
         // tier 10.4（`Lambda` 中置 `Atom` → apply）は演算子表の上では**型による分岐**であり、
         // pass2 は静的に解けた場合だけ apply ノードを作る。ところが「適用の結果が Lambda に
         // なる式」（`[!_] __` → Id射）は、静的には arity 1 が飽和した Atom にしか見えないため
