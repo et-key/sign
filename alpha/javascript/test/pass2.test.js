@@ -1,6 +1,6 @@
 /**
  * Pass2（coproduct_resolver.md）の動作確認テスト。
- * 実行: npm test （test/run.js と合わせて実行される想定なら node test/pass2.test.js を追加）
+ * 実行: npm test（test/run.js が自動で拾う）／単体なら node test/pass2.test.js
  */
 import peggy from "peggy";
 import fs from "fs";
