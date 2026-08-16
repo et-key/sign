@@ -109,15 +109,20 @@ function paramTypeText(entry, usageTypes, fieldReqs) {
  *
  * 両者は同じ構造（固定オフセットで並ぶ連続ブロック）だが**関心事が違う**（§2）。
  *
- *   Struct{x : 1 y : 0}  名前付き。**名前をソート順に並べ、各名前が宣言順（連番）を持つ**
- *   Struct(_ _ _)        連番。順序が意味そのもの。スロット型を並べる
+ *   Struct{x : Address , 0  y : Address , 1}  名前付き
+ *   Struct(Address String Float)             連番
  *
- * 名前付きの書き方は、それ自体が名前付きスロットの形をしている（名前→連番の写像）。
- * 名前がソート順に並ぶので**物理配置がそのまま読め**、各名前が持つ値が宣言順なので
- * **ねじれもそのまま読める**。どちらも導出に頼らず明示されている。
+ * どちらのスロットも **(型, 連番)** を持つ。違いは連番の書き表し方だけである。
+ * 連番スロットには名前が無いので並べ替える鍵が無く、**記法上の位置がそのまま連番**に
+ * なる（だから書かない）。名前付きスロットは名前でソートして並べるため、連番は
+ * 明示するしかない——そこで `型 , 連番` という直積で書く。
  *
- *   point  : [x : 3 / y : 4]  →  Struct{x : 0 y : 1}   恒等置換
- *   point2 : [y : 4 / x : 3]  →  Struct{x : 1 y : 0}   互換が入っている
+ * 名前付きの書き方は、それ自体が名前付きスロットの形をしている（名前→(型,連番) の写像）。
+ * 名前がソート順に並ぶので**並びが物理配置**、各名前が持つ連番が**宣言順**であり、
+ * どちらも導出に頼らず明示されている。
+ *
+ *   point  : [x : 3 / y : 4]  →  Struct{x : Address , 0  y : Address , 1}
+ *   point2 : [y : 4 / x : 3]  →  Struct{x : Address , 1  y : Address , 0}
  *
  * 括弧の違いが**位置の確約の有無**を表す。`{}` は名前で同定するものであり、物理
  * オフセットは名前ソートの正規順（stack_abi.md §7.1）なので「N番目は offset N×幅」
@@ -143,17 +148,17 @@ function structTypeText(node, atomType) {
     // 並び＝物理配置（正規順）、各名前が持つ値＝宣言順。両方が明示される。
     const slots = (node.lines || [])
       .map((l, ordinal) => {
-        const name = isDefineNode(l) && isIdentifierNode(l.left)
-          ? bareName(l.left.value)
-          : isIdentifierNode(l)
-            ? bareName(l.value)
-            : null;
-        return name === null ? null : { name, ordinal };
+        if (isDefineNode(l) && isIdentifierNode(l.left)) {
+          return { name: bareName(l.left.value), ordinal, type: l.right && l.right.atomType ? l.right.atomType : UNKNOWN };
+        }
+        // フィールド名の省略記法（`x` だけの行）。値はその識別子自身。
+        if (isIdentifierNode(l)) return { name: bareName(l.value), ordinal, type: l.atomType || UNKNOWN };
+        return null;
       })
       .filter(Boolean);
     if (slots.length === 0) return "Struct";
     slots.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-    return `Struct{${slots.map((s) => `${s.name} : ${s.ordinal}`).join(" ")}}`;
+    return `Struct{${slots.map((s) => `${s.name} : ${s.type} , ${s.ordinal}`).join("  ")}}`;
   }
   if (node.slotKind === "positional") {
     const slots = [];

@@ -85,16 +85,19 @@ check("ブラケット分割代入は形をそのまま書く", entries("f : [h 
 //
 // `point` と `point2` は `==` では等しい（Hom集合の一致は宣言順を問わない）が、連番で
 // 引けば違う値を返す。それは `==` が比較していない性質を測っているだけであり矛盾ではない。
-check("名前はソート順に並び、各名前が宣言順を持つ", entries("p : [\n\tx : 1\n\ty : 2\n]"), [
-	"p : Struct{x : 0 y : 1}",
+// どちらのスロットも (型, 連番) を持つ。違いは連番の書き表し方だけである——連番スロットは
+// 名前が無いので並べ替える鍵が無く、記法上の位置がそのまま連番になる（だから書かない）。
+// 名前付きは名前でソートして並べるため、連番は明示するしかない（`型 , 連番` の直積）。
+check("名前はソート順に並び、各名前が (型, 連番) を持つ", entries("p : [\n\tx : 1\n\ty : 2\n]"), [
+	"p : Struct{x : Address , 0  y : Address , 1}",
 ]);
 check("宣言順が違えば連番が入れ替わる（ねじれが型に保存される）", entries("p : [\n\ty : 2\n\tx : 1\n]"), [
-	"p : Struct{x : 1 y : 0}",
+	"p : Struct{x : Address , 1  y : Address , 0}",
 ]);
 // 並びと連番が食い違う例。宣言は CR→SR→DR だが物理配置は CR→DR→SR になる
 // ——名前付きスロットに位置の確約が無いこと（stack_abi.md §7.1）が型に現れている。
-check("ねじれは1行で読める", entries("uart : [\n\tCR : 0\n\tSR : 0\n\tDR : 0\n]"), [
-	"uart : Struct{CR : 0 DR : 2 SR : 1}",
+check("ねじれもスロット型も1行で読める", entries("uart : [\n\tCR : 0x40011000\n\tSR : 0\n\tDR : `d`\n]"), [
+	"uart : Struct{CR : Address , 0  DR : String , 2  SR : Address , 1}",
 ]);
 check("連番スロットは順序どおりにスロット型を並べる", entries("t : 1 , `abc` , 2.5"), [
 	"t : Struct(Address String Float)",
