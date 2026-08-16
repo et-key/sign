@@ -109,8 +109,15 @@ function paramTypeText(entry, usageTypes, fieldReqs) {
  *
  * 両者は同じ構造（固定オフセットで並ぶ連続ブロック）だが**関心事が違う**（§2）。
  *
- *   Struct{x y}    名前付き。**宣言順**で名前を並べる
- *   Struct(_ _ _)  連番。順序が意味そのもの。スロット型を並べる
+ *   Struct{x : 1 y : 0}  名前付き。**名前をソート順に並べ、各名前が宣言順（連番）を持つ**
+ *   Struct(_ _ _)        連番。順序が意味そのもの。スロット型を並べる
+ *
+ * 名前付きの書き方は、それ自体が名前付きスロットの形をしている（名前→連番の写像）。
+ * 名前がソート順に並ぶので**物理配置がそのまま読め**、各名前が持つ値が宣言順なので
+ * **ねじれもそのまま読める**。どちらも導出に頼らず明示されている。
+ *
+ *   point  : [x : 3 / y : 4]  →  Struct{x : 0 y : 1}   恒等置換
+ *   point2 : [y : 4 / x : 3]  →  Struct{x : 1 y : 0}   互換が入っている
  *
  * 括弧の違いが**位置の確約の有無**を表す。`{}` は名前で同定するものであり、物理
  * オフセットは名前ソートの正規順（stack_abi.md §7.1）なので「N番目は offset N×幅」
@@ -132,10 +139,21 @@ function paramTypeText(entry, usageTypes, fieldReqs) {
 function structTypeText(node, atomType) {
   if (atomType !== "Struct" || !node) return atomType;
   if (node.slotKind === "named") {
-    const names = (node.lines || [])
-      .map((l) => (isDefineNode(l) && isIdentifierNode(l.left) ? bareName(l.left.value) : isIdentifierNode(l) ? bareName(l.value) : null))
+    // 宣言順（連番）を先に確定させてから、名前でソートして並べる。
+    // 並び＝物理配置（正規順）、各名前が持つ値＝宣言順。両方が明示される。
+    const slots = (node.lines || [])
+      .map((l, ordinal) => {
+        const name = isDefineNode(l) && isIdentifierNode(l.left)
+          ? bareName(l.left.value)
+          : isIdentifierNode(l)
+            ? bareName(l.value)
+            : null;
+        return name === null ? null : { name, ordinal };
+      })
       .filter(Boolean);
-    return names.length > 0 ? `Struct{${names.join(" ")}}` : "Struct";
+    if (slots.length === 0) return "Struct";
+    slots.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    return `Struct{${slots.map((s) => `${s.name} : ${s.ordinal}`).join(" ")}}`;
   }
   if (node.slotKind === "positional") {
     const slots = [];
