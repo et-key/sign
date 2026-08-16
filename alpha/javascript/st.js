@@ -108,13 +108,20 @@ function paramTypeText(entry, usageTypes, fieldReqs) {
  * `Struct` を、名前付きスロットか連番スロットかが分かる形で書く。
  *
  * 両者は同じ構造（固定オフセットで並ぶ連続ブロック）だが**関心事が違う**（§2）。
- * 名前付きは「何が在るか」が関心事で、物理オフセットは名前でソートした正規順に
- * 割り当てられる——ただしその順序は言語から観測できない（`==` は Hom集合の一致で
- * 宣言順を問わず、位置アクセスも持たない）。連番は「どこに在るか」が関心事で、
- * 宣言順がそのまま物理配置になる。バイト並びを書くのはこちらである。
  *
- *   Struct{a b}    名前付き。順序は不問
- *   Struct(_ _ _)  連番。順序が意味そのもの
+ *   Struct{x y}    名前付き。**宣言順**で名前を並べる
+ *   Struct(_ _ _)  連番。順序が意味そのもの。スロット型を並べる
+ *
+ * 名前付きスロットは「名前・連番・実データ」の三つを持つ。ここに書き写すのは
+ * **宣言順**である——物理配置は名前でソートした正規順（stack_abi.md §7.1）だが、
+ * それは宣言順から `sort` で導出できる。逆は導出できない。したがって宣言順の方が
+ * 情報として厳密に大きく、ソート順を書き写すと**ねじれが失われる**。
+ *
+ * ねじれ（宣言順と正規順の置換）自体が情報である。`point : [x y]` と
+ * `point2 : [y x]` は `==` では等しい（Hom集合の一致は宣言順を問わない）が、
+ * 連番で引けば違う値を返す。これは矛盾ではなく、`==` が比較していない性質を
+ * 測っているだけである（§2、`==` は同一性ではない）。`.st` がソート順しか書かないと
+ * この差が消え、「正した」事実だけが残って「何を正したか」が暗黙化してしまう。
  */
 function structTypeText(node, atomType) {
   if (atomType !== "Struct" || !node) return atomType;
@@ -122,7 +129,7 @@ function structTypeText(node, atomType) {
     const names = (node.lines || [])
       .map((l) => (isDefineNode(l) && isIdentifierNode(l.left) ? bareName(l.left.value) : isIdentifierNode(l) ? bareName(l.value) : null))
       .filter(Boolean);
-    return names.length > 0 ? `Struct{${names.sort().join(" ")}}` : "Struct";
+    return names.length > 0 ? `Struct{${names.join(" ")}}` : "Struct";
   }
   if (node.slotKind === "positional") {
     const slots = [];
