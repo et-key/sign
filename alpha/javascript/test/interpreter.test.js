@@ -290,6 +290,27 @@ check("String も同じ（文字の List と同型）", run("s : `abc`\nn : 1\ns
 // そのキーが無いので `__` に収束する。
 check("名前付きスロットは変数で引けない（`i` というキーを探して __）", run("s : [\n\ta : 1\n]\ni : 0\ns ' i"), "__");
 
+// 名前付きスロットは **名前・連番・実データ** の三つを持つ。名前で引くのは右辺が識別子の
+// とき、連番（宣言順）で引くのは右辺が数値のとき。連番は物理オフセットの順（名前ソートの
+// 正規順、stack_abi.md §7.1）とは別物である。
+//
+// `point == point2` が真でありながら `point ' 0` と `point2 ' 0` が違う値になるのは
+// 矛盾ではない。`==` は Hom集合の一致であって**同一性ではない**（同一性は `===` と
+// `' !__` が担う、§6.2）。宣言順は `==` が比較していない別の性質であり、それを測って
+// 違う値が出るのは正しい観測である。
+{
+	const P = "point : [\n\tx : 3\n\ty : 4\n]\n";
+	const Q = "point2 : [\n\ty : 4\n\tx : 3\n]\n";
+	check("point ' 0 → 3（連番は宣言順）", run(P + "point ' 0"), 3);
+	check("point ' 1 → 4", run(P + "point ' 1"), 4);
+	check("point ' -1 → 4（負の連番は末尾から）", run(P + "point ' -1"), 4);
+	check("point ' 2 → __（範囲外）", run(P + "point ' 2"), "__");
+	check("point ' x → 3（名前でも引ける）", run(P + "point ' x"), 3);
+	check("|point| → 2（スロット数。連番で引ける以上、個数も定義されている）", run(P + "|point|"), 2);
+	check("point2 ' 0 → 4（宣言順が違えば違う値。正しい観測）", run(Q + "point2 ' 0"), 4);
+	check("それでも == は真（Hom集合の一致は宣言順を問わない）", run(P + Q + "point == point2"), { x: 3, y: 4 });
+}
+
 // 未定義識別子のUnit収束は診断上informationとして記録される（unit.md §0.1、非ブロッキング）。
 function runDiag(source) {
 	const { nodes } = compile(source, { parse: parser.parse });

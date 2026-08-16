@@ -892,10 +892,29 @@ function getPropValue(l, rightNode, env) {
 // 右辺のノード形を見ないと決まらないため getPropValue 側に残し、ここは数値・範囲だけを扱う。
 // 左辺束縛のポイントフリー（`[[3 , 4] ']` に添字を渡す形）は右辺がノードとして存在しない
 // ——ストリームから値で届く——ため、この入口が要る。
+// 名前付きスロット（プレーンオブジェクト）か。List・String・スカラーと区別する。
+function isNamedSlots(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v) && !v.__lambda__ && !v.__address__;
+}
+
 function getPropByValue(l, r) {
   if (isUnit(l)) return UNIT;
   const isString = typeof l === "string";
-  const asIndexable = Array.isArray(l) ? l : isString ? l.split("") : [l];
+  // 名前付きスロットは **名前・連番・実データ** の三つを持つ。名前で引くのは
+  // getPropValue 側（右辺が識別子のとき）、連番で引くのはここ（右辺が数値のとき）である。
+  //
+  // 連番は宣言順であって、物理オフセットの順（名前ソートの正規順、stack_abi.md §7.1）
+  // ではない。両者が食い違っても矛盾しない——`==` は Hom集合の一致であって**同一性では
+  // ない**（同一性は `===` と `' !__` が担う、§6.2）。したがって
+  // `point == point2` が真でありながら `point ' 0` と `point2 ' 0` が違う値になるのは、
+  // `==` が比較していない別の性質を測っているだけであり、正しい観測である。
+  const asIndexable = Array.isArray(l)
+    ? l
+    : isString
+      ? l.split("")
+      : isNamedSlots(l)
+        ? Object.values(l)
+        : [l];
   // 負のインデックスは末尾から数える（`-1`=最後の要素、length+indexへ写像）。
   // 正側は0始まり、負側は-1始まり（-0が無いため対称にはならない）。
   // type_system.md §4.1: `'` は Address（位置）を構造的に要求するため、Float が
@@ -1108,7 +1127,11 @@ function evaluate(node, env) {
         return operand === "List" || operand === "String" ? 0 : UNIT;
       }
       if (Array.isArray(inner) || typeof inner === "string") return inner.length;
-      // Lambda（Id射・クロージャ等）や構造体には要素数/絶対値が定義されていない——
+      // 名前付きスロットもスロット数を持つ。名前・連番・実データの三つを持つ以上、
+      // 連番の個数＝スロット数は定義されている。連番で引ける（`point ' 0`）のに
+      // 個数が取れないと、走査する手段が無くなってしまう。
+      if (isNamedSlots(inner)) return Object.keys(inner).length;
+      // Lambda（Id射・クロージャ等）には要素数/絶対値が定義されていない——
       // Math.absへ渡すとNaNが静かに出るため、型エラーとして__へ収束させる。
       if (inner !== null && typeof inner === "object") return UNIT;
       return Math.abs(inner);
