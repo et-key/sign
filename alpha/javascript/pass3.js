@@ -57,6 +57,57 @@ const NUMERIC_TYPES = new Set(["Address", "Float", "Vector"]);
 // `+`・`-`・`%` はList/Stringと同様に型エラーで __ へ収束する。
 const LIST_ARITHMETIC_OPS = new Set(["mul", "pow", "div"]);
 
+// 範囲族（list_model.md §2.3）。`~` は単純形式 `[start ~ end]` と、3項形式
+// `[start ~op step ~ end]` の外側を担う。`~+`〜`~^` は step を伴う派生演算子。
+const RANGE_STEP_OPS = new Set([
+  "range_arithmetic",
+  "range_arithmetic_rev",
+  "range_geometric",
+  "range_geometric_rev",
+  "range_power",
+]);
+
+// type_system.md §4: `~` 中置は `(Scalar -> Scalar) -> Iterator -> List`。
+// 端点になれるのは「点」——数値と文字である。文字は Layer 2 では String だが、
+// 範囲の端点としては符号位置で数えるため点として扱える（`\a ~ \e`）。
+// List / Struct は点ではないので端点にできない。原理4により静的に弾く。
+const RANGE_ENDPOINT_TYPES = new Set(["Address", "Float", "Vector", "String"]);
+
+// 範囲式の端点になっているノードの型を、単純形式・3項形式のどちらでも取り出す。
+// 3項形式は `range(range_arithmetic(start, step), end)` という入れ子であり、
+// 実際の端点は内側の左辺（start）と外側の右辺（end）である。
+function rangeEndpoints(node, env) {
+  if (RANGE_STEP_OPS.has(node.name)) return [node.left, node.right];
+  const inner = node.left;
+  if (inner && inner.type === "operation" && RANGE_STEP_OPS.has(inner.name)) {
+    return [inner.left, node.right];
+  }
+  return [node.left, node.right];
+}
+
+function rangeResultType(node, env) {
+  const [startNode, endNode] = rangeEndpoints(node, env);
+  const types = [];
+  for (const [label, operand] of [["左辺", startNode], ["右辺", endNode]]) {
+    const t = operand ? inferAtomType(operand, env) : null;
+    // 未解決（null）は静的に判定できないのでエラーにしない（原理4）。
+    // Unit は零射として振る舞うので型エラーの対象外。
+    if (t && t !== "Unit" && !RANGE_ENDPOINT_TYPES.has(t)) {
+      throw new TypeError(
+        `type_system.md §4違反: 範囲演算子 '${node.op}' の${label}に ${t} は置けません` +
+          `（端点になれるのは数値と文字だけです）。範囲は「点から点まで」であり、` +
+          `${t} は点ではありません`
+      );
+    }
+    types.push(t);
+  }
+  // 終端を持たない2項形式（`1 ~+ 2`）は Pull 型のストリームそのもの。
+  if (RANGE_STEP_OPS.has(node.name)) return "Iterator";
+  // 文字の範囲は文字の並び＝String（String ≅ List(0u)）。それ以外は List。
+  if (types[0] === "String" && types[1] === "String") return "String";
+  return "List";
+}
+
 // type_system.md §3.2「要素型の join」: 余積で構築される List の要素型を求める。
 // join は数値の昇格格子そのもの。戻り値の意味を3値で区別する：
 //   型名   … join が求まった
@@ -237,6 +288,10 @@ function computeAtomType(node, env) {
       // 論理・圏論族の`&`（§4: `(L -> R) -> (R | __)`）だけは右辺の型を返す。
       // 左辺は短絡（Unitなら全体がUnit）を決めるだけで、値として返るのは右辺。
       if (node.name === "and") return inferAtomType(node.right, env);
+      // 範囲族は左辺優先ルール（§3.2）の対象外——結果は端点の型ではなく列である。
+      // 以前は `return leftType` へ落ちており、`1 ~ 5` の型が値（[1,2,3,4,5]）と
+      // 食い違って Address になっていた。
+      if (node.name === "range" || RANGE_STEP_OPS.has(node.name)) return rangeResultType(node, env);
       const leftType = inferAtomType(node.left, env);
       if (ARITHMETIC_OPS.has(node.name)) return arithmeticResultType(node, leftType, env);
       return leftType; // 左辺が規則を選ぶ（§3.2）。比較・構造比較族は左辺の型が結果型

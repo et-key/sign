@@ -173,5 +173,17 @@ checkNoThrow("[1 `abc`] → String（ブラケットでも同じ）", "[1 `abc`]
 checkThrows("1 [x : 1] → コンパイルエラー（Address と Struct に join が無い）", "1 [x : 1]");
 checkNoThrow("1 , `abc` → Struct（カンマなら混在は正当）", "1 , `abc`", "Struct");
 
+// 範囲族（type_system.md §4: `~` は `(Scalar -> Scalar) -> Iterator -> List`）。
+// 結果は端点の型ではなく「列」なので、左辺優先ルール（§3.2）の対象外である
+// ——以前は `1 ~ 5` の型が値（[1,2,3,4,5]）と食い違って Address になっていた。
+checkNoThrow("1 ~ 5 → List（結果は列であり端点の型ではない）", "1 ~ 5", "List");
+checkNoThrow("\\a ~ \\e → String（文字の範囲は文字の並び、String ≅ List(0u)）", "\\a ~ \\e", "String");
+checkNoThrow("2 ~+ 2 ~ 10 → List（3項形式。端点は内側の左辺と外側の右辺）", "2 ~+ 2 ~ 10", "List");
+checkNoThrow("1 ~+ 2 → Iterator（終端の無い2項形式はPull型ストリームそのもの）", "1 ~+ 2", "Iterator");
+// 端点になれるのは「点」だけ。List / Struct は型で分かるので静的に弾く（原理4）。
+checkThrows("[1 2] ~ [3 4] → コンパイルエラー（List は範囲の端点になれない）", "[1 2] ~ [3 4]");
+checkThrows("[x : 1] ~ [y : 2] → コンパイルエラー（Struct も同様）", "[x : 1] ~ [y : 2]");
+checkThrows("1 ~+ 2 ~ [3 4] → コンパイルエラー（3項形式の終端も端点）", "1 ~+ 2 ~ [3 4]");
+
 console.log(`\n${passed + extraPassed}/${cases.length + extra} passed`);
 process.exit(passed === cases.length && extraPassed === extra ? 0 : 1);

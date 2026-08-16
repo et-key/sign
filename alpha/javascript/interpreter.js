@@ -629,6 +629,45 @@ function rangeStepFn(op, step) {
   }
 }
 
+// 範囲の端点として評価された値を検査する。「点」であるのは数値と1文字だけで、
+// それ以外（多文字の String・List・Struct）は端点になれない。pass3 が静的に弾けるのは
+// 型で分かる List / Struct までであり、String が1文字かどうかは値を見ないと決まらない
+// ため、ここで実行時に弾く。検査が無かった頃は数値経路の `v + step` が
+// `"abc"` → `"abc1"` → `"abc11"` と伸ばし続け、100万回のガードに当たるまで走っていた。
+function checkRangeEndpoint(op, label, v, allowChar) {
+  if (typeof v === "number") return;
+  if (allowChar && typeof v === "string" && [...v].length === 1) return;
+  const shown =
+    typeof v === "string"
+      ? `${[...v].length}文字の String`
+      : Array.isArray(v)
+        ? "List"
+        : v !== null && typeof v === "object"
+          ? "Struct"
+          : String(v);
+  throw new TypeError(
+    `範囲演算子 '${op}' の${label}が範囲の端点になれません（${shown}）。` +
+      `端点になれるのは数値${allowChar ? "と1文字" : ""}だけです`
+  );
+}
+
+// 文字の範囲（`\a ~ \e` → `abcde`）。文字は Layer 2 では String だが、範囲の端点
+// としては符号位置で数える点である。String ≅ List(0u) なので、結果は文字の並び
+// ＝String として返す（pass3 の rangeResultType も両端が String なら String を返す）。
+// 端点が1文字でなければ範囲ではないので null を返し、呼び出し元の数値経路へ渡さない
+// ——数値経路の `v + step` は文字列に対して `"a"` → `"a1"` → `"a11"` と伸ばし続け、
+// 100万回のガードに当たるまで走り続けてしまう（実際にハングとして踏んだ）。
+function buildCharRange(start, end) {
+  const isChar = (v) => typeof v === "string" && [...v].length === 1;
+  if (!isChar(start) || !isChar(end)) return null;
+  const s = start.codePointAt(0);
+  const e = end.codePointAt(0);
+  const step = s <= e ? 1 : -1;
+  return buildRange(s, e, (v) => v + step)
+    .map((c) => String.fromCodePoint(c))
+    .join("");
+}
+
 // start から end まで（終端を含む）、stepFnを繰り返し適用して配列へ実体化する。
 // 昇順・降順どちらもstart/endの大小関係だけから判定する（呼び出し元でstepの符号を揃える）。
 function buildRange(start, end, stepFn) {
@@ -1230,16 +1269,24 @@ function evaluate(node, env) {
         // 3項形式 [start ~op step ~ end]（node.leftが5種の派生演算子いずれかのノード。
         // list_model.md §2.3: ~+/~-/~*/~/~^、rangeStepFnが全種のstep関数を持つ）と、
         // 単純形式 [start ~ end]（step省略、昇順なら+1・降順なら-1）の両方を扱う。
-        if (node.left && node.left.type === "operation" && RANGE_ARITHMETIC_NAMES.has(node.left.name)) {
-          const start = evaluate(node.left.left, env);
-          const step = evaluate(node.left.right, env);
-          const end = evaluate(node.right, env);
-          return buildRange(start, end, rangeStepFn(node.left.op, step));
-        }
-        const start = evaluate(node.left, env);
+        // 演算子表（operator_table.md）: `~` は両辺とも零射。左辺が Unit なら結果が
+        // `__` に確定するため、継続の規則に従い右辺を評価しない。
+        const isStepForm =
+          node.left && node.left.type === "operation" && RANGE_ARITHMETIC_NAMES.has(node.left.name);
+        const start = evaluate(isStepForm ? node.left.left : node.left, env);
+        if (isUnit(start)) return UNIT;
+        const step = isStepForm ? evaluate(node.left.right, env) : null;
         const end = evaluate(node.right, env);
-        const step = start <= end ? 1 : -1;
-        return buildRange(start, end, (v) => v + step);
+        if (isUnit(end)) return UNIT;
+        // step 形式は数値のみ（文字への等差・等比は意味が決まっていない）。
+        // 単純形式は数値または1文字。
+        checkRangeEndpoint(node.op, "左辺", start, !isStepForm);
+        checkRangeEndpoint(node.op, "右辺", end, !isStepForm);
+        if (isStepForm) return buildRange(start, end, rangeStepFn(node.left.op, step));
+        const charRange = buildCharRange(start, end);
+        if (charRange !== null) return charRange;
+        const delta = start <= end ? 1 : -1;
+        return buildRange(start, end, (v) => v + delta);
       }
       case "range_arithmetic":
       case "range_arithmetic_rev":

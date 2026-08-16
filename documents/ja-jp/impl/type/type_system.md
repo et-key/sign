@@ -572,8 +572,34 @@ Coproduct Resolver が曖昧さなく決定論的に解決できます。
 > **記法**: `L` = 左辺の型、`R` = 右辺の型  
 > `Scalar` = String を**含まない** Atom（Number など）  
 > `Atom` = String を**含む**スカラー  
+> `Point` = 範囲の端点になれるもの＝**数値と1文字**（下記 NOTE）  
 > `List` = `Array | Struct`（多相リストは `Struct`）  
 > `Implicit` = 暗黙のアドレス（Implicit Address）
+
+> [!NOTE]
+> **範囲の端点（`Point`）は数値と1文字である。**
+>
+> 範囲は「点から点まで」を表すため、端点は点でなければならない。数値のほかに
+> **文字**が端点になれる——文字は Layer 2 では `String` だが、範囲の端点としては
+> 符号位置で数える点だからである。両端が文字なら結果は文字の並び、すなわち
+> `String` になる（`String ≅ List(0u)` なので、文字の List は String そのもの）。
+>
+> ```sign
+> 1 ~ 5        ` List:   [1 2 3 4 5]
+> \a ~ \e      ` String: `abcde`
+> \e ~ \a      ` String: `edcba`（降順）
+> ```
+>
+> `List` と `Struct` は点ではないため端点にできない。型で判定できるので
+> [原理4](../0_design_principles.md)によりコンパイルエラーとする。**多文字の
+> `String`** が点でないことは型では決まらない（`String` は文字数を持たない）ため、
+> こちらは実行時に弾く。
+>
+> step を伴う派生演算子（`~+` `~-` `~*` `~/` `~^`）の端点は数値のみである。
+> 文字に対する等差・等比の意味は定めていない。
+>
+> なお `~` の結果は**端点の型ではない**（列である）ため、§3.2 の左辺優先ルールの
+> 対象外である。
 
 | 記号 | 位置 | 型シグネチャ |
 | :------: | :------: | ------ |
@@ -593,7 +619,7 @@ Coproduct Resolver が曖昧さなく決定論的に解決できます。
 | ` ` | `Lambda` 中置 `Atom \| List` | `(Lambda -> (Atom \| List \| __)) -> (List \| Lambda \| __)` |
 | ` ` | `Lambda` 中置 `Lambda` | `(Lambda -> Lambda) -> Lambda` |
 | ` ` | `Atom \| List` 中置 `Atom \| List` | `((Atom \| List \| __) -> (Atom \| List \| __)) -> (List \| __)` |
-| `~` | 中置 | `(Scalar -> Scalar) -> Iterator -> List` |
+| `~` | 中置 | `(Point -> Point) -> Iterator -> (List \| String)` |
 | `~+` `~-` `~*` `~/` `~^` | 中置 | `(Scalar -> Scalar) -> Iterator` |
 | `<` `<=` `=` `>=` `>` `!=` | 中置 | `(L(Scalar) -> R(Scalar)) -> (L \| R \| __)` |
 | `+` `-` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
