@@ -419,6 +419,20 @@ check(
 	run("calc_diff : [foo bar ~obj] ? foo - bar\ncalc_diff [\n\tbar : 20\n\tfoo : 100\n]"),
 	80
 );
+// 名前付きスロットの意味論は「名前→値の有限写像」であり、関心事は「何が在るか」。
+// 物理オフセットは名前ソートの正規順だがそれは観測できないので、宣言順に依らず名前で
+// 束縛できる。表現は固定オフセットの連続ブロックなので、辞書の意味論を構造体のコストで
+// 得ていることになる（function_guide.md「構造体メンバーの一致による自動バインディング」）。
+check("rest は未消費のキーだけを集める", run("f : [foo bar ~obj] ? obj\nf [\n\tbar : 20\n\tfoo : 100\n\tbaz : 7\n]"), {
+	baz: 7,
+});
+// function_guide.md の func_mixed（デフォルト引数・match_case との共存）。
+// foo = 4、bar = foo * 2 = 8、foo > 3 が真なので foo - bar = -4。
+check(
+	"func_mixed [foo : 4] → -4（デフォルト引数が名前束縛のあとに評価される）",
+	run("func_mixed :\n\t\t[\n\t\t\tfoo\n\t\t\tbar : foo * 2\n\t\t\t~obj\n\t\t]\n\t?\n\t\tfoo > 3 : foo - bar\n\t\tbar\nfunc_mixed [\n\tfoo : 4\n]"),
+	-4
+);
 
 check(
 	"get_age dict渡し → 20（pattern_guide.mdのStore例、~objは未使用でも問題ない）",
