@@ -843,15 +843,27 @@ function evalUnaryOp(name, v) {
 // 両方から呼ぶ。以前はevaluateの中にインラインで書かれており、ポイントフリー側から
 // 再利用できなかったため `[' 0]` が「未対応の演算子」で落ちていた。
 function getPropValue(l, rightNode, env) {
-  // `d ' foo`: 右辺が識別子の場合、変数として評価せず「キー名そのもの」として扱う
-  // （Struct/Structのフィールドアクセス）。数値等なら通常通り評価してListのインデックスに使う。
   if (isUnit(l)) return UNIT;
+  // 右辺が識別子のとき、それを「名前」と読むか「値（添字）」と読むかは**左辺が決める**。
+  //
+  // type_system.md §2 は「名前付きスロット（`[key : val]`）と連番スロット（`1, 2, 3`）は
+  // 同じ構造であり、名前の有無だけが違う」と規定している。したがって区別の基準は
+  // 名前を持つかどうかであり、それは左辺の形にしか無い情報である。
+  //
+  //   名前付きスロット → 右辺の識別子は**名前**       `d ' foo`
+  //   連番スロット・List・String → 右辺の識別子は**値**  `xs ' i`
+  //
+  // 以前は左辺を問わず常に名前として扱い、名前付きでなければ `__` を返していた。
+  // そのため §2 が OK 例として明示している `list ' i`（`i` は実行時変数でよい）が
+  // 書けず、仮引数経由の `f : n ? l ' n` も `__` になっていた——連番スロットは
+  // 「順序が意味そのもの」であり、変数で引けなければバイト並びを扱う手段にならない。
   if (rightNode.type === "atom" && rightNode.kind === "identifier") {
-    const key = rightNode.value.slice(1, -1); // "<foo>" -> "foo"
     if (l && typeof l === "object" && !Array.isArray(l)) {
+      const key = rightNode.value.slice(1, -1); // "<foo>" -> "foo"
       return Object.prototype.hasOwnProperty.call(l, key) ? l[key] : UNIT;
     }
-    return UNIT;
+    // 名前を持たない左辺（List / String / スカラー）。識別子は値として評価し、
+    // 下の添字経路へ落とす。
   }
   // スカラー ≅ 1要素リスト（asListと同じ同型性）。非Array値も長さ1のリストとして
   // インデックスアクセスできる（`5 ' 0` = 5、`5 ' 1` = __）。
