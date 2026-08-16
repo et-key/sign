@@ -120,7 +120,7 @@ function collectApplyChain(node) {
 }
 
 // 実引数ノード1個を評価して値配列にする。後置~（expand）付きなら複数の位置引数へ展開する
-// （apply/apply_reverse共通、pattern_guide.md「関数にListを渡すときは必ず後置~を使う」）。
+// （pattern_guide.md「関数にListを渡すときは必ず後置~を使う」）。
 function evalArgValues(argNode, env) {
   if (argNode.type === "operation" && argNode.position === "postfix" && argNode.name === "expand") {
     const v = evaluate(argNode.operand, env);
@@ -1139,18 +1139,11 @@ function evaluate(node, env) {
         }
         return makePartialClosure(callee, argValues);
       }
-      case "apply_reverse": {
-        // `x f`（UFCS的なreceiver記法、coproduct_resolver.md §3の10.3）。左のxは常に
-        // ちょうど1個のreceiver値としてのみ渡す（8/5の設計合意：複数引数は取れない）。
-        // applyと違い後置~による複数位置引数への展開は行わない——xが`~`付きList等でも
-        // 展開せず「1個の値」としてそのまま渡す（evaluate側のexpandケースは非spread時
-        // 単なる素通しなので、ここでevalArgValuesを使わず直接evaluateするだけで済む）。
-        // それ以外はapplyと全く同じ経路（bindParams・完全性公理）を通す——
-        // `f : [foo bar ~this] ? ...`のような構造体destructuringも通常呼び出しと同じ
-        // 仕組みで解決される。
-        const callee = evaluate(node.right, env);
-        return applyClosure(callee, [evaluate(node.left, env)]);
-      }
+      // `apply_reverse` の専用ケースは無い。`x f`（UFCS的なreceiver記法、
+      // coproduct_resolver.md §3の10.3）は pass2 が通常の `apply`（`f x`）へ
+      // 展開する糖衣であり、ここへは apply として届く。専用ノードだった頃は
+      // TCO も静的な部分適用の印付けも届かず、`(n - 1) down` がスタックを溢れさせ、
+      // `(5 add) 3` が 8 ではなく 3 を返していた。
       case "compose": {
         const f = evaluate(node.left, env);
         const g = evaluate(node.right, env);

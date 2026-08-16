@@ -324,15 +324,40 @@ check(
 );
 
 check(
-	"5 inc 3 → [5, 4]（apply(inc,3)がtier10.4で先に確定し、apply_reverseが5を横取りしない。arity1のincが両隣のAtomに挟まれても通常適用が優先される）",
+	"5 inc 3 → [5, 4]（apply(inc,3)がtier10.4で先に確定し、10.3が5を横取りしない。arity1のincが両隣のAtomに挟まれても通常適用が優先される）",
 	run("inc : x ? x + 1\n5 inc 3"),
 	[5, 4]
 );
 
+// `x f` は通常の apply（`f x`）へ展開される糖衣であり、専用の評価規則を持たない
+// （coproduct_resolver.md §3.1、alpha/javascript/docs/apply_reverse.md）。
+// receiver は「1オブジェクトとして数えられる」ものに限るため、後置 `~`（List を
+// 複数の位置引数へ展開する指示）を receiver に書くのは構文エラー。
+checkThrows("[1 2]~ pair → 構文エラー（receiver に後置 `~` は書けない）", () => run("pair : a b ? a\n[1 2]~ pair"));
+checkTrue(
+	"pair [1 2]~ は従来通り通る（前置適用は receiver ではないので `~` の制限を受けない）",
+	(() => {
+		const v = run("pair : a b ? a\npair [1 2]~");
+		return !!(v && v.__lambda__);
+	})()
+);
+
+// 糖衣にしたことで、apply に対する実装がそのまま届くようになった2点。
+// (1) 静的な部分適用の印付け——以前は `5 add` が完全性公理で `__` へ潰れ、
+//     `(5 add) 3` が `__ 3` の余積左単位元で 8 ではなく 3 を黙って返していた。
+check("(5 add) 3 → 8（`5 add` が `add 5` と同じ部分適用になる）", run("add : a b ? a + b\n(5 add) 3"), 8);
+check("(add 5) 3 → 8（前置形は従来通り）", run("add : a b ? a + b\n(add 5) 3"), 8);
+// (2) TCO——以前は `name === "apply"` しか TailCall 検出の対象でなく、
+//     receiver 形の末尾再帰だけが host stack を溢れさせていた。
 check(
-	"[1 2]~ pair → __（apply_reverseは後置~でも展開せず常に1個のreceiver値として渡す。pair(a b?a)のbが埋まらず完全性公理で崩壊）",
-	run("pair : a b ? a\n[1 2]~ pair"),
-	"__"
+	"receiver 形の末尾再帰が10万段でも溢れない（以前はスタック溢れ）",
+	run("down : n ?\n\tn = 0 : 0\n\t(n - 1) down\ndown 100000"),
+	0
+);
+check(
+	"前置形の末尾再帰は従来通り",
+	run("down : n ?\n\tn = 0 : 0\n\tdown (n - 1)\ndown 100000"),
+	0
 );
 
 // ブラケット仮引数リスト（`[x ~xs]`等）への単一List/Struct実引数の分割代入（8/5の設計合意、

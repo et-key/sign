@@ -13,7 +13,7 @@ alpha JavaScript は、完成済みの仕様を逐語的に写すだけの実装
 | 種類 | 説明 | 例 |
 |---|---|---|
 | **規範参照** | `impl/` が明示的に定める言語規則 | PEG、Unit の演算規則、余積の category pair |
-| **alpha の設計判断** | 規範参照を alpha が具体化する際に選んだ読み方 | `apply_reverse` を UFCS receiver として一値に制限すること |
+| **alpha の設計判断** | 規範参照を alpha が具体化する際に選んだ読み方 | 逆適用（`x f`）を固有 node にせず `apply` へ展開する糖衣として扱うこと |
 | **実装制限** | alpha が未対応、または簡略化している範囲 | target memory、native ABI、無限 Pull iterator の実体化評価 |
 | **未決事項** | 実装前に仕様側の裁定が必要な範囲 | target ごとの fault profile、Struct key 衝突、複数 phase にまたがる arity 規則 |
 
@@ -76,9 +76,11 @@ alpha は、規範上の全機能を一度に実装するのではなく、実�
 
 ## 4. 余積は構文糖ではなく、category による解決である
 
-space は token separator ではなく coproduct です。Pass 2 は flat term sequence を、`Lambda × Lambda`、`Lambda × Atom`、`Atom × Lambda`、`Atom × Atom` の category と phase に従って `compose`、`apply`、`apply_reverse`、`concat` / `construct` 等へ縮約します。
+space は token separator ではなく coproduct です。Pass 2 は flat term sequence を、`Lambda × Lambda`、`Lambda × Atom`、`Atom × Lambda`、`Atom × Atom` の category と phase に従って `compose`、`apply`、`concat` / `construct` 等へ縮約します。
 
-この前提から、見かけ上の構文が似ていても、各 node を通常の関数呼び出しとして一般化してはなりません。特に `apply_reverse` は、次の文書で定めるように UFCS receiver を余積へ吸収した限定形です。
+この前提から、見かけ上の構文が似ていても、各 node を通常の関数呼び出しとして一般化してはなりません。
+
+ただし `Atom × Lambda`（逆適用、`x f`）は例外で、**固有の node を作らず左右を入れ替えた `apply` へ展開します**。解決規則としての 10.3 は残りますが、意味論は `apply` ひとつです。固有 node にしていた頃は `apply` へ足した機能（TCO、静的な部分適用の印付け）が届かず取りこぼしが繰り返し起きたためで、経緯は次の文書に記します。
 
 ## 5. 文書化の原則
 

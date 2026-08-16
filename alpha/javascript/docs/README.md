@@ -10,7 +10,7 @@
 | 順序 | 文書 | 目的 |
 |---:|---|---|
 | 0 | [`design_premises.md`](design_premises.md) | 規範仕様・alpha の設計判断・実装制限・未決事項を区別する。Unit の不動点と参照の安全性を定める。 |
-| 1 | [`apply_reverse.md`](apply_reverse.md) | `x f` を、一般関数適用の鏡像ではなく余積に吸収された UFCS receiver 記法として定義し、alpha の制限を明示する。 |
+| 1 | [`apply_reverse.md`](apply_reverse.md) | `x f` を、固有ノードを持たず通常の `apply` へ展開される糖衣構文として定義し、receiver が1オブジェクトに限られることを明示する。 |
 | 2 | [`memory/`](memory/README.md) | alpha の実装判断、実測、訂正の経緯を残した原文メモリ。規範仕様ではなく、設計背景を遡るために参照する。 |
 
 ## 記述の状態

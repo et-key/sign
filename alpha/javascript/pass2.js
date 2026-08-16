@@ -375,7 +375,7 @@ function getCategory(node, env, closed = false) {
       // 【注意】ポイントフリー記述の完全に裸な中置演算子（`[+]`）が複数引数を貪欲に
       // 取り込む挙動は、ここ（getCategory）ではなくreduceOnceのPhase2（apply）専用の
       // 特例として実装している（isBarePointfreeChainBase参照）。ここで「常にLambda」に
-      // してしまうと、Phase2で使い切った後のPhase3（apply_reverse）でも依然Lambdaと
+      // してしまうと、Phase2で使い切った後のPhase3（逆適用）でも依然Lambdaと
       // 誤判定され、既に確定した計算結果（`[+](3)(4)`のような値）がまた関数として
       // 呼ばれようとしてしまう（`1 2 [+] 3 4`で実際に踏んだ）。apply連鎖は、名前付き
       // 識別子と同様に既知のarityが無い限り、1回の適用で即座にAtom（飽和済み）として
@@ -487,7 +487,36 @@ function coproductReduce(a, b, env) {
     }
     return mk("apply", a, b);
   }
-  if (catA === "Atom" && catB === "Lambda") return mk("apply_reverse", a, b);
+  if (catA === "Atom" && catB === "Lambda") {
+    // 10.3: UFCS 的な receiver 記法（`x f`）。**固有のノードは作らず、通常の apply
+    // （`f x`）へ展開する糖衣として扱う。**
+    //
+    // 以前は `apply_reverse` という別ノードを作り、interpreter に専用の評価経路を
+    // 持たせていた。その結果、apply に足した機能が apply_reverse へ届かないという
+    // 取りこぼしが繰り返し起きた——TCO は `name === "apply"` しか検出せず
+    // `(n - 1) down` が深い再帰でスタックを溢れさせ、静的な部分適用の印付けも
+    // 効かないため `5 add` が完全性公理で `__` へ潰れ、`(5 add) 3` が 8 ではなく
+    // 3（`__ 3` の余積左単位元）を黙って返していた。
+    // ここで通常の apply へ展開しておけば、TCO・部分適用・`~` 展開・型注釈の
+    // すべてが「apply に対する実装」ひとつで届く。適用の意味論は一つだけになる。
+    //
+    // 空白がどの縮約へ落ちるかはカテゴリ対でしか決まらないため、10.3 という
+    // **解決規則自体は規範に残る**（coproduct_resolver.md §3）。糖衣にしたのは
+    // ノードの型と、それに固有の評価規則である。
+    if (hasPostfixTilde(a)) {
+      // receiver は「1オブジェクトとして数えられる」ものでなければならない。
+      // 後置 `~` は List を複数の位置引数へ展開する指示であり、一つの値ではない。
+      // 通常 apply へ展開する以上ここで展開が起きてしまうが、`x~ f` と書いた側が
+      // 「receiver を1個渡す」つもりなのか「複数引数へ展開する」つもりなのかは
+      // 静的に確定できない。原理4により、値を返さず弾く。
+      throw new SyntaxError(
+        "receiver に後置 '~' は書けません。'x~ f' の '~' は List を複数の位置引数へ" +
+          "展開する指示であり、receiver として数えられる1つの値ではありません。" +
+          "展開したいなら通常の前置適用 'f x~' と書き、1つの値として渡したいなら '~' を外して 'x f' と書いてください"
+      );
+    }
+    return mk("apply", b, a);
+  }
   if (catA === "Atom" && catB === "Atom") {
     // 10.1/10.2 の判定には isRealListValue を使う（isListLike ではない）。
     // isListLike は中身を見ずに括弧ブロックを全て List 扱いするため、
@@ -521,19 +550,19 @@ function coproductReduce(a, b, env) {
 
 // ---- Step2: 優先順位に基づく総当たり縮約（coproduct_resolver.md §4） ----
 //
-// coproduct_resolver.md §4は「10.5(compose)→10.4(apply)→10.3(apply_reverse)→10.2〜10.0
+// coproduct_resolver.md §4は「10.5(compose)→10.4(apply)→10.3(逆適用)→10.2〜10.0
 // (concat/push/unshift/construct)の順に、各優先度をリスト全体に対して使い尽くしてから
 // 次へ進む」という段階的マルチパスを規定している。以前はtier===10をひとまとめにし、
 // 隣接ペアを左から見て最初にマッチしたものを即座に縮約する単一グリーディスキャンに
 // なっていたため、この優先順位が守られていなかった（例: `5 inc 3` で本来10.4(apply)が
-// 先に `inc 3` を縮約すべきところ、実際は左端の `5 inc` が10.3(apply_reverse)として
+// 先に `inc 3` を縮約すべきところ、実際は左端の `5 inc` が10.3(逆適用)として
 // 先に縮約されてしまっていた）。COPRODUCT_PHASESで4段階に明示的に分割し、各段階を
 // 使い尽くしてから次へ進むことで仕様通りの優先順位を保証する。
 //
-// これにより、apply_reverse（UFCS的な `receiver method` 記法、`f : [foo bar ~this] ? ...`
+// これにより、逆適用（UFCS的な `receiver method` 記法、`f : [foo bar ~this] ? ...`
 // のようなオブジェクト指向的呼び出しを意図）は「そのLambdaが右側に通常適用できるAtomを
 // 持たない場合のみ」発動するフォールバックになる——両隣にAtomがあるLambdaは常にapply
-// （右のAtomへの通常適用）が先に確定するため、apply_reverseが途中のAtomを横取りすることはない。
+// （右のAtomへの通常適用）が先に確定するため、逆適用が途中のAtomを横取りすることはない。
 // concat/push/unshift/constructの3つ（10.2〜10.0）はcoproductReduce内部でリスト形状のみから
 // 相互排他的に決まり、tier間の競合が無いため、引き続き1フェーズにまとめている。
 // ポイントフリー記述で「複数の実引数を貪欲に消費し続けるべき」apply連鎖の根本（base）
@@ -587,15 +616,15 @@ const COPRODUCT_PHASES = [
     // （function_guide.md）——getCategoryでは通常のarity判定と同様1回の適用で即座に
     // Atom（飽和済み）として扱うが、Phase2（apply）だけはこの特例で「まだ右にAtomが
     // あれば貪欲に食う」を許可する。これをgetCategory本体に持ち込むと、Phase2で使い
-    // 切った後のPhase3（apply_reverse）でも依然Lambdaと誤判定され、既に確定した計算
+    // 切った後のPhase3（逆適用）でも依然Lambdaと誤判定され、既に確定した計算
     // 結果（`[+](3)(4)`）がまた関数として呼ばれようとしてしまう（`1 2 [+] 3 4`で実際に
     // 踏んだバグ）。Phase2内だけで完結させることで、Phase2が尽きた時点（＝これ以上
     // 右にAtomが無い時点）で自然にAtomへ確定する。
     extendPointfree: true,
   }, // 10.4: apply
   {
-    // 10.3: apply_reverse。ポイントフリー由来のLambda（`[+]`/`[+ 1]`等、演算子の種類を
-    // 問わない）はapply_reverseの対象から除外する（8/5の設計合意）。ポイントフリーは
+    // 10.3: 逆適用（`x f`）。ポイントフリー由来のLambda（`[+]`/`[+ 1]`等、演算子の種類を
+    // 問わない）は逆適用の対象から除外する（8/5の設計合意）。ポイントフリーは
     // 常に前置適用（`[+ 1] 5`）という一つの呼び出し方だけを持ち、UFCS的なreceiver記法
     // （`x f`）という別経路を重ねない——「一つのことを表現する方法は一つ」の方針、かつ
     // `5 [+]`のような曖昧な読み（5をどちら側の被演算子とみなすか不定）を防ぐ。
@@ -1019,7 +1048,7 @@ function reduceAll(rawItems, env) {
   for (let tier = 26; tier >= 1; tier--) {
     let guard = 0;
     if (tier === 10) {
-      // coproduct_resolver.md §4: compose→apply→apply_reverse→concat/push/constructの
+      // coproduct_resolver.md §4: compose→apply→逆適用→concat/push/constructの
       // 4段階を、それぞれ使い尽くしてから次へ進む（COPRODUCT_PHASES参照）。
       for (const phase of COPRODUCT_PHASES) {
         while (reduceOnce(items, tier, env, phase)) {
@@ -1118,7 +1147,6 @@ const STRUCTURAL_INFIX = new Set([
   "push",
   "unshift",
   "apply",
-  "apply_reverse",
   "compose",
   "product",
 ]);
