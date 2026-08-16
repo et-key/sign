@@ -112,6 +112,15 @@ checkReasons("`abc` + 1 → 同上（両方向とも）", "`abc` + 1", ["arithme
 checkReasons("識別子経由でも追える（x : `abc` / x * 2）", "x : `abc`\nx * 2", ["arithmetic-type-mismatch"]);
 checkReasons("[1 2] + [3 4] → List左辺の算術が未定義", "[1 2] + [3 4]", ["list-arithmetic-undefined"]);
 checkReasons("5 + 2 → 診断なし", "5 + 2", []);
+// 範囲族（§4）: 端点が「点」でないとき。停止させず `__` へ落とし、理由を帳簿に残す
+// ——型が合わないことは「射が無い」ことであり、零対象を経由する射（零射）が常に
+// 存在する以上、結果は `__` である。停止するのは構文が壊れているときだけ。
+checkReasons("[1 2] ~ [3 4] → 端点が点でないことを記録", "[1 2] ~ [3 4]", ["range-endpoint-not-a-point"]);
+checkReasons("[x : 1] ~ [y : 2] → 同上（Struct）", "[x : 1] ~ [y : 2]", ["range-endpoint-not-a-point"]);
+checkReasons("1 ~+ 2 ~ [3 4] → 3項形式の終端も端点として見る", "1 ~+ 2 ~ [3 4]", ["range-endpoint-not-a-point"]);
+checkReasons("1 ~ 5 → 診断なし", "1 ~ 5", []);
+checkReasons("\\a ~ \\e → 診断なし（文字は点）", "\\a ~ \\e", []);
+checkReasons("__ ~ 5 → 診断なし（Unit は零射であって型の不一致ではない）", "__ ~ 5", []);
 // §3.3 の非対称Unit伝播則は「意図された伝播」であって型の不一致ではないので診断しない
 // （再帰の底打ちがこれに乗っている——原理5。ここで鳴らすとログのゴミ山になる）。
 checkReasons("__ + 5 → 診断なし（§3.3の吸収則は意図された伝播）", "__ + 5", []);

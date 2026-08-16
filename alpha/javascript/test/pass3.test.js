@@ -180,10 +180,11 @@ checkNoThrow("1 ~ 5 → List（結果は列であり端点の型ではない）"
 checkNoThrow("\\a ~ \\e → String（文字の範囲は文字の並び、String ≅ List(0u)）", "\\a ~ \\e", "String");
 checkNoThrow("2 ~+ 2 ~ 10 → List（3項形式。端点は内側の左辺と外側の右辺）", "2 ~+ 2 ~ 10", "List");
 checkNoThrow("1 ~+ 2 → Iterator（終端の無い2項形式はPull型ストリームそのもの）", "1 ~+ 2", "Iterator");
-// 端点になれるのは「点」だけ。List / Struct は型で分かるので静的に弾く（原理4）。
-checkThrows("[1 2] ~ [3 4] → コンパイルエラー（List は範囲の端点になれない）", "[1 2] ~ [3 4]");
-checkThrows("[x : 1] ~ [y : 2] → コンパイルエラー（Struct も同様）", "[x : 1] ~ [y : 2]");
-checkThrows("1 ~+ 2 ~ [3 4] → コンパイルエラー（3項形式の終端も端点）", "1 ~+ 2 ~ [3 4]");
+// 端点になれるのは「点」だけ。点でなければ射が無い＝零射なので、停止せず `__` になる。
+// 型が合わないことは停止理由ではない（停止するのは構文が壊れているときだけ）。
+checkNoThrow("[1 2] ~ [3 4] → Unit（List は点ではない。停止せず零射へ）", "[1 2] ~ [3 4]", "Unit");
+checkNoThrow("[x : 1] ~ [y : 2] → Unit（Struct も同様）", "[x : 1] ~ [y : 2]", "Unit");
+checkNoThrow("1 ~+ 2 ~ [3 4] → Unit（3項形式の終端も端点）", "1 ~+ 2 ~ [3 4]", "Unit");
 
 console.log(`\n${passed + extraPassed}/${cases.length + extra} passed`);
 process.exit(passed === cases.length && extraPassed === extra ? 0 : 1);

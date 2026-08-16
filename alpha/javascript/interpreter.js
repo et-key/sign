@@ -629,26 +629,19 @@ function rangeStepFn(op, step) {
   }
 }
 
-// 範囲の端点として評価された値を検査する。「点」であるのは数値と1文字だけで、
-// それ以外（多文字の String・List・Struct）は端点になれない。pass3 が静的に弾けるのは
-// 型で分かる List / Struct までであり、String が1文字かどうかは値を見ないと決まらない
-// ため、ここで実行時に弾く。検査が無かった頃は数値経路の `v + step` が
-// `"abc"` → `"abc1"` → `"abc11"` と伸ばし続け、100万回のガードに当たるまで走っていた。
-function checkRangeEndpoint(op, label, v, allowChar) {
-  if (typeof v === "number") return;
-  if (allowChar && typeof v === "string" && [...v].length === 1) return;
-  const shown =
-    typeof v === "string"
-      ? `${[...v].length}文字の String`
-      : Array.isArray(v)
-        ? "List"
-        : v !== null && typeof v === "object"
-          ? "Struct"
-          : String(v);
-  throw new TypeError(
-    `範囲演算子 '${op}' の${label}が範囲の端点になれません（${shown}）。` +
-      `端点になれるのは数値${allowChar ? "と1文字" : ""}だけです`
-  );
+// 範囲の端点になれる値かを判定する。「点」であるのは数値と1文字だけで、それ以外
+// （多文字の String・List・Struct）は端点になれない。
+//
+// 端点でない値を渡されても**例外にはしない**——点でないものを端点に置くことは
+// 「射が無い」ということであり、零対象を経由する射（零射）が常に存在する以上、
+// 結果は `__` である。静的に判定できた分は pass3 が Pass 3b の診断として記録する。
+//
+// 判定そのものは要る。検査が無かった頃は数値経路の `v + step` が
+// `"abc"` → `"abc1"` → `"abc11"` と値を伸ばし続け、100万回のガードに当たるまで
+// 走っていた（無限ループではないが実用上はハング）。
+function isRangePoint(v, allowChar) {
+  if (typeof v === "number") return true;
+  return allowChar && typeof v === "string" && [...v].length === 1;
 }
 
 // 文字の範囲（`\a ~ \e` → `abcde`）。文字は Layer 2 では String だが、範囲の端点
@@ -1279,9 +1272,8 @@ function evaluate(node, env) {
         const end = evaluate(node.right, env);
         if (isUnit(end)) return UNIT;
         // step 形式は数値のみ（文字への等差・等比は意味が決まっていない）。
-        // 単純形式は数値または1文字。
-        checkRangeEndpoint(node.op, "左辺", start, !isStepForm);
-        checkRangeEndpoint(node.op, "右辺", end, !isStepForm);
+        // 単純形式は数値または1文字。点でなければ射が無い＝零射なので `__`。
+        if (!isRangePoint(start, !isStepForm) || !isRangePoint(end, !isStepForm)) return UNIT;
         if (isStepForm) return buildRange(start, end, rangeStepFn(node.left.op, step));
         const charRange = buildCharRange(start, end);
         if (charRange !== null) return charRange;

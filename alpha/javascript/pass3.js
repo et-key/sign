@@ -85,26 +85,30 @@ function rangeEndpoints(node, env) {
   return [node.left, node.right];
 }
 
-function rangeResultType(node, env) {
+// 端点として不正な型を見つけたら、その型を返す（見つからなければ null）。
+// 「不正」は例外にしない——点でないものを端点に置くことは「射が無い」ということであり、
+// 零対象を経由する射（零射）が常に存在する以上、結果は `__` である。なぜ潰れたかは
+// Pass 3b（collectUnitReason）が診断として記録する。
+function badRangeEndpoint(node, env) {
   const [startNode, endNode] = rangeEndpoints(node, env);
-  const types = [];
   for (const [label, operand] of [["左辺", startNode], ["右辺", endNode]]) {
     const t = operand ? inferAtomType(operand, env) : null;
-    // 未解決（null）は静的に判定できないのでエラーにしない（原理4）。
-    // Unit は零射として振る舞うので型エラーの対象外。
-    if (t && t !== "Unit" && !RANGE_ENDPOINT_TYPES.has(t)) {
-      throw new TypeError(
-        `type_system.md §4違反: 範囲演算子 '${node.op}' の${label}に ${t} は置けません` +
-          `（端点になれるのは数値と文字だけです）。範囲は「点から点まで」であり、` +
-          `${t} は点ではありません`
-      );
-    }
-    types.push(t);
+    // 未解決（null）は静的に判定できないので何も言わない。
+    // Unit は零射として振る舞うので、そもそも型の不一致ではない。
+    if (t && t !== "Unit" && !RANGE_ENDPOINT_TYPES.has(t)) return { label, type: t };
   }
+  return null;
+}
+
+function rangeResultType(node, env) {
+  if (badRangeEndpoint(node, env)) return "Unit";
+  const [startNode, endNode] = rangeEndpoints(node, env);
+  const startType = startNode ? inferAtomType(startNode, env) : null;
+  const endType = endNode ? inferAtomType(endNode, env) : null;
   // 終端を持たない2項形式（`1 ~+ 2`）は Pull 型のストリームそのもの。
   if (RANGE_STEP_OPS.has(node.name)) return "Iterator";
   // 文字の範囲は文字の並び＝String（String ≅ List(0u)）。それ以外は List。
-  if (types[0] === "String" && types[1] === "String") return "String";
+  if (startType === "String" && endType === "String") return "String";
   return "List";
 }
 
@@ -424,6 +428,21 @@ function annotateTypes(node, env, diagnostics) {
 function collectUnitReason(node, env, diagnostics) {
   if (!node || node.type !== "operation" || node.position !== "infix") return;
   if (node.atomType !== "Unit") return;
+
+  // 範囲族（§4）: 端点が「点」でない（List / Struct）ため零射へ落ちた場合。
+  if (node.name === "range" || RANGE_STEP_OPS.has(node.name)) {
+    const bad = badRangeEndpoint(node, env);
+    if (bad) {
+      diagnostics.push({
+        level: "information",
+        reason: "range-endpoint-not-a-point",
+        spec: "type_system.md §4",
+        message: `範囲演算子 '${node.op}' の${bad.label}が ${bad.type} であり、範囲の端点になれないため __ に収束します（端点になれるのは数値と1文字だけです）`,
+      });
+    }
+    return;
+  }
+
   if (!ARITHMETIC_OPS.has(node.name)) return;
 
   const leftType = inferAtomType(node.left, env);
