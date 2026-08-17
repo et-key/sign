@@ -104,6 +104,23 @@ function paramTypeText(entry, usageTypes, fieldReqs) {
   return entry.rest ? `${base}~` : base;
 }
 
+// ノード1つ分の型表記。`List` は要素型を伴って `List(T)` と書く（§2 の記法）。
+//
+// 要素型を落とすと「整数のリスト」と「実数のリスト」が同じ `List` になり、単一の実数
+// （`Float`）とも区別が付かなくなる。要素型は Pass 4 が `base + i × sizeof(T)` を出すのに
+// 要る情報であり、型の側で最も落としてはいけない部分である。
+//
+// なお1要素のリストはスカラーと同型なので（`[5]` は `Address`）、`List(T)` が付くのは
+// 2要素以上か構文的にリストと確定している場合だけである。これは設計上の同一視であり
+// 欠落ではない——1要素の連続ブロックとレジスタ上のスカラーは同じビット列を持つ。
+function slotTypeText(node) {
+  if (!node) return UNKNOWN;
+  const t = node.atomType || UNKNOWN;
+  if (t === "List") return node.elementType ? `List(${node.elementType})` : "List";
+  if (t === "Struct") return structTypeText(node, t);
+  return t;
+}
+
 /**
  * `Struct` を、名前付きスロットか連番スロットかが分かる形で書く。
  *
@@ -149,10 +166,10 @@ function structTypeText(node, atomType) {
     const slots = (node.lines || [])
       .map((l, ordinal) => {
         if (isDefineNode(l) && isIdentifierNode(l.left)) {
-          return { name: bareName(l.left.value), ordinal, type: l.right && l.right.atomType ? l.right.atomType : UNKNOWN };
+          return { name: bareName(l.left.value), ordinal, type: slotTypeText(l.right) };
         }
         // フィールド名の省略記法（`x` だけの行）。値はその識別子自身。
-        if (isIdentifierNode(l)) return { name: bareName(l.value), ordinal, type: l.atomType || UNKNOWN };
+        if (isIdentifierNode(l)) return { name: bareName(l.value), ordinal, type: slotTypeText(l) };
         return null;
       })
       .filter(Boolean);
@@ -165,10 +182,10 @@ function structTypeText(node, atomType) {
     const walk = (n) => {
       if (n && n.type === "operation" && n.name === "product") {
         walk(n.left);
-        slots.push(n.right && n.right.atomType ? n.right.atomType : UNKNOWN);
+        slots.push(slotTypeText(n.right));
         return;
       }
-      slots.push(n && n.atomType ? n.atomType : UNKNOWN);
+      slots.push(slotTypeText(n));
     };
     walk(node);
     return `Struct(${slots.join(" ")})`;
@@ -188,7 +205,7 @@ function entryFor(defineNode) {
   if (!isLambdaNode(rhs)) {
     // Atom: 右辺式の Layer 2 型がそのまま識別子の型になる（§5 Pass 1a）。
     const t = rhs && rhs.atomType ? rhs.atomType : UNKNOWN;
-    return { name, text: `${name} : ${structTypeText(rhs, t)}`, unresolved: t === UNKNOWN ? 1 : 0 };
+    return { name, text: `${name} : ${slotTypeText(rhs)}`, unresolved: t === UNKNOWN ? 1 : 0 };
   }
 
   const entries = paramEntries(rhs.left);
@@ -207,7 +224,7 @@ function entryFor(defineNode) {
     : entries.map((e) => paramTypeText(e, usageTypes, fieldReqs));
   // 返値型は本体ノードの Layer 2 型そのもの。Lambda 自身は Layer 1 のカテゴリであり
   // Layer 2 型を持たないが（§2）、本体は値を作るので型を持つ。
-  const ret = rhs.right && rhs.right.atomType ? rhs.right.atomType : UNKNOWN;
+  const ret = rhs.right && rhs.right.atomType ? slotTypeText(rhs.right) : UNKNOWN;
 
   const unresolved = params.filter((p) => p === UNKNOWN || p === `${UNKNOWN}~`).length + (ret === UNKNOWN ? 1 : 0);
   const lhs = params.length > 0 ? params.join(" ") : "__";

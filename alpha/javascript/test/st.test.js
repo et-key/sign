@@ -102,7 +102,20 @@ check("ねじれもスロット型も1行で読める", entries("uart : [\n\tCR 
 check("連番スロットは順序どおりにスロット型を並べる", entries("t : 1 , `abc` , 2.5"), [
 	"t : Struct(Address String Float)",
 ]);
-check("List は要素型が一つなので Struct にならない", entries("l : [1 2 3]"), ["l : List"]);
+// List は要素型を伴って `List(T)` と書く。要素型を落とすと「整数のリスト」と「実数の
+// リスト」が同じ `List` になり、単一の実数（`Float`）とも区別が付かなくなる。要素型は
+// Pass 4 が `base + i × sizeof(T)` を出すのに要る情報であり、最も落としてはいけない。
+check("List は要素型を伴う（整数のリスト）", entries("l : [1 2 3]"), ["l : List(Address)"]);
+check("実数のリストは区別される", entries("l : [1.0 2.0]"), ["l : List(Float)"]);
+check("単一の実数とも区別される", entries("r : 5.0"), ["r : Float"]);
+// 1要素のリストはスカラーと同型なので `List(T)` にならない（`[5]` は `Address`）。
+// 設計上の同一視であり欠落ではない——1要素の連続ブロックとレジスタ上のスカラーは
+// 同じビット列を持つ。
+check("1要素のリストはスカラーと同型", entries("one : [5]"), ["one : Address"]);
+// 入れ子でも要素型が保たれる。
+check("連番スロットの中でも要素型が残る", entries("t : 1 , [1 2] , [1.0 2.0]"), [
+	"t : Struct(Address List(Address) List(Float))",
+]);
 
 // ---- 範囲: `.st` は export されたものだけ ----
 check("`.st` は export されていない識別子を出さない", entries("a : 1\nb : 2", "st"), []);
