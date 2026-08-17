@@ -351,6 +351,17 @@ function computeAtomType(node, env) {
 const SCALAR_ARITHMETIC_OPS = ARITHMETIC_OPS;
 const SCALAR_COMPARISON_OP_SYMBOLS = new Set(["<", "<=", "=", ">=", ">", "!="]);
 
+// 演算の相手が「型の制約として意味を持つリテラル」なら、その型を返す。
+// リテラルでなければ null（演算子が要求する族までしか言えない）。
+//
+// `Unit` は除く。`__` は零射であって型ではないので、`a + __` は `a` について何も語らない
+// ——むしろ結果が `__` に収束することを意味する（§3.3 の吸収則）。
+function constraintFromLiteral(node) {
+  if (!node || node.type !== "atom") return null;
+  const t = literalAtomTypeFromKind(node);
+  return t === "Unit" ? null : t;
+}
+
 function inferParamTypesFromUsage(bodyNode, paramNames) {
   const inferred = new Map();
 
@@ -363,7 +374,10 @@ function inferParamTypesFromUsage(bodyNode, paramNames) {
       (SCALAR_ARITHMETIC_OPS.has(node.name) || SCALAR_COMPARISON_OP_SYMBOLS.has(node.op));
 
     if (isScalarOp) {
-      for (const side of [node.left, node.right]) {
+      for (const [side, other] of [
+        [node.left, node.right],
+        [node.right, node.left],
+      ]) {
         if (
           side &&
           side.type === "atom" &&
@@ -371,7 +385,22 @@ function inferParamTypesFromUsage(bodyNode, paramNames) {
           paramNames.has(side.value) &&
           !inferred.has(side.value)
         ) {
-          inferred.set(side.value, "Scalar");
+          // 相手がリテラルなら**その型がこの仮引数の型を決める**。相手が分からなければ
+          // 演算子が要求する族（`Scalar`）までしか言えない。
+          //
+          // これは「恒等演算を型注釈として使う」書き方を成立させるための規則である。
+          // Sign には型注釈の構文が無いので（§1「型はコードの影」）、初期化時に型を
+          // 決めたいときは値を変えない演算を書く。
+          //
+          //   x : @p + 0      Address として読む
+          //   x : @p + 0.0    Float として読む
+          //   x : @p          型を決める情報が無い
+          //
+          // `+ 0` は値を変えないので実行時コストは無い（コンパイル時に消える）が、
+          // 型は固定される。注釈構文を足さずに「キャスト情報がある場合と無い場合」を
+          // 書き分けられる。比較でも同じで、`t = \`===\`` の `t` は String になる
+          // ——比較は同種同士でしか成立しないため、相手の型がそのまま制約になる。
+          inferred.set(side.value, constraintFromLiteral(other) || "Scalar");
         }
       }
     }

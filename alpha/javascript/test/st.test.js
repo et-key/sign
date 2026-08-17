@@ -43,7 +43,7 @@ function check(note, got, want) {
 // ---- 書き写せている型 ----
 check("Atom はリテラルの Layer 2 型がそのまま出る", entries("pi : 3.14"), ["pi : Float"]);
 check("String も同様", entries("greeting : `hello`"), ["greeting : String"]);
-check("本体が式なら返値型が出る", entries("f : x ?\n\tx > 3 : 1\n\t2"), ["f : Scalar -> Address"]);
+check("本体が式なら返値型が出る", entries("f : x ?\n\tx > 3 : 1\n\t2"), ["f : Address -> Address"]);
 // §7.1 の表がそのまま述べている: `f : x y ? x + y` の `x`/`y` は `+` のシグネチャが
 // 要求する `Scalar` であり、`f` は `Lambda<returns: Scalar>` になる。ここで言う `Scalar` は
 // 「String を含まない Atom」という**族**（§4 の記法定義）であって Layer 2 の具体型では
@@ -51,8 +51,14 @@ check("本体が式なら返値型が出る", entries("f : x ?\n\tx > 3 : 1\n\t2
 check("仮引数の型を本体の演算子から逆算し、返値まで通る（§7.1）", entries("add : a b ? a + b"), [
 	"add : Scalar Scalar -> Scalar",
 ]);
-check("単項でも同じ", entries("f : x ? x + 1"), ["f : Scalar -> Scalar"]);
-check("比較演算子からも逆算される", entries("f : x ? x > 3"), ["f : Scalar -> Scalar"]);
+// 相手がリテラルなら、族（`Scalar`）ではなくその型まで決まる。Sign には型注釈の構文が
+// 無いので（§1「型はコードの影」）、初期化時に型を決めたいときは**値を変えない演算**を
+// 書く。`+ 0` は Address、`+ 0.0` は Float。実行時コストは無いが型は固定される。
+check("相手が整数リテラルなら Address まで決まる", entries("f : x ? x + 1"), ["f : Address -> Address"]);
+check("`+ 0.0` は恒等演算だが型を Float に固定する", entries("f : x ? x + 0.0"), ["f : Float -> Float"]);
+check("比較演算子でも同じ", entries("f : x ? x > 3"), ["f : Address -> Address"]);
+check("比較は同種同士なので String も決まる", entries("f : t ? t = `abc`"), ["f : String -> String"]);
+check("相手もリテラルでなければ族までしか言えない", entries("add : a b ? a + b"), ["add : Scalar Scalar -> Scalar"]);
 check(
 	"`'` でアクセスしたフィールドを要求集合として集める（§6.2）",
 	entries("distance : p1 p2 ? p1 ' x - p2 ' x").map((l) => l.split("->")[0].trim()),
