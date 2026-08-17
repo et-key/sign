@@ -641,6 +641,11 @@ const COPRODUCT_PHASES = [
 // §4.1 が要求する推移性を持たないため（下の NON_TRANSITIVE_CHAIN_OPS 参照）。
 // ここから外してしまうと連鎖と検出されず、左結合の二項（`(a != b) != c`）として
 // 黙って値を返してしまう（`3 != 5 != 7` が 3 になる）ので、集合には残す。
+// 余積（空白演算子）の優先度。operator_table.js のコメント番号と一致する。
+// 前置 `~`（持ち上げ）を tier 10 として挿入したため、以前の 10 から 11 へ繰り下がった
+// ——ハードコードした数値を複数箇所に散らすと同じ事故を繰り返すので定数にしてある。
+const COPRODUCT_TIER = 11;
+
 const CHAIN_COMPARE_OPS = new Set(["<", "<=", "=", ">=", ">", "!="]);
 
 // 推移的でない比較演算子。`a R b` かつ `b R c` から `a R c` が導けないため、
@@ -706,7 +711,7 @@ function reduceOnce(items, tier, env, phase) {
       }
       continue;
     }
-    if (tier === 10 && !isBareOperatorToken(a) && !isBareOperatorToken(b)) {
+    if (tier === COPRODUCT_TIER && !isBareOperatorToken(a) && !isBareOperatorToken(b)) {
       const left = toNode(a, env);
       const right = toNode(b, env);
       const catA = getCategory(left, env), catB = getCategory(right, env);
@@ -1094,9 +1099,9 @@ function reduceAll(rawItems, env) {
   // ここでは atom/block のみを変換し、演算子文字列はそのまま残す。
   let items = resolveDensity(rawItems, env).map((x) => (isBareOperatorToken(x) ? x : toNode(x, env)));
   // tier 26(escape) から 1(export) まで、高い方から低い方へ処理
-  for (let tier = 26; tier >= 1; tier--) {
+  for (let tier = 27; tier >= 1; tier--) {
     let guard = 0;
-    if (tier === 10) {
+    if (tier === COPRODUCT_TIER) {
       // coproduct_resolver.md §4: compose→apply→逆適用→concat/push/constructの
       // 4段階を、それぞれ使い尽くしてから次へ進む（COPRODUCT_PHASES参照）。
       for (const phase of COPRODUCT_PHASES) {

@@ -41,10 +41,25 @@ export const OPERATOR_BY_PRECEDENCE = [
   { // 9
     ',': { position: 'infix', name: 'product' },
   },
-  { // 10: 空白演算子（適用、リスト構築等）
+  { // 10: 前置 `~`（持ち上げ）。積（`,`）の隣であり、余積（空白）より緩い。
+    // system_semantics.md の待機の表が「前置 `~`（持ち上げ）は**余積を一回**待機状態に
+    // 入れる（サスペンド）」と述べている通り、被演算子は余積である。したがって余積より
+    // 緩くなければ余積を掴めない——以前は他の前置演算子と同じ最内（旧tier23）に置かれて
+    // おり、`~1 2 3` が `(~1) 2 3` に切れて型エラーになっていた。
+    //
+    // `$`/`@` が最内のままなのは、作用する対象が違うからである。`$` は単一の値に作用する
+    // ので対象はアトム、前置 `~` は構造に作用するので対象は構造を作る演算子（`,`・空白）の
+    // 段にある。「演算子の優先度は、作用対象を構築する演算子の優先度に合わせる」。
+    //
+    // 後置 `~`（展開）は余積より内側でありさえすればよいので、動かしていない（旧tier22）。
+    // `list ' N~`（get-rest）が `'`（tier19）より内側であることに依存しているため、
+    // ここまで下げると壊れる。
+    '~': { position: 'prefix', name: 'continuous' },
+  },
+  { // 11: 空白演算子（適用、リスト構築等）
     ' ': { position: 'infix', name: 'coproduct' },
   },
-  { // 11
+  { // 12
     '~': { position: 'infix', name: 'range' },
     '~+': { position: 'infix', name: 'range_arithmetic' },
     '~-': { position: 'infix', name: 'range_arithmetic_rev' },
@@ -52,7 +67,7 @@ export const OPERATOR_BY_PRECEDENCE = [
     '~/': { position: 'infix', name: 'range_geometric_rev' },
     '~^': { position: 'infix', name: 'range_power' },
   },
-  { // 12
+  { // 13
     '<': { position: 'infix', name: 'less' },
     '<=': { position: 'infix', name: 'less_equal' },
     '=': { position: 'infix', name: 'assign_equal' },
@@ -60,44 +75,44 @@ export const OPERATOR_BY_PRECEDENCE = [
     '>': { position: 'infix', name: 'more' },
     '!=': { position: 'infix', name: 'not_equal' },
   },
-  { // 13
+  { // 14
     '+': { position: 'infix', name: 'add' },
     '-': { position: 'infix', name: 'sub' },
   },
-  { // 14
+  { // 15
     '*': { position: 'infix', name: 'mul' },
     '/': { position: 'infix', name: 'div' },
     '%': { position: 'infix', name: 'mod' },
   },
-  { // 15
+  { // 16
     '^': { position: 'infix', name: 'pow' },
   },
-  { // 16
+  { // 17
     '|...|': { position: 'enclosure', name: 'abs' },
   },
-  { // 17
+  { // 18
     "'": { position: 'infix', name: 'get_prop' },
     '@': { position: 'infix', name: 'get_at' },
   },
-  { // 18
+  { // 19
     '<<': { position: 'infix', name: 'bit_shift_left' },
     '>>': { position: 'infix', name: 'bit_shift_right' },
   },
-  { // 19
+  { // 20
     '||': { position: 'infix', name: 'bit_or' },
   },
-  { // 20
+  { // 21
     ';;': { position: 'infix', name: 'bit_xor' },
   },
-  { // 21
+  { // 22
     '&&': { position: 'infix', name: 'bit_and' },
   },
-  { // 22
+  { // 23
     '!': { position: 'postfix', name: 'factorial' },
     '~': { position: 'postfix', name: 'expand' },
   },
-  { // 23
-    '~': { position: 'prefix', name: 'continuous' },
+  { // 24
+    // 前置 `~`（continuous）は tier 10 へ移した（そちらのコメント参照）。
     '!': { position: 'prefix', name: 'not' },
     '$': { position: 'prefix', name: 'address' },
     '@': { position: 'prefix', name: 'input' },
@@ -106,19 +121,19 @@ export const OPERATOR_BY_PRECEDENCE = [
     // 【8/6 撤去】'><' (reverse)。documents/ja-jp/impl/syntax/operator_table.js と同時に
     // 撤去——list_model.md §2.5のrest記法の位置一般化で代替できるため不要と判断。
   },
-  { // 24: postfix @（import）は単独tier（8/6、documents/ja-jp/impl/syntax/operator_table.js
+  { // 25: postfix @（import）は単独tier（8/6、documents/ja-jp/impl/syntax/operator_table.js
     // と同時に修正——「importしてからinput」の意図とtier番号の慣習の整合性のため）。
     '@': { position: 'postfix', name: 'import' },
   },
-  { // 25（旧24から繰り下げ）
+  { // 26（旧24から繰り下げ）
     '(...)': { position: 'enclosure', name: 'block_paren' },
     '{...}': { position: 'enclosure', name: 'block_brace' },
     '[...]': { position: 'enclosure', name: 'block_bracket' },
   },
-  { // 26（旧25から繰り下げ）
+  { // 27（旧25から繰り下げ）
     '\t': { position: 'prefix', name: 'indent' },
   },
-  { // 27（旧26から繰り下げ）
+  { // 28（旧26から繰り下げ）
     '\\': { position: 'prefix', name: 'escape' },
   }
 ];
