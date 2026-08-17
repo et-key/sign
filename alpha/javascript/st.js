@@ -117,6 +117,8 @@ function slotTypeText(node) {
   if (!node) return UNKNOWN;
   const t = node.atomType || UNKNOWN;
   if (t === "List") return node.elementType ? `List(${node.elementType})` : "List";
+  // `Implicit(T)`（暗黙のアドレス＝場所）も要素型を伴う。前置 `~`（持ち上げ）が生む。
+  if (t === "Implicit") return node.elementType ? `Implicit(${node.elementType})` : "Implicit";
   if (t === "Struct") return structTypeText(node, t);
   return t;
 }

@@ -319,7 +319,22 @@ function computeAtomType(node, env) {
       return leftType; // 左辺が規則を選ぶ（§3.2）。比較・構造比較族は左辺の型が結果型
     }
     if (node.operand) {
-      // 前置/後置演算子は§4に個別の型シグネチャがあるが、今回は簡略化して
+      // 前置 `~`（`continuous`、§4）は**持ち上げ**である。`$`/`@` が単体値に対する
+      // 持ち上げ／持ち下げであるのと同じ段で、前置 `~`／後置 `~` が列に対するそれを担う。
+      //
+      //   単体値   $ が持ち上げ（値 → Address）      @ が持ち下げ
+      //   列       前置 ~ が持ち上げ（→ Implicit）   後置 ~ が持ち下げ（展開）
+      //
+      // 行き先は `Implicit(T)`——「暗黙のアドレス（場所）」であり、`$` が返す
+      // 「値としての Address」とは別物である（§2 の Layer 2 表）。§4 は
+      // `List -> Implicit(List)` しか定めていないが、スカラーを持ち上げた場合も
+      // 同じ段の操作なので `Implicit(T)` になる。要素型は elementType に載せる
+      // （`List(T)` と同じ機構）。
+      if (node.position === "prefix" && node.name === "continuous") {
+        node.elementType = inferAtomType(node.operand, env);
+        return "Implicit";
+      }
+      // それ以外の前置/後置演算子は§4に個別の型シグネチャがあるが、今回は簡略化して
       // オペランドの型をそのまま通す（要精査、既知の制限）。
       return inferAtomType(node.operand, env);
     }
