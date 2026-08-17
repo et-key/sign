@@ -53,6 +53,9 @@ function isIdentifierNode(n) {
 // 左辺は「どの規則を使うか」を選ぶだけで、数値同士の結果型は昇格格子が決める
 // （＝左辺の型がそのまま結果型になるとは限らない）。
 const NUMERIC_TYPES = new Set(["Address", "Float", "Vector"]);
+// 「場所」と「ストリーム」。値ではないので算術・比較の対象にならない（§4 は Scalar を要求）。
+// `Implicit` は前置 `~`（持ち上げ）・`'`・前置 `#` が生み、`Iterator` は範囲族が生む。
+const NON_SCALAR_PLACES = new Set(["Implicit", "Iterator"]);
 // List左辺で固有の意味を持つのは `*`(repeat)・`^`(lift)・`/`(split) だけ。
 // `+`・`-`・`%` はList/Stringと同様に型エラーで __ へ収束する。
 const LIST_ARITHMETIC_OPS = new Set(["mul", "pow", "div"]);
@@ -145,6 +148,11 @@ function arithmeticResultType(node, leftType, env) {
   if (leftType === "List" || leftType === "Struct") {
     return LIST_ARITHMETIC_OPS.has(node.name) ? leftType : "Unit";
   }
+  // 場所（`Implicit`）とストリーム（`Iterator`）は Scalar ではないので算術の対象にならない
+  // （§4: `(L(Scalar) -> R(Scalar)) -> L`）。射が無い＝零射なので `__` へ収束する。
+  // 持ち上げた結果に算術を書いてしまう形（`~xs + 1`）がここに来る——要素型を決める演算は
+  // 持ち上げの**内側**に置くこと（`~(xs + 1)`）。
+  if (NON_SCALAR_PLACES.has(leftType) || NON_SCALAR_PLACES.has(rightType)) return "Unit";
   // 数値の昇格格子: 精度の高い側へ昇格する（降格しない）
   if (NUMERIC_TYPES.has(leftType) && NUMERIC_TYPES.has(rightType)) {
     if (leftType === "Vector" || rightType === "Vector") return "Vector";
@@ -533,6 +541,17 @@ function collectUnitReason(node, env, diagnostics) {
   // 意図された伝播なので診断しない。
   if (leftType === "Unit" || rightType === "Unit") return;
 
+  if (NON_SCALAR_PLACES.has(leftType) || NON_SCALAR_PLACES.has(rightType)) {
+    diagnostics.push({
+      level: "information",
+      reason: "arithmetic-on-place",
+      spec: "type_system.md §4",
+      message:
+        `算術演算 '${node.op}' の被演算子が場所またはストリーム（左辺=${leftType}, 右辺=${rightType}）であるため __ に収束します。` +
+        `算術は Scalar を要求します——持ち上げた結果に演算を書いている場合は、演算を持ち上げの内側へ移してください（\`~(x + 1)\`）`,
+    });
+    return;
+  }
   if (leftType === "String" || rightType === "String") {
     diagnostics.push({
       level: "information",
