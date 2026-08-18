@@ -33,6 +33,7 @@
           <option value="rest_recursion">Rest Param Recursion</option>
           <option value="chain_compare">Chain Comparison</option>
           <option value="manual_curry">Manual Curry ($/@/#)</option>
+          <option value="types">Types (SignType)</option>
         </select>
       </div>
       <div class="control-group font-group">
@@ -83,10 +84,23 @@
         </div>
       </section>
 
+      <section class="panel signtype-panel">
+        <div class="panel-header">
+          <h2>SignType</h2>
+          <select id="stScope" class="custom-select scope-select">
+            <option value="ist">.ist（全識別子）</option>
+            <option value="st">.st（export のみ）</option>
+          </select>
+        </div>
+        <div class="panel-body code-view">
+          <pre><code id="st"></code></pre>
+        </div>
+      </section>
+
       <section class="panel ast-panel">
         <div class="panel-header">
           <h2>Resolved AST</h2>
-          <span class="panel-subtitle">Pass1/Pass2 出力（各行）</span>
+          <span class="panel-subtitle">Pass1/Pass2 出力＋Layer 2 型</span>
         </div>
         <div class="panel-body code-view">
           <pre><code id="ast"></code></pre>

@@ -319,7 +319,7 @@ input[type="range"] {
    alphaはResult/ASTの2分割） */
 .output-split {
   display: grid;
-  grid-template-rows: 1fr 1.2fr;
+  grid-template-rows: 1fr 1fr 1.2fr;
   gap: 1.25rem;
   height: 100%;
   min-height: 0;
@@ -422,4 +422,13 @@ code {
   .panel {
     height: 380px;
   }
+}
+
+/* SignType パネルのスコープ切替（.st = export のみ / .ist = 全識別子）。
+   パネルヘッダー内に収めるため、ヘッダーの他要素（panel-subtitle）と同じ
+   文字サイズまで詰めた小型の select として扱う。 */
+.scope-select {
+  font-size: 0.72rem;
+  padding: 0.15rem 1.5rem 0.15rem 0.5rem;
+  background-position: right 0.4rem center;
 }

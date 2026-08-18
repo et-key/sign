@@ -257,5 +257,40 @@ check("`.ist` は全識別子を出す", entries("#a : 1\nb : 2", "ist"), ["#a :
 // これは欠落というより、まだ書いていない規則の裏返しである。`'`（フィールドアクセス）や
 // ブラケット分割代入の形からの逆算はまだ実装していない（§6.2 の要求フィールド集合は
 // `.st` に出しているが、仮引数の atomType へは反映していない）。
+
+// ---- 合成のシグネチャ（`h : f g`） ----
+//
+// 合成は Lambda なので Layer 2 の Atom 内部型を持たない。それでも `.st` には型が出る
+// ——スペースによる合成は左→右のパイプライン（`f g` は `g(f(x))`、coproduct_resolver.md
+// §3.1）なので、**仮引数は左端の関数が、返値は右端の関数が**決めるからである。
+check("合成のシグネチャは両端から決まる", entries("f : x ? x + 1\ng : x ? x * 2\nh : f g"), [
+	"f : Int -> Int",
+	"g : Int -> Int",
+	"h : Int -> Int",
+]);
+check("両端の型が違えば、そのまま左端の仮引数と右端の返値になる", entries("f : x ? 0.0 + x\ng : x ? x > 3\nm : f g"), [
+	"f : Float -> Float",
+	"g : Int -> Int",
+	"m : Float -> Int",
+]);
+// 多段合成でも決めるのは両端だけである（間の関数は型の受け渡しにしか関与しない）。
+check("多段合成でも両端が決める", entries("f : x ? 0.0 + x\ng : x ? x * 2\nk : x ? x = `s`\nc : f g k"), [
+	"f : Float -> Float",
+	"g : Int -> Int",
+	"k : String -> String",
+	"c : Float -> String",
+]);
+// その場に書かれた無名ラムダは端としてそのまま使える。
+check("合成の端が無名ラムダでも解ける", entries("f : x ? x + 1\nh : (x ? 0.0 + x) f"), [
+	"f : Int -> Int",
+	"h : Float -> Int",
+]);
+// ポイントフリーのブロック（`[+ 1]`）はラムダノードではないので端として辿れない。
+// 分からないことを「分かった」と書かないのが `.st` の原則なので `_` のままにする。
+check("辿れない端を持つ合成は `_` のまま", entries("g : x ? x * 2\nh : [+ 1] g"), [
+	"g : Int -> Int",
+	"h : _",
+]);
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

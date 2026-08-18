@@ -1,10 +1,13 @@
 import { compile } from "../compile.js";
+import { generateSignType } from "../st.js";
 import { evaluate, newRuntimeEnv, UNIT, isUnit } from "../interpreter.js";
 
 const srcEl = document.getElementById("src");
 const outEl = document.getElementById("out");
 const outPreEl = outEl.parentElement;
 const astEl = document.getElementById("ast");
+const stEl = document.getElementById("st");
+const stScopeEl = document.getElementById("stScope");
 const lineNumbersEl = document.getElementById("lineNumbers");
 const runBtn = document.getElementById("runBtn");
 const exampleSelectEl = document.getElementById("exampleSelect");
@@ -85,6 +88,22 @@ x : 7
   manual_curry: `\`手動カリー（$で継続をアドレス化、@で呼び出す）
 f : a ? $[b ? a + b]
 @(f 1) 2`,
+  types: `\`型はコードの影（SignTypeパネルを見る）。記法が域を、演算子が型を決める
+\`アドレスは0x記法のみ。十進はInt、小数点ありはFloat（type_system.md §3.6）
+#uart : [
+	CR : 0x40011000
+	SR : 3
+	DR : \\d
+]
+\`リテラルは左辺に置く——域を選ぶのは左辺だから（§3.2）
+#as_int : x ? 0 + x
+#as_float : x ? 0.0 + x
+\`返値はmatch_caseの直和になる
+#classify : n ?
+	n < 0 : \`neg\`
+	n
+\`合成は左端が仮引数を、右端が返値を決める
+#piped : as_float classify`,
 };
 
 exampleSelectEl.addEventListener("change", () => {
@@ -141,11 +160,18 @@ function run() {
   try {
     // 静的解決は compile()（Pass 1〜3 の単一ドライバ）に一本化。
     // 各ノードには pass3 が Layer 2 型（atomType）を注釈済みなので、AST表示にも出す。
-    const { nodes, diagnostics } = compile(source);
+    const { nodes, env, diagnostics } = compile(source);
+    // SignType（.st/.ist）— Pass 1〜3 が確定した型の観測チャネル。
+    // `.ist` はブラウザのメモリ上にしか出さない（compiler_pipeline.md §4:
+    // 内部識別子名・構造体の内部レイアウトを含むためディスクへ永続化しない）。
+    stEl.textContent = generateSignType(nodes, env, { scope: stScopeEl.value }).text;
     const runtimeEnv = newRuntimeEnv(null);
     let last = UNIT;
     for (const node of nodes) {
-      astLines.push(`${showAst(node)}\n  :: ${node.atomType ?? "?"}`);
+      // Layer 2 型（atomType）が無いノードは `:: ?` を出さずに省く。ラムダのような
+      // Layer 1 の値に Atom 内部型が無いのは当然であって、解決の失敗ではない。
+      // 型の全体像（シグネチャ・仮引数・返値）は SignType パネルが担う。
+      astLines.push(node.atomType ? `${showAst(node)}\n  :: ${node.atomType}` : showAst(node));
       last = evaluate(node, runtimeEnv);
       outLines.push(showValue(last));
     }
@@ -182,6 +208,7 @@ function runWithFeedback() {
 }
 
 runBtn.addEventListener("click", runWithFeedback);
+stScopeEl.addEventListener("change", run);
 srcEl.addEventListener("keydown", (e) => {
   if (e.ctrlKey && e.key === "Enter") runWithFeedback();
   // Signのインデントは厳密にタブ文字のみ（lexer.jsのmarkBlockは/^\t*/でタブしか見ない、

@@ -209,17 +209,36 @@ function structTypeText(node, atomType) {
  * 1つの定義行から SignType の1エントリを組み立てる。
  * @returns {{ name: string, text: string, unresolved: number } | null}
  */
-function entryFor(defineNode) {
-  if (!isDefineNode(defineNode) || !isIdentifierNode(defineNode.left)) return null;
-  const name = bareName(defineNode.left.value);
-  const rhs = defineNode.right;
+function isComposeNode(node) {
+  return node && node.type === "operation" && node.name === "compose";
+}
 
-  if (!isLambdaNode(rhs)) {
-    // Atom: 右辺式の Layer 2 型がそのまま識別子の型になる（§5 Pass 1a）。
-    const t = rhs && rhs.atomType ? rhs.atomType : UNKNOWN;
-    return { name, text: `${name} : ${slotTypeText(rhs)}`, unresolved: t === UNKNOWN ? 1 : 0 };
+// 合成木の端の項を返す。`f g h` のような多段合成でも、シグネチャを決めるのは
+// 両端だけである（間の関数は型の受け渡しにしか関与しない）。
+function composeEndNode(node, side) {
+  let n = node;
+  while (isComposeNode(n)) n = side === "left" ? n.left : n.right;
+  return n;
+}
+
+// 合成の端をラムダノードへ解決する。その場に書かれた無名ラムダ（`(x ? x + 1) f`）は
+// そのまま使えるし、識別子なら束縛を引く。どちらでもない端（ポイントフリーの `[+ 1]` や
+// `@p` のような間接呼び出し）は辿れないので null——分からないことは `_` のままにする。
+function lambdaOf(node, lambdaByName) {
+  // その場に書いた無名ラムダは `(x ? x + 1)` のように括弧で包まれて来るので、
+  // 1文だけの括弧ブロックは剥がしてから見る。
+  let n = node;
+  while (n && n.type === "block" && n.kind === "paren" && Array.isArray(n.lines) && n.lines.length === 1) {
+    n = n.lines[0];
   }
+  if (isLambdaNode(n)) return n;
+  if (!isIdentifierNode(n) || !lambdaByName) return null;
+  return lambdaByName.get(n.value) || null;
+}
 
+// ラムダ1つ分のシグネチャ（仮引数の並びと返値）を組み立てる。`名前 : ラムダ` の分岐と、
+// 合成（`h : f g`）が両端から拾う分岐とで共有する。
+function lambdaSignature(rhs) {
   const entries = paramEntries(rhs.left);
   const paramNames = new Set(entries.map((e) => e.name).filter(Boolean));
   const usageTypes = inferLambdaParamTypes(rhs, null);
@@ -237,10 +256,42 @@ function entryFor(defineNode) {
   // 返値型は本体ノードの Layer 2 型そのもの。Lambda 自身は Layer 1 のカテゴリであり
   // Layer 2 型を持たないが（§2）、本体は値を作るので型を持つ。
   const ret = rhs.right && rhs.right.atomType ? slotTypeText(rhs.right) : UNKNOWN;
+  return { params, ret };
+}
 
+// 仮引数の並びと返値から1行分のテキストを起こす。仮引数が無い関数は `__ -> T`
+// ——完全性公理（§3.4）が言う通り、引数を取らない関数は Unit を受ける関数である。
+function signatureText(name, params, ret) {
   const unresolved = params.filter((p) => p === UNKNOWN || p === `${UNKNOWN}~`).length + (ret === UNKNOWN ? 1 : 0);
   const lhs = params.length > 0 ? params.join(" ") : "__";
   return { name, text: `${name} : ${lhs} -> ${ret}`, unresolved };
+}
+
+function entryFor(defineNode, lambdaByName) {
+  if (!isDefineNode(defineNode) || !isIdentifierNode(defineNode.left)) return null;
+  const name = bareName(defineNode.left.value);
+  const rhs = defineNode.right;
+
+  if (isLambdaNode(rhs)) {
+    const { params, ret } = lambdaSignature(rhs);
+    return signatureText(name, params, ret);
+  }
+
+  // 合成（`h : f g`）は Lambda であって Layer 2 の Atom 内部型を持たないが、
+  // シグネチャは両端から決まる。スペースによる合成は**左→右のパイプライン**
+  // （`f g` は `g(f(x))`、coproduct_resolver.md §3.1）なので、**仮引数は左端の
+  // `f` が、返値は右端の `g` が**決める。
+  if (isComposeNode(rhs)) {
+    const first = lambdaOf(composeEndNode(rhs, "left"), lambdaByName);
+    const last = lambdaOf(composeEndNode(rhs, "right"), lambdaByName);
+    if (first && last) {
+      return signatureText(name, lambdaSignature(first).params, lambdaSignature(last).ret);
+    }
+  }
+
+  // Atom: 右辺式の Layer 2 型がそのまま識別子の型になる（§5 Pass 1a）。
+  const t = rhs && rhs.atomType ? rhs.atomType : UNKNOWN;
+  return { name, text: `${name} : ${slotTypeText(rhs)}`, unresolved: t === UNKNOWN ? 1 : 0 };
 }
 
 /**
@@ -257,12 +308,20 @@ function generateSignType(nodes, env, options = {}) {
   const scope = options.scope === "ist" ? "ist" : "st";
   const bindings = env && env.bindings ? env.bindings : new Map();
 
+  // 合成（`h : f g`）のシグネチャを両端のラムダから拾うための索引。
+  const lambdaByName = new Map();
+  for (const node of nodes) {
+    if (isDefineNode(node) && isIdentifierNode(node.left) && isLambdaNode(node.right)) {
+      lambdaByName.set(node.left.value, node.right);
+    }
+  }
+
   const out = [];
   let entries = 0;
   let unresolved = 0;
 
   for (const node of nodes) {
-    const e = entryFor(node);
+    const e = entryFor(node, lambdaByName);
     if (!e) continue;
     const binding = bindings.get(`<${e.name}>`);
     const exported = binding ? binding.exported : null;
