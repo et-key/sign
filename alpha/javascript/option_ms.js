@@ -28,6 +28,7 @@
  */
 
 import { compile } from "./compile.js";
+import { CHARSETS } from "./target_info.js";
 
 // §3 target 別デフォルト値。`entry`/`stack` を省略したときに適用する。
 // `null` は「その target では外部（UEFI/WASM ランタイム/OS）が決める」の意。
@@ -49,7 +50,11 @@ const TARGET_DEFAULTS = {
 };
 
 // §2 のデフォルト: target は rust（ホストビルド）、layer は 4（std）。
-const DEFAULTS = { target: "rust", layer: 4, optimize: 0, inherit: true, link: "dynamic", output: null };
+// `charset` の既定は `utf32`——全 Unicode を表現でき、要素幅が固定なので
+// `String ≅ List(0u)` が保たれる（type_system.md §2）。組み込みで 1 byte に詰めたい
+// ときだけ `ascii` を選ぶ。可変長の UTF-8 が選択肢に無いのは、それを選ぶと `s ' i` を
+// `base + i × sizeof(T)` の1命令で出せなくなるためである（target_info.js の CHARSETS）。
+const DEFAULTS = { target: "rust", layer: 4, optimize: 0, inherit: true, link: "dynamic", output: null, charset: "utf32" };
 
 const LAYER_ALIASES = { bare: 0, alloc: 1, fpu: 2, simd: 3, std: 4 };
 
@@ -153,6 +158,12 @@ function readOptionMs(source, options = {}) {
       const n = typeof raw === "string" ? LAYER_ALIASES[raw] : raw;
       if (Number.isInteger(n) && n >= 0 && n <= 4) conf.layer = n;
       else warnings.push(`layer は 0〜4（または bare/alloc/fpu/simd/std）です: ${raw}`);
+    }
+
+    if (tree.charset !== undefined) {
+      const cs = scalarOf(tree.charset);
+      if (Object.prototype.hasOwnProperty.call(CHARSETS, cs)) conf.charset = cs;
+      else warnings.push(`charset は ascii / utf32 です: ${cs}（${DEFAULTS.charset} として扱います）`);
     }
 
     for (const key of ["entry", "stack", "output", "optimize"]) {

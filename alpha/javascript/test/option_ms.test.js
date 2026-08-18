@@ -153,5 +153,12 @@ for (const block of msBlocks) {
 check(`仕様書の ms サンプル ${msBlocks.length} 個が全て読める${blockErrors.length ? " / " + blockErrors[0] : ""}`, blocksOk, msBlocks.length);
 check("サンプルが1つ以上ある（正規表現が空振りしていない）", msBlocks.length > 0, true);
 
+
+// ---- charset（§4.2） ----
+check("既定の charset は utf32", readOptionMs("").charset, "utf32");
+check("ascii を選べる", readOptionMs("charset : ascii").charset, "ascii");
+// 可変長の UTF-8 は選択肢に無い（選ぶと `String ≅ List(0u)` が崩れる）。
+check("utf8 は警告して既定へ倒す", readOptionMs("charset : utf8").charset, "utf32");
+check("その警告は握り潰さない", readOptionMs("charset : utf8").warnings.length, 1);
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

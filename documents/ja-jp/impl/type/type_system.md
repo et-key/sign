@@ -374,6 +374,28 @@ val : 42            → val は Atom
 > 実行時の見た目には現れないが、Pass 1〜3の判断そのものには常に厳密に対応している——
 > 「消える」と「厳密でない」は別の話である。
 
+> [!IMPORTANT]
+> **Char の幅は固定である——メモリ上の話と、境界の話を分ける。**
+>
+> 上の「要素幅が同じなら同一のビット表現」は、Char が**固定幅**であることを前提にしている。
+> 一方 [`value_representation.md`](../core/value_representation.md) は Char のエンコーディングを
+> 標準 UTF-8 と定めており、UTF-8 は 1〜4 バイトの**可変長**である。そのままでは
+> `String ≅ List(0u)` が成立しない——`s ' i` を `base + i × sizeof(T)` の 1 命令で出せない。
+>
+> 解決は役割の分離である。UTF-8 の利点（先頭バイトのビットパターンが「何バイト列か」を
+> 自己記述するので boxing が無償になる）が効くのは、`value_representation.md` §4 の
+> タイトルが言う通り**外部から届いた Byte 列を Char 列へ変換する境界**である。転送・保存の
+> 形式であって、メモリ上の表現である必然は無い。
+>
+> | | 形式 | 決めるもの |
+> |---|---|---|
+> | メモリ上の `String` | `option.ms` の `charset`（`ascii`=1 byte / `utf32`=4 byte） | 添字と `List` との同型 |
+> | IO 境界・保存・転送 | UTF-8（常に） | 自己記述による無償の boxing |
+>
+> どちらの `charset` も固定幅なので、`String ≅ List(0u)` はメモリ上で常に成立する。
+> 詳細は [`option_ms_schema.md` §4.2](../build/option_ms_schema.md)。
+
+
 ---
 
 ## 3. 型規則

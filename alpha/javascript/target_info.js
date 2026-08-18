@@ -59,9 +59,28 @@ const SIGNEDNESS = { Address: "unsigned", Int: "signed", Float: "signed", Vector
 // 幅クラスへの割り当て。`String` は `List(0u)` と同型なので要素は Char。
 const WIDTH_CLASS = { Address: "gpr", Int: "gpr", Float: "float", Vector: "vector" };
 
-// Char（`0u`）は Unicode コードポイント。UTF-32 として 4 byte 固定で数える
-// ——`String ≅ List(0u)` である以上、要素幅が決まらないと `base + i × sizeof(T)` が出せない。
-const CHAR_SIZE = 4;
+/**
+ * Char（`0u`）1個の幅。`option.ms` の `charset` で選ぶ。
+ *
+ * **どちらも固定幅である。** `type_system.md` は `List` を「固定幅要素の連続領域」と定め、
+ * `String ≅ List(0u)` の根拠を「要素幅が同じなら同一のビット表現」と書いている。可変長の
+ * 表現を選ぶとこの同型が崩れ、`s ' i` を `base + i × sizeof(T)` の1命令で出せなくなる。
+ * だから選択肢は固定幅に限る。
+ *
+ *   ascii  1 byte  layer 0 の組み込み向け。UART 出力やブートログに Unicode は要らない
+ *   utf32  4 byte  既定。全 Unicode を表現でき、添字は O(1) のまま
+ *
+ * UTF-8 はここに無い。`value_representation.md` が UTF-8 を採る理由——先頭バイトの
+ * ビットパターンが「何バイト列か」を自己記述するので boxing が無償になる——は、
+ * 同文書 §4 のタイトルが言う通り**外部から届いた Byte 列を Char 列へ変換する境界**の
+ * 話である。転送・保存の形式であって、メモリ上の String 表現である必然は無い。
+ */
+const CHARSETS = { ascii: 1, utf32: 4 };
+const DEFAULT_CHARSET = "utf32";
+
+function charSizeOf(charset) {
+  return CHARSETS[charset] ?? CHARSETS[DEFAULT_CHARSET];
+}
 
 /**
  * ターゲットの幅クラスを返す。未対応なら null。
@@ -89,7 +108,9 @@ function sizeOf(type, target) {
   if (!w) return null;
   // `Unit` は零対象。値を持たないので 0 byte——場所を占めない（unit.md）。
   if (type === "Unit") return 0;
-  // `String` は `List(0u)` と同型で長さが型に入っていないため、単体では決まらない。
+  // `String` は `List(0u)` と同型だが、**長さ**が型に入っていないので単体では決まらない。
+  // 要素1個の幅は charset が決めるので `charSizeOf` を使う——全体の大きさを出すのは
+  // 並びを持つノードから計算する側（形の解決）の仕事である。
   if (type === "String") return null;
   const cls = WIDTH_CLASS[type];
   return cls ? w[cls] : null;
@@ -104,4 +125,4 @@ function reduceToMachineType(type, target) {
   return { size, signed: SIGNEDNESS[type] === "signed", class: WIDTH_CLASS[type] || null };
 }
 
-export { TARGET_WIDTHS, SIGNEDNESS, WIDTH_CLASS, CHAR_SIZE, widthsOf, isSupported, sizeOf, reduceToMachineType };
+export { TARGET_WIDTHS, SIGNEDNESS, WIDTH_CLASS, CHARSETS, DEFAULT_CHARSET, charSizeOf, widthsOf, isSupported, sizeOf, reduceToMachineType };

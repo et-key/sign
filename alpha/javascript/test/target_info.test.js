@@ -8,7 +8,7 @@
  *
  * 実行: node test/target_info.test.js（`npm test` からも呼ばれる）
  */
-import { widthsOf, isSupported, sizeOf, reduceToMachineType } from "../target_info.js";
+import { widthsOf, isSupported, sizeOf, reduceToMachineType, charSizeOf, CHARSETS, DEFAULT_CHARSET } from "../target_info.js";
 import { readOptionMs } from "../option_ms.js";
 
 let passed = 0;
@@ -90,6 +90,22 @@ check("未知のターゲットも同じ", widthsOf("nosuch"), null);
 const conf = readOptionMs("target : aarch64_qemu\nlayer : 2");
 check("option.ms が読んだ target から幅が引ける", sizeOf("Float", conf.target), 8);
 check("既定の target（rust）はまだ幅を持たない", sizeOf("Int", readOptionMs("").target), null);
+
+
+// ---- Char の幅は `charset` が決める（option_ms_schema.md §4.2） ----
+//
+// **選択肢は固定幅に限る。** `type_system.md` は `List` を「固定幅要素の連続領域」と定め、
+// `String ≅ List(0u)` の根拠を「要素幅が同じなら同一のビット表現」と書いている。可変長を
+// 選ぶとこの同型が崩れ、`s ' i` を `base + i × sizeof(T)` の1命令で出せなくなる。
+//
+// UTF-8 が選択肢に無いのはそのためである。`value_representation.md` が UTF-8 を採る理由
+// （先頭バイトの自己記述で boxing が無償）が効くのは、同文書 §4 が扱う**外部から届いた
+// Byte 列を Char 列へ変換する境界**であって、メモリ上の表現ではない。
+check("既定は utf32（全 Unicode・添字は O(1)）", charSizeOf("utf32"), 4);
+check("ascii は 1 byte（layer 0 の組み込み向け）", charSizeOf("ascii"), 1);
+check("どちらも固定幅なので `String ≅ List(0u)` が保たれる", Object.values(CHARSETS).every((n) => Number.isInteger(n) && n > 0), true);
+check("可変長（utf8）は選択肢に無い", Object.prototype.hasOwnProperty.call(CHARSETS, "utf8"), false);
+check("既定値は utf32", DEFAULT_CHARSET, "utf32");
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
