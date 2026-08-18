@@ -206,6 +206,42 @@ check("呼び先の返値型が apply へ伝わる", entries("g : x ? x + 1\nh :
 	"g : Address -> Address",
 	"h : Atom -> Address",
 ]);
+// ---- 静的・単相化・動的の3層が型に出る ----
+//
+// `$` は §4 の通り常に `Atom(Address)` を返す。凍結対象が関数でもデータへのパスでも、
+// `$` 自身は「その式が指す場所のアドレスを取る」だけで場合分けを必要としない（§2）。
+//
+// `p : $f` のように「関数のアドレス」を束縛している場合、`@p` の呼び先は `f` である。
+// §2 の IMPORTANT が「多くの場合は静的に一意に決まる（`@handler` で handler の定義が
+// 既知なら構文から読める）」と述べている分を由来として辿る。
+//
+// この2つが入ると `_` が「本当に呼び先が静的に決まらない場所」だけに絞られる。
+// `dyn` のようなキーワードを書かずに、3層が型として区別できる。
+//
+//   具体型      完全に静的。命令テンプレートが1つに決まる
+//   Atom        定義側では決まらない。呼び出しサイトで具体化される（§5 Pass 1b、単相化）
+//   `_`         呼び先が実行時にしか決まらない。**ここが本物の動的ディスパッチ**
+check("`$` は常に Address（関数を指しても）", entries("f : x ? x + 1\np : $f"), [
+	"f : Address -> Address",
+	"p : Address",
+]);
+check("`p : $f` を経由した `@p x` も呼び先が静的に決まる", entries("f : x ? x + 1\np : $f\ncall : x ? @p x"), [
+	"f : Address -> Address",
+	"p : Address",
+	"call : Atom -> Address",
+]);
+check("`@f x` も同じく解ける", entries("f : x ? x + 1\ncall : x ? @f x"), [
+	"f : Address -> Address",
+	"call : Atom -> Address",
+]);
+// 構造体フィールド経由の呼び出しは、呼び先が実行時にしか決まらない——手で書いた vtable
+// である。返値は `_` になり、§6.2 の要求フィールド集合 `{h}` が「h というスロットを
+// 要求する」ことを示す。両方あわせて vtable スロットのシグネチャになっている。
+check("構造体フィールド経由の呼び出しは `_`（本物の dyn）", entries("f : x ? x + 1\nt : [\n\th : $f\n\tk : 0\n]\ncall : s ? @(s ' h) 5"), [
+	"f : Address -> Address",
+	"t : Struct{h : Address , 0  k : Address , 1}",
+	"call : {h} -> _",
+]);
 // ---- 範囲: `.st` は export されたものだけ ----
 check("`.st` は export されていない識別子を出さない", entries("a : 1\nb : 2", "st"), []);
 check("`.st` は export 記号を保ったまま出す", entries("#a : 1\nb : 2", "st"), ["#a : Address"]);

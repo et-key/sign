@@ -369,6 +369,12 @@ function computeAtomType(node, env) {
       // `List -> Implicit(List)` しか定めていないが、スカラーを持ち上げた場合も
       // 同じ段の操作なので `Implicit(T)` になる。要素型は elementType に載せる
       // （`List(T)` と同じ機構）。
+      // 前置 `$`（アドレス取得）は §4 の通り常に `Atom(Address)` を返す。凍結対象が
+      // 関数であろうとデータへのパスであろうと、`$` 自身は「その式が指す場所のアドレスを
+      // 取る」だけで場合分けを必要としない（§2 の非対称性）。オペランドの型を素通しすると、
+      // 関数を指したとき（Lambda は Layer 2 型を持たない）に `_` になってしまい、
+      // 「アドレスという値を持っている」ことすら型に出なかった。
+      if (node.position === "prefix" && node.name === "address") return "Address";
       if (node.position === "prefix" && node.name === "continuous") {
         node.elementType = inferAtomType(node.operand, env);
         return "Implicit";
@@ -654,14 +660,38 @@ function joinArmTypes(types) {
 // apply 連鎖（`apply(apply(f, a), b)`）の根にある識別子の binding を返す。
 // 根が識別子でなければ（即値ラムダ・ポイントフリー等）null——呼び先が静的に決まらない
 // ので返値型も決まらない。
+// 識別子の binding から、それが**指している**関数の binding を辿る。
+// `p : $f` のように「関数のアドレス」を束縛している場合、`@p` の呼び先は `f` である
+// ——§2 の IMPORTANT が「多くの場合は静的に一意に決まる（`@handler` で handler の定義が
+// 既知なら構文から読める）」と述べている分をここで解決する。
+function resolveThroughAddress(binding, env) {
+  let b = binding;
+  const seen = new Set();
+  while (b && b.addressOf && !seen.has(b.addressOf)) {
+    seen.add(b.addressOf);
+    const next = envLookup(env, b.addressOf);
+    if (!next) break;
+    b = next;
+  }
+  return b;
+}
+
 function applyCalleeBinding(node, env) {
   let base = node;
   while (base && base.type === "operation" && base.name === "apply") base = base.left;
   while (base && base.type === "block" && base.kind !== "indent" && base.kind !== "abs" && (base.lines || []).length === 1) {
     base = base.lines[0];
   }
-  if (!isIdentifierNode(base) || !env) return null;
-  return envLookup(env, base.value) || null;
+  if (!env) return null;
+  // 根が `@識別子`（前置 input）なら、その識別子が指す先まで辿る。`@f x` はもちろん、
+  // `p : $f` を経由した `@p x` も呼び先が静的に決まる。
+  if (base && base.type === "operation" && base.position === "prefix" && base.name === "input") {
+    const inner = base.operand;
+    if (!isIdentifierNode(inner)) return null;
+    return resolveThroughAddress(envLookup(env, inner.value), env) || null;
+  }
+  if (!isIdentifierNode(base)) return null;
+  return resolveThroughAddress(envLookup(env, base.value), env) || null;
 }
 
 // 不動点計算のために、前回付けた型注釈を消す。
@@ -712,6 +742,15 @@ function annotateAll(nodes, env, diagnostics) {
     if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
     const binding = envLookup(env, node.left.value);
     if (binding && binding.returns === undefined) binding.returns = "Unit";
+  }
+  // `名前 : $対象` の由来を記録する。`@名前` の呼び先を静的に解くのに使う。
+  for (const node of nodes) {
+    if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+    const rhs = node.right;
+    if (!rhs || rhs.type !== "operation" || rhs.position !== "prefix" || rhs.name !== "address") continue;
+    if (!isIdentifierNode(rhs.operand)) continue;
+    const binding = envLookup(env, node.left.value);
+    if (binding) binding.addressOf = rhs.operand.value;
   }
   // 上限は「定義の数 + 2」。各周回で少なくとも1つは束を上がるので、それ以上は回らない。
   const limit = nodes.length + 2;
