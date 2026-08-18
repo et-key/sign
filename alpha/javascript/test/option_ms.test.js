@@ -10,6 +10,11 @@
  */
 import { readOptionMs } from "../option_ms.js";
 import { compile } from "../compile.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let passed = 0;
 let total = 0;
@@ -100,6 +105,53 @@ check("リストの要素の Float も見つける", gate("xs : [1.0 2.0]", 0), 
 // 門番はオプトインである。`option.ms` を読まない経路（素の評価・playground）まで
 // std 相当を強制しない——layer を宣言していないコードに layer 違反は無い。
 check("layer を渡さなければ検査しない", gate("x : 3.14", undefined), "OK");
+
+
+// ---- サイズは文字列で書く（§5.2、`ms` 独自の表記） ----
+//
+// Sign の数値リテラルに `K`/`M`/`G` 接尾辞は無い。メモリマップにしか要らない表記のために
+// 言語の字句解析を触らず、文字列として書いて `ms` の読み手が解釈する。
+const mem = readOptionMs(
+	"link :\n\tstatic :\n\t\tmemory :\n\t\t\trom : origin 0x08000000 length `1024k`\n\t\t\tram : origin 0x20000000 length `128K`\n\t\t\theap : max `64k`\n"
+).memory;
+check("1K は 1024（10進の 1000 ではない）", mem.rom.length, 1024 * 1024);
+check("大文字小文字は問わない", mem.ram.length, 128 * 1024);
+check("heap の max も同じ表記", mem.heap.max, 64 * 1024);
+check("origin はアドレスなので数値のまま", mem.rom.origin, 0x08000000);
+check("`4M` はメガバイト", readOptionMs("link :\n\tstatic :\n\t\tmemory :\n\t\t\trom : origin 0x0 length `4M`\n").memory.rom.length, 4 * 1024 * 1024);
+check("接尾辞なしはバイト", readOptionMs("link :\n\tstatic :\n\t\tmemory :\n\t\t\trom : origin 0x0 length `4096`\n").memory.rom.length, 4096);
+check("`ram : auto` は実行時決定（§5.3）", readOptionMs("link :\n\tstatic :\n\t\tmemory :\n\t\t\tram : auto\n").memory.ram, "auto");
+
+// cortex_m の entry/stack だけはメモリマップから導出する（§3 の NOTE）。
+// stack が RAM の**末端**なのは、Cortex-M のスタックが上位アドレスから下方へ伸びるため。
+const cm = readOptionMs(
+	"target : cortex_m\nlink :\n\tstatic :\n\t\tmemory :\n\t\t\trom : origin 0x08000000 length `1024k`\n\t\t\tram : origin 0x20000000 length `128k`\n"
+);
+check("cortex_m の entry は rom.origin", cm.entry, 0x08000000);
+check("cortex_m の stack は ram の末端", cm.stack, 0x20000000 + 128 * 1024);
+
+// ---- 仕様書のサンプルが実際に読めること ----
+//
+// `option_ms_schema.md` は「唯一の正規リファレンス」を名乗る。そこに載っている `ms` ブロックが
+// パースできないなら、仕様が実装可能でないということである。実際この検査で2種類の齟齬が
+// 見つかった——サイズ接尾辞（`1024K`）と、行末コメント（Sign にはインデント後のコメントは
+// 無く、閉じありのドキュメント文字列で書く。string_and_comment.md §3）。
+const doc = fs.readFileSync(path.join(__dirname, "..", "..", "..", "documents", "ja-jp", "impl", "build", "option_ms_schema.md"), "utf8").replace(/\r\n/g, "\n");
+const msBlocks = [...doc.matchAll(/```ms\n([\s\S]*?)```/g)].map((m) => m[1]);
+let blocksOk = 0;
+const blockErrors = [];
+for (const block of msBlocks) {
+	// 仕様書はスペースでインデントしているが Sign のインデントはタブのみ（lexer.js）。
+	const src = block.replace(/^( +)/gm, (m) => "\t".repeat(Math.round(m.length / 4)));
+	try {
+		readOptionMs(src);
+		blocksOk++;
+	} catch (e) {
+		blockErrors.push(e.message.slice(0, 60));
+	}
+}
+check(`仕様書の ms サンプル ${msBlocks.length} 個が全て読める${blockErrors.length ? " / " + blockErrors[0] : ""}`, blocksOk, msBlocks.length);
+check("サンプルが1つ以上ある（正規表現が空振りしていない）", msBlocks.length > 0, true);
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

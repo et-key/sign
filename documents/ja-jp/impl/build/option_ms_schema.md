@@ -161,27 +161,27 @@ link : dynamic
 link :
     static :
         memory :
-            rom : origin 0x08000000  length 1024K
-            ram : origin 0x20000000  length 128K
+            rom : origin 0x08000000  length `1024K`
+            ram : origin 0x20000000  length `128K`
 ```
 
-> [!CAUTION]
-> **サイズ接尾辞（`1024K` / `128K` / `4M`）は Sign の数値リテラルには存在しない。**
+> [!IMPORTANT]
+> **サイズは文字列で書く（`ms` 独自の表記）。**
 >
-> §1 は「`ms` は Sign の積型記法をそのままデータ記述に使ったフォーマット」と定めており、
-> `key : value` も入れ子も実際に Sign のパーサがそのまま読む。しかし `1024K` だけは
-> Sign の字句解析が受け付けないため、**このメモリマップ部分だけが「そのまま」ではない**。
+> Sign の数値リテラルに `K`/`M`/`G` 接尾辞は無いので、`length 1024K` と素で書くと字句解析を
+> 通らない。接尾辞を言語側へ足すこともできたが、**メモリマップにしか要らない表記のために
+> 言語の字句解析を触らない**方を採った。文字列なら Sign の文法のままであり、解釈は `ms` の
+> 読み手が担う——`ms` は Sign の積型記法の上に乗る**データ形式**なので、値の読み方を形式の
+> 側が決めるのは筋が通っている。
 >
-> 解消の方向は二つある。どちらを採るかは未決である。
+> | 書き方 | byte 数 |
+> |---|---|
+> | `` `1024k` `` / `` `1024K` `` | 1048576（1K = 1024。10進の 1000 ではない） |
+> | `` `4M` `` | 4194304 |
+> | `` `4096` `` | 4096（接尾辞なしも可） |
 >
-> 1. Sign の数値リテラルに `K`/`M`/`G` 接尾辞を足す（言語側の変更。`ms` は純粋に Sign の
->    部分集合であり続ける）
-> 2. サイズを素の整数で書く（`length 1048576`）。読みにくいが言語を変えずに済む
->
-> 現在の実装（`alpha/javascript/option_ms.js`）は `link` のモード（`dynamic`/`static`）
-> までを読み、メモリマップは読まない。**幅の決定にはターゲットしか要らない**ため
-> （`Address` = GPR 幅、`Float` = FPU 最高精度）、この欠落は型から幅への還元を止めない。
-> 配置（origin/length）が要るのはリンク段階である。
+> 大文字小文字は問わない。`origin` はアドレスなので従来どおり `0x…` の数値で書く
+> ——アドレスとサイズは別のものであり、記法でも別れている（type_system.md §3.6）。
 
 ### 5.3 `link: static` — 実行時マップ取得（PC/SBC）
 
@@ -191,8 +191,9 @@ UEFI やデバイスツリー経由で実行時にメモリサイズが決定さ
 link :
     static :
         memory :
-            rom : origin 0x00000000  length 4M
-            ram : auto    ` UEFI/デバイスツリーから起動時に自動マッピング
+            rom : origin 0x00000000  length `4M`
+            `UEFI/デバイスツリーから起動時に自動マッピング`
+            ram : auto
 ```
 
 ### 5.4 `link: static` — ヒープ領域の一括確保（`layer: 1+`）
@@ -206,8 +207,9 @@ layer : 1
 link :
     static :
         memory :
-            ram  : origin 0x20000000  length 128K
-            heap : max 64K    ` 起動時に 64K を一括確保、内部はアリーナで管理
+            ram  : origin 0x20000000  length `128K`
+            `起動時に 64K を一括確保、内部はアリーナで管理`
+            heap : max `64K`
 ```
 
 ### 5.5 link サブフィールド一覧
@@ -218,7 +220,8 @@ link :
 | `static.memory.ram` | `origin <addr> length <size>` または `auto` | RAM 領域。`auto` は実行時決定 |
 | `static.memory.heap` | `max <size>` | ヒープ一括確保サイズ（`layer: 1+` のみ） |
 
-サイズ指定の単位：`K`（キロバイト）、`M`（メガバイト）、数値のみ（バイト）
+`<size>` は**文字列**で書く（§5.2 の IMPORTANT）。単位は `K`（1024）、`M`（1024²）、
+`G`（1024³）、接尾辞なし（バイト）。大文字小文字は問わない。`<addr>` は `0x…` の数値。
 
 ---
 
@@ -307,7 +310,7 @@ link :
     static :
         memory :
             rom : origin 0x7C00   length 512
-            ram : origin 0x9000   length 512K
+            ram : origin 0x9000   length `512K`
 ```
 
 ### 9.3 UEFI 代替ファームウェア
@@ -318,7 +321,7 @@ layer    : 0
 link :
     static :
         memory :
-            rom : origin 0xFFFFF000  length 64K
+            rom : origin 0xFFFFF000  length `64K`
             ram : auto
 ```
 
@@ -330,8 +333,8 @@ layer    : 0
 link :
     static :
         memory :
-            rom : origin 0x80000    length 1M
-            ram : origin 0x200000   length 256M
+            rom : origin 0x80000    length `1M`
+            ram : origin 0x200000   length `256M`
 ```
 
 ### 9.5 STM32 Cortex-M マイコン
@@ -343,9 +346,9 @@ optimize : 2
 link :
     static :
         memory :
-            rom : origin 0x08000000  length 1024K
-            ram : origin 0x20000000  length 128K
-            heap : max 32K
+            rom : origin 0x08000000  length `1024K`
+            ram : origin 0x20000000  length `128K`
+            heap : max `32K`
 ```
 
 ### 9.6 WebAssembly モジュール
@@ -365,7 +368,7 @@ layer    : 0
 link :
     static :
         memory :
-            rom : origin 0xFFFFF000  length 64K
+            rom : origin 0xFFFFF000  length `64K`
             ram : auto
 ```
 
@@ -375,7 +378,7 @@ layer    : 1
 link :
     static :
         memory :
-            heap : max 128K
+            heap : max `128K`
 ```
 
 ```ms

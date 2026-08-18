@@ -19,12 +19,12 @@
  * `Float` は「ターゲットの FPU が持つ最高精度」なので（type_system.md §2）、**幅は
  * ターゲットが決まらないと決まらない**。その唯一の入口がこのファイルである。
  *
- * ## 未対応（既知）
+ * ## サイズ表記は `ms` だけの約束（文字列で書く）
  *
- * `link : static :` の下のメモリマップは `length 1024K` のようにサイズ接尾辞を使うが、
- * Sign の数値リテラルに `K`/`M`/`G` は無いため現状パースできない。ここでは `link` の
- * モード（`dynamic`/`static`）までを読み、メモリマップは読まない。幅の決定には
- * ターゲットしか要らないので、この欠落は Pass 3.5 を止めない（配置は Pass 4 以降の話）。
+ * メモリマップのサイズは `` length `1024k` `` のように**文字列**で書く。Sign の数値
+ * リテラルに `K`/`M`/`G` 接尾辞は無いので、素の `1024k` は字句解析を通らない。接尾辞を
+ * 言語側へ足すこともできたが、**メモリマップにしか要らない表記のために言語の字句解析を
+ * 触らない**方を採った。文字列なら Sign の文法のままで、解釈は `ms` の読み手が担う。
  */
 
 import { compile } from "./compile.js";
@@ -79,9 +79,50 @@ function scalarOf(node) {
   if (node.kind === "identifier") return bareName(node.value);
   if (node.kind === "number") return node.value.includes(".") ? parseFloat(node.value) : parseInt(node.value, 10);
   if (node.kind === "address") return parseInt(node.value, 16);
-  if (node.kind === "string") return node.value;
+  if (node.kind === "string") return node.value.slice(1, -1); // バッククォートを剥がす
   if (node.kind === "unit") return null;
   return node.value;
+}
+
+// `ms` 独自のサイズ表記（`` `1024k` `` / `` `4M` `` / 素の `` `4096` ``）を byte 数へ直す。
+// メモリマップの単位なので 1K = 1024（10進の 1000 ではない）。大文字小文字は問わない。
+const SIZE_UNITS = { k: 1024, m: 1024 * 1024, g: 1024 * 1024 * 1024 };
+
+function parseSize(text) {
+  if (typeof text !== "string") return undefined;
+  const m = /^\s*([0-9]+)\s*([kKmMgG]?)[bB]?\s*$/.exec(text);
+  if (!m) return undefined;
+  return parseInt(m[1], 10) * (m[2] ? SIZE_UNITS[m[2].toLowerCase()] : 1);
+}
+
+// 余積（`construct` の連なり）を平らな配列へ均す。`origin 0x08000000 length `1024k`` は
+// 4項の余積として来るので、ここで `[origin, 0x08000000, length, "1024k"]` になる。
+function flattenConstruct(node) {
+  if (!node) return [];
+  if (node.type === "operation" && (node.name === "construct" || node.name === "concat")) {
+    return [...flattenConstruct(node.left), ...flattenConstruct(node.right)];
+  }
+  return [node];
+}
+
+/**
+ * メモリ領域1つ分（`origin <addr> length <size>` / `max <size>` / `auto`）を読む。
+ *
+ * `キー 値 キー 値 …` の並びとして読む——`ms` は Sign の余積をそのままデータに使うので、
+ * ラベルと値が交互に並ぶだけの形になる。
+ */
+function readRegion(node) {
+  const items = flattenConstruct(node);
+  // `ram : auto`（実行時にデバイスツリー/UEFI から決まる）は単一の識別子で来る。
+  if (items.length === 1) return scalarOf(items[0]);
+  const region = {};
+  for (let i = 0; i + 1 < items.length; i += 2) {
+    const key = scalarOf(items[i]);
+    const raw = scalarOf(items[i + 1]);
+    // origin はアドレス（`0x…`）、length/max はサイズ（文字列）。
+    region[key] = typeof raw === "string" ? parseSize(raw) : raw;
+  }
+  return region;
 }
 
 /**
@@ -120,7 +161,16 @@ function readOptionMs(source, options = {}) {
     if (tree.inherit !== undefined) conf.inherit = scalarOf(tree.inherit) !== "false";
     // `link : dynamic` は単一の値、`link : static : …` は入れ子のブロックで来る。
     if (tree.link !== undefined) {
-      conf.link = tree.link && tree.link.type ? scalarOf(tree.link) : Object.keys(tree.link)[0] || "dynamic";
+      if (tree.link && tree.link.type) {
+        conf.link = scalarOf(tree.link);
+      } else {
+        conf.link = Object.keys(tree.link)[0] || "dynamic";
+        const memory = tree.link.static && tree.link.static.memory;
+        if (memory) {
+          conf.memory = {};
+          for (const [name, node] of Object.entries(memory)) conf.memory[name] = readRegion(node);
+        }
+      }
     }
   }
 
@@ -128,6 +178,17 @@ function readOptionMs(source, options = {}) {
   const td = TARGET_DEFAULTS[conf.target] || { entry: null, stack: null };
   if (conf.entry === undefined || conf.entry === null) conf.entry = td.entry;
   if (conf.stack === undefined || conf.stack === null) conf.stack = td.stack;
+
+  // cortex_m の既定だけはメモリマップから導出する（§3 の NOTE）——entry は `rom.origin`、
+  // stack は `ram.origin + ram.length`（RAM 末端）。Cortex-M の慣例でスタックは上位
+  // アドレスから下方へ伸びるため、初期 sp は領域の**末尾**を指す。
+  if (conf.target === "cortex_m" && conf.memory) {
+    const { rom, ram } = conf.memory;
+    if (conf.entry === null && rom && typeof rom.origin === "number") conf.entry = rom.origin;
+    if (conf.stack === null && ram && typeof ram.origin === "number" && typeof ram.length === "number") {
+      conf.stack = ram.origin + ram.length;
+    }
+  }
 
   return { ...conf, warnings };
 }

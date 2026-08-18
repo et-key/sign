@@ -18,7 +18,8 @@ string = ` [^\n\r`]* `
 開始と終了をバッククォートで挟んだ、改行（`\n`/`\r`）とバッククォート自身を除く任意の文字列。
 
 ```sign
-greeting : `Hello, World!`   ` greeting に文字列を束縛
+` greeting に文字列を束縛
+greeting : `Hello, World!`
 message  : `Sign is elegant`
 ```
 
@@ -109,7 +110,8 @@ Sign の文字列は**シングルライン**が基本。
 
 ```sign
 ` 複数文字列の組み立て
-lines : `Line 1` `Line 2` `Line 3`   ` リスト構築
+` リスト構築
+lines : `Line 1` `Line 2` `Line 3`
 
 `改行文字自体を文字として扱う
 text  : `Line 1` \
