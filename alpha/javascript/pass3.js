@@ -125,6 +125,14 @@ const NO_JOIN = Symbol("no-join");
 function joinElementTypes(a, b) {
   if (a === null || a === undefined || b === null || b === undefined) return null;
   if (a === b) return a;
+  // `Scalar` は「String を含まない Atom」という**族**であり（§4 の記法定義）、
+  // Address / Float / Vector はその要素である。族と要素の上限は族——どの要素かは
+  // まだ分かっていないので、分かっている以上のことを名乗らない。仮引数の型が
+  // 呼び出しサイトで具体化されるまでの暫定形がここを通る（§7.1）。
+  if (a === "Scalar" || b === "Scalar") {
+    const other = a === "Scalar" ? b : a;
+    return NUMERIC_TYPES.has(other) || other === "Scalar" ? "Scalar" : NO_JOIN;
+  }
   if (NUMERIC_TYPES.has(a) && NUMERIC_TYPES.has(b)) {
     if (a === "Vector" || b === "Vector") return "Vector";
     if (a === "Float" || b === "Float") return "Float";
@@ -244,6 +252,17 @@ function computeAtomType(node, env) {
         return "Struct";
       }
     }
+    // 関数本体（match_case の並び）の型は、各 arm の型の**直和**である（§7.3）。
+    // 最終行だけを見ると、途中の arm が返しうる型が消えてしまう。
+    if (node.isFunctionBody) {
+      const armTypes = node.lines.map((line) =>
+        // `cond : result` の arm が返すのは result 側。フォールバック行は行そのもの。
+        isDefineNode(line)
+          ? inferAtomType(line.right, node.scope || env)
+          : inferAtomType(line, node.scope || env)
+      );
+      return joinArmTypes(armTypes);
+    }
     const last = node.lines[node.lines.length - 1];
     // pass2 が残した子スコープで最終行を解決する。外側のenvで先に評価すると、
     // ブロック内で定義された識別子が解決できないまま**メモ化されてしまう**
@@ -313,6 +332,14 @@ function computeAtomType(node, env) {
       }
       node.elementType = joined;
       return "List";
+    }
+    // apply の結果型は**呼び先の返値型**である（§7.1・§8）。Lambda 自身は Layer 1 の
+    // カテゴリであり Layer 2 型を持たない（§2）が、射の**適用結果**は場所を持つ値なので
+    // 型を持つ。したがって返値型は Layer 2 の型表へ足すのではなく、識別子テーブル側
+    // （binding.returns）に置く。
+    if (node.name === "apply") {
+      const callee = applyCalleeBinding(node, env);
+      return callee ? callee.returns ?? null : null;
     }
     if (node.position === "infix" && node.left) {
       // 論理・圏論族の`&`（§4: `(L -> R) -> (R | __)`）だけは右辺の型を返す。
@@ -571,4 +598,95 @@ function collectUnitReason(node, env, diagnostics) {
   }
 }
 
-export { inferAtomType, annotateTypes, inferLambdaParamTypes, inferParamTypesFromUsage };
+// match_case の各 arm の型から返値型（直和）を作る（§7.3）。
+//
+// `__` は直和から落とす。完全性公理によりあらゆる関数が `__` を返しうるので `T | Unit` は
+// 全ての関数に付き、識別情報をゼロしか持たない。零対象は余積の単位元でもあるので、
+// 直和の単位元として落とすのは代数的にも一貫している。
+//
+// 未解決（null）が混ざる場合は直和全体が未解決——分かっていない枝がある以上、
+// 分かっている枝だけで返値型を名乗ると嘘になる。
+function joinArmTypes(types) {
+  if (types.some((x) => x === null || x === undefined)) return null;
+  const distinct = [...new Set(types.filter((x) => x !== "Unit"))].sort();
+  if (distinct.length === 0) return "Unit";
+  if (distinct.length === 1) return distinct[0];
+  return distinct.join(" | ");
+}
+
+// apply 連鎖（`apply(apply(f, a), b)`）の根にある識別子の binding を返す。
+// 根が識別子でなければ（即値ラムダ・ポイントフリー等）null——呼び先が静的に決まらない
+// ので返値型も決まらない。
+function applyCalleeBinding(node, env) {
+  let base = node;
+  while (base && base.type === "operation" && base.name === "apply") base = base.left;
+  while (base && base.type === "block" && base.kind !== "indent" && base.kind !== "abs" && (base.lines || []).length === 1) {
+    base = base.lines[0];
+  }
+  if (!isIdentifierNode(base) || !env) return null;
+  return envLookup(env, base.value) || null;
+}
+
+// 不動点計算のために、前回付けた型注釈を消す。
+function clearTypeAnnotations(node) {
+  if (!node || typeof node !== "object") return;
+  delete node.atomType;
+  delete node.elementType;
+  delete node.slotKind;
+  delete node.operandType;
+  for (const k of ["left", "right", "operand", "middle"]) clearTypeAnnotations(node[k]);
+  for (const l of node.lines || []) clearTypeAnnotations(l);
+  for (const e of node.entries || []) clearTypeAnnotations(e.default);
+}
+
+// トップレベルの `名前 : ラムダ` から返値型を集めて識別子テーブルへ書き戻す。
+// 変化があったら true（不動点の判定に使う）。
+function collectReturns(nodes, env) {
+  let changed = false;
+  for (const node of nodes) {
+    if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+    const rhs = node.right;
+    if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
+    const binding = envLookup(env, node.left.value);
+    if (!binding) continue;
+    const ret = inferAtomType(rhs.right, rhs.scope || env);
+    if (binding.returns !== ret) {
+      binding.returns = ret;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/**
+ * 型注釈を不動点まで回す（§5 Pass 3）。
+ *
+ * 再帰関数の返値型は自分自身に依存するため、一度の走査では決まらない。**`__` を束の底**
+ * として始める——零対象は直和の単位元であり joinArmTypes が `Unit` を落とすので、初回は
+ * 再帰呼び出しの枝が何も寄与せず、基底ケースだけが型を決める。次の周回でその型が再帰の枝
+ * へ伝わり、変化が止まったところが返値型である。
+ *
+ * 型変数も制約ソルビングも使っていない（§1）——束を単調に上がるだけである。
+ */
+function annotateAll(nodes, env, diagnostics) {
+  for (const node of nodes) {
+    if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+    const rhs = node.right;
+    if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
+    const binding = envLookup(env, node.left.value);
+    if (binding && binding.returns === undefined) binding.returns = "Unit";
+  }
+  // 上限は「定義の数 + 2」。各周回で少なくとも1つは束を上がるので、それ以上は回らない。
+  const limit = nodes.length + 2;
+  for (let i = 0; i < limit; i++) {
+    for (const node of nodes) clearTypeAnnotations(node);
+    for (const node of nodes) annotateTypes(node, env, null);
+    if (!collectReturns(nodes, env)) break;
+  }
+  // 診断は確定後の1回だけ集める（周回ごとに集めると重複する）。
+  for (const node of nodes) clearTypeAnnotations(node);
+  for (const node of nodes) annotateTypes(node, env, diagnostics);
+  return nodes;
+}
+
+export { inferAtomType, annotateTypes, annotateAll, inferLambdaParamTypes, inferParamTypesFromUsage };

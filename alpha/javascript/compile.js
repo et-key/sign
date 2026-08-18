@@ -27,7 +27,7 @@ import { parse } from "./parser.js";
 import { buildEnv } from "./pass1.js";
 import { reduceAll } from "./pass2.js";
 import { specializeGenericParams } from "./pass1b.js";
-import { annotateTypes } from "./pass3.js";
+import { annotateAll } from "./pass3.js";
 
 function isDefineNode(n) {
   return !!n && n.type === "operation" && n.name === "define";
@@ -106,7 +106,7 @@ function compile(source, options = {}) {
   const specializations = runPass1b(nodes, env);
   // Pass 3 の型注釈と Pass 3b（`__` へ収束する経路の静的記録）は同じ走査で行う。
   const diagnostics = [];
-  for (const node of nodes) annotateTypes(node, env, diagnostics);
+  annotateAll(nodes, env, diagnostics);
   return { nodes, env, specializations, diagnostics };
 }
 
