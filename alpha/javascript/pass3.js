@@ -29,6 +29,7 @@
  */
 
 import { envLookup } from './pass1.js';
+import { OperationError } from "./errors.js";
 
 const ARITHMETIC_OPS = new Set(["add", "sub", "mul", "div", "mod", "pow"]);
 // coproduct_resolver.md §3-4: Atom-Atom間の余積（スペース）が縮約される演算。
@@ -772,4 +773,52 @@ function annotateAll(nodes, env, diagnostics) {
   return nodes;
 }
 
-export { inferAtomType, annotateTypes, annotateAll, inferLambdaParamTypes, inferParamTypesFromUsage };
+
+/**
+ * layer による使用可能リテラル型の門番（option_ms_schema.md §4、type_system.md §2）。
+ *
+ * layer は単なるビルド設定ではなく**コンパイル時の使用可能機能セットの宣言**であり
+ * （build_system.md）、違反はコンパイルエラーとして報告される。`layer: 0` は RAM も FPU も
+ * 未初期化の段階なので、そこに `3.14` と書けてしまうと **FPU が初期化される前に浮動小数点
+ * 命令を出す**ことになる。これは静的に決定可能な違反なので、原理4 に従って弾く。
+ *
+ * 見るのは**リテラルの型**であって式の型ではない。昇格でその型になった式（`x + 1.0` が
+ * Float になる等）は、元をたどれば必ずどこかにリテラルが在るので、リテラルの位置で
+ * 止めた方が誤りの在り処が正確に指せる。
+ */
+const LITERAL_MIN_LAYER = { Float: 2, Vector: 3 };
+
+// その layer で何が使えないのかを、機能の名前で言う（数字だけでは何が足りないか読めない）。
+const LAYER_FEATURE = { 2: "FPU", 3: "SIMD" };
+
+function checkLayerConstraints(nodes, layer) {
+	if (!Number.isInteger(layer)) return;
+	const seen = new Set();
+	function visit(node) {
+		if (!node || typeof node !== "object" || seen.has(node)) return;
+		seen.add(node);
+		// **リテラルだけを見る。** 識別子は除く——`x : 3.14` では `x` にも Float が付くが、
+		// それは 3.14 が Float であることの帰結であって違反の在り処ではない。値が書かれて
+		// いる場所を指した方が直せる。`Vector` はリテラル1個ではなく並びが作るので、
+		// atom でなくても型で拾う。
+		const isLiteral = node.type === "atom" && node.kind !== "identifier" && node.kind !== "hole";
+		if (node.atomType && (isLiteral || node.atomType === "Vector")) {
+			const need = LITERAL_MIN_LAYER[node.atomType];
+			if (need !== undefined && layer < need) {
+				throw new OperationError(
+					`layer: ${layer} では ${node.atomType} を使えません` +
+						(node.value !== undefined ? `（${node.value}）` : "") +
+						`（${LAYER_FEATURE[need]} は layer: ${need} 以上で有効）。` +
+						`option.ms の layer を ${need} 以上にするか、この値を整数で書いてください`,
+					{ spec: "option_ms_schema.md §4", reason: "literal-above-layer" }
+				);
+			}
+		}
+		for (const k of ["left", "right", "operand", "middle"]) visit(node[k]);
+		for (const line of node.lines || []) visit(line);
+		for (const e of node.entries || []) visit(e.default);
+	}
+	for (const node of nodes) visit(node);
+}
+
+export { inferAtomType, annotateTypes, annotateAll, inferLambdaParamTypes, inferParamTypesFromUsage, checkLayerConstraints };

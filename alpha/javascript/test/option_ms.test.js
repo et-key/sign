@@ -1,0 +1,105 @@
+/**
+ * `option.ms` の読み取り（option_ms_schema.md）と、layer による門番（§4）の動作確認。
+ *
+ * この2つは**幅の根拠**である。`compiler_pipeline.md` §3 は Pass 1〜3 が Pass 4 へ渡すのは
+ * 「何バイト幅・符号あり/なし」に還元した情報だと定めるが、`Address` は「GPR 幅」、`Float` は
+ * 「ターゲットの FPU が持つ最高精度」なので（type_system.md §2）、**ターゲットが決まらないと
+ * 幅が決まらない**。その唯一の入口が `option.ms` である。
+ *
+ * 実行: node test/option_ms.test.js（`npm test` からも呼ばれる）
+ */
+import { readOptionMs } from "../option_ms.js";
+import { compile } from "../compile.js";
+
+let passed = 0;
+let total = 0;
+
+function check(note, got, want) {
+	total++;
+	const ok = JSON.stringify(got) === JSON.stringify(want);
+	if (ok) {
+		console.log(`OK   ${note}`);
+		passed++;
+	} else {
+		console.log(`FAIL ${note}`);
+		console.log(`     got:  ${JSON.stringify(got)}`);
+		console.log(`     want: ${JSON.stringify(want)}`);
+	}
+}
+
+// `layer` を渡してコンパイルし、通れば "OK"、弾かれれば例外の名前を返す。
+function gate(source, layer) {
+	try {
+		compile(source, { layer });
+		return "OK";
+	} catch (e) {
+		return e.name;
+	}
+}
+
+// ---- ms は Sign の積型記法そのものである（§1） ----
+//
+// だから専用のパーサを持たない。`key : value` は Sign の `define`、入れ子はタブ
+// インデントのブロックであり、既存の Pass 1〜2 がそのまま読む。メタ定義もまた Sign の式である。
+check("`key : value` がそのまま読める", readOptionMs("target : cortex_m").target, "cortex_m");
+check("行頭バッククォートはコメント（§1 の表）", readOptionMs("` これはコメント\ntarget : riscv64").target, "riscv64");
+check("入れ子は link のモードとして読める", readOptionMs("link :\n\tstatic :\n\t\tmemory :\n\t\t\trom : 0x0").link, "static");
+check("単一値の link も読める", readOptionMs("link : dynamic").link, "dynamic");
+
+// ---- デフォルト（§2） ----
+check("省略時の target は rust（ホストビルド）", readOptionMs("").target, "rust");
+check("省略時の layer は 4（std）", readOptionMs("").layer, 4);
+check("省略時の optimize は 0", readOptionMs("").optimize, 0);
+check("空でなくても未記載のフィールドは既定値", readOptionMs("target : wasm").layer, 4);
+
+// ---- target 別の entry/stack 既定値（§3 の表） ----
+//
+// `entry`/`stack` を省略したら target が決める。ここを取り違えると、CPU が最初に
+// ジャンプする先が変わる——既定値の表は仕様の一部であって利便性ではない。
+check("x86_bios の既定 entry は 0x7C00（MBR ロード先）", readOptionMs("target : x86_bios").entry, 0x7c00);
+check("x86_bios の既定 stack は 0x7BFF", readOptionMs("target : x86_bios").stack, 0x7bff);
+check("aarch64_qemu の既定 entry は 0x40080000", readOptionMs("target : aarch64_qemu").entry, 0x40080000);
+check("riscv64 の既定 entry は 0x80000000", readOptionMs("target : riscv64").entry, 0x80000000);
+check("明示した entry は既定値より優先する", readOptionMs("target : x86_bios\nentry : 0x1000").entry, 0x1000);
+// UEFI/WASM/ホストビルドは実行環境が決めるので、コンパイラ側では確定しない。
+check("x86_uefi_app の entry は確定しない（UEFI が決める）", readOptionMs("target : x86_uefi_app").entry, null);
+check("rust（ホストビルド）も確定しない", readOptionMs("target : rust").entry, null);
+
+// ---- layer は数値でも別名でも書ける（§4 の表） ----
+check("layer : 0 は bare", readOptionMs("layer : 0").layer, 0);
+check("layer : bare は 0", readOptionMs("layer : bare").layer, 0);
+check("layer : fpu は 2", readOptionMs("layer : fpu").layer, 2);
+check("layer : simd は 3", readOptionMs("layer : simd").layer, 3);
+check("layer : std は 4", readOptionMs("layer : std").layer, 4);
+
+// ---- 読めたが妥当でないものは警告して既定へ倒す ----
+//
+// 構文が壊れているなら compile() が SyntaxError を投げる。ここで警告に留めるのは
+// 「読めたが値が仕様の集合に無い」場合であり、黙って通さないことが目的である。
+check("未知の target は警告して rust へ倒す", readOptionMs("target : nosuch").target, "rust");
+check("その警告は握り潰さない", readOptionMs("target : nosuch").warnings.length, 1);
+check("範囲外の layer も警告する", readOptionMs("layer : 9").warnings.length, 1);
+check("妥当な設定なら警告は出ない", readOptionMs("target : cortex_m\nlayer : 0").warnings.length, 0);
+
+// ---- layer による門番（§4） ----
+//
+// layer は単なるビルド設定ではなく**使用可能機能セットの宣言**である（build_system.md）。
+// `layer: 0` は FPU 未初期化の段階なので、そこに Float リテラルが書けてしまうと
+// **FPU が初期化される前に浮動小数点命令を出す**ことになる。静的に決定可能な違反なので
+// 原理4 に従って弾く。止める種別は OperationError——「この位置で許されない操作」である。
+check("layer: 0 で Float リテラルは弾かれる", gate("x : 3.14", 0), "OperationError");
+check("layer: 1 でもまだ弾かれる（FPU は 2 以上）", gate("x : 3.14", 1), "OperationError");
+check("layer: 2 なら通る", gate("x : 3.14", 2), "OK");
+check("整数は layer: 0 でも通る", gate("x : 42", 0), "OK");
+check("アドレスも layer: 0 で通る（MMIO は bare の仕事）", gate("p : 0x40011000", 0), "OK");
+check("文字列も layer: 0 で通る", gate("s : `hi`", 0), "OK");
+// 違反の在り処はリテラルの位置で指す。識別子にも昇格で Float が付くが、それは
+// リテラルが Float であることの帰結であって原因ではない。
+check("本体の奥にある Float リテラルも見つける", gate("f : n ? n + 1.0", 0), "OperationError");
+check("リストの要素の Float も見つける", gate("xs : [1.0 2.0]", 0), "OperationError");
+// 門番はオプトインである。`option.ms` を読まない経路（素の評価・playground）まで
+// std 相当を強制しない——layer を宣言していないコードに layer 違反は無い。
+check("layer を渡さなければ検査しない", gate("x : 3.14", undefined), "OK");
+
+console.log(`\n${passed}/${total} passed`);
+process.exit(passed === total ? 0 : 1);

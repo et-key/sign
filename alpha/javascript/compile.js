@@ -27,7 +27,7 @@ import { parse } from "./parser.js";
 import { buildEnv } from "./pass1.js";
 import { reduceAll } from "./pass2.js";
 import { specializeGenericParams } from "./pass1b.js";
-import { annotateAll } from "./pass3.js";
+import { annotateAll, checkLayerConstraints } from "./pass3.js";
 
 function isDefineNode(n) {
   return !!n && n.type === "operation" && n.name === "define";
@@ -107,6 +107,10 @@ function compile(source, options = {}) {
   // Pass 3 の型注釈と Pass 3b（`__` へ収束する経路の静的記録）は同じ走査で行う。
   const diagnostics = [];
   annotateAll(nodes, env, diagnostics);
+  // layer による使用可能リテラル型の門番（option_ms_schema.md §4）。型が確定した後でないと
+  // 判定できないのでここに置く。`options.layer` を渡さなければ検査しない——`option.ms` を
+  // 読まない経路（テスト・playground の素の評価）まで std 相当を強制しないためである。
+  if (options.layer !== undefined) checkLayerConstraints(nodes, options.layer);
   return { nodes, env, specializations, diagnostics };
 }
 
