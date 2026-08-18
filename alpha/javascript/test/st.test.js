@@ -149,6 +149,18 @@ check("連番スロットの中でも要素型が残る", entries("t : 1 , [1 2]
 ]);
 
 
+// **デフォルト式があれば、その型がその仮引数の型である。**
+//
+// デフォルトは「引数が省略されたときに実際にそこへ入る値」なので、型の根拠として本体の
+// 使用箇所より強い。使用箇所は「その演算が要求する型」しか語らない——`y + 0.0` は y が
+// Address でも昇格するので y が Float とは限らない。デフォルトは中身そのものを語る。
+check("デフォルトが整数なら Address", entries("f :\n\tx\n\ty : 1\n ? y"), ["f : _ Address -> Address"]);
+check("デフォルトが実数なら Float", entries("f :\n\tx\n\ty : 1.0\n ? y"), ["f : _ Float -> Float"]);
+check("デフォルトが文字列なら String", entries("f :\n\tx\n\ty : `s`\n ? y"), ["f : _ String -> String"]);
+check("デフォルトがリストなら List", entries("f :\n\tx\n\ty : [1 2 3]\n ? y"), ["f : _ List -> List"]);
+check("デフォルトは使用箇所より優先する（値は Address、式が Float へ昇格）", entries("f :\n\ty : 1\n ? y + 0.0"), [
+	"f : Address -> Float",
+]);
 // ---- 返値型（§7.1・§7.3・§8） ----
 //
 // 関数本体（match_case の並び）の型は各 arm の型の**直和**であり（§7.3）、apply の結果型は

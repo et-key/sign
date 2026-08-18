@@ -476,9 +476,25 @@ function paramNamesOf(paramNode) {
 
 // lambdaNode（{type:"operation", name:"lambda", left: params, right: body}）から、
 // 本体の使用箇所に基づく仮引数のatomType推定結果を Map<識別子, atomType> で返す。
-function inferLambdaParamTypes(lambdaNode) {
+function inferLambdaParamTypes(lambdaNode, env) {
   const names = new Set(paramNamesOf(lambdaNode.left));
-  return inferParamTypesFromUsage(lambdaNode.right, names);
+  const inferred = inferParamTypesFromUsage(lambdaNode.right, names);
+  // **デフォルト式があれば、その型がその仮引数の型である。**
+  //
+  // デフォルトは「引数が省略されたときに実際にそこへ入る値」なので、型の根拠として
+  // 本体の使用箇所より強い。使用箇所は「その演算が要求する型」しか語らないが（`y + 0.0`
+  // は y が Address でも昇格するので Float とは限らない）、デフォルトは中身そのものを
+  // 語る。したがって使用箇所からの逆算より優先する。
+  const paramNode = lambdaNode.left;
+  if (paramNode && paramNode.type === "params") {
+    const scope = lambdaNode.scope || env;
+    for (const e of paramNode.entries || []) {
+      if (!e.name || !e.default) continue;
+      const t = inferAtomType(e.default, scope);
+      if (t) inferred.set(e.name, t);
+    }
+  }
+  return inferred;
 }
 
 // AST全体を歩いて、全ノードに `atomType` を載せる（type_system.md §5 Pass 3 の
@@ -511,7 +527,7 @@ function annotateTypes(node, env, diagnostics) {
   // Layer 2 の具体型（Address / Float / Vector）ではない。呼び出しサイトで具体化される
   // までの暫定形であり、§7.1 が `Lambda<returns: Scalar>` と書いているのと同じ粒度である。
   if (node.name === "lambda" && node.scope) {
-    for (const [name, atomType] of inferLambdaParamTypes(node)) {
+    for (const [name, atomType] of inferLambdaParamTypes(node, env)) {
       const binding = envLookup(node.scope, name);
       if (binding && !binding.atomType) binding.atomType = atomType;
     }

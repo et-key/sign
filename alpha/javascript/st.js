@@ -212,7 +212,7 @@ function entryFor(defineNode) {
 
   const entries = paramEntries(rhs.left);
   const paramNames = new Set(entries.map((e) => e.name).filter(Boolean));
-  const usageTypes = inferLambdaParamTypes(rhs);
+  const usageTypes = inferLambdaParamTypes(rhs, null);
   const fieldReqs = collectFieldRequirements(rhs.right, paramNames);
 
   // 仮引数リスト全体が1個のブラケット（`[h ~t]`）なら、**要求する実引数は1個**である
