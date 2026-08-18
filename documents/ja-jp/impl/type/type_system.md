@@ -809,11 +809,11 @@ Coproduct Resolver が曖昧さなく決定論的に解決できます。
 > **持ち上げは、型が決まったものに対して行う。**
 >
 > ```sign
-> state : @stateAddr + 0          ` Address
-> level : ~(@levelAddr + 0.0)     ` Implicit(Float)
+> state : 0 + @stateAddr          ` Address
+> level : ~(0.0 + @levelAddr)     ` Implicit(Float)
 > ```
 >
-> `~@levelAddr + 0.0` と書くと `(~@levelAddr) + 0.0` に結合し、`Implicit` に対する
+> `~0.0 + @levelAddr` と書くと `(~0.0) + @levelAddr` に結合し、`Implicit` に対する
 > 算術になって §3.2 により `__` へ収束する。要素型を決める演算は**持ち上げの内側**に置く。
 > `$` が `$[array ' 0]` のように確定した式へ適用されるのと同じ形である。
 
@@ -1382,9 +1382,9 @@ f : x y ? x + y
 >
 > ```sign
 > f : x ? x + y      ` x, y ともに Scalar（相手が未知なので族までしか言えない）
-> f : x ? x + 1      ` x は Address
-> f : x ? x + 0.0    ` x は Float
-> f : t ? t = `abc`  ` t は String（比較は同種同士でしか成立しない）
+> f : x ? 1 + x      ` x は Address
+> f : x ? 0.0 + x    ` x は Float
+> f : t ? `abc` = t  ` t は String（比較は同種同士でしか成立しない）
 > ```
 >
 > Sign には型注釈の構文が無い（§1「型はコードの影であり、注釈する対象が最初から無い」）。
@@ -1392,14 +1392,29 @@ f : x y ? x + y
 >
 > ```sign
 > uart_read :
->     state : @stateAddr + 0      ` Address として読む
->     level : @levelAddr + 0.0    ` Float として読む
+>     state : 0 + @stateAddr      ` Address として読む
+>     level : 0.0 + @levelAddr    ` Float として読む
 >     raw : @rawAddr              ` 型を決める情報が無い
 >  ? ...
 > ```
 >
 > `+ 0` は加法単位元なので値を変えず、コンパイル時に消える。実行時コストは無いまま型だけが
 > 固定される。「キャスト情報がある場合と無い場合」を、注釈構文を足さずに書き分けられる。
+>
+> **リテラルは左辺に置く。** §3.2 の左辺優先ルールにより、域を選ぶのは左辺だからである。
+>
+> ```sign
+> 0.0 + @levelAddr    ` Float の域で読む（FPU ロード、ビット列をそのまま解釈）
+> @levelAddr + 0.0    ` Address として読んでから Float へ変換（`scvtf`、値が変わる）
+> ```
+>
+> どちらも**結果の型は `Float`** になる——数値同士の結果型は昇格格子が決めるので、
+> 左右のどちらに Float があっても Float へ上がる。違うのは**読み方**である。MMIO の
+> レジスタが IEEE-754 を保持している場合、後者は整数として読んだビット列を浮動小数へ
+> 変換してしまい、値が壊れる。解釈を変えたいのであって変換したいのではない。
+>
+> なお alpha は Pass 4 を持たないため、この2つを型の上で区別していない（どちらも `Float`）。
+> 区別が現れるのは命令選択の段である。
 >
 > これは §1 の帰結であって例外ではない——型は演算子から決まるのだから、型を決めたければ
 > 演算子を書く。C が `*(uint32_t*)p` と型を書くところを、Sign は「その型でしか成立しない

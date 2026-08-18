@@ -53,9 +53,10 @@ check("仮引数の型を本体の演算子から逆算し、返値まで通る�
 ]);
 // 相手がリテラルなら、族（`Scalar`）ではなくその型まで決まる。Sign には型注釈の構文が
 // 無いので（§1「型はコードの影」）、初期化時に型を決めたいときは**値を変えない演算**を
-// 書く。`+ 0` は Address、`+ 0.0` は Float。実行時コストは無いが型は固定される。
+// 書く。リテラルは**左辺**に置く——域を選ぶのは左辺だからである（§3.2）。
+// `0 +` は Address、`0.0 +` は Float。実行時コストは無いが型は固定される。
 check("相手が整数リテラルなら Address まで決まる", entries("f : x ? x + 1"), ["f : Address -> Address"]);
-check("`+ 0.0` は恒等演算だが型を Float に固定する", entries("f : x ? x + 0.0"), ["f : Float -> Float"]);
+check("`0.0 +` は恒等演算だが型を Float に固定する（域を選ぶのは左辺、§3.2）", entries("f : x ? 0.0 + x"), ["f : Float -> Float"]);
 check("比較演算子でも同じ", entries("f : x ? x > 3"), ["f : Address -> Address"]);
 check("比較は同種同士なので String も決まる", entries("f : t ? t = `abc`"), ["f : String -> String"]);
 check("相手もリテラルでなければ族までしか言えない", entries("add : a b ? a + b"), ["add : Scalar Scalar -> Scalar"]);

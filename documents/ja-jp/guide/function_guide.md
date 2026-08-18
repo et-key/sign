@@ -381,7 +381,7 @@ read_n :
 	acc : __
  ?
 	n = 0 : acc
-	read_n (n - 1) ((@sensor + 0.0) acc)
+	read_n (n - 1) ((0.0 + @sensor) acc)
 
 ` 受け側はブラケット。展開（`~`）が要らず、実引数はいつでも1個。
 consume : [a b c] ? a + b + c
