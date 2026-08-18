@@ -47,27 +47,27 @@ function lastType(source) {
 {
 	const { nodes } = run("5 + 2");
 	const add = nodes[0];
-	check("トップレベルノードに atomType が載る", add.atomType, "Address");
-	check("左の子にも載る", add.left.atomType, "Address");
-	check("右の子にも載る", add.right.atomType, "Address");
+	check("トップレベルノードに atomType が載る", add.atomType, "Int");
+	check("左の子にも載る", add.left.atomType, "Int");
+	check("右の子にも載る", add.right.atomType, "Int");
 }
 
 // ---- 数値の昇格格子（§3.2） ----
-check("Address ⊕ Address → Address", lastType("5 + 2"), "Address");
-check("Address ⊕ Float → Float（昇格、降格しない）", lastType("5 + 1.5"), "Float");
-check("Float ⊕ Address → Float", lastType("1.5 + 5"), "Float");
+check("Int ⊕ Int → Int", lastType("5 + 2"), "Int");
+check("Int ⊕ Float → Float（昇格、降格しない）", lastType("5 + 1.5"), "Float");
+check("Float ⊕ Int → Float", lastType("1.5 + 5"), "Float");
 check("Float ⊕ Float → Float", lastType("1.5 + 2.5"), "Float");
 // 識別子を経由しても昇格が効くこと（pass1a が読んだ atomType が伝播する）
 check("識別子経由でも昇格する（a:5 / b:1.5 / a + b → Float）", lastType("a : 5\nb : 1.5\na + b"), "Float");
 
 // ---- 算術族の型不一致（§3.2、両方向とも __） ----
-check("Address ⊕ String → Unit", lastType("1 + `abc`"), "Unit");
-check("String ⊕ Address → Unit", lastType("`abc` + 1"), "Unit");
+check("Int ⊕ String → Unit", lastType("1 + `abc`"), "Unit");
+check("String ⊕ Int → Unit", lastType("`abc` + 1"), "Unit");
 
 // ---- List 左辺の算術（§3.2 算術族テーブル） ----
-check("List * Address → List（repeat）", lastType("[1 2] * 2"), "List");
-check("List ^ Address → List（lift）", lastType("[1 2] ^ 2"), "List");
-check("List / Address → List（split）", lastType("[1 2 3 4] / 2"), "List");
+check("List * Int → List（repeat）", lastType("[1 2] * 2"), "List");
+check("List ^ Int → List（lift）", lastType("[1 2] ^ 2"), "List");
+check("List / Int → List（split）", lastType("[1 2 3 4] / 2"), "List");
 check("List + List → Unit（+ - % はList左辺で型エラー）", lastType("[1 2] + [3 4]"), "Unit");
 
 // ---- 余積族（§3.2） ----
@@ -76,10 +76,10 @@ check("String 以外の余積 → List", lastType("1 2"), "List");
 
 // ---- 論理・圏論族（§3.2、`&` だけ右辺の型） ----
 check("`&` は右辺の型を返す（§4: (L -> R) -> (R | __)）", lastType("1 & `abc`"), "String");
-check("`|` は左辺の型を返す", lastType("1 | `abc`"), "Address");
+check("`|` は左辺の型を返す", lastType("1 | `abc`"), "Int");
 
 // ---- define / lambda / Struct の判定 ----
-check("define の型は束縛される値の型", lastType("x : 5"), "Address");
+check("define の型は束縛される値の型", lastType("x : 5"), "Int");
 check("Lambda は Layer 2 型を持たない（Layer 1 のカテゴリなので null）", lastType("f : x ? x + 1"), null);
 check("改行区切りの構造体リテラル → Struct", lastType("d :\n\tfoo : 1\n\tbar : 2"), "Struct");
 check("単一エントリの構造体も Struct", lastType("d : [foo : 1]"), "Struct");
@@ -136,7 +136,7 @@ checkReasons("5 + __ → 診断なし（右辺Unitは単位元）", "5 + __", []
 	const { nodes } = run("d :\n\ta : 5\n\tb : 1.5\n\ta + b");
 	const block = nodes[0].right;
 	const add = block.lines[block.lines.length - 1];
-	check("ブロック内で定義した識別子の型が解決する（a → Address）", add.left.atomType, "Address");
+	check("ブロック内で定義した識別子の型が解決する（a → Int）", add.left.atomType, "Int");
 	check("同（b → Float）", add.right.atomType, "Float");
 	check("ブロック内の演算にも昇格格子が効く（a + b → Float）", add.atomType, "Float");
 	check("ブロックの値＝最終行の型", block.atomType, "Float");

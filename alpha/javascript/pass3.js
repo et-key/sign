@@ -52,7 +52,7 @@ function isIdentifierNode(n) {
 // type_system.md §3.2「数値の昇格格子」と算術族の型変換テーブルの実装。
 // 左辺は「どの規則を使うか」を選ぶだけで、数値同士の結果型は昇格格子が決める
 // （＝左辺の型がそのまま結果型になるとは限らない）。
-const NUMERIC_TYPES = new Set(["Address", "Float", "Vector"]);
+const NUMERIC_TYPES = new Set(["Int", "Address", "Float", "Vector"]);
 // 「場所」と「ストリーム」。値ではないので算術・比較の対象にならない（§4 は Scalar を要求）。
 // `Implicit` は前置 `~`（持ち上げ）・`'`・前置 `#` が生み、`Iterator` は範囲族が生む。
 const NON_SCALAR_PLACES = new Set(["Implicit", "Iterator"]);
@@ -74,7 +74,7 @@ const RANGE_STEP_OPS = new Set([
 // 端点になれるのは「点」——数値と文字である。文字は Layer 2 では String だが、
 // 範囲の端点としては符号位置で数えるため点として扱える（`\a ~ \e`）。
 // List / Struct は点ではないので端点にできない。原理4により静的に弾く。
-const RANGE_ENDPOINT_TYPES = new Set(["Address", "Float", "Vector", "String"]);
+const RANGE_ENDPOINT_TYPES = new Set(["Int", "Address", "Float", "Vector", "String"]);
 
 // 範囲式の端点になっているノードの型を、単純形式・3項形式のどちらでも取り出す。
 // 3項形式は `range(range_arithmetic(start, step), end)` という入れ子であり、
@@ -140,7 +140,11 @@ function joinElementTypes(a, b) {
   if (NUMERIC_TYPES.has(a) && NUMERIC_TYPES.has(b)) {
     if (a === "Vector" || b === "Vector") return "Vector";
     if (a === "Float" || b === "Float") return "Float";
-    return "Address";
+    // Address は昇格段には乗らない（幅は Int と同じ GPR 1語）が、**より具体的**である。
+    // 片側がアドレスなら結果もアドレス——`p + 4` はオフセット計算であって、ただの整数
+    // 加算に落ちてはいけない（type_system.md §3.6）。
+    if (a === "Address" || b === "Address") return "Address";
+    return "Int";
   }
   return NO_JOIN;
 }
@@ -169,7 +173,8 @@ function arithmeticResultType(node, leftType, env) {
   if (NUMERIC_TYPES.has(leftType) && NUMERIC_TYPES.has(rightType)) {
     if (leftType === "Vector" || rightType === "Vector") return "Vector";
     if (leftType === "Float" || rightType === "Float") return "Float";
-    return "Address";
+    if (leftType === "Address" || rightType === "Address") return "Address";
+    return "Int";
   }
   // どちらかの型が未解決（識別子のatom_typeが読めない等）なら、従来通り左辺を通す
   return leftType;
@@ -177,7 +182,8 @@ function arithmeticResultType(node, leftType, env) {
 
 function literalAtomTypeFromKind(node) {
   switch (node.kind) {
-    case "number": return node.value.includes(".") ? "Float" : "Address";
+    // アドレスは `0x` 記法のみ（§3.6）。十進整数は `Int`。
+    case "number": return node.value.includes(".") ? "Float" : "Int";
     case "string": return "String";
     case "char": return "String"; // 文字リテラルはStringと同型（type_system.md: Stringは文字のリスト）
     case "address": return "Address";
@@ -221,13 +227,14 @@ function computeAtomType(node, env) {
     // とも「値の不在」とも読めてしまい、**値だけでは決まらない**。これは `5 / 2` と
     // `5.0 / 2` を型で分けたのと同じ構図なので、型で決める（原理2：型はゼロコストの帳簿）。
     // ここではオペランドの型を記録するだけで、Unitの読み替えは評価器が行う。
-    // 結果型は絶対値・要素数のいずれも非負の機械語1語に収まるため Address とする。
+    // 結果型は絶対値・要素数のいずれも非負の機械語1語に収まるため Int（uint）とする。
+    // ——アドレスではない。要素数はどこも指していない（§3.6）。
     if (node.kind === "abs") {
       node.operandType =
         Array.isArray(node.lines) && node.lines.length > 0
           ? inferAtomType(node.lines[node.lines.length - 1], node.scope || env)
           : "List";
-      return "Address";
+      return "Int";
     }
     if (!Array.isArray(node.lines) || node.lines.length === 0) return "List";
     // 全行が define(key:val) かつ左辺が識別子 → Struct（list_model.md §5.3、

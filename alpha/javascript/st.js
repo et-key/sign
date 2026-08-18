@@ -120,7 +120,7 @@ function paramTypeText(entry, usageTypes, fieldReqs) {
 // （`Float`）とも区別が付かなくなる。要素型は Pass 4 が `base + i × sizeof(T)` を出すのに
 // 要る情報であり、型の側で最も落としてはいけない部分である。
 //
-// なお1要素のリストはスカラーと同型なので（`[5]` は `Address`）、`List(T)` が付くのは
+// なお1要素のリストはスカラーと同型なので（`[5]` は `Int`）、`List(T)` が付くのは
 // 2要素以上か構文的にリストと確定している場合だけである。これは設計上の同一視であり
 // 欠落ではない——1要素の連続ブロックとレジスタ上のスカラーは同じビット列を持つ。
 function slotTypeText(node) {
@@ -138,8 +138,8 @@ function slotTypeText(node) {
  *
  * 両者は同じ構造（固定オフセットで並ぶ連続ブロック）だが**関心事が違う**（§2）。
  *
- *   Struct{x : Address , 0  y : Address , 1}  名前付き
- *   Struct(Address String Float)             連番
+ *   Struct{x : Int , 0  y : Int , 1}  名前付き
+ *   Struct(Int String Float)             連番
  *
  * どちらのスロットも **(型, 連番)** を持つ。違いは連番の書き表し方だけである。
  * 連番スロットには名前が無いので並べ替える鍵が無く、**記法上の位置がそのまま連番**に
@@ -150,8 +150,8 @@ function slotTypeText(node) {
  * 名前がソート順に並ぶので**並びが物理配置**、各名前が持つ連番が**宣言順**であり、
  * どちらも導出に頼らず明示されている。
  *
- *   point  : [x : 3 / y : 4]  →  Struct{x : Address , 0  y : Address , 1}
- *   point2 : [y : 4 / x : 3]  →  Struct{x : Address , 1  y : Address , 0}
+ *   point  : [x : 3 / y : 4]  →  Struct{x : Int , 0  y : Int , 1}
+ *   point2 : [y : 4 / x : 3]  →  Struct{x : Int , 1  y : Int , 0}
  *
  * 括弧の違いが**位置の確約の有無**を表す。`{}` は名前で同定するものであり、物理
  * オフセットは名前ソートの正規順（stack_abi.md §7.1）なので「N番目は offset N×幅」

@@ -589,12 +589,14 @@ function evalArith(node, env) {
   const r = evaluate(node.right, env);
   const value = arithOnValues(name, l, r);
   if (typeof value !== "number") return value;
-  // §3.2「除算だけは Address 同士でも丸めが起きる」: 結果型が Address（＝両辺とも
-  // Address）なのに非整数が出たら四捨五入する。丸めるべきかどうかは**値**からは
+  // §3.2「除算だけは整数同士でも丸めが起きる」: 結果型が整数（＝両辺とも
+  // 整数）なのに非整数が出たら四捨五入する。丸めるべきかどうかは**値**からは
   // 決められない——JSのNumberでは `5` と `5.0` が同一なので、`5 / 2`（→3）と
   // `5.0 / 2`（→2.5）を値だけで区別できない。pass3 がノードへ載せた Layer 2 型
   // （compile.js のパイプライン）を読んで初めて判定できる。
-  if (node.atomType === "Address" && !Number.isInteger(value)) {
+  // 整数域（`Int` と `Address`）同士の除算がここに来る。アドレスも整数幅なので
+  // 丸めの対象は同じ——分けたのは記法と溢れ方であって、除算の丸めではない（§3.6）。
+  if ((node.atomType === "Int" || node.atomType === "Address") && !Number.isInteger(value)) {
     const rounded = roundHalfAwayFromZero(value);
     // 精度が失われたことを information として記録する（unit.md §7.3 と同じ非ブロッキング
     // 診断のレベル）。昇格格子のおかげで Float が絡む算術は精度を落とさないため、
@@ -726,7 +728,7 @@ function isArithmeticUnitElement(value, leftNode) {
   const type = leftNode && leftNode.atomType;
   // 型注釈が無い（pass3を通していない経路）の場合は、値が0/1である時点で数値とみなす
   if (type === undefined || type === null) return true;
-  return type === "Address" || type === "Float" || type === "Vector";
+  return type === "Int" || type === "Address" || type === "Float" || type === "Vector";
 }
 
 function evalCompare(node, env) {

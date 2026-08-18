@@ -43,7 +43,7 @@ function check(note, got, want) {
 // ---- 書き写せている型 ----
 check("Atom はリテラルの Layer 2 型がそのまま出る", entries("pi : 3.14"), ["pi : Float"]);
 check("String も同様", entries("greeting : `hello`"), ["greeting : String"]);
-check("本体が式なら返値型が出る", entries("f : x ?\n\tx > 3 : 1\n\t2"), ["f : Address -> Address"]);
+check("本体が式なら返値型が出る", entries("f : x ?\n\tx > 3 : 1\n\t2"), ["f : Int -> Int"]);
 // §7.1 の表がそのまま述べている: `f : x y ? x + y` の `x`/`y` は `+` のシグネチャが
 // 要求する `Scalar` であり、`f` は `Lambda<returns: Scalar>` になる。ここで言う `Scalar` は
 // 「String を含まない Atom」という**族**（§4 の記法定義）であって Layer 2 の具体型では
@@ -54,10 +54,10 @@ check("仮引数の型を本体の演算子から逆算し、返値まで通る�
 // 相手がリテラルなら、族（`Scalar`）ではなくその型まで決まる。Sign には型注釈の構文が
 // 無いので（§1「型はコードの影」）、初期化時に型を決めたいときは**値を変えない演算**を
 // 書く。リテラルは**左辺**に置く——域を選ぶのは左辺だからである（§3.2）。
-// `0 +` は Address、`0.0 +` は Float。実行時コストは無いが型は固定される。
-check("相手が整数リテラルなら Address まで決まる", entries("f : x ? x + 1"), ["f : Address -> Address"]);
+// `0 +` は Int、`0x0 +` は Address、`0.0 +` は Float。実行時コストは無いが型は固定される。
+check("相手が整数リテラルなら Int まで決まる", entries("f : x ? x + 1"), ["f : Int -> Int"]);
 check("`0.0 +` は恒等演算だが型を Float に固定する（域を選ぶのは左辺、§3.2）", entries("f : x ? 0.0 + x"), ["f : Float -> Float"]);
-check("比較演算子でも同じ", entries("f : x ? x > 3"), ["f : Address -> Address"]);
+check("比較演算子でも同じ", entries("f : x ? x > 3"), ["f : Int -> Int"]);
 check("比較は同種同士なので String も決まる", entries("f : t ? t = `abc`"), ["f : String -> String"]);
 check("相手もリテラルでなければ族までしか言えない", entries("add : a b ? a + b"), ["add : Scalar Scalar -> Scalar"]);
 check(
@@ -96,23 +96,23 @@ check("ブラケット分割代入は形をそのまま書く", entries("f : [h 
 // 名前が無いので並べ替える鍵が無く、記法上の位置がそのまま連番になる（だから書かない）。
 // 名前付きは名前でソートして並べるため、連番は明示するしかない（`型 , 連番` の直積）。
 check("名前はソート順に並び、各名前が (型, 連番) を持つ", entries("p : [\n\tx : 1\n\ty : 2\n]"), [
-	"p : Struct{x : Address , 0  y : Address , 1}",
+	"p : Struct{x : Int , 0  y : Int , 1}",
 ]);
 check("宣言順が違えば連番が入れ替わる（ねじれが型に保存される）", entries("p : [\n\ty : 2\n\tx : 1\n]"), [
-	"p : Struct{x : Address , 1  y : Address , 0}",
+	"p : Struct{x : Int , 1  y : Int , 0}",
 ]);
 // 並びと連番が食い違う例。宣言は CR→SR→DR だが物理配置は CR→DR→SR になる
 // ——名前付きスロットに位置の確約が無いこと（stack_abi.md §7.1）が型に現れている。
 check("ねじれもスロット型も1行で読める", entries("uart : [\n\tCR : 0x40011000\n\tSR : 0\n\tDR : `d`\n]"), [
-	"uart : Struct{CR : Address , 0  DR : String , 2  SR : Address , 1}",
+	"uart : Struct{CR : Address , 0  DR : String , 2  SR : Int , 1}",
 ]);
 check("連番スロットは順序どおりにスロット型を並べる", entries("t : 1 , `abc` , 2.5"), [
-	"t : Struct(Address String Float)",
+	"t : Struct(Int String Float)",
 ]);
 // List は要素型を伴って `List(T)` と書く。要素型を落とすと「整数のリスト」と「実数の
 // リスト」が同じ `List` になり、単一の実数（`Float`）とも区別が付かなくなる。要素型は
 // Pass 4 が `base + i × sizeof(T)` を出すのに要る情報であり、最も落としてはいけない。
-check("List は要素型を伴う（整数のリスト）", entries("l : [1 2 3]"), ["l : List(Address)"]);
+check("List は要素型を伴う（整数のリスト）", entries("l : [1 2 3]"), ["l : List(Int)"]);
 check("実数のリストは区別される", entries("l : [1.0 2.0]"), ["l : List(Float)"]);
 check("単一の実数とも区別される", entries("r : 5.0"), ["r : Float"]);
 // 前置 `~`（持ち上げ）は `Implicit(T)`（暗黙のアドレス＝場所）を作る。
@@ -136,17 +136,17 @@ check("持ち上げない読み出しは Address のまま", entries("p : 0x4001
 // `~xs + 1` は `(~xs) + 1` になる——これが「持ち上げは型が決まったものに対して行う」を
 // 構文の側から強制している。
 check("持ち上げた結果への算術は __ へ落ちる", entries("xs : [1 2 3]\nbad : ~xs + 1"), [
-	"xs : List(Address)",
+	"xs : List(Int)",
 	"bad : Unit",
 ]);
 
-// 1要素のリストはスカラーと同型なので `List(T)` にならない（`[5]` は `Address`）。
+// 1要素のリストはスカラーと同型なので `List(T)` にならない（`[5]` は `Int`）。
 // 設計上の同一視であり欠落ではない——1要素の連続ブロックとレジスタ上のスカラーは
 // 同じビット列を持つ。
-check("1要素のリストはスカラーと同型", entries("one : [5]"), ["one : Address"]);
+check("1要素のリストはスカラーと同型", entries("one : [5]"), ["one : Int"]);
 // 入れ子でも要素型が保たれる。
 check("連番スロットの中でも要素型が残る", entries("t : 1 , [1 2] , [1.0 2.0]"), [
-	"t : Struct(Address List(Address) List(Float))",
+	"t : Struct(Int List(Int) List(Float))",
 ]);
 
 
@@ -160,7 +160,7 @@ check("連番スロットの中でも要素型が残る", entries("t : 1 , [1 2]
 // `Atom` は §4 の記法定義で「String を**含む**スカラー」＝ `Scalar | String` である。
 // 多相に見えて下限が決まっている。具体的な型は呼び出しサイトで確定する（§5 Pass 1b）。
 check("証拠が無くても裸の仮引数は Atom", entries("f : x ? x"), ["f : Atom -> Atom"]);
-check("演算子から逆算できればそちらが優先", entries("f : x ? x + 1"), ["f : Address -> Address"]);
+check("演算子から逆算できればそちらが優先", entries("f : x ? x + 1"), ["f : Int -> Int"]);
 // rest は stream、ブラケットは構造であり、どちらも点ではないので `Atom` は付けない。
 check("rest には付けない", entries("f : x ~xs ? x"), ["f : Atom _~ -> Atom"]);
 check("ブラケットにも付けない", entries("f : [a ~b] ? a"), ["f : [a b~] -> Atom"]);
@@ -168,13 +168,13 @@ check("ブラケットにも付けない", entries("f : [a ~b] ? a"), ["f : [a b
 //
 // デフォルトは「引数が省略されたときに実際にそこへ入る値」なので、型の根拠として本体の
 // 使用箇所より強い。使用箇所は「その演算が要求する型」しか語らない——`y + 0.0` は y が
-// Address でも昇格するので y が Float とは限らない。デフォルトは中身そのものを語る。
-check("デフォルトが整数なら Address", entries("f :\n\tx\n\ty : 1\n ? y"), ["f : Atom Address -> Address"]);
+// Int でも昇格するので y が Float とは限らない。デフォルトは中身そのものを語る。
+check("デフォルトが整数なら Int", entries("f :\n\tx\n\ty : 1\n ? y"), ["f : Atom Int -> Int"]);
 check("デフォルトが実数なら Float", entries("f :\n\tx\n\ty : 1.0\n ? y"), ["f : Atom Float -> Float"]);
 check("デフォルトが文字列なら String", entries("f :\n\tx\n\ty : `s`\n ? y"), ["f : Atom String -> String"]);
 check("デフォルトがリストなら List", entries("f :\n\tx\n\ty : [1 2 3]\n ? y"), ["f : Atom List -> List"]);
-check("デフォルトは使用箇所より優先する（値は Address、式が Float へ昇格）", entries("f :\n\ty : 1\n ? y + 0.0"), [
-	"f : Address -> Float",
+check("デフォルトは使用箇所より優先する（値は Int、式が Float へ昇格）", entries("f :\n\ty : 1\n ? y + 0.0"), [
+	"f : Int -> Float",
 ]);
 // ---- 返値型（§7.1・§7.3・§8） ----
 //
@@ -188,24 +188,24 @@ check("デフォルトは使用箇所より優先する（値は Address、式�
 // ケースだけが型を決める。次の周回でその型が再帰の枝へ伝わり、変化が止まったところが
 // 返値型である。型変数も制約ソルビングも使っていない（§1）——束を単調に上がるだけ。
 check("arm の型が割れたら直和になる（§7.3）", entries("f : n ?\n\tn = 0 : `zero`\n\tn"), [
-	"f : Address -> Address | String",
+	"f : Int -> Int | String",
 ]);
 // `__` の arm は直和から落ちる。完全性公理により全ての関数が `__` を返しうるので
 // `T | Unit` は情報を持たない。零対象は余積の単位元でもあり、代数的にも一貫している。
 check("`__` の arm は直和から落ちる", entries("f : t ?\n\tt = `abc` : t\n\t__"), ["f : String -> String"]);
 check("再帰が解ける（束の底から上がる）", entries("down : n ?\n\tn = 0 : 0\n\tdown (n - 1)"), [
-	"down : Address -> Address",
+	"down : Int -> Int",
 ]);
 check("再帰でも基底ケースが型を決める", entries("s : n ?\n\tn = 0 : `end`\n\ts (n - 1)"), [
-	"s : Address -> String",
+	"s : Int -> String",
 ]);
 check("相互再帰も解ける", entries("ev : n ?\n\tn = 0 : 1\n\tod (n - 1)\nod : n ?\n\tn = 0 : 0\n\tev (n - 1)"), [
-	"ev : Address -> Address",
-	"od : Address -> Address",
+	"ev : Int -> Int",
+	"od : Int -> Int",
 ]);
 check("呼び先の返値型が apply へ伝わる", entries("g : x ? x + 1\nh : y ? g y"), [
-	"g : Address -> Address",
-	"h : Atom -> Address",
+	"g : Int -> Int",
+	"h : Atom -> Int",
 ]);
 // ---- 静的・単相化・動的の3層が型に出る ----
 //
@@ -223,30 +223,30 @@ check("呼び先の返値型が apply へ伝わる", entries("g : x ? x + 1\nh :
 //   Atom        定義側では決まらない。呼び出しサイトで具体化される（§5 Pass 1b、単相化）
 //   `_`         呼び先が実行時にしか決まらない。**ここが本物の動的ディスパッチ**
 check("`$` は常に Address（関数を指しても）", entries("f : x ? x + 1\np : $f"), [
-	"f : Address -> Address",
+	"f : Int -> Int",
 	"p : Address",
 ]);
 check("`p : $f` を経由した `@p x` も呼び先が静的に決まる", entries("f : x ? x + 1\np : $f\ncall : x ? @p x"), [
-	"f : Address -> Address",
+	"f : Int -> Int",
 	"p : Address",
-	"call : Atom -> Address",
+	"call : Atom -> Int",
 ]);
 check("`@f x` も同じく解ける", entries("f : x ? x + 1\ncall : x ? @f x"), [
-	"f : Address -> Address",
-	"call : Atom -> Address",
+	"f : Int -> Int",
+	"call : Atom -> Int",
 ]);
 // 構造体フィールド経由の呼び出しは、呼び先が実行時にしか決まらない——手で書いた vtable
 // である。返値は `_` になり、§6.2 の要求フィールド集合 `{h}` が「h というスロットを
 // 要求する」ことを示す。両方あわせて vtable スロットのシグネチャになっている。
 check("構造体フィールド経由の呼び出しは `_`（本物の dyn）", entries("f : x ? x + 1\nt : [\n\th : $f\n\tk : 0\n]\ncall : s ? @(s ' h) 5"), [
-	"f : Address -> Address",
-	"t : Struct{h : Address , 0  k : Address , 1}",
+	"f : Int -> Int",
+	"t : Struct{h : Address , 0  k : Int , 1}",
 	"call : {h} -> _",
 ]);
 // ---- 範囲: `.st` は export されたものだけ ----
 check("`.st` は export されていない識別子を出さない", entries("a : 1\nb : 2", "st"), []);
-check("`.st` は export 記号を保ったまま出す", entries("#a : 1\nb : 2", "st"), ["#a : Address"]);
-check("`.ist` は全識別子を出す", entries("#a : 1\nb : 2", "ist"), ["#a : Address", "b : Address"]);
+check("`.st` は export 記号を保ったまま出す", entries("#a : 1\nb : 2", "st"), ["#a : Int"]);
+check("`.ist` は全識別子を出す", entries("#a : 1\nb : 2", "ist"), ["#a : Int", "b : Int"]);
 
 // ---- 残っている `_` について ----
 //

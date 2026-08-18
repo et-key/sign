@@ -30,8 +30,8 @@ const cases = [
 	{
 		source: "5 + x",
 		pick: (nodes) => nodes[0],
-		want: "Address",
-		note: "5 + x → Address（左辺の数値リテラル、小数点なし＝Address、右辺は無関係）",
+		want: "Int",
+		note: "5 + x → Int（左辺の数値リテラル、小数点なし＝Int、右辺は無関係）",
 	},
 	{
 		source: "3.14 + x",
@@ -48,8 +48,8 @@ const cases = [
 	{
 		source: "x : 5\nx + 3",
 		pick: (nodes) => nodes[1],
-		want: "Address",
-		note: "x : 5 という定義から x の atomType(Address) が Pass1a で静的に解決され、x + 3 に伝播する",
+		want: "Int",
+		note: "x : 5 という定義から x の atomType(Int) が Pass1a で静的に解決され、x + 3 に伝播する",
 	},
 	{
 		source: "[1 2] * 2",
@@ -84,7 +84,7 @@ const cases = [
 	{
 		source: "f : y ?\x02x : 1\n2\x03",
 		pick: (nodes) => nodes[0].right.right,
-		want: "Address",
+		want: "Int",
 		note: "関数本体（複数行だが全行がdefineではない: define→numberの並び）は構造体化せず、最後の文(2)の型に委譲する",
 	},
 	// ---- §3.2 族別テーブル（「左辺優先」＝結果型ではなく規則の選択） ----
@@ -104,7 +104,7 @@ const cases = [
 		source: "1 2.5",
 		pick: (nodes) => nodes[0],
 		want: "List",
-		note: "§2 要素型のjoin: Address ⊕ Float は Float へ昇格するので List のまま（エラーにならない）",
+		note: "§2 要素型のjoin: Int ⊕ Float は Float へ昇格するので List のまま（エラーにならない）",
 	},
 	{
 		source: "1 & `abc`",
@@ -115,7 +115,7 @@ const cases = [
 	{
 		source: "1 | `abc`",
 		pick: (nodes) => nodes[0],
-		want: "Address",
+		want: "Int",
 		note: "論理・圏論族: `|`は左辺が非Unitなら左辺を返すため左辺の型",
 	},
 ];
@@ -170,7 +170,7 @@ checkNoThrow("`ab` 1 → String（String左辺）", "`ab` 1", "String");
 checkNoThrow("1 `ab` → String（String右辺でも同じ。引数の順序で挙動を変えない）", "1 `ab`", "String");
 checkNoThrow("[1 `abc`] → String（ブラケットでも同じ）", "[1 `abc`]", "String");
 // joinが本当に存在しない組み合わせ（数値とStruct/List）だけがコンパイルエラーになる。
-checkThrows("1 [x : 1] → コンパイルエラー（Address と Struct に join が無い）", "1 [x : 1]");
+checkThrows("1 [x : 1] → コンパイルエラー（Int と Struct に join が無い）", "1 [x : 1]");
 checkNoThrow("1 , `abc` → Struct（カンマなら混在は正当）", "1 , `abc`", "Struct");
 
 // 範囲族（type_system.md §4: `~` は `(Scalar -> Scalar) -> Iterator -> List`）。
