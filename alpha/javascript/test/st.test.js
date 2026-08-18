@@ -149,15 +149,29 @@ check("連番スロットの中でも要素型が残る", entries("t : 1 , [1 2]
 ]);
 
 
+// **裸の仮引数は、証拠が何も無くても `Atom` まで書ける。**
+//
+// 裸の仮引数（rest でもブラケット分割代入でもない）は1個の値を受ける。集合を受け取るなら
+// `[x ~xs]`（参照渡し）か `~xs`（stream）で宣言するので、宣言の形が既に「点である」ことを
+// 語っている（原理3 の表）。さらにデフォルトが無ければ `__` を渡せない——完全性公理により
+// 呼び出しごと潰れるので、本体に入った時点で非Unitが保証される。
+//
+// `Atom` は §4 の記法定義で「String を**含む**スカラー」＝ `Scalar | String` である。
+// 多相に見えて下限が決まっている。具体的な型は呼び出しサイトで確定する（§5 Pass 1b）。
+check("証拠が無くても裸の仮引数は Atom", entries("f : x ? x"), ["f : Atom -> Atom"]);
+check("演算子から逆算できればそちらが優先", entries("f : x ? x + 1"), ["f : Address -> Address"]);
+// rest は stream、ブラケットは構造であり、どちらも点ではないので `Atom` は付けない。
+check("rest には付けない", entries("f : x ~xs ? x"), ["f : Atom _~ -> Atom"]);
+check("ブラケットにも付けない", entries("f : [a ~b] ? a"), ["f : [a b~] -> Atom"]);
 // **デフォルト式があれば、その型がその仮引数の型である。**
 //
 // デフォルトは「引数が省略されたときに実際にそこへ入る値」なので、型の根拠として本体の
 // 使用箇所より強い。使用箇所は「その演算が要求する型」しか語らない——`y + 0.0` は y が
 // Address でも昇格するので y が Float とは限らない。デフォルトは中身そのものを語る。
-check("デフォルトが整数なら Address", entries("f :\n\tx\n\ty : 1\n ? y"), ["f : _ Address -> Address"]);
-check("デフォルトが実数なら Float", entries("f :\n\tx\n\ty : 1.0\n ? y"), ["f : _ Float -> Float"]);
-check("デフォルトが文字列なら String", entries("f :\n\tx\n\ty : `s`\n ? y"), ["f : _ String -> String"]);
-check("デフォルトがリストなら List", entries("f :\n\tx\n\ty : [1 2 3]\n ? y"), ["f : _ List -> List"]);
+check("デフォルトが整数なら Address", entries("f :\n\tx\n\ty : 1\n ? y"), ["f : Atom Address -> Address"]);
+check("デフォルトが実数なら Float", entries("f :\n\tx\n\ty : 1.0\n ? y"), ["f : Atom Float -> Float"]);
+check("デフォルトが文字列なら String", entries("f :\n\tx\n\ty : `s`\n ? y"), ["f : Atom String -> String"]);
+check("デフォルトがリストなら List", entries("f :\n\tx\n\ty : [1 2 3]\n ? y"), ["f : Atom List -> List"]);
 check("デフォルトは使用箇所より優先する（値は Address、式が Float へ昇格）", entries("f :\n\ty : 1\n ? y + 0.0"), [
 	"f : Address -> Float",
 ]);
@@ -190,7 +204,7 @@ check("相互再帰も解ける", entries("ev : n ?\n\tn = 0 : 1\n\tod (n - 1)\n
 ]);
 check("呼び先の返値型が apply へ伝わる", entries("g : x ? x + 1\nh : y ? g y"), [
 	"g : Address -> Address",
-	"h : _ -> Address",
+	"h : Atom -> Address",
 ]);
 // ---- 範囲: `.st` は export されたものだけ ----
 check("`.st` は export されていない識別子を出さない", entries("a : 1\nb : 2", "st"), []);

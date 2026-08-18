@@ -129,6 +129,10 @@ function joinElementTypes(a, b) {
   // Address / Float / Vector はその要素である。族と要素の上限は族——どの要素かは
   // まだ分かっていないので、分かっている以上のことを名乗らない。仮引数の型が
   // 呼び出しサイトで具体化されるまでの暫定形がここを通る（§7.1）。
+  // `Atom` は「どの Atom か分かっていない」という下限であり、join は判定できない。
+  // NO_JOIN（コンパイルエラー）ではなく null を返す——分からないことを「不正」と
+  // 断じないのが原理4 の線引きである。
+  if (a === "Atom" || b === "Atom") return null;
   if (a === "Scalar" || b === "Scalar") {
     const other = a === "Scalar" ? b : a;
     return NUMERIC_TYPES.has(other) || other === "Scalar" ? "Scalar" : NO_JOIN;
@@ -493,6 +497,23 @@ function inferLambdaParamTypes(lambdaNode, env) {
       const t = inferAtomType(e.default, scope);
       if (t) inferred.set(e.name, t);
     }
+  }
+  // **裸の仮引数は、証拠が何も無くても `Atom` まで決まる。**
+  //
+  // 裸の仮引数（rest でもブラケット分割代入でもない）は1個の値を受ける。集合を受け取る
+  // なら `[x ~xs]`（参照渡し）か `~xs`（stream）で宣言するので、宣言の形が既に「点で
+  // ある」ことを語っている（原理3 の表）。さらにデフォルトが無ければ `__` を渡せない
+  // ——完全性公理により呼び出しごと潰れるので、本体に入った時点で非Unitが保証される。
+  //
+  // `Atom` は §4 の記法定義で「String を**含む**スカラー」＝ `Scalar | String` である。
+  // 多相に見えて下限が決まっている。具体的な型は呼び出しサイトで確定する（§5 Pass 1b）。
+  if (paramNode && paramNode.type === "params") {
+    for (const e of paramNode.entries || []) {
+      if (!e.name || e.rest || e.pattern) continue;
+      if (!inferred.has(e.name)) inferred.set(e.name, "Atom");
+    }
+  } else if (isIdentifierNode(paramNode) && !inferred.has(paramNode.value)) {
+    inferred.set(paramNode.value, "Atom");
   }
   return inferred;
 }
