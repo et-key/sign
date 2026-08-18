@@ -221,19 +221,30 @@ function composeEndNode(node, side) {
   return n;
 }
 
-// 合成の端をラムダノードへ解決する。その場に書かれた無名ラムダ（`(x ? x + 1) f`）は
-// そのまま使えるし、識別子なら束縛を引く。どちらでもない端（ポイントフリーの `[+ 1]` や
-// `@p` のような間接呼び出し）は辿れないので null——分からないことは `_` のままにする。
-function lambdaOf(node, lambdaByName) {
-  // その場に書いた無名ラムダは `(x ? x + 1)` のように括弧で包まれて来るので、
-  // 1文だけの括弧ブロックは剥がしてから見る。
+function isApplyLikeNode(node) {
+  return node && node.type === "operation" && (node.name === "apply" || node.name === "partial_apply");
+}
+
+// 適用の連なりを左へ辿り、呼び先の項と渡された実引数の個数を返す。多引数の部分適用は
+// `f 1 2` → `partial_apply[apply[f, 1], 2]` のように内側が `apply` になるので両方数える。
+function applySpine(node) {
+  let n = node;
+  let supplied = 0;
+  while (isApplyLikeNode(n)) {
+    supplied++;
+    n = n.left;
+  }
+  return { base: n, supplied };
+}
+
+// その場に書いた無名ラムダは `(x ? x + 1)` のように括弧で包まれて来るので、1文だけの
+// 括弧ブロックは剥がしてから見る。
+function unwrapSoloParen(node) {
   let n = node;
   while (n && n.type === "block" && n.kind === "paren" && Array.isArray(n.lines) && n.lines.length === 1) {
     n = n.lines[0];
   }
-  if (isLambdaNode(n)) return n;
-  if (!isIdentifierNode(n) || !lambdaByName) return null;
-  return lambdaByName.get(n.value) || null;
+  return n;
 }
 
 // ラムダ1つ分のシグネチャ（仮引数の並びと返値）を組み立てる。`名前 : ラムダ` の分岐と、
@@ -267,27 +278,60 @@ function signatureText(name, params, ret) {
   return { name, text: `${name} : ${lhs} -> ${ret}`, unresolved };
 }
 
-function entryFor(defineNode, lambdaByName) {
+/**
+ * 右辺のノードからシグネチャ（仮引数の並びと返値）を求める。
+ *
+ * ラムダ・合成・部分適用はどれも **Lambda（Layer 1）であって Layer 2 の Atom 内部型を
+ * 持たない**が、シグネチャそのものは静的に決まる。三つとも「別の関数から新しい関数を
+ * 作る」形なので、ここで再帰的に一つの解決器として扱う——`inc : add3 1` を経由した
+ * `both : inc 2` のように、Lambda を作る式が積み重なっても辿れるようにするため。
+ *
+ * 辿れないもの（ポイントフリーの `[+ 1]`、`@p` のような間接呼び出し、未定義の名前）は
+ * null を返す。分からないことを「分かった」と書かないのが `.st` の原則である。
+ * `seen` は名前の循環（`a : b 1` / `b : a 1`）を止める。
+ */
+function signatureOfNode(node, defineByName, seen) {
+  const n = unwrapSoloParen(node);
+  if (isLambdaNode(n)) return lambdaSignature(n);
+
+  if (isIdentifierNode(n)) {
+    if (seen.has(n.value)) return null;
+    seen.add(n.value);
+    const bound = defineByName && defineByName.get(n.value);
+    return bound ? signatureOfNode(bound, defineByName, seen) : null;
+  }
+
+  // 合成（`h : f g`）のシグネチャは両端から決まる。スペースによる合成は**左→右の
+  // パイプライン**（`f g` は `g(f(x))`、coproduct_resolver.md §3.1）なので、
+  // **仮引数は左端の `f` が、返値は右端の `g` が**決める。間の関数は型の受け渡しに
+  // しか関与しないので、多段合成でも見るのは両端だけでよい。
+  if (isComposeNode(n)) {
+    const first = signatureOfNode(composeEndNode(n, "left"), defineByName, new Set(seen));
+    const last = signatureOfNode(composeEndNode(n, "right"), defineByName, new Set(seen));
+    return first && last ? { params: first.params, ret: last.ret } : null;
+  }
+
+  // 部分適用（`g : f 1`）は**渡した分だけ仮引数が減り、返値は変わらない**。Pass 2 が
+  // 静的にアリティ不足を判定して `partial_apply` を立てている以上（§5）、ここは残りの
+  // 仮引数を数え直すだけでよい。
+  if (n && n.type === "operation" && n.name === "partial_apply") {
+    const { base, supplied } = applySpine(n);
+    const callee = signatureOfNode(base, defineByName, new Set(seen));
+    if (callee && supplied < callee.params.length) {
+      return { params: callee.params.slice(supplied), ret: callee.ret };
+    }
+  }
+
+  return null;
+}
+
+function entryFor(defineNode, defineByName) {
   if (!isDefineNode(defineNode) || !isIdentifierNode(defineNode.left)) return null;
   const name = bareName(defineNode.left.value);
   const rhs = defineNode.right;
 
-  if (isLambdaNode(rhs)) {
-    const { params, ret } = lambdaSignature(rhs);
-    return signatureText(name, params, ret);
-  }
-
-  // 合成（`h : f g`）は Lambda であって Layer 2 の Atom 内部型を持たないが、
-  // シグネチャは両端から決まる。スペースによる合成は**左→右のパイプライン**
-  // （`f g` は `g(f(x))`、coproduct_resolver.md §3.1）なので、**仮引数は左端の
-  // `f` が、返値は右端の `g` が**決める。
-  if (isComposeNode(rhs)) {
-    const first = lambdaOf(composeEndNode(rhs, "left"), lambdaByName);
-    const last = lambdaOf(composeEndNode(rhs, "right"), lambdaByName);
-    if (first && last) {
-      return signatureText(name, lambdaSignature(first).params, lambdaSignature(last).ret);
-    }
-  }
+  const sig = signatureOfNode(rhs, defineByName, new Set([defineNode.left.value]));
+  if (sig) return signatureText(name, sig.params, sig.ret);
 
   // Atom: 右辺式の Layer 2 型がそのまま識別子の型になる（§5 Pass 1a）。
   const t = rhs && rhs.atomType ? rhs.atomType : UNKNOWN;
@@ -308,12 +352,10 @@ function generateSignType(nodes, env, options = {}) {
   const scope = options.scope === "ist" ? "ist" : "st";
   const bindings = env && env.bindings ? env.bindings : new Map();
 
-  // 合成（`h : f g`）のシグネチャを両端のラムダから拾うための索引。
-  const lambdaByName = new Map();
+  // 合成・部分適用のシグネチャを呼び先から拾うための索引（名前 → 右辺ノード）。
+  const defineByName = new Map();
   for (const node of nodes) {
-    if (isDefineNode(node) && isIdentifierNode(node.left) && isLambdaNode(node.right)) {
-      lambdaByName.set(node.left.value, node.right);
-    }
+    if (isDefineNode(node) && isIdentifierNode(node.left)) defineByName.set(node.left.value, node.right);
   }
 
   const out = [];
@@ -321,7 +363,7 @@ function generateSignType(nodes, env, options = {}) {
   let unresolved = 0;
 
   for (const node of nodes) {
-    const e = entryFor(node, lambdaByName);
+    const e = entryFor(node, defineByName);
     if (!e) continue;
     const binding = bindings.get(`<${e.name}>`);
     const exported = binding ? binding.exported : null;

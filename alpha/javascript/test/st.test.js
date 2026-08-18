@@ -292,5 +292,36 @@ check("辿れない端を持つ合成は `_` のまま", entries("g : x ? x * 2\
 	"h : _",
 ]);
 
+
+// ---- 部分適用のシグネチャ（`g : f 1`） ----
+//
+// 部分適用も Lambda なので Layer 2 型を持たないが、シグネチャは呼び先から決まる
+// ——**渡した分だけ仮引数が減り、返値は変わらない**。Pass 2 が静的にアリティ不足を
+// 判定して `partial_apply` を立てているので（§5）、残りの仮引数を数え直すだけでよい。
+check("部分適用は渡した分だけ仮引数が減る", entries("f : x y z ? x + y + z\ng : f 1"), [
+	"f : Scalar Scalar Scalar -> Scalar",
+	"g : Scalar Scalar -> Scalar",
+]);
+check("2個渡せば2個減る", entries("f : x y z ? x + y + z\ng : f 1 2"), [
+	"f : Scalar Scalar Scalar -> Scalar",
+	"g : Scalar -> Scalar",
+]);
+// 部分適用の結果をさらに部分適用しても辿れる（Lambda を作る式は積み重なる）。
+check("部分適用の部分適用も辿れる", entries("add3 : a b c ? a + b + c\ninc : add3 1\nboth : inc 2"), [
+	"add3 : Scalar Scalar Scalar -> Scalar",
+	"inc : Scalar Scalar -> Scalar",
+	"both : Scalar -> Scalar",
+]);
+// 返値型は呼び先のまま変わらない——減るのは仮引数だけである。
+check("返値は呼び先のまま", entries("f : x y ? 0.0 + x + y\ng : f 1.5"), [
+	"f : Float Scalar -> Float",
+	"g : Scalar -> Float",
+]);
+// 別名（`alias : f`）も同じシグネチャになる。
+check("別名は同じシグネチャになる", entries("f : x ? 0.0 + x\nalias : f"), [
+	"f : Float -> Float",
+	"alias : Float -> Float",
+]);
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
