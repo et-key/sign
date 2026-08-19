@@ -25,7 +25,7 @@
  * 欠けた型も観測されないままになる。`.st` はその最初の観測手段である。
  */
 
-import { inferLambdaParamTypes } from "./pass3.js";
+import { inferLambdaParamTypes, pointfreeSignature } from "./pass3.js";
 
 const UNKNOWN = "_";
 
@@ -293,6 +293,11 @@ function signatureText(name, params, ret) {
 function signatureOfNode(node, defineByName, seen) {
   const n = unwrapSoloParen(node);
   if (isLambdaNode(n)) return lambdaSignature(n);
+
+  // ポイントフリーの演算子ブロック（`[+ 1]` / `[+]`）。演算子表はそれ自体が型の表なので
+  // （operator_table.md 基本原則）、穴の数を数えるだけでシグネチャが出る。
+  const pf = pointfreeSignature(n);
+  if (pf) return pf;
 
   if (isIdentifierNode(n)) {
     if (seen.has(n.value)) return null;

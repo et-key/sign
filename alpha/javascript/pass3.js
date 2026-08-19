@@ -430,6 +430,47 @@ function constraintFromLiteral(node) {
   return t === "Unit" ? null : t;
 }
 
+/**
+ * ポイントフリーの演算子ブロック（`[+ 1]` / `[+]`）のシグネチャを求める。
+ *
+ * `operator_table.md` の基本原則が「持ち上げる／持ち下げる演算子の関係性が包括的に型を
+ * 決定する」と言う通り、**演算子表はそれ自体が型の表**である。`[+ 1]` は「`+` の左辺が
+ * まだ来ていない」形なので、シグネチャは `+` のシグネチャから穴の数を数えるだけで出る
+ * ——型変数も制約ソルビングも要らない（§1）。
+ *
+ * 規則は `f : x ? x + 1` を逆算するのと同一である。相手がリテラルならその型まで決まり
+ * （`[+ 1]` は `Int -> Int`）、両方とも空なら演算子が要求する族までしか言えない
+ * （`[+]` は `Scalar Scalar -> Scalar`）。同じ結論を2通りの書き方から得ているのであって、
+ * ポイントフリーのために別の規則を足しているわけではない。
+ */
+// ブロックのまま（`[+ 1]`）でも、1文の括弧を剥がした後の演算子ノードのままでも受ける。
+function pointfreeOp(node) {
+	if (!node || typeof node !== "object") return null;
+	if (node.type === "operation" && node.partial) return node;
+	if (node.type !== "block") return null;
+	if (!Array.isArray(node.lines) || node.lines.length !== 1) return null;
+	const op = node.lines[0];
+	if (!op || op.type !== "operation" || !op.partial) return null;
+	return op;
+}
+
+function pointfreeSignature(node) {
+	const op = pointfreeOp(node);
+	if (!op) return null;
+	// 族が `Scalar` に定まる演算子だけを扱う。構造比較（`==` / `!==`）はリストや構造体にも
+	// 効くので族が決まらず、ここでは何も名乗らない（§4 NOTE）。
+	const isScalarOp = SCALAR_ARITHMETIC_OPS.has(op.name) || SCALAR_COMPARISON_OP_SYMBOLS.has(op.op);
+	if (!isScalarOp) return null;
+	// 埋まっている側がリテラルなら、その型が穴の型でもある——比較も算術も同種同士でしか
+	// 成立しないためである。両方空なら演算子が要求する族までしか言えない。
+	const filled = op.left || op.right || null;
+	const slot = (filled && constraintFromLiteral(filled)) || "Scalar";
+	const holes = (op.left ? 0 : 1) + (op.right ? 0 : 1);
+	if (holes === 0) return null;
+	return { params: new Array(holes).fill(slot), ret: slot };
+}
+
+
 function inferParamTypesFromUsage(bodyNode, paramNames) {
   const inferred = new Map();
 
@@ -721,9 +762,19 @@ function collectReturns(nodes, env) {
   for (const node of nodes) {
     if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
     const rhs = node.right;
-    if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
     const binding = envLookup(env, node.left.value);
     if (!binding) continue;
+    // ポイントフリーの演算子ブロック（`inc : [+ 1]`）もラムダである。返値型は演算子表から
+    // 決まるので、`inc 3` の型が呼び先の返値として伝わるように識別子テーブルへ書き戻す。
+    const pf = pointfreeSignature(rhs);
+    if (pf) {
+      if (binding.returns !== pf.ret) {
+        binding.returns = pf.ret;
+        changed = true;
+      }
+      continue;
+    }
+    if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
     const ret = inferAtomType(rhs.right, rhs.scope || env);
     if (binding.returns !== ret) {
       binding.returns = ret;
@@ -821,4 +872,4 @@ function checkLayerConstraints(nodes, layer) {
 	for (const node of nodes) visit(node);
 }
 
-export { inferAtomType, annotateTypes, annotateAll, inferLambdaParamTypes, inferParamTypesFromUsage, checkLayerConstraints };
+export { inferAtomType, annotateTypes, annotateAll, inferLambdaParamTypes, inferParamTypesFromUsage, checkLayerConstraints, pointfreeSignature };

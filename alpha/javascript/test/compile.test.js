@@ -158,5 +158,11 @@ checkReasons("5 + __ → 診断なし（右辺Unitは単位元）", "5 + __", []
 	}
 }
 
+
+// ポイントフリーの適用も呼び先の返値型が伝わる（演算子表がシグネチャを持つため）。
+check("[+ 1] の適用は Int", lastType("inc : [+ 1]\ninc 3"), "Int");
+check("[+ 1.0] の適用は Float", lastType("fl : [+ 1.0]\nfl 3"), "Float");
+check("[+] は族までなので Scalar", lastType("add : [+]\nadd 1 2"), "Scalar");
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
