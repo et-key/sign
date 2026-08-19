@@ -562,7 +562,11 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
 function paramNamesOf(paramNode) {
   if (!paramNode) return [];
   if (paramNode.type === "atom" && paramNode.kind === "identifier") return [paramNode.value];
-  if (paramNode.type === "params") return paramNode.entries.map((e) => e.name);
+  if (paramNode.type === "params") {
+    // 混在形（`dist [h ~t]`）のブラケットは1エントリに畳まれ、内側の名前は `pattern` に
+    // 入っている。それらも本体で使われる仮引数なので、使用箇所からの逆算の対象である。
+    return paramNode.entries.flatMap((e) => (e.pattern ? e.pattern.map((p) => p.name) : [e.name]));
+  }
   return [];
 }
 
@@ -628,11 +632,16 @@ function inferLambdaParamTypes(lambdaNode, env) {
   // ——文字列同士をスペース（余積）で並べると String の吸収則で1本に連結されるため
   // （`` [`ab` `cd`] `` は `"abcd"`）、複数の文字列を保つには `Struct`（カンマ）が要る。
   // だから「要素が String な List」と「String」は同じものであり、迷う余地が無い。
-  if (paramNode && paramNode.type === "params" && paramNode.bracket) {
-    const entries = paramNode.entries || [];
-    const restEntry = entries.find((e) => e.rest && e.name);
-    if (restEntry && !inferred.has(restEntry.name)) {
-      const element = entries.find((e) => !e.rest && e.name && inferred.has(e.name));
+  // ブラケットの rest には器の型を与える。全体ブラケット（`[c ~rest]`）でも、混在形の
+  // パターン（`dist [h ~t]`）でも規則は同じである。
+  if (paramNode && paramNode.type === "params") {
+    const groups = [];
+    if (paramNode.bracket) groups.push(paramNode.entries || []);
+    for (const e of paramNode.entries || []) if (e.pattern) groups.push(e.pattern);
+    for (const group of groups) {
+      const restEntry = group.find((e) => e.rest && e.name);
+      if (!restEntry || inferred.has(restEntry.name)) continue;
+      const element = group.find((e) => !e.rest && e.name && inferred.has(e.name));
       const elementType = element ? inferred.get(element.name) : null;
       if (elementType && elementType !== "Atom") {
         inferred.set(restEntry.name, elementType === "String" ? "String" : "List");
@@ -662,7 +671,14 @@ function lambdaParamSlotTypes(lambdaNode, env) {
     const restEntry = entries.find((e) => e.rest && e.name);
     return [restEntry ? inferred.get(restEntry.name) || null : null];
   }
-  return entries.map((e) => (e.name ? inferred.get(e.name) || null : null));
+  return entries.map((e) => {
+    // 混在形のパターン（`dist [h ~t]`）も**実引数1個**を食って分解する。器の型は rest である。
+    if (e.pattern) {
+      const restEntry = e.pattern.find((p) => p.rest && p.name);
+      return restEntry ? inferred.get(restEntry.name) || null : null;
+    }
+    return e.name ? inferred.get(e.name) || null : null;
+  });
 }
 
 /**
@@ -928,6 +944,10 @@ function collectReturns(nodes, env) {
     }
     if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
     const ret = inferAtomType(rhs.right, rhs.scope || env);
+    // **null は「まだ分からない」であって、型ではない。** 束は `__`（底）から始めて単調に
+    // 上がる設計なので、途中の周回で読めなかったからといって底を壊してはいけない
+    // ——相互再帰では初回に必ず相手が未確定になるため、上書きすると二度と上がれなくなる。
+    if (ret === null || ret === undefined) continue;
     if (binding.returns !== ret) {
       binding.returns = ret;
       changed = true;

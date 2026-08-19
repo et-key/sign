@@ -13,6 +13,11 @@
  */
 import { compile } from "../compile.js";
 import { generateSignType } from "../st.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let passed = 0;
 let total = 0;
@@ -426,6 +431,47 @@ check("デフォルトが式でも本体まで型が届く", entries("id : s ? s
 check("入れ子の直和は展開して重複を落とす", entries("f : n ?\n\tn = 0 : `s`\n\tn = 1 : 1.0\n\tf (n - 1)"), [
 	"f : Int -> Float | String",
 ]);
+
+
+// ---- 混在形のブラケット（`x [c ~r]`）も器の型が決まる ----
+//
+// 混在形はブラケットが1エントリへ畳まれ、内側の名前は `pattern` に入る。それらも本体で
+// 使われる仮引数なので使用箇所からの逆算の対象であり、器の型を決める規則も全体ブラケットと同じ
+// ——`[h ~t]` の `t` が残りの集合そのものだからである。
+check("パターン内の要素から器が決まる", entries("f : col [h ~t] ?\n\th = col : 1\n\tf col t"), [
+	"f : Scalar List -> Int",
+]);
+
+// ---- 相互再帰は束の底から上がる（null で底を壊さない） ----
+//
+// `null` は「まだ分からない」であって型ではない。束は `__`（底）から始めて単調に上がる
+// 設計なので、途中の周回で読めなかったからといって底を壊してはいけない——相互再帰では
+// 初回に必ず相手が未確定になるため、上書きすると二度と上がれなくなる。
+check("相互再帰の返値が両方決まる", entries("a : n ?\n\tn = 0 : `s`\n\tb (n - 1)\nb : n ?\n\tn = 0 : `t`\n\ta (n - 1)"), [
+	"a : Int -> String",
+	"b : Int -> String",
+]);
+// rest だけのパターン（`[~xs]`）は器の型を決める手掛かりが無い——要素が無いので
+// 「何の集合か」を言えない。他から型が流れてこなければ形のまま残るのが正しい。
+check(
+	"要素の無いパターンは形のまま",
+	entries("p : n [~xs] ?\n\tn > 0 : xs\n\tq n xs\nq : n [~ys] ?\n\tn > 0 : ys\n\tp (n - 1) ys"),
+	["p : Int [xs~] -> _", "q : Int [ys~] -> _"]
+);
+
+
+// ---- 実プログラムで未解決が残らないこと ----
+//
+// n_queens.sn は混在形のブラケット（`col dist [h ~t]`）と相互再帰（place ↔ try_col）の
+// 両方を含む。どちらか一方でも欠けると `_` が残るので、全体が解けることが両者の噛み合いの
+// 証拠になる。
+{
+	const src = fs.readFileSync(path.join(__dirname, "..", "..", "..", "documents", "ja-jp", "guide", "examples", "n-queen", "n_queens.sn"), "utf8");
+	const { nodes, env } = compile(src);
+	const r = generateSignType(nodes, env, { scope: "ist" });
+	check(`n_queens.sn に未解決が残らない（${r.entries} エントリ）`, r.unresolved, 0);
+	check("solve は盤（List）を返す", r.text.includes("solve : Scalar -> List"), true);
+}
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

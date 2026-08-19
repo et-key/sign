@@ -93,7 +93,12 @@ function collectFieldRequirements(bodyNode, paramNames) {
 // （`{x, y}` は「少なくとも x, y を持つ構造体」という構造的な要求）。
 function paramTypeText(entry, usageTypes, fieldReqs) {
   if (entry.pattern) {
-    // ブラケット分割代入パターン。実引数は1個で、その中身が分解される。
+    // ブラケット分割代入パターン。実引数は1個で、その中身が分解される。器の型は rest
+    // ——`[h ~t]` の `t` が残りの集合そのものだからである（pass3 の inferLambdaParamTypes）。
+    // 型が分かればそれを書き、分からないときだけ形を書く。
+    const restEntry = entry.pattern.find((p) => p.rest && p.name);
+    const container = restEntry ? usageTypes.get(restEntry.name) : null;
+    if (container) return container;
     const inner = entry.pattern.map((p) => bareName(p.name) + (p.rest ? "~" : "")).join(" ");
     return `[${inner}]`;
   }
