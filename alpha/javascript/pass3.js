@@ -570,6 +570,27 @@ function inferLambdaParamTypes(lambdaNode, env) {
   } else if (isIdentifierNode(paramNode) && !inferred.has(paramNode.value)) {
     inferred.set(paramNode.value, "Atom");
   }
+  // **ブラケット分割代入の rest は器そのものである。**
+  //
+  // `[c ~rest]` は渡された単一の集合をその場で分解する（list_model.md §2.4）。`c` が要素、
+  // `rest` は**残りの集合**——つまり `rest` の型は器の型と同じである。したがって要素の型が
+  // 分かれば器の型も決まる。
+  //
+  // 要素が文字（`String`）なら器は `String` である。`List(String)` という型は**存在しない**
+  // ——文字列同士をスペース（余積）で並べると String の吸収則で1本に連結されるため
+  // （`` [`ab` `cd`] `` は `"abcd"`）、複数の文字列を保つには `Struct`（カンマ）が要る。
+  // だから「要素が String な List」と「String」は同じものであり、迷う余地が無い。
+  if (paramNode && paramNode.type === "params" && paramNode.bracket) {
+    const entries = paramNode.entries || [];
+    const restEntry = entries.find((e) => e.rest && e.name);
+    if (restEntry && !inferred.has(restEntry.name)) {
+      const element = entries.find((e) => !e.rest && e.name && inferred.has(e.name));
+      const elementType = element ? inferred.get(element.name) : null;
+      if (elementType && elementType !== "Atom") {
+        inferred.set(restEntry.name, elementType === "String" ? "String" : "List");
+      }
+    }
+  }
   return inferred;
 }
 

@@ -350,5 +350,39 @@ check("比較は同種同士なので String も決まる", entries("eq : [= `a`
 // 分からないことを「分かった」と書かないのが `.st` の原則なので `_` のままにする。
 check("構造比較は族が決まらないので `_`", entries("st : [==]"), ["st : _"]);
 
+
+// ---- ブラケット分割代入の rest は器そのものである ----
+//
+// `[c ~rest]` は渡された単一の集合をその場で分解する（list_model.md §2.4）。`c` が要素で
+// `rest` は**残りの集合**——つまり `rest` の型は器の型と同じである。したがって要素の型が
+// 分かれば器の型も決まり、それがスロットの型になる。
+//
+// 要素が文字（`String`）なら器は `String` である。**`List(String)` という型は存在しない**
+// ——文字列同士をスペース（余積）で並べると String の吸収則で1本に連結されるため
+// （`` [`ab` `cd`] `` は `"abcd"`）、複数の文字列を保つには `Struct`（カンマ）が要る。
+// だから「要素が String な List」と「String」は同じものであり、迷う余地が無い。
+check("要素が文字なら器は String", entries("hd : [c ~rest] ?\n\tc = `a` : __\n\tc (hd rest)"), [
+	"hd : String -> String",
+]);
+check("残りを返す形でも同じ", entries("tl : [c ~rest] ?\n\tc = `a` : rest\n\ttl rest"), ["tl : String -> String"]);
+check("要素が数値なら器は List(T)", entries("sum : [x ~xs] ? xs & x + (sum xs) | x"), [
+	"sum : List(Scalar) -> Scalar",
+]);
+check("実数なら List(Float)", entries("g : [x ~xs] ? 0.0 + x"), ["g : List(Float) -> Float"]);
+// 要素の型が分からなければ形のまま書く。形は「まだ型が分かっていない」ときの記述であって、
+// 裸の仮引数における `Atom` と同じ位置にある。
+check("証拠が無ければ形のまま", entries("f : [c ~rest] ? c"), ["f : [c rest~] -> Atom"]);
+// rest が無いブラケット（`[a b]`）は器の型を決める手掛かりが無い——`rest` こそが器だから。
+check("rest が無ければ器は決まらない", entries("f : [a b] ? a + b"), ["f : [a b] -> Scalar"]);
+
+// **添字で書くと返値型を取り違える。**
+//
+// `(s ' 0) (f (s ' 1~))` は `s` が裸の仮引数（`Atom`）だと `s ' 0` の型が分からず、余積の
+// join が `List` に落ちる——文字列を返す関数なのに `List` と書かれてしまう。分割代入なら
+// `c` が要素だと分かるので String の吸収則が効いて正しく `String` になる。
+check("添字スタイルは List と誤る", entries("hd : s ?\n\t(s ' 0) = `a` : __\n\t(s ' 0) (hd (s ' 1~))"), [
+	"hd : Atom -> List",
+]);
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

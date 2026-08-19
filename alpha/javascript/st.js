@@ -261,8 +261,20 @@ function lambdaSignature(rhs) {
   // 型としても1スロットにまとめて書く。混在形（`dist [h ~t]`）の場合は entry.pattern
   // として1エントリに畳まれているので、こちらの分岐には来ない。
   const wholeBracket = rhs.left && rhs.left.type === "params" && rhs.left.bracket;
+  // ブラケットの rest は器そのものなので（pass3 の inferLambdaParamTypes 参照）、その型が
+  // 分かればそれが**スロットの型**である。分からないときだけ形を書く——形は「まだ型が
+  // 分かっていない」ときの記述であって、裸の仮引数における `Atom` と同じ位置にある。
+  const restEntry = wholeBracket ? entries.find((e) => e.rest && e.name) : null;
+  let containerType = restEntry ? usageTypes.get(restEntry.name) : null;
+  // `List` は要素型を伴って書く（§2 の記法）。要素は先頭エントリそのものである
+  // ——`[x ~xs]` の `x` が要素で `xs` が器なのだから、器の要素型は `x` の型である。
+  if (containerType === "List") {
+    const head = entries.find((e) => !e.rest && e.name && usageTypes.get(e.name));
+    const el = head ? usageTypes.get(head.name) : null;
+    if (el && el !== "Atom") containerType = `List(${el})`;
+  }
   const params = wholeBracket
-    ? [`[${entries.map((e) => bareName(e.name) + (e.rest ? "~" : "")).join(" ")}]`]
+    ? [containerType || `[${entries.map((e) => bareName(e.name) + (e.rest ? "~" : "")).join(" ")}]`]
     : entries.map((e) => paramTypeText(e, usageTypes, fieldReqs));
   // 返値型は本体ノードの Layer 2 型そのもの。Lambda 自身は Layer 1 のカテゴリであり
   // Layer 2 型を持たないが（§2）、本体は値を作るので型を持つ。
