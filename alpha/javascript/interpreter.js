@@ -152,7 +152,10 @@ function paramEntriesOf(paramsNode) {
 // 渡した単一のList/Struct実引数を分割代入できる値かどうか判定する。Lambda（クロージャ）は
 // 除外する——`f`をそのまま1個の不透明な値として渡すケースを構造体扱いしないため。
 function isDestructurable(v) {
-  return Array.isArray(v) || (v !== null && typeof v === "object" && !v.__lambda__);
+  // `String ≅ List(0u)`（type_system.md §2）なので、文字列も分割代入できる。添字（`s ' 0`）と
+  // 要素数（`|s|`）は既に文字のリストとして扱っており、ブラケットだけ単一の不透明な値として
+  // 扱うと同型が片側だけ成立していることになる。
+  return Array.isArray(v) || typeof v === "string" || (v !== null && typeof v === "object" && !v.__lambda__);
 }
 
 // ブラケット仮引数リストへ、単一のList/Struct実引数を分割代入する（8/5の設計合意）。
@@ -172,6 +175,12 @@ function bindBracketParams(entries, value, env) {
   // スカラー ≅ 1要素リスト（asList/get_propと同じ同型性）。Struct（プレーンオブジェクト）
   // ではない非Array値は、長さ1のリストとして分割代入できる。
   if (!isDestructurable(value)) value = [value];
+  // 文字列は文字のリストとして分解し、rest には**文字列のまま**返す。範囲添字（`s ' 1~`）が
+  // 文字列を返すのと揃える——同じ「残り」を取る操作が、書き方で違う型になってはいけない。
+  // 符号位置単位で切る（サロゲートペアを2文字に割らない）。
+  const fromString = typeof value === "string";
+  if (fromString) value = [...value];
+  const restValue = (v) => (fromString ? v.join("") : v);
   if (Array.isArray(value)) {
     const restIdx = entries.findIndex((e) => e.rest);
     const before = restIdx === -1 ? entries : entries.slice(0, restIdx);
@@ -191,7 +200,7 @@ function bindBracketParams(entries, value, env) {
     if (restIdx !== -1) {
       // afterの分だけ末尾を確保してから、間に残った部分をrestへ渡す。
       const restEnd = Math.max(idx, value.length - after.length);
-      envDefine(env, entries[restIdx].name, value.slice(idx, restEnd));
+      envDefine(env, entries[restIdx].name, restValue(value.slice(idx, restEnd)));
       for (let i = 0; i < after.length; i++) {
         const entry = after[i];
         const pos = restEnd + i;
