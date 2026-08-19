@@ -57,6 +57,10 @@ const NUMERIC_TYPES = new Set(["Int", "Address", "Float", "Vector"]);
 // 「場所」と「ストリーム」。値ではないので算術・比較の対象にならない（§4 は Scalar を要求）。
 // `Implicit` は前置 `~`（持ち上げ）・`'`・前置 `#` が生み、`Iterator` は範囲族が生む。
 const NON_SCALAR_PLACES = new Set(["Implicit", "Iterator"]);
+// 恒等射（真）。Layer 1 の射であって Layer 2 の値ではないので、型の表には載らない。
+// `__` が単位元である以上 `x ⊗ __ ≅ x` であり、`__` の積関手は恒等関手そのものである
+// ——恒等射は `__` から導かれる別の顔であって、独立した型ではない。
+const IDENTITY = "Identity";
 // List左辺で固有の意味を持つのは `*`(repeat)・`^`(lift)・`/`(split) だけ。
 // `+`・`-`・`%` はList/Stringと同様に型エラーで __ へ収束する。
 const LIST_ARITHMETIC_OPS = new Set(["mul", "pow", "div"]);
@@ -387,6 +391,21 @@ function computeAtomType(node, env) {
         node.elementType = inferAtomType(node.operand, env);
         return "Implicit";
       }
+      // **否定は真偽を反転する。** `!__` は恒等射（真）である。
+      //
+      // 恒等射は `__` と別物ではない——`__` は単位元なので単位律 `x ⊗ __ ≅ x` が成り立ち、
+      // **`__` の積関手はそのまま恒等関手**である。`!__` はその自然同型の成分であって、
+      // `__` から随伴で導かれる（unit.md §368 の外延性による証明も同じ結論に至る）。
+      // したがって新しい型を足す話ではなく、**単位元の射としての顔**に名前を与えるだけである。
+      //
+      // `Unit`（偽）と書くのは意味が逆なので、Layer 1 の印 `IDENTITY` を返す。`.st` は
+      // これを `_` と書く——裸の `_` は Sign 自身の恒等射記法であり（unit.md §378）、
+      // 「まだ埋まっていないスロット」と同じ概念だからである。
+      if (node.position === "prefix" && node.name === "not") {
+        const t = inferAtomType(node.operand, env);
+        if (t === "Unit") return IDENTITY;
+        return t ? "Unit" : null;
+      }
       // それ以外の前置/後置演算子は§4に個別の型シグネチャがあるが、今回は簡略化して
       // オペランドの型をそのまま通す（要精査、既知の制限）。
       return inferAtomType(node.operand, env);
@@ -525,6 +544,22 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
           inferred.set(side.value, fromOther || "Scalar");
         }
       }
+    }
+
+    // 連鎖比較（``0` <= c <= `9``）も同じ規則で読める。中央の項が両端と比較される
+    // 以上、比較が同種同士でしか成立しないという性質がそのまま制約になる（comparison.md §4）。
+    // これは範囲判定の書き方そのものなので、拾えないと述語の型が `Atom` に留まる。
+    if (node.type === "operation" && node.name === "chain_compare") {
+      const mid = node.middle;
+      if (isIdentifierNode(mid) && paramNames.has(mid.value) && !inferred.has(mid.value)) {
+        const t =
+          constraintFromLiteral(node.left) ||
+          constraintFromLiteral(node.right) ||
+          typeOfKnownOperand(node.left, scope, paramNames) ||
+          typeOfKnownOperand(node.right, scope, paramNames);
+        inferred.set(mid.value, t || "Scalar");
+      }
+      visit(node.middle);
     }
 
     // **実引数の位置が仮引数の型を語る。**
@@ -1048,4 +1083,4 @@ function checkLayerConstraints(nodes, layer) {
 	for (const node of nodes) visit(node);
 }
 
-export { inferAtomType, annotateTypes, annotateAll, inferLambdaParamTypes, inferParamTypesFromUsage, checkLayerConstraints, pointfreeSignature };
+export { IDENTITY, inferAtomType, annotateTypes, annotateAll, inferLambdaParamTypes, inferParamTypesFromUsage, checkLayerConstraints, pointfreeSignature };

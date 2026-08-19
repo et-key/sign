@@ -25,7 +25,7 @@
  * 欠けた型も観測されないままになる。`.st` はその最初の観測手段である。
  */
 
-import { inferLambdaParamTypes, pointfreeSignature } from "./pass3.js";
+import { inferLambdaParamTypes, pointfreeSignature, IDENTITY } from "./pass3.js";
 
 const UNKNOWN = "_";
 
@@ -130,6 +130,11 @@ function paramTypeText(entry, usageTypes, fieldReqs) {
 // 欠落ではない——1要素の連続ブロックとレジスタ上のスカラーは同じビット列を持つ。
 function slotTypeText(node) {
   if (!node) return UNKNOWN;
+  // 恒等射（真）も `_` と書く。裸の `_` は Sign 自身の恒等射記法であり（unit.md §378）、
+  // 「まだ埋まっていないスロット」＝部分適用のプレースホルダと**同じ概念**である。
+  // 記号は最初から正しいので分ける必要は無い——分けるのは**数え方**だけである
+  // （恒等射は解けている。未解決として数えてはいけない）。
+  if (node.atomType === IDENTITY) return UNKNOWN;
   const t = node.atomType || UNKNOWN;
   if (t === "List") return node.elementType ? `List(${node.elementType})` : "List";
   // `Implicit(T)`（暗黙のアドレス＝場所）も要素型を伴う。前置 `~`（持ち上げ）が生む。
@@ -284,13 +289,16 @@ function lambdaSignature(rhs) {
   // 返値型は本体ノードの Layer 2 型そのもの。Lambda 自身は Layer 1 のカテゴリであり
   // Layer 2 型を持たないが（§2）、本体は値を作るので型を持つ。
   const ret = rhs.right && rhs.right.atomType ? slotTypeText(rhs.right) : UNKNOWN;
-  return { params, ret };
+  // 恒等射（真）は `_` と書くが**解けている**。未解決と混ぜないよう印を持ち回る。
+  const retIdentity = !!(rhs.right && rhs.right.atomType === IDENTITY);
+  return { params, ret, retIdentity };
 }
 
 // 仮引数の並びと返値から1行分のテキストを起こす。仮引数が無い関数は `__ -> T`
 // ——完全性公理（§3.4）が言う通り、引数を取らない関数は Unit を受ける関数である。
-function signatureText(name, params, ret) {
-  const unresolved = params.filter((p) => p === UNKNOWN || p === `${UNKNOWN}~`).length + (ret === UNKNOWN ? 1 : 0);
+function signatureText(name, params, ret, retResolved) {
+  // 返値が恒等射（真）のときは `_` と書くが**解けている**——未解決として数えない。
+  const unresolved = params.filter((p) => p === UNKNOWN || p === `${UNKNOWN}~`).length + (ret === UNKNOWN && !retResolved ? 1 : 0);
   const lhs = params.length > 0 ? params.join(" ") : "__";
   return { name, text: `${name} : ${lhs} -> ${ret}`, unresolved };
 }
@@ -353,7 +361,7 @@ function entryFor(defineNode, defineByName) {
   const rhs = defineNode.right;
 
   const sig = signatureOfNode(rhs, defineByName, new Set([defineNode.left.value]));
-  if (sig) return signatureText(name, sig.params, sig.ret);
+  if (sig) return signatureText(name, sig.params, sig.ret, sig.retIdentity);
 
   // Atom: 右辺式の Layer 2 型がそのまま識別子の型になる（§5 Pass 1a）。
   const t = rhs && rhs.atomType ? rhs.atomType : UNKNOWN;

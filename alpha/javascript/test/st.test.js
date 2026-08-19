@@ -473,5 +473,25 @@ check(
 	check("solve は盤（List）を返す", r.text.includes("solve : Scalar -> List"), true);
 }
 
+
+// ---- 真理値の型は無い。真は `__` から導かれる（§2） ----
+//
+// Sign の真偽はどちらも値の型ではない。偽は `__`（零対象＝射が無いこと）、真は恒等射
+// （何もしない射）である。恒等射は `__` と別物ではない——`__` は単位元なので単位律
+// `x ⊗ __ ≅ x` が成り立ち、**`__` の積関手はそのまま恒等関手**だからである。
+//
+// 比較が値を返す（comparison.md「真なら LHS、偽なら `__`」）のも同じ設計の現れで、
+// 真理値を作る代わりに値をそのまま通す。だから述語は**その値の型**になる。
+check("値を返す述語は値の型になる", entries("is_digit : c ? `0` <= c <= `9`"), ["is_digit : String -> String"]);
+check("比較そのものも値を返す", entries("pos : x ? x > 0"), ["pos : Int -> Int"]);
+// 恒等射を明示的に返す書き方だけが Layer 2 に名前を持たない。`.st` は `_` と書く
+// ——裸の `_` は Sign 自身の恒等射記法なので（unit.md §378）、記号としてこれが正しい。
+check("恒等射は `_` と書く", entries("id : !__"), ["id : _"]);
+check("恒等射を返す述語も同じ", entries("t : x ?\n\tx = 0 : !__\n\t__"), ["t : Int -> _"]);
+// **`Unit`（偽）と書いてはいけない。** `!__` は真であり、意味が逆になる。
+check("`!__` は Unit ではない", entries("id : !__")[0].endsWith("Unit"), false);
+// 非 Unit の否定は `__`（偽）である。
+check("非 Unit の否定は Unit", entries("f : !5"), ["f : Unit"]);
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
