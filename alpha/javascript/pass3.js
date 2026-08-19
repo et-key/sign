@@ -527,6 +527,26 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
       }
     }
 
+    // **実引数の位置が仮引数の型を語る。**
+    //
+    // `f : s ? g s` で `g` が String を要求するなら `s` は String である。演算子から逆算
+    // するのと同じことを、演算子の代わりに**呼び先のシグネチャ**でやっている——結局どちらも
+    // 「その位置に置ける型は何か」を読んでいるだけである。呼び先の要求は不動点で確定して
+    // いくので（collectParamTypes）、多段でも周回のうちに伝わる。
+    if (node.type === "operation" && node.name === "apply" && scope) {
+      const { base, args } = applyChainOf(node);
+      const callee = isIdentifierNode(base) && !paramNames.has(base.value) ? envLookup(scope, base.value) : null;
+      const slots = callee && callee.paramTypes;
+      if (slots) {
+        args.forEach((arg, i) => {
+          if (!isIdentifierNode(arg) || !paramNames.has(arg.value) || inferred.has(arg.value)) return;
+          const t = slots[i];
+          // `Atom` は下限であって制約ではないので、逆流させる意味が無い。
+          if (t && t !== "Atom") inferred.set(arg.value, t);
+        });
+      }
+    }
+
     if (node.left) visit(node.left);
     if (node.right) visit(node.right);
     if (node.operand) visit(node.operand);
@@ -550,7 +570,19 @@ function paramNamesOf(paramNode) {
 // 本体の使用箇所に基づく仮引数のatomType推定結果を Map<識別子, atomType> で返す。
 function inferLambdaParamTypes(lambdaNode, env) {
   const names = new Set(paramNamesOf(lambdaNode.left));
-  const inferred = inferParamTypesFromUsage(lambdaNode.right, names, lambdaNode.scope || env);
+  const scopeOf = lambdaNode.scope || env;
+  const inferred = inferParamTypesFromUsage(lambdaNode.right, names, scopeOf);
+  // 仮引数のデフォルト式も走査する。デフォルトは**他の仮引数を使って書ける**ので
+  // （`walk : s  line : head_line s  …`）、そこも使用箇所である。本体だけを見ていると、
+  // 仮引数リストの中で使われているだけの引数がいつまでも `Atom` のままになる。
+  if (lambdaNode.left && lambdaNode.left.type === "params") {
+    for (const e of lambdaNode.left.entries || []) {
+      if (!e.default) continue;
+      for (const [k, v] of inferParamTypesFromUsage(e.default, names, scopeOf)) {
+        if (!inferred.has(k)) inferred.set(k, v);
+      }
+    }
+  }
   // **デフォルト式があれば、その型がその仮引数の型である。**
   //
   // デフォルトは「引数が省略されたときに実際にそこへ入る値」なので、型の根拠として
@@ -563,7 +595,10 @@ function inferLambdaParamTypes(lambdaNode, env) {
     for (const e of paramNode.entries || []) {
       if (!e.name || !e.default) continue;
       const t = inferAtomType(e.default, scope);
-      if (t) inferred.set(e.name, t);
+      // ただし `__` は例外である。零対象は束の**底**であって「この引数は Unit だ」とは
+      // 言っていない——`s : __` は「省略されうる」という宣言であり、完全性公理の抑制が
+      // 目的である（そうしないと空を渡した時点で呼び出しごと消える）。型は使用箇所が語る。
+      if (t && t !== "Unit") inferred.set(e.name, t);
     }
   }
   // **裸の仮引数は、証拠が何も無くても `Atom` まで決まる。**
@@ -605,6 +640,85 @@ function inferLambdaParamTypes(lambdaNode, env) {
     }
   }
   return inferred;
+}
+
+
+/**
+ * ラムダが**実引数ごとに**要求する型の並びを返す（未解決の位置は null）。
+ *
+ * `inferLambdaParamTypes` が返すのは「束縛名 → 型」であって、実引数の並びではない。
+ * ブラケット分割代入（`[c ~rest]`）は**実引数を1個だけ食って分解する**ので、束縛が2つでも
+ * スロットは1つである（list_model.md §2.4）。呼び出しサイトから型を逆流させるには、
+ * この「スロットの並び」の方が要る。
+ */
+function lambdaParamSlotTypes(lambdaNode, env) {
+  const inferred = inferLambdaParamTypes(lambdaNode, env);
+  const paramNode = lambdaNode.left;
+  if (isIdentifierNode(paramNode)) return [inferred.get(paramNode.value) || null];
+  if (!paramNode || paramNode.type !== "params") return [];
+  const entries = paramNode.entries || [];
+  // 仮引数リスト全体が1個のブラケットなら、要求する実引数は1個。その型は rest（＝器）の型。
+  if (paramNode.bracket) {
+    const restEntry = entries.find((e) => e.rest && e.name);
+    return [restEntry ? inferred.get(restEntry.name) || null : null];
+  }
+  return entries.map((e) => (e.name ? inferred.get(e.name) || null : null));
+}
+
+/**
+ * 各識別子が要求する実引数の型を識別子テーブルへ書き戻す（`binding.returns` と対になる）。
+ * 変化があったら true——返値型と同じ不動点で回る。
+ */
+function collectParamTypes(nodes, env) {
+  let changed = false;
+  for (const node of nodes) {
+    if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+    const binding = envLookup(env, node.left.value);
+    if (!binding) continue;
+    const rhs = node.right;
+    let types = null;
+    const pf = pointfreeSignature(rhs);
+    if (pf) types = pf.params;
+    else if (rhs && rhs.type === "operation" && rhs.name === "lambda") {
+      const scope = rhs.scope || env;
+      // 逆算した仮引数の型を**ラムダのスコープへ書き戻す**。ここを書かないと、本体で
+      // その仮引数を読んだときに Pass 1a が置いた下限（`Atom`）しか見えず、返値型が
+      // 実際より緩くなる——`b : lstrip raw` のようにデフォルトが式の場合、Pass 1a は
+      // 型を読めないので下限のままである。書き戻して初めて逆算が本体まで届く。
+      const inferred = inferLambdaParamTypes(rhs, scope);
+      if (scope && scope.bindings) {
+        for (const [name, t] of inferred) {
+          const b = scope.bindings.get(name);
+          // `Atom` は下限であって情報ではないので、上書きの根拠にしない。
+          if (b && t && t !== "Atom" && b.atomType !== t) {
+            b.atomType = t;
+            changed = true;
+          }
+        }
+      }
+      types = lambdaParamSlotTypes(rhs, scope);
+    }
+    if (!types) continue;
+    const key = types.join("\u0000");
+    if (binding.paramTypesKey !== key) {
+      binding.paramTypes = types;
+      binding.paramTypesKey = key;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+// 適用の連なりを左へ辿り、呼び先の項と実引数の並びを返す。
+// `f a b` は `apply[apply[f, a], b]` なので、ここで `{base: f, args: [a, b]}` になる。
+function applyChainOf(node) {
+  const args = [];
+  let n = node;
+  while (n && n.type === "operation" && (n.name === "apply" || n.name === "partial_apply")) {
+    args.unshift(n.right);
+    n = n.left;
+  }
+  return { base: n, args };
 }
 
 // AST全体を歩いて、全ノードに `atomType` を載せる（type_system.md §5 Pass 3 の
@@ -734,7 +848,11 @@ function collectUnitReason(node, env, diagnostics) {
 // 分かっている枝だけで返値型を名乗ると嘘になる。
 function joinArmTypes(types) {
   if (types.some((x) => x === null || x === undefined)) return null;
-  const distinct = [...new Set(types.filter((x) => x !== "Unit"))].sort();
+  // **直和は平らにする。** arm の型が既に直和（再帰呼び出しの返値など）だと、それを1個の
+  // 要素として数えてしまい、周回のたびに `String | List | String | List | …` と伸び続ける
+  // ——直和は冪等（`A | A = A`）であり、結合的でもあるのだから、入れ子を保つ理由が無い。
+  const flat = types.flatMap((t) => String(t).split(" | "));
+  const distinct = [...new Set(flat.filter((x) => x !== "Unit"))].sort();
   if (distinct.length === 0) return "Unit";
   if (distinct.length === 1) return distinct[0];
   return distinct.join(" | ");
@@ -850,7 +968,11 @@ function annotateAll(nodes, env, diagnostics) {
   for (let i = 0; i < limit; i++) {
     for (const node of nodes) clearTypeAnnotations(node);
     for (const node of nodes) annotateTypes(node, env, null);
-    if (!collectReturns(nodes, env)) break;
+    // 返値型と仮引数型は互いに依存する（呼び先の要求が実引数の型を決め、その型が返値を
+    // 決める）ので、同じ周回で両方を集める。どちらかが動いている限り回す。
+    const a = collectReturns(nodes, env);
+    const b = collectParamTypes(nodes, env);
+    if (!a && !b) break;
   }
   // 診断は確定後の1回だけ集める（周回ごとに集めると重複する）。
   for (const node of nodes) clearTypeAnnotations(node);
