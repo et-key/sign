@@ -34,7 +34,13 @@ let unsummarized = 0;
 
 for (const file of files) {
 	const started = Date.now();
-	const result = spawnSync(process.execPath, [path.join(__dirname, file)], { encoding: "utf8" });
+	// Sign にはループが無く**再帰しか無い**ので、素直に書いたコードほど深く積む。
+	// 末尾再帰は TCO（トランポリン）で平らになるが、余積の中の再帰呼び出しは末尾位置に
+	// 無いため入力の大きさぶんフレームを使う——`preprocess.sn` が自分自身（5000文字超）を
+	// 処理できるかは、Node の既定スタック（約1MB＝Sign の約1000フレーム）では測れない。
+	// これは JS インタプリタ側の都合であって Sign の言語仕様ではないので、テストでは
+	// スタックを広げて意味論そのものを見る。
+	const result = spawnSync(process.execPath, ["--stack-size=16000", path.join(__dirname, file)], { encoding: "utf8" });
 	const elapsed = Date.now() - started;
 	const output = (result.stdout || "") + (result.stderr || "");
 	// 規約の `N/M passed` を拾う。最後のものを採る（テスト本文が同じ形を出す場合に備えて）

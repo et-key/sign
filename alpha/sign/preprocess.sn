@@ -122,7 +122,19 @@ cont_tilde : ch ?
 	ch = \^ : ch
 	__
 
-continues : b ?
+`継続行の判定は行頭の空白を落としてから行う。body_of が落とすのはタブだけであり`
+`（タブの数がインデントの深さそのものだから）、深さに関わらないスペースは残る。`
+`仮引数リストを閉じる  ?  の行がまさにこの形である`
+
+lstrip : s ?
+	(s ' 0) = space : lstrip (s ' 1~)
+	s
+
+
+continues :
+	raw
+	b : lstrip raw
+ ?
 	cont1 (b ' 0) : b
 	((b ' 0) = bang) & ((b ' 1) = \=) : b
 	((b ' 0) = bar) & (cont_bar (b ' 1)) : b
@@ -263,7 +275,7 @@ walk :
 	!b : walk rest st bd jo
 	(bd > 0) & ((jo = 1) | (nd < 1)) : b (walk rest st nd 0)
 	bd > 0 : newline b (walk rest st nd 0)
-	continues b : space b (walk rest st nd (opened bd nd))
+	continues b : (closers st d) space b (walk rest (unwind st d) nd (opened bd nd))
 	(gap st d) b (walk rest (next_st st d) nd (opened bd nd))
 
 `walk は各行の前に区切りを置くため、先頭行のぶんだけ余分な改行が付く`

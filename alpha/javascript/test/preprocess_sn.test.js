@@ -82,7 +82,7 @@ same("3文字の中置演算子", "a===b");
 same("多義的な演算子は区切らない", "-1 |x| ~xs");
 // 文字列・エスケープ・コメントの中身は保護する。
 same("文字列の中は保護する", "s : `a+b`");
-same("エスケープの中も保護する", "c : \+");
+same("エスケープの中も保護する", "c : \\+");
 
 // ---- 2. タブ深さから INDENT / DEDENT を作る ----
 same("1段深くなる", "a\n\tb");
@@ -108,31 +108,27 @@ same("括弧でも同じ", "f : (\n\ta\n\tb\n)");
 same("行頭の中置演算子は前の行へ繋ぐ", "x\n+ 1");
 same("インデントの中でも繋ぐ", "f : x ?\n\tx\n\t+ 1");
 
-// ---- 実プログラム ----
+// ---- 実ファイルを一巡させる ----
 //
-// 合成した例ではなく、実際に書かれている Sign のコードで一致すること。
-const lexerSn = fs.readFileSync(path.join(__dirname, "..", "..", "sign", "lexer.sn"), "utf8").replace(/\r\n/g, "\n");
-// 全体を通すと下の「既知の限界」に当たるため、先頭の一部で確認する。
-const excerpt = lexerSn.split("\n").slice(0, 22).join("\n");
-same(`lexer.sn の先頭 22 行（${excerpt.length} 文字）`, excerpt);
-
-// ---- 既知の限界 ----
-//
-// `sep` も `walk` も末尾再帰ではない（再帰呼び出しが余積の中にある）ため、JS 実装の
-// インタプリタでは入力の大きさぶんスタックを積む。TCO は末尾位置の呼び出しにしか効かない。
-// これは JS バックエンド側の制約であって Sign の言語仕様ではないが、**自分自身を処理する
-// には足りていない**（preprocess.sn は 5000 文字を超える）。
-check(
-	"1000 文字程度までは処理できる（既知の限界）",
-	(() => {
-		try {
-			return runSn("a+b ".repeat(200)).length > 0;
-		} catch {
-			return false;
-		}
-	})(),
-	null
-);
+// 合成した例ではなく、実際に書かれている Sign のコード全体で一致すること。
+// **`preprocess.sn` 自身を含む**——前処理器が自分のソースを処理できないなら、
+// 自己ホストへの道が最初の一段で途切れていることになる。
+for (const rel of [
+	["sign", "lexer.sn"],
+	["sign", "parser.sn"],
+	["sign", "preprocess.sn"],
+]) {
+	const p = path.join(__dirname, "..", "..", ...rel);
+	const text = fs.readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+	const lines = text.split("\n").length;
+	const sn = runSn(text);
+	const js = preprocess(text);
+	check(
+		`${rel[1]}（${lines} 行 / ${text.length} 文字）`,
+		astOf(sn) === astOf(js),
+		`     sn: ${astOf(sn).slice(0, 90)}\n     js: ${astOf(js).slice(0, 90)}`
+	);
+}
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
