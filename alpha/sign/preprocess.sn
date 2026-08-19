@@ -84,6 +84,91 @@ in_quote : s ?
 	(s ' 0) = newline : (s ' 0) (sep (s ' 1~))
 	(s ' 0) (in_quote (s ' 1~))
 
+`--- 継続行の判定 ---`
+`行頭が中置演算子で始まる行は、前の行の続きとして空白で繋ぐ`
+`多義的な | と ~ は2文字目まで見る。| は絶対値、~ は残余にもなるため1文字では決まらない`
+
+bang : \!
+bar : \|
+tilde : \~
+
+cont1 : ch ?
+	ch = \? : ch
+	ch = \+ : ch
+	ch = \* : ch
+	ch = \/ : ch
+	ch = \. : ch
+	ch = \, : ch
+	ch = \= : ch
+	ch = \< : ch
+	ch = \> : ch
+	ch = \; : ch
+	ch = \% : ch
+	ch = \& : ch
+	ch = \^ : ch
+	__
+
+cont_bar : ch ?
+	ch = space : ch
+	ch = bar : ch
+	__
+
+cont_tilde : ch ?
+	ch = space : ch
+	ch = \+ : ch
+	ch = \- : ch
+	ch = \* : ch
+	ch = \/ : ch
+	ch = \^ : ch
+	__
+
+continues : b ?
+	cont1 (b ' 0) : b
+	((b ' 0) = bang) & ((b ' 1) = \=) : b
+	((b ' 0) = bar) & (cont_bar (b ' 1)) : b
+	((b ' 0) = tilde) & (cont_tilde (b ' 1)) : b
+	__
+
+`--- 括弧の中ではインデントを無効化する ---`
+`括弧の中で見やすさのためにタブを深くする書き方があるため、深さの変化を`
+`INDENT/DEDENT にしてはいけない。他の多くの言語のオフサイドルールと同じ扱いである`
+
+open_br : ch ?
+	ch = \[ : ch
+	ch = \( : ch
+	ch = \{ : ch
+	__
+
+close_br : ch ?
+	ch = \] : ch
+	ch = \) : ch
+	ch = \} : ch
+	__
+
+`閉じるバッククォートまで読み飛ばす。閉じが無ければ残り全部（行コメント）`
+
+skip_quote : s ?
+	(s ' 0) = quote : s ' 1~
+	skip_quote (s ' 1~)
+
+`1行ぶんの括弧の開閉差。文字列とエスケープの中は数えない`
+`終端では完全性公理で呼び出しが消えて Unit になるが、算術の右辺の Unit は単位元なので`
+`n + __ = n となり、それまでの和がそのまま残る`
+
+delta : s ?
+	(s ' 0) = escape : delta (s ' 2~)
+	(s ' 0) = quote : delta (skip_quote (s ' 1~))
+	open_br (s ' 0) : 1 + (delta (s ' 1~))
+	close_br (s ' 0) : -1 + (delta (s ' 1~))
+	delta (s ' 1~)
+
+`この行で括弧を開いたか。開いた直後の行は前の行へ直結させる必要がある`
+`文法上、開き括弧の直後と閉じ括弧の直前に改行を置けないためである`
+
+opened : bd nd ?
+	(bd < 1) & (nd > 0) : 1
+	0
+
 `--- 2. 行頭のタブ深さから INDENT / DEDENT を作る ---`
 
 `インデント幅のスタック。cons で積み、底はスカラーの 0 とする`
@@ -147,26 +232,39 @@ next_st : st d ?
 	d > (top st) : push st d
 	unwind st d
 
-`1行ずつ処理する。空行は深さ計算から除外し、スタックを動かさない`
-`再帰の終端は呼び出し側で |rest| = 0 として捕まえる`
-`空文字列を引数に渡すと完全性公理で呼び出しごと消えてしまうためである`
+`1行ずつ処理する。空行は落とす——深さ計算に関わらず、パース結果も変わらない`
+`（DEDENT は直前の内容行に付く必要があり、空行を残すと間に挟まって構文が壊れる）`
+`空かどうかは否定演算子で見る。等号で空を判定してはいけない`
+`——比較は左辺が零射へ落ちた時点で確定し、空のときこそ偽になる（function_guide.md）`
+``
+`絶対値による判定も使えない。中身が無いときそれが「空リストで 0」なのか`
+`「値の不在」なのかは型でしか決まらず、裸の仮引数（Atom）では決められないので`
+`吸収元へ倒れる（unit.md）`
+``
+`終端を呼び出し側で捕まえるのは、空を引数に渡すと完全性公理で呼び出しごと消えるため。`
+`デフォルト付きの仮引数では公理が抑制されるので、そこでは否定演算子が使える`
 
 `行から取り出す4つは仮引数リストで宣言する。関数本体のインデント行は全て match_case`
 `であり、そこに 識別子 : 値 と書いても分岐にしかならない。ローカル変数を置く場所は`
 `仮引数リストの側である`
 
 walk :
-	s
+	s : __
 	st
+	bd
+	jo
 	line : head_line s
 	rest : tail_line s
 	b : body_of line
 	d : depth_of line
+	nd : bd + (delta b)
  ?
-	(|rest| = 0) & (|b| = 0) : newline (close_all st)
-	|rest| = 0 : (gap st d) b (close_all (next_st st d))
-	|b| = 0 : newline (walk rest st)
-	(gap st d) b (walk rest (next_st st d))
+	!s : close_all st
+	!b : walk rest st bd jo
+	(bd > 0) & ((jo = 1) | (nd < 1)) : b (walk rest st nd 0)
+	bd > 0 : newline b (walk rest st nd 0)
+	continues b : space b (walk rest st nd (opened bd nd))
+	(gap st d) b (walk rest (next_st st d) nd (opened bd nd))
 
 `walk は各行の前に区切りを置くため、先頭行のぶんだけ余分な改行が付く`
 `先頭行がインデントされている場合は区切りが INDENT になるので、その時は取らない`
@@ -175,7 +273,7 @@ strip_head : s ?
 	(s ' 0) = newline : s ' 1~
 	s
 
-mark : s ? strip_head (walk s bottom)
+mark : s ? strip_head (walk s bottom 0 0)
 
 `--- 前処理の全体 ---`
 `インデントを先に確定させてから、演算子の空白を入れる`
