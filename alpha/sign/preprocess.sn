@@ -60,29 +60,24 @@ infix1 : ch ?
 	ch = \' : ch
 	__
 
-`先頭2文字・3文字の候補。文字数が足りなければ Unit が同一視されて短くなる`
-
-take2 : s ? (s ' 0) (s ' 1)
-take3 : s ? (s ' 0) (s ' 1) (s ' 2)
-
 `--- 1. 中置演算子の両側へ空白を入れる ---`
 `文字リテラル・文字列・コメントの中身は保護する`
 
-sep : s ?
-	(s ' 0) = escape : (s ' 0) (s ' 1) (sep (s ' 2~))
-	(s ' 0) = quote : (s ' 0) (in_quote (s ' 1~))
-	infix3 (take3 s) : space (take3 s) space (sep (s ' 3~))
-	infix2 (take2 s) : space (take2 s) space (sep (s ' 2~))
-	infix1 (s ' 0) : space (s ' 0) space (sep (s ' 1~))
-	(s ' 0) (sep (s ' 1~))
+sep : [c ~rest] ?
+	c = escape : c (rest ' 0) (sep (rest ' 1~))
+	c = quote : c (in_quote rest)
+	infix3 (c (rest ' 0) (rest ' 1)) : space (c (rest ' 0) (rest ' 1)) space (sep (rest ' 2~))
+	infix2 (c (rest ' 0)) : space (c (rest ' 0)) space (sep (rest ' 1~))
+	infix1 c : space c space (sep rest)
+	c (sep rest)
 
 `閉じるバッククォートまで、あるいは行末まで素通しする`
 `閉じない場合は行コメントであり、いずれにせよ行末で通常状態へ戻る`
 
-in_quote : s ?
-	(s ' 0) = quote : (s ' 0) (sep (s ' 1~))
-	(s ' 0) = newline : (s ' 0) (sep (s ' 1~))
-	(s ' 0) (in_quote (s ' 1~))
+in_quote : [c ~rest] ?
+	c = quote : c (sep rest)
+	c = newline : c (sep rest)
+	c (in_quote rest)
 
 `--- 継続行の判定 ---`
 `行頭が中置演算子で始まる行は、前の行の続きとして空白で繋ぐ`
@@ -126,9 +121,9 @@ cont_tilde : ch ?
 `（タブの数がインデントの深さそのものだから）、深さに関わらないスペースは残る。`
 `仮引数リストを閉じる  ?  の行がまさにこの形である`
 
-lstrip : s ?
-	(s ' 0) = space : lstrip (s ' 1~)
-	s
+lstrip : [c ~rest] ?
+	c = space : lstrip rest
+	c rest
 
 
 continues :
@@ -159,20 +154,20 @@ close_br : ch ?
 
 `閉じるバッククォートまで読み飛ばす。閉じが無ければ残り全部（行コメント）`
 
-skip_quote : s ?
-	(s ' 0) = quote : s ' 1~
-	skip_quote (s ' 1~)
+skip_quote : [c ~rest] ?
+	c = quote : rest
+	skip_quote rest
 
 `1行ぶんの括弧の開閉差。文字列とエスケープの中は数えない`
 `終端では完全性公理で呼び出しが消えて Unit になるが、算術の右辺の Unit は単位元なので`
 `n + __ = n となり、それまでの和がそのまま残る`
 
-delta : s ?
-	(s ' 0) = escape : delta (s ' 2~)
-	(s ' 0) = quote : delta (skip_quote (s ' 1~))
-	open_br (s ' 0) : 1 + (delta (s ' 1~))
-	close_br (s ' 0) : -1 + (delta (s ' 1~))
-	delta (s ' 1~)
+delta : [c ~rest] ?
+	c = escape : delta (rest ' 1~)
+	c = quote : delta (skip_quote rest)
+	open_br c : 1 + (delta rest)
+	close_br c : -1 + (delta rest)
+	delta rest
 
 `この行で括弧を開いたか。開いた直後の行は前の行へ直結させる必要がある`
 `文法上、開き括弧の直後と閉じ括弧の直前に改行を置けないためである`
@@ -199,23 +194,23 @@ pop : st ?
 
 `行頭のタブ数と、タブを落とした本文`
 
-depth_of : s ?
-	(s ' 0) = tab : 1 + (depth_of (s ' 1~))
+depth_of : [c ~rest] ?
+	c = tab : 1 + (depth_of rest)
 	0
 
-body_of : s ?
-	(s ' 0) = tab : body_of (s ' 1~)
-	s
+body_of : [c ~rest] ?
+	c = tab : body_of rest
+	c rest
 
 `最初の改行まで、および最初の改行より後ろ`
 
-head_line : s ?
-	(s ' 0) = newline : __
-	(s ' 0) (head_line (s ' 1~))
+head_line : [c ~rest] ?
+	c = newline : __
+	c (head_line rest)
 
-tail_line : s ?
-	(s ' 0) = newline : s ' 1~
-	tail_line (s ' 1~)
+tail_line : [c ~rest] ?
+	c = newline : rest
+	tail_line rest
 
 `深さ d より深い段を閉じる。閉じた後のスタックと、その段数ぶんの DEDENT`
 
@@ -281,9 +276,9 @@ walk :
 `walk は各行の前に区切りを置くため、先頭行のぶんだけ余分な改行が付く`
 `先頭行がインデントされている場合は区切りが INDENT になるので、その時は取らない`
 
-strip_head : s ?
-	(s ' 0) = newline : s ' 1~
-	s
+strip_head : [c ~rest] ?
+	c = newline : rest
+	c rest
 
 mark : s ? strip_head (walk s bottom 0 0)
 

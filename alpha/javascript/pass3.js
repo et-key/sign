@@ -471,7 +471,15 @@ function pointfreeSignature(node) {
 }
 
 
-function inferParamTypesFromUsage(bodyNode, paramNames) {
+// 比較・算術の相手が「型の分かっている識別子」なら、その型を制約として使う。
+// 仮引数自身（まだ型が決まっていない）と、型が読めないものは対象にしない。
+function typeOfKnownOperand(node, scope, paramNames) {
+  if (!scope || !isIdentifierNode(node) || paramNames.has(node.value)) return null;
+  const t = inferAtomType(node, scope);
+  return t && t !== "Unit" ? t : null;
+}
+
+function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
   const inferred = new Map();
 
   function visit(node) {
@@ -509,7 +517,12 @@ function inferParamTypesFromUsage(bodyNode, paramNames) {
           // 型は固定される。注釈構文を足さずに「キャスト情報がある場合と無い場合」を
           // 書き分けられる。比較でも同じで、`t = \`===\`` の `t` は String になる
           // ——比較は同種同士でしか成立しないため、相手の型がそのまま制約になる。
-          inferred.set(side.value, constraintFromLiteral(other) || "Scalar");
+          // 相手が**型の分かっている識別子**でも同じことが言える。`c = tab` の `tab` が
+          // 文字定数として定義されているなら、比較が同種同士でしか成立しない以上 `c` も
+          // 文字である。定数へ切り出した書き方（`tab : \t` と置いてから比べる）が、
+          // リテラルを直接書いた場合より弱い型になってしまうのを防ぐ。
+          const fromOther = constraintFromLiteral(other) || typeOfKnownOperand(other, scope, paramNames);
+          inferred.set(side.value, fromOther || "Scalar");
         }
       }
     }
@@ -537,7 +550,7 @@ function paramNamesOf(paramNode) {
 // 本体の使用箇所に基づく仮引数のatomType推定結果を Map<識別子, atomType> で返す。
 function inferLambdaParamTypes(lambdaNode, env) {
   const names = new Set(paramNamesOf(lambdaNode.left));
-  const inferred = inferParamTypesFromUsage(lambdaNode.right, names);
+  const inferred = inferParamTypesFromUsage(lambdaNode.right, names, lambdaNode.scope || env);
   // **デフォルト式があれば、その型がその仮引数の型である。**
   //
   // デフォルトは「引数が省略されたときに実際にそこへ入る値」なので、型の根拠として
