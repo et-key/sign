@@ -35,12 +35,35 @@ myPairs = myPairs0 = myPairs1
 ### 2.2 List Concatenation & Postfix Tilde (`~`)
 
 ```sign
-` Bare lists (Preserved as 2D matrix structure)
-[1 2] [3 4]   = 1 2 , 3 4
+` Space is a coproduct: extend within the same dimension.
+` Without a tilde the right operand is added as ONE element.
+m : 1 2 , 3 4
+m [5 6]        = 1 2 , 3 4 , 5 6
 
-` With Postfix Tildes (Flattens and concatenates)
-[1 2]~ [3 4]~ = 1 2 3 4
+` With a postfix tilde the right operand is spread and joined.
+[1 2]~ [3 4]~  = 1 2 3 4
+
+` Comma is a product: it raises the dimension (see §3).
+m , [5 6]      ` [[[1,2],[3,4]],[5,6]]
 ```
+
+> [!IMPORTANT]
+> **Space is always the coproduct.** Per the table in §1, space extends within the current
+> dimension and comma raises it. That correspondence never changes with the operand types.
+>
+> The postfix `~` has exactly one meaning: **spread me**. When it is on the right operand the
+> contents are spread and joined; without it the right operand is added as a single element.
+> The left operand is the container, so it is always already spread.
+
+> [!CAUTION]
+> **A list of integers cannot take a list as an element.** `List` is a contiguous region of
+> equal-width elements ([`type_system.md` §2](type_system.md)), so `[1 2] [3 4]` is rejected
+> statically because the element types do not agree. Write a comma to build two dimensions
+> (`1 2 , 3 4`) — that is what "comma raises the dimension" means.
+>
+> This section previously read `[1 2] [3 4] = 1 2 , 3 4`, treating space as a product for
+> list-list pairs alone. That made a symbol's meaning depend on the combination it appeared in,
+> and it left **no notation for appending one row to an existing n-dimensional array**.
 
 ---
 

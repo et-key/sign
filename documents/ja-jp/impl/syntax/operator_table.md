@@ -82,12 +82,13 @@ Sign において真は Id射（恒等射）、偽は `__`（零対象）であ�
 | 8 | `!==` | 中置 | xnot_equal | 等しくない | 構造内比較演算 | 恒等射（右辺値 X） | 恒等射（左辺値 X） |
 | 9 | `,` | 中置※ | product | 積（構造的組み立て） | 右結合な構造構築 | 恒等射 ※3 | 恒等射 ※3 |
 | 10 ※5 | `~` | 前置※ | continuous | 〜末尾 | 連続リスト構築（持ち上げ） | / | 零射 |
-| 11.0 | ` ` | `Atom \| List \| Struct` 中置 `Atom \| List \| Struct` | construct | 並べる（連接） | 構造構築 | 恒等射 | 恒等射 |
-| 11.1 | ` ` | `Atom \| List~` 中置 `Atom \| List~` | push<br>unshift | 並べる（連接） | リストへ追加 | 恒等射 | 恒等射 |
-| 11.2 | ` ` | `List~ \| Struct~` 中置 `List~ \| Struct~` | concat | 並べる（連接） | リスト/構造体の結合 | 恒等射 | 恒等射 |
-| 11.3 | ` ` | `Atom \| List \| Struct` 中置 `Lambda` | apply | 逆適用 | 関数適用 | 恒等射 | 恒等射 |
-| 11.4 | ` ` | `Lambda` 中置 `Atom \| List \| Struct` | apply | 適用 | 関数適用 | 恒等射 | 恒等射 |
-| 11.5 | ` ` | `Lambda` 中置 `Lambda` | compose | 左結合な関数合成 | 関数合成 | 恒等射 | 恒等射 |
+| 11.0 | ` ` | `Atom` 中置 `Atom` | construct | 並べる（連接） | リストを組む | 恒等射 | 恒等射 |
+| 11.1 | ` ` | `Atom` 中置 `List \| Struct` | push | 並べる（連接） | 左辺を先頭へ足す | 恒等射 | 恒等射 |
+| 11.2 | ` ` | `List \| Struct` 中置 `Atom \| List \| Struct` | unshift | 並べる（連接） | 右辺を**1要素として**足す | 恒等射 | 恒等射 |
+| 11.3 | ` ` | `List \| Struct` 中置 `List~ \| Struct~` | concat | 並べる（連接） | 右辺を**展開して**繋ぐ | 恒等射 | 恒等射 |
+| 11.4 | ` ` | `Atom \| List \| Struct` 中置 `Lambda` | apply | 逆適用 | 関数適用 | 恒等射 | 恒等射 |
+| 11.5 | ` ` | `Lambda` 中置 `Atom \| List \| Struct` | apply | 適用 | 関数適用 | 恒等射 | 恒等射 |
+| 11.6 | ` ` | `Lambda` 中置 `Lambda` | compose | 左結合な関数合成 | 関数合成 | 恒等射 | 恒等射 |
 | 12 | `~` | 中置 | range | around（範囲のその辺り） | 範囲リスト構築 | 零射 | 零射 |
 | 12 | `~+` | 中置 | range | around（範囲のその辺り） | 等差数列指定 | 零射 | 零射 |
 | 12 | `~-` | 中置 | range | around（範囲のその辺り） | 等差逆数列指定 | 零射 | 零射 |
