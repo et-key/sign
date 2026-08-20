@@ -186,6 +186,29 @@ function isDestructurable(v) {
 // 集約されているため、将来.st生成（type_system.md §6.2「関数仮引数のフィールド要求」）を
 // 実装する際、このentries列挙をそのまま構造的フィールド要求集合として再利用できる想定。
 function bindBracketParams(entries, value, env) {
+  // **`[先頭... ~残り]` はイテレータを展開しない。**
+  // 先頭は規則を進めれば出るし、残りは「進めたイテレータ」そのものである。これが
+  // 効くおかげで、レンジ上の再帰が O(1) メモリで回る——無限ストリームでも回る。
+  // 末尾側のエントリ（`[h ~t l]`）がある形だけは終端の位置が要るので、そこで初めて走る。
+  if (isIterator(value)) {
+    const restIdx = entries.findIndex((e) => e.rest);
+    const streamable = restIdx !== -1 && restIdx === entries.length - 1;
+    if (streamable) {
+      let cur = value;
+      for (const entry of entries.slice(0, restIdx)) {
+        let v = isIterator(cur) ? cur.start : UNIT;
+        if (isUnit(v)) {
+          if (entry.default) v = evaluate(entry.default, env);
+          else return null; // 完全性公理
+        }
+        envDefine(env, entry.name, v);
+        cur = isIterator(cur) ? iteratorRest(cur) : UNIT;
+      }
+      envDefine(env, entries[restIdx].name, cur);
+      return env;
+    }
+    value = materializeIterator(value);
+  }
   // スカラー ≅ 1要素リスト（asList/get_propと同じ同型性）。Struct（プレーンオブジェクト）
   // ではない非Array値は、長さ1のリストとして分割代入できる。
   if (!isDestructurable(value)) value = [value];
@@ -842,8 +865,10 @@ function buildCharRange(start, end) {
  * 引数として使うとループカウンタになる——再帰という概念を使わずに純粋なループを記述できる」
  * と書いている看板の書き方であり、実体化しかできない実装では**そもそも書けなかった**。
  */
-function makeIterator(start, stepFn, end) {
-  return { __iterator__: true, start, stepFn, end };
+function makeIterator(start, stepFn, end, affineStep = null) {
+  // `affineStep` は等差（`~` `~+` `~-`）のときの歩幅。規則が一次なら要素数は割り算で
+  // 出るので、`|.|` が**走査すらせずに**答えられる。等比・冪では null（規則が一次でない）。
+  return { __iterator__: true, start, stepFn, end, affineStep };
 }
 
 function isIterator(v) {
@@ -858,6 +883,14 @@ function isInfiniteIterator(v) {
 // n 番目の要素を取り出す。**無限でも引ける**——これがループカウンタを成立させる。
 function iteratorAt(it, n) {
   if (!Number.isInteger(n) || n < 0) return UNIT;
+  // 規則が一次なら、`i` 回進めるのは掛け算1回である——`start + i × step`。
+  // type_system.md §2 のアクセス表が `Iterator(T)` の欄に書いているのがこれで、
+  // Pass 4 が出すのもロードではなくこの算術になる。
+  if (typeof it.affineStep === "number" && typeof it.start === "number") {
+    const v = it.start + n * it.affineStep;
+    if (isInfiniteIterator(it)) return v;
+    return (it.start <= it.end ? v > it.end : v < it.end) ? UNIT : v;
+  }
   let v = it.start;
   for (let i = 0; i < n; i++) {
     v = it.stepFn(v);
@@ -866,8 +899,39 @@ function iteratorAt(it, n) {
   return v;
 }
 
+/**
+ * 要素数。**数えることと並べることは別である**（list_model.md §2.3）。
+ * 等差なら規則から割り算1回で出る。そうでなくても走査で足りる——走査は O(1) メモリで、
+ * 配列を作る必要はどこにも無い。無限は数え上げられないので零射（`__`）。
+ */
+function iteratorCount(it) {
+  if (isInfiniteIterator(it)) return UNIT;
+  const { start, end, affineStep } = it;
+  if (typeof affineStep === "number" && affineStep !== 0) {
+    const n = Math.floor((end - start) / affineStep) + 1;
+    return n > 0 ? n : 0;
+  }
+  let v = start;
+  let n = 0;
+  const ascending = start <= end;
+  while (ascending ? v <= end : v >= end) {
+    n++;
+    v = it.stepFn(v);
+    if (n > 1000000) throw new Error("interpreter: range: 要素数が多すぎます（stepが0または終端に向かっていない可能性）");
+  }
+  return n;
+}
+
+// 先頭を1つ進めたイテレータ。`[h ~t]` の `t` がこれである——**残余は展開ではない**。
+// これがあるおかげで、レンジ上の再帰が O(1) メモリで回る。
+function iteratorRest(it) {
+  const next = it.stepFn(it.start);
+  if (!isInfiniteIterator(it) && (it.start <= it.end ? next > it.end : next < it.end)) return UNIT;
+  return makeIterator(next, it.stepFn, it.end, it.affineStep);
+}
+
 // 有限のイテレータだけを実体化する。無限は展開できないので `__`——「無限を配列にする」
-// という射は無い。
+// という射は無い。**ここへ来ることが「展開」であり、それは消費側の要求でしか起きない。**
 function materializeIterator(it) {
   if (isInfiniteIterator(it)) return UNIT;
   const out = [];
@@ -1065,9 +1129,15 @@ function getPropValue(l, rightNode, env) {
   // ——`c : [0 ~+ 1]` の n 番目は、start から step を n 回適用すれば出る（stack_abi.md §3.3）。
   // 範囲での添字（部分列）は実体化してから通す。
   if (isIterator(l)) {
-    const idx = evaluate(rightNode, env);
-    if (typeof idx === "number") return iteratorAt(l, idx);
-    return getPropValue(materializeIterator(l), rightNode, env);
+    // 後置 `~`（`it ' n~`）は「n から末尾まで」＝進めたイテレータそのもの。
+    if (rightNode.type === "operation" && rightNode.position === "postfix" && rightNode.name === "expand") {
+      const n = evaluate(rightNode.operand, env);
+      if (typeof n !== "number" || n < 0) return UNIT;
+      let cur = l;
+      for (let i = 0; i < n && isIterator(cur); i++) cur = iteratorRest(cur);
+      return cur;
+    }
+    return getPropByValue(l, evaluate(rightNode, env));
   }
   // 右辺が識別子のとき、それを「名前」と読むか「値（添字）」と読むかは**左辺が決める**。
   //
@@ -1119,11 +1189,23 @@ function getPropValue(l, rightNode, env) {
 // ——ストリームから値で届く——ため、この入口が要る。
 // 名前付きスロット（プレーンオブジェクト）か。List・String・スカラーと区別する。
 function isNamedSlots(v) {
-  return v !== null && typeof v === "object" && !Array.isArray(v) && !v.__lambda__ && !v.__address__;
+  // イテレータもプレーンオブジェクトなので明示的に除く——`{start, step, end}` の
+  // フィールドは**規則の内訳**であって名前付きスロットではない。
+  return v !== null && typeof v === "object" && !Array.isArray(v) && !v.__lambda__ && !v.__address__ && !v.__iterator__;
 }
 
 function getPropByValue(l, r) {
   if (isUnit(l)) return UNIT;
+  // **添字としてのレンジは消費側である。** どの位置を採るかの並びが要るので、ここで走る。
+  r = deIterate(r);
+  if (isUnit(r)) return UNIT;
+  if (isIterator(l)) {
+    // 左辺がイテレータなら、位置ごとに規則を適用すれば済む——**左辺は展開しない**。
+    // 無限ストリームからの部分列取得もこれで通る。
+    if (typeof r === "number") return iteratorAt(l, r);
+    if (Array.isArray(r)) return r.map((i) => iteratorAt(l, i));
+    return UNIT;
+  }
   const isString = typeof l === "string";
   // 名前付きスロットは **名前・連番・実データ** の三つを持つ。名前で引くのは
   // getPropValue 側（右辺が識別子のとき）、連番で引くのはここ（右辺が数値のとき）である。
@@ -1356,10 +1438,7 @@ function evaluate(node, env) {
       }
       // イテレータは有限なら要素数を持つ。**無限は数えられない**ので零射へ落ちる
       // ——「無限の要素数」という値は無い。
-      if (isIterator(inner)) {
-        if (isInfiniteIterator(inner)) return UNIT;
-        return materializeIterator(inner).length;
-      }
+      if (isIterator(inner)) return iteratorCount(inner);
       if (Array.isArray(inner) || typeof inner === "string") return inner.length;
       // 名前付きスロットもスロット数を持つ。名前・連番・実データの三つを持つ以上、
       // 連番の個数＝スロット数は定義されている。連番で引ける（`point ' 0`）のに
@@ -1550,11 +1629,13 @@ function evaluate(node, env) {
         const b = evaluate(node.right, env);
         return isUnit(b) ? asList(a) : [...asList(a), b];
       }
-      // list_model.md §2.3「派生演算子による範囲リストの構築」。仕様上レンジ式の実体は
-      // 常にイテレータ（{start,step,end}の固定サイズ構造体、終端の無い2項指定はPull型の
-      // 無限ストリームにもなれる）だが、本インタプリタは全ての値をJS配列へ実体化する
-      // 単純な評価器のため、ここでは常に即座に配列へ展開する（3項セット「即座に全消費」
-      // の挙動のみ再現、2項指定の遅延・無限ストリームは未対応——下記参照）。
+      // list_model.md §2.3「派生演算子による範囲リストの構築」。**レンジ式の実体は
+      // 常にイテレータである**——`{start, step, end}` の固定サイズ構造体であり、
+      // 終端の有無は「数え上げられるか」を分けるだけで、実体の種類は変えない。
+      //
+      // 項数が宣言するのは**消費**（いつ走るか）であって**展開**（並べて置くこと）では
+      // ない。走査は O(1) メモリで済み、展開が要るのは同時アクセスを宣言した消費側
+      // （`[x ~xs]` ＝ `Implicit(List(T))`、type_system.md §2）と観測境界（observe）だけ。
       case "range": {
         // 3項形式 [start ~op step ~ end]（node.leftが5種の派生演算子いずれかのノード。
         // list_model.md §2.3: ~+/~-/~*/~/~^、rangeStepFnが全種のstep関数を持つ）と、
@@ -1571,23 +1652,33 @@ function evaluate(node, env) {
         // step 形式は数値のみ（文字への等差・等比は意味が決まっていない）。
         // 単純形式は数値または1文字。点でなければ射が無い＝零射なので `__`。
         if (!isRangePoint(start, !isStepForm) || !isRangePoint(end, !isStepForm)) return UNIT;
-        if (isStepForm) return buildRange(start, end, rangeStepFn(node.left.op, step));
+        // **終端があってもイテレータである**（list_model.md §2.3 の IMPORTANT）。
+        // 3項形式が宣言しているのは「いつ消費するか」であって「並べて置け」ではない。
+        // 消費（走査）は O(1) メモリで済み、展開が要るのは同時アクセスを宣言した
+        // 消費側（`[x ~xs]` ＝ `Implicit(List(T))`）だけである（type_system.md §2）。
+        if (isStepForm) {
+          const op = node.left.op;
+          // 等差だけ歩幅を残す——規則が一次なら `|.|` が割り算1回で答えられる。
+          const affine = op === "+" ? step : op === "-" ? -step : null;
+          return makeIterator(start, rangeStepFn(op, step), end, affine);
+        }
+        // 文字の範囲だけは String になる（String ≅ List(0u)）。文字列は Sign では
+        // 実体を持つ値であり、規則ではない。
         const charRange = buildCharRange(start, end);
         if (charRange !== null) return charRange;
         const delta = start <= end ? 1 : -1;
-        return buildRange(start, end, (v) => v + delta);
+        return makeIterator(start, (v) => v + delta, end, delta);
       }
       case "range_arithmetic":
       case "range_arithmetic_rev":
       case "range_geometric":
       case "range_geometric_rev":
       case "range_power": {
-        // 2項形式 [start ~op step]（終端なし、5種いずれも）は仕様上、終端を持たない
-        // 無限のPull型ストリーム（list_model.md §2.3「2項指定」）。本インタプリタは
-        // 実体化された値しか扱えないため、無限生成を試みず明示的に未対応として拒否する。
+        // 2項形式 [start ~op step]（終端なし、5種いずれも）は**無限の Pull 型ストリーム**
+        // そのものである（list_model.md §2.3「2項指定」）。3項形式との違いは終端を持つか
+        // どうかだけで、どちらも同じイテレータである。
         // （3項形式 [start ~op step ~ end] は上の"range"ケースが処理する——このケースに
         // 来るのは、外側に終端"~ end"が付いていない生の2項ノードのみ。）
-        // 終端の無い2項形式は**無限の Pull 型ストリーム**そのものである（list_model.md §2.3）。
         // 実体化できないことは扱えないことではない——添字で引けるので、stack_abi.md §3.3 の
         // ループカウンタ（`c : [0 ~+ 1]`）が成立する。
         const itStart = evaluate(node.left, env);
@@ -1672,4 +1763,15 @@ function evaluate(node, env) {
   return UNIT;
 }
 
-export { evaluate, newRuntimeEnv, envDefine, envGet, UNIT, isUnit };
+/**
+ * **観測境界**。値が Sign の外——表示・受け渡し——へ出るときに呼ぶ。
+ *
+ * ホストは「全部を同時に見る」ことしかできないので、これは type_system.md §2 の
+ * `Implicit`（同時アクセス）側の消費者である。展開が起きてよい場所がここしか無い、
+ * というのが `Iterator` を実体にした狙いそのものである。無限は観測できないので `__`。
+ */
+function observe(v) {
+  return deIterate(v);
+}
+
+export { evaluate, newRuntimeEnv, envDefine, envGet, UNIT, isUnit, observe };

@@ -12,7 +12,7 @@
  * 実行: node test/integer_width.test.js（`npm test` からも呼ばれる）
  */
 import { compile } from "../compile.js";
-import { evaluate, newRuntimeEnv, isUnit } from "../interpreter.js";
+import { evaluate, newRuntimeEnv, isUnit, observe } from "../interpreter.js";
 
 let passed = 0;
 let total = 0;
@@ -21,7 +21,7 @@ function run(src) {
 	const { nodes } = compile(src);
 	const renv = newRuntimeEnv(null);
 	let last;
-	for (const n of nodes) last = evaluate(n, renv);
+	for (const n of nodes) last = observe(evaluate(n, renv));
 	return isUnit(last) ? "__" : String(last);
 }
 

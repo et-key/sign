@@ -10,7 +10,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { compile } from "../compile.js";
-import { evaluate, newRuntimeEnv, envGet, UNIT, isUnit } from "../interpreter.js";
+import { evaluate, newRuntimeEnv, envGet, UNIT, isUnit, observe } from "../interpreter.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const grammarPath = path.join(__dirname, "..", "sign.pegjs");
@@ -26,7 +26,8 @@ function run(source) {
 	const runtimeEnv = newRuntimeEnv(null);
 	let result = UNIT;
 	for (const node of nodes) result = evaluate(node, runtimeEnv);
-	return result;
+	// 観測境界：ホストへ渡すので、ここで初めて並んだ姿になる（interpreter.js の observe）。
+	return observe(result);
 }
 
 let passed = 0;
@@ -250,7 +251,7 @@ check(
 		const source = "d : [\n\tfoo : 1\n\tbar : 2\n]\nfoo";
 		const compiled = compile(source, { parse: parser.parse });
 		const runtimeEnv = newRuntimeEnv(null);
-		const results = compiled.nodes.map((node) => evaluate(node, runtimeEnv));
+		const results = compiled.nodes.map((node) => observe(evaluate(node, runtimeEnv)));
 		return { nodes: results, env: runtimeEnv };
 	})();
 	const dictValue = nodes[0];
@@ -632,6 +633,39 @@ check("[1 ~* 2] ' 5 → 32（等比も同じ引き方）", run("[1 ~* 2] ' 5"), 
 // ——ここで例外を投げず `__` を返すのは、Sign が「不明」ではなく「無い」を持つ言語だからである。
 check("|[1 ~+ 1]| → __（無限は数えられない）", run("|[1 ~+ 1]|"), "__");
 check("|[1 ~ 5]| → 5（有限は数えられる。対比）", run("|[1 ~ 5]|"), 5);
+
+// list_model.md §2.3 の IMPORTANT:「レンジ式は**リストに見えるだけ**であり、実体は常に
+// `{start, step, end}` 相当の固定サイズ構造体である」。**終端があっても同じである**
+// ——3項形式が宣言しているのは「いつ消費するか」であって「並べて置け」ではない。
+//
+// これは observe（値が Sign の外へ出る観測境界）を通す前の実体を見るテストである。
+// run() は observe を通すので、ここでは生の evaluate を使う。
+function rawValue(source) {
+	const { nodes } = compile(source, { parse: parser.parse });
+	const runtimeEnv = newRuntimeEnv(null);
+	let result = UNIT;
+	for (const node of nodes) result = evaluate(node, runtimeEnv);
+	return result;
+}
+checkTrue(
+	"[1 ~ 1000000] の実体は配列ではない（100万要素を並べない）",
+	!Array.isArray(rawValue("[1 ~ 1000000]"))
+);
+checkTrue("[2 ~+ 2 ~ 10] も同じく実体は構造体", !Array.isArray(rawValue("[2 ~+ 2 ~ 10]")));
+// 展開が起きるのは観測境界だけ。観測すれば従来通りの並びが見える。
+check("観測すれば [1 ~ 5] は [1,2,3,4,5]", run("[1 ~ 5]"), [1, 2, 3, 4, 5]);
+
+// 数えることと並べることは別である（§2.3）。等差なら要素数は割り算1回で出る。
+check("|[1 ~ 1000000]| → 1000000（走査せず数える）", run("|[1 ~ 1000000]|"), 1000000);
+check("[1 ~ 1000000] ' 999999 → 1000000（start + i × step）", run("[1 ~ 1000000] ' 999999"), 1000000);
+
+// `[先頭 ~残り]` は展開しない——先頭は start、残りは「進めた規則」である。
+// これが効くおかげでレンジ上の再帰が O(1) メモリで回り、無限ストリームでも回る。
+check("[h ~t] の h は start", run("f : [h ~t] ? h\nf [1 ~ 1000000]"), 1);
+check("[h ~t] の t は進めた規則（数えられる）", run("f : [h ~t] ? |t|\nf [1 ~ 1000000]"), 999999);
+check("無限ストリームでも [h ~t] が回る", run("f : [h ~t] ? h\nf [7 ~+ 3]"), 7);
+// 無限ストリームからの部分列取得。左辺は展開されず、位置ごとに規則が適用される。
+check("[1 ~+ 1] ' [2 ~ 4] → [3,4,5]", run("[1 ~+ 1] ' [2 ~ 4]"), [3, 4, 5]);
 
 check("\\e ~ \\a → `edcba`（降順）", run("\\e ~ \\a"), "edcba");
 // List / Struct / 多文字 String は点ではないので端点にできない。ただし**例外にはしない**

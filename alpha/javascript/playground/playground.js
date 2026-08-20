@@ -1,6 +1,6 @@
 import { compile } from "../compile.js";
 import { generateSignType } from "../st.js";
-import { evaluate, newRuntimeEnv, UNIT, isUnit } from "../interpreter.js";
+import { evaluate, newRuntimeEnv, UNIT, isUnit, observe } from "../interpreter.js";
 
 const srcEl = document.getElementById("src");
 const outEl = document.getElementById("out");
@@ -172,7 +172,8 @@ function run() {
       // Layer 1 の値に Atom 内部型が無いのは当然であって、解決の失敗ではない。
       // 型の全体像（シグネチャ・仮引数・返値）は SignType パネルが担う。
       astLines.push(node.atomType ? `${showAst(node)}\n  :: ${node.atomType}` : showAst(node));
-      last = evaluate(node, runtimeEnv);
+      // 観測境界：画面へ出すので、ここで初めて並んだ姿になる。
+      last = observe(evaluate(node, runtimeEnv));
       outLines.push(showValue(last));
     }
     // Pass 3b（コンパイル時）と実行時（unit.md §7.3相当のenv.diagnostics）の両方を出す。

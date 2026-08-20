@@ -16,7 +16,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { compile } from "../compile.js";
-import { evaluate, newRuntimeEnv, UNIT, isUnit } from "../interpreter.js";
+import { evaluate, newRuntimeEnv, UNIT, isUnit, observe } from "../interpreter.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const grammar = fs.readFileSync(path.join(__dirname, "..", "sign.pegjs"), "utf8");
@@ -29,7 +29,7 @@ function runFile(name) {
 	const { nodes } = compile(source, { parse: parser.parse });
 	const env = newRuntimeEnv(null);
 	let result = UNIT;
-	for (const node of nodes) result = evaluate(node, env);
+	for (const node of nodes) result = observe(evaluate(node, env));
 	return result;
 }
 
@@ -41,7 +41,7 @@ function runWith(name, lastLine) {
 	const { nodes } = compile(body.join("\n"), { parse: parser.parse });
 	const env = newRuntimeEnv(null);
 	let result = UNIT;
-	for (const node of nodes) result = evaluate(node, env);
+	for (const node of nodes) result = observe(evaluate(node, env));
 	return result;
 }
 
