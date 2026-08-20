@@ -986,27 +986,28 @@ check("__ !== __ → __（両辺Unitは等しいので偽）", run("__ !== __"),
 // 比較だけが両辺を評価していた。Sign は副作用と非停止を持つため、右辺を評価するか否かは
 // 観測可能な差である（`__ < ($UART # x)` で書き込みが起きるかどうかが変わる）。
 //
-// `!!` は未実装の bit_not なので、評価されれば必ず例外になる——短絡したかどうかの検出に使う。
+// 短絡したかどうかは**評価したときだけ出る診断**で検出する。整数除算 `5 / 2` は結果を
+// 四捨五入した旨を information として記録するので、その有無が「右辺を評価したか」になる。
+// （以前は未実装だった `!!` が例外を投げることを利用していたが、`!!` を実装したので
+// プローブとして使えなくなった——検出手段が未実装であることに依存していたということでもある。）
 const evaluatesRight = (src) => {
-	try {
-		run(src);
-		return false; // 例外が出ない＝右辺を評価していない＝短絡した
-	} catch (e) {
-		return /未対応の前置\/後置演算/.test(e.message);
-	}
+	const { nodes } = compile(src);
+	const renv = newRuntimeEnv(null);
+	for (const n of nodes) evaluate(n, renv);
+	return renv.diagnostics.length > 0;
 };
-checkTrue("`<` は左辺Unitで右辺を評価しない", !evaluatesRight("__ < (!!1)"));
-checkTrue("`=` は左辺Unitで右辺を評価しない", !evaluatesRight("__ = (!!1)"));
-checkTrue("`==` は左辺Unitで右辺を評価しない", !evaluatesRight("__ == (!!1)"));
+checkTrue("`<` は左辺Unitで右辺を評価しない", !evaluatesRight("__ < (5 / 2)"));
+checkTrue("`=` は左辺Unitで右辺を評価しない", !evaluatesRight("__ = (5 / 2)"));
+checkTrue("`==` は左辺Unitで右辺を評価しない", !evaluatesRight("__ == (5 / 2)"));
 // `!=`／`!==` は左辺Unitでも零射ではなく恒等射（非Unit側を返す）なので、右辺の値が要る。
-checkTrue("`!=` は左辺Unitでも右辺を評価する", evaluatesRight("__ != (!!1)"));
-checkTrue("`!==` は左辺Unitでも右辺を評価する", evaluatesRight("__ !== (!!1)"));
-checkTrue("左辺が非Unitなら右辺を評価する", evaluatesRight("5 < (!!1)"));
+checkTrue("`!=` は左辺Unitでも右辺を評価する", evaluatesRight("__ != (5 / 2)"));
+checkTrue("`!==` は左辺Unitでも右辺を評価する", evaluatesRight("__ !== (5 / 2)"));
+checkTrue("左辺が非Unitなら右辺を評価する", evaluatesRight("5 < (5 / 2)"));
 
 // 三項連鎖も同じ規則に従う。左から順に評価し、零射へ落ちた時点でそれより右を評価しない。
-checkTrue("連鎖: 左辺Unitで中央以降を評価しない", !evaluatesRight("__ < (!!1) < 3"));
-checkTrue("連鎖: 中央Unitで右辺を評価しない", !evaluatesRight("1 < __ < (!!1)"));
-checkTrue("連鎖: 左が真なら右辺は要る", evaluatesRight("1 < 2 < (!!1)"));
+checkTrue("連鎖: 左辺Unitで中央以降を評価しない", !evaluatesRight("__ < (5 / 2) < 3"));
+checkTrue("連鎖: 中央Unitで右辺を評価しない", !evaluatesRight("1 < __ < (5 / 2)"));
+checkTrue("連鎖: 左が真なら右辺は要る", evaluatesRight("1 < 2 < (5 / 2)"));
 check("連鎖の値は回帰なし: 1 < 2 < 3 → 2", run("1 < 2 < 3"), 2);
 check("連鎖の値は回帰なし: 5 < 3 < 10 → __", run("5 < 3 < 10"), "__");
 

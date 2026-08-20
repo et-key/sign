@@ -39,6 +39,17 @@ const UNIT = Symbol("Sign.Unit");
 // string_and_comment.md §1「空文字列は`__`（Unit）と同型」: 同じ理屈をStringドメインにも
 // 適用する——空文字列は文字列連結の単位元（`"" + s = s`）であり、空リストが余積の単位元
 // であるのと同じ位置づけ。
+// 整数リテラルを読む。安全な範囲に収まるなら Number、超えるなら BigInt——
+// 丸めて返すと「もっともらしく見える間違った値」がリテラルの時点で入ってしまう。
+function parseIntegerLiteral(text, radix) {
+  const n = parseInt(text, radix);
+  if (Number.isSafeInteger(n)) return n;
+  const neg = String(text).trim().startsWith("-");
+  const digits = String(text).replace(/^[+-]/, "");
+  const b = radix === 16 ? BigInt("0x" + digits) : BigInt(digits);
+  return neg ? -b : b;
+}
+
 function isUnit(v) {
   return v === UNIT || v === undefined || (Array.isArray(v) && v.length === 0) || v === "";
 }
@@ -89,13 +100,16 @@ function envGet(env, name) {
 function evalLiteral(node) {
   switch (node.kind) {
     case "number":
-      return node.value.includes(".") ? parseFloat(node.value) : parseInt(node.value, 10);
+      // 整数リテラルは f64 では 2^53 までしか正しく持てない——`9223372036854775807` が
+      // 読んだ時点で 2^63 になってしまう。8 byte の値を扱う言語で、リテラルが最初から
+      // 壊れているのは通らないので、安全な範囲を超えるものは BigInt で読む。
+      return node.value.includes(".") ? parseFloat(node.value) : parseIntegerLiteral(node.value, 10);
     case "string":
       return node.value.slice(1, -1); // バッククォートを剥がす
     case "char":
       return node.value.slice(1); // "\a" -> "a"
     case "address":
-      return parseInt(node.value.slice(2), 16);
+      return parseIntegerLiteral(node.value.slice(2), 16);
     case "unicode": {
       // `0u` は Char（String の要素型）のリテラルである——`String ≅ List(0u)` であり、
       // guide/example.sn も `uni_a : 0u3042` を「Unicodeで 'あ' を表現」と説明している。
@@ -512,6 +526,73 @@ function applyClosure(closure, argValues) {
 }
 
 // ---- 算術・比較演算子のUnit伝播ルール（type_system.md §3.3） ----
+/**
+ * 整数の幅とビット演算。
+ *
+ * ## なぜ BigInt を経由するか
+ *
+ * JS の数値は f64 しか無いので、そのままでは Sign の整数を表せない——2^53 を超えると
+ * 整数が保てず（`2^53 + 1` が `2^53` になる）、8 byte のラップアラウンドも表現できない。
+ * `type_system.md` §3.6 と `integer_overflow.md` §1 が定める挙動（`Int` はラップ、
+ * `Address` は `__` へ収束）は、**幅が確定していて初めて意味を持つ**規則である。
+ *
+ * そこで整数の演算だけ BigInt で行い、結果を安全な範囲なら Number へ戻す。安全でなければ
+ * BigInt のまま流す——「もっともらしく見える間違った値」を返さないためである。
+ *
+ * ## 既定の幅は 64bit
+ *
+ * Sign の初期構想は AArch64（GPR 8 byte）を対象とする（`target_info.js`）。ターゲットを
+ * 与えない経路ではその既定を使う。ターゲットが分かっている場合は `option.ms` の値が勝つ。
+ */
+const DEFAULT_GPR_BITS = 64;
+
+function toBig(v) {
+  if (typeof v === "bigint") return v;
+  if (typeof v === "number" && Number.isInteger(v)) return BigInt(v);
+  return null;
+}
+
+// 安全に Number へ戻せるなら戻す。戻せないものを丸めて返すと、静かに違う値になる。
+function fromBig(b) {
+  return b >= BigInt(Number.MIN_SAFE_INTEGER) && b <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(b) : b;
+}
+
+// `Int` は符号付きでラップする（integer_overflow.md §1）。ビット列（`0r`/`0b`）も同じ。
+function wrapInt(b, bits = DEFAULT_GPR_BITS) {
+  return fromBig(BigInt.asIntN(bits, b));
+}
+
+// `Address` は符号なしで、幅を超えたら `__` へ収束する——不正アドレスの伝播を止めるため。
+function clampAddress(b, bits = DEFAULT_GPR_BITS) {
+  const max = (1n << BigInt(bits)) - 1n;
+  return b < 0n || b > max ? UNIT : fromBig(b);
+}
+
+const BIT_OPS = {
+  bit_and: (a, b) => a & b,
+  bit_or: (a, b) => a | b,
+  bit_xor: (a, b) => a ^ b,
+  bit_shift_left: (a, b) => a << b,
+  bit_shift_right: (a, b) => a >> b,
+};
+
+// ビット演算は幅の中で閉じる。`<<` が幅の外へ出た分は捨てられる——ビット列はラップが
+// 前提であり（integer_overflow.md §1「bit演算はラップが前提（暗号・ハッシュ等）」）、
+// そこが桁あふれとして `__` になっては困る。
+function bitOnValues(name, l, r) {
+  const a = toBig(l);
+  const b = toBig(r);
+  if (a === null || b === null) return UNIT;
+  return wrapInt(BIT_OPS[name](a, b));
+}
+
+// `!!` は幅の中での補数。幅が無ければ「全ビット反転」が定義できない。
+function bitNot(v) {
+  const a = toBig(v);
+  return a === null ? UNIT : wrapInt(~a);
+}
+
+
 const ARITH_OPS = {
   add: (l, r) => l + r,
   sub: (l, r) => l - r,
@@ -520,6 +601,31 @@ const ARITH_OPS = {
   mod: (l, r) => l % r,
   pow: (l, r) => Math.pow(l, r),
 };
+
+// 整数域の演算を BigInt で行う版。f64 は 2^53 を超えると整数を保てないので、8 byte の
+// 値を扱う以上こちらが本体である。Number で足りる範囲は Number のまま流し、超えたところ
+// だけこちらへ来る（`fromBig` が安全なら Number へ戻す）。
+const BIG_ARITH = {
+  add: (a, b) => a + b,
+  sub: (a, b) => a - b,
+  mul: (a, b) => a * b,
+  // §3.2「除算だけは整数同士でも丸めが起きる」: 四捨五入・タイは0から遠ざける。
+  // BigInt の `/` は切り捨てなので自前で丸める。
+  div: (a, b) => {
+    if (b === 0n) return null;
+    const q = a / b;
+    const rem = a % b;
+    if (rem === 0n) return q;
+    const absRem = rem < 0n ? -rem : rem;
+    const absB = b < 0n ? -b : b;
+    const away = absRem * 2n >= absB ? 1n : 0n;
+    const sign = (a < 0n) !== (b < 0n) ? -1n : 1n;
+    return q + sign * away;
+  },
+  mod: (a, b) => (b === 0n ? null : a % b),
+  pow: (a, b) => (b < 0n ? null : a ** b),
+};
+
 const COMPARE_OPS = {
   less: (l, r) => l < r,
   less_equal: (l, r) => l <= r,
@@ -586,8 +692,28 @@ function arithOnValues(name, l, r) {
   // この判定が無いとJSの型強制がそのまま漏れ、「もっともらしく見える間違った値」が
   // 静かに出てくる——`1 + \`abc\`` → "1abc"、`1 + [2 3]` → "12,3"、
   // `x : !__` の `x + 1` → "[object Object]1" は全てこの経路だった。
+  // 片方でも BigInt なら整数域の演算として BigInt で行う（JS は混在演算を許さない）。
+  if (typeof l === "bigint" || typeof r === "bigint") {
+    const a = toBig(l);
+    const b = toBig(r);
+    if (a === null || b === null) return UNIT;
+    const fn = BIG_ARITH[name];
+    if (!fn) return UNIT;
+    const out = fn(a, b);
+    return out === null ? UNIT : fromBig(out);
+  }
   if (typeof l !== "number" || typeof r !== "number") return UNIT;
   return ARITH_OPS[name](l, r);
+}
+
+// ビット演算（`<< >> && || ;;`）。幅の中で閉じる——ビット列はラップが前提である
+// （integer_overflow.md §1「bit演算はラップが前提（暗号・ハッシュ等）」）。
+function evalBit(node, env) {
+  const l = evaluate(node.left, env);
+  if (isUnit(l)) return UNIT;
+  const r = evaluate(node.right, env);
+  if (isUnit(r)) return l;
+  return bitOnValues(node.name, l, r);
 }
 
 function evalArith(node, env) {
@@ -597,7 +723,9 @@ function evalArith(node, env) {
   if (isUnit(l) || typeof l === "string") return arithOnValues(name, l, undefined);
   const r = evaluate(node.right, env);
   const value = arithOnValues(name, l, r);
-  if (typeof value !== "number") return value;
+  // BigInt は「安全な範囲を超えた整数」であり、溢れの規則を適用する対象そのものである。
+  // ここで早期に返してしまうと、幅を超えた値が型の規則を通らずに素通りする。
+  if (typeof value !== "number" && typeof value !== "bigint") return value;
   // §3.2「除算だけは整数同士でも丸めが起きる」: 結果型が整数（＝両辺とも
   // 整数）なのに非整数が出たら四捨五入する。丸めるべきかどうかは**値**からは
   // 決められない——JSのNumberでは `5` と `5.0` が同一なので、`5 / 2`（→3）と
@@ -605,7 +733,9 @@ function evalArith(node, env) {
   // （compile.js のパイプライン）を読んで初めて判定できる。
   // 整数域（`Int` と `Address`）同士の除算がここに来る。アドレスも整数幅なので
   // 丸めの対象は同じ——分けたのは記法と溢れ方であって、除算の丸めではない（§3.6）。
-  if ((node.atomType === "Int" || node.atomType === "Address") && !Number.isInteger(value)) {
+  // 丸めが要るのは f64 の非整数だけである。BigInt は既に整数（BIG_ARITH.div が四捨五入
+  // 済み）なので、ここへ入れると Math.round が BigInt を受け取って落ちる。
+  if (typeof value === "number" && (node.atomType === "Int" || node.atomType === "Address") && !Number.isInteger(value)) {
     const rounded = roundHalfAwayFromZero(value);
     // 精度が失われたことを information として記録する（unit.md §7.3 と同じ非ブロッキング
     // 診断のレベル）。昇格格子のおかげで Float が絡む算術は精度を落とさないため、
@@ -618,6 +748,22 @@ function evalArith(node, env) {
     }
     return rounded;
   }
+  // **溢れ方は型が決める**（integer_overflow.md §1）。`Int` はラップアラウンド、`Address` は
+  // `__` へ収束する——不正アドレスの伝播を止めるためである。JS の数値は f64 しか無いので、
+  // ここを型で矯正しないと 2^53 を超えた時点で「もっともらしく見える間違った値」が出る。
+  // 除算の丸めと同じ手法であり、同じ理由（値だけでは決まらない）による。
+  return applyOverflowRule(node.atomType, value);
+}
+
+// 整数域の演算結果へ、その型の溢れ方を適用する。整数でない結果（Float の演算）は対象外
+// ——溢れの規則は幅が確定している整数にしか無い。
+function applyOverflowRule(atomType, value) {
+  if (typeof value === "number" && !Number.isInteger(value)) return value;
+  if (typeof value !== "number" && typeof value !== "bigint") return value;
+  const b = toBig(value);
+  if (b === null) return value;
+  if (atomType === "Int") return wrapInt(b);
+  if (atomType === "Address") return clampAddress(b);
   return value;
 }
 
@@ -824,6 +970,9 @@ function evalUnaryOp(name, v) {
     case "continuous":
       // 前置~（rest記法用の密着マーカー）。値としてはオペランドをそのまま返す。
       return v;
+    case "bit_not":
+      // `!!` は幅の中での補数。幅が無ければ「全ビット反転」が定義できない。
+      return bitNot(v);
     case "factorial": {
       if (isUnit(v)) return UNIT;
       let r = 1;
@@ -1421,6 +1570,7 @@ function evaluate(node, env) {
     }
 
     if (ARITH_OPS[node.name]) return evalArith(node, env);
+    if (BIT_OPS[node.name]) return evalBit(node, env);
     // `!=`（tier12、name="not_equal"）・`==`（name="equal"）・`!==`（tier8、name="xnot_equal"、
     // ==の構造比較を否定したもの）はCOMPARE_OPSにキーを持たない——8/6にoperator_table.js側の
     // tier8`!==`をname="xnot_equal"へ改名して名前衝突自体は解消したが、COMPARE_OPS
