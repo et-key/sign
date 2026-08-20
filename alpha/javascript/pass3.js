@@ -728,6 +728,20 @@ function collectParamTypes(nodes, env) {
     if (!binding) continue;
     const rhs = node.right;
     let types = null;
+    // **合成値に束縛された識別子の型も書き戻す。** Pass 1a は `名前 : リテラル1個` しか
+    // 読めないので、`m : 1 2 , 3 4` のような合成形は `atomType` が空のまま残る。そのため
+    // `m , 5 6` を見たときに `m` が Struct だと分からず、直積の結合が名前を経由すると
+    // 破れていた（`1 2 , 3 4 , 5 6` は3スロットなのに `m , 5 6` は入れ子になる）。
+    if (rhs && !(rhs.type === "operation" && rhs.name === "lambda") && !pointfreeSignature(rhs)) {
+      const t = inferAtomType(rhs, env);
+      if (t && t !== "Unit" && binding.atomType !== t) {
+        binding.atomType = t;
+        // 名前付きスロットと連番スロットは結合の可否が違うので、種別も持ち回る。
+        if (rhs.slotKind) binding.slotKind = rhs.slotKind;
+        if (rhs.elementType) binding.elementType = rhs.elementType;
+        changed = true;
+      }
+    }
     const pf = pointfreeSignature(rhs);
     if (pf) types = pf.params;
     else if (rhs && rhs.type === "operation" && rhs.name === "lambda") {

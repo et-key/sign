@@ -456,7 +456,11 @@ function isRealListValue(node) {
   if (!isListLike(node)) return false;
   if (!Array.isArray(node.lines) || node.lines.length !== 1) return true;
   const inner = node.lines[0];
-  if (!inner || inner.type !== "operation") return false;
+  if (!inner) return false;
+  // 中身がさらにブロックなら再帰する。`([1 2 3])` のように括弧が1段余分に付いただけで
+  // List と認識されなくなると、`([1 2 3]) [4 5]` が push へ落ちて `[1 2 3] [4 5]` と
+  // 違う値になる——**冗長な括弧が意味を変えてはいけない**。
+  if (inner.type !== "operation") return isRealListValue(inner);
   return LIST_PRODUCING_NAMES.has(inner.name);
 }
 
@@ -542,8 +546,18 @@ function coproductReduce(a, b, env) {
     // 字句解析器を書こうとして発覚（`(s ' 0) (f (s ' 1~))` が文字列を連結せず
     // ペアを積み上げる）。§5.4 の検査では既に isRealListValue へ移行済みだったが、
     // ここだけ古い判定のまま残っていた。
-    const listA = isRealListValue(a) || isReducedListValue(a) || (hasPostfixTilde(a) && isRealListValue(a.operand));
-    const listB = isRealListValue(b) || isReducedListValue(b) || (hasPostfixTilde(b) && isRealListValue(b.operand));
+    // **識別子は中身を見て分類する。** `m : [1 2] [3 4]` と束縛してから `m [5 6]` と書くと、
+    // `m` は identifier ノードなので block でも縮約済みノードでもなく、List と認識されずに
+    // `push`（＝Atom を List の先頭へ足す）へ落ちていた——結果は `[[[1,2],[3,4]],5,6]` という
+    // どちらの読みでもない値になる。`derefBoundNode` は既に遅延解決＋メモ化された右辺
+    // ノードを返すので、それを**分類にだけ**使う。ノード自体は識別子のまま残すので、
+    // 「名前は括られた部分式である」という等価性（`m [5 6]` ≡ `([1 2] [3 4]) [5 6]`）は保たれる。
+    const isListValue = (n) => isRealListValue(n) || isReducedListValue(n);
+    // 後置 `~` の中身も同じく deref する（`m~ [5 6]` の `m`）。
+    const derefIsList = (n) => isListValue(n) || isListValue(derefBoundNode(n, env));
+    const listOf = (n) => derefIsList(n) || (hasPostfixTilde(n) && derefIsList(n.operand));
+    const listA = listOf(a);
+    const listB = listOf(b);
     if (listA && listB) {
       // 既に concat された結果は**平らなリスト**なので、次の項と繋ぐときも concat である
       // ——`[1 2]~ [3 4]~` が `1 2 3 4` と等価なら、`[1 2]~ [3 4]~ [5 6]~` は `1 2 3 4 5 6`
