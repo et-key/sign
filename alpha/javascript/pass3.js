@@ -1143,6 +1143,92 @@ function collectReturns(nodes, env) {
   return changed;
 }
 
+
+/**
+ * 合成の中間の型が噛み合っているかを検査する（Pass 3b）。
+ *
+ * `h : f g` はスペースによる左→右のパイプライン（`f g` は `g(f(x))`）なので、**`f` の返値が
+ * `g` の第1仮引数へ入る**。ここが噛み合っていなければ射が無く、適用しても零射（`__`）に
+ * なる——値は静かに消え、型だけが `Int -> String` のように**通ったかのように**見えてしまう。
+ *
+ * 例外にはしない。射が無いことは「不正」ではなく「そこに射が無い」という事実であり、
+ * 零対象を経由する射（零射）が常に存在する以上、結果は `__` である（原理4）。なぜ潰れるかを
+ * 記録するのが Pass 3b の仕事である。
+ */
+
+// `arg` を `param` の位置へ置けるか。分からないものは通す——分からないことを「不正」と
+// 断じないのが原理4 の線引きである。
+function acceptsType(param, arg) {
+  if (!param || !arg) return true;
+  if (param === arg) return true;
+  // `Atom` は「どの Atom か分かっていない」という下限であり、制約ではない。
+  if (param === "Atom" || arg === "Atom") return true;
+  // `Unit` を渡すのは完全性公理の話であって型の不一致ではない。
+  if (param === "Unit" || arg === "Unit") return true;
+  // 恒等射は何でも通す（`!__ x = x`）。
+  if (param === IDENTITY || arg === IDENTITY) return true;
+  // 直和はどれか1つでも置ければよい。
+  if (String(param).includes(" | ")) return String(param).split(" | ").some((p) => acceptsType(p, arg));
+  if (String(arg).includes(" | ")) return String(arg).split(" | ").some((a) => acceptsType(param, a));
+  // `Scalar` は族（String を含まない Atom）。その要素なら置ける。
+  if (param === "Scalar") return NUMERIC_TYPES.has(arg) || arg === "Scalar";
+  if (arg === "Scalar") return NUMERIC_TYPES.has(param) || param === "Scalar";
+  // 数値同士は昇格格子で繋がっている（§3.2）ので射がある。
+  if (NUMERIC_TYPES.has(param) && NUMERIC_TYPES.has(arg)) return true;
+  return false;
+}
+
+// 合成木を左から順に並べる。`f g h` は `compose[compose[f,g],h]`。
+function composeChain(node) {
+  if (node && node.type === "operation" && node.name === "compose") {
+    return [...composeChain(node.left), ...composeChain(node.right)];
+  }
+  return [node];
+}
+
+function signatureOfTerm(term, env) {
+  if (!isIdentifierNode(term) || !env) return null;
+  const b = envLookup(env, term.value);
+  if (!b) return null;
+  return { returns: b.returns, params: b.paramTypes };
+}
+
+function collectCompositionMismatch(nodes, env, diagnostics) {
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "operation" && node.name === "compose") {
+      const chain = composeChain(node);
+      for (let i = 0; i + 1 < chain.length; i++) {
+        const from = signatureOfTerm(chain[i], env);
+        const to = signatureOfTerm(chain[i + 1], env);
+        if (!from || !to || !to.params || to.params.length === 0) continue;
+        const out = from.returns;
+        const need = to.params[0];
+        if (acceptsType(need, out)) continue;
+        diagnostics.push({
+          level: "information",
+          reason: "composition-type-mismatch",
+          spec: "coproduct_resolver.md §3.1",
+          message:
+            `合成 '${bareIdent(chain[i])} ${bareIdent(chain[i + 1])}' の中間の型が噛み合っていません` +
+            `（${bareIdent(chain[i])} の返値は ${out}、${bareIdent(chain[i + 1])} が要求するのは ${need}）。` +
+            `射が無いため、適用すると __ に収束します`,
+        });
+      }
+      return;
+    }
+    for (const k of ["left", "right", "operand", "middle"]) visit(node[k]);
+    for (const line of node.lines || []) visit(line);
+    for (const e of node.entries || []) visit(e.default);
+  };
+  for (const node of nodes) visit(node);
+}
+
+function bareIdent(n) {
+  const v = n && n.value;
+  return typeof v === "string" && v.startsWith("<") && v.endsWith(">") ? v.slice(1, -1) : String(v);
+}
+
 /**
  * 型注釈を不動点まで回す（§5 Pass 3）。
  *
@@ -1184,6 +1270,7 @@ function annotateAll(nodes, env, diagnostics) {
   // 診断は確定後の1回だけ集める（周回ごとに集めると重複する）。
   for (const node of nodes) clearTypeAnnotations(node);
   for (const node of nodes) annotateTypes(node, env, diagnostics);
+  if (diagnostics) collectCompositionMismatch(nodes, env, diagnostics);
   return nodes;
 }
 
