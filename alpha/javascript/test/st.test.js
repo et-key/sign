@@ -511,5 +511,32 @@ check("部分列の添字は器の型", entries("l : [1 2 3]\np : l ' 1~"), ["l 
 check("名前付きスロットはその名前の型", entries("d : [\n\tx : 1\n\ty : `s`\n]\np : d ' y").slice(1), ["p : String"]);
 check("連番スロットはその位置の型", entries("t : 1 , `a` , 2.5\np : t ' 2").slice(1), ["p : Float"]);
 
+
+// ---- rest の要素型は「展開した先のスロット」が決める ----
+//
+// 後置 `~` は展開なので、`xs~` を呼び出しへ渡すとスロットに入るのは rest 自身ではなく
+// **その要素**である。したがって呼び先のスロットの型がそのまま rest の要素型になる
+// ——`sum : x ~xs ? x + (sum xs~)` の `xs` の要素は、展開先が `x` である以上 `x` と
+// 同じ型でなければならない。実引数の位置から逆算するのと同じ規則を、要素の側で使っている。
+check("再帰で自分へ展開する形", entries("sum : x ~xs ? x + (sum xs~)"), ["sum : Scalar Scalar~ -> Scalar"]);
+check("別の関数へ展開しても同じ", entries("g : a ? 0.0 + a\nf : ~xs ? g xs~"), [
+	"g : Float -> Float",
+	"f : Float~ -> Float",
+]);
+check("文字列でも同じ", entries("g : c ? c = `a`\nf : ~cs ? g cs~"), ["g : String -> String", "f : String~ -> String"]);
+// 多段でも周回のうちに伝わる（返値型・仮引数型と同じ不動点で回っている）。
+check("多段の逆流", entries("g : a ? 0.0 + a\nh : ~ys ? g ys~\nf : ~xs ? h xs~"), [
+	"g : Float -> Float",
+	"h : Float~ -> Float",
+	"f : Float~ -> Float",
+]);
+// 展開先は第1スロットとは限らない。
+check("2番目のスロットへ展開", entries("g : a b ? 0.0 + b\nf : ~xs ? g 1 xs~"), [
+	"g : Atom Float -> Float",
+	"f : Float~ -> Float",
+]);
+// 展開しなければ何も分からない。分からないことを「分かった」と書かないのが `.st` の原則。
+check("証拠が無ければ `_~` のまま", entries("f : ~xs ? xs"), ["f : _~ -> _"]);
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

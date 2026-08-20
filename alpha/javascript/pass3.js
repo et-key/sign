@@ -711,10 +711,28 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
       const slots = callee && callee.paramTypes;
       if (slots) {
         args.forEach((arg, i) => {
-          if (!isIdentifierNode(arg) || !paramNames.has(arg.value) || inferred.has(arg.value)) return;
           const t = slots[i];
           // `Atom` は下限であって制約ではないので、逆流させる意味が無い。
-          if (t && t !== "Atom") inferred.set(arg.value, t);
+          if (!t || t === "Atom") return;
+          if (isIdentifierNode(arg) && paramNames.has(arg.value) && !inferred.has(arg.value)) {
+            inferred.set(arg.value, t);
+            return;
+          }
+          // **`xs~` はスロットへ「要素」を渡す。** 後置 `~` は展開なので、呼び先のスロットに
+          // 入るのは rest 自身ではなくその要素である。したがってスロットの型がそのまま
+          // rest の**要素型**になる——`sum : x ~xs ? x + (sum xs~)` の `xs` の要素は、
+          // 展開された先が `x` である以上 `x` と同じ型でなければならない。
+          if (
+            arg &&
+            arg.type === "operation" &&
+            arg.position === "postfix" &&
+            arg.name === "expand" &&
+            isIdentifierNode(arg.operand) &&
+            paramNames.has(arg.operand.value) &&
+            !inferred.has(arg.operand.value)
+          ) {
+            inferred.set(arg.operand.value, t);
+          }
         });
       }
     }
