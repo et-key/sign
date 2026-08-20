@@ -990,6 +990,16 @@ check("__ !== __ → __（両辺Unitは等しいので偽）", run("__ !== __"),
 // 四捨五入した旨を information として記録するので、その有無が「右辺を評価したか」になる。
 // （以前は未実装だった `!!` が例外を投げることを利用していたが、`!!` を実装したので
 // プローブとして使えなくなった——検出手段が未実装であることに依存していたということでもある。）
+// 値そのものを取り出す（恒等射かどうかを見るため）。
+const runValue = (src) => {
+	const { nodes } = compile(src);
+	const renv = newRuntimeEnv(null);
+	let last;
+	for (const n of nodes) last = evaluate(n, renv);
+	return last;
+};
+const isIdentity = (v) => !!(v && v.__identity__);
+
 const evaluatesRight = (src) => {
 	const { nodes } = compile(src);
 	const renv = newRuntimeEnv(null);
@@ -1121,6 +1131,22 @@ check("0u00 → __（同上）", run("0u00"), "__");
 check("0x00 → 0（アドレスリテラルは Unit ではない）", run("0x00"), 0);
 check("5 __ == 5 !__（余積の右単位元とId射、双方5）", run("5 __ == 5 !__"), 5);
 check("__ 1 2 → [1 2]（2項以上は従来通りList、§6.1の輸入失敗例）", run("__ 1 2"), [1, 2]);
+
+
+// **`!` は対合であり、恒等射は `__` から導かれる。**
+//
+// `__` は void 型の関数そのもの——何も返さない関数である。その否定は「入力をそのまま返す
+// 関数」、すなわち恒等射になる。だから `!__` は新しく足した規則ではなく、`__` が関数で
+// あることからの帰結である。`!` を2回かければ戻ることがそれを裏づける。
+checkTrue("`!__` は恒等射（真）", isIdentity(runValue("!__")));
+checkTrue("`!(!__)` は `__` へ戻る", isUnit(runValue("!(!__)")));
+checkTrue("3回で恒等射へ戻る", isIdentity(runValue("!(!(!__))")));
+// 適用すると**どちらも値を素通しする**。ただし通る道が違う——前者は余積の左単位元として、
+// 後者は評価予定の恒等射として（guide/operator_table.md）。
+check("`__ 5` は素通し（余積の左単位元）", run("__ 5"), 5);
+check("`!__ 5` も素通し（恒等射）", run("(!__) 5"), 5);
+// 値として等しくはない。素通しする道が違うだけである。
+checkTrue("`__` と `!__` は等しくない（真なので恒等射が返る）", isIdentity(runValue("__ !== (!__)")));
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
