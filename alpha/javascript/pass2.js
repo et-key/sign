@@ -473,7 +473,7 @@ function isRealListValue(node) {
 // `construct` を含めないのは、`1 2 3` が `construct[construct[1,2], 3]` と縮約される際に
 // 左辺が List と見なされて push へ落ちてしまうためである。ここで拾いたいのは**List 同士の
 // 並置が作った入れ子**だけであり、それは product（~なし）と concat（双方~）に限られる。
-const REDUCED_LIST_NAMES = new Set(["product", "concat"]);
+const REDUCED_LIST_NAMES = new Set(["product", "concat", "unshift", "push"]);
 
 function isReducedListValue(node) {
   return !!node && node.type === "operation" && REDUCED_LIST_NAMES.has(node.name);
@@ -553,8 +553,16 @@ function coproductReduce(a, b, env) {
     // ノードを返すので、それを**分類にだけ**使う。ノード自体は識別子のまま残すので、
     // 「名前は括られた部分式である」という等価性（`m [5 6]` ≡ `([1 2] [3 4]) [5 6]`）は保たれる。
     const isListValue = (n) => isRealListValue(n) || isReducedListValue(n);
-    // 後置 `~` の中身も同じく deref する（`m~ [5 6]` の `m`）。
-    const derefIsList = (n) => isListValue(n) || isListValue(derefBoundNode(n, env));
+    // 束縛先を辿った場合は `construct` も List 値として数える。`l : 1 2 3` は余積で組まれた
+    // リストそのものだからである。式の途中の累積ノードで `construct` を数えないのは、
+    // `1 2 3` が `construct[construct[1,2], 3]` と縮約される際に左辺が List と見なされて
+    // しまい、3項目が「1要素として足す」側へ落ちるためで、そことは事情が違う。
+    const derefIsList = (n) => {
+      if (isListValue(n)) return true;
+      const d = derefBoundNode(n, env);
+      if (d === n) return false;
+      return isListValue(d) || (d.type === "operation" && d.name === "construct");
+    };
     const listOf = (n) => derefIsList(n) || (hasPostfixTilde(n) && derefIsList(n.operand));
     const listA = listOf(a);
     const listB = listOf(b);
@@ -562,16 +570,22 @@ function coproductReduce(a, b, env) {
       // 既に concat された結果は**平らなリスト**なので、次の項と繋ぐときも concat である
       // ——`[1 2]~ [3 4]~` が `1 2 3 4` と等価なら、`[1 2]~ [3 4]~ [5 6]~` は `1 2 3 4 5 6`
       // でなければならない。縮約後のノードには `~` が付いていないので、ここで補って読む。
+      // **スペースは余積である。** `list_model.md` §1 の表が定める通り、スペースは余積
+      // （同じ次元で伸ばす）、カンマは直積（次元を上げる）である。以前は List 同士のときだけ
+      // スペースを直積として扱っていたが（§2.2 の `[1 2] [3 4] = 1 2 , 3 4`）、それは記号の
+      // 意味を組み合わせで変えるということであり、`~` に「連結したいときに付ける印」という
+      // 二つ目の役割を負わせる原因でもあった。
+      //
+      // 後置 `~` の意味は**展開して渡す**の一つだけである。右辺に付いていれば中身を展開して
+      // 繋ぎ（concat）、付いていなければ右辺を**1要素として**足す（unshift）。左辺は器なので
+      // 常に展開されている——`~` を付けても意味は変わらない。
+      //
+      //   m [5 6]   →  [[1,2],[3,4],[5,6]]   行を1つ足す
+      //   m [5 6]~  →  [[1,2],[3,4],5,6]     展開して足す
+      //   m , [5 6] →  [[[1,2],[3,4]],[5,6]] 次元を上げる（カンマの仕事）
       const isConcat = (n) => !!n && n.type === "operation" && n.name === "concat";
-      const tA = hasPostfixTilde(a) || isConcat(a), tB = hasPostfixTilde(b) || isConcat(b);
-      if (tA && tB) return mk("concat", a, b); // §5.2-1: 双方~ → concat
-      // §5.2-2: ~なし → マージしない、独立したAtom（2つの参照のリスト）として保たれる。
-      // list_model.md §2.2が明言する等価性「[1 2] [3 4] = 1 2 , 3 4」通り、product
-      // （カンマ）と同じノードとして扱う——以前はnullを返して「そのまま未縮約で放置」
-      // していたため、この2項だけが行全体だった場合にitems.length!==1のまま
-      // unresolvedへ落ち、評価側で静かにUnitへ収束してしまっていた
-      // （`[1 2 3] [1 2 3]`が2次元配列にならずUnitになるバグ）。
-      return mk("product", a, b);
+      const spreadB = hasPostfixTilde(b) || isConcat(b);
+      return spreadB ? mk("concat", a, b) : mk("unshift", a, b);
     }
     if ((listA && !listB) || (!listA && listB)) {
       // 10.1: Atom|List~ の組み合わせ → Unshift/push（仕様に方向の明記なし、上記コメント参照）

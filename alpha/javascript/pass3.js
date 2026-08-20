@@ -336,6 +336,32 @@ function computeAtomType(node, env) {
         node.elementType = node.left.elementType ?? null;
         return leftType;
       }
+      // **`unshift`/`push` は片方が「要素」である**（器へ1個足す）。`construct`/`concat` の
+      // ように両側を器として扱うと、要素そのものの型を器の要素型と突き合わせてしまい、
+      // `m [5 6]`（2次元へ行を1つ足す）が「Struct と Int の join が無い」で落ちる。
+      //
+      // 器が `Struct` なら、足すのは**スロット**である。スロットごとに型が違ってよいのが
+      // 直積の意味なので（§2）、要素型の join は要らず結果も `Struct` のままである。
+      if (node.name === "unshift" || node.name === "push") {
+        const isUnshift = node.name === "unshift";
+        const containerNode = isUnshift ? node.left : node.right;
+        const elementNode = isUnshift ? node.right : node.left;
+        const containerType = isUnshift ? leftType : rightType;
+        if (containerType === "Struct") {
+          node.slotKind = containerNode.slotKind || "positional";
+          return "Struct";
+        }
+        const joinedAppend = joinElementTypes(elementTypeOf(containerNode, env), inferAtomType(elementNode, env));
+        // join が無いのは「器の要素型と足すものが揃っていない」場合。混ぜたいなら直積にする。
+        if (joinedAppend === NO_JOIN) {
+          throw new TypeError(
+            `type_system.md §2違反: List へ足す要素の型が揃っていません（要素型 ${elementTypeOf(containerNode, env)} に ${inferAtomType(elementNode, env)}）。` +
+              `混在させたい場合はカンマ区切りの Struct（tuple）にしてください`
+          );
+        }
+        node.elementType = joinedAppend;
+        return "List";
+      }
       // §2「Listは同一型」: 要素型のjoinを取る。join が存在しない組み合わせ
       // （`[1 \`abc\`]` 等）は原理4に従いコンパイルエラーにする——混在させたい場合は
       // カンマで Struct（tuple）だと明示する必要がある。

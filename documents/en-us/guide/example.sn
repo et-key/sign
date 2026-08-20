@@ -257,7 +257,7 @@ myPairs'[1 ~ 3] == 2 3 4
 
 ` Coproduct / Array concatenation: `
 
-r: [1 2] [3 4]
+r: [1 2]~ [3 4]~
 
 ` Product / 2D Matrix: `
 
