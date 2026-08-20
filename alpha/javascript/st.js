@@ -136,7 +136,8 @@ function slotTypeText(node) {
   // （恒等射は解けている。未解決として数えてはいけない）。
   if (node.atomType === IDENTITY) return UNKNOWN;
   const t = node.atomType || UNKNOWN;
-  if (t === "List") return node.elementType ? `List(${node.elementType})` : "List";
+  // `Iterator` も要素型を伴う——実体を持たないだけで、並ぶものの型は List と同じに決まる。
+  if (t === "List" || t === "Iterator") return node.elementType ? `${t}(${node.elementType})` : t;
   // `Implicit(T)`（暗黙のアドレス＝場所）も要素型を伴う。前置 `~`（持ち上げ）が生む。
   if (t === "Implicit") return node.elementType ? `Implicit(${node.elementType})` : "Implicit";
   if (t === "Struct") return structTypeText(node, t);

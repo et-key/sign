@@ -830,6 +830,63 @@ function buildCharRange(start, end) {
 
 // start から end まで（終端を含む）、stepFnを繰り返し適用して配列へ実体化する。
 // 昇順・降順どちらもstart/endの大小関係だけから判定する（呼び出し元でstepの符号を揃える）。
+
+/**
+ * レンジ式の実体（`Iterator`、list_model.md §2.3・type_system.md §2）。
+ *
+ * 仕様は「レンジ式は**リストに見えるだけ**であり、実体は常に `{start, step, end}` 相当の
+ * 固定サイズ構造体である。要素列はメモリ上に展開されるわけではない」と定める。展開は
+ * **消費する側の都合**であって、レンジ自身の性質ではない。
+ *
+ * 終端の無い形（`0 ~+ 1`）はこれでしか表せない。`stack_abi.md` §3.3 が「開端レンジを
+ * 引数として使うとループカウンタになる——再帰という概念を使わずに純粋なループを記述できる」
+ * と書いている看板の書き方であり、実体化しかできない実装では**そもそも書けなかった**。
+ */
+function makeIterator(start, stepFn, end) {
+  return { __iterator__: true, start, stepFn, end };
+}
+
+function isIterator(v) {
+  return !!(v && typeof v === "object" && v.__iterator__);
+}
+
+// 終端を持たないストリームは無限である。数え上げ・実体化はできない。
+function isInfiniteIterator(v) {
+  return isIterator(v) && (v.end === null || v.end === undefined);
+}
+
+// n 番目の要素を取り出す。**無限でも引ける**——これがループカウンタを成立させる。
+function iteratorAt(it, n) {
+  if (!Number.isInteger(n) || n < 0) return UNIT;
+  let v = it.start;
+  for (let i = 0; i < n; i++) {
+    v = it.stepFn(v);
+    if (!isInfiniteIterator(it) && (it.start <= it.end ? v > it.end : v < it.end)) return UNIT;
+  }
+  return v;
+}
+
+// 有限のイテレータだけを実体化する。無限は展開できないので `__`——「無限を配列にする」
+// という射は無い。
+function materializeIterator(it) {
+  if (isInfiniteIterator(it)) return UNIT;
+  const out = [];
+  let v = it.start;
+  const ascending = it.start <= it.end;
+  let guard = 0;
+  while (ascending ? v <= it.end : v >= it.end) {
+    out.push(v);
+    v = it.stepFn(v);
+    if (++guard > 1000000) throw new Error("interpreter: range: 要素数が多すぎます（stepが0または終端に向かっていない可能性）");
+  }
+  return out;
+}
+
+// 値としてリストが要る場面で、イテレータなら実体化して渡す。
+function deIterate(v) {
+  return isIterator(v) ? materializeIterator(v) : v;
+}
+
 function buildRange(start, end, stepFn) {
   const out = [];
   let v = start;
@@ -1004,6 +1061,14 @@ function evalUnaryOp(name, v) {
 // 再利用できなかったため `[' 0]` が「未対応の演算子」で落ちていた。
 function getPropValue(l, rightNode, env) {
   if (isUnit(l)) return UNIT;
+  // **イテレータは添字で引ける。無限でも引ける。** これがループカウンタを成立させる
+  // ——`c : [0 ~+ 1]` の n 番目は、start から step を n 回適用すれば出る（stack_abi.md §3.3）。
+  // 範囲での添字（部分列）は実体化してから通す。
+  if (isIterator(l)) {
+    const idx = evaluate(rightNode, env);
+    if (typeof idx === "number") return iteratorAt(l, idx);
+    return getPropValue(materializeIterator(l), rightNode, env);
+  }
   // 右辺が識別子のとき、それを「名前」と読むか「値（添字）」と読むかは**左辺が決める**。
   //
   // type_system.md §2 は「名前付きスロット（`[key : val]`）と連番スロット（`1, 2, 3`）は
@@ -1195,6 +1260,9 @@ function applyPointfree(node, closureEnv, argValues) {
 // 103行目「`__ = []`（空リストと等価）」の通り、値として並べず消去（フィルタ）する。
 function asList(v) {
   if (isUnit(v)) return [];
+  // イテレータは「リストに見えるだけ」なので、リストが要る場面で初めて実体化する
+  // （list_model.md §2.3）。無限は実体化できないので `__` ＝空になる。
+  if (isIterator(v)) return asList(materializeIterator(v));
   return Array.isArray(v) ? v : [v];
 }
 function stringifyForConcat(v) {
@@ -1285,6 +1353,12 @@ function evaluate(node, env) {
       if (isUnit(inner)) {
         const operand = node.operandType;
         return operand === "List" || operand === "String" ? 0 : UNIT;
+      }
+      // イテレータは有限なら要素数を持つ。**無限は数えられない**ので零射へ落ちる
+      // ——「無限の要素数」という値は無い。
+      if (isIterator(inner)) {
+        if (isInfiniteIterator(inner)) return UNIT;
+        return materializeIterator(inner).length;
       }
       if (Array.isArray(inner) || typeof inner === "string") return inner.length;
       // 名前付きスロットもスロット数を持つ。名前・連番・実データの三つを持つ以上、
@@ -1513,9 +1587,15 @@ function evaluate(node, env) {
         // 実体化された値しか扱えないため、無限生成を試みず明示的に未対応として拒否する。
         // （3項形式 [start ~op step ~ end] は上の"range"ケースが処理する——このケースに
         // 来るのは、外側に終端"~ end"が付いていない生の2項ノードのみ。）
-        throw new Error(
-          "interpreter: 終端の無い範囲式（2項指定の~+等）は無限のPull型ストリームのため、値を全て実体化する本インタプリタでは未対応です（list_model.md §2.3）"
-        );
+        // 終端の無い2項形式は**無限の Pull 型ストリーム**そのものである（list_model.md §2.3）。
+        // 実体化できないことは扱えないことではない——添字で引けるので、stack_abi.md §3.3 の
+        // ループカウンタ（`c : [0 ~+ 1]`）が成立する。
+        const itStart = evaluate(node.left, env);
+        if (isUnit(itStart)) return UNIT;
+        const itStep = evaluate(node.right, env);
+        if (isUnit(itStep)) return UNIT;
+        if (!isRangePoint(itStart, false) || !isRangePoint(itStep, false)) return UNIT;
+        return makeIterator(itStart, rangeStepFn(node.op, itStep), null);
       }
       case "product": {
         // list_model.md §2.1: `1,2,3,4,5`（スカラーのカンマ連鎖）は`1 2 3 4 5`と等価な

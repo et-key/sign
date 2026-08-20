@@ -114,9 +114,18 @@ function rangeResultType(node, env) {
   const startType = startNode ? inferAtomType(startNode, env) : null;
   const endType = endNode ? inferAtomType(endNode, env) : null;
   // 終端を持たない2項形式（`1 ~+ 2`）は Pull 型のストリームそのもの。
-  if (RANGE_STEP_OPS.has(node.name)) return "Iterator";
+  if (RANGE_STEP_OPS.has(node.name)) {
+    // ストリームでも**要素型は分かる**——始点と歩幅の join がそれである。Pass 4 は
+    // 添字に対して要素1個ぶんの命令を出すので、ここを落とすと添字が型を失う。
+    const el = joinElementTypes(startType, endType);
+    if (typeof el === "string") node.elementType = el;
+    return "Iterator";
+  }
   // 文字の範囲は文字の並び＝String（String ≅ List(0u)）。それ以外は List。
   if (startType === "String" && endType === "String") return "String";
+  // 有限レンジも要素型を持つ。ストリームと同じく端点の join がそれである。
+  const el = joinElementTypes(startType, endType);
+  if (typeof el === "string") node.elementType = el;
   return "List";
 }
 
@@ -158,7 +167,7 @@ function joinElementTypes(a, b) {
 // （スカラーは1要素リストと同型なので、自分自身が要素になる）。
 function elementTypeOf(node, env) {
   const type = inferAtomType(node, env);
-  if (type === "List") return node.elementType ?? null;
+  if (type === "List" || type === "Iterator") return node.elementType ?? null;
   return type;
 }
 
@@ -268,8 +277,9 @@ function getPropResultType(node, env) {
   // `String ≅ List(0u)` なので、文字列の添字は文字＝String である（§2）。
   if (containerType === "String") return "String";
 
-  if (containerType === "List") {
-    // List は同一型の要素が並ぶので、どの添字でも要素型は同じ。実行時の添字でよい。
+  // List と Iterator はどちらも「同じ型の要素が並ぶもの」で、違いは実体を持つかどうかだけ。
+  // **型の上では同じ引き方をする**ので、添字の結果はどちらも要素型である。
+  if (containerType === "List" || containerType === "Iterator") {
     return containerElementType(node.left, env) || null;
   }
 
@@ -396,7 +406,7 @@ function computeAtomType(node, env) {
     // `[1 2 3]` のようにブロックが List を包んでいる場合、要素型もブロックへ引き継ぐ
     // （そうしないと `[1 2] [3 4]` のように List 同士を余積で繋いだとき、外側から
     // 中身の要素型が見えなくなる）。
-    if (lastType === "List") node.elementType = last.elementType ?? null;
+    if (lastType === "List" || lastType === "Iterator") node.elementType = last.elementType ?? null;
     return lastType;
   }
 
@@ -793,6 +803,12 @@ function inferLambdaParamTypes(lambdaNode, env) {
       // 言っていない——`s : __` は「省略されうる」という宣言であり、完全性公理の抑制が
       // 目的である（そうしないと空を渡した時点で呼び出しごと消える）。型は使用箇所が語る。
       if (t && t !== "Unit") inferred.set(e.name, t);
+      // 器のデフォルトは要素型も語る。`c : [0 ~+ 1]` の `c ' n` が何の型かは
+      // ここを渡さないと出ない——`inferred` は型名しか運べないので束縛へ直接置く。
+      if (e.default.elementType) {
+        const b = scope ? envLookup(scope, e.name) : null;
+        if (b) b.elementType = e.default.elementType;
+      }
     }
   }
   // **裸の仮引数は、証拠が何も無くても `Atom` まで決まる。**

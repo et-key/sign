@@ -538,5 +538,20 @@ check("2番目のスロットへ展開", entries("g : a b ? 0.0 + b\nf : ~xs ? g
 // 展開しなければ何も分からない。分からないことを「分かった」と書かないのが `.st` の原則。
 check("証拠が無ければ `_~` のまま", entries("f : ~xs ? xs"), ["f : _~ -> _"]);
 
+
+// レンジは有限でも無限でも「同じ型の要素が並ぶもの」であり、要素型を持つ（list_model.md §2.3）。
+// 実体を持つかどうか（List か Iterator か）は項の数が決めるが、それは**器の違い**であって
+// 要素型の有無ではない。Pass 4 は添字に対して要素1個ぶんの命令を出すので、ここが要る。
+check("有限レンジは List(T)", entries("h : 1 ~ 5"), ["h : List(Int)"]);
+check("無限ストリームは Iterator(T)", entries("a : 0 ~+ 1"), ["a : Iterator(Int)"]);
+check("どちらの添字も要素型になる", entries("h : 1 ~ 5\na : 0 ~+ 1\ni : h ' 2\nj : a ' 3"), [
+	"h : List(Int)",
+	"a : Iterator(Int)",
+	"i : Int",
+	"j : Int",
+]);
+// stack_abi.md §3.3 のループカウンタ。開端レンジをデフォルト引数へ置くと、その関数は
+// 「Iterator を受けて要素を返すもの」として型が付く——再帰を書かずにループが成立する形である。
+check("開端レンジをデフォルトに持つ関数の型", entries("f :\n\tc : [0 ~+ 1]\n ?\n\tc ' 3"), ["f : Iterator -> Int"]);
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
