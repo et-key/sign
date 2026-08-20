@@ -460,6 +460,21 @@ function isRealListValue(node) {
   return LIST_PRODUCING_NAMES.has(inner.name);
 }
 
+// 既に縮約された「List 同士の並置」の結果も List 値である。並置は左結合で縮約されるので、
+// 3項目以降では左辺が block ではなく operation（`product` / `concat`）になる——block しか
+// 見ないと3項目からリストと認識されず push へ落ち、要素型の join が Struct と Int で壊れる。
+// `1 2 , 3 4 , 5 6` は通るのに `[1 2] [3 4] [5 6]` だけコンパイルエラーになっていた
+// （list_model.md §2.2 が両者を等価と明言しているのに、3項で等価性が破れていた）。
+//
+// `construct` を含めないのは、`1 2 3` が `construct[construct[1,2], 3]` と縮約される際に
+// 左辺が List と見なされて push へ落ちてしまうためである。ここで拾いたいのは**List 同士の
+// 並置が作った入れ子**だけであり、それは product（~なし）と concat（双方~）に限られる。
+const REDUCED_LIST_NAMES = new Set(["product", "concat"]);
+
+function isReducedListValue(node) {
+  return !!node && node.type === "operation" && REDUCED_LIST_NAMES.has(node.name);
+}
+
 function hasPostfixTilde(node) {
   return node && node.type === "operation" && node.op === "~" && node.position === "postfix";
 }
@@ -527,10 +542,14 @@ function coproductReduce(a, b, env) {
     // 字句解析器を書こうとして発覚（`(s ' 0) (f (s ' 1~))` が文字列を連結せず
     // ペアを積み上げる）。§5.4 の検査では既に isRealListValue へ移行済みだったが、
     // ここだけ古い判定のまま残っていた。
-    const listA = isRealListValue(a) || (hasPostfixTilde(a) && isRealListValue(a.operand));
-    const listB = isRealListValue(b) || (hasPostfixTilde(b) && isRealListValue(b.operand));
+    const listA = isRealListValue(a) || isReducedListValue(a) || (hasPostfixTilde(a) && isRealListValue(a.operand));
+    const listB = isRealListValue(b) || isReducedListValue(b) || (hasPostfixTilde(b) && isRealListValue(b.operand));
     if (listA && listB) {
-      const tA = hasPostfixTilde(a), tB = hasPostfixTilde(b);
+      // 既に concat された結果は**平らなリスト**なので、次の項と繋ぐときも concat である
+      // ——`[1 2]~ [3 4]~` が `1 2 3 4` と等価なら、`[1 2]~ [3 4]~ [5 6]~` は `1 2 3 4 5 6`
+      // でなければならない。縮約後のノードには `~` が付いていないので、ここで補って読む。
+      const isConcat = (n) => !!n && n.type === "operation" && n.name === "concat";
+      const tA = hasPostfixTilde(a) || isConcat(a), tB = hasPostfixTilde(b) || isConcat(b);
       if (tA && tB) return mk("concat", a, b); // §5.2-1: 双方~ → concat
       // §5.2-2: ~なし → マージしない、独立したAtom（2つの参照のリスト）として保たれる。
       // list_model.md §2.2が明言する等価性「[1 2] [3 4] = 1 2 , 3 4」通り、product
