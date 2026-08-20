@@ -185,6 +185,115 @@ function arithmeticResultType(node, leftType, env) {
   return leftType;
 }
 
+
+// 識別子を束縛先のノードまで辿る。`l : [1 2 3]` と書いてから `l ' 0` と引く形は普通なので、
+// ここを辿れないと実用上ほとんどの添字が型を失う。pass2 が縮約済みノードをメモ化している。
+function derefToNode(node, env) {
+  if (!isIdentifierNode(node) || !env) return node;
+  const b = envLookup(env, node.value);
+  return (b && (b.valueNode || b.rhsNode)) || node;
+}
+
+// List ノードの要素型を読む。まだ注釈されていなければ推論を走らせてから読む。
+function elementTypeOfNode(node, env) {
+  if (!node) return null;
+  if (node.elementType) return node.elementType;
+  inferAtomType(node, env);
+  return node.elementType || null;
+}
+
+// 器の要素型。識別子なら識別子テーブルへ書き戻された値を使う——Pass 3 の不動点が合成値の
+// 型と要素型を書き戻しているので、`l : [1 2 3]` と束縛してからの `l ' 0` もここで解ける。
+function containerElementType(node, env) {
+  if (isIdentifierNode(node) && env) {
+    const b = envLookup(env, node.value);
+    if (b && b.elementType) return b.elementType;
+  }
+  return elementTypeOfNode(derefToNode(node, env), env);
+}
+
+
+/**
+ * `'`（添字・フィールドアクセス）の結果型（type_system.md §2 のアクセス表）。
+ *
+ * これまで `'` は左辺優先ルールへ落ちて**器の型をそのまま返して**いた——`[1 2 3] ' 0` が
+ * `Int` ではなく `List` になっていた。値は正しく `1` を返しているので、型だけが器のまま
+ * 取り残されていたことになる。Pass 4 は `base + i × sizeof(T)` を出すのに要素型 `T` を
+ * 必要とするので、ここは落としてはいけない情報である。
+ *
+ * 添字が**範囲**のときだけ結果は器と同じ型になる（部分列は同じ器だから）。
+ */
+// 添字が**部分列を指す**形かどうか。`l ' 1~`（後置 `~`＝そこから先）と `l ' (1 ~ 2)`
+// （範囲式）の2つがある。単一の点を指す添字と違い、結果は器と同じ型になる。
+function sliceIndexNode(node) {
+  let r = node.right;
+  if (!r) return false;
+  // 括弧1段は剥がす（`(1 ~ 2)` のように優先順位のために括る形）。
+  while (r.type === "block" && Array.isArray(r.lines) && r.lines.length === 1) r = r.lines[0];
+  if (r.type !== "operation") return false;
+  if (r.position === "postfix" && r.name === "expand") return true;
+  return r.name === "range" || RANGE_STEP_OPS.has(r.name);
+}
+
+// 連番スロットを左から並べる。`1 , \`a\` , 2.5` は product の入れ子なので均す。
+function positionalSlots(node) {
+  if (node && node.type === "operation" && node.name === "product") {
+    return [...positionalSlots(node.left), ...positionalSlots(node.right)];
+  }
+  return [node];
+}
+
+// 名前付きスロットを `名前 -> 値ノード` で取り出す。
+function namedSlots(node) {
+  const out = new Map();
+  for (const line of node.lines || []) {
+    if (isDefineNode(line) && isIdentifierNode(line.left)) out.set(line.left.value, line.right);
+    else if (isIdentifierNode(line)) out.set(line.value, line);
+  }
+  return out;
+}
+
+function getPropResultType(node, env) {
+  // 器そのものを解決する。識別子なら束縛先まで辿る——`l : [1 2 3]` の `l ' 0` を
+  // 解けなければ、実用上ほとんどの添字が型を失う。
+  const base = derefToNode(node.left, env);
+  const containerType = inferAtomType(node.left, env);
+
+  // 範囲添字は部分列なので器と同じ型。要素型もそのまま引き継ぐ。
+  if (sliceIndexNode(node)) {
+    if (containerType === "List") node.elementType = containerElementType(node.left, env);
+    return containerType;
+  }
+
+  // `String ≅ List(0u)` なので、文字列の添字は文字＝String である（§2）。
+  if (containerType === "String") return "String";
+
+  if (containerType === "List") {
+    // List は同一型の要素が並ぶので、どの添字でも要素型は同じ。実行時の添字でよい。
+    return containerElementType(node.left, env) || null;
+  }
+
+  if (containerType === "Struct") {
+    const key = node.right;
+    // 名前付きスロットは名前で引く。
+    if (base && base.slotKind === "named" && isIdentifierNode(key)) {
+      const slot = namedSlots(base).get(key.value);
+      return slot ? inferAtomType(slot, env) : null;
+    }
+    // 連番スロットはリテラルの添字で引く。**実行時の添字は静的に解けない**
+    // ——スロットごとに型が違ってよいのが直積の意味なので、どの命令を出すか決まらない
+    // （§2「多相な Struct への実行時添字はコード生成できない」）。
+    const slots = base && base.slotKind === "named" ? [...namedSlots(base).values()] : positionalSlots(base);
+    if (key && key.type === "atom" && key.kind === "number") {
+      const i = parseInt(key.value, 10);
+      return slots[i] ? inferAtomType(slots[i], env) : null;
+    }
+    return null;
+  }
+
+  return containerType;
+}
+
 function literalAtomTypeFromKind(node) {
   switch (node.kind) {
     // アドレスは `0x` 記法のみ（§3.6）。十進整数は `Int`。
@@ -391,6 +500,8 @@ function computeAtomType(node, env) {
       // 以前は `return leftType` へ落ちており、`1 ~ 5` の型が値（[1,2,3,4,5]）と
       // 食い違って Address になっていた。
       if (node.name === "range" || RANGE_STEP_OPS.has(node.name)) return rangeResultType(node, env);
+      // `'`（添字・フィールドアクセス）は器の型ではなく**取り出したものの型**を返す。
+      if (node.name === "get_prop") return getPropResultType(node, env);
       const leftType = inferAtomType(node.left, env);
       if (ARITHMETIC_OPS.has(node.name)) return arithmeticResultType(node, leftType, env);
       return leftType; // 左辺が規則を選ぶ（§3.2）。比較・構造比較族は左辺の型が結果型
@@ -762,6 +873,7 @@ function collectParamTypes(nodes, env) {
       const t = inferAtomType(rhs, env);
       if (t && t !== "Unit" && binding.atomType !== t) {
         binding.atomType = t;
+        binding.valueNode = rhs;
         // 名前付きスロットと連番スロットは結合の可否が違うので、種別も持ち回る。
         if (rhs.slotKind) binding.slotKind = rhs.slotKind;
         if (rhs.elementType) binding.elementType = rhs.elementType;

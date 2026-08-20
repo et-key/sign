@@ -493,5 +493,23 @@ check("`!__` は Unit ではない", entries("id : !__")[0].endsWith("Unit"), fa
 // 非 Unit の否定は `__`（偽）である。
 check("非 Unit の否定は Unit", entries("f : !5"), ["f : Unit"]);
 
+
+// ---- `'`（添字・フィールドアクセス）は取り出したものの型を返す ----
+//
+// これまで `'` は左辺優先ルールへ落ちて**器の型をそのまま返して**いた——`[1 2 3] ' 0` が
+// `Int` ではなく `List` になっていた。値は正しく `1` を返していたので、型だけが器のまま
+// 取り残されていたことになる。Pass 4 は `base + i × sizeof(T)` を出すのに要素型 `T` を
+// 必要とするので、ここは落としてはいけない情報である。
+check("List(Int) の添字は Int", entries("l : [1 2 3]\np : l ' 0"), ["l : List(Int)", "p : Int"]);
+check("List(Float) の添字は Float", entries("l : [1.0 2.0]\np : l ' 0"), ["l : List(Float)", "p : Float"]);
+// `String ≅ List(0u)` なので文字列の添字は文字＝String である（§2）。
+check("String の添字は String（文字）", entries("s : `abc`\np : s ' 0"), ["s : String", "p : String"]);
+// 添字が**部分列**を指す形（後置 `~` と範囲式）のときだけ、結果は器と同じ型になる。
+check("部分列の添字は器の型", entries("l : [1 2 3]\np : l ' 1~"), ["l : List(Int)", "p : List(Int)"]);
+// 名前付きスロットは名前で、連番スロットはリテラルの添字でそのスロットの型を引く
+// ——スロットごとに型が違ってよいのが直積の意味だからである。
+check("名前付きスロットはその名前の型", entries("d : [\n\tx : 1\n\ty : `s`\n]\np : d ' y").slice(1), ["p : String"]);
+check("連番スロットはその位置の型", entries("t : 1 , `a` , 2.5\np : t ' 2").slice(1), ["p : Float"]);
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
