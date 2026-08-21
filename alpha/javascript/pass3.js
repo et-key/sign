@@ -782,8 +782,54 @@ function typeOfKnownOperand(node, scope, paramNames) {
   return t && t !== "Unit" ? t : null;
 }
 
+// 族（まだ具体型が決まっていない下限）とその成員（§4 の記法定義）。
+// `Scalar` は「String を含まない Atom」、`Atom` は「String を**含む**スカラー」である。
+// どちらも証拠ではなく**証拠の不在**だが、不在にも範囲がある——`List` や `Struct` は
+// どちらの族にも属さない。
+const FAMILY_MEMBERS = {
+  Scalar: new Set(["Int", "Address", "Float", "Vector"]),
+  Atom: new Set(["Int", "Address", "Float", "Vector", "String", "Scalar"]),
+};
+
 function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
   const inferred = new Map();
+
+  /**
+   * 仮引数の型を記録する。**先に書いた方が勝つのではなく、具体的な方が勝つ。**
+   *
+   * 使用箇所は複数あり、証拠の強さが違う。`col > n` は「col は数である」としか言わない
+   * （相手も仮引数なので）が、`col + 1` は「col は Int である」と言う。先勝ちにすると
+   * 本体の**書いた順**で型が変わってしまい、`try_col : col row n [~board] ?` の `col` が
+   * `Scalar` に留まっていた——`col > n` が `col + 1` より前の行にあるという、それだけの
+   * 理由で。Pass 4 は `Scalar` では命令を選べない（GPR か FPU かも幅も決まらない）ので、
+   * ここで落ちる差は最後まで響く。
+   *
+   * 族（`Atom` / `Scalar`）は証拠ではなく**証拠の不在**なので、具体型が来たら譲る。
+   * 逆に具体型が既にあるところへ族が来ても何も起きない。束を単調に下る（狭める）だけで
+   * あり、順序に依存しない——これが不動点の前提でもある。
+   */
+  const refine = (name, type) => {
+    if (!type) return;
+    const prev = inferred.get(name);
+    if (prev === undefined) {
+      inferred.set(name, type);
+      return;
+    }
+    if (prev === type) return;
+    // **族の中でだけ狭める。** `Scalar` に対する `Int` は「どの数か分かった」だが、
+    // `Scalar` に対する `List` は絞り込みではなく食い違いである——`List` は `Scalar` の
+    // 成員ではない。
+    //
+    // これは実際に踏んだ差である。`first_row : col n ?` の `col` は数（`col > n`、
+    // `col + 1`）だが、`place 2 n col` では盤（`List`）を要求するスロットへ渡る
+    // ——スカラーが1要素リストと同型だからそう書ける。両方とも真だが、`col` 自身の型は
+    // 数である。族の外から来た型で上書きすると、同型で通しただけの位置が型を乗っ取る。
+    //
+    // 食い違いはここでは断じない。本当の不一致を見るのは演算子ごとの検査の仕事である
+    // （原理4）。
+    const members = FAMILY_MEMBERS[prev];
+    if (members && members.has(type)) inferred.set(name, type);
+  };
 
   function visit(node) {
     if (!node || typeof node !== "object") return;
@@ -803,7 +849,7 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
           side.type === "atom" &&
           side.kind === "identifier" &&
           paramNames.has(side.value) &&
-          !inferred.has(side.value)
+          true
         ) {
           // 相手がリテラルなら**その型がこの仮引数の型を決める**。相手が分からなければ
           // 演算子が要求する族（`Scalar`）までしか言えない。
@@ -825,9 +871,40 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
           // 文字である。定数へ切り出した書き方（`tab : \t` と置いてから比べる）が、
           // リテラルを直接書いた場合より弱い型になってしまうのを防ぐ。
           const fromOther = constraintFromLiteral(other) || typeOfKnownOperand(other, scope, paramNames);
-          inferred.set(side.value, fromOther || "Scalar");
+          refine(side.value, fromOther || "Scalar");
         }
       }
+    }
+
+    // **前置 `@` / `#` はアドレスを要求する。** §3.5 の表が `@` を
+    // 「`Address` → 参照先の圏を継承」と定めており、参照を外せるのはアドレスだけである。
+    // だから `f : p ? @p 1` の `p` は `Address` だと**書いてある**——演算子から逆算する
+    // という点で `x + 1` から `Int` を読むのと同じことをしている。
+    //
+    // これは高階関数の受け口そのものである。§2 の状況表が「高階関数の型解決は `$`/`@` に
+    // よる明示的な Lambda↔Atom 変換で足りる」と言う通り、Sign では関数を渡すときに
+    // `$is_digit` とアドレスを取り、受け側は `@p` で呼ぶ。仕組みは既にあったが、
+    // **型がそれを書き写していなかった**——`take_while : Atom String -> String` の
+    // 第1引数は `Address` である。Pass 4 が関数ポインタを渡す命令を選ぶのに要る。
+    if (
+      node.type === "operation" &&
+      node.position === "prefix" &&
+      node.name === "input" &&
+      isIdentifierNode(node.operand) &&
+      paramNames.has(node.operand.value)
+    ) {
+      refine(node.operand.value, "Address");
+    }
+    // 中置 `#`（output、tier 4）は「アドレスにデータを入れる」ので**左辺**がアドレスである
+    // （前置 `#` は export 印なので別物——同じ記号でも位置で意味が違う）。
+    if (
+      node.type === "operation" &&
+      node.position === "infix" &&
+      node.name === "output" &&
+      isIdentifierNode(node.left) &&
+      paramNames.has(node.left.value)
+    ) {
+      refine(node.left.value, "Address");
     }
 
     // レンジの端点も同じ規則で読める。§4 のシグネチャ
@@ -844,10 +921,10 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
         [ends[0], ends[1]],
         [ends[1], ends[0]],
       ]) {
-        if (side && side.type === "atom" && side.kind === "identifier" && paramNames.has(side.value) && !inferred.has(side.value)) {
+        if (side && side.type === "atom" && side.kind === "identifier" && paramNames.has(side.value)) {
           const fromOther = constraintFromLiteral(other) || typeOfKnownOperand(other, scope, paramNames);
           // 端点になれるのは点だけなので、相手が分からなくても `Scalar` までは言える。
-          inferred.set(side.value, fromOther && RANGE_ENDPOINT_TYPES.has(fromOther) ? fromOther : "Scalar");
+          refine(side.value, fromOther && RANGE_ENDPOINT_TYPES.has(fromOther) ? fromOther : "Scalar");
         }
       }
     }
@@ -857,13 +934,13 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
     // これは範囲判定の書き方そのものなので、拾えないと述語の型が `Atom` に留まる。
     if (node.type === "operation" && node.name === "chain_compare") {
       const mid = node.middle;
-      if (isIdentifierNode(mid) && paramNames.has(mid.value) && !inferred.has(mid.value)) {
+      if (isIdentifierNode(mid) && paramNames.has(mid.value)) {
         const t =
           constraintFromLiteral(node.left) ||
           constraintFromLiteral(node.right) ||
           typeOfKnownOperand(node.left, scope, paramNames) ||
           typeOfKnownOperand(node.right, scope, paramNames);
-        inferred.set(mid.value, t || "Scalar");
+        refine(mid.value, t || "Scalar");
       }
       visit(node.middle);
     }
@@ -883,8 +960,8 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
           const t = slots[i];
           // `Atom` は下限であって制約ではないので、逆流させる意味が無い。
           if (!t || t === "Atom") return;
-          if (isIdentifierNode(arg) && paramNames.has(arg.value) && !inferred.has(arg.value)) {
-            inferred.set(arg.value, t);
+          if (isIdentifierNode(arg) && paramNames.has(arg.value)) {
+            refine(arg.value, t);
             return;
           }
           // **`xs~` はスロットへ「要素」を渡す。** 後置 `~` は展開なので、呼び先のスロットに
@@ -898,9 +975,9 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
             arg.name === "expand" &&
             isIdentifierNode(arg.operand) &&
             paramNames.has(arg.operand.value) &&
-            !inferred.has(arg.operand.value)
+            true
           ) {
-            inferred.set(arg.operand.value, t);
+            refine(arg.operand.value, t);
           }
         });
       }
