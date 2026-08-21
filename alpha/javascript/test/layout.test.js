@@ -146,6 +146,11 @@ function sizeVia(source) {
 	const m = measure(node, conf);
 	return m && m.size;
 }
+function sizeVia2(source, charset) {
+	const { node, conf } = A64env(source);
+	const m = measure(node, { ...conf, charset });
+	return m && m.size;
+}
 function reprVia(source) {
 	const { node, conf } = A64env(source);
 	const m = measure(node, conf);
@@ -167,6 +172,24 @@ check("関数の戻り値を経由", sizeVia("f : _ ? [1 ~ 5]\ng : f __"), 24);
 // 値が分からなくても `{start, step, end}` の形は変わらない。
 check("終端が仮引数でも 24 byte", sizeVia("mk : n ? [1 ~ n]\ng : mk 5"), 24);
 check("2段の関数越しでも決まる", sizeVia("mk : n ? [1 ~ n]\nvia : n ? mk n\ng : via 5"), 24);
+
+// ---- 列は伸びても数えられる（String ≅ List(0u)） ----
+//
+// 文字列は余積で伸びる文字の列である（type_system.md §2）。両辺の長さが分かれば全体の
+// 長さも分かる——`[1 2] 3` の要素数が数えられるのと同じことである。ここを数えないと
+// 同型が片側だけ成立していることになる（型は `String` と言えるのに大きさが言えない）。
+check("文字列の連結は足し算", sizeVia("s : `ab` `cd`"), 16);
+check("名前を経由した連結", sizeVia("t : `hi`\ns : t `!`"), 12);
+check("名前だけでも数えられる", sizeVia("t : `abc`\ns : t"), 12);
+check("charset が1文字の幅を決める（ascii なら1 byte）", sizeVia2("s : `ab` `cd`", "ascii"), 4);
+// List も同じ規則で伸びる。pass2 が空白の解決結果として出す4つの名前
+// （construct / concat / push / unshift）は、どれも「1段の中で列が伸びる」ことを言っている。
+check("push で伸びた List", sizeVia("l : [1 2] 3"), 24);
+check("unshift で伸びた List", sizeVia("l : 0 [1 2]"), 24);
+check("名前を経由した余積", sizeVia("a : [1 2]\nb : [3 4]\nl : a b"), 32);
+// **長さが実行時に決まるものは決まらないと言う。** 嘘の数を返してはいけない
+// ——場所を先に取れない値は参照として渡すしかない（return_value_addressing.md）。
+check("実行時に伸びる連結は決まらない", sizeVia("f : x ? x `!`\ng : f `hi`"), null);
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

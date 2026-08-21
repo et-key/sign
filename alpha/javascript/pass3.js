@@ -973,9 +973,14 @@ function collectParamTypes(nodes, env) {
     // 破れていた（`1 2 , 3 4 , 5 6` は3スロットなのに `m , 5 6` は入れ子になる）。
     if (rhs && !(rhs.type === "operation" && rhs.name === "lambda") && !pointfreeSignature(rhs)) {
       const t = inferAtomType(rhs, env);
+      // **値ノードは型が変わらなくても記録する。** 型と大きさは別の情報だからである
+      // ——`t : `abc`` は Pass 1a の時点で `String` と分かるので型は動かないが、
+      // 「3文字である」ことは値ノードにしか無い。ここを型の変化に紐付けていたせいで、
+      // リテラルに束縛された識別子だけ形の解決から漏れていた（`s : t` が測れない）。
+      // `changed` は不動点を回す旗なので、型が動いたときだけ立てる。
+      if (t && t !== "Unit") binding.valueNode = rhs;
       if (t && t !== "Unit" && binding.atomType !== t) {
         binding.atomType = t;
-        binding.valueNode = rhs;
         // 名前付きスロットと連番スロットは結合の可否が違うので、種別も持ち回る。
         if (rhs.slotKind) binding.slotKind = rhs.slotKind;
         if (rhs.elementType) binding.elementType = rhs.elementType;

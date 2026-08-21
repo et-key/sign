@@ -95,12 +95,28 @@ function alignUp(n, align) {
   return align > 0 ? Math.ceil(n / align) * align : n;
 }
 
-// 余積（`construct` の連なり）を平らな配列へ均す。`[1 2 3]` の中身がこの形で来る。
-function flattenConstruct(node) {
+/**
+ * 余積の連なりを平らな要素の並びへ均す。`[1 2 3]` の中身がこの形で来る。
+ *
+ * `push` と `unshift` も余積である。pass2 が空白の解決結果として出す4つの名前
+ * （`construct` / `concat` / `push` / `unshift`）は、どれも「列が1段の中で伸びる」ことを
+ * 言っているにすぎず、**どちら側から伸びたか**が違うだけである。ここで `push` /
+ * `unshift` を均さないと、`[1 2] 3` のように名前を経由せず伸びた列だけ大きさが
+ * 出せなくなる——文字列側（``ab` `cd``）が数えられるのと食い違う。
+ *
+ * 名前も辿る。要素の並びは名前ではなく中身にしか無い。
+ */
+function flattenConstruct(node, env = null, seen = new Set()) {
+  node = deref(node, env, seen);
   if (!node) return [];
-  if (node.type === "operation" && (node.name === "construct" || node.name === "concat")) {
-    return [...flattenConstruct(node.left), ...flattenConstruct(node.right)];
+  if (node.type === "operation") {
+    // `construct` / `concat` は左右とも列。`push` は右が要素、`unshift` は左が要素。
+    if (node.name === "construct" || node.name === "concat" || node.name === "push" || node.name === "unshift") {
+      return [...flattenConstruct(node.left, env, seen), ...flattenConstruct(node.right, env, seen)];
+    }
   }
+  // 1行だけのブロックは括りでしかない（`[[1 2] 3]` の外側）。
+  if (Array.isArray(node.lines) && node.lines.length === 1) return flattenConstruct(node.lines[0], env, seen);
   return [node];
 }
 
@@ -133,8 +149,8 @@ function measure(node, conf) {
   // `String ≅ List(0u)`。要素幅は charset が決める。長さはリテラルなら数えられる。
   if (type === "String") {
     const w = charSizeOf(charset);
-    const n = stringLength(node);
-    return n === null ? null : { size: n * w, align: w };
+    const n = stringLength(node, env);
+    return n === null ? null : { size: n * w, align: w, repr: "cells", stride: w, count: n };
   }
 
   // **規則裏打ち**（レンジ）は要素を持たない。置かれるのは規則そのものである。
@@ -150,14 +166,38 @@ function measure(node, conf) {
   return size === null ? null : { size, align: size };
 }
 
-// 文字列リテラルの文字数。バッククォートを剥がしてコードポイント単位で数える
-// （サロゲートペアを2文字と数えないため `[...s]` を使う）。
-function stringLength(node) {
+/**
+ * 文字列の文字数。バッククォートを剥がしてコードポイント単位で数える
+ * （サロゲートペアを2文字と数えないため `[...s]` を使う）。
+ *
+ * **連結も数える。** `String ≅ List(0u)`（type_system.md §2）である以上、文字列は
+ * 余積で伸びる列であり、両辺の長さが分かれば全体の長さも分かる——`[1 2] ~ [3 4]` の
+ * 要素数が数えられるのと同じことである。ここを数えないと、同型が片側だけ成立している
+ * ことになる（型は `String` と言えるのに大きさが言えない）。
+ *
+ * 名前も辿る。長さは名前ではなく中身にしか無い。
+ *
+ * 静的に決まらないもの（実行時に伸びる連結）は null。**それは失敗ではなく事実である**
+ * ——長さが実行時に決まる値は場所を先に取れないので、参照として渡すしかない
+ * （`Implicit`、return_value_addressing.md）。ここで嘘の数を返してはいけない。
+ */
+function stringLength(node, env = null, seen = new Set()) {
+  node = deref(node, env, seen);
+  if (!node) return null;
   if (node.type === "atom" && node.kind === "string") return [...node.value.slice(1, -1)].length;
   if (node.type === "atom" && node.kind === "char") return 1;
   // `0u….` は Char 1個。U+0000 は Unit なので 0 個（niche、value_representation.md §3）。
   if (node.type === "atom" && node.kind === "unicode") return parseInt(node.value.slice(2), 16) === 0 ? 0 : 1;
-  return null; // 連結の結果など、静的に長さが決まらないもの
+  // 余積（`construct` / `concat`）は両辺の和。片方でも決まらなければ全体も決まらない。
+  if (node.type === "operation" && (node.name === "construct" || node.name === "concat")) {
+    const l = stringLength(node.left, env, seen);
+    if (l === null) return null;
+    const r = stringLength(node.right, env, seen);
+    return r === null ? null : l + r;
+  }
+  // 1行だけのブロックは括りでしかない（`[`ab`]` は ``ab`` と同じ）。
+  if (Array.isArray(node.lines) && node.lines.length === 1) return stringLength(node.lines[0], env, seen);
+  return null;
 }
 
 /**
@@ -191,7 +231,7 @@ function measureRule(node, conf) {
 }
 
 function measureList(node, conf) {
-  const items = listItems(node);
+  const items = listItems(node, conf && conf.env);
   if (items === null) return null;
   // 要素は同一型（`List` の同一型制約、§2）なので、先頭1個を測れば全体が出る。
   const first = items.length > 0 ? measure(items[0], conf) : null;
@@ -201,11 +241,16 @@ function measureList(node, conf) {
   return { size: stride * items.length, align: first.align, stride, count: items.length, repr: "cells" };
 }
 
-// List の要素ノードを取り出す。`[1 2 3]` は paren ブロックの中に余積1本が入っている。
-function listItems(node) {
-  if (!Array.isArray(node.lines)) return null;
-  if (node.lines.length === 1) return flattenConstruct(node.lines[0]);
-  return node.lines;
+// List の要素ノードを取り出す。`[1 2 3]` は paren ブロックの中に余積1本が入っているが、
+// `[1 2] 3` のようにブロックを経ずに伸びた形もある。どちらも同じ余積である。
+function listItems(node, env = null) {
+  if (Array.isArray(node.lines)) {
+    if (node.lines.length === 1) return flattenConstruct(node.lines[0], env);
+    return node.lines;
+  }
+  const items = flattenConstruct(node, env);
+  // 均せずに自分自身が返ってきたなら、それは列ではない（数えようがない）。
+  return items.length === 1 && items[0] === node ? null : items;
 }
 
 /**
