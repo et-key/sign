@@ -178,19 +178,15 @@ opened : bd nd ?
 
 `--- 2. 行頭のタブ深さから INDENT / DEDENT を作る ---`
 
-`インデント幅のスタック。cons で積み、底はスカラーの 0 とする`
-`1要素リストはスカラーへ縮退するため、底の判定は |st| = 0 でしか安定しない`
+`インデント幅のスタック。深さの列として積む。底の 0 は要素として常に残るので`
+`スタックは空にならない——unwind は (top st) > d で止まり、0 > d は偽である`
 
 bottom : 0
-push : st d ? [d , st]
+push : st d ? d st~
 
-top : st ?
-	|st| = 0 : 0
-	st ' 0
+top : st ? st ' 0
 
-pop : st ?
-	|st| = 0 : st
-	st ' 1
+pop : st ? st ' 1~
 
 `行頭のタブ数と、タブを落とした本文`
 
@@ -215,18 +211,16 @@ tail_line : [c ~rest] ?
 `深さ d より深い段を閉じる。閉じた後のスタックと、その段数ぶんの DEDENT`
 
 unwind : st d ?
-	|st| = 0 : st
 	(top st) > d : unwind (pop st) d
 	st
 
 closers : st d ?
-	|st| = 0 : __
 	(top st) > d : dedent (closers (pop st) d)
 	__
 
 close_all : st ?
-	|st| = 0 : __
-	dedent (close_all (pop st))
+	(top st) > 0 : dedent (close_all (pop st))
+	__
 
 `この行の直前に置く区切りと、この行を読んだ後のスタック`
 `深くなれば INDENT で前の行に直結し、浅くなれば DEDENT を並べてから改行する`
