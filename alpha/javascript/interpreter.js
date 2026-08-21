@@ -1187,6 +1187,12 @@ function getPropValue(l, rightNode, env) {
 // 右辺のノード形を見ないと決まらないため getPropValue 側に残し、ここは数値・範囲だけを扱う。
 // 左辺束縛のポイントフリー（`[[3 , 4] ']` に添字を渡す形）は右辺がノードとして存在しない
 // ——ストリームから値で届く——ため、この入口が要る。
+// 後置 `~`（展開）が付いているか。マージが「双方に `~`」を条件にしているので
+// （list_model.md §5.3）、値ではなく**書かれ方**を見る必要がある。
+function isSpreadNode(n) {
+  return !!n && n.type === "operation" && n.position === "postfix" && n.name === "expand";
+}
+
 // 名前付きスロット（プレーンオブジェクト）か。List・String・スカラーと区別する。
 function isNamedSlots(v) {
   // イテレータもプレーンオブジェクトなので明示的に除く——`{start, step, end}` の
@@ -1600,6 +1606,19 @@ function evaluate(node, env) {
         if (l !== null && typeof l === "object" && l.__lambda__ &&
             !(r !== null && typeof r === "object" && r.__lambda__)) {
           return applyClosure(l, [r]);
+        }
+        // **構造体のマージ**（list_model.md §5.3）。「双方に後置 `~` がついていれば、
+        // リストの時と同様に構造体同士をマージできる」——後置 `~` の意味は一貫して
+        // 「展開して渡す」であり、構造体を展開するとはスロットを撒くということである。
+        //
+        // `~` が無ければマージではない。`q r` は構造体2個が並んだ列（`List(Struct)`）で
+        // あって、勝手に畳んではいけない——名前付きスロットに名前の無いものを足せない
+        // 以上、余積は次元の中を伸ばすしかないからである。
+        //
+        // 重複キーは右が勝つ（§5.3 規則2）。型が違う上書きはコンパイルエラーであり、
+        // それは Pass 3 が静的に弾く（規則3）——ここへ来る時点で型は揃っている。
+        if (isSpreadNode(node.right) && isNamedSlots(l) && isNamedSlots(r)) {
+          return { ...l, ...r };
         }
         // §3.2 余積族: どちらかが文字列ならテキストとして連結する
         // （`123` 123 = `123123`、list_model.md §2.1/§4.4）。

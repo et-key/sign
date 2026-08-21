@@ -250,6 +250,73 @@ function elementTypeOfNode(node, env) {
 
 // 器の要素型。識別子なら識別子テーブルへ書き戻された値を使う——Pass 3 の不動点が合成値の
 // 型と要素型を書き戻しているので、`l : [1 2 3]` と束縛してからの `l ' 0` もここで解ける。
+// 後置 `~`（展開）が付いているか。§5.3 のマージは「双方に `~`」が条件なので、
+// 値ではなく**書かれ方**を見る。
+function isSpreadNode(n) {
+  return !!n && n.type === "operation" && n.position === "postfix" && n.name === "expand";
+}
+
+// 名前付きスロットを `名前 -> 値ノード` で読む。識別子なら束縛先まで辿る。
+// **型ではなくノードを持つ。** 型からは大きさが出ないからである（文字列の長さ、
+// リストの要素数、レンジの実体はノードにしか無い）——形の解決がここを読む。
+function namedSlotTypes(node, env) {
+  const d = derefToNode(isSpreadNode(node) ? node.operand : node, env);
+  const target = derefToNode(d, env);
+  if (!target) return null;
+  // 既にマージ済みの結果はスロット表をそのまま持っている。`a~ b~ c~` は左結合なので、
+  // 3つ目を足すときの左辺は「マージ済みの構造体」であって展開ノードではない。
+  if (target.mergedSlots) return target.mergedSlots;
+  if (target.slotKind !== "named") return null;
+  const out = new Map();
+  for (const line of target.lines || []) {
+    if (isDefineNode(line) && isIdentifierNode(line.left)) out.set(line.left.value, line.right);
+    else if (isIdentifierNode(line)) out.set(line.value, line);
+  }
+  return out;
+}
+
+/**
+ * 構造体のマージ（list_model.md §5.3）。**双方に後置 `~` があるときだけ**成立する。
+ *
+ * 規則は3つ。重複しないキーは足す。重複するキーは**両辺の型が一致するときだけ**
+ * 上書きを許す（右が勝つ）。型が違えばコンパイルエラーである——「型安全な上書き」と
+ * 呼ばれているのは、上書きが型を変えないことを保証するという意味だからである。
+ *
+ * 全て静的に決まる。マージ対象のフィールド型はコードの評価前に確定しており、
+ * 実行時型情報を必要としない（§5.3 の NOTE）。
+ */
+function mergedStructSlots(node, env) {
+  // 右辺には必ず `~` が要る（足す側が展開されていなければマージではない）。左辺は
+  // 展開ノードか、既にマージ済みの結果のどちらかでよい——`a~ b~ c~` の左結合に対応する。
+  if (!isSpreadNode(node.right)) return null;
+  if (!isSpreadNode(node.left) && !node.left.mergedSlots) return null;
+  const l = namedSlotTypes(node.left, env);
+  const r = namedSlotTypes(node.right, env);
+  if (!l || !r) return null;
+  for (const [k, rNode] of r) {
+    if (!l.has(k)) continue;
+    const lt = inferAtomType(l.get(k), env);
+    const rt = inferAtomType(rNode, env);
+    // 未解決（null）は判定できないので断じない（原理4）。
+    if (lt === null || rt === null || lt === rt) continue;
+    throw new TypeError(
+      `list_model.md §5.3違反: 構造体のマージで型が衝突しています（${bareIdent({ value: k })} が ${lt} と ${rt}）。` +
+        "上書きが許されるのは両辺の型が一致するときだけです"
+    );
+  }
+  return new Map([...l, ...r]);
+}
+
+// スロットの種別。名前付きか連番かは**中身にしか無い**ので、識別子なら束縛まで辿る。
+function slotKindOf(node, env) {
+  if (isIdentifierNode(node) && env) {
+    const b = envLookup(env, node.value);
+    if (b && b.slotKind) return b.slotKind;
+  }
+  const d = derefToNode(node, env);
+  return (d && d.slotKind) || null;
+}
+
 function containerElementType(node, env) {
   if (isIdentifierNode(node) && env) {
     const b = envLookup(env, node.value);
@@ -484,6 +551,16 @@ function computeAtomType(node, env) {
       // String との join は常に存在する（「レンダリングする」という全域の操作がある）。
       // 左辺だけを見ると `` `ab` 1 `` → "ab1" なのに `1 `ab`` はエラー、という
       // 引数の順序で挙動が変わる非対称が生じてしまう。
+      // 構造体のマージ（§5.3）。文字列吸収より先に見る——両辺が構造体である以上、
+      // テキスト連結の話にはならない。
+      if (leftType === "Struct" && rightType === "Struct") {
+        const merged = mergedStructSlots(node, env);
+        if (merged) {
+          node.slotKind = "named";
+          node.mergedSlots = merged;
+          return "Struct";
+        }
+      }
       if (leftType === "String" || rightType === "String") return "String";
       // §3.2の余積族テーブル / §6.1: 余積の単位元。片側がUnitなら他方を素通しする
       // （`__ x = x`、`x __ = x`）。Unitは要素型の join には参加しない——
@@ -508,7 +585,21 @@ function computeAtomType(node, env) {
         const elementNode = isUnshift ? node.right : node.left;
         const containerType = isUnshift ? leftType : rightType;
         if (containerType === "Struct") {
-          node.slotKind = containerNode.slotKind || "positional";
+          // **名前付きスロットには、名前の無いものを足せない。** 名前で引くのが名前付き
+          // スロットの意味なので、付ける名前が無いものはスロットになりようがない。
+          // 足せないからといって不正なのではなく、そのとき余積は**次元の中を伸ばす**
+          // ——構造体が2つ並んだ列（`List(Struct)`）になる。評価器は最初からそう動いて
+          // いて、型だけが `Struct` と言い張っていた（`l : p p` の値は構造体2個の列）。
+          //
+          // 名前付き構造体同士を1つに畳むのは §5.3 のマージであり、それは**双方に後置
+          // `~` を書いたときだけ**起きる。`~` の無い並びをマージと読んではいけない。
+          if (slotKindOf(containerNode, env) === "named") {
+            node.elementType = "Struct";
+            return "List";
+          }
+          // 連番スロットなら足せる。順序が意味そのものなので、末尾に1つ増えるだけである
+          // ——`m : 1 2 , 3 4` へ行を足す `m [5 6]` がこれ。
+          node.slotKind = slotKindOf(containerNode, env) || "positional";
           return "Struct";
         }
         const joinedAppend = joinElementTypes(elementTypeOf(containerNode, env), inferAtomType(elementNode, env));

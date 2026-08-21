@@ -151,6 +151,11 @@ function sizeVia2(source, charset) {
 	const m = measure(node, { ...conf, charset });
 	return m && m.size;
 }
+function slotsVia(source) {
+	const { node, conf } = A64env(source);
+	const l = layoutOfStruct(node, conf);
+	return l && l.slots.map((s) => `${s.name}@${s.offset}`);
+}
 function reprVia(source) {
 	const { node, conf } = A64env(source);
 	const m = measure(node, conf);
@@ -190,6 +195,11 @@ check("名前を経由した余積", sizeVia("a : [1 2]\nb : [3 4]\nl : a b"), 3
 // **長さが実行時に決まるものは決まらないと言う。** 嘘の数を返してはいけない
 // ——場所を先に取れない値は参照として渡すしかない（return_value_addressing.md）。
 check("実行時に伸びる連結は決まらない", sizeVia("f : x ? x `!`\ng : f `hi`"), null);
+// マージの結果もレイアウトを持つ（list_model.md §5.3）。元の宣言は2つ以上の構造体へ
+// 散っているので並べられるのは畳んだ後のスロットだけだが、物理配置の規則は変わらない
+// ——名前順である（stack_abi.md §7.1）。マージで作ったかどうかは配置に影響しない。
+check("マージした構造体も名前順に並ぶ", slotsVia("q : [\n\ty : 2.5\n]\nr : [\n\tx : 1\n]\ns : q~ r~"), ["x@0", "y@8"]);
+check("マージした構造体の大きさ", sizeVia("q : [\n\tx : 1\n]\nr : [\n\ty : 2.5\n]\ns : q~ r~"), 16);
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

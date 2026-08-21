@@ -263,6 +263,15 @@ function layoutOfStruct(node, conf) {
   node = deref(node, conf && conf.env);
   if (!node || node.atomType !== "Struct") return null;
 
+  // マージの結果はスロット表を直接持つ（list_model.md §5.3）。元の宣言は2つ以上の
+  // 構造体へ散っているので、並べられるのは畳んだ後のスロットだけである。物理配置は
+  // 他の名前付き構造体と同じく名前順——マージで作ったからといって配置規則は変わらない。
+  if (node.mergedSlots) {
+    const entries = [...node.mergedSlots].map(([k, v], ordinal) => ({ name: bareName(k), ordinal, node: v }));
+    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    return packSlots(entries, conf, "named");
+  }
+
   // 名前付き: 宣言順（連番）を確定させてから、**名前でソートして並べる**（stack_abi.md §7.1）。
   // 並びが物理配置、各スロットが持つ ordinal が宣言順である。詰め込みのための並べ替えは
   // しない——並びを決めるのは名前であって、コンパイラの裁量ではない。

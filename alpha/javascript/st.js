@@ -183,6 +183,21 @@ function slotTypeText(node) {
  */
 function structTypeText(node, atomType) {
   if (atomType !== "Struct" || !node) return atomType;
+  // マージの結果はスロット表を直接持つ（list_model.md §5.3）。元の宣言は2つ以上の
+  // 構造体に散っているので、書き写せるのは畳んだ後の並びだけである。
+  if (node.mergedSlots) {
+    // 宣言順は畳んだ後の並び（左の順、右の新しいキーが続く）。重複したキーは元の位置に
+    // 留まり、値だけが右のものになる（§5.3 規則2）。物理配置は他の名前付き構造体と
+    // 同じく名前順である（stack_abi.md §7.1）。
+    const slots = [...node.mergedSlots].map(([k, v], ordinal) => ({
+      name: bareName(k),
+      ordinal,
+      type: slotTypeText(v),
+    }));
+    if (slots.length === 0) return "Struct";
+    slots.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    return `Struct{${slots.map((s) => `${s.name} : ${s.type} , ${s.ordinal}`).join("  ")}}`;
+  }
   if (node.slotKind === "named") {
     // 宣言順（連番）を先に確定させてから、名前でソートして並べる。
     // 並び＝物理配置（正規順）、各名前が持つ値＝宣言順。両方が明示される。
@@ -202,15 +217,23 @@ function structTypeText(node, atomType) {
   }
   if (node.slotKind === "positional") {
     const slots = [];
+    // **自分自身を渡し直さない。** 連番スロットは直積（`product`）の連なりとして
+    // 分解できるが、`slotKind` が付いていても直積でない形はありうる。そこで
+    // `slotTypeText(node)` を呼ぶと `Struct` を見て再びここへ戻り、無限に回る
+    // ——実際に `l : p p`（構造体を余積で並べた形）が型の書き出しで落ちていた。
+    // 分解できないものは分解できないと言えばよい。型の書き出しが止まらないのは
+    // どんな理由があっても間違いである。
     const walk = (n) => {
       if (n && n.type === "operation" && n.name === "product") {
         walk(n.left);
         slots.push(slotTypeText(n.right));
         return;
       }
+      if (n === node) return;
       slots.push(slotTypeText(n));
     };
     walk(node);
+    if (slots.length === 0) return "Struct";
     return `Struct(${slots.join(" ")})`;
   }
   return atomType;
