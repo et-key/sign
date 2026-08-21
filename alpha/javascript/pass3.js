@@ -1319,7 +1319,15 @@ function collectCallsiteParamTypes(nodes, env) {
         if (!name || i >= args.length) return;
         const t = inferAtomType(args[i], env);
         // 未解決と `Unit` は観測ではない（`__` は零射であって型の主張ではない）。
-        if (t && t !== "Unit") observed[i].add(t);
+        // **族も観測ではない。** 族は「まだ分かっていない」の言い換えなので、それを
+        // 観測に数えると具体型と食い違って「複数の型で呼ばれている」に見えてしまう。
+        //
+        // これが効くのは再帰である。`conflict : col dist [h ~t] ?` は自分自身を
+        // `conflict col (dist + 1) t` と呼ぶので、`col` の観測に `col` 自身の型が
+        // 混ざる——決めようとしているものを証拠として数える循環になっていた。結果
+        // `{Int, Scalar}` と食い違って、`try_col` から Int で呼ばれている事実が
+        // 打ち消されていた。
+        if (t && t !== "Unit" && !FAMILY_MEMBERS[t]) observed[i].add(t);
         if (t !== "Struct") return;
         const sh = structShapeOf(args[i], env);
         if (!sh) { shapes[i].agreed = false; return; }
@@ -1580,7 +1588,16 @@ function joinArmTypes(types) {
   const distinct = [...new Set(flat.filter((x) => x !== "Unit"))].sort();
   if (distinct.length === 0) return "Unit";
   if (distinct.length === 1) return distinct[0];
-  return distinct.join(" | ");
+  // **族が既に含んでいる枝は畳む。** §4 の記法定義では `Atom` は `Scalar | String` で
+  // あり、`Scalar` は `Int | Address | Float | Vector` である。したがって
+  // `Atom | String` は `Atom` であって、`| String` は何も足していない。
+  //
+  // 畳まないと「表現を決めるべき直和」が水増しされる——Pass 4 から見れば `Atom | String`
+  // は枝が2つあるように見えるが、実際には1つの族でしかない。冪等（`A | A = A`）を
+  // 平らにするのと同じ話が、族と成員の間にも成り立つ。
+  const absorbed = distinct.filter((x) => !distinct.some((y) => y !== x && FAMILY_MEMBERS[y] && FAMILY_MEMBERS[y].has(x)));
+  if (absorbed.length === 1) return absorbed[0];
+  return absorbed.join(" | ");
 }
 
 // apply 連鎖（`apply(apply(f, a), b)`）の根にある識別子の binding を返す。

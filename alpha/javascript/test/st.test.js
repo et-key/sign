@@ -661,7 +661,28 @@ check("形が違うサイトが混ざれば解けない", entries("f : p ? p ' 0
 	"a : Atom",
 	"b : Atom",
 ]);
-// 中身が見えていれば従来通り解ける。
+
+// **族は観測ではない。** 呼び出しサイトの実引数がまだ族なら、それは「まだ分かっていない」の
+// 言い換えであって型の主張ではない。観測に数えると具体型と食い違い、「複数の型で呼ばれて
+// いる」に見えてしまう。
+//
+// これが効くのは再帰である。自分自身を呼ぶとき、決めようとしている仮引数がそのまま
+// 実引数として渡る——決めたいものを証拠として数える循環になる。
+check("再帰の自己呼び出しが具体化を打ち消さない", entries("f : n ?\n\tn > 0 : f n\n\tn\ng : f 8"), [
+	"f : Int -> Int",
+	"g : Int",
+]);
+
+// **族が既に含んでいる枝は畳む。** §4 の記法定義では `Atom` は `Scalar | String` であり、
+// `Scalar` は `Int | Address | Float | Vector` である。したがって `Atom | String` は `Atom`
+// であって、`| String` は何も足していない。畳まないと「表現を決めるべき直和」が水増しされる
+// ——Pass 4 から見れば枝が2つあるように見えるが、実際には1つの族でしかない。
+check("Atom | String は Atom（String は Atom の成員）", entries("f : x y ?\n\ty : x\n\t`s`").map((l) => l.split("->")[1].trim()), ["Atom"]);
+check("Scalar | Int は Scalar", entries("f : a b ?\n\ta > b : a + b\n\t1").map((l) => l.split("->")[1].trim()), [
+	"Scalar",
+]);
+// 族と関係の無い枝は畳まない。`String` と `List` はどちらも他方を含まない。
+check("含み合わない枝は残る（List は Atom の成員ではない）", entries("f : x y ?\n\ty : x\n\t[1 2 3]").map((l) => l.split("->")[1].trim()), ["Atom | List"]);
 check("中身が見えていればスロットの型が出る", entries("t : 1 , 2.5\na : t ' 0\nb : t ' 1"), [
 	"t : Struct(Int Float)",
 	"a : Int",
