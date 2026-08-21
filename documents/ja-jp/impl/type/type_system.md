@@ -975,11 +975,34 @@ x : 0.0 + input      ` Float として読む
 ## 4. 演算子別型シグネチャ一覧
 
 > **記法**: `L` = 左辺の型、`R` = 右辺の型  
-> `Scalar` = String を**含まない** Atom（Number など）  
-> `Atom` = String を**含む**スカラー  
+> `Atom` = **値ならなんでも**（Layer 1 のカテゴリ。Layer 2 のどの型でもよい）  
+> `Scalar` = **レジスタに乗る数値**＝ `Int | Address | Float | Vector`  
 > `Point` = 範囲の端点になれるもの＝**数値と1文字**（下記 NOTE）  
 > `List` = `Array | Struct`（多相リストは `Struct`）  
 > `Implicit` = 暗黙のアドレス（Implicit Address）
+
+> [!IMPORTANT]
+> **`Atom` は Layer 1 の語である。** §2 が Layer 2 を「Atom 内部型」と呼んでいる通り、
+> `Atom` は「射ではないもの＝値」を指すカテゴリであって、Layer 2 の族ではない。
+> したがって `List` も `Struct` も `Atom` である——値だからである。
+>
+> 以前ここには `Scalar` = 「String を含まない Atom」、`Atom` = 「String を含むスカラー」と
+> 書かれていた。2つが互いを使って定義されている上に噛み合っていない——**String が
+> `Scalar` でないなら、String を含む `Atom` はスカラーではありえない**。Layer 1 の語を
+> Layer 2 の族へ読み替えて狭めてしまっていた。
+>
+> 実害があった。仮引数の既定は「証拠が何も無くても `Atom` まで決まる」であり、そこへ
+> `Struct` や `List` が渡ると**型が値より狭くなる**（型が嘘をつく）。狭めた定義のままでは
+> それを検出することも表現することもできなかった。
+>
+> | 語 | 何であるか | 含むもの |
+> |---|---|---|
+> | `Atom` | 値（Layer 1 のカテゴリ） | Layer 2 の全て |
+> | `Scalar` | レジスタに乗る数値 | `Int` `Address` `Float` `Vector` |
+> | `String` | それ自体が Layer 2 の型 | ——（`Scalar` ではない） |
+>
+> `Scalar` が族として要るのは、算術がそこだけを対象にするからである（§3.2）。
+> `String` を足せないことと、`String` が `Atom` であることは両立する。
 
 > [!NOTE]
 > **範囲の端点（`Point`）は数値と1文字である。**

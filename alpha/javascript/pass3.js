@@ -885,12 +885,20 @@ function typeOfKnownOperand(node, scope, paramNames) {
 }
 
 // 族（まだ具体型が決まっていない下限）とその成員（§4 の記法定義）。
-// `Scalar` は「String を含まない Atom」、`Atom` は「String を**含む**スカラー」である。
-// どちらも証拠ではなく**証拠の不在**だが、不在にも範囲がある——`List` や `Struct` は
-// どちらの族にも属さない。
+//
+// **`Atom` は Layer 1 の語である。** §2 が Layer 2 を「Atom 内部型」と呼んでいる通り、
+// `Atom` は「射ではないもの＝値」を指す。したがって `List` も `Struct` も `Atom` である
+// ——値だからである。`Scalar` はその中の「レジスタに乗る数値」だけを指す族であり、
+// `String` はどちらでもない独立した Layer 2 型である（`Scalar` ではない）。
+//
+// 以前ここは §4 の記法をそのまま写して `Atom` を `Scalar | String` としていた。その定義は
+// 循環している上に噛み合っておらず（String が `Scalar` でないなら、String を含む `Atom`
+// はスカラーではありえない）、実害もあった——仮引数の既定は「証拠が無くても `Atom`」
+// なので、そこへ `Struct` や `List` が渡ると**型が値より狭くなる**。狭めた定義のままでは
+// それを表現することも検出することもできなかった。
 const FAMILY_MEMBERS = {
   Scalar: new Set(["Int", "Address", "Float", "Vector"]),
-  Atom: new Set(["Int", "Address", "Float", "Vector", "String", "Scalar"]),
+  Atom: new Set(["Int", "Address", "Float", "Vector", "Scalar", "String", "List", "Struct", "Iterator", "Implicit"]),
 };
 
 function inferParamTypesFromUsage(bodyNode, paramNames, scope) {

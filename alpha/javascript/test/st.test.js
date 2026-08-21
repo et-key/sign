@@ -686,7 +686,7 @@ check("Scalar | Int は Scalar", entries("f : a b ?\n\ta > b : a + b\n\t1").map(
 	"Scalar",
 ]);
 // 族と関係の無い枝は畳まない。`String` と `List` はどちらも他方を含まない。
-check("含み合わない枝は残る（List は Atom の成員ではない）", entries("f : x y ?\n\ty : x\n\t[1 2 3]").map((l) => l.split("->")[1].trim()), ["Atom | List"]);
+check("含み合わない枝は残る（String と List は互いを含まない）", entries("f : x ?\n\tx : `s`\n\t[1 2 3]").map((l) => l.split("->")[1].trim()), ["List | String"]);
 
 // **分解は同型の両側から読める。** 既存の規則は「要素の型が分かれば器の型も決まる」という
 // 向きしか持っていなかったので、器の側からしか情報が無い場合に要素が族のまま残っていた。
