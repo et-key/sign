@@ -553,5 +553,11 @@ check("どちらの添字も要素型になる", entries("h : 1 ~ 5\na : 0 ~+ 1\
 // stack_abi.md §3.3 のループカウンタ。開端レンジをデフォルト引数へ置くと、その関数は
 // 「Iterator を受けて要素を返すもの」として型が付く——再帰を書かずにループが成立する形である。
 check("開端レンジをデフォルトに持つ関数の型", entries("f :\n\tc : [0 ~+ 1]\n ?\n\tc ' 3"), ["f : Iterator -> Int"]);
+// レンジの端点も比較と同じ制約を持つ。§4 のシグネチャ
+// `~ : (Point -> Point) -> Iterator -> (List | String)` が「両端は同じ点」と定めている
+// 以上、片方が分かればもう片方も決まる——注釈を足したのではなく、演算子の定義を読んだだけ。
+check("端点から仮引数の型が決まる", entries("mk : n ? [1 ~ n]"), ["mk : Int -> List(Int)"]);
+check("適用の結果も要素型を運ぶ", entries("mk : n ? [1 ~ n]\ng : mk 5"), ["mk : Int -> List(Int)", "g : List(Int)"]);
+check("文字の端点なら String", entries("upto : c ? [\\a ~ c]"), ["upto : String -> String"]);
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

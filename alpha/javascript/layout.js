@@ -32,6 +32,7 @@
  */
 
 import { widthsOf, sizeOf, charSizeOf, DEFAULT_CHARSET } from "./target_info.js";
+import { envLookup } from "./pass1.js";
 
 function isDefineNode(n) {
   return !!n && n.type === "operation" && n.name === "define";
@@ -43,6 +44,50 @@ function isIdentifierNode(n) {
 
 function bareName(value) {
   return typeof value === "string" && value.startsWith("<") && value.endsWith(">") ? value.slice(1, -1) : value;
+}
+
+/**
+ * 識別子を束縛先の値ノードまで辿る（Pass 3 の `derefToNode` と同じ規則）。
+ *
+ * **名前は場所を持たない。** `s : r` の `s` が何バイト要るかは `r` が何であるかで決まり、
+ * それは識別子テーブルにしか無い。ここを辿らないと、名前を1つ挟んだだけで大きさが
+ * 出せなくなる——`l : [1 2 3]` の後の `s : l` すら測れなかった。
+ *
+ * 実体の種類（`repr`）も同じ経路で運ばれる。Pass 3 が束縛へ書き戻しているので、
+ * 名前を何段挟んでも「これは規則裏打ちである」が Pass 4 まで届く。
+ */
+function applyBase(node) {
+  let n = node;
+  while (n && n.type === "operation" && (n.name === "apply" || n.name === "partial_apply")) n = n.left;
+  return n;
+}
+
+function deref(node, env, seen = new Set()) {
+  if (!node || !env) return node;
+  // 適用の結果は呼び先の返値である。`mk : n ? [1 ~ n]` の `mk 5` が何バイト要るかは
+  // `mk` の本体にしか無い——そして**それは実行時の `n` に依らない**。規則裏打ちの
+  // 大きさは要素数に依らないので、終端が実行時変数でも形は静的に決まる
+  // （list_model.md §2.3「終端値 n が実行時変数であっても静的型付け原則は維持される」）。
+  if (node.type === "operation" && (node.name === "apply" || node.name === "partial_apply")) {
+    const base = applyBase(node);
+    if (base && base.type === "atom" && base.kind === "identifier" && !seen.has(base.value)) {
+      seen.add(base.value);
+      const b = envLookup(env, base.value);
+      if (b && b.returnsNode) return deref(b.returnsNode, env, seen);
+    }
+    return node;
+  }
+  if (node.type !== "atom" || node.kind !== "identifier") return node;
+  // 自己参照・相互参照で回らないようにする（`a : b` / `b : a` は解けないので諦める）。
+  if (seen.has(node.value)) return node;
+  seen.add(node.value);
+  const b = envLookup(env, node.value);
+  const next = b && (b.valueNode || b.rhsNode);
+  if (!next) return node;
+  // 束縛が実体の種類を知っていて、値ノード側が知らないなら引き継ぐ。
+  if (b.repr && !next.repr) next.repr = b.repr;
+  if (b.elementType && !next.elementType) next.elementType = b.elementType;
+  return deref(next, env, seen);
 }
 
 // `n` を `align` の倍数へ切り上げる。align が 0/未定なら切り上げない。
@@ -74,10 +119,12 @@ function flattenProduct(node) {
  */
 function measure(node, conf) {
   if (!node) return null;
-  const { target, charset = DEFAULT_CHARSET } = conf;
+  const { target, charset = DEFAULT_CHARSET, env = null } = conf;
   if (!widthsOf(target)) return null;
-
-  const type = node.atomType;
+  // 型は識別子のノードにも付いているが、**大きさは中身にしか無い**ので辿る。
+  const named = node;
+  node = deref(node, env);
+  const type = node.atomType || named.atomType;
   if (!type) return null;
 
   // 零対象は場所を占めない。
@@ -167,6 +214,8 @@ function listItems(node) {
  * @returns {{ size, align, slotKind, slots: Array<{name?, ordinal, type, offset, size, align}> }|null}
  */
 function layoutOfStruct(node, conf) {
+  // 構造体も名前を経由できる。`p2 : p` のスロット配置は `p` にしか無い。
+  node = deref(node, conf && conf.env);
   if (!node || node.atomType !== "Struct") return null;
 
   // 名前付き: 宣言順（連番）を確定させてから、**名前でソートして並べる**（stack_abi.md §7.1）。

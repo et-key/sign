@@ -132,5 +132,41 @@ check("規則裏打ちの添字は算術", measure(rhs("r : [1 ~ 5]"), A64).acce
 // 要素の幅はターゲットが決める。Float のレンジなら FPU 幅で並ぶ。
 check("Float のレンジも同じ形", fieldsOf("f : [1.5 ~+ 0.5 ~ 9.0]"), ["start@0", "step@8", "end@16"]);
 
+// ---- 名前・関数を経由しても形は決まる ----
+//
+// **名前は場所を持たない。** `s : r` の `s` が何バイト要るかは `r` にしか無く、
+// それは識別子テーブルの中にある。ここを辿らないと名前を1つ挟んだだけで大きさが
+// 出せず、Pass 4 は命令を選べない。
+const A64env = (source) => {
+	const { nodes, env } = compile(source);
+	return { node: nodes.filter((n) => n && n.type === "operation" && n.name === "define").pop().right, conf: { ...A64, env } };
+};
+function sizeVia(source) {
+	const { node, conf } = A64env(source);
+	const m = measure(node, conf);
+	return m && m.size;
+}
+function reprVia(source) {
+	const { node, conf } = A64env(source);
+	const m = measure(node, conf);
+	return m && m.repr;
+}
+check("名前を1つ経由（レンジ）", sizeVia("r : [1 ~ 5]\ns : r"), 24);
+check("名前を2つ経由", sizeVia("r : [1 ~ 5]\ns : r\nt : s"), 24);
+check("名前を経由しても実体の種類は残る", reprVia("r : [1 ~ 5]\ns : r"), "rule");
+check("名前を経由（リテラルのリスト）", sizeVia("l : [1 2 3]\ns : l"), 24);
+check("名前を経由（構造体）", sizeVia("p : [\n\tx : 1\n\ty : 2.5\n]\np2 : p"), 16);
+// 相互参照は解けないので諦める。無限に辿って落ちてはいけない。
+check("循環する束縛でも止まる", sizeVia("a : b\nb : a"), null);
+// 適用の結果は呼び先の返値である。返値の**ノード**を辿らないと大きさが出ない。
+check("関数の戻り値を経由", sizeVia("f : _ ? [1 ~ 5]\ng : f __"), 24);
+
+// **終端が実行時変数でも形は決まる**（list_model.md §2.3:「終端値 `n` が実行時変数で
+// あっても静的型付け原則は完全に維持される——イテレータ構造体の型もサイズも、常に
+// コンパイル時に確定している」）。規則裏打ちの大きさは要素数に依らないので、終端の
+// 値が分からなくても `{start, step, end}` の形は変わらない。
+check("終端が仮引数でも 24 byte", sizeVia("mk : n ? [1 ~ n]\ng : mk 5"), 24);
+check("2段の関数越しでも決まる", sizeVia("mk : n ? [1 ~ n]\nvia : n ? mk n\ng : via 5"), 24);
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

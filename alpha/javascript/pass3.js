@@ -103,9 +103,42 @@ function badRangeEndpoint(node, env) {
     const t = operand ? inferAtomType(operand, env) : null;
     // 未解決（null）は静的に判定できないので何も言わない。
     // Unit は零射として振る舞うので、そもそも型の不一致ではない。
+    //
+    // `Atom` と `Scalar` も断じない。**どちらも「まだ分かっていない」の言い換え**である
+    // ——`Atom` は「どの Atom か未確定」、`Scalar` は「String を含まない Atom の族」で
+    // あって、どちらも「点ではない」という証拠を持っていない。分からないことを「不正」と
+    // 断じないのが原理4 の線引きであり、joinElementTypes が同じ2つに対して NO_JOIN では
+    // なく null を返しているのと同じ扱いである。
+    //
+    // ここを断じていたせいで `mk : n ? [1 ~ n]` が丸ごと `Unit` になっていた。仮引数は
+    // 証拠が無ければ `Atom` まで決まる（§7.1）ので、**終端が実行時変数のレンジが全部
+    // 潰れていた**——list_model.md §2.3 が「終端値 `n` が実行時変数であっても静的型付け
+    // 原則は完全に維持される」と明記している、まさにその形である。
+    if (t === "Atom" || t === "Scalar") continue;
     if (t && t !== "Unit" && !RANGE_ENDPOINT_TYPES.has(t)) return { label, type: t };
   }
   return null;
+}
+
+/**
+ * レンジの要素型。**両端は同じ点でなければならない**——§4 のシグネチャ
+ * `~ : (Point -> Point) -> Iterator -> (List | String)` がそう定めている。
+ *
+ * したがって片方が具体的な点型で、もう片方が「まだ分かっていない」（`Atom` / `Scalar`）
+ * なら、要素型は具体的な方に決まる。これは未知数を立てて解いているのではなく、
+ * **演算子の定義をそのまま読んでいるだけ**である（§1「型は宣言されるものではなく
+ * コードから読み取って書き写すだけの存在」）。
+ *
+ * これが効くのは `mk : n ? [1 ~ n]` のような形である。終端が実行時変数でも、要素型が
+ * 決まれば規則裏打ちの大きさ（`{start, step, end}`）は静的に確定する
+ * ——list_model.md §2.3 が「静的型付け原則は完全に維持される」と言うのはこのことである。
+ */
+function rangeElementType(startType, endType) {
+  const unknown = (x) => x === null || x === undefined || x === "Atom" || x === "Scalar";
+  if (unknown(startType) && unknown(endType)) return null;
+  if (unknown(startType)) return endType;
+  if (unknown(endType)) return startType;
+  return joinElementTypes(startType, endType);
 }
 
 function rangeResultType(node, env) {
@@ -121,14 +154,14 @@ function rangeResultType(node, env) {
   if (RANGE_STEP_OPS.has(node.name)) {
     // ストリームでも**要素型は分かる**——始点と歩幅の join がそれである。Pass 4 は
     // 添字に対して要素1個ぶんの命令を出すので、ここを落とすと添字が型を失う。
-    const el = joinElementTypes(startType, endType);
+    const el = rangeElementType(startType, endType);
     if (typeof el === "string") node.elementType = el;
     return "Iterator";
   }
   // 文字の範囲は文字の並び＝String（String ≅ List(0u)）。それ以外は List。
   if (startType === "String" && endType === "String") return "String";
   // 有限レンジも要素型を持つ。ストリームと同じく端点の join がそれである。
-  const el = joinElementTypes(startType, endType);
+  const el = rangeElementType(startType, endType);
   if (typeof el === "string") node.elementType = el;
   return "List";
 }
@@ -508,7 +541,12 @@ function computeAtomType(node, env) {
     // （binding.returns）に置く。
     if (node.name === "apply") {
       const callee = applyCalleeBinding(node, env);
-      return callee ? callee.returns ?? null : null;
+      if (!callee) return null;
+      // 要素型と実体の種類も返値と一緒に運ぶ。器の型（`List`）だけでは Pass 4 が
+      // 添字の命令を選べない——要素1個ぶんの幅と、ロードか算術かが要る。
+      if (callee.returnsElementType && !node.elementType) node.elementType = callee.returnsElementType;
+      if (callee.returnsRepr && !node.repr) node.repr = callee.returnsRepr;
+      return callee.returns ?? null;
     }
     if (node.position === "infix" && node.left) {
       // 論理・圏論族の`&`（§4: `(L -> R) -> (R | __)`）だけは右辺の型を返す。
@@ -697,6 +735,28 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
           // リテラルを直接書いた場合より弱い型になってしまうのを防ぐ。
           const fromOther = constraintFromLiteral(other) || typeOfKnownOperand(other, scope, paramNames);
           inferred.set(side.value, fromOther || "Scalar");
+        }
+      }
+    }
+
+    // レンジの端点も同じ規則で読める。§4 のシグネチャ
+    // `~ : (Point -> Point) -> Iterator -> (List | String)` は**両端が同じ点である**ことを
+    // 要求しているので、片方が分かればもう片方も決まる——比較が同種同士でしか成立
+    // しないのと全く同じ構造である。
+    //
+    // これを拾わないと `mk : n ? [1 ~ n]` の `n` が `Atom` に留まり、要素型が決まらず、
+    // 規則裏打ちの大きさ（`{start, step, end}`）が出せない。終端が実行時変数でも形は
+    // 静的に決まる、という list_model.md §2.3 の主張はここまで繋がって初めて成立する。
+    if (node.type === "operation" && (node.name === "range" || RANGE_STEP_OPS.has(node.name))) {
+      const ends = rangeEndpoints(node, scope);
+      for (const [side, other] of [
+        [ends[0], ends[1]],
+        [ends[1], ends[0]],
+      ]) {
+        if (side && side.type === "atom" && side.kind === "identifier" && paramNames.has(side.value) && !inferred.has(side.value)) {
+          const fromOther = constraintFromLiteral(other) || typeOfKnownOperand(other, scope, paramNames);
+          // 端点になれるのは点だけなので、相手が分からなくても `Scalar` までは言える。
+          inferred.set(side.value, fromOther && RANGE_ENDPOINT_TYPES.has(fromOther) ? fromOther : "Scalar");
         }
       }
     }
@@ -1179,6 +1239,11 @@ function collectReturns(nodes, env) {
     // 上がる設計なので、途中の周回で読めなかったからといって底を壊してはいけない
     // ——相互再帰では初回に必ず相手が未確定になるため、上書きすると二度と上がれなくなる。
     if (ret === null || ret === undefined) continue;
+    // 返値の**ノード**も残す。型は「何ができるか」しか語らないので、大きさと実体の種類
+    // （規則裏打ちか要素の並びか）は返値の式そのものにしか無い。形の解決がこれを辿る。
+    binding.returnsNode = rhs.right;
+    if (rhs.right.elementType) binding.returnsElementType = rhs.right.elementType;
+    if (rhs.right.repr) binding.returnsRepr = rhs.right.repr;
     if (binding.returns !== ret) {
       binding.returns = ret;
       changed = true;
