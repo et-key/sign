@@ -1338,6 +1338,8 @@ function collectReturns(nodes, env) {
     // 返値の**ノード**も残す。型は「何ができるか」しか語らないので、大きさと実体の種類
     // （規則裏打ちか要素の並びか）は返値の式そのものにしか無い。形の解決がこれを辿る。
     binding.returnsNode = rhs.right;
+    // 一度でも本体から型が読めたら、もう種ではない。
+    binding.returnsSeeded = false;
     if (rhs.right.elementType) binding.returnsElementType = rhs.right.elementType;
     if (rhs.right.repr) binding.returnsRepr = rhs.right.repr;
     if (binding.returns !== ret) {
@@ -1450,7 +1452,12 @@ function annotateAll(nodes, env, diagnostics) {
     const rhs = node.right;
     if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
     const binding = envLookup(env, node.left.value);
-    if (binding && binding.returns === undefined) binding.returns = "Unit";
+    // 束の**底**を置く。これは答えではなく出発点である——再帰の枝が初回に何も寄与
+    // しないようにするための種であって、「何も返さない」という主張ではない。
+    if (binding && binding.returns === undefined) {
+      binding.returns = "Unit";
+      binding.returnsSeeded = true;
+    }
   }
   // `名前 : $対象` の由来を記録する。`@名前` の呼び先を静的に解くのに使う。
   for (const node of nodes) {
@@ -1471,6 +1478,16 @@ function annotateAll(nodes, env, diagnostics) {
     const a = collectReturns(nodes, env);
     const b = collectParamTypes(nodes, env);
     if (!a && !b) break;
+  }
+  // **上がらなかった種は答えではない。** 不動点が一度も本体から型を読めなかった関数は
+  // 「何も返さない」のではなく「まだ分からない」のである。底を置いたまま報告すると、
+  // `f : [x ~xs] ? xs` が `Unit` を返すと言い張りながら値はリストを返す——型と値が
+  // 食い違う。分からないことを「分かった」と書かないのが `.st` の原則であり（§1）、
+  // 「無い」と断じないのが原理4 の線引きである。
+  for (const node of nodes) {
+    if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+    const binding = envLookup(env, node.left.value);
+    if (binding && binding.returnsSeeded) binding.returns = null;
   }
   // 診断は確定後の1回だけ集める（周回ごとに集めると重複する）。
   for (const node of nodes) clearTypeAnnotations(node);

@@ -114,7 +114,8 @@ function reprOf(source, conf = A64) {
 	return m && m.repr;
 }
 function fieldsOf(source, conf = A64) {
-	const m = measure(rhs(source), conf);
+	const { node, conf: c } = A64env(source);
+	const m = measure(node, conf === A64 ? c : { ...c, ...conf });
 	return m && m.fields && m.fields.map((f) => `${f.name}@${f.offset}`);
 }
 check("終端の無いレンジは {start, step}", fieldsOf("c : [0 ~+ 1]"), ["start@0", "step@8"]);
@@ -137,10 +138,11 @@ check("Float のレンジも同じ形", fieldsOf("f : [1.5 ~+ 0.5 ~ 9.0]"), ["st
 // **名前は場所を持たない。** `s : r` の `s` が何バイト要るかは `r` にしか無く、
 // それは識別子テーブルの中にある。ここを辿らないと名前を1つ挟んだだけで大きさが
 // 出せず、Pass 4 は命令を選べない。
-const A64env = (source) => {
+function A64env(source) {
 	const { nodes, env } = compile(source);
-	return { node: nodes.filter((n) => n && n.type === "operation" && n.name === "define").pop().right, conf: { ...A64, env } };
-};
+	const node = nodes.filter((n) => n && n.type === "operation" && n.name === "define").pop().right;
+	return { node, conf: { ...A64, env } };
+}
 function sizeVia(source) {
 	const { node, conf } = A64env(source);
 	const m = measure(node, conf);
@@ -200,6 +202,30 @@ check("実行時に伸びる連結は決まらない", sizeVia("f : x ? x `!`\ng
 // ——名前順である（stack_abi.md §7.1）。マージで作ったかどうかは配置に影響しない。
 check("マージした構造体も名前順に並ぶ", slotsVia("q : [\n\ty : 2.5\n]\nr : [\n\tx : 1\n]\ns : q~ r~"), ["x@0", "y@8"]);
 check("マージした構造体の大きさ", sizeVia("q : [\n\tx : 1\n]\nr : [\n\ty : 2.5\n]\ns : q~ r~"), 16);
+
+// ---- 場所（`Implicit`）は「型が語らないもの」だけを運ぶ ----
+//
+// `stack_abi.md` §7.5 が答えを持っている。スライスの実装は
+//
+//     result_ptr = base + 1 * num_cols * sizeof(elem)
+//     result_len = 2 * num_cols
+//
+// の2つだけであり（「これだけ（メモリコピーなし）」）、`'` が返すのは `Implicit` である
+// （type_system.md §4）。つまり列への参照は `{ptr, len}` のファットポインタである。
+//
+// なぜ `len` が要るのかは型を見れば分かる。**Sign の `List(T)` は要素数を型に持たない**
+// ——要素数は定義した場所のノードにしか無いので、呼び出しごとに違う長さが渡る関数側では
+// 型から復元できない。だから参照がそれを運ぶ。逆にスカラーや構造体は大きさが型で
+// 決まりきっているので、運ぶものはアドレス1つで足りる。
+//
+// これは `Iterator` が規則を運ぶのと同じ形の説明である——どちらも、型に書いてない分だけを
+// 実体が持つ。型と実体が二重に同じことを言わない。
+check("List への参照は {ptr, len}", fieldsOf("l : [1 2 3]\na : ~l"), ["ptr@0", "len@8"]);
+check("String への参照も {ptr, len}", fieldsOf("s : `abc`\na : ~s"), ["ptr@0", "len@8"]);
+check("スカラーへの参照は {ptr} だけ", fieldsOf("n : 42\na : ~n"), ["ptr@0"]);
+check("構造体への参照も {ptr} だけ", fieldsOf("p : [\n\tx : 1\n]\na : ~p"), ["ptr@0"]);
+check("列への参照は 16 byte", sizeVia("l : [1 2 3]\na : ~l"), 16);
+check("スカラーへの参照は 8 byte", sizeVia("n : 42\na : ~n"), 8);
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

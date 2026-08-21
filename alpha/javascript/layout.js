@@ -153,6 +153,9 @@ function measure(node, conf) {
     return n === null ? null : { size: n * w, align: w, repr: "cells", stride: w, count: n };
   }
 
+  // **場所**（参照）は指す先を持たない。置かれるのは指し方そのものである。
+  if (type === "Implicit") return measureImplicit(node, conf);
+
   // **規則裏打ち**（レンジ）は要素を持たない。置かれるのは規則そのものである。
   if (node.repr === "rule") return measureRule(node, conf);
   if (type === "List") return measureList(node, conf);
@@ -198,6 +201,49 @@ function stringLength(node, env = null, seen = new Set()) {
   // 1行だけのブロックは括りでしかない（`[`ab`]` は ``ab`` と同じ）。
   if (Array.isArray(node.lines) && node.lines.length === 1) return stringLength(node.lines[0], env, seen);
   return null;
+}
+
+/**
+ * 場所（`Implicit(T)`）の大きさ。**参照が運ぶのは、型が語らないものだけである。**
+ *
+ * `stack_abi.md` §7.5 が答えを持っている。スライスの実装は
+ *
+ *     result_ptr = base + 1 * num_cols * sizeof(elem)
+ *     result_len = 2 * num_cols
+ *
+ * の2つだけであり（「これだけ（メモリコピーなし）」）、`'` が返すのは `Implicit` である
+ * （type_system.md §4）。つまり列への参照は `{ptr, len}` のファットポインタである。
+ *
+ * なぜ `len` が要るのかは型を見れば分かる。**Sign の `List(T)` は要素数を型に持たない**
+ * ——要素数は定義した場所のノードにしか無いので、呼び出しごとに違う長さが渡る関数側では
+ * 型から復元できない。だから参照がそれを運ぶ。逆にスカラーや構造体は大きさが型で
+ * 決まりきっているので、運ぶものはアドレス1つで足りる。
+ *
+ * | 指す先 | 型が語らないもの | 実体 | AArch64 |
+ * |---|---|---|---|
+ * | スカラー・構造体・イテレータ | 無い（大きさは型で決まる） | `{ptr}` | 8 byte |
+ * | `List(T)` ・ `String` | 要素数 | `{ptr, len}` | 16 byte |
+ *
+ * これは `Iterator` が「規則を運ぶ」のと同じ形の説明である——どちらも、**型に書いて
+ * ない分だけを実体が持つ**。型と実体が二重に同じことを言わない、というのが一貫している。
+ */
+function measureImplicit(node, conf) {
+  const { target } = conf;
+  const w = widthsOf(target);
+  if (!w) return null;
+  const ptr = w.gpr;
+  const el = node.elementType;
+  // 要素数が型に無いもの（列）だけが `len` を伴う。
+  const carriesLength = el === "List" || el === "String";
+  const fields = carriesLength ? ["ptr", "len"] : ["ptr"];
+  return {
+    size: ptr * fields.length,
+    align: ptr,
+    repr: "place",
+    fields: fields.map((name, i) => ({ name, offset: i * ptr, size: ptr, type: name === "ptr" ? "Address" : "Int" })),
+    access: carriesLength ? "ptr + i × sizeof(T)（len で範囲を検査できる）" : "ptr を辿る",
+    pointee: el || null,
+  };
 }
 
 /**
