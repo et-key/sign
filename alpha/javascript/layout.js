@@ -31,7 +31,7 @@
  * ——ストライドが揃わないと `base + i × size` が壊れる。
  */
 
-import { widthsOf, sizeOf, charSizeOf, DEFAULT_CHARSET } from "./target_info.js";
+import { widthsOf, sizeOf, charSizeOf, DEFAULT_CHARSET, reduceToMachineType } from "./target_info.js";
 import { envLookup } from "./pass1.js";
 
 function isDefineNode(n) {
@@ -379,4 +379,63 @@ function formatLayout(layout) {
   return [head, ...body].join("\n");
 }
 
-export { measure, layoutOfStruct, formatLayout, alignUp };
+/**
+ * 値が呼び出しをどう渡るか（`stack_abi.md` §4.6）。決まらなければ null。
+ *
+ * **参照で渡すのは「メモリに置かれているもの」だけである。**
+ *
+ *   スカラー          値渡し   レジスタ1本（§4.2）
+ *   規則（レンジ）      値渡し   `{start, step, end}` がそのまま乗る
+ *   要素の並び         参照渡し `{ptr}` または `{ptr, len}`
+ *
+ * 規則はメモリ上に無いので、指す先が無く参照を作れない。§5 のまとめが
+ * `c : [0 ~+ 1]` を「ゼロ（レジスタのみ）」と書いているのはこのことである。
+ *
+ * 要素の並びは常にメモリを占める。そして `List(T)` は要素数を型に持たないので、
+ * 値渡しにすると同じ型でも呼び出しごとに渡し方が変わってしまう。参照で揃えることで
+ * **渡し方が型だけで決まる**という性質が保たれる。
+ *
+ * 参照が何を運ぶかは `Implicit` と同じ規則である——型が語らないものだけを運ぶ。
+ *
+ * @returns {{ mode: "register"|"reference", size, align, fields?, pointee? }|null}
+ */
+function passingOf(node, conf) {
+  if (!node) return null;
+  const { target, env = null } = conf;
+  const w = widthsOf(target);
+  if (!w) return null;
+  const named = node;
+  const target_ = deref(node, env);
+  const type = target_.atomType || named.atomType;
+  if (!type) return null;
+  // 零対象は何も渡らない。
+  if (type === "Unit") return { mode: "register", size: 0, align: 1, slots: 0 };
+  // スカラーは値そのものがレジスタに乗る。
+  const machine = reduceToMachineType(type, target);
+  if (machine) return { mode: "register", size: machine.size, align: machine.size, slots: 1, class: machine.class, signed: machine.signed };
+  // 規則（レンジ・イテレータ）はメモリ上に無いので、そのままレジスタへ乗る。
+  const m = measure(named, conf);
+  if (m && m.repr === "rule") {
+    return { mode: "register", size: m.size, align: m.align, slots: m.fields.length, fields: m.fields };
+  }
+  // 場所（`Implicit`）は既に参照そのものである。
+  if (m && m.repr === "place") return { mode: "reference", size: m.size, align: m.align, slots: m.fields.length, fields: m.fields, pointee: m.pointee };
+  // 要素の並びは参照で渡す。運ぶものは型が語らない分だけ——要素数が型に無い
+  // （`List` / `String`）なら `len` を伴う。
+  if (type === "List" || type === "String" || type === "Struct") {
+    const carriesLength = type === "List" || type === "String";
+    const names = carriesLength ? ["ptr", "len"] : ["ptr"];
+    return {
+      mode: "reference",
+      size: w.gpr * names.length,
+      align: w.gpr,
+      slots: names.length,
+      fields: names.map((n, i) => ({ name: n, offset: i * w.gpr, size: w.gpr, type: n === "ptr" ? "Address" : "Int" })),
+      pointee: type,
+    };
+  }
+  // 族（`Atom` / `Scalar`）や直和は、まだ渡し方が決まらない。
+  return null;
+}
+
+export { measure, layoutOfStruct, formatLayout, alignUp, passingOf };

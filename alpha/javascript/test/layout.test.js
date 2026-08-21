@@ -8,7 +8,7 @@
  * 実行: node test/layout.test.js（`npm test` からも呼ばれる）
  */
 import { compile } from "../compile.js";
-import { measure, layoutOfStruct, alignUp } from "../layout.js";
+import { measure, layoutOfStruct, alignUp, passingOf } from "../layout.js";
 
 let passed = 0;
 let total = 0;
@@ -226,6 +226,31 @@ check("スカラーへの参照は {ptr} だけ", fieldsOf("n : 42\na : ~n"), ["
 check("構造体への参照も {ptr} だけ", fieldsOf("p : [\n\tx : 1\n]\na : ~p"), ["ptr@0"]);
 check("列への参照は 16 byte", sizeVia("l : [1 2 3]\na : ~l"), 16);
 check("スカラーへの参照は 8 byte", sizeVia("n : 42\na : ~n"), 8);
+
+// ---- 呼び出しをどう渡るか（stack_abi.md §4.6） ----
+//
+// **参照で渡すのは「メモリに置かれているもの」だけである。** 規則（レンジ・`Iterator`）は
+// メモリ上に無いので、指す先が無く参照を作れない——§5 のまとめが `c : [0 ~+ 1]` を
+// 「ゼロ（レジスタのみ）」と書いているのはこのことである。
+//
+// 要素の並びは常にメモリを占める。そして `List(T)` は要素数を型に持たないので、値渡しに
+// すると同じ型でも呼び出しごとに渡し方が変わる。参照で揃えることで**渡し方が型だけで
+// 決まる**という性質が保たれる。
+function passVia(source) {
+	const { node, conf } = A64env(source);
+	const p = passingOf(node, conf);
+	return p && `${p.mode}/${p.size}${p.fields ? " {" + p.fields.map((f) => f.name).join(",") + "}" : ""}`;
+}
+check("スカラーは値渡し", passVia("n : 42"), "register/8");
+check("実数も値渡し（幅は FPU）", passVia("x : 1.5"), "register/8");
+check("規則は値渡し（メモリ上に無い）", passVia("r : [1 ~ 5]"), "register/24 {start,step,end}");
+check("終端の無い規則も同じ", passVia("c : [0 ~+ 1]"), "register/16 {start,step}");
+// 参照が何を運ぶかは `Implicit` と同じ規則——型が語らないものだけを運ぶ。
+check("List は要素数が型に無いので {ptr, len}", passVia("l : [1 2 3]"), "reference/16 {ptr,len}");
+check("String も同じ", passVia("s : `abc`"), "reference/16 {ptr,len}");
+check("Struct は形が型にあるので {ptr} だけ", passVia("p : [\n\tx : 1\n\ty : 2.5\n]"), "reference/8 {ptr}");
+// 零対象は何も渡らない。
+check("Unit は何も渡らない", passVia("u : __"), "register/0");
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

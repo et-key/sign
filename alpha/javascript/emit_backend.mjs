@@ -17,7 +17,7 @@
 import fs from "fs";
 import { compile } from "./compile.js";
 import { readOptionMs } from "./option_ms.js";
-import { measure } from "./layout.js";
+import { measure, passingOf } from "./layout.js";
 import { widthsOf, reduceToMachineType } from "./target_info.js";
 
 const file = process.argv[2];
@@ -49,7 +49,7 @@ const measureConf = { target: conf.target, charset: conf.charset, env };
 //   morphism 射（恒等射など）。値ではないので幅を持たない——命令ではなく制御が対応する
 //   sum      直和（`A | B`）。表現を決めるには**両方が入る形**を選ぶ必要がある
 //   open     族（`Atom` / `Scalar`）のまま。GPR か FPU かも幅も決まっていない
-const buckets = { scalar: 0, sized: 0, ref: 0, morphism: 0, sum: 0, open: 0 };
+const buckets = { scalar: 0, ref: 0, morphism: 0, sum: 0, open: 0 };
 const notes = { ref: [], sum: [], open: [] };
 
 const AGGREGATES = new Set(["String", "List", "Struct", "Iterator", "Implicit"]);
@@ -75,20 +75,12 @@ function classify(node, where) {
 	const kind = node.type === "atom" ? `atom/${node.kind}` : `${node.name || node.type}`;
 	// 射は値ではない。恒等射に幅を訊くこと自体が問い方の間違いである。
 	if (t === "Identity") return record("morphism", null);
-	// 零対象は場所を占めない。還元済みである（命令は出ない）。
-	if (t === "Unit") return record("sized", null);
+	// **渡し方が決まれば命令は選べる**（stack_abi.md §4.6）。値渡しか参照渡しか、
+	// レジスタ何本かまで出るなら、そこは Pass 4 が扱える。
+	const pass = passingOf(node, measureConf);
+	if (pass) return record(pass.mode === "reference" ? "ref" : "scalar", null);
 	// 直和は**両方が入る形**を決めなければ表現が決まらない。
 	if (t.includes("|")) return record("sum", { type: t, kind });
-	// 幅と符号まで落ちるならレジスタ1本（§4.2）。
-	if (reduceToMachineType(t, conf.target)) return record("scalar", null);
-	if (FAMILIES.has(t)) return record("open", { type: t, kind });
-	if (AGGREGATES.has(t)) {
-		// 大きさが静的に決まるなら、そのまま置ける。
-		if (measure(node, measureConf)) return record("sized", null);
-		// 決まらないなら参照で渡すしかない。**それは失敗ではなく事実である**
-		// ——ただし「集約を参照で渡す」という規則自体が stack_abi.md に書かれていない。
-		return record("ref", { type: t, kind });
-	}
 	record("open", { type: t, kind });
 }
 
@@ -101,16 +93,15 @@ for (const node of nodes) {
 }
 
 const total = Object.values(buckets).reduce((a, b) => a + b, 0);
-console.log(`レジスタ1本で渡る（幅と符号が決まった） ${buckets.scalar}`);
-console.log(`そのまま置ける（大きさが静的に決まる）   ${buckets.sized}`);
-console.log(`参照でしか渡せない（大きさが実行時）     ${buckets.ref}`);
-console.log(`射（値ではない）                        ${buckets.morphism}`);
-console.log(`直和（表現の決定が要る）                 ${buckets.sum}`);
-console.log(`族のまま（命令が選べない）               ${buckets.open}`);
+console.log(`値渡し（レジスタに乗る）     ${buckets.scalar}`);
+console.log(`参照渡し（{ptr} / {ptr,len}） ${buckets.ref}`);
+console.log(`射（値ではない）             ${buckets.morphism}`);
+console.log(`直和（表現の決定が要る）      ${buckets.sum}`);
+console.log(`族のまま（渡し方が決まらない） ${buckets.open}`);
 console.log("");
 
 // 理由ごとに畳んで見せる。同じ理由が何箇所で出ているかが分かる方が手を付けやすい。
-for (const [bucket, label] of [["open", "族のまま"], ["sum", "直和"], ["ref", "参照渡しが要る"]]) {
+for (const [bucket, label] of [["open", "族のまま"], ["sum", "直和"]]) {
 	if (notes[bucket].length === 0) continue;
 	console.log("` " + label);
 	const byReason = new Map();
@@ -125,4 +116,4 @@ for (const [bucket, label] of [["open", "族のまま"], ["sum", "直和"], ["re
 	console.log("");
 }
 
-console.error(`${total} ノード / 族のまま ${buckets.open} / 直和 ${buckets.sum} / 参照 ${buckets.ref}`);
+console.error(`${total} ノード / 渡し方が決まらない ${buckets.open + buckets.sum}`);

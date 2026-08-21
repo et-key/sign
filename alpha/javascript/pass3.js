@@ -1247,26 +1247,31 @@ function lambdaParamSlotTypes(lambdaNode, env) {
  * `applyChainOf` が `apply` と `partial_apply` の両方を辿るのはそのためである
  * （Pass 1b 側の収集は Layer 1 のジェネリック解決が目的なので別物として残す）。
  */
-function callsitesOf(nodes, fnName) {
+function callsitesOf(nodes, fnName, rootEnv) {
   const sites = [];
-  const visit = (node) => {
+  // **サイトごとにスコープを持ち回る。** 実引数の型はそれが書かれた場所でしか引けない
+  // ——`try_col 1 row n board` の `board` は `place` のスコープに居るので、トップレベルの
+  // env で引いても見つからない。器が何段も引数として渡り歩く形（盤が first_row →
+  // place → try_col → conflict と流れる）は、ここを取り違えると連鎖が切れる。
+  const visit = (node, scope) => {
     if (!node || typeof node !== "object") return;
+    if (node.scope) scope = node.scope;
     if (node.type === "operation" && (node.name === "apply" || node.name === "partial_apply")) {
       const { base, args } = applyChainOf(node);
       if (isIdentifierNode(base) && base.value === fnName) {
-        sites.push(args);
+        sites.push(Object.assign(args, { scope }));
         // 連鎖全体で1サイト。内側を別サイトとして二重に数えない。ただし実引数の中に
         // 別の呼び出しが入っていることはあるので、そちらは個別に辿る。
-        args.forEach(visit);
+        args.forEach((a) => visit(a, scope));
         return;
       }
     }
-    if (node.left) visit(node.left);
-    if (node.right) visit(node.right);
-    if (node.operand) visit(node.operand);
-    if (Array.isArray(node.lines)) node.lines.forEach(visit);
+    if (node.left) visit(node.left, scope);
+    if (node.right) visit(node.right, scope);
+    if (node.operand) visit(node.operand, scope);
+    if (Array.isArray(node.lines)) node.lines.forEach((l) => visit(l, scope));
   };
-  for (const n of nodes) visit(n);
+  for (const n of nodes) visit(n, rootEnv);
   return sites;
 }
 
@@ -1301,14 +1306,60 @@ function collectCallsiteParamTypes(nodes, env) {
     const paramNode = rhs.left;
     // 裸の仮引数だけを扱う。ブラケット分割代入は実引数1個を分解する形なので、
     // スロットと束縛名が1対1にならない（器の型は別の規則が決めている）。
+    const entries = paramNode && paramNode.type === "params" ? paramNode.entries || [] : [];
     const names = isIdentifierNode(paramNode)
       ? [paramNode.value]
       : paramNode && paramNode.type === "params" && !paramNode.bracket
-        ? (paramNode.entries || []).map((e) => (e.pattern || e.rest ? null : e.name || null))
+        ? entries.map((e) => (e.pattern || e.rest ? null : e.name || null))
         : [];
     if (names.length === 0) continue;
-    const sites = callsitesOf(nodes, node.left.value);
+    const sites = callsitesOf(nodes, node.left.value, env);
     if (sites.length === 0) continue;
+    // **器を受け取る位置は、要素の型を語る。** `[h ~t]` は渡された集合をその場で分解
+    // するので、渡ってくるのが `List(Int)` なら `h` は Int である。既存の規則は
+    // 「要素の型が分かれば器の型も決まる」という**逆向き**しか持っていなかったため、
+    // 器の側からしか情報が無い場合（`conflict col dist [h ~t]` の盤）に要素が族の
+    // ままだった。分解は同型の両側から読める。
+    // 要素型も呼び出しサイトで観測する。器の型（`List`）だけでは分解した先が決まらず、
+    // 器が何段も引数として渡り歩く場合（盤が `first_row` → `place` → `try_col` →
+    // `conflict` と流れる）は、各段で要素型を運ばないと連鎖が切れる。
+    const elementObs = entries.map(() => new Set());
+    for (const args of sites) {
+      entries.forEach((e, i) => {
+        if (i >= args.length) return;
+        const el = containerElementType(args[i], args.scope || env) || elementTypeOf(args[i], args.scope || env);
+        if (el && el !== "Unit" && !FAMILY_MEMBERS[el]) elementObs[i].add(el);
+      });
+    }
+    const patScope = rhs.scope;
+    if (patScope) {
+      entries.forEach((e, i) => {
+        const seen = [...elementObs[i]];
+        if (seen.length !== 1) return;
+        // 器そのものを受ける位置（rest・ブラケット全体）には要素型を載せる。
+        // 次の段の呼び出しサイトはここを読むので、これが連鎖を繋ぐ。
+        for (const name of [e.name, ...(e.pattern || []).filter((q) => q.rest).map((q) => q.name)]) {
+          if (!name) continue;
+          const cb = envLookup(patScope, name);
+          if (cb && cb.elementType !== seen[0]) {
+            cb.elementType = seen[0];
+            changed = true;
+          }
+        }
+        if (!e.pattern) return;
+        for (const pe of e.pattern) {
+          if (!pe.name || pe.rest) continue;
+          const b = envLookup(patScope, pe.name);
+          if (!b) continue;
+          const members = FAMILY_MEMBERS[b.atomType];
+          if (b.atomType && !(members && members.has(seen[0]))) continue;
+          if (b.atomType === seen[0]) continue;
+          b.atomType = seen[0];
+          b.fromContainer = seen[0];
+          changed = true;
+        }
+      });
+    }
     const observed = names.map(() => new Set());
     // **型名だけでは足りない。** `Struct` はスロットごとに型が違ってよいので、`p ' 0` が
     // 何を返すかは並びを知らないと決まらない。呼び出しサイトはそれを知っているので、
@@ -1317,7 +1368,7 @@ function collectCallsiteParamTypes(nodes, env) {
     for (const args of sites) {
       names.forEach((name, i) => {
         if (!name || i >= args.length) return;
-        const t = inferAtomType(args[i], env);
+        const t = inferAtomType(args[i], args.scope || env);
         // 未解決と `Unit` は観測ではない（`__` は零射であって型の主張ではない）。
         // **族も観測ではない。** 族は「まだ分かっていない」の言い換えなので、それを
         // 観測に数えると具体型と食い違って「複数の型で呼ばれている」に見えてしまう。
@@ -1329,7 +1380,7 @@ function collectCallsiteParamTypes(nodes, env) {
         // 打ち消されていた。
         if (t && t !== "Unit" && !FAMILY_MEMBERS[t]) observed[i].add(t);
         if (t !== "Struct") return;
-        const sh = structShapeOf(args[i], env);
+        const sh = structShapeOf(args[i], args.scope || env);
         if (!sh) { shapes[i].agreed = false; return; }
         if (shapes[i].shape === undefined) shapes[i].shape = sh;
         else if (!sameShape(shapes[i].shape, sh)) shapes[i].agreed = false;
