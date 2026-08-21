@@ -122,9 +122,10 @@ function flattenConstruct(node, env = null, seen = new Set()) {
 
 // 直積（`product` の連なり）を平らな配列へ均す。連番スロットがこの形で来る。
 function flattenProduct(node) {
-  if (node && node.type === "operation" && node.name === "product") {
+  if (node && node.type === "operation" && ["product", "construct", "concat", "push", "unshift"].includes(node.name)) {
     return [...flattenProduct(node.left), flattenProduct(node.right)].flat();
   }
+  if (node && Array.isArray(node.lines) && node.lines.length === 1) return flattenProduct(node.lines[0]);
   return [node];
 }
 
@@ -339,7 +340,11 @@ function layoutOfStruct(node, conf) {
 
   // 連番: 宣言順がそのまま物理配置。ソートの鍵となる名前が無いためである。
   if (node.slotKind === "positional") {
-    const entries = flattenProduct(node).map((n, ordinal) => ({ ordinal, node: n }));
+    const slots = flattenProduct(node);
+    // 分解できなければオフセットは出ない。**自分自身を1スロットとして数えない**
+    // ——数えると `measure` が同じノードへ戻ってきて無限に回る。
+    if (slots.length === 1 && slots[0] === node) return null;
+    const entries = slots.map((n, ordinal) => ({ ordinal, node: n }));
     return packSlots(entries, conf, "positional");
   }
 

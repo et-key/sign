@@ -366,9 +366,17 @@ function sliceIndexNode(node) {
 
 // 連番スロットを左から並べる。`1 , \`a\` , 2.5` は product の入れ子なので均す。
 function positionalSlots(node) {
-  if (node && node.type === "operation" && node.name === "product") {
-    return [...positionalSlots(node.left), ...positionalSlots(node.right)];
+  if (node && node.type === "operation") {
+    // 直積（カンマ）だけでなく、**余積で作った不均質な連続領域**もスロットへ分解する
+    // ——`[1 2] [3 4]` は `Struct(Int Int List(Int))` であり、分解できなければ
+    // オフセットが出ない（分解できない `Struct` は自分自身を1スロットとして数えて
+    // しまい、無限に回る）。
+    if (["product", "construct", "concat", "push", "unshift"].includes(node.name)) {
+      return [...positionalSlots(node.left), ...positionalSlots(node.right)];
+    }
   }
+  // 1行だけのブロックは括りでしかない（`[1 2]` の外側）。
+  if (node && Array.isArray(node.lines) && node.lines.length === 1) return positionalSlots(node.lines[0]);
   return [node];
 }
 
@@ -779,26 +787,31 @@ function computeAtomType(node, env) {
           node.slotKind = slotKindOf(containerNode, env) || "positional";
           return "Struct";
         }
-        const joinedAppend = joinElementTypes(elementTypeOf(containerNode, env), inferAtomType(elementNode, env));
-        // join が無いのは「器の要素型と足すものが揃っていない」場合。混ぜたいなら直積にする。
+        // **器の要素型は名前の先にある。** 識別子ノード自身は要素型を持たないので、
+        // 束縛まで辿らないと検査が効かない——`m : 1 2` の後の `m [3 4]` が素通りして
+        // いた。型は `List`（同一幅の連続領域）と言うのに中身は Int Int List で、
+        // Pass 4 は `base + i × 8` を出して3番目で壊れる。型と値の食い違いである。
+        const containerEl = containerElementType(containerNode, env) ?? elementTypeOf(containerNode, env);
+        const joinedAppend = joinElementTypes(containerEl, inferAtomType(elementNode, env));
+        // **揃っていないことは不正ではない。それは `Struct` である。**
+        //
+        // 以前ここはコンパイルエラーにして「混ぜたいならカンマで Struct にしろ」と
+        // 誘導していた。その誘導は「カンマでしか Struct が作れない」という前提に
+        // 立っており、カンマを「均質なら List」にした時点でその前提は消えた。幅が
+        // 揃わない連続領域は、スロットごとに別命令で引くもの——つまり `Struct` である。
         if (joinedAppend === NO_JOIN) {
-          throw new TypeError(
-            `type_system.md §2違反: List へ足す要素の型が揃っていません（要素型 ${elementTypeOf(containerNode, env)} に ${inferAtomType(elementNode, env)}）。` +
-              `混在させたい場合はカンマ区切りの Struct（tuple）にしてください`
-          );
+          node.slotKind = "positional";
+          return "Struct";
         }
-        node.elementType = joinedAppend;
         return "List";
       }
-      // §2「Listは同一型」: 要素型のjoinを取る。join が存在しない組み合わせ
-      // （`[1 \`abc\`]` 等）は原理4に従いコンパイルエラーにする——混在させたい場合は
-      // カンマで Struct（tuple）だと明示する必要がある。
+      // §2「Listは同一型」: 要素型のjoinを取る。**join が無いのは不正ではなく Struct**
+      // である（上の unshift/push と同じ理由）。幅が揃わない連続領域はスロットごとに
+      // 別命令で引くもの——それが `Struct` の定義そのものである。
       const joined = joinElementTypes(elementTypeOf(node.left, env), elementTypeOf(node.right, env));
       if (joined === NO_JOIN) {
-        throw new TypeError(
-          `type_system.md §2違反: List の要素型が揃っていません（${elementTypeOf(node.left, env)} と ${elementTypeOf(node.right, env)}）。` +
-            `混在させたい場合はカンマ区切りの Struct（tuple）にしてください`
-        );
+        node.slotKind = "positional";
+        return "Struct";
       }
       node.elementType = joined;
       return "List";

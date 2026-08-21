@@ -171,8 +171,9 @@ function checkNoThrow(note, source, want) {
 checkNoThrow("`ab` 1 → String（String左辺）", "`ab` 1", "String");
 checkNoThrow("1 `ab` → String（String右辺でも同じ。引数の順序で挙動を変えない）", "1 `ab`", "String");
 checkNoThrow("[1 `abc`] → String（ブラケットでも同じ）", "[1 `abc`]", "String");
-// joinが本当に存在しない組み合わせ（数値とStruct/List）だけがコンパイルエラーになる。
-checkThrows("1 [x : 1] → コンパイルエラー（Int と Struct に join が無い）", "1 [x : 1]");
+// join が存在しない組み合わせ（数値と Struct/List）は**不正ではなく `Struct`** である
+// ——幅が揃わない連続領域はスロットごとに別命令で引くもので、それが `Struct` の定義である。
+checkNoThrow("1 [x : 1] → Struct（揃わない余積は Struct になる）", "1 [x : 1]", "Struct");
 checkNoThrow("1 , `abc` → Struct（カンマなら混在は正当）", "1 , `abc`", "Struct");
 
 // 範囲族（type_system.md §4: `~` は `(Scalar -> Scalar) -> Iterator -> List`）。
