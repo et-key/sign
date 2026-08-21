@@ -322,23 +322,27 @@ check("辿れない端を持つ合成は `_` のまま", entries("f : x ? x + 1\
 // ——**渡した分だけ仮引数が減り、返値は変わらない**。Pass 2 が静的にアリティ不足を
 // 判定して `partial_apply` を立てているので（§5）、残りの仮引数を数え直すだけでよい。
 check("部分適用は渡した分だけ仮引数が減る", entries("f : x y z ? x + y + z\ng : f 1"), [
-	"f : Scalar Scalar Scalar -> Scalar",
+	// スロットは呼び出しサイトで具体化されている——**部分適用も呼び出しサイトである**。
+	// 飽和していなくても、埋めたスロットについては同じ強さの証拠になる（`f 1` の 1 は Int）。
+	"f : Int Scalar Scalar -> Scalar",
 	"g : Scalar Scalar -> Scalar",
 ]);
 check("2個渡せば2個減る", entries("f : x y z ? x + y + z\ng : f 1 2"), [
-	"f : Scalar Scalar Scalar -> Scalar",
-	"g : Scalar -> Scalar",
+	// 3つ目も Int になる——§3.2「域を選ぶのは左辺」により、`(x + y)` が Int である以上
+	// その右辺に置ける `z` も Int である。左辺の型注釈は2項目以降へも伝わる。
+	"f : Int Int Int -> Int",
+	"g : Int -> Int",
 ]);
 // 部分適用の結果をさらに部分適用しても辿れる（Lambda を作る式は積み重なる）。
 check("部分適用の部分適用も辿れる", entries("add3 : a b c ? a + b + c\ninc : add3 1\nboth : inc 2"), [
-	"add3 : Scalar Scalar Scalar -> Scalar",
+	"add3 : Int Scalar Scalar -> Scalar",
 	"inc : Scalar Scalar -> Scalar",
 	"both : Scalar -> Scalar",
 ]);
 // 返値型は呼び先のまま変わらない——減るのは仮引数だけである。
 check("返値は呼び先のまま", entries("f : x y ? 0.0 + x + y\ng : f 1.5"), [
-	"f : Float Scalar -> Float",
-	"g : Scalar -> Float",
+	"f : Float Float -> Float",
+	"g : Float -> Float",
 ]);
 // 別名（`alias : f`）も同じシグネチャになる。
 check("別名は同じシグネチャになる", entries("f : x ? 0.0 + x\nalias : f"), [
@@ -407,7 +411,7 @@ check("添字スタイルは List と誤る", entries("hd : s ?\n\t(s ' 0) = `a`
 // 演算子の代わりに**呼び先のシグネチャ**でやっている——どちらも「その位置に置ける型は
 // 何か」を読んでいるだけである。返値型と仮引数型は互いに依存するので同じ不動点で回る。
 check("2番目の引数でも逆流する", entries("g : a b ? 0.0 + b\nh : y ? g 1 y"), [
-	"g : Atom Float -> Float",
+	"g : Int Float -> Float",
 	"h : Float -> Float",
 ]);
 // 仮引数のデフォルト式も使用箇所である。デフォルトは**他の仮引数を使って書ける**ので、
@@ -470,7 +474,7 @@ check(
 	const { nodes, env } = compile(src);
 	const r = generateSignType(nodes, env, { scope: "ist" });
 	check(`n_queens.sn に未解決が残らない（${r.entries} エントリ）`, r.unresolved, 0);
-	check("solve は盤（List）を返す", r.text.includes("solve : Scalar -> List"), true);
+	check("solve は盤（List）を返す", r.text.includes("solve : Int -> List"), true);
 }
 
 
@@ -532,7 +536,7 @@ check("多段の逆流", entries("g : a ? 0.0 + a\nh : ~ys ? g ys~\nf : ~xs ? h 
 ]);
 // 展開先は第1スロットとは限らない。
 check("2番目のスロットへ展開", entries("g : a b ? 0.0 + b\nf : ~xs ? g 1 xs~"), [
-	"g : Atom Float -> Float",
+	"g : Int Float -> Float",
 	"f : Float~ -> Float",
 ]);
 // 展開しなければ何も分からない。分からないことを「分かった」と書かないのが `.st` の原則。
@@ -562,7 +566,7 @@ check("順序を入れ替えても同じ", entries("f : a b ?\n\ta + 1 : __\n\ta
 // 成員ではない（§4 の記法定義）。スカラーが1要素リストと同型なので、数を「盤」の
 // スロットへ渡すことはできる。両方とも真だが、その仮引数自身の型は数である。
 check("族の外から来た型では上書きしない", entries("g : x y ? y\nf : a b ?\n\ta > b : __\n\tg [1 2] a"), [
-	"g : Atom Atom -> Atom",
+	"g : List Atom -> Atom",
 	"f : Scalar Scalar -> Atom",
 ]);
 
@@ -580,6 +584,67 @@ check("複数引数でも位置を取り違えない", entries("f : p s ? @p s")
 // 中置 `#`（output、tier 4）は「アドレスにデータを入れる」ので**左辺**がアドレスである
 // （前置 `#` は export 印なので別物——同じ記号でも位置で意味が違う）。
 check("中置 `#`（書き込み）は左辺が Address", entries("f : p ? p # 1").map((l) => l.split("->")[0].trim()), ["f : Address"]);
+
+// ---- 呼び出しサイトからの具体化（§5 Pass 1b の Layer 2 版） ----
+//
+// §7.1 の `Scalar` は「String を含まない Atom」という族であり、§1 は「呼び出しサイトで
+// 具体化されるまでの暫定形」と明記している。Pass 1b は Layer 1（`Lambda` か `Atom` か）に
+// ついてこれを既にやっていたが、Layer 2 についてはやっていなかった。
+//
+// **export されていない関数は、呼び出しサイトが全てである。** 外から呼ばれる可能性が
+// 無いので、観測したサイトの型がその関数の型そのものになる。
+check("呼び出しサイトが仮引数の型を決める", entries("f : n ? n\ng : f 8"), ["f : Int -> Int", "g : Int"]);
+check("族に留まっている位置だけが埋まる", entries("f : a b ? a + b\ng : f 1 2.0"), [
+	"f : Int Float -> Float",
+	"g : Float",
+]);
+// 全サイトが同じ具体型で一致したときだけ狭める。食い違うなら族のままが正しい
+// ——それは「まだ決まっていない」のではなく「複数の型で呼ばれている」ということであり、
+// Pass 4 はサイトごとに別の実体を出す（コンパイル時特殊化）。
+check("型の違うサイトが混ざれば族のまま", entries("f : a b ? a + b\nx : f 1 2\ny : f 1.5 2.5"), [
+	"f : Scalar Scalar -> Scalar",
+	"x : Scalar",
+	"y : Scalar",
+]);
+// **export されているものはジェネリックのまま。** 外の呼び出しサイトは見えないので、
+// 見えている分だけで決めつけてはいけない（compiler_pipeline.md §6.3 が呼び出しサイトの
+// 列挙を export の性質として扱っているのと同じ線引きである）。
+check("export されていれば狭めない", entries("#f : a b ? a + b\ng : f 1 2"), [
+	"#f : Scalar Scalar -> Scalar",
+	"g : Scalar",
+]);
+// 観測した型は識別子テーブルへ残す。狭めなかった場合でも、これが Pass 4 の出す実体の
+// 一覧になる（export されていても記録はする）。
+{
+	const { env } = compile("#f : a b ? a + b\ng : f 1 2\nh : f 1.5 2.5");
+	const b = env.bindings.get("<f>");
+	check("観測した型は instances に残る", b && b.instances, [
+		["Int", "Float"],
+		["Int", "Float"],
+	]);
+}
+
+// **偶然当たった型は、未解決より悪い。**
+//
+// 仮引数のように中身の見えない `Struct` はスロットへ分解できない。それでも連番添字の
+// 経路は「分解できなかった器そのもの」を1個のスロットとして数えていたため、`p ' 0` が
+// スロットの型ではなく**器の型**を返していた——`fst : p ? p ' 0` が `Struct -> Struct`
+// になる。`p ' 1` は範囲外で `_` になるので、同じ書き方の 0 と 1 で答えの質が違っていた。
+check("中身の見えない Struct への添字は解けない", entries("f : p ? p ' 0\ng : f (1 , 2)"), ["f : Struct -> _", "g : Atom"]);
+check("添字が 1 でも同じ（0 だけ当たる、が無くなった）", entries("f : p ? p ' 1\ng : f (1 , 2)"), ["f : Struct -> _", "g : Atom"]);
+// 中身が見えていれば従来通り解ける。
+check("中身が見えていればスロットの型が出る", entries("t : 1 , 2.5\na : t ' 0\nb : t ' 1"), [
+	"t : Struct(Int Float)",
+	"a : Int",
+	"b : Float",
+]);
+
+// **片方が族なら、算術の結果も族である。** `Int + Scalar` を `Int` と答えてはいけない
+// ——相手が Float なら昇格して Float になり、Address なら Address になる。具体型の側を
+// そのまま答えにすると、分かっていないことを分かったと書くことになる（原理4）。
+check("族が混ざれば結果も族", entries("f : a b c ? (a + 1) + b + c").map((l) => l.split("->")[1].trim()), [
+	"Scalar",
+]);
 
 
 // レンジは有限でも無限でも「同じ型の要素が並ぶもの」であり、要素型を持つ（list_model.md §2.3）。

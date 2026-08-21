@@ -227,6 +227,13 @@ function arithmeticResultType(node, leftType, env) {
     if (leftType === "Address" || rightType === "Address") return "Address";
     return "Int";
   }
+  // **片方が族なら、結果も族である。** `Int + Scalar` を `Int` と答えてはいけない
+  // ——相手が Float なら昇格して Float になり、Address なら Address になる。具体型の側を
+  // そのまま答えにすると、分かっていないことを分かったと書くことになる（原理4）。
+  //
+  // 算術は String を対象にしないので（上で `Unit` へ落としている）、`Atom` が来ても
+  // 実際に置けるのは `Scalar` の成員だけである。したがって結果は `Scalar` まで狭まる。
+  if (FAMILY_MEMBERS[leftType] || FAMILY_MEMBERS[rightType]) return "Scalar";
   // どちらかの型が未解決（識別子のatom_typeが読めない等）なら、従来通り左辺を通す
   return leftType;
 }
@@ -398,6 +405,12 @@ function getPropResultType(node, env) {
     // ——スロットごとに型が違ってよいのが直積の意味なので、どの命令を出すか決まらない
     // （§2「多相な Struct への実行時添字はコード生成できない」）。
     const slots = base && base.slotKind === "named" ? [...namedSlots(base).values()] : positionalSlots(base);
+    // **スロットへ分解できなければ、添字は解けない。** 仮引数のように中身の見えない
+    // `Struct` は `positionalSlots` が自分自身1個を返すだけなので、`p ' 0` がスロットの型
+    // ではなく**器の型そのもの**を返してしまう——`fst : p ? p ' 0` が `Struct -> Struct`
+    // になっていた。`p ' 1` は範囲外で `_` になるので、同じ関数の 0 と 1 で答えの質が
+    // 変わっていたことになる。偶然当たった型は、未解決より悪い。
+    if (slots.length === 1 && slots[0] === base) return null;
     if (key && key.type === "atom" && key.kind === "number") {
       const i = parseInt(key.value, 10);
       return slots[i] ? inferAtomType(slots[i], env) : null;
@@ -777,9 +790,19 @@ function pointfreeSignature(node) {
 // 比較・算術の相手が「型の分かっている識別子」なら、その型を制約として使う。
 // 仮引数自身（まだ型が決まっていない）と、型が読めないものは対象にしない。
 function typeOfKnownOperand(node, scope, paramNames) {
-  if (!scope || !isIdentifierNode(node) || paramNames.has(node.value)) return null;
+  if (!scope || !node) return null;
+  // 仮引数そのものは「相手」にならない（互いを根拠にしても何も決まらない）。
+  if (isIdentifierNode(node) && paramNames.has(node.value)) return null;
+  // **相手はリテラルや識別子とは限らない。** §3.2 が「域を選ぶのは左辺」と定める通り、
+  // 左辺が式であってもその型が域を決める——`0.0 + x + y` は `(0.0 + x) + y` に切れるので、
+  // `y` の相手は `Float` と分かっている式である。ここを識別子に限っていたせいで、
+  // 型注釈の書き方（`0.0 +`）が**2項目以降へ伝わらなかった**。
+  //
+  // 式の型は既に解けているものだけを読む（未解決なら null のまま）。
+  if (!isIdentifierNode(node) && !(node.type === "operation" && node.position === "infix")) return null;
   const t = inferAtomType(node, scope);
-  return t && t !== "Unit" ? t : null;
+  // 族は証拠ではないので相手の根拠にしない。
+  return t && t !== "Unit" && !FAMILY_MEMBERS[t] ? t : null;
 }
 
 // 族（まだ具体型が決まっていない下限）とその成員（§4 の記法定義）。
@@ -1012,6 +1035,20 @@ function inferLambdaParamTypes(lambdaNode, env) {
   const names = new Set(paramNamesOf(lambdaNode.left));
   const scopeOf = lambdaNode.scope || env;
   const inferred = inferParamTypesFromUsage(lambdaNode.right, names, scopeOf);
+  // 呼び出しサイトで観測した具体型を取り込む（§5 Pass 1b の Layer 2 版）。§7.1 の
+  // `Scalar` は「呼び出しサイトで具体化されるまでの暫定形」なので、族に留まっている
+  // 位置はここで決まる。本体の証拠が既に具体型なら、そちらの方が近いので触らない。
+  if (Array.isArray(lambdaNode.callsiteParamTypes) && lambdaNode.left) {
+    const entries = lambdaNode.left.type === "params" ? lambdaNode.left.entries || [] : [];
+    const slotNames = lambdaNode.left.type === "atom" ? [lambdaNode.left.value] : entries.map((e) => (e.pattern || e.rest ? null : e.name || null));
+    slotNames.forEach((name, i) => {
+      const t = lambdaNode.callsiteParamTypes[i];
+      if (!name || !t) return;
+      const prev = inferred.get(name);
+      const members = prev === undefined ? null : FAMILY_MEMBERS[prev];
+      if (prev === undefined || (members && members.has(t))) inferred.set(name, t);
+    });
+  }
   // 仮引数のデフォルト式も走査する。デフォルトは**他の仮引数を使って書ける**ので
   // （`walk : s  line : head_line s  …`）、そこも使用箇所である。本体だけを見ていると、
   // 仮引数リストの中で使われているだけの引数がいつまでも `Atom` のままになる。
@@ -1124,6 +1161,110 @@ function lambdaParamSlotTypes(lambdaNode, env) {
 }
 
 /**
+ * `fnName` への呼び出しサイトを全て集め、各サイトの位置順の実引数ノードを返す。
+ *
+ * **部分適用も呼び出しサイトである。** `f 1` は飽和していないが、スロット0へ 1 を
+ * 渡していることに変わりはない——埋めたスロットについては同じ強さの証拠になる。
+ * `applyChainOf` が `apply` と `partial_apply` の両方を辿るのはそのためである
+ * （Pass 1b 側の収集は Layer 1 のジェネリック解決が目的なので別物として残す）。
+ */
+function callsitesOf(nodes, fnName) {
+  const sites = [];
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "operation" && (node.name === "apply" || node.name === "partial_apply")) {
+      const { base, args } = applyChainOf(node);
+      if (isIdentifierNode(base) && base.value === fnName) {
+        sites.push(args);
+        // 連鎖全体で1サイト。内側を別サイトとして二重に数えない。ただし実引数の中に
+        // 別の呼び出しが入っていることはあるので、そちらは個別に辿る。
+        args.forEach(visit);
+        return;
+      }
+    }
+    if (node.left) visit(node.left);
+    if (node.right) visit(node.right);
+    if (node.operand) visit(node.operand);
+    if (Array.isArray(node.lines)) node.lines.forEach(visit);
+  };
+  for (const n of nodes) visit(n);
+  return sites;
+}
+
+/**
+ * 呼び出しサイトから仮引数の型を確定させる（§5 Pass 1b の Layer 2 版）。
+ *
+ * §7.1 の `Scalar` は「String を含まない Atom」という**族**であり、「呼び出しサイトで
+ * 具体化されるまでの暫定形」だと §1 が明記している。Pass 1b は Layer 1（`Lambda` か
+ * `Atom` か）についてこれを既にやっていたが、Layer 2 についてはやっていなかった
+ * ——`solve : n ? first_row 1 n` は `solve 8` としか呼ばれないのに `n` が `Scalar` の
+ * ままで、Pass 4 は Int 版を出す根拠を持てなかった。
+ *
+ * **export されていない関数は、呼び出しサイトが全てである。** 外から呼ばれる可能性が
+ * 無いので、観測したサイトの型がその関数の型そのものになる。export されているものは
+ * ジェネリックのまま残す——外の呼び出しサイトは見えないので、見えている分だけで
+ * 決めつけてはいけない（compiler_pipeline.md §6.3 が呼び出しサイトの列挙を export の
+ * 性質として扱っているのと同じ線引きである）。
+ *
+ * 全サイトが同じ具体型で一致したときだけ狭める。食い違うなら族のままが正しい
+ * ——それは「まだ決まっていない」のではなく「複数の型で呼ばれている」ということであり、
+ * Pass 4 はサイトごとに別の実体を出す（stack_abi.md のコンパイル時特殊化）。
+ * 観測した型の集合は `binding.instances` に残すので、そちらが実体の一覧になる。
+ */
+function collectCallsiteParamTypes(nodes, env) {
+  let changed = false;
+  for (const node of nodes) {
+    if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+    const rhs = node.right;
+    if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
+    const binding = envLookup(env, node.left.value);
+    if (!binding) continue;
+    const paramNode = rhs.left;
+    // 裸の仮引数だけを扱う。ブラケット分割代入は実引数1個を分解する形なので、
+    // スロットと束縛名が1対1にならない（器の型は別の規則が決めている）。
+    const names = isIdentifierNode(paramNode)
+      ? [paramNode.value]
+      : paramNode && paramNode.type === "params" && !paramNode.bracket
+        ? (paramNode.entries || []).map((e) => (e.pattern || e.rest ? null : e.name || null))
+        : [];
+    if (names.length === 0) continue;
+    const sites = callsitesOf(nodes, node.left.value);
+    if (sites.length === 0) continue;
+    const observed = names.map(() => new Set());
+    for (const args of sites) {
+      names.forEach((name, i) => {
+        if (!name || i >= args.length) return;
+        const t = inferAtomType(args[i], env);
+        // 未解決と `Unit` は観測ではない（`__` は零射であって型の主張ではない）。
+        if (t && t !== "Unit") observed[i].add(t);
+      });
+    }
+    const instances = names.map((name, i) => (name ? [...observed[i]] : null));
+    if (JSON.stringify(binding.instances) !== JSON.stringify(instances)) {
+      binding.instances = instances;
+      changed = true;
+    }
+    // export されているものはジェネリックのまま。外の呼び出しサイトは見えない。
+    if (node.exported) continue;
+    // **観測はラムダノードへ置く。** 型を組み立てるのは inferLambdaParamTypes であり、
+    // そこは本体と仮引数リストしか見ない——呼び出しサイトは別の場所にあるので、
+    // 証拠をここへ運んでおかないと合流しない。
+    const settled = names.map((name, i) => {
+      if (!name) return null;
+      const seen = [...observed[i]];
+      // 全サイトが同じ具体型で一致したときだけ。食い違うなら族のままが正しい。
+      if (seen.length !== 1 || FAMILY_MEMBERS[seen[0]]) return null;
+      return seen[0];
+    });
+    if (JSON.stringify(rhs.callsiteParamTypes) !== JSON.stringify(settled)) {
+      rhs.callsiteParamTypes = settled;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/**
  * 各識別子が要求する実引数の型を識別子テーブルへ書き戻す（`binding.returns` と対になる）。
  * 変化があったら true——返値型と同じ不動点で回る。
  */
@@ -1167,7 +1308,10 @@ function collectParamTypes(nodes, env) {
       const inferred = inferLambdaParamTypes(rhs, scope);
       if (scope && scope.bindings) {
         for (const [name, t] of inferred) {
-          const b = scope.bindings.get(name);
+          // **仮引数のスコープは入れ子である。** カリー化により引数1つごとに1段できるので、
+          // 最内側の `bindings` だけを見ると**最後の引数しか書き戻されない**
+          // ——`f : a b ? a + b` の `a` は1段外に居る。親まで辿る。
+          const b = envLookup(scope, name);
           // `Atom` は下限であって情報ではないので、上書きの根拠にしない。
           if (b && t && t !== "Atom" && b.atomType !== t) {
             b.atomType = t;
@@ -1554,7 +1698,10 @@ function annotateAll(nodes, env, diagnostics) {
     // 決める）ので、同じ周回で両方を集める。どちらかが動いている限り回す。
     const a = collectReturns(nodes, env);
     const b = collectParamTypes(nodes, env);
-    if (!a && !b) break;
+    // 呼び出しサイトからの具体化も同じ不動点で回す——狭まった型が本体へ伝わり、
+    // その本体が別の関数を呼んでいれば、そこでも狭まる。
+    const c = collectCallsiteParamTypes(nodes, env);
+    if (!a && !b && !c) break;
   }
   // **上がらなかった種は答えではない。** 不動点が一度も本体から型を読めなかった関数は
   // 「何も返さない」のではなく「まだ分からない」のである。底を置いたまま報告すると、
