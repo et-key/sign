@@ -76,7 +76,21 @@ function collectFieldRequirements(bodyNode, paramNames) {
     if (node.type === "operation" && node.name === "get_prop") {
       const base = node.left;
       const key = node.right;
-      if (isIdentifierNode(base) && paramNames.has(base.value) && isIdentifierNode(key)) {
+      // **仮引数はフィールド名になれない。** 仮引数は実行時に値が入る場所であり、
+      // 名前ではない——`f : l i ? l ' i` の `i` は添字であって「i というフィールド」
+      // ではない。type_system.md §2 が OK 例として明示している `list ' i`（`i` は実行時
+      // 変数でよい）がまさにこの形なので、ここを取り違えると添字の書き方が全部
+      // 「フィールド要求」に化ける。
+      //
+      // 右辺が識別子のとき名前と読むか値と読むかは左辺が決める、というのが `'` の規則
+      // （interpreter.js の getPropValue）。左辺が未解決の仮引数なら決め手が無いので、
+      // せめて**右辺が仮引数であるときは値である**と分かる分だけは取り違えない。
+      if (
+        isIdentifierNode(base) &&
+        paramNames.has(base.value) &&
+        isIdentifierNode(key) &&
+        !paramNames.has(key.value)
+      ) {
         if (!fields.has(base.value)) fields.set(base.value, new Set());
         fields.get(base.value).add(bareName(key.value));
       }
