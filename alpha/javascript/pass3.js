@@ -173,9 +173,18 @@ function rangeResultType(node, env) {
 //   NO_JOIN … join が存在しない（コンパイルエラー）
 const NO_JOIN = Symbol("no-join");
 
+// **`List` は「要素型が未確定のリスト」＝族である。** `List(Int)` はその成員であり、
+// 両者の関係は `Scalar` と `Int` の関係と同じ——具体的な方が勝つ。入れ子の要素型
+// （`List(List(Int))`）を運ぶようになって初めて、この区別が要るようになった。
+function memberOfListFamily(family, type) {
+  return family === "List" && typeof type === "string" && type.startsWith("List(");
+}
+
 function joinElementTypes(a, b) {
   if (a === null || a === undefined || b === null || b === undefined) return null;
   if (a === b) return a;
+  if (memberOfListFamily(a, b)) return b;
+  if (memberOfListFamily(b, a)) return a;
   // `Scalar` は「String を含まない Atom」という**族**であり（§4 の記法定義）、
   // Address / Float / Vector はその要素である。族と要素の上限は族——どの要素かは
   // まだ分かっていないので、分かっている以上のことを名乗らない。仮引数の型が
@@ -361,6 +370,57 @@ function positionalSlots(node) {
     return [...positionalSlots(node.left), ...positionalSlots(node.right)];
   }
   return [node];
+}
+
+/**
+ * スロットの**形の鍵**。型と、並ぶものなら個数まで含めた文字列を返す。
+ *
+ * `List` と `Struct` を分ける基準は §2 が明言している通り「Pass 4 が1つの命令
+ * テンプレートで済むか」であり、それは **`base + i × stride` が書けるか**である。
+ * つまり要る条件は型が揃っていることではなく**幅が揃っていること**である。
+ *
+ *   1 2 , 3 4     スロットは List(Int) が2つ、幅も 16 と 16   → 揃う
+ *   1 2 , 3 4 5   スロットは List(Int) が2つ、幅は 16 と 24   → 揃わない
+ *
+ * 2つ目は**型だけ見ると同じ**なので、型の一致だけを見ていると取り違える。だから鍵には
+ * 個数を含める。幅そのもの（バイト数）はターゲットが決めるが、**揃っているかどうかは
+ * ターゲットに依らない**——同じ型が同じ個数並ぶなら、どのターゲットでも同じ幅になる。
+ */
+function slotShapeKey(node, env, depth = 0) {
+  if (!node || depth > 8) return "?";
+  const type = inferAtomType(node, env);
+  if (type === "List") {
+    const items = listItemNodes(node, env);
+    const el = node.elementType || "?";
+    return items === null ? `List(${el})?` : `List(${el})[${items.length}]`;
+  }
+  if (type === "String") {
+    const d = derefValueNode(node, env);
+    const n = d && d.type === "atom" && d.kind === "string" ? [...d.value.slice(1, -1)].length : null;
+    return n === null ? "String?" : `String[${n}]`;
+  }
+  if (type === "Struct") {
+    const d = derefValueNode(node, env);
+    const slots = d && d.slotKind === "named" ? [...namedSlots(d).values()] : positionalSlots(d);
+    if (slots.length === 1 && slots[0] === d) return "Struct?";
+    return `Struct(${slots.map((x) => slotShapeKey(x, env, depth + 1)).join(" ")})`;
+  }
+  return String(type);
+}
+
+// List の要素ノード。均せなければ null（個数が読めない）。
+function listItemNodes(node, env) {
+  const d = derefValueNode(node, env);
+  if (!d) return null;
+  const flat = (n) => {
+    if (n && n.type === "operation" && ["construct", "concat", "push", "unshift"].includes(n.name)) {
+      return [...flat(n.left), ...flat(n.right)];
+    }
+    if (Array.isArray(n.lines) && n.lines.length === 1) return flat(n.lines[0]);
+    return [n];
+  };
+  const items = flat(d);
+  return items.length === 1 && items[0] === d ? null : items;
 }
 
 // 名前付きスロットを `名前 -> 値ノード` で取り出す。
@@ -617,6 +677,31 @@ function computeAtomType(node, env) {
       // ただし**関心事が違う**ので slotKind で区別する——カンマは名前を持たないため
       // 順序が意味そのものであり、宣言順がそのまま物理配置になる。名前ソートの
       // 正規順（stack_abi.md §7.1）は名前付きスロットにのみ適用される規則である。
+      // **均質なら List である。** カンマは「次元を上げる」演算子だが、上げた結果が
+      // 多相であるとは限らない——`1 2 , 3 4` は行が全部同じ形なので `base + i × stride`
+      // が書ける。次元を上げることと多相な入れ物を作ることは別の操作であり、両方を
+      // 無条件に `Struct` へ落とすと §2 が定めた基準（1つの命令テンプレートで済むか）と
+      // 型が食い違う。
+      //
+      // 揃っているかは**幅**で見る。型だけでは足りない——`1 2 , 3 4 5` はスロットの型が
+      // どちらも `List(Int)` なのに幅が 16 と 24 で違う。
+      const slots = positionalSlots(node);
+      const keys = slots.map((x) => slotShapeKey(x, env));
+      // **`Unit` は証拠ではない。** 不動点の初回は返値がまだ束の底（`Unit`）なので、
+      // どの直積もスロットが揃って見えてしまう——そこで `List` が確定すると、直和は
+      // 単調にしか増えないので二度と抜けられない（`List | Struct` が自分自身を養う）。
+      // 種を答えとして数えない、というのはここでも同じである。
+      const decided = (k) => k && !k.includes("?") && k !== "Unit" && k !== "null" && k !== "undefined";
+      const uniform = keys.length > 1 && keys.every((k) => k === keys[0] && decided(k));
+      if (uniform) {
+        // 要素型は入れ子ごと運ぶ。`List` とだけ書くと、行が何の列なのかが落ちる
+        // ——`List(List(Int))` の内側が要らないなら、そもそも要素型を書く意味が無い。
+        const slotType = inferAtomType(slots[0], env);
+        const inner = slots[0].elementType;
+        node.elementType = slotType === "List" && inner ? `List(${inner})` : slotType;
+        node.slotKind = undefined;
+        return "List";
+      }
       node.slotKind = "positional";
       return "Struct";
     }
@@ -938,7 +1023,7 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
     // 食い違いはここでは断じない。本当の不一致を見るのは演算子ごとの検査の仕事である
     // （原理4）。
     const members = FAMILY_MEMBERS[prev];
-    if (members && members.has(type)) inferred.set(name, type);
+    if ((members && members.has(type)) || memberOfListFamily(prev, type)) inferred.set(name, type);
   };
 
   function visit(node) {
@@ -1654,7 +1739,9 @@ function joinArmTypes(types) {
   // 畳まないと「表現を決めるべき直和」が水増しされる——Pass 4 から見れば `Atom | String`
   // は枝が2つあるように見えるが、実際には1つの族でしかない。冪等（`A | A = A`）を
   // 平らにするのと同じ話が、族と成員の間にも成り立つ。
-  const absorbed = distinct.filter((x) => !distinct.some((y) => y !== x && FAMILY_MEMBERS[y] && FAMILY_MEMBERS[y].has(x)));
+  const absorbed = distinct.filter(
+    (x) => !distinct.some((y) => y !== x && ((FAMILY_MEMBERS[y] && FAMILY_MEMBERS[y].has(x)) || memberOfListFamily(y, x)))
+  );
   if (absorbed.length === 1) return absorbed[0];
   return absorbed.join(" | ");
 }

@@ -64,10 +64,12 @@ const cases = [
 		note: "__ 単体 → Unit",
 	},
 	{
+		// 均質なら `base + i × stride` が書けるので、§2 の基準（1つの命令テンプレートで
+		// 済むか）では `List` である。多相なら `Struct`（下）。
 		source: "[1, 2, 3]",
 		pick: (nodes) => nodes[0],
-		want: "Struct",
-		note: "[1, 2, 3] → Struct（カンマ＝直積、type_system.md §2の`1, 2, 3`の例）",
+		want: "List",
+		note: "[1, 2, 3] → List（カンマは次元を上げるが、上げた結果が均質なら List）",
 	},
 	{
 		source: "[\n\tfoo : 1\n\tbar : 2\n]",

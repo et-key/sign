@@ -290,6 +290,9 @@ function measureList(node, conf) {
 // List の要素ノードを取り出す。`[1 2 3]` は paren ブロックの中に余積1本が入っているが、
 // `[1 2] 3` のようにブロックを経ずに伸びた形もある。どちらも同じ余積である。
 function listItems(node, env = null) {
+  // 均質な直積も List である（カンマは次元を上げるが、上げた結果が多相とは限らない）。
+  // その場合スロットは `product` の連なりで来るので、こちらも均す。
+  if (node.type === "operation" && node.name === "product") return flattenProduct(node);
   if (Array.isArray(node.lines)) {
     if (node.lines.length === 1) return flattenConstruct(node.lines[0], env);
     return node.lines;
