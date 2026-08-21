@@ -100,5 +100,37 @@ check("未対応ターゲットでは出せない", layoutOfStruct(rhs("p : [\n\
 check("スカラーも同じ", measure(rhs("x : 42"), { target: "cortex_m" }), null);
 check("Struct でないものに layoutOfStruct は null", layoutOfStruct(rhs("x : 42"), A64), null);
 
+// ---- 規則裏打ち（レンジ）は要素を置かない ----
+//
+// list_model.md §2.3:「レンジ式は**リストに見えるだけ**であり、実体は常に
+// `{start, step, end}` という固定サイズの構造体である」。置かれるのは要素ではなく規則で、
+// したがって**大きさは要素数に依らない**。
+//
+// ここで `Iterator` と `List` の差がバイト単位で現れる——**差は `end` フィールド1つ**。
+// 型が「`|.|` が答えられるか」で2つを分けているのと、レイアウトがフィールド1つで
+// 分けているのが同じ線になっている。型と実体は別の話でありながら食い違っていない。
+function reprOf(source, conf = A64) {
+	const m = measure(rhs(source), conf);
+	return m && m.repr;
+}
+function fieldsOf(source, conf = A64) {
+	const m = measure(rhs(source), conf);
+	return m && m.fields && m.fields.map((f) => `${f.name}@${f.offset}`);
+}
+check("終端の無いレンジは {start, step}", fieldsOf("c : [0 ~+ 1]"), ["start@0", "step@8"]);
+check("終端のあるレンジは {start, step, end}", fieldsOf("r : [1 ~ 5]"), ["start@0", "step@8", "end@16"]);
+check("Iterator は 16 byte", sizeOf("c : [0 ~+ 1]"), 16);
+check("List（規則裏打ち）は 24 byte", sizeOf("r : [1 ~ 5]"), 24);
+// **大きさは要素数に依らない。** これが「展開しない」ということの意味である。
+check("100万要素でも 24 byte のまま", sizeOf("r : [1 ~ 1000000]"), 24);
+// 同じ値の並びでも、リテラルは要素が置かれるので要素数ぶんの場所を取る。
+check("リテラルの [1 2 3 4 5] は 40 byte（要素が置かれる）", sizeOf("l : [1 2 3 4 5]"), 40);
+check("リテラルの実体は要素の並び", reprOf("l : [1 2 3 4 5]"), "cells");
+check("レンジの実体は規則", reprOf("r : [1 ~ 5]"), "rule");
+// 添字はロードではなく算術になる（type_system.md §2 のアクセス表、`Iterator(T)` の行）。
+check("規則裏打ちの添字は算術", measure(rhs("r : [1 ~ 5]"), A64).access, "start + i × step");
+// 要素の幅はターゲットが決める。Float のレンジなら FPU 幅で並ぶ。
+check("Float のレンジも同じ形", fieldsOf("f : [1.5 ~+ 0.5 ~ 9.0]"), ["start@0", "step@8", "end@16"]);
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

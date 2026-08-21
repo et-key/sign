@@ -114,6 +114,10 @@ function rangeResultType(node, env) {
   const startType = startNode ? inferAtomType(startNode, env) : null;
   const endType = endNode ? inferAtomType(endNode, env) : null;
   // 終端を持たない2項形式（`1 ~+ 2`）は Pull 型のストリームそのもの。
+  // **実体は規則である**（list_model.md §2.3）。型は「何ができるか」しか語らないので、
+  // 「どう置かれているか」はここに印として残す——Pass 4 が `l ' i` に対してロードを出すか
+  // 算術を出すかは、型ではなくこれが決める（type_system.md §2 のアクセス表）。
+  node.repr = "rule";
   if (RANGE_STEP_OPS.has(node.name)) {
     // ストリームでも**要素型は分かる**——始点と歩幅の join がそれである。Pass 4 は
     // 添字に対して要素1個ぶんの命令を出すので、ここを落とすと添字が型を失う。
@@ -406,7 +410,11 @@ function computeAtomType(node, env) {
     // `[1 2 3]` のようにブロックが List を包んでいる場合、要素型もブロックへ引き継ぐ
     // （そうしないと `[1 2] [3 4]` のように List 同士を余積で繋いだとき、外側から
     // 中身の要素型が見えなくなる）。
-    if (lastType === "List" || lastType === "Iterator") node.elementType = last.elementType ?? null;
+    if (lastType === "List" || lastType === "Iterator") {
+      node.elementType = last.elementType ?? null;
+      // 実体の種類もブロック越しに引き継ぐ（`[1 ~ 5]` の外側から中身が規則だと見えるように）。
+      if (last.repr) node.repr = last.repr;
+    }
     return lastType;
   }
 
@@ -911,6 +919,7 @@ function collectParamTypes(nodes, env) {
         // 名前付きスロットと連番スロットは結合の可否が違うので、種別も持ち回る。
         if (rhs.slotKind) binding.slotKind = rhs.slotKind;
         if (rhs.elementType) binding.elementType = rhs.elementType;
+        if (rhs.repr) binding.repr = rhs.repr;
         changed = true;
       }
     }
@@ -1137,6 +1146,7 @@ function clearTypeAnnotations(node) {
   if (!node || typeof node !== "object") return;
   delete node.atomType;
   delete node.elementType;
+  delete node.repr;
   delete node.slotKind;
   delete node.operandType;
   for (const k of ["left", "right", "operand", "middle"]) clearTypeAnnotations(node[k]);

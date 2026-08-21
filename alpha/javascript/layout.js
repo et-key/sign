@@ -90,6 +90,8 @@ function measure(node, conf) {
     return n === null ? null : { size: n * w, align: w };
   }
 
+  // **規則裏打ち**（レンジ）は要素を持たない。置かれるのは規則そのものである。
+  if (node.repr === "rule") return measureRule(node, conf);
   if (type === "List") return measureList(node, conf);
   if (type === "Struct") {
     const l = layoutOfStruct(node, conf);
@@ -111,6 +113,36 @@ function stringLength(node) {
   return null; // 連結の結果など、静的に長さが決まらないもの
 }
 
+/**
+ * 規則裏打ち（レンジ）の大きさ。要素は**置かれない**——置かれるのは規則である。
+ *
+ * ここで `Iterator` と `List` の差がバイト単位で現れる。**差は `end` フィールド1つ**である。
+ *
+ *   `0 ~+ 1`   → `{start, step}`        終端が無い＝数え上げられない → `Iterator(T)`
+ *   `1 ~ 5`    → `{start, step, end}`   終端がある＝数え上げられる   → `List(T)`
+ *
+ * 型が「何ができるか」（`|.|` が答えられるか）で2つを分けているのと、レイアウトが
+ * フィールド1つで分けているのが**同じ線**になっている。型と実体が別々の話でありながら
+ * 食い違っていない、という確認でもある。
+ *
+ * 添字は `base` からのロードではなく `start + i × step` の**算術**になる
+ * （type_system.md §2 のアクセス表、`Iterator(T)` の行）。
+ */
+function measureRule(node, conf) {
+  const { target } = conf;
+  const el = node.elementType;
+  const w = el ? sizeOf(el, target) : null;
+  if (w === null) return null;
+  const fields = node.atomType === "Iterator" ? ["start", "step"] : ["start", "step", "end"];
+  return {
+    size: w * fields.length,
+    align: w,
+    repr: "rule",
+    fields: fields.map((name, i) => ({ name, offset: i * w, size: w, type: el })),
+    access: "start + i × step",
+  };
+}
+
 function measureList(node, conf) {
   const items = listItems(node);
   if (items === null) return null;
@@ -119,7 +151,7 @@ function measureList(node, conf) {
   if (!first) return null;
   // 要素をその境界へ切り上げた大きさがストライドになる。
   const stride = alignUp(first.size, first.align);
-  return { size: stride * items.length, align: first.align, stride, count: items.length };
+  return { size: stride * items.length, align: first.align, stride, count: items.length, repr: "cells" };
 }
 
 // List の要素ノードを取り出す。`[1 2 3]` は paren ブロックの中に余積1本が入っている。
@@ -185,6 +217,12 @@ function packSlots(entries, conf, slotKind) {
  */
 function formatLayout(layout) {
   if (!layout) return "(決まらない)";
+  // 規則裏打ちは要素ではなく規則が並ぶ。`end` の有無が Iterator と List を分けている。
+  if (layout.repr === "rule") {
+    const head = `size ${layout.size} / align ${layout.align} / rule`;
+    const body = layout.fields.map((f) => `  +${String(f.offset).padStart(3)}  ${f.name.padEnd(8)} ${String(f.type).padEnd(8)} ${f.size} byte`);
+    return [head, ...body, `  添字: ${layout.access}`].join("\n");
+  }
   const head = `size ${layout.size} / align ${layout.align} / ${layout.slotKind}`;
   const body = layout.slots.map(
     (s) => `  +${String(s.offset).padStart(3)}  ${(s.name !== undefined ? s.name : `[${s.ordinal}]`).padEnd(8)} ${String(s.type).padEnd(8)} ${s.size} byte  (宣言順 ${s.ordinal})`

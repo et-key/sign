@@ -51,6 +51,14 @@ for (const node of nodes) {
 	const struct = layoutOfStruct(node.right, conf);
 	const stride = m.stride !== undefined ? `  stride ${m.stride} × ${m.count}` : "";
 	console.log(`${name} : ${node.right.atomType}  —  size ${m.size} / align ${m.align}${stride}`);
+	// 規則裏打ち（レンジ）は要素を持たない。置かれているのは規則そのものなので、
+	// 添字がロードではなく算術になることまで見せる（type_system.md §2 のアクセス表）。
+	if (m.repr === "rule") {
+		for (const f of m.fields) {
+			console.log(`  +${String(f.offset).padStart(4)}  ${f.name.padEnd(10)} ${String(f.type).padEnd(8)} ${f.size} byte`);
+		}
+		console.log("  ` 添字は " + m.access + "（ロードではなく算術）");
+	}
 	if (struct) {
 		for (const s of struct.slots) {
 			const label = s.name !== undefined ? s.name : `[${s.ordinal}]`;
