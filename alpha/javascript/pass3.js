@@ -373,6 +373,71 @@ function namedSlots(node) {
   return out;
 }
 
+/**
+ * 値ノードを辿る。識別子は束縛先へ、適用は呼び先の返値へ。
+ *
+ * `derefToNode` は識別子だけを辿る。ここは**適用も辿る**——`fst (expr ts)` の実引数が
+ * どんな形かは `expr` の本体にしか無いからである。呼び出しサイトから形を運ぶには、
+ * サイトに書かれている式の先まで行く必要がある。
+ */
+function derefValueNode(node, env, seen = new Set()) {
+  if (!node || !env) return node;
+  if (isIdentifierNode(node)) {
+    if (seen.has(node.value)) return node;
+    seen.add(node.value);
+    const b = envLookup(env, node.value);
+    const next = b && (b.valueNode || b.rhsNode);
+    return next ? derefValueNode(next, env, seen) : node;
+  }
+  if (node.type === "operation" && (node.name === "apply" || node.name === "partial_apply")) {
+    const { base } = applyChainOf(node);
+    if (isIdentifierNode(base) && !seen.has(base.value)) {
+      seen.add(base.value);
+      const b = envLookup(env, base.value);
+      if (b && b.returnsNode) return derefValueNode(b.returnsNode, env, seen);
+    }
+    return node;
+  }
+  // ブロックは最終行が値である。1行なら括りでしかなく、複数行なら match_case の
+  // 最後の枝——どちらも「そのブロックが返すもの」は最終行に書いてある。ブロックの型を
+  // 最終行から取るのは Pass 3 の既定の読み方なので、形も同じ読み方に揃える。
+  // ただし**名前付きスロットのブロックは値そのもの**である。`[x : 1 / y : 2.5]` の
+  // 各行はスロットであって枝ではないので、最終行へ潰すと構造体が1スロットに化ける。
+  if (Array.isArray(node.lines) && node.lines.length > 0 && !node.slotKind) {
+    const last = node.lines[node.lines.length - 1];
+    if (last !== node) return derefValueNode(last, node.scope || env, seen);
+  }
+  return node;
+}
+
+/**
+ * `Struct` の**スロットの形**（種別とスロットごとの型）を読む。読めなければ null。
+ *
+ * 型名（`Struct`）だけでは `p ' 0` が何を返すか決まらない。スロットごとに型が違って
+ * よいのが直積の意味なので（§2）、必要なのは並びそのものである。**呼び出しサイトは
+ * それを知っている**——`fst (expr ts)` の `expr` は返値の形を持っているので、そこから
+ * 運べば仮引数の側でも添字が解ける。
+ */
+function structShapeOf(node, env) {
+  const base = derefValueNode(node, env);
+  if (!base || inferAtomType(base, env) !== "Struct") return null;
+  if (base.slotKind === "named") {
+    const m = namedSlots(base);
+    if (m.size === 0) return null;
+    return { slotKind: "named", names: [...m.keys()], types: [...m.values()].map((n) => inferAtomType(n, env)) };
+  }
+  const slots = positionalSlots(base);
+  // 分解できていない（自分自身1個）なら形は読めない。
+  if (slots.length <= 1 && slots[0] === base) return null;
+  return { slotKind: "positional", types: slots.map((n) => inferAtomType(n, env)) };
+}
+
+// 形が同じかどうか。スロットごとの型まで一致して初めて同じ形である。
+function sameShape(a, b) {
+  if (!a || !b) return false;
+  return a.slotKind === b.slotKind && JSON.stringify(a.types) === JSON.stringify(b.types) && JSON.stringify(a.names || null) === JSON.stringify(b.names || null);
+}
+
 function getPropResultType(node, env) {
   // 器そのものを解決する。識別子なら束縛先まで辿る——`l : [1 2 3]` の `l ' 0` を
   // 解けなければ、実用上ほとんどの添字が型を失う。
@@ -405,6 +470,20 @@ function getPropResultType(node, env) {
     // ——スロットごとに型が違ってよいのが直積の意味なので、どの命令を出すか決まらない
     // （§2「多相な Struct への実行時添字はコード生成できない」）。
     const slots = base && base.slotKind === "named" ? [...namedSlots(base).values()] : positionalSlots(base);
+    // 呼び出しサイトから形が届いていれば、それで解ける。中身が見えないのは**定義サイト
+    // だけ**であって、呼ばれ方まで含めればスロットの型は書いてある。
+    if (isIdentifierNode(node.left) && env) {
+      const b = envLookup(env, node.left.value);
+      const sh = b && b.slotShape;
+      if (sh && key && key.type === "atom" && key.kind === "number") {
+        const i = parseInt(key.value, 10);
+        return sh.types[i] ?? null;
+      }
+      if (sh && sh.slotKind === "named" && isIdentifierNode(key)) {
+        const i = sh.names.indexOf(key.value);
+        return i >= 0 ? sh.types[i] : null;
+      }
+    }
     // **スロットへ分解できなければ、添字は解けない。** 仮引数のように中身の見えない
     // `Struct` は `positionalSlots` が自分自身1個を返すだけなので、`p ' 0` がスロットの型
     // ではなく**器の型そのもの**を返してしまう——`fst : p ? p ' 0` が `Struct -> Struct`
@@ -1231,12 +1310,21 @@ function collectCallsiteParamTypes(nodes, env) {
     const sites = callsitesOf(nodes, node.left.value);
     if (sites.length === 0) continue;
     const observed = names.map(() => new Set());
+    // **型名だけでは足りない。** `Struct` はスロットごとに型が違ってよいので、`p ' 0` が
+    // 何を返すかは並びを知らないと決まらない。呼び出しサイトはそれを知っているので、
+    // 型と一緒に形も運ぶ。全サイトで形が一致したときだけ採る。
+    const shapes = names.map(() => ({ shape: undefined, agreed: true }));
     for (const args of sites) {
       names.forEach((name, i) => {
         if (!name || i >= args.length) return;
         const t = inferAtomType(args[i], env);
         // 未解決と `Unit` は観測ではない（`__` は零射であって型の主張ではない）。
         if (t && t !== "Unit") observed[i].add(t);
+        if (t !== "Struct") return;
+        const sh = structShapeOf(args[i], env);
+        if (!sh) { shapes[i].agreed = false; return; }
+        if (shapes[i].shape === undefined) shapes[i].shape = sh;
+        else if (!sameShape(shapes[i].shape, sh)) shapes[i].agreed = false;
       });
     }
     const instances = names.map((name, i) => (name ? [...observed[i]] : null));
@@ -1260,6 +1348,20 @@ function collectCallsiteParamTypes(nodes, env) {
       rhs.callsiteParamTypes = settled;
       changed = true;
     }
+    // 形は仮引数の束縛へ直接置く。型（`Struct`）は既に分かっていて、足りないのは
+    // 並びの方だからである。スコープは入れ子なので親まで辿る。
+    const scope = rhs.scope;
+    if (!scope) continue;
+    names.forEach((name, i) => {
+      if (!name) return;
+      const sh = shapes[i].agreed ? shapes[i].shape : null;
+      const b = envLookup(scope, name);
+      if (!b) return;
+      if (JSON.stringify(b.slotShape) !== JSON.stringify(sh || null)) {
+        b.slotShape = sh || null;
+        changed = true;
+      }
+    });
   }
   return changed;
 }
