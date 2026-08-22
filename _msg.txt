@@ -1,34 +1,34 @@
-fix: 返値型の不動点を2相で回す（仮引数の狭まりは単調な変化ではない）
+docs: §4 のシグネチャ表を通した（幽霊語を落とし、実装と突き合わせた）
 
-返値型の不動点は `__`（底）から単調に上がる設計である。ところが**仮引数の型は
-後から狭まる**——呼び出しサイトからの具体化（Pass 1b の Layer 2 版）は束を下る
-変化であり、単調ではない。両方を1つのループで回すと、一度上がった返値は二度と
-狭まらない。再帰の枝が前の周回の値を読み、それが自分を養い続けるからである。
+記法だけが `List` = `Array | Struct` としており、**同じ語が表の中で2つの意味で
+使われていた**。
 
-`unwind : st d ?` がこれを踏んでいた。
+  | `,` | 中置 | (L -> R) -> List |            ← Struct を含むつもり
+  | `~` | 後置 | Deref(... -> (List | Struct | Atom)) |  ← 別物として並べている
 
-  arm 0  unwind (pop st) d   ← 自分の返値を読む
-  arm 1  st
+`List` と `Struct` を分けるのは幅が揃うかどうかであり（§2）、渡し方も違う
+（`List` は `{ptr, len}`、`Struct` は `{ptr}`、stack_abi.md §4.6）。同じ語で2つを
+指すと、Pass 4 がどちらの命令を出すか決まらない。`Array` はこの1行にしか出て
+こない語だった。同じく `Register`（2箇所）と `Number`（表では2箇所）も、Layer 2 に
+存在しない語である。
 
-`st` は初回に既定の `Atom` なので返値が `Atom` へ上がる。呼び出しサイトから
-`st` が `Int` へ狭まった後も、arm 0 が古い `Atom` を返し続けるため
-`join(Atom, Int) = Atom` で固定されていた。
+全ての行を**実装と突き合わせてから**書き換えた。
 
-1相目で仮引数の型を確定させ、返値を底へ戻して2相目を回す。2相目は最初から
-正しい仮引数の型で始まるので、基底ケースが決めた型がそのまま残る。文書が
-「初回は再帰の枝が何も寄与せず、基底ケースだけが型を決める」と書いている通りの
-ことを、仮引数が確定した後にもう一度やっているだけである。
+  `,`         -> List                              →  -> (List | Struct)
+  ` ` 空白    Atom | List                          →  Atom（List ⊂ Atom）
+              -> (List | Lambda | __)              →  -> (List | Struct | Lambda | __)
+  `'` `@`     Implicit(Atom | List | Lambda)       →  Implicit(Atom | Lambda)
+  `~` 後置    Deref(-> (List | Struct | Atom))     →  Deref(-> Atom)
+  `<<` `>>`   (L(Address | Register) -> Number)    →  (L(Address | Int) -> Int)
+  `||` `;;` `&&`  (L(Address | Register) -> Scalar) →  (L(Address | Int) -> (Address | Int))
+  `!` 後置    Number -> Number                     →  L(Scalar) -> L
+  `?`         (List -> R)                          →  (List(Identifier) -> R)
 
-  unwind  : Int Int -> Atom  →  Int Int -> Int
-  next_st : Int Int -> Atom  →  Int Int -> Int | List
-  walk    : ... -> Atom      →  ... -> String
+`Atom | List` が冗長になったのは、`Atom` を Layer 1 の語（値ならなんでも）へ戻した
+結果である。旧定義（`Scalar | String`）では `List` を明示的に足す必要があった。
 
-Pass 4 への還元（preprocess.sn）: 44 → 4。族のままは 0 になった。
+階乗は `Int -> Int` にしかけたが、`5.0!` が `Float` を返すことを確かめて `L(Scalar) -> L`
+にした——他の算術と同じく左辺が域を決める。`5 !` は空白があると中置として読まれて
+コンパイルエラーになる（`!` に中置は無い）ので、後置は `5!` と書く。
 
-残る4つは `Int | List` で、これは**本物**である——インデントスタックは空のとき
-スカラーの 0、中身があれば `List(Int)` なので、値として本当に両方を流れる。
-型が嘘をついているのではなく、多相であることを正しく書き写している。
-
-底へ戻すときは「種である」という印も立て直す。上がらなかった種を答えとして報告
-しないための旗なので、2相目でも同じ扱いが要る（ポイントフリーの返値は演算子表から
-読めているので種ではない——そちらは印を消す）。
+記法ブロックに `Struct` / `Deref` / `Identifier` の定義を足した。

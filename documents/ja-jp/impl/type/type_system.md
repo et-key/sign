@@ -978,8 +978,11 @@ x : 0.0 + input      ` Float として読む
 > `Atom` = **値ならなんでも**（Layer 1 のカテゴリ。Layer 2 のどの型でもよい）  
 > `Scalar` = **レジスタに乗る数値**＝ `Int | Address | Float | Vector`  
 > `Point` = 範囲の端点になれるもの＝**数値と1文字**（下記 NOTE）  
-> `List` = `Array | Struct`（多相リストは `Struct`）  
-> `Implicit` = 暗黙のアドレス（Implicit Address）
+> `List` = **同一幅の要素が並ぶ連続領域**（`List(T)` と要素型を伴って書く）  
+> `Struct` = **スロットごとに幅も解釈も違いうる連続領域**（名前付き／連番）  
+> `Implicit` = 暗黙のアドレス（Implicit Address）  
+> `Deref(A -> B)` = `A` を辿って `B` を得る  
+> `Identifier` = 識別子（値ではなく名前そのもの）
 
 > [!IMPORTANT]
 > **`Atom` は Layer 1 の語である。** §2 が Layer 2 を「Atom 内部型」と呼んでいる通り、
@@ -1003,6 +1006,19 @@ x : 0.0 + input      ` Float として読む
 >
 > `Scalar` が族として要るのは、算術がそこだけを対象にするからである（§3.2）。
 > `String` を足せないことと、`String` が `Atom` であることは両立する。
+>
+> 同じ理由で `List` と `Struct` も書き分ける。以前は記法だけが `List` = `Array | Struct`
+> としており、**同じ語が表の中で2つの意味で使われていた**——`,` の返値の `List` は
+> `Struct` を含むつもりだったが、後置 `~` の `List | Struct` は別物として並べていた。
+> `Array` はこの1行にしか出てこない語だった。
+>
+> `List` と `Struct` を分けるのは幅が揃うかどうかであり（§2）、渡し方も違う
+> （`List` は `{ptr, len}`、`Struct` は `{ptr}`、[`stack_abi.md` §4.6](../memory/stack_abi.md)）。
+> 同じ語で2つを指すと、Pass 4 がどちらの命令を出すか決まらない。
+>
+> `Register` と `Number` も同様に、ここにしか出てこない語だった。ビット演算が扱うのは
+> `Address` と `Int`（どちらも GPR 幅の整数）であり、階乗は他の算術と同じく左辺が域を
+> 決める。実装がそう動いていることを確かめてから書き換えた。
 
 > [!NOTE]
 > **範囲の端点（`Point`）は数値と1文字である。**
@@ -1037,18 +1053,18 @@ x : 0.0 + input      ` Float として読む
 | `##` | 前置※ | `R -> Implicit(R)` |
 | `###` | 前置※ | `R -> Implicit(R)` |
 | `:` | 中置※ | `(Identifier -> R) -> R` |
-| `?` | 中置※ | `(List -> R) -> Lambda(R)` |
+| `?` | 中置※ | `(List(Identifier) -> R) -> Lambda(R)` |
 | `#` | 中置※ | `(Address -> R) -> (Address \| __)` |
 | `;` | 中置 | `(L -> R) -> (L \| R \| __)` |
 | `\|` | 中置 | `(L -> R) -> (L \| R \| __)` |
 | `&` | 中置 | `(L -> R) -> (R \| __)` |
 | `==` | 中置 | `(L -> R) -> (L \| __)` |
 | `!==` | 中置 | `(L -> R) -> (L \| __)` |
-| `,` | 中置※ | `(L -> R) -> List` |
-| ` ` | `Atom \| List` 中置 `Lambda` | `((Atom \| List \| __) -> Lambda) -> (List \| Lambda \| __)` |
-| ` ` | `Lambda` 中置 `Atom \| List` | `(Lambda -> (Atom \| List \| __)) -> (List \| Lambda \| __)` |
+| `,` | 中置※ | `(L -> R) -> (List \| Struct)` |
+| ` ` | `Atom` 中置 `Lambda` | `((Atom \| __) -> Lambda) -> (List \| Struct \| Lambda \| __)` |
+| ` ` | `Lambda` 中置 `Atom` | `(Lambda -> (Atom \| __)) -> (List \| Struct \| Lambda \| __)` |
 | ` ` | `Lambda` 中置 `Lambda` | `(Lambda -> Lambda) -> Lambda` |
-| ` ` | `Atom \| List` 中置 `Atom \| List` | `((Atom \| List \| __) -> (Atom \| List \| __)) -> (List \| __)` |
+| ` ` | `Atom` 中置 `Atom` | `((Atom \| __) -> (Atom \| __)) -> (List \| Struct \| __)` |
 | `~` | 中置 | `(Point -> Point) -> Iterator -> (List \| String)` |
 | `~+` `~-` `~*` `~/` `~^` | 中置 | `(Scalar -> Scalar) -> Iterator` |
 | `<` `<=` `=` `>=` `>` `!=` | 中置 | `(L(Scalar) -> R(Scalar)) -> (L \| R \| __)` |
@@ -1056,12 +1072,12 @@ x : 0.0 + input      ` Float として読む
 | `*` `/` `%` | 中置 | `(L(Scalar) -> R(Scalar)) -> L` |
 | `^` | 中置※ | `(L(Scalar) -> R(Scalar)) -> L` |
 | `\|...\|` | 囲み | `L(Scalar) -> L` |
-| `'` | 中置 | `(L -> R) -> Implicit(Atom \| List \| Lambda) -> Deref(Implicit -> (Atom \| List \| Lambda))` |
-| `@` | 中置※ | `(R -> L) -> Implicit(Atom \| List \| Lambda) -> Deref(Implicit -> (Atom \| List \| Lambda))` |
-| `<<` `>>` | 中置 | `(L(Address \| Register) -> Number) -> L` |
-| `\|\|` `;;` `&&` | 中置 | `(L(Address \| Register) -> Scalar) -> L` |
-| `!` | 後置 | `Number -> Number` |
-| `~` | 後置 | `Deref(Implicit -> (List \| Struct \| Atom))` |
+| `'` | 中置 | `(L -> R) -> Implicit(Atom \| Lambda) -> Deref(Implicit -> (Atom \| Lambda))` |
+| `@` | 中置※ | `(R -> L) -> Implicit(Atom \| Lambda) -> Deref(Implicit -> (Atom \| Lambda))` |
+| `<<` `>>` | 中置 | `(L(Address \| Int) -> Int) -> L` |
+| `\|\|` `;;` `&&` | 中置 | `(L(Address \| Int) -> (Address \| Int)) -> L` |
+| `!` | 後置 | `L(Scalar) -> L`（階乗。`\|...\|` と同じく左辺が域を決める） |
+| `~` | 後置 | `Deref(Implicit -> Atom)` |
 | `@` | 後置 | `Implicit(Struct) -> Deref(Implicit -> Struct)` |
 | `~` | 前置※ | `T -> Implicit(T)`（持ち上げ。下記NOTE） |
 | `!` | 前置※ | `R -> (R \| __)` |
