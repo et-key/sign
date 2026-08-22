@@ -25,3 +25,6 @@ alpha/javascript/parser.js
 # pre-alpha のアーカイブ（documents/ja-jp/impl/appendix/pre_alpha.md 参照）
 # 履歴には残っているため、リポジトリには含めない
 pre_alpha_archive.zip
+_msg.txt
+_doc.cjs
+_fix.cjs
