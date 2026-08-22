@@ -1200,7 +1200,7 @@ function getPropValue(l, rightNode, env) {
     const n = evaluate(rightNode.operand, env);
     if (typeof n !== "number") return UNIT;
     const sliced = asIndexable.slice(n);
-    return isString ? sliced.join("") : sliced;
+    return isString ? sliced.join("") : collapseSlice(sliced);
   }
   return getPropByValue(l, evaluate(rightNode, env));
 }
@@ -1213,6 +1213,23 @@ function getPropValue(l, rightNode, env) {
 // （list_model.md §5.3）、値ではなく**書かれ方**を見る必要がある。
 function isSpreadNode(n) {
   return !!n && n.type === "operation" && n.position === "postfix" && n.name === "expand";
+}
+
+/**
+ * 切り出した並びを値へ戻す。**1要素はスカラーである**（`[5]` は `Int`、list_model.md）。
+ *
+ * リテラルのブロックは構文の時点で潰れる（1行だけのブロックは括りでしかない）。文字列の
+ * スライスも `join("")` で潰れる。ところがリストのスライスだけが配列のまま残っており、
+ * `String ≅ List(0u)` が片側でしか成立していなかった——同じ操作の結果が、器が文字列か
+ * リストかで別の形になっていた。
+ *
+ * これは見た目の問題ではない。`|st| = 1` のような長さでの場合分けが、潰れる側と潰れない
+ * 側で違う答えを出す（parser.sn の `peek` が末尾のトークンを器ごと返していたのがこれ）。
+ */
+function collapseSlice(arr) {
+  if (!Array.isArray(arr)) return arr;
+  if (arr.length === 0) return [];
+  return arr.length === 1 ? arr[0] : arr;
 }
 
 // 名前付きスロット（プレーンオブジェクト）か。List・String・スカラーと区別する。
@@ -1231,7 +1248,7 @@ function getPropByValue(l, r) {
     // 左辺がイテレータなら、位置ごとに規則を適用すれば済む——**左辺は展開しない**。
     // 無限ストリームからの部分列取得もこれで通る。
     if (typeof r === "number") return iteratorAt(l, r);
-    if (Array.isArray(r)) return r.map((i) => iteratorAt(l, i));
+    if (Array.isArray(r)) return collapseSlice(r.map((i) => iteratorAt(l, i)));
     return UNIT;
   }
   const isString = typeof l === "string";
@@ -1274,7 +1291,7 @@ function getPropByValue(l, r) {
       const idx = resolveIndex(i);
       return idx >= 0 && idx < asIndexable.length ? asIndexable[idx] : UNIT;
     });
-    return isString ? mapped.map((v) => (isUnit(v) ? "" : v)).join("") : mapped;
+    return isString ? mapped.map((v) => (isUnit(v) ? "" : v)).join("") : collapseSlice(mapped);
   }
   return UNIT;
 }
