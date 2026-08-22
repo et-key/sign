@@ -219,6 +219,37 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 	checkTrue("両方の条件を取って and する", ls.some((l) => l === "and x11, x11, x13"), ls.join(" / "));
 	checkTrue("真なら中央を返す", ls.some((l) => l === "csel x9, x10, x12, ne"));
 }
+// ---- 完全性公理（`f __ = __`） ----
+//
+// **これは最適化ではなく終端そのものである。** Sign にループは無く再帰しかないので
+// （0_design_principles.md 原理5）、ここを出さないと「命令は出ているのに止まらない」
+// ——診断も出ない一番たちの悪い形になる。
+{
+	const fb = body("f : x ? x + 1\nf 2", "f");
+	// 検査は**仮引数をスロットへ写した後**。TCO でフレームを使い回すとき、飛び先が
+	// この検査より後ろにあると初回しか通らず、ループが終わらない。
+	const store = fb.findIndex((l) => l === "str x0, [x29, #16]");
+	const test = fb.findIndex((l) => l.startsWith("b.eq .Lunit"));
+	checkTrue("仮引数を写してから検査する", store >= 0 && test > store, fb.join(" / "));
+	// 本体へ入る前に飛ぶ（`add` は検査より後ろ）。
+	const work = fb.findIndex((l) => l.startsWith("add x9"));
+	checkTrue("本体へ一歩も入らない", work > test, fb.join(" / "));
+	checkTrue("崩壊したら __ を返す", fb.some((l) => l === "movz x0, #0x8000, lsl #48"), fb.join(" / "));
+}
+// **判定の仕方は幅で違う。** 1本なら niche、2本なら `len = 0`——`emitUnit` の裏返しで
+// あって、新しい規則ではない。
+{
+	const gb = body("g : s ? s\ng `hello`", "g");
+	checkTrue("2本なら len を見る", gb.some((l) => l === "cmp x9, #0"), gb.join(" / "));
+	checkTrue("2本なら __ も2本で返す", gb.some((l) => l === "mov x1, #0"), gb.join(" / "));
+}
+// 引数が複数なら**どれか1つでも** `__` で崩壊する（unit.md「所有の引数に有効値が揃って
+// 初めて呼び出しは真」）。
+{
+	const hb = body("h : a b ? a + b\nh 1 2", "h");
+	check("引数の数だけ検査する", hb.filter((l) => l.startsWith("b.eq .Lunit")).length, 2);
+	check("飛び先は1つ", new Set(hb.filter((l) => l.startsWith("b.eq .Lunit"))).size, 1);
+}
 // ---- 要素の並びは参照で運ぶ（stack_abi.md §4.6） ----
 //
 // 2文字以上は `String` であり、中身は `.rodata` に置いて `{ptr, len}` の2本で渡す。
@@ -242,7 +273,8 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 	check("ptr は x0、len は x1", main.slice(call - 2, call), ["ldr x0, [x29, #16]", "ldr x1, [x29, #24]"]);
 	// 返値も2本。AAPCS64 が16バイトの複合型を x0/x1 で返すのと同じ置き方。
 	const fb = body(src, "f");
-	const ret = fb.findIndex((l) => l.startsWith("ldp "));
+	// 崩壊の出口へ飛ぶ直前が、本体を通ったときの返値の積み込みである。
+	const ret = fb.findIndex((l) => l.startsWith("b .Ldone"));
 	check("返値も x0/x1 の2本", fb.slice(ret - 2, ret), ["ldr x0, [x29, #32]", "ldr x1, [x29, #40]"]);
 }
 // 中身が同じ文字列は1つに畳む（キーは符号位置の並び）。

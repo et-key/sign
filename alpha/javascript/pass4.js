@@ -764,6 +764,34 @@ function genMatch(node, env, em, scope) {
 }
 
 /**
+ * 値が `__` かどうかを見て、フラグを立てる（真なら `eq`）。
+ *
+ * **判定の仕方は幅で違う。** `emitUnit` の裏返しである——1本ならレジスタ上の niche と
+ * 比べ、2本なら `len` が 0 かを見る（空文字列・空リストが `__` そのもの、unit.md）。
+ */
+function emitIsUnit(em, off, width, comment) {
+	if (width === 1) {
+		em.load(SCRATCH[0], off, comment);
+		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
+		em.emit(`cmp ${SCRATCH[0]}, x12`);
+		return;
+	}
+	// 2本のときは `len` を見る。`ptr` は何を指していても関係ない。
+	em.load(SCRATCH[0], off + 8, comment);
+	em.emit(`cmp ${SCRATCH[0]}, #0`, "len = 0 が __");
+}
+
+// 返値レジスタへ `__` を置く。幅は返値と同じ（呼ぶ側が読む本数を変えない）。
+function emitUnitRegs(em, width) {
+	if (width <= 1) {
+		em.emit("movz x0, #0x8000, lsl #48", "__ を返す（完全性公理）");
+		return;
+	}
+	em.emit("mov x0, #0", "__ を返す（完全性公理）");
+	em.emit("mov x1, #0", "len = 0 が __");
+}
+
+/**
  * 本体を組み立ててから、必要なフレームの大きさを決めて前後を付ける。
  *
  * フレームの大きさは**本体を出してみるまで分からない**（式の深さで決まる）ので、
@@ -841,6 +869,23 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	}
 	for (const [pn, cn] of Object.entries(callees)) em.emit(`// ${bareName(pn)} = ${cn}`, "具体化された呼び先");
 
+	// **完全性公理を出す。** `f __ = __`——所有の引数に有効値が揃って初めて呼び出しが
+	// 真になるので、どれか1つでも `__` なら本体へ一歩も入らずに `__` を返す
+	// （unit.md §完全性公理、0_design_principles.md 原理5）。
+	//
+	// Sign にループは無く再帰しかない以上、これは最適化ではなく**終端そのもの**である。
+	// 出さないと「命令は出ているのに止まらない」——診断も出ない一番たちの悪い形になる。
+	//
+	// 検査は**仮引数をスロットへ写した後**に置く。TCO でフレームを使い回すとき、飛び先が
+	// この検査より後ろにあると初回しか検査を通らず、ループが終わらなくなるためである。
+	const unitLabel = params.length > 0 ? em.newLabel("unit") : null;
+	if (unitLabel) {
+		for (let i = 0; i < params.length; i++) {
+			emitIsUnit(em, paramOffsets[i], paramSlots[i], `仮引数 ${bareName(params[i])} が __ か`);
+			em.emit(`b.eq ${unitLabel}`, "__ なら本体へ入らない（完全性公理）");
+		}
+	}
+
 	const before = em.diagnostics.length;
 	const ok = genExpr(lambdaNode.right, env, em, { params, paramOffsets, paramSlots, callees });
 	if (ok !== false) {
@@ -853,6 +898,15 @@ function genFunction(name, lambdaNode, env, em, mono) {
 			em.load(ARG_REGS[k], (base + k) * 8, k === 0 ? (ok > 1 ? "返値の ptr を x0 へ" : "返値を x0 へ") : "返値の len を x1 へ");
 		}
 		em.pop(ok);
+		// 崩壊したときの出口。返値と同じ幅で `__` を置く——枝によって幅が変わると
+		// 呼び出し側が読む本数が決まらない。
+		if (unitLabel) {
+			const done = em.newLabel("done");
+			em.emit(`b ${done}`);
+			em.label(unitLabel);
+			emitUnitRegs(em, Math.min(ok, 2));
+			em.label(done);
+		}
 	} else if (em.diagnostics.length === before) {
 		em.diagnostics.push({ severity: "error", message: `${name}: 本体を出せませんでした`, node: lambdaNode });
 	}
