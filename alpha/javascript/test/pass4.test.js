@@ -199,6 +199,35 @@ checkTrue(
 	asm("g : x ? x\ntake_while : p s ? @p s\nf : s ? take_while (g 1) s\nf 1").diagnostics.length > 0
 );
 
+
+// ---- 文字は符号位置というスカラー ----
+//
+// `String ≅ List(0u)`（§2）であり、1要素のリストはスカラーと同型（`[5]` は `Int`）。
+// したがって**1文字の文字列は符号位置そのもの**であり、レジスタに乗る。
+// `is_digit : c ? \0 <= c <= \9` が `cmp` で書けるのはこれが理由である。
+checkTrue("文字リテラルは符号位置", (body("f : x ? x\nf \\a", "f") || []) && asm("c : \\a\nf : x ? x\nf c").diagnostics.length === 0);
+check("文字の比較は診断なし", asm("f : c ? c = \\0\nf \\5").diagnostics.length, 0);
+// **比較は同種同士でしか成立しない**ので、片側が1文字ならもう片側も文字である
+// ——レンジの端点が「両端とも点」であるのと同じ形の推論。仮引数のように中身が
+// 見えない側もここで決まる。
+checkTrue("片側が文字なら相手も文字として比べる", (body("f : c ? c = \\0\nf \\5", "f") || []).some((l) => l.startsWith("cmp ")));
+// 連鎖比較は範囲判定の書き方そのもの。真のとき返るのは**必ず中央**である
+// （二項と違い 0/1 の規則は効かない）。
+{
+	const ls = body("is_digit : c ? \\0 <= c <= \\9\nis_digit \\5", "is_digit");
+	check("連鎖比較は診断なし", asm("is_digit : c ? \\0 <= c <= \\9\nis_digit \\5").diagnostics.length, 0);
+	checkTrue("両方の条件を取って and する", ls.some((l) => l === "and x11, x11, x13"), ls.join(" / "));
+	checkTrue("真なら中央を返す", ls.some((l) => l === "csel x9, x10, x12, ne"));
+}
+// 2文字以上は要素の並びなので `.rodata` と `{ptr, len}` が要る（stack_abi.md §4.6）。
+// まだ出さないが、**理由を名指しする**——「まだ実装していない」と分かる形にする。
+checkTrue("2文字以上は理由を名指しする", asm("s : `ab`\nf : x ? x\nf s").diagnostics.some((d) => d.message.includes(".rodata")));
+
+// **トップレベルの定数はその場で畳む。** `名前 : 値` は束縛であって場所ではないので、
+// 値そのものを書けば済む——ロードは要らない。
+check("定数参照は畳まれる", asm("one : 1\nf : x ? x + one\nf 2").diagnostics.length, 0);
+checkTrue("畳んだ結果はリテラルと同じ命令", (body("one : 1\nf : x ? x + one\nf 2", "f") || []).some((l) => l === "mov x9, #1"));
+
 // ---- 出せないものは名指しする ----
 //
 // 黙って落とすと、命令の無い関数ができあがって「動いたように見える」——型が値より
