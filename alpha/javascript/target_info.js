@@ -54,7 +54,7 @@ const TARGET_WIDTHS = {
 //   Int      符号あり。十進は符号を書ける唯一の記法であり（§3.6）、`-1` はここに来る。
 //            uint を含むのは値域の話であって、幅と符号の帳簿としては signed を採る
 //   Float    符号あり（IEEE 754）
-const SIGNEDNESS = { Address: "unsigned", Int: "signed", Float: "signed", Vector: "signed" };
+const SIGNEDNESS = { Address: "unsigned", Int: "signed", Char: "unsigned", Float: "signed", Vector: "signed" };
 
 /**
  * `__`（Unit）の niche。GPR 幅の型で「値の不在」を表すビットパターン
@@ -74,7 +74,9 @@ const UNIT_NICHE = 0x8000000000000000n;
 const UNIT_NICHE_ASM = "0x8000000000000000";
 
 // 幅クラスへの割り当て。`String` は `List(0u)` と同型なので要素は Char。
-const WIDTH_CLASS = { Address: "gpr", Int: "gpr", Float: "float", Vector: "vector" };
+// `Char` は符号位置という整数なので、レジスタ上は GPR である。**記憶上の幅だけが
+// charset で決まる**（1 or 4 byte、`charSizeOf`）——比較や添字の計算はレジスタで行う。
+const WIDTH_CLASS = { Address: "gpr", Int: "gpr", Char: "gpr", Float: "float", Vector: "vector" };
 
 /**
  * Char（`0u`）1個の幅。`option.ms` の `charset` で選ぶ。

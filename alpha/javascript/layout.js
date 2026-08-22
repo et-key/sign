@@ -172,7 +172,14 @@ function measure(node, conf) {
   // 零対象は場所を占めない。
   if (type === "Unit") return { size: 0, align: 1 };
 
-  // `String ≅ List(0u)`。要素幅は charset が決める。長さはリテラルなら数えられる。
+  // **`Char` の記憶上の幅は charset が決める**（1 or 4 byte）。レジスタ上は GPR だが
+  // （符号位置という整数なので）、置くときは1文字ぶんである。
+  if (type === "Char") {
+    const w = charSizeOf(charset);
+    return { size: w, align: w, repr: "cells", stride: w, count: 1 };
+  }
+
+  // `String ≅ List(Char)`。要素幅は charset が決める。長さはリテラルなら数えられる。
   if (type === "String") {
     const w = charSizeOf(charset);
     const n = stringLength(node, env);

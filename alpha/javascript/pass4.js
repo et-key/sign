@@ -81,11 +81,15 @@ function unwrap(node) {
 
 // 文字・文字列リテラルの符号位置の並び。読めなければ null。
 // サロゲートペアを2文字と数えないため `[...s]` で回す。
-// 1文字か（＝符号位置というスカラーか）。リテラルでなければ分からない。
+// **1文字かどうかは型が言う。** `Char` は Layer 2 の型であり（type_system.md §2）、
+// 1文字は `Char`、2文字以上が `String` である——`String ≅ List(Char)` と1要素の潰れ
+// （`[5]` は `Int`）から出てくる。
+//
+// リテラルの形を見るのをやめたのは、**表現が実行時の長さで変わってはいけない**からで
+// ある。`Char` はレジスタに乗る符号位置、`String` は `{ptr, len}` の参照なので、同じ型が
+// 両方を指すと実行時に見分ける必要が出る——それは動的型付けである。
 function isSingleChar(n) {
-	if (!n || n.type !== "atom") return false;
-	const cps = codePointsOf(n);
-	return cps !== null && cps.length === 1;
+	return !!n && n.atomType === "Char";
 }
 
 function codePointsOf(n) {
@@ -308,7 +312,8 @@ function genExpr(node, env, em, scope) {
 	if (n.type === "atom" && (n.kind === "char" || n.kind === "string" || n.kind === "unicode")) {
 		const cps = codePointsOf(n);
 		if (cps === null) return em.fail(n, "文字列の中身が読めません");
-		if (cps.length !== 1) {
+		// 型が `String` なら2文字以上である（1文字は `Char` へ潰れる）。
+		if (n.atomType !== "Char" || cps.length !== 1) {
 			return em.fail(n, `2文字以上の文字列はまだ出せません（.rodata と {ptr, len} が要る。${cps.length} 文字）`);
 		}
 		const w = charSizeOf(em.conf.charset);
@@ -388,16 +393,11 @@ function genExpr(node, env, em, scope) {
 		// **1文字は符号位置というスカラーなので、整数と同じく `cmp` で比べられる**
 		// （§4 の NOTE「文字は符号位置で数える点」）。器としての `String` は比べられない
 		// ——中身の比較になるので、`.rodata` と長さが要る。
-		// **比較は同種同士でしか成立しない**（comparison.md）。だから片側が1文字なら
-		// もう片側も文字である——レンジの端点が「両端とも点」であるのと同じ形の推論で、
-		// 仮引数のように中身が見えない側もここで決まる。
-		const charSide = isSingleChar(n.left) || isSingleChar(n.right);
+		// **`Char` は符号位置という整数なので GPR に乗る**（target_info.js の WIDTH_CLASS）。
+		// 型がそう言っているので、リテラルの形を見る必要はない。
 		const cmpOk = (side) => {
 			const m = reduceToMachineType(side && side.atomType, em.conf.target);
-			if (m && m.class === "gpr") return true;
-			if (isSingleChar(side)) return true;
-			// 相手が1文字なら、こちらも符号位置である。
-			return charSide && side && side.atomType === "String";
+			return !!m && m.class === "gpr";
 		};
 		if (!cmpOk(n.left) || !cmpOk(n.right)) {
 			return em.fail(n, `GPR 幅の値の比較だけを出せます（${n.left && n.left.atomType} と ${n.right && n.right.atomType}）`);
@@ -433,12 +433,9 @@ function genExpr(node, env, em, scope) {
 		const cond = CMP_COND[n.compareName];
 		if (!cond) return em.fail(n, `連鎖できない比較です（${n.compareName}）`);
 		const sides = [n.left, n.middle, n.right];
-		const charSide = sides.some((x) => isSingleChar(x));
 		const ok = (side) => {
 			const m = reduceToMachineType(side && side.atomType, em.conf.target);
-			if (m && m.class === "gpr") return true;
-			if (isSingleChar(side)) return true;
-			return charSide && side && side.atomType === "String";
+			return !!m && m.class === "gpr";
 		};
 		if (!sides.every(ok)) {
 			return em.fail(n, `GPR 幅の値の連鎖比較だけを出せます（${sides.map((x) => x && x.atomType).join(" ")}）`);

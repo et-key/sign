@@ -79,7 +79,9 @@ const RANGE_STEP_OPS = new Set([
 // 端点になれるのは「点」——数値と文字である。文字は Layer 2 では String だが、
 // 範囲の端点としては符号位置で数えるため点として扱える（`\a ~ \e`）。
 // List / Struct は点ではないので端点にできない。原理4により静的に弾く。
-const RANGE_ENDPOINT_TYPES = new Set(["Int", "Address", "Float", "Vector", "String"]);
+// 端点になれるのは「点」——数値と1文字である。`Char` はまさに1文字そのもの
+// （2文字以上の `String` は点ではないので端点にできない）。
+const RANGE_ENDPOINT_TYPES = new Set(["Int", "Address", "Float", "Vector", "Char"]);
 
 // 範囲式の端点になっているノードの型を、単純形式・3項形式のどちらでも取り出す。
 // 3項形式は `range(range_arithmetic(start, step), end)` という入れ子であり、
@@ -159,7 +161,11 @@ function rangeResultType(node, env) {
     return "Iterator";
   }
   // 文字の範囲は文字の並び＝String（String ≅ List(0u)）。それ以外は List。
-  if (startType === "String" && endType === "String") return "String";
+  // 文字の範囲は文字の並び＝String（`String ≅ List(Char)`）。端点は `Char` である。
+  if (startType === "Char" && endType === "Char") {
+    node.elementType = "Char";
+    return "String";
+  }
   // 有限レンジも要素型を持つ。ストリームと同じく端点の join がそれである。
   const el = rangeElementType(startType, endType);
   if (typeof el === "string") node.elementType = el;
@@ -628,13 +634,21 @@ function literalAtomTypeFromKind(node) {
   switch (node.kind) {
     // アドレスは `0x` 記法のみ（§3.6）。十進整数は `Int`。
     case "number": return node.value.includes(".") ? "Float" : "Int";
-    case "string": return "String";
-    case "char": return "String"; // 文字リテラルはStringと同型（type_system.md: Stringは文字のリスト）
+    // **1文字は `Char`、2文字以上が `String`。**
+    //
+    // `String ≅ List(0u)`（§2）であり、1要素のリストはスカラーと同型（`[5]` は `Int`）。
+    // したがって1文字の文字列は `0u` 1個そのもの——`Char` である。潰れの規則を型に
+    // 見せているだけで、新しい概念ではない。
+    //
+    // 分けないと**表現が実行時の長さで変わる**。`Char` はレジスタに乗る符号位置、
+    // `String` は `{ptr, len}` の参照（stack_abi.md §4.6）なので、同じ型が両方を
+    // 指すと実行時に見分ける必要が出る——それは動的型付けである。
+    case "string": return [...node.value.slice(1, -1)].length === 1 ? "Char" : "String";
+    case "char": return "Char";
     case "address": return "Address";
     case "register": return "Address";
-    // `0u` は Char（String の要素型）。`String ≅ List(0u)`（§2）である以上、
-    // `\a` と同じく String である。U+0000 は Char の値域から除外された niche なので Unit。
-    case "unicode": return parseInt(node.value.slice(2), 16) === 0 ? "Unit" : "String";
+    // U+0000 は Char の値域から除外された niche なので Unit（value_representation.md §3）。
+    case "unicode": return parseInt(node.value.slice(2), 16) === 0 ? "Unit" : "Char";
     case "unit": return "Unit";
     default: return null; // identifier/hole/unknown はここでは扱わない
   }
@@ -817,7 +831,13 @@ function computeAtomType(node, env) {
           return "Struct";
         }
       }
-      if (leftType === "String" || rightType === "String") return "String";
+      // §3.2の余積族テーブル。**`Char` も文字の並びを作る**——`String ≅ List(Char)` で
+      // あり、文字を並べれば文字列だからである。1文字どうしを並べれば2文字になり、
+      // それは `Char` ではなく `String` である（潰れるのは1要素のときだけ）。
+      if (leftType === "String" || rightType === "String" || leftType === "Char" || rightType === "Char") {
+        node.elementType = "Char";
+        return "String";
+      }
       // §3.2の余積族テーブル / §6.1: 余積の単位元。片側がUnitなら他方を素通しする
       // （`__ x = x`、`x __ = x`）。Unitは要素型の join には参加しない——
       // 「無い」ものと型が合わないという判定は成立しないため。
@@ -1067,7 +1087,9 @@ function typeOfKnownOperand(node, scope, paramNames) {
 // それを表現することも検出することもできなかった。
 const FAMILY_MEMBERS = {
   Scalar: new Set(["Int", "Address", "Float", "Vector"]),
-  Atom: new Set(["Int", "Address", "Float", "Vector", "Scalar", "String", "List", "Struct", "Iterator", "Implicit"]),
+  // `Char` は値なので `Atom` の成員である。`Scalar` には入れない——算術の対象では
+  // ないからである（§3.2 が String を算術から外しているのと同じ理由）。
+  Atom: new Set(["Int", "Address", "Float", "Vector", "Scalar", "Char", "String", "List", "Struct", "Iterator", "Implicit"]),
 };
 
 function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
@@ -1384,7 +1406,9 @@ function inferLambdaParamTypes(lambdaNode, env) {
       const element = group.find((e) => !e.rest && e.name && inferred.has(e.name));
       const elementType = element ? inferred.get(element.name) : null;
       if (elementType && elementType !== "Atom") {
-        inferred.set(restEntry.name, elementType === "String" ? "String" : "List");
+        // 要素が文字なら器は `String` である（`String ≅ List(Char)`）。`List(Char)` と
+        // `String` は同じものであり、別の名前を持たない。
+        inferred.set(restEntry.name, elementType === "Char" || elementType === "String" ? "String" : "List");
       }
     }
   }
