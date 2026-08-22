@@ -56,6 +56,23 @@ const TARGET_WIDTHS = {
 //   Float    符号あり（IEEE 754）
 const SIGNEDNESS = { Address: "unsigned", Int: "signed", Float: "signed", Vector: "signed" };
 
+/**
+ * `__`（Unit）の niche。GPR 幅の型で「値の不在」を表すビットパターン
+ * （value_representation.md §3.5）。
+ *
+ * **`0` を使ってはいけない。** Sign では `__` だけが偽であり `0` は真である
+ * ——`0 = 0` は真で、そのとき返せるオペランドは `0` しかない（comparison.md §2.1）。
+ * `0` を不在の印にすると、この真が偽と区別できなくなる。
+ *
+ * 根拠はハードウェアの側にある。`Int` では `INT_MIN`（2の補数で唯一、正の対応物を
+ * 持たない値）であり、`Address` では AArch64 の非正準領域（上位16ビットが全0でも
+ * 全1でもない）——そもそも有効なアドレスになりえない。
+ *
+ * `Float` はこの値を使えない（負のゼロという正当な値である）。浮動小数の niche は未定。
+ */
+const UNIT_NICHE = 0x8000000000000000n;
+const UNIT_NICHE_ASM = "0x8000000000000000";
+
 // 幅クラスへの割り当て。`String` は `List(0u)` と同型なので要素は Char。
 const WIDTH_CLASS = { Address: "gpr", Int: "gpr", Float: "float", Vector: "vector" };
 
@@ -125,4 +142,4 @@ function reduceToMachineType(type, target) {
   return { size, signed: SIGNEDNESS[type] === "signed", class: WIDTH_CLASS[type] || null };
 }
 
-export { TARGET_WIDTHS, SIGNEDNESS, WIDTH_CLASS, CHARSETS, DEFAULT_CHARSET, charSizeOf, widthsOf, isSupported, sizeOf, reduceToMachineType };
+export { TARGET_WIDTHS, SIGNEDNESS, UNIT_NICHE, UNIT_NICHE_ASM, WIDTH_CLASS, CHARSETS, DEFAULT_CHARSET, charSizeOf, widthsOf, isSupported, sizeOf, reduceToMachineType };

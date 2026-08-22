@@ -34,7 +34,7 @@
  * 名指しする——落とすと「命令が無いのに動いたように見える」が起きる。
  */
 
-import { reduceToMachineType, widthsOf } from "./target_info.js";
+import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM } from "./target_info.js";
 
 // AAPCS64（stack_abi.md §4.2）。引数は x0〜x7、返値は x0、一時は x9〜x15。
 const ARG_REGS = ["x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7"];
@@ -46,6 +46,14 @@ const MAX_SLOTS = 16;
 // 演算子名 → ニーモニック。除算が `sdiv` なのは `Int` が符号ありだから
 // （target_info.js の SIGNEDNESS）。
 const INT_OPS = { add: "add", sub: "sub", mul: "mul", div: "sdiv" };
+
+// 比較。符号あり整数の条件コード（`Int` は符号あり——target_info.js の SIGNEDNESS）。
+// `assign_equal` は `=`（等価比較）である——`:` が定義なので、`=` は比較に使える。
+const CMP_COND = { less: "lt", less_equal: "le", assign_equal: "eq", more_equal: "ge", more: "gt", not_equal: "ne" };
+
+// 比較が偽のときに返す値＝`__` の niche（value_representation.md §3.5）。
+// **`0` ではない。** Sign では `0` は真であり、`0 = 0` は真で `0` を返す。
+const UNIT = UNIT_NICHE_ASM;
 
 function isIdentifierNode(n) {
 	return !!n && n.type === "atom" && n.kind === "identifier";
@@ -60,9 +68,13 @@ function bareName(v) {
 }
 
 // 1行だけのブロックは括りでしかない（`(a + b)` の外側）。
+// 1行だけのブロックは括りでしかない（`(a + b)` の外側）。ただし**その1行が定義なら
+// 剥がさない**——`x > 10 : 1` は括りではなく枝が1つの match_case である。
 function unwrap(node) {
 	let n = node;
-	while (n && Array.isArray(n.lines) && n.lines.length === 1 && n.kind !== "abs") n = n.lines[0];
+	while (n && Array.isArray(n.lines) && n.lines.length === 1 && n.kind !== "abs" && !isDefineNode(n.lines[0])) {
+		n = n.lines[0];
+	}
 	return n;
 }
 
@@ -89,6 +101,7 @@ class Emitter {
 		this.diagnostics = [];
 		this.slot = 0; // 使用中のフレームスロット数
 		this.maxSlot = 0;
+		this.labelSeq = 0;
 	}
 
 	emit(text, comment) {
@@ -101,6 +114,11 @@ class Emitter {
 
 	blank() {
 		this.lines.push("");
+	}
+
+	// ローカルラベル。アセンブラの慣習に合わせて `.L` 始まりにする。
+	newLabel(tag) {
+		return `.L${tag}${this.labelSeq++}`;
 	}
 
 	fail(node, message) {
@@ -141,6 +159,19 @@ function genExpr(node, env, em, scope) {
 	const n = unwrap(node);
 	if (!n) return false;
 
+	// **match_case の並び**（関数本体）。各行は `条件 : 結果`、最後の1行だけ条件無しの
+	// フォールバックでありうる。条件が `__` でなければその結果を返す（function_guide.md）。
+	//
+	// 判定は niche との比較である——**`cbz` は使えない**。Sign では `0` は真であり、
+	// `0 = 0` は真で `0` を返すので、0 を偽と読むと評価器と食い違う
+	// （value_representation.md §3.5、unit.md §5.1 の CAUTION）。
+	// 1行でも `条件 : 結果` なら分岐である（枝が尽きれば `__`）。ブロックの行数ではなく
+	// **定義行かどうか**で決まる——`名前 : 値` の構造体と区別が要るのは複数行のときだけで、
+	// 関数本体では `識別子 : 値` も match_case である（function_guide.md）。
+	if (Array.isArray(n.lines) && (n.lines.length > 1 || (n.lines.length === 1 && isDefineNode(n.lines[0])))) {
+		return genMatch(n, env, em, scope);
+	}
+
 	// 整数リテラル。`mov` の即値は16ビットまで。それを超える値は `movz`/`movk` の
 	// 連なりが要るので、桁を落として黙って通さず名指しする。
 	if (n.type === "atom" && n.kind === "number") {
@@ -150,6 +181,15 @@ function genExpr(node, env, em, scope) {
 		const off = em.push();
 		if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 		em.emit(`mov ${SCRATCH[0]}, #${v}`, `リテラル ${n.value}`);
+		em.store(SCRATCH[0], off);
+		return true;
+	}
+
+	// `__`（Unit）。niche を積む（value_representation.md §3.5）。
+	if (n.type === "atom" && n.kind === "unit") {
+		const off = em.push();
+		if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		em.emit("movz x9, #0x8000, lsl #48", "__ の niche");
 		em.store(SCRATCH[0], off);
 		return true;
 	}
@@ -184,6 +224,42 @@ function genExpr(node, env, em, scope) {
 		return true;
 	}
 
+	// **比較は値を返す。**（comparison.md §2.1）真ならオペランド、偽なら `__`。
+	// どちらのオペランドを返すかは**左辺の値**が決める——左辺が算術単位元（0 か 1）なら
+	// 右辺、そうでなければ左辺。値で決まるので実行時に見る必要がある。
+	//
+	// `csel` を2段重ねる。1段目で「左辺が単位元か」を見て返す候補を選び、2段目で
+	// 「比較が真か」を見て候補と `__` を選ぶ。分岐は出さない。
+	if (n.type === "operation" && CMP_COND[n.name] && n.position === "infix") {
+		const machine = reduceToMachineType(n.atomType, em.conf.target);
+		// 比較の結果型は `L | R | __` なので、それ自体は還元できない。両辺が GPR 幅の
+		// 整数であることを見る。
+		const lt = reduceToMachineType(n.left && n.left.atomType, em.conf.target);
+		const rt = reduceToMachineType(n.right && n.right.atomType, em.conf.target);
+		if (!lt || lt.class !== "gpr" || !rt || rt.class !== "gpr") {
+			return em.fail(n, `GPR 幅の整数の比較だけを出せます（${n.left && n.left.atomType} と ${n.right && n.right.atomType}）`);
+		}
+		if (!genExpr(n.left, env, em, scope)) return false;
+		const lo = (em.slot - 1) * 8;
+		if (!genExpr(n.right, env, em, scope)) return false;
+		const ro = (em.slot - 1) * 8;
+		em.load(SCRATCH[0], lo);
+		em.load(SCRATCH[1], ro);
+		// 左辺が 0 か 1 か（算術単位元、comparison.md §2.1）。
+		em.emit(`cmp ${SCRATCH[0]}, #0`, "左辺は加法単位元か");
+		em.emit(`ccmp ${SCRATCH[0]}, #1, #4, ne`, "違えば乗算単位元か");
+		em.emit(`csel x11, ${SCRATCH[1]}, ${SCRATCH[0]}, eq`, "単位元なら右辺、でなければ左辺");
+		// 比較そのもの。真なら選んだ候補、偽なら `__`。
+		// 64ビット即値は `mov` に載らない。niche は上位16ビットだけが立っているので
+		// `movz` 1命令で作れる（0x8000 << 48）。
+		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
+		em.emit(`cmp ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
+		em.emit(`csel ${SCRATCH[0]}, x11, x12, ${CMP_COND[n.name]}`, "真なら値、偽なら __");
+		em.pop(1);
+		em.store(SCRATCH[0], lo);
+		return true;
+	}
+
 	// 飽和した呼び出し。引数をスロットで作ってから x0〜x7 へ積んで `bl`。
 	if (n.type === "operation" && n.name === "apply") {
 		const { base, args } = applyChain(n);
@@ -206,6 +282,49 @@ function genExpr(node, env, em, scope) {
 	}
 
 	return em.fail(n, `まだ出せない式です（${n.name || n.type}）`);
+}
+
+/**
+ * match_case の並びを分岐へ落とす。結果は呼び出し元が使うスロット1つに揃える
+ * ——どの枝を通っても同じ場所に値がある、という一点を守る。
+ */
+function genMatch(node, env, em, scope) {
+	const out = em.push();
+	if (out === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+	const end = em.newLabel("end");
+	const lines = node.lines;
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		const isArm = isDefineNode(line);
+		if (!isArm) {
+			// フォールバック。条件を見ずにここへ来たら必ず値になる。
+			if (!genExpr(line, env, em, scope)) return false;
+			em.load(SCRATCH[0], (em.slot - 1) * 8);
+			em.pop(1);
+			em.store(SCRATCH[0], out, "枝の値");
+			break;
+		}
+		const next = em.newLabel("arm");
+		if (!genExpr(line.left, env, em, scope)) return false;
+		em.load(SCRATCH[0], (em.slot - 1) * 8, "条件");
+		em.pop(1);
+		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
+		em.emit(`cmp ${SCRATCH[0]}, x12`);
+		em.emit(`b.eq ${next}`, "__ なら次の枝へ");
+		if (!genExpr(line.right, env, em, scope)) return false;
+		em.load(SCRATCH[0], (em.slot - 1) * 8);
+		em.pop(1);
+		em.store(SCRATCH[0], out, "枝の値");
+		em.emit(`b ${end}`);
+		em.label(next);
+		// 最後の行が条件付きなら、どの枝も通らない場合がある。そのときの値は `__`。
+		if (i === lines.length - 1) {
+			em.emit("movz x12, #0x8000, lsl #48", "どの枝も通らなければ __");
+			em.store("x12", out);
+		}
+	}
+	em.label(end);
+	return true;
 }
 
 /**
@@ -313,6 +432,11 @@ function generateAsm(nodes, env, options = {}) {
 	em.slot = 0;
 	em.maxSlot = 0;
 	for (const node of exprs) {
+		// **裸の文字列リテラルはコメントである**（string_and_comment.md）。Sign の
+		// コメントはバッククォート文字列そのものなので AST に残るが、値として使われて
+		// いない以上、命令は出ない。ここを診断にすると、コメントの数だけ「出せない」が
+		// 並んで本当の穴が埋もれる。
+		if (node.type === "atom" && node.kind === "string") continue;
 		const target = isDefineNode(node) ? node.right : node;
 		if (genExpr(target, env, em, null)) em.pop(1);
 	}

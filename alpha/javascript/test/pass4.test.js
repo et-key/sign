@@ -125,13 +125,52 @@ checkTrue(
 	checkTrue("閉じる大きさが開く大きさと一致する", ls.some((l) => l === `ldp x29, x30, [sp], #${size}`));
 }
 
+
+// ---- 分岐（match_case） ----
+//
+// **`__` の判定は niche との比較であり、`cbz` ではない。** Sign では `0` は真であり、
+// `0 = 0` は真で `0` を返す（comparison.md §2.1）ので、0 を偽と読むと評価器と食い違う。
+// niche は `0x8000000000000000`（value_representation.md §3.5）——`Int` では `INT_MIN`、
+// `Address` では AArch64 の非正準領域で、どちらも有効な値になりえない点である。
+{
+	const ls = body("f : x ?\n\tx > 3 : 1\n\t2\nf 5", "f");
+	checkTrue("条件は niche と比べる（cbz ではない）", ls.some((l) => l === "movz x12, #0x8000, lsl #48"));
+	checkTrue("__ なら次の枝へ飛ぶ", ls.some((l) => /^b\.eq \.Larm/.test(l)));
+	checkTrue("枝を通ったら末尾へ飛ぶ", ls.some((l) => /^b \.Lend/.test(l)));
+	checkTrue("どの枝も同じスロットへ書く", ls.filter((l) => /^str x9, \[x29, #24\]$/.test(l)).length >= 2, ls.join(" / "));
+}
+// 比較は値を返す。真ならオペランド、偽なら `__`。どちらのオペランドかは**左辺の値**が
+// 決めるので（0 か 1 なら右辺）、実行時に見る必要がある——`csel` を2段重ねる。
+{
+	const ls = body("f : x ? x > 3\nf 5", "f");
+	checkTrue("左辺が単位元かを見る", ls.some((l) => l === "cmp x9, #0") && ls.some((l) => /^ccmp x9, #1, #4, ne$/.test(l)));
+	checkTrue("単位元なら右辺を候補にする", ls.some((l) => l === "csel x11, x10, x9, eq"));
+	checkTrue("真なら候補、偽なら __", ls.some((l) => l === "csel x9, x11, x12, gt"));
+}
+check("比較の条件コード", body("f : a ? a < 3\nf 1", "f").filter((l) => /^csel x9, x11, x12,/.test(l)), [
+	"csel x9, x11, x12, lt",
+]);
+// 再帰は分岐があって初めて書ける（Sign にはループが無い）。
+check("再帰が出せる", asm("fact : n ?\n\tn > 1 : n * (fact (n - 1))\n\t1\nfact 5").diagnostics.length, 0);
+check(
+	"相互再帰も出せる",
+	asm("even : n ?\n\tn = 0 : 1\n\todd (n - 1)\nodd : n ?\n\tn = 0 : 0\n\teven (n - 1)\neven 4").diagnostics.length,
+	0
+);
+check("枝が1つでも分岐（尽きたら __）", asm("f : x ?\n\tx > 10 : 1\nf 7").diagnostics.length, 0);
+// `__` そのものも積める。
+checkTrue("__ は niche を積む", (body("f : x ?\n\tx > 3 : __\n\t1\nf 5", "f") || []).some((l) => l === "movz x9, #0x8000, lsl #48"));
+
+// **裸の文字列リテラルはコメントである**（string_and_comment.md）。命令は出ないし、
+// 診断にもしない——コメントの数だけ「出せない」が並ぶと本当の穴が埋もれる。
+check("コメントは診断にならない", asm("`これはコメント`\nf : a ? a + 1\nf 1").diagnostics.length, 0);
+
 // ---- 出せないものは名指しする ----
 //
 // 黙って落とすと、命令の無い関数ができあがって「動いたように見える」——型が値より
 // 狭いときと同じ種類の嘘である。
 checkTrue("族のままなら出せない（GPR か FPU か決まらない）", asm("f : a b ? a + b").diagnostics.length > 0);
 checkTrue("浮動小数はまだ出せない", asm("f : a ? 0.0 + a\nf 1.0").diagnostics.length > 0);
-checkTrue("分岐はまだ出せない", asm("f : x ?\n\tx > 3 : 1\n\t2\nf 1").diagnostics.length > 0);
 checkTrue("16ビットを超える即値はまだ出せない", asm("f : a ? a + 70000\nf 1").diagnostics.length > 0);
 checkTrue("未対応ターゲットは名指しする", asm("f : a ? a + 1\nf 1", "cortex_m").diagnostics.length > 0);
 // 出せるものは診断が出ない。
