@@ -55,6 +55,18 @@ const INT_OPS = { add: "add", sub: "sub", mul: "mul", div: "sdiv" };
 // `assign_equal` は `=`（等価比較）である——`:` が定義なので、`=` は比較に使える。
 const CMP_COND = { less: "lt", less_equal: "le", assign_equal: "eq", more_equal: "ge", more: "gt", not_equal: "ne" };
 
+/**
+ * 末尾呼び出しを出したという印。**値を積まない**——制御がそこから戻らないからである。
+ *
+ * `genExpr` は普段「積んだスロットの本数」を返すが、末尾呼び出しだけは本数を持たない。
+ * `0` にすると「幅ゼロの値を積んだ」と読めてしまうので、別のものにしてある。
+ */
+const TAIL = Symbol("tail");
+
+// フレームの大きさは本体を出し切るまで決まらないので、相互末尾呼び出しの
+// 「フレームを畳む」命令には印だけ置いて `wrapFrame` で埋める。
+const FRAME_MARK = "@@FRAME@@";
+
 // 比較が偽のときに返す値＝`__` の niche（value_representation.md §3.5）。
 // **`0` ではない。** Sign では `0` は真であり、`0 = 0` は真で `0` を返す。
 const UNIT = UNIT_NICHE_ASM;
@@ -279,7 +291,9 @@ class Emitter {
 	}
 
 	emit(text, comment) {
-		this.lines.push(comment ? `\t${text.padEnd(26)}// ${comment}` : `\t${text}`);
+		// 26桁を超える命令でもコメントの前に1つは空きが要る（詰まると読めない）。
+		const pad = text.length >= 26 ? text + " " : text.padEnd(26);
+		this.lines.push(comment ? `\t${pad}// ${comment}` : `\t${text}`);
 	}
 
 	label(name) {
@@ -349,7 +363,7 @@ function genScalar(node, env, em, scope, why) {
 	return 1;
 }
 
-function genExpr(node, env, em, scope) {
+function genExpr(node, env, em, scope, tail = false) {
 	const n = unwrap(node);
 	if (!n) return false;
 
@@ -363,7 +377,7 @@ function genExpr(node, env, em, scope) {
 	// **定義行かどうか**で決まる——`名前 : 値` の構造体と区別が要るのは複数行のときだけで、
 	// 関数本体では `識別子 : 値` も match_case である（function_guide.md）。
 	if (Array.isArray(n.lines) && (n.lines.length > 1 || (n.lines.length === 1 && isDefineNode(n.lines[0])))) {
-		return genMatch(n, env, em, scope);
+		return genMatch(n, env, em, scope, tail);
 	}
 
 	// 整数リテラル。`mov` の即値は16ビットまで。それを超える値は `movz`/`movk` の
@@ -456,7 +470,7 @@ function genExpr(node, env, em, scope) {
 			if (v && v !== n && !(scope && scope.folding && scope.folding.has(n.value))) {
 				const folding = new Set(scope && scope.folding ? scope.folding : []);
 				folding.add(n.value);
-				return genExpr(v, env, em, { ...(scope || {}), folding });
+				return genExpr(v, env, em, { ...(scope || {}), folding }, tail);
 			}
 		}
 		return em.fail(n, `まだ出せない識別子です（${bareName(n.value)}）`);
@@ -588,7 +602,19 @@ function genExpr(node, env, em, scope) {
 			`b.${isAnd ? "eq" : "ne"} ${end}`,
 			isAnd ? "左が __ なら全体が __（右を評価しない）" : "左が __ でなければ左が結果（右を評価しない）"
 		);
-		if (!genScalar(n.right, env, em, scope, whySc)) return false;
+		// **右辺は末尾位置である**（tco.md §2「`then` と `else` の両方が末尾位置」）。
+		// 左辺は違う——結果を見てから飛び先を決めるので、評価しきる必要がある。
+		const rw = tail ? genExpr(n.right, env, em, scope, true) : genScalar(n.right, env, em, scope, whySc);
+		if (rw === false) return false;
+		if (rw === TAIL) {
+			// 右辺は飛んで行った。ここへ落ちてくるのは左辺の経路だけである。
+			em.label(end);
+			return 1;
+		}
+		if (rw !== 1) {
+			em.pop(rw);
+			return em.fail(n.right, `${whySc}（${rw} 本の参照で運ぶ値）`);
+		}
 		em.load(SCRATCH[0], (em.slot - 1) * 8);
 		em.pop(1);
 		em.store(SCRATCH[0], lo, "右辺が結果");
@@ -641,6 +667,24 @@ function genExpr(node, env, em, scope) {
 			}
 		});
 		em.pop(total);
+
+		// **末尾呼び出しは `bl` ではなく `b` である**（tco.md §6——最適化ではなく
+		// 言語仕様としての保証）。Sign にループは無く再帰しかないので、ここを `bl` の
+		// ままにすると再帰の深さがそのままスタックの深さになる。
+		if (tail && scope) {
+			if (callee === scope.selfLabel) {
+				// 自己末尾再帰。フレームをそのまま使い回す。飛び先は**仮引数を写す前**
+				// なので、完全性公理の検査も毎回通る——ここが終端である。
+				em.emit(`b ${scope.loopLabel}`, "末尾自己再帰（フレーム再利用）");
+				return TAIL;
+			}
+			// 相互末尾再帰。自分のフレームはもう死んでいるので畳んでから飛ぶ。
+			// 大きさは本体を出し切るまで決まらないので印だけ置く。
+			em.emit(`ldp x29, x30, [sp], #${FRAME_MARK}`, "自分のフレームを畳む");
+			em.emit(`b ${callee}`, "末尾呼び出し");
+			return TAIL;
+		}
+
 		em.emit(`bl ${callee}`, n.monoLabel ? "呼び出し（具体化済み）" : "呼び出し");
 		// 返値の幅も型が決める。器を返す関数は x0/x1 で `{ptr, len}` を返す
 		// （AAPCS64 が16バイトの複合型をそう返すのと同じ置き方）。
@@ -700,7 +744,7 @@ function emitUnit(em, offs) {
  * match_case の並びを分岐へ落とす。結果は呼び出し元が使うスロットへ揃える
  * ——どの枝を通っても同じ場所に値がある、という一点を守る。
  */
-function genMatch(node, env, em, scope) {
+function genMatch(node, env, em, scope, tail = false) {
 	// **どの枝も同じ幅でなければ、置き場所が決まらない。** `Char | String` のような直和は
 	// 「1本の枝と2本の枝」を1つの場所へ揃えろと言っていることになる。仕様は答えを持って
 	// いる——「表現の違う枝の直和は広い方に揃え、`Char` の枝は境界で1要素の連続領域へ
@@ -719,9 +763,14 @@ function genMatch(node, env, em, scope) {
 		outs.push(o);
 	}
 	// 枝の値を出力スロットへ写す。幅が合わない枝は上と同じ持ち上げの話なので落とす。
+	//
+	// **枝の値は末尾位置である。** 分岐の結果がそのまま関数の返値になるので、そこにある
+	// 呼び出しは末尾呼び出しである（interpreter.js の `evaluateTail` も同じ規則で
+	// ブロックの各行を辿る）。飛んで行った枝は値を置かないので `TAIL` を返す。
 	const move = (line) => {
-		const w = genExpr(line, env, em, scope);
+		const w = genExpr(line, env, em, scope, tail);
 		if (w === false) return false;
+		if (w === TAIL) return TAIL;
 		if (w !== width) {
 			em.pop(w);
 			return em.fail(line, `枝の幅が揃いません（${w} 本と ${width} 本）——広い方へ揃える持ち上げがまだ出せません（type_system.md §2）`);
@@ -753,8 +802,10 @@ function genMatch(node, env, em, scope) {
 		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
 		em.emit(`cmp ${SCRATCH[0]}, x12`);
 		em.emit(`b.eq ${next}`, "__ なら次の枝へ");
-		if (!move(line.right)) return false;
-		em.emit(`b ${end}`);
+		const armResult = move(line.right);
+		if (armResult === false) return false;
+		// 飛んで行った枝は合流点へ戻ってこないので、`b` を出す意味が無い。
+		if (armResult !== TAIL) em.emit(`b ${end}`);
 		em.label(next);
 		// 最後の行が条件付きなら、どの枝も通らない場合がある。そのときの値は `__`。
 		if (i === lines.length - 1) emitUnit(em, outs);
@@ -800,11 +851,13 @@ function emitUnitRegs(em, width) {
  */
 function wrapFrame(bodyLines, slots, name) {
 	const frame = 16 + Math.ceil((slots * 8) / 16) * 16; // x29/x30 の16バイト + スロット
+	// 相互末尾呼び出しが置いた印を、決まったフレームの大きさで埋める。
+	const filled = bodyLines.map((l) => (l.includes(FRAME_MARK) ? l.split(FRAME_MARK).join(String(frame)) : l));
 	return [
 		`${name}:`,
 		`\tstp x29, x30, [sp, #-${frame}]!`.padEnd(30) + `// フレーム ${frame} バイト`,
 		"\tmov x29, sp",
-		...bodyLines,
+		...filled,
 		`\tldp x29, x30, [sp], #${frame}`.padEnd(30) + "// フレームを戻す",
 		"\tret",
 	];
@@ -853,6 +906,15 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	em.slot = 0;
 	em.maxSlot = 0;
 
+	// **末尾自己再帰の飛び先。** フレームの確保（`stp`）はこの外側にあり、ここから下だけを
+	// 繰り返す——だから再帰の深さがスタックに積まれない（tco.md §7「同一スタック
+	// フレームへの JMP」）。
+	//
+	// 飛び先を**仮引数の写しと完全性公理の検査より前**に置くのが要である。後ろに置くと
+	// 検査が初回しか通らず、終端が消える。
+	const loopLabel = em.newLabel("loop");
+	em.label(loopLabel);
+
 	// **仮引数を入口でスロットへ写す。** 引数レジスタは最初の `bl` で壊れるので、
 	// 本体のどこからでも読める場所へ移しておく必要がある。
 	// 幅は引数ごとに違う——器を受ける仮引数は `{ptr, len}` で2本来る（stack_abi.md §4.6）。
@@ -887,25 +949,32 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	}
 
 	const before = em.diagnostics.length;
-	const ok = genExpr(lambdaNode.right, env, em, { params, paramOffsets, paramSlots, callees });
+	// 本体そのものが末尾位置である。`selfLabel` / `loopLabel` を渡すことで、本体の中の
+	// 自己呼び出しがフレームを使い回す `b` になる。
+	const scope = { params, paramOffsets, paramSlots, callees, selfLabel: name, loopLabel };
+	const ok = genExpr(lambdaNode.right, env, em, scope, true);
 	if (ok !== false) {
-		// 返値も幅ぶん x0/x1 へ載せる。
-		if (ok > 2) {
-			em.diagnostics.push({ severity: "error", message: `${name}: ${ok} 本で返す関数はまだ出せません`, node: lambdaNode });
+		// 返値の幅ぶん x0/x1 へ載せる。末尾呼び出しで出て行った経路は値を持たない。
+		const width = ok === TAIL ? 1 : ok;
+		if (width > 2) {
+			em.diagnostics.push({ severity: "error", message: `${name}: ${width} 本で返す関数はまだ出せません`, node: lambdaNode });
 		}
-		const base = em.slot - ok;
-		for (let k = 0; k < Math.min(ok, 2); k++) {
-			em.load(ARG_REGS[k], (base + k) * 8, k === 0 ? (ok > 1 ? "返値の ptr を x0 へ" : "返値を x0 へ") : "返値の len を x1 へ");
+		if (ok !== TAIL) {
+			const base = em.slot - ok;
+			for (let k = 0; k < Math.min(ok, 2); k++) {
+				em.load(ARG_REGS[k], (base + k) * 8, k === 0 ? (ok > 1 ? "返値の ptr を x0 へ" : "返値を x0 へ") : "返値の len を x1 へ");
+			}
+			em.pop(ok);
 		}
-		em.pop(ok);
 		// 崩壊したときの出口。返値と同じ幅で `__` を置く——枝によって幅が変わると
 		// 呼び出し側が読む本数が決まらない。
 		if (unitLabel) {
-			const done = em.newLabel("done");
-			em.emit(`b ${done}`);
+			// 本体が全て飛んで行ったなら、ここへ落ちてくるのは崩壊の経路だけである。
+			const done = ok === TAIL ? null : em.newLabel("done");
+			if (done) em.emit(`b ${done}`);
 			em.label(unitLabel);
-			emitUnitRegs(em, Math.min(ok, 2));
-			em.label(done);
+			emitUnitRegs(em, Math.min(width, 2));
+			if (done) em.label(done);
 		}
 	} else if (em.diagnostics.length === before) {
 		em.diagnostics.push({ severity: "error", message: `${name}: 本体を出せませんでした`, node: lambdaNode });

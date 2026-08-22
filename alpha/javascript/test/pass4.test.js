@@ -76,13 +76,15 @@ check("除算は sdiv（Int は符号あり）", body("f : a ? a / 2\nf 1", "f")
 // 引数は x0〜x7、返値は x0（stack_abi.md §4.2）。
 {
 	// 呼び出しの直前に並ぶロードが引数の積み込みである（末尾の「返値を x0 へ」と混ぜない）。
+	// `g x x x` は末尾位置なので `b` になる（tco.md §6）。積み込みの順は変わらない。
 	const ls = body("g : a b c ? a\nadd3 : x ? g x x x\nadd3 1", "add3");
-	const call = ls.findIndex((l) => l === "bl g");
+	const call = ls.findIndex((l) => l === "b g");
 	const loads = [];
-	for (let k = call - 1; k >= 0 && /^ldr x[0-7],/.test(ls[k]); k--) loads.unshift(ls[k].split(",")[0]);
+	for (let k = call - 2; k >= 0 && /^ldr x[0-7],/.test(ls[k]); k--) loads.unshift(ls[k].split(",")[0]);
 	check("引数は x0 から順に積む", loads, ["ldr x0", "ldr x1", "ldr x2"]);
 }
-checkTrue("呼び出しは bl", (body("g : a ? a\nf : x ? g x\nf 1", "f") || []).some((l) => l === "bl g"));
+// 末尾でない呼び出しは `bl` のままである——結果を使うので戻ってこなければならない。
+checkTrue("末尾でない呼び出しは bl", (body("g : a ? a\nf : x ? (g x) + 1\nf 1", "f") || []).some((l) => l === "bl g"));
 checkTrue("返値は x0 へ載せて ret", (body("f : a ? a + 1\nf 1", "f") || []).includes("ret"));
 
 // ---- 式の途中の値はフレームに置く ----
@@ -108,10 +110,21 @@ checkTrue("返値は x0 へ載せて ret", (body("f : a ? a + 1\nf 1", "f") || [
 	);
 }
 // 仮引数は入口で退避される。引数レジスタは最初の呼び出しで壊れるからである。
-checkTrue(
-	"仮引数を入口でスロットへ写す",
-	(body("f : a b ? a + b\nf 1 2", "f") || []).slice(0, 3).some((l) => l.startsWith("str x0, [x29,")),
-);
+//
+// **並びが意味を持つ。** フレーム確保 → 飛び先 → 仮引数の退避 → 完全性公理の検査、の順で
+// なければならない。飛び先が検査より後ろに来ると、末尾自己再帰でフレームを使い回した
+// ときに検査が初回しか通らず、終端が消える。
+{
+	const ls = body("f : a b ? a + b\nf 1 2", "f");
+	const at = (re) => ls.findIndex((l) => re.test(l));
+	const frame = at(/^stp x29/);
+	const loop = at(/^\.Lloop/);
+	const save = at(/^str x0, \[x29,/);
+	const test = at(/^b\.eq \.Lunit/);
+	checkTrue("フレーム確保は飛び先の外", frame >= 0 && frame < loop, ls.join(" / "));
+	checkTrue("仮引数を入口でスロットへ写す", loop < save, ls.join(" / "));
+	checkTrue("完全性公理の検査は飛び先の中", loop < test && save < test, ls.join(" / "));
+}
 
 // ---- フレーム ----
 //
@@ -182,14 +195,14 @@ check("コメントは診断にならない", asm("`これはコメント`\nf : 
 	const r = asm(src);
 	checkTrue("呼ばれた組み合わせのぶんだけ実体が出る", r.text.includes("take_while$is_digit:") && r.text.includes("take_while$is_alpha:"));
 	checkTrue("多相なままの実体は出ない", !r.text.includes("\ntake_while:"));
-	// 実体の中では `@p` が直接の `bl` になる。
-	checkTrue("`@p` は直接 bl になる", (body(src, "take_while$is_digit") || []).includes("bl is_digit"));
-	checkTrue("別の実体は別の呼び先", (body(src, "take_while$is_alpha") || []).includes("bl is_alpha"));
+	// 実体の中では `@p` が直接の呼び先になる（ここでは末尾位置なので `b`）。
+	checkTrue("`@p` は直接の呼び先になる", (body(src, "take_while$is_digit") || []).includes("b is_digit"));
+	checkTrue("別の実体は別の呼び先", (body(src, "take_while$is_alpha") || []).includes("b is_alpha"));
 	// 呼び出し側では関数ポインタを渡さない。引数は s だけ。
 	const ls = body(src, "f");
-	const call = ls.findIndex((l) => l === "bl take_while$is_digit");
+	const call = ls.findIndex((l) => l === "b take_while$is_digit");
 	const loads = [];
-	for (let k = call - 1; k >= 0 && /^ldr x[0-7],/.test(ls[k]); k--) loads.unshift(ls[k].split(",")[0]);
+	for (let k = call - 2; k >= 0 && /^ldr x[0-7],/.test(ls[k]); k--) loads.unshift(ls[k].split(",")[0]);
 	check("関数ポインタは引数として渡らない", loads, ["ldr x0"]);
 	check("診断は出ない", r.diagnostics.length, 0);
 }
@@ -218,6 +231,45 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 	check("連鎖比較は診断なし", asm("is_digit : c ? \\0 <= c <= \\9\nis_digit \\5").diagnostics.length, 0);
 	checkTrue("両方の条件を取って and する", ls.some((l) => l === "and x11, x11, x13"), ls.join(" / "));
 	checkTrue("真なら中央を返す", ls.some((l) => l === "csel x9, x10, x12, ne"));
+}
+// ---- 末尾呼び出し最適化（tco.md） ----
+//
+// **これは最適化ではなく言語仕様としての保証である**（tco.md §6）。Sign にループは
+// 無いので、`bl` のままだと再帰の深さがそのままスタックの深さになる。
+{
+	const src = "down : n acc ?\n\tn = 0 : acc\n\tdown (n - 1) (acc + 1)\ndown 5 0";
+	const ls = body(src, "down");
+	// 自己末尾再帰はフレームを使い回す——`bl` も `ldp` も出さずに飛び先へ戻るだけ。
+	checkTrue("自己末尾再帰は飛び先へ戻る", ls.some((l) => /^b \.Lloop/.test(l)), ls.join(" / "));
+	checkTrue("自己末尾再帰に bl は出ない", !ls.some((l) => l.startsWith("bl ")), ls.join(" / "));
+	// **飛び先は仮引数の写しより前。** 後ろだと完全性公理の検査が初回しか通らない。
+	const loop = ls.findIndex((l) => /^\.Lloop/.test(l));
+	const back = ls.findIndex((l) => /^b \.Lloop/.test(l));
+	const test = ls.findIndex((l) => /^b\.eq \.Lunit/.test(l));
+	checkTrue("飛び先は検査より前", loop < test && test < back, ls.join(" / "));
+	// 新しい引数は飛ぶ前に x0.. へ載っている（フレームはまだ生きている）。
+	check("引数を載せてから飛ぶ", ls.slice(back - 2, back), ["ldr x0, [x29, #40]", "ldr x1, [x29, #48]"]);
+}
+// 相互末尾再帰は自分のフレームを畳んでから飛ぶ（tco.md §3）。どちらもスタックを積まない。
+{
+	const src = "is_odd : n ?\n\tn = 0 : __\n\tis_even (n - 1)\nis_even : n ?\n\tn = 0 : 1\n\tis_odd (n - 1)\nis_even 4";
+	const ls = body(src, "is_even");
+	const jump = ls.findIndex((l) => l === "b is_odd");
+	checkTrue("相互末尾再帰は b で飛ぶ", jump >= 0, ls.join(" / "));
+	checkTrue("飛ぶ前にフレームを畳む", /^ldp x29, x30, \[sp\], #\d+$/.test(ls[jump - 1]), ls[jump - 1]);
+	checkTrue("畳む大きさは開いた大きさと同じ", ls[jump - 1] === ls[0].replace(/^stp x29, x30, \[sp, #-(\d+)\]!$/, "ldp x29, x30, [sp], #$1"), ls[0] + " / " + ls[jump - 1]);
+}
+// `&` / `|` の右辺も末尾位置である（tco.md §2）。左辺は違う——結果を見てから飛び先を
+// 決めるので、評価しきる必要がある。
+{
+	const ls = body("f : n ? n = 0 | f (n - 1)\nf 3", "f");
+	checkTrue("`|` の右辺は末尾", ls.some((l) => /^b \.Lloop/.test(l)), ls.join(" / "));
+}
+// 末尾でない呼び出しは `bl` のまま。結果を使うので戻ってこなければならない。
+{
+	const ls = body("g : a ? a\nf : x ? (g x) + 1\nf 1", "f");
+	checkTrue("末尾でなければ bl", ls.some((l) => l === "bl g"), ls.join(" / "));
+	checkTrue("末尾でなければフレームを畳まない", !ls.slice(0, -2).some((l) => l.startsWith("ldp ")), ls.join(" / "));
 }
 // ---- 完全性公理（`f __ = __`） ----
 //
