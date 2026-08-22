@@ -263,7 +263,13 @@ function genExpr(node, env, em, scope) {
 	// 飽和した呼び出し。引数をスロットで作ってから x0〜x7 へ積んで `bl`。
 	if (n.type === "operation" && n.name === "apply") {
 		const { base, args } = applyChain(n);
-		if (!isIdentifierNode(base)) return em.fail(n, "呼び先が静的に決まりません");
+		// アドレス経由の呼び出し（`@p x`）は**呼び出しサイト単位で具体化する**のが
+		// Sign の答えである（type_system.md §4 の前置 `@`）。実行時ディスパッチは
+		// 持たない（compiler_pipeline.md §3）。ここが出せないのは方針が無いからではなく、
+		// 具体化の結果を Pass 4 がまだ読んでいないからである。
+		if (!isIdentifierNode(base)) {
+			return em.fail(n, "呼び先が静的に決まりません（呼び出しサイト単位の具体化を Pass 4 がまだ読んでいない）");
+		}
 		if (args.length > ARG_REGS.length) return em.fail(n, `引数が ${ARG_REGS.length} 本を超えます`);
 		const offs = [];
 		for (const a of args) {
@@ -281,6 +287,21 @@ function genExpr(node, env, em, scope) {
 		return true;
 	}
 
+	// **多相な器を実行時の添字で引くのは、Sign が持たないと決めた唯一の場所である。**
+	//
+	// 他の言語が `dyn` や仮想テーブルで解くのがここであり、Sign は実行時ディスパッチを
+	// 持たない（compiler_pipeline.md §3「コンパイル時のシミュレーション実行で解決
+	// できなければ、それは単純にコンパイルエラーであり、実行時フォールバック経路を
+	// 言語として持たない」）。「まだ実装していない」と読まれないよう言い分ける。
+	if (n.type === "operation" && n.name === "get_prop" && n.runtimeIndexProblem) {
+		return em.fail(
+			n,
+			n.runtimeIndexProblem === "named"
+				? "名前付きスロットへ実行時の添字は引けません（物理配置は名前順、stack_abi.md §7.1）"
+				: "多相な器へ実行時の添字は引けません——ここが動的型付けの要る唯一の場所であり、" +
+					"Sign は実行時ディスパッチを持たない（compiler_pipeline.md §3）。スロットの型を揃えれば List になります"
+		);
+	}
 	return em.fail(n, `まだ出せない式です（${n.name || n.type}）`);
 }
 
