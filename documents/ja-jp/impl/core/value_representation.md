@@ -27,7 +27,7 @@ MUTF-8 のような独自拡張・overlong 表現は一切用いない。UTF-8 �
 > 出せず、`String` が `List` でなくなってしまう。
 >
 > 幅は [`option.ms` の `charset`](../build/option_ms_schema.md) が決める
-> （`ascii` = 1 byte / `utf32` = 4 byte、既定は `utf32`）。どちらも固定幅なので同型は保たれる。
+> （`ascii` = 1 byte / `utf32` = 4 byte、既定は `ascii`）。どちらも固定幅なので同型は保たれる。
 > U+0000 を niche として `__` に充てる規則（§3）は、どちらの幅でもそのまま成り立つ。
 
 

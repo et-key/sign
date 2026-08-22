@@ -27,7 +27,7 @@ import { parse } from "./parser.js";
 import { buildEnv } from "./pass1.js";
 import { reduceAll } from "./pass2.js";
 import { specializeGenericParams } from "./pass1b.js";
-import { annotateAll, checkLayerConstraints } from "./pass3.js";
+import { annotateAll, checkLayerConstraints, checkCharsetConstraints } from "./pass3.js";
 
 function isDefineNode(n) {
   return !!n && n.type === "operation" && n.name === "define";
@@ -111,6 +111,8 @@ function compile(source, options = {}) {
   // 判定できないのでここに置く。`options.layer` を渡さなければ検査しない——`option.ms` を
   // 読まない経路（テスト・playground の素の評価）まで std 相当を強制しないためである。
   if (options.layer !== undefined) checkLayerConstraints(nodes, options.layer);
+  // charset に収まらない文字も同じ門番で見る（option_ms_schema.md §4.2）。
+  if (options.charset !== undefined) checkCharsetConstraints(nodes, options.charset);
   return { nodes, env, specializations, diagnostics };
 }
 

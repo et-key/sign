@@ -50,11 +50,12 @@ const TARGET_DEFAULTS = {
 };
 
 // §2 のデフォルト: target は rust（ホストビルド）、layer は 4（std）。
-// `charset` の既定は `utf32`——全 Unicode を表現でき、要素幅が固定なので
-// `String ≅ List(0u)` が保たれる（type_system.md §2）。組み込みで 1 byte に詰めたい
-// ときだけ `ascii` を選ぶ。可変長の UTF-8 が選択肢に無いのは、それを選ぶと `s ' i` を
+// `charset` の既定は `ascii`——Sign が最初に書くのは OS カーネルだからである
+// （option_ms_schema.md §4.2）。全 Unicode が要るときだけ `utf32` を選ぶ。どちらも
+// 要素幅が固定なので `String ≅ List(0u)` は保たれる（type_system.md §2）。可変長の
+// UTF-8 が選択肢に無いのは、それを選ぶと `s ' i` を
 // `base + i × sizeof(T)` の1命令で出せなくなるためである（target_info.js の CHARSETS）。
-const DEFAULTS = { target: "rust", layer: 4, optimize: 0, inherit: true, link: "dynamic", output: null, charset: "utf32" };
+const DEFAULTS = { target: "rust", layer: 4, optimize: 0, inherit: true, link: "dynamic", output: null, charset: "ascii" };
 
 const LAYER_ALIASES = { bare: 0, alloc: 1, fpu: 2, simd: 3, std: 4 };
 

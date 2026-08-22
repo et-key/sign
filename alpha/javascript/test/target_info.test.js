@@ -105,7 +105,7 @@ check("既定は utf32（全 Unicode・添字は O(1)）", charSizeOf("utf32"), 
 check("ascii は 1 byte（layer 0 の組み込み向け）", charSizeOf("ascii"), 1);
 check("どちらも固定幅なので `String ≅ List(0u)` が保たれる", Object.values(CHARSETS).every((n) => Number.isInteger(n) && n > 0), true);
 check("可変長（utf8）は選択肢に無い", Object.prototype.hasOwnProperty.call(CHARSETS, "utf8"), false);
-check("既定値は utf32", DEFAULT_CHARSET, "utf32");
+check("既定値は ascii（OS カーネルが初歩の対象なので）", DEFAULT_CHARSET, "ascii");
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

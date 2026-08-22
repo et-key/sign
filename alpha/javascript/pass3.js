@@ -2176,6 +2176,47 @@ const LITERAL_MIN_LAYER = { Float: 2, Vector: 3 };
 // その layer で何が使えないのかを、機能の名前で言う（数字だけでは何が足りないか読めない）。
 const LAYER_FEATURE = { 2: "FPU", 3: "SIMD" };
 
+/**
+ * `charset` に収まらない文字を名指しする（option_ms_schema.md §4.2）。
+ *
+ * `charset : `ascii`` は Char 1個を1バイトとすると決めることであり、そこへ U+0080 以上を
+ * 書けば**収まらない**。黙って下位バイトへ落とすと、書いた文字と出る文字が違うという
+ * 一番たちの悪い壊れ方をするので、名指しして止める。
+ *
+ * layer の門番と同じ形である——`option.ms` を読まない経路（テスト・playground の素の
+ * 評価）では検査しない。
+ */
+function checkCharsetConstraints(nodes, charset) {
+  const limit = charset === "ascii" ? 0x7f : 0x10ffff;
+  const seen = new Set();
+  const visit = (node) => {
+    if (!node || typeof node !== "object" || seen.has(node)) return;
+    seen.add(node);
+    if (node.type === "atom" && (node.kind === "char" || node.kind === "string" || node.kind === "unicode")) {
+      const text =
+        node.kind === "unicode"
+          ? String.fromCodePoint(parseInt(node.value.slice(2), 16) || 1)
+          : node.kind === "char"
+            ? node.value.slice(1)
+            : node.value.slice(1, -1);
+      for (const ch of text) {
+        const cp = ch.codePointAt(0);
+        if (cp > limit) {
+          throw new OperationError(
+            `charset: ${charset} に収まらない文字です（U+${cp.toString(16).toUpperCase().padStart(4, "0")} '${ch}'）。` +
+              `option.ms の charset を utf32 にするか、この文字を使わないでください`,
+            { spec: "option_ms_schema.md §4.2", reason: "char-above-charset" }
+          );
+        }
+      }
+    }
+    for (const k of ["left", "right", "operand", "middle"]) visit(node[k]);
+    for (const l of node.lines || []) visit(l);
+    for (const e of node.entries || []) visit(e.default);
+  };
+  for (const n of nodes) visit(n);
+}
+
 function checkLayerConstraints(nodes, layer) {
 	if (!Number.isInteger(layer)) return;
 	const seen = new Set();
@@ -2206,4 +2247,4 @@ function checkLayerConstraints(nodes, layer) {
 	for (const node of nodes) visit(node);
 }
 
-export { IDENTITY, inferAtomType, annotateTypes, annotateAll, inferLambdaParamTypes, inferParamTypesFromUsage, checkLayerConstraints, pointfreeSignature };
+export { IDENTITY, inferAtomType, annotateTypes, annotateAll, inferLambdaParamTypes, inferParamTypesFromUsage, checkLayerConstraints, checkCharsetConstraints, pointfreeSignature };

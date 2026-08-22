@@ -83,6 +83,28 @@ check("layer : std は 4", readOptionMs("layer : std").layer, 4);
 // 「読めたが値が仕様の集合に無い」場合であり、黙って通さないことが目的である。
 check("未知の target は警告して rust へ倒す", readOptionMs("target : nosuch").target, "rust");
 check("その警告は握り潰さない", readOptionMs("target : nosuch").warnings.length, 1);
+
+// **`charset` に収まらない文字は名指しする。**
+//
+// `charset : ascii` は Char 1個を1バイトとすると決めることであり、そこへ U+0080 以上を
+// 書けば収まらない。黙って下位バイトへ落とすと、書いた文字と出る文字が違うという
+// 一番たちの悪い壊れ方をする。
+{
+	const fails = (src, charset) => {
+		try {
+			compile(src, { charset });
+			return false;
+		} catch (e) {
+			return /charset/.test(e.message);
+		}
+	};
+	check("ascii に ASCII は通る", fails("s : `hello`", "ascii"), false);
+	check("ascii に非 ASCII は止める", fails("s : `あ`", "ascii"), true);
+	check("`0u` でも同じ", fails("s : 0u3042", "ascii"), true);
+	check("utf32 なら通る", fails("s : `あ`", "utf32"), false);
+	// layer の門番と同じで、`option.ms` を読まない経路では検査しない。
+	check("charset を渡さなければ検査しない", fails("s : `あ`", undefined), false);
+}
 check("範囲外の layer も警告する", readOptionMs("layer : 9").warnings.length, 1);
 check("妥当な設定なら警告は出ない", readOptionMs("target : cortex_m\nlayer : 0").warnings.length, 0);
 
@@ -155,10 +177,12 @@ check("サンプルが1つ以上ある（正規表現が空振りしていない
 
 
 // ---- charset（§4.2） ----
-check("既定の charset は utf32", readOptionMs("").charset, "utf32");
-check("ascii を選べる", readOptionMs("charset : ascii").charset, "ascii");
+// **既定は `ascii`。** Sign が最初に書くのは OS カーネルであり、そこは layer: 0 の
+// 世界である——UART 出力やブートログに Unicode は要らない（§4.2）。
+check("既定の charset は ascii", readOptionMs("").charset, "ascii");
+check("utf32 を選べる", readOptionMs("charset : utf32").charset, "utf32");
 // 可変長の UTF-8 は選択肢に無い（選ぶと `String ≅ List(0u)` が崩れる）。
-check("utf8 は警告して既定へ倒す", readOptionMs("charset : utf8").charset, "utf32");
+check("utf8 は警告して既定へ倒す", readOptionMs("charset : utf8").charset, "ascii");
 check("その警告は握り潰さない", readOptionMs("charset : utf8").warnings.length, 1);
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

@@ -86,8 +86,8 @@ const WIDTH_CLASS = { Address: "gpr", Int: "gpr", Char: "gpr", Float: "float", V
  * 表現を選ぶとこの同型が崩れ、`s ' i` を `base + i × sizeof(T)` の1命令で出せなくなる。
  * だから選択肢は固定幅に限る。
  *
- *   ascii  1 byte  layer 0 の組み込み向け。UART 出力やブートログに Unicode は要らない
- *   utf32  4 byte  既定。全 Unicode を表現でき、添字は O(1) のまま
+ *   ascii  1 byte  既定。layer 0 の組み込み向け。UART 出力やブートログに Unicode は要らない
+ *   utf32  4 byte  全 Unicode を表現でき、添字は O(1) のまま
  *
  * UTF-8 はここに無い。`value_representation.md` が UTF-8 を採る理由——先頭バイトの
  * ビットパターンが「何バイト列か」を自己記述するので boxing が無償になる——は、
@@ -95,7 +95,14 @@ const WIDTH_CLASS = { Address: "gpr", Int: "gpr", Char: "gpr", Float: "float", V
  * 話である。転送・保存の形式であって、メモリ上の String 表現である必然は無い。
  */
 const CHARSETS = { ascii: 1, utf32: 4 };
-const DEFAULT_CHARSET = "utf32";
+// **既定は `ascii`。** Sign が最初に書くのは OS カーネルであり、そこは `layer: 0` の
+// 世界である——UART 出力やブートログに Unicode は要らない（option_ms_schema.md §4.2）。
+// 1文字1バイトなら `.rodata` もそのままバイト列になる。
+//
+// 全 Unicode が要る場面では `option.ms` で `charset : `utf32`` と書く。IO 境界は
+// charset に関わらず常に UTF-8 なので（value_representation.md §4）、この選択が
+// 決めるのは**メモリ上の Char 1個の幅**だけである。
+const DEFAULT_CHARSET = "ascii";
 
 function charSizeOf(charset) {
   return CHARSETS[charset] ?? CHARSETS[DEFAULT_CHARSET];
