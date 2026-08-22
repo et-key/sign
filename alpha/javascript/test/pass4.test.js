@@ -232,6 +232,45 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 	checkTrue("両方の条件を取って and する", ls.some((l) => l === "and x11, x11, x13"), ls.join(" / "));
 	checkTrue("真なら中央を返す", ls.some((l) => l === "csel x9, x10, x12, ne"));
 }
+// ---- ブラケット分割代入 `[h ~t]` ----
+//
+// **コピーは起きない。** 要素の並びは `{ptr, len}` で渡ってくる（stack_abi.md §4.6）ので、
+// 先頭は指す先の1要素、残りは**同じ領域を指したまま ptr を1要素進めて len を1減らしたもの**
+// である。`t` のスロットは容器のスロットをそのまま使い回す。
+{
+	const src = "conflict : col d [h ~t] ?\n\th = col : 1\n\tconflict col (d + 1) t\nconflict 1 1 [1 2 3]";
+	const ls = body(src, "conflict");
+	// 検査が先、取り出しが後。空の容器から先頭を読むと指す先の外を触る。
+	const test = ls.findIndex((l, i) => /^b\.eq \.Lunit/.test(l) && ls[i - 1] === "cmp x9, #0");
+	const load = ls.findIndex((l) => l === "ldr x10, [x9]");
+	checkTrue("検査してから先頭を読む", test >= 0 && test < load, ls.join(" / "));
+	// `List(Int)` の要素は 8 byte。
+	checkTrue("要素の幅ぶん進める", ls.some((l) => l === "add x9, x9, #8"), ls.join(" / "));
+	// 残りは長さを1減らすだけ。0 になれば `__` そのものなので、次の呼び出しが崩壊する
+	// ——これが終端である（function_guide.md「ブラケット分解でなければ完全性公理が
+	// 終端を与えられない」）。
+	checkTrue("残りは長さを1減らす", ls.some((l) => l === "sub x10, x10, #1"), ls.join(" / "));
+	checkTrue("容器を作り直さない", !ls.some((l) => /^(bl|b) (malloc|_sign_alloc)/.test(l)), ls.join(" / "));
+}
+// 要素の幅は型が言う。`String` の要素は `charset` 幅（既定の ascii なら 1 byte）で、
+// `List(Int)` の 8 byte とは別の命令になる。
+{
+	const ls = body("f : [c ~rest] ?\n\tc = 0u61 : 1\n\tf rest\nf `abc`", "f");
+	checkTrue("String の要素は 1 byte で読む", ls.some((l) => l === "ldrb w10, [x9]"), ls.join(" / "));
+	checkTrue("String は 1 byte ぶん進める", ls.some((l) => l === "add x9, x9, #1"), ls.join(" / "));
+}
+// 仮引数リスト全体がブラケットでも、混在形でも同じ形として扱う（書かれ方が違うだけ）。
+{
+	const lone = body("f : [c ~rest] ?\n\tc = 0u61 : 1\n\tf rest\nf `abc`", "f");
+	const mixed = body("g : a [c ~rest] ?\n\tc = 0u61 : a\n\tg a rest\ng 1 `abc`", "g");
+	checkTrue("単独ブラケットも分解する", lone.some((l) => l === "ldrb w10, [x9]"), lone.join(" / "));
+	checkTrue("混在形も分解する", mixed.some((l) => l === "ldrb w10, [x9]"), mixed.join(" / "));
+}
+// rest とデフォルトはまだ出せない。**名指しする**——黙って飛ばすと命令の無い関数ができる。
+checkTrue(
+	"裸の rest はまだ名指しする",
+	asm("f : x ~xs ? x\nf 1 2").diagnostics.some((d) => d.message.includes("rest・デフォルトはまだ"))
+);
 // ---- 末尾呼び出し最適化（tco.md） ----
 //
 // **これは最適化ではなく言語仕様としての保証である**（tco.md §6）。Sign にループは

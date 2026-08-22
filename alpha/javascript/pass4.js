@@ -35,10 +35,10 @@
  * 名指しする——落とすと「命令が無いのに動いたように見える」が起きる。
  */
 
-import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf, DEFAULT_CHARSET } from "./target_info.js";
+import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf, DEFAULT_CHARSET, SIGNEDNESS } from "./target_info.js";
 import { envLookup } from "./pass1.js";
 import { isBareComment } from "./pass3.js";
-import { passingOf } from "./layout.js";
+import { passingOf, measure } from "./layout.js";
 
 // AAPCS64（stack_abi.md §4.2）。引数は x0〜x7、返値は x0、一時は x9〜x15。
 const ARG_REGS = ["x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7"];
@@ -237,6 +237,75 @@ function paramNamesOf(paramNode) {
 	return (paramNode.entries || []).map((e) => (e.pattern || e.rest || e.default ? null : e.name || null));
 }
 
+/**
+ * 仮引数の形を宣言順で返す。
+ *
+ *   { kind: "bare", name }              裸の仮引数
+ *   { kind: "destructure", head, rest } ブラケット分割代入 `[h ~t]`
+ *   null                                まだ出せない形（rest・デフォルト）
+ *
+ * `paramNamesOf` と分けてあるのは、単相化（`collectMonomorphs`）が見るのは「名前で
+ * 呼べる仮引数」だけであり、分割代入された仮引数は関数ポインタになりえないためである。
+ */
+function paramShapesOf(paramNode) {
+	if (isIdentifierNode(paramNode)) return [{ kind: "bare", name: paramNode.value }];
+	if (!paramNode || paramNode.type !== "params") return [];
+	// 仮引数が `[h ~t]` **だけ**のときは、括弧が仮引数リスト全体に付く（`bracket: true`）。
+	// 入れ子の `pattern` にはならないので、ここで拾う——同じ形の別の書かれ方である。
+	if (paramNode.bracket) {
+		const es = paramNode.entries || [];
+		if (es.length === 2 && !es[0].rest && es[1].rest && !es[0].default && !es[1].default) {
+			return [{ kind: "destructure", head: es[0].name, rest: es[1].name }];
+		}
+		return [null];
+	}
+	return (paramNode.entries || []).map((e) => {
+		if (e.default) return null;
+		if (e.pattern) {
+			// いま出せるのは `[h ~t]`——先頭と残りの2つに割る形だけである。
+			const p = e.pattern;
+			if (p.length === 2 && !p[0].rest && p[1].rest && !p[0].defaultTokens && !p[1].defaultTokens) {
+				return { kind: "destructure", head: p[0].name, rest: p[1].name };
+			}
+			return null;
+		}
+		if (e.rest) return null;
+		return e.name ? { kind: "bare", name: e.name } : null;
+	});
+}
+
+/**
+ * ブラケット分割代入 `[h ~t]` を、渡ってきた `{ptr, len}` から作る。
+ *
+ * **コピーは起きない。** 要素の並びは参照で渡ってくる（stack_abi.md §4.6）ので、
+ * 先頭は指す先の1要素、残りは**同じ領域を指したまま `ptr` を1要素進めて `len` を1
+ * 減らしたもの**である。`t` のスロットは容器のスロットをそのまま使い回せる。
+ *
+ *   h = ptr[0]
+ *   t = { ptr + sizeof(要素), len - 1 }
+ *
+ * **これが終端になる。** 残りが尽きると `len` が 0 になり、`len = 0` は `__` そのもの
+ * （`__ = []`、unit.md）なので、次の呼び出しは完全性公理で崩壊する
+ * ——`function_guide.md` が「ブラケット分解でなければ完全性公理が終端を与えられない」と
+ * 書いているのは、この形のことである。
+ */
+function emitDestructure(em, containerOff, headOff, elemSize, signed, name) {
+	em.load(SCRATCH[0], containerOff, `${name} の先頭を取り出す`);
+	// 要素の幅ぶんだけ読む。符号ありで 8 byte 未満なら符号拡張が要る。
+	const mnemonic =
+		elemSize === 8 ? `ldr ${SCRATCH[1]}, [${SCRATCH[0]}]`
+		: elemSize === 4 ? `ldr${signed ? "sw " + SCRATCH[1] : " w10"}, [${SCRATCH[0]}]`
+		: elemSize === 2 ? `ldr${signed ? "sh " + SCRATCH[1] : "h w10"}, [${SCRATCH[0]}]`
+		: `ldr${signed ? "sb " + SCRATCH[1] : "b w10"}, [${SCRATCH[0]}]`;
+	em.emit(mnemonic, `${elemSize} byte の要素1つ`);
+	em.store(SCRATCH[1], headOff, "先頭");
+	// 残りは同じ領域を指したまま、頭を1つ分ずらす。
+	em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #${elemSize}`, "1要素ぶん進める");
+	em.store(SCRATCH[0], containerOff, "残りの ptr");
+	em.load(SCRATCH[1], containerOff + 8);
+	em.emit(`sub ${SCRATCH[1]}, ${SCRATCH[1]}, #1`, "残りの長さ");
+	em.store(SCRATCH[1], containerOff + 8, "残りの len（0 なら __）");
+}
 /**
  * 命令列を組み立てる器。
  *
@@ -865,36 +934,79 @@ function wrapFrame(bodyLines, slots, name) {
 
 function genFunction(name, lambdaNode, env, em, mono) {
 	const paramNode = lambdaNode.left;
-	const allParams = paramNamesOf(paramNode);
+	const allShapes = paramShapesOf(paramNode);
 	// 具体化された関数ポインタの仮引数は**引数として渡ってこない**（命令へ焼き込み済み）。
 	const callees = (mono && mono.callees) || {};
-	const params = allParams.filter((x) => x === null || !(x in callees));
-	if (params.some((p) => p === null)) {
+	const keep = allShapes.map((_, i) => i).filter((i) => {
+		const sh = allShapes[i];
+		return !sh || sh.kind !== "bare" || !(sh.name in callees);
+	});
+	const shapes = keep.map((i) => allShapes[i]);
+	if (shapes.some((sh) => sh === null)) {
 		em.diagnostics.push({
 			severity: "error",
-			message: `${name}: 裸の仮引数だけを出せます（ブラケット分割代入・rest・デフォルトはまだ）`,
+			message: `${name}: 裸の仮引数と \`[h ~t]\` だけを出せます（rest・デフォルトはまだ）`,
 			node: lambdaNode,
 		});
 		return;
 	}
-	// 仮引数の幅は呼び出しサイトから決まった型が言う（pass3.js の `callsiteParamTypes`）。
+	// 型は2つの経路から来る。裸の仮引数は呼び出しサイトからの逆算（`callsiteParamTypes`）、
+	// 分割代入された名前はラムダのスコープに直接ある——`[h ~t]` の `h` と `t` は仮引数の
+	// 位置に名前が無いので、束縛の側にしか書いていない。
 	const allTypes = lambdaNode.callsiteParamTypes || [];
-	const keep = allParams.map((x, i) => i).filter((i) => allParams[i] === null || !(allParams[i] in callees));
-	const paramSlots = keep.map((i) => slotsOf(allTypes[i], em.conf));
-	if (paramSlots.some((w) => w === null)) {
-		const bad = params[paramSlots.findIndex((w) => w === null)];
-		em.diagnostics.push({
-			severity: "error",
-			message: `${name}: 仮引数 ${bareName(bad)} の渡し方が決まりません（直和か族）`,
-			node: lambdaNode,
-		});
-		return;
+	// **束縛は直接の Map ではなく `envLookup` で引く。** `[c ~rest]` の `c` はラムダの
+	// スコープの Map に直接は載らない（載るのは器を受ける `rest` だけ）が、束縛としては
+	// 解決されている。Map を覗くと「型が無い」に見えて、要素の幅が決まらなくなる。
+	const typeOf = (raw) => {
+		const b = lambdaNode.scope ? envLookup(lambdaNode.scope, raw) : null;
+		return b ? b.atomType : null;
+	};
+
+	// 入ってくるレジスタの本数と、本体から見える名前を作る。
+	//   裸        1つの名前 : 型の幅ぶん
+	//   `[h ~t]`  容器が `{ptr, len}` の2本で来て、そこから2つの名前が生える
+	const incoming = []; // { regs, shape, headType }
+	for (let i = 0; i < shapes.length; i++) {
+		const sh = shapes[i];
+		if (sh.kind === "bare") {
+			const w = slotsOf(allTypes[keep[i]] ?? typeOf(sh.name), em.conf);
+			if (w === null) {
+				em.diagnostics.push({
+					severity: "error",
+					message: `${name}: 仮引数 ${bareName(sh.name)} の渡し方が決まりません（直和か族）`,
+					node: lambdaNode,
+				});
+				return;
+			}
+			incoming.push({ regs: w, shape: sh });
+			continue;
+		}
+		// `[h ~t]` は要素の並びを受ける。渡ってくるのは常に `{ptr, len}` の2本。
+		const headType = typeOf(sh.head);
+		const elem = headType ? measure({ atomType: headType }, { target: em.conf.target, charset: em.conf.charset }) : null;
+		if (!elem || !elem.size) {
+			em.diagnostics.push({
+				severity: "error",
+				message: `${name}: \`[${bareName(sh.head)} ~${bareName(sh.rest)}]\` の要素の幅が決まりません（${headType}）`,
+				node: lambdaNode,
+			});
+			return;
+		}
+		if (slotsOf(headType, em.conf) !== 1) {
+			em.diagnostics.push({
+				severity: "error",
+				message: `${name}: 要素そのものが参照で運ぶ値の分割代入はまだ出せません（${headType}）`,
+				node: lambdaNode,
+			});
+			return;
+		}
+		incoming.push({ regs: 2, shape: sh, elemSize: elem.size, signed: SIGNEDNESS[headType] === "signed" });
 	}
-	const regs = paramSlots.reduce((a, b) => a + b, 0);
+	const regs = incoming.reduce((a, x) => a + x.regs, 0);
 	if (regs > ARG_REGS.length) {
 		em.diagnostics.push({
 			severity: "error",
-			message: `${name}: 引数がレジスタ ${ARG_REGS.length} 本を超えます（${params.length} 個で ${regs} 本）`,
+			message: `${name}: 引数がレジスタ ${ARG_REGS.length} 本を超えます（${shapes.length} 個で ${regs} 本）`,
 			node: lambdaNode,
 		});
 		return;
@@ -918,14 +1030,13 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	// **仮引数を入口でスロットへ写す。** 引数レジスタは最初の `bl` で壊れるので、
 	// 本体のどこからでも読める場所へ移しておく必要がある。
 	// 幅は引数ごとに違う——器を受ける仮引数は `{ptr, len}` で2本来る（stack_abi.md §4.6）。
-	const paramOffsets = [];
 	let reg = 0;
-	for (let i = 0; i < params.length; i++) {
-		const w = paramSlots[i];
-		paramOffsets.push(em.slot * 8);
-		for (let k = 0; k < w; k++) {
+	for (const inc of incoming) {
+		inc.off = em.slot * 8;
+		for (let k = 0; k < inc.regs; k++) {
 			em.push();
-			em.store(ARG_REGS[reg], (em.slot - 1) * 8, k === 0 ? `仮引数 ${bareName(params[i])} を退避${w > 1 ? "（ptr）" : ""}` : "（len）");
+			const what = inc.shape.kind === "bare" ? bareName(inc.shape.name) : `[${bareName(inc.shape.head)} ~${bareName(inc.shape.rest)}]`;
+			em.store(ARG_REGS[reg], (em.slot - 1) * 8, k === 0 ? `仮引数 ${what} を退避${inc.regs > 1 ? "（ptr）" : ""}` : "（len）");
 			reg++;
 		}
 	}
@@ -940,12 +1051,37 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	//
 	// 検査は**仮引数をスロットへ写した後**に置く。TCO でフレームを使い回すとき、飛び先が
 	// この検査より後ろにあると初回しか検査を通らず、ループが終わらなくなるためである。
-	const unitLabel = params.length > 0 ? em.newLabel("unit") : null;
+	const unitLabel = incoming.length > 0 ? em.newLabel("unit") : null;
 	if (unitLabel) {
-		for (let i = 0; i < params.length; i++) {
-			emitIsUnit(em, paramOffsets[i], paramSlots[i], `仮引数 ${bareName(params[i])} が __ か`);
+		for (const inc of incoming) {
+			const what = inc.shape.kind === "bare" ? bareName(inc.shape.name) : `[${bareName(inc.shape.head)} ~${bareName(inc.shape.rest)}]`;
+			emitIsUnit(em, inc.off, inc.regs, `仮引数 ${what} が __ か`);
 			em.emit(`b.eq ${unitLabel}`, "__ なら本体へ入らない（完全性公理）");
 		}
+	}
+
+	// **`[h ~t]` はここで作る。**
+	//
+	// 検査の**後**である。空の容器から先頭を読むと、指す先の外を触る——先に崩壊させて
+	// おけば読まずに済む。`function_guide.md` が「ブラケット分解でなければ完全性公理が
+	// 終端を与えられない」と書いているのは、この順序があって初めて成り立つ。
+	const params = [];
+	const paramOffsets = [];
+	const paramSlots = [];
+	for (const inc of incoming) {
+		if (inc.shape.kind === "bare") {
+			params.push(inc.shape.name);
+			paramOffsets.push(inc.off);
+			paramSlots.push(inc.regs);
+			continue;
+		}
+		// 先頭は新しいスロット、残りは容器のスロットをそのまま使い回す（コピーしない）。
+		const headOff = em.slot * 8;
+		em.push();
+		emitDestructure(em, inc.off, headOff, inc.elemSize, inc.signed, `[${bareName(inc.shape.head)} ~${bareName(inc.shape.rest)}]`);
+		params.push(inc.shape.head, inc.shape.rest);
+		paramOffsets.push(headOff, inc.off);
+		paramSlots.push(1, 2);
 	}
 
 	const before = em.diagnostics.length;
