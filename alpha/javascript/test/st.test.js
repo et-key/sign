@@ -517,8 +517,11 @@ check("非 Unit の否定は Unit", entries("f : !5"), ["f : Unit"]);
 // 必要とするので、ここは落としてはいけない情報である。
 check("List(Int) の添字は Int", entries("l : [1 2 3]\np : l ' 0"), ["l : List(Int)", "p : Int"]);
 check("List(Float) の添字は Float", entries("l : [1.0 2.0]\np : l ' 0"), ["l : List(Float)", "p : Float"]);
-// `String ≅ List(0u)` なので文字列の添字は文字＝String である（§2）。
-check("String の添字は String（文字）", entries("s : `abc`\np : s ' 0"), ["s : String", "p : String"]);
+// `String ≅ List(Char)` なので、文字列の添字は要素型＝`Char` である（§2）——`List(Int)` の
+// 添字が `Int` になるのと同じ引き方をする。**器の型を返してはいけない。** 返すと
+// `is_digit : c ? \0 <= c <= \9` の `c` が呼び出しサイト（`s ' 0`）から `String` と
+// 逆算され、レジスタ1本で比べる本体と `{ptr, len}` で受ける入口が食い違う。
+check("String の添字は Char", entries("s : `abc`\np : s ' 0"), ["s : String", "p : Char"]);
 // 添字が**部分列**を指す形（後置 `~` と範囲式）のときだけ、結果は器と同じ型になる。
 check("部分列の添字は器の型", entries("l : [1 2 3]\np : l ' 1~"), ["l : List(Int)", "p : List(Int)"]);
 // 名前付きスロットは名前で、連番スロットはリテラルの添字でそのスロットの型を引く

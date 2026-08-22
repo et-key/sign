@@ -564,8 +564,18 @@ function getPropResultType(node, env) {
     return containerType;
   }
 
-  // `String ≅ List(0u)` なので、文字列の添字は文字＝String である（§2）。
-  if (containerType === "String") return "String";
+  // **`String` の添字は `Char` である。**
+  //
+  // `String ≅ List(Char)` であり（§2）、`List(T) ' i` が `T` を返すのと同じ引き方をする。
+  // ここが長く `String` を返していたのは、`Char` が Layer 2 の型になる前に「1文字も
+  // String」と書かれた規則が残っていたからである——`Char` を足した時点で、この行は
+  // 「要素型」ではなく「器の型」を返すようになっていた。
+  //
+  // 実害は Pass 4 で出た。`is_digit : c ? \0 <= c <= \9` の `c` を呼び出しサイトから
+  // 逆算すると `s ' 0`＝`String` になり、仮引数を `{ptr, len}` の2本で受けるという
+  // 結論になる。同じ `c` が本体では `Char`（レジスタ1本）として比較されるので、
+  // **入口と本体で幅が食い違う**。型が値より広いときに起きる、いつもの壊れ方である。
+  if (containerType === "String") return "Char";
 
   // List と Iterator はどちらも「同じ型の要素が並ぶもの」で、違いは実体を持つかどうかだけ。
   // **型の上では同じ引き方をする**ので、添字の結果はどちらも要素型である。
@@ -643,6 +653,12 @@ function literalAtomTypeFromKind(node) {
     // 分けないと**表現が実行時の長さで変わる**。`Char` はレジスタに乗る符号位置、
     // `String` は `{ptr, len}` の参照（stack_abi.md §4.6）なので、同じ型が両方を
     // 指すと実行時に見分ける必要が出る——それは動的型付けである。
+    //
+    // **0文字は `Unit` ではなく `String` である。** 値としては空文字列も `__` も同じもの
+    // （零対象は一つ）だが、型だけが違う——`` `` 1 2 3 `` が `` `123` `` になり
+    // `__ 1 2 3` が `[1 2 3]` になるのは、`` `` `` が「以降をテキストとして連結する」と
+    // 宣言しているからである（type_system.md §余積族の型変換テーブル）。ここを `Unit` に
+    // すると余積の吸収則が効かなくなり、テキスト連結が List 構築へ落ちる。
     case "string": return [...node.value.slice(1, -1)].length === 1 ? "Char" : "String";
     case "char": return "Char";
     case "address": return "Address";
@@ -2185,6 +2201,11 @@ const LAYER_FEATURE = { 2: "FPU", 3: "SIMD" };
  *
  * layer の門番と同じ形である——`option.ms` を読まない経路（テスト・playground の素の
  * 評価）では検査しない。
+ *
+ * **コメントは検査しない。** Sign のコメントはバッククォート文字列そのものなので AST に
+ * 残るが（guide/string_and_comment.md）、値として使われない以上 `.rodata` にも命令にも
+ * ならない。日本語で書いたコメントが `charset : `ascii`` を落とすのは、書いた文字と出る
+ * 文字が違うという本来の危険とは何の関係も無い。
  */
 function checkCharsetConstraints(nodes, charset) {
   const limit = charset === "ascii" ? 0x7f : 0x10ffff;
@@ -2214,7 +2235,20 @@ function checkCharsetConstraints(nodes, charset) {
     for (const l of node.lines || []) visit(l);
     for (const e of node.entries || []) visit(e.default);
   };
-  for (const n of nodes) visit(n);
+  for (const n of nodes) {
+    if (isBareComment(n)) continue;
+    visit(n);
+  }
+}
+
+/**
+ * 値として使われない裸の文字列リテラル——すなわちコメント（guide/string_and_comment.md）。
+ *
+ * **Pass 4 も同じ判定でここを読み飛ばす。** 判定を1箇所に置くのは、食い違うと
+ * 「charset の検査は通ったのに `.rodata` へ出る」（またはその逆）が起きるからである。
+ */
+function isBareComment(node) {
+  return !!node && node.type === "atom" && node.kind === "string";
 }
 
 function checkLayerConstraints(nodes, layer) {
@@ -2247,4 +2281,4 @@ function checkLayerConstraints(nodes, layer) {
 	for (const node of nodes) visit(node);
 }
 
-export { IDENTITY, inferAtomType, annotateTypes, annotateAll, inferLambdaParamTypes, inferParamTypesFromUsage, checkLayerConstraints, checkCharsetConstraints, pointfreeSignature };
+export { IDENTITY, inferAtomType, annotateTypes, annotateAll, inferLambdaParamTypes, inferParamTypesFromUsage, checkLayerConstraints, checkCharsetConstraints, isBareComment, pointfreeSignature };

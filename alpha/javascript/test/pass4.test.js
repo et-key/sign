@@ -219,9 +219,80 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 	checkTrue("両方の条件を取って and する", ls.some((l) => l === "and x11, x11, x13"), ls.join(" / "));
 	checkTrue("真なら中央を返す", ls.some((l) => l === "csel x9, x10, x12, ne"));
 }
-// 2文字以上は要素の並びなので `.rodata` と `{ptr, len}` が要る（stack_abi.md §4.6）。
-// まだ出さないが、**理由を名指しする**——「まだ実装していない」と分かる形にする。
-checkTrue("2文字以上は理由を名指しする", asm("s : `ab`\nf : x ? x\nf s").diagnostics.some((d) => d.message.includes(".rodata")));
+// ---- 要素の並びは参照で運ぶ（stack_abi.md §4.6） ----
+//
+// 2文字以上は `String` であり、中身は `.rodata` に置いて `{ptr, len}` の2本で渡す。
+// 1文字が `Char` としてレジスタ1本に乗るのと**同じ型が2通りの運ばれ方をしない**のは、
+// 1文字と2文字以上が別の型だからである（type_system.md §2）。
+{
+	const src = "f : s ? s\nf `hello`";
+	const r = asm(src);
+	check("文字列は診断なしで出る", r.diagnostics.length, 0);
+	checkTrue("中身は .rodata へ置く", r.text.includes(".section .rodata"), r.text);
+	checkTrue("1 byte 幅なら .ascii で書ける", r.text.includes('.ascii "hello"'), r.text);
+	// アドレスは `adrp` + `:lo12:` で作る。PC 相対なので位置独立のまま。
+	const main = body(src, "_sign_main");
+	checkTrue("adrp でラベルの頁を取る", main.some((l) => l === "adrp x9, .Lstr0"), main.join(" / "));
+	checkTrue(":lo12: で下位12ビットを足す", main.some((l) => l === "add x9, x9, :lo12:.Lstr0"));
+	// **`len` は文字数であってバイト数ではない。** `String ≅ List(Char)` の要素数なので、
+	// charset を変えても同じ値でなければ添字がずれる。
+	checkTrue("len は文字数", main.some((l) => l === "mov x10, #5"), main.join(" / "));
+	// 引数は2本使う。器を1本に詰めない。
+	const call = main.findIndex((l) => l === "bl f");
+	check("ptr は x0、len は x1", main.slice(call - 2, call), ["ldr x0, [x29, #16]", "ldr x1, [x29, #24]"]);
+	// 返値も2本。AAPCS64 が16バイトの複合型を x0/x1 で返すのと同じ置き方。
+	const fb = body(src, "f");
+	const ret = fb.findIndex((l) => l.startsWith("ldp "));
+	check("返値も x0/x1 の2本", fb.slice(ret - 2, ret), ["ldr x0, [x29, #32]", "ldr x1, [x29, #40]"]);
+}
+// 中身が同じ文字列は1つに畳む（キーは符号位置の並び）。
+{
+	const r = asm("f : s ? s\nf `ab`\nf `ab`\nf `cd`");
+	check("同じ中身は1つに畳む", (r.text.match(/^\.Lstr\d+:$/gm) || []).length, 2);
+}
+// `charset` は**要素の幅だけ**を決める。文字数は変わらない。
+{
+	const { nodes, env } = compile("f : s ? s\nf `ab`", { charset: "utf32" });
+	const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "utf32" });
+	checkTrue("utf32 では 4 byte 要素で置く", r.text.includes(".balign 4") && r.text.includes(".word 0x61, 0x62"), r.text);
+	checkTrue("len は charset に依らず文字数", r.text.includes("mov x10, #2"), r.text);
+}
+// 器はレジスタ1本の演算に当たらない。**黙って先頭のスロットだけ見ない**。中身の比較には
+// 長さの一致と要素の走査が要るので、そこは別の命令列になる。
+{
+	const ds = asm("f : s ? s = `ab`\nf `cd`").diagnostics.map((d) => d.message);
+	checkTrue("器どうしの比較は理由を名指しする", ds.some((m) => m.includes("String と String")), JSON.stringify(ds));
+}
+// ---- 幅のある値を返す分岐 ----
+//
+// どの枝を通っても同じ場所に値がある、という一点は幅が2本でも変わらない。
+{
+	const src = "f : c ?\n\tc = 0u61 : `yes`\n\t`no`\nf 0u61";
+	const r = asm(src);
+	check("器を返す分岐は出る", r.diagnostics.length, 0);
+	const fb = body(src, "f");
+	// 枝の値は ptr と len の2本まとめて出力スロットへ写る。
+	check("2本まとめて写す", fb.filter((l) => l === "str x9, [x29, #24]").length, 2);
+	check("len も写す", fb.filter((l) => l === "str x9, [x29, #32]").length, 2);
+}
+// **どの枝も通らなかったときの `__` は、幅ごとに表し方が違う。**
+//
+//   1本  上位ビットの niche（value_representation.md §3.5）
+//   2本  `len = 0`——空文字列・空リストが `__` そのものだから（`__ = []`、unit.md）
+//
+// 新しい表現を足したのではなく、元からある同一視をそのまま命令にしている。
+{
+	const one = body("f : c ?\n\tc = 0u61 : 1\nf 0u61", "f");
+	checkTrue("1本なら niche", one.some((l) => l === "movz x12, #0x8000, lsl #48"), one.join(" / "));
+	const two = body("f : c ?\n\tc = 0u61 : `yes`\nf 0u61", "f");
+	checkTrue("2本なら len = 0", two.some((l) => l === "mov x12, #0"), two.join(" / "));
+}
+// 幅の違う枝の直和（`Char | String`）は、広い方へ持ち上げる規則が仕様にある
+// （type_system.md §2）が、その持ち上げにはメモリの確保が要るのでまだ出さない。
+{
+	const ds = asm("f : c ?\n\tc = 0u61 : `yes`\n\t0u62\nf 0u61").diagnostics.map((d) => d.message);
+	checkTrue("幅の違う枝は持ち上げとして名指しする", ds.some((m) => m.includes("持ち上げ")), JSON.stringify(ds));
+}
 
 // **トップレベルの定数はその場で畳む。** `名前 : 値` は束縛であって場所ではないので、
 // 値そのものを書けば済む——ロードは要らない。

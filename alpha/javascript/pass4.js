@@ -29,13 +29,16 @@
  *   - `+` `-` `*` `/`（GPR 幅の整数）
  *   - 裸の仮引数を持つ関数定義と、その飽和した呼び出し
  *   - トップレベルの式（`_sign_main` へ入る）
+ *   - 2文字以上の文字列（`.rodata` へ置いて `{ptr, len}` を積む）
  *
  * 集約値・浮動小数・分岐・再帰はまだ出さない。出せないものは黙って落とさず診断として
  * 名指しする——落とすと「命令が無いのに動いたように見える」が起きる。
  */
 
-import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf } from "./target_info.js";
+import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf, DEFAULT_CHARSET } from "./target_info.js";
 import { envLookup } from "./pass1.js";
+import { isBareComment } from "./pass3.js";
+import { passingOf } from "./layout.js";
 
 // AAPCS64（stack_abi.md §4.2）。引数は x0〜x7、返値は x0、一時は x9〜x15。
 const ARG_REGS = ["x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7"];
@@ -88,6 +91,25 @@ function unwrap(node) {
 // リテラルの形を見るのをやめたのは、**表現が実行時の長さで変わってはいけない**からで
 // ある。`Char` はレジスタに乗る符号位置、`String` は `{ptr, len}` の参照なので、同じ型が
 // 両方を指すと実行時に見分ける必要が出る——それは動的型付けである。
+/**
+ * 値がスロットを何本占めるか。**「渡し方」がそのまま「スタックマシンの幅」である**
+ * （stack_abi.md §4.6）——スカラーは1本、要素の並びは `{ptr}` / `{ptr, len}` で1〜2本。
+ *
+ * ただし `__` だけは §4.6 の表と食い違う。あちらは「零対象は何も渡らない」（0本）と
+ * 言うが、Pass 4 の `__` は**直和 `L | R | __` の一員としてレジスタに乗る niche**
+ * であって「引数が無い」ことではない（value_representation.md §3.5）。比較が偽のとき
+ * 返るのはこの値なので、幅を 0 にすると置き場所が消える。
+ *
+ * 直和や族（`Char | String` など）は渡し方が決まらないので `null` を返す。呼ぶ側は
+ * 黙って1本と決めつけず、名指しで落とす。
+ */
+function slotsOf(type, conf) {
+	// 型注釈が無いノードは今まで通り1本として扱う（整数リテラルなど）。
+	if (!type || type === "Unit") return 1;
+	const pass = passingOf({ atomType: type }, { target: conf.target });
+	return pass ? Math.max(pass.slots, 1) : null;
+}
+
 function isSingleChar(n) {
 	return !!n && n.atomType === "Char";
 }
@@ -217,6 +239,43 @@ class Emitter {
 		this.slot = 0; // 使用中のフレームスロット数
 		this.maxSlot = 0;
 		this.labelSeq = 0;
+		// `.rodata` に置いた文字列。中身が同じなら1つに畳む（キーは符号位置の並び）。
+		this.rodata = new Map();
+	}
+
+	/**
+	 * 文字列の中身を `.rodata` へ置き、その先頭のラベルを返す。
+	 *
+	 * 幅は `charset` が決める（`ascii` = 1 byte / `utf32` = 4 byte、option_ms_schema.md
+	 * §4.2）。どちらも固定幅なので `s ' i` は `base + i × sizeof(Char)` のままである。
+	 */
+	intern(cps) {
+		const key = cps.join(",");
+		const hit = this.rodata.get(key);
+		if (hit) return hit.label;
+		const label = `.Lstr${this.rodata.size}`;
+		this.rodata.set(key, { label, cps });
+		return label;
+	}
+
+	// `.rodata` セクションを組み立てる。1つも無ければ空を返す（節ごと出さない）。
+	rodataLines() {
+		if (this.rodata.size === 0) return [];
+		const w = charSizeOf(this.conf.charset);
+		// 幅ごとのディレクティブ。`String ≅ List(Char)` の要素幅そのものである。
+		const dir = w === 1 ? ".byte" : w === 2 ? ".hword" : ".word";
+		const out = ["", "	.section .rodata"];
+		for (const { label, cps } of this.rodata.values()) {
+			out.push(`	.balign ${w}`);
+			out.push(`${label}:`);
+			// 1 byte 幅で中身が素直な ASCII なら `.ascii` で書く——読めるほうが良い。
+			// `"` と `\` を含むもの・印字できないものは `.byte` の並びへ落とす。
+			const plain = w === 1 && cps.every((c) => c >= 0x20 && c <= 0x7e && c !== 0x22 && c !== 0x5c);
+			if (plain) out.push(`	.ascii "${cps.map((c) => String.fromCharCode(c)).join("")}"`);
+			else out.push(`	${dir} ${cps.map((c) => "0x" + c.toString(16)).join(", ")}`);
+			out.push(`	// ${cps.length} 文字`);
+		}
+		return out;
 	}
 
 	emit(text, comment) {
@@ -266,10 +325,30 @@ class Emitter {
 }
 
 /**
- * 式を評価して、結果をフレームのスロットへ積む。成功したら true。
+ * 式を評価して、結果をフレームのスロットへ積む。
  *
- * 呼ぶ側は使い終わったら `pop()` する。式の入れ子はそのままスロットの深さになる。
+ * @returns 積んだ**スロットの本数**。出せなければ `false`。
+ *
+ * 本数が返るのは、値が1本とは限らないからである——スカラーは1本だが、要素の並びは
+ * `{ptr, len}` の2本で運ぶ（stack_abi.md §4.6）。呼ぶ側は使い終わったらその本数だけ
+ * `pop()` する。式の入れ子はそのままスロットの深さになる。
  */
+/**
+ * 式を出して、**スカラー1本**であることを要求する。
+ *
+ * `cmp` も `add` もレジスタ1本の値にしか当たらない。器（`{ptr, len}`）が来たら
+ * 中身の比較・連結になるので、黙って先頭のスロットだけ見ずに名指しで落とす。
+ */
+function genScalar(node, env, em, scope, why) {
+	const w = genExpr(node, env, em, scope);
+	if (w === false) return false;
+	if (w !== 1) {
+		em.pop(w);
+		return em.fail(node, `${why}（${node && node.atomType} は ${w} 本の参照で運ぶ値）`);
+	}
+	return 1;
+}
+
 function genExpr(node, env, em, scope) {
 	const n = unwrap(node);
 	if (!n) return false;
@@ -297,7 +376,7 @@ function genExpr(node, env, em, scope) {
 		if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 		em.emit(`mov ${SCRATCH[0]}, #${v}`, `リテラル ${n.value}`);
 		em.store(SCRATCH[0], off);
-		return true;
+		return 1;
 	}
 
 	// **1文字はスカラーである。**
@@ -307,22 +386,40 @@ function genExpr(node, env, em, scope) {
 	// あり、レジスタに乗る——`is_digit : c ?   <= c <= 9` が `cmp` 1命令で書けるのは
 	// これが理由である（§4 の NOTE「文字は符号位置で数える点」）。
 	//
-	// 2文字以上は要素の並びなので `.rodata` へ置いて `{ptr, len}` で渡すことになる
-	// （stack_abi.md §4.6）。そちらはまだ出さない。
+	// 2文字以上は要素の並びなので `.rodata` へ置いて `{ptr, len}` で渡す
+	// （stack_abi.md §4.6）。
 	if (n.type === "atom" && (n.kind === "char" || n.kind === "string" || n.kind === "unicode")) {
 		const cps = codePointsOf(n);
 		if (cps === null) return em.fail(n, "文字列の中身が読めません");
-		// 型が `String` なら2文字以上である（1文字は `Char` へ潰れる）。
-		if (n.atomType !== "Char" || cps.length !== 1) {
-			return em.fail(n, `2文字以上の文字列はまだ出せません（.rodata と {ptr, len} が要る。${cps.length} 文字）`);
-		}
 		const w = charSizeOf(em.conf.charset);
-		if (cps[0] > 0xffff) return em.fail(n, `16ビットを超える符号位置はまだ出せません（U+${cps[0].toString(16)}）`);
-		const off = em.push();
-		if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
-		em.emit(`mov ${SCRATCH[0]}, #${cps[0]}`, `文字 U+${cps[0].toString(16).toUpperCase().padStart(4, "0")}（${w} byte 幅）`);
-		em.store(SCRATCH[0], off);
-		return true;
+		// 型が `String` なら2文字以上である（1文字は `Char` へ潰れ、0文字は `Unit`）。
+		if (n.atomType === "Char" && cps.length === 1) {
+			if (cps[0] > 0xffff) return em.fail(n, `16ビットを超える符号位置はまだ出せません（U+${cps[0].toString(16)}）`);
+			const off = em.push();
+			if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.emit(`mov ${SCRATCH[0]}, #${cps[0]}`, `文字 U+${cps[0].toString(16).toUpperCase().padStart(4, "0")}（${w} byte 幅）`);
+			em.store(SCRATCH[0], off);
+			return 1;
+		}
+		if (cps.length === 0) return em.fail(n, "空文字列は Unit です（`__` として出るはずのものがここへ来ました）");
+		if (cps.length > 0xffff) return em.fail(n, `16ビットを超える長さはまだ出せません（${cps.length} 文字）`);
+
+		// **`len` は文字数であってバイト数ではない。** `String ≅ List(Char)` であり
+		// （type_system.md §2）、添字は `base + i × sizeof(Char)` で引く。バイト数で持つと
+		// charset を変えた瞬間に添字がずれる——`charset` が決めるのは要素の幅だけで、
+		// **要素数は charset に依らない**という一点をここで守る。
+		const label = em.intern(cps);
+		const po = em.push();
+		const lo = po === null ? null : em.push();
+		if (lo === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		// AArch64 でラベルのアドレスを作る決まり文句。`adrp` が 4KB 単位の頁を取り、
+		// `:lo12:` が下位12ビットを足す。PC 相対なので位置独立のまま。
+		em.emit(`adrp ${SCRATCH[0]}, ${label}`, `${label} の頁（${w} byte 幅 × ${cps.length} 文字）`);
+		em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, :lo12:${label}`);
+		em.store(SCRATCH[0], po, "ptr");
+		em.emit(`mov ${SCRATCH[1]}, #${cps.length}`, "len は文字数（バイト数ではない）");
+		em.store(SCRATCH[1], lo, "len");
+		return 2;
 	}
 
 	// `__`（Unit）。niche を積む（value_representation.md §3.5）。
@@ -331,18 +428,22 @@ function genExpr(node, env, em, scope) {
 		if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 		em.emit("movz x9, #0x8000, lsl #48", "__ の niche");
 		em.store(SCRATCH[0], off);
-		return true;
+		return 1;
 	}
 
 	// 仮引数。入口でスロットへ写してあるので、そこから読む。
 	if (isIdentifierNode(n)) {
 		const slot = scope && scope.params ? scope.params.indexOf(n.value) : -1;
 		if (slot >= 0) {
-			const off = em.push();
-			if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
-			em.load(SCRATCH[0], scope.paramOffsets[slot], `仮引数 ${bareName(n.value)}`);
-			em.store(SCRATCH[0], off);
-			return true;
+			// 仮引数も幅を持つ——`{ptr, len}` で受けた仮引数は2本まとめて写す。
+			const w = scope.paramSlots ? scope.paramSlots[slot] : 1;
+			const base = em.slot;
+			for (let k = 0; k < w; k++) {
+				if (em.push() === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+				em.load(SCRATCH[0], scope.paramOffsets[slot] + k * 8, k === 0 ? `仮引数 ${bareName(n.value)}` : undefined);
+				em.store(SCRATCH[0], (base + k) * 8);
+			}
+			return w;
 		}
 		// **トップレベルの定数はその場で畳む。** `space :  ` のような `名前 : 値` は
 		// 束縛であって場所ではない——値そのものを書けば済むので、ロードは要らない。
@@ -366,16 +467,17 @@ function genExpr(node, env, em, scope) {
 		if (!machine || machine.class !== "gpr") {
 			return em.fail(n, `GPR 幅の整数演算だけを出せます（${n.atomType}）`);
 		}
-		if (!genExpr(n.left, env, em, scope)) return false;
+		const why = "GPR 幅の整数演算だけを出せます";
+		if (!genScalar(n.left, env, em, scope, why)) return false;
 		const lo = (em.slot - 1) * 8;
-		if (!genExpr(n.right, env, em, scope)) return false;
+		if (!genScalar(n.right, env, em, scope, why)) return false;
 		const ro = (em.slot - 1) * 8;
 		em.load(SCRATCH[0], lo);
 		em.load(SCRATCH[1], ro);
 		em.emit(`${INT_OPS[n.name]} ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
 		em.pop(1); // 右辺のスロットを返す。結果は左辺のスロットへ書く。
 		em.store(SCRATCH[0], lo);
-		return true;
+		return 1;
 	}
 
 	// **比較は値を返す。**（comparison.md §2.1）真ならオペランド、偽なら `__`。
@@ -402,9 +504,10 @@ function genExpr(node, env, em, scope) {
 		if (!cmpOk(n.left) || !cmpOk(n.right)) {
 			return em.fail(n, `GPR 幅の値の比較だけを出せます（${n.left && n.left.atomType} と ${n.right && n.right.atomType}）`);
 		}
-		if (!genExpr(n.left, env, em, scope)) return false;
+		const whyCmp = "GPR 幅の値の比較だけを出せます";
+		if (!genScalar(n.left, env, em, scope, whyCmp)) return false;
 		const lo = (em.slot - 1) * 8;
-		if (!genExpr(n.right, env, em, scope)) return false;
+		if (!genScalar(n.right, env, em, scope, whyCmp)) return false;
 		const ro = (em.slot - 1) * 8;
 		em.load(SCRATCH[0], lo);
 		em.load(SCRATCH[1], ro);
@@ -420,7 +523,7 @@ function genExpr(node, env, em, scope) {
 		em.emit(`csel ${SCRATCH[0]}, x11, x12, ${CMP_COND[n.name]}`, "真なら値、偽なら __");
 		em.pop(1);
 		em.store(SCRATCH[0], lo);
-		return true;
+		return 1;
 	}
 
 	// **連鎖比較**（`  <= c <= 9`）。二項と違い、真のとき返るのは**必ず中央**である
@@ -442,7 +545,7 @@ function genExpr(node, env, em, scope) {
 		}
 		const offs = [];
 		for (const side of sides) {
-			if (!genExpr(side, env, em, scope)) return false;
+			if (!genScalar(side, env, em, scope, "GPR 幅の値の連鎖比較だけを出せます")) return false;
 			offs.push((em.slot - 1) * 8);
 		}
 		em.load(SCRATCH[0], offs[0]);
@@ -458,7 +561,7 @@ function genExpr(node, env, em, scope) {
 		em.emit(`csel ${SCRATCH[0]}, ${SCRATCH[1]}, x12, ne`, "真なら中央、偽なら __");
 		em.pop(2);
 		em.store(SCRATCH[0], offs[0]);
-		return true;
+		return 1;
 	}
 
 	// **短絡**（`&` と `|`）。どちらも「左を見て、右を評価するかどうかを決める」形である。
@@ -473,7 +576,9 @@ function genExpr(node, env, em, scope) {
 	// 結果は左のスロットに揃える——どちらの経路を通っても同じ場所に値がある。
 	if (n.type === "operation" && (n.name === "and" || n.name === "or") && n.position === "infix") {
 		const isAnd = n.name === "and";
-		if (!genExpr(n.left, env, em, scope)) return false;
+		// 判定は niche との比較なので、両辺ともレジスタ1本の値であることが要る。
+		const whySc = `短絡はレジスタ1本の値どうしだけを出せます（${n.op}）`;
+		if (!genScalar(n.left, env, em, scope, whySc)) return false;
 		const lo = (em.slot - 1) * 8;
 		const end = em.newLabel("sc");
 		em.load(SCRATCH[0], lo, "左辺");
@@ -483,12 +588,12 @@ function genExpr(node, env, em, scope) {
 			`b.${isAnd ? "eq" : "ne"} ${end}`,
 			isAnd ? "左が __ なら全体が __（右を評価しない）" : "左が __ でなければ左が結果（右を評価しない）"
 		);
-		if (!genExpr(n.right, env, em, scope)) return false;
+		if (!genScalar(n.right, env, em, scope, whySc)) return false;
 		em.load(SCRATCH[0], (em.slot - 1) * 8);
 		em.pop(1);
 		em.store(SCRATCH[0], lo, "右辺が結果");
 		em.label(end);
-		return true;
+		return 1;
 	}
 
 	// 飽和した呼び出し。引数をスロットで作ってから x0〜x7 へ積んで `bl`。
@@ -514,21 +619,40 @@ function genExpr(node, env, em, scope) {
 		const drop = n.monoDrop || [];
 		if (n.monoLabel) callee = n.monoLabel;
 		const passed = args.filter((_, i) => !drop.includes(i));
-		if (passed.length > ARG_REGS.length) return em.fail(n, `引数が ${ARG_REGS.length} 本を超えます`);
-		const offs = [];
+		// **数えるのは引数の個数ではなくレジスタの本数である。** 器を渡す引数は
+		// `{ptr, len}` で2本使う（stack_abi.md §4.6）。
+		const parts = [];
 		for (const a of passed) {
-			if (!genExpr(a, env, em, scope)) return false;
-			offs.push((em.slot - 1) * 8);
+			const w = genExpr(a, env, em, scope);
+			if (w === false) return false;
+			parts.push({ off: (em.slot - w) * 8, w });
+		}
+		const total = parts.reduce((acc, x) => acc + x.w, 0);
+		if (total > ARG_REGS.length) {
+			return em.fail(n, `引数がレジスタ ${ARG_REGS.length} 本を超えます（${passed.length} 個で ${total} 本）`);
 		}
 		// 引数レジスタへ積むのは**全部作り終えてから**。先に x0 へ書くと、2つ目の
 		// 引数を作る途中で潰れる（式の中に呼び出しがあれば必ず潰れる）。
-		offs.forEach((o, i) => em.load(ARG_REGS[i], o, `第${i + 1}引数`));
-		em.pop(offs.length);
+		let reg = 0;
+		parts.forEach((part, i) => {
+			for (let k = 0; k < part.w; k++) {
+				em.load(ARG_REGS[reg], part.off + k * 8, k === 0 ? `第${i + 1}引数${part.w > 1 ? "の ptr" : ""}` : "その len");
+				reg++;
+			}
+		});
+		em.pop(total);
 		em.emit(`bl ${callee}`, n.monoLabel ? "呼び出し（具体化済み）" : "呼び出し");
-		const off = em.push();
-		if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
-		em.store("x0", off, "返値");
-		return true;
+		// 返値の幅も型が決める。器を返す関数は x0/x1 で `{ptr, len}` を返す
+		// （AAPCS64 が16バイトの複合型をそう返すのと同じ置き方）。
+		const rw = slotsOf(n.atomType, em.conf);
+		if (rw === null) return em.fail(n, `返値の渡し方が決まりません（${n.atomType}）`);
+		if (rw > 2) return em.fail(n, `返値が ${rw} 本の関数はまだ出せません（${n.atomType}）`);
+		const rbase = em.slot;
+		for (let k = 0; k < rw; k++) {
+			if (em.push() === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.store(ARG_REGS[k], (rbase + k) * 8, k === 0 ? (rw > 1 ? "返値の ptr" : "返値") : "返値の len");
+		}
+		return rw;
 	}
 
 	// **多相な器を実行時の添字で引くのは、Sign が持たないと決めた唯一の場所である。**
@@ -550,12 +674,67 @@ function genExpr(node, env, em, scope) {
 }
 
 /**
- * match_case の並びを分岐へ落とす。結果は呼び出し元が使うスロット1つに揃える
+ * `__` を幅ぶん置く。**表し方は幅ごとに違う。**
+ *
+ *   1本（レジスタ上の値）  上位ビットの niche（value_representation.md §3.5）
+ *   2本（`{ptr, len}`）    `len = 0`
+ *
+ * 2本目が `len = 0` なのは、**空文字列・空リストが `__` そのものだから**である
+ * （`__ = []`、unit.md §値としての性質 / type_system.md §空文字列）。零対象は一つしか
+ * ないので、器の側にも既に `__` の置き場所がある——新しい表現を足したのではなく、
+ * 元からある同一視をそのまま命令にしている。`String` は2文字以上、`Char` は1文字
+ * なので、`len = 0` は他の値と衝突しない。
+ */
+function emitUnit(em, offs) {
+	if (offs.length === 1) {
+		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
+		em.store("x12", offs[0]);
+		return;
+	}
+	em.emit("mov x12, #0", "__ は空（`__ = []`）");
+	em.store("x12", offs[0], "ptr");
+	em.store("x12", offs[1], "len = 0 が __");
+}
+
+/**
+ * match_case の並びを分岐へ落とす。結果は呼び出し元が使うスロットへ揃える
  * ——どの枝を通っても同じ場所に値がある、という一点を守る。
  */
 function genMatch(node, env, em, scope) {
-	const out = em.push();
-	if (out === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+	// **どの枝も同じ幅でなければ、置き場所が決まらない。** `Char | String` のような直和は
+	// 「1本の枝と2本の枝」を1つの場所へ揃えろと言っていることになる。仕様は答えを持って
+	// いる——「表現の違う枝の直和は広い方に揃え、`Char` の枝は境界で1要素の連続領域へ
+	// 持ち上げる」（type_system.md §2）——が、その持ち上げにはメモリの確保が要るので
+	// ここではまだ出さない。黙って先頭だけ置かず名指しする。
+	const width = slotsOf(node.atomType, em.conf);
+	if (width === null) {
+		return em.fail(node, `枝の幅が揃いません（${node.atomType}）——広い方へ揃える持ち上げがまだ出せません（type_system.md §2）`);
+	}
+	if (width > 2) return em.fail(node, `${width} 本で運ぶ値を返す分岐はまだ出せません（${node.atomType}）`);
+
+	const outs = [];
+	for (let k = 0; k < width; k++) {
+		const o = em.push();
+		if (o === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		outs.push(o);
+	}
+	// 枝の値を出力スロットへ写す。幅が合わない枝は上と同じ持ち上げの話なので落とす。
+	const move = (line) => {
+		const w = genExpr(line, env, em, scope);
+		if (w === false) return false;
+		if (w !== width) {
+			em.pop(w);
+			return em.fail(line, `枝の幅が揃いません（${w} 本と ${width} 本）——広い方へ揃える持ち上げがまだ出せません（type_system.md §2）`);
+		}
+		const base = em.slot - w;
+		for (let k = 0; k < w; k++) {
+			em.load(SCRATCH[0], (base + k) * 8);
+			em.store(SCRATCH[0], outs[k], k === 0 ? "枝の値" : undefined);
+		}
+		em.pop(w);
+		return true;
+	};
+
 	const end = em.newLabel("end");
 	const lines = node.lines;
 	for (let i = 0; i < lines.length; i++) {
@@ -563,33 +742,25 @@ function genMatch(node, env, em, scope) {
 		const isArm = isDefineNode(line);
 		if (!isArm) {
 			// フォールバック。条件を見ずにここへ来たら必ず値になる。
-			if (!genExpr(line, env, em, scope)) return false;
-			em.load(SCRATCH[0], (em.slot - 1) * 8);
-			em.pop(1);
-			em.store(SCRATCH[0], out, "枝の値");
+			if (!move(line)) return false;
 			break;
 		}
 		const next = em.newLabel("arm");
-		if (!genExpr(line.left, env, em, scope)) return false;
+		// 条件は必ずレジスタ1本の値である——niche と比べる形なので器は当たらない。
+		if (!genScalar(line.left, env, em, scope, "分岐の条件はレジスタ1本の値だけを出せます")) return false;
 		em.load(SCRATCH[0], (em.slot - 1) * 8, "条件");
 		em.pop(1);
 		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
 		em.emit(`cmp ${SCRATCH[0]}, x12`);
 		em.emit(`b.eq ${next}`, "__ なら次の枝へ");
-		if (!genExpr(line.right, env, em, scope)) return false;
-		em.load(SCRATCH[0], (em.slot - 1) * 8);
-		em.pop(1);
-		em.store(SCRATCH[0], out, "枝の値");
+		if (!move(line.right)) return false;
 		em.emit(`b ${end}`);
 		em.label(next);
 		// 最後の行が条件付きなら、どの枝も通らない場合がある。そのときの値は `__`。
-		if (i === lines.length - 1) {
-			em.emit("movz x12, #0x8000, lsl #48", "どの枝も通らなければ __");
-			em.store("x12", out);
-		}
+		if (i === lines.length - 1) emitUnit(em, outs);
 	}
 	em.label(end);
-	return true;
+	return width;
 }
 
 /**
@@ -625,8 +796,26 @@ function genFunction(name, lambdaNode, env, em, mono) {
 		});
 		return;
 	}
-	if (params.length > ARG_REGS.length) {
-		em.diagnostics.push({ severity: "error", message: `${name}: 引数が ${ARG_REGS.length} 本を超えます`, node: lambdaNode });
+	// 仮引数の幅は呼び出しサイトから決まった型が言う（pass3.js の `callsiteParamTypes`）。
+	const allTypes = lambdaNode.callsiteParamTypes || [];
+	const keep = allParams.map((x, i) => i).filter((i) => allParams[i] === null || !(allParams[i] in callees));
+	const paramSlots = keep.map((i) => slotsOf(allTypes[i], em.conf));
+	if (paramSlots.some((w) => w === null)) {
+		const bad = params[paramSlots.findIndex((w) => w === null)];
+		em.diagnostics.push({
+			severity: "error",
+			message: `${name}: 仮引数 ${bareName(bad)} の渡し方が決まりません（直和か族）`,
+			node: lambdaNode,
+		});
+		return;
+	}
+	const regs = paramSlots.reduce((a, b) => a + b, 0);
+	if (regs > ARG_REGS.length) {
+		em.diagnostics.push({
+			severity: "error",
+			message: `${name}: 引数がレジスタ ${ARG_REGS.length} 本を超えます（${params.length} 個で ${regs} 本）`,
+			node: lambdaNode,
+		});
 		return;
 	}
 
@@ -638,15 +827,32 @@ function genFunction(name, lambdaNode, env, em, mono) {
 
 	// **仮引数を入口でスロットへ写す。** 引数レジスタは最初の `bl` で壊れるので、
 	// 本体のどこからでも読める場所へ移しておく必要がある。
-	const paramOffsets = params.map(() => em.push());
-	params.forEach((p, i) => em.store(ARG_REGS[i], paramOffsets[i], `仮引数 ${bareName(p)} を退避`));
+	// 幅は引数ごとに違う——器を受ける仮引数は `{ptr, len}` で2本来る（stack_abi.md §4.6）。
+	const paramOffsets = [];
+	let reg = 0;
+	for (let i = 0; i < params.length; i++) {
+		const w = paramSlots[i];
+		paramOffsets.push(em.slot * 8);
+		for (let k = 0; k < w; k++) {
+			em.push();
+			em.store(ARG_REGS[reg], (em.slot - 1) * 8, k === 0 ? `仮引数 ${bareName(params[i])} を退避${w > 1 ? "（ptr）" : ""}` : "（len）");
+			reg++;
+		}
+	}
 	for (const [pn, cn] of Object.entries(callees)) em.emit(`// ${bareName(pn)} = ${cn}`, "具体化された呼び先");
 
 	const before = em.diagnostics.length;
-	const ok = genExpr(lambdaNode.right, env, em, { params, paramOffsets, callees });
-	if (ok) {
-		em.load("x0", (em.slot - 1) * 8, "返値を x0 へ");
-		em.pop(1);
+	const ok = genExpr(lambdaNode.right, env, em, { params, paramOffsets, paramSlots, callees });
+	if (ok !== false) {
+		// 返値も幅ぶん x0/x1 へ載せる。
+		if (ok > 2) {
+			em.diagnostics.push({ severity: "error", message: `${name}: ${ok} 本で返す関数はまだ出せません`, node: lambdaNode });
+		}
+		const base = em.slot - ok;
+		for (let k = 0; k < Math.min(ok, 2); k++) {
+			em.load(ARG_REGS[k], (base + k) * 8, k === 0 ? (ok > 1 ? "返値の ptr を x0 へ" : "返値を x0 へ") : "返値の len を x1 へ");
+		}
+		em.pop(ok);
 	} else if (em.diagnostics.length === before) {
 		em.diagnostics.push({ severity: "error", message: `${name}: 本体を出せませんでした`, node: lambdaNode });
 	}
@@ -663,7 +869,7 @@ function genFunction(name, lambdaNode, env, em, mono) {
  * @returns {{ text: string, diagnostics: Array }}
  */
 function generateAsm(nodes, env, options = {}) {
-	const conf = { target: options.target || "aarch64_qemu", charset: options.charset || "utf32" };
+	const conf = { target: options.target || "aarch64_qemu", charset: options.charset || DEFAULT_CHARSET };
 	const em = new Emitter(conf);
 	if (!widthsOf(conf.target)) {
 		return {
@@ -723,14 +929,20 @@ function generateAsm(nodes, env, options = {}) {
 		// コメントはバッククォート文字列そのものなので AST に残るが、値として使われて
 		// いない以上、命令は出ない。ここを診断にすると、コメントの数だけ「出せない」が
 		// 並んで本当の穴が埋もれる。
-		if (node.type === "atom" && node.kind === "string") continue;
+		//
+		// 判定は Pass 3 の charset の門番と**同じ関数**である。食い違うと「検査は通った
+		// のに `.rodata` へ出る」（またはその逆）が起きる。
+		if (isBareComment(node)) continue;
 		const target = isDefineNode(node) ? node.right : node;
-		if (genExpr(target, env, em, null)) em.pop(1);
+		const w = genExpr(target, env, em, null);
+		if (w !== false) em.pop(w);
 	}
 	const body = em.lines;
 	em.lines = outer;
 	em.lines.push("\t.global _sign_main");
 	em.lines.push(...wrapFrame(body, em.maxSlot, "_sign_main"));
+	// 文字列の中身は最後に置く。`.text` と混ぜないのは、書き換えない領域だからである。
+	em.lines.push(...em.rodataLines());
 
 	return { text: em.lines.join("\n") + "\n", diagnostics: em.diagnostics };
 }
