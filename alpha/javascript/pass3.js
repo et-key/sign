@@ -533,7 +533,20 @@ function sameShape(a, b) {
   return a.slotKind === b.slotKind && JSON.stringify(a.types) === JSON.stringify(b.types) && JSON.stringify(a.names || null) === JSON.stringify(b.names || null);
 }
 
+// `'` の右辺に置かれた前置 `@` は「名前ではなく中身を使う」という指示である
+// （参照外しではない）。仮引数の型を逆算する側がそれを知る必要があるので、印を付ける。
+// `'` の右辺が「値として引く」形か（前置 `@`、または数値・式）。
+function isGetPropValueKey(k) {
+  return !!k && k.type === "operation" && k.position === "prefix" && k.name === "input";
+}
+
+function markGetPropKey(node) {
+  const k = node && node.right;
+  if (k && k.type === "operation" && k.position === "prefix" && k.name === "input") k.inGetPropKey = true;
+}
+
 function getPropResultType(node, env) {
+  markGetPropKey(node);
   // 器そのものを解決する。識別子なら束縛先まで辿る——`l : [1 2 3]` の `l ' 0` を
   // 解けなければ、実用上ほとんどの添字が型を失う。
   const base = derefToNode(node.left, env);
@@ -588,6 +601,22 @@ function getPropResultType(node, env) {
     if (key && key.type === "atom" && key.kind === "number") {
       const i = parseInt(key.value, 10);
       return slots[i] ? inferAtomType(slots[i], env) : null;
+    }
+    // **多相な `Struct` への実行時添字は原理的にコード生成できない**（§2）。`p ' @i` は
+    // 「名前ではなく中身で引く」形だが、スロットごとに型が違ってよいのが直積の意味なので、
+    // どの命令を出すか決まらない。スロットの型が全部同じならそれは `List` である
+    // （幅が揃うかで分ける、§2）ので、ここへ来るのは本当に多相な場合だけである。
+    //
+    // 黙って未解決にせず名指しする——`_` のままだと「まだ実装していない」に見えるが、
+    // これは**書けないことが決まっている**形である。
+    // 実行時の添字が引けない理由は2つあり、どちらかは必ず当たる。
+    //
+    //   名前付き … 物理配置は**名前順**なので、連番と一致しない。「N番目は offset N×幅」
+    //              の確約が得られるのは連番スロットだけである（stack_abi.md §7.1 CAUTION）
+    //   連番     … スロットごとに型が違う。揃っていればそれは `List` である（§2）ので、
+    //              ここへ来る連番スロットは必ず多相である
+    if (isGetPropValueKey(key)) {
+      node.runtimeIndexProblem = base && base.slotKind === "named" ? "named" : "polymorphic";
     }
     return null;
   }
@@ -1136,12 +1165,17 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
     // `$is_digit` とアドレスを取り、受け側は `@p` で呼ぶ。仕組みは既にあったが、
     // **型がそれを書き写していなかった**——`take_while : Atom String -> String` の
     // 第1引数は `Address` である。Pass 4 が関数ポインタを渡す命令を選ぶのに要る。
+    // ただし **`'` の右辺の `@` は参照外しではない**。そこでの `@` は「名前ではなく
+    // 中身を使う」という指示であり（type_system.md §2 のアクセス規則）、指すのは
+    // アドレスではなく添字である。ここを Address と読むと `f : p i ? p ' @i` の `i` が
+    // アドレス扱いになる。
     if (
       node.type === "operation" &&
       node.position === "prefix" &&
       node.name === "input" &&
       isIdentifierNode(node.operand) &&
-      paramNames.has(node.operand.value)
+      paramNames.has(node.operand.value) &&
+      !node.inGetPropKey
     ) {
       refine(node.operand.value, "Address");
     }
@@ -1778,6 +1812,38 @@ function collectUnitReason(node, env, diagnostics) {
 //
 // 未解決（null）が混ざる場合は直和全体が未解決——分かっていない枝がある以上、
 // 分かっている枝だけで返値型を名乗ると嘘になる。
+/**
+ * **多相な `Struct` へ実行時の添字は引けない**（§2）。
+ *
+ * `p ' @i` は「名前ではなく中身で引く」形だが、スロットごとに型が違ってよいのが直積の
+ * 意味なので、どの命令を出すか決まらない。スロットの型が全部同じならそれは `List` で
+ * ある（幅が揃うかで分ける、§2）ので、ここへ来るのは本当に多相な場合だけである。
+ *
+ * 黙って未解決にしない。`_` のままだと「まだ実装していない」に見えるが、これは
+ * **書けないことが決まっている**形である。
+ */
+function collectPolymorphicIndex(nodes, diagnostics) {
+  const visit = (n) => {
+    if (!n || typeof n !== "object") return;
+    if (n.runtimeIndexProblem) {
+      diagnostics.push({
+        severity: "error",
+        message:
+          n.runtimeIndexProblem === "named"
+            ? "stack_abi.md §7.1違反: 名前付きスロットへ実行時の添字は引けません" +
+              "（物理配置は名前順なので連番と一致しない）。名前で引くか、連番スロットにしてください"
+            : "type_system.md §2違反: 多相な Struct へ実行時の添字は引けません" +
+              "（スロットごとに型が違うため命令が決まらない）。スロットの型を揃えれば List になります",
+        node: n,
+      });
+    }
+    for (const k of ["left", "right", "operand"]) visit(n[k]);
+    for (const l of n.lines || []) visit(l);
+    for (const e of n.entries || []) visit(e.default);
+  };
+  for (const n of nodes) visit(n);
+}
+
 function joinArmTypes(types) {
   if (types.some((x) => x === null || x === undefined)) return null;
   // **直和は平らにする。** arm の型が既に直和（再帰呼び出しの返値など）だと、それを1個の
@@ -2064,6 +2130,7 @@ function annotateAll(nodes, env, diagnostics) {
   for (const node of nodes) clearTypeAnnotations(node);
   for (const node of nodes) annotateTypes(node, env, diagnostics);
   if (diagnostics) collectCompositionMismatch(nodes, env, diagnostics);
+  if (diagnostics) collectPolymorphicIndex(nodes, diagnostics);
   return nodes;
 }
 
