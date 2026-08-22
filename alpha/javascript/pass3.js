@@ -1864,6 +1864,8 @@ function collectReturns(nodes, env) {
     // 決まるので、`inc 3` の型が呼び先の返値として伝わるように識別子テーブルへ書き戻す。
     const pf = pointfreeSignature(rhs);
     if (pf) {
+      // 演算子表から返値が読めているのだから、これは種ではない。
+      binding.returnsSeeded = false;
       if (binding.returns !== pf.ret) {
         binding.returns = pf.ret;
         changed = true;
@@ -2011,6 +2013,18 @@ function annotateAll(nodes, env, diagnostics) {
   }
   // 上限は「定義の数 + 2」。各周回で少なくとも1つは束を上がるので、それ以上は回らない。
   const limit = nodes.length + 2;
+  //
+  // **2相で回す。** 返値型の不動点は底から単調に上がる設計だが、**仮引数の型は後から
+  // 狭まる**（呼び出しサイトからの具体化）。これは単調な変化ではないので、一度上がった
+  // 返値は狭まらない——再帰の枝が前の周回の値を読み、それが自分を養い続けるからである。
+  //
+  // `unwind : st d ?` がこれを踏んでいた。`st` は初回に既定の `Atom` で、返値が `Atom`
+  // へ上がる。呼び出しサイトから `st` が `Int` へ狭まった後も `join(Atom, Int) = Atom`
+  // で固定されていた。
+  //
+  // 1相目で仮引数の型を確定させ、返値を底へ戻して2相目を回す。2相目は最初から
+  // 正しい仮引数の型で始まるので、基底ケースが決めた型がそのまま残る。
+  const runFixpoint = () => {
   for (let i = 0; i < limit; i++) {
     for (const node of nodes) clearTypeAnnotations(node);
     for (const node of nodes) annotateTypes(node, env, null);
@@ -2023,6 +2037,19 @@ function annotateAll(nodes, env, diagnostics) {
     const c = collectCallsiteParamTypes(nodes, env);
     if (!a && !b && !c) break;
   }
+  };
+  runFixpoint();
+  // 返値だけを底へ戻して、確定した仮引数の型で回し直す。
+  for (const node of nodes) {
+    if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+    const b2 = envLookup(env, node.left.value);
+    if (b2 && b2.returns !== undefined) {
+      b2.returns = "Unit";
+      // 底へ戻したのだから、これは答えではなく種である——印も立て直す。
+      b2.returnsSeeded = true;
+    }
+  }
+  runFixpoint();
   // **上がらなかった種は答えではない。** 不動点が一度も本体から型を読めなかった関数は
   // 「何も返さない」のではなく「まだ分からない」のである。底を置いたまま報告すると、
   // `f : [x ~xs] ? xs` が `Unit` を返すと言い張りながら値はリストを返す——型と値が
