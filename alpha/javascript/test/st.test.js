@@ -158,6 +158,13 @@ check("連番スロットの中でも要素型が残る", entries("t : 1 , [1 2]
 	"t : Struct(Int List(Int) List(Float))",
 ]);
 
+// ブロック記法は1行のカンマ形と同じ型になる（list_model.md §3.1 の IMPORTANT）。
+// 改行とタブだけで次元が上がるので、行末のカンマは要らない。
+check("ブロックの行が次元の行になる", entries("s :\n\t1 2\n\t3 4"), ["s : List(List(Int))"]);
+check("1行のカンマ形と一致する", entries("s : 1 2 , 3 4"), ["s : List(List(Int))"]);
+check("3次元まで通る", entries("v3 :\n\t1 2 , 3 4\n\t5 6 , 7 8"), ["v3 : List(List(List(Int)))"]);
+check("行が揃わなければ Struct", entries("L :\n\t1 2\n\t3 4 5"), ["L : Struct"]);
+
 
 // **裸の仮引数は、証拠が何も無くても `Atom` まで書ける。**
 //

@@ -436,15 +436,24 @@ function slotShapeKey(node, env, depth = 0) {
 
 // List の要素ノード。均せなければ null（個数が読めない）。
 function listItemNodes(node, env) {
-  const d = derefValueNode(node, env);
+  let d = derefValueNode(node, env);
   if (!d) return null;
+  // 括りのブロックを剥がす。中身が何であれ、1行だけのブロックは括りでしかない。
+  while (Array.isArray(d.lines) && d.lines.length === 1) d = d.lines[0];
+  // **均質な直積も List である**（カンマが上げた次元の行）。行の並びを数えるには
+  // 直積で割る必要がある——`[1 2 , 3 4]` は行が2つであって1つではない。
+  // どの族で割るかは根が決める（族を混ぜると次元が潰れる）。
+  const coproduct = ["construct", "concat", "push", "unshift"];
+  const isProduct = d.type === "operation" && d.name === "product";
+  const same = (n) =>
+    n && n.type === "operation" && (isProduct ? n.name === "product" : coproduct.includes(n.name));
   const flat = (n) => {
-    if (n && n.type === "operation" && ["construct", "concat", "push", "unshift"].includes(n.name)) {
-      return [...flat(n.left), ...flat(n.right)];
-    }
-    if (Array.isArray(n.lines) && n.lines.length === 1) return flat(n.lines[0]);
+    if (same(n)) return [...flat(n.left), ...flat(n.right)];
+    if (!isProduct && n && Array.isArray(n.lines) && n.lines.length === 1 && same(n.lines[0])) return flat(n.lines[0]);
     return [n];
   };
+  // 行のブロック（`L :` の下に行が並ぶ形）は行そのものが要素である。
+  if (Array.isArray(d.lines) && d.lines.length > 1 && d.lines.every((l) => !isDefineNode(l))) return d.lines;
   const items = flat(d);
   return items.length === 1 && items[0] === d ? null : items;
 }
