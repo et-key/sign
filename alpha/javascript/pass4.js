@@ -464,6 +464,36 @@ function genExpr(node, env, em, scope) {
 		return true;
 	}
 
+	// **短絡**（`&` と `|`）。どちらも「左を見て、右を評価するかどうかを決める」形である。
+	//
+	//   &   左が `__` なら全体が `__`（右は評価しない）。そうでなければ右がそのまま結果
+	//   |   左が `__` でなければ左がそのまま結果（右は評価しない）。`__` なら右
+	//
+	// 評価しないことは意味論の一部である。Sign は副作用と非停止を持つので、
+	// `__ & ($UART # x)` で書き込みが起きるかどうかが変わる（operator_table.md
+	// 「Unit 欄の読み方」）。命令の節約ではなく、**評価するかしないか**を出している。
+	//
+	// 結果は左のスロットに揃える——どちらの経路を通っても同じ場所に値がある。
+	if (n.type === "operation" && (n.name === "and" || n.name === "or") && n.position === "infix") {
+		const isAnd = n.name === "and";
+		if (!genExpr(n.left, env, em, scope)) return false;
+		const lo = (em.slot - 1) * 8;
+		const end = em.newLabel("sc");
+		em.load(SCRATCH[0], lo, "左辺");
+		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
+		em.emit(`cmp ${SCRATCH[0]}, x12`);
+		em.emit(
+			`b.${isAnd ? "eq" : "ne"} ${end}`,
+			isAnd ? "左が __ なら全体が __（右を評価しない）" : "左が __ でなければ左が結果（右を評価しない）"
+		);
+		if (!genExpr(n.right, env, em, scope)) return false;
+		em.load(SCRATCH[0], (em.slot - 1) * 8);
+		em.pop(1);
+		em.store(SCRATCH[0], lo, "右辺が結果");
+		em.label(end);
+		return true;
+	}
+
 	// 飽和した呼び出し。引数をスロットで作ってから x0〜x7 へ積んで `bl`。
 	if (n.type === "operation" && n.name === "apply") {
 		const { base, args } = applyChain(n);

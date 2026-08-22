@@ -228,6 +228,30 @@ checkTrue("2文字以上は理由を名指しする", asm("s : `ab`\nf : x ? x\n
 check("定数参照は畳まれる", asm("one : 1\nf : x ? x + one\nf 2").diagnostics.length, 0);
 checkTrue("畳んだ結果はリテラルと同じ命令", (body("one : 1\nf : x ? x + one\nf 2", "f") || []).some((l) => l === "mov x9, #1"));
 
+
+// ---- 短絡（`&` と `|`） ----
+//
+// どちらも「左を見て、右を評価するかどうかを決める」形である。
+//
+//   &   左が `__` なら全体が `__`（右は評価しない）
+//   |   左が `__` でなければ左が結果（右は評価しない）
+//
+// **評価しないことは意味論の一部である。** Sign は副作用と非停止を持つので、
+// `__ & ($UART # x)` で書き込みが起きるかどうかが変わる（operator_table.md
+// 「Unit 欄の読み方」）。命令の節約ではなく、評価するかしないかを出している。
+{
+	const ls = body("f : a b ? a > 0 & b > 0\nf 1 2", "f");
+	checkTrue("左が __ なら右へ行かず飛ぶ", ls.some((l) => /^b\.eq \.Lsc/.test(l)), ls.join(" / "));
+	checkTrue("飛び先は右辺の後ろ", ls.some((l) => /^\.Lsc\d+:$/.test(l)));
+}
+{
+	const ls = body("f : a b ? a > 0 | b > 0\nf 1 2", "f");
+	checkTrue("`|` は左が __ でなければ飛ぶ", ls.some((l) => /^b\.ne \.Lsc/.test(l)), ls.join(" / "));
+}
+check("入れ子でも出る", asm("f : a b c ? (a > 0 & b > 0) | c > 0\nf 1 2 3").diagnostics.length, 0);
+// `|` はバックトラックの書き方でもある（n_queens.sn の try_col がこの形）。
+check("バックトラックの形", asm("g : x ? x\nf : a ? (g a) | (f (a - 1))\nf 3").diagnostics.length, 0);
+
 // ---- 出せないものは名指しする ----
 //
 // 黙って落とすと、命令の無い関数ができあがって「動いたように見える」——型が値より
