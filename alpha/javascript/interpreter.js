@@ -415,8 +415,30 @@ class TailCall {
 // なる式」をどう評価するかのコールバック——通常のevaluate()からはevaluate自身を渡す
 // （常に値を完全に確定させる、従来通りの挙動）。末尾呼び出し検出用のevaluateTailからは
 // evaluateTail自身を渡すことで、末尾位置の判定ロジックをこの1箇所だけに保つ。
+/**
+ * **どの行も定義でないブロックは、行が要素の列である。**
+ *
+ * `list_model.md` §3.1 は2次元配列のブロック記法を挙げている。
+ *
+ *     L :
+ *         1 2
+ *         3 4
+ *
+ * これまでは**全行を評価してから最後の1つだけを残して**いた。効果は既に起きているので
+ * 失われるのは値だけであり、書いた行が黙って捨てられていたことになる——値の位置で
+ * それが役に立つ場面は無い。集めれば、捨てていた分がそのまま行になる。
+ *
+ * 定義を1つでも含むブロックは対象外である。`名前 : 値` は構造体、`条件 : 結果` は
+ * match_case であり、どちらも「行が要素」ではない。
+ */
+function isRowBlock(node) {
+  const lines = node.lines;
+  return Array.isArray(lines) && lines.length > 1 && lines.every((l) => !isDefineNode(l));
+}
+
 function evalIndentBlock(node, env, tailEval) {
   const lines = node.lines;
+  if (isRowBlock(node)) return lines.map((l) => evaluate(l, env));
   let result = UNIT;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];

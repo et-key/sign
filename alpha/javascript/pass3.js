@@ -365,18 +365,36 @@ function sliceIndexNode(node) {
 }
 
 // 連番スロットを左から並べる。`1 , \`a\` , 2.5` は product の入れ子なので均す。
+const COPRODUCT_OPS = ["construct", "concat", "push", "unshift"];
+
+/**
+ * 連番スロットへ均す。**根の演算子と同じ族でだけ割る。**
+ *
+ * 直積（カンマ）の根なら、割るのは直積だけである——`1 2 , 3 4` の行は `1 2` と `3 4` の
+ * 2つであって、`1 2 3 4` の4つではない。行の中の余積まで降りると次元が潰れる。
+ * 余積の根なら、割るのは余積だけである——`[1 2] [3 4]` は同じ1段の中で伸びた列なので、
+ * 入れ子の余積まで降りるのが正しい。
+ *
+ * 族を混ぜて割ると、**カンマが上げた次元を勝手に下げてしまう**（`1 2 , 3 4` が
+ * `List(Int)` と型付けられ、値の `[[1,2],[3,4]]` と食い違う）。
+ */
+function slotsByFamily(node, coproduct) {
+  const same = (n) =>
+    n && n.type === "operation" && (coproduct ? COPRODUCT_OPS.includes(n.name) : n.name === "product");
+  const walk = (n) => {
+    if (same(n)) return [...walk(n.left), ...walk(n.right)];
+    // 余積の側だけ、括りのブロックを剥がして中の余積まで割る。
+    if (coproduct && n && Array.isArray(n.lines) && n.lines.length === 1 && same(n.lines[0])) return walk(n.lines[0]);
+    return [n];
+  };
+  return walk(node);
+}
+
 function positionalSlots(node) {
-  if (node && node.type === "operation") {
-    // 直積（カンマ）だけでなく、**余積で作った不均質な連続領域**もスロットへ分解する
-    // ——`[1 2] [3 4]` は `Struct(Int Int List(Int))` であり、分解できなければ
-    // オフセットが出ない（分解できない `Struct` は自分自身を1スロットとして数えて
-    // しまい、無限に回る）。
-    if (["product", "construct", "concat", "push", "unshift"].includes(node.name)) {
-      return [...positionalSlots(node.left), ...positionalSlots(node.right)];
-    }
-  }
-  // 1行だけのブロックは括りでしかない（`[1 2]` の外側）。
-  if (node && Array.isArray(node.lines) && node.lines.length === 1) return positionalSlots(node.lines[0]);
+  if (!node) return [node];
+  const isCoproduct = node.type === "operation" && COPRODUCT_OPS.includes(node.name);
+  if (node.type === "operation" && (node.name === "product" || isCoproduct)) return slotsByFamily(node, isCoproduct);
+  if (Array.isArray(node.lines) && node.lines.length === 1) return positionalSlots(node.lines[0]);
   return [node];
 }
 
@@ -661,6 +679,21 @@ function computeAtomType(node, env) {
           : inferAtomType(line, node.scope || env)
       );
       return joinArmTypes(armTypes);
+    }
+    // **どの行も定義でないブロックは、行が要素の列である**（list_model.md §3.1 の
+    // 2次元配列のブロック記法）。定義を1つでも含めば構造体か match_case なので対象外。
+    // 揃っているかの判定はカンマと同じ——均質なら `List`、そうでなければ `Struct`。
+    if (node.lines.length > 1 && node.lines.every((l) => !isDefineNode(l))) {
+      const rowKeys = node.lines.map((l) => slotShapeKey(l, node.scope || env));
+      const rowDecided = (k) => k && !k.includes("?") && k !== "Unit" && k !== "null" && k !== "undefined";
+      if (rowKeys.every((k) => k === rowKeys[0] && rowDecided(k))) {
+        const rowType = inferAtomType(node.lines[0], node.scope || env);
+        const innerEl = node.lines[0].elementType;
+        node.elementType = rowType === "List" && innerEl ? `List(${innerEl})` : rowType;
+        return "List";
+      }
+      node.slotKind = "positional";
+      return "Struct";
     }
     const last = node.lines[node.lines.length - 1];
     // pass2 が残した子スコープで最終行を解決する。外側のenvで先に評価すると、

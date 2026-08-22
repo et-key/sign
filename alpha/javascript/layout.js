@@ -121,11 +121,36 @@ function flattenConstruct(node, env = null, seen = new Set()) {
 }
 
 // 直積（`product` の連なり）を平らな配列へ均す。連番スロットがこの形で来る。
+const COPRODUCT_OPS = ["construct", "concat", "push", "unshift"];
+
+/**
+ * 連番スロットへ均す。**根の演算子と同じ族でだけ割る。**
+ *
+ * 直積（カンマ）の根なら、割るのは直積だけである——`1 2 , 3 4` の行は `1 2` と `3 4` の
+ * 2つであって、`1 2 3 4` の4つではない。行の中の余積まで降りると次元が潰れる。
+ * 余積の根なら、割るのは余積だけである——`[1 2] [3 4]` は同じ1段の中で伸びた列なので、
+ * 入れ子の余積まで降りるのが正しい。
+ *
+ * 族を混ぜて割ると、**カンマが上げた次元を勝手に下げてしまう**（`1 2 , 3 4` が
+ * `List(Int)` と型付けられ、値の `[[1,2],[3,4]]` と食い違う）。
+ */
+function flattenByFamily(node, coproduct) {
+  const same = (n) =>
+    n && n.type === "operation" && (coproduct ? COPRODUCT_OPS.includes(n.name) : n.name === "product");
+  const walk = (n) => {
+    if (same(n)) return [...walk(n.left), ...walk(n.right)];
+    // 余積の側だけ、括りのブロックを剥がして中の余積まで割る。
+    if (coproduct && n && Array.isArray(n.lines) && n.lines.length === 1 && same(n.lines[0])) return walk(n.lines[0]);
+    return [n];
+  };
+  return walk(node);
+}
+
 function flattenProduct(node) {
-  if (node && node.type === "operation" && ["product", "construct", "concat", "push", "unshift"].includes(node.name)) {
-    return [...flattenProduct(node.left), flattenProduct(node.right)].flat();
-  }
-  if (node && Array.isArray(node.lines) && node.lines.length === 1) return flattenProduct(node.lines[0]);
+  if (!node) return [node];
+  const isCoproduct = node.type === "operation" && COPRODUCT_OPS.includes(node.name);
+  if (node.type === "operation" && (node.name === "product" || isCoproduct)) return flattenByFamily(node, isCoproduct);
+  if (Array.isArray(node.lines) && node.lines.length === 1) return flattenProduct(node.lines[0]);
   return [node];
 }
 
