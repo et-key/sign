@@ -165,6 +165,40 @@ checkTrue("__ は niche を積む", (body("f : x ?\n\tx > 3 : __\n\t1\nf 5", "f"
 // 診断にもしない——コメントの数だけ「出せない」が並ぶと本当の穴が埋もれる。
 check("コメントは診断にならない", asm("`これはコメント`\nf : a ? a + 1\nf 1").diagnostics.length, 0);
 
+
+// ---- 単相化（compiler_pipeline.md §3 の IMPORTANT） ----
+//
+// `@p x` は「どこへ跳ぶか」が実行時にしか分からない形だが、Sign はそこへ実行時
+// ディスパッチを置かない——**呼び出しサイト単位で具体化する**。Rust の単相化と同じで、
+// `dyn` の側は採らない。
+//
+// 具体化すると**関数ポインタの引数は消える**。アドレスが命令へ焼き込まれるので、
+// レジスタで運ぶ必要が無くなる——`stack_abi.md` の比較表が Sign の欄に
+// 「コンパイル時特殊化（コストゼロ）」と書いているのはこのことである。
+{
+	const src =
+		"is_digit : c ? c + 0\nis_alpha : c ? c + 1\ntake_while : p s ? @p s\n" +
+		"f : s ? take_while $is_digit s\ng : s ? take_while $is_alpha s\nf 1\ng 2";
+	const r = asm(src);
+	checkTrue("呼ばれた組み合わせのぶんだけ実体が出る", r.text.includes("take_while$is_digit:") && r.text.includes("take_while$is_alpha:"));
+	checkTrue("多相なままの実体は出ない", !r.text.includes("\ntake_while:"));
+	// 実体の中では `@p` が直接の `bl` になる。
+	checkTrue("`@p` は直接 bl になる", (body(src, "take_while$is_digit") || []).includes("bl is_digit"));
+	checkTrue("別の実体は別の呼び先", (body(src, "take_while$is_alpha") || []).includes("bl is_alpha"));
+	// 呼び出し側では関数ポインタを渡さない。引数は s だけ。
+	const ls = body(src, "f");
+	const call = ls.findIndex((l) => l === "bl take_while$is_digit");
+	const loads = [];
+	for (let k = call - 1; k >= 0 && /^ldr x[0-7],/.test(ls[k]); k--) loads.unshift(ls[k].split(",")[0]);
+	check("関数ポインタは引数として渡らない", loads, ["ldr x0"]);
+	check("診断は出ない", r.diagnostics.length, 0);
+}
+// `$名前` 以外では具体化できない。式で作ったアドレスは静的に決まらない。
+checkTrue(
+	"式で作ったアドレスは名指しする",
+	asm("g : x ? x\ntake_while : p s ? @p s\nf : s ? take_while (g 1) s\nf 1").diagnostics.length > 0
+);
+
 // ---- 出せないものは名指しする ----
 //
 // 黙って落とすと、命令の無い関数ができあがって「動いたように見える」——型が値より

@@ -89,6 +89,96 @@ function applyChain(node) {
 }
 
 /**
+ * **単相化**（compiler_pipeline.md §3 の IMPORTANT）。
+ *
+ * `@p x` は「どこへ跳ぶか」が実行時にしか分からない形だが、Sign はそこへ実行時
+ * ディスパッチを置かない——**呼び出しサイト単位で具体化する**（type_system.md §4 の
+ * 前置 `@`）。Rust の単相化と同じで、`dyn` の側は採らない。
+ *
+ * 具体化すると**関数ポインタの引数は消える**。アドレスが命令へ焼き込まれるので、
+ * レジスタで運ぶ必要が無くなる——`stack_abi.md` の比較表が Sign の欄に
+ * 「コンパイル時特殊化（コストゼロ）」と書いているのはこのことである。
+ *
+ *   take_while : p s ? @p s
+ *   take_while $is_digit s   →  bl take_while$is_digit   （引数は s だけ）
+ *
+ * @returns Map<関数名, { ptrParams: string[], instances: Map<鍵, {callees, label}> }>
+ */
+function collectMonomorphs(nodes) {
+	const table = new Map();
+	// まず「アドレス経由で呼ばれる仮引数」を持つ関数を見つける。
+	for (const node of nodes) {
+		if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+		const rhs = node.right;
+		if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
+		const params = paramNamesOf(rhs.left);
+		if (params.some((x) => x === null)) continue;
+		const ptrParams = [];
+		const visit = (n) => {
+			if (!n || typeof n !== "object") return;
+			// `@p` が適用の根に来ている＝アドレス経由の呼び出しである。
+			if (n.type === "operation" && (n.name === "apply" || n.name === "partial_apply")) {
+				const { base } = applyChain(n);
+				if (base && base.type === "operation" && base.position === "prefix" && base.name === "input" && isIdentifierNode(base.operand)) {
+					const v = base.operand.value;
+					if (params.includes(v) && !ptrParams.includes(v)) ptrParams.push(v);
+				}
+			}
+			for (const k of ["left", "right", "operand"]) visit(n[k]);
+			for (const l of n.lines || []) visit(l);
+			for (const e of n.entries || []) visit(e.default);
+		};
+		visit(rhs.right);
+		if (ptrParams.length > 0) table.set(bareName(node.left.value), { params, ptrParams, instances: new Map(), lambda: rhs });
+	}
+	if (table.size === 0) return table;
+	// 次に呼び出しサイトを歩いて、どの関数が渡されているかを集める。
+	const visitSites = (n) => {
+		if (!n || typeof n !== "object") return;
+		if (n.type === "operation" && (n.name === "apply" || n.name === "partial_apply")) {
+			const { base, args } = applyChain(n);
+			if (isIdentifierNode(base)) {
+				const entry = table.get(bareName(base.value));
+				if (entry) {
+					const callees = {};
+					let ok = true;
+					for (const pn of entry.ptrParams) {
+						const i = entry.params.indexOf(pn);
+						const a = args[i];
+						// `$名前` だけを具体化できる。式で作ったアドレスは静的に決まらない。
+						if (a && a.type === "operation" && a.position === "prefix" && a.name === "address" && isIdentifierNode(a.operand)) {
+							callees[pn] = bareName(a.operand.value);
+						} else ok = false;
+					}
+					if (ok) {
+						const key = entry.ptrParams.map((pn) => callees[pn]).join("$");
+						if (!entry.instances.has(key)) {
+							entry.instances.set(key, { callees, label: `${bareName(base.value)}$${key}` });
+						}
+						n.monoLabel = entry.instances.get(key).label;
+						n.monoDrop = entry.ptrParams.map((pn) => entry.params.indexOf(pn));
+					}
+				}
+			}
+			args.forEach(visitSites);
+			return;
+		}
+		for (const k of ["left", "right", "operand"]) visitSites(n[k]);
+		for (const l of n.lines || []) visitSites(l);
+		for (const e of n.entries || []) visitSites(e.default);
+	};
+	for (const n of nodes) visitSites(n);
+	return table;
+}
+
+// 裸の仮引数の名前を宣言順で返す。分割代入・rest・デフォルトは null。
+function paramNamesOf(paramNode) {
+	if (isIdentifierNode(paramNode)) return [paramNode.value];
+	if (!paramNode || paramNode.type !== "params") return [];
+	return (paramNode.entries || []).map((e) => (e.pattern || e.rest || e.default ? null : e.name || null));
+}
+
+/**
  * 命令列を組み立てる器。
  *
  * 診断は**捨てない**。出せなかった場所を黙って飛ばすと、命令の無い関数ができあがって
@@ -263,16 +353,29 @@ function genExpr(node, env, em, scope) {
 	// 飽和した呼び出し。引数をスロットで作ってから x0〜x7 へ積んで `bl`。
 	if (n.type === "operation" && n.name === "apply") {
 		const { base, args } = applyChain(n);
-		// アドレス経由の呼び出し（`@p x`）は**呼び出しサイト単位で具体化する**のが
-		// Sign の答えである（type_system.md §4 の前置 `@`）。実行時ディスパッチは
-		// 持たない（compiler_pipeline.md §3）。ここが出せないのは方針が無いからではなく、
-		// 具体化の結果を Pass 4 がまだ読んでいないからである。
-		if (!isIdentifierNode(base)) {
-			return em.fail(n, "呼び先が静的に決まりません（呼び出しサイト単位の具体化を Pass 4 がまだ読んでいない）");
+		// **アドレス経由の呼び出しは具体化されている。** 本体を出しているのは特定の実体
+		// なので、`@p` の `p` が何を指すかはこの実体の中では決まっている
+		// （compiler_pipeline.md §3 の IMPORTANT）。
+		let callee = null;
+		if (isIdentifierNode(base)) {
+			callee = bareName(base.value);
+		} else if (
+			base && base.type === "operation" && base.position === "prefix" && base.name === "input" &&
+			isIdentifierNode(base.operand) && scope && scope.callees && scope.callees[base.operand.value]
+		) {
+			callee = scope.callees[base.operand.value];
 		}
-		if (args.length > ARG_REGS.length) return em.fail(n, `引数が ${ARG_REGS.length} 本を超えます`);
+		if (!callee) {
+			return em.fail(n, "呼び先が静的に決まりません（`$名前` で渡されたものだけ具体化できます）");
+		}
+		// 単相化された呼び出しでは、関数ポインタの引数は**命令へ焼き込まれている**ので
+		// レジスタで渡さない。ここが「コンパイル時特殊化（コストゼロ）」の実体である。
+		const drop = n.monoDrop || [];
+		if (n.monoLabel) callee = n.monoLabel;
+		const passed = args.filter((_, i) => !drop.includes(i));
+		if (passed.length > ARG_REGS.length) return em.fail(n, `引数が ${ARG_REGS.length} 本を超えます`);
 		const offs = [];
-		for (const a of args) {
+		for (const a of passed) {
 			if (!genExpr(a, env, em, scope)) return false;
 			offs.push((em.slot - 1) * 8);
 		}
@@ -280,7 +383,7 @@ function genExpr(node, env, em, scope) {
 		// 引数を作る途中で潰れる（式の中に呼び出しがあれば必ず潰れる）。
 		offs.forEach((o, i) => em.load(ARG_REGS[i], o, `第${i + 1}引数`));
 		em.pop(offs.length);
-		em.emit(`bl ${bareName(base.value)}`, "呼び出し");
+		em.emit(`bl ${callee}`, n.monoLabel ? "呼び出し（具体化済み）" : "呼び出し");
 		const off = em.push();
 		if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 		em.store("x0", off, "返値");
@@ -367,13 +470,12 @@ function wrapFrame(bodyLines, slots, name) {
 	];
 }
 
-function genFunction(name, lambdaNode, env, em) {
+function genFunction(name, lambdaNode, env, em, mono) {
 	const paramNode = lambdaNode.left;
-	const params = isIdentifierNode(paramNode)
-		? [paramNode.value]
-		: paramNode && paramNode.type === "params"
-			? (paramNode.entries || []).map((e) => (e.pattern || e.rest || e.default ? null : e.name || null))
-			: [];
+	const allParams = paramNamesOf(paramNode);
+	// 具体化された関数ポインタの仮引数は**引数として渡ってこない**（命令へ焼き込み済み）。
+	const callees = (mono && mono.callees) || {};
+	const params = allParams.filter((x) => x === null || !(x in callees));
 	if (params.some((p) => p === null)) {
 		em.diagnostics.push({
 			severity: "error",
@@ -397,9 +499,10 @@ function genFunction(name, lambdaNode, env, em) {
 	// 本体のどこからでも読める場所へ移しておく必要がある。
 	const paramOffsets = params.map(() => em.push());
 	params.forEach((p, i) => em.store(ARG_REGS[i], paramOffsets[i], `仮引数 ${bareName(p)} を退避`));
+	for (const [pn, cn] of Object.entries(callees)) em.emit(`// ${bareName(pn)} = ${cn}`, "具体化された呼び先");
 
 	const before = em.diagnostics.length;
-	const ok = genExpr(lambdaNode.right, env, em, { params, paramOffsets });
+	const ok = genExpr(lambdaNode.right, env, em, { params, paramOffsets, callees });
 	if (ok) {
 		em.load("x0", (em.slot - 1) * 8, "返値を x0 へ");
 		em.pop(1);
@@ -428,6 +531,9 @@ function generateAsm(nodes, env, options = {}) {
 		};
 	}
 
+	// 具体化はコード生成の前に済ませる（どの実体を出すかが決まらないと本体を出せない）。
+	const monos = collectMonomorphs(nodes);
+
 	em.lines.push("// Sign — AArch64 (AAPCS64)");
 	if (options.source) em.lines.push(`// source: ${options.source}`);
 	em.lines.push("\t.text");
@@ -440,8 +546,27 @@ function generateAsm(nodes, env, options = {}) {
 		if (isDefineNode(node) && isIdentifierNode(node.left)) {
 			const rhs = node.right;
 			if (rhs && rhs.type === "operation" && rhs.name === "lambda") {
-				em.lines.push(`\t.global ${bareName(node.left.value)}`);
-				genFunction(bareName(node.left.value), rhs, env, em);
+				const fname = bareName(node.left.value);
+				const entry = monos.get(fname);
+				if (entry) {
+					// **呼ばれている組み合わせのぶんだけ実体を出す。** 呼び出しサイトが1つも
+					// 無ければ実体を持ちようがない——`dyn` を持たない以上、そこは §5 Pass 1b が
+					// 「呼び出しサイトの無い export はコンパイルエラー」と言うのと同じ線である。
+					if (entry.instances.size === 0) {
+						em.diagnostics.push({
+							severity: "error",
+							message: `${fname}: アドレス経由で呼ぶ仮引数を持つが、具体化できる呼び出しサイトが無い`,
+							node: rhs,
+						});
+					}
+					for (const inst of entry.instances.values()) {
+						em.lines.push(`	.global ${inst.label}`);
+						genFunction(inst.label, rhs, env, em, inst);
+					}
+					continue;
+				}
+				em.lines.push(`	.global ${fname}`);
+				genFunction(fname, rhs, env, em);
 				continue;
 			}
 		}
