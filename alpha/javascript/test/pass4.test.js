@@ -266,6 +266,21 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 	checkTrue("単独ブラケットも分解する", lone.some((l) => l === "ldrb w10, [x9]"), lone.join(" / "));
 	checkTrue("混在形も分解する", mixed.some((l) => l === "ldrb w10, [x9]"), mixed.join(" / "));
 }
+// **`[~x]` は切り出さず丸ごと受ける形である**（n_queens.sn「分解の形には2つある」）。
+// 受け取り方は裸の仮引数と同じ1つの値であり、違うのは型の宣言の方——器であることを
+// 言っているので `__` がそこを通れない。それは Pass 3 の仕事なので、機械の上ですることは
+// 裸の仮引数と変わらない（分解の命令は出ない）。
+{
+	const mixed = "f : n [~xs] ?\n\tn = 0 : 9\n\tf (n - 1) xs\nf 2 `abc`";
+	check("混在形の `[~x]` は出る", asm(mixed).diagnostics.length, 0);
+	const ls = body(mixed, "f");
+	checkTrue("器は2本で受ける", ls.some((l) => l === "str x1, [x29, #24]") && ls.some((l) => l === "str x2, [x29, #32]"), ls.join(" / "));
+	checkTrue("分解の命令は出ない", !ls.some((l) => l === "add x9, x9, #1"), ls.join(" / "));
+	// 単独ブラケットも同じ形として扱う（書かれ方が違うだけ）。
+	// 単独ブラケットだけの関数は、器の**要素型**を語る証拠がどこにも無いので添字は引けない
+	// （宣言が言うのは「器である」までで、何の器かは言っていない）。受け取り自体は出る。
+	check("単独の `[~x]` も出る", asm("f : [~xs] ?\n\t9\nf `abc`").diagnostics.length, 0);
+}
 // rest とデフォルトはまだ出せない。**名指しする**——黙って飛ばすと命令の無い関数ができる。
 checkTrue(
 	"裸の rest はまだ名指しする",

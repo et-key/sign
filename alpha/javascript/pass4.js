@@ -257,6 +257,13 @@ function paramShapesOf(paramNode) {
 		if (es.length === 2 && !es[0].rest && es[1].rest && !es[0].default && !es[1].default) {
 			return [{ kind: "destructure", head: es[0].name, rest: es[1].name }];
 		}
+		// `[~x]` は**切り出さず丸ごと受ける**形である（n_queens.sn の「分解の形には2つある」）。
+		// 受け取り方は裸の仮引数と同じ1つの値であり、違うのは**型の宣言**の方——器である
+		// ことを言っているので `__` がそこを通れない。それは Pass 3 の仕事であって、
+		// 機械の上ですることは裸の仮引数と変わらない。
+		if (es.length === 1 && es[0].rest && !es[0].default && es[0].name) {
+			return [{ kind: "bare", name: es[0].name, defaultNode: null, whole: true }];
+		}
 		return [null];
 	}
 	return (paramNode.entries || []).map((e) => {
@@ -265,6 +272,10 @@ function paramShapesOf(paramNode) {
 			const p = e.pattern;
 			if (p.length === 2 && !p[0].rest && p[1].rest && !p[0].defaultTokens && !p[1].defaultTokens) {
 				return { kind: "destructure", head: p[0].name, rest: p[1].name };
+			}
+			// `[~x]`（混在形）。丸ごと受けるので裸の仮引数と同じ扱いになる。
+			if (p.length === 1 && p[0].rest && !p[0].defaultTokens && p[0].name) {
+				return { kind: "bare", name: p[0].name, defaultNode: null, whole: true };
 			}
 			return null;
 		}
@@ -1214,6 +1225,11 @@ function paramRegWidths(lambdaNode, em, callees = {}) {
 		const sh = allShapes[idx];
 		if (!sh) return { shape: null, error: "裸の仮引数・デフォルト付き・`[h ~t]` を出せます（rest はまだ）" };
 		if (sh.kind === "bare") {
+			// **`[~x]` は宣言そのものが「器である」と言っている。** 型の解決を待たずに
+			// 渡し方が決まる——要素の並びは `{ptr, len}` の2本である（stack_abi.md §4.6）。
+			// n_queens.sn が「引数の書き方がそのまま型の宣言になっている」と書いているのは
+			// このことで、`[~board]` は盤がリストであることを宣言している。
+			if (sh.whole) return { shape: sh, regs: 2 };
 			const w = slotsOf(allTypes[idx] ?? typeOf(sh.name), em.conf);
 			if (w === null) return { shape: sh, error: `仮引数 ${bareName(sh.name)} の渡し方が決まりません（直和か族）` };
 			return { shape: sh, regs: w };
