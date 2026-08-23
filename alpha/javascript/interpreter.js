@@ -1150,17 +1150,9 @@ function getPropValue(l, rightNode, env) {
   // **イテレータは添字で引ける。無限でも引ける。** これがループカウンタを成立させる
   // ——`c : [0 ~+ 1]` の n 番目は、start から step を n 回適用すれば出る（stack_abi.md §3.3）。
   // 範囲での添字（部分列）は実体化してから通す。
-  if (isIterator(l)) {
-    // 後置 `~`（`it ' n~`）は「n から末尾まで」＝進めたイテレータそのもの。
-    if (rightNode.type === "operation" && rightNode.position === "postfix" && rightNode.name === "expand") {
-      const n = evaluate(rightNode.operand, env);
-      if (typeof n !== "number" || n < 0) return UNIT;
-      let cur = l;
-      for (let i = 0; i < n && isIterator(cur); i++) cur = iteratorRest(cur);
-      return cur;
-    }
-    return getPropByValue(l, evaluate(rightNode, env));
-  }
+  // 添字は**値として**読む。`s ' 1~` は Pass 2 が `s ' (1 ~+ 1)` へ均しているので、
+  // ここに後置 `~` を見る分岐は要らない——書き方が2通りあって道が2本ある、が無くなる。
+  if (isIterator(l)) return getPropByValue(l, evaluate(rightNode, env));
   // 右辺が識別子のとき、それを「名前」と読むか「値（添字）」と読むかは**左辺が決める**。
   //
   // type_system.md §2 は「名前付きスロット（`[key : val]`）と連番スロット（`1, 2, 3`）は
@@ -1191,17 +1183,8 @@ function getPropValue(l, rightNode, env) {
   // 合う——List側の`[1 2 3 4] ' [1~3] → [2 3 4]`と対称）。
   const isString = typeof l === "string";
   const asIndexable = Array.isArray(l) ? l : isString ? l.split("") : [l];
-  // get-rest: `list ' N~`（数値インデックスへ後置~）は、Nから末尾までの部分リストを
-  // 返す（既存のList/Scalar同型性・負インデックス変換をそのまま流用できる。
-  // Array.prototype.sliceの負start解釈がSignの「末尾から数える」規約と一致するため
-  // 追加変換は不要）。呼び出し引数位置での展開（複数の位置引数へのspread）を担う
-  // evalArgValuesとは別経路——ここはget_propの右辺としての`~`のみを扱う。
-  if (rightNode.type === "operation" && rightNode.position === "postfix" && rightNode.name === "expand") {
-    const n = evaluate(rightNode.operand, env);
-    if (typeof n !== "number") return UNIT;
-    const sliced = asIndexable.slice(n);
-    return isString ? sliced.join("") : collapseSlice(sliced);
-  }
+  // get-rest（`list ' N~`）はここには無い。Pass 2 が `list ' (N ~+ 1)` へ均しており、
+  // 「終端の無いレンジで引く＝そこから末尾まで」として `getPropByValue` が1本で扱う。
   return getPropByValue(l, evaluate(rightNode, env));
 }
 
@@ -1241,6 +1224,29 @@ function isNamedSlots(v) {
 
 function getPropByValue(l, r) {
   if (isUnit(l)) return UNIT;
+  // **終端の無いレンジで引くのは「その位置から末尾まで」である。** 位置の列そのものは
+  // 実体化できないが、器の側に終端があるので、そこで閉じればよい。`s ' 1~` は Pass 2 が
+  // `s ' (1 ~+ 1)` へ均しているので（`desugarIndexRest`）、両方がこの1本の道を通る。
+  if (isInfiniteIterator(r) && typeof r.start === "number") {
+    const from = r.start;
+    // 左辺もイテレータなら、進めたイテレータそのものが答えである——**展開しない**。
+    if (isIterator(l)) {
+      let cur = l;
+      for (let i = 0; i < from && isIterator(cur); i++) cur = iteratorRest(cur);
+      return cur;
+    }
+    const asStr = typeof l === "string";
+    const items = Array.isArray(l)
+      ? l
+      : asStr
+        ? l.split("")
+        : isNamedSlots(l)
+          ? Object.values(l)
+          : [l];
+    // 負の添字は末尾から数える（`slice` の負 start 解釈が Sign の規約と一致する）。
+    const sliced = items.slice(from);
+    return asStr ? sliced.join("") : collapseSlice(sliced);
+  }
   // **添字としてのレンジは消費側である。** どの位置を採るかの並びが要るので、ここで走る。
   r = deIterate(r);
   if (isUnit(r)) return UNIT;

@@ -1328,4 +1328,51 @@ function resolveBlock(term, env) {
   return { type: "block", kind, lines, scope: inner };
 }
 
-export { reduceAll, getCategory, resolveDensity };
+/**
+ * 添字位置の `N~` を「N から始まる終端の無いレンジ」へ書き換える（糖衣）。
+ *
+ *   s ' 1~   →   s ' (1 ~+ 1)
+ *
+ * **後置 `~` の意味を1つにするための書き換えである。** `~` は本来「器を開いて中身を
+ * 撒く」だけを意味するべきだが、添字の位置では「N から末尾まで」も意味していた。同じ
+ * 記号が置かれた場所で別の意味になるのは、原理1（ソースを読めば命令列が読める）と
+ * 相容れない。
+ *
+ * **値では区別できない。** `[x]` ≅ `x`（1要素リストはスカラー、list_model.md）なので、
+ * `st~` の `st` が底の1要素だけになると `0~` になる——それが「1要素の並びを撒く」なのか
+ * 「0 から始まる無限列」なのかは、値からも型からも決まらない。1要素の潰れは器と要素の
+ * 区別を消す同型であり、`~` はまさにその区別を要求する演算だからである。
+ * だから**構文の段階で決める**。決まる場所は1つしかない。
+ *
+ * 逆適用（`x f` → `apply(f, x)`）と同じ扱いである——記号は残し、意味論からは消す。
+ * これで `~` は演算子表 tier 23 の「展開」だけを意味するようになり、`'`（tier 18）より
+ * 内側でなければ壊れるという順位の制約も無くなる（operator_table.md の tier 23 の注）。
+ */
+function desugarIndexRest(node) {
+  if (!node || typeof node !== "object") return node;
+  for (const k of ["left", "right", "operand", "middle"]) {
+    if (node[k]) node[k] = desugarIndexRest(node[k]);
+  }
+  if (Array.isArray(node.lines)) node.lines = node.lines.map(desugarIndexRest);
+  for (const e of node.entries || []) if (e.default) e.default = desugarIndexRest(e.default);
+  const r = node.right;
+  if (
+    node.type === "operation" && node.name === "get_prop" &&
+    r && r.type === "operation" && r.position === "postfix" && r.name === "expand"
+  ) {
+    node.right = {
+      type: "operation",
+      op: "~+",
+      name: "range_arithmetic",
+      position: "infix",
+      left: r.operand,
+      // 歩幅は1。位置は1つずつ進むものであって、飛ばす理由がここには無い。
+      right: { type: "atom", kind: "number", value: "1" },
+      location: r.location,
+      desugaredFrom: "index-rest",
+    };
+  }
+  return node;
+}
+
+export { reduceAll, getCategory, resolveDensity, desugarIndexRest };

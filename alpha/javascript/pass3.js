@@ -366,7 +366,9 @@ function sliceIndexNode(node) {
   // 括弧1段は剥がす（`(1 ~ 2)` のように優先順位のために括る形）。
   while (r.type === "block" && Array.isArray(r.lines) && r.lines.length === 1) r = r.lines[0];
   if (r.type !== "operation") return false;
-  if (r.position === "postfix" && r.name === "expand") return true;
+  // `s ' 1~` は Pass 2 が `s ' (1 ~+ 1)` へ均しているので（`desugarIndexRest`）、
+  // ここで後置 `~` を見る必要は無い——添字が部分列を指すかどうかは**レンジかどうか**
+  // だけで決まる。
   return r.name === "range" || RANGE_STEP_OPS.has(r.name);
 }
 

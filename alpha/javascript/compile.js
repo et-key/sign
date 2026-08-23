@@ -25,7 +25,7 @@
 import { preprocess } from "./lexer.js";
 import { parse } from "./parser.js";
 import { buildEnv } from "./pass1.js";
-import { reduceAll } from "./pass2.js";
+import { reduceAll, desugarIndexRest } from "./pass2.js";
 import { specializeGenericParams } from "./pass1b.js";
 import { annotateAll, checkLayerConstraints, checkCharsetConstraints } from "./pass3.js";
 
@@ -92,7 +92,11 @@ function compile(source, options = {}) {
   const parseFn = options.parse || parse;
   const lines = parseFn(preprocess(source));
   const env = buildEnv(lines);
-  const nodes = lines.map((line) => reduceAll(line, env));
+  // 添字位置の `N~` を終端の無いレンジへ均す（糖衣）。**後置 `~` の意味を「撒く」
+  // 1つに絞るための書き換え**であり、逆適用（`x f`）と同じ扱いである——記号は残し、
+  // 意味論からは消す。Pass 2 の出口でやるのは、ここが「構文の形が最後に見える場所」
+  // だからである（Pass 3 以降は型の話しかしない）。
+  const nodes = lines.map((line) => desugarIndexRest(reduceAll(line, env)));
   for (const node of nodes) {
     const bad = findUnresolved(node);
     if (bad) {
