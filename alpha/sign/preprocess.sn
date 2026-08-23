@@ -127,8 +127,8 @@ lstrip : [c ~rest] ?
 
 
 continues :
-	[~raw]
-	[~b] : lstrip raw
+	raw
+	b : lstrip raw
  ?
 	cont1 (b ' 0) : b
 	((b ' 0) = bang) & ((b ' 1) = \=) : b

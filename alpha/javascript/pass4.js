@@ -265,7 +265,7 @@ function paramShapesOf(paramNode) {
 		// 受け取り方は裸の仮引数と同じ1つの値であり、違うのは**型の宣言**の方——器である
 		// ことを言っているので `__` がそこを通れない。それは Pass 3 の仕事であって、
 		// 機械の上ですることは裸の仮引数と変わらない。
-		if (es.length === 1 && es[0].rest && es[0].name) {
+		if (es.length === 1 && es[0].rest && !es[0].default && es[0].name) {
 			return [{ kind: "bare", name: es[0].name, defaultNode: null, whole: true }];
 		}
 		return [null];
@@ -274,16 +274,13 @@ function paramShapesOf(paramNode) {
 		if (e.pattern) {
 			// いま出せるのは `[h ~t]`——先頭と残りの2つに割る形だけである。
 			const p = e.pattern;
-			// `[~x]`（混在形）。丸ごと受けるので裸の仮引数と同じ扱いになる。デフォルトが
-			// あればそれが**器を供給する**ので、裸の仮引数のデフォルトと同じ経路で足りる。
+			// `[~x]`（混在形）。丸ごと受けるので裸の仮引数と同じ扱いになる。
+			// **デフォルトは付きえない**——参照が指すのは呼び出し側が置いた記憶なので、
+			// 既定値を作る場所が無い（pass2.js が構文エラーで弾く）。
 			if (p.length === 1 && p[0].rest && !p[0].defaultTokens && p[0].name) {
-				return { kind: "bare", name: p[0].name, defaultNode: e.default || null, whole: true };
+				return { kind: "bare", name: p[0].name, defaultNode: null, whole: true };
 			}
 			if (p.length === 2 && !p[0].rest && p[1].rest && !p[0].defaultTokens && !p[1].defaultTokens) {
-				// **分解の形にデフォルトが付いた場合はまだ出せない。** 器を供給してから
-				// 分解する、という順序を出す必要がある——黙って無視すると、渡されなかった
-				// ときに未初期化のレジスタを分解することになる。
-				if (e.default) return null;
 				return { kind: "destructure", head: p[0].name, rest: p[1].name };
 			}
 			return null;
@@ -1232,7 +1229,7 @@ function paramRegWidths(lambdaNode, em, callees = {}) {
 	};
 	return keep.map((idx) => {
 		const sh = allShapes[idx];
-		if (!sh) return { shape: null, error: "裸の仮引数・デフォルト付き・`[h ~t]`・`[~x]` を出せます（裸の rest と、分解の形へのデフォルトはまだ）" };
+		if (!sh) return { shape: null, error: "裸の仮引数・デフォルト付き・`[h ~t]`・`[~x]` を出せます（裸の rest はまだ）" };
 		if (sh.kind === "bare") {
 			// **`[~x]` は宣言そのものが「器である」と言っている。** 型の解決を待たずに
 			// 渡し方が決まる——要素の並びは `{ptr, len}` の2本である（stack_abi.md §4.6）。

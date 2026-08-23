@@ -304,13 +304,6 @@ function bindParams(paramsNode, argValues, closureEnv) {
       if (restArgs.length === 0 || (restArgs.length === 1 && isUnit(restArgs[0]))) {
         restArgs = [];
       }
-      // **rest にもデフォルトを書ける**（`~xs : [2 3 4]`）。ただし発火の条件が裸の仮引数
-      // とは違う——rest は何個でも吸うので `__` が渡ってこない。**残りがゼロのとき**が
-      // 「渡されなかった」にあたる。`let*` の順で、ここまでに束縛済みの env で評価する。
-      if (restArgs.length === 0 && entry.default) {
-        envDefine(env, entry.name, evaluate(entry.default, env));
-        continue;
-      }
       envDefine(env, entry.name, restArgs);
       continue;
     }

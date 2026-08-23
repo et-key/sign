@@ -816,12 +816,17 @@ function isIdentifierToken(x) {
 function parseParamLine(tokens) {
   const colonIdx = tokens.indexOf(":");
   if (colonIdx !== -1) {
-    const defaultTokens = tokens.slice(colonIdx + 1);
-    // **裸の rest にもデフォルトを書ける**（`~xs : [2 3 4]`）。以前は `tokens[0]` を
-    // そのまま名前にしていたので、rest の印（`~_`）が名前になって束縛が壊れていた。
-    if (tokens[0] === "~_") return [{ name: tokens[1], rest: true, defaultTokens }];
+    // **rest 形にデフォルトは書けない**（理由は `parseParamStatements` の同じ検査を参照）。
+    // 以前はここで `tokens[0]` をそのまま名前にしていたので、`~xs : 1` の名前が `~_` に
+    // なって**黙って通っていた**——束縛できない名前が1つ増えるだけで、診断も出ない。
+    if (tokens[0] === "~_") {
+      throw new SyntaxError(
+        "rest 形の仮引数にデフォルト値は書けません" +
+          "（`~xs` は stream＝規則であり、既定値として置ける実体化した列とは別物です。原理3 の表）"
+      );
+    }
     // "name : defaultExpr..." という1エントリ
-    return [{ name: tokens[0], rest: false, defaultTokens }];
+    return [{ name: tokens[0], rest: false, defaultTokens: tokens.slice(colonIdx + 1) }];
   }
   // ":" が無ければ、裸の複数パラメータが1行に並んでいる可能性がある（例: "x ~xs"）
   return splitBareParamTokens(tokens);
@@ -896,12 +901,7 @@ function parseBracketSubEntries(lines) {
 // スタックを溢れさせる——実際にデフォルト引数の中で括弧が一切使えなくなっていた。
 // 先頭が識別子で、トップレベルに `:` があれば、中身が入れ子でも1エントリの行である。
 function isParamEntryLine(x) {
-  if (!Array.isArray(x) || x.indexOf(":") <= 0) return false;
-  // **裸の rest にもデフォルトを書ける**（`~xs : [2 3 4]`）。先頭が rest の印なら、
-  // 名前はその次にある。これを見ないとデフォルト式が括弧やブラケットを含んだ瞬間に
-  // 「平らなトークン行」でなくなり、末尾の再帰へ落ちて内部エラーで死んでいた。
-  if (x[0] === "~_") return isIdentifierToken(x[1]);
-  return isIdentifierToken(x[0]);
+  return Array.isArray(x) && isIdentifierToken(x[0]) && x.indexOf(":") > 0;
 }
 
 function parseParamStatements(lines) {
@@ -909,17 +909,27 @@ function parseParamStatements(lines) {
   return lines.flatMap((stmt) => {
     if (isFlatTokenLine(stmt) || isParamEntryLine(stmt)) return parseParamLine(stmt);
     if (isTaggedBlock(stmt)) return parseParamStatements(stmt[1]);
-    // **ブラケット形にもデフォルトを書ける**（`[x ~xs] : [1 2 3]`）。デフォルトが供給する
-    // のは**器**であり、分解はその器に対して起きる——`xs : \`ab\`` が「値を供給してから
-    // 束縛する」のと同じ順序である。ここを拾わないと、`:` を含む文がブラケットとして
-    // 剥がせず、末尾の再帰へ落ちて `lines.flatMap is not a function` で落ちていた。
+    // **分解の形・rest 形にデフォルトは書けない。**
+    //
+    // 参照渡し（`[x ~xs]` / `[~xs]`）が指すのは**呼び出し側が置いた**記憶である
+    // （stack_abi.md §4.6「参照で渡すのは、メモリに置かれているものだけ」）。そこへ
+    // デフォルトを付けると「渡されなかったら呼ばれた側が器を作る」ことになり、所有が
+    // 反転する——しかも作る場所は自分のフレーム（alloca）なので、返せば宙に浮く。
+    // 返値の設計が sret（呼び出し側がスロットを提供する）へ向かっているのと逆である。
+    //
+    // 裸の rest（`~xs`）は stream＝規則であり（原理3 の表）、既定値として置ける「規則」が
+    // 実体化した列とは別物なので、やはり書けない。
+    //
+    // 以前はここが `lines.flatMap is not a function` という内部エラーで落ちており、
+    // 理由を名指しできていなかった。
     if (Array.isArray(stmt)) {
       const ci = stmt.indexOf(":");
-      if (ci > 0 && Array.isArray(stmt[0])) {
-        const inner = peelBracketEntryToken(stmt.slice(0, ci).length === 1 ? stmt[0] : stmt.slice(0, ci));
-        if (inner) {
-          return [{ name: null, pattern: parseBracketSubEntries(inner), rest: false, defaultTokens: stmt.slice(ci + 1) }];
-        }
+      if (ci > 0 && (Array.isArray(stmt[0]) || stmt[0] === "~_")) {
+        throw new SyntaxError(
+          "分解の形・rest 形の仮引数にデフォルト値は書けません" +
+            "（参照が指すのは呼び出し側が置いた記憶であり、既定値を作る場所が無いためです。" +
+            "stack_abi.md §4.6）。器を既定で持たせたいなら、値を受ける裸の仮引数にしてください"
+        );
       }
     }
     const bracketLines = peelBracketEntryToken(stmt);
@@ -1054,14 +1064,8 @@ function buildParameterList(paramTokens, env) {
     if (raw.pattern) {
       // 混在パラメータ内のブラケット分割代入エントリ（例: `dist [h ~t]`の`[h ~t]`）。
       // 名前を持たず、対応する1個の実引数をpattern（サブエントリ列）へ分割代入する
-      // （interpreter.jsのbindParams参照）。
-      //
-      // **デフォルトが供給するのは器である。** 分解はその器に対して起きる——`xs : `ab``
-      // が「値を供給してから束縛する」のと同じ順序で、新しい機構は要らない。
-      if (raw.defaultTokens) checkNoForwardReference(raw.defaultTokens, raw.name, allNames, boundSoFar);
-      const patDefault = raw.defaultTokens ? reduceAll(raw.defaultTokens, scope) : null;
-      if (patDefault) checkNoOutputInDefault(patDefault, raw.name);
-      entries.push({ name: null, pattern: raw.pattern, rest: false, default: patDefault });
+      // （interpreter.jsのbindParams参照）。デフォルトは現行未対応。
+      entries.push({ name: null, pattern: raw.pattern, rest: false, default: null });
       // パターン内の各サブエントリ名も、後続パラメータのデフォルト式から参照できるよう
       // スコープへ加える（let*的な逐次スコープの一貫性のため）。
       const patternNames = raw.pattern.map((e) => e.name).filter((n) => typeof n === "string");

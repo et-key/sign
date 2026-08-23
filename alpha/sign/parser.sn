@@ -26,21 +26,21 @@ snd : p ? p ' 1
 `--- 乗除（優先順位が高い側）---`
 `左結合で畳む`
 
-mul_go : acc [~ts] i ?
+mul_go : acc ts i ?
 	(ts ' i) = `*` : mul_go ((acc , `*`) , (ts ' (i + 1))) ts (i + 2)
 	(ts ' i) = `/` : mul_go ((acc , `/`) , (ts ' (i + 1))) ts (i + 2)
 	acc , i
 
-mul_lv : [~ts] i ? mul_go (ts ' i) ts (i + 1)
+mul_lv : ts i ? mul_go (ts ' i) ts (i + 1)
 
 `--- 加減（優先順位が低い側）---`
 
-add_go : acc [~ts] i ?
+add_go : acc ts i ?
 	(ts ' i) = `+` : add_go ((acc , `+`) , (fst (mul_lv ts (i + 1)))) ts (snd (mul_lv ts (i + 1)))
 	(ts ' i) = `-` : add_go ((acc , `-`) , (fst (mul_lv ts (i + 1)))) ts (snd (mul_lv ts (i + 1)))
 	acc , i
 
-expr : [~ts] ? add_go (fst (mul_lv ts 0)) ts (snd (mul_lv ts 0))
+expr : ts ? add_go (fst (mul_lv ts 0)) ts (snd (mul_lv ts 0))
 
 `実行例`
 `トークン列はカンマで積む。スペースで並べると String の吸収則で連結されてしまうため`
