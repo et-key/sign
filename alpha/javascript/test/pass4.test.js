@@ -380,11 +380,78 @@ checkTrue(
 	checkTrue("utf32 では 4 byte 要素で置く", r.text.includes(".balign 4") && r.text.includes(".word 0x61, 0x62"), r.text);
 	checkTrue("len は charset に依らず文字数", r.text.includes("mov x10, #2"), r.text);
 }
-// 器はレジスタ1本の演算に当たらない。**黙って先頭のスロットだけ見ない**。中身の比較には
-// 長さの一致と要素の走査が要るので、そこは別の命令列になる。
+// ---- 添字（`'`） ----
+//
+// **どちらもメモリを要求しない。** 要素を1つ読むのはアドレス計算1つ、部分列は同じ領域を
+// 指したまま頭と長さをずらすだけである（`[h ~t]` の分解とまったく同じ機械）。
 {
-	const ds = asm("f : s ? s = `ab`\nf `cd`").diagnostics.map((d) => d.message);
-	checkTrue("器どうしの比較は理由を名指しする", ds.some((m) => m.includes("String と String")), JSON.stringify(ds));
+	const one = body("f : s ? s ' 0\nf `abc`", "f");
+	checkTrue("要素は位置つきで読む", one.some((l) => l === "ldrb w14, [x9, x10]"), one.join(" / "));
+	checkTrue("範囲外は __", one.some((l) => l === "csel x9, x14, x12, lo"), one.join(" / "));
+	const rest = body("f : s ? s ' 1~\nf `abc`", "f");
+	checkTrue("部分列は ptr をずらす", rest.some((l) => l === "add x9, x9, x10"), rest.join(" / "));
+	checkTrue("長さは引く", rest.some((l) => l === "subs x9, x9, x10"), rest.join(" / "));
+	// **尽きたら `len = 0`** であり、それが `__` である。負にはしない。
+	checkTrue("負の長さにはしない", rest.some((l) => l === "csel x9, x9, xzr, pl"), rest.join(" / "));
+	checkTrue("部分列にコピーは無い", !rest.some((l) => /^(bl|b) [a-z_]/.test(l)), rest.join(" / "));
+}
+// **1要素リストとスカラーは同型である。** 器の幅が1本でも同じ規則で引ける。
+{
+	const ls = body("f : n ? n ' 0\nf 5", "f");
+	checkTrue("0 番目は器そのもの", ls.some((l) => l === "csel x9, x9, x12, eq"), ls.join(" / "));
+}
+// 要素の幅は charset が決める。utf32 なら 4 byte 単位でずらす。
+{
+	const { nodes, env } = compile("f : s ? s ' 1~\nf `abc`", { charset: "utf32" });
+	const t = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "utf32" }).text;
+	checkTrue("utf32 は 4 byte ぶんずらす", t.includes("add x9, x9, x10, lsl #2"), t);
+}
+// **具体化された実体の中では、仮引数の関数ポインタも決まっている。** 再帰が `$名前` では
+// なく仮引数をそのまま渡す形（`take_while p (s ' 1~)`）でも、同じ実体へ結び直す
+// ——そうしないと再帰だけが多相なまま取り残される。
+{
+	const src =
+		"is_digit : c ? c + 0\n" +
+		"take_while : p s ?\n\t(@p (s ' 0)) : take_while p (s ' 1~)\n\ts\n" +
+		"f : s ? take_while $is_digit s\nf `12`";
+	const r = asm(src);
+	check("再帰も具体化される", r.diagnostics.length, 0);
+	const ls = body(src, "take_while$is_digit");
+	checkTrue("自己再帰は飛び先へ戻る", ls.some((l) => /^b \.Lloop/.test(l)), ls.join(" / "));
+	// 引数は器の2本だけ（x0/x1）。関数ポインタの分は増えない。
+	const back = ls.findIndex((l) => /^b \.Lloop/.test(l));
+	check("引数は器の2本だけ", ls.slice(back - 2, back), ["ldr x0, [x29, #48]", "ldr x1, [x29, #56]"]);
+}
+// ---- 器どうしの等価（中身の比較） ----
+//
+// **メモリは要らない。読むだけである。** 真のときに返すのは左辺そのもの、偽のときは
+// `len = 0`（＝`__`）なので、新しい `{ptr, len}` を作る必要がない。
+{
+	const src = "f : s ?\n\ts = `ab` : 1\n\t0\nf `cd`";
+	const r = asm(src);
+	check("器どうしの等価は出る", r.diagnostics.length, 0);
+	const ls = body(src, "f");
+	// 長さが違えば中身を見るまでもない。
+	const lenCmp = ls.findIndex((l) => l === "cmp x9, x10");
+	checkTrue("先に長さを比べる", lenCmp >= 0 && ls[lenCmp + 1].startsWith("b.ne "), ls.join(" / "));
+	// 要素の幅は charset が決める（`String ≅ List(Char)` の要素幅そのもの）。
+	checkTrue("1 byte 要素なら ldrb で走る", ls.some((l) => l === "ldrb w14, [x10, x13]"), ls.join(" / "));
+	checkTrue("位置を1つずつ進める", ls.some((l) => l === "add x13, x13, #1"), ls.join(" / "));
+	// 比較は値を返す（comparison.md §2.1）。真なら左辺、偽なら `__`。
+	checkTrue("偽は len = 0 で表す", ls.some((l) => l === "mov x10, #0"), ls.join(" / "));
+	// 条件の位置に器が来ても分岐できる——`__` かどうかの判定は幅ごとに決まっている。
+	checkTrue("器の条件は len で判定する", ls.filter((l) => l === "cmp x9, #0").length >= 1, ls.join(" / "));
+}
+// 順序（`<` `>`）は辞書式の規則が要るのでまだ出さない。**名指しする。**
+checkTrue(
+	"器の順序比較は名指しする",
+	asm("f : s ? s < `ab`\nf `cd`").diagnostics.some((d) => d.message.includes("等価だけを出せます"))
+);
+// utf32 なら要素は 4 byte。同じ命令列が幅だけ変わる。
+{
+	const { nodes, env } = compile("f : s ?\n\ts = `ab` : 1\n\t0\nf `cd`", { charset: "utf32" });
+	const t = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "utf32" }).text;
+	checkTrue("4 byte 要素なら lsl #2 で引く", t.includes("ldr w14, [x10, x13, lsl #2]"), t);
 }
 // ---- 幅のある値を返す分岐 ----
 //

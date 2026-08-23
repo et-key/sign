@@ -484,7 +484,19 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.store(SCRATCH[0], off);
 			return 1;
 		}
-		if (cps.length === 0) return em.fail(n, "空文字列は Unit です（`__` として出るはずのものがここへ来ました）");
+		// **空文字列は `{ptr, len}` の `len = 0` である。** 値としては `__` そのものだが
+		// （`__ = []`、unit.md）、型は `String` なので幅2本で置く——型が言う本数と実際に
+		// 置く本数が食い違うと、呼び出し側が読む本数が決まらない。`.rodata` は要らない
+		// （指す先が無いので `ptr` は 0 でよい）。
+		if (cps.length === 0) {
+			const po0 = em.push();
+			const lo0 = po0 === null ? null : em.push();
+			if (lo0 === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.emit(`mov ${SCRATCH[0]}, #0`, "空文字列は __（len = 0）");
+			em.store(SCRATCH[0], po0, "ptr");
+			em.store(SCRATCH[0], lo0, "len = 0 が __");
+			return 2;
+		}
 		if (cps.length > 0xffff) return em.fail(n, `16ビットを超える長さはまだ出せません（${cps.length} 文字）`);
 
 		// **`len` は文字数であってバイト数ではない。** `String ≅ List(Char)` であり
@@ -584,6 +596,14 @@ function genExpr(node, env, em, scope, tail = false) {
 			const m = reduceToMachineType(side && side.atomType, em.conf.target);
 			return !!m && m.class === "gpr";
 		};
+		// **器どうしの等価は中身の比較である。** `String` は `{ptr, len}` で来るので、
+		// 長さを見てから要素を1つずつ見る。メモリは要らない——読むだけである。
+		if (n.left && n.right && n.left.atomType === "String" && n.right.atomType === "String") {
+			if (n.name !== "assign_equal" && n.name !== "not_equal") {
+				return em.fail(n, `器どうしは等価だけを出せます（${n.op}）——順序を出すには辞書式の規則が要る`);
+			}
+			return genStringCompare(n, env, em, scope);
+		}
 		if (!cmpOk(n.left) || !cmpOk(n.right)) {
 			return em.fail(n, `GPR 幅の値の比較だけを出せます（${n.left && n.left.atomType} と ${n.right && n.right.atomType}）`);
 		}
@@ -659,36 +679,40 @@ function genExpr(node, env, em, scope, tail = false) {
 	// 結果は左のスロットに揃える——どちらの経路を通っても同じ場所に値がある。
 	if (n.type === "operation" && (n.name === "and" || n.name === "or") && n.position === "infix") {
 		const isAnd = n.name === "and";
-		// 判定は niche との比較なので、両辺ともレジスタ1本の値であることが要る。
-		const whySc = `短絡はレジスタ1本の値どうしだけを出せます（${n.op}）`;
-		if (!genScalar(n.left, env, em, scope, whySc)) return false;
-		const lo = (em.slot - 1) * 8;
+		// **幅は問わない。** 見るのは「`__` かどうか」だけで、その判定は幅ごとに決まって
+		// いる。左右の幅が揃っていることだけが要る——どちらの経路を通っても同じ場所に
+		// 同じ本数の値がある、が結果の置き方だからである。
+		const lw = genExpr(n.left, env, em, scope);
+		if (lw === false) return false;
+		if (lw === TAIL) return em.fail(n.left, "短絡の左辺に末尾呼び出しは置けません（結果を見て飛び先を決めるため）");
+		const lo = (em.slot - lw) * 8;
 		const end = em.newLabel("sc");
-		em.load(SCRATCH[0], lo, "左辺");
-		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
-		em.emit(`cmp ${SCRATCH[0]}, x12`);
+		emitIsUnit(em, lo, lw, "左辺");
 		em.emit(
 			`b.${isAnd ? "eq" : "ne"} ${end}`,
 			isAnd ? "左が __ なら全体が __（右を評価しない）" : "左が __ でなければ左が結果（右を評価しない）"
 		);
 		// **右辺は末尾位置である**（tco.md §2「`then` と `else` の両方が末尾位置」）。
 		// 左辺は違う——結果を見てから飛び先を決めるので、評価しきる必要がある。
-		const rw = tail ? genExpr(n.right, env, em, scope, true) : genScalar(n.right, env, em, scope, whySc);
+		const rw = genExpr(n.right, env, em, scope, tail);
 		if (rw === false) return false;
 		if (rw === TAIL) {
 			// 右辺は飛んで行った。ここへ落ちてくるのは左辺の経路だけである。
 			em.label(end);
-			return 1;
+			return lw;
 		}
-		if (rw !== 1) {
+		if (rw !== lw) {
 			em.pop(rw);
-			return em.fail(n.right, `${whySc}（${rw} 本の参照で運ぶ値）`);
+			return em.fail(n.right, `短絡の両辺は同じ幅でなければ出せません（${lw} 本と ${rw} 本、${n.op}）`);
 		}
-		em.load(SCRATCH[0], (em.slot - 1) * 8);
-		em.pop(1);
-		em.store(SCRATCH[0], lo, "右辺が結果");
+		const rbase = em.slot - rw;
+		for (let k = 0; k < rw; k++) {
+			em.load(SCRATCH[0], (rbase + k) * 8);
+			em.store(SCRATCH[0], lo + k * 8, k === 0 ? "右辺が結果" : undefined);
+		}
+		em.pop(rw);
 		em.label(end);
-		return 1;
+		return lw;
 	}
 
 	// 飽和した呼び出し。引数をスロットで作ってから x0〜x7 へ積んで `bl`。
@@ -711,8 +735,23 @@ function genExpr(node, env, em, scope, tail = false) {
 		}
 		// 単相化された呼び出しでは、関数ポインタの引数は**命令へ焼き込まれている**ので
 		// レジスタで渡さない。ここが「コンパイル時特殊化（コストゼロ）」の実体である。
-		const drop = n.monoDrop || [];
+		let drop = n.monoDrop || [];
 		if (n.monoLabel) callee = n.monoLabel;
+		else if (scope && scope.callees && Object.keys(scope.callees).length > 0) {
+			// **具体化された実体の中では、仮引数の関数ポインタも既に決まっている。**
+			// `take_while : p s ? … take_while p (s ' 1~)` の再帰は `$名前` ではなく `p` を
+			// そのまま渡すので、呼び出しサイトの走査（`collectMonomorphs`）からは具体化
+			// できない。だがこの実体の中では `p` が何を指すかは決まっているので、ここで
+			// 同じ実体へ結び直す——そうしないと再帰だけが多相なまま取り残される。
+			const passing = [];
+			args.forEach((a, i) => {
+				if (isIdentifierNode(a) && scope.callees[a.value]) passing.push({ i, to: scope.callees[a.value] });
+			});
+			if (passing.length > 0) {
+				callee = `${callee}$${passing.map((x) => x.to).join("$")}`;
+				drop = passing.map((x) => x.i);
+			}
+		}
 		const passed = args.filter((_, i) => !drop.includes(i));
 		// **数えるのは引数の個数ではなくレジスタの本数である。** 器を渡す引数は
 		// `{ptr, len}` で2本使う（stack_abi.md §4.6）。
@@ -768,6 +807,21 @@ function genExpr(node, env, em, scope, tail = false) {
 		return rw;
 	}
 
+	// **添字。** 器は `{ptr, len}` で来るので、引くのはアドレス計算1つである
+	// （type_system.md §2 のアクセス表：`base + i × sizeof(T)`）。
+	//
+	//   s ' i    要素1つを読む     → 要素型（`Char` / `Int` …）
+	//   s ' i~   そこから末尾まで   → 器と同じ型（`{ptr + i×幅, len - i}`）
+	//
+	// **どちらもメモリを要求しない。** 後者は同じ領域を指したまま頭と長さをずらすだけで、
+	// `[h ~t]` の分解とまったく同じ機械である——`~` の意味が1つになったので、分解と
+	// スライスが同じ規則の別の書き方であることが命令の上でも見えるようになった。
+	if (n.type === "operation" && n.name === "get_prop" && !n.runtimeIndexProblem) {
+		const out = genIndex(n, env, em, scope);
+		if (out !== null) return out;
+		// 出せない形（`Struct` のスロット・型が決まらない器）は下の診断へ落ちる。
+	}
+
 	// **多相な器を実行時の添字で引くのは、Sign が持たないと決めた唯一の場所である。**
 	//
 	// 他の言語が `dyn` や仮想テーブルで解くのがここであり、Sign は実行時ディスパッチを
@@ -807,6 +861,160 @@ function emitUnit(em, offs) {
 	em.emit("mov x12, #0", "__ は空（`__ = []`）");
 	em.store("x12", offs[0], "ptr");
 	em.store("x12", offs[1], "len = 0 が __");
+}
+
+/**
+ * 添字（`'`）を出す。出せない形なら `null` を返して呼び出し元の診断へ渡す。
+ *
+ * **1要素リストとスカラーは同型である**（`[5]` は `Int`、list_model.md）。だから器の幅が
+ * 1本のときも同じ規則で引ける——`x ' 0` は `x` 自身、`x ' 1` は範囲外で `__` である。
+ * 器が2本（`{ptr, len}`）のときだけアドレス計算になる。
+ */
+function genIndex(node, env, em, scope) {
+	const conf = em.conf;
+	const cw = slotsOf(node.left && node.left.atomType, conf);
+	const rw = slotsOf(node.atomType, conf);
+	if (cw === null || rw === null || cw > 2 || rw > 2) return null;
+	// スライスかどうかは**添字の形**で決まる。`s ' i~` は Pass 2 が `s ' (i ~+ 1)` へ
+	// 均しているので（`desugarIndexRest`）、ここで見るのは終端の無い等差レンジである。
+	const idx = node.right;
+	const isSlice = !!idx && idx.type === "operation" && idx.name === "range_arithmetic";
+	if (isSlice) {
+		// 歩幅1の「そこから末尾まで」だけを出せる。飛ばし読みは別の命令列になる。
+		const step = idx.right;
+		if (!(step && step.type === "atom" && step.kind === "number" && Number(step.value) === 1)) return null;
+		if (rw !== cw) return null; // 部分列は器と同じ型でなければおかしい
+	}
+	// 要素の幅。`String` なら charset 幅、`List(T)` なら T の大きさ。
+	const elemType = isSlice ? node.elementType || elementTypeOfNode(node.left) : node.atomType;
+	const elem = elemType ? measure({ atomType: elemType }, { target: conf.target, charset: conf.charset }) : null;
+	if (cw === 2 && (!elem || !elem.size)) return null;
+
+	const cvw = genExpr(node.left, env, em, scope);
+	if (cvw === false) return false;
+	if (cvw !== cw) { em.pop(cvw); return null; }
+	const co = (em.slot - cw) * 8;
+	// 添字そのもの（スライスなら起点）を積む。
+	const iw = genExpr(isSlice ? idx.left : idx, env, em, scope);
+	if (iw === false) return false;
+	if (iw !== 1) { em.pop(iw + cw); return null; }
+	const io = (em.slot - 1) * 8;
+
+	if (cw === 1) {
+		// **スカラーは1要素の器である。** 0 番目は自分自身、それ以外は範囲外で `__`。
+		em.load(SCRATCH[0], io, "添字");
+		em.emit(`cmp ${SCRATCH[0]}, #0`);
+		em.load(SCRATCH[0], co, "0 番目は器そのもの");
+		em.emit("movz x12, #0x8000, lsl #48", "範囲外は __");
+		em.emit(`csel ${SCRATCH[0]}, ${SCRATCH[0]}, x12, eq`);
+		em.pop(1);
+		em.store(SCRATCH[0], co);
+		// スライス（`x ' 0~`）の結果も同じ——1要素の器を切っただけである。
+		return 1;
+	}
+
+	const w = elem.size;
+	if (isSlice) {
+		// `{ptr + i×幅, len - i}`。**同じ領域を指したまま頭と長さをずらす**——コピー無し。
+		em.load(SCRATCH[0], co, "ptr");
+		em.load(SCRATCH[1], io, "起点");
+		em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}${w === 1 ? "" : `, lsl #${Math.log2(w)}`}`, `${w} byte × 起点`);
+		em.store(SCRATCH[0], co, "残りの ptr");
+		em.load(SCRATCH[0], co + 8);
+		em.emit(`subs ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "残りの長さ");
+		// 負にはしない。**尽きたら `len = 0`** であり、それが `__` である。
+		em.emit(`csel ${SCRATCH[0]}, ${SCRATCH[0]}, xzr, pl`);
+		em.pop(1);
+		em.store(SCRATCH[0], co + 8, "残りの len（0 なら __）");
+		return 2;
+	}
+
+	// 要素1つ。範囲外は `__`（niche）。
+	em.load(SCRATCH[1], io, "添字");
+	em.load(SCRATCH[0], co + 8, "len");
+	em.emit(`cmp ${SCRATCH[1]}, ${SCRATCH[0]}`, "範囲内か");
+	em.load(SCRATCH[0], co, "ptr");
+	em.emit(loadElem("w14", SCRATCH[0], SCRATCH[1], w), `${w} byte の要素`);
+	em.emit("movz x12, #0x8000, lsl #48", "範囲外は __");
+	em.emit(`csel ${SCRATCH[0]}, x14, x12, lo`);
+	// 器（cw 本）と添字（1本）を返してから、要素1本を積む。
+	em.pop(cw + 1);
+	const off = em.push();
+	if (off === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+	em.store(SCRATCH[0], off, "要素");
+	return 1;
+}
+
+// 器の要素型。`elementType` はレンジ・List に付く（pass3.js）。
+function elementTypeOfNode(n) {
+	if (!n) return null;
+	if (n.elementType) return n.elementType;
+	return n.atomType === "String" ? "Char" : null;
+}
+
+/**
+ * **器どうしの等価**（`s = t` / `s != t`）。`{ptr, len}` を2本ずつ受けて、真なら左辺、
+ * 偽なら `__` を積む（comparison.md §2.1「比較は値を返す」）。
+ *
+ * 返すのが左辺なのは、0/1 の規則（左辺が算術単位元なら右辺）が `String` には効かない
+ * からである——器は加法単位元でも乗法単位元でもない。
+ *
+ * **メモリは要らない。** 読むだけであり、新しい `{ptr, len}` も作らない。真のときに返す
+ * のは左辺そのものであり、偽のときは `len = 0`（＝`__`、unit.md）である。
+ *
+ * 長さが違えば中身を見るまでもない。同じなら要素を1つずつ見る——要素の幅は `charset` が
+ * 決める（`String ≅ List(Char)` の要素幅そのもの）。
+ */
+function genStringCompare(node, env, em, scope) {
+	const w = charSizeOf(em.conf.charset);
+	if (!genExpr(node.left, env, em, scope)) return false;
+	const lo = (em.slot - 2) * 8;
+	if (!genExpr(node.right, env, em, scope)) return false;
+	const ro = (em.slot - 2) * 8;
+	const wantEqual = node.name === "assign_equal";
+	const same = em.newLabel("streq");
+	const diff = em.newLabel("strne");
+	const end = em.newLabel("strend");
+	const loop = em.newLabel("strloop");
+
+	em.load(SCRATCH[0], lo + 8, "左辺の len");
+	em.load(SCRATCH[1], ro + 8, "右辺の len");
+	em.emit(`cmp ${SCRATCH[0]}, ${SCRATCH[1]}`, "長さが違えば中身を見るまでもない");
+	em.emit(`b.ne ${diff}`);
+	// 位置を進めながら1要素ずつ比べる。x13 が位置、x14/x15 が読んだ要素。
+	em.emit("mov x13, #0", "位置");
+	em.label(loop);
+	em.emit(`cmp x13, ${SCRATCH[0]}`);
+	em.emit(`b.ge ${same}`, "末尾まで一致した");
+	em.load(SCRATCH[1], lo, "左辺の ptr");
+	em.emit(loadElem("w14", SCRATCH[1], "x13", w), `${w} byte の要素`);
+	em.load(SCRATCH[1], ro, "右辺の ptr");
+	em.emit(loadElem("w15", SCRATCH[1], "x13", w));
+	em.emit("cmp w14, w15");
+	em.emit(`b.ne ${diff}`);
+	em.emit("add x13, x13, #1");
+	em.emit(`b ${loop}`);
+
+	// 真なら左辺、偽なら `__`（`len = 0`）。どちらの枝も左辺のスロットへ揃える。
+	const put = (isTrue) => {
+		if (isTrue) {
+			em.load(SCRATCH[0], lo);
+			em.load(SCRATCH[1], lo + 8);
+		} else {
+			em.emit(`mov ${SCRATCH[0]}, #0`, "__ は空（len = 0）");
+			em.emit(`mov ${SCRATCH[1]}, #0`);
+		}
+		em.store(SCRATCH[0], lo, isTrue ? "真なら左辺" : "偽なら __");
+		em.store(SCRATCH[1], lo + 8);
+	};
+	em.label(same);
+	put(wantEqual);
+	em.emit(`b ${end}`);
+	em.label(diff);
+	put(!wantEqual);
+	em.label(end);
+	em.pop(2); // 右辺の2本を返す。結果は左辺のスロットにある。
+	return 2;
 }
 
 /**
@@ -864,12 +1072,14 @@ function genMatch(node, env, em, scope, tail = false) {
 			break;
 		}
 		const next = em.newLabel("arm");
-		// 条件は必ずレジスタ1本の値である——niche と比べる形なので器は当たらない。
-		if (!genScalar(line.left, env, em, scope, "分岐の条件はレジスタ1本の値だけを出せます")) return false;
-		em.load(SCRATCH[0], (em.slot - 1) * 8, "条件");
-		em.pop(1);
-		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
-		em.emit(`cmp ${SCRATCH[0]}, x12`);
+		// **条件の幅は問わない。** 見るのは「`__` かどうか」だけであり、その判定は幅ごとに
+		// 決まっている（1本なら niche、2本なら `len = 0`）。比較は値を返すので
+		// （comparison.md §2.1）、`s = \`abc\`` のように条件が器になることがある。
+		const cw = genExpr(line.left, env, em, scope);
+		if (cw === false) return false;
+		if (cw === TAIL) return em.fail(line.left, "条件の位置に末尾呼び出しは置けません");
+		emitIsUnit(em, (em.slot - cw) * 8, cw, "条件");
+		em.pop(cw);
 		em.emit(`b.eq ${next}`, "__ なら次の枝へ");
 		const armResult = move(line.right);
 		if (armResult === false) return false;
@@ -889,6 +1099,14 @@ function genMatch(node, env, em, scope, tail = false) {
  * **判定の仕方は幅で違う。** `emitUnit` の裏返しである——1本ならレジスタ上の niche と
  * 比べ、2本なら `len` が 0 かを見る（空文字列・空リストが `__` そのもの、unit.md）。
  */
+// 要素1つを位置つきで読むニーモニック。幅は `charset` が決める（`String ≅ List(Char)`）。
+// 符号なしなので `ldrb`/`ldrh` はゼロ拡張で足りる（Char は unsigned、target_info.js）。
+function loadElem(dst, base, idx, size) {
+	if (size === 1) return `ldrb ${dst}, [${base}, ${idx}]`;
+	if (size === 2) return `ldrh ${dst}, [${base}, ${idx}, lsl #1]`;
+	return `ldr ${dst}, [${base}, ${idx}, lsl #2]`;
+}
+
 function emitIsUnit(em, off, width, comment) {
 	if (width === 1) {
 		em.load(SCRATCH[0], off, comment);
