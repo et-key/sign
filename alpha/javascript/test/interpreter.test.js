@@ -1373,14 +1373,26 @@ checkTrue("`__` と `!__` は等しくない（真なので恒等射が返る）
 	// 実プログラムでは `preprocess.sn` の `walk` だけが持ち上げている。
 	check("n_queens は持ち上げていない", infos(fs.readFileSync(path.join(__dirname, "..", "..", "..", "documents", "ja-jp", "guide", "examples", "n-queen", "n_queens.sn"), "utf8")).length, 0);
 }
-// **持ち上げは誤りではない。** 完全性公理が与える終端は答えが必ず `__` になるので、終端に
-// 仕事があるときは公理を止めるしかない。`preprocess.sn` の `walk` は残ったインデントを
-// 閉じるためにこれを使っており、デフォルトを外すと閉じ DEDENT が消える。
+// **終端に仕事があっても、公理を止めるのは本来の形ではない。**
+//
+// 完全性公理が与える終端は答えが必ず `__` になるが、終端に仕事があるなら**その仕事を
+// 高階関数で渡し、崩壊を `|` で受ける**。子の呼び出しが公理で潰れた瞬間、その階層の状態が
+// 最終状態なので、そこで仕事をすればよい（`system_semantics.md` のポーリング標準形
+// `@STATUS & @DATA | read __` と同じ形）。終端に何をするかは関数ではなく**呼び出し側**が
+// 決めるのだから、渡すのが筋である。
 {
-	const body = "\n\t!s : 9\n\tf (s ' 1~)\n";
-	const run1 = (def) => run("f :\n\ts" + def + "\n ?" + body + "f `ab`");
-	check("終端に仕事があるなら `: __` が要る", run1(" : __"), 9);
-	check("デフォルト無しだと終端の仕事に届かない", run1(""), "__");
+	const infos = (src) => compile(src).diagnostics.filter((d) => d.reason === "lifted-domain").length;
+	// 公理を止める書き方。動くが定義域が持ち上がる。
+	const lifted = "f :\n\ts : __\n\tst\n ?\n\t!s : st\n\tf (s ' 1~) (st + 1)\nf `abc` 0";
+	check("公理を止めても動く", run(lifted), 3);
+	check("その代わり定義域が持ち上がる", infos(lifted), 1);
+	// 崩壊を `|` で受ける書き方。持ち上げが要らない。
+	const caught = "f : s st ?\n\t(f (s ' 1~) (st + 1)) | st\nf `abc` 0";
+	check("`|` で受ければ持ち上げは要らない", infos(caught), 0);
+	// 終端の仕事を高階で渡す（`$` は呼び出し側に付く）。
+	const higher = "close : st ? st\nw : k s st ?\n\t(w k (s ' 1~) (st (s ' 0)~)) | (@k st)\nw $close `abc` 0";
+	check("高階で渡しても持ち上げは要らない", infos(higher), 0);
+	check("終端の仕事が実際に走る", run(higher), [0, "a", "b"]);
 }
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
