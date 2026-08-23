@@ -1728,6 +1728,8 @@ function evaluate(node, env) {
       // List（右がList~）で「aを先頭へ」、unshift(a,b)はa側がList（左がList~）で
       // 「bを末尾へ」（pass2.js冒頭コメント「優先度10.1の具体的な演算子名」参照、
       // 仕様は方向性を明記していないため実装時に決めた仮定）。
+      // **`push` は Pass 2 が作らなくなった**（余積の向きは常に「左辺が器」で足りる）。
+      // 外から与えられた AST を評価する経路のために残してある。
       case "push": {
         // 0 [1 2 3] → [0 1 2 3]（aを先頭に追加）。aがUnit（単位元）なら素通しでbのみ返す。
         // **`~` が付いていれば撒く**——判定は値であって構文ではない。
@@ -1742,6 +1744,10 @@ function evaluate(node, env) {
         const rawB = evaluate(node.right, env);
         const a = deIterate(evaluate(node.left, env));
         const b = deIterate(rawB);
+        // 余積の単位元則（type_system.md §6.1）。**器の側が `__` なら右辺がそのまま通る**
+        // ——`__ [1 2 3]` は `[1 2 3]` であって `[[1 2 3]]` ではない。`construct` 側と
+        // 同じ規則であり、片側にしか無いと `__` が「器を1つ被せる」ことになる。
+        if (isUnit(a)) return b;
         if (isUnit(b)) return asList(a);
         // 右辺が `~` 付きなら撒く。無ければ**1要素として**足す（§2.2 の表）。
         return [...asList(a), ...(isIterator(rawB) ? asList(b) : [b])];

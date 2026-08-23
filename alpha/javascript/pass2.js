@@ -12,9 +12,12 @@
  * 実装にあたって仕様書(coproduct_resolver.md)に明記がなく、以下の点は仮定を置いた（要レビュー）:
  * 1. 複数の前置/後置演算子が連続する場合（例: `!$x`）の結合順序。
  *    coreに近い方から先に結合する（`!$x` = `!($x)`）という一般的な慣習を採用。
- * 2. 優先度10.1（Unshift/push）の具体的な演算子名。仕様は「Atom|List~ の組み合わせ」としか
- *    書いておらず、方向性の区別が明記されていない。ここでは List~ 側が右なら push、
- *    左なら unshift とした。
+ * 2. 【解決済み】優先度10.1（Unshift/push）の方向。仕様は「Atom|List~ の組み合わせ」としか
+ *    書いておらず方向の明記が無かったため、当初は「List 側が器」と読んで `List~` が右なら
+ *    push、左なら unshift としていた。**それは向きをブラケットの位置という構文で決めていた**
+ *    ことになり、`[1 2] 3` は右辺を1要素として足すのに `1 [2 3]` は右辺を展開する、という
+ *    非対称を生んでいた。余積は左結合であり左辺が器である（list_model.md §2.2）ので、
+ *    向きは常に一つで足りる——`push` はもう作られない。
  * 3. Block（[...] {...} (...)）の種別（paren/brace/bracket）は grammar.pegjs が
  *    区別を保持しないため、AST上でも区別できていない（kindは "paren" 固定、または
  *    indent/absのみ判別）。
@@ -566,6 +569,11 @@ function coproductReduce(a, b, env) {
     const listOf = (n) => derefIsList(n) || (hasPostfixTilde(n) && derefIsList(n.operand));
     const listA = listOf(a);
     const listB = listOf(b);
+    // 既に concat された結果は**平らなリスト**なので、次の項と繋ぐときも concat である
+    // ——`[1 2]~ [3 4]~` が `1 2 3 4` と等価なら、`[1 2]~ [3 4]~ [5 6]~` は `1 2 3 4 5 6`
+    // でなければならない。縮約後のノードには `~` が付いていないので、ここで補って読む。
+    const isConcatNode = (n) => !!n && n.type === "operation" && n.name === "concat";
+    const spreadB = hasPostfixTilde(b) || isConcatNode(b);
     if (listA && listB) {
       // 既に concat された結果は**平らなリスト**なので、次の項と繋ぐときも concat である
       // ——`[1 2]~ [3 4]~` が `1 2 3 4` と等価なら、`[1 2]~ [3 4]~ [5 6]~` は `1 2 3 4 5 6`
@@ -583,13 +591,19 @@ function coproductReduce(a, b, env) {
       //   m [5 6]   →  [[1,2],[3,4],[5,6]]   行を1つ足す
       //   m [5 6]~  →  [[1,2],[3,4],5,6]     展開して足す
       //   m , [5 6] →  [[[1,2],[3,4]],[5,6]] 次元を上げる（カンマの仕事）
-      const isConcat = (n) => !!n && n.type === "operation" && n.name === "concat";
-      const spreadB = hasPostfixTilde(b) || isConcat(b);
       return spreadB ? mk("concat", a, b) : mk("unshift", a, b);
     }
-    if ((listA && !listB) || (!listA && listB)) {
-      // 10.1: Atom|List~ の組み合わせ → Unshift/push（仕様に方向の明記なし、上記コメント参照）
-      return listB ? mk("push", a, b) : mk("unshift", a, b);
+    if (listA || listB) {
+      // 10.1: 片側だけが List でも規則は同じである。**どちらが List かで向きを変えない。**
+      //
+      // 以前はここだけ「List の側が器」と読んで、`1 [2 3]` を push（＝`[2 3]` の先頭へ 1 を
+      // 足す）へ落としていた。その結果 `[1 2] 3` は `[1 2 3]`（右辺を1要素として足す）なのに
+      // `1 [2 3]` は `[1 2 3]`（右辺を展開）になり、**同じ演算子が引数の並びで意味を変えて
+      // いた**。器がどちら側かをブラケットの位置という構文で決めていたのが原因である。
+      //
+      // 余積は左結合であり、左辺が器である（list_model.md §2.2）。1要素リストとスカラーは
+      // 同型なので、左辺がスカラーでも「1要素の器」として同じ規則に乗る。
+      return spreadB ? mk("concat", a, b) : mk("unshift", a, b);
     }
     return mk("construct", a, b); // 10.0: Atom Atom → 直和/双積
   }
