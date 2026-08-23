@@ -271,6 +271,42 @@ checkTrue(
 	"裸の rest はまだ名指しする",
 	asm("f : x ~xs ? x\nf 1 2").diagnostics.some((d) => d.message.includes("rest・デフォルトはまだ"))
 );
+// ---- デフォルト引数 ----
+//
+// **検査・デフォルトの充填・分解は宣言順に混ぜて出す。** 評価器が仮引数を1つずつ順に
+// 見るのと同じ順序でなければならない——デフォルト式は前の仮引数を参照でき（`let*`）、
+// かつ Input（前置 `@`）を含みうるので、**どの順で何回読むかが観測できる**。
+{
+	const src = "f :\n\tn\n\tas : 7\n ?\n\tn + as\nf 3";
+	const r = asm(src);
+	check("デフォルト付きは出る", r.diagnostics.length, 0);
+	const ls = body(src, "f");
+	// 渡されていれば（`__` でなければ）そのまま。渡されていなければ埋める。
+	checkTrue("渡されたかを見る", ls.some((l) => /^b\.ne \.Lhave/.test(l)), ls.join(" / "));
+	checkTrue("埋める値はデフォルト式", ls.some((l) => l === "mov x9, #7"), ls.join(" / "));
+	// **デフォルトを持つ仮引数は完全性公理の対象外。** `as` の検査は `b.eq .Lunit` にならない。
+	check("公理の検査は n の分だけ", ls.filter((l) => /^b\.eq \.Lunit/.test(l)).length, 1);
+	// **省略された引数には呼ぶ側が `__` を置く。** AAPCS64 は使わないレジスタを初期化
+	// しないので、伝えないと前の呼び出しの残骸をデフォルトの判定に使うことになる。
+	const main = body(src, "_sign_main");
+	checkTrue("呼ぶ側が __ を置く", main.some((l) => l === "movz x1, #0x8000, lsl #48"), main.join(" / "));
+	// 全部渡せば埋めない。
+	checkTrue("全部渡せば埋めない", !body("f :\n\tn\n\tas : 7\n ?\n\tn + as\nf 3 5", "_sign_main").some((l) => /^movz x1,/.test(l)));
+}
+// デフォルト式は前の仮引数を読める（`let*`）。
+{
+	const ls = body("f :\n\tn\n\ta : n + 1\n ?\n\tn + a\nf 3", "f");
+	checkTrue("前の仮引数を読む", ls.some((l) => l === "add x9, x9, x10"), ls.join(" / "));
+}
+// **`: __` のデフォルトは命令ゼロである。** 埋めるのは値が `__` のときだけなので、そこへ
+// `__` を置いても何も変わらない。宣言の内容は「この引数について完全性公理を働かせない」
+// の一点であり、検査を飛ばせば足りる——定義域の持ち上げは機械の上では何も無い。
+{
+	const src = "f :\n\tn\n\ts : __\n ?\n\tn + 1\nf 3 5";
+	const ls = body(src, "f");
+	check("公理の検査は n の分だけ", ls.filter((l) => /^b\.eq \.Lunit/.test(l)).length, 1);
+	checkTrue("埋める命令は出ない", !ls.some((l) => /^b\.ne \.Lhave/.test(l)), ls.join(" / "));
+}
 // ---- 末尾呼び出し最適化（tco.md） ----
 //
 // **これは最適化ではなく言語仕様としての保証である**（tco.md §6）。Sign にループは

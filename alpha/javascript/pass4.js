@@ -260,7 +260,6 @@ function paramShapesOf(paramNode) {
 		return [null];
 	}
 	return (paramNode.entries || []).map((e) => {
-		if (e.default) return null;
 		if (e.pattern) {
 			// いま出せるのは `[h ~t]`——先頭と残りの2つに割る形だけである。
 			const p = e.pattern;
@@ -270,7 +269,11 @@ function paramShapesOf(paramNode) {
 			return null;
 		}
 		if (e.rest) return null;
-		return e.name ? { kind: "bare", name: e.name } : null;
+		// **デフォルトを持つ仮引数も裸である。** 違うのは「渡されなかったとき何を置くか」
+		// だけであり、受け取り方は同じ1つの値である。デフォルト式はここでは持ち回るだけで、
+		// 生成するのは `genFunction`——`let*` の順で、前の仮引数が既に置かれた後に評価する
+		// 必要があるためである（1_definition.md §6.1）。
+		return e.name ? { kind: "bare", name: e.name, defaultNode: e.default || null } : null;
 	});
 }
 
@@ -722,13 +725,16 @@ function genExpr(node, env, em, scope, tail = false) {
 		// なので、`@p` の `p` が何を指すかはこの実体の中では決まっている
 		// （compiler_pipeline.md §3 の IMPORTANT）。
 		let callee = null;
+		let baseName = null;
 		if (isIdentifierNode(base)) {
 			callee = bareName(base.value);
+			baseName = callee;
 		} else if (
 			base && base.type === "operation" && base.position === "prefix" && base.name === "input" &&
 			isIdentifierNode(base.operand) && scope && scope.callees && scope.callees[base.operand.value]
 		) {
 			callee = scope.callees[base.operand.value];
+			baseName = callee;
 		}
 		if (!callee) {
 			return em.fail(n, "呼び先が静的に決まりません（`$名前` で渡されたものだけ具体化できます）");
@@ -774,6 +780,39 @@ function genExpr(node, env, em, scope, tail = false) {
 				reg++;
 			}
 		});
+		// **省略された引数には呼ぶ側が `__` を置く。**
+		//
+		// AAPCS64 は使われないレジスタを初期化しない。デフォルトを持つ仮引数は「渡されて
+		// いなければ埋める」形で出しているので（`genFunction`）、渡されなかったことを
+		// `__` で伝えないと**前の呼び出しの残骸をデフォルトの判定に使う**ことになる。
+		// 評価器が `argIdx < argValues.length ? … : UNIT` と書いているのと同じことを、
+		// 機械の上で明示する。
+		const sig = em.signatures ? em.signatures.get(baseName) : null;
+		if (sig) {
+			const expect = sig.filter((_, i) => !drop.includes(i));
+			let want = 0;
+			let ok = true;
+			for (const x of expect) {
+				if (x.error || !x.regs) { ok = false; break; }
+				want += x.regs;
+			}
+			if (ok && want > reg) {
+				// 足りない位置の幅は署名が言う。幅ごとに `__` の表し方が違う。
+				let at = reg;
+				let seen = 0;
+				for (const x of expect) {
+					if (seen + x.regs > reg) {
+						if (x.regs === 1) em.emit(`movz ${ARG_REGS[at]}, #0x8000, lsl #48`, "省略された引数は __");
+						else {
+							em.emit(`mov ${ARG_REGS[at]}, #0`, "省略された引数は __");
+							em.emit(`mov ${ARG_REGS[at + 1]}, #0`, "（len = 0）");
+						}
+						at += x.regs;
+					}
+					seen += x.regs;
+				}
+			}
+		}
 		em.pop(total);
 
 		// **末尾呼び出しは `bl` ではなく `b` である**（tco.md §6——最適化ではなく
@@ -1150,6 +1189,60 @@ function wrapFrame(bodyLines, slots, name) {
 	];
 }
 
+/**
+ * 仮引数が引数レジスタを何本ずつ使うかを返す（診断は出さない）。
+ *
+ * **呼び出しサイトと関数の入口が同じ計算を使う必要がある。** 省略された引数には呼ぶ側が
+ * `__` を置かなければならず（AAPCS64 は使われないレジスタを初期化しない）、その位置は
+ * 仮引数の幅で決まるからである。2箇所で別々に数えると、片方だけが正しい命令列を出す。
+ *
+ * @returns 仮引数ごとの `{ shape, regs, elemSize, signed, error }`。決まらない位置は
+ *   `error` に理由が入る（呼ぶ側は診断へ、呼び出しサイト側は「埋めない」判断へ使う）。
+ */
+function paramRegWidths(lambdaNode, em, callees = {}) {
+	const allShapes = paramShapesOf(lambdaNode.left);
+	const keep = allShapes.map((_, i) => i).filter((i) => {
+		const sh = allShapes[i];
+		return !sh || sh.kind !== "bare" || !(sh.name in callees);
+	});
+	const allTypes = lambdaNode.callsiteParamTypes || [];
+	const typeOf = (raw) => {
+		const b = lambdaNode.scope ? envLookup(lambdaNode.scope, raw) : null;
+		return b ? b.atomType : null;
+	};
+	return keep.map((idx) => {
+		const sh = allShapes[idx];
+		if (!sh) return { shape: null, error: "裸の仮引数・デフォルト付き・`[h ~t]` を出せます（rest はまだ）" };
+		if (sh.kind === "bare") {
+			const w = slotsOf(allTypes[idx] ?? typeOf(sh.name), em.conf);
+			if (w === null) return { shape: sh, error: `仮引数 ${bareName(sh.name)} の渡し方が決まりません（直和か族）` };
+			return { shape: sh, regs: w };
+		}
+		const headType = typeOf(sh.head);
+		const elem = headType ? measure({ atomType: headType }, { target: em.conf.target, charset: em.conf.charset }) : null;
+		if (!elem || !elem.size) {
+			return { shape: sh, error: `\`[${bareName(sh.head)} ~${bareName(sh.rest)}]\` の要素の幅が決まりません（${headType}）` };
+		}
+		if (slotsOf(headType, em.conf) !== 1) {
+			return { shape: sh, error: `要素そのものが参照で運ぶ値の分割代入はまだ出せません（${headType}）` };
+		}
+		return { shape: sh, regs: 2, elemSize: elem.size, signed: SIGNEDNESS[headType] === "signed" };
+	});
+}
+/**
+ * 関数ごとの引数レジスタの並びを先に集める。呼び出しサイトが「省略された引数」の位置を
+ * 知るために要る（`genFunction` と同じ `paramRegWidths` を使うので、必ず一致する）。
+ */
+function collectSignatures(nodes, em) {
+	const sig = new Map();
+	for (const node of nodes) {
+		if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+		const rhs = node.right;
+		if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
+		sig.set(bareName(node.left.value), paramRegWidths(rhs, em));
+	}
+	return sig;
+}
 function genFunction(name, lambdaNode, env, em, mono) {
 	const paramNode = lambdaNode.left;
 	const allShapes = paramShapesOf(paramNode);
@@ -1183,42 +1276,13 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	// 入ってくるレジスタの本数と、本体から見える名前を作る。
 	//   裸        1つの名前 : 型の幅ぶん
 	//   `[h ~t]`  容器が `{ptr, len}` の2本で来て、そこから2つの名前が生える
-	const incoming = []; // { regs, shape, headType }
-	for (let i = 0; i < shapes.length; i++) {
-		const sh = shapes[i];
-		if (sh.kind === "bare") {
-			const w = slotsOf(allTypes[keep[i]] ?? typeOf(sh.name), em.conf);
-			if (w === null) {
-				em.diagnostics.push({
-					severity: "error",
-					message: `${name}: 仮引数 ${bareName(sh.name)} の渡し方が決まりません（直和か族）`,
-					node: lambdaNode,
-				});
-				return;
-			}
-			incoming.push({ regs: w, shape: sh });
-			continue;
-		}
-		// `[h ~t]` は要素の並びを受ける。渡ってくるのは常に `{ptr, len}` の2本。
-		const headType = typeOf(sh.head);
-		const elem = headType ? measure({ atomType: headType }, { target: em.conf.target, charset: em.conf.charset }) : null;
-		if (!elem || !elem.size) {
-			em.diagnostics.push({
-				severity: "error",
-				message: `${name}: \`[${bareName(sh.head)} ~${bareName(sh.rest)}]\` の要素の幅が決まりません（${headType}）`,
-				node: lambdaNode,
-			});
-			return;
-		}
-		if (slotsOf(headType, em.conf) !== 1) {
-			em.diagnostics.push({
-				severity: "error",
-				message: `${name}: 要素そのものが参照で運ぶ値の分割代入はまだ出せません（${headType}）`,
-				node: lambdaNode,
-			});
-			return;
-		}
-		incoming.push({ regs: 2, shape: sh, elemSize: elem.size, signed: SIGNEDNESS[headType] === "signed" });
+	// 幅の計算は**呼び出しサイトと同じ関数**で行う（`paramRegWidths`）。省略された引数へ
+	// `__` を置く位置がそこで決まるので、2箇所で別々に数えると片方だけが正しくなる。
+	const incoming = paramRegWidths(lambdaNode, em, callees);
+	const bad = incoming.find((x) => x.error);
+	if (bad) {
+		em.diagnostics.push({ severity: "error", message: `${name}: ${bad.error}`, node: lambdaNode });
+		return;
 	}
 	const regs = incoming.reduce((a, x) => a + x.regs, 0);
 	if (regs > ARG_REGS.length) {
@@ -1269,34 +1333,81 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	//
 	// 検査は**仮引数をスロットへ写した後**に置く。TCO でフレームを使い回すとき、飛び先が
 	// この検査より後ろにあると初回しか検査を通らず、ループが終わらなくなるためである。
-	const unitLabel = incoming.length > 0 ? em.newLabel("unit") : null;
-	if (unitLabel) {
-		for (const inc of incoming) {
-			const what = inc.shape.kind === "bare" ? bareName(inc.shape.name) : `[${bareName(inc.shape.head)} ~${bareName(inc.shape.rest)}]`;
-			emitIsUnit(em, inc.off, inc.regs, `仮引数 ${what} が __ か`);
-			em.emit(`b.eq ${unitLabel}`, "__ なら本体へ入らない（完全性公理）");
-		}
-	}
-
-	// **`[h ~t]` はここで作る。**
+	// **検査・デフォルトの充填・分解は、宣言順に混ぜて出す。**
 	//
-	// 検査の**後**である。空の容器から先頭を読むと、指す先の外を触る——先に崩壊させて
-	// おけば読まずに済む。`function_guide.md` が「ブラケット分解でなければ完全性公理が
-	// 終端を与えられない」と書いているのは、この順序があって初めて成り立つ。
+	// 評価器（`bindParams`）が仮引数を1つずつ順に見るのと同じ順序でなければならない。
+	// デフォルト式は前の仮引数を参照でき（`let*`、1_definition.md §6.1）、かつ Input
+	// （前置 `@`）を含みうる——MMIO は読むたびに値が変わりうるので、**どの順で何回読むかが
+	// 観測できる**。まとめて先に出すと、崩壊するはずの呼び出しで余計な読み出しが起きる。
+	//
+	// デフォルトを持つ仮引数は完全性公理の対象外である。`__` を受けても崩壊させず、
+	// デフォルト式の値で埋める（それが `__` でも埋めたことにする——`s : __` が定義域を
+	// 持ち上げるのはこの一点である。Pass 3 が information で名指ししている）。
+	const unitLabel = incoming.length > 0 ? em.newLabel("unit") : null;
 	const params = [];
 	const paramOffsets = [];
 	const paramSlots = [];
+	const scopeSoFar = () => ({ params, paramOffsets, paramSlots, callees });
 	for (const inc of incoming) {
+		const what = inc.shape.kind === "bare" ? bareName(inc.shape.name) : `[${bareName(inc.shape.head)} ~${bareName(inc.shape.rest)}]`;
+		if (inc.shape.kind === "bare" && inc.shape.defaultNode) {
+			// **デフォルトが `__` なら命令は要らない。** 埋めるのは値が `__` のときだけで
+			// あり、そこへ `__` を置いても何も変わらない。つまりこの宣言の内容は
+			// 「この引数について完全性公理を働かせない」の一点であって、検査を飛ばせば
+			// それで足りる——定義域の持ち上げ（Pass 3 が information で名指しする）が
+			// 機械の上では**命令ゼロ**であることが、ここで見える。
+			if (inc.shape.defaultNode.type === "atom" && inc.shape.defaultNode.kind === "unit") {
+				em.emit(`// ${what} は __ を受けても崩壊しない`, "定義域の持ち上げ");
+				params.push(inc.shape.name);
+				paramOffsets.push(inc.off);
+				paramSlots.push(inc.regs);
+				continue;
+			}
+			// 渡されていれば（`__` でなければ）そのまま。渡されていなければ埋める。
+			const have = em.newLabel("have");
+			emitIsUnit(em, inc.off, inc.regs, `仮引数 ${what} が渡されたか`);
+			em.emit(`b.ne ${have}`, "渡されていればそのまま");
+			const dw = genExpr(inc.shape.defaultNode, env, em, scopeSoFar());
+			if (dw === false) {
+				em.diagnostics.push({ severity: "error", message: `${name}: 仮引数 ${what} のデフォルト式を出せませんでした`, node: inc.shape.defaultNode });
+				return;
+			}
+			if (dw === TAIL || dw !== inc.regs) {
+				em.pop(dw === TAIL ? 0 : dw);
+				em.diagnostics.push({
+					severity: "error",
+					message: `${name}: 仮引数 ${what} のデフォルトの幅が合いません（${dw} 本と ${inc.regs} 本）`,
+					node: inc.shape.defaultNode,
+				});
+				return;
+			}
+			const base = em.slot - dw;
+			for (let k = 0; k < dw; k++) {
+				em.load(SCRATCH[0], (base + k) * 8);
+				em.store(SCRATCH[0], inc.off + k * 8, k === 0 ? "デフォルトで埋める" : undefined);
+			}
+			em.pop(dw);
+			em.label(have);
+			params.push(inc.shape.name);
+			paramOffsets.push(inc.off);
+			paramSlots.push(inc.regs);
+			continue;
+		}
+		// デフォルトが無いなら完全性公理が働く。
+		emitIsUnit(em, inc.off, inc.regs, `仮引数 ${what} が __ か`);
+		em.emit(`b.eq ${unitLabel}`, "__ なら本体へ入らない（完全性公理）");
 		if (inc.shape.kind === "bare") {
 			params.push(inc.shape.name);
 			paramOffsets.push(inc.off);
 			paramSlots.push(inc.regs);
 			continue;
 		}
-		// 先頭は新しいスロット、残りは容器のスロットをそのまま使い回す（コピーしない）。
+		// **`[h ~t]` は検査の後で作る。** 空の容器から先頭を読むと指す先の外を触る
+		// ——先に崩壊させておけば読まずに済む。先頭は新しいスロット、残りは容器の
+		// スロットをそのまま使い回す（コピーしない）。
 		const headOff = em.slot * 8;
 		em.push();
-		emitDestructure(em, inc.off, headOff, inc.elemSize, inc.signed, `[${bareName(inc.shape.head)} ~${bareName(inc.shape.rest)}]`);
+		emitDestructure(em, inc.off, headOff, inc.elemSize, inc.signed, what);
 		params.push(inc.shape.head, inc.shape.rest);
 		paramOffsets.push(headOff, inc.off);
 		paramSlots.push(1, 2);
@@ -1357,6 +1468,8 @@ function generateAsm(nodes, env, options = {}) {
 
 	// 具体化はコード生成の前に済ませる（どの実体を出すかが決まらないと本体を出せない）。
 	const monos = collectMonomorphs(nodes);
+	// 呼び出しサイトが省略された引数の位置を知るための署名表。本体を出す前に要る。
+	em.signatures = collectSignatures(nodes, em);
 
 	em.lines.push("// Sign — AArch64 (AAPCS64)");
 	if (options.source) em.lines.push(`// source: ${options.source}`);
