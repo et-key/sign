@@ -30,3 +30,5 @@ _doc.cjs
 _fix.cjs
 _t.mjs
 _q.mjs
+_patch.cjs
+_pp/
