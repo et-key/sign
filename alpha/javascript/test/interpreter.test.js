@@ -1394,5 +1394,38 @@ checkTrue("`__` と `!__` は等しくない（真なので恒等射が返る）
 	check("高階で渡しても持ち上げは要らない", infos(higher), 0);
 	check("終端の仕事が実際に走る", run(higher), [0, "a", "b"]);
 }
+
+// ---- rest 形・ブラケット形のデフォルト ----
+//
+// 旧仕様は「デフォルトを渡す構文が思いつかない」という理由で避けていただけで、`:` を
+// そのまま使えば書ける。**デフォルトが供給するのは器であり、分解はその器に対して起きる**
+// ——`xs : `ab`` が「値を供給してから束縛する」のと同じ順序で、新しい機構は要らない。
+{
+	// `[x ~xs] : [1 2 3]` — 省略されたら `[1 2 3]` を分解する。
+	const F = "f :\n\t[x ~xs] : [1 2 3]\n ?\n\tx\n";
+	check("省略すればデフォルトを分解する", run(F + "f __"), 1);
+	check("渡せばそちらを分解する", run(F + "f [7 8]"), 7);
+	// `[~xs]`（分解しない参照渡し）も同じ。
+	check("`[~xs]` にも書ける", run("f :\n\t[~xs] : [1 2 3]\n ?\n\txs\nf __"), [1, 2, 3]);
+	// 混在形。
+	const G = "g :\n\tn\n\t[x ~xs] : [1 2 3]\n ?\n\tn + x\n";
+	check("混在形・省略", run(G + "g 10"), 11);
+	check("混在形・明示", run(G + "g 10 [7 8]"), 17);
+}
+// **裸の rest は発火の条件が違う。** rest は何個でも吸うので `__` が渡ってこない
+// ——「残りがゼロのとき」が「渡されなかった」にあたる（原理3 の表では `~xs` は stream、
+// `[x ~xs]` は参照渡しで、列が違う）。
+{
+	const H = "h :\n\tn\n\t~xs : [2 3 4]\n ?\n\txs\n";
+	check("残りがゼロならデフォルト", run(H + "h 1"), [2, 3, 4]);
+	check("渡せばそちら", run(H + "h 1 8 9"), [8, 9]);
+}
+// 以前は `:` を付けた瞬間に内部エラー（`lines.flatMap is not a function`）で落ちていた。
+// 名指しすらできていなかったので、まず通るようにした。
+{
+	const ok = (src) => { try { compile(src); return true; } catch (e) { return String(e.message).slice(0, 40); } };
+	check("`[x ~xs] : …` は落ちない", ok("f :\n\t[x ~xs] : [1 2]\n ?\n\tx\nf __"), true);
+	check("`~xs : …` は落ちない", ok("f :\n\t~xs : [1 2]\n ?\n\txs\nf __"), true);
+}
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
