@@ -586,5 +586,28 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 	checkTrue("トップレベルの式は _sign_main の中", r.text.split("_sign_main:")[1].includes("bl sq"));
 }
 
+
+// ---- 器を作る式と layer ----
+//
+// **記憶を確保できる layer でしか器は作れない。** `layer: 0` には確保の手段が無い
+// （前置 `#` はコンパイルエラー、memory_management.md §2 の表）。あるのは `alloca` と
+// `.rodata` だけで、`alloca` は自分のフレームなので返せない。
+//
+// 切り出し（`s ' i~`）は別の話である——既にある記憶を指し直すだけで、新しい場所を
+// 要求しない。だから layer: 0 でも使える。
+{
+	const at = (src, layer) => {
+		const { nodes, env } = compile(src, { charset: "ascii" });
+		return generateAsm(nodes, env, { target: "aarch64_qemu", charset: "ascii", layer }).diagnostics.map((d) => d.message);
+	};
+	const build = "f : s ?\n\ts (s ' 0)\nf `ab`";
+	checkTrue("layer 0 は「作れません」と言う", at(build, 0).some((m) => /layer: 0 では器を作れません/.test(m)), JSON.stringify(at(build, 0)));
+	// **同じ「出せない」でも中身が違う。** 上は設計上の結論、下は実装の穴である。
+	checkTrue("layer 1 は「まだ」と言う", at(build, 1).some((m) => /確保の規約が未定/.test(m)), JSON.stringify(at(build, 1)));
+	// 切り出しは layer 0 でも通る。
+	check("切り出しは layer 0 でも出る", at("f : s ?\n\ts ' 1~\nf `abc`", 0).length, 0);
+	// layer を渡さなければ検査しない（他の門番と同じ方針）。
+	checkTrue("layer 未指定なら layer の話をしない", !at(build, undefined).some((m) => /layer: /.test(m)), JSON.stringify(at(build, undefined)));
+}
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

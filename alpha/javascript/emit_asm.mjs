@@ -22,7 +22,7 @@ if (!file) {
 
 const conf = readOptionMs(msFile ? fs.readFileSync(msFile, "utf8") : "");
 const { nodes, env } = compile(fs.readFileSync(file, "utf8"), { layer: conf.layer, charset: conf.charset });
-const r = generateAsm(nodes, env, { target: conf.target, charset: conf.charset, source: file });
+const r = generateAsm(nodes, env, { target: conf.target, charset: conf.charset, layer: conf.layer, source: file });
 
 process.stdout.write(r.text);
 for (const d of r.diagnostics) console.error(`${d.severity}: ${d.message}`);

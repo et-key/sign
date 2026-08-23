@@ -47,6 +47,9 @@ const SCRATCH = ["x9", "x10"];
 // フレームに置ける式の深さ。超えたら診断（深い式は稀なので、まず名指しする）。
 const MAX_SLOTS = 16;
 
+// 器を作る余積の演算（記憶の確保を要求する）。
+const COPRODUCT_BUILD_OPS = new Set(["construct", "concat", "push", "unshift", "product"]);
+
 // 演算子名 → ニーモニック。除算が `sdiv` なのは `Int` が符号ありだから
 // （target_info.js の SIGNEDNESS）。
 const INT_OPS = { add: "add", sub: "sub", mul: "mul", div: "sdiv" };
@@ -893,6 +896,25 @@ function genExpr(node, env, em, scope, tail = false) {
 					"Sign は実行時ディスパッチを持たない（compiler_pipeline.md §3）。スロットの型を揃えれば List になります"
 		);
 	}
+	// **器を作る式は、記憶を確保できる layer でしか成立しない。**
+	//
+	// `layer: 0` には確保の手段が無い（前置 `#` はコンパイルエラー、memory_management.md
+	// §2 の表）。あるのは `alloca` と `.rodata` だけで、`alloca` は自分のフレームなので
+	// 返せない。切り出し（`s ' i~`）がコピー無しで作れるのとは別の話である——あちらは
+	// 既にある記憶を指し直すだけで、新しい場所を要求しない。
+	//
+	// layer が上がっても今は出せないが、そのときの理由は「確保の規約が未定」であって
+	// 「この layer では書けない」ではない。**同じ「出せない」でも中身が違う**ので分ける。
+	if (COPRODUCT_BUILD_OPS.has(n.name) && slotsOf(n.atomType, em.conf) === 2) {
+		if (em.conf.layer !== undefined && em.conf.layer < 1) {
+			return em.fail(
+				n,
+				`layer: ${em.conf.layer} では器を作れません（${n.atomType} の記憶を確保する手段が無い）。` +
+					`切り出し（\`s ' i~\`）は確保が要らないので使えます`
+			);
+		}
+		return em.fail(n, `器の構築はまだ出せません（${n.atomType}——確保の規約が未定。返値は sret へ向かう）`);
+	}
 	return em.fail(n, `まだ出せない式です（${n.name || n.type}）`);
 }
 
@@ -1482,7 +1504,13 @@ function genFunction(name, lambdaNode, env, em, mono) {
  * @returns {{ text: string, diagnostics: Array }}
  */
 function generateAsm(nodes, env, options = {}) {
-	const conf = { target: options.target || "aarch64_qemu", charset: options.charset || DEFAULT_CHARSET };
+	// `layer` は記憶を確保できるかどうかを決める（memory_management.md §2 の表）。
+	// 渡されなければ検査しない——`option.ms` を読まない経路まで縛らない、他の門番と同じ方針。
+	const conf = {
+		target: options.target || "aarch64_qemu",
+		charset: options.charset || DEFAULT_CHARSET,
+		layer: options.layer,
+	};
 	const em = new Emitter(conf);
 	if (!widthsOf(conf.target)) {
 		return {
