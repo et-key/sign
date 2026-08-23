@@ -910,12 +910,27 @@ function makeIterator(start, stepFn, end, affineStep = null, source = null) {
  */
 function makeWalk(items, origin = null) {
   const it = makeIterator(0, (i) => i + 1, items.length - 1, 1, items);
+  it.spread = true;
   if (origin) it.origin = origin;
   return it;
 }
 
 function isIterator(v) {
   return !!(v && typeof v === "object" && v.__iterator__);
+}
+
+/**
+ * 「撒かれた並び」か——後置 `~` が付いた値かどうか。
+ *
+ * **規則そのものと、規則の要素たちは別のものである。** `[1 ~ 3]` は1個の値（`{start,
+ * step, end}` の規則）であり、`[1 ~ 3]~` はその要素たちである。どちらもイテレータで
+ * 運ばれるので、「イテレータかどうか」では区別できない——だから印を値に持たせる。
+ *
+ * 印が値にあるので名前を通っても関数を通っても残る。`n : [1 ~ 3]~` と束縛してから
+ * `[1 2] n` と書いても撒かれる、という等価性がこれで保たれる。
+ */
+function isSpread(v) {
+  return isIterator(v) && v.spread === true;
 }
 
 // 終端を持たないストリームは無限である。数え上げ・実体化はできない。
@@ -1135,7 +1150,11 @@ function evalUnaryOp(name, v) {
       // 見るしかなく、名前に束縛した瞬間に印が消えていた。添字位置の「N から末尾まで」は
       // Pass 2 が終端の無いレンジへ均している（`desugarIndexRest`）ので、ここには来ない。
       if (isUnit(v)) return UNIT; // 零射（operator_table.md tier 23）
-      if (isIterator(v)) return v; // 既に規則なら不動点
+      // **不動点は「撒かれた並び」であって「規則」ではない。** 規則に `~` を付けると
+      // その要素たちになる——`[1 ~ 3]` は1個の値、`[1 ~ 3]~` は 1,2,3 である。
+      // 既に撒かれているものへもう一度付けても変わらない（冪等）。
+      if (isSpread(v)) return v;
+      if (isIterator(v)) return { ...v, spread: true };
       if (typeof v === "string") return makeWalk([...v]);
       if (Array.isArray(v)) return makeWalk(v);
       // 名前付きスロットの展開は「スロットを名前ごと撒く」ことである（§5.3）。
@@ -1719,9 +1738,10 @@ function evaluate(node, env) {
         if (typeof l === "string" || typeof r === "string") {
           return stringifyForConcat(l) + stringifyForConcat(r);
         }
-        // **撒くかどうかは値が決める。** イテレータ（後置 `~` の結果）なら中身を撒く。
+        // **撒くかどうかは値が決める。** 後置 `~` が付いた値だけを撒く。イテレータで
+        // ありさえすれば撒く、ではない——レンジは撒くものではなく1個の値だからである。
         // 構文ではなく値なので、名前に束縛しても関数を通しても同じ答えになる。
-        return [...asList(deIterate(l)), ...asList(deIterate(r))];
+        return [...asList(deIterate(l)), ...(isSpread(r) ? asList(deIterate(r)) : [r])];
       }
       // list_cheat_sheet.md「先頭/末尾に要素追加」（10.1、pass2.jsのcoproductReduce参照）。
       // pass2.js側の命名はJS配列メソッドのpush/unshiftとは意味が逆——push(a,b)はb側が
@@ -1734,23 +1754,25 @@ function evaluate(node, env) {
         // 0 [1 2 3] → [0 1 2 3]（aを先頭に追加）。aがUnit（単位元）なら素通しでbのみ返す。
         // **`~` が付いていれば撒く**——判定は値であって構文ではない。
         const rawA = evaluate(node.left, env);
-        const a = deIterate(rawA);
         const b = deIterate(evaluate(node.right, env));
-        if (isUnit(a)) return asList(b);
-        return [...(isIterator(rawA) ? asList(a) : [a]), ...asList(b)];
+        if (isUnit(rawA)) return asList(b);
+        return [...(isSpread(rawA) ? asList(deIterate(rawA)) : [rawA]), ...asList(b)];
       }
       case "unshift": {
         // [1 2 3] 4 → [1 2 3 4]（bを末尾に追加）。bがUnit（単位元）なら素通しでaのみ返す。
         const rawB = evaluate(node.right, env);
         const a = deIterate(evaluate(node.left, env));
-        const b = deIterate(rawB);
         // 余積の単位元則（type_system.md §6.1）。**器の側が `__` なら右辺がそのまま通る**
         // ——`__ [1 2 3]` は `[1 2 3]` であって `[[1 2 3]]` ではない。`construct` 側と
         // 同じ規則であり、片側にしか無いと `__` が「器を1つ被せる」ことになる。
-        if (isUnit(a)) return b;
-        if (isUnit(b)) return asList(a);
+        //
+        // **単位元かどうかは実体化する前に見る。** 終端の無い規則を実体化すると `__` に
+        // なるが、それは「規則が単位元だ」という意味ではない——`[1 2] [0 ~+ 1]` は
+        // カウンタを1個持つリストであって、カウンタが消えるわけではない。
+        if (isUnit(a)) return rawB;
+        if (isUnit(rawB)) return asList(a);
         // 右辺が `~` 付きなら撒く。無ければ**1要素として**足す（§2.2 の表）。
-        return [...asList(a), ...(isIterator(rawB) ? asList(b) : [b])];
+        return [...asList(a), ...(isSpread(rawB) ? asList(deIterate(rawB)) : [rawB])];
       }
       // list_model.md §2.3「派生演算子による範囲リストの構築」。**レンジ式の実体は
       // 常にイテレータである**——`{start, step, end}` の固定サイズ構造体であり、
@@ -1894,6 +1916,10 @@ function evaluate(node, env) {
  * というのが `Iterator` を実体にした狙いそのものである。無限は観測できないので `__`。
  */
 function observe(v) {
+  // 中に入れ子になった規則も実体化する。**観測の話であって値の話ではない**
+  // ——`[1 2] [1 ~ 3]` の値は「カウンタを1個持つリスト」であり、それを見せるときに
+  // 有限の規則は要素の並びとして描かれる（`String ≅ List` を描画側で保つのと同じ）。
+  if (Array.isArray(v)) return v.map(observe);
   const d = deIterate(v);
   // **1要素はスカラーである**（`[5]` は `Int`、list_model.md）。実体化した規則にも同じ
   // 規則が効く——`1 ~ 1` や `st~`（`st` が底の1要素だけ）が `[x]` のまま残っていると、

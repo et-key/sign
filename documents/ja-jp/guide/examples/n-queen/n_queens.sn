@@ -42,7 +42,7 @@ conflict : col dist [h ~t] ?
 try_col : col row n [~board] ?
 	col > n : __
 	(conflict col 1 board) : try_col (col + 1) row n board
-	(place (row + 1) n (col board)) | try_col (col + 1) row n board
+	(place (row + 1) n (col board~)) | try_col (col + 1) row n board
 
 `place: row 行目以降を埋める。全ての行を置き終えたら（row > n）盤がそのまま答えになる。`
 

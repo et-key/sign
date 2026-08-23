@@ -129,5 +129,26 @@ check(
 
 check("parser.sn: 単項（7 のみ）", runWith("parser.sn", "fst (expr [`7`])"), "7");
 
+
+// ---- 8-Queens（guide の例） ----
+//
+// **結果を固定していなかったので、壊れても気付けなかった。** 実際に一度壊した
+// ——余積の規則を直したとき `(col board)` が「盤を1要素として足す」になり、答えが
+// `[3 [1 [3 [1 …]]]]` という入れ子になった。テストが無ければ通ってしまう類の壊れ方で、
+// 診断も出ない。処理系の単体テストでは拾えない相互作用そのものである。
+{
+	const p = path.join(__dirname, "..", "..", "..", "documents", "ja-jp", "guide", "examples", "n-queen");
+	const runFile = (name) => {
+		const source = fs.readFileSync(path.join(p, name), "utf8");
+		const { nodes } = compile(source, { parse: parser.parse });
+		const env = newRuntimeEnv(null);
+		let result = UNIT;
+		for (const node of nodes) result = observe(evaluate(node, env));
+		return result;
+	};
+	check("n_queens.sn → 8クイーンの解", runFile("n_queens.sn"), [4, 2, 7, 3, 6, 8, 5, 1]);
+	// コメントを落とした版も同じ答えを出す（コメントは命令を出さない）。
+	check("コメント除去版も同じ解", runFile("n_queens.nocomment.sn"), [4, 2, 7, 3, 6, 8, 5, 1]);
+}
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
