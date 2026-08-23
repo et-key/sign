@@ -170,8 +170,12 @@ function collectMonomorphs(nodes) {
 		if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
 		const rhs = node.right;
 		if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
-		const params = paramNamesOf(rhs.left);
-		if (params.some((x) => x === null)) continue;
+		// **名前を持たない仮引数があっても具体化はできる。** 関数ポインタになれるのは裸の
+		// 仮引数だけだが、同じ仮引数リストに `[~s]` のような分解の形が混ざることはある
+		// ——以前はそこで諦めていたので、器を宣言の形で受けた瞬間に単相化が効かなくなり、
+		// `@p` が「呼び先が静的に決まりません」になっていた。位置は保つ（`indexOf` が
+		// 実引数の位置と対応する必要があるため）。
+		const params = paramShapesOf(rhs.left).map((sh) => (sh && sh.kind === "bare" ? sh.name : null));
 		const ptrParams = [];
 		const visit = (n) => {
 			if (!n || typeof n !== "object") return;
@@ -261,7 +265,7 @@ function paramShapesOf(paramNode) {
 		// 受け取り方は裸の仮引数と同じ1つの値であり、違うのは**型の宣言**の方——器である
 		// ことを言っているので `__` がそこを通れない。それは Pass 3 の仕事であって、
 		// 機械の上ですることは裸の仮引数と変わらない。
-		if (es.length === 1 && es[0].rest && !es[0].default && es[0].name) {
+		if (es.length === 1 && es[0].rest && es[0].name) {
 			return [{ kind: "bare", name: es[0].name, defaultNode: null, whole: true }];
 		}
 		return [null];
@@ -270,12 +274,17 @@ function paramShapesOf(paramNode) {
 		if (e.pattern) {
 			// いま出せるのは `[h ~t]`——先頭と残りの2つに割る形だけである。
 			const p = e.pattern;
-			if (p.length === 2 && !p[0].rest && p[1].rest && !p[0].defaultTokens && !p[1].defaultTokens) {
-				return { kind: "destructure", head: p[0].name, rest: p[1].name };
-			}
-			// `[~x]`（混在形）。丸ごと受けるので裸の仮引数と同じ扱いになる。
+			// `[~x]`（混在形）。丸ごと受けるので裸の仮引数と同じ扱いになる。デフォルトが
+			// あればそれが**器を供給する**ので、裸の仮引数のデフォルトと同じ経路で足りる。
 			if (p.length === 1 && p[0].rest && !p[0].defaultTokens && p[0].name) {
-				return { kind: "bare", name: p[0].name, defaultNode: null, whole: true };
+				return { kind: "bare", name: p[0].name, defaultNode: e.default || null, whole: true };
+			}
+			if (p.length === 2 && !p[0].rest && p[1].rest && !p[0].defaultTokens && !p[1].defaultTokens) {
+				// **分解の形にデフォルトが付いた場合はまだ出せない。** 器を供給してから
+				// 分解する、という順序を出す必要がある——黙って無視すると、渡されなかった
+				// ときに未初期化のレジスタを分解することになる。
+				if (e.default) return null;
+				return { kind: "destructure", head: p[0].name, rest: p[1].name };
 			}
 			return null;
 		}
@@ -1223,13 +1232,23 @@ function paramRegWidths(lambdaNode, em, callees = {}) {
 	};
 	return keep.map((idx) => {
 		const sh = allShapes[idx];
-		if (!sh) return { shape: null, error: "裸の仮引数・デフォルト付き・`[h ~t]` を出せます（rest はまだ）" };
+		if (!sh) return { shape: null, error: "裸の仮引数・デフォルト付き・`[h ~t]`・`[~x]` を出せます（裸の rest と、分解の形へのデフォルトはまだ）" };
 		if (sh.kind === "bare") {
 			// **`[~x]` は宣言そのものが「器である」と言っている。** 型の解決を待たずに
 			// 渡し方が決まる——要素の並びは `{ptr, len}` の2本である（stack_abi.md §4.6）。
 			// n_queens.sn が「引数の書き方がそのまま型の宣言になっている」と書いているのは
 			// このことで、`[~board]` は盤がリストであることを宣言している。
-			if (sh.whole) return { shape: sh, regs: 2 };
+			// **どの器かは型が言う。** `Struct` は形が型にあるので `{ptr}` の1本、
+			// `List`/`String` は要素数が型に無いので `{ptr, len}` の2本である
+			// （stack_abi.md §4.6）。型が決まらないときだけ、宣言が言う「器である」に
+			// 従って要素の並び（2本）として扱う——`[~x]` はそこまでは必ず言っている。
+			if (sh.whole) {
+				// 型が**決まっているとき**だけ型に従う。`slotsOf` は未注釈を 1 とみなすので、
+				// そのまま渡すと器が1本になってしまう——宣言が「器である」と言っている
+				// 以上、決まらないなら要素の並び（2本）として扱う方が宣言に忠実である。
+				const t = allTypes[idx] ?? typeOf(sh.name);
+				return { shape: sh, regs: t ? slotsOf(t, em.conf) ?? 2 : 2 };
+			}
 			const w = slotsOf(allTypes[idx] ?? typeOf(sh.name), em.conf);
 			if (w === null) return { shape: sh, error: `仮引数 ${bareName(sh.name)} の渡し方が決まりません（直和か族）` };
 			return { shape: sh, regs: w };
@@ -1268,15 +1287,8 @@ function genFunction(name, lambdaNode, env, em, mono) {
 		const sh = allShapes[i];
 		return !sh || sh.kind !== "bare" || !(sh.name in callees);
 	});
-	const shapes = keep.map((i) => allShapes[i]);
-	if (shapes.some((sh) => sh === null)) {
-		em.diagnostics.push({
-			severity: "error",
-			message: `${name}: 裸の仮引数と \`[h ~t]\` だけを出せます（rest・デフォルトはまだ）`,
-			node: lambdaNode,
-		});
-		return;
-	}
+	// 出せない形の報告は `paramRegWidths` が返す `error` に一本化してある（下）。
+	// ここで別文言を出すと、同じ理由が2通りの言い方で出ることになる。
 	// 型は2つの経路から来る。裸の仮引数は呼び出しサイトからの逆算（`callsiteParamTypes`）、
 	// 分割代入された名前はラムダのスコープに直接ある——`[h ~t]` の `h` と `t` は仮引数の
 	// 位置に名前が無いので、束縛の側にしか書いていない。
@@ -1304,7 +1316,7 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	if (regs > ARG_REGS.length) {
 		em.diagnostics.push({
 			severity: "error",
-			message: `${name}: 引数がレジスタ ${ARG_REGS.length} 本を超えます（${shapes.length} 個で ${regs} 本）`,
+			message: `${name}: 引数がレジスタ ${ARG_REGS.length} 本を超えます（${incoming.length} 個で ${regs} 本）`,
 			node: lambdaNode,
 		});
 		return;

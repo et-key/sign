@@ -284,7 +284,7 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 // rest とデフォルトはまだ出せない。**名指しする**——黙って飛ばすと命令の無い関数ができる。
 checkTrue(
 	"裸の rest はまだ名指しする",
-	asm("f : x ~xs ? x\nf 1 2").diagnostics.some((d) => d.message.includes("rest・デフォルトはまだ"))
+	asm("f : x ~xs ? x\nf 1 2").diagnostics.some((d) => d.message.includes("裸の rest"))
 );
 // ---- デフォルト引数 ----
 //
