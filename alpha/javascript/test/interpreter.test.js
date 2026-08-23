@@ -1351,5 +1351,36 @@ check("`!__ 5` も素通し（恒等射）", run("(!__) 5"), 5);
 // 値として等しくはない。素通しする道が違うだけである。
 checkTrue("`__` と `!__` は等しくない（真なので恒等射が返る）", isIdentity(runValue("__ !== (!__)")));
 
+
+// ---- 定義域の持ち上げ（`: __` のデフォルト） ----
+//
+// `s : __` は「省略されうる」の宣言であると同時に、その引数について**完全性公理を止める**
+// 宣言でもある——`__` を受けても本体が走る。
+//
+// **型には出せない。** `T | Unit` は `T` へ吸収される（`joinArmTypes`）——niche が T の
+// 表現の中にあるので機械の上では同じ幅であり、その吸収は正しい。違うのは関数の性質の方
+// なので、性質として報告する。
+{
+	const infos = (src) => compile(src).diagnostics.filter((d) => d.reason === "lifted-domain");
+	const lifted = "f :\n\tn\n\tas : __\n ?\n\tas\nf 3";
+	check("`: __` は information で名指しする", infos(lifted).length, 1);
+	check("level は information（誤りではない）", infos(lifted)[0].level, "information");
+	// **見るのは書かれた形であって推論された型ではない。** 計算されるデフォルトは、返値型が
+	// 未解決な周回では `Unit` に見えるが、それは「まだ分かっていない」であって宣言ではない。
+	check("計算されるデフォルトは持ち上げではない", infos("g : x ? x\nf :\n\tn\n\tas : g n\n ?\n\tas\nf 3").length, 0);
+	check("値のデフォルトは持ち上げではない", infos("f :\n\tn\n\tas : 0\n ?\n\tas\nf 3").length, 0);
+	check("デフォルト無しは持ち上げではない", infos("f : n as ? as\nf 3 4").length, 0);
+	// 実プログラムでは `preprocess.sn` の `walk` だけが持ち上げている。
+	check("n_queens は持ち上げていない", infos(fs.readFileSync(path.join(__dirname, "..", "..", "..", "documents", "ja-jp", "guide", "examples", "n-queen", "n_queens.sn"), "utf8")).length, 0);
+}
+// **持ち上げは誤りではない。** 完全性公理が与える終端は答えが必ず `__` になるので、終端に
+// 仕事があるときは公理を止めるしかない。`preprocess.sn` の `walk` は残ったインデントを
+// 閉じるためにこれを使っており、デフォルトを外すと閉じ DEDENT が消える。
+{
+	const body = "\n\t!s : 9\n\tf (s ' 1~)\n";
+	const run1 = (def) => run("f :\n\ts" + def + "\n ?" + body + "f `ab`");
+	check("終端に仕事があるなら `: __` が要る", run1(" : __"), 9);
+	check("デフォルト無しだと終端の仕事に届かない", run1(""), "__");
+}
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

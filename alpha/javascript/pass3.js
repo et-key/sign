@@ -1377,6 +1377,24 @@ function inferLambdaParamTypes(lambdaNode, env) {
       // 言っていない——`s : __` は「省略されうる」という宣言であり、完全性公理の抑制が
       // 目的である（そうしないと空を渡した時点で呼び出しごと消える）。型は使用箇所が語る。
       if (t && t !== "Unit") inferred.set(e.name, t);
+      // **`__` のデフォルトは束縛へ印を残す。** 型には出せない——`joinArmTypes` が
+      // `T | Unit` を `T` へ吸収するのは正しい（niche が T の表現の中にあるので、機械の
+      // 上では同じ幅である）。違うのは**関数の性質**の方であり、この仮引数について
+      // 完全性公理が働かない＝非正格になる、というのがその内容である。
+      //
+      // これが必要な場面はある。完全性公理が与える終端は答えが必ず `__` になるので、
+      // 終端に仕事があるとき（`preprocess.sn` の `walk` が残ったインデントを閉じる等）は
+      // 公理を止めるしかない。禁止ではなく、代償のある選択である
+      // （[`function_guide.md`] の「状態ベクタには失敗と区別が付かない値を置かない」）。
+      //
+      // **見るのは書かれた形であって推論された型ではない。** `line : head_line s` のような
+      // 計算されるデフォルトは、返値型が未解決な周回では `Unit` に見えるが、それは
+      // 「まだ分かっていない」であって定義域の宣言ではない。持ち上げは書き手が
+      // `: __` と**書いた**ときだけ起きる。
+      else if (e.default.type === "atom" && e.default.kind === "unit") {
+        const b = scope ? envLookup(scope, e.name) : null;
+        if (b) b.liftedDomain = true;
+      }
       // 器のデフォルトは要素型も語る。`c : [0 ~+ 1]` の `c ' n` が何の型かは
       // ここを渡さないと出ない——`inferred` は型名しか運べないので束縛へ直接置く。
       if (e.default.elementType) {
@@ -2158,6 +2176,40 @@ function annotateAll(nodes, env, diagnostics) {
     }
   }
   runFixpoint();
+
+  // **完全性公理が働かない仮引数を名指しする。**
+  //
+  // `s : __` は「省略されうる」の宣言であると同時に、その引数について完全性公理を
+  // 止めるという宣言でもある——`__` を受けても本体が走る。型には出せない
+  // （`T | Unit` は `T` へ吸収される。niche が T の表現の中にあるので機械の上では
+  // 同じ幅であり、その吸収は正しい）ので、性質として報告する。
+  //
+  // **誤りではない。** 完全性公理が与える終端は答えが必ず `__` になるので、終端に仕事が
+  // あるときは公理を止めるしかない（`preprocess.sn` の `walk` は残ったインデントを
+  // 閉じる）。代償は、正当な「空」と失敗して `__` に落ちた値を区別できなくなること
+  // である（`function_guide.md` の状態ベクタの節）。だから information に留める。
+  for (const node of nodes) {
+    if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+    const rhs = node.right;
+    if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
+    const pn = rhs.left;
+    if (!pn || pn.type !== "params") continue;
+    for (const e of pn.entries || []) {
+      if (!e.name || !e.default) continue;
+      if (!(e.default.type === "atom" && e.default.kind === "unit")) continue;
+      const b = rhs.scope ? envLookup(rhs.scope, e.name) : null;
+      diagnostics.push({
+        level: "information",
+        reason: "lifted-domain",
+        spec: "function_guide.md 「仮引数リストは関数の状態ベクタである」",
+        message:
+          `${String(node.left.value).replace(/^<|>$/g, "")} の仮引数 ${String(e.name).replace(/^<|>$/g, "")} は定義域が __ まで持ち上がっています` +
+          `（デフォルトが __ なので完全性公理が働かず、__ を受けても本体が走ります${b && b.atomType ? `。型は ${b.atomType}` : ""}）。` +
+          `終端に仕事があるときは必要ですが、正当な「空」と失敗して __ に落ちた値を区別できなくなります`,
+      });
+    }
+  }
+
   // **上がらなかった種は答えではない。** 不動点が一度も本体から型を読めなかった関数は
   // 「何も返さない」のではなく「まだ分からない」のである。底を置いたまま報告すると、
   // `f : [x ~xs] ? xs` が `Unit` を返すと言い張りながら値はリストを返す——型と値が
