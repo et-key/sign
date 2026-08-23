@@ -887,10 +887,31 @@ function buildCharRange(start, end) {
  * 引数として使うとループカウンタになる——再帰という概念を使わずに純粋なループを記述できる」
  * と書いている看板の書き方であり、実体化しかできない実装では**そもそも書けなかった**。
  */
-function makeIterator(start, stepFn, end, affineStep = null) {
+function makeIterator(start, stepFn, end, affineStep = null, source = null) {
   // `affineStep` は等差（`~` `~+` `~-`）のときの歩幅。規則が一次なら要素数は割り算で
   // 出るので、`|.|` が**走査すらせずに**答えられる。等比・冪では null（規則が一次でない）。
-  return { __iterator__: true, start, stepFn, end, affineStep };
+  //
+  // `source` があるときは `start`/`end` は**値ではなく位置**であり、要素は `source[i]`
+  // である。器の上を走るイテレータがこれで、機械の上では `{ptr, stride, end}` になる
+  // （stack_abi.md §4.6 の「規則」の行）——**コピーは起きない**。
+  return { __iterator__: true, start, stepFn, end, affineStep, source };
+}
+
+/**
+ * 器の要素を走るイテレータ。後置 `~`（展開）がこれを作る。
+ *
+ * **`~` の結果が値になることが要である。** 器と同じ値を返していたときは、余積が
+ * 「右辺に `~` が書いてあるか」という**構文**を見るしかなく、名前に束縛した瞬間に印が
+ * 消えていた——`[1 2] [3 4]~` は平らになるのに `n : [3 4]~` を経由すると入れ子になる、
+ * という破れである。値が違えば名前を通っても関数を通っても残る。
+ *
+ * `origin` は名前付きスロットを撒いたときの元の器。**スロットを撒くとは名前ごと撒く
+ * ことである**——値だけにすると名前が落ちてマージできない（list_model.md §5.3）。
+ */
+function makeWalk(items, origin = null) {
+  const it = makeIterator(0, (i) => i + 1, items.length - 1, 1, items);
+  if (origin) it.origin = origin;
+  return it;
 }
 
 function isIterator(v) {
@@ -910,8 +931,10 @@ function iteratorAt(it, n) {
   // Pass 4 が出すのもロードではなくこの算術になる。
   if (typeof it.affineStep === "number" && typeof it.start === "number") {
     const v = it.start + n * it.affineStep;
-    if (isInfiniteIterator(it)) return v;
-    return (it.start <= it.end ? v > it.end : v < it.end) ? UNIT : v;
+    // 器の上なら `v` は位置なのでそこを読む。規則の上なら `v` そのものが要素である。
+    const pick = (x) => (it.source ? (x in it.source ? it.source[x] : UNIT) : x);
+    if (isInfiniteIterator(it)) return pick(v);
+    return (it.start <= it.end ? v > it.end : v < it.end) ? UNIT : pick(v);
   }
   let v = it.start;
   for (let i = 0; i < n; i++) {
@@ -949,7 +972,7 @@ function iteratorCount(it) {
 function iteratorRest(it) {
   const next = it.stepFn(it.start);
   if (!isInfiniteIterator(it) && (it.start <= it.end ? next > it.end : next < it.end)) return UNIT;
-  return makeIterator(next, it.stepFn, it.end, it.affineStep);
+  return makeIterator(next, it.stepFn, it.end, it.affineStep, it.source);
 }
 
 // 有限のイテレータだけを実体化する。無限は展開できないので `__`——「無限を配列にする」
@@ -961,7 +984,8 @@ function materializeIterator(it) {
   const ascending = it.start <= it.end;
   let guard = 0;
   while (ascending ? v <= it.end : v >= it.end) {
-    out.push(v);
+    // 器の上なら `v` は位置である。規則の上なら `v` そのものが要素である。
+    out.push(it.source ? it.source[v] : v);
     v = it.stepFn(v);
     if (++guard > 1000000) throw new Error("interpreter: range: 要素数が多すぎます（stepが0または終端に向かっていない可能性）");
   }
@@ -1103,12 +1127,21 @@ function evalUnaryOp(name, v) {
       // unit.md §0.4: @__ = __（Unitもそのまま吸収元として素通し）。
       return v && v.__address__ ? v.get() : v;
     case "expand": {
-      // 後置~：1段階展開（list_cheat_sheet.md「リストのフラット」、`[1 2,3 4]~ → [1 2 3 4]`）。
-      // 呼び出し引数位置での展開（複数の位置引数へのspread）はevalArgValues側が
-      // 独自に処理する別経路なので、ここは「値としての」1段階フラット化のみを担う。
-      // ネストした要素（配列）だけをspreadし、非配列の要素はそのまま残す。
-      if (!Array.isArray(v)) return v;
-      return v.flatMap((x) => (Array.isArray(x) ? x : [x]));
+      // **後置 `~` は「器を開いて中身を撒く」だけを意味する。** 返すのは器そのものでは
+      // なく「消費されるべき並び」＝イテレータであり、器とは別の値である
+      // （list_model.md §2.3「消費と展開は別のこと」）。
+      //
+      // 器と同じ値を返していたときは、余積が「右辺に `~` が書いてあるか」という**構文**を
+      // 見るしかなく、名前に束縛した瞬間に印が消えていた。添字位置の「N から末尾まで」は
+      // Pass 2 が終端の無いレンジへ均している（`desugarIndexRest`）ので、ここには来ない。
+      if (isUnit(v)) return UNIT; // 零射（operator_table.md tier 23）
+      if (isIterator(v)) return v; // 既に規則なら不動点
+      if (typeof v === "string") return makeWalk([...v]);
+      if (Array.isArray(v)) return makeWalk(v);
+      // 名前付きスロットの展開は「スロットを名前ごと撒く」ことである（§5.3）。
+      if (isNamedSlots(v)) return makeWalk(Object.values(v), v);
+      // **1要素はスカラーと同型**（`[x]` ≅ `x`）。撒いても1つなので器へ戻る。
+      return makeWalk([v]);
     }
     case "continuous":
       // 前置~（rest記法用の密着マーカー）。値としてはオペランドをそのまま返す。
@@ -1618,8 +1651,8 @@ function evaluate(node, env) {
       }
       case "construct":
       case "concat": {
-        const l = evaluate(node.left, env);
-        const r = evaluate(node.right, env);
+        let l = evaluate(node.left, env);
+        let r = evaluate(node.right, env);
         // 余積の単位元則（type_system.md §6.1「関数の位置の `__` は余積の初対象＝単位元、
         // 引数を素通しにする」）。Unit側を消した結果が1項だけになったら、それを
         // 1要素リストで包み直さずそのまま返す——`[5]`（1行ブロック）が5そのものに
@@ -1662,9 +1695,21 @@ function evaluate(node, env) {
         //
         // 重複キーは右が勝つ（§5.3 規則2）。型が違う上書きはコンパイルエラーであり、
         // それは Pass 3 が静的に弾く（規則3）——ここへ来る時点で型は揃っている。
-        if (isSpreadNode(node.right) && isNamedSlots(l) && isNamedSlots(r)) {
-          return { ...l, ...r };
+        // 判定は**値**で行う。`~` はイテレータを返すので構文を見る必要が無い
+        // ——`n : q~` と束縛してから `p n` と書いても同じようにマージされる。
+        // 見るのは右辺だけでよい。**左辺は器なので常に展開されている**（§2.2）ので、
+        // 左結合の連鎖（`a~ b~ c~`）で中間結果が素の構造体になっても繋がる。
+        {
+          const lo = isIterator(l) && isNamedSlots(l.origin) ? l.origin : l;
+          if (isIterator(r) && isNamedSlots(r.origin) && isNamedSlots(lo)) {
+            return { ...lo, ...r.origin };
+          }
         }
+        // マージにならなかった `~` は何もしない印なので、器そのものへ戻す
+        // ——名前付きスロットは撒いても名前の行き先が無い。
+        const unwrapStruct = (x) => (isIterator(x) && isNamedSlots(x.origin) ? x.origin : x);
+        l = unwrapStruct(l);
+        r = unwrapStruct(r);
         // §3.2 余積族: どちらかが文字列ならテキストとして連結する
         // （`123` 123 = `123123`、list_model.md §2.1/§4.4）。
         // Stringは余積の**吸収元**——あらゆる値がテキスト表現を持つため、Stringとの
@@ -1674,7 +1719,9 @@ function evaluate(node, env) {
         if (typeof l === "string" || typeof r === "string") {
           return stringifyForConcat(l) + stringifyForConcat(r);
         }
-        return [...asList(l), ...asList(r)];
+        // **撒くかどうかは値が決める。** イテレータ（後置 `~` の結果）なら中身を撒く。
+        // 構文ではなく値なので、名前に束縛しても関数を通しても同じ答えになる。
+        return [...asList(deIterate(l)), ...asList(deIterate(r))];
       }
       // list_cheat_sheet.md「先頭/末尾に要素追加」（10.1、pass2.jsのcoproductReduce参照）。
       // pass2.js側の命名はJS配列メソッドのpush/unshiftとは意味が逆——push(a,b)はb側が
@@ -1683,15 +1730,21 @@ function evaluate(node, env) {
       // 仕様は方向性を明記していないため実装時に決めた仮定）。
       case "push": {
         // 0 [1 2 3] → [0 1 2 3]（aを先頭に追加）。aがUnit（単位元）なら素通しでbのみ返す。
-        const a = evaluate(node.left, env);
-        const b = evaluate(node.right, env);
-        return isUnit(a) ? asList(b) : [a, ...asList(b)];
+        // **`~` が付いていれば撒く**——判定は値であって構文ではない。
+        const rawA = evaluate(node.left, env);
+        const a = deIterate(rawA);
+        const b = deIterate(evaluate(node.right, env));
+        if (isUnit(a)) return asList(b);
+        return [...(isIterator(rawA) ? asList(a) : [a]), ...asList(b)];
       }
       case "unshift": {
         // [1 2 3] 4 → [1 2 3 4]（bを末尾に追加）。bがUnit（単位元）なら素通しでaのみ返す。
-        const a = evaluate(node.left, env);
-        const b = evaluate(node.right, env);
-        return isUnit(b) ? asList(a) : [...asList(a), b];
+        const rawB = evaluate(node.right, env);
+        const a = deIterate(evaluate(node.left, env));
+        const b = deIterate(rawB);
+        if (isUnit(b)) return asList(a);
+        // 右辺が `~` 付きなら撒く。無ければ**1要素として**足す（§2.2 の表）。
+        return [...asList(a), ...(isIterator(rawB) ? asList(b) : [b])];
       }
       // list_model.md §2.3「派生演算子による範囲リストの構築」。**レンジ式の実体は
       // 常にイテレータである**——`{start, step, end}` の固定サイズ構造体であり、
@@ -1835,7 +1888,12 @@ function evaluate(node, env) {
  * というのが `Iterator` を実体にした狙いそのものである。無限は観測できないので `__`。
  */
 function observe(v) {
-  return deIterate(v);
+  const d = deIterate(v);
+  // **1要素はスカラーである**（`[5]` は `Int`、list_model.md）。実体化した規則にも同じ
+  // 規則が効く——`1 ~ 1` や `st~`（`st` が底の1要素だけ）が `[x]` のまま残っていると、
+  // 同じ値が作られ方によって器になったりスカラーになったりする。`collapseSlice` が
+  // スライスに対してやっているのと同じ潰しである。
+  return isIterator(v) && Array.isArray(d) ? collapseSlice(d) : d;
 }
 
 export { evaluate, newRuntimeEnv, envDefine, envGet, UNIT, isUnit, observe };
