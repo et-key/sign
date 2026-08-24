@@ -30,6 +30,7 @@
 
 import { envLookup } from './pass1.js';
 import { OperationError } from "./errors.js";
+import { stringLength } from "./layout.js";
 import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 const ARITHMETIC_OPS = new Set(["add", "sub", "mul", "div", "mod", "pow"]);
@@ -182,11 +183,26 @@ function rangeResultType(node, env) {
 }
 
 // 切り出しの長さが静的に1か（`s ' (1 ~+ 1 ~ 1)`）。終端の無い形は器の長さが要るので
-// 判定しない——長さが実行時に決まるからこそ `Char | String` という直和が要る。
+// 判定しない——決まらないものを決まったことにはしない（原理4）。
 function sliceLengthOne(node, env) {
   let r = node.right;
   while (r && r.type === "block" && Array.isArray(r.lines) && r.lines.length === 1) r = r.lines[0];
-  if (!r || r.type !== "operation" || r.name !== "range") return false;
+  if (!r) return false;
+  // **終端の無い形でも、器の長さが分かれば決まる。** リテラルの器（`` `abc` ' 2~ ``）は
+  // 長さが静的に分かるので、そこから 1 になるかどうかも静的に出る。決まるものは決める。
+  if (r.type === "operation" && RANGE_STEP_OPS.has(r.name)) {
+    const num0 = (n) => {
+      let d = n;
+      while (d && d.type === "block" && Array.isArray(d.lines) && d.lines.length === 1) d = d.lines[0];
+      return d && d.type === "atom" && d.kind === "number" && Number.isInteger(Number(d.value)) ? Number(d.value) : null;
+    };
+    const st = num0(r.left);
+    const sp = num0(r.right);
+    if (st === null || sp !== 1) return false;
+    const total = stringLength(node.left, env);
+    return total !== null && total - st === 1;
+  }
+  if (r.type !== "operation" || r.name !== "range") return false;
   const num = (n) => {
     let d = n;
     while (d && d.type === "block" && Array.isArray(d.lines) && d.lines.length === 1) d = d.lines[0];
@@ -661,8 +677,12 @@ function getPropResultType(node, env) {
   if (sliceIndexNode(node)) {
     // **長さ1のリストは存在しない。** 終端が起点と同じ切り出し（`s ' (1 ~+ 1 ~ 1)`）は
     // 1要素であり、値としては既にスカラーになっている（interpreter.js）——型だけが器の
-    // まま取り残されると、幅が値より広くなる。長さが実行時に決まる形（`s ' i~`）は
-    // 判定できないので触らない——**そこが `Char | String` が存在する理由**である。
+    // まま取り残されると、幅が値より広くなる。
+    //
+    // 終端の無い形（`s ' i~`）は器の長さが要るので、そこは触らない。**これは直和の理由
+    // ではない**——直和（`Char | String`）は「どちらか分からない」ではなく「経路によって
+    // 型が違う」ことであり、両方の型はコンパイル時に決まっている（`gap` の枝はリテラルの
+    // `Char` と計算した `String`）。実行時に決まるのは**どの経路を通るか**だけである。
     if (sliceLengthOne(node, env)) {
       if (containerType === "String") return "Char";
       const el = containerElementType(node.left, env);

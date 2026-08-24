@@ -1409,13 +1409,16 @@ function genIndex(node, env, em, scope) {
 			if (!(step && step.type === "atom" && step.kind === "number" && Number(step.value) === 1)) return null;
 		}
 		// 部分列は器と同じ型でなければおかしい——**ただし長さ1は別**である。1要素の器は
-		// 存在しないので、そこはスカラー（1本）になる。
-		if (rw !== cw && !(bounded && bounded.count === 1 && rw === 1)) return null;
+		// 存在しないので、そこはスカラー（1本）になる。型がそう言っているなら従う。
+		if (rw !== cw && rw !== 1) return null;
 	}
 
 	// **長さ1の切り出しは要素そのものである。** 1要素の器は存在しないので、`s ' (i ~+ 1 ~ i)`
 	// は `s ' i` と同じものである——型がそう言っているので、引くのも要素1つでよい。
-	if (bounded && bounded.count === 1 && rw === 1 && cw === 2) {
+	// **長さ1の切り出しは要素そのものである。** 1要素の器は存在しないので、型が
+	// スカラーだと言っているなら、引くのも要素1つでよい（`s ' (i ~+ 1 ~ i)` も
+	// `` `abc` ' 2~ `` も同じことである——長さが1だと決まっている）。
+	if (isSlice && rw === 1 && cw === 2) {
 		const et = node.atomType;
 		const em1 = et ? measure({ atomType: et }, { target: conf.target, charset: conf.charset }) : null;
 		if (!em1 || !em1.size) return em.fail(node, `切り出した要素の幅が決まりません（${et}）`);
@@ -1423,7 +1426,14 @@ function genIndex(node, env, em, scope) {
 		if (cw2 === false) return false;
 		if (cw2 !== cw) { em.pop(cw2); return null; }
 		const co2 = (em.slot - cw) * 8;
-		em.emit(`mov ${SCRATCH[1]}, #${bounded.start}`, "長さ1の切り出しは要素そのもの");
+		if (bounded) {
+			em.emit(`mov ${SCRATCH[1]}, #${bounded.start}`, "長さ1の切り出しは要素そのもの");
+		} else {
+			const sw = genScalar(idx.left, env, em, scope, "切り出しの起点はレジスタ1本の値です");
+			if (sw === false) return false;
+			em.load(SCRATCH[1], (em.slot - 1) * 8, "長さ1の切り出しは要素そのもの");
+			em.pop(1);
+		}
 		em.load(SCRATCH[0], co2 + 8, "len");
 		em.emit(`cmp ${SCRATCH[1]}, ${SCRATCH[0]}`, "範囲内か");
 		em.load(SCRATCH[0], co2, "ptr");
