@@ -34,3 +34,8 @@ _q.mjs
 _patch.cjs
 _pp/
 _t*.mjs
+
+# qemu で走らせるときの中間物（.s/.o/.elf はビルド生成物）
+alpha/javascript/qemu/*.o
+alpha/javascript/qemu/*.elf
+alpha/javascript/qemu/probe.s
