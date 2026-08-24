@@ -349,10 +349,21 @@ function measureRule(node, conf) {
 function measureCursor(node, conf) {
   const w = (widthsOf(conf.target) || {}).gpr;
   if (!w) return null;
-  // 捕まえた入力の幅。器なら `{ptr, len}` の2本、規則なら3本。既定は器の2本——
-  // 均せるのは入力を1つ受けて分解する形だけなので（`arity === 1`）、そこは器である。
-  const inner = node.cursorInner || 2;
-  const names = ["arm", "k", ...(inner === 3 ? ["start", "step", "end"] : ["ptr", "len"])];
+  // **捕まえた入力の幅は、捕まえたものが決める。**
+  //
+  // カーソルは `(枝番号, 枝の中の位置, 入力)` の組であり、最初の2つは常に1本だが
+  // 3つ目は入力次第である——器なら `{ptr, len}` の2本、規則なら3本、スカラーなら1本。
+  // 既定を「器の2本」と決め打ちしていたので、スカラーを捕まえたカーソルで本数が合わな
+  // かった（構築側は3本を出し、測る側は4本だと言う）。組そのものが在るならそれを測る。
+  const parts = cursorParts(node);
+  let inner = node.cursorInner || 0;
+  if (!inner && parts) {
+    const m = passingOf(parts[2], conf);
+    inner = m ? Math.max(m.slots, 1) : 0;
+  }
+  if (!inner) inner = 2;
+  const tail = inner === 1 ? ["入力"] : inner === 3 ? ["start", "step", "end"] : ["ptr", "len"];
+  const names = ["arm", "k", ...tail];
   return {
     size: w * names.length,
     align: w,
@@ -360,6 +371,31 @@ function measureCursor(node, conf) {
     fields: names.map((name, i) => ({ name, offset: i * w, size: w, type: name === "ptr" ? "Address" : "Int" })),
     access: "at(arm, k, 入力)",
   };
+}
+
+// カーソルの組 `(枝番号, 位置, 入力)` を取り出す。組そのものでなければ null。
+function cursorParts(node) {
+  let n = node;
+  while (n && Array.isArray(n.lines) && n.lines.length === 1) n = n.lines[0];
+  // 分岐なら枝それぞれがカーソルである。どの枝も同じ形なので、最初に読めた枝で決まる
+  // ——揃っていなければ `genMatch` が「枝の幅が揃いません」と言う。
+  if (n && Array.isArray(n.lines)) {
+    for (const line of n.lines) {
+      const v = line && line.type === "operation" && line.name === "define" ? line.right : line;
+      const p = cursorParts(v);
+      if (p) return p;
+    }
+    return null;
+  }
+  if (!n || n.type !== "operation" || n.name !== "product") return null;
+  const out = [];
+  let cur = n;
+  while (cur && cur.type === "operation" && cur.name === "product") {
+    out.unshift(cur.right);
+    cur = cur.left;
+  }
+  out.unshift(cur);
+  return out.length === 3 ? out : null;
 }
 
 function measureList(node, conf) {

@@ -169,18 +169,6 @@ function compile(source, options = {}) {
   //
   // 既定では走らせない。均すと `sep s` が列ではなくカーソルを返すようになるので、
   // 消費側もカーソルを引ける必要がある——それが揃うまでは、頼まれたときだけ動かす。
-  if (options.desugarStreams && !options.__desugared) {
-    // **呼び合う塊ごとに均す。** 関係の無い関数を1つの群にまとめると、片方が均せない
-    // ときに巻き添えになるし、引くたびに関係の無い枝まで比べることになる。
-    const groups = groupStreamFunctions(findStreamFunctions(nodes)).map(generatePullers).filter(Boolean);
-    if (groups.length > 0) {
-      return compile(`${source}\n${groups.map((g) => g.source).join("\n")}`, {
-        ...options,
-        __desugared: true,
-        __cursorGroups: groups.map((g) => ({ group: g.group, entries: g.entries })),
-      });
-    }
-  }
   // 均した先の入口に印を付ける。**同じ名前が2回定義されている**ので、後の方（生成側）が
   // カーソルの入口で、前の方（元の関数）は Pass 4 が飛ばす対象である。
   for (const g of options.__cursorGroups || []) markCursorEntries(nodes, g.entries, g.entries, g.group);
@@ -194,6 +182,33 @@ function compile(source, options = {}) {
   if (options.layer !== undefined) checkLayerConstraints(nodes, options.layer);
   // charset に収まらない文字も同じ門番で見る（option_ms_schema.md §4.2）。
   if (options.charset !== undefined) checkCharsetConstraints(nodes, options.charset);
+
+  // **均すのは型が付いてからである。**
+  //
+  // 認識器は「並べるものが器か」を型で見る（器が並ぶ形は個数が固定でないので均せない）。
+  // 注釈の前に走らせると `atomType` が無く、その判定が素通りする——実際 `lexer.sn` で
+  // 均せないはずの形まで均し、診断が 3 件から 8 件へ増えていた。**同じ入力に対して
+  // 認識器が2つの答えを出す**形であり、いつもの壊れ方である。
+  //
+  // 生成するのは Sign のソースなので、ここでソースを足して**もう一度同じ道を通す**。
+  // 手で書いたコードと同じパイプラインを通るので、生成側だけが通る抜け道が生まれない。
+  // 元の名前はカーソルの入口として再定義され（後の定義が勝つ）、Pass 4 は元を飛ばす。
+  //
+  // 既定では走らせない。均すと `sep s` が列ではなくカーソルを返すようになるので、
+  // 消費側もカーソルを引ける必要がある——それが揃うまでは、頼まれたときだけ動かす。
+  if (options.desugarStreams && !options.__desugared) {
+    // **呼び合う塊ごとに均す。** 関係の無い関数を1つの群にまとめると、片方が均せない
+    // ときに巻き添えになるし、引くたびに関係の無い枝まで比べることになる。
+    const groups = groupStreamFunctions(findStreamFunctions(nodes)).map(generatePullers).filter(Boolean);
+    if (groups.length > 0) {
+      return compile(`${source}\n${groups.map((g) => g.source).join("\n")}`, {
+        ...options,
+        __desugared: true,
+        __cursorGroups: groups.map((g) => ({ group: g.group, entries: g.entries })),
+      });
+    }
+  }
+
   return { nodes, env, specializations, diagnostics };
 }
 

@@ -1036,7 +1036,9 @@ function computeAtomType(node, env) {
       if (callee.returnsRepr && !node.repr) node.repr = callee.returnsRepr;
       if (callee.returnsRepr === "cursor") {
         node.repr = "cursor";
-        node.cursorInner = callee.returnsCursorInner || 2;
+        // **捕まえた幅は決め打ちしない。** 分からないなら測る側（`measureCursor`）が
+        // 組そのものを見て決める——器とは限らず、スカラーを捕まえるカーソルもある。
+        if (callee.returnsCursorInner) node.cursorInner = callee.returnsCursorInner;
         node.cursorGroup = callee.returnsCursorGroup || null;
       }
       return callee.returns ?? null;
@@ -2378,7 +2380,7 @@ function collectReturns(nodes, env) {
     // 本体から読める `repr` で上書きさせない。
     if (rhs.cursorEntry || rhs.cursorReturns) {
       binding.returnsRepr = "cursor";
-      binding.returnsCursorInner = rhs.cursorInner || 2;
+      if (rhs.cursorInner) binding.returnsCursorInner = rhs.cursorInner;
       // どの群のカーソルかも運ぶ。引く命令はここから跳び先を決める。
       binding.returnsCursorGroup = rhs.cursorGroup || null;
     }
