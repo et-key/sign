@@ -887,14 +887,30 @@ function buildCharRange(start, end) {
  * 引数として使うとループカウンタになる——再帰という概念を使わずに純粋なループを記述できる」
  * と書いている看板の書き方であり、実体化しかできない実装では**そもそも書けなかった**。
  */
-function makeIterator(start, stepFn, end, affineStep = null, source = null) {
+function makeIterator(start, stepFn, end, affineStep = null, source = null, descending = null) {
   // `affineStep` は等差（`~` `~+` `~-`）のときの歩幅。規則が一次なら要素数は割り算で
   // 出るので、`|.|` が**走査すらせずに**答えられる。等比・冪では null（規則が一次でない）。
   //
   // `source` があるときは `start`/`end` は**値ではなく位置**であり、要素は `source[i]`
   // である。器の上を走るイテレータがこれで、機械の上では `{ptr, stride, end}` になる
   // （stack_abi.md §4.6 の「規則」の行）——**コピーは起きない**。
-  return { __iterator__: true, start, stepFn, end, affineStep, source };
+  // **向きは規則が持つ。端点の並びから読み直してはいけない。** 切ったイテレータ
+  // （`[0 ~ 3] ' 5~`）は起点が終端を越えているので、並びで見ると降順に化ける——そして
+  // 降順のつもりで終端を判定するので、いつまでも尽きない。等差なら歩幅の符号が向きで
+  // あり、等比・冪では構築のときに決めた向きをそのまま持ち回る。
+  const desc =
+    descending !== null
+      ? descending
+      : typeof affineStep === "number" && affineStep !== 0
+        ? affineStep < 0
+        : start > end;
+  return { __iterator__: true, start, stepFn, end, affineStep, source, descending: desc };
+}
+
+// `v` が終端の外か。**向きは規則が持つ**（`descending`）ので、切っても動かない。
+function iteratorOutOfRange(it, v) {
+  if (isInfiniteIterator(it)) return false;
+  return it.descending ? v < it.end : v > it.end;
 }
 
 /**
@@ -949,12 +965,12 @@ function iteratorAt(it, n) {
     // 器の上なら `v` は位置なのでそこを読む。規則の上なら `v` そのものが要素である。
     const pick = (x) => (it.source ? (x in it.source ? it.source[x] : UNIT) : x);
     if (isInfiniteIterator(it)) return pick(v);
-    return (it.start <= it.end ? v > it.end : v < it.end) ? UNIT : pick(v);
+    return iteratorOutOfRange(it, v) ? UNIT : pick(v);
   }
   let v = it.start;
   for (let i = 0; i < n; i++) {
     v = it.stepFn(v);
-    if (!isInfiniteIterator(it) && (it.start <= it.end ? v > it.end : v < it.end)) return UNIT;
+    if (iteratorOutOfRange(it, v)) return UNIT;
   }
   return v;
 }
@@ -973,8 +989,7 @@ function iteratorCount(it) {
   }
   let v = start;
   let n = 0;
-  const ascending = start <= end;
-  while (ascending ? v <= end : v >= end) {
+  while (!iteratorOutOfRange(it, v)) {
     n++;
     v = it.stepFn(v);
     if (n > 1000000) throw new Error("interpreter: range: 要素数が多すぎます（stepが0または終端に向かっていない可能性）");
@@ -986,8 +1001,8 @@ function iteratorCount(it) {
 // これがあるおかげで、レンジ上の再帰が O(1) メモリで回る。
 function iteratorRest(it) {
   const next = it.stepFn(it.start);
-  if (!isInfiniteIterator(it) && (it.start <= it.end ? next > it.end : next < it.end)) return UNIT;
-  return makeIterator(next, it.stepFn, it.end, it.affineStep, it.source);
+  if (iteratorOutOfRange(it, next)) return UNIT;
+  return makeIterator(next, it.stepFn, it.end, it.affineStep, it.source, it.descending);
 }
 
 // 有限のイテレータだけを実体化する。無限は展開できないので `__`——「無限を配列にする」

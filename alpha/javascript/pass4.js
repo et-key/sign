@@ -1378,7 +1378,7 @@ function genMatch(node, env, em, scope, tail = false) {
 		const cw = genExpr(line.left, env, em, scope);
 		if (cw === false) return false;
 		if (cw === TAIL) return em.fail(line.left, "条件の位置に末尾呼び出しは置けません");
-		emitIsUnit(em, (em.slot - cw) * 8, cw, "条件");
+		emitIsUnit(em, (em.slot - cw) * 8, cw, "条件", isRuleNode(node.left, em.conf, em.env));
 		em.pop(cw);
 		em.emit(`b.eq ${next}`, "__ なら次の枝へ");
 		const armResult = move(line.right);
@@ -1511,11 +1511,34 @@ function widthOfType(type, conf) {
 	const m = type ? reduceToMachineType(type, conf.target) : null;
 	return m && m.class === "gpr" ? m.size : 8;
 }
-function emitIsUnit(em, off, width, comment) {
+function emitIsUnit(em, off, width, comment, isRule = false) {
 	if (width === 1) {
 		em.load(SCRATCH[0], off, comment);
 		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
 		em.emit(`cmp ${SCRATCH[0]}, x12`);
+		return;
+	}
+	// **規則が尽きているかは `len` では分からない。** 置かれているのは
+	// `{start, step, end}` であって、2本目は長さではなく歩幅である。ここを場所と同じ
+	// 経路へ流すと「歩幅が 0 か」を見ることになり、歩幅は 0 にならないので**規則は
+	// 決して尽きない**ことになる。カーソルを1歩多く回していたのはこれである。
+	if (isRule) {
+		if (width < 3) {
+			// 終端が無い＝無限。尽きない。呼ぶ側は直後に `b.eq` を置くので、`eq` が
+			// 立たない形にしておく。2命令とも消せるが、消すのは正しさを確かめてからで足りる。
+			em.emit("mov x12, #1", `${comment}（終端が無いので尽きない）`);
+			em.emit("cmp x12, #0");
+			return;
+		}
+		em.load(SCRATCH[0], off, comment);
+		em.load("x10", off + 8, "step");
+		em.load("x13", off + 16, "end");
+		em.emit(`cmp ${SCRATCH[0]}, x13`);
+		em.emit("cset x14, gt", "昇順なら end を越えていたら空");
+		em.emit("cset x15, lt", "降順なら end を下回っていたら空");
+		em.emit("cmp x10, #0");
+		em.emit("csel x14, x14, x15, ge", "歩幅の符号で選ぶ");
+		em.emit("cmp x14, #1", "空が __");
 		return;
 	}
 	// 2本のときは `len` を見る。`ptr` は何を指していても関係ない。
@@ -1598,9 +1621,12 @@ function paramRegWidths(lambdaNode, em, callees = {}) {
 			// を `f [0 ~+ 1]` と呼ぶ形）は、型が `Iterator` でも運ぶのは `{start, step}` の
 			// 2本であって参照ではない。型だけを見ると渡し方が決まらない。
 			const b = lambdaNode.scope ? envLookup(lambdaNode.scope, sh.name) : null;
-			const w = slotsOfNode({ atomType: allTypes[idx] ?? (b && b.atomType), repr: b && b.repr, elementType: b && b.elementType }, em.conf, lambdaNode.scope);
+			const view = { atomType: allTypes[idx] ?? (b && b.atomType), repr: b && b.repr, elementType: b && b.elementType };
+			const w = slotsOfNode(view, em.conf, lambdaNode.scope);
 			if (w === null) return { shape: sh, error: `仮引数 ${bareName(sh.name)} の渡し方が決まりません（直和か族）` };
-			return { shape: sh, regs: w };
+			// **規則かどうかは入口の判定を変える。** 尽きているかを `len` で見るか
+			// `start` と `end` の関係で見るかが違う（`emitIsUnit`）。
+			return { shape: sh, regs: w, rule: isRuleNode(view, em.conf, lambdaNode.scope) };
 		}
 		const headType = typeOf(sh.head);
 		const elem = headType ? measure({ atomType: headType }, { target: em.conf.target, charset: em.conf.charset }) : null;
@@ -1749,7 +1775,7 @@ function genFunction(name, lambdaNode, env, em, mono) {
 			}
 			// 渡されていれば（`__` でなければ）そのまま。渡されていなければ埋める。
 			const have = em.newLabel("have");
-			emitIsUnit(em, inc.off, inc.regs, `仮引数 ${what} が渡されたか`);
+			emitIsUnit(em, inc.off, inc.regs, `仮引数 ${what} が渡されたか`, inc.rule);
 			em.emit(`b.ne ${have}`, "渡されていればそのまま");
 			const dw = genExpr(inc.shape.defaultNode, env, em, scopeSoFar());
 			if (dw === false) {
@@ -1778,7 +1804,7 @@ function genFunction(name, lambdaNode, env, em, mono) {
 			continue;
 		}
 		// デフォルトが無いなら完全性公理が働く。
-		emitIsUnit(em, inc.off, inc.regs, `仮引数 ${what} が __ か`);
+		emitIsUnit(em, inc.off, inc.regs, `仮引数 ${what} が __ か`, inc.rule);
 		em.emit(`b.eq ${unitLabel}`, "__ なら本体へ入らない（完全性公理）");
 		if (inc.shape.kind === "bare") {
 			params.push(inc.shape.name);

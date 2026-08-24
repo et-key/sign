@@ -567,8 +567,10 @@ function getPropResultType(node, env) {
     // ここで落とすと `[0 ~ 3] ' 2~` が「要素列への参照」に見え、Pass 4 が `start` を
     // ポインタとして読む命令を出す。切るというのは起点をずらす算術1つであって、
     // 要素はどこにも現れない。
-    const baseRepr = base && base.repr ? base.repr : node.left && node.left.repr;
-    if (baseRepr === "rule") node.repr = "rule";
+    // 識別子は「どう置かれているか」を持たない——持っているのは束縛の側で、仮引数なら
+    // 呼び出しサイトから観測した `repr` がそこに在る。`base` を見るだけでは、規則を
+    // 受け取った仮引数を切ったときに落ちる。
+    if (reprOfNode(node.left, env) === "rule") node.repr = "rule";
     return containerType;
   }
 

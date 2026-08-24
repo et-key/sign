@@ -144,5 +144,26 @@ agree("降順を数え上げる", SUM + "sum [10 ~ 1] 0 0");
 agree("切った規則を数え上げる", SUM + "sum ([1 ~ 20] ' 4~) 0 0");
 agree("歩幅つきを数え上げる", SUM + "sum [0 ~+ 3] 0 0");
 
+// ---- カーソル：規則も器も、同じ形で渡り歩ける ----
+//
+// **これがストリームの原型である。** 状態は「残りへの参照」そのものなので、持ち回るのに
+// 記憶は要らない。終わりは `x = __` では見えない（それは常に `__` で偽になる）——
+// 完全性公理が入口で止め、`|` がそれを受けて溜めた値を返す。
+{
+	// 切りながら畳む。切った先は器なら `{ptr+1, len-1}`、規則なら起点をずらしただけ。
+	const FOLD = (f) => `${f}\nfold : s a ? (fold (s ' 1~) (step (s ' 0) a)) | a\n`;
+	const CNT = FOLD("step : c a ? a + 1");
+	const SUM = FOLD("step : c a ? a + c");
+	agree("器を渡り歩く", CNT + "fold `abcde` 0");
+	agree("規則を渡り歩く", CNT + "fold [1 ~ 10] 0");
+	agree("規則を足しながら", SUM + "fold [1 ~ 10] 0");
+	agree("降順を渡り歩く", SUM + "fold [10 ~ 1] 0");
+	agree("歩幅つきを渡り歩く", SUM + "fold [0 ~+ 3 ~ 20] 0");
+	// 枝の中の位置（`k`）を持つ形。1つの入力から2つ出す枝がこれになる。
+	agree("枝の中の位置を持つ", "step : c a ? a + 1\ndup : s k a ?\n\tk < 1 : (dup s (k + 1) (step (s ' 0) a)) | a\n\t(dup (s ' 1~) 0 (step (s ' 0) a)) | a\ndup `abc` 0 0");
+	// 添字で歩く形。切る形と同じ答えにならなければおかしい。
+	agree("添字で歩く", "step : c a ? a + 1\nfold : s i a ? (fold s (i + 1) (step (s ' i) a)) | a\nfold `abcde` 0 0");
+}
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
