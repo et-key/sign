@@ -986,6 +986,38 @@ function genExpr(node, env, em, scope, tail = false) {
 	// guide の演算子表が `$__ # expr` を「致命的なエラー（不正なアドレスへの書き込み）」と
 	// 呼ぶのも同じことで、niche は書き込み先ではない。
 
+	// **前置 `!` は「`__` かどうか」を反転する。**
+	//
+	// `!__` は恒等射（真）、`!x` は `x` が値なら `__`（偽）である（pass3 の型規則）。
+	// つまり見ているのは中身ではなく**不在かどうか**で、それは幅ごとに決まっている
+	// （`emitIsUnit`）。`0` が真なので、真は `0`・偽は niche を置けばよい。
+	//
+	// `!__` はこの規則の定数畳み込みにすぎない——`__` は必ず不在なので必ず `0` になる。
+	if (n.type === "operation" && n.position === "prefix" && n.name === "not") {
+		const t = unwrap(n.operand);
+		const off0 = em.push();
+		if (off0 === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		if (isUnitNode(t)) {
+			em.emit(`mov ${SCRATCH[0]}, #0`, "!__ は恒等射——`0` が真");
+			em.store(SCRATCH[0], off0);
+			return 1;
+		}
+		em.pop(1);
+		const w = genExpr(n.operand, env, em, scope);
+		if (w === false) return false;
+		const o = (em.slot - w) * 8;
+		const opBase = unwrap(n.operand);
+		emitIsUnit(em, o, w, "`__` か", isRuleNode(opBase, em.conf, env), opBase && opBase.repr === "cursor");
+		em.emit(`mov ${SCRATCH[0]}, #0`, "不在なら真（`0`）");
+		em.emit("movz x12, #0x8000, lsl #48", "在るなら偽（`__`）");
+		em.emit(`csel ${SCRATCH[0]}, ${SCRATCH[0]}, x12, eq`);
+		em.pop(w);
+		const off1 = em.push();
+		if (off1 === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		em.store(SCRATCH[0], off1, "!");
+		return 1;
+	}
+
 	// 前置 `$`——アドレスを取る。
 	if (n.type === "operation" && n.position === "prefix" && n.name === "address") {
 		const t = unwrap(n.operand);

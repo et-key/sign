@@ -76,7 +76,11 @@ const UNIT_NICHE_ASM = "0x8000000000000000";
 // 幅クラスへの割り当て。`String` は `List(0u)` と同型なので要素は Char。
 // `Char` は符号位置という整数なので、レジスタ上は GPR である。**記憶上の幅だけが
 // charset で決まる**（1 or 4 byte、`charSizeOf`）——比較や添字の計算はレジスタで行う。
-const WIDTH_CLASS = { Address: "gpr", Int: "gpr", Char: "gpr", Float: "float", Vector: "vector" };
+// `Identity`（`!__`）は Layer 1 の恒等射だが、**値として運ばれる**ときは GPR 1本である。
+// 機械の上で恒等射に対してやることは「`__` かどうか見る」しかなく、Sign では `0` が真な
+// ので、置くのは `0` でよい。呼ぶのではなく運ぶだけなので、単相化とは衝突しない
+// （`conflict : … : !__` が真を返して呼び出し側が条件に使う、という形がこれである）。
+const WIDTH_CLASS = { Address: "gpr", Int: "gpr", Char: "gpr", Float: "float", Vector: "vector", Identity: "gpr" };
 
 /**
  * Char（`0u`）1個の幅。`option.ms` の `charset` で選ぶ。

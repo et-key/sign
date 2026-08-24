@@ -183,6 +183,21 @@ checkTrue("__ は niche を積む", (body("f : x ?\n\tx > 3 : __\n\t1\nf 5", "f"
 	check("器と合流しても診断は出ない", asm("f : s ?\n\t(s ' 0) = ` ` : __\n\ts ' 1~\nf `ab`").diagnostics.length, 0);
 }
 
+// ---- 恒等射（`!__`）は値として運べる ----
+//
+// `Identity` は Layer 1 の射だが、**呼ぶのではなく運ぶ**ぶんには GPR 1本である。機械の
+// 上で恒等射に対してやることは「`__` かどうか見る」しかなく、Sign では `0` が真なので、
+// 置くのは `0` でよい。単相化とは衝突しない（跳び先の話ではない）。
+{
+	checkTrue("!__ は 0 を置く", body("f : n ? !__\nf 1", "f").includes("mov x9, #0"));
+	check("恒等射を返す枝は出る", asm("f : n ?\n\tn > 3 : !__\n\t__\nf 5").diagnostics.length, 0);
+	// `!値` は niche を見て反転する。中身ではなく不在かどうかを見ている。
+	const bn = body("f : n ? !n\nf 5", "f");
+	checkTrue("!値 は niche を見る", bn.includes("csel x9, x9, x12, eq"), bn.join(" / "));
+	// 器でも同じ規則で見る（幅ごとに判定が違うだけ）。
+	check("器の否定も出る", asm("f : s ? !s\nf `ab`").diagnostics.length, 0);
+}
+
 // **裸の文字列リテラルはコメントである**（string_and_comment.md）。命令は出ないし、
 // 診断にもしない——コメントの数だけ「出せない」が並ぶと本当の穴が埋もれる。
 check("コメントは診断にならない", asm("`これはコメント`\nf : a ? a + 1\nf 1").diagnostics.length, 0);
