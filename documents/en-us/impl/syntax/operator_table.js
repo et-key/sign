@@ -111,7 +111,7 @@ export const OPERATOR_BY_PRECEDENCE = [
     '{...}': { position: 'enclosure', name: 'block_brace' },
     '[...]': { position: 'enclosure', name: 'block_bracket' },
     '|...|': { position: 'enclosure', name: 'abs' },
-    '~|...|~': { position: 'enclosure', name: 'norm' },
+    '||...||': { position: 'enclosure', name: 'norm' },
   },
   { // 25
     '\t': { position: 'prefix', name: 'indent' },

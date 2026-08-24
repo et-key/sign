@@ -139,7 +139,10 @@ function markBlock(input) {
 
     // 継続行の判定 (行頭が中置演算子などで始まる場合)
     const contentTrimmed = content.trim();
-    const isContinuation = /^[?+*\/\.,=<>;%&^]/.test(contentTrimmed) || /^!=(?:=)?/.test(contentTrimmed) || /^\|(?:\s|\|)/.test(contentTrimmed) || /^~(?:\s|[+*\/\^-])/.test(contentTrimmed);
+    // **行頭の `|` / `||` が「続き」なのは、空白が続くときだけである。** 密着していれば
+    // それは囲みの開き（絶対値・ノルム）であって中置演算子ではない——`||xs||` を続きと
+    // 読むと、インデントブロックの境界がずれる（枝が1つ header へ吸い込まれていた）。
+    const isContinuation = /^[?+*\/\.,=<>;%&^]/.test(contentTrimmed) || /^!=(?:=)?/.test(contentTrimmed) || /^\|\|?\s/.test(contentTrimmed) || /^~(?:\s|[+*\/\^-])/.test(contentTrimmed);
 
     if (isContinuation) {
       if (lastContentLineIdx !== -1) {

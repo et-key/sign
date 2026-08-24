@@ -133,7 +133,7 @@ export const OPERATOR_BY_PRECEDENCE = [
     '{...}': { position: 'enclosure', name: 'block_brace' },
     '[...]': { position: 'enclosure', name: 'block_bracket' },
     '|...|': { position: 'enclosure', name: 'abs' },
-    '~|...|~': { position: 'enclosure', name: 'norm' },
+    '||...||': { position: 'enclosure', name: 'norm' },
   },
   { // 27（旧25から繰り下げ）
     '\t': { position: 'prefix', name: 'indent' },
@@ -179,14 +179,19 @@ export function getPolysemousOperators() {
       polysemous.add(symbol);
     }
   }
+  // `|` と `||` は囲みの delimiter でもある（絶対値・ノルム）。中置としか思わずに
+  // 前後へ空白を入れると、`|5|` や `||xs||` が `| 5 |` `|| xs ||` になって囲みが壊れる
+  // ——**囲みか中置かは空白の位置が決める**ので、レキサーが空白を足してはいけない。
   polysemous.add('|');
+  polysemous.add('||');
   return Array.from(polysemous);
 }
 
 export function getStrictInfixOperators() {
   const strictInfix = [];
   for (const [symbol, defs] of Object.entries(OPERATOR_DICT)) {
-    if (symbol === ' ' || symbol === '|') continue;
+    // `|` / `||` は囲みにもなる（絶対値・ノルム）ので、中置と決めつけて空白を入れない。
+    if (symbol === ' ' || symbol === '|' || symbol === '||') continue;
     const positions = new Set(defs.map(d => d.position));
     if (positions.size === 1 && positions.has('infix')) {
       strictInfix.push(symbol);
