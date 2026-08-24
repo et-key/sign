@@ -70,7 +70,7 @@ export const OPERATOR_BY_PRECEDENCE = [
     '^': { position: 'infix', name: 'pow' },
   },
   { // 16
-    '|...|': { position: 'enclosure', name: 'abs' },
+    // 囲みはここには居ない。自己完結しているので優先順位を持たず、ブロックと同じ段にある。
   },
   { // 17
     "'": { position: 'infix', name: 'get_prop' },
@@ -104,9 +104,14 @@ export const OPERATOR_BY_PRECEDENCE = [
     '><': { position: 'prefix', name: 'reverse' },
   },
   { // 24
+    // **囲みはすべてここに居る。** 自己完結しているので優先順位は参照されない
+    // ——`pass2` は囲みの tier を一度も引かない（文法が先にブロックへ畳む）。
+    // 絶対値だけ別の段に書かれていたのは帳簿のズレで、実装は最初からここと同じ挙動だった。
     '(...)': { position: 'enclosure', name: 'block_paren' },
     '{...}': { position: 'enclosure', name: 'block_brace' },
     '[...]': { position: 'enclosure', name: 'block_bracket' },
+    '|...|': { position: 'enclosure', name: 'abs' },
+    '~|...|~': { position: 'enclosure', name: 'norm' },
   },
   { // 25
     '\t': { position: 'prefix', name: 'indent' },
