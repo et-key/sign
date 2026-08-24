@@ -560,6 +560,33 @@ function markGetPropKey(node) {
   if (k && k.type === "operation" && k.position === "prefix" && k.name === "input") k.inGetPropKey = true;
 }
 
+/**
+ * そのアドレスが**何を指しているか**。`$` が書き留めた印を、識別子なら束縛先まで辿って拾う。
+ *
+ * `elementType`（器の要素型）と同じ運び方をする——ノードに付き、束縛へ書き戻され、
+ * 呼び出しサイトと返値を通って次の段へ渡る。**型は帳簿なので、1つ足しても命令は増えない。**
+ */
+function pointeeOfNode(n, env) {
+  if (!n || typeof n !== "object") return null;
+  // 括弧は剥ぐ。
+  while (n && Array.isArray(n.lines) && n.lines.length === 1) n = n.lines[0];
+  if (!n) return null;
+  if (n.pointee) return { type: n.pointee, element: n.pointeeElement || null };
+  const d = derefToNode(n, env);
+  if (d && d !== n && d.pointee) return { type: d.pointee, element: d.pointeeElement || null };
+  if (isIdentifierNode(n) && env) {
+    const b = envLookup(env, n.value);
+    if (b && b.pointee) return { type: b.pointee, element: b.pointeeElement || null };
+    if (b && b.returnsPointee) return { type: b.returnsPointee, element: b.returnsPointeeElement || null };
+  }
+  // 適用の結果は呼び先の返値である。
+  if (n.type === "operation" && (n.name === "apply" || n.name === "partial_apply")) {
+    const callee = applyCalleeBinding(n, env);
+    if (callee && callee.returnsPointee) return { type: callee.returnsPointee, element: callee.returnsPointeeElement || null };
+  }
+  return null;
+}
+
 // 直和のうち**器の側**（広い方）。置かれ方がそちらなので、引き方もそちらで決まる。
 const CONTAINER_TYPES = new Set(["String", "List", "Struct", "Iterator", "Implicit"]);
 function widestMember(type) {
@@ -1041,7 +1068,30 @@ function computeAtomType(node, env) {
       // 取る」だけで場合分けを必要としない（§2 の非対称性）。オペランドの型を素通しすると、
       // 関数を指したとき（Lambda は Layer 2 型を持たない）に `_` になってしまい、
       // 「アドレスという値を持っている」ことすら型に出なかった。
-      if (node.position === "prefix" && node.name === "address") return "Address";
+      // **アドレスは指す先を覚える。**
+      //
+      // `Address` だけでは `@c` の型が決まらない——C の `int*` と `cell*` の区別が無い
+      // 状態である。`$` は何を指したのかを知っているので、そこで書き留める。`List(T)` の
+      // 要素型（`elementType`）と同じ機構であり、型は「ゼロコストの帳簿」なので、
+      // 指す先を1つ足しても命令は1つも増えない。
+      if (node.position === "prefix" && node.name === "address") {
+        const p = inferAtomType(node.operand, env);
+        if (p && p !== "Unit") {
+          node.pointee = p;
+          const el = node.operand && node.operand.elementType;
+          if (el) node.pointeeElement = el;
+        }
+        return "Address";
+      }
+      // **`@` は指す先を読む。** 何を指しているか分かっているなら、その型である。
+      // 分からなければ従来通りオペランドの型を素通しする（下の既定へ落ちる）。
+      if (node.position === "prefix" && node.name === "input" && !node.inGetPropKey) {
+        const p = pointeeOfNode(node.operand, env);
+        if (p) {
+          if (p.element) node.elementType = p.element;
+          return p.type;
+        }
+      }
       if (node.position === "prefix" && node.name === "continuous") {
         node.elementType = inferAtomType(node.operand, env);
         return "Implicit";
@@ -1683,11 +1733,37 @@ function collectCallsiteParamTypes(nodes, env) {
     // 器が何段も引数として渡り歩く場合（盤が `first_row` → `place` → `try_col` →
     // `conflict` と流れる）は、各段で要素型を運ばないと連鎖が切れる。
     const elementObs = entries.map(() => new Set());
+    // **指す先は仮引数の並びごとに観測する。** 裸の1引数（`head : c ?`）は `entries` が
+    // 空なので、器の要素型と同じループには乗らない——名前の並びを別に作って拾う。
+    const ptNames = isIdentifierNode(paramNode) ? [paramNode.value] : entries.map((e) => (e.pattern ? null : e.name || null));
+    const pointeeObs = ptNames.map(() => new Set());
     for (const args of sites) {
       entries.forEach((e, i) => {
         if (i >= args.length) return;
         const el = containerElementType(args[i], args.scope || env) || elementTypeOf(args[i], args.scope || env);
         if (el && el !== "Unit" && !FAMILY_MEMBERS[el]) elementObs[i].add(el);
+      });
+      // アドレスを受け取る位置は、**指す先**を語る。`head (cons …)` の `c` が何を
+      // 指しているかは、呼び出しサイトにしか書いていない。
+      ptNames.forEach((nm, i) => {
+        if (!nm || i >= args.length) return;
+        const pt = pointeeOfNode(args[i], args.scope || env);
+        if (pt && pt.type && !FAMILY_MEMBERS[pt.type]) pointeeObs[i].add(JSON.stringify(pt));
+      });
+    }
+    // 全サイトで一致したときだけ採る。仮引数の束縛へ書き戻す。
+    if (rhs.scope) {
+      ptNames.forEach((nm, i) => {
+        if (!nm) return;
+        const seen = [...pointeeObs[i]];
+        if (seen.length !== 1) return;
+        const v = JSON.parse(seen[0]);
+        const b2 = envLookup(rhs.scope, nm);
+        if (b2 && b2.pointee !== v.type) {
+          b2.pointee = v.type;
+          b2.pointeeElement = v.element || undefined;
+          changed = true;
+        }
       });
     }
     const patScope = rhs.scope;
@@ -2269,6 +2345,10 @@ function collectReturns(nodes, env) {
     // 一度でも本体から型が読めたら、もう種ではない。
     binding.returnsSeeded = false;
     if (rhs.right.elementType) binding.returnsElementType = rhs.right.elementType;
+    // **指す先も返値と一緒に運ぶ。** `cons : h t ? $(h , t)` を呼んだ側が `@` で読むとき、
+    // 何が出るかを決めているのは `cons` の中の `$` である。ここで運ばないと連鎖が切れる。
+    if (rhs.right.pointee) binding.returnsPointee = rhs.right.pointee;
+    if (rhs.right.pointeeElement) binding.returnsPointeeElement = rhs.right.pointeeElement;
     if (rhs.right.repr) binding.returnsRepr = rhs.right.repr;
     // **カーソルの入口は「どう置かれているか」を宣言している。** 糖衣が作る
     // `sep : s ? (sep_arm s) , 0 , s` の本体は積に見えるが、置かれているのは

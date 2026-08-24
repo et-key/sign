@@ -87,6 +87,27 @@ function agree(note, source) {
 }
 
 /**
+ * 出せないものが**名指しされている**ことを見る。黙って別の答えを出していないこと、
+ * すなわち「まだ」と言えていることの確認である。
+ */
+function checkNamed(note, source) {
+	total++;
+	let msg = "（診断が出なかった）";
+	try {
+		const { nodes, env } = compile(source, { charset: "ascii" });
+		const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "ascii", layer: 1 });
+		if (r.diagnostics.length > 0) {
+			passed++;
+			console.log(`ok   ${note.padEnd(34)} ${r.diagnostics[0].message.replace(/（.*/, "")}`);
+			return;
+		}
+	} catch (e) {
+		msg = "例外：" + e.message;
+	}
+	console.log(`FAIL ${note.padEnd(34)} ${msg}`);
+}
+
+/**
  * 機械の側だけを見る。**インタプリタと同じものをモデルしていない場所**で使う——
  * 番地の算術がそれで、インタプリタは参照セル（getter/setter）、機械は整数である。
  * 突き合わせられないので期待値を書くしかない。使うのはここだけに留める。
@@ -159,6 +180,25 @@ agree("条件が真", "f : x ?\n\tx = 1 : 10\n\t20\nf 1");
 agree("条件が偽", "f : x ?\n\tx = 1 : 10\n\t20\nf 2");
 agree("尽きたら __", "f : x ?\n\tx > 10 : 1\nf 7");
 
+// ---- アドレスは指す先を覚える（`Address(T)`） ----
+//
+// `Address` だけでは `@c` の型が決まらない——C の `int*` と `cell*` の区別が無い状態で
+// ある。`$` は何を指したのかを知っているので、そこで書き留めて、束縛・返値・呼び出し
+// サイトを通して運ぶ（`List(T)` の要素型とまったく同じ機構）。**型は帳簿なので、
+// 指す先を1つ足しても命令は1つも増えない。**
+{
+	const BOX = "box : v ? $(v + 0)\nget : c ? @c\n";
+	agree("箱に入れて出す", BOX + "f : n ? get (box n)\nf 7");
+	agree("箱の中で計算", BOX + "f : n ? (get (box n)) + 1\nf 7");
+	agree("箱を書き換える", BOX + "f : n ? @((box n) # 99)\nf 7");
+	agree("2段の箱", BOX + "f : n ? get (box (get (box n)))\nf 7");
+	// **1語より広い指す先はまだ読めない。** `@` が読むのは1語なので、器（`{ptr, len}`）や
+	// 組（`{h, t}`）を指すアドレスは、読むのではなく**指したまま引く**必要がある
+	// （Struct のフィールド addressing）。型はもう運べているので、残るのは命令の側である。
+	checkNamed("器を指す箱はまだ読めない", "box : s ? $(s ' 0~)\nf : s ? @(box s)\nf `abc`");
+	checkNamed("組を指す箱もまだ", "cons : h t ? $(h , t)\nf : n ? (@(cons n 9)) ' 0\nf 7");
+}
+
 // ---- `$匿名式` はその場に置いてアドレスを返す ----
 //
 // 書くのは `#`（中置）、読むのは `@`。**順序は式の形が決める**——Sign には逐次実行が
@@ -176,9 +216,13 @@ agree("尽きたら __", "f : x ?\n\tx > 10 : 1\nf 7");
 	// 機械の側では番地は整数そのものである。同じものの別のモデルであって、どちらかが
 	// 間違っているのではない——だから期待値をここに書く。
 	const CONS = "cons : h t ? $(h , t)\n";
-	machineIs("組の1語目", CONS + "f : n ? @(cons n 99)\nf 7", "7");
-	machineIs("組の2語目", CONS + "f : n ? @((cons n 99) + 8)\nf 7", "99");
-	machineIs("組を入れ子に", CONS + "f : n ? @(@((cons (n + 1) (cons n 0)) + 8))\nf 7", "8");
+	// **組を指すアドレスは `@` では読めない。** 指す先が2語なので、1語を読む `@` では
+	// 足りない——以前は黙って先頭1語を読んでいて、cons セルでは**たまたま頭が出ていた**。
+	// 正しくは指したまま引く（Struct のフィールド addressing）。
+	checkNamed("組は @ では読めない", CONS + "f : n ? @(cons n 99)\nf 7");
+	// 番地の算術を挟むと指す先が分からなくなるので、そこは1語として読む（従来通り）。
+	machineIs("番地をずらして1語", CONS + "f : n ? @((cons n 99) + 8)\nf 7", "99");
+	machineIs("ずらした先も番地", CONS + "f : n ? @(@((cons (n + 1) (cons n 0)) + 8))\nf 7", "8");
 	// 2つ置けば別の場所になる（16 バイトずつ下がる）。
 	machineIs("別の場所になる", "f : n ? ($(n + 1)) - ($(n + 2))\nf 10", "16");
 }

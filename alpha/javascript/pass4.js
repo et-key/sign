@@ -1114,6 +1114,16 @@ function genExpr(node, env, em, scope, tail = false) {
 
 	// 前置 `@`——アドレスから読む。niche なら読まずに `__`。
 	if (n.type === "operation" && n.position === "prefix" && n.name === "input") {
+		// **`@` が読むのは1語である。**
+		//
+		// 指す先が器（`{ptr, len}`）や組（`{h, t}`）なら、1語では足りない——そこは
+		// 読むのではなく**指したまま引く**必要がある（Struct のフィールド addressing）。
+		// `widthOfType` は決まらない型に 8 を返すので、ここで見ないと2語の値を1語で
+		// 読んで**幅が黙って食い違う**。型は既に何本か言っているのだから、そこを見る。
+		const rw0 = slotsOfNode(n, em.conf, env);
+		if (rw0 !== null && rw0 !== 1) {
+			return em.fail(n, `${rw0} 本で運ぶ値を指すアドレスはまだ読めません（${n.atomType}——指したまま引く必要があります）`);
+		}
 		if (!genScalar(n.operand, env, em, scope, "アドレスはレジスタ1本の値です")) return false;
 		const po = (em.slot - 1) * 8;
 		const w = widthOfType(n.atomType, em.conf);
