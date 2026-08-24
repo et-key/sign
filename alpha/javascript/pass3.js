@@ -748,6 +748,12 @@ function computeAtomType(node, env) {
           ? inferAtomType(line.right, node.scope || env)
           : inferAtomType(line, node.scope || env)
       );
+      // **実体の種類も枝で合流する。** どれか1つでも規則を返す枝があれば、全体は規則で
+      // ある——場所は規則として歩けるが（`makeWalk`：器の上を走るイテレータ）、規則を
+      // 場所へ戻すには確保が要るからである。type_system.md §2 の「表現の違う枝の直和は
+      // 広い方に揃える」を、型ではなく実体の側へ当てたもの。
+      const armNodes = node.lines.map((line) => (isDefineNode(line) ? line.right : line));
+      if (armNodes.some((a) => a && a.repr === "closure")) node.repr = "closure";
       return joinArmTypes(armTypes);
     }
     // **どの行も定義でないブロックは、行が要素の列である**（list_model.md §3.1 の
@@ -775,8 +781,12 @@ function computeAtomType(node, env) {
     // 中身の要素型が見えなくなる）。
     if (lastType === "List" || lastType === "Iterator") {
       node.elementType = last.elementType ?? null;
-      // 実体の種類もブロック越しに引き継ぐ（`[1 ~ 5]` の外側から中身が規則だと見えるように）。
-      if (last.repr) node.repr = last.repr;
+    }
+    // 実体の種類はブロック越しに引き継ぐ（`[1 ~ 5]` の外側から中身が規則だと見えるように）。
+    // **器の型なら何でも運ぶ**——`String` を落としていたので、文字列を組み立てる関数の
+    // 返値が「場所」に見えていた。
+    if (last.repr && (lastType === "List" || lastType === "Iterator" || lastType === "String")) {
+      node.repr = last.repr;
     }
     return lastType;
   }
@@ -829,6 +839,23 @@ function computeAtomType(node, env) {
       return null;
     }
     if (LIST_BUILDING_OPS.has(node.name)) {
+      // **作られた器は場所ではなく規則である。**
+      //
+      // `\`abc\`` は `.rodata` に在る場所、`s ' 1~` は既存の場所を指し直したもの。どちらも
+      // `{ptr, len}` で運べる。しかし `c rest` のように**組み立てられた**器には、置く場所が
+      // どこにも無い——`alloca` は自分のフレームなので返せず、`layer: 0` には確保の手段が
+      // 無い（memory_management.md §2）。
+      //
+      // 返すのは「残りをどう作るか」という規則であり、その実体は部分適用と同じ
+      // `{fn, captured…}` である（stack_abi.md §4.3）。**大きさが静的に決まる**ので
+      // 呼び出し側が確保できる——作られた文字列の長さは静的に決まらないが、その規則の
+      // 大きさは決まる。sret の「スロットの大きさ」が答えられなかったのは、返すものを
+      // 取り違えていたからである。
+      //
+      // 型は「何ができるか」しか語らないので、「どう置かれているか」はここに印として残す
+      // （レンジが `repr = "rule"` を置くのと同じ場所・同じ理由）。アフィンな規則とは
+      // 実体の形が違う（`{start, step, end}` ではない）ので別の名前にする。
+      node.repr = "closure";
       // 余積族（§3.2の族別テーブル）: 左辺がStringならテキスト連結でString、
       // それ以外はList構築。以前は無条件に"List"を返していたが、interpreter.jsの
       // concatは左辺がstringならテキスト連結する（`ab` 1 → "ab1"）ため食い違っていた。
