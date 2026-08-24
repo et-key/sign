@@ -18,15 +18,21 @@ function check(note, got, want) {
 	if (!ok) console.log(`     got: ${JSON.stringify(got)}\n     want: ${JSON.stringify(want)}`);
 }
 const reasons = (src) => compile(src, { charset: "ascii" }).diagnostics.map((d) => d.reason);
+const WARN = "export-on-anonymous-expression";
 
 // 名前に付いた形は Pass 2 が畳むので、演算子ノードは残らない。
 check("#名前 : 値", reasons("#total : 0"), []);
 check("#名前 : 関数", reasons("#push : st d ? d st~"), []);
 check("##名前", reasons("##shared : 1"), []);
 // 式に付いた形は名前が無い。
-check("#(式)", reasons("f : n ? #(n + 1)"), ["export-without-name"]);
-check("##(式)", reasons("f : n ? ##(n + 1)"), ["export-without-name"]);
-check("###(式)", reasons("f : n ? ###(n + 1)"), ["export-without-name"]);
+check("#(式)", reasons("f : n ? #(n + 1)"), [WARN]);
+check("##(式)", reasons("f : n ? ##(n + 1)"), [WARN]);
+check("###(式)", reasons("f : n ? ###(n + 1)"), [WARN]);
+// **記憶を持たない値では同じ所を指す。** 閉じたラムダの実体は `.text` のコード番地で、
+// フレームでもアリーナでもない。それでも記法は `$` に寄せる——一致するのは寿命が
+// 問題にならない所だけで、実体を持つものでは本当に違うからである。
+check("#(ラムダ)", reasons("f : n ? #(x ? x + 1)"), [WARN]);
+check("$(ラムダ) は診断されない", reasons("f : n ? $(x ? x + 1)"), []);
 // 確保のつもりで書く形は `$` である（その場に置いてアドレスを返す）。
 check("$(式) は診断されない", reasons("f : n ? @($(n + 1))"), []);
 // ふつうの式には出ない。

@@ -2031,10 +2031,25 @@ function annotateTypes(node, env, diagnostics) {
 //
 // `reason` は機械可読なコード、`message` は人間向け。形式手法へ橋を架けるとき
 // （Lean/Coq への変換など）に読むのは `reason` の方であり、日本語文ではない。
-// 前置 `#` / `##` / `###` は**名前に付く印**である（operator_table.md tier 1：
-// 「名前をプロジェクト内部から発見可能にする」）。`#name : value` は Pass 2 が
-// `define.exported` へ畳むので、演算子ノードとして残っているなら**名前が無い**——
-// 名前の無いものを「発見可能に」はできない。
+/**
+ * **匿名の式へアドレスを作るのは `$` である。**
+ *
+ * 前置 `#` / `##` / `###` は名前に付く印であり（operator_table.md tier 1：「名前を
+ * プロジェクト内部から発見可能にする」）、`#name : value` は Pass 2 が `define.exported`
+ * へ畳む。演算子ノードとして残っているなら**名前が無い**——修飾する対象が無い。
+ *
+ * `#(x ? x + 1)` と `$(x ? x + 1)` は**同じ所を指す**。閉じたラムダは何も捕まえて
+ * いないので実体は `.text` のコード番地であり、フレームでもアリーナでもないからである。
+ * リテラルも同じ。だから「どちらでもよい」に見える。
+ *
+ * **しかし一致するのは記憶を持たない値だけである。** `$` は自分のフレーム（`sub sp`、
+ * 関数から戻ると死ぬ）、`#` はプロジェクトのアリーナ（unload まで生きる）で、
+ * `#(d st~)` のように実体を持つものでは寿命が本当に違う。**寿命が問題にならない所で
+ * だけ一致し、問題になる所で食い違う**——同義語にすると、一番効く場所で破れる規則を
+ * 教えることになる。だから記法は `$` に寄せる。
+ *
+ * 「一つのことを表現する方法は一つ」（pass2.js の方針）に従う。
+ */
 const EXPORT_PREFIX_OPS = new Set(["export_internal", "export_external", "export_pin"]);
 
 function collectExportMisuse(node, diagnostics) {
@@ -2042,11 +2057,13 @@ function collectExportMisuse(node, diagnostics) {
   if (!EXPORT_PREFIX_OPS.has(node.name)) return;
   diagnostics.push({
     level: "warning",
-    reason: "export-without-name",
+    reason: "export-on-anonymous-expression",
     spec: "operator_table.md tier 1",
     message:
-      `前置 '${node.op}' は名前に付ける印です（'${node.op}名前 : 値'）。式に付けても発見可能にする名前がありません` +
-      `——確保のつもりなら '$式'（その場に置いてアドレスを返す）です`,
+      `匿名の式へアドレスを作るなら '$式' と書きます（前置 '${node.op}' は名前に付ける印で、` +
+      `'${node.op}名前 : 値' の形でしか修飾する対象がありません）` +
+      `——記憶を持たない値では同じ所を指しますが、実体を持つものでは寿命が違います` +
+      `（'$' は自分のフレーム、'${node.op}' はプロジェクトのアリーナ）`,
   });
 }
 
