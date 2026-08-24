@@ -571,18 +571,22 @@ function pointeeOfNode(n, env) {
   // 括弧は剥ぐ。
   while (n && Array.isArray(n.lines) && n.lines.length === 1) n = n.lines[0];
   if (!n) return null;
-  if (n.pointee) return { type: n.pointee, element: n.pointeeElement || null };
+  if (n.pointee) return { type: n.pointee, element: n.pointeeElement || null, node: n.pointeeNode || null };
   const d = derefToNode(n, env);
-  if (d && d !== n && d.pointee) return { type: d.pointee, element: d.pointeeElement || null };
+  if (d && d !== n && d.pointee) return { type: d.pointee, element: d.pointeeElement || null, node: d.pointeeNode || null };
   if (isIdentifierNode(n) && env) {
     const b = envLookup(env, n.value);
-    if (b && b.pointee) return { type: b.pointee, element: b.pointeeElement || null };
-    if (b && b.returnsPointee) return { type: b.returnsPointee, element: b.returnsPointeeElement || null };
+    if (b && b.pointee) return { type: b.pointee, element: b.pointeeElement || null, node: b.pointeeNode || null };
+    if (b && b.returnsPointee) {
+      return { type: b.returnsPointee, element: b.returnsPointeeElement || null, node: b.returnsPointeeNode || null };
+    }
   }
   // 適用の結果は呼び先の返値である。
   if (n.type === "operation" && (n.name === "apply" || n.name === "partial_apply")) {
     const callee = applyCalleeBinding(n, env);
-    if (callee && callee.returnsPointee) return { type: callee.returnsPointee, element: callee.returnsPointeeElement || null };
+    if (callee && callee.returnsPointee) {
+      return { type: callee.returnsPointee, element: callee.returnsPointeeElement || null, node: callee.returnsPointeeNode || null };
+    }
   }
   return null;
 }
@@ -1080,6 +1084,14 @@ function computeAtomType(node, env) {
           node.pointee = p;
           const el = node.operand && node.operand.elementType;
           if (el) node.pointeeElement = el;
+          // **形は型ではなくノードにしかない。** `Struct` はスロットごとに型が違ってよいので、
+          // 「何番目が何バイト目か」は式そのものを見ないと出ない（`layoutOfStruct`）。
+          // `binding.returnsNode` を残しているのと同じ理由である。
+          // 括弧は剥ぐ。測るのは中身であって、包みではない（包んだまま測ると
+          // 「16 バイトの要素が1つ」に見え、スロットの並びが出ない）。
+          let pn = node.operand;
+          while (pn && Array.isArray(pn.lines) && pn.lines.length === 1) pn = pn.lines[0];
+          node.pointeeNode = pn;
         }
         return "Address";
       }
@@ -1089,6 +1101,9 @@ function computeAtomType(node, env) {
         const p = pointeeOfNode(node.operand, env);
         if (p) {
           if (p.element) node.elementType = p.element;
+          // 形も刻む。**1語より広い指す先は読むのではなく指したまま引く**ので、
+          // Pass 4 はスロットの並びを知る必要がある。
+          if (p.node) node.pointeeNode = p.node;
           return p.type;
         }
       }
@@ -1737,6 +1752,8 @@ function collectCallsiteParamTypes(nodes, env) {
     // 空なので、器の要素型と同じループには乗らない——名前の並びを別に作って拾う。
     const ptNames = isIdentifierNode(paramNode) ? [paramNode.value] : entries.map((e) => (e.pattern ? null : e.name || null));
     const pointeeObs = ptNames.map(() => new Set());
+    // 形（スロットの並び）はノードにしか無いので、型とは別に持ち回る。
+    const pointeeNodes = ptNames.map(() => null);
     for (const args of sites) {
       entries.forEach((e, i) => {
         if (i >= args.length) return;
@@ -1748,7 +1765,10 @@ function collectCallsiteParamTypes(nodes, env) {
       ptNames.forEach((nm, i) => {
         if (!nm || i >= args.length) return;
         const pt = pointeeOfNode(args[i], args.scope || env);
-        if (pt && pt.type && !FAMILY_MEMBERS[pt.type]) pointeeObs[i].add(JSON.stringify(pt));
+        if (pt && pt.type && !FAMILY_MEMBERS[pt.type]) {
+          pointeeObs[i].add(pt.type + "|" + (pt.element || ""));
+          if (pt.node && !pointeeNodes[i]) pointeeNodes[i] = pt.node;
+        }
       });
     }
     // 全サイトで一致したときだけ採る。仮引数の束縛へ書き戻す。
@@ -1757,11 +1777,12 @@ function collectCallsiteParamTypes(nodes, env) {
         if (!nm) return;
         const seen = [...pointeeObs[i]];
         if (seen.length !== 1) return;
-        const v = JSON.parse(seen[0]);
+        const [ty, el] = seen[0].split("|");
         const b2 = envLookup(rhs.scope, nm);
-        if (b2 && b2.pointee !== v.type) {
-          b2.pointee = v.type;
-          b2.pointeeElement = v.element || undefined;
+        if (b2 && b2.pointee !== ty) {
+          b2.pointee = ty;
+          b2.pointeeElement = el || undefined;
+          b2.pointeeNode = pointeeNodes[i] || undefined;
           changed = true;
         }
       });
@@ -2349,6 +2370,7 @@ function collectReturns(nodes, env) {
     // 何が出るかを決めているのは `cons` の中の `$` である。ここで運ばないと連鎖が切れる。
     if (rhs.right.pointee) binding.returnsPointee = rhs.right.pointee;
     if (rhs.right.pointeeElement) binding.returnsPointeeElement = rhs.right.pointeeElement;
+    if (rhs.right.pointeeNode) binding.returnsPointeeNode = rhs.right.pointeeNode;
     if (rhs.right.repr) binding.returnsRepr = rhs.right.repr;
     // **カーソルの入口は「どう置かれているか」を宣言している。** 糖衣が作る
     // `sep : s ? (sep_arm s) , 0 , s` の本体は積に見えるが、置かれているのは

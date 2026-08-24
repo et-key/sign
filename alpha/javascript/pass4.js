@@ -862,7 +862,15 @@ function genExpr(node, env, em, scope, tail = false) {
 		// **末尾呼び出しは `bl` ではなく `b` である**（tco.md §6——最適化ではなく
 		// 言語仕様としての保証）。Sign にループは無く再帰しかないので、ここを `bl` の
 		// ままにすると再帰の深さがそのままスタックの深さになる。
-		if (tail && scope) {
+		// **場所を取った関数は末尾呼び出しにできない。**
+		//
+		// 末尾呼び出しは自分のフレームを畳んでから飛ぶ（自己再帰なら使い回す）。ところが
+		// `$匿名式` で取った場所はそのフレームの中にあるので、畳んだ瞬間に死ぬ——呼び先が
+		// 読む前に消える。`bl` にして戻ってから畳めば生きている。
+		//
+		// **TCO と、フレームに置いたデータは引っ張り合う。** 末尾再帰はフレームを1つに
+		// 畳むのが仕事であり、そのフレームに寿命を預けているものとは両立しない。
+		if (tail && scope && !scope.holdsFrameStorage) {
 			if (callee === scope.selfLabel) {
 				// 自己末尾再帰。フレームをそのまま使い回す。飛び先は**仮引数を写す前**
 				// なので、完全性公理の検査も毎回通る——ここが終端である。
@@ -1122,6 +1130,23 @@ function genExpr(node, env, em, scope, tail = false) {
 		// 読んで**幅が黙って食い違う**。型は既に何本か言っているのだから、そこを見る。
 		const rw0 = slotsOfNode(n, em.conf, env);
 		if (rw0 !== null && rw0 !== 1) {
+			// **1語より広い指す先は、読むのではなく指したまま引く。**
+			//
+			// 器（`{ptr, len}`）を指すアドレスは、そのアドレスが既に `ptr` である——
+			// 要るのは `len` だけで、それは形（`layoutOfStruct` / `measure`）が知っている。
+			// **ロードは1つも出ない**：アドレスを参照として読み替えるだけである。
+			// `.rodata` の文字列で `{ptr, len}` を積むのとまったく同じ形になる。
+			const shape = n.pointeeNode ? measure(n.pointeeNode, { target: em.conf.target, charset: em.conf.charset, env }) : null;
+			if (rw0 === 2 && shape && shape.count) {
+				if (!genScalar(n.operand, env, em, scope, "アドレスはレジスタ1本の値です")) return false;
+				const ao0 = (em.slot - 1) * 8;
+				const lo0 = em.push();
+				if (lo0 === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+				em.emit(`mov ${SCRATCH[1]}, #${shape.count}`, `len は形が知っている（${shape.count} 要素・ロードは出ない）`);
+				em.store(SCRATCH[1], lo0, "len");
+				em.emit(`// ptr はアドレスそのもの`, "指したまま引く");
+				return 2;
+			}
 			return em.fail(n, `${rw0} 本で運ぶ値を指すアドレスはまだ読めません（${n.atomType}——指したまま引く必要があります）`);
 		}
 		if (!genScalar(n.operand, env, em, scope, "アドレスはレジスタ1本の値です")) return false;
@@ -1720,7 +1745,12 @@ function genMatch(node, env, em, scope, tail = false) {
 function loadElem(dst, base, idx, size) {
 	if (size === 1) return `ldrb ${dst}, [${base}, ${idx}]`;
 	if (size === 2) return `ldrh ${dst}, [${base}, ${idx}, lsl #1]`;
-	return `ldr ${dst}, [${base}, ${idx}, lsl #2]`;
+	if (size === 4) return `ldr ${dst}, [${base}, ${idx}, lsl #2]`;
+	// **8 byte は 64 ビットのレジスタで読む。** `w` のままだと上半分が落ち、しかも
+	// ストライドが 4 になるので隣の要素を跨いで読む。ここが 4 byte で頭打ちだったのは、
+	// これまで通っていたのが `String` の1 byte 要素と規則（算術で引くのでロードしない）
+	// だけだったからで、`List(Int)` を実際に引くまで表に出なかった。
+	return `ldr ${dst.replace(/^w/, "x")}, [${base}, ${idx}, lsl #3]`;
 }
 
 // 幅ぶんのロード／ストア。`layer: 0` は volatile だが、Pass 4 は並べ替えも削除もしないので
@@ -1942,6 +1972,44 @@ function emitUnitRegs(em, width, kind = null) {
  * 本文を先に作って後から包む。AArch64 のスタックは16バイト境界を要求するので
  * 切り上げる。
  */
+// 本体のどこかで `$匿名式` が場所を取るか。取るなら、そのフレームは呼び先が走っている
+// 間も生きていなければならない（末尾呼び出しで畳めない）。
+function takesFrameStorage(node) {
+	if (!node || typeof node !== "object") return false;
+	if (node.type === "operation" && node.position === "prefix" && node.name === "address") {
+		const t = unwrap(node.operand);
+		if (t && !isIdentifierNode(t) && !(t.type === "atom" && t.kind === "unit")) return true;
+	}
+	for (const k of ["left", "right", "operand"]) if (takesFrameStorage(node[k])) return true;
+	for (const l of node.lines || []) if (takesFrameStorage(l)) return true;
+	for (const e of node.entries || []) if (takesFrameStorage(e.default)) return true;
+	return false;
+}
+
+/**
+ * 末尾位置に `$匿名式` があるか。あるならその値は**自分のフレームの場所**であり、
+ * 返すと死んだ場所を指す。分岐なら枝それぞれが末尾位置である。
+ */
+function frameAddressInTail(node) {
+	const n = unwrap(node);
+	if (!n) return null;
+	if (Array.isArray(n.lines)) {
+		for (const line of n.lines) {
+			const v = isDefineNode(line) ? line.right : line;
+			const hit = frameAddressInTail(v);
+			if (hit) return hit;
+		}
+		return null;
+	}
+	if (n.type === "operation" && n.position === "prefix" && n.name === "address") {
+		const t = unwrap(n.operand);
+		// 名前付き識別子と `__` は場所を取らない（既にある所を指すだけ）。
+		if (!t || isIdentifierNode(t) || (t.type === "atom" && t.kind === "unit")) return null;
+		return n;
+	}
+	return null;
+}
+
 function wrapFrame(bodyLines, slots, name, movedSp = false) {
 	const frame = 16 + Math.ceil((slots * 8) / 16) * 16; // x29/x30 の16バイト + スロット
 	// 相互末尾呼び出しが置いた印を、決まったフレームの大きさで埋める。
@@ -2216,10 +2284,41 @@ function genFunction(name, lambdaNode, env, em, mono) {
 		paramSlots.push(1, 2);
 	}
 
+	// **自分のフレームに置いたものは返せない。**
+	//
+	// `$匿名式` は `sub sp` で場所を取るが、エピローグの `mov sp, x29` がそれを捨てる
+	// ——返したアドレスは死んだ場所を指す。仕様がそう書いている（memory_management.md
+	// §2「`alloca` は自分のフレームなので、作った器を返せない」）ので、黙って壊れた
+	// アドレスを返さずに名指しする。
+	//
+	// 返す規約（sret：呼び出し側がスロットを提供し、呼ばれた側が `#` で書く）はまだ
+	// 決まっていない。決まればここが道になる。
+	//
+	// 見るのは**末尾位置の式**である。変数へ入れてから返す形までは追わない（脱出解析が
+	// 要る）——追えないものを追えたことにする方が危ない。
+	const escaped = frameAddressInTail(lambdaNode.right);
+	if (escaped) {
+		em.diagnostics.push({
+			severity: "error",
+			message: `${name}: 自分のフレームに置いたものは返せません（'$匿名式' は 'sub sp' で場所を取り、関数から戻ると消えます——返す規約は未定です）`,
+			node: escaped,
+		});
+	}
+
 	const before = em.diagnostics.length;
 	// 本体そのものが末尾位置である。`selfLabel` / `loopLabel` を渡すことで、本体の中の
 	// 自己呼び出しがフレームを使い回す `b` になる。
-	const scope = { params, paramOffsets, paramSlots, callees, selfLabel: name, loopLabel, bracketPairs };
+	// 本体のどこかで場所を取るなら、フレームを畳む末尾呼び出しは使えない（`genApply` の理由）。
+	const scope = {
+		params,
+		paramOffsets,
+		paramSlots,
+		callees,
+		selfLabel: name,
+		loopLabel,
+		bracketPairs,
+		holdsFrameStorage: takesFrameStorage(lambdaNode.right),
+	};
 	const ok = genExpr(lambdaNode.right, env, em, scope, true);
 	if (ok !== false) {
 		// 返値の幅ぶん x0/x1 へ載せる。末尾呼び出しで出て行った経路は値を持たない。
