@@ -703,6 +703,16 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 	checkTrue("組み直しに確保は要らない", asm(LS + "f `  ab`").diagnostics.length === 0);
 	checkTrue("頭を1要素ぶん戻す", b(LS + "f `  ab`").includes("sub x9, x9, #1"));
 	checkTrue("長さを1つ戻す", b(LS + "f `  ab`").includes("add x9, x9, #1"));
+	// **撒くかどうかで意味が違う。** 器の側に後置 `~` が要るのが仕様である（分解の
+	// `[c ~rest]` と対称）。`String` だけは撒かない形もテキスト連結になるので同じ答えに
+	// なるが、`List` では `c rest` は `[c, rest]` という**別の器**である——そこで恒等射を
+	// 当てると、入れ子であるべきものを平らにしてしまう。
+	checkTrue("撒く形も組み直し", b("f : [c ~rest] ? c rest~\nf `abcd`").includes("sub x9, x9, #1"));
+	checkTrue(
+		"List の撒かない形は組み直しではない",
+		!body("f : [c ~rest] ? c rest\nf [1 2 3 4]", "f").includes("sub x9, x9, #1"),
+	);
+	checkTrue("List でも撒けば組み直し", body("f : [c ~rest] ? c rest~\nf [1 2 3 4]", "f").includes("sub x9, x9, #8"));
 	// 順序が逆なら別の器である（`rest c` は「残りのうしろへ頭を足す」）。
 	checkTrue("逆順は組み直しではない", asm("f : [c ~rest] ?\n\tc = ` ` : f rest\n\trest c\nf `  ab`").diagnostics.length > 0);
 	// 別の分解の組み合わせも組み直しではない。

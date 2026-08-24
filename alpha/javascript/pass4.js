@@ -1385,8 +1385,21 @@ function genIndex(node, env, em, scope) {
 function rejoinPair(node, scope) {
 	if (!scope || !scope.bracketPairs || scope.bracketPairs.length === 0) return null;
 	const l = unwrap(node.left);
-	const r = unwrap(node.right);
-	if (!isIdentifierNode(l) || !isIdentifierNode(r)) return null;
+	let r = unwrap(node.right);
+	if (!isIdentifierNode(l)) return null;
+	// **撒くかどうかで意味が違う。**
+	//
+	//   c rest~   撒いて繋ぐ  → 渡された器そのもの（組み直し）
+	//   c rest    1要素として足す → `[c, rest]` という**別の器**
+	//
+	// 器の側に後置 `~` が要るのが仕様である（分解の `[c ~rest]` と対称）。ただし
+	// `String` だけは撒かない形もテキスト連結になる（余積族の規則「左辺が String なら
+	// テキスト連結」）ので、そこは同じ答えになる。**そこ以外で撒かない形に当てると、
+	// 入れ子であるべきものを平らにしてしまう**——List で実際にそうなる。
+	const spread = !!r && r.type === "operation" && r.position === "postfix" && r.name === "expand";
+	if (spread) r = unwrap(r.operand);
+	if (!isIdentifierNode(r)) return null;
+	if (!spread && node.atomType !== "String") return null;
 	for (const p of scope.bracketPairs) {
 		if (l.value === p.head && r.value === p.rest) return p;
 	}

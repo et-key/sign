@@ -1475,6 +1475,14 @@ function stringifyForConcat(v) {
   // 左辺が先に List へ確定している `1 2 3 \`abc\`` だけカンマが混ざるのは、
   // 同じ演算子が畳まれ方によって別の結果を出していたということである。
   if (Array.isArray(v)) return v.map(stringifyForConcat).join("");
+  // **撒かれた並びも描画できる。** 後置 `~` は器を開いて中身を撒くので、`` `a` rest~ `` の
+  // 右辺はイテレータで来る（`expand` が `makeWalk` を返す）。ここが並びを知らなかったので
+  // `String(v)` へ落ち、`"a[object Object]"` になっていた——**`c rest~` という、仕様が
+  // 「器を並べるならこう書け」と言っている形そのものが動いていなかった**。
+  if (isIterator(v) || isSpread(v)) {
+    const items = asList(deIterate(v));
+    return items === null || isUnit(items) ? "" : stringifyForConcat(items);
+  }
   return String(v);
 }
 

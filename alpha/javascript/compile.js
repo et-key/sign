@@ -28,7 +28,7 @@ import { buildEnv } from "./pass1.js";
 import { reduceAll, desugarIndexRest } from "./pass2.js";
 import { specializeGenericParams } from "./pass1b.js";
 import { annotateAll, checkLayerConstraints, checkCharsetConstraints } from "./pass3.js";
-import { findStreamFunctions, generatePullers, CURSOR_SUFFIXES } from "./stream_desugar.js";
+import { findStreamFunctions, generatePullers, groupStreamFunctions, CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 function isDefineNode(n) {
   return !!n && n.type === "operation" && n.name === "define";
@@ -170,21 +170,20 @@ function compile(source, options = {}) {
   // 既定では走らせない。均すと `sep s` が列ではなくカーソルを返すようになるので、
   // 消費側もカーソルを引ける必要がある——それが揃うまでは、頼まれたときだけ動かす。
   if (options.desugarStreams && !options.__desugared) {
-    const found = findStreamFunctions(nodes);
-    const gen = generatePullers(found);
-    if (gen) {
-      return compile(`${source}\n${gen.source}`, {
+    // **呼び合う塊ごとに均す。** 関係の無い関数を1つの群にまとめると、片方が均せない
+    // ときに巻き添えになるし、引くたびに関係の無い枝まで比べることになる。
+    const groups = groupStreamFunctions(findStreamFunctions(nodes)).map(generatePullers).filter(Boolean);
+    if (groups.length > 0) {
+      return compile(`${source}\n${groups.map((g) => g.source).join("\n")}`, {
         ...options,
         __desugared: true,
-        __cursorEntries: gen.entries,
-        __cursorGroup: gen.group,
-        __superseded: found.map((f) => f.name),
+        __cursorGroups: groups.map((g) => ({ group: g.group, entries: g.entries })),
       });
     }
   }
   // 均した先の入口に印を付ける。**同じ名前が2回定義されている**ので、後の方（生成側）が
   // カーソルの入口で、前の方（元の関数）は Pass 4 が飛ばす対象である。
-  if (options.__cursorEntries) markCursorEntries(nodes, options.__cursorEntries, options.__superseded || [], options.__cursorGroup);
+  for (const g of options.__cursorGroups || []) markCursorEntries(nodes, g.entries, g.entries, g.group);
   const specializations = runPass1b(nodes, env);
   // Pass 3 の型注釈と Pass 3b（`__` へ収束する経路の静的記録）は同じ走査で行う。
   const diagnostics = [];

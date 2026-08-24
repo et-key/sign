@@ -77,22 +77,25 @@ function joinItems(node) {
  * 1つの枝を読む。**最後の項が仲間への呼び出しなら**、それはストリームの枝である。
  * @returns {{prefix: Node[], call: {name, args}}|null}
  */
+// `__`（零射）そのものか。終端の枝が `__` を返すのは「そこで列が尽きる」であって、
+// `__` という要素を1つ並べることではない。
+function isUnitAtom(n) {
+	return !!n && n.type === "atom" && (n.value === "_" || n.value === "__");
+}
+
 function readArm(body, group) {
 	const items = joinItems(body).map(unparen);
-	if (items.length < 2) {
-		// 項が1つでも、それが仲間への呼び出しなら「何も並べずに続く」枝である。
-		const only = items[0];
-		if (isApply(only)) {
-			const { base, args } = applyChain(only);
-			if (isIdent(base) && group.has(bare(base.value))) return { prefix: [], call: { name: bare(base.value), args } };
-		}
-		return null;
-	}
 	const last = items[items.length - 1];
-	if (!isApply(last)) return null;
-	const { base, args } = applyChain(last);
-	if (!isIdent(base) || !group.has(bare(base.value))) return null;
-	return { prefix: items.slice(0, -1), call: { name: bare(base.value), args } };
+	if (isApply(last)) {
+		const { base, args } = applyChain(last);
+		if (isIdent(base) && group.has(bare(base.value))) {
+			return { prefix: items.slice(0, -1), call: { name: bare(base.value), args } };
+		}
+	}
+	// **終端の枝。** 仲間を呼ばずに終わる枝は「そこで列が尽きる」である——カーソルの
+	// 尽きた状態そのものなので、状態機械の枝として正しい。`close_all` のように
+	// 「並べて自分を呼ぶ枝」と「`__` で終わる枝」の2つで書かれた形がこれである。
+	return { prefix: items.every(isUnitAtom) ? [] : items, call: null };
 }
 
 /**
@@ -123,18 +126,40 @@ function readStreamFunction(node, group) {
 	// ただの末尾呼び出しであり、状態機械の枝ではない——ここを混ぜると、ふつうの関数まで
 	// カーソルへ均そうとしてしまう。
 	if (!arms.some((a) => a.prefix.length > 0)) return null;
-	// **要素そのものが構築なら均せない。**
+	// **並べるものは1要素でなければならない。**
 	//
-	// `space (c (rest ' 0) (rest ' 1)) space` の真ん中は**1つの要素**であって3つでは
-	// ない——括弧が意味を変えており、`a (b c) d` は `["a","bc","d"]` になる（余積は
-	// 「右辺を1要素として足す」）。平らにすると答えが変わるので、勝手に平らにはできない。
-	// かといってそのまま `_at` の返値にすると、複数文字の器をその場で作ることになる。
+	// `space (c (rest ' 0) (rest ' 1)) space` の真ん中は**1つの要素**だが、それは
+	// 3文字の器である——`_at` の返値にすると、複数文字の器をその場で作ることになる。
+	// 平らにすれば答えが変わる（`a (b c) d` は `["a","bc","d"]`——余積は「右辺を1要素と
+	// して足す」）。`c rest` のように器そのものが並ぶ形も、個数が固定でないので入らない。
 	// **どちらも黙ってやってはいけない**ので、この形は均さない。
-	if (arms.some((a) => a.prefix.some((p) => p && p.type === "operation" && JOIN_OPS.has(p.name)))) return null;
+	//
+	// 見るのは型である。器（`String` / `List` / `Struct` / `Iterator`）が並んでいたら諦める。
+	const CONTAINER = new Set(["String", "List", "Struct", "Iterator", "Implicit"]);
+	if (arms.some((a) => a.prefix.some((p) => !p || CONTAINER.has(p.atomType) || (p.type === "operation" && JOIN_OPS.has(p.name))))) {
+		return null;
+	}
+	// **列であるには、続く枝が要る。** 全部が終端なら、それはただの分岐である。
+	if (!arms.some((a) => a.call)) return null;
+	// **並べるものの中に仲間が隠れていてはいけない。**
+	//
+	// `delta : … 1 + (delta rest)` は列を作っているように見えるが、再帰の結果を**算術に
+	// 使って**いる——返すのは深さという1つの数であって、列ではない。枝の末尾にある呼び出し
+	// だけを見ていると、式の中に埋まった再帰を見落として、まったく別の意味へ均してしまう。
+	// 遅くなるのではなく**間違える**ので、少しでも混ざっていたら諦める。
+	const mentions = (n) => {
+		if (!n || typeof n !== "object") return false;
+		if (isIdent(n) && group.has(bare(n.value))) return true;
+		for (const k of ["left", "right", "operand"]) if (mentions(n[k])) return true;
+		for (const l of n.lines || []) if (mentions(l)) return true;
+		return false;
+	};
+	if (arms.some((a) => a.prefix.some(mentions))) return null;
 	// **次の状態の形は枝によらず同じでなければならない。** 引数の本数が枝ごとに違うなら
-	// カーソルの形が決まらない。
-	const arity = arms[0].call.args.length;
-	if (arms.some((a) => a.call.args.length !== arity)) return null;
+	// カーソルの形が決まらない（終端の枝には次が無いので数えない）。
+	const calls = arms.filter((a) => a.call);
+	const arity = calls[0].call.args.length;
+	if (calls.some((a) => a.call.args.length !== arity)) return null;
 	return { name, paramNode: lam.left, arms, arity };
 }
 
@@ -271,7 +296,7 @@ function generatePullers(funcs, opts = {}) {
 	// `_na` は存在しない名前へ跳ぶ。片方だけ均すのは、跳び先を失うことである。
 	const known = new Set(funcs.map((f) => f.name));
 	for (const f of funcs) {
-		for (const a of f.arms) if (!known.has(a.call.name)) return null;
+		for (const a of f.arms) if (a.call && !known.has(a.call.name)) return null;
 	}
 	const pre = opts.prefix || "";
 	const group = pre + funcs[0].name;
@@ -321,10 +346,12 @@ function generatePullers(funcs, opts = {}) {
 			lines.push(`\t${elems[elems.length - 1]}`);
 			out.push(lines.join("\n"));
 		}
-		// 次の入力。再帰呼び出しの実引数がそれである。
-		const nx = printNode(a.call.args[0]);
-		if (nx === null) return null;
-		out.push(`${group}_nx${n} : ${ps} ? ${nx}`);
+		// 次の入力。再帰呼び出しの実引数がそれである。終端の枝には次が無い。
+		if (a.call) {
+			const nx = printNode(a.call.args[0]);
+			if (nx === null) return null;
+			out.push(`${group}_nx${n} : ${ps} ? ${nx}`);
+		}
 	}
 
 	// --- 振り分け。ただの分岐であって、跳び先は静的に決まっている ---
@@ -340,9 +367,11 @@ function generatePullers(funcs, opts = {}) {
 	};
 	out.push(dispatch("len", "a", (n) => String(flat[n].prefix.length)));
 	out.push(dispatch("at", "a k s", (n) => `${group}_at${n} k s`));
-	out.push(dispatch("nx", "a s", (n) => `${group}_nx${n} s`));
-	// 移った先の枝番号は、移った先の関数のガード列が決める。
-	out.push(dispatch("na", "a s", (n) => `${pre}${flat[n].call.name}_arm s`));
+	// 終端の枝は入力を動かさない。動かす先が無いので、そのまま返す（幅を揃えるため）。
+	out.push(dispatch("nx", "a s", (n) => (flat[n].call ? `${group}_nx${n} s` : "s")));
+	// 移った先の枝番号は、移った先の関数のガード列が決める。**終端の枝は `__` である**
+	// ——カーソルの `arm` が niche になり、それがそのまま「尽きた」を表す。
+	out.push(dispatch("na", "a s", (n) => (flat[n].call ? `${pre}${flat[n].call.name}_arm s` : "__")));
 
 	// --- 進める。**カーソルを1つ進めたカーソル** ---
 	//
@@ -378,4 +407,53 @@ function generatePullers(funcs, opts = {}) {
  */
 const CURSOR_SUFFIXES = { arm: "_arm", len: "_len", at: "_at", nx: "_nx", na: "_na", adv: "_adv" };
 
-export { CURSOR_SUFFIXES, generatePullers, printNode, printParams, findStreamFunctions, readStreamFunction, joinItems, readArm, definedNames, bare, unparen, applyChain };
+/**
+ * **見つけたものを、実際に呼び合う塊へ分ける。**
+ *
+ * `close_all` と `delta` は互いを呼ばないので別の群である。まとめて1つの群として番号を
+ * 振ると、関係の無い関数の枝が同じ `_at` の分岐に並ぶ——動きはするが、`close_all` を
+ * 引くたびに `delta` の枝まで比べることになるし、片方が均せないときに巻き添えになる。
+ *
+ * 枝が移る先が見つかっていない群は落とす。跳び先の無い `_na` を出すよりは、均さない方が
+ * よい（`in_quote` は `sep` へ移るが、`sep` は要素が器なので均せない）。
+ */
+function groupStreamFunctions(funcs) {
+	const byName = new Map(funcs.map((f) => [f.name, f]));
+	const seen = new Set();
+	const groups = [];
+	for (const f of funcs) {
+		if (seen.has(f.name)) continue;
+		// 呼び合う関係の連結成分を取る（向きは見ない——相互再帰は双方向である）。
+		const members = [];
+		const queue = [f.name];
+		let closed = true;
+		while (queue.length > 0) {
+			const name = queue.shift();
+			if (seen.has(name)) continue;
+			seen.add(name);
+			const g = byName.get(name);
+			if (!g) continue;
+			members.push(g);
+			for (const a of g.arms) {
+				if (!a.call) continue;
+				if (!byName.has(a.call.name)) {
+					closed = false;
+					continue;
+				}
+				if (!seen.has(a.call.name)) queue.push(a.call.name);
+			}
+			// 自分を呼ぶ側も同じ群である。
+			for (const other of funcs) {
+				if (seen.has(other.name)) continue;
+				if (other.arms.some((a) => a.call && a.call.name === name)) queue.push(other.name);
+			}
+		}
+		if (!closed) continue;
+		// 定義の順を保つ（群の名前は最初の関数から借りるので、決め方を一つにしておく）。
+		members.sort((a, b) => funcs.indexOf(a) - funcs.indexOf(b));
+		groups.push(members);
+	}
+	return groups;
+}
+
+export { CURSOR_SUFFIXES, groupStreamFunctions, generatePullers, printNode, printParams, findStreamFunctions, readStreamFunction, joinItems, readArm, definedNames, bare, unparen, applyChain };

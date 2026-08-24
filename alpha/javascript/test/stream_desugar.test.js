@@ -13,7 +13,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { compile } from "../compile.js";
 import { evaluate, newRuntimeEnv, UNIT, observe, isUnit } from "../interpreter.js";
-import { findStreamFunctions, generatePullers, printNode, printParams } from "../stream_desugar.js";
+import { findStreamFunctions, generatePullers, groupStreamFunctions, printNode, printParams } from "../stream_desugar.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const parser = peggy.generate(fs.readFileSync(path.join(__dirname, "..", "sign.pegjs"), "utf8"));
@@ -134,15 +134,48 @@ check("入れ子の構築は均さない", streams("f : [c ~rest] ? c (c (rest '
 	checkTrue("閉じた群は生成する", generatePullers(streams(closed)) !== null);
 }
 
+// ---- 終端の枝 ----
+//
+// 仲間を呼ばずに終わる枝は「そこで列が尽きる」であって、カーソルの尽きた状態そのもので
+// ある。`__` を返す枝は要素を1つ並べるのではなく、並べずに終わる。
+check("終端の枝を読む", streams("f : [c ~rest] ?\n\tc = `;` : __\n\tc (f rest)").map((x) => x.arms.map((a) => (a.call ? a.prefix.length + "→" + a.call.name : a.prefix.length + "→終端"))), [["0→終端", "1→f"]]);
+check("終端が要素を並べる", streams("f : [c ~rest] ?\n\tc = `;` : c\n\tc c (f rest)").map((x) => x.arms.map((a) => a.prefix.length)), [[1, 2]]);
+checkTrue("全部終端なら列ではない", streams("f : [c ~rest] ?\n\tc = `;` : c\n\tc").length === 0);
+
+// **並べるものの中に仲間が隠れていてはいけない。**
+//
+// `delta : … 1 + (delta rest)` は列を作っているように見えるが、再帰の結果を**算術に
+// 使って**いる——返すのは深さという1つの数であって列ではない。枝の末尾にある呼び出しだけを
+// 見ていると、式に埋まった再帰を見落として**まったく別の意味へ均してしまう**。
+check("式に埋まった再帰は列ではない", streams("f : [c ~rest] ?\n\tc = `(` : 1 + (f rest)\n\tc (f rest)"), []);
+// 器が並ぶ形も入らない（個数が固定でない）。
+check("器が並ぶ形は均さない", streams("f : [c ~rest] ?\n\tc = `;` : c rest\n\tc (f rest)"), []);
+
+// ---- 群は呼び合う塊ごとに分ける ----
+//
+// `close_all` と `delta` は互いを呼ばないので別の群である。まとめると、片方が均せない
+// ときに巻き添えになるし、引くたびに関係の無い枝まで比べることになる。
+{
+	const two = "a : [c ~rest] ?\n\tc = `;` : __\n\tc (a rest)\nb : [c ~rest] ?\n\tc = `.` : __\n\tc c (b rest)";
+	const gs = groupStreamFunctions(streams(two));
+	check("別々の群に分ける", gs.map((g) => g.map((f) => f.name)), [["a"], ["b"]]);
+	const mutual = "p : [c ~rest] ? c (q rest)\nq : [c ~rest] ? c c (p rest)";
+	check("呼び合う塊は1つの群", groupStreamFunctions(streams(mutual)).map((g) => g.map((f) => f.name)), [["p", "q"]]);
+	const open = "p : [c ~rest] ? c (r rest)\nr : n ? n";
+	check("閉じない群は落とす", groupStreamFunctions(streams(open)), []);
+}
+
 // ---- 実物を読めること ----
 {
 	const src = fs.readFileSync(path.join(__dirname, "..", "..", "sign", "preprocess.sn"), "utf8");
 	const found = streams(src);
-	// `sep` は枝の真ん中に構築があるので均せない（上の規則）。`in_quote` は均せるが、
-	// 枝が `sep` へ移るので群が閉じない——だから preprocess.sn はまだ均せない。
-	check("preprocess.sn のストリーム", found.map((f) => f.name).sort(), ["in_quote"]);
+	// `sep` は枝の真ん中に構築があるので均せない。`in_quote` は均せるが枝が `sep` へ移る
+	// ので群が閉じない。残るのは `head_line` と `unwind` で、`unwind` は状態が2つ（arity 2）。
+	check("preprocess.sn のストリーム", found.map((f) => f.name).sort(), ["head_line", "in_quote", "unwind"]);
 	check("in_quote の枝の本数", found.find((f) => f.name === "in_quote").arms.map((a) => a.prefix.length), [1, 1, 1]);
-	checkTrue("群が閉じないので生成しない", generatePullers(found) === null);
+	const groups = groupStreamFunctions(found);
+	check("閉じた群だけ残る", groups.map((g) => g.map((f) => f.name)), [["head_line"], ["unwind"]]);
+	checkTrue("状態が2つならまだ均さない", generatePullers(groups.find((g) => g[0].name === "unwind")) === null);
 	// 状態が1つの器で表せない形（`walk`）はまだ均さない——カーソルが太る。
 	checkTrue("walk は含まれない", !found.some((f) => f.name === "walk"));
 }

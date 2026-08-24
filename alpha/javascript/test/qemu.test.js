@@ -177,6 +177,16 @@ agree("歩幅つきを数え上げる", SUM + "sum [0 ~+ 3] 0 0");
 	agree("削るものが無い", LS + "f : s ? (lstrip s) ' 0\nf `ab`\n");
 	agree("全部消えたら __", LS + "f : s ? (lstrip s) ' 0\nf `   `\n");
 	agree("組み直してから切る", LS + "f : s ? ((lstrip s) ' 1~) ' 0\nf `  abc`\n");
+	// **撒く形（`c rest~`）が仕様の書き方である**（分解の `[c ~rest]` と対称）。
+	// 長い尾でも一致することを見る——尾が1文字だと撒く形と撒かない形が同じ答えになり、
+	// 取り違えても気づけない。
+	// 後置 `~` が要るのは**余積の側**（返す器を組むところ）であって、引数として渡す
+	// ところではない——`lstrip rest` は器を1つ渡しているだけである。
+	const LT = "lstrip : [c ~rest] ?\n\tc = ` ` : lstrip rest\n\tc rest~\n";
+	agree("撒く形で組み直す", LT + "f : s ? (lstrip s) ' 0\nf `  abcd`\n");
+	agree("撒く形の2番目", LT + "f : s ? (lstrip s) ' 1\nf `  abcd`\n");
+	agree("撒く形の3番目", LT + "f : s ? (lstrip s) ' 2\nf `  abcd`\n");
+	agree("撒く形の外", LT + "f : s ? (lstrip s) ' 9\nf `  abcd`\n");
 	// 先頭を落として組み直さない形（残りだけ返す）とも突き合わせる。
 	const SH = "strip_head : [c ~rest] ?\n\tc = `#` : rest\n\tc rest\n";
 	agree("先頭を落とす", SH + "f : s ? (strip_head s) ' 0\nf `#ab`\n");
