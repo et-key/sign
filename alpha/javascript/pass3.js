@@ -220,6 +220,12 @@ function joinElementTypes(a, b) {
 function elementTypeOf(node, env) {
   const type = inferAtomType(node, env);
   if (type === "List" || type === "Iterator") return node.elementType ?? null;
+  // **`String` の要素は `Char` である**（`String ≅ List(Char)`、§2）。ここが `String` を
+  // 返していたのは、`Char` が Layer 2 の型になる前に書かれた規則が残っていたからで、
+  // `getPropResultType` では既に直っていた同じ穴である（[[vocabulary lag]]）。器を1つ
+  // 受けて分解する形（`[c ~rest]`）で `c` の幅が決まらなかった原因がここ。
+  if (type === "String") return "Char";
+  // スカラーは1要素の器なので、要素は自分自身である（`[5]` ≅ `5`）。
   return type;
 }
 
@@ -1593,6 +1599,47 @@ function collectCallsiteParamTypes(nodes, env) {
       : paramNode && paramNode.type === "params" && !paramNode.bracket
         ? entries.map((e) => (e.pattern || e.rest ? null : e.name || null))
         : [];
+    // **ブラケットで受ける形は実引数1個を分解する。**
+    //
+    // `sep : [c ~rest] ?` の `c` は渡された器の要素で、`rest` は器そのものである。
+    // スロットと束縛名が1対1にならないので下の経路（`entries[i]` と `args[i]` を突き
+    // 合わせる形）では扱えないが、**要素型は呼び出しサイトが知っている**。ここを丸ごと
+    // 飛ばしていたので、器を1つ受けて分解する関数の `c` がいつまでも族（`Atom`）の
+    // ままで、Pass 4 が「要素の幅が決まりません」と言うしかなかった。
+    if (paramNode && paramNode.type === "params" && paramNode.bracket) {
+      const bsites = callsitesOf(nodes, node.left.value, env);
+      const bscope = rhs.scope;
+      if (bsites.length === 0 || !bscope) continue;
+      const obsEl = new Set();
+      const obsCt = new Set();
+      for (const args of bsites) {
+        if (args.length === 0) continue;
+        const sc = args.scope || env;
+        const el = containerElementType(args[0], sc) || elementTypeOf(args[0], sc);
+        if (el && el !== "Unit" && !FAMILY_MEMBERS[el]) obsEl.add(el);
+        const ct = inferAtomType(args[0], sc);
+        if (ct && ct !== "Unit" && !FAMILY_MEMBERS[ct]) obsCt.add(ct);
+      }
+      // 食い違うなら決まらないのが正しい（複数の型で呼ばれている）。
+      const el = obsEl.size === 1 ? [...obsEl][0] : null;
+      const ct = obsCt.size === 1 ? [...obsCt][0] : null;
+      for (const e of entries) {
+        if (!e.name || e.pattern) continue;
+        const b = envLookup(bscope, e.name);
+        if (!b) continue;
+        if (e.rest) {
+          // rest は器そのもの。型と要素型の両方を持つ——次の段の呼び出しサイトが
+          // ここを読むので、これが連鎖を繋ぐ。
+          if (ct && b.atomType !== ct) { b.atomType = ct; changed = true; }
+          if (el && b.elementType !== el) { b.elementType = el; changed = true; }
+        } else if (el && b.atomType !== el && (!b.atomType || FAMILY_MEMBERS[b.atomType])) {
+          b.atomType = el;
+          b.fromContainer = el;
+          changed = true;
+        }
+      }
+      continue;
+    }
     if (names.length === 0) continue;
     const sites = callsitesOf(nodes, node.left.value, env);
     if (sites.length === 0) continue;

@@ -1,0 +1,107 @@
+/**
+ * ストリームを返す関数を、引ける規則へ均す糖衣（stream_desugar.js）。
+ *
+ * **見るのは「元の関数と同じ列になるか」だけ**である。生成したものが元と違う意味に
+ * なっていても見た目では分からないので、期待値は書かず、元の関数をインタプリタで
+ * 走らせた答えと突き合わせる。
+ *
+ * 実行: node test/stream_desugar.test.js
+ */
+import peggy from "peggy";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { compile } from "../compile.js";
+import { evaluate, newRuntimeEnv, UNIT, observe, isUnit } from "../interpreter.js";
+import { findStreamFunctions, generatePullers, printNode, printParams } from "../stream_desugar.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const parser = peggy.generate(fs.readFileSync(path.join(__dirname, "..", "sign.pegjs"), "utf8"));
+
+let passed = 0;
+let total = 0;
+
+function check(note, got, want) {
+	total++;
+	const ok = JSON.stringify(got) === JSON.stringify(want);
+	if (ok) passed++;
+	console.log(`${ok ? "OK  " : "FAIL"} ${note}`);
+	if (!ok) {
+		console.log(`     got:  ${JSON.stringify(got)}`);
+		console.log(`     want: ${JSON.stringify(want)}`);
+	}
+}
+function checkTrue(note, cond, extra) {
+	check(note, !!cond, true);
+	if (!cond && extra) console.log(`     ${extra}`);
+}
+
+function run(source) {
+	const { nodes } = compile(source, { parse: parser.parse });
+	const env = newRuntimeEnv(null);
+	let r = UNIT;
+	for (const node of nodes) r = evaluate(node, env);
+	return isUnit(r) ? "__" : observe(r);
+}
+function streams(src) {
+	return findStreamFunctions(compile(src, { charset: "ascii" }).nodes);
+}
+
+// ---- 何がストリームで、何がそうでないか ----
+//
+// 枝が「有限個の要素を並べて、最後に自分（か仲間）をもう一度呼ぶ」形をしているものだけ。
+// 並べる要素が1つも無ければただの末尾呼び出しであって、状態機械の枝ではない。
+check("1枝のストリーム", streams("dup : [c ~rest] ? c c (dup rest)").map((f) => [f.name, f.arms.length, f.arms[0].prefix.length]), [["dup", 1, 2]]);
+check("多枝のストリーム", streams("sep : [c ~rest] ?\n\tc = 1 : c c (sep rest)\n\tc (sep rest)").map((f) => f.arms.map((a) => a.prefix.length)), [[2, 1]]);
+check("相互再帰も群になる", streams("a : [c ~rest] ? c (b rest)\nb : [c ~rest] ? c c (a rest)").map((f) => f.name), ["a", "b"]);
+check("ふつうの関数は違う", streams("f : n ? n + 1"), []);
+check("末尾呼び出しだけは違う", streams("f : s ? g (s ' 1~)\ng : s ? f (s ' 1~)"), []);
+check("畳み込みは違う", streams("fold : s a ? (fold (s ' 1~) (a + 1)) | a"), []);
+
+// ---- 印字。糖衣だと言うからには目で読めなければならない ----
+{
+	const lam = compile("sep : [c ~rest] ?\n\tc = 1 : c (rest ' 0)\n\t!c & (c > 2) : c\n", { charset: "ascii" }).nodes[0].right;
+	check("仮引数はブラケットごと", printParams(lam.left), "[c ~rest]");
+	// ブラケットの有無で意味が変わる（1引数を分解する／先頭と可変長）ので、落としてはいけない。
+	const bareLam = compile("f : c ~rest ? c", { charset: "ascii" }).nodes[0].right;
+	check("裸の rest はブラケット無し", printParams(bareLam.left), "c ~rest");
+	check("ガードも印字できる", printNode(lam.right.lines[1].left), "(!c & ((c > 2)))");
+}
+
+// ---- 生成物は元の列と一致する ----
+//
+// 消費側（`run`）は手で書く。カーソルは `(a, k, s)` の3つで、`a` が枝、`k` が枝の中の
+// 位置、`s` が残りの入力である。要素はどこにも置かれない。
+const RUN = (g) => `run : a k s acc ?\n\tk < (${g}_len a) : (run a (k + 1) s (acc + 1)) | acc\n\t(run (${g}_na a (${g}_nx a s)) 0 (${g}_nx a s) acc) | acc\n`;
+
+function sameLength(note, def, input) {
+	const name = /^(\w+)/.exec(def)[1];
+	const want = run(`${def}\n${name} ${input}\n`);
+	const g = generatePullers(findStreamFunctions(compile(def, { charset: "ascii" }).nodes));
+	if (!g) return checkTrue(note, false, "生成できなかった");
+	// 糖衣なら元の定義は消える。生成した規則だけで同じ列が引けなければならない。
+	const got = run(g.source + RUN(g.group) + `run (${name}_arm ${input}) 0 ${input} 0\n`);
+	checkTrue(note, typeof want === "string" && got === want.length, `元=${JSON.stringify(want)} 長さ=${typeof want === "string" ? want.length : "?"} 糖衣=${got}`);
+}
+sameLength("そのまま流す", "id : [c ~rest] ? c (id rest)", "`abcde`");
+sameLength("1つを2つにする", "dup : [c ~rest] ? c c (dup rest)", "`abc`");
+sameLength("1つを3つにする", "tri : [c ~rest] ? c c c (tri rest)", "`ab`");
+sameLength("入力を飛ばす", "sk : [c ~rest] ? c (sk (rest ' 1~))", "`abcdef`");
+sameLength("枝で本数が変わる", "v : [c ~rest] ?\n\tc = `a` : c c (v rest)\n\tc (v rest)", "`abaca`");
+sameLength("仲間へ移る", "p : [c ~rest] ?\n\tc = `\"` : c (q rest)\n\tc (p rest)\nq : [c ~rest] ?\n\tc = `\"` : c (p rest)\n\tc c (q rest)", '`ab"cd"ef`');
+
+// ---- 実物を読めること ----
+//
+// `preprocess.sn` の `sep` / `in_quote` が本当に列を作っている2つで、`walk`（状態を
+// 5つ持ち回る）や `preprocess`（ただの末尾呼び出し）はそうではない。
+{
+	const src = fs.readFileSync(path.join(__dirname, "..", "..", "sign", "preprocess.sn"), "utf8");
+	const found = streams(src);
+	check("preprocess.sn のストリーム", found.map((f) => f.name).sort(), ["in_quote", "sep"]);
+	check("sep の枝の本数", found.find((f) => f.name === "sep").arms.map((a) => a.prefix.length), [2, 1, 3, 3, 3, 1]);
+	// 状態が1つの器で表せない形（`walk`）はまだ均さない——カーソルが太る。
+	checkTrue("walk は含まれない", !found.some((f) => f.name === "walk"));
+}
+
+console.log(`\n${passed}/${total} passed`);
+process.exit(passed === total ? 0 : 1);

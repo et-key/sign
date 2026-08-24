@@ -1378,7 +1378,8 @@ function genMatch(node, env, em, scope, tail = false) {
 		const cw = genExpr(line.left, env, em, scope);
 		if (cw === false) return false;
 		if (cw === TAIL) return em.fail(line.left, "条件の位置に末尾呼び出しは置けません");
-		emitIsUnit(em, (em.slot - cw) * 8, cw, "条件", isRuleNode(node.left, em.conf, em.env));
+		// 規則かどうかを見るのは**条件の式**である（`node` は分岐そのもので `left` を持たない）。
+		emitIsUnit(em, (em.slot - cw) * 8, cw, "条件", isRuleNode(line.left, em.conf, em.env));
 		em.pop(cw);
 		em.emit(`b.eq ${next}`, "__ なら次の枝へ");
 		const armResult = move(line.right);
