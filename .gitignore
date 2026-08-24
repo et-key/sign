@@ -2,6 +2,7 @@ node_modules
 GEMINI.md
 CLAUDE.md
 scripts
+.obsidian
 
 # Rust build artifacts
 alpha/rust/target/
