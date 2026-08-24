@@ -72,17 +72,41 @@ check("畳み込みは違う", streams("fold : s a ? (fold (s ' 1~) (a + 1)) | a
 //
 // 消費側（`run`）は手で書く。カーソルは `(a, k, s)` の3つで、`a` が枝、`k` が枝の中の
 // 位置、`s` が残りの入力である。要素はどこにも置かれない。
+// 長さを数える消費側。
 const RUN = (g) => `run : a k s acc ?\n\tk < (${g}_len a) : (run a (k + 1) s (acc + 1)) | acc\n\t(run (${g}_na a (${g}_nx a s)) 0 (${g}_nx a s) acc) | acc\n`;
 
-function sameLength(note, def, input) {
+// **中身も数える消費側。** `Char` に算術は無いので（仕様通り、算術は `__` へ落ちる）、
+// 比較して `hit` で 1 を作る。`hit __` は完全性公理で `__` になり、`| 0` が受ける。
+const RUN_CH = (g, ch) =>
+	`hit : c ? 1\nrun : a k s acc ?\n\tk < (${g}_len a) : (run a (k + 1) s (acc + ((hit ((${g}_at a k s) = \`${ch}\`)) | 0))) | acc\n` +
+	`\t(run (${g}_na a (${g}_nx a s)) 0 (${g}_nx a s) acc) | acc\n`;
+
+/**
+ * 元の関数が作る列と、生成した規則から引ける列が一致することを見る。
+ *
+ * 長さだけでは足りない——並べる要素を取り違えていても長さは合う。文字ごとの個数まで
+ * 数えれば、どの枝がどの要素を出すかも見ていることになる。**期待値は書かない**：
+ * 仕様の答えは元の関数が持っている。
+ */
+function sameStream(note, def, input) {
 	const name = /^(\w+)/.exec(def)[1];
 	const want = run(`${def}\n${name} ${input}\n`);
 	const g = generatePullers(findStreamFunctions(compile(def, { charset: "ascii" }).nodes));
 	if (!g) return checkTrue(note, false, "生成できなかった");
+	if (typeof want !== "string") return checkTrue(note, false, `元が列にならない：${JSON.stringify(want)}`);
 	// 糖衣なら元の定義は消える。生成した規則だけで同じ列が引けなければならない。
-	const got = run(g.source + RUN(g.group) + `run (${name}_arm ${input}) 0 ${input} 0\n`);
-	checkTrue(note, typeof want === "string" && got === want.length, `元=${JSON.stringify(want)} 長さ=${typeof want === "string" ? want.length : "?"} 糖衣=${got}`);
+	const head = `run (${name}_arm ${input}) 0 ${input} 0\n`;
+	const len = run(g.source + RUN(g.group) + head);
+	const bad = [];
+	if (len !== want.length) bad.push(`長さ ${want.length} → ${len}`);
+	for (const ch of new Set([...want])) {
+		const n = [...want].filter((x) => x === ch).length;
+		const got = run(g.source + RUN_CH(g.group, ch) + head);
+		if (got !== n) bad.push(`${ch} が ${n} → ${got}`);
+	}
+	checkTrue(note, bad.length === 0, `元=${JSON.stringify(want)}  ${bad.join(" / ")}`);
 }
+const sameLength = sameStream;
 sameLength("そのまま流す", "id : [c ~rest] ? c (id rest)", "`abcde`");
 sameLength("1つを2つにする", "dup : [c ~rest] ? c c (dup rest)", "`abc`");
 sameLength("1つを3つにする", "tri : [c ~rest] ? c c c (tri rest)", "`ab`");

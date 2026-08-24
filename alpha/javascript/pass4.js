@@ -1108,7 +1108,11 @@ function genIndex(node, env, em, scope) {
 	if (cw === null || rw === null || cw > 3 || rw > 3) return null;
 	// スライスかどうかは**添字の形**で決まる。`s ' i~` は Pass 2 が `s ' (i ~+ 1)` へ
 	// 均しているので（`desugarIndexRest`）、ここで見るのは終端の無い等差レンジである。
-	const idx = node.right;
+	// **括弧は剥ぐ。** `s ' (1 ~+ 1)` のように優先順位のために括った形も同じスライスで
+	// ある。pass3 の `sliceIndexNode` は剥いでいたので、型は「部分列」と言うのに命令は
+	// 「要素1つ」を出そうとして幅が合わなくなっていた——同じ式について2つのパスが違う
+	// ことを言う、いつもの壊れ方である。
+	const idx = unwrap(node.right);
 	const isSlice = !!idx && idx.type === "operation" && idx.name === "range_arithmetic";
 	const ruleLeft = isRuleNode(node.left, conf, env);
 	if (isSlice) {

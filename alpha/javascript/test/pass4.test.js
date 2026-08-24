@@ -691,5 +691,18 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 	check("上位だけなら movz 1つ", ins("f : a ? a + 0x40000000\nf 1"), ["movz x9, #0x4000, lsl #16"]);
 	checkTrue("超える即値でも診断は出ない", asm("f : a ? a + 70000\nf 1").diagnostics.length === 0);
 }
+
+// ---- 括弧はスライスの判定を変えない ----
+//
+// `s ' (1 ~+ 1)` は `s ' 1~` と同じ部分列である（優先順位のために括っただけ）。pass3 の
+// `sliceIndexNode` は括弧を剥いでいたので、pass4 が剥がないと型は「部分列」と言うのに命令は
+// 「要素1つ」を出そうとして幅が合わなくなる——同じ式について2つのパスが違うことを言う。
+{
+	// 部分列は「頭と長さをずらす」——長さを詰めて負にしない `csel` がその印である。
+	const slice = (src) => body(src, "f").includes("csel x9, x9, xzr, pl");
+	checkTrue("裸のスライス", slice("f : s ? s ' 1~\nf `abc`"));
+	checkTrue("括ったスライス", slice("f : s ? s ' (1 ~+ 1)\nf `abc`"));
+	checkTrue("二重に括っても", slice("f : s ? s ' ((1 ~+ 1))\nf `abc`"));
+}
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

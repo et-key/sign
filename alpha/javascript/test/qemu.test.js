@@ -22,6 +22,7 @@ import { compile } from "../compile.js";
 import { generateAsm } from "../pass4.js";
 import { evaluate, newRuntimeEnv, UNIT, observe, isUnit } from "../interpreter.js";
 import { runAsm, asInt, available, toolReport } from "../qemu_run.js";
+import { findStreamFunctions, generatePullers } from "../stream_desugar.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const parser = peggy.generate(fs.readFileSync(path.join(__dirname, "..", "sign.pegjs"), "utf8"));
@@ -163,6 +164,33 @@ agree("歩幅つきを数え上げる", SUM + "sum [0 ~+ 3] 0 0");
 	agree("枝の中の位置を持つ", "step : c a ? a + 1\ndup : s k a ?\n\tk < 1 : (dup s (k + 1) (step (s ' 0) a)) | a\n\t(dup (s ' 1~) 0 (step (s ' 0) a)) | a\ndup `abc` 0 0");
 	// 添字で歩く形。切る形と同じ答えにならなければおかしい。
 	agree("添字で歩く", "step : c a ? a + 1\nfold : s i a ? (fold s (i + 1) (step (s ' i) a)) | a\nfold `abcde` 0 0");
+}
+
+// ---- 糖衣が出した規則が実機で走る ----
+//
+// `stream_desugar.js` は「列を作る関数」を `_arm`/`_len`/`_at`/`_nx`/`_na` へ均す。
+// 出るのは Sign のソースなので、手で書いたコードと同じ道を通る——**ここで走ることが、
+// 均した先が機械まで降りていることの確かめ**である。中身まで数えるのは、要素を取り
+// 違えていても長さは合ってしまうからである。
+{
+	const drive = (g, ch) =>
+		`hit : c ? 1\nrun : a k s acc ?\n\tk < (${g}_len a) : (run a (k + 1) s (acc + ((hit ((${g}_at a k s) = \`${ch}\`)) | 0))) | acc\n` +
+		`\t(run (${g}_na a (${g}_nx a s)) 0 (${g}_nx a s) acc) | acc\n`;
+	const stream = (note, def, input, ch) => {
+		const name = /^(\w+)/.exec(def)[1];
+		const g = generatePullers(findStreamFunctions(compile(def, { charset: "ascii" }).nodes));
+		if (!g) {
+			total++;
+			console.log(`FAIL ${note.padEnd(34)} 生成できなかった`);
+			return;
+		}
+		agree(note, g.source + drive(g.group, ch) + `run (${name}_arm ${input}) 0 ${input} 0\n`);
+	};
+	stream("糖衣：そのまま流す", "id : [c ~rest] ? c (id rest)", "`abcab`", "a");
+	stream("糖衣：1つを2つにする", "dup : [c ~rest] ? c c (dup rest)", "`abc`", "b");
+	stream("糖衣：入力を飛ばす", "sk : [c ~rest] ? c (sk (rest ' 1~))", "`abcabc`", "a");
+	stream("糖衣：枝で本数が変わる", "v : [c ~rest] ?\n\tc = `a` : c c (v rest)\n\tc (v rest)", "`abaca`", "a");
+	stream("糖衣：仲間へ移る", "p : [c ~rest] ?\n\tc = `-` : c (q rest)\n\tc (p rest)\nq : [c ~rest] ?\n\tc = `-` : c (p rest)\n\tc c (q rest)", "`ab-cd-ef`", "c");
 }
 
 console.log(`\n${passed}/${total} passed`);
