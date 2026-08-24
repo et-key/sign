@@ -39,6 +39,7 @@ import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf, DEFAULT_CHAR
 import { envLookup } from "./pass1.js";
 import { isBareComment } from "./pass3.js";
 import { passingOf, measure } from "./layout.js";
+import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 // AAPCS64（stack_abi.md §4.2）。引数は x0〜x7、返値は x0、一時は x9〜x15。
 const ARG_REGS = ["x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7"];
@@ -940,6 +941,41 @@ function genExpr(node, env, em, scope, tail = false) {
 		return want;
 	}
 
+	// **カーソルを組む。** `(arm s) , 0 , s` は積に見えるが、置かれるのは
+	// `{arm, k, 入力}` の3つ組であってメモリ上の並びではない（stream_desugar.js）。
+	// レンジと同じ機械で、順に積めば連続する。
+	if (n.type === "operation" && n.name === "product" && n.repr === "cursor") {
+		const want = slotsOfNode(n, em.conf, env);
+		if (want === null) return em.fail(n, "カーソルの渡し方が決まりません");
+		const parts = [];
+		let cur = n;
+		while (cur && cur.type === "operation" && cur.name === "product") {
+			parts.unshift(cur.right);
+			cur = cur.left;
+		}
+		parts.unshift(cur);
+		if (parts.length !== 3) return em.fail(n, `カーソルは {arm, k, 入力} の3つです（${parts.length} つ来ました）`);
+		const base = em.slot;
+		const names = ["arm", "k", "入力"];
+		for (let i = 0; i < parts.length; i++) {
+			const w = genExpr(parts[i], env, em, scope);
+			if (w === false) return false;
+			if ((em.slot - w) * 8 !== (base + (i === 2 ? 2 : i)) * 8) {
+				// 隙間ができたら詰める（前の項が複数本だった場合）。
+				for (let k = 0; k < w; k++) {
+					em.load(SCRATCH[0], (em.slot - w + k) * 8);
+					em.store(SCRATCH[0], (base + (i === 2 ? 2 : i) + k) * 8, k === 0 ? names[i] : undefined);
+				}
+			} else {
+				em.emit(`// ${names[i]}`, i === 0 ? "カーソル（メモリ上に無い）" : undefined);
+			}
+			if (i < 2 && w !== 1) return em.fail(parts[i], `カーソルの ${names[i]} はレジスタ1本の値です（${w} 本）`);
+		}
+		const got = em.slot - base;
+		if (got !== want) return em.fail(n, `カーソルの本数が合いません（${got} と ${want}）`);
+		return want;
+	}
+
 	// **`$` `@` `#` は niche を動かせない。**
 	//
 	// `$__ = __ = @__` は機械語の側の不動点である——記憶が無いものにアドレスは無く、
@@ -1100,8 +1136,75 @@ function isRuleNode(node, conf, env) {
 	const p = node ? passingOf(node, { target: conf.target, charset: conf.charset, env }) : null;
 	return !!p && p.mode === "register" && p.slots >= 2;
 }
+// カーソルかどうか。「どう置かれているか」の帳簿を見る（`repr`）。
+function cursorGroupOf(node, env) {
+	if (!node) return null;
+	if (node.cursorGroup) return node.cursorGroup;
+	if (isIdentifierNode(node) && env) {
+		const b = envLookup(env, node.value);
+		if (b && b.cursorGroup) return b.cursorGroup;
+		if (b && b.returnsCursorGroup) return b.returnsCursorGroup;
+	}
+	return null;
+}
+
+/**
+ * **カーソルを引く・進める。**
+ *
+ * `cur ' 0` が k 番目の要素、`cur ' 1~` が1つ進めたカーソルである。どちらも生成された
+ * Sign の関数（`<g>_at` / `<g>_adv`）を呼ぶだけで済む——分岐や次の枝の選び方は Sign の
+ * 側に書いてあるので、命令の側へ持ち込む必要が無い（stream_desugar.js）。
+ *
+ * `cur ' i`（i が 0 以外）は出せない。枝をいくつ跨ぐかは実行時にしか分からないので、
+ * 走らせる命令列になる——それは `' 1~` を繰り返すことであって、添字の算術ではない。
+ * 黙って別の答えを出さず名指しする。
+ */
+function genCursorIndex(node, env, em, scope, group, cbase) {
+	const conf = em.conf;
+	// 幅も命令も**剥いだ先**で測る。括弧のノードは「どう置かれているか」を持たない。
+	const cw = slotsOfNode(cbase, conf, env);
+	if (cw === null || cw < 3) return em.fail(node, `カーソルの本数が決まりません（${cw}）`);
+	const idx = unwrap(node.right);
+	const isSlice = !!idx && idx.type === "operation" && idx.name === "range_arithmetic";
+	const start = isSlice ? unwrap(idx.left) : idx;
+	const isLiteral = (n, v) => n && n.type === "atom" && n.kind === "number" && Number(n.value) === v;
+	if (isSlice) {
+		if (!isLiteral(start, 1) || !isLiteral(unwrap(idx.right), 1)) {
+			return em.fail(node, "カーソルは1つずつしか進められません（`cur ' 1~` だけ出せます）");
+		}
+	} else if (!isLiteral(start, 0)) {
+		return em.fail(node, "カーソルは先頭しか引けません（`cur ' 0` だけ出せます——途中を引くのは進めることの繰り返しです）");
+	}
+	// カーソルの3つ組（か4つ組）をそのまま引数へ載せる。`{arm, k, 入力…}` の並びが
+	// `<g>_at` / `<g>_adv` の仮引数の並びと同じなので、詰め替えは要らない。
+	const w = genExpr(cbase, env, em, scope);
+	if (w === false) return false;
+	if (w !== cw) { em.pop(w); return em.fail(node, `カーソルの本数が合いません（${w} と ${cw}）`); }
+	const base = em.slot - cw;
+	if (cw > ARG_REGS.length) return em.fail(node, `カーソルが ${cw} 本でレジスタに載りません`);
+	for (let k = 0; k < cw; k++) em.load(ARG_REGS[k], (base + k) * 8, k === 0 ? "カーソルをそのまま渡す" : undefined);
+	const callee = group + (isSlice ? CURSOR_SUFFIXES.adv : CURSOR_SUFFIXES.at);
+	em.emit(`bl ${callee}`, isSlice ? "1つ進めたカーソル" : "先頭の要素");
+	em.pop(cw);
+	// 引いた結果は要素1つ、進めた結果はカーソルそのもの。
+	const outw = isSlice ? cw : 1;
+	const off = [];
+	for (let k = 0; k < outw; k++) {
+		const o = em.push();
+		if (o === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		off.push(o);
+	}
+	for (let k = 0; k < outw; k++) em.store(ARG_REGS[k], off[k], k === 0 ? (isSlice ? "進めたカーソル" : "要素") : undefined);
+	return outw;
+}
+
 function genIndex(node, env, em, scope) {
 	const conf = em.conf;
+	// **カーソルは器でも規則でもない。** 引き方が違うので、先に振り分ける。
+	// 括弧は剥ぐ——`(dup s) ' 0` のように括った形が普通である。
+	const cbase = unwrap(node.left);
+	const cgroup = cbase && cbase.repr === "cursor" ? cursorGroupOf(cbase, env) : null;
+	if (cgroup) return genCursorIndex(node, env, em, scope, cgroup, cbase);
 	const cw = slotsOfNode(node.left, conf, env);
 	const rw = slotsOfNode(node, conf, env);
 	// 規則は3本（`{start, step, end}`）まで在る。場所は2本まで。
@@ -1335,7 +1438,10 @@ function genMatch(node, env, em, scope, tail = false) {
 	if (width === null) {
 		return em.fail(node, `枝の幅が揃いません（${node.atomType}）——広い方へ揃える持ち上げがまだ出せません（type_system.md §2）`);
 	}
-	if (width > 2) return em.fail(node, `${width} 本で運ぶ値を返す分岐はまだ出せません（${node.atomType}）`);
+	// レジスタに載る幅なら合流できる。**カーソルは4本**（`{arm, k, ptr, len}`）なので、
+	// 2本で打ち切っていると枝の合流ができない。載らない幅はメモリの確保が要るので、
+	// そこは名指しする。
+	if (width > ARG_REGS.length) return em.fail(node, `${width} 本で運ぶ値を返す分岐はまだ出せません（${node.atomType}）`);
 
 	const outs = [];
 	for (let k = 0; k < width; k++) {
@@ -1516,7 +1622,15 @@ function widthOfType(type, conf) {
 	const m = type ? reduceToMachineType(type, conf.target) : null;
 	return m && m.class === "gpr" ? m.size : 8;
 }
-function emitIsUnit(em, off, width, comment, isRule = false) {
+function emitIsUnit(em, off, width, comment, isRule = false, isCursor = false) {
+	// カーソルは先頭の `arm` だけ見る。空の入力から枝は選べないので、`_arm` が
+	// 完全性公理で `__` を返し、それがそのまま先頭に立つ。
+	if (isCursor) {
+		em.load(SCRATCH[0], off, comment);
+		em.emit("movz x12, #0x8000, lsl #48", "__ の niche（arm）");
+		em.emit(`cmp ${SCRATCH[0]}, x12`);
+		return;
+	}
 	if (width === 1) {
 		em.load(SCRATCH[0], off, comment);
 		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
@@ -1552,13 +1666,22 @@ function emitIsUnit(em, off, width, comment, isRule = false) {
 }
 
 // 返値レジスタへ `__` を置く。幅は返値と同じ（呼ぶ側が読む本数を変えない）。
-function emitUnitRegs(em, width) {
+function emitUnitRegs(em, width, kind = null) {
 	if (width <= 1) {
 		em.emit("movz x0, #0x8000, lsl #48", "__ を返す（完全性公理）");
 		return;
 	}
+	// **カーソルが尽きているかは `arm` が niche かで分かる。** 入力が空になれば枝を
+	// 選ぶ関数が完全性公理で `__` を返すので、そのまま先頭のフィールドに現れる——
+	// 空を別に表す必要が無い。
+	if (kind === "cursor") {
+		em.emit("movz x0, #0x8000, lsl #48", "__ を返す（arm が niche）");
+		for (let k = 1; k < width; k++) em.emit(`mov x${k}, #0`);
+		return;
+	}
 	em.emit("mov x0, #0", "__ を返す（完全性公理）");
 	em.emit("mov x1, #0", "len = 0 が __");
+	for (let k = 2; k < width; k++) em.emit(`mov x${k}, #0`);
 }
 
 /**
@@ -1841,8 +1964,12 @@ function genFunction(name, lambdaNode, env, em, mono) {
 		}
 		if (ok !== TAIL) {
 			const base = em.slot - ok;
-			for (let k = 0; k < Math.min(ok, 2); k++) {
-				em.load(ARG_REGS[k], (base + k) * 8, k === 0 ? (ok > 1 ? "返値の ptr を x0 へ" : "返値を x0 へ") : "返値の len を x1 へ");
+			// **返す本数は値の形が決める。** 2本で打ち切っていたので、カーソル
+			// （`{arm, k, ptr, len}`）や3本の規則を返す関数が上2本だけ載せて帰っていた
+			// ——呼ぶ側は4本読むので、残りは前の呼び出しの残骸を読むことになる。
+			for (let k = 0; k < Math.min(ok, ARG_REGS.length); k++) {
+				const what = ok === 1 ? "返値を x0 へ" : k === 0 ? "返値の1本目を x0 へ" : undefined;
+				em.load(ARG_REGS[k], (base + k) * 8, what);
 			}
 			em.pop(ok);
 		}
@@ -1902,6 +2029,10 @@ function generateAsm(nodes, env, options = {}) {
 	// （entry_point.md の生成スタブが `bl _sign_main` で呼ぶ）。
 	const exprs = [];
 	for (const node of nodes) {
+		// 糖衣が置き換えた元の定義は出さない。同じ列を2通りに出すだけである
+		// （compile.js の `markCursorEntries`）。AST には残っている——インタプリタは
+		// 元の形をそのまま走らせるので、そちらが仕様の答えを持っている。
+		if (node && node.supersededByDesugar) continue;
 		if (isDefineNode(node) && isIdentifierNode(node.left)) {
 			const rhs = node.right;
 			if (rhs && rhs.type === "operation" && rhs.name === "lambda") {

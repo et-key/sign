@@ -123,6 +123,14 @@ function readStreamFunction(node, group) {
 	// ただの末尾呼び出しであり、状態機械の枝ではない——ここを混ぜると、ふつうの関数まで
 	// カーソルへ均そうとしてしまう。
 	if (!arms.some((a) => a.prefix.length > 0)) return null;
+	// **要素そのものが構築なら均せない。**
+	//
+	// `space (c (rest ' 0) (rest ' 1)) space` の真ん中は**1つの要素**であって3つでは
+	// ない——括弧が意味を変えており、`a (b c) d` は `["a","bc","d"]` になる（余積は
+	// 「右辺を1要素として足す」）。平らにすると答えが変わるので、勝手に平らにはできない。
+	// かといってそのまま `_at` の返値にすると、複数文字の器をその場で作ることになる。
+	// **どちらも黙ってやってはいけない**ので、この形は均さない。
+	if (arms.some((a) => a.prefix.some((p) => p && p.type === "operation" && JOIN_OPS.has(p.name)))) return null;
 	// **次の状態の形は枝によらず同じでなければならない。** 引数の本数が枝ごとに違うなら
 	// カーソルの形が決まらない。
 	const arity = arms[0].call.args.length;
@@ -259,6 +267,12 @@ function generatePullers(funcs, opts = {}) {
 	// 状態が1つの器で表せる形だけを扱う。複数の値を持ち回る枝（`walk`）はカーソルが
 	// 太るので、まだここでは均さない。
 	if (funcs.some((f) => f.arity !== 1)) return null;
+	// **群は閉じていなければならない。** 枝が移る先の関数が均されていなければ、その枝の
+	// `_na` は存在しない名前へ跳ぶ。片方だけ均すのは、跳び先を失うことである。
+	const known = new Set(funcs.map((f) => f.name));
+	for (const f of funcs) {
+		for (const a of f.arms) if (!known.has(a.call.name)) return null;
+	}
 	const pre = opts.prefix || "";
 	const group = pre + funcs[0].name;
 	const { armIndex, flat } = numberArms(funcs);
@@ -314,10 +328,14 @@ function generatePullers(funcs, opts = {}) {
 	}
 
 	// --- 振り分け。ただの分岐であって、跳び先は静的に決まっている ---
+	// **どの枝も番号で選ぶ。最後の枝も条件を書く。**
+	//
+	// 既定の枝（条件なし）にすると、枝が1つのときに `a` が本体に一度も現れず、型が
+	// 決まらなくなる（「渡し方が決まりません」）。全部条件付きにすれば `a = N` が `a` を
+	// `Int` だと言うし、範囲外の枝番号は `__` になる——それが正しい答えでもある。
 	const dispatch = (name, params, body) => {
 		const lines = [`${group}_${name} : ${params} ?`];
-		for (let n = 0; n < flat.length - 1; n++) lines.push(`\ta = ${n} : ${body(n)}`);
-		lines.push(`\t${body(flat.length - 1)}`);
+		for (let n = 0; n < flat.length; n++) lines.push(`\ta = ${n} : ${body(n)}`);
 		return lines.join("\n");
 	};
 	out.push(dispatch("len", "a", (n) => String(flat[n].prefix.length)));
@@ -325,7 +343,39 @@ function generatePullers(funcs, opts = {}) {
 	out.push(dispatch("nx", "a s", (n) => `${group}_nx${n} s`));
 	// 移った先の枝番号は、移った先の関数のガード列が決める。
 	out.push(dispatch("na", "a s", (n) => `${pre}${flat[n].call.name}_arm s`));
-	return { source: out.join("\n\n") + "\n", group, armCount: flat.length };
+
+	// --- 進める。**カーソルを1つ進めたカーソル** ---
+	//
+	// 枝の中に続きがあれば `k` を進めるだけ、尽きたら入力を送って次の枝を選ぶ。どちらも
+	// カーソルであって、要素はどこにも現れない——`[h ~t]` が参照の頭と長さをずらすのと
+	// 同じ機械が、ここでは枝と位置をずらす算術になる。
+	//
+	// **これも Sign で書く。** Pass 4 が出すのは `bl <g>_adv` の1つで足りる。分岐や
+	// 呼び出しの組み立てを命令の側へ持ち込まなければ、確かめる場所が1つで済む。
+	out.push(
+		[
+			`${group}_adv : a k s ?`,
+			`\t(k + 1) < (${group}_len a) : a , (k + 1) , s`,
+			`\t(${group}_na a (${group}_nx a s)) , 0 , (${group}_nx a s)`,
+		].join("\n"),
+	);
+
+	// --- 入口。**元の名前がカーソルを返すようになる** ---
+	//
+	// `sep s` は列を作るのではなく「列を引くための3つ組」を返す。並べるものは何も
+	// 置かれないので、これが「器を作るのではなく引ける規則を作る」の実体である。
+	// 定義は後から来た方が勝つので、元の定義はこれに置き換わる（Pass 4 は元を飛ばす）。
+	const entries = funcs.map((f) => f.name);
+	for (const f of funcs) out.push(`${pre}${f.name} : s ? (${pre}${f.name}_arm s) , 0 , s`);
+
+	return { source: out.join("\n\n") + "\n", group, armCount: flat.length, entries };
 }
 
-export { generatePullers, printNode, printParams, findStreamFunctions, readStreamFunction, joinItems, readArm, definedNames, bare, unparen, applyChain };
+/**
+ * 生成される規則の名前。**pass3 と pass4 もこれを読む**——カーソルは「引き方」を持つ値
+ * なので、どの関数を呼ぶかは型の側からも命令の側からも同じ規約で決まる。文字列を
+ * 3か所に書くと、片方だけ変えたときに黙って食い違う。
+ */
+const CURSOR_SUFFIXES = { arm: "_arm", len: "_len", at: "_at", nx: "_nx", na: "_na", adv: "_adv" };
+
+export { CURSOR_SUFFIXES, generatePullers, printNode, printParams, findStreamFunctions, readStreamFunction, joinItems, readArm, definedNames, bare, unparen, applyChain };

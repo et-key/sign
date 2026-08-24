@@ -186,6 +186,11 @@ function measure(node, conf) {
   // 零対象は場所を占めない。
   if (type === "Unit") return { size: 0, align: 1 };
 
+  // **「どう置かれているか」は型より先に見る。** カーソルの型は列の型（`String` など）
+  // だが、置かれているのは `{arm, k, 入力}` の3つ組であって要素の並びではない。型の側の
+  // 分岐（`String` は要素の並び）へ先に落ちると、規則が器に化ける。
+  if (node.repr === "cursor" || named.repr === "cursor") return measureCursor(node.repr === "cursor" ? node : named, conf);
+
   // **`Char` の記憶上の幅は charset が決める**（1 or 4 byte）。レジスタ上は GPR だが
   // （符号位置という整数なので）、置くときは1文字ぶんである。
   if (type === "Char") {
@@ -327,6 +332,33 @@ function measureRule(node, conf) {
     repr: "rule",
     fields: fields.map((name, i) => ({ name, offset: i * w, size: w, type: el })),
     access: "start + i × step",
+  };
+}
+
+/**
+ * **カーソル**（`{arm, k, 捕まえた入力}`）。規則の一般形である。
+ *
+ * レンジが `start + i × step` で引けるのは規則が一次だからだが、列を作る関数はどれも
+ * 「有限個の要素を並べて自分をもう一度呼ぶ」形をしているので、`(どの枝か, 枝の中で何番目か,
+ * 残りの入力)` という3つ組で同じことができる（stream_desugar.js）。要素はどこにも置かれず、
+ * 訊かれたときに計算する——**器を作るのではなく引ける規則を作る**の一般形である。
+ *
+ * 尽きているかは `arm` が niche かで分かる。入力が空になれば枝を選ぶ関数（`_arm`）が
+ * 完全性公理で `__` を返すので、そのまま先頭のフィールドに現れる。
+ */
+function measureCursor(node, conf) {
+  const w = (widthsOf(conf.target) || {}).gpr;
+  if (!w) return null;
+  // 捕まえた入力の幅。器なら `{ptr, len}` の2本、規則なら3本。既定は器の2本——
+  // 均せるのは入力を1つ受けて分解する形だけなので（`arity === 1`）、そこは器である。
+  const inner = node.cursorInner || 2;
+  const names = ["arm", "k", ...(inner === 3 ? ["start", "step", "end"] : ["ptr", "len"])];
+  return {
+    size: w * names.length,
+    align: w,
+    repr: "cursor",
+    fields: names.map((name, i) => ({ name, offset: i * w, size: w, type: name === "ptr" ? "Address" : "Int" })),
+    access: "at(arm, k, 入力)",
   };
 }
 
@@ -479,8 +511,12 @@ function passingOf(node, conf) {
   // 測るのは**辿った先**である。識別子そのものは「どう置かれているか」を持たない——
   // 持っているのは束縛の側で、`deref` がそれを載せて返す。ここで元のノードを測ると
   // 型（`List`）だけが残り、規則が参照に化ける。
-  const shaped = named.repr ? named : { ...named, atomType: type, repr: target_.repr, elementType: named.elementType || target_.elementType };
+  const shaped = named.repr ? named : { ...named, atomType: type, repr: target_.repr, elementType: named.elementType || target_.elementType, cursorInner: named.cursorInner || target_.cursorInner };
   const m = measure(shaped, conf);
+  // カーソルも規則である（`{arm, k, 入力}`）。メモリ上に無いのでレジスタへ乗る。
+  if (m && m.repr === "cursor") {
+    return { mode: "register", size: m.size, align: m.align, slots: m.fields.length, fields: m.fields, cursor: true };
+  }
   if (m && m.repr === "rule") {
     return { mode: "register", size: m.size, align: m.align, slots: m.fields.length, fields: m.fields };
   }

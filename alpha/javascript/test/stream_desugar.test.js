@@ -118,11 +118,31 @@ sameLength("仲間へ移る", "p : [c ~rest] ?\n\tc = `\"` : c (q rest)\n\tc (p 
 //
 // `preprocess.sn` の `sep` / `in_quote` が本当に列を作っている2つで、`walk`（状態を
 // 5つ持ち回る）や `preprocess`（ただの末尾呼び出し）はそうではない。
+// ---- 均せない形は均さない ----
+//
+// **要素そのものが構築なら均せない。** `space (c (rest ' 0) (rest ' 1)) space` の真ん中は
+// 1つの要素であって3つではない（`a (b c) d` は `["a","bc","d"]`——余積は「右辺を1要素として
+// 足す」）。平らにすると答えが変わり、そのまま返すと複数文字の器をその場で作ることになる。
+// どちらも黙ってやってはいけない。
+check("入れ子の構築は均さない", streams("f : [c ~rest] ? c (c (rest ' 0)) c (f rest)"), []);
+// **群は閉じていなければならない。** 枝が移る先が均されていなければ `_na` は存在しない
+// 名前へ跳ぶ。片方だけ均すのは跳び先を失うことである。
+{
+	const half = "p : [c ~rest] ? c (q rest)\nq : [c ~rest] ? c (q (rest ' 1~)) (r rest)\nr : n ? n";
+	checkTrue("閉じない群は生成しない", generatePullers(streams(half)) === null);
+	const closed = "p : [c ~rest] ? c (q rest)\nq : [c ~rest] ? c c (p rest)";
+	checkTrue("閉じた群は生成する", generatePullers(streams(closed)) !== null);
+}
+
+// ---- 実物を読めること ----
 {
 	const src = fs.readFileSync(path.join(__dirname, "..", "..", "sign", "preprocess.sn"), "utf8");
 	const found = streams(src);
-	check("preprocess.sn のストリーム", found.map((f) => f.name).sort(), ["in_quote", "sep"]);
-	check("sep の枝の本数", found.find((f) => f.name === "sep").arms.map((a) => a.prefix.length), [2, 1, 3, 3, 3, 1]);
+	// `sep` は枝の真ん中に構築があるので均せない（上の規則）。`in_quote` は均せるが、
+	// 枝が `sep` へ移るので群が閉じない——だから preprocess.sn はまだ均せない。
+	check("preprocess.sn のストリーム", found.map((f) => f.name).sort(), ["in_quote"]);
+	check("in_quote の枝の本数", found.find((f) => f.name === "in_quote").arms.map((a) => a.prefix.length), [1, 1, 1]);
+	checkTrue("群が閉じないので生成しない", generatePullers(found) === null);
 	// 状態が1つの器で表せない形（`walk`）はまだ均さない——カーソルが太る。
 	checkTrue("walk は含まれない", !found.some((f) => f.name === "walk"));
 }

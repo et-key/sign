@@ -28,6 +28,7 @@ import { buildEnv } from "./pass1.js";
 import { reduceAll, desugarIndexRest } from "./pass2.js";
 import { specializeGenericParams } from "./pass1b.js";
 import { annotateAll, checkLayerConstraints, checkCharsetConstraints } from "./pass3.js";
+import { findStreamFunctions, generatePullers, CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 function isDefineNode(n) {
   return !!n && n.type === "operation" && n.name === "define";
@@ -88,6 +89,59 @@ function describeUnresolved(node) {
     .join(" ");
 }
 
+/**
+ * 糖衣が置き換えた定義に印を付ける。同じ名前が2回出てくるので、**後ろがカーソルの入口**、
+ * 前は元の関数である。元は AST に残す——インタプリタは元の形をそのまま走らせられるし、
+ * 「均した先が同じ列になるか」はそれと突き合わせて初めて言える。
+ */
+function markCursorEntries(nodes, entries, superseded, group) {
+  const names = new Set(entries);
+  const dead = new Set(superseded);
+  const last = new Map();
+  const advName = group ? group + CURSOR_SUFFIXES.adv : null;
+  let adv = null;
+  for (const node of nodes) {
+    if (!node || node.type !== "operation" || node.name !== "define") continue;
+    const id = node.left;
+    if (!id || id.type !== "atom" || id.kind !== "identifier") continue;
+    const raw = String(id.value).replace(/^<|>$/g, "");
+    if (names.has(raw)) last.set(raw, node);
+    if (raw === advName) adv = node;
+  }
+  // `isEntry` は「元の名前」だけ。**入口は捕まえた入力を仮引数に持つ**ので、pullers の
+  // 署名の種はそこから撒ける（pass3 の `seedCursorPullers`）。`_adv` はカーソルを返すが
+  // 入口ではない——第1仮引数は枝番号であって入力ではないので、混ぜると種が間違う。
+  const markBody = (node, raw, isEntry) => {
+    if (!node.right || node.right.type !== "operation" || node.right.name !== "lambda") return;
+    if (isEntry) node.right.cursorEntry = true;
+    else node.right.cursorReturns = true;
+    node.right.cursorGroup = raw;
+    // 本体（`(arm s) , 0 , s`）にも印を付ける。積に見えるが、置かれるのは
+    // `{arm, k, 入力}` の3つ組であってメモリ上の並びではない。分岐の場合は枝それぞれ。
+    const body = node.right.right;
+    if (!body) return;
+    const arms = Array.isArray(body.lines) ? body.lines : [body];
+    for (const line of arms) {
+      const v = line && line.type === "operation" && line.name === "define" ? line.right : line;
+      if (v) v.cursorGroup = raw;
+    }
+    // 分岐そのものにも印を付ける。どの枝もカーソルを返すので、合流した結果もカーソルである。
+    body.cursorGroup = raw;
+  };
+  for (const [raw, node] of last) markBody(node, raw, true);
+  // 進めた結果もカーソルである（`<g>_adv`）。枝はどちらも3つ組を返す。
+  if (adv) markBody(adv, group, false);
+  // 元の定義（同じ名前の、入口ではない方）は機械語を出さない。糖衣が置き換えたものを
+  // もう一度出しても、同じ列を2通りに出すだけである。
+  for (const node of nodes) {
+    if (!node || node.type !== "operation" || node.name !== "define") continue;
+    const id = node.left;
+    if (!id || id.type !== "atom" || id.kind !== "identifier") continue;
+    const raw = String(id.value).replace(/^<|>$/g, "");
+    if (dead.has(raw) && last.get(raw) !== node) node.supersededByDesugar = true;
+  }
+}
+
 function compile(source, options = {}) {
   const parseFn = options.parse || parse;
   const lines = parseFn(preprocess(source));
@@ -107,6 +161,30 @@ function compile(source, options = {}) {
       );
     }
   }
+  // **ストリームを返す関数を、引ける規則へ均す**（糖衣、stream_desugar.js）。
+  //
+  // 生成するのは Sign のソースなので、ここでソースを足して**もう一度同じ道を通す**。
+  // 手で書いたコードと同じパイプラインを通るので、生成側だけが通る抜け道が生まれない。
+  // 元の名前はカーソルの入口として再定義され（後の定義が勝つ）、Pass 4 は元を飛ばす。
+  //
+  // 既定では走らせない。均すと `sep s` が列ではなくカーソルを返すようになるので、
+  // 消費側もカーソルを引ける必要がある——それが揃うまでは、頼まれたときだけ動かす。
+  if (options.desugarStreams && !options.__desugared) {
+    const found = findStreamFunctions(nodes);
+    const gen = generatePullers(found);
+    if (gen) {
+      return compile(`${source}\n${gen.source}`, {
+        ...options,
+        __desugared: true,
+        __cursorEntries: gen.entries,
+        __cursorGroup: gen.group,
+        __superseded: found.map((f) => f.name),
+      });
+    }
+  }
+  // 均した先の入口に印を付ける。**同じ名前が2回定義されている**ので、後の方（生成側）が
+  // カーソルの入口で、前の方（元の関数）は Pass 4 が飛ばす対象である。
+  if (options.__cursorEntries) markCursorEntries(nodes, options.__cursorEntries, options.__superseded || [], options.__cursorGroup);
   const specializations = runPass1b(nodes, env);
   // Pass 3 の型注釈と Pass 3b（`__` へ収束する経路の静的記録）は同じ走査で行う。
   const diagnostics = [];

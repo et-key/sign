@@ -166,31 +166,56 @@ agree("歩幅つきを数え上げる", SUM + "sum [0 ~+ 3] 0 0");
 	agree("添字で歩く", "step : c a ? a + 1\nfold : s i a ? (fold s (i + 1) (step (s ' i) a)) | a\nfold `abcde` 0 0");
 }
 
-// ---- 糖衣が出した規則が実機で走る ----
+// ---- 糖衣が均した先が、元の関数と同じ列になる（実機で） ----
 //
-// `stream_desugar.js` は「列を作る関数」を `_arm`/`_len`/`_at`/`_nx`/`_na` へ均す。
-// 出るのは Sign のソースなので、手で書いたコードと同じ道を通る——**ここで走ることが、
-// 均した先が機械まで降りていることの確かめ**である。中身まで数えるのは、要素を取り
-// 違えていても長さは合ってしまうからである。
+// **仕様の答えは元の形が持っている。** だからインタプリタには糖衣を通さない元のソースを
+// 渡し、機械には均した先を渡して、同じ答えになることだけを見る。
+//
+// 均すと `dup s` は列ではなく**カーソル**（`{arm, k, 入力}`）を返す。要素はどこにも
+// 置かれず、`cur ' 0` が引いて `cur ' 1~` が1つ進める——器を切るのとまったく同じ書き方で
+// あり、消費側は書き換えなくてよい。尽きれば `arm` が niche になるので `__` が出る。
 {
-	const drive = (g, ch) =>
-		`hit : c ? 1\nrun : a k s acc ?\n\tk < (${g}_len a) : (run a (k + 1) s (acc + ((hit ((${g}_at a k s) = \`${ch}\`)) | 0))) | acc\n` +
-		`\t(run (${g}_na a (${g}_nx a s)) 0 (${g}_nx a s) acc) | acc\n`;
-	const stream = (note, def, input, ch) => {
-		const name = /^(\w+)/.exec(def)[1];
-		const g = generatePullers(findStreamFunctions(compile(def, { charset: "ascii" }).nodes));
-		if (!g) {
-			total++;
-			console.log(`FAIL ${note.padEnd(34)} 生成できなかった`);
-			return;
-		}
-		agree(note, g.source + drive(g.group, ch) + `run (${name}_arm ${input}) 0 ${input} 0\n`);
+	const machineDesugared = (source) => {
+		const { nodes, env } = compile(source, { charset: "ascii", desugarStreams: true });
+		const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "ascii", layer: 1 });
+		if (r.diagnostics.length) return "出せない：" + r.diagnostics[0].message;
+		const v = asInt(runAsm(r.text)[0]);
+		return v === null ? "__" : String(v);
 	};
-	stream("糖衣：そのまま流す", "id : [c ~rest] ? c (id rest)", "`abcab`", "a");
-	stream("糖衣：1つを2つにする", "dup : [c ~rest] ? c c (dup rest)", "`abc`", "b");
-	stream("糖衣：入力を飛ばす", "sk : [c ~rest] ? c (sk (rest ' 1~))", "`abcabc`", "a");
-	stream("糖衣：枝で本数が変わる", "v : [c ~rest] ?\n\tc = `a` : c c (v rest)\n\tc (v rest)", "`abaca`", "a");
-	stream("糖衣：仲間へ移る", "p : [c ~rest] ?\n\tc = `-` : c (q rest)\n\tc (p rest)\nq : [c ~rest] ?\n\tc = `-` : c (p rest)\n\tc c (q rest)", "`ab-cd-ef`", "c");
+	const agreeDesugared = (note, source) => {
+		total++;
+		let a, b;
+		try {
+			a = interp(source);
+		} catch (e) {
+			a = "解釈で例外：" + e.message;
+		}
+		try {
+			b = machineDesugared(source);
+		} catch (e) {
+			b = "機械で例外：" + e.message;
+		}
+		if (a === b) {
+			passed++;
+			console.log(`ok   ${note.padEnd(34)} ${a}`);
+		} else {
+			console.log(`FAIL ${note.padEnd(34)} 解釈=${a} / 機械=${b}`);
+		}
+	};
+	// `n` 回進めてから引く。器を切るのと同じ書き方である。
+	const pull = (call, n) => "(".repeat(n) + call + " ' 1~)".repeat(n) + " ' 0";
+	const DUP = "dup : [c ~rest] ? c c (dup rest)\n";
+	for (let n = 0; n <= 4; n++) agreeDesugared(`糖衣：${n} 進めて引く`, DUP + `f : s ? ${pull("(dup s)", n)}\nf \`abc\`\n`);
+	agreeDesugared("糖衣：尽きたら __", DUP + `f : s ? ${pull("(dup s)", 9)}\nf \`ab\`\n`);
+	// 枝で並べる本数が変わる形。`a` は2つ、それ以外は1つ。
+	const V = "v : [c ~rest] ?\n\tc = `a` : c c (v rest)\n\tc (v rest)\n";
+	for (let n = 0; n <= 3; n++) agreeDesugared(`糖衣：枝で変わる ${n}`, V + `f : s ? ${pull("(v s)", n)}\nf \`ba\`\n`);
+	// 仲間へ移る形（引用の中と外）。カーソルの `arm` が群をまたいで動く。
+	const P = "p : [c ~rest] ?\n\tc = `-` : c (q rest)\n\tc (p rest)\nq : [c ~rest] ?\n\tc = `-` : c (p rest)\n\tc c (q rest)\n";
+	for (let n = 0; n <= 4; n++) agreeDesugared(`糖衣：仲間へ移る ${n}`, P + `f : s ? ${pull("(p s)", n)}\nf \`a-bc\`\n`);
+	// 入力を飛ばす形。
+	const SK = "sk : [c ~rest] ? c (sk (rest ' 1~))\n";
+	for (let n = 0; n <= 2; n++) agreeDesugared(`糖衣：入力を飛ばす ${n}`, SK + `f : s ? ${pull("(sk s)", n)}\nf \`abcdef\`\n`);
 }
 
 console.log(`\n${passed}/${total} passed`);

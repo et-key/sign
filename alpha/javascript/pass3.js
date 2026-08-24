@@ -30,6 +30,7 @@
 
 import { envLookup } from './pass1.js';
 import { OperationError } from "./errors.js";
+import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 const ARITHMETIC_OPS = new Set(["add", "sub", "mul", "div", "mod", "pow"]);
 // coproduct_resolver.md §3-4: Atom-Atom間の余積（スペース）が縮約される演算。
@@ -577,6 +578,14 @@ function getPropResultType(node, env) {
     // 呼び出しサイトから観測した `repr` がそこに在る。`base` を見るだけでは、規則を
     // 受け取った仮引数を切ったときに落ちる。
     if (reprOfNode(node.left, env) === "rule") node.repr = "rule";
+    // **カーソルを進めた結果もカーソルである。** 枝と位置をずらすだけで、要素はどこにも
+    // 現れない——器を切った結果が器であるのと同じことである。群も一緒に運ぶ（引く命令が
+    // どこへ跳ぶかはそこから決まる）。
+    const cg = cursorGroupOfNode(node.left, env);
+    if (cg) {
+      node.repr = "cursor";
+      node.cursorGroup = cg;
+    }
     return containerType;
   }
 
@@ -695,6 +704,11 @@ function literalAtomTypeFromKind(node) {
 // （汚染ではない）。Pass 4 も同じノードから型を読んで命令を選ぶことになる。
 function inferAtomType(node, env) {
   if (!node || typeof node !== "object") return null;
+  // **カーソルの印は不動点を跨いで生き残る。** `clearTypeAnnotations` は周回ごとに
+  // `repr` を消すが、`cursorGroup`（糖衣が付ける、消されない印）から毎回書き戻す。
+  // 型の側の分岐（積 → `Struct`）へ落ちる前に置く必要がある——置かれているのは
+  // `{arm, k, 入力}` の3つ組であって、メモリ上の並びではない。
+  if (node.cursorGroup && node.repr !== "cursor") node.repr = "cursor";
   if (node.atomType !== undefined) return node.atomType;
   const inferred = computeAtomType(node, env);
   node.atomType = inferred;
@@ -977,6 +991,11 @@ function computeAtomType(node, env) {
       // 添字の命令を選べない——要素1個ぶんの幅と、ロードか算術かが要る。
       if (callee.returnsElementType && !node.elementType) node.elementType = callee.returnsElementType;
       if (callee.returnsRepr && !node.repr) node.repr = callee.returnsRepr;
+      if (callee.returnsRepr === "cursor") {
+        node.repr = "cursor";
+        node.cursorInner = callee.returnsCursorInner || 2;
+        node.cursorGroup = callee.returnsCursorGroup || null;
+      }
       return callee.returns ?? null;
     }
     if (node.position === "infix" && node.left) {
@@ -1769,6 +1788,79 @@ function collectCallsiteParamTypes(nodes, env) {
   return changed;
 }
 
+// どの群のカーソルか。識別子なら束縛先まで辿る（返値経由も見る）。
+function cursorGroupOfNode(n, env) {
+  if (!n) return null;
+  // 括弧は剥ぐ——`(sep s) ' 0` のように括った形が普通である。
+  while (n && Array.isArray(n.lines) && n.lines.length === 1) n = n.lines[0];
+  if (!n) return null;
+  if (n.cursorGroup) return n.cursorGroup;
+  const d = derefToNode(n, env);
+  if (d && d.cursorGroup) return d.cursorGroup;
+  if (isIdentifierNode(n) && env) {
+    const b = envLookup(env, n.value);
+    if (b && b.cursorGroup) return b.cursorGroup;
+    if (b && b.returnsCursorGroup) return b.returnsCursorGroup;
+  }
+  return null;
+}
+
+/**
+ * **カーソルは pullers の署名を宣言する。**
+ *
+ * 糖衣が出す `_at` / `_nx` / `_na` は、カーソルを引く命令からしか呼ばれない
+ * （`cur ' 0` / `cur ' 1~` が Pass 4 でそこへ跳ぶ）。ソースには呼び出しサイトが無いので、
+ * 呼び出しサイトからの逆算では型が決まらない——決めているのはカーソルの側であり、
+ * 「捕まえた入力が何か」は入口（`sep : s ? …`）の仮引数が知っている。
+ *
+ * 枝番号と枝の中の位置は常に `Int` である。それはカーソルの形そのものなので、
+ * 本体の使われ方を待つ必要が無い。
+ */
+function seedCursorPullers(nodes, env) {
+  let changed = false;
+  for (const node of nodes) {
+    if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+    const rhs = node.right;
+    if (!rhs || !rhs.cursorEntry || !rhs.scope) continue;
+    // 入口の仮引数が捕まえた入力である。
+    const p = rhs.left;
+    const pname = isIdentifierNode(p) ? p.value : (p && p.entries && p.entries[0] && p.entries[0].name) || null;
+    if (!pname) continue;
+    const inb = envLookup(rhs.scope, pname);
+    if (!inb || !inb.atomType || FAMILY_MEMBERS[inb.atomType]) continue;
+    const group = rhs.cursorGroup;
+    for (const suffix of [CURSOR_SUFFIXES.at, CURSOR_SUFFIXES.nx, CURSOR_SUFFIXES.na, CURSOR_SUFFIXES.len, CURSOR_SUFFIXES.adv]) {
+      const target = nodes.find(
+        (n) => isDefineNode(n) && isIdentifierNode(n.left) && n.left.value.replace(/^<|>$/g, "") === group + suffix,
+      );
+      const lam = target && target.right;
+      if (!lam || lam.type !== "operation" || lam.name !== "lambda" || !lam.scope) continue;
+      const entries = lam.left && lam.left.type === "params" ? lam.left.entries || [] : [];
+      entries.forEach((e, i) => {
+        if (!e.name || e.pattern) return;
+        const b = envLookup(lam.scope, e.name);
+        if (!b) return;
+        // 最後の仮引数が入力、それ以外（枝番号・枝の中の位置）は Int。
+        const last = i === entries.length - 1 && suffix !== CURSOR_SUFFIXES.len;
+        const want = last ? inb.atomType : "Int";
+        if ((!b.atomType || FAMILY_MEMBERS[b.atomType]) && b.atomType !== want) {
+          b.atomType = want;
+          changed = true;
+        }
+        if (last && inb.elementType && b.elementType !== inb.elementType) {
+          b.elementType = inb.elementType;
+          changed = true;
+        }
+        if (last && inb.repr && b.repr !== inb.repr) {
+          b.repr = inb.repr;
+          changed = true;
+        }
+      });
+    }
+  }
+  return changed;
+}
+
 /**
  * その式が**どう置かれているか**（`repr`）。型（`atomType`）とは別の帳簿で、
  * 「規則なのか、要素列への参照なのか」を持つ。識別子なら束縛先まで辿る。
@@ -2129,6 +2221,16 @@ function collectReturns(nodes, env) {
     binding.returnsSeeded = false;
     if (rhs.right.elementType) binding.returnsElementType = rhs.right.elementType;
     if (rhs.right.repr) binding.returnsRepr = rhs.right.repr;
+    // **カーソルの入口は「どう置かれているか」を宣言している。** 糖衣が作る
+    // `sep : s ? (sep_arm s) , 0 , s` の本体は積に見えるが、置かれているのは
+    // `{arm, k, 入力}` の3つ組であって要素の並びではない（stream_desugar.js）。
+    // 本体から読める `repr` で上書きさせない。
+    if (rhs.cursorEntry || rhs.cursorReturns) {
+      binding.returnsRepr = "cursor";
+      binding.returnsCursorInner = rhs.cursorInner || 2;
+      // どの群のカーソルかも運ぶ。引く命令はここから跳び先を決める。
+      binding.returnsCursorGroup = rhs.cursorGroup || null;
+    }
     if (binding.returns !== ret) {
       binding.returns = ret;
       changed = true;
@@ -2279,7 +2381,10 @@ function annotateAll(nodes, env, diagnostics) {
     // 呼び出しサイトからの具体化も同じ不動点で回す——狭まった型が本体へ伝わり、
     // その本体が別の関数を呼んでいれば、そこでも狭まる。
     const c = collectCallsiteParamTypes(nodes, env);
-    if (!a && !b && !c) break;
+    // カーソルの pullers は呼び出しサイトを持たない（引く命令が Pass 4 で跳ぶだけ）。
+    // 型を決めているのはカーソルの側なので、同じ不動点で種を撒く。
+    const d = seedCursorPullers(nodes, env);
+    if (!a && !b && !c && !d) break;
   }
   };
   runFixpoint();
