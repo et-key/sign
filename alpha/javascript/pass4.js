@@ -1408,6 +1408,21 @@ function genIndex(node, env, em, scope) {
 		if (rw !== cw) return null; // 部分列は器と同じ型でなければおかしい
 	}
 
+	// **`x ' 0~` は恒等射である。**
+	//
+	// 0 番目から末尾までは丸ごとであり、器でも規則でも変わらない（`ptr + 0×幅` は `ptr`、
+	// `start + 0×step` は `start`）。**添字がリテラルならコンパイル時に決まっている**ので、
+	// 命令は1つも要らない——`$__ = __ = @__` が機械語の不動点であるのと同じ形である。
+	if (isSlice && !bounded) {
+		const st0 = unwrap(idx.left);
+		if (st0 && st0.type === "atom" && st0.kind === "number" && Number(st0.value) === 0) {
+			const w0 = genExpr(node.left, env, em, scope);
+			if (w0 === false) return false;
+			if (w0 !== cw) { em.pop(w0); return null; }
+			return w0;
+		}
+	}
+
 	// **規則を切っても規則である。**
 	//
 	// `{start, step, end}` から i 番目以降を取るのは `{start + i × step, step, end}` で、
@@ -1482,6 +1497,44 @@ function genIndex(node, env, em, scope) {
 		em.store(SCRATCH[0], off2, "n 番目");
 		return 1;
 	}
+	// **`scalar ' 0` は恒等射である。**
+	//
+	// 1要素の器とスカラーは同型なので（`[5]` は `Int`、list_model.md）、その 0 番目は
+	// 自分自身である。添字がリテラルなら**どちらになるかはコンパイル時に決まっている**
+	// ——0 なら器そのもの、それ以外は範囲外で `__`。それでも 0 を積んで 0 と比べて選ぶ
+	// 命令を出していた（8命令）。**問いになっていない問いを実行時に訊いていた**ことになる。
+	//
+	// `$__ = __ = @__` が機械語の不動点であるのと同じ形である：型の上では別のものでも、
+	// 機械の上では同じビットでなければならない。
+
+	if (cw === 1 && !isSlice) {
+		const lit = unwrap(idx);
+		if (lit && lit.type === "atom" && lit.kind === "number" && Number.isInteger(Number(lit.value))) {
+			if (Number(lit.value) === 0) {
+				// 器そのもの。命令は1つも要らない。
+				return cvw;
+			}
+			em.pop(cvw);
+			const uo = em.push();
+			if (uo === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.emit(`movz ${SCRATCH[0]}, #0x8000, lsl #48`, "1要素の器の範囲外は __");
+			em.store(SCRATCH[0], uo);
+			return 1;
+		}
+	}
+	// 1要素の器を 1 番目から切れば空である。空は `__` そのものなので、幅ぶん置く。
+	if (cw === 1 && isSlice && !bounded) {
+		const st = unwrap(idx.left);
+		if (st && st.type === "atom" && st.kind === "number" && Number(st.value) > 0) {
+			em.pop(cvw);
+			const uo = em.push();
+			if (uo === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.emit(`movz ${SCRATCH[0]}, #0x8000, lsl #48`, "1要素の器を越えて切れば __");
+			em.store(SCRATCH[0], uo);
+			return 1;
+		}
+	}
+
 	// 添字そのもの（スライスなら起点）を積む。終端の有る形は起点がリテラルなので直に置く
 	// ——`(i ~+ 1)` をそのまま出すと規則（2本）になってしまう。
 	let iw;

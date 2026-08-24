@@ -493,10 +493,30 @@ checkTrue(
 	checkTrue("負の長さにはしない", rest.some((l) => l === "csel x9, x9, xzr, pl"), rest.join(" / "));
 	checkTrue("部分列にコピーは無い", !rest.some((l) => /^(bl|b) [a-z_]/.test(l)), rest.join(" / "));
 }
-// **1要素リストとスカラーは同型である。** 器の幅が1本でも同じ規則で引ける。
+// ---- 恒等射は命令を持たない ----
+//
+// **1要素リストとスカラーは同型である**（`[5]` は `Int`）ので、その 0 番目は自分自身で
+// ある。`x ' 0~`（0 番目から末尾まで）も丸ごとであり、器でも規則でも変わらない
+// （`ptr + 0×幅` は `ptr`、`start + 0×step` は `start`）。
+//
+// **添字がリテラルなら、どちらになるかはコンパイル時に決まっている。** それでも 0 を積んで
+// 0 と比べて選ぶ命令を出していた——問いになっていない問いを実行時に訊いていたことになる。
+// `$__ = __ = @__` が機械語の不動点であるのと同じ形で、型の上では別のものでも機械の上では
+// 同じビットでなければならない。
 {
-	const ls = body("f : n ? n ' 0\nf 5", "f");
-	checkTrue("0 番目は器そのもの", ls.some((l) => l === "csel x9, x9, x12, eq"), ls.join(" / "));
+	const same = (a, b) => JSON.stringify(body(a, "f")) === JSON.stringify(body(b, "f"));
+	checkTrue("scalar ' 0 は恒等射", same("f : n ? n ' 0\nf 5", "f : n ? n\nf 5"));
+	checkTrue("scalar ' 0~ も恒等射", same("f : n ? n ' 0~\nf 5", "f : n ? n\nf 5"));
+	checkTrue("器 ' 0~ も恒等射", same("f : s ? s ' 0~\nf `abc`", "f : s ? s\nf `abc`"));
+	checkTrue("規則 ' 0~ も恒等射", same("f : n ? [1 ~ 5] ' 0~\nf 1", "f : n ? [1 ~ 5]\nf 1"));
+	// 式の中でも同じ命令列になる。
+	checkTrue("式の中でも同じ", same("f : n ? (n ' 0) + 1\nf 5", "f : n ? n + 1\nf 5"));
+	// 1要素の器の範囲外は `__`。これもコンパイル時に決まる。
+	const out = body("f : n ? n ' 1\nf 5", "f");
+	checkTrue("1要素の外は __", out.includes("movz x9, #0x8000, lsl #48") && !out.includes("csel x9, x9, x12, eq"), out.join(" / "));
+	// **実行時の添字は畳めない。** そこは比べて選ぶ（畳んでよいのはリテラルだけである）。
+	const dyn = body("f : n i ? n ' i\nf 5 0", "f");
+	checkTrue("実行時の添字は比べる", dyn.includes("csel x9, x9, x12, eq"), dyn.join(" / "));
 }
 // 要素の幅は charset が決める。utf32 なら 4 byte 単位でずらす。
 {
