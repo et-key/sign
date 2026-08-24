@@ -147,7 +147,12 @@ checkTrue("全部終端なら列ではない", streams("f : [c ~rest] ?\n\tc = `
 // `delta : … 1 + (delta rest)` は列を作っているように見えるが、再帰の結果を**算術に
 // 使って**いる——返すのは深さという1つの数であって列ではない。枝の末尾にある呼び出しだけを
 // 見ていると、式に埋まった再帰を見落として**まったく別の意味へ均してしまう**。
-check("式に埋まった再帰は列ではない", streams("f : [c ~rest] ?\n\tc = `(` : 1 + (f rest)\n\tc (f rest)"), []);
+// **仲間が隠れているかは、群が決まってから見る。** ファイル中の全定義を仲間と見なすと、
+// `dedent` のような定数を並べているだけの枝まで弾いてしまう（実際に弾いていた）。
+checkTrue("式に埋まった再帰は生成しない", generatePullers(streams("f : [c ~rest] ?\n\tc = `(` : 1 + (f rest)\n\tc (f rest)")) === null);
+checkTrue("定数を並べる枝は生成する", generatePullers(streams("d : `x`\nf : [c ~rest] ?\n\tc = `;` : __\n\td (f rest)")) !== null);
+// **空文字列は `__` と同型である**（`__ = []`）。「空を返して終わる」枝は終端である。
+check("空文字列で終わる枝", streams("f : [c ~rest] ?\n\tc = `;` : ``\n\tc (f rest)").map((x) => x.arms.map((a) => a.prefix.length)), [[0, 1]]);
 // 器が並ぶ形も入らない（個数が固定でない）。
 check("器が並ぶ形は均さない", streams("f : [c ~rest] ?\n\tc = `;` : c rest\n\tc (f rest)"), []);
 
@@ -170,12 +175,16 @@ check("器が並ぶ形は均さない", streams("f : [c ~rest] ?\n\tc = `;` : c 
 	const src = fs.readFileSync(path.join(__dirname, "..", "..", "sign", "preprocess.sn"), "utf8");
 	const found = streams(src);
 	// `sep` は枝の真ん中に構築があるので均せない。`in_quote` は均せるが枝が `sep` へ移る
-	// ので群が閉じない。残るのは `head_line` と `unwind` で、`unwind` は状態が2つ（arity 2）。
-	check("preprocess.sn のストリーム", found.map((f) => f.name).sort(), ["head_line", "in_quote", "unwind"]);
+	// ので群が閉じない。
+	check("preprocess.sn のストリーム", found.map((f) => f.name).sort(), ["close_all", "closers", "delta", "head_line", "in_quote", "unwind"]);
 	check("in_quote の枝の本数", found.find((f) => f.name === "in_quote").arms.map((a) => a.prefix.length), [1, 1, 1]);
 	const groups = groupStreamFunctions(found);
-	check("閉じた群だけ残る", groups.map((g) => g.map((f) => f.name)), [["head_line"], ["unwind"]]);
-	checkTrue("状態が2つならまだ均さない", generatePullers(groups.find((g) => g[0].name === "unwind")) === null);
+	check("閉じた群だけ残る", groups.map((g) => g.map((f) => f.name)), [["delta"], ["head_line"], ["unwind"], ["closers"], ["close_all"]]);
+	// 実際に均せるのは、状態が1つで、式に再帰が埋まっていないものだけ。
+	const gen = (nm) => generatePullers(groups.find((g) => g[0].name === nm)) !== null;
+	check("均せる群", groups.map((g) => g[0].name).filter(gen), ["head_line", "close_all"]);
+	checkTrue("状態が2つならまだ均さない", !gen("unwind") && !gen("closers"));
+	checkTrue("式に再帰が埋まっていたら均さない", !gen("delta"));
 	// 状態が1つの器で表せない形（`walk`）はまだ均さない——カーソルが太る。
 	checkTrue("walk は含まれない", !found.some((f) => f.name === "walk"));
 }

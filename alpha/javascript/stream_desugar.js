@@ -80,7 +80,12 @@ function joinItems(node) {
 // `__`（零射）そのものか。終端の枝が `__` を返すのは「そこで列が尽きる」であって、
 // `__` という要素を1つ並べることではない。
 function isUnitAtom(n) {
-	return !!n && n.type === "atom" && (n.value === "_" || n.value === "__");
+	if (!n || n.type !== "atom") return false;
+	// **空文字列は `__` と同型である**（`__ = []`、unit.md）。`take_while : … s = `` : ``` の
+	// ように「空を返して終わる」枝はよくある書き方で、`__` と書いたのと同じ意味である。
+	if (n.atomType === "Unit") return true;
+	if ((n.kind === "string" || n.kind === "char") && String(n.value).replace(/^`|`$/g, "") === "") return true;
+	return n.value === "_" || n.value === "__";
 }
 
 function readArm(body, group) {
@@ -141,20 +146,7 @@ function readStreamFunction(node, group) {
 	}
 	// **列であるには、続く枝が要る。** 全部が終端なら、それはただの分岐である。
 	if (!arms.some((a) => a.call)) return null;
-	// **並べるものの中に仲間が隠れていてはいけない。**
-	//
-	// `delta : … 1 + (delta rest)` は列を作っているように見えるが、再帰の結果を**算術に
-	// 使って**いる——返すのは深さという1つの数であって、列ではない。枝の末尾にある呼び出し
-	// だけを見ていると、式の中に埋まった再帰を見落として、まったく別の意味へ均してしまう。
-	// 遅くなるのではなく**間違える**ので、少しでも混ざっていたら諦める。
-	const mentions = (n) => {
-		if (!n || typeof n !== "object") return false;
-		if (isIdent(n) && group.has(bare(n.value))) return true;
-		for (const k of ["left", "right", "operand"]) if (mentions(n[k])) return true;
-		for (const l of n.lines || []) if (mentions(l)) return true;
-		return false;
-	};
-	if (arms.some((a) => a.prefix.some(mentions))) return null;
+
 	// **次の状態の形は枝によらず同じでなければならない。** 引数の本数が枝ごとに違うなら
 	// カーソルの形が決まらない（終端の枝には次が無いので数えない）。
 	const calls = arms.filter((a) => a.call);
@@ -297,6 +289,25 @@ function generatePullers(funcs, opts = {}) {
 	const known = new Set(funcs.map((f) => f.name));
 	for (const f of funcs) {
 		for (const a of f.arms) if (a.call && !known.has(a.call.name)) return null;
+	}
+	// **並べるものの中に仲間が隠れていてはいけない。**
+	//
+	// `delta : … 1 + (delta rest)` は列を作っているように見えるが、再帰の結果を**算術に
+	// 使って**いる——返すのは深さという1つの数であって列ではない。枝の末尾にある呼び出し
+	// だけを見ていると、式に埋まった再帰を見落として**まったく別の意味へ均してしまう**。
+	// 遅くなるのではなく間違えるので、少しでも混ざっていたら諦める。
+	//
+	// 見るのは**群の仲間だけ**である。ファイル中の全定義を仲間と見なすと、`dedent` の
+	// ような定数を並べているだけの枝まで弾いてしまう（実際に弾いていた）。
+	const mentions = (n) => {
+		if (!n || typeof n !== "object") return false;
+		if (isIdent(n) && known.has(bare(n.value))) return true;
+		for (const k of ["left", "right", "operand"]) if (mentions(n[k])) return true;
+		for (const l of n.lines || []) if (mentions(l)) return true;
+		return false;
+	};
+	for (const f of funcs) {
+		for (const a of f.arms) if (a.prefix.some(mentions)) return null;
 	}
 	const pre = opts.prefix || "";
 	const group = pre + funcs[0].name;
