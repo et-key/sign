@@ -852,6 +852,9 @@ function computeAtomType(node, env) {
     // ここではオペランドの型を記録するだけで、Unitの読み替えは評価器が行う。
     // 結果型は絶対値・要素数のいずれも非負の機械語1語に収まるため Int（uint）とする。
     // ——アドレスではない。要素数はどこも指していない（§3.6）。
+    // ノルム（`~|...|~`）は常に要素数なので、オペランドの型で読み替える必要が無い
+    // ——空は 0、スカラーは 1 である（1要素の器は存在しない）。
+    if (node.kind === "norm") return "Int";
     if (node.kind === "abs") {
       node.operandType =
         Array.isArray(node.lines) && node.lines.length > 0

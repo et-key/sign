@@ -186,7 +186,7 @@ function resolveKnownArity(node, env) {
     }
     return null;
   }
-  if (node.type === "block" && node.kind !== "indent" && node.kind !== "abs" && node.lines.length === 1) {
+  if (node.type === "block" && node.kind !== "indent" && node.kind !== "abs" && node.kind !== "norm" && node.lines.length === 1) {
     return resolveKnownArity(node.lines[0], env);
   }
   if (node.type === "operation" && (node.name === "apply" || node.name === "partial_apply")) {
@@ -326,7 +326,7 @@ function derefBoundNode(node, env) {
 }
 
 function unwrapSoloBlock(node) {
-  while (node && node.type === "block" && node.kind !== "indent" && node.kind !== "abs" && node.lines.length === 1) {
+  while (node && node.type === "block" && node.kind !== "indent" && node.kind !== "abs" && node.kind !== "norm" && node.lines.length === 1) {
     node = node.lines[0];
   }
   return node;
@@ -408,7 +408,7 @@ function getCategory(node, env, closed = false) {
     // 中身を見ずに常にAtomを返すと外側の余積解決でLambdaとして扱われない。1行だけの
     // bracket系ブロック（indent/absを除く）は、中身のカテゴリをそのまま継承する
     // （`[1 2 3]`のような通常のListは中身がconstructでAtomのままなので影響なし）。
-    if (node.kind !== "indent" && node.kind !== "abs" && node.lines.length === 1) {
+    if (node.kind !== "indent" && node.kind !== "abs" && node.kind !== "norm" && node.lines.length === 1) {
       // カッコは**引数リストを閉じる**。中身が既に requiredArity を満たした適用なら、
       // そこで値に確定する（closed=true を渡してarityではなくrequiredArityで判定させる）。
       return getCategory(node.lines[0], env, true);
@@ -837,11 +837,12 @@ function parseParamLine(tokens) {
 function extractParamLines(token) {
   if (Array.isArray(token) && token[0] === '"INDENT_"') return token[1];
   if (Array.isArray(token) && token[0] === '"ABS_"') return token[1];
+  if (Array.isArray(token) && token[0] === '"NORM_"') return token[1];
   return token; // bracket系: tokenそのものがexprs（行の配列）
 }
 
 function isTaggedBlock(x) {
-  return Array.isArray(x) && (x[0] === '"INDENT_"' || x[0] === '"ABS_"');
+  return Array.isArray(x) && (x[0] === '"INDENT_"' || x[0] === '"ABS_"' || x[0] === '"NORM_"');
 }
 function isFlatTokenLine(x) {
   return Array.isArray(x) && x.every((t) => typeof t === "string");
@@ -1360,6 +1361,11 @@ function resolveBlock(term, env) {
     exprsArray = term[1];
   } else if (Array.isArray(term) && term[0] === '"ABS_"') {
     kind = "abs";
+    exprsArray = term[1];
+  } else if (Array.isArray(term) && term[0] === '"NORM_"') {
+    // ノルム（`~|...|~`、要素数）。絶対値と分けるのは、1要素の器が存在しないからである
+    // ——`[5] ≅ 5` なので `|[5]|` は絶対値なら 5、要素数なら 1 になってしまう。
+    kind = "norm";
     exprsArray = term[1];
   } else {
     exprsArray = term; // bracket系: term がそのまま exprs

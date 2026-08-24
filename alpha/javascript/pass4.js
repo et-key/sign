@@ -92,7 +92,7 @@ function bareName(v) {
 // 剥がさない**——`x > 10 : 1` は括りではなく枝が1つの match_case である。
 function unwrap(node) {
 	let n = node;
-	while (n && Array.isArray(n.lines) && n.lines.length === 1 && n.kind !== "abs" && !isDefineNode(n.lines[0])) {
+	while (n && Array.isArray(n.lines) && n.lines.length === 1 && n.kind !== "abs" && n.kind !== "norm" && !isDefineNode(n.lines[0])) {
 		n = n.lines[0];
 	}
 	return n;
@@ -492,6 +492,49 @@ function genExpr(node, env, em, scope, tail = false) {
 	// 1行でも `条件 : 結果` なら分岐である（枝が尽きれば `__`）。ブロックの行数ではなく
 	// **定義行かどうか**で決まる——`名前 : 値` の構造体と区別が要るのは複数行のときだけで、
 	// 関数本体では `識別子 : 値` も match_case である（function_guide.md）。
+	// **ノルム（`~|...|~`）は要素数である。数えることと並べることは別なので、走査しない。**
+	//
+	// 器（`{ptr, len}`）なら `len` がそのまま答え——ロード1つ。規則（`{start, step, end}`）
+	// なら `(end - start) / step + 1` で割り算1つ（list_model.md §2.3「規則が一次なら
+	// `|.|` が走査すらせずに答えられる」）。**スカラーは1要素の器**なので 1、`__` は 0。
+	// 終端の無い規則は数えられないので `__`——「無限の要素数」という値は無い。
+	if (n.kind === "norm") {
+		const inner = n.lines && n.lines.length > 0 ? n.lines[n.lines.length - 1] : null;
+		if (!inner) return em.fail(n, "ノルムの中身が空です");
+		const iw = genExpr(inner, env, em, scope);
+		if (iw === false) return false;
+		const io = (em.slot - iw) * 8;
+		const rule = isRuleNode(inner, em.conf, env);
+		if (rule && iw >= 3) {
+			em.load(SCRATCH[0], io, "start");
+			em.load(SCRATCH[1], io + 8, "step");
+			em.load("x11", io + 16, "end");
+			em.emit(`sub x11, x11, ${SCRATCH[0]}`, "end - start");
+			em.emit(`sdiv x11, x11, ${SCRATCH[1]}`, "歩幅で割る（走査は要らない）");
+			em.emit(`adds ${SCRATCH[0]}, x11, #1`, "+1（端点を含む）");
+			em.emit(`csel ${SCRATCH[0]}, ${SCRATCH[0]}, xzr, pl`, "負にはしない");
+		} else if (rule) {
+			em.emit(`movz ${SCRATCH[0]}, #0x8000, lsl #48`, "終端が無い＝無限は数えられない");
+		} else if (iw === 2) {
+			em.load(SCRATCH[0], io + 8, "len がそのまま要素数");
+		} else if (iw === 1) {
+			em.load(SCRATCH[0], io, "中身");
+			em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
+			em.emit(`cmp ${SCRATCH[0]}, x12`);
+			em.emit(`mov ${SCRATCH[0]}, #1`, "スカラーは1要素の器");
+			em.emit("mov x11, #0", "__ は 0 要素");
+			em.emit(`csel ${SCRATCH[0]}, x11, ${SCRATCH[0]}, eq`);
+		} else {
+			em.pop(iw);
+			return em.fail(n, `${iw} 本で運ぶ値の要素数はまだ出せません（${n.atomType}）`);
+		}
+		em.pop(iw);
+		const no = em.push();
+		if (no === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		em.store(SCRATCH[0], no, "要素数");
+		return 1;
+	}
+
 	if (Array.isArray(n.lines) && (n.lines.length > 1 || (n.lines.length === 1 && isDefineNode(n.lines[0])))) {
 		return genMatch(n, env, em, scope, tail);
 	}

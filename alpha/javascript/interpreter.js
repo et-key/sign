@@ -1500,7 +1500,7 @@ function makeAddress(getFn, setFn) {
 // pass2.jsのunwrapSoloBlockと同じロジック（循環import回避のためここで別途最小実装）。
 // `$[expr]`のようにブラケット/括弧で1個の式を囲んだだけの中身を覗く。
 function unwrapParenNode(node) {
-  while (node && node.type === "block" && node.kind !== "indent" && node.kind !== "abs" && node.lines.length === 1) {
+  while (node && node.type === "block" && node.kind !== "indent" && node.kind !== "abs" && node.kind !== "norm" && node.lines.length === 1) {
     node = node.lines[0];
   }
   return node;
@@ -1555,11 +1555,27 @@ function evaluate(node, env) {
     // 空ブロック（`[]`/`{}`/`()`）は空リスト。unit.md「`__ = []`（空リストと等価）」の
     // 通りUnitと同型（isUnit([])が真）なので、Unit判定を要求する箇所ではそのまま
     // Unitとして振る舞いつつ、`|[]|`が0になる等の「リストとしての」性質も保てる。
-    if (node.kind !== "abs" && node.lines.length === 0) return [];
+    if (node.kind !== "abs" && node.kind !== "norm" && node.lines.length === 0) return [];
     // |list|（abs）: list_cheat_sheet.md「要素数の取得」。ブロックとしては通常通り解決される
     // （中身を逐次評価、最後の文の値）が、kind==='abs'の場合だけ絶対値/要素数へ変換する
     // ——List/StringならJSの.length、数値ならMath.abs（"absolute"の名の通り、リストの
     // 要素数と数値の絶対値を同じ記号で表す設計、list_cheat_sheet.mdの命名）。
+    // ノルム（`~|...|~`）は**常に数え上げ**である。絶対値と分けるのは、1要素の器が
+    // 存在しないからで（`[5] ≅ 5`）、同じ記号だと長さ1で意味が変わってしまう
+    // ——`count : xs ? |xs|` が `[7]` に対して 7 を返していた。
+    if (node.kind === "norm") {
+      let inner = UNIT;
+      for (const line of node.lines) inner = evaluate(line, env);
+      // 空は 0 要素である（`__ = []`）。不在も空も、数えれば 0 になる。
+      if (isUnit(inner)) return 0;
+      // 無限は数えられない——「無限の要素数」という値は無いので零射へ落ちる。
+      if (isIterator(inner)) return iteratorCount(inner);
+      if (Array.isArray(inner) || typeof inner === "string") return inner.length;
+      if (isNamedSlots(inner)) return Object.keys(inner).length;
+      // **スカラーは1要素の器である。** 射（Lambda）は器ではないので零射。
+      if (inner !== null && typeof inner === "object") return UNIT;
+      return 1;
+    }
     if (node.kind === "abs") {
       let inner = UNIT;
       for (const line of node.lines) inner = evaluate(line, env);
