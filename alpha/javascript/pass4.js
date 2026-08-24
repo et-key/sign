@@ -1088,6 +1088,31 @@ function genExpr(node, env, em, scope, tail = false) {
 	//
 	// layer が上がっても今は出せないが、そのときの理由は「確保の規約が未定」であって
 	// 「この layer では書けない」ではない。**同じ「出せない」でも中身が違う**ので分ける。
+	// **分解したものを組み直すのは恒等射である。**
+	//
+	// `body_of : [c ~rest] ? … c rest` の `c rest` は、渡された器そのものである。
+	// `[c ~rest]` は器をその場で分解する形（コピーはしない）なので、`rest` は同じ領域の
+	// 頭を1つ進めた参照であり、`c` はその手前の1要素である。したがって組み直した結果は
+	// `{rest.ptr − 幅, rest.len + 1}`——**確保は要らない**。切り出しの逆向きであり、
+	// 「作られた器は規則である」という答えの、いちばん小さい形にあたる。
+	//
+	// 見るのは形だけである（同じ分解の頭と残りが、その順で並んでいるか）。`c` が本体で
+	// 書き換えられていたら別の値なので、そこは束縛が動いていないことを確かめる。
+	if (COPRODUCT_BUILD_OPS.has(n.name)) {
+		const pair = rejoinPair(n, scope);
+		if (pair) {
+			const off = em.slot;
+			if (em.push() === null || em.push() === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			const w = pair.elemSize || 1;
+			em.load(SCRATCH[0], pair.restOff, "残りの ptr");
+			em.emit(`sub ${SCRATCH[0]}, ${SCRATCH[0]}, #${w}`, `頭を1要素ぶん戻す（${w} byte）`);
+			em.store(SCRATCH[0], off * 8, "組み直した ptr（確保は要らない）");
+			em.load(SCRATCH[0], pair.restOff + 8, "残りの len");
+			em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #1`, "長さを1つ戻す");
+			em.store(SCRATCH[0], (off + 1) * 8, "組み直した len");
+			return 2;
+		}
+	}
 	if (COPRODUCT_BUILD_OPS.has(n.name) && slotsOf(n.atomType, em.conf) === 2) {
 		if (em.conf.layer !== undefined && em.conf.layer < 1) {
 			return em.fail(
@@ -1350,6 +1375,22 @@ function genIndex(node, env, em, scope) {
 	if (off === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 	em.store(SCRATCH[0], off, "要素");
 	return 1;
+}
+
+/**
+ * `head rest` が**同じ分解の組み直し**かを見る。そうなら参照を戻すだけで済む。
+ *
+ * 順序も見る——`rest c` は「残りのうしろへ頭を足す」であって別の器である。
+ */
+function rejoinPair(node, scope) {
+	if (!scope || !scope.bracketPairs || scope.bracketPairs.length === 0) return null;
+	const l = unwrap(node.left);
+	const r = unwrap(node.right);
+	if (!isIdentifierNode(l) || !isIdentifierNode(r)) return null;
+	for (const p of scope.bracketPairs) {
+		if (l.value === p.head && r.value === p.rest) return p;
+	}
+	return null;
 }
 
 // 器の要素型。`elementType` はレンジ・List に付く（pass3.js）。
@@ -1846,6 +1887,7 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	// 検査が初回しか通らず、終端が消える。
 	const loopLabel = em.newLabel("loop");
 	em.label(loopLabel);
+	const bracketPairs = [];
 
 	// **仮引数を入口でスロットへ写す。** 引数レジスタは最初の `bl` で壊れるので、
 	// 本体のどこからでも読める場所へ移しておく必要がある。
@@ -1948,13 +1990,16 @@ function genFunction(name, lambdaNode, env, em, mono) {
 		emitDestructure(em, inc.off, headOff, inc.elemSize, inc.signed, what);
 		params.push(inc.shape.head, inc.shape.rest);
 		paramOffsets.push(headOff, inc.off);
+		// **分解した組を覚えておく。** 組み直す形（`c rest`）は恒等射なので、器を作る
+		// のではなく参照を戻せばよい（`genRejoin`）。
+		bracketPairs.push({ head: inc.shape.head, rest: inc.shape.rest, restOff: inc.off, elemSize: inc.elemSize });
 		paramSlots.push(1, 2);
 	}
 
 	const before = em.diagnostics.length;
 	// 本体そのものが末尾位置である。`selfLabel` / `loopLabel` を渡すことで、本体の中の
 	// 自己呼び出しがフレームを使い回す `b` になる。
-	const scope = { params, paramOffsets, paramSlots, callees, selfLabel: name, loopLabel };
+	const scope = { params, paramOffsets, paramSlots, callees, selfLabel: name, loopLabel, bracketPairs };
 	const ok = genExpr(lambdaNode.right, env, em, scope, true);
 	if (ok !== false) {
 		// 返値の幅ぶん x0/x1 へ載せる。末尾呼び出しで出て行った経路は値を持たない。

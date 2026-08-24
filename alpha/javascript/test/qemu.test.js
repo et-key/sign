@@ -166,6 +166,23 @@ agree("歩幅つきを数え上げる", SUM + "sum [0 ~+ 3] 0 0");
 	agree("添字で歩く", "step : c a ? a + 1\nfold : s i a ? (fold s (i + 1) (step (s ' i) a)) | a\nfold `abcde` 0 0");
 }
 
+// ---- 分解したものを組み直すのは恒等射である ----
+//
+// `lstrip : [c ~rest] ? … c rest` の `c rest` は渡された器そのもので、確保は要らない
+// （`{rest.ptr − 幅, rest.len + 1}`）。器を作るのではなく参照を戻すだけである。
+{
+	const LS = "lstrip : [c ~rest] ?\n\tc = ` ` : lstrip rest\n\tc rest\n";
+	agree("組み直して先頭を引く", LS + "f : s ? (lstrip s) ' 0\nf `  ab`\n");
+	agree("組み直して2番目を引く", LS + "f : s ? (lstrip s) ' 1\nf `  ab`\n");
+	agree("削るものが無い", LS + "f : s ? (lstrip s) ' 0\nf `ab`\n");
+	agree("全部消えたら __", LS + "f : s ? (lstrip s) ' 0\nf `   `\n");
+	agree("組み直してから切る", LS + "f : s ? ((lstrip s) ' 1~) ' 0\nf `  abc`\n");
+	// 先頭を落として組み直さない形（残りだけ返す）とも突き合わせる。
+	const SH = "strip_head : [c ~rest] ?\n\tc = `#` : rest\n\tc rest\n";
+	agree("先頭を落とす", SH + "f : s ? (strip_head s) ' 0\nf `#ab`\n");
+	agree("落とさない", SH + "f : s ? (strip_head s) ' 0\nf `ab`\n");
+}
+
 // ---- 糖衣が均した先が、元の関数と同じ列になる（実機で） ----
 //
 // **仕様の答えは元の形が持っている。** だからインタプリタには糖衣を通さない元のソースを

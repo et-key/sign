@@ -692,6 +692,30 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 	checkTrue("超える即値でも診断は出ない", asm("f : a ? a + 70000\nf 1").diagnostics.length === 0);
 }
 
+// ---- 分解したものを組み直すのは恒等射である ----
+//
+// `[c ~rest]` は器をその場で分解する（コピーはしない）ので、`rest` は同じ領域の頭を1つ
+// 進めた参照であり、`c` はその手前の1要素である。組み直した結果は
+// `{rest.ptr − 幅, rest.len + 1}` で、**確保は要らない**——切り出しの逆向きである。
+{
+	const b = (src) => body(src, "f");
+	const LS = "f : [c ~rest] ?\n\tc = ` ` : f rest\n\tc rest\n";
+	checkTrue("組み直しに確保は要らない", asm(LS + "f `  ab`").diagnostics.length === 0);
+	checkTrue("頭を1要素ぶん戻す", b(LS + "f `  ab`").includes("sub x9, x9, #1"));
+	checkTrue("長さを1つ戻す", b(LS + "f `  ab`").includes("add x9, x9, #1"));
+	// 順序が逆なら別の器である（`rest c` は「残りのうしろへ頭を足す」）。
+	checkTrue("逆順は組み直しではない", asm("f : [c ~rest] ?\n\tc = ` ` : f rest\n\trest c\nf `  ab`").diagnostics.length > 0);
+	// 別の分解の組み合わせも組み直しではない。
+	checkTrue(
+		"別の組は組み直しではない",
+		asm("g : [a ~b] [c ~d] ?\n\ta = ` ` : g b d\n\ta d\ng `x` `y`").diagnostics.length > 0,
+	);
+	// 4 byte の charset なら戻す幅も変わる。
+	const u = generateAsm(compile(LS + "f `  ab`", { charset: "utf32" }).nodes, compile(LS + "f `  ab`", { charset: "utf32" }).env,
+		{ target: "aarch64_qemu", charset: "utf32", layer: 1 });
+	checkTrue("幅は charset が決める", u.text.split("\n").map((l) => l.replace(/\/\/.*/, "").trim()).includes("sub x9, x9, #4"), u.diagnostics.map((d) => d.message).join(" / "));
+}
+
 // ---- 括弧はスライスの判定を変えない ----
 //
 // `s ' (1 ~+ 1)` は `s ' 1~` と同じ部分列である（優先順位のために括っただけ）。pass3 の
