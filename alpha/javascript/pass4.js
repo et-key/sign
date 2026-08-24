@@ -1138,15 +1138,24 @@ function genExpr(node, env, em, scope, tail = false) {
  * 元からある同一視をそのまま命令にしている。`String` は2文字以上、`Char` は1文字
  * なので、`len = 0` は他の値と衝突しない。
  */
-function emitUnit(em, offs) {
+function emitUnit(em, offs, kind = null) {
 	if (offs.length === 1) {
 		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
 		em.store("x12", offs[0]);
 		return;
 	}
+	// カーソルは先頭の `arm` が niche であることが「尽きた」である。
+	if (kind === "cursor") {
+		em.emit("movz x12, #0x8000, lsl #48", "__ の niche（arm）");
+		em.store("x12", offs[0], "arm");
+		em.emit("mov x12, #0");
+		for (let k = 1; k < offs.length; k++) em.store("x12", offs[k]);
+		return;
+	}
 	em.emit("mov x12, #0", "__ は空（`__ = []`）");
 	em.store("x12", offs[0], "ptr");
 	em.store("x12", offs[1], "len = 0 が __");
+	for (let k = 2; k < offs.length; k++) em.store("x12", offs[k]);
 }
 
 /**
@@ -1503,12 +1512,23 @@ function genMatch(node, env, em, scope, tail = false) {
 		if (o === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 		outs.push(o);
 	}
+	// 合流した値がカーソルなら、`__` の書き方が違う（`arm` が niche）。
+	const matchKind = node.repr === "cursor" || node.cursorGroup ? "cursor" : null;
 	// 枝の値を出力スロットへ写す。幅が合わない枝は上と同じ持ち上げの話なので落とす。
 	//
 	// **枝の値は末尾位置である。** 分岐の結果がそのまま関数の返値になるので、そこにある
 	// 呼び出しは末尾呼び出しである（interpreter.js の `evaluateTail` も同じ規則で
 	// ブロックの各行を辿る）。飛んで行った枝は値を置かないので `TAIL` を返す。
 	const move = (line) => {
+		// **`__` は幅を持たない。** 零対象なので、置く場所の広さに合わせて空を書けばよい
+		// ——1本なら niche、参照なら `len = 0`、カーソルなら `arm` が niche である。
+		// ここを「1本の値」として出していたので、`__` を返す枝と器を返す枝の合流が
+		// すべて「1本と2本」で落ちていた。**型は既に `Unit` だと言っている**のだから、
+		// 幅の話は合流の側で決まる。
+		if (isUnitNode(line)) {
+			emitUnit(em, outs, matchKind);
+			return true;
+		}
 		const w = genExpr(line, env, em, scope, tail);
 		if (w === false) return false;
 		if (w === TAIL) return TAIL;
@@ -1720,6 +1740,12 @@ function emitIsUnit(em, off, width, comment, isRule = false, isCursor = false) {
 }
 
 // 返値レジスタへ `__` を置く。幅は返値と同じ（呼ぶ側が読む本数を変えない）。
+// `__`（零射）そのものを書いたノードか。値ではなく**書かれ方**を見る。
+function isUnitNode(n) {
+	const u = unwrap(n);
+	return !!u && u.type === "atom" && (u.value === "_" || u.value === "__");
+}
+
 function emitUnitRegs(em, width, kind = null) {
 	if (width <= 1) {
 		em.emit("movz x0, #0x8000, lsl #48", "__ を返す（完全性公理）");
