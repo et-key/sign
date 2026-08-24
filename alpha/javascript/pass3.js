@@ -560,12 +560,24 @@ function markGetPropKey(node) {
   if (k && k.type === "operation" && k.position === "prefix" && k.name === "input") k.inGetPropKey = true;
 }
 
+// 直和のうち**器の側**（広い方）。置かれ方がそちらなので、引き方もそちらで決まる。
+const CONTAINER_TYPES = new Set(["String", "List", "Struct", "Iterator", "Implicit"]);
+function widestMember(type) {
+  if (typeof type !== "string" || !type.includes(" | ")) return type;
+  const parts = type.split(" | ").map((t) => t.trim());
+  return parts.find((t) => CONTAINER_TYPES.has(t)) || type;
+}
+
 function getPropResultType(node, env) {
   markGetPropKey(node);
   // 器そのものを解決する。識別子なら束縛先まで辿る——`l : [1 2 3]` の `l ' 0` を
   // 解けなければ、実用上ほとんどの添字が型を失う。
   const base = derefToNode(node.left, env);
-  const containerType = inferAtomType(node.left, env);
+  // **直和は広い方で引く。** 置かれているのが広い方だからである（layout.js の
+  // `passingOf`：「表現の違う枝の直和は広い方に揃える」）。`Char | String` は器として
+  // 置かれているので、引けば `Char` が出る——狭い枝（1文字）も器として置かれている以上、
+  // 同じ引き方で正しい。
+  const containerType = widestMember(inferAtomType(node.left, env));
 
   // 範囲添字は部分列なので器と同じ型。要素型もそのまま引き継ぐ。
   if (sliceIndexNode(node)) {

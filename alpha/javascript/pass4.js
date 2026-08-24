@@ -1529,7 +1529,23 @@ function genMatch(node, env, em, scope, tail = false) {
 	// いる——「表現の違う枝の直和は広い方に揃え、`Char` の枝は境界で1要素の連続領域へ
 	// 持ち上げる」（type_system.md §2）——が、その持ち上げにはメモリの確保が要るので
 	// ここではまだ出さない。黙って先頭だけ置かず名指しする。
-	const width = slotsOfNode(node, em.conf, em.env);
+	// **幅が型から決まらないなら、枝から決める。**
+	//
+	// `Char | String` のような直和は「1本の枝と2本の枝」であり、型の側に答えは無い。
+	// 仕様は「表現の違う枝の直和は広い方に揃える」と言っているので（type_system.md §2）、
+	// 広い方を取る。`__` は幅を持たないので数えない（置く場所の広さで書く）。
+	// 揃えられるかどうかは枝ごとに `move` が見る——確保が要るなら、そこで名指しされる。
+	let width = slotsOfNode(node, em.conf, em.env);
+	if (width === null) {
+		const armWidths = (node.lines || [])
+			.map((line) => (isDefineNode(line) ? line.right : line))
+			.filter((v) => !isUnitNode(v))
+			.map((v) => slotsOfNode(v, em.conf, em.env));
+		const known = armWidths.filter((w) => w !== null && w !== undefined);
+		if (known.length > 0 && known.length === armWidths.length && Math.max(...known) <= 2) {
+			width = Math.max(...known);
+		}
+	}
 	if (width === null) {
 		return em.fail(node, `枝の幅が揃いません（${node.atomType}）——広い方へ揃える持ち上げがまだ出せません（type_system.md §2）`);
 	}
@@ -1561,7 +1577,11 @@ function genMatch(node, env, em, scope, tail = false) {
 			emitUnit(em, outs, matchKind);
 			return true;
 		}
-		const w = genExpr(line, env, em, scope, tail);
+		// **広い方へ揃えるのは、確保が要らないなら先に試す。** リテラルの1文字は
+		// `.rodata` に置き場所があるので、器として置ける（`genWidened`）。
+		const wide = width === 2 ? genWidened(line, width, env, em, scope) : null;
+		if (wide === false) return false;
+		const w = wide === null ? genExpr(line, env, em, scope, tail) : wide;
 		if (w === false) return false;
 		if (w === TAIL) return TAIL;
 		if (w !== width) {
@@ -1772,6 +1792,46 @@ function emitIsUnit(em, off, width, comment, isRule = false, isCursor = false) {
 }
 
 // 返値レジスタへ `__` を置く。幅は返値と同じ（呼ぶ側が読む本数を変えない）。
+/**
+ * **足りない幅を、確保せずに埋める。**
+ *
+ * 枝の合流で `Char`（1本）と `String`（2本）が並ぶことがある（`gap : … : indent` と
+ * `(closers st d) newline`）。仕様は「表現の違う枝の直和は広い方に揃える」と言っている
+ * が、素直に読むと1文字ぶんの領域を確保することになる——ところが**リテラルなら既に
+ * 置き場所がある**。`.rodata` へ1文字置けば `{ptr, 1}` で、確保は要らない。
+ *
+ * これは文字列リテラルでやっていることそのものである。1文字を「長さ1の文字列」として
+ * 扱うのは `String ≅ List(0u)` の言い換えでしかない。
+ *
+ * 広げられなければ `null` を返す（呼ぶ側が名指しする）。
+ */
+function genWidened(node, want, env, em, scope) {
+	if (want !== 2) return null;
+	let t = unwrap(node);
+	// 名前で書かれていても中身はリテラルである（`indent : \t`）。束縛先まで辿る——
+	// **置き場所があるかどうかは名前ではなく中身が決める**。
+	if (isIdentifierNode(t) && env) {
+		const b = envLookup(env, t.value);
+		const v = b && b.valueNode;
+		if (v && v !== t) t = unwrap(v);
+	}
+	if (!t || t.type !== "atom") return null;
+	if (t.kind !== "char" && t.kind !== "string" && t.kind !== "unicode") return null;
+	const cps = codePointsOf(t);
+	if (cps === null || cps.length !== 1) return null;
+	const w = charSizeOf(em.conf.charset);
+	const label = em.intern(cps);
+	const po = em.push();
+	const lo = po === null ? null : em.push();
+	if (lo === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+	em.emit(`adrp ${SCRATCH[0]}, ${label}`, `${label} の頁（1文字を器として置く——確保は要らない）`);
+	em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, :lo12:${label}`);
+	em.store(SCRATCH[0], po, "ptr");
+	em.emit(`mov ${SCRATCH[1]}, #1`, `len は文字数（${w} byte 幅 × 1 文字）`);
+	em.store(SCRATCH[1], lo, "len");
+	return 2;
+}
+
 // `__`（零射）そのものを書いたノードか。値ではなく**書かれ方**を見る。
 function isUnitNode(n) {
 	const u = unwrap(n);

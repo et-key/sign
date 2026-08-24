@@ -552,11 +552,20 @@ checkTrue(
 	const two = body("f : c ?\n\tc = 0u61 : `yes`\nf 0u61", "f");
 	checkTrue("2本なら len = 0", two.some((l) => l === "mov x12, #0"), two.join(" / "));
 }
-// 幅の違う枝の直和（`Char | String`）は、広い方へ持ち上げる規則が仕様にある
-// （type_system.md §2）が、その持ち上げにはメモリの確保が要るのでまだ出さない。
+// **幅の違う枝の直和は広い方へ揃える**（type_system.md §2）。
+//
+// `Char | String` は「1本の枝と2本の枝」であり、型の側に1つの答えは無い。置き方の話
+// なので決めるのは `passingOf` で、広い方（参照）を採る。**狭い枝を広げるのに確保は
+// 要らない**——リテラルの1文字は `.rodata` に置き場所があるので `{ptr, 1}` になる。
+// 1文字を「長さ1の文字列」として扱うのは `String ≅ List(0u)` の言い換えでしかない。
 {
 	const ds = asm("f : c ?\n\tc = 0u61 : `yes`\n\t0u62\nf 0u61").diagnostics.map((d) => d.message);
-	checkTrue("幅の違う枝は持ち上げとして名指しする", ds.some((m) => m.includes("持ち上げ")), JSON.stringify(ds));
+	check("直和の枝は揃う", ds, []);
+	const b = body("f : c ?\n\tc = 0u61 : `yes`\n\t0u62\nf 0u61", "f");
+	// 狭い枝も器として置かれる——`.rodata` の頁を取って長さ1を積む。
+	checkTrue("狭い枝は .rodata へ置く", b.some((l) => /^adrp x9, \.Lstr/.test(l)) && b.includes("mov x10, #1"), b.join(" / "));
+	// 確保の命令は出ない（`bl` も `sub sp` も無い）。
+	checkTrue("確保は出ない", !b.some((l) => /^bl |^sub sp/.test(l)), b.join(" / "));
 }
 
 // **トップレベルの定数はその場で畳む。** `名前 : 値` は束縛であって場所ではないので、

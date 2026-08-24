@@ -536,7 +536,23 @@ function passingOf(node, conf) {
       pointee: type,
     };
   }
-  // 族（`Atom` / `Scalar`）や直和は、まだ渡し方が決まらない。
+  // **直和は広い方へ揃える**（type_system.md §2「表現の違う枝の直和は広い方に揃える」）。
+  //
+  // `Char | String` は「1本の枝と2本の枝」であり、型の側に1つの答えは無い。置き方の話
+  // なので、決めるのはここである——広い方（参照）で揃えれば、どの枝も同じ本数で運べる。
+  // **狭い枝を広げるのに確保は要らない**：リテラルなら `.rodata` に置き場所があり、
+  // 入力から来た値なら元の器の中に在る。要るとすれば計算した値だけで、それは Pass 4 が
+  // 名指しする（`genWidened`）。
+  if (type.includes(" | ")) {
+    // 型だけを渡す。ノードごと渡すと `deref` が同じ直和へ戻ってきて回り続ける。
+    const parts = type
+      .split(" | ")
+      .map((t) => passingOf({ atomType: t.trim(), elementType: node.elementType }, { target, charset: conf.charset }));
+    if (parts.some((p) => !p)) return null;
+    const widest = parts.reduce((a, b) => (b.slots > a.slots ? b : a));
+    return widest.slots <= 2 ? widest : null;
+  }
+  // 族（`Atom` / `Scalar`）は、まだ渡し方が決まらない。
   return null;
 }
 
