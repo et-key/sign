@@ -1857,13 +1857,25 @@ function evaluate(node, env) {
         // 受け取る」経路には乗せられない——参照先の束縛そのものが必要なため）。
         return evalAddress(node.operand, env);
       case "output": {
-        // `addr # value`（後置#、pattern_guide.mdの`$[array ' 0] # 3`）。
-        // 左辺は$で作った参照セルである必要がある——それ以外（Unitや普通の値）は
-        // 書き込み先を持たないため吸収し、右辺の値をそのまま返す（unit.mdのUnit吸収則に倣う）。
+        // `addr # value`（中置#、pattern_guide.mdの`$[array ' 0] # 3`）。
+        //
+        // **`__` は書き込まれない。** `__` は「値が無い」であって値ではないので、書ける
+        // ものが無い。演算子表 tier 4 の Unit 欄が「`0x00 # __` は、何もしないがアドレス値は
+        // 返ってくる」と書いているのがこれである。
+        //
+        // これが無いと、偽になった比較が書き込み先を壊す——`$x # (2 < 1)` で `x` が `__` に
+        // なっていた。仮引数では完全性公理が `__` を弾いているのに、`#` の右辺だけが
+        // 素通しになっていたことになる。
+        //
+        // **返すのはアドレスである**（同表「アドレスにデータを入れ、成功したらアドレスを
+        // 返す」）。値を返すと「書けたが値が `__`」と「書けなかった」が区別できず、
+        // 連鎖（`$buf # a # b`）もできない。左辺が書き込み先でなければ `__` を返す。
         const addr = evaluate(node.left, env);
         const value = evaluate(node.right, env);
-        if (addr && addr.__address__) addr.set(value);
-        return value;
+        if (!addr || !addr.__address__) return UNIT;
+        if (isUnit(value)) return addr;
+        addr.set(value);
+        return addr;
       }
     }
 
