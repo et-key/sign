@@ -183,6 +183,29 @@ checkTrue("__ は niche を積む", (body("f : x ?\n\tx > 3 : __\n\t1\nf 5", "f"
 	check("器と合流しても診断は出ない", asm("f : s ?\n\t(s ' 0) = ` ` : __\n\ts ' 1~\nf `ab`").diagnostics.length, 0);
 }
 
+// ---- `$匿名式` はその場に置いてアドレスを返す（alloca） ----
+//
+// 演算子表がそう言っている——「その場で生成された**オブジェクト本体のアドレス**を取得
+// する。C++ の `&(new [](x){x})` に相当」。つまり確保の記法は最初から在った。置く先は
+// 自分のスタックで、`sp` を下げれば1命令で場所が取れる——フリーリストも管理情報も要らない。
+// **`alloca` であって `malloc` ではない**ので、返せないという制約もそのままである。
+{
+	const b = body("f : n ? @($(n + 1))\nf 1", "f");
+	checkTrue("場所を取る", b.includes("sub sp, sp, #16"), b.join(" / "));
+	checkTrue("そのアドレスを返す", b.includes("mov x9, sp"), b.join(" / "));
+	// `sp` を動かしたら、戻すのは `x29` からである（`ldp` は sp が底のままを前提にしている）。
+	checkTrue("sp を戻す", b.includes("mov sp, x29"), b.join(" / "));
+	// 動かしていない関数には出さない——使っていない機能の代金を払わない。
+	checkTrue("動かさなければ出さない", !body("f : n ? n + 1\nf 1", "f").includes("mov sp, x29"));
+	// **積は `$` で場所を得る。** `h , t` はそれだけでは置き場所を持たない。
+	const c = body("cons : h t ? $(h , t)\ncons 1 2", "cons");
+	checkTrue("組は2語ぶん取る", c.includes("sub sp, sp, #16") && c.includes("str x9, [sp, #8]"), c.join(" / "));
+	// `$__` は niche のまま（記憶が無いものにアドレスは無い）。場所は取らない。
+	checkTrue("$__ は場所を取らない", !body("f : n ? @($__)\nf 1", "f").includes("sub sp"));
+	// 名前付き識別子はフレームに在るので、そのアドレスでよい（新しい場所は要らない）。
+	checkTrue("仮引数は場所を取らない", !body("f : n ? @($n)\nf 1", "f").includes("sub sp"));
+}
+
 // ---- 恒等射（`!__`）は値として運べる ----
 //
 // `Identity` は Layer 1 の射だが、**呼ぶのではなく運ぶ**ぶんには GPR 1本である。機械の

@@ -364,6 +364,8 @@ class Emitter {
 		this.diagnostics = [];
 		this.slot = 0; // 使用中のフレームスロット数
 		this.maxSlot = 0;
+		// 本体が `sp` を動かしたか。動かしたなら戻すのは `x29` からである。
+		this.movedSp = false;
 		this.labelSeq = 0;
 		// `.rodata` に置いた文字列。中身が同じなら1つに畳む（キーは符号位置の並び）。
 		this.rodata = new Map();
@@ -1039,8 +1041,75 @@ function genExpr(node, env, em, scope, tail = false) {
 			}
 		}
 		em.pop(1);
-		// 関数のアドレス（`$is_digit`）は単相化が扱うのでここへ来ない。
-		return em.fail(n, `アドレスを取れるのはフレームに在るものだけです（${t && t.type === "atom" ? bareName(t.value) : t && t.name}）`);
+
+		// **`$匿名式` は「その場で置いて、そのアドレスを返す」。**
+		//
+		// 演算子表がそう言っている——「その場で生成された**オブジェクト本体のアドレス**を
+		// 取得する。C++ の `&(new [](x){x})` に相当」。つまり確保の記法は最初から在った。
+		//
+		// 置く先は**自分のスタック**である。`sp` を下げれば1命令で場所が取れる——フリー
+		// リストも管理情報も要らない。`x29` はフレームの底を指したままなので、スロットの
+		// 読み書きは何も変わらない（`wrapFrame` が戻すのは `x29` から）。
+		//
+		// **これは `alloca` であって `malloc` ではない。** 返せないという制約もそのまま
+		// ——自分のフレームなので、呼び出し側へ返すと死んだ場所を指す。返す規約（sret）は
+		// まだ決まっていない（memory_management.md §2）。
+		if (isIdentifierNode(t)) {
+			// 関数のアドレス（`$is_digit`）は単相化が扱うのでここへ来ない。
+			return em.fail(n, `アドレスを取れるのはフレームに在るものだけです（${bareName(t.value)}）`);
+		}
+		// **積は `$` で場所を得る。** `h , t` はそれだけでは置き場所を持たないが、
+		// `$(h , t)` は「その場で生成されたオブジェクト本体」そのものである。ここで
+		// スカラーを順に置けば、それが cons セルになる——`{ptr, len}` の器ではなく、
+		// 幅の決まった組である（`list_model.md` の List は連続領域、こちらは組）。
+		const parts = [];
+		if (t && t.type === "operation" && t.name === "product") {
+			let cur = t;
+			while (cur && cur.type === "operation" && cur.name === "product") {
+				parts.unshift(cur.right);
+				cur = cur.left;
+			}
+			parts.unshift(cur);
+		}
+		if (parts.length > 1) {
+			const base = em.slot;
+			for (const p of parts) {
+				const pw = genScalar(p, env, em, scope, "組の要素はレジスタ1本の値です");
+				if (pw === false) return false;
+			}
+			const got = em.slot - base;
+			const bytes0 = Math.ceil((got * 8) / 16) * 16;
+			em.emit(`sub sp, sp, #${bytes0}`, `${got} 語の組を置く（$匿名式）`);
+			em.movedSp = true;
+			for (let k = 0; k < got; k++) {
+				em.load(SCRATCH[0], (base + k) * 8);
+				em.emit(`str ${SCRATCH[0]}, [sp, #${k * 8}]`, k === 0 ? "置く" : undefined);
+			}
+			em.emit(`mov ${SCRATCH[0]}, sp`, "そのアドレス");
+			em.pop(got);
+			const po0 = em.push();
+			if (po0 === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.store(SCRATCH[0], po0, "$匿名式（組）");
+			return 1;
+		}
+		const vw = genExpr(n.operand, env, em, scope);
+		if (vw === false) return false;
+		if (vw === TAIL) return em.fail(n, "末尾呼び出しのアドレスは取れません");
+		const vo = (em.slot - vw) * 8;
+		// AArch64 の `sp` は16バイト境界を要求する。
+		const bytes = Math.ceil((vw * 8) / 16) * 16;
+		em.emit(`sub sp, sp, #${bytes}`, `${vw} 本ぶんの場所を取る（$匿名式）`);
+		em.movedSp = true;
+		for (let k = 0; k < vw; k++) {
+			em.load(SCRATCH[0], vo + k * 8);
+			em.emit(`str ${SCRATCH[0]}, [sp, #${k * 8}]`, k === 0 ? "置く" : undefined);
+		}
+		em.emit(`mov ${SCRATCH[0]}, sp`, "そのアドレス");
+		em.pop(vw);
+		const ao = em.push();
+		if (ao === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		em.store(SCRATCH[0], ao, "$匿名式");
+		return 1;
 	}
 
 	// 前置 `@`——アドレスから読む。niche なら読まずに `__`。
@@ -1863,15 +1932,24 @@ function emitUnitRegs(em, width, kind = null) {
  * 本文を先に作って後から包む。AArch64 のスタックは16バイト境界を要求するので
  * 切り上げる。
  */
-function wrapFrame(bodyLines, slots, name) {
+function wrapFrame(bodyLines, slots, name, movedSp = false) {
 	const frame = 16 + Math.ceil((slots * 8) / 16) * 16; // x29/x30 の16バイト + スロット
 	// 相互末尾呼び出しが置いた印を、決まったフレームの大きさで埋める。
 	const filled = bodyLines.map((l) => (l.includes(FRAME_MARK) ? l.split(FRAME_MARK).join(String(frame)) : l));
+	// **`sp` を動かしたなら、戻すのは `x29` からである。**
+	//
+	// `ldp x29, x30, [sp], #frame` は「`sp` がフレームの底のまま」を前提にしている。
+	// 本体が `sub sp, sp, #n` で場所を取ったら、その前提は崩れる——`x29` はフレームの底を
+	// 指したままなので、そこから戻せばよい（AAPCS64 が `x29` をフレームポインタと呼ぶのは
+	// このためである）。動かしていない関数には出さない：1命令とはいえ、全ての `ret` に
+	// 付けるのは「使っていない機能の代金」である。
+	const restore = movedSp ? ["\tmov sp, x29".padEnd(30) + "// sp を動かしたので戻す"] : [];
 	return [
 		`${name}:`,
 		`\tstp x29, x30, [sp, #-${frame}]!`.padEnd(30) + `// フレーム ${frame} バイト`,
 		"\tmov x29, sp",
 		...filled,
+		...restore,
 		`\tldp x29, x30, [sp], #${frame}`.padEnd(30) + "// フレームを戻す",
 		"\tret",
 	];
@@ -2009,6 +2087,7 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	em.lines = [];
 	em.slot = 0;
 	em.maxSlot = 0;
+	em.movedSp = false; // 本体が `sp` を動かしたか（エピローグの戻し方が変わる）
 
 	// **末尾自己再帰の飛び先。** フレームの確保（`stp`）はこの外側にあり、ここから下だけを
 	// 繰り返す——だから再帰の深さがスタックに積まれない（tco.md §7「同一スタック
@@ -2165,7 +2244,7 @@ function genFunction(name, lambdaNode, env, em, mono) {
 
 	const body = em.lines;
 	em.lines = outer;
-	em.lines.push(...wrapFrame(body, em.maxSlot, name));
+	em.lines.push(...wrapFrame(body, em.maxSlot, name, em.movedSp));
 	em.blank();
 }
 
@@ -2243,6 +2322,7 @@ function generateAsm(nodes, env, options = {}) {
 	em.lines = [];
 	em.slot = 0;
 	em.maxSlot = 0;
+	em.movedSp = false; // 本体が `sp` を動かしたか（エピローグの戻し方が変わる）
 	for (const node of exprs) {
 		// **裸の文字列リテラルはコメントである**（string_and_comment.md）。Sign の
 		// コメントはバッククォート文字列そのものなので AST に残るが、値として使われて
@@ -2259,7 +2339,7 @@ function generateAsm(nodes, env, options = {}) {
 	const body = em.lines;
 	em.lines = outer;
 	em.lines.push("\t.global _sign_main");
-	em.lines.push(...wrapFrame(body, em.maxSlot, "_sign_main"));
+	em.lines.push(...wrapFrame(body, em.maxSlot, "_sign_main", em.movedSp));
 	// 文字列の中身は最後に置く。`.text` と混ぜないのは、書き換えない領域だからである。
 	em.lines.push(...em.rodataLines());
 

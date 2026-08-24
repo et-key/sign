@@ -1981,6 +1981,7 @@ function annotateTypes(node, env, diagnostics) {
   if (!node || typeof node !== "object") return node;
   inferAtomType(node, env);
   if (diagnostics) collectUnitReason(node, env, diagnostics);
+  if (diagnostics) collectExportMisuse(node, diagnostics);
   // ブロック・ラムダは pass2 が残した子スコープで中身を歩く（無ければ現在のenv）。
   // これが無いと仮引数やブロック内の定義が「未定義識別子」になってしまう。
   const inner = node.scope || env;
@@ -2030,6 +2031,25 @@ function annotateTypes(node, env, diagnostics) {
 //
 // `reason` は機械可読なコード、`message` は人間向け。形式手法へ橋を架けるとき
 // （Lean/Coq への変換など）に読むのは `reason` の方であり、日本語文ではない。
+// 前置 `#` / `##` / `###` は**名前に付く印**である（operator_table.md tier 1：
+// 「名前をプロジェクト内部から発見可能にする」）。`#name : value` は Pass 2 が
+// `define.exported` へ畳むので、演算子ノードとして残っているなら**名前が無い**——
+// 名前の無いものを「発見可能に」はできない。
+const EXPORT_PREFIX_OPS = new Set(["export_internal", "export_external", "export_pin"]);
+
+function collectExportMisuse(node, diagnostics) {
+  if (!node || node.type !== "operation" || node.position !== "prefix") return;
+  if (!EXPORT_PREFIX_OPS.has(node.name)) return;
+  diagnostics.push({
+    level: "warning",
+    reason: "export-without-name",
+    spec: "operator_table.md tier 1",
+    message:
+      `前置 '${node.op}' は名前に付ける印です（'${node.op}名前 : 値'）。式に付けても発見可能にする名前がありません` +
+      `——確保のつもりなら '$式'（その場に置いてアドレスを返す）です`,
+  });
+}
+
 function collectUnitReason(node, env, diagnostics) {
   if (!node || node.type !== "operation" || node.position !== "infix") return;
   if (node.atomType !== "Unit") return;

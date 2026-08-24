@@ -1525,11 +1525,22 @@ function evalAddress(operandNode, env) {
     if (!Array.isArray(l) || typeof idx !== "number" || idx < 0 || idx >= l.length) return UNIT;
     return makeAddress(() => l[idx], (v) => { l[idx] = v; });
   }
-  // それ以外（リテラル・ラムダ式など、その場で作った値）: 書き込み先を持たない
-  // スナップショット参照。カリー化の手動形`f : x ? $[y ? ...]`はここを通る——
-  // 継続クロージャそのものをアドレス化するだけで、書き込みは意味を持たない。
-  const snapshot = evaluate(inner, env);
-  return makeAddress(() => snapshot);
+  // それ以外（リテラル・式・ラムダ式など、その場で作った値）。
+  //
+  // **`$匿名式` は「その場で生成されたオブジェクト本体のアドレス」である**——演算子表が
+  // C++ の `&(new [](x){x})` に相当すると書いている通り、`new` であって覗き窓ではない。
+  // 読み取り専用のスナップショットにしていたので `($式) # 値` が黙って効かなかった。
+  // 機械の側は `sub sp` で場所を取って書けるので、そこと食い違っていた。
+  //
+  // カリー化の手動形（`f : x ? $[y ? ...]`）もここを通るが、書き込みが意味を持たない
+  // だけで、持てないわけではない。
+  let cell = evaluate(inner, env);
+  return makeAddress(
+    () => cell,
+    (v) => {
+      cell = v;
+    },
+  );
 }
 
 function evaluate(node, env) {
