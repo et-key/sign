@@ -875,6 +875,88 @@ function genExpr(node, env, em, scope, tail = false) {
 	// **どちらもメモリを要求しない。** 後者は同じ領域を指したまま頭と長さをずらすだけで、
 	// `[h ~t]` の分解とまったく同じ機械である——`~` の意味が1つになったので、分解と
 	// スライスが同じ規則の別の書き方であることが命令の上でも見えるようになった。
+	// **`$` `@` `#` は niche を動かせない。**
+	//
+	// `$__ = __ = @__` は機械語の側の不動点である——記憶が無いものにアドレスは無く、
+	// 無いアドレスから読めるものも無い。3つとも同じビット列（niche）であり、区別している
+	// のは型だけである（`__` は `Unit`、`$__` は `Address`）。原理2「型はゼロコストの帳簿」
+	// がそのまま出る場所で、`f $__` が完全性公理で崩壊しないのに1命令も余分に要らない。
+	//
+	// guide の演算子表が `$__ # expr` を「致命的なエラー（不正なアドレスへの書き込み）」と
+	// 呼ぶのも同じことで、niche は書き込み先ではない。
+
+	// 前置 `$`——アドレスを取る。
+	if (n.type === "operation" && n.position === "prefix" && n.name === "address") {
+		const t = unwrap(n.operand);
+		const off = em.push();
+		if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		// `$__` は niche そのもの。型は `Address` だがビットは `__` と同じ。
+		if (t && t.type === "atom" && t.kind === "unit") {
+			em.emit(`movz ${SCRATCH[0]}, #0x8000, lsl #48`, "$__ は niche（記憶が無いものにアドレスは無い）");
+			em.store(SCRATCH[0], off);
+			return 1;
+		}
+		// 仮引数はフレームに在るので、そのアドレスが取れる。
+		if (isIdentifierNode(t) && scope && scope.params) {
+			const i = scope.params.indexOf(t.value);
+			if (i >= 0) {
+				em.emit(`add ${SCRATCH[0]}, x29, #${16 + scope.paramOffsets[i]}`, `$${bareName(t.value)}（フレーム内）`);
+				em.store(SCRATCH[0], off);
+				return 1;
+			}
+		}
+		em.pop(1);
+		// 関数のアドレス（`$is_digit`）は単相化が扱うのでここへ来ない。
+		return em.fail(n, `アドレスを取れるのはフレームに在るものだけです（${t && t.type === "atom" ? bareName(t.value) : t && t.name}）`);
+	}
+
+	// 前置 `@`——アドレスから読む。niche なら読まずに `__`。
+	if (n.type === "operation" && n.position === "prefix" && n.name === "input") {
+		if (!genScalar(n.operand, env, em, scope, "アドレスはレジスタ1本の値です")) return false;
+		const po = (em.slot - 1) * 8;
+		const w = widthOfType(n.atomType, em.conf);
+		const none = em.newLabel("noaddr");
+		const done = em.newLabel("loaded");
+		em.load(SCRATCH[0], po, "アドレス");
+		em.emit("movz x12, #0x8000, lsl #48", "niche なら記憶が無い");
+		em.emit(`cmp ${SCRATCH[0]}, x12`);
+		em.emit(`b.eq ${none}`, "@__ = __（読まない）");
+		em.emit(loadAt(SCRATCH[0], SCRATCH[0], w), `${w} byte を読む`);
+		em.emit(`b ${done}`);
+		em.label(none);
+		em.emit(`mov ${SCRATCH[0]}, x12`, "__");
+		em.label(done);
+		em.store(SCRATCH[0], po);
+		return 1;
+	}
+
+	// 中置 `#`——アドレスへ書く。**守るのは左辺**（不正なアドレスへ書かない）。
+	// 右辺の `__` は書ける——書けないと場所を空にできない。
+	if (n.type === "operation" && n.name === "output" && n.position === "infix") {
+		if (!genScalar(n.left, env, em, scope, "書き込み先はレジスタ1本のアドレスです")) return false;
+		const po = (em.slot - 1) * 8;
+		const vw = genExpr(n.right, env, em, scope);
+		if (vw === false) return false;
+		if (vw !== 1) { em.pop(vw); return em.fail(n.right, `書ける値はレジスタ1本ぶんです（${vw} 本の参照で運ぶ値）`); }
+		const vo = (em.slot - 1) * 8;
+		const w = widthOfType(n.right && n.right.atomType, em.conf);
+		const skip = em.newLabel("nowrite");
+		const done = em.newLabel("wrote");
+		em.load(SCRATCH[0], po, "書き込み先");
+		em.emit("movz x12, #0x8000, lsl #48", "niche は書き込み先ではない");
+		em.emit(`cmp ${SCRATCH[0]}, x12`);
+		em.emit(`b.eq ${skip}`, "不正なアドレスへは書かない");
+		em.load(SCRATCH[1], vo, "書く値");
+		em.emit(storeAt(SCRATCH[1], SCRATCH[0], w), `${w} byte を書く`);
+		em.emit(`b ${done}`, "成功したらアドレスを返す");
+		em.label(skip);
+		em.emit(`mov ${SCRATCH[0]}, x12`, "書けなければ __");
+		em.label(done);
+		em.pop(1);
+		em.store(SCRATCH[0], po);
+		return 1;
+	}
+
 	if (n.type === "operation" && n.name === "get_prop" && !n.runtimeIndexProblem) {
 		const out = genIndex(n, env, em, scope);
 		if (out !== null) return out;
@@ -1185,6 +1267,26 @@ function loadElem(dst, base, idx, size) {
 	return `ldr ${dst}, [${base}, ${idx}, lsl #2]`;
 }
 
+// 幅ぶんのロード／ストア。`layer: 0` は volatile だが、Pass 4 は並べ替えも削除もしないので
+// 素の `ldr`/`str` がそのまま volatile の意味を満たす（memory_management.md §2）。
+function loadAt(dst, base, size) {
+	if (size === 1) return `ldrb ${dst.replace("x", "w")}, [${base}]`;
+	if (size === 2) return `ldrh ${dst.replace("x", "w")}, [${base}]`;
+	if (size === 4) return `ldr ${dst.replace("x", "w")}, [${base}]`;
+	return `ldr ${dst}, [${base}]`;
+}
+function storeAt(src, base, size) {
+	if (size === 1) return `strb ${src.replace("x", "w")}, [${base}]`;
+	if (size === 2) return `strh ${src.replace("x", "w")}, [${base}]`;
+	if (size === 4) return `str ${src.replace("x", "w")}, [${base}]`;
+	return `str ${src}, [${base}]`;
+}
+
+// 型が言う幅（決まらなければ GPR 幅）。
+function widthOfType(type, conf) {
+	const m = type ? reduceToMachineType(type, conf.target) : null;
+	return m && m.class === "gpr" ? m.size : 8;
+}
 function emitIsUnit(em, off, width, comment) {
 	if (width === 1) {
 		em.load(SCRATCH[0], off, comment);

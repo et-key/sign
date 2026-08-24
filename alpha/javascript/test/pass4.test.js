@@ -609,5 +609,37 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 	// layer を渡さなければ検査しない（他の門番と同じ方針）。
 	checkTrue("layer 未指定なら layer の話をしない", !at(build, undefined).some((m) => /layer: /.test(m)), JSON.stringify(at(build, undefined)));
 }
+
+// ---- `$` `@` `#`（アドレス・ロード・ストア） ----
+//
+// **3つとも niche を動かせない。** `$__ = __ = @__` は機械語の側の不動点である——記憶が
+// 無いものにアドレスは無く、無いアドレスから読めるものも無い。同じビット列であり、区別して
+// いるのは型だけ（`__` は `Unit`、`$__` は `Address`）。原理2「型はゼロコストの帳簿」が
+// そのまま出る場所で、`f $__` が完全性公理で崩壊しないのに1命令も余分に要らない。
+{
+	// 前置 `$`——仮引数はフレームに在るのでアドレスが取れる。
+	const a = body("f : n ? $n\nf 1", "f");
+	checkTrue("フレーム内のアドレスは add 1命令", a.some((l) => /^add x9, x29, #\d+$/.test(l)), a.join(" / "));
+	// `$__` は niche そのもの。型は `Address` だがビットは `__` と同じ。
+	const u = body("f : n ? $__\nf 1", "f");
+	checkTrue("`$__` は niche", u.some((l) => l === "movz x9, #0x8000, lsl #48"), u.join(" / "));
+	// 前置 `@`——niche なら読まない。
+	const ld = body("f : p ? @p\nf 100", "f");
+	checkTrue("読む前に niche を見る", ld.some((l) => /^b\.eq \.Lnoaddr/.test(l)), ld.join(" / "));
+	checkTrue("読むのは1命令", ld.some((l) => l === "ldr x9, [x9]"), ld.join(" / "));
+	// 中置 `#`——**守るのは左辺**。不正なアドレスへは書かない。
+	const st = body("f : p v ? p # v\nf 100 5", "f");
+	checkTrue("書く前に niche を見る", st.some((l) => /^b\.eq \.Lnowrite/.test(l)), st.join(" / "));
+	checkTrue("書くのは1命令", st.some((l) => l === "str x10, [x9]"), st.join(" / "));
+	// 成功したらアドレス、書けなければ `__`（演算子表 tier 4）。
+	checkTrue("書けなければ __ を返す", st.some((l) => l === "mov x9, x12"), st.join(" / "));
+	check("診断は出ない", asm("f : p v ? p # v\nf 100 5").diagnostics.length, 0);
+}
+// **右辺の `__` は書ける。** 書けないと場所を空にできない——ストリームが尽きたときに
+// カーソルへ「もう無い」を書き込めない。だから右辺には niche の検査を入れない。
+{
+	const st = body("f : p ? p # __\nf 100", "f");
+	check("右辺を検査する分岐は出ない", st.filter((l) => /^b\.eq \.Lnowrite/.test(l)).length, 1);
+}
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
