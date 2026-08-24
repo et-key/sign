@@ -121,7 +121,28 @@ function unwrap(node) {
 function slotsOf(type, conf) {
 	// 型注釈が無いノードは今まで通り1本として扱う（整数リテラルなど）。
 	if (!type || type === "Unit") return 1;
-	const pass = passingOf({ atomType: type }, { target: conf.target });
+	const pass = passingOf({ atomType: type }, { target: conf.target, charset: conf.charset });
+	return pass ? Math.max(pass.slots, 1) : null;
+}
+
+/**
+ * ノードから幅を引く。**型だけでは場所か規則か決まらない。**
+ *
+ * `[1 ~ 5]` の型は `List` だが実体は規則であり（`repr: "rule"`）、運ぶのは `{ptr, len}` の
+ * 2本ではなく `{start, step, end}` の3本である（stack_abi.md §4.6 の「規則」の行）。
+ * 型だけを渡していたので、レンジが参照として数えられていた——`layout.js` は最初から
+ * 正しく答えていて、こちらが訊き方を間違えていた。
+ *
+ * 「型は何ができるかしか語らない。どう置かれているかは `repr` に印として残す」という
+ * pass3 の設計を、ここで使い切る。
+ */
+function slotsOfNode(node, conf, env) {
+	if (!node) return null;
+	if (!node.atomType || node.atomType === "Unit") return 1;
+	// `env` を渡すと `deref` が束縛まで辿り、`repr` と要素型を引き継ぐ——`c : [0 ~+ 1]`
+	// と束縛してから `c ' 3` と書いたとき、識別子ノード自身は実体の種類を知らないが
+	// 束縛は知っている（pass3 が書き戻している）。
+	const pass = passingOf(node, { target: conf.target, charset: conf.charset, env });
 	return pass ? Math.max(pass.slots, 1) : null;
 }
 
@@ -855,9 +876,14 @@ function genExpr(node, env, em, scope, tail = false) {
 		em.emit(`bl ${callee}`, n.monoLabel ? "呼び出し（具体化済み）" : "呼び出し");
 		// 返値の幅も型が決める。器を返す関数は x0/x1 で `{ptr, len}` を返す
 		// （AAPCS64 が16バイトの複合型をそう返すのと同じ置き方）。
-		const rw = slotsOf(n.atomType, em.conf);
+		// **返値の幅もノードが言う。** 規則（レンジ）は `{start, step, end}` で3本になる
+		// ので、型だけを見ると参照（2本）と取り違える。
+		const rw = slotsOfNode(n, em.conf, em.env);
 		if (rw === null) return em.fail(n, `返値の渡し方が決まりません（${n.atomType}）`);
-		if (rw > 2) return em.fail(n, `返値が ${rw} 本の関数はまだ出せません（${n.atomType}）`);
+		// **返値も引数と同じくレジスタで運ぶ。** AAPCS64 は16バイトを超える複合型を sret へ
+		// 送るが、Sign の関数は全て `main` の内部関数なので（execution_model）呼ぶ側と
+		// 呼ばれる側の両方をこちらが決められる。規則は3本まで在るので x0〜x7 の範囲で運ぶ。
+		if (rw > ARG_REGS.length) return em.fail(n, `返値が ${rw} 本の関数はまだ出せません（${n.atomType}）`);
 		const rbase = em.slot;
 		for (let k = 0; k < rw; k++) {
 			if (em.push() === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
@@ -875,6 +901,34 @@ function genExpr(node, env, em, scope, tail = false) {
 	// **どちらもメモリを要求しない。** 後者は同じ領域を指したまま頭と長さをずらすだけで、
 	// `[h ~t]` の分解とまったく同じ機械である——`~` の意味が1つになったので、分解と
 	// スライスが同じ規則の別の書き方であることが命令の上でも見えるようになった。
+	// **レンジは規則である。** 置かれているのは `{start, step, end}` という固定サイズの
+	// 3つ組だけで、要素列はどこにも無い（list_model.md §2.3）。だからレジスタに乗り、
+	// 無限でも 24 バイトで済む。3つを連続したスロットへ積む——順に積めば連続する。
+	if (n.type === "operation" && (n.name === "range" || n.name === "range_arithmetic")) {
+		const parts = rangeParts(n);
+		if (!parts) return em.fail(n, `等差のレンジだけを出せます（${n.op}——添字が start + i × step にならない）`);
+		const want = slotsOfNode(n, em.conf, em.env);
+		if (want === null) return em.fail(n, `レンジの渡し方が決まりません（${n.atomType}）`);
+		const pieces = [parts.start, parts.step, ...(parts.end ? [parts.end] : [])];
+		if (pieces.length !== want) return em.fail(n, `レンジの本数が合いません（${pieces.length} と ${want}）`);
+		const base = em.slot;
+		const names = ["start", "step", "end"];
+		for (let i = 0; i < pieces.length; i++) {
+			const w = genScalar(pieces[i], env, em, scope, "レンジの端点と歩幅はレジスタ1本の値です");
+			if (w === false) return false;
+			// 端点は積んだ順に並ぶ。連続しているので、そのまま `{start, step, end}` になる。
+			if ((em.slot - 1) * 8 !== (base + i) * 8) {
+				em.load(SCRATCH[0], (em.slot - 1) * 8);
+				em.pop(1);
+				em.push();
+				em.store(SCRATCH[0], (base + i) * 8, names[i]);
+			} else {
+				em.emit(`// ${names[i]}`, i === 0 ? "規則（メモリ上に無い）" : undefined);
+			}
+		}
+		return want;
+	}
+
 	// **`$` `@` `#` は niche を動かせない。**
 	//
 	// `$__ = __ = @__` は機械語の側の不動点である——記憶が無いものにアドレスは無く、
@@ -1030,11 +1084,17 @@ function emitUnit(em, offs) {
  * 1本のときも同じ規則で引ける——`x ' 0` は `x` 自身、`x ' 1` は範囲外で `__` である。
  * 器が2本（`{ptr, len}`）のときだけアドレス計算になる。
  */
+// 左辺が規則か（レンジ・イテレータ）。規則はレジスタに乗り、添字は算術で出る。
+function isRuleNode(node, conf, env) {
+	const p = node ? passingOf(node, { target: conf.target, charset: conf.charset, env }) : null;
+	return !!p && p.mode === "register" && p.slots >= 2;
+}
 function genIndex(node, env, em, scope) {
 	const conf = em.conf;
-	const cw = slotsOf(node.left && node.left.atomType, conf);
-	const rw = slotsOf(node.atomType, conf);
-	if (cw === null || rw === null || cw > 2 || rw > 2) return null;
+	const cw = slotsOfNode(node.left, conf, env);
+	const rw = slotsOfNode(node, conf, env);
+	// 規則は3本（`{start, step, end}`）まで在る。場所は2本まで。
+	if (cw === null || rw === null || cw > 3 || rw > 3) return null;
 	// スライスかどうかは**添字の形**で決まる。`s ' i~` は Pass 2 が `s ' (i ~+ 1)` へ
 	// 均しているので（`desugarIndexRest`）、ここで見るのは終端の無い等差レンジである。
 	const idx = node.right;
@@ -1048,12 +1108,54 @@ function genIndex(node, env, em, scope) {
 	// 要素の幅。`String` なら charset 幅、`List(T)` なら T の大きさ。
 	const elemType = isSlice ? node.elementType || elementTypeOfNode(node.left) : node.atomType;
 	const elem = elemType ? measure({ atomType: elemType }, { target: conf.target, charset: conf.charset }) : null;
-	if (cw === 2 && (!elem || !elem.size)) return null;
+	// 要素の幅が要るのは**場所**を引くときだけである（`base + i × sizeof(T)`）。規則は
+	// `start + i × step` なので、要素が何バイトかを知らなくても引ける——`step` が既に
+	// 要素の単位で書かれているからである。
+	const ruleLeft = isRuleNode(node.left, conf, env);
+	if (cw === 2 && !ruleLeft && (!elem || !elem.size)) return null;
 
 	const cvw = genExpr(node.left, env, em, scope);
 	if (cvw === false) return false;
 	if (cvw !== cw) { em.pop(cvw); return null; }
 	const co = (em.slot - cw) * 8;
+
+	// **規則の添字はロードではない。**
+	//
+	// 置かれているのは `{start, step, end}` だけで要素列はどこにも無いので、n 番目は
+	// `start + n × step` という**算術**で出る（type_system.md §2 のアクセス表「添字は
+	// 必ずしもロードではない」）。だから無限でも引ける——これがループカウンタを成立させて
+	// いる。ここを場所と同じ経路へ流すと、`start` をポインタ・`step` を長さとして読む
+	// 命令が出る（実際に出ていた）。
+	if (ruleLeft && cw >= 2) {
+		const iw2 = genScalar(node.right, env, em, scope, "規則の添字はレジスタ1本の値です");
+		if (iw2 === false) return false;
+		const io2 = (em.slot - 1) * 8;
+		em.load(SCRATCH[0], co, "start");
+		em.load(SCRATCH[1], co + 8, "step");
+		em.load("x11", io2, "添字");
+		em.emit(`madd ${SCRATCH[0]}, ${SCRATCH[1]}, x11, ${SCRATCH[0]}`, "start + n × step（ロードではない）");
+		if (cw >= 3) {
+			// 終端があるなら範囲を見る。**向きは start と end の並びが決める**——
+			// 降順のレンジ（`5 ~ 1`）もあるので、大小のどちらが外かは固定できない。
+			em.load("x13", co + 16, "end");
+			em.load("x14", co, "start");
+			em.emit("cmp x14, x13");
+			em.emit("cset x14, le", "昇順か");
+			em.emit(`cmp ${SCRATCH[0]}, x13`);
+			em.emit("cset x15, gt", "昇順なら end を越えたら外");
+			em.emit("cset x11, lt", "降順なら end を下回ったら外");
+			em.emit("cmp x14, #0");
+			em.emit("csel x15, x15, x11, ne", "向きで選ぶ");
+			em.emit("movz x12, #0x8000, lsl #48", "範囲外は __");
+			em.emit("cmp x15, #0");
+			em.emit(`csel ${SCRATCH[0]}, x12, ${SCRATCH[0]}, ne`);
+		}
+		em.pop(cw + 1);
+		const off2 = em.push();
+		if (off2 === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		em.store(SCRATCH[0], off2, "n 番目");
+		return 1;
+	}
 	// 添字そのもの（スライスなら起点）を積む。
 	const iw = genExpr(isSlice ? idx.left : idx, env, em, scope);
 	if (iw === false) return false;
@@ -1187,7 +1289,7 @@ function genMatch(node, env, em, scope, tail = false) {
 	// いる——「表現の違う枝の直和は広い方に揃え、`Char` の枝は境界で1要素の連続領域へ
 	// 持ち上げる」（type_system.md §2）——が、その持ち上げにはメモリの確保が要るので
 	// ここではまだ出さない。黙って先頭だけ置かず名指しする。
-	const width = slotsOf(node.atomType, em.conf);
+	const width = slotsOfNode(node, em.conf, em.env);
 	if (width === null) {
 		return em.fail(node, `枝の幅が揃いません（${node.atomType}）——広い方へ揃える持ち上げがまだ出せません（type_system.md §2）`);
 	}
@@ -1269,6 +1371,30 @@ function loadElem(dst, base, idx, size) {
 
 // 幅ぶんのロード／ストア。`layer: 0` は volatile だが、Pass 4 は並べ替えも削除もしないので
 // 素の `ldr`/`str` がそのまま volatile の意味を満たす（memory_management.md §2）。
+/**
+ * レンジ式から `{start, step, end}` を取り出す。書き方は3つあるが実体は1つである。
+ *
+ *   [0 ~+ 1]      range_arithmetic(0, 1)              終端なし → 無限
+ *   [1 ~ 5]       range(1, 5)                         歩幅は暗黙の 1
+ *   [2 ~+ 3 ~ 9]  range(range_arithmetic(2, 3), 9)    全部書いた形
+ *
+ * 出せるのは**等差**（`~` / `~+`）だけである。等比・冪（`~*` `~^`）は同じ3つ組で運べるが
+ * 添字が `start + i × step` にならないので、命令が別になる（type_system.md §2 のアクセス表）。
+ */
+function rangeParts(node) {
+	const ONE = { type: "atom", kind: "number", value: "1", atomType: "Int" };
+	if (node.name === "range_arithmetic") {
+		if (node.op !== "~+") return null;
+		return { start: node.left, step: node.right, end: null };
+	}
+	if (node.name !== "range") return null;
+	const l = node.left;
+	if (l && l.type === "operation" && l.name === "range_arithmetic") {
+		if (l.op !== "~+") return null;
+		return { start: l.left, step: l.right, end: node.right };
+	}
+	return { start: l, step: ONE, end: node.right };
+}
 function loadAt(dst, base, size) {
 	if (size === 1) return `ldrb ${dst.replace("x", "w")}, [${base}]`;
 	if (size === 2) return `ldrh ${dst.replace("x", "w")}, [${base}]`;
@@ -1370,7 +1496,11 @@ function paramRegWidths(lambdaNode, em, callees = {}) {
 				const t = allTypes[idx] ?? typeOf(sh.name);
 				return { shape: sh, regs: t ? slotsOf(t, em.conf) ?? 2 : 2 };
 			}
-			const w = slotsOf(allTypes[idx] ?? typeOf(sh.name), em.conf);
+			// **束縛が実体の種類を知っている場合がある。** 規則を受ける仮引数（`f : c ? c ' 3`
+			// を `f [0 ~+ 1]` と呼ぶ形）は、型が `Iterator` でも運ぶのは `{start, step}` の
+			// 2本であって参照ではない。型だけを見ると渡し方が決まらない。
+			const b = lambdaNode.scope ? envLookup(lambdaNode.scope, sh.name) : null;
+			const w = slotsOfNode({ atomType: allTypes[idx] ?? (b && b.atomType), repr: b && b.repr, elementType: b && b.elementType }, em.conf, lambdaNode.scope);
 			if (w === null) return { shape: sh, error: `仮引数 ${bareName(sh.name)} の渡し方が決まりません（直和か族）` };
 			return { shape: sh, regs: w };
 		}
@@ -1570,7 +1700,7 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	if (ok !== false) {
 		// 返値の幅ぶん x0/x1 へ載せる。末尾呼び出しで出て行った経路は値を持たない。
 		const width = ok === TAIL ? 1 : ok;
-		if (width > 2) {
+		if (width > ARG_REGS.length) {
 			em.diagnostics.push({ severity: "error", message: `${name}: ${width} 本で返す関数はまだ出せません`, node: lambdaNode });
 		}
 		if (ok !== TAIL) {
@@ -1622,6 +1752,7 @@ function generateAsm(nodes, env, options = {}) {
 	}
 
 	// 具体化はコード生成の前に済ませる（どの実体を出すかが決まらないと本体を出せない）。
+	em.env = env; // 束縛から実体の種類を辿るために持つ（`slotsOfNode`）
 	const monos = collectMonomorphs(nodes);
 	// 呼び出しサイトが省略された引数の位置を知るための署名表。本体を出す前に要る。
 	em.signatures = collectSignatures(nodes, em);

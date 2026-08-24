@@ -190,7 +190,10 @@ function measure(node, conf) {
   if (type === "Implicit") return measureImplicit(node, conf);
 
   // **規則裏打ち**（レンジ）は要素を持たない。置かれるのは規則そのものである。
-  if (node.repr === "rule") return measureRule(node, conf);
+  // **`Iterator` は型そのものが規則だと言っている**（type_system.md §2 のアクセス表：
+  // 添字は必ずしもロードではない）。`repr` の印が付いていなくても規則である。曖昧なのは
+  // `List` の方で、あちらは場所（`[1 2 3]`）にも規則（`[1 ~ 5]`）にもなる。
+  if (node.repr === "rule" || node.atomType === "Iterator") return measureRule(node, conf);
   if (type === "List") return measureList(node, conf);
   if (type === "Struct") {
     const l = layoutOfStruct(node, conf);
@@ -297,7 +300,11 @@ function measureImplicit(node, conf) {
 function measureRule(node, conf) {
   const { target } = conf;
   const el = node.elementType;
-  const w = el ? sizeOf(el, target) : null;
+  // **本数は要素の幅に依らない。** 規則が持つのは `{start, step}` か `{start, step, end}` の
+  // 3つ組であり、要素型が分からなくても**何本で運ぶか**は決まる（stack_abi.md §4.6）。
+  // 幅だけが未確定なので、そこは GPR 幅を置く——`size` を使う側（アラインメントや
+  // オフセット計算）が要素型を要求するなら、そちらで名指しすればよい。
+  const w = el ? sizeOf(el, target) : (widthsOf(target) || {}).gpr || 8;
   if (w === null) return null;
   const fields = node.atomType === "Iterator" ? ["start", "step"] : ["start", "step", "end"];
   return {

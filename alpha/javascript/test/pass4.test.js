@@ -641,5 +641,36 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 	const st = body("f : p ? p # __\nf 100", "f");
 	check("右辺を検査する分岐は出ない", st.filter((l) => /^b\.eq \.Lnowrite/.test(l)).length, 1);
 }
+
+// ---- 規則（レンジ）は場所ではない ----
+//
+// 置かれているのは `{start, step, end}` という固定サイズの3つ組だけで、要素列はどこにも
+// 無い（list_model.md §2.3）。だからレジスタに乗り、**無限でも 24 バイトで済む**。
+{
+	const asmL = (src, layer) => { const { nodes, env } = compile(src, { charset: "ascii" }); return generateAsm(nodes, env, { target: "aarch64_qemu", charset: "ascii", layer }); };
+	check("無限カウンタは出る", asmL("f : n ? [0 ~+ 1]\nf 1", 1).diagnostics.length, 0);
+	check("有界レンジも出る", asmL("f : n ? [1 ~ 5]\nf 1", 1).diagnostics.length, 0);
+	check("歩幅つきも出る", asmL("f : n ? [2 ~+ 3 ~ 9]\nf 1", 1).diagnostics.length, 0);
+	// 等比・冪は同じ3つ組で運べるが、添字が `start + i × step` にならない。名指しする。
+	checkTrue("等比は名指しする", asmL("f : n ? [2 ~* 2 ~ 8]\nf 1", 1).diagnostics.length > 0);
+}
+// **添字はロードではない。** `start + n × step` という算術で出る（type_system.md §2 の
+// アクセス表「添字は必ずしもロードではない」）。だから無限でも引ける——これがループ
+// カウンタを成立させている。ここを場所と同じ経路へ流すと、`start` をポインタ・`step` を
+// 長さとして読む命令が出る（実際に出ていた）。
+{
+	const has = (src, ins) => body(src, "f").includes(ins);
+	checkTrue("無限を引くのは madd", has("f : n ? [0 ~+ 1] ' 3\nf 1", "madd x9, x10, x11, x9"));
+	checkTrue("ロードは出ない", !body("f : n ? [0 ~+ 1] ' 3\nf 1", "f").some((l) => /^ldr w14|^ldrb/.test(l)));
+	// 仮引数で受けても、束縛を経ても同じ。`repr` が束縛から辿れる。
+	checkTrue("仮引数で受けても算術", has("f : c ? c ' 3\nf [0 ~+ 1]", "madd x9, x10, x11, x9"));
+	checkTrue("束縛を経ても算術", body("c : [0 ~+ 1]\nf : n ? c ' 3\nf 1", "f").includes("madd x9, x10, x11, x9"));
+	// **場所はロードのまま。** 型が同じ `List` でも、実体が違えば命令が違う。
+	checkTrue("場所はロード", has("f : s ? s ' 0\nf `abc`", "ldrb w14, [x9, x10]"));
+	// 終端があるなら範囲を見る。向きは start と end の並びが決める（降順もある）。
+	const b5 = body("f : n ? [1 ~ 5] ' 3\nf 1", "f");
+	checkTrue("有界は向きを見る", b5.includes("cset x14, le") && b5.includes("csel x15, x15, x11, ne"), b5.join(" / "));
+	checkTrue("無限は範囲を見ない", !body("f : n ? [0 ~+ 1] ' 3\nf 1", "f").includes("cset x14, le"));
+}
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
