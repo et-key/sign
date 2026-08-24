@@ -1125,6 +1125,20 @@ function genExpr(node, env, em, scope, tail = false) {
 
 	// 前置 `@`——アドレスから読む。niche なら読まずに `__`。
 	if (n.type === "operation" && n.position === "prefix" && n.name === "input") {
+		// **`@$x` は恒等射である。**
+		//
+		// `$名前` は束縛の番地であり（演算子表 tier 23）、そこから読めば束縛の値そのもの
+		// である——番地を作って読み直す意味が無い。フレームの中に在るものは niche にも
+		// なりえないので、`@` が出す「記憶が無いか」の分岐も要らない。10命令が 0 になる。
+		//
+		// `$匿名式` は別である（その場に置いた**新しい**場所なので、読むまで中身が無い）。
+		const src0 = unwrap(n.operand);
+		if (src0 && src0.type === "operation" && src0.position === "prefix" && src0.name === "address") {
+			const named = unwrap(src0.operand);
+			if (isIdentifierNode(named) && scope && scope.params && scope.params.indexOf(named.value) >= 0) {
+				return genExpr(named, env, em, scope);
+			}
+		}
 		// **`@` が読むのは1語である。**
 		//
 		// 指す先が器（`{ptr, len}`）や組（`{h, t}`）なら、1語では足りない——そこは
