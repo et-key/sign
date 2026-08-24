@@ -83,7 +83,21 @@ function deref(node, env, seen = new Set()) {
   seen.add(node.value);
   const b = envLookup(env, node.value);
   const next = b && (b.valueNode || b.rhsNode);
-  if (!next) return node;
+  // **仮引数には値ノードが無い。** 束縛だけが「どう置かれているか」を知っている——
+  // 呼び出しサイトから観測した `repr` がそこに在る（pass3 の collectCallsiteEvidence）。
+  // ここで拾わないと、規則を受け取った仮引数が要素列への参照に見え、`start` をポインタ
+  // として読む命令が出る。
+  if (!next) {
+    if (b && (b.repr || b.elementType)) {
+      return {
+        ...node,
+        atomType: node.atomType || b.atomType,
+        repr: node.repr || b.repr,
+        elementType: node.elementType || b.elementType,
+      };
+    }
+    return node;
+  }
   // 束縛が実体の種類を知っていて、値ノード側が知らないなら引き継ぐ。
   if (b.repr && !next.repr) next.repr = b.repr;
   if (b.elementType && !next.elementType) next.elementType = b.elementType;
@@ -461,7 +475,12 @@ function passingOf(node, conf) {
   const machine = reduceToMachineType(type, target);
   if (machine) return { mode: "register", size: machine.size, align: machine.size, slots: 1, class: machine.class, signed: machine.signed };
   // 規則（レンジ・イテレータ）はメモリ上に無いので、そのままレジスタへ乗る。
-  const m = measure(named, conf);
+  //
+  // 測るのは**辿った先**である。識別子そのものは「どう置かれているか」を持たない——
+  // 持っているのは束縛の側で、`deref` がそれを載せて返す。ここで元のノードを測ると
+  // 型（`List`）だけが残り、規則が参照に化ける。
+  const shaped = named.repr ? named : { ...named, atomType: type, repr: target_.repr, elementType: named.elementType || target_.elementType };
+  const m = measure(shaped, conf);
   if (m && m.repr === "rule") {
     return { mode: "register", size: m.size, align: m.align, slots: m.fields.length, fields: m.fields };
   }

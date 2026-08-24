@@ -493,15 +493,15 @@ function genExpr(node, env, em, scope, tail = false) {
 		return genMatch(n, env, em, scope, tail);
 	}
 
-	// 整数リテラル。`mov` の即値は16ビットまで。それを超える値は `movz`/`movk` の
-	// 連なりが要るので、桁を落として黙って通さず名指しする。
-	if (n.type === "atom" && n.kind === "number") {
-		const v = Number(n.value);
-		if (!Number.isInteger(v)) return em.fail(n, `浮動小数はまだ出せません（${n.value}）`);
-		if (v < 0 || v > 0xffff) return em.fail(n, `16ビットを超える即値はまだ出せません（${n.value}）`);
+	// 整数リテラル・アドレスリテラル。16ビットを超える値は `movz`/`movk` の連なりになる。
+	if (n.type === "atom" && (n.kind === "number" || n.kind === "address" || n.kind === "register")) {
+		// `Number` を経由しない——`0x123456789abcdef` のような番地は倍精度に載らず、
+		// 下の桁が黙って丸まる。文字列のまま `BigInt` へ渡せば桁は落ちない。
+		let v;
+		try { v = BigInt(n.value); } catch { return em.fail(n, `浮動小数はまだ出せません（${n.value}）`); }
 		const off = em.push();
 		if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
-		em.emit(`mov ${SCRATCH[0]}, #${v}`, `リテラル ${n.value}`);
+		emitImm(em, SCRATCH[0], v, `リテラル ${n.value}`);
 		em.store(SCRATCH[0], off);
 		return 1;
 	}
@@ -926,6 +926,17 @@ function genExpr(node, env, em, scope, tail = false) {
 				em.emit(`// ${names[i]}`, i === 0 ? "規則（メモリ上に無い）" : undefined);
 			}
 		}
+		// 歩幅を書かない形なら、置いた `1` を端点の並びで符号付きに直す。ここで畳んで
+		// おけば、この先どれだけ切っても向きは動かない。
+		if (parts.signedByEnds && pieces.length === 3) {
+			em.load(SCRATCH[0], base * 8, "start");
+			em.load(SCRATCH[1], (base + 2) * 8, "end");
+			em.emit(`cmp ${SCRATCH[0]}, ${SCRATCH[1]}`);
+			em.emit("mov x11, #1");
+			em.emit("movn x12, #0", "−1");
+			em.emit("csel x11, x11, x12, le", "昇順なら +1、降順なら −1");
+			em.store("x11", (base + 1) * 8, "歩幅（向きを持つ）");
+		}
 		return want;
 	}
 
@@ -1099,11 +1110,40 @@ function genIndex(node, env, em, scope) {
 	// 均しているので（`desugarIndexRest`）、ここで見るのは終端の無い等差レンジである。
 	const idx = node.right;
 	const isSlice = !!idx && idx.type === "operation" && idx.name === "range_arithmetic";
+	const ruleLeft = isRuleNode(node.left, conf, env);
 	if (isSlice) {
 		// 歩幅1の「そこから末尾まで」だけを出せる。飛ばし読みは別の命令列になる。
+		// ここで見ているのは**添字の歩幅**であって器の歩幅ではない——`[0 ~+ 2] ' 1~` の
+		// 添字は `1 ~+ 1`（1番目から全部）で、器の歩幅 2 とは別物である。
 		const step = idx.right;
 		if (!(step && step.type === "atom" && step.kind === "number" && Number(step.value) === 1)) return null;
 		if (rw !== cw) return null; // 部分列は器と同じ型でなければおかしい
+	}
+
+	// **規則を切っても規則である。**
+	//
+	// `{start, step, end}` から i 番目以降を取るのは `{start + i × step, step, end}` で、
+	// 要素はどこにも現れない——`[h ~t]` が参照の頭と長さをずらすのと同じ機械が、規則の
+	// 側では起点をずらす算術1つになる。切っても向きが動かないのは step が符号を持つから
+	// である（`rangeParts` の `signedByEnds`）。
+	//
+	// これはカーソルを進める操作の原型でもある。`cur ' 1~` が次の状態そのものなので、
+	// 状態を持ち回るのに記憶は要らない。
+	if (isSlice && ruleLeft && cw >= 2) {
+		const cvw0 = genExpr(node.left, env, em, scope);
+		if (cvw0 === false) return false;
+		if (cvw0 !== cw) { em.pop(cvw0); return null; }
+		const co0 = (em.slot - cw) * 8;
+		const iw0 = genScalar(idx.left, env, em, scope, "規則の起点はレジスタ1本の値です");
+		if (iw0 === false) return false;
+		const io0 = (em.slot - 1) * 8;
+		em.load(SCRATCH[0], co0, "start");
+		em.load(SCRATCH[1], co0 + 8, "step");
+		em.load("x11", io0, "起点");
+		em.emit(`madd ${SCRATCH[0]}, ${SCRATCH[1]}, x11, ${SCRATCH[0]}`, "start + i × step（ずらすだけ）");
+		em.pop(1);
+		em.store(SCRATCH[0], co0, "切った先の start");
+		return cw;
 	}
 	// 要素の幅。`String` なら charset 幅、`List(T)` なら T の大きさ。
 	const elemType = isSlice ? node.elementType || elementTypeOfNode(node.left) : node.atomType;
@@ -1111,7 +1151,6 @@ function genIndex(node, env, em, scope) {
 	// 要素の幅が要るのは**場所**を引くときだけである（`base + i × sizeof(T)`）。規則は
 	// `start + i × step` なので、要素が何バイトかを知らなくても引ける——`step` が既に
 	// 要素の単位で書かれているからである。
-	const ruleLeft = isRuleNode(node.left, conf, env);
 	if (cw === 2 && !ruleLeft && (!elem || !elem.size)) return null;
 
 	const cvw = genExpr(node.left, env, em, scope);
@@ -1135,17 +1174,16 @@ function genIndex(node, env, em, scope) {
 		em.load("x11", io2, "添字");
 		em.emit(`madd ${SCRATCH[0]}, ${SCRATCH[1]}, x11, ${SCRATCH[0]}`, "start + n × step（ロードではない）");
 		if (cw >= 3) {
-			// 終端があるなら範囲を見る。**向きは start と end の並びが決める**——
-			// 降順のレンジ（`5 ~ 1`）もあるので、大小のどちらが外かは固定できない。
+			// 終端があるなら範囲を見る。**向きは歩幅の符号が持つ**——端点の並びを読み直す
+			// のではない。切った規則（`[0 ~ 3] ' 5~`）は起点が終端を越えているので、
+			// 並びから読むと降順に見えてしまう。
 			em.load("x13", co + 16, "end");
-			em.load("x14", co, "start");
-			em.emit("cmp x14, x13");
-			em.emit("cset x14, le", "昇順か");
+			em.load("x14", co + 8, "step");
 			em.emit(`cmp ${SCRATCH[0]}, x13`);
 			em.emit("cset x15, gt", "昇順なら end を越えたら外");
 			em.emit("cset x11, lt", "降順なら end を下回ったら外");
 			em.emit("cmp x14, #0");
-			em.emit("csel x15, x15, x11, ne", "向きで選ぶ");
+			em.emit("csel x15, x15, x11, ge", "歩幅の符号で選ぶ");
 			em.emit("movz x12, #0x8000, lsl #48", "範囲外は __");
 			em.emit("cmp x15, #0");
 			em.emit(`csel ${SCRATCH[0]}, x12, ${SCRATCH[0]}, ne`);
@@ -1393,7 +1431,67 @@ function rangeParts(node) {
 		if (l.op !== "~+") return null;
 		return { start: l.left, step: l.right, end: node.right };
 	}
-	return { start: l, step: ONE, end: node.right };
+	// **歩幅を書かない形（`[a ~ b]`）の向きは、端点の並びが決める。**
+	//
+	// `[5 ~ 1]` は 5,4,3,2,1 なので歩幅は −1 である（interpreter.js の `delta`）。
+	// ところが端点は実行時の値かもしれないので、符号はここでは決まらない——`signedByEnds`
+	// を立てて、置くときに `start <= end` を見て ±1 を作らせる。
+	//
+	// 向きを step へ畳むのが要なのは、**規則を切ったあとも向きが残る**からである。
+	// `[0 ~ 3] ' 5~` の起点は 5 で終端は 3 だから、並びから向きを読み直すと降順に見えて
+	// しまう。step が符号を持っていれば、切っても向きは動かない。
+	return { start: l, step: ONE, end: node.right, signedByEnds: true };
+}
+/**
+ * 64ビットの即値をレジスタへ置く。
+ *
+ * AArch64 の `mov` に載る即値は16ビットまでなので、超える値は `movz` で最下位の非零な
+ * 16ビットを置き、残りを `movk` で埋める。**桁を落として黙って通さない**——`0x40000000`
+ * のような MMIO のアドレスは、下位16ビットだけ置くと別の番地を触ることになる。
+ *
+ * 負の値は2の補数のビット列をそのまま置く。`movn` を使えば命令が減る場合もあるが、
+ * `movz`/`movk` は常に正しい——短くするのは、正しさを確かめてからで足りる。
+ */
+function emitImm(em, reg, value, comment) {
+	const u = BigInt.asUintN(64, BigInt(value));
+	const chunks = (fill) => {
+		const out = [];
+		for (let shift = 0; shift < 64; shift += 16) {
+			const c = (u >> BigInt(shift)) & 0xffffn;
+			if (c !== fill) out.push([shift, c]);
+		}
+		return out;
+	};
+	const zeros = chunks(0n); // 0 で埋まらない桁
+	const ones = chunks(0xffffn); // 0xffff で埋まらない桁
+	const lsl = (shift) => (shift === 0 ? "" : `, lsl #${shift}`);
+
+	// 16ビットに収まる正の値は `mov` 1つ。これは `movz` の別名なので出る機械語は同じで、
+	// 読むときに桁を数えなくて済む。
+	if (u <= 0xffffn) {
+		em.emit(`mov ${reg}, #${u}`, comment);
+		return;
+	}
+
+	// 負の値は上の桁が 0xffff で埋まる。`movn` は反転を置くので、そちらが短い。
+	// `-1` は `movn reg, #0` の1命令で済む。
+	if (ones.length < zeros.length) {
+		if (ones.length === 0) {
+			em.emit(`movn ${reg}, #0`, comment);
+			return;
+		}
+		const [s0, c0] = ones[0];
+		em.emit(`movn ${reg}, #0x${(0xffffn ^ c0).toString(16)}${lsl(s0)}`, comment);
+		for (const [s, c] of ones.slice(1)) em.emit(`movk ${reg}, #0x${c.toString(16)}${lsl(s)}`);
+		return;
+	}
+	if (zeros.length === 0) {
+		em.emit(`mov ${reg}, #0`, comment);
+		return;
+	}
+	const [s0, c0] = zeros[0];
+	em.emit(`movz ${reg}, #0x${c0.toString(16)}${lsl(s0)}`, comment);
+	for (const [s, c] of zeros.slice(1)) em.emit(`movk ${reg}, #0x${c.toString(16)}${lsl(s)}`);
 }
 function loadAt(dst, base, size) {
 	if (size === 1) return `ldrb ${dst.replace("x", "w")}, [${base}]`;
@@ -1530,6 +1628,13 @@ function collectSignatures(nodes, em) {
 	return sig;
 }
 function genFunction(name, lambdaNode, env, em, mono) {
+	// **本体の中では、名前は関数のスコープで解決する。**
+	//
+	// 外側の識別子テーブルだけを見ていると、仮引数が「見つからない名前」になる。型は
+	// `callsiteParamTypes` が別経路で運んでいたので気づきにくかったが、**渡し方**
+	// （`repr`）は束縛にしか無い——規則を受けた仮引数が要素列への参照に見えていた。
+	// スコープは親へ繋がっているので、これでグローバルも今まで通り引ける。
+	env = lambdaNode.scope || env;
 	const paramNode = lambdaNode.left;
 	const allShapes = paramShapesOf(paramNode);
 	// 具体化された関数ポインタの仮引数は**引数として渡ってこない**（命令へ焼き込み済み）。

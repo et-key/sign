@@ -570,7 +570,7 @@ check("バックトラックの形", asm("g : x ? x\nf : a ? (g a) | (f (a - 1))
 // 狭いときと同じ種類の嘘である。
 checkTrue("族のままなら出せない（GPR か FPU か決まらない）", asm("f : a b ? a + b").diagnostics.length > 0);
 checkTrue("浮動小数はまだ出せない", asm("f : a ? 0.0 + a\nf 1.0").diagnostics.length > 0);
-checkTrue("16ビットを超える即値はまだ出せない", asm("f : a ? a + 70000\nf 1").diagnostics.length > 0);
+
 checkTrue("未対応ターゲットは名指しする", asm("f : a ? a + 1\nf 1", "cortex_m").diagnostics.length > 0);
 // 出せるものは診断が出ない。
 check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n ? add (sq n) (sq n)\nf 3").diagnostics.length, 0);
@@ -667,10 +667,29 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 	checkTrue("束縛を経ても算術", body("c : [0 ~+ 1]\nf : n ? c ' 3\nf 1", "f").includes("madd x9, x10, x11, x9"));
 	// **場所はロードのまま。** 型が同じ `List` でも、実体が違えば命令が違う。
 	checkTrue("場所はロード", has("f : s ? s ' 0\nf `abc`", "ldrb w14, [x9, x10]"));
-	// 終端があるなら範囲を見る。向きは start と end の並びが決める（降順もある）。
+	// **終端があるなら範囲を見る。向きは歩幅の符号が持つ。**
+	//
+	// `[5 ~ 1]` は 5,4,3,2,1 なので歩幅は −1 である。端点の並びから読み直すのでは足りない
+	// ——切った規則（`[0 ~ 3] ' 5~`）は起点が終端を越えているので、並びで見ると降順に
+	// 化ける。構築のときに符号へ畳んでおけば、切っても向きは動かない。
 	const b5 = body("f : n ? [1 ~ 5] ' 3\nf 1", "f");
-	checkTrue("有界は向きを見る", b5.includes("cset x14, le") && b5.includes("csel x15, x15, x11, ne"), b5.join(" / "));
-	checkTrue("無限は範囲を見ない", !body("f : n ? [0 ~+ 1] ' 3\nf 1", "f").includes("cset x14, le"));
+	checkTrue("有界は範囲を見る", b5.includes("csel x15, x15, x11, ge"), b5.join(" / "));
+	checkTrue("無限は範囲を見ない", !body("f : n ? [0 ~+ 1] ' 3\nf 1", "f").includes("csel x15, x15, x11, ge"));
+	// 歩幅を書かない形は、端点の並びから ±1 を作る。書いてある形は触らない。
+	checkTrue("向きは構築時に畳む", body("f : n ? [5 ~ 1] ' 3\nf 1", "f").includes("csel x11, x11, x12, le"));
+	checkTrue("書いた歩幅は触らない", !body("f : n ? [2 ~+ 3 ~ 9] ' 1\nf 1", "f").includes("csel x11, x11, x12, le"));
+}
+
+// ---- 16ビットを超える即値は movz/movk の連なりになる ----
+//
+// 桁を落として黙って通さない——`0x40000000` のような番地は、下位16ビットだけ置くと
+// 別の番地を触ることになる。負の値は `movn` の方が短い。
+{
+	const ins = (src) => body(src, "f").filter((l) => /^(mov|movz|movk|movn) x9/.test(l));
+	check("16ビットまでは mov 1つ", ins("f : a ? a + 65535\nf 1"), ["mov x9, #65535"]);
+	check("超えたら movz と movk", ins("f : a ? a + 70000\nf 1"), ["movz x9, #0x1170", "movk x9, #0x1, lsl #16"]);
+	check("上位だけなら movz 1つ", ins("f : a ? a + 0x40000000\nf 1"), ["movz x9, #0x4000, lsl #16"]);
+	checkTrue("超える即値でも診断は出ない", asm("f : a ? a + 70000\nf 1").diagnostics.length === 0);
 }
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

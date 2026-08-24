@@ -563,6 +563,12 @@ function getPropResultType(node, env) {
   // 範囲添字は部分列なので器と同じ型。要素型もそのまま引き継ぐ。
   if (sliceIndexNode(node)) {
     if (containerType === "List") node.elementType = containerElementType(node.left, env);
+    // **規則を切っても規則である。** `repr` は「どう置かれているか」を持つ帳簿なので、
+    // ここで落とすと `[0 ~ 3] ' 2~` が「要素列への参照」に見え、Pass 4 が `start` を
+    // ポインタとして読む命令を出す。切るというのは起点をずらす算術1つであって、
+    // 要素はどこにも現れない。
+    const baseRepr = base && base.repr ? base.repr : node.left && node.left.repr;
+    if (baseRepr === "rule") node.repr = "rule";
     return containerType;
   }
 
@@ -1634,6 +1640,11 @@ function collectCallsiteParamTypes(nodes, env) {
       });
     }
     const observed = names.map(() => new Set());
+    // **型だけでは渡し方が決まらない。** `[1 ~ 10]` の型は `List` だが、置かれているのは
+    // `{start, step, end}` という規則であって要素列への参照ではない（`repr`）。型を運んで
+    // `repr` を落とすと、呼ぶ側は3本で渡し受ける側は2本で受け、しかも `start` をポインタ
+    // として読む命令が出る——実際にそうなっていた。渡し方は型と一緒に運ぶ。
+    const reprObs = names.map(() => new Set());
     // **型名だけでは足りない。** `Struct` はスロットごとに型が違ってよいので、`p ' 0` が
     // 何を返すかは並びを知らないと決まらない。呼び出しサイトはそれを知っているので、
     // 型と一緒に形も運ぶ。全サイトで形が一致したときだけ採る。
@@ -1652,6 +1663,11 @@ function collectCallsiteParamTypes(nodes, env) {
         // `{Int, Scalar}` と食い違って、`try_col` から Int で呼ばれている事実が
         // 打ち消されていた。
         if (t && t !== "Unit" && !FAMILY_MEMBERS[t]) observed[i].add(t);
+        // 決まっていないものは観測ではない——ここも再帰で効く。`sum c (i + 1) …` は
+        // 自分の `c` を渡すので、まだ決まっていないうちは証拠に数えない。1周目で
+        // 呼び出しサイトの `[1 ~ 10]` から決まり、2周目で自己呼び出しも一致する。
+        const rp = reprOfNode(args[i], args.scope || env);
+        if (rp) reprObs[i].add(rp);
         if (t !== "Struct") return;
         const sh = structShapeOf(args[i], args.scope || env);
         if (!sh) { shapes[i].agreed = false; return; }
@@ -1693,9 +1709,31 @@ function collectCallsiteParamTypes(nodes, env) {
         b.slotShape = sh || null;
         changed = true;
       }
+      // 全サイトが同じ渡し方で一致したときだけ採る。食い違うなら決まらないのが正しい。
+      const rp = [...reprObs[i]];
+      if (rp.length === 1 && b.repr !== rp[0]) {
+        b.repr = rp[0];
+        changed = true;
+      }
     });
   }
   return changed;
+}
+
+/**
+ * その式が**どう置かれているか**（`repr`）。型（`atomType`）とは別の帳簿で、
+ * 「規則なのか、要素列への参照なのか」を持つ。識別子なら束縛先まで辿る。
+ */
+function reprOfNode(n, scope) {
+  if (!n) return null;
+  if (n.repr) return n.repr;
+  const d = derefToNode(n, scope);
+  if (d && d.repr) return d.repr;
+  if (isIdentifierNode(n) && scope) {
+    const b = envLookup(scope, n.value);
+    if (b && b.repr) return b.repr;
+  }
+  return null;
 }
 
 /**
