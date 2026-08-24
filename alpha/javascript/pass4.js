@@ -920,6 +920,9 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (!parts) return em.fail(n, `等差のレンジだけを出せます（${n.op}——添字が start + i × step にならない）`);
 		const want = slotsOfNode(n, em.conf, em.env);
 		if (want === null) return em.fail(n, `レンジの渡し方が決まりません（${n.atomType}）`);
+		// **長さ1のリストは存在しない。** 端点が同じレンジ（`[3 ~ 3]`）は1要素であり、
+		// それはスカラーである——型がそう言っているので、置くのも起点1本でよい。
+		if (want === 1) return genExpr(parts.start, env, em, scope);
 		const pieces = [parts.start, parts.step, ...(parts.end ? [parts.end] : [])];
 		if (pieces.length !== want) return em.fail(n, `レンジの本数が合いません（${pieces.length} と ${want}）`);
 		const base = em.slot;
@@ -1405,7 +1408,33 @@ function genIndex(node, env, em, scope) {
 			const step = idx.right;
 			if (!(step && step.type === "atom" && step.kind === "number" && Number(step.value) === 1)) return null;
 		}
-		if (rw !== cw) return null; // 部分列は器と同じ型でなければおかしい
+		// 部分列は器と同じ型でなければおかしい——**ただし長さ1は別**である。1要素の器は
+		// 存在しないので、そこはスカラー（1本）になる。
+		if (rw !== cw && !(bounded && bounded.count === 1 && rw === 1)) return null;
+	}
+
+	// **長さ1の切り出しは要素そのものである。** 1要素の器は存在しないので、`s ' (i ~+ 1 ~ i)`
+	// は `s ' i` と同じものである——型がそう言っているので、引くのも要素1つでよい。
+	if (bounded && bounded.count === 1 && rw === 1 && cw === 2) {
+		const et = node.atomType;
+		const em1 = et ? measure({ atomType: et }, { target: conf.target, charset: conf.charset }) : null;
+		if (!em1 || !em1.size) return em.fail(node, `切り出した要素の幅が決まりません（${et}）`);
+		const cw2 = genExpr(node.left, env, em, scope);
+		if (cw2 === false) return false;
+		if (cw2 !== cw) { em.pop(cw2); return null; }
+		const co2 = (em.slot - cw) * 8;
+		em.emit(`mov ${SCRATCH[1]}, #${bounded.start}`, "長さ1の切り出しは要素そのもの");
+		em.load(SCRATCH[0], co2 + 8, "len");
+		em.emit(`cmp ${SCRATCH[1]}, ${SCRATCH[0]}`, "範囲内か");
+		em.load(SCRATCH[0], co2, "ptr");
+		em.emit(loadElem("w14", SCRATCH[0], SCRATCH[1], em1.size), `${em1.size} byte の要素`);
+		em.emit("movz x12, #0x8000, lsl #48", "範囲外は __");
+		em.emit(`csel ${SCRATCH[0]}, x14, x12, lo`);
+		em.pop(cw);
+		const eo = em.push();
+		if (eo === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		em.store(SCRATCH[0], eo, "要素");
+		return 1;
 	}
 
 	// **`x ' 0~` は恒等射である。**

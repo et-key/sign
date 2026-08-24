@@ -161,7 +161,15 @@ function rangeResultType(node, env) {
     if (typeof el === "string") node.elementType = el;
     return "Iterator";
   }
-  // 文字の範囲は文字の並び＝String（String ≅ List(0u)）。それ以外は List。
+  // **長さ1のリストは存在しない。** 1要素の器はスカラーと同型なので（`[5]` は `Int`）、
+  // その瞬間にスカラーへ落ちる。端点が同じレンジ（`[3 ~ 3]`）は1要素であり、値としては
+  // 既に `3` になっている（interpreter.js）——型だけが器のまま取り残されていた。
+  // **型が値より広い**のは、`is_digit` を壊したのと同じ形である。
+  const one = rangeSingleton(node, env);
+  if (one) {
+    const el = rangeElementType(startType, endType);
+    return typeof el === "string" ? el : startType;
+  }
   // 文字の範囲は文字の並び＝String（`String ≅ List(Char)`）。端点は `Char` である。
   if (startType === "Char" && endType === "Char") {
     node.elementType = "Char";
@@ -171,6 +179,45 @@ function rangeResultType(node, env) {
   const el = rangeElementType(startType, endType);
   if (typeof el === "string") node.elementType = el;
   return "List";
+}
+
+// 切り出しの長さが静的に1か（`s ' (1 ~+ 1 ~ 1)`）。終端の無い形は器の長さが要るので
+// 判定しない——長さが実行時に決まるからこそ `Char | String` という直和が要る。
+function sliceLengthOne(node, env) {
+  let r = node.right;
+  while (r && r.type === "block" && Array.isArray(r.lines) && r.lines.length === 1) r = r.lines[0];
+  if (!r || r.type !== "operation" || r.name !== "range") return false;
+  const num = (n) => {
+    let d = n;
+    while (d && d.type === "block" && Array.isArray(d.lines) && d.lines.length === 1) d = d.lines[0];
+    return d && d.type === "atom" && d.kind === "number" && Number.isInteger(Number(d.value)) ? Number(d.value) : null;
+  };
+  const end = num(r.right);
+  if (end === null) return false;
+  let l = r.left;
+  while (l && l.type === "block" && Array.isArray(l.lines) && l.lines.length === 1) l = l.lines[0];
+  if (l && l.type === "operation" && RANGE_STEP_OPS.has(l.name)) {
+    const st = num(l.left);
+    const sp = num(l.right);
+    return st !== null && sp === 1 && st === end;
+  }
+  return num(l) === end;
+}
+
+// 端点が静的に等しいレンジか（`[3 ~ 3]`）。**1要素の器は存在しない**ので、そのときは
+// 器ではなくスカラーである。実行時に決まる端点は判定できないので false（原理4）。
+function rangeSingleton(node, env) {
+  if (RANGE_STEP_OPS.has(node.name)) return false;
+  const [s, e] = rangeEndpoints(node, env);
+  const lit = (n) => {
+    const d = derefToNode(n, env);
+    if (!d || d.type !== "atom") return null;
+    if (d.kind === "number" && Number.isInteger(Number(d.value))) return Number(d.value);
+    return null;
+  };
+  const a = lit(s);
+  const b = lit(e);
+  return a !== null && a === b;
 }
 
 // type_system.md §3.2「要素型の join」: 余積で構築される List の要素型を求める。
@@ -612,6 +659,15 @@ function getPropResultType(node, env) {
 
   // 範囲添字は部分列なので器と同じ型。要素型もそのまま引き継ぐ。
   if (sliceIndexNode(node)) {
+    // **長さ1のリストは存在しない。** 終端が起点と同じ切り出し（`s ' (1 ~+ 1 ~ 1)`）は
+    // 1要素であり、値としては既にスカラーになっている（interpreter.js）——型だけが器の
+    // まま取り残されると、幅が値より広くなる。長さが実行時に決まる形（`s ' i~`）は
+    // 判定できないので触らない——**そこが `Char | String` が存在する理由**である。
+    if (sliceLengthOne(node, env)) {
+      if (containerType === "String") return "Char";
+      const el = containerElementType(node.left, env);
+      if (el) return el;
+    }
     if (containerType === "List") node.elementType = containerElementType(node.left, env);
     // **規則を切っても規則である。** `repr` は「どう置かれているか」を持つ帳簿なので、
     // ここで落とすと `[0 ~ 3] ' 2~` が「要素列への参照」に見え、Pass 4 が `start` を
