@@ -141,9 +141,16 @@ function readStreamFunction(node, group) {
 	//
 	// 見るのは型である。器（`String` / `List` / `Struct` / `Iterator`）が並んでいたら諦める。
 	const CONTAINER = new Set(["String", "List", "Struct", "Iterator", "Implicit"]);
-	if (arms.some((a) => a.prefix.some((p) => !p || CONTAINER.has(p.atomType) || (p.type === "operation" && JOIN_OPS.has(p.name))))) {
-		return null;
-	}
+	// ただし**入力の連続した位置が並んでいるなら通す**。`space (c (rest ' 0) (rest ' 1)) space`
+	// の真ん中は3文字の器に見えるが、それは入力のその3文字そのものであり、切り出し1つで
+	// 書ける（`printElement`）——確保は要らない。
+	const dmap = destructureMap(lam.left);
+	const okElement = (p) => {
+		if (!p) return false;
+		if (!CONTAINER.has(p.atomType) && !(p.type === "operation" && JOIN_OPS.has(p.name))) return true;
+		return !!dmap && consecutiveRun(p, dmap) !== null;
+	};
+	if (arms.some((a) => a.prefix.some((p) => !okElement(p)))) return null;
 	// **列であるには、続く枝が要る。** 全部が終端なら、それはただの分岐である。
 	if (!arms.some((a) => a.call)) return null;
 
@@ -193,23 +200,31 @@ function findStreamFunctions(nodes) {
  */
 
 // 並置（連接・適用）は記号が空白なので、項の間に空白1つだけを置く。
-function printNode(n) {
+function printNode(n, subst = null) {
 	if (!n || typeof n !== "object") return null;
 	if (n.type === "atom") {
-		if (n.kind === "identifier") return bare(n.value);
+		if (n.kind === "identifier") {
+			const name = bare(n.value);
+			// **分割代入を添字へ戻す。** `[c ~rest]` で受けた名前は、入力を丸ごと受ける形
+			// （`s`）から見れば `s ' 0` と `s ' 1~` である。同じものの別の書き方でしかない
+			// が、**添字の形なら「入力の連続した位置」だと分かる**——分かれば器を作らずに
+			// 切り出しで済む（`sep` の枝が3文字を並べているのは入力の3文字そのものである）。
+			if (subst && Object.prototype.hasOwnProperty.call(subst, name)) return subst[name];
+			return name;
+		}
 		return String(n.value);
 	}
 	if (n.type === "operation") {
 		if (n.position === "prefix") {
-			const o = printNode(n.operand);
+			const o = printNode(n.operand, subst);
 			return o === null ? null : `${n.op}${o}`;
 		}
 		if (n.position === "postfix") {
-			const o = printNode(n.operand);
+			const o = printNode(n.operand, subst);
 			return o === null ? null : `(${o})${n.op}`;
 		}
-		const l = printNode(n.left);
-		const r = printNode(n.right);
+		const l = printNode(n.left, subst);
+		const r = printNode(n.right, subst);
 		if (l === null || r === null) return null;
 		// 並置は記号が空白1つ。それ以外は記号の両側に空白を置く（中置は空白で区切る）。
 		return n.op === " " ? `(${l} ${r})` : `(${l} ${n.op} ${r})`;
@@ -217,7 +232,7 @@ function printNode(n) {
 	// ブロックは1行ものだけ扱う。複数行のブロックが式の位置に来る形は、ここでは諦める。
 	if (Array.isArray(n.lines)) {
 		if (n.lines.length !== 1) return null;
-		const inner = printNode(n.lines[0]);
+		const inner = printNode(n.lines[0], subst);
 		return inner === null ? null : `(${inner})`;
 	}
 	return null;
@@ -240,6 +255,85 @@ function printParams(p) {
 	}
 	if (parts.length === 0) return null;
 	return p.bracket ? `[${parts.join(" ")}]` : parts.join(" ");
+}
+
+/**
+ * `[c ~rest]` で受ける形を、入力を丸ごと受ける形（`s`）へ読み替える表。
+ * 頭と尾の名前、そして名前 → 添字式の置換を返す。この形でなければ null。
+ */
+function destructureMap(paramNode) {
+	if (!paramNode || paramNode.type !== "params" || !paramNode.bracket) return null;
+	const es = paramNode.entries || [];
+	if (es.length !== 2 || es[0].rest || !es[1].rest || !es[0].name || !es[1].name) return null;
+	const head = bare(es[0].name);
+	const rest = bare(es[1].name);
+	return { head, rest, subst: { [head]: "(s ' 0)", [rest]: "(s ' 1~)" } };
+}
+
+// その式が入力の何番目を指しているか。`c` は 0、`rest ' i` は i+1。分からなければ null。
+function inputPosition(node, dm) {
+	const n = unparen(node);
+	if (!n) return null;
+	if (isIdent(n) && bare(n.value) === dm.head) return 0;
+	if (n.type === "operation" && n.name === "get_prop" && isIdent(unparen(n.left))) {
+		if (bare(unparen(n.left).value) !== dm.rest) return null;
+		const i = unparen(n.right);
+		if (i && i.type === "atom" && i.kind === "number" && Number.isInteger(Number(i.value))) return Number(i.value) + 1;
+	}
+	return null;
+}
+
+// その式が入力の何番目から末尾までを指しているか。`rest` は 1、`rest ' (i ~+ 1)` は i+1。
+function suffixPosition(node, dm) {
+	const n = unparen(node);
+	if (!n) return null;
+	if (isIdent(n) && bare(n.value) === dm.rest) return 1;
+	if (n.type === "operation" && n.name === "get_prop" && isIdent(unparen(n.left))) {
+		if (bare(unparen(n.left).value) !== dm.rest) return null;
+		const r = unparen(n.right);
+		if (r && r.type === "operation" && r.name === "range_arithmetic") {
+			const st = unparen(r.left);
+			const sp = unparen(r.right);
+			if (st && st.kind === "number" && sp && sp.kind === "number" && Number(sp.value) === 1) return Number(st.value) + 1;
+		}
+	}
+	return null;
+}
+
+/**
+ * 並べる要素を印字する。**入力の連続した位置が並んでいるなら、切り出し1つで書く。**
+ *
+ * `c (rest ' 0) (rest ' 1)` は入力の 0,1,2 番目であり、器を作る必要はない——同じ領域を
+ * 指したまま頭と長さを決めればよい。ここが `sep` の枝が均せなかった理由である。
+ */
+// 並んでいるのが入力の連続した位置なら `[先頭, 末尾]` を返す。そうでなければ null。
+function consecutiveRun(node, dm) {
+	const items = joinItems(node).map(unparen);
+	if (items.length < 2) return null;
+	const positions = items.map((it) => inputPosition(it, dm));
+	if (positions.some((p) => p === null)) return null;
+	for (let i = 1; i < positions.length; i++) if (positions[i] !== positions[i - 1] + 1) return null;
+	return [positions[0], positions[positions.length - 1]];
+}
+
+/**
+ * 並べる要素を印字する。**入力の連続した位置が並んでいるなら、位置ごとの要素へ展開する。**
+ *
+ * `(c (rest ' 0) (rest ' 1))` は括弧のせいで1つの要素に見えるが、中身は入力の 0,1,2 番目
+ * である。**切り出し1つに畳んではいけない**——列の要素数が変わってしまう（3文字が1要素に
+ * なる）。位置ごとにばらせば、器も作らず、列も元のままである。
+ *
+ * @returns 印字した要素の配列（ふつうは1つ、連続位置なら並んだぶんだけ）
+ */
+function printElements(node, dm) {
+	const run = consecutiveRun(node, dm);
+	if (run) {
+		const out = [];
+		for (let p = run[0]; p <= run[1]; p++) out.push(`s ' ${p}`);
+		return out;
+	}
+	const one = printNode(node, dm.subst);
+	return one === null ? null : [one];
 }
 
 /**
@@ -341,11 +435,23 @@ function generatePullers(funcs, opts = {}) {
 	// --- 枝ごとの「k 番目」と「次の入力」 ---
 	for (let n = 0; n < flat.length; n++) {
 		const a = flat[n];
-		const ps = printParams(a.owner.paramNode);
+		// **分割代入は添字へ戻せる。** `[c ~rest]` で受けた名前は、入力を丸ごと受ける形から
+		// 見れば `s ' 0` と `s ' 1~` である。戻すと「入力の連続した位置」が見えるようになり、
+		// 並んでいるのが入力の切り出しなら**器を作らずに済む**（`sep` の枝が3文字を並べて
+		// いるのは、入力のその3文字そのものである）。
+		const dm = destructureMap(a.owner.paramNode);
+		const ps = dm ? "s" : printParams(a.owner.paramNode);
 		if (ps === null) return null;
 		// k 番目。要素が1つなら分岐は要らない。
-		const elems = a.prefix.map(printNode);
-		if (elems.some((e) => e === null)) return null;
+		// 連続位置は位置ごとの要素へ展開されるので、枝の要素数が増えることがある。
+		let elems = [];
+		for (const p of a.prefix) {
+			const got = dm ? printElements(p, dm) : [printNode(p)];
+			if (!got || got.some((e) => e === null)) { elems = null; break; }
+			elems.push(...got);
+		}
+		if (elems === null) return null;
+		a.emitted = elems.length; // `_len` はここで決まる（元の要素数ではない）
 		if (elems.length === 0) {
 			// 何も並べない枝。引かれることは無いが、形を揃えておく（`_len` が 0 を返す）。
 			out.push(`${group}_at${n} : k ${ps} ? __`);
@@ -359,7 +465,9 @@ function generatePullers(funcs, opts = {}) {
 		}
 		// 次の入力。再帰呼び出しの実引数がそれである。終端の枝には次が無い。
 		if (a.call) {
-			const nx = printNode(a.call.args[0]);
+			// 次の入力も位置で書ける（`rest ' 2~` は入力の 3 番目から末尾まで）。
+			const pos = dm ? suffixPosition(a.call.args[0], dm) : null;
+			const nx = pos !== null ? `s ' ${pos}~` : printNode(a.call.args[0], dm ? dm.subst : null);
 			if (nx === null) return null;
 			out.push(`${group}_nx${n} : ${ps} ? ${nx}`);
 		}
@@ -376,7 +484,7 @@ function generatePullers(funcs, opts = {}) {
 		for (let n = 0; n < flat.length; n++) lines.push(`\ta = ${n} : ${body(n)}`);
 		return lines.join("\n");
 	};
-	out.push(dispatch("len", "a", (n) => String(flat[n].prefix.length)));
+	out.push(dispatch("len", "a", (n) => String(flat[n].emitted ?? flat[n].prefix.length)));
 	out.push(dispatch("at", "a k s", (n) => `${group}_at${n} k s`));
 	// 終端の枝は入力を動かさない。動かす先が無いので、そのまま返す（幅を揃えるため）。
 	out.push(dispatch("nx", "a s", (n) => (flat[n].call ? `${group}_nx${n} s` : "s")));

@@ -113,6 +113,10 @@ sameLength("1つを3つにする", "tri : [c ~rest] ? c c c (tri rest)", "`ab`")
 sameLength("入力を飛ばす", "sk : [c ~rest] ? c (sk (rest ' 1~))", "`abcdef`");
 sameLength("枝で本数が変わる", "v : [c ~rest] ?\n\tc = `a` : c c (v rest)\n\tc (v rest)", "`abaca`");
 sameLength("仲間へ移る", "p : [c ~rest] ?\n\tc = `\"` : c (q rest)\n\tc (p rest)\nq : [c ~rest] ?\n\tc = `\"` : c (p rest)\n\tc c (q rest)", '`ab"cd"ef`');
+// **入力の連続した位置を並べる枝**（`sep` の形）。3文字を1つの要素として並べているが、
+// それは入力のその3文字そのものなので、切り出し1つになる——確保は要らない。
+sameStream("連続位置を切り出す", "w : [c ~rest] ?\n\tc = `-` : (c (rest ' 0) (rest ' 1)) (w (rest ' 2~))\n\tc (w rest)", "`ab-cdef`");
+sameStream("2文字ぶんの切り出し", "w : [c ~rest] ?\n\tc = `-` : (c (rest ' 0)) (w (rest ' 1~))\n\tc (w rest)", "`a-bc-de`");
 
 // ---- 実物を読めること ----
 //
@@ -120,11 +124,16 @@ sameLength("仲間へ移る", "p : [c ~rest] ?\n\tc = `\"` : c (q rest)\n\tc (p 
 // 5つ持ち回る）や `preprocess`（ただの末尾呼び出し）はそうではない。
 // ---- 均せない形は均さない ----
 //
-// **要素そのものが構築なら均せない。** `space (c (rest ' 0) (rest ' 1)) space` の真ん中は
-// 1つの要素であって3つではない（`a (b c) d` は `["a","bc","d"]`——余積は「右辺を1要素として
-// 足す」）。平らにすると答えが変わり、そのまま返すと複数文字の器をその場で作ることになる。
-// どちらも黙ってやってはいけない。
-check("入れ子の構築は均さない", streams("f : [c ~rest] ? c (c (rest ' 0)) c (f rest)"), []);
+// **並べるものは1要素でなければならない。ただし入力の連続した位置なら切り出せる。**
+//
+// `space (c (rest ' 0) (rest ' 1)) space` の真ん中は1つの要素であって3つではない
+// （`a (b c) d` は `["a","bc","d"]`——余積は「右辺を1要素として足す」）。平らにすると
+// 答えが変わり、そのまま返すと複数文字の器をその場で作ることになる。**ところがその
+// 3文字は入力のその3文字そのもの**なので、切り出し1つで書ける——確保は要らない。
+// 分割代入を添字へ戻すと（`c` は `s ' 0`、`rest ' i` は `s ' (i+1)`）それが見える。
+check("連続した位置なら均せる", streams("f : [c ~rest] ? c (c (rest ' 0)) c (f rest)").length, 1);
+// 連続していなければ均さない（`(c c)` は 0 番目を2つ並べており、切り出しにならない）。
+check("連続していなければ均さない", streams("f : [c ~rest] ? c (c c) c (f rest)"), []);
 // **群は閉じていなければならない。** 枝が移る先が均されていなければ `_na` は存在しない
 // 名前へ跳ぶ。片方だけ均すのは跳び先を失うことである。
 {
@@ -176,13 +185,15 @@ check("器が並ぶ形は均さない", streams("f : [c ~rest] ?\n\tc = `;` : c 
 	const found = streams(src);
 	// `sep` は枝の真ん中に構築があるので均せない。`in_quote` は均せるが枝が `sep` へ移る
 	// ので群が閉じない。
-	check("preprocess.sn のストリーム", found.map((f) => f.name).sort(), ["close_all", "closers", "delta", "head_line", "in_quote", "unwind"]);
+	// `sep` の枝が並べる3文字は**入力のその3文字**なので切り出し1つで書ける。均せるように
+	// なったので `in_quote` の群も閉じる（枝が `sep` へ移れる）。
+	check("preprocess.sn のストリーム", found.map((f) => f.name).sort(), ["close_all", "closers", "delta", "head_line", "in_quote", "sep", "unwind"]);
 	check("in_quote の枝の本数", found.find((f) => f.name === "in_quote").arms.map((a) => a.prefix.length), [1, 1, 1]);
 	const groups = groupStreamFunctions(found);
-	check("閉じた群だけ残る", groups.map((g) => g.map((f) => f.name)), [["delta"], ["head_line"], ["unwind"], ["closers"], ["close_all"]]);
+	check("閉じた群だけ残る", groups.map((g) => g.map((f) => f.name)), [["sep", "in_quote"], ["delta"], ["head_line"], ["unwind"], ["closers"], ["close_all"]]);
 	// 実際に均せるのは、状態が1つで、式に再帰が埋まっていないものだけ。
 	const gen = (nm) => generatePullers(groups.find((g) => g[0].name === nm)) !== null;
-	check("均せる群", groups.map((g) => g[0].name).filter(gen), ["head_line", "close_all"]);
+	check("均せる群", groups.map((g) => g[0].name).filter(gen), ["sep", "head_line", "close_all"]);
 	checkTrue("状態が2つならまだ均さない", !gen("unwind") && !gen("closers"));
 	checkTrue("式に再帰が埋まっていたら均さない", !gen("delta"));
 	// 状態が1つの器で表せない形（`walk`）はまだ均さない——カーソルが太る。

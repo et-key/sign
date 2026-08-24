@@ -1386,14 +1386,25 @@ function genIndex(node, env, em, scope) {
 	// 「要素1つ」を出そうとして幅が合わなくなっていた——同じ式について2つのパスが違う
 	// ことを言う、いつもの壊れ方である。
 	const idx = unwrap(node.right);
-	const isSlice = !!idx && idx.type === "operation" && idx.name === "range_arithmetic";
+	// **切り出しには終端の有る形と無い形がある。**
+	//
+	//   s ' i~            i から末尾まで（`i ~+ 1` へ均されている）
+	//   s ' (i ~+ 1 ~ j)  i から j まで（長さが決まっている）
+	//
+	// どちらも同じ機械である——頭をずらして長さを決めるだけで、コピーは起きない。
+	// 終端の有る形は、入力の連続した位置を切り出すときに出る（`sep` の枝が3文字を
+	// 並べているのは、入力のその3文字そのものである）。
+	const bounded = !!idx && idx.type === "operation" && idx.name === "range" ? boundedSlice(idx) : null;
+	const isSlice = (!!idx && idx.type === "operation" && idx.name === "range_arithmetic") || !!bounded;
 	const ruleLeft = isRuleNode(node.left, conf, env);
 	if (isSlice) {
-		// 歩幅1の「そこから末尾まで」だけを出せる。飛ばし読みは別の命令列になる。
-		// ここで見ているのは**添字の歩幅**であって器の歩幅ではない——`[0 ~+ 2] ' 1~` の
-		// 添字は `1 ~+ 1`（1番目から全部）で、器の歩幅 2 とは別物である。
-		const step = idx.right;
-		if (!(step && step.type === "atom" && step.kind === "number" && Number(step.value) === 1)) return null;
+		// 歩幅1の切り出しだけを出せる。飛ばし読みは別の命令列になる。ここで見ているのは
+		// **添字の歩幅**であって器の歩幅ではない——`[0 ~+ 2] ' 1~` の添字は `1 ~+ 1`
+		// （1番目から全部）で、器の歩幅 2 とは別物である。
+		if (!bounded) {
+			const step = idx.right;
+			if (!(step && step.type === "atom" && step.kind === "number" && Number(step.value) === 1)) return null;
+		}
 		if (rw !== cw) return null; // 部分列は器と同じ型でなければおかしい
 	}
 
@@ -1471,8 +1482,18 @@ function genIndex(node, env, em, scope) {
 		em.store(SCRATCH[0], off2, "n 番目");
 		return 1;
 	}
-	// 添字そのもの（スライスなら起点）を積む。
-	const iw = genExpr(isSlice ? idx.left : idx, env, em, scope);
+	// 添字そのもの（スライスなら起点）を積む。終端の有る形は起点がリテラルなので直に置く
+	// ——`(i ~+ 1)` をそのまま出すと規則（2本）になってしまう。
+	let iw;
+	if (bounded) {
+		const bo = em.push();
+		if (bo === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		emitImm(em, SCRATCH[0], bounded.start, "切り出しの起点");
+		em.store(SCRATCH[0], bo);
+		iw = 1;
+	} else {
+		iw = genExpr(isSlice ? idx.left : idx, env, em, scope);
+	}
 	if (iw === false) return false;
 	if (iw !== 1) { em.pop(iw + cw); return null; }
 	const io = (em.slot - 1) * 8;
@@ -1501,6 +1522,13 @@ function genIndex(node, env, em, scope) {
 		em.emit(`subs ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "残りの長さ");
 		// 負にはしない。**尽きたら `len = 0`** であり、それが `__` である。
 		em.emit(`csel ${SCRATCH[0]}, ${SCRATCH[0]}, xzr, pl`);
+		// 終端が有るなら、そこまでで頭打ちにする。**足りなければ足りないまま**——
+		// 器が短ければ短い切り出しになるだけで、範囲外を読むことはない。
+		if (bounded) {
+			emitImm(em, "x11", bounded.count, `終端まで ${bounded.count} 要素`);
+			em.emit(`cmp ${SCRATCH[0]}, x11`);
+			em.emit(`csel ${SCRATCH[0]}, ${SCRATCH[0]}, x11, ls`, "短い方を採る");
+		}
 		em.pop(1);
 		em.store(SCRATCH[0], co + 8, "残りの len（0 なら __）");
 		return 2;
@@ -1549,6 +1577,28 @@ function rejoinPair(node, scope) {
 		if (l.value === p.head && r.value === p.rest) return p;
 	}
 	return null;
+}
+
+/**
+ * 終端の有る切り出し `(i ~+ 1 ~ j)` から `{起点, 長さ}` を取り出す。歩幅1の等差で、
+ * 両端がリテラルの形だけを読む——それ以外は長さが実行時に決まるので別の命令列になる。
+ */
+function boundedSlice(idx) {
+	const l = unwrap(idx.left);
+	const r = unwrap(idx.right);
+	const num = (n) => (n && n.type === "atom" && n.kind === "number" && Number.isInteger(Number(n.value)) ? Number(n.value) : null);
+	const end = num(r);
+	if (end === null) return null;
+	// `i ~+ 1 ~ j`（歩幅を書いた形）と `i ~ j`（歩幅は暗黙の 1）の両方。
+	if (l && l.type === "operation" && l.name === "range_arithmetic") {
+		const st = num(unwrap(l.left));
+		const sp = num(unwrap(l.right));
+		if (st === null || sp !== 1) return null;
+		return end < st ? null : { start: st, count: end - st + 1 };
+	}
+	const st = num(l);
+	if (st === null || end < st) return null;
+	return { start: st, count: end - st + 1 };
 }
 
 // 器の要素型。`elementType` はレンジ・List に付く（pass3.js）。
