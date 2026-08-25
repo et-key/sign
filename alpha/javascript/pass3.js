@@ -56,6 +56,11 @@ function isIdentifierNode(n) {
 // 左辺は「どの規則を使うか」を選ぶだけで、数値同士の結果型は昇格格子が決める
 // （＝左辺の型がそのまま結果型になるとは限らない）。
 const NUMERIC_TYPES = new Set(["Int", "Address", "Float", "Vector"]);
+// 数値の昇格格子の順（`arithmeticResultType` が使っている順そのもの）。**下ほど弱い。**
+// `Int` が最下位であることには意味がある——算術の相手に `1` と書いてあっても、それは
+// 「相手も Int だ」とは言っていない。`Address + 1` も `Float + 1` も普通に書ける形で、
+// 昇格すれば通るからである。したがって Int リテラルは**証拠として一番弱い**。
+const NUMERIC_RANK = { Int: 0, Address: 1, Float: 2, Vector: 3 };
 // 「場所」と「ストリーム」。値ではないので算術・比較の対象にならない（§4 は Scalar を要求）。
 // `Implicit` は前置 `~`（持ち上げ）・`'`・前置 `#` が生み、`Iterator` は範囲族が生む。
 const NON_SCALAR_PLACES = new Set(["Implicit", "Iterator"]);
@@ -1584,7 +1589,19 @@ function inferLambdaParamTypes(lambdaNode, env) {
       if (!name || !t) return;
       const prev = inferred.get(name);
       const members = prev === undefined ? null : FAMILY_MEMBERS[prev];
-      if (prev === undefined || (members && members.has(t))) inferred.set(name, t);
+      // 本体から読めた型が具体型でも、それが**算術の相手のリテラルから来た `Int`** なら
+      // 呼び出しサイトの方が近い。`f : a ? a / 2` の `a` は「数である」までしか言われて
+      // いないのに、リテラル `2` の型がそのまま `a` の型として書き込まれていた。呼び出しが
+      // `f 0x40` なら `a` は `Address` であり、Pass 4 はそこで `udiv` と `sdiv` を、
+      // 符号付き条件と符号なし条件を選び分ける。上位ビットの立った番地（カーネル空間）で
+      // 実際に壊れる差である。
+      //
+      // **昇格の向きにしか動かさない。** 格子を上がるのは「もっと広い型だった」という
+      // 情報の追加だが、下がるのは情報の破棄である（`@p` から読んだ `Address` を
+      // 呼び出しの `Int` で潰してはいけない）。族の中で狭める既存の規則と向きは逆だが、
+      // どちらも「分かっていないことを分かったと書かない」の側に倒れている（原理4）。
+      const promotes = NUMERIC_RANK[prev] !== undefined && NUMERIC_RANK[t] > NUMERIC_RANK[prev];
+      if (prev === undefined || promotes || (members && members.has(t))) inferred.set(name, t);
     });
   }
   // 仮引数のデフォルト式も走査する。デフォルトは**他の仮引数を使って書ける**ので

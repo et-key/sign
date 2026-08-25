@@ -51,13 +51,38 @@ const MAX_SLOTS = 16;
 // 器を作る余積の演算（記憶の確保を要求する）。
 const COPRODUCT_BUILD_OPS = new Set(["construct", "concat", "push", "unshift", "product"]);
 
-// 演算子名 → ニーモニック。除算が `sdiv` なのは `Int` が符号ありだから
-// （target_info.js の SIGNEDNESS）。
+// 演算子名 → ニーモニック。**除算と比較だけは符号で分かれる**ので、型の
+// `SIGNEDNESS`（target_info.js）を見て選ぶ——`Int` は符号あり、`Address` と `Char` は
+// 符号なしである。`add`/`sub`/`mul` は2の補数で同じ命令になるので分かれない。
 const INT_OPS = { add: "add", sub: "sub", mul: "mul", div: "sdiv" };
+const DIV_FOR = { signed: "sdiv", unsigned: "udiv" };
 
-// 比較。符号あり整数の条件コード（`Int` は符号あり——target_info.js の SIGNEDNESS）。
-// `assign_equal` は `=`（等価比較）である——`:` が定義なので、`=` は比較に使える。
+// 比較の条件コード。`assign_equal` は `=`（等価比較）である——`:` が定義なので `=` は
+// 比較に使える。
+//
+// **大小は符号で条件が変わる。** `Int` は符号あり（`lt`/`le`/`ge`/`gt`）、`Address` と
+// `Char` は符号なし（`lo`/`ls`/`hs`/`hi`）である。番地を符号ありで比べると、**上位ビット
+// の立った番地**——カーネル空間の `0xFFFF…`——が負の数として扱われ、低位の番地より小さいと
+// 判定される。OS を書く言語でそれは踏む。等価（`eq`/`ne`）は符号に依らない。
 const CMP_COND = { less: "lt", less_equal: "le", assign_equal: "eq", more_equal: "ge", more: "gt", not_equal: "ne" };
+const CMP_COND_UNSIGNED = { less: "lo", less_equal: "ls", assign_equal: "eq", more_equal: "hs", more: "hi", not_equal: "ne" };
+
+// その比較を符号なしで出すか。オペランドの型が決める（結果の型ではない——結果は真偽である）。
+function unsignedCompare(node, conf, env) {
+	const t = (x) => {
+		const u = unwrap(x);
+		if (!u) return null;
+		if (u.atomType) return u.atomType;
+		return null;
+	};
+	const lt = t(node.left);
+	const rt = t(node.right);
+	const uns = (x) => x && SIGNEDNESS[x] === "unsigned";
+	const sgn = (x) => x && SIGNEDNESS[x] === "signed";
+	// どちらかが符号ありなら符号あり（`Int` と `Address` を比べる形は、そもそも稀である）。
+	if (sgn(lt) || sgn(rt)) return false;
+	return uns(lt) || uns(rt);
+}
 
 /**
  * 末尾呼び出しを出したという印。**値を積まない**——制御がそこから戻らないからである。
@@ -659,7 +684,9 @@ function genExpr(node, env, em, scope, tail = false) {
 		const ro = (em.slot - 1) * 8;
 		em.load(SCRATCH[0], lo);
 		em.load(SCRATCH[1], ro);
-		em.emit(`${INT_OPS[n.name]} ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
+		// 除算だけは符号で分かれる（`Address` は符号なし）。
+		const mn = n.name === "div" ? DIV_FOR[machine.signed ? "signed" : "unsigned"] : INT_OPS[n.name];
+		em.emit(`${mn} ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
 		em.pop(1); // 右辺のスロットを返す。結果は左辺のスロットへ書く。
 		em.store(SCRATCH[0], lo);
 		return 1;
@@ -713,7 +740,8 @@ function genExpr(node, env, em, scope, tail = false) {
 		// `movz` 1命令で作れる（0x8000 << 48）。
 		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
 		em.emit(`cmp ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
-		em.emit(`csel ${SCRATCH[0]}, x11, x12, ${CMP_COND[n.name]}`, "真なら値、偽なら __");
+		const table = unsignedCompare(n, em.conf, env) ? CMP_COND_UNSIGNED : CMP_COND;
+		em.emit(`csel ${SCRATCH[0]}, x11, x12, ${table[n.name]}`, "真なら値、偽なら __");
 		em.pop(1);
 		em.store(SCRATCH[0], lo);
 		return 1;
@@ -726,7 +754,9 @@ function genExpr(node, env, em, scope, tail = false) {
 	// 2つの条件を `cset` で取って `and` する。`ccmp` で1命令に詰められるが、条件ごとに
 	// 「偽のときのフラグ」を選ぶ必要があり読みにくい。まず読んで正しいと分かる形にする。
 	if (n.type === "operation" && n.name === "chain_compare") {
-		const cond = CMP_COND[n.compareName];
+		// 連鎖も同じ規則で符号を選ぶ（中央と両端が同じ型なので、左辺で決まる）。
+		const chainTable = unsignedCompare({ left: n.left, right: n.middle }, em.conf, env) ? CMP_COND_UNSIGNED : CMP_COND;
+		const cond = chainTable[n.compareName];
 		if (!cond) return em.fail(n, `連鎖できない比較です（${n.compareName}）`);
 		const sides = [n.left, n.middle, n.right];
 		const ok = (side) => {
