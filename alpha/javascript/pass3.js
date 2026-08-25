@@ -1762,6 +1762,10 @@ function callsitesOf(nodes, fnName, rootEnv) {
 function collectCallsiteParamTypes(nodes, env) {
   let changed = false;
   for (const node of nodes) {
+    // 糖衣が置き換えた元の定義は見ない。**同じ名前の束縛が2つある**ので、両方から
+    // 書き戻すと型が交互に書き換わって不動点が回り続ける（実際 `sep` が String と Struct を
+    // 300 周以上往復し、コンパイルが 85ms から 6 秒になっていた）。勝つのは後の定義である。
+    if (node && node.supersededByDesugar) continue;
     if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
     const rhs = node.right;
     if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
@@ -1963,8 +1967,11 @@ function collectCallsiteParamTypes(nodes, env) {
       const sh = shapes[i].agreed ? shapes[i].shape : null;
       const b = envLookup(scope, name);
       if (!b) return;
-      if (JSON.stringify(b.slotShape) !== JSON.stringify(sh || null)) {
-        b.slotShape = sh || null;
+      // **一度決まった形を消さない。** 不動点は底から単調に上がる設計なので、下げると
+      // 回り続ける——実際ここが `null` と形を往復して、糖衣を通したときに 170 周以上
+      // 回っていた（決まらない周回では単に「まだ分からない」であって、否定ではない）。
+      if (sh && JSON.stringify(b.slotShape) !== JSON.stringify(sh)) {
+        b.slotShape = sh;
         changed = true;
       }
       // 全サイトが同じ渡し方で一致したときだけ採る。食い違うなら決まらないのが正しい。
@@ -2009,6 +2016,10 @@ function cursorGroupOfNode(n, env) {
 function seedCursorPullers(nodes, env) {
   let changed = false;
   for (const node of nodes) {
+    // 糖衣が置き換えた元の定義は見ない。**同じ名前の束縛が2つある**ので、両方から
+    // 書き戻すと型が交互に書き換わって不動点が回り続ける（実際 `sep` が String と Struct を
+    // 300 周以上往復し、コンパイルが 85ms から 6 秒になっていた）。勝つのは後の定義である。
+    if (node && node.supersededByDesugar) continue;
     if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
     const rhs = node.right;
     if (!rhs || !rhs.cursorEntry || !rhs.scope) continue;
@@ -2074,6 +2085,10 @@ function reprOfNode(n, scope) {
 function collectParamTypes(nodes, env) {
   let changed = false;
   for (const node of nodes) {
+    // 糖衣が置き換えた元の定義は見ない。**同じ名前の束縛が2つある**ので、両方から
+    // 書き戻すと型が交互に書き換わって不動点が回り続ける（実際 `sep` が String と Struct を
+    // 300 周以上往復し、コンパイルが 85ms から 6 秒になっていた）。勝つのは後の定義である。
+    if (node && node.supersededByDesugar) continue;
     if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
     const binding = envLookup(env, node.left.value);
     if (!binding) continue;
@@ -2116,6 +2131,13 @@ function collectParamTypes(nodes, env) {
           // ——`f : a b ? a + b` の `a` は1段外に居る。親まで辿る。
           const b = envLookup(scope, name);
           // `Atom` は下限であって情報ではないので、上書きの根拠にしない。
+          //
+          // **ここは横へも動く。** 具体型を別の具体型で上書きしうるので、他の型がまだ
+          // settle していない間は往復する——糖衣を通すと不動点が上限（150周）まで回る。
+          // 「最初の具体型が勝つ」に変えると止まるが、型が上がらなくなる（`sep` などが
+          // ストリームとして認識されなくなる）ので、そちらは採れない。**食い違うなら
+          // 族のままにする**のが筋だが、`inferLambdaParamTypes` が型を1つしか返さないので
+          // そのままでは書けない。**未解決**。
           if (b && t && t !== "Atom" && b.atomType !== t) {
             b.atomType = t;
             changed = true;
@@ -2419,6 +2441,10 @@ function clearTypeAnnotations(node) {
 function collectReturns(nodes, env) {
   let changed = false;
   for (const node of nodes) {
+    // 糖衣が置き換えた元の定義は見ない。**同じ名前の束縛が2つある**ので、両方から
+    // 書き戻すと型が交互に書き換わって不動点が回り続ける（実際 `sep` が String と Struct を
+    // 300 周以上往復し、コンパイルが 85ms から 6 秒になっていた）。勝つのは後の定義である。
+    if (node && node.supersededByDesugar) continue;
     if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
     const rhs = node.right;
     const binding = envLookup(env, node.left.value);
@@ -2569,6 +2595,10 @@ function bareIdent(n) {
  */
 function annotateAll(nodes, env, diagnostics) {
   for (const node of nodes) {
+    // 糖衣が置き換えた元の定義は見ない。**同じ名前の束縛が2つある**ので、両方から
+    // 書き戻すと型が交互に書き換わって不動点が回り続ける（実際 `sep` が String と Struct を
+    // 300 周以上往復し、コンパイルが 85ms から 6 秒になっていた）。勝つのは後の定義である。
+    if (node && node.supersededByDesugar) continue;
     if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
     const rhs = node.right;
     if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
@@ -2582,6 +2612,10 @@ function annotateAll(nodes, env, diagnostics) {
   }
   // `名前 : $対象` の由来を記録する。`@名前` の呼び先を静的に解くのに使う。
   for (const node of nodes) {
+    // 糖衣が置き換えた元の定義は見ない。**同じ名前の束縛が2つある**ので、両方から
+    // 書き戻すと型が交互に書き換わって不動点が回り続ける（実際 `sep` が String と Struct を
+    // 300 周以上往復し、コンパイルが 85ms から 6 秒になっていた）。勝つのは後の定義である。
+    if (node && node.supersededByDesugar) continue;
     if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
     const rhs = node.right;
     if (!rhs || rhs.type !== "operation" || rhs.position !== "prefix" || rhs.name !== "address") continue;
@@ -2622,6 +2656,10 @@ function annotateAll(nodes, env, diagnostics) {
   runFixpoint();
   // 返値だけを底へ戻して、確定した仮引数の型で回し直す。
   for (const node of nodes) {
+    // 糖衣が置き換えた元の定義は見ない。**同じ名前の束縛が2つある**ので、両方から
+    // 書き戻すと型が交互に書き換わって不動点が回り続ける（実際 `sep` が String と Struct を
+    // 300 周以上往復し、コンパイルが 85ms から 6 秒になっていた）。勝つのは後の定義である。
+    if (node && node.supersededByDesugar) continue;
     if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
     const b2 = envLookup(env, node.left.value);
     if (b2 && b2.returns !== undefined) {
@@ -2644,6 +2682,10 @@ function annotateAll(nodes, env, diagnostics) {
   // 閉じる）。代償は、正当な「空」と失敗して `__` に落ちた値を区別できなくなること
   // である（`function_guide.md` の状態ベクタの節）。だから information に留める。
   for (const node of nodes) {
+    // 糖衣が置き換えた元の定義は見ない。**同じ名前の束縛が2つある**ので、両方から
+    // 書き戻すと型が交互に書き換わって不動点が回り続ける（実際 `sep` が String と Struct を
+    // 300 周以上往復し、コンパイルが 85ms から 6 秒になっていた）。勝つのは後の定義である。
+    if (node && node.supersededByDesugar) continue;
     if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
     const rhs = node.right;
     if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
@@ -2673,6 +2715,10 @@ function annotateAll(nodes, env, diagnostics) {
   // 食い違う。分からないことを「分かった」と書かないのが `.st` の原則であり（§1）、
   // 「無い」と断じないのが原理4 の線引きである。
   for (const node of nodes) {
+    // 糖衣が置き換えた元の定義は見ない。**同じ名前の束縛が2つある**ので、両方から
+    // 書き戻すと型が交互に書き換わって不動点が回り続ける（実際 `sep` が String と Struct を
+    // 300 周以上往復し、コンパイルが 85ms から 6 秒になっていた）。勝つのは後の定義である。
+    if (node && node.supersededByDesugar) continue;
     if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
     const binding = envLookup(env, node.left.value);
     if (binding && binding.returnsSeeded) binding.returns = null;
