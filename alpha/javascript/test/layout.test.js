@@ -255,5 +255,33 @@ check("Struct は形が型にあるので {ptr} だけ", passVia("p : [\n\tx : 1
 // 零対象は何も渡らない。
 check("Unit は何も渡らない", passVia("u : __"), "register/0");
 
+// ---- 底に着かない型は「測れない」と答える（落ちない） ----
+//
+// 器の要素がまた同じ器になる形（`List(List(List(…)))`）は大きさが存在しない。ここを
+// 見ていなかったため、推論がそういう型を作った瞬間にスタックを食い潰して落ちていた
+// ——**落ちるのと「測れない」は別**である（原理4）。測れないと答えれば呼び出し側が
+// 名指しできるし、どこで壊れたのかも追える。
+//
+// 見るのは深さであってノードの同一性ではない。要素のノードは段ごとに作られるので
+// 「同じものを2度通ったか」では捕まらない——底に着かないことの観測可能な形は
+// 「いくら降りても終わらない」である。
+{
+	const deep = (n) => {
+		let t = { type: "atom", kind: "number", value: "1", atomType: "Int" };
+		for (let i = 0; i < n; i++) t = { type: "block", kind: "bracket", atomType: "List", elementType: "List", lines: [t] };
+		return t;
+	};
+	total++;
+	let ok = false;
+	try {
+		measure(deep(500), { target: "aarch64_qemu", charset: "ascii" });
+		ok = true; // 落ちないことが要件（`null` を返すのが正しい答え）
+	} catch (e) {
+		console.log(`     ${e.constructor.name}: ${String(e.message).slice(0, 60)}`);
+	}
+	if (ok) passed++;
+	console.log(`${ok ? "OK  " : "FAIL"} 深すぎる入れ子でも落ちない`);
+}
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

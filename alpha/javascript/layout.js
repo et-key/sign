@@ -173,10 +173,26 @@ function flattenProduct(node) {
  *
  * @returns {{ size: number, align: number }|null}
  */
-function measure(node, conf) {
+// 器の入れ子をどこまで測るか。これを超えたら「測れない」と答える——実用上の入れ子は
+// 数段で、それ以上は型が自己参照になっている印である（下の注を参照）。
+const MAX_NEST = 32;
+
+function measure(node, conf, depth = 0) {
   if (!node) return null;
   const { target, charset = DEFAULT_CHARSET, env = null } = conf;
   if (!widthsOf(target)) return null;
+  // **自分を含む型は測れない。** 器の要素がまた同じ器になる形（`List(List(List(…)))`）は
+  // 底に着かないので、大きさが存在しない。ここを見ていなかったため、そういう型が出来た
+  // 瞬間にスタックを食い潰して落ちていた——**落ちるのと「測れない」は別**である（原理4）。
+  // 測れないと答えれば、呼び出し側が名指しできる。
+  //
+  // 見るのは深さであってノードの同一性ではない。要素のノードは段ごとに作られるので、
+  // 同じものを2度通ったかでは捕まらない——「底に着かない」ことの観測可能な形は
+  // 「いくら降りても終わらない」である。
+  //
+  // 型が自己参照になること自体は推論の側の問題だが、測る側が検出できないと、どこで
+  // 壊れたのかも分からなくなる。
+  if (depth > MAX_NEST) return null;
   // 型は識別子のノードにも付いているが、**大きさは中身にしか無い**ので辿る。
   const named = node;
   node = deref(node, env);
@@ -213,7 +229,7 @@ function measure(node, conf) {
   // 添字は必ずしもロードではない）。`repr` の印が付いていなくても規則である。曖昧なのは
   // `List` の方で、あちらは場所（`[1 2 3]`）にも規則（`[1 ~ 5]`）にもなる。
   if (node.repr === "rule" || node.atomType === "Iterator") return measureRule(node, conf);
-  if (type === "List") return measureList(node, conf);
+  if (type === "List") return measureList(node, conf, depth);
   if (type === "Struct") {
     const l = layoutOfStruct(node, conf);
     return l && { size: l.size, align: l.align };
@@ -398,11 +414,12 @@ function cursorParts(node) {
   return out.length === 3 ? out : null;
 }
 
-function measureList(node, conf) {
+function measureList(node, conf, depth = 0) {
   const items = listItems(node, conf && conf.env);
   if (items === null) return null;
   // 要素は同一型（`List` の同一型制約、§2）なので、先頭1個を測れば全体が出る。
-  const first = items.length > 0 ? measure(items[0], conf) : null;
+  // 降りた段数を渡す——底に着かないなら、そこで測れないと答える。
+  const first = items.length > 0 ? measure(items[0], conf, depth + 1) : null;
   if (!first) return null;
   // 要素をその境界へ切り上げた大きさがストライドになる。
   const stride = alignUp(first.size, first.align);
