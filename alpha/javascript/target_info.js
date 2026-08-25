@@ -113,6 +113,20 @@ function charSizeOf(charset) {
 }
 
 /**
+ * **その charset で書ける符号位置の上限。**
+ *
+ * 幅（バイト数）とは別の話である。`ascii` は1バイトだが書けるのは 0x7F までで、
+ * 0x80〜0xFF は「入るが charset の外」である。
+ *
+ * 文字の算術（`c + 1`、`c1 + c2`）はここを越えたら `__` になる——**足せることと、
+ * 足した先が文字であることは別**だからである。型検査・インタプリタ・コード生成の
+ * 3箇所が同じ数を引く必要がある。別々に書くと片方だけが正しい答えを出す。
+ */
+function charLimitOf(charset) {
+  return charset === "utf32" ? 0x10ffff : 0x7f;
+}
+
+/**
  * ターゲットの幅クラスを返す。未対応なら null。
  */
 function widthsOf(target) {
@@ -155,4 +169,4 @@ function reduceToMachineType(type, target) {
   return { size, signed: SIGNEDNESS[type] === "signed", class: WIDTH_CLASS[type] || null };
 }
 
-export { TARGET_WIDTHS, SIGNEDNESS, UNIT_NICHE, UNIT_NICHE_ASM, WIDTH_CLASS, CHARSETS, DEFAULT_CHARSET, charSizeOf, widthsOf, isSupported, sizeOf, reduceToMachineType };
+export { TARGET_WIDTHS, SIGNEDNESS, UNIT_NICHE, UNIT_NICHE_ASM, WIDTH_CLASS, CHARSETS, DEFAULT_CHARSET, charSizeOf, charLimitOf, widthsOf, isSupported, sizeOf, reduceToMachineType };

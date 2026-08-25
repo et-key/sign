@@ -35,7 +35,7 @@
  * 名指しする——落とすと「命令が無いのに動いたように見える」が起きる。
  */
 
-import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf, DEFAULT_CHARSET, SIGNEDNESS } from "./target_info.js";
+import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf, charLimitOf, DEFAULT_CHARSET, SIGNEDNESS } from "./target_info.js";
 import { envLookup } from "./pass1.js";
 import { isBareComment } from "./pass3.js";
 import { passingOf, measure } from "./layout.js";
@@ -726,6 +726,19 @@ function genExpr(node, env, em, scope, tail = false) {
 		// 除算だけは符号で分かれる（`Address` は符号なし）。
 		const mn = n.name === "div" ? DIV_FOR[machine.signed ? "signed" : "unsigned"] : INT_OPS[n.name];
 		em.emit(`${mn} ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
+		// **足せることと、足した先が文字であることは別である。** 文字の算術は符号位置の
+		// 算術なので命令はそのままだが、結果が charset の外へ出たらそれは文字ではない
+		// ——`__` になる。`c + 1` で次の文字を取る書き方はこの検査の内側で成立している。
+		//
+		// 見るのは**符号なしの上限1つ**でよい。`Char` は符号なしなので、引き算で負へ
+		// 回った値は巨大な符号なし値になり、同じ比較で落ちる。
+		if (n.atomType === "Char") {
+			const lim = charLimitOf(em.conf.charset);
+			emitImm(em, SCRATCH[1], lim, `charset の上限（${em.conf.charset || DEFAULT_CHARSET}）`);
+			em.emit(`cmp ${SCRATCH[0]}, ${SCRATCH[1]}`, "文字の範囲内か");
+			em.emit("movz x12, #0x8000, lsl #48", "範囲外は __");
+			em.emit(`csel ${SCRATCH[0]}, ${SCRATCH[0]}, x12, ls`, "文字でなければ __");
+		}
 		em.pop(1); // 右辺のスロットを返す。結果は左辺のスロットへ書く。
 		em.store(SCRATCH[0], lo);
 		return 1;

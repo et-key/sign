@@ -315,6 +315,16 @@ function arithmeticResultType(node, leftType, env) {
   // 持ち上げた結果に算術を書いてしまう形（`~xs + 1`）がここに来る——要素型を決める演算は
   // 持ち上げの**内側**に置くこと（`~(xs + 1)`）。
   if (NON_SCALAR_PLACES.has(leftType) || NON_SCALAR_PLACES.has(rightType)) return "Unit";
+  // **文字の算術は符号位置の算術である。** `c + 1` で次の文字を取る書き方が成立する
+  // のはこのためで、結果もまた文字である。ただし**足せることと、足した先が文字である
+  // ことは別**なので、charset の外へ出たら `__` になる——そこは値を見る側（インタプリタ
+  // と Pass 4）が決める。型の側は「文字である」とだけ言う。
+  //
+  // `Char` を `Scalar` の成員に入れていないのは算術の対象でないからではなく、昇格格子
+  // （`Int → Address → Float → Vector`）に乗らないからである。文字は数の一種ではない。
+  if ((leftType === "Char" && (rightType === "Char" || rightType === "Int")) || (leftType === "Int" && rightType === "Char")) {
+    return "Char";
+  }
   // 数値の昇格格子: 精度の高い側へ昇格する（降格しない）
   if (NUMERIC_TYPES.has(leftType) && NUMERIC_TYPES.has(rightType)) {
     if (leftType === "Vector" || rightType === "Vector") return "Vector";
@@ -1338,7 +1348,15 @@ function typeOfKnownOperand(node, scope, paramNames) {
 // なので、そこへ `Struct` や `List` が渡ると**型が値より狭くなる**。狭めた定義のままでは
 // それを表現することも検出することもできなかった。
 const FAMILY_MEMBERS = {
-  Scalar: new Set(["Int", "Address", "Float", "Vector"]),
+  // **`Char` も算術の対象である。** かつてここに入れていなかったのは「文字は算術の
+  // 対象ではない」と考えていたからだが、文字の算術は符号位置の算術として成立する
+  // （`c + 1` で次の文字）。除外の理由の方が消えたので、成員に戻す。
+  //
+  // ただし**昇格格子には乗らない**（`NUMERIC_TYPES` に入れていない）。文字は数の一種
+  // ではないので、`Char + Float` は Float にはならない——足せるのは文字と整数だけで、
+  // 結果は文字である（`arithmeticResultType`）。族の成員であることと、格子を昇るのは
+  // 別の話である。
+  Scalar: new Set(["Int", "Address", "Float", "Vector", "Char"]),
   // **器だとは分かるが、どの器かはまだ分からない。** 仮引数を添字・スライス・撒きする
   // 書き方は「これは器である」としか言っていない——`s ' 0` は `String` でも `List` でも
   // 書けるので、そこから具体型を決めると当て推量になる（原理4）。呼び出しサイトが
@@ -1695,7 +1713,12 @@ function inferLambdaParamTypes(lambdaNode, env) {
       // 情報の追加だが、下がるのは情報の破棄である（`@p` から読んだ `Address` を
       // 呼び出しの `Int` で潰してはいけない）。族の中で狭める既存の規則と向きは逆だが、
       // どちらも「分かっていないことを分かったと書かない」の側に倒れている（原理4）。
-      const promotes = NUMERIC_RANK[prev] !== undefined && NUMERIC_RANK[t] > NUMERIC_RANK[prev];
+      // `Char` も同じ扱いである。`c - 200` の `200` は「相手も Int だ」とは言っていない
+      // ——文字の算術は符号位置の算術として成立するので、`Char` から引ける。格子には
+      // 乗らないが（文字は数の一種ではない）、**リテラル由来の `Int` より近い**という
+      // 点では Address や Float と変わらない。
+      const promotes =
+        NUMERIC_RANK[prev] !== undefined && (NUMERIC_RANK[t] > NUMERIC_RANK[prev] || (prev === "Int" && t === "Char"));
       if (prev === undefined || promotes || (members && members.has(t))) inferred.set(name, t);
     });
   }

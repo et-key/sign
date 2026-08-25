@@ -1,3 +1,5 @@
+import { charLimitOf, DEFAULT_CHARSET } from "./target_info.js";
+
 /**
  * 最小インタプリタ（評価器）。Pass2/Pass1bが構築した二分木ASTを実際に評価して値を出す。
  *
@@ -79,8 +81,15 @@ function isStructBlock(node) {
 
 // ---- 実行時環境（Pass1の静的envとは別物、実際の値を保持する） ----
 // diagnosticsは子envにも同じ配列参照を引き継ぐ（ルートenvに一元的に蓄積される）。
-function newRuntimeEnv(parent) {
-  return { bindings: new Map(), parent: parent || null, diagnostics: parent ? parent.diagnostics : [] };
+function newRuntimeEnv(parent, charset) {
+  // charset は根に置いて子は引き継ぐ。**文字の算術がここを見る**——足せることと、
+  // 足した先が文字であることは別で、後者は charset が決める。
+  return {
+    bindings: new Map(),
+    parent: parent || null,
+    diagnostics: parent ? parent.diagnostics : [],
+    charset: charset || (parent && parent.charset) || DEFAULT_CHARSET,
+  };
 }
 function envDefine(env, name, value) {
   env.bindings.set(name, value);
@@ -715,8 +724,26 @@ function roundHalfAwayFromZero(x) {
 // 以前は後者が ARITH_OPS を直に叩いており型ガードを丸ごと迂回していたため、
 // `[+ 1] [1 2 3]` が `"1,2,31"`（JSの配列→文字列強制）、`[* 2,] \`abc\`` が NaN を
 // 静かに返していた。算術が何を意味するかを決める場所は1つでなければならない。
-function arithOnValues(name, l, r) {
+function arithOnValues(name, l, r, limit = charLimitOf(DEFAULT_CHARSET)) {
   if (isUnit(l)) return UNIT; // 左辺Unit = 吸収元
+  // **1文字は符号位置そのものである**（`[x] ≅ x` なので長さ1の文字列は `Char`）。
+  // 文字の算術は符号位置の算術であり、結果が charset の外へ出たら**それは文字では
+  // ない**ので `__` になる。`c + 1` で次の文字を取る書き方がここで成立する。
+  //
+  // 長さ2以上の文字列は §3.2 の通り算術の対象ではない（型エラーで `__` へ収束）。
+  // 区別できるのは、1要素の器がスカラーと同型だからである（原理8）。
+  const cp = (x) => (typeof x === "string" && [...x].length === 1 ? x.codePointAt(0) : null);
+  const lc = cp(l);
+  if (lc !== null) {
+    if (isUnit(r)) return l; // 右辺Unit = 単位元（素通し）
+    const rv = cp(r) ?? (typeof r === "number" ? r : null);
+    if (rv === null) return UNIT;
+    const fn = ARITH_OPS[name];
+    if (!fn) return UNIT;
+    const out = fn(lc, rv);
+    if (!Number.isInteger(out) || out < 0 || out > limit) return UNIT;
+    return String.fromCodePoint(out);
+  }
   // §3.2: String（Listと同型）の左辺に算術演算子は効かない → 型エラーで__に収束。
   // 注: list_model.md §4.4の文面は「+でコードポイントが露出する」としているが、
   // 自身の例(`123` 123 = `123123`)はスペース連結でありこの主張を実証していない。
@@ -764,10 +791,12 @@ function evalBit(node, env) {
 function evalArith(node, env) {
   const name = node.name;
   const l = evaluate(node.left, env);
-  // 左辺がUnit/Stringの時点で右辺を評価せずに済ませる（短絡、既存の挙動を保つ）
-  if (isUnit(l) || typeof l === "string") return arithOnValues(name, l, undefined);
+  // 左辺がUnit/Stringの時点で右辺を評価せずに済ませる（短絡、既存の挙動を保つ）。
+  // **ただし1文字は短絡しない**——`Char` は算術の対象なので右辺が要る。
+  const lim = charLimitOf(env && env.charset);
+  if (isUnit(l) || (typeof l === "string" && [...l].length !== 1)) return arithOnValues(name, l, undefined, lim);
   const r = evaluate(node.right, env);
-  const value = arithOnValues(name, l, r);
+  const value = arithOnValues(name, l, r, lim);
   // BigInt は「安全な範囲を超えた整数」であり、溢れの規則を適用する対象そのものである。
   // ここで早期に返してしまうと、幅を超えた値が型の規則を通らずに素通りする。
   if (typeof value !== "number" && typeof value !== "bigint") return value;
