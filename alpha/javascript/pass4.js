@@ -960,11 +960,24 @@ function genExpr(node, env, em, scope, tail = false) {
 		// **返す器の場所は呼ぶ側が用意する（sret）。** 呼ばれた側は自分のフレームに
 		// 置けないので（`mov sp, x29` が捨てる）、こちらの `sub sp` で取った場所を
 		// x8 で渡す。大きさは `returnSizeBound` の上界であり、両側が同じ表を引く。
-		const sp = em.sretPlan ? em.sretPlan.get(callee) : null;
-		if (sp) {
+		// 具体化された実体は名前が変わる（`take_while$is_digit`）が、返す器の形は同じ
+		// なので、素の名前で引き直す。
+		const sp = em.sretPlan ? em.sretPlan.get(callee) || em.sretPlan.get(baseName) : null;
+		// **追記なら、場所は既に決まっている。** `(s ' 0) (f (s ' 1~))` の `f` は自分の
+		// 器の**続き**を書くので、新しく取るのではなく渡された宛先をそのまま使う。印は
+		// ノードに付いている——引数の中に別の呼び出しがあっても取り違えないためである。
+		if (sp && n._sretInto !== undefined && n._sretInto !== null) {
+			em.load("x8", n._sretInto, "続きを書く場所（追記）");
+		} else if (sp) {
 			if (sp.sizeOfIndex !== null) {
 				// 上界が引数の要素数に依る形。その引数の len から測る。
-				const src = parts[sp.sizeOfIndex];
+				//
+				// **具体化で消えた引数のぶん位置がずれる。** 関数ポインタは命令へ焼き込ま
+				// れていて渡らないので（`drop`）、計画表が言う仮引数の位置と、ここで実際に
+				// 積んだ位置は同じではない。`take_while $is_digit s` の `s` は仮引数では
+				// 2番目だが、渡すのは1本目である。
+				const shifted = sp.sizeOfIndex - drop.filter((i) => i < sp.sizeOfIndex).length;
+				const src = parts[shifted];
 				if (!src || src.w !== 2) return em.fail(n, `返値スロットの大きさが測れません（${callee} の第${sp.sizeOfIndex + 1}引数が器ではない）`);
 				em.load(SCRATCH[0], src.off + 8, "上界を測る（引数の len）");
 				if (sp.coef !== 1) em.emit(`mov ${SCRATCH[1]}, #${sp.coef}`, "段ごとの個数");
@@ -1401,6 +1414,62 @@ function genExpr(node, env, em, scope, tail = false) {
 		parts.unshift(cur);
 		const et = n.elementType || (n.atomType === "String" ? "Char" : null);
 		const em1 = et ? measure({ atomType: et }, { target: em.conf.target, charset: em.conf.charset }) : null;
+		// **末尾が器を返す呼び出しなら、そこへ追記する。**
+		//
+		// `(s ' 0) (f (s ' 1~))` は「要素 ＋ 再帰の結果」であり、後者は器なので「並べる
+		// のは1本の値」の道には乗らない。だが写す必要は無い——**呼ばれた側に、自分の器の
+		// 続きを直接書かせればよい**。先頭 k 個を書いてから `宛先 + k×幅` を次の宛先として
+		// 渡す。段が深くなっても同じ領域の中でカーソルが進むだけで、確保も複写も起きない。
+		//
+		// 上界は呼ぶ側が既に確保している（`returnSizeBound` が `konst + coef × ||p||` を
+		// 出している）ので、何段進んでも溢れない。
+		//
+		// **器は末尾にしか来られない。** 途中に置くと、その長さが決まるまで後ろを書けない
+		// ——1回の走査で書くにはそこが条件である。
+		const lead = parts.slice(0, -1);
+		const tailPart = parts.length > 1 ? parts[parts.length - 1] : null;
+		const appendTo = tailPart && sretHere ? appendableCallee(tailPart, em) : null;
+		if (em1 && em1.size && appendTo && lead.every((p) => slotsOfNode(p, em.conf, env) === 1)) {
+			const base = em.slot;
+			for (const p of lead) {
+				const pw = genScalar(p, env, em, scope, "追記の前に並べる要素はレジスタ1本の値です");
+				if (pw === false) return false;
+			}
+			const k = em.slot - base;
+			const w = em1.size;
+			em.load(SCRATCH[1], em.sretDest, "返値スロット（sret）");
+			for (let i = 0; i < k; i++) {
+				em.load(SCRATCH[0], (base + i) * 8);
+				em.emit(storeElem(SCRATCH[0], SCRATCH[1], i * w, w), i === 0 ? "先頭を並べる" : undefined);
+			}
+			em.pop(k);
+			// 続きの宛先はスロットへ置く。引数を作る途中で `bl` が挟まればレジスタは壊れる。
+			const destSlot = em.push();
+			if (destSlot === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.load(SCRATCH[1], em.sretDest);
+			if (k * w) em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, #${k * w}`, `${k} 要素ぶん進める`);
+			em.store(SCRATCH[1], destSlot, "続きを書く場所");
+			tailPart._sretInto = destSlot;
+			const tw = genExpr(tailPart, env, em, scope);
+			tailPart._sretInto = undefined;
+			if (tw === false) return false;
+			if (tw !== 2) {
+				em.pop(tw === TAIL ? 0 : tw);
+				return em.fail(n, `追記の相手が器ではありません（${tw} 本）`);
+			}
+			// 長さは「自分が書いた数 ＋ 続きが書いた数」。ptr は自分の宛先のままである。
+			em.load(SCRATCH[0], (em.slot - 1) * 8, "続きの len");
+			if (k) em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #${k}`, `先頭の ${k} を足す`);
+			em.pop(2);
+			em.pop(1); // 続きの宛先
+			const po2 = em.push();
+			const lo2 = po2 === null ? null : em.push();
+			if (lo2 === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.store(SCRATCH[0], lo2, "len");
+			em.load(SCRATCH[1], em.sretDest);
+			em.store(SCRATCH[1], po2, "ptr は自分の宛先");
+			return 2;
+		}
 		if (em1 && em1.size && parts.every((p) => slotsOfNode(p, em.conf, env) === 1)) {
 			const base = em.slot;
 			for (const p of parts) {
@@ -2782,6 +2851,24 @@ function collectSretPlan(nodes, em) {
 	return plan;
 }
 
+/**
+ * **その部分は「器の続きを自分で書ける」呼び出しか。**
+ *
+ * 追記が成立するのは、相手が sret の規約で呼べる——つまり x8 で宛先を受け取れる——
+ * ときだけである。そうでなければ相手は自分の場所へ書くので、こちらが写す羽目になる。
+ *
+ * @returns 呼び先の素の名前。追記できないなら null。
+ */
+function appendableCallee(node, em) {
+	const u = unwrap(node);
+	if (!u || u.type !== "operation" || u.name !== "apply") return null;
+	let head = u;
+	while (head && head.type === "operation" && head.name === "apply") head = unwrap(head.left);
+	if (!isIdentifierNode(head)) return null;
+	const nm = bareName(head.value);
+	return em.sretPlan && em.sretPlan.has(nm) ? nm : null;
+}
+
 /** 上界をバイト数へ。16 バイト境界へ丸める（AAPCS64 は `sp` の 16 整列を要求する）。 */
 function sretBytesConst(p) {
 	return Math.ceil((p.konst * p.width) / 16) * 16;
@@ -2871,8 +2958,12 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	// **x8 は最初の `bl` で壊れる。** 呼び出し側から受け取った返値スロットのアドレスは
 	// 本体の最後まで要るので、仮引数と同じくスロットへ写しておく。呼ばれた側が自分でも
 	// 誰かを呼ぶなら、その `bl` が x8 を自分の用途で上書きするからである。
+	// **具体化された実体も同じ器を返す。** 名前は `take_while$is_digit` に変わるが、
+	// 返す形は元の定義が決めているので、素の名前でも引く——ここを見落とすと、多相な
+	// 関数だけが sret から取り残される（実際 `take_while` がそうなっていた）。
 	em.sretDest = null;
-	if (em.sretPlan && em.sretPlan.has(bareName(name))) {
+	const sretKey = bareName(name).split("$")[0];
+	if (em.sretPlan && (em.sretPlan.has(bareName(name)) || em.sretPlan.has(sretKey))) {
 		em.push();
 		em.sretDest = (em.slot - 1) * 8;
 		em.store("x8", em.sretDest, "返値スロットのアドレス（sret）を退避");
