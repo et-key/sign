@@ -226,8 +226,11 @@ function printNode(n, subst = null) {
 		const l = printNode(n.left, subst);
 		const r = printNode(n.right, subst);
 		if (l === null || r === null) return null;
-		// 並置は記号が空白1つ。それ以外は記号の両側に空白を置く（中置は空白で区切る）。
-		return n.op === " " ? `(${l} ${r})` : `(${l} ${n.op} ${r})`;
+		// **並置に括弧を付けてはいけない。** `a (b c) d` の括弧は「ここまでで1つの要素」と
+		// 言っており、付けると要素数が変わる（余積は右辺を1要素として足す）。連なりは
+		// 平らなまま書く——括弧が要る所には、元の木に既にブロックが在る。
+		if (n.op === " ") return `${l} ${r}`;
+		return `(${l} ${n.op} ${r})`;
 	}
 	// ブロックは1行ものだけ扱う。複数行のブロックが式の位置に来る形は、ここでは諦める。
 	if (Array.isArray(n.lines)) {

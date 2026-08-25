@@ -1309,6 +1309,64 @@ function genExpr(node, env, em, scope, tail = false) {
 			return 2;
 		}
 	}
+	// **フレームから出ない器は、自分のフレームに置ける。**
+	//
+	// `sub sp` で場所を取って要素を並べるだけ——`$匿名式` と同じ機械である（`alloca`）。
+	// 出て行くかどうかは `markEscapes` が先に決めている。出るなら sret が要るので、
+	// そこは下で名指しする。
+	//
+	// 並べるものが全部スカラーの場合だけ出せる。器が混じると要素数が実行時に決まり、
+	// 写す側もループになる——それは別の命令列である。
+	if (COPRODUCT_BUILD_OPS.has(n.name) && n.escapesFrame === false && slotsOfNode(n, em.conf, env) === 2) {
+		// **括弧の中が連接なら剥いではいけない。** `a (b c) d` は `[a, "bc", d]` であり、
+		// 括弧が「ここまでで1つの要素」と言っている（余積は右辺を1要素として足す）。
+		// 剥ぐと要素数が変わる——実際 `((c (rest'0)) (rest'1)) ' 2` が `__` ではなく
+		// 3番目を返していた。優先順位のための括弧（中が連接でないもの）だけを剥ぐ。
+		const peel = (x) => {
+			let v = x;
+			while (v && Array.isArray(v.lines) && v.lines.length === 1 && v.kind !== "abs" && v.kind !== "norm") {
+				const inner = v.lines[0];
+				if (inner && inner.type === "operation" && COPRODUCT_BUILD_OPS.has(inner.name)) break;
+				v = inner;
+			}
+			return v;
+		};
+		const parts = [];
+		let cur = peel(n);
+		while (cur && cur.type === "operation" && COPRODUCT_BUILD_OPS.has(cur.name)) {
+			parts.unshift(peel(cur.right));
+			cur = peel(cur.left);
+		}
+		parts.unshift(cur);
+		const et = n.elementType || (n.atomType === "String" ? "Char" : null);
+		const em1 = et ? measure({ atomType: et }, { target: em.conf.target, charset: em.conf.charset }) : null;
+		if (em1 && em1.size && parts.every((p) => slotsOfNode(p, em.conf, env) === 1)) {
+			const base = em.slot;
+			for (const p of parts) {
+				const pw = genScalar(p, env, em, scope, "並べる要素はレジスタ1本の値です");
+				if (pw === false) return false;
+			}
+			const count = em.slot - base;
+			const w = em1.size;
+			const bytes = Math.ceil((count * w) / 16) * 16;
+			em.emit(`sub sp, sp, #${bytes}`, `${count} 要素ぶんの場所を取る（フレームから出ない）`);
+			em.movedSp = true;
+			for (let k = 0; k < count; k++) {
+				em.load(SCRATCH[0], (base + k) * 8);
+				em.emit(storeElem(SCRATCH[0], "sp", k * w, w), k === 0 ? "並べる" : undefined);
+			}
+			em.emit(`mov ${SCRATCH[0]}, sp`, "ptr");
+			em.pop(count);
+			const po = em.push();
+			const lo = po === null ? null : em.push();
+			if (lo === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.store(SCRATCH[0], po, "ptr");
+			em.emit(`mov ${SCRATCH[1]}, #${count}`, "len は要素数");
+			em.store(SCRATCH[1], lo, "len");
+			return 2;
+		}
+		em.pop(em.slot - em.slot); // 何も積んでいない
+	}
 	if (COPRODUCT_BUILD_OPS.has(n.name) && slotsOf(n.atomType, em.conf) === 2) {
 		if (em.conf.layer !== undefined && em.conf.layer < 1) {
 			return em.fail(
@@ -1317,7 +1375,14 @@ function genExpr(node, env, em, scope, tail = false) {
 					`切り出し（\`s ' i~\`）は確保が要らないので使えます`
 			);
 		}
-		return em.fail(n, `器の構築はまだ出せません（${n.atomType}——確保の規約が未定。返値は sret へ向かう）`);
+		if (n.escapesFrame === false) {
+			return em.fail(n, `器の構築はまだ出せません（${n.atomType}——並べるものが器なので要素数が実行時に決まる）`);
+		}
+		return em.fail(
+			n,
+			`器の構築はまだ出せません（${n.atomType}——**フレームから出る**ので自分のフレームには置けない。` +
+				`sret の規約が未定）`
+		);
 	}
 	return em.fail(n, `まだ出せない式です（${n.name || n.type}）`);
 }
@@ -1941,6 +2006,15 @@ function genMatch(node, env, em, scope, tail = false) {
  */
 // 要素1つを位置つきで読むニーモニック。幅は `charset` が決める（`String ≅ List(Char)`）。
 // 符号なしなので `ldrb`/`ldrh` はゼロ拡張で足りる（Char は unsigned、target_info.js）。
+// 要素1つを位置つきで書く。幅は要素型が決める。
+function storeElem(src, base, offset, size) {
+	const reg = size >= 8 ? src.replace(/^x/, "x") : src.replace(/^x/, "w");
+	if (size === 1) return `strb ${reg}, [${base}, #${offset}]`;
+	if (size === 2) return `strh ${reg}, [${base}, #${offset}]`;
+	if (size === 4) return `str ${reg}, [${base}, #${offset}]`;
+	return `str ${src}, [${base}, #${offset}]`;
+}
+
 function loadElem(dst, base, idx, size) {
 	if (size === 1) return `ldrb ${dst}, [${base}, ${idx}]`;
 	if (size === 2) return `ldrh ${dst}, [${base}, ${idx}, lsl #1]`;
@@ -2207,6 +2281,141 @@ function frameAddressInTail(node) {
 		return n;
 	}
 	return null;
+}
+
+/**
+ * **作った器はフレームより長生きするか。**
+ *
+ * `$匿名式` は `sub sp` で自分のフレームに場所を取るので、返すと死んだ場所を指す
+ * （memory_management.md §2）。だから器を作ってよいのは**フレームの外へ出ない**ときだけ
+ * であり、出るなら sret（呼び出し側がスロットを提供する）が要る。
+ *
+ * 判定は**直近の呼び出しだけを見ても足りない**。n_queens の `col board~` は `place` の
+ * 引数なので一見「下へ流すだけ」に見えるが、
+ *
+ *     place : row n [~board] ?
+ *         row > n : board          ← 引数をそのまま返す
+ *         try_col 1 row n board
+ *
+ * `place` が `board` を返すので、`try_col` のフレームに置いた器が上へ抜ける。**どの
+ * 仮引数が返値になりうるか**を先に求めてから、引数の位置ごとに判定する必要がある。
+ *
+ * 走る先が分からない呼び出し（アドレス経由）は「返しうる」と見なす——決まらないものを
+ * 「安全だ」と決めてはいけない（原理4は安全側にだけ倒す）。
+ */
+function collectReturnedParams(nodes) {
+	// 関数名 → 返値になりうる仮引数の位置の集合
+	const table = new Map();
+	const bodies = new Map();
+	for (const node of nodes) {
+		if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+		const rhs = node.right;
+		if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
+		const name = bareName(node.left.value);
+		bodies.set(name, rhs);
+		table.set(name, new Set());
+	}
+	const paramsOf = (lam) => paramShapesOf(lam.left).map((sh) => (sh && sh.kind === "bare" ? sh.name : sh && sh.head ? sh.head : null));
+
+	// 末尾位置の式を集める（分岐なら枝それぞれ、`|` なら両辺）。
+	const tails = (n, out = []) => {
+		const u = unwrap(n);
+		if (!u) return out;
+		if (Array.isArray(u.lines)) {
+			for (const line of u.lines) tails(isDefineNode(line) ? line.right : line, out);
+			return out;
+		}
+		if (u.type === "operation" && u.name === "or") {
+			tails(u.left, out);
+			tails(u.right, out);
+			return out;
+		}
+		out.push(u);
+		return out;
+	};
+
+	let changed = true;
+	let guard = 0;
+	while (changed && guard++ < 50) {
+		changed = false;
+		for (const [name, lam] of bodies) {
+			const params = paramsOf(lam);
+			const set = table.get(name);
+			for (const t of tails(lam.right)) {
+				// 仮引数そのものを返している。
+				if (isIdentifierNode(t)) {
+					const i = params.indexOf(t.value);
+					if (i >= 0 && !set.has(i)) { set.add(i); changed = true; }
+					continue;
+				}
+				// 呼び出しの結果を返している。呼び先が j 番目を返すなら、その実引数を辿る。
+				if (t.type === "operation" && (t.name === "apply" || t.name === "partial_apply")) {
+					const { base, args } = applyChain(t);
+					if (!isIdentifierNode(base)) continue;
+					const callee = table.get(bareName(base.value));
+					if (!callee) continue;
+					for (const j of callee) {
+						const a = unwrap(args[j]);
+						if (!isIdentifierNode(a)) continue;
+						const i = params.indexOf(a.value);
+						if (i >= 0 && !set.has(i)) { set.add(i); changed = true; }
+					}
+				}
+			}
+		}
+	}
+	return table;
+}
+
+/**
+ * 器を作るノードに「フレームより長生きするか」の印を付ける（`node.escapesFrame`）。
+ * 印が無い＝出ないので、自分のフレームに置ける（`alloca`）。
+ */
+// 参照を運べる型。これ以外（数・文字・恒等射）は器を外へ持ち出せない。
+const CONTAINER_TYPES = new Set(["String", "List", "Struct", "Iterator", "Implicit", "Address"]);
+
+function markEscapes(nodes, returnedParams) {
+	const visit = (n, escaping) => {
+		const u = n;
+		if (!u || typeof u !== "object") return;
+		if (u.type === "operation" && COPRODUCT_BUILD_OPS.has(u.name)) u.escapesFrame = escaping;
+		// 呼び出しの引数は、呼び先がその位置を返すときだけ出て行く。
+		if (u.type === "operation" && (u.name === "apply" || u.name === "partial_apply")) {
+			const { base, args } = applyChain(u);
+			const callee = isIdentifierNode(base) ? returnedParams.get(bareName(base.value)) : null;
+			// 呼び先が分からないなら、安全側に倒して「出て行く」と見なす。
+			const unknown = !isIdentifierNode(base) || !returnedParams.has(bareName(base.value));
+			args.forEach((a, i) => visit(a, escaping && (unknown || (callee ? callee.has(i) : true))));
+			visit(base, false);
+			return;
+		}
+		// `|`（or）は値をそのまま通す。
+		if (u.type === "operation" && u.name === "or") {
+			visit(u.left, escaping);
+			visit(u.right, escaping);
+			return;
+		}
+		// 分岐は枝それぞれが結果になる。条件は結果にならない。
+		if (Array.isArray(u.lines)) {
+			const pass = u.kind === "norm" || u.kind === "abs" ? false : escaping;
+			for (const line of u.lines) {
+				if (isDefineNode(line)) { visit(line.left, false); visit(line.right, pass); }
+				else visit(line, pass);
+			}
+			return;
+		}
+		// **結果が参照を運べないなら、そこで止まる。** 数え上げ（`||x||`）や添字（`x ' 0`）や
+		// 算術は、器を受け取っても数や要素しか返さない——器そのものは外へ出ない。
+		// 器を返しうる形（切り出し・組み直し・撒き）だけが値を通す。
+		const carries = CONTAINER_TYPES.has(u.atomType) || u.atomType === undefined || u.atomType === null;
+		for (const k of ["left", "right", "operand"]) visit(u[k], escaping && carries);
+	};
+	for (const node of nodes) {
+		if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+		const rhs = node.right;
+		if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
+		visit(rhs.right, true); // 本体そのものが返値である
+	}
 }
 
 function wrapFrame(bodyLines, slots, name, movedSp = false) {
@@ -2580,6 +2789,9 @@ function generateAsm(nodes, env, options = {}) {
 	// 具体化はコード生成の前に済ませる（どの実体を出すかが決まらないと本体を出せない）。
 	em.env = env; // 束縛から実体の種類を辿るために持つ（`slotsOfNode`）
 	const monos = collectMonomorphs(nodes);
+	// **作った器がフレームより長生きするか**を先に決める。器を作ってよいのは出ないときだけ
+	// で、出るなら sret（呼び出し側がスロットを提供する）が要る。
+	markEscapes(nodes, collectReturnedParams(nodes));
 	// 呼び出しサイトが省略された引数の位置を知るための署名表。本体を出す前に要る。
 	em.signatures = collectSignatures(nodes, em);
 

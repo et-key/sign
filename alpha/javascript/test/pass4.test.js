@@ -679,7 +679,16 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 	const build = "f : s ?\n\ts (s ' 0)\nf `ab`";
 	checkTrue("layer 0 は「作れません」と言う", at(build, 0).some((m) => /layer: 0 では器を作れません/.test(m)), JSON.stringify(at(build, 0)));
 	// **同じ「出せない」でも中身が違う。** 上は設計上の結論、下は実装の穴である。
-	checkTrue("layer 1 は「まだ」と言う", at(build, 1).some((m) => /確保の規約が未定/.test(m)), JSON.stringify(at(build, 1)));
+	checkTrue("layer 1 は「まだ」と言う", at(build, 1).some((m) => /sret の規約が未定/.test(m)), JSON.stringify(at(build, 1)));
+	// **フレームから出ないなら、自分のフレームに置ける。** 出るかどうかは呼び先が引数を
+	// 返しうるかまで見て決まる（`collectReturnedParams`）——直近の呼び出しだけでは足りない。
+	{
+		const inFrame = "g : x ? 1\nf : [c ~rest] ?\n\tg ((c (rest ' 0)) ' 0) : 7\n\t0\nf `abc`";
+		check("出ない器は置ける", at(inFrame, 1), []);
+		const b = body(inFrame, "f");
+		checkTrue("sub sp で場所を取る", b.some((l) => /^sub sp, sp, #/.test(l)), b.join(" / "));
+		checkTrue("sp を戻す", b.includes("mov sp, x29"), b.join(" / "));
+	}
 	// 切り出しは layer 0 でも通る。
 	check("切り出しは layer 0 でも出る", at("f : s ?\n\ts ' 1~\nf `abc`", 0).length, 0);
 	// layer を渡さなければ検査しない（他の門番と同じ方針）。
