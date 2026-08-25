@@ -2418,6 +2418,80 @@ function markEscapes(nodes, returnedParams) {
 	}
 }
 
+/**
+ * **返す器の大きさの上界を、引数から求める。**
+ *
+ * 正確な個数は実行時に決まるが、**上界は静的に書ける**ことが多い——`d st~` は
+ * `1 + ||st||`、`col board~` は `1 + ||board||` である。スロットは上界で足りるので、
+ * これが分かれば呼び出し側が場所を用意できる（sret）。
+ *
+ * 「実行時にしか決まらない」で止まらず、**上界を疑う**のが要である。個数と上界は別の
+ * 問いであり、後者の方がずっとよく決まる。
+ *
+ * @returns `{ konst, sizeOf }`——`konst + ||sizeOf||` が上界。`sizeOf` が null なら定数。
+ *   求まらなければ null（再帰を含む形はまだ扱わない）。
+ */
+function returnSizeBound(lam, name) {
+	const params = paramShapesOf(lam.left).map((sh) => (sh && sh.kind === "bare" ? sh.name : sh && sh.whole ? sh.name : null));
+	const arms = Array.isArray(lam.right && lam.right.lines) ? lam.right.lines.map((l) => (isDefineNode(l) ? l.right : l)) : [lam.right];
+	let konst = 0;
+	let sizeOf = null;
+	for (const arm of arms) {
+		const a = unwrap(arm);
+		if (!a) return null;
+		// `__` を返す枝は 0 要素。上界には効かない。
+		if (a.type === "atom" && (a.value === "_" || a.value === "__")) continue;
+		if (!(a.type === "operation" && COPRODUCT_BUILD_OPS.has(a.name))) return null;
+		// 連なりを平らにする（括弧の中が連接なら1要素——剥いではいけない）。
+		const parts = [];
+		let cur = a;
+		const peel = (x) => {
+			let v = x;
+			while (v && Array.isArray(v.lines) && v.lines.length === 1 && v.kind !== "abs" && v.kind !== "norm") {
+				const inner = v.lines[0];
+				if (inner && inner.type === "operation" && COPRODUCT_BUILD_OPS.has(inner.name)) break;
+				v = inner;
+			}
+			return v;
+		};
+		cur = peel(cur);
+		while (cur && cur.type === "operation" && COPRODUCT_BUILD_OPS.has(cur.name)) {
+			parts.unshift(peel(cur.right));
+			cur = peel(cur.left);
+		}
+		parts.unshift(cur);
+		let k = 0;
+		let ref = null;
+		for (const p of parts) {
+			// 撒いた仮引数（`st~`）と裸の仮引数は、その器の要素数ぶん。
+			const q = p && p.type === "operation" && p.position === "postfix" && p.name === "expand" ? unwrap(p.operand) : p;
+			if (isIdentifierNode(q) && params.includes(q.value)) {
+				const t = q.atomType;
+				// **直和に器が混じっていれば器である**（`Int | List` は器になりうる）。
+				// 広い方へ揃えるのと同じ理由で、大きさも広い方で見なければ足りない。
+				const members = String(t || "").split(" | ").map((x) => x.trim());
+				const isBox = members.some((x) => ["String", "List", "Struct", "Iterator", "Implicit"].includes(x));
+				if (t && !isBox) {
+					k += 1; // スカラーの仮引数は1要素
+					continue;
+				}
+				if (ref && ref !== q.value) return null; // 器が2つ以上混ざると和になる。まだ扱わない
+				ref = q.value;
+				continue;
+			}
+			// それ以外は1要素とみなせるものだけ（器なら個数が決まらない）。
+			if (!q || ["String", "List", "Struct", "Iterator", "Implicit"].includes(q.atomType)) return null;
+			k += 1;
+		}
+		konst = Math.max(konst, k);
+		if (ref) {
+			if (sizeOf && sizeOf !== ref) return null;
+			sizeOf = ref;
+		}
+	}
+	return { konst, sizeOf };
+}
+
 function wrapFrame(bodyLines, slots, name, movedSp = false) {
 	const frame = 16 + Math.ceil((slots * 8) / 16) * 16; // x29/x30 の16バイト + スロット
 	// 相互末尾呼び出しが置いた印を、決まったフレームの大きさで埋める。
@@ -2866,4 +2940,4 @@ function generateAsm(nodes, env, options = {}) {
 	return { text: em.lines.join("\n") + "\n", diagnostics: em.diagnostics };
 }
 
-export { generateAsm, ARG_REGS, SCRATCH, MAX_SLOTS };
+export { returnSizeBound, generateAsm, ARG_REGS, SCRATCH, MAX_SLOTS };
