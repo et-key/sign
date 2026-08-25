@@ -294,6 +294,11 @@ function elementTypeOf(node, env) {
   // `getPropResultType` では既に直っていた同じ穴である（[[vocabulary lag]]）。器を1つ
   // 受けて分解する形（`[c ~rest]`）で `c` の幅が決まらなかった原因がここ。
   if (type === "String") return "Char";
+  // **どの器かが決まっていなければ、要素の型も決まらない。** `Container` は「器である」
+  // としか言っていないので、要素が何かは言えない——器の要素が器とは限らない。ここで
+  // `Container` をそのまま返すと「分かっていないこと」を書くことになる（原理4）。
+  // スカラーの分岐（下）へ落として自分自身を返すのも同じ誤りである。
+  if (type === "Container") return null;
   // スカラーは1要素の器なので、要素は自分自身である（`[5]` ≅ `5`）。
   return type;
 }
@@ -725,6 +730,12 @@ function getPropResultType(node, env) {
   // 結論になる。同じ `c` が本体では `Char`（レジスタ1本）として比較されるので、
   // **入口と本体で幅が食い違う**。型が値より広いときに起きる、いつもの壊れ方である。
   if (containerType === "String") return "Char";
+
+  // **どの器かが決まっていなければ、要素の型も決まらない。** `Container` は「器である」
+  // としか言っていない。ここを素通りさせると最後の `return containerType` に落ちて
+  // 「器の要素は器である」と書いてしまう——器の要素が器とは限らない（原理4）。
+  // 決まるのは呼び出しサイトが実引数を見せた時点である。
+  if (containerType === "Container") return null;
 
   // List と Iterator はどちらも「同じ型の要素が並ぶもの」で、違いは実体を持つかどうかだけ。
   // **型の上では同じ引き方をする**ので、添字の結果はどちらも要素型である。
@@ -1328,9 +1339,15 @@ function typeOfKnownOperand(node, scope, paramNames) {
 // それを表現することも検出することもできなかった。
 const FAMILY_MEMBERS = {
   Scalar: new Set(["Int", "Address", "Float", "Vector"]),
+  // **器だとは分かるが、どの器かはまだ分からない。** 仮引数を添字・スライス・撒きする
+  // 書き方は「これは器である」としか言っていない——`s ' 0` は `String` でも `List` でも
+  // 書けるので、そこから具体型を決めると当て推量になる（原理4）。呼び出しサイトが
+  // 実引数を見せた時点で成員のどれかへ狭まる。族は「分かっていない」の言い換えであり、
+  // 束を下る（狭める）だけなので順序に依存しない。
+  Container: new Set(["String", "List", "Struct", "Iterator", "Implicit"]),
   // `Char` は値なので `Atom` の成員である。`Scalar` には入れない——算術の対象では
   // ないからである（§3.2 が String を算術から外しているのと同じ理由）。
-  Atom: new Set(["Int", "Address", "Float", "Vector", "Scalar", "Char", "String", "List", "Struct", "Iterator", "Implicit"]),
+  Atom: new Set(["Int", "Address", "Float", "Vector", "Scalar", "Container", "Char", "String", "List", "Struct", "Iterator", "Implicit"]),
 };
 
 /**
@@ -1344,7 +1361,15 @@ function joinParamType(cur, next) {
   if (!next) return cur;
   if (!cur || FAMILY_MEMBERS[cur]) return next;
   if (cur === next) return cur;
-  const box = (t) => ["String", "List", "Struct", "Iterator", "Implicit"].includes(t);
+  // **直和に器が混じっていれば器である。** `next_st` の返値は `List | Int`——枝によって
+  // 段が違うだけで、器になりうる。ここを文字列の一致で見ていたため `"List | Int"` が
+  // 器と読めず、`walk` の `st` が「決められない（null）」に落ちていた。器の側で運べば
+  // どちらの枝も通る（スカラーは長さ1の器）ので、広い方へ寄せるのが正しい。
+  // `returnSizeBound` は既に同じ判定をしている——**そちらだけが直和を読めていた**。
+  const box = (t) =>
+    String(t || "")
+      .split(" | ")
+      .some((x) => ["String", "List", "Struct", "Iterator", "Implicit"].includes(x.trim()));
   // **持ち上げのときだけ合流する。** スカラーは1要素の器なので器へ上げられるが、
   // スカラー同士・器同士で食い違うなら本当に複数の型で呼ばれている——決めない。
   if (box(cur) && !box(next)) return cur;
@@ -1352,7 +1377,7 @@ function joinParamType(cur, next) {
   return null;
 }
 
-function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
+function inferParamTypesFromUsage(bodyNode, paramNames, scope, bareNames = null) {
   const inferred = new Map();
 
   /**
@@ -1437,6 +1462,41 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
       }
     }
 
+    // **仮引数を添字・スライス・撒きしたら、それは器である。** `@p` から `Address` を
+    // 読むのと同じ推論で、演算子が被演算子に要求するものを書き写している——`s ' 0` も
+    // `st~` も、器でなければ書けない。
+    //
+    // ここが無かったために、スタックの API 全体（`top` / `pop` / `push`）の仮引数が
+    // `Int` になっていた。初期値が `bottom : 0` というスカラーで、呼び出しサイトだけが
+    // 型を決めていたためである。1要素の器はスカラーと同型（`[5] ≅ 5`）なので値としては
+    // 正しく、**役割だけが器**だった。
+    //
+    // **書くのは族であって具体型ではない。** `List` と書くと `take_while` の `s`
+    // （`String`）まで `List` になり、要素型が降りられなくなる（実際に layout が
+    // 無限再帰した）。分かっているのは「器である」ことだけなので、そこまでを書く。
+    //
+    // **裸の仮引数だけを見る。** `[c ~rest]` の `rest` は分解元から型が決まっている
+    // ——そこへ族を書いても近づかないし、分解の側と引っ張り合って不動点が回る
+    // （実際 `sep` で回り、コンパイルが 100ms から 7.6 秒になった）。穴があったのは
+    // 「名前1つで器を受けている」位置だけである。
+    const bare = bareNames || paramNames;
+    if (
+      node.type === "operation" &&
+      node.name === "get_prop" &&
+      isIdentifierNode(node.left) &&
+      bare.has(node.left.value)
+    ) {
+      refine(node.left.value, "Container");
+    }
+    if (
+      node.type === "operation" &&
+      node.position === "postfix" &&
+      node.name === "expand" &&
+      isIdentifierNode(node.operand) &&
+      bare.has(node.operand.value)
+    ) {
+      refine(node.operand.value, "Container");
+    }
     // **前置 `@` / `#` はアドレスを要求する。** §3.5 の表が `@` を
     // 「`Address` → 参照先の圏を継承」と定めており、参照を外せるのはアドレスだけである。
     // だから `f : p ? @p 1` の `p` は `Address` だと**書いてある**——演算子から逆算する
@@ -1577,7 +1637,13 @@ function paramNamesOf(paramNode) {
 function inferLambdaParamTypes(lambdaNode, env) {
   const names = new Set(paramNamesOf(lambdaNode.left));
   const scopeOf = lambdaNode.scope || env;
-  const inferred = inferParamTypesFromUsage(lambdaNode.right, names, scopeOf);
+  // 裸の仮引数（`f : st ?`）だけが「器として使われた」の対象である。
+  const bareNames = new Set(
+    lambdaNode.left && lambdaNode.left.type === "atom"
+      ? [lambdaNode.left.value]
+      : ((lambdaNode.left && lambdaNode.left.entries) || []).filter((e) => !e.pattern && !e.rest && e.name).map((e) => e.name)
+  );
+  const inferred = inferParamTypesFromUsage(lambdaNode.right, names, scopeOf, bareNames);
   // 呼び出しサイトで観測した具体型を取り込む（§5 Pass 1b の Layer 2 版）。§7.1 の
   // `Scalar` は「呼び出しサイトで具体化されるまでの暫定形」なので、族に留まっている
   // 位置はここで決まる。本体の証拠が既に具体型なら、そちらの方が近いので触らない。
@@ -1589,6 +1655,35 @@ function inferLambdaParamTypes(lambdaNode, env) {
       if (!name || !t) return;
       const prev = inferred.get(name);
       const members = prev === undefined ? null : FAMILY_MEMBERS[prev];
+      // **`Container` は実引数に譲る。スカラーにも譲る。**
+      //
+      // ここで器へ持ち上げたくなるが、それは間違いである。`f : n ? n ' 0` を `f 5` と
+      // 呼ぶ形と、`f : st ? st ' 0` を `f bottom` と呼ぶ形は**構文が同じ**であり、
+      // 使い方だけでは区別が付かない——`[5] ≅ 5` なのでどちらも意味は通る。違うのは
+      // 表現（レジスタ1本か `{ptr, len}` か）だけである。
+      //
+      // 器だと決めるのは**実引数が食い違うとき**である。スタックは `bottom`（`Int`）と
+      // `next_st st d`（`List`）の両方で呼ばれるので、`joinParamType` が既に器へ寄せる
+      // ——`C` と `C×C` は同じものの別の段だからである。全ての呼び出しがスカラーなら、
+      // それは本当に長さ1であり、1本で運ぶ方が正しい。
+      if (prev === "Container" && t && !FAMILY_MEMBERS[t]) {
+        inferred.set(name, t);
+        return;
+      }
+      // **実引数のどれかが器なら、仮引数は器で運ぶ。** 観測が `Int | List` に落ち着く形
+      // ——`walk` の `st` は `bottom`（スカラー）でも `next_st st d`（器）でも呼ばれる
+      // ——では、広い方が両方を運べる（スカラーは長さ1の器）。逆は運べない。
+      //
+      // 直和のまま置くと Pass 4 が幅を選べないので、**器の成員へ寄せる**。段が違うだけで
+      // 同じものなので、広い側に決めるのは情報の破棄ではない（原理7）。
+      const boxMember = String(t || "")
+        .split(" | ")
+        .map((x) => x.trim())
+        .find((x) => CONTAINER_TYPES.has(x));
+      if (boxMember && (prev === undefined || !CONTAINER_TYPES.has(prev))) {
+        inferred.set(name, boxMember);
+        return;
+      }
       // 本体から読めた型が具体型でも、それが**算術の相手のリテラルから来た `Int`** なら
       // 呼び出しサイトの方が近い。`f : a ? a / 2` の `a` は「数である」までしか言われて
       // いないのに、リテラル `2` の型がそのまま `a` の型として書き込まれていた。呼び出しが
@@ -2001,6 +2096,24 @@ function collectCallsiteParamTypes(nodes, env) {
     if (JSON.stringify(rhs.callsiteParamTypes) !== JSON.stringify(settled)) {
       rhs.callsiteParamTypes = settled;
       changed = true;
+    }
+    // **持ち上げた直和のスカラー側が、要素の型である。**
+    //
+    // `st` が `Int | List` と観測されるのは「スカラーでも器でも呼ばれる」形であり、
+    // `[5] ≅ 5` なので前者は**長さ1の器**である。だから器の要素は `Int` だと分かって
+    // いる。ここを繋がないと `List` とだけ書かれて要素の幅が決まらず、`top : st ? st ' 0`
+    // が「まだ出せない式」になる——型は正しいのに命令が選べない状態である。
+    if (rhs.scope) {
+      names.forEach((name, i) => {
+        const t = settled[i];
+        if (!name || !t) return;
+        const ms = String(t).split(" | ").map((x) => x.trim());
+        const boxM = ms.find((x) => CONTAINER_TYPES.has(x));
+        const scaM = ms.find((x) => x !== "Unit" && !CONTAINER_TYPES.has(x) && !FAMILY_MEMBERS[x]);
+        if (!boxM || !scaM) return;
+        const b = envLookup(rhs.scope, name);
+        if (b && b.elementType !== scaM) { b.elementType = scaM; changed = true; }
+      });
     }
     // 形は仮引数の束縛へ直接置く。型（`Struct`）は既に分かっていて、足りないのは
     // 並びの方だからである。スコープは入れ子なので親まで辿る。
