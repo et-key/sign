@@ -78,13 +78,26 @@ check("呼び出しを含む形は求めない", bound("g : x ? x\nf : a b ? a (
 {
 	const S = "bottom : 0\npush : st d ? d st~\nf : st d ? d st~\n";
 	check("実行時は伸びる", value(S + "push (push bottom 2) 5"), JSON.stringify([5, 2, 0]));
-	const { nodes } = compile(S + "push bottom 2", { charset: "ascii" });
+	const { nodes } = compile(S + "push (push bottom 2) 5", { charset: "ascii" });
 	const look = (s, nm) => { while (s) { const b = s.bindings instanceof Map ? s.bindings.get(nm) : s.bindings[nm]; if (b) return b; s = s.parent; } return null; };
 	const d = nodes.find((n) => n.name === "define" && String(n.left.value).includes("push"));
 	const st = look(d.right.scope, "<st>");
-	checkTrue("型が値より狭い（既知の穴）", st && st.atomType === "Int", `st = ${st && st.atomType}`);
-	// 直和になっていれば器として数えられる。そうなるまで sret は組めない。
-	checkTrue("直和なら器として数える", bound("g : x ?\n\tx > 1 : `ab`\n\t0\nf : d st ? d st~\nf 1 (g 2)") !== "2");
+	// **スカラーと器が混ざったら器へ持ち上げる。** `[5] ≅ 5` なのでスカラーは1要素の器で
+	// あり、`Int` と `List` は「どちらか分からない」のではなく**同じものの別の段**である
+	// （`C` と `C×C`）。実引数を観測する側で合流させると、`st` は `List` になり上界も
+	// 正しくなる——以前は片方へ落ちて `2` になり、実行時に伸びる値に対してスロットが
+	// 小さすぎた。
+	checkTrue("器へ持ち上がる", st && st.atomType === "List", `st = ${st && st.atomType}`);
+	check("上界も正しくなる", bound(S + "f (f bottom 2) 5"), "1 + ||st||");
+	// **持ち上げるのは「値がどちらにもなる」ときだけ**である。使われ方（`c (rest ' 0)` の
+	// `c` は String を要求する演算に渡される）は値の型ではないので、そこでは持ち上げない
+	// ——混同すると `[c ~rest]` の頭まで器になり、要素の幅が決まらなくなる。
+	{
+		const { nodes: ns } = compile("f : [c ~rest] ? c (rest ' 0)\nf `abc`", { charset: "ascii" });
+		const fd = ns.find((n) => n.name === "define" && String(n.left.value).includes("f>"));
+		const cb = look(fd.right.scope, "<c>");
+		checkTrue("使われ方では持ち上げない", cb && cb.atomType === "Char", `c = ${cb && cb.atomType}`);
+	}
 }
 
 console.log(`\n${passed}/${total} passed`);

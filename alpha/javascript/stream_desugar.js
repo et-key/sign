@@ -140,15 +140,25 @@ function readStreamFunction(node, group) {
 	// **どちらも黙ってやってはいけない**ので、この形は均さない。
 	//
 	// 見るのは型である。器（`String` / `List` / `Struct` / `Iterator`）が並んでいたら諦める。
-	const CONTAINER = new Set(["String", "List", "Struct", "Iterator", "Implicit"]);
-	// ただし**入力の連続した位置が並んでいるなら通す**。`space (c (rest ' 0) (rest ' 1)) space`
-	// の真ん中は3文字の器に見えるが、それは入力のその3文字そのものであり、切り出し1つで
-	// 書ける（`printElement`）——確保は要らない。
+	// **並べるものは1要素でなければならない。ただし個数は型では分からない。**
+	//
+	// 型の上ではスカラーも1要素の器なので（`[5] ≅ 5`）、`c` は `Char` とも `String` とも
+	// 書ける——**型で「器かどうか」を判定しても、1要素かどうかは出ない**。見るのは構造で
+	// ある：分割代入の頭（`c`）と添字（`rest ' i`）とリテラルは1つ、尾（`rest`）とその
+	// 撒き（`rest~`）は多数、連なりは中身の数だけ。
+	//
+	// 入力の連続した位置が並んでいるなら通す——`space (c (rest ' 0) (rest ' 1)) space` の
+	// 真ん中は3文字だが、入力のその3文字そのものなので位置ごとに展開できる（`printElements`）。
 	const dmap = destructureMap(lam.left);
 	const okElement = (p) => {
 		if (!p) return false;
-		if (!CONTAINER.has(p.atomType) && !(p.type === "operation" && JOIN_OPS.has(p.name))) return true;
-		return !!dmap && consecutiveRun(p, dmap) !== null;
+		// 連なりは、入力の連続した位置なら展開できる。そうでなければ個数が決まらない。
+		if (p.type === "operation" && JOIN_OPS.has(p.name)) return !!dmap && consecutiveRun(p, dmap) !== null;
+		// 尾そのもの（と、その撒き）は多数である。
+		const q = p.type === "operation" && p.position === "postfix" && p.name === "expand" ? unparen(p.operand) : p;
+		if (dmap && isIdent(q) && bare(q.value) === dmap.rest) return false;
+		// それ以外は1つ（頭・添字・リテラル・計算した値）。
+		return true;
 	};
 	if (arms.some((a) => a.prefix.some((p) => !okElement(p)))) return null;
 	// **列であるには、続く枝が要る。** 全部が終端なら、それはただの分岐である。

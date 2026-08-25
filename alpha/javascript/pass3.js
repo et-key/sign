@@ -1328,6 +1328,25 @@ const FAMILY_MEMBERS = {
   Atom: new Set(["Int", "Address", "Float", "Vector", "Scalar", "Char", "String", "List", "Struct", "Iterator", "Implicit"]),
 };
 
+/**
+ * 仮引数の型の合流。**スカラーは1要素の器である**（`[5] ≅ 5`）ので、器と混ざったら器へ
+ * 持ち上げる——`Int` と `List` は別の型ではなく、同じものの別の段（`C` と `C×C`）である。
+ *
+ * 族は「まだ分かっていない」の言い換えなので、具体型が来たら譲る。どちらも器・どちらも
+ * スカラーで食い違う場合は決めない（本当に複数の型で呼ばれている）。
+ */
+function joinParamType(cur, next) {
+  if (!next) return cur;
+  if (!cur || FAMILY_MEMBERS[cur]) return next;
+  if (cur === next) return cur;
+  const box = (t) => ["String", "List", "Struct", "Iterator", "Implicit"].includes(t);
+  // **持ち上げのときだけ合流する。** スカラーは1要素の器なので器へ上げられるが、
+  // スカラー同士・器同士で食い違うなら本当に複数の型で呼ばれている——決めない。
+  if (box(cur) && !box(next)) return cur;
+  if (box(next) && !box(cur)) return next;
+  return null;
+}
+
 function inferParamTypesFromUsage(bodyNode, paramNames, scope) {
   const inferred = new Map();
 
@@ -1949,10 +1968,18 @@ function collectCallsiteParamTypes(nodes, env) {
     // 証拠をここへ運んでおかないと合流しない。
     const settled = names.map((name, i) => {
       if (!name) return null;
-      const seen = [...observed[i]];
-      // 全サイトが同じ具体型で一致したときだけ。食い違うなら族のままが正しい。
-      if (seen.length !== 1 || FAMILY_MEMBERS[seen[0]]) return null;
-      return seen[0];
+      const seen = [...observed[i]].filter((t) => !FAMILY_MEMBERS[t]);
+      if (seen.length === 0) return null;
+      // **スカラーと器が混ざったら、器へ持ち上げる。**
+      //
+      // `[5] ≅ 5` なのでスカラーは1要素の器であり、`Int` と `List` は「どちらか分から
+      // ない」のではなく**同じものの別の段**である（`C` と `C×C`）。食い違いを `null` へ
+      // 捨てていたので、`push : st d ? d st~` の `st` が `Int` のまま——**型が値より狭く**、
+      // 返す器の上界が `2` になっていた（実行時には伸びる）。持ち上げは無償である。
+      //
+      // どちらも器・どちらもスカラーで食い違うなら、本当に複数の型で呼ばれている
+      // （`binding.instances` が実体の一覧を持つ）ので決めない。
+      return seen.reduce((a, b) => (a === null ? null : joinParamType(a, b)));
     });
     if (JSON.stringify(rhs.callsiteParamTypes) !== JSON.stringify(settled)) {
       rhs.callsiteParamTypes = settled;
@@ -2132,12 +2159,10 @@ function collectParamTypes(nodes, env) {
           const b = envLookup(scope, name);
           // `Atom` は下限であって情報ではないので、上書きの根拠にしない。
           //
-          // **ここは横へも動く。** 具体型を別の具体型で上書きしうるので、他の型がまだ
-          // settle していない間は往復する——糖衣を通すと不動点が上限（150周）まで回る。
-          // 「最初の具体型が勝つ」に変えると止まるが、型が上がらなくなる（`sep` などが
-          // ストリームとして認識されなくなる）ので、そちらは採れない。**食い違うなら
-          // 族のままにする**のが筋だが、`inferLambdaParamTypes` が型を1つしか返さないので
-          // そのままでは書けない。**未解決**。
+          // **ここは使われ方であって、値ではない。** `c (rest ' 0)` の `c` は「String を
+          // 要求する演算に渡された」だけで、値が String だとは言っていない——持ち上げの
+          // 判断（`joinParamType`）はここではなく**実引数を観測する側**で行う。
+          // 混同すると `[c ~rest]` の頭まで器に持ち上がり、要素の幅が決まらなくなる。
           if (b && t && t !== "Atom" && b.atomType !== t) {
             b.atomType = t;
             changed = true;
