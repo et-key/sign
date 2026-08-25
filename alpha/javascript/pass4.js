@@ -46,10 +46,49 @@ const ARG_REGS = ["x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7"];
 // 演算のあいだだけ使う。呼び出しを跨がないので caller-saved で足りる。
 const SCRATCH = ["x9", "x10"];
 // フレームに置ける式の深さ。超えたら診断（深い式は稀なので、まず名指しする）。
-const MAX_SLOTS = 16;
+//
+// **仮引数もここを使う。** 器を受ける仮引数は2本使うので、引数が多い関数は本体を
+// 出す前に枠を食う——`walk` は9個で13本である。16 では仮引数だけでほぼ埋まって
+// しまい、本体が「式が深すぎます」で落ちていた。
+//
+// 上げても命令は変わらない。`ldr`/`str` の符号なしオフセットは 64 ビット幅で
+// 32760 まで届くので、この程度のフレームは1命令で引ける。
+const MAX_SLOTS = 48;
 
 // 器を作る余積の演算（記憶の確保を要求する）。
 const COPRODUCT_BUILD_OPS = new Set(["construct", "concat", "push", "unshift", "product"]);
+
+/**
+ * **引数をレジスタとスタックへ割り振る**（AAPCS64 §6.4）。
+ *
+ * x0〜x7 が尽きたら残りはスタックへ積む。**またぐことはできない**——2本要る引数に1本
+ * しか残っていなければ、その引数から先は全部スタックである（レジスタ側を半端に埋めて
+ * 器を分断しない）。一度スタックへ回ったら、それ以降も全部スタックである。
+ *
+ * 呼ぶ側と受ける側が**同じ計算**を使う必要がある。2箇所で別々に数えると、片方だけが
+ * 正しい命令列を出す——省略された引数の位置と同じ理由である。
+ *
+ * @param widths 引数ごとのレジスタ本数
+ * @returns `{ slots, stackBytes }`。`slots[i].reg` が null ならスタック渡しで、
+ *   置き場所は `slots[i].stackOff`（呼び出し時点の `sp` からの相対）。
+ */
+function assignArgSlots(widths) {
+	const slots = [];
+	let reg = 0;
+	let stack = 0;
+	let onStack = false;
+	for (const w of widths) {
+		if (!onStack && reg + w <= ARG_REGS.length) {
+			slots.push({ reg, stackOff: null, w });
+			reg += w;
+			continue;
+		}
+		onStack = true;
+		slots.push({ reg: null, stackOff: stack, w });
+		stack += w * 8;
+	}
+	return { slots, stackBytes: Math.ceil(stack / 16) * 16 };
+}
 
 // 演算子名 → ニーモニック。**除算と比較だけは符号で分かれる**ので、型の
 // `SIGNEDNESS`（target_info.js）を見て選ぶ——`Int` は符号あり、`Address` と `Char` は
@@ -885,51 +924,55 @@ function genExpr(node, env, em, scope, tail = false) {
 			parts.push({ off: (em.slot - w) * 8, w });
 		}
 		const total = parts.reduce((acc, x) => acc + x.w, 0);
-		if (total > ARG_REGS.length) {
-			return em.fail(n, `引数がレジスタ ${ARG_REGS.length} 本を超えます（${passed.length} 個で ${total} 本）`);
-		}
-		// 引数レジスタへ積むのは**全部作り終えてから**。先に x0 へ書くと、2つ目の
-		// 引数を作る途中で潰れる（式の中に呼び出しがあれば必ず潰れる）。
-		let reg = 0;
-		parts.forEach((part, i) => {
-			for (let k = 0; k < part.w; k++) {
-				em.load(ARG_REGS[reg], part.off + k * 8, k === 0 ? `第${i + 1}引数${part.w > 1 ? "の ptr" : ""}` : "その len");
-				reg++;
-			}
-		});
-		// **省略された引数には呼ぶ側が `__` を置く。**
-		//
-		// AAPCS64 は使われないレジスタを初期化しない。デフォルトを持つ仮引数は「渡されて
-		// いなければ埋める」形で出しているので（`genFunction`）、渡されなかったことを
-		// `__` で伝えないと**前の呼び出しの残骸をデフォルトの判定に使う**ことになる。
-		// 評価器が `argIdx < argValues.length ? … : UNIT` と書いているのと同じことを、
-		// 機械の上で明示する。
-		const sig = em.signatures ? em.signatures.get(baseName) : null;
-		if (sig) {
-			const expect = sig.filter((_, i) => !drop.includes(i));
-			let want = 0;
-			let ok = true;
-			for (const x of expect) {
-				if (x.error || !x.regs) { ok = false; break; }
-				want += x.regs;
-			}
-			if (ok && want > reg) {
-				// 足りない位置の幅は署名が言う。幅ごとに `__` の表し方が違う。
-				let at = reg;
-				let seen = 0;
-				for (const x of expect) {
-					if (seen + x.regs > reg) {
-						if (x.regs === 1) em.emit(`movz ${ARG_REGS[at]}, #0x8000, lsl #48`, "省略された引数は __");
+		// **幅は署名が言う。** 省略された位置まで含めて全部数えないと、スタックへ積む
+		// 位置が決まらない——`walk s bottom 0 0` は9個の仮引数のうち4個しか渡さないが、
+		// 残り5個も引数域の場所を占める。
+		const sigAll = em.signatures ? em.signatures.get(baseName) : null;
+		const sigW = sigAll
+			? sigAll.filter((_, i) => !drop.includes(i)).map((x) => (x.error || !x.regs ? null : x.regs))
+			: null;
+		const widths =
+			sigW && sigW.length >= parts.length && sigW.every((x) => x !== null) && parts.every((p, i) => p.w === sigW[i])
+				? sigW
+				: parts.map((p) => p.w);
+		const plan = assignArgSlots(widths);
+		// **レジスタで渡すぶんは、末尾呼び出しの判定より前に置く。** 末尾なら `b` で
+		// 飛んでしまうので、後ろに置くと引数を積まないまま飛ぶ——テストが捕まえた。
+		// スタックで渡すぶんは `sp` を下げてからでないと書けないので下で置く（そちらは
+		// 末尾呼び出しにしないので、この分岐には来ない）。
+		const place = (onStack) => {
+			widths.forEach((w, i) => {
+				const s = plan.slots[i];
+				if ((s.reg === null) !== onStack) return;
+				const part = parts[i];
+				for (let k = 0; k < w; k++) {
+					const what = k === 0 ? `第${i + 1}引数${w > 1 ? "の ptr" : ""}` : "その len";
+					if (part) {
+						if (!onStack) em.load(ARG_REGS[s.reg + k], part.off + k * 8, what);
 						else {
-							em.emit(`mov ${ARG_REGS[at]}, #0`, "省略された引数は __");
-							em.emit(`mov ${ARG_REGS[at + 1]}, #0`, "（len = 0）");
+							em.load(SCRATCH[0], part.off + k * 8);
+							em.emit(`str ${SCRATCH[0]}, [sp, #${s.stackOff + k * 8}]`, `${what}（スタック渡し）`);
 						}
-						at += x.regs;
+						continue;
 					}
-					seen += x.regs;
+					// **省略された引数には呼ぶ側が `__` を置く。** AAPCS64 は使われない
+					// レジスタを初期化しない。デフォルトを持つ仮引数は「渡されていなければ
+					// 埋める」形で出しているので（`genFunction`）、渡されなかったことを
+					// `__` で伝えないと**前の呼び出しの残骸をデフォルトの判定に使う**。
+					// 幅ごとに `__` の表し方が違う（1本なら niche、2本なら len = 0）。
+					const one = w === 1;
+					if (!onStack) {
+						if (one) em.emit(`movz ${ARG_REGS[s.reg]}, #0x8000, lsl #48`, "省略された引数は __");
+						else em.emit(`mov ${ARG_REGS[s.reg + k]}, #0`, k === 0 ? "省略された引数は __" : "（len = 0）");
+						continue;
+					}
+					if (one) em.emit(`movz ${SCRATCH[0]}, #0x8000, lsl #48`, "省略された引数は __");
+					else em.emit(`mov ${SCRATCH[0]}, #0`, k === 0 ? "省略された引数は __" : "（len = 0）");
+					em.emit(`str ${SCRATCH[0]}, [sp, #${s.stackOff + k * 8}]`, "（スタック渡し）");
 				}
-			}
-		}
+			});
+		};
+		place(false);
 		em.pop(total);
 
 		// **末尾呼び出しは `bl` ではなく `b` である**（tco.md §6——最適化ではなく
@@ -943,6 +986,11 @@ function genExpr(node, env, em, scope, tail = false) {
 		//
 		// **TCO と、フレームに置いたデータは引っ張り合う。** 末尾再帰はフレームを1つに
 		// 畳むのが仕事であり、そのフレームに寿命を預けているものとは両立しない。
+		// **スタックへ積む引数があるなら末尾呼び出しにはできない。** 末尾呼び出しは自分の
+		// フレームを畳んでから飛ぶが、積んだ引数はそのフレームの上にある——畳んだ瞬間に
+		// 呼び先の引数域が消える。`bl` にして戻ってから畳めば生きている（`$匿名式` を
+		// 持つ関数と同じ理由である）。
+		if (tail && plan.stackBytes > 0) tail = false;
 		if (tail && scope && !scope.holdsFrameStorage) {
 			if (callee === scope.selfLabel) {
 				// 自己末尾再帰。フレームをそのまま使い回す。飛び先は**仮引数を写す前**
@@ -997,7 +1045,18 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.movedSp = true;
 			em.emit("mov x8, sp", "返値スロットのアドレスを渡す");
 		}
+		// **引数を置くのは全部作り終えてから。** 先に x0 へ書くと、2つ目の引数を作る
+		// 途中で潰れる（式の中に呼び出しがあれば必ず潰れる）。スタック側は sret の
+		// スロットより**上**に積む——`bl` の時点で `[sp]` から始まっている必要がある
+		// （AAPCS64 §6.4）ので、確保の順序がそのまま意味を持つ。
+		if (plan.stackBytes > 0) {
+			em.emit(`sub sp, sp, #${plan.stackBytes}`, "スタック渡しの引数域");
+			em.movedSp = true;
+			place(true);
+		}
 		em.emit(`bl ${callee}`, n.monoLabel ? "呼び出し（具体化済み）" : "呼び出し");
+		// 引数域はもう要らない。sret のスロットは返値が指しているので**畳まない**。
+		if (plan.stackBytes > 0) em.emit(`add sp, sp, #${plan.stackBytes}`, "引数域を戻す");
 		// 返値の幅も型が決める。器を返す関数は x0/x1 で `{ptr, len}` を返す
 		// （AAPCS64 が16バイトの複合型をそう返すのと同じ置き方）。
 		// **返値の幅もノードが言う。** 規則（レンジ）は `{start, step, end}` で3本になる
@@ -2915,15 +2974,9 @@ function genFunction(name, lambdaNode, env, em, mono) {
 		em.diagnostics.push({ severity: "error", message: `${name}: ${bad.error}`, node: lambdaNode });
 		return;
 	}
-	const regs = incoming.reduce((a, x) => a + x.regs, 0);
-	if (regs > ARG_REGS.length) {
-		em.diagnostics.push({
-			severity: "error",
-			message: `${name}: 引数がレジスタ ${ARG_REGS.length} 本を超えます（${incoming.length} 個で ${regs} 本）`,
-			node: lambdaNode,
-		});
-		return;
-	}
+	// レジスタが尽きたら残りはスタックで受ける（AAPCS64 §6.4）。割り振りは呼ぶ側と
+	// **同じ関数**で計算する——2箇所で別々に数えると片方だけが正しい命令列を出す。
+	const inPlan = assignArgSlots(incoming.map((x) => x.regs));
 
 	// 本体は別の行配列へ出してから包む（フレームの大きさが後で決まるため）。
 	const outer = em.lines;
@@ -2945,16 +2998,25 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	// **仮引数を入口でスロットへ写す。** 引数レジスタは最初の `bl` で壊れるので、
 	// 本体のどこからでも読める場所へ移しておく必要がある。
 	// 幅は引数ごとに違う——器を受ける仮引数は `{ptr, len}` で2本来る（stack_abi.md §4.6）。
-	let reg = 0;
-	for (const inc of incoming) {
+	// **スタックで渡された引数は、自分のフレームの上にある。** `stp x29, x30, [sp, #-frame]!`
+	// で `sp` が frame ぶん下がっているので、呼ぶ側が `[sp]` から積んだものは `x29 + frame`
+	// にある。フレームの大きさは本体を出し切るまで決まらないので印を置く。
+	if (inPlan.stackBytes > 0) em.emit(`add ${SCRATCH[1]}, x29, #${FRAME_MARK}`, "スタックで渡された引数域");
+	incoming.forEach((inc, i) => {
+		const s = inPlan.slots[i];
 		inc.off = em.slot * 8;
 		for (let k = 0; k < inc.regs; k++) {
 			em.push();
 			const what = inc.shape.kind === "bare" ? bareName(inc.shape.name) : `[${bareName(inc.shape.head)} ~${bareName(inc.shape.rest)}]`;
-			em.store(ARG_REGS[reg], (em.slot - 1) * 8, k === 0 ? `仮引数 ${what} を退避${inc.regs > 1 ? "（ptr）" : ""}` : "（len）");
-			reg++;
+			const note = k === 0 ? `仮引数 ${what} を退避${inc.regs > 1 ? "（ptr）" : ""}` : "（len）";
+			if (s.reg !== null) {
+				em.store(ARG_REGS[s.reg + k], (em.slot - 1) * 8, note);
+				continue;
+			}
+			em.emit(`ldr ${SCRATCH[0]}, [${SCRATCH[1]}, #${s.stackOff + k * 8}]`, k === 0 ? `仮引数 ${what}（スタック渡し）` : undefined);
+			em.store(SCRATCH[0], (em.slot - 1) * 8, note);
 		}
-	}
+	});
 	// **x8 は最初の `bl` で壊れる。** 呼び出し側から受け取った返値スロットのアドレスは
 	// 本体の最後まで要るので、仮引数と同じくスロットへ写しておく。呼ばれた側が自分でも
 	// 誰かを呼ぶなら、その `bl` が x8 を自分の用途で上書きするからである。
