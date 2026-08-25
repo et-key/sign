@@ -581,7 +581,7 @@ function genExpr(node, env, em, scope, tail = false) {
 	//
 	// `String ≅ List(0u)`（type_system.md §2）であり、1要素のリストはスカラーと同型
 	// （`[5]` は `Int`、list_model.md）。したがって1文字の文字列は符号位置そのもので
-	// あり、レジスタに乗る——`is_digit : c ?   <= c <= 9` が `cmp` 1命令で書けるのは
+	// あり、レジスタに乗る——`is_digit : c ? 0 <= c <= 9` が `cmp` 1命令で書けるのは
 	// これが理由である（§4 の NOTE「文字は符号位置で数える点」）。
 	//
 	// 2文字以上は要素の並びなので `.rodata` へ置いて `{ptr, len}` で渡す
@@ -747,7 +747,7 @@ function genExpr(node, env, em, scope, tail = false) {
 		return 1;
 	}
 
-	// **連鎖比較**（`  <= c <= 9`）。二項と違い、真のとき返るのは**必ず中央**である
+	// **連鎖比較**（`0 <= c <= 9`）。二項と違い、真のとき返るのは**必ず中央**である
 	// ——0/1 の規則（comparison.md §2.1）は効かない。範囲判定の書き方そのものなので、
 	// これが出せないと文字の分類が1つも書けない。
 	//
@@ -957,6 +957,33 @@ function genExpr(node, env, em, scope, tail = false) {
 			return TAIL;
 		}
 
+		// **返す器の場所は呼ぶ側が用意する（sret）。** 呼ばれた側は自分のフレームに
+		// 置けないので（`mov sp, x29` が捨てる）、こちらの `sub sp` で取った場所を
+		// x8 で渡す。大きさは `returnSizeBound` の上界であり、両側が同じ表を引く。
+		const sp = em.sretPlan ? em.sretPlan.get(callee) : null;
+		if (sp) {
+			if (sp.sizeOfIndex !== null) {
+				// 上界が引数の要素数に依る形。その引数の len から測る。
+				const src = parts[sp.sizeOfIndex];
+				if (!src || src.w !== 2) return em.fail(n, `返値スロットの大きさが測れません（${callee} の第${sp.sizeOfIndex + 1}引数が器ではない）`);
+				em.load(SCRATCH[0], src.off + 8, "上界を測る（引数の len）");
+				if (sp.coef !== 1) em.emit(`mov ${SCRATCH[1]}, #${sp.coef}`, "段ごとの個数");
+				if (sp.coef !== 1) em.emit(`mul ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "係数を掛ける");
+				if (sp.konst) em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #${sp.konst}`, "定数の枝ぶん");
+				if (sp.width !== 1) {
+					em.emit(`mov ${SCRATCH[1]}, #${sp.width}`, "要素の幅");
+					em.emit(`mul ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "バイト数へ");
+				}
+				em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #15`, "16 バイトへ丸める");
+				em.emit(`and ${SCRATCH[0]}, ${SCRATCH[0]}, #0xfffffffffffffff0`);
+				em.emit(`sub sp, sp, ${SCRATCH[0]}`, "返値スロットを取る（sret）");
+			} else {
+				const bytes = sretBytesConst(sp);
+				if (bytes > 0) em.emit(`sub sp, sp, #${bytes}`, `返値スロット ${bytes} バイトを取る（sret）`);
+			}
+			em.movedSp = true;
+			em.emit("mov x8, sp", "返値スロットのアドレスを渡す");
+		}
 		em.emit(`bl ${callee}`, n.monoLabel ? "呼び出し（具体化済み）" : "呼び出し");
 		// 返値の幅も型が決める。器を返す関数は x0/x1 で `{ptr, len}` を返す
 		// （AAPCS64 が16バイトの複合型をそう返すのと同じ置き方）。
@@ -1347,7 +1374,11 @@ function genExpr(node, env, em, scope, tail = false) {
 	//
 	// 並べるものが全部スカラーの場合だけ出せる。器が混じると要素数が実行時に決まり、
 	// 写す側もループになる——それは別の命令列である。
-	if (COPRODUCT_BUILD_OPS.has(n.name) && n.escapesFrame === false && slotsOfNode(n, em.conf, env) === 2) {
+	// フレームから出るなら、書く先は呼び出し側が用意したスロットである（`em.sretDest`）。
+	// 置き方は同じ——要素を順に並べて `{ptr, len}` を返す。違うのは**底が誰のものか**
+	// だけである。
+	const sretHere = n.escapesFrame !== false && em.sretDest !== null && em.sretDest !== undefined;
+	if (COPRODUCT_BUILD_OPS.has(n.name) && (n.escapesFrame === false || sretHere) && slotsOfNode(n, em.conf, env) === 2) {
 		// **括弧の中が連接なら剥いではいけない。** `a (b c) d` は `[a, "bc", d]` であり、
 		// 括弧が「ここまでで1つの要素」と言っている（余積は右辺を1要素として足す）。
 		// 剥ぐと要素数が変わる——実際 `((c (rest'0)) (rest'1)) ' 2` が `__` ではなく
@@ -1378,14 +1409,21 @@ function genExpr(node, env, em, scope, tail = false) {
 			}
 			const count = em.slot - base;
 			const w = em1.size;
-			const bytes = Math.ceil((count * w) / 16) * 16;
-			em.emit(`sub sp, sp, #${bytes}`, `${count} 要素ぶんの場所を取る（フレームから出ない）`);
-			em.movedSp = true;
+			let into = "sp";
+			if (sretHere) {
+				// 呼び出し側のスロットへ書く。底は x8 で渡ってきている。
+				em.load(SCRATCH[1], em.sretDest, "返値スロット（sret）");
+				into = SCRATCH[1];
+			} else {
+				const bytes = Math.ceil((count * w) / 16) * 16;
+				em.emit(`sub sp, sp, #${bytes}`, `${count} 要素ぶんの場所を取る（フレームから出ない）`);
+				em.movedSp = true;
+			}
 			for (let k = 0; k < count; k++) {
 				em.load(SCRATCH[0], (base + k) * 8);
-				em.emit(storeElem(SCRATCH[0], "sp", k * w, w), k === 0 ? "並べる" : undefined);
+				em.emit(storeElem(SCRATCH[0], into, k * w, w), k === 0 ? (sretHere ? "呼び出し側のスロットへ並べる" : "並べる") : undefined);
 			}
-			em.emit(`mov ${SCRATCH[0]}, sp`, "ptr");
+			em.emit(`mov ${SCRATCH[0]}, ${into}`, "ptr");
 			em.pop(count);
 			const po = em.push();
 			const lo = po === null ? null : em.push();
@@ -2695,6 +2733,60 @@ function collectSignatures(nodes, em) {
 	}
 	return sig;
 }
+/**
+ * **返す器は、呼び出し側が用意したスロットへ書く（sret）。**
+ *
+ * 自分のフレームに置いた器は返せない——エピローグの `mov sp, x29` が捨てるので、
+ * 返したアドレスは死んだ場所を指す（memory_management.md §2）。そこで**呼び出し側が
+ * 場所を用意し、呼ばれた側はそこへ書く**。使うのは x8、AAPCS64 が16バイトを超える
+ * 複合型に使う間接返値レジスタそのものである——規約を新しく作らず、ハードウェアの
+ * 側に既にあるものへ乗る（原理1：RISC as-is）。
+ *
+ * 用意する大きさは `returnSizeBound` の上界である。正確な個数は実行時に決まるが、
+ * **上界は静的に書ける**——そこが sret を成立させている。
+ *
+ * @returns 名前 → `{ konst, coef, sizeOfIndex, width }`。バイト数は
+ *   `(konst + coef × len) × width` であり、`sizeOfIndex` はその `len` を持つ仮引数の
+ *   位置（null なら定数）。
+ */
+function collectSretPlan(nodes, em) {
+	const plan = new Map();
+	for (const node of nodes) {
+		if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+		const lam = node.right;
+		if (!lam || lam.type !== "operation" || lam.name !== "lambda") continue;
+		// 本体の末尾で器を組み、それがフレームから出る形だけが対象である。
+		const arms = Array.isArray(lam.right && lam.right.lines)
+			? lam.right.lines.map((l) => (isDefineNode(l) ? l.right : l))
+			: [lam.right];
+		let build = null;
+		for (const arm of arms) {
+			const a = unwrap(arm);
+			if (a && a.type === "operation" && COPRODUCT_BUILD_OPS.has(a.name) && a.escapesFrame !== false) { build = a; break; }
+		}
+		if (!build) continue;
+		const et = build.elementType || (build.atomType === "String" ? "Char" : null);
+		const m = et ? measure({ atomType: et }, { target: em.conf.target, charset: em.conf.charset }) : null;
+		if (!m || !m.size) continue;
+		const name = bareName(node.left.value);
+		const b = returnSizeBound(lam, name);
+		if (!b) continue;
+		let sizeOfIndex = null;
+		if (b.sizeOf) {
+			const names = paramShapesOf(lam.left).map((sh) => (sh && sh.kind === "bare" ? sh.name : sh && sh.whole ? sh.name : null));
+			sizeOfIndex = names.indexOf(b.sizeOf);
+			if (sizeOfIndex < 0) continue; // `||…||` の相手が仮引数でなければ呼ぶ側は測れない
+		}
+		plan.set(name, { konst: b.konst, coef: b.coef, sizeOfIndex, width: m.size });
+	}
+	return plan;
+}
+
+/** 上界をバイト数へ。16 バイト境界へ丸める（AAPCS64 は `sp` の 16 整列を要求する）。 */
+function sretBytesConst(p) {
+	return Math.ceil((p.konst * p.width) / 16) * 16;
+}
+
 function genFunction(name, lambdaNode, env, em, mono) {
 	// **本体の中では、名前は関数のスコープで解決する。**
 	//
@@ -2775,6 +2867,15 @@ function genFunction(name, lambdaNode, env, em, mono) {
 			em.store(ARG_REGS[reg], (em.slot - 1) * 8, k === 0 ? `仮引数 ${what} を退避${inc.regs > 1 ? "（ptr）" : ""}` : "（len）");
 			reg++;
 		}
+	}
+	// **x8 は最初の `bl` で壊れる。** 呼び出し側から受け取った返値スロットのアドレスは
+	// 本体の最後まで要るので、仮引数と同じくスロットへ写しておく。呼ばれた側が自分でも
+	// 誰かを呼ぶなら、その `bl` が x8 を自分の用途で上書きするからである。
+	em.sretDest = null;
+	if (em.sretPlan && em.sretPlan.has(bareName(name))) {
+		em.push();
+		em.sretDest = (em.slot - 1) * 8;
+		em.store("x8", em.sretDest, "返値スロットのアドレス（sret）を退避");
 	}
 	for (const [pn, cn] of Object.entries(callees)) em.emit(`// ${bareName(pn)} = ${cn}`, "具体化された呼び先");
 
@@ -2972,6 +3073,9 @@ function generateAsm(nodes, env, options = {}) {
 	markEscapes(nodes, collectReturnedParams(nodes));
 	// 呼び出しサイトが省略された引数の位置を知るための署名表。本体を出す前に要る。
 	em.signatures = collectSignatures(nodes, em);
+	// 返す器の置き場所（sret）。呼ぶ側と呼ばれる側の両方が同じ表を引く必要がある
+	// ——2箇所で別々に大きさを数えると、片方だけが正しい命令列を出す。
+	em.sretPlan = collectSretPlan(nodes, em);
 
 	em.lines.push("// Sign — AArch64 (AAPCS64)");
 	if (options.source) em.lines.push(`// source: ${options.source}`);
@@ -3021,6 +3125,11 @@ function generateAsm(nodes, env, options = {}) {
 	em.slot = 0;
 	em.maxSlot = 0;
 	em.movedSp = false; // 本体が `sp` を動かしたか（エピローグの戻し方が変わる）
+	// **`_sign_main` は sret の受け手ではない。** 直前に出した関数が残した印を
+	// そのまま持ち込むと、トップレベルで作った器が**死んだ他人のスロット**へ書かれる
+	// ——トップレベルは返さないので `escapesFrame` が付いておらず、素通りしてしまう。
+	em.sretDest = null;
+	let last = null; // 最後に値を出した式の置き場所（`_sign_main` の返値になる）
 	for (const node of exprs) {
 		// **裸の文字列リテラルはコメントである**（string_and_comment.md）。Sign の
 		// コメントはバッククォート文字列そのものなので AST に残るが、値として使われて
@@ -3032,7 +3141,19 @@ function generateAsm(nodes, env, options = {}) {
 		if (isBareComment(node)) continue;
 		const target = isDefineNode(node) ? node.right : node;
 		const w = genExpr(target, env, em, null);
-		if (w !== false) em.pop(w);
+		if (w === false) continue;
+		// **最後の式の値が `_sign_main` の返値である。** ここまでは値をスロットへ置いた
+		// まま `ret` していた——x0 に残っていたのは直前の `bl` の戻り値であって、式の値
+		// ではない。`f 1 2` の形で終わるプログラムだけが偶然正しく、`1 + 2` や `42` は
+		// 番地を返していた。qemu のテストが全て呼び出しで終わる書き方だったため、
+		// **ハーネス自身の書き方がこの穴を隠していた**。
+		last = w === TAIL ? null : { off: (em.slot - w) * 8, w };
+		if (w !== TAIL) em.pop(w);
+	}
+	if (last) {
+		for (let k = 0; k < last.w; k++) {
+			em.load(ARG_REGS[k], last.off + k * 8, k === 0 ? (last.w > 1 ? "最後の式の値を返す（ptr）" : "最後の式の値を返す") : "（len）");
+		}
 	}
 	const body = em.lines;
 	em.lines = outer;
