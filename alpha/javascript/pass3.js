@@ -1889,7 +1889,19 @@ function callsitesOf(nodes, fnName, rootEnv) {
     if (node.operand) visit(node.operand, scope);
     if (Array.isArray(node.lines)) node.lines.forEach((l) => visit(l, scope));
   };
-  for (const n of nodes) visit(n, rootEnv);
+  // **置き換えられた定義は呼び出しサイトではない。** ストリームの糖衣は同じ名前の定義を
+  // 2つ作る（元のものと、器を引く形へ均したもの）。元の方は `supersededByDesugar` の印が
+  // 付いていて命令にはならないが、`callsitesOf` はそこも歩いていたので、**死んだ定義の
+  // 中の呼び出しが型の証拠として数えられていた**。
+  //
+  // 実害はこう出た。`sep : [c ~rest] ?` の `c` は `Char` だが、置き換えられた側の `c` は
+  // `String` のまま取り残される。そこの `infix1 c` が観測されるため `infix1` の仮引数が
+  // `String` になり、`ch = \:` が「String と Char の比較」になって出せなくなっていた。
+  // 生きている `sep_arm` の側では `c` は正しく `Char` である。
+  for (const n of nodes) {
+    if (n && n.supersededByDesugar) continue;
+    visit(n, rootEnv);
+  }
   return sites;
 }
 

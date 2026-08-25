@@ -200,5 +200,34 @@ check("器が並ぶ形は均さない", streams("f : [c ~rest] ?\n\tc = `;` : c 
 	checkTrue("walk は含まれない", !found.some((f) => f.name === "walk"));
 }
 
+// ---- 置き換えられた定義は呼び出しサイトではない ----
+//
+// 糖衣は同じ名前の定義を2つ作る（元のものと、器を引く形へ均したもの）。元の方は
+// `supersededByDesugar` の印が付いていて命令にはならないが、型の証拠としては数えられて
+// いた——**死んだ定義の中の呼び出しが、生きている関数の仮引数の型を決めていた**。
+//
+// 実害はこう出た。`sep : [c ~rest] ?` の `c` は `Char` だが、置き換えられた側の `c` は
+// `String` のまま取り残される。そこの `infix1 c` が観測されるため `infix1` の仮引数が
+// `String` になり、`ch = \:` が「String と Char の比較」になって出せなくなっていた。
+{
+	const look = (s, n) => { while (s) { const b = s.bindings instanceof Map ? s.bindings.get(n) : s.bindings[n]; if (b) return b; s = s.parent; } return null; };
+	const clean = (s) => String(s).replace(/[<>]/g, "");
+	// 器を1つ受けて頭を渡す形。糖衣が掛かっても、渡る先の仮引数は要素の型（`Char`）である。
+	const SRC = "hit : ch ?\n\tch = `a` : ch\n\t__\ns : [c ~rest] ?\n\thit c : c (s rest)\n\tc (s rest)\nf : x ? s x\nf `abc`\n";
+	for (const ds of [false, true]) {
+		const { nodes } = compile(SRC, { charset: "ascii", desugarStreams: ds });
+		const d = nodes.find((n) => n.name === "define" && clean(n.left.value) === "hit" && !n.supersededByDesugar);
+		const b = d && d.right.name === "lambda" ? look(d.right.scope, "<ch>") : null;
+		check(`糖衣${ds ? "あり" : "なし"}：頭は要素の型`, b && b.atomType, "Char");
+	}
+	// 置き換えられた定義そのものが残っていること（消さずに印だけ付ける設計）も確かめる
+	// ——消してしまうと、どの定義が何に置き換わったのかが追えなくなる。
+	{
+		const { nodes } = compile(SRC, { charset: "ascii", desugarStreams: true });
+		const dead = nodes.filter((n) => n && n.supersededByDesugar);
+		checkTrue("置き換えられた定義は印が付いて残る", dead.length > 0, `印の付いた定義が ${dead.length} 個`);
+	}
+}
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
