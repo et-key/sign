@@ -41,7 +41,9 @@ function bound(src) {
 	const d = nodes.find((n) => n.name === "define" && String(n.left.value).replace(/[<>]/g, "") === "f");
 	const b = returnSizeBound(d.right, "f");
 	if (!b) return null;
-	return b.sizeOf ? `${b.konst} + ||${String(b.sizeOf).replace(/[<>]/g, "")}||` : String(b.konst);
+	if (!b.sizeOf) return String(b.konst);
+	const p = String(b.sizeOf).replace(/[<>]/g, "");
+	return `${b.konst} + ${b.coef === 1 ? "" : `${b.coef} × `}||${p}||`;
 }
 function value(src) {
 	const { nodes } = compile(src, { parse: parser.parse });
@@ -98,6 +100,31 @@ check("呼び出しを含む形は求めない", bound("g : x ? x\nf : a b ? a (
 		const cb = look(fd.right.scope, "<c>");
 		checkTrue("使われ方では持ち上げない", cb && cb.atomType === "Char", `c = ${cb && cb.atomType}`);
 	}
+}
+
+// ---- 引数を食う自己呼び出しは、その器の要素数ぶん ----
+//
+// 器を返す関数のほとんどは再帰である。ここで諦めていると、返し方（sret）を決めても
+// スロットの大きさが出ないので何も出せない——実際 lexer と preprocess の sret が
+// 全部ここで止まっていた。
+//
+// 止まる理由が器の側にあること（毎段短くなること）が上界の根拠であり、それは原理5の
+// 完全性公理が言う「器を尽くして止まる」形そのものである。
+{
+	// `take_while` の形。毎段1つ取って残りへ進むので `||s||` で頭打ちになる。
+	const TW = "f : p s ?\n\ts = `` : ``\n\t(@p (s ' 0)) : (s ' 0) (f p (s ' 1~))\n\t``\nf $g `abc`\ng : c ? c = `a`\n";
+	check("食う再帰は器の要素数", bound(TW), "0 + ||s||");
+	// 段ごとに2つ並べるなら係数が2になる（`T(n) = 2 + T(n-1)`）。
+	const DUP = "f : s ?\n\ts = `` : ``\n\t(s ' 0) (s ' 0) (f (s ' 1~))\nf `abc`\n";
+	check("段ごとに2つなら係数2", bound(DUP), "0 + 2 × ||s||");
+	// 底の枝が定数を返すなら、それが `konst` になる。
+	const BASE = "f : s ?\n\ts = `` : `xy`\n\t(s ' 0) (f (s ' 1~))\nf `abc`\n";
+	check("底の定数が konst", bound(BASE), "2 + ||s||");
+	// **そのまま渡す再帰は器では止まらない。** `try_col … board` は `board` が毎段
+	// 同じで、止めているのは別の条件である——器から上界は出ないので求めない。
+	// ここを緩めると、止まらない再帰に有限のスロットを割り当ててしまう。
+	const SAME = "f : n s ?\n\tn > 3 : __\n\t(s ' 0) (f (n + 1) s)\nf 0 `abc`\n";
+	check("そのまま渡す再帰は求めない", bound(SAME), null);
 }
 
 console.log(`\n${passed}/${total} passed`);

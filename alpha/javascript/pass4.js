@@ -2461,16 +2461,71 @@ function markEscapes(nodes, returnedParams) {
  * @returns `{ konst, sizeOf }`——`konst + ||sizeOf||` が上界。`sizeOf` が null なら定数。
  *   求まらなければ null（再帰を含む形はまだ扱わない）。
  */
+/** 直和に器が混じっていれば器である（`Int | List` は器になりうる）。 */
+function isBoxType(t) {
+	return String(t || "")
+		.split(" | ")
+		.map((x) => x.trim())
+		.some((x) => ["String", "List", "Struct", "Iterator", "Implicit"].includes(x));
+}
+
+/**
+ * **自己呼び出しが器の仮引数を食っているなら、その仮引数を返す。**
+ *
+ * `take_while p (s ' 1~)` は `s` を食っている——毎段1つずつ短くなるので、段数は
+ * `||s||` で頭打ちになる。原理5（完全性公理）が言う「器を尽くすことで止まる」形が、
+ * そのまま上界になっている。
+ *
+ * **そのまま渡しているだけは食っていない。** `try_col (col + 1) row n board` の
+ * `board` は毎段同じなので、止まる理由が器の側に無い——段数は `board` からは出ない
+ * （止めているのは `col > n` である）。ここを区別しないと、器から出ない再帰に器由来の
+ * 有限な上界を付けてしまう。
+ */
+function selfConsumes(part, name, params) {
+	const bare = (s) => String(s).replace(/[<>]/g, "");
+	const args = [];
+	let head = part;
+	while (head && head.type === "operation" && head.name === "apply") {
+		args.unshift(unwrap(head.right));
+		head = unwrap(head.left);
+	}
+	if (!args.length || !isIdentifierNode(head) || bare(head.value) !== bare(name)) return null;
+	for (const arg of args) {
+		// 裸の仮引数はそのまま渡しているだけ。式になっていて初めて「食った」と言える。
+		if (!arg || isIdentifierNode(arg)) continue;
+		let found = null;
+		const walk = (x) => {
+			if (!x || typeof x !== "object" || found) return;
+			if (isIdentifierNode(x) && params.includes(x.value) && isBoxType(x.atomType)) {
+				found = x.value;
+				return;
+			}
+			for (const k of ["left", "right", "operand"]) walk(x[k]);
+			if (Array.isArray(x.lines)) x.lines.forEach(walk);
+		};
+		walk(arg);
+		if (found) return found;
+	}
+	return null;
+}
+
 function returnSizeBound(lam, name) {
 	const params = paramShapesOf(lam.left).map((sh) => (sh && sh.kind === "bare" ? sh.name : sh && sh.whole ? sh.name : null));
 	const arms = Array.isArray(lam.right && lam.right.lines) ? lam.right.lines.map((l) => (isDefineNode(l) ? l.right : l)) : [lam.right];
 	let konst = 0;
+	let coef = 0; // 段ごとに足す個数。`konst + coef × ||sizeOf||` が上界である
 	let sizeOf = null;
 	for (const arm of arms) {
 		const a = unwrap(arm);
 		if (!a) return null;
 		// `__` を返す枝は 0 要素。上界には効かない。
 		if (a.type === "atom" && (a.value === "_" || a.value === "__")) continue;
+		// 文字列リテラルの枝は、その文字数ぶん。空文字列（`` ` ` ``）は 0 要素であり、
+		// これが構造的再帰の底になっている——`take_while` の「尽きたら空を返す」枝である。
+		if (a.type === "atom" && a.kind === "string") {
+			konst = Math.max(konst, [...String(a.value || "").replace(/^`|`$/g, "")].length);
+			continue;
+		}
 		if (!(a.type === "operation" && COPRODUCT_BUILD_OPS.has(a.name))) return null;
 		// 連なりを平らにする（括弧の中が連接なら1要素——剥いではいけない）。
 		const parts = [];
@@ -2492,6 +2547,7 @@ function returnSizeBound(lam, name) {
 		parts.unshift(cur);
 		let k = 0;
 		let ref = null;
+		let rec = null; // 自己呼び出しが食っている仮引数
 		for (const p of parts) {
 			// 撒いた仮引数（`st~`）と裸の仮引数は、その器の要素数ぶん。
 			const q = p && p.type === "operation" && p.position === "postfix" && p.name === "expand" ? unwrap(p.operand) : p;
@@ -2499,9 +2555,7 @@ function returnSizeBound(lam, name) {
 				const t = q.atomType;
 				// **直和に器が混じっていれば器である**（`Int | List` は器になりうる）。
 				// 広い方へ揃えるのと同じ理由で、大きさも広い方で見なければ足りない。
-				const members = String(t || "").split(" | ").map((x) => x.trim());
-				const isBox = members.some((x) => ["String", "List", "Struct", "Iterator", "Implicit"].includes(x));
-				if (t && !isBox) {
+				if (t && !isBoxType(t)) {
 					k += 1; // スカラーの仮引数は1要素
 					continue;
 				}
@@ -2509,17 +2563,37 @@ function returnSizeBound(lam, name) {
 				ref = q.value;
 				continue;
 			}
+			// **自己呼び出しは、食っている器の要素数ぶん。** ここで諦めていたのが、
+			// 器を返す関数のほとんどが再帰である以上そのまま sret を塞いでいた。
+			const eaten = selfConsumes(q, name, params);
+			if (eaten) {
+				if (rec && rec !== eaten) return null; // 1枝で2つ食う形はまだ扱わない
+				rec = eaten;
+				continue;
+			}
 			// それ以外は1要素とみなせるものだけ（器なら個数が決まらない）。
-			if (!q || ["String", "List", "Struct", "Iterator", "Implicit"].includes(q.atomType)) return null;
+			if (!q || isBoxType(q.atomType)) return null;
 			k += 1;
+		}
+		// 食いながら撒く枝（`d st~` と自己呼び出しが同居する形）は線形の漸化式に
+		// ならない。上界が二次以上になりうるので、ここは名指しせず諦める。
+		if (rec && ref) return null;
+		if (rec) {
+			// `T(n) = k + T(n-1)`、底は `konst`。解くと `konst + k × ||p||` である。
+			// **段ごとの定数が係数になる**——`c c (dup rest)` なら 2 である。
+			if (sizeOf && sizeOf !== rec) return null;
+			sizeOf = rec;
+			coef = Math.max(coef, k);
+			continue;
 		}
 		konst = Math.max(konst, k);
 		if (ref) {
 			if (sizeOf && sizeOf !== ref) return null;
 			sizeOf = ref;
+			coef = Math.max(coef, 1); // 撒くのは1回ぶん
 		}
 	}
-	return { konst, sizeOf };
+	return { konst, coef: sizeOf ? Math.max(coef, 1) : 0, sizeOf };
 }
 
 function wrapFrame(bodyLines, slots, name, movedSp = false) {
