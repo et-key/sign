@@ -401,9 +401,16 @@ checkTrue(
 	// 末尾の枝そのものが場所を取るなら畳めない（呼び先が読む前に消える）。
 	const here = tail("f : n ?\n\tn > 100 : n\n\tf (($(n , n)) ' 0)\nf 0");
 	checkTrue("末尾の枝で取ったら畳まない", here.some((l) => l === "bl f") && !here.some((l) => /^b \.Lloop/.test(l)), here.join(" / "));
-	// 条件はどの枝でも通るので、そこで取ったら畳めない。
+	// **場所を取ったことは、畳めない理由ではない。** 理由になるのは、その場所への参照が
+	// 呼び先へ渡ることである。条件で取っても、渡すのが数なら呼び先は触れない——`sp` を
+	// `x29` から戻してから飛べばよい（エピローグがやっているのと同じことである）。
+	// 戻さずに回すと毎周 `sub sp` が積み上がって伸び続けるので、そこが本当の条件である。
 	const cond = tail("f : n ?\n\t(($(n , n)) ' 0) > 100 : n\n\tf (n + 1)\nf 0");
-	checkTrue("条件で取ったら畳まない", cond.some((l) => l === "bl f") && !cond.some((l) => /^b \.Lloop/.test(l)), cond.join(" / "));
+	checkTrue("条件で取っても畳める", cond.some((l) => /^b \.Lloop/.test(l)), cond.join(" / "));
+	checkTrue("畳む前に sp を戻す", cond.indexOf("mov sp, x29") < cond.findIndex((l) => /^b \.Lloop/.test(l)), cond.join(" / "));
+	// 参照そのものが渡るなら畳まない（呼び先が読む前に捨ててしまう）。
+	const ref = tail("f : n p ?\n\tn > 3 : (@p) ' 0\n\tf (n + 1) ($(n , n))\nf 0 ($(0 , 0))");
+	checkTrue("参照が渡るなら畳まない", ref.some((l) => l === "bl f") && !ref.some((l) => /^b \.Lloop/.test(l)), ref.join(" / "));
 	// **呼び先の引数域が自分より広ければ畳まない。** 畳んだ先の `sp` は自分が受け取った
 	// 域であり、そこを超えて書くと呼び出し元の領分へはみ出す。
 	const wide = tail(

@@ -1010,14 +1010,26 @@ function genExpr(node, env, em, scope, tail = false) {
 		// 相互末尾呼び出しはフレームを畳んでから飛ぶので、そちらは話が別である。畳んだ
 		// 先にある引数域は**呼び出し元のもの**で、大きさが合う保証が無い（合えば書ける
 		// が、まだそこは見ていない）。積むものがあるなら `bl` にして戻ってから畳む。
-		const selfTail = !!(tail && scope && callee === scope.selfLabel && !scope.holdsFrameStorage);
+		// **場所を取ったことは、畳めない理由ではない。** 理由になるのは、その場所への
+		// 参照が**呼び先へ渡る**ことである——渡らなければ呼び先は触れないので、置いた
+		// ものごと捨ててよい。`($(n , n)) ' 0` は場所を取るが渡るのは要素である。
+		//
+		// 一方 `sp` が動いていることは別の話で、そちらは畳む前に `x29` から戻せば済む
+		// （エピローグがやっているのと同じことである）。2つを1つの旗で見ていたため、
+		// 「参照は渡らないが場所は取った」形がまとめて止まっていた。
+		const argCarries = passed.some(carriesFrameStorage);
+		const spMoved = !!(scope && scope.holdsFrameStorage);
+		const selfTail = !!(tail && scope && callee === scope.selfLabel && !argCarries);
 		// **相互末尾呼び出しも、収まるなら積める。** フレームを畳むと `sp` は
 		// `x29 + フレーム`——**ちょうど自分が受け取った引数域**へ戻る。呼び先はそこを
 		// `[sp]` として読むので、畳む前に自分の域へ書いておけばよい。収まるかどうかだけが
 		// 条件である（呼び先の方が広ければ、呼び出し元の領分へはみ出す）。
 		const mutualFits = !!(scope && plan.stackBytes <= (scope.incomingStackBytes || 0));
 		if (tail && plan.stackBytes > 0 && !selfTail && !mutualFits) tail = false;
-		if (tail && scope && !scope.holdsFrameStorage) {
+		if (tail && scope && !argCarries) {
+			// **`sp` を動かしたなら戻してから飛ぶ。** 自己再帰でそのままにすると毎周
+			// `sub sp` が積み上がって伸び続け、相互では畳む命令が前提を失う。
+			if (spMoved) em.emit("mov sp, x29", "取った場所を捨てる（sp を戻す）");
 			if (callee === scope.selfLabel) {
 				// 自己末尾再帰。フレームをそのまま使い回す。飛び先は**仮引数を写す前**
 				// なので、完全性公理の検査も毎回通る——ここが終端である。
@@ -2484,6 +2496,23 @@ function emitUnitRegs(em, width, kind = null) {
  * 本文を先に作って後から包む。AArch64 のスタックは16バイト境界を要求するので
  * 切り上げる。
  */
+/**
+ * その式は**フレームに取った場所への参照を運ぶ**か。
+ *
+ * **場所を取ったことと、その場所が呼び先から見えることは別である。**
+ * `($(n , n)) ' 0` は `sub sp` で場所を取るが、渡るのは要素（スカラー）であって参照では
+ * ない——呼び先はその場所に触れないので、畳んで構わない。触れるのは参照を運べる型
+ * （器・アドレス）で渡したときだけである。
+ *
+ * 型が読めない位置は運びうると見なす（`markEscapes` と同じ倒し方）。
+ */
+function carriesFrameStorage(node) {
+	if (!takesFrameStorage(node, true)) return false;
+	const u = unwrap(node);
+	const t = u && u.atomType;
+	return CONTAINER_TYPES.has(t) || t === "Address" || t === undefined || t === null;
+}
+
 /** match の並びか（`genExpr` の分岐と同じ判定を使う——別々に書くと片方だけ当たる）。 */
 function isMatchBlock(n) {
 	return !!(n && Array.isArray(n.lines) && (n.lines.length > 1 || (n.lines.length === 1 && isDefineNode(n.lines[0]))));
