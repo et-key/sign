@@ -37,9 +37,9 @@ let passed = 0;
 let total = 0;
 
 // インタプリタ側の答え。観測境界を通した姿で見る。
-function interp(source) {
-	const { nodes } = compile(source, { parse: parser.parse });
-	const env = newRuntimeEnv(null);
+function interp(source, charset = "ascii") {
+	const { nodes } = compile(source, { parse: parser.parse, charset });
+	const env = newRuntimeEnv(null, charset);
 	let r = UNIT;
 	for (const node of nodes) r = evaluate(node, env);
 	if (isUnit(r)) return "__";
@@ -55,9 +55,9 @@ function interp(source) {
 }
 
 // 機械側の答え。`_sign_main` の x0 を符号付き64ビットで読む。
-function machine(source) {
-	const { nodes, env } = compile(source, { charset: "ascii" });
-	const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "ascii", layer: 1 });
+function machine(source, charset = "ascii") {
+	const { nodes, env } = compile(source, { charset });
+	const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset, layer: 1 });
 	if (r.diagnostics.length) return "出せない：" + r.diagnostics[0].message;
 	const v = asInt(runAsm(r.text)[0]);
 	return v === null ? "__" : String(v);
@@ -65,16 +65,16 @@ function machine(source) {
 
 // 同じソースを両方へ通し、答えが一致することだけを見る。**期待値は書かない**——
 // 仕様の答えはインタプリタが持っているので、ここで二重に書くと片方だけ直る。
-function agree(note, source) {
+function agree(note, source, charset = "ascii") {
 	total++;
 	let a, b;
 	try {
-		a = interp(source);
+		a = interp(source, charset);
 	} catch (e) {
 		a = "解釈で例外：" + e.message;
 	}
 	try {
-		b = machine(source);
+		b = machine(source, charset);
 	} catch (e) {
 		b = "機械で例外：" + e.message;
 	}
@@ -285,6 +285,15 @@ agree("尽きたら __", "f : x ?\n\tx > 10 : 1\nf 7");
 	agree("負へ回っても __", "f : c ? c - 200\nf `a`");
 	// 整数の算術は検査しない（範囲は charset の話であって整数の話ではない）。
 	agree("整数は検査しない", "f : a ? a + 1000\nf 5");
+	// **断る理由が命令の作り方の側にあるなら、それは対象の制限ではない。** 符号位置も
+	// 長さも `mov` 1つで置いていたため 0xFFFF を超えると名指しで断っていたが、`emitImm`
+	// が `movz`/`movk` の連なりを出せるようになった時点で理由の方が消えていた。
+	// 絵文字は U+1F600 台なので、utf32 では素直に踏む。
+	agree("絵文字の符号位置", "f : c ? c\nf `😀`", "utf32");
+	agree("絵文字を比べる", "f : c ? c = `😀`\nf `😀`", "utf32");
+	agree("面1の文字に足す", "f : c ? c + 1\nf `😀`", "utf32");
+	agree("7万字の長さ", "x : `" + "a".repeat(70000) + "`\n||x||");
+	agree("7万字の末尾", "x : `" + "a".repeat(69999) + "z`\nx ' 69999");
 	// **再帰は器の続きへ追記する。** `(s ' 0) (f (s ' 1~))` は「要素 ＋ 再帰の結果」で
 	// あり、後者は器なので「並べるのは1本の値」の道には乗らない。だが写す必要は無い
 	// ——呼ばれた側に自分の器の**続き**を直接書かせればよい。先頭を書いてから

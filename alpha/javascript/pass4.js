@@ -631,10 +631,13 @@ function genExpr(node, env, em, scope, tail = false) {
 		const w = charSizeOf(em.conf.charset);
 		// 型が `String` なら2文字以上である（1文字は `Char` へ潰れ、0文字は `Unit`）。
 		if (n.atomType === "Char" && cps.length === 1) {
-			if (cps[0] > 0xffff) return em.fail(n, `16ビットを超える符号位置はまだ出せません（U+${cps[0].toString(16)}）`);
 			const off = em.push();
 			if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
-			em.emit(`mov ${SCRATCH[0]}, #${cps[0]}`, `文字 U+${cps[0].toString(16).toUpperCase().padStart(4, "0")}（${w} byte 幅）`);
+			// 16ビットを超える符号位置（`utf32` の面1以降）は `movz`/`movk` の連なりになる。
+			// ここが `mov` 1つだったため 0xFFFF より上を名指しで断っていたが、断る理由は
+			// **命令の作り方**であって符号位置の側には無い——`emitImm` が後から入った時に
+			// 更新され忘れていた。絵文字は U+1F600 台なので、素直に踏む。
+			emitImm(em, SCRATCH[0], cps[0], `文字 U+${cps[0].toString(16).toUpperCase().padStart(4, "0")}（${w} byte 幅）`);
 			em.store(SCRATCH[0], off);
 			return 1;
 		}
@@ -651,7 +654,7 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.store(SCRATCH[0], lo0, "len = 0 が __");
 			return 2;
 		}
-		if (cps.length > 0xffff) return em.fail(n, `16ビットを超える長さはまだ出せません（${cps.length} 文字）`);
+
 
 		// **`len` は文字数であってバイト数ではない。** `String ≅ List(Char)` であり
 		// （type_system.md §2）、添字は `base + i × sizeof(Char)` で引く。バイト数で持つと
@@ -666,7 +669,8 @@ function genExpr(node, env, em, scope, tail = false) {
 		em.emit(`adrp ${SCRATCH[0]}, ${label}`, `${label} の頁（${w} byte 幅 × ${cps.length} 文字）`);
 		em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, :lo12:${label}`);
 		em.store(SCRATCH[0], po, "ptr");
-		em.emit(`mov ${SCRATCH[1]}, #${cps.length}`, "len は文字数（バイト数ではない）");
+		// 長さも 16ビットに収まるとは限らない（65535 文字を超える文字列リテラル）。
+		emitImm(em, SCRATCH[1], cps.length, "len は文字数（バイト数ではない）");
 		em.store(SCRATCH[1], lo, "len");
 		return 2;
 	}
@@ -2721,6 +2725,29 @@ function selfConsumes(part, name, params) {
 	return null;
 }
 
+/**
+ * その枝は「自分を呼んで、器の引数はそのまま渡している」形か。
+ *
+ * そうなら上界には何も足さない——返るものは自分の上界そのものだからである。器の位置が
+ * 素の仮引数のままであることだけを見る（入れ替えや式になっていれば大きさが動きうる）。
+ */
+function selfCallSameArgs(part, name, params) {
+	const bare = (s) => String(s).replace(/[<>]/g, "");
+	const args = [];
+	let head = part;
+	while (head && head.type === "operation" && head.name === "apply") {
+		args.unshift(unwrap(head.right));
+		head = unwrap(head.left);
+	}
+	if (!args.length || !isIdentifierNode(head) || bare(head.value) !== bare(name)) return false;
+	// 器を受ける位置が、同じ名前の仮引数のまま渡っていること。
+	return args.every((arg, i) => {
+		if (!arg) return false;
+		if (isIdentifierNode(arg)) return !isBoxType(arg.atomType) || arg.value === params[i];
+		return !isBoxType(arg.atomType); // 式ならスカラーだけ許す
+	});
+}
+
 function returnSizeBound(lam, name) {
 	const params = paramShapesOf(lam.left).map((sh) => (sh && sh.kind === "bare" ? sh.name : sh && sh.whole ? sh.name : null));
 	const arms = Array.isArray(lam.right && lam.right.lines) ? lam.right.lines.map((l) => (isDefineNode(l) ? l.right : l)) : [lam.right];
@@ -2738,6 +2765,14 @@ function returnSizeBound(lam, name) {
 			konst = Math.max(konst, [...String(a.value || "").replace(/^`|`$/g, "")].length);
 			continue;
 		}
+		// **同じものを渡す自己呼び出しは、上界に何も足さない。** `f (n + 1) a b` は
+		// 器の引数を素通しするので、返るものの大きさは自分の上界そのものである
+		// （`T = T`）——上界は他の枝で決まる。ここで諦めていたため、`n > 3 : a b` の
+		// ような**定数の底を持つ形**まで sret に乗らなかった。
+		//
+		// 器の位置が同じ仮引数のままであることを見る。入れ替えたり式にしたりしていれば
+		// 大きさが動きうるので、そこは諦める。
+		if (selfCallSameArgs(a, name, params)) continue;
 		if (!(a.type === "operation" && COPRODUCT_BUILD_OPS.has(a.name))) return null;
 		// 連なりを平らにする（括弧の中が連接なら1要素——剥いではいけない）。
 		const parts = [];
