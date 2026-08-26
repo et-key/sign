@@ -1999,6 +1999,12 @@ function collectCallsiteParamTypes(nodes, env) {
     // 器が何段も引数として渡り歩く場合（盤が `first_row` → `place` → `try_col` →
     // `conflict` と流れる）は、各段で要素型を運ばないと連鎖が切れる。
     const elementObs = entries.map(() => new Set());
+    // **`[~ts]` は「ここは器だ」と書いてある。** 分割代入の rest 名は器そのものを受ける
+    // 位置なので、器の型も観測して書き戻す必要がある——ここまで要素型しか書いていな
+    // かったため、`f : a [~ts] ? …` の `ts` が要素型だけ持って**器の型は null** という
+    // 半端な状態になっていた（仮引数が `[~ts]` 1つだけの形は別の経路が通るので偶然
+    // 動いていた）。結果、**宣言した方が裸で書くより弱い**という逆転が起きていた。
+    const containerObs = entries.map(() => new Set());
     // **指す先は仮引数の並びごとに観測する。** 裸の1引数（`head : c ?`）は `entries` が
     // 空なので、器の要素型と同じループには乗らない——名前の並びを別に作って拾う。
     const ptNames = isIdentifierNode(paramNode) ? [paramNode.value] : entries.map((e) => (e.pattern ? null : e.name || null));
@@ -2010,6 +2016,8 @@ function collectCallsiteParamTypes(nodes, env) {
         if (i >= args.length) return;
         const el = containerElementType(args[i], args.scope || env) || elementTypeOf(args[i], args.scope || env);
         if (el && el !== "Unit" && !FAMILY_MEMBERS[el]) elementObs[i].add(el);
+        const ct = inferAtomType(args[i], args.scope || env);
+        if (ct && ct !== "Unit" && !FAMILY_MEMBERS[ct]) containerObs[i].add(ct);
       });
       // アドレスを受け取る位置は、**指す先**を語る。`head (cons …)` の `c` が何を
       // 指しているかは、呼び出しサイトにしか書いていない。
@@ -2041,6 +2049,19 @@ function collectCallsiteParamTypes(nodes, env) {
     const patScope = rhs.scope;
     if (patScope) {
       entries.forEach((e, i) => {
+        // 器の型は rest 名（器そのものを受ける位置）へ書く。要素型とは別の観測なので、
+        // 片方しか揃わない場合でも揃った方だけ書く。
+        const ctSeen = [...containerObs[i]];
+        if (ctSeen.length === 1) {
+          for (const q of e.pattern || []) {
+            if (!q.rest || !q.name) continue;
+            const rb = envLookup(patScope, q.name);
+            if (rb && rb.atomType !== ctSeen[0] && (!rb.atomType || FAMILY_MEMBERS[rb.atomType])) {
+              rb.atomType = ctSeen[0];
+              changed = true;
+            }
+          }
+        }
         const seen = [...elementObs[i]];
         if (seen.length !== 1) return;
         // 器そのものを受ける位置（rest・ブラケット全体）には要素型を載せる。
