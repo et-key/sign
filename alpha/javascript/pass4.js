@@ -2662,6 +2662,22 @@ function markEscapes(nodes, returnedParams) {
 		if (!rhs || rhs.type !== "operation" || rhs.name !== "lambda") continue;
 		visit(rhs.right, true); // 本体そのものが返値である
 	}
+	// **トップレベルは返さない。** ここに置いた器は `_sign_main` のフレームに在り、
+	// 呼び出し元はエントリのスタブだけである——`bl _sign_main` の次は `wfe` で、返値を
+	// 辿らない（entry_point.md）。フレームより長生きする先が無いので `sub sp` で置ける。
+	//
+	// ここを訪れていなかったため `escapesFrame` が `undefined` のまま残り、`!== false`
+	// が「出て行く」と読んでいた。**判定していないことと、出て行くと判定したことは別**
+	// である——前者を後者として扱うと、決めていないことを決めたことにしてしまう。
+	for (const node of nodes) {
+		if (isDefineNode(node) && isIdentifierNode(node.left)) {
+			const rhs = node.right;
+			if (rhs && rhs.type === "operation" && rhs.name === "lambda") continue;
+			visit(rhs, false);
+			continue;
+		}
+		visit(node, false);
+	}
 }
 
 /**
