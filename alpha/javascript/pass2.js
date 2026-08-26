@@ -1098,7 +1098,11 @@ function buildParameterList(paramTokens, env) {
     // （`d : depth_of line`）まで Lambda と判定し、そこを関数として呼ぼうとして縮約が
     // 壊れる——preprocess が丸ごと解決できなくなった。`?` と書いてあるものだけを
     // 関数内関数と見なす。
-    if (defaultNode && defaultNode.type === "operation" && defaultNode.name === "lambda") {
+    // ポイントフリー（`g : [+ 2]`）も書かれた形である——仕様が「任意のカッコで演算子を
+    // 囲むことで関数として扱う」と定めており、判定の `partial` は**縮約時に書かれた形
+    // から付く印**であってアリティ解析ではない。だから `d : depth_of line` のような
+    // 部分適用には付かず、誤爆しない。
+    if (defaultNode && ((defaultNode.type === "operation" && defaultNode.name === "lambda") || isPointfreeLambda(defaultNode, scope))) {
       {
         const b = scope.bindings.get(raw.name);
         if (b) {

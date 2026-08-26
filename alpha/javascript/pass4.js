@@ -295,12 +295,13 @@ function collectMonomorphs(nodes) {
 		// **デフォルトにラムダを書いた仮引数は、関数内関数である。** そこは `@p` ではなく
 		// `p x` と直接呼ぶ——`p` は関数であってアドレスではないからである。`@p` の形だけを
 		// 見ていたので、この書き方が単相化の網から丸ごと漏れていた。
+		// **判定は pass2 が済ませている。** Layer 1 のカテゴリがそこで決まる——ラムダも
+		// ポイントフリー（`[+ 2]` / `[* 2,]`）も「書かれた形」から `Lambda` になる。
+		// ここで形を見直すと2箇所で別々に数えることになり、片方だけが当たる。
 		for (const e of (rhs.left && rhs.left.entries) || []) {
-			if (!e.name || !e.default) continue;
-			const d = unwrap(e.default);
-			if (d && d.type === "operation" && d.name === "lambda" && params.includes(e.name) && !ptrParams.includes(e.name)) {
-				ptrParams.push(e.name);
-			}
+			if (!e.name || !e.default || !params.includes(e.name) || ptrParams.includes(e.name)) continue;
+			const b = rhs.scope ? envLookup(rhs.scope, e.name) : null;
+			if (b && b.category === "Lambda") ptrParams.push(e.name);
 		}
 		if (ptrParams.length > 0) table.set(bareName(node.left.value), { params, ptrParams, instances: new Map(), lambda: rhs });
 	}
@@ -330,7 +331,10 @@ function collectMonomorphs(nodes) {
 						// 取る側の話であって、定義とは別）。名前が無いので、ここで名前を
 						// 与えて実体として出す。具体化は名前で結ぶので、名前さえ在れば
 						// `$名前` を書いたのと同じ道に乗る。
-						const inline = a && a.type === "operation" && a.name === "lambda" ? a : null;
+						// ポイントフリー（`[+ 2]` / `[* 2,]`）もここへ来る。判定は pass2 の
+						// カテゴリを読む——書かれた形から決まっているので、形を見直さない。
+						const pb = entry.lambda.scope ? envLookup(entry.lambda.scope, pn) : null;
+						const inline = a && pb && pb.category === "Lambda" && !(a.position === "prefix" && a.name === "address") ? a : null;
 						if (inline) {
 							const label = `${bareName(base.value)}$${bareName(pn)}`;
 							if (!hoisted.has(label)) hoisted.set(label, inline);
@@ -3453,6 +3457,21 @@ function generateAsm(nodes, env, options = {}) {
 						if (!em.hoistedDone) em.hoistedDone = new Set();
 						if (!entry.ptrParams.some((pn) => `${fname}$${bareName(pn)}` === label)) continue;
 						em.hoistedDone.add(label);
+						// **ポイントフリーはまだ実体にできない。** `[+ 2]` は「左辺の欠けた
+						// 演算」であって仮引数を持たないので、`_a ? _a + 2` へ合成しないと
+						// 関数として出せない。これはデフォルトの話ではなく Pass 4 全体の穴
+						// である——トップレベルの `g : [+ 2]` も、その場書きの `[+ 2] 5` も
+						// 同じく出せない。黙って壊れた実体を出さずに名指しする。
+						if (!(lam.type === "operation" && lam.name === "lambda")) {
+							em.diagnostics.push({
+								severity: "error",
+								message:
+									`${label}: ポイントフリーを実体にする経路がまだありません` +
+									`（\`[+ 2]\` は左辺の欠けた演算であり、仮引数を持つ形へ合成する必要があります）`,
+								node: lam,
+							});
+							continue;
+						}
 						em.lines.push(`	.global ${label}`);
 						genFunction(label, lam, env, em);
 						em.blank();
