@@ -953,7 +953,7 @@ function genExpr(node, env, em, scope, tail = false) {
 		// 飛んでしまうので、後ろに置くと引数を積まないまま飛ぶ——テストが捕まえた。
 		// スタックで渡すぶんは `sp` を下げてからでないと書けないので下で置く（そちらは
 		// 末尾呼び出しにしないので、この分岐には来ない）。
-		const place = (onStack) => {
+		const place = (onStack, base = "sp") => {
 			widths.forEach((w, i) => {
 				const s = plan.slots[i];
 				if ((s.reg === null) !== onStack) return;
@@ -964,7 +964,7 @@ function genExpr(node, env, em, scope, tail = false) {
 						if (!onStack) em.load(ARG_REGS[s.reg + k], part.off + k * 8, what);
 						else {
 							em.load(SCRATCH[0], part.off + k * 8);
-							em.emit(`str ${SCRATCH[0]}, [sp, #${s.stackOff + k * 8}]`, `${what}（スタック渡し）`);
+							em.emit(`str ${SCRATCH[0]}, [${base}, #${s.stackOff + k * 8}]`, `${what}（スタック渡し）`);
 						}
 						continue;
 					}
@@ -981,7 +981,7 @@ function genExpr(node, env, em, scope, tail = false) {
 					}
 					if (one) em.emit(`movz ${SCRATCH[0]}, #0x8000, lsl #48`, "省略された引数は __");
 					else em.emit(`mov ${SCRATCH[0]}, #0`, k === 0 ? "省略された引数は __" : "（len = 0）");
-					em.emit(`str ${SCRATCH[0]}, [sp, #${s.stackOff + k * 8}]`, "（スタック渡し）");
+					em.emit(`str ${SCRATCH[0]}, [${base}, #${s.stackOff + k * 8}]`, "（スタック渡し）");
 				}
 			});
 		};
@@ -999,15 +999,24 @@ function genExpr(node, env, em, scope, tail = false) {
 		//
 		// **TCO と、フレームに置いたデータは引っ張り合う。** 末尾再帰はフレームを1つに
 		// 畳むのが仕事であり、そのフレームに寿命を預けているものとは両立しない。
-		// **スタックへ積む引数があるなら末尾呼び出しにはできない。** 末尾呼び出しは自分の
-		// フレームを畳んでから飛ぶが、積んだ引数はそのフレームの上にある——畳んだ瞬間に
-		// 呼び先の引数域が消える。`bl` にして戻ってから畳めば生きている（`$匿名式` を
-		// 持つ関数と同じ理由である）。
-		if (tail && plan.stackBytes > 0) tail = false;
+		// **自己末尾再帰はフレームを畳まない。** `b .Lloop` は同じフレームの中へ戻る
+		// だけなので、スタックで渡す引数があっても成立する——書き先は自分の引数域
+		// （`x29 + フレーム`）であり、レジスタを上書きするのとまったく同じことである。
+		//
+		// 相互末尾呼び出しはフレームを畳んでから飛ぶので、そちらは話が別である。畳んだ
+		// 先にある引数域は**呼び出し元のもの**で、大きさが合う保証が無い（合えば書ける
+		// が、まだそこは見ていない）。積むものがあるなら `bl` にして戻ってから畳む。
+		const selfTail = !!(tail && scope && callee === scope.selfLabel && !scope.holdsFrameStorage);
+		if (tail && plan.stackBytes > 0 && !selfTail) tail = false;
 		if (tail && scope && !scope.holdsFrameStorage) {
 			if (callee === scope.selfLabel) {
 				// 自己末尾再帰。フレームをそのまま使い回す。飛び先は**仮引数を写す前**
 				// なので、完全性公理の検査も毎回通る——ここが終端である。
+				// スタックで渡すぶんは自分の引数域へ書き直してから戻る。
+				if (plan.stackBytes > 0) {
+					em.emit(`add ${SCRATCH[1]}, x29, #${FRAME_MARK}`, "自分の引数域（スタック渡し）");
+					place(true, SCRATCH[1]);
+				}
 				em.emit(`b ${scope.loopLabel}`, "末尾自己再帰（フレーム再利用）");
 				return TAIL;
 			}
