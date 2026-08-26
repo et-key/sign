@@ -404,6 +404,13 @@ checkTrue(
 	// 条件はどの枝でも通るので、そこで取ったら畳めない。
 	const cond = tail("f : n ?\n\t(($(n , n)) ' 0) > 100 : n\n\tf (n + 1)\nf 0");
 	checkTrue("条件で取ったら畳まない", cond.some((l) => l === "bl f") && !cond.some((l) => /^b \.Lloop/.test(l)), cond.join(" / "));
+	// **呼び先の引数域が自分より広ければ畳まない。** 畳んだ先の `sp` は自分が受け取った
+	// 域であり、そこを超えて書くと呼び出し元の領分へはみ出す。
+	const wide = tail(
+		"g : a b c d e h i j k l m n o ?\n\ta > 5 : o\n\ta\n" +
+			"f : a b c d e h i j k ?\n\ta > 5 : k\n\tg a b c d e h i j k 1 2 3 4\nf 0 1 2 3 4 5 6 7 8"
+	);
+	checkTrue("広い呼び先へは畳まない", wide.some((l) => l === "bl g") && !wide.some((l) => l === "b g"), wide.join(" / "));
 }
 
 // 相互末尾再帰は自分のフレームを畳んでから飛ぶ（tco.md §3）。どちらもスタックを積まない。

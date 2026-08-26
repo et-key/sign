@@ -1011,7 +1011,12 @@ function genExpr(node, env, em, scope, tail = false) {
 		// 先にある引数域は**呼び出し元のもの**で、大きさが合う保証が無い（合えば書ける
 		// が、まだそこは見ていない）。積むものがあるなら `bl` にして戻ってから畳む。
 		const selfTail = !!(tail && scope && callee === scope.selfLabel && !scope.holdsFrameStorage);
-		if (tail && plan.stackBytes > 0 && !selfTail) tail = false;
+		// **相互末尾呼び出しも、収まるなら積める。** フレームを畳むと `sp` は
+		// `x29 + フレーム`——**ちょうど自分が受け取った引数域**へ戻る。呼び先はそこを
+		// `[sp]` として読むので、畳む前に自分の域へ書いておけばよい。収まるかどうかだけが
+		// 条件である（呼び先の方が広ければ、呼び出し元の領分へはみ出す）。
+		const mutualFits = !!(scope && plan.stackBytes <= (scope.incomingStackBytes || 0));
+		if (tail && plan.stackBytes > 0 && !selfTail && !mutualFits) tail = false;
 		if (tail && scope && !scope.holdsFrameStorage) {
 			if (callee === scope.selfLabel) {
 				// 自己末尾再帰。フレームをそのまま使い回す。飛び先は**仮引数を写す前**
@@ -1026,6 +1031,14 @@ function genExpr(node, env, em, scope, tail = false) {
 			}
 			// 相互末尾再帰。自分のフレームはもう死んでいるので畳んでから飛ぶ。
 			// 大きさは本体を出し切るまで決まらないので印だけ置く。
+			//
+			// **スタックで渡すぶんは畳む前に自分の引数域へ書く。** 畳んだ後の `sp` が
+			// そこなので、呼び先は `[sp]` として読める。`x29` は畳むと呼び出し元のものに
+			// 戻るため、順序を逆にはできない。
+			if (plan.stackBytes > 0) {
+				em.emit(`add ${SCRATCH[1]}, x29, #${FRAME_MARK}`, "自分の引数域（スタック渡し）");
+				place(true, SCRATCH[1]);
+			}
 			em.emit(`ldp x29, x30, [sp], #${FRAME_MARK}`, "自分のフレームを畳む");
 			em.emit(`b ${callee}`, "末尾呼び出し");
 			return TAIL;
@@ -3256,6 +3269,8 @@ function genFunction(name, lambdaNode, env, em, mono) {
 		bracketPairs,
 		// **道の上にあるものだけ数える。** 枝の値は `genMatch` が枝ごとに足す。
 		holdsFrameStorage: takesFrameStorage(lambdaNode.right, true),
+		// 自分がスタックで受け取った引数域の大きさ。相互末尾呼び出しはここへ書ける。
+		incomingStackBytes: inPlan.stackBytes,
 	};
 	const ok = genExpr(lambdaNode.right, env, em, scope, true);
 	if (ok !== false) {
