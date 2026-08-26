@@ -252,6 +252,14 @@ function applyChain(node) {
  *
  * @returns Map<関数名, { ptrParams: string[], instances: Map<鍵, {callees, label}> }>
  */
+/** 仮引数 `name` に書かれたデフォルト式（無ければ null）。 */
+function defaultOfParam(lambdaNode, name) {
+	const p = lambdaNode && lambdaNode.left;
+	if (!p || p.type !== "params") return null;
+	const e = (p.entries || []).find((x) => x && x.name === name);
+	return (e && e.default) || null;
+}
+
 function collectMonomorphs(nodes) {
 	const table = new Map();
 	// まず「アドレス経由で呼ばれる仮引数」を持つ関数を見つける。
@@ -296,7 +304,13 @@ function collectMonomorphs(nodes) {
 					let ok = true;
 					for (const pn of entry.ptrParams) {
 						const i = entry.params.indexOf(pn);
-						const a = args[i];
+						// **省略されたなら、デフォルトが渡している。** `g : $dbl` と書いた
+						// 仮引数は、実引数が無ければその `$dbl` が入る——呼び出しサイトに
+						// 書いていないだけで、渡す先は決まっている。ここを見ていなかった
+						// ので、デフォルトで関数を渡す形が「具体化できる呼び出しサイトが
+						// 無い」になっていた。仮引数リストは関数の状態ベクタであり
+						// （function_guide.md）、デフォルトはその初期値である。
+						const a = args[i] || defaultOfParam(entry.lambda, pn);
 						// `$名前` だけを具体化できる。式で作ったアドレスは静的に決まらない。
 						if (a && a.type === "operation" && a.position === "prefix" && a.name === "address" && isIdentifierNode(a.operand)) {
 							callees[pn] = bareName(a.operand.value);
