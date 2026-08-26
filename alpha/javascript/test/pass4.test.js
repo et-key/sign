@@ -387,6 +387,25 @@ checkTrue(
 	// 新しい引数は飛ぶ前に x0.. へ載っている（フレームはまだ生きている）。
 	check("引数を載せてから飛ぶ", ls.slice(back - 2, back), ["ldr x0, [x29, #40]", "ldr x1, [x29, #48]"]);
 }
+// **枝は互いに排他なので、通らなかった枝で取った場所は畳めない理由にならない。**
+//
+// `$匿名式` は `sub sp` で場所を取るため、そのフレームは呼び先が走っている間も生きて
+// いなければならない——末尾呼び出しでは畳めない。だが判定を**関数まるごと**で見ていた
+// ので、別の枝に `$匿名式` があるだけで末尾自己再帰の枝まで `bl` になっていた。
+// Sign にループは無く再帰しかないので、ここは深さがそのままスタックの深さになる。
+{
+	const tail = (src, fname = "f") => (body(src, fname) || []).map((l) => l.replace(/\/\/.*/, "").trim());
+	// 別の枝で場所を取る——この枝は通らないので畳める。
+	const other = tail("f : n ?\n\tn > 100 : ($(n , n)) ' 0\n\tf (n + 1)\nf 0");
+	checkTrue("別の枝の $匿名式は畳めない理由にならない", other.some((l) => /^b \.Lloop/.test(l)), other.join(" / "));
+	// 末尾の枝そのものが場所を取るなら畳めない（呼び先が読む前に消える）。
+	const here = tail("f : n ?\n\tn > 100 : n\n\tf (($(n , n)) ' 0)\nf 0");
+	checkTrue("末尾の枝で取ったら畳まない", here.some((l) => l === "bl f") && !here.some((l) => /^b \.Lloop/.test(l)), here.join(" / "));
+	// 条件はどの枝でも通るので、そこで取ったら畳めない。
+	const cond = tail("f : n ?\n\t(($(n , n)) ' 0) > 100 : n\n\tf (n + 1)\nf 0");
+	checkTrue("条件で取ったら畳まない", cond.some((l) => l === "bl f") && !cond.some((l) => /^b \.Lloop/.test(l)), cond.join(" / "));
+}
+
 // 相互末尾再帰は自分のフレームを畳んでから飛ぶ（tco.md §3）。どちらもスタックを積まない。
 {
 	const src = "is_odd : n ?\n\tn = 0 : __\n\tis_even (n - 1)\nis_even : n ?\n\tn = 0 : 1\n\tis_odd (n - 1)\nis_even 4";

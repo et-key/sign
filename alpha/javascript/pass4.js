@@ -2144,6 +2144,10 @@ function genMatch(node, env, em, scope, tail = false) {
 	// **枝の値は末尾位置である。** 分岐の結果がそのまま関数の返値になるので、そこにある
 	// 呼び出しは末尾呼び出しである（interpreter.js の `evaluateTail` も同じ規則で
 	// ブロックの各行を辿る）。飛んで行った枝は値を置かないので `TAIL` を返す。
+	// **枝ごとに「場所を取ったか」を決める。** 通らなかった枝で取った場所はこの道には
+	// 存在しないので、そこを理由に末尾呼び出しを止めてはいけない。
+	const armScope = (line) =>
+		scope && !scope.holdsFrameStorage && takesFrameStorage(line, true) ? { ...scope, holdsFrameStorage: true } : scope;
 	const move = (line) => {
 		// **`__` は幅を持たない。** 零対象なので、置く場所の広さに合わせて空を書けばよい
 		// ——1本なら niche、参照なら `len = 0`、カーソルなら `arm` が niche である。
@@ -2158,7 +2162,7 @@ function genMatch(node, env, em, scope, tail = false) {
 		// `.rodata` に置き場所があるので、器として置ける（`genWidened`）。
 		const wide = width === 2 ? genWidened(line, width, env, em, scope) : null;
 		if (wide === false) return false;
-		const w = wide === null ? genExpr(line, env, em, scope, tail) : wide;
+		const w = wide === null ? genExpr(line, env, em, armScope(line), tail) : wide;
 		if (w === false) return false;
 		if (w === TAIL) return TAIL;
 		if (w !== width) {
@@ -2454,17 +2458,37 @@ function emitUnitRegs(em, width, kind = null) {
  * 本文を先に作って後から包む。AArch64 のスタックは16バイト境界を要求するので
  * 切り上げる。
  */
-// 本体のどこかで `$匿名式` が場所を取るか。取るなら、そのフレームは呼び先が走っている
-// 間も生きていなければならない（末尾呼び出しで畳めない）。
-function takesFrameStorage(node) {
+/** match の並びか（`genExpr` の分岐と同じ判定を使う——別々に書くと片方だけ当たる）。 */
+function isMatchBlock(n) {
+	return !!(n && Array.isArray(n.lines) && (n.lines.length > 1 || (n.lines.length === 1 && isDefineNode(n.lines[0]))));
+}
+
+/**
+ * `$匿名式` が場所を取るか。取るなら、そのフレームは呼び先が走っている間も生きて
+ * いなければならないので、末尾呼び出しで畳めない。
+ *
+ * `pathOnly` を立てると**この道の上にあるか**を見る。**枝は互いに排他である**——
+ * 別の枝で取った場所は、この枝を通るときには存在しない。条件は全部通るので数えるが、
+ * 枝の値は数えない。
+ *
+ * ここを関数まるごとで見ていたため、`n > 100 : ($(n , n)) ' 0` という**別の枝**が
+ * あるだけで、末尾自己再帰の枝まで `bl` になっていた——畳めるはずのものを畳めないと
+ * 言っていたことになる。Sign にループは無く再帰しかないので、ここは深さがそのまま
+ * スタックの深さになる（tco.md）。
+ */
+function takesFrameStorage(node, pathOnly = false) {
 	if (!node || typeof node !== "object") return false;
 	if (node.type === "operation" && node.position === "prefix" && node.name === "address") {
 		const t = unwrap(node.operand);
 		if (t && !isIdentifierNode(t) && !(t.type === "atom" && t.kind === "unit")) return true;
 	}
-	for (const k of ["left", "right", "operand"]) if (takesFrameStorage(node[k])) return true;
-	for (const l of node.lines || []) if (takesFrameStorage(l)) return true;
-	for (const e of node.entries || []) if (takesFrameStorage(e.default)) return true;
+	if (pathOnly && isMatchBlock(node)) {
+		// 条件だけを見る。枝の値は `genMatch` が枝ごとに足す。
+		return (node.lines || []).some((l) => (isDefineNode(l) ? takesFrameStorage(l.left, true) : false));
+	}
+	for (const k of ["left", "right", "operand"]) if (takesFrameStorage(node[k], pathOnly)) return true;
+	for (const l of node.lines || []) if (takesFrameStorage(l, pathOnly)) return true;
+	for (const e of node.entries || []) if (takesFrameStorage(e.default, pathOnly)) return true;
 	return false;
 }
 
@@ -3170,7 +3194,8 @@ function genFunction(name, lambdaNode, env, em, mono) {
 		selfLabel: name,
 		loopLabel,
 		bracketPairs,
-		holdsFrameStorage: takesFrameStorage(lambdaNode.right),
+		// **道の上にあるものだけ数える。** 枝の値は `genMatch` が枝ごとに足す。
+		holdsFrameStorage: takesFrameStorage(lambdaNode.right, true),
 	};
 	const ok = genExpr(lambdaNode.right, env, em, scope, true);
 	if (ok !== false) {
