@@ -1085,6 +1085,29 @@ function buildParameterList(paramTokens, env) {
     if (defaultNode) checkNoOutputInDefault(defaultNode, raw.name);
     entries.push({ name: raw.name, rest: raw.rest, default: defaultNode });
     scope = bindEnv([raw.name], scope); // このパラメータ自身を、次のパラメータ以降から見えるようにする
+    // **デフォルトにラムダを書いた仮引数は、関数内関数である。** トップレベルで
+    // `dbl : y ? y * 2` と書くのと同じことを仮引数リストの中でしているだけなので、
+    // 呼ぶときは `g x` と直接書く——`@` が要るのは `$` を書いたときの対であって、
+    // 定義そのものには要らない。
+    //
+    // Layer 1 の category が `Atom` のままだと `g x` が適用ではなく**余積**（リストを
+    // 組む）に落ちる。判定は `getCategory` に任せる——ポイントフリー（`[+ 2]`）も
+    // §2 の表で Lambda なので、同じ規則で拾える。
+    //
+    // 見るのは**書かれた形**である。`getCategory` に任せるとアリティ不足の部分適用
+    // （`d : depth_of line`）まで Lambda と判定し、そこを関数として呼ぼうとして縮約が
+    // 壊れる——preprocess が丸ごと解決できなくなった。`?` と書いてあるものだけを
+    // 関数内関数と見なす。
+    if (defaultNode && defaultNode.type === "operation" && defaultNode.name === "lambda") {
+      {
+        const b = scope.bindings.get(raw.name);
+        if (b) {
+          b.category = "Lambda";
+          const info = resolveKnownArity(defaultNode, scope);
+          if (info && info.arity != null) b.arity = info.arity;
+        }
+      }
+    }
     boundSoFar.add(raw.name);
   }
   // デフォルトを持つ仮引数は、実際の評価（未実装）ではアリティ計算から除外される

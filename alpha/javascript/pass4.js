@@ -262,6 +262,9 @@ function defaultOfParam(lambdaNode, name) {
 
 function collectMonomorphs(nodes) {
 	const table = new Map();
+	// デフォルトに直接書かれたラムダへ与えた名前。呼び出しサイトの走査で埋まる。
+	const hoisted = new Map();
+	table.hoisted = hoisted;
 	// まず「アドレス経由で呼ばれる仮引数」を持つ関数を見つける。
 	for (const node of nodes) {
 		if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
@@ -289,6 +292,16 @@ function collectMonomorphs(nodes) {
 			for (const e of n.entries || []) visit(e.default);
 		};
 		visit(rhs.right);
+		// **デフォルトにラムダを書いた仮引数は、関数内関数である。** そこは `@p` ではなく
+		// `p x` と直接呼ぶ——`p` は関数であってアドレスではないからである。`@p` の形だけを
+		// 見ていたので、この書き方が単相化の網から丸ごと漏れていた。
+		for (const e of (rhs.left && rhs.left.entries) || []) {
+			if (!e.name || !e.default) continue;
+			const d = unwrap(e.default);
+			if (d && d.type === "operation" && d.name === "lambda" && params.includes(e.name) && !ptrParams.includes(e.name)) {
+				ptrParams.push(e.name);
+			}
+		}
 		if (ptrParams.length > 0) table.set(bareName(node.left.value), { params, ptrParams, instances: new Map(), lambda: rhs });
 	}
 	if (table.size === 0) return table;
@@ -311,6 +324,19 @@ function collectMonomorphs(nodes) {
 						// 無い」になっていた。仮引数リストは関数の状態ベクタであり
 						// （function_guide.md）、デフォルトはその初期値である。
 						const a = args[i] || defaultOfParam(entry.lambda, pn);
+						// **デフォルトに書いたラムダは関数内関数の定義である。** 関数を
+						// 定義するのに `$` は要らない——トップレベルの `dbl : y ? y * 2` と
+						// 同じことを仮引数リストの中でしているだけである（`$` はアドレスを
+						// 取る側の話であって、定義とは別）。名前が無いので、ここで名前を
+						// 与えて実体として出す。具体化は名前で結ぶので、名前さえ在れば
+						// `$名前` を書いたのと同じ道に乗る。
+						const inline = a && a.type === "operation" && a.name === "lambda" ? a : null;
+						if (inline) {
+							const label = `${bareName(base.value)}$${bareName(pn)}`;
+							if (!hoisted.has(label)) hoisted.set(label, inline);
+							callees[pn] = label;
+							continue;
+						}
 						// `$名前` だけを具体化できる。式で作ったアドレスは静的に決まらない。
 						if (a && a.type === "operation" && a.position === "prefix" && a.name === "address" && isIdentifierNode(a.operand)) {
 							callees[pn] = bareName(a.operand.value);
@@ -914,7 +940,12 @@ function genExpr(node, env, em, scope, tail = false) {
 		let callee = null;
 		let baseName = null;
 		if (isIdentifierNode(base)) {
-			callee = bareName(base.value);
+			// **具体化された仮引数は、直接呼んでも名前が変わる。** `@p` の形だけが
+			// `scope.callees` を引いていたので、デフォルトにラムダを書いて `g x` と
+			// 直接呼ぶ形が素の名前のまま `b g` を出していた——存在しないラベルである。
+			// `$` を書いたなら `@` で呼ぶ、書かないならそのまま呼ぶ。どちらの側も
+			// 同じ表を引かなければ対にならない。
+			callee = (scope && scope.callees && scope.callees[base.value]) || bareName(base.value);
 			baseName = callee;
 		} else if (
 			base && base.type === "operation" && base.position === "prefix" && base.name === "input" &&
@@ -3414,6 +3445,17 @@ function generateAsm(nodes, env, options = {}) {
 							message: `${fname}: アドレス経由で呼ぶ仮引数を持つが、具体化できる呼び出しサイトが無い`,
 							node: rhs,
 						});
+					}
+					// デフォルトに直接書かれたラムダは、ここで名前付きの実体として出す
+					// ——関数内関数の定義なので、出す先はトップレベルでよい。
+					for (const [label, lam] of monos.hoisted || []) {
+						if (em.hoistedDone && em.hoistedDone.has(label)) continue;
+						if (!em.hoistedDone) em.hoistedDone = new Set();
+						if (!entry.ptrParams.some((pn) => `${fname}$${bareName(pn)}` === label)) continue;
+						em.hoistedDone.add(label);
+						em.lines.push(`	.global ${label}`);
+						genFunction(label, lam, env, em);
+						em.blank();
 					}
 					for (const inst of entry.instances.values()) {
 						em.lines.push(`	.global ${inst.label}`);
