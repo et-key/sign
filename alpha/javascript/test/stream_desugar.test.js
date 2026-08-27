@@ -200,6 +200,25 @@ check("器が並ぶ形は均さない", streams("f : [c ~rest] ?\n\tc = `;` : c 
 	checkTrue("walk は含まれない", !found.some((f) => f.name === "walk"));
 }
 
+// ---- カーソルを仮引数で受けるなら、群も一緒に運ぶ ----
+//
+// 引く命令がどこへ跳ぶか（`<群>_at` / `<群>_adv`）は群からしか決まらない。`repr` だけを
+// 渡して群を落とすと、仮引数で受けたカーソルが「参照」に見えて `ptr` を値として読む
+// ——**黙って違う値が出る**（実測で 97 のところに 0 が出ていた）。渡し方は群と一緒に運ぶ。
+//
+// `reprOfNode` は呼び出しの返値までは辿らないが、`cursorGroupOfNode` は辿る。群が
+// 分かった時点で置かれ方も分かっているので、そこから読む。
+{
+	const look = (s, n) => { while (s) { const b = s.bindings instanceof Map ? s.bindings.get(n) : s.bindings[n]; if (b) return b; s = s.parent; } return null; };
+	const clean = (s) => String(s).replace(/[<>]/g, "");
+	const SRC = "dup : [c ~rest] ? c c (dup rest)\ntake : cur ? cur ' 0\ntake (dup `abc`)";
+	const { nodes } = compile(SRC, { charset: "ascii", desugarStreams: true });
+	const d = nodes.find((n) => n.name === "define" && clean(n.left.value) === "take" && !n.supersededByDesugar);
+	const b = d ? look(d.right.scope, "<cur>") : null;
+	check("カーソルの置かれ方が届く", b && b.repr, "cursor");
+	check("カーソルの群も届く", b && b.cursorGroup, "dup");
+}
+
 // ---- 置き換えられた定義は呼び出しサイトではない ----
 //
 // 糖衣は同じ名前の定義を2つ作る（元のものと、器を引く形へ均したもの）。元の方は

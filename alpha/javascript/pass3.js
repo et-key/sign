@@ -2134,6 +2134,7 @@ function collectCallsiteParamTypes(nodes, env) {
     // `repr` を落とすと、呼ぶ側は3本で渡し受ける側は2本で受け、しかも `start` をポインタ
     // として読む命令が出る——実際にそうなっていた。渡し方は型と一緒に運ぶ。
     const reprObs = names.map(() => new Set());
+    const groupObs = names.map(() => new Set());
     // **型名だけでは足りない。** `Struct` はスロットごとに型が違ってよいので、`p ' 0` が
     // 何を返すかは並びを知らないと決まらない。呼び出しサイトはそれを知っているので、
     // 型と一緒に形も運ぶ。全サイトで形が一致したときだけ採る。
@@ -2157,6 +2158,18 @@ function collectCallsiteParamTypes(nodes, env) {
         // 呼び出しサイトの `[1 ~ 10]` から決まり、2周目で自己呼び出しも一致する。
         const rp = reprOfNode(args[i], args.scope || env);
         if (rp) reprObs[i].add(rp);
+        // **カーソルは群も一緒に運ぶ。** 引く命令がどこへ跳ぶか（`<群>_at` / `<群>_adv`）は
+        // 群からしか決まらない。`repr` だけを渡して群を落とすと、仮引数で受けたカーソルが
+        // 「参照」に見えて `ptr` を値として読む——**黙って違う値が出る**（実測で 97 の
+        // ところに 0 が出ていた）。渡し方は群と一緒に運ぶ。
+        const cg = cursorGroupOfNode(args[i], args.scope || env);
+        if (cg) {
+          groupObs[i].add(cg);
+          // **群が付くならカーソルである。** `reprOfNode` は呼び出しの返値までは辿らない
+          // が、`cursorGroupOfNode` は辿る（「返値経由も見る」）。群が分かった時点で
+          // 置かれ方も分かっているので、そこから読む。
+          reprObs[i].add("cursor");
+        }
         if (t !== "Struct") return;
         const sh = structShapeOf(args[i], args.scope || env);
         if (!sh) { shapes[i].agreed = false; return; }
@@ -2231,6 +2244,11 @@ function collectCallsiteParamTypes(nodes, env) {
       const rp = [...reprObs[i]];
       if (rp.length === 1 && b.repr !== rp[0]) {
         b.repr = rp[0];
+        changed = true;
+      }
+      const gp = [...groupObs[i]];
+      if (gp.length === 1 && b.cursorGroup !== gp[0]) {
+        b.cursorGroup = gp[0];
         changed = true;
       }
     });
