@@ -2765,7 +2765,19 @@ function genMatch(node, env, em, scope, tail = false) {
 		// `.rodata` に置き場所があるので、器として置ける（`genWidened`）。
 		const wide = width === 2 ? genWidened(line, width, env, em, scope) : null;
 		if (wide === false) return false;
+		// **枝そのものが追記できる呼び出しなら、自分の返値スロットをそのまま渡す。**
+		//
+		// 選択写像の「落ちたら並べずに再帰」がこれである。構築の末尾ではないので追記の道に
+		// 乗っていなかったが、書く先は同じ器の続きであって、要素を1個書いてから渡すか0個で
+		// 渡すかの違いしかない——飛ばす枝は「0 個書いた」だけである。
+		//
+		// 印はノードに付ける。引数の中に別の呼び出しがあっても取り違えないためで、追記の
+		// 相手（構築の末尾）と同じ扱いである。
+		const stripped = width === 2 && em.sretDest !== null && em.sretDest !== undefined ? stripExpand(line) : null;
+		const armAppend = stripped && appendableCallee(stripped, em) ? stripped : null;
+		if (armAppend) armAppend._sretInto = em.sretDest;
 		const w = wide === null ? genExpr(line, env, em, armScope(line), tail) : wide;
+		if (armAppend) armAppend._sretInto = undefined;
 		if (w === false) return false;
 		if (w === TAIL) return TAIL;
 		if (w !== width) {
@@ -3363,11 +3375,22 @@ function selfCallSameArgs(part, name, params) {
 		head = unwrap(head.left);
 	}
 	if (!args.length || !isIdentifierNode(head) || bare(head.value) !== bare(name)) return false;
-	// 器を受ける位置が、同じ名前の仮引数のまま渡っていること。
+	// 器を受ける位置が、同じ仮引数そのものか、**その切り出し**であること。
+	//
+	// 切り出し（`s ' 1~`）を渡す自己呼び出しも上界を上げない。返るものは「より短い器に
+	// 対する自分の上界」であり、`konst + coef × ||s||` から `coef` を引いた値以下だから
+	// である。選択写像の「落ちたら並べずに再帰」がこの形で、ここを見ていなかったために
+	// **上界が出せず sret に乗らなかった**——「同じ実引数」より広い、正しい条件はこちら。
+	const sliceOf = (arg, p) => {
+		let v = arg;
+		while (v && v.type === "operation" && v.name === "get_prop") v = unwrap(v.left);
+		return !!(p && isIdentifierNode(v) && v.value === p);
+	};
 	return args.every((arg, i) => {
 		if (!arg) return false;
 		if (isIdentifierNode(arg)) return !isBoxType(arg.atomType) || arg.value === params[i];
-		return !isBoxType(arg.atomType); // 式ならスカラーだけ許す
+		if (isBoxType(arg.atomType)) return sliceOf(arg, params[i]);
+		return true; // 式ならスカラーだけ許す
 	});
 }
 

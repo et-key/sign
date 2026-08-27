@@ -922,11 +922,25 @@ function computeAtomType(node, env) {
     // 関数本体（match_case の並び）の型は、各 arm の型の**直和**である（§7.3）。
     // 最終行だけを見ると、途中の arm が返しうる型が消えてしまう。
     if (node.isFunctionBody) {
-      const armTypes = node.lines.map((line) =>
-        // `cond : result` の arm が返すのは result 側。フォールバック行は行そのもの。
-        isDefineNode(line)
-          ? inferAtomType(line.right, node.scope || env)
-          : inferAtomType(line, node.scope || env)
+      // **「自分を呼ぶだけ」の枝は数えない。**
+      //
+      // 選択（`通れば並べて再帰／落ちれば並べずに再帰`）の後者がこれである。その枝は
+      // 「結果は全体と同じものである」としか言っておらず、新しいことを何も足さない。
+      // join に入れると `X = join(A, X)` になり、**自分で自分を養い続ける**——実際
+      // `Int | List | Struct` と発散していた。
+      //
+      // この方程式の最小解は `A` である。だから落とすのは近似ではなく、**最小不動点を
+      // 取る**ということそのものだ。`joinArmTypes` が `Unit`（零対象＝直和の単位元）を
+      // 落とすのと同じ扱いで、情報を持たない枝は単位元として扱う。
+      const selfOnly = (v) => {
+        let b = v && v.type === "block" && (v.lines || []).length === 1 ? v.lines[0] : v;
+        while (b && b.type === "operation" && b.name === "apply") b = b.left;
+        while (b && b.type === "block" && (b.lines || []).length === 1) b = b.lines[0];
+        return !!(node.selfName && b && b.type === "atom" && b.kind === "identifier" && b.value === node.selfName);
+      };
+      const armValues = node.lines.map((line) => (isDefineNode(line) ? line.right : line));
+      const armTypes = armValues.map((v, i) =>
+        selfOnly(v) && armValues.some((o, j) => j !== i && !selfOnly(o)) ? "Unit" : inferAtomType(v, node.scope || env)
       );
       // **実体の種類も枝で合流する。** どれか1つでも規則を返す枝があれば、全体は規則で
       // ある——場所は規則として歩けるが（`makeWalk`：器の上を走るイテレータ）、規則を

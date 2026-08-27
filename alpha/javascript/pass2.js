@@ -1206,7 +1206,12 @@ function resolveLambdaLine(rawItems, qIdx, env) {
   const lambdaNode = { type: "operation", op: "?", name: "lambda", position: "infix", left: paramNode, right: bodyNode, scope };
 
   if (nameToken) {
-    return { type: "operation", op: ":", name: "define", position: "infix", left: toNode(nameToken, env), right: lambdaNode, exported };
+    const nameNode = toNode(nameToken, env);
+    // **本体に自分の名前を刻む。** 枝が「自分を呼ぶだけ」かどうかは、型の不動点を回す
+    // 側が知らなければならない——そういう枝は「結果は全体と同じ」としか言っておらず、
+    // join に入れると `X = join(A, X)` になって自分で自分を養い続ける。
+    if (bodyNode && typeof bodyNode === "object" && nameNode && nameNode.type === "atom" && nameNode.kind === "identifier") bodyNode.selfName = nameNode.value;
+    return { type: "operation", op: ":", name: "define", position: "infix", left: nameNode, right: lambdaNode, exported };
   }
   return lambdaNode;
 }
