@@ -24,7 +24,7 @@
 
 import { preprocess } from "./lexer.js";
 import { parse } from "./parser.js";
-import { buildEnv } from "./pass1.js";
+import { buildEnv, bindEnv } from "./pass1.js";
 import { reduceAll, desugarIndexRest } from "./pass2.js";
 import { specializeGenericParams } from "./pass1b.js";
 import { annotateAll, checkLayerConstraints, checkCharsetConstraints } from "./pass3.js";
@@ -151,6 +151,7 @@ function compile(source, options = {}) {
   // 意味論からは消す。Pass 2 の出口でやるのは、ここが「構文の形が最後に見える場所」
   // だからである（Pass 3 以降は型の話しかしない）。
   const nodes = lines.map((line) => desugarIndexRest(reduceAll(line, env)));
+  for (const node of nodes) synthesizePointfreeIn(node, env);
   for (const node of nodes) {
     const bad = findUnresolved(node);
     if (bad) {
@@ -210,6 +211,73 @@ function compile(source, options = {}) {
   }
 
   return { nodes, env, specializations, diagnostics };
+}
+
+/** その識別子ノードは「置き場所」を表すホールか（`[!_]` の `_`）。 */
+function isHole(n) {
+  return !!(n && n.type === "atom" && n.kind === "hole");
+}
+
+/**
+ * **ポイントフリーを、仮引数を持つ形へ合成する。**
+ *
+ * `[+ 2]` は「左辺の欠けた演算」であって仮引数を持たない。意味論の上ではそれで足りる
+ * （インタプリタは欠けた所へ実引数を入れて評価する）が、機械の上で関数として出すには
+ * **受け口**が要る——`genFunction` は仮引数リストが無いと何も束縛できない。
+ *
+ * そこで書かれた形から `_a ? _a + 2` を組む。意味は変えない——**欠けている所に名前を
+ * 置くだけ**である。判定に使う `partial` は縮約時に書かれた形から付く印なので、ここも
+ * 「フロントエンドの表現がそのまま型になる」の側に居る。
+ *
+ * 合成できるのは受け口が1つの形だけである。`[+]`（貪欲な畳み込み）と `[* 2,]`（写像）は
+ * 実引数を何個でも食うので、仮引数1つの形には収まらない——そちらは別の合成が要る。
+ *
+ * @returns 合成したラムダノード。合成できない形なら null。
+ */
+function synthesizePointfree(node, scope) {
+  const inner = node && Array.isArray(node.lines) && node.lines.length === 1 ? node.lines[0] : node;
+  if (!inner || inner.type !== "operation" || !inner.partial || inner.pointfreeMap) return null;
+  const name = "<_pf>";
+  const param = { type: "atom", kind: "identifier", value: name };
+  let body = null;
+  if (inner.position === "infix" && inner.right && !inner.left) {
+    // `[+ 2]` → `_a ? _a + 2`。欠けているのは左辺である。
+    body = { ...inner, left: param, partial: undefined };
+  } else if ((inner.position === "prefix" || inner.position === "postfix") && isHole(inner.operand)) {
+    // `[!_]` / `[_!]` → ホールがそのまま受け口である。
+    body = { ...inner, operand: param, partial: undefined };
+  }
+  if (!body) return null;
+  const inner2 = bindEnv([name], scope);
+  return {
+    type: "operation",
+    op: "?",
+    name: "lambda",
+    position: "infix",
+    left: { type: "params", entries: [{ name, rest: false, default: null }], requiredArity: 1, bracket: false },
+    right: body,
+    scope: inner2,
+  };
+}
+
+/** 束縛の右辺に書かれたポイントフリーを、その場でラムダへ置き換える。 */
+function synthesizePointfreeIn(node, scope) {
+  if (!node || typeof node !== "object") return;
+  if (node.type === "operation" && node.name === "define" && node.right) {
+    const lam = synthesizePointfree(node.right, scope);
+    if (lam) {
+      node.right = lam;
+      return;
+    }
+  }
+  for (const k of ["left", "right", "operand"]) synthesizePointfreeIn(node[k], scope);
+  for (const l of node.lines || []) synthesizePointfreeIn(l, scope);
+  for (const e of node.entries || []) {
+    if (!e.default) continue;
+    const lam = synthesizePointfree(e.default, scope);
+    if (lam) e.default = lam;
+    else synthesizePointfreeIn(e.default, scope);
+  }
 }
 
 export { compile };
