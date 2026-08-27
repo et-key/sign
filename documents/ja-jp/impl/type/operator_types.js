@@ -27,8 +27,20 @@ export const OPERATOR_TYPES = {
   '#_': (R) => ({ type: 'Implicit', target: R }),
   '##_': (R) => ({ type: 'Implicit', target: R }),
   '###_': (R) => ({ type: 'Implicit', target: R }),
+  // 前置 `~`（持ち上げ）は**長さ1の器**を作る。`~x ≅ [x]`。
+  //
+  // 器に当てれば恒等である——`~` は η であり `[x] ≅ x` の潰れが効くので、器に当てても
+  // 何も増えない（`~[1 2 3]` は `[1 2 3]`、`~~5` は `~5`）。スカラーに当てたときだけ
+  // 表現が変わる（型では無償、表現では有償。0_design_principles.md 原理8）。
+  //
+  // 以前はここが「List にだけ効いて `Implicit(List)`（場所）を返し、他は Unit」だった。
+  // 「暗黙のアドレス」という名前は番地を型として名指すことに意味があった頃のもので、
+  // **番地は表に出さない**と決めた以上、観測できる姿は長さ1の器＝`List` だけである。
+  // スカラーを蹴っていたのも誤りで、`$` と同じ段の操作である以上、元が列である必要は無い。
   '~_': (R) => {
-    return getTypeName(R) === 'List' ? { type: 'Implicit', target: 'List' } : { type: 'Unit' };
+    const t = getTypeName(R);
+    if (t === 'List' || t === 'String' || t === 'Struct' || t === 'Iterator' || t === 'Implicit') return R;
+    return { type: 'List', elements: [R] };
   },
   '!_': (R) => R,
   '$_': (R) => {
