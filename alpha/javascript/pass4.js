@@ -952,6 +952,37 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.label(end);
 			return lw;
 		}
+		// **`&` の左辺は条件であって結果にならない。** `a & b` は `a` が `__` なら `__`、
+		// そうでなければ `b` である（operator_table.md の Unit 欄：左右どちらが `__` でも
+		// 零射）。左辺は「通るかどうか」しか語らないので、**幅が揃う必要は無い**。
+		// `xs & x + (s xs~) | x` の `xs` は器（2本）で右辺は数（1本）という、畳み込みの
+		// 素直な書き方がここで止まっていた。
+		//
+		// `|` は違う。`a | b` はどちらか非 `__` の方が結果になる（恒等射）ので、左辺も
+		// 結果になりうる——そちらは揃っていなければ置き場所が決まらない。
+		if (isAnd && rw !== lw) {
+			// 結果は右辺の幅で置く。左辺のスロットは条件を見るためだけに使ったので返す。
+			const rbase0 = em.slot - rw;
+			const outs = [];
+			for (let k = 0; k < rw; k++) {
+				em.load(SCRATCH[0], (rbase0 + k) * 8);
+				outs.push(SCRATCH[0]);
+				em.store(SCRATCH[0], lo + k * 8, k === 0 ? "右辺が結果（左辺は条件）" : undefined);
+			}
+			em.pop(rw);
+			// 左辺のスロットが右辺より狭ければ足りない。そこは名指しする。
+			if (rw > lw) {
+				return em.fail(n.right, `短絡の結果が左辺より広い形はまだ出せません（${lw} 本と ${rw} 本、${n.op}）`);
+			}
+			em.pop(lw - rw);
+			const skip = em.newLabel("scv");
+			em.emit(`b ${skip}`);
+			em.label(end);
+			emitUnitRegs(em, rw, null);
+			for (let k = 0; k < rw; k++) em.store(ARG_REGS[k], lo + k * 8, k === 0 ? "左が __ なので全体が __" : undefined);
+			em.label(skip);
+			return rw;
+		}
 		if (rw !== lw) {
 			em.pop(rw);
 			return em.fail(n.right, `短絡の両辺は同じ幅でなければ出せません（${lw} 本と ${rw} 本、${n.op}）`);
