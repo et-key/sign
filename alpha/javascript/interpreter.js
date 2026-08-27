@@ -157,7 +157,16 @@ function collectApplyChain(node) {
 function evalArgValues(argNode, env) {
   if (argNode.type === "operation" && argNode.position === "postfix" && argNode.name === "expand") {
     const v = evaluate(argNode.operand, env);
-    return Array.isArray(v) ? v : [v];
+    if (Array.isArray(v)) return v;
+    // **文字列も展開する。** `String ≅ List(Char)` なので、`` `abc`~ `` は文字3つの
+    // ストリームである（list_model.md §2.4①）。ここが「配列かどうか」だけを見ていた
+    // ため、文字列は展開されず1個の引数として渡っていた——`f : x ~xs ? x` を
+    // `` f `abc`~ `` と呼ぶと `x` が "abc" になり、Pass 4 が出す 'a' と食い違っていた。
+    //
+    // 1文字は展開しても1つなので特別扱いは要らず（それは `Char` である）、空文字列は
+    // 0個になる——`__` を渡したのと同じで、完全性公理がそこで止める。
+    if (typeof v === "string") return [...v];
+    return [v];
   }
   return [evaluate(argNode, env)];
 }
