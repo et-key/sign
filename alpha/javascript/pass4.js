@@ -1092,7 +1092,7 @@ function genExpr(node, env, em, scope, tail = false) {
 			if (w === false) return false;
 			parts.push({ off: (em.slot - w) * 8, w });
 		}
-		const total = parts.reduce((acc, x) => acc + x.w, 0);
+		let total = parts.reduce((acc, x) => acc + x.w, 0);
 		// **幅は署名が言う。** 省略された位置まで含めて全部数えないと、スタックへ積む
 		// 位置が決まらない——`walk s bottom 0 0` は9個の仮引数のうち4個しか渡さないが、
 		// 残り5個も引数域の場所を占める。
@@ -1100,6 +1100,44 @@ function genExpr(node, env, em, scope, tail = false) {
 		const sigW = sigAll
 			? sigAll.filter((_, i) => !drop.includes(i)).map((x) => (x.error || !x.regs ? null : x.regs))
 			: null;
+		// **同型は型では無償、表現では有償**（0_design_principles.md 原理8）。
+		//
+		// `[7]` は型の上では `7` であり（`[x] ≅ x`）、`unwrap` はそれを畳んでレジスタ1本の
+		// 値にする。だが受け側の仮引数が `[x ~xs]` なら要るのは器の表現——`{ptr, len}` の
+		// 2本である。ここを黙って1本のまま呼ぶと、呼び先は x1 に残っていた別の値を len と
+		// して読む。`f : [x ~xs] ? x` に `f [7]` で `__` が返っていたのがこれである。
+		//
+		// **払うのは呼ぶ側である。** 同型を渡り歩く費用は、どちらの表現が要るかを知って
+		// いる側が負う。長さ1ぶんの場所を取って値を置き、ptr と len = 1 を作る。
+		//
+		// 幅は 8 byte で置く。要素が 1/2/4 byte でも呼び先は下位から読むので（LE）値は
+		// 一致し、残り（len = 0）は誰も辿らない。
+		let promoted = false;
+		if (sigW) {
+			parts.forEach((p, i) => {
+				if (sigW[i] !== 2 || p.w !== 1) return;
+				em.emit(`sub sp, sp, #16`, "1要素ぶんの場所を取る（同型の持ち上げ）");
+				em.movedSp = true;
+				em.load(SCRATCH[0], p.off);
+				em.emit(`str ${SCRATCH[0]}, [sp, #0]`, "長さ1の器として置く");
+				em.emit(`mov ${SCRATCH[0]}, sp`, "ptr");
+				const po = em.push();
+				const lo = po === null ? null : em.push();
+				if (lo === null) {
+					em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+					promoted = null;
+					return;
+				}
+				em.store(SCRATCH[0], po, "ptr");
+				em.emit(`mov ${SCRATCH[1]}, #1`, "len は 1");
+				em.store(SCRATCH[1], lo, "len");
+				p.off = po;
+				p.w = 2;
+				total += 2;
+				promoted = true;
+			});
+			if (promoted === null) return false;
+		}
 		const widths =
 			sigW && sigW.length >= parts.length && sigW.every((x) => x !== null) && parts.every((p, i) => p.w === sigW[i])
 				? sigW
@@ -1169,7 +1207,10 @@ function genExpr(node, env, em, scope, tail = false) {
 		// 一方 `sp` が動いていることは別の話で、そちらは畳む前に `x29` から戻せば済む
 		// （エピローグがやっているのと同じことである）。2つを1つの旗で見ていたため、
 		// 「参照は渡らないが場所は取った」形がまとめて止まっていた。
-		const argCarries = passed.some(carriesFrameStorage);
+		// **持ち上げた器も「呼び先へ渡る参照」である。** `sub sp` で取った場所を指す ptr を
+		// 渡すので、フレームを畳んでから飛ぶと呼び先が読む前に消える。`bl` で戻ってから
+		// 畳めば生きている——`carriesFrameStorage` と同じ理由、同じ扱いである。
+		const argCarries = promoted || passed.some(carriesFrameStorage);
 		const spMoved = !!(scope && scope.holdsFrameStorage);
 		const selfTail = !!(tail && scope && callee === scope.selfLabel && !argCarries);
 		// **相互末尾呼び出しも、収まるなら積める。** フレームを畳むと `sp` は

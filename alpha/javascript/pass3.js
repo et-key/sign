@@ -1152,6 +1152,23 @@ function computeAtomType(node, env) {
       // 論理・圏論族の`&`（§4: `(L -> R) -> (R | __)`）だけは右辺の型を返す。
       // 左辺は短絡（Unitなら全体がUnit）を決めるだけで、値として返るのは右辺。
       if (node.name === "and") return inferAtomType(node.right, env);
+      // **`|` は左辺が短絡しうるときだけ直和になる。** `|` は左辺が非Unitならそれを返す
+      // ので、左辺が静的に非Unitなら結果は左辺そのものであり、型も左辺の型でよい
+      // （`1 | \`abc\`` は `Int`）。
+      //
+      // だが左辺が `&` なら話が違う——§4 のシグネチャは `(L -> R) -> (R | __)` であり、
+      // **`&` は Unit を返しうる**と自分で言っている。`cond & 結果 | 既定` はまさにその形
+      // なので、右辺も返りうる。ここを左辺型で通していたため、末尾の自己再帰が丸ごと片腕に
+      // なっている形（`xs & go acc xs | !xs & 結果`）で全体が `Unit` に落ちていた——再帰の
+      // 返値はまだ決まっていないからである。直和にすれば `joinArmTypes` が `Unit` を落とし、
+      // 基底の腕が型を決める。ブロック形の match（`isFunctionBody`）が §7.3 で既にそう
+      // 畳んでいるので、インライン形もこれで揃う。
+      if (node.name === "or") {
+        const lt = inferAtomType(node.left, env);
+        const leftShortCircuits = lt === "Unit" || (node.left.type === "operation" && node.left.name === "and");
+        if (leftShortCircuits) return joinArmTypes([lt, inferAtomType(node.right, env)]);
+        return lt;
+      }
       // 範囲族は左辺優先ルール（§3.2）の対象外——結果は端点の型ではなく列である。
       // 以前は `return leftType` へ落ちており、`1 ~ 5` の型が値（[1,2,3,4,5]）と
       // 食い違って Address になっていた。
@@ -2712,9 +2729,12 @@ function joinArmTypes(types) {
 function resolveThroughAddress(binding, env) {
   let b = binding;
   const seen = new Set();
-  while (b && b.addressOf && !seen.has(b.addressOf)) {
-    seen.add(b.addressOf);
-    const next = envLookup(env, b.addressOf);
+  // `$対象`（持ち上げ）でも `別名`（そのまま）でも、辿り着く先の定義は同じである。
+  while (b && (b.addressOf || b.aliasOf)) {
+    const to = b.addressOf || b.aliasOf;
+    if (seen.has(to)) break;
+    seen.add(to);
+    const next = envLookup(env, to);
     if (!next) break;
     b = next;
   }
@@ -2934,6 +2954,18 @@ function annotateAll(nodes, env, diagnostics) {
     if (node && node.supersededByDesugar) continue;
     if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
     const rhs = node.right;
+    // **`名前 : 別名` も呼び先の由来である。** `g : f` と書いたとき `g 5` の呼び先は `f`
+    // であり、構文から読める。`$` を挟むかどうかは持ち上げの有無の違いでしかなく、
+    // 「どの定義へ行き着くか」は同じ問いである——だから同じ場所で記録する。
+    //
+    // これが無いと、別名越しの呼び出しは返値型も仮引数型も付かなかった（`g : f` の
+    // `g 5` が `null`）。ポイントフリーの畳み込みは `add : [+]` が生成した名前への
+    // 別名になるので、この穴をそのまま踏んでいた。
+    if (rhs && isIdentifierNode(rhs)) {
+      const b = envLookup(env, node.left.value);
+      if (b && rhs.value !== node.left.value) b.aliasOf = rhs.value;
+      continue;
+    }
     if (!rhs || rhs.type !== "operation" || rhs.position !== "prefix" || rhs.name !== "address") continue;
     if (!isIdentifierNode(rhs.operand)) continue;
     const binding = envLookup(env, node.left.value);

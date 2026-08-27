@@ -24,11 +24,15 @@
 
 import { preprocess } from "./lexer.js";
 import { parse } from "./parser.js";
-import { buildEnv, bindEnv } from "./pass1.js";
+import { buildEnv, bindEnv, envLookup } from "./pass1.js";
 import { reduceAll, desugarIndexRest } from "./pass2.js";
 import { specializeGenericParams } from "./pass1b.js";
 import { annotateAll, checkLayerConstraints, checkCharsetConstraints } from "./pass3.js";
 import { findStreamFunctions, generatePullers, groupStreamFunctions, CURSOR_SUFFIXES } from "./stream_desugar.js";
+
+function isIdentifierNode(n) {
+  return !!n && n.type === "atom" && n.kind === "identifier";
+}
 
 function isDefineNode(n) {
   return !!n && n.type === "operation" && n.name === "define";
@@ -152,6 +156,22 @@ function compile(source, options = {}) {
   // だからである（Pass 3 以降は型の話しかしない）。
   const nodes = lines.map((line) => desugarIndexRest(reduceAll(line, env)));
   for (const node of nodes) synthesizePointfreeIn(node, env);
+
+  // **貪欲な畳み込みへ名前と本体を与える。** `[+]` は残りアリティ2なので受け口1つの
+  // 合成には収まらない——トップレベルへ持ち上げてから、その場の `[+]` を名前へ差し替える。
+  if (!options.__pfFolded) {
+    const folds = collectGreedyFolds(nodes);
+    if (folds.length > 0) {
+      // **前に置く。** ストリームの糖衣は元の名前を上書きするので後ろだったが、畳み込みは
+      // 新しい名前を足すだけなので、使う場所より先に定義が要る。元の最後の式が最後のまま
+      // 残る、という点でも前置きが正しい——`_sign_main` はそれを返す。
+      return compile([...folds.map(foldSource), source].join("\n"), { ...options, __pfFolded: true });
+    }
+  } else {
+    replaceGreedyFolds(nodes);
+  }
+  // 木を1つにするのは、ポイントフリーが名前へ変わった**後**である。
+  gatherBracketArgs(nodes, env);
   for (const node of nodes) {
     const bad = findUnresolved(node);
     if (bad) {
@@ -211,6 +231,153 @@ function compile(source, options = {}) {
   }
 
   return { nodes, env, specializations, diagnostics };
+}
+
+
+/**
+ * **貪欲な畳み込み（`[+]`）に名前と本体を与える。**
+ *
+ * 貪欲なポイントフリーにはアリティがある。`[+ 2]` は残りアリティ0（合成済み）だが、
+ * `[+]` は残りアリティ2——隣り合う2つを潰していく**畳み込み**であり、器を1本走査すれば
+ * 済む。書き下せば `[x ~xs] ? xs & x + (自分 xs) | x` であり、`function_guide.md` の
+ * `sum_list` そのものである。
+ *
+ * **合成には名前が要る。** 畳み込みは自分を呼ぶので、その場に書かれた `[+]` のままでは
+ * 再帰の呼び先が無い。だからトップレベルへ名前付きで持ち上げる。
+ *
+ * 生成するのは Sign のソースであり、足してから**同じ道をもう一度通す**（ストリームの
+ * 糖衣と同じやり方）。手で書いたコードと同じパイプラインを通るので、生成側だけが通れる
+ * 抜け道が生まれない——`fold [1 2 3]` が Pass 4 で出せる以上、`[+] 1 2 3` も出せる。
+ */
+/**
+ * **ブラケット仮引数1つの関数へは、並置を器1つにまとめて渡す。**
+ *
+ * `f : [x ~xs] ?` に `f 1 2 3` と書いたとき、渡るのは3つの実引数ではなく器 `(1 2 3)`
+ * 1つである——ブラケット仮引数は「器を分解して受ける」形だからで、`f (1 2 3)` や
+ * `f [1 2 3]` と同じ木にならなければならない。
+ *
+ * インタプリタは適用の連鎖を辿りながら畳んでいたので答えは合っていたが、Pass 4 は
+ * 連鎖をそのまま「3引数の呼び出し」として出していた。**同じ式に2つの読みがあった**
+ * わけで、機械の側だけが黙って違う値を出す（`[+] 1 2 3` が 1 になる）。木を1つに
+ * すれば、どちらも同じものを見る。
+ *
+ * まとめるのは**仮引数がブラケット1つだけ**の場合に限る。`go : acc [x ~xs]` のように
+ * 前に別の仮引数が居る形は、どこから器が始まるかが位置で決まるので別の話である。
+ */
+function gatherBracketArgs(nodes, env) {
+  const construct = (l, r) => ({ type: "operation", op: " ", name: "construct", position: "infix", left: l, right: r });
+  const rewrite = (n) => {
+    if (!n || n.type !== "operation" || n.name !== "apply") return n;
+    const args = [];
+    let head = n;
+    while (head && head.type === "operation" && head.name === "apply") {
+      args.unshift(head.right);
+      head = head.left;
+    }
+    if (args.length < 2 || !head || !isIdentifierNode(head)) return n;
+    const b = envLookup(env, head.value);
+    if (!b || b.restParam !== "bracket" || b.requiredArity !== 1) return n;
+    return {
+      ...n,
+      left: head,
+      right: { type: "block", kind: "paren", lines: [args.reduce(construct)], scope: n.scope || null },
+    };
+  };
+  // **外側から降りる。** 内側の適用を先に畳むと `f 1 2 3` が `f ((1 2) 3)` になり、
+  // 並べるものの中に器が現れる（要素数が実行時にしか決まらない形）。連鎖は一番外から
+  // 見て初めて「実引数が何個並んでいるか」が分かる。
+  const seen = new Set();
+  const deep = (n) => {
+    if (!n || typeof n !== "object" || seen.has(n)) return n;
+    const r = rewrite(n);
+    seen.add(r);
+    for (const k of ["left", "right", "operand"]) if (r[k]) r[k] = deep(r[k]);
+    if (Array.isArray(r.lines)) r.lines = r.lines.map(deep);
+    for (const e of r.entries || []) if (e.default) e.default = deep(e.default);
+    return r;
+  };
+  for (let i = 0; i < nodes.length; i++) nodes[i] = deep(nodes[i]);
+}
+
+/**
+ * 畳み込みの本体を Sign のソースとして書き下す。
+ *
+ * **左から畳む。** 貪欲な連鎖は隣り合う2つを左から潰していくので、`[-] 10 3 2` は
+ * `(10 - 3) - 2 = 5` である。右から畳むと 9 になり、非可換な演算子で黙って答えが変わる。
+ *
+ * 累算器を別の仮引数に出すのは、そうすれば**器を組み直さずに済む**からである。頭2つを
+ * 潰して残りへ繋ぐ形（`自分 ((x OP y) ~xs)`）だと再帰のたびに列を作ることになるが、
+ * 累算器なら残りをそのまま渡せる。しかも `自分 (acc OP x) xs` は末尾呼び出しなので、
+ * 走査はループへ潰れる。
+ */
+function foldSource(op) {
+  const f = foldNameFor(op);
+  const go = `${f}_go`;
+  // **空側を `!xs` で名指しする。** `xs & 本体 | x` と書くと、本体が正当に `__` を返した
+  // とき（`` `abc` + 1 `` のような型エラー）にも `| x` へ落ちて、黙って違う値が出る。
+  // 両側を条件付きにすれば、`__` は `__` のまま通る。
+  return [
+    `${go} : acc [x ~xs] ? xs & ${go} (acc ${op} x) xs | !xs & acc ${op} x`,
+    `${f} : [x ~xs] ? xs & ${go} x xs | !xs & x`,
+  ].join("\n");
+}
+
+function foldNameFor(op) {
+  return `_pf_fold_${[...op].map((c) => c.charCodeAt(0).toString(16)).join("")}`;
+}
+
+/** その式は「残りアリティ2の貪欲なポイントフリー」か（`[+]` / `[*]`）。 */
+function isGreedyFold(node) {
+  const n = node && Array.isArray(node.lines) && node.lines.length === 1 ? node.lines[0] : node;
+  return !!(n && n.type === "operation" && n.partial && !n.pointfreeMap && n.position === "infix" && !n.left && !n.right && n.op);
+}
+
+/** 畳み込みのポイントフリーを演算子ごとに集める。 */
+function collectGreedyFolds(nodes) {
+  const ops = new Set();
+  walkNodes(nodes, (n) => {
+    if (isGreedyFold(n)) ops.add((n.lines ? n.lines[0] : n).op);
+  });
+  return [...ops];
+}
+
+/** 畳み込みのポイントフリーを、生成した名前への参照へ置き換える。 */
+function replaceGreedyFolds(nodes) {
+  walkNodes(nodes, null, (child) => {
+    if (!isGreedyFold(child)) return child;
+    const op = (child.lines ? child.lines[0] : child).op;
+    return { type: "atom", kind: "identifier", value: `<${foldNameFor(op)}>` };
+  });
+}
+
+/** 子を差し替えられる木歩き。`visit` は観測、`swap` は置き換え。 */
+function walkNodes(nodes, visit, swap) {
+  const seen = new Set();
+  const step = (n) => {
+    if (!n || typeof n !== "object" || seen.has(n)) return;
+    seen.add(n);
+    if (visit) visit(n);
+    for (const k of ["left", "right", "operand"]) {
+      if (!n[k]) continue;
+      const s = swap ? swap(n[k]) : n[k];
+      if (s !== n[k]) n[k] = s;
+      else step(n[k]);
+    }
+    if (Array.isArray(n.lines)) {
+      for (let i = 0; i < n.lines.length; i++) {
+        const s = swap ? swap(n.lines[i]) : n.lines[i];
+        if (s !== n.lines[i]) n.lines[i] = s;
+        else step(n.lines[i]);
+      }
+    }
+    for (const e of n.entries || []) {
+      if (!e.default) continue;
+      const s = swap ? swap(e.default) : e.default;
+      if (s !== e.default) e.default = s;
+      else step(e.default);
+    }
+  };
+  for (const n of nodes) step(n);
 }
 
 /** その識別子ノードは「置き場所」を表すホールか（`[!_]` の `_`）。 */
