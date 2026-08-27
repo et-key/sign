@@ -934,6 +934,13 @@ function computeAtomType(node, env) {
       // 広い方に揃える」を、型ではなく実体の側へ当てたもの。
       const armNodes = node.lines.map((line) => (isDefineNode(line) ? line.right : line));
       if (armNodes.some((a) => a && a.repr === "closure")) node.repr = "closure";
+      // **要素型も枝で合流する。** 型（`List`）だけ合流させて要素型を落とすと、返値を
+      // 引く側で幅が決まらない——`(m [1 2 3]) ' 1` が「まだ出せない」になっていた。
+      // 基底の枝は `__`（`Unit`）で要素型を持たないので、**持っている枝から採る**
+      // ——`joinArmTypes` が `Unit` を落とすのと同じ扱いである。食い違う枝があれば
+      // 決まらないのが正しい。
+      const els = [...new Set(armNodes.map((a) => a && a.elementType).filter((x) => x))];
+      if (els.length === 1) node.elementType = els[0];
       return joinArmTypes(armTypes);
     }
     // **どの行も定義でないブロックは、行が要素の列である**（list_model.md §3.1 の
@@ -1124,7 +1131,27 @@ function computeAtomType(node, env) {
       // §2「Listは同一型」: 要素型のjoinを取る。**join が無いのは不正ではなく Struct**
       // である（上の unshift/push と同じ理由）。幅が揃わない連続領域はスロットごとに
       // 別命令で引くもの——それが `Struct` の定義そのものである。
-      const joined = joinElementTypes(elementTypeOf(node.left, env), elementTypeOf(node.right, env));
+      // **「まだ分からない」に「分かっている」を潰させない。**
+      //
+      // 器を返す再帰（写像：`(s ' 0) (m (s ' 1~))~`）では、右の再帰呼び出しの要素型が
+      // その周回ではまだ決まっていない。null と join すると全体が null になり、**片方が
+      // 分かっているのに何も分からないと言う**ことになる——`joinArmTypes` が `Unit` を
+      // 落とすのと同じ理由で、ここも未確定の側を数えない。
+      //
+      // 不動点で回るので、次の周回で右が決まれば改めて join される。食い違えば
+      // `NO_JOIN` になって `Struct` へ落ちるので、取り違えたまま固まることはない。
+      //
+      // これが落ちていたため、列の写像は「並べるものの幅」が決まらず sret の計画が
+      // 立たなかった。`String` は型名に要素が入っている（`≅ List(Char)`）ので偶然通り、
+      // `List` だけが出せなかった。
+      //
+      // ただし**片側だけから族を名乗らない**。`Atom` や `Scalar` は「どれか分かって
+      // いない」という下限であり、要素型に書いても素の `List` と情報量が変わらない
+      // ——分かっている以上のことも、以下のことも言わないのが `.st` の原則である。
+      const lel = elementTypeOf(node.left, env);
+      const rel = elementTypeOf(node.right, env);
+      const lone = lel ?? rel ?? null;
+      const joined = lel == null || rel == null ? (lone && FAMILY_MEMBERS[lone] ? null : lone) : joinElementTypes(lel, rel);
       if (joined === NO_JOIN) {
         node.slotKind = "positional";
         return "Struct";
@@ -2174,6 +2201,37 @@ function collectCallsiteParamTypes(nodes, env) {
           changed = true;
         }
       });
+    }
+    // **裸の仮引数にも要素型が要る。** 上の `elementObs` は `entries`（分割代入の並び）
+    // ごとに回るので、`m : s ?` のような裸の1引数は `entries` が空で観測に乗らない
+    // ——指す先（`pointeeObs`）だけが `ptNames` で別に拾われていた。
+    //
+    // 器を受け取る位置は、ブラケットで受けようが裸で受けようが**同じだけ要素の型を
+    // 語る**。落ちていると、器を返す再帰（写像）で「並べるものの幅」が決まらず、
+    // sret の計画が立たない——`String` は型名に要素が入っている（`≅ List(Char)`）ので
+    // 偶然通り、`List` だけが落ちていた。
+    if (rhs.scope && isIdentifierNode(paramNode)) {
+      const obsEl = new Set();
+      const obsCt = new Set();
+      for (const args of sites) {
+        if (args.length === 0) continue;
+        const el = containerElementType(args[0], args.scope || env) || elementTypeOf(args[0], args.scope || env);
+        if (el && el !== "Unit" && !FAMILY_MEMBERS[el]) obsEl.add(el);
+        const ct = inferAtomType(args[0], args.scope || env);
+        if (ct && ct !== "Unit" && !FAMILY_MEMBERS[ct]) obsCt.add(ct);
+      }
+      const b0 = envLookup(rhs.scope, paramNode.value);
+      if (b0) {
+        // 全サイトで一致したときだけ採る（食い違うなら決まらないのが正しい）。
+        if (obsCt.size === 1 && b0.atomType !== [...obsCt][0] && (!b0.atomType || FAMILY_MEMBERS[b0.atomType])) {
+          b0.atomType = [...obsCt][0];
+          changed = true;
+        }
+        if (obsEl.size === 1 && b0.elementType !== [...obsEl][0]) {
+          b0.elementType = [...obsEl][0];
+          changed = true;
+        }
+      }
     }
     const patScope = rhs.scope;
     if (patScope) {

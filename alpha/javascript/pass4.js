@@ -1896,8 +1896,11 @@ function genExpr(node, env, em, scope, tail = false) {
 		//
 		// **器は末尾にしか来られない。** 途中に置くと、その長さが決まるまで後ろを書けない
 		// ——1回の走査で書くにはそこが条件である。
+		//
+		// 相手の後置 `~` はここで剥がす（`stripExpand`）。列の μ は任意なので写像は
+		// `(…) (m rest)~` と書くしかないが、追記の位置では平らに書かれるので命令は要らない。
 		const lead = parts.slice(0, -1);
-		const tailPart = parts.length > 1 ? parts[parts.length - 1] : null;
+		const tailPart = parts.length > 1 ? stripExpand(parts[parts.length - 1]) : null;
 		const appendTo = tailPart && sretHere ? appendableCallee(tailPart, em) : null;
 		if (em1 && em1.size && appendTo && lead.every((p) => slotsOfNode(p, em.conf, env) === 1)) {
 			const base = em.slot;
@@ -3629,8 +3632,25 @@ function collectSretPlan(nodes, em) {
  *
  * @returns 呼び先の素の名前。追記できないなら null。
  */
-function appendableCallee(node, em) {
+/**
+ * 追記の相手から後置 `~`（撒く）を剥がす。
+ *
+ * **List の μ は任意であり、`String` のそれは強制である**（原理7）。だから同じ「要素 ＋
+ * 再帰の結果」でも、文字列は `(s ' 0) (f rest)` で平らになるのに、列は `(… ) (m rest)~`
+ * と `~` を書かないと入れ子になる。写像がまさにこの形である。
+ *
+ * だが**追記の位置では `~` は 0 命令である**。呼ばれた側は自分の器の続きへ要素を連続して
+ * 書くので、書き終えた領域は既に平らだからだ——器に当てた `~` が恒等であるのと同じ話。
+ * 型の上で要る記号が、この位置では命令を1つも生まない。
+ */
+function stripExpand(node) {
 	const u = unwrap(node);
+	if (u && u.type === "operation" && u.position === "postfix" && u.name === "expand" && u.operand) return unwrap(u.operand);
+	return u;
+}
+
+function appendableCallee(node, em) {
+	const u = stripExpand(node);
 	if (!u || u.type !== "operation" || u.name !== "apply") return null;
 	let head = u;
 	while (head && head.type === "operation" && head.name === "apply") head = unwrap(head.left);
