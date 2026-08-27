@@ -1457,8 +1457,26 @@ function applyPointfree(node, closureEnv, argValues) {
     throw new Error(`interpreter: pointfree: 未対応の演算子 '${node.name}'`);
   };
 
+  // **器を1つ受けたら、その要素の上を走る。**
+  //
+  // 貪欲なポイントフリーは器を1本走査するものであり、その器が並置で届こうが（`[* 2,] 1 2 3`）
+  // 器1つで届こうが（`[* 2,] [1 2 3]`）同じものである。以前は前者だけを走査対象と見て、
+  // 後者は「器という1つの要素」として扱っていた——`[* 2,] [1 2 3]` が `[[1 2 3 1 2 3]]`
+  // （List * Int の複製）になり、`~` で撒き直さないと写像にならなかった。
+  //
+  // 余積での関数適用が構築より下の優先順位になった今、並置は**ここへ来る前に器へまとまる**。
+  // 走査対象を「届いた実引数の並び」ではなく「受け取った器」と読み直せば、両方の書き方が
+  // 同じ道を通る——合成（`[* 2,] [* 3,] 1 2 3`）も、内側が返した器がそのまま外側の
+  // 走査対象になるだけの話になる。
+  // **走るのは貪欲な形だけである。** `[* 2,]`（写像）と `[+]`（畳み込み）は残りアリティが
+  // あるので器を走るが、`[+ 1]` や `[' 1]` は残りアリティ0の**合成済み**の関数であり、
+  // 受け取った器はそのまま1つの値である（`[+ 1] [1 2 3]` は `[1 2 3] + 1` で型エラー、
+  // `[' 1] [3 , 4]` はその器の添字1）。ここを分けずに走らせると、合成済みの側が黙って
+  // 写像に化ける。
   const rightBound = node.right !== null && node.right !== undefined;
   const leftBound = node.left !== null && node.left !== undefined;
+  const greedy = !!node.pointfreeMap || (!leftBound && !rightBound);
+  if (greedy && argValues.length === 1 && Array.isArray(argValues[0])) argValues = argValues[0];
 
   if (node.pointfreeMap) {
     // 末尾カンマの写像糖衣構文（`[* 2,]`、function_guide.md「そのすべてに適用される」）。

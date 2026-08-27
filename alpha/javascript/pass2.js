@@ -670,20 +670,45 @@ function isPointfreeLambda(node, env) {
   return false;
 }
 
+/**
+ * その関数はまだ実引数を要るか（アリティが分かっていて、あと1個以上要る形）。
+ *
+ * 「飽和するまで食う」を段の順序ではなく**関数自身のアリティ**で決めるためのもの。
+ * 分からない（アリティが読めない）なら false——分からないことを根拠に順序を変えない。
+ */
+function wantsMore(a, env) {
+  const info = resolveKnownArity(a, env);
+  return !!(info && info.arity != null && info.arity - (info.consumed || 0) >= 1);
+}
+
+/**
+ * 余積（スペース）を解決する段。**上にあるものほど内側で結び付く。**
+ *
+ * **余積での関数適用は、構築より下の優先順位である。** `f a b` と書いたとき、`a b` が
+ * 先に器になってから `f` へ渡るのが自然な読みであり、`(f a) b` のように1つずつ食うのは
+ * 「関数適用が構築より内側にある」と言っているのと同じである。
+ *
+ * ただし**まだ飽和していない関数は先に食う**。`g : a b ? …` に `g 1 2` と書いたとき、
+ * `1 2` を器にしてから渡すと引数が1つしか無いことになる。アリティが「あと要る」と言って
+ * いる間は適用が内側であり、飽和した時点で構築へ譲る——順序を静的な段だけで決めず、
+ * 関数自身のアリティに聞く。
+ */
 const COPRODUCT_PHASES = [
-  { match: (catA, catB) => catA === "Lambda" && catB === "Lambda" }, // 10.5: compose
-  {
-    match: (catA, catB) => catA === "Lambda" && catB === "Atom",
-    // ポイントフリー記述の完全に裸な中置演算子（`[+]`）は「複数の引数を貪欲に演算する」
-    // （function_guide.md）——getCategoryでは通常のarity判定と同様1回の適用で即座に
-    // Atom（飽和済み）として扱うが、Phase2（apply）だけはこの特例で「まだ右にAtomが
-    // あれば貪欲に食う」を許可する。これをgetCategory本体に持ち込むと、Phase2で使い
-    // 切った後のPhase3（逆適用）でも依然Lambdaと誤判定され、既に確定した計算
-    // 結果（`[+](3)(4)`）がまた関数として呼ばれようとしてしまう（`1 2 [+] 3 4`で実際に
-    // 踏んだバグ）。Phase2内だけで完結させることで、Phase2が尽きた時点（＝これ以上
-    // 右にAtomが無い時点）で自然にAtomへ確定する。
-    extendPointfree: true,
-  }, // 10.4: apply
+  // 未飽和の適用。飽和するまでは適用が内側である。
+  { match: (catA, catB, a, b, env) => catA === "Lambda" && catB === "Atom" && wantsMore(a, env) },
+  // 構築。飽和した関数の右に並ぶ Atom は、まず器になる。
+  { match: (catA, catB) => catA === "Atom" && catB === "Atom" },
+  { match: (catA, catB) => catA === "Lambda" && catB === "Lambda" }, // compose
+  // apply。**貪欲さはもう要らない。**
+  //
+  // 以前はここに「裸の中置演算子（`[+]`）は右の Atom を食えるだけ食う」という特例が
+  // 載っていた。だが `[+]` は残りアリティ2の**畳み込み**であり、受け取るのは器1つで
+  // ある——実引数を1個ずつ舐めるのではなく、並んだものが器になってから渡る。構築が
+  // 適用より内側になった今、その器はここへ来るまでに出来上がっている。
+  //
+  // 特例を残したままだと、合成が壊れる。`[* 2,] [+] 1 2 3 4 5` で写像が実引数を先に
+  // 食ってしまい、畳み込みが宙に浮いていた（`[2 4 6 8 10]` が出て 30 にならない）。
+  { match: (catA, catB) => catA === "Lambda" && catB === "Atom" },
   {
     // 10.3: 逆適用（`x f`）。ポイントフリー由来のLambda（`[+]`/`[+ 1]`等、演算子の種類を
     // 問わない）は逆適用の対象から除外する（8/5の設計合意）。ポイントフリーは
@@ -692,7 +717,6 @@ const COPRODUCT_PHASES = [
     // `5 [+]`のような曖昧な読み（5をどちら側の被演算子とみなすか不定）を防ぐ。
     match: (catA, catB, a, b, env) => catA === "Atom" && catB === "Lambda" && !isPointfreeLambda(b, env),
   },
-  { match: (catA, catB) => catA === "Atom" && catB === "Atom" }, // 10.2〜10.0: concat/push/unshift/construct
 ];
 
 // 連鎖比較（comparison.md §4）の対象となる比較演算子（tier12）。構造比較の
@@ -1242,9 +1266,17 @@ function reduceAll(rawItems, env) {
     if (tier === COPRODUCT_TIER) {
       // coproduct_resolver.md §4: compose→apply→逆適用→concat/push/constructの
       // 4段階を、それぞれ使い尽くしてから次へ進む（COPRODUCT_PHASES参照）。
-      for (const phase of COPRODUCT_PHASES) {
-        while (reduceOnce(items, tier, env, phase)) {
-          if (++guard > 10000) throw new Error("reduceAll: possible infinite loop at tier " + tier);
+      // **還元が起きたら段の先頭へ戻る。** 適用が新しい Atom-Atom の対を生むので、
+      // 段を一方向に流すと「構築の段を通り過ぎたあとに現れた対」を拾えない。1つ潰す
+      // たびに最初から見直せば、どの順で現れても同じ結論に着く。
+      for (let again = true; again; ) {
+        again = false;
+        for (const phase of COPRODUCT_PHASES) {
+          if (reduceOnce(items, tier, env, phase)) {
+            again = true;
+            if (++guard > 10000) throw new Error("reduceAll: possible infinite loop at tier " + tier);
+            break;
+          }
         }
       }
       continue;
