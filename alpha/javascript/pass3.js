@@ -1953,6 +1953,53 @@ function collectCallsiteParamTypes(nodes, env) {
     // 合わせる形）では扱えないが、**要素型は呼び出しサイトが知っている**。ここを丸ごと
     // 飛ばしていたので、器を1つ受けて分解する関数の `c` がいつまでも族（`Atom`）の
     // ままで、Pass 4 が「要素の幅が決まりません」と言うしかなかった。
+    // **ストリーム形（`x ~xs`）は位置で照合できない。**
+    //
+    // 渡るのは展開された1つ（`f l~`）であり、それが頭と残りの両方を埋める——`x` は先頭の
+    // 要素、`~xs` は残りを包む遅延ストリームである（list_model.md §2.4①）。ところが観測は
+    // 実引数を位置で照合していたので、`x` に器の型が入り `xs` は何も観測されないまま
+    // （`["List", null]`）だった。**器形と同じ観測がここにも要る**——違うのは実体化する
+    // かどうかだけで、型の読み方は同じである。
+    if (
+      paramNode &&
+      paramNode.type === "params" &&
+      !paramNode.bracket &&
+      entries.length === 2 &&
+      entries[1] &&
+      entries[1].rest &&
+      entries[0] &&
+      entries[0].name &&
+      !entries[0].rest &&
+      !entries[0].pattern
+    ) {
+      const ssites = callsitesOf(nodes, node.left.value, env);
+      const sscope = rhs.scope;
+      if (ssites.length > 0 && sscope) {
+        const els = new Set();
+        const cts = new Set();
+        for (const args of ssites) {
+          if (args.length === 0) continue;
+          const sc = args.scope || env;
+          const a = args[0];
+          // 展開（`l~`）で渡されたものだけを見る。`~` 無しの List は §5.4 が禁じている。
+          const inner = a && a.type === "operation" && a.position === "postfix" && a.name === "expand" ? a.operand : a;
+          const el = containerElementType(inner, sc) || elementTypeOf(inner, sc);
+          if (el && el !== "Unit" && !FAMILY_MEMBERS[el]) els.add(el);
+          const ct = inferAtomType(inner, sc);
+          if (ct && ct !== "Unit" && !FAMILY_MEMBERS[ct]) cts.add(ct);
+        }
+        const el = els.size === 1 ? [...els][0] : null;
+        const ct = cts.size === 1 ? [...cts][0] : null;
+        const hb = envLookup(sscope, entries[0].name);
+        if (hb && el && hb.atomType !== el) { hb.atomType = el; changed = true; }
+        const rb2 = envLookup(sscope, entries[1].name);
+        if (rb2 && ct) {
+          if (rb2.atomType !== ct) { rb2.atomType = ct; changed = true; }
+          if (el && rb2.elementType !== el) { rb2.elementType = el; changed = true; }
+        }
+      }
+      continue;
+    }
     if (paramNode && paramNode.type === "params" && paramNode.bracket) {
       const bsites = callsitesOf(nodes, node.left.value, env);
       const bscope = rhs.scope;

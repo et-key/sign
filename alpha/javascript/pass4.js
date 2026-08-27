@@ -411,6 +411,29 @@ function paramShapesOf(paramNode) {
 		}
 		return [null];
 	}
+	// **ストリーム形（`x ~xs`）は、実体化された器が渡る限り器形と同じ機械である。**
+	//
+	// 違うのは laziness——`~xs` は残りを包む遅延ストリームとしてサスペンドされる
+	// （list_model.md §2.4①）——であって、渡ってくるのが `l~` のように実体化された
+	// `{ptr, len}` なら、頭を読んで ptr を進め len を1減らすという操作は変わらない。
+	// **サスペンドが効くのは相手が生成器のときだけ**であり、そちらはカーソルの道である。
+	//
+	// §5.4 が `~` 無しの List 渡しを禁じているので、ここへ来るのは展開された形だけである。
+	if (
+		!paramNode.bracket &&
+		(paramNode.entries || []).length === 2 &&
+		paramNode.entries[1] &&
+		paramNode.entries[1].rest &&
+		paramNode.entries[1].name &&
+		paramNode.entries[0] &&
+		paramNode.entries[0].name &&
+		!paramNode.entries[0].rest &&
+		!paramNode.entries[0].pattern &&
+		!paramNode.entries[0].default &&
+		!paramNode.entries[1].default
+	) {
+		return [{ kind: "destructure", head: paramNode.entries[0].name, rest: paramNode.entries[1].name, stream: true }];
+	}
 	return (paramNode.entries || []).map((e) => {
 		if (e.pattern) {
 			// いま出せるのは `[h ~t]`——先頭と残りの2つに割る形だけである。
@@ -1181,6 +1204,20 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.store(ARG_REGS[k], (rbase + k) * 8, k === 0 ? (rw > 1 ? "返値の ptr" : "返値") : "返値の len");
 		}
 		return rw;
+	}
+
+	// **展開（後置 `~`）は、器をストリームとして渡すという指示である。**
+	//
+	// 機械の上ですることは無い——`l~` が渡すのは `l` と同じ `{ptr, len}` であり、違うのは
+	// 受け側がそれを実体のリストとして分解するか（`[x ~xs]`）、遅延ストリームとして
+	// 受けるか（`x ~xs`）だけである（list_model.md §2.4）。**同型はコストを持たない**
+	// （原理8：無償なのは型の上での持ち上げであって、ここは表現が変わらないので本当に
+	// 0命令である）。
+	//
+	// 余積を組む位置の `~`（`d st~` の連接）は別の道で、そちらは要素を並べる。
+	if (n.type === "operation" && n.position === "postfix" && n.name === "expand" && n.operand) {
+		const w = slotsOfNode(n.operand, em.conf, em.env);
+		if (w === 2) return genExpr(n.operand, env, em, scope);
 	}
 
 	// **添字。** 器は `{ptr, len}` で来るので、引くのはアドレス計算1つである
