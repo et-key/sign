@@ -165,7 +165,7 @@ function compile(source, options = {}) {
       // **前に置く。** ストリームの糖衣は元の名前を上書きするので後ろだったが、畳み込みは
       // 新しい名前を足すだけなので、使う場所より先に定義が要る。元の最後の式が最後のまま
       // 残る、という点でも前置きが正しい——`_sign_main` はそれを返す。
-      return compile([...folds.map(foldSource), source].join("\n"), { ...options, __pfFolded: true });
+      return compile([...folds, source].join("\n"), { ...options, __pfFolded: true });
     }
   } else {
     replaceGreedyFolds(nodes);
@@ -266,6 +266,23 @@ function compile(source, options = {}) {
  */
 function gatherBracketArgs(nodes, env) {
   const construct = (l, r) => ({ type: "operation", op: " ", name: "construct", position: "infix", left: l, right: r });
+  // 名前 → ブラケット仮引数が何番目か。`entries[i].pattern` がその印である
+  // （`[x ~xs]` は entries 全体が分解、`k [x ~xs]` は2つ目の entry が分解）。
+  const brackets = new Map();
+  for (const node of nodes) {
+    if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+    const params = node.right && node.right.name === "lambda" ? node.right.left : null;
+    if (!params || !Array.isArray(params.entries)) continue;
+    // **ブラケットが最後の仮引数であるときだけ。** `mul_go : acc [~ts] i` のように後ろへ
+    // まだ仮引数が続く形は、どこまでが器なのかを位置から言えない——器がいくつ食うかは
+    // 実引数の数で決まるので、後ろの仮引数と取り合いになる。そこは元の並びのままにする。
+    if (params.bracket) {
+      brackets.set(node.left.value, 0); // entries 全体が1つの分解（`[x ~xs]`）
+      continue;
+    }
+    const at = params.entries.findIndex((e) => Array.isArray(e.pattern));
+    if (at >= 0 && at === params.entries.length - 1) brackets.set(node.left.value, at);
+  }
   const rewrite = (n) => {
     if (!n || n.type !== "operation" || n.name !== "apply") return n;
     const args = [];
@@ -275,13 +292,15 @@ function gatherBracketArgs(nodes, env) {
       head = head.left;
     }
     if (args.length < 2 || !head || !isIdentifierNode(head)) return n;
-    const b = envLookup(env, head.value);
-    if (!b || b.restParam !== "bracket" || b.requiredArity !== 1) return n;
-    return {
-      ...n,
-      left: head,
-      right: { type: "block", kind: "paren", lines: [args.reduce(construct)], scope: n.scope || null },
-    };
+    const at = brackets.get(head.value);
+    // ブラケット仮引数より前は普通の実引数である。まとめるのはそこから後ろだけ。
+    if (at === undefined || args.length <= at + 1) return n;
+    const gathered = { type: "block", kind: "paren", lines: [args.slice(at).reduce(construct)], scope: n.scope || null };
+    const front = args.slice(0, at);
+    return [...front, gathered].reduce(
+      (f, a) => ({ type: "operation", op: " ", name: "apply", position: "infix", left: f, right: a }),
+      head
+    );
   };
   // **外側から降りる。** 内側の適用を先に畳むと `f 1 2 3` が `f ((1 2) 3)` になり、
   // 並べるものの中に器が現れる（要素数が実行時にしか決まらない形）。連鎖は一番外から
@@ -321,7 +340,6 @@ function foldSource(op) {
     `${f} : [x ~xs] ? xs & ${go} x xs | !xs & x`,
   ].join("\n");
 }
-
 function foldNameFor(op) {
   return `_pf_fold_${[...op].map((c) => c.charCodeAt(0).toString(16)).join("")}`;
 }
@@ -334,19 +352,27 @@ function isGreedyFold(node) {
 
 /** 畳み込みのポイントフリーを演算子ごとに集める。 */
 function collectGreedyFolds(nodes) {
-  const ops = new Set();
+  const folds = new Set();
   walkNodes(nodes, (n) => {
-    if (isGreedyFold(n)) ops.add((n.lines ? n.lines[0] : n).op);
+    if (isGreedyFold(n)) folds.add((n.lines ? n.lines[0] : n).op);
   });
-  return [...ops];
+  return [...folds].map(foldSource);
 }
 
-/** 畳み込みのポイントフリーを、生成した名前への参照へ置き換える。 */
+/**
+ * 貪欲なポイントフリーを、生成した名前への参照へ置き換える。
+ *
+ * 写像は相手を仮引数で受けるので、置き換え先は名前ではなく**相手を1つ渡した適用**である
+ * （`[* 2,]` → `_pf_map_2a 2`）。Sign は自動カリー化するので、残るのは器を1つ取る写像
+ * そのものになる。
+ */
 function replaceGreedyFolds(nodes) {
   walkNodes(nodes, null, (child) => {
-    if (!isGreedyFold(child)) return child;
-    const op = (child.lines ? child.lines[0] : child).op;
-    return { type: "atom", kind: "identifier", value: `<${foldNameFor(op)}>` };
+    const inner = child && child.lines ? child.lines[0] : child;
+    if (isGreedyFold(child)) {
+      return { type: "atom", kind: "identifier", value: `<${foldNameFor(inner.op)}>` };
+    }
+    return child;
   });
 }
 
