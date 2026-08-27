@@ -404,16 +404,16 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 {
 	const tail = (src, fname = "f") => (body(src, fname) || []).map((l) => l.replace(/\/\/.*/, "").trim());
 	// 別の枝で場所を取る——この枝は通らないので畳める。
-	const other = tail("f : n ?\n\tn > 100 : ($(n , n)) ' 0\n\tf (n + 1)\nf 0");
+	const other = tail("f : n ?\n\tn > 100 : ($(n + 1)) ' 0\n\tf (n + 1)\nf 0");
 	checkTrue("別の枝の $匿名式は畳めない理由にならない", other.some((l) => /^b \.Lloop/.test(l)), other.join(" / "));
 	// 末尾の枝そのものが場所を取るなら畳めない（呼び先が読む前に消える）。
-	const here = tail("f : n ?\n\tn > 100 : n\n\tf (($(n , n)) ' 0)\nf 0");
+	const here = tail("f : n ?\n\tn > 100 : n\n\tf (($(n + 1)) ' 0)\nf 0");
 	checkTrue("末尾の枝で取ったら畳まない", here.some((l) => l === "bl f") && !here.some((l) => /^b \.Lloop/.test(l)), here.join(" / "));
 	// **場所を取ったことは、畳めない理由ではない。** 理由になるのは、その場所への参照が
 	// 呼び先へ渡ることである。条件で取っても、渡すのが数なら呼び先は触れない——`sp` を
 	// `x29` から戻してから飛べばよい（エピローグがやっているのと同じことである）。
 	// 戻さずに回すと毎周 `sub sp` が積み上がって伸び続けるので、そこが本当の条件である。
-	const cond = tail("f : n ?\n\t(($(n , n)) ' 0) > 100 : n\n\tf (n + 1)\nf 0");
+	const cond = tail("f : n ?\n\t(($(n + 1)) ' 0) > 100 : n\n\tf (n + 1)\nf 0");
 	checkTrue("条件で取っても畳める", cond.some((l) => /^b \.Lloop/.test(l)), cond.join(" / "));
 	checkTrue("畳む前に sp を戻す", cond.indexOf("mov sp, x29") < cond.findIndex((l) => /^b \.Lloop/.test(l)), cond.join(" / "));
 	// 参照そのものが渡るなら畳まない（呼び先が読む前に捨ててしまう）。

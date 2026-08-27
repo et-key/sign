@@ -508,6 +508,8 @@ class Emitter {
 		this.labelSeq = 0;
 		// `.rodata` に置いた文字列。中身が同じなら1つに畳む（キーは符号位置の並び）。
 		this.rodata = new Map();
+		// `$名前` が指す先。名前ごとに1つ（演算子表の「binding ごとに一意・安定」）。
+		this.namedData = new Map();
 	}
 
 	/**
@@ -525,9 +527,30 @@ class Emitter {
 		return label;
 	}
 
+	/**
+	 * **名前付きの束縛に、一意で安定した場所を与える。**
+	 *
+	 * 演算子表が `$名前` を「binding（変数）自体のアドレス。C++ の `&b` に相当。binding
+	 * ごとに一意・安定したアドレスが保証される」と定めている。ところがトップレベルの
+	 * 定数は命令へ畳まれる（`space : ` のような束縛は値そのものを書けば済む）ので、
+	 * 指す先が無かった——`$関数` は単相化が、`$匿名式` は `alloca` が扱えるのに、
+	 * **値の束縛だけが場所を持たない**という穴だった。
+	 *
+	 * 置く先は `.rodata` である。畳まれる定数は書き換えないので、読み取り専用でよい。
+	 * 同じ名前は1つに畳む——「binding ごとに一意」がそのまま識別子になる。
+	 */
+	internBinding(name, value, size) {
+		const key = `b:${name}`;
+		const hit = this.namedData.get(key);
+		if (hit) return hit.label;
+		const label = `.Lbind_${name.replace(/[^\w]/g, "_")}`;
+		this.namedData.set(key, { label, value, size });
+		return label;
+	}
+
 	// `.rodata` セクションを組み立てる。1つも無ければ空を返す（節ごと出さない）。
 	rodataLines() {
-		if (this.rodata.size === 0) return [];
+		if (this.rodata.size === 0 && this.namedData.size === 0) return [];
 		const w = charSizeOf(this.conf.charset);
 		// 幅ごとのディレクティブ。`String ≅ List(Char)` の要素幅そのものである。
 		const dir = w === 1 ? ".byte" : w === 2 ? ".hword" : ".word";
@@ -541,6 +564,11 @@ class Emitter {
 			if (plain) out.push(`	.ascii "${cps.map((c) => String.fromCharCode(c)).join("")}"`);
 			else out.push(`	${dir} ${cps.map((c) => "0x" + c.toString(16)).join(", ")}`);
 			out.push(`	// ${cps.length} 文字`);
+		}
+		for (const { label, value, size } of this.namedData.values()) {
+			out.push(`	.balign ${size}`);
+			out.push(`${label}:`);
+			out.push(`	${size === 8 ? ".quad" : size === 4 ? ".word" : size === 2 ? ".hword" : ".byte"} ${value}`);
 		}
 		return out;
 	}
@@ -1415,6 +1443,26 @@ function genExpr(node, env, em, scope, tail = false) {
 		// まだ決まっていない（memory_management.md §2）。
 		if (isIdentifierNode(t)) {
 			// 関数のアドレス（`$is_digit`）は単相化が扱うのでここへ来ない。
+			//
+			// **名前付きの束縛には場所を与える。** 演算子表が `$名前` を「binding 自体の
+			// アドレス。binding ごとに一意・安定」と定めている。トップレベルの定数は命令へ
+			// 畳まれるので指す先が無かった——`$関数` は単相化が、`$匿名式` は `alloca` が
+			// 扱えるのに、**値の束縛だけが場所を持たない**という穴だった。`.rodata` に
+			// 置いて、そのラベルのアドレスを作る。
+			const nb = env ? envLookup(env, t.value) : null;
+			const vn = nb && nb.valueNode ? unwrap(nb.valueNode) : null;
+			const lit = vn && vn.type === "atom" && (vn.kind === "number" || vn.kind === "address") ? vn : null;
+			const m = nb && nb.atomType ? measure({ atomType: nb.atomType }, { target: em.conf.target, charset: em.conf.charset }) : null;
+			if (lit && m && m.size) {
+				const raw = String(lit.value);
+				const label = em.internBinding(bareName(t.value), raw, m.size);
+				const off = em.push();
+				if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+				em.emit(`adrp ${SCRATCH[0]}, ${label}`, `${bareName(t.value)} の場所（$名前）`);
+				em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, :lo12:${label}`);
+				em.store(SCRATCH[0], off, "binding のアドレス");
+				return 1;
+			}
 			return em.fail(n, `アドレスを取れるのはフレームに在るものだけです（${bareName(t.value)}）`);
 		}
 		// **積は `$` で場所を得る。** `h , t` はそれだけでは置き場所を持たないが、
@@ -1865,6 +1913,36 @@ function genCursorIndex(node, env, em, scope, group, cbase) {
 	return outw;
 }
 
+/**
+ * そのアドレスが指す先は何本で運ぶ値か（分からなければ null）。
+ *
+ * `$名前` は束縛の型が指す先を語り、`$匿名式` は書かれた式が語る。1本なら `' 0` は
+ * その場のロードで済み、2本以上なら「指したまま引く」経路が要る。
+ */
+function pointeeWidthOf(node, env, em) {
+	const t = unwrap(node);
+	if (!t) return null;
+	if (t.type === "operation" && t.position === "prefix" && t.name === "address") {
+		const inner = unwrap(t.operand);
+		if (!inner) return null;
+		if (isIdentifierNode(inner) && env) {
+			const b = envLookup(env, inner.value);
+			return b && b.atomType ? slotsOf(b.atomType, em.conf) : null;
+		}
+		return slotsOfNode(inner, em.conf, env);
+	}
+	if (isIdentifierNode(t) && env) {
+		const b = envLookup(env, t.value);
+		if (b && b.pointee) return slotsOf(b.pointee, em.conf);
+	}
+	return null;
+}
+
+/** 添字が定数 0 か（`$x ' 0` の判定に使う）。 */
+function idxIsZero(n) {
+	return !!(n && n.type === "atom" && n.kind === "number" && Number(n.value) === 0);
+}
+
 function genIndex(node, env, em, scope) {
 	const conf = em.conf;
 	// **カーソルは器でも規則でもない。** 引き方が違うので、先に振り分ける。
@@ -1876,6 +1954,36 @@ function genIndex(node, env, em, scope) {
 	const rw = slotsOfNode(node, conf, env);
 	// 規則は3本（`{start, step, end}`）まで在る。場所は2本まで。
 	if (cw === null || rw === null || cw > 3 || rw > 3) return null;
+	// **アドレスは長さ1の器である。** `$x ≅ [x]` であり、`' 0` はその中身を出す
+	// ——`@` が器を剥がすのと同じことを言っている（`@e ≡ e ' 0`）。0 以外は長さ1の
+	// 外なので `__` で、そこは下の範囲検査がそのまま扱う。
+	//
+	// ここが無かったため `($x) ' 0` が番地そのものを返していた。数える方（`||$x||`）と
+	// 範囲外（`' 1`）は既に合っていたので、**引く所だけが等値から外れていた**。
+	{
+		const lt = unwrap(node.left);
+		const at = lt && (lt.atomType || (isIdentifierNode(lt) && env ? (envLookup(env, lt.value) || {}).atomType : null));
+		if (at === "Address" && idxIsZero(unwrap(node.right))) {
+			// **`@e` と `e ' 0` は同じことを言っている**（`$e ≅ [e]` なので、長さ1の器を
+			// 引くのは器を剥がすのと同じ）。指す先が1本で運ぶ値なら、その場で読める。
+			//
+			// 指す先が器（`$(n , 99)` のような組）なら、剥がした結果は「指したまま引く」
+			// 経路が要る——そこは `@` を明示した形（`(@($(n , 99))) ' 1`）が既に扱う。
+			// **黙って番地を返さない**：それはインタプリタ（指す先を返す）と食い違う。
+			const pt = pointeeWidthOf(lt, env, em);
+			if (pt === 1) {
+				const w = genExpr(node.left, env, em, scope);
+				if (w === false) return false;
+				if (w !== 1) { em.pop(w); return null; }
+				const off = (em.slot - 1) * 8;
+				em.load(SCRATCH[0], off, "アドレス（長さ1の器）");
+				em.emit(`ldr ${SCRATCH[0]}, [${SCRATCH[0]}]`, "その中身（`' 0` は `@` と同じ）");
+				em.store(SCRATCH[0], off);
+				return 1;
+			}
+			return em.fail(node, `器を指すアドレスは \`' 0\` では引けません（\`@\` を明示してください）`);
+		}
+	}
 	// スライスかどうかは**添字の形**で決まる。`s ' i~` は Pass 2 が `s ' (i ~+ 1)` へ
 	// 均しているので（`desugarIndexRest`）、ここで見るのは終端の無い等差レンジである。
 	// **括弧は剥ぐ。** `s ' (1 ~+ 1)` のように優先順位のために括った形も同じスライスで
