@@ -23,7 +23,9 @@
  * - `Implicit(T)`（場所）と `Iterator(T)`（ストリーム）は type_system.md §2 に型として
  *   定義されたが、ここではまだ推論しない。仮引数の形による割り当て
  *   （`f : [x ~xs]` → `Implicit(List(T))` / `f : x ~xs` → `Iterator(T)`、list_model.md §2.4）も、
- *   `'`・前置`~`・前置`#` が `Implicit` を返すことも未実装。
+ *   `'`・前置`#` が `Implicit` を返すことも未実装。
+ *   **前置 `~` はこの一覧から外れた。** 作るのは場所ではなく長さ1の器（`List`）である
+ *   ——番地を表に出さないと決めた以上、「場所」という観測可能な型には仕事が残っていない。
  *   これが入ると原理4の静的拒否ルール「`[...]`内でのstream型識別子の使用」が
  *   初めて強制可能になる（stream型が型として存在するため）。
  */
@@ -62,7 +64,9 @@ const NUMERIC_TYPES = new Set(["Int", "Address", "Float", "Vector"]);
 // 昇格すれば通るからである。したがって Int リテラルは**証拠として一番弱い**。
 const NUMERIC_RANK = { Int: 0, Address: 1, Float: 2, Vector: 3 };
 // 「場所」と「ストリーム」。値ではないので算術・比較の対象にならない（§4 は Scalar を要求）。
-// `Implicit` は前置 `~`（持ち上げ）・`'`・前置 `#` が生み、`Iterator` は範囲族が生む。
+// `Iterator` は範囲族が生む。`Implicit` を生むものは今は無い——前置 `~` は長さ1の器
+// （`List`）を作るようになったので、`'`・前置 `#` が参照を返すようになるまで出番が無い。
+// `~xs + 1` はここではなく List 算術の規則で `__` になる（素の `xs + 1` と同じ理由）。
 const NON_SCALAR_PLACES = new Set(["Implicit", "Iterator"]);
 // 恒等射（真）。Layer 1 の射であって Layer 2 の値ではないので、型の表には載らない。
 // `__` が単位元である以上 `x ⊗ __ ≅ x` であり、`__` の積関手は恒等関手そのものである
@@ -749,13 +753,7 @@ function getPropResultType(node, env) {
 
   // List と Iterator はどちらも「同じ型の要素が並ぶもの」で、違いは実体を持つかどうかだけ。
   // **型の上では同じ引き方をする**ので、添字の結果はどちらも要素型である。
-  //
-  // `Implicit`（前置 `~` が作る場所）も同じ引き方をする。持ち上げたのは列に対してであり
-  // （`$`/`@` が単体値に対して行うのと同じ段）、場所を引けば出てくるのは要素である。
-  // ここに `Implicit` が無かったため最後の `return containerType` へ落ち、「場所の要素は
-  // 場所である」と書いていた——`f : [~o] ? o ' 0` に `f ~5` を渡すと、要素の 5 ではなく
-  // 器そのもの（ptr）が返っていた。上の `Container` を弾く注意書きと同じ落とし穴である。
-  if (containerType === "List" || containerType === "Iterator" || containerType === "Implicit") {
+  if (containerType === "List" || containerType === "Iterator") {
     return containerElementType(node.left, env) || null;
   }
 
@@ -1237,9 +1235,30 @@ function computeAtomType(node, env) {
           return p.type;
         }
       }
+      // **前置 `~` が作るのは長さ1の器（`List`）であって「場所」ではない。**
+      //
+      // 以前はここが `Implicit(T)`（暗黙の番地＝場所）を返していた。その名前は「番地を
+      // 型として名指す」ことに意味があった頃のものだが、**番地は表に出さないと決めた**
+      // ——`$` が作った番地は算術に使えず、読むなら `@`、列を辿るなら `[h ~t]` の分解で
+      // 語る。観測できないものを名指す型には仕事が残っていない。観測できる姿は「長さ1の
+      // 器」だけであり、それは `List` である（`~x ≅ [x]`）。
+      //
+      // 実害も出ていた。`Implicit` は要素型が1段ずれるので `~5 ' 0` が要素の 5 ではなく
+      // 器そのものを返し、`||~[1 2 3]||` は型が 1・値が 3 と食い違っていた。
+      //
+      // **器なら恒等、スカラーなら持ち上げ。** `~` は η（持ち上げ）であり、`[x] ≅ x` の
+      // 潰れが効くので器に当てても何も増えない（冪等：`~~5` は `~5`）。スカラーのときだけ
+      // 表現が変わる——型では無償、表現では有償（原理8）。
       if (node.position === "prefix" && node.name === "continuous") {
-        node.elementType = inferAtomType(node.operand, env);
-        return "Implicit";
+        const inner = inferAtomType(node.operand, env);
+        if (CONTAINER_TYPES.has(inner)) {
+          // 要素型は束縛の側に在ることがある（`l : [1 2 3]` の `~l`）ので、ノードの
+          // フィールドを覗くだけでは落ちる。
+          node.elementType = containerElementType(node.operand, env) || node.operand.elementType || null;
+          return inner;
+        }
+        node.elementType = inner;
+        return "List";
       }
       // **否定は真偽を反転する。** `!__` は恒等射（真）である。
       //

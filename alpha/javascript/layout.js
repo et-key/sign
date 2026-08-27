@@ -62,6 +62,9 @@ function applyBase(node) {
   return n;
 }
 
+// 器の型（pass3 の同名の集合と同じ顔ぶれ）。
+const CONTAINER_TYPES = new Set(["String", "List", "Struct", "Iterator", "Implicit"]);
+
 function deref(node, env, seen = new Set()) {
   if (!node || !env) return node;
   // 適用の結果は呼び先の返値である。`mk : n ? [1 ~ n]` の `mk 5` が何バイト要るかは
@@ -202,6 +205,27 @@ function measure(node, conf, depth = 0) {
   // 零対象は場所を占めない。
   if (type === "Unit") return { size: 0, align: 1 };
 
+  // **前置 `~`（持ち上げ）は器を1つ作る。型の振り分けより先に見る。**
+  //
+  // 器に当てれば恒等なので、測るのは中身そのものである（`[x] ≅ x` の潰れが効くので
+  // 持ち上げても何も増えない。冪等：`~~5` は `~5`）。スカラーに当てたときだけ表現が
+  // 変わり、要素1つの器になる——型では無償、表現では有償（原理8）。
+  //
+  // 以前ここは `Implicit`（場所）へ行っており、スカラーの持ち上げが `{ptr}` 8 byte に
+  // なっていた。番地を表に出さないと決めた以上「場所」という観測可能な型は仕事を失って
+  // おり、残るのは長さ1の器＝`List` である。
+  //
+  // 型の分岐より前に置くのは、**持ち上げたノードは中身の型を名乗る**からである。
+  // `~s`（`String`）を後ろへ置くと String の分岐が先に捕まえ、文字列の長さを持ち上げ
+  // ノードから数えようとして落ちる。
+  if (node.type === "operation" && node.position === "prefix" && node.name === "continuous" && node.operand) {
+    const t = deref(node.operand, env).atomType || node.operand.atomType;
+    const inner = measure(node.operand, conf, depth + 1);
+    if (!inner) return null;
+    if (CONTAINER_TYPES.has(t)) return inner; // 既に器なので恒等
+    return { size: inner.size, align: inner.align, repr: "cells", stride: inner.size, count: 1 };
+  }
+
   // **「どう置かれているか」は型より先に見る。** カーソルの型は列の型（`String` など）
   // だが、置かれているのは `{arm, k, 入力}` の3つ組であって要素の並びではない。型の側の
   // 分岐（`String` は要素の並び）へ先に落ちると、規則が器に化ける。
@@ -222,6 +246,8 @@ function measure(node, conf, depth = 0) {
   }
 
   // **場所**（参照）は指す先を持たない。置かれるのは指し方そのものである。
+  // 今これを生むものは無い——前置 `~` が上へ移ったので、`'` と前置 `#` が
+  // 参照を返すようになるまでは出番が無い（type_system.md §4）。
   if (type === "Implicit") return measureImplicit(node, conf);
 
   // **規則裏打ち**（レンジ）は要素を持たない。置かれるのは規則そのものである。
