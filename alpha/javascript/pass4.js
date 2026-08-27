@@ -819,6 +819,19 @@ function genExpr(node, env, em, scope, tail = false) {
 	}
 
 	if (n.type === "operation" && INT_OPS[n.name] && n.position === "infix") {
+		// **`$` が作った番地は表に出てはいけない。**
+		//
+		// インタプリタは `$` の結果への算術を一律 `__` にしている——参照セルであって数では
+		// ないからである。機械の側だけが生の番地を返していた（`($a) + 0` が 1074266336）。
+		// 番地が値として観測できると、置き場所という実装の都合がプログラムの意味に漏れる。
+		//
+		// **列の走査には要らない。** 持ち上げ（`~x`）と持ち下げ（`[x ~xs]` の分解）の対で
+		// 書けており、ポインタの加減算は分解の中にしか存在しない——実プログラム4本はどれも
+		// 番地の算術を1度も書いていない。速い命令のために開くかどうかは、生成したマシン語が
+		// C より速いかを測ってから決める。
+		if (addressFromDollar(n.left, env) || addressFromDollar(n.right, env)) {
+			return em.fail(n, `\`$\` が作った番地は算術に使えません（番地は表に出ません。読むなら \`@\`、列を辿るなら \`[h ~t]\` の分解を使ってください）`);
+		}
 		const machine = reduceToMachineType(n.atomType, em.conf.target);
 		if (!machine || machine.class !== "gpr") {
 			return em.fail(n, `GPR 幅の整数演算だけを出せます（${n.atomType}）`);
@@ -1939,6 +1952,24 @@ function pointeeWidthOf(node, env, em) {
 }
 
 /** 添字が定数 0 か（`$x ' 0` の判定に使う）。 */
+/**
+ * その式は `$` が作った番地か（識別子なら束縛まで辿る）。
+ *
+ * 生の番地リテラル（`0x40000000`、MMIO）とは区別する——**そちらは本当に数である番地**で
+ * あり、算術が要る。区別しているのは「置き場所として作られたもの」だけである。
+ */
+function addressFromDollar(node, env) {
+	const t = unwrap(node);
+	if (!t) return false;
+	if (t.type === "operation" && t.position === "prefix" && t.name === "address") return true;
+	if (isIdentifierNode(t) && env) {
+		const b = envLookup(env, t.value);
+		const v = b && b.valueNode ? unwrap(b.valueNode) : null;
+		return !!(v && v.type === "operation" && v.position === "prefix" && v.name === "address");
+	}
+	return false;
+}
+
 function idxIsZero(n) {
 	return !!(n && n.type === "atom" && n.kind === "number" && Number(n.value) === 0);
 }
@@ -1954,36 +1985,18 @@ function genIndex(node, env, em, scope) {
 	const rw = slotsOfNode(node, conf, env);
 	// 規則は3本（`{start, step, end}`）まで在る。場所は2本まで。
 	if (cw === null || rw === null || cw > 3 || rw > 3) return null;
-	// **アドレスは長さ1の器である。** `$x ≅ [x]` であり、`' 0` はその中身を出す
-	// ——`@` が器を剥がすのと同じことを言っている（`@e ≡ e ' 0`）。0 以外は長さ1の
-	// 外なので `__` で、そこは下の範囲検査がそのまま扱う。
+	// **持ち上げは `~` の仕事であって `$` の仕事ではない。**
 	//
-	// ここが無かったため `($x) ' 0` が番地そのものを返していた。数える方（`||$x||`）と
-	// 範囲外（`' 1`）は既に合っていたので、**引く所だけが等値から外れていた**。
-	{
-		const lt = unwrap(node.left);
-		const at = lt && (lt.atomType || (isIdentifierNode(lt) && env ? (envLookup(env, lt.value) || {}).atomType : null));
-		if (at === "Address" && idxIsZero(unwrap(node.right))) {
-			// **`@e` と `e ' 0` は同じことを言っている**（`$e ≅ [e]` なので、長さ1の器を
-			// 引くのは器を剥がすのと同じ）。指す先が1本で運ぶ値なら、その場で読める。
-			//
-			// 指す先が器（`$(n , 99)` のような組）なら、剥がした結果は「指したまま引く」
-			// 経路が要る——そこは `@` を明示した形（`(@($(n , 99))) ' 1`）が既に扱う。
-			// **黙って番地を返さない**：それはインタプリタ（指す先を返す）と食い違う。
-			const pt = pointeeWidthOf(lt, env, em);
-			if (pt === 1) {
-				const w = genExpr(node.left, env, em, scope);
-				if (w === false) return false;
-				if (w !== 1) { em.pop(w); return null; }
-				const off = (em.slot - 1) * 8;
-				em.load(SCRATCH[0], off, "アドレス（長さ1の器）");
-				em.emit(`ldr ${SCRATCH[0]}, [${SCRATCH[0]}]`, "その中身（`' 0` は `@` と同じ）");
-				em.store(SCRATCH[0], off);
-				return 1;
-			}
-			return em.fail(node, `器を指すアドレスは \`' 0\` では引けません（\`@\` を明示してください）`);
-		}
-	}
+	// 前置 `~`（`continuous`）が「連続リスト構築（持ち上げ）」——`~x` が `[x]` である。
+	// `$x` は束縛の場所を取るだけで、器としては振る舞わない（剥がせるのは `@` だけ）。
+	// 一度この2つを同一視して `($x) ' 0` を通したが、それは `~` の役割を `$` に
+	// 押し付けることになり、**生の番地が表へ出る道を開いてしまう**。
+	//
+	// 番地はプログラムから観測できてはいけない。列の走査はすでに持ち上げ（`~x`）と
+	// 持ち下げ（`[x ~xs]` の分解）の対で書けており、**ポインタの加減算は分解の中にしか
+	// 存在しない**——実プログラム4本はどれも番地の算術を1度も書いていない。触れない以上、
+	// 不正な番地を構成しようがない。速い命令のために開くかどうかは、生成したマシン語が
+	// C より速いかを測ってから決める（それまでは閉じておく方が安い）。
 	// スライスかどうかは**添字の形**で決まる。`s ' i~` は Pass 2 が `s ' (i ~+ 1)` へ
 	// 均しているので（`desugarIndexRest`）、ここで見るのは終端の無い等差レンジである。
 	// **括弧は剥ぐ。** `s ' (1 ~+ 1)` のように優先順位のために括った形も同じスライスで

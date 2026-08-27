@@ -1252,14 +1252,7 @@ function evalUnaryOp(name, v) {
 // 再利用できなかったため `[' 0]` が「未対応の演算子」で落ちていた。
 function getPropValue(l, rightNode, env) {
   if (isUnit(l)) return UNIT;
-  // **アドレスは長さ1の器なので、`' 0` で中身が出る。** `$x ≅ [x]` であり、`@` は
-  // その器を剥がして値へ戻す——つまり `@e` と `e ' 0` は同じことを言っている。
-  // 0 以外は範囲外なので `__` である（長さ1なのだから）。
-  if (l && l.__address__) {
-    const i = evaluate(rightNode, env);
-    if (isUnit(i)) return UNIT;
-    return i === 0 ? l.get() : UNIT;
-  }
+
   // **イテレータは添字で引ける。無限でも引ける。** これがループカウンタを成立させる
   // ——`c : [0 ~+ 1]` の n 番目は、start から step を n 回適用すれば出る（stack_abi.md §3.3）。
   // 範囲での添字（部分列）は実体化してから通す。
@@ -1618,10 +1611,7 @@ function evaluate(node, env) {
       if (isIterator(inner)) return iteratorCount(inner);
       if (Array.isArray(inner) || typeof inner === "string") return inner.length;
       if (isNamedSlots(inner)) return Object.keys(inner).length;
-      // **アドレスは長さ1の器である。** `$x` は `[x]` と同値であり、`$` は「型では
-      // 無償な持ち上げ（`[x] ≅ x`）を、器の表現のまま実体化する」演算子である
-      // （原理8：無償なのは型の上だけで、表現には場所が要る）。数えれば 1 になる。
-      if (inner && inner.__address__) return 1;
+
       // **スカラーは1要素の器である。** 射（Lambda）は器ではないので零射。
       if (inner !== null && typeof inner === "object") return UNIT;
       return 1;
