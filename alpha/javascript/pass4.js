@@ -473,6 +473,36 @@ function paramShapesOf(paramNode) {
  * ——`function_guide.md` が「ブラケット分解でなければ完全性公理が終端を与えられない」と
  * 書いているのは、この形のことである。
  */
+/**
+ * **スカラー1つを、長さ1の器へ持ち上げる。**
+ *
+ * `[x] ≅ x` は型の上では無償だが、表現では有償である（原理8）。スカラーはレジスタ1本、
+ * 器は `{ptr, len}` の2本なので、器の表現が要る場所では場所を取って値を置くしかない。
+ *
+ * これは前置 `~`（`continuous`）そのものである。呼ぶ側が仮引数の形に合わせて払う費用と、
+ * 書き手が `~x` と書いて求める持ち上げは、同じ1つの操作である——だから同じ命令を出す。
+ *
+ * 幅は 8 byte で置く。要素が 1/2/4 byte でも読む側は下位から読むので（LE）値は一致し、
+ * 残り（`len = 0`）は誰も辿らない。
+ *
+ * @param valueOff スカラーが載っているフレームのオフセット
+ * @returns 器の ptr スロットのオフセット。スロットが尽きたら null。
+ */
+function emitLiftToContainer(em, valueOff, why) {
+	em.emit(`sub sp, sp, #16`, why || "1要素ぶんの場所を取る（同型の持ち上げ）");
+	em.movedSp = true;
+	em.load(SCRATCH[0], valueOff);
+	em.emit(`str ${SCRATCH[0]}, [sp, #0]`, "長さ1の器として置く");
+	em.emit(`mov ${SCRATCH[0]}, sp`, "ptr");
+	const po = em.push();
+	const lo = po === null ? null : em.push();
+	if (lo === null) return null;
+	em.store(SCRATCH[0], po, "ptr");
+	em.emit(`mov ${SCRATCH[1]}, #1`, "len は 1");
+	em.store(SCRATCH[1], lo, "len");
+	return po;
+}
+
 function emitDestructure(em, containerOff, headOff, elemSize, signed, name) {
 	em.load(SCRATCH[0], containerOff, `${name} の先頭を取り出す`);
 	// 要素の幅ぶんだけ読む。符号ありで 8 byte 未満なら符号拡張が要る。
@@ -1116,27 +1146,31 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (sigW) {
 			parts.forEach((p, i) => {
 				if (sigW[i] !== 2 || p.w !== 1) return;
-				em.emit(`sub sp, sp, #16`, "1要素ぶんの場所を取る（同型の持ち上げ）");
-				em.movedSp = true;
-				em.load(SCRATCH[0], p.off);
-				em.emit(`str ${SCRATCH[0]}, [sp, #0]`, "長さ1の器として置く");
-				em.emit(`mov ${SCRATCH[0]}, sp`, "ptr");
-				const po = em.push();
-				const lo = po === null ? null : em.push();
-				if (lo === null) {
+				const po = emitLiftToContainer(em, p.off);
+				if (po === null) {
 					em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 					promoted = null;
 					return;
 				}
-				em.store(SCRATCH[0], po, "ptr");
-				em.emit(`mov ${SCRATCH[1]}, #1`, "len は 1");
-				em.store(SCRATCH[1], lo, "len");
 				p.off = po;
 				p.w = 2;
 				total += 2;
 				promoted = true;
 			});
 			if (promoted === null) return false;
+		}
+		// **幅が食い違ったまま呼ばない。** 署名が「この位置は N 本」と言っているのに実引数が
+		// 別の本数を出したなら、呼び先は自分の読み方で読む——足りなければ前の呼び出しの残骸を、
+		// 多ければ渡したはずの片割れを落とす。どちらも黙って違う値になる。
+		//
+		// 1本→2本は上で持ち上げて払える（原理8）。逆（2本→1本）は捨てる操作であり、何を
+		// 捨てるかは呼ぶ側には決められないので、名指しして止める。
+		if (sigW) {
+			const bad = parts.findIndex((p, i) => sigW[i] !== null && sigW[i] !== undefined && sigW[i] !== p.w);
+			if (bad >= 0) {
+				em.pop(total);
+				return em.fail(n, `${callee} の第${bad + 1}引数の幅が合いません（渡す側 ${parts[bad].w} 本／受ける側 ${sigW[bad]} 本）`);
+			}
 		}
 		const widths =
 			sigW && sigW.length >= parts.length && sigW.every((x) => x !== null) && parts.every((p, i) => p.w === sigW[i])
@@ -1331,6 +1365,38 @@ function genExpr(node, env, em, scope, tail = false) {
 	if (n.type === "operation" && n.position === "postfix" && n.name === "expand" && n.operand) {
 		const w = slotsOfNode(n.operand, em.conf, em.env);
 		if (w === 2) return genExpr(n.operand, env, em, scope);
+	}
+
+	// **前置 `~` は持ち上げ（`continuous`）である。** `~x` は `[x]` と同じ長さ1の器で
+	// あり、後置 `~`（撒く）とは逆向きの操作である。
+	//
+	// 器がそのまま来たなら 0 命令——既に器なのだから、持ち上げるものが無い。スカラーが
+	// 来たときだけ場所を取って値を置く。これは呼ぶ側が仮引数の形に合わせて払う費用と
+	// 同じ操作であり、同じ関数（`emitLiftToContainer`）が出す。
+	//
+	// **`~@番地` はこの規則から出てくる。** `@p` は場所から値を読み、`~` がそれを器に
+	// する——番地そのものは表に出ない（`$` が作った番地を算術に使えないのと同じ理由）。
+	if (n.type === "operation" && n.position === "prefix" && n.name === "continuous" && n.operand) {
+		const w = genExpr(n.operand, env, em, scope);
+		if (w === false) return false;
+		if (w === 2) return 2; // 既に器
+		if (w !== 1) {
+			em.pop(w === TAIL ? 0 : w);
+			return em.fail(n, `\`~\` で持ち上げられるのはレジスタ1本の値か器だけです（${w} 本）`);
+		}
+		const off = (em.slot - 1) * 8;
+		const po = emitLiftToContainer(em, off, "`~` で長さ1の器へ持ち上げる");
+		if (po === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		// 元のスカラーのスロットは要らない。器の2本だけを残す。
+		em.load(SCRATCH[0], po);
+		em.load(SCRATCH[1], po + 8);
+		em.pop(3);
+		const p2 = em.push();
+		const l2 = p2 === null ? null : em.push();
+		if (l2 === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		em.store(SCRATCH[0], p2, "ptr");
+		em.store(SCRATCH[1], l2, "len");
+		return 2;
 	}
 
 	// **添字。** 器は `{ptr, len}` で来るので、引くのはアドレス計算1つである

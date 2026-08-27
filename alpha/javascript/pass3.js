@@ -749,7 +749,13 @@ function getPropResultType(node, env) {
 
   // List と Iterator はどちらも「同じ型の要素が並ぶもの」で、違いは実体を持つかどうかだけ。
   // **型の上では同じ引き方をする**ので、添字の結果はどちらも要素型である。
-  if (containerType === "List" || containerType === "Iterator") {
+  //
+  // `Implicit`（前置 `~` が作る場所）も同じ引き方をする。持ち上げたのは列に対してであり
+  // （`$`/`@` が単体値に対して行うのと同じ段）、場所を引けば出てくるのは要素である。
+  // ここに `Implicit` が無かったため最後の `return containerType` へ落ち、「場所の要素は
+  // 場所である」と書いていた——`f : [~o] ? o ' 0` に `f ~5` を渡すと、要素の 5 ではなく
+  // 器そのもの（ptr）が返っていた。上の `Container` を弾く注意書きと同じ落とし穴である。
+  if (containerType === "List" || containerType === "Iterator" || containerType === "Implicit") {
     return containerElementType(node.left, env) || null;
   }
 
