@@ -452,6 +452,24 @@ check("[~ts] 単独", entries("f : [~ts] ? ts ' 0\nf [1 2 3]"), ["f : [ts~] -> I
 check("[~ts] が他の仮引数と並ぶ", entries("f : a [~ts] ? ts ' a\nf 0 [1 2 3]"), ["f : Int [ts~] -> Int"]);
 check("[~ts] が文字列を受ける", entries("f : a [~ts] ? ts ' a\nf 0 `abc`"), ["f : Int [ts~] -> Char"]);
 
+// ---- 構造体は名前で分ける（`[key1 key2 ~it]`）----
+//
+// 名前と仮引数名が一致すれば順番に関わらず束縛される（function_guide.md「構造体
+// メンバーの一致による自動バインディング」）。物理配置は名前でソートした正規順だが、
+// 束縛は名前で結ぶので順序に依らない——スロットの型がそのまま束縛の型である。
+{
+	const look = (s, n) => { while (s) { const b = s.bindings instanceof Map ? s.bindings.get(n) : s.bindings[n]; if (b) return b; s = s.parent; } return null; };
+	const SRC = "calc_diff : [foo bar ~obj] ? foo - bar\ncalc_diff [\n\tbar : 20\n\tfoo : 100\n]";
+	const { nodes } = compile(SRC, { charset: "ascii" });
+	const d = nodes.find((n) => n.name === "define" && String(n.left.value).includes("calc_diff"));
+	check("名前で分けた型（foo）", (look(d.right.scope, "<foo>") || {}).atomType, "Int");
+	check("名前で分けた型（bar）", (look(d.right.scope, "<bar>") || {}).atomType, "Int");
+	// `~obj` は器そのもの。並びもここへ置く——Pass 4 の入口がそこから固定オフセットを引く。
+	const rb = look(d.right.scope, "<obj>") || {};
+	check("器そのものは Struct", rb.atomType, "Struct");
+	check("並びを持つ", (rb.shape && rb.shape.slots || []).map((s) => `${s.name}@${s.offset}`), ["bar@0", "foo@8"]);
+}
+
 check("添字スタイルは器だと分かる", entries("hd : s ?\n\t(s ' 0) = `a` : __\n\t(s ' 0) (hd (s ' 1~))"), [
 	"hd : Container -> List",
 ]);

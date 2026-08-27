@@ -420,6 +420,20 @@ checkTrue(
 	checkTrue("広い呼び先へは畳まない", wide.some((l) => l === "bl g") && !wide.some((l) => l === "b g"), wide.join(" / "));
 }
 
+// **構造体は名前で分ける。** 名前はコンパイル時にオフセットへ解決され Pass 4 には残らない
+// ——入口ですることは固定オフセットからのロードだけである（function_guide.md の言う
+// 「辞書の意味論を構造体のコストで得ている」がこの一点）。渡ってくるのは `{ptr}` 1本で、
+// 構造体は形が型にあるので長さが要らない（stack_abi.md §4.6）。
+{
+	const ls = body("calc_diff : [foo bar ~obj] ? foo - bar\ncalc_diff [\n\tbar : 20\n\tfoo : 100\n]", "calc_diff") || [];
+	// 受けるのは1本（`{ptr}`）。`len` は来ない。
+	// 数えるのは**引数レジスタ**の退避だけ（本体の一時置き場と混ぜない）。
+	checkTrue("構造体は ptr 1本で受ける", ls.filter((l) => /^str x[0-7], \[x29/.test(l)).length === 1, ls.join(" / "));
+	// 名前は正規順（名前でソート）へ解決される——`bar` が +0、`foo` が +8。
+	checkTrue("bar は +0 から読む", ls.some((l) => /^ldr x\d+, \[x\d+, #0\]$/.test(l)), ls.join(" / "));
+	checkTrue("foo は +8 から読む", ls.some((l) => /^ldr x\d+, \[x\d+, #8\]$/.test(l)), ls.join(" / "));
+}
+
 // 相互末尾再帰は自分のフレームを畳んでから飛ぶ（tco.md §3）。どちらもスタックを積まない。
 {
 	const src = "is_odd : n ?\n\tn = 0 : __\n\tis_even (n - 1)\nis_even : n ?\n\tn = 0 : 1\n\tis_odd (n - 1)\nis_even 4";

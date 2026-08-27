@@ -30,7 +30,7 @@
 
 import { envLookup } from './pass1.js';
 import { OperationError } from "./errors.js";
-import { stringLength } from "./layout.js";
+import { stringLength, layoutOfStruct } from "./layout.js";
 import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 const ARITHMETIC_OPS = new Set(["add", "sub", "mul", "div", "mod", "pow"]);
@@ -1957,6 +1957,46 @@ function collectCallsiteParamTypes(nodes, env) {
       const bsites = callsitesOf(nodes, node.left.value, env);
       const bscope = rhs.scope;
       if (bsites.length === 0 || !bscope) continue;
+      // **名前で分ける形は、スロットの型がそのまま束縛の型である。**
+      //
+      // `calc_diff : [foo bar ~obj] ?` は構造体を名前で分解する（function_guide.md
+      // 「構造体メンバーの一致による自動バインディング」）。物理配置は名前でソートした
+      // 正規順だが、束縛は名前で結ぶので順序に依らない——`layoutOfStruct` がそのスロット
+      // 表を持っているので、そこから引く。ここを見ていなかったため `foo` も `bar` も
+      // 器の型（`Struct`）のままで、Pass 4 は幅を選べなかった。
+      const named = entries.filter((e) => e && e.name && !e.rest && !e.pattern);
+      if (named.length > 0 && entries.some((e) => e && e.rest)) {
+        const seen = new Map();
+        let agree = true;
+        let layout = null;
+        for (const args of bsites) {
+          if (args.length === 0) { agree = false; break; }
+          const lay = layoutOfStruct(args[0], { target: "aarch64_qemu", charset: "ascii", env: args.scope || env });
+          if (!lay || lay.slotKind !== "named") { agree = false; break; }
+          layout = lay;
+          for (const s of lay.slots || []) {
+            const prev = seen.get(s.name);
+            if (prev && prev !== s.type) { agree = false; break; }
+            seen.set(s.name, s.type);
+          }
+        }
+        if (agree) {
+          for (const e of named) {
+            const t = seen.get(String(e.name).replace(/[<>]/g, ""));
+            if (!t) continue;
+            const b = envLookup(bscope, e.name);
+            if (b && b.atomType !== t) { b.atomType = t; changed = true; }
+          }
+          // **並びは器そのものを受ける名前に置く。** Pass 4 の入口はそこから引いて
+          // 固定オフセットのロードを出す——名前はコンパイル時にオフセットへ解決され、
+          // Pass 4 には残らない（function_guide.md）。
+          const rest = entries.find((e) => e && e.rest && e.name);
+          if (rest && layout) {
+            const rb = envLookup(bscope, rest.name);
+            if (rb && !rb.shape) { rb.shape = layout; changed = true; }
+          }
+        }
+      }
       const obsEl = new Set();
       const obsCt = new Set();
       for (const args of bsites) {

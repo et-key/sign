@@ -401,6 +401,14 @@ function paramShapesOf(paramNode) {
 		if (es.length === 1 && es[0].rest && !es[0].default && es[0].name) {
 			return [{ kind: "bare", name: es[0].name, defaultNode: null, whole: true }];
 		}
+		// **名前で分ける形**（`[foo bar ~obj]`）。構造体を名前で分解する
+		// （function_guide.md「構造体メンバーの一致による自動バインディング」）。渡って
+		// くるのは `{ptr}` 1本で、名前はコンパイル時にオフセットへ解決されるので
+		// （名前でソートした正規順）、機械の上ですることは固定オフセットからのロードである。
+		// `~obj` は器そのもの＝その `ptr` を指す。
+		if (es.length >= 2 && es[es.length - 1].rest && es[es.length - 1].name && es.slice(0, -1).every((e) => e.name && !e.rest && !e.pattern && !e.default)) {
+			return [{ kind: "fields", names: es.slice(0, -1).map((e) => e.name), rest: es[es.length - 1].name }];
+		}
 		return [null];
 	}
 	return (paramNode.entries || []).map((e) => {
@@ -3024,6 +3032,16 @@ function paramRegWidths(lambdaNode, em, callees = {}) {
 			// `start` と `end` の関係で見るかが違う（`emitIsUnit`）。
 			return { shape: sh, regs: w, rule: isRuleNode(view, em.conf, lambdaNode.scope) };
 		}
+		// **名前で分ける形は `{ptr}` 1本で受ける。** 構造体は形が型にあるので長さが要らない
+		// （stack_abi.md §4.6）。名前はコンパイル時にオフセットへ解決されるので、入口で
+		// することは固定オフセットからのロードだけである。
+		if (sh.kind === "fields") {
+			// 並びは呼び出しサイトが知っている。Pass 3 が仮引数の束縛へ形を置いている
+			// ので（`shape`）、そこから引く——無ければ `~obj` の型から引き直す。
+			const rb = lambdaNode.scope ? envLookup(lambdaNode.scope, sh.rest) : null;
+			const lay = (rb && rb.shape) || lambdaNode.structLayout || null;
+			return { shape: sh, regs: 1, layout: lay };
+		}
 		const headType = typeOf(sh.head);
 		const elem = headType ? measure({ atomType: headType }, { target: em.conf.target, charset: em.conf.charset }) : null;
 		if (!elem || !elem.size) {
@@ -3296,6 +3314,47 @@ function genFunction(name, lambdaNode, env, em, mono) {
 			params.push(inc.shape.name);
 			paramOffsets.push(inc.off);
 			paramSlots.push(inc.regs);
+			continue;
+		}
+		// **名前で分ける形は、固定オフセットからのロードである。** 名前はコンパイル時に
+		// オフセットへ解決されるので Pass 4 には残らない（function_guide.md）——辞書の
+		// 意味論を構造体のコストで得ている、というのがこの一点である。`~obj` は器その
+		// もの＝渡ってきた `ptr` を指すので、そのスロットを使い回す（コピーしない）。
+		if (inc.shape.kind === "fields") {
+			const lay = inc.layout;
+			if (!lay) {
+				em.diagnostics.push({ severity: "error", message: `${name}: 構造体の並びが決まりません（呼び出しサイトから形が引けません）`, node: lambdaNode });
+				return;
+			}
+			for (const nm of inc.shape.names) {
+				const slot = (lay.slots || []).find((s) => s.name === bareName(nm));
+				if (!slot) {
+					em.diagnostics.push({ severity: "error", message: `${name}: 構造体に ${bareName(nm)} というスロットがありません`, node: lambdaNode });
+					return;
+				}
+				const off = em.slot * 8;
+				em.push();
+				em.load(SCRATCH[1], inc.off, `構造体の ptr`);
+				// 引くのは**バイトのずれ**であって添字ではない（`loadElem` は添字を取る）。
+				// 名前がオフセットへ解決されている以上、そこは即値で書ける。
+				const sg = SIGNEDNESS[slot.type] === "signed";
+				const ld =
+					slot.size === 1
+						? `${sg ? "ldrsb" : "ldrb"} ${sg ? SCRATCH[0] : SCRATCH[0].replace(/^x/, "w")}, [${SCRATCH[1]}, #${slot.offset}]`
+						: slot.size === 2
+							? `${sg ? "ldrsh" : "ldrh"} ${sg ? SCRATCH[0] : SCRATCH[0].replace(/^x/, "w")}, [${SCRATCH[1]}, #${slot.offset}]`
+							: slot.size === 4
+								? `${sg ? "ldrsw" : "ldr"} ${sg ? SCRATCH[0] : SCRATCH[0].replace(/^x/, "w")}, [${SCRATCH[1]}, #${slot.offset}]`
+								: `ldr ${SCRATCH[0]}, [${SCRATCH[1]}, #${slot.offset}]`;
+				em.emit(ld, `フィールド ${bareName(nm)}（+${slot.offset}）`);
+				em.store(SCRATCH[0], off);
+				params.push(nm);
+				paramOffsets.push(off);
+				paramSlots.push(1);
+			}
+			params.push(inc.shape.rest);
+			paramOffsets.push(inc.off);
+			paramSlots.push(1);
 			continue;
 		}
 		// **`[h ~t]` は検査の後で作る。** 空の容器から先頭を読むと指す先の外を触る
