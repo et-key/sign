@@ -566,15 +566,23 @@ class Emitter {
 	 * 指す先が無かった——`$関数` は単相化が、`$匿名式` は `alloca` が扱えるのに、
 	 * **値の束縛だけが場所を持たない**という穴だった。
 	 *
-	 * 置く先は `.rodata` である。畳まれる定数は書き換えないので、読み取り専用でよい。
+	 * 置く先は**書き込まれるかどうかで決まる**。`$名前 # 値` が書く先なら `.data`
+	 * （書き込み可）、読むだけなら `.rodata` でよい。かつてここは一律 `.rodata` で、
+	 * 理由に「畳まれる定数は書き換えない」と書いてあったが、`$` が場所を作れる以上その
+	 * 前提は成り立たない——読み取り専用の節へ書いても黙って落ちるだけである。
+	 *
 	 * 同じ名前は1つに畳む——「binding ごとに一意」がそのまま識別子になる。
 	 */
-	internBinding(name, value, size) {
+	internBinding(name, value, size, writable = false) {
 		const key = `b:${name}`;
 		const hit = this.namedData.get(key);
-		if (hit) return hit.label;
+		// 一度でも書かれるなら書ける場所でなければならない。
+		if (hit) {
+			if (writable) hit.writable = true;
+			return hit.label;
+		}
 		const label = `.Lbind_${name.replace(/[^\w]/g, "_")}`;
-		this.namedData.set(key, { label, value, size });
+		this.namedData.set(key, { label, value, size, writable });
 		return label;
 	}
 
@@ -595,10 +603,24 @@ class Emitter {
 			else out.push(`	${dir} ${cps.map((c) => "0x" + c.toString(16)).join(", ")}`);
 			out.push(`	// ${cps.length} 文字`);
 		}
-		for (const { label, value, size } of this.namedData.values()) {
+		const dirFor = (size) => (size === 8 ? ".quad" : size === 4 ? ".word" : size === 2 ? ".hword" : ".byte");
+		for (const { label, value, size, writable } of this.namedData.values()) {
+			if (writable) continue; // 書かれるものは下の `.data` へ
 			out.push(`	.balign ${size}`);
 			out.push(`${label}:`);
-			out.push(`	${size === 8 ? ".quad" : size === 4 ? ".word" : size === 2 ? ".hword" : ".byte"} ${value}`);
+			out.push(`	${dirFor(size)} ${value}`);
+		}
+		// **書かれる束縛は `.data` へ。** `$名前 # 値` の書き先が読み取り専用の節に在ると、
+		// 書き込みは黙って落ちる（あるいはフォールトする）。どちらに置くかは「書かれるか」
+		// が決めるのであって、定数として書かれたかどうかではない。
+		const written = [...this.namedData.values()].filter((x) => x.writable);
+		if (written.length > 0) {
+			out.push("", "	.section .data");
+			for (const { label, value, size } of written) {
+				out.push(`	.balign ${size}`);
+				out.push(`${label}:`);
+				out.push(`	${dirFor(size)} ${value}`);
+			}
 		}
 		return out;
 	}
@@ -838,6 +860,12 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (env) {
 			const b = envLookup(env, n.value);
 			const v = b && b.valueNode;
+			// **番地を取られた束縛は畳まない。** そこには書き込める場所があるので、読みは
+			// その場所を辿らなければならない——畳むと、書いた後の読みが古い定数を返す。
+			if (b && b.addressTaken) {
+				const loaded = genLoadBinding(n, b, env, em);
+				if (loaded !== null) return loaded;
+			}
 			// 自分自身へ戻らないようにする（`a : a` のような形は解けない）。
 			if (v && v !== n && !(scope && scope.folding && scope.folding.has(n.value))) {
 				const folding = new Set(scope && scope.folding ? scope.folding : []);
@@ -1549,6 +1577,48 @@ function genExpr(node, env, em, scope, tail = false) {
 		}
 		em.pop(1);
 
+		// **`$[器 ' 添字]` は要素の場所である。**
+		//
+		// `器 ' 添字` が要素を**読む**のに対し、`$` を被せたものは同じ計算の途中で止まる
+		// ——`base + i × sizeof(T)` を出して、辿らずに返す。だから型が語る幅がそのまま
+		// 番地の刻みになり、読みと書きが同じ場所を指すことが命令の上で保証される。
+		//
+		// ここが無いと `$[l ' 0]` は下の「匿名式」へ落ち、**その場でコピーを置いて**その
+		// 番地を返していた。書き込みは通るのに元へ届かない、という黙って違う値になる形で
+		// ある（解釈側では届くので、同じプログラムが2つの意味を持っていた）。
+		//
+		// 範囲外は `__` を返す。書き込み側（`#`）が niche を書き込み先ではないと見て弾く
+		// ので、不正な番地へ書くことにはならない。
+		if (t && t.type === "operation" && t.name === "get_prop" && t.left && t.right) {
+			const et = t.atomType;
+			const m1 = et ? measure({ atomType: et }, { target: em.conf.target, charset: em.conf.charset }) : null;
+			if (m1 && m1.size) {
+				const cw = genExpr(t.left, env, em, scope);
+				if (cw === false) return false;
+				if (cw === 2) {
+					const co = (em.slot - 2) * 8;
+					const iw = genScalar(t.right, env, em, scope, "添字はレジスタ1本の値です");
+					if (iw === false) return false;
+					em.load(SCRATCH[1], (em.slot - 1) * 8, "添字");
+					em.pop(1);
+					em.load(SCRATCH[0], co + 8, "len");
+					em.emit(`cmp ${SCRATCH[1]}, ${SCRATCH[0]}`, "範囲内か");
+					em.load(SCRATCH[0], co, "ptr");
+					const shift = m1.size === 8 ? 3 : m1.size === 4 ? 2 : m1.size === 2 ? 1 : 0;
+					if (shift) em.emit(`add x14, ${SCRATCH[0]}, ${SCRATCH[1]}, lsl #${shift}`, `base + i × ${m1.size}`);
+					else em.emit(`add x14, ${SCRATCH[0]}, ${SCRATCH[1]}`, "base + i");
+					em.emit("movz x12, #0x8000, lsl #48", "範囲外は __（書き込み先にならない）");
+					em.emit(`csel ${SCRATCH[0]}, x14, x12, lo`);
+					em.pop(2);
+					const ao = em.push();
+					if (ao === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+					em.store(SCRATCH[0], ao, "要素の場所");
+					return 1;
+				}
+				em.pop(cw === TAIL ? 0 : cw);
+			}
+		}
+
 		// **`$匿名式` は「その場で置いて、そのアドレスを返す」。**
 		//
 		// 演算子表がそう言っている——「その場で生成された**オブジェクト本体のアドレス**を
@@ -1570,12 +1640,9 @@ function genExpr(node, env, em, scope, tail = false) {
 			// 扱えるのに、**値の束縛だけが場所を持たない**という穴だった。`.rodata` に
 			// 置いて、そのラベルのアドレスを作る。
 			const nb = env ? envLookup(env, t.value) : null;
-			const vn = nb && nb.valueNode ? unwrap(nb.valueNode) : null;
-			const lit = vn && vn.type === "atom" && (vn.kind === "number" || vn.kind === "address") ? vn : null;
-			const m = nb && nb.atomType ? measure({ atomType: nb.atomType }, { target: em.conf.target, charset: em.conf.charset }) : null;
-			if (lit && m && m.size) {
-				const raw = String(lit.value);
-				const label = em.internBinding(bareName(t.value), raw, m.size);
+			const got = nb ? bindingLabel(t.value, nb, env, em) : null;
+			if (got) {
+				const label = got.label;
 				const off = em.push();
 				if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 				em.emit(`adrp ${SCRATCH[0]}, ${label}`, `${bareName(t.value)} の場所（$名前）`);
@@ -2079,6 +2146,148 @@ function addressFromDollar(node, env) {
 
 function idxIsZero(n) {
 	return !!(n && n.type === "atom" && n.kind === "number" && Number(n.value) === 0);
+}
+
+/**
+ * 番地を取られた束縛の置き場所（ラベル）。無ければ null。
+ *
+ * **場所を作る側と読む側で同じ答えが要る。** `$名前` が場所を作り、`名前` がそこを読む
+ * ——2つが別々に判断すると、片方だけ場所を使って片方が畳む形になる。
+ */
+function bindingLabel(name, b, env, em) {
+	const vn = b && b.valueNode ? unwrap(b.valueNode) : null;
+	const lit = vn && vn.type === "atom" && (vn.kind === "number" || vn.kind === "address") ? vn : null;
+	const m = b && b.atomType ? measure({ atomType: b.atomType }, { target: em.conf.target, charset: em.conf.charset }) : null;
+	if (!lit || !m || !m.size) return null;
+	return { label: em.internBinding(bareName(name), String(lit.value), m.size, !!b.addressTaken), size: m.size };
+}
+
+/**
+ * 番地を取られた**器**の束縛を、1つの置き場所として出す。出せなければ null。
+ *
+ * `l : [1 2 3]` は普段、使うたびにフレームへ並べ直される——読むだけなら同じ値なので
+ * 区別が付かない。だが `$[l ' 0] # 99` が書くなら話が別で、**書いた先と読む先が同じ実体で
+ * なければならない**。`.data` へ一度だけ置いて、どの参照も同じ `{ptr, len}` を積む。
+ *
+ * 出せるのは中身がリテラルの並びに畳める器だけである。実行時に決まる要素があるなら
+ * 「1つの場所」を静的には作れないので、名指しして止める側へ回す。
+ */
+function genLoadListBinding(node, b, env, em) {
+	const vn = b && b.valueNode ? unwrap(b.valueNode) : null;
+	if (!vn) return null;
+	// 余積の連なりを平らな要素の並びへ均す。
+	const parts = [];
+	const flat = (x) => {
+		const u = unwrap(x);
+		if (u && u.type === "operation" && COPRODUCT_BUILD_OPS.has(u.name)) {
+			flat(u.left);
+			flat(u.right);
+			return;
+		}
+		parts.push(u);
+	};
+	flat(vn);
+	if (parts.length < 2) return null;
+	const vals = parts.map((p) => (p && p.type === "atom" && (p.kind === "number" || p.kind === "address") ? String(p.value) : null));
+	if (vals.some((v) => v === null)) return null;
+	const el = b.elementType || "Int";
+	const m = measure({ atomType: el }, { target: em.conf.target, charset: em.conf.charset });
+	if (!m || !m.size) return null;
+	const label = em.internBinding(bareName(node.value), vals.join(", "), m.size, true);
+	const po = em.push();
+	const lo = po === null ? null : em.push();
+	if (lo === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+	em.emit(`adrp ${SCRATCH[0]}, ${label}`, `${bareName(node.value)} の場所（番地を取られている）`);
+	em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, :lo12:${label}`);
+	em.store(SCRATCH[0], po, "ptr");
+	em.emit(`mov ${SCRATCH[1]}, #${parts.length}`, "len は要素数");
+	em.store(SCRATCH[1], lo, "len");
+	return 2;
+}
+
+/** 番地を取られた束縛を、その置き場所から読む。出せなければ null。 */
+function genLoadBinding(node, b, env, em) {
+	// 器か単体かは**束縛の型**が言う。ノード側の幅は識別子には載っていないことがある。
+	const asList = genLoadListBinding(node, b, env, em);
+	if (asList !== null) return asList;
+	const got = bindingLabel(node.value, b, env, em);
+	if (!got) return null;
+	const off = em.push();
+	if (off === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+	em.emit(`adrp ${SCRATCH[0]}, ${got.label}`, `${bareName(node.value)} の場所を辿る（番地を取られている）`);
+	em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, :lo12:${got.label}`);
+	// 幅ぶんを1つ読む。束縛は符号ありの数なので、8 byte 未満は符号拡張する。
+	const ld =
+		got.size === 8 ? `ldr ${SCRATCH[0]}, [${SCRATCH[0]}]`
+		: got.size === 4 ? `ldrsw ${SCRATCH[0]}, [${SCRATCH[0]}]`
+		: got.size === 2 ? `ldrsh ${SCRATCH[0]}, [${SCRATCH[0]}]`
+		: `ldrsb ${SCRATCH[0]}, [${SCRATCH[0]}]`;
+	em.emit(ld, `${got.size} byte を読む`);
+	em.store(SCRATCH[0], off, bareName(node.value));
+	return 1;
+}
+
+/**
+ * **番地を取られた束縛を、命令へ畳む前に洗い出す。**
+ *
+ * トップレベルの `名前 : 値` は普段その場で畳んでよい——束縛であって場所ではないので、
+ * 値そのものを書けばロードは要らない。だが `$名前` が書かれていれば話が別で、そこには
+ * **書き込める場所**がある。畳んだまま読むと、書いた後の読みが古い定数を返す
+ * ——`n : 5` / `$n # 99` / `n` が 99 ではなく 5 を返していた（診断も出ずに）。
+ *
+ * **走査が先に要る理由は順序である。** 場所を作るのは `$名前` を出すときだが、読みは
+ * その前に来ることもある（`n` / `$n # 99` / `n`）。書かれた場所が意味を決めるのであって、
+ * 行の順序が決めるのではない。だから命令を出す前に一度全部見る。
+ */
+function markAddressTaken(nodes, env) {
+	if (!env) return;
+	const seen = new Set();
+	const visit = (n) => {
+		if (!n || typeof n !== "object" || seen.has(n)) return;
+		seen.add(n);
+		if (n.type === "operation" && n.position === "prefix" && n.name === "address") {
+			// **添字の根まで辿る。** `$[l ' 0]` は `l` の要素の場所であり、それが在るには
+			// `l` 自身が場所を持っていなければならない——器が使うたびに組み直されると、
+			// 書いた先と読む先が別の実体になる。
+			let t = unwrap(n.operand);
+			while (t && t.type === "operation" && t.name === "get_prop") t = unwrap(t.left);
+			if (isIdentifierNode(t)) {
+				const b = envLookup(env, t.value);
+				if (b) b.addressTaken = true;
+			}
+		}
+		// **ブラケット仮引数へ渡した束縛にも場所が要る。** カッコは参照を取るという意味
+		// なので（C の `f(&x)`）、呼び先はそこへ書ける。呼ぶ側が呼び出しごとに組み直すと、
+		// 書いた先と後で読む先が別の実体になる——`f : [~o] ? $[o ' 0] # 99` を通した後に
+		// `l ' 0` が 1 を返していた。
+		if (n.type === "operation" && n.name === "apply") {
+			const args = [];
+			let head = n;
+			while (head && head.type === "operation" && head.name === "apply") {
+				args.unshift(unwrap(head.right));
+				head = unwrap(head.left);
+			}
+			//
+			// 判定は束縛の `restParam` で行う（Pass 1a が仮引数の形から記録している）。
+			// どの位置がブラケットかまでは持っていないので、**識別子の実引数を一律に
+			// 印す**——余分に印しても「場所を1つ持つ」だけで意味は変わらず、足りないと
+			// 黙って違う値になる。安全側はこちらである。
+			if (isIdentifierNode(head)) {
+				const cb = envLookup(env, head.value);
+				if (cb && cb.restParam === "bracket") {
+					for (const a of args) {
+						if (!isIdentifierNode(a)) continue;
+						const ab = envLookup(env, a.value);
+						if (ab) ab.addressTaken = true;
+					}
+				}
+			}
+		}
+		for (const k of ["left", "right", "operand"]) visit(n[k]);
+		for (const l of n.lines || []) visit(l);
+		for (const e of n.entries || []) visit(e.default);
+	};
+	for (const n of nodes) visit(n);
 }
 
 function genIndex(node, env, em, scope) {
@@ -3769,6 +3978,9 @@ function generateAsm(nodes, env, options = {}) {
 	const monos = collectMonomorphs(nodes);
 	// **作った器がフレームより長生きするか**を先に決める。器を作ってよいのは出ないときだけ
 	// で、出るなら sret（呼び出し側がスロットを提供する）が要る。
+	// **番地を取られた束縛を、命令へ畳む前に洗い出す。** 場所が在るかどうかは書かれた
+	// ものが決めるのであって、行の順序が決めるのではない。
+	markAddressTaken(nodes, env);
 	markEscapes(nodes, collectReturnedParams(nodes));
 	// 呼び出しサイトが省略された引数の位置を知るための署名表。本体を出す前に要る。
 	em.signatures = collectSignatures(nodes, em);

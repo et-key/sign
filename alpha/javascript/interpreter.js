@@ -254,8 +254,14 @@ function bindBracketParams(entries, value, env) {
 
     if (restIdx !== -1) {
       // afterの分だけ末尾を確保してから、間に残った部分をrestへ渡す。
+      //
+      // **残りは覗き窓である**（`listView`）。カッコは参照を取るという意味なので、
+      // ここで写すと仮引数越しの書き込みが元へ届かない——機械の側は `ptr` と `len` を
+      // ずらすだけで同じ領域を指し続けるので、写した瞬間に2つの意味ができてしまう。
+      // 文字列は不変なので窓にしても書けず、`restValue` が文字列へ畳み戻す方が正しい。
       const restEnd = Math.max(idx, value.length - after.length);
-      envDefine(env, entries[restIdx].name, restValue(value.slice(idx, restEnd)));
+      const rest = fromString ? restValue(value.slice(idx, restEnd)) : listView(value, idx, restEnd);
+      envDefine(env, entries[restIdx].name, rest);
       for (let i = 0; i < after.length; i++) {
         const entry = after[i];
         const pos = restEnd + i;
@@ -1350,6 +1356,14 @@ function getPropByValue(l, r) {
           ? Object.values(l)
           : [l];
     // 負の添字は末尾から数える（`slice` の負 start 解釈が Sign の規約と一致する）。
+    //
+    // **スライスは覗き窓である**（`listView`）。`l ' 1~` と `[x ~xs]` の `xs` は同じ
+    // 「残り」を別の書き方で取っているにすぎず、機械の側はどちらも `ptr` と `len` を
+    // ずらすだけである。写すと書き込みが元へ届かなくなる。
+    if (Array.isArray(l) && !asStr) {
+      const start = from < 0 ? Math.max(0, items.length + from) : from;
+      return collapseSlice(listView(items, start, items.length));
+    }
     const sliced = items.slice(from);
     return asStr ? sliced.join("") : collapseSlice(sliced);
   }
@@ -1552,6 +1566,69 @@ function stringifyForConcat(v) {
 // （新規に作った値自体はどこにも「格納」されていないため、書き込む先が無い）。
 function makeAddress(getFn, setFn) {
   return { __address__: true, get: getFn, set: setFn || (() => {}) };
+}
+
+/**
+ * **器の「残り」は覗き窓であって複製ではない。**
+ *
+ * `[~o]` / `[x ~xs]` のカッコは**参照を取る**という意味であり（C で `f(&x)` と書くのと
+ * 同じ）、`l ' 1~` のスライスも同じ「残り」を別の書き方で取っているにすぎない。Pass 4 は
+ * 元からそう出していた——`{ptr + k×幅, len - k}` で、同じ領域を指したまま頭と長さを
+ * ずらすだけである（`emitDestructure`）。ところが解釈側は `slice()` で写していたので、
+ * **同じプログラムが2つの意味を持っていた**：仮引数越しに書いた値が、機械では元へ届き、
+ * 解釈では届かない。
+ *
+ * `Proxy` を使うと `Array.isArray` が真のまま添字と長さだけをずらせるので、既にある
+ * 配列の扱い（`map`・スプレッド・`JSON`）は何も変えずに済む。読み書きはそのまま元の
+ * 実体へ通る。
+ *
+ * 入れ子の窓は起点を足して1枚に畳む——窓の窓を作ると、辿る段が深さぶん増えるだけで
+ * 得るものが無い。
+ */
+const VIEW_BASE = Symbol("viewBase");
+const VIEW_FROM = Symbol("viewFrom");
+
+function listView(base, from, to) {
+  // 既に窓なら、元の実体まで降りて起点を足す。
+  if (base && base[VIEW_BASE]) {
+    from += base[VIEW_FROM];
+    to += base[VIEW_FROM];
+    base = base[VIEW_BASE];
+  }
+  const len = Math.max(0, Math.min(to, base.length) - from);
+  const idx = (p) => (typeof p === "string" && /^\d+$/.test(p) ? Number(p) : null);
+  return new Proxy(base, {
+    get(t, p, r) {
+      if (p === VIEW_BASE) return t;
+      if (p === VIEW_FROM) return from;
+      if (p === "length") return len;
+      const i = idx(p);
+      if (i !== null) return i < len ? t[i + from] : undefined;
+      return Reflect.get(t, p, r);
+    },
+    set(t, p, v, r) {
+      const i = idx(p);
+      if (i !== null) {
+        if (i < len) t[i + from] = v;
+        return true;
+      }
+      return Reflect.set(t, p, v, r);
+    },
+    has(t, p) {
+      const i = idx(p);
+      if (i !== null) return i < len;
+      return Reflect.has(t, p);
+    },
+    ownKeys(t) {
+      return [...Array.from({ length: len }, (_, i) => String(i)), "length"];
+    },
+    getOwnPropertyDescriptor(t, p) {
+      const i = idx(p);
+      if (i !== null) return i < len ? { value: t[i + from], writable: true, enumerable: true, configurable: true } : undefined;
+      if (p === "length") return { value: len, writable: true, enumerable: false, configurable: false };
+      return Reflect.getOwnPropertyDescriptor(t, p);
+    },
+  });
 }
 
 // pass2.jsのunwrapSoloBlockと同じロジック（循環import回避のためここで別途最小実装）。
