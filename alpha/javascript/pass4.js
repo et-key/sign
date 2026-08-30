@@ -1859,15 +1859,22 @@ function genExpr(node, env, em, scope, tail = false) {
 			}
 			return em.fail(n, `${rw0} 本で運ぶ値を指すアドレスはまだ読めません（${n.atomType}——指したまま引く必要があります）`);
 		}
-		if (!genScalar(n.operand, env, em, scope, "アドレスはレジスタ1本の値です")) return false;
-		const po = (em.slot - 1) * 8;
+		// 書き込み側と同じ畳み。読む番地が定数なら「記憶が無い」検査は答えが出ているし、
+		// 番地そのものもスロットを経由せずレジスタへ作れる——`genScalar` を通すと同じ
+		// 定数を作って置いて読み戻すので、**そこを丸ごと飛ばす**。
 		const w = widthOfType(n.atomType, em.conf);
-		// 書き込み側と同じ畳み。読む番地が定数なら「記憶が無い」検査は答えが出ている。
 		const fixedSrc = constAddressOf(n.operand, env);
 		if (fixedSrc !== null && fixedSrc !== NICHE_VALUE) {
-			em.load(SCRATCH[0], po, "アドレス（定数——niche ではない）");
+			const off0 = em.push();
+			if (off0 === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			emitImm(em, SCRATCH[0], fixedSrc, "アドレス（定数——niche ではない）");
 			em.emit(loadAt(SCRATCH[0], SCRATCH[0], w), `${w} byte を読む`);
-		} else {
+			em.store(SCRATCH[0], off0);
+			return 1;
+		}
+		if (!genScalar(n.operand, env, em, scope, "アドレスはレジスタ1本の値です")) return false;
+		const po = (em.slot - 1) * 8;
+		{
 			const none = em.newLabel("noaddr");
 			const done = em.newLabel("loaded");
 			em.load(SCRATCH[0], po, "アドレス");
@@ -1901,6 +1908,36 @@ function genExpr(node, env, em, scope, tail = false) {
 				`layer: ${em.conf.layer} では生の番地へ直に書けません（番地の捏造を防ぐため）。` +
 					"MMIO を扱えるのは layer: 0〜1 です——上の層では `$名前`・受け取った参照・分解した先へ書きます"
 			);
+		}
+		// **定数はスロットを経由する理由が無い。**
+		//
+		// `genExpr` の規約は「どの式も新しいスロットへ置く」で、合成が閉じるためにそれで
+		// よい。だが定数は**その場でレジスタに作れる**ので、書いて読み戻す往復は丸ごと
+		// 無駄である。MMIO の書き込みは書き込み先も値も定数なので、boot コードはここに
+		// 全部落ちる。
+		//
+		// 値が定数でないときも、**書き込み先だけは**直接置ける。ただし順番が要る——値を
+		// 先に出さないと `genExpr` がスクラッチを壊す。
+		const cDst = constAddressOf(n.left, env);
+		const cVal = constAddressOf(n.right, env);
+		const wOut = widthOfType(n.right && n.right.atomType, em.conf);
+		if (cDst !== null && cDst !== NICHE_VALUE) {
+			const off = em.push();
+			if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			if (cVal !== null) {
+				emitImm(em, SCRATCH[0], cDst, "書き込み先（定数——niche ではない）");
+				emitImm(em, SCRATCH[1], cVal, "書く値（定数）");
+			} else {
+				const vw2 = genExpr(n.right, env, em, scope);
+				if (vw2 === false) { em.pop(1); return false; }
+				if (vw2 !== 1) { em.pop(vw2 + 1); return em.fail(n.right, `書ける値はレジスタ1本ぶんです（${vw2} 本の参照で運ぶ値）`); }
+				em.load(SCRATCH[1], (em.slot - 1) * 8, "書く値");
+				em.pop(1);
+				emitImm(em, SCRATCH[0], cDst, "書き込み先（定数——niche ではない）");
+			}
+			em.emit(storeAt(SCRATCH[1], SCRATCH[0], wOut), `${wOut} byte を書く`);
+			em.store(SCRATCH[0], off);
+			return 1;
 		}
 		if (!genScalar(n.left, env, em, scope, "書き込み先はレジスタ1本のアドレスです")) return false;
 		const po = (em.slot - 1) * 8;
@@ -4118,6 +4155,56 @@ function returnSizeBound(lam, name, known, group) {
  * 消すのは `ldr` の側だけである。`str` はスロットの中身を作っており、後で別の場所から
  * 読まれうる——「今この瞬間レジスタにも在る」ことしか使わない。
  */
+/**
+ * **上書きされるだけのスロット書き込みを消す**（覗き穴）。
+ *
+ *     str x9, [x29, #16]    ← 1回目の `#` が返す番地
+ *     …（#16 を読まない）
+ *     str x9, [x29, #16]    ← 2回目が上書きする。1回目は誰も見ていない
+ *
+ * `#` も `@` も式なので値を返す。文の位置に並べたときその値は捨てられるが、
+ * `genExpr` の規約（どの式もスロットへ置く）は捨てられることを知らない。boot の
+ * ような「並べるだけ」のコードでは、**書き込みの数だけ死んだストアが出る**。
+ *
+ * 跨いではいけないものは `peepholeSlotMoves` と同じ——ラベル（別経路から飛び込める）と
+ * 分岐である。加えて `x29` がスロットの読み書き以外の形で出てきたら、そのスロットの
+ * 番地が漏れている可能性があるので**関数ごと諦める**（`$名前` が典型）。
+ */
+function peepholeDeadSlotStores(lines) {
+	const insOf = (l) => l.trim().replace(new RegExp("\\s*//.*$"), "");
+	const ST = new RegExp("^str\\s+(x\\d+),\\s*\\[x29,\\s*#(\\d+)\\]$");
+	const LD = new RegExp("^ldr\\s+(x\\d+),\\s*\\[x29,\\s*#(\\d+)\\]$");
+	const isLabel = (t) => new RegExp("^[.\\w]+:$").test(t);
+	const isBranch = (t) => new RegExp("^(b|b\\.\\w+|cbz|cbnz|tbz|tbnz|bl|br|ret)\\b").test(t);
+	const mentionsFp = new RegExp("\\bx29\\b");
+	const framePro = new RegExp("^mov\\s+x29,\\s*sp$");
+	const frameSave = new RegExp("^(stp|ldp)\\s+x29,\\s*x30,");
+	// スロットの番地が漏れていないか。漏れていたら何も消せない。
+	for (const l of lines) {
+		const t = insOf(l);
+		if (!mentionsFp.test(t)) continue;
+		if (ST.test(t) || LD.test(t)) continue;
+		if (framePro.test(t) || frameSave.test(t)) continue;
+		return lines;
+	}
+	const drop = new Set();
+	for (let i = 0; i < lines.length; i++) {
+		const st = ST.exec(insOf(lines[i]));
+		if (!st) continue;
+		for (let m = i + 1; m <= lines.length; m++) {
+			if (m === lines.length) { drop.add(i); break; } // 関数の終わりまで誰も読まない
+			const t = insOf(lines[m]);
+			if (!t) continue;
+			if (isLabel(t) || isBranch(t)) break;
+			const ld = LD.exec(t);
+			if (ld && ld[2] === st[2]) break; // 読まれた
+			const st2 = ST.exec(t);
+			if (st2 && st2[2] === st[2]) { drop.add(i); break; } // 上書きされた
+		}
+	}
+	return lines.filter((_, i) => !drop.has(i));
+}
+
 function peepholeRedundantLoads(lines) {
 	const out = [];
 	const insOf = (l) => l.trim().replace(/\s*\/\/.*$/, "");
@@ -4193,7 +4280,7 @@ function peepholeSlotMoves(lines) {
 }
 
 function wrapFrame(bodyLines, slots, name, movedSp = false) {
-	bodyLines = peepholeSlotMoves(peepholeRedundantLoads(bodyLines));
+	bodyLines = peepholeDeadSlotStores(peepholeSlotMoves(peepholeRedundantLoads(bodyLines)));
 	const frame = 16 + Math.ceil((slots * 8) / 16) * 16; // x29/x30 の16バイト + スロット
 	// 相互末尾呼び出しが置いた印を、決まったフレームの大きさで埋める。
 	const filled = bodyLines.map((l) => (l.includes(FRAME_MARK) ? l.split(FRAME_MARK).join(String(frame)) : l));
