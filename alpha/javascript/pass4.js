@@ -2565,7 +2565,9 @@ function markAddressTaken(nodes, env) {
 /** その定義は「全行が `名前 : 定数`」の構造体か（＝命令を持たない配置の記述）。 */
 function constStructDefine(node) {
 	const v = node && node.right ? unwrap(node.right) : null;
-	if (!v || !Array.isArray(v.lines) || v.lines.length < 2) return false;
+	// フィールドが1つでも配置の記述である（`uart : / DR : 0x9000000` は普通に書く形）。
+	// 型が `Struct` と決まっているかは Pass 3 が言うので、ここは形だけを見る。
+	if (!v || !Array.isArray(v.lines) || v.lines.length < 1) return false;
 	return v.lines.every((line) => {
 		const l = unwrap(line);
 		if (!isDefineNode(l) || !isIdentifierNode(l.left)) return false;
