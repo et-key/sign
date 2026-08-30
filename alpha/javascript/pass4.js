@@ -1908,10 +1908,21 @@ function genExpr(node, env, em, scope, tail = false) {
 		//
 		// 相手の後置 `~` はここで剥がす（`stripExpand`）。列の μ は任意なので写像は
 		// `(…) (m rest)~` と書くしかないが、追記の位置では平らに書かれるので命令は要らない。
-		const lead = parts.slice(0, -1);
-		const tailPart = parts.length > 1 ? stripExpand(parts[parts.length - 1]) : null;
+		//
+		// **器は末尾でなくてもよい。** 一度は「途中に置くとその長さが決まるまで後ろを
+		// 書けない」と諦めていたが、決まらないのは**静的に**であって、呼び先は自分が書いた
+		// 個数を `len` で返す。後ろの要素はそれを足した位置へ書けばよい——1回の走査で
+		// 書き切るという条件はそのまま満たされる。
+		//
+		// `gap : st d ? … (closers st d) newline` がこの形で、器が先頭・スカラーが後ろに
+		// 来る。器が2つ以上あると和が要るので、そこはまだ扱わない。
+		const contIdx = parts.findIndex((p) => sretHere && appendableCallee(stripExpand(p), em));
+		const lead = contIdx < 0 ? parts.slice(0, -1) : parts.slice(0, contIdx);
+		const trail = contIdx < 0 ? [] : parts.slice(contIdx + 1);
+		const tailPart = contIdx >= 0 ? stripExpand(parts[contIdx]) : parts.length > 1 ? stripExpand(parts[parts.length - 1]) : null;
 		const appendTo = tailPart && sretHere ? appendableCallee(tailPart, em) : null;
-		if (em1 && em1.size && appendTo && lead.every((p) => slotsOfNode(p, em.conf, env) === 1)) {
+		const oneScalar = (p) => slotsOfNode(p, em.conf, env) === 1;
+		if (em1 && em1.size && appendTo && lead.every(oneScalar) && trail.every(oneScalar) && !trail.some((p) => appendableCallee(stripExpand(p), em))) {
 			const base = em.slot;
 			for (const p of lead) {
 				const pw = genScalar(p, env, em, scope, "追記の前に並べる要素はレジスタ1本の値です");
@@ -1944,6 +1955,32 @@ function genExpr(node, env, em, scope, tail = false) {
 			if (k) em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #${k}`, `先頭の ${k} を足す`);
 			em.pop(2);
 			em.pop(1); // 続きの宛先
+			// **後ろの要素は、書かれた個数を足した位置へ置く。** 呼び先が何個書いたかは
+			// `len` で返ってきているので、静的に決まらないだけで実行時には決まっている。
+			if (trail.length > 0) {
+				const cnt = em.push();
+				if (cnt === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+				em.store(SCRATCH[0], cnt, "ここまでに書いた個数");
+				const tbase = em.slot;
+				for (const p of trail) {
+					const pw = genScalar(p, env, em, scope, "追記の後ろに並べる要素はレジスタ1本の値です");
+					if (pw === false) return false;
+				}
+				const t = em.slot - tbase;
+				em.load(SCRATCH[1], em.sretDest, "返値スロット（sret）");
+				em.load(SCRATCH[0], cnt);
+				const shift = w === 8 ? 3 : w === 4 ? 2 : w === 2 ? 1 : 0;
+				if (shift) em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}, lsl #${shift}`, "書かれた個数ぶん進める");
+				else em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}`, "書かれた個数ぶん進める");
+				for (let i = 0; i < t; i++) {
+					em.load("x14", (tbase + i) * 8);
+					em.emit(storeElem("x14", SCRATCH[1], i * w, w), i === 0 ? "後ろを並べる" : undefined);
+				}
+				em.pop(t);
+				em.load(SCRATCH[0], cnt);
+				em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #${t}`, `後ろの ${t} を足す`);
+				em.pop(1);
+			}
 			const po2 = em.push();
 			const lo2 = po2 === null ? null : em.push();
 			if (lo2 === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
@@ -3480,7 +3517,34 @@ function boundParamNames(lam) {
 	);
 }
 
-function returnSizeBound(lam, name) {
+/**
+ * その部分が「上界の分かっている関数の呼び出し」なら、その上界を**こちらの仮引数で
+ * 言い換えて**返す。言い換えられなければ null。
+ *
+ * 呼び先の上界は `konst + coef × ||第 i 引数||` の形をしている。第 i 引数としてこちらの
+ * 仮引数をそのまま渡しているなら、測るのはどちらも呼ぶ側なので同じ `len` を見ればよい。
+ * 式にして渡している形（`closers (pop st) d`）は、長さが変わりうるので言い換えられない
+ * ——そこは諦める。
+ */
+function boundedCallOf(part, known, params) {
+	const u = unwrap(part);
+	if (!u || u.type !== "operation" || u.name !== "apply") return null;
+	const args = [];
+	let head = u;
+	while (head && head.type === "operation" && head.name === "apply") {
+		args.unshift(unwrap(head.right));
+		head = unwrap(head.left);
+	}
+	if (!isIdentifierNode(head)) return null;
+	const p = known.get(bareName(head.value));
+	if (!p) return null;
+	if (p.sizeOfIndex === null || p.sizeOfIndex === undefined) return { konst: p.konst, coef: 0, sizeOf: null };
+	const a = args[p.sizeOfIndex];
+	if (!isIdentifierNode(a) || !params.includes(a.value)) return null;
+	return { konst: p.konst, coef: p.coef, sizeOf: a.value };
+}
+
+function returnSizeBound(lam, name, known) {
 	const params = boundParamNames(lam);
 	// 分解した残りの名前。`f rest` は名前1つでも1要素食っている。
 	const restNames = new Set(paramShapesOf(lam.left).filter((sh) => sh && sh.kind === "destructure").map((sh) => sh.rest));
@@ -3560,6 +3624,26 @@ function returnSizeBound(lam, name) {
 			if (eaten) {
 				if (rec && rec !== eaten) return null; // 1枝で2つ食う形はまだ扱わない
 				rec = eaten;
+				continue;
+			}
+			// **上界が分かっている関数の呼び出しは、その上界ぶん。**
+			//
+			// `gap : st d ? … (closers st d) newline` の `closers` は自分では無いので
+			// 自己呼び出しには当たらないが、上界は既に出ている。渡している器がこちらの
+			// 仮引数そのものなら、その上界を**自分の仮引数で言い換えられる**——測るのは
+			// どちらも呼ぶ側なので、同じ `len` を見ればよい。
+			//
+			// 定義の順序で決まらないよう、計画は不動点で回している（`collectSretPlan`）。
+			const bounded = known ? boundedCallOf(q, known, params) : null;
+			if (bounded) {
+				// 定数のぶんは要素数として数える。
+				k += bounded.konst;
+				if (bounded.coef > 0) {
+					// 器に比例するぶんは「撒く器」と同じ扱い。係数が2以上、あるいは器が
+					// 2つ以上混ざる形は和になるので、そこはまだ扱わない。
+					if (bounded.coef !== 1 || (ref && ref !== bounded.sizeOf)) return null;
+					ref = bounded.sizeOf;
+				}
 				continue;
 			}
 			// それ以外は1要素とみなせるものだけ（器なら個数が決まらない）。
@@ -3712,7 +3796,24 @@ function collectSignatures(nodes, em) {
  *   `(konst + coef × len) × width` であり、`sizeOfIndex` はその `len` を持つ仮引数の
  *   位置（null なら定数）。
  */
+/**
+ * 上界を集める。**不動点で回す。**
+ *
+ * ある関数の上界が、別の関数の上界に依ることがある——`gap : st d ? … (closers st d)
+ * newline` は「`closers` が返す器 ＋ 1」であり、`closers` の上界が決まらなければ決まら
+ * ない。定義の順序で決まってしまわないように、増えなくなるまで回す。
+ */
 function collectSretPlan(nodes, em) {
+	let plan = new Map();
+	for (let grew = true; grew; ) {
+		const next = collectSretPlanOnce(nodes, em, plan);
+		grew = next.size > plan.size;
+		plan = next;
+	}
+	return plan;
+}
+
+function collectSretPlanOnce(nodes, em, known) {
 	const plan = new Map();
 	for (const node of nodes) {
 		if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
@@ -3732,7 +3833,7 @@ function collectSretPlan(nodes, em) {
 		const m = et ? measure({ atomType: et }, { target: em.conf.target, charset: em.conf.charset }) : null;
 		if (!m || !m.size) continue;
 		const name = bareName(node.left.value);
-		const b = returnSizeBound(lam, name);
+		const b = returnSizeBound(lam, name, known);
 		if (!b) continue;
 		let sizeOfIndex = null;
 		if (b.sizeOf) {
