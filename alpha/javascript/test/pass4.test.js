@@ -733,6 +733,38 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 	};
 	const build = "f : s ?\n\ts (s ' 0)\nf `ab`";
 	checkTrue("layer 0 は「作れません」と言う", at(build, 0).some((m) => /layer: 0 では器を作れません/.test(m)), JSON.stringify(at(build, 0)));
+	// **門番は場所を取る式ぜんぶに掛かる。**
+	//
+	// `option_ms_schema.md` §4 の表が `layer: 0` を「RAM 未初期化。alloca ✗」と定めて
+	// いる。`sub sp` はまさにその alloca なので、layer 0 では出してはいけない——BIOS/UEFI
+	// の初期フェーズに相当する層で、未初期化のハードウェアへ触ることを構造的に防ぐのが
+	// 層の役目である（`build_system.md` §4.1）。
+	//
+	// かつて判定は sret の枝にしか入っておらず、**器の構築も `$匿名式` も持ち上げも
+	// layer 0 で素通りしていた**。場所を取る式は6通りあるので、判定を散らすと必ずどれかが
+	// 漏れる——`allocaAllowed` の1箇所へ集めてある。
+	const gated = (src) => at(src, 0).some((m) => /layer: 0 では場所を取れません/.test(m));
+	checkTrue("layer 0: 器を組み立てられない", gated("||1 2 3||"));
+	checkTrue("layer 0: `$匿名式` で場所を取れない", gated("f : x ? ($(x , x)) ' 0\nf 5"));
+	checkTrue("layer 0: 前置 `~` の持ち上げも場所である", gated("f : [~o] ? ||o||\nf ~5"));
+	checkTrue("layer 0: 参照越しの書き込みも場所が要る", gated("l : [1 2 3]\n$[l ' 0] # 9\nl ' 0"));
+	// **確保が要らないものは layer 0 でも通る。** 切り出しは同じ領域を指し直すだけ、
+	// MMIO は既に在る場所を読み書きするだけである。
+	checkTrue("layer 0: 切り出しは通る", at("s : `abcde`\n||s ' 2~||", 0).length === 0);
+	checkTrue("layer 0: MMIO は通る", at("0x40800000 # 65\n@0x40800000", 0).length === 0);
+	checkTrue("layer 0: 末尾再帰は通る", at("f : a n ?\n\tn > 0 : f (a + n) (n - 1)\n\ta\nf 0 5", 0).length === 0);
+	// **層の禁止と実装の穴は別である。** `Float` は layer 2 以上（同 §4）。実装が無い
+	// ことを理由に落とすと、実装したときに layer 0 で通ってしまう。
+	checkTrue(
+		"layer 0: Float は層が禁じる（未実装ではなく）",
+		at("x : 1.5\nx", 0).some((m) => /layer: 0 では Float を使えません/.test(m)),
+		JSON.stringify(at("x : 1.5\nx", 0)),
+	);
+	checkTrue(
+		"layer 2: Float は「まだ」である",
+		at("x : 1.5\nx", 2).some((m) => /浮動小数はまだ出せません/.test(m)),
+		JSON.stringify(at("x : 1.5\nx", 2)),
+	);
 	// **同じ「出せない」でも中身が違った。** 上は設計上の結論（記憶を確保する手段が無い）、
 	// 下は実装の穴だった。穴の方は塞がった——撒いた器は返値スロットへ写せるので、layer 1
 	// では出る。層の側の結論は変わらない。

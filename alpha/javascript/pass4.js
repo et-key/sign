@@ -488,7 +488,34 @@ function paramShapesOf(paramNode) {
  * @param valueOff スカラーが載っているフレームのオフセット
  * @returns 器の ptr スロットのオフセット。スロットが尽きたら null。
  */
-function emitLiftToContainer(em, valueOff, why) {
+/**
+ * **その層で場所を取れるか**（門番）。取れないなら理由を名指しして false を返す。
+ *
+ * `option_ms_schema.md` §4 の表が `layer: 0` を「RAM 未初期化。alloca ✗」と定めている。
+ * `sub sp` はまさにその alloca なので、layer 0 では出してはいけない——BIOS/UEFI の初期
+ * フェーズに相当する層で、未初期化のハードウェアへ触ることを構造的に防ぐのが層の役目で
+ * ある（`build_system.md` §4.1）。
+ *
+ * **判定はここ1箇所に集める。** 場所を取る式は6通りあり（持ち上げ・sret・匿名式・器の
+ * 構築…）、それぞれの枝で書くと必ずどれかが漏れる——実際、判定は sret の枝にしか入って
+ * おらず、`layer: 0` で器の構築も `$匿名式` も素通りしていた。
+ *
+ * これは「まだ出せない」とは**別の種類の拒否**である。実装の穴ではなく設計上の結論なので、
+ * 文面もそう書く。
+ */
+function allocaAllowed(em, n, what) {
+	if (em.conf.layer === undefined || em.conf.layer >= 1) return true;
+	em.fail(
+		n,
+		`layer: ${em.conf.layer} では場所を取れません（${what}）。` +
+			"alloca が使えるのは layer: 1 以上です（option_ms_schema.md §4）——" +
+			"切り出しと MMIO は確保が要らないので layer: 0 でも使えます"
+	);
+	return false;
+}
+
+function emitLiftToContainer(em, node, valueOff, why) {
+	if (!allocaAllowed(em, node, "長さ1の器へ持ち上げる")) return false;
 	em.emit(`sub sp, sp, #16`, why || "1要素ぶんの場所を取る（同型の持ち上げ）");
 	em.movedSp = true;
 	em.load(SCRATCH[0], valueOff);
@@ -763,7 +790,23 @@ function genExpr(node, env, em, scope, tail = false) {
 		// `Number` を経由しない——`0x123456789abcdef` のような番地は倍精度に載らず、
 		// 下の桁が黙って丸まる。文字列のまま `BigInt` へ渡せば桁は落ちない。
 		let v;
-		try { v = BigInt(n.value); } catch { return em.fail(n, `浮動小数はまだ出せません（${n.value}）`); }
+		try {
+			v = BigInt(n.value);
+		} catch {
+			// **層の禁止と実装の穴を区別する。** `option_ms_schema.md` §4 が `Float` を
+			// layer 2 以上、`Vector` を layer 3 以上と定めている。layer が足りないなら
+			// 設計上の結論であって「まだ」ではない——実装したときに `layer: 0` で通って
+			// しまわないよう、門番を先に置く。
+			const need = n.atomType === "Vector" ? 3 : 2;
+			if (em.conf.layer !== undefined && em.conf.layer < need) {
+				return em.fail(
+					n,
+					`layer: ${em.conf.layer} では ${n.atomType || "浮動小数"} を使えません（${n.value}）。` +
+						`必要なのは layer: ${need} 以上です（option_ms_schema.md §4）`
+				);
+			}
+			return em.fail(n, `浮動小数はまだ出せません（${n.value}）`);
+		}
 		const off = em.push();
 		if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 		emitImm(em, SCRATCH[0], v, `リテラル ${n.value}`);
@@ -1183,7 +1226,11 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (sigW) {
 			parts.forEach((p, i) => {
 				if (sigW[i] !== 2 || p.w !== 1) return;
-				const po = emitLiftToContainer(em, p.off);
+				const po = emitLiftToContainer(em, n, p.off);
+				if (po === false) {
+					promoted = null; // 層が許さない（名指し済み）
+					return;
+				}
 				if (po === null) {
 					em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 					promoted = null;
@@ -1332,6 +1379,8 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (sp && n._sretInto !== undefined && n._sretInto !== null) {
 			em.load("x8", n._sretInto, "続きを書く場所（追記）");
 		} else if (sp) {
+			// 返値スロットも `sub sp` で取る場所である（門番）。
+			if (!allocaAllowed(em, n, callee + " の返値スロット（sret）")) return false;
 			if (sp.sizeOfIndex !== null) {
 				// 上界が引数の要素数に依る形。その引数の len から測る。
 				//
@@ -1354,6 +1403,7 @@ function genExpr(node, env, em, scope, tail = false) {
 				em.emit(`and ${SCRATCH[0]}, ${SCRATCH[0]}, #0xfffffffffffffff0`);
 				em.emit(`sub sp, sp, ${SCRATCH[0]}`, "返値スロットを取る（sret）");
 			} else {
+				// 返値スロットも `sub sp` で取る場所である（門番）。
 				const bytes = sretBytesConst(sp);
 				if (bytes > 0) em.emit(`sub sp, sp, #${bytes}`, `返値スロット ${bytes} バイトを取る（sret）`);
 			}
@@ -1422,7 +1472,8 @@ function genExpr(node, env, em, scope, tail = false) {
 			return em.fail(n, `\`~\` で持ち上げられるのはレジスタ1本の値か器だけです（${w} 本）`);
 		}
 		const off = (em.slot - 1) * 8;
-		const po = emitLiftToContainer(em, off, "`~` で長さ1の器へ持ち上げる");
+		const po = emitLiftToContainer(em, n, off, "`~` で長さ1の器へ持ち上げる");
+		if (po === false) return false; // 層が許さない（名指し済み）
 		if (po === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 		// 元のスカラーのスロットは要らない。器の2本だけを残す。
 		em.load(SCRATCH[0], po);
@@ -1681,6 +1732,7 @@ function genExpr(node, env, em, scope, tail = false) {
 				if (pw === false) return false;
 			}
 			const got = em.slot - base;
+			if (!allocaAllowed(em, n, "`$` で組を置く")) return false;
 			const bytes0 = Math.ceil((got * 8) / 16) * 16;
 			em.emit(`sub sp, sp, #${bytes0}`, `${got} 語の組を置く（$匿名式）`);
 			em.movedSp = true;
@@ -1699,6 +1751,7 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (vw === false) return false;
 		if (vw === TAIL) return em.fail(n, "末尾呼び出しのアドレスは取れません");
 		const vo = (em.slot - vw) * 8;
+		if (!allocaAllowed(em, n, "`$` で値を置く")) return false;
 		// AArch64 の `sp` は16バイト境界を要求する。
 		const bytes = Math.ceil((vw * 8) / 16) * 16;
 		em.emit(`sub sp, sp, #${bytes}`, `${vw} 本ぶんの場所を取る（$匿名式）`);
@@ -2086,6 +2139,7 @@ function genExpr(node, env, em, scope, tail = false) {
 				em.load(SCRATCH[1], em.sretDest, "返値スロット（sret）");
 				into = SCRATCH[1];
 			} else {
+				if (!allocaAllowed(em, n, n.atomType + " を組み立てる")) return false;
 				const bytes = Math.ceil((count * w) / 16) * 16;
 				em.emit(`sub sp, sp, #${bytes}`, `${count} 要素ぶんの場所を取る（フレームから出ない）`);
 				em.movedSp = true;
