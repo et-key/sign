@@ -3970,7 +3970,98 @@ function returnSizeBound(lam, name, known, group) {
 	return { konst, coef: sizeOf ? Math.max(coef, 1) : 0, sizeOf };
 }
 
+/**
+ * **書いた直後に同じレジスタへ読み戻す対を消す**（覗き穴）。
+ *
+ *     str x9, [x29, #32]
+ *     ldr x9, [x29, #32]   ← 消せる。x9 は既にその値である
+ *
+ * `genExpr` の規約は「どの式も値をスロットへ置いて返す」で、呼ぶ側は「スロットから読む」
+ * で始まる——**生産と消費が隣り合っていても必ずメモリを経由する**。規約そのものは合成が
+ * 正しく閉じるために要るので、崩さずに出た命令の側で畳む。
+ *
+ * **ラベルを跨がない。** 間にラベルがあると別の経路から飛び込んで来られるので、直前の
+ * `str` が実行されたとは限らない。分岐・呼び出しも跨がない（`bl` はレジスタを壊す）。
+ *
+ * 消すのは `ldr` の側だけである。`str` はスロットの中身を作っており、後で別の場所から
+ * 読まれうる——「今この瞬間レジスタにも在る」ことしか使わない。
+ */
+function peepholeRedundantLoads(lines) {
+	const out = [];
+	const insOf = (l) => l.trim().replace(/\s*\/\/.*$/, "");
+	const ST = /^str\s+(x\d+),\s*\[x29,\s*#(\d+)\]$/;
+	const LD = /^ldr\s+(x\d+),\s*\[x29,\s*#(\d+)\]$/;
+	for (const line of lines) {
+		const cur = insOf(line);
+		const ld = LD.exec(cur);
+		if (ld && out.length > 0) {
+			const prev = insOf(out[out.length - 1]);
+			const st = ST.exec(prev);
+			// 同じレジスタ・同じスロットなら、この `ldr` は何も変えない。
+			if (st && st[1] === ld[1] && st[2] === ld[2]) continue;
+		}
+		out.push(line);
+	}
+	return out;
+}
+
+/**
+ * **スロット間の写しを、読み替えて消す**（覗き穴）。
+ *
+ *     ldr x9, [x29, #16]    ← 仮引数 a
+ *     str x9, [x29, #32]    ← 新しいスロットへ写すだけ
+ *     …
+ *     ldr x9, [x29, #32]    ← ここを [#16] に読み替えれば、上の2つが消える
+ *
+ * `genExpr` は「どの式も新しいスロットへ置く」ので、**既にスロットに在る値でも写す**。
+ * 規約は合成が閉じるために要るが、出た命令の上では消せる。
+ *
+ * **跨いではいけないものが2つある。** ラベル（別の経路から飛び込んで来られる）と分岐・
+ * 呼び出し（`bl` はレジスタを壊し、分岐先では話が変わる）である。実測すると候補 482 の
+ * うち 368 はこれに当たり、安全なのは 113 だけだった——**局所的に見えて、実際は跨ぐ**。
+ *
+ * 加えて、写し元が途中で書き換わらないこと・写し先がちょうど1回だけ読まれることを見る。
+ */
+function peepholeSlotMoves(lines) {
+	const insOf = (l) => l.trim().replace(/\s*\/\/.*$/, "");
+	const LD = /^ldr\s+(x\d+),\s*\[x29,\s*#(\d+)\]$/;
+	const ST = /^str\s+(x\d+),\s*\[x29,\s*#(\d+)\]$/;
+	const isLabel = (s) => /^[.\w]+:$/.test(s);
+	const isBranch = (s) => /^(b|b\.\w+|cbz|cbnz|tbz|tbnz|bl)\b/.test(s);
+	const drop = new Set();
+	const rewrite = new Map(); // 行番号 → 読み替え先スロット
+	for (let k = 0; k + 1 < lines.length; k++) {
+		if (drop.has(k) || drop.has(k + 1)) continue;
+		const a = LD.exec(insOf(lines[k]));
+		const b = ST.exec(insOf(lines[k + 1]));
+		if (!a || !b || a[1] !== b[1] || a[2] === b[2]) continue;
+		const [src, dst] = [a[2], b[2]];
+		let at = -1;
+		let ok = true;
+		for (let m = k + 2; m < lines.length; m++) {
+			const s = insOf(lines[m]);
+			if (isLabel(s) || isBranch(s)) { ok = false; break; }
+			const st = ST.exec(s);
+			if (st && st[2] === src) { ok = false; break; } // 写し元が書き換わった
+			if (st && st[2] === dst) break; // 写し先が上書きされた——ここまでで完結
+			const ld = LD.exec(s);
+			if (ld && ld[2] === dst) {
+				if (at >= 0) { ok = false; break; } // 2回以上読まれる
+				at = m;
+			}
+		}
+		if (!ok || at < 0) continue;
+		drop.add(k);
+		drop.add(k + 1);
+		rewrite.set(at, src);
+	}
+	return lines
+		.map((l, i) => (rewrite.has(i) ? l.replace(/\[x29,\s*#\d+\]/, `[x29, #${rewrite.get(i)}]`) : l))
+		.filter((_, i) => !drop.has(i));
+}
+
 function wrapFrame(bodyLines, slots, name, movedSp = false) {
+	bodyLines = peepholeSlotMoves(peepholeRedundantLoads(bodyLines));
 	const frame = 16 + Math.ceil((slots * 8) / 16) * 16; // x29/x30 の16バイト + スロット
 	// 相互末尾呼び出しが置いた印を、決まったフレームの大きさで埋める。
 	const filled = bodyLines.map((l) => (l.includes(FRAME_MARK) ? l.split(FRAME_MARK).join(String(frame)) : l));
