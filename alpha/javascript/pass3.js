@@ -1950,6 +1950,26 @@ function lambdaParamSlotTypes(lambdaNode, env) {
  */
 function callsitesOf(nodes, fnName, rootEnv) {
   const sites = [];
+  // **別名越しの呼び出しも、その関数の呼び出しサイトである。**
+  //
+  // `g : f` と書いたとき `g 5 6` は `f` を呼んでいる。ここで数えないと、実引数を見せて
+  // いるのに仮引数の型が決まらない——`f: 仮引数 a の渡し方が決まりません（直和か族）` に
+  // なる。名前を1つ挟んだだけで型が落ちるのは、`$` を挟んだ場合と同じ穴であり、そちらは
+  // `addressOf`／`aliasOf` を辿って既に塞いである。
+  //
+  // 辿るのは名前の連なりだけ（`h : g` / `g : f`）。部分適用（`g : f 1`）は実引数の位置が
+  // ずれるので数えない——ずれたまま数えると、別の位置の型を書き込むことになる。
+  const names = new Set([fnName]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const node of nodes) {
+      if (!isDefineNode(node) || !isIdentifierNode(node.left) || !isIdentifierNode(node.right)) continue;
+      if (names.has(node.right.value) && !names.has(node.left.value)) {
+        names.add(node.left.value);
+        grew = true;
+      }
+    }
+  }
   // **サイトごとにスコープを持ち回る。** 実引数の型はそれが書かれた場所でしか引けない
   // ——`try_col 1 row n board` の `board` は `place` のスコープに居るので、トップレベルの
   // env で引いても見つからない。器が何段も引数として渡り歩く形（盤が first_row →
@@ -1959,7 +1979,7 @@ function callsitesOf(nodes, fnName, rootEnv) {
     if (node.scope) scope = node.scope;
     if (node.type === "operation" && (node.name === "apply" || node.name === "partial_apply")) {
       const { base, args } = applyChainOf(node);
-      if (isIdentifierNode(base) && base.value === fnName) {
+      if (isIdentifierNode(base) && names.has(base.value)) {
         sites.push(Object.assign(args, { scope }));
         // 連鎖全体で1サイト。内側を別サイトとして二重に数えない。ただし実引数の中に
         // 別の呼び出しが入っていることはあるので、そちらは個別に辿る。

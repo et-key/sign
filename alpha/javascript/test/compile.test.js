@@ -167,7 +167,11 @@ checkReasons("5 + __ → 診断なし（右辺Unitは単位元）", "5 + __", []
 // ポイントフリーの適用も呼び先の返値型が伝わる（演算子表がシグネチャを持つため）。
 check("[+ 1] の適用は Int", lastType("inc : [+ 1]\ninc 3"), "Int");
 check("[+ 1.0] の適用は Float", lastType("fl : [+ 1.0]\nfl 3"), "Float");
-check("[+] は族までなので Scalar", lastType("add : [+]\nadd 1 2"), "Scalar");
+// **別名越しの呼び出しサイトも証拠である。** `add : [+]` は合成が作った畳み込みへの
+// 別名であり、`add 1 2` はその畳み込みを呼んでいる。かつてここは族（`Scalar`）までしか
+// 言えなかった——名前を1つ挟むと実引数が見えなくなっていたためで、族に留まったのは
+// 「分からない」の言い換えだった。今は Int のリテラルで呼ばれていることが届く。
+check("別名越しでも実引数まで狭まる", lastType("add : [+]\nadd 1 2"), "Int");
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

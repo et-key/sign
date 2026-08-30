@@ -1110,7 +1110,16 @@ function genExpr(node, env, em, scope, tail = false) {
 			// 直接呼ぶ形が素の名前のまま `b g` を出していた——存在しないラベルである。
 			// `$` を書いたなら `@` で呼ぶ、書かないならそのまま呼ぶ。どちらの側も
 			// 同じ表を引かなければ対にならない。
-			callee = (scope && scope.callees && scope.callees[base.value]) || bareName(base.value);
+			// **別名は名前の言い換えでしかない。** `g : f` と書いて `g 5` と呼んだら、
+			// 飛ぶ先は `f` である。ここを辿らないと存在しないラベルへ `bl` を出すか、
+			// 「まだ出せない識別子です」で止まる——名前を1つ挟んだだけで呼べなくなる。
+			//
+			// 型の側は `callsitesOf` が同じ連なりを辿っており（別名越しの呼び出しも
+			// その関数の呼び出しサイトである）、両側が同じ表を引いて初めて対になる。
+			// ポイントフリーに名前を付けた形（`g : [* 2,]`）がちょうどこれで、合成が
+			// 作った定義への別名になる。
+			const aliased = aliasTargetOf(base.value, env);
+			callee = (scope && scope.callees && scope.callees[base.value]) || bareName(aliased);
 			baseName = callee;
 		} else if (
 			base && base.type === "operation" && base.position === "prefix" && base.name === "input" &&
@@ -2145,6 +2154,27 @@ function addressFromDollar(node, env) {
 		return !!(v && v.type === "operation" && v.position === "prefix" && v.name === "address");
 	}
 	return false;
+}
+
+/**
+ * 別名の連なりを辿って、実体の名前を返す（`h : g` / `g : f` なら `f`）。
+ *
+ * 辿るのは**名前だけ**である。部分適用（`g : f 1`）は実引数の位置がずれるので辿らない
+ * ——飛ぶ先は同じでも、渡すものが違う。
+ */
+function aliasTargetOf(name, env) {
+	let cur = name;
+	const seen = new Set();
+	while (env && !seen.has(cur)) {
+		seen.add(cur);
+		const b = envLookup(env, cur);
+		// 由来は Pass 3 が束縛へ書き戻している（`名前 : 別名` の `aliasOf`）。ラムダの
+		// 束縛には値ノードが無いので、そちらを覗くだけでは辿れない。
+		const to = b && b.aliasOf ? b.aliasOf : null;
+		if (!to || to === cur) break;
+		cur = to;
+	}
+	return cur;
 }
 
 function idxIsZero(n) {
@@ -4044,6 +4074,14 @@ function generateAsm(nodes, env, options = {}) {
 		// （compile.js の `markCursorEntries`）。AST には残っている——インタプリタは
 		// 元の形をそのまま走らせるので、そちらが仕様の答えを持っている。
 		if (node && node.supersededByDesugar) continue;
+		// **関数への別名は命令を持たない。** `g : f` は名前の言い換えでしかなく、実体は
+		// `f` の側に1つある。呼ぶ側が名前を辿るので（`aliasTargetOf`）、ここで値として
+		// 出そうとするとラムダを式の位置で組むことになり「まだ出せない識別子です」で
+		// 止まっていた——**呼び出しではなく定義の側が落ちていた**。
+		if (isDefineNode(node) && isIdentifierNode(node.left) && aliasTargetOf(node.left.value, env) !== node.left.value) {
+			const target = envLookup(env, aliasTargetOf(node.left.value, env));
+			if (target && target.category === "Lambda") continue;
+		}
 		if (isDefineNode(node) && isIdentifierNode(node.left)) {
 			const rhs = node.right;
 			if (rhs && rhs.type === "operation" && rhs.name === "lambda") {
