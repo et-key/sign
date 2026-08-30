@@ -933,6 +933,23 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (addressFromDollar(n.left, env) || addressFromDollar(n.right, env)) {
 			return em.fail(n, `\`$\` が作った番地は算術に使えません（番地は表に出ません。読むなら \`@\`、列を辿るなら \`[h ~t]\` の分解を使ってください）`);
 		}
+		// **生の番地の算術は layer 0 だけの特権である。**
+		//
+		// 層は機能を積み上げるだけではない——**上へ行くほど禁じられるものがある**。
+		// MMIO のレジスタを選ぶには `uart + 4` が要るので layer 0 では算術が必要だが、
+		// 同じ式が上の層では「任意の番地を捏造する手段」になる。`$` が作った番地は既に
+		// 守られているのに、リテラル由来だけが素通りしていた。
+		//
+		// これが閉じると、上の層で番地として存在できるのは**自分が持っているもの**だけに
+		// なる——`$自分の束縛`・下の層から受け取った参照・分解した先。捏造した番地は型と
+		// して作れないので、境界を越えて渡されるポインタを受け側が検証する必要が無い。
+		if (em.conf.layer !== undefined && em.conf.layer > 0 && (rawAddressNode(n.left, env) || rawAddressNode(n.right, env))) {
+			return em.fail(
+				n,
+				`layer: ${em.conf.layer} では生の番地を算術に使えません（番地の捏造を防ぐため）。` +
+					"番地の算術が要るのは MMIO を扱う layer: 0 だけです——上の層では `$名前`・受け取った参照・分解した先だけが番地になります"
+			);
+		}
 		const machine = reduceToMachineType(n.atomType, em.conf.target);
 		if (!machine || machine.class !== "gpr") {
 			return em.fail(n, `GPR 幅の整数演算だけを出せます（${n.atomType}）`);
@@ -1832,6 +1849,21 @@ function genExpr(node, env, em, scope, tail = false) {
 	// 中置 `#`——アドレスへ書く。**守るのは左辺**（不正なアドレスへ書かない）。
 	// 右辺の `__` は書ける——書けないと場所を空にできない。
 	if (n.type === "operation" && n.name === "output" && n.position === "infix") {
+		// **生の番地へ直に書けるのは、ハードウェアを触る層だけである。**
+		//
+		// `0x9000000 # 0x4b`（UART へ1文字）は layer 0〜1 の仕事であり、上の層で同じ式を
+		// 許すと**任意の番地へ書ける**ことになる。書き込み先が `$名前`・受け取った参照・
+		// 分解した先なら、それは自分が持っているものなので層に関わらず書ける。
+		//
+		// これは alloca の門番と逆向きである（下限ではなく上限）。層は機能を積み上げる
+		// だけではない、という一点がここに出る。
+		if (em.conf.layer !== undefined && em.conf.layer > 1 && rawAddressNode(n.left, env)) {
+			return em.fail(
+				n,
+				`layer: ${em.conf.layer} では生の番地へ直に書けません（番地の捏造を防ぐため）。` +
+					"MMIO を扱えるのは layer: 0〜1 です——上の層では `$名前`・受け取った参照・分解した先へ書きます"
+			);
+		}
 		if (!genScalar(n.left, env, em, scope, "書き込み先はレジスタ1本のアドレスです")) return false;
 		const po = (em.slot - 1) * 8;
 		const vw = genExpr(n.right, env, em, scope);
@@ -2349,6 +2381,25 @@ function aliasTargetOf(name, env) {
 		cur = to;
 	}
 	return cur;
+}
+
+/**
+ * その式は**生の番地**（`0x40800000` のようなリテラル由来）か。名前は辿る。
+ *
+ * `$` が作った番地（`addressFromDollar`）とは区別する——あちらは「置き場所として作られた
+ * もの」で、こちらは**本当に数である番地**である。MMIO はこれでしか書けないので layer 0
+ * では要るが、上の層では番地の捏造そのものになる。
+ */
+function rawAddressNode(node, env) {
+	const t = unwrap(node);
+	if (!t) return false;
+	if (t.type === "atom" && t.kind === "address") return true;
+	if (isIdentifierNode(t) && env) {
+		const b = envLookup(env, t.value);
+		const v = b && b.valueNode ? unwrap(b.valueNode) : null;
+		if (v && v !== t) return rawAddressNode(v, env);
+	}
+	return false;
 }
 
 function idxIsZero(n) {

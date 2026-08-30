@@ -55,9 +55,11 @@ function interp(source, charset = "ascii") {
 }
 
 // 機械側の答え。`_sign_main` の x0 を符号付き64ビットで読む。
-function machine(source, charset = "ascii") {
+// **層は指定できる。** 既定は 1（RAM が開通した層）だが、MMIO の番地を算術する形は
+// layer 0 の特権なので、そこだけ 0 で回す（上の層では番地の捏造になるため門番が止める）。
+function machine(source, charset = "ascii", layer = 1) {
 	const { nodes, env } = compile(source, { charset });
-	const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset, layer: 1 });
+	const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset, layer });
 	if (r.diagnostics.length) return "出せない：" + r.diagnostics[0].message;
 	const v = asInt(runAsm(r.text)[0]);
 	return v === null ? "__" : String(v);
@@ -65,7 +67,7 @@ function machine(source, charset = "ascii") {
 
 // 同じソースを両方へ通し、答えが一致することだけを見る。**期待値は書かない**——
 // 仕様の答えはインタプリタが持っているので、ここで二重に書くと片方だけ直る。
-function agree(note, source, charset = "ascii") {
+function agree(note, source, charset = "ascii", layer = 1) {
 	total++;
 	let a, b;
 	try {
@@ -74,7 +76,7 @@ function agree(note, source, charset = "ascii") {
 		a = "解釈で例外：" + e.message;
 	}
 	try {
-		b = machine(source, charset);
+		b = machine(source, charset, layer);
 	} catch (e) {
 		b = "機械で例外：" + e.message;
 	}
@@ -112,11 +114,11 @@ function checkNamed(note, source) {
  * 番地の算術がそれで、インタプリタは参照セル（getter/setter）、機械は整数である。
  * 突き合わせられないので期待値を書くしかない。使うのはここだけに留める。
  */
-function machineIs(note, source, want) {
+function machineIs(note, source, want, layer = 1) {
 	total++;
 	let got;
 	try {
-		got = machine(source);
+		got = machine(source, "ascii", layer);
 	} catch (e) {
 		got = "機械で例外：" + e.message;
 	}
@@ -135,7 +137,8 @@ agree("掛ける", "f : n ? n * 3\nf 14");
 
 // ---- 即値。16ビットを超える値は movz/movk の連なりになる ----
 agree("16ビットちょうど", "f : n ? 65535 + n\nf 0");
-agree("番地リテラル", "f : n ? 0x40000000 + n\nf 1");
+// 生の番地の算術は layer 0 の特権である（上の層では番地の捏造になるので門番が止める）。
+agree("番地リテラル", "f : n ? 0x40000000 + n\nf 1", "ascii", 0);
 agree("2桁ぶんの即値", "f : n ? 1000000 + n\nf 1");
 agree("負の即値は movn", "f : n ? n - 1000000\nf 0");
 
@@ -670,8 +673,8 @@ agree("尽きたら __", "f : x ?\n\tx > 10 : 1\nf 7");
 	checkNamed("$ の番地どうしも引けない", "a : 1\nb : 2\n($a) - ($b)");
 	checkNamed("$匿名式の番地も足せない", "f : n ? ($(n , 99)) + 8\nf 7");
 	// 生の番地（MMIO）は本当に数なので、そちらは今まで通り算術できる。
-	agree("生の番地は足せる", "0x40 + 8");
-	agree("番地の束縛も足せる", "y : 0x40\ny + 8");
+	agree("生の番地は足せる（layer 0 の特権）", "0x40 + 8", "ascii", 0);
+	agree("番地の束縛も足せる", "y : 0x40\ny + 8", "ascii", 0);
 
 	// **名前付きの束縛には場所が要る。** 演算子表が `$名前` を「binding 自体のアドレス。
 	// binding ごとに一意・安定」と定めているのに、トップレベルの定数は命令へ畳まれて
@@ -699,7 +702,7 @@ agree("尽きたら __", "f : x ?\n\tx > 10 : 1\nf 7");
 	// `udiv` なら `0x6000000000000000` である。ここはインタプリタと突き合わせられない
 	// ——JS の数は 2^63 を持てないので、機械の側だけを見る。
 	machineIs("番地を2で割る", "f : a ? a / 2\nf 0xC000000000000000\n", String(0x6000000000000000n));
-	machineIs("番地を16で割る", "f : a ? a / 0x10\nf 0xC000000000000000\n", String(0xc00000000000000n));
+	machineIs("番地を16で割る", "f : a ? a / 0x10\nf 0xC000000000000000\n", String(0xc00000000000000n), 0);
 	// 比較も同じ。符号付きなら「負の数 < 16」で真になってしまう。
 	machineIs("大きい番地は小さくない", "f : a ? a < 0x10\nf 0xC000000000000000\n", "__");
 	machineIs("大きい番地は大きい", "f : a ? a > 0x10\nf 0xC000000000000000\n", String(0xc000000000000000n - (1n << 64n)));
