@@ -1862,17 +1862,24 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (!genScalar(n.operand, env, em, scope, "アドレスはレジスタ1本の値です")) return false;
 		const po = (em.slot - 1) * 8;
 		const w = widthOfType(n.atomType, em.conf);
-		const none = em.newLabel("noaddr");
-		const done = em.newLabel("loaded");
-		em.load(SCRATCH[0], po, "アドレス");
-		em.emit("movz x12, #0x8000, lsl #48", "niche なら記憶が無い");
-		em.emit(`cmp ${SCRATCH[0]}, x12`);
-		em.emit(`b.eq ${none}`, "@__ = __（読まない）");
-		em.emit(loadAt(SCRATCH[0], SCRATCH[0], w), `${w} byte を読む`);
-		em.emit(`b ${done}`);
-		em.label(none);
-		em.emit(`mov ${SCRATCH[0]}, x12`, "__");
-		em.label(done);
+		// 書き込み側と同じ畳み。読む番地が定数なら「記憶が無い」検査は答えが出ている。
+		const fixedSrc = constAddressOf(n.operand, env);
+		if (fixedSrc !== null && fixedSrc !== NICHE_VALUE) {
+			em.load(SCRATCH[0], po, "アドレス（定数——niche ではない）");
+			em.emit(loadAt(SCRATCH[0], SCRATCH[0], w), `${w} byte を読む`);
+		} else {
+			const none = em.newLabel("noaddr");
+			const done = em.newLabel("loaded");
+			em.load(SCRATCH[0], po, "アドレス");
+			em.emit("movz x12, #0x8000, lsl #48", "niche なら記憶が無い");
+			em.emit(`cmp ${SCRATCH[0]}, x12`);
+			em.emit(`b.eq ${none}`, "@__ = __（読まない）");
+			em.emit(loadAt(SCRATCH[0], SCRATCH[0], w), `${w} byte を読む`);
+			em.emit(`b ${done}`);
+			em.label(none);
+			em.emit(`mov ${SCRATCH[0]}, x12`, "__");
+			em.label(done);
+		}
 		em.store(SCRATCH[0], po);
 		return 1;
 	}
@@ -1902,18 +1909,27 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (vw !== 1) { em.pop(vw); return em.fail(n.right, `書ける値はレジスタ1本ぶんです（${vw} 本の参照で運ぶ値）`); }
 		const vo = (em.slot - 1) * 8;
 		const w = widthOfType(n.right && n.right.atomType, em.conf);
-		const skip = em.newLabel("nowrite");
-		const done = em.newLabel("wrote");
-		em.load(SCRATCH[0], po, "書き込み先");
-		em.emit("movz x12, #0x8000, lsl #48", "niche は書き込み先ではない");
-		em.emit(`cmp ${SCRATCH[0]}, x12`);
-		em.emit(`b.eq ${skip}`, "不正なアドレスへは書かない");
-		em.load(SCRATCH[1], vo, "書く値");
-		em.emit(storeAt(SCRATCH[1], SCRATCH[0], w), `${w} byte を書く`);
-		em.emit(`b ${done}`, "成功したらアドレスを返す");
-		em.label(skip);
-		em.emit(`mov ${SCRATCH[0]}, x12`, "書けなければ __");
-		em.label(done);
+		// **番地が分かっているなら、守る相手はもう居ない。**
+		// 検査は「書き込み先が niche か」だけなので、定数なら今答えが出る。
+		const fixedDst = constAddressOf(n.left, env);
+		if (fixedDst !== null && fixedDst !== NICHE_VALUE) {
+			em.load(SCRATCH[0], po, "書き込み先（定数——niche ではない）");
+			em.load(SCRATCH[1], vo, "書く値");
+			em.emit(storeAt(SCRATCH[1], SCRATCH[0], w), `${w} byte を書く`);
+		} else {
+			const skip = em.newLabel("nowrite");
+			const done = em.newLabel("wrote");
+			em.load(SCRATCH[0], po, "書き込み先");
+			em.emit("movz x12, #0x8000, lsl #48", "niche は書き込み先ではない");
+			em.emit(`cmp ${SCRATCH[0]}, x12`);
+			em.emit(`b.eq ${skip}`, "不正なアドレスへは書かない");
+			em.load(SCRATCH[1], vo, "書く値");
+			em.emit(storeAt(SCRATCH[1], SCRATCH[0], w), `${w} byte を書く`);
+			em.emit(`b ${done}`, "成功したらアドレスを返す");
+			em.label(skip);
+			em.emit(`mov ${SCRATCH[0]}, x12`, "書けなければ __");
+			em.label(done);
+		}
 		em.pop(1);
 		em.store(SCRATCH[0], po);
 		return 1;
@@ -2641,6 +2657,39 @@ function constStructDefine(node) {
 		const val = unwrap(l.right);
 		return !!val && val.type === "atom" && (val.kind === "number" || val.kind === "address");
 	});
+}
+
+// niche（`__`）の実体。**番地としては決して有効でない値**であり、`#` / 前置 `@` の
+// 全域性はこの1つの値を避けることでできている。
+const NICHE_VALUE = 0x8000000000000000n;
+
+// **その番地はコンパイル時に決まるか。** 決まるなら値（BigInt）、決まらないなら null。
+//
+// これがあると `#` と前置 `@` の niche 検査が畳める——検査の中身は「niche か否か」
+// でしかないので、番地が分かっていれば答えも分かっている。MMIO の書き込みは全部この形
+// （`0x9000000 # 72`、レジスタ束のフィールド、定数へ束縛した名前）なので、boot コードは
+// 丸ごとこの道に乗る。
+//
+// **全域性はタダになる。** 番地が分からないときだけ実行時に払う。
+function constAddressOf(node, env) {
+	const n = unwrap(node);
+	if (!n) return null;
+	const lit = (a) => {
+		if (!a || a.type !== "atom" || (a.kind !== "number" && a.kind !== "address")) return null;
+		try { return BigInt(String(a.value)); } catch { return null; }
+	};
+	const direct = lit(n);
+	if (direct !== null) return direct;
+	// レジスタ束のフィールド（`DR @ uart` / `uart ' DR`）。畳んだ先が定数なら同じこと。
+	const field = constStructField(n, env);
+	if (field) return lit(field);
+	// 定数へ束縛した名前（`base : 0x9000000` の `base`）。
+	if (isIdentifierNode(n) && env) {
+		const b = envLookup(env, n.value);
+		const v = b && b.valueNode ? unwrap(b.valueNode) : null;
+		if (v && v !== n) return lit(v);
+	}
+	return null;
 }
 
 function constStructField(node, env) {
