@@ -340,6 +340,85 @@ function foldSource(op) {
     `${f} : [x ~xs] ? xs & ${go} x xs | !xs & x`,
   ].join("\n");
 }
+/**
+ * **貪欲な写像（`[* 2,]`）に名前と本体を与える。**
+ *
+ * 残りアリティ1——各要素へ同じ演算を当てて器を返す。畳み込みと同じく器を1本走査する
+ * だけで、違うのは畳むか並べるかである。
+ *
+ * **顔は2つあるが規則は1つ。** 各要素に `x OP k` を当て、`__` になったものを落とす。
+ * 算術ならどれも `__` にならないので素直な写像になり、比較なら偽が `__` になるので
+ * **選択**になる（`[< 3,] [1 2 3]` が `[1 2]`）。落とすのは構築がやる（`1 __ 3` は
+ * `[1 3]`）ので、規則を2つ持つ必要は無い。
+ *
+ * ただし**書き下し方は2つ要る**。比較で残すのは判定の値ではなく**要素そのもの**なので
+ * （`[< 3,]` は 3 ではなく 1 を残す）、`(x OP k) & x` と書く。そしてその形は「通れば
+ * 並べて再帰、落ちれば並べずに再帰」の枝分かれにしないと、機械の側で長さが上界のまま
+ * になる——飛ばした個数を返り値の長さへ反映できないからである。
+ *
+ * 相手（`2`）は仮引数で受ける。生成するのはソースなので、相手が任意の式だと書き下せない
+ * ——仮引数にしておけば、呼ぶ側が元の式のノードをそのまま実引数として渡せる。
+ *
+ * 繋ぎの後置 `~` は**列の μ が任意である**ことから来る（原理7）。文字列なら要らないが、
+ * 追記の位置では 0 命令なので、どちらでも同じ命令に落ちる。
+ */
+// 比較族（Pass 2 が付ける名前）。`=` は `assign_equal`、構造比較は `equal`/`xnot_equal`。
+const COMPARE_MAP_OPS = new Set([
+  "less",
+  "less_equal",
+  "more",
+  "more_equal",
+  "assign_equal",
+  "not_equal",
+  "equal",
+  "xnot_equal",
+]);
+
+function mapSource(m) {
+  const f = mapNameFor(m);
+  const k = m.operand;
+  const step = `(${f} (s ' 1~))~`;
+  if (COMPARE_MAP_OPS.has(m.name)) {
+    // 比較は選択である。残すのは判定の値ではなく要素そのもの。
+    //
+    // 「通れば並べて再帰、落ちれば並べずに再帰」に枝分かれさせる。`(x OP k) & x` と
+    // 1本で書いても解釈側は同じ答えを出すが、機械の側は飛ばした個数を長さへ反映できず
+    // 上界のままになる——枝にすれば、落ちる枝が「0 個書いて続ける」ことになる。
+    return [`${f} : [~s] ?`, `\t!s : __`, `\t(s ' 0) ${m.op} ${k} : (s ' 0) ${step}`, `\t${f} (s ' 1~)`].join("\n");
+  }
+  return [`${f} : [~s] ?`, `\t!s : __`, `\t((s ' 0) ${m.op} ${k}) ${step}`].join("\n");
+}
+
+function mapNameFor(m) {
+  const hex = (s) => [...String(s)].map((c) => c.charCodeAt(0).toString(16)).join("");
+  return `_pf_map_${hex(m.op)}_${hex(m.operand)}`;
+}
+
+/**
+ * その式は「残りアリティ1の貪欲なポイントフリー」か（`[* 2,]`）。穴は左辺である。
+ *
+ * **相手はリテラルのときだけ扱う。** 生成するのは Sign のソースなので、相手が任意の式だと
+ * 書き下せない。仮引数で受ける手もあるが、それだと合成した関数のアリティが 2 になり、
+ * 書き換え前に `buildEnv` が記録した束縛（`g : [* 2,]` の `g`）と食い違う——木だけ
+ * 差し替えても、束縛の言うアリティは古いままだからである。リテラルを焼き込めば受け口は
+ * 器1つのままで、畳み込みと同じく**名前へ差し替えるだけ**で済む。
+ *
+ * 相手が式の形は、これまで通り解釈側の貪欲な道を通る（機械では出せないと名指しされる）。
+ */
+function greedyMapOf(node) {
+  const n = node && Array.isArray(node.lines) && node.lines.length === 1 ? node.lines[0] : node;
+  if (!n || n.type !== "operation" || !n.partial || !n.pointfreeMap || n.position !== "infix") return null;
+  if (n.left || !n.right || !n.op) return null;
+  // **添字の写像（`[' 0,]`）は扱わない。** 相手は要素の中の位置であって、走査する器の
+  // 切り出し方（`s ' 1~`）と同じ演算子を別の意味で使うことになる。実際、積を渡した形
+  // （`[' 0,] ([1 2] , [3 4])`）で残りの取り方が食い違う。ここは積の切り出しが揃って
+  // からで、それまでは解釈側の貪欲な道に残す。
+  if (n.name === "get_prop") return null;
+  const r = n.right;
+  if (!r || r.type !== "atom" || !(r.kind === "number" || r.kind === "address")) return null;
+  return { op: n.op, name: n.name, operand: String(r.value), node: n };
+}
+
 function foldNameFor(op) {
   return `_pf_fold_${[...op].map((c) => c.charCodeAt(0).toString(16)).join("")}`;
 }
@@ -350,21 +429,27 @@ function isGreedyFold(node) {
   return !!(n && n.type === "operation" && n.partial && !n.pointfreeMap && n.position === "infix" && !n.left && !n.right && n.op);
 }
 
-/** 畳み込みのポイントフリーを演算子ごとに集める。 */
+/** 貪欲なポイントフリーを演算子ごとに集め、生成すべきソースを返す。 */
 function collectGreedyFolds(nodes) {
   const folds = new Set();
+  const maps = new Map(); // 名前 -> 記述（演算子と焼き込む相手で1つに畳む）
   walkNodes(nodes, (n) => {
-    if (isGreedyFold(n)) folds.add((n.lines ? n.lines[0] : n).op);
+    if (isGreedyFold(n)) {
+      folds.add((n.lines ? n.lines[0] : n).op);
+      return;
+    }
+    const m = greedyMapOf(n);
+    if (m) maps.set(mapNameFor(m), m);
   });
-  return [...folds].map(foldSource);
+  return [...folds].map(foldSource).concat([...maps.values()].map(mapSource));
 }
 
 /**
  * 貪欲なポイントフリーを、生成した名前への参照へ置き換える。
  *
- * 写像は相手を仮引数で受けるので、置き換え先は名前ではなく**相手を1つ渡した適用**である
- * （`[* 2,]` → `_pf_map_2a 2`）。Sign は自動カリー化するので、残るのは器を1つ取る写像
- * そのものになる。
+ * 畳み込みも写像も**器1つを取る**ので、どちらも名前へ差し替えるだけでよい。写像の相手を
+ * 焼き込んであるおかげで受け口が1つに収まり、`buildEnv` が記録した束縛のアリティと
+ * 食い違わない。
  */
 function replaceGreedyFolds(nodes) {
   walkNodes(nodes, null, (child) => {
@@ -372,6 +457,8 @@ function replaceGreedyFolds(nodes) {
     if (isGreedyFold(child)) {
       return { type: "atom", kind: "identifier", value: `<${foldNameFor(inner.op)}>` };
     }
+    const m = greedyMapOf(child);
+    if (m) return { type: "atom", kind: "identifier", value: `<${mapNameFor(m)}>` };
     return child;
   });
 }
