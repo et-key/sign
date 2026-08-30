@@ -393,7 +393,14 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 	const test = ls.findIndex((l) => /^b\.eq \.Lunit/.test(l));
 	checkTrue("飛び先は検査より前", loop < test && test < back, ls.join(" / "));
 	// 新しい引数は飛ぶ前に x0.. へ載っている（フレームはまだ生きている）。
-	check("引数を載せてから飛ぶ", ls.slice(back - 2, back), ["ldr x0, [x29, #40]", "ldr x1, [x29, #48]"]);
+	// **スロット番号は書かない。** それは生成の都合であって、ここで見たいのは「飛ぶ直前に
+	// 引数がレジスタへ載っている」ことである（番号を書くと、置き場所を変える改良のたびに
+	// 目的と関係なく落ちる——枝を合流スロットへ直に置く変更で実際に落ちた）。
+	check(
+		"引数を載せてから飛ぶ",
+		ls.slice(back - 2, back).map((l) => l.replace(/#\d+/, "#N")),
+		["ldr x0, [x29, #N]", "ldr x1, [x29, #N]"],
+	);
 }
 // **枝は互いに排他なので、通らなかった枝で取った場所は畳めない理由にならない。**
 //
@@ -593,7 +600,11 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 	checkTrue("自己再帰は飛び先へ戻る", ls.some((l) => /^b \.Lloop/.test(l)), ls.join(" / "));
 	// 引数は器の2本だけ（x0/x1）。関数ポインタの分は増えない。
 	const back = ls.findIndex((l) => /^b \.Lloop/.test(l));
-	check("引数は器の2本だけ", ls.slice(back - 2, back), ["ldr x0, [x29, #48]", "ldr x1, [x29, #56]"]);
+	check(
+		"引数は器の2本だけ",
+		ls.slice(back - 2, back).map((l) => l.replace(/#\d+/, "#N")),
+		["ldr x0, [x29, #N]", "ldr x1, [x29, #N]"],
+	);
 }
 // ---- 器どうしの等価（中身の比較） ----
 //
@@ -634,9 +645,15 @@ checkTrue(
 	const r = asm(src);
 	check("器を返す分岐は出る", r.diagnostics.length, 0);
 	const fb = body(src, "f");
-	// 枝の値は ptr と len の2本まとめて出力スロットへ写る。
-	check("2本まとめて写す", fb.filter((l) => l === "str x9, [x29, #24]").length, 2);
-	check("len も写す", fb.filter((l) => l === "str x9, [x29, #32]").length, 2);
+	// **どの枝も同じ場所へ置く。** かつてここは「出力スロットへ**写す**回数」を数えて
+	// いたが、写しは手段であって目的ではない——枝を合流用スロットへ**直に置く**ように
+	// なったので、写しは0回になった。見るべきは「同じ場所に在る」ことの方である。
+	//
+	// 2つの枝が同じ ptr スロットと同じ len スロットへ書いていることを確かめる。
+	check("どの枝も同じ ptr へ置く", fb.filter((l) => l === "str x9, [x29, #24]").length, 2);
+	check("どの枝も同じ len へ置く", fb.filter((l) => l === "str x10, [x29, #32]").length, 2);
+	// 合流のための写しはもう出ない（枝が最初からそこへ置いている）。
+	check("写しは出ない", fb.filter((l) => l === "ldr x9, [x29, #24]").length, 0);
 }
 // **どの枝も通らなかったときの `__` は、幅ごとに表し方が違う。**
 //

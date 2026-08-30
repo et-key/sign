@@ -3082,10 +3082,26 @@ function genMatch(node, env, em, scope, tail = false) {
 		const stripped = width === 2 && em.sretDest !== null && em.sretDest !== undefined ? stripExpand(line) : null;
 		const armAppend = stripped && appendableCallee(stripped, em) ? stripped : null;
 		if (armAppend) armAppend._sretInto = em.sretDest;
+		// **枝を合流用スロットへ直に置く。**
+		//
+		// スロットはスタック規律なので、生成の直前に `outs` ぶんを空けておけば、枝の最初の
+		// `push` がちょうど `outs[0]` に乗る——同じ場所なので写しが要らない。「どの枝を
+		// 通っても同じ場所に値がある」という合流の条件は、**写して揃える**のではなく
+		// **最初からそこへ置く**ことでも満たされる。
+		//
+		// `genWidened` は既に値を置いてしまっているので、そちらは従来どおり写す。
+		const direct = wide === null;
+		if (direct) em.pop(width);
 		const w = wide === null ? genExpr(line, env, em, armScope(line), tail) : wide;
 		if (armAppend) armAppend._sretInto = undefined;
 		if (w === false) return false;
-		if (w === TAIL) return TAIL;
+		if (w === TAIL) {
+			// 飛んで行った枝は値を置かない。空けた分を戻して帳尻を合わせる。
+			if (direct) for (let k = 0; k < width; k++) em.push();
+			return TAIL;
+		}
+		if (direct && w === width) return true; // 既に `outs` に在る
+		if (direct) for (let k = w; k < width; k++) em.push(); // 幅が違う——下で名指しする
 		if (w !== width) {
 			em.pop(w);
 			return em.fail(line, `枝の幅が揃いません（${w} 本と ${width} 本）——広い方へ揃える持ち上げがまだ出せません（type_system.md §2）`);
