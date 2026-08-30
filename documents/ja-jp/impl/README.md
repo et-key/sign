@@ -16,6 +16,8 @@
 
 ```
 impl/
+├── layer_relations.md ← 演算子と層の関係（何を要求するかで層が決まる・実測表）
+│
 ├── syntax/            ← 字句・構文フェーズ
 │   ├── operator_table.md    演算子テーブル（優先順位・位置・Unit挙動）
 │   ├── grammar.pegjs        PEG文法仕様（パーサーの原型）
