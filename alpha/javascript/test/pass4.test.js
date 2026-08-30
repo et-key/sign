@@ -246,11 +246,20 @@ check("コメントは診断にならない", asm("`これはコメント`\nf : 
 	checkTrue("`@p` は直接の呼び先になる", (body(src, "take_while$is_digit") || []).includes("b is_digit"));
 	checkTrue("別の実体は別の呼び先", (body(src, "take_while$is_alpha") || []).includes("b is_alpha"));
 	// 呼び出し側では関数ポインタを渡さない。引数は s だけ。
+	// **立つ引数レジスタの数を見る。** `s` だけなら x0 の1本、関数ポインタも渡すなら
+	// 2本になる——それが「消える」の中身である。**載せ方は見ない**：スロットから
+	// `ldr` するか直前の値を `mov` で渡すかは覗き穴が決めることで、渡すものの数は
+	// それで変わらない。以前ここは `ldr x0` という*形*を数えていて、往復を畳んだ
+	// だけで落ちた。
 	const ls = body(src, "f");
 	const call = ls.findIndex((l) => l === "b take_while$is_digit");
-	const loads = [];
-	for (let k = call - 2; k >= 0 && /^ldr x[0-7],/.test(ls[k]); k--) loads.unshift(ls[k].split(",")[0]);
-	check("関数ポインタは引数として渡らない", loads, ["ldr x0"]);
+	checkTrue("具体化した実体へ直接飛ぶ", call >= 0);
+	const argRegs = new Set();
+	for (let k = 0; k < call; k++) {
+		const m = /^(?:mov|movz|movn|ldr|add|sub|orr)\s+(x[0-7]),/.exec(ls[k]);
+		if (m) argRegs.add(m[1]);
+	}
+	check("関数ポインタは引数として渡らない", [...argRegs].sort(), ["x0"]);
 	check("診断は出ない", r.diagnostics.length, 0);
 }
 // `$名前` 以外では具体化できない。式で作ったアドレスは静的に決まらない。
@@ -915,7 +924,10 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 // 桁を落として黙って通さない——`0x40000000` のような番地は、下位16ビットだけ置くと
 // 別の番地を触ることになる。負の値は `movn` の方が短い。
 {
-	const ins = (src) => body(src, "f").filter((l) => /^(mov|movz|movk|movn) x9/.test(l));
+	// **即値だけを見る**（`, #` を要求する）。レジスタ間の `mov x9, x0` まで拾うと、
+	// 覗き穴がスロットの往復を `mov` に畳んだ瞬間に、符号化を何も変えていないのに
+	// 落ちる——ここで守りたいのは「桁を落とさずに置くこと」であって命令の数ではない。
+	const ins = (src) => body(src, "f").filter((l) => /^(mov|movz|movk|movn) x9, #/.test(l));
 	check("16ビットまでは mov 1つ", ins("f : a ? a + 65535\nf 1"), ["mov x9, #65535"]);
 	check("超えたら movz と movk", ins("f : a ? a + 70000\nf 1"), ["movz x9, #0x1170", "movk x9, #0x1, lsl #16"]);
 	check("上位だけなら movz 1つ", ins("f : a ? a + 0x40000000\nf 1"), ["movz x9, #0x4000, lsl #16"]);

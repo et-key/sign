@@ -4156,6 +4156,139 @@ function returnSizeBound(lam, name, known, group) {
  * 読まれうる——「今この瞬間レジスタにも在る」ことしか使わない。
  */
 /**
+ * **近い定数番地は、ベースを1つ作って ±offset で届かせる**（覗き穴）。
+ *
+ *     movz x9, #0x30             movz x9, #0x30
+ *     movk x9, #0x900, lsl #16   movk x9, #0x900, lsl #16
+ *     str  x10, [x9]             str  x10, [x9]
+ *     movz x9, #0x44         →   （消える）
+ *     movk x9, #0x900, lsl #16   （消える）
+ *     str  x11, [x9]             stur x11, [x9, #20]
+ *
+ * MMIO のレジスタ束は同じページに固まっている——PL011 の CR と DR は 0x30 離れて
+ * いるだけである。番地を毎回2命令で作り直すのは、**同じ上位ビットを何度も書いて
+ * いる**ということでしかない。
+ *
+ * 畳んでよいのは、次に同じ register が書かれるまでの間、**それが番地としてしか
+ * 使われない**ときだけである。データとして読まれていたら（`str x9, [x10]` の x9）
+ * 値そのものが要るので消せない。ラベル・分岐・`bl` はベースを捨てる（別経路から
+ * 飛び込まれる、呼んだ先で壊れる）。
+ *
+ * オフセットの入れ方は2つある。幅の倍数で収まるなら `str`（スケール済み、
+ * 0〜4095×幅）、収まらないなら `stur`（符号付き9ビット、-256〜255）である。MMIO の
+ * レジスタは 4 byte 刻みで並ぶので 8 byte アクセスでは倍数にならないことが多く、
+ * **`stur` が要る**——ここを持たないと畳めない組み合わせが半分残る。
+ */
+function peepholeShareAddressBase(lines) {
+	const insOf = (l) => l.trim().replace(/\s*\/\/.*$/, "");
+	// 即値は 16 進でも 10 進でも出る（`movz x9, #0x30` と `mov x10, #0`）。
+	const MOVZ = /^(?:movz|mov)\s+(x\d+),\s*#(0x[0-9a-fA-F]+|[0-9]+)(?:,\s*lsl\s*#(\d+))?$/;
+	const MOVK = /^movk\s+(x\d+),\s*#(0x[0-9a-fA-F]+|[0-9]+),\s*lsl\s*#(\d+)$/;
+	const MEM = /^(strb|strh|str|ldrb|ldrh|ldr)\s+([wx]\d+),\s*\[(x\d+)\]$/;
+	const isLabel = (t) => /^[.\w]+:$/.test(t);
+	const isBranch = (t) => /^(b|b\.\w+|cbz|cbnz|tbz|tbnz|bl|br|blr|ret)\b/.test(t);
+	const NOWRITE = /^(str|strb|strh|stur|sturb|sturh|stp|cmp|cmn|tst)\b/;
+	const FIRSTREG = /^[a-z.]+\s+([wx]\d+)/;
+	const UNSCALED = { str: "stur", strb: "sturb", strh: "sturh", ldr: "ldur", ldrb: "ldurb", ldrh: "ldurh" };
+
+	const widthOf = (mn, reg) => (mn.endsWith("b") ? 1 : mn.endsWith("h") ? 2 : reg[0] === "w" ? 4 : 8);
+	// その register を書く命令か。ストアと比較は書かない——それ以外は第1オペランドを書く。
+	const writesReg = (t, reg) => {
+		if (NOWRITE.test(t)) return false;
+		const m = FIRSTREG.exec(t);
+		return !!m && m[1].replace("w", "x") === reg;
+	};
+	const mentions = (t, reg) => new RegExp("\\b" + reg + "\\b").test(t);
+
+	// 定数の材料化を読む（`movz`/`mov` に `movk` が続く並び）。
+	const readMat = (i) => {
+		const z = MOVZ.exec(insOf(lines[i]));
+		if (!z) return null;
+		let val = BigInt(z[2]) << BigInt(z[3] || 0);
+		let len = 1;
+		for (let m = i + 1; m < lines.length; m++) {
+			const k = MOVK.exec(insOf(lines[m]));
+			if (!k || k[1] !== z[1]) break;
+			val |= BigInt(k[2]) << BigInt(k[3]);
+			len++;
+		}
+		return { reg: z[1], val, len };
+	};
+
+	// 次にその register が書かれるまでの間、番地としてしか使われないなら使用箇所を返す。
+	// 一度でも番地以外で出てきたら null（畳めない）。
+	const collectUses = (from, reg) => {
+		const uses = [];
+		for (let m = from; m < lines.length; m++) {
+			const t = insOf(lines[m]);
+			if (!t) continue;
+			if (isLabel(t) || isBranch(t)) break;
+			if (writesReg(t, reg)) break;
+			if (!mentions(t, reg)) continue;
+			const mem = MEM.exec(t);
+			if (!mem || mem[3] !== reg) return null;
+			uses.push({ idx: m, mn: mem[1], reg: mem[2] });
+		}
+		return uses;
+	};
+
+	const encode = (u, baseReg, off) => {
+		const w = widthOf(u.mn, u.reg);
+		const o = Number(off);
+		if (!Number.isSafeInteger(o)) return null;
+		if (o === 0) return "\t" + u.mn + " " + u.reg + ", [" + baseReg + "]";
+		if (o > 0 && o % w === 0 && o / w <= 4095) return "\t" + u.mn + " " + u.reg + ", [" + baseReg + ", #" + o + "]";
+		if (o >= -256 && o <= 255) return "\t" + UNSCALED[u.mn] + " " + u.reg + ", [" + baseReg + ", #" + o + "]";
+		return null;
+	};
+
+	const drop = new Set();
+	const rewrite = new Map();
+	let base = new Map(); // register → 今そこに入っている定数
+	for (let i = 0; i < lines.length; ) {
+		const t = insOf(lines[i]);
+		if (!t) { i++; continue; }
+		if (isLabel(t) || isBranch(t)) { base = new Map(); i++; continue; }
+		const mat = readMat(i);
+		if (!mat) {
+			for (const r of [...base.keys()]) if (writesReg(t, r)) base.delete(r);
+			i++;
+			continue;
+		}
+		const had = base.get(mat.reg);
+		// **同じ値をもう一度作るのは、ただの重複である。** 後の使い方が番地でも
+		// データでも関係なく、register の中身は変わらない——材料化ごと消してよい。
+		// レジスタ束を一度離れてまた戻る形（`CR` → `DR` → `CR`）で出る。
+		if (had !== undefined && had === mat.val) {
+			for (let k = 0; k < mat.len; k++) drop.add(i + k);
+			i += mat.len;
+			continue;
+		}
+		if (had !== undefined && had !== mat.val) {
+			const uses = collectUses(i + mat.len, mat.reg);
+			if (uses && uses.length > 0) {
+				const rw = uses.map((u) => encode(u, mat.reg, mat.val - had));
+				if (rw.every((x) => x !== null)) {
+					for (let k = 0; k < mat.len; k++) drop.add(i + k);
+					uses.forEach((u, k) => rewrite.set(u.idx, rw[k]));
+					i += mat.len;
+					continue; // ベースは据え置き
+				}
+			}
+		}
+		base.set(mat.reg, mat.val);
+		i += mat.len;
+	}
+	if (drop.size === 0) return lines;
+	const out = [];
+	for (let i = 0; i < lines.length; i++) {
+		if (drop.has(i)) continue;
+		out.push(rewrite.has(i) ? rewrite.get(i) : lines[i]);
+	}
+	return out;
+}
+
+/**
  * **上書きされるだけのスロット書き込みを消す**（覗き穴）。
  *
  *     str x9, [x29, #16]    ← 1回目の `#` が返す番地
@@ -4218,6 +4351,15 @@ function peepholeRedundantLoads(lines) {
 			const st = ST.exec(prev);
 			// 同じレジスタ・同じスロットなら、この `ldr` は何も変えない。
 			if (st && st[1] === ld[1] && st[2] === ld[2]) continue;
+			// **別のレジスタなら、記憶を経由せず渡せる。** 直前に書いた値をそのまま
+			// 読み直しているので、`mov` 1つで足りる——書いた側は誰にも読まれなく
+			// なるので `peepholeDeadSlotStores`（後で走る）が拾って消す。
+			// 最後の式の値を返す形（`str x9, [x29,#16]` → `ldr x0, [x29,#16]`）が
+			// 毎回これである。
+			if (st && st[2] === ld[2]) {
+				out.push("\tmov " + ld[1] + ", " + st[1]);
+				continue;
+			}
 		}
 		out.push(line);
 	}
@@ -4280,7 +4422,7 @@ function peepholeSlotMoves(lines) {
 }
 
 function wrapFrame(bodyLines, slots, name, movedSp = false) {
-	bodyLines = peepholeDeadSlotStores(peepholeSlotMoves(peepholeRedundantLoads(bodyLines)));
+	bodyLines = peepholeShareAddressBase(peepholeDeadSlotStores(peepholeSlotMoves(peepholeRedundantLoads(bodyLines))));
 	const frame = 16 + Math.ceil((slots * 8) / 16) * 16; // x29/x30 の16バイト + スロット
 	// 相互末尾呼び出しが置いた印を、決まったフレームの大きさで埋める。
 	const filled = bodyLines.map((l) => (l.includes(FRAME_MARK) ? l.split(FRAME_MARK).join(String(frame)) : l));
