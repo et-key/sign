@@ -1924,9 +1924,14 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (cDst !== null && cDst !== NICHE_VALUE) {
 			const off = em.push();
 			if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			// **0 は作らなくてよい。** AArch64 は 0 を読み出す register を持っている
+			// （`xzr` / `wzr`）ので、材料化する命令に意味が無い。MMIO の初期化は
+			// 「レジスタを 0 にして黙らせる」から始まるので、ここは毎回通る。
+			let srcReg = SCRATCH[1];
 			if (cVal !== null) {
 				emitImm(em, SCRATCH[0], cDst, "書き込み先（定数——niche ではない）");
-				emitImm(em, SCRATCH[1], cVal, "書く値（定数）");
+				if (cVal === 0n) srcReg = "xzr";
+				else emitImm(em, SCRATCH[1], cVal, "書く値（定数）");
 			} else {
 				const vw2 = genExpr(n.right, env, em, scope);
 				if (vw2 === false) { em.pop(1); return false; }
@@ -1935,7 +1940,7 @@ function genExpr(node, env, em, scope, tail = false) {
 				em.pop(1);
 				emitImm(em, SCRATCH[0], cDst, "書き込み先（定数——niche ではない）");
 			}
-			em.emit(storeAt(SCRATCH[1], SCRATCH[0], wOut), `${wOut} byte を書く`);
+			em.emit(storeAt(srcReg, SCRATCH[0], wOut), `${wOut} byte を書く`);
 			em.store(SCRATCH[0], off);
 			return 1;
 		}
@@ -4184,7 +4189,8 @@ function peepholeShareAddressBase(lines) {
 	// 即値は 16 進でも 10 進でも出る（`movz x9, #0x30` と `mov x10, #0`）。
 	const MOVZ = /^(?:movz|mov)\s+(x\d+),\s*#(0x[0-9a-fA-F]+|[0-9]+)(?:,\s*lsl\s*#(\d+))?$/;
 	const MOVK = /^movk\s+(x\d+),\s*#(0x[0-9a-fA-F]+|[0-9]+),\s*lsl\s*#(\d+)$/;
-	const MEM = /^(strb|strh|str|ldrb|ldrh|ldr)\s+([wx]\d+),\s*\[(x\d+)\]$/;
+	// 運ぶ側は `xzr`/`wzr` にもなる（0 を書くとき）。番地の側は普通の register だけ。
+	const MEM = /^(strb|strh|str|ldrb|ldrh|ldr)\s+([wx](?:\d+|zr)),\s*\[(x\d+)\]$/;
 	const isLabel = (t) => /^[.\w]+:$/.test(t);
 	const isBranch = (t) => /^(b|b\.\w+|cbz|cbnz|tbz|tbnz|bl|br|blr|ret)\b/.test(t);
 	const NOWRITE = /^(str|strb|strh|stur|sturb|sturh|stp|cmp|cmn|tst)\b/;
@@ -4223,11 +4229,18 @@ function peepholeShareAddressBase(lines) {
 			const t = insOf(lines[m]);
 			if (!t) continue;
 			if (isLabel(t) || isBranch(t)) break;
+			// **番地として読むのが先である。** `ldr x9, [x9]` は x9 を番地として読んで
+			// から x9 へ書く——「書く」だけを見て止めると、この形が畳めない。読み終えて
+			// から基準が死ぬので、記録してから抜ける。定数の番地から読む式が毎回これ。
+			const mem = MEM.exec(t);
+			if (mem && mem[3] === reg) {
+				uses.push({ idx: m, mn: mem[1], reg: mem[2] });
+				if (writesReg(t, reg)) break;
+				continue;
+			}
 			if (writesReg(t, reg)) break;
 			if (!mentions(t, reg)) continue;
-			const mem = MEM.exec(t);
-			if (!mem || mem[3] !== reg) return null;
-			uses.push({ idx: m, mn: mem[1], reg: mem[2] });
+			return null;
 		}
 		return uses;
 	};
