@@ -2548,8 +2548,57 @@ function markAddressTaken(nodes, env) {
 	for (const n of nodes) visit(n);
 }
 
+/**
+ * **中身が定数だけの構造体は、実行時に存在しなくてよい。**
+ *
+ * MMIO のレジスタ束はこの形をしている——`uart : / CR : 0x9000000 / DR : 0x9000004` は
+ * 「配置の記述」であって「値の確保」ではない。フィールドを名前で引いた結果は**その番地
+ * そのもの**なので、畳んでしまえば構造体はどこにも置かれない。`n : 5` を `mov x9, #5` へ
+ * 畳むのと同じ話である。
+ *
+ * これが効くと**構造体で書いたレジスタ束が layer 0 で使える**。確保が起きないので、
+ * 「Struct は単一の alloca で確保する」（stack_abi.md §7.1）に当たらない——確保が要るのは
+ * 値として作るときであって、定数の記述はその手前で消える。
+ *
+ * @returns 畳めるならフィールドの値ノード。畳めなければ null。
+ */
+/** その定義は「全行が `名前 : 定数`」の構造体か（＝命令を持たない配置の記述）。 */
+function constStructDefine(node) {
+	const v = node && node.right ? unwrap(node.right) : null;
+	if (!v || !Array.isArray(v.lines) || v.lines.length < 2) return false;
+	return v.lines.every((line) => {
+		const l = unwrap(line);
+		if (!isDefineNode(l) || !isIdentifierNode(l.left)) return false;
+		const val = unwrap(l.right);
+		return !!val && val.type === "atom" && (val.kind === "number" || val.kind === "address");
+	});
+}
+
+function constStructField(node, env) {
+	if (!node || node.type !== "operation" || node.name !== "get_prop") return null;
+	const key = unwrap(node.right);
+	if (!isIdentifierNode(key)) return null; // 名前で引く形だけ（添字は別の道）
+	const base = unwrap(node.left);
+	if (!isIdentifierNode(base) || !env) return null;
+	const b = envLookup(env, base.value);
+	const v = b && b.valueNode ? unwrap(b.valueNode) : null;
+	if (!v || !Array.isArray(v.lines)) return null;
+	for (const line of v.lines) {
+		const l = unwrap(line);
+		if (!isDefineNode(l) || !isIdentifierNode(l.left)) return null; // 全行が `名前 : 値` でなければ構造体ではない
+		if (l.left.value !== key.value) continue;
+		const val = unwrap(l.right);
+		// 定数だけ畳む。式なら実行時に決まるので、そこは通常の道へ返す。
+		return val && val.type === "atom" && (val.kind === "number" || val.kind === "address") ? val : null;
+	}
+	return null;
+}
+
 function genIndex(node, env, em, scope) {
 	const conf = em.conf;
+	// **定数の構造体は畳む**（レジスタ束はここで消える）。
+	const folded = constStructField(node, env);
+	if (folded) return genExpr(folded, env, em, scope);
 	// **カーソルは器でも規則でもない。** 引き方が違うので、先に振り分ける。
 	// 括弧は剥ぐ——`(dup s) ' 0` のように括った形が普通である。
 	const cbase = unwrap(node.left);
@@ -4500,6 +4549,16 @@ function generateAsm(nodes, env, options = {}) {
 			const target = envLookup(env, aliasTargetOf(node.left.value, env));
 			if (target && target.category === "Lambda") continue;
 		}
+		// **定数だけの構造体も命令を持たない。**
+		//
+		// MMIO のレジスタ束（`uart : / CR : 0x9000000 / DR : 0x9000004`）は「配置の記述」
+		// であって「値の確保」ではない。フィールドを引いた結果はその番地そのものなので
+		// （`constStructField` が畳む）、構造体自身はどこにも置かれなくてよい。
+		//
+		// ここを飛ばさないと定義の側が値を組もうとして「まだ出せない識別子です（CR）」で
+		// 止まる——**畳みは成功しているのに、定義が落ちていた**。別名の定義と同じ形の穴で
+		// ある。確保が起きないので `layer: 0` でもそのまま使える。
+		if (isDefineNode(node) && isIdentifierNode(node.left) && constStructDefine(node)) continue;
 		if (isDefineNode(node) && isIdentifierNode(node.left)) {
 			const rhs = node.right;
 			if (rhs && rhs.type === "operation" && rhs.name === "lambda") {
