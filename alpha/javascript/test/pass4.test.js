@@ -64,12 +64,17 @@ function body(source, label) {
 // 型は「使い捨ての帳簿」として消費される（§3）。`Int` は符号ありなので除算は `sdiv`
 // である（target_info.js の SIGNEDNESS）。ここで型の名前が命令に化けて、以降どこにも
 // 残らない。
-check("加算は add", body("f : a ? a + 1\nf 1", "f").filter((l) => l.startsWith("add ")), ["add x9, x9, x10"]);
-check("減算は sub", body("f : a ? a - 1\nf 1", "f").filter((l) => l.startsWith("sub ")), ["sub x9, x9, x10"]);
-check("乗算は mul", body("f : a ? a * 2\nf 1", "f").filter((l) => l.startsWith("mul ")), ["mul x9, x9, x10"]);
-check("除算は sdiv（Int は符号あり）", body("f : a ? a / 2\nf 1", "f").filter((l) => l.startsWith("sdiv ")), [
-	"sdiv x9, x9, x10",
-]);
+// **見るのは選ばれた命令と、組み合わせる2本である。** 結果をどの register へ置くかは
+// 見ない——完全性公理を `csel` で足したとき置き先が変わったが、型が命令に化けるという
+// ここの主題は何も動いていない。
+const arith = (src, mn) =>
+	body(src, "f")
+		.filter((l) => l.startsWith(mn + " "))
+		.map((l) => l.replace(/^(\w+)\s+x\d+,/, "$1"));
+check("加算は add", arith("f : a ? a + 1\nf 1", "add"), ["add x9, x10"]);
+check("減算は sub", arith("f : a ? a - 1\nf 1", "sub"), ["sub x9, x10"]);
+check("乗算は mul", arith("f : a ? a * 2\nf 1", "mul"), ["mul x9, x10"]);
+check("除算は sdiv（Int は符号あり）", arith("f : a ? a / 2\nf 1", "sdiv"), ["sdiv x9, x10"]);
 
 // ---- AAPCS64 ----
 //
@@ -375,7 +380,8 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 // デフォルト式は前の仮引数を読める（`let*`）。
 {
 	const ls = body("f :\n\tn\n\ta : n + 1\n ?\n\tn + a\nf 3", "f");
-	checkTrue("前の仮引数を読む", ls.some((l) => l === "add x9, x9, x10"), ls.join(" / "));
+	// 前の仮引数と足し合わせている（置き先は問わない）。
+	checkTrue("前の仮引数を読む", ls.some((l) => /^add x\d+, x9, x10$/.test(l)), ls.join(" / "));
 }
 // **`: __` のデフォルトは命令ゼロである。** 埋めるのは値が `__` のときだけなので、そこへ
 // `__` を置いても何も変わらない。宣言の内容は「この引数について完全性公理を働かせない」
@@ -492,7 +498,7 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 	const test = fb.findIndex((l) => l.startsWith("b.eq .Lunit"));
 	checkTrue("仮引数を写してから検査する", store >= 0 && test > store, fb.join(" / "));
 	// 本体へ入る前に飛ぶ（`add` は検査より後ろ）。
-	const work = fb.findIndex((l) => l.startsWith("add x9"));
+	const work = fb.findIndex((l) => /^add x\d+,/.test(l));
 	checkTrue("本体へ一歩も入らない", work > test, fb.join(" / "));
 	checkTrue("崩壊したら __ を返す", fb.some((l) => l === "movz x0, #0x8000, lsl #48"), fb.join(" / "));
 }

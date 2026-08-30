@@ -979,7 +979,44 @@ function genExpr(node, env, em, scope, tail = false) {
 		em.load(SCRATCH[1], ro);
 		// 除算だけは符号で分かれる（`Address` は符号なし）。
 		const mn = n.name === "div" ? DIV_FOR[machine.signed ? "signed" : "unsigned"] : INT_OPS[n.name];
-		em.emit(`${mn} ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
+
+		// **完全性公理**（`operator_table.md` の算術行）。
+		//
+		// | | 左辺が `__` | 右辺が `__` |
+		// | --- | --- | --- |
+		// | `+` `-` `*` `/` | `__`（吸収元） | **左辺値** |
+		//
+		// これを出していなかったので `1 + __` が niche を数として足していた
+		// （-9223372036854775807）。**黙って間違う**——`1 * __` に至っては niche×1 が
+		// niche のままなので、それらしく見えてしまう。
+		//
+		// `sum : [x ~xs] ? x + (sum xs)` ——公理だけで終端する Sign で最も素直な
+		// 畳み込み——はこの1行に乗っている。関数の入口の `__` 検査はどの形でも必ず
+		// 出るので、その形は追加の代金がゼロで済む。明示的に `!xs` と書く形は、
+		// 同じことをもう一度検査していることになる。
+		//
+		// **分岐ではなく `csel` で出す。** ラベルを増やすと覗き穴が全部そこで降参する
+		// ので、直線のまま置ける方が後段に効く（`Char` の範囲検査と同じ形）。
+		//
+		// **`__` になり得ない辺は検査しない。** 両辺とも分かっていれば命令は1つのまま
+		// で、公理は本当にタダになる。
+		const lMaybe = !cannotBeUnit(n.left, env);
+		const rMaybe = !cannotBeUnit(n.right, env);
+		if (!lMaybe && !rMaybe) {
+			em.emit(`${mn} ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
+		} else {
+			em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
+			em.emit(`${mn} x11, ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
+			if (rMaybe) {
+				em.emit(`cmp ${SCRATCH[1]}, x12`, "右辺が __ か");
+				em.emit(`csel x11, ${SCRATCH[0]}, x11, eq`, "右が __ なら左辺値（完全性公理）");
+			}
+			if (lMaybe) {
+				em.emit(`cmp ${SCRATCH[0]}, x12`, "左辺が __ か");
+				em.emit(`csel x11, x12, x11, eq`, "左が __ なら __（吸収元）");
+			}
+			em.emit(`mov ${SCRATCH[0]}, x11`);
+		}
 		// **足せることと、足した先が文字であることは別である。** 文字の算術は符号位置の
 		// 算術なので命令はそのままだが、結果が charset の外へ出たらそれは文字ではない
 		// ——`__` になる。`c + 1` で次の文字を取る書き方はこの検査の内側で成立している。
@@ -2704,6 +2741,27 @@ function constStructDefine(node) {
 // niche（`__`）の実体。**番地としては決して有効でない値**であり、`#` / 前置 `@` の
 // 全域性はこの1つの値を避けることでできている。
 const NICHE_VALUE = 0x8000000000000000n;
+
+// **その式が `__` になり得ないと、構文だけで分かるか。**
+//
+// 分かるなら完全性公理の検査を出さなくてよい——boot で「番地が定数なら全域性はタダ」
+// だったのと同じことが、演算子の側でも成り立つ。ここは**構文だけ**で答える：型が
+// `Int` でも実行時の値は `__` になり得るので、型は答えにならない。
+//
+// リテラルは `__` ではない。算術の結果は、両辺が `__` でなければ `__` ではない
+// ——公理自身がそう言っている（左が `__` なら `__`、右が `__` なら左辺値）。
+// ただし `Char` は別で、charset の外へ出た結果は `__` になる。除算も別で、0 で
+// 割った結果をここでは決めていない。
+function cannotBeUnit(node, env) {
+	const n = unwrap(node);
+	if (!n) return false;
+	if (n.type === "atom") return n.kind === "number" || n.kind === "address" || n.kind === "char" || n.kind === "unicode";
+	if (n.type === "operation" && INT_OPS[n.name] && n.position === "infix") {
+		if (n.atomType === "Char" || n.name === "div") return false;
+		return cannotBeUnit(n.left, env) && cannotBeUnit(n.right, env);
+	}
+	return false;
+}
 
 // **その番地はコンパイル時に決まるか。** 決まるなら値（BigInt）、決まらないなら null。
 //
