@@ -1989,6 +1989,89 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.store(SCRATCH[1], po2, "ptr は自分の宛先");
 			return 2;
 		}
+		// **撒いた器は写す。**
+		//
+		// `push : [~st] d ? d st~` は「値1つ ＋ 器の中身」であり、器の方は**呼び先が書いて
+		// くれるわけではない**——既に在る要素を自分の返値スロットへ運ぶしかない。追記
+		// （`(s ' 0) (f rest)`）が写さずに済むのは、続きを書くのが呼び先だからで、値として
+		// 手元に在る器はそこが違う。
+		//
+		// 個数は実行時に決まるので走査する。上界は呼ぶ側が確保済みなので溢れない
+		// （`returnSizeBound` が撒いた仮引数を `coef` として数えている）。
+		//
+		// 位置は「ここまでに書いた個数」で決まる。スカラーは1つ、器は自分の `len` ぶん
+		// 進める——前に来ようが後ろに来ようが同じ規則で、順に置くだけである。
+		//
+		// **層は先に見る。** `layer: 0` には記憶を確保する手段が無い、というのは設計上の
+		// 結論であって実装の穴ではない（下の判定と同じ線）。sret は呼ぶ側が場所を用意する
+		// ので確保には当たらないが、その規約自体が layer 1 以上の話である。
+		const widths = parts.map((p) => slotsOfNode(p, em.conf, env));
+		const layerOk = !(em.conf.layer !== undefined && em.conf.layer < 1);
+		if (layerOk && em1 && em1.size && sretHere && widths.some((w) => w === 2) && widths.every((w) => w === 1 || w === 2)) {
+			const w = em1.size;
+			const shift = w === 8 ? 3 : w === 4 ? 2 : w === 2 ? 1 : 0;
+			const cnt = em.push();
+			if (cnt === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.emit(`mov ${SCRATCH[0]}, #0`, "ここまでに書いた個数");
+			em.store(SCRATCH[0], cnt);
+			for (let i = 0; i < parts.length; i++) {
+				if (widths[i] === 1) {
+					const pw = genScalar(parts[i], env, em, scope, "並べる要素はレジスタ1本の値です");
+					if (pw === false) return false;
+					em.load("x14", (em.slot - 1) * 8, "置く値");
+					em.pop(1);
+					em.load(SCRATCH[1], em.sretDest, "返値スロット（sret）");
+					em.load(SCRATCH[0], cnt);
+					if (shift) em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}, lsl #${shift}`, "書いた個数ぶん進める");
+					else em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}`, "書いた個数ぶん進める");
+					em.emit(storeElem("x14", SCRATCH[1], 0, w), `${w} byte を1つ`);
+					em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #1`, "1つぶん進む");
+					em.store(SCRATCH[0], cnt);
+					continue;
+				}
+				const cw = genExpr(stripExpand(parts[i]), env, em, scope);
+				if (cw === false) return false;
+				if (cw !== 2) {
+					em.pop(cw === TAIL ? 0 : cw);
+					return em.fail(n, `並べる器が ${cw} 本です`);
+				}
+				const so = (em.slot - 2) * 8;
+				const top = em.newLabel("cp");
+				const end = em.newLabel("cpe");
+				em.emit(`mov x13, #0`, "写す位置");
+				em.label(top);
+				em.load("x15", so + 8, "写す器の len");
+				em.emit(`cmp x13, x15`);
+				em.emit(`b.ge ${end}`, "写し終えたら抜ける");
+				em.load(SCRATCH[1], so, "写す器の ptr");
+				// `loadElem` は 8 byte 未満を `w` レジスタで読む（`ldrb`/`ldrh` は 32 ビット
+				// 側しか取らない）。書く側も同じ幅で書くので、上半分は使わない。
+				em.emit(loadElem("w14", SCRATCH[1], "x13", w), `${w} byte を1つ読む`);
+				em.load(SCRATCH[1], em.sretDest);
+				em.load(SCRATCH[0], cnt);
+				em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, x13`, "書いた個数 ＋ 写した位置");
+				if (shift) em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}, lsl #${shift}`);
+				else em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}`);
+				em.emit(storeElem("x14", SCRATCH[1], 0, w), "写す");
+				em.emit(`add x13, x13, #1`);
+				em.emit(`b ${top}`);
+				em.label(end);
+				em.load(SCRATCH[0], cnt);
+				em.load("x15", so + 8);
+				em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, x15`, "写した個数ぶん進む");
+				em.store(SCRATCH[0], cnt);
+				em.pop(2);
+			}
+			em.load(SCRATCH[0], cnt, "len は書いた個数");
+			em.load(SCRATCH[1], em.sretDest, "ptr は自分の宛先");
+			em.pop(1);
+			const po3 = em.push();
+			const lo3 = po3 === null ? null : em.push();
+			if (lo3 === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.store(SCRATCH[1], po3, "ptr");
+			em.store(SCRATCH[0], lo3, "len");
+			return 2;
+		}
 		if (em1 && em1.size && parts.every((p) => slotsOfNode(p, em.conf, env) === 1)) {
 			const base = em.slot;
 			for (const p of parts) {

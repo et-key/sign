@@ -733,8 +733,10 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 	};
 	const build = "f : s ?\n\ts (s ' 0)\nf `ab`";
 	checkTrue("layer 0 は「作れません」と言う", at(build, 0).some((m) => /layer: 0 では器を作れません/.test(m)), JSON.stringify(at(build, 0)));
-	// **同じ「出せない」でも中身が違う。** 上は設計上の結論、下は実装の穴である。
-	checkTrue("layer 1 は「まだ」と言う", at(build, 1).some((m) => /sret の規約が未定/.test(m)), JSON.stringify(at(build, 1)));
+	// **同じ「出せない」でも中身が違った。** 上は設計上の結論（記憶を確保する手段が無い）、
+	// 下は実装の穴だった。穴の方は塞がった——撒いた器は返値スロットへ写せるので、layer 1
+	// では出る。層の側の結論は変わらない。
+	checkTrue("layer 1 では出る", at(build, 1).length === 0, JSON.stringify(at(build, 1)));
 	// **フレームから出ないなら、自分のフレームに置ける。** 出るかどうかは呼び先が引数を
 	// 返しうるかまで見て決まる（`collectReturnedParams`）——直近の呼び出しだけでは足りない。
 	{
@@ -853,8 +855,14 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 		!body("f : [c ~rest] ? c rest\nf [1 2 3 4]", "f").includes("sub x9, x9, #1"),
 	);
 	checkTrue("List でも撒けば組み直し", body("f : [c ~rest] ? c rest~\nf [1 2 3 4]", "f").includes("sub x9, x9, #8"));
-	// 順序が逆なら別の器である（`rest c` は「残りのうしろへ頭を足す」）。
-	checkTrue("逆順は組み直しではない", asm("f : [c ~rest] ?\n\tc = ` ` : f rest\n\trest c\nf `  ab`").diagnostics.length > 0);
+	// 順序が逆なら別の器である（`rest c` は「残りのうしろへ頭を足す」）。**組み直しでは
+	// ないが、出せないわけでもない**——撒いた器を返値スロットへ写して、そのうしろへ頭を
+	// 足せばよい。かつてここは「診断が出ること」を見ていたが、写せるようになった今、
+	// 見るべきは「組み直しの命令を出していないこと」である。
+	checkTrue(
+		"逆順は組み直しではない",
+		!body("f : [c ~rest] ?\n\tc = ` ` : f rest\n\trest c\nf `  ab`", "f").includes("sub x9, x9, #1"),
+	);
 	// 別の分解の組み合わせも組み直しではない。
 	checkTrue(
 		"別の組は組み直しではない",
