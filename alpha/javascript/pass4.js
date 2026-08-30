@@ -3047,6 +3047,38 @@ function emitIsUnit(em, off, width, comment, isRule = false, isCursor = false) {
  */
 function genWidened(node, want, env, em, scope) {
 	if (want !== 2) return null;
+	// **返値スロットが在るなら、確保は要らない。**
+	//
+	// 器を返す関数の枝が全部器を組むとは限らない——`gap : st d ? d > (top st) : indent /
+	// …` の `indent` のように、片方が値1つで済む形は普通である。そこは `[x] ≅ x` で
+	// 長さ1の器だが、**表現では有償**なので（原理8）1本と2本で幅が揃わず、枝が合流でき
+	// なかった。
+	//
+	// sret の位置では払い方が一番安い。呼ぶ側が用意したスロットへ要素を1つ書き、
+	// `{そのスロット, 1}` を返せばよい——器を組む枝がやっているのと同じことである。
+	// `sub sp` も `.rodata` も要らない。
+	if (em.sretDest !== null && em.sretDest !== undefined) {
+		const el = node.atomType;
+		const m1 = el && !isBoxType(el) ? measure({ atomType: el }, { target: em.conf.target, charset: em.conf.charset }) : null;
+		if (m1 && m1.size) {
+			const vw = genExpr(node, env, em, scope);
+			if (vw === false) return false;
+			if (vw === 1) {
+				em.load(SCRATCH[0], (em.slot - 1) * 8, "1つの値を器として返す");
+				em.load(SCRATCH[1], em.sretDest, "返値スロット（sret）");
+				em.emit(storeElem(SCRATCH[0], SCRATCH[1], 0, m1.size), `${m1.size} byte を1つ書く`);
+				em.pop(1);
+				const po0 = em.push();
+				const lo0 = po0 === null ? null : em.push();
+				if (lo0 === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+				em.store(SCRATCH[1], po0, "ptr は返値スロット");
+				em.emit(`mov ${SCRATCH[0]}, #1`, "len は 1");
+				em.store(SCRATCH[0], lo0, "len");
+				return 2;
+			}
+			em.pop(vw === TAIL ? 0 : vw);
+		}
+	}
 	let t = unwrap(node);
 	// 名前で書かれていても中身はリテラルである（`indent : \t`）。束縛先まで辿る——
 	// **置き場所があるかどうかは名前ではなく中身が決める**。
@@ -3475,7 +3507,17 @@ function returnSizeBound(lam, name) {
 		// 器の位置が同じ仮引数のままであることを見る。入れ替えたり式にしたりしていれば
 		// 大きさが動きうるので、そこは諦める。
 		if (selfCallSameArgs(a, name, params)) continue;
-		if (!(a.type === "operation" && COPRODUCT_BUILD_OPS.has(a.name))) return null;
+		// **スカラーを返す枝は長さ1の器である**（`[x] ≅ x`）。器を返す関数の枝が全部
+		// 器を組むとは限らない——`gap : st d ? d > (top st) : indent / (closers st d)
+		// newline` の `indent` のように、片方が値1つで済む形は普通である。ここで諦めて
+		// いたため、**分岐して器を返す形**がまるごと sret に乗らなかった。
+		//
+		// 器を返す枝（識別子が器を指しているなど）は数えられないので、そこは諦める。
+		if (!(a.type === "operation" && COPRODUCT_BUILD_OPS.has(a.name))) {
+			if (isBoxType(a.atomType)) return null;
+			konst = Math.max(konst, 1);
+			continue;
+		}
 		// 連なりを平らにする（括弧の中が連接なら1要素——剥いではいけない）。
 		const parts = [];
 		let cur = a;

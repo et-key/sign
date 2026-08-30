@@ -361,7 +361,15 @@ function elementTypeOfNode(node, env) {
   if (!node) return null;
   if (node.elementType) return node.elementType;
   inferAtomType(node, env);
-  return node.elementType || null;
+  if (node.elementType) return node.elementType;
+  // **1行だけの括りは括りでしかない。** `(f 5) ' 1` の `(f 5)` は器の型（`Int | List`）
+  // までは運ぶのに、要素型を運んでいなかった——呼び先の返値の要素型は中の適用ノードに
+  // 載っている（`callee.returnsElementType`）ので、括りを剥がさないと届かない。
+  // 型を運ぶのに要素型を落とすと、Pass 4 が `base + i × sizeof(T)` を出せない。
+  if (node.type === "block" && Array.isArray(node.lines) && node.lines.length === 1 && node.kind !== "abs" && node.kind !== "norm") {
+    return elementTypeOfNode(node.lines[0], env);
+  }
+  return null;
 }
 
 // 器の要素型。識別子なら識別子テーブルへ書き戻された値を使う——Pass 3 の不動点が合成値の
