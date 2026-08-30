@@ -182,7 +182,7 @@ opened : bd nd ?
 `スタックは空にならない——unwind は (top st) > d で止まり、0 > d は偽である`
 
 bottom : 0
-push : st d ? d st~
+push : [~st] d ? d st~
 
 top : st ? st ' 0
 

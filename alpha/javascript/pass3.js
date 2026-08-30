@@ -2055,7 +2055,24 @@ function collectCallsiteParamTypes(nodes, env) {
     const names = isIdentifierNode(paramNode)
       ? [paramNode.value]
       : paramNode && paramNode.type === "params" && !paramNode.bracket
-        ? entries.map((e) => (e.pattern || e.rest ? null : e.name || null))
+        ? entries.map((e) =>
+            // **`[~st]` は器を丸ごと受ける位置である。** 分解（`[c ~rest]`、`e.pattern`）
+            // なら実引数1個を割るので位置と名前が1対1にならないが、丸ごと受ける形は
+            // 渡された実引数**そのもの**を受けるので、裸の仮引数と同じく型を持つ。
+            //
+            // ここを `null` にしていたため、`push : [~st] d ?` の `st` に呼び出しサイトの
+            // 型が届かず、渡し方が「器か分からないので1本」になっていた——呼ぶ側は器
+            // （2本）で渡すので幅が食い違う。**宣言を正しく書いた方が弱くなる**という
+            // 逆転で、`[~ts]` について前に一度直したのと同じ形の穴である。
+            // `[~st]` は `pattern` が rest 1つだけの形で来る（`[c ~rest]` は2つ以上）。
+            e.pattern
+              ? e.pattern.length === 1 && e.pattern[0].rest && e.pattern[0].name
+                ? e.pattern[0].name
+                : null
+              : e.rest
+                ? null
+                : e.name || null
+          )
         : [];
     // **ブラケットで受ける形は実引数1個を分解する。**
     //
