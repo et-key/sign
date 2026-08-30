@@ -3514,7 +3514,65 @@ function isBoxType(t) {
  * （止めているのは `col > n` である）。ここを区別しないと、器から出ない再帰に器由来の
  * 有限な上界を付けてしまう。
  */
-function selfConsumes(part, name, params, restNames) {
+/**
+ * **呼び合う塊を出す**（相互再帰の群）。
+ *
+ * `sep` と `in_quote` はお互いを呼ぶので、どちらの上界も相手が決まらなければ決まらない
+ * ——一方向に流すと永久に起動しない。だが**器から見れば自己再帰と同じ**である：どちらの
+ * 枝も「1つ食って、短くなった器で誰かを呼ぶ」でしかない。自分か相手かは呼び先の名前の
+ * 違いであって、器の減り方は変わらない。
+ *
+ * だから群の中の呼び出しは自己呼び出しと同じに数える。`T(n) = k + T(n-1)` という漸化式は
+ * 群全体で1つであり、解も1つである。
+ */
+function mutualGroups(nodes) {
+	const calls = new Map(); // 名前 → 呼んでいる名前の集合
+	for (const node of nodes) {
+		if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
+		const lam = node.right;
+		if (!lam || lam.type !== "operation" || lam.name !== "lambda") continue;
+		const to = new Set();
+		const seen = new Set();
+		const visit = (n) => {
+			if (!n || typeof n !== "object" || seen.has(n)) return;
+			seen.add(n);
+			if (n.type === "operation" && n.name === "apply") {
+				let h = n;
+				while (h && h.type === "operation" && h.name === "apply") h = unwrap(h.left);
+				if (isIdentifierNode(h)) to.add(bareName(h.value));
+			}
+			for (const k of ["left", "right", "operand"]) visit(n[k]);
+			for (const l of n.lines || []) visit(l);
+			for (const e of n.entries || []) visit(e.default);
+		};
+		visit(lam.right);
+		calls.set(bareName(node.left.value), to);
+	}
+	// 到達可能性を推移閉包で出し、互いに到達できる名前を1つの群にする。
+	const reach = new Map([...calls].map(([k, v]) => [k, new Set(v)]));
+	for (let grew = true; grew; ) {
+		grew = false;
+		for (const [k, set] of reach) {
+			for (const m of [...set]) {
+				for (const x of reach.get(m) || []) {
+					if (!set.has(x)) {
+						set.add(x);
+						grew = true;
+					}
+				}
+			}
+		}
+	}
+	const group = new Map();
+	for (const k of calls.keys()) {
+		const g = new Set([k]);
+		for (const m of reach.get(k) || []) if ((reach.get(m) || new Set()).has(k)) g.add(m);
+		group.set(k, g);
+	}
+	return group;
+}
+
+function selfConsumes(part, name, params, restNames, group) {
 	const bare = (s) => String(s).replace(/[<>]/g, "");
 	const args = [];
 	let head = part;
@@ -3522,7 +3580,9 @@ function selfConsumes(part, name, params, restNames) {
 		args.unshift(unwrap(head.right));
 		head = unwrap(head.left);
 	}
-	if (!args.length || !isIdentifierNode(head) || bare(head.value) !== bare(name)) return null;
+	// 自分か、呼び合う塊の中の誰かなら「食っている」。器の減り方は同じである。
+	const isSelf = isIdentifierNode(head) && (bare(head.value) === bare(name) || (group && group.has(bare(head.value))));
+	if (!args.length || !isSelf) return null;
 	for (const arg of args) {
 		// 裸の仮引数はそのまま渡しているだけ。式になっていて初めて「食った」と言える。
 		//
@@ -3627,7 +3687,7 @@ function boundedCallOf(part, known, params) {
 	return { konst: p.konst, coef: p.coef, sizeOf: a.value };
 }
 
-function returnSizeBound(lam, name, known) {
+function returnSizeBound(lam, name, known, group) {
 	const params = boundParamNames(lam);
 	// 分解した残りの名前。`f rest` は名前1つでも1要素食っている。
 	const restNames = new Set(paramShapesOf(lam.left).filter((sh) => sh && sh.kind === "destructure").map((sh) => sh.rest));
@@ -3703,7 +3763,7 @@ function returnSizeBound(lam, name, known) {
 			}
 			// **自己呼び出しは、食っている器の要素数ぶん。** ここで諦めていたのが、
 			// 器を返す関数のほとんどが再帰である以上そのまま sret を塞いでいた。
-			const eaten = selfConsumes(q, name, params, restNames);
+			const eaten = selfConsumes(q, name, params, restNames, group);
 			if (eaten) {
 				if (rec && rec !== eaten) return null; // 1枝で2つ食う形はまだ扱わない
 				rec = eaten;
@@ -3888,15 +3948,16 @@ function collectSignatures(nodes, em) {
  */
 function collectSretPlan(nodes, em) {
 	let plan = new Map();
+	const groups = mutualGroups(nodes);
 	for (let grew = true; grew; ) {
-		const next = collectSretPlanOnce(nodes, em, plan);
+		const next = collectSretPlanOnce(nodes, em, plan, groups);
 		grew = next.size > plan.size;
 		plan = next;
 	}
 	return plan;
 }
 
-function collectSretPlanOnce(nodes, em, known) {
+function collectSretPlanOnce(nodes, em, known, groups) {
 	const plan = new Map();
 	for (const node of nodes) {
 		if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
@@ -3916,7 +3977,7 @@ function collectSretPlanOnce(nodes, em, known) {
 		const m = et ? measure({ atomType: et }, { target: em.conf.target, charset: em.conf.charset }) : null;
 		if (!m || !m.size) continue;
 		const name = bareName(node.left.value);
-		const b = returnSizeBound(lam, name, known);
+		const b = returnSizeBound(lam, name, known, groups && groups.get(bareName(node.left.value)));
 		if (!b) continue;
 		let sizeOfIndex = null;
 		if (b.sizeOf) {
