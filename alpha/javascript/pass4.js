@@ -156,10 +156,23 @@ function bareName(v) {
 // 剥がさない**——`x > 10 : 1` は括りではなく枝が1つの match_case である。
 function unwrap(node) {
 	let n = node;
-	while (n && Array.isArray(n.lines) && n.lines.length === 1 && n.kind !== "abs" && n.kind !== "norm" && !isDefineNode(n.lines[0])) {
-		n = n.lines[0];
+	for (;;) {
+		if (n && Array.isArray(n.lines) && n.lines.length === 1 && n.kind !== "abs" && n.kind !== "norm" && !isDefineNode(n.lines[0])) {
+			n = n.lines[0];
+			continue;
+		}
+		// **後置 `@`（import）も括りと同じである。** 同一オブジェクト内では「その名前を
+		// 指す」以上のことをしないので（`system_architecture.md` §2.1）、剥がしてよい。
+		//
+		// ここで剥がすと全部の経路が一度に通る——呼び先の解決（`(inc@) 5`）、定数構造体の
+		// 畳み（`DR @ (uart@)`）、添字。個々の枝で `import` を数えて回ると必ずどれかが
+		// 漏れる、というのは層の門番で踏んだのと同じ形である。
+		if (n && n.type === "operation" && n.position === "postfix" && n.name === "import" && n.operand) {
+			n = n.operand;
+			continue;
+		}
+		return n;
 	}
-	return n;
 }
 
 // 文字・文字列リテラルの符号位置の並び。読めなければ null。
@@ -228,10 +241,13 @@ function codePointsOf(n) {
 
 function applyChain(node) {
 	const args = [];
-	let n = node;
+	// **根は剥がしてから返す。** 括りも後置 `@`（import）も「その名前を指す」だけなので、
+	// `(inc@) 5` の呼び先は `inc` である。ここを剥がさないと呼び先が識別子に見えず、
+	// 「まだ出せない識別子です」で止まる。
+	let n = unwrap(node);
 	while (n && n.type === "operation" && (n.name === "apply" || n.name === "partial_apply")) {
 		args.unshift(n.right);
-		n = n.left;
+		n = unwrap(n.left);
 	}
 	return { base: n, args };
 }
@@ -1466,6 +1482,21 @@ function genExpr(node, env, em, scope, tail = false) {
 	// 0命令である）。
 	//
 	// 余積を組む位置の `~`（`d st~` の連接）は別の道で、そちらは要素を並べる。
+	// **後置 `@`（import）は、同一オブジェクト内では 0 命令である。**
+	//
+	// `#` と `@` は随伴ペアであり（`system_architecture.md` §2.1）、`#foo` の段では
+	// 「静的に解決（インライン化または同一オブジェクト内）」と定められている——名前が
+	// 既にこのオブジェクトの中に在るなら、要求は**その名前を指すこと**でしかない。
+	//
+	// だから確保もローダーも要らず、`layer: 0` から使える。Zig の `@import` と同じく
+	// コンパイル時の構文であり、実行時に何かが起きるわけではない（`layer_relations.md`）。
+	//
+	// 別のオブジェクトから取り込む形はここへ来ない——名前がこのスコープに無いので、
+	// 識別子の解決の側で決まる。そこは `link` 戦略の話であり、まだ実装していない。
+	if (n.type === "operation" && n.position === "postfix" && n.name === "import" && n.operand) {
+		return genExpr(n.operand, env, em, scope, tail);
+	}
+
 	if (n.type === "operation" && n.position === "postfix" && n.name === "expand" && n.operand) {
 		const w = slotsOfNode(n.operand, em.conf, em.env);
 		if (w === 2) return genExpr(n.operand, env, em, scope);
@@ -2360,6 +2391,42 @@ function addressFromDollar(node, env) {
 		return !!(v && v.type === "operation" && v.position === "prefix" && v.name === "address");
 	}
 	return false;
+}
+
+// **`#` の段数はシンボルの見え方そのものである。**
+//
+// `system_architecture.md` §2.1 の随伴ペア（エクスポート側 `#`／デマンド側 `@`）は
+// project-arena / shared-heap / pinned-area の3段を持つ。ELF にはこの3段がそのまま
+// 揃っている——だから写すだけでよく、リンカスクリプトが要らない（§2.2）。
+//
+// | Sign | ELF | 意味 |
+// | --- | --- | --- |
+// | （無印） | local（`.global` を出さない） | 外に名前が出ない |
+// | `#` (Rc) | `.global` + `.hidden` | プロジェクト内では結合できるが共有物からは出ない |
+// | `##` (Arc) | `.global` | 共有オブジェクトの外から見える |
+// | `###` (Pin) | `.global` + 専用セクション | 配置を option.ms が決められる |
+//
+// **無印を local にするのが本題である。** ここまで Pass 4 は全部の関数に `.global` を
+// 付けていた——`#` を書いても書かなくても同じで、つまり `#` は機械語に何の意味も
+// 持っていなかった。内部関数の名前がシンボル表に載るのは、`.ist` を書き出さない理由
+// （内部識別子名を外に出さない）と同じものが `.s` 側から漏れていたということでもある。
+function symbolDirectives(name, env, label = name) {
+	const level = exportLevelOf(name, env);
+	if (level === "###") return [`	.global ${label}`, `	.section .sign.pinned,"ax",%progbits`];
+	if (level === "##") return [`	.global ${label}`];
+	if (level === "#") return [`	.global ${label}`, `	.hidden ${label}`];
+	return [];
+}
+
+// `###` は自分のセクションへ出るので、次の関数のために `.text` へ戻す。
+function symbolDirectivesAfter(name, env) {
+	return exportLevelOf(name, env) === "###" ? ["	.text"] : [];
+}
+
+// 環境の鍵は `<f>` の形（トークンのまま）だが、ラベルは剥がした `f`。両方で引く。
+function exportLevelOf(name, env) {
+	const b = envLookup(env, name) || envLookup(env, `<${bareName(name)}>`);
+	return b ? b.exported || null : null;
 }
 
 /**
@@ -4706,18 +4773,22 @@ function generateAsm(nodes, env, options = {}) {
 							});
 							continue;
 						}
-						em.lines.push(`	.global ${label}`);
+						// 生成された内部名（デフォルトに直接書かれたラムダ）。書いた人が付けた
+						// 名前ではないので外から呼ばれることは無い——local のままにする。
 						genFunction(label, lam, env, em);
 						em.blank();
 					}
 					for (const inst of entry.instances.values()) {
-						em.lines.push(`	.global ${inst.label}`);
+						// 具体化した実体は元の名前の見え方を継ぐ（別名ではなく、同じ export の別の形）。
+						em.lines.push(...symbolDirectives(fname, env, inst.label));
 						genFunction(inst.label, rhs, env, em, inst);
+						em.lines.push(...symbolDirectivesAfter(fname, env));
 					}
 					continue;
 				}
-				em.lines.push(`	.global ${fname}`);
+				em.lines.push(...symbolDirectives(fname, env));
 				genFunction(fname, rhs, env, em);
+				em.lines.push(...symbolDirectivesAfter(fname, env));
 				continue;
 			}
 		}

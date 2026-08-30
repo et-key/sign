@@ -48,6 +48,17 @@ function isIdentifierNode(n) {
   return !!n && n.type === "atom" && n.kind === "identifier";
 }
 
+// **後置 `@`（import）は名前の由来を隠さない。** `g : inc@` は「inc を取り込んで g と
+// 呼ぶ」であって、行き着く定義は `inc` そのもの（`system_architecture.md` §2.1 の
+// `#`/`@` 随伴ペア）。ここで剥がさないと `g : inc@` が別名として記録されず、Pass 4 で
+// 「まだ出せない識別子です（inc）」になる——**取り込んだ関数に名前を付けた途端に
+// 呼べなくなる**という、取り込み側だけを直しても消えない穴だった。
+function stripImport(n) {
+  let cur = n;
+  while (cur && cur.type === "operation" && cur.position === "postfix" && cur.name === "import" && cur.operand) cur = cur.operand;
+  return cur;
+}
+
 // 【2026-08-09】以前ここには productShape() があり、カンマ結合の要素列を
 // 「全要素が define(key:val) なら Dict、そうでなければ Struct」と振り分けていた。
 // type_system.md §2 で `Dict` を `Struct` へ統合したため、この振り分けは不要になった
@@ -3095,7 +3106,7 @@ function annotateAll(nodes, env, diagnostics) {
     // 300 周以上往復し、コンパイルが 85ms から 6 秒になっていた）。勝つのは後の定義である。
     if (node && node.supersededByDesugar) continue;
     if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
-    const rhs = node.right;
+    const rhs = stripImport(node.right);
     // **`名前 : 別名` も呼び先の由来である。** `g : f` と書いたとき `g 5` の呼び先は `f`
     // であり、構文から読める。`$` を挟むかどうかは持ち上げの有無の違いでしかなく、
     // 「どの定義へ行き着くか」は同じ問いである——だから同じ場所で記録する。

@@ -1237,6 +1237,17 @@ function evalUnaryOp(name, v) {
     case "export_external":
     case "export_pin":
       return v;
+    case "import":
+      // **`foo@` は `#foo` の随伴である**（`system_architecture.md` §2.1）。
+      //
+      // `#` が「名前を発見可能にする」なら、`@` は「発見した名前を要求する」——同じ一つの
+      // 関係を両側から書いている。同一オブジェクト内では**指す先はその名前そのもの**なので
+      // （§2.1「静的に解決（インライン化または同一オブジェクト内）」）、値としては素通しで
+      // ある。`export` の3つが素通しなのと同じ理由で、対になっている。
+      //
+      // 別のオブジェクトから取り込む形（`link: static` / `dynamic`）はここには来ない
+      // ——そちらは名前がこのスコープに無いので、識別子の解決の側で決まる。
+      return v;
   }
   throw new Error(`interpreter: 未対応の前置/後置演算 '${name}'`);
 }

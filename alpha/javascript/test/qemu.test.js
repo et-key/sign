@@ -973,5 +973,30 @@ agree("歩幅つきを数え上げる", SUM + "sum [0 ~+ 3] 0 0");
 	for (let n = 0; n <= 2; n++) agreeDesugared(`糖衣：入力を飛ばす ${n}`, SK + `f : s ? ${pull("(sk s)", n)}\nf \`abcdef\`\n`);
 }
 
+
+// ---- 取り込みは名前の由来を隠さない（後置 `@`） ----
+//
+// **`import` はコンパイル時である**（Zig の `@import` の側であって JavaScript の
+// `import()` ではない）。`system_architecture.md` §3.1 が layer 0 を「静的に解決可能な
+// シンボルの要求」と書いていて、層をまたぐ import 違反が *コンパイルエラー* になる
+// （`option_ms_schema.md` §4.1）ことがその証拠——動的なら静的に判定できない。
+//
+// だから **layer 0 でも通る**。ここは全段で同じ値が出ることを見る。
+{
+	for (const layer of [0, 1, 4]) {
+		agree(`取り込む：値 L${layer}`, "#foo : 42\nfoo@", "ascii", layer);
+		agree(`取り込む：関数 L${layer}`, "#inc : a ? a + 1\n(inc@) 5", "ascii", layer);
+		// **取り込んだ関数に名前を付けても呼べる。** `g : inc@` の別名記録が `@` を
+		// 剥がしていないと、行き着く定義を見失って「まだ出せない識別子です」になる。
+		agree(`取り込む：別名 L${layer}`, "#inc : a ? a + 1\ng : inc@\ng 5", "ascii", layer);
+		agree(`取り込む：二重 L${layer}`, "#foo : 7\nfoo@@", "ascii", layer);
+	}
+	// export の段数は取り込む側から見て同じもの（随伴の相方が変わっても値は変わらない）。
+	agree("取り込む：## も同じ", "##a : 1\n###b : 2\n(a@) + (b@)", "ascii", 0);
+	agree("取り込む：export 無しでも", "foo : 42\nfoo@", "ascii", 0);
+	// レジスタ束（定数だけの構造体）を取り込んでフィールドを引く。中置 `@` と後置 `@` が同居する。
+	agree("取り込む：レジスタ束", "#uart :\n\tDR : 0x9000000\n\nDR @ (uart@)", "ascii", 0);
+}
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

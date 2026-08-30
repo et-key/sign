@@ -347,6 +347,11 @@ function getCategory(node, env, closed = false) {
     if (node.name === "compose") return "Lambda";
     if (node.partial) return "Lambda"; // オペランド不足の部分適用
     if (node.position === "prefix" && node.op === "@") return "Lambda"; // 前置@（Input）
+    // **後置 `@`（import）は中身のカテゴリを継ぐ。** `foo@` は「foo を要求する」であって
+    // foo そのものを指すので（`system_architecture.md` §2.1 の随伴ペア）、関数を取り込め
+    // ば関数である。ここが無いと `(inc@) 5` が適用ではなく余積（器）に解決される
+    // ——`inc@` が Atom に見えるためで、**取り込んだ途端に呼べなくなる**。
+    if (node.position === "postfix" && node.name === "import" && node.operand) return getCategory(node.operand, env, closed);
     // `!__` は Id射（categorical_truth.md §6）＝呼び出せる恒等射なのでLambda。
     // これが無いと `!__ 5`（guide/operator_table.md 147行目の `__ 5 == !__ 5`）が
     // apply ではなく concat に解決されてしまう。`!<非Unit>` は `__` に落ちるのでAtomのまま。

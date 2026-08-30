@@ -726,12 +726,23 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 // ---- 全体の形 ----
 //
 // トップレベルの式は `_sign_main` に入る（entry_point.md の生成スタブが `bl _sign_main`
-// で呼ぶ）。関数は `.global` で外から見える。
+// で呼ぶ）。
 {
 	const r = asm("sq : x ? x * x\nsq 7");
 	checkTrue("_sign_main が出る", r.text.includes("_sign_main:"));
-	checkTrue("関数は .global", r.text.includes(".global sq"));
 	checkTrue("トップレベルの式は _sign_main の中", r.text.split("_sign_main:")[1].includes("bl sq"));
+}
+
+// **名前が外から見えるかどうかは `#` の段数が決める**（system_architecture.md §2.1 の
+// 随伴ペアを ELF に写したもの）。ここで守るのは「`.global` が出るか」ではなく段差である
+// ——以前は全部の関数に `.global` が付いていて、`#` は機械語に何の意味も持っていなかった。
+{
+	const vis = (m) => asm(`${m}sq : x ? x * x\nsq 7`).text;
+	checkTrue("無印は外に名前を出さない", !vis("").includes(".global sq"));
+	checkTrue("# はプロジェクト内だけ（hidden）", vis("#").includes(".global sq") && vis("#").includes(".hidden sq"));
+	checkTrue("## は共有物の外から見える", vis("##").includes(".global sq") && !vis("##").includes(".hidden sq"));
+	checkTrue("### は自分のセクションを持つ", vis("###").includes(".section .sign.pinned"));
+	checkTrue("### の後は .text に戻る", vis("###").split(".section .sign.pinned")[1].includes(".text"));
 }
 
 
