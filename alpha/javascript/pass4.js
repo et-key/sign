@@ -3362,7 +3362,7 @@ function isBoxType(t) {
  * （止めているのは `col > n` である）。ここを区別しないと、器から出ない再帰に器由来の
  * 有限な上界を付けてしまう。
  */
-function selfConsumes(part, name, params) {
+function selfConsumes(part, name, params, restNames) {
 	const bare = (s) => String(s).replace(/[<>]/g, "");
 	const args = [];
 	let head = part;
@@ -3373,6 +3373,12 @@ function selfConsumes(part, name, params) {
 	if (!args.length || !isIdentifierNode(head) || bare(head.value) !== bare(name)) return null;
 	for (const arg of args) {
 		// 裸の仮引数はそのまま渡しているだけ。式になっていて初めて「食った」と言える。
+		//
+		// **ただし分解した残りは違う。** `f : [c ~rest] ?` の `rest` は渡ってきた器の
+		// 2要素目以降であり、`f rest` は名前1つでも**1要素食って進んでいる**。ここを
+		// 「そのまま渡しただけ」と読んでいたため、ブラケットで分解して残りへ再帰する形
+		// （`preprocess.sn` の大半）が上界を出せなかった。
+		if (arg && isIdentifierNode(arg) && restNames && restNames.has(arg.value)) return arg.value;
 		if (!arg || isIdentifierNode(arg)) continue;
 		let found = null;
 		const walk = (x) => {
@@ -3424,8 +3430,28 @@ function selfCallSameArgs(part, name, params) {
 	});
 }
 
+/**
+ * 上界を測るときに「その位置の器」を指す名前。位置ごとに1つ。
+ *
+ * **分解した残りは、同じ器の続きである。** `f : [c ~rest] ?` の `rest` は渡ってきた器の
+ * 2要素目以降であり、そこへ再帰する形（`c (f rest)`）は「同じ器を食いながら進む」ことに
+ * ほかならない。ここを見ていなかったため、**ブラケットで分解して残りへ再帰する形だけが
+ * 上界を出せなかった**——`preprocess.sn` の `sep` / `in_quote` / `head_line` / `gap` /
+ * `walk` がどれもこの形である。
+ *
+ * 測るのは呼ぶ側なので、渡された器の `len` で測る。`||rest||` は `||器|| - 1` なので
+ * 1要素ぶん多く見積もることになるが、**上界なので安全側**である。
+ */
+function boundParamNames(lam) {
+	return paramShapesOf(lam.left).map((sh) =>
+		sh && (sh.kind === "bare" || sh.whole) ? sh.name : sh && sh.kind === "destructure" ? sh.rest : null
+	);
+}
+
 function returnSizeBound(lam, name) {
-	const params = paramShapesOf(lam.left).map((sh) => (sh && sh.kind === "bare" ? sh.name : sh && sh.whole ? sh.name : null));
+	const params = boundParamNames(lam);
+	// 分解した残りの名前。`f rest` は名前1つでも1要素食っている。
+	const restNames = new Set(paramShapesOf(lam.left).filter((sh) => sh && sh.kind === "destructure").map((sh) => sh.rest));
 	const arms = Array.isArray(lam.right && lam.right.lines) ? lam.right.lines.map((l) => (isDefineNode(l) ? l.right : l)) : [lam.right];
 	let konst = 0;
 	let coef = 0; // 段ごとに足す個数。`konst + coef × ||sizeOf||` が上界である
@@ -3488,7 +3514,7 @@ function returnSizeBound(lam, name) {
 			}
 			// **自己呼び出しは、食っている器の要素数ぶん。** ここで諦めていたのが、
 			// 器を返す関数のほとんどが再帰である以上そのまま sret を塞いでいた。
-			const eaten = selfConsumes(q, name, params);
+			const eaten = selfConsumes(q, name, params, restNames);
 			if (eaten) {
 				if (rec && rec !== eaten) return null; // 1枝で2つ食う形はまだ扱わない
 				rec = eaten;
@@ -3668,7 +3694,7 @@ function collectSretPlan(nodes, em) {
 		if (!b) continue;
 		let sizeOfIndex = null;
 		if (b.sizeOf) {
-			const names = paramShapesOf(lam.left).map((sh) => (sh && sh.kind === "bare" ? sh.name : sh && sh.whole ? sh.name : null));
+			const names = boundParamNames(lam);
 			sizeOfIndex = names.indexOf(b.sizeOf);
 			if (sizeOfIndex < 0) continue; // `||…||` の相手が仮引数でなければ呼ぶ側は測れない
 		}
