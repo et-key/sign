@@ -743,6 +743,16 @@ function reduceOnce(items, tier, env, phase) {
   for (let i = 0; i < items.length - 1; i++) {
     const a = items[i];
     const b = items[i + 1];
+    // **中置 `@` は右結合である。**
+    //
+    // `a @ b @ c` は「c において（b において a）」であり、**一番右が根**である
+    // （`www.example.com` を右から解決するのと同じ向き）。左から畳むと `(a @ b) @ c` に
+    // なり、内側が鍵の位置へ落ちて根と葉が入れ替わる。
+    //
+    // 右にまだ `@` が居るなら、ここでは畳まない——結果として右から畳まれる。均し
+    // （`x @ p` → `p ' x`）は単純な左右の入れ替えで済む：内側から均されるので、器の側が
+    // 自然に内側へ積まれる。
+    if (b === "@" && items.indexOf("@", i + 2) !== -1) continue;
     if (isBareOperatorToken(b)) {
       const entry = lookup(b, "infix");
       if (entry && entry.precedence === tier && i + 2 < items.length && !isBareOperatorToken(items[i + 2])) {
@@ -1500,11 +1510,31 @@ function resolveBlock(term, env) {
  */
 function desugarIndexRest(node) {
   if (!node || typeof node !== "object") return node;
+  // **中置 `@` は `'` の左右を入れ替えた形である**（`x @ p` ＝ `p ' x`）。
+  //
+  // `@` は右結合なので（`reduceOnce`）、`a @ b @ c` は `a @ (b @ c)` である。内側から
+  // 均せば `a @ (c ' b)` → `(c ' b) ' a` となり、**器の側が自然に内側へ積まれる**
+  // ——連鎖を畳み直す必要は無い。結合の向きが正しければ、入れ替えは1段の話で済む。
+  if (node.type === "operation" && node.name === "get_at" && node.position === "infix" && node.left && node.right) {
+    node = { ...node, op: "'", name: "get_prop", left: node.right, right: node.left };
+  }
   for (const k of ["left", "right", "operand", "middle"]) {
     if (node[k]) node[k] = desugarIndexRest(node[k]);
   }
   if (Array.isArray(node.lines)) node.lines = node.lines.map(desugarIndexRest);
   for (const e of node.entries || []) if (e.default) e.default = desugarIndexRest(e.default);
+  // **中置 `@` は `'` の左右を入れ替えた形である**（`x @ p` ＝ `p ' x`）。
+  //
+  // 演算子表は両方を tier 17 の `get` と定めている——違うのは語順だけで、`s ' x` が
+  // 「s **の** x」（所有格・器が主語）、`x @ s` が「s **において** x」（鍵が主語）である。
+  // 引くもの自体は同じなので、意味論は1つに保って記号だけ2通りにする。
+  //
+  // **鍵を先に言う語順は名前解決の語順である。** `foo @ そのモジュール` のように「探す
+  // ものを先に、どこで探すかを後に」置ける——後置 `@`（import）はその右辺が暗黙になった
+  // 形であり、右辺を名指す予約語を持たない（Sign に予約語は無い）ゆえに後置になっている。
+  //
+  // 均すのは Pass 2 の出口である。逆適用（`x f`）や添字の `N~` と同じ扱い——記号は残し、
+  // 意味論からは消す。入れ替えそのものは**子へ降りる前**に済ませてある（上）。
   const r = node.right;
   if (
     node.type === "operation" && node.name === "get_prop" &&
