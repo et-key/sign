@@ -157,6 +157,11 @@ function compile(source, options = {}) {
   const nodes = lines.map((line) => desugarIndexRest(reduceAll(line, env)));
   for (const node of nodes) synthesizePointfreeIn(node, env);
 
+  // **並べた相手は、ここで畳み終える。** 個数が構文から見えているなら関数も器も要らない
+  // ——`construct` の連鎖が既に左畳みの括弧の形をしている。残った（相手が実行時の器の）
+  // 形だけが、下の合成へ回る。
+  expandGreedyFoldsIn(nodes);
+
   // **貪欲な畳み込みへ名前と本体を与える。** `[+]` は残りアリティ2なので受け口1つの
   // 合成には収まらない——トップレベルへ持ち上げてから、その場の `[+]` を名前へ差し替える。
   if (!options.__pfFolded) {
@@ -447,6 +452,68 @@ function foldNameFor(op) {
 function isGreedyFold(node) {
   const n = node && Array.isArray(node.lines) && node.lines.length === 1 ? node.lines[0] : node;
   return !!(n && n.type === "operation" && n.partial && !n.pointfreeMap && n.position === "infix" && !n.left && !n.right && n.op);
+}
+
+/**
+ * **並べた相手なら、畳み込みはコンパイル時に終わる。**
+ *
+ * `[-] 1 2 3 4 5` の右辺は、Pass 2 を出た時点で既に**左に入れ子の `construct` 連鎖**に
+ * なっている——`construct(construct(construct(construct(1,2),3),4),5)`。これは左畳みの
+ * 括弧の付き方そのものなので、**`construct` を演算子に差し替えるだけ**で畳み終わる。
+ *
+ *     [-] 1 2 3 4 5   →   ((((1 - 2) - 3) - 4) - 5)
+ *
+ * 個数が構文から見えているときだけできる。相手が識別子（実行時の器）や後置 `~` なら
+ * 長さが分からないので、これまで通り再帰する関数を合成する。
+ *
+ * これが効くのは命令数だけではない。**実行時の値に対するポイントフリーが出せるように
+ * なる**——`f : a b c ? [+] a b c` は器を組んで走ろうとして「器の構築はまだ出せません
+ * （フレームから出る）」で止まっていたが、展開すれば器そのものが要らない。
+ *
+ * @returns 畳み終えたノード。展開できない形なら null。
+ */
+function expandGreedyFold(node) {
+  if (!node || node.type !== "operation" || node.name !== "apply" || node.position !== "infix") return null;
+  if (!isGreedyFold(node.left)) return null;
+  const inner = node.left.lines ? node.left.lines[0] : node.left;
+  const leaves = constructLeaves(node.right);
+  if (!leaves || leaves.length < 2) return null; // 1つだけの形は畳む相手が無く、器かもしれない
+  return leaves.reduce((acc, x) => ({
+    type: "operation",
+    name: inner.name,
+    op: inner.op,
+    position: "infix",
+    left: acc,
+    right: x,
+  }));
+}
+
+/**
+ * 左に入れ子の `construct` 連鎖を、並びとして読む。連鎖でなければ null。
+ *
+ * 一番外側の括弧だけ剥がす（`[+] [1 2 3]` の `[…]`）。**要素の括弧は剥がさない**
+ * ——`(1 2)` は入れ子の器であって、外の並びの1要素である。
+ */
+function constructLeaves(node) {
+  const outer = node && Array.isArray(node.lines) && node.lines.length === 1 ? node.lines[0] : node;
+  const isChain = (n) => !!(n && n.type === "operation" && n.name === "construct" && n.position === "infix");
+  if (!isChain(outer)) return null;
+  const leaves = [];
+  const walk = (n) => {
+    if (isChain(n)) { walk(n.left); leaves.push(n.right); return; }
+    leaves.push(n);
+  };
+  walk(outer);
+  return leaves;
+}
+
+/** 木の中の展開できる畳み込みを、その場で畳み終える。 */
+function expandGreedyFoldsIn(nodes) {
+  for (let i = 0; i < nodes.length; i++) {
+    const done = expandGreedyFold(nodes[i]);
+    if (done) nodes[i] = done;
+  }
+  walkNodes(nodes, null, (child) => expandGreedyFold(child) || child);
 }
 
 /** 貪欲なポイントフリーを演算子ごとに集め、生成すべきソースを返す。 */
