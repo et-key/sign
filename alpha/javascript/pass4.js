@@ -4434,6 +4434,23 @@ function wrapFrame(bodyLines, slots, name, movedSp = false) {
 	// このためである）。動かしていない関数には出さない：1命令とはいえ、全ての `ret` に
 	// 付けるのは「使っていない機能の代金」である。
 	const restore = movedSp ? ["\tmov sp, x29".padEnd(30) + "// sp を動かしたので戻す"] : [];
+
+	// **場所を使わない関数は、場所を取らない。**
+	//
+	// フレームは「スロットを x29 相対で持つため」と「呼び出しを跨いで x30 を残すため」に
+	// ある。どちらも要らない関数——覗き穴が往復を消しきって `x29` が1度も出て来ず、
+	// `bl` も無い——では、`stp`/`mov x29, sp`/`ldp` の3命令はただの儀式である。
+	//
+	// **layer 0 ではこれが正しさの話でもある。** そこは RAM 未初期化の世界であり、
+	// `sp` が有効な場所を指している保証が無い。ところが `stp x29, x30, [sp, #-32]!` は
+	// プリインデックスで `sp` を下げて書く——`sub sp` という*形*をしていないだけで、
+	// やっていることは確保である。門番が `sub sp` を探していたので当たっていなかった。
+	// 使わないフレームを出さなくなれば、少なくとも「使わないのに触る」は消える
+	// （`?` が持つ本来の要求は別の話で、layer_relations.md §4.1 が名指ししている）。
+	const usesFrame = filled.some((l) => /\bx29\b/.test(l));
+	const calls = filled.some((l) => /^\s*(bl|blr)\b/.test(l.split("//")[0].trim()));
+	if (!movedSp && !usesFrame && !calls) return [`${name}:`, ...filled, "\tret"];
+
 	return [
 		`${name}:`,
 		`\tstp x29, x30, [sp, #-${frame}]!`.padEnd(30) + `// フレーム ${frame} バイト`,
