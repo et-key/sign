@@ -1065,17 +1065,17 @@ function computeAtomType(node, env) {
         // ——`f` の返値が `a , (f …)~` なら `T = T` になり、どの型も不動点なので何も
         // 分からない。左辺は積まれる要素そのものなので、そこから決まる。余積の
         // `(s ' 0) (f …)~` が `List(Int)` になるのと同じ理屈である。
+        // **左辺が器でも同じである。** トークン列（`String` を並べた列）がまさにその形で
+        // あり、要素が器だからといって規則が変わる理由は無い——余積の
+        // `(s ' 0) (f …)~` が左辺から要素型を取るのと揃える。
+        //
+        // 以前ここは左辺が器のときだけ「相手の型を通す」にしていたが、それだと lexer.sn
+        // の `(take_while …) , (tokens …)~` が `T = T` になって決まらず、枝ごとに違う型が
+        // 出て `List | Struct` の直和へ落ちていた。
         const el = inferAtomType(node.left, env);
-        if (el && el !== "Unit" && !CONTAINER_TYPES.has(el)) {
+        if (el && el !== "Unit") {
           node.elementType = el;
           return "List";
-        }
-        // 左辺が器なら、並ぶのは器である——相手の型を通す（`[1 2] , [3 4]~` の形）。
-        const inner = inferAtomType(node.right.operand, env);
-        if (inner && inner !== "Unit") {
-          const ie = node.right.operand && node.right.operand.elementType;
-          if (ie) node.elementType = ie;
-          return inner;
         }
       }
       // カンマ（直積）は常に Struct（type_system.md §2）。名前付きスロットも

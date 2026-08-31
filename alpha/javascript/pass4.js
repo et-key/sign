@@ -4350,6 +4350,17 @@ function boundedCallOf(part, known, params) {
 
 function returnSizeBound(lam, name, known, group) {
 	const params = boundParamNames(lam);
+	// 要素の型。**要素が器なら、器を1つ置くのは1要素である**——並べるものが器だから
+	// といって個数が決まらないわけではない（幅は `passingOf` が答える）。
+	const elemType = (() => {
+		const body = lam.right;
+		const ls = Array.isArray(body && body.lines) ? body.lines.map((l) => (isDefineNode(l) ? l.right : l)) : [body];
+		for (const l of ls) {
+			const u = unwrap(l);
+			if (u && u.elementType) return u.elementType;
+		}
+		return null;
+	})();
 	// 分解した残りの名前。`f rest` は名前1つでも1要素食っている。
 	const restNames = new Set(paramShapesOf(lam.left).filter((sh) => sh && sh.kind === "destructure").map((sh) => sh.rest));
 	const arms = Array.isArray(lam.right && lam.right.lines) ? lam.right.lines.map((l) => (isDefineNode(l) ? l.right : l)) : [lam.right];
@@ -4398,12 +4409,19 @@ function returnSizeBound(lam, name, known, group) {
 			}
 			return v;
 		};
-		cur = peel(cur);
-		while (cur && cur.type === "operation" && COPRODUCT_BUILD_OPS.has(cur.name)) {
-			parts.unshift(peel(cur.right));
-			cur = peel(cur.left);
-		}
-		parts.unshift(cur);
+		// **結合の向きに依存しない歩き方をする。** 片方へ降りるループは「左結合で積まれて
+		// いる」を前提にしており、右結合の連鎖（`a , (b , c)`）を1要素と数えて上界を
+		// 少なく見積もる。左右とも再帰で開く。
+		const walkBound = (x) => {
+			const v = peel(x);
+			if (v && v.type === "operation" && COPRODUCT_BUILD_OPS.has(v.name)) {
+				walkBound(v.left);
+				walkBound(v.right);
+				return;
+			}
+			parts.push(v);
+		};
+		walkBound(cur);
 		let k = 0;
 		let ref = null;
 		let rec = null; // 自己呼び出しが食っている仮引数
@@ -4450,8 +4468,18 @@ function returnSizeBound(lam, name, known, group) {
 				}
 				continue;
 			}
-			// それ以外は1要素とみなせるものだけ（器なら個数が決まらない）。
-			if (!q || isBoxType(q.atomType)) return null;
+			// それ以外は1要素とみなせるものだけ。
+			//
+			// **器でも、それが要素そのものなら1つである。** 要素の型が器のとき
+			// （`List(String)` のトークン列がそれ）、並べるものが器なのは当たり前で
+			// あって「個数が決まらない」わけではない——並ぶ幅は `passingOf` が答える
+			// （`{ptr, len}` の2語）。ここで諦めていたため、**要素が `String` の器を
+			// 返す関数**が丸ごと sret に乗らなかった（lexer.sn の `tokens`）。
+			//
+			// 撒いた器（`st~`）はこの手前で拾われている。ここへ来るのは撒いていない
+			// ——つまり1要素として置かれるものである。
+			if (!q) return null;
+			if (isBoxType(q.atomType) && !(elemType && isBoxType(elemType))) return null;
 			k += 1;
 		}
 		// 食いながら撒く枝（`d st~` と自己呼び出しが同居する形）は線形の漸化式に
@@ -4942,8 +4970,22 @@ function collectSretPlanOnce(nodes, em, known, groups) {
 			if (a && a.type === "operation" && COPRODUCT_BUILD_OPS.has(a.name) && a.escapesFrame !== false) { build = a; break; }
 		}
 		if (!build) continue;
+		// **要素1つを置くのに何バイト要るか**は、`measure` ではなく `passingOf` が答える。
+		//
+		// `measure({atomType:"String"})` は「その文字列の中身の長さ」を測ろうとするので
+		// 長さが型に無いと null になる。だがここで要るのは**運ぶ幅**であり、`String` を
+		// 要素にする器は `{ptr, len}` の2語＝16 byte で並べる（`passingOf` はそう答える）。
+		//
+		// これが無いと、要素が `String` の器を返す関数——lexer.sn の `tokens` がまさに
+		// それ——は sret の計画に載らず、「フレームから出るので置けない」で止まっていた。
+		// レジスタに乗る要素（`Char`/`Int`）はこれまで通り `measure` の答えと同じである。
 		const et = build.elementType || (build.atomType === "String" ? "Char" : null);
-		const m = et ? measure({ atomType: et }, { target: em.conf.target, charset: em.conf.charset }) : null;
+		const pass = et ? passingOf({ atomType: et }, { target: em.conf.target, charset: em.conf.charset }) : null;
+		const m = pass && pass.mode === "reference"
+			? { size: pass.size }
+			: et
+				? measure({ atomType: et }, { target: em.conf.target, charset: em.conf.charset })
+				: null;
 		if (!m || !m.size) continue;
 		const name = bareName(node.left.value);
 		const b = returnSizeBound(lam, name, known, groups && groups.get(bareName(node.left.value)));
