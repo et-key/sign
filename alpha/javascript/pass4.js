@@ -1692,13 +1692,9 @@ function genExpr(node, env, em, scope, tail = false) {
 	if (n.type === "operation" && n.name === "product" && n.repr === "cursor") {
 		const want = slotsOfNode(n, em.conf, env);
 		if (want === null) return em.fail(n, "カーソルの渡し方が決まりません");
-		const parts = [];
-		let cur = n;
-		while (cur && cur.type === "operation" && cur.name === "product") {
-			parts.unshift(cur.right);
-			cur = cur.left;
-		}
-		parts.unshift(cur);
+		// **結合の向きに依存しない歩き方をする**（`flattenProduct`）。片方へ降りる while
+		// ループは「左結合で積まれている」を前提にしていた。
+		const parts = flattenProduct(n) || [];
 		if (parts.length !== 3) return em.fail(n, `カーソルは {arm, k, 入力} の3つです（${parts.length} つ来ました）`);
 		const base = em.slot;
 		const names = ["arm", "k", "入力"];
@@ -1864,15 +1860,8 @@ function genExpr(node, env, em, scope, tail = false) {
 		// `$(h , t)` は「その場で生成されたオブジェクト本体」そのものである。ここで
 		// スカラーを順に置けば、それが cons セルになる——`{ptr, len}` の器ではなく、
 		// 幅の決まった組である（`list_model.md` の List は連続領域、こちらは組）。
-		const parts = [];
-		if (t && t.type === "operation" && t.name === "product") {
-			let cur = t;
-			while (cur && cur.type === "operation" && cur.name === "product") {
-				parts.unshift(cur.right);
-				cur = cur.left;
-			}
-			parts.unshift(cur);
-		}
+		// 同上——組の要素も向きに依存せず開く。
+		const parts = t && t.type === "operation" && t.name === "product" ? flattenProduct(t) || [] : [];
 		if (parts.length > 1) {
 			const base = em.slot;
 			for (const p of parts) {
@@ -2210,13 +2199,20 @@ function genExpr(node, env, em, scope, tail = false) {
 			}
 			return v;
 		};
+		// **結合の向きに依存しない歩き方をする。** 片方へ降りる while ループは「左結合で
+		// 積まれている」を前提にしており、`,` を仕様どおり右結合にした瞬間に、連鎖の残りが
+		// 「器が1つ」に見えて「要素数が実行時に決まる」へ落ちていた。左右とも再帰で開く。
 		const parts = [];
-		let cur = peel(n);
-		while (cur && cur.type === "operation" && COPRODUCT_BUILD_OPS.has(cur.name)) {
-			parts.unshift(peel(cur.right));
-			cur = peel(cur.left);
-		}
-		parts.unshift(cur);
+		const walkParts = (x) => {
+			const u = peel(x);
+			if (u && u.type === "operation" && COPRODUCT_BUILD_OPS.has(u.name)) {
+				walkParts(u.left);
+				walkParts(u.right);
+				return;
+			}
+			parts.push(u);
+		};
+		walkParts(n);
 		// **構築は `__` を落とす。** `1 __ 3` は `[1 3]` である（operator_table.md の
 		// 構築行、Unit は単位元）。ここで落とさないと `||1 __ 3||` が 3 を返し、解釈器の
 		// 2 と食い違う——**診断も出ず、長さだけが違う**。

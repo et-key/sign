@@ -237,10 +237,15 @@ function structTypeText(node, atomType) {
     // ——実際に `l : p p`（構造体を余積で並べた形）が型の書き出しで落ちていた。
     // 分解できないものは分解できないと言えばよい。型の書き出しが止まらないのは
     // どんな理由があっても間違いである。
+    // **結合の向きに依存しない歩き方をする。** 左だけ再帰して右を葉として扱うのは
+    // 「左結合で積まれている」を前提にしていた。`,` は仕様どおり右結合なので
+    // （operator_table.md 9行目）、`1 , (`abc` , 2.5)` の右がそのまま1スロットに見え、
+    // `Struct(Int Struct(String Float))` と入れ子で書き出されていた。値の側は平坦なのに
+    // 型だけが入れ子という食い違いである。左右とも再帰で開けばどちらでも同じ並びが出る。
     const walk = (n) => {
       if (n && n.type === "operation" && n.name === "product") {
         walk(n.left);
-        slots.push(slotTypeText(n.right));
+        walk(n.right);
         return;
       }
       if (n === node) return;

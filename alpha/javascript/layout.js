@@ -430,14 +430,12 @@ function cursorParts(node) {
     return null;
   }
   if (!n || n.type !== "operation" || n.name !== "product") return null;
-  const out = [];
-  let cur = n;
-  while (cur && cur.type === "operation" && cur.name === "product") {
-    out.unshift(cur.right);
-    cur = cur.left;
-  }
-  out.unshift(cur);
-  return out.length === 3 ? out : null;
+  // **結合の向きに依存しない歩き方をする。** 片方へ降りる while ループは「左結合で
+  // 積まれている」を前提にしており、`,` の結合を仕様どおり（右結合）に直した瞬間に
+  // 並びが崩れる。左右とも再帰で開けば、どちらから畳まれていても同じ並びが出る
+  // ——`flattenByFamily` が既にその形である。
+  const out = flattenProduct(n);
+  return out && out.length === 3 ? out : null;
 }
 
 function measureList(node, conf, depth = 0) {
