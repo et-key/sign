@@ -858,6 +858,19 @@ function genExpr(node, env, em, scope, tail = false) {
 	if (n.type === "atom" && (n.kind === "char" || n.kind === "string" || n.kind === "unicode")) {
 		const cps = codePointsOf(n);
 		if (cps === null) return em.fail(n, "文字列の中身が読めません");
+		// **U+0000 は文字ではなく `__` である**（value_representation.md §3）。Char の
+		// 符号位置範囲から除外されている唯一の点で、そのビットパターンが niche に充てられて
+		// いる——`0u0000` と書いたら `__` が出なければならない。
+		//
+		// ここが 0 を出していた。**Sign では `0` は真**（加法単位元・id 射の観測）なので、
+		// 偽であるべきものが真として出てくる。解釈器は `__` を返しており、値だけが食い違う。
+		if (isUnitAtom(n)) {
+			const off0 = em.push();
+			if (off0 === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.emit("movz x9, #0x8000, lsl #48", "U+0000 は __ の niche（文字ではない）");
+			em.store(SCRATCH[0], off0);
+			return 1;
+		}
 		const w = charSizeOf(em.conf.charset);
 		// 型が `String` なら2文字以上である（1文字は `Char` へ潰れ、0文字は `Unit`）。
 		if (n.atomType === "Char" && cps.length === 1) {
@@ -2167,8 +2180,7 @@ function genExpr(node, env, em, scope, tail = false) {
 		// なる——そこはまだ食い違ったままで、`compile.js` の写像の展開が比較を避けて
 		// いるのはそのためである。
 		for (let k = parts.length - 1; k >= 0; k--) {
-			const u = peel(parts[k]);
-			if (u && u.type === "atom" && u.kind === "unit") parts.splice(k, 1);
+			if (isUnitAtom(peel(parts[k]))) parts.splice(k, 1);
 		}
 		const et = n.elementType || (n.atomType === "String" ? "Char" : null);
 		const em1 = et ? measure({ atomType: et }, { target: em.conf.target, charset: em.conf.charset }) : null;
@@ -2852,6 +2864,21 @@ function constStructDefine(node) {
 // 全域性はこの1つの値を避けることでできている。
 const NICHE_VALUE = 0x8000000000000000n;
 
+// **これは `__` そのものを書いたリテラルか。**
+//
+// 書き方が2つある。`__` と、`0u0000` である——U+0000 は Char の符号位置範囲から除外
+// された唯一の点で、そのビットパターンが niche に充てられている
+// （value_representation.md §3）。**同じ値の別の綴り**なので、片方だけ知っている場所が
+// あると食い違う（`\|\|1 0u0000 3\|\|` が 3、`0u0000 + 5` が niche+5 になっていた）。
+function isUnitAtom(node) {
+	const n = unwrap(node);
+	if (!n || n.type !== "atom") return false;
+	if (n.kind === "unit") return true;
+	if (n.kind !== "unicode") return false;
+	const cps = codePointsOf(n);
+	return !!cps && cps.length === 0;
+}
+
 // **その式が `__` になり得ないと、構文だけで分かるか。**
 //
 // 分かるなら完全性公理の検査を出さなくてよい——boot で「番地が定数なら全域性はタダ」
@@ -2865,6 +2892,7 @@ const NICHE_VALUE = 0x8000000000000000n;
 function cannotBeUnit(node, env) {
 	const n = unwrap(node);
 	if (!n) return false;
+	if (isUnitAtom(n)) return false; // `0u0000` は綴りが違うだけの `__` である
 	if (n.type === "atom") return n.kind === "number" || n.kind === "address" || n.kind === "char" || n.kind === "unicode";
 	if (n.type === "operation" && INT_OPS[n.name] && n.position === "infix") {
 		if (n.atomType === "Char" || n.name === "div") return false;
