@@ -2152,7 +2152,12 @@ function genExpr(node, env, em, scope, tail = false) {
 	//
 	// **運ぶのは `{ptr}` の1本。** 形が型に入っているので長さを添える必要が無い
 	// （stack_abi.md §4.6）——`List` が2本なのと対になる。
-	if (n.atomType === "Struct" && n.slotKind === "positional" && !sretHere && n.escapesFrame === false) {
+	// **積（`,`）の連番スロットだけを見る。** 余積（空白）の `unshift`/`construct` も
+	// 同じ `Struct` 型になりうるが、`flattenProduct` は括りの中の余積まで割ってしまう
+	// ——`1 [2 3]` が3スロットになり、「`[2 3]` は1要素である」（右辺を1要素として足す、
+	// operator_table.md 10.1）が消える。連番スロットの表を引いてよいのは、積として
+	// 書かれた形だけである。
+	if (n.name === "product" && n.atomType === "Struct" && n.slotKind === "positional" && !sretHere && n.escapesFrame === false) {
 		const lay = layoutOfStruct(n, { target: em.conf.target, charset: em.conf.charset, env });
 		const slotNodes = flattenProduct(n);
 		if (lay && lay.slots && slotNodes && lay.slots.length === slotNodes.length && slotNodes.length > 1) {
