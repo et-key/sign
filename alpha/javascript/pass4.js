@@ -1054,19 +1054,13 @@ function genExpr(node, env, em, scope, tail = false) {
 			}
 			em.emit(`mov ${SCRATCH[0]}, x11`);
 		}
-		// **足せることと、足した先が文字であることは別である。** 文字の算術は符号位置の
-		// 算術なので命令はそのままだが、結果が charset の外へ出たらそれは文字ではない
-		// ——`__` になる。`c + 1` で次の文字を取る書き方はこの検査の内側で成立している。
+		// **足せることと、書けることは別である。** 文字の算術は符号位置の算術であり、
+		// 値としてはそれで全部である——charset に収まるかどうかは**書き出すときの話**
+		// なので、`#` の出口（`emitWritableGuard`）が見る。
 		//
-		// 見るのは**符号なしの上限1つ**でよい。`Char` は符号なしなので、引き算で負へ
-		// 回った値は巨大な符号なし値になり、同じ比較で落ちる。
-		if (n.atomType === "Char") {
-			const lim = charLimitOf(em.conf.charset);
-			emitImm(em, SCRATCH[1], lim, `charset の上限（${em.conf.charset || DEFAULT_CHARSET}）`);
-			em.emit(`cmp ${SCRATCH[0]}, ${SCRATCH[1]}`, "文字の範囲内か");
-			em.emit("movz x12, #0x8000, lsl #48", "範囲外は __");
-			em.emit(`csel ${SCRATCH[0]}, ${SCRATCH[0]}, x12, ls`, "文字でなければ __");
-		}
+		// 以前はここで上限を見ていた。判定が半端で（サロゲートが通る）、`__` を誤りの
+		// 印として使うことになり、演算のたびに3命令払っていた。`Char` は `Int` と同じ
+		// 値であり、算術の道も同じでよい。
 		em.pop(1); // 右辺のスロットを返す。結果は左辺のスロットへ書く。
 		em.store(SCRATCH[0], lo);
 		return 1;
@@ -2046,7 +2040,10 @@ function genExpr(node, env, em, scope, tail = false) {
 				em.pop(1);
 				emitImm(em, SCRATCH[0], cDst, "書き込み先（定数——niche ではない）");
 			}
+			const skipC = em.newLabel("unwritable");
+			const guardedC = emitWritableGuard(em, srcReg, n.right, env, skipC);
 			em.emit(storeAt(srcReg, SCRATCH[0], wOut), `${wOut} byte を書く`);
+			if (guardedC) em.label(skipC);
 			em.store(SCRATCH[0], off);
 			return 1;
 		}
@@ -2072,7 +2069,10 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.emit(`cmp ${SCRATCH[0]}, x12`);
 			em.emit(`b.eq ${skip}`, "不正なアドレスへは書かない");
 			em.load(SCRATCH[1], vo, "書く値");
+			const skipG = em.newLabel("unwritable");
+			const guardedG = emitWritableGuard(em, SCRATCH[1], n.right, env, skipG);
 			em.emit(storeAt(SCRATCH[1], SCRATCH[0], w), `${w} byte を書く`);
+			if (guardedG) em.label(skipG);
 			em.emit(`b ${done}`, "成功したらアドレスを返す");
 			em.label(skip);
 			em.emit(`mov ${SCRATCH[0]}, x12`, "書けなければ __");
@@ -2863,6 +2863,52 @@ function constStructDefine(node) {
 // niche（`__`）の実体。**番地としては決して有効でない値**であり、`#` / 前置 `@` の
 // 全域性はこの1つの値を避けることでできている。
 const NICHE_VALUE = 0x8000000000000000n;
+
+/**
+ * **書けない値は書かない**（`#` の出口）。
+ *
+ * 2つある。
+ *
+ *   `__`          仕様は「何もしないがアドレス値は返ってくる」（operator_table.md の
+ *                 `#` 中置行）。書き込んでいたので、`p # __` がメモリを niche で
+ *                 潰していた。
+ *   charset の外   `Char` は符号位置なので、charset が受け取れない値は**文字として
+ *                 書き出せない**。ascii なら 0x7F まで、utf32 なら 0x10FFFF まで
+ *                 ——かつ**サロゲート（D800–DFFF）は単独では文字ではない**。
+ *
+ * **算術ではなく出口で見る。** 値としての `Char` は Int と同じもので、違うのは
+ * 書き出すときだけである。算術の途中で見ると、(1) 判定が半端になり（上限しか見て
+ * いなかったのでサロゲートが通っていた）、(2) `__` を「誤りの印」として使うことに
+ * なり、(3) 演算のたびに払う。出口なら1回で、完全に、要るときだけ見られる。
+ *
+ * **要るときだけ出す。** 値が `__` になり得ないと構文で分かるなら前者は要らず、
+ * `Char` でないなら後者も要らない——MMIO の書き込み（`0x9000000 # 72`）はどちらも
+ * 当たらないので、命令は1つも増えない。
+ *
+ * @returns 門を出したか（出したなら呼ぶ側が `skip` のラベルを置く）
+ */
+function emitWritableGuard(em, valReg, node, env, skip) {
+	let guarded = false;
+	if (valReg !== "xzr" && !cannotBeUnit(node, env)) {
+		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
+		em.emit(`cmp ${valReg}, x12`, "書く値が __ か");
+		em.emit(`b.eq ${skip}`, "__ は書かない（何も起きない）");
+		guarded = true;
+	}
+	if (node && node.atomType === "Char") {
+		emitImm(em, "x13", charLimitOf(em.conf.charset), `charset の上限（${em.conf.charset || DEFAULT_CHARSET}）`);
+		em.emit(`cmp ${valReg}, x13`);
+		em.emit(`b.hi ${skip}`, "charset の外は書かない");
+		if (charSizeOf(em.conf.charset) > 1) {
+			emitImm(em, "x13", 0xd800, "サロゲートの下端");
+			em.emit(`sub x13, ${valReg}, x13`);
+			em.emit("cmp x13, #0x7ff");
+			em.emit(`b.ls ${skip}`, "サロゲートは単独では文字ではない");
+		}
+		guarded = true;
+	}
+	return guarded;
+}
 
 // **これは `__` そのものを書いたリテラルか。**
 //

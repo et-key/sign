@@ -761,8 +761,12 @@ function arithOnValues(name, l, r, limit = charLimitOf(DEFAULT_CHARSET)) {
     return typeof r === "string" && [...r].length !== 1 ? UNIT : r;
   }
   // **1文字は符号位置そのものである**（`[x] ≅ x` なので長さ1の文字列は `Char`）。
-  // 文字の算術は符号位置の算術であり、結果が charset の外へ出たら**それは文字では
-  // ない**ので `__` になる。`c + 1` で次の文字を取る書き方がここで成立する。
+  // 文字の算術は符号位置の算術である——**そして値としてはそれで全部**である。
+  //
+  // ここで charset の範囲を見るのをやめた。`Char` は `Int` と同じ値であり、違うのは
+  // **書き出すときだけ**だからである（`#` の出口が `emitWritableGuard` で見る）。
+  // 算術で見ると、(1) 判定が半端になり（上限しか見ずサロゲートが通っていた）、
+  // (2) `__` を「誤りの印」として使うことになり、(3) 演算のたびに払う。
   //
   // 長さ2以上の文字列は §3.2 の通り算術の対象ではない（型エラーで `__` へ収束）。
   // 区別できるのは、1要素の器がスカラーと同型だからである（原理8）。
@@ -775,8 +779,15 @@ function arithOnValues(name, l, r, limit = charLimitOf(DEFAULT_CHARSET)) {
     const fn = ARITH_OPS[name];
     if (!fn) return UNIT;
     const out = fn(lc, rv);
-    if (!Number.isInteger(out) || out < 0 || out > limit) return UNIT;
-    return String.fromCodePoint(out);
+    // **値としては `Int` と同じ**。ここで落とすものは何も無い——負も、上限の外も、
+    // サロゲートも、値としては普通に存在する。書けるかどうかは `#` の出口が見る。
+    //
+    // 返す姿だけが違う。**描ける符号位置なら文字として、そうでなければ数として**返す
+    // ——同じ値の別の見せ方であって（qemu ハーネスもそう揃えている）、値の側の区別では
+    // ない。以前ここは範囲外を `__` にしており、`\`a\` - 200` が `__`、機械は -103 と
+    // 食い違っていた。
+    const drawable = Number.isInteger(out) && out >= 0 && out <= 0x10ffff && !(out >= 0xd800 && out <= 0xdfff);
+    return drawable ? String.fromCodePoint(out) : out;
   }
   // §3.2: String（Listと同型）の左辺に算術演算子は効かない → 型エラーで__に収束。
   // 注: list_model.md §4.4の文面は「+でコードポイントが露出する」としているが、
