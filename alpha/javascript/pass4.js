@@ -2314,9 +2314,50 @@ function genExpr(node, env, em, scope, tail = false) {
 				em.emit(`sub sp, sp, #${bytes}`, `${count} 要素ぶんの場所を取る（フレームから出ない）`);
 				em.movedSp = true;
 			}
+			// **実行時に `__` になる要素は、並べない。**
+			//
+			// 構築の `__` は単位元なので `1 __ 3` は `[1 3]` である。静的に `__` と分かる
+			// 要素は既に落としてあるが（`parts` のフィルタ）、選択写像が落とした要素の
+			// ように**走らせてみないと分からない**ものが残る。
+			//
+			// そこはカーソルで書く：書けた個数をバイトで持ち、通った要素だけをカーソルの
+			// 位置へ置いて進める。長さは最後にカーソルから作る。上界は要素数なので確保は
+			// 変わらない——**溢れないまま短くなる**だけである。
+			//
+			// **払うのは `__` になり得る要素だけである。** リテラルの並びは全部が
+			// `cannotBeUnit` なので、今まで通り静的なオフセットと静的な長さで出る
+			// （実プログラムはここに乗る）。番地が定数なら全域性がタダだったのと同じ形。
+			const maybeUnit = parts.map((q) => !cannotBeUnit(q, env));
+			if (!maybeUnit.some(Boolean)) {
+				for (let k = 0; k < count; k++) {
+					em.load(SCRATCH[0], (base + k) * 8);
+					em.emit(storeElem(SCRATCH[0], into, k * w, w), k === 0 ? (sretHere ? "呼び出し側のスロットへ並べる" : "並べる") : undefined);
+				}
+				em.emit(`mov ${SCRATCH[0]}, ${into}`, "ptr");
+				em.pop(count);
+				const po = em.push();
+				const lo = po === null ? null : em.push();
+				if (lo === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+				em.store(SCRATCH[0], po, "ptr");
+				em.emit(`mov ${SCRATCH[1]}, #${count}`, "len は要素数");
+				em.store(SCRATCH[1], lo, "len");
+				return 2;
+			}
+			em.emit("mov x13, #0", "書けた個数（バイト）");
+			em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
 			for (let k = 0; k < count; k++) {
 				em.load(SCRATCH[0], (base + k) * 8);
-				em.emit(storeElem(SCRATCH[0], into, k * w, w), k === 0 ? (sretHere ? "呼び出し側のスロットへ並べる" : "並べる") : undefined);
+				if (!maybeUnit[k]) {
+					em.emit(storeElem(SCRATCH[0], into, null, w, "x13"), k === 0 ? "並べる" : undefined);
+					em.emit(`add x13, x13, #${w}`);
+					continue;
+				}
+				const skip = em.newLabel("nofill");
+				em.emit(`cmp ${SCRATCH[0]}, x12`, "この要素は __ か");
+				em.emit(`b.eq ${skip}`, "__ は並べない（構築の単位元）");
+				em.emit(storeElem(SCRATCH[0], into, null, w, "x13"), "並べる");
+				em.emit(`add x13, x13, #${w}`, "書けたぶんだけ進む");
+				em.label(skip);
 			}
 			em.emit(`mov ${SCRATCH[0]}, ${into}`, "ptr");
 			em.pop(count);
@@ -2324,7 +2365,8 @@ function genExpr(node, env, em, scope, tail = false) {
 			const lo = po === null ? null : em.push();
 			if (lo === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 			em.store(SCRATCH[0], po, "ptr");
-			em.emit(`mov ${SCRATCH[1]}, #${count}`, "len は要素数");
+			em.emit(`mov ${SCRATCH[1]}, x13`, "len は書けた個数");
+			if (w !== 1) em.emit(`lsr ${SCRATCH[1]}, ${SCRATCH[1]}, #${Math.log2(w)}`, `バイトから個数へ（1要素 ${w} byte）`);
 			em.store(SCRATCH[1], lo, "len");
 			return 2;
 		}
@@ -3385,12 +3427,20 @@ function genMatch(node, env, em, scope, tail = false) {
 // 要素1つを位置つきで読むニーモニック。幅は `charset` が決める（`String ≅ List(Char)`）。
 // 符号なしなので `ldrb`/`ldrh` はゼロ拡張で足りる（Char は unsigned、target_info.js）。
 // 要素1つを位置つきで書く。幅は要素型が決める。
-function storeElem(src, base, offset, size) {
+/**
+ * 器の k 番目へ書く。
+ *
+ * `byteReg` を渡すと**バイト位置をレジスタで**指す（`str x9, [x10, x13]`）。要素を
+ * 落としながら並べるとき、書ける位置が実行時にしか決まらないためである——静的な
+ * `offset` の道は、落ちる要素が1つも無いと分かっているときだけ通る。
+ */
+function storeElem(src, base, offset, size, byteReg = null) {
 	const reg = size >= 8 ? src.replace(/^x/, "x") : src.replace(/^x/, "w");
-	if (size === 1) return `strb ${reg}, [${base}, #${offset}]`;
-	if (size === 2) return `strh ${reg}, [${base}, #${offset}]`;
-	if (size === 4) return `str ${reg}, [${base}, #${offset}]`;
-	return `str ${src}, [${base}, #${offset}]`;
+	const at = byteReg ? `[${base}, ${byteReg}]` : `[${base}, #${offset}]`;
+	if (size === 1) return `strb ${reg}, ${at}`;
+	if (size === 2) return `strh ${reg}, ${at}`;
+	if (size === 4) return `str ${reg}, ${at}`;
+	return `str ${src}, ${at}`;
 }
 
 function loadElem(dst, base, idx, size) {

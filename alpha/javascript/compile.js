@@ -515,25 +515,28 @@ function constructLeaves(node) {
  *
  *     [* 2,] 1 2 3   →   (1 * 2) (2 * 2) (3 * 2)
  *
- * **比較（選択）は展開しない。** `[< 3,]` が落とした要素は `__` になり、それを落とすのは
- * 構築である（`1 __ 3` は `[1 3]`）——ところが **Pass 4 の構築は `__` を落とさない**。
- * 長さが静的に決まる器として組むので `||1 __ 3||` が 3 を返す（解釈は 2）。これは
- * この展開とは無関係に前からある食い違いで、直すには長さが実行時に決まる器が要る
- * ——sret の規約と同じ場所である。
+ * **比較は選択になる。** `[< 3,]` が残すのは判定の値ではなく**要素そのもの**なので
+ * `(x < 3) & x` と書く。落ちた要素は `__` になり、**落とすのは構築がやる**
+ * （`1 __ 3` は `[1 3]`）——規則を2つ持つ必要は無く、合成する関数の側と同じ読みである。
  *
- * 合成する関数の側は「通れば並べて再帰、落ちれば並べずに再帰」と枝で書いてあるので
- * 正しく短くなる。**だから選択はそちらに任せる。** 算術の写像は要素ごとに `__` を
- * 作らない（作るのは Char が charset を出るときだけ）ので、ここで展開してよい。
+ * これは一度諦めた道である。Pass 4 の構築が `__` を落とさず、`||[< 3,] 1 2 3||` が
+ * 3 を返していた（解釈は 2）——**展開が正しくても、置く先が落とさなければ合わない**。
+ * 構築がカーソルで書くようになって成り立った。
  */
 function expandGreedyMap(node) {
   if (!node || node.type !== "operation" || node.name !== "apply" || node.position !== "infix") return null;
   const m = greedyMapOf(node.left);
   if (!m) return null;
-  if (COMPARE_MAP_OPS.has(m.name)) return null;
   const leaves = constructLeaves(node.right);
   if (!leaves || leaves.length < 2) return null;
   const k = () => ({ type: "atom", kind: m.node.right.kind, value: m.node.right.value });
-  const step = (x) => ({ type: "operation", name: m.name, op: m.op, position: "infix", left: x, right: k() });
+  const step = (x) => {
+    const hit = { type: "operation", name: m.name, op: m.op, position: "infix", left: x, right: k() };
+    // 比較は「通ったら要素を残す」——判定の値ではない。
+    return COMPARE_MAP_OPS.has(m.name)
+      ? { type: "operation", name: "and", op: "&", position: "infix", left: hit, right: x }
+      : hit;
+  };
   return leaves.map(step).reduce((acc, x) => ({
     type: "operation",
     name: "construct",
