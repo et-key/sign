@@ -61,6 +61,36 @@ export function toolReport() {
  * `.s` の本文を受けて走らせ、`_sign_main` の返値レジスタ x0..x3 を BigInt で返す。
  * `__` は niche（0x8000000000000000）なので、そのまま見れば分かる。
  */
+/**
+ * 外部の道具を1つ走らせる。**失敗したら中身を見せる。**
+ *
+ * `stdio: "pipe"` で握り潰すと「Command failed」しか残らず、本物の失敗と一時的な失敗の
+ * 区別が付かない。実際それで、生成物は正しいのに落ちた回を2度追いかける羽目になった。
+ */
+function run(bin, args, opts = {}) {
+	try {
+		return execFileSync(bin, args, { stdio: "pipe", ...opts });
+	} catch (e) {
+		const err = (e.stderr && String(e.stderr).trim()) || (e.stdout && String(e.stdout).trim()) || "";
+		const why = e.code === "ETIMEDOUT" ? "時間切れ" : e.status !== undefined && e.status !== null ? `終了コード ${e.status}` : e.code || "失敗";
+		throw new Error(`${path.basename(bin)}：${why}${err ? "：" + err.slice(0, 300) : ""}`);
+	}
+}
+
+// **開始コードは1度だけ組む。** `start.s` は毎回同じ入力なのに検査ごとに clang を
+// 呼んでおり、403 件なら 403 回の無駄——**そのぶん一時的な失敗の機会も増える**。
+// 生成物は `.o` なので、この処理の間で使い回せる。
+let startObj = null;
+function startObjectPath() {
+	if (startObj && fs.existsSync(startObj)) return startObj;
+	const t = tools();
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sign-start-"));
+	const out = path.join(dir, "start.o");
+	run(t.clang, ["--target=aarch64-unknown-none", "-c", path.join(ASSET, "start.s"), "-o", out]);
+	startObj = out;
+	return out;
+}
+
 export function runAsm(asmText, { timeout = 20000 } = {}) {
 	const t = tools();
 	if (!t.ok) throw new Error(`ツールチェーンがありません（${toolReport()}）`);
@@ -68,19 +98,13 @@ export function runAsm(asmText, { timeout = 20000 } = {}) {
 	try {
 		const sPath = path.join(dir, "prog.s");
 		fs.writeFileSync(sPath, asmText);
-		const cc = (src, out) =>
-			execFileSync(t.clang, ["--target=aarch64-unknown-none", "-c", src, "-o", out], { stdio: "pipe" });
-		cc(sPath, path.join(dir, "prog.o"));
-		cc(path.join(ASSET, "start.s"), path.join(dir, "start.o"));
-		execFileSync(
-			t.lld,
-			["-T", path.join(ASSET, "link.ld"), path.join(dir, "start.o"), path.join(dir, "prog.o"), "-o", path.join(dir, "prog.elf")],
-			{ stdio: "pipe" },
-		);
-		const out = execFileSync(
+		run(t.clang, ["--target=aarch64-unknown-none", "-c", sPath, "-o", path.join(dir, "prog.o")]);
+		const startO = startObjectPath();
+		run(t.lld, ["-T", path.join(ASSET, "link.ld"), startO, path.join(dir, "prog.o"), "-o", path.join(dir, "prog.elf")]);
+		const out = run(
 			t.qemu,
 			["-M", "virt", "-cpu", "cortex-a57", "-nographic", "-semihosting", "-kernel", path.join(dir, "prog.elf")],
-			{ stdio: "pipe", timeout, encoding: "utf8" },
+			{ timeout, encoding: "utf8" },
 		);
 		const words = out.trim().split(/\s+/).filter((w) => /^[0-9a-f]{16}$/.test(w));
 		if (words.length < 4) throw new Error(`出力が読めません：${JSON.stringify(out.slice(0, 200))}`);
