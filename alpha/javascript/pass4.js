@@ -4793,11 +4793,118 @@ function peepholeSlotMoves(lines) {
 		.filter((_, i) => !drop.has(i));
 }
 
+// 呼び出しを跨いでも生きるレジスタ（AAPCS64 の callee-saved）。**跨げることが要点**
+// である——スロットは `bl` の先でも読めるので、置き換える先も同じ性質が要る。
+const SLOT_REGS = ["x19", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28"];
+
+/**
+ * **スロットをレジスタへ移す（関数まるごと1つの表で決める）。**
+ *
+ * `genExpr` の規約は「どの式も新しいスロットへ置く」で、合成が閉じるためにそれでよい。
+ * だがスクラッチが実質 x9/x10 の2本しか使われていないため、式が2つ以上の値を同時に
+ * 持つたびに記憶へ溢れる——実プログラムの **46%（1879/4051 命令）** がスロット往復だった。
+ *
+ * **なぜ覗き穴では取れなかったか。** 2度試して2度壊した。窓ごとに「このレジスタは空き」
+ * と判断すると、**重なった窓が同じレジスタを取る**（実際 `x11` を2つの窓が奪い合った）。
+ * 重ならないように選ぶのは区間グラフの彩色そのもので、局所の書き換えでは決められない。
+ *
+ * ここでは彩色が要らない。**スロットは push/pop のスタックなので、生存区間は必ず入れ子**
+ * であり、深さがそのまま色になる——深さ d のスロットは常に同じレジスタでよい。関数全体を
+ * 見ている `wrapFrame` が、1つの表として決める。
+ *
+ * 条件は2つ。**`$名前` で番地が漏れていない**こと（漏れていれば記憶でなければならない）
+ * と、**深さが手持ちのレジスタに収まる**こと。実測では 49 関数中 48 本が 10 本以内に
+ * 収まり、往復の 93% がここに含まれる。
+ */
+function slotsToRegisters(lines) {
+	const insOf = (l) => l.trim().replace(/\s*\/\/.*$/, "");
+	const ST = /^str\s+(x\d+),\s*\[x29,\s*#(\d+)\]$/;
+	const LD = /^ldr\s+(x\d+),\s*\[x29,\s*#(\d+)\]$/;
+	// **番地が漏れていたら記憶でなければならない。** スロットの読み書き以外で `x29` が
+	// 出てきたら、そのフレームは誰かに指されている可能性がある（`$名前` が典型）。
+	// 相互末尾呼び出しの畳み（`ldp x29, x30`）だけは通す——戻しをその手前に差し込む。
+	for (const l of lines) {
+		const t = insOf(l);
+		if (!/\bx29\b/.test(t)) continue;
+		if (ST.test(t) || LD.test(t)) continue;
+		if (/^mov\s+x29,\s*sp$/.test(t)) continue;
+		if (/^(stp|ldp)\s+x29,\s*x30,/.test(t)) continue;
+		return null;
+	}
+	// 使う深さを集める（飛び飛びでも、深さ→レジスタの対応は変えない）。
+	const used = new Set();
+	for (const l of lines) {
+		const m = ST.exec(insOf(l)) || LD.exec(insOf(l));
+		if (m) {
+			const d = (Number(m[2]) - 16) / 8;
+			if (!Number.isInteger(d) || d < 0 || d >= SLOT_REGS.length) return null;
+			used.add(d);
+		}
+	}
+	if (used.size === 0) return null;
+	const depths = [...used].sort((a, b) => a - b);
+	const regs = depths.map((d) => SLOT_REGS[d]);
+	// 移す先を本体が既に使っていないか（呼ぶ先は AAPCS64 に従って守ってくれる）。
+	for (const l of lines) {
+		const t = insOf(l);
+		if (ST.test(t) || LD.test(t)) continue;
+		if (regs.some((r) => new RegExp("\\b" + r + "\\b").test(t))) return null;
+	}
+	const out = lines.map((l) => {
+		const t = insOf(l);
+		const st = ST.exec(t);
+		if (st) return "\tmov " + SLOT_REGS[(Number(st[2]) - 16) / 8] + ", " + st[1];
+		const ld = LD.exec(t);
+		if (ld) return "\tmov " + ld[1] + ", " + SLOT_REGS[(Number(ld[2]) - 16) / 8];
+		return l;
+	});
+	return { lines: out, regs };
+}
+
+/** 退避／復帰の組を作る（`x29` 相対で、**フレームの中に**置く）。 */
+function calleeSaveLines(regs, verb) {
+	const out = [];
+	for (let i = 0; i < regs.length; i += 2) {
+		const off = 16 + i * 8;
+		const two = regs[i + 1];
+		const op = verb === "save" ? (two ? "stp" : "str") : two ? "ldp" : "ldr";
+		out.push("\t" + op + " " + regs[i] + (two ? ", " + two : "") + ", [x29, #" + off + "]");
+	}
+	return out;
+}
+
 function wrapFrame(bodyLines, slots, name, movedSp = false) {
 	bodyLines = peepholeShareAddressBase(peepholeDeadSlotStores(peepholeSlotMoves(peepholeRedundantLoads(bodyLines))));
-	const frame = 16 + Math.ceil((slots * 8) / 16) * 16; // x29/x30 の16バイト + スロット
+
+	// **フレームが要るかは、写す*前*の本体で決める。** 写した後を見ると `x29` が消えて
+	// いるので「場所を使わない関数」に見え、退避を出さないまま x19… を壊す機械語になる
+	// ——実際そうして `step` が呼び出し元の `a` を飛ばした（2026-09-01）。
+	// **判定と生成が同じ本体を見ていること。**
+	const bare = !movedSp && !bodyLines.some((l) => /\bx29\b/.test(l)) && !bodyLines.some((l) => /^\s*(bl|blr)\b/.test(l.split("//")[0].trim()));
+
+	// **スロットをレジスタへ移せるなら移す。** `sp` を動かす関数はフレームの底が動くので
+	// 触らない。移せたぶんだけ場所が要らなくなるので、フレームの大きさもここで決まる。
+	const moved = movedSp || bare ? null : slotsToRegisters(bodyLines);
+	const saves = moved ? calleeSaveLines(moved.regs, "save") : [];
+	const back = moved ? calleeSaveLines(moved.regs, "restore") : [];
+	if (moved) bodyLines = moved.lines;
+	// x29/x30 の16バイト + （スロット、または移した先の退避）
+	const cells = moved ? moved.regs.length : slots;
+	const frame = 16 + Math.ceil((cells * 8) / 16) * 16;
+
 	// 相互末尾呼び出しが置いた印を、決まったフレームの大きさで埋める。
-	const filled = bodyLines.map((l) => (l.includes(FRAME_MARK) ? l.split(FRAME_MARK).join(String(frame)) : l));
+	//
+	// **畳んで飛ぶ道は出口を通らない。** 印を埋めるだけでは足りない——退避したレジスタは
+	// 畳む*手前*で戻さねばならず（`ldp x29, x30` が `x29` を呼び出し元のものへ書き換えて
+	// しまう）、フレームの大きさもこの畳みと出口の両方が同じ表から出ている必要がある。
+	// 大きさを決める場所が2つあることに気づかず出口だけに足して、`sp` がずれて無限に回る
+	// 機械語を出した（2026-09-01）。
+	const filled = [];
+	for (const l of bodyLines) {
+		const t = l.split("//")[0];
+		if (moved && l.includes(FRAME_MARK) && /^\s*ldp\s+x29,\s*x30,/.test(t)) filled.push(...back);
+		filled.push(l.includes(FRAME_MARK) ? l.split(FRAME_MARK).join(String(frame)) : l);
+	}
 	// **`sp` を動かしたなら、戻すのは `x29` からである。**
 	//
 	// `ldp x29, x30, [sp], #frame` は「`sp` がフレームの底のまま」を前提にしている。
@@ -4819,16 +4926,16 @@ function wrapFrame(bodyLines, slots, name, movedSp = false) {
 	// やっていることは確保である。門番が `sub sp` を探していたので当たっていなかった。
 	// 使わないフレームを出さなくなれば、少なくとも「使わないのに触る」は消える
 	// （`?` が持つ本来の要求は別の話で、layer_relations.md §4.1 が名指ししている）。
-	const usesFrame = filled.some((l) => /\bx29\b/.test(l));
-	const calls = filled.some((l) => /^\s*(bl|blr)\b/.test(l.split("//")[0].trim()));
-	if (!movedSp && !usesFrame && !calls) return [`${name}:`, ...filled, "\tret"];
+	if (bare) return [`${name}:`, ...filled, "\tret"];
 
 	return [
 		`${name}:`,
 		`\tstp x29, x30, [sp, #-${frame}]!`.padEnd(30) + `// フレーム ${frame} バイト`,
 		"\tmov x29, sp",
+		...saves,
 		...filled,
 		...restore,
+		...back,
 		`\tldp x29, x30, [sp], #${frame}`.padEnd(30) + "// フレームを戻す",
 		"\tret",
 	];

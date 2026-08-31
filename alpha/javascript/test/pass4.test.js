@@ -47,16 +47,37 @@ function asm(source, target = "aarch64_qemu") {
 }
 
 // ラベル1つ分の本文を、コメントを落とした命令の並びとして取り出す。
-function body(source, label) {
+// **スロットの語彙へ写し戻す。**
+//
+// 「式の途中の値を*どこか*へ置く」という規約と、「それが記憶かレジスタか」は別の話で
+// ある。`slotsToRegisters` が後者だけを変えたとき、前者を見ているはずの検査が15本落ちた
+// ——検査が入れ物の名前で書かれていたからで、規約が壊れたわけではない。
+//
+// 深さ d ↔ `x19+d` はその写し**そのもの**なので、ここで元の語彙へ戻して読む。移らなかった
+// 関数（`$名前` で番地が漏れている、深すぎる）は元から `[x29, #…]` で出るため、どちらの
+// 出方も同じ言葉で語れる。
+const SLOT_REGS = ["x19", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28"];
+const asSlots = (l) => {
+	let m = /^mov (x1[9]|x2[0-8]), (x\d+)$/.exec(l);
+	if (m) return `str ${m[2]}, [x29, #${16 + SLOT_REGS.indexOf(m[1]) * 8}]`;
+	m = /^mov (x\d+), (x1[9]|x2[0-8])$/.exec(l);
+	if (m) return `ldr ${m[1]}, [x29, #${16 + SLOT_REGS.indexOf(m[2]) * 8}]`;
+	// 入口の退避と出口の復帰は、スロットで言えば存在しない命令である。
+	if (/^(stp|ldp|str|ldr) (x1[9]|x2[0-8]),/.test(l)) return null;
+	return l;
+};
+
+function body(source, label, raw = false) {
 	const r = asm(source);
 	const lines = r.text.split("\n");
 	const i = lines.findIndex((l) => l.startsWith(`${label}:`));
 	if (i < 0) return null;
 	const j = lines.findIndex((l, k) => k > i && l === "");
-	return lines
+	const out = lines
 		.slice(i + 1, j < 0 ? undefined : j)
 		.map((l) => l.replace(/\/\/.*$/, "").trim())
 		.filter(Boolean);
+	return raw ? out : out.map(asSlots).filter((l) => l !== null);
 }
 
 // ---- 命令の選択 ----
