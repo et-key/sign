@@ -2078,8 +2078,12 @@ function evaluate(node, env) {
         // 2要素のリストにする。
         const l = evaluate(node.left, env);
         const r = evaluate(node.right, env);
-        const isChain = node.left && node.left.type === "operation" && node.left.name === "product";
-        const items = isChain ? [...asList(l), r] : [l, r];
+        // **連鎖は右へ伸びる**（`,` は右結合、operator_table.md 9行目）。
+        // `1 , 2 , 3` は `1 , (2 , 3)` なので、内側の並びの先頭へ足すと平坦になる。
+        // 明示の器（`1 , [2 3]`）は連鎖ではないので要素1つとして残る——
+        // `1 2 3 , 4 5 6` が `[[1,2,3],[4,5,6]]` であるための条件でもある。
+        const isChain = node.right && node.right.type === "operation" && node.right.name === "product";
+        const items = isChain ? [l, ...asList(r)] : [l, r];
         // `,` の単位元は `__` である。零対象は終対象でもあるため直積では `A × __ ≅ A` が
         // 成り立つ——スロットは生まれない。余積（空白）が連接の単位元として `__` を落とすのと
         // 同じ理屈が、直積では終対象としての性質から出てくる。

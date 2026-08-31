@@ -758,6 +758,16 @@ function reduceOnce(items, tier, env, phase) {
     // （`x @ p` → `p ' x`）は単純な左右の入れ替えで済む：内側から均されるので、器の側が
     // 自然に内側へ積まれる。
     if (b === "@" && items.indexOf("@", i + 2) !== -1) continue;
+    // **`,` も右結合である**（operator_table.md 9行目「右結合なリスト構築」）。
+    //
+    // 右結合だと `1 , 2 , 3` が `1 , (2 , 3)` に切れ、内側から `[2,3]` が出来て外側が
+    // その先頭へ 1 を足す——**cons そのもの**であり、結果は平坦な `[1,2,3]` になる。
+    //
+    // 左から畳むと `((1 , 2) , 3)` になり、`x , 器` が「数1つと器1つの並び」＝入れ子の
+    // `Struct` に見える。答えだけは「左が product なら平坦化する」で合わせていたが、
+    // **構造が違う**——`(s ' 0) , (cons …)` のような cons の書き方が、平坦なリストでは
+    // なく段の深い `Struct` になり、大きさが静的に決まらなくなっていた（lexer.sn）。
+    if (b === "," && items.indexOf(",", i + 2) !== -1) continue;
     if (isBareOperatorToken(b)) {
       const entry = lookup(b, "infix");
       if (entry && entry.precedence === tier && i + 2 < items.length && !isBareOperatorToken(items[i + 2])) {
