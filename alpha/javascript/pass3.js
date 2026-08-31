@@ -322,6 +322,20 @@ function arithmeticResultType(node, leftType, env) {
   const rightType = inferAtomType(node.right, env);
   // §3.2: Stringは左右どちらに来ても算術の型エラー（両方向とも __ 消去）
   if (leftType === "String" || rightType === "String") return "Unit";
+  // **`__` は強さの底である**（爆発律）。
+  //
+  // 算術は `A × A → A`——積を食って同じ対象を返すので、片方が始対象なら返せる値は
+  // 残った方しか無い。型でも同じで `Unit ⊕ T → T` になる。「A と B が出会ったら強い方」
+  // の A に `__` を置くと必ず相手が勝つ、という一点である。
+  //
+  // 以前ここは `Unit` を素通りさせていて、`__ + 3` の型が `Unit` になっていた。値の側は
+  // 3 を出すのに型が `Unit` なので、Pass 4 が「GPR 幅の整数演算だけを出せます（Unit）」で
+  // 止まる——**意味と型が食い違っていた**。
+  //
+  // 相手が算術の対象でないとき（String は上で落ちる、List や Implicit は下の規則）は
+  // 通り抜けない。代数の中に居ないものは、底から持ち上がる先が無い。
+  if (leftType === "Unit" && (NUMERIC_TYPES.has(rightType) || rightType === "Char")) return rightType;
+  if (rightType === "Unit" && (NUMERIC_TYPES.has(leftType) || leftType === "Char")) return leftType;
   if (leftType === "List" || leftType === "Struct") {
     return LIST_ARITHMETIC_OPS.has(node.name) ? leftType : "Unit";
   }

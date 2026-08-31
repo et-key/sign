@@ -16,7 +16,8 @@ import { charLimitOf, DEFAULT_CHARSET } from "./target_info.js";
  *   デフォルト式（let*的に、直前までの束縛を使って）を評価する。
  * - restパラメータへのUnitフォールバック（§3.3）：restの実引数が無い、またはUnit単体なら
  *   空リストにフォールバックする（完全性公理による崩壊は起きない）。
- * - 算術演算子の非対称Unit伝播則（§3.3）：左辺Unit=吸収元、右辺Unit=単位元（素通し）。
+ * - 算術演算子のUnit伝播則（§3.3）：**両辺とも単位元**（爆発律）。算術は積を食って
+ *   同じ対象を返すので、片方が始対象なら残った方が通り抜ける——`__` は強さの底である。
  * - 比較演算子の吸収則（§3.3）：両辺とも吸収元。`!=`のみ例外で右辺Unitは単位元。
  * - `&`/`|`/`;`の短絡評価（AGENTS.md）：`&`は左辺がUnitなら右辺を評価せず即座にUnit、
  *   `|`は左辺がUnitでなければ右辺を評価せず左辺を返す。
@@ -740,7 +741,25 @@ function roundHalfAwayFromZero(x) {
 // `[+ 1] [1 2 3]` が `"1,2,31"`（JSの配列→文字列強制）、`[* 2,] \`abc\`` が NaN を
 // 静かに返していた。算術が何を意味するかを決める場所は1つでなければならない。
 function arithOnValues(name, l, r, limit = charLimitOf(DEFAULT_CHARSET)) {
-  if (isUnit(l)) return UNIT; // 左辺Unit = 吸収元
+  // **`__` は算術の両側で単位元である**（爆発律）。
+  //
+  // 算術は `A × A → A`——**積**を食って**同じ対象**を返す。片方が始対象なら、返せる値は
+  // 残った方しか無い（始対象からの射は一意）。だから相手が通り抜ける。型の側で言えば
+  // `__` は強さの**底**であり、`Unit ⊕ T → T` である。
+  //
+  // 比較は違う。`A × A → Ω` で返す先が別の対象なので、相手の値を通しても行き先の型に
+  // ならない——爆発しようがなく、`__` のまま（`compareOnValues` 側）。
+  //
+  // 以前ここは「左辺Unit = 吸収元」で `__ + 3` が `__` だった。**`__` を誤りの印としても
+  // 使っていた**が、それは `__` の役割ではない——誤りはコンパイル時の診断であり、
+  // 実行時フォールバック経路を言語として持たない（compiler_pipeline.md §3）。
+  // ただし **String は算術の対象ではない**（§3.2、左右どちらでも型エラー）。爆発律は
+  // 算術の代数の中の話なので、代数に居ないものは通り抜けない——`__ + \`abc\`` も
+  // `\`abc\` + __` も `__` で、左右対称である。
+  if (isUnit(l)) {
+    if (r === undefined) return UNIT;
+    return typeof r === "string" && [...r].length !== 1 ? UNIT : r;
+  }
   // **1文字は符号位置そのものである**（`[x] ≅ x` なので長さ1の文字列は `Char`）。
   // 文字の算術は符号位置の算術であり、結果が charset の外へ出たら**それは文字では
   // ない**ので `__` になる。`c + 1` で次の文字を取る書き方がここで成立する。
@@ -797,8 +816,9 @@ function arithOnValues(name, l, r, limit = charLimitOf(DEFAULT_CHARSET)) {
 // （integer_overflow.md §1「bit演算はラップが前提（暗号・ハッシュ等）」）。
 function evalBit(node, env) {
   const l = evaluate(node.left, env);
-  if (isUnit(l)) return UNIT;
   const r = evaluate(node.right, env);
+  // 算術と同じ族（operator_table.md の同じ行）なので、`__` は両側とも単位元である。
+  if (isUnit(l)) return r;
   if (isUnit(r)) return l;
   return bitOnValues(node.name, l, r);
 }
@@ -806,10 +826,15 @@ function evalBit(node, env) {
 function evalArith(node, env) {
   const name = node.name;
   const l = evaluate(node.left, env);
-  // 左辺がUnit/Stringの時点で右辺を評価せずに済ませる（短絡、既存の挙動を保つ）。
+  // 左辺が String の時点で右辺を評価せずに済ませる（型エラーは右辺に依らない）。
   // **ただし1文字は短絡しない**——`Char` は算術の対象なので右辺が要る。
+  //
+  // **`__` では短絡できない。** 爆発律で結果が右辺そのものになるので、右辺の値が要る
+  // ——ここは観測できる差である（`__ + ($UART # x)` は書き込みが起きる）。以前は
+  // 「零射との合成は零だから右辺は結果に寄与しえない」という理由で飛ばしていたが、
+  // `__` が単位元になった以上その前提が消えた。
   const lim = charLimitOf(env && env.charset);
-  if (isUnit(l) || (typeof l === "string" && [...l].length !== 1)) return arithOnValues(name, l, undefined, lim);
+  if (typeof l === "string" && [...l].length !== 1) return arithOnValues(name, l, undefined, lim);
   const r = evaluate(node.right, env);
   const value = arithOnValues(name, l, r, lim);
   // BigInt は「安全な範囲を超えた整数」であり、溢れの規則を適用する対象そのものである。
