@@ -507,13 +507,65 @@ function constructLeaves(node) {
   return leaves;
 }
 
-/** 木の中の展開できる畳み込みを、その場で畳み終える。 */
+/**
+ * **並べた相手なら、写像もコンパイル時に終わる。**
+ *
+ * 畳み込みが `construct` を演算子に差し替えるのに対し、写像は**連鎖の形を保ったまま
+ * 各要素に演算を当てる**——並びの長さは変わらないからである。
+ *
+ *     [* 2,] 1 2 3   →   (1 * 2) (2 * 2) (3 * 2)
+ *
+ * **比較（選択）は展開しない。** `[< 3,]` が落とした要素は `__` になり、それを落とすのは
+ * 構築である（`1 __ 3` は `[1 3]`）——ところが **Pass 4 の構築は `__` を落とさない**。
+ * 長さが静的に決まる器として組むので `||1 __ 3||` が 3 を返す（解釈は 2）。これは
+ * この展開とは無関係に前からある食い違いで、直すには長さが実行時に決まる器が要る
+ * ——sret の規約と同じ場所である。
+ *
+ * 合成する関数の側は「通れば並べて再帰、落ちれば並べずに再帰」と枝で書いてあるので
+ * 正しく短くなる。**だから選択はそちらに任せる。** 算術の写像は要素ごとに `__` を
+ * 作らない（作るのは Char が charset を出るときだけ）ので、ここで展開してよい。
+ */
+function expandGreedyMap(node) {
+  if (!node || node.type !== "operation" || node.name !== "apply" || node.position !== "infix") return null;
+  const m = greedyMapOf(node.left);
+  if (!m) return null;
+  if (COMPARE_MAP_OPS.has(m.name)) return null;
+  const leaves = constructLeaves(node.right);
+  if (!leaves || leaves.length < 2) return null;
+  const k = () => ({ type: "atom", kind: m.node.right.kind, value: m.node.right.value });
+  const step = (x) => ({ type: "operation", name: m.name, op: m.op, position: "infix", left: x, right: k() });
+  return leaves.map(step).reduce((acc, x) => ({
+    type: "operation",
+    name: "construct",
+    op: " ",
+    position: "infix",
+    left: acc,
+    right: x,
+  }));
+}
+
+/**
+ * 木の中の展開できる畳み込み・写像を、その場で終わらせる。
+ *
+ * **内側から畳む必要がある。** `[+] ([* 2,] a b c)` は、写像が並びになって初めて
+ * 畳み込みの相手が `construct` 連鎖になる。`walkNodes` は差し替えたところで降りるのを
+ * やめるので、**変化が無くなるまで回す**——回数は式の入れ子の深さで、実際には 2〜3 回。
+ */
 function expandGreedyFoldsIn(nodes) {
-  for (let i = 0; i < nodes.length; i++) {
-    const done = expandGreedyFold(nodes[i]);
-    if (done) nodes[i] = done;
+  const one = (n) => expandGreedyFold(n) || expandGreedyMap(n) || null;
+  for (let pass = 0; pass < 16; pass++) {
+    let changed = false;
+    for (let i = 0; i < nodes.length; i++) {
+      const done = one(nodes[i]);
+      if (done) { nodes[i] = done; changed = true; }
+    }
+    walkNodes(nodes, null, (child) => {
+      const d = one(child);
+      if (d) changed = true;
+      return d || child;
+    });
+    if (!changed) break;
   }
-  walkNodes(nodes, null, (child) => expandGreedyFold(child) || child);
 }
 
 /** 貪欲なポイントフリーを演算子ごとに集め、生成すべきソースを返す。 */
