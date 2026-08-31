@@ -54,7 +54,7 @@ const TARGET_WIDTHS = {
 //   Int      符号あり。十進は符号を書ける唯一の記法であり（§3.6）、`-1` はここに来る。
 //            uint を含むのは値域の話であって、幅と符号の帳簿としては signed を採る
 //   Float    符号あり（IEEE 754）
-const SIGNEDNESS = { Address: "unsigned", Int: "signed", Char: "unsigned", Float: "signed", Vector: "signed" };
+const SIGNEDNESS = { Address: "unsigned", Int: "signed", Char: "unsigned", Float: "signed", Vector: "signed", Raw: "unsigned" };
 
 /**
  * `__`（Unit）の niche。GPR 幅の型で「値の不在」を表すビットパターン
@@ -80,7 +80,7 @@ const UNIT_NICHE_ASM = "0x8000000000000000";
 // 機械の上で恒等射に対してやることは「`__` かどうか見る」しかなく、Sign では `0` が真な
 // ので、置くのは `0` でよい。呼ぶのではなく運ぶだけなので、単相化とは衝突しない
 // （`conflict : … : !__` が真を返して呼び出し側が条件に使う、という形がこれである）。
-const WIDTH_CLASS = { Address: "gpr", Int: "gpr", Char: "gpr", Float: "float", Vector: "vector", Identity: "gpr" };
+const WIDTH_CLASS = { Address: "gpr", Int: "gpr", Char: "gpr", Float: "float", Vector: "vector", Identity: "gpr", Raw: "gpr" };
 
 /**
  * Char（`0u`）1個の幅。`option.ms` の `charset` で選ぶ。
@@ -163,6 +163,12 @@ function sizeOf(type, target) {
 /**
  * 型を Pass 4 が要る形（幅と符号）へ還元する。決まらなければ null。
  */
+// **`Raw` は「値は在るが型が無い」**。生の番地から読んだビット列がこれである
+// （`@0x40200000`）——`__` は値が無いのに対し、こちらは在る。格子の底の1段上に居て、
+// **どの具体型にも負ける**（`arithmeticResultType`）。
+//
+// 単体で出すときは GPR 1語として運ぶ。**符号は主張しない**——ビットはビットであり、
+// 符号ありと読むかどうかは相手が決める。
 function reduceToMachineType(type, target) {
   const size = sizeOf(type, target);
   if (size === null) return null;

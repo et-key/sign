@@ -361,6 +361,13 @@ function arithmeticResultType(node, leftType, env) {
   // 以前ここには `Int + Char → Char` の節があった。右辺の型が結果を決めていたことになり、
   // 左辺優先と食い違う。**節を消すのが直し方**である——強弱が無いものに順序を作らない。
   if (leftType === "Char") return "Char";
+  // **`Raw`（生の入力）は最弱である。** 値は在るが型が無いので、相手が具体型なら
+  // 必ずそちらが勝つ——だからどちらの位置に来ても答えが同じで、**可換が保たれる**
+  // （`@p + 0` も `0 + @p` も `Int`）。左辺優先が働くのは「強弱が無いとき」だけで
+  // あり、型を持たないものには主張すべき内容が無い。
+  if (leftType === "Raw" && rightType && rightType !== "Raw") return arithmeticResultType(node, rightType, env);
+  if (rightType === "Raw" && leftType !== "Raw") return leftType;
+
   // **強弱があるものだけ格子で決まる。無いものは左辺が決める。**
   //
   // `Vector` と `Float` は精度で本当に上なので、どちら側に来ても昇格する（降格しない）。
@@ -1317,7 +1324,19 @@ function computeAtomType(node, env) {
       // **`@` は指す先を読む。** 何を指しているか分かっているなら、その型である。
       // 分からなければ従来通りオペランドの型を素通しする（下の既定へ落ちる）。
       if (node.position === "prefix" && node.name === "input" && !node.inGetPropKey) {
+        // **`@` の相手は番地である。** 相手が `Raw`（値は在るが型が無い）なら、外側の
+        // `@` が「これを番地として使う」と言っている——**要求が型を決める**。
+        //
+        // `@@p` がこの形である。前置は右結合なので `@(@p)` と切れ、内側の `@p` は
+        // 指す先が分からないので `Raw`。それを外側が読むと言った時点で `Address` に
+        // 決まり、外側の結果はまた `Raw` になる（その先も分からないので）。
+        if (node.operand && inferAtomType(node.operand, env) === "Raw") node.operand.atomType = "Address";
         const p = pointeeOfNode(node.operand, env);
+        // **指す先が分からないなら `Raw` である。** 以前はオペランドの型を素通ししており、
+        // `@0x40200000` が `Address` を名乗っていた——読んだのが 65（`\`A\``）でも
+        // 「これは番地だ」と言うことになる。**分かっていないことを分かったと書かない**
+        // （原理4）。値は在るので `__` でもない。
+        if (!p) return "Raw";
         if (p) {
           if (p.element) node.elementType = p.element;
           // 形も刻む。**1語より広い指す先は読むのではなく指したまま引く**ので、
