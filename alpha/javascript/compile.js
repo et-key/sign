@@ -160,7 +160,7 @@ function compile(source, options = {}) {
   // **並べた相手は、ここで畳み終える。** 個数が構文から見えているなら関数も器も要らない
   // ——`construct` の連鎖が既に左畳みの括弧の形をしている。残った（相手が実行時の器の）
   // 形だけが、下の合成へ回る。
-  expandGreedyFoldsIn(nodes);
+  expandGreedyFoldsIn(nodes, env);
 
   // **貪欲な畳み込みへ名前と本体を与える。** `[+]` は残りアリティ2なので受け口1つの
   // 合成には収まらない——トップレベルへ持ち上げてから、その場の `[+]` を名前へ差し替える。
@@ -548,14 +548,50 @@ function expandGreedyMap(node) {
 }
 
 /**
- * 木の中の展開できる畳み込み・写像を、その場で終わらせる。
+ * **合成は左から実行する。** `f g` は「`f` してから `g`」であり（operator_table.md
+ * 10.6「左結合な関数合成」）、数学の `g ∘ f` と読みの向きが逆である——パイプラインの
+ * 順に書ける。したがって `(f g) x` は `g (f x)` に展開する。
+ *
+ * 呼び先が静的に分かるので実行時に合成を組む必要が無い。畳み込みや写像と同じ「並べた
+ * 相手ならコンパイル時に終わる」形であり、これが無いと Pass 4 は
+ * 「呼び先が静的に決まりません」「まだ出せない式です（compose）」で止まる。
+ *
+ * 連なり（`f g h`）は `compose(compose(f,g),h)` なので、外側を1回開くと内側がまた
+ * `apply(compose(...), …)` になる——不動点まで回す側が続きを片付ける。
+ */
+function expandCompose(node, named) {
+  if (!node || node.type !== "operation" || node.name !== "apply" || node.position !== "infix") return null;
+  const peelParen = (x) => (x && Array.isArray(x.lines) && x.lines.length === 1 ? x.lines[0] : x);
+  const isCompose = (x) => !!(x && x.type === "operation" && x.name === "compose" && x.position === "infix");
+  let fn = peelParen(node.left);
+  // **名前を付けた合成（`h : f g`）も同じ形である。** `buildEnv` の束縛は型とアリティしか
+  // 持たないので（値ノードは後の pass が入れる）、トップレベルの定義から直に引く。
+  if (!isCompose(fn) && fn && fn.type === "atom" && fn.kind === "identifier" && named) {
+    const v = named.get(fn.value);
+    if (isCompose(v)) fn = v;
+  }
+  if (!isCompose(fn)) return null;
+  const call = (f, x) => ({ type: "operation", name: "apply", op: " ", position: "infix", left: f, right: x });
+  return call(fn.right, call(fn.left, node.right));
+}
+
+/**
+ * 木の中の展開できる畳み込み・写像・合成を、その場で終わらせる。
  *
  * **内側から畳む必要がある。** `[+] ([* 2,] a b c)` は、写像が並びになって初めて
  * 畳み込みの相手が `construct` 連鎖になる。`walkNodes` は差し替えたところで降りるのを
  * やめるので、**変化が無くなるまで回す**——回数は式の入れ子の深さで、実際には 2〜3 回。
  */
-function expandGreedyFoldsIn(nodes) {
-  const one = (n) => expandGreedyFold(n) || expandGreedyMap(n) || null;
+function expandGreedyFoldsIn(nodes, env) {
+  // 名前を付けた合成を先に集める（`h : f g`）。
+  const named = new Map();
+  for (const n of nodes) {
+    if (!n || n.type !== "operation" || n.name !== "define") continue;
+    if (!n.left || n.left.type !== "atom" || n.left.kind !== "identifier") continue;
+    const v = n.right && Array.isArray(n.right.lines) && n.right.lines.length === 1 ? n.right.lines[0] : n.right;
+    if (v && v.type === "operation" && v.name === "compose" && v.position === "infix") named.set(n.left.value, v);
+  }
+  const one = (n) => expandGreedyFold(n) || expandGreedyMap(n) || expandCompose(n, named) || null;
   for (let pass = 0; pass < 16; pass++) {
     let changed = false;
     for (let i = 0; i < nodes.length; i++) {
@@ -568,6 +604,17 @@ function expandGreedyFoldsIn(nodes) {
       return d || child;
     });
     if (!changed) break;
+  }
+  // **展開しきった合成の定義は、もう誰も見ない。** `h : f g` の呼び出しは全部
+  // `g (f x)` へ開いてあるので、定義そのものは死んでいる——残すと Pass 4 が
+  // 「まだ出せない式です（compose）」で止まる。
+  //
+  // 開けなかった使い方（`$h` のように値として渡す形）が残っていれば、そちらは
+  // 「まだ出せない識別子です（h）」と名指しで止まる——**黙って消えることはない**。
+  for (const n of nodes) {
+    if (!n || n.type !== "operation" || n.name !== "define") continue;
+    const v = n.right && Array.isArray(n.right.lines) && n.right.lines.length === 1 ? n.right.lines[0] : n.right;
+    if (v && v.type === "operation" && v.name === "compose" && v.position === "infix") n.supersededByDesugar = true;
   }
 }
 
