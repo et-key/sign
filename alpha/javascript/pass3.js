@@ -1051,6 +1051,23 @@ function computeAtomType(node, env) {
 
   if (node.type === "operation") {
     if (node.name === "product") {
+      // **後置 `~` が付いていれば、相手のスロットを並べる**（余積との双対）。
+      //
+      // `a , b~` は「b のスロットを自分の並びへ広げる」であり、スロットを1つ足す形とは
+      // 違う。したがって結果は「a と b の要素が並んだ列」——b の型がそのまま結果の型に
+      // なる（b は既にその並びだからである）。
+      //
+      // これが無いと、値は平坦なのに型が `Struct` のままで食い違う。lexer.sn の
+      // `(s ' 0) , (tokens …)~` がまさにそれで、値は平坦なトークン列なのに型が段の深い
+      // `Struct` になり、大きさが静的に決まらないと言われていた。
+      if (isSpreadNode(node.right)) {
+        const inner = inferAtomType(node.right.operand, env);
+        if (inner && inner !== "Unit") {
+          const el = node.right.operand && node.right.operand.elementType;
+          if (el) node.elementType = el;
+          return inner;
+        }
+      }
       // カンマ（直積）は常に Struct（type_system.md §2）。名前付きスロットも
       // 連番スロットも同じ「固定オフセットで並ぶ連続ブロック」である。
       // ただし**関心事が違う**ので slotKind で区別する——カンマは名前を持たないため
