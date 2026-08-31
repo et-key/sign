@@ -2068,7 +2068,8 @@ function evaluate(node, env) {
         // `,` の単位元は `__` である。零対象は終対象でもあるため直積では `A × __ ≅ A` が
         // 成り立つ——スロットは生まれない。余積（空白）が連接の単位元として `__` を落とすのと
         // 同じ理屈が、直積では終対象としての性質から出てくる。
-        return items.filter((v) => !isUnit(v));
+        //
+return items.filter((v) => !isUnit(v));
       }
       case "get_prop":
         return getPropValue(evaluate(node.left, env), node.right, env);

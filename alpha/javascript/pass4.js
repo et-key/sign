@@ -106,6 +106,22 @@ const DIV_FOR = { signed: "sdiv", unsigned: "udiv" };
 const CMP_COND = { less: "lt", less_equal: "le", assign_equal: "eq", more_equal: "ge", more: "gt", not_equal: "ne" };
 const CMP_COND_UNSIGNED = { less: "lo", less_equal: "ls", assign_equal: "eq", more_equal: "hs", more: "hi", not_equal: "ne" };
 
+// `ccmp` が「前の条件が偽だったとき」に置くフラグ。**その条件自身が偽になる並び**を選ぶ
+// ——そうすれば連鎖の最後で条件を1つ見るだけで全体の判定になる。
+// nzcv のビットは N=8 / Z=4 / C=2 / V=1。
+const FALSE_NZCV = {
+	eq: 0, // Z=0 なら eq は偽
+	ne: 4, // Z=1 なら ne は偽
+	lt: 0, // N==V なら lt は偽
+	le: 0, // Z=0 かつ N==V なら le は偽
+	gt: 4, // Z=1 なら gt は偽
+	ge: 8, // N!=V なら ge は偽
+	lo: 2, // C=1 なら lo は偽
+	ls: 2, // C=1 かつ Z=0 なら ls は偽
+	hi: 0, // C=0 なら hi は偽
+	hs: 0, // C=0 なら hs は偽
+};
+
 // その比較を符号なしで出すか。オペランドの型が決める（結果の型ではない——結果は真偽である）。
 function unsignedCompare(node, conf, env) {
 	const t = (x) => {
@@ -1102,8 +1118,16 @@ function genExpr(node, env, em, scope, tail = false) {
 	// ——0/1 の規則（comparison.md §2.1）は効かない。範囲判定の書き方そのものなので、
 	// これが出せないと文字の分類が1つも書けない。
 	//
-	// 2つの条件を `cset` で取って `and` する。`ccmp` で1命令に詰められるが、条件ごとに
-	// 「偽のときのフラグ」を選ぶ必要があり読みにくい。まず読んで正しいと分かる形にする。
+	// **boolean を作らない。** 値と真偽が同じ対象である以上（Sign に `Bool` は無い）、
+	// `cset` で1ビットを作って `and` してまた値へ戻すのは、**言語から消したものを機械語で
+	// 作り直している**ことになる。AArch64 には条件を繋ぐ命令がそのまま在る。
+	//
+	//   両端が定数    `sub`/`cmp`/`csel`   —— 符号なしの範囲検査に畳む（3命令）
+	//   それ以外      `cmp`/`ccmp`/`csel`  —— 条件を繋ぐ（4命令）
+	//
+	// 以前は `cset`×2 + `and` + `cmp` + `csel` の8命令だった（`0 <= c <= 9` 全体で 30、
+	// 同じ意味論を書いた C の -O2 は 4）。読みやすさのために選んだ形だったが、**畳んだ方
+	// が短いだけでなく、出す側のコードも短い**。
 	if (n.type === "operation" && n.name === "chain_compare") {
 		// 連鎖も同じ規則で符号を選ぶ（中央と両端が同じ型なので、左辺で決まる）。
 		const chainTable = unsignedCompare({ left: n.left, right: n.middle }, em.conf, env) ? CMP_COND_UNSIGNED : CMP_COND;
@@ -1117,23 +1141,47 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (!sides.every(ok)) {
 			return em.fail(n, `GPR 幅の値の連鎖比較だけを出せます（${sides.map((x) => x && x.atomType).join(" ")}）`);
 		}
+		// **端が文字リテラルでも定数である。** 文字の比較は符号位置の比較なので、`\0` は
+		// 48 という定数と同じに畳める——**文字クラスの判定こそがこの形の本命**であり
+		// （lexer.sn はこれしか書かない）、そこで畳めないと入れた意味が無い。
+		const constEnd = (side) => {
+			const v = constAddressOf(side, env);
+			if (v !== null) return v;
+			const cps = codePointsOf(unwrap(side));
+			return cps && cps.length === 1 ? BigInt(cps[0]) : null;
+		};
+		const lo = constEnd(n.left);
+		const hi = constEnd(n.right);
+		const rangeCond = cond === "le" || cond === "ls";
+		// **両端が定数なら、両端は出さない。** 幅は即値になるので、値として持つ必要が無い
+		// ——出してから畳むと `mov`/`str` が残る。畳めると分かってから出す。
+		const asRange = lo !== null && hi !== null && rangeCond && hi >= lo && hi - lo < 4096n;
 		const offs = [];
-		for (const side of sides) {
+		for (const side of asRange ? [n.middle] : sides) {
 			if (!genScalar(side, env, em, scope, "GPR 幅の値の連鎖比較だけを出せます")) return false;
 			offs.push((em.slot - 1) * 8);
 		}
-		em.load(SCRATCH[0], offs[0]);
-		em.load(SCRATCH[1], offs[1]);
-		em.emit(`cmp ${SCRATCH[0]}, ${SCRATCH[1]}`, `左 ${n.op} 中央`);
-		em.emit(`cset x11, ${cond}`);
-		em.load(SCRATCH[0], offs[2]);
-		em.emit(`cmp ${SCRATCH[1]}, ${SCRATCH[0]}`, `中央 ${n.op} 右`);
-		em.emit(`cset x13, ${cond}`);
-		em.emit("and x11, x11, x13", "両方が真か");
+		em.load(SCRATCH[1], asRange ? offs[0] : offs[1], "中央");
 		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
-		em.emit("cmp x11, #0");
-		em.emit(`csel ${SCRATCH[0]}, ${SCRATCH[1]}, x12, ne`, "真なら中央、偽なら __");
-		em.pop(2);
+		if (asRange) {
+			// **`lo <= x <= hi` は「`x - lo` を符号なしで見て `hi - lo` 以下か」である。**
+			// 2の補数では範囲外がそのまま巨大な符号なし値になるので、下側の検査が要らない
+			// ——比較が1つで済む。文字の分類（`0 <= c <= 9`）はすべてこの形である。
+			const base = lo === 0n ? SCRATCH[1] : SCRATCH[0];
+			if (lo !== 0n) em.emit(`sub ${SCRATCH[0]}, ${SCRATCH[1]}, #${lo}`, `下端 ${lo} を引く`);
+			em.emit(`cmp ${base}, #${hi - lo}`, `幅 ${hi - lo} に収まるか（符号なし）`);
+			em.emit(`csel ${SCRATCH[0]}, ${SCRATCH[1]}, x12, ls`, "収まれば中央、外れれば __");
+		} else {
+			// 一般の形。**`ccmp` は「前が真のときだけ実際に比較し、偽なら決め打ちのフラグを
+			// 置く」命令**である。置くフラグは「その条件が偽になる並び」を選ぶ——そうすれば
+			// 最後の `csel` を1つ見るだけで両方の判定になる。
+			em.load(SCRATCH[0], offs[0], "左");
+			em.load("x11", offs[2], "右");
+			em.emit(`cmp ${SCRATCH[0]}, ${SCRATCH[1]}`, `左 ${n.op} 中央`);
+			em.emit(`ccmp ${SCRATCH[1]}, x11, #${FALSE_NZCV[cond]}, ${cond}`, `真のときだけ 中央 ${n.op} 右`);
+			em.emit(`csel ${SCRATCH[0]}, ${SCRATCH[1]}, x12, ${cond}`, "両方真なら中央、でなければ __");
+		}
+		em.pop(asRange ? 0 : 2);
 		em.store(SCRATCH[0], offs[0]);
 		return 1;
 	}

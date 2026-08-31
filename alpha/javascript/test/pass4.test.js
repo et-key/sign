@@ -290,8 +290,16 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 {
 	const ls = body("is_digit : c ? \\0 <= c <= \\9\nis_digit \\5", "is_digit");
 	check("連鎖比較は診断なし", asm("is_digit : c ? \\0 <= c <= \\9\nis_digit \\5").diagnostics.length, 0);
-	checkTrue("両方の条件を取って and する", ls.some((l) => l === "and x11, x11, x13"), ls.join(" / "));
-	checkTrue("真なら中央を返す", ls.some((l) => l === "csel x9, x10, x12, ne"));
+	// **boolean を作らないこと**が守りたい性質である。値と真偽が同じ対象なので、
+	// `cset` で1ビットを起こして `and` してまた値へ戻す必要が無い——`csel` で中央か
+	// `__` を直接選ぶ。以前ここは `and x11, x11, x13` という*形*を数えていて、
+	// 条件の繋ぎ方を変えただけで落ちた。
+	checkTrue("boolean を作らない（cset を出さない）", !ls.some((l) => l.startsWith("cset ")), ls.join(" / "));
+	checkTrue("真なら中央、偽なら __ を選ぶ", ls.some((l) => /^csel x\d+, x\d+, x12, \w+$/.test(l)), ls.join(" / "));
+	// 両端が定数なら符号なしの範囲検査に畳む——比較は1つで済む。
+	// 数えるのは**即値との比較**だけである。入口の完全性検査（`cmp x9, x12`）も `cmp`
+	// なので、そちらまで数えると畳めていても 2 になる。
+	checkTrue("定数の両端は比較1つに畳む", ls.filter((l) => /^cmp x\d+, #\d+$/.test(l)).length === 1, ls.join(" / "));
 }
 // ---- ブラケット分割代入 `[h ~t]` ----
 //
