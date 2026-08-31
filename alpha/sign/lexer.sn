@@ -35,13 +35,15 @@ drop_while : p s ?
 `--- 字句解析本体 ---`
 `トークン列はカンマ（直積）で積む`
 `スペース（余積）で積むと String の吸収則で1本の文字列に連結されてしまうため`
+`後置 ~ は「相手のスロットを並べる」——付けないと再帰の結果が1スロットとして積まれ、`
+`段の深い Struct になって大きさが静的に決まらない（余積の ~ との双対）`
 
 tokens : s ?
 	s = `` : __
 	is_space (s ' 0) : tokens (drop_while $is_space s)
-	is_digit (s ' 0) : (take_while $is_digit s) , (tokens (drop_while $is_digit s))
-	is_alpha (s ' 0) : (take_while $is_alpha s) , (tokens (drop_while $is_alpha s))
-	(s ' 0) , (tokens (s ' 1~))
+	is_digit (s ' 0) : (take_while $is_digit s) , (tokens (drop_while $is_digit s))~
+	is_alpha (s ' 0) : (take_while $is_alpha s) , (tokens (drop_while $is_alpha s))~
+	(s ' 0) , (tokens (s ' 1~))~
 
 `実行例`
 `foo 123 + bar42 の5トークンに分かれる`

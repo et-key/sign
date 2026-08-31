@@ -61,19 +61,26 @@ function check(note, got, want) {
 }
 
 // ---- lexer.sn ----
-// トークン列はカンマ（直積）で積むため、右結合の入れ子として返る。
-// 直積の Unit は恒等射（`A × __ ≅ A`、operator_table.md ※3）なので、末尾で残りが空に
-// なった cons セルはスロットを作らず `[token]` に潰れる——終端に `__` は現れない。
+// **トークン列は平坦である。** カンマ（直積）で積むが、再帰の結果に後置 `~` を付けて
+// 「相手のスロットを並べる」ので、段は残らない（余積の `~` との双対）。
+//
+// **型の上では cons、表現は平坦な配列**である（原理8：同型は型では無償、表現では有償）。
+// 終端は `__` が signal し、直積の Unit は恒等射なので（`A × __ ≅ A`）末尾にスロットは
+// 生まれない。
+//
+// 以前ここは入れ子（`["foo",["123",…]]`）を期待値に焼き込んでいた。検査の名前は
+// 「5トークンへ分割する」と言っているのに、**期待値の方が段の深さを固定していた**
+// ——`~` が無いと段が深くなり、大きさが静的に決まらず機械語にできない。
 check(
 	"lexer.sn: `foo 123 + bar42` を5トークンへ分割する",
 	runFile("lexer.sn"),
-	["foo", ["123", ["+", ["bar", ["42"]]]]]
+	["foo", "123", "+", "bar", "42"]
 );
 
 check(
 	"lexer.sn: 数字と識別子の境界を正しく切る（bar42 → bar , 42）",
 	runWith("lexer.sn", "tokens `bar42`"),
-	["bar", ["42"]]
+	["bar", "42"]
 );
 
 check("lexer.sn: 空文字列 → __", isUnit(runWith("lexer.sn", "tokens ``")), true);
@@ -81,7 +88,7 @@ check("lexer.sn: 空文字列 → __", isUnit(runWith("lexer.sn", "tokens ``")),
 check(
 	"lexer.sn: 連続する空白を読み飛ばす",
 	runWith("lexer.sn", "tokens `a   b`"),
-	["a", ["b"]]
+	["a", "b"]
 );
 
 // 文字リテラルは直後の1バイトをそのまま取るため、空白・タブ・改行が同じ形で書ける
@@ -90,7 +97,7 @@ const TAB = String.fromCharCode(9);
 check(
 	"lexer.sn: タブ区切りも空白として扱う",
 	runWith("lexer.sn", "tokens `a" + TAB + "b`"),
-	["a", ["b"]]
+	["a", "b"]
 );
 check("lexer.sn: is_space がタブに真を返す", runWith("lexer.sn", "is_space tab"), TAB);
 check("lexer.sn: is_space が改行に真を返す", runWith("lexer.sn", "is_space newline"), "\n");
