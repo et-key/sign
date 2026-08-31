@@ -2102,6 +2102,18 @@ function genExpr(node, env, em, scope, tail = false) {
 			cur = peel(cur.left);
 		}
 		parts.unshift(cur);
+		// **構築は `__` を落とす。** `1 __ 3` は `[1 3]` である（operator_table.md の
+		// 構築行、Unit は単位元）。ここで落とさないと `||1 __ 3||` が 3 を返し、解釈器の
+		// 2 と食い違う——**診断も出ず、長さだけが違う**。
+		//
+		// 落とせるのは**書いた時点で `__` と分かる要素だけ**である。実行時に `__` に
+		// なる要素（選択写像の落ちた要素）は、長さが実行時に決まる器が要るので別の話に
+		// なる——そこはまだ食い違ったままで、`compile.js` の写像の展開が比較を避けて
+		// いるのはそのためである。
+		for (let k = parts.length - 1; k >= 0; k--) {
+			const u = peel(parts[k]);
+			if (u && u.type === "atom" && u.kind === "unit") parts.splice(k, 1);
+		}
 		const et = n.elementType || (n.atomType === "String" ? "Char" : null);
 		const em1 = et ? measure({ atomType: et }, { target: em.conf.target, charset: em.conf.charset }) : null;
 		// **末尾が器を返す呼び出しなら、そこへ追記する。**
