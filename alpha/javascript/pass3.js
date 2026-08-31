@@ -1061,10 +1061,20 @@ function computeAtomType(node, env) {
       // `(s ' 0) , (tokens …)~` がまさにそれで、値は平坦なトークン列なのに型が段の深い
       // `Struct` になり、大きさが静的に決まらないと言われていた。
       if (isSpreadNode(node.right)) {
+        // **要素の型は左辺が決める。** 「相手の型をそのまま返す」だと再帰で決まらない
+        // ——`f` の返値が `a , (f …)~` なら `T = T` になり、どの型も不動点なので何も
+        // 分からない。左辺は積まれる要素そのものなので、そこから決まる。余積の
+        // `(s ' 0) (f …)~` が `List(Int)` になるのと同じ理屈である。
+        const el = inferAtomType(node.left, env);
+        if (el && el !== "Unit" && !CONTAINER_TYPES.has(el)) {
+          node.elementType = el;
+          return "List";
+        }
+        // 左辺が器なら、並ぶのは器である——相手の型を通す（`[1 2] , [3 4]~` の形）。
         const inner = inferAtomType(node.right.operand, env);
         if (inner && inner !== "Unit") {
-          const el = node.right.operand && node.right.operand.elementType;
-          if (el) node.elementType = el;
+          const ie = node.right.operand && node.right.operand.elementType;
+          if (ie) node.elementType = ie;
           return inner;
         }
       }
