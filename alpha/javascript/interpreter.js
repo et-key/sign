@@ -772,20 +772,24 @@ function arithOnValues(name, l, r, limit = charLimitOf(DEFAULT_CHARSET)) {
   // 区別できるのは、1要素の器がスカラーと同型だからである（原理8）。
   const cp = (x) => (typeof x === "string" && [...x].length === 1 ? x.codePointAt(0) : null);
   const lc = cp(l);
-  if (lc !== null) {
+  const rc = cp(r);
+  // **どちらが文字でも同じ道である。** `Char` は `Int` と同じ値なので、順序で答えが
+  // 変わる理由が無い。以前は左辺しか見ておらず、`\`a\` + 1` は "b" なのに `1 + \`a\``
+  // が `__` になっていた——右辺の文字が「算術に混ざった非数値」として弾かれていた。
+  if (lc !== null || (rc !== null && typeof l === "number")) {
     if (isUnit(r)) return l; // 右辺Unit = 単位元（素通し）
-    const rv = cp(r) ?? (typeof r === "number" ? r : null);
+    const lv = lc ?? l;
+    const rv = rc ?? (typeof r === "number" ? r : null);
     if (rv === null) return UNIT;
     const fn = ARITH_OPS[name];
     if (!fn) return UNIT;
-    const out = fn(lc, rv);
-    // **値としては `Int` と同じ**。ここで落とすものは何も無い——負も、上限の外も、
-    // サロゲートも、値としては普通に存在する。書けるかどうかは `#` の出口が見る。
-    //
-    // 返す姿だけが違う。**描ける符号位置なら文字として、そうでなければ数として**返す
-    // ——同じ値の別の見せ方であって（qemu ハーネスもそう揃えている）、値の側の区別では
-    // ない。以前ここは範囲外を `__` にしており、`\`a\` - 200` が `__`、機械は -103 と
-    // 食い違っていた。
+    const out = fn(lv, rv);
+    // **左辺が結果の姿を決める。** `Char` と `Int` に強弱は無いので、格子ではなく
+    // 左辺優先の規則が働く——`\`a\` + 1` は文字、`1 + \`a\`` は数である。
+    if (lc === null) return out;
+    // 値としては `Int` と同じなので、ここで落とすものは無い——負も、上限の外も、
+    // サロゲートも普通に存在する。書けるかどうかは `#` の出口が見る。**描ける符号位置
+    // なら文字として、そうでなければ数として**返す（同じ値の別の見せ方）。
     const drawable = Number.isInteger(out) && out >= 0 && out <= 0x10ffff && !(out >= 0xd800 && out <= 0xdfff);
     return drawable ? String.fromCodePoint(out) : out;
   }

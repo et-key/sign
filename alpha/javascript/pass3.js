@@ -351,15 +351,32 @@ function arithmeticResultType(node, leftType, env) {
   //
   // `Char` を `Scalar` の成員に入れていないのは算術の対象でないからではなく、昇格格子
   // （`Int → Address → Float → Vector`）に乗らないからである。文字は数の一種ではない。
-  if ((leftType === "Char" && (rightType === "Char" || rightType === "Int")) || (leftType === "Int" && rightType === "Char")) {
-    return "Char";
-  }
-  // 数値の昇格格子: 精度の高い側へ昇格する（降格しない）
+  // **`Char` と `Int` の間に強弱は無い。** 昇格格子は「精度の高い方へ上がる」で決まるが、
+  // 文字は数の一種ではないので上下が付かない——だから格子では決められず、**左辺優先の
+  // 規則**がそのまま働く（§3.2「左辺の**型**が演算の意味を選ぶ」）。
+  //
+  //   `\`a\` + 1`  → `Char`（位置に差を足すと位置）
+  //   `1 + \`a\``  → `Int` （数に数を足すと数。文字にはならない）
+  //
+  // 以前ここには `Int + Char → Char` の節があった。右辺の型が結果を決めていたことになり、
+  // 左辺優先と食い違う。**節を消すのが直し方**である——強弱が無いものに順序を作らない。
+  if (leftType === "Char") return "Char";
+  // **強弱があるものだけ格子で決まる。無いものは左辺が決める。**
+  //
+  // `Vector` と `Float` は精度で本当に上なので、どちら側に来ても昇格する（降格しない）。
+  // だが `Address` と `Int` の間に強弱は無い——片方が精度で上なのではなく、**符号の有無
+  // が違うだけ**で、溢れ方が違う（integer_overflow.md）。上下が付かないものに順序を作る
+  // と、右辺が結果を決めることになり左辺優先と食い違う。
+  //
+  //   `番地 + 8` → `Address`（番地を進める）
+  //   `8 + 番地` → `Int`   （数に数を足す。番地にはならない）
+  //
+  // 以前は `Address` が片側にあれば結果も `Address` だった。`Char` の `Int + Char →
+  // Char` と同じ形の誤りで、**強弱の無いものに順序を作っていた**。
   if (NUMERIC_TYPES.has(leftType) && NUMERIC_TYPES.has(rightType)) {
     if (leftType === "Vector" || rightType === "Vector") return "Vector";
     if (leftType === "Float" || rightType === "Float") return "Float";
-    if (leftType === "Address" || rightType === "Address") return "Address";
-    return "Int";
+    return leftType;
   }
   // **片方が族なら、結果も族である。** `Int + Scalar` を `Int` と答えてはいけない
   // ——相手が Float なら昇格して Float になり、Address なら Address になる。具体型の側を
