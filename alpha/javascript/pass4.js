@@ -38,7 +38,7 @@
 import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf, charLimitOf, DEFAULT_CHARSET, SIGNEDNESS } from "./target_info.js";
 import { envLookup } from "./pass1.js";
 import { isBareComment } from "./pass3.js";
-import { passingOf, measure } from "./layout.js";
+import { passingOf, measure, layoutOfStruct, flattenProduct } from "./layout.js";
 import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 // AAPCS64（stack_abi.md §4.2）。引数は x0〜x7、返値は x0、一時は x9〜x15。
@@ -2150,6 +2150,52 @@ function genExpr(node, env, em, scope, tail = false) {
 	// 置き方は同じ——要素を順に並べて `{ptr, len}` を返す。違うのは**底が誰のものか**
 	// だけである。
 	const sretHere = n.escapesFrame !== false && em.sretDest !== null && em.sretDest !== undefined;
+
+	// **スロットごとに幅が違う並びは `Struct` である。**
+	//
+	// `1 , [2 3]` は「数1つ」と「器1つ」の並びで、要素の幅が揃っていない——一様な並び
+	// （`List`、`{ptr, len}` の2本）の道には乗らない。だから下の枝は `slotsOfNode === 2`
+	// で弾いており、**`Struct` は素通りして「まだ出せない式です（product）」に落ちて
+	// いた**。lexer.sn と parser.sn が止まっていたのはここである。
+	//
+	// 形は `layoutOfStruct` が既に出している（どのスロットが何バイト目か）。**スロットの
+	// 分解も同じ関数を使う**——2箇所で同じものを計算すると必ずズレる。
+	//
+	// **運ぶのは `{ptr}` の1本。** 形が型に入っているので長さを添える必要が無い
+	// （stack_abi.md §4.6）——`List` が2本なのと対になる。
+	if (n.atomType === "Struct" && n.slotKind === "positional" && !sretHere && n.escapesFrame === false) {
+		const lay = layoutOfStruct(n, { target: em.conf.target, charset: em.conf.charset, env });
+		const slotNodes = flattenProduct(n);
+		if (lay && lay.slots && slotNodes && lay.slots.length === slotNodes.length && slotNodes.length > 1) {
+			if (!allocaAllowed(em, n, "Struct を組み立てる")) return false;
+			// **先に全スロットを評価する。** 確保してから評価すると、`sp` が動いた後で
+			// スロットの番地がずれる。
+			const base = em.slot;
+			const widths = [];
+			for (const part of slotNodes) {
+				const w = genExpr(part, env, em, scope);
+				if (w === false) return false;
+				widths.push(w);
+			}
+			const bytes = Math.ceil(lay.size / 16) * 16;
+			em.emit(`sub sp, sp, #${bytes}`, `${slotNodes.length} スロットの Struct（${lay.size} byte）`);
+			em.movedSp = true;
+			let at = base;
+			for (let k = 0; k < slotNodes.length; k++) {
+				for (let r = 0; r < widths[k]; r++) {
+					em.load(SCRATCH[0], (at + r) * 8);
+					em.emit(`str ${SCRATCH[0]}, [sp, #${lay.slots[k].offset + r * 8}]`, r === 0 ? `スロット ${k}` : undefined);
+				}
+				at += widths[k];
+			}
+			em.pop(at - base);
+			const po = em.push();
+			if (po === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.emit(`mov ${SCRATCH[0]}, sp`, "ptr（Struct は形が型にあるので1本）");
+			em.store(SCRATCH[0], po);
+			return 1;
+		}
+	}
 	if (COPRODUCT_BUILD_OPS.has(n.name) && (n.escapesFrame === false || sretHere) && slotsOfNode(n, em.conf, env) === 2) {
 		// **括弧の中が連接なら剥いではいけない。** `a (b c) d` は `[a, "bc", d]` であり、
 		// 括弧が「ここまでで1つの要素」と言っている（余積は右辺を1要素として足す）。
@@ -3001,6 +3047,40 @@ function genIndex(node, env, em, scope) {
 	// **定数の構造体は畳む**（レジスタ束はここで消える）。
 	const folded = constStructField(node, env);
 	if (folded) return genExpr(folded, env, em, scope);
+	// **`Struct` のスロットは形が知っている。**
+	//
+	// 一様な並び（`List`）は「幅 × 添字」で場所が出るが、`Struct` はスロットごとに幅が
+	// 違うので**表を引く**（`layoutOfStruct`）。だから添字は定数でなければならない
+	// ——実行時に決まる添字ではどのスロットか決まらず、それは `dyn` を持たないという
+	// 決定そのものである（compiler_pipeline.md §3）。
+	//
+	// 運ばれてくるのは `{ptr}` の1本。取り出したスロットは、その型の本数で返る
+	// （数なら1本、器なら `{ptr, len}` の2本）。
+	{
+		const sb = unwrap(node.left);
+		const slay = sb && sb.atomType === "Struct" ? layoutOfStruct(sb, { target: conf.target, charset: conf.charset, env }) : null;
+		const si = slay && slay.slots ? constAddressOf(node.right, env) : null;
+		if (slay && si !== null && si >= 0n && si < BigInt(slay.slots.length)) {
+			const slot = slay.slots[Number(si)];
+			const regs = Math.max(1, Math.ceil(slot.size / 8));
+			if (!genScalar(node.left, env, em, scope, "Struct は {ptr} の1本で運びます")) return false;
+			const bo = (em.slot - 1) * 8;
+			em.load(SCRATCH[0], bo, "Struct の ptr");
+			em.pop(1);
+			const outs = [];
+			for (let r = 0; r < regs; r++) {
+				const o = em.push();
+				if (o === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+				outs.push(o);
+			}
+			for (let r = 0; r < regs; r++) {
+				em.emit(`ldr ${SCRATCH[1]}, [${SCRATCH[0]}, #${slot.offset + r * 8}]`, r === 0 ? `スロット ${si}（+${slot.offset}、${slot.type}）` : undefined);
+				em.store(SCRATCH[1], outs[r]);
+			}
+			return regs;
+		}
+	}
+
 	// **カーソルは器でも規則でもない。** 引き方が違うので、先に振り分ける。
 	// 括弧は剥ぐ——`(dup s) ' 0` のように括った形が普通である。
 	const cbase = unwrap(node.left);

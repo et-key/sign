@@ -635,4 +635,4 @@ function passingOf(node, conf) {
   return null;
 }
 
-export { measure, layoutOfStruct, formatLayout, alignUp, passingOf, stringLength };
+export { measure, layoutOfStruct, formatLayout, alignUp, passingOf, stringLength, flattenProduct };
