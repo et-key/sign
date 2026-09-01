@@ -1591,6 +1591,12 @@ function typeOfKnownOperand(node, scope, paramNames) {
 // はスカラーではありえない）、実害もあった——仮引数の既定は「証拠が無くても `Atom`」
 // なので、そこへ `Struct` や `List` が渡ると**型が値より狭くなる**。狭めた定義のままでは
 // それを表現することも検出することもできなかった。
+// 「器である」とだけ分かっている型。ここへスカラーが合流したら、それは中身である。
+const CONTAINER_FAMILY = new Set(["Container", "List", "Iterator"]);
+// 器の中に1つとして並びうるスカラー。`String` の要素は `Char` だと型が既に言っている
+// ので、そこは対象にしない（合流の余地が無い）。
+const SCALAR_ELEMENTS = new Set(["Int", "Char", "Address", "Float", "Vector"]);
+
 const FAMILY_MEMBERS = {
   // **`Char` も算術の対象である。** かつてここに入れていなかったのは「文字は算術の
   // 対象ではない」と考えていたからだが、文字の算術は符号位置の算術として成立する
@@ -1639,7 +1645,7 @@ function joinParamType(cur, next) {
   return null;
 }
 
-function inferParamTypesFromUsage(bodyNode, paramNames, scope, bareNames = null) {
+function inferParamTypesFromUsage(bodyNode, paramNames, scope, bareNames = null, elemsOut = null) {
   const inferred = new Map();
 
   /**
@@ -1676,7 +1682,21 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope, bareNames = null)
     // 食い違いはここでは断じない。本当の不一致を見るのは演算子ごとの検査の仕事である
     // （原理4）。
     const members = FAMILY_MEMBERS[prev];
-    if ((members && members.has(type)) || memberOfListFamily(prev, type)) inferred.set(name, type);
+    if ((members && members.has(type)) || memberOfListFamily(prev, type)) {
+      inferred.set(name, type);
+      return;
+    }
+    // **器にスカラーが合流したら、それは要素である**（`Scalar ⇒ [Scalar, __]`、
+    // value_representation.md §5.10）。型は器のまま——どの器かは分からない——だが、
+    // **1個が何であるかは分かる**ので、そこを落とさずに残す。
+    //
+    // これが無いと `preprocess.sn` の `pop : [~st] ? st ' 1~` が出せない。スタックの底は
+    // `bottom : 0` というスカラーなので、呼び出しサイトは `Int` を持ってくるのに
+    // `FAMILY_MEMBERS.Container` に `Int` が居ないので黙って捨てられ、**要素の幅が
+    // 決まらないから切り出せない**、という所まで落ちていた。
+    if (elemsOut && CONTAINER_FAMILY.has(prev) && SCALAR_ELEMENTS.has(type) && !elemsOut.has(name)) {
+      elemsOut.set(name, type);
+    }
   };
 
   function visit(node) {
@@ -1905,7 +1925,10 @@ function inferLambdaParamTypes(lambdaNode, env) {
       ? [lambdaNode.left.value]
       : ((lambdaNode.left && lambdaNode.left.entries) || []).filter((e) => !e.pattern && !e.rest && e.name).map((e) => e.name)
   );
-  const inferred = inferParamTypesFromUsage(lambdaNode.right, names, scopeOf, bareNames);
+  const elems = new Map();
+  const inferred = inferParamTypesFromUsage(lambdaNode.right, names, scopeOf, bareNames, elems);
+  // 呼ぶ側が要素型も要るので、Map に添えて返す（返り値の形は変えない）。
+  inferred.elementTypes = elems;
   // 呼び出しサイトで観測した具体型を取り込む（§5 Pass 1b の Layer 2 版）。§7.1 の
   // `Scalar` は「呼び出しサイトで具体化されるまでの暫定形」なので、族に留まっている
   // 位置はここで決まる。本体の証拠が既に具体型なら、そちらの方が近いので触らない。
@@ -2785,6 +2808,14 @@ function collectParamTypes(nodes, env) {
           // 混同すると `[c ~rest]` の頭まで器に持ち上がり、要素の幅が決まらなくなる。
           if (b && t && t !== "Atom" && b.atomType !== t) {
             b.atomType = t;
+            changed = true;
+          }
+          // **器だと分かっただけでは引けない。** 何バイトずつ並んでいるかが要る
+          // （value_representation.md §5.10）。要素型を書き戻せば `elementTypeOfNode` が
+          // 束縛まで辿って見つける——新しい口は要らない。
+          const el = inferred.elementTypes && inferred.elementTypes.get(name);
+          if (b && el && b.elementType !== el) {
+            b.elementType = el;
             changed = true;
           }
         }

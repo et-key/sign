@@ -3321,7 +3321,7 @@ function genIndex(node, env, em, scope) {
 		return cw;
 	}
 	// 要素の幅。`String` なら charset 幅、`List(T)` なら T の大きさ。
-	const elemType = isSlice ? node.elementType || elementTypeOfNode(node.left) : node.atomType;
+	const elemType = isSlice ? node.elementType || elementTypeOfNode(node.left, env) : node.atomType;
 	const elem = elemType ? measure({ atomType: elemType }, { target: conf.target, charset: conf.charset }) : null;
 	// 要素の幅が要るのは**場所**を引くときだけである（`base + i × sizeof(T)`）。規則は
 	// `start + i × step` なので、要素が何バイトかを知らなくても引ける——`step` が既に
@@ -3527,9 +3527,19 @@ function boundedSlice(idx) {
 }
 
 // 器の要素型。`elementType` はレンジ・List に付く（pass3.js）。
-function elementTypeOfNode(n) {
+function elementTypeOfNode(n, env) {
 	if (!n) return null;
 	if (n.elementType) return n.elementType;
+	// **束縛が知っていることを、識別子ノードは持っていない。**
+	//
+	// Pass 3 は仮引数の型を束縛へ書き戻すが、要素型はノードには載らない。`st ' 1~` の
+	// `st` がそれで、束縛は `elementType = Int` だと知っているのに引く側から見えず、
+	// **要素の幅が決まらないから切り出せない**という所まで落ちていた
+	// （value_representation.md §5.10）。
+	if (env && n.type === "atom" && n.kind === "identifier") {
+		const b = envLookup(env, n.value);
+		if (b && b.elementType) return b.elementType;
+	}
 	return n.atomType === "String" ? "Char" : null;
 }
 
