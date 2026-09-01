@@ -4916,6 +4916,31 @@ function calleeSaveLines(regs, verb) {
 }
 
 /**
+ * **読みだけを写し元へ向け直す。**
+ *
+ * 書き先も同じ名前のことがある——`csel x9, x9, x12, eq` の第2オペランドは読みである。
+ * オペランドをまとめて置換すると書き先まで変わってしまうので、以前は「書き先と同じ名前
+ * なら触らない」で逃げていた。**それで `is_space` の `mov x9, x0` が3つとも残った**。
+ * 書き先の**後ろ**だけを置き換えれば、逃げる必要は無い。
+ */
+function substituteReads(line, from, to) {
+	const cut = line.indexOf("//");
+	const code = cut < 0 ? line : line.slice(0, cut);
+	const tail = cut < 0 ? "" : line.slice(cut);
+	const mn = code.trim().split(/[\s,]/)[0];
+	const at = code.indexOf(mn) + mn.length;
+	const ops = code.slice(at);
+	// **書き先が何本かは `regsOf` が知っている。** ここで数え直すと `cmp x9, x12` や
+	// `str x9, [x29, #16]` の第1オペランドを書き先と見なしてしまう——どちらも読みである。
+	// 実際それで置換が減り、命令が 2588 から 2729 に増えた。**同じことを2箇所で決めない。**
+	const n = regsOf(code.trim()).w.length;
+	let start = 0;
+	for (let k = 0; k < n; k++) start = ops.indexOf(",", start) + 1;
+	if (n > 0 && start === 0) return line; // カンマが無い（書き先だけ）——読みは無い
+	return code.slice(0, at) + ops.slice(0, start) + ops.slice(start).replace(new RegExp("\\b" + from + "\\b", "g"), to) + tail;
+}
+
+/**
  * **どのレジスタを読み、どのレジスタに書くか。**
  *
  * 書き先は第1オペランドである——ただし記憶へ書く形（`str`/`stp`）と比較（`cmp`/`ccmp`）は
@@ -4980,12 +5005,7 @@ function peepholeFoldMoves(lines) {
 			let line = out[i];
 			for (const reg of new Set(r)) {
 				const src = copy.get(reg);
-				if (!src || w.includes(reg)) continue;
-				// 第1オペランド（書き先）は置き換えない。幅の違う読みも触らない。
-				const mn = insOf(line).split(/[\s,]/)[0];
-				const head = line.indexOf(mn) + mn.length;
-				const body = line.slice(head).replace(new RegExp("\\b" + reg + "\\b", "g"), src);
-				line = line.slice(0, head) + body;
+				if (src) line = substituteReads(line, reg, src);
 			}
 			out[i] = line;
 		}
@@ -5230,14 +5250,11 @@ function propagateCopies(lines) {
 		const src = new Map();
 		for (const c of inOf[i]) { const [a, b] = c.split(" "); if (!src.has(a)) src.set(a, b); }
 		if (!src.size) continue;
-		const { w, r } = rw[i];
+		const { r } = rw[i];
 		let line = out[idx[i]];
 		for (const reg of new Set(r)) {
 			const to = src.get(reg);
-			if (!to || w.includes(reg)) continue;
-			const mn = insOf(line).split(/[\s,]/)[0];
-			const head = line.indexOf(mn) + mn.length;
-			line = line.slice(0, head) + line.slice(head).replace(new RegExp("\\b" + reg + "\\b", "g"), to);
+			if (to) line = substituteReads(line, reg, to);
 		}
 		if (line !== out[idx[i]]) { out[idx[i]] = line; moved++; }
 	}
@@ -5271,6 +5288,11 @@ function deadCodeElim(lines) {
 	const drop = new Set();
 	for (let k = 0; k < ins.length; k++) {
 		const t = ins[k];
+		// **自分から自分への写しは、生きていようと何もしない。** コピー伝播が読みを
+		// 向け直した結果として出る（`mov x0, x9` の x9 が x0 と同じだった）。生存では
+		// 消えない——書き先は本当に生きているからである。
+		const self = /^mov (x\d+), (x\d+)$/.exec(t);
+		if (self && self[1] === self[2]) { drop.add(idx[k]); continue; }
 		if (!PURE.test(t.split(/[\s,]/)[0])) continue;
 		if (t.includes("]!") || /\],\s*#/.test(t)) continue; // 書き戻しは `sp` を動かす
 		const w = regsOf(t).w;

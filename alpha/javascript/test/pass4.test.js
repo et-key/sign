@@ -992,7 +992,7 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 	);
 	// 4 byte の charset なら戻す幅も変わる。
 	const u = generateAsm(compile(LS + "f `  ab`", { charset: "utf32" }).nodes, compile(LS + "f `  ab`", { charset: "utf32" }).env,
-		{ target: "aarch64_qemu", charset: "utf32", layer: 1 });
+		{ target: "aarch64_qemu", charset: "utf32", layer: 1, regAlloc: false });
 	checkTrue("幅は charset が決める", u.text.split("\n").map((l) => l.replace(/\/\/.*/, "").trim()).includes("sub x9, x9, #4"), u.diagnostics.map((d) => d.message).join(" / "));
 }
 
