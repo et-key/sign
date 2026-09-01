@@ -270,11 +270,39 @@ function memberOfListFamily(family, type) {
   return family === "List" && typeof type === "string" && type.startsWith("List(");
 }
 
+// **スカラーは1要素の器と同型である**（`Scalar ⇒ [Scalar, __]`）。
+//
+// 「長さ1のリストは存在しない」（`[5]` は `Int`）は既にこの同型を**降りる**方向で
+// 使っている。ここはその同じ同型を**昇る**方向で読むだけである——片方が `T`、もう片方が
+// `T` の器なら、上限は器である。
+//
+// **根拠は単位元が持ち上げで動かないこと。** 機械の上で `$__ = __ = @__` が成り立つので
+// （pass4.js / interpreter.js）、型の上で `$__ = [__] = @__` と読んでも観測は壊れない。
+// 持ち上げの底が `__` のまま動かないから、持ち上げてよい。
+//
+// **そして自然同型はコードの表面に出さない。** 書かせた時点で自然ではなくなるからで、
+// 実際 Sign には1文字の `String` を書く手段が無い（`s ' 0` も `s ' (0 ~ 0)` も `Char` へ
+// 降りる）。だから昇る側はフロントエンドが黙って吸う。lexer.sn の `tokens` が記号1文字の
+// 枝で `Char`、語の枝で `String` を積むのは、書き手にとっては同じ「トークンを1つ積む」で
+// あって、そこに変換を書かせる理由が無い。
+//
+// 代金は原理8のとおり出る——`Char` の要素は `{ptr, len}` の2語になる。ただし `s ' 0` は
+// 元の器のスライス（`{s.ptr, 1}`）なので確保は要らない。
+function liftScalarToBox(a, b) {
+  if (a === "Char" && b === "String") return "String"; // String ≅ List(Char)（原理7）
+  if (b === "Char" && a === "String") return "String";
+  if (b === `List(${a})`) return b;
+  if (a === `List(${b})`) return a;
+  return null;
+}
+
 function joinElementTypes(a, b) {
   if (a === null || a === undefined || b === null || b === undefined) return null;
   if (a === b) return a;
   if (memberOfListFamily(a, b)) return b;
   if (memberOfListFamily(b, a)) return a;
+  const lifted = liftScalarToBox(a, b);
+  if (lifted) return lifted;
   // `Scalar` は「String を含まない Atom」という**族**であり（§4 の記法定義）、
   // Address / Float / Vector はその要素である。族と要素の上限は族——どの要素かは
   // まだ分かっていないので、分かっている以上のことを名乗らない。仮引数の型が
@@ -1088,7 +1116,11 @@ function computeAtomType(node, env) {
         // 左辺だけで決まり、相手が決まった次の周で join が効く（Pass 3 は不動点で回る）。
         const el = inferAtomType(node.left, env);
         if (el && el !== "Unit") {
-          const known = node.right.elementType ?? (node.right.operand && node.right.operand.elementType) ?? null;
+          // 相手の要素型は**束縛表から来る**（適用ノードは呼び先の `returnsElementType` を
+          // 読む）ので、推論を走らせても自分へは戻らない。周回ごとに注釈は消されるため、
+          // 走らせないと同じ周の中では読めない——枝1（適用そのもの）が上がっても枝4
+          // （積）が `Char` のまま取り残されていたのはこれである。
+          const known = elementTypeOfNode(node.right.operand ?? node.right, env);
           const j = known && known !== el ? joinElementTypes(el, known) : el;
           // join できない＝中身が同型でない。そのときは下の Struct（連番スロット）へ
           // 落ちる——「添え字が数字になる構造体」がまさにそれである。

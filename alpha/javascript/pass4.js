@@ -4420,17 +4420,15 @@ function returnSizeBound(lam, name, known, group) {
 		// 器の位置が同じ仮引数のままであることを見る。入れ替えたり式にしたりしていれば
 		// 大きさが動きうるので、そこは諦める。
 		if (selfCallSameArgs(a, name, params)) continue;
-		// **スカラーを返す枝は長さ1の器である**（`[x] ≅ x`）。器を返す関数の枝が全部
-		// 器を組むとは限らない——`gap : st d ? d > (top st) : indent / (closers st d)
-		// newline` の `indent` のように、片方が値1つで済む形は普通である。ここで諦めて
-		// いたため、**分岐して器を返す形**がまるごと sret に乗らなかった。
+		// **組まない枝も、同じ歩き方に通す。**
 		//
-		// 器を返す枝（識別子が器を指しているなど）は数えられないので、そこは諦める。
-		if (!(a.type === "operation" && COPRODUCT_BUILD_OPS.has(a.name))) {
-			if (isBoxType(a.atomType)) return null;
-			konst = Math.max(konst, 1);
-			continue;
-		}
+		// 以前ここで「器を組まない枝が器を返すなら諦める」としていたが、下の `walkBound`
+		// は組まない節点を**1要素の並び**として扱えるので、通せば同じ規則で数えられる
+		// ——仮引数そのものを返す枝（`strip_head` の `rest`）は「撒いた仮引数」と同じ、
+		// 上界の分かっている呼び出しは `boundedCallOf` と同じである。
+		//
+		// スカラーを返す枝が長さ1の器（`[x] ≅ x`）になるのも、歩いた先の `k += 1` が
+		// そのまま言っている。手前で分ける理由が無い。
 		// 連なりを平らにする（括弧の中が連接なら1要素——剥いではいけない）。
 		const parts = [];
 		let cur = a;
