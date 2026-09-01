@@ -1037,8 +1037,8 @@ function genExpr(node, env, em, scope, tail = false) {
 		//
 		// **`__` になり得ない辺は検査しない。** 両辺とも分かっていれば命令は1つのまま
 		// で、公理は本当にタダになる。
-		const lMaybe = !cannotBeUnit(n.left, env);
-		const rMaybe = !cannotBeUnit(n.right, env);
+		const lMaybe = !cannotBeUnit(n.left, env, scope);
+		const rMaybe = !cannotBeUnit(n.right, env, scope);
 		if (!lMaybe && !rMaybe) {
 			em.emit(`${mn} ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
 		} else {
@@ -1105,17 +1105,28 @@ function genExpr(node, env, em, scope, tail = false) {
 		const ro = (em.slot - 1) * 8;
 		em.load(SCRATCH[0], lo);
 		em.load(SCRATCH[1], ro);
-		// 左辺が 0 か 1 か（算術単位元、comparison.md §2.1）。
-		em.emit(`cmp ${SCRATCH[0]}, #0`, "左辺は加法単位元か");
-		em.emit(`ccmp ${SCRATCH[0]}, #1, #4, ne`, "違えば乗算単位元か");
-		em.emit(`csel x11, ${SCRATCH[1]}, ${SCRATCH[0]}, eq`, "単位元なら右辺、でなければ左辺");
+		// **`=` は 0/1 の規則を出さなくてよい。**
+		//
+		// 真のとき返る候補は「左辺が 0 か 1 なら右辺、でなければ左辺」である
+		// （comparison.md §2.1——`0 < 5` が 5、`2 < 5` が 2 になるのはこれ）。だが `=` が
+		// 真になるのは**両辺が同じ値のとき**だけで、そのとき左辺と右辺は区別が付かない。
+		// 規則が無くなったのではなく、**この演算子では観測できない**。
+		//
+		// 実プログラムで比較の 72 箇所中このぶんが 3 命令ずつ減る。
+		const eqOnly = n.name === "assign_equal";
+		if (!eqOnly) {
+			// 左辺が 0 か 1 か（算術単位元、comparison.md §2.1）。
+			em.emit(`cmp ${SCRATCH[0]}, #0`, "左辺は加法単位元か");
+			em.emit(`ccmp ${SCRATCH[0]}, #1, #4, ne`, "違えば乗算単位元か");
+			em.emit(`csel x11, ${SCRATCH[1]}, ${SCRATCH[0]}, eq`, "単位元なら右辺、でなければ左辺");
+		}
 		// 比較そのもの。真なら選んだ候補、偽なら `__`。
 		// 64ビット即値は `mov` に載らない。niche は上位16ビットだけが立っているので
 		// `movz` 1命令で作れる（0x8000 << 48）。
 		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
 		em.emit(`cmp ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
 		const table = unsignedCompare(n, em.conf, env) ? CMP_COND_UNSIGNED : CMP_COND;
-		em.emit(`csel ${SCRATCH[0]}, x11, x12, ${table[n.name]}`, "真なら値、偽なら __");
+		em.emit(`csel ${SCRATCH[0]}, ${eqOnly ? SCRATCH[0] : "x11"}, x12, ${table[n.name]}`, "真なら値、偽なら __");
 		em.pop(1);
 		em.store(SCRATCH[0], lo);
 		return 1;
@@ -2030,7 +2041,7 @@ function genExpr(node, env, em, scope, tail = false) {
 				emitImm(em, SCRATCH[0], cDst, "書き込み先（定数——niche ではない）");
 			}
 			const skipC = em.newLabel("unwritable");
-			const guardedC = emitWritableGuard(em, srcReg, n.right, env, skipC);
+			const guardedC = emitWritableGuard(em, srcReg, n.right, env, skipC, scope);
 			em.emit(storeAt(srcReg, SCRATCH[0], wOut), `${wOut} byte を書く`);
 			if (guardedC) em.label(skipC);
 			em.store(SCRATCH[0], off);
@@ -2059,7 +2070,7 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.emit(`b.eq ${skip}`, "不正なアドレスへは書かない");
 			em.load(SCRATCH[1], vo, "書く値");
 			const skipG = em.newLabel("unwritable");
-			const guardedG = emitWritableGuard(em, SCRATCH[1], n.right, env, skipG);
+			const guardedG = emitWritableGuard(em, SCRATCH[1], n.right, env, skipG, scope);
 			em.emit(storeAt(SCRATCH[1], SCRATCH[0], w), `${w} byte を書く`);
 			if (guardedG) em.label(skipG);
 			em.emit(`b ${done}`, "成功したらアドレスを返す");
@@ -2442,7 +2453,7 @@ function genExpr(node, env, em, scope, tail = false) {
 			// **払うのは `__` になり得る要素だけである。** リテラルの並びは全部が
 			// `cannotBeUnit` なので、今まで通り静的なオフセットと静的な長さで出る
 			// （実プログラムはここに乗る）。番地が定数なら全域性がタダだったのと同じ形。
-			const maybeUnit = parts.map((q) => !cannotBeUnit(q, env));
+			const maybeUnit = parts.map((q) => !cannotBeUnit(q, env, scope));
 			if (!maybeUnit.some(Boolean)) {
 				for (let k = 0; k < count; k++) {
 					em.load(SCRATCH[0], (base + k) * 8);
@@ -2934,9 +2945,9 @@ const NICHE_VALUE = 0x8000000000000000n;
  *
  * @returns 門を出したか（出したなら呼ぶ側が `skip` のラベルを置く）
  */
-function emitWritableGuard(em, valReg, node, env, skip) {
+function emitWritableGuard(em, valReg, node, env, skip, scope) {
 	let guarded = false;
-	if (valReg !== "xzr" && !cannotBeUnit(node, env)) {
+	if (valReg !== "xzr" && !cannotBeUnit(node, env, scope)) {
 		em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
 		em.emit(`cmp ${valReg}, x12`, "書く値が __ か");
 		em.emit(`b.eq ${skip}`, "__ は書かない（何も起きない）");
@@ -2982,14 +2993,17 @@ function isUnitAtom(node) {
 // ——公理自身がそう言っている（左が `__` なら `__`、右が `__` なら左辺値）。
 // ただし `Char` は別で、charset の外へ出た結果は `__` になる。除算も別で、0 で
 // 割った結果をここでは決めていない。
-function cannotBeUnit(node, env) {
+function cannotBeUnit(node, env, scope) {
 	const n = unwrap(node);
 	if (!n) return false;
 	if (isUnitAtom(n)) return false; // `0u0000` は綴りが違うだけの `__` である
-	if (n.type === "atom") return n.kind === "number" || n.kind === "address" || n.kind === "char" || n.kind === "unicode";
+	if (n.type === "atom") {
+		if (n.kind === "identifier") return !!(scope && scope.total && scope.total.has(n.value));
+		return n.kind === "number" || n.kind === "address" || n.kind === "char" || n.kind === "unicode";
+	}
 	if (n.type === "operation" && INT_OPS[n.name] && n.position === "infix") {
 		if (n.atomType === "Char" || n.name === "div") return false;
-		return cannotBeUnit(n.left, env) && cannotBeUnit(n.right, env);
+		return cannotBeUnit(n.left, env, scope) && cannotBeUnit(n.right, env, scope);
 	}
 	return false;
 }
@@ -5579,7 +5593,10 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	const params = [];
 	const paramOffsets = [];
 	const paramSlots = [];
-	const scopeSoFar = () => ({ params, paramOffsets, paramSlots, callees });
+	// **入口の門番を通った仮引数**。デフォルトを持つものは通らない（渡されなければ
+	// デフォルトで埋まり、その値が `__` である可能性を否定できない）ので入れない。
+	const total = new Set();
+	const scopeSoFar = () => ({ params, paramOffsets, paramSlots, callees, total });
 	for (const inc of incoming) {
 		const what = inc.shape.kind === "bare" ? bareName(inc.shape.name) : `[${bareName(inc.shape.head)} ~${bareName(inc.shape.rest)}]`;
 		if (inc.shape.kind === "bare" && inc.shape.defaultNode) {
@@ -5629,6 +5646,9 @@ function genFunction(name, lambdaNode, env, em, mono) {
 		emitIsUnit(em, inc.off, inc.regs, `仮引数 ${what} が __ か`, inc.rule);
 		em.emit(`b.eq ${unitLabel}`, "__ なら本体へ入らない（完全性公理）");
 		if (inc.shape.kind === "bare") {
+			// **この名前は本体の中で `__ ` になり得ない。** 分解する形は入れない——門番が
+			// 見たのは器であって、取り出した要素ではないからである。
+			total.add(inc.shape.name);
 			params.push(inc.shape.name);
 			paramOffsets.push(inc.off);
 			paramSlots.push(inc.regs);
