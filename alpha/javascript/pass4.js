@@ -5051,24 +5051,15 @@ const CALL_ARGS = ["x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8"];
 const PURE = /^(mov|movz|add|sub|mul|sdiv|udiv|and|orr|eor|lsl|lsr|asr|csel|cset|csinc|neg|ldr|ldrb|ldrh|ldrsw|madd|msub)$/;
 
 /**
- * **関数まるごとの後ろ向き生存解析。**
+ * **命令の並びを流れ図として読む。**
  *
- * `peepholeFoldMoves` の直線区間は分岐に当たると表を捨てる——「この写しは以降読まれない」
- * が言えるのは次の分岐までで、実プログラムでは 1429 本の写しが残った。内訳の最大は
- * **保存→作業 381 / 作業→保存 315** で、どちらも消費側が分岐の向こうにある形である。
+ * 生存解析（後ろ向き）とコピーの伝播（前向き）が同じ図を見る。**2箇所で組み立てると
+ * 必ず食い違う**ので、ここ1つにまとめてある。
  *
- * 分岐の向こうまで見るには、命令ごとの後続を辿って不動点を取るしかない。**局所で決める
- * のをやめて関数を1つの表として解く**——スロットの割り当てと同じ形である。
- *
- * 出口で生きているのは戻り値（x0/x1）だけ。**退避したレジスタは出口で生きていない**
- * ——復帰は記憶から読むので、レジスタとしての値は要らない。ここが効いて `mov x19, x9`
- * の最後の1本が死ぬ。
- *
- * 安全側の寄せ方が3つ。呼び出しは x0–x8 を**読む**と見なす（何本渡すかは呼び先が決める）。
- * 呼び出しが**壊す**側は数えない——壊すと見なすと、跨いで生きている値を死んだことに
- * してしまう。飛び先の分からない `br` は全部生きていると見なす。
+ * @returns `{ succ, preds, extra, rw }`——`extra` は「後続の外側で生きているもの」
+ *   （出口・末尾呼び出し・飛び先不明）、`rw` は命令ごとの読み書き。
  */
-function liveOutSets(ins, labels) {
+function buildFlow(ins, labels) {
 	const n = ins.length;
 	// **戻り値は x0/x1 とは限らない。** 余積を返す関数は x0 から順に何本でも使う（AAPCS64
 	// は x0–x7、sret なら x8）。2本と決めつけて `dup` の戻りを消し、`__` を返す機械語を
@@ -5116,6 +5107,30 @@ function liveOutSets(ins, labels) {
 		if (mn === "movk") return { w: g.w, r: [...g.r, ...g.w] };
 		return g;
 	});
+	const preds = ins.map(() => []);
+	for (let i = 0; i < n; i++) for (const j of succ[i]) preds[j].push(i);
+	return { succ, preds, extra, rw };
+}
+
+/**
+ * **関数まるごとの後ろ向き生存解析。**
+ *
+ * `peepholeFoldMoves` の直線区間は分岐に当たると表を捨てる——「この写しは以降読まれない」
+ * が言えるのは次の分岐までである。分岐の向こうまで見るには、命令ごとの後続を辿って
+ * 不動点を取るしかない。**局所で決めるのをやめて関数を1つの表として解く**——スロットの
+ * 割り当てと同じ形である。
+ *
+ * 出口で生きているのは呼び出しの口（x0–x8）だけ。**退避したレジスタは出口で生きて
+ * いない**——復帰は記憶から読むので、レジスタとしての値は要らない。ここが効いて
+ * `mov x19, x9` の最後の1本が死ぬ。
+ *
+ * 安全側の寄せ方が3つ。呼び出しは x0–x8 を**読む**と見なす（何本渡すかは呼び先が決める）。
+ * 呼び出しが**壊す**側は数えない——壊すと見なすと、跨いで生きている値を死んだことに
+ * してしまう。飛び先の分からない `br` は全部生きていると見なす。
+ */
+function liveOutSets(ins, labels) {
+	const n = ins.length;
+	const { succ, extra, rw } = buildFlow(ins, labels);
 	const liveIn = ins.map(() => new Set());
 	const liveOut = ins.map(() => new Set());
 	for (let round = 0; round < 100; round++) {
@@ -5133,6 +5148,100 @@ function liveOutSets(ins, labels) {
 		if (!changed) break;
 	}
 	return liveOut;
+}
+
+/**
+ * **関数まるごとのコピー伝播（前向き）。**
+ *
+ * `peepholeFoldMoves` は直線区間しか見ないので、`mov xD, xS` の消費側が分岐の向こうに
+ * あると向け直せない。実プログラムに残った写し 694 本（命令の 24%）の大半がこれである。
+ *
+ * 前向きに「いまどの写しが生きているか」を辿り、**合流点では交わりを取る**——どちらの
+ * 道から来ても成り立つ写しだけが使える。生存解析と同じ流れ図を `buildFlow` から借りる。
+ *
+ * **呼び出しは x0–x18 を巻き込む写しを全部殺す。** 生存解析では「壊す側を数えない」のが
+ * 安全側だったが、こちらは逆で、**数えないと壊れたレジスタを読みに行く**。同じ流れ図でも
+ * 向きが逆なら安全側も逆である。
+ *
+ * 何も割り当てないので、覗き穴で2度壊した「重なった窓が同じレジスタを奪い合う」形には
+ * ならない——既にある名前へ向け直すだけである。
+ */
+function propagateCopies(lines) {
+	const insOf = (l) => l.trim().replace(/\s*\/\/.*$/, "");
+	const idx = [];
+	const ins = [];
+	const labels = new Map();
+	for (let i = 0; i < lines.length; i++) {
+		const t = insOf(lines[i]);
+		if (!t) continue;
+		const m = /^([.\w$]+):$/.exec(t);
+		if (m) { labels.set(m[1], ins.length); continue; }
+		idx.push(i);
+		ins.push(t);
+	}
+	if (!ins.length) return lines;
+	const n = ins.length;
+	const { preds, rw } = buildFlow(ins, labels);
+	const MOV = /^mov (x\d+), (x\d+)$/;
+	const CLOBBER = Array.from({ length: 19 }, (_, i) => "x" + i); // 呼び出しが壊す口
+
+	// 起こり得る写しを先に数え上げる（交わりを取るので、初期値は「全部」が要る）。
+	const universe = [];
+	for (const t of ins) {
+		const m = MOV.exec(t);
+		if (m && m[1] !== m[2]) universe.push(m[1] + " " + m[2]);
+	}
+	if (!universe.length) return lines;
+	const all = new Set(universe);
+	const killsAt = (i) => (/^(bl|blr)\b/.test(ins[i]) ? CLOBBER : rw[i].w);
+
+	const outOf = ins.map((_, i) => (i === 0 ? new Set() : new Set(all)));
+	const inOf = ins.map(() => new Set());
+	for (let round = 0; round < 100; round++) {
+		let changed = false;
+		for (let i = 0; i < n; i++) {
+			// 入口は空。合流点は交わり。
+			//
+			// **関数の入口は、前任者が居ないこととは違う。** 自分へ戻る末尾再帰があると
+			// 先頭にも後ろ向き辺が入り、合流点に見える——その道だけで交わりを取ると、
+			// 「入口から来た場合」が抜ける（`loop 5 0` が 15 ではなく 0 になった）。
+			let inn;
+			if (i === 0 || !preds[i].length) inn = new Set();
+			else {
+				inn = new Set(outOf[preds[i][0]]);
+				for (const q of preds[i].slice(1)) for (const c of [...inn]) if (!outOf[q].has(c)) inn.delete(c);
+			}
+			const out = new Set(inn);
+			for (const d of killsAt(i)) for (const c of [...out]) { const [a, b] = c.split(" "); if (a === d || b === d) out.delete(c); }
+			const m = MOV.exec(ins[i]);
+			if (m && m[1] !== m[2]) out.add(m[1] + " " + m[2]);
+			if (out.size !== outOf[i].size || [...out].some((c) => !outOf[i].has(c))) changed = true;
+			inOf[i] = inn;
+			outOf[i] = out;
+		}
+		if (!changed) break;
+	}
+
+	// 読みを写し元へ向け直す。**書き先は触らない**し、幅の違う読み（`w9`）も触らない
+	// ——`add w9, x19, w10` は命令として成り立たない。
+	const out = lines.slice();
+	let moved = 0;
+	for (let i = 0; i < n; i++) {
+		const src = new Map();
+		for (const c of inOf[i]) { const [a, b] = c.split(" "); if (!src.has(a)) src.set(a, b); }
+		if (!src.size) continue;
+		const { w, r } = rw[i];
+		let line = out[idx[i]];
+		for (const reg of new Set(r)) {
+			const to = src.get(reg);
+			if (!to || w.includes(reg)) continue;
+			const mn = insOf(line).split(/[\s,]/)[0];
+			const head = line.indexOf(mn) + mn.length;
+			line = line.slice(0, head) + line.slice(head).replace(new RegExp("\\b" + reg + "\\b", "g"), to);
+		}
+		if (line !== out[idx[i]]) { out[idx[i]] = line; moved++; }
+	}
+	return moved ? out : lines;
 }
 
 /**
@@ -5190,7 +5299,7 @@ function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true) {
 	if (moved) {
 		bodyLines = moved.lines;
 		for (let i = 0; i < 4; i++) {
-			const next = deadCodeElim(peepholeFoldMoves(bodyLines));
+			const next = deadCodeElim(propagateCopies(peepholeFoldMoves(bodyLines)));
 			if (next.length === bodyLines.length && next.every((l, k) => l === bodyLines[k])) break;
 			bodyLines = next;
 		}
