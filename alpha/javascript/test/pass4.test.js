@@ -205,7 +205,10 @@ checkTrue("__ は niche を積む", (body("f : x ?\n\tx > 3 : __\n\t1\nf 5", "f"
 {
 	const b = body("f : n ? @($(n + 1))\nf 1", "f");
 	checkTrue("場所を取る", b.includes("sub sp, sp, #16"), b.join(" / "));
-	checkTrue("そのアドレスを返す", b.includes("mov x9, sp"), b.join(" / "));
+	// **どのレジスタに載るかは見ない。** $__ = __ を出すようになってから、アドレスは
+	// 候補として別のレジスタへ載り csel で選ばれる。ここの主題は「sp から取る」ことで
+	// あって、置き先ではない。
+	checkTrue("そのアドレスを返す", b.some((l) => /^mov x\d+, sp$/.test(l)), b.join(" / "));
 	// `sp` を動かしたら、戻すのは `x29` からである（`ldp` は sp が底のままを前提にしている）。
 	checkTrue("sp を戻す", b.includes("mov sp, x29"), b.join(" / "));
 	// 動かしていない関数には出さない——使っていない機能の代金を払わない。

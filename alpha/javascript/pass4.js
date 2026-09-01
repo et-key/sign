@@ -1908,7 +1908,27 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.load(SCRATCH[0], vo + k * 8);
 			em.emit(`str ${SCRATCH[0]}, [sp, #${k * 8}]`, k === 0 ? "置く" : undefined);
 		}
-		em.emit(`mov ${SCRATCH[0]}, sp`, "そのアドレス");
+		// **`$__ = __`。** 置く値が `__` なら、場所を作っても指すものが無い——`@__ = __`
+		// と対である。門番は既に「`__` は書かない」を出していたが、**書かずにアドレスは
+		// 返していた**ので `$@__` や `$__` が場所を指していた（`@__` は `__` なのだから
+		// `$@__` は `$__` ＝ `__` でなければならない）。
+		//
+		// **これは型の側の足場である。** `Scalar ⇒ [Scalar, __]` という持ち上げ——1要素の
+		// 器はスカラーと同型、という主張を昇る方向へ読むこと——が観測を壊さないと言える
+		// のは、機械の上で `$__ = __ = @__` が成り立つときだけである。単位元が持ち上げで
+		// 動かないことが、持ち上げそのものの根拠になっている。
+		//
+		// `__` になり得ない値には出さない（`cannotBeUnit`）——boot で「番地が定数なら
+		// 全域性はタダ」だったのと同じ形である。
+		if (vw === 1 && !cannotBeUnit(n.operand, env, scope)) {
+			em.emit(`mov ${SCRATCH[1]}, sp`, "そのアドレス");
+			em.load(SCRATCH[0], vo, "置いた値");
+			em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
+			em.emit(`cmp ${SCRATCH[0]}, x12`, "置いたのは __ か");
+			em.emit(`csel ${SCRATCH[0]}, x12, ${SCRATCH[1]}, eq`, "__ を置いた場所は __（$__ = __）");
+		} else {
+			em.emit(`mov ${SCRATCH[0]}, sp`, "そのアドレス");
+		}
 		em.pop(vw);
 		const ao = em.push();
 		if (ao === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
