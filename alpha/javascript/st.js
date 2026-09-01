@@ -112,7 +112,11 @@ function paramTypeText(entry, usageTypes, fieldReqs) {
     // 型が分かればそれを書き、分からないときだけ形を書く。
     const restEntry = entry.pattern.find((p) => p.rest && p.name);
     const container = restEntry ? usageTypes.get(restEntry.name) : null;
-    if (container) return container;
+    // **`Container` は形より弱い。** 「器である」としか言っていないのに対し、形は
+    // 「器であり、こう分解する」まで言う。分からないときだけ形を書く、ではなく——
+    // **多くを言っている方を書く**。要素の項目が無いパターン（`[~st]`）は器だとしか
+    // 決まらないので、そこは形が残る。
+    if (container && container !== "Container") return container;
     const inner = entry.pattern.map((p) => bareName(p.name) + (p.rest ? "~" : "")).join(" ");
     return `[${inner}]`;
   }
@@ -319,6 +323,9 @@ function lambdaSignature(rhs) {
   // 分かっていない」ときの記述であって、裸の仮引数における `Atom` と同じ位置にある。
   const restEntry = wholeBracket ? entries.find((e) => e.rest && e.name) : null;
   let containerType = restEntry ? usageTypes.get(restEntry.name) : null;
+  // **`Container` は形より弱い。** 「器である」としか言っていないのに対し、形は「器で
+  // あり、こう分解する」まで言う。多くを言っている方を書く。
+  if (containerType === "Container") containerType = null;
   // `List` は要素型を伴って書く（§2 の記法）。要素は先頭エントリそのものである
   // ——`[x ~xs]` の `x` が要素で `xs` が器なのだから、器の要素型は `x` の型である。
   if (containerType === "List") {

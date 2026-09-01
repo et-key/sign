@@ -2060,6 +2060,23 @@ function inferLambdaParamTypes(lambdaNode, env) {
       if (!restEntry || inferred.has(restEntry.name)) continue;
       const element = group.find((e) => !e.rest && e.name && inferred.has(e.name));
       const elementType = element ? inferred.get(element.name) : null;
+      // **要素が無くても「器である」ことは分かる。**
+      //
+      // `[~st]` のように rest だけを書く形では、要素の型を語る項目がどこにも無い。だが
+      // ブラケットは**器を受ける形の宣言**であり、呼ぶ側はスカラーを渡すときも形に合わせて
+      // 持ち上げてから渡す（`emitLiftToContainer`）——中では必ず器である。
+      //
+      // ここで何も言わずに終わると、呼び出しサイトから来たスカラーの型がそのまま残り、
+      // **型は 1 本と言うのに ABI は 2 本で運ぶ**という食い違いになる。preprocess.sn の
+      // `push : [~st] d ? d st~` がそれで、スタックの底が `bottom : 0` というスカラー
+      // なので `Int` が入っていた。**形の宣言の方が正しい。**
+      //
+      // どの器かは分からないので `Container` と言う——分かっている以上のことを名乗らない
+      // のが原理4 である。
+      if (!elementType && !group.some((e) => !e.rest && e.name)) {
+        inferred.set(restEntry.name, "Container");
+        continue;
+      }
       if (elementType && elementType !== "Atom") {
         // 要素が文字なら器は `String` である（`String ≅ List(Char)`）。`List(Char)` と
         // `String` は同じものであり、別の名前を持たない。
