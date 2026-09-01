@@ -1587,6 +1587,46 @@ function asList(v) {
   if (isIterator(v)) return asList(materializeIterator(v));
   return Array.isArray(v) ? v : [v];
 }
+/**
+ * **文字列の吸収則**（type_system.md §3.2 の余積族）。どちらかが文字列ならテキストとして
+ * 連結する。連結にならないなら null を返す。
+ *
+ * **同じ規則が3箇所に要る。** 余積は書かれ方で `construct` / `push` / `unshift` の3つの
+ * ノードになるが、規則は1つである。`construct` にしか書いていなかったので、括弧が付いて
+ * `unshift` になった途端に吸収が効かなくなっていた——`` `a` `bc` `` は "abc"、
+ * `` `a` (`b` `c`) `` は ["a","bc"] という別物になり、**同じ値を代入しただけで結果が
+ * 変わる**（参照透明が壊れる）。
+ *
+ * **括弧は評価順を決めるだけで、構造を作らない。** `String` の μ は強制だからである
+ * （原理7、`String ≅ List(Char)`）——文字列の中に文字列は入れ子で生き残れない。
+ * `List` の μ は任意なので、そちらは括弧が入れ子を作ってよい（`[1] ([2] [3])` は
+ * `[1,[2,3]]` のままである）。
+ */
+function textAbsorb(l, r) {
+  if (typeof l === "string" || typeof r === "string") return stringifyForConcat(l) + stringifyForConcat(r);
+  return null;
+}
+
+/**
+ * **括りが構造を作れるのは `List` だけである。**
+ *
+ * 余積は書かれ方で `construct` / `push` / `unshift` の3つのノードになる。括った側を
+ * 1要素として足すのが `push`/`unshift` で、そこがテキストの吸収を通していなかったため、
+ * 同じ値でも括ると答えが変わっていた——`` `a` `bc` `` は "abc"、`` `a` (`b` `c`) `` は
+ * ["a","bc"]。**同じ値を代入しただけで結果が変わる**（参照透明が壊れる）。
+ *
+ * 括った側が `List` なら、そこは1要素である。`List` の μ は任意なので入れ子が生き残る
+ * ——`` `abc` [1 2 3] `` は ["abc", [1,2,3]] であり、ブラケットが「これは器である」と
+ * 宣言している（type_system.md 余積族の型変換テーブル）。
+ *
+ * 括った側が `String` なら、入れ子は生き残れない。**`String` の μ は強制**だからである
+ * （原理7、`String ≅ List(Char)`）。だから括弧は評価順を決めるだけで、吸収は効く。
+ */
+function groupedAbsorb(l, r, groupedNode) {
+  if (groupedNode && groupedNode.atomType === "List") return null;
+  return textAbsorb(l, r);
+}
+
 function stringifyForConcat(v) {
   if (typeof v === "string") return v;
   if (isUnit(v)) return "";
@@ -1981,8 +2021,9 @@ function evaluate(node, env) {
         // 結合は常に成立する。左辺だけを見ていると `` `ab` 1 `` → "ab1" なのに
         // `1 `ab`` は [1, "ab"] という別物になり、同じ演算子が引数の順序で挙動を
         // 変えてしまっていた。それ以外は通常のList構築。
-        if (typeof l === "string" || typeof r === "string") {
-          return stringifyForConcat(l) + stringifyForConcat(r);
+        {
+          const t = textAbsorb(l, r);
+          if (t !== null) return t;
         }
         // **撒くかどうかは値が決める。** 後置 `~` が付いた値だけを撒く。イテレータで
         // ありさえすれば撒く、ではない——レンジは撒くものではなく1個の値だからである。
@@ -2002,6 +2043,10 @@ function evaluate(node, env) {
         const rawA = evaluate(node.left, env);
         const b = deIterate(evaluate(node.right, env));
         if (isUnit(rawA)) return asList(b);
+        {
+          const t = groupedAbsorb(rawA, b, node.left);
+          if (t !== null) return t;
+        }
         return [...(isSpread(rawA) ? asList(deIterate(rawA)) : [rawA]), ...asList(b)];
       }
       case "unshift": {
@@ -2017,6 +2062,10 @@ function evaluate(node, env) {
         // カウンタを1個持つリストであって、カウンタが消えるわけではない。
         if (isUnit(a)) return rawB;
         if (isUnit(rawB)) return asList(a);
+        {
+          const t = groupedAbsorb(a, rawB, node.right);
+          if (t !== null) return t;
+        }
         // 右辺が `~` 付きなら撒く。無ければ**1要素として**足す（§2.2 の表）。
         return [...asList(a), ...(isSpread(rawB) ? asList(deIterate(rawB)) : [rawB])];
       }

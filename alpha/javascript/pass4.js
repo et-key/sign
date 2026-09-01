@@ -2226,15 +2226,7 @@ function genExpr(node, env, em, scope, tail = false) {
 		// 括弧が「ここまでで1つの要素」と言っている（余積は右辺を1要素として足す）。
 		// 剥ぐと要素数が変わる——実際 `((c (rest'0)) (rest'1)) ' 2` が `__` ではなく
 		// 3番目を返していた。優先順位のための括弧（中が連接でないもの）だけを剥ぐ。
-		const peel = (x) => {
-			let v = x;
-			while (v && Array.isArray(v.lines) && v.lines.length === 1 && v.kind !== "abs" && v.kind !== "norm") {
-				const inner = v.lines[0];
-				if (inner && inner.type === "operation" && COPRODUCT_BUILD_OPS.has(inner.name)) break;
-				v = inner;
-			}
-			return v;
-		};
+		const peel = (x) => peelGroup(x, n.elementType === "Char");
 		// **結合の向きに依存しない歩き方をする。** 片方へ降りる while ループは「左結合で
 		// 積まれている」を前提にしており、`,` を仕様どおり右結合にした瞬間に、連鎖の残りが
 		// 「器が1つ」に見えて「要素数が実行時に決まる」へ落ちていた。左右とも再帰で開く。
@@ -4495,15 +4487,7 @@ function returnSizeBound(lam, name, known, group) {
 		// 連なりを平らにする（括弧の中が連接なら1要素——剥いではいけない）。
 		const parts = [];
 		let cur = a;
-		const peel = (x) => {
-			let v = x;
-			while (v && Array.isArray(v.lines) && v.lines.length === 1 && v.kind !== "abs" && v.kind !== "norm") {
-				const inner = v.lines[0];
-				if (inner && inner.type === "operation" && COPRODUCT_BUILD_OPS.has(inner.name)) break;
-				v = inner;
-			}
-			return v;
-		};
+		const peel = (x) => peelGroup(x, elemType === "Char");
 		// **結合の向きに依存しない歩き方をする。** 片方へ降りるループは「左結合で積まれて
 		// いる」を前提にしており、右結合の連鎖（`a , (b , c)`）を1要素と数えて上界を
 		// 少なく見積もる。左右とも再帰で開く。
@@ -5438,6 +5422,28 @@ function emitSretCapacityGuard(em, idxReg) {
 	em.load("x15", em.sretCap, "入る個数");
 	em.emit(`cmp ${idxReg}, x15`, "入るか");
 	em.emit(`b.ge ${em.unitLabel}`, "入らなければ器は作れない（__ を返す）");
+}
+
+
+/**
+ * **括りを剥がすか、1要素として残すか。**
+ *
+ * `a (b c) d` の `(b c)` は、器が `List` なら1要素である——`List` の μ は任意なので入れ子が
+ * 生き残る。だが器が `String` なら剥がさなければならない——**`String` の μ は強制**
+ * （原理7、`String ≅ List(Char)`）で、文字列の中に文字列は入れ子で残れないからである。
+ *
+ * 解釈系の側は `groupedAbsorb` が同じことを言っている。**同じ規則を2箇所で書かない。**
+ *
+ * @param flatten 器が `String`（要素が `Char`）なら true。連接まで剥がす。
+ */
+function peelGroup(x, flatten) {
+	let v = x;
+	while (v && Array.isArray(v.lines) && v.lines.length === 1 && v.kind !== "abs" && v.kind !== "norm") {
+		const inner = v.lines[0];
+		if (!flatten && inner && inner.type === "operation" && COPRODUCT_BUILD_OPS.has(inner.name)) break;
+		v = inner;
+	}
+	return v;
 }
 
 
