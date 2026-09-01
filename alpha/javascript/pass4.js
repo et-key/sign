@@ -4969,6 +4969,137 @@ function peepholeFoldMoves(lines) {
  *   移り、コピー伝播が任意の命令をそちらへ向け直すため）。切って読めば、どちらのパスが
  *   何を決めたのかが分かれたまま検査できる。
  */
+// 呼ぶ側が引数に使う口。**呼び出しの手前では、ここは全部生きていると見なす**——何本
+// 渡すかは呼び先が決めることで、この表からは見えない。多めに生かすのは安全側である。
+const CALL_ARGS = ["x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8"];
+
+// 消してよい命令。**旗を立てるもの（`cmp`/`subs`/`adds`）と、書き戻しのあるもの
+// （`[sp, #-16]!`）は入れない。** 前者は次の `csel` が読み、後者は `sp` を動かす
+// ——どちらも「書き先が死んでいる」だけでは判断できない。
+const PURE = /^(mov|movz|add|sub|mul|sdiv|udiv|and|orr|eor|lsl|lsr|asr|csel|cset|csinc|neg|ldr|ldrb|ldrh|ldrsw|madd|msub)$/;
+
+/**
+ * **関数まるごとの後ろ向き生存解析。**
+ *
+ * `peepholeFoldMoves` の直線区間は分岐に当たると表を捨てる——「この写しは以降読まれない」
+ * が言えるのは次の分岐までで、実プログラムでは 1429 本の写しが残った。内訳の最大は
+ * **保存→作業 381 / 作業→保存 315** で、どちらも消費側が分岐の向こうにある形である。
+ *
+ * 分岐の向こうまで見るには、命令ごとの後続を辿って不動点を取るしかない。**局所で決める
+ * のをやめて関数を1つの表として解く**——スロットの割り当てと同じ形である。
+ *
+ * 出口で生きているのは戻り値（x0/x1）だけ。**退避したレジスタは出口で生きていない**
+ * ——復帰は記憶から読むので、レジスタとしての値は要らない。ここが効いて `mov x19, x9`
+ * の最後の1本が死ぬ。
+ *
+ * 安全側の寄せ方が3つ。呼び出しは x0–x8 を**読む**と見なす（何本渡すかは呼び先が決める）。
+ * 呼び出しが**壊す**側は数えない——壊すと見なすと、跨いで生きている値を死んだことに
+ * してしまう。飛び先の分からない `br` は全部生きていると見なす。
+ */
+function liveOutSets(ins, labels) {
+	const n = ins.length;
+	// **戻り値は x0/x1 とは限らない。** 余積を返す関数は x0 から順に何本でも使う（AAPCS64
+	// は x0–x7、sret なら x8）。2本と決めつけて `dup` の戻りを消し、`__` を返す機械語を
+	// 出した。**何本使うかはこの表からは見えない**ので、全部生きていると見なす。
+	const EXIT = new Set(CALL_ARGS);
+	const TAIL = new Set(CALL_ARGS); // 畳んで飛ぶ先へ渡すもの
+	const ALL = new Set(Array.from({ length: 29 }, (_, i) => "x" + i));
+	const succ = [];
+	const extra = []; // 後続の外側で生きていると見なすもの（出口・末尾呼び出し）
+	// **本文の末尾に置かれたラベルは出口である。** `.Ldone:` の後に命令が無い形が実際に
+	// 出る（入口と出口は `wrapFrame` が後から足すので、本文はそこで終わっている）。
+	const at = (name) => {
+		const k = labels.get(name);
+		return k !== undefined && k < n ? k : null;
+	};
+	const goes = (name) => labels.has(name) && at(name) === null; // 末尾のラベル＝出口
+	for (let i = 0; i < n; i++) {
+		const t = ins[i];
+		const mn = t.split(/[\s,]/)[0];
+		const to = t.split(/\s+/).pop();
+		if (mn === "ret") { succ.push([]); extra.push(EXIT); continue; }
+		if (mn === "br") { succ.push([]); extra.push(ALL); continue; }
+		if (mn === "b") {
+			// 局所ラベルなら飛び先へ。そうでなければ末尾呼び出し（畳んで飛ぶ）である。
+			if (at(to) !== null) { succ.push([at(to)]); extra.push(null); }
+			else { succ.push([]); extra.push(goes(to) ? EXIT : TAIL); }
+			continue;
+		}
+		if (mn.startsWith("b.") || /^(cbz|cbnz|tbz|tbnz)$/.test(mn)) {
+			// **落ちる先が本文の外に出ることがある。** 診断で弾かれる関数は本体が途中で
+			// 終わり、飛び先のラベル（`.Lunit1`）も置かれないまま条件分岐が最後に残る。
+			const fall = i + 1 < n ? [i + 1] : [];
+			succ.push(at(to) !== null ? [...fall, at(to)] : fall);
+			extra.push(at(to) !== null ? (fall.length ? null : EXIT) : goes(to) ? EXIT : TAIL);
+			continue;
+		}
+		succ.push(i + 1 < n ? [i + 1] : []);
+		extra.push(i + 1 < n ? null : EXIT);
+	}
+	const rw = ins.map((t) => {
+		const mn = t.split(/[\s,]/)[0];
+		if (mn === "bl" || mn === "blr") return { w: [], r: CALL_ARGS };
+		const g = regsOf(t);
+		// `movk` は上書きではなく差し込みなので、読みでもある。
+		if (mn === "movk") return { w: g.w, r: [...g.r, ...g.w] };
+		return g;
+	});
+	const liveIn = ins.map(() => new Set());
+	const liveOut = ins.map(() => new Set());
+	for (let round = 0; round < 100; round++) {
+		let changed = false;
+		for (let i = n - 1; i >= 0; i--) {
+			const out = new Set(extra[i] || []);
+			for (const j of succ[i]) for (const r of liveIn[j]) out.add(r);
+			const inn = new Set(out);
+			for (const d of rw[i].w) inn.delete(d);
+			for (const u of rw[i].r) if (u !== "xzr") inn.add(u);
+			if (inn.size !== liveIn[i].size || [...inn].some((r) => !liveIn[i].has(r))) changed = true;
+			liveIn[i] = inn;
+			liveOut[i] = out;
+		}
+		if (!changed) break;
+	}
+	return liveOut;
+}
+
+/**
+ * **死んだ命令を消す（関数まるごとの生存で決める）。**
+ *
+ * 書き先が以降どの道でも読まれない純粋な命令を落とす。`peepholeFoldMoves` が向け直した
+ * 結果、読み手を失った写しがここで死ぬ——**向け直しと除去は別の話で、後者だけが関数
+ * 全体を要求する**。
+ *
+ * `x29`/`x30` には触らない。フレームと戻り先は、この本文の外（入口と出口）が読む。
+ */
+function deadCodeElim(lines) {
+	const insOf = (l) => l.trim().replace(/\s*\/\/.*$/, "");
+	const idx = [];
+	const ins = [];
+	const labels = new Map();
+	for (let i = 0; i < lines.length; i++) {
+		const t = insOf(lines[i]);
+		if (!t) continue;
+		const m = /^([.\w$]+):$/.exec(t);
+		if (m) { labels.set(m[1], ins.length); continue; }
+		idx.push(i);
+		ins.push(t);
+	}
+	if (!ins.length) return lines;
+	const liveOut = liveOutSets(ins, labels);
+	const drop = new Set();
+	for (let k = 0; k < ins.length; k++) {
+		const t = ins[k];
+		if (!PURE.test(t.split(/[\s,]/)[0])) continue;
+		if (t.includes("]!") || /\],\s*#/.test(t)) continue; // 書き戻しは `sp` を動かす
+		const w = regsOf(t).w;
+		if (w.length !== 1 || /^(xzr|x29|x30)$/.test(w[0])) continue;
+		if (liveOut[k].has(w[0])) continue;
+		drop.add(idx[k]);
+	}
+	return drop.size ? lines.filter((_, i) => !drop.has(i)) : lines;
+}
+
 function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true) {
 	bodyLines = peepholeShareAddressBase(peepholeDeadSlotStores(peepholeSlotMoves(peepholeRedundantLoads(bodyLines))));
 
@@ -4984,8 +5115,16 @@ function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true) {
 	const saves = moved ? calleeSaveLines(moved.regs, "save") : [];
 	const back = moved ? calleeSaveLines(moved.regs, "restore") : [];
 	// 往復が写しに化けたぶんを畳む。**写した後でなければ見えない**形なので、前段の
-	// 覗き穴とは別に、ここで回す。
-	if (moved) bodyLines = peepholeFoldMoves(moved.lines);
+	// 覗き穴とは別に、ここで回す。向け直すと読み手を失う命令が出て、消すとまた向け直せる
+	// ——動かなくなるまで回す。
+	if (moved) {
+		bodyLines = moved.lines;
+		for (let i = 0; i < 4; i++) {
+			const next = deadCodeElim(peepholeFoldMoves(bodyLines));
+			if (next.length === bodyLines.length && next.every((l, k) => l === bodyLines[k])) break;
+			bodyLines = next;
+		}
+	}
 	// x29/x30 の16バイト + （スロット、または移した先の退避）
 	const cells = moved ? moved.regs.length : slots;
 	const frame = 16 + Math.ceil((cells * 8) / 16) * 16;
