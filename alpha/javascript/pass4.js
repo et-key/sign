@@ -2405,6 +2405,7 @@ function genExpr(node, env, em, scope, tail = false) {
 					em.load(SCRATCH[0], cnt);
 					if (shift) em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}, lsl #${shift}`, "書いた個数ぶん進める");
 					else em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}`, "書いた個数ぶん進める");
+					emitSretCapacityGuard(em, SCRATCH[0]);
 					em.emit(storeElem("x14", SCRATCH[1], 0, w), `${w} byte を1つ`);
 					em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #1`, "1つぶん進む");
 					em.store(SCRATCH[0], cnt);
@@ -2428,6 +2429,7 @@ function genExpr(node, env, em, scope, tail = false) {
 				// なく文字数 2 を返したのはこれである。**型は通るのに数が違う**形だった。
 				if (w === 16 && !spreadHere) {
 					em.load(SCRATCH[0], cnt);
+					emitSretCapacityGuard(em, SCRATCH[0]);
 					em.load("x11", em.sretDest);
 					em.emit(`add x11, x11, ${SCRATCH[0]}, lsl #4`, "書く先の位置へ");
 					em.load("x14", so, "この要素の ptr");
@@ -2460,6 +2462,7 @@ function genExpr(node, env, em, scope, tail = false) {
 					em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, x13, lsl #4`, "写す元の位置へ");
 					em.load(SCRATCH[0], cnt);
 					em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, x13`, "書いた個数 ＋ 写した位置");
+					emitSretCapacityGuard(em, SCRATCH[0]);
 					em.load("x11", em.sretDest);
 					em.emit(`add x11, x11, ${SCRATCH[0]}, lsl #4`, "書く先の位置へ");
 					em.emit(`ldr x14, [${SCRATCH[1]}]`, "ptr");
@@ -4569,10 +4572,27 @@ function returnSizeBound(lam, name, known, group) {
 			if (isBoxType(q.atomType) && !(elemType && isBoxType(elemType))) return null;
 			k += 1;
 		}
-		// 食いながら撒く枝（`d st~` と自己呼び出しが同居する形）は線形の漸化式に
-		// ならない。上界が二次以上になりうるので、ここは名指しせず諦める。
-		// **見積もりで通す道は手順3**——呼ばれた側の容量照合（手順2）が先である。
-		if (rec && ref) return null;
+		// **食いながら撒く枝は、証明ではなく見積もりで通す。**
+		//
+		// `(take_while p s) , (tokens (drop_while p s))~` は撒き（`ref`）と食い（`rec`）が
+		// 同居しており、線形の漸化式にならない——一般には `s , (f (s ' 1~))~` のように
+		// 二次になりうる形である。ここで諦めていたので lexer.sn の `tokens` が sret に
+		// 乗らなかった。
+		//
+		// **この形が線形なのは `take_while` と `drop_while` が `s` を分割するから**であって、
+		// 本体を読んでも出てこない事実である。片側だけで正しさを決めようとしていたのが誤り
+		// だった——確保の正しさは呼ぶ側と呼ばれた側の**関係**が定める。
+		//
+		// 同じ器を撒いて食っているなら、段ごとの寄与はその段で消えたぶんを超えないと
+		// **見積もる**。証明ではないので外れうるが、**外れても壊れない**——呼ばれた側が
+		// 同じ式を計算して照合し（`emitSretCapacityGuard`）、越えたら `__` を返す。
+		if (rec && ref) {
+			if (rec !== ref) return null; // 別々の器なら和になる。そこはまだ見積もらない
+			if (sizeOf && sizeOf !== rec) return null;
+			sizeOf = rec;
+			coef = Math.max(coef, k, 1);
+			continue;
+		}
 		if (rec) {
 			// `T(n) = k + T(n-1)`、底は `konst`。解くと `konst + k × ||p||` である。
 			// **段ごとの定数が係数になる**——`c c (dup rest)` なら 2 である。
@@ -5395,6 +5415,27 @@ function elementCellSize(et, conf) {
 	return measure({ atomType: et }, { target: conf.target, charset: conf.charset });
 }
 
+/**
+ * **書く前に、入るかを確かめる**（sret の容量照合）。
+ *
+ * 呼ぶ側は `konst + coef × ||引数||` で場所を取り、呼ばれた側は**同じ式を自分の引数から
+ * 計算**して持っている（`em.sretCap`）。書く位置がそれを越えるなら、その器は作れない
+ * ——**作れなかったものは無い**ので `__` を返す（完全性公理がそれを外へ運ぶ）。
+ *
+ * どちらか一方が正しさを決めているのではない。両側が同じ法則に従っていることだけが
+ * 正しさであり、見積もりが外れても壊れない。数学では無限はありふれているので、解が無い
+ * ことにも答えを持っていなければならない。
+ *
+ * @param idxReg 書こうとしている位置（要素数）が入っているレジスタ
+ */
+function emitSretCapacityGuard(em, idxReg) {
+	if (em.sretCap === null || em.sretCap === undefined || !em.unitLabel) return;
+	em.load("x15", em.sretCap, "入る個数");
+	em.emit(`cmp ${idxReg}, x15`, "入るか");
+	em.emit(`b.ge ${em.unitLabel}`, "入らなければ器は作れない（__ を返す）");
+}
+
+
 function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true) {
 	bodyLines = peepholeShareAddressBase(peepholeDeadSlotStores(peepholeSlotMoves(peepholeRedundantLoads(bodyLines))));
 
@@ -5649,7 +5690,10 @@ function collectSretPlanOnce(nodes, em, known, groups) {
 			sizeOfIndex = names.indexOf(b.sizeOf);
 			if (sizeOfIndex < 0) continue; // `||…||` の相手が仮引数でなければ呼ぶ側は測れない
 		}
-		plan.set(name, { konst: b.konst, coef: b.coef, sizeOfIndex, width: m.size });
+		// **名前も持つ。** 呼ぶ側は引数の位置で、呼ばれた側は自分の仮引数の名前で同じ器を
+		// 指す。位置は枠ごとに違いうる（分解した名前が混ざる）ので、両側が同じものを
+		// 見ていると言えるのは名前の方である。
+		plan.set(name, { konst: b.konst, coef: b.coef, sizeOfIndex, sizeOf: b.sizeOf, width: m.size });
 	}
 	return plan;
 }
@@ -5970,6 +6014,38 @@ function genFunction(name, lambdaNode, env, em, mono) {
 		// 自分がスタックで受け取った引数域の大きさ。相互末尾呼び出しはここへ書ける。
 		incomingStackBytes: inPlan.stackBytes,
 	};
+	// **容量は渡すデータではなく、両側が計算する法則である。**
+	//
+	// 呼ぶ側は `konst + coef × ||引数||` で `sub sp` する。呼ばれた側は**自分の仮引数から
+	// 同じ式を計算**して、書きながら照合する——越えたら `__` を返す。どちらかが正しさを
+	// 決めるのではなく、両側が同じ法則に従っていることが正しさである。ABI は変わらない
+	// （容量は値として渡らない）。
+	//
+	// 見積もりが外れても壊れない。器が入らなければ「無い」——完全性公理がそれを外へ運ぶ。
+	// 数学では無限はありふれているので、**解が無いことに答えを持っている**必要がある。
+	em.sretCap = null;
+	em.unitLabel = unitLabel;
+	if (em.sretDest !== null && em.sretDest !== undefined && unitLabel) {
+		const sp0 = em.sretPlan && (em.sretPlan.get(bareName(name)) || em.sretPlan.get(bareName(name).split("$")[0]));
+		if (sp0) {
+			const cap = em.push();
+			if (cap === null) return em.fail(lambdaNode, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			const si = sp0.sizeOf ? params.indexOf(sp0.sizeOf) : -1;
+			if (si >= 0 && paramSlots[si] === 2) {
+				em.load(SCRATCH[0], paramOffsets[si] + 8, "上界を測る（自分の引数の len）");
+				if (sp0.coef !== 1) {
+					em.emit(`mov ${SCRATCH[1]}, #${sp0.coef}`, "段ごとの個数");
+					em.emit(`mul ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "係数を掛ける");
+				}
+				if (sp0.konst) em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #${sp0.konst}`, "定数の枝ぶん");
+			} else {
+				em.emit(`mov ${SCRATCH[0]}, #${sp0.konst || 0}`, "上界（定数のみ）");
+			}
+			em.sretCap = (em.slot - 1) * 8;
+			em.store(SCRATCH[0], em.sretCap, "返値スロットに入る個数（呼ぶ側と同じ式）");
+		}
+	}
+
 	const ok = genExpr(lambdaNode.right, env, em, scope, true);
 	if (ok !== false) {
 		// 返値の幅ぶん x0/x1 へ載せる。末尾呼び出しで出て行った経路は値を持たない。
