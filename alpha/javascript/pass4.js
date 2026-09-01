@@ -4914,10 +4914,16 @@ function peepholeFoldMoves(lines) {
 	const out = lines.slice();
 
 	// 1) コピー伝播：`mov xD, xS` のあと、xD の読みを xS に向け直す。
+	//
+	// **定数も同じ扱いにする。** `mov x9, #12` のあと `mov x21, x9` と写す形が実プログラム
+	// に 246 箇所あった（命令の 9%）。写す代わりに置き直せば、元の `mov x9, #12` は読み手を
+	// 失って死ぬ。置き直すのは `mov xE, xD` の形だけで、算術のオペランドには入れない
+	// ——即値が命令の幅に収まるかはここでは分からない。
 	let copy = new Map(); // xD -> xS
+	let konst = new Map(); // xD -> その定数を作る命令（書き先は xD のまま）
 	for (let i = 0; i < out.length; i++) {
 		const t = insOf(out[i]);
-		if (isBreak(t)) { copy = new Map(); continue; }
+		if (isBreak(t)) { copy = new Map(); konst = new Map(); continue; }
 		const { w, r } = regsOf(t);
 		if (copy.size && r.length) {
 			let line = out[i];
@@ -4932,10 +4938,25 @@ function peepholeFoldMoves(lines) {
 			}
 			out[i] = line;
 		}
+		// 写しの右辺が定数なら、写す代わりに置き直す。
+		{
+			const m = MOV.exec(insOf(out[i]));
+			const k = m && konst.get(m[2]);
+			if (k && m[1] !== m[2]) {
+				const tail = out[i].includes("//") ? out[i].slice(out[i].indexOf("//")) : "";
+				const made = k.replace(/^(\w+) x\d+,/, "$1 " + m[1] + ",");
+				out[i] = "\t" + (tail ? made.padEnd(26) + tail : made);
+			}
+		}
 		const now = insOf(out[i]);
 		const nw = regsOf(now).w;
 		// 書かれたレジスタが絡む写しは無効になる（写し先としても、写し元としても）。
-		for (const d of nw) { copy.delete(d); for (const [k, v] of copy) if (v === d) copy.delete(k); }
+		for (const d of nw) {
+			copy.delete(d);
+			konst.delete(d);
+			for (const [k, v] of copy) if (v === d) copy.delete(k);
+		}
+		if (/^(mov|movz) x\d+, #/.test(now)) konst.set(regsOf(now).w[0], now);
 		const m = MOV.exec(now);
 		if (m && m[1] !== m[2]) copy.set(m[1], m[2]);
 	}
@@ -5112,8 +5133,6 @@ function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true) {
 	// **スロットをレジスタへ移せるなら移す。** `sp` を動かす関数はフレームの底が動くので
 	// 触らない。移せたぶんだけ場所が要らなくなるので、フレームの大きさもここで決まる。
 	const moved = movedSp || bare || !alloc ? null : slotsToRegisters(bodyLines);
-	const saves = moved ? calleeSaveLines(moved.regs, "save") : [];
-	const back = moved ? calleeSaveLines(moved.regs, "restore") : [];
 	// 往復が写しに化けたぶんを畳む。**写した後でなければ見えない**形なので、前段の
 	// 覗き穴とは別に、ここで回す。向け直すと読み手を失う命令が出て、消すとまた向け直せる
 	// ——動かなくなるまで回す。
@@ -5125,8 +5144,17 @@ function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true) {
 			bodyLines = next;
 		}
 	}
+
+	// **退避するのは、畳み終わってから残っているものだけ。**
+	//
+	// 移した時点の一覧で退避を決めると、そのあと死んだレジスタまで守ってしまう
+	// （`mov x9, #12` / `mov x21, x9` が `mov x10, #12` に畳まれても x21 を退避し続けた）。
+	// 何を守るかは、本文が決まってからでなければ決まらない。
+	const live = moved ? moved.regs.filter((r) => bodyLines.some((l) => new RegExp("\\b" + r + "\\b").test(l.split("//")[0]))) : [];
+	const saves = calleeSaveLines(live, "save");
+	const back = calleeSaveLines(live, "restore");
 	// x29/x30 の16バイト + （スロット、または移した先の退避）
-	const cells = moved ? moved.regs.length : slots;
+	const cells = moved ? live.length : slots;
 	const frame = 16 + Math.ceil((cells * 8) / 16) * 16;
 
 	// 相互末尾呼び出しが置いた印を、決まったフレームの大きさで埋める。
@@ -5163,7 +5191,11 @@ function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true) {
 	// やっていることは確保である。門番が `sub sp` を探していたので当たっていなかった。
 	// 使わないフレームを出さなくなれば、少なくとも「使わないのに触る」は消える
 	// （`?` が持つ本来の要求は別の話で、layer_relations.md §4.1 が名指ししている）。
-	if (bare) return [`${name}:`, ...filled, "\tret"];
+	// **畳んだ結果、場所が要らなくなることがある。** 守るものが無く、呼び出しも無く、
+	// `x29` も出て来ないなら、入口と出口の3命令はただの儀式である（layer 0 ではそれが
+	// 正しさの話でもある——`stp … [sp, #-32]!` は形が違うだけの確保である）。
+	if (bare || (moved && !live.length && !filled.some((l) => /\bx29\b/.test(l) || /^\s*(bl|blr)\b/.test(l.split("//")[0].trim()))))
+		return [`${name}:`, ...filled, "\tret"];
 
 	return [
 		`${name}:`,
