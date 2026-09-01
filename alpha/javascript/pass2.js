@@ -75,9 +75,13 @@ function classifyAtom(s) {
   if (typeof s === "string" && s.startsWith("<") && s.endsWith(">")) return "identifier";
   if (typeof s === "string" && s.startsWith("`")) return "string";
   if (typeof s === "string" && s.startsWith("\\")) return "char";
-  if (typeof s === "string" && /^0x[0-9a-fA-F]+$/.test(s)) return "address";
+  // **プリフィックスの数は幅である**（value_representation.md §5）。`0` は「言っていない」、
+  // それ以外はその幅（`x` は byte、`u` は bit）。ここは種類を決めるだけで、幅の妥当性は
+  // Pass 3 が見る——分からないものを構文で弾くと、診断が「まだ出せない」ではなく
+  // 「読めない」になってしまう（原理4）。
+  if (typeof s === "string" && /^[0-9]+x[0-9a-fA-F]+$/.test(s)) return "address";
   if (typeof s === "string" && /^(0r[0-9a-fA-F]+|0b[01]+)$/.test(s)) return "register";
-  if (typeof s === "string" && /^0u[0-9a-fA-F]+$/.test(s)) return "unicode";
+  if (typeof s === "string" && /^[0-9]+u[0-9a-fA-F]+$/.test(s)) return "unicode";
   if (typeof s === "string" && /^-?[0-9]+\.?[0-9]*$/.test(s)) return "number";
   return "unknown";
 }

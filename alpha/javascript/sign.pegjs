@@ -147,9 +147,9 @@ Atom
 string = $("`" [^`\r\n]* "`")
 charactor = $("\\".)
 number = $("-"? [0-9]+ "."? [0-9]*)
-address = $("0x" Hex+)
+address = $([0-9]+ "x" Hex+)
 register = $("0r" Hex+) / $("0b" ("0" / "1")+)
-unicode = $("0u" Hex+)
+unicode = $([0-9]+ "u" Hex+)
 // "__"（Unit）だけは識別子ではなくunitへ回す（&{}述語で除外し、Atomの次の選択肢へフォールスルー）。
 // これが無いと "_" [a-zA-Z0-9_]+ が "__" にもマッチしてしまい、unitに一生到達しなくなる。
 identifier = id:( $([a-zA-Z][a-zA-Z0-9_]*) / $("_" [a-zA-Z0-9_]+) ) &{ return id !== "__"; } {return `<${id}>`}
