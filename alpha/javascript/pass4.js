@@ -3151,7 +3151,12 @@ function genIndex(node, env, em, scope) {
 	// （数なら1本、器なら `{ptr, len}` の2本）。
 	{
 		const sb = unwrap(node.left);
-		const slay = sb && sb.atomType === "Struct" ? layoutOfStruct(sb, { target: conf.target, charset: conf.charset, env }) : null;
+		// **ポインタ1本で運ばれてくるものだけがこの道である。** `Struct` 型でも運ぶ本数が
+		// 1本とは限らない——カーソル（`{arm, k, ptr, len}`）は 4 本である。以前は形が出な
+		// かったので素通りしていたが、スロットの幅を `passingOf` で埋めるようにした途端、
+		// カーソルがここへ落ちて「1本で運びます」と断られた。前提は明示して確かめる。
+		const carried = sb ? slotsOfNode(sb, conf, env) : null;
+		const slay = sb && sb.atomType === "Struct" && carried === 1 ? layoutOfStruct(sb, { target: conf.target, charset: conf.charset, env }) : null;
 		const si = slay && slay.slots ? constAddressOf(node.right, env) : null;
 		if (slay && si !== null && si >= 0n && si < BigInt(slay.slots.length)) {
 			const slot = slay.slots[Number(si)];

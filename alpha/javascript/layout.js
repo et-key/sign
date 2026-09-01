@@ -515,12 +515,36 @@ function layoutOfStruct(node, conf) {
 
 // スロットを順に自然境界へ置いていく。全体の境界は最大スロットの境界、全体の大きさは
 // その境界へ切り上げ——`List(Struct)` の各要素が同じ境界に載るために要る。
+/**
+ * **スロット1つに何バイト要るか。**
+ *
+ * `measure` は「その値の中身の長さ」を測る。中身の長さが型に無いもの——`Struct` /
+ * `String` / `List`——では `null` になるが、それは**置けない**という意味ではない。
+ * 参照で運ぶ型はその参照ぶんを置けばよく、`passingOf` がその幅を答える
+ * （`Struct` は `{ptr}` の 8 byte、`String`/`List` は `{ptr, len}` の 16 byte）。
+ *
+ * **同じ取り違えを今日3度踏んだ。** リストの要素（`elementCellSize`）、sret の計画、
+ * そしてここである。`measure` は中身、`passingOf` は運ぶ幅——**並べるときに要るのは
+ * 後者**である。ここで `null` を返していたので、`Struct` を1つでもスロットに持つ構造体
+ * （parser.sn の `acc`）は形が出なかった。
+ *
+ * 中身の長さが分かるもの（文字列リテラルなど）はこれまで通り `measure` の答えを使う
+ * ——先に測って、測れないときだけ運ぶ幅へ落ちる。
+ */
+function slotCellSize(node, conf) {
+  const m = measure(node, conf);
+  if (m) return m;
+  const pass = passingOf(node, conf);
+  if (pass && pass.mode === "reference" && pass.size) return { size: pass.size, align: 8 };
+  return null;
+}
+
 function packSlots(entries, conf, slotKind) {
   const slots = [];
   let offset = 0;
   let maxAlign = 1;
   for (const e of entries) {
-    const m = measure(e.node, conf);
+    const m = slotCellSize(e.node, conf);
     if (!m) return null;
     const align = m.align || 1;
     offset = alignUp(offset, align);
