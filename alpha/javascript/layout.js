@@ -625,8 +625,14 @@ function passingOf(node, conf) {
   if (m && m.repr === "place") return { mode: "reference", size: m.size, align: m.align, slots: m.fields.length, fields: m.fields, pointee: m.pointee };
   // 要素の並びは参照で渡す。運ぶものは型が語らない分だけ——要素数が型に無い
   // （`List` / `String`）なら `len` を伴う。
-  if (type === "List" || type === "String" || type === "Struct") {
-    const carriesLength = type === "List" || type === "String";
+  //
+  // **器だと分かれば、中身が何かを知らなくても運び方は決まる。** `Container` は「器で
+  // ある」としか言っていない型だが（要素の項目が無いブラケット `[~st]` がこれを付ける）、
+  // `{ptr, len}` の2本という運び方は `List` でも `String` でも同じである——**運ぶ幅は
+  // 中身の型を見ていない**。ここに枝が無かったので、器として受けた途端に「返値の渡し方が
+  // 決まりません」になっていた。
+  if (type === "List" || type === "String" || type === "Struct" || type === "Container") {
+    const carriesLength = type !== "Struct";
     const names = carriesLength ? ["ptr", "len"] : ["ptr"];
     return {
       mode: "reference",
