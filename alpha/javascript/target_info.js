@@ -191,6 +191,8 @@ function reduceToMachineType(type, target) {
  * **プリフィックスは可変長である。** `16x` や `32u` は3文字なので、`.slice(2)` で数字を
  * 取ると壊れる。数字を欲しい側は `digits` を使う。
  */
+const ACCESS_WIDTHS = new Set([1, 2, 4, 8, 16]);
+
 function literalParts(text) {
   const m = /^([0-9]+)([xurb])(.*)$/.exec(String(text ?? ""));
   if (!m) return null;
@@ -201,7 +203,9 @@ function literalParts(text) {
     family,
     digits: m[3],
     radix: family === "b" ? 2 : 16,
-    width: n === 0 ? null : Number.isInteger(bytes) && bytes > 0 ? bytes : NaN,
+    // 機械が持っている幅だけが幅である（1/2/4/8 と、SIMD の 16）。3 byte の読み書きは
+    // 命令が無いので NaN——呼ぶ側が名指しで断る。
+    width: n === 0 ? null : ACCESS_WIDTHS.has(bytes) ? bytes : NaN,
   };
 }
 

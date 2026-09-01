@@ -821,9 +821,16 @@ function genExpr(node, env, em, scope, tail = false) {
 	if (n.type === "atom" && (n.kind === "number" || n.kind === "address" || n.kind === "register")) {
 		// `Number` を経由しない——`0x123456789abcdef` のような番地は倍精度に載らず、
 		// 下の桁が黙って丸まる。文字列のまま `BigInt` へ渡せば桁は落ちない。
+		//
+		// **プリフィックスは `literalParts` が剥がす。** `BigInt` が読めるのは `0x` / `0b` の
+		// 綴りだけなので、`04x…` をそのまま渡すと投げる——そして下の `catch` は「浮動小数か、
+		// 層が足りないか」だと決めつけているので、**幅を書いただけで「layer: 0 では Address を
+		// 使えません」という無関係な診断が出ていた**。catch が原因を1つに決めつけるのは、
+		// 今日何度も踏んだ形である。
 		let v;
 		try {
-			v = BigInt(n.value);
+			const lit = literalParts(n.value);
+			v = lit ? BigInt((lit.radix === 2 ? "0b" : "0x") + lit.digits) : BigInt(n.value);
 		} catch {
 			// **層の禁止と実装の穴を区別する。** `option_ms_schema.md` §4 が `Float` を
 			// layer 2 以上、`Vector` を layer 3 以上と定めている。layer が足りないなら
@@ -1992,7 +1999,9 @@ function genExpr(node, env, em, scope, tail = false) {
 		// 書き込み側と同じ畳み。読む番地が定数なら「記憶が無い」検査は答えが出ているし、
 		// 番地そのものもスロットを経由せずレジスタへ作れる——`genScalar` を通すと同じ
 		// 定数を作って置いて読み戻すので、**そこを丸ごと飛ばす**。
-		const w = widthOfType(n.atomType, em.conf);
+		const declared = declaredWidthOf(n.operand);
+		if (Number.isNaN(declared)) return em.fail(n, "その幅の命令が機械にありません（プリフィックスの数を見直してください）");
+		const w = declared ?? widthOfType(n.atomType, em.conf);
 		const fixedSrc = constAddressOf(n.operand, env);
 		if (fixedSrc !== null && fixedSrc !== NICHE_VALUE) {
 			const off0 = em.push();
@@ -2050,7 +2059,9 @@ function genExpr(node, env, em, scope, tail = false) {
 		// 先に出さないと `genExpr` がスクラッチを壊す。
 		const cDst = constAddressOf(n.left, env);
 		const cVal = constAddressOf(n.right, env);
-		const wOut = widthOfType(n.right && n.right.atomType, em.conf);
+		const declOut = declaredWidthOf(n.left);
+		if (Number.isNaN(declOut)) return em.fail(n, "その幅の命令が機械にありません（プリフィックスの数を見直してください）");
+		const wOut = declOut ?? widthOfType(n.right && n.right.atomType, em.conf);
 		if (cDst !== null && cDst !== NICHE_VALUE) {
 			const off = em.push();
 			if (off === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
@@ -2083,7 +2094,9 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (vw === false) return false;
 		if (vw !== 1) { em.pop(vw); return em.fail(n.right, `書ける値はレジスタ1本ぶんです（${vw} 本の参照で運ぶ値）`); }
 		const vo = (em.slot - 1) * 8;
-		const w = widthOfType(n.right && n.right.atomType, em.conf);
+		const decl2 = declaredWidthOf(n.left);
+		if (Number.isNaN(decl2)) return em.fail(n, "その幅の命令が機械にありません（プリフィックスの数を見直してください）");
+		const w = decl2 ?? widthOfType(n.right && n.right.atomType, em.conf);
 		// **番地が分かっているなら、守る相手はもう居ない。**
 		// 検査は「書き込み先が niche か」だけなので、定数なら今答えが出る。
 		const fixedDst = constAddressOf(n.left, env);
@@ -3864,6 +3877,24 @@ function storeAt(src, base, size) {
 }
 
 // 型が言う幅（決まらなければ GPR 幅）。
+/**
+ * **その番地が宣言している幅**（value_representation.md §5）。
+ *
+ * `NxHHHH` の `N` がその番地に居るものの幅である（`x` は byte、`u` は bit。正規化は
+ * `literalParts` が済ませている）。宣言していなければ `null` を返し、呼ぶ側は今まで通り
+ * 型から決める——`0x… # \\a` が 1 byte 書くのは値が `Char` だからであって、そこを
+ * 「言っていないから語幅」にすると後退する。**言ってあるときだけ効かせる。**
+ *
+ * 機械にその幅の命令が無いもの（`3x`、割り切れない `12u`）は `NaN` で返る。呼ぶ側が
+ * 名指しで断る——分からないものを既定へ倒さない（原理4）。
+ */
+function declaredWidthOf(node) {
+	const a = unwrap(node);
+	if (!a || a.type !== "atom" || (a.kind !== "address" && a.kind !== "unicode")) return null;
+	const parts = literalParts(a.value);
+	return parts && parts.width !== null ? parts.width : null;
+}
+
 function widthOfType(type, conf) {
 	const m = type ? reduceToMachineType(type, conf.target) : null;
 	return m && m.class === "gpr" ? m.size : 8;
