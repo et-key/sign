@@ -4906,6 +4906,11 @@ function calleeSaveLines(regs, verb) {
  *
  * 書き先は第1オペランドである——ただし記憶へ書く形（`str`/`stp`）と比較（`cmp`/`ccmp`）は
  * 全部が読みで、`ldp` は2本に書く。ここを取り違えると、生きている値を消す。
+ *
+ * **書き先が `sp` の形に気をつける。** `sub sp, sp, x9` の第1オペランドはレジスタ番号を
+ * 持たないので、「最初に現れた x レジスタ」を書き先だと読むと `x9` を書くことになる
+ * ——生きている `x9` が死んで見え、確保そのものが消えて、返値スロットが引数配列と同じ
+ * 番地になった。**オペランドの位置で見る**（`sp`/`xzr` は書き先として数えない）。
  */
 function regsOf(t) {
 	const mn = t.split(/[\s,]/)[0];
@@ -4913,8 +4918,12 @@ function regsOf(t) {
 	const all = [...ops.matchAll(/\b([wx])(\d+|zr)\b/g)].map((m) => "x" + m[2]);
 	if (/^(str|strb|strh|stur|sturb|sturh|stp|stlr|cmp|cmn|tst|ccmp|ccmn|b|bl|br|blr|ret|cbz|cbnz|tbz|tbnz)$/.test(mn) || mn.startsWith("b."))
 		return { w: [], r: all };
-	if (/^(ldp|ldnp)$/.test(mn)) return { w: all.slice(0, 2), r: all.slice(2) };
-	return { w: all.slice(0, 1), r: all.slice(1) };
+	// 先頭からいくつのオペランドが「x レジスタそのもの」か。`ldp` だけが2本に書く。
+	const head = ops.split(",").map((o) => o.trim());
+	const dests = /^(ldp|ldnp)$/.test(mn) ? 2 : 1;
+	let n = 0;
+	while (n < dests && /^[wx]\d+$/.test(head[n] || "")) n++;
+	return { w: all.slice(0, n), r: all.slice(n) };
 }
 
 /**
@@ -5160,7 +5169,7 @@ function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true) {
 
 	// **スロットをレジスタへ移せるなら移す。** `sp` を動かす関数はフレームの底が動くので
 	// 触らない。移せたぶんだけ場所が要らなくなるので、フレームの大きさもここで決まる。
-	const moved = movedSp || bare || !alloc ? null : slotsToRegisters(bodyLines);
+	const moved = bare || !alloc ? null : slotsToRegisters(bodyLines);
 	// 往復が写しに化けたぶんを畳む。**写した後でなければ見えない**形なので、前段の
 	// 覗き穴とは別に、ここで回す。向け直すと読み手を失う命令が出て、消すとまた向け直せる
 	// ——動かなくなるまで回す。
@@ -5222,7 +5231,10 @@ function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true) {
 	// **畳んだ結果、場所が要らなくなることがある。** 守るものが無く、呼び出しも無く、
 	// `x29` も出て来ないなら、入口と出口の3命令はただの儀式である（layer 0 ではそれが
 	// 正しさの話でもある——`stp … [sp, #-32]!` は形が違うだけの確保である）。
-	if (bare || (moved && !live.length && !filled.some((l) => /\bx29\b/.test(l) || /^\s*(bl|blr)\b/.test(l.split("//")[0].trim()))))
+	// **`sp` を動かした関数はフレームを手放せない。** 戻すのが `mov sp, x29` だからで
+	// ある——入口と出口を落とすと `sub sp` した16バイトが返らず、`ret` した先の記憶が
+	// ずれる（実際それで `@($(n + 4))` が止まらなくなった）。
+	if (bare || (moved && !movedSp && !live.length && !filled.some((l) => /\bx29\b/.test(l) || /^\s*(bl|blr)\b/.test(l.split("//")[0].trim()))))
 		return [`${name}:`, ...filled, "\tret"];
 
 	return [
