@@ -4797,6 +4797,11 @@ function peepholeSlotMoves(lines) {
 // である——スロットは `bl` の先でも読めるので、置き換える先も同じ性質が要る。
 const SLOT_REGS = ["x19", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28"];
 
+// 呼び出しを跨がないなら、使い捨ての側で足りる（x16/x17 はリンカの継ぎ当てが、x18 は
+// 環境が使う可能性があるので入れない）。**こちらは退避が要らない**——誰も守っていない
+// レジスタなので、守る義務もこちらには無い。
+const SCRATCH_REGS = ["x9", "x10", "x11", "x12", "x13", "x14", "x15"];
+
 /**
  * **スロットをレジスタへ移す（関数まるごと1つの表で決める）。**
  *
@@ -4837,13 +4842,36 @@ function slotsToRegisters(lines) {
 		const m = ST.exec(insOf(l)) || LD.exec(insOf(l));
 		if (m) {
 			const d = (Number(m[2]) - 16) / 8;
-			if (!Number.isInteger(d) || d < 0 || d >= SLOT_REGS.length) return null;
+			if (!Number.isInteger(d) || d < 0) return null;
 			used.add(d);
 		}
 	}
 	if (used.size === 0) return null;
+
+	// **呼び出しを跨がないなら、使い捨ての側で足りる。**
+	//
+	// 跨ぐ関数は callee-saved（x19–x28）でなければならず、その代金として入口の退避と
+	// フレームが要る。跨がない関数——実プログラムでは 49 本中 26 本——には、その代金を
+	// 払う理由が無い。空いている使い捨てを使えば、退避も `sp` も出て来ない。
+	//
+	// **これは速さより先に、どの層で動くかの話である。** layer 0 は RAM が初期化されて
+	// いない世界で、`sp` が有効な場所を指している保証が無い（`stp … [sp, #-32]!` は形が
+	// 違うだけの確保である）。フレームを取らない関数は、そこでも動く。
+	const calls = lines.some((l) => /^(bl|blr)\b/.test(insOf(l)));
+	const taken = new Set();
+	for (const l of lines) for (const m of insOf(l).matchAll(/\b(x\d+)\b/g)) taken.add(m[1]);
+	const free = calls ? [] : SCRATCH_REGS.filter((r) => !taken.has(r));
+
+	// 深さは順位で詰める（飛び飛びでも入れ子は保たれるので、順位は色として正しい）。
 	const depths = [...used].sort((a, b) => a - b);
-	const regs = depths.map((d) => SLOT_REGS[d]);
+	// **使い捨てで足りるときだけそちらを使う。** 足りなければ callee-saved に落ちる
+	// ——空きが無いことは「割り当てない」理由にはならない（一度そうして往復が倍に
+	// 戻った）。
+	const cheap = depths.length <= free.length;
+	const bank = cheap ? free : SLOT_REGS;
+	if (depths.length > bank.length) return null;
+	const at = new Map(depths.map((d, i) => [d, bank[i]]));
+	const regs = depths.map((d) => at.get(d));
 	// 移す先を本体が既に使っていないか（呼ぶ先は AAPCS64 に従って守ってくれる）。
 	for (const l of lines) {
 		const t = insOf(l);
@@ -4853,12 +4881,12 @@ function slotsToRegisters(lines) {
 	const out = lines.map((l) => {
 		const t = insOf(l);
 		const st = ST.exec(t);
-		if (st) return "\tmov " + SLOT_REGS[(Number(st[2]) - 16) / 8] + ", " + st[1];
+		if (st) return "\tmov " + at.get((Number(st[2]) - 16) / 8) + ", " + st[1];
 		const ld = LD.exec(t);
-		if (ld) return "\tmov " + ld[1] + ", " + SLOT_REGS[(Number(ld[2]) - 16) / 8];
+		if (ld) return "\tmov " + ld[1] + ", " + at.get((Number(ld[2]) - 16) / 8);
 		return l;
 	});
-	return { lines: out, regs };
+	return { lines: out, regs, needsSaving: !cheap };
 }
 
 /** 退避／復帰の組を作る（`x29` 相対で、**フレームの中に**置く）。 */
@@ -5150,7 +5178,7 @@ function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true) {
 	// 移した時点の一覧で退避を決めると、そのあと死んだレジスタまで守ってしまう
 	// （`mov x9, #12` / `mov x21, x9` が `mov x10, #12` に畳まれても x21 を退避し続けた）。
 	// 何を守るかは、本文が決まってからでなければ決まらない。
-	const live = moved ? moved.regs.filter((r) => bodyLines.some((l) => new RegExp("\\b" + r + "\\b").test(l.split("//")[0]))) : [];
+	const live = moved && moved.needsSaving ? moved.regs.filter((r) => bodyLines.some((l) => new RegExp("\\b" + r + "\\b").test(l.split("//")[0]))) : [];
 	const saves = calleeSaveLines(live, "save");
 	const back = calleeSaveLines(live, "restore");
 	// x29/x30 の16バイト + （スロット、または移した先の退避）
