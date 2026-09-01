@@ -185,5 +185,22 @@ checkTrue("空リストの値は __", value("[]") === "__");
 	checkTrue("Int と String も合流して String", paramType("f : a ? a\nf 1\nf `ab`") === "String");
 	checkTrue("Char と Struct は合流しない", paramType("f : a ? a\nf `x`\nf (1 , `x`)") === "Atom");
 
+	// **撒いた文字は文字列へ戻る**（原理7——`String` の μ は強制である）。
+	//
+	// `List` の μ は任意なので `~` を書いて初めて平らになるが、`String` のそれは書かなくても
+	// 効く。だから `s~` と `s` は**同じ値**でなければならない——機械はそう出している
+	// （`~` は 0 命令、器はもう並んでいるので置き直すものが無い）。解釈器だけが
+	// `["a","b"]` のまま持っており、**型は String、値は列**という食い違いだった。
+	//
+	// ここが揃っていないと、機械の答えを解釈器で照合できない——**正しい方を疑う**羽目になる。
+	checkTrue("撒いた文字列は元の文字列", value("s : `ab`\ns~ = s") === value("s : `ab`\ns"));
+	checkTrue("撒いても長さは変わらない", value("s : `ab`\n||s~||") === value("s : `ab`\n||s||"));
+	checkTrue("撒いた先の添字も同じ", value("s : `ab`\n(s~) ' 1") === value("s : `ab`\ns ' 1"));
+	// **ただし撒く印は消えない。** 構築の位置では `~` の有無が要素数を変える——
+	// `x , s~` は文字を並べ、`x , s` は文字列1つを置く（`words `ab`` が語数ではなく
+	// 文字数を返したのがこの取り違えだった）。μ が効くのは**値として見るとき**だけである。
+	checkTrue("構築では撒きが効く", value("s : `ab`\n||`Z` , s~||") === "3");
+	checkTrue("撒かなければ1つ", value("s : `ab`\n||`Z` , s||") === "2");
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

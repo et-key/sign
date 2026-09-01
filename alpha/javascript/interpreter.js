@@ -1130,6 +1130,20 @@ function buildRange(start, end, stepFn) {
 // Pass1レベルでの構造体の生成元追跡が必要になる別機能で、今回は対象外）。
 // Unit同型の値（__・空配列・空文字列、いずれもisUnit）は互いに構造的に等しいとみなす
 // （零対象は1つしかない、というunit.mdの立場と一貫させる）。
+/**
+ * **撒いた文字は文字列へ戻る**（原理7——`String` の μ は強制である）。
+ *
+ * `List` の μ は任意なので `~` を書いて初めて平らになるが、`String` のそれは書かなくても
+ * 効く。つまり `s~` と `s` は**同じ値でなければならない**——機械はそう出している
+ * （`~` は 0 命令、`s~ = s` は真）。ここが無いと解釈器だけが違う答えを出し、
+ * **照合の相手として使えなくなる**。
+ */
+function collapseText(v) {
+  if (!isIterator(v) || !v.spread || !v.text) return v;
+  const d = deIterate(v);
+  return Array.isArray(d) && d.every((x) => typeof x === "string") ? d.join("") : v;
+}
+
 function structuralEqual(l, r) {
   if (isUnit(l) && isUnit(r)) return true;
   if (isUnit(l) || isUnit(r)) return false;
@@ -1188,6 +1202,9 @@ function evalCompare(node, env) {
 // （`[== 2] 6`）では左辺値がストリームから届きノードが無いので null を渡す——
 // その場合 isArithmeticUnitElement は「値が0/1なら数値」とみなすフォールバックへ落ちる。
 function compareOnValues(name, op, l, r, leftNode) {
+  // 比べるのは**値**である。撒いた文字は文字列に戻してから比べる（原理7）。
+  l = collapseText(l);
+  r = collapseText(r);
   if (op === "!=") {
     // 例外: 比較族は両辺とも吸収元だが、`!=` だけは**両辺とも単位元**である
     // （operator_table.md tier 12）。片方が Unit なら「等しくない」ことが確定して真になり、
@@ -1254,7 +1271,15 @@ function evalUnaryOp(name, v) {
       // 既に撒かれているものへもう一度付けても変わらない（冪等）。
       if (isSpread(v)) return v;
       if (isIterator(v)) return { ...v, spread: true };
-      if (typeof v === "string") return makeWalk([...v]);
+      // **文字から来たことを覚えておく。** 撒く印は値に持たせる必要があるが（構文では
+      // 名前に束縛した瞬間に消える）、`String` の μ は強制なので**値として見るときには
+      // 文字列に戻らなければならない**（原理7）。機械では `~` は 0 命令なので最初から
+      // 同じもので、解釈器だけが `["a","b"]` のまま持っていた。
+      if (typeof v === "string") {
+        const w = makeWalk([...v]);
+        w.text = true;
+        return w;
+      }
       if (Array.isArray(v)) return makeWalk(v);
       // 名前付きスロットの展開は「スロットを名前ごと撒く」ことである（§5.3）。
       if (isNamedSlots(v)) return makeWalk(Object.values(v), v);
@@ -2244,6 +2269,7 @@ return items.filter((v) => !isUnit(v));
  * というのが `Iterator` を実体にした狙いそのものである。無限は観測できないので `__`。
  */
 function observe(v) {
+  v = collapseText(v);
   // 中に入れ子になった規則も実体化する。**観測の話であって値の話ではない**
   // ——`[1 2] [1 ~ 3]` の値は「カウンタを1個持つリスト」であり、それを見せるときに
   // 有限の規則は要素の並びとして描かれる（`String ≅ List` を描画側で保つのと同じ）。
