@@ -1661,10 +1661,21 @@ function joinParamType(cur, next) {
   // 器と読めず、`walk` の `st` が「決められない（null）」に落ちていた。器の側で運べば
   // どちらの枝も通る（スカラーは長さ1の器）ので、広い方へ寄せるのが正しい。
   // `returnSizeBound` は既に同じ判定をしている——**そちらだけが直和を読めていた**。
+  // **持ち上がる先は均質な器だけである。** 根拠は `Scalar ⇒ [Scalar, __]`、つまり
+  // 「長さ1の器はその要素と同型」（原理8）であり、これが言えるのは**要素が並ぶ**器
+  // ——`List` / `String` / `Iterator` / `Implicit`——に限る。
+  //
+  // **`Struct` はここに入らない。** 積はスロット配置が型の側にあり、`[x] ≅ x` が成り
+  // 立たない——Char は「同じ形の Struct」ではない。にもかかわらず入れていたため、
+  // parser.sn の `mul_go` の `acc` が Char（`mul_lv` から来る葉）と Struct（再帰から
+  // 来る枝）の両方で呼ばれているのに `Struct` へ潰れていた。どちらも1レジスタなので
+  // 幅の検査も通り、**Char の値がポインタとして参照される**ところだった。
+  //
+  // 葉と枝が別の形をしているのは本当なので、決めない方が正しい（原理4）。
   const box = (t) =>
     String(t || "")
       .split(" | ")
-      .some((x) => ["String", "List", "Struct", "Iterator", "Implicit"].includes(x.trim()));
+      .some((x) => ["String", "List", "Iterator", "Implicit"].includes(x.trim()));
   // **持ち上げのときだけ合流する。** スカラーは1要素の器なので器へ上げられるが、
   // スカラー同士・器同士で食い違うなら本当に複数の型で呼ばれている——決めない。
   if (box(cur) && !box(next)) return cur;

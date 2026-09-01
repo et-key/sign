@@ -48,6 +48,19 @@ function type(source) {
 	return String(nodes[nodes.length - 1].atomType);
 }
 // `f` の本体の命令列（コメントは落とす）。出せなければ null。
+// `f` の仮引数 `a` の型（呼び出しサイトを見て合流させた結果）。
+function paramType(source) {
+	const { nodes } = compile(source, { charset: "ascii" });
+	let t = null;
+	const walk = (n) => {
+		if (!n || typeof n !== "object" || t !== null) return;
+		if (n.type === "atom" && n.kind === "identifier" && String(n.value) === "<a>") { t = n.atomType; return; }
+		for (const k of ["left", "right", "operand"]) walk(n[k]);
+		for (const l of n.lines || []) walk(l);
+	};
+	for (const n of nodes) walk(n);
+	return String(t);
+}
 function body(source) {
 	const { nodes, env } = compile(source, { charset: "ascii" });
 	const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "ascii", layer: 1 });
@@ -155,6 +168,22 @@ checkTrue("ノルムも同じ", value("||[1 2]|| + 1") === "3" && value("1 + ||[
 checkTrue("空文字列の値は __", value("``") === "__");
 checkTrue("空文字列の型は String", type("``") === "String");
 checkTrue("空リストの値は __", value("[]") === "__");
+
+	// **持ち上がる先は均質な器だけである。**
+	//
+	// `Scalar ⇒ [Scalar, __]` が言えるのは「長さ1の器はその要素と同型」だからで、これは
+	// **要素が並ぶ**器の話である。`Struct` はスロット配置が型の側にあるので `[x] ≅ x` が
+	// 成り立たない——Char は「同じ形の Struct」ではない。
+	//
+	// **同型に見えて違う**のがここで、実際に踏んだ。parser.sn の `mul_go` の `acc` は
+	// `mul_lv` からは Char（葉のトークン）、再帰からは Struct（枝）で来る。仮引数の合流が
+	// これを `Struct` へ潰していたため、**Char の値がポインタとして参照される**ところ
+	// だった。どちらも1レジスタなので幅の検査も通り、診断も出ない。
+	//
+	// 葉と枝が別の形をしているのは本当なので、決めない（`Atom`）のが正しい（原理4）。
+	checkTrue("Char と List は合流して List", paramType("f : a ? a\nf `x`\nf [1 2]") === "List");
+	checkTrue("Int と String も合流して String", paramType("f : a ? a\nf 1\nf `ab`") === "String");
+	checkTrue("Char と Struct は合流しない", paramType("f : a ? a\nf `x`\nf (1 , `x`)") === "Atom");
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
