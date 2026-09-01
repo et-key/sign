@@ -1351,10 +1351,24 @@ function genExpr(node, env, em, scope, tail = false) {
 		// （`strip_head`）、返る器は**引数の場所**に在る。自分がもらったスロットをその引数の
 		// 生産者へ渡せば、場所は最も外側で一度取るだけで済む——渡さなければ引数は自分の
 		// フレームに置かれ、返した先では死んでいる（`mark : s ? strip_head (walk s …)`）。
+		// **呼び先がその引数をそのまま返すなら、その引数の場所は「自分がもらった場所」で
+		// なければならない。** 呼び先は受け取った器をそのまま返すので、自分のフレームに
+		// 取って渡すと、返ってきた器は**自分のフレームの中**を指す——エピローグの
+		// `mov sp, x29` が捨てた場所である。1回呼ぶだけなら偶然読めてしまい、2回呼ぶと
+		// 2回目が1回目を上書きする（**診断も出ず、値だけが違う**）。
+		const handsBack = em.returnedParams ? em.returnedParams.get(baseName) || em.returnedParams.get(callee) : null;
 		const through = [];
 		if (tail && em.sretDest !== null && em.sretDest !== undefined) {
 			const ce = em.sretPlan && (em.sretPlan.get(callee) || em.sretPlan.get(baseName));
-			if (ce && !ce.needsSlot) {
+			if (handsBack && handsBack.size) {
+				for (let i = 0; i < passed.length; i++) {
+					if (!handsBack.has(i) || !appendableCallee(passed[i], em)) continue;
+					const t = stripExpand(passed[i]);
+					t._sretInto = em.sretDest;
+					through.push(t);
+				}
+			}
+			if (ce && !ce.needsSlot && through.length === 0) {
 				for (const a of passed) {
 					if (!appendableCallee(a, em)) continue;
 					// **印は括りの中の呼び出しに付ける。** `(walk s bottom 0 0)` は括弧の節で
@@ -1381,6 +1395,22 @@ function genExpr(node, env, em, scope, tail = false) {
 			parts.push({ off: (em.slot - w) * 8, w, took });
 		}
 		for (const a of through) a._sretInto = undefined;
+		// **逃がす先が無いなら止める。** 自分のフレームに取った器を「そのまま返す」位置へ
+		// 渡していて、通す先（もらったスロット）が無い形である。ここを黙って出すと、返った
+		// 器は捨てられた場所を指す。
+		// **問題になるのは、その値が自分の返値になるときだけである。** 途中の値なら自分の
+		// フレームは生きているので、呼び先が返した器も読める。
+		if (tail && handsBack && handsBack.size && through.length === 0) {
+			// **見るのは器だけである。** 番地（`$匿名式` で取った場所）を渡して返される形は
+			// 層0の話で、そこは書いた人が持ち場を決めている。ここで止めたいのは、組んだ器を
+			// 「そのまま返す」位置へ渡す形——`go (node ar n n) (n - 1)` である。
+			const bad = parts.findIndex((pp, i) => pp.took && handsBack.has(i) && isBoxType(unwrap(passed[i]) && unwrap(passed[i]).atomType));
+			if (bad >= 0)
+				return em.fail(
+					n,
+					"第" + (bad + 1) + "引数の場所が足りません（" + callee + " はこの引数をそのまま返すので、置き場所は呼ぶ側の外——sret のスロット——でなければなりません）"
+				);
+		}
 		let total = parts.reduce((acc, x) => acc + x.w, 0);
 		// **幅は署名が言う。** 省略された位置まで含めて全部数えないと、スタックへ積む
 		// 位置が決まらない——`walk s bottom 0 0` は9個の仮引数のうち4個しか渡さないが、
@@ -6469,7 +6499,10 @@ function generateAsm(nodes, env, options = {}) {
 	// **番地を取られた束縛を、命令へ畳む前に洗い出す。** 場所が在るかどうかは書かれた
 	// ものが決めるのであって、行の順序が決めるのではない。
 	markAddressTaken(nodes, env);
-	markEscapes(nodes, collectReturnedParams(nodes));
+	// **どの位置の仮引数がそのまま返るか**は呼び出しサイトでも要る——渡す器の場所を
+	// 決めるのは、呼び先がそれを返すかどうかだからである。
+	em.returnedParams = collectReturnedParams(nodes);
+	markEscapes(nodes, em.returnedParams);
 	// 呼び出しサイトが省略された引数の位置を知るための署名表。本体を出す前に要る。
 	em.signatures = collectSignatures(nodes, em);
 	// 返す器の置き場所（sret）。呼ぶ側と呼ばれる側の両方が同じ表を引く必要がある

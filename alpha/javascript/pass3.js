@@ -1359,6 +1359,21 @@ function computeAtomType(node, env) {
             : callee.returnsElementType;
         if (j && j !== NO_JOIN) node.elementType = j;
       }
+      // **そのまま返される仮引数の要素型は、実引数が言う。** `(id [0 0]) ' 1` の要素型は
+      // `id` の定義からは出ない——`ar` が何の器かは呼ぶ側にしか無いからである。ここが
+      // 無いと、器を受け取ってそのまま返す関数の結果に添字が付けられなかった
+      // （`get_prop` が「まだ出せない式です」で止まる）。
+      //
+      // 族（`Atom` / `Scalar`）は証拠の不在なので載せない（原理4）。
+      if (callee.returnsParamAt && callee.returnsParamAt.length) {
+        const { args } = applyChainOf(node);
+        for (const i of callee.returnsParamAt) {
+          const el = args[i] ? elementTypeOf(args[i], env) : null;
+          if (!el || FAMILY_MEMBERS[el]) continue;
+          const j = node.elementType && node.elementType !== el ? joinElementTypes(node.elementType, el) : el;
+          if (j && j !== NO_JOIN) node.elementType = j;
+        }
+      }
       if (callee.returnsRepr && !node.repr) node.repr = callee.returnsRepr;
       if (callee.returnsRepr === "cursor") {
         node.repr = "cursor";
@@ -2873,6 +2888,57 @@ function collectParamTypes(nodes, env) {
 
 // 適用の連なりを左へ辿り、呼び先の項と実引数の並びを返す。
 // `f a b` は `apply[apply[f, a], b]` なので、ここで `{base: f, args: [a, b]}` になる。
+/**
+ * **どの位置の仮引数を、そのまま返しうるか。**
+ *
+ * `id : [~ar] ? ar` の要素型は定義側には無い——器の中身を決めているのは実引数である。
+ * 位置を覚えておいて、呼ぶ側で実引数の要素型を読む。
+ *
+ * ブラケットの仮引数は**1つの引数を分解した形**なので位置は0番だけであり、器を指すのは
+ * 残り（`rest`）の名前である。頭（`c`）は要素であって器ではない。
+ */
+function returnedParamPositions(lam) {
+  const p = lam.left;
+  if (!p) return [];
+  const at = new Map();
+  if (p.type === "atom" && p.kind === "identifier") at.set(p.value, 0);
+  else if (p.type === "params") {
+    // **分解した形は位置ごとに畳まれている。** 純ブラケット（`[~ar]`）は器1つを分解した
+    // 形なので位置は0番だけ。混在形（`[~ar] n`）は各エントリが1位置で、分解した中身は
+    // `pattern` に入る——**名前の場所が2つある**ので、片方だけを見ると混在形が落ちる。
+    const wholeOf = (e) => {
+      if (!e.pattern) return e.name;
+      const r = e.pattern.find((x) => x.rest) || e.pattern[e.pattern.length - 1];
+      return r ? r.name : null;
+    };
+    if (p.bracket && (p.entries || []).length && !(p.entries || []).some((e) => e.pattern)) {
+      const r = (p.entries || []).find((e) => e.rest);
+      if (r) at.set(r.name, 0);
+    } else
+      (p.entries || []).forEach((e, i) => {
+        const nm = wholeOf(e);
+        if (nm) at.set(nm, i);
+      });
+  }
+  if (!at.size) return [];
+  const out = new Set();
+  const arms = (v) => {
+    if (!v || typeof v !== "object") return;
+    if (Array.isArray(v.lines)) {
+      for (const l of v.lines) arms(isDefineNode(l) ? l.right : l);
+      return;
+    }
+    if (v.type === "operation" && v.name === "or") {
+      arms(v.left);
+      arms(v.right);
+      return;
+    }
+    if (isIdentifierNode(v) && at.has(v.value)) out.add(at.get(v.value));
+  };
+  arms(lam.right);
+  return [...out];
+}
+
 function applyChainOf(node) {
   const args = [];
   let n = node;
@@ -3190,6 +3256,10 @@ function collectReturns(nodes, env) {
     // 一度でも本体から型が読めたら、もう種ではない。
     binding.returnsSeeded = false;
     if (rhs.right.elementType) binding.returnsElementType = rhs.right.elementType;
+    // **仮引数をそのまま返す枝は、要素型を呼び出しサイトから受け取る。** 定義側は器の
+    // 中身を知らない——知っているのは実引数である。
+    const rp = returnedParamPositions(rhs);
+    if (rp.length) binding.returnsParamAt = rp;
     // **指す先も返値と一緒に運ぶ。** `cons : h t ? $(h , t)` を呼んだ側が `@` で読むとき、
     // 何が出るかを決めているのは `cons` の中の `$` である。ここで運ばないと連鎖が切れる。
     if (rhs.right.pointee) binding.returnsPointee = rhs.right.pointee;
