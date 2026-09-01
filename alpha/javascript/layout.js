@@ -532,11 +532,16 @@ function layoutOfStruct(node, conf) {
  * ——先に測って、測れないときだけ運ぶ幅へ落ちる。
  */
 function slotCellSize(node, conf) {
-  const m = measure(node, conf);
-  if (m) return m;
+  // **先に訊くのは「どう運ぶか」である。** ここを `measure` から訊いていたため、
+  // **リテラルの文字列で答えが変わっていた**——`` `ab` `` は中身が読めるので `measure` が
+  // 2 バイトと答えて成功し、参照へ落ちる道に入らない。ところが出す側は `{ptr, len}` の
+  // 16 バイトを書くので、次のスロットの位置が 2 バイト目になり **ptr を踏み潰す**。
+  //
+  // 中身が読めることと、そこに何バイト置かれるかは別の問いである。置かれるのは運ぶ姿の
+  // 方なので、参照で運ぶ型はその幅で数える——中身が読めるかどうかに関わらず。
   const pass = passingOf(node, conf);
   if (pass && pass.mode === "reference" && pass.size) return { size: pass.size, align: 8 };
-  return null;
+  return measure(node, conf);
 }
 
 function packSlots(entries, conf, slotKind) {
