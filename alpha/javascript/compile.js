@@ -24,7 +24,7 @@
 
 import { preprocess } from "./lexer.js";
 import { parse } from "./parser.js";
-import { buildEnv, bindEnv, envLookup } from "./pass1.js";
+import { buildEnv, bindEnv, envLookup, EXPORT_MARKERS } from "./pass1.js";
 import { reduceAll, desugarIndexRest } from "./pass2.js";
 import { specializeGenericParams } from "./pass1b.js";
 import { annotateAll, checkLayerConstraints, checkCharsetConstraints } from "./pass3.js";
@@ -146,9 +146,96 @@ function markCursorEntries(nodes, entries, superseded, group) {
   }
 }
 
+/**
+ * **インポートはコンパイル時に解ける**（build_system.md §4.2）。
+ *
+ * `` `lib/x.sn`@~ `` は「そのファイルを読んで（`@`）、束縛をここへ撒く（`~`）」であり、
+ * 後置演算子2つの意味そのままである。専用の構文は要らないし、走らせる側には何も残らない
+ * ——読むのはビルド時である（Zig の `@import` と同じ立場で、layer 4 の話ではない）。
+ *
+ * 解くのは**行の段階**である。ここがまだ「ファイルが1つに見えている」最後の場所であり、
+ * 以降のパスは `lines` しか見ない——束縛表もそこから作るので、撒いた先の名前が普通に引ける。
+ */
+function importPathOf(line) {
+  // `[text, "_@", "_~"]` の形だけがインポートである。`@` だけ（撒かない）は「そのファイルの
+  // 値を1つ読む」であって、束縛を並べる話ではない。裸のテキスト1つはコメントである。
+  if (!Array.isArray(line) || line.length !== 3) return null;
+  const [t, at, spread] = line;
+  if (at !== "_@" || spread !== "_~") return null;
+  if (typeof t !== "string" || t.length < 2 || t[0] !== "`" || t[t.length - 1] !== "`") return null;
+  return t.slice(1, -1);
+}
+
+/** その行は束縛か。撒くのは**束縛**であって、そのファイルの実行例ではない。 */
+function definedNameOf(line) {
+  if (!Array.isArray(line)) return null;
+  const at = typeof line[0] === "string" && EXPORT_MARKERS[line[0]] ? 1 : 0;
+  const id = line[at];
+  if (typeof id !== "string" || id[0] !== "<" || id[id.length - 1] !== ">") return null;
+  return line[at + 1] === ":" ? { name: id, exported: at > 0 } : null;
+}
+
+function dirOf(path) {
+  const n = normPath(path);
+  const i = n.lastIndexOf("/");
+  return i < 0 ? "" : n.slice(0, i);
+}
+
+/** 区切りは `/` に均す（Windows の区切りも同じ意味である）。 */
+const normPath = (x) => String(x).split(String.fromCharCode(92)).join("/");
+
+function joinPath(base, rel) {
+  const r = normPath(rel);
+  const drive = r.length > 2 && r[1] === ":" && r[2] === "/";
+  const raw2 = r.startsWith("/") || drive ? r : (base ? normPath(base) + "/" : "") + r;
+  const abs = raw2.startsWith("/");
+  const seg = [];
+  for (const x of raw2.split("/")) {
+    if (x === "" || x === ".") continue;
+    if (x === "..") { seg.pop(); continue; }
+    seg.push(x);
+  }
+  return (abs ? "/" : "") + seg.join("/");
+}
+
+function resolveImports(lines, options, parseFn, base, state) {
+  const out = [];
+  for (const line of lines) {
+    const rel = importPathOf(line);
+    if (rel === null) { out.push(line); continue; }
+    if (!options.readImport)
+      throw new SyntaxError(`インポートを解決する手段がありません（${rel}——compile に readImport を渡してください）`);
+    const full = joinPath(base, rel);
+    // **同じファイルは一度だけ撒く。** 2つのモジュールが同じものを読んでいても定義が2つに
+    // なってはいけない——後の定義が勝つので、黙って別物になる。
+    if (state.done.has(full)) continue;
+    // **循環は通してよい。** 同じファイルは一度しか撒かないので、定義はそれぞれ1つに
+    // なる。トップレベルの定義は順序に依らない（`buildEnv` が先に全部集める）ので、
+    // 循環するインポートは**ファイルを跨いだ相互再帰**でしかない——`sep` と `in_quote` が
+    // 同じファイルで呼び合えるのと同じ話であり、断る理由が無い（原理4）。
+    let src;
+    try { src = options.readImport(full); } catch { throw new SyntaxError(`インポートが読めません: ${full}`); }
+    state.done.add(full);
+    // **撒くのは束縛だけである。** モジュールの末尾にある実行例まで持ってくると、
+    // 最後の式が入れ替わる——`_sign_main` が返すのはそれなので、黙って別の値になる。
+    const inner = resolveImports(parseFn(preprocess(src)), options, parseFn, dirOf(full), state);
+    for (const l of inner) if (definedNameOf(l)) out.push(l);
+  }
+  return out;
+}
+
 function compile(source, options = {}) {
   const parseFn = options.parse || parse;
-  const lines = parseFn(preprocess(source));
+  // **入口のファイル自身も「撒き済み」として数える。** 循環したときに入口が自分を撒き直し、
+  // 同じ定義が2つになる——後の定義が勝つので、黙って別物になりうる。
+  const selfPath = options.sourcePath ? joinPath("", options.sourcePath) : null;
+  const lines = resolveImports(
+    parseFn(preprocess(source)),
+    options,
+    parseFn,
+    options.importBase !== undefined ? options.importBase : selfPath ? dirOf(selfPath) : "",
+    { done: new Set(selfPath ? [selfPath] : []) }
+  );
   const env = buildEnv(lines);
   // 添字位置の `N~` を終端の無いレンジへ均す（糖衣）。**後置 `~` の意味を「撒く」
   // 1つに絞るための書き換え**であり、逆適用（`x f`）と同じ扱いである——記号は残し、

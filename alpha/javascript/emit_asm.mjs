@@ -21,7 +21,7 @@ if (!file) {
 }
 
 const conf = readOptionMs(msFile ? fs.readFileSync(msFile, "utf8") : "");
-const { nodes, env } = compile(fs.readFileSync(file, "utf8"), { layer: conf.layer, charset: conf.charset });
+const { nodes, env } = compile(fs.readFileSync(file, "utf8"), { layer: conf.layer, charset: conf.charset, sourcePath: file, readImport: (f) => fs.readFileSync(f, "utf8") });
 const r = generateAsm(nodes, env, { target: conf.target, charset: conf.charset, layer: conf.layer, source: file });
 
 process.stdout.write(r.text);

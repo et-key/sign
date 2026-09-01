@@ -17,7 +17,7 @@ if (!file) {
 	console.error("使い方: node emit_st.mjs <file.sn> [st|ist]");
 	process.exit(1);
 }
-const { nodes, env } = compile(fs.readFileSync(file, "utf8"));
+const { nodes, env } = compile(fs.readFileSync(file, "utf8"), { sourcePath: file, readImport: (f) => fs.readFileSync(f, "utf8") });
 const r = generateSignType(nodes, env, { scope, source: file });
 process.stdout.write(r.text);
 console.error(`${r.entries} エントリ / 未解決 ${r.unresolved}`);
