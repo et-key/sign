@@ -2261,7 +2261,7 @@ function genExpr(node, env, em, scope, tail = false) {
 			if (isUnitAtom(peel(parts[k]))) parts.splice(k, 1);
 		}
 		const et = n.elementType || (n.atomType === "String" ? "Char" : null);
-		const em1 = et ? measure({ atomType: et }, { target: em.conf.target, charset: em.conf.charset }) : null;
+		const em1 = elementCellSize(et, em.conf);
 		// **末尾が器を返す呼び出しなら、そこへ追記する。**
 		//
 		// `(s ' 0) (f (s ' 1~))` は「要素 ＋ 再帰の結果」であり、後者は器なので「並べる
@@ -2385,6 +2385,18 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.store(SCRATCH[0], cnt);
 			for (let i = 0; i < parts.length; i++) {
 				if (widths[i] === 1) {
+					// **持ち上げの代金は、まだ払えない。** 要素が参照で運ばれる器（`List(String)`）に
+					// スカラーを1つ積むには、その値を `{ptr, len}` にしなければならない——型の上では
+					// 無償でも、表現では有償である（原理8）。`s ` i` のように元の器の中に居るものは
+					// スライス `{ptr + i×幅, 1}` で済む（確保が要らない）が、そこはまだ出していない。
+					// **黙って幅の合わない値を置くよりは断る。**
+					if (w === 16) {
+						return em.fail(
+							n,
+							`器の構築はまだ出せません（${n.atomType}——要素が参照で運ばれる器へスカラーを積むには ` +
+								"`{ptr, len}` へ持ち上げる必要がある。原理8 の表現の代金が未実装）"
+						);
+					}
 					const pw = genScalar(parts[i], env, em, scope, "並べる要素はレジスタ1本の値です");
 					if (pw === false) return false;
 					em.load("x14", (em.slot - 1) * 8, "置く値");
@@ -2398,6 +2410,11 @@ function genExpr(node, env, em, scope, tail = false) {
 					em.store(SCRATCH[0], cnt);
 					continue;
 				}
+				// 撒いているか（後置 `~`）。剥がす前に見ておく。
+				const spreadHere = (() => {
+					const u = unwrap(parts[i]);
+					return !!(u && u.type === "operation" && u.position === "postfix" && u.name === "expand");
+				})();
 				const cw = genExpr(stripExpand(parts[i]), env, em, scope);
 				if (cw === false) return false;
 				if (cw !== 2) {
@@ -2405,6 +2422,23 @@ function genExpr(node, env, em, scope, tail = false) {
 					return em.fail(n, `並べる器が ${cw} 本です`);
 				}
 				const so = (em.slot - 2) * 8;
+				// **撒いていない器は1要素である。** `a , b~` は「a を1つ置いて、b の要素を並べる」
+				// であり、`~` の有無がその境目である。ここで `stripExpand` を無条件に掛けていたので、
+				// 左辺の `take_while` の結果まで要素ごとに写していた——`words `ab`` が語数 1 では
+				// なく文字数 2 を返したのはこれである。**型は通るのに数が違う**形だった。
+				if (w === 16 && !spreadHere) {
+					em.load(SCRATCH[0], cnt);
+					em.load("x11", em.sretDest);
+					em.emit(`add x11, x11, ${SCRATCH[0]}, lsl #4`, "書く先の位置へ");
+					em.load("x14", so, "この要素の ptr");
+					em.emit("str x14, [x11]");
+					em.load("x14", so + 8, "この要素の len");
+					em.emit("str x14, [x11, #8]");
+					em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #1`, "1つぶん進む");
+					em.store(SCRATCH[0], cnt);
+					em.pop(2);
+					continue;
+				}
 				const top = em.newLabel("cp");
 				const end = em.newLabel("cpe");
 				em.emit(`mov x13, #0`, "写す位置");
@@ -2415,13 +2449,34 @@ function genExpr(node, env, em, scope, tail = false) {
 				em.load(SCRATCH[1], so, "写す器の ptr");
 				// `loadElem` は 8 byte 未満を `w` レジスタで読む（`ldrb`/`ldrh` は 32 ビット
 				// 側しか取らない）。書く側も同じ幅で書くので、上半分は使わない。
-				em.emit(loadElem("w14", SCRATCH[1], "x13", w), `${w} byte を1つ読む`);
-				em.load(SCRATCH[1], em.sretDest);
-				em.load(SCRATCH[0], cnt);
-				em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, x13`, "書いた個数 ＋ 写した位置");
-				if (shift) em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}, lsl #${shift}`);
-				else em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}`);
-				em.emit(storeElem("x14", SCRATCH[1], 0, w), "写す");
+				if (w === 16) {
+					// **参照で運ぶ要素は2語である。** `loadElem`/`storeElem` は 8 byte で頭打ちで、
+					// 16 はその枝に落ちて**刻み 8 で半分だけ**写していた。ここは一度も走ったことの
+					// 無い道で（`em1` が `String` に対して常に `null` だった）、蓋を開けた瞬間に
+					// `tokens `ab`` が回った。
+					//
+					// 8 byte を2回で写す——1本のレジスタしか使わないので、この場の割り当てを変えずに
+					// 済む（`ldp`/`stp` は組で2本要る）。
+					em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, x13, lsl #4`, "写す元の位置へ");
+					em.load(SCRATCH[0], cnt);
+					em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, x13`, "書いた個数 ＋ 写した位置");
+					em.load("x11", em.sretDest);
+					em.emit(`add x11, x11, ${SCRATCH[0]}, lsl #4`, "書く先の位置へ");
+					em.emit(`ldr x14, [${SCRATCH[1]}]`, "ptr");
+					em.emit("str x14, [x11]");
+					em.emit(`ldr x14, [${SCRATCH[1]}, #8]`, "len");
+					em.emit("str x14, [x11, #8]");
+				} else {
+					// `loadElem` は 8 byte 未満を `w` レジスタで読む（`ldrb`/`ldrh` は 32 ビット側しか
+					// 取らない）。書く側も同じ幅で書くので、上半分は使わない。
+					em.emit(loadElem("w14", SCRATCH[1], "x13", w), `${w} byte を1つ読む`);
+					em.load(SCRATCH[1], em.sretDest);
+					em.load(SCRATCH[0], cnt);
+					em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, x13`, "書いた個数 ＋ 写した位置");
+					if (shift) em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}, lsl #${shift}`);
+					else em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}`);
+					em.emit(storeElem("x14", SCRATCH[1], 0, w), "写す");
+				}
 				em.emit(`add x13, x13, #1`);
 				em.emit(`b ${top}`);
 				em.label(end);
@@ -3175,7 +3230,7 @@ function genIndex(node, env, em, scope) {
 	// `` `abc` ' 2~ `` も同じことである——長さが1だと決まっている）。
 	if (isSlice && rw === 1 && cw === 2) {
 		const et = node.atomType;
-		const em1 = et ? measure({ atomType: et }, { target: conf.target, charset: conf.charset }) : null;
+		const em1 = elementCellSize(et, conf);
 		if (!em1 || !em1.size) return em.fail(node, `切り出した要素の幅が決まりません（${et}）`);
 		const cw2 = genExpr(node.left, env, em, scope);
 		if (cw2 === false) return false;
@@ -4516,6 +4571,7 @@ function returnSizeBound(lam, name, known, group) {
 		}
 		// 食いながら撒く枝（`d st~` と自己呼び出しが同居する形）は線形の漸化式に
 		// ならない。上界が二次以上になりうるので、ここは名指しせず諦める。
+		// **見積もりで通す道は手順3**——呼ばれた側の容量照合（手順2）が先である。
 		if (rec && ref) return null;
 		if (rec) {
 			// `T(n) = k + T(n-1)`、底は `konst`。解くと `konst + k × ||p||` である。
@@ -5319,6 +5375,24 @@ function deadCodeElim(lines) {
 		drop.add(idx[k]);
 	}
 	return drop.size ? lines.filter((_, i) => !drop.has(i)) : lines;
+}
+
+/**
+ * **要素1つを置くのに何バイト要るか。**
+ *
+ * `measure` は「その値の中身の長さ」を測るので、`String` のように長さが型に無いものでは
+ * `null` を返す。だがここで要るのは**運ぶ幅**であり、`String` を要素にする器は
+ * `{ptr, len}` の2語＝16 byte で並べる——`passingOf` がそう答える。
+ *
+ * **同じ問いが2箇所に在った。** sret の計画（`collectSretPlan`）は既にこの規則で解いて
+ * いたのに、実際に出す側は `measure` のままだったので、計画には載るのに「器の構築はまだ
+ * 出せません」で止まっていた。決めるのは1箇所である。
+ */
+function elementCellSize(et, conf) {
+	if (!et) return null;
+	const pass = passingOf({ atomType: et }, { target: conf.target, charset: conf.charset });
+	if (pass && pass.mode === "reference") return { size: pass.size };
+	return measure({ atomType: et }, { target: conf.target, charset: conf.charset });
 }
 
 function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true) {
