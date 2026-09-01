@@ -1608,9 +1608,19 @@ function genExpr(node, env, em, scope, tail = false) {
 		return genExpr(n.operand, env, em, scope, tail);
 	}
 
+	// **撒くのは 0 命令である。** 器はもう並んでいるので、撒けと言われても置き直すものが
+	// 無い——後置 `~` が要求するのは型の側の「1要素として足すな」であって、値の側の操作
+	// ではない。
+	//
+	// **スカラーも同じである。** `Scalar ⇒ [Scalar, __]`——スカラーは1要素の器なので、
+	// 撒けばその要素そのもの、つまり恒等射である。解釈系は既にそう振る舞っていた
+	// （`5~` は 5、`1 5~` は `1 5` と同じ `[1, 5]`）が、出す側は 2 本で運ぶ器しか見て
+	// おらず、スカラーは素通りして「まだ出せない式です（expand）」に落ちていた
+	// ——preprocess.sn の `push : [~st] d ? d st~` がそれで、深さが1つだけのスタックは
+	// 1要素の器＝スカラーだからここへ来る。
 	if (n.type === "operation" && n.position === "postfix" && n.name === "expand" && n.operand) {
 		const w = slotsOfNode(n.operand, em.conf, em.env);
-		if (w === 2) return genExpr(n.operand, env, em, scope);
+		if (w === 1 || w === 2) return genExpr(n.operand, env, em, scope);
 	}
 
 	// **前置 `~` は持ち上げ（`continuous`）である。** `~x` は `[x]` と同じ長さ1の器で
