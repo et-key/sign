@@ -1,4 +1,4 @@
-import { charLimitOf, DEFAULT_CHARSET } from "./target_info.js";
+import { charLimitOf, DEFAULT_CHARSET, literalDigits, literalParts } from "./target_info.js";
 
 /**
  * 最小インタプリタ（評価器）。Pass2/Pass1bが構築した二分木ASTを実際に評価して値を出す。
@@ -119,7 +119,7 @@ function evalLiteral(node) {
     case "char":
       return node.value.slice(1); // "\a" -> "a"
     case "address":
-      return parseIntegerLiteral(node.value.slice(2), 16);
+      return parseIntegerLiteral(literalDigits(node.value), 16);
     case "unicode": {
       // `0u` は Char（String の要素型）のリテラルである——`String ≅ List(0u)` であり、
       // guide/example.sn も `uni_a : 0u3042` を「Unicodeで 'あ' を表現」と説明している。
@@ -129,11 +129,11 @@ function evalLiteral(node) {
       //
       // U+0000 は Char の値域から除外された niche であり、`__`（Unit）そのものである
       // （value_representation.md §3、system_semantics.md）。
-      const cp = parseInt(node.value.slice(2), 16);
+      const cp = parseInt(literalDigits(node.value), 16);
       return cp === 0 ? UNIT : String.fromCodePoint(cp);
     }
     case "register":
-      return node.value.startsWith("0b") ? parseInt(node.value.slice(2), 2) : parseInt(node.value.slice(2), 16);
+      return parseInt(literalDigits(node.value), literalParts(node.value)?.radix ?? 16);
     case "unit":
       return UNIT;
     default:

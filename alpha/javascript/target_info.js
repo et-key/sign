@@ -175,4 +175,39 @@ function reduceToMachineType(type, target) {
   return { size, signed: SIGNEDNESS[type] === "signed", class: WIDTH_CLASS[type] || null };
 }
 
-export { TARGET_WIDTHS, SIGNEDNESS, UNIT_NICHE, UNIT_NICHE_ASM, WIDTH_CLASS, CHARSETS, DEFAULT_CHARSET, charSizeOf, charLimitOf, widthsOf, isSupported, sizeOf, reduceToMachineType };
+/**
+ * **リテラルのプリフィックスを、幅と数字に分ける。**
+ *
+ * `NxHHHH` / `NuHHHH` の先頭の数がその幅である（value_representation.md §5）。
+ * `x` は byte、`u` は bit で書く——それぞれの族の世界共通の呼び名（UTF-8/16/32）に
+ * 合わせているだけなので、**ここで byte へ揃える**。以降のパスは byte しか見ない。
+ *
+ * `0` は「幅 0」ではなく「**言っていない**」である。`width` に `null` を返し、呼ぶ側が
+ * `option.ms`（`target` の語幅 / `charset`）から埋める（§5.4）。
+ *
+ * 機械にその幅の命令が無いもの（`3x`、`12u` のような割り切れない指定）は `width` が
+ * `NaN` になる。そこは診断で弾く——**分からないことを分かったことにしない**（原理4）。
+ *
+ * **プリフィックスは可変長である。** `16x` や `32u` は3文字なので、`.slice(2)` で数字を
+ * 取ると壊れる。数字を欲しい側は `digits` を使う。
+ */
+function literalParts(text) {
+  const m = /^([0-9]+)([xurb])(.*)$/.exec(String(text ?? ""));
+  if (!m) return null;
+  const n = Number(m[1]);
+  const family = m[2];
+  const bytes = family === "u" ? n / 8 : n;
+  return {
+    family,
+    digits: m[3],
+    radix: family === "b" ? 2 : 16,
+    width: n === 0 ? null : Number.isInteger(bytes) && bytes > 0 ? bytes : NaN,
+  };
+}
+
+/** リテラルの数字部分（プリフィックスの後ろ）。可変長プリフィックスに耐える。 */
+function literalDigits(text) {
+  const p = literalParts(text);
+  return p ? p.digits : String(text ?? "").slice(2);
+}
+export { TARGET_WIDTHS, SIGNEDNESS, UNIT_NICHE, UNIT_NICHE_ASM, WIDTH_CLASS, CHARSETS, DEFAULT_CHARSET, charSizeOf, charLimitOf, widthsOf, isSupported, sizeOf, reduceToMachineType, literalParts, literalDigits };

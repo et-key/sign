@@ -35,7 +35,7 @@
  * 名指しする——落とすと「命令が無いのに動いたように見える」が起きる。
  */
 
-import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf, charLimitOf, DEFAULT_CHARSET, SIGNEDNESS } from "./target_info.js";
+import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf, charLimitOf, DEFAULT_CHARSET, SIGNEDNESS, literalDigits, literalParts } from "./target_info.js";
 import { envLookup } from "./pass1.js";
 import { isBareComment } from "./pass3.js";
 import { passingOf, measure, layoutOfStruct, flattenProduct } from "./layout.js";
@@ -248,7 +248,7 @@ function codePointsOf(n) {
 	if (n.kind === "char") return [...n.value.slice(1)].map((c) => c.codePointAt(0));
 	if (n.kind === "string") return [...n.value.slice(1, -1)].map((c) => c.codePointAt(0));
 	if (n.kind === "unicode") {
-		const cp = parseInt(n.value.slice(2), 16);
+		const cp = parseInt(literalDigits(n.value), 16);
 		// U+0000 は niche であって文字ではない（value_representation.md §3）。
 		return Number.isNaN(cp) ? null : cp === 0 ? [] : [cp];
 	}

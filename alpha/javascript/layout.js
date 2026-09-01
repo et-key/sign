@@ -31,7 +31,7 @@
  * ——ストライドが揃わないと `base + i × size` が壊れる。
  */
 
-import { widthsOf, sizeOf, charSizeOf, DEFAULT_CHARSET, reduceToMachineType } from "./target_info.js";
+import { widthsOf, sizeOf, charSizeOf, DEFAULT_CHARSET, reduceToMachineType, literalDigits } from "./target_info.js";
 import { envLookup } from "./pass1.js";
 
 function isDefineNode(n) {
@@ -287,7 +287,7 @@ function stringLength(node, env = null, seen = new Set()) {
   if (node.type === "atom" && node.kind === "string") return [...node.value.slice(1, -1)].length;
   if (node.type === "atom" && node.kind === "char") return 1;
   // `0u….` は Char 1個。U+0000 は Unit なので 0 個（niche、value_representation.md §3）。
-  if (node.type === "atom" && node.kind === "unicode") return parseInt(node.value.slice(2), 16) === 0 ? 0 : 1;
+  if (node.type === "atom" && node.kind === "unicode") return parseInt(literalDigits(node.value), 16) === 0 ? 0 : 1;
   // 余積（`construct` / `concat`）は両辺の和。片方でも決まらなければ全体も決まらない。
   if (node.type === "operation" && (node.name === "construct" || node.name === "concat")) {
     const l = stringLength(node.left, env, seen);

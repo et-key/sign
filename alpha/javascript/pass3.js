@@ -30,6 +30,7 @@
  *   初めて強制可能になる（stream型が型として存在するため）。
  */
 
+import { literalDigits } from "./target_info.js";
 import { envLookup } from './pass1.js';
 import { OperationError } from "./errors.js";
 import { stringLength, layoutOfStruct } from "./layout.js";
@@ -923,7 +924,7 @@ function literalAtomTypeFromKind(node) {
     case "address": return "Address";
     case "register": return "Address";
     // U+0000 は Char の値域から除外された niche なので Unit（value_representation.md §3）。
-    case "unicode": return parseInt(node.value.slice(2), 16) === 0 ? "Unit" : "Char";
+    case "unicode": return parseInt(literalDigits(node.value), 16) === 0 ? "Unit" : "Char";
     case "unit": return "Unit";
     default: return null; // identifier/hole/unknown はここでは扱わない
   }
@@ -3432,7 +3433,7 @@ function checkCharsetConstraints(nodes, charset) {
     if (node.type === "atom" && (node.kind === "char" || node.kind === "string" || node.kind === "unicode")) {
       const text =
         node.kind === "unicode"
-          ? String.fromCodePoint(parseInt(node.value.slice(2), 16) || 1)
+          ? String.fromCodePoint(parseInt(literalDigits(node.value), 16) || 1)
           : node.kind === "char"
             ? node.value.slice(1)
             : node.value.slice(1, -1);
