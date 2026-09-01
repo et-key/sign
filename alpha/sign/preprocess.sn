@@ -242,15 +242,16 @@ next_st : [~st] d ?
 `「値の不在」なのかは型でしか決まらず、裸の仮引数（Atom）では決められないので`
 `吸収元へ倒れる（unit.md）`
 ``
-`終端を呼び出し側で捕まえるのは、空を引数に渡すと完全性公理で呼び出しごと消えるため。`
-`デフォルト付きの仮引数では公理が抑制されるので、そこでは否定演算子が使える`
+`入力が尽きたら walk は解なしを返す。完全性公理は「解なしならば解なしを返す」と`
+`言っており、それを演算子まで徹底しているだけである`
+`残った段の DEDENT は、各段が再帰の結果を受けるところで拾う——左が解なしなら右`
 
 `行から取り出す4つは仮引数リストで宣言する。関数本体のインデント行は全て match_case`
 `であり、そこに 識別子 : 値 と書いても分岐にしかならない。ローカル変数を置く場所は`
 `仮引数リストの側である`
 
 walk :
-	s : __
+	s
 	st
 	bd
 	jo
@@ -260,12 +261,11 @@ walk :
 	d : depth_of line
 	nd : bd + (delta b)
  ?
-	!s : close_all st
-	!b : walk rest st bd jo
-	(bd > 0) & ((jo = 1) | (nd < 1)) : b (walk rest st nd 0)
-	bd > 0 : newline b (walk rest st nd 0)
-	continues b : (closers st d) space b (walk rest (unwind st d) nd (opened bd nd))
-	(gap st d) b (walk rest (next_st st d) nd (opened bd nd))
+	!b : (walk rest st bd jo) | (close_all st)
+	(bd > 0) & ((jo = 1) | (nd < 1)) : b ((walk rest st nd 0) | (close_all st))
+	bd > 0 : newline b ((walk rest st nd 0) | (close_all st))
+	continues b : (closers st d) space b ((walk rest (unwind st d) nd (opened bd nd)) | (close_all (unwind st d)))
+	(gap st d) b ((walk rest (next_st st d) nd (opened bd nd)) | (close_all (next_st st d)))
 
 `walk は各行の前に区切りを置くため、先頭行のぶんだけ余分な改行が付く`
 `先頭行がインデントされている場合は区切りが INDENT になるので、その時は取らない`
