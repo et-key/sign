@@ -41,43 +41,30 @@ function checkTrue(note, cond, detail) {
 	}
 }
 
-function asm(source, target = "aarch64_qemu") {
+// **既定では割り当てを切って読む。**
+//
+// ここの検査が語っているのは `genExpr` の決めごと——どの命令を選ぶか、器を何本で受けるか、
+// 要素を何 byte で読むか——であって、その値がフレームに置かれるかレジスタに残るかではない。
+// `slotsToRegisters` を入れた日に28本が落ちたが、落ちた理由は全部「値の居場所が変わった」
+// だけだった。パスが違うものを同じ本文で読もうとしていたのが誤りなので、切って読む。
+//
+// 割り当てそのものは `regAlloc: true` で呼ぶ検査（下）と、qemu の403本が見ている。
+function asm(source, target = "aarch64_qemu", regAlloc = false) {
 	const { nodes, env } = compile(source);
-	return generateAsm(nodes, env, { target });
+	return generateAsm(nodes, env, { target, regAlloc });
 }
 
 // ラベル1つ分の本文を、コメントを落とした命令の並びとして取り出す。
-// **スロットの語彙へ写し戻す。**
-//
-// 「式の途中の値を*どこか*へ置く」という規約と、「それが記憶かレジスタか」は別の話で
-// ある。`slotsToRegisters` が後者だけを変えたとき、前者を見ているはずの検査が15本落ちた
-// ——検査が入れ物の名前で書かれていたからで、規約が壊れたわけではない。
-//
-// 深さ d ↔ `x19+d` はその写し**そのもの**なので、ここで元の語彙へ戻して読む。移らなかった
-// 関数（`$名前` で番地が漏れている、深すぎる）は元から `[x29, #…]` で出るため、どちらの
-// 出方も同じ言葉で語れる。
-const SLOT_REGS = ["x19", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28"];
-const asSlots = (l) => {
-	let m = /^mov (x1[9]|x2[0-8]), (x\d+)$/.exec(l);
-	if (m) return `str ${m[2]}, [x29, #${16 + SLOT_REGS.indexOf(m[1]) * 8}]`;
-	m = /^mov (x\d+), (x1[9]|x2[0-8])$/.exec(l);
-	if (m) return `ldr ${m[1]}, [x29, #${16 + SLOT_REGS.indexOf(m[2]) * 8}]`;
-	// 入口の退避と出口の復帰は、スロットで言えば存在しない命令である。
-	if (/^(stp|ldp|str|ldr) (x1[9]|x2[0-8]),/.test(l)) return null;
-	return l;
-};
-
-function body(source, label, raw = false) {
-	const r = asm(source);
+function body(source, label, regAlloc = false) {
+	const r = asm(source, "aarch64_qemu", regAlloc);
 	const lines = r.text.split("\n");
 	const i = lines.findIndex((l) => l.startsWith(`${label}:`));
 	if (i < 0) return null;
 	const j = lines.findIndex((l, k) => k > i && l === "");
-	const out = lines
+	return lines
 		.slice(i + 1, j < 0 ? undefined : j)
 		.map((l) => l.replace(/\/\/.*$/, "").trim())
 		.filter(Boolean);
-	return raw ? out : out.map(asSlots).filter((l) => l !== null);
 }
 
 // ---- 命令の選択 ----
@@ -580,7 +567,7 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 // `charset` は**要素の幅だけ**を決める。文字数は変わらない。
 {
 	const { nodes, env } = compile("f : s ? s\nf `ab`", { charset: "utf32" });
-	const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "utf32" });
+	const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "utf32", regAlloc: false });
 	checkTrue("utf32 では 4 byte 要素で置く", r.text.includes(".balign 4") && r.text.includes(".word 0x61, 0x62"), r.text);
 	checkTrue("len は charset に依らず文字数", r.text.includes("mov x10, #2"), r.text);
 }
@@ -627,7 +614,7 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 // 要素の幅は charset が決める。utf32 なら 4 byte 単位でずらす。
 {
 	const { nodes, env } = compile("f : s ? s ' 1~\nf `abc`", { charset: "utf32" });
-	const t = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "utf32" }).text;
+	const t = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "utf32", regAlloc: false }).text;
 	checkTrue("utf32 は 4 byte ぶんずらす", t.includes("add x9, x9, x10, lsl #2"), t);
 }
 // **具体化された実体の中では、仮引数の関数ポインタも決まっている。** 再帰が `$名前` では
@@ -678,7 +665,7 @@ checkTrue(
 // utf32 なら要素は 4 byte。同じ命令列が幅だけ変わる。
 {
 	const { nodes, env } = compile("f : s ?\n\ts = `ab` : 1\n\t0\nf `cd`", { charset: "utf32" });
-	const t = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "utf32" }).text;
+	const t = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "utf32", regAlloc: false }).text;
 	checkTrue("4 byte 要素なら lsl #2 で引く", t.includes("ldr w14, [x10, x13, lsl #2]"), t);
 }
 // ---- 幅のある値を返す分岐 ----

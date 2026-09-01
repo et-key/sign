@@ -4873,7 +4873,103 @@ function calleeSaveLines(regs, verb) {
 	return out;
 }
 
-function wrapFrame(bodyLines, slots, name, movedSp = false) {
+/**
+ * **どのレジスタを読み、どのレジスタに書くか。**
+ *
+ * 書き先は第1オペランドである——ただし記憶へ書く形（`str`/`stp`）と比較（`cmp`/`ccmp`）は
+ * 全部が読みで、`ldp` は2本に書く。ここを取り違えると、生きている値を消す。
+ */
+function regsOf(t) {
+	const mn = t.split(/[\s,]/)[0];
+	const ops = t.slice(mn.length);
+	const all = [...ops.matchAll(/\b([wx])(\d+|zr)\b/g)].map((m) => "x" + m[2]);
+	if (/^(str|strb|strh|stur|sturb|sturh|stp|stlr|cmp|cmn|tst|ccmp|ccmn|b|bl|br|blr|ret|cbz|cbnz|tbz|tbnz)$/.test(mn) || mn.startsWith("b."))
+		return { w: [], r: all };
+	if (/^(ldp|ldnp)$/.test(mn)) return { w: all.slice(0, 2), r: all.slice(2) };
+	return { w: all.slice(0, 1), r: all.slice(1) };
+}
+
+/**
+ * **写しを畳む（コピー伝播と死んだ写しの除去）。**
+ *
+ *     mov x9, x19            add x9, x19, x24
+ *     mov x10, x24     →     （2命令消える）
+ *     add x9, x9, x10
+ *
+ * `slotsToRegisters` が往復を写しに変えたあと、**読む側が写し先を読んでいるだけ**の形が
+ * 残る（実プログラムで 39%）。読む側を元のレジスタに向け直せば写しは死ぬ。
+ *
+ * **覗き穴で2度壊した形とは違う。** あちらは窓ごとに「空いているレジスタ」を*割り当て*、
+ * 重なった窓が同じレジスタを奪い合った。ここは何も割り当てない——既にある名前へ向け直す
+ * だけなので、窓が重なっても奪い合うものが無い。
+ *
+ * 直線の区間だけを見る。ラベル・分岐・呼び出しで表を捨てる（別の道から飛び込まれたら
+ * レジスタの中身は保証できず、`bl` は x0–x18 を壊す）。幅の違う読み（`w9`）は触らない
+ * ——`add w9, x19, w10` は命令として成り立たない。
+ */
+function peepholeFoldMoves(lines) {
+	const insOf = (l) => l.trim().replace(/\s*\/\/.*$/, "");
+	const isBreak = (t) => !t || /^[.\w$]+:$/.test(t) || /^(b|bl|br|blr|ret|cbz|cbnz|tbz|tbnz)\b/.test(t) || t.startsWith("b.");
+	const MOV = /^mov (x\d+), (x\d+)$/;
+	const out = lines.slice();
+
+	// 1) コピー伝播：`mov xD, xS` のあと、xD の読みを xS に向け直す。
+	let copy = new Map(); // xD -> xS
+	for (let i = 0; i < out.length; i++) {
+		const t = insOf(out[i]);
+		if (isBreak(t)) { copy = new Map(); continue; }
+		const { w, r } = regsOf(t);
+		if (copy.size && r.length) {
+			let line = out[i];
+			for (const reg of new Set(r)) {
+				const src = copy.get(reg);
+				if (!src || w.includes(reg)) continue;
+				// 第1オペランド（書き先）は置き換えない。幅の違う読みも触らない。
+				const mn = insOf(line).split(/[\s,]/)[0];
+				const head = line.indexOf(mn) + mn.length;
+				const body = line.slice(head).replace(new RegExp("\\b" + reg + "\\b", "g"), src);
+				line = line.slice(0, head) + body;
+			}
+			out[i] = line;
+		}
+		const now = insOf(out[i]);
+		const nw = regsOf(now).w;
+		// 書かれたレジスタが絡む写しは無効になる（写し先としても、写し元としても）。
+		for (const d of nw) { copy.delete(d); for (const [k, v] of copy) if (v === d) copy.delete(k); }
+		const m = MOV.exec(now);
+		if (m && m[1] !== m[2]) copy.set(m[1], m[2]);
+	}
+
+	// 2) 死んだ写しを消す：使い捨てのスクラッチ（x9–x15）へ書いて、読まれる前に
+	//    書き直されるもの。区間の終わりまでに読まれなければ捨てる——ただしラベルや
+	//    分岐に達したら、その先で読まれるかは分からないので残す。
+	const drop = new Set();
+	for (let i = 0; i < out.length; i++) {
+		const t = insOf(out[i]);
+		const m = MOV.exec(t);
+		if (!m) continue;
+		const d = m[1];
+		if (!/^x(9|1[0-5])$/.test(d)) continue;
+		if (d === m[2]) { drop.add(i); continue; }
+		for (let j = i + 1; j < out.length; j++) {
+			const u = insOf(out[j]);
+			if (isBreak(u)) break;
+			const { w, r } = regsOf(u);
+			if (r.includes(d)) break;
+			if (w.includes(d)) { drop.add(i); break; }
+		}
+	}
+	return out.filter((_, i) => !drop.has(i));
+}
+
+/**
+ * @param {boolean} alloc スロットをレジスタへ移すか。**切れるようにしてあるのは、これが
+ *   別のパスだからである**——「String の要素は 1 byte で読む」「ptr は x0、len は x1」の
+ *   ような `genExpr` の決めごとを読む検査は、割り当ての後では読めなくなる（値が x19… に
+ *   移り、コピー伝播が任意の命令をそちらへ向け直すため）。切って読めば、どちらのパスが
+ *   何を決めたのかが分かれたまま検査できる。
+ */
+function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true) {
 	bodyLines = peepholeShareAddressBase(peepholeDeadSlotStores(peepholeSlotMoves(peepholeRedundantLoads(bodyLines))));
 
 	// **フレームが要るかは、写す*前*の本体で決める。** 写した後を見ると `x29` が消えて
@@ -4884,10 +4980,12 @@ function wrapFrame(bodyLines, slots, name, movedSp = false) {
 
 	// **スロットをレジスタへ移せるなら移す。** `sp` を動かす関数はフレームの底が動くので
 	// 触らない。移せたぶんだけ場所が要らなくなるので、フレームの大きさもここで決まる。
-	const moved = movedSp || bare ? null : slotsToRegisters(bodyLines);
+	const moved = movedSp || bare || !alloc ? null : slotsToRegisters(bodyLines);
 	const saves = moved ? calleeSaveLines(moved.regs, "save") : [];
 	const back = moved ? calleeSaveLines(moved.regs, "restore") : [];
-	if (moved) bodyLines = moved.lines;
+	// 往復が写しに化けたぶんを畳む。**写した後でなければ見えない**形なので、前段の
+	// 覗き穴とは別に、ここで回す。
+	if (moved) bodyLines = peepholeFoldMoves(moved.lines);
 	// x29/x30 の16バイト + （スロット、または移した先の退避）
 	const cells = moved ? moved.regs.length : slots;
 	const frame = 16 + Math.ceil((cells * 8) / 16) * 16;
@@ -5452,7 +5550,7 @@ function genFunction(name, lambdaNode, env, em, mono) {
 
 	const body = em.lines;
 	em.lines = outer;
-	em.lines.push(...wrapFrame(body, em.maxSlot, name, em.movedSp));
+	em.lines.push(...wrapFrame(body, em.maxSlot, name, em.movedSp, em.conf.regAlloc !== false));
 	em.blank();
 }
 
@@ -5468,6 +5566,8 @@ function generateAsm(nodes, env, options = {}) {
 		target: options.target || "aarch64_qemu",
 		charset: options.charset || DEFAULT_CHARSET,
 		layer: options.layer,
+		// **割り当てを切る口**（既定は入り）。パスごとに何を決めたのかを分けて読むため。
+		regAlloc: options.regAlloc,
 	};
 	const em = new Emitter(conf);
 	if (!widthsOf(conf.target)) {
@@ -5621,7 +5721,7 @@ function generateAsm(nodes, env, options = {}) {
 	const body = em.lines;
 	em.lines = outer;
 	em.lines.push("\t.global _sign_main");
-	em.lines.push(...wrapFrame(body, em.maxSlot, "_sign_main", em.movedSp));
+	em.lines.push(...wrapFrame(body, em.maxSlot, "_sign_main", em.movedSp, em.conf.regAlloc !== false));
 	// 文字列の中身は最後に置く。`.text` と混ぜないのは、書き換えない領域だからである。
 	em.lines.push(...em.rodataLines());
 
