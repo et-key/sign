@@ -4297,6 +4297,35 @@ function collectReturnedParams(nodes) {
 					if (i >= 0 && !set.has(i)) { set.add(i); changed = true; }
 					continue;
 				}
+				// **返す器の中に居る仮引数も出て行く。** `mul_go : … ? acc , i` は `acc` を組の
+				// 中へ入れて返すので、`acc` として渡した器は呼ぶ側のフレームより長生きしなければ
+				// ならない。ここが「そのまま返す」形だけを見ていたため、**組んで返す形が漏れて**
+				// いた——出て行かないと判定された器は自分のフレームに置かれ、返した先で死ぬ。
+				//
+				// 見るのは参照を運べる位置だけである。`i`（数）は場所を持たない。
+				if (t.type === "operation" && COPRODUCT_BUILD_OPS.has(t.name)) {
+					const seen = [];
+					const dig = (x) => {
+						const u = unwrap(x);
+						if (!u) return;
+						if (u.type === "operation" && COPRODUCT_BUILD_OPS.has(u.name)) {
+							dig(u.left);
+							dig(u.right);
+							return;
+						}
+						seen.push(u);
+					};
+					dig(t);
+					for (const q of seen) {
+						if (!isIdentifierNode(q) || !mayCarryReference(q)) continue;
+						const i = params.indexOf(q.value);
+						if (i >= 0 && !set.has(i)) {
+							set.add(i);
+							changed = true;
+						}
+					}
+					continue;
+				}
 				// 呼び出しの結果を返している。呼び先が j 番目を返すなら、その実引数を辿る。
 				if (t.type === "operation" && (t.name === "apply" || t.name === "partial_apply")) {
 					const { base, args } = applyChain(t);
