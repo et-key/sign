@@ -332,6 +332,33 @@ function joinElementTypes(a, b) {
 // （スカラーは1要素リストと同型なので、自分自身が要素になる）。
 function elementTypeOf(node, env) {
   const type = inferAtomType(node, env);
+  // **直和の要素型は、決まっている腕の join である。**
+  //
+  // `Int | List | Struct` は「スカラーとして渡ることも器として渡ることもある」であって、
+  // 要素が何かを言っていないわけではない——スカラーの腕は1要素の器なので自分自身が要素で
+  // あり（`Scalar ⇒ [Scalar, __]`、value_representation.md §5.10）、器の腕は要素型を
+  // 持つならそれである。決まらない腕は数えない（`joinArmTypes` が `Unit` を落とすのと
+  // 同じ理由）。
+  //
+  // ここが無いと、直和は最後の「スカラーは自分自身が要素」へ落ちて**直和そのものを要素型
+  // として返す**——それは何とも join できないので `NO_JOIN` になり、余積が `Struct` へ
+  // 落ちる。preprocess.sn の `push : [~st] d ? d st~` はそれで型が輪になっていた：
+  // `push` の返値が `Struct` ← 本体が `Struct` ← `st` が直和 ← `push` の返値。
+  // 単独で書けば `List(Int)` と正しく決まるのに、呼び合う文脈でだけ固まっていた。
+  if (typeof type === "string" && type.includes(" | ")) {
+    let acc = null;
+    for (const arm of type.split(" | ").map((x) => x.trim())) {
+      const el =
+        arm === "String" ? "Char"
+        : arm === "List" || arm === "Iterator" ? node.elementType ?? null
+        : arm === "Struct" || FAMILY_MEMBERS[arm] ? null // 中身が揃わない／族は下限
+        : arm; // スカラーは1要素の器なので、要素は自分自身
+      if (!el) continue;
+      acc = acc === null ? el : joinElementTypes(acc, el);
+      if (acc === NO_JOIN) return null; // 本当に食い違うなら決めない（原理4）
+    }
+    return acc;
+  }
   if (type === "List" || type === "Iterator") return node.elementType ?? null;
   // **`String` の要素は `Char` である**（`String ≅ List(Char)`、§2）。ここが `String` を
   // 返していたのは、`Char` が Layer 2 の型になる前に書かれた規則が残っていたからで、
