@@ -1008,10 +1008,22 @@ function computeAtomType(node, env) {
       // **要素型も枝で合流する。** 型（`List`）だけ合流させて要素型を落とすと、返値を
       // 引く側で幅が決まらない——`(m [1 2 3]) ' 1` が「まだ出せない」になっていた。
       // 基底の枝は `__`（`Unit`）で要素型を持たないので、**持っている枝から採る**
-      // ——`joinArmTypes` が `Unit` を落とすのと同じ扱いである。食い違う枝があれば
-      // 決まらないのが正しい。
+      // ——`joinArmTypes` が `Unit` を落とすのと同じ扱いである。
+      //
+      // **食い違う枝は join する。** 以前はそこで諦めていたが、それは「違う」と「まだ
+      // 決まっていない」を混ぜていた。lexer.sn の `tokens` は記号1文字の枝が `Char`、
+      // 語の枝が `String` で、`String ≅ List(Char)`（原理7）だから上限は `String` で
+      // ある。諦めると要素型が消え、再帰の枝が `Char` のまま固定されて——**型は通るのに
+      // 1要素 1 byte で場所を測る**という一番たちの悪い形になっていた。
+      //
+      // 本当に合流しない枝（`joinElementTypes` が `NO_JOIN` を返す）だけは、これまで
+      // 通り決めない。原理4——決まらないものを決まったことにはしない。
       const els = [...new Set(armNodes.map((a) => a && a.elementType).filter((x) => x))];
       if (els.length === 1) node.elementType = els[0];
+      else if (els.length > 1) {
+        const j = els.reduce((x, y) => (x === null || x === NO_JOIN ? x : joinElementTypes(x, y)));
+        if (j && j !== NO_JOIN) node.elementType = j;
+      }
       return joinArmTypes(armTypes);
     }
     // **どの行も定義でないブロックは、行が要素の列である**（list_model.md §3.1 の
@@ -1061,21 +1073,29 @@ function computeAtomType(node, env) {
       // `(s ' 0) , (tokens …)~` がまさにそれで、値は平坦なトークン列なのに型が段の深い
       // `Struct` になり、大きさが静的に決まらないと言われていた。
       if (isSpreadNode(node.right)) {
-        // **要素の型は左辺が決める。** 「相手の型をそのまま返す」だと再帰で決まらない
-        // ——`f` の返値が `a , (f …)~` なら `T = T` になり、どの型も不動点なので何も
-        // 分からない。左辺は積まれる要素そのものなので、そこから決まる。余積の
-        // `(s ' 0) (f …)~` が `List(Int)` になるのと同じ理屈である。
-        // **左辺が器でも同じである。** トークン列（`String` を並べた列）がまさにその形で
-        // あり、要素が器だからといって規則が変わる理由は無い——余積の
-        // `(s ' 0) (f …)~` が左辺から要素型を取るのと揃える。
+        // **積と余積は、二項演算のようでいて制御である。** だから左辺の型に合わせては
+        // ならない——中身が同型なら配列、同型でなければ添え字が数字になる構造体である。
         //
-        // 以前ここは左辺が器のときだけ「相手の型を通す」にしていたが、それだと lexer.sn
-        // の `(take_while …) , (tokens …)~` が `T = T` になって決まらず、枝ごとに違う型が
-        // 出て `List | Struct` の直和へ落ちていた。
+        // 左辺だけを見ていた頃、lexer.sn の `tokens` が壊れていた。記号1文字を積む枝
+        // `(s ' 0) , (tokens (s ' 1~))~` は左辺が `Char` なので `List(Char)` になり、
+        // 同じ関数の `(take_while …) , …~` の枝は `List(String)` になる。**型は通るのに
+        // 中身が違う**——1要素 1 byte として場所を測るので、`{ptr, len}` のトークンには
+        // 到底足りなかった。`String ≅ List(Char)`（原理7）なので join は `String` である。
+        //
+        // ただし**相手の型をそのまま返してはいけない**。`f` の返値が `a , (f …)~` なら
+        // `T = T` になり、どの型も不動点なので何も分からない。だから
+        // **既に注釈されている要素型だけを読む**——推論を強制すると自分へ戻る。1周目は
+        // 左辺だけで決まり、相手が決まった次の周で join が効く（Pass 3 は不動点で回る）。
         const el = inferAtomType(node.left, env);
         if (el && el !== "Unit") {
-          node.elementType = el;
-          return "List";
+          const known = node.right.elementType ?? (node.right.operand && node.right.operand.elementType) ?? null;
+          const j = known && known !== el ? joinElementTypes(el, known) : el;
+          // join できない＝中身が同型でない。そのときは下の Struct（連番スロット）へ
+          // 落ちる——「添え字が数字になる構造体」がまさにそれである。
+          if (j !== NO_JOIN) {
+            node.elementType = j || el;
+            return "List";
+          }
         }
       }
       // カンマ（直積）は常に Struct（type_system.md §2）。名前付きスロットも
@@ -1266,7 +1286,19 @@ function computeAtomType(node, env) {
       if (!callee) return null;
       // 要素型と実体の種類も返値と一緒に運ぶ。器の型（`List`）だけでは Pass 4 が
       // 添字の命令を選べない——要素1個ぶんの幅と、ロードか算術かが要る。
-      if (callee.returnsElementType && !node.elementType) node.elementType = callee.returnsElementType;
+      //
+      // **上がれるようにする。** 以前は `!node.elementType` で最初に読めた値を凍結して
+      // いたが、束は `__`（底）から始めて単調に上がる設計であり、相互再帰では初回に
+      // 必ず低い値が入る。lexer.sn の `tokens` は1周目に `Char` で固まり、他の枝が
+      // `String` だと分かっても二度と上がれなかった——**型は通るのに要素の幅が違う**。
+      // join は単調で型の束は有限なので、これで止まる。
+      if (callee.returnsElementType) {
+        const j =
+          node.elementType && node.elementType !== callee.returnsElementType
+            ? joinElementTypes(node.elementType, callee.returnsElementType)
+            : callee.returnsElementType;
+        if (j && j !== NO_JOIN) node.elementType = j;
+      }
       if (callee.returnsRepr && !node.repr) node.repr = callee.returnsRepr;
       if (callee.returnsRepr === "cursor") {
         node.repr = "cursor";
