@@ -41,9 +41,11 @@ function bound(src) {
 	const d = nodes.find((n) => n.name === "define" && String(n.left.value).replace(/[<>]/g, "") === "f");
 	const b = returnSizeBound(d.right, "f");
 	if (!b) return null;
-	if (!b.sizeOf) return String(b.konst);
-	const p = String(b.sizeOf).replace(/[<>]/g, "");
-	return `${b.konst} + ${b.coef === 1 ? "" : `${b.coef} × `}||${p}||`;
+	// **上界は器ごとの項の和である**（`konst + Σ coef_i × ||器_i||`）。1項なら今まで通りの
+	// 見た目になる——`walk` のように2つの器を同時に食う形が書けるようになっただけである。
+	if (!b.terms || b.terms.length === 0) return String(b.konst);
+	const parts = b.terms.map((t) => `${t.coef === 1 ? "" : `${t.coef} × `}||${String(t.sizeOf).replace(/[<>]/g, "")}||`);
+	return `${b.konst} + ${parts.join(" + ")}`;
 }
 function value(src) {
 	const { nodes } = compile(src, { parse: parser.parse });
@@ -65,8 +67,13 @@ check("__ の枝は数えない", bound("f : a b ?\n\ta > 1 : __\n\ta b\nf 1 2")
 // 可能にする（スロットは上界で足りる）。
 check("器の前にスカラー", bound("f : d st ? d st~\nf 1 `abc`"), "1 + ||st||");
 check("器の後ろにスカラー", bound("f : d st ? st~ d\nf 1 `abc`"), "1 + ||st||");
-// 器が2つ混ざると和になる。まだ扱わない（決まらないものは決めない）。
-check("器が2つは求めない", bound("f : a b ? a~ b~\nf `ab` `cd`"), null);
+// **器が2つ混ざるなら、和で書く。** 上界は器ごとの項の和（`konst + Σ coef×||器||`）で
+// あり、1変数しか持てなかった頃はここで諦めていた。呼ぶ側も呼ばれた側も同じ式を計算する
+// ——項が増えるだけで、性質は変わらない。
+//
+// これが要るのは preprocess.sn の `walk` である：各段で「続きを歩く」（入力に比例）か
+// 「残りの段を閉じる」（スタックに比例）かを選ぶので、2つの器を同時に食っている。
+check("器が2つなら和で書く", bound("f : a b ? a~ b~\nf `ab` `cd`"), "0 + ||a|| + ||b||");
 // 呼び出しを含む形も、まだ扱わない（再帰の深さが要る）。
 check("呼び出しを含む形は求めない", bound("g : x ? x\nf : a b ? a (g b)\nf 1 `ab`"), null);
 

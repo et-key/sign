@@ -1347,12 +1347,40 @@ function genExpr(node, env, em, scope, tail = false) {
 		const passed = args.filter((_, i) => !drop.includes(i));
 		// **数えるのは引数の個数ではなくレジスタの本数である。** 器を渡す引数は
 		// `{ptr, len}` で2本使う（stack_abi.md §4.6）。
+		// **透過な呼び先の向こうへスロットを渡す。** 呼び先が器を組まず引数の切片を返すなら
+		// （`strip_head`）、返る器は**引数の場所**に在る。自分がもらったスロットをその引数の
+		// 生産者へ渡せば、場所は最も外側で一度取るだけで済む——渡さなければ引数は自分の
+		// フレームに置かれ、返した先では死んでいる（`mark : s ? strip_head (walk s …)`）。
+		const through = [];
+		if (tail && em.sretDest !== null && em.sretDest !== undefined) {
+			const ce = em.sretPlan && (em.sretPlan.get(callee) || em.sretPlan.get(baseName));
+			if (ce && !ce.needsSlot) {
+				for (const a of passed) {
+					if (!appendableCallee(a, em)) continue;
+					// **印は括りの中の呼び出しに付ける。** `(walk s bottom 0 0)` は括弧の節で
+					// あり、そこに付けても `genCall` が見るのは中の `apply` である。
+					const t = stripExpand(a);
+					t._sretInto = em.sretDest;
+					through.push(t);
+					break;
+				}
+			}
+		}
 		const parts = [];
 		for (const a of passed) {
+			// **この引数を作る途中で場所を取ったか**を引数ごとに覚える。器を返す呼び出しは
+			// sret のスロットを sub sp で取り、返るのはそこを指す ptr である——つまり
+			// 引数そのものがフレームの場所への参照になる。関数まるごとの旗では
+			// 「どの引数が」が落ちるので、ここで帰属させる。
+			const spWas = em.movedSp;
+			em.movedSp = false;
 			const w = genExpr(a, env, em, scope);
+			const took = em.movedSp;
+			em.movedSp = spWas || took;
 			if (w === false) return false;
-			parts.push({ off: (em.slot - w) * 8, w });
+			parts.push({ off: (em.slot - w) * 8, w, took });
 		}
+		for (const a of through) a._sretInto = undefined;
 		let total = parts.reduce((acc, x) => acc + x.w, 0);
 		// **幅は署名が言う。** 省略された位置まで含めて全部数えないと、スタックへ積む
 		// 位置が決まらない——`walk s bottom 0 0` は9個の仮引数のうち4個しか渡さないが、
@@ -1479,8 +1507,21 @@ function genExpr(node, env, em, scope, tail = false) {
 		// **持ち上げた器も「呼び先へ渡る参照」である。** `sub sp` で取った場所を指す ptr を
 		// 渡すので、フレームを畳んでから飛ぶと呼び先が読む前に消える。`bl` で戻ってから
 		// 畳めば生きている——`carriesFrameStorage` と同じ理由、同じ扱いである。
-		const argCarries = promoted || passed.some(carriesFrameStorage);
-		const spMoved = !!(scope && scope.holdsFrameStorage);
+		// **内側の sret スロットも「呼び先へ渡る参照」である。** 器を返す呼び出しを引数に
+		// 書くと、その結果は自分のフレームに取った場所を指す。畳んでから飛べば呼び先が
+		// 読む前に消える——carriesFrameStorage と同じ理由だが、あちらは `$匿名式` しか
+		// 見ていないので、**入れ子の sret がここを素通りしていた**。
+		//
+		// 型で絞るのは同じである。`($(n , n)) ' 0` は場所を取るが渡るのは要素（スカラー）
+		// なので、畳んでよい。
+		// **この呼び出しの値が自分の返値になるか。** 末尾かどうかの旗がそれを言っている——
+		// 下で `b` にできるかを判定するのに使うが、その前に「場所は誰のものか」の答えでも
+		// ある。だから畳めるかを決める前に控えておく。
+		const returnsHere = tail;
+		const sretCarries = parts.some((p, i) => p.took && mayCarryReference(passed[i]));
+		const argCarries = promoted || sretCarries || passed.some(carriesFrameStorage);
+		// 静的な旗は `$匿名式` しか見ないので、実際に動かした旗も併せて見る。
+		const spMoved = !!((scope && scope.holdsFrameStorage) || em.movedSp);
 		const selfTail = !!(tail && scope && callee === scope.selfLabel && !argCarries);
 		// **相互末尾呼び出しも、収まるなら積める。** フレームを畳むと `sp` は
 		// `x29 + フレーム`——**ちょうど自分が受け取った引数域**へ戻る。呼び先はそこを
@@ -1523,29 +1564,49 @@ function genExpr(node, env, em, scope, tail = false) {
 		// x8 で渡す。大きさは `returnSizeBound` の上界であり、両側が同じ表を引く。
 		// 具体化された実体は名前が変わる（`take_while$is_digit`）が、返す器の形は同じ
 		// なので、素の名前で引き直す。
-		const sp = em.sretPlan ? em.sretPlan.get(callee) || em.sretPlan.get(baseName) : null;
+		// **場所を用意する基準は「組むか」ではなく「器を返すか」である。** 組まずに下の
+		// 呼び出しの結果をそのまま返す関数（`mark : s ? strip_head (walk s bottom 0 0)`）
+		// も、その器は**どこかのフレームに取られている**——自分のなら、返した先では死んで
+		// いる。x8 をもらっていれば下へ渡せるので、もらう側に回す。
+		const sp0raw = em.sretPlan ? em.sretPlan.get(callee) || em.sretPlan.get(baseName) : null;
+		const sp = sp0raw && sp0raw.needsSlot ? sp0raw : null;
 		// **追記なら、場所は既に決まっている。** `(s ' 0) (f (s ' 1~))` の `f` は自分の
 		// 器の**続き**を書くので、新しく取るのではなく渡された宛先をそのまま使う。印は
 		// ノードに付いている——引数の中に別の呼び出しがあっても取り違えないためである。
 		if (sp && n._sretInto !== undefined && n._sretInto !== null) {
 			em.load("x8", n._sretInto, "続きを書く場所（追記）");
+		} else if (sp && returnsHere && em.sretDest !== null && em.sretDest !== undefined) {
+			// **場所は最も外側で一度だけ取る。** この呼び出しの値がそのまま自分の返値なら、
+			// 書く先は**自分がもらったスロット**である。ここで新しく取ると、自分のフレームの
+			// 中に置いて返すことになり、エピローグの `mov sp, x29` が捨てた場所を指す。
+			//
+			// 収まることは上界が言っている——呼ぶ側の上界はこの呼び出しを**合成して**
+			// 求めた式（`k₂ + c₂k₁ + c₂c₁||p||`）なので、内側のぶんを必ず覆う。
+			em.load("x8", em.sretDest, "返値スロットは自分がもらったもの（sret を下へ渡す）");
 		} else if (sp) {
 			// 返値スロットも `sub sp` で取る場所である（門番）。
 			if (!allocaAllowed(em, n, callee + " の返値スロット（sret）")) return false;
-			if (sp.sizeOfIndex !== null) {
-				// 上界が引数の要素数に依る形。その引数の len から測る。
+			if (sp.terms && sp.terms.length > 0) {
+				// 上界が引数の要素数に依る形。**器ごとに測って足す**——上界は
+				// `konst + Σ coef_i × ||器_i||` である。
 				//
 				// **具体化で消えた引数のぶん位置がずれる。** 関数ポインタは命令へ焼き込ま
 				// れていて渡らないので（`drop`）、計画表が言う仮引数の位置と、ここで実際に
 				// 積んだ位置は同じではない。`take_while $is_digit s` の `s` は仮引数では
 				// 2番目だが、渡すのは1本目である。
-				const shifted = sp.sizeOfIndex - drop.filter((i) => i < sp.sizeOfIndex).length;
-				const src = parts[shifted];
-				if (!src || src.w !== 2) return em.fail(n, `返値スロットの大きさが測れません（${callee} の第${sp.sizeOfIndex + 1}引数が器ではない）`);
-				em.load(SCRATCH[0], src.off + 8, "上界を測る（引数の len）");
-				if (sp.coef !== 1) em.emit(`mov ${SCRATCH[1]}, #${sp.coef}`, "段ごとの個数");
-				if (sp.coef !== 1) em.emit(`mul ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "係数を掛ける");
-				if (sp.konst) em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #${sp.konst}`, "定数の枝ぶん");
+				em.emit(`mov x11, #${sp.konst}`, "定数の枝ぶん");
+				for (const t of sp.terms) {
+					const shifted = t.sizeOfIndex - drop.filter((i) => i < t.sizeOfIndex).length;
+					const src = parts[shifted];
+					if (!src || src.w !== 2) return em.fail(n, `返値スロットの大きさが測れません（${callee} の第${t.sizeOfIndex + 1}引数が器ではない）`);
+					em.load(SCRATCH[0], src.off + 8, "上界を測る（引数の len）");
+					if (t.coef !== 1) {
+						em.emit(`mov ${SCRATCH[1]}, #${t.coef}`, "段ごとの個数");
+						em.emit(`mul ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "係数を掛ける");
+					}
+					em.emit(`add x11, x11, ${SCRATCH[0]}`, "この器のぶんを足す");
+				}
+				em.emit(`mov ${SCRATCH[0]}, x11`, "上界（個数）");
 				if (sp.width !== 1) {
 					em.emit(`mov ${SCRATCH[1]}, #${sp.width}`, "要素の幅");
 					em.emit(`mul ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "バイト数へ");
@@ -4067,7 +4128,17 @@ function emitUnitRegs(em, width, kind = null) {
  * 型が読めない位置は運びうると見なす（`markEscapes` と同じ倒し方）。
  */
 function carriesFrameStorage(node) {
-	if (!takesFrameStorage(node, true)) return false;
+	return takesFrameStorage(node, true) && mayCarryReference(node);
+}
+
+/**
+ * その値は**参照を運びうるか**。
+ *
+ * 場所を取ったことと、その場所が呼び先から見えることは別である。運べるのは参照を
+ * 運べる型（器・アドレス）だけで、要素を1つ取り出したなら呼び先はその場所に触れない。
+ * 型が読めない位置は運びうると見なす（`markEscapes` と同じ倒し方）。
+ */
+function mayCarryReference(node) {
 	const u = unwrap(node);
 	const t = u && u.atomType;
 	return CONTAINER_TYPES.has(t) || t === "Address" || t === undefined || t === null;
@@ -4373,7 +4444,7 @@ function mutualGroups(nodes) {
 	return group;
 }
 
-function selfConsumes(part, name, params, restNames, group) {
+function selfConsumes(part, name, params, restNames, group, defaults = null) {
 	const bare = (s) => String(s).replace(/[<>]/g, "");
 	const args = [];
 	let head = part;
@@ -4392,6 +4463,29 @@ function selfConsumes(part, name, params, restNames, group) {
 		// 「そのまま渡しただけ」と読んでいたため、ブラケットで分解して残りへ再帰する形
 		// （`preprocess.sn` の大半）が上界を出せなかった。
 		if (arg && isIdentifierNode(arg) && restNames && restNames.has(arg.value)) return arg.value;
+		// **デフォルトを持つ名前は、その定義の側を見る。**
+		//
+		// `walk rest st bd jo` の `rest` は名前1つに見えるが、`rest : tail_line s` である
+		// ——渡しているのは `s` を食った結果であって、そのまま素通ししているのではない。
+		// ここを「裸の仮引数だから素通し」と読んでいたため、`walk` だけが上界を出せず
+		// sret に乗らなかった。
+		if (arg && isIdentifierNode(arg) && defaults && defaults.has(arg.value)) {
+			let found = null;
+			const dig = (x) => {
+				if (!x || typeof x !== "object" || found) return;
+				// **デフォルト式のノードには型が付いていない**（Pass 3 は根にしか付けない）ので、
+				// 器かどうかでは選べない。**渡された仮引数**——自分がデフォルトを持たないもの
+				// ——であることで選ぶ。器でなければ計画の側（幅 2 本の検査）が弾く。
+				if (isIdentifierNode(x) && params.includes(x.value) && !defaults.has(x.value)) {
+					found = x.value;
+					return;
+				}
+				for (const k of ["left", "right", "operand"]) dig(x[k]);
+				if (Array.isArray(x.lines)) x.lines.forEach(dig);
+			};
+			dig(defaults.get(arg.value));
+			if (found) return found;
+		}
 		if (!arg || isIdentifierNode(arg)) continue;
 		let found = null;
 		const walk = (x) => {
@@ -4482,10 +4576,61 @@ function boundedCallOf(part, known, params) {
 	if (!isIdentifierNode(head)) return null;
 	const p = known.get(bareName(head.value));
 	if (!p) return null;
-	if (p.sizeOfIndex === null || p.sizeOfIndex === undefined) return { konst: p.konst, coef: 0, sizeOf: null };
-	const a = args[p.sizeOfIndex];
-	if (!isIdentifierNode(a) || !params.includes(a.value)) return null;
-	return { konst: p.konst, coef: p.coef, sizeOf: a.value };
+	// **呼び先も器ごとの項を持つ。** ここが `sizeOfIndex` を読んだままだと、計画が項の
+	// 並びになった時点で `undefined` に落ち、**器の項を黙って捨てる**——上界が痩せて
+	// 確保が足りなくなり、照合が `__` を返す。実際それで preprocess が回った。
+	// **引数が式なら、その上界と合成する。**
+	//
+	// 上界はどれも `konst + Σ coef×||器||` の形なので、合成しても同じ形に閉じる：
+	//
+	//     ||f x|| ≤ k₂ + c₂×||x||、||x|| ≤ k₁ + c₁×||p||
+	//     ⇒ ||f x|| ≤ (k₂ + c₂k₁) + (c₂c₁)×||p||
+	//
+	// `close_all (next_st st d)` がこれで、辿らないと「引数が仮引数ではない」で諦める
+	// ——だが呼ぶ側は `st` を持っているのだから、`st` の式へ言い換えれば測れる。
+	const merged = new Map();
+	let konstAcc = p.konst;
+	for (const t of p.terms || []) {
+		const a = args[t.sizeOfIndex];
+		if (isIdentifierNode(a) && params.includes(a.value)) {
+			merged.set(a.value, Math.max(merged.get(a.value) || 0, t.coef));
+			continue;
+		}
+		// **長さが分かっている実引数は定数に畳む。** `walk s bottom 0 0` の `bottom` は
+		// `0`——スカラーである。器の位置へ渡すと**長さ1の器へ持ち上がる**（原理8）ので
+		// `||bottom|| = 1` と言える。ここで諦めると `mark` が計画に載らず、器を自分の
+		// フレームに置いて返す——エピローグが捨てた場所を指したまま返っていた。
+		const fixed = knownLengthOf(a);
+		if (fixed !== null) {
+			konstAcc += t.coef * fixed;
+			continue;
+		}
+		const inner = boundedCallOf(a, known, params);
+		if (!inner) return null;
+		konstAcc += t.coef * inner.konst;
+		for (const it of inner.terms) {
+			const c = t.coef * it.coef;
+			merged.set(it.sizeOf, Math.max(merged.get(it.sizeOf) || 0, c));
+		}
+	}
+	return { konst: konstAcc, terms: [...merged].map(([sizeOf, coef]) => ({ sizeOf, coef })) };
+}
+
+/**
+ * その実引数の**長さは分かるか**。分からないなら null。
+ *
+ * 器の位置へスカラーを渡すと長さ1の器になる（`emitLiftToContainer`——同型は型では
+ * 無償、表現では有償）。`__` は長さ0である。リテラルは書いてある通りの長さを持つ。
+ * それ以外（名前で来た器）は中身が見えないので分からないと言う（原理4）。
+ */
+function knownLengthOf(node) {
+	const u = unwrap(node);
+	if (!u) return null;
+	if (u.type === "atom" && u.kind === "unit") return 0;
+	if (u.type === "atom" && u.kind === "text") return String(u.value ?? "").length;
+	const t = u.atomType;
+	if (t && !isBoxType(t)) return 1; // スカラーは持ち上がって長さ1
+	return null;
 }
 
 function returnSizeBound(lam, name, known, group) {
@@ -4503,10 +4648,20 @@ function returnSizeBound(lam, name, known, group) {
 	})();
 	// 分解した残りの名前。`f rest` は名前1つでも1要素食っている。
 	const restNames = new Set(paramShapesOf(lam.left).filter((sh) => sh && sh.kind === "destructure").map((sh) => sh.rest));
+	// デフォルトを持つ名前 → その定義。名前1つに見えても、渡しているのは式の結果である。
+	const defaults = new Map(
+		((lam.left && lam.left.entries) || []).filter((e) => e.name && e.default).map((e) => [e.name, e.default])
+	);
 	const arms = Array.isArray(lam.right && lam.right.lines) ? lam.right.lines.map((l) => (isDefineNode(l) ? l.right : l)) : [lam.right];
 	let konst = 0;
-	let coef = 0; // 段ごとに足す個数。`konst + coef × ||sizeOf||` が上界である
-	let sizeOf = null;
+	// **器ごとに係数を持つ。** 上界は `konst + Σ coef_i × ||器_i||` である。
+	//
+	// 1変数（`konst + coef × ||sizeOf||`）では `walk` が書けない——各段が「続きを歩く」
+	// （入力 `s` に比例）か「残りの段を閉じる」（スタック `st` に比例）かを選ぶので、
+	// **2つの器を同時に食っている**。選択なので実際には片方だが、和で抑えれば線形のまま
+	// 上から押さえられる（`max(a,b) ≤ a + b`）。
+	const terms = new Map();
+	const addTerm = (nm, c) => { if (nm) terms.set(nm, Math.max(terms.get(nm) || 0, c)); };
 	for (const arm of arms) {
 		const a = unwrap(arm);
 		if (!a) return null;
@@ -4551,9 +4706,47 @@ function returnSizeBound(lam, name, known, group) {
 			}
 			parts.push(v);
 		};
+		// **選択の上界は、両辺の大きい方である。**
+		//
+		// `a | b` はどちらかを返すので、出る要素数は多い方を超えない——**足し算ではない**。
+		// `walk` は各段で「続きを歩く」か「残りの段を閉じる」かを選ぶので、ここが無いと
+		// 上界が出ない（`or` は呼び出しではないので `boundedCallOf` が答えられず、器を
+		// 返すぶんだけ「幅が決まらない」に落ちていた）。
+		//
+		// 部分1つの寄与は `{k, ref, rec}`——定数の個数、比例する器、食っている器である。
+		// 選択では `k` を max で合流し、器は同じものでなければ諦める（和になる）。
+		const contributionOf = (q0) => {
+			const q = unwrap(q0);
+			if (!q) return null;
+			if (q.type === "operation" && q.name === "or") {
+				const l = contributionOf(q.left);
+				const r = contributionOf(q.right);
+				if (!l || !r) return null;
+				if (l.rec && r.rec && l.rec !== r.rec) return null;
+				const m = new Map(l.refs);
+				for (const [nm, c] of r.refs) m.set(nm, Math.max(m.get(nm) || 0, c));
+				return { k: Math.max(l.k, r.k), refs: m, rec: l.rec || r.rec };
+			}
+			if (isIdentifierNode(q) && params.includes(q.value)) {
+				const t = q.atomType;
+				return t && !isBoxType(t)
+					? { k: 1, refs: new Map(), rec: null }
+					: { k: 0, refs: new Map([[q.value, 1]]), rec: null };
+			}
+			const eaten0 = selfConsumes(q, name, params, restNames, group, defaults);
+			if (eaten0) return { k: 0, refs: new Map(), rec: eaten0 };
+			const b0 = known ? boundedCallOf(q, known, params) : null;
+			if (b0) return { k: b0.konst, refs: new Map(b0.terms.map((t) => [t.sizeOf, t.coef])), rec: null };
+			if (isBoxType(q.atomType) && !(elemType && isBoxType(elemType))) return null;
+			return { k: 1, refs: new Map(), rec: null };
+		};
+
 		walkBound(cur);
 		let k = 0;
-		let ref = null;
+		// **撒く器は1つとは限らない。** 呼び先が複数の器に比例する形（`walk`）があるので、
+		// 名前1つでは足りない。
+		const refs = new Map();
+		const addRef = (nm, c) => { if (nm) refs.set(nm, Math.max(refs.get(nm) || 0, c)); };
 		let rec = null; // 自己呼び出しが食っている仮引数
 		for (const p of parts) {
 			// 撒いた仮引数（`st~`）と裸の仮引数は、その器の要素数ぶん。
@@ -4566,13 +4759,12 @@ function returnSizeBound(lam, name, known, group) {
 					k += 1; // スカラーの仮引数は1要素
 					continue;
 				}
-				if (ref && ref !== q.value) return null; // 器が2つ以上混ざると和になる。まだ扱わない
-				ref = q.value;
+				addRef(q.value, 1);
 				continue;
 			}
 			// **自己呼び出しは、食っている器の要素数ぶん。** ここで諦めていたのが、
 			// 器を返す関数のほとんどが再帰である以上そのまま sret を塞いでいた。
-			const eaten = selfConsumes(q, name, params, restNames, group);
+			const eaten = selfConsumes(q, name, params, restNames, group, defaults);
 			if (eaten) {
 				if (rec && rec !== eaten) return null; // 1枝で2つ食う形はまだ扱わない
 				rec = eaten;
@@ -4588,14 +4780,9 @@ function returnSizeBound(lam, name, known, group) {
 			// 定義の順序で決まらないよう、計画は不動点で回している（`collectSretPlan`）。
 			const bounded = known ? boundedCallOf(q, known, params) : null;
 			if (bounded) {
-				// 定数のぶんは要素数として数える。
+				// 定数のぶんは要素数として数える。器に比例するぶんは「撒く器」と同じ扱い。
 				k += bounded.konst;
-				if (bounded.coef > 0) {
-					// 器に比例するぶんは「撒く器」と同じ扱い。係数が2以上、あるいは器が
-					// 2つ以上混ざる形は和になるので、そこはまだ扱わない。
-					if (bounded.coef !== 1 || (ref && ref !== bounded.sizeOf)) return null;
-					ref = bounded.sizeOf;
-				}
+				for (const t of bounded.terms) addRef(t.sizeOf, t.coef);
 				continue;
 			}
 			// それ以外は1要素とみなせるものだけ。
@@ -4609,6 +4796,18 @@ function returnSizeBound(lam, name, known, group) {
 			// 撒いた器（`st~`）はこの手前で拾われている。ここへ来るのは撒いていない
 			// ——つまり1要素として置かれるものである。
 			if (!q) return null;
+			// 選択は両辺の大きい方（上の `contributionOf`）。
+			if (q.type === "operation" && q.name === "or") {
+				const c = contributionOf(q);
+				if (!c) return null;
+				k += c.k;
+				for (const [nm, cc] of c.refs) addRef(nm, cc);
+				if (c.rec) {
+					if (rec && rec !== c.rec) return null;
+					rec = c.rec;
+				}
+				continue;
+			}
 			if (isBoxType(q.atomType) && !(elemType && isBoxType(elemType))) return null;
 			k += 1;
 		}
@@ -4626,29 +4825,47 @@ function returnSizeBound(lam, name, known, group) {
 		// 同じ器を撒いて食っているなら、段ごとの寄与はその段で消えたぶんを超えないと
 		// **見積もる**。証明ではないので外れうるが、**外れても壊れない**——呼ばれた側が
 		// 同じ式を計算して照合し（`emitSretCapacityGuard`）、越えたら `__` を返す。
-		if (rec && ref) {
-			if (rec !== ref) return null; // 別々の器なら和になる。そこはまだ見積もらない
-			if (sizeOf && sizeOf !== rec) return null;
-			sizeOf = rec;
-			coef = Math.max(coef, k, 1);
-			continue;
-		}
 		if (rec) {
 			// `T(n) = k + T(n-1)`、底は `konst`。解くと `konst + k × ||p||` である。
 			// **段ごとの定数が係数になる**——`c c (dup rest)` なら 2 である。
-			if (sizeOf && sizeOf !== rec) return null;
-			sizeOf = rec;
-			coef = Math.max(coef, k);
+			addTerm(rec, Math.max(k, 1));
+			// 食いながら撒く枝は、撒く器のぶんも項として持つ。**別々の器でも和で書ける**
+			// ——1変数しか持てなかったので、ここで諦めていた。
+			for (const [nm, c] of refs) if (nm !== rec) addTerm(nm, c);
 			continue;
 		}
 		konst = Math.max(konst, k);
-		if (ref) {
-			if (sizeOf && sizeOf !== ref) return null;
-			sizeOf = ref;
-			coef = Math.max(coef, 1); // 撒くのは1回ぶん
-		}
+		for (const [nm, c] of refs) addTerm(nm, c);
 	}
-	return { konst, coef: sizeOf ? Math.max(coef, 1) : 0, sizeOf };
+	// **項の相手は「渡された引数」でなければならない。**
+	//
+	// 容量は呼ぶ側と呼ばれた側が同じ式を独立に計算する法則である。呼ぶ側は `line` や `b`
+	// を持っていない——それを埋めるのは呼ばれた側だからである。だからデフォルトを持つ名前は、
+	// その定義を辿って渡された引数の式へ言い換える。
+	//
+	// 上界はどれも `konst + coef × ||x||` の形なので、**合成しても同じ形に閉じる**：
+	//
+	//     ||f x|| ≤ k₂ + c₂×||x||、||x|| ≤ k₁ + c₁×||p||
+	//     ⇒ ||f x|| ≤ (k₂ + c₂k₁) + (c₂c₁)×||p||
+	//
+	// `walk` の `b : body_of line` / `line : head_line s` がこれで、辿らないと「第7引数が
+	// 器ではない」——呼ぶ側に無いものを測れと言うことになる。
+	const resolved = new Map();
+	let extra = 0;
+	const resolveTerm = (nm, c, depth) => {
+		if (depth > 8) return false; // デフォルトが輪になっている
+		if (!defaults.has(nm)) {
+			resolved.set(nm, Math.max(resolved.get(nm) || 0, c));
+			return true;
+		}
+		const bb = known ? boundedCallOf(defaults.get(nm), known, params) : null;
+		if (!bb) return false;
+		extra += c * bb.konst;
+		for (const t of bb.terms) if (!resolveTerm(t.sizeOf, c * t.coef, depth + 1)) return false;
+		return true;
+	};
+	for (const [nm, c] of terms) if (!resolveTerm(nm, c, 0)) return null;
+	return { konst: konst + extra, terms: [...resolved].map(([sizeOf, coef]) => ({ sizeOf, coef })) };
 }
 
 /**
@@ -5704,10 +5921,40 @@ function collectSretPlan(nodes, em) {
 	const groups = mutualGroups(nodes);
 	for (let grew = true; grew; ) {
 		const next = collectSretPlanOnce(nodes, em, plan, groups);
-		grew = next.size > plan.size;
+		// **旗が立ったことでも進む。** 大きさだけを見ていると、`needsSlot` が下から
+		// 伝わる形（`preprocess` → `mark` → `strip_head`）が1周で止まる。
+		grew = next.size > plan.size || [...next].some(([k, v]) => v.needsSlot && !(plan.get(k) || {}).needsSlot);
 		plan = next;
 	}
 	return plan;
+}
+
+/**
+ * その枝は**場所を要る呼び出しの結果**をそのまま返すか。
+ *
+ * 返すなら、その器は呼び先が書く場所に在る。自分が x8 をもらって下へ渡せば、場所は
+ * 最も外側で一度だけ取れば済む——もらわなければ自分のフレームに取ることになり、
+ * 返した先では死んでいる。
+ */
+function returnsCallResult(arm, known) {
+	const u = stripExpand(arm);
+	if (!u) return false;
+	if (u.type === "operation" && u.name === "or") return returnsCallResult(u.left, known) || returnsCallResult(u.right, known);
+	if (Array.isArray(u.lines)) return u.lines.some((l) => returnsCallResult(isDefineNode(l) ? l.right : l, known));
+	if (u.type !== "operation" || u.name !== "apply") return false;
+	const args = [];
+	let head = u;
+	while (head && head.type === "operation" && head.name === "apply") {
+		args.unshift(unwrap(head.right));
+		head = unwrap(head.left);
+	}
+	if (!isIdentifierNode(head)) return false;
+	const e = known.get(bareName(head.value));
+	if (!e) return false;
+	if (e.needsSlot) return true;
+	// **透過な呼び先の向こうを見る。** 器を組まず引数の切片を返す関数は、返る器の場所が
+	// **引数の場所**である。だから場所が要るかどうかは引数の側が決める。
+	return args.some((a) => returnsCallResult(a, known));
 }
 
 function collectSretPlanOnce(nodes, em, known, groups) {
@@ -5720,12 +5967,26 @@ function collectSretPlanOnce(nodes, em, known, groups) {
 		const arms = Array.isArray(lam.right && lam.right.lines)
 			? lam.right.lines.map((l) => (isDefineNode(l) ? l.right : l))
 			: [lam.right];
+		// **組み直しは器を作らない。** `strip_head : [c ~rest] ? … c rest` の `c rest` は
+		// 渡された器そのもので、ptr を1つ戻すだけである（`rejoinPair`——確保は0）。
+		// ここを「組む」と数えると、呼ぶ側が場所を用意するのに呼ばれた側はそこへ書かず、
+		// **引数の切片**を返す。その引数が呼ぶ側のフレームに在れば、返した先で死んでいる。
+		const rejoinScope = {
+			bracketPairs: paramShapesOf(lam.left)
+				.filter((sh) => sh && sh.kind === "destructure")
+				.map((sh) => ({ head: sh.head, rest: sh.rest })),
+		};
 		let build = null;
 		for (const arm of arms) {
 			const a = unwrap(arm);
-			if (a && a.type === "operation" && COPRODUCT_BUILD_OPS.has(a.name) && a.escapesFrame !== false) { build = a; break; }
+			if (a && a.type === "operation" && COPRODUCT_BUILD_OPS.has(a.name) && a.escapesFrame !== false && !rejoinPair(a, rejoinScope)) { build = a; break; }
 		}
-		if (!build) continue;
+		// **上界は器を返す関数すべてについて出す。** 場所を要るのは組む関数だけだが、上界は
+		// **合成のため**に誰のぶんも要る——`close_all (next_st st d)` の内側がそれで、
+		// `next_st` は組まない（`push` / `unwind` を呼ぶだけ）ので計画に載らず、外側の
+		// 上界が出せなかった。**載せる基準は「組むか」ではなく「器を返すか」である。**
+		const builds = !!build;
+		if (!builds && !isBoxType(lam.right && lam.right.atomType)) continue;
 		// **要素1つを置くのに何バイト要るか**は、`measure` ではなく `passingOf` が答える。
 		//
 		// `measure({atomType:"String"})` は「その文字列の中身の長さ」を測ろうとするので
@@ -5735,27 +5996,47 @@ function collectSretPlanOnce(nodes, em, known, groups) {
 		// これが無いと、要素が `String` の器を返す関数——lexer.sn の `tokens` がまさに
 		// それ——は sret の計画に載らず、「フレームから出るので置けない」で止まっていた。
 		// レジスタに乗る要素（`Char`/`Int`）はこれまで通り `measure` の答えと同じである。
-		const et = build.elementType || (build.atomType === "String" ? "Char" : null);
+		// **幅は返す器が決める。** 組む節があればそれが言うし、無ければ返値の型が言う——
+		// 組まずに下から受け取って返す関数（`mark`）も、返すのは同じ形の器である。
+		const shape = build || lam.right;
+		const et = shape ? shape.elementType || (shape.atomType === "String" ? "Char" : null) : null;
 		const pass = et ? passingOf({ atomType: et }, { target: em.conf.target, charset: em.conf.charset }) : null;
 		const m = pass && pass.mode === "reference"
 			? { size: pass.size }
 			: et
 				? measure({ atomType: et }, { target: em.conf.target, charset: em.conf.charset })
 				: null;
-		if (!m || !m.size) continue;
+		// **幅が測れなくても落とさない。** 上界は合成のために誰のぶんも要る——ここで
+		// `continue` すると `continues` / `next_st` のぶんが消え、それを呼ぶ `walk` の
+		// 上界まで出せなくなる（walk が計画から落ち、器を置く先を失っていた）。
+		//
+		// **場所が要るかどうかは別の問いである。** 要るのは「返す器がどこかのフレームに
+		// 取られている」とき——自分で組むか、下の呼び出しの結果を返すか——であり、
+		// どちらも幅が言えなければ確保できない。
 		const name = bareName(node.left.value);
 		const b = returnSizeBound(lam, name, known, groups && groups.get(bareName(node.left.value)));
 		if (!b) continue;
-		let sizeOfIndex = null;
-		if (b.sizeOf) {
-			const names = boundParamNames(lam);
-			sizeOfIndex = names.indexOf(b.sizeOf);
-			if (sizeOfIndex < 0) continue; // `||…||` の相手が仮引数でなければ呼ぶ側は測れない
+		// **名前も位置も持つ。** 呼ぶ側は引数の位置で、呼ばれた側は自分の仮引数の名前で
+		// 同じ器を指す。位置は枠ごとに違いうる（分解した名前が混ざる）ので、両側が同じ
+		// ものを見ていると言えるのは名前の方である。
+		const names = boundParamNames(lam);
+		const terms = [];
+		let ok = true;
+		for (const t of b.terms) {
+			const at = names.indexOf(t.sizeOf);
+			if (at < 0) { ok = false; break; } // 相手が仮引数でなければ呼ぶ側は測れない
+			terms.push({ coef: t.coef, sizeOf: t.sizeOf, sizeOfIndex: at });
 		}
-		// **名前も持つ。** 呼ぶ側は引数の位置で、呼ばれた側は自分の仮引数の名前で同じ器を
-		// 指す。位置は枠ごとに違いうる（分解した名前が混ざる）ので、両側が同じものを
-		// 見ていると言えるのは名前の方である。
-		plan.set(name, { konst: b.konst, coef: b.coef, sizeOfIndex, sizeOf: b.sizeOf, width: m.size });
+		if (!ok) continue;
+		// **場所が要るのは「返す器が、死ぬフレームに取られる」ときだけである。**
+		//
+		//   - 自分で組む            → 自分のフレームに取るので要る（`builds`）
+		//   - 下の呼び出しの結果を返す → その呼び先も場所を要るので、もらって渡す（`mark`）
+		//   - 仮引数をそのまま返す    → **呼び手の場所**なので要らない（`f : s ? s`）
+		//
+		// 3つ目を混ぜると、返すだけの関数にまで `sub sp` が付く。
+		const needsSlot = !!(m && m.size) && (builds || arms.some((a) => returnsCallResult(a, known)));
+		plan.set(name, { konst: b.konst, terms, width: m && m.size ? m.size : null, builds, needsSlot });
 	}
 	return plan;
 }
@@ -5792,7 +6073,8 @@ function appendableCallee(node, em) {
 	while (head && head.type === "operation" && head.name === "apply") head = unwrap(head.left);
 	if (!isIdentifierNode(head)) return null;
 	const nm = bareName(head.value);
-	return em.sretPlan && em.sretPlan.has(nm) ? nm : null;
+	const e = em.sretPlan && em.sretPlan.get(nm);
+	return e && e.needsSlot ? nm : null;
 }
 
 /** 上界をバイト数へ。16 バイト境界へ丸める（AAPCS64 は `sp` の 16 整列を要求する）。 */
@@ -5892,7 +6174,8 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	// 関数だけが sret から取り残される（実際 `take_while` がそうなっていた）。
 	em.sretDest = null;
 	const sretKey = bareName(name).split("$")[0];
-	if (em.sretPlan && (em.sretPlan.has(bareName(name)) || em.sretPlan.has(sretKey))) {
+	const sretEntry = em.sretPlan && (em.sretPlan.get(bareName(name)) || em.sretPlan.get(sretKey));
+	if (sretEntry && sretEntry.needsSlot) {
 		em.push();
 		em.sretDest = (em.slot - 1) * 8;
 		em.store("x8", em.sretDest, "返値スロットのアドレス（sret）を退避");
@@ -6089,17 +6372,26 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	em.unitLabel = unitLabel;
 	if (em.sretDest !== null && em.sretDest !== undefined && unitLabel) {
 		const sp0 = em.sretPlan && (em.sretPlan.get(bareName(name)) || em.sretPlan.get(bareName(name).split("$")[0]));
-		if (sp0) {
+		if (sp0 && sp0.needsSlot) {
 			const cap = em.push();
 			if (cap === null) return em.fail(lambdaNode, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
-			const si = sp0.sizeOf ? params.indexOf(sp0.sizeOf) : -1;
-			if (si >= 0 && paramSlots[si] === 2) {
-				em.load(SCRATCH[0], paramOffsets[si] + 8, "上界を測る（自分の引数の len）");
-				if (sp0.coef !== 1) {
-					em.emit(`mov ${SCRATCH[1]}, #${sp0.coef}`, "段ごとの個数");
-					em.emit(`mul ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "係数を掛ける");
+			// **呼ぶ側と同じ式を、自分の引数から計算する。** 項ごとに測って足す。
+			const usable = (sp0.terms || []).every((t) => {
+				const i = params.indexOf(t.sizeOf);
+				return i >= 0 && paramSlots[i] === 2;
+			});
+			if (usable && (sp0.terms || []).length > 0) {
+				em.emit(`mov x11, #${sp0.konst || 0}`, "定数の枝ぶん");
+				for (const t of sp0.terms) {
+					const i = params.indexOf(t.sizeOf);
+					em.load(SCRATCH[0], paramOffsets[i] + 8, "上界を測る（自分の引数の len）");
+					if (t.coef !== 1) {
+						em.emit(`mov ${SCRATCH[1]}, #${t.coef}`, "段ごとの個数");
+						em.emit(`mul ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "係数を掛ける");
+					}
+					em.emit(`add x11, x11, ${SCRATCH[0]}`, "この器のぶんを足す");
 				}
-				if (sp0.konst) em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #${sp0.konst}`, "定数の枝ぶん");
+				em.emit(`mov ${SCRATCH[0]}, x11`, "入る個数");
 			} else {
 				em.emit(`mov ${SCRATCH[0]}, #${sp0.konst || 0}`, "上界（定数のみ）");
 			}
