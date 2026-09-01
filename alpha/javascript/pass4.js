@@ -795,6 +795,18 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.emit(`movz ${SCRATCH[0]}, #0x8000, lsl #48`, "終端が無い＝無限は数えられない");
 		} else if (iw === 2) {
 			em.load(SCRATCH[0], io + 8, "len がそのまま要素数");
+		} else if (iw === 1 && structSlots(inner, em, env) !== null) {
+			// **`Struct` の要素数はスロット数である。** 形が型にあるので数える必要が無く、
+			// `{ptr}` の1本で運ばれる——だが**スカラーも1本**なので、ここを幅だけで見ると
+			// 「スカラーは1要素」に落ちて、いくつスロットがあっても 1 を返していた。
+			// 器と同じで「長さを取りたいならスロット数」でなければならない。
+			const k = structSlots(inner, em, env);
+			em.load(SCRATCH[0], io, "Struct の ptr");
+			em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
+			em.emit(`cmp ${SCRATCH[0]}, x12`);
+			em.emit(`mov ${SCRATCH[0]}, #${k}`, "スロット数（形は型にある）");
+			em.emit("mov x11, #0", "__ は 0 要素");
+			em.emit(`csel ${SCRATCH[0]}, x11, ${SCRATCH[0]}, eq`);
 		} else if (iw === 1) {
 			em.load(SCRATCH[0], io, "中身");
 			em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
@@ -2742,6 +2754,14 @@ function emitUnit(em, offs, kind = null) {
  * 器が2本（`{ptr, len}`）のときだけアドレス計算になる。
  */
 // 左辺が規則か（レンジ・イテレータ）。規則はレジスタに乗り、添字は算術で出る。
+/** `Struct` のスロット数（形が型にあるので静的に出る）。Struct でなければ null。 */
+function structSlots(node, em, env) {
+	const u = unwrap(node);
+	if (!u || u.atomType !== "Struct") return null;
+	const lay = layoutOfStruct(u, { target: em.conf.target, charset: em.conf.charset, env });
+	return lay && lay.slots && lay.slots.length > 0 ? lay.slots.length : null;
+}
+
 function isRuleNode(node, conf, env) {
 	const p = node ? passingOf(node, { target: conf.target, charset: conf.charset, env }) : null;
 	return !!p && p.mode === "register" && p.slots >= 2;
