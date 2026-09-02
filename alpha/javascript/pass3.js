@@ -1219,6 +1219,18 @@ function computeAtomType(node, env) {
         node.slotKind = undefined;
         return "List";
       }
+      // **`Char` と `String` が並ぶ器は `List(String)` である。** 1文字は長さ1の文字列で
+      // あり（原理7——`String ≅ List(Char)`）、型の上では `Char ∨ String = String` が
+      // 既に成り立っている。ここを形の鍵の一致だけで見ていたので、**トークン列**
+      // （`[`10` , `+` , `2`]`）のように長さの違う語が並ぶだけで `Struct` に落ちていた。
+      //
+      // 要素はどれも `{ptr, len}` で運ばれる。1文字のリテラルもそう置けばよいので、
+      // 実行時の持ち上げは要らない——払うのは**書いた側**（`.rodata` の置き方）である。
+      if (keys.length > 1 && keys.every((k) => k === "Char" || k === "String")) {
+        node.elementType = "String";
+        node.slotKind = undefined;
+        return "List";
+      }
       node.slotKind = "positional";
       return "Struct";
     }

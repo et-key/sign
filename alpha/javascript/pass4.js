@@ -3498,8 +3498,15 @@ function genIndex(node, env, em, scope) {
 		return cw;
 	}
 	// 要素の幅。`String` なら charset 幅、`List(T)` なら T の大きさ。
+	//
+	// **先に訊くのは「どう運ぶか」である**（`elementCellSize`）。ここが `measure`（中身の
+	// 長さ）を直に呼んでいたので、要素が参照で運ばれる器——`List(String)`——では答えが
+	// 出ず、`base + i × 幅` を書けないまま「まだ出せない式です」で止まっていた。中身の
+	// 長さが型に無いことと、そこに何バイト置かれるかは別の問いである。
+	//
+	// `measure` と `passingOf` の取り違えは、これで7度目である。
 	const elemType = isSlice ? node.elementType || elementTypeOfNode(node.left, env) : node.atomType;
-	const elem = elemType ? measure({ atomType: elemType }, { target: conf.target, charset: conf.charset }) : null;
+	const elem = elementCellSize(elemType, conf);
 	// 要素の幅が要るのは**場所**を引くときだけである（`base + i × sizeof(T)`）。規則は
 	// `start + i × step` なので、要素が何バイトかを知らなくても引ける——`step` が既に
 	// 要素の単位で書かれているからである。
@@ -3633,6 +3640,31 @@ function genIndex(node, env, em, scope) {
 		}
 		em.pop(1);
 		em.store(SCRATCH[0], co + 8, "残りの len（0 なら __）");
+		return 2;
+	}
+
+	// **参照で運ぶ要素は2語である。** `List(String)` の1つは `{ptr, len}` の 16 バイトで
+	// あり、`loadElem` は 8 byte で頭打ちなのでそこは通れない。丸ごと引いて2本返す。
+	//
+	// 範囲外は **`len = 0`** である——器の `__` は niche ではなく長さ0だからで、1本で運ぶ
+	// 値（niche）とは表し方が違う（`genMatch` の「1本なら niche、2本なら len = 0」と同じ）。
+	if (w === 16) {
+		em.load(SCRATCH[1], io, "添字");
+		em.load("x11", co + 8, "len");
+		em.emit(`cmp ${SCRATCH[1]}, x11`, "範囲内か");
+		em.load(SCRATCH[0], co, "ptr");
+		em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}, lsl #4`, "16 byte × 添字");
+		em.emit(`ldr x14, [${SCRATCH[0]}]`, "要素の ptr");
+		em.emit(`ldr x15, [${SCRATCH[0]}, #8]`, "その len");
+		em.emit("mov x12, #0", "範囲外は len = 0（器の __）");
+		em.emit("csel x14, x14, x12, lo");
+		em.emit("csel x15, x15, x12, lo");
+		em.pop(cw + 1);
+		const po16 = em.push();
+		const lo16 = po16 === null ? null : em.push();
+		if (lo16 === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		em.store("x14", po16, "要素の ptr");
+		em.store("x15", lo16, "その len");
 		return 2;
 	}
 

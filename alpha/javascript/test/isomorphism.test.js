@@ -208,10 +208,11 @@ checkTrue("空リストの値は __", value("[]") === "__");
 	// なっていた——`measure`（中身の長さ）と `passingOf`（運ぶ幅）の取り違えの6例目である。
 	checkTrue("長さの違う文字列も同じ器", type("[`ab` , `abc`]") === "List");
 	checkTrue("同じ長さでももちろん器", type("[`ab` , `cd`]") === "List");
-	// **ただし `Char` と `String` はまだ揃わない。** 型の上では `Char ∨ String = String`
-	// だが（1文字は長さ1の文字列）、表現は 1 本と 2 本で違うので、揃えるには持ち上げの
-	// 代金が要る（原理8）。そこはまだ払えないので、決めずに `Struct` と言う。
-	checkTrue("Char と String はまだ揃わない", type("[`ab` , `c`]") === "Struct");
+	// **`Char` と `String` も同じ器に並ぶ。** 1文字は長さ1の文字列であり（原理7）、型の
+	// 上では `Char ∨ String = String` が既に成り立っている。表現は 1 本と 2 本で違うので
+	// 持ち上げの代金は要るが（原理8）、払えば済む話である——トークン列（`[`10` , `+`]`）が
+	// まさにその形で、実機で作れて引けるところまで確かめてある。
+	checkTrue("Char と String も同じ器", type("[`ab` , `c`]") === "List");
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
