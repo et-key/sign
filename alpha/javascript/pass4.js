@@ -4566,6 +4566,17 @@ function selfConsumes(part, name, params, restNames, group, defaults = null) {
 			if (found) return found;
 		}
 		if (!arg || isIdentifierNode(arg)) continue;
+		// **組んで渡す引数は「食う」のではなく「伸びる」。** 蓄積子がそれで、
+		// `go (acc~ , (ts ' 0)) (ts ' 1~)` の第1引数は `acc` を**長くして**渡している。
+		// ここを式の中の最初の器で選んでいたため `acc` を「食っている器」と読み、段数が
+		// `||acc||` に比例すると見積もっていた——実際に段数を決めているのは短くして渡す方
+		// （`ts`）である。**短くする方が食う方**であり、長くする方は結果の底になる。
+		//
+		// 伸びるぶんは撒いた器として別に数えられる（`refs`）ので、ここで拾う必要は無い。
+		{
+			const u = unwrap(arg);
+			if (u && u.type === "operation" && COPRODUCT_BUILD_OPS.has(u.name)) continue;
+		}
 		let found = null;
 		const walk = (x) => {
 			if (!x || typeof x !== "object" || found) return;
@@ -6055,11 +6066,30 @@ function collectSretPlanOnce(nodes, em, known, groups) {
 				.filter((sh) => sh && sh.kind === "destructure")
 				.map((sh) => ({ head: sh.head, rest: sh.rest })),
 		};
+		// **出て行く器は、末尾の枝にいるとは限らない。** 蓄積子は引数の位置で組まれる：
+		//
+		//     go : [~acc] [~ts] i ?
+		//         i > 2 : acc
+		//         go (acc~ , (ts ' i)) ts (i + 1)      ← ここ
+		//
+		// `go` は仮引数をそのまま返すので、この引数は**出て行く**（`markEscapes` はそう
+		// 印を付けている）。だが計画は末尾の枝しか見ておらず、`go` は「組まない」と読まれて
+		// 場所をもらえなかった——組んだ器は自分のフレームに置かれ、返した先で死ぬ。
+		//
+		// **出て行く印が付いている器は、どこに書かれていても外から場所をもらう**のが
+		// 「場所は最も外側で一度だけ取る」の言い換えである。
 		let build = null;
-		for (const arm of arms) {
-			const a = unwrap(arm);
-			if (a && a.type === "operation" && COPRODUCT_BUILD_OPS.has(a.name) && a.escapesFrame !== false && !rejoinPair(a, rejoinScope)) { build = a; break; }
-		}
+		const findBuild = (x) => {
+			if (!x || typeof x !== "object" || build) return;
+			const u = unwrap(x);
+			if (u && u.type === "operation" && COPRODUCT_BUILD_OPS.has(u.name) && u.escapesFrame !== false && !rejoinPair(u, rejoinScope)) {
+				build = u;
+				return;
+			}
+			for (const k of ["left", "right", "operand"]) findBuild(x[k]);
+			for (const l of x.lines || []) findBuild(l);
+		};
+		findBuild(lam.right);
 		// **上界は器を返す関数すべてについて出す。** 場所を要るのは組む関数だけだが、上界は
 		// **合成のため**に誰のぶんも要る——`close_all (next_st st d)` の内側がそれで、
 		// `next_st` は組まない（`push` / `unwind` を呼ぶだけ）ので計画に載らず、外側の
