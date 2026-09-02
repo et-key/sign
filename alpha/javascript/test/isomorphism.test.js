@@ -202,5 +202,16 @@ checkTrue("空リストの値は __", value("[]") === "__");
 	checkTrue("構築では撒きが効く", value("s : `ab`\n||`Z` , s~||") === "3");
 	checkTrue("撒かなければ1つ", value("s : `ab`\n||`Z` , s||") === "2");
 
+	// **`String` は中身の長さで分かれない。** スロットに置かれるのは常に `{ptr, len}` の
+	// 16 バイトであり、中身が何文字かは配置に効かない。ここを長さで比べていたので、
+	// **長さの違う文字列が並ぶだけ**で「揃わない」と読まれ、`List` ではなく `Struct` に
+	// なっていた——`measure`（中身の長さ）と `passingOf`（運ぶ幅）の取り違えの6例目である。
+	checkTrue("長さの違う文字列も同じ器", type("[`ab` , `abc`]") === "List");
+	checkTrue("同じ長さでももちろん器", type("[`ab` , `cd`]") === "List");
+	// **ただし `Char` と `String` はまだ揃わない。** 型の上では `Char ∨ String = String`
+	// だが（1文字は長さ1の文字列）、表現は 1 本と 2 本で違うので、揃えるには持ち上げの
+	// 代金が要る（原理8）。そこはまだ払えないので、決めずに `Struct` と言う。
+	checkTrue("Char と String はまだ揃わない", type("[`ab` , `c`]") === "Struct");
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

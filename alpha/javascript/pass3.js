@@ -659,11 +659,13 @@ function slotShapeKey(node, env, depth = 0) {
     const el = node.elementType || "?";
     return items === null ? `List(${el})?` : `List(${el})[${items.length}]`;
   }
-  if (type === "String") {
-    const d = derefValueNode(node, env);
-    const n = d && d.type === "atom" && d.kind === "string" ? [...d.value.slice(1, -1)].length : null;
-    return n === null ? "String?" : `String[${n}]`;
-  }
+  // **`String` は中身の長さで分かれない。** スロットに置かれるのは常に `{ptr, len}` の
+  // 16 バイトであり（`slotCellSize`）、中身が何文字かは配置に効かない。ここを長さで
+  // 比べていたので、`[`ab` , `c`]` のように**長さの違う文字列が並ぶだけ**で「揃わない」と
+  // 読まれ、`List(String)` ではなく `Struct` になっていた——トークン列がまさにその形である。
+  //
+  // `measure`（中身の長さ）と `passingOf`（運ぶ幅）の取り違えは、これで6度目である。
+  if (type === "String") return "String";
   if (type === "Struct") {
     const d = derefValueNode(node, env);
     const slots = d && d.slotKind === "named" ? [...namedSlots(d).values()] : positionalSlots(d);
