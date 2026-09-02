@@ -348,7 +348,16 @@ function lambdaSignature(rhs) {
 // ——完全性公理（§3.4）が言う通り、引数を取らない関数は Unit を受ける関数である。
 function signatureText(name, params, ret, retResolved) {
   // 返値が恒等射（真）のときは `_` と書くが**解けている**——未解決として数えない。
-  const unresolved = params.filter((p) => p === UNKNOWN || p === `${UNKNOWN}~`).length + (ret === UNKNOWN && !retResolved ? 1 : 0);
+  //
+  // **形は受け取り方であって、型ではない。** `[acc~]` は「器を1つ受けてこう分解する」と
+  // しか言っておらず、**何の器かを言っていない**。ここを数えていなかったので、`.st` は
+  // 仮引数の型が丸ごと決まっていない関数を「未解決 0」と報告していた——伏せずに出すのが
+  // `.st` の目的なのだから、これは目的そのものを外している。
+  //
+  // 型が決まっていれば `List(Char)` のように書かれる（形へ落ちるのは決まらなかったとき
+  // だけ）ので、括りの形をしていること自体が「決まらなかった」の印である。
+  const isHole = (x) => x === UNKNOWN || x === `${UNKNOWN}~` || (x.startsWith("[") && x.endsWith("]"));
+  const unresolved = params.filter(isHole).length + (ret === UNKNOWN && !retResolved ? 1 : 0);
   const lhs = params.length > 0 ? params.join(" ") : "__";
   return { name, text: `${name} : ${lhs} -> ${ret}`, unresolved };
 }

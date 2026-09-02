@@ -32,6 +32,12 @@ function entries(source, scope = "ist") {
 		.map((l) => l.trim());
 }
 
+// 未解決として数えられた箇所の数。
+function holes(source, scope = "ist") {
+	const { nodes, env } = compile(source);
+	return generateSignType(nodes, env, { scope }).unresolved;
+}
+
 function check(note, got, want) {
 	total++;
 	const ok = JSON.stringify(got) === JSON.stringify(want);
@@ -880,6 +886,16 @@ check("開端レンジをデフォルトに持つ関数の型", entries("f :\n\t
 // 以上、片方が分かればもう片方も決まる——注釈を足したのではなく、演算子の定義を読んだだけ。
 check("端点から仮引数の型が決まる", entries("mk : n ? [1 ~ n]"), ["mk : Int -> List(Int)"]);
 check("適用の結果も要素型を運ぶ", entries("mk : n ? [1 ~ n]\ng : mk 5"), ["mk : Int -> List(Int)", "g : List(Int)"]);
+
+// **形は受け取り方であって、型ではない。** `[acc~]` は「器を1つ受けてこう分解する」と
+// しか言っておらず、**何の器かを言っていない**。ここを未解決に数えていなかったので、
+// `.st` は仮引数の型が丸ごと決まっていない関数を「未解決 0」と報告していた——伏せずに
+// 出すのが `.st` の目的なのだから、目的そのものを外していたことになる。
+//
+// 型が決まっていれば `List(Char)` のように書かれる（形へ落ちるのは決まらなかったとき
+// だけ）ので、括りの形をしていること自体が「決まらなかった」の印である。
+check("形しか書けなければ未解決", holes("f : [~s] ?\n	s ' 0\nf `abc`"), 1);
+check("型が決まれば未解決でない", holes("f : n ? n + 1\nf 1"), 0);
 check("文字の端点なら String", entries("upto : c ? [\\a ~ c]"), ["upto : Char -> String"]);
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
