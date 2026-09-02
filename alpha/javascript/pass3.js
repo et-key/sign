@@ -627,8 +627,32 @@ function positionalSlots(node) {
  * 個数を含める。幅そのもの（バイト数）はターゲットが決めるが、**揃っているかどうかは
  * ターゲットに依らない**——同じ型が同じ個数並ぶなら、どのターゲットでも同じ幅になる。
  */
+/**
+ * 撒いたときに**1つ置かれるもの**の形の鍵。
+ *
+ * 器なら要素、器でなければ自分自身である（スカラーは1要素の器なので撒いても1つ）。
+ * `String` の要素は `Char`（原理7）。
+ */
+function spreadItemKey(inner, env, depth) {
+  if (!inner) return "?";
+  const t = inferAtomType(inner, env);
+  if (t === "String") return "Char";
+  if (t === "List" || t === "Iterator") {
+    // **器の要素型は名前の先にある。** 識別子ノード自身は要素型を持たないので、束縛まで
+    // 辿らないと「決まらない（?）」に落ちて、揃っているかの判定が素通りする。
+    const el = containerElementType(inner, env) ?? elementTypeOf(inner, env);
+    return el ? String(el) : "?";
+  }
+  return slotShapeKey(inner, env, depth + 1);
+}
+
 function slotShapeKey(node, env, depth = 0) {
   if (!node || depth > 8) return "?";
+  // **撒いているスロットは「器1つ」ではなく、その要素たちである。** 置かれるのは中身なので
+  // 形も中身で見る——ここを器のまま見ていたため `a~ , x` が「List と Char で揃わない」と
+  // 読まれて `Struct` へ落ち、入れ子になっていた。撒くかどうかは**書かれ方**で決まる
+  // （`isSpreadNode`）ので、値の側を見る必要は無い。
+  if (isSpreadNode(node)) return spreadItemKey(node.operand, env, depth);
   const type = inferAtomType(node, env);
   if (type === "List") {
     const items = listItemNodes(node, env);
@@ -1182,8 +1206,13 @@ function computeAtomType(node, env) {
       if (uniform) {
         // 要素型は入れ子ごと運ぶ。`List` とだけ書くと、行が何の列なのかが落ちる
         // ——`List(List(Int))` の内側が要らないなら、そもそも要素型を書く意味が無い。
-        const slotType = inferAtomType(slots[0], env);
-        const inner = slots[0].elementType;
+        // **撒いているスロットからは要素型を取る。** 置かれるのは中身なので、器の型を
+        // そのまま要素型にすると1段深くなる（`List(Char)` を要素だと言ってしまう）。
+        const head = isSpreadNode(slots[0]) ? slots[0].operand : slots[0];
+        const slotType = isSpreadNode(slots[0])
+          ? containerElementType(head, env) ?? elementTypeOf(head, env)
+          : inferAtomType(head, env);
+        const inner = isSpreadNode(slots[0]) ? null : head.elementType;
         node.elementType = slotType === "List" && inner ? `List(${inner})` : slotType;
         node.slotKind = undefined;
         return "List";

@@ -2160,7 +2160,7 @@ function evaluate(node, env) {
         // 同じproductノード（＝連鎖の続き）の場合だけ展開して連結し、そうでない場合
         // （スペースで構築された塊やリテラル単体が左辺の場合）は互いに対等な要素として
         // 2要素のリストにする。
-        const l = evaluate(node.left, env);
+        const rawL = evaluate(node.left, env);
         const rawR = evaluate(node.right, env);
         // **後置 `~` は積にも効く**（余積との双対）。
         //
@@ -2176,6 +2176,13 @@ function evaluate(node, env) {
         //
         // 消費されない `~` は観測に漏れる（イテレータがそのまま値に出る）ので、受ける
         // 側が無いこと自体が穴だった。
+        // **左辺の `~` も同じだけ効く。** 撒くかどうかは向きに依らない——`a~ , x` は
+        // 「a の要素たちを並べて、その後ろに x を1つ」である。ここを右辺でしか見て
+        // いなかったので、左から積む書き方（`acc~ , 新しい要素`）だけが入れ子になって
+        // いた。左右で意味が違う理由は仕様の側に無く、**規則が片側にしか書かれて**
+        // いなかっただけである。
+        const spreadL = isSpread(rawL);
+        const l = deIterate(rawL);
         const spreadR = isSpread(rawR);
         const r = deIterate(rawR);
         // **連鎖は右へ伸びる**（`,` は右結合、operator_table.md 9行目）。
@@ -2183,7 +2190,7 @@ function evaluate(node, env) {
         // 明示の器（`1 , [2 3]`）は連鎖ではないので要素1つとして残る——
         // `1 2 3 , 4 5 6` が `[[1,2,3],[4,5,6]]` であるための条件でもある。
         const isChain = node.right && node.right.type === "operation" && node.right.name === "product";
-        const items = isChain || spreadR ? [l, ...asList(r)] : [l, r];
+        const items = [...(spreadL ? asList(l) : [l]), ...(isChain || spreadR ? asList(r) : [r])];
         // `,` の単位元は `__` である。零対象は終対象でもあるため直積では `A × __ ≅ A` が
         // 成り立つ——スロットは生まれない。余積（空白）が連接の単位元として `__` を落とすのと
         // 同じ理屈が、直積では終対象としての性質から出てくる。
