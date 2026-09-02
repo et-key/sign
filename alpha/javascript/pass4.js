@@ -3834,10 +3834,10 @@ function genMatch(node, env, em, scope, tail = false) {
 	// 広い方を取る。`__` は幅を持たないので数えない（置く場所の広さで書く）。
 	// 揃えられるかどうかは枝ごとに `move` が見る——確保が要るなら、そこで名指しされる。
 	let width = slotsOfNode(node, em.conf, em.env);
-	const armWidths = (node.lines || [])
+	const armNodes = (node.lines || [])
 		.map((line) => (isDefineNode(line) ? line.right : line))
-		.filter((v) => !isUnitNode(v))
-		.map((v) => slotsOfNode(v, em.conf, em.env));
+		.filter((v) => !isUnitNode(v));
+	const armWidths = armNodes.map((v) => slotsOfNode(v, em.conf, em.env));
 	const knownW = armWidths.filter((w) => w !== null && w !== undefined);
 	const armMax = knownW.length > 0 && knownW.length === armWidths.length ? Math.max(...knownW) : null;
 	// **広い方へ揃えるのだから、ノード自身の幅より広い枝があればそちらである。** ここを
@@ -3857,6 +3857,28 @@ function genMatch(node, env, em, scope, tail = false) {
 	// そこは名指しする。
 	if (width > ARG_REGS.length) return em.fail(node, `${width} 本で運ぶ値を返す分岐はまだ出せません（${node.atomType}）`);
 
+	// **狭い枝の持ち上げ先は、枝の外で一度取る。**
+	//
+	// 同型は型では無償、表現では有償である（原理8）——1本で出た枝を `{ptr, len}` の2本へ
+	// 揃えるには、その1つを置く場所が要る。だが**枝の中で `sub sp` してはいけない**：
+	// 通る枝によって合流点の `sp` が変わり、フレームが枝ごとに違うことになる。
+	//
+	// 通るのは1本だけなので、場所は共有してよい。ここでも「場所は最も外側で一度だけ取る」
+	// である——外側が、この分岐そのものになっただけである。
+	let liftSlot = null;
+	// **リテラルの狭い枝に場所は要らない。** 1文字は `.rodata` に置き場所があるので、
+	// `{ptr, 1}` を積むだけで広い方へ揃う——`String ≅ List(Char)` の言い換えでしかない。
+	// 場所が要るのは**実行時に決まる**狭い枝（`ts ' i`）だけである。
+	const needsLift = armWidths.some((w, i) => w === 1 && unwrap(armNodes[i]) && unwrap(armNodes[i]).type !== "atom");
+	if (width === 2 && armMax === 2 && needsLift) {
+		if (!allocaAllowed(em, node, "枝を長さ1の器へ持ち上げる")) return false;
+		em.emit("sub sp, sp, #16", "狭い枝の持ち上げ先（枝の外で一度取る）");
+		em.movedSp = true;
+		liftSlot = em.push();
+		if (liftSlot === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+		em.emit(`mov ${SCRATCH[0]}, sp`, "持ち上げ先の ptr");
+		em.store(SCRATCH[0], liftSlot);
+	}
 	const outs = [];
 	for (let k = 0; k < width; k++) {
 		const o = em.push();
@@ -3918,6 +3940,19 @@ function genMatch(node, env, em, scope, tail = false) {
 			return TAIL;
 		}
 		if (direct && w === width) return true; // 既に `outs` に在る
+		// **狭い枝を広い方へ揃える**（原理8）。場所は上で取ってあるので、ここは置くだけ。
+		if (w === 1 && width === 2 && liftSlot !== null) {
+			em.load(SCRATCH[1], (em.slot - 1) * 8, "枝の値");
+			em.load(SCRATCH[0], liftSlot, "持ち上げ先");
+			em.emit(`str ${SCRATCH[1]}, [${SCRATCH[0]}]`, "長さ1の器として置く");
+			em.store(SCRATCH[0], outs[0], "枝の値（持ち上げた ptr）");
+			em.emit(`mov ${SCRATCH[0]}, #1`, "len は 1");
+			em.store(SCRATCH[0], outs[1], "その len");
+			// 直に置いた枝は `outs` ぶんを空けてあるので、埋め戻す。
+			if (direct) for (let k = w; k < width; k++) em.push();
+			else em.pop(w);
+			return true;
+		}
 		if (direct) for (let k = w; k < width; k++) em.push(); // 幅が違う——下で名指しする
 		if (w !== width) {
 			em.pop(w);

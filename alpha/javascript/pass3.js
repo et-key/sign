@@ -3242,7 +3242,15 @@ function joinArmTypes(types) {
     (x) => !distinct.some((y) => y !== x && ((FAMILY_MEMBERS[y] && FAMILY_MEMBERS[y].has(x)) || memberOfListFamily(y, x)))
   );
   if (absorbed.length === 1) return absorbed[0];
-  return absorbed.join(" | ");
+  // **スカラーと器は「どちらか」ではなく、同じものの別の段である**（原理8——`[x] ≅ x`）。
+  // `Char | String` は「文字か文字列か」ではなく、**1文字は長さ1の文字列**なので `String`
+  // である（原理7）。族を畳むのと同じ話が、持ち上げの上下にも成り立つ。
+  //
+  // 直和のまま残すと、枝ごとに表現が違う（1本と2本）ことになり、合流の幅も返値の幅も
+  // 決められない——**型が「同じもの」と言っているのに、表現だけが分かれたまま**になる。
+  const lifted = absorbed.filter((x) => !absorbed.some((y) => y !== x && liftScalarToBox(x, y) === y));
+  if (lifted.length === 1) return lifted[0];
+  return lifted.join(" | ");
 }
 
 // apply 連鎖（`apply(apply(f, a), b)`）の根にある識別子の binding を返す。
