@@ -2617,6 +2617,72 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.store(SCRATCH[0], lo3, "len");
 			return 2;
 		}
+		// **器の要素も、個数が書いてあるなら並べられる。**
+		//
+		// 個数が実行時に決まるのは**撒いた**ときであって、要素が器であること自体ではない
+		// ——`[`10` , `+` , `2`]` は3要素だと書いてある。ここを「並べるものが器なら実行時」
+		// と読んでいたので、要素が参照で運ばれる器はフレームの中で作れなかった。**器が
+		// 並ぶことと、個数が実行時に決まることは別の問いである。**
+		//
+		// 一つ置くのは `{ptr, len}` の 16 バイトである。置き先が違うだけで、sret の枝と
+		// やることは同じ——底が呼ぶ側のスロットか、自分の `sub sp` かの違いしかない。
+		const spreadPart = (x) => {
+			const u = unwrap(x);
+			return !!(u && u.type === "operation" && u.position === "postfix" && u.name === "expand");
+		};
+		if (
+			em1 &&
+			em1.size === 16 &&
+			parts.length > 0 &&
+			parts.every((p) => !spreadPart(p) && [1, 2].includes(slotsOfNode(p, em.conf, env)))
+		) {
+			const base16 = em.slot;
+			// 要素ごとの `{ptr, len}` が置かれたスロット。
+			const cells = [];
+			for (const q of parts) {
+				const pw = genExpr(q, env, em, scope);
+				if (pw === false) return false;
+				if (pw === 2) {
+					cells.push((em.slot - 2) * 8);
+					continue;
+				}
+				if (pw !== 1) {
+					em.pop(pw === TAIL ? 0 : pw);
+					return em.fail(n, `並べる器が ${pw} 本です`);
+				}
+				// **要素が参照で運ばれる器へスカラーを積むには、持ち上げの代金を払う**
+				// （原理8——同型は型では無償、表現では有償）。1文字は長さ1の文字列である。
+				const po = emitLiftToContainer(em, q, (em.slot - 1) * 8, "長さ1の器へ持ち上げる（原理8）");
+				if (po === false) return false;
+				if (po === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+				cells.push(po);
+			}
+			const count16 = parts.length;
+			let into16 = "sp";
+			if (sretHere) {
+				em.load(SCRATCH[1], em.sretDest, "返値スロット（sret）");
+				into16 = SCRATCH[1];
+			} else {
+				if (!allocaAllowed(em, n, n.atomType + " を組み立てる")) return false;
+				em.emit(`sub sp, sp, #${count16 * 16}`, `${count16} 要素ぶんの場所を取る（1要素 16 byte）`);
+				em.movedSp = true;
+			}
+			for (let k = 0; k < count16; k++) {
+				em.load(SCRATCH[0], cells[k]);
+				em.emit(`str ${SCRATCH[0]}, [${into16}, #${k * 16}]`, k === 0 ? "要素の ptr" : undefined);
+				em.load(SCRATCH[0], cells[k] + 8);
+				em.emit(`str ${SCRATCH[0]}, [${into16}, #${k * 16 + 8}]`, k === 0 ? "その len" : undefined);
+			}
+			em.emit(`mov ${SCRATCH[0]}, ${into16}`, "ptr");
+			em.pop(em.slot - base16);
+			const po16 = em.push();
+			const lo16 = po16 === null ? null : em.push();
+			if (lo16 === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+			em.store(SCRATCH[0], po16, "ptr");
+			em.emit(`mov ${SCRATCH[1]}, #${count16}`, "len は要素数");
+			em.store(SCRATCH[1], lo16, "len");
+			return 2;
+		}
 		if (em1 && em1.size && parts.every((p) => slotsOfNode(p, em.conf, env) === 1)) {
 			const base = em.slot;
 			for (const p of parts) {
