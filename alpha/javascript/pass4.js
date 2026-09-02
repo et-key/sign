@@ -4661,7 +4661,7 @@ function mutualGroups(nodes) {
 	return group;
 }
 
-function selfConsumes(part, name, params, restNames, group, defaults = null) {
+function selfConsumes(part, name, params, restNames, group, defaults = null, indexedBy = null) {
 	const bare = (s) => String(s).replace(/[<>]/g, "");
 	const args = [];
 	let head = part;
@@ -4727,6 +4727,38 @@ function selfConsumes(part, name, params, restNames, group, defaults = null) {
 		};
 		walk(arg);
 		if (found) return found;
+	}
+	// **添字で回る再帰の段数は、その添字が走る器が抑えている。**
+	//
+	// `mul_out ts i (j - 2)` は器を短くして渡さない——`ts` はそのままで、動くのは添字の
+	// 方である。だが `j` は `ts` の中を指す添字なので、段数は `||ts||` を超えない。器を
+	// 尽くす形（原理5）と同じことを、添字の側から言っているだけである。
+	//
+	// **これは証明ではなく見積もりである。** 上界は呼ぶ側と呼ばれた側が同じ式で計算し、
+	// 書く前に照合する（`emitSretCapacityGuard`）——外れても壊れず `__` になる。証明を
+	// 要求すると、添字で書いた再帰が丸ごと出せないままになる。
+	// **根拠は「動く添字がその器を指していること」である。** `f (n + 1) s` のように器を
+	// そのまま渡すだけの再帰は、止めているのが別の条件なので器からは上界が出ない
+	// ——ここを緩めると、**止まらない再帰に有限のスロットを割り当ててしまう**。
+	// `mul_out ts i (j - 2)` が通るのは `ts ' (j - 2)` と本体が書いているからである。
+	if (!indexedBy || indexedBy.size === 0) return null;
+	let moved = null;
+	const movesInt = args.some((arg) => {
+		if (!arg || arg.type !== "operation" || !["add", "sub"].includes(arg.name)) return false;
+		const l = unwrap(arg.left);
+		const r = unwrap(arg.right);
+		const isParam = (x) => isIdentifierNode(x) && params.includes(x.value);
+		const isConst = (x) => x && x.type === "atom" && x.kind === "number";
+		if (isParam(l) && isConst(r)) moved = l.value;
+		else if (isConst(l) && isParam(r)) moved = r.value;
+		return moved !== null;
+	});
+	if (movesInt && moved) {
+		for (const arg of args) {
+			if (!arg || !isIdentifierNode(arg) || !params.includes(arg.value)) continue;
+			if (!isBoxType(arg.atomType)) continue;
+			if (indexedBy.has(arg.value + String.fromCharCode(0) + moved)) return arg.value;
+		}
 	}
 	return null;
 }
@@ -4861,6 +4893,19 @@ function knownLengthOf(node) {
 	return null;
 }
 
+/**
+ * その部分は**リテラルとして何要素置くか**。分からなければ null。
+ *
+ * 要素が `Char` の器へ `` `[[` `` を並べれば2要素である——器だからといって「個数が
+ * 決まらない」わけではない。**書いてあるものは数えられる。** 要素の側が器なら、文字列は
+ * 1つの要素なのでここでは答えない（その道は別にある）。
+ */
+function literalElemCount(q, elemType) {
+	if (!q || q.type !== "atom" || q.kind !== "string") return null;
+	if (!elemType || isBoxType(elemType)) return null;
+	return [...String(q.value || "").replace(/^`|`$/g, "")].length;
+}
+
 function returnSizeBound(lam, name, known, group) {
 	const params = boundParamNames(lam);
 	// 要素の型。**要素が器なら、器を1つ置くのは1要素である**——並べるものが器だから
@@ -4881,6 +4926,30 @@ function returnSizeBound(lam, name, known, group) {
 		((lam.left && lam.left.entries) || []).filter((e) => e.name && e.default).map((e) => [e.name, e.default])
 	);
 	const arms = Array.isArray(lam.right && lam.right.lines) ? lam.right.lines.map((l) => (isDefineNode(l) ? l.right : l)) : [lam.right];
+	// **本体に現れる「器 ' 添字」の組。** 添字で回る再帰の段数をその器で抑えてよいかの
+	// 根拠であり、書いていないなら抑えられない（原理4）。
+	const indexedBy = new Set();
+	const digNames = (y, out) => {
+		if (!y || typeof y !== "object") return;
+		if (isIdentifierNode(y) && params.includes(y.value)) out.push(y.value);
+		for (const kk of ["left", "right", "operand"]) digNames(y[kk], out);
+		// **括りの中も見る。** `ts ' (j - 2)` の添字は括弧の中にある。
+		for (const l of y.lines || []) digNames(l, out);
+	};
+	const scanIdx = (x) => {
+		if (!x || typeof x !== "object") return;
+		if (x.type === "operation" && x.name === "get_prop") {
+			const c = unwrap(x.left);
+			if (isIdentifierNode(c) && params.includes(c.value)) {
+				const ns = [];
+				digNames(x.right, ns);
+				for (const nm of ns) indexedBy.add(c.value + String.fromCharCode(0) + nm);
+			}
+		}
+		for (const kk of ["left", "right", "operand"]) scanIdx(x[kk]);
+		for (const l of x.lines || []) scanIdx(l);
+	};
+	scanIdx(lam.right);
 	let konst = 0;
 	// **器ごとに係数を持つ。** 上界は `konst + Σ coef_i × ||器_i||` である。
 	//
@@ -4961,10 +5030,12 @@ function returnSizeBound(lam, name, known, group) {
 					? { k: 1, refs: new Map(), rec: null }
 					: { k: 0, refs: new Map([[q.value, 1]]), rec: null };
 			}
-			const eaten0 = selfConsumes(q, name, params, restNames, group, defaults);
+			const eaten0 = selfConsumes(q, name, params, restNames, group, defaults, indexedBy);
 			if (eaten0) return { k: 0, refs: new Map(), rec: eaten0 };
 			const b0 = known ? boundedCallOf(q, known, params) : null;
 			if (b0) return { k: b0.konst, refs: new Map(b0.terms.map((t) => [t.sizeOf, t.coef])), rec: null };
+			const lit0 = literalElemCount(q, elemType);
+			if (lit0 !== null) return { k: lit0, refs: new Map(), rec: null };
 			if (isBoxType(q.atomType) && !(elemType && isBoxType(elemType))) return null;
 			return { k: 1, refs: new Map(), rec: null };
 		};
@@ -4992,7 +5063,7 @@ function returnSizeBound(lam, name, known, group) {
 			}
 			// **自己呼び出しは、食っている器の要素数ぶん。** ここで諦めていたのが、
 			// 器を返す関数のほとんどが再帰である以上そのまま sret を塞いでいた。
-			const eaten = selfConsumes(q, name, params, restNames, group, defaults);
+			const eaten = selfConsumes(q, name, params, restNames, group, defaults, indexedBy);
 			if (eaten) {
 				if (rec && rec !== eaten) return null; // 1枝で2つ食う形はまだ扱わない
 				rec = eaten;
@@ -5034,6 +5105,11 @@ function returnSizeBound(lam, name, known, group) {
 					if (rec && rec !== c.rec) return null;
 					rec = c.rec;
 				}
+				continue;
+			}
+			const lit = literalElemCount(q, elemType);
+			if (lit !== null) {
+				k += lit;
 				continue;
 			}
 			if (isBoxType(q.atomType) && !(elemType && isBoxType(elemType))) return null;
