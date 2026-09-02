@@ -104,38 +104,35 @@ check("lexer.sn: is_space が改行に真を返す", runWith("lexer.sn", "is_spa
 check("lexer.sn: is_space は通常文字に __ を返す", isUnit(runWith("lexer.sn", "is_space \\a")), true);
 
 // ---- parser.sn ----
-// 優先順位（* が + より内側）と左結合を確認する。
 //
-// 最後のトークンが `"3"` であって `["3"]` ではないことに注意。以前は残りが1個に
-// なった時点で `peek` が**器ごと**返していた（`|ts| = 1 : ts`）ため、末尾のトークン
-// だけ1要素リストに包まれていた。トークン列を縮めず位置だけを進めるようにして、
-// その場合分けごと消えた——トークンはトークンである。
-check(
-	"parser.sn: 1 + 2 * 3 → * が + より内側（優先順位）",
-	runFile("parser.sn"),
-	[["1", "+"], [["2", "*"], "3"]]
-);
+// **パース結果はそのまま Sign のプログラムである。** `1 + 2 * 3` は `[[+] 1 [[*] 2 3]]`
+// になり、それを走らせると 7 が出る——`[+]` は畳み込みなので、S式がそのまま式である。
+// だから中間表現は要らず、後段のコード生成は既にあるコンパイラそのものになる。
+//
+// 木を持たないので節の寿命という問題も出ない。再帰そのものが木であり、出力は流れる。
+// 優先順位・左結合・優先順位跨ぎを、**出した文字列**と**それを評価した値**の両方で見る
+// ——形だけ合っていて値が違う、という壊れ方を通さないためである。
+function sexpr(lastLine) {
+	return runWith("parser.sn", lastLine);
+}
+function evalSign(src) {
+	const { nodes } = compile(src, { parse: parser.parse });
+	const env = newRuntimeEnv(null);
+	let result = UNIT;
+	for (const node of nodes) result = observe(evaluate(node, env));
+	return result;
+}
+function checkParse(note, tokens, want, infix) {
+	const got = sexpr("expr " + tokens);
+	check(note, got, want);
+	check(note + "：走らせると中置と同じ", evalSign(String(got)), evalSign(infix));
+}
 
-check(
-	"parser.sn: 1 * 2 + 3 → (1*2)+3",
-	runWith("parser.sn", "fst (expr [`1` , `*` , `2` , `+` , `3`])"),
-	[[[["1", "*"], "2"], "+"], "3"]
-);
-
-check(
-	"parser.sn: 1 - 2 - 3 → (1-2)-3（左結合）",
-	runWith("parser.sn", "fst (expr [`1` , `-` , `2` , `-` , `3`])"),
-	[[[["1", "-"], "2"], "-"], "3"]
-);
-
-check(
-	"parser.sn: 1 + 2 * 3 - 4 → ((1+(2*3))-4)",
-	runWith("parser.sn", "fst (expr [`1` , `+` , `2` , `*` , `3` , `-` , `4`])"),
-	[[[["1", "+"], [["2", "*"], "3"]], "-"], "4"]
-);
-
-check("parser.sn: 単項（7 のみ）", runWith("parser.sn", "fst (expr [`7`])"), "7");
-
+check("parser.sn: 1 + 2 * 3", runFile("parser.sn"), "[[+] 1 [[*] 2 3]]");
+checkParse("parser.sn: 1 * 2 + 3", "[`1` , `*` , `2` , `+` , `3`]", "[[+] [[*] 1 2] 3]", "1 * 2 + 3");
+checkParse("parser.sn: 1 - 2 - 3（左結合）", "[`1` , `-` , `2` , `-` , `3`]", "[[-] [[-] 1 2] 3]", "1 - 2 - 3");
+checkParse("parser.sn: 1 + 2 * 3 - 4", "[`1` , `+` , `2` , `*` , `3` , `-` , `4`]", "[[-] [[+] 1 [[*] 2 3]] 4]", "1 + 2 * 3 - 4");
+check("parser.sn: 単項（7 のみ）", sexpr("expr " + "[`7`]"), "7");
 
 // ---- 8-Queens（guide の例） ----
 //

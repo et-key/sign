@@ -1,49 +1,40 @@
-`Sign で書いた再帰下降パーサ`
-`四則演算の優先順位と左結合を扱う`
+`前置（S式）で書き出す再帰下降パーサ`
+`出力はそのまま Sign のプログラムである——[[+] 1 2] は 3 に評価される`
+`だから中間表現は要らない。コード生成は既にあるコンパイラそのものである`
 
-`文法`
-`  expr   := term (PLUS | MINUS) term ...`
-`  term   := factor (MUL | DIV) factor ...`
-`  factor := token`
+is_mul : c ? (c = `*`) | (c = `/`)
+is_add : c ? (c = `+`) | (c = `-`)
 
-`各関数は 結果AST と 次に読む位置 のペアを返す`
+`--- 位置：走査するのは添字だけで、確保は無い ---`
 
-fst : p ? p ' 0
-snd : p ? p ' 1
+mul_end : [~ts] i ?
+	is_mul (ts ' (i + 1)) : mul_end ts (i + 2)
+	i + 1
 
-`--- トークン列の消費 ---`
+add_end : [~ts] i ?
+	is_add (ts ' (mul_end ts i)) : add_end ts ((mul_end ts i) + 1)
+	mul_end ts i
 
-`トークン列は縮めない。位置だけを進める`
-`縮めると2つの問題が同時に出る——1要素リストはスカラーへ潰れて長さで場合分けが要り`
-`（list_model.md）、尽きた先を __ で表すと次の呼び出しが完全性公理で崩壊する`
-`（0_design_principles.md 原理5）。どちらも「空を作らないこと」で消える`
+`加減の並び ts[i..j) で、最後の項が始まる位置`
 
-`範囲外の添字は __ を返し、__ との比較は偽になる。終端の判定はそれで足りるので`
-`番兵の値も要らない`
-`factor := token は「その位置のトークン」そのものなので、関数にせず添字で書く`
-`関数にすると fst/snd が factor の結果と mul_lv の結果の両方で呼ばれ、形について多相になる`
+last_term : [~ts] i j ?
+	(mul_end ts i) = j : i
+	last_term ts ((mul_end ts i) + 1) j
 
-`--- 乗除（優先順位が高い側）---`
-`左結合で畳む`
+`--- 出力：左結合なので一番外側の演算子は最後のもの ---`
+`終わりが分かっているので外から書ける。String どうしの並置は連結（吸収則）`
 
-mul_go : acc [~ts] i ?
-	(ts ' i) = `*` : mul_go ((acc , `*`) , (ts ' (i + 1))) ts (i + 2)
-	(ts ' i) = `/` : mul_go ((acc , `/`) , (ts ' (i + 1))) ts (i + 2)
-	acc , i
+mul_out : [~ts] i j ?
+	j = (i + 1) : ts ' i
+	`[[` (ts ' (j - 2)) `] ` (mul_out ts i (j - 2)) ` ` (ts ' (j - 1)) `]`
 
-mul_lv : [~ts] i ? mul_go (ts ' i) ts (i + 1)
+add_out : [~ts] i j ?
+	(mul_end ts i) = j : mul_out ts i j
+	`[[` (ts ' ((last_term ts i j) - 1)) `] ` (add_out ts i ((last_term ts i j) - 1)) ` ` (mul_out ts (last_term ts i j) j) `]`
 
-`--- 加減（優先順位が低い側）---`
-
-add_go : acc [~ts] i ?
-	(ts ' i) = `+` : add_go ((acc , `+`) , (fst (mul_lv ts (i + 1)))) ts (snd (mul_lv ts (i + 1)))
-	(ts ' i) = `-` : add_go ((acc , `-`) , (fst (mul_lv ts (i + 1)))) ts (snd (mul_lv ts (i + 1)))
-	acc , i
-
-expr : [~ts] ? add_go (fst (mul_lv ts 0)) ts (snd (mul_lv ts 0))
+expr : [~ts] ? add_out ts 0 (add_end ts 0)
 
 `実行例`
 `トークン列はカンマで積む。スペースで並べると String の吸収則で連結されてしまうため`
-`1 + 2 * 3 は 1 と 2 * 3 の和として構造化される`
 
-fst (expr [`1` , `+` , `2` , `*` , `3`])
+expr [`1` , `+` , `2` , `*` , `3`]
