@@ -2620,6 +2620,9 @@ function collectCallsiteParamTypes(nodes, env) {
     // 何を返すかは並びを知らないと決まらない。呼び出しサイトはそれを知っているので、
     // 型と一緒に形も運ぶ。全サイトで形が一致したときだけ採る。
     const shapes = names.map(() => ({ shape: undefined, agreed: true }));
+    // **器だと分かっただけでは引けない。何バイトずつ並んでいるかが要る。** 型と同じく
+    // 要素型も呼ぶ側が知っているので、一緒に運ぶ。
+    const elemObs = names.map(() => new Set());
     for (const args of sites) {
       names.forEach((name, i) => {
         if (!name || i >= args.length) return;
@@ -2637,6 +2640,8 @@ function collectCallsiteParamTypes(nodes, env) {
         // 決まっていないものは観測ではない——ここも再帰で効く。`sum c (i + 1) …` は
         // 自分の `c` を渡すので、まだ決まっていないうちは証拠に数えない。1周目で
         // 呼び出しサイトの `[1 ~ 10]` から決まり、2周目で自己呼び出しも一致する。
+        const el = containerElementType(args[i], args.scope || env);
+        if (el && !FAMILY_MEMBERS[el]) elemObs[i].add(el);
         const rp = reprOfNode(args[i], args.scope || env);
         if (rp) reprObs[i].add(rp);
         // **カーソルは群も一緒に運ぶ。** 引く命令がどこへ跳ぶか（`<群>_at` / `<群>_adv`）は
@@ -2686,6 +2691,37 @@ function collectCallsiteParamTypes(nodes, env) {
     if (JSON.stringify(rhs.callsiteParamTypes) !== JSON.stringify(settled)) {
       rhs.callsiteParamTypes = settled;
       changed = true;
+    }
+    // **仮引数の型を決めるのは呼ぶ側である**（type_system.md §5——呼び出しサイトで実引数の
+    // 具体的な型を用いて `.ist` 上に具体化する）。観測はここまで来ているのに、束縛へは
+    // 本体からの推定しか書かれていなかった——本体は「器として使った」までしか言えないので
+    // `Container` に留まり、**呼ぶ側が知っている具体型が届かない**。
+    //
+    // 蓄積子がそれで輪になる：`go (acc~ , x) …` の `acc` は本体からは `Container`、
+    // 呼び出しサイトからは `List` と観測されているのに、束縛は `Container` のまま。
+    // すると `acc~ , x` が「揃わない」と読まれて `Struct` になり、その `Struct` が次の
+    // 周回の観測に混ざる——決めようとしているものが証拠に化ける。
+    //
+    // 族は「まだ分かっていない」の言い換えなので、具体型に譲る（原理4 の線引き）。
+    if (rhs.scope) {
+      names.forEach((name, i) => {
+        const t = settled[i];
+        if (!name || !t || FAMILY_MEMBERS[t]) return;
+        const b2 = envLookup(rhs.scope, name);
+        if (!b2) return;
+        if (!b2.atomType || FAMILY_MEMBERS[b2.atomType]) {
+          if (b2.atomType !== t) {
+            b2.atomType = t;
+            changed = true;
+          }
+        }
+        // 要素型は全サイトが一致したときだけ採る（食い違うなら決めない——原理4）。
+        const els = [...elemObs[i]];
+        if (els.length === 1 && !b2.elementType) {
+          b2.elementType = els[0];
+          changed = true;
+        }
+      });
     }
     // **持ち上げた直和のスカラー側が、要素の型である。**
     //
