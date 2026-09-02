@@ -3736,15 +3736,20 @@ function genMatch(node, env, em, scope, tail = false) {
 	// 広い方を取る。`__` は幅を持たないので数えない（置く場所の広さで書く）。
 	// 揃えられるかどうかは枝ごとに `move` が見る——確保が要るなら、そこで名指しされる。
 	let width = slotsOfNode(node, em.conf, em.env);
+	const armWidths = (node.lines || [])
+		.map((line) => (isDefineNode(line) ? line.right : line))
+		.filter((v) => !isUnitNode(v))
+		.map((v) => slotsOfNode(v, em.conf, em.env));
+	const knownW = armWidths.filter((w) => w !== null && w !== undefined);
+	const armMax = knownW.length > 0 && knownW.length === armWidths.length ? Math.max(...knownW) : null;
+	// **広い方へ揃えるのだから、ノード自身の幅より広い枝があればそちらである。** ここを
+	// 「ノードの幅が決まらないときだけ枝を見る」としていたので、型が `Char` と言う分岐に
+	// `String` を返す枝が混ざると「2 本と 1 本」で止まっていた——広い方に揃えると
+	// 言っておきながら、狭い方で場所を決めていたことになる。
 	if (width === null) {
-		const armWidths = (node.lines || [])
-			.map((line) => (isDefineNode(line) ? line.right : line))
-			.filter((v) => !isUnitNode(v))
-			.map((v) => slotsOfNode(v, em.conf, em.env));
-		const known = armWidths.filter((w) => w !== null && w !== undefined);
-		if (known.length > 0 && known.length === armWidths.length && Math.max(...known) <= 2) {
-			width = Math.max(...known);
-		}
+		if (armMax !== null && armMax <= 2) width = armMax;
+	} else if (armMax !== null && armMax > width && armMax <= 2) {
+		width = armMax;
 	}
 	if (width === null) {
 		return em.fail(node, `枝の幅が揃いません（${node.atomType}）——広い方へ揃える持ち上げがまだ出せません（type_system.md §2）`);
