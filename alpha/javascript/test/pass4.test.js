@@ -814,7 +814,41 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 	// MMIO は既に在る場所を読み書きするだけである。
 	checkTrue("layer 0: 切り出しは通る", at("s : `abcde`\n||s ' 2~||", 0).length === 0);
 	checkTrue("layer 0: MMIO は通る", at("0x40800000 # 65\n@0x40800000", 0).length === 0);
-	checkTrue("layer 0: 末尾再帰は通る", at("f : a n ?\n\tn > 0 : f (a + n) (n - 1)\n\ta\nf 0 5", 0).length === 0);
+	// **フレームも確保である。** `stp x29, x30, [sp, #-N]!` はプリインデックスで `sp` を
+	// 下げて書く——`sub sp` という*形*をしていないだけで、やっていることは同じである
+	// （`layer_relations.md` §4.1）。門番が `sub sp` だけを探していたので当たっていなかった。
+	//
+	// **呼び出しは必ずフレームを要求する。** `bl` は戻り番地 `x30` を上書きするので、
+	// 呼ぶ側は自分の戻り先を記憶へ退避しなければならない。したがって layer 0 では関数が
+	// 呼べない——それは正しい姿で、boot は直列のハード操作だけで書ける（同 §4.1）。
+	const callGated = (src) => at(src, 0).some((m) => /layer: 0 では関数を呼べません/.test(m));
+	checkTrue("layer 0: 関数を呼べない", callGated("f : n ? n + 1\nf 41"));
+	checkTrue("layer 0: 合成も呼び出しである", callGated("f : n ? n + 1\ng : n ? n * 2\n(f g) 5"));
+	// **判定は形ではなく要求で行う。** 止めるのは「`?` を書いたこと」ではなく「フレームが
+	// 要ったこと」である。`f : n ? n + 1` の `f` 自身は覗き穴と割り付けの後にフレームが
+	// 消えるので、名指しされるのは呼ぶ側（`_sign_main`）だけになる。
+	checkTrue(
+		"layer 0: フレームの要らない `?` は名指ししない",
+		at("f : n ? n + 1\nf 41", 0).every((m) => !/では f がフレームを/.test(m))
+	);
+	// **切り出しは呼び出しの中でも確保を要求しない。** layer 0 で出る診断は呼ぶ側の
+	// ぶんだけで、`f` 自身は名指しされない——`s ' 1~` は同じ領域を指し直すだけである。
+	checkTrue(
+		"layer 0: 仮引数の切り出しも確保ではない",
+		at("f : s ?\n\ts ' 1~\nf `abc`", 0).every((m) => !/では f が/.test(m))
+	);
+	// **末尾再帰が積まないのは「繰り返しごとに」であって、「まったく」ではない。**
+	// 自己末尾再帰は `b .Lloop` で同じフレームへ戻るので深さは増えないが、その1つの
+	// フレームは入口で確保される。かつてここは「layer 0 でも通る」と書いてあり、実際
+	// `f` は 32 バイトのフレームを取っていた——**誰も見ていなかったので通っていた**。
+	checkTrue(
+		"layer 0: 末尾再帰も入口のフレームは確保である",
+		at("f : a n ?\n\tn > 0 : f (a + n) (n - 1)\n\ta\nf 0 5", 0).some((m) => /では f がフレームを要求します/.test(m))
+	);
+	checkTrue(
+		"layer 1: 末尾再帰は通る",
+		at("f : a n ?\n\tn > 0 : f (a + n) (n - 1)\n\ta\nf 0 5", 1).length === 0
+	);
 	// **層の禁止と実装の穴は別である。** `Float` は layer 2 以上（同 §4）。実装が無い
 	// ことを理由に落とすと、実装したときに layer 0 で通ってしまう。
 	checkTrue(
@@ -868,8 +902,10 @@ check("通る形は診断ゼロ", asm("sq : x ? x * x\nadd : a b ? a + b\nf : n 
 		checkTrue("sub sp で場所を取る", b.some((l) => /^sub sp, sp, #/.test(l)), b.join(" / "));
 		checkTrue("sp を戻す", b.includes("mov sp, x29"), b.join(" / "));
 	}
-	// 切り出しは layer 0 でも通る。
-	check("切り出しは layer 0 でも出る", at("f : s ?\n\ts ' 1~\nf `abc`", 0).length, 0);
+	// 切り出しは layer 0 でも通る。**名指しされるのは呼ぶ側だけ**である——`f` 自身は
+	// フレームを取らない（`s ' 1~` は同じ領域を指し直すだけ）ので、layer 0 で出るのは
+	// `_sign_main` の呼び出しに対する診断1件だけになる（`layer_relations.md` §4.1）。
+	check("切り出し自体は確保を要求しない", at("f : s ?\n\ts ' 1~\nf `abc`", 0).filter((m) => /では f が/.test(m)).length, 0);
 	// layer を渡さなければ検査しない（他の門番と同じ方針）。
 	checkTrue("layer 未指定なら layer の話をしない", !at(build, undefined).some((m) => /layer: /.test(m)), JSON.stringify(at(build, undefined)));
 }

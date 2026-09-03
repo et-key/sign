@@ -6757,8 +6757,49 @@ function genFunction(name, lambdaNode, env, em, mono) {
 
 	const body = em.lines;
 	em.lines = outer;
-	em.lines.push(...wrapFrame(body, em.maxSlot, name, em.movedSp, em.conf.regAlloc !== false));
+	const wrapped = wrapFrame(body, em.maxSlot, name, em.movedSp, em.conf.regAlloc !== false);
+	checkStackFree(em, wrapped, name, lambdaNode);
+	em.lines.push(...wrapped);
 	em.blank();
+}
+
+/**
+ * **layer 0 に記憶は無い。フレームは確保である。**
+ *
+ * `stp x29, x30, [sp, #-N]!` はプリインデックスで `sp` を下げて書く——`sub sp` という
+ * *形*をしていないだけで、やっていることは確保である。layer 0 は RAM が生きている保証の
+ * 無い世界なので、これを出してはならない（[`layer_relations.md`](../../documents/ja-jp/impl/layer_relations.md) §4.1）。
+ * `-M virt` は最初から RAM が生きているので qemu では動いてしまうが、本物の BIOS/UEFI
+ * 初期フェーズならその1命令目で死ぬ。**動いているように見えて実機で死ぬ**のが一番たちの
+ * 悪い形なので、門番はここに要る。
+ *
+ * **判定は形ではなく要求で行う。** 「`?` を書いたか」ではなく「フレームが要ったか」を
+ * 見る——覗き穴と割り付けが往復を消し切れば `?` を書いた関数でもフレームは消え、
+ * そのときは本当に記憶を触らないので通してよい。層は要求で決まる（同 §5）。だから
+ * **見るのは `wrapFrame` を通した後の行**である。前で見ると、消える予定のフレームまで
+ * 止めることになる。
+ *
+ * 呼び出しを含む関数は必ずフレームを持つ（`wrapFrame` の `bare` 判定が `bl`/`blr` を
+ * 外している）。`bl` は戻り番地 `x30` を上書きするので、呼ぶ側は自分の戻り先を記憶へ
+ * 退避しなければならないためである。したがって **layer 0 では関数が呼べなくなる**——
+ * それは正しい姿で、boot は直列のハード操作だけで書ける（同 §4.1）。
+ */
+function checkStackFree(em, lines, name, node) {
+	if (em.conf.layer === undefined || em.conf.layer >= 1) return;
+	const code = lines.map((l) => l.split("//")[0]);
+	const frame = code.some((t) => /^\s*stp\s+x29,\s*x30,\s*\[sp,/.test(t) || /^\s*sub\s+sp\b/.test(t));
+	if (!frame) return;
+	const calls = code.some((t) => /^\s*(bl|blr)\b/.test(t.trim()));
+	em.diagnostics.push({
+		severity: "error",
+		message: calls
+			? `layer: ${em.conf.layer} では関数を呼べません（${name} が呼び出しを含む——` +
+				`\`bl\` は戻り番地 x30 を上書きするので、呼ぶ側は自分の戻り先を記憶へ退避する必要がある）。` +
+				`必要なのは layer: 1 以上です（layer_relations.md §4.1）`
+			: `layer: ${em.conf.layer} では ${name} がフレームを要求します（式の途中の値を置く場所が要る）。` +
+				`必要なのは layer: 1 以上です（layer_relations.md §4.1）`,
+		node,
+	});
 }
 
 /**
@@ -6931,7 +6972,9 @@ function generateAsm(nodes, env, options = {}) {
 	const body = em.lines;
 	em.lines = outer;
 	em.lines.push("\t.global _sign_main");
-	em.lines.push(...wrapFrame(body, em.maxSlot, "_sign_main", em.movedSp, em.conf.regAlloc !== false));
+	const wrappedMain = wrapFrame(body, em.maxSlot, "_sign_main", em.movedSp, em.conf.regAlloc !== false);
+	checkStackFree(em, wrappedMain, "_sign_main", null);
+	em.lines.push(...wrappedMain);
 	// 文字列の中身は最後に置く。`.text` と混ぜないのは、書き換えない領域だからである。
 	em.lines.push(...em.rodataLines());
 
