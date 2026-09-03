@@ -38,9 +38,8 @@ Sign言語において、スペースによる並置は「余積（Coproduct）�
 | **10.5** | `Lambda` | `Lambda` | `compose` | 射の合成（関数合成） |
 | **10.4** | `Lambda` | `Atom` | `apply` | 射の適用（関数適用） |
 | **10.3** | `Atom` | `Lambda` | `apply`（左右を入れ替えて展開） | 逆適用（右辺の関数に左辺の値を適用）。§3.1 参照 |
-| **10.2** | `List \| Struct` | `List~ \| Struct~` | `concat` | 右辺を**展開して**繋ぐ |
-| **10.1** | `List \| Struct` | `Atom \| List \| Struct` | `unshift` | 右辺を**1要素として**足す |
-| **10.1** | `Atom` | `List \| Struct` | `push` | 左辺を先頭へ足す |
+| **10.2** | `Atom \| List \| Struct` | `List~ \| Struct~` | `concat` | 右辺を**展開して**繋ぐ |
+| **10.1** | `Atom \| List \| Struct` | `Atom \| List \| Struct` | `unshift` | 右辺を**1要素として**足す |
 | **10.0** | `Atom` | `Atom` | `construct` | 直和/双積（リストの連接） |
 
 
@@ -54,8 +53,11 @@ Sign言語において、スペースによる並置は「余積（Coproduct）�
 > n 次元配列へ行を1つ足す記法が存在しないという帰結を生んでいた。
 
 > [!NOTE]
-> 優先度の数値は `A_Operator_Table.md` の優先順位欄（低い順→高い順）と対応する。
-> 10.3 が最高優先度（先に処理）、10.0 が最低優先度（後に処理）。
+> 優先度の数値は [`operator_table.md`](../syntax/operator_table.md) の優先順位欄と対応する。
+> 10.5 が最高優先度（先に処理）、10.0 が最低優先度（後に処理）。
+>
+> **`10.x` は tier ではない。** 空白（余積）そのものは `operator_table.js` では tier 11 で
+> あり、`10.x` はその内部でカテゴリ対をどの順に解決するかを表す（演算子表の ※6 を参照）。
 
 ### 3.1 10.3 は独立したノードを作らない（逆適用は糖衣構文）
 
