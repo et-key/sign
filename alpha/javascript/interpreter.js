@@ -430,9 +430,14 @@ function makePartialClosure(closure, suppliedArgs) {
 
 // TailCallマーカー: 末尾位置で見つかったLambda呼び出し（未実行）を表す。
 class TailCall {
-  constructor(closure, argValues) {
+  constructor(closure, argValues, pending = []) {
     this.closure = closure;
     this.argValues = argValues;
+    // **まだ左辺と繋いでいない前置き。** `sep` のような「前置き ＋ 再帰」は末尾では
+    // ないが、構築は自由モノイド（結合的、単位元 `__`）なので**繋ぐのを後回しに
+    // できる**——溜めて最後に畳めば同じ値である。繋ぎ方はノードが知っているので
+    // （`String` の吸収は型で決まる）、値とノードを対で持ち回る。
+    this.pending = pending;
   }
 }
 
@@ -490,6 +495,85 @@ function evalIndentBlock(node, env, tailEval) {
 // その場でapplyClosureを再帰呼び出しする代わりにTailCallマーカーを返す——
 // JSのスタックフレームを消費しない。それ以外の形（compose・pointfree・組み込み関数・
 // 算術式など）は通常のevaluate()にそのまま委譲する（正しく動くが最適化はされない）。
+/**
+ * **構築の合成を値の関数として置く。** ノードを見るのは `String` の吸収を型で決める
+ * ところだけで、あとは値の話である——切り出しておけば、末尾の呼び出しへ跳ぶ側からも
+ * 同じ規則で繋げる（`sep` のような「前置き ＋ 再帰」を積まずに回すのに要る）。
+ */
+function constructValues(node, l, r) {
+        // 余積の単位元則（type_system.md §6.1「関数の位置の `__` は余積の初対象＝単位元、
+        // 引数を素通しにする」）。Unit側を消した結果が1項だけになったら、それを
+        // 1要素リストで包み直さずそのまま返す——`[5]`（1行ブロック）が5そのものに
+        // 評価されるのと同じで、この言語では1要素リストとスカラーは同型。
+        // これが無いと `__ 5` が `[5]` になり、guide/operator_table.md 147行目の
+        // `__ 5 == !__ 5`（両方5）が成立しない。2項以上（`__ 1 2` → `[1 2]`、§6.1の
+        // 輸入失敗例）は左結合で `(__ 1) 2` → `1 2` と畳まれるため従来通り。
+        //
+        // ただし**空文字列は単位元として落とさない**。値としては Unit と同型だが、
+        // 型は String である（pass3 は `` `` 1 2 3 `` を既に String と注釈している）。
+        // 余積に置かれた `` は「以降をテキストとして連結する」という宣言であり、
+        // 落とすと型が String と言っているのに値が List になる——型と値が食い違う。
+        // 値だけでは決まらないので型で決める。`5 / 2` と `5.0 / 2` を型で分けたのと
+        // 同じ構図であり（原理2: 型はゼロコストの帳簿）、`|xs|` のオペランド型判定と同じ。
+        //
+        //   `` 1 2 3   → `123`（テキストとして連結する宣言）
+        //   __ 1 2 3   → [1 2 3]（Unit は余積の単位元なので落ちる）
+        const isTextSeed = (v, n) => isUnit(v) && !!n && n.atomType === "String";
+        if (isUnit(l) && !isTextSeed(l, node.left)) return r;
+        if (isUnit(r) && !isTextSeed(r, node.right)) return l;
+        // tier 10.4（`Lambda` 中置 `Atom` → apply）は演算子表の上では**型による分岐**であり、
+        // pass2 は静的に解けた場合だけ apply ノードを作る。ところが「適用の結果が Lambda に
+        // なる式」（`[!_] __` → Id射）は、静的には arity 1 が飽和した Atom にしか見えないため
+        // construct へ落ちてしまい、`([!_] __) 5` が `[Id射, 5]` になっていた。
+        // 生の `(!__) 5` は getCategory が前置`!`+unit を直接 Lambda と判定するので 5 を返す。
+        // 同じ Id射が、作られ方によって射になったり値として並んだりするのは誤り。
+        // 実行時には左辺の実際の値が分かるので、ここで表どおりの分岐へ戻す。
+        // 右辺も Lambda の場合は tier 10.5（compose）であってここでの apply ではないため除く。
+        if (l !== null && typeof l === "object" && l.__lambda__ &&
+            !(r !== null && typeof r === "object" && r.__lambda__)) {
+          return applyClosure(l, [r]);
+        }
+        // **構造体のマージ**（list_model.md §5.3）。「双方に後置 `~` がついていれば、
+        // リストの時と同様に構造体同士をマージできる」——後置 `~` の意味は一貫して
+        // 「展開して渡す」であり、構造体を展開するとはスロットを撒くということである。
+        //
+        // `~` が無ければマージではない。`q r` は構造体2個が並んだ列（`List(Struct)`）で
+        // あって、勝手に畳んではいけない——名前付きスロットに名前の無いものを足せない
+        // 以上、余積は次元の中を伸ばすしかないからである。
+        //
+        // 重複キーは右が勝つ（§5.3 規則2）。型が違う上書きはコンパイルエラーであり、
+        // それは Pass 3 が静的に弾く（規則3）——ここへ来る時点で型は揃っている。
+        // 判定は**値**で行う。`~` はイテレータを返すので構文を見る必要が無い
+        // ——`n : q~` と束縛してから `p n` と書いても同じようにマージされる。
+        // 見るのは右辺だけでよい。**左辺は器なので常に展開されている**（§2.2）ので、
+        // 左結合の連鎖（`a~ b~ c~`）で中間結果が素の構造体になっても繋がる。
+        {
+          const lo = isIterator(l) && isNamedSlots(l.origin) ? l.origin : l;
+          if (isIterator(r) && isNamedSlots(r.origin) && isNamedSlots(lo)) {
+            return { ...lo, ...r.origin };
+          }
+        }
+        // マージにならなかった `~` は何もしない印なので、器そのものへ戻す
+        // ——名前付きスロットは撒いても名前の行き先が無い。
+        const unwrapStruct = (x) => (isIterator(x) && isNamedSlots(x.origin) ? x.origin : x);
+        l = unwrapStruct(l);
+        r = unwrapStruct(r);
+        // §3.2 余積族: どちらかが文字列ならテキストとして連結する
+        // （`123` 123 = `123123`、list_model.md §2.1/§4.4）。
+        // Stringは余積の**吸収元**——あらゆる値がテキスト表現を持つため、Stringとの
+        // 結合は常に成立する。左辺だけを見ていると `` `ab` 1 `` → "ab1" なのに
+        // `1 `ab`` は [1, "ab"] という別物になり、同じ演算子が引数の順序で挙動を
+        // 変えてしまっていた。それ以外は通常のList構築。
+        {
+          const t = textAbsorb(l, r);
+          if (t !== null) return t;
+        }
+        // **撒くかどうかは値が決める。** 後置 `~` が付いた値だけを撒く。イテレータで
+        // ありさえすれば撒く、ではない——レンジは撒くものではなく1個の値だからである。
+        // 構文ではなく値なので、名前に束縛しても関数を通しても同じ答えになる。
+        return [...asList(deIterate(l)), ...(isSpread(r) ? asList(deIterate(r)) : [r])];
+}
+
 function evaluateTail(node, env) {
   if (!node || typeof node !== "object") return evaluate(node, env);
   if (
@@ -499,6 +583,18 @@ function evaluateTail(node, env) {
   ) {
     // Struct型（全行define+識別子キー）はここでは対象外——evaluate()のStruct分岐へ委譲。
     return evalIndentBlock(node, env, evaluateTail);
+  }
+  // **括りは剥いでから見る。** `c (f rest)` の右辺は括りの節であって呼び出しノードでは
+  // ないので、素通しすると末尾だと気づけない——1文字ごとに JS のフレームが積まれる。
+  // 1行の括りの値はその行の値そのものなので、末尾の判定はそのまま中へ持ち込める。
+  //
+  // **`kind === "paren"` は丸カッコのことではない。** 文法は `[]` / `{}` / `()` を
+  // 区別せず、pass2 はどれも「括り」を `paren` と呼ぶ（囲みの形は読みやすさのためであって、
+  // 意味は構文の位置が決める）。ここで外しているのは**囲みの形をした演算子**の方である
+  // ——`|x|`（絶対値、`abs`）と `||x||`（要素数、`norm`）は中の行の値ではないので、
+  // 剥ぐと別のものになる。分岐（`indent`）も上で別に扱っている。
+  if (node.type === "block" && node.kind === "paren" && Array.isArray(node.lines) && node.lines.length === 1) {
+    return evaluateTail(node.lines[0], env);
   }
   if (node.type === "operation") {
     if (node.name === "or") {
@@ -510,6 +606,23 @@ function evaluateTail(node, env) {
       const l = evaluate(node.left, env);
       if (isUnit(l)) return UNIT;
       return evaluateTail(node.right, env);
+    }
+    // **「前置き ＋ 末尾の呼び出し」は積まずに回せる。**
+    //
+    // `sep : [c ~rest] ? … c (sep rest)` は末尾呼び出しではない——呼んだ後に繋ぐ仕事が
+    // 残るからで、素直に書くと1文字ごとに JS のフレームが1つ積まれる。だが繋ぐのは
+    // 結合的な演算なので、**前置きを溜めて最後に畳んでも同じ値**である。Pass 4 が追記
+    // （呼び先が同じ場所の続きへ書く）で同じことをしているのと同じ話で、実質末尾になる。
+    //
+    // 左辺を先に評価する。順序を変えると副作用（`#` の書き込み）の起きる順が変わる。
+    if (node.name === "construct" || node.name === "concat") {
+      const lv = evaluate(node.left, env);
+      const rt = evaluateTail(node.right, env);
+      if (rt instanceof TailCall) {
+        rt.pending.push({ node, left: lv });
+        return rt;
+      }
+      return constructValues(node, lv, rt);
     }
     if (node.name === "apply") {
       const { calleeNode, argNodes } = collectApplyChain(node);
@@ -537,9 +650,19 @@ function isGreedyPointfreeClosure(closure) {
 }
 
 function applyClosure(closure, argValues) {
+  // 末尾の手前に置かれた前置き（`構築 ＋ 再帰`）を溜める。積まずに回すために要る。
+  const pending = [];
+  // **どの出口でも前置きを畳む。** 完全性公理で潰れる底（`callEnv === null`）のように、
+  // ループの途中から返る道がいくつもある——そこを素通しすると、溜めた前置きが丸ごと
+  // 落ちて `__` になる。畳み方は1箇所にしておく。
+  const finish = (v) => {
+    let out = v;
+    for (let i = pending.length - 1; i >= 0; i--) out = constructValues(pending[i].node, pending[i].left, out);
+    return out;
+  };
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    if (typeof closure === "function") return closure(...argValues); // 組み込み関数
+    if (typeof closure === "function") return finish(closure(...argValues)); // 組み込み関数
     // 関数の位置に来たUnitは余積の初対象（単位元）として引数を素通しする
     // （type_system.md §6.1の表「関数の位置 (`__ x`) → 引数を素通しにする」、
     // 同§のimport失敗例が示す通りクラッシュさせない）。Pass2が静的にLambdaと判定した
@@ -547,7 +670,7 @@ function applyClosure(closure, argValues) {
     // 場合にここへ来る——unit.md §0.1の「未定義識別子はUnitへ収束、実行は止めない」に
     // 揃える。Id射（`!__`）への適用と同じ結果になるのは偶然ではなく、
     // guide/operator_table.md 147行目の `__ 5 == !__ 5` が言っていることそのもの。
-    if (isUnit(closure)) return argValues.length === 1 ? argValues[0] : argValues;
+    if (isUnit(closure)) return finish(argValues.length === 1 ? argValues[0] : argValues);
     if (!closure || !closure.__lambda__) {
       throw new TypeError("Lambdaではない値を関数として適用しようとしました");
     }
@@ -556,19 +679,19 @@ function applyClosure(closure, argValues) {
       // 完全性公理はチェーン全体に効く：fの結果がUnitならgを呼ばず即座にUnit。
       // 左(f)を先に適用し、その結果に右(g)を適用する（左→右パイプライン順、上記参照）。
       const mid = applyClosure(f, argValues);
-      if (isUnit(mid)) return UNIT;
+      if (isUnit(mid)) return finish(UNIT);
       // list_model.md §2.4③: ポイントフリー合成の中間は「1個の実体化されたList値」
       // ではなく次段へ流れるストリーム（①②の Eager/Lazy 境界と同じ原則）。
       // 次段が貪欲なポイントフリー（`[+]`/`[* 2,]`）なら展開して渡す——
       // `[* 2,] [+] 1 2 3 4 5` は「2倍の写像 → 畳み込み」で30になる。
       // 括弧で括った場合（`([* 2,] 1 2 3 4 5)`）はそこで値（List）に実体化されるため、
       // 畳み込むには後置`~`での再展開が要る、という区別がそのまま効く。
-      if (Array.isArray(mid) && isGreedyPointfreeClosure(g)) return applyClosure(g, mid);
-      return applyClosure(g, [mid]);
+      if (Array.isArray(mid) && isGreedyPointfreeClosure(g)) return finish(applyClosure(g, mid));
+      return finish(applyClosure(g, [mid]));
     }
     // Id射（`!__`）への適用は引数をそのまま返す。引数がUnitなら完全性公理がそのまま
     // 効いてUnitになる（categorical_truth.md「`!__ __` は理論的に正しく `__` を返す」）。
-    if (closure.__identity__) return argValues.length > 0 ? argValues[0] : UNIT;
+    if (closure.__identity__) return finish(argValues.length > 0 ? argValues[0] : UNIT);
     if (closure.__pointfree__) {
       // ホール由来のポイントフリー（`[!_]`）は hole_desugaring.md により静的に
       // `$p0 ? !$p0` へ脱糖される——すなわち**ラムダ**であり、完全性公理の対象である。
@@ -579,19 +702,20 @@ function applyClosure(closure, argValues) {
       // 一方、貪欲なポイントフリー（`[+]`）は引数スロットではなく**余積のストリーム**を
       // 食う（tier 10.0）。ストリーム中の `__` は余積の単位元として消えるべきものであり、
       // 引数スロットへUnitが来たわけではないので公理の対象ではない（`[+] 1 __` は 1）。
-      if (!isGreedyPointfreeClosure(closure) && argValues.some((v) => isUnit(v))) return UNIT;
-      return applyPointfree(closure.__pointfree__, closure.env, argValues);
+      if (!isGreedyPointfreeClosure(closure) && argValues.some((v) => isUnit(v))) return finish(UNIT);
+      return finish(applyPointfree(closure.__pointfree__, closure.env, argValues));
     }
     const callEnv = bindParams(closure.params, argValues, closure.env);
-    if (callEnv === null) return UNIT;
+    if (callEnv === null) return finish(UNIT);
     const result = evaluateTail(closure.body, callEnv);
     if (result instanceof TailCall) {
       // 末尾呼び出し: 新しいJSフレームを積まず、同じループの中で継続する。
+      if (result.pending.length > 0) pending.push(...result.pending);
       closure = result.closure;
       argValues = result.argValues;
       continue;
     }
-    return result;
+    return finish(result);
   }
 }
 
@@ -1981,79 +2105,9 @@ function evaluate(node, env) {
       }
       case "construct":
       case "concat": {
-        let l = evaluate(node.left, env);
-        let r = evaluate(node.right, env);
-        // 余積の単位元則（type_system.md §6.1「関数の位置の `__` は余積の初対象＝単位元、
-        // 引数を素通しにする」）。Unit側を消した結果が1項だけになったら、それを
-        // 1要素リストで包み直さずそのまま返す——`[5]`（1行ブロック）が5そのものに
-        // 評価されるのと同じで、この言語では1要素リストとスカラーは同型。
-        // これが無いと `__ 5` が `[5]` になり、guide/operator_table.md 147行目の
-        // `__ 5 == !__ 5`（両方5）が成立しない。2項以上（`__ 1 2` → `[1 2]`、§6.1の
-        // 輸入失敗例）は左結合で `(__ 1) 2` → `1 2` と畳まれるため従来通り。
-        //
-        // ただし**空文字列は単位元として落とさない**。値としては Unit と同型だが、
-        // 型は String である（pass3 は `` `` 1 2 3 `` を既に String と注釈している）。
-        // 余積に置かれた `` は「以降をテキストとして連結する」という宣言であり、
-        // 落とすと型が String と言っているのに値が List になる——型と値が食い違う。
-        // 値だけでは決まらないので型で決める。`5 / 2` と `5.0 / 2` を型で分けたのと
-        // 同じ構図であり（原理2: 型はゼロコストの帳簿）、`|xs|` のオペランド型判定と同じ。
-        //
-        //   `` 1 2 3   → `123`（テキストとして連結する宣言）
-        //   __ 1 2 3   → [1 2 3]（Unit は余積の単位元なので落ちる）
-        const isTextSeed = (v, n) => isUnit(v) && !!n && n.atomType === "String";
-        if (isUnit(l) && !isTextSeed(l, node.left)) return r;
-        if (isUnit(r) && !isTextSeed(r, node.right)) return l;
-        // tier 10.4（`Lambda` 中置 `Atom` → apply）は演算子表の上では**型による分岐**であり、
-        // pass2 は静的に解けた場合だけ apply ノードを作る。ところが「適用の結果が Lambda に
-        // なる式」（`[!_] __` → Id射）は、静的には arity 1 が飽和した Atom にしか見えないため
-        // construct へ落ちてしまい、`([!_] __) 5` が `[Id射, 5]` になっていた。
-        // 生の `(!__) 5` は getCategory が前置`!`+unit を直接 Lambda と判定するので 5 を返す。
-        // 同じ Id射が、作られ方によって射になったり値として並んだりするのは誤り。
-        // 実行時には左辺の実際の値が分かるので、ここで表どおりの分岐へ戻す。
-        // 右辺も Lambda の場合は tier 10.5（compose）であってここでの apply ではないため除く。
-        if (l !== null && typeof l === "object" && l.__lambda__ &&
-            !(r !== null && typeof r === "object" && r.__lambda__)) {
-          return applyClosure(l, [r]);
-        }
-        // **構造体のマージ**（list_model.md §5.3）。「双方に後置 `~` がついていれば、
-        // リストの時と同様に構造体同士をマージできる」——後置 `~` の意味は一貫して
-        // 「展開して渡す」であり、構造体を展開するとはスロットを撒くということである。
-        //
-        // `~` が無ければマージではない。`q r` は構造体2個が並んだ列（`List(Struct)`）で
-        // あって、勝手に畳んではいけない——名前付きスロットに名前の無いものを足せない
-        // 以上、余積は次元の中を伸ばすしかないからである。
-        //
-        // 重複キーは右が勝つ（§5.3 規則2）。型が違う上書きはコンパイルエラーであり、
-        // それは Pass 3 が静的に弾く（規則3）——ここへ来る時点で型は揃っている。
-        // 判定は**値**で行う。`~` はイテレータを返すので構文を見る必要が無い
-        // ——`n : q~` と束縛してから `p n` と書いても同じようにマージされる。
-        // 見るのは右辺だけでよい。**左辺は器なので常に展開されている**（§2.2）ので、
-        // 左結合の連鎖（`a~ b~ c~`）で中間結果が素の構造体になっても繋がる。
-        {
-          const lo = isIterator(l) && isNamedSlots(l.origin) ? l.origin : l;
-          if (isIterator(r) && isNamedSlots(r.origin) && isNamedSlots(lo)) {
-            return { ...lo, ...r.origin };
-          }
-        }
-        // マージにならなかった `~` は何もしない印なので、器そのものへ戻す
-        // ——名前付きスロットは撒いても名前の行き先が無い。
-        const unwrapStruct = (x) => (isIterator(x) && isNamedSlots(x.origin) ? x.origin : x);
-        l = unwrapStruct(l);
-        r = unwrapStruct(r);
-        // §3.2 余積族: どちらかが文字列ならテキストとして連結する
-        // （`123` 123 = `123123`、list_model.md §2.1/§4.4）。
-        // Stringは余積の**吸収元**——あらゆる値がテキスト表現を持つため、Stringとの
-        // 結合は常に成立する。左辺だけを見ていると `` `ab` 1 `` → "ab1" なのに
-        // `1 `ab`` は [1, "ab"] という別物になり、同じ演算子が引数の順序で挙動を
-        // 変えてしまっていた。それ以外は通常のList構築。
-        {
-          const t = textAbsorb(l, r);
-          if (t !== null) return t;
-        }
-        // **撒くかどうかは値が決める。** 後置 `~` が付いた値だけを撒く。イテレータで
-        // ありさえすれば撒く、ではない——レンジは撒くものではなく1個の値だからである。
-        // 構文ではなく値なので、名前に束縛しても関数を通しても同じ答えになる。
-        return [...asList(deIterate(l)), ...(isSpread(r) ? asList(deIterate(r)) : [r])];
+        const cl = evaluate(node.left, env);
+        const cr = evaluate(node.right, env);
+        return constructValues(node, cl, cr);
       }
       // list_cheat_sheet.md「先頭/末尾に要素追加」（10.1、pass2.jsのcoproductReduce参照）。
       // pass2.js側の命名はJS配列メソッドのpush/unshiftとは意味が逆——push(a,b)はb側が
