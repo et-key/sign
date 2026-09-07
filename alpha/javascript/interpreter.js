@@ -1619,7 +1619,7 @@ function getPropValue(l, rightNode, env) {
   // 文字の配列のままではなく文字列へ戻す（isString、Stringとして返す方が同型性に
   // 合う——List側の`[1 2 3 4] ' [1~3] → [2 3 4]`と対称）。
   const isString = typeof l === "string";
-  const asIndexable = Array.isArray(l) ? l : isString ? l.split("") : [l];
+  const asIndexable = Array.isArray(l) ? l : isString ? [...l] : [l];
   // get-rest（`list ' N~`）はここには無い。Pass 2 が `list ' (N ~+ 1)` へ均しており、
   // 「終端の無いレンジで引く＝そこから末尾まで」として `getPropByValue` が1本で扱う。
   return getPropByValue(l, evaluate(rightNode, env));
@@ -1676,7 +1676,7 @@ function getPropByValue(l, r) {
     const items = Array.isArray(l)
       ? l
       : asStr
-        ? l.split("")
+        ? [...l]
         : isNamedSlots(l)
           ? Object.values(l)
           : [l];
@@ -1714,7 +1714,7 @@ function getPropByValue(l, r) {
   const asIndexable = Array.isArray(l)
     ? l
     : isString
-      ? l.split("")
+      ? [...l]
       : isNamedSlots(l)
         ? Object.values(l)
         : [l];
@@ -2097,7 +2097,11 @@ function evaluate(node, env) {
       if (isUnit(inner)) return 0;
       // 無限は数えられない——「無限の要素数」という値は無いので零射へ落ちる。
       if (isIterator(inner)) return iteratorCount(inner);
-      if (Array.isArray(inner) || typeof inner === "string") return inner.length;
+      if (Array.isArray(inner)) return inner.length;
+      // **文字列は符号位置で数える。** `String ≅ List(Char)` の Char は符号位置なので、
+      // JS の `.length`（UTF-16 単位）では非 BMP が 2 と数えられる——実際 `𐀀𐀁𐀂` が
+      // 6 になり、**実機の 3 のほうが正しかった**（オラクルの側が壊れていた）。
+      if (typeof inner === "string") return [...inner].length;
       if (isNamedSlots(inner)) return Object.keys(inner).length;
 
       // **スカラーは1要素の器である。** 射（Lambda）は器ではないので零射。
@@ -2120,7 +2124,11 @@ function evaluate(node, env) {
       // イテレータは有限なら要素数を持つ。**無限は数えられない**ので零射へ落ちる
       // ——「無限の要素数」という値は無い。
       if (isIterator(inner)) return iteratorCount(inner);
-      if (Array.isArray(inner) || typeof inner === "string") return inner.length;
+      if (Array.isArray(inner)) return inner.length;
+      // **文字列は符号位置で数える。** `String ≅ List(Char)` の Char は符号位置なので、
+      // JS の `.length`（UTF-16 単位）では非 BMP が 2 と数えられる——実際 `𐀀𐀁𐀂` が
+      // 6 になり、**実機の 3 のほうが正しかった**（オラクルの側が壊れていた）。
+      if (typeof inner === "string") return [...inner].length;
       // 名前付きスロットもスロット数を持つ。名前・連番・実データの三つを持つ以上、
       // 連番の個数＝スロット数は定義されている。連番で引ける（`point ' 0`）のに
       // 個数が取れないと、走査する手段が無くなってしまう。
