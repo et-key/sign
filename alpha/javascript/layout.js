@@ -569,6 +569,33 @@ function elementShapeOfList(node, conf) {
 }
 
 /**
+ * **添字がリテラルなら、要素の形は「その要素の形」である。**
+ *
+ * `elementShapeOfList` は「要素はどれも同じ形」を要求する。それは正しい——揃っていない
+ * 器を先頭の表で読むと別のスロットを読むからである。だが**どれを引くかが静的に書かれて
+ * いるなら、揃っている必要は無い**：`by_precedence ' 1` は段2の表そのものであり、他の段が
+ * どんな形でも関係が無い。
+ *
+ * 演算子表がまさにこの形である。段ごとに綴り（鍵）が違うので要素の形は揃わないが、
+ * 段は番号で引く。連番スロットを持つ構造体を `slotOfKey` がリテラルの添字で引けるのと
+ * 同じ話が、器の要素にも成り立つ。
+ *
+ * 要素の並べ方は `elementShapeOfList` と同じ手続きで数える——**2箇所で別々に数えない**。
+ */
+function itemShapeOfListAt(node, conf, index) {
+  if (!Number.isInteger(index) || index < 0) return null;
+  const n = deref(node, conf && conf.env);
+  if (!n) return null;
+  let items = listItems(n, conf && conf.env);
+  if (!items || items.length === 0) return null;
+  if (items.length === 1 && items[0] && items[0].type === "operation" && items[0].name === "product") {
+    items = flattenProduct(items[0]);
+  }
+  if (index >= items.length) return null;
+  return layoutOfStruct(items[index], conf);
+}
+
+/**
  * **鍵が増えるマージのために、場所を「鍵の和集合」で取る。**
  *
  * `p~ [ zzz : 1 ]~` は「p の器へ入れる」形だが、鍵が1本増える。p が自分の鍵ぶんしか
@@ -919,6 +946,7 @@ export {
   measure,
   layoutOfStruct,
   elementShapeOfList,
+  itemShapeOfListAt,
   formatLayout,
   alignUp,
   passingOf,

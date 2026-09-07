@@ -38,7 +38,7 @@
 import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf, charLimitOf, DEFAULT_CHARSET, SIGNEDNESS, literalDigits, literalParts } from "./target_info.js";
 import { envLookup } from "./pass1.js";
 import { isBareComment } from "./pass3.js";
-import { passingOf, measure, layoutOfStruct, elementShapeOfList, flattenProduct, isExpandNode, mergeBaseIdentifier } from "./layout.js";
+import { passingOf, measure, layoutOfStruct, elementShapeOfList, itemShapeOfListAt, flattenProduct, isExpandNode, mergeBaseIdentifier } from "./layout.js";
 import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 // AAPCS64（stack_abi.md §4.2）。引数は x0〜x7、返値は x0、一時は x9〜x15。
@@ -4402,6 +4402,15 @@ function structShapeOf(node, env, conf, depth = 0) {
 		// 並びは同じ——添字が実行時に決まっても構わない、というのがここの違いである。
 		const bl = unwrap(u.left);
 		if (bl && (bl.atomType === "List" || bl.atomType === "Iterator")) {
+			// **添字がリテラルなら、要素の形が揃っている必要は無い。** どれを引くかが静的に
+			// 書かれているので、他の要素がどんな形でも関係が無い——演算子表がこの形で、
+			// 段ごとに綴り（鍵）が違うため形は揃わないが、段は番号で引く。
+			// 判定は Pass 3 と同じ関数（`itemShapeOfListAt`）に置いてある。
+			const ik = constAddressOf(u.right, env);
+			if (ik !== null && ik >= 0n) {
+				const at = itemShapeOfListAt(bl, conf, Number(ik));
+				if (at && at.slotKind === "named") return at;
+			}
 			const direct = elementShapeOfList(bl, conf);
 			if (direct) return direct;
 			// 仮引数として受けた器には値ノードが無い。呼び出しサイトから起こしたものが束縛に在る。
@@ -4411,8 +4420,13 @@ function structShapeOf(node, env, conf, depth = 0) {
 			}
 			return null;
 		}
+		// **連番スロットの中の形も引ける。** 下の分岐は連番（`ordinal`）でも名前でも辿るので、
+		// ここで名前付きに限る理由が無い——限っていたため、直積で並べた器
+		// （`by_precedence : tier1 , tier2 , …`）から取り出した要素の形が出ず、
+		// `(by_precedence ' 1) ' \`:\`` が「まだ出せない式です（get_prop）」で止まっていた。
+		// Pass 3 の `structShapeOfNode` にも同じ緩和が要る（片方だけだと型か命令のどちらかが欠ける）。
 		const base = structShapeOf(u.left, env, conf, depth + 1);
-		if (!base || base.slotKind !== "named" || !Array.isArray(base.slots)) return null;
+		if (!base || !Array.isArray(base.slots)) return null;
 		const si = constAddressOf(u.right, env);
 		let slot = null;
 		if (si !== null && si >= 0n) {

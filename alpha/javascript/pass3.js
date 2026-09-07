@@ -33,7 +33,7 @@
 import { literalDigits } from "./target_info.js";
 import { envLookup } from './pass1.js';
 import { OperationError } from "./errors.js";
-import { stringLength, layoutOfStruct , elementShapeOfList } from "./layout.js";
+import { stringLength, layoutOfStruct , elementShapeOfList, itemShapeOfListAt } from "./layout.js";
 import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 const ARITHMETIC_OPS = new Set(["add", "sub", "mul", "div", "mod", "pow"]);
@@ -1203,6 +1203,15 @@ function structShapeOfNode(node, env, depth = 0) {
     // 器の要素を引いた形。要素はどれも同じ形なので、並びは要素そのものが持っている。
     const bl = u.left;
     if (bl && (bl.atomType === "List" || bl.atomType === "Iterator")) {
+      // **添字がリテラルなら、揃っている必要は無い。** どれを引くかが静的に書かれている
+      // ので、他の要素がどんな形でも関係が無い——演算子表がこの形で、段ごとに綴り（鍵）が
+      // 違うため要素の形は揃わないが、段は番号で引く（`layout.js` の注記）。
+      let k = u.right;
+      while (k && k.type === "block" && Array.isArray(k.lines) && k.lines.length === 1) k = k.lines[0];
+      if (k && k.type === "atom" && k.kind === "number") {
+        const at = itemShapeOfListAt(bl, conf, parseInt(k.value, 10));
+        if (at && at.slotKind === "named") return at;
+      }
       const direct = elementShapeOfList(bl, conf);
       if (direct) return direct;
       // 仮引数として受けた器には値ノードが無い。呼び出しサイトから起こしたものが束縛に在る。
@@ -1212,8 +1221,15 @@ function structShapeOfNode(node, env, depth = 0) {
       }
       return null;
     }
+    // **連番スロットの中の形も引ける。** `slotOfKey` は名前でも連番（宣言順）でも引く
+    // ので、ここで名前付きに限る理由が無い——限っていたため、直積で並べた器
+    // （`by_precedence : tier1 , tier2 , …`）から取り出した要素の形が出ず、
+    // `(by_precedence ' 1) ' \`:\`` が「まだ出せない式です（get_prop）」で止まっていた。
+    //
+    // 要素の形が揃っていなくてよいのは、**どれを引くかが静的に書かれている**からである
+    // （揃わない器を実行時の添字で引く形は、そもそも `slotOfKey` が null を返す）。
     const base = structShapeOfNode(u.left, env, depth + 1);
-    if (!base || base.slotKind !== "named" || !Array.isArray(base.slots)) return null;
+    if (!base || !Array.isArray(base.slots)) return null;
     const sl = slotOfKey(base, u.right);
     return (sl && sl.shape) || null;
   }
