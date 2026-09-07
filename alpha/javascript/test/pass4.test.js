@@ -1083,5 +1083,46 @@ checkTrue(
 check("連番は引ける", asm("l : [1 2 3]\nl ' 0").diagnostics.length, 0);
 check("名前は引ける", asm("p :\n\tx : 3\np ' x").diagnostics.length, 0);
 
+// ---- 入れ子の構造体を `.rodata` へ置く（出力の形を見る） ----
+//
+// 値の一致は qemu 側の 17 本が見ている。ここが見るのは**アセンブリの性質**で、
+// 値の突き合わせでは捕まらないものだけを扱う。
+const anonLabels = (t) => (t.match(/\.Lanon\d+:/g) || []).map((x) => x.slice(0, -1));
+const anonRefs = (t) => (t.match(/\.quad \.Lanon\d+/g) || []).map((x) => x.slice(7));
+{
+	// 置ける形：像が出て、外側から指されている。フレームへ組み直さない（確保ゼロ）。
+	const r = asm("n :\n\ta :\n\t\tt : 14\n\t\tr : 0\n\tb :\n\t\tt : 15\n\t\tr : 1\nn ' a");
+	checkTrue("入れ子：内側の像が .rodata に出る", anonLabels(r.text).length === 2, anonLabels(r.text).join(","));
+	checkTrue("入れ子：出た像は全部指されている", anonRefs(r.text).length === 2 && new Set(anonRefs(r.text)).size === 2);
+	checkTrue("入れ子：フレームへ組み直さない", !/sub\s+sp,\s*sp,\s*#/.test(r.text), r.text.slice(0, 200));
+}
+{
+	// 同じ内容は1つに畳む。**鍵は内容そのもの**なので、内容が違えば必ず別の像になる。
+	const same = asm("t :\n\ta :\n\t\tx : 1\n\t\ty : 2\n\tb :\n\t\tx : 1\n\t\ty : 2\nt ' a");
+	checkTrue("入れ子：同じ内容は1つに畳む", anonLabels(same.text).length === 1, anonLabels(same.text).join(","));
+	// 32 ビット FNV-1a では衝突していた組（実際に踏んだ）。要約で畳むと 1 本になる。
+	const clash = asm("t :\n\tesc :\n\t\ta : 1\n\t\tb : 48\n\t\tc : 54\n\tsep :\n\t\ta : 3\n\t\tb : 210\n\t\tc : 80\nt ' esc");
+	checkTrue("入れ子：内容が違えば畳まない（衝突した組）", anonLabels(clash.text).length === 2, anonLabels(clash.text).join(","));
+	// 幅が違えば別の像である（整列も鍵に入っている）。
+	const width = asm("n :\n\ta :\n\t\tp : 477\n\t\tq : 259\n\tb :\n\t\tp : 0\n\t\tq : 60\n\t\tr : 84\nn ' a");
+	checkTrue("入れ子：幅が違えば畳まない", anonLabels(width.text).length === 2, anonLabels(width.text).join(","));
+}
+{
+	// **諦めたら、置きかけたものも引き上げる。** 外側に実行時の値が1つでもあれば像は
+	// 置けないが、`intern` は呼んだ時点で登録されるので、そのままだと誰も指さないデータが
+	// `.rodata` に残っていた（実測で 35 本の表が 560 byte の死んだ像を積んだ）。
+	const r = asm("g : y ? y + 1\nn :\n\ta :\n\t\tc : 2\n\t\td : 3\n\tb : g 3\nn ' b");
+	checkTrue("入れ子：譲ったら像を残さない", anonLabels(r.text).length === 0, anonLabels(r.text).join(","));
+}
+{
+	// **その幅に収まらない数は置かない。** 収まらない数をそのまま `.quad` へ書くと、
+	// Sign は診断ゼロのままアセンブルできない `.s` を出していた（止めるのは clang だけ）。
+	const over = asm("n :\n\tk :\n\t\tv : 18446744073709551616\n\t\tw : 1\n\tz : 1\nn ' z");
+	checkTrue("入れ子：幅に収まらない数を .quad へ書かない", !/\.quad\s+18446744073709551616/.test(over.text));
+	checkTrue("入れ子：収まらないときは像ごと置かない", anonLabels(over.text).length === 0, anonLabels(over.text).join(","));
+	const edge = asm("n :\n\tk :\n\t\tv : 9223372036854775808\n\t\tw : 1\n\tz : 1\nn ' k");
+	checkTrue("入れ子：2^63 は置ける（境界）", anonLabels(edge.text).length === 1, anonLabels(edge.text).join(","));
+}
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

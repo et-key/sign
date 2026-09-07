@@ -728,7 +728,10 @@ class Emitter {
 		// `.rodata` に置いた文字列。中身が同じなら1つに畳む（キーは符号位置の並び）。
 		this.rodata = new Map();
 		// `$名前` が指す先。名前ごとに1つ（演算子表の「binding ごとに一意・安定」）。
+		// 名前を持たない像（入れ子の内側）も同じ表に載るが、そちらの鍵は内容そのもので
+		// あり、ラベルは `.Lanon<連番>`——利用者の識別子と棚を分ける（`internAnonImage`）。
 		this.namedData = new Map();
+		this.anonSeq = 0;
 	}
 
 	/**
@@ -788,6 +791,36 @@ class Emitter {
 		}
 		const label = `.Lbind_${name.replace(/[^\w]/g, "_")}`;
 		this.namedData.set(key, { label, body, align, writable });
+		return label;
+	}
+
+	/**
+	 * **名前を持たない像を置く。鍵は内容そのものである。**
+	 *
+	 * 入れ子の内側の構造体には名前が無い。`internBindingImage` は「名前ごとに一意」で
+	 * 畳むので、名前の代わりに内容の要約（ハッシュ）を渡すと**要約が同じ別物が同じ像に
+	 * なる**——しかも鍵が当たった時点で新しい body を捨てるため、後から来たほうが黙って
+	 * 先客の中身を読む。実際に踏んだ：
+	 *
+	 *   `{a:1, b:48, c:54}` と `{a:3, b:210, c:80}` は 32 ビット FNV-1a がどちらも
+	 *   `3dea029b` で、後者を引くと 3 ではなく 1 が返った（診断ゼロ）。幅の違う像
+	 *   （16 byte と 24 byte）まで衝突すると、読む側は本当の大きさで引くので**像の外**を
+	 *   読み、生の番地が値として出た。衝突は乱数的にばらけず族をなし、その値域
+	 *   （`.quad 14` / `.quad 7` など）は演算子表そのものの値域と重なっていた。
+	 *
+	 * **だから要約は使わない。** `intern`（文字列）が `cps.join(",")` を鍵にしているのと
+	 * 同じで、内容そのものを鍵にすれば衝突は原理的に起きない。整列も鍵に入れる——同じ行の
+	 * 並びでも整列が違えば別の像である。
+	 *
+	 * ラベルは連番で振る。**利用者の識別子と同じ棚に載せない**のも要点で、`anon_<hex>` の
+	 * ような綴りを名前にすると利用者が同じ名前を書けてしまい、そこでも像を共有していた。
+	 */
+	internAnonImage(body, align) {
+		const key = `a:${align}:${body.join("\n")}`;
+		const hit = this.namedData.get(key);
+		if (hit) return hit.label;
+		const label = `.Lanon${this.anonSeq++}`;
+		this.namedData.set(key, { label, body, align, writable: false });
 		return label;
 	}
 
@@ -3597,6 +3630,24 @@ function bindingLabel(name, b, env, em) {
  */
 function slotImageLines(slot, value, env, em) {
 	const v = unwrap(value);
+	// **スロットが構造体なら、その中身も静的に置ける。**
+	//
+	// 入れ子は `{ptr}` 1本で運ばれる（`passingOf(Struct)` が reference/8）ので、内側を
+	// `.rodata` へ置いてそのラベルを指すだけでよい。ここを見ていなかったため、値が全部
+	// 定数でも**入れ子というだけでフレームへ組み直していた**——実測で、中置35本の演算子表を
+	// 1回引くのに平らなら 3 命令・確保ゼロのところ、入れ子は 995 命令・1696 byte の確保に
+	// なっていた。読む側は既に `ldr` 2本で最適なので、高いのは組み直しのほうだった。
+	//
+	// 内側が置けなければ（実行時に決まる値を含むなら）null を返して、これまで通り
+	// フレームへ組む道へ譲る。**置けないことと黙って別の答えを出すことは違う**（原理4）。
+	//
+	// 畳むのは `internAnonImage`——鍵は内容そのものである。要約（ハッシュ）で畳むと
+	// 別物が同じ像を共有する（そちらの注記を参照）。
+	if (v && v.type === "block" && slot.type === "Struct" && slot.size === 8) {
+		const inner = structImageOf(v, env, em);
+		if (!inner) return null;
+		return [`	.quad ${em.internAnonImage(inner.body, inner.align)}`];
+	}
 	if (!v || v.type !== "atom") return null;
 	if (v.kind === "number" || v.kind === "address") {
 		// **整数として書けるものだけ。** `.quad 2.5` はアセンブラが受け取らない
@@ -3608,6 +3659,16 @@ function slotImageLines(slot, value, env, em) {
 			return null;
 		}
 		if (![1, 2, 4, 8].includes(slot.size)) return null;
+		// **その幅に収まる数だけ。** 収まらない数をそのまま書くと、Sign は診断ゼロのまま
+		// アセンブルできない `.s` を出す（`.quad 18446744073709551616` を clang が
+		// `literal value out of range` で撥ねる）。**止めているのがツールチェーンだけ**という
+		// のは名指ししていないのと同じである（原理4）。ここで置くのをやめれば、値を命令へ
+		// 組む道へ譲る——そちらは数の幅を自分で見る。
+		//
+		// 上下界は符号付きと符号無しの合併である。アセンブラは `.quad` に
+		// `-2^63` も `2^64-1` も受け取り、どちらも同じ 64 ビットの並びになる。
+		const bits = BigInt(slot.size * 8);
+		if (n >= 1n << bits || n < -(1n << (bits - 1n))) return null;
 		return [`	${dataDirective(slot.size)} ${n}`];
 	}
 	if (v.kind === "string" || v.kind === "char" || v.kind === "unicode") {
@@ -3644,24 +3705,41 @@ function slotImageLines(slot, value, env, em) {
 function structImageOf(node, env, em) {
 	const n = unwrap(node);
 	if (!isStructBlock(n) || n.mergedSlots) return null;
+	// **諦めたら、置きかけたものも引き上げる。**
+	//
+	// スロットは順に見ていくので、途中まで置けて最後の1つで諦めることがある。`em.intern`
+	// も `em.internAnonImage` も**呼んだ時点で登録される**ので、そのままだと誰も指さない
+	// データが `.rodata` に残る——実測で、実行時の値を1つ混ぜた35本の表が、命令列は
+	// 譲る道と1命令も違わないのに 560 byte の死んだ像を積んでいた。裸の機械へ降ろす
+	// 言語で、指されないバイトを黙って増やしてはいけない。
+	//
+	// 巻き戻すのは登録の**数**でよい。Map は挿入順を保つので、境界より後ろを消せば
+	// この呼び出しが足したものだけが消える（内側の再帰が足したぶんも含めて）。
+	const mark = { rodata: em.rodata.size, named: em.namedData.size, anon: em.anonSeq };
+	const rollback = () => {
+		for (const k of [...em.rodata.keys()].slice(mark.rodata)) em.rodata.delete(k);
+		for (const k of [...em.namedData.keys()].slice(mark.named)) em.namedData.delete(k);
+		em.anonSeq = mark.anon;
+		return null;
+	};
 	const lay = layoutOfStruct(n, { target: em.conf.target, charset: em.conf.charset, env });
 	const lines = (n.lines || []).map(unwrap);
 	// スロットは宣言順の `ordinal` で行と1対1である。1つでも欠けていれば置かない。
-	if (!lay || !lay.slots || lay.slots.length !== lines.length) return null;
+	if (!lay || !lay.slots || lay.slots.length !== lines.length) return rollback();
 	const body = [];
 	let at = 0;
 	for (const sl of lay.slots) {
 		const line = lines[sl.ordinal];
-		if (!isDefineNode(line)) return null;
+		if (!isDefineNode(line)) return rollback();
 		const piece = slotImageLines(sl, line.right, env, em);
-		if (!piece) return null;
+		if (!piece) return rollback();
 		// 重なったら置かない。決まらないことは黙って別の答えにせず、道を譲る（原理4）。
-		if (sl.offset < at) return null;
+		if (sl.offset < at) return rollback();
 		if (sl.offset > at) body.push(`	.zero ${sl.offset - at}`);
 		body.push(...piece);
 		at = sl.offset + sl.size;
 	}
-	if (lay.size < at) return null;
+	if (lay.size < at) return rollback();
 	if (lay.size > at) body.push(`	.zero ${lay.size - at}`);
 	return { body, align: lay.align, size: lay.size };
 }
