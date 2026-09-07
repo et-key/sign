@@ -603,12 +603,22 @@ function emitLiftToContainer(em, node, valueOff, why) {
 	em.movedSp = true;
 	em.load(SCRATCH[0], valueOff);
 	em.emit(`str ${SCRATCH[0]}, [sp, #0]`, "長さ1の器として置く");
+	// **`__` は長さ1の器ではなく、空の器である**（`__ = []`、unit.md）。持ち上げても
+	// 空のままでなければならない。ここで無条件に `len = 1` を置くと、受ける側の完全性
+	// 公理（`cmp len, #0`）が発火せず、`f __` で本体が走ってしまう——実際 `f : [~a] ? 99`
+	// に `__` を渡すと機械は `99` を返していた（解釈器は `__`）。
+	//
+	// **`__ = []` を決める場所はここ1箇所にする。** 持ち上げる側と受ける側の2箇所で
+	// 別々に決めていたのが原因で、片方だけが `__` を知っている状態になっていた。
+	em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
+	em.emit(`cmp ${SCRATCH[0]}, x12`);
+	em.emit(`mov ${SCRATCH[1]}, #1`, "len は 1");
+	em.emit(`csel ${SCRATCH[1]}, xzr, ${SCRATCH[1]}, eq`, "ただし __ なら len = 0（__ = []）");
 	em.emit(`mov ${SCRATCH[0]}, sp`, "ptr");
 	const po = em.push();
 	const lo = po === null ? null : em.push();
 	if (lo === null) return null;
 	em.store(SCRATCH[0], po, "ptr");
-	em.emit(`mov ${SCRATCH[1]}, #1`, "len は 1");
 	em.store(SCRATCH[1], lo, "len");
 	return po;
 }
@@ -682,21 +692,38 @@ function emitSliceLift(em, node, env, scope) {
 function emitDestructure(em, containerOff, headOffs, elemSize, signed, name) {
 	const offs = Array.isArray(headOffs) ? headOffs : [headOffs];
 	em.load(SCRATCH[0], containerOff, `${name} の先頭を取り出す`);
+	em.load("x11", containerOff + 8, "器の長さ");
 	// 要素の幅ぶんだけ読む。符号ありで 8 byte 未満なら符号拡張が要る。
 	const mnemonic =
 		elemSize === 8 ? `ldr ${SCRATCH[1]}, [${SCRATCH[0]}]`
 		: elemSize === 4 ? `ldr${signed ? "sw " + SCRATCH[1] : " w10"}, [${SCRATCH[0]}]`
 		: elemSize === 2 ? `ldr${signed ? "sh " + SCRATCH[1] : "h w10"}, [${SCRATCH[0]}]`
 		: `ldr${signed ? "sb " + SCRATCH[1] : "b w10"}, [${SCRATCH[0]}]`;
+	// **器より多くの頭は取れない。** 足りないスロットは `__` であって、器の外に在った値
+	// ではない。検査が無かったので `f : [a b c ~d] ? c` に `[7 8]` を渡すと `0` が、
+	// `d ' 0` に至っては RAM の番地がそのまま返っていた。
+	//
+	// 読んでから選ぶ。切り出し（`' i~`）の側が既にこの綴りなので合わせる——**同じ事実を
+	// 2通りに書かない**。範囲外を読むこと自体は、頭の数は静的に決まっていて器は少なくとも
+	// 1要素あるので（下の門番の話）、高々数要素ぶんの先読みにしかならない。
+	if (offs.length > 1) em.emit("movz x12, #0x8000, lsl #48", "範囲外は __");
 	offs.forEach((headOff, i) => {
 		em.emit(mnemonic, `${elemSize} byte の要素1つ（${i + 1} 個目）`);
+		// **1個目は検査が要らない。** 入口の門番が `len = 0`（＝`__`）を弾いているので、
+		// ここへ来た時点で器は少なくとも1要素ある——門番が証明したことを本体で払い直さない。
+		if (i > 0) {
+			em.emit(`cmp x11, #${i}`, `${i + 1} 個目は器の中か`);
+			em.emit(`csel ${SCRATCH[1]}, ${SCRATCH[1]}, x12, hi`, "器の外なら __");
+		}
 		em.store(SCRATCH[1], headOff, offs.length === 1 ? "先頭" : `先頭から ${i + 1} 個目`);
 		em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #${elemSize}`, "1要素ぶん進める");
 	});
 	em.store(SCRATCH[0], containerOff, "残りの ptr");
-	em.load(SCRATCH[1], containerOff + 8);
-	em.emit(`sub ${SCRATCH[1]}, ${SCRATCH[1]}, #${offs.length}`, "残りの長さ");
-	em.store(SCRATCH[1], containerOff + 8, "残りの len（0 なら __）");
+	em.emit(`subs x11, x11, #${offs.length}`, "残りの長さ");
+	// **負にはしない。** 長さは自然数で、下限の 0 が `__`（空の器）である。切り出し側の
+	// `csel …, xzr, pl` と同じ規準——ここに無かったので `||残り||` が -1 を返していた。
+	em.emit("csel x11, x11, xzr, pl", "尽きたら 0（__ = []）");
+	em.store("x11", containerOff + 8, "残りの len（0 なら __）");
 }
 /**
  * **`n` バイトを置くディレクティブ。**
@@ -1152,7 +1179,9 @@ function genExpr(node, env, em, scope, tail = false) {
 			// 組み直す」ことであり、スカラーなら同じ値でも、構造体では**同じ名前が呼び
 			// 出しごとに別の実体になる**（実測で `sub sp` が3回出ていた）。名前ごとに一つ
 			// の場所を持つのは binding の性質であって `$` の副作用ではない。
-			if (b && (b.addressTaken || isStructBlock(unwrap(b.valueNode)))) {
+			// `runsOnce` も同じ理由でここに並ぶ——**畳むというのは「使うたびに出し直す」
+			// ことであり、効果を持つ値では観測が使った回数だけ走る**。場所を辿れば1回になる。
+			if (b && (b.addressTaken || b.runsOnce || isStructBlock(unwrap(b.valueNode)))) {
 				const loaded = genLoadBinding(n, b, env, em);
 				if (loaded !== null) return loaded;
 			}
@@ -3611,6 +3640,10 @@ function idxIsZero(n) {
  * ——2つが別々に判断すると、片方だけ場所を使って片方が畳む形になる。
  */
 function bindingLabel(name, b, env, em) {
+	// **効果を持つ束縛の場所は、中身が実行時に決まる。** 定義の行が書き、使う側は読む
+	// だけなので、置くのは 0 で初期化した書ける語ひとつでよい。幅は必ず 8 byte にする
+	// ——狭く置くと `__`（niche）が入らず、**尽きたことを表せなくなる**。
+	if (b && b.runsOnce) return { label: em.internBinding(bareName(name), "0", 8, true), size: 8 };
 	const vn = b && b.valueNode ? unwrap(b.valueNode) : null;
 	const lit = vn && vn.type === "atom" && (vn.kind === "number" || vn.kind === "address") ? vn : null;
 	const m = b && b.atomType ? measure({ atomType: b.atomType }, { target: em.conf.target, charset: em.conf.charset }) : null;
@@ -3848,6 +3881,67 @@ function genLoadBinding(node, b, env, em) {
  * その前に来ることもある（`n` / `$n # 99` / `n`）。書かれた場所が意味を決めるのであって、
  * 行の順序が決めるのではない。だから命令を出す前に一度全部見る。
  */
+/**
+ * **効果を持つトップレベルの束縛は、畳まずに場所を持つ。**
+ *
+ * `名前 : 値` は普段その場で畳んでよい——束縛であって場所ではないので、使う所へ値ノードを
+ * 出し直せば済む。**ただし値ノードが効果を持つなら、出し直すたびに効果が走る。**
+ *
+ *     p : 0x40100000 ／ a : @p ／ a + a + a + a + a
+ *     読みが 5 回出る（1回使えば 1 回）——**使うたびに世界を観測し直している**
+ *
+ *     rd : q ? @q ／ a : rd p ／ a + a + a
+ *     `bl` が使用回数ぶん増える（関数の向こうに隠れているだけで、同じ壊れ方）
+ *
+ * `名前 : @p` は bind であって代入ではない。モナドの左単位則 `return a >>= f ≡ f a` は
+ * **効果がちょうど1回**であることを要求するので、これはその違反である。同じ形でも
+ * デフォルト引数（`f : / p / s : @p / ? …`）は最初から1回で、そちらは正しい
+ * ——**同じ「束縛」という事実が、置かれた場所で2通りに決まっていた**。
+ *
+ * 定義の行は `_sign_main` で既に値を出している（`isDefineNode(node) ? node.right : node`）
+ * ので、**捨てずに場所へ書けば済む**。使う側はその場所を読む（`genLoadBinding`）。
+ *
+ * **走査が先に要る理由は順序である。** 関数定義のほうが先に出るので、本体の中の `a` は
+ * トップレベルの行を見る前に解決される。印はここで先に付ける（`markAddressTaken` と同じ）。
+ *
+ * 対象は**1本で運ぶ値だけ**に絞る。器（`{ptr, len}`）や構造体は畳み方そのものが別で、
+ * そちらは `addressTaken` / `isStructBlock` の道が既に持っている。
+ */
+function marksRunOnce(v) {
+	let found = false;
+	const seen = new Set();
+	const walk = (n) => {
+		if (!n || typeof n !== "object" || found || seen.has(n)) return;
+		seen.add(n);
+		// `@`/`#` は世界を触る。適用は、その先で触るかもしれない（呼び先まで辿らずに
+		// 「触りうる」で止める——**触らないことを証明できないなら1回に寄せる**ほうが安全で、
+		// 誤って1回にしても値は変わらない。誤って何度も走らせるほうは値が変わる）。
+		if (n.type === "operation" && (n.name === "input" || n.name === "output" || n.name === "apply")) {
+			found = true;
+			return;
+		}
+		for (const k of ["left", "right", "operand"]) walk(n[k]);
+		for (const k of ["elements", "lines", "args"]) if (Array.isArray(n[k])) n[k].forEach(walk);
+	};
+	walk(v);
+	return found;
+}
+
+function markRunOnceBindings(nodes, env) {
+	if (!env) return;
+	for (const node of nodes) {
+		if (!isDefineNode(node) || !isIdentifierNode(unwrap(node.left))) continue;
+		const b = envLookup(env, unwrap(node.left).value);
+		if (!b) continue;
+		const v = unwrap(node.right);
+		// 関数定義は畳むのが正しい（畳み込みが呼び出しそのものである）。
+		if (!v || v.type === "lambda" || v.type === "block") continue;
+		// 1本で運ぶ値だけ。器・構造体は別の道が持っている。
+		if (b.atomType === "String" || b.atomType === "List" || b.atomType === "Struct") continue;
+		if (marksRunOnce(v)) b.runsOnce = true;
+	}
+}
+
 function markAddressTaken(nodes, env) {
 	if (!env) return;
 	const seen = new Set();
@@ -8391,6 +8485,8 @@ function generateAsm(nodes, env, options = {}) {
 	// **番地を取られた束縛を、命令へ畳む前に洗い出す。** 場所が在るかどうかは書かれた
 	// ものが決めるのであって、行の順序が決めるのではない。
 	markAddressTaken(nodes, env);
+	// **効果を持つ束縛は1回だけ走らせる。** 同じく畳む前に印を付ける（上の注記）。
+	markRunOnceBindings(nodes, env);
 	// **鍵が増えるマージは、鍵の和集合ぶんの場所を取る。** 確保なので layer 1 以上である
 	// （layer_relations.md §3.3.1、option_ms_schema.md §4）。和集合は compile.js が
 	// Pass 3 の前に確定させているので、ここで見るのは「実際に鍵が増えたか」だけ。
@@ -8531,6 +8627,20 @@ function generateAsm(nodes, env, options = {}) {
 		const target = isDefineNode(node) ? node.right : node;
 		const w = genExpr(target, env, em, null);
 		if (w === false) continue;
+		// **効果を持つ束縛は、この行で出した値を場所へ書く。** 使う側は畳まずにここを読むので
+		// （`genLoadBinding`）、観測はプログラム全体で1回になる——`markRunOnceBindings` の注記。
+		// これまでは出した値をそのまま捨てていたので、使う側が値ノードを出し直すしかなかった。
+		if (isDefineNode(node) && w === 1 && isIdentifierNode(unwrap(node.left))) {
+			const nm = unwrap(node.left).value;
+			const rb = envLookup(env, nm);
+			if (rb && rb.runsOnce) {
+				const lab = em.internBinding(bareName(nm), "0", 8, true);
+				em.load(SCRATCH[0], (em.slot - w) * 8, "この行で観測した値");
+				em.emit(`adrp ${SCRATCH[1]}, ${lab}`, `${bareName(nm)} の場所（効果は1回）`);
+				em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, :lo12:${lab}`);
+				em.emit(`str ${SCRATCH[0]}, [${SCRATCH[1]}]`, "置く。以降の読みはここを辿る");
+			}
+		}
 		// **最後の式の値が `_sign_main` の返値である。** ここまでは値をスロットへ置いた
 		// まま `ret` していた——x0 に残っていたのは直前の `bl` の戻り値であって、式の値
 		// ではない。`f 1 2` の形で終わるプログラムだけが偶然正しく、`1 + 2` や `42` は

@@ -329,7 +329,12 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 	// 残りは長さを1減らすだけ。0 になれば `__` そのものなので、次の呼び出しが崩壊する
 	// ——これが終端である（function_guide.md「ブラケット分解でなければ完全性公理が
 	// 終端を与えられない」）。
-	checkTrue("残りは長さを1減らす", ls.some((l) => l === "sub x10, x10, #1"), ls.join(" / "));
+	//
+	// **減らした結果は 0 で止める。** 長さは自然数で、下限の 0 が `__`（空の器）である。
+	// 頭を器より多く取る形（`[a b ~c]` に1要素）で負になっていたので `subs` + `csel` に
+	// した——切り出し（`' i~`）の側が元からこの綴りで、そちらに合わせてある。
+	checkTrue("残りは長さを1減らす", ls.some((l) => l === "subs x11, x11, #1"), ls.join(" / "));
+	checkTrue("減らした長さは負にしない", ls.some((l) => l === "csel x11, x11, xzr, pl"), ls.join(" / "));
 	checkTrue("容器を作り直さない", !ls.some((l) => /^(bl|b) (malloc|_sign_alloc)/.test(l)), ls.join(" / "));
 }
 // 要素の幅は型が言う。`String` の要素は `charset` 幅（既定の ascii なら 1 byte）で、
@@ -372,7 +377,8 @@ checkTrue("片側が文字なら相手も文字として比べる", (body("f : c
 	// `~` 無しの List 渡しは §5.4 が禁じている（構文の側で弾かれる）ので、ここへは来ない。
 	const ls = body("f : x ~xs ? x\nl : [1 2 3]\nf l~", "f") || [];
 	checkTrue("頭を読んで ptr を進める", ls.some((l) => /^add x\d+, x\d+, #8$/.test(l)), ls.join(" / "));
-	checkTrue("残りの長さを1減らす", ls.some((l) => /^sub x\d+, x\d+, #1$/.test(l)), ls.join(" / "));
+	checkTrue("残りの長さを1減らす", ls.some((l) => /^subs x\d+, x\d+, #1$/.test(l)), ls.join(" / "));
+	checkTrue("こちらも負にしない", ls.some((l) => /^csel x\d+, x\d+, xzr, pl$/.test(l)), ls.join(" / "));
 }
 // ---- デフォルト引数 ----
 //
