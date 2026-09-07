@@ -3,7 +3,11 @@
  *
  * 同じ表がリポジトリに4本ある——仕様の md、その隣の .js、実装の手写し、そして Sign 側。
  * 手で写すと必ずズレる（実際、`===` の廃止と `||` の除外で2件ズレていた）ので、Sign 側は
- * 仕様の .js から生成する。
+ * **実装が実際に使っている表**（alpha/javascript/operator_table.js）から生成する。
+ *
+ * documents 側の写しとは**56件中42件で食い違っている**——前置 `~` を tier 10 へ移した差で
+ * 10 以降の段番号が1ずつズレており、右結合（`assoc`）を持つのも実装側だけである。
+ * コード生成が引くのは実装側なので、Sign 側もそちらへ揃える。
  *
  * **鍵は演算子の綴りそのものである。** 綴りが静的に書けるなら 0 命令で引け、実行時に
  * 決まるなら名前を探す——同じ表が構造体にも連想配列にもなる。
@@ -27,7 +31,7 @@
  * 走らせ方: node tools/gen_operator_table.mjs
  */
 import fs from "fs";
-import { OPERATOR_BY_PRECEDENCE, getStrictInfixOperators } from "../documents/ja-jp/impl/syntax/operator_table.js";
+import { OPERATOR_BY_PRECEDENCE, getStrictInfixOperators } from "../alpha/javascript/operator_table.js";
 
 const BQ = String.fromCharCode(96), BS = String.fromCharCode(92), T = "\t";
 const s = (x) => BQ + x + BQ;
@@ -55,11 +59,13 @@ for (let i = 0; i < OPERATOR_BY_PRECEDENCE.length; i++)
 		if (!writable(sym)) continue;
 		if (def.removed) { removed.push(sym); continue; }
 		if (!byPos[def.position]) continue;
-		byPos[def.position].push({ sym, tier: i + 1, name: def.name });
+		byPos[def.position].push({ sym, tier: i + 1, name: def.name, assoc: def.assoc || null });
 	}
 
-// 右結合（凡例「右結合は位置表記内に※あり」）。中置についてのみ意味を持つ。
-const RIGHT = new Set([",", "@", "^", "#", ":", "?"]);
+// **右結合は表が言う。** 以前はここに手書きの集合を持っていたが、それは表とは別の
+// 3つ目の意見であり、片方だけ直る形だった——実際 `:` と `?` は集合に入っているのに
+// 表には無く、どちらが正しいかは書かれたものからは決まらなかった。表がデータとして
+// 持つようになったので、集合は要らない。
 const strict = getStrictInfixOperators().filter(writable);
 
 const table = (title, name, rows, valueOf) => [
@@ -72,7 +78,7 @@ const table = (title, name, rows, valueOf) => [
 
 const L = [
 	s("Sign の演算子表。仕様から生成している——手で写さない"),
-	s("生成もと documents/ja-jp/impl/syntax/operator_table.js / 生成器 tools/gen_operator_table.mjs"),
+	s("生成もと alpha/javascript/operator_table.js / 生成器 tools/gen_operator_table.mjs"),
 	"",
 	s("鍵は演算子の綴りそのものである。綴りが静的に書けるなら 0 命令で引け、実行時に決まる"),
 	s("なら名前を探す——同じ表が構造体にも連想配列にもなる"),
@@ -92,7 +98,7 @@ for (const p of POSITIONS) {
 	L.push(...table("--- " + p + "：演算の名前 ---", p + "_name", rows, (r) => s(r.name)));
 }
 
-L.push(...table("--- 右結合か（凡例「右結合は位置表記内に※あり」）---", "right", byPos.infix, (r) => (RIGHT.has(r.sym) ? 1 : 0)));
+L.push(...table("--- 右結合か（表の assoc がそう言うもの）---", "right", byPos.infix, (r) => (r.assoc === "right" ? 1 : 0)));
 
 L.push(
 	s("--- 曖昧でない中置：前後に空白を入れてよいもの ---"),

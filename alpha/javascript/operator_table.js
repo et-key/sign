@@ -11,10 +11,10 @@ export const OPERATOR_BY_PRECEDENCE = [
     '###': { position: 'prefix', name: 'export_pin' },
   },
   { // 2
-    ':': { position: 'infix', name: 'define' },
+    ':': { position: 'infix', name: 'define' , assoc: 'right' },
   },
   { // 3
-    '?': { position: 'infix', name: 'lambda' },
+    '?': { position: 'infix', name: 'lambda' , assoc: 'right' },
   },
   { // 4
     '#': { position: 'infix', name: 'output', assoc: 'right' },
