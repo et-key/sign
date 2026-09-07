@@ -6,9 +6,13 @@
 
 `段番号は仕様の段番号そのものであって、配列の添字ではない`
 
-`--- 段 ---`
+`位置ごとに表を分けてある。多義な綴り（＃ は前置の段1と中置の段4）が鍵として`
+`衝突しないのと、実行時に決まる鍵で引けるのが理由——入れ子にすると二段目が実機で`
+`引けない（生成器の注記）`
 
-#tier :
+`--- infix：段 ---`
+
+#infix_tier :
 	`:` : 2
 	`?` : 3
 	`#` : 4
@@ -44,6 +48,105 @@
 	`||` : 19
 	`;;` : 20
 	`&&` : 21
+
+`--- infix：演算の名前 ---`
+
+#infix_name :
+	`:` : `define`
+	`?` : `lambda`
+	`#` : `output`
+	`;` : `xor`
+	`|` : `or`
+	`&` : `and`
+	`==` : `equal`
+	`!==` : `xnot_equal`
+	`,` : `product`
+	` ` : `coproduct`
+	`~` : `range`
+	`~+` : `range_arithmetic`
+	`~-` : `range_arithmetic_rev`
+	`~*` : `range_geometric`
+	`~/` : `range_geometric_rev`
+	`~^` : `range_power`
+	`<` : `less`
+	`<=` : `less_equal`
+	`=` : `assign_equal`
+	`>=` : `more_equal`
+	`>` : `more`
+	`!=` : `not_equal`
+	`+` : `add`
+	`-` : `sub`
+	`*` : `mul`
+	`/` : `div`
+	`%` : `mod`
+	`^` : `pow`
+	`'` : `get_prop`
+	`@` : `get_at`
+	`<<` : `bit_shift_left`
+	`>>` : `bit_shift_right`
+	`||` : `bit_or`
+	`;;` : `bit_xor`
+	`&&` : `bit_and`
+
+`--- prefix：段 ---`
+
+#prefix_tier :
+	`#` : 1
+	`##` : 1
+	`###` : 1
+	`~` : 23
+	`!` : 23
+	`$` : 23
+	`@` : 23
+	`!!` : 23
+	`-` : 23
+	`\` : 27
+
+`--- prefix：演算の名前 ---`
+
+#prefix_name :
+	`#` : `export_internal`
+	`##` : `export_external`
+	`###` : `export_pin`
+	`~` : `continuous`
+	`!` : `not`
+	`$` : `address`
+	`@` : `input`
+	`!!` : `bit_not`
+	`-` : `negate`
+	`\` : `escape`
+
+`--- postfix：段 ---`
+
+#postfix_tier :
+	`!` : 22
+	`~` : 22
+	`@` : 24
+
+`--- postfix：演算の名前 ---`
+
+#postfix_name :
+	`!` : `factorial`
+	`~` : `expand`
+	`@` : `import`
+
+`--- enclosure：段 ---`
+
+#enclosure_tier :
+	`(...)` : 25
+	`{...}` : 25
+	`[...]` : 25
+	`|...|` : 25
+	`||...||` : 25
+
+`--- enclosure：演算の名前 ---`
+
+#enclosure_name :
+	`(...)` : `block_paren`
+	`{...}` : `block_brace`
+	`[...]` : `block_bracket`
+	`|...|` : `abs`
+	`||...||` : `norm`
 
 `--- 右結合か（凡例「右結合は位置表記内に※あり」）---`
 
@@ -119,4 +222,11 @@
 	`>>` : 1
 	`;;` : 1
 	`&&` : 1
+
+`--- 廃止された綴り ---`
+`意味は持たないが、字句としては1つの綴りである。表から消すと 三連の等号が 二連 ＋ 単独 に`
+`割れて別の意味へ黙って化けるので、ここに残す（.js の注記と同じ理由）`
+
+#removed :
+	`===` : 1
 
