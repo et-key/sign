@@ -5043,7 +5043,36 @@ function genBoxOperand(x, env, em, scope) {
 		po = emitCharLiteralBox(x, env, em);
 		if (po === false) return false;
 	}
-	return po === null ? null : 2;
+	if (po !== null) return 2;
+	// **計算した値も広げられる。ただし代金が要る。**
+	//
+	// ここまでの2つは確保ゼロで広げる道である——リテラルは `.rodata` に置き場所があり、
+	// 器の中の1つはその器を指し直せば済む。**残るのは「レジスタに載っている値」**で、
+	// これは置き場所を持たないので場所を取るしかない（layout.js の `passingOf` が
+	// 「要るとすれば計算した値だけで、それは Pass 4 が名指しする」と書いていた枝）。
+	//
+	// これが無いと、直和の狭い方が実行時に来た瞬間に比較が出せなかった——`ops` が
+	// `Char` の器で `c` が `String` の仮引数、という自己ホストの継ぎ目がまさにこれである。
+	// 原理8 の「広い方は狭い場合を長さ1として運べる」は**両方の綴りで**成り立たなければ
+	// ならず、リテラルだけが広がるのでは片手落ちになる。
+	if (wid !== 1) return null;
+	const sw = genExpr(x, env, em, scope);
+	if (sw === false) return false;
+	if (sw !== 1) { em.pop(sw === TAIL ? 0 : sw); return null; }
+	const lifted = emitLiftToContainer(em, x, (em.slot - 1) * 8, "長さ1の器へ広げる（原理8——計算した値なので場所が要る）");
+	if (lifted === false) return false;
+	if (lifted === null) return null;
+	// **呼ぶ側はちょうど2本を期待する**（比較は `em.pop(2)` で右辺だけを捨てる）。
+	// 持ち上げの下にスカラーの1本を残すと、その勘定がずれて別のスロットが答えになる。
+	em.load(SCRATCH[0], lifted, "ptr");
+	em.load(SCRATCH[1], lifted + 8, "len");
+	em.pop(3);
+	const pOff = em.push();
+	const lOff = pOff === null ? null : em.push();
+	if (lOff === null) return null;
+	em.store(SCRATCH[0], pOff, "ptr");
+	em.store(SCRATCH[1], lOff, "len");
+	return 2;
 }
 
 /**
