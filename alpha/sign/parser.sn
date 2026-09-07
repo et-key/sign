@@ -2,63 +2,67 @@
 `出力はそのまま Sign のプログラムである——[[+] 1 2] は 3 に評価される`
 `だから中間表現は要らない。コード生成は既にあるコンパイラそのものである`
 
-`--- 演算子の優先順位表（operator_table.md）---`
-`段が大きいほど強く結びつく。同じ段は同じ強さで、左から結合する`
-`番号は仕様の段番号そのもの（1 始まり）——配列の添字ではない。ズレると表の話が通じない`
-`表に行を足せば段が増える`
-
-`綴りは文字記法（`\+`）で書く。この構文解析器が扱うのは1文字の演算子だけなので、`
-`綴りは Char であり、`(ops ' i) = c` は段12 のスカラー比較で正しい`
+`--- 演算子表 ---`
+`表は仕様から生成したものを読む（operator_table.sn）。手で写した並列リストを持つと`
+`必ずズレるし、段を増やすたびにこちらも直さねばならない`
 ``
-`複数文字の演算子まで扱うなら綴りは String になり、比較は段8 の構造比較になる。`
-`そのときは alpha/sign/operator_table.sn を読む——仕様から生成した表で、鍵が`
-`演算子の綴りそのものである。ただし今は sret の上界が「器の要素の長さの和」を`
-`表せないので、String のトークンを連結して返す形が出せない（下の mul_out）`
+`インポートはコンパイル時に解ける——読んで（@）束縛をここへ撒く（~）だけである`
+
+`operator_table.sn`@~
+
+`--- 段は表が言う ---`
+`綴りが鍵なので、演算子かどうかも「引けたか」で分かる。無ければ __ が返り、`
+`比較は偽のまま回る——尽きたことを長さで見るのと同じ形である`
+
+tier_at : [~ts] k ? infix_tier ' (ts ' k)~
+
+is_tier : [~ts] k t ? (tier_at ts k) = t
+
+`表にある最も強い段。ここを越えたら式は1トークン（項）そのものである`
+
+top_tier : 21
+
+`--- 位置：段 t の式が [i, ?) でどこまで続くか ---`
+`一段強い側の終わり k は一度だけ数えて渡す。同じ問いを一つの節に何度も書くと、`
+`段の深さに対して指数的に効く——段は 2..21 あるので効き方が大きい`
+`（実測で数式ひとつに2分以上かかっていたのが、渡す形にして数ミリ秒になった）`
+
+end_of : [~ts] i t ?
+	t > top_tier : i + 1
+	end_at ts i t (end_of ts i (t + 1))
+
+end_at : [~ts] i t k ?
+	is_tier ts k t : end_of ts (k + 1) t
+	k
+
+`段 t の左結合で、最後の項が始まる位置`
+
+last_of : [~ts] i j t ? last_at ts i j t (end_of ts i (t + 1))
+
+last_at : [~ts] i j t k ?
+	k = j : i
+	last_of ts (k + 1) j t
+
+`--- 出力：終わりが分かっているので外から書ける ---`
+`左結合なら一番外側の演算子は最後のもの、右結合なら最初のもの`
+`String どうしの並置は連結（吸収則）`
 ``
-ops   : [\+ , \- , \* , \/]
-tiers : [ 14 , 14 , 15 , 15 ]
+`表の right は 1/0 を返す。Sign では 0 も真なので「= 1」で明示する`
+`——ここを条件にそのまま置くと、左結合の 0 まで真になって全部が右結合になる`
 
-`その綴りの段。表に無ければ 0（演算子ではない）`
-`尽きたことは長さで見る——添字が範囲外だと __ になり、比較は偽のまま回り続ける`
+out : [~ts] i j t ?
+	t > top_tier : ts ' i
+	out_at ts i j t (end_of ts i (t + 1))
 
-tier_at : c i ?
-	i = ||ops|| : 0
-	(ops ' i) = c : tiers ' i
-	tier_at c (i + 1)
+out_at : [~ts] i j t k ?
+	k = j : out ts i j (t + 1)
+	(right ' (ts ' k)~) = 1 : `[[` (ts ' k) `] ` (out ts i k (t + 1)) ` ` (out ts (k + 1) j t) `]`
+	out_left ts i j t (last_of ts i j t)
 
-tier_of : c ? tier_at c 0
+out_left : [~ts] i j t m ?
+	`[[` (ts ' (m - 1)) `] ` (out ts i (m - 1) t) ` ` (out ts m j (t + 1)) `]`
 
-is_mul : c ? (tier_of c) = 15
-is_add : c ? (tier_of c) = 14
-
-`--- 位置：走査するのは添字だけで、確保は無い ---`
-
-mul_end : [~ts] i ?
-	is_mul (ts ' (i + 1)) : mul_end ts (i + 2)
-	i + 1
-
-add_end : [~ts] i ?
-	is_add (ts ' (mul_end ts i)) : add_end ts ((mul_end ts i) + 1)
-	mul_end ts i
-
-`加減の並び ts[i..j) で、最後の項が始まる位置`
-
-last_term : [~ts] i j ?
-	(mul_end ts i) = j : i
-	last_term ts ((mul_end ts i) + 1) j
-
-`--- 出力：左結合なので一番外側の演算子は最後のもの ---`
-`終わりが分かっているので外から書ける。String どうしの並置は連結（吸収則）`
-
-mul_out : [~ts] i j ?
-	j = (i + 1) : ts ' i
-	`[[` (ts ' (j - 2)) `] ` (mul_out ts i (j - 2)) ` ` (ts ' (j - 1)) `]`
-
-add_out : [~ts] i j ?
-	(mul_end ts i) = j : mul_out ts i j
-	`[[` (ts ' ((last_term ts i j) - 1)) `] ` (add_out ts i ((last_term ts i j) - 1)) ` ` (mul_out ts (last_term ts i j) j) `]`
-
-expr : [~ts] ? add_out ts 0 (add_end ts 0)
+expr : [~ts] ? out ts 0 (end_of ts 0 2) 2
 
 `実行例`
 `トークン列はカンマで積む。スペースで並べると String の吸収則で連結されてしまうため`

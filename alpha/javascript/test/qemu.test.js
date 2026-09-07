@@ -26,6 +26,9 @@ import { findStreamFunctions, generatePullers } from "../stream_desugar.js";
 import { mergeBaseIdentifier } from "../layout.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// **インポートを解く手段は呼ぶ側が渡す**（build_system.md §4.2）。`parser.sn` が演算子表を
+// 読むようになったので、実機のハーネスでも渡す。
+const readImport = (p) => fs.readFileSync(path.join(__dirname, "..", "..", "sign", p), "utf8").replace(/\r\n/g, "\n");
 const parser = peggy.generate(fs.readFileSync(path.join(__dirname, "..", "sign.pegjs"), "utf8"));
 
 if (!available()) {
@@ -39,7 +42,7 @@ let total = 0;
 
 // インタプリタ側の答え。観測境界を通した姿で見る。
 function interp(source, charset = "ascii") {
-	const { nodes } = compile(source, { parse: parser.parse, charset });
+	const { nodes } = compile(source, { parse: parser.parse, charset, readImport });
 	const env = newRuntimeEnv(null, charset);
 	let r = UNIT;
 	for (const node of nodes) r = evaluate(node, env);
@@ -59,7 +62,7 @@ function interp(source, charset = "ascii") {
 // **層は指定できる。** 既定は 1（RAM が開通した層）だが、MMIO の番地を算術する形は
 // layer 0 の特権なので、そこだけ 0 で回す（上の層では番地の捏造になるため門番が止める）。
 function machine(source, charset = "ascii", layer = 1) {
-	const { nodes, env } = compile(source, { charset });
+	const { nodes, env } = compile(source, { charset, readImport });
 	const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset, layer });
 	if (r.diagnostics.length) return "出せない：" + r.diagnostics[0].message;
 	const v = asInt(runAsm(r.text)[0]);
@@ -97,7 +100,7 @@ function checkNamed(note, source) {
 	total++;
 	let msg = "（診断が出なかった）";
 	try {
-		const { nodes, env } = compile(source, { charset: "ascii" });
+		const { nodes, env } = compile(source, { charset: "ascii", readImport });
 		const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "ascii", layer: 1 });
 		if (r.diagnostics.length > 0) {
 			passed++;
@@ -142,7 +145,7 @@ function buildsOnce(note, source) {
 	total++;
 	let got;
 	try {
-		const { nodes, env } = compile(source, { charset: "ascii" });
+		const { nodes, env } = compile(source, { charset: "ascii", readImport });
 		const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "ascii", layer: 1 });
 		got = r.diagnostics.length ? "出せない：" + r.diagnostics[0].message : (r.text.match(/sub\s+sp, sp/g) || []).length;
 	} catch (e) {
@@ -1002,7 +1005,7 @@ agree("歩幅つきを数え上げる", SUM + "sum [0 ~+ 3] 0 0");
 // あり、消費側は書き換えなくてよい。尽きれば `arm` が niche になるので `__` が出る。
 {
 	const machineDesugared = (source) => {
-		const { nodes, env } = compile(source, { charset: "ascii", desugarStreams: true });
+		const { nodes, env } = compile(source, { charset: "ascii", desugarStreams: true, readImport });
 		const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "ascii", layer: 1 });
 		if (r.diagnostics.length) return "出せない：" + r.diagnostics[0].message;
 		const v = asInt(runAsm(r.text)[0]);

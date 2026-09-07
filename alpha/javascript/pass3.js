@@ -1109,8 +1109,20 @@ function isGetPropValueKey(k) {
 }
 
 function markGetPropKey(node) {
-  const k = node && node.right;
-  if (k && k.type === "operation" && k.position === "prefix" && k.name === "input") k.inGetPropKey = true;
+  // **鍵かどうかは、その式が `'` の右辺に在るかで決まる。** ここを見ずに右辺へ印を付けると、
+  // あらゆる中置演算の右辺が「鍵」になる——実際 `@$x` の型が Address から Int へ化けた。
+  if (!node || node.name !== "get_prop") return;
+  const k = node.right;
+  if (!k || k.type !== "operation") return;
+  if (k.position === "prefix" && k.name === "input") k.inGetPropKey = true;
+  // **鍵に立つ式は範囲ではない。** `obj ' k~` の `k~` は Pass 2 が範囲へ均しているが、
+  // 鍵の位置に在る以上「その位置から末尾まで」ではなく「k の中身で引く」である。
+  //
+  // **印を付ける場所はここ1箇所にする。** 以前は `annotateTypes` の側だけで立てていたが、
+  // あちらは `inferAtomType` の**後**に走るので、型を決める時点では見えていなかった
+  // ——しかも型はノードへメモ化されるので、null が焼き付いて後から直らない。実際、
+  // 演算子表を綴りで引いた結果に型が付かず、比較が「Struct と Int」で止まっていた。
+  k.isSlotKeyIndex = true;
 }
 
 /**
@@ -1235,6 +1247,28 @@ function getPropResultType(node, env) {
   // 同じ引き方で正しい。
   const containerType = widestMember(inferAtomType(node.left, env));
 
+  // **同じ範囲ノードでも、名前付きスロットの器に立つなら切り出しではなく鍵である。**
+  //
+  // `s ' 1~` も `obj ' k~` も Pass 2 が範囲へ均すので（`desugarIndexRest`）、形だけでは
+  // 分かれない。**分けるのは左辺の型である**——Pass 4 も器の種類で道を選んでいる
+  // （名前付きスロットなら `genNameSearch`）。起点が数値かどうかで分けようとすると
+  // `s ' i~`（変数の添字）が鍵に見えて切り出しが壊れる（実際そうなった）。
+  //
+  // どのスロットが出るかは実行時に決まるが、**出うる型は全部書かれている**ので、結果は
+  // スロット型の直和である。直和は冪等（`A | A = A`）なので、揃っていれば1つの型になる
+  // ——Pass 4 が「全スロットが同じ幅かつ同じ型」を要求してその型を答えにしているのと
+  // 同じ規則に着く。揃わなければ直和が残り、あちらが名指しで断る。
+  //
+  // ここを見ていなかったため、演算子表を綴りで引いた結果が器の型（`Struct`）のまま比較へ
+  // 渡り、「GPR 幅の値の比較だけを出せます（Struct と Int）」で止まっていた。
+  if (containerType === "Struct" && sliceIndexNode(node)) {
+    const keyShape = structShapeOfNode(node.left, env);
+    if (keyShape && keyShape.slotKind === "named") {
+      const joined = joinArmTypes((keyShape.slots || []).map((sl) => sl.type));
+      if (joined && joined !== "Unit") return joined;
+    }
+  }
+
   // 範囲添字は部分列なので器と同じ型。要素型もそのまま引き継ぐ。
   if (sliceIndexNode(node)) {
     // **長さ1のリストは存在しない。** 終端が起点と同じ切り出し（`s ' (1 ~+ 1 ~ 1)`）は
@@ -1350,6 +1384,20 @@ function getPropResultType(node, env) {
     //              の確約が得られるのは連番スロットだけである（stack_abi.md §7.1 CAUTION）
     //   連番     … スロットごとに型が違う。揃っていればそれは `List` である（§2）ので、
     //              ここへ来る連番スロットは必ず多相である
+    // **鍵が実行時に決まる引き方（`obj ' k~`）は、連番ではなく名前で探す。**
+    //
+    // 上の「連番と名前順が一致しない」問題に当たらない——探すのは名前だからである
+    // （Pass 4 の `genNameSearch`：`.rodata` に名前の表を1つ置いて舐める）。どのスロットが
+    // 出るかは実行時に決まるが、**出うる型は全部書かれている**ので、結果はスロット型の
+    // 直和である。直和は冪等（`A | A = A`）なので、揃っていればそのまま1つの型になる。
+    //
+    // **Pass 4 と同じ規則で決まる。** あちらは「全スロットが同じ幅かつ同じ型」を要求して
+    // その型を答えにしているので、こちらが `joinArmTypes` で畳めば同じ答えに着く。幅の
+    // 違う直和が残ったときは、あちらが「引いた結果の型が枝で変わります」と名指しで断る
+    // ——**同じ事実を2箇所で別々に決めない**。
+    //
+    // ここが `null` を返していたため、演算子表を綴りで引く形（自己ホストのパーサ）が
+    // 「Struct と Int の比較」で止まっていた。引いた結果に型が付かなかったのが理由である。
     if (isGetPropValueKey(key)) {
       node.runtimeIndexProblem = base && base.slotKind === "named" ? "named" : "polymorphic";
     }
@@ -3633,7 +3681,10 @@ function annotateTypes(node, env, diagnostics) {
   // 抑止しても切り出し（`s ' 1~`）は失わない。あちらは端点が数値なので、そもそもこの
   // 診断の条件（端点が点でない）に当たらない。`'` の鍵に立つ非数値の `~` は
   // **実行時の鍵しかない**——だからここで落として構わない。
-  if (node.name === "get_prop" && node.right && node.right.type === "operation") node.right.isSlotKeyIndex = true;
+  // 印は `markGetPropKey` が付ける（`getPropResultType` の入口で呼ばれるので、型を決める
+  // 時点で既に立っている）。ここで二重に決めない——同じ事実を2箇所で決めると、片方だけが
+  // 知っている状態になる。実際そうなっていて、型が付かないまま焼き付いていた。
+  markGetPropKey(node);
   if (node.right) annotateTypes(node.right, inner, diagnostics);
   if (node.operand) annotateTypes(node.operand, inner, diagnostics);
   if (node.type === "block" && Array.isArray(node.lines)) {

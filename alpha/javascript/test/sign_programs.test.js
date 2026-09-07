@@ -23,10 +23,15 @@ const grammar = fs.readFileSync(path.join(__dirname, "..", "sign.pegjs"), "utf8"
 const parser = peggy.generate(grammar);
 const signDir = path.join(__dirname, "..", "..", "sign");
 
+// **インポートを解く手段は呼ぶ側が渡す**（build_system.md §4.2——`compile.js` は fs に
+// 触らない。playground でも同じ道が通る必要があるため）。`parser.sn` が演算子表を
+// 読むようになったので、ここでも渡す。
+const readImport = (p) => fs.readFileSync(path.join(signDir, p), "utf8").replace(/\r\n/g, "\n");
+
 // .sn ファイルを読んで実行し、最後の行の評価結果を返す。
 function runFile(name) {
 	const source = fs.readFileSync(path.join(signDir, name), "utf8");
-	const { nodes } = compile(source, { parse: parser.parse });
+	const { nodes } = compile(source, { parse: parser.parse, readImport });
 	const env = newRuntimeEnv(null);
 	let result = UNIT;
 	for (const node of nodes) result = observe(evaluate(node, env));
@@ -38,7 +43,7 @@ function runWith(name, lastLine) {
 	const source = fs.readFileSync(path.join(signDir, name), "utf8");
 	const body = source.split("\n").filter((l) => l.trim() !== "");
 	body[body.length - 1] = lastLine;
-	const { nodes } = compile(body.join("\n"), { parse: parser.parse });
+	const { nodes } = compile(body.join("\n"), { parse: parser.parse, readImport });
 	const env = newRuntimeEnv(null);
 	let result = UNIT;
 	for (const node of nodes) result = observe(evaluate(node, env));
