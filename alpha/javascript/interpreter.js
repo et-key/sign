@@ -2093,8 +2093,17 @@ function evaluate(node, env) {
     if (node.kind === "norm") {
       let inner = UNIT;
       for (const line of node.lines) inner = evaluate(line, env);
-      // 空は 0 要素である（`__ = []`）。不在も空も、数えれば 0 になる。
-      if (isUnit(inner)) return 0;
+      // **`[] ⇒ __` は潰れる向きで、戻せない。**
+      //
+      // 空の器は `__` と等しい（`__ = []`、unit.md）が、その向きは一方通行である
+      // ——`__` を見て「器だった」とは言えない。だから `||__||` に 0 と答えるのは、
+      // 潰れた写像を逆に辿って「器だったことにする」ことであり、**無かったものから
+      // 使える値を作っている**。それは `null` が生まれた道と同じ形である。
+      //
+      // 以前はここで 0 を返していた。実害は `||zzz||`（未定義の名前）が 0 を返すことで、
+      // 「空だった」と読めてしまう——答えの無い問いに、分岐できる値を渡していた。
+      // 数え上げられるのは器が在るときだけで、無ければ解なしである。
+      if (isUnit(inner)) return UNIT;
       // 無限は数えられない——「無限の要素数」という値は無いので零射へ落ちる。
       if (isIterator(inner)) return iteratorCount(inner);
       if (Array.isArray(inner)) return inner.length;
