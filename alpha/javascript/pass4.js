@@ -1234,6 +1234,35 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (addressFromDollar(n.left, env) || addressFromDollar(n.right, env)) {
 			return em.fail(n, `\`$\` が作った番地は算術に使えません（番地は表に出ません。読むなら \`@\`、列を辿るなら \`[h ~t]\` の分解を使ってください）`);
 		}
+		// **恒等射を算術の片側に置くと、結果は値ではなく射である。**
+		//
+		// `__` は零対象で、初対象と終対象が一致している。対象としての顔（`__`）は単位元
+		// として通り抜けて値を返すが、射としての顔（`!__`）は演算そのものを射へ持ち上げる
+		// ——`!__ + 1` は `[+ 1]` であり、置いた位置がそのまま穴になる（interpreter.js の
+		// `isIdentityMorphism` の注記）。
+		//
+		// **機械は射を値として運べない。** `[1 !__ 2]` が長さ2になる（器に入れると消える）
+		// のと同じ理由で、レジスタに載せられるのは「`__` でない」ことだけである。ここは
+		// 静的に分かるので、黙って数として計算せずに名指しで断る——実際これまでは `!__` を
+		// 数の 0 として扱っており、`!__ * 7` が解釈器の射に対して **0** を返していた。
+		const identityOperand = (q) => {
+			const u = unwrap(q);
+			if (!u) return false;
+			if (u.atomType === "Identity") return true;
+			if (!env || !isIdentifierNode(u)) return false;
+			const b = envLookup(env, u.value);
+			const v = b && b.valueNode ? unwrap(b.valueNode) : null;
+			return !!(b && (b.atomType === "Identity" || (v && v.atomType === "Identity")));
+		};
+		if (identityOperand(n.left) || identityOperand(n.right)) {
+			return em.fail(
+				n,
+				`恒等射（\`!__\`）は算術に運べません。射を演算子の片側に置くと結果は値ではなく` +
+					`**射**になり（\`!__ + 1\` は \`[+ 1]\`、置いた位置が穴）、機械はレジスタに射を載せられません` +
+					`——書きたいのが部分適用なら \`[+ 1]\` / \`[1 -]\` と綴ってください。` +
+					`単位元として通したいのなら、射の顔ではなく対象の顔 \`__\` を置いてください`
+			);
+		}
 		// **生の番地の算術は layer 0 だけの特権である。**
 		//
 		// 層は機能を積み上げるだけではない——**上へ行くほど禁じられるものがある**。

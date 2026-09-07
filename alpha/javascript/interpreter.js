@@ -479,8 +479,27 @@ function makeComposed(f, g) {
 // のような、演算子を直接値として扱うLambda。nodeはpass2.jsが作るpartialな中置演算
 // ノード（{op, name, partial:true, left, right}）で、left/rightのうち欠けている側が
 // 呼び出し引数で埋まる。
-function makePointfreeClosure(node, env) {
-  return { __lambda__: true, __pointfree__: node, env };
+// `bound` は**評価済みの束縛側**（`{left?, right?}`）。`!__` を演算子の片側へ置いて
+// 穴を開けたときに使う——その場合、残った側は既に評価されているので、適用時に
+// ノードから評価し直してはいけない（副作用が2回走る）。書かれた `[+ 1]` の側は
+// 束縛がリテラルのノードなので、これまで通りノードから評価する。
+function makePointfreeClosure(node, env, bound) {
+  return { __lambda__: true, __pointfree__: node, env, __pfbound__: bound };
+}
+
+/**
+ * **恒等射（`!__`）か。** `__` の「射としての顔」である（unit.md §2.1）。
+ *
+ * 零対象は初対象と終対象が一致した対象なので、`__` と `!__` は同じものを対象として見るか
+ * 射として見るかの違いでしかなく、`!` はその視点を入れ替える対合である（`!!__` は `__`）。
+ *
+ * **だから演算子の片側に置いたとき、返るものも顔で決まる。** 対象を置けば値が返り
+ * （`__ + x = x`、単位元）、射を置けば射が返る（`!__ + x = [+ x]`、穴の開いた演算）。
+ * 置いた位置がそのまま穴の位置になるので、`!__ - 1` は `[- 1]`、`1 - !__` は `[1 -]` で、
+ * 非可換な演算子でも向きが保たれる。
+ */
+function isIdentityMorphism(v) {
+  return !!(v && typeof v === "object" && v.__identity__);
 }
 
 // 自動カリー化（project memory: project-sign-currying-design、pass2.jsのmarkUndersaturatedApplies
@@ -807,7 +826,7 @@ function applyClosure(closure, argValues) {
       // 食う（tier 10.0）。ストリーム中の `__` は余積の単位元として消えるべきものであり、
       // 引数スロットへUnitが来たわけではないので公理の対象ではない（`[+] 1 __` は 1）。
       if (!isGreedyPointfreeClosure(closure) && argValues.some((v) => isUnit(v))) return finish(UNIT);
-      return finish(applyPointfree(closure.__pointfree__, closure.env, argValues));
+      return finish(applyPointfree(closure.__pointfree__, closure.env, argValues, closure.__pfbound__));
     }
     const callEnv = bindParams(closure.params, argValues, closure.env);
     if (callEnv === null) return finish(UNIT);
@@ -1079,6 +1098,30 @@ function evalArith(node, env) {
   const lim = charLimitOf(env && env.charset);
   if (typeof l === "string" && [...l].length !== 1) return arithOnValues(name, l, undefined, lim);
   const r = evaluate(node.right, env);
+  // **対象を置けば値が返り、射を置けば射が返る。**
+  //
+  // `__` は零対象で、初対象と終対象が一致している。演算子の片側に置いたとき、その
+  // 「対象としての顔」（`__`）は単位元として通り抜けて**値**を返す（`__ + x = x`）が、
+  // 「射としての顔」（`!__`）は演算そのものを**射**へ持ち上げる——`!__ + x = [+ x]`。
+  //
+  // **置いた位置がそのまま穴の位置になる。** だから非可換な演算子でも向きが保たれる：
+  //
+  //     !__ - 1   →  [- 1]    （[- 1] 5 は 5 - 1 = 4）
+  //     1 - !__   →  [1 -]    （[1 -] 5 は 1 - 5 = -4）
+  //
+  // 両側とも射なら両側とも穴で、`[+]`（畳み込みの形）になる。
+  //
+  // 残った側は**もう評価してある**ので、値のまま持たせる——ノードから評価し直すと
+  // 副作用が2回走る（`makePointfreeClosure` の `bound` の注記）。
+  const holeL = isIdentityMorphism(l);
+  const holeR = isIdentityMorphism(r);
+  if (holeL || holeR) {
+    return makePointfreeClosure(
+      { ...node, partial: true, left: holeL ? undefined : node.left, right: holeR ? undefined : node.right },
+      env,
+      { left: holeL ? undefined : l, right: holeR ? undefined : r }
+    );
+  }
   const value = arithOnValues(name, l, r, lim);
   // BigInt は「安全な範囲を超えた整数」であり、溢れの規則を適用する対象そのものである。
   // ここで早期に返してしまうと、幅を超えた値が型の規則を通らずに素通りする。
@@ -1747,7 +1790,10 @@ function getPropByValue(l, r) {
   return UNIT;
 }
 
-function applyPointfree(node, closureEnv, argValues) {
+function applyPointfree(node, closureEnv, argValues, pfbound) {
+  // 束縛側が既に評価済みなら、それを使う（`!__` で開けた穴の場合——上の注記）。
+  const boundOf = (side) =>
+    pfbound && pfbound[side] !== undefined ? pfbound[side] : evaluate(node[side], closureEnv);
   if (node.position === "prefix" || node.position === "postfix") {
     const x = argValues.length > 0 ? argValues[0] : UNIT;
     return evalUnaryOp(node.name, x);
@@ -1825,7 +1871,7 @@ function applyPointfree(node, closureEnv, argValues) {
     // 結果からUnitを取り除く——比較演算子（`[< 3,]`）は真の場合のみ値を返す（§4）ため、
     // このUnit除去だけで「選択写像」（select、偽だった要素の除外）が自然に得られる
     // （list_cheat_sheet.md「選択写像」、余積のUnit除去則、type_system.mdの輸入失敗例と同型）。
-    const bound = rightBound ? evaluate(node.right, closureEnv) : undefined;
+    const bound = rightBound ? boundOf("right") : undefined;
     const results = argValues.map((v) => (isUnit(v) ? UNIT : combine(v, bound)));
     return results.filter((r) => !isUnit(r));
   }
@@ -1835,7 +1881,7 @@ function applyPointfree(node, closureEnv, argValues) {
     return argValues.reduce((acc, v) => (isUnit(acc) ? UNIT : combine(acc, v)));
   }
   if (rightBound && !leftBound) {
-    const bound = evaluate(node.right, closureEnv);
+    const bound = boundOf("right");
     const x = argValues.length > 0 ? argValues[0] : UNIT;
     if (isUnit(x)) return UNIT;
     return combine(x, bound);
@@ -1843,7 +1889,7 @@ function applyPointfree(node, closureEnv, argValues) {
   // 左辺束縛・右辺欠落（`[1 -]` = `x ? 1 - x`）。右辺束縛（`[- 1]`）と対称で、
   // 非可換な演算子では両方が必要になる。オペランドの順序だけが逆になる。
   if (leftBound && !rightBound) {
-    const bound = evaluate(node.left, closureEnv);
+    const bound = boundOf("left");
     const x = argValues.length > 0 ? argValues[0] : UNIT;
     if (isUnit(x)) return UNIT;
     return combine(bound, x);
