@@ -830,11 +830,7 @@ class Emitter {
 		const w = charSizeOf(this.conf.charset);
 		// 幅ごとのディレクティブ。`String ≅ List(Char)` の要素幅そのものである。
 		const dir = w === 1 ? ".byte" : w === 2 ? ".hword" : ".word";
-		// **中身が無いなら見出しも出さない。** 束縛が全部「書かれる」ものだと `.rodata` は
-		// 空になるが、見出しだけが残っていた。読む人には「読み取り専用の何かがある」と
-		// 見えるので、無いものは書かない。
-		const ro = [...this.namedData.values()].filter((x) => !x.writable);
-		const out = this.rodata.size === 0 && ro.length === 0 ? [] : ["", "	.section .rodata"];
+		const out = ["", "	.section .rodata"];
 		for (const { label, cps } of this.rodata.values()) {
 			out.push(`	.balign ${w}`);
 			out.push(`${label}:`);
@@ -1156,10 +1152,7 @@ function genExpr(node, env, em, scope, tail = false) {
 			// 組み直す」ことであり、スカラーなら同じ値でも、構造体では**同じ名前が呼び
 			// 出しごとに別の実体になる**（実測で `sub sp` が3回出ていた）。名前ごとに一つ
 			// の場所を持つのは binding の性質であって `$` の副作用ではない。
-			//
-			// **ラッチした束縛も畳まない。** 値ノードが `@` を含むなら、畳むというのは
-			// 「使うたびに読み直す」ことである（`markAddressTaken` の末尾の注記）。
-			if (b && (b.addressTaken || b.latched || isStructBlock(unwrap(b.valueNode)))) {
+			if (b && (b.addressTaken || isStructBlock(unwrap(b.valueNode)))) {
 				const loaded = genLoadBinding(n, b, env, em);
 				if (loaded !== null) return loaded;
 			}
@@ -3621,18 +3614,8 @@ function bindingLabel(name, b, env, em) {
 	const vn = b && b.valueNode ? unwrap(b.valueNode) : null;
 	const lit = vn && vn.type === "atom" && (vn.kind === "number" || vn.kind === "address") ? vn : null;
 	const m = b && b.atomType ? measure({ atomType: b.atomType }, { target: em.conf.target, charset: em.conf.charset }) : null;
-	if (!m || !m.size) return null;
-	// **ラッチした束縛は、初期値ではなく置き場所が要る。**
-	//
-	// 定義の行が読んだ値をここへ書き、使うところがここから読む。初期値は 0 で、必ず
-	// 書ける場所（`.data`）に置く——`@` の結果は定数ではないので `.rodata` では困る。
-	// 1レジスタに収まるものだけを扱う。器（`{ptr, len}`）は 2 本要るので、そこは
-	// これまで通り畳む道に残す（黙って半分だけ持つより、変えないほうが正しい）。
-	if (!lit) {
-		if (!b || !b.latched || m.size > 8 || m.slots > 1) return null;
-		return { label: em.internBinding(bareName(name), "0", m.size, true), size: m.size };
-	}
-	return { label: em.internBinding(bareName(name), String(lit.value), m.size, !!b.addressTaken || !!b.latched), size: m.size };
+	if (!lit || !m || !m.size) return null;
+	return { label: em.internBinding(bareName(name), String(lit.value), m.size, !!b.addressTaken), size: m.size };
 }
 
 /**
@@ -3808,7 +3791,7 @@ function genLoadListBinding(node, b, env, em) {
 	const po = em.push();
 	const lo = po === null ? null : em.push();
 	if (lo === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
-	em.emit(`adrp ${SCRATCH[0]}, ${label}`, `${bareName(node.value)} の場所（${b.latched && !b.addressTaken ? "読みを固定した" : "番地を取られている"}）`);
+	em.emit(`adrp ${SCRATCH[0]}, ${label}`, `${bareName(node.value)} の場所（番地を取られている）`);
 	em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, :lo12:${label}`);
 	em.store(SCRATCH[0], po, "ptr");
 	em.emit(`mov ${SCRATCH[1]}, #${parts.length}`, "len は要素数");
@@ -3840,7 +3823,7 @@ function genLoadBinding(node, b, env, em) {
 	if (!got) return null;
 	const off = em.push();
 	if (off === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
-	em.emit(`adrp ${SCRATCH[0]}, ${got.label}`, `${bareName(node.value)} の場所を辿る（${b.latched && !b.addressTaken ? "読みを固定した" : "番地を取られている"}）`);
+	em.emit(`adrp ${SCRATCH[0]}, ${got.label}`, `${bareName(node.value)} の場所を辿る（番地を取られている）`);
 	em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, :lo12:${got.label}`);
 	// 幅ぶんを1つ読む。束縛は符号ありの数なので、8 byte 未満は符号拡張する。
 	const ld =
@@ -3928,45 +3911,6 @@ function markAddressTaken(nodes, env) {
 		for (const e of n.entries || []) visit(e.default);
 	};
 	for (const n of nodes) visit(n);
-	// **読んだ値を名前に持てなければ、名前は読みの別名でしかない。**
-	//
-	// 識別子は普段その場で畳む（値ノードを出し直す）。純粋な式ならそれで同じ値になるが、
-	// **`@`（Input）を含む式では使用箇所ごとに読み直しになる**——実測で
-	//
-	//     p # 7 ／ a : @p ／ p # 9 ／ (a * 100) + a   →  707 ではなく 909（`ldr` が2本）
-	//
-	// clear-on-read のレジスタなら、2回目は値が消えたあとを読む。`function_guide.md` が
-	// `@` をデフォルト引数に許す理由として挙げているのがまさにこれで、「読み出した値を
-	// 名前に束縛できないと、使用箇所ごとに再読み出しすることになり**正しさ**を損なう」と
-	// 書いてある。**意図は書かれていたが、束縛が読みを固定していなかった。**
-	//
-	// 定義の場所では既に1回読んでいる（使わなくても `ldr` が1本出る）。足りないのは
-	// その値を**保つ**ことだけなので、場所を1つ与えて、定義で書き、使うところで読む
-	// ——`$名前` が既に通っている道と同じものである。
-	for (const n of nodes) {
-		if (!isDefineNode(n) || !isIdentifierNode(unwrap(n.left))) continue;
-		if (!hasObservableEffect(unwrap(n.right))) continue;
-		const b = envLookup(env, unwrap(n.left).value);
-		if (b) b.latched = true;
-	}
-}
-
-/**
- * **その式は、評価するたびに違うことが起きうるか。**
- *
- * `@`（Input）は読むたびに値が変わりうる（clear-on-read もある）。`#`（Output）は
- * 書くので、2回評価すれば2回書く。どちらも「同じ式なら同じ値」が成り立たないので、
- * 識別子の畳み込み（使うたびに値ノードを出し直す）に載せてはいけない。
- *
- * 純粋な式は畳んでよい——値は同じである。命令数は増えるが、それは意味の問題ではない。
- */
-function hasObservableEffect(n) {
-	if (!n || typeof n !== "object") return false;
-	if (n.type === "operation" && (n.name === "input" || n.name === "output")) return true;
-	for (const k of ["left", "right", "operand", "middle"]) if (hasObservableEffect(n[k])) return true;
-	for (const l of n.lines || []) if (hasObservableEffect(l)) return true;
-	for (const e of n.entries || []) if (hasObservableEffect(e.default)) return true;
-	return false;
 }
 
 
@@ -8538,24 +8482,6 @@ function generateAsm(nodes, env, options = {}) {
 		const target = isDefineNode(node) ? node.right : node;
 		const w = genExpr(target, env, em, null);
 		if (w === false) continue;
-		// **ラッチした束縛は、ここで値を置き場所へ書く。**
-		//
-		// これまでは値を出したあと `pop` で捨てていた——だから使うところは値ノードを
-		// 出し直すしかなく、`@` を含む式では読み直しになっていた。定義の行は既に1回
-		// 評価しているので、その結果を保つだけでよい。
-		if (w === 1 && isDefineNode(node) && isIdentifierNode(unwrap(node.left))) {
-			const nm = unwrap(node.left).value;
-			const lb = envLookup(env, nm);
-			if (lb && lb.latched) {
-				const got = bindingLabel(nm, lb, env, em);
-				if (got) {
-					em.load(SCRATCH[0], (em.slot - w) * 8, `${bareName(nm)} の値`);
-					em.emit(`adrp ${SCRATCH[1]}, ${got.label}`, `${bareName(nm)} の置き場所（読みを固定する）`);
-					em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, :lo12:${got.label}`);
-					em.emit(slotStoreInsn(got.size, SCRATCH[0], SCRATCH[1], 0), `${got.size} byte を書く`);
-				}
-			}
-		}
 		// **最後の式の値が `_sign_main` の返値である。** ここまでは値をスロットへ置いた
 		// まま `ret` していた——x0 に残っていたのは直前の `bl` の戻り値であって、式の値
 		// ではない。`f 1 2` の形で終わるプログラムだけが偶然正しく、`1 + 2` や `42` は
