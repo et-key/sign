@@ -91,6 +91,63 @@ const L = [
 	"",
 ];
 
+// **`.js` と同じ構造：段の器の中に、綴りを鍵にした構造体を入れる。**
+//
+// `OPERATOR_BY_PRECEDENCE` は「段で引く配列 → 綴りで引く構造体 → {position, name, assoc}」
+// である。Sign でも同じ形に書ける——ただし**器の要素は名前を付けてから並べる**。
+// 実測すると、入れ子のリテラルをその場に書く形（`[ [ … ] [ … ] ]`）は機械が
+// 「枝の幅が揃いません（1 本と 2 本）」で断るが、名前にしてから並べる形は器になる：
+//
+//     x : [ … ] ／ y : [ … ] ／ op : [x y]      →  ||op|| は 2（実機でも）
+//
+// 段は 1 から始まり、**空の段もある**（囲みだけの段など）。番号と位置を一致させるため、
+// 空の段も器の中に置く——`__` は余積の単位元なので、素直に並べると消えてしまう。
+// そこで空の段は空の構造体ではなく `__` を明示的に持つ名前にする。
+const tierNames = [];
+for (let i = 0; i < OPERATOR_BY_PRECEDENCE.length; i++) {
+	const at = Object.entries(OPERATOR_BY_PRECEDENCE[i] || {}).filter(([sym]) => writable(sym));
+	const nm = "tier" + (i + 1);
+	tierNames.push({ nm, empty: at.length === 0, tier: i + 1 });
+	if (!at.length) {
+		// **空の段も器の中に置く。** 添字が段番号そのものであることが `.js` の構造の要点で、
+		// 一つでも抜けると以降が全部ズレる。
+		//
+		// ただし `__` では置けない——`__` は積（`,`）の単位元なので、並べると**消える**
+		// （`1 , __ , 2` は長さ2）。実測でも段17と段27が落ちて 28 が 26 になった。
+		// 消えない印として、綴りではないスロットを1つ置く。
+		L.push(
+			s("--- 段 " + (i + 1) + "：書ける綴りは無い ---"),
+			s("囲みだけの段か、綴りが文字列に書けない段（タブ・改行）である"),
+			"",
+			nm + " :",
+			T + "none : 1",
+			""
+		);
+		continue;
+	}
+	L.push(s("--- 段 " + (i + 1) + " ---"), "", nm + " :");
+	for (const [sym, def] of at) {
+		L.push(T + s(sym) + " :");
+		L.push(T + T + "position : " + s(def.position));
+		L.push(T + T + "name : " + s(def.name));
+		if (def.assoc) L.push(T + T + "assoc : " + s(def.assoc));
+		if (def.removed) L.push(T + T + "removed : 1");
+	}
+	L.push("");
+}
+
+L.push(
+	s("--- 段で引く器（.js の OPERATOR_BY_PRECEDENCE と同じ並び）---"),
+	s("添字は 0 始まりなので、段 N は by_precedence ' (N - 1) で引く"),
+	"",
+	"#by_precedence : " + tierNames.map((t) => t.nm).join(" , "),
+	""
+);
+
+// **綴りで引く平らな表も併せて置く。** `OPERATOR_DICT` に当たるもので、パーサはこちらを
+// 引く——鍵が実行時に決まる（トークンが値である）ので、二段引きにすると実機で降りない。
+// 位置ごとに分けてあるのは、多義な綴り（`#` は前置の段1と中置の段4）の鍵を衝突させない
+// ためで、`.js` が定義の配列にしているのと同じ情報である。
 for (const p of POSITIONS) {
 	const rows = byPos[p];
 	if (!rows.length) continue;

@@ -10,6 +10,296 @@
 `衝突しないのと、実行時に決まる鍵で引けるのが理由——入れ子にすると二段目が実機で`
 `引けない（生成器の注記）`
 
+`--- 段 1 ---`
+
+tier1 :
+	`#` :
+		position : `prefix`
+		name : `export_internal`
+	`##` :
+		position : `prefix`
+		name : `export_external`
+	`###` :
+		position : `prefix`
+		name : `export_pin`
+
+`--- 段 2 ---`
+
+tier2 :
+	`:` :
+		position : `infix`
+		name : `define`
+		assoc : `right`
+
+`--- 段 3 ---`
+
+tier3 :
+	`?` :
+		position : `infix`
+		name : `lambda`
+		assoc : `right`
+
+`--- 段 4 ---`
+
+tier4 :
+	`#` :
+		position : `infix`
+		name : `output`
+		assoc : `right`
+
+`--- 段 5 ---`
+
+tier5 :
+	`;` :
+		position : `infix`
+		name : `xor`
+
+`--- 段 6 ---`
+
+tier6 :
+	`|` :
+		position : `infix`
+		name : `or`
+
+`--- 段 7 ---`
+
+tier7 :
+	`&` :
+		position : `infix`
+		name : `and`
+
+`--- 段 8 ---`
+
+tier8 :
+	`===` :
+		position : `infix`
+		name : `same`
+		removed : 1
+	`==` :
+		position : `infix`
+		name : `equal`
+	`!==` :
+		position : `infix`
+		name : `xnot_equal`
+
+`--- 段 9 ---`
+
+tier9 :
+	`,` :
+		position : `infix`
+		name : `product`
+		assoc : `right`
+
+`--- 段 10 ---`
+
+tier10 :
+	`~` :
+		position : `prefix`
+		name : `continuous`
+
+`--- 段 11 ---`
+
+tier11 :
+	` ` :
+		position : `infix`
+		name : `coproduct`
+
+`--- 段 12 ---`
+
+tier12 :
+	`~` :
+		position : `infix`
+		name : `range`
+	`~+` :
+		position : `infix`
+		name : `range_arithmetic`
+	`~-` :
+		position : `infix`
+		name : `range_arithmetic_rev`
+	`~*` :
+		position : `infix`
+		name : `range_geometric`
+	`~/` :
+		position : `infix`
+		name : `range_geometric_rev`
+	`~^` :
+		position : `infix`
+		name : `range_power`
+
+`--- 段 13 ---`
+
+tier13 :
+	`<` :
+		position : `infix`
+		name : `less`
+	`<=` :
+		position : `infix`
+		name : `less_equal`
+	`=` :
+		position : `infix`
+		name : `assign_equal`
+	`>=` :
+		position : `infix`
+		name : `more_equal`
+	`>` :
+		position : `infix`
+		name : `more`
+	`!=` :
+		position : `infix`
+		name : `not_equal`
+
+`--- 段 14 ---`
+
+tier14 :
+	`+` :
+		position : `infix`
+		name : `add`
+	`-` :
+		position : `infix`
+		name : `sub`
+
+`--- 段 15 ---`
+
+tier15 :
+	`*` :
+		position : `infix`
+		name : `mul`
+	`/` :
+		position : `infix`
+		name : `div`
+	`%` :
+		position : `infix`
+		name : `mod`
+
+`--- 段 16 ---`
+
+tier16 :
+	`^` :
+		position : `infix`
+		name : `pow`
+		assoc : `right`
+
+`--- 段 17：書ける綴りは無い ---`
+`囲みだけの段か、綴りが文字列に書けない段（タブ・改行）である`
+
+tier17 :
+	none : 1
+
+`--- 段 18 ---`
+
+tier18 :
+	`'` :
+		position : `infix`
+		name : `get_prop`
+	`@` :
+		position : `infix`
+		name : `get_at`
+		assoc : `right`
+
+`--- 段 19 ---`
+
+tier19 :
+	`<<` :
+		position : `infix`
+		name : `bit_shift_left`
+	`>>` :
+		position : `infix`
+		name : `bit_shift_right`
+
+`--- 段 20 ---`
+
+tier20 :
+	`||` :
+		position : `infix`
+		name : `bit_or`
+
+`--- 段 21 ---`
+
+tier21 :
+	`;;` :
+		position : `infix`
+		name : `bit_xor`
+
+`--- 段 22 ---`
+
+tier22 :
+	`&&` :
+		position : `infix`
+		name : `bit_and`
+
+`--- 段 23 ---`
+
+tier23 :
+	`!` :
+		position : `postfix`
+		name : `factorial`
+	`~` :
+		position : `postfix`
+		name : `expand`
+
+`--- 段 24 ---`
+
+tier24 :
+	`!` :
+		position : `prefix`
+		name : `not`
+	`$` :
+		position : `prefix`
+		name : `address`
+	`@` :
+		position : `prefix`
+		name : `input`
+	`!!` :
+		position : `prefix`
+		name : `bit_not`
+	`-` :
+		position : `prefix`
+		name : `negate`
+
+`--- 段 25 ---`
+
+tier25 :
+	`@` :
+		position : `postfix`
+		name : `import`
+
+`--- 段 26 ---`
+
+tier26 :
+	`(...)` :
+		position : `enclosure`
+		name : `block_paren`
+	`{...}` :
+		position : `enclosure`
+		name : `block_brace`
+	`[...]` :
+		position : `enclosure`
+		name : `block_bracket`
+	`|...|` :
+		position : `enclosure`
+		name : `abs`
+	`||...||` :
+		position : `enclosure`
+		name : `norm`
+
+`--- 段 27：書ける綴りは無い ---`
+`囲みだけの段か、綴りが文字列に書けない段（タブ・改行）である`
+
+tier27 :
+	none : 1
+
+`--- 段 28 ---`
+
+tier28 :
+	`\` :
+		position : `prefix`
+		name : `escape`
+
+`--- 段で引く器（.js の OPERATOR_BY_PRECEDENCE と同じ並び）---`
+`添字は 0 始まりなので、段 N は by_precedence ' (N - 1) で引く`
+
+#by_precedence : tier1 , tier2 , tier3 , tier4 , tier5 , tier6 , tier7 , tier8 , tier9 , tier10 , tier11 , tier12 , tier13 , tier14 , tier15 , tier16 , tier17 , tier18 , tier19 , tier20 , tier21 , tier22 , tier23 , tier24 , tier25 , tier26 , tier27 , tier28
+
 `--- infix：段 ---`
 
 #infix_tier :
