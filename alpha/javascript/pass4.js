@@ -4029,8 +4029,44 @@ function cannotBeUnit(node, env, scope) {
 		if (n.atomType === "Char" || n.name === "div") return false;
 		return cannotBeUnit(n.left, env, scope) && cannotBeUnit(n.right, env, scope);
 	}
+	// **スカラーへの `' 0` は恒等射である**（`[x] ≅ x`——1要素の器は存在しない）。
+	//
+	// 値を出す道は左辺をそのまま返すので、「`__` になり得るか」も左辺と同じでなければ
+	// ならない。片方だけが知っていると、**同じものが綴りによって違う命令数になる**
+	// ——`(n ' 0) + 1` が 16 命令、`n + 1` が 13 命令、というふうに
+	// （`isomorphism.test.js` が見ているのはその性質である）。
+	//
+	// 添字が 0 のときだけである。器の範囲外は `__` であり（`[5] ' 9` は `__`）、
+	// スカラーも1要素の器なので同じ規則に従う。
+	if (n.type === "operation" && n.name === "get_prop") {
+		const i = unwrap(n.right);
+		const zero = i && i.type === "atom" && i.kind === "number" && Number(i.value) === 0;
+		const lt = n.left && unwrap(n.left) ? unwrap(n.left).atomType : null;
+		if (zero && SCALAR_ATOM_TYPES.has(lt)) return cannotBeUnit(n.left, env, scope);
+	}
+	// **後置 `~`（撒く）はスカラーでは恒等射である。** 出す側も 0 命令で素通ししている
+	// （`genExpr` の `expand` の枝）ので、ここも同じ答えでなければならない。
+	if (n.type === "operation" && n.position === "postfix" && n.name === "expand" && n.operand) {
+		if (SCALAR_ATOM_TYPES.has(unwrap(n.operand) ? unwrap(n.operand).atomType : null))
+			return cannotBeUnit(n.operand, env, scope);
+	}
+	// **`@$名前` も恒等射である。** 仮引数の番地を作って読み直しても、束縛の値そのもの
+	// にしかならない——出す側は 10 命令を 0 に畳んでいる（`genExpr` の `input` の枝）。
+	// 条件はそちらと**同じもの**でなければならない：`$` の対象が仮引数の名前であること。
+	if (n.type === "operation" && n.position === "prefix" && n.name === "input" && n.operand) {
+		const src = unwrap(n.operand);
+		if (src && src.type === "operation" && src.position === "prefix" && src.name === "address") {
+			const named = unwrap(src.operand);
+			if (isIdentifierNode(named) && scope && scope.params && scope.params.indexOf(named.value) >= 0)
+				return cannotBeUnit(named, env, scope);
+		}
+	}
 	return false;
 }
+
+// レジスタ1本で運ばれる型。器（`List` / `String` / `Struct` / `Iterator` / `Implicit`）は
+// 入っていない——そちらは `' 0` が本当に要素を引く操作であり、恒等射ではない。
+const SCALAR_ATOM_TYPES = new Set(["Int", "Char", "Address", "Float"]);
 
 // **その番地はコンパイル時に決まるか。** 決まるなら値（BigInt）、決まらないなら null。
 //
@@ -8143,6 +8179,19 @@ function genFunction(name, lambdaNode, env, em, mono) {
 		paramOffsets,
 		paramSlots,
 		callees,
+		// **門番が証明したことを、本体へ持って行く。**
+		//
+		// 入口で仮引数を1つずつ `__` か検査し、そうなら本体へ入らずに `__` を返している
+		// （完全性公理）。だから本体の中でその名前は `__` になり得ない——`total` はその
+		// 集合である。ところがここへ載せていなかったので `cannotBeUnit` が
+		// `scope.total === undefined` を見て常に false を返し、**門番が既に見たものを
+		// 演算ごとにもう一度** `cmp` / `csel` で見ていた。
+		//
+		//     f : a b c ? a + b + c   入口で3回検査したうえで、算術がさらに4回
+		//
+		// 同じ事実を2箇所で決めていた形である。証明した側が黙っていたので、使う側は
+		// 何も知らないまま毎回払っていた。
+		total,
 		selfLabel: name,
 		loopLabel,
 		bracketPairs,
