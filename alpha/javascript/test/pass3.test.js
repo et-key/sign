@@ -259,5 +259,65 @@ checkStructOk("連番スロットは対象外（名前が無い）", "[1 , 1 , 1
 // この規則の対象外である（左辺が識別子でも文字列でもないので `isSlotKeyNode` に外れる）。
 checkStructOk("match_case は対象外", "f : n ?\n\tn = 1 : 10\n\tn = 1 : 20\n\t0\nf 1\n");
 
+// ---- rest がふたつある分割（切れ目が決まらない）----
+//
+// カッコの仮引数は器をどの位置で切るかを選ぶ宣言である。**固定スロットは器の端から数えて
+// 位置が決まる**ので、rest がひとつならその長さも決まる：
+//
+//     [a ~b]     a は左端の1個、b は終端まで
+//     [~u v]     v は右端の1個、u はその手前まで
+//     [a ~b c]   両端が固定、b は挟まれたぶん
+//
+// rest がふたつあると、その間の境界がどこにも書かれない。`[~u ~v]` は境目が自由だし、
+// `[~l x ~r]` も **`l` が i 個なら `x` は i 番目**で、その i が決まらない。後者は
+// 「左文脈・焦点・右文脈」に見えるが**焦点の位置を書いていない**のでジッパーにならない
+// ——ジッパーは `[a ~b]` と再帰でできる（左文脈は呼び出しの側に在る）。
+//
+// 実際これまでは先に出てきた rest だけが効いていて、`[~u ~v]` に `[1 2 3 4]` を渡すと
+// `u=[1,2,3] v=4`、つまり **`[~u v]` と1文字も違わない答え**が診断ゼロで返っていた。
+// 決めていたのは書かれた形ではなく実装の貪欲さだったので、二重定義と同じ強さで止める。
+function checkMultipleRest(note, source) {
+	extra++;
+	try {
+		compile(source, { charset: "ascii" });
+		console.log(`FAIL ${note}`);
+		console.log(`     例外が投げられなかった`);
+	} catch (e) {
+		if (e.reason === "multiple-rest-params") {
+			console.log(`OK   ${note}`);
+			extraPassed++;
+		} else {
+			console.log(`FAIL ${note}`);
+			console.log(`     別の理由で止まった: ${e.name} / reason=${JSON.stringify(e.reason)} / ${e.message.slice(0, 70)}`);
+		}
+	}
+}
+checkMultipleRest("[~u ~v] は境目が決まらない", "f : [~u ~v] ? v\nf [1 2 3 4]");
+checkMultipleRest("[~l x ~r] も焦点の位置が決まらない", "f : [~l x ~r] ? x\nf [1 2 3 4]");
+checkMultipleRest("裸の可変引数でも同じ", "f : x ~xs ~ys ? xs\nf 1 2 3");
+checkMultipleRest("3つ並んでも止まる", "f : [~a ~b ~c] ? a\nf [1 2 3]");
+checkMultipleRest("器を2つ受ける形でも、その並びの中で見る", "g : [a ~b] [~c ~d] ? b\ng [1 2] [3 4]");
+// 端から数えて決まる形は通す。
+checkStructOk("[a ~b] は通る", "f : [a ~b] ? b\nf [1 2 3 4]");
+checkStructOk("[~u v] は通る（右端が錨）", "f : [~u v] ? v\nf [1 2 3 4]");
+checkStructOk("[a ~b c] は通る（両端が錨）", "f : [a ~b c] ? b\nf [1 2 3 4]");
+checkStructOk("[~a] は通る（rest ひとつ）", "f : [~a] ? a\nf [1 2 3]");
+checkStructOk("[a ~b] [c ~d] は別の並びなので通る", "g : [a ~b] [c ~d] ? b\ng [1 2] [3 4]");
+checkStructOk("裸の可変引数 1つは通る", "f : x ~xs ? xs\nf 1 2 3");
+// **ジッパーの綴りは `[~l] x [~r]` である**——ひとつの並びの中ではなく、**3つの別々の
+// 仮引数**として書く。各グループの rest はひとつずつなので上の規則をそのまま通り、
+// そして肝心なのは**焦点をどこに置くかを呼ぶ側が決める**ことである。受ける側の宣言には
+// 焦点の位置が書かれていない（書けない）——それは適用の側の情報だからで、器への持ち上げも
+// 同じく呼ぶ側が払う（原理8、`emitLiftToContainer` の「払うのは呼ぶ側である」）。
+//
+// 同じ列に対して `z [1] 2 [3 4]` と `z [1 2] 3 [4]` はどちらも `[1 2 3 4]` に組み直る。
+// 焦点だけが違う。これが「1つの余積の項を選ぶ」ということである。
+checkStructOk("ジッパーは [~l] x [~r]（3つの仮引数）", "z : [~l] x [~r] ?\n\t[l~ x r~]\nz [1 2] 3 [4 5]");
+checkStructOk("焦点は呼ぶ側が決める（別の切り方）", "z : [~l] x [~r] ?\n\t[l~ x r~]\nz [1] 2 [3 4]");
+checkStructOk("スカラーは器へ持ち上がる", "z : [~l] x [~r] ?\n\tl\nz 1 2 [3 4]");
+// 焦点を動かすのは再帰そのもので、余結合律がその歩きを保証している
+// （どこで先に切っても同じ所に着く）。左文脈は呼び出しの側に在る。
+checkStructOk("焦点を進めるのは再帰", "at : n [a ~b] ?\n\tn = 0 : a\n\tat (n - 1) b\nat 2 [1 2 3 4]");
+
 console.log(`\n${passed + extraPassed}/${cases.length + extra} passed`);
 process.exit(passed === cases.length && extraPassed === extra ? 0 : 1);

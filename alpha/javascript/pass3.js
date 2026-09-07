@@ -586,6 +586,59 @@ function checkNoDuplicateSlotNames(lines) {
 }
 
 /**
+ * **ひとつの並びに rest はひとつまで。**
+ *
+ * カッコの仮引数は器をどの位置で切るかを選ぶ宣言である（Δ——脱連結余積の項をひとつ
+ * 選ぶ）。切れ目は**書かれた形が決めなければならない**。
+ *
+ * 固定スロットは器の端から数えて位置が決まる。rest がひとつなら、その両側は「端」か
+ * 「端から数えた固定スロット」で挟まれるので、長さが決まる：
+ *
+ *     [a ~b]     a は左端の1個、b は終端まで        決まる
+ *     [~u v]     v は右端の1個、u はその手前まで    決まる
+ *     [a ~b c]   両端が固定、b は挟まれたぶん        決まる
+ *
+ * **rest が2つあると、その間の境界がどこにも書かれない。**
+ *
+ *     [~u ~v]    u と v の境目が自由                 決まらない
+ *     [~l x ~r]  l が i 個なら x は i 番目。i が自由 決まらない
+ *
+ * 2つ目の形は「左文脈・焦点・右文脈」に見えるが、**焦点の位置を書いていない**ので
+ * ジッパーにはならない。ジッパーは `[a ~b]`（焦点＝頭、右文脈＝残り）と**再帰**で
+ * できる——左文脈は呼び出しの側に在り、焦点を動かすのが再帰そのものである。
+ *
+ * 実際これまでは先に出てきた rest だけが効いていた（`entries.find((e) => e.rest)` が
+ * 最初のひとつで止まる）。`[~u ~v]` に `[1 2 3 4]` を渡すと `u=[1,2,3] v=4` で、
+ * **`[~u v]` と1文字も違わない答え**が診断ゼロで返っていた。決めていたのは書かれた形
+ * ではなく実装の貪欲さだったので、`checkNoDuplicateSlotNames` と同じ理由・同じ強さで断る。
+ *
+ * 裸の可変引数（`x ~xs`）も同じ並びなので同じ規準。器を2つ受ける形（`[a ~b] [c ~d]`）は
+ * それぞれ別の並びなので、どちらも1つずつでよい。
+ */
+function checkOneRestPerGroup(node) {
+  if (!node || node.name !== "lambda" || !node.left || !Array.isArray(node.left.entries)) return;
+  const groups = [node.left.entries];
+  for (const e of node.left.entries) if (e && Array.isArray(e.pattern)) groups.push(e.pattern);
+  for (const g of groups) {
+    const rests = g.filter((e) => e && e.rest && e.name);
+    if (rests.length < 2) continue;
+    const spelled = rests.map((e) => `~${bareKey(e.name)}`).join(" ");
+    throw new OperationError(
+      `ひとつの仮引数の並びに rest が ${rests.length} つあります（\`${spelled}\`）。` +
+        `カッコの仮引数は器をどの位置で切るかを選ぶ宣言ですが、rest が2つあるとその間の境界が` +
+        `どこにも書かれません——\`[~u ~v]\` は境目が自由ですし、\`[~l x ~r]\` も \`l\` が i 個なら` +
+        `\`x\` は i 番目で、その i が決まりません。` +
+        `実際これまでは先に書いた rest だけが効いて、\`[~u v]\` と同じ答えを黙って返していました。` +
+        `固定スロットは器の端から数えて位置が決まるので、rest をひとつにすれば長さが決まります` +
+        `（\`[a ~b]\` \`[~u v]\` \`[a ~b c]\`）。` +
+        `焦点を動かしながら辿るなら、\`[a ~b]\` と再帰で書いてください` +
+        `——左文脈は呼び出しの側に在ります`,
+      { spec: "0_design_principles.md 原理4", reason: "multiple-rest-params" }
+    );
+  }
+}
+
+/**
  * **スロットの名前になれるノード。** 識別子と文字列リテラルである（綴れない名前は
  * 文字列で書く：`` `+` : `add` ``）。interpreter.js の `isSlotKeyNode`、layout.js の
  * 同名、pass4.js の `isSlotKeyAtom` と**同じ基準でなければならない**。
@@ -3543,6 +3596,9 @@ function annotateTypes(node, env, diagnostics) {
   if (diagnostics) collectRemovedOperator(node, diagnostics);
   if (diagnostics) collectMorphismAsKey(node, diagnostics);
   if (diagnostics) collectDynamicSlotKey(node, diagnostics);
+  // **切れ目が決まらない分割は断る。** 診断ではなく throw なのは、二重定義と同じく
+  // 「書かれたものから答えが決まらない」形だからである（原理4）。
+  checkOneRestPerGroup(node);
   // ブロック・ラムダは pass2 が残した子スコープで中身を歩く（無ければ現在のenv）。
   // これが無いと仮引数やブロック内の定義が「未定義識別子」になってしまう。
   const inner = node.scope || env;
