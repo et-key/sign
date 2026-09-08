@@ -6,449 +6,227 @@
 
 `段番号は仕様の段番号そのものであって、配列の添字ではない`
 
-`位置ごとに表を分けてある。多義な綴り（＃ は前置の段1と中置の段4）が鍵として`
-`衝突しないのと、実行時に決まる鍵で引けるのが理由——入れ子にすると二段目が実機で`
-`引けない（生成器の注記）`
+`位置ごとに表を分けてある。多義な綴り（＃ は前置の段1と中置の段4）が鍵として衝突しないため`
 
-`--- 段 1 ---`
+`どの綴りも同じ欄を持つ。鍵が実行時に決まる引き方は、形が揃っているときだけ出せる`
+`——欄を綴りごとに省くと、機械は「まだ出せない識別子です」で断る`
 
-tier1 :
+`持つ綴りと持たない綴りが分かれるものは所属の問いなので、下の集合で持つ`
+`無い側はそもそも記述しない。引けば __ が返り、それが唯一の偽である`
+
+`廃止された綴りは載せていない。この表に在ることが「演算子である」という言明そのものなので、`
+`引けば __ が返り、それが「演算子でない」になる。廃止の印を別に持つと同じ事実が2箇所で決まる`
+`どこで切るかという字句の問いは別で、それは下の 曖昧でない中置 が持っている`
+
+`--- infix ---`
+
+#infix :
+	`:` :
+		tier : 2
+		name : `define`
+		assoc : -1
+	`?` :
+		tier : 3
+		name : `lambda`
+		assoc : -1
 	`#` :
-		position : `prefix`
+		tier : 4
+		name : `output`
+		assoc : -1
+	`;` :
+		tier : 5
+		name : `xor`
+		assoc : 0
+	`|` :
+		tier : 6
+		name : `or`
+		assoc : 0
+	`&` :
+		tier : 7
+		name : `and`
+		assoc : 0
+	`==` :
+		tier : 8
+		name : `equal`
+		assoc : 0
+	`!==` :
+		tier : 8
+		name : `xnot_equal`
+		assoc : 0
+	`,` :
+		tier : 9
+		name : `product`
+		assoc : -1
+	` ` :
+		tier : 11
+		name : `coproduct`
+		assoc : 0
+	`~` :
+		tier : 12
+		name : `range`
+		assoc : 0
+	`~+` :
+		tier : 12
+		name : `range_arithmetic`
+		assoc : 0
+	`~-` :
+		tier : 12
+		name : `range_arithmetic_rev`
+		assoc : 0
+	`~*` :
+		tier : 12
+		name : `range_geometric`
+		assoc : 0
+	`~/` :
+		tier : 12
+		name : `range_geometric_rev`
+		assoc : 0
+	`~^` :
+		tier : 12
+		name : `range_power`
+		assoc : 0
+	`<` :
+		tier : 13
+		name : `less`
+		assoc : 0
+	`<=` :
+		tier : 13
+		name : `less_equal`
+		assoc : 0
+	`=` :
+		tier : 13
+		name : `assign_equal`
+		assoc : 0
+	`>=` :
+		tier : 13
+		name : `more_equal`
+		assoc : 0
+	`>` :
+		tier : 13
+		name : `more`
+		assoc : 0
+	`!=` :
+		tier : 13
+		name : `not_equal`
+		assoc : 0
+	`+` :
+		tier : 14
+		name : `add`
+		assoc : 0
+	`-` :
+		tier : 14
+		name : `sub`
+		assoc : 0
+	`*` :
+		tier : 15
+		name : `mul`
+		assoc : 0
+	`/` :
+		tier : 15
+		name : `div`
+		assoc : 0
+	`%` :
+		tier : 15
+		name : `mod`
+		assoc : 0
+	`^` :
+		tier : 16
+		name : `pow`
+		assoc : -1
+	`'` :
+		tier : 18
+		name : `get_prop`
+		assoc : 0
+	`@` :
+		tier : 18
+		name : `get_at`
+		assoc : -1
+	`<<` :
+		tier : 19
+		name : `bit_shift_left`
+		assoc : 0
+	`>>` :
+		tier : 19
+		name : `bit_shift_right`
+		assoc : 0
+	`||` :
+		tier : 20
+		name : `bit_or`
+		assoc : 0
+	`;;` :
+		tier : 21
+		name : `bit_xor`
+		assoc : 0
+	`&&` :
+		tier : 22
+		name : `bit_and`
+		assoc : 0
+
+`--- prefix ---`
+
+#prefix :
+	`#` :
+		tier : 1
 		name : `export_internal`
 	`##` :
-		position : `prefix`
+		tier : 1
 		name : `export_external`
 	`###` :
-		position : `prefix`
+		tier : 1
 		name : `export_pin`
-
-`--- 段 2 ---`
-
-tier2 :
-	`:` :
-		position : `infix`
-		name : `define`
-		assoc : `right`
-
-`--- 段 3 ---`
-
-tier3 :
-	`?` :
-		position : `infix`
-		name : `lambda`
-		assoc : `right`
-
-`--- 段 4 ---`
-
-tier4 :
-	`#` :
-		position : `infix`
-		name : `output`
-		assoc : `right`
-
-`--- 段 5 ---`
-
-tier5 :
-	`;` :
-		position : `infix`
-		name : `xor`
-
-`--- 段 6 ---`
-
-tier6 :
-	`|` :
-		position : `infix`
-		name : `or`
-
-`--- 段 7 ---`
-
-tier7 :
-	`&` :
-		position : `infix`
-		name : `and`
-
-`--- 段 8 ---`
-
-tier8 :
-	`===` :
-		position : `infix`
-		name : `same`
-		removed : 1
-	`==` :
-		position : `infix`
-		name : `equal`
-	`!==` :
-		position : `infix`
-		name : `xnot_equal`
-
-`--- 段 9 ---`
-
-tier9 :
-	`,` :
-		position : `infix`
-		name : `product`
-		assoc : `right`
-
-`--- 段 10 ---`
-
-tier10 :
 	`~` :
-		position : `prefix`
+		tier : 10
 		name : `continuous`
-
-`--- 段 11 ---`
-
-tier11 :
-	` ` :
-		position : `infix`
-		name : `coproduct`
-
-`--- 段 12 ---`
-
-tier12 :
-	`~` :
-		position : `infix`
-		name : `range`
-	`~+` :
-		position : `infix`
-		name : `range_arithmetic`
-	`~-` :
-		position : `infix`
-		name : `range_arithmetic_rev`
-	`~*` :
-		position : `infix`
-		name : `range_geometric`
-	`~/` :
-		position : `infix`
-		name : `range_geometric_rev`
-	`~^` :
-		position : `infix`
-		name : `range_power`
-
-`--- 段 13 ---`
-
-tier13 :
-	`<` :
-		position : `infix`
-		name : `less`
-	`<=` :
-		position : `infix`
-		name : `less_equal`
-	`=` :
-		position : `infix`
-		name : `assign_equal`
-	`>=` :
-		position : `infix`
-		name : `more_equal`
-	`>` :
-		position : `infix`
-		name : `more`
-	`!=` :
-		position : `infix`
-		name : `not_equal`
-
-`--- 段 14 ---`
-
-tier14 :
-	`+` :
-		position : `infix`
-		name : `add`
-	`-` :
-		position : `infix`
-		name : `sub`
-
-`--- 段 15 ---`
-
-tier15 :
-	`*` :
-		position : `infix`
-		name : `mul`
-	`/` :
-		position : `infix`
-		name : `div`
-	`%` :
-		position : `infix`
-		name : `mod`
-
-`--- 段 16 ---`
-
-tier16 :
-	`^` :
-		position : `infix`
-		name : `pow`
-		assoc : `right`
-
-`--- 段 17：書ける綴りは無い ---`
-`囲みだけの段か、綴りが文字列に書けない段（タブ・改行）である`
-
-tier17 :
-	none : 1
-
-`--- 段 18 ---`
-
-tier18 :
-	`'` :
-		position : `infix`
-		name : `get_prop`
-	`@` :
-		position : `infix`
-		name : `get_at`
-		assoc : `right`
-
-`--- 段 19 ---`
-
-tier19 :
-	`<<` :
-		position : `infix`
-		name : `bit_shift_left`
-	`>>` :
-		position : `infix`
-		name : `bit_shift_right`
-
-`--- 段 20 ---`
-
-tier20 :
-	`||` :
-		position : `infix`
-		name : `bit_or`
-
-`--- 段 21 ---`
-
-tier21 :
-	`;;` :
-		position : `infix`
-		name : `bit_xor`
-
-`--- 段 22 ---`
-
-tier22 :
-	`&&` :
-		position : `infix`
-		name : `bit_and`
-
-`--- 段 23 ---`
-
-tier23 :
 	`!` :
-		position : `postfix`
-		name : `factorial`
-	`~` :
-		position : `postfix`
-		name : `expand`
-
-`--- 段 24 ---`
-
-tier24 :
-	`!` :
-		position : `prefix`
+		tier : 24
 		name : `not`
 	`$` :
-		position : `prefix`
+		tier : 24
 		name : `address`
 	`@` :
-		position : `prefix`
+		tier : 24
 		name : `input`
 	`!!` :
-		position : `prefix`
+		tier : 24
 		name : `bit_not`
 	`-` :
-		position : `prefix`
+		tier : 24
 		name : `negate`
-
-`--- 段 25 ---`
-
-tier25 :
-	`@` :
-		position : `postfix`
-		name : `import`
-
-`--- 段 26 ---`
-
-tier26 :
-	`(...)` :
-		position : `enclosure`
-		name : `block_paren`
-	`{...}` :
-		position : `enclosure`
-		name : `block_brace`
-	`[...]` :
-		position : `enclosure`
-		name : `block_bracket`
-	`|...|` :
-		position : `enclosure`
-		name : `abs`
-	`||...||` :
-		position : `enclosure`
-		name : `norm`
-
-`--- 段 27：書ける綴りは無い ---`
-`囲みだけの段か、綴りが文字列に書けない段（タブ・改行）である`
-
-tier27 :
-	none : 1
-
-`--- 段 28 ---`
-
-tier28 :
 	`\` :
-		position : `prefix`
+		tier : 28
 		name : `escape`
 
-`--- 段で引く器（.js の OPERATOR_BY_PRECEDENCE と同じ並び）---`
-`添字は 0 始まりなので、段 N は by_precedence ' (N - 1) で引く`
+`--- postfix ---`
 
-#by_precedence : tier1 , tier2 , tier3 , tier4 , tier5 , tier6 , tier7 , tier8 , tier9 , tier10 , tier11 , tier12 , tier13 , tier14 , tier15 , tier16 , tier17 , tier18 , tier19 , tier20 , tier21 , tier22 , tier23 , tier24 , tier25 , tier26 , tier27 , tier28
+#postfix :
+	`!` :
+		tier : 23
+		name : `factorial`
+	`~` :
+		tier : 23
+		name : `expand`
+	`@` :
+		tier : 25
+		name : `import`
 
-`--- infix：段 ---`
+`--- enclosure ---`
 
-#infix_tier :
-	`:` : 2
-	`?` : 3
-	`#` : 4
-	`;` : 5
-	`|` : 6
-	`&` : 7
-	`==` : 8
-	`!==` : 8
-	`,` : 9
-	` ` : 11
-	`~` : 12
-	`~+` : 12
-	`~-` : 12
-	`~*` : 12
-	`~/` : 12
-	`~^` : 12
-	`<` : 13
-	`<=` : 13
-	`=` : 13
-	`>=` : 13
-	`>` : 13
-	`!=` : 13
-	`+` : 14
-	`-` : 14
-	`*` : 15
-	`/` : 15
-	`%` : 15
-	`^` : 16
-	`'` : 18
-	`@` : 18
-	`<<` : 19
-	`>>` : 19
-	`||` : 20
-	`;;` : 21
-	`&&` : 22
-
-`--- infix：演算の名前 ---`
-
-#infix_name :
-	`:` : `define`
-	`?` : `lambda`
-	`#` : `output`
-	`;` : `xor`
-	`|` : `or`
-	`&` : `and`
-	`==` : `equal`
-	`!==` : `xnot_equal`
-	`,` : `product`
-	` ` : `coproduct`
-	`~` : `range`
-	`~+` : `range_arithmetic`
-	`~-` : `range_arithmetic_rev`
-	`~*` : `range_geometric`
-	`~/` : `range_geometric_rev`
-	`~^` : `range_power`
-	`<` : `less`
-	`<=` : `less_equal`
-	`=` : `assign_equal`
-	`>=` : `more_equal`
-	`>` : `more`
-	`!=` : `not_equal`
-	`+` : `add`
-	`-` : `sub`
-	`*` : `mul`
-	`/` : `div`
-	`%` : `mod`
-	`^` : `pow`
-	`'` : `get_prop`
-	`@` : `get_at`
-	`<<` : `bit_shift_left`
-	`>>` : `bit_shift_right`
-	`||` : `bit_or`
-	`;;` : `bit_xor`
-	`&&` : `bit_and`
-
-`--- prefix：段 ---`
-
-#prefix_tier :
-	`#` : 1
-	`##` : 1
-	`###` : 1
-	`~` : 10
-	`!` : 24
-	`$` : 24
-	`@` : 24
-	`!!` : 24
-	`-` : 24
-	`\` : 28
-
-`--- prefix：演算の名前 ---`
-
-#prefix_name :
-	`#` : `export_internal`
-	`##` : `export_external`
-	`###` : `export_pin`
-	`~` : `continuous`
-	`!` : `not`
-	`$` : `address`
-	`@` : `input`
-	`!!` : `bit_not`
-	`-` : `negate`
-	`\` : `escape`
-
-`--- postfix：段 ---`
-
-#postfix_tier :
-	`!` : 23
-	`~` : 23
-	`@` : 25
-
-`--- postfix：演算の名前 ---`
-
-#postfix_name :
-	`!` : `factorial`
-	`~` : `expand`
-	`@` : `import`
-
-`--- enclosure：段 ---`
-
-#enclosure_tier :
-	`(...)` : 26
-	`{...}` : 26
-	`[...]` : 26
-	`|...|` : 26
-	`||...||` : 26
-
-`--- enclosure：演算の名前 ---`
-
-#enclosure_name :
-	`(...)` : `block_paren`
-	`{...}` : `block_brace`
-	`[...]` : `block_bracket`
-	`|...|` : `abs`
-	`||...||` : `norm`
-
-`--- 右結合（表の assoc がそう言うもの）---`
-`所属の問いなので綴りを鍵にした集合で持つ。無ければ __ が返る`
-`0 は書かない——Sign では 0 は真なので、書くと条件に直に置けなくなる`
-
-#right :
-	`:` : 1
-	`?` : 1
-	`#` : 1
-	`,` : 1
-	`^` : 1
-	`@` : 1
+#enclosure :
+	`(...)` :
+		tier : 26
+		name : `block_paren`
+	`{...}` :
+		tier : 26
+		name : `block_brace`
+	`[...]` :
+		tier : 26
+		name : `block_bracket`
+	`|...|` :
+		tier : 26
+		name : `abs`
+	`||...||` :
+		tier : 26
+		name : `norm`
 
 `--- 曖昧でない中置：前後に空白を入れてよいもの ---`
 `前置・後置・囲みにもなる綴りは入っていない`
@@ -485,11 +263,4 @@ tier28 :
 	`>>` : 1
 	`;;` : 1
 	`&&` : 1
-
-`--- 廃止された綴り ---`
-`意味は持たないが、字句としては1つの綴りである。表から消すと 三連の等号が 二連 ＋ 単独 に`
-`割れて別の意味へ黙って化けるので、ここに残す（.js の注記と同じ理由）`
-
-#removed :
-	`===` : 1
 
