@@ -1078,16 +1078,31 @@ function arithOnValues(name, l, r, limit = charLimitOf(DEFAULT_CHARSET)) {
 // （integer_overflow.md §1「bit演算はラップが前提（暗号・ハッシュ等）」）。
 function evalBit(node, env) {
   const l = evaluate(node.left, env);
-  const r = evaluate(node.right, env);
+  const r = unspreadScalar(evaluate(node.right, env));
   // 算術と同じ族（operator_table.md の同じ行）なので、`__` は両側とも単位元である。
   if (isUnit(l)) return r;
   if (isUnit(r)) return l;
   return bitOnValues(node.name, l, r);
 }
 
+/**
+ * **1要素を撒けばそれ自身である**（`[x] ≅ x`、原理8）。
+ *
+ * 後置 `~` は値へ「撒く印」を付ける（`isSpread`——印の付いたイテレータ）。印が意味を持つのは
+ * **器を組む場所と引数の位置**であって、算術は器を組まない。ここで剥がさないと `n~ + 1` が
+ * `__` になる——機械は 0 命令で素通しして 3 を返すので、**診断ゼロで答えが割れていた**。
+ *
+ * 剥がすのは中身がちょうど1つのときだけである。`[1 2]~ + 1` は器を算術へ渡す形なので
+ * `__` のままでよい——スカラーの `~` が恒等射なのは、1要素の器が存在しないからである。
+ */
+function unspreadScalar(v) {
+  if (!isSpread(v)) return v;
+  return iteratorCount(v) === 1 ? iteratorAt(v, 0) : v;
+}
+
 function evalArith(node, env) {
   const name = node.name;
-  const l = evaluate(node.left, env);
+  const l = unspreadScalar(evaluate(node.left, env));
   // 左辺が String の時点で右辺を評価せずに済ませる（型エラーは右辺に依らない）。
   // **ただし1文字は短絡しない**——`Char` は算術の対象なので右辺が要る。
   //
@@ -1097,7 +1112,7 @@ function evalArith(node, env) {
   // `__` が単位元になった以上その前提が消えた。
   const lim = charLimitOf(env && env.charset);
   if (typeof l === "string" && [...l].length !== 1) return arithOnValues(name, l, undefined, lim);
-  const r = evaluate(node.right, env);
+  const r = unspreadScalar(evaluate(node.right, env));
   // **対象を置けば値が返り、射を置けば射が返る。**
   //
   // `__` は零対象で、初対象と終対象が一致している。演算子の片側に置いたとき、その
