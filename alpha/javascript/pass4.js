@@ -6676,7 +6676,16 @@ function returnSizeBound(lam, name, known, group) {
 		// **撒く器は1つとは限らない。** 呼び先が複数の器に比例する形（`walk`）があるので、
 		// 名前1つでは足りない。
 		const refs = new Map();
-		const addRef = (nm, c) => { if (nm) refs.set(nm, Math.max(refs.get(nm) || 0, c)); };
+		// **枝の中は和、枝どうしは max。** `parts` は1つの節の連接を平らにしたもの、つまり
+		// 直積である——`s s` は `s` を2回書くので上界は `2×||s||` になる。定数 `k` は
+		// 既に `+=` で足しているのに器の参照だけ `max` で潰していたので、同じ器を2回
+		// 並べる形の上界が半分になっていた（実測：`h : s ? s s` は24文字で実機が
+		// スタックを踏み抜く。4/8/12 文字は16バイト丸めが隠す）。
+		//
+		// max が正しいのは**選択の合流**だけである——節どうしを束ねる `addTerm` と、
+		// 部分の中の `a | b`（`contributionOf` の or 枝）。どちらかしか返らないので
+		// 多い方で抑えれば足りる。
+		const addRef = (nm, c) => { if (nm) refs.set(nm, (refs.get(nm) || 0) + c); };
 		let rec = null; // 自己呼び出しが食っている仮引数
 		for (const p of parts) {
 			// 撒いた仮引数（`st~`）と裸の仮引数は、その器の要素数ぶん。
