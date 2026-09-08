@@ -3224,6 +3224,19 @@ function genExpr(node, env, em, scope, tail = false) {
 					em.load(SCRATCH[1], em.sretDest);
 					em.load(SCRATCH[0], cnt);
 					em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, x13`, "書いた個数 ＋ 写した位置");
+					// **見積もりで通すなら、照合は付属品ではなく前提条件である。**
+					//
+					// 上界は証明ではなく見積もりなので（`returnSizeBound` の「食いながら撒く枝」）、
+					// 外れうる。外れても壊れないのは書く前に照合して `__` へ落ちるからで、
+					// **照合が無ければ外れた瞬間にスタックを踏む**——`__` ではなく踏み抜きになる。
+					//
+					// 兄弟枝（`w === 16`）には在るのにここ（`w < 16`＝要素が `Char` の1バイト写し）
+					// には無かった。`parser.sn` の `out_one` が通るのはまさにこちらである。
+					// 同じ規則が片方の枝にしか無い形で、上界を伸ばすほど効いてくる。
+					//
+					// 壊すのは `x15` だけで、`x15` はループ頭で毎周読み直す（写す器の len）。
+					// 読んだ要素の `x14` と、宛先の `SCRATCH[1]` には触らない。
+					emitSretCapacityGuard(em, SCRATCH[0]);
 					if (shift) em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}, lsl #${shift}`);
 					else em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}`);
 					em.emit(storeElem("x14", SCRATCH[1], 0, w), "写す");
