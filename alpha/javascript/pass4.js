@@ -1975,7 +1975,7 @@ function genExpr(node, env, em, scope, tail = false) {
 					const shifted = t.sizeOfIndex - drop.filter((i) => i < t.sizeOfIndex).length;
 					const src = parts[shifted];
 					if (!src || src.w !== 2) return em.fail(n, `返値スロットの大きさが測れません（${callee} の第${t.sizeOfIndex + 1}引数が器ではない）`);
-					em.load(SCRATCH[0], src.off + 8, "上界を測る（引数の len）");
+					emitTermMeasure(em, src.off, t.measure, SCRATCH[0]);
 					if (t.coef !== 1) {
 						em.emit(`mov ${SCRATCH[1]}, #${t.coef}`, "段ごとの個数");
 						em.emit(`mul ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "係数を掛ける");
@@ -3414,10 +3414,17 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (n.escapesFrame === false) {
 			return em.fail(n, `器の構築はまだ出せません（${n.atomType}——並べるものが器なので要素数が実行時に決まる）`);
 		}
+		// **状態を取り違えて名指ししない。** ここは「sret の規約が未定」と言っていたが、
+		// 規約は在って動いている。実際に起きているのは**返す器の上界が出せなかった**ことで、
+		// 上界が無いと計画に載らず、載らないと `em.sretDest` が付かず、付かないと上の枝へ
+		// 一歩も入れずにここへ落ちる。名前が状態を指していないと、読んだ人は無い規約を
+		// 作りに行く（実際そうなった）。上界がどの部分で出せなかったかは
+		// `returnSizeBound` が知っているので、そこを見る手がかりだけ渡す。
 		return em.fail(
 			n,
-			`器の構築はまだ出せません（${n.atomType}——**フレームから出る**ので自分のフレームには置けない。` +
-				`sret の規約が未定）`
+			`器の構築はまだ出せません（${n.atomType}——**フレームから出る**ので置き場所は呼ぶ側が用意する（sret）が、` +
+				`返す器の上界が出せなかったので計画に載っていない。上界は konst + Σ coef×||仮引数|| と ` +
+				`coef×μ||仮引数|| しか書けない）`
 		);
 	}
 	return em.fail(n, `まだ出せない式です（${n.name || n.type}）`);
@@ -6460,6 +6467,50 @@ function boundParamNames(lam) {
 }
 
 /**
+ * **上界には測り方が2つある。**
+ *
+ * いままで項は `coef × ||p||`（要素数）しか書けなかった。だが `String` を組むときに要る
+ * のは中身の総量である——`ts` が語の並び（`List(String)`）なら、`ts ' o` を平らへ写す
+ * ぶんは `||ts||`（語の個数）では抑えられない。要るのは **μ||ts||**（平らにしてからの
+ * 個数＝全語の文字数の和）である。
+ *
+ * どちらで測るかは**返す器の μ が決める**（原理7：`String` の μ は強制、`List` は任意）。
+ * 要素が終端（`Char`/`Int`）なら μ||p|| = ||p|| で今までのまま、要素が器なら
+ * `{ptr, len}` の並びを走査して `len` を足す。
+ *
+ * 印は**名前に付けて Map の鍵にする**。合流（`addRef` の和・`addTerm` の max）は文字列を
+ * 鍵にしているので、印を鍵の一部にすれば同じ規則がそのまま効く——測り方が違う項は別物
+ * として扱われ、混ざらない。計画へ入れる直前に落として `measure` の欄にする。
+ */
+const MU_MARK = "μ:";
+const muKey = (nm) => MU_MARK + nm;
+const bareMeasureName = (nm) => (typeof nm === "string" && nm.startsWith(MU_MARK) ? nm.slice(MU_MARK.length) : nm);
+const measureOfKey = (nm) => (typeof nm === "string" && nm.startsWith(MU_MARK) ? "chars" : "len");
+const keyOfTerm = (t) => (t.measure === "chars" ? muKey(t.sizeOf) : t.sizeOf);
+
+/**
+ * その部分は**仮引数の器の「要素そのもの」**か。だとしたら底の仮引数の名前を返す。
+ *
+ * `ts ' o` は語1つであり、その文字数は `||ts||` では言えない。だが**どの要素も μ||ts||
+ * を超えない**ので、μ の項1つで抑えられる。同じ節に k 回現れれば k×μ||ts||——並置は
+ * 直積なので和である（`addRef`）。
+ *
+ * 切片（`ts ' o~`、添字が `Iterator`）は要素ではなく器そのものなので、今まで通り `len`
+ * で測る。底が `String` の `s ' i` は `Char`（スカラー）なので、そもそもここへ来ない。
+ */
+function flatBaseParam(q0, params) {
+	const q = unwrap(q0);
+	if (!q || q.type !== "operation" || q.name !== "get_prop") return null;
+	const base = unwrap(q.left);
+	const idx = unwrap(q.right);
+	if (!isIdentifierNode(base) || !params.includes(base.value)) return null;
+	if (!isBoxType(base.atomType)) return null; // 底が器でなければ要素を取れない
+	if (idx && idx.atomType === "Iterator") return null; // 切片は要素ではない
+	if (!isBoxType(q.atomType)) return null; // 要素が器でなければ len で足りる
+	return base.value;
+}
+
+/**
  * その部分が「上界の分かっている関数の呼び出し」なら、その上界を**こちらの仮引数で
  * 言い換えて**返す。言い換えられなければ null。
  *
@@ -6496,10 +6547,18 @@ function boundedCallOf(part, known, params) {
 	let konstAcc = p.konst;
 	for (const t of p.terms || []) {
 		const a = args[t.sizeOfIndex];
+		// **測り方も一緒に運ぶ。** 呼び先が μ で測る項を持つなら、こちらの仮引数を渡した
+		// ときの項も μ である——測るのはどちらも同じ器だからである。
 		if (isIdentifierNode(a) && params.includes(a.value)) {
-			merged.set(a.value, Math.max(merged.get(a.value) || 0, t.coef));
+			const key = t.measure === "chars" ? muKey(a.value) : a.value;
+			merged.set(key, Math.max(merged.get(key) || 0, t.coef));
 			continue;
 		}
+		// **μ の項は式へ言い換えられない。** 下の2つの道——長さの分かる実引数を定数へ畳む、
+		// 内側の上界と合成する——はどちらも「要素数」の言葉で書かれている。渡しているのが
+		// 仮引数そのものでなければ諦める（諦めれば上界を持たないと言うだけで、痩せた上界を
+		// 黙って使うことにはならない）。
+		if (t.measure === "chars") return null;
 		// **長さが分かっている実引数は定数に畳む。** `walk s bottom 0 0` の `bottom` は
 		// `0`——スカラーである。器の位置へ渡すと**長さ1の器へ持ち上がる**（原理8）ので
 		// `||bottom|| = 1` と言える。ここで諦めると `mark` が計画に載らず、器を自分の
@@ -6680,7 +6739,13 @@ function returnSizeBound(lam, name, known, group) {
 			if (b0) return { k: b0.konst, refs: new Map(b0.terms.map((t) => [t.sizeOf, t.coef])), rec: null };
 			const lit0 = literalElemCount(q, elemType);
 			if (lit0 !== null) return { k: lit0, refs: new Map(), rec: null };
-			if (isBoxType(q.atomType) && !(elemType && isBoxType(elemType))) return null;
+			if (isBoxType(q.atomType) && !(elemType && isBoxType(elemType))) {
+				// **器の要素を平らへ写すぶんは μ で測れる。** ここで諦めていたので、語の並びを
+				// 受け取って文字列を組む形（parser.sn の `out_one`）が上界を持てなかった。
+				const mu0 = flatBaseParam(q, params);
+				if (mu0) return { k: 0, refs: new Map([[muKey(mu0), 1]]), rec: null };
+				return null;
+			}
 			return { k: 1, refs: new Map(), rec: null };
 		};
 
@@ -6765,7 +6830,14 @@ function returnSizeBound(lam, name, known, group) {
 				k += lit;
 				continue;
 			}
-			if (isBoxType(q.atomType) && !(elemType && isBoxType(elemType))) return null;
+			if (isBoxType(q.atomType) && !(elemType && isBoxType(elemType))) {
+				// **器の要素を平らへ写すぶんは μ で測れる**（`flatBaseParam`）。並置は直積
+				// なので、同じ節に k 回現れれば k×μ||p||——`addRef` が和で足す。
+				const mu = flatBaseParam(q, params);
+				if (!mu) return null;
+				addRef(muKey(mu), 1);
+				continue;
+			}
 			k += 1;
 		}
 		// **食いながら撒く枝は、証明ではなく見積もりで通す。**
@@ -6829,10 +6901,13 @@ function returnSizeBound(lam, name, known, group) {
 	let extra = 0;
 	const resolveTerm = (nm, c, depth) => {
 		if (depth > 8) return false; // デフォルトが輪になっている
-		if (!defaults.has(nm)) {
+		const bare = bareMeasureName(nm);
+		if (!defaults.has(bare)) {
 			resolved.set(nm, Math.max(resolved.get(nm) || 0, c));
 			return true;
 		}
+		// **μ の項はデフォルトの式へ言い換えられない**（`boundedCallOf` と同じ理由）。
+		if (nm !== bare) return false;
 		const bb = known ? boundedCallOf(defaults.get(nm), known, params) : null;
 		if (!bb) return false;
 		extra += c * bb.konst;
@@ -7671,6 +7746,42 @@ function elementCellSize(et, conf) {
  *
  * @param idxReg 書こうとしている位置（要素数）が入っているレジスタ
  */
+/**
+ * **上界の項を1つ測る。** 呼ぶ側は実引数の枠から、呼ばれた側は自分の仮引数の枠から呼ぶ。
+ *
+ * **同じ命令列でなければならない**——容量は値として渡らず、両側が独立に計算した式が
+ * 一致することだけが正しさだからである。だから測り方を書く場所も1つにする（同じ規則を
+ * 2箇所に書かない）。`off` は `{ptr, len}` を置いた枠の底で、これは両側で同じ形である。
+ *
+ *   len   ……… 要素の個数。`len` を1本読むだけ。
+ *   chars ……… μ、つまり平らにしてからの個数。要素が `{ptr, len}` で並んでいるので、
+ *              走査して `len` を足す。`String` の μ が強制であること（原理7）が、
+ *              この測り方が要る理由そのものである。
+ *
+ * 走査に使うのは x12〜x15 で、容量式の総和（x11）と項の受け皿（`dst`）には触らない。
+ */
+function emitTermMeasure(em, off, measure, dst) {
+	if (measure !== "chars") {
+		em.load(dst, off + 8, "上界を測る（器の len）");
+		return;
+	}
+	const top = em.newLabel("mu");
+	const end = em.newLabel("mue");
+	em.load("x12", off, "μ を測る：器の ptr");
+	em.load("x14", off + 8, "μ を測る：器の len（要素の個数）");
+	em.emit(`mov ${dst}, #0`, "中身の総量");
+	em.emit("mov x13, #0", "位置");
+	em.label(top);
+	em.emit("cmp x13, x14");
+	em.emit(`b.ge ${end}`);
+	em.emit("add x15, x12, x13, lsl #4", "要素は {ptr, len} の16バイト");
+	em.emit("ldr x15, [x15, #8]", "その要素の len");
+	em.emit(`add ${dst}, ${dst}, x15`, "足す");
+	em.emit("add x13, x13, #1");
+	em.emit(`b ${top}`);
+	em.label(end);
+}
+
 function emitSretCapacityGuard(em, idxReg) {
 	if (em.sretCap === null || em.sretCap === undefined || !em.unitLabel) return;
 	em.load("x15", em.sretCap, "入る個数");
@@ -8148,9 +8259,13 @@ function collectSretPlanOnce(nodes, em, known, groups) {
 		const terms = [];
 		let ok = true;
 		for (const t of b.terms) {
-			const at = names.indexOf(t.sizeOf);
+			// **ここで印を落とす。** 上界を組み立てるあいだは測り方を名前へ付けて Map の鍵に
+			// していた（合流の規則をそのまま効かせるため）。計画は両側が引く表なので、名前は
+			// 仮引数そのもの、測り方は欄として持つ。
+			const sizeOf = bareMeasureName(t.sizeOf);
+			const at = names.indexOf(sizeOf);
 			if (at < 0) { ok = false; break; } // 相手が仮引数でなければ呼ぶ側は測れない
-			terms.push({ coef: t.coef, sizeOf: t.sizeOf, sizeOfIndex: at });
+			terms.push({ coef: t.coef, sizeOf, sizeOfIndex: at, measure: measureOfKey(t.sizeOf) });
 		}
 		if (!ok) continue;
 		// **場所が要るのは「返す器が、死ぬフレームに取られる」ときだけである。**
@@ -8507,7 +8622,11 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	em.unitLabel = unitLabel;
 	if (em.sretDest !== null && em.sretDest !== undefined && unitLabel) {
 		const sp0 = em.sretPlan && (em.sretPlan.get(bareName(name)) || em.sretPlan.get(bareName(name).split("$")[0]));
-		if (sp0 && sp0.needsSlot) {
+		// **容量式を計算するのは自分で書く関数だけである。** 照合するのは書く場所であって、
+		// 組まずに下から受け取って返す関数は一度も書かない——その容量式は誰も読まない死んだ
+		// 命令列である（parser.sn で5本、μ の走査つきで出ていた）。needsSlot は「場所をもらう
+		// か」であって「照合するか」ではない。
+		if (sp0 && sp0.needsSlot && sp0.builds) {
 			const cap = em.push();
 			if (cap === null) return em.fail(lambdaNode, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 			// **呼ぶ側と同じ式を、自分の引数から計算する。** 項ごとに測って足す。
@@ -8519,7 +8638,7 @@ function genFunction(name, lambdaNode, env, em, mono) {
 				em.emit(`mov x11, #${sp0.konst || 0}`, "定数の枝ぶん");
 				for (const t of sp0.terms) {
 					const i = params.indexOf(t.sizeOf);
-					em.load(SCRATCH[0], paramOffsets[i] + 8, "上界を測る（自分の引数の len）");
+					emitTermMeasure(em, paramOffsets[i], t.measure, SCRATCH[0]);
 					if (t.coef !== 1) {
 						em.emit(`mov ${SCRATCH[1]}, #${t.coef}`, "段ごとの個数");
 						em.emit(`mul ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "係数を掛ける");
