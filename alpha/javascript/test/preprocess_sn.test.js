@@ -18,6 +18,10 @@ import { parse } from "../parser.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const snPath = path.join(__dirname, "..", "..", "sign", "preprocess.sn");
+// **インポートを解く手段は呼ぶ側が渡す**（build_system.md §4.2）。`preprocess.sn` が
+// 演算子表を読むようになったので、ここでも渡す——渡さないと `compile` が投げ、この
+// ファイルは1件も報告しないまま終わる（「29/31 ファイル」で気づいた）。
+const readImport = (p) => fs.readFileSync(path.join(__dirname, "..", "..", "sign", p), "utf8").replace(/\r\n/g, "\n");
 
 let passed = 0;
 let total = 0;
@@ -36,7 +40,7 @@ function check(note, ok, detail) {
 // `preprocess.sn` を読み込み、末尾の実行例を落として関数群だけを環境へ束縛する。
 const src = fs.readFileSync(snPath, "utf8").replace(/\r\n/g, "\n");
 const base = src.split("\n").filter((l) => !l.startsWith("preprocess `")).join("\n");
-const { nodes, env } = compile(base);
+const { nodes, env } = compile(base, { readImport });
 const renv = I.newRuntimeEnv(env);
 for (const n of nodes) I.evaluate(n, renv);
 

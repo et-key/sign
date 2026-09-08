@@ -18,45 +18,21 @@ indent : \
 dedent : \
 
 `--- 中置演算子表 ---`
-`多義的なものは入れない。- は負号、| は絶対値、~ は残余、|| はノルムの囲みにもなるため区切れない`
-`長いものから先に照合する`
+`表は仕様から生成したものを読む（operator_table.sn）。ここに手で写した並びを持っていたが、`
+`同じ事実が2箇所で決まる形であり、片方だけ直る。実際いまは一致していたが、それは運である`
+``
+`表が言うのは「その綴りは曖昧でない中置か」だけで、長さで分けるのは照合する側の仕事である`
+`——下の sep が3文字・2文字・1文字の順に組んで訊く。無ければ __ が返り、それが唯一の偽`
+``
+`多義的なものは表に入っていない。- は負号、| は絶対値、~ は残余、|| はノルムの囲みにも`
+`なるため区切れない。その判断は表の側が持っている`
+``
+`手書きより短い——実測で 2629 → 2205 命令。29 本の比較の連なりが、表を1回引く形になる`
 
-infix3 : t ?
-	t == `===` : t
-	t == `!==` : t
-	__
+`operator_table.sn`@~
 
-infix2 : t ?
-	t == `==` : t
-	t == `!=` : t
-	t == `<=` : t
-	t == `>=` : t
-	t == `<<` : t
-	t == `>>` : t
-	t == `&&` : t
-	t == `;;` : t
-	t == `~+` : t
-	t == `~-` : t
-	t == `~*` : t
-	t == `~/` : t
-	t == `~^` : t
-	__
-
-infix1 : ch ?
-	ch = \: : ch
-	ch = \? : ch
-	ch = \; : ch
-	ch = \& : ch
-	ch = \, : ch
-	ch = \< : ch
-	ch = \> : ch
-	ch = \= : ch
-	ch = \+ : ch
-	ch = \* : ch
-	ch = \/ : ch
-	ch = \% : ch
-	ch = \^ : ch
-	ch = \' : ch
+strict : t ?
+	strict_infix ' t~ : t
 	__
 
 `--- 1. 中置演算子の両側へ空白を入れる ---`
@@ -65,9 +41,9 @@ infix1 : ch ?
 sep : [c ~rest] ?
 	c = escape : c (rest ' 0) (sep (rest ' 1~))
 	c = quote : c (in_quote rest)
-	infix3 (c (rest ' 0) (rest ' 1)) : space (c (rest ' 0) (rest ' 1)) space (sep (rest ' 2~))
-	infix2 (c (rest ' 0)) : space (c (rest ' 0)) space (sep (rest ' 1~))
-	infix1 c : space c space (sep rest)
+	strict (c (rest ' 0) (rest ' 1)) : space (c (rest ' 0) (rest ' 1)) space (sep (rest ' 2~))
+	strict (c (rest ' 0)) : space (c (rest ' 0)) space (sep (rest ' 1~))
+	strict c : space c space (sep rest)
 	c (sep rest)
 
 `閉じるバッククォートまで、あるいは行末まで素通しする`

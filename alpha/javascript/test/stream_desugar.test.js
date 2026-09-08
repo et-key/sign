@@ -43,8 +43,12 @@ function run(source) {
 	for (const node of nodes) r = evaluate(node, env);
 	return isUnit(r) ? "__" : observe(r);
 }
+// **インポートを解く手段は呼ぶ側が渡す**（build_system.md §4.2）。下で preprocess.sn の
+// 実物を読ませており、それが演算子表を読むようになったので渡す——渡さないと compile が
+// 投げ、このファイルは1件も報告しないまま終わる（総数が減るだけで FAIL は出ない）。
+const readImport = (rel) => fs.readFileSync(path.join(__dirname, "..", "..", "sign", rel), "utf8").replace(/\r\n/g, "\n");
 function streams(src) {
-	return findStreamFunctions(compile(src, { charset: "ascii" }).nodes);
+	return findStreamFunctions(compile(src, { charset: "ascii", readImport }).nodes);
 }
 
 // ---- 何がストリームで、何がそうでないか ----
