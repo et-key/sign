@@ -4892,7 +4892,12 @@ function genIndex(node, env, em, scope) {
 	// **均すのはここ1箇所である。** 以降の枝（要素の読み・切り出し・範囲検査）は非負の
 	// 添字だけを見ればよく、同じ規則を枝ごとに書かなくて済む。行き過ぎた負（`l ' -4`）は
 	// 均しても負のままなので、既存の符号なし比較がそのまま `__` にする。
-	if (cw === 1 || cw === 2) {
+	// **静的に非負と分かるなら均さない。** 添字がリテラル（または終端の有る切り出しの起点）
+	// なら符号はコンパイル時に決まっている——実プログラムはほとんどこちらで、均しを一律に
+	// 出すと lexer.sn が 510 → 599 命令に膨らんだ。決まっていることは実行時に訊かない。
+	const staticIdx = bounded ? BigInt(bounded.start) : constAddressOf(isSlice ? idx.left : idx, env);
+	const knownNonNegative = staticIdx !== null && staticIdx >= 0n;
+	if ((cw === 1 || cw === 2) && !knownNonNegative) {
 		const neg = em.newLabel("nonneg");
 		em.load(SCRATCH[0], io, "添字");
 		em.emit(`cmp ${SCRATCH[0]}, #0`, "負なら末尾から数える");

@@ -49,8 +49,8 @@ last_at : [~ts] i j t k ?
 `左結合なら一番外側の演算子は最後のもの、右結合なら最初のもの`
 `String どうしの並置は連結（吸収則）`
 ``
-`表の right は 1/0 を返す。Sign では 0 も真なので「= 1」で明示する`
-`——ここを条件にそのまま置くと、左結合の 0 まで真になって全部が右結合になる`
+`right は右結合のものだけを持つ集合である。無ければ __ が返り、__ は唯一の偽なので`
+`そのまま条件に置ける。1/0 を全綴りぶん書いていた頃は、0 も真なので明示の比較が要った`
 
 out : [~ts] i j t ?
 	t > top_tier : ts ' i
@@ -58,7 +58,7 @@ out : [~ts] i j t ?
 
 out_at : [~ts] i j t k ?
 	k = j : out ts i j (t + 1)
-	(right ' (ts ' k)~) = 1 : `[[` (ts ' k) `] ` (out ts i k (t + 1)) ` ` (out ts (k + 1) j t) `]`
+	right ' (ts ' k)~ : `[[` (ts ' k) `] ` (out ts i k (t + 1)) ` ` (out ts (k + 1) j t) `]`
 	out_left ts i j t (last_of ts i j t)
 
 out_left : [~ts] i j t m ?
