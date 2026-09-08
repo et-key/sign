@@ -6763,7 +6763,25 @@ function returnSizeBound(lam, name, known, group) {
 		if (rec) {
 			// `T(n) = k + T(n-1)`、底は `konst`。解くと `konst + k × ||p||` である。
 			// **段ごとの定数が係数になる**——`c c (dup rest)` なら 2 である。
-			addTerm(rec, Math.max(k, 1));
+			//
+			// **1周の費用は輪が言う。** 相互再帰では「1段」が自分の節で閉じない——
+			// parser.sn は `out → out_at → out_as → out_one → out` と回り、7文字を書くのは
+			// `out_one` だけである。自分の `k` だけで係数を決めると `out` は 0（→ 1）に
+			// なり、`out_at` も `expr` も小さい方を引き継ぐ。**同じ器を返す輪なのに上界が
+			// 2種類**あり、一番外側が一番小さいのを使って `sub sp` していた
+			// （実測：n=5 で 6 バイト要求に対し 17 文字を書き、n≥7 で qemu が踏み抜く）。
+			//
+			// 輪の誰か1人が払う定数は、輪の全員が払う。だから段の費用は輪の最大を採る。
+			// 計画は不動点で回っているので、1周目に `out_one` が出した 8 を2周目に `out`
+			// が読む——**上界がどこか1箇所で決まる**という形はここで閉じている。
+			let step = Math.max(k, 1);
+			if (group && known)
+				for (const m of group) {
+					if (m === name) continue;
+					const e = known.get(m);
+					for (const tm of (e && e.terms) || []) step = Math.max(step, tm.coef);
+				}
+			addTerm(rec, step);
 			// 食いながら撒く枝は、撒く器のぶんも項として持つ。**別々の器でも和で書ける**
 			// ——1変数しか持てなかったので、ここで諦めていた。
 			for (const [nm, c] of refs) if (nm !== rec) addTerm(nm, c);
