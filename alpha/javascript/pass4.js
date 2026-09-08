@@ -38,7 +38,7 @@
 import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf, charLimitOf, DEFAULT_CHARSET, SIGNEDNESS, literalDigits, literalParts } from "./target_info.js";
 import { envLookup } from "./pass1.js";
 import { isBareComment } from "./pass3.js";
-import { passingOf, measure, layoutOfStruct, elementShapeOfList, itemShapeOfListAt, flattenProduct, isExpandNode, mergeBaseIdentifier } from "./layout.js";
+import { passingOf, measure, layoutOfStruct, elementShapeOfList, itemShapeOfListAt, commonSlotShape, flattenProduct, isExpandNode, mergeBaseIdentifier } from "./layout.js";
 import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 // AAPCS64（stack_abi.md §4.2）。引数は x0〜x7、返値は x0、一時は x9〜x15。
@@ -4436,7 +4436,11 @@ function structShapeOf(node, env, conf, depth = 0) {
 			const spell = slotKeySpelling(unwrap(u.right), env);
 			if (spell !== null) slot = base.slots.find((sl) => sl.name === spell);
 		}
-		return (slot && slot.shape) || null;
+		if (slot && slot.shape) return slot.shape;
+		// **鍵が実行時に決まっても、どのスロットも同じ形なら引いた結果の形は決まる。**
+		// `genNameSearch` が「全スロットが同じ幅かつ同じ型」を要求しているのと同じ規準で、
+		// あちらが値を、こちらが形を出す。判定は `commonSlotShape`（layout.js）1箇所。
+		return commonSlotShape(base);
 	}
 	// 最後にリテラルを起こす。ここまで来たものは束縛にも呼び先にも答えが無い形である。
 	return layoutOfStruct(u, conf) || null;
@@ -4631,6 +4635,19 @@ function genIndex(node, env, em, scope) {
 				if (o === null) return em.fail(node, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
 				outs.push(o);
 			}
+			// **`__` は番地ではない。** 器が無ければ引いた結果も `__` である（完全性公理）——
+			// ところが `__` は niche（`0x8000_0000_0000_0000`）という**具体的なビット列**なので、
+			// 検査せずに `ldr [x9]` を出すと**それを番地として読む**。
+			//
+			// 実測では、鍵が実行時に決まる引き方で綴りが表に無かったとき（`genNameSearch` が
+			// `__` を返す枝）にそのまま field を引き、qemu がフォールトして時間切れになっていた
+			// ——診断でも `__` でもなく**クラッシュ**である。パーサは未知の綴りを必ず引くので、
+			// ここは通る道である。
+			const nul = em.newLabel("nofield");
+			const fin = em.newLabel("field");
+			em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
+			em.emit(`cmp ${SCRATCH[0]}, x12`, "器が __ なら引かない");
+			em.emit(`b.eq ${nul}`);
 			for (let r = 0; r < regs; r++) {
 				em.emit(
 					regs === 1 ? slotLoadInsn(slot, SCRATCH[1], SCRATCH[0], slot.offset) : `ldr ${SCRATCH[1]}, [${SCRATCH[0]}, #${slot.offset + r * 8}]`,
@@ -4638,6 +4655,16 @@ function genIndex(node, env, em, scope) {
 				);
 				em.store(SCRATCH[1], outs[r]);
 			}
+			em.emit(`b ${fin}`);
+			em.label(nul);
+			// 1本で運ぶ値の `__` は niche、2本（`{ptr, len}`）なら `len = 0` である
+			// （`genMatch` の「1本なら niche、2本なら len = 0」と同じ規則）。
+			for (let r = 0; r < regs; r++) {
+				if (regs === 1) em.emit(`mov ${SCRATCH[1]}, x12`, "器が無ければ結果も __");
+				else em.emit(`mov ${SCRATCH[1]}, #0`, r === 0 ? "器が無ければ結果も __（len = 0）" : undefined);
+				em.store(SCRATCH[1], outs[r]);
+			}
+			em.label(fin);
 			return regs;
 		}
 	}

@@ -33,7 +33,7 @@
 import { literalDigits } from "./target_info.js";
 import { envLookup } from './pass1.js';
 import { OperationError } from "./errors.js";
-import { stringLength, layoutOfStruct , elementShapeOfList, itemShapeOfListAt } from "./layout.js";
+import { stringLength, layoutOfStruct , elementShapeOfList, itemShapeOfListAt, commonSlotShape } from "./layout.js";
 import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 const ARITHMETIC_OPS = new Set(["add", "sub", "mul", "div", "mod", "pow"]);
@@ -1231,7 +1231,10 @@ function structShapeOfNode(node, env, depth = 0) {
     const base = structShapeOfNode(u.left, env, depth + 1);
     if (!base || !Array.isArray(base.slots)) return null;
     const sl = slotOfKey(base, u.right);
-    return (sl && sl.shape) || null;
+    if (sl && sl.shape) return sl.shape;
+    // **鍵が実行時に決まっても、どのスロットも同じ形なら引いた結果の形は決まる。**
+    // 型を直和で畳んだのと同じ話が形にも成り立つ（`commonSlotShape`）。
+    return commonSlotShape(base);
   }
   return null;
 }

@@ -582,6 +582,30 @@ function elementShapeOfList(node, conf) {
  *
  * 要素の並べ方は `elementShapeOfList` と同じ手続きで数える——**2箇所で別々に数えない**。
  */
+/**
+ * **どのスロットも同じ形なら、鍵が実行時に決まっても引いた結果の形は決まる。**
+ *
+ * `obj ' k~` はどのスロットが出るかを実行時に選ぶが、**出うる形は全部書かれている**。
+ * 全部が同じ形なら、選ばれたものもその形である——鍵が実行時に決まる引き方で結果の**型**を
+ * スロット型の直和にしたのと同じ話が、**形**にも成り立つ。
+ *
+ * 揃っていなければ null を返す。揃わない形を先頭の表で読むと別のスロットを読むからで、
+ * 判定は `elementShapeOfList` が器の要素についてしているのと同じである。
+ *
+ * Pass 3（型）と Pass 4（命令）の両方が引くので、ここ1箇所に置く。
+ */
+function commonSlotShape(shape) {
+  const slots = shape && Array.isArray(shape.slots) ? shape.slots : null;
+  if (!slots || slots.length === 0) return null;
+  const first = slots[0].shape;
+  if (!first || !Array.isArray(first.slots)) return null;
+  const key = JSON.stringify(first.slots);
+  for (const sl of slots) {
+    if (!sl.shape || !Array.isArray(sl.shape.slots) || JSON.stringify(sl.shape.slots) !== key) return null;
+  }
+  return first;
+}
+
 function itemShapeOfListAt(node, conf, index) {
   if (!Number.isInteger(index) || index < 0) return null;
   const n = deref(node, conf && conf.env);
@@ -947,6 +971,7 @@ export {
   layoutOfStruct,
   elementShapeOfList,
   itemShapeOfListAt,
+  commonSlotShape,
   formatLayout,
   alignUp,
   passingOf,
