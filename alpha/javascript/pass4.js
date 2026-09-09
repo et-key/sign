@@ -1974,11 +1974,18 @@ function genExpr(node, env, em, scope, tail = false) {
 			// **追記は器を割る。** 自分が先に k 個書いたぶん、呼び先の取り分はそれだけ狭い。
 			// **どこで割れているかは呼ぶ側の情報**なので、ここでしか出せない。
 			const adv = n._sretAdvance || 0;
+			// **割れ目は実行時に決まることもある。** 器を2つ並べる形（`(out …) \` \` (out …)`）
+			// では、2つ目の宛先は「1つ目が**何個書いたか**」で決まる——静的には言えない。
+			// そのときは個数の入ったスロットを渡してもらう。
+			const advSlot = n._sretAdvanceSlot;
 			const mine = em.sretLimit;
 			if (mine !== null && mine !== undefined)
 				limit = () => {
 					em.load(SRET_LIMIT, mine, "自分がもらった残り");
-					if (adv) em.emit(`sub ${SRET_LIMIT}, ${SRET_LIMIT}, #${adv}`, `先に置いた ${adv} 要素ぶん狭い`);
+					if (advSlot !== null && advSlot !== undefined) {
+						em.load(SCRATCH[0], advSlot, "先に置いた個数（実行時）");
+						em.emit(`sub ${SRET_LIMIT}, ${SRET_LIMIT}, ${SCRATCH[0]}`, "そのぶん狭い");
+					} else if (adv) em.emit(`sub ${SRET_LIMIT}, ${SRET_LIMIT}, #${adv}`, `先に置いた ${adv} 要素ぶん狭い`);
 				};
 		} else if (sp && returnsHere && em.sretDest !== null && em.sretDest !== undefined) {
 			// **場所は最も外側で一度だけ取る。** この呼び出しの値がそのまま自分の返値なら、
@@ -3265,6 +3272,58 @@ function genExpr(node, env, em, scope, tail = false) {
 					const u = unwrap(parts[i]);
 					return !!(u && u.type === "operation" && u.position === "postfix" && u.name === "expand");
 				})();
+				// **器が2つ以上あっても、順に書かせればよい。**
+				//
+				// ここは長らく「作らせてから写す」だけだった。作らせるとは呼び先が `sub sp` で
+				// 自分のスロットを取ることで、その大きさは `μ||ts|| + 6×||ts||` ——つまり O(n)。
+				// `out_one` は器を返す呼び出しを**2つ**持つので段ごとに 2 つ取り、段が O(n) ある
+				// ので**空間が O(n²)** になっていた（実測：83 語まで通り、85 語でスタックを
+				// 踏み抜く。時間は語数によらず一定なので、遅いのではなく回っている）。
+				//
+				// 追記の道は「末尾の器1つ」しか見ていなかったが、位置が実行時に決まるだけで
+				// 話は同じである——**いま書いた個数のぶん進めた場所**を宛先として渡し、残りも
+				// そのぶん狭めて渡す。呼び先はそこへ直に書き、こちらは返ってきた個数を足す。
+				// 写しも確保も消える。
+				//
+				// 幅が違う器は混ぜられない（呼び先の要素幅が自分と同じときだけ）。1要素として
+				// 置く形（`w === 16` で撒いていない）も別の話で、そちらは要素を1つ書くだけである。
+				const appendHere = (() => {
+					if (w === 16 && !spreadHere) return null;
+					const nm = appendableCallee(parts[i], em);
+					if (!nm) return null;
+					const e = em.sretPlan && em.sretPlan.get(nm);
+					return e && e.width === w ? stripExpand(parts[i]) : null;
+				})();
+				if (appendHere) {
+					const destSlot = em.push();
+					if (destSlot === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
+					// **この枝の `shift` は 16 を答えない。** 写す側は 16 のとき `lsl #4` を直に
+					// 書いているので、共有の `shift` には 16 の場合が無い（0 になる）。それを
+					// そのまま使うと宛先が `底 + 個数` バイトになり、**16 分の1の位置**を指す。
+					const sh = w === 16 ? 4 : shift;
+					em.load(SCRATCH[1], em.sretDest, "返値スロット（sret）");
+					em.load(SCRATCH[0], cnt);
+					if (sh) em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}, lsl #${sh}`, "書いた個数ぶん進める");
+					else em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}`, "書いた個数ぶん進める");
+					em.store(SCRATCH[1], destSlot, "続きを書く場所");
+					appendHere._sretInto = destSlot;
+					appendHere._sretAdvanceSlot = cnt;
+					const aw = genExpr(appendHere, env, em, scope);
+					appendHere._sretInto = undefined;
+					appendHere._sretAdvanceSlot = undefined;
+					if (aw === false) return false;
+					if (aw !== 2) {
+						em.pop(aw === TAIL ? 0 : aw);
+						return em.fail(n, `並べる器が ${aw} 本です`);
+					}
+					em.load(SCRATCH[1], (em.slot - 1) * 8, "呼び先が書いた個数");
+					em.load(SCRATCH[0], cnt);
+					em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "書いた個数を足す");
+					em.store(SCRATCH[0], cnt);
+					em.pop(2);
+					em.pop(1);
+					continue;
+				}
 				const cw = genExpr(stripExpand(parts[i]), env, em, scope);
 				if (cw === false) return false;
 				if (cw !== 2) {
