@@ -45,6 +45,10 @@ import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 const ARG_REGS = ["x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7"];
 // 演算のあいだだけ使う。呼び出しを跨がないので caller-saved で足りる。
 const SCRATCH = ["x9", "x10"];
+// **返値スロットに入る個数を渡す口。** AAPCS64 の外にある Sign の取り決めで、x8 と対に
+// なる（`CALL_ARGS`）。一時としても使うが、値は呼ばれた側が入口でスロットへ写すので、
+// そこから先で潰しても構わない——渡す直前に組み立て、受けた直後に仕舞う。
+const SRET_LIMIT = "x15";
 // フレームに置ける式の深さ。超えたら診断（深い式は稀なので、まず名指しする）。
 //
 // **仮引数もここを使う。** 器を受ける仮引数は2本使うので、引数が多い関数は本体を
@@ -1904,6 +1908,12 @@ function genExpr(node, env, em, scope, tail = false) {
 					em.emit(`add ${SCRATCH[1]}, x29, #${FRAME_MARK}`, "自分の引数域（スタック渡し）");
 					place(true, SCRATCH[1]);
 				}
+				// **飛び先は仮引数を写す前**なので、x8 と x15 も入口と同じ姿で渡さなければ
+				// ならない。途中の `bl` が壊しているので、スロットから戻す（下の相互末尾と同じ）。
+				if (em.sretDest !== null && em.sretDest !== undefined) {
+					em.load("x8", em.sretDest, "返値スロットを渡し直す（末尾自己再帰）");
+					if (em.sretLimit !== null && em.sretLimit !== undefined) em.load(SRET_LIMIT, em.sretLimit, "残りも渡し直す");
+				}
 				em.emit(`b ${scope.loopLabel}`, "末尾自己再帰（フレーム再利用）");
 				return TAIL;
 			}
@@ -1916,6 +1926,22 @@ function genExpr(node, env, em, scope, tail = false) {
 			if (plan.stackBytes > 0) {
 				em.emit(`add ${SCRATCH[1]}, x29, #${FRAME_MARK}`, "自分の引数域（スタック渡し）");
 				place(true, SCRATCH[1]);
+			}
+			// **飛ぶ先も返値スロットを要るなら、畳む前に渡し直す。**
+			//
+			// 末尾なので飛んだ先の返値が自分の返値である——書く場所は自分がもらったスロット
+			// で、残りももらったままでよい。ところが x8 も x15 も**途中の `bl` で壊れている**
+			// （呼び出しは caller-saved を守らない）ので、レジスタに残っているものは信用でき
+			// ない。畳むと `x29` が呼び出し元のものへ戻るので、順序を逆にはできない。
+			//
+			// x8 の方は前からこの穴を持っていた——`close_all` が `mov x21, x8` で受けている
+			// のに、飛ばす側は `bl walk` を挟んだ後の残骸を渡していた。同じ事実なので一緒に直す。
+			{
+				const ce = em.sretPlan && (em.sretPlan.get(callee) || em.sretPlan.get(baseName));
+				if (ce && ce.needsSlot && em.sretDest !== null && em.sretDest !== undefined) {
+					em.load("x8", em.sretDest, "返値スロットを渡し直す（末尾呼び出し）");
+					if (em.sretLimit !== null && em.sretLimit !== undefined) em.load(SRET_LIMIT, em.sretLimit, "残りも渡し直す");
+				}
 			}
 			em.emit(`ldp x29, x30, [sp], #${FRAME_MARK}`, "自分のフレームを畳む");
 			// **飛んだ先が返す本数が、この関数が返す本数である。** 型が答えない形（具体化した
@@ -1939,8 +1965,22 @@ function genExpr(node, env, em, scope, tail = false) {
 		// **追記なら、場所は既に決まっている。** `(s ' 0) (f (s ' 1~))` の `f` は自分の
 		// 器の**続き**を書くので、新しく取るのではなく渡された宛先をそのまま使う。印は
 		// ノードに付いている——引数の中に別の呼び出しがあっても取り違えないためである。
+		//
+		// **番地と残りは対で渡す。** x8 だけでは、そこがどこまで自分のものかを呼ばれた側が
+		// 知りようがない——`emitSretCapacityGuard` が読むのはこの x15 である。組み立てるのは
+		// `bl` の直前（下）で、ここでは何を渡すかだけを決める。
+		let limit = null;
 		if (sp && n._sretInto !== undefined && n._sretInto !== null) {
 			em.load("x8", n._sretInto, "続きを書く場所（追記）");
+			// **追記は器を割る。** 自分が先に k 個書いたぶん、呼び先の取り分はそれだけ狭い。
+			// **どこで割れているかは呼ぶ側の情報**なので、ここでしか出せない。
+			const adv = n._sretAdvance || 0;
+			const mine = em.sretLimit;
+			if (mine !== null && mine !== undefined)
+				limit = () => {
+					em.load(SRET_LIMIT, mine, "自分がもらった残り");
+					if (adv) em.emit(`sub ${SRET_LIMIT}, ${SRET_LIMIT}, #${adv}`, `先に置いた ${adv} 要素ぶん狭い`);
+				};
 		} else if (sp && returnsHere && em.sretDest !== null && em.sretDest !== undefined) {
 			// **場所は最も外側で一度だけ取る。** この呼び出しの値がそのまま自分の返値なら、
 			// 書く先は**自分がもらったスロット**である。ここで新しく取ると、自分のフレームの
@@ -1949,6 +1989,9 @@ function genExpr(node, env, em, scope, tail = false) {
 			// 収まることは上界が言っている——呼ぶ側の上界はこの呼び出しを**合成して**
 			// 求めた式（`k₂ + c₂k₁ + c₂c₁||p||`）なので、内側のぶんを必ず覆う。
 			em.load("x8", em.sretDest, "返値スロットは自分がもらったもの（sret を下へ渡す）");
+			// 場所ごと渡すのだから、残りもそのまま渡る。
+			const mine = em.sretLimit;
+			if (mine !== null && mine !== undefined) limit = () => em.load(SRET_LIMIT, mine, "残りももらったまま渡す");
 		} else if (sp) {
 			// 返値スロットも `sub sp` で取る場所である（門番）。
 			if (!allocaAllowed(em, n, callee + " の返値スロット（sret）")) return false;
@@ -1980,10 +2023,14 @@ function genExpr(node, env, em, scope, tail = false) {
 				em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #15`, "16 バイトへ丸める");
 				em.emit(`and ${SCRATCH[0]}, ${SCRATCH[0]}, #0xfffffffffffffff0`);
 				em.emit(`sub sp, sp, ${SCRATCH[0]}`, "返値スロットを取る（sret）");
+				// x11 は個数のまま残っている（丸めもバイト換算も x9 の側でやった）。
+				limit = () => em.emit(`mov ${SRET_LIMIT}, x11`, "入る個数を渡す（sret）");
 			} else {
 				// 返値スロットも `sub sp` で取る場所である（門番）。
 				const bytes = sretBytesConst(sp);
 				if (bytes > 0) em.emit(`sub sp, sp, #${bytes}`, `返値スロット ${bytes} バイトを取る（sret）`);
+				// 丸める前の個数が上界である（丸めたぶんは余りであって、約束ではない）。
+				limit = () => em.emit(`mov ${SRET_LIMIT}, #${sp.konst}`, "入る個数を渡す（sret）");
 			}
 			em.movedSp = true;
 			em.emit("mov x8, sp", "返値スロットのアドレスを渡す");
@@ -1997,6 +2044,9 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.movedSp = true;
 			place(true);
 		}
+		// **残りは最後に組み立てる。** 途中の式は x15 を一時に使うので、`bl` の直前でなければ
+		// 潰れる。x8 と違って計算で作るものなので、置く場所そのものが規約の一部である。
+		if (limit) limit();
 		em.emit(`bl ${callee}`, n.monoLabel ? "呼び出し（具体化済み）" : "呼び出し");
 		// 引数域はもう要らない。sret のスロットは返値が指しているので**畳まない**。
 		if (plan.stackBytes > 0) em.emit(`add sp, sp, #${plan.stackBytes}`, "引数域を戻す");
@@ -2965,10 +3015,12 @@ function genExpr(node, env, em, scope, tail = false) {
 		// 渡す。段が深くなっても同じ領域の中でカーソルが進むだけで、確保も複写も起きない。
 		//
 		// 上界は呼ぶ側が確保している（`returnSizeBound` の `konst + Σ coef×||器|| + Σ coef×μ||器||`）。
-		// **ただしそれは見積もりであって証明ではない。** 本来は書く前に照合して外れたら `__` へ
-		// 落ちるべきだが、**追記の道には照合がまだ無い**（`emitSretCapacityGuard` は写す枝に
-		// しか入っていない）。添字で回る再帰でここへ来ると、外れたときに `__` ではなく
-		// スタックを踏む（実測：上界3に対し41要素書いて qemu が止まる）。既知の穴である。
+		// **ただしそれは見積もりであって証明ではない。** だから書く前に照合し、外れたら `__` へ
+		// 落ちる（`emitSretCapacityNeed` / `emitSretCapacityGuard`）。**呼び先の取り分は k 個ぶん
+		// 狭い**ので、そのぶん引いた残りを x15 で渡す——どこで割れているかは呼ぶ側の情報で、
+		// 呼ばれた側は自分の仮引数からは復元できない（仮引数は段が下がっても同じままである）。
+		// 長らくここには照合が無く、添字で回る再帰が `__` ではなくスタックを踏んでいた
+		// （実測：上界3に対し41要素書いて qemu が止まった）。
 		//
 		// **器は末尾にしか来られない。** 途中に置くと、その長さが決まるまで後ろを書けない
 		// ——1回の走査で書くにはそこが条件である。
@@ -3028,6 +3080,9 @@ function genExpr(node, env, em, scope, tail = false) {
 			const k = (em.slot - base) / per;
 			const w = em1.size;
 			em.load(SCRATCH[1], em.sretDest, "返値スロット（sret）");
+			// **先頭のぶんも書く前に照合する。** 個数は静的なので、いちばん後ろの1つだけ
+			// 見れば足りる（前が入らないなら後ろも入らない）。
+			emitSretCapacityNeed(em, k);
 			for (let i = 0; i < k; i++) {
 				if (per === 2) {
 					em.load(SCRATCH[0], (base + i * 2) * 8);
@@ -3047,8 +3102,12 @@ function genExpr(node, env, em, scope, tail = false) {
 			if (k * w) em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, #${k * w}`, `${k} 要素ぶん進める`);
 			em.store(SCRATCH[1], destSlot, "続きを書く場所");
 			tailPart._sretInto = destSlot;
+			// **呼び先の取り分は k 個ぶん狭い。** 器を割ったのはこちらなので、割れ目を伝える
+			// のもこちらである（`genCall` が x15 を組み立てる）。
+			tailPart._sretAdvance = k;
 			const tw = genExpr(tailPart, env, em, scope);
 			tailPart._sretInto = undefined;
+			tailPart._sretAdvance = undefined;
 			if (tw === false) return false;
 			if (tw !== 2) {
 				em.pop(tw === TAIL ? 0 : tw);
@@ -3072,6 +3131,12 @@ function genExpr(node, env, em, scope, tail = false) {
 				const t = (em.slot - tbase) / per;
 				em.load(SCRATCH[1], em.sretDest, "返値スロット（sret）");
 				em.load(SCRATCH[0], cnt);
+				// **後ろのぶんも書く前に照合する。** 位置は実行時（呼び先が書いた個数）に
+				// 決まるので、いちばん後ろを計算して見る。
+				if (t > 0) {
+					em.emit(`add x14, ${SCRATCH[0]}, #${t - 1}`, "後ろで書く最後の位置");
+					emitSretCapacityGuard(em, "x14");
+				}
 				const shift = w === 16 ? 4 : w === 8 ? 3 : w === 4 ? 2 : w === 2 ? 1 : 0;
 				if (shift) em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}, lsl #${shift}`, "書かれた個数ぶん進める");
 				else em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, ${SCRATCH[0]}`, "書かれた個数ぶん進める");
@@ -6358,13 +6423,12 @@ function selfConsumes(part, name, params, restNames, group, defaults = null, ind
 	// 方である。だが `j` は `ts` の中を指す添字なので、段数は `||ts||` を超えない。器を
 	// 尽くす形（原理5）と同じことを、添字の側から言っているだけである。
 	//
-	// **これは証明ではなく見積もりである。** 上界は呼ぶ側と呼ばれた側が同じ式で計算する。
-	// 証明を要求すると、添字で書いた再帰が丸ごと出せないままになる。
+	// **これは証明ではなく見積もりである。** 呼ぶ側が上界の個数を x15 で渡し、呼ばれた側は
+	// 書く直前にそれと比べる。証明を要求すると、添字で書いた再帰が丸ごと出せないままになる。
 	//
-	// **「外れても壊れず `__` になる」は写す枝でだけ成り立つ。** 照合
-	// （`emitSretCapacityGuard`）が入っているのはそちらだけで、追記の枝には無い。
-	// この段落が守ろうとしている添字再帰は、要素がスカラーで末尾が自己呼び出しなら
-	// まさに追記の枝へ落ちる。そこが塞がるまで、この見積もりは踏み抜きうる。
+	// **外れても壊れず `__` になる。** 照合（`emitSretCapacityGuard`）は写す枝と追記の枝の
+	// 両方に入っている。この段落が守ろうとしている添字再帰は、要素がスカラーで末尾が自己
+	// 呼び出しならまさに追記の枝へ落ちる——長らくそこに照合が無く、踏み抜いていた。
 	// **根拠は「動く添字がその器を指していること」である。** `f (n + 1) s` のように器を
 	// そのまま渡すだけの再帰は、止めているのが別の条件なので器からは上界が出ない
 	// ——ここを緩めると、**止まらない再帰に有限のスロットを割り当ててしまう**。
@@ -7451,7 +7515,12 @@ function peepholeFoldMoves(lines) {
  */
 // 呼ぶ側が引数に使う口。**呼び出しの手前では、ここは全部生きていると見なす**——何本
 // 渡すかは呼び先が決めることで、この表からは見えない。多めに生かすのは安全側である。
-const CALL_ARGS = ["x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8"];
+//
+// **x15 は x8 と対である。** 返値スロットは番地（x8）と入る個数（x15）の2つで初めて
+// 器になる——番地だけでは、そこがどこまで自分のものかを呼ばれた側が知りようがない
+// （`SRET_LIMIT`）。ここに入れ忘れると `bl` を跨いで死んだと見なされ、**渡す命令が
+// 消える**。実際それで消えていた。
+const CALL_ARGS = ["x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x15"];
 
 // 消してよい命令。**旗を立てるもの（`cmp`/`subs`/`adds`）と、書き戻しのあるもの
 // （`[sp, #-16]!`）は入れない。** 前者は次の `csel` が読み、後者は `sp` を動かす
@@ -7710,24 +7779,12 @@ function elementCellSize(et, conf) {
 }
 
 /**
- * **書く前に、入るかを確かめる**（sret の容量照合）。
+ * **上界の項を1つ測る。** 呼ぶ側が、実引数を置いた枠から呼ぶ。
  *
- * 呼ぶ側は `konst + coef × ||引数||` で場所を取り、呼ばれた側は**同じ式を自分の引数から
- * 計算**して持っている（`em.sretCap`）。書く位置がそれを越えるなら、その器は作れない
- * ——**作れなかったものは無い**ので `__` を返す（完全性公理がそれを外へ運ぶ）。
- *
- * どちらか一方が正しさを決めているのではない。両側が同じ法則に従っていることだけが
- * 正しさであり、見積もりが外れても壊れない。数学では無限はありふれているので、解が無い
- * ことにも答えを持っていなければならない。
- *
- * @param idxReg 書こうとしている位置（要素数）が入っているレジスタ
- */
-/**
- * **上界の項を1つ測る。** 呼ぶ側は実引数の枠から、呼ばれた側は自分の仮引数の枠から呼ぶ。
- *
- * **同じ命令列でなければならない**——容量は値として渡らず、両側が独立に計算した式が
- * 一致することだけが正しさだからである。だから測り方を書く場所も1つにする（同じ規則を
- * 2箇所に書かない）。`off` は `{ptr, len}` を置いた枠の底で、これは両側で同じ形である。
+ * 測った総和はそのまま x15 で呼び先へ渡る（`emitSretCapacityGuard`）。以前は呼ばれた側も
+ * 自分の仮引数から同じ式を計算していて、そのため「同じ命令列でなければならない」という
+ * 条件が付いていた——追記でその前提が崩れたので、いまは測るのは呼ぶ側だけである。
+ * `off` は `{ptr, len}` を置いた枠の底。
  *
  *   len   ……… 要素の個数。`len` を1本読むだけ。
  *   chars ……… μ、つまり平らにしてからの個数。要素が `{ptr, len}` で並んでいるので、
@@ -7758,11 +7815,42 @@ function emitTermMeasure(em, off, measure, dst) {
 	em.label(end);
 }
 
+/**
+ * **書く前に、入るかを確かめる**（sret の容量照合）。
+ *
+ * 呼ぶ側は `konst + Σ coef×||引数||` で場所を取り、その**個数をそのまま x15 で渡す**。
+ * 呼ばれた側は入口でスロットへ仕舞っている（`em.sretLimit`）ので、ここではそれを読んで
+ * 比べるだけである。越えるなら、その器は作れない——**作れなかったものは無い**ので `__`
+ * を返す（完全性公理がそれを外へ運ぶ）。
+ *
+ * **なぜ呼ばれた側が計算し直さないか。** 追記では宛先が段ごとに進むのに仮引数は同じ
+ * ままなので、自分の引数から出した式は「まるごとの容量」を答えてしまい、照合が素通り
+ * する。**どこで割れているかは呼ぶ側の情報**であり（ジッパーの焦点と同じ形）、そこだけは
+ * 渡すしかない。渡ってくるなら計算し直す理由も無い——**決めるのは1箇所**である。
+ *
+ * 見積もりが外れても壊れない。数学では無限はありふれているので、解が無いことにも答えを
+ * 持っていなければならない。
+ *
+ * @param idxReg 書こうとしている位置（要素数）が入っているレジスタ
+ */
 function emitSretCapacityGuard(em, idxReg) {
-	if (em.sretCap === null || em.sretCap === undefined || !em.unitLabel) return;
-	em.load("x15", em.sretCap, "入る個数");
-	em.emit(`cmp ${idxReg}, x15`, "入るか");
+	if (em.sretLimit === null || em.sretLimit === undefined || !em.unitLabel) return;
+	em.load(SRET_LIMIT, em.sretLimit, "入る個数（呼ぶ側が渡した残り）");
+	em.emit(`cmp ${idxReg}, ${SRET_LIMIT}`, "入るか");
 	em.emit(`b.ge ${em.unitLabel}`, "入らなければ器は作れない（__ を返す）");
+}
+
+/**
+ * **個数が静的に分かるなら、位置を組み立てずに直に比べる。**
+ *
+ * 先頭に `k` 個並べるなら、聞きたいのは「残りが `k` 以上か」だけである。位置を作って
+ * から比べると `mov` が1本余計に出る——同じ問いなので、答え方も1つでよい。
+ */
+function emitSretCapacityNeed(em, need) {
+	if (em.sretLimit === null || em.sretLimit === undefined || !em.unitLabel || need <= 0) return;
+	em.load(SRET_LIMIT, em.sretLimit, "入る個数（呼ぶ側が渡した残り）");
+	em.emit(`cmp ${SRET_LIMIT}, #${need}`, `${need} 個入るか`);
+	em.emit(`b.lt ${em.unitLabel}`, "入らなければ器は作れない（__ を返す）");
 }
 
 
@@ -8396,10 +8484,25 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	em.sretBump = 0;
 	const sretKey = bareName(name).split("$")[0];
 	const sretEntry = em.sretPlan && (em.sretPlan.get(bareName(name)) || em.sretPlan.get(sretKey));
+	em.sretLimit = null;
 	if (sretEntry && sretEntry.needsSlot) {
 		em.push();
 		em.sretDest = (em.slot - 1) * 8;
 		em.store("x8", em.sretDest, "返値スロットのアドレス（sret）を退避");
+		// **どこまでが自分のものかは、呼ぶ側にしか分からない。**
+		//
+		// 以前はここで上界の式を自分の仮引数から計算し直していた（呼ぶ側と同じ式なので
+		// 一致する、という理屈）。追記の道でそれが崩れる——`(s ' 0) (g s (i - 1))` は
+		// 器の**続き**を書くので、段が下がるたびに宛先だけが進み、仮引数 `s` は同じまま
+		// である。自分で計算すると毎段まるごとの容量が答えになり、照合は素通りする
+		// （実測：上界3に対し41要素書いて qemu が止まる）。
+		//
+		// **割れ目は呼ぶ側の情報である**——ジッパーの焦点を呼ぶ側が選ぶのと同じ形で、
+		// 残りは渡すしかない。渡ってくるなら呼ばれた側が計算し直す理由も無い：
+		// **決めるのは1箇所**である。
+		em.push();
+		em.sretLimit = (em.slot - 1) * 8;
+		em.store(SRET_LIMIT, em.sretLimit, "返値スロットに入る個数（sret）を退避");
 	}
 	for (const [pn, cn] of Object.entries(callees)) em.emit(`// ${bareName(pn)} = ${cn}`, "具体化された呼び先");
 
@@ -8588,50 +8691,14 @@ function genFunction(name, lambdaNode, env, em, mono) {
 		// 自分がスタックで受け取った引数域の大きさ。相互末尾呼び出しはここへ書ける。
 		incomingStackBytes: inPlan.stackBytes,
 	};
-	// **容量は渡すデータではなく、両側が計算する法則である。**
+	// **容量は呼ぶ側が渡す。** 番地（x8）と対で入口に届いており、`em.sretLimit` の
+	// スロットに仕舞ってある（`genFunction` の入口）。書く位置がそれを越えるなら、その
+	// 器は作れない——**作れなかったものは無い**ので `__` を返す（完全性公理がそれを外へ
+	// 運ぶ）。
 	//
-	// 呼ぶ側は `konst + coef × ||引数||` で `sub sp` する。呼ばれた側は**自分の仮引数から
-	// 同じ式を計算**して、書きながら照合する——越えたら `__` を返す。どちらかが正しさを
-	// 決めるのではなく、両側が同じ法則に従っていることが正しさである。ABI は変わらない
-	// （容量は値として渡らない）。
-	//
-	// 見積もりが外れても壊れない。器が入らなければ「無い」——完全性公理がそれを外へ運ぶ。
-	// 数学では無限はありふれているので、**解が無いことに答えを持っている**必要がある。
-	em.sretCap = null;
+	// 見積もりが外れても壊れない。数学では無限はありふれているので、**解が無いことに
+	// 答えを持っている**必要がある。
 	em.unitLabel = unitLabel;
-	if (em.sretDest !== null && em.sretDest !== undefined && unitLabel) {
-		const sp0 = em.sretPlan && (em.sretPlan.get(bareName(name)) || em.sretPlan.get(bareName(name).split("$")[0]));
-		// **容量式を計算するのは自分で書く関数だけである。** 照合するのは書く場所であって、
-		// 組まずに下から受け取って返す関数は一度も書かない——その容量式は誰も読まない死んだ
-		// 命令列である（parser.sn で5本、μ の走査つきで出ていた）。needsSlot は「場所をもらう
-		// か」であって「照合するか」ではない。
-		if (sp0 && sp0.needsSlot && sp0.builds) {
-			const cap = em.push();
-			if (cap === null) return em.fail(lambdaNode, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
-			// **呼ぶ側と同じ式を、自分の引数から計算する。** 項ごとに測って足す。
-			const usable = (sp0.terms || []).every((t) => {
-				const i = params.indexOf(t.sizeOf);
-				return i >= 0 && paramSlots[i] === 2;
-			});
-			if (usable && (sp0.terms || []).length > 0) {
-				em.emit(`mov x11, #${sp0.konst || 0}`, "定数の枝ぶん");
-				for (const t of sp0.terms) {
-					const i = params.indexOf(t.sizeOf);
-					emitTermMeasure(em, paramOffsets[i], t.measure, SCRATCH[0]);
-					if (t.coef !== 1) {
-						em.emit(`mov ${SCRATCH[1]}, #${t.coef}`, "段ごとの個数");
-						em.emit(`mul ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, "係数を掛ける");
-					}
-					em.emit(`add x11, x11, ${SCRATCH[0]}`, "この器のぶんを足す");
-				}
-				em.emit(`mov ${SCRATCH[0]}, x11`, "入る個数");
-			} else {
-				em.emit(`mov ${SCRATCH[0]}, #${sp0.konst || 0}`, "上界（定数のみ）");
-			}
-			em.sretCap = (em.slot - 1) * 8;
-			em.store(SCRATCH[0], em.sretCap, "返値スロットに入る個数（呼ぶ側と同じ式）");
-		}
-	}
 
 	// **撒いただけのものは返せない。** 後置 `~` は「器を開いて中身を撒く」であり、受け手
 	// （組み立て中の器）がある位置でだけ意味を持つ。返値の位置には受け手が無いので、
