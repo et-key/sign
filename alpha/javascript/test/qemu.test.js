@@ -1341,6 +1341,40 @@ agree("歩幅つきを数え上げる", SUM + "sum [0 ~+ 3] 0 0");
 	for (const i of [0, 5, 10, 16]) agree(`parser.sn：入れ子の ${i} 文字目`, PARSER + `\n(expr ${W("10", "+", "2", "*", "30")}) ' ${i}`);
 	agree("parser.sn：長い語 100 + 200 * 3000", PARSER + `\n||expr ${W("100", "+", "200", "*", "3000")}||`);
 	agree("parser.sn：廃止された綴りは __", PARSER + `\n||expr ${W("1", "===", "2")}||`);
+	// **字句と構文を繋ぐ。** `expr (tokens s)` は前段2本の合成であり、自己ホストの通し道
+	// そのものである。μ（全語の文字数の和）で上界を持つ `expr` へ、`tokens` の返す器を
+	// 渡す形になる。
+	//
+	// **parser.sn は「書いてあるまま」使う**（`PARSER` のように例を落とさない）。落とすと
+	// 診断が4件出て出せなくなる——`expr` の仮引数の型は**呼び出しサイトから**来るので、
+	// リテラルの語リストで呼ぶ例が消えると `ts` が無型になり、`get_prop` が出せなくなる。
+	// **`tokens` の返り値だけでは要素の型が伝わらない**。これは sret でも μ でもなく型推論
+	// の穴で、自己ホストの通し道に直に効く（別途、名指しして残してある）。
+	const LEXER = fs.readFileSync(path.join(__dirname, "..", "..", "sign", "lexer.sn"), "utf8")
+		.replace(/\r\n/g, "\n")
+		.split("\n")
+		.filter((l) => !/^tokens `/.test(l))
+		.join("\n");
+	const CHAIN = LEXER + "\n" + fs.readFileSync(path.join(__dirname, "..", "..", "sign", "parser.sn"), "utf8").replace(/\r\n/g, "\n") + "\n";
+	agree("字句→構文：長さ", CHAIN + "||expr (tokens `1 + 2`)||");
+	for (const i of [0, 1, 3, 8]) agree(`字句→構文：${i} 文字目`, CHAIN + `(expr (tokens \`1 + 2\`)) ' ${i}`);
+	agree("字句→構文：複数文字", CHAIN + "||expr (tokens `10 + 2`)||");
+	// **選び出しで組んだ実引数も測れる。**
+	//
+	// 上界の項は「呼び先の仮引数」で書いてあるので、呼ぶ側は渡すものを**自分の仮引数の
+	// 言葉へ言い換え**なければならない。裸の仮引数しか言い換えられなかったため、切片を
+	// 渡す形と、仮引数そのものを既定にした形（`b : ts`）で上界ごと出せなくなり、計画に
+	// 載らず、スロットが取られないまま呼び先へ飛んで**ゴミの x8** を宛先にしていた。
+	//
+	// 言い換えの規則は測り方で違う。μ は選び出しで増えないので要素の取り出しも通るが、
+	// `len` は切片だけ——`List(String)` の要素は文字列で、その `len` は文字数であり、
+	// 語の個数とは何の関係も無い。**同じ形でも測り方が違えば別の話**である。
+	const SLICE = CHAIN + "run : [~ts] ? expr (ts ' 1~)\n";
+	agree("切片を渡す：長さ", SLICE + "||run (tokens `0 1 + 2`)||");
+	for (const i of [0, 2, 8]) agree(`切片を渡す：${i} 文字目`, SLICE + `(run (tokens \`0 1 + 2\`)) ' ${i}`);
+	const VIADEF = CHAIN + "run :\n\tts\n\tb : ts\n? expr b\n";
+	agree("既定が仮引数：長さ", VIADEF + "||run (tokens `1 + 2`)||");
+	for (const i of [0, 3]) agree(`既定が仮引数：${i} 文字目`, VIADEF + `(run (tokens \`1 + 2\`)) ' ${i}`);
 	agree("トークン列：個数", "||[`10` , `+` , `2`]||");
 	agree("トークン列：語の長さ", "||[`10` , `+` , `2`] ' 0||");
 	agree("トークン列：1文字の語", "||[`10` , `+` , `2`] ' 1||");

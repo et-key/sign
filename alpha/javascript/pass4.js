@@ -6580,6 +6580,84 @@ const measureOfKey = (nm) => (typeof nm === "string" && nm.startsWith(MU_MARK) ?
  * 切片（`ts ' o~`、添字が `Iterator`）は要素ではなく器そのものなので、今まで通り `len`
  * で測る。底が `String` の `s ' i` は `Char`（スカラー）なので、そもそもここへ来ない。
  */
+/**
+ * **その実引数の μ を抑える仮引数**（無ければ null）。
+ *
+ * μ は「平らにしたときの総量」であり、**選び出しでは増えない**——`p ' 1~` は要素を後ろから
+ * 取るだけ、`p ' i` は1つ取るだけで、どちらも中身の総量は `μ||p||` を超えない。後置 `~`
+ * （撒く）も並べ方を変えるだけで総量は同じである。
+ *
+ * だから実引数がそれらで組まれているなら、呼び先の μ の項は**底の仮引数の μ へ言い換え
+ * られる**。ここが無かったので、μ で上界を持つ関数へ切片を渡した瞬間に「上界が出せない」
+ * になっていた（`out (ts ' 1~) …` の形）。
+ *
+ * **`len` の側と同じ言い換えではない。** `||p ' 1~||` は `||p||` より小さいが1つ減るだけで、
+ * 定数の引き算が要る——μ にはそれが要らない（総量は単調に減るだけ）ぶん、こちらの方が
+ * 素直に言える。
+ */
+function muDominatingParam(a0, params) {
+	let a = unwrap(a0);
+	for (let i = 0; i < 16 && a; i++) {
+		if (a.type === "operation" && a.position === "postfix" && a.name === "expand" && a.operand) {
+			a = unwrap(a.operand);
+			continue;
+		}
+		if (a.type === "operation" && a.name === "get_prop" && a.left) {
+			a = unwrap(a.left);
+			continue;
+		}
+		break;
+	}
+	if (!isIdentifierNode(a) || !params.includes(a.value)) return null;
+	return isBoxType(a.atomType) ? a.value : null;
+}
+
+/**
+ * **その実引数の要素数を抑える仮引数**（無ければ null）。`muDominatingParam` の `len` 版。
+ *
+ * **切片は要素を増やさない**——`p ' 1~` は後ろから取るだけなので `||p ' 1~|| ≤ ||p||` である。
+ * 定数を引けばもっと締まるが、上界なのでそのままでよい。
+ *
+ * **要素の取り出し（`p ' i`）はここに入れてはならない。** `List(String)` の要素は文字列で
+ * あり、その `len` は文字数——`||p||`（語の個数）とは何の関係も無い。μ の側なら「どの要素も
+ * μ||p|| を超えない」と言えるが、`len` では言えない。**同じ形でも測り方が違えば別の話**である。
+ */
+function lenDominatingParam(a0, params) {
+	let a = unwrap(a0);
+	for (let i = 0; i < 16 && a; i++) {
+		if (a.type === "operation" && a.position === "postfix" && a.name === "expand" && a.operand) {
+			a = unwrap(a.operand);
+			continue;
+		}
+		if (a.type === "operation" && a.name === "get_prop" && a.left) {
+			const idx = unwrap(a.right);
+			if (!idx || idx.atomType !== "Iterator") return null; // 切片だけ。要素は器を跨ぐ
+			a = unwrap(a.left);
+			continue;
+		}
+		break;
+	}
+	if (!isIdentifierNode(a) || !params.includes(a.value)) return null;
+	return isBoxType(a.atomType) ? a.value : null;
+}
+
+/**
+ * **その実引数の μ は書いた時点で分かるか**（分からなければ null）。
+ *
+ * `knownLengthOf` の μ 版である。あちらが「要素が何個か」を答えるのに対し、こちらは
+ * 「中身が何文字か」を答える——`__` は 0、文字列リテラルはその文字数、器の位置へ渡した
+ * スカラーは長さ1の器へ持ち上がる（原理8）ので 1 である。
+ */
+function knownMuOf(node) {
+	const u = unwrap(node);
+	if (!u) return null;
+	if (u.type === "atom" && u.kind === "unit") return 0;
+	if (u.type === "atom" && u.kind === "text") return String(u.value ?? "").length;
+	const t = u.atomType;
+	if (t && !isBoxType(t)) return 1;
+	return null;
+}
+
 function flatBaseParam(q0, params) {
 	const q = unwrap(q0);
 	if (!q || q.type !== "operation" || q.name !== "get_prop") return null;
@@ -6625,7 +6703,17 @@ function boundedCallOf(part, known, params) {
 	//
 	// `close_all (next_st st d)` がこれで、辿らないと「引数が仮引数ではない」で諦める
 	// ——だが呼ぶ側は `st` を持っているのだから、`st` の式へ言い換えれば測れる。
+	// **同じ器へ2回書くなら、要る場所は2倍である。**
+	//
+	// ここは長らく max だった——呼び先の上界が c1×||a|| + c2×||b|| のとき、同じ実引数を
+	// 2つの位置へ渡すと（f s s）本当は (c1+c2)×||s|| 要るのに、max(c1,c2)×||s|| と見積もって
+	// いた。実測：f : a b ? a b と g : s ? f s s で、||g "abc"|| が 6 ではなく __ になる。
+	// **踏み抜かないのは照合が効いているからで、上界が正しいからではない。**
+	//
+	// 枝の中は和・枝どうしは max、という規則は addRef 側で既に効いている。ここは1つの
+	// 呼び出しの引数どうし——つまり直積なので、和である。
 	const merged = new Map();
+	const addMerged = (k, c) => merged.set(k, (merged.get(k) || 0) + c);
 	let konstAcc = p.konst;
 	for (const t of p.terms || []) {
 		const a = args[t.sizeOfIndex];
@@ -6633,14 +6721,33 @@ function boundedCallOf(part, known, params) {
 		// ときの項も μ である——測るのはどちらも同じ器だからである。
 		if (isIdentifierNode(a) && params.includes(a.value)) {
 			const key = t.measure === "chars" ? muKey(a.value) : a.value;
-			merged.set(key, Math.max(merged.get(key) || 0, t.coef));
+			addMerged(key, t.coef);
 			continue;
 		}
-		// **μ の項は式へ言い換えられない。** 下の2つの道——長さの分かる実引数を定数へ畳む、
-		// 内側の上界と合成する——はどちらも「要素数」の言葉で書かれている。渡しているのが
-		// 仮引数そのものでなければ諦める（諦めれば上界を持たないと言うだけで、痩せた上界を
-		// 黙って使うことにはならない）。
-		if (t.measure === "chars") return null;
+		// **μ の項は μ の言葉で言い換える。** 下の2つの道——長さの分かる実引数を定数へ畳む、
+		// 内側の上界と合成する——はどちらも「要素数」の言葉で書かれているので、そのままでは
+		// 使えない。μ には μ 用の言い換えが要る：
+		//
+		//   選び出しで組んだ実引数（`p ' 1~`、`p ' i`、後置 `~`）→ μ は `μ||p||` を超えない
+		//   書いた時点で中身が分かる実引数（リテラル・スカラー・`__`）→ 定数へ畳む
+		//
+		// **残るのは「呼び出しの結果を渡す」形だけ**である。そこは `μ||f x||` を `μ||x||` と
+		// `||x||` で書く法——上界の言語をスカラーから2つ組へ上げること——が要るので、まだ
+		// 諦める（諦めれば上界を持たないと言うだけで、痩せた上界を黙って使うことにはならない）。
+		if (t.measure === "chars") {
+			const mb = muDominatingParam(a, params);
+			if (mb) {
+				const key = muKey(mb);
+				addMerged(key, t.coef);
+				continue;
+			}
+			const km = knownMuOf(a);
+			if (km !== null) {
+				konstAcc += t.coef * km;
+				continue;
+			}
+			return null;
+		}
 		// **長さが分かっている実引数は定数に畳む。** `walk s bottom 0 0` の `bottom` は
 		// `0`——スカラーである。器の位置へ渡すと**長さ1の器へ持ち上がる**（原理8）ので
 		// `||bottom|| = 1` と言える。ここで諦めると `mark` が計画に載らず、器を自分の
@@ -6650,12 +6757,19 @@ function boundedCallOf(part, known, params) {
 			konstAcc += t.coef * fixed;
 			continue;
 		}
+		// **切片で組んだ実引数は、底の仮引数で抑えられる**（`lenDominatingParam`）。μ の側と
+		// 同じ規則だが、こちらは切片だけ——要素の取り出しは器を跨ぐので言えない。
+		const lb = lenDominatingParam(a, params);
+		if (lb) {
+			addMerged(lb, t.coef);
+			continue;
+		}
 		const inner = boundedCallOf(a, known, params);
 		if (!inner) return null;
 		konstAcc += t.coef * inner.konst;
 		for (const it of inner.terms) {
 			const c = t.coef * it.coef;
-			merged.set(it.sizeOf, Math.max(merged.get(it.sizeOf) || 0, c));
+			addMerged(it.sizeOf, c);
 		}
 	}
 	return { konst: konstAcc, terms: [...merged].map(([sizeOf, coef]) => ({ sizeOf, coef })) };
@@ -6980,16 +7094,47 @@ function returnSizeBound(lam, name, known, group) {
 	// `walk` の `b : body_of line` / `line : head_line s` がこれで、辿らないと「第7引数が
 	// 器ではない」——呼ぶ側に無いものを測れと言うことになる。
 	const resolved = new Map();
+	// 同じ理由で和である（addMerged を参照）。
+	const addResolved = (k, c) => resolved.set(k, (resolved.get(k) || 0) + c);
 	let extra = 0;
 	const resolveTerm = (nm, c, depth) => {
 		if (depth > 8) return false; // デフォルトが輪になっている
 		const bare = bareMeasureName(nm);
 		if (!defaults.has(bare)) {
-			resolved.set(nm, Math.max(resolved.get(nm) || 0, c));
+			addResolved(nm, c);
 			return true;
 		}
-		// **μ の項はデフォルトの式へ言い換えられない**（`boundedCallOf` と同じ理由）。
-		if (nm !== bare) return false;
+		// **μ の項もデフォルトの式へ言い換える**（`boundedCallOf` と同じ規則）。デフォルトは
+		// 呼ぶ側に無いものを測れと言っている形なので、その定義まで辿って底の仮引数へ戻す。
+		if (nm !== bare) {
+			const d = defaults.get(bare);
+			const mb = d ? muDominatingParam(d, params) : null;
+			if (mb) {
+				const key = muKey(mb);
+				addResolved(key, c);
+				return true;
+			}
+			const km = d ? knownMuOf(d) : null;
+			if (km !== null) {
+				extra += c * km;
+				return true;
+			}
+			return false;
+		}
+		// **`len` の側も同じ規則で辿る。** ここは長らく「デフォルトが呼び出しなら合成する」
+		// しか見ておらず、`b : ts` のように**仮引数そのものを既定にした**形で諦めていた
+		// ——上界が出ないので計画に載らず、スロットが取られないまま `b expr` で飛んで、
+		// 呼び先が**ゴミの x8** を宛先として読んでいた（診断ゼロで `__`）。
+		const lb = lenDominatingParam(defaults.get(nm), params);
+		if (lb) {
+			addResolved(lb, c);
+			return true;
+		}
+		const fixedD = knownLengthOf(defaults.get(nm));
+		if (fixedD !== null) {
+			extra += c * fixedD;
+			return true;
+		}
 		const bb = known ? boundedCallOf(defaults.get(nm), known, params) : null;
 		if (!bb) return false;
 		extra += c * bb.konst;
@@ -7373,7 +7518,24 @@ function slotsToRegisters(lines) {
 	const asX = (r) => "x" + r.slice(1);
 	const taken = new Set();
 	for (const l of lines) for (const m of insOf(l).matchAll(/\b([wx]\d+)\b/g)) taken.add(asX(m[1]));
-	const free = calls ? [] : SCRATCH_REGS.filter((r) => !taken.has(r));
+	// **末尾で飛ぶ関数では x15 を配らない。**
+	//
+	// x15 は返値スロットの「入る個数」を運ぶ口（`SRET_LIMIT`）で、x8 と対の ABI である。
+	// 使い捨てが使えるのは「呼び出しの無い関数」だけだから安全、と判断していたのが誤りで、
+	// **末尾で飛ぶ関数は `bl` を持たないまま ABI に参加する**——`b` の先が入口で読む。
+	//
+	// 実測：`run : [~ts] ? expr (ts ' 1~)` が切片の起点 `1` を x15 へ置き、`b expr` の先で
+	// 「残り 1」として読まれて**診断ゼロで `__`** になっていた。
+	//
+	// 表そのものから外すと、飛ばない関数まで1本損をする——使い捨てが減ったぶん
+	// callee-saved に落ちてフレームを取り、`f : s ? s ' 1~` が layer 0 で弾かれた。
+	// **守る必要があるのは飛ぶ関数だけ**なので、そこだけ予約する。
+	const jumpsAway = lines.some((l) => {
+		const t = insOf(l);
+		if (!/^b\s+/.test(t)) return false;
+		return !/^b\s+\.L/.test(t);
+	});
+	const free = calls ? [] : SCRATCH_REGS.filter((r) => !taken.has(r) && !(jumpsAway && r === SRET_LIMIT));
 
 	// 深さは順位で詰める（飛び飛びでも入れ子は保たれるので、順位は色として正しい）。
 	const depths = [...used].sort((a, b) => a - b);
