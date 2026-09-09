@@ -253,16 +253,13 @@ pre-alpha 実装はアーカイブへ退避した（`documents/ja-jp/impl/append
   自動的にLambda扱いになる）。`getCategory`のblock判定も、1行だけのbracket系ブロック
   （`[+]`はブロック{lines:[partialノード]}という形になる）なら中身のカテゴリを継承する
   よう修正（`unwrapSoloBlock`）。
-  **複数引数の貪欲な畳み込み（`[+] 1 2 3 4 5 → 15`）はPhase2（apply）専用の特例として
-  実装**：完全に裸な演算子（left/right両方null）は「アリティ不定」であり、`getCategory`
-  本体で「常にLambda」にしてしまうとPhase2で消費し切った後もPhase3（apply_reverse）で
-  誤ってLambda扱いされ続け、既に確定した計算結果（`[+](3)(4)`）がまた関数として呼ばれ
-  ようとして例外になる（`1 2 [+] 3 4`で実際に踏んだ）。`COPRODUCT_PHASES`のPhase2側にだけ
-  `extendPointfree`という特例フラグを持たせ、`reduceOnce`が「基点が裸のポイントフリー
-  演算子なら、getCategoryの答えに関わらず右のAtomを取り込む」を直接処理するようにした
-  （`coproductReduce`やgetCategory本体は変更しない）。これにより、Phase2が使い切った
-  時点（＝これ以上右にAtomが無い時点）で自然にAtomへ確定し、Phase3・Phase4へ正しく
-  引き継がれる。
+  **複数引数の貪欲な畳み込み（`[+] 1 2 3 4 5 → 15`）に特例は要らない。** かつては
+  `COPRODUCT_PHASES` に `extendPointfree` という旗を立て、`reduceOnce` が「基点が裸の
+  ポイントフリー演算子なら右の Atom を取り込む」を直接処理していた。**構築が適用より
+  内側**になった時点（c93ff2e）で、並んだ実引数が先に器になってから畳み込みへ渡るように
+  なったので、旗も特例も消してある。`getCategory` 本体で「常に Lambda」にしてはいけない
+  という点だけは変わらない——既に確定した計算結果（`[+](3)(4)`）がまた関数として呼ばれ
+  ようとする（`1 2 [+] 3 4` で実際に踏んだ）。
   **ポイントフリー由来のLambdaはapply_reverse（Phase3）の対象から除外**（8/5の設計合意、
   演算子の種類を問わず一律）：ポイントフリーは常に前置適用（`[+ 1] 5`）という一つの
   呼び出し方だけを持ち、UFCS的なreceiver記法（`x f`）という別経路を重ねない——

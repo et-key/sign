@@ -79,8 +79,6 @@ const EXPORT_MARKERS = { "#_": "#", "##_": "##", "###_": "###" };
 // 仮引数の生トークン列から、消費すべき引数の数（アリティ）を数える。
 // 裸の空白区切り形（`x y z`）・ブラケット/インデント形（改行区切り、デフォルト付き含む）の
 // どちらにも対応する。restが登場したら Infinity（可変長、常に受け付ける）を返す。
-// 単一パラメータ（配列でない裸の1トークン）は null（対象外）を返す——1個適用した時点で
-// 元々Atomになるため、この判定が無くても正しく動く（pass2.jsのapply連鎖飽和判定を参照）。
 function countArity(paramTokens) {
   if (paramTokens.length === 0) return null;
   if (paramTokens.length === 1 && Array.isArray(paramTokens[0])) {

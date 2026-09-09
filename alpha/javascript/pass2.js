@@ -175,9 +175,10 @@ function applyChainInfo(node) {
 // countArity/countRequiredArityの区別と対応）。1行だけのparenブロック（`(...)`）なら
 // 中身を再帰的に覗く。apply/partial_applyチェーン（既にいくらか引数が適用された状態）
 // なら、そのチェーン自身の深さを「既に消費済み」に加算しつつ、根本の識別子まで再帰的に
-// 遡る。既知の有限アリティを持つ識別子へ辿り着けない場合（rest引数・単一裸パラメータ・
-// 識別子でない値など）はnullを返す——その場合は元々の「1回の適用で飽和する」既存挙動の
-// まま何も変えない。
+// 遡る。**rest は null ではなく Infinity**（下の 191-194 の通りここでは許可する）、
+// **単一の裸パラメータは 1**（pass1 の countArity が数える）。null になるのは識別子でない
+// 値と、pass2 自身が組んだ単一パラメータのラムダだけで、そのときは「1回の適用で飽和する」
+// 既存挙動のまま何も変えない。
 function resolveKnownArity(node, env) {
   if (!node) return null;
   if (node.type === "atom" && node.kind === "identifier") {
@@ -215,8 +216,12 @@ function resolveKnownArity(node, env) {
   // ラムダノードそのもの。pass1 は束縛のアリティをトークン列から数えるため、`?` を含まない
   // 右辺（ホール脱糖が作ったラムダ、`p : f _ _` など）ではアリティが読めない。pass2 が
   // 組んだ params ノードから直接数えることで、`p 1 2` が2引数の適用として解決される。
-  // 単一の裸パラメータは pass1 の countArity と同じく null を返す（1回の適用で飽和する
-  // 既存挙動のまま）。rest があれば Infinity——上のコメントの通りここでは許可する。
+  // **単一の裸パラメータはここだけ読めない。** pass1 の countArity は 1 と数えるが、
+  // buildParameterList が1個のときだけ params ではなく identifier ノードを返すので、
+  // 木からは数えられず null になる。名前つきの束縛は pass1 の値が使われるので実害が
+  // 出るのは無名ラムダとホール脱糖だけ——`(x ? x * 10) 1 2` が `λ (1 2)` になる。
+  // **同じ事実が2つの形で持たれている**のが穴で、直すなら params ノードの形を1つにする。
+  // rest があれば Infinity——上のコメントの通りここでは許可する。
   if (node.type === "operation" && node.op === "?" && node.left && node.left.type === "params") {
     const entries = node.left.entries || [];
     const arity = entries.some((e) => e.rest) ? Infinity : entries.length;
@@ -234,8 +239,8 @@ function resolveKnownArity(node, env) {
 // 相当するPass2）で完結させるための印付け。interpreter.js側は"partial_apply"を見たら、
 // 完全性公理による崩壊（bindParamsの通常経路）を一切通さず、無条件に部分適用クロージャを
 // 構築するだけ——「アリティが足りているか」という判断そのものは、もうここで終わっている。
-// rest（arity===Infinity）や単一裸パラメータ（arity===null、未追跡）の呼び出し先は対象外
-// （元々1回の適用で飽和したものとして正しく動く既存の挙動を変えない）。
+// rest（arity===Infinity）の呼び出し先は対象外（可変長はカリー化の概念に合わない）。
+// 単一裸パラメータは arity===1 で追跡されているので、普通に判定へ乗る。
 // depthが同じ「1本のapplyチェーン」内では最も外側（呼び出し全体の完成形）だけを見ればよく、
 // チェーンの内側（.left側）は既にそのdepth計算に含まれているため再帰しない——ただし各段の
 // 引数（.right）や呼び出し先（base）自身は、別の独立したapply式を含みうるため再帰する。
@@ -327,8 +332,8 @@ function resolveBindingCategory(binding, scope) {
 }
 
 // 識別子ノードなら、その束縛の右辺ノード（resolveBindingCategoryがメモ化したもの）へ
-// 置き換える。ポイントフリー判定（isBarePointfreeChainBase / isPointfreeLambda）が
-// `add : [+]` のように名前を経由したポイントフリーも見抜けるようにするため。
+// 置き換える。ポイントフリー判定（`isPointfreeLambda`）が `add : [+]` のように名前を
+// 経由したポイントフリーも見抜けるようにするため。
 function derefBoundNode(node, env) {
   if (!env || !node || node.type !== "atom" || node.kind !== "identifier") return node;
   const found = envLookupScope(env, node.value);
@@ -377,8 +382,10 @@ function getCategory(node, env, closed = false) {
       // 飽和しない場合がある。左に伸びるapplyチェーンの深さ（=消費済みの引数の数）が
       // 呼び出し先のarityにまだ届いていなければ、まだ引数を受け取れるLambdaのまま
       // 扱う（次のAtomとの結合が construct ではなく apply になるように）。
-      // アリティが不明（単一パラメータ・rest・ブラケット等）な場合は、従来通り
-      // 1回の適用で即座にAtom（飽和済み）として扱う。
+      // アリティが読めない場合は、従来通り1回の適用で即座に Atom（飽和済み）として
+      // 扱う。**読めないのは識別子でない値と、pass2 自身が組んだ単一パラメータの
+      // ラムダだけ**である——単一パラメータ=1、rest=Infinity（`depth < arity` が常に
+      // 真なのでずっと Lambda）、ブラケット=分解後の数、はどれも読める。
       const { depth, base } = applyChainInfo(node);
       // resolveKnownArityはbaseが素の識別子の場合だけでなく、丸括弧を挟んだ部分適用の
       // 結果（`(f 1) 2`のbase＝`(f 1)`という1行parenブロック）も透かして見る——
@@ -393,14 +400,15 @@ function getCategory(node, env, closed = false) {
       if (info && depth + info.consumed < limit) {
         return "Lambda";
       }
-      // 【注意】ポイントフリー記述の完全に裸な中置演算子（`[+]`）が複数引数を貪欲に
-      // 取り込む挙動は、ここ（getCategory）ではなくreduceOnceのPhase2（apply）専用の
-      // 特例として実装している（isBarePointfreeChainBase参照）。ここで「常にLambda」に
-      // してしまうと、Phase2で使い切った後のPhase3（逆適用）でも依然Lambdaと
-      // 誤判定され、既に確定した計算結果（`[+](3)(4)`のような値）がまた関数として
-      // 呼ばれようとしてしまう（`1 2 [+] 3 4`で実際に踏んだ）。apply連鎖は、名前付き
-      // 識別子と同様に既知のarityが無い限り、1回の適用で即座にAtom（飽和済み）として
-      // 扱うのが正しい——ポイントフリーの多引数消費はPhase2内で完結させる。
+      // 【注意】ここで「常にLambda」にしてはいけない。既に確定した計算結果
+      // （`[+](3)(4)` のような値）がまた関数として呼ばれようとする（`1 2 [+] 3 4` で
+      // 実際に踏んだ）。apply 連鎖は、既知のアリティが無い限り1回の適用で Atom
+      // （飽和済み）として扱うのが正しい。
+      //
+      // **貪欲さは段の特例ではない。** 以前は「裸の `[+]` が複数引数を貪欲に取り込む」を
+      // reduceOnce の中の特例（`extendPointfree`）で実装していたが、**構築が適用より
+      // 内側**になった時点（c93ff2e）で要らなくなった——並んだ実引数が先に器になってから
+      // 畳み込みへ渡る。特例は消してある。
     }
     // 通常の演算ノード（算術・concat等）はAtom
     return "Atom";
@@ -638,23 +646,23 @@ function coproductReduce(a, b, env) {
   return null;
 }
 
-// ---- Step2: 優先順位に基づく総当たり縮約（coproduct_resolver.md §4） ----
+// ---- Step2: 段ごとの総当たり縮約（coproduct_resolver.md §3.0） ----
 //
-// coproduct_resolver.md §4は「10.5(compose)→10.4(apply)→10.3(逆適用)→10.2〜10.0
-// (concat/push/unshift/construct)の順に、各優先度をリスト全体に対して使い尽くしてから
-// 次へ進む」という段階的マルチパスを規定している。以前はtier===10をひとまとめにし、
-// 隣接ペアを左から見て最初にマッチしたものを即座に縮約する単一グリーディスキャンに
-// なっていたため、この優先順位が守られていなかった（例: `5 inc 3` で本来10.4(apply)が
-// 先に `inc 3` を縮約すべきところ、実際は左端の `5 inc` が10.3(逆適用)として
-// 先に縮約されてしまっていた）。COPRODUCT_PHASESで4段階に明示的に分割し、各段階を
-// 使い尽くしてから次へ進むことで仕様通りの優先順位を保証する。
+// **`10.x` は縮約の名前であって順序ではない**（仕様 §3 の [!IMPORTANT]）。順序は §3.0 が
+// 定める5段で、内側から compose → 未飽和の適用 → 構築 → 適用（飽和済み）→ 逆適用である。
+// **構築が適用より内側**で、**合成が最も内側**。COPRODUCT_PHASES がその5段そのものである。
+//
+// 以前はtier===10をひとまとめにし、隣接ペアを左から見て最初にマッチしたものを即座に
+// 縮約する単一グリーディスキャンになっていたため、順序が守られていなかった
+// （例: `5 inc 3` で `inc 3` を先に縮約すべきところ、左端の `5 inc` が逆適用として
+// 先に縮約されていた）。段に分けたことでそれは無くなった。
 //
 // これにより、逆適用（UFCS的な `receiver method` 記法、`f : [foo bar ~this] ? ...`
 // のようなオブジェクト指向的呼び出しを意図）は「そのLambdaが右側に通常適用できるAtomを
 // 持たない場合のみ」発動するフォールバックになる——両隣にAtomがあるLambdaは常にapply
 // （右のAtomへの通常適用）が先に確定するため、逆適用が途中のAtomを横取りすることはない。
-// concat/push/unshift/constructの3つ（10.2〜10.0）はcoproductReduce内部でリスト形状のみから
-// 相互排他的に決まり、tier間の競合が無いため、引き続き1フェーズにまとめている。
+// concat/unshift/construct（10.2〜10.0）はcoproductReduce内部でリスト形状のみから
+// 相互排他的に決まり、競合が無いため1つの段にまとめている（`push` は誰も作らない）。
 // **貪欲さの特例は消えた。** かつてここに `isBarePointfreeChainBase` と
 // `isGreedyPointfree` があり、段に立てた `extendPointfree` の旗を見て「裸の `[+]` は
 // 右の Atom を食えるだけ食う」を reduceOnce の中で直に処理していた。c93ff2e が
@@ -1309,8 +1317,8 @@ function reduceAll(rawItems, env) {
   for (let tier = 27; tier >= 1; tier--) {
     let guard = 0;
     if (tier === COPRODUCT_TIER) {
-      // coproduct_resolver.md §4: compose→apply→逆適用→concat/push/constructの
-      // 4段階を、それぞれ使い尽くしてから次へ進む（COPRODUCT_PHASES参照）。
+      // coproduct_resolver.md §3.0 の5段（内側から compose → 未飽和の適用 → 構築 →
+      // 適用 → 逆適用）を順に見る（COPRODUCT_PHASES）。
       // **還元が起きたら段の先頭へ戻る。** 適用が新しい Atom-Atom の対を生むので、
       // 段を一方向に流すと「構築の段を通り過ぎたあとに現れた対」を拾えない。1つ潰す
       // たびに最初から見直せば、どの順で現れても同じ結論に着く。

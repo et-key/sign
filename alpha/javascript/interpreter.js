@@ -2583,7 +2583,9 @@ return items.filter((v) => !isUnit(v));
       return evalUnaryOp(node.name, evaluate(node.operand, env));
     }
 
-    // 未対応の演算（$/@/#等）
+    // 未対応の演算。$（address）・@（input）・#（output）は実装済みなので、実際に
+    // ここへ届くのは `===`（same）だけである——構造の同一性はコンストラクタ由来の
+    // 追跡が要るので、まだ持っていない。
     throw new Error(`interpreter: 未対応の演算 '${node.name}'`);
   }
 
