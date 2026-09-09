@@ -195,7 +195,7 @@ function resolveKnownArity(node, env) {
     // が個別にInfinityを除外する。
     if (binding && typeof binding.arity === "number") {
       const requiredArity = typeof binding.requiredArity === "number" ? binding.requiredArity : binding.arity;
-      return { arity: binding.arity, requiredArity, consumed: 0 };
+      return { arity: binding.arity, requiredArity, consumed: 0, containerParam: !!binding.containerParam };
     }
     return null;
   }
@@ -211,22 +211,31 @@ function resolveKnownArity(node, env) {
     }
     const inner = resolveKnownArity(n, env);
     if (!inner) return null;
-    return { arity: inner.arity, requiredArity: inner.requiredArity, consumed: inner.consumed + depth };
+    return { arity: inner.arity, requiredArity: inner.requiredArity, consumed: inner.consumed + depth, containerParam: !!inner.containerParam };
   }
   // ラムダノードそのもの。pass1 は束縛のアリティをトークン列から数えるため、`?` を含まない
   // 右辺（ホール脱糖が作ったラムダ、`p : f _ _` など）ではアリティが読めない。pass2 が
   // 組んだ params ノードから直接数えることで、`p 1 2` が2引数の適用として解決される。
-  // **単一の裸パラメータはここだけ読めない。** pass1 の countArity は 1 と数えるが、
-  // buildParameterList が1個のときだけ params ではなく identifier ノードを返すので、
-  // 木からは数えられず null になる。名前つきの束縛は pass1 の値が使われるので実害が
-  // 出るのは無名ラムダとホール脱糖だけ——`(x ? x * 10) 1 2` が `λ (1 2)` になる。
-  // **同じ事実が2つの形で持たれている**のが穴で、直すなら params ノードの形を1つにする。
   // rest があれば Infinity——上のコメントの通りここでは許可する。
   if (node.type === "operation" && node.op === "?" && node.left && node.left.type === "params") {
     const entries = node.left.entries || [];
     const arity = entries.some((e) => e.rest) ? Infinity : entries.length;
     const requiredArity = typeof node.left.requiredArity === "number" ? node.left.requiredArity : arity;
-    return { arity, requiredArity, consumed: 0 };
+    return { arity, requiredArity, consumed: 0, containerParam: !!node.left.bracket };
+  }
+  // **仮引数が1つのときだけ形が違う。** `buildParameterList` は1個のとき params ではなく
+  // identifier ノードを返す（既存の出力形状との後方互換）。同じ事実が2つの形で持たれて
+  // いるので、木から数える側はここを別に読まなければならない。
+  //
+  // 名前つきの束縛は pass1 がトークンから数えた 1 を使うので実害が出ないが、**pass1 を
+  // 通らない場面**——無名ラムダとホール脱糖が作ったラムダ——では読めずに null になり、
+  // `(x ? x * 10) 1 2` が `λ (1 2)` になっていた（正しくは `(λ 1) 2`）。今日
+  // `countArity` で直したのと同じ「同じ事実が2箇所」である。
+  //
+  // 本筋は params ノードの形を1つにすることだが、それは出力形状を assert している
+  // テストごと動かす話になる。ここで読めるようにするだけで木は正しくなる。
+  if (node.type === "operation" && node.op === "?" && node.left && node.left.type === "atom" && node.left.kind === "identifier") {
+    return { arity: 1, requiredArity: 1, consumed: 0 };
   }
   return null;
 }
@@ -695,7 +704,18 @@ function isPointfreeLambda(node, env) {
  */
 function wantsMore(a, env) {
   const info = resolveKnownArity(a, env);
-  return !!(info && info.arity != null && info.arity - (info.consumed || 0) >= 1);
+  if (!info) return false;
+  // **器をまるごと受け取る仮引数は、1つずつ食わない。** `f : [x ~xs] ?` に `f 1 2 3`
+  // と書いたら、渡るのは `(1 2 3)` という器1つである。裸の仮引数1つ（`d : x ?`）が
+  // 「1つ取って残りは余積」なのと逆で、**どちらも実引数1個なので数では区別できない**
+  // ——だから pass1 が事実として持たせている（`containerParam`）。
+  //
+  // ここが無かった頃は、ブラケットの仮引数部が arity=Infinity（分解後の束縛の数）を
+  // 名乗って未飽和と判定され、並置を1個ずつ食って apply 連鎖を作っていた。それを
+  // compile.js の後段（gatherBracketArgs）が木ごと組み直していた——本体が事実を
+  // 持てば、その後段は要らない。
+  if (info.containerParam) return false;
+  return !!(info.arity != null && info.arity - (info.consumed || 0) >= 1);
 }
 
 /**

@@ -1532,6 +1532,28 @@ function compareOnValues(name, op, l, r, leftNode) {
 // 呼び出し引数を直接vとして渡す）の両方から共有する。
 function evalUnaryOp(name, v) {
   switch (name) {
+    case "address": {
+      // **ここへ届くのは値だけである。** `evaluate` は `$` を見たら `evalAddress` へ
+      // **構文形**を渡し、名前や要素なら実在する場所への参照セルを組む。だがポイント
+      // フリー（`[$_] 5`）はホールへ値しか渡せないので、この道へ来る。
+      //
+      // 値しか無いなら取りうる意味は1つに定まる——`evalAddress` の最後の分岐、つまり
+      // **無名の値にその場で場所を作る**（`new` と同じ振る舞い）。機械の側も `sub sp` で
+      // 場所を取る形で一致している。
+      //
+      // `$__ = __`（= `@__`）の不動点は守る。**置くものが無ければ場所も無い。**
+      //
+      // ここが無かった頃は `[$_] 5` だけが「未対応の前置/後置演算」で落ちていた——
+      // 前置・後置12綴りのうち `address` だけが値を受け取れなかった。
+      if (isUnit(v)) return UNIT;
+      let cell = v;
+      return makeAddress(
+        () => cell,
+        (x) => {
+          cell = x;
+        },
+      );
+    }
     case "negate":
       return isUnit(v) ? UNIT : -v;
     case "not":

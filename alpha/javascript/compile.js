@@ -262,8 +262,6 @@ function compile(source, options = {}) {
   } else {
     replaceGreedyFolds(nodes);
   }
-  // 木を1つにするのは、ポイントフリーが名前へ変わった**後**である。
-  gatherBracketArgs(nodes);
   for (const node of nodes) {
     const bad = findUnresolved(node);
     if (bad) {
@@ -326,96 +324,6 @@ function compile(source, options = {}) {
   return { nodes, env, specializations, diagnostics };
 }
 
-
-/**
- * **貪欲な畳み込み（`[+]`）に名前と本体を与える。**
- *
- * 貪欲なポイントフリーにはアリティがある。`[+ 2]` は残りアリティ0（合成済み）だが、
- * `[+]` は残りアリティ2——隣り合う2つを潰していく**畳み込み**であり、器を1本走査すれば
- * 済む。書き下せば `[x ~xs] ? xs & x + (自分 xs) | x` であり、`function_guide.md` の
- * `sum_list` そのものである。
- *
- * **合成には名前が要る。** 畳み込みは自分を呼ぶので、その場に書かれた `[+]` のままでは
- * 再帰の呼び先が無い。だからトップレベルへ名前付きで持ち上げる。
- *
- * 生成するのは Sign のソースであり、足してから**同じ道をもう一度通す**（ストリームの
- * 糖衣と同じやり方）。手で書いたコードと同じパイプラインを通るので、生成側だけが通れる
- * 抜け道が生まれない——`fold [1 2 3]` が Pass 4 で出せる以上、`[+] 1 2 3` も出せる。
- */
-/**
- * **ブラケット仮引数1つの関数へは、並置を器1つにまとめて渡す。**
- *
- * `f : [x ~xs] ?` に `f 1 2 3` と書いたとき、渡るのは3つの実引数ではなく器 `(1 2 3)`
- * 1つである——ブラケット仮引数は「器を分解して受ける」形だからで、`f (1 2 3)` や
- * `f [1 2 3]` と同じ木にならなければならない。
- *
- * インタプリタは適用の連鎖を辿りながら畳んでいたので答えは合っていたが、Pass 4 は
- * 連鎖をそのまま「3引数の呼び出し」として出していた。**同じ式に2つの読みがあった**
- * わけで、機械の側だけが黙って違う値を出す（`[+] 1 2 3` が 1 になる）。木を1つに
- * すれば、どちらも同じものを見る。
- *
- * まとめるのは**ブラケットが最後の仮引数**のときに限る（`[x ~xs]` そのものと、
- * `go : acc [x ~xs]` のように前にだけ仮引数が居る形）。`mul_go : acc [~ts] i` のように
- * 後ろへまだ仮引数が続く形は、どこまでが器なのかを位置から言えないので対象外である。
- *
- * **これは pass2 の穴を埋めるパッチである。** 余積の段は仮引数が「ブラケットか裸か」を
- * 知らず、アリティの数だけでは区別できない——`d : x ?` に `d 1 2` は `(d 1) 2` だが、
- * `f : [x ~xs] ?` に `f 1 2 3` は `f (1 2 3)` でなければならない。どちらも実引数1個。
- * 段がその形を見られるようになれば、この関数ごと消える。
- */
-function gatherBracketArgs(nodes) {
-  const construct = (l, r) => ({ type: "operation", op: " ", name: "construct", position: "infix", left: l, right: r });
-  // 名前 → ブラケット仮引数が何番目か。`entries[i].pattern` がその印である
-  // （`[x ~xs]` は entries 全体が分解、`k [x ~xs]` は2つ目の entry が分解）。
-  const brackets = new Map();
-  for (const node of nodes) {
-    if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
-    const params = node.right && node.right.name === "lambda" ? node.right.left : null;
-    if (!params || !Array.isArray(params.entries)) continue;
-    // **ブラケットが最後の仮引数であるときだけ。** `mul_go : acc [~ts] i` のように後ろへ
-    // まだ仮引数が続く形は、どこまでが器なのかを位置から言えない——器がいくつ食うかは
-    // 実引数の数で決まるので、後ろの仮引数と取り合いになる。そこは元の並びのままにする。
-    if (params.bracket) {
-      brackets.set(node.left.value, 0); // entries 全体が1つの分解（`[x ~xs]`）
-      continue;
-    }
-    const at = params.entries.findIndex((e) => Array.isArray(e.pattern));
-    if (at >= 0 && at === params.entries.length - 1) brackets.set(node.left.value, at);
-  }
-  const rewrite = (n) => {
-    if (!n || n.type !== "operation" || n.name !== "apply") return n;
-    const args = [];
-    let head = n;
-    while (head && head.type === "operation" && head.name === "apply") {
-      args.unshift(head.right);
-      head = head.left;
-    }
-    if (args.length < 2 || !head || !isIdentifierNode(head)) return n;
-    const at = brackets.get(head.value);
-    // ブラケット仮引数より前は普通の実引数である。まとめるのはそこから後ろだけ。
-    if (at === undefined || args.length <= at + 1) return n;
-    const gathered = { type: "block", kind: "paren", lines: [args.slice(at).reduce(construct)], scope: n.scope || null };
-    const front = args.slice(0, at);
-    return [...front, gathered].reduce(
-      (f, a) => ({ type: "operation", op: " ", name: "apply", position: "infix", left: f, right: a }),
-      head
-    );
-  };
-  // **外側から降りる。** 内側の適用を先に畳むと `f 1 2 3` が `f ((1 2) 3)` になり、
-  // 並べるものの中に器が現れる（要素数が実行時にしか決まらない形）。連鎖は一番外から
-  // 見て初めて「実引数が何個並んでいるか」が分かる。
-  const seen = new Set();
-  const deep = (n) => {
-    if (!n || typeof n !== "object" || seen.has(n)) return n;
-    const r = rewrite(n);
-    seen.add(r);
-    for (const k of ["left", "right", "operand"]) if (r[k]) r[k] = deep(r[k]);
-    if (Array.isArray(r.lines)) r.lines = r.lines.map(deep);
-    for (const e of r.entries || []) if (e.default) e.default = deep(e.default);
-    return r;
-  };
-  for (let i = 0; i < nodes.length; i++) nodes[i] = deep(nodes[i]);
-}
 
 /**
  * 畳み込みの本体を Sign のソースとして書き下す。

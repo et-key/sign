@@ -174,6 +174,26 @@ function countNestedArity(token) {
   return countStatements(lines);
 }
 
+// **仮引数部がブラケット1つか。**
+//
+// そのとき呼ぶ側が渡すのは器1つで、並んだ実引数は**まるごとその器**になる
+// （`f : [x ~xs] ?` に `f 1 2 3` は `f (1 2 3)`）。裸の仮引数1つとは逆で、そちらは
+// 1つ取って残りを余積へ回す（`d : x ?` に `d 1 2` は `(d 1) 2`）。
+//
+// **どちらも「実引数1個」なので、数では区別できない。** だから数ではなく事実として
+// 束縛に残す。以前はこの判定が countRequiredArity の中にだけ在って値へ潰されており、
+// 事実の方が捨てられていたので、pass2 は区別できず compile.js の後段（gatherBracketArgs）
+// が木を組み直していた。
+function isWholeBracketParams(paramTokens) {
+	return !!(
+		paramTokens &&
+		paramTokens.length === 1 &&
+		Array.isArray(paramTokens[0]) &&
+		!isTaggedBlockToken(paramTokens[0]) &&
+		isBracketEntryToken(paramTokens[0])
+	);
+}
+
 // 必須アリティ（デフォルト・rest以外の仮引数の数、pass2.jsのbuildParameterListが計算する
 // requiredArityと同じ基準）を数える。countArity（総スロット数、デフォルト付きも含めて
 // 数える）とは別軸——自動カリー化（markUndersaturatedApplies、project memory:
@@ -187,7 +207,7 @@ function countRequiredArity(paramTokens) {
     // ——ブラケットは渡された単一の List/Struct をその場で分割代入する（Eagerパターン、
     // list_model.md §2.4）。エントリ数は分解後の束縛の数であって実引数の数ではない。
     // インデントブロック形（デフォルト引数）は別物なので従来通り数える。
-    if (!isTaggedBlockToken(paramTokens[0]) && isBracketEntryToken(paramTokens[0])) return 1;
+    if (isWholeBracketParams(paramTokens)) return 1;
     return countNestedRequiredArity(paramTokens[0]);
   }
   if (paramTokens.length === 1) return 1; // 単一の裸パラメータ（デフォルト無し前提）
@@ -272,7 +292,19 @@ function buildEnvScope(lines) {
     // 行ってここへメモ化する（遅延なので前方参照でも順序に依存しない）。
     // 単独のリテラル（atomTypeが読めた形）は確実にAtomなので、保持せず打ち切る。
     const rhsTokens = !hasLambda && atomType === null && rhs.length > 0 ? rhs : null;
-    bindings.set(first, { category: hasLambda ? "Lambda" : "Atom", restParam, atomType, exported, arity, requiredArity, rhsTokens });
+    // **器をまるごと受け取る仮引数か**は数では言えないので、事実として持つ（pass2 の
+    // wantsMore がこれを見て「1つずつ食わない」と決める）。
+    const containerParam = hasLambda ? isWholeBracketParams(paramTokens) : false;
+    bindings.set(first, {
+      category: hasLambda ? "Lambda" : "Atom",
+      restParam,
+      atomType,
+      exported,
+      arity,
+      requiredArity,
+      containerParam,
+      rhsTokens,
+    });
   }
   return bindings;
 }
