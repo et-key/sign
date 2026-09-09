@@ -7849,6 +7849,70 @@ function emitSretCapacityGuard(em, idxReg) {
  * 先頭に `k` 個並べるなら、聞きたいのは「残りが `k` 以上か」だけである。位置を作って
  * から比べると `mov` が1本余計に出る——同じ問いなので、答え方も1つでよい。
  */
+/**
+ * **スロットをもらったなら、器はそこへ着地する**（sret の着地）。
+ *
+ * 追記の枝は `len = 自分が置いた数 + 呼び先が返した len`、`ptr = 自分の宛先` で畳む。これが
+ * 正しいのは**呼び先が自分のスロットへ書いた**ときだけである。ところが器を返す枝は3種類
+ * あって、書くのはそのうち1つしかない：
+ *
+ *   組み立てた器      …… スロットに在る。そのまま。
+ *   リテラル（`` `x` ``）…… `.rodata` に在る。**スロットには無い。**
+ *   仮引数の切片      …… 呼ぶ側の記憶に在る。**スロットには無い。**
+ *
+ * 計画（`needsSlot`）は**関数ごと**に付くのに、「スロットに着地するか」は**枝ごと**に違う。
+ * 実測：`g : s i ? i > 0 : (s ' 0) (g s (i - 1)) / \`x\`` が `||g \`ab\` 2||` に 3 を返しながら
+ * `' 2` に 0 を返していた——**長さは合っているのに中身が無い**、診断ゼロの形である。
+ *
+ * だから枝ごとに直さず、**出口で1度だけ問う**。既にスロットに在るなら（`ptr` がスロットそのもの）
+ * 何もしない——組み立てた枝も、下へ通した枝も、そこで一致する。在らなければ写す。
+ *
+ * @param width 要素1つのバイト数（`sretPlan` の `width`）
+ */
+function emitSretLanding(em, width) {
+	if (em.sretDest === null || em.sretDest === undefined || !width) return;
+	const skip = em.newLabel("landed");
+	em.load(SCRATCH[0], em.sretDest, "もらったスロット");
+	em.emit(`cmp x0, ${SCRATCH[0]}`, "もう自分のスロットに在るか");
+	em.emit(`b.eq ${skip}`, "在るなら写さない");
+	em.emit(`cbz x1, ${skip}`, "空なら写すものが無い（__ はそのまま）");
+	// **写す前に入るかを確かめる。** 器を丸ごと運ぶので、要素数がそのまま位置の上限である。
+	if (em.sretLimit !== null && em.sretLimit !== undefined && em.unitLabel) {
+		em.load(SRET_LIMIT, em.sretLimit, "入る個数（呼ぶ側が渡した残り）");
+		em.emit(`cmp x1, ${SRET_LIMIT}`, "入るか");
+		em.emit(`b.gt ${em.unitLabel}`, "入らなければ器は作れない（__ を返す）");
+	}
+	const shift = width === 16 ? 4 : width === 8 ? 3 : width === 4 ? 2 : width === 2 ? 1 : 0;
+	const top = em.newLabel("land");
+	const end = em.newLabel("lande");
+	em.emit("mov x13, #0", "位置");
+	em.label(top);
+	em.emit("cmp x13, x1");
+	em.emit(`b.ge ${end}`);
+	if (shift) {
+		em.emit(`add x12, x0, x13, lsl #${shift}`, "写す元");
+		em.emit(`add x14, ${SCRATCH[0]}, x13, lsl #${shift}`, "写す先");
+	} else {
+		em.emit("add x12, x0, x13", "写す元");
+		em.emit(`add x14, ${SCRATCH[0]}, x13`, "写す先");
+	}
+	if (width === 16) {
+		em.emit("ldr x11, [x12, #0]", "要素は {ptr, len} の16バイト");
+		em.emit("str x11, [x14, #0]");
+		em.emit("ldr x11, [x12, #8]");
+		em.emit("str x11, [x14, #8]");
+	} else {
+		const ld = width === 1 ? "ldrb w11, [x12]" : width === 2 ? "ldrh w11, [x12]" : width === 4 ? "ldr w11, [x12]" : "ldr x11, [x12]";
+		em.emit(ld, `${width} byte を1つ`);
+		em.emit(storeElem("x11", "x14", 0, width));
+	}
+	em.emit("add x13, x13, #1");
+	em.emit(`b ${top}`);
+	em.label(end);
+	em.emit(`mov x0, ${SCRATCH[0]}`, "器はスロットに在る");
+	em.label(skip);
+}
+
 function emitSretCapacityNeed(em, need) {
 	if (em.sretLimit === null || em.sretLimit === undefined || !em.unitLabel || need <= 0) return;
 	em.load(SRET_LIMIT, em.sretLimit, "入る個数（呼ぶ側が渡した残り）");
@@ -8760,6 +8824,10 @@ function genFunction(name, lambdaNode, env, em, mono) {
 				em.load(ARG_REGS[k], (base + k) * 8, what);
 			}
 			em.pop(ok);
+			// **スロットをもらったなら、器はそこへ着地する。** 枝によっては `.rodata` や
+			// 呼ぶ側の記憶を指したまま返っており、追記の勘定（`len = k + 呼び先の len`）が
+			// 空振りしていた。問いは枝ごとではなく出口で1つである（`emitSretLanding`）。
+			if (ok === 2 && sretEntry && sretEntry.needsSlot) emitSretLanding(em, sretEntry.width);
 		}
 		// 崩壊したときの出口。返値と同じ幅で `__` を置く——枝によって幅が変わると
 		// 呼び出し側が読む本数が決まらない。
