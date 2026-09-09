@@ -7541,8 +7541,11 @@ function buildFlow(ins, labels) {
 	// **戻り値は x0/x1 とは限らない。** 余積を返す関数は x0 から順に何本でも使う（AAPCS64
 	// は x0–x7、sret なら x8）。2本と決めつけて `dup` の戻りを消し、`__` を返す機械語を
 	// 出した。**何本使うかはこの表からは見えない**ので、全部生きていると見なす。
-	const EXIT = new Set(CALL_ARGS);
-	const TAIL = new Set(CALL_ARGS); // 畳んで飛ぶ先へ渡すもの
+	// **`ret` で生きているのは返す口だけである。** x15（入る個数）は**もらう**口であって
+	// 返す口ではないので、ここには入らない。入れると `mov x15, …` が「出口で読まれる」
+	// ことになり、直後に上書きされる死んだ写しまで残る（実測で `f` に1本ずつ）。
+	const EXIT = new Set(CALL_ARGS.filter((r) => r !== SRET_LIMIT));
+	const TAIL = new Set(CALL_ARGS); // 畳んで飛ぶ先へ渡すもの（x15 も渡る）
 	const ALL = new Set(Array.from({ length: 29 }, (_, i) => "x" + i));
 	const succ = [];
 	const extra = []; // 後続の外側で生きていると見なすもの（出口・末尾呼び出し）
