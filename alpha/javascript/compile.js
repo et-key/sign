@@ -24,7 +24,7 @@
 
 import { preprocess } from "./lexer.js";
 import { parse } from "./parser.js";
-import { buildEnv, bindEnv, envLookup, EXPORT_MARKERS } from "./pass1.js";
+import { buildEnv, bindEnv, EXPORT_MARKERS } from "./pass1.js";
 import { reduceAll, desugarIndexRest } from "./pass2.js";
 import { specializeGenericParams } from "./pass1b.js";
 import { annotateAll, checkLayerConstraints, checkCharsetConstraints } from "./pass3.js";
@@ -247,7 +247,7 @@ function compile(source, options = {}) {
   // **並べた相手は、ここで畳み終える。** 個数が構文から見えているなら関数も器も要らない
   // ——`construct` の連鎖が既に左畳みの括弧の形をしている。残った（相手が実行時の器の）
   // 形だけが、下の合成へ回る。
-  expandGreedyFoldsIn(nodes, env);
+  expandGreedyFoldsIn(nodes);
 
   // **貪欲な畳み込みへ名前と本体を与える。** `[+]` は残りアリティ2なので受け口1つの
   // 合成には収まらない——トップレベルへ持ち上げてから、その場の `[+]` を名前へ差し替える。
@@ -263,7 +263,7 @@ function compile(source, options = {}) {
     replaceGreedyFolds(nodes);
   }
   // 木を1つにするのは、ポイントフリーが名前へ変わった**後**である。
-  gatherBracketArgs(nodes, env);
+  gatherBracketArgs(nodes);
   for (const node of nodes) {
     const bad = findUnresolved(node);
     if (bad) {
@@ -365,7 +365,7 @@ function compile(source, options = {}) {
  * まとめるのは**仮引数がブラケット1つだけ**の場合に限る。`go : acc [x ~xs]` のように
  * 前に別の仮引数が居る形は、どこから器が始まるかが位置で決まるので別の話である。
  */
-function gatherBracketArgs(nodes, env) {
+function gatherBracketArgs(nodes) {
   const construct = (l, r) => ({ type: "operation", op: " ", name: "construct", position: "infix", left: l, right: r });
   // 名前 → ブラケット仮引数が何番目か。`entries[i].pattern` がその印である
   // （`[x ~xs]` は entries 全体が分解、`k [x ~xs]` は2つ目の entry が分解）。
@@ -678,7 +678,7 @@ function expandCompose(node, named) {
  * 畳み込みの相手が `construct` 連鎖になる。`walkNodes` は差し替えたところで降りるのを
  * やめるので、**変化が無くなるまで回す**——回数は式の入れ子の深さで、実際には 2〜3 回。
  */
-function expandGreedyFoldsIn(nodes, env) {
+function expandGreedyFoldsIn(nodes) {
   // 名前を付けた合成を先に集める（`h : f g`）。
   const named = new Map();
   for (const n of nodes) {

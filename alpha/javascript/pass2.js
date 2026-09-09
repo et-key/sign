@@ -460,7 +460,7 @@ function isListLike(node) {
 
 // 中身がList値を構築する演算（余積・直積・範囲）かどうか。isRealListValueが使う。
 const LIST_PRODUCING_NAMES = new Set([
-  "construct", "concat", "push", "unshift", "product",
+  "construct", "concat", "unshift", "product",
   "range", "range_arithmetic", "range_arithmetic_rev",
   "range_geometric", "range_geometric_rev", "range_power",
 ]);
@@ -493,7 +493,7 @@ function isRealListValue(node) {
 // `construct` を含めないのは、`1 2 3` が `construct[construct[1,2], 3]` と縮約される際に
 // 左辺が List と見なされて push へ落ちてしまうためである。ここで拾いたいのは**List 同士の
 // 並置が作った入れ子**だけであり、それは product（~なし）と concat（双方~）に限られる。
-const REDUCED_LIST_NAMES = new Set(["product", "concat", "unshift", "push"]);
+const REDUCED_LIST_NAMES = new Set(["product", "concat", "unshift"]);
 
 function isReducedListValue(node) {
   return !!node && node.type === "operation" && REDUCED_LIST_NAMES.has(node.name);
@@ -603,7 +603,7 @@ function coproductReduce(a, b, env) {
     // `[9,9,[1,2,3,4]]`（展開しない）なので、生のノードのときだけ展開する規則は
     // 「名前は括られた部分式である」という等価性を破る。
     const spreadB = hasPostfixTilde(b);
-    if (listA && listB) {
+    if (listA || listB) {
       // **スペースは余積である。** `list_model.md` §1 の表が定める通り、スペースは余積
       // （同じ次元で伸ばす）、カンマは直積（次元を上げる）である。以前は List 同士のときだけ
       // スペースを直積として扱っていたが（§2.2 の `[1 2] [3 4] = 1 2 , 3 4`）、それは記号の
@@ -617,9 +617,11 @@ function coproductReduce(a, b, env) {
       //   m [5 6]   →  [[1,2],[3,4],[5,6]]   行を1つ足す
       //   m [5 6]~  →  [[1,2],[3,4],5,6]     展開して足す
       //   m , [5 6] →  [[[1,2],[3,4]],[5,6]] 次元を上げる（カンマの仕事）
-      return spreadB ? mk("concat", a, b) : mk("unshift", a, b);
-    }
-    if (listA || listB) {
+      //
+      // **両辺が List のときの枝は消した。** 返す式がこちらと一字一句同じで、条件が
+      // `listA && listB` はこの `listA || listB` に含まれる。向きを引数の並びに依存させない
+      // と決めた時点（ad48c2e）で吸収されていたのに、枝だけが残っていた。
+      //
       // 10.1: 片側だけが List でも規則は同じである。**どちらが List かで向きを変えない。**
       //
       // 以前はここだけ「List の側が器」と読んで、`1 [2 3]` を push（＝`[2 3]` の先頭へ 1 を
@@ -653,33 +655,14 @@ function coproductReduce(a, b, env) {
 // （右のAtomへの通常適用）が先に確定するため、逆適用が途中のAtomを横取りすることはない。
 // concat/push/unshift/constructの3つ（10.2〜10.0）はcoproductReduce内部でリスト形状のみから
 // 相互排他的に決まり、tier間の競合が無いため、引き続き1フェーズにまとめている。
-// ポイントフリー記述で「複数の実引数を貪欲に消費し続けるべき」apply連鎖の根本（base）
-// かどうかを判定する。対象は2パターン: (1) 完全に裸な中置演算子（`[+]`、left/right両方
-// null、function_guide.md「複数の引数を貪欲に演算する」）、(2) 末尾カンマの写像糖衣構文
-// （`[* 2,]`、pointfreeMap、function_guide.md「そのすべてに適用される」——`[* 2,] 1 2 3
-// 4 5`のように複数の位置引数へ写像する場合、そのすべてをapply連鎖で集めきる必要がある）。
-// `[+]`のようにbracketブロックでラップされたまま渡ってくる場合はunwrapSoloBlockで
-// 中身を覗く。Phase2（apply）専用の特例判定にのみ使う——getCategory本体には反映しない
-// （下記COPRODUCT_PHASESのコメント参照）。
-function isBarePointfreeChainBase(node, env) {
-  const { base } = applyChainInfo(node);
-  return isGreedyPointfree(base, env);
-}
-
-// 「複数の実引数を貪欲に消費し続けるべき」ポイントフリーかどうか。
-// `add : [+]` のように名前を経由していても同じ判定が要る（type_system.md §6.1の
-// `#add : [+]` → `add 1 2` = 3）ため、束縛の右辺ノードまで透かして見る。
-function isGreedyPointfree(node, env) {
-  const unwrapped = unwrapSoloBlock(derefBoundNode(unwrapSoloBlock(node), env));
-  if (!unwrapped || unwrapped.type !== "operation") return false;
-  // 合成（`f g`）は左→右のパイプライン順（`(f g)(x) = g(f(x))`）なので、実引数は
-  // **左の関数**へ渡る。左が貪欲なポイントフリーなら合成全体も貪欲でなければならない。
-  // これが無いと `[* 2,] [+] 1 2 3 4 5` が、合成へ引数を1個だけ渡して残りを
-  // concat してしまう（`[2 2 3 4 5]`）。
-  if (unwrapped.name === "compose") return isGreedyPointfree(unwrapped.left, env);
-  if (!unwrapped.partial) return false;
-  return unwrapped.pointfreeMap === true || (unwrapped.left === null && unwrapped.right === null);
-}
+// **貪欲さの特例は消えた。** かつてここに `isBarePointfreeChainBase` と
+// `isGreedyPointfree` があり、段に立てた `extendPointfree` の旗を見て「裸の `[+]` は
+// 右の Atom を食えるだけ食う」を reduceOnce の中で直に処理していた。c93ff2e が
+// **構築を適用より内側**にした時点で旗を段から外したのに、旗を読む側と補助関数だけが
+// 残っていた（旗を立てる場所はリポジトリのどこにも無い）。
+//
+// いまは並んだ実引数が先に器になってから畳み込みへ渡るので、特例は要らない。
+// `[+] 1 2 3 4 5` = 15、`[* 2,] [+] 1 2 3 4 5` = 30 は特例なしで出る。
 
 // ポイントフリー記述由来のLambda（`[+]`のような裸の演算子、`[+ 1]`のような部分適用、
 // およびそのapply連鎖）かどうかを判定する。演算子の種類（算術・比較・前置・後置いずれも
@@ -851,10 +834,6 @@ function reduceOnce(items, tier, env, phase) {
       const left = toNode(a, env);
       const right = toNode(b, env);
       const catA = getCategory(left, env), catB = getCategory(right, env);
-      if (phase && phase.extendPointfree && catB === "Atom" && isBarePointfreeChainBase(left, env)) {
-        items.splice(i, 2, mk("apply", left, right));
-        return true;
-      }
       if (phase && !phase.match(catA, catB, left, right, env)) continue;
       const node = coproductReduce(left, right, env);
       if (node) {
@@ -1451,7 +1430,6 @@ function isHoleNode(n) {
 const STRUCTURAL_INFIX = new Set([
   "construct",
   "concat",
-  "push",
   "unshift",
   "apply",
   "compose",

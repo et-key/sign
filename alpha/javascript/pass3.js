@@ -1814,11 +1814,13 @@ function computeAtomType(node, env) {
       //
       // 器が `Struct` なら、足すのは**スロット**である。スロットごとに型が違ってよいのが
       // 直積の意味なので（§2）、要素型の join は要らず結果も `Struct` のままである。
-      if (node.name === "unshift" || node.name === "push") {
-        const isUnshift = node.name === "unshift";
-        const containerNode = isUnshift ? node.left : node.right;
-        const elementNode = isUnshift ? node.right : node.left;
-        const containerType = isUnshift ? leftType : rightType;
+      // **`push` は誰も作らない。** 余積の向きは常に「左辺が器」で足りるので
+      // （pass2 の coproductReduce）、`push` ノードは生成されない。左右を入れ替える
+      // 分岐ごと落として、器は左・要素は右で固定する。
+      if (node.name === "unshift") {
+        const containerNode = node.left;
+        const elementNode = node.right;
+        const containerType = leftType;
         if (containerType === "Struct") {
           // **名前付きスロットには、名前の無いものを足せない。** 名前で引くのが名前付き
           // スロットの意味なので、付ける名前が無いものはスロットになりようがない。
@@ -2495,8 +2497,7 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope, bareNames = null,
             arg.position === "postfix" &&
             arg.name === "expand" &&
             isIdentifierNode(arg.operand) &&
-            paramNames.has(arg.operand.value) &&
-            true
+            paramNames.has(arg.operand.value)
           ) {
             refine(arg.operand.value, t);
           }

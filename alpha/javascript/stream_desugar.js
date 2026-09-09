@@ -420,11 +420,6 @@ function generatePullers(funcs, opts = {}) {
 	const group = pre + funcs[0].name;
 	const { armIndex, flat } = numberArms(funcs);
 	const out = [];
-	const bad = (why) => {
-		out.length = 0;
-		out.push(why);
-		return null;
-	};
 
 	// --- どの枝か。ガード列はそのまま写す ---
 	for (const f of funcs) {

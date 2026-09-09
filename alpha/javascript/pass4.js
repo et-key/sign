@@ -153,7 +153,6 @@ const FRAME_MARK = "@@FRAME@@";
 
 // 比較が偽のときに返す値＝`__` の niche（value_representation.md §3.5）。
 // **`0` ではない。** Sign では `0` は真であり、`0 = 0` は真で `0` を返す。
-const UNIT = UNIT_NICHE_ASM;
 
 function isIdentifierNode(n) {
 	return !!n && n.type === "atom" && n.kind === "identifier";
@@ -238,10 +237,6 @@ function slotsOfNode(node, conf, env) {
 	// 束縛は知っている（pass3 が書き戻している）。
 	const pass = passingOf(node, { target: conf.target, charset: conf.charset, env });
 	return pass ? Math.max(pass.slots, 1) : null;
-}
-
-function isSingleChar(n) {
-	return !!n && n.atomType === "Char";
 }
 
 function codePointsOf(n) {
@@ -421,11 +416,6 @@ function paramNamesOf(paramNode) {
 // 片方だけ広げると、同じソースが解釈器では構造体・機械語では match_case になる。
 function isSlotKeyAtom(n) {
 	return isIdentifierNode(n) || (!!n && n.type === "atom" && n.kind === "string");
-}
-
-/** 後置 `~`（撒く／器そのものを指す）か。マージ `a~ b~` は両辺がこの形である。 */
-function isExpandPostfix(n) {
-	return isExpandNode(unwrap(n));
 }
 
 /**
@@ -3401,7 +3391,6 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.store(SCRATCH[1], lo, "len");
 			return 2;
 		}
-		em.pop(em.slot - em.slot); // 何も積んでいない
 	}
 	if (COPRODUCT_BUILD_OPS.has(n.name) && slotsOf(n.atomType, em.conf) === 2) {
 		if (em.conf.layer !== undefined && em.conf.layer < 1) {
@@ -3564,31 +3553,6 @@ function genCursorIndex(node, env, em, scope, group, cbase) {
 	return outw;
 }
 
-/**
- * そのアドレスが指す先は何本で運ぶ値か（分からなければ null）。
- *
- * `$名前` は束縛の型が指す先を語り、`$匿名式` は書かれた式が語る。1本なら `' 0` は
- * その場のロードで済み、2本以上なら「指したまま引く」経路が要る。
- */
-function pointeeWidthOf(node, env, em) {
-	const t = unwrap(node);
-	if (!t) return null;
-	if (t.type === "operation" && t.position === "prefix" && t.name === "address") {
-		const inner = unwrap(t.operand);
-		if (!inner) return null;
-		if (isIdentifierNode(inner) && env) {
-			const b = envLookup(env, inner.value);
-			return b && b.atomType ? slotsOf(b.atomType, em.conf) : null;
-		}
-		return slotsOfNode(inner, em.conf, env);
-	}
-	if (isIdentifierNode(t) && env) {
-		const b = envLookup(env, t.value);
-		if (b && b.pointee) return slotsOf(b.pointee, em.conf);
-	}
-	return null;
-}
-
 /** 添字が定数 0 か（`$x ' 0` の判定に使う）。 */
 /**
  * その式は `$` が作った番地か（識別子なら束縛まで辿る）。
@@ -3682,10 +3646,6 @@ function rawAddressNode(node, env) {
 		if (v && v !== t) return rawAddressNode(v, env);
 	}
 	return false;
-}
-
-function idxIsZero(n) {
-	return !!(n && n.type === "atom" && n.kind === "number" && Number(n.value) === 0);
 }
 
 /**
@@ -6486,7 +6446,6 @@ const MU_MARK = "μ:";
 const muKey = (nm) => MU_MARK + nm;
 const bareMeasureName = (nm) => (typeof nm === "string" && nm.startsWith(MU_MARK) ? nm.slice(MU_MARK.length) : nm);
 const measureOfKey = (nm) => (typeof nm === "string" && nm.startsWith(MU_MARK) ? "chars" : "len");
-const keyOfTerm = (t) => (t.measure === "chars" ? muKey(t.sizeOf) : t.sizeOf);
 
 /**
  * その部分は**仮引数の器の「要素そのもの」**か。だとしたら底の仮引数の名前を返す。
