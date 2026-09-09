@@ -1908,12 +1908,11 @@ function genExpr(node, env, em, scope, tail = false) {
 					em.emit(`add ${SCRATCH[1]}, x29, #${FRAME_MARK}`, "自分の引数域（スタック渡し）");
 					place(true, SCRATCH[1]);
 				}
-				// **飛び先は仮引数を写す前**なので、x8 と x15 も入口と同じ姿で渡さなければ
-				// ならない。途中の `bl` が壊しているので、スロットから戻す（下の相互末尾と同じ）。
-				if (em.sretDest !== null && em.sretDest !== undefined) {
-					em.load("x8", em.sretDest, "返値スロットを渡し直す（末尾自己再帰）");
-					if (em.sretLimit !== null && em.sretLimit !== undefined) em.load(SRET_LIMIT, em.sretLimit, "残りも渡し直す");
-				}
+				// **x8 と x15 は戻さなくてよい。** 返値スロットの退避は飛び先（`.Lloop`）より
+				// 前に置いてあるので、スロットは入口の値を持ったままである——周ごとに変わる
+				// ものではない。以前は退避が中に在ったため、`bl` で壊れた残骸を書き戻さない
+				// よう、ここで読み直して埋め合わせていた。**置き場所を直したら埋め合わせが
+				// 要らなくなった。**
 				em.emit(`b ${scope.loopLabel}`, "末尾自己再帰（フレーム再利用）");
 				return TAIL;
 			}
@@ -3095,6 +3094,49 @@ function genExpr(node, env, em, scope, tail = false) {
 				em.emit(storeElem(SCRATCH[0], SCRATCH[1], i * w, w), i === 0 ? "先頭を並べる" : undefined);
 			}
 			em.pop(k * per);
+			// **自分自身への追記はループになる。**
+			//
+			// 追記は器の**続き**を書くので、段が下がるたびに宛先だけが進む。ならば段を下げず
+			// に宛先だけ進めれば同じことである——呼び出しの後に残るのが「定数 k を足す」
+			// だけだから成り立つ（蓄積子）。clang が `1 + f(…)` をループへ均すのと同じ変換で、
+			// Sign には既に自己末尾再帰の `b .Lloop` がある。**機械は在って、繋がっていなかった。**
+			//
+			// **飛ぶかどうかは自分で判定しない。** 末尾にできるかは呼び出しの側が引数を出して
+			// から決める（`argCarries`——フレームに取った場所への参照が渡るか）。ここで同じ
+			// 判定を書き直すと**2箇所が食い違う**ので、実際に出させて、飛んだかどうかを見る。
+			// 飛ばなければ出したものを捨てて、従来の追記の道をやり直す。
+			if (scope && tail && trail.length === 0 && appendTo === scope.selfLabel && em.sretTotal !== null && em.sretTotal !== undefined) {
+				const lineMark = em.lines.length;
+				const slotMark = em.slot;
+				const diagMark = em.diagnostics.length;
+				const spWas = em.movedSp;
+				const tw0 = genExpr(tailPart, env, em, scope, true);
+				const jumped = tw0 === TAIL && em.lines.slice(lineMark).some((l) => l.includes(`b ${scope.loopLabel}`));
+				if (jumped) {
+					// カーソルと合計を進める命令は、飛ぶ手前——つまり引数を積む前——へ差し込む。
+					// どちらもスロットしか触らないので、引数の組み立てとは干渉しない。
+					const before = em.lines.length;
+					em.load(SCRATCH[1], em.sretDest);
+					if (k * w) em.emit(`add ${SCRATCH[1]}, ${SCRATCH[1]}, #${k * w}`, `${k} 要素ぶんカーソルを進める`);
+					em.store(SCRATCH[1], em.sretDest, "次の周はここから書く");
+					em.load(SCRATCH[0], em.sretTotal);
+					if (k) em.emit(`add ${SCRATCH[0]}, ${SCRATCH[0]}, #${k}`, `書いた ${k} を足す`);
+					em.store(SCRATCH[0], em.sretTotal, "周を跨ぐ合計");
+					// **残りも同じだけ狭くする。** そうすれば照合は今まで通り「この周の位置 vs 残り」
+					// で済み、位置に合計を足す必要が無い——足すと**もう1本レジスタが要る**ことに
+					// なり、写す枝が持っている値（x14 に読んだ1文字）を潰していた。
+					em.load(SCRATCH[0], em.sretLimit);
+					if (k) em.emit(`sub ${SCRATCH[0]}, ${SCRATCH[0]}, #${k}`, `置いた ${k} ぶん狭い`);
+					em.store(SCRATCH[0], em.sretLimit, "次の周の残り");
+					em.lines.splice(lineMark, 0, ...em.lines.splice(before, em.lines.length - before));
+					em.sretLooped = true;
+					return TAIL;
+				}
+				em.lines.length = lineMark;
+				em.slot = slotMark;
+				em.diagnostics.length = diagMark;
+				em.movedSp = spWas;
+			}
 			// 続きの宛先はスロットへ置く。引数を作る途中で `bl` が挟まればレジスタは壊れる。
 			const destSlot = em.push();
 			if (destSlot === null) return em.fail(n, `式が深すぎます（スロットは ${MAX_SLOTS} まで）`);
@@ -7836,9 +7878,25 @@ function emitTermMeasure(em, off, measure, dst) {
  *
  * @param idxReg 書こうとしている位置（要素数）が入っているレジスタ
  */
+/**
+ * **器の底は、カーソルから合計を引けば出る。** 底を別のスロットに持たせると、それだけで
+ * 割り当ての持ち駒（10本）を越えて関数が丸ごとメモリへ落ちる——**持たないで済むものは
+ * 持たない**。使うのは出口の2箇所だけなので、そこで引く方が安い。
+ */
+function emitSretBase(em, dst, width) {
+	const shift = width === 16 ? 4 : width === 8 ? 3 : width === 4 ? 2 : width === 2 ? 1 : 0;
+	em.load(dst, em.sretDest, "いまのカーソル");
+	em.load(SCRATCH[1], em.sretTotal, "周を跨いだ合計");
+	if (shift) em.emit(`sub ${dst}, ${dst}, ${SCRATCH[1]}, lsl #${shift}`, "戻せば器の底");
+	else em.emit(`sub ${dst}, ${dst}, ${SCRATCH[1]}`, "戻せば器の底");
+}
+
 function emitSretCapacityGuard(em, idxReg) {
 	if (em.sretLimit === null || em.sretLimit === undefined || !em.unitLabel) return;
-	em.load(SRET_LIMIT, em.sretLimit, "入る個数（呼ぶ側が渡した残り）");
+	// **位置は底から数える。** ループにするとカーソルが周ごとに進むので、この周の中での
+	// 位置（`idxReg`）だけでは上限と比べられない——前の周までに書いた合計を足す。
+	// ループにならなければ合計は 0 のままで、足す命令は死んで消える。
+	em.load(SRET_LIMIT, em.sretLimit, "入る個数（この周の残り）");
 	em.emit(`cmp ${idxReg}, ${SRET_LIMIT}`, "入るか");
 	em.emit(`b.ge ${em.unitLabel}`, "入らなければ器は作れない（__ を返す）");
 }
@@ -7878,7 +7936,7 @@ function emitSretLanding(em, width) {
 	em.emit(`cbz x1, ${skip}`, "空なら写すものが無い（__ はそのまま）");
 	// **写す前に入るかを確かめる。** 器を丸ごと運ぶので、要素数がそのまま位置の上限である。
 	if (em.sretLimit !== null && em.sretLimit !== undefined && em.unitLabel) {
-		em.load(SRET_LIMIT, em.sretLimit, "入る個数（呼ぶ側が渡した残り）");
+		em.load(SRET_LIMIT, em.sretLimit, "入る個数（この周の残り）");
 		em.emit(`cmp x1, ${SRET_LIMIT}`, "入るか");
 		em.emit(`b.gt ${em.unitLabel}`, "入らなければ器は作れない（__ を返す）");
 	}
@@ -7902,7 +7960,11 @@ function emitSretLanding(em, width) {
 		em.emit("ldr x11, [x12, #8]");
 		em.emit("str x11, [x14, #8]");
 	} else {
-		const ld = width === 1 ? "ldrb w11, [x12]" : width === 2 ? "ldrh w11, [x12]" : width === 4 ? "ldr w11, [x12]" : "ldr x11, [x12]";
+		// **変位を明示する。** `[x12]` と書くと、効果を数える側（`unit_law` の
+		// `effectReads`）が MMIO の読みと同じ綴りに見る——あちらの見分けは「素の `[xN]` から
+		// 読んでいるか」だからである。書く側は `storeElem` が `[x14, #0]` を出しているので、
+		// 読む側も揃える。**同じことをしている命令は同じ綴りで出す。**
+		const ld = width === 1 ? "ldrb w11, [x12, #0]" : width === 2 ? "ldrh w11, [x12, #0]" : width === 4 ? "ldr w11, [x12, #0]" : "ldr x11, [x12, #0]";
 		em.emit(ld, `${width} byte を1つ`);
 		em.emit(storeElem("x11", "x14", 0, width));
 	}
@@ -7915,7 +7977,7 @@ function emitSretLanding(em, width) {
 
 function emitSretCapacityNeed(em, need) {
 	if (em.sretLimit === null || em.sretLimit === undefined || !em.unitLabel || need <= 0) return;
-	em.load(SRET_LIMIT, em.sretLimit, "入る個数（呼ぶ側が渡した残り）");
+	em.load(SRET_LIMIT, em.sretLimit, "入る個数（この周の残り）");
 	em.emit(`cmp ${SRET_LIMIT}, #${need}`, `${need} 個入るか`);
 	em.emit(`b.lt ${em.unitLabel}`, "入らなければ器は作れない（__ を返す）");
 }
@@ -8440,6 +8502,30 @@ function stripExpand(node) {
 	return u;
 }
 
+/**
+ * **自分を呼んでいるか。** 追記のループ（底・合計の2スロットと、位置に合計を足す照合）は
+ * 自己再帰にしか効かないので、そうでない関数に代金を払わせない。
+ *
+ * 実測でここを配らなかったとき、スロットが2つ増えただけで `slotsToRegisters` の持ち駒
+ * （10本）を越え、`tokens` と `take_while` が丸ごとメモリへ落ちた——往復 30 → 278。
+ * **要らない関数に持たせないことが、そのまま割り当ての成否になる。**
+ *
+ * 広めに見てよい（見落とすとループにならないだけ、余計に見ても代金を払うだけ）。ただし
+ * **ループにするかの判定と同じ旗を使う**こと——2箇所で決めると必ず食い違う。
+ */
+function callsItself(node, name) {
+	const self = new Set([name, bareName(name), bareName(name).split("$")[0]]);
+	let found = false;
+	const walk = (x) => {
+		if (!x || typeof x !== "object" || found) return;
+		if (isIdentifierNode(x) && (self.has(x.value) || self.has(bareName(x.value)))) { found = true; return; }
+		for (const k of ["left", "right", "operand"]) walk(x[k]);
+		if (Array.isArray(x.lines)) x.lines.forEach(walk);
+	};
+	walk(node);
+	return found;
+}
+
 function appendableCallee(node, em) {
 	const u = stripExpand(node);
 	if (!u || u.type !== "operation" || u.name !== "apply") return null;
@@ -8514,6 +8600,60 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	//
 	// 飛び先を**仮引数の写しと完全性公理の検査より前**に置くのが要である。後ろに置くと
 	// 検査が初回しか通らず、終端が消える。
+	//
+	// **返値スロットの退避は飛び先より前に置く。** x8 と x15 は入口の値であって、周ごとに
+	// 変わるものではない——中で写すと、`bl` で壊れた残骸を毎周書き戻すことになる（実際
+	// そうなっていて、飛ぶ直前にスロットから読み直す命令で埋め合わせていた）。**同じ値を
+	// 2度決めない。**
+	em.sretDest = null;
+	// 返値スロットの中で、入れ子をどこまで置いたか（親のすぐ後ろから前順に伸びる）。
+	em.sretBump = 0;
+	em.sretLimit = null;
+	em.sretTotal = null;
+	// **具体化された実体も同じ器を返す。** 名前は `take_while$is_digit` に変わるが、返す形は
+	// 元の定義が決めているので、素の名前でも引く——ここを見落とすと、多相な関数だけが
+	// sret から取り残される（実際 `take_while` がそうなっていた）。
+	const sretKey = bareName(name).split("$")[0];
+	const sretEntry = em.sretPlan && (em.sretPlan.get(bareName(name)) || em.sretPlan.get(sretKey));
+	if (sretEntry && sretEntry.needsSlot) {
+		em.push();
+		em.sretDest = (em.slot - 1) * 8;
+		em.store("x8", em.sretDest, "返値スロットのアドレス（sret）を退避");
+		// **どこまでが自分のものかは、呼ぶ側にしか分からない。**
+		//
+		// 以前はここで上界の式を自分の仮引数から計算し直していた（呼ぶ側と同じ式なので
+		// 一致する、という理屈）。追記の道でそれが崩れる——`(s ' 0) (g s (i - 1))` は
+		// 器の**続き**を書くので、段が下がるたびに宛先だけが進み、仮引数 `s` は同じまま
+		// である。自分で計算すると毎段まるごとの容量が答えになり、照合は素通りする
+		// （実測：上界3に対し41要素書いて qemu が止まる）。
+		//
+		// **割れ目は呼ぶ側の情報である**——ジッパーの焦点を呼ぶ側が選ぶのと同じ形で、
+		// 残りは渡すしかない。渡ってくるなら呼ばれた側が計算し直す理由も無い：
+		// **決めるのは1箇所**である。
+		em.push();
+		em.sretLimit = (em.slot - 1) * 8;
+		em.store(SRET_LIMIT, em.sretLimit, "返値スロットに入る個数（sret）を退避");
+		// **自分自身への追記をループにするための2つ。** 追記は器の続きを書くので、段が
+		// 下がるたびに宛先だけが進む——ならば段を下げずに**宛先だけ進めればループになる**
+		// （clang が `1 + f(…)` を蓄積子でループへ均すのと同じ変換）。
+		//
+		//   底（`sretBase`）  …… 返す `ptr`。周を回っても動かない。
+		//   合計（`sretTotal`）…… ここまでに書いた個数。周を跨いで積む。
+		//   カーソル（`sretDest`）…… 次に書く場所。周ごとに `k×幅` 進む。
+		//
+		// 3つとも**飛び先（`.Lloop`）より前**に置く。スロットは `x29` 相対でフレームは
+		// 畳まれないので、後ろ向き辺を跨いで生き残る。
+		//
+		// **自分を呼ばない関数には持たせない**（`callsItself`）。スロットが2つ増えるだけで
+		// 割り当ての持ち駒を越え、関数が丸ごとメモリへ落ちる。
+		if (callsItself(lambdaNode.right, name)) {
+			em.push();
+			em.sretTotal = (em.slot - 1) * 8;
+			em.emit(`mov ${SCRATCH[0]}, #0`, "ここまでに書いた個数");
+			em.store(SCRATCH[0], em.sretTotal, "周を跨ぐ合計");
+		}
+	}
+	em.sretLooped = false;
 	const loopLabel = em.newLabel("loop");
 	em.label(loopLabel);
 	const bracketPairs = [];
@@ -8540,37 +8680,6 @@ function genFunction(name, lambdaNode, env, em, mono) {
 			em.store(SCRATCH[0], (em.slot - 1) * 8, note);
 		}
 	});
-	// **x8 は最初の `bl` で壊れる。** 呼び出し側から受け取った返値スロットのアドレスは
-	// 本体の最後まで要るので、仮引数と同じくスロットへ写しておく。呼ばれた側が自分でも
-	// 誰かを呼ぶなら、その `bl` が x8 を自分の用途で上書きするからである。
-	// **具体化された実体も同じ器を返す。** 名前は `take_while$is_digit` に変わるが、
-	// 返す形は元の定義が決めているので、素の名前でも引く——ここを見落とすと、多相な
-	// 関数だけが sret から取り残される（実際 `take_while` がそうなっていた）。
-	em.sretDest = null;
-	// 返値スロットの中で、入れ子をどこまで置いたか（親のすぐ後ろから前順に伸びる）。
-	em.sretBump = 0;
-	const sretKey = bareName(name).split("$")[0];
-	const sretEntry = em.sretPlan && (em.sretPlan.get(bareName(name)) || em.sretPlan.get(sretKey));
-	em.sretLimit = null;
-	if (sretEntry && sretEntry.needsSlot) {
-		em.push();
-		em.sretDest = (em.slot - 1) * 8;
-		em.store("x8", em.sretDest, "返値スロットのアドレス（sret）を退避");
-		// **どこまでが自分のものかは、呼ぶ側にしか分からない。**
-		//
-		// 以前はここで上界の式を自分の仮引数から計算し直していた（呼ぶ側と同じ式なので
-		// 一致する、という理屈）。追記の道でそれが崩れる——`(s ' 0) (g s (i - 1))` は
-		// 器の**続き**を書くので、段が下がるたびに宛先だけが進み、仮引数 `s` は同じまま
-		// である。自分で計算すると毎段まるごとの容量が答えになり、照合は素通りする
-		// （実測：上界3に対し41要素書いて qemu が止まる）。
-		//
-		// **割れ目は呼ぶ側の情報である**——ジッパーの焦点を呼ぶ側が選ぶのと同じ形で、
-		// 残りは渡すしかない。渡ってくるなら呼ばれた側が計算し直す理由も無い：
-		// **決めるのは1箇所**である。
-		em.push();
-		em.sretLimit = (em.slot - 1) * 8;
-		em.store(SRET_LIMIT, em.sretLimit, "返値スロットに入る個数（sret）を退避");
-	}
 	for (const [pn, cn] of Object.entries(callees)) em.emit(`// ${bareName(pn)} = ${cn}`, "具体化された呼び先");
 
 	// **完全性公理を出す。** `f __ = __`——所有の引数に有効値が揃って初めて呼び出しが
@@ -8828,6 +8937,14 @@ function genFunction(name, lambdaNode, env, em, mono) {
 			// 呼ぶ側の記憶を指したまま返っており、追記の勘定（`len = k + 呼び先の len`）が
 			// 空振りしていた。問いは枝ごとではなく出口で1つである（`emitSretLanding`）。
 			if (ok === 2 && sretEntry && sretEntry.needsSlot) emitSretLanding(em, sretEntry.width);
+			// **ループにしたなら、返すのは底と合計である。** 周の中で返ってきたのは
+			// 「カーソルから何個書いたか」でしかない——器の全体は底から始まり、長さは
+			// 周を跨いだ合計である。着地はカーソルに対して先に済ませてから底へ戻す。
+			if (ok === 2 && em.sretLooped) {
+				emitSretBase(em, "x0", sretEntry.width);
+				em.load(SCRATCH[0], em.sretTotal, "周を跨いだ合計");
+				em.emit(`add x1, x1, ${SCRATCH[0]}`, "最後の周のぶんを足す");
+			}
 		}
 		// 崩壊したときの出口。返値と同じ幅で `__` を置く——枝によって幅が変わると
 		// 呼び出し側が読む本数が決まらない。
@@ -8836,7 +8953,21 @@ function genFunction(name, lambdaNode, env, em, mono) {
 			const done = ok === TAIL ? null : em.newLabel("done");
 			if (done) em.emit(`b ${done}`);
 			em.label(unitLabel);
-			emitUnitRegs(em, Math.min(width, 2));
+			// **ループにしたなら、崩壊しても積んだぶんは残る。**
+			//
+			// 再帰なら `f __ = __` は**呼び先**が `__` になるだけで、呼ぶ側は自分が置いた
+			// k を持ったまま `(s ' 0) __ = [s ' 0]` と畳む（構築は `__` を落とす）。ところが
+			// 飛び戻る形では持ち主が居ない——ここで素の `__` を返すと、**それまでに書いた
+			// 全部が消える**。実測で `||f \`abcde\`||` が 5 ではなく `__` になった。
+			//
+			// だから返すのは底と合計である。1周目で崩壊したなら合計は 0 で、`{底, 0}` は
+			// そのまま `__`（器の `__` は長さ 0）——同じ答えに落ちる。
+			if (em.sretLooped && Math.min(width, 2) === 2) {
+				emitSretBase(em, "x0", sretEntry && sretEntry.width);
+				em.load("x1", em.sretTotal, "周を跨いだ合計（0 ならそのまま __）");
+			} else {
+				emitUnitRegs(em, Math.min(width, 2));
+			}
 			if (done) em.label(done);
 		}
 	} else if (em.diagnostics.length === before) {
@@ -9049,7 +9180,12 @@ function generateAsm(nodes, env, options = {}) {
 	// **`_sign_main` は sret の受け手ではない。** 直前に出した関数が残した印を
 	// そのまま持ち込むと、トップレベルで作った器が**死んだ他人のスロット**へ書かれる
 	// ——トップレベルは返さないので `escapesFrame` が付いておらず、素通りしてしまう。
+	// **印は一式で捨てる。** 底・合計・上限はスロットの番号であって、他人のフレームの
+	// 番号を持ち込めば読む場所を間違える。1つ消して3つ残す方が危ない。
 	em.sretDest = null;
+	em.sretTotal = null;
+	em.sretLimit = null;
+	em.sretLooped = false;
 	let last = null; // 最後に値を出した式の置き場所（`_sign_main` の返値になる）
 	for (const node of exprs) {
 		// **裸の文字列リテラルはコメントである**（string_and_comment.md）。Sign の
