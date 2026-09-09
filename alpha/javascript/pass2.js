@@ -119,8 +119,16 @@ function resolveDensity(rawItems, env) {
       i++;
     }
     // coreに近い方から先に結合（前置は右から、後置は左から）
+    //
+    // **後置は左から回す。** ここは前置と同じく末尾から回していたが、後置は core に近い方が
+    // **左端**なので順序が反転していた——`x@~` が `[[_@] [[_~] x]]`（展開してから読む）に
+    // なっており、正しくは `[[_~] [[_@] x]]`（読んでから展開する）である。上のコメントは
+    // 最初から「後置は左から」と書いてあり、コードだけが違っていた。
+    //
+    // 気づかれなかったのは、実際に使う後置の連なりが `` `file.sn`@~ `` の1つだけで、
+    // 文字列に対する展開が恒等なので**順序が観測できなかった**ためである。
     let node = core;
-    for (let k = postOps.length - 1; k >= 0; k--) {
+    for (let k = 0; k < postOps.length; k++) {
       const op = postOps[k];
       const operand = node;
       node = { type: "operation", op, name: lookup(op, "postfix")?.name, position: "postfix", operand };

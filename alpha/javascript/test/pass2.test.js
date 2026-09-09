@@ -30,6 +30,20 @@ const cases = [
 	{ input: "f : x ? x + 1", want: "define[identifier(<f>), lambda[identifier(<x>), add[identifier(<x>), number(1)]]]", note: "define/lambdaのネスト" },
 	{ input: "@x", want: "input(identifier(<x>))", note: "前置密着演算子の解決" },
 	{ input: "x@", want: "import(identifier(<x>))", note: "後置密着演算子の解決" },
+	// **密着の連なりは core に近い方から結合する。** 前置は core に近いのが右端、後置は
+	// **左端**である。後置だけ末尾から回していたので順序が反転しており、x@~ が
+	// 「展開してから読む」になっていた（正しくは「読んでから展開する」）。
+	//
+	// **気づけなかったのは、実際に使う連なりがインポートの綴り（バッククォートで囲んだ
+	// ファイル名に @~ を付けたもの）1つだけで、文字列に対する展開が恒等なので順序が
+	// 観測できなかったからである。** 差の出る組み合わせを見る。
+	{ input: "x@~", want: "expand(import(identifier(<x>)))", note: "後置の連なりは左から" },
+	{ input: "x~@", want: "import(expand(identifier(<x>)))", note: "後置の連なりは左から（逆順）" },
+	{ input: "x!~", want: "expand(factorial(identifier(<x>)))", note: "後置3種でも同じ" },
+	{ input: "!$x", want: "not(address(identifier(<x>)))", note: "前置の連なりは右から（core に近い方が先）" },
+	{ input: "$!x", want: "address(not(identifier(<x>)))", note: "前置の連なりは右から（逆順）" },
+	{ input: "!a!", want: "not(factorial(identifier(<a>)))", note: "前置と後置が混ざっても core に近い方が先" },
+	{ input: "~a~", want: "continuous(expand(identifier(<a>)))", note: "同じ綴りが両側でも同じ" },
 	{ input: "x ' y", want: "get_prop[identifier(<x>), identifier(<y>)]", note: "GetLeft" },
 	{
 		input: "$[array ' 0] # 3",
