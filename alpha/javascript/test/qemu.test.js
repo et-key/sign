@@ -96,12 +96,12 @@ function agree(note, source, charset = "ascii", layer = 1) {
  * 出せないものが**名指しされている**ことを見る。黙って別の答えを出していないこと、
  * すなわち「まだ」と言えていることの確認である。
  */
-function checkNamed(note, source) {
+function checkNamed(note, source, charset = "ascii") {
 	total++;
 	let msg = "（診断が出なかった）";
 	try {
-		const { nodes, env } = compile(source, { charset: "ascii", readImport });
-		const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset: "ascii", layer: 1 });
+		const { nodes, env } = compile(source, { charset, readImport });
+		const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset, layer: 1 });
 		if (r.diagnostics.length > 0) {
 			passed++;
 			console.log(`ok   ${note.padEnd(34)} ${r.diagnostics[0].message.replace(/（.*/, "")}`);
@@ -366,6 +366,27 @@ agree("尽きたら __", "f : x ?\n\tx > 10 : 1\nf 7");
 	// 機械にその幅の命令が無いものは名指しで断る（割り切れない `12u` も同じ）。
 	checkNamed("3 byte の命令は無い", "@(03x40810028 # 1)");
 	checkNamed("割り切れない幅は無い", "@12u0041");
+	// **`Nu` の幅も、言ったなら守らせる。**
+	//
+	// `literalParts` は `u` の幅を計算していたのに、`unicode` リテラルの利用者は全員
+	// `literalDigits`（数字部分）しか読んでいなかった——**1箇所で決めたのに誰も引かない**。
+	// 実測（どちらも診断ゼロ）：`8u3042` が「あ」を返し、`12u41` が「A」を返していた。
+	// `Nx` の側（`@`/`#`）は同じ問いを3箇所で立てているのに、`u` の側には無かった。
+	//
+	// **`@` を通さない裸のリテラルが素通りしていた**ので、そちらを見る（上の `@12u0041`
+	// は番地の道である）。
+	//
+	// **charset を渡すのが要る。** ascii のまま `8u3042` を書くと、幅の検査より手前で
+	// 「charset に収まらない文字です」の門に当たる——しかもそちらは診断ではなく**例外**
+	// なので、名指しを見る検査からは「名指しされなかった」に見える。見たいのは幅の側なので、
+	// その文字が charset には収まる設定で問う。
+	checkNamed("裸の 12u も断る", "12u41");
+	checkNamed("幅に入らない符号位置", "8u3042", "utf16");
+	checkNamed("幅に入らない絵文字", "8u1F600", "utf32");
+	// 言っていない（`0u`）なら何も言わない。入る幅も通る。
+	agree("0u は幅を言っていない", "0u3042", "utf16");
+	agree("16u なら入る", "16u3042", "utf16");
+	agree("8u41 は入る", "8u41", "utf16");
 	// **中置 `@` は `'` の左右を入れ替えた形である**（`x @ p` ＝ `p ' x`）。
 	//
 	// 演算子表は両方を tier 17 の `get` と定めている。違うのは語順だけで、`s ' x` が

@@ -243,6 +243,36 @@ function slotsOfNode(node, conf, env) {
 	return pass ? Math.max(pass.slots, 1) : null;
 }
 
+/**
+ * **`Nu` の幅も、言ったなら守らせる。**
+ *
+ * `literalParts` は `u` の幅をちゃんと計算している（`8u` なら 1 byte、`12u` なら機械に
+ * 無いので NaN）。ところが `unicode` リテラルの利用者は**全員 `literalDigits` しか読んで
+ * いなかった**——幅は計算されて、誰にも引かれていなかった。
+ *
+ * 実測（どちらも診断ゼロ）：`8u3042` が「あ」を返す（0x3042 は 1 byte に入らない）。
+ * `12u41` が「A」を返す（12 ビット幅の読み書きは機械に無い）。`Nx` の側（`@`/`#`）は
+ * 同じ問いを3箇所で立てているのに、`u` の側には一度も無かった。
+ *
+ * **1箇所で決めたのに誰も引かない**、という形である。今日ずっと出てきた「同じ事実が
+ * 2箇所」のちょうど裏返しで、片方は食い違い、こちらは素通りになる。
+ *
+ * `0u` は「幅を言っていない」なので何も言わない（`option.ms` へ落ちる）。
+ */
+function unicodeWidthError(n) {
+	if (!n || n.type !== "atom" || n.kind !== "unicode") return null;
+	const p = literalParts(n.value);
+	if (!p || p.family !== "u") return null;
+	if (Number.isNaN(p.width)) return "その幅の命令が機械にありません（プリフィックスの数を見直してください）";
+	if (p.width === null) return null; // `0u` は幅を言っていない
+	const cp = parseInt(p.digits, 16);
+	if (!Number.isFinite(cp)) return null;
+	// 8 byte 以上は符号位置の側が先に尽きるので、問う意味が無い。
+	if (p.width < 8 && cp >= 2 ** (p.width * 8))
+		return `符号位置がプリフィックスの幅に入りません（0x${p.digits} は ${p.width} byte に収まりません——幅を上げるか 0u と書いてください）`;
+	return null;
+}
+
 function codePointsOf(n) {
 	if (n.kind === "char") return [...n.value.slice(1)].map((c) => c.codePointAt(0));
 	if (n.kind === "string") return [...n.value.slice(1, -1)].map((c) => c.codePointAt(0));
@@ -1080,6 +1110,8 @@ function genExpr(node, env, em, scope, tail = false) {
 	// 2文字以上は要素の並びなので `.rodata` へ置いて `{ptr, len}` で渡す
 	// （stack_abi.md §4.6）。
 	if (n.type === "atom" && (n.kind === "char" || n.kind === "string" || n.kind === "unicode")) {
+		const wErr = unicodeWidthError(n);
+		if (wErr) return em.fail(n, wErr);
 		const cps = codePointsOf(n);
 		if (cps === null) return em.fail(n, "文字列の中身が読めません");
 		// **U+0000 は文字ではなく `__` である**（value_representation.md §3）。Char の
