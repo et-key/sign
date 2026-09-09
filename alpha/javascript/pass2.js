@@ -720,11 +720,18 @@ function wantsMore(a, env) {
  * 関数自身のアリティに聞く。
  */
 const COPRODUCT_PHASES = [
+  // **合成が最も内側である。** `double inc 5` は「double してから inc」——射が並んだら
+  // まず合成が決まり、その合成へ値が渡る。ここが未飽和の適用より後ろにあると
+  // `inc 5` が先に潰れて `double (inc 5)` になり、順序が逆さまになる。
+  //
+  // 以前これが後ろにあっても合っていたのは、1引数の関数のアリティが `null` だった
+  // （`pass1.js` の `countArity`）ため未飽和の適用が不発だったからで、**バグが順序を
+  // 肩代わりしていた**。アリティを正しく数えるようにした時点で、順序の方を直す番になる。
+  { match: (catA, catB) => catA === "Lambda" && catB === "Lambda" }, // compose
   // 未飽和の適用。飽和するまでは適用が内側である。
   { match: (catA, catB, a, b, env) => catA === "Lambda" && catB === "Atom" && wantsMore(a, env) },
   // 構築。飽和した関数の右に並ぶ Atom は、まず器になる。
   { match: (catA, catB) => catA === "Atom" && catB === "Atom" },
-  { match: (catA, catB) => catA === "Lambda" && catB === "Lambda" }, // compose
   // apply。**貪欲さはもう要らない。**
   //
   // 以前はここに「裸の中置演算子（`[+]`）は右の Atom を食えるだけ食う」という特例が

@@ -86,7 +86,12 @@ function countArity(paramTokens) {
   if (paramTokens.length === 1 && Array.isArray(paramTokens[0])) {
     return countNestedArity(paramTokens[0]);
   }
-  if (paramTokens.length === 1) return null; // 単一の裸パラメータ
+  // **単一の裸パラメータもアリティ1である。** ここだけ null を返していたので、1引数の
+  // 関数は「アリティ不明」になり、余積の解決で未飽和と見なされず（pass2.js の wantsMore）、
+  // `d : x ? …` に `d 1 2` と書くと `(d 1) 2` ではなく `d (1 2)` になっていた——余った
+  // 実引数が器へ巻き込まれる。countRequiredArity は同じ場合に 1 を返しており、**同じ事実が
+  // 2箇所で決まって食い違っていた**。countBareArity は単一トークンで 1、`~_` で Infinity を
+  // 返すので、特例を置かずに通せばよい。
   return countBareArity(paramTokens);
 }
 
