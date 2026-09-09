@@ -161,7 +161,7 @@ hole = "_"
 
 // --- Operators and symbols (prefix / postfix / infix behaviour is settled by the shunting-yard) ---
 prefix
-  = "###" / "##" / "#" / $("-" &(Block / identifier)) / "~" / "!!" / "!" / "$" / "@"
+  = "###" / "##" / "#" / $("-" &(Block / identifier / hole)) / "~" / "!!" / "!" / "$" / "@"
 
 postfix
   = "!" / "~" / "@"
