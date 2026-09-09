@@ -29,6 +29,16 @@ const cases = [
 	{ input: "1 + 2 * 3", want: "add[number(1), mul[number(2), number(3)]]", note: "算術優先順位（*が+より先に縮約）" },
 	{ input: "f : x ? x + 1", want: "define[identifier(<f>), lambda[identifier(<x>), add[identifier(<x>), number(1)]]]", note: "define/lambdaのネスト" },
 	{ input: "@x", want: "input(identifier(<x>))", note: "前置密着演算子の解決" },
+	// **前置の負号は綴りが化けていた。** 文法が ("-" &(Block / identifier)) と書いており、
+	// 述語は何も消費しないのにシーケンスの結果には並ぶので、["-", undefined] が "-," という
+	// 綴りになっていた。表を引けず name が undefined になり、解釈器は「未対応の前置/後置演算」
+	// で落ち、機械は「まだ出せない式です」で断る——-y と書けなかった。テキスト取りの $ で
+	// 囲んで直した（述語の結果を捨てて、消費した文字列そのものを綴りにする）。
+	//
+	// 数値リテラルの -3 は別の道（リテラル側）なので通っていた。**通る例が1つあると、
+	// 壊れている道に気づけない。**
+	{ input: "-x", want: "negate(identifier(<x>))", note: "前置の負号は綴りが化けない" },
+	{ input: "-(1 + 2)", want: "negate(paren{add[number(1), number(2)]})", note: "負号はブロックにも付く" },
 	{ input: "x@", want: "import(identifier(<x>))", note: "後置密着演算子の解決" },
 	// **密着の連なりは core に近い方から結合する。** 前置は core に近いのが右端、後置は
 	// **左端**である。後置だけ末尾から回していたので順序が反転しており、x@~ が
