@@ -7330,6 +7330,13 @@ function slotsToRegisters(lines) {
 		if (!/\bx29\b/.test(t)) continue;
 		if (ST.test(t) || LD.test(t)) continue;
 		if (/^mov\s+x29,\s*sp$/.test(t)) continue;
+		// **`mov sp, x29` は漏れではない。** x29 を*読んで* `sp` を戻すだけで、番地は誰の
+		// 手にも渡らない——ここが見ているのは「フレームの番地が外へ出たか」である。
+		//
+		// 逆向き（`mov x29, sp`）しか通していなかったので、`sp` を動かして戻す関数は
+		// 割り当てを**丸ごと**諦めていた。追記をループにすると飛ぶ手前で `mov sp, x29` が
+		// 出るので、`tokens` がここで落ちて往復が 157 本残っていた（+133 命令）。
+		if (/^mov\s+sp,\s*x29$/.test(t)) continue;
 		if (/^(stp|ldp)\s+x29,\s*x30,/.test(t)) continue;
 		return null;
 	}
@@ -7370,38 +7377,78 @@ function slotsToRegisters(lines) {
 
 	// 深さは順位で詰める（飛び飛びでも入れ子は保たれるので、順位は色として正しい）。
 	const depths = [...used].sort((a, b) => a - b);
-	// **使い捨てで足りるときだけそちらを使う。** 足りなければ callee-saved に落ちる
-	// ——空きが無いことは「割り当てない」理由にはならない（一度そうして往復が倍に
-	// 戻った）。
-	const cheap = depths.length <= free.length;
-	const bank = cheap ? free : SLOT_REGS;
-	if (depths.length > bank.length) return null;
-	const at = new Map(depths.map((d, i) => [d, bank[i]]));
-	const regs = depths.map((d) => at.get(d));
-	// 移す先を本体が既に使っていないか（呼ぶ先は AAPCS64 に従って守ってくれる）。
+	// **配る先を本体が既に使っていないか。** 32ビット名は同じレジスタなので w も数える。
+	//
+	// ここは長らく死んでいた——"\\b" は正規表現にすると「バックスラッシュ1文字」を探す
+	// 綴りで、機械語には現れない。実害は出ていなかった（本体は x19–x28 を触らない）が、
+	// **安全だと思い込む材料にはなっていた**。しかも「1本でも被ったら関数まるごと諦める」
+	// という判断そのものが強すぎる——被った1本を配らなければ済む話である。
+	const bodyUses = new Set();
 	for (const l of lines) {
 		const t = insOf(l);
 		if (ST.test(t) || LD.test(t)) continue;
-		// **ここも 32 ビット名を数える。** x14 を配ったのに本体が w14 を書いていたら、
-		// 同じレジスタを2人が使うことになる。
-		if (regs.some((r) => new RegExp("\\\\b[wx]" + r.slice(1) + "\\\\b").test(t))) return null;
+		for (const m of t.matchAll(/\b[wx](\d+)\b/g)) bodyUses.add("x" + m[1]);
 	}
+	// **使い捨てで足りるときだけそちらを使う。** 足りなければ callee-saved に落ちる
+	// ——空きが無いことは「割り当てない」理由にはならない（一度そうして往復が倍に戻った）。
+	const cheapBank = free.filter((r) => !bodyUses.has(r));
+	const savedBank = SLOT_REGS.filter((r) => !bodyUses.has(r));
+	const cheap = depths.length <= cheapBank.length;
+	const bank = cheap ? cheapBank : savedBank;
+	if (bank.length === 0) return null;
+
+	// **入るだけ入れる。** 以前は持ち駒（10本）を1つでも越えたら null を返し、**何も
+	// 割り当てなかった**。1本足りないだけで関数が丸ごと記憶へ落ちる崖で、実測では
+	// スロットを2つ足しただけで tokens がそこから落ち、往復が 30 → 278 になった。
+	//
+	// 入れ子の生存区間では**深さがそのまま色**なので、部分集合を配っても衝突しない
+	// ——配らなかった深さは記憶のままで、そこだけ往復が残る。全か無かである理由は無かった。
+	//
+	// どれを配るかは**触る回数**で決める。深い方が短命とは限らず（枝の中で何度も読む
+	// スロットがある）、順位で切ると往復の多い方を落としかねない。
+	const hits = new Map();
+	for (const l of lines) {
+		const m = ST.exec(insOf(l)) || LD.exec(insOf(l));
+		if (m) {
+			const d = (Number(m[2]) - 16) / 8;
+			hits.set(d, (hits.get(d) || 0) + 1);
+		}
+	}
+	const chosen = [...depths]
+		.sort((x, y) => (hits.get(y) || 0) - (hits.get(x) || 0) || x - y)
+		.slice(0, bank.length)
+		.sort((x, y) => x - y);
+	const at = new Map(chosen.map((d, i) => [d, bank[i]]));
+	const regs = chosen.map((d) => at.get(d));
+
+	// **記憶に残るスロットは前へ詰める。** 退避はその後ろに置く（calleeSaveLines の base）
+	// ので、隙間を残すと退避と重なる。全部配れていた頃はスロットの領域をそのまま退避に
+	// 使い回していて、**そこが全か無かの本当の理由**だった。
+	const kept = depths.filter((d) => !at.has(d));
+	const to = new Map(kept.map((d, i) => [d, 16 + i * 8]));
+	const off = (v) => to.get((Number(v) - 16) / 8);
 	const out = lines.map((l) => {
 		const t = insOf(l);
 		const st = ST.exec(t);
-		if (st) return "\tmov " + at.get((Number(st[2]) - 16) / 8) + ", " + st[1];
+		if (st) {
+			const d = (Number(st[2]) - 16) / 8;
+			return at.has(d) ? "\tmov " + at.get(d) + ", " + st[1] : "\tstr " + st[1] + ", [x29, #" + off(st[2]) + "]";
+		}
 		const ld = LD.exec(t);
-		if (ld) return "\tmov " + ld[1] + ", " + at.get((Number(ld[2]) - 16) / 8);
+		if (ld) {
+			const d = (Number(ld[2]) - 16) / 8;
+			return at.has(d) ? "\tmov " + ld[1] + ", " + at.get(d) : "\tldr " + ld[1] + ", [x29, #" + off(ld[2]) + "]";
+		}
 		return l;
 	});
-	return { lines: out, regs, needsSaving: !cheap };
+	return { lines: out, regs, needsSaving: !cheap, kept: kept.length };
 }
 
 /** 退避／復帰の組を作る（`x29` 相対で、**フレームの中に**置く）。 */
-function calleeSaveLines(regs, verb) {
+function calleeSaveLines(regs, verb, base = 16) {
 	const out = [];
 	for (let i = 0; i < regs.length; i += 2) {
-		const off = 16 + i * 8;
+		const off = base + i * 8;
 		const two = regs[i + 1];
 		const op = verb === "save" ? (two ? "stp" : "str") : two ? "ldp" : "ldr";
 		out.push("\t" + op + " " + regs[i] + (two ? ", " + two : "") + ", [x29, #" + off + "]");
@@ -8035,10 +8082,13 @@ function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true) {
 	// （`mov x9, #12` / `mov x21, x9` が `mov x10, #12` に畳まれても x21 を退避し続けた）。
 	// 何を守るかは、本文が決まってからでなければ決まらない。
 	const live = moved && moved.needsSaving ? moved.regs.filter((r) => bodyLines.some((l) => new RegExp("\\b" + r + "\\b").test(l.split("//")[0]))) : [];
-	const saves = calleeSaveLines(live, "save");
-	const back = calleeSaveLines(live, "restore");
-	// x29/x30 の16バイト + （スロット、または移した先の退避）
-	const cells = moved ? live.length : slots;
+	// **退避は、記憶に残したスロットの後ろへ置く。** 全部配れたときだけスロットの領域を
+	// 使い回せる——一部を残すなら、そこは塞がっている。
+	const keptCells = moved ? moved.kept : 0;
+	const saves = calleeSaveLines(live, "save", 16 + keptCells * 8);
+	const back = calleeSaveLines(live, "restore", 16 + keptCells * 8);
+	// x29/x30 の16バイト + （記憶に残したスロット ＋ 移した先の退避）
+	const cells = moved ? keptCells + live.length : slots;
 	const frame = 16 + Math.ceil((cells * 8) / 16) * 16;
 
 	// 相互末尾呼び出しが置いた印を、決まったフレームの大きさで埋める。
