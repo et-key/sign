@@ -158,9 +158,6 @@ const FRAME_MARK = "@@FRAME@@";
 // 比較が偽のときに返す値＝`__` の niche（value_representation.md §3.5）。
 // **`0` ではない。** Sign では `0` は真であり、`0 = 0` は真で `0` を返す。
 
-// 余積族（pass2 が空白を解くときに使う名前）。適用として読めなかった形を名指しするのに要る。
-const COPRODUCT_OPS_P4 = new Set(["construct", "concat", "push", "unshift"]);
-
 function isIdentifierNode(n) {
 	return !!n && n.type === "atom" && n.kind === "identifier";
 }
@@ -324,11 +321,60 @@ function defaultOfParam(lambdaNode, name) {
 	return (e && e.default) || null;
 }
 
+/**
+ * ラムダが**外の関数の束縛**を捕まえているか。
+ *
+ * 自分の仮引数は**仮引数の並びから**取る。スコープの深さでは決まらない——多引数の
+ * ラムダはスコープがカリー化されて入れ子になり、`p q ? p * q` の一番内側は `q` しか
+ * 持たず、`p` はその親（同じラムダの外側の段）に居る。深さで見ると自分の仮引数を外の
+ * 関数の束縛と取り違える（実際に取り違えて、2引数の無名ラムダだけ吊り上がらなかった）。
+ *
+ * 仮引数でも本体の局所でもない名前は、上へ辿って最初に見つかった所で判定する——
+ * トップ（親の無いスコープ）なら大域で捕獲ではなく、途中なら外の関数の束縛である。
+ * 迷った側は「捕まえる」に倒れる——吊り上げないだけなので安全側である。
+ */
+function capturesFreeVars(lam) {
+	const own = lam && lam.scope;
+	if (!own) return true;
+	const mine = new Set();
+	const collect = (pn) => {
+		if (!pn) return;
+		if (isIdentifierNode(pn)) { mine.add(pn.value); return; }
+		if (pn.type !== "params") return;
+		for (const en of pn.entries || []) {
+			if (en.name) mine.add(en.name);
+			if (en.pattern) collect(en.pattern);
+		}
+	};
+	collect(lam.left);
+	const ids = [];
+	const walk = (n) => {
+		if (!n || typeof n !== "object") return;
+		if (n.type === "atom" && n.kind === "identifier") ids.push(n.value);
+		for (const k of ["left", "right", "operand", "middle"]) walk(n[k]);
+		for (const l of n.lines || []) walk(l);
+		for (const en of n.entries || []) walk(en.default);
+	};
+	walk(lam.right);
+	for (const id of ids) {
+		if (mine.has(id) || (own.bindings && own.bindings.has(id))) continue;
+		for (let s = own.parent; s; s = s.parent) {
+			if (s.bindings && s.bindings.has(id)) {
+				if (s.parent) return true;
+				break;
+			}
+		}
+	}
+	return false;
+}
+
 function collectMonomorphs(nodes) {
 	const table = new Map();
 	// デフォルトに直接書かれたラムダへ与えた名前。呼び出しサイトの走査で埋まる。
 	const hoisted = new Map();
 	table.hoisted = hoisted;
+	// 呼び出しサイトで `$` を付けた無名のラムダへ与えた名前（節 → ラベル）。同じ節は同じ名前。
+	const anonLabels = new Map();
 	// まず「アドレス経由で呼ばれる仮引数」を持つ関数を見つける。
 	for (const node of nodes) {
 		if (!isDefineNode(node) || !isIdentifierNode(node.left)) continue;
@@ -404,6 +450,27 @@ function collectMonomorphs(nodes) {
 							if (!hoisted.has(label)) hoisted.set(label, inline);
 							callees[pn] = label;
 							continue;
+						}
+						// **無名のラムダに `$` を付けたものも、名前を与えれば `$名前` と同じ道に乗る。**
+						// 上のデフォルトの吊り上げと同じ理屈で、名前が無いぶんをここで作る。名前には `$` を
+						// 含めるので利用者の識別子と衝突しない（Sign の字句では `$` は演算子であり、名前に
+						// 書けない）。アセンブリのラベルは `$` を普通に使えるので、`app$add` と同じ慣習に乗る。
+						//
+						// **捕獲するものは吊り上げない。** 自由変数を持つラムダをトップへ出すと、捕まえた
+						// 変数の置き場が無い——それは仮引数へ足して通すリフティングの仕事で、まだ無い。
+						// 吊り上げずに通すと ok = false のまま下の診断へ落ちる（黙って壊れた実体は出さない）。
+						if (a && a.type === "operation" && a.position === "prefix" && a.name === "address") {
+							const lam = unwrap(a.operand);
+							if (lam && lam.type === "operation" && lam.name === "lambda" && !capturesFreeVars(lam)) {
+								let label = anonLabels.get(lam);
+								if (!label) {
+									label = `${bareName(base.value)}$${bareName(pn)}$${anonLabels.size}`;
+									anonLabels.set(lam, label);
+									hoisted.set(label, lam);
+								}
+								callees[pn] = label;
+								continue;
+							}
 						}
 						// `$名前` だけを具体化できる。式で作ったアドレスは静的に決まらない。
 						if (a && a.type === "operation" && a.position === "prefix" && a.name === "address" && isIdentifierNode(a.operand)) {
@@ -9381,43 +9448,6 @@ function generateAsm(nodes, env, options = {}) {
 					node: n,
 				});
 			}
-			// **アリティの分からない呼び先を適用した結果は、余積へ落としてはいけない。**
-			//
-			// `(@f x) y` を pass2 は `construct(apply(@f, x), y)` と組む——その時点で `@f` の
-			// アリティが分からないので「適用ではない」と決め打つしかないからである。決め打ちが
-			// 外れると、足りない引数が `__` で埋まり、完全性公理で結果が `__` になり、それと `y`
-			// で器が組まれて**番地が返る**（実機で 1074332096、診断ゼロ）。解釈器も 4 を返していた。
-			//
-			// pass4 は具体化の時点で呼び先を知っている（生成コードに `f = add` と出る）が、木は
-			// もう組まれた後である。**順序の問題であって、印（`$`）の問題ではない**。
-			//
-			// **層の禁止と実装の穴を区別する。** この形を通すには、単相化で解けないぶんを閉包に
-			// するしかない——閉包は捕獲した引数の置き場が要るので確保であり、layer 0 には無い。
-			// だから layer 0 では設計上の結論であって「まだ」ではない。layer 1 以上は実装の穴で
-			// あり、直す道は「具体化した実体ごとに本体を pass2 へ通し直す」ことである。
-			// （layer 4 でローダが入ると単相化が動的境界を越えられないので、そこでは関数値が
-			// 必然になる——同じ形が層によって「禁止／まだ／必要」と変わる。）
-			if (n.type === "operation" && COPRODUCT_OPS_P4.has(n.name)) {
-				const u = unwrap(n.left);
-				const c = u && u.type === "operation" && u.name === "apply" ? unwrap(u.left) : null;
-				if (c && c.type === "operation" && c.position === "prefix" && c.name === "input" && isIdentifierNode(c.operand)) {
-					const lay = em.conf.layer;
-					const who = bareName(c.operand.value);
-					em.diagnostics.push({
-						severity: "error",
-						message:
-							lay !== undefined && lay < 1
-								? `layer: ${lay} では「@${who} … を括って更に適用する」形を出せません` +
-								  "（単相化で解けないぶんは閉包になり、捕獲した引数の置き場＝確保が要る）。" +
-								  "引数を1つずつ渡す形（`@名前 引数` を1回だけ）にしてください"
-								: `「@${who} … を括って更に適用する」形は、まだ出せません` +
-								  "——括りの中の適用が飽和しているかどうかが、呼び先の具体化より前には決まらないため、" +
-								  "外側が適用ではなく余積として読まれています。" +
-								  "いまは引数を1つずつ渡す形（`@名前 引数` を1回だけ）にしてください",
-						node: n,
-					});
-				}
-			}
 			for (const k of ["left", "right", "operand", "middle"]) walk(n[k], false);
 			for (const l of n.lines || []) walk(l, true);
 			for (const e of n.entries || []) walk(e.default, false);
@@ -9516,7 +9546,9 @@ function generateAsm(nodes, env, options = {}) {
 					for (const [label, lam] of monos.hoisted || []) {
 						if (em.hoistedDone && em.hoistedDone.has(label)) continue;
 						if (!em.hoistedDone) em.hoistedDone = new Set();
-						if (!entry.ptrParams.some((pn) => `${fname}$${bareName(pn)}` === label)) continue;
+						// 呼び出しサイトの `$(無名)` は `関数$仮引数$番号` で吊り上げている（1つの仮引数に
+						// 何通りも来るため番号で分ける）。デフォルトは1つなので `関数$仮引数` のまま。
+						if (!entry.ptrParams.some((pn) => { const pat = `${fname}$${bareName(pn)}`; return label === pat || label.startsWith(pat + "$"); })) continue;
 						em.hoistedDone.add(label);
 						// **ポイントフリーはまだ実体にできない。** `[+ 2]` は「左辺の欠けた
 						// 演算」であって仮引数を持たないので、`_a ? _a + 2` へ合成しないと

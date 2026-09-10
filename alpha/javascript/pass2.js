@@ -181,6 +181,20 @@ function applyChainInfo(node) {
 // 既存挙動のまま何も変えない。
 function resolveKnownArity(node, env) {
   if (!node) return null;
+  // **前置 `@` の先は必ず Lambda である**（getCategory が無条件にそう分類している）。
+  // `$` を付けてまで渡す価値があるのは関数だけで、入力の番地を読むのも「当てるたびに
+  // 次の値が出る」射である——どちらにしても値ではない。だから `@f x y` の後ろに並んだ
+  // ものは全部引数であり、「入力を先頭に置いた器」を組む読みは無い。
+  //
+  // アリティは呼び先の具体化まで分からないので、rest と同じく Infinity を返して鎖を
+  // 伸ばし続ける（この上の慣習どおり、カリー化の是非は呼び出し側が判断する）。
+  // 以前はここが null で、「1回適用したら飽和」と決め打たれていた——そのため
+  // `@f x y` が `apply(@f, construct(x, y))` と組まれ（引数を器にしてから1回だけ適用）、
+  // `(@f x) y` は余積に落ちて番地を返していた。名前の関数 `h x y` は元から
+  // `apply(apply(h, x), y)` の鎖になるので、**`@` だけが名前と違う扱いを受けていた**。
+  if (node.type === "operation" && node.position === "prefix" && node.op === "@") {
+    return { arity: Infinity, requiredArity: Infinity, consumed: 0, containerParam: false };
+  }
   if (node.type === "atom" && node.kind === "identifier") {
     if (!env) return null;
     const found = envLookupScope(env, node.value);

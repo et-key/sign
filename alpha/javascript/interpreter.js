@@ -188,9 +188,30 @@ function evalLiteral(node) {
 function collectApplyChain(node) {
   const argNodes = [];
   let n = node;
-  while (n && n.type === "operation" && n.name === "apply") {
-    argNodes.unshift(n.right);
-    n = n.left;
+  for (;;) {
+    if (n && n.type === "operation" && n.name === "apply") {
+      argNodes.unshift(n.right);
+      n = n.left;
+      continue;
+    }
+    // **1行の括りは透かす。** pass2 の resolveKnownArity は `(f 1) 2` の base を括りの
+    // 中まで見て鎖を伸ばす（自動カリー化が括りを跨いでも Lambda のまま扱われるように）が、
+    // こちらは `apply` という名前だけを辿って括りで止まっていた——同じ問いに2箇所が
+    // 答えていて、片方だけが括りを透かしていた。
+    //
+    // 実害は `(@f x) y` だった。pass2 は前置 `@` の先を必ず Lambda とみなして鎖に組むが、
+    // こちらは括りで止まるので `(@f x)` を単独の呼び出しとして評価し、足りない引数が
+    // `__` で埋まって完全性公理で `__` になり、それが `y` と余積になって y が返っていた
+    // （`app $add 3 4` が 4。機械は具体化で呼び先のアリティを知るので 7 を出していた）。
+    //
+    // 中身が `apply` のときだけ透かす。飽和した呼び出しを括ったもの（`(g x) y` で g の
+    // アリティが 1）は pass2 が余積に組むので、ここへは来ない。
+    if (n && n.type === "block" && n.kind === "paren" && Array.isArray(n.lines) && n.lines.length === 1 &&
+        n.lines[0] && n.lines[0].type === "operation" && n.lines[0].name === "apply") {
+      n = n.lines[0];
+      continue;
+    }
+    break;
   }
   return { calleeNode: n, argNodes };
 }
