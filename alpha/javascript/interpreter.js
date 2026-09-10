@@ -624,8 +624,17 @@ function evalIndentBlock(node, env, tailEval) {
 const COPRODUCT_OPS = ["construct", "concat", "push", "unshift"];
 const isUnitNode = (n) =>
   !!n &&
+  // 構文に書かれた単位元。
   ((n.type === "atom" && n.kind === "unit") ||
-    (n.type === "block" && Array.isArray(n.lines) && n.lines.length === 0));
+    (n.type === "block" && Array.isArray(n.lines) && n.lines.length === 0) ||
+    // **型も知っている。** 名前へ隠しても pass3 が Unit と注釈していればここで拾える
+    // ——「区別は構文にしかない」ではなかった。
+    //
+    // 空の器を束ねた名前（`e : []`）はここへ来ない。型が List だからだが、それは
+    // 取りこぼしではなく**正しい型**である——`[]` は List の零であって、零がどの型の
+    // ものかは型が持つ。だから `[] == __`（値は Unit）と `|[]| == 0`（長さは 0）が
+    // 両立する。Unit と型付けると後者が `__` になり、零が何の零だったかが消える。
+    n.atomType === "Unit");
 const isAccumulator = (n) => {
   if (!n || n.type !== "operation" || !COPRODUCT_OPS.includes(n.name)) return false;
   // 右が落ちるなら左がそのまま出る——蓄積子かどうかは左が決める。
@@ -2220,7 +2229,11 @@ function evaluate(node, env) {
       // 以前はここで 0 を返していた。実害は `||zzz||`（未定義の名前）が 0 を返すことで、
       // 「空だった」と読めてしまう——答えの無い問いに、分岐できる値を渡していた。
       // 数え上げられるのは器が在るときだけで、無ければ解なしである。
-      if (isUnit(inner)) return UNIT;
+      // **空は 0 である。** `||[]||` が 0 なのは器の定義から決まり、`[] = __`（unit.md）は
+      // 同一なので `||__||` も 0 でなければならない——同型から降りてくるのであって、
+      // 潰れた写像を逆に辿っているのではない。数え上げは器から Int への全域の射で、
+      // 始対象から出る射は一意、その行き先が 0 である。
+      if (isUnit(inner)) return 0;
       // 無限は数えられない——「無限の要素数」という値は無いので零射へ落ちる。
       if (isIterator(inner)) return iteratorCount(inner);
       if (Array.isArray(inner)) return inner.length;
@@ -2237,32 +2250,16 @@ function evaluate(node, env) {
     if (node.kind === "abs") {
       let inner = UNIT;
       for (const line of node.lines) inner = evaluate(line, env);
-      // Unitのときだけ値では決まらない——`__ = []`（unit.md）の同一視により「空リスト
-      // ＝要素数0」とも「値の不在」とも読めるため、pass3が記録したオペランド型で決める。
-      // List/Stringの位置なら空コレクションなので0、それ以外（不在・型不明）は吸収元。
-      // 型が付かない側を0に倒さないのは、不在がもっともらしい値に化けるのを防ぐため
-      // ——「不在」と「うっかり使える値」を混ぜないという一点が、null参照の失敗の核心
-      // だったので、Signは常に吸収元側へ倒す（narrowingは呼び出し側が明示的に行う）。
-      if (isUnit(inner)) {
-        const operand = node.operandType;
-        return operand === "List" || operand === "String" ? 0 : UNIT;
-      }
-      // イテレータは有限なら要素数を持つ。**無限は数えられない**ので零射へ落ちる
-      // ——「無限の要素数」という値は無い。
-      if (isIterator(inner)) return iteratorCount(inner);
-      if (Array.isArray(inner)) return inner.length;
-      // **文字列は符号位置で数える。** `String ≅ List(Char)` の Char は符号位置なので、
-      // JS の `.length`（UTF-16 単位）では非 BMP が 2 と数えられる——実際 `𐀀𐀁𐀂` が
-      // 6 になり、**実機の 3 のほうが正しかった**（オラクルの側が壊れていた）。
-      if (typeof inner === "string") return [...inner].length;
-      // 名前付きスロットもスロット数を持つ。名前・連番・実データの三つを持つ以上、
-      // 連番の個数＝スロット数は定義されている。連番で引ける（`point ' 0`）のに
-      // 個数が取れないと、走査する手段が無くなってしまう。
-      if (isNamedSlots(inner)) return Object.keys(inner).length;
-      // Lambda（Id射・クロージャ等）には要素数/絶対値が定義されていない——
-      // Math.absへ渡すとNaNが静かに出るため、型エラーとして__へ収束させる。
-      if (inner !== null && typeof inner === "object") return UNIT;
-      return Math.abs(inner);
+      // **絶対値は器を数えない。** 数えるのはノルム（`||...||`）の仕事であり、絶対値が
+      // 長さも返すなら 2 つに分けた意味が無い。分けた理由は 1 要素の器がスカラーと同一
+      // だから（`[5] ≅ 5`、原理8）で、そこで意味が割れるのを避けるためだった——ところが
+      // 絶対値の側も数えていたので、割れたままだった。
+      //
+      // 器（List・String・Struct・イテレータ）に絶対値は定義されていないので零射へ落ちる。
+      // これで pass3 が abs のためだけに記録していた `operandType` も要らなくなる。
+      if (typeof inner === "number") return Math.abs(inner);
+      if (typeof inner === "bigint") return inner < 0n ? -inner : inner;
+      return UNIT;
     }
     // 構造体判定はpass3.jsのinferAtomTypeと同じ基準（全行がdefineかつ左辺が識別子）。
     // 左辺が識別子でないdefine行（下記match_case）と区別するため、identifierNode

@@ -1487,23 +1487,14 @@ function computeAtomType(node, env) {
   }
 
   if (node.type === "block") {
-    // `|x|`（abs）は「数値の絶対値」と「リストの要素数」を兼ねる多重定義である。
-    // オペランドがUnitのとき、`__ = []`（unit.md）の同一視によって「空リスト＝要素数0」
-    // とも「値の不在」とも読めてしまい、**値だけでは決まらない**。これは `5 / 2` と
-    // `5.0 / 2` を型で分けたのと同じ構図なので、型で決める（原理2：型はゼロコストの帳簿）。
-    // ここではオペランドの型を記録するだけで、Unitの読み替えは評価器が行う。
-    // 結果型は絶対値・要素数のいずれも非負の機械語1語に収まるため Int（uint）とする。
-    // ——アドレスではない。要素数はどこも指していない（§3.6）。
-    // ノルム（`~|...|~`）は常に要素数なので、オペランドの型で読み替える必要が無い
-    // ——空は 0、スカラーは 1 である（1要素の器は存在しない）。
-    if (node.kind === "norm") return "Int";
-    if (node.kind === "abs") {
-      node.operandType =
-        Array.isArray(node.lines) && node.lines.length > 0
-          ? inferAtomType(node.lines[node.lines.length - 1], node.scope || env)
-          : "List";
-      return "Int";
-    }
+    // **絶対値と数え上げは別の演算である。** `|x|` は絶対値だけを返し、器は数えない
+    // ——数えるのはノルム（`||x||`）の仕事で、絶対値が長さも返すなら 2 つに分けた
+    // 意味が無い。以前は abs がオペランドの型（`operandType`）を要求していたが、
+    // 器を数えなくなったので不要になった。**書いて、消して、誰も読まない欄だった。**
+    //
+    // 結果型はどちらも非負の機械語1語に収まるため Int（uint）。アドレスではない
+    // ——要素数はどこも指していない（§3.6）。
+    if (node.kind === "norm" || node.kind === "abs") return "Int";
     if (!Array.isArray(node.lines) || node.lines.length === 0) return "List";
     // 全行が define(key:val) かつ左辺が識別子 → Struct（list_model.md §5.3、
     // pattern_guide.mdの改行区切り構造体リテラルの形）。単一エントリの `[foo : 1]` も含む。
@@ -4115,7 +4106,6 @@ function clearTypeAnnotations(node) {
   delete node.mergedSlots;
   delete node.slotOrigins;
   delete node.mergeBase;
-  delete node.operandType;
   for (const k of ["left", "right", "operand", "middle"]) clearTypeAnnotations(node[k]);
   for (const l of node.lines || []) clearTypeAnnotations(l);
   for (const e of node.entries || []) clearTypeAnnotations(e.default);

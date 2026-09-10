@@ -1023,13 +1023,11 @@ function genExpr(node, env, em, scope, tail = false) {
 		} else if (rule) {
 			em.emit(`movz ${SCRATCH[0]}, #0x8000, lsl #48`, "終端が無い＝無限は数えられない");
 		} else if (iw === 2) {
-			// `len` がそのまま要素数——ただし **`len = 0` は器ではなく `__` そのもの**
-			// である（`__ = []`、unit.md）。`[] ⇒ __` は潰れる向きなので戻せない：
-			// `__` を見て「空の器だった」とは言えず、0 と答えるのは逆写像の捏造になる。
+			// **`len` がそのまま要素数である。** 空の器は 0 で、`[] = __`（unit.md）は同一なので
+			// `||__||` も 0 でなければならない——同型から降りてくるのであって、潰れた写像を逆に
+			// 辿っているのではない。以前はここで `len = 0` を `__` へ倒しており、cmp/movz/csel の
+			// 3命令を数えるたびに払っていた。**規則を直すと命令が減る。**
 			em.load(SCRATCH[0], io + 8, "len");
-			em.emit(`cmp ${SCRATCH[0]}, #0`, "len = 0 は __ そのもの");
-			em.emit("movz x12, #0x8000, lsl #48", "数えられない（解なし）");
-			em.emit(`csel ${SCRATCH[0]}, x12, ${SCRATCH[0]}, eq`);
 		} else if (iw === 1 && structSlots(inner, em, env) !== null) {
 			// **`Struct` の要素数はスロット数である。** 形が型にあるので数える必要が無く、
 			// `{ptr}` の1本で運ばれる——だが**スカラーも1本**なので、ここを幅だけで見ると
@@ -1040,15 +1038,13 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
 			em.emit(`cmp ${SCRATCH[0]}, x12`);
 			em.emit(`mov ${SCRATCH[0]}, #${k}`, "スロット数（形は型にある）");
-			em.emit("mov x11, x12", "__ は数えられない（解なし）");
-			em.emit(`csel ${SCRATCH[0]}, x11, ${SCRATCH[0]}, eq`);
+			em.emit(`csel ${SCRATCH[0]}, xzr, ${SCRATCH[0]}, eq`, "__ は 0");
 		} else if (iw === 1) {
 			em.load(SCRATCH[0], io, "中身");
 			em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
 			em.emit(`cmp ${SCRATCH[0]}, x12`);
 			em.emit(`mov ${SCRATCH[0]}, #1`, "スカラーは1要素の器");
-			em.emit("mov x11, x12", "__ は数えられない（解なし）");
-			em.emit(`csel ${SCRATCH[0]}, x11, ${SCRATCH[0]}, eq`);
+			em.emit(`csel ${SCRATCH[0]}, xzr, ${SCRATCH[0]}, eq`, "__ は 0");
 		} else {
 			em.pop(iw);
 			return em.fail(n, `${iw} 本で運ぶ値の要素数はまだ出せません（${n.atomType}）`);
