@@ -971,17 +971,9 @@ const BIG_ARITH = {
   mul: (a, b) => a * b,
   // §3.2「除算だけは整数同士でも丸めが起きる」: 四捨五入・タイは0から遠ざける。
   // BigInt の `/` は切り捨てなので自前で丸める。
-  div: (a, b) => {
-    if (b === 0n) return null;
-    const q = a / b;
-    const rem = a % b;
-    if (rem === 0n) return q;
-    const absRem = rem < 0n ? -rem : rem;
-    const absB = b < 0n ? -b : b;
-    const away = absRem * 2n >= absB ? 1n : 0n;
-    const sign = (a < 0n) !== (b < 0n) ? -1n : 1n;
-    return q + sign * away;
-  },
+  // **丈である**（§3.2）。BigInt の `/` は元から 0 方向へ落とすので、そのままでよい。
+  // 以前はここで四捨五入の補正（商と剰余から away を作る）を書いていた。
+  div: (a, b) => (b === 0n ? null : a / b),
   mod: (a, b) => (b === 0n ? null : a % b),
   pow: (a, b) => (b < 0n ? null : a ** b),
 };
@@ -1010,11 +1002,25 @@ function listLift(l, r) {
   return out;
 }
 function listSplit(l, r) {
-  // [1 2 3 4] / 2 → [[1 2] [3 4]]（lをr個のグループへ均等分割）
+  // **`/` は割り目である**（§3.2）。丈は要素数を r で割った商——スカラーの除算と同じ
+  // 規則で、余りは最後の群に残る。`[1 2 3 4] / 3` は `[[1] [2] [3 4]]`。
+  //
+  // 以前は `size = ceil(n/r)` で切っており、**頼んだ数の群が出ていなかった**（n=1..12 ×
+  // r=2..5 の 48 組中 19 組で群数 ≠ r）。天井が丈を切り上げるので、丈 0（`r > n`）も
+  // 除数 0 も表に出ないまま隠れていた（`/ 0` は `/ 1` と同じ答えを黙って返し、`/ -1` は
+  // 終わらなかった）。丈を商にすると、3 つとも同じ条件の下に出てくる。
+  //
+  // `r <= 0` は群の置き場が無い——「余りは最後の群に残る」と言っているのに最後の群が
+  // 存在しない。作れなかったものは無い（完全性公理）。
+  if (!(r >= 1)) return UNIT;
+  const q = Math.trunc(l.length / r);
   const out = [];
-  const size = Math.ceil(l.length / r);
-  for (let i = 0; i < l.length; i += size) out.push(l.slice(i, i + size));
-  return out;
+  for (let k = 0; k < r; k++) out.push(k === r - 1 ? l.slice(k * q) : l.slice(k * q, (k + 1) * q));
+  // 丈 0 の群は空の器＝`__` なので、余積の単位元として消える（`[] = __`、unit.md）。
+  // 残るのは全部を持つ 1 群だけで、`[x] ≅ x`（原理8）で元の器に戻る——`[1 2] / 5` は
+  // `[1 2]` である。「2 個を 5 つに分けたら、どこにも配れなかった」がそのまま答えになる。
+  const kept = out.filter((g) => g.length > 0);
+  return kept.length === 1 ? kept[0] : kept;
 }
 
 // type_system.md §3.2/§4.1 の丸め規則: 四捨五入（最近接、タイは0から遠ざける）。
@@ -1191,20 +1197,20 @@ function evalArith(node, env) {
   // （compile.js のパイプライン）を読んで初めて判定できる。
   // 整数域（`Int` と `Address`）同士の除算がここに来る。アドレスも整数幅なので
   // 丸めの対象は同じ——分けたのは記法と溢れ方であって、除算の丸めではない（§3.6）。
-  // 丸めが要るのは f64 の非整数だけである。BigInt は既に整数（BIG_ARITH.div が四捨五入
+  // 丸めが要るのは f64 の非整数だけである。BigInt は既に整数（BIG_ARITH.div が商を返す
   // 済み）なので、ここへ入れると Math.round が BigInt を受け取って落ちる。
+  // **除算は割り目の丈である。丸めない**（§3.2）。`a = (a/b)*b + a%b` が成り立つ形で、
+  // AArch64 の `sdiv`/`udiv` そのもの——補正命令は要らない。
+  //
+  // 以前ここは四捨五入しており、除法の等式が破れていた（`5/2 = 3` なら `3×2 + 1 = 7 ≠ 5`）。
+  // `/` と `%` が別々の除算の相棒になっていたということである。**補正が要ること自体が、
+  // その規則が誤りだという合図だった**——正しい形は短い。
+  //
+  // `Float` が絡む位置での四捨五入（`list ' 1.5`、`@1.5`）は §4.1 の別規則であり、
+  // `roundHalfAwayFromZero` はそちらが使い続ける。丸めが「起きた」という診断も
+  // 要らなくなった——起きないので。
   if (typeof value === "number" && (node.atomType === "Int" || node.atomType === "Address") && !Number.isInteger(value)) {
-    const rounded = roundHalfAwayFromZero(value);
-    // 精度が失われたことを information として記録する（unit.md §7.3 と同じ非ブロッキング
-    // 診断のレベル）。昇格格子のおかげで Float が絡む算術は精度を落とさないため、
-    // 黙って丸めが起きるのは Address 同士の除算だけ——ここだけに診断を置けば足りる。
-    if (env && env.diagnostics) {
-      env.diagnostics.push({
-        level: "information",
-        message: `整数除算 ${l} / ${r} の結果を四捨五入して ${rounded} にしました。精度が必要なら左辺を ${l}.0 と書いてください`,
-      });
-    }
-    return rounded;
+    return Math.trunc(value);
   }
   // **溢れ方は型が決める**（integer_overflow.md §1）。`Int` はラップアラウンド、`Address` は
   // `__` へ収束する——不正アドレスの伝播を止めるためである。JS の数値は f64 しか無いので、
