@@ -694,7 +694,18 @@ function constructValues(node, l, r) {
         // **撒くかどうかは値が決める。** 後置 `~` が付いた値だけを撒く。イテレータで
         // ありさえすれば撒く、ではない——レンジは撒くものではなく1個の値だからである。
         // 構文ではなく値なので、名前に束縛しても関数を通しても同じ答えになる。
-        return [...asList(deIterate(l)), ...(isSpread(r) ? asList(deIterate(r)) : [r])];
+        //
+        // **左辺も同じ規則である。** ここが無条件に撒いていたため、`~` を直接書いた
+        // `[1 2] [3 4]~`（pass2 は `concat` に解く）と、名前へ隠した `n : [3 4]~ / [1 2] n`
+        // （`unshift` に解く）が違う答えを出していた——**構文で演算子が変わるのに、演算子
+        // ごとに規則が違う**という食い違いである。
+        //
+        // ただし**組み立て中の器は別**で、そこは撒く。余積は左結合なので `[1 2 3]` の左辺は
+        // 「いま組み立てている器」であり、1要素で包むと過剰に入れ子になる。区別は構文にしか
+        // ない——組み立て中かどうかは値に現れない（どちらも同じ配列である）。
+        const accL = !!(node && node.left && node.left.type === "operation" && ["construct", "concat", "push", "unshift"].includes(node.left.name));
+        const dl = deIterate(l);
+        return [...(accL || isSpread(l) ? asList(dl) : [dl]), ...(isSpread(r) ? asList(deIterate(r)) : [r])];
 }
 
 function evaluateTail(node, env) {
@@ -2421,7 +2432,8 @@ function evaluate(node, env) {
       case "unshift": {
         // [1 2 3] 4 → [1 2 3 4]（bを末尾に追加）。bがUnit（単位元）なら素通しでaのみ返す。
         const rawB = evaluate(node.right, env);
-        const a = deIterate(evaluate(node.left, env));
+        const rawA2 = evaluate(node.left, env);
+        const a = deIterate(rawA2);
         // 余積の単位元則（type_system.md §6.1）。**器の側が `__` なら右辺がそのまま通る**
         // ——`__ [1 2 3]` は `[1 2 3]` であって `[[1 2 3]]` ではない。`construct` 側と
         // 同じ規則であり、片側にしか無いと `__` が「器を1つ被せる」ことになる。
@@ -2436,7 +2448,28 @@ function evaluate(node, env) {
           if (t !== null) return t;
         }
         // 右辺が `~` 付きなら撒く。無ければ**1要素として**足す（§2.2 の表）。
-        return [...asList(a), ...(isSpread(rawB) ? asList(deIterate(rawB)) : [rawB])];
+        //
+        // **左辺も同じ規則である。** `List` の μ は任意なので、平らにするなら `~` と書く
+        // （原理7）。ここが位置で決まっていた——「左は器、右は要素」——ため、同じ形をした
+        // `[1 2 3] 4` と `[[1 2] [3 4]]` が違う読みになり、後者が `[1,2,[3,4]]` になっていた。
+        // **位置による例外を作らない。** `~` があれば撒く、無ければ1要素、左右とも同じ。
+        //
+        // 能力は失われず、綴りが変わる：`m [5 6]`（行を足す）は `m~ [5 6]` と書く。実測で
+        // alpha/sign の4本には挙動が変わる箇所が0（`space [x]` のように左辺がスカラーの形は
+        // 元から `[a]` なので動かない）。
+        //
+        // **組み立て中の器だけは別である。** 余積は左結合なので `[1 2 3]` の左辺は「いま
+        // 組み立てている器」であり、そこを1要素で包むと `[[[1,2],[3,4]],[5,6]]` のように
+        // 過剰に入れ子になる。区別は**構文にしかない**——組み立て中かどうかは値に現れない
+        // （どちらも同じ配列である）。左辺が余積の演算ノードなら蓄積子、そうでなければ
+        // 書かれた器、と読む。
+        //
+        // 判定が2つ在るのは重複ではない。`acc` は「この位置は組み立ての途中か」（構文が
+        // 決める）、`isSpread` は「書き手が撒けと言ったか」（値に付いた印）で、**どちらも
+        // 片方では答えられない**——名前を経由した `a~` は構文に現れず、組み立て中かどうかは
+        // 値に現れない。
+        const acc = !!(node.left && node.left.type === "operation" && ["construct", "concat", "push", "unshift"].includes(node.left.name));
+        return [...(acc || isSpread(rawA2) ? asList(a) : [a]), ...(isSpread(rawB) ? asList(deIterate(rawB)) : [rawB])];
       }
       // list_model.md §2.3「派生演算子による範囲リストの構築」。**レンジ式の実体は
       // 常にイテレータである**——`{start, step, end}` の固定サイズ構造体であり、
