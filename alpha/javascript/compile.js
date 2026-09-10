@@ -313,6 +313,8 @@ function specializeRefCalls(lines, nodes, env, options) {
   // 無名のラムダを名前付きの定義として吊り上げる。捕獲しているものは吊り上げない
   // ——トップへ出すと捕まえた変数の置き場が無い（リフティングの仕事で、まだ無い）。
   let anonSeq = 0;
+  // 持ち上げた関数が捕まえていた変数（名前 → 呼び出しサイトでの名前の並び）。
+  const liftCaps = new Map();
   const idsIn = (x, out = []) => { if (Array.isArray(x)) x.forEach((y) => idsIn(y, out)); else if (isId(x)) out.push(x); return out; };
   const hoistAnon = (block, encl, F, pn) => {
     const lam = Array.isArray(block) && block.length === 1 && Array.isArray(block[0]) ? block[0] : null;
@@ -324,12 +326,19 @@ function specializeRefCalls(lines, nodes, env, options) {
     // 囲む定義の仮引数（`<g> : <a> ? …` の `<a>`）に触れていたら捕獲である
     const eq = Array.isArray(encl) && isId(encl[0]) && encl[1] === ":" ? encl.indexOf("?", 2) : -1;
     const outer = eq > 0 ? encl.slice(2, eq) : [];
+    // **捕まえた変数は、前の仮引数として持ち上げる**（リフティング）。囲む定義の仮引数に
+    // 触れていたら、それを仮引数に足してトップへ出す——もう何も捕まえていない関数になる。
+    // 捕まえた変数は呼び出しサイトに居るので、そこで渡せばよい（下の呼び出しの書き換え）。
+    // 囲む定義の仮引数でもトップの束縛でもない名前（入れ子の局所など）は、まだ扱わない。
+    const captured = [];
     for (const id of idsIn(lam.slice(q + 1))) {
       if (own.includes(id)) continue;
-      if (outer.includes(id) || !top.has(id)) return null;
+      if (outer.includes(id)) { if (!captured.includes(id)) captured.push(id); continue; }
+      if (!top.has(id)) return null;
     }
     const name = "<" + F.slice(1, -1) + "$" + pn.slice(1, -1) + "$" + anonSeq++ + ">";
-    const def = [name, ":", ...lam];
+    const def = [name, ":", ...captured, ...own, "?", ...lam.slice(q + 1)];
+    liftCaps.set(name, captured);
     const bind = buildEnvScope([def]).get(name);
     if (!bind) return null;
     top.set(name, bind);
@@ -374,7 +383,10 @@ function specializeRefCalls(lines, nodes, env, options) {
       // 読み方で余積（`[6 4]`）に戻ってしまい、`@` の意図が消える。作らずに印を付け、pass4 が
       // 名指しする。
       const over = fn.ptr.map((pn, j) => {
-        const want = top.get(callees[j]).arity;
+        // 持ち上げた関数のアリティには捕まえた分が入っている。利用者が `@p` に当てるのは
+        // 残りだけなので、そちらで比べる。
+        const all = top.get(callees[j]).arity;
+        const want = typeof all === "number" ? all - (liftCaps.get(callees[j]) || []).length : all;
         const got = appliedDepth(nodes[fn.idx], pn);
         return typeof want === "number" && got > want ? { param: pn, callee: callees[j], want, got } : null;
       }).find(Boolean);
@@ -383,13 +395,22 @@ function specializeRefCalls(lines, nodes, env, options) {
       if (!made.has(name)) {
         const src = lines[fn.idx];
         const keep = fn.params.filter((pn) => !fn.ptr.includes(pn));
+        // 捕まえた変数を運ぶ仮引数。名前には `$` を含める——`ap : f x` が `x` を捕まえた
+        // ラムダを受けると、元の名前のままでは実体の仮引数と衝突する。`$` は利用者が書けない。
+        let cseq = 0;
+        const capParams = callees.map((c) => (liftCaps.get(c) || []).map(() => "<$c" + cseq++ + ">"));
         const body = [];
         const b = src.slice(fn.q + 1);
         for (let j = 0; j < b.length; j++) {
-          if (b[j] === "@_" && fn.ptr.includes(b[j + 1])) { body.push(callees[fn.ptr.indexOf(b[j + 1])]); j++; continue; }
+          if (b[j] === "@_" && fn.ptr.includes(b[j + 1])) {
+            const ci = fn.ptr.indexOf(b[j + 1]);
+            body.push(callees[ci], ...capParams[ci]);
+            j++;
+            continue;
+          }
           body.push(b[j]);
         }
-        const def = [name, ":", ...keep, "?", ...body];
+        const def = [name, ":", ...capParams.flat(), ...keep, "?", ...body];
         const bind = buildEnvScope([def]).get(name);
         if (!bind) continue;
         top.set(name, bind);
@@ -400,7 +421,8 @@ function specializeRefCalls(lines, nodes, env, options) {
       const drop = new Set();
       for (const pn of fn.ptr) { const a = args[fn.params.indexOf(pn)]; for (let k = a.from; k <= a.to; k++) drop.add(k); }
       const next = [];
-      for (let k = 0; k < line.length; k++) { if (k === s) next.push(name); else if (!drop.has(k)) next.push(line[k]); }
+      const caps = callees.flatMap((c) => liftCaps.get(c) || []);
+      for (let k = 0; k < line.length; k++) { if (k === s) next.push(name, ...caps); else if (!drop.has(k)) next.push(line[k]); }
       lines[idx] = next;
       dirty.add(idx);
       break;                                           // 1行に1つ。残りは次の周回で
