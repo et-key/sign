@@ -38,8 +38,11 @@ function checkTrue(note, cond, extra) {
 // `f` の返値の上界を `k` か `k + ||p||` の形で返す。
 function bound(src) {
 	const { nodes } = compile(src, { charset: "ascii" });
-	const d = nodes.find((n) => n.name === "define" && String(n.left.value).replace(/[<>]/g, "") === "f");
-	const b = returnSizeBound(d.right, "f");
+	// `$` で関数を受ける `f` は、呼び出しサイトごとの実体 `f$g` になって総称は消える
+	// （compile.js の specializeRefCalls）。測るのはその実体である。
+	const nm = (n) => String(n.left.value).replace(/[<>]/g, "");
+	const d = nodes.find((n) => n.name === "define" && /^f(\$|$)/.test(nm(n)));
+	const b = returnSizeBound(d.right, nm(d));
 	if (!b) return null;
 	// **上界は器ごとの項の和である**（`konst + Σ coef_i × ||器_i||`）。1項なら今まで通りの
 	// 見た目になる——`walk` のように2つの器を同時に食う形が書けるようになっただけである。

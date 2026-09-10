@@ -96,13 +96,17 @@ function agree(note, source, charset = "ascii", layer = 1) {
  * 出せないものが**名指しされている**ことを見る。黙って別の答えを出していないこと、
  * すなわち「まだ」と言えていることの確認である。
  */
-function checkNamed(note, source, charset = "ascii") {
+// `reason` を渡すと、名指しの**理由**も見る。別の理由で断っていても「名指しされた」には
+// なるので、止まった場所が違うことを見逃す。
+function checkNamed(note, source, charset = "ascii", reason = null) {
 	total++;
 	let msg = "（診断が出なかった）";
 	try {
 		const { nodes, env } = compile(source, { charset, readImport });
 		const r = generateAsm(nodes, env, { target: "aarch64_qemu", charset, layer: 1 });
-		if (r.diagnostics.length > 0) {
+		if (r.diagnostics.length > 0 && reason && !r.diagnostics[0].message.includes(reason)) {
+			msg = "別の理由：" + r.diagnostics[0].message;
+		} else if (r.diagnostics.length > 0) {
 			passed++;
 			console.log(`ok   ${note.padEnd(34)} ${r.diagnostics[0].message.replace(/（.*/, "")}`);
 			return;
@@ -973,6 +977,24 @@ agree("尽きたら __", "f : x ?\n\tx > 10 : 1\nf 7");
 	// （`[6 4]`——`@` の意図が消える）。どちらでもなく名指しする。
 	checkNamed("@f に多すぎる引数を当てると名指しされる", "dbl : n ? n * 2\napp : f x y ? @f x y\napp $dbl 3 4");
 	checkNamed("無名のラムダでも同じ", "app : f x y ? @f x y\napp $(n ? n * 3) 3 4");
+	// **括りの奥の呼び出しも、同じ行の2つ目の呼び出しも同じ道に乗る。** 実体化の段は行の
+	// 表層の1つ目しか見ておらず（「残りは次の周回で」と書いてあったが、次の周回は無い）、
+	// 残りは pass4 の単相化へ回っていた。多すぎる引数はそこで断られてはいたが、**理由が
+	// 違った**（「渡し方が決まりません」「GPR 幅の整数演算だけ」）。
+	//
+	// 印は通し直しの**後**に付ける。同じ行の別の呼び出しを書き換えると行ごと還元し直すので、
+	// 先に付けた印はそこで消える。
+	checkNamed("括りの中の多すぎる引数も同じ理由で", "app : f x y ? @f x y\ndbl : x ? x * 2\n(app $dbl 3 4) + 1", "ascii", "適用以外");
+	checkNamed("同じ行の書き換えで印が消えない", "app : f x y ? @f x y\ndbl : x ? x * 2\nadd : x y ? x + y\n(app $add 3 4) + (app $dbl 3 4)", "ascii", "適用以外");
+	// **再帰する関数も実体になる。** `take_while : p [~s] ?` の本体は自分を `take_while p (s ' 1~)`
+	// と呼ぶ。実体の中では `p` はもう決まっているので `take_while$is_digit (s ' 1~)` へ付け替える
+	// ——pass4 の単相化が拾っていた頃は本物の再帰（`bl`）のままで、2000 桁で段がスタックを
+	// 踏み抜き、**診断ゼロで 1008 を返していた**。AST の段で実体になると、追記の自己再帰が
+	// ループになる（穴5）。
+	const TW = "is_digit : c ? \\0 <= c <= \\9\ntake_while : p [~s] ?\n\t!s : ``\n\t(@p (s ' 0)) : (s ' 0) (take_while p (s ' 1~))\n\t``\n";
+	agree("再帰する関数の実体：長さ", TW + "||take_while $is_digit `12a`||");
+	agree("再帰する関数の実体：中身", TW + "(take_while $is_digit `12a`) ' 1");
+	agree("再帰する関数の実体：2000 桁", TW + `||take_while $is_digit \`${"7".repeat(2000)}a\`||`);
 	// **入力は時間に沿って来る。`List` にはなれない。** 機器の番地を読んだ値（`Raw`）に前置 `~`
 	// を当てると `Reader(Raw)` で、実体は**番地そのもの**（即値）——`List` は要素が空間に同時に
 	// 並ぶこと（並列時間）を要求するが、入力の要素は1つずつ来る（type_system.md §3.5）。

@@ -248,8 +248,11 @@ const OPERATOR_HEADS = new Set([..."?:#;|&=<>!+*/%^~@$,", "-"]);
  * 型がラッチする。名前に `$` を含めるのは、字句の後の並びなので字句解析を通らず、
  * 利用者の識別子とも衝突しないからである（Sign の字句では `$` は演算子）。
  *
- * **扱えない形は触らない。** 再帰する関数、仮引数を `@` 以外にも使う本体、単純でない
- * 呼び出しは書き換えずに残す——そちらは今まで通り pass4 の単相化が拾う。だからこの
+ * **再帰する関数も実体になる。** 実体の中の `take_while p (s ' 1~)` は `take_while$is_digit (s ' 1~)`
+ * へ付け替える——実体の中では `p` はもう決まっているので、渡し直す必要が無い。
+ *
+ * **扱えない形は触らない。** 仮引数を `@` 以外にも使う本体（自分への素通しは除く）、単純で
+ * ない呼び出しは書き換えずに残す——そちらは今まで通り pass4 の単相化が拾う。だからこの
  * 段は足し算にしかならない。
  */
 function specializeRefCalls(lines, nodes, env, options) {
@@ -258,25 +261,38 @@ function specializeRefCalls(lines, nodes, env, options) {
   const isId = (x) => typeof x === "string" && x.startsWith("<") && x.endsWith(">");
   // 1. `@p` を持つ関数：`<F> : 仮引数… ? 本体` で、本体に `@_ <p>` が在る
   const fns = new Map();
+  // 入れ子の中まで見る：`@_ <p>` がどこかに在るか。本体は字下げのブロックや括りを持つ。
+  const hasAt = (x, pn) => Array.isArray(x) && x.some((t, i) => (t === "@_" && x[i + 1] === pn) || hasAt(t, pn));
   lines.forEach((line, idx) => {
     if (!Array.isArray(line) || !isId(line[0]) || line[1] !== ":") return;
     const q = line.indexOf("?", 2);
     if (q < 0) return;
+    // **仮引数の形は問わない。** `take_while : p [~s]` の `[~s]` のような括りの仮引数は、
+    // 実体にそのまま残す。落とすのは裸で `@` される仮引数（ptr）だけである。
     const params = line.slice(2, q);
-    if (!params.every(isId)) return;                  // 裸の仮引数だけの形
     const body = line.slice(q + 1);
-    const ptr = params.filter((pn) => body.some((tok, i) => tok === "@_" && body[i + 1] === pn));
+    const ptr = params.filter((pn) => isId(pn) && hasAt(body, pn));
     if (ptr.length === 0) return;
-    // 仮引数を `@` 以外にも使っているなら落とせない（別の関数へ渡している等）
-    const bare = (pn) => body.some((tok, i) => tok === pn && body[i - 1] !== "@_");
-    if (ptr.some(bare)) return;
+    const ptrIdx = ptr.map((pn) => params.indexOf(pn));
+    // 仮引数を `@` 以外に使ってよいのは、**自分への呼び出しで同じ位置へそのまま渡す**とき
+    // だけである（`take_while p (s ' 1~)` の `p`）。実体の中ではその呼び出しが実体自身への
+    // 呼び出しになり、`p` は落ちる。別の関数へ渡している等なら落とせない。
+    const F = line[0];
+    const badUse = (x) => {
+      if (!Array.isArray(x)) return false;
+      for (let i = 0; i < x.length; i++) {
+        const t = x[i];
+        if (ptr.includes(t) && x[i - 1] !== "@_" && x[i - 1 - ptrIdx[ptr.indexOf(t)]] !== F) return true;
+        if (Array.isArray(t) && badUse(t)) return true;
+      }
+      return false;
+    };
+    if (badUse(body)) return;
     // **残る仮引数がゼロなら実体にしない。** `apply5 : ref ? @ref 5` の `ref` を落とすと
     // `apply5$add : ? add 5` になるが、仮引数ゼロの関数を名前だけ書いたときに呼ぶのか値の
     // ままなのかは、元の `apply5 $add`（＝ `add 5`、未飽和の Lambda）と意味が変わりうる。
     if (params.length - ptr.length === 0) return;
-    if (body.includes(line[0])) return;               // 再帰は pass4 に任せる
-    if (body.some((tok) => Array.isArray(tok))) return; // 入れ子の括りは今は触らない
-    fns.set(line[0], { idx, params, ptr, q });
+    fns.set(F, { idx, params, ptr, ptrIdx, q });
   });
   if (fns.size === 0) return;
   // 本体で `@p` に当てている引数の数（適用の鎖の深さ）。pass2 は `@` の先を Infinity の
@@ -345,89 +361,152 @@ function specializeRefCalls(lines, nodes, env, options) {
     newDefs.push(def);
     return name;
   };
-  // 2. 呼び出しサイト：行の中の `<F> …` で、ptr の位置が `$_ <X>`（X はトップの関数）
+  // 2. 呼び出しサイト：`<F> …` で、ptr の位置が `$_ <X>`（X はトップの関数）。**入れ子の奥まで
+  //    探す**——`tokens` の本体のように、呼び出しは字下げのブロックや括りの中に居る。
   const made = new Map();
   const dirty = new Set();
   const newDefs = [];
-  lines.forEach((line, idx) => {
-    if (!Array.isArray(line)) return;
-    for (let s = 0; s < line.length; s++) {
-      const fn = fns.get(line[s]);
-      if (!fn || fns.get(line[s]).idx === idx) continue;
-      // 実引数を仮引数の数ぶん読む。単純な形（識別子・字面・括り・`$_ <X>`）だけ。
-      const args = [];
-      let i = s + 1;
-      while (args.length < fn.params.length && i < line.length) {
-        const tok = line[i];
-        // 無名のラムダ `$(p q ? p * q)` は、捕獲していなければ名前を与えて吊り上げ、名前の
-        // `$X` と同じ道に乗せる。仮引数の型は、ここで作る実体の中の呼び出しから流れ込む
-        // ——直接呼ばれる場所が無かったので、それまでは決まらなかった。
-        if (tok === "$_" && Array.isArray(line[i + 1])) {
-          const pn = fn.params[args.length];
-          const ref = fn.ptr.includes(pn) ? hoistAnon(line[i + 1], line, line[s], pn) : null;
-          args.push({ from: i, to: i + 1, ref });
-          i += 2;
-          continue;
-        }
-        if (tok === "$_" && isId(line[i + 1])) { args.push({ from: i, to: i + 1, ref: line[i + 1] }); i += 2; continue; }
-        if (typeof tok === "string" && !isId(tok) && OPERATOR_HEADS.has(tok[0]) && !/^[0-9`]/.test(tok)) break;
-        args.push({ from: i, to: i, ref: null });
-        i++;
+  // 多すぎる引数の印。付けるのは通し直しの**後**である——同じ行の別の呼び出しを書き換えると
+  // 行ごと還元し直すので、先に付けた印はそこで消え、pass4 が名指しできなくなる。
+  const overMarks = [];
+  // その行で束縛し直している名前（仮引数・局所の定義）。そこでの `<F>` はトップの F ではない。
+  const bindersOf = (x, out = new Set(), nested = false) => {
+    if (!Array.isArray(x)) return out;
+    const q = x.indexOf("?");
+    if (q > 0) x.slice(nested ? 0 : 1, q).forEach((t) => { if (isId(t)) out.add(t); });
+    if (nested && isId(x[0]) && x[1] === ":") out.add(x[0]);
+    x.forEach((t) => bindersOf(t, out, true));
+    return out;
+  };
+  // 1つの呼び出しを読む。書き換えるなら、置き換える頭と、残す実引数と、読み終えた位置を返す。
+  const tryCall = (arr, s, fn, idx) => {
+    const F = arr[s];
+    // 実引数を仮引数の数ぶん読む。単純な形（識別子・字面・括り・`$_ <X>`）だけ。
+    const args = [];
+    let i = s + 1;
+    while (args.length < fn.params.length && i < arr.length) {
+      const tok = arr[i];
+      // 無名のラムダ `$(p q ? p * q)` は、捕獲していなければ名前を与えて吊り上げ、名前の
+      // `$X` と同じ道に乗せる。仮引数の型は、ここで作る実体の中の呼び出しから流れ込む
+      // ——直接呼ばれる場所が無かったので、それまでは決まらなかった。
+      if (tok === "$_" && Array.isArray(arr[i + 1])) {
+        const pn = fn.params[args.length];
+        const ref = fn.ptr.includes(pn) ? hoistAnon(arr[i + 1], lines[idx], F, pn) : null;
+        args.push({ from: i, to: i + 1, ref });
+        i += 2;
+        continue;
       }
-      if (args.length !== fn.params.length) continue;   // 足りない・読めないなら触らない
-      const callees = fn.ptr.map((pn) => args[fn.params.indexOf(pn)].ref);
-      if (callees.some((c) => !c || !top.has(c) || top.get(c).category !== "Lambda")) continue;
-      // **多すぎる引数は捨てられない。** `@a b c` は適用以外にありえない——前置 `@` の先は
-      // 必ず Lambda だからである。本体で `@p` に当てている数が、渡した関数のアリティより多ければ、
-      // 余った引数は飽和した結果（値）へ当てることになる。実体を作ると `<dbl> <x> <y>` が名前の
-      // 読み方で余積（`[6 4]`）に戻ってしまい、`@` の意図が消える。作らずに印を付け、pass4 が
-      // 名指しする。
-      const over = fn.ptr.map((pn, j) => {
-        // 持ち上げた関数のアリティには捕まえた分が入っている。利用者が `@p` に当てるのは
-        // 残りだけなので、そちらで比べる。
-        const all = top.get(callees[j]).arity;
-        const want = typeof all === "number" ? all - (liftCaps.get(callees[j]) || []).length : all;
-        const got = appliedDepth(nodes[fn.idx], pn);
-        return typeof want === "number" && got > want ? { param: pn, callee: callees[j], want, got } : null;
-      }).find(Boolean);
-      if (over) { markCall(nodes[idx], line[s], over); continue; }
-      const name = "<" + [line[s].slice(1, -1), ...callees.map((c) => c.slice(1, -1))].join("$") + ">";
-      if (!made.has(name)) {
-        const src = lines[fn.idx];
-        const keep = fn.params.filter((pn) => !fn.ptr.includes(pn));
-        // 捕まえた変数を運ぶ仮引数。名前には `$` を含める——`ap : f x` が `x` を捕まえた
-        // ラムダを受けると、元の名前のままでは実体の仮引数と衝突する。`$` は利用者が書けない。
-        let cseq = 0;
-        const capParams = callees.map((c) => (liftCaps.get(c) || []).map(() => "<$c" + cseq++ + ">"));
-        const body = [];
-        const b = src.slice(fn.q + 1);
-        for (let j = 0; j < b.length; j++) {
-          if (b[j] === "@_" && fn.ptr.includes(b[j + 1])) {
-            const ci = fn.ptr.indexOf(b[j + 1]);
-            body.push(callees[ci], ...capParams[ci]);
+      if (tok === "$_" && isId(arr[i + 1])) { args.push({ from: i, to: i + 1, ref: arr[i + 1] }); i += 2; continue; }
+      if (typeof tok === "string" && !isId(tok) && OPERATOR_HEADS.has(tok[0]) && !/^[0-9`]/.test(tok)) break;
+      args.push({ from: i, to: i, ref: null });
+      i++;
+    }
+    if (args.length !== fn.params.length) return null;   // 足りない・読めないなら触らない
+    const callees = fn.ptr.map((pn) => args[fn.params.indexOf(pn)].ref);
+    if (callees.some((c) => !c || !top.has(c) || top.get(c).category !== "Lambda")) return null;
+    // **多すぎる引数は捨てられない。** `@a b c` は適用以外にありえない——前置 `@` の先は
+    // 必ず Lambda だからである。本体で `@p` に当てている数が、渡した関数のアリティより多ければ、
+    // 余った引数は飽和した結果（値）へ当てることになる。実体を作ると `<dbl> <x> <y>` が名前の
+    // 読み方で余積（`[6 4]`）に戻ってしまい、`@` の意図が消える。作らずに印を付け、pass4 が
+    // 名指しする。
+    const over = fn.ptr.map((pn, j) => {
+      // 持ち上げた関数のアリティには捕まえた分が入っている。利用者が `@p` に当てるのは
+      // 残りだけなので、そちらで比べる。
+      const all = top.get(callees[j]).arity;
+      const want = typeof all === "number" ? all - (liftCaps.get(callees[j]) || []).length : all;
+      const got = appliedDepth(nodes[fn.idx], pn);
+      return typeof want === "number" && got > want ? { param: pn, callee: callees[j], want, got } : null;
+    }).find(Boolean);
+    if (over) { overMarks.push({ idx, F, over }); return null; }
+    const name = "<" + [F.slice(1, -1), ...callees.map((c) => c.slice(1, -1))].join("$") + ">";
+    if (!made.has(name)) {
+      const src = lines[fn.idx];
+      const keep = fn.params.filter((pn) => !fn.ptr.includes(pn));
+      // 捕まえた変数を運ぶ仮引数。名前には `$` を含める——`ap : f x` が `x` を捕まえた
+      // ラムダを受けると、元の名前のままでは実体の仮引数と衝突する。`$` は利用者が書けない。
+      let cseq = 0;
+      const capParams = callees.map((c) => (liftCaps.get(c) || []).map(() => "<$c" + cseq++ + ">"));
+      // **本体を入れ子の中まで書き換える。** `@_ <p>` を渡した関数へ、自分への呼び出し
+      // `<F> … <p> …` を実体自身への呼び出し `<実体> …` へ（ptr の位置の実引数を落とし、
+      // 捕まえた変数を運ぶ仮引数をそのまま渡し直す）。再帰する関数もこれで実体になる——
+      // 実体の中では `p` がもう決まっているので、渡し直す必要が無い。
+      let intact = true;
+      const rw = (x) => {
+        if (!Array.isArray(x)) return x;
+        const out = [];
+        for (let j = 0; j < x.length; j++) {
+          const t = x[j];
+          if (t === "@_" && fn.ptr.includes(x[j + 1])) {
+            const ci = fn.ptr.indexOf(x[j + 1]);
+            out.push(callees[ci], ...capParams[ci]);
             j++;
             continue;
           }
-          body.push(b[j]);
+          if (t === F) {
+            // `$F`（自分を値として渡す）は呼び出しではない。実体の名前へ付け替えると意味が変わる。
+            if (x[j - 1] === "$_") { intact = false; return out; }
+            const argv = x.slice(j + 1, j + 1 + fn.params.length);
+            // 実引数が揃っていて、ptr の位置がちょうど ptr 自身（素通し）のときだけ
+            if (argv.length !== fn.params.length || fn.ptrIdx.some((pi) => argv[pi] !== fn.params[pi])) { intact = false; return out; }
+            out.push(name, ...capParams.flat());
+            argv.forEach((a, k) => { if (!fn.ptrIdx.includes(k)) out.push(rw(a)); });
+            j += fn.params.length;
+            continue;
+          }
+          out.push(rw(t));
         }
-        const def = [name, ":", ...capParams.flat(), ...keep, "?", ...body];
-        const bind = buildEnvScope([def]).get(name);
-        if (!bind) continue;
-        top.set(name, bind);
-        made.set(name, def);
-        newDefs.push(def);
-      }
-      // 呼び出しを書き換える：`<F>` を実体の名前へ、ptr の実引数（`$_ <X>`）を落とす
-      const drop = new Set();
-      for (const pn of fn.ptr) { const a = args[fn.params.indexOf(pn)]; for (let k = a.from; k <= a.to; k++) drop.add(k); }
-      const next = [];
-      const caps = callees.flatMap((c) => liftCaps.get(c) || []);
-      for (let k = 0; k < line.length; k++) { if (k === s) next.push(name, ...caps); else if (!drop.has(k)) next.push(line[k]); }
-      lines[idx] = next;
-      dirty.add(idx);
-      break;                                           // 1行に1つ。残りは次の周回で
+        return out;
+      };
+      const body = rw(src.slice(fn.q + 1));
+      if (!intact) return null;
+      const def = [name, ":", ...capParams.flat(), ...keep, "?", ...body];
+      const bind = buildEnvScope([def]).get(name);
+      if (!bind) return null;
+      top.set(name, bind);
+      made.set(name, def);
+      newDefs.push(def);
     }
-  });
+    // 呼び出しを書き換える：`<F>` を実体の名前へ、ptr の実引数（`$_ <X>`）を落とす
+    const drop = new Set();
+    for (const pn of fn.ptr) { const a = args[fn.params.indexOf(pn)]; for (let k = a.from; k <= a.to; k++) drop.add(k); }
+    const end = args[args.length - 1].to;
+    const kept = [];
+    for (let k = s + 1; k <= end; k++) if (!drop.has(k)) kept.push(arr[k]);
+    return { head: [name, ...callees.flatMap((c) => liftCaps.get(c) || [])], kept, end };
+  };
+  const scan = (arr, idx, binders) => {
+    const out = [];
+    for (let s = 0; s < arr.length; s++) {
+      const tok = arr[s];
+      const fn = fns.get(tok);
+      // 自分の定義の中の自分への呼び出しは、実体を作るときに付け替える（上の rw）
+      if (fn && fn.idx !== idx && arr[s - 1] !== "$_" && !binders.has(tok)) {
+        const r = tryCall(arr, s, fn, idx);
+        if (r) {
+          // 残した実引数の中にも呼び出しは居る（`take_while $is_digit (drop_while $is_space s)`）
+          out.push(...r.head, ...r.kept.map((a) => (Array.isArray(a) ? scan(a, idx, binders) : a)));
+          s = r.end;
+          dirty.add(idx);
+          continue;
+        }
+      }
+      out.push(Array.isArray(tok) ? scan(tok, idx, binders) : tok);
+    }
+    return out;
+  };
+  // **総称の定義の行を先に見る。** その本体の中の呼び出しを先に実体へ付け替えておけば、
+  // そこから作る実体もそれを引き継ぐ。
+  const fnLines = [...new Set([...fns.values()].map((f) => f.idx))];
+  for (const idx of [...fnLines, ...[...lines.keys()].filter((k) => !fnLines.includes(k))]) {
+    const line = lines[idx];
+    if (!Array.isArray(line)) continue;
+    const next = scan(line, idx, bindersOf(line));
+    if (dirty.has(idx)) lines[idx] = next;
+  }
+  // 3. 通し直す。多すぎる引数の印は、通し直した木に付ける
+  const reduce = (line) => { const n = desugarIndexRest(reduceAll(line, env)); synthesizePointfreeIn(n, env); return n; };
+  for (const idx of dirty) nodes[idx] = reduce(lines[idx]);
+  for (const m of overMarks) markCall(nodes[m.idx], m.F, m.over);
   if (newDefs.length === 0) return;
   // **使われなくなった元の総称関数は落とす。** 呼び出しを全部実体へ付け替えたので、
   // `@` の仮引数を持ったまま誰にも呼ばれない——残すと pass4 の単相化が「呼び出しサイトが
@@ -438,12 +517,12 @@ function specializeRefCalls(lines, nodes, env, options) {
     if (![...made.keys()].some((nm) => nm.startsWith(F.slice(0, -1) + "$"))) continue;
     const b = top.get(F);
     if (b && b.exported) continue;
-    if (lines.some((line, idx) => idx !== fn.idx && mentions(line, F))) continue;
+    // 実体の本体からも呼ばれていないこと。総称の行を先に書き換えても、まだ見ていない総称の
+    // 本体から作った実体は、別の総称への呼び出しを持ったままでありうる。
+    if (lines.some((line, idx) => idx !== fn.idx && mentions(line, F)) || newDefs.some((d) => mentions(d, F))) continue;
     dead.push(fn.idx);
   }
-  // 3. 通し直す。実体は前に置く（使う場所より先に定義が要り、最後の式は最後のまま）
-  const reduce = (line) => { const n = desugarIndexRest(reduceAll(line, env)); synthesizePointfreeIn(n, env); return n; };
-  for (const idx of dirty) nodes[idx] = reduce(lines[idx]);
+  // 実体は前に置く（使う場所より先に定義が要り、最後の式は最後のまま）
   for (const idx of dead.sort((x, y) => y - x)) { nodes.splice(idx, 1); lines.splice(idx, 1); }
   nodes.unshift(...newDefs.map(reduce));
   lines.unshift(...newDefs);
