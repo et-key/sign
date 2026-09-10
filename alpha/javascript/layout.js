@@ -911,6 +911,10 @@ function passingOf(node, conf) {
   // スカラーは値そのものがレジスタに乗る。
   const machine = reduceToMachineType(type, target);
   if (machine) return { mode: "register", size: machine.size, align: machine.size, slots: 1, class: machine.class, signed: machine.signed };
+  // **入力は番地そのもの**（即値、type_system.md §3.5）。要素はメモリに並んでいないので
+  // 器ではない——規則と同じく値で運び、状態は番地1語だけである。頭は番地から読み、尾は
+  // 同じ番地（進むのは機器の側）。
+  if (type === "Reader") return { mode: "register", size: w.gpr, align: w.gpr, slots: 1, reader: true };
   // 規則（レンジ・イテレータ）はメモリ上に無いので、そのままレジスタへ乗る。
   //
   // 測るのは**辿った先**である。識別子そのものは「どう置かれているか」を持たない——

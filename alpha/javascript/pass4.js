@@ -2241,6 +2241,18 @@ function genExpr(node, env, em, scope, tail = false) {
 	// **`~@番地` はこの規則から出てくる。** `@p` は場所から値を読み、`~` がそれを器に
 	// する——番地そのものは表に出ない（`$` が作った番地を算術に使えないのと同じ理由）。
 	if (n.type === "operation" && n.position === "prefix" && n.name === "continuous" && n.operand) {
+		// **入力は読まずに番地だけを置く。** `~@X` の型が `Reader` のとき、ここで `@X` を生成すると
+		// その場で1回読んでしまう。読むのは分解したとき（頭）であり、ストリームそのものは番地で
+		// ある——`@` の中の X（番地）だけを置けば、それが Reader の実体になる。器は作らないので
+		// layer 0 でも通る（以前は1回読んだ値を長さ1の器へ包むので確保が要り、layer 0 が断っていた）。
+		if (n.atomType === "Reader") {
+			const src = n.operand && n.operand.type === "operation" && n.operand.name === "input" ? n.operand.operand : null;
+			if (!src) return em.fail(n, "入力（Reader）の番地が読み取れません");
+			const aw = genExpr(src, env, em, scope);
+			if (aw === false) return false;
+			if (aw !== 1) { em.pop(aw === TAIL ? 0 : aw); return em.fail(n, `入力の番地はレジスタ1本の値でなければなりません（${aw} 本）`); }
+			return 1;
+		}
 		const w = genExpr(n.operand, env, em, scope);
 		if (w === false) return false;
 		if (w === 2) return 2; // 既に器
@@ -8531,6 +8543,17 @@ function paramRegWidths(lambdaNode, em, callees = {}) {
 				sh = { kind: "fields", names: [sh.head], heads: [sh.head], rest: sh.rest };
 			}
 		}
+		// **尾が入力（Reader）なら、頭がいくつでも番地1本で受ける。** 器ではないので ptr と len の
+		// 2本は要らない——状態は番地だけで、頭は番地から読み、尾は同じ番地である（type_system.md
+		// §3.5）。頭が2つ以上だと `fields` の形で来るので、その枝より前で拾う（後ろに置くと
+		// `[a b ~xs]` だけが器の道へ落ち、ptr と len で引いていた）。
+		if (sh.rest) {
+			const restB = lambdaNode.scope ? envLookup(lambdaNode.scope, sh.rest) : null;
+			if (restB && restB.atomType === "Reader") {
+				const heads = sh.heads || (sh.head ? [sh.head] : []);
+				return { shape: { kind: "destructure", heads, head: heads[0], rest: sh.rest }, regs: 1, reader: true };
+			}
+		}
 		// **名前で分ける形は `{ptr}` 1本で受ける。** 構造体は形が型にあるので長さが要らない
 		// （stack_abi.md §4.6）。名前はコンパイル時にオフセットへ解決されるので、入口で
 		// することは固定オフセットからのロードだけである。
@@ -9160,6 +9183,30 @@ function genFunction(name, lambdaNode, env, em, mono) {
 				em.store(SCRATCH[0], off);
 				params.push(nm);
 				paramOffsets.push(off);
+				paramSlots.push(1);
+			}
+			params.push(inc.shape.rest);
+			paramOffsets.push(inc.off);
+			paramSlots.push(1);
+			continue;
+		}
+		// **入力の分解は、頭を読んで尾に同じ番地を渡すだけである**（type_system.md §3.5）。
+		// 器ではないので長さも崩壊の検査も無い——機器は尽きない。頭が複数あれば書いた順に同じ
+		// 番地から読む（機器が読むたびに次を出すので、それが順に並ぶ）。尾は番地のスロットを
+		// そのまま使い回す（1本、コピーしない）。出力 `#` が番地を返すのと対になる形である。
+		if (inc.reader) {
+			for (const h of inc.shape.heads || [inc.shape.head]) {
+				const o = em.slot * 8;
+				em.push();
+				em.load(SCRATCH[1], inc.off, "入力の番地");
+				// **機器を読むのは副作用である。** `[x ~xs]` は1つ消費することなので、`x` を使わなくても
+				// 読みは起きなければならない——消すと、次に `xs` を読んだとき本来 `x` だった値が来る。
+				// `ldr` は純粋な命令として不要命令の除去に消されるので、`ldar`（load-acquire）で出す。
+				// 順序が保証されて並べ替えられず、除去の対象にもならない。MMIO の読みとしても筋が通る。
+				em.emit(`ldar ${SCRATCH[0]}, [${SCRATCH[1]}]`, "読む（機器が次を出す。消さない・並べ替えない）");
+				em.store(SCRATCH[0], o);
+				params.push(h);
+				paramOffsets.push(o);
 				paramSlots.push(1);
 			}
 			params.push(inc.shape.rest);

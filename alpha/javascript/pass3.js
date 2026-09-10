@@ -2037,6 +2037,18 @@ function computeAtomType(node, env) {
       // 表現が変わる——型では無償、表現では有償（原理8）。
       if (node.position === "prefix" && node.name === "continuous") {
         const inner = inferAtomType(node.operand, env);
+        // **機器から読んだ値を撒くと、入力になる。** `@` の指す先が分からない（`Raw`＝機器の
+        // 番地）とき、読むたびに機器が次の値を出す——値ではなく射である。`~` はそれを撒くが、
+        // `List(Raw)` にはなれない。`List` は要素が空間に同時に並んでいること（並列時間）を要求
+        // するが、入力の要素は時間に沿って1つずつ来る。だから `Reader(Raw)` で、実体は番地そのもの
+        // （即値）である（type_system.md §3.5「`@` の相方は2つしかない」）。
+        //
+        // メモリ（インスタンスの番地 `$a`）を読んだ値は `Raw` ではなくその型なので、ここへは来ない
+        // ——1つの番地には値が1つしか居ないので、何度読んでも同じ値であり、ストリームにならない。
+        if (inner === "Raw" && node.operand && node.operand.type === "operation" && node.operand.position === "prefix" && node.operand.name === "input") {
+          node.elementType = "Raw";
+          return "Reader";
+        }
         if (CONTAINER_TYPES.has(inner)) {
           // 要素型は束縛の側に在ることがある（`l : [1 2 3]` の `~l`）ので、ノードの
           // フィールドを覗くだけでは落ちる。
