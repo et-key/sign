@@ -2654,9 +2654,20 @@ function inferLambdaParamTypes(lambdaNode, env) {
       }
       // 器のデフォルトは要素型も語る。`c : [0 ~+ 1]` の `c ' n` が何の型かは
       // ここを渡さないと出ない——`inferred` は型名しか運べないので束縛へ直接置く。
-      if (e.default.elementType) {
+      // **既定が名前なら、その束縛が要素型を持っている。**
+      //
+      // ノードの注釈は周回ごとに捨てられる（`clearTypeAnnotations`）ので、既定の式が
+      // 「別の仮引数」だと、まだ注釈が付いていない周で写し損ねる——器の型だけが伝わって
+      // 要素型が落ちる。実測：`run : ts / b : ts ? expr b` が `b = List(-)` になり、
+      // `expr` の `ts` もそのまま要素型なしを継いで「まだ出せない式です（get_prop）」。
+      //
+      // 注釈は派生値で、束縛が原本である。**原本の方を引く。**
+      const de =
+        e.default.elementType ||
+        (isIdentifierNode(e.default) && scope ? (envLookup(scope, e.default.value) || {}).elementType : null);
+      if (de) {
         const b = scope ? envLookup(scope, e.name) : null;
-        if (b) b.elementType = e.default.elementType;
+        if (b) b.elementType = de;
       }
     }
   }
@@ -4357,6 +4368,43 @@ function annotateAll(nodes, env, diagnostics) {
       // 底へ戻したのだから、これは答えではなく種である——印も立て直す。
       b2.returnsSeeded = true;
     }
+  }
+  // **要素型も底へ戻す。**
+  //
+  // 返値だけ戻して仮引数の要素型を残すと、1相目の**過渡値**がそのまま2相目へ持ち越される。
+  // `clearTypeAnnotations` は周回ごとにノードの注釈を捨てるが、束縛（scope の bindings）の
+  // `elementType` は捨てない——**同じ事実がノードと束縛の2箇所にあって、片方しか作り直して
+  // いなかった**。あの関数のコメントが自分で言っている規則（同じ事実が2つの周回に跨って
+  // 2つ在る状態を作らない）が、返値には適用されて要素型には適用されていなかった。
+  //
+  // 症状：`||expr (tokens s)||` が診断ゼロのまま実機で `__` を返す。周回を観測すると、
+  // `tokens` の返り値がまだ収束していない周（`Struct`）の値が `out` 系10本の `ts` へ書き
+  // 込まれ、そのまま固まる。`noteElementType` は畳めるときしか動かさず、上書きは観測が
+  // 単集合のときだけなので、相互再帰の輪では観測が `{Struct, String}` で固定されて二度と
+  // 解けない——**輪が自分の古い値を証拠にして固める**形である。
+  //
+  // `expr` だけ回復していたのは、仮引数リスト全体がブラケット（`[~ts]`）の経路が毎周
+  // 無条件に上書きするからで、`out : [~ts] i j t ?` はその経路に乗らない。**同じ書き方に
+  // 見えて通る道が違う**、というのがここでも効いていた。
+  //
+  // 底へ戻すのは安全側である。2相目は確定した仮引数の型で始まるので、正しい値は同じ周回で
+  // 戻ってくる（戻ってこないなら、それは元から観測が足りない形である）。
+  // **辿るのはスコープの鎖である。** 仮引数の束縛は、その式のノードが持つスコープとは
+  // 限らない（`out : [~ts] i j t ?` は分解の入れ子で親側に居る）。node から見えるスコープを
+  // 拾ったら、そこから `parent` を辿って全部戻す。
+  const bottomOutElementTypes = (node, seen, scopes) => {
+    if (!node || typeof node !== "object" || seen.has(node)) return;
+    seen.add(node);
+    for (let s = node.scope; s && s.bindings && !scopes.has(s); s = s.parent) scopes.add(s);
+    for (const k of ["left", "right", "operand", "middle"]) bottomOutElementTypes(node[k], seen, scopes);
+    for (const l of node.lines || []) bottomOutElementTypes(l, seen, scopes);
+    for (const e of node.entries || []) bottomOutElementTypes(e.default, seen, scopes);
+  };
+  {
+    const seen = new Set();
+    const scopes = new Set();
+    for (const node of nodes) bottomOutElementTypes(node, seen, scopes);
+    for (const s of scopes) for (const b of s.bindings.values()) delete b.elementType;
   }
   runFixpoint();
 
