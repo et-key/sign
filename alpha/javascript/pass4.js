@@ -158,6 +158,9 @@ const FRAME_MARK = "@@FRAME@@";
 // 比較が偽のときに返す値＝`__` の niche（value_representation.md §3.5）。
 // **`0` ではない。** Sign では `0` は真であり、`0 = 0` は真で `0` を返す。
 
+// 余積族（pass2 が空白を解くときに使う名前）。適用として読めなかった形を名指しするのに要る。
+const COPRODUCT_OPS_P4 = new Set(["construct", "concat", "push", "unshift"]);
+
 function isIdentifierNode(n) {
 	return !!n && n.type === "atom" && n.kind === "identifier";
 }
@@ -9377,6 +9380,43 @@ function generateAsm(nodes, env, options = {}) {
 						"一行に並べた `名前 : 値 , 名前 : 値` は `:` の方が緩いので `x : ((1 , y) : 2)` と読まれ、二要素にはなりません",
 					node: n,
 				});
+			}
+			// **アリティの分からない呼び先を適用した結果は、余積へ落としてはいけない。**
+			//
+			// `(@f x) y` を pass2 は `construct(apply(@f, x), y)` と組む——その時点で `@f` の
+			// アリティが分からないので「適用ではない」と決め打つしかないからである。決め打ちが
+			// 外れると、足りない引数が `__` で埋まり、完全性公理で結果が `__` になり、それと `y`
+			// で器が組まれて**番地が返る**（実機で 1074332096、診断ゼロ）。解釈器も 4 を返していた。
+			//
+			// pass4 は具体化の時点で呼び先を知っている（生成コードに `f = add` と出る）が、木は
+			// もう組まれた後である。**順序の問題であって、印（`$`）の問題ではない**。
+			//
+			// **層の禁止と実装の穴を区別する。** この形を通すには、単相化で解けないぶんを閉包に
+			// するしかない——閉包は捕獲した引数の置き場が要るので確保であり、layer 0 には無い。
+			// だから layer 0 では設計上の結論であって「まだ」ではない。layer 1 以上は実装の穴で
+			// あり、直す道は「具体化した実体ごとに本体を pass2 へ通し直す」ことである。
+			// （layer 4 でローダが入ると単相化が動的境界を越えられないので、そこでは関数値が
+			// 必然になる——同じ形が層によって「禁止／まだ／必要」と変わる。）
+			if (n.type === "operation" && COPRODUCT_OPS_P4.has(n.name)) {
+				const u = unwrap(n.left);
+				const c = u && u.type === "operation" && u.name === "apply" ? unwrap(u.left) : null;
+				if (c && c.type === "operation" && c.position === "prefix" && c.name === "input" && isIdentifierNode(c.operand)) {
+					const lay = em.conf.layer;
+					const who = bareName(c.operand.value);
+					em.diagnostics.push({
+						severity: "error",
+						message:
+							lay !== undefined && lay < 1
+								? `layer: ${lay} では「@${who} … を括って更に適用する」形を出せません` +
+								  "（単相化で解けないぶんは閉包になり、捕獲した引数の置き場＝確保が要る）。" +
+								  "引数を1つずつ渡す形（`@名前 引数` を1回だけ）にしてください"
+								: `「@${who} … を括って更に適用する」形は、まだ出せません` +
+								  "——括りの中の適用が飽和しているかどうかが、呼び先の具体化より前には決まらないため、" +
+								  "外側が適用ではなく余積として読まれています。" +
+								  "いまは引数を1つずつ渡す形（`@名前 引数` を1回だけ）にしてください",
+						node: n,
+					});
+				}
 			}
 			for (const k of ["left", "right", "operand", "middle"]) walk(n[k], false);
 			for (const l of n.lines || []) walk(l, true);
