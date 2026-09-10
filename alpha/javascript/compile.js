@@ -24,7 +24,7 @@
 
 import { preprocess } from "./lexer.js";
 import { parse } from "./parser.js";
-import { buildEnv, bindEnv, EXPORT_MARKERS } from "./pass1.js";
+import { buildEnv, buildEnvScope, bindEnv, EXPORT_MARKERS } from "./pass1.js";
 import { reduceAll, desugarIndexRest } from "./pass2.js";
 import { specializeGenericParams } from "./pass1b.js";
 import { annotateAll, checkLayerConstraints, checkCharsetConstraints } from "./pass3.js";
@@ -224,6 +224,131 @@ function resolveImports(lines, options, parseFn, base, state) {
   return out;
 }
 
+// 呼び出しの実引数を読むときに「ここで式が切れる」と判る字句の頭文字（演算子）。
+const OPERATOR_HEADS = new Set([..."?:#;|&=<>!+*/%^~@$,", "-"]);
+
+/**
+ * **`$` で渡した関数を、実体ごとに pass2 へ通し直す**（ref の具体化）。
+ *
+ * `app : f x y ? @f x y` を `app $add 3 4` と呼ぶと、`@f` の先は呼び出しサイトごとに
+ * 決まっている（ここでは `add`）。ところが pass2 は `app` の本体を**総称のまま1回だけ**
+ * 読むので、`@f` のアリティも仮引数の型も知らない——そのぶんは pass4 の単相化が
+ * アセンブリの段で後から拾っていた。後からでは Pass 3 が型を付けられない：
+ *
+ *   多引数の無名 `$(p q ? p * q)` は直接呼ばれる場所が無く、仮引数の型が決まらない
+ *   `a : ap $dbl 5` の `a` は `@f` 越しの返り値なので型が届かない
+ *
+ * そこで**実体を構文木の段で作る**。還元前の行（平らな字句の並び）を複製して
+ *
+ *   <app> : <f> <x> <y> ? @_ <f> <x> <y>     →     <app$add> : <x> <y> ? <add> <x> <y>
+ *   <app> $_ <add> 3 4                      →     <app$add> 3 4
+ *
+ * と書き換え、pass2 へ通し直す。還元前の行にはまだスコープが無い（pass2 が付ける）ので、
+ * 通し直すたびに**実体ごとに新しいスコープ**ができ、束縛を共有しない——共有すると
+ * 型がラッチする。名前に `$` を含めるのは、字句の後の並びなので字句解析を通らず、
+ * 利用者の識別子とも衝突しないからである（Sign の字句では `$` は演算子）。
+ *
+ * **扱えない形は触らない。** 再帰する関数、仮引数を `@` 以外にも使う本体、単純でない
+ * 呼び出しは書き換えずに残す——そちらは今まで通り pass4 の単相化が拾う。だからこの
+ * 段は足し算にしかならない。
+ */
+function specializeRefCalls(lines, nodes, env, options) {
+  const top = env && env.bindings;
+  if (!top) return;
+  const isId = (x) => typeof x === "string" && x.startsWith("<") && x.endsWith(">");
+  // 1. `@p` を持つ関数：`<F> : 仮引数… ? 本体` で、本体に `@_ <p>` が在る
+  const fns = new Map();
+  lines.forEach((line, idx) => {
+    if (!Array.isArray(line) || !isId(line[0]) || line[1] !== ":") return;
+    const q = line.indexOf("?", 2);
+    if (q < 0) return;
+    const params = line.slice(2, q);
+    if (!params.every(isId)) return;                  // 裸の仮引数だけの形
+    const body = line.slice(q + 1);
+    const ptr = params.filter((pn) => body.some((tok, i) => tok === "@_" && body[i + 1] === pn));
+    if (ptr.length === 0) return;
+    // 仮引数を `@` 以外にも使っているなら落とせない（別の関数へ渡している等）
+    const bare = (pn) => body.some((tok, i) => tok === pn && body[i - 1] !== "@_");
+    if (ptr.some(bare)) return;
+    // **残る仮引数がゼロなら実体にしない。** `apply5 : ref ? @ref 5` の `ref` を落とすと
+    // `apply5$add : ? add 5` になるが、仮引数ゼロの関数を名前だけ書いたときに呼ぶのか値の
+    // ままなのかは、元の `apply5 $add`（＝ `add 5`、未飽和の Lambda）と意味が変わりうる。
+    if (params.length - ptr.length === 0) return;
+    if (body.includes(line[0])) return;               // 再帰は pass4 に任せる
+    if (body.some((tok) => Array.isArray(tok))) return; // 入れ子の括りは今は触らない
+    fns.set(line[0], { idx, params, ptr, q });
+  });
+  if (fns.size === 0) return;
+  // 2. 呼び出しサイト：行の中の `<F> …` で、ptr の位置が `$_ <X>`（X はトップの関数）
+  const made = new Map();
+  const dirty = new Set();
+  const newDefs = [];
+  lines.forEach((line, idx) => {
+    if (!Array.isArray(line)) return;
+    for (let s = 0; s < line.length; s++) {
+      const fn = fns.get(line[s]);
+      if (!fn || fns.get(line[s]).idx === idx) continue;
+      // 実引数を仮引数の数ぶん読む。単純な形（識別子・字面・括り・`$_ <X>`）だけ。
+      const args = [];
+      let i = s + 1;
+      while (args.length < fn.params.length && i < line.length) {
+        const tok = line[i];
+        if (tok === "$_" && isId(line[i + 1])) { args.push({ from: i, to: i + 1, ref: line[i + 1] }); i += 2; continue; }
+        if (typeof tok === "string" && !isId(tok) && OPERATOR_HEADS.has(tok[0]) && !/^[0-9`]/.test(tok)) break;
+        args.push({ from: i, to: i, ref: null });
+        i++;
+      }
+      if (args.length !== fn.params.length) continue;   // 足りない・読めないなら触らない
+      const callees = fn.ptr.map((pn) => args[fn.params.indexOf(pn)].ref);
+      if (callees.some((c) => !c || !top.has(c) || top.get(c).category !== "Lambda")) continue;
+      const name = "<" + [line[s].slice(1, -1), ...callees.map((c) => c.slice(1, -1))].join("$") + ">";
+      if (!made.has(name)) {
+        const src = lines[fn.idx];
+        const keep = fn.params.filter((pn) => !fn.ptr.includes(pn));
+        const body = [];
+        const b = src.slice(fn.q + 1);
+        for (let j = 0; j < b.length; j++) {
+          if (b[j] === "@_" && fn.ptr.includes(b[j + 1])) { body.push(callees[fn.ptr.indexOf(b[j + 1])]); j++; continue; }
+          body.push(b[j]);
+        }
+        const def = [name, ":", ...keep, "?", ...body];
+        const bind = buildEnvScope([def]).get(name);
+        if (!bind) continue;
+        top.set(name, bind);
+        made.set(name, def);
+        newDefs.push(def);
+      }
+      // 呼び出しを書き換える：`<F>` を実体の名前へ、ptr の実引数（`$_ <X>`）を落とす
+      const drop = new Set();
+      for (const pn of fn.ptr) { const a = args[fn.params.indexOf(pn)]; for (let k = a.from; k <= a.to; k++) drop.add(k); }
+      const next = [];
+      for (let k = 0; k < line.length; k++) { if (k === s) next.push(name); else if (!drop.has(k)) next.push(line[k]); }
+      lines[idx] = next;
+      dirty.add(idx);
+      break;                                           // 1行に1つ。残りは次の周回で
+    }
+  });
+  if (newDefs.length === 0) return;
+  // **使われなくなった元の総称関数は落とす。** 呼び出しを全部実体へ付け替えたので、
+  // `@` の仮引数を持ったまま誰にも呼ばれない——残すと pass4 の単相化が「呼び出しサイトが
+  // 無い」と断る。他の行から参照されておらず、エクスポートもされていないものだけ落とす。
+  const mentions = (x, id) => Array.isArray(x) ? x.some((y) => mentions(y, id)) : x === id;
+  const dead = [];
+  for (const [F, fn] of fns) {
+    if (![...made.keys()].some((nm) => nm.startsWith(F.slice(0, -1) + "$"))) continue;
+    const b = top.get(F);
+    if (b && b.exported) continue;
+    if (lines.some((line, idx) => idx !== fn.idx && mentions(line, F))) continue;
+    dead.push(fn.idx);
+  }
+  // 3. 通し直す。実体は前に置く（使う場所より先に定義が要り、最後の式は最後のまま）
+  const reduce = (line) => { const n = desugarIndexRest(reduceAll(line, env)); synthesizePointfreeIn(n, env); return n; };
+  for (const idx of dirty) nodes[idx] = reduce(lines[idx]);
+  for (const idx of dead.sort((x, y) => y - x)) { nodes.splice(idx, 1); lines.splice(idx, 1); }
+  nodes.unshift(...newDefs.map(reduce));
+  lines.unshift(...newDefs);
+}
+
 function compile(source, options = {}) {
   const parseFn = options.parse || parse;
   // **入口のファイル自身も「撒き済み」として数える。** 循環したときに入口が自分を撒き直し、
@@ -275,6 +400,9 @@ function compile(source, options = {}) {
   // 均した先の入口に印を付ける。**同じ名前が2回定義されている**ので、後の方（生成側）が
   // カーソルの入口で、前の方（元の関数）は Pass 4 が飛ばす対象である。
   for (const g of options.__cursorGroups || []) markCursorEntries(nodes, g.entries, g.entries, g.group);
+  // **`$` で渡した関数を、実体ごとに pass2 へ通し直す。** 型とアリティが実体の中へ
+  // 流れ込むように、Pass 3 より前でやる（specializeRefCalls の注記）。
+  specializeRefCalls(lines, nodes, env, options);
   const specializations = runPass1b(nodes, env);
   // **鍵が増えるマージのぶんまで、器の並びを先に決める。**
   //
