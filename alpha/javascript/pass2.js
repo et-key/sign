@@ -19,8 +19,8 @@
  *    非対称を生んでいた。余積は左結合であり左辺が器である（list_model.md §2.2）ので、
  *    向きは常に一つで足りる——`push` はもう作られない。
  * 3. Block（[...] {...} (...)）の種別（paren/brace/bracket）は grammar.pegjs が
- *    区別を保持しないため、AST上でも区別できていない（kindは "paren" 固定、または
- *    indent/absのみ判別）。
+ *    区別を保持しないため、AST上でも区別できていない（kind は "paren" 固定、または
+ *    indent / abs / **norm** の4種を判別する——`||xs||` は abs とは別の kind である）。
  *
  * 【grammar.pegjs 根本修正済み】以前は Expression の `.flat()` が密着演算子グループと
  * Blockを区別できず、Blockが他の項と混在すると中身が漏れる問題があった（Pass2側の
@@ -1528,7 +1528,7 @@ function resolveBlock(term, env) {
     kind = "abs";
     exprsArray = term[1];
   } else if (Array.isArray(term) && term[0] === '"NORM_"') {
-    // ノルム（`~|...|~`、要素数）。絶対値と分けるのは、1要素の器が存在しないからである
+    // ノルム（`||...||`、要素数）。絶対値と分けるのは、1要素の器が存在しないからである
     // ——`[5] ≅ 5` なので `|[5]|` は絶対値なら 5、要素数なら 1 になってしまう。
     kind = "norm";
     exprsArray = term[1];

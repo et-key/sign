@@ -1002,7 +1002,7 @@ function genExpr(node, env, em, scope, tail = false) {
 	// 1行でも `条件 : 結果` なら分岐である（枝が尽きれば `__`）。ブロックの行数ではなく
 	// **定義行かどうか**で決まる——`名前 : 値` の構造体と区別が要るのは複数行のときだけで、
 	// 関数本体では `識別子 : 値` も match_case である（function_guide.md）。
-	// **ノルム（`~|...|~`）は要素数である。数えることと並べることは別なので、走査しない。**
+	// **ノルム（`||...||`）は要素数である。数えることと並べることは別なので、走査しない。**
 	//
 	// 器（`{ptr, len}`）なら `len` がそのまま答え——ロード1つ。規則（`{start, step, end}`）
 	// なら `(end - start) / step + 1` で割り算1つ（list_model.md §2.3「規則が一次なら
@@ -1740,7 +1740,7 @@ function genExpr(node, env, em, scope, tail = false) {
 				for (const a of passed) {
 					if (!appendableCallee(a, em)) continue;
 					// **印は括りの中の呼び出しに付ける。** `(walk s bottom 0 0)` は括弧の節で
-					// あり、そこに付けても `genCall` が見るのは中の `apply` である。
+					// あり、そこに付けても呼び出しを出す側（genExpr の apply 分岐）が見るのは中の `apply` である。
 					const t = stripExpand(a);
 					t._sretInto = em.sretDest;
 					through.push(t);
@@ -3183,7 +3183,7 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.store(SCRATCH[1], destSlot, "続きを書く場所");
 			tailPart._sretInto = destSlot;
 			// **呼び先の取り分は k 個ぶん狭い。** 器を割ったのはこちらなので、割れ目を伝える
-			// のもこちらである（`genCall` が x15 を組み立てる）。
+			// のもこちらである（genExpr の apply 分岐が x15 を組み立てる）。
 			tailPart._sretAdvance = k;
 			const tw = genExpr(tailPart, env, em, scope);
 			tailPart._sretInto = undefined;
@@ -9113,7 +9113,7 @@ function genFunction(name, lambdaNode, env, em, mono) {
 		params.push(...heads, inc.shape.rest);
 		paramOffsets.push(...headOffs, inc.off);
 		// **分解した組を覚えておく。** 組み直す形（`c rest`）は恒等射なので、器を作る
-		// のではなく参照を戻せばよい（`genRejoin`）。
+		// のではなく参照を戻せばよい（この直後の `bracketPairs` がその印である）。
 		bracketPairs.push({ head: inc.shape.head, rest: inc.shape.rest, restOff: inc.off, elemSize: inc.elemSize });
 		paramSlots.push(...heads.map(() => 1), 2);
 	}
@@ -9142,7 +9142,7 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	const before = em.diagnostics.length;
 	// 本体そのものが末尾位置である。`selfLabel` / `loopLabel` を渡すことで、本体の中の
 	// 自己呼び出しがフレームを使い回す `b` になる。
-	// 本体のどこかで場所を取るなら、フレームを畳む末尾呼び出しは使えない（`genApply` の理由）。
+	// 本体のどこかで場所を取るなら、フレームを畳む末尾呼び出しは使えない（`allocaAllowed` と
 	const scope = {
 		params,
 		paramOffsets,
