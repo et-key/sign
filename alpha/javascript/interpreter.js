@@ -612,6 +612,29 @@ function evalIndentBlock(node, env, tailEval) {
  * ところだけで、あとは値の話である——切り出しておけば、末尾の呼び出しへ跳ぶ側からも
  * 同じ規則で繋げる（`sep` のような「前置き ＋ 再帰」を積まずに回すのに要る）。
  */
+// **単位元が落ちた余積は、組み立てていない。** 蓄積子かどうかは構文で見る（値には現れない
+// ——組み立て中の器も書かれた器も同じ配列である）。ところが `[[1 2] [] [3 4]]` の左辺は
+// construct ノードでありながら、`[]` が余積の単位元として落ちるので値は素通しの `[1 2]`
+// であって蓄積子ではない。そこを撒くと器が1段潰れ、先頭の群だけが平坦化されて
+// `||[[1 2] [] [3 4] [5 6]]||` が 3 ではなく 4 になっていた。
+//
+// 構文で見る以上、**構文に現れる単位元——`__` と空の括り——はここで透過させる**。
+// 名前へ隠した `[]` までは追えないが、それは「蓄積子かどうかは値に現れない」という
+// 制約そのものであって、この判定に足りないものではない。
+const COPRODUCT_OPS = ["construct", "concat", "push", "unshift"];
+const isUnitNode = (n) =>
+  !!n &&
+  ((n.type === "atom" && n.kind === "unit") ||
+    (n.type === "block" && Array.isArray(n.lines) && n.lines.length === 0));
+const isAccumulator = (n) => {
+  if (!n || n.type !== "operation" || !COPRODUCT_OPS.includes(n.name)) return false;
+  // 右が落ちるなら左がそのまま出る——蓄積子かどうかは左が決める。
+  if (isUnitNode(n.right)) return isAccumulator(n.left);
+  // 左が落ちるなら右がそのまま出る——1項なので蓄積子ではない。
+  if (isUnitNode(n.left)) return false;
+  return true;
+};
+
 function constructValues(node, l, r) {
         // 余積の単位元則（type_system.md §6.1「関数の位置の `__` は余積の初対象＝単位元、
         // 引数を素通しにする」）。Unit側を消した結果が1項だけになったら、それを
@@ -703,7 +726,7 @@ function constructValues(node, l, r) {
         // ただし**組み立て中の器は別**で、そこは撒く。余積は左結合なので `[1 2 3]` の左辺は
         // 「いま組み立てている器」であり、1要素で包むと過剰に入れ子になる。区別は構文にしか
         // ない——組み立て中かどうかは値に現れない（どちらも同じ配列である）。
-        const accL = !!(node && node.left && node.left.type === "operation" && ["construct", "concat", "push", "unshift"].includes(node.left.name));
+        const accL = isAccumulator(node && node.left);
         const dl = deIterate(l);
         return [...(accL || isSpread(l) ? asList(dl) : [dl]), ...(isSpread(r) ? asList(deIterate(r)) : [r])];
 }
@@ -2468,7 +2491,7 @@ function evaluate(node, env) {
         // 決める）、`isSpread` は「書き手が撒けと言ったか」（値に付いた印）で、**どちらも
         // 片方では答えられない**——名前を経由した `a~` は構文に現れず、組み立て中かどうかは
         // 値に現れない。
-        const acc = !!(node.left && node.left.type === "operation" && ["construct", "concat", "push", "unshift"].includes(node.left.name));
+        const acc = isAccumulator(node.left);
         return [...(acc || isSpread(rawA2) ? asList(a) : [a]), ...(isSpread(rawB) ? asList(deIterate(rawB)) : [rawB])];
       }
       // list_model.md §2.3「派生演算子による範囲リストの構築」。**レンジ式の実体は
