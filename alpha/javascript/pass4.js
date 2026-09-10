@@ -9347,6 +9347,50 @@ function generateAsm(nodes, env, options = {}) {
 		};
 	}
 
+	// **`名前 : 値` の左辺は名前である。**
+	//
+	// 構造体は必ずブロックで書く（1エントリでも）ので、`[x : 1 , y : 2]` のように一行で
+	// 並べる綴りには正当な用途が無い。ところが `:` は `,` より緩く右結合なので、あれは
+	// `x : ((1 , y) : 2)` と読まれ——**内側の define の左辺が直積**になって、値だけが
+	// 出てくる。実測で `{"x":2}`、診断ゼロ。`baz~ : foo`（撒いた鍵）も同じで、1行入る
+	// だけで構造体ごと潰れて `bar` が引けなくなっていた。
+	//
+	// **撒けるということは1個ではないということ**であり、鍵は1個でなければならない。だから
+	// 断るのは「左辺がスロット鍵（識別子か文字列）でないもの」——`isSlotKeyAtom` が既に
+	// 持っている境界をそのまま使う。**同じ規則を2箇所に書かない。**
+	//
+	// **`:` は2つの役をしている。** ブロックの行にある `条件 : 値` は match の枝で、左辺は
+	// 式でよい（`n > 0 : f (n - 1)`）。だから「どの define も左辺は名前」では強すぎる
+	// ——実測で pass4 の 13 件が落ちた。
+	//
+	// 分かれ目は**行かどうか**である。match の枝は必ずブロックの行に居るので、**値の中に
+	// 現れた define** は枝ではありえない。一行 Dict の内側（`x : ((1 , y) : 2)`）がまさに
+	// それで、そこだけを見れば枝を巻き込まない。
+	{
+		const seen = new Set();
+		const walk = (n, inLine) => {
+			if (!n || typeof n !== "object" || seen.has(n)) return;
+			seen.add(n);
+			if (isDefineNode(n) && !inLine && !isSlotKeyAtom(n.left)) {
+				const l = unwrap(n.left);
+				const how = l && l.type === "operation" ? l.name + (l.position === "postfix" ? "（後置）" : "") : l && l.kind ? l.kind : "?";
+				em.diagnostics.push({
+					severity: "error",
+					message:
+						`\`名前 : 値\` の左辺は名前でなければなりません（${how}）——構造体は1エントリでもブロックで書きます。` +
+						"一行に並べた `名前 : 値 , 名前 : 値` は `:` の方が緩いので `x : ((1 , y) : 2)` と読まれ、二要素にはなりません",
+					node: n,
+				});
+			}
+			for (const k of ["left", "right", "operand", "middle"]) walk(n[k], false);
+			for (const l of n.lines || []) walk(l, true);
+			for (const e of n.entries || []) walk(e.default, false);
+		};
+		// **トップレベルは match の枝ではない。** 枝はラムダの本体ブロックの行に居るので、
+		// ここを行として扱う理由が無い（`x : 1` は左辺が名前なので、そもそも引っかからない）。
+		for (const node of nodes) walk(node, false);
+	}
+
 	// 具体化はコード生成の前に済ませる（どの実体を出すかが決まらないと本体を出せない）。
 	em.env = env; // 束縛から実体の種類を辿るために持つ（`slotsOfNode`）
 	const monos = collectMonomorphs(nodes);
