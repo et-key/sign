@@ -252,8 +252,9 @@ check("コメントは診断にならない", asm("`これはコメント`\nf : 
 // レジスタで運ぶ必要が無くなる——`stack_abi.md` の比較表が Sign の欄に
 // 「コンパイル時特殊化（コストゼロ）」と書いているのはこのことである。
 {
+	// 本体は `@p (s + 1)`——`@p s` だと η 簡約で実体ごと消える（下の η の節）。
 	const src =
-		"is_digit : c ? c + 0\nis_alpha : c ? c + 1\ntake_while : p s ? @p s\n" +
+		"is_digit : c ? c + 0\nis_alpha : c ? c + 1\ntake_while : p s ? @p (s + 1)\n" +
 		"f : s ? take_while $is_digit s\ng : s ? take_while $is_alpha s\nf 1\ng 2";
 	const r = asm(src);
 	checkTrue("呼ばれた組み合わせのぶんだけ実体が出る", r.text.includes("take_while$is_digit:") && r.text.includes("take_while$is_alpha:"));
@@ -277,6 +278,16 @@ check("コメントは診断にならない", asm("`これはコメント`\nf : 
 	}
 	check("関数ポインタは引数として渡らない", [...argRegs].sort(), ["x0"]);
 	check("診断は出ない", r.diagnostics.length, 0);
+}
+// **η 簡約：仮引数をそのまま渡すだけの実体は、呼び先そのものである。**
+// `<take_while$is_digit> : <s> ? <is_digit> <s>` は `is_digit` と同じなので実体を作らず、
+// 呼び出しサイトが `is_digit` を直に呼ぶ——1段挟むぶんの呼び出しとフレームが消える。
+{
+	const src = "is_digit : c ? c + 0\ntake_while : p s ? @p s\nf : s ? take_while $is_digit s\nf 1";
+	const r = asm(src);
+	check("η：診断は出ない", r.diagnostics.length, 0);
+	checkTrue("η：実体は出ない", !r.text.includes("take_while$is_digit:"));
+	checkTrue("η：呼び先を直に呼ぶ", (body(src, "f") || []).includes("b is_digit"), (body(src, "f") || []).join(" / "));
 }
 // `$名前` 以外では具体化できない。式で作ったアドレスは静的に決まらない。
 checkTrue(

@@ -364,6 +364,8 @@ function specializeRefCalls(lines, nodes, env, options) {
   // 2. 呼び出しサイト：`<F> …` で、ptr の位置が `$_ <X>`（X はトップの関数）。**入れ子の奥まで
   //    探す**——`tokens` の本体のように、呼び出しは字下げのブロックや括りの中に居る。
   const made = new Map();
+  // η 簡約した実体の名前 → 呼び先。実体の定義は作らない。
+  const etas = new Map();
   const dirty = new Set();
   const newDefs = [];
   // 多すぎる引数の印。付けるのは通し直しの**後**である——同じ行の別の呼び出しを書き換えると
@@ -459,20 +461,39 @@ function specializeRefCalls(lines, nodes, env, options) {
       };
       const body = rw(src.slice(fn.q + 1));
       if (!intact) return null;
-      const def = [name, ":", ...capParams.flat(), ...keep, "?", ...body];
-      const bind = buildEnvScope([def]).get(name);
-      if (!bind) return null;
-      top.set(name, bind);
-      made.set(name, def);
-      newDefs.push(def);
+      // **η 簡約。** 本体が「呼び先へ仮引数を同じ順でそのまま渡すだけ」なら、実体は呼び先
+      // そのものである（`<app$add> : <x> <y> ? <add> <x> <y>` ≡ `add`）。実体を作らず、呼び出し
+      // サイトで呼び先を直に呼ぶ——1段挟むぶんの呼び出しとフレームが消える。
+      //
+      // 呼び先のアリティが仮引数より**多い**ときも同じである。カリー化されているので
+      // `<ap$add3> : <x> ? <add3> <x>` も `add3` そのものであり、実体は部分適用（関数）を返す。
+      // 実体のままだと pass2 は返り値が関数だと知らないので、`(ap$add3 1) 2 3` を適用ではなく
+      // 構築に読んでいた（インタプリタが黙って 3 を返した）。`(add3 1) 2 3` なら適用の鎖に
+      // なる。少ないとき（多すぎる引数）は上で断っている。
+      const formals = [...capParams.flat(), ...keep];
+      const head = body[0];
+      const headArity = isId(head) && top.has(head) ? top.get(head).arity : null;
+      if (formals.every(isId) && body.length === formals.length + 1 && body.slice(1).every((t, k) => t === formals[k]) &&
+          !formals.includes(head) && top.get(head).category === "Lambda" &&
+          typeof headArity === "number" && headArity >= formals.length) {
+        made.set(name, null);
+        etas.set(name, head);
+      } else {
+        const def = [name, ":", ...formals, "?", ...body];
+        const bind = buildEnvScope([def]).get(name);
+        if (!bind) return null;
+        top.set(name, bind);
+        made.set(name, def);
+        newDefs.push(def);
+      }
     }
-    // 呼び出しを書き換える：`<F>` を実体の名前へ、ptr の実引数（`$_ <X>`）を落とす
+    // 呼び出しを書き換える：`<F>` を実体の名前へ（η 簡約したなら呼び先へ）、ptr の実引数（`$_ <X>`）を落とす
     const drop = new Set();
     for (const pn of fn.ptr) { const a = args[fn.params.indexOf(pn)]; for (let k = a.from; k <= a.to; k++) drop.add(k); }
     const end = args[args.length - 1].to;
     const kept = [];
     for (let k = s + 1; k <= end; k++) if (!drop.has(k)) kept.push(arr[k]);
-    return { head: [name, ...callees.flatMap((c) => liftCaps.get(c) || [])], kept, end };
+    return { head: [etas.get(name) || name, ...callees.flatMap((c) => liftCaps.get(c) || [])], kept, end };
   };
   const scan = (arr, idx, binders) => {
     const out = [];
@@ -504,14 +525,40 @@ function specializeRefCalls(lines, nodes, env, options) {
     if (dirty.has(idx)) lines[idx] = next;
   }
   // 3. 通し直す。多すぎる引数の印は、通し直した木に付ける
+  //
+  // **通し直した行には、compile がここまでに当てた段を全部当てる。** pass2 の出口の段
+  // （`desugarIndexRest`・`synthesizePointfreeIn`）だけでは足りない——`[+] 1 2 3` の畳み込みの
+  // 展開と名前への差し替えが消え、同じ行に `$` の呼び出しがあるだけで機械が断っていた。
   const reduce = (line) => { const n = desugarIndexRest(reduceAll(line, env)); synthesizePointfreeIn(n, env); return n; };
+  const refold = () => { expandGreedyFoldsIn(nodes); if (options.__pfFolded) replaceGreedyFolds(nodes); };
+  const mentions = (x, id) => Array.isArray(x) ? x.some((y) => mentions(y, id)) : x === id;
+  // **書き換えた値の定義は、束縛を作り直す。** `p : ap $add3 1` が `p : add3 1` になると `p` は
+  // 部分適用（アリティ2の関数）だが、束縛は書き換える前の右辺から読んだカテゴリとアリティを
+  // メモ化している（pass2 の resolveBindingCategory）。そのままだと `p 2 3` が構築に読まれ、
+  // インタプリタが黙って 3 を返す。作り直した名前を使う行も通し直す（その行がまた値の
+  // 定義なら、その束縛も）。関数の定義は仮引数で決まるので、本体を書き換えても変わらない。
+  const work = [...dirty];
+  const refreshed = new Set();
+  while (work.length > 0) {
+    const idx = work.pop();
+    const d = definedNameOf(lines[idx]);
+    if (!d || refreshed.has(d.name) || !top.has(d.name)) continue;
+    const fresh = buildEnvScope([lines[idx]]).get(d.name);
+    if (!fresh || fresh.category === "Lambda") continue;
+    const old = top.get(d.name);
+    for (const k of Object.keys(old)) delete old[k];     // メモ（rhsNode 等）ごと捨てる
+    Object.assign(old, fresh);                           // 同じ物を指している表があるので中身を入れ替える
+    refreshed.add(d.name);
+    lines.forEach((line, j) => { if (!dirty.has(j) && mentions(line, d.name)) { dirty.add(j); work.push(j); } });
+  }
   for (const idx of dirty) nodes[idx] = reduce(lines[idx]);
+  if (dirty.size > 0) refold();
   for (const m of overMarks) markCall(nodes[m.idx], m.F, m.over);
-  if (newDefs.length === 0) return;
+  // η 簡約だけで済んだときも、呼ばれなくなった総称は落とす（実体の定義は1つも無い）
+  if (made.size === 0 && newDefs.length === 0) return;
   // **使われなくなった元の総称関数は落とす。** 呼び出しを全部実体へ付け替えたので、
   // `@` の仮引数を持ったまま誰にも呼ばれない——残すと pass4 の単相化が「呼び出しサイトが
   // 無い」と断る。他の行から参照されておらず、エクスポートもされていないものだけ落とす。
-  const mentions = (x, id) => Array.isArray(x) ? x.some((y) => mentions(y, id)) : x === id;
   const dead = [];
   for (const [F, fn] of fns) {
     if (![...made.keys()].some((nm) => nm.startsWith(F.slice(0, -1) + "$"))) continue;
@@ -526,6 +573,8 @@ function specializeRefCalls(lines, nodes, env, options) {
   for (const idx of dead.sort((x, y) => y - x)) { nodes.splice(idx, 1); lines.splice(idx, 1); }
   nodes.unshift(...newDefs.map(reduce));
   lines.unshift(...newDefs);
+  // 実体の本体は総称の本体の写しなので、畳み込みも持ちうる
+  if (newDefs.length > 0) refold();
 }
 
 function compile(source, options = {}) {
