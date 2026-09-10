@@ -465,23 +465,32 @@ function specializeRefCalls(lines, nodes, env, options) {
       // そのものである（`<app$add> : <x> <y> ? <add> <x> <y>` ≡ `add`）。実体を作らず、呼び出し
       // サイトで呼び先を直に呼ぶ——1段挟むぶんの呼び出しとフレームが消える。
       //
-      // 呼び先のアリティが仮引数より**多い**ときも同じである。カリー化されているので
-      // `<ap$add3> : <x> ? <add3> <x>` も `add3` そのものであり、実体は部分適用（関数）を返す。
-      // 実体のままだと pass2 は返り値が関数だと知らないので、`(ap$add3 1) 2 3` を適用ではなく
-      // 構築に読んでいた（インタプリタが黙って 3 を返した）。`(add3 1) 2 3` なら適用の鎖に
-      // なる。少ないとき（多すぎる引数）は上で断っている。
+      // **最適化なので、呼び出しサイトの読み方を変えてはいけない。** 続く字句をいくつ食べるかは
+      // 呼ぶ関数の仮引数の並びが宣言していて、pass2 はそれを束縛の**アリティ**と**器を丸ごと
+      // 受けるか**（wantsMore）で読む。実体の束縛と呼び先の束縛でこの2つが一致するときだけ
+      // 入れ替えてよい。
+      //
+      //   アリティが多い     `ap $add3 1 2 3` が `add3 1 2 3`（6）になり、手で書いた同じ射
+      //                      `h : x ? add3 x` の `h 1 2 3`（構築）とずれた。一度そう広げていた
+      //   器を丸ごと受ける   `f : [a]` はアリティ1でも `f 1 2 3` を器ごと食べる
+      //   rest・既定値       アリティが一致しない（裸の rest は読めない＝null）
+      //
+      // 必須の数は比べない。書き換える呼び出しサイトでは引数が揃っている（揃っていなければ
+      // 書き換えない）ので、既定値で埋まるかどうかは読みに効かない。
+      //
+      // 余る引数を取りたい関数は、仮引数の並びでそう宣言する（`~x` / `[~x]`）。
       const formals = [...capParams.flat(), ...keep];
+      const def = [name, ":", ...formals, "?", ...body];
+      const bind = buildEnvScope([def]).get(name);
+      if (!bind) return null;
       const head = body[0];
-      const headArity = isId(head) && top.has(head) ? top.get(head).arity : null;
+      const hb = isId(head) && top.has(head) ? top.get(head) : null;
+      const reads = (b) => [b.arity, !!b.containerParam].join();
       if (formals.every(isId) && body.length === formals.length + 1 && body.slice(1).every((t, k) => t === formals[k]) &&
-          !formals.includes(head) && top.get(head).category === "Lambda" &&
-          typeof headArity === "number" && headArity >= formals.length) {
+          !formals.includes(head) && hb && hb.category === "Lambda" && reads(hb) === reads(bind)) {
         made.set(name, null);
         etas.set(name, head);
       } else {
-        const def = [name, ":", ...formals, "?", ...body];
-        const bind = buildEnvScope([def]).get(name);
-        if (!bind) return null;
         top.set(name, bind);
         made.set(name, def);
         newDefs.push(def);

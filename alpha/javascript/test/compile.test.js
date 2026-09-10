@@ -194,5 +194,25 @@ check("[+ 1.0] の適用は Float", lastType("fl : [+ 1.0]\nfl 3"), "Float");
 // 「分からない」の言い換えだった。今は Int のリテラルで呼ばれていることが届く。
 check("別名越しでも実引数まで狭まる", lastType("add : [+]\nadd 1 2"), "Int");
 
+// ---- `$` の実体化が書き換えた値の定義は、束縛も書き換えた後の行を指す ----
+//
+// 実体化の段（specializeRefCalls）は還元前の行を書き換える。値の定義 `v : ap $dbl 5` は
+// `v : dbl 5`（η）になるが、束縛は右辺の字句（`rhsTokens`）を**書き換える前の行から**
+// 取っていた。pass2 はそれを遅延で還元してカテゴリとアリティを決める（resolveBindingCategory）
+// ——そのまま残すと、消した総称 `ap` への呼び出しを組み立てることになる。
+//
+// 値には今は出ない（pass3 が書き戻す `valueNode` が先に辿られる）。**同じ事実が行と束縛の
+// 2箇所にある**ので、片方だけ書き換えると黙って食い違う——その形になっていないことを見る。
+{
+	const rhsOf = (source, name) => {
+		const b = run(source).env.bindings.get(name);
+		return b && b.rhsTokens ? b.rhsTokens.join(" ") : null;
+	};
+	check("η した値の定義", rhsOf("dbl : n ? n * 2\nap : f x ? @f x\nv : ap $dbl 5\nv * 2", "<v>"), "<dbl> 5");
+	check("実体へ付け替えた値の定義", rhsOf("sub : a b ? a - b\nflip : f x y ? @f y x\nv : flip $sub 3 10\nv * 2", "<v>"), "<flip$sub> 3 10");
+	// 書き換えていない値の定義は、そのまま（作り直す対象を広げすぎていないこと）
+	check("書き換えていない値の定義", rhsOf("dbl : n ? n * 2\nap : f x ? @f x\nv : ap $dbl 5\nw : v\nw * 2", "<w>"), "<v>");
+}
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
