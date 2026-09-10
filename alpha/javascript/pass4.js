@@ -9448,6 +9448,21 @@ function generateAsm(nodes, env, options = {}) {
 					node: n,
 				});
 			}
+			// **多すぎる引数を名指しする**（印は compile の specializeRefCalls が付ける）。
+			if (n.refOverApply) {
+				const o = n.refOverApply;
+				const nm = (v) => String(v).replace(/^<|>$/g, "");
+				// 吊り上げた無名のラムダには内部の名前（`関数$仮引数$番号`）が付いているので、書いた人の言葉で言う
+				const tail = nm(o.callee).split("$").pop();
+				const who = tail !== "" && [...tail].every((c) => c >= "0" && c <= "9") ? "無名のラムダ" : nm(o.callee);
+				em.diagnostics.push({
+					severity: "error",
+					message:
+						`@${nm(o.param)} に渡した ${who} はアリティ ${o.want} だが、本体で ${o.got} 個当てています` +
+						"——`@a b c` は適用以外にありえないので、余った引数は飽和した結果（値）へ当てることになります",
+					node: n,
+				});
+			}
 			for (const k of ["left", "right", "operand", "middle"]) walk(n[k], false);
 			for (const l of n.lines || []) walk(l, true);
 			for (const e of n.entries || []) walk(e.default, false);

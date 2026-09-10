@@ -279,6 +279,63 @@ function specializeRefCalls(lines, nodes, env, options) {
     fns.set(line[0], { idx, params, ptr, q });
   });
   if (fns.size === 0) return;
+  // 本体で `@p` に当てている引数の数（適用の鎖の深さ）。pass2 は `@` の先を Infinity の
+  // アリティで読むので、書かれた分だけ鎖が伸びている。
+  const appliedDepth = (root, pn) => {
+    let most = 0;
+    const spine = (n) => { let d = 0; while (n && n.type === "operation" && n.name === "apply") { d++; n = n.left; } return { d, base: n }; };
+    const visit = (n) => {
+      if (!n || typeof n !== "object") return;
+      if (n.type === "operation" && n.name === "apply") {
+        const { d, base } = spine(n);
+        if (base && base.type === "operation" && base.position === "prefix" && base.name === "input" &&
+            base.operand && base.operand.type === "atom" && base.operand.value === pn) most = Math.max(most, d);
+      }
+      for (const k of ["left", "right", "operand", "middle"]) visit(n[k]);
+      for (const l of n.lines || []) visit(l);
+    };
+    visit(root);
+    return most;
+  };
+  // 呼び出しの鎖の根（F への適用のうち一番外）に印を付ける。
+  const markCall = (root, F, info) => {
+    const baseIs = (n) => { while (n && n.type === "operation" && n.name === "apply") n = n.left; return n && n.type === "atom" && n.value === F; };
+    const visit = (n, onSpine) => {
+      if (!n || typeof n !== "object") return;
+      const isApply = n.type === "operation" && n.name === "apply";
+      if (isApply && !onSpine && baseIs(n)) n.refOverApply = info;
+      if (isApply) { visit(n.left, true); visit(n.right, false); }
+      else for (const k of ["left", "right", "operand", "middle"]) visit(n[k], false);
+      for (const l of n.lines || []) visit(l, false);
+    };
+    visit(root, false);
+  };
+  // 無名のラムダを名前付きの定義として吊り上げる。捕獲しているものは吊り上げない
+  // ——トップへ出すと捕まえた変数の置き場が無い（リフティングの仕事で、まだ無い）。
+  let anonSeq = 0;
+  const idsIn = (x, out = []) => { if (Array.isArray(x)) x.forEach((y) => idsIn(y, out)); else if (isId(x)) out.push(x); return out; };
+  const hoistAnon = (block, encl, F, pn) => {
+    const lam = Array.isArray(block) && block.length === 1 && Array.isArray(block[0]) ? block[0] : null;
+    if (!lam) return null;
+    const q = lam.indexOf("?");
+    if (q <= 0) return null;
+    const own = lam.slice(0, q);
+    if (!own.every(isId)) return null;
+    // 囲む定義の仮引数（`<g> : <a> ? …` の `<a>`）に触れていたら捕獲である
+    const eq = Array.isArray(encl) && isId(encl[0]) && encl[1] === ":" ? encl.indexOf("?", 2) : -1;
+    const outer = eq > 0 ? encl.slice(2, eq) : [];
+    for (const id of idsIn(lam.slice(q + 1))) {
+      if (own.includes(id)) continue;
+      if (outer.includes(id) || !top.has(id)) return null;
+    }
+    const name = "<" + F.slice(1, -1) + "$" + pn.slice(1, -1) + "$" + anonSeq++ + ">";
+    const def = [name, ":", ...lam];
+    const bind = buildEnvScope([def]).get(name);
+    if (!bind) return null;
+    top.set(name, bind);
+    newDefs.push(def);
+    return name;
+  };
   // 2. 呼び出しサイト：行の中の `<F> …` で、ptr の位置が `$_ <X>`（X はトップの関数）
   const made = new Map();
   const dirty = new Set();
@@ -293,6 +350,16 @@ function specializeRefCalls(lines, nodes, env, options) {
       let i = s + 1;
       while (args.length < fn.params.length && i < line.length) {
         const tok = line[i];
+        // 無名のラムダ `$(p q ? p * q)` は、捕獲していなければ名前を与えて吊り上げ、名前の
+        // `$X` と同じ道に乗せる。仮引数の型は、ここで作る実体の中の呼び出しから流れ込む
+        // ——直接呼ばれる場所が無かったので、それまでは決まらなかった。
+        if (tok === "$_" && Array.isArray(line[i + 1])) {
+          const pn = fn.params[args.length];
+          const ref = fn.ptr.includes(pn) ? hoistAnon(line[i + 1], line, line[s], pn) : null;
+          args.push({ from: i, to: i + 1, ref });
+          i += 2;
+          continue;
+        }
         if (tok === "$_" && isId(line[i + 1])) { args.push({ from: i, to: i + 1, ref: line[i + 1] }); i += 2; continue; }
         if (typeof tok === "string" && !isId(tok) && OPERATOR_HEADS.has(tok[0]) && !/^[0-9`]/.test(tok)) break;
         args.push({ from: i, to: i, ref: null });
@@ -301,6 +368,17 @@ function specializeRefCalls(lines, nodes, env, options) {
       if (args.length !== fn.params.length) continue;   // 足りない・読めないなら触らない
       const callees = fn.ptr.map((pn) => args[fn.params.indexOf(pn)].ref);
       if (callees.some((c) => !c || !top.has(c) || top.get(c).category !== "Lambda")) continue;
+      // **多すぎる引数は捨てられない。** `@a b c` は適用以外にありえない——前置 `@` の先は
+      // 必ず Lambda だからである。本体で `@p` に当てている数が、渡した関数のアリティより多ければ、
+      // 余った引数は飽和した結果（値）へ当てることになる。実体を作ると `<dbl> <x> <y>` が名前の
+      // 読み方で余積（`[6 4]`）に戻ってしまい、`@` の意図が消える。作らずに印を付け、pass4 が
+      // 名指しする。
+      const over = fn.ptr.map((pn, j) => {
+        const want = top.get(callees[j]).arity;
+        const got = appliedDepth(nodes[fn.idx], pn);
+        return typeof want === "number" && got > want ? { param: pn, callee: callees[j], want, got } : null;
+      }).find(Boolean);
+      if (over) { markCall(nodes[idx], line[s], over); continue; }
       const name = "<" + [line[s].slice(1, -1), ...callees.map((c) => c.slice(1, -1))].join("$") + ">";
       if (!made.has(name)) {
         const src = lines[fn.idx];
