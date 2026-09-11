@@ -294,6 +294,13 @@ check("別名越しでも実引数まで狭まる", lastType("add : [+]\nadd 1 2
 	// 仮引数と同じ名前の `$X` はトップの関数ではない
 	check("仮引数と同名の $", refusal(`${FNS}rd : p ? @p\ng : inc ? rd $inc\ng 7`), null);
 
+	// ---- 器に並べた関数を `'` で取り出して返す ----
+	// `$` が付いていないので、取り出した瞬間にすぐ当てられる関数である。本体がそれを返せば、
+	// 関数を `$` 無しで返すことになる（operator_table.md の後置 `~` の項）。
+	check("見える器から関数を取り出して返す", refusal("proc : [+ 2] , [* 4] , 3\nk : n ? proc ' 0\nk 1"), NAMED);
+	check("見える器から値を取り出して返す", refusal("proc : [+ 2] , [* 4] , 3\nk : n ? proc ' 2\nk 1"), null);
+	check("見える器を本体で撒く", refusal("proc : [+ 2] , [* 4] , 3\nk : n ? proc~\nk 1"), null);
+
 	// ---- 名指しの言葉は利用者の書いたもので ----
 	const said = (source) => { try { run(source); return ""; } catch (e) { return e.message; } };
 	const checkTrue = (note, cond) => check(note, !!cond, true);

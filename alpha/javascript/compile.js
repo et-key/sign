@@ -229,6 +229,95 @@ function resolveImports(lines, options, parseFn, base, state) {
 const OPERATOR_HEADS = new Set([..."?:#;|&=<>!+*/%^~@$,", "-"]);
 
 /**
+ * **器に並べた関数は、中身が見えれば呼べる**（operator_table.md の後置 `~` の項、
+ * type_system.md §3.5）。
+ *
+ * `proc : [+ 2] , [* 4] , 3` のように、字面の積に `$` を付けない関数を並べた器は、余積の中で
+ * 撒けば（`proc~`）その場にスロットを書いたのと同じであり、`'` で取り出せば（`proc ' 0`）すぐ
+ * 当てられる関数である。還元前の字句の並びでスロットに置き換えてから pass2 へ渡す——余積の
+ * 規則（合成・適用）がそのまま効き、`[+ 2] [* 4] 3` と書いたのと同じ 20 になる。
+ *
+ *   撒く      余積の要素として立っている `proc~` だけ（両隣が演算子でない。行頭と `:`・`?` の
+ *             直後は境目）。積の中の `a , proc~` はスロットを要素として並べる読み（cons）なので
+ *             触らない。中置の被演算子（`1 + proc~`）も触らない
+ *   取り出す  `proc ' 0` の添字が字面の非負整数で、そのスロットが関数のときだけ
+ *
+ * **中身が見えない器は呼べない**（仮引数で受けた器・再帰や分岐で作った器）——触らない。スロットが
+ * 全部値の器も触らない（撒いたときの読みを変えない）。`$` を付けたスロットは番地（値）である。
+ */
+function pasteVisiblePipelines(lines, env) {
+  const isId = (x) => typeof x === "string" && x.startsWith("<") && x.endsWith(">");
+  const isOp = (t) => typeof t === "string" && !isId(t) && OPERATOR_HEADS.has(t[0]) && !/^-?[0-9`]/.test(t);
+  const isPostfixMark = (t) => typeof t === "string" && /^_[^\w<`"]+$/.test(t);
+  // 最上位の `,` で割ったスロット。関数のスロットが1つも無ければ器ではなくデータとして扱う。
+  const pipelineOf = (toks) => {
+    if (!Array.isArray(toks) || !toks.includes(",")) return null;
+    const slots = [[]];
+    for (const t of toks) { if (t === ",") slots.push([]); else slots[slots.length - 1].push(t); }
+    if (slots.some((x) => x.length === 0)) return null;
+    const fn = slots.map((x) => { try { return !!functionKindOf(reduceAll(x, env), env, null); } catch { return false; } });
+    return fn.some(Boolean) ? { slots, fn } : null;
+  };
+  // 見える器：`<X> : 積`（関数の定義ではない束縛）
+  const visible = new Map();
+  for (const line of lines) {
+    if (!Array.isArray(line) || !isId(line[0]) || line[1] !== ":" || line.includes("?")) continue;
+    const p = pipelineOf(line.slice(2));
+    if (p) visible.set(line[0], p);
+  }
+  // 複数の字句のスロット（`add3 1`）は括って1つにする——並べ直すと読みが変わる
+  const asToken = (x) => (x.length === 1 ? x[0] : [x]);
+  // その行で束縛し直している名前（仮引数など）はトップの器ではない
+  const bindersOf = (x, out = new Set()) => {
+    if (!Array.isArray(x)) return out;
+    const q = x.indexOf("?");
+    if (q > 0) x.slice(0, q).forEach((t) => { if (isId(t)) out.add(t); });
+    x.forEach((t) => bindersOf(t, out));
+    return out;
+  };
+  const rewrite = (arr, binders) => {
+    const out = [];
+    for (let i = 0; i < arr.length; i++) {
+      const t = arr[i];
+      // 撒く：`<X> _~`、またはその場の字面 `(積)~`
+      if (arr[i + 1] === "_~") {
+        let p = null;
+        if (isId(t) && !binders.has(t)) p = visible.get(t) || null;
+        else if (Array.isArray(t) && t.length === 1 && Array.isArray(t[0])) p = pipelineOf(t[0]);
+        const prev = arr[i - 1];
+        const next = arr[i + 2];
+        const standsAlone = (i === 0 || prev === ":" || prev === "?" || !isOp(prev)) && (next === undefined || !isOp(next));
+        if (p && standsAlone) { out.push(...p.slots.map(asToken)); i += 1; continue; }
+      }
+      // 取り出す：`<X> ' k`（k は字面の非負整数、`' 1~` のような切り出しは除く）。値のスロットも
+      // 置き換える——字面の器なのでスロットの式そのものであり、残すと積が生き残る。
+      if (isId(t) && !binders.has(t) && arr[i + 1] === "'" && typeof arr[i + 2] === "string" && /^[0-9]+$/.test(arr[i + 2]) && !isPostfixMark(arr[i + 3])) {
+        const p = visible.get(t);
+        const k = Number(arr[i + 2]);
+        if (p && k < p.slots.length) { out.push(asToken(p.slots[k])); i += 2; continue; }
+      }
+      out.push(Array.isArray(t) ? rewrite(t, binders) : t);
+    }
+    return out;
+  };
+  lines.forEach((line, idx) => {
+    if (!Array.isArray(line)) return;
+    lines[idx] = rewrite(line, bindersOf(line));
+  });
+  // **置き換えて誰も参照しなくなった器の定義は、もう誰も見ない**（展開しきった合成の定義と同じ）。
+  // 関数を並べた積は機械がまだ出せないので、残すと使う場所を全部置き換えても断られる。
+  // 最後の行はプログラムの値なので除く。
+  const mentions = (x, id) => (Array.isArray(x) ? x.some((y) => mentions(y, id)) : x === id);
+  const dead = new Set();
+  for (const name of visible.keys()) {
+    const def = lines.findIndex((l) => Array.isArray(l) && l[0] === name && l[1] === ":");
+    if (def < 0 || def === lines.length - 1) continue;
+    if (!lines.some((l, k) => k !== def && mentions(l, name))) dead.add(name);
+  }
+  return dead;
+}
+
+/**
  * **`$` で渡した関数を、実体ごとに pass2 へ通し直す**（ref の具体化）。
  *
  * `app : f x y ? @f x y` を `app $add 3 4` と呼ぶと、`@f` の先は呼び出しサイトごとに
@@ -876,12 +965,17 @@ function compile(source, options = {}) {
     { done: new Set(selfPath ? [selfPath] : []) }
   );
   const env = buildEnv(lines);
+  // 中身の見える器に並べた関数は、撒けば・取り出せば呼べる（字句の段でスロットへ置き換える）
+  const pastedAway = pasteVisiblePipelines(lines, env);
   // 添字位置の `N~` を終端の無いレンジへ均す（糖衣）。**後置 `~` の意味を「撒く」
   // 1つに絞るための書き換え**であり、逆適用（`x f`）と同じ扱いである——記号は残し、
   // 意味論からは消す。Pass 2 の出口でやるのは、ここが「構文の形が最後に見える場所」
   // だからである（Pass 3 以降は型の話しかしない）。
   const nodes = lines.map((line) => desugarIndexRest(reduceAll(line, env)));
   for (const node of nodes) synthesizePointfreeIn(node, env);
+  for (const node of nodes) {
+    if (node && node.type === "operation" && node.name === "define" && node.left && pastedAway.has(node.left.value)) node.supersededByDesugar = true;
+  }
 
   // **並べた相手は、ここで畳み終える。** 個数が構文から見えているなら関数も器も要らない
   // ——`construct` の連鎖が既に左畳みの括弧の形をしている。残った（相手が実行時の器の）
