@@ -249,6 +249,8 @@ function pasteVisiblePipelines(lines, env) {
   const isId = (x) => typeof x === "string" && x.startsWith("<") && x.endsWith(">");
   const isOp = (t) => typeof t === "string" && !isId(t) && OPERATOR_HEADS.has(t[0]) && !/^-?[0-9`]/.test(t);
   const isPostfixMark = (t) => typeof t === "string" && /^_[^\w<`"]+$/.test(t);
+  // 括りで書いた器（`[[+ 2], [* 4], 3]`）は、積を1行持つ括り1つである
+  const unbracket = (toks) => (toks.length === 1 && Array.isArray(toks[0]) && toks[0].length === 1 && Array.isArray(toks[0][0]) ? toks[0][0] : toks);
   // 最上位の `,` で割ったスロット。関数のスロットが1つも無ければ器ではなくデータとして扱う。
   const pipelineOf = (toks) => {
     if (!Array.isArray(toks) || !toks.includes(",")) return null;
@@ -258,15 +260,21 @@ function pasteVisiblePipelines(lines, env) {
     const fn = slots.map((x) => { try { return !!functionKindOf(reduceAll(x, env), env, null); } catch { return false; } });
     return fn.some(Boolean) ? { slots, fn } : null;
   };
-  // 見える器：`<X> : 積`（関数の定義ではない束縛）
+  // 見える器：`<X> : 積`（関数の定義ではない束縛）と、その別名 `<Q> : <X>`
   const visible = new Map();
-  for (const line of lines) {
-    if (!Array.isArray(line) || !isId(line[0]) || line[1] !== ":" || line.includes("?")) continue;
-    const p = pipelineOf(line.slice(2));
-    if (p) visible.set(line[0], p);
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const line of lines) {
+      if (!Array.isArray(line) || !isId(line[0]) || line[1] !== ":" || line.includes("?") || visible.has(line[0])) continue;
+      const rhs = line.slice(2);
+      const p = rhs.length === 1 && isId(rhs[0]) ? visible.get(rhs[0]) || null : pipelineOf(unbracket(rhs));
+      if (p) { visible.set(line[0], p); changed = true; }
+    }
   }
-  // 複数の字句のスロット（`add3 1`）は括って1つにする——並べ直すと読みが変わる
+  // 複数の字句のスロット（`add3 1`）は、並べるときは括って1つにする——並べ直すと読みが変わる
   const asToken = (x) => (x.length === 1 ? x[0] : [x]);
+  // 器の字面（積を1行持つ括り）
+  const literal = (p) => [p.slots.flatMap((x, k) => (k ? [",", ...x] : x))];
   // その行で束縛し直している名前（仮引数など）はトップの器ではない
   const bindersOf = (x, out = new Set()) => {
     if (!Array.isArray(x)) return out;
@@ -275,44 +283,48 @@ function pasteVisiblePipelines(lines, env) {
     x.forEach((t) => bindersOf(t, out));
     return out;
   };
+  // **裸の関数は書かれた行の中でしか生きない。** 器の定義は雛形で、参照した行でスロットを書き直す：
+  //   余積の中で撒く（`proc~`）      スロットを並べる——その場に書いたのと同じ
+  //   積の中で撒く（`1 , proc~`）    スロットを要素として書く（cons）
+  //   字面の添字で取り出す           そのスロット（値のスロットも——字面の器なので式そのもの）
+  //   それ以外の参照                 器の字面をその場に書く（`||proc||`、`f proc`、`proc ' i`）
+  // 器ごと行を越えて運ぶ使い方（関数へ渡す・本体から返す）は、書き直した後の木で名指しする。
   const rewrite = (arr, binders) => {
     const out = [];
     for (let i = 0; i < arr.length; i++) {
       const t = arr[i];
-      // 撒く：`<X> _~`、またはその場の字面 `(積)~`
-      if (arr[i + 1] === "_~") {
-        let p = null;
-        if (isId(t) && !binders.has(t)) p = visible.get(t) || null;
-        else if (Array.isArray(t) && t.length === 1 && Array.isArray(t[0])) p = pipelineOf(t[0]);
+      const named = isId(t) && !binders.has(t) ? visible.get(t) || null : null;
+      // その場の字面 `(積)~` も撒ける
+      const p = named || (arr[i + 1] === "_~" && Array.isArray(t) && t.length === 1 && Array.isArray(t[0]) ? pipelineOf(t[0]) : null);
+      if (p && arr[i + 1] === "_~") {
         const prev = arr[i - 1];
         const next = arr[i + 2];
-        const standsAlone = (i === 0 || prev === ":" || prev === "?" || !isOp(prev)) && (next === undefined || !isOp(next));
-        if (p && standsAlone) { out.push(...p.slots.map(asToken)); i += 1; continue; }
+        const inCoproduct = (i === 0 || prev === ":" || prev === "?" || !isOp(prev)) && (next === undefined || !isOp(next));
+        if (inCoproduct) { out.push(...p.slots.map(asToken)); i += 1; continue; }
+        if (prev === "," || next === ",") { p.slots.forEach((x, k) => { if (k) out.push(","); out.push(...x); }); i += 1; continue; }
       }
-      // 取り出す：`<X> ' k`（k は字面の非負整数、`' 1~` のような切り出しは除く）。値のスロットも
-      // 置き換える——字面の器なのでスロットの式そのものであり、残すと積が生き残る。
-      if (isId(t) && !binders.has(t) && arr[i + 1] === "'" && typeof arr[i + 2] === "string" && /^[0-9]+$/.test(arr[i + 2]) && !isPostfixMark(arr[i + 3])) {
-        const p = visible.get(t);
+      if (named && arr[i + 1] === "'" && typeof arr[i + 2] === "string" && /^[0-9]+$/.test(arr[i + 2]) && !isPostfixMark(arr[i + 3])) {
         const k = Number(arr[i + 2]);
-        if (p && k < p.slots.length) { out.push(asToken(p.slots[k])); i += 2; continue; }
+        if (k < named.slots.length) { out.push(asToken(named.slots[k])); i += 2; continue; }
       }
+      if (named) { out.push(literal(named)); continue; }
       out.push(Array.isArray(t) ? rewrite(t, binders) : t);
     }
     return out;
   };
   lines.forEach((line, idx) => {
     if (!Array.isArray(line)) return;
-    lines[idx] = rewrite(line, bindersOf(line));
+    // 定義の頭（`<X> :` の X）は参照ではない。右辺だけを書き直す。
+    if (isId(line[0]) && line[1] === ":") lines[idx] = [line[0], ":", ...rewrite(line.slice(2), bindersOf(line))];
+    else lines[idx] = rewrite(line, bindersOf(line));
   });
-  // **置き換えて誰も参照しなくなった器の定義は、もう誰も見ない**（展開しきった合成の定義と同じ）。
-  // 関数を並べた積は機械がまだ出せないので、残すと使う場所を全部置き換えても断られる。
+  // 雛形の定義は実行時のオブジェクトにならない（出さない）。参照は全部書き直してある。
+  // 関数を並べた積は機械がまだ出せないので、残すと使う場所を全部書き直しても断られる。
   // 最後の行はプログラムの値なので除く。
-  const mentions = (x, id) => (Array.isArray(x) ? x.some((y) => mentions(y, id)) : x === id);
   const dead = new Set();
   for (const name of visible.keys()) {
     const def = lines.findIndex((l) => Array.isArray(l) && l[0] === name && l[1] === ":");
-    if (def < 0 || def === lines.length - 1) continue;
-    if (!lines.some((l, k) => k !== def && mentions(l, name))) dead.add(name);
+    if (def >= 0 && def !== lines.length - 1) dead.add(name);
   }
   return dead;
 }
@@ -809,11 +821,14 @@ function returnTails(b, out = []) {
   if (!b || typeof b !== "object") return out;
   if (b.type === "block" && Array.isArray(b.lines) && (b.kind === "indent" || b.kind === "paren")) {
     const lines = b.lines;
+    // 枝の無い2行以上の並び・構造体は器である。器のまま返り値の位置に置く——中身は
+    // checkFunctionReturns が器として見る（裸の関数を入れて返すのは行を越える）。
     if (!lines.some(isArmNode)) {
       if (lines.length === 1) returnTails(lines[0], out);
+      else out.push(b);
       return out;
     }
-    if (b.kind === "paren" && lines.every((l) => isArmNode(l) && isIdentNode(l.left))) return out;
+    if (b.kind === "paren" && lines.every((l) => isArmNode(l) && isIdentNode(l.left))) { out.push(b); return out; }
     for (const l of lines) if (isArmNode(l)) returnTails(l.right, out);
     if (!isArmNode(lines[lines.length - 1])) returnTails(lines[lines.length - 1], out);
     return out;
@@ -908,22 +923,67 @@ const FUNCTION_RETURN_ADVICE =
  * `$` で渡した関数に本体が当てる数が足りない形（`ap : g x ? @g x` に `$add3`）は、実体化の段
  * （specializeRefCalls）が呼び出しサイトで名指しする。
  */
-function checkFunctionReturns(nodes) {
+// 器の要素（積・構築の連なり、枝の無い2行以上の並び、構造体のスロット）。器でなければ null。
+const CONTAINER_OPS = new Set(["product", "construct", "unshift", "concat"]);
+function containerElements(n) {
+  n = peelWrappers(n);
+  if (!n || typeof n !== "object") return null;
+  const out = [];
+  const walk = (x) => {
+    x = peelWrappers(x);
+    if (x && x.type === "operation" && CONTAINER_OPS.has(x.name)) { walk(x.left); walk(x.right); return; }
+    out.push(x);
+  };
+  if (n.type === "operation" && CONTAINER_OPS.has(n.name)) { walk(n); return out; }
+  if (n.type === "block" && Array.isArray(n.lines) && n.lines.length > 1 && (n.kind === "indent" || n.kind === "paren")) {
+    if (!n.lines.some(isArmNode)) { n.lines.forEach(walk); return out; }
+    if (n.kind === "paren" && n.lines.every((l) => isArmNode(l) && isIdentNode(l.left))) { n.lines.forEach((l) => walk(l.right)); return out; }
+  }
+  return null;
+}
+
+const LIFETIME_ADVICE =
+  "裸の関数は書かれた行の中でしか生きないので、器ごと行を越えて運べません。運ぶなら `$` を付けて並べてください（`$inc , $dbl`）";
+
+function checkFunctionReturns(nodes, env) {
   const defaultsOf = (lam) => new Map(((lam.left && lam.left.entries) || []).filter((x) => x.name && x.default).map((x) => [x.name, x.default]));
   const check = (lam, who) => {
     const defaults = defaultsOf(lam);
     for (const t of returnTails(lam.right)) {
       const kind = functionKindOf(t, lam.scope, defaults);
-      if (!kind) continue;
-      throw new OperationError(`${who} は関数を返しています（${kind}）——${FUNCTION_RETURN_ADVICE}`, {
+      if (kind) {
+        throw new OperationError(`${who} は関数を返しています（${kind}）——${FUNCTION_RETURN_ADVICE}`, {
+          spec: "type_system.md §3.5",
+          reason: "function-returned-without-address",
+        });
+      }
+      // **裸の関数を器に入れて返すのも、行を越える。**（`mk : n ? [+ n] , [* 4] , 3`）
+      for (const e of containerElements(t) || []) {
+        const k2 = functionKindOf(e, lam.scope, defaults);
+        if (!k2) continue;
+        throw new OperationError(`${who} は \`$\` の付かない関数を器に入れて返しています（${k2}）——${LIFETIME_ADVICE}`, {
+          spec: "type_system.md §3.5",
+          reason: "function-returned-without-address",
+        });
+      }
+    }
+  };
+  // **裸の関数を器に入れて関数へ渡すのも、行を越える**（渡した先は別の行である）。
+  // `$` を付けた要素（番地）は運べる。
+  const checkArgs = (n, scope) => {
+    for (const e of containerElements(n.right) || []) {
+      const k2 = functionKindOf(e, scope, null);
+      if (!k2) continue;
+      throw new OperationError(`\`$\` の付かない関数を器に入れて関数へ渡しています（${k2}）——${LIFETIME_ADVICE}`, {
         spec: "type_system.md §3.5",
-        reason: "function-returned-without-address",
+        reason: "bare-function-leaves-line",
       });
     }
   };
   const seen = new Set();
   // `who` は一番近い名前付きの関数の呼び方。無名の関数は「〜の中の無名の関数」と言う。
-  const visit = (n, who) => {
+  // `scope` は識別子を引く場所（一番近いラムダの有効範囲、トップでは env）。
+  const visit = (n, who, scope) => {
     if (!n || typeof n !== "object" || seen.has(n)) return;
     seen.add(n);
     if (n.type === "operation" && n.name === "define" && isIdentNode(n.left) && n.right && n.right.op === "?") {
@@ -939,17 +999,18 @@ function checkFunctionReturns(nodes) {
       return;
     }
     // 値の定義（`h : dbl (y ? inc)` のような合成）の中の無名の関数も、その名前で言う
-    if (n.type === "operation" && n.name === "define" && isIdentNode(n.left)) { visit(n.right, functionLabel(n.left.value)); return; }
-    for (const k of ["left", "right", "operand", "middle"]) visit(n[k], who);
-    for (const l of n.lines || []) visit(l, who);
-    for (const x of n.entries || []) visit(x.default, who);
+    if (n.type === "operation" && n.name === "define" && isIdentNode(n.left)) { visit(n.right, functionLabel(n.left.value), scope); return; }
+    if (n.type === "operation" && (n.name === "apply" || n.name === "partial_apply")) checkArgs(n, scope);
+    for (const k of ["left", "right", "operand", "middle"]) visit(n[k], who, scope);
+    for (const l of n.lines || []) visit(l, who, scope);
+    for (const x of n.entries || []) visit(x.default, who, scope);
   };
   // 本体と、仮引数の既定値の中（`f : (y ? inc)` のようなラムダが居る）を見る。
   const visitLambda = (lam, who) => {
-    visit(lam.right, who);
-    for (const x of (lam.left && lam.left.entries) || []) visit(x.default, who);
+    visit(lam.right, who, lam.scope);
+    for (const x of (lam.left && lam.left.entries) || []) visit(x.default, who, lam.scope);
   };
-  for (const n of nodes) visit(n, null);
+  for (const n of nodes) visit(n, null, env);
 }
 
 function compile(source, options = {}) {
@@ -1012,7 +1073,7 @@ function compile(source, options = {}) {
   // 流れ込むように、Pass 3 より前でやる（specializeRefCalls の注記）。
   specializeRefCalls(lines, nodes, env, options);
   // 実体を作った後で見る——`$` で渡した関数ごとの実体の本体が、関数を返す形になりうる。
-  checkFunctionReturns(nodes);
+  checkFunctionReturns(nodes, env);
   const specializations = runPass1b(nodes, env);
   // **鍵が増えるマージのぶんまで、器の並びを先に決める。**
   //

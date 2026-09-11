@@ -301,6 +301,20 @@ check("別名越しでも実引数まで狭まる", lastType("add : [+]\nadd 1 2
 	check("見える器から値を取り出して返す", refusal("proc : [+ 2] , [* 4] , 3\nk : n ? proc ' 2\nk 1"), null);
 	check("見える器を本体で撒く", refusal("proc : [+ 2] , [* 4] , 3\nk : n ? proc~\nk 1"), null);
 
+	// ---- 裸の関数の生存期間は、書かれた行の中まで（type_system.md §3.5） ----
+	// `$` を付けて初めてオブジェクトになる。器に入れて行を越える使い方——関数へ渡す、本体から
+	// 返す——は名指しする。`$` を付けて並べた器（番地の表）は運べる。
+	const LEAVES = "bare-function-leaves-line";
+	check("裸の関数の器を関数へ渡す（字面）", refusal("run : [~p] ? ||p||\nrun ([+ 2] , [* 4] , 3)"), LEAVES);
+	check("裸の関数の器を関数へ渡す（名前）", refusal("proc : [+ 2] , [* 4] , 3\nrun : [~p] ? ||p||\nrun proc"), LEAVES);
+	check("$ の器は関数へ渡せる", refusal(`${FNS}run : [~p] ? ||p||\nrun ($inc , $dbl)`), null);
+	check("裸の関数の器を返す（積）", refusal("mk : n ? [+ n] , [* 4] , 3\nmk 1"), NAMED);
+	check("裸の関数の器を返す（行の並び）", refusal(`${FNS}mk : n ?\n\tinc\n\t3\nmk 1`), NAMED);
+	check("裸の関数の器を返す（構造体）", refusal(`${FNS}mk : n ? [\n\tget : inc\n\tv : n\n]\nmk 1`), NAMED);
+	check("$ の器は返せる", refusal(`${FNS}mk : n ? $inc , $dbl\nmk 1`), null);
+	check("値の器は返せる", refusal("mk : n ? n , n + 1\nmk 1"), null);
+	check("同じ行で撒いて使うのは行の中", refusal("mk : n ? ([+ n] , [* 4] , 3)~\nmk 1"), null);
+
 	// ---- 名指しの言葉は利用者の書いたもので ----
 	const said = (source) => { try { run(source); return ""; } catch (e) { return e.message; } };
 	const checkTrue = (note, cond) => check(note, !!cond, true);
