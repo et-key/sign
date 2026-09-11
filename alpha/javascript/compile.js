@@ -24,8 +24,9 @@
 
 import { preprocess } from "./lexer.js";
 import { parse } from "./parser.js";
-import { buildEnv, buildEnvScope, bindEnv, EXPORT_MARKERS } from "./pass1.js";
-import { reduceAll, desugarIndexRest } from "./pass2.js";
+import { buildEnv, buildEnvScope, bindEnv, envLookupScope, EXPORT_MARKERS } from "./pass1.js";
+import { reduceAll, desugarIndexRest, getCategory } from "./pass2.js";
+import { OperationError } from "./errors.js";
 import { specializeGenericParams } from "./pass1b.js";
 import { annotateAll, checkLayerConstraints, checkCharsetConstraints } from "./pass3.js";
 import { findStreamFunctions, generatePullers, groupStreamFunctions, CURSOR_SUFFIXES } from "./stream_desugar.js";
@@ -291,8 +292,9 @@ function specializeRefCalls(lines, nodes, env, options) {
     // **残る仮引数がゼロなら実体にしない。** `apply5 : ref ? @ref 5` の `ref` を落とすと
     // `apply5$add : ? add 5` になるが、仮引数ゼロの関数を名前だけ書いたときに呼ぶのか値の
     // ままなのかは、元の `apply5 $add`（＝ `add 5`、未飽和の Lambda）と意味が変わりうる。
-    if (params.length - ptr.length === 0) return;
-    fns.set(F, { idx, params, ptr, ptrIdx, q });
+    // ただし**呼び出しは読む**——渡した関数に当てる数が足りない形（`k : f ? @f`）を名指しする
+    // ために（tryCall）。
+    fns.set(F, { idx, params, ptr, ptrIdx, q, underOnly: params.length - ptr.length === 0 });
   });
   if (fns.size === 0) return;
   // 本体で `@p` に当てている引数の数（適用の鎖の深さ）。pass2 は `@` の先を Infinity の
@@ -380,6 +382,17 @@ function specializeRefCalls(lines, nodes, env, options) {
     x.forEach((t) => bindersOf(t, out, true));
     return out;
   };
+  // 本体の返り値の位置で `@p` に当てている数（適用の鎖の深さ）。`@p` をそのまま返すなら 0。
+  const tailDepthsOf = (lam, pn) => {
+    const out = [];
+    for (const t of returnTails(lam && lam.right)) {
+      let n = t;
+      let d = 0;
+      while (n && n.type === "operation" && (n.name === "apply" || n.name === "partial_apply")) { d++; n = peelWrappers(n.left); }
+      if (n && n.type === "operation" && n.position === "prefix" && n.op === "@" && isIdentNode(n.operand) && n.operand.value === pn) out.push(d);
+    }
+    return out;
+  };
   // 1つの呼び出しを読む。書き換えるなら、置き換える頭と、残す実引数と、読み終えた位置を返す。
   const tryCall = (arr, s, fn, idx) => {
     const F = arr[s];
@@ -394,15 +407,61 @@ function specializeRefCalls(lines, nodes, env, options) {
       if (tok === "$_" && Array.isArray(arr[i + 1])) {
         const pn = fn.params[args.length];
         const ref = fn.ptr.includes(pn) ? hoistAnon(arr[i + 1], lines[idx], F, pn) : null;
-        args.push({ from: i, to: i + 1, ref });
+        // 吊り上げられなくても（入れ子の束縛を参照する等）、自分の仮引数の数は字句から数えられる
+        const lam = arr[i + 1].length === 1 && Array.isArray(arr[i + 1][0]) ? arr[i + 1][0] : null;
+        const q = lam ? lam.indexOf("?") : -1;
+        const anonArity = q > 0 && lam.slice(0, q).every(isId) ? q : null;
+        args.push({ from: i, to: i + 1, ref, anonArity });
         i += 2;
         continue;
       }
       if (tok === "$_" && isId(arr[i + 1])) { args.push({ from: i, to: i + 1, ref: arr[i + 1] }); i += 2; continue; }
-      if (typeof tok === "string" && !isId(tok) && OPERATOR_HEADS.has(tok[0]) && !/^[0-9`]/.test(tok)) break;
+      // 前置演算子の付いた実引数（`-y`・`!x`・`@p`）は、印と対象の2つで1つの実引数である。
+      if (typeof tok === "string" && /^[^\w<`"$]+_$/.test(tok) && i + 1 < arr.length) { args.push({ from: i, to: i + 1, ref: null }); i += 2; continue; }
+      // 負の字面（`-1`）は演算子ではない。演算子として読むと実体を作らずに素通しし、`$` で渡した
+      // 関数の検査（下の当てる数）まで抜けていた。
+      if (typeof tok === "string" && !isId(tok) && OPERATOR_HEADS.has(tok[0]) && !/^-?[0-9`]/.test(tok)) break;
       args.push({ from: i, to: i, ref: null });
       i++;
     }
+    // **`$` で渡した関数に、返り値の位置で当てる数が足りない**なら、その関数は関数を返すことに
+    // なる（`ap : g x ? @g x` に `$add3`、`k : f ? @f` に `$inc`）。多すぎる引数の裏返しで
+    // あり、関数を返す関数は関数オブジェクトの番地で返す（type_system.md §3.5）。実体を作るか
+    // どうかに依らず、呼び出しサイトで名指しする——作らない形でも抜けないように：
+    //
+    //   仮引数が `$` の分しか無い関数    `k : f ? @f`（実体を作らない）
+    //   実引数が足りない呼び出し          `q : ap $add3`（`$` の実引数さえ読めれば判じられる）
+    //   値の束縛を `$` で渡す             `p : add3 1` / `ap $p 2`（束縛のカテゴリを先に解く）
+    //   吊り上げられない無名の関数        仮引数の数を字句から数える
+    fn.ptr.forEach((pn) => {
+      const k = fn.params.indexOf(pn);
+      const a = k < args.length ? args[k] : null;
+      if (!a) return;
+      let need = null;
+      let callee = "無名の関数";
+      if (a.ref && top.has(a.ref)) {
+        getCategory({ type: "atom", kind: "identifier", value: a.ref }, env);
+        const c = top.get(a.ref);
+        if (c.category !== "Lambda") return;
+        const caps = (liftCaps.get(a.ref) || []).length;
+        need = typeof c.requiredArity === "number" ? c.requiredArity - caps : typeof c.arity === "number" ? c.arity - caps : null;
+        const raw = String(a.ref).replace(/^<|>$/g, "");
+        if (!liftCaps.has(a.ref) && !/\$\d+$/.test(raw)) callee = raw;
+      } else if (a.anonArity != null) need = a.anonArity;
+      else return;
+      const Fname = functionLabel(F);
+      for (const d of tailDepthsOf(nodes[fn.idx] && nodes[fn.idx].right, pn)) {
+        if (d > 0 && (need == null || d >= need)) continue;
+        const what = d === 0
+          ? `${Fname} は \`@${pn.slice(1, -1)}\` をそのまま返しています——\`$\` で渡した ${callee} そのもの（関数）を返すことになります`
+          : `\`@${pn.slice(1, -1)}\` に渡した ${callee} はアリティ ${need} だが、${Fname} の本体は返り値の位置で ${d} 個しか当てていません——${Fname} が関数（部分適用）を返すことになります`;
+        throw new OperationError(`${what}。${FUNCTION_RETURN_ADVICE}`, {
+          spec: "type_system.md §3.5",
+          reason: "function-returned-without-address",
+        });
+      }
+    });
+    if (fn.underOnly) return null;
     if (args.length !== fn.params.length) return null;   // 足りない・読めないなら触らない
     const callees = fn.ptr.map((pn) => args[fn.params.indexOf(pn)].ref);
     if (callees.some((c) => !c || !top.has(c) || top.get(c).category !== "Lambda")) return null;
@@ -586,6 +645,189 @@ function specializeRefCalls(lines, nodes, env, options) {
   if (newDefs.length > 0) refold();
 }
 
+const isArmNode = (l) => !!l && l.type === "operation" && l.name === "define";
+const isIdentNode = (n) => !!n && n.type === "atom" && n.kind === "identifier";
+
+/**
+ * 式の外側の包みを剥がす：1行の括り、後置 `@`（取り込み）、前置 `~`・後置 `~`、そして `@$X`。
+ * `$` と `@` は往復なので `@$X` は X そのものである（LambdaLift）。前置 `@` の先が番地の往復で
+ * なければ剥がさない——それは読むことであって、関数を運ぶことではない。
+ */
+function peelWrappers(n) {
+  for (;;) {
+    if (!n || typeof n !== "object") return n;
+    if (n.type === "block" && n.kind === "paren" && Array.isArray(n.lines) && n.lines.length === 1) { n = n.lines[0]; continue; }
+    if (n.type === "operation" && n.operand && (n.name === "import" || n.name === "continuous" || n.name === "expand")) { n = n.operand; continue; }
+    if (n.type === "operation" && n.position === "prefix" && n.op === "@" && n.operand) {
+      const a = peelWrappers(n.operand);
+      if (a && a.type === "operation" && a.name === "address" && a.operand) { n = a.operand; continue; }
+    }
+    return n;
+  }
+}
+
+/**
+ * 本体の**返り値の位置**にある式を集める。
+ *
+ *   枝のある並び（字下げでも括りでも）   各枝 `左 : 右` の右と、最後の行（既定）
+ *   1行の枝 `n = 1 : inc`              右（1スロットの構造体 `[a : inc]` も `[x] ≅ x` で同じ）
+ *   選び                                `|` と `;` の両辺、`&` の右
+ *
+ * 本体の中の `左 : 右` は**左が識別子でも枝である**（局所の束縛ではない）。`t : 1` のもとで
+ * `f : n ?` / `t : 42` / `0` は 42 を返す。
+ *
+ * **枝の無い2行以上の並びと、全部が `名前 : 値` の括りは器である**（行の並び・構造体）。
+ * `f : n ?` / `1` / `2` は `[1, 2]` を返す——最後の行が返り値なのは、枝があるときだけである。
+ * 器の中に関数を入れて返す形は、まだ決めていない。
+ */
+function returnTails(b, out = []) {
+  b = peelWrappers(b);
+  if (!b || typeof b !== "object") return out;
+  if (b.type === "block" && Array.isArray(b.lines) && (b.kind === "indent" || b.kind === "paren")) {
+    const lines = b.lines;
+    if (!lines.some(isArmNode)) {
+      if (lines.length === 1) returnTails(lines[0], out);
+      return out;
+    }
+    if (b.kind === "paren" && lines.every((l) => isArmNode(l) && isIdentNode(l.left))) return out;
+    for (const l of lines) if (isArmNode(l)) returnTails(l.right, out);
+    if (!isArmNode(lines[lines.length - 1])) returnTails(lines[lines.length - 1], out);
+    return out;
+  }
+  if (isArmNode(b)) return returnTails(b.right, out);
+  if (b.type === "operation" && (b.name === "or" || b.name === "xor")) { returnTails(b.left, out); returnTails(b.right, out); return out; }
+  if (b.type === "operation" && b.name === "and") return returnTails(b.right, out);
+  out.push(b);
+  return out;
+}
+
+/** 貪欲な点なしの括りへ付けた名前（`_pf_fold_2b`）を、書かれた綴り（`[+]`）へ戻す。 */
+function pointfreeSpelling(name) {
+  const raw = String(name).replace(/^<|>$/g, "");
+  const unhex = (h) => (h.match(/../g) || []).map((x) => String.fromCharCode(parseInt(x, 16))).join("");
+  let m = /^_pf_fold_([0-9a-f]+)$/.exec(raw);
+  if (m) return `[${unhex(m[1])}]`;
+  m = /^_pf_map_([0-9a-f]+)_([0-9a-f]+)$/.exec(raw);
+  if (m) return `[${unhex(m[1])} ${unhex(m[2])},]`;
+  return null;
+}
+
+/** `add _ n` の穴が作ったラムダか（仮引数が `$p0`, `$p1`, … だけ）。 */
+function isHoleLambda(lam) {
+  const L = lam.left;
+  const names = isIdentNode(L) ? [L.value] : ((L && L.entries) || []).map((x) => x.name);
+  return names.length > 0 && names.every((x) => /^<\$p\d+>$/.test(String(x)));
+}
+
+/**
+ * その式は関数そのものか。関数なら何であるかを言う語を、そうでなければ null を返す。
+ *
+ * **識別子は束縛の右辺の式で判じる**（pass2 の分類ではなく）。分類は値の束縛を右辺の
+ * 還元結果で Lambda と答えることがある——`r : first [1 2 3]`（器を丸ごと受ける関数の飽和した
+ * 呼び出し）、`Red : !__`（真）、`v : @buf`（読み）はどれも値だが、分類だけ見ると関数に見え、
+ * 正しいプログラムを止めていた。
+ */
+function functionKindOf(e, scope, defaults, seen = new Set()) {
+  e = peelWrappers(e);
+  if (!e || typeof e !== "object") return null;
+  if (e.type === "operation") {
+    if (e.op === "?") return isHoleLambda(e) ? "`_` による部分適用" : "ラムダ";
+    if (e.name === "compose") return "合成";
+    if (e.name === "partial_apply") return "部分適用";
+    if (e.partial) return "点なしの括り";
+    return null;
+  }
+  if (!isIdentNode(e) || seen.has(e.value)) return null;
+  seen.add(e.value);
+  const pf = pointfreeSpelling(e.value);
+  if (pf) return `点なしの括り ${pf}`;
+  const nm = String(e.value).replace(/^<|>$/g, "");
+  // 既定値を持つ仮引数は、その既定値で判じる（`f : inc` を既定に持つ `f` を返す形）
+  if (defaults && defaults.has(e.value)) return functionKindOf(defaults.get(e.value), scope, null, seen) ? `関数を既定値に持つ仮引数 ${nm}` : null;
+  const found = scope ? envLookupScope(scope, e.value) : null;
+  if (!found) return null;
+  getCategory(e, scope);                               // 値の束縛の右辺を還元させる（rhsNode ができる）
+  const b = found.binding;
+  if (b.rhsNode) return functionKindOf(b.rhsNode, found.scope, null, seen) ? `関数を束縛した名前 ${nm}` : null;
+  // 残るのは関数の定義（`名前 : 仮引数 ? 本体`）と仮引数。仮引数の束縛は Atom である。
+  return b.category === "Lambda" ? `関数の名前 ${nm}` : null;
+}
+
+/** 検査で名指しする関数の呼び方。実体化の段が作った名前（`$` を含む）は、利用者の言葉へ戻す。 */
+function functionLabel(name) {
+  const raw = String(name).replace(/^<|>$/g, "");
+  if (!raw.includes("$")) return raw;
+  const parts = raw.split("$");
+  // 吊り上げた無名の関数（`<F$仮引数$番号>`）。書いたのは呼び出しサイトの無名の関数である。
+  if (parts.length === 3 && /^\d+$/.test(parts[2])) return `${parts[0]} の仮引数 ${parts[1]} へ \`$\` で渡した無名の関数`;
+  return `${parts[0]}（\`$\` で渡した関数ごとの実体 ${raw}）`;
+}
+
+const FUNCTION_RETURN_ADVICE =
+  "関数を返す関数は、関数オブジェクトの番地で返します。`$(…)` を付けて返し、使う側は `@` で当ててください" +
+  "（余る引数を取りたいなら仮引数の並びで `~x` / `[~x]` と宣言します）";
+
+/**
+ * **関数を返す関数は、関数オブジェクトの番地で返す**（type_system.md §3.5）。
+ *
+ * 本体の返り値の位置（`returnTails`）に、関数そのもの（部分適用・ラムダ・合成・点なしの括り・
+ * 関数の名前）が `$` 無しで居たら止める。そのまま返すと実行時の値を捕まえた閉包を返すことに
+ * なり、部分適用はコンパイル時の特殊化である（execution_model.md §3）という前提の外へ出る。
+ * 番地で返せば（`g : x ? $(add3 x + 1)`）、関数を値として運んでいることが綴りに現れ、使う側は
+ * `@` で当てる。
+ *
+ * **自動カリー化とは別である。** 呼び出しサイトや束縛で引数が足りない形（`p : add3 1`、
+ * `(add3 1) 2 3`）は返り値の位置ではないので見ない。`!__`（真＝恒等射）と、前置 `@` の読みも
+ * 関数オブジェクトの受け渡しではない。飽和した `apply` も見ない——本当に引数が足りない適用は、
+ * pass2 が既に `partial_apply` へ改名している。
+ *
+ * `$` で渡した関数に本体が当てる数が足りない形（`ap : g x ? @g x` に `$add3`）は、実体化の段
+ * （specializeRefCalls）が呼び出しサイトで名指しする。
+ */
+function checkFunctionReturns(nodes) {
+  const defaultsOf = (lam) => new Map(((lam.left && lam.left.entries) || []).filter((x) => x.name && x.default).map((x) => [x.name, x.default]));
+  const check = (lam, who) => {
+    const defaults = defaultsOf(lam);
+    for (const t of returnTails(lam.right)) {
+      const kind = functionKindOf(t, lam.scope, defaults);
+      if (!kind) continue;
+      throw new OperationError(`${who} は関数を返しています（${kind}）——${FUNCTION_RETURN_ADVICE}`, {
+        spec: "type_system.md §3.5",
+        reason: "function-returned-without-address",
+      });
+    }
+  };
+  const seen = new Set();
+  // `who` は一番近い名前付きの関数の呼び方。無名の関数は「〜の中の無名の関数」と言う。
+  const visit = (n, who) => {
+    if (!n || typeof n !== "object" || seen.has(n)) return;
+    seen.add(n);
+    if (n.type === "operation" && n.name === "define" && isIdentNode(n.left) && n.right && n.right.op === "?") {
+      const me = functionLabel(n.left.value);
+      seen.add(n.right);
+      check(n.right, me);
+      visitLambda(n.right, me);
+      return;
+    }
+    if (n.type === "operation" && n.op === "?") {
+      check(n, who ? `${who} の中の無名の関数` : "無名の関数");
+      visitLambda(n, who);
+      return;
+    }
+    // 値の定義（`h : dbl (y ? inc)` のような合成）の中の無名の関数も、その名前で言う
+    if (n.type === "operation" && n.name === "define" && isIdentNode(n.left)) { visit(n.right, functionLabel(n.left.value)); return; }
+    for (const k of ["left", "right", "operand", "middle"]) visit(n[k], who);
+    for (const l of n.lines || []) visit(l, who);
+    for (const x of n.entries || []) visit(x.default, who);
+  };
+  // 本体と、仮引数の既定値の中（`f : (y ? inc)` のようなラムダが居る）を見る。
+  const visitLambda = (lam, who) => {
+    visit(lam.right, who);
+    for (const x of (lam.left && lam.left.entries) || []) visit(x.default, who);
+  };
+  for (const n of nodes) visit(n, null);
+}
+
 function compile(source, options = {}) {
   const parseFn = options.parse || parse;
   // **入口のファイル自身も「撒き済み」として数える。** 循環したときに入口が自分を撒き直し、
@@ -640,6 +882,8 @@ function compile(source, options = {}) {
   // **`$` で渡した関数を、実体ごとに pass2 へ通し直す。** 型とアリティが実体の中へ
   // 流れ込むように、Pass 3 より前でやる（specializeRefCalls の注記）。
   specializeRefCalls(lines, nodes, env, options);
+  // 実体を作った後で見る——`$` で渡した関数ごとの実体の本体が、関数を返す形になりうる。
+  checkFunctionReturns(nodes);
   const specializations = runPass1b(nodes, env);
   // **鍵が増えるマージのぶんまで、器の並びを先に決める。**
   //

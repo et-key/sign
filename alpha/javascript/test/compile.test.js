@@ -170,8 +170,10 @@ checkReasons("5 + __ → 診断なし（右辺Unitは単位元）", "5 + __", []
 
 // ---- Pass 1b がパイプラインに載っていること ----
 {
-	// `@ref` を持つジェネリック関数と、その呼び出しサイト2つ。
-	const { specializations } = run("apply5 : ref ? @ref 5\nadd : x y ? x + y\napply5 $add\napply5 3");
+	// `@ref` を持つジェネリック関数と、その呼び出しサイト2つ。渡す関数はアリティ1——`$add`
+	// （アリティ2）だと `@ref 5` が部分適用になり、`apply5` が関数を返す形として名指しされる
+	// （type_system.md §3.5「関数を返す関数は、関数オブジェクトの番地で返す」）。
+	const { specializations } = run("apply5 : ref ? @ref 5\ninc : x ? x + 1\napply5 $inc\napply5 3");
 	total++;
 	const entry = specializations.get("<apply5>");
 	const ok = !!entry && entry.has("<ref>") && entry.get("<ref>").callsiteCount === 2;
@@ -212,6 +214,81 @@ check("別名越しでも実引数まで狭まる", lastType("add : [+]\nadd 1 2
 	check("実体へ付け替えた値の定義", rhsOf("sub : a b ? a - b\nflip : f x y ? @f y x\nv : flip $sub 3 10\nv * 2", "<v>"), "<flip$sub> 3 10");
 	// 書き換えていない値の定義は、そのまま（作り直す対象を広げすぎていないこと）
 	check("書き換えていない値の定義", rhsOf("dbl : n ? n * 2\nap : f x ? @f x\nv : ap $dbl 5\nw : v\nw * 2", "<w>"), "<v>");
+}
+
+// ---- 関数を返す関数は、関数オブジェクトの番地で返す（type_system.md §3.5） ----
+//
+// 本体の返り値の位置に関数そのものが `$` 無しで居たら止める（OperationError）。そのまま返すと
+// 実行時の値を捕まえた閉包を返すことになり、部分適用はコンパイル時の特殊化という前提の外へ出る。
+// **自動カリー化とは別である**——呼び出しサイトや束縛で引数が足りない形は返り値の位置ではない。
+{
+	const refusal = (source) => {
+		try { run(source); return null; } catch (e) { return e.reason || e.message; }
+	};
+	const NAMED = "function-returned-without-address";
+	const A3 = "add3 : a b c ? a + b + c\n";
+	const FNS = "inc : n ? n + 1\ndbl : n ? n * 2\n";
+	check("部分適用を返す", refusal(`${A3}g : x ? add3 (x + 1)\ng 1`), NAMED);
+	check("関数の名前を返す", refusal(`${FNS}k : n ? inc\nk 1`), NAMED);
+	check("ラムダを返す", refusal("k : n ? (y ? y + n)\nk 1"), NAMED);
+	check("点なしの括りを返す", refusal("k : n ? [+ n]\nk 1"), NAMED);
+	check("合成を返す", refusal(`${FNS}k : n ? inc dbl\nk 1`), NAMED);
+	check("match の枝で返す", refusal(`${FNS}k : n ?\n\tn > 3 : inc\n\tdbl\nk 1`), NAMED);
+	check("選びで返す", refusal(`${FNS}k : n ? (n > 3) & inc | dbl\nk 1`), NAMED);
+	// 本体の中の `左 : 右` は左が識別子でも**枝**である（局所の束縛ではない）。`t` が真なら
+	// `inc` をそのまま返す——一度「局所の束縛」と読んで取りこぼしていた。
+	check("識別子が条件の枝で返す", refusal(`t : 1\n${FNS}f : n ?\n\tt : inc\n\t0\nf 1`), NAMED);
+	// `$` で渡した関数が本体の中で関数を返す形になるとき（`@g x` の引数不足）も同じ。多すぎる
+	// 引数を名指しするのと対になる。**η がこの実体を消してはいけない**——消すと呼び出しサイトが
+	// `add3 1 2 3` になって検査をすり抜け、黙って 6 になる（η をアリティの多い呼び先へ広げた版）。
+	check("$ で渡した関数が関数を返す形になる", refusal(`${A3}ap : f x ? @f x\nap $add3 1 2 3`), NAMED);
+	// 通るもの
+	check("$ で番地を返す", refusal(`${A3}g : x ? $(add3 x + 1)\n@(g 1) 2 3`), null);
+	check("名前の番地を返す", refusal(`${FNS}k : n ? $inc\n@(k 1) 5`), null);
+	check("!__ は真（恒等射）", refusal("f : n ? !__\nf 1"), null);
+	check("@ で読んだものを返す", refusal("f : p ? @p\nf 100"), null);
+	check("自動カリー化：束縛", refusal(`${A3}p : add3 1\np 2 3`), null);
+	check("自動カリー化：括りに当てる", refusal(`${A3}(add3 1) 2 3`), null);
+	check("本体の中で使うだけ", refusal(`${A3}f : x ? (add3 x) 2 3\nf 1`), null);
+	check("枝の条件に関数を使うだけ", refusal(`${FNS}f : n ?\n\t(inc n) > 3 : 1\n\t0\nf 1`), null);
+
+	// ---- 敵対的な検証で見つかった取りこぼし ----
+	// 返り値の位置：`;` の両辺、字下げ以外の枝（1行・括り・複数行の括り）、1スロットの構造体
+	check("`;` の右で返す", refusal(`${FNS}k : n ? n = 0 ; inc\nk 1`), NAMED);
+	check("1行の枝で返す", refusal(`${FNS}k : n ? n = 1 : inc\nk 1`), NAMED);
+	check("括った枝を選びで返す", refusal(`${FNS}k : n ? (n = 1 : inc) | 0\nk 1`), NAMED);
+	check("複数行の括りの枝で返す", refusal(`${FNS}k : n ? (\n\tn = 0 : inc\n\t0\n)\nk 1`), NAMED);
+	check("1スロットの構造体で返す（[x] ≅ x）", refusal(`${FNS}k : n ? [a : inc]\nk 1`), NAMED);
+	// 包み：`@$X` は往復で X、取り込み `@` と `~` は中身
+	check("@$ の往復で返す", refusal(`${A3}k : n ? @$(add3 n)\nk 1`), NAMED);
+	check("取り込みの @ で包んで返す", refusal(`${FNS}k : n ? inc@\nk 1`), NAMED);
+	check("~ で包んで返す", refusal(`${FNS}k : n ? ~inc\nk 1`), NAMED);
+	// 仮引数の既定値
+	check("既定値が関数の仮引数を返す", refusal(`${FNS}k :\n\t\tn\n\t\tf : inc\n\t? f\nk 1`), NAMED);
+	check("既定値の中のラムダが関数を返す", refusal(`${FNS}k :\n\t\tn\n\t\tf : (y ? inc)\n\t? f n\nk 1`), NAMED);
+	check("合成の定義の中のラムダが関数を返す", refusal(`${FNS}h : dbl (y ? inc)\nh 1`), NAMED);
+	// `$` で渡した関数に当てる数が足りない形——実体を作らない道でも抜けない
+	check("渡した関数をそのまま返す（k : f ? @f）", refusal(`${FNS}k : f ? @f\n(k $inc) 5`), NAMED);
+	check("負の字面の実引数", refusal("add : a b ? a + b\nap : f x ? @f x\nap $add -1"), NAMED);
+	check("実引数が足りない呼び出し", refusal(`${A3}ap : f x ? @f x\nq : ap $add3\nq 1`), NAMED);
+	check("値の束縛を $ で渡す", refusal(`${A3}p : add3 1\nap : h x ? @h x\nap $p 2`), NAMED);
+	check("別名を $ で渡す", refusal("add : a b ? a + b\ng : add\nap : f x ? @f x\nap $g 1"), NAMED);
+	check("吊り上げられない無名の関数", refusal("ap : f x ? @f x\nap $(a b ? (c ? c + a) b) 1"), NAMED);
+
+	// ---- 誤爆していたもの（値の束縛を返すのは値を返すこと） ----
+	// 識別子は束縛の右辺の式で判じる。pass2 の分類は値の束縛を Lambda と答えることがある。
+	check("飽和した呼び出しに束縛した名前", refusal("first : [x ~xs] ? x\nr : first [1 2 3]\nk : n ? r\nk 0"), null);
+	check("!__ に束縛した名前（列挙）", refusal("#RGB : Red | Green | Blue\nRed : !__\nGreen : !__\nBlue : !__\npick : n ?\n\tn = 0 : Red\n\tn = 1 : Green\n\tBlue\npick 1"), null);
+	check("読みに束縛した名前", refusal("buf : 0x40011000\nv : @buf\nf : n ? v\nf 1"), null);
+	check("別名を $ で渡して足りる", refusal("add : a b ? a + b\ng : add\napp : f x y ? @f x y\napp $g 3 4"), null);
+
+	// ---- 名指しの言葉は利用者の書いたもので ----
+	const said = (source) => { try { run(source); return ""; } catch (e) { return e.message; } };
+	const checkTrue = (note, cond) => check(note, !!cond, true);
+	checkTrue("[+] は点なしの括りと言う", said("k : n ? [+]\nk 1").includes("点なしの括り [+]"));
+	checkTrue("穴は `_` による部分適用と言う", said("add : x y ? x + y\nk : n ? add _ n\nk 1").includes("`_` による部分適用"));
+	checkTrue("吊り上げた無名の関数はそう言う", said(`${FNS}ap : f x ? @f x\nap $(n ? inc) 1`).includes("ap の仮引数 f へ `$` で渡した無名の関数"));
+	checkTrue("当てる数の不足は呼び出しサイトで言う", said(`${A3}ap : f x ? @f x\nap $add3 1`).includes("`@f` に渡した add3 はアリティ 3"));
 }
 
 console.log(`\n${passed}/${total} passed`);
