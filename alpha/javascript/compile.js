@@ -394,35 +394,43 @@ function specializeRefCalls(lines, nodes, env, options) {
     return out;
   };
   // 1つの呼び出しを読む。書き換えるなら、置き換える頭と、残す実引数と、読み終えた位置を返す。
-  const tryCall = (arr, s, fn, idx) => {
+  const tryCall = (arr, s, fn, idx, binders) => {
     const F = arr[s];
-    // 実引数を仮引数の数ぶん読む。単純な形（識別子・字面・括り・`$_ <X>`）だけ。
+    const isPrefixMark = (t) => typeof t === "string" && (t === "$_" || /^[^\w<`"$]+_$/.test(t));
+    const isPostfixMark = (t) => typeof t === "string" && /^_[^\w<`"]+$/.test(t);
+    // 実引数を仮引数の数ぶん読む。単純な形（識別子・字面・括り・`$_ <X>`・前置の印の連なりと
+    // その対象）だけ。**区切りは pass2 と同じ所で切る**——ずれると別の `$` を実体化し、黙って
+    // 違う答えを返す（`h ~@p $dbl $inc` で `~` と `@p` を別の実引数に読んでいた）。
     const args = [];
     let i = s + 1;
     while (args.length < fn.params.length && i < arr.length) {
       const tok = arr[i];
-      // 無名のラムダ `$(p q ? p * q)` は、捕獲していなければ名前を与えて吊り上げ、名前の
-      // `$X` と同じ道に乗せる。仮引数の型は、ここで作る実体の中の呼び出しから流れ込む
-      // ——直接呼ばれる場所が無かったので、それまでは決まらなかった。
+      let arg;
       if (tok === "$_" && Array.isArray(arr[i + 1])) {
-        const pn = fn.params[args.length];
-        const ref = fn.ptr.includes(pn) ? hoistAnon(arr[i + 1], lines[idx], F, pn) : null;
-        // 吊り上げられなくても（入れ子の束縛を参照する等）、自分の仮引数の数は字句から数えられる
+        // 無名の関数 `$(p q ? p * q)`。吊り上げるのは書き換えが決まってから（下）——読むだけで
+        // 吊り上げると、書き換えない呼び出しに持ち主の無い定義が残り、機械で名前が重複した。
+        // 仮引数の数は字句から数えられる（吊り上げられない形でも）。
         const lam = arr[i + 1].length === 1 && Array.isArray(arr[i + 1][0]) ? arr[i + 1][0] : null;
         const q = lam ? lam.indexOf("?") : -1;
-        const anonArity = q > 0 && lam.slice(0, q).every(isId) ? q : null;
-        args.push({ from: i, to: i + 1, ref, anonArity });
-        i += 2;
-        continue;
+        arg = { from: i, to: i + 1, ref: null, anon: arr[i + 1], anonArity: q > 0 && lam.slice(0, q).every(isId) ? q : null };
+      } else if (tok === "$_" && isId(arr[i + 1])) {
+        arg = { from: i, to: i + 1, ref: arr[i + 1] };
+      } else if (isPrefixMark(tok)) {
+        // 前置演算子の連なり（`-y`・`~@p`・`!!x`）は、対象と合わせて1つの実引数である
+        let j = i;
+        while (j < arr.length && isPrefixMark(arr[j])) j++;
+        if (j >= arr.length) break;
+        arg = { from: i, to: j, ref: null };
+      } else if (typeof tok === "string" && !isId(tok) && OPERATOR_HEADS.has(tok[0]) && !/^-?[0-9`]/.test(tok)) {
+        // 負の字面（`-1`）は演算子ではない。演算子として読むと実体を作らずに素通ししていた。
+        break;
+      } else {
+        arg = { from: i, to: i, ref: null };
       }
-      if (tok === "$_" && isId(arr[i + 1])) { args.push({ from: i, to: i + 1, ref: arr[i + 1] }); i += 2; continue; }
-      // 前置演算子の付いた実引数（`-y`・`!x`・`@p`）は、印と対象の2つで1つの実引数である。
-      if (typeof tok === "string" && /^[^\w<`"$]+_$/.test(tok) && i + 1 < arr.length) { args.push({ from: i, to: i + 1, ref: null }); i += 2; continue; }
-      // 負の字面（`-1`）は演算子ではない。演算子として読むと実体を作らずに素通しし、`$` で渡した
-      // 関数の検査（下の当てる数）まで抜けていた。
-      if (typeof tok === "string" && !isId(tok) && OPERATOR_HEADS.has(tok[0]) && !/^-?[0-9`]/.test(tok)) break;
-      args.push({ from: i, to: i, ref: null });
-      i++;
+      // 後置演算子（`3!`・`ys~`）は直前の実引数のものである
+      while (arg.to + 1 < arr.length && isPostfixMark(arr[arg.to + 1])) arg.to++;
+      args.push(arg);
+      i = arg.to + 1;
     }
     // **`$` で渡した関数に、返り値の位置で当てる数が足りない**なら、その関数は関数を返すことに
     // なる（`ap : g x ? @g x` に `$add3`、`k : f ? @f` に `$inc`）。多すぎる引数の裏返しで
@@ -431,18 +439,22 @@ function specializeRefCalls(lines, nodes, env, options) {
     //
     //   仮引数が `$` の分しか無い関数    `k : f ? @f`（実体を作らない）
     //   実引数が足りない呼び出し          `q : ap $add3`（`$` の実引数さえ読めれば判じられる）
-    //   値の束縛を `$` で渡す             `p : add3 1` / `ap $p 2`（束縛のカテゴリを先に解く）
+    //   値の束縛を `$` で渡す             `p : add3 1` / `ap $p 2`（右辺の式で判じる）
     //   吊り上げられない無名の関数        仮引数の数を字句から数える
+    //
+    // `$X` が関数かどうかは functionKindOf と同じく**束縛の右辺の式**で判じる。pass2 の分類は
+    // `r : first [1 2 3]`・`Red : !__`・`v : @buf` を Lambda と答え、値を読むだけの `f $r` を
+    // 止めていた。仮引数と同じ名前の `$X` はトップの関数ではない（`g : inc ? rd $inc`）。
     fn.ptr.forEach((pn) => {
       const k = fn.params.indexOf(pn);
       const a = k < args.length ? args[k] : null;
       if (!a) return;
       let need = null;
       let callee = "無名の関数";
-      if (a.ref && top.has(a.ref)) {
-        getCategory({ type: "atom", kind: "identifier", value: a.ref }, env);
+      if (a.ref) {
+        if (binders.has(a.ref) || !top.has(a.ref)) return;
+        if (!functionKindOf({ type: "atom", kind: "identifier", value: a.ref }, env, null)) return;
         const c = top.get(a.ref);
-        if (c.category !== "Lambda") return;
         const caps = (liftCaps.get(a.ref) || []).length;
         need = typeof c.requiredArity === "number" ? c.requiredArity - caps : typeof c.arity === "number" ? c.arity - caps : null;
         const raw = String(a.ref).replace(/^<|>$/g, "");
@@ -463,8 +475,31 @@ function specializeRefCalls(lines, nodes, env, options) {
     });
     if (fn.underOnly) return null;
     if (args.length !== fn.params.length) return null;   // 足りない・読めないなら触らない
+    // 仮引数と同じ名前の `$X` は、その仮引数である（トップの関数へ焼き込んではいけない）
+    if (fn.ptr.some((pn) => { const a = args[fn.params.indexOf(pn)]; return a.ref && binders.has(a.ref); })) return null;
+    // 無名の関数を吊り上げる。ここから先で書き換えをやめるなら、吊り上げた定義は巻き戻す。
+    const hoisted = [];
+    const rollback = () => {
+      for (const nm of hoisted) {
+        top.delete(nm);
+        liftCaps.delete(nm);
+        const k = newDefs.findIndex((d) => d[0] === nm);
+        if (k >= 0) newDefs.splice(k, 1);
+      }
+      return null;
+    };
+    for (const pn of fn.ptr) {
+      const a = args[fn.params.indexOf(pn)];
+      if (!a.anon) continue;
+      a.ref = hoistAnon(a.anon, lines[idx], F, pn);
+      if (!a.ref) return rollback();
+      hoisted.push(a.ref);
+    }
     const callees = fn.ptr.map((pn) => args[fn.params.indexOf(pn)].ref);
-    if (callees.some((c) => !c || !top.has(c) || top.get(c).category !== "Lambda")) return null;
+    // **値の束縛・別名（`g : add`・`p : add3 1`）は実体にしない。** 当てる数の検査は右辺で判じる
+    // が、実体を作ると本体の中から別名越しに呼ぶ形になり、器を返す関数の別名でそこを踏むと機械が
+    // 0 や `__` を返す（以前から在る穴）。作らなかった頃の振る舞いを保つ。
+    if (callees.some((c) => !c || !top.has(c) || top.get(c).category !== "Lambda" || top.get(c).rhsNode)) return rollback();
     // **多すぎる引数は捨てられない。** `@a b c` は適用以外にありえない——前置 `@` の先は
     // 必ず Lambda だからである。本体で `@p` に当てている数が、渡した関数のアリティより多ければ、
     // 余った引数は飽和した結果（値）へ当てることになる。実体を作ると `<dbl> <x> <y>` が名前の
@@ -478,7 +513,7 @@ function specializeRefCalls(lines, nodes, env, options) {
       const got = appliedDepth(nodes[fn.idx], pn);
       return typeof want === "number" && got > want ? { param: pn, callee: callees[j], want, got } : null;
     }).find(Boolean);
-    if (over) { overMarks.push({ idx, F, over }); return null; }
+    if (over) { overMarks.push({ idx, F, over }); return rollback(); }
     const name = "<" + [F.slice(1, -1), ...callees.map((c) => c.slice(1, -1))].join("$") + ">";
     if (!made.has(name)) {
       const src = lines[fn.idx];
@@ -519,7 +554,7 @@ function specializeRefCalls(lines, nodes, env, options) {
         return out;
       };
       const body = rw(src.slice(fn.q + 1));
-      if (!intact) return null;
+      if (!intact) return rollback();
       // **η 簡約。** 本体が「呼び先へ仮引数を同じ順でそのまま渡すだけ」なら、実体は呼び先
       // そのものである（`<app$add> : <x> <y> ? <add> <x> <y>` ≡ `add`）。実体を作らず、呼び出し
       // サイトで呼び先を直に呼ぶ——1段挟むぶんの呼び出しとフレームが消える。
@@ -541,7 +576,7 @@ function specializeRefCalls(lines, nodes, env, options) {
       const formals = [...capParams.flat(), ...keep];
       const def = [name, ":", ...formals, "?", ...body];
       const bind = buildEnvScope([def]).get(name);
-      if (!bind) return null;
+      if (!bind) return rollback();
       const head = body[0];
       const hb = isId(head) && top.has(head) ? top.get(head) : null;
       const reads = (b) => [b.arity, !!b.containerParam].join();
@@ -570,7 +605,7 @@ function specializeRefCalls(lines, nodes, env, options) {
       const fn = fns.get(tok);
       // 自分の定義の中の自分への呼び出しは、実体を作るときに付け替える（上の rw）
       if (fn && fn.idx !== idx && arr[s - 1] !== "$_" && !binders.has(tok)) {
-        const r = tryCall(arr, s, fn, idx);
+        const r = tryCall(arr, s, fn, idx, binders);
         if (r) {
           // 残した実引数の中にも呼び出しは居る（`take_while $is_digit (drop_while $is_space s)`）
           out.push(...r.head, ...r.kept.map((a) => (Array.isArray(a) ? scan(a, idx, binders) : a)));

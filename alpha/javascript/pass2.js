@@ -365,6 +365,21 @@ function derefBoundNode(node, env) {
   return found.binding.rhsNode || node;
 }
 
+// `@f`、または `@f x …`（前置 `@` を根に持つ適用の鎖）か。
+function isAtHeaded(node) {
+  let n = node;
+  while (n && n.type === "operation" && (n.name === "apply" || n.name === "partial_apply")) n = n.left;
+  return !!n && n.type === "operation" && n.position === "prefix" && n.op === "@";
+}
+
+// 括りで閉じた `(@g x)`（前置 `@` を根に持ち、1つ以上当てた適用）か。
+function isClosedAtApply(node) {
+  if (!node || node.type !== "block" || node.kind === "indent" || node.kind === "abs" || node.kind === "norm") return false;
+  if (!Array.isArray(node.lines) || node.lines.length !== 1) return false;
+  const inner = unwrapSoloBlock(node.lines[0]);
+  return !!inner && inner.type === "operation" && (inner.name === "apply" || inner.name === "partial_apply") && isAtHeaded(inner);
+}
+
 function unwrapSoloBlock(node) {
   while (node && node.type === "block" && node.kind !== "indent" && node.kind !== "abs" && node.kind !== "norm" && node.lines.length === 1) {
     node = node.lines[0];
@@ -541,6 +556,16 @@ function mk(name, left, right) {
 // coproduct_resolver.md §3の優先度表（10.5〜10.0）
 function coproductReduce(a, b, env) {
   const catA = getCategory(a, env), catB = getCategory(b, env);
+  // **`@a b c` は適用以外にありえない**（type_system.md §3.5）。Lambda どうしの並びは合成だが、
+  // `@` が絡むときは違う：
+  //
+  //   左が `@` で始まる鎖（`@f …`）   並んだものは全部実引数である
+  //   右が括りで閉じた `@` の適用     `(@g x)` は書いた分を当てた結果（値）である
+  //
+  // 前置 `@` のアリティは具体化まで分からない（Infinity）ので、`(@g x)` はいつまでも未飽和の
+  // Lambda に見え、`comp : f g x ? @f (@g x)` が `@f` と `(@g x)` の合成に読まれていた——
+  // 総称の本体が走る道で、解釈器が黙って合成関数を返していた（11 のはず）。
+  if (catA === "Lambda" && catB === "Lambda" && (isAtHeaded(a) || isClosedAtApply(b))) return mk("apply", a, b);
   if (catA === "Lambda" && catB === "Lambda") return mk("compose", a, b);
   if (catA === "Lambda" && catB === "Atom") {
     // coproduct_resolver.md §5.4: 裸のrestパラメータ（`x ~xs ? ...`）を持つLambdaに

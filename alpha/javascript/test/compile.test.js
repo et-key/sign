@@ -282,6 +282,18 @@ check("別名越しでも実引数まで狭まる", lastType("add : [+]\nadd 1 2
 	check("読みに束縛した名前", refusal("buf : 0x40011000\nv : @buf\nf : n ? v\nf 1"), null);
 	check("別名を $ で渡して足りる", refusal("add : a b ? a + b\ng : add\napp : f x y ? @f x y\napp $g 3 4"), null);
 
+	// ---- 2周目：自分の変更が持ち込んだ誤爆 ----
+	// `@a b c` は適用。`comp : f g x ? @f (@g x)` の本体は合成ではない（pass2 が `(@g x)` を
+	// 未飽和の Lambda と見て合成に読んでいた）。定義しただけで止まっていた。
+	check("合成の高階関数を定義するだけ", refusal(`${FNS}comp : f g x ? @f (@g x)\n5`), null);
+	check("twice を定義するだけ", refusal(`${FNS}twice : f x ? @f (@f x)\n5`), null);
+	check("S コンビネータを定義するだけ", refusal("S : f g x ? @f x (@g x)\n5"), null);
+	// 呼び出しサイトの検査も `$X` を束縛の右辺で判じる。値を読むだけの `f $r` は止めない。
+	check("値の束縛を $ で渡して読む", refusal("first : [x ~xs] ? x\nr : first [1 2 3]\nf : p ? @p\nf $r"), null);
+	check("!__ の束縛を $ で渡して読む", refusal("Red : !__\nf : p ? @p\nf $Red"), null);
+	// 仮引数と同じ名前の `$X` はトップの関数ではない
+	check("仮引数と同名の $", refusal(`${FNS}rd : p ? @p\ng : inc ? rd $inc\ng 7`), null);
+
 	// ---- 名指しの言葉は利用者の書いたもので ----
 	const said = (source) => { try { run(source); return ""; } catch (e) { return e.message; } };
 	const checkTrue = (note, cond) => check(note, !!cond, true);

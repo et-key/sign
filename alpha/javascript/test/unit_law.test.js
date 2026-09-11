@@ -399,5 +399,24 @@ console.log("\n--- η：$ を通っても読み方は同じ ---");
 	law("app $add 3 4 == add 3 4", "add : a b ? a + b\napp : f x y ? @f x y\napp $add 3 4", "add : a b ? a + b\nadd 3 4");
 }
 
+// ---------------------------------------------------------------------------
+// `@a b c` は適用：総称の本体が走っても、直に書いたのと同じ
+// ---------------------------------------------------------------------------
+// `twice : f x ? @f (@f x)` の本体を pass2 が `@f` と `(@f x)` の**合成**と読んでいた（前置 `@` の
+// アリティは Infinity なので、括った `(@f x)` がいつまでも未飽和に見えた）。実体にならない道
+// （束縛 `p : twice $inc` を経由する）で、解釈器が黙って合成関数を返していた。
+console.log("\n--- @a b c は適用（総称の本体） ---");
+{
+	const F = "inc : n ? n + 1\ndbl : n ? n * 2\n";
+	law("p : twice $inc / p 5 == inc (inc 5)", `${F}twice : f x ? @f (@f x)\np : twice $inc\np 5`, `${F}inc (inc 5)`);
+	law("q : comp $inc $dbl / q 5 == inc (dbl 5)", `${F}comp : f g x ? @f (@g x)\nq : comp $inc $dbl\nq 5`, `${F}inc (dbl 5)`);
+	// 実引数の区切りは pass2 と同じ所で切る。括った形と括らない形は同じ値——前置の印の連なり
+	// （`~@p`）や後置の印（`3!`）を割って読むと、別の `$` を実体化して黙って違う答えになった。
+	const H = "inc : n ? n + 1\ndbl : n ? n * 2\nh : x g f ? @f x\nv : 10\np : $v\n";
+	law("h ~@p $dbl $inc == h (~@p) $dbl $inc", `${H}h ~@p $dbl $inc`, `${H}h (~@p) $dbl $inc`);
+	const G = "inc : n ? n + 1\nadd : a b ? a + b\nh : x f g ?\n\tx > 0 : @f x 1\n\t@g x\n";
+	law("h 3! $add $inc == h (3!) $add $inc", `${G}h 3! $add $inc`, `${G}h (3!) $add $inc`);
+}
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
