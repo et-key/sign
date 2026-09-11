@@ -22,6 +22,10 @@ const grammar = fs.readFileSync(path.join(__dirname, "..", "sign.pegjs"), "utf8"
 const parser = peggy.generate(grammar);
 
 const run = (source) => compile(source, { parse: parser.parse });
+// 止まったなら理由（機械可読な `reason`、無ければ文言）を、通れば null を返す。
+const refusal = (source) => {
+	try { run(source); return null; } catch (e) { return e.reason || e.message; }
+};
 
 let passed = 0;
 let total = 0;
@@ -222,9 +226,6 @@ check("別名越しでも実引数まで狭まる", lastType("add : [+]\nadd 1 2
 // 実行時の値を捕まえた閉包を返すことになり、部分適用はコンパイル時の特殊化という前提の外へ出る。
 // **自動カリー化とは別である**——呼び出しサイトや束縛で引数が足りない形は返り値の位置ではない。
 {
-	const refusal = (source) => {
-		try { run(source); return null; } catch (e) { return e.reason || e.message; }
-	};
 	const NAMED = "function-returned-without-address";
 	const A3 = "add3 : a b c ? a + b + c\n";
 	const FNS = "inc : n ? n + 1\ndbl : n ? n * 2\n";
@@ -253,11 +254,14 @@ check("別名越しでも実引数まで狭まる", lastType("add : [+]\nadd 1 2
 	check("枝の条件に関数を使うだけ", refusal(`${FNS}f : n ?\n\t(inc n) > 3 : 1\n\t0\nf 1`), null);
 
 	// ---- 敵対的な検証で見つかった取りこぼし ----
-	// 返り値の位置：`;` の両辺、字下げ以外の枝（1行・括り・複数行の括り）、1スロットの構造体
+	// 返り値の位置：`;` の両辺、1スロットの構造体
 	check("`;` の右で返す", refusal(`${FNS}k : n ? n = 0 ; inc\nk 1`), NAMED);
-	check("1行の枝で返す", refusal(`${FNS}k : n ? n = 1 : inc\nk 1`), NAMED);
-	check("括った枝を選びで返す", refusal(`${FNS}k : n ? (n = 1 : inc) | 0\nk 1`), NAMED);
-	check("複数行の括りの枝で返す", refusal(`${FNS}k : n ? (\n\tn = 0 : inc\n\t0\n)\nk 1`), NAMED);
+	// 1行で書いた `n = 1 : inc` も、括った `(n = 1 : inc)` も枝ではない（枝が居られるのは
+	// `?` 直後の字下げブロックの行だけ）。左辺が名前でない define なので、関数を返すかどうかを
+	// 見る前に構文として止まる（下の「`名前 : 値`」の節）。
+	check("1行の枝は枝ではない", refusal(`${FNS}k : n ? n = 1 : inc\nk 1`), "define-left-not-a-name");
+	check("括った枝も枝ではない", refusal(`${FNS}k : n ? (n = 1 : inc) | 0\nk 1`), "define-left-not-a-name");
+	check("複数行の括りも枝ではない", refusal(`${FNS}k : n ? (\n\tn = 0 : inc\n\t0\n)\nk 1`), "define-left-not-a-name");
 	check("1スロットの構造体で返す（[x] ≅ x）", refusal(`${FNS}k : n ? [a : inc]\nk 1`), NAMED);
 	// 包み：`@$X` は往復で X、取り込み `@` と `~` は中身
 	check("@$ の往復で返す", refusal(`${A3}k : n ? @$(add3 n)\nk 1`), NAMED);
@@ -322,6 +326,49 @@ check("別名越しでも実引数まで狭まる", lastType("add : [+]\nadd 1 2
 	checkTrue("穴は `_` による部分適用と言う", said("add : x y ? x + y\nk : n ? add _ n\nk 1").includes("`_` による部分適用"));
 	checkTrue("吊り上げた無名の関数はそう言う", said(`${FNS}ap : f x ? @f x\nap $(n ? inc) 1`).includes("ap の仮引数 f へ `$` で渡した無名の関数"));
 	checkTrue("当てる数の不足は呼び出しサイトで言う", said(`${A3}ap : f x ? @f x\nap $add3 1`).includes("`@f` に渡した add3 はアリティ 3"));
+}
+
+// ---- `名前 : 値` の左辺は名前である（match_case は1行で書けない） ----
+//
+// match の枝はブロックの行にしか居ない（match_case.md §概要）。`f : x ? x > 0 : 42` の本体は
+// 枝ではなく、値の位置に居る**左辺が名前でない define** であり、構文が壊れている。断っていた
+// のが機械だけだったので、解釈器は束縛として読んで右辺を無条件に返していた（`f -1` が 42）。
+// 検査は compile に1つだけ置き、両方のエンジンの手前で止める。
+//
+// 一行に並べた構造体も同じ形である。`:` は `,` より緩く右結合なので `[x : 1 , y : 2]` は
+// `x : ((1 , y) : 2)` と読まれ、**内側の define の左辺が直積**になる（実測 `{"x":2}`）。
+{
+	const LEFT = "define-left-not-a-name";
+	check("1行の本体は枝ではない（比較）", refusal("f : x ? x > 0 : 42\nf -1"), LEFT);
+	check("1行の本体は枝ではない（等号）", refusal("f : x ? x = 1 : 42\nf 2"), LEFT);
+	check("一行に並べた構造体", refusal("[x : 1 , y : 2]"), LEFT);
+	check("空白で並べても同じ", refusal("[x : 1 y : 2]"), LEFT);
+	check("括りを外しても同じ", refusal("x : 1 , y : 2"), LEFT);
+	check("値の中の直積キー", refusal("(1 , 2) : 3"), LEFT);
+	// **括弧があると意味が変わる**（括りの中はオブジェクトとして見る）。pass2 は `()` も `[]` も
+	// `{}` も同じブロックにするので、括りを1組かぶせただけで枝の綴りが復活していた——実測で
+	// 解釈器 42／機械 `__`、再帰に至っては解釈器だけ止まらなくなる（qemu で確認）。
+	check("括った1行の枝", refusal("f : x ? (x > 0 : 42)\nf -1"), LEFT);
+	check("角括弧でも同じ", refusal("f : x ? [x > 0 : 42]\nf -1"), LEFT);
+	check("波括弧でも同じ", refusal("f : x ? {x > 0 : 42}\nf -1"), LEFT);
+	check("括ると止まらなくなっていた形", refusal("down : n ? [n > 0 : down (n - 1)]\ndown 3"), LEFT);
+	check("`&` の右を括っても同じ", refusal("f : x ? 1 & (x > 0 : 2)\nf -1"), LEFT);
+	// `[…]` の行と、`名前 :` の下の構造体ブロックの行は**項目**である（枝ではない）。
+	check("[…] に条件の行", refusal("f : x ? [\n\tx > 0 : 1\n\tbar : 2\n]\n(f 3) ' bar"), LEFT);
+	check("構造体ブロックに条件の行", refusal("point :\n\t0 < 1 : 5\n\tbaz : 2\npoint ' baz"), LEFT);
+	check("値の位置の字下げブロック", refusal("p :\n\t1 > 0 : 42\np"), LEFT);
+	// 枝の値を字下げすれば、その行はまた枝である（入れ子の match）。両方のエンジンで動く。
+	check("入れ子の枝は通る", refusal("f : x y ?\n\tx < 0 :\n\t\ty > 0 : 1\n\t\t2\n\t3\nf -1 1"), null);
+	check("構造体を返す関数は通る", refusal("f : x ? [\n\tfoo : x\n\tbar : x + 1\n]\n(f 3) ' bar"), null);
+	check("撒いた鍵の行は通る", refusal("p :\n\tbar : 1\n\tbaz~ : 2\np ' bar"), null);
+	// 言葉は左辺の形を言う（括りの中まで見る）
+	const said = (source) => { try { run(source); return ""; } catch (e) { return e.message; } };
+	check("左辺の形を言う", said("f : x ? x > 0 : 42\nf -1").includes("（more）"), true);
+	check("括った左辺は中身を言う", said("(1 , 2) : 3").includes("（product）"), true);
+	// 通るもの：字下げの枝、ブロックの構造体（qemu.test.js は道具が無いと飛ぶので、ここでも見る）
+	check("字下げの枝は通る", refusal("f : x ?\n\tx > 0 : 42\nf -1"), null);
+	check("ブロックなら1エントリでも通る", refusal("foo :\n\tbar : 1\n(foo ' bar)"), null);
+	check("文字列の鍵も通る", refusal("foo :\n\t`a` : 2\n(foo ' `a`)"), null);
 }
 
 console.log(`\n${passed}/${total} passed`);

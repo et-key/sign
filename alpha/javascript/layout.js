@@ -84,8 +84,9 @@ function mergeBaseIdentifier(n) {
  * **スロットの名前になれるノード。** 識別子と文字列リテラルである（`t : / `+` : 3` の
  * ように、識別子として綴れない名前は文字列で書く）。
  *
- * この基準は interpreter.js の `isSlotKeyNode`、pass3.js の `slotKey`、pass4.js の
- * `isSlotKeyAtom`、そしてここ——**計5箇所で一致していなければならない**。ここだけ
+ * この基準は interpreter.js の `isSlotKeyNode`、pass3.js の `isSlotKeyNode`、pass4.js の
+ * `isSlotKeyAtom`、そしてここ——**計4箇所で一致していなければならない**（compile.js の
+ * `checkDefineLeftSides` はここのものを import して引くので写しではない）。ここだけ
  * 識別子に限っていたため、文字列キーの構造体は行が1つも拾われず、`layoutOfStruct` が
  * `null`（配置できない）ではなく **size 0 のもっともらしいレイアウト**を返していた。
  * 混在（`foo : 1` と ``+` : 2`）ではスロットが黙って1つ消えた。
@@ -984,5 +985,9 @@ export {
   flattenProduct,
   isExpandNode,
   mergeBaseIdentifier,
+  // compile の `checkDefineLeftSides` が引く。`名前 : 値` の左辺が名前かどうかは構造体の
+  // 判定と同じ基準でなければならないので、写しを増やさずここのものを使う。
+  isSlotKeyNode,
+  unparen,
 
 };

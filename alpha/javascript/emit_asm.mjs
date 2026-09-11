@@ -21,7 +21,16 @@ if (!file) {
 }
 
 const conf = readOptionMs(msFile ? fs.readFileSync(msFile, "utf8") : "");
-const { nodes, env } = compile(fs.readFileSync(file, "utf8"), { layer: conf.layer, charset: conf.charset, sourcePath: file, readImport: (f) => fs.readFileSync(f, "utf8") });
+// **前段で止まったものも、名指しで出す。** compile は静的に分かる違反を例外で返すので、
+// 受けずに書き出すと Node のスタックだけが出て、どこが悪いのか言わないことになる。
+let nodes, env;
+try {
+	({ nodes, env } = compile(fs.readFileSync(file, "utf8"), { layer: conf.layer, charset: conf.charset, sourcePath: file, readImport: (f) => fs.readFileSync(f, "utf8") }));
+} catch (e) {
+	console.error(`error: ${e.message}`);
+	if (e.reason) console.error(`（${e.reason}${e.spec ? " / " + e.spec : ""}）`);
+	process.exit(1);
+}
 const r = generateAsm(nodes, env, { target: conf.target, charset: conf.charset, layer: conf.layer, source: file });
 
 process.stdout.write(r.text);

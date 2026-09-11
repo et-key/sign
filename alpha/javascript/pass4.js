@@ -515,9 +515,11 @@ function paramNamesOf(paramNode) {
  * `paramNamesOf` と分けてあるのは、単相化（`collectMonomorphs`）が見るのは「名前で
  * 呼べる仮引数」だけであり、分割代入された仮引数は関数ポインタになりえないためである。
  */
-// スロットのキーになれるノード。識別子と文字列リテラル。**3箇所（interpreter.js の
-// `isSlotKeyNode`、pass3.js の `slotKey`、ここ）で同じ基準でなければならない**——
-// 片方だけ広げると、同じソースが解釈器では構造体・機械語では match_case になる。
+// スロットのキーになれるノード。識別子と文字列リテラル。**4箇所（interpreter.js と
+// layout.js の `isSlotKeyNode`、pass3.js の `isSlotKeyNode`、ここ）で同じ基準でなければ
+// ならない**——片方だけ広げると、同じソースが解釈器では構造体・機械語では match_case に
+// なる。compile.js の `checkDefineLeftSides` は layout.js のものを import して引くので、
+// 写しは増えていない。
 function isSlotKeyAtom(n) {
 	return isIdentifierNode(n) || (!!n && n.type === "atom" && n.kind === "string");
 }
@@ -9460,42 +9462,16 @@ function generateAsm(nodes, env, options = {}) {
 		};
 	}
 
-	// **`名前 : 値` の左辺は名前である。**
+	// **多すぎる引数を名指しする**（印は compile の specializeRefCalls が付ける）。
 	//
-	// 構造体は必ずブロックで書く（1エントリでも）ので、`[x : 1 , y : 2]` のように一行で
-	// 並べる綴りには正当な用途が無い。ところが `:` は `,` より緩く右結合なので、あれは
-	// `x : ((1 , y) : 2)` と読まれ——**内側の define の左辺が直積**になって、値だけが
-	// 出てくる。実測で `{"x":2}`、診断ゼロ。`baz~ : foo`（撒いた鍵）も同じで、1行入る
-	// だけで構造体ごと潰れて `bar` が引けなくなっていた。
-	//
-	// **撒けるということは1個ではないということ**であり、鍵は1個でなければならない。だから
-	// 断るのは「左辺がスロット鍵（識別子か文字列）でないもの」——`isSlotKeyAtom` が既に
-	// 持っている境界をそのまま使う。**同じ規則を2箇所に書かない。**
-	//
-	// **`:` は2つの役をしている。** ブロックの行にある `条件 : 値` は match の枝で、左辺は
-	// 式でよい（`n > 0 : f (n - 1)`）。だから「どの define も左辺は名前」では強すぎる
-	// ——実測で pass4 の 13 件が落ちた。
-	//
-	// 分かれ目は**行かどうか**である。match の枝は必ずブロックの行に居るので、**値の中に
-	// 現れた define** は枝ではありえない。一行 Dict の内側（`x : ((1 , y) : 2)`）がまさに
-	// それで、そこだけを見れば枝を巻き込まない。
+	// `名前 : 値` の左辺が名前かどうか（1行の `条件 : 値`・一行に並べた構造体）はここでは
+	// 見ない。構文が壊れている話なので、compile の `checkDefineLeftSides` が解釈器と機械の
+	// 両方の手前で止める——機械だけが断っていた頃は、解釈器が同じ綴りを黙って束縛に読んでいた。
 	{
 		const seen = new Set();
-		const walk = (n, inLine) => {
+		const walk = (n) => {
 			if (!n || typeof n !== "object" || seen.has(n)) return;
 			seen.add(n);
-			if (isDefineNode(n) && !inLine && !isSlotKeyAtom(n.left)) {
-				const l = unwrap(n.left);
-				const how = l && l.type === "operation" ? l.name + (l.position === "postfix" ? "（後置）" : "") : l && l.kind ? l.kind : "?";
-				em.diagnostics.push({
-					severity: "error",
-					message:
-						`\`名前 : 値\` の左辺は名前でなければなりません（${how}）——構造体は1エントリでもブロックで書きます。` +
-						"一行に並べた `名前 : 値 , 名前 : 値` は `:` の方が緩いので `x : ((1 , y) : 2)` と読まれ、二要素にはなりません",
-					node: n,
-				});
-			}
-			// **多すぎる引数を名指しする**（印は compile の specializeRefCalls が付ける）。
 			if (n.refOverApply) {
 				const o = n.refOverApply;
 				const nm = (v) => String(v).replace(/^<|>$/g, "");
@@ -9510,13 +9486,11 @@ function generateAsm(nodes, env, options = {}) {
 					node: n,
 				});
 			}
-			for (const k of ["left", "right", "operand", "middle"]) walk(n[k], false);
-			for (const l of n.lines || []) walk(l, true);
-			for (const e of n.entries || []) walk(e.default, false);
+			for (const k of ["left", "right", "operand", "middle"]) walk(n[k]);
+			for (const l of n.lines || []) walk(l);
+			for (const e of n.entries || []) walk(e.default);
 		};
-		// **トップレベルは match の枝ではない。** 枝はラムダの本体ブロックの行に居るので、
-		// ここを行として扱う理由が無い（`x : 1` は左辺が名前なので、そもそも引っかからない）。
-		for (const node of nodes) walk(node, false);
+		for (const node of nodes) walk(node);
 	}
 
 	// 具体化はコード生成の前に済ませる（どの実体を出すかが決まらないと本体を出せない）。

@@ -29,6 +29,7 @@ import { reduceAll, desugarIndexRest, getCategory } from "./pass2.js";
 import { OperationError } from "./errors.js";
 import { specializeGenericParams } from "./pass1b.js";
 import { annotateAll, checkLayerConstraints, checkCharsetConstraints } from "./pass3.js";
+import { isSlotKeyNode, unparen, isExpandNode } from "./layout.js";
 import { findStreamFunctions, generatePullers, groupStreamFunctions, CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 function isIdentifierNode(n) {
@@ -805,12 +806,17 @@ function peelWrappers(n) {
 /**
  * 本体の**返り値の位置**にある式を集める。
  *
- *   枝のある並び（字下げでも括りでも）   各枝 `左 : 右` の右と、最後の行（既定）
- *   1行の枝 `n = 1 : inc`              右（1スロットの構造体 `[a : inc]` も `[x] ≅ x` で同じ）
+ *   枝の並び（`?` 直後の字下げブロック）  各枝 `左 : 右` の右と、最後の行（既定）
+ *   1スロットの構造体 `[a : inc]`        右（`[x] ≅ x` で中身そのものだから）
  *   選び                                `|` と `;` の両辺、`&` の右
  *
- * 本体の中の `左 : 右` は**左が識別子でも枝である**（局所の束縛ではない）。`t : 1` のもとで
- * `f : n ?` / `t : 42` / `0` は 42 を返す。
+ * 本体の字下げブロックの中の `左 : 右` は**左が識別子でも枝である**（局所の束縛ではない）。
+ * `t : 1` のもとで `f : n ?` / `t : 42` / `0` は 42 を返す。
+ *
+ * **枝はその字下げブロックの行にしか居ない。** 1行で書いた `n = 1 : inc` も、括った
+ * `(n = 1 : inc)` も枝ではなく、値の位置に居る左辺が名前でない define なので、ここへ来る
+ * 前に checkDefineLeftSides が止める。1行の本体で左辺が名前のもの（`k : n ? t : inc`）は
+ * 検査を通るが、その値も右辺なので、やはり右が返り値の位置である。
  *
  * **枝の無い2行以上の並びと、全部が `名前 : 値` の括りは器である**（行の並び・構造体）。
  * `f : n ?` / `1` / `2` は `[1, 2]` を返す——最後の行が返り値なのは、枝があるときだけである。
@@ -1013,6 +1019,84 @@ function checkFunctionReturns(nodes, env) {
   for (const n of nodes) visit(n, null, env);
 }
 
+/**
+ * **`名前 : 値` の左辺は名前である。**
+ *
+ * 構造体は必ずブロックで書く（1エントリでも）ので、`[x : 1 , y : 2]` のように一行で
+ * 並べる綴りには正当な用途が無い。ところが `:` は `,` より緩く右結合なので、あれは
+ * `x : ((1 , y) : 2)` と読まれ——**内側の define の左辺が直積**になって、値だけが
+ * 出てくる。実測で `{"x":2}`、診断ゼロ。
+ *
+ * **`:` は2つの役をしている。** `条件 : 値`（match の枝）と `名前 : 値`（束縛・構造体の
+ * 項目）である。**分かれ目はどのブロックの行に居るかであって、左辺の形ではない**
+ * （match_case.md §概要）。枝が居られるのは `?` 直後の字下げブロックの行だけで、枝の値を
+ * さらに字下げすればその行も枝である（入れ子の match）。それ以外——1行の本体・`(…)` の
+ * 中・`[…]` の行・`名前 :` の下の構造体ブロックの行——の `:` は項目なので、左辺は鍵で
+ * なければならない。「どの define も左辺は名前」まで強めると、本体ブロックの行が全部
+ * 落ちる（実測でほぼ全ファイルが最初の枝で止まる）。
+ *
+ * **括弧があると意味が変わる。** `(…)` の中はオブジェクトとして見るので、`? (…)` は
+ * match_case ではない。pass2 は `()` も `[]` も `{}` も同じ `kind:"paren"` のブロックに
+ * するため、「ブロックの行なら枝」と読むと、括りを1組かぶせるだけで枝の綴りが復活して
+ * いた——実測で `f : x ? (x > 0 : 42)` が解釈器で 42・機械で `__`、
+ * `down : n ? [n > 0 : down (n - 1)]` に至っては解釈器だけ止まらなくなる。
+ *
+ * **match_case は1行で書けない**（利用者の言明）。`f : x ? x > 0 : 42` の本体は枝では
+ * なく、値の位置に居る左辺が名前でない define である。これを断っていたのが機械（pass4）
+ * だけだったので、解釈器は束縛として読んで右辺を無条件に返し（`f -1` が 42）、
+ * `returnTails` は枝として読んでいた——**同じ綴りを3箇所が3通りに読んでいた**。静的に
+ * 分かる違反なので、両方のエンジンの手前で1回だけ止める（原理4）。
+ *
+ * 断るのは「左辺がスロット鍵（識別子か文字列）でないもの」——構造体の判定が持っている
+ * 境界（`isSlotKeyNode`）をそのまま使う。**同じ規則を2箇所に書かない。**
+ */
+function checkDefineLeftSides(nodes) {
+  const seen = new Set();
+  // **項目の鍵は、名前か文字列か、撒いた鍵（`k~`）である。** 実行時の鍵で構造体を作る綴り
+  // （`[k~ : v]`）は保留であって禁止ではない（`list_model.md`）ので、構文としては通し、
+  // 保留は pass3 が名指しする。
+  const isEntryKey = (l) => isSlotKeyNode(l) || (isExpandNode(l) && isSlotKeyNode(l.operand));
+  const refuse = (n) => {
+    const l = unparen(n.left);
+    const how = l && l.type === "operation" ? l.name + (l.position === "postfix" ? "（後置）" : "") : l && l.kind ? l.kind : "?";
+    throw new OperationError(
+      `\`名前 : 値\` の左辺は名前でなければなりません（${how}）——構造体は1エントリでもブロックで書きます。` +
+        "一行に並べた `名前 : 値 , 名前 : 値` は `:` の方が緩いので `x : ((1 , y) : 2)` と読まれ、二要素にはなりません。" +
+        "`条件 : 値`（match の枝）を書けるのは `?` 直後の字下げブロックの行だけで、1行・`(…)`・`[…]`・構造体ブロックには書けません",
+      { spec: "match_case.md §概要 / 0_design_principles.md 原理4", reason: "define-left-not-a-name" }
+    );
+  };
+  // `where` は**この節点が何の位置に居るか**である。`arm` は枝が居てよい行、`entry` は
+  // 器の項目の行、`value` はそれ以外（`armValue` は枝の値——そこの字下げブロックは
+  // また枝の並びになる）。
+  const walk = (n, where) => {
+    if (!n || typeof n !== "object" || seen.has(n)) return;
+    seen.add(n);
+    if (isDefineNode(n)) {
+      if (where !== "arm" && !(where === "entry" ? isEntryKey(n.left) : isSlotKeyNode(n.left))) refuse(n);
+      walk(n.left, "value");
+      walk(n.right, where === "arm" ? "armValue" : "value");
+      return;
+    }
+    if (n.type === "block") {
+      const inner = n.kind === "indent" && (n.isFunctionBody || where === "armValue") ? "arm" : "entry";
+      for (const l of n.lines || []) walk(l, inner);
+      for (const k of ["left", "right", "operand", "middle"]) walk(n[k], "value");
+      for (const e of n.entries || []) walk(e.default, "value");
+      return;
+    }
+    // 本体が字下げブロックでない（1行の本体）なら、そこは枝の居場所ではない——`armValue`
+    // はブロックのときにだけ `arm` へ変わる。
+    const lambda = n.type === "operation" && n.name === "lambda";
+    for (const k of ["left", "right", "operand", "middle"]) walk(n[k], lambda && k === "right" ? "armValue" : "value");
+    for (const l of n.lines || []) walk(l, "value");
+    for (const e of n.entries || []) walk(e.default, "value");
+  };
+  // **トップレベルは束縛である**（枝でも項目でもない）。左辺は名前なので、そもそも
+  // 引っかからない。
+  for (const node of nodes) walk(node, "value");
+}
+
 function compile(source, options = {}) {
   const parseFn = options.parse || parse;
   // **入口のファイル自身も「撒き済み」として数える。** 循環したときに入口が自分を撒き直し、
@@ -1066,6 +1150,10 @@ function compile(source, options = {}) {
       );
     }
   }
+  // **構文の検査なので、本体の返り値の位置を読むものより先に見る。** 実体化の段
+  // （`tailDepthsOf`）も checkFunctionReturns も returnTails を通るので、後ろに置くと
+  // 1行の `条件 : 値` を枝として読んだ答え（「関数を返しています」）が先に出てしまう。
+  checkDefineLeftSides(nodes);
   // 均した先の入口に印を付ける。**同じ名前が2回定義されている**ので、後の方（生成側）が
   // カーソルの入口で、前の方（元の関数）は Pass 4 が飛ばす対象である。
   for (const g of options.__cursorGroups || []) markCursorEntries(nodes, g.entries, g.entries, g.group);
