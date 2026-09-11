@@ -1056,7 +1056,7 @@ function checkDefineLeftSides(nodes) {
   // （`[k~ : v]`）は保留であって禁止ではない（`list_model.md`）ので、構文としては通し、
   // 保留は pass3 が名指しする。
   const isEntryKey = (l) => isSlotKeyNode(l) || (isExpandNode(l) && isSlotKeyNode(l.operand));
-  const refuse = (n) => {
+  const badKey = (n) => {
     const l = unparen(n.left);
     const how = l && l.type === "operation" ? l.name + (l.position === "postfix" ? "（後置）" : "") : l && l.kind ? l.kind : "?";
     throw new OperationError(
@@ -1066,14 +1066,28 @@ function checkDefineLeftSides(nodes) {
       { spec: "match_case.md §概要 / 0_design_principles.md 原理4", reason: "define-left-not-a-name" }
     );
   };
-  // `where` は**この節点が何の位置に居るか**である。`arm` は枝が居てよい行、`entry` は
-  // 器の項目の行、`value` はそれ以外（`armValue` は枝の値——そこの字下げブロックは
-  // また枝の並びになる）。
+  // **値の位置に `:` の定義は書けない。** 束縛は行の頭、項目は器の行、枝は `?` 直後の
+  // 字下げブロックの行——`:` が居られる場所はこの3つだけである。1行の本体
+  // （`f : n ? t : 42`）はどれでもないので読みが無い。実測で解釈器は束縛として 42 を
+  // 返し（条件を見ない）、機械は「まだ出せない式です（define）」と断っていた。
+  const badPlace = (n) => {
+    throw new OperationError(
+      "`名前 : 値` を値の位置に書けません——束縛は行の頭、構造体の項目はブロックの行（`[…]` か字下げ）、" +
+        "match の枝は `?` 直後の字下げブロックの行です。1行の本体（`f : n ? t : 42`）に `:` を書く読みはありません。" +
+        "一行に並べた `x : 1 , y : 2` が `x : ((1 , y) : 2)` と読まれるのも同じ形で、二要素にはなりません",
+      { spec: "match_case.md §概要 / 0_design_principles.md 原理4", reason: "define-in-value-position" }
+    );
+  };
+  // `where` は**この節点が何の位置に居るか**である。`binding` は行の頭（トップレベル）、
+  // `arm` は枝が居てよい行、`entry` は器の項目の行、`value` はそれ以外（`armValue` は
+  // 枝の値——そこの字下げブロックはまた枝の並びになる）。
   const walk = (n, where) => {
     if (!n || typeof n !== "object" || seen.has(n)) return;
     seen.add(n);
     if (isDefineNode(n)) {
-      if (where !== "arm" && !(where === "entry" ? isEntryKey(n.left) : isSlotKeyNode(n.left))) refuse(n);
+      if (where === "entry") { if (!isEntryKey(n.left)) badKey(n); }
+      else if (where === "binding") { if (!isSlotKeyNode(n.left)) badKey(n); }
+      else if (where !== "arm") badPlace(n);
       walk(n.left, "value");
       walk(n.right, where === "arm" ? "armValue" : "value");
       return;
@@ -1092,9 +1106,8 @@ function checkDefineLeftSides(nodes) {
     for (const l of n.lines || []) walk(l, "value");
     for (const e of n.entries || []) walk(e.default, "value");
   };
-  // **トップレベルは束縛である**（枝でも項目でもない）。左辺は名前なので、そもそも
-  // 引っかからない。
-  for (const node of nodes) walk(node, "value");
+  // **トップレベルは束縛である**（枝でも項目でもない）。左辺は名前でなければならない。
+  for (const node of nodes) walk(node, "binding");
 }
 
 function compile(source, options = {}) {

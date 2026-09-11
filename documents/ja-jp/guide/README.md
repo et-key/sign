@@ -10,7 +10,8 @@ Sign言語を**書く人**向けのドキュメント集。
 |---|---|
 | **[operator_table.md](operator_table.md)** | 全演算子の優先順位・意味・Unit挙動。**言語の骨格** |
 | **[list_cheat_sheet.md](list_cheat_sheet.md)** | よく使うリスト操作の一覧表 |
-| **[example.sn](example.sn)** | 実際に動くSignコード。これを読めば書ける |
+| **[examples/](examples/)** | 完結した実プログラム（Nクイーンなど）。動く例はこちら |
+| ~~[example.sn](example.sn)~~ | **古い。参照しないこと**——空白字下げで読めず、今は止まる綴りが混ざっている |
 
 ---
 
@@ -42,7 +43,7 @@ guide/
 ├── string_and_comment.md  文字列・コメントの書き方
 ├── pattern_guide.md       慣用パターン集（Maybe/List/Either/IO等）
 ├── reference.md           Sign言語リファレンス（完全版）
-├── example.sn             動くサンプルコード（機能ごとの断片集）
+├── example.sn             古い断片集（参照しないこと）
 └── examples/              完結した実プログラムの例
     └── n-queen/           Nクイーン問題（バックトラック探索）
         ├── n_queens.sn            解説コメント付き

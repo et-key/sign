@@ -259,7 +259,7 @@ check("別名越しでも実引数まで狭まる", lastType("add : [+]\nadd 1 2
 	// 1行で書いた `n = 1 : inc` も、括った `(n = 1 : inc)` も枝ではない（枝が居られるのは
 	// `?` 直後の字下げブロックの行だけ）。左辺が名前でない define なので、関数を返すかどうかを
 	// 見る前に構文として止まる（下の「`名前 : 値`」の節）。
-	check("1行の枝は枝ではない", refusal(`${FNS}k : n ? n = 1 : inc\nk 1`), "define-left-not-a-name");
+	check("1行の枝は枝ではない", refusal(`${FNS}k : n ? n = 1 : inc\nk 1`), "define-in-value-position");
 	check("括った枝も枝ではない", refusal(`${FNS}k : n ? (n = 1 : inc) | 0\nk 1`), "define-left-not-a-name");
 	check("複数行の括りも枝ではない", refusal(`${FNS}k : n ? (\n\tn = 0 : inc\n\t0\n)\nk 1`), "define-left-not-a-name");
 	check("1スロットの構造体で返す（[x] ≅ x）", refusal(`${FNS}k : n ? [a : inc]\nk 1`), NAMED);
@@ -328,23 +328,29 @@ check("別名越しでも実引数まで狭まる", lastType("add : [+]\nadd 1 2
 	checkTrue("当てる数の不足は呼び出しサイトで言う", said(`${A3}ap : f x ? @f x\nap $add3 1`).includes("`@f` に渡した add3 はアリティ 3"));
 }
 
-// ---- `名前 : 値` の左辺は名前である（match_case は1行で書けない） ----
+// ---- `:` の定義が書ける場所は3つだけ ----
 //
-// match の枝はブロックの行にしか居ない（match_case.md §概要）。`f : x ? x > 0 : 42` の本体は
-// 枝ではなく、値の位置に居る**左辺が名前でない define** であり、構文が壊れている。断っていた
-// のが機械だけだったので、解釈器は束縛として読んで右辺を無条件に返していた（`f -1` が 42）。
-// 検査は compile に1つだけ置き、両方のエンジンの手前で止める。
+// 束縛は行の頭、構造体の項目は器の行（`[…]` か字下げ）、match の枝は `?` 直後の字下げ
+// ブロックの行（match_case.md §概要）。**どれでもない場所に書いた `名前 : 値` は読みが無い。**
+//
+// `f : x ? x > 0 : 42` の本体はその「どれでもない場所」であり、断っていたのが機械だけだった
+// ので、解釈器は束縛として読んで右辺を無条件に返していた（`f -1` が 42）。検査は compile に
+// 1つだけ置き、両方のエンジンの手前で止める。
 //
 // 一行に並べた構造体も同じ形である。`:` は `,` より緩く右結合なので `[x : 1 , y : 2]` は
-// `x : ((1 , y) : 2)` と読まれ、**内側の define の左辺が直積**になる（実測 `{"x":2}`）。
+// `x : ((1 , y) : 2)` と読まれ、**内側の define が値の位置へ落ちる**（実測 `{"x":2}`）。
 {
 	const LEFT = "define-left-not-a-name";
-	check("1行の本体は枝ではない（比較）", refusal("f : x ? x > 0 : 42\nf -1"), LEFT);
-	check("1行の本体は枝ではない（等号）", refusal("f : x ? x = 1 : 42\nf 2"), LEFT);
-	check("一行に並べた構造体", refusal("[x : 1 , y : 2]"), LEFT);
-	check("空白で並べても同じ", refusal("[x : 1 y : 2]"), LEFT);
-	check("括りを外しても同じ", refusal("x : 1 , y : 2"), LEFT);
-	check("値の中の直積キー", refusal("(1 , 2) : 3"), LEFT);
+	const PLACE = "define-in-value-position";
+	check("1行の本体は枝ではない（比較）", refusal("f : x ? x > 0 : 42\nf -1"), PLACE);
+	check("1行の本体は枝ではない（等号）", refusal("f : x ? x = 1 : 42\nf 2"), PLACE);
+	// 左辺が名前でも同じ。1行の本体に `:` を書く読みは無い（解釈器は 42、機械は「まだ出せない
+	// 式です（define）」と、ここも3通りのうち2通りが残っていた）
+	check("1行の本体は束縛でもない", refusal("t : 1\nf : n ? t : 42\nf 1"), PLACE);
+	check("一行に並べた構造体", refusal("[x : 1 , y : 2]"), PLACE);
+	check("空白で並べても同じ", refusal("[x : 1 y : 2]"), PLACE);
+	check("括りを外しても同じ", refusal("x : 1 , y : 2"), PLACE);
+	check("行の頭の左辺は名前", refusal("(1 , 2) : 3"), LEFT);
 	// **括弧があると意味が変わる**（括りの中はオブジェクトとして見る）。pass2 は `()` も `[]` も
 	// `{}` も同じブロックにするので、括りを1組かぶせただけで枝の綴りが復活していた——実測で
 	// 解釈器 42／機械 `__`、再帰に至っては解釈器だけ止まらなくなる（qemu で確認）。
@@ -360,10 +366,12 @@ check("別名越しでも実引数まで狭まる", lastType("add : [+]\nadd 1 2
 	// 枝の値を字下げすれば、その行はまた枝である（入れ子の match）。両方のエンジンで動く。
 	check("入れ子の枝は通る", refusal("f : x y ?\n\tx < 0 :\n\t\ty > 0 : 1\n\t\t2\n\t3\nf -1 1"), null);
 	check("構造体を返す関数は通る", refusal("f : x ? [\n\tfoo : x\n\tbar : x + 1\n]\n(f 3) ' bar"), null);
+	check("1スロットの構造体は1行でもよい", refusal("k : n ? [a : 42]\nk 1"), null);
 	check("撒いた鍵の行は通る", refusal("p :\n\tbar : 1\n\tbaz~ : 2\np ' bar"), null);
-	// 言葉は左辺の形を言う（括りの中まで見る）
+	// 言葉は「場所」と「左辺の形」を言い分ける（括りの中まで見る）
 	const said = (source) => { try { run(source); return ""; } catch (e) { return e.message; } };
-	check("左辺の形を言う", said("f : x ? x > 0 : 42\nf -1").includes("（more）"), true);
+	check("場所を言う", said("f : x ? x > 0 : 42\nf -1").includes("値の位置"), true);
+	check("左辺の形を言う", said("f : x ? (x > 0 : 42)\nf -1").includes("（more）"), true);
 	check("括った左辺は中身を言う", said("(1 , 2) : 3").includes("（product）"), true);
 	// 通るもの：字下げの枝、ブロックの構造体（qemu.test.js は道具が無いと飛ぶので、ここでも見る）
 	check("字下げの枝は通る", refusal("f : x ?\n\tx > 0 : 42\nf -1"), null);
