@@ -825,7 +825,7 @@ function evaluateTail(node, env) {
       if (callee && callee.__lambda__ && !callee.__compose__ && !callee.__pointfree__) {
         return new TailCall(callee, argValues);
       }
-      return applyClosure(callee, argValues);
+      return applyClosure(callee, argValues, env);
     }
   }
   return evaluate(node, env);
@@ -840,7 +840,7 @@ function isGreedyPointfreeClosure(closure) {
   return node.pointfreeMap === true || (node.left === null && node.right === null);
 }
 
-function applyClosure(closure, argValues) {
+function applyClosure(closure, argValues, env = null) {
   // 末尾の手前に置かれた前置き（`構築 ＋ 再帰`）を溜める。積まずに回すために要る。
   const pending = [];
   // **どの出口でも前置きを畳む。** 完全性公理で潰れる底（`callEnv === null`）のように、
@@ -862,14 +862,32 @@ function applyClosure(closure, argValues) {
     // 揃える。Id射（`!__`）への適用と同じ結果になるのは偶然ではなく、
     // guide/operator_table.md 147行目の `__ 5 == !__ 5` が言っていることそのもの。
     if (isUnit(closure)) return finish(argValues.length === 1 ? argValues[0] : argValues);
+    // **関数の位置に値が来たら `__` である。止めない。**
+    //
+    // ここへ来るのは、静的には関数だった呼び先が、実行時には値だった場合である。典型は
+    // 裸で渡そうとした形で、`use : f x ? @f x` に `use inc 5` と書くと余積が先に合成として
+    // 読むので `(use inc) 5` になり、`use 5` は引数が1つ足りない——`inc` はその足りない
+    // 引数を待つ合成になるが、その行に `$` も名前も無いので実体が無い。**無いものは
+    // `__` である**（裸の関数の生存期間、type_system.md §3.5）。
+    //
+    // 以前はここで `TypeError` を投げていた。投げると `|` で捕まえられない——Sign の
+    // 例外は `__` の伝播であって（爆発律）、処理系がそれとは別の経路を持ってはいけない。
+    // 理由は実行時の診断に残すので、REPL と開発環境はそこから拾える。
     if (!closure || !closure.__lambda__) {
-      throw new TypeError("Lambdaではない値を関数として適用しようとしました");
+      if (env && env.diagnostics) {
+        env.diagnostics.push({
+          level: "information",
+          reason: "applied-a-value",
+          message: "関数の位置に値が来たので `__` に落ちました——関数を渡すなら `$名前`、受けた側は `@` で当ててください（裸で並べると合成として読まれます）",
+        });
+      }
+      return finish(UNIT);
     }
     if (closure.__compose__) {
       const [f, g] = closure.__compose__;
       // 完全性公理はチェーン全体に効く：fの結果がUnitならgを呼ばず即座にUnit。
       // 左(f)を先に適用し、その結果に右(g)を適用する（左→右パイプライン順、上記参照）。
-      const mid = applyClosure(f, argValues);
+      const mid = applyClosure(f, argValues, env);
       if (isUnit(mid)) return finish(UNIT);
       // list_model.md §2.4③: ポイントフリー合成の中間は「1個の実体化されたList値」
       // ではなく次段へ流れるストリーム（①②の Eager/Lazy 境界と同じ原則）。
@@ -877,8 +895,8 @@ function applyClosure(closure, argValues) {
       // `[* 2,] [+] 1 2 3 4 5` は「2倍の写像 → 畳み込み」で30になる。
       // 括弧で括った場合（`([* 2,] 1 2 3 4 5)`）はそこで値（List）に実体化されるため、
       // 畳み込むには後置`~`での再展開が要る、という区別がそのまま効く。
-      if (Array.isArray(mid) && isGreedyPointfreeClosure(g)) return finish(applyClosure(g, mid));
-      return finish(applyClosure(g, [mid]));
+      if (Array.isArray(mid) && isGreedyPointfreeClosure(g)) return finish(applyClosure(g, mid, env));
+      return finish(applyClosure(g, [mid], env));
     }
     // Id射（`!__`）への適用は引数をそのまま返す。引数がUnitなら完全性公理がそのまま
     // 効いてUnitになる（categorical_truth.md「`!__ __` は理論的に正しく `__` を返す」）。
@@ -2380,7 +2398,7 @@ function evaluate(node, env) {
         for (const a of argNodes) {
           argValues.push(...evalArgValues(a, env));
         }
-        return applyClosure(callee, argValues);
+        return applyClosure(callee, argValues, env);
       }
       case "partial_apply": {
         // 自動カリー化。pass2.jsが「既知のアリティに対して引数の個数が足りない」と
@@ -2405,7 +2423,7 @@ function evaluate(node, env) {
         if (!callee || !callee.__lambda__ || callee.__compose__ || callee.__pointfree__) {
           // pass2の静的判定は素のLambda識別子のみを対象にしているため通常来ないはずだが、
           // 想定外の形なら安全側の通常apply経路へフォールバックする。
-          return applyClosure(callee, argValues);
+          return applyClosure(callee, argValues, env);
         }
         return makePartialClosure(callee, argValues);
       }

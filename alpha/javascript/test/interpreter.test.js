@@ -518,6 +518,25 @@ function checkThrows(note, fn) {
 	checkTrue("定義済み識別子 x の参照 → diagnosticsは空", diagnostics.length === 0);
 }
 
+// **関数の位置に値が来たら `__` である。止めない。**
+//
+// 裸で渡そうとすると余積が先に合成として読む——`use inc 5` は `(use inc) 5` であり、`use 5` は
+// 引数が1つ足りない。`inc` はその足りない引数を待つ合成になるが、その行に `$` も名前も無いので
+// 実体が無い（type_system.md §3.5）。以前はここで `TypeError` を投げていて、`|` で捕まえられない
+// 例外が処理系の側にだけ在った——Sign の例外は `__` の伝播である（爆発律）。
+{
+	const FN = "inc : n ? n + 1\nuse : f ? @f 5\n";
+	const { result, diagnostics } = runDiag(FN + "use inc 5");
+	checkTrue("裸で渡すと合成になり __ に落ちる（例外を投げない）", isUnit(result));
+	checkTrue(
+		"落ちた理由は実行時の診断に残る（level='information'）",
+		diagnostics.some((d) => d.reason === "applied-a-value" && d.level === "information")
+	);
+	checkTrue("`|` で捕まえられる（投げていたら捕まらない）", runDiag(FN + "(use inc 5) | 42").result === 42);
+	checkTrue("`$` を付けて渡せば当たる", runDiag(FN + "use $inc").result === 6);
+	checkTrue("正しく渡した側に診断は出ない", runDiag(FN + "use $inc").diagnostics.length === 0);
+}
+
 // 逆適用（UFCS的な `receiver method` 記法、coproduct_resolver.md §3の10.3）。
 // tier=10の縮約はcompose→apply→逆適用→concat/push/constructの4段階マルチパスであり、
 // 逆適用は「そのLambdaが右側に通常適用できるAtomを持たない場合のみ」発動する
