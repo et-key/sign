@@ -30,12 +30,14 @@
  */
 
 
+// ノードの形を見るだけの述語は layout.js が唯一の置き場である（理由はそこの
+// `isDefineNode` のコメント）。ここでの呼び名は `isIdent`。下の `bare` は
+// `/^<|>$/g` で片側だけの山括弧も剥ぐ**別の規則**なので、そちらは写しではない。
+import { isIdentifierNode as isIdent } from "./layout.js";
+
 // 並置（連接）で列を伸ばす演算。どれも「左辺が器」で左結合である（list_model.md §2.2）。
 const JOIN_OPS = new Set(["construct", "push", "unshift", "concat", "product"]);
 
-function isIdent(n) {
-	return !!n && n.type === "atom" && n.kind === "identifier";
-}
 function bare(name) {
 	return typeof name === "string" ? name.replace(/^<|>$/g, "") : name;
 }

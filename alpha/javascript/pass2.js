@@ -33,7 +33,9 @@
 
 import { OPERATOR_DICT } from './operator_table.js';
 import { OperationError } from './errors.js';
-import { childEnv, envLookup, envLookupScope, bindEnv, EXPORT_MARKERS } from './pass1.js';
+// `isFlatTokenLine` は pass1.js の `isFlatLine` そのもの（トークン行の要素が全部文字列か）。
+// 同じ判定に綴りを2つ持たないよう、別名で受ける。
+import { childEnv, envLookup, envLookupScope, bindEnv, isFlatLine as isFlatTokenLine, EXPORT_MARKERS } from './pass1.js';
 
 // ---- ユーティリティ ----
 
@@ -964,9 +966,6 @@ function extractParamLines(token) {
 
 function isTaggedBlock(x) {
   return Array.isArray(x) && (x[0] === '"INDENT_"' || x[0] === '"ABS_"' || x[0] === '"NORM_"');
-}
-function isFlatTokenLine(x) {
-  return Array.isArray(x) && x.every((t) => typeof t === "string");
 }
 
 // extractParamLinesが返す「文の並び」を、1文=1識別子宣言の生トークン列（flat token line）の

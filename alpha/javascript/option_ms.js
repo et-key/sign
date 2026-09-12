@@ -29,6 +29,9 @@
 
 import { compile } from "./compile.js";
 import { CHARSETS } from "./target_info.js";
+// ノードの形を見るだけの述語は layout.js が唯一の置き場である（理由はそこの
+// `isDefineNode` のコメント）。下の `bareName` は山括弧だけを剥ぐ別の規則なので写しではない。
+import { isDefineNode } from "./layout.js";
 
 // §3 target 別デフォルト値。`entry`/`stack` を省略したときに適用する。
 // `null` は「その target では外部（UEFI/WASM ランタイム/OS）が決める」の意。
@@ -61,10 +64,6 @@ const LAYER_ALIASES = { bare: 0, alloc: 1, fpu: 2, simd: 3, std: 4 };
 
 function bareName(value) {
   return typeof value === "string" && value.startsWith("<") && value.endsWith(">") ? value.slice(1, -1) : value;
-}
-
-function isDefineNode(n) {
-  return !!n && n.type === "operation" && n.name === "define";
 }
 
 // `define` の木を `{ キー: 値ノード }` の入れ子オブジェクトへ均す。

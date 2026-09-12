@@ -111,6 +111,8 @@ function countBareArity(tokens) {
   return count;
 }
 
+// トークン行が「生のまま」か——要素が全部文字列、つまり括りもブロックも入っていない。
+// pass2.js の `isFlatTokenLine` はこれを別名で受けている（写しを増やさない）。
 function isFlatLine(x) {
   return Array.isArray(x) && x.every((t) => typeof t === "string");
 }
@@ -349,4 +351,4 @@ function bindEnv(names, parent) {
   return { bindings, parent: parent || null };
 }
 
-export { buildEnv, buildEnvScope, childEnv, envLookup, envLookupScope, bindEnv, literalAtomType, EXPORT_MARKERS };
+export { buildEnv, buildEnvScope, childEnv, envLookup, envLookupScope, bindEnv, literalAtomType, isFlatLine, EXPORT_MARKERS };

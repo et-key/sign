@@ -38,7 +38,7 @@
 import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf, charLimitOf, DEFAULT_CHARSET, SIGNEDNESS, literalDigits, literalParts } from "./target_info.js";
 import { envLookup } from "./pass1.js";
 import { isBareComment } from "./pass3.js";
-import { passingOf, measure, layoutOfStruct, elementShapeOfList, itemShapeOfListAt, commonSlotShape, flattenProduct, isExpandNode, mergeBaseIdentifier } from "./layout.js";
+import { passingOf, measure, layoutOfStruct, elementShapeOfList, itemShapeOfListAt, commonSlotShape, flattenProduct, isExpandNode, mergeBaseIdentifier, isIdentifierNode, isDefineNode, isSlotKeyNode as isSlotKeyAtom, bareName as slotName } from "./layout.js";
 import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 // AAPCS64（stack_abi.md §4.2）。引数は x0〜x7、返値は x0、一時は x9〜x15。
@@ -158,14 +158,9 @@ const FRAME_MARK = "@@FRAME@@";
 // 比較が偽のときに返す値＝`__` の niche（value_representation.md §3.5）。
 // **`0` ではない。** Sign では `0` は真であり、`0 = 0` は真で `0` を返す。
 
-function isIdentifierNode(n) {
-	return !!n && n.type === "atom" && n.kind === "identifier";
-}
-
-function isDefineNode(n) {
-	return !!n && n.type === "operation" && n.name === "define";
-}
-
+// `isIdentifierNode` / `isDefineNode` / `isSlotKeyAtom` / `slotName` は layout.js から
+// 引く（ファイル冒頭の import）。下の `bareName` は**別の規則**——山括弧だけを剥ぎ、
+// 非文字列を綴りへ潰す——なので同名で共存させず、layout.js のものは `slotName` で受ける。
 function bareName(v) {
 	return typeof v === "string" && v.startsWith("<") && v.endsWith(">") ? v.slice(1, -1) : String(v);
 }
@@ -515,14 +510,9 @@ function paramNamesOf(paramNode) {
  * `paramNamesOf` と分けてあるのは、単相化（`collectMonomorphs`）が見るのは「名前で
  * 呼べる仮引数」だけであり、分割代入された仮引数は関数ポインタになりえないためである。
  */
-// スロットのキーになれるノード。識別子と文字列リテラル。**4箇所（interpreter.js と
-// layout.js の `isSlotKeyNode`、pass3.js の `isSlotKeyNode`、ここ）で同じ基準でなければ
-// ならない**——片方だけ広げると、同じソースが解釈器では構造体・機械語では match_case に
-// なる。compile.js の `checkDefineLeftSides` は layout.js のものを import して引くので、
-// 写しは増えていない。
-function isSlotKeyAtom(n) {
-	return isIdentifierNode(n) || (!!n && n.type === "atom" && n.kind === "string");
-}
+// スロットのキーになれるノード＝`isSlotKeyAtom` は layout.js の `isSlotKeyNode`
+// （冒頭で別名 import）。かつてここにも写しがあり、片方だけ広げると**同じソースが
+// 解釈器では構造体・機械語では match_case になる**——その壊れ方は layout.js のコメントへ。
 
 /**
  * **構造体ブロックか。** `p : / foo : 10 / …` は match の並びと**同じ形**をしている
@@ -4501,15 +4491,10 @@ function constAddressOf(node, env) {
  * 束縛されていれば、その綴りがそのまま名前になるので、静的に畳める。
  * 実行時に決まる鍵は畳めない——そこは null を返して呼び出し側の判断へ渡す。
  */
-// スロット名の綴りから区切りを剥がす。layout.js の `bareName` と同じ規則でなければ
-// ならない——名前付きスロットの物理配置は名前順で決まるので、片方だけ区切りを残すと
-// 「レイアウトが言う場所」と「pass4 が探す名前」がずれる。
-function slotName(v) {
-	if (typeof v !== "string" || v.length < 2) return String(v);
-	const head = v[0], tail = v[v.length - 1];
-	if ((head === "<" && tail === ">") || (head === "`" && tail === "`")) return v.slice(1, -1);
-	return v;
-}
+// スロット名の綴りから区切りを剥がす＝`slotName` は layout.js の `bareName`
+// （冒頭で別名 import）。同じ規則でなければならない——名前付きスロットの物理配置は
+// 名前順で決まるので、片方だけ区切りを残すと「レイアウトが言う場所」と
+// 「pass4 が探す名前」がずれる。
 
 function slotKeySpelling(key, env) {
 	if (isSlotKeyAtom(key)) return slotName(key.value);

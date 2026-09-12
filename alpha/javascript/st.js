@@ -26,16 +26,11 @@
  */
 
 import { inferLambdaParamTypes, pointfreeSignature, IDENTITY } from "./pass3.js";
+// ノードの形を見るだけの述語は layout.js が唯一の置き場である（理由はそこの
+// `isDefineNode` のコメント）。
+import { isDefineNode, isIdentifierNode } from "./layout.js";
 
 const UNKNOWN = "_";
-
-function isDefineNode(n) {
-  return !!n && n.type === "operation" && n.name === "define";
-}
-
-function isIdentifierNode(n) {
-  return !!n && n.type === "atom" && n.kind === "identifier";
-}
 
 function isLambdaNode(n) {
   return !!n && n.type === "operation" && n.name === "lambda";

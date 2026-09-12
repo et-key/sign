@@ -29,16 +29,11 @@ import { reduceAll, desugarIndexRest, getCategory } from "./pass2.js";
 import { OperationError } from "./errors.js";
 import { specializeGenericParams } from "./pass1b.js";
 import { annotateAll, checkLayerConstraints, checkCharsetConstraints } from "./pass3.js";
-import { isSlotKeyNode, unparen, isExpandNode } from "./layout.js";
+// ノードの形を見るだけの述語は layout.js が唯一の置き場である（理由はそこの
+// `isDefineNode` のコメント）。`isArmNode`／`isIdentNode` はこのファイルでの呼び名で、
+// 規則は同じ——写しを持たず、別名で受ける。
+import { isSlotKeyNode, unparen, isExpandNode, isDefineNode, isDefineNode as isArmNode, isIdentifierNode as isIdentNode } from "./layout.js";
 import { findStreamFunctions, generatePullers, groupStreamFunctions, CURSOR_SUFFIXES } from "./stream_desugar.js";
-
-function isIdentifierNode(n) {
-  return !!n && n.type === "atom" && n.kind === "identifier";
-}
-
-function isDefineNode(n) {
-  return !!n && n.type === "operation" && n.name === "define";
-}
 
 // Pass 1b: トップレベルの各ラムダ定義について、ジェネリック仮引数（本体で `@` が
 // 直接かかっている仮引数）を呼び出しサイトの実引数カテゴリで具体化する。
@@ -782,8 +777,8 @@ function specializeRefCalls(lines, nodes, env, options) {
   if (newDefs.length > 0) refold();
 }
 
-const isArmNode = (l) => !!l && l.type === "operation" && l.name === "define";
-const isIdentNode = (n) => !!n && n.type === "atom" && n.kind === "identifier";
+// `isArmNode`（枝は `条件 : 値` という define である）と `isIdentNode` は、
+// ファイル冒頭で layout.js から別名で受けている。
 
 /**
  * 式の外側の包みを剥がす：1行の括り、後置 `@`（取り込み）、前置 `~`・後置 `~`、そして `@$X`。

@@ -34,6 +34,15 @@
 import { widthsOf, sizeOf, charSizeOf, DEFAULT_CHARSET, reduceToMachineType, literalDigits } from "./target_info.js";
 import { envLookup } from "./pass1.js";
 
+/**
+ * **ノードの形を見るだけの述語は、ここが唯一の置き場である。**
+ *
+ * `isDefineNode`（「define という名の演算」）と `isIdentifierNode`（「identifier という
+ * 種の atom」）は、かつて compile / interpreter / option_ms / pass3 / pass4 / st /
+ * stream_desugar に写しで散っていた。interpreter.js の写しには「循環 import 回避のため
+ * ここで別途最小実装」と書いてあったが、循環は無い——layout.js が引くのは target_info.js と
+ * pass1.js（どちらも何も import しない葉）だけなので、どの段からでも引ける。
+ */
 function isDefineNode(n) {
   return !!n && n.type === "operation" && n.name === "define";
 }
@@ -42,7 +51,14 @@ function isIdentifierNode(n) {
   return !!n && n.type === "atom" && n.kind === "identifier";
 }
 
-/** 後置 `~`（撒く／器そのものを指す）か。マージ `a~ b~` は両辺がこの形である。 */
+/**
+ * 後置 `~`（撒く／器そのものを指す）か。マージ `a~ b~` は両辺がこの形である。
+ *
+ * pass3 の `isSpreadNode`、interpreter の `isSpreadNode` と `isStructSpreadLine` も
+ * この判定だった（**同じ形を4つの名前で呼んでいた**）。`!!n.operand` を足してあるのは
+ * ここだけだったが、剥いだ中身を必ず読むのはどの呼び手も同じで、
+ * operand の無い後置 `~` は前段が作らない——狭い方を残す。
+ */
 function isExpandNode(n) {
   return !!n && n.type === "operation" && n.position === "postfix" && n.name === "expand" && !!n.operand;
 }
@@ -84,12 +100,29 @@ function mergeBaseIdentifier(n) {
  * **スロットの名前になれるノード。** 識別子と文字列リテラルである（`t : / `+` : 3` の
  * ように、識別子として綴れない名前は文字列で書く）。
  *
- * この基準は interpreter.js の `isSlotKeyNode`、pass3.js の `isSlotKeyNode`、pass4.js の
- * `isSlotKeyAtom`、そしてここ——**計4箇所で一致していなければならない**（compile.js の
- * `checkDefineLeftSides` はここのものを import して引くので写しではない）。ここだけ
- * 識別子に限っていたため、文字列キーの構造体は行が1つも拾われず、`layoutOfStruct` が
- * `null`（配置できない）ではなく **size 0 のもっともらしいレイアウト**を返していた。
- * 混在（`foo : 1` と ``+` : 2`）ではスロットが黙って1つ消えた。
+ * この基準は**ここ1箇所**である。かつて写しが4つあり（interpreter.js と pass3.js の
+ * `isSlotKeyNode`、pass4.js の `isSlotKeyAtom`、そしてここ）、「4箇所で一致していなければ
+ * ならない」と各所に書いてあった——**一致を書いても一致はしない**。実際に出た壊れ方を
+ * 全部ここへ集める:
+ *
+ * - ここだけ識別子に限っていたため、文字列キーの構造体は行が1つも拾われず、
+ *   `layoutOfStruct` が `null`（配置できない）ではなく **size 0 のもっともらしい
+ *   レイアウト**を返していた。混在（`foo : 1` と ``+` : 2`）ではスロットが黙って1つ消えた。
+ * - pass3.js 側で1つだけ識別子に絞ったままの場所が残っていて（`namedSlotTypes`）、
+ *   文字列キーを持つ器を撒くと**その鍵だけが黙って消えた**——新しい器の並びにスロットが
+ *   無いので、引くところで「そんなスロットは無い」になる。
+ * - 片方だけ広げると、同じソースが**解釈器では構造体・機械語では match_case** になる。
+ *
+ * 演算子記号を鍵にした表を書けるようにするために要る（function_guide.md
+ * 「構造体メンバーの一致による自動バインディング」——名前付きスロットの意味論は
+ * 「名前→値の有限写像」であって、名前が識別子として綴れるかどうかは別の話である）:
+ *
+ *   add_mul :
+ *       `+` : `add`
+ *       `*` : `mul`
+ *
+ * 文字リテラル（`\+`）は受けない。同じ名前に綴りが2つある状態を作らないためで、
+ * 記号を名前にしたいなら文字列で書く。
  */
 function isSlotKeyNode(n) {
   return isIdentifierNode(n) || (!!n && n.type === "atom" && n.kind === "string");
@@ -104,6 +137,17 @@ function isSlotKeyNode(n) {
  * ここで区切りを残すと並びが変わる。``~x`` と `foo` は、中身で比べれば
  * `foo` が先、バッククォート込みで比べれば ``~x`` が先——**同じ構造体が
  * 別の配置になる**。`==` で等しい構造体は同じ物理配置を持つ、という §7.1 の保証が壊れる。
+ *
+ * 写しだった pass3 の `bareKey`・pass4 の `slotName` が持っていた理由も、ここへ集める:
+ *
+ * - **名前の出どころが2つある。** 値ノードの表からは `<foo>` と綴りのまま出るが、
+ *   仮引数の並び（`binding.shape`）からは中身しか出ない。綴りのまま混ぜると
+ *   同じスロットが2つに見える（pass3）。
+ * - 片方だけ区切りを残すと「レイアウトが言う場所」と「pass4 が探す名前」がずれる。
+ *
+ * 受けるのは綴り（文字列）だけである。写しの2つは非文字列を `String(v)` で潰していたが、
+ * 呼ぶ側が渡すのは atom の `value`（常に文字列）か、ここが返した名前そのものなので、
+ * その分岐には誰も入らない。**潰さない方を残す**——入らない道で型を変えない。
  */
 function bareName(value) {
   if (typeof value !== "string" || value.length < 2) return value;
@@ -218,6 +262,9 @@ const COPRODUCT_OPS = ["construct", "concat", "push", "unshift"];
  *
  * 族を混ぜて割ると、**カンマが上げた次元を勝手に下げてしまう**（`1 2 , 3 4` が
  * `List(Int)` と型付けられ、値の `[[1,2],[3,4]]` と食い違う）。
+ *
+ * pass3 の `slotsByFamily` は、このコメントごと同じものだった。型が言う次元と配置が言う
+ * 次元は**同じ規則から出ていなければならない**ので、写しではなくここを引く。
  */
 function flattenByFamily(node, coproduct) {
   const same = (n) =>
@@ -983,11 +1030,19 @@ export {
   passingOf,
   stringLength,
   flattenProduct,
+  flattenByFamily,
   isExpandNode,
   mergeBaseIdentifier,
   // compile の `checkDefineLeftSides` が引く。`名前 : 値` の左辺が名前かどうかは構造体の
   // 判定と同じ基準でなければならないので、写しを増やさずここのものを使う。
   isSlotKeyNode,
+  // ノードの形を見るだけの述語と、名前の綴りを剥ぐ規則。**写しを置かない場所として
+  // ここを選んでいる**——layout.js が引くのは target_info.js と pass1.js（どちらも葉）
+  // だけなので、どの段から import しても循環しない。名前が衝突する側は別名で受ける
+  // （pass3 の `bareKey`、pass4 の `slotName`／`isSlotKeyAtom`、compile の `isIdentNode`）。
+  isDefineNode,
+  isIdentifierNode,
+  bareName,
   unparen,
 
 };

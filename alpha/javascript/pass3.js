@@ -33,21 +33,16 @@
 import { literalDigits } from "./target_info.js";
 import { envLookup } from './pass1.js';
 import { OperationError } from "./errors.js";
-import { stringLength, layoutOfStruct , elementShapeOfList, itemShapeOfListAt, commonSlotShape } from "./layout.js";
+// ノードの形を見るだけの述語・名前の綴りを剥ぐ規則・族で割る規則は、layout.js が唯一の
+// 置き場である（理由はそこの `isDefineNode` のコメント）。このファイルでの呼び名
+// （`isSpreadNode` / `bareKey` / `slotsByFamily`）は別名で受ける——写しを持たない。
+import { stringLength, layoutOfStruct , elementShapeOfList, itemShapeOfListAt, commonSlotShape, isDefineNode, isIdentifierNode, isSlotKeyNode, isExpandNode as isSpreadNode, bareName as bareKey, flattenByFamily as slotsByFamily } from "./layout.js";
 import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 const ARITHMETIC_OPS = new Set(["add", "sub", "mul", "div", "mod", "pow"]);
 // coproduct_resolver.md §3-4: Atom-Atom間の余積（スペース）が縮約される演算。
 // これらの結果はList（1次元配列）そのものであり、左辺の個別の型を素通しすべきではない。
 const LIST_BUILDING_OPS = new Set(["construct", "concat", "push", "unshift"]);
-
-function isDefineNode(n) {
-  return !!n && n.type === "operation" && n.name === "define";
-}
-
-function isIdentifierNode(n) {
-  return !!n && n.type === "atom" && n.kind === "identifier";
-}
 
 // **後置 `@`（import）は名前の由来を隠さない。** `g : inc@` は「inc を取り込んで g と
 // 呼ぶ」であって、行き着く定義は `inc` そのもの（`system_architecture.md` §2.1 の
@@ -523,27 +518,12 @@ function elementTypeOfNode(node, env) {
 
 // 器の要素型。識別子なら識別子テーブルへ書き戻された値を使う——Pass 3 の不動点が合成値の
 // 型と要素型を書き戻しているので、`l : [1 2 3]` と束縛してからの `l ' 0` もここで解ける。
-// 後置 `~`（展開）が付いているか。§5.3 のマージは「双方に `~`」が条件なので、
-// 値ではなく**書かれ方**を見る。
-function isSpreadNode(n) {
-  return !!n && n.type === "operation" && n.position === "postfix" && n.name === "expand";
-}
-
-/**
- * **スロットの名前は綴りではなく中身である**（layout.js の `bareName`、interpreter.js の
- * `slice(1, -1)` と同じ規則）。物理配置は名前順で決まるので、区切りを残すか剥がすかで
- * 並びが変わる——`` `~x` `` と `foo` は、中身で比べれば `foo` が先である。
- *
- * ここで剥がしておくのは、**名前の出どころが2つある**からである。値ノードの表からは
- * `<foo>` と綴りのまま出るが、仮引数の並び（`binding.shape`）からは中身しか出ない。
- * 綴りのまま混ぜると同じスロットが2つに見える。
- */
-function bareKey(v) {
-  if (typeof v !== "string" || v.length < 2) return String(v);
-  const head = v[0], tail = v[v.length - 1];
-  if ((head === "<" && tail === ">") || (head === "`" && tail === "`")) return v.slice(1, -1);
-  return v;
-}
+// 後置 `~`（展開）が付いているか＝`isSpreadNode`。§5.3 のマージは「双方に `~`」が条件
+// なので、値ではなく**書かれ方**を見る。判定そのものは layout.js の `isExpandNode`
+// （冒頭で別名 import）——同じ形を別の名前で写していた。
+//
+// スロットの名前は綴りではなく中身である＝`bareKey`。これも layout.js の `bareName`
+// を別名で受ける。「名前の出どころが2つある」という、ここで剥がす理由はそちらへ移した。
 
 /**
  * **同じ名前のスロットを2回書くのは二重定義である。**
@@ -638,18 +618,10 @@ function checkOneRestPerGroup(node) {
   }
 }
 
-/**
- * **スロットの名前になれるノード。** 識別子と文字列リテラルである（綴れない名前は
- * 文字列で書く：`` `+` : `add` ``）。interpreter.js の `isSlotKeyNode`、layout.js の
- * 同名、pass4.js の `isSlotKeyAtom` と**同じ基準でなければならない**。
- *
- * ここを識別子だけに絞っていたところが1つ残っていて（`namedSlotTypes`）、文字列キーを
- * 持つ器を撒くと**その鍵だけが黙って消えた**——新しい器の並びにスロットが無いので、
- * 引くところで「そんなスロットは無い」になる。
- */
-function isSlotKeyNode(n) {
-  return isIdentifierNode(n) || (!!n && n.type === "atom" && n.kind === "string");
-}
+// **スロットの名前になれるノード**（`isSlotKeyNode`）は layout.js から引く。かつては
+// ここにも写しがあり、「4箇所で同じ基準でなければならない」と書いてあった——そのうち
+// `namedSlotTypes` だけが識別子に絞られたままで、文字列キーを持つ器を撒くと**その鍵だけが
+// 黙って消えた**。出た壊れ方は全部 layout.js のコメントへ集めてある。
 
 // 名前付きスロットを `名前 -> 値ノード` で読む。識別子なら束縛先まで辿る。
 // **型ではなくノードを持つ。** 型からは大きさが出ないからである（文字列の長さ、
@@ -909,28 +881,9 @@ function sliceIndexNode(node) {
 // 連番スロットを左から並べる。`1 , \`a\` , 2.5` は product の入れ子なので均す。
 const COPRODUCT_OPS = ["construct", "concat", "push", "unshift"];
 
-/**
- * 連番スロットへ均す。**根の演算子と同じ族でだけ割る。**
- *
- * 直積（カンマ）の根なら、割るのは直積だけである——`1 2 , 3 4` の行は `1 2` と `3 4` の
- * 2つであって、`1 2 3 4` の4つではない。行の中の余積まで降りると次元が潰れる。
- * 余積の根なら、割るのは余積だけである——`[1 2] [3 4]` は同じ1段の中で伸びた列なので、
- * 入れ子の余積まで降りるのが正しい。
- *
- * 族を混ぜて割ると、**カンマが上げた次元を勝手に下げてしまう**（`1 2 , 3 4` が
- * `List(Int)` と型付けられ、値の `[[1,2],[3,4]]` と食い違う）。
- */
-function slotsByFamily(node, coproduct) {
-  const same = (n) =>
-    n && n.type === "operation" && (coproduct ? COPRODUCT_OPS.includes(n.name) : n.name === "product");
-  const walk = (n) => {
-    if (same(n)) return [...walk(n.left), ...walk(n.right)];
-    // 余積の側だけ、括りのブロックを剥がして中の余積まで割る。
-    if (coproduct && n && Array.isArray(n.lines) && n.lines.length === 1 && same(n.lines[0])) return walk(n.lines[0]);
-    return [n];
-  };
-  return walk(node);
-}
+// 連番スロットへ均す＝`slotsByFamily`。**根の演算子と同じ族でだけ割る**という規則は
+// layout.js の `flattenByFamily`（冒頭で別名 import）にあり、ここにあったのはコメントごと
+// 同じ写しだった。型が言う次元と配置が言う次元は同じ規則から出ていなければならない。
 
 function positionalSlots(node) {
   if (!node) return [node];

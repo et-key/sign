@@ -1,4 +1,11 @@
 import { charLimitOf, DEFAULT_CHARSET, literalDigits, literalParts } from "./target_info.js";
+// ノードの形を見るだけの述語は layout.js が唯一の置き場である（理由はそこの
+// `isDefineNode` のコメント）。ここに写しがあったときは「循環 import 回避のため」と
+// 書いてあったが、循環は無い——layout.js が引くのは葉の2つだけである。
+// 後置 `~` の判定は、ここでは `isStructSpreadLine` と `isSpreadNode` の2つの名前で
+// 呼ばれていた（マージが「双方に `~`」を条件にしているので、値ではなく**書かれ方**を
+// 見る：list_model.md §5.3）。同じ規則なので、どちらも layout.js の1つを別名で受ける。
+import { isDefineNode, isIdentifierNode, isSlotKeyNode, isExpandNode as isStructSpreadLine, isExpandNode as isSpreadNode } from "./layout.js";
 
 /**
  * 最小インタプリタ（評価器）。Pass2/Pass1b が構築した二分木 AST を評価して値を出す。
@@ -61,14 +68,6 @@ function isUnit(v) {
   return v === UNIT || v === undefined || (Array.isArray(v) && v.length === 0) || v === "";
 }
 
-// pass3.jsのisDefineNodeと同じ判定（循環import回避のためここで別途最小実装）。
-function isDefineNode(n) {
-  return !!n && n.type === "operation" && n.name === "define";
-}
-function isIdentifierNode(n) {
-  return !!n && n.type === "atom" && n.kind === "identifier";
-}
-
 // 構造体のフィールド行かどうか。`a : x`（明示）と `x`（省略記法：フィールド名も値も
 // その識別子から取る）の2通りを認める。省略記法は2行以上のブロックでのみ有効にする
 // ——`[x]` は「1要素リスト ≅ スカラー」として既に広く使われている形であり、
@@ -95,25 +94,12 @@ function spreadLinesAreLast(lines) {
 // 取り出しと置き直しが揃う。`this` を `~` 無しで書くと省略記法として「this という名前の
 // フィールド」になってしまうので、撒くことは `~` で言う——余積・直積の他の位置と同じ
 // 「展開して渡す」である。
-function isStructSpreadLine(n) {
-  return !!n && n.type === "operation" && n.position === "postfix" && n.name === "expand";
-}
-// スロットのキーになれるノード。**識別子と文字列リテラル**である。
 //
-// 名前付きスロットの意味論は「名前→値の有限写像」であり（function_guide.md
-// 「構造体メンバーの一致による自動バインディング」）、名前が識別子として綴れるか
-// どうかは別の話である。演算子記号を鍵にした表を書けるようにするために要る:
+// 判定そのもの（後置 `~` か）は layout.js の `isExpandNode`——冒頭でこの名前で受けている。
 //
-//   add_mul :
-//       `+` : `add`
-//       `*` : `mul`
-//
-// 文字リテラル（`\+`）は受けない。同じ名前に綴りが2つある状態を作らないためで、
-// 記号を名前にしたいなら文字列で書く。
-function isSlotKeyNode(n) {
-  if (isIdentifierNode(n)) return true;
-  return !!n && n.type === "atom" && n.kind === "string";
-}
+// スロットのキーになれるノード（`isSlotKeyNode`）も同じく layout.js のもの。識別子と
+// 文字列リテラルであり、文字リテラル（`\+`）は受けない——理由と、写しがあった頃の
+// 壊れ方は、そちらのコメントに集めてある。
 function isStructBlock(node) {
   if (node.isFunctionBody) return false; // 関数本体は match_case であって構造体ではない
   const lines = node.lines;
@@ -1794,11 +1780,6 @@ function getPropValue(l, rightNode, env) {
 // 右辺のノード形を見ないと決まらないため getPropValue 側に残し、ここは数値・範囲だけを扱う。
 // 左辺束縛のポイントフリー（`[[3 , 4] ']` に添字を渡す形）は右辺がノードとして存在しない
 // ——ストリームから値で届く——ため、この入口が要る。
-// 後置 `~`（展開）が付いているか。マージが「双方に `~`」を条件にしているので
-// （list_model.md §5.3）、値ではなく**書かれ方**を見る必要がある。
-function isSpreadNode(n) {
-  return !!n && n.type === "operation" && n.position === "postfix" && n.name === "expand";
-}
 
 /**
  * 切り出した並びを値へ戻す。**1要素はスカラーである**（`[5]` は `Int`、list_model.md）。
