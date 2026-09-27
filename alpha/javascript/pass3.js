@@ -85,8 +85,8 @@ const IDENTITY = "Identity";
 // List左辺で固有の意味を持つのは `*`(repeat)・`^`(lift)・`/`(split) だけ。
 // `+`・`-`・`%` はList/Stringと同様に型エラーで __ へ収束する。
 const LIST_ARITHMETIC_OPS = new Set(["mul", "pow", "div"]);
-// 文字列の繰り返し（`s * n`）の回数になれないもの。文字・文字列は位置と並びで量ではなく、`__` は今までどおり
-// 型エラーの側に置く（`s * __` の読みは決めていない）。
+// 文字列の域の `*`（連結の n 乗）の回数になれないもの。文字・文字列は位置と並びで量ではない。`__` を回数に
+// 置いた形（`s * __`）も射なしの側に置く。
 const TEXT_NON_COUNTS = new Set(["String", "Char", "Unit"]);
 // 文字の繰り返しの回数の型が決まっているか。まだ分からない（`null`）か族（`Scalar` には `Char` も居る）なら、
 // 繰り返し（`String`）か射なし（`Char`）かが決まらない（`arithmeticResultType` の文字の節）。
@@ -373,20 +373,24 @@ function elementTypeOf(node, env) {
 
 function arithmeticResultType(node, leftType, env) {
   const rightType = inferAtomType(node.right, env);
-  // §3.2: Stringは左右どちらに来ても算術の型エラー（両方向とも __ 消去）。
-  // **ただし掛け算は繰り返しである**（type_system.md §3.2、裁定 2026-09-26）。String ≅ List(Char) なので器の `*` と
-  // 同じ射で、回数は数——`` `ab` * 3 `` は `ababab`。回数に文字・文字列・`__` を置いた形は今までどおり型エラー。
-  // 左辺優先なので `` 3 * `ab` `` は数の域のまま（型エラー）。
+  // **左辺が文字列なら文字列の域である**（type_system.md §3.2、裁定 2026-09-26・27）。左辺が域を選ぶので、`s * n` は
+  // 算術の代数の例外ではなく**文字列の代数の射**である。文字列の代数は連結（余積）のモノイドで、`s * n` はその n 乗
+  // ——`s s … s`（n 個の余積）。`s * 0` は空の余積で単位元 `__`。ほかの綴りに射は無い（`^` は直接の計算として
+  // 定まらず、`/` は分数がきれいな逆像になるとは限らないので忘却したものへの適用になる）。回数に文字・文字列・`__`
+  // を置いた形も射なし（型は `Unit`、値は `__`）。数の域に文字列の相手は居ない（`` 3 * `ab` `` も型エラー）。
   // **回数の型がまだ分からない（`null`）うちは決めない**（原理4）。不動点の途中で答えを決めると、過渡値が束縛に
   // 固まりうる（下の文字の節で実際に起きた形）。`Unit` なら直和で落ちるので、決まった型が後から入れる。回数が族なら
   // 決めてよい——どの成員でも答えは繰り返し（`String`）か回数の型エラー（`Unit`、強さの底）で、`String ⊕ Unit` は
   // `String` である。ここで `Unit` と答えると、`f `ab` 2` と `f `cd` 0x2` の両方で呼ぶ本体が型の不一致と記録され、
   // 値（`cdcd`）と食い違う。文字の節では族が `String` と `Char` のどちらかを選ぶので、そちらは決められない。
-  if (leftType === "String" && node.name === "mul" && rightType && !TEXT_NON_COUNTS.has(rightType)) {
-    node.elementType = "Char";
-    return "String";
+  if (leftType === "String") {
+    if (node.name === "mul" && rightType && !TEXT_NON_COUNTS.has(rightType)) {
+      node.elementType = "Char";
+      return "String";
+    }
+    return "Unit";
   }
-  if (leftType === "String" || rightType === "String") return "Unit";
+  if (rightType === "String") return "Unit";
   // **番地の域に、掛け算と冪の射は無い**（type_system.md §3.6、利用者の決定 2026-09-14）。
   // 射が無いので零射を通る（原理4）——`` `abc` + 1 `` と同じく `__` へ収束する。
   //
@@ -459,8 +463,9 @@ function arithmeticResultType(node, leftType, env) {
   if (leftType === "Char") {
     if (node.name === "sub" && rightType === "Char") return "Int";
     if (node.name === "sub" && (rightType === "Scalar" || rightType === "Atom")) return "Scalar";
-    // **文字の掛け算は繰り返しである**（type_system.md §3.6「文字の域の射」、裁定 2026-09-26）。文字は長さ1の
-    // 文字列の顔を持つ（`[x] ≅ x`、`String ≅ List(Char)`）ので、`\- * 10` は長さ 10 の文字列。以前は符号位置を
+    // **文字の掛け算は連結の n 乗である**（type_system.md §3.6「文字の域の射」、裁定 2026-09-26）。文字は長さ1の
+    // 文字列の顔を持つ（`[x] ≅ x`、`String ≅ List(Char)`）ので、`c * n` は文字列の代数の n 乗 `c c … c`——
+    // `\- * 10` は長さ 10 の文字列。以前は符号位置を
     // 掛けていた（`\0 * 2` が '`'）。回数に位置を置く `c * d` は上の `charWithoutArrow` が取る。**回数の型が決まって
     // いなければ決めない**（`repeatCountKnown`、原理4、上の `sub` の節と同じ）——族（`Scalar` には `Char` も居る）は
     // 繰り返し（`String`）か射なし（`Char`）かを選べない。先に `String` と答えると不動点の過渡値が畳み込みの蓄積子に

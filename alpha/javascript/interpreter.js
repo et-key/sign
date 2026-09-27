@@ -1114,8 +1114,9 @@ function listRepeat(l, r) {
   for (let i = 0; i < r; i++) out.push(...l);
   return out;
 }
-// **文字列の繰り返しは器の繰り返しである**（String ≅ List(Char)、type_system.md §3.2・§3.6）。回数の読み方を
-// 2か所で決めないよう、`listRepeat` にそのまま通す。回数が 0 以下なら空の器＝`__`。
+// **`s * n` は文字列の代数（連結のモノイド）の n 乗 `s s … s` である**（type_system.md §3.2・§3.6）。String ≅ List(Char)
+// なので器の繰り返しと同じもので、回数の読み方を2か所で決めないよう `listRepeat` にそのまま通す。回数が 0 以下
+// なら空の余積＝単位元 `__`。
 // **空の器は空の文字列で返す**（`isUnit("")` は真）。`UNIT` で返すと、型が `String` の `__` を余積が文字列の種と
 // して残し（`constructValues` の `isTextSeed`）、並びに生の `__` が混ざっていた——`||[* 0,] `ab`||` が 3、
 // `(\a * 0) + 1` が爆発律で 1。切り出しの外（`` `ab` ' [5 ~ 6] ``）と同じ姿にすれば、余積は文字列として繋ぐ。
@@ -1219,8 +1220,8 @@ function arithOnValues(name, l, r, resultType, charset = DEFAULT_CHARSET) {
   // 以前ここは「左辺Unit = 吸収元」で `__ + 3` が `__` だった。**`__` を誤りの印としても
   // 使っていた**が、それは `__` の役割ではない——誤りはコンパイル時の診断であり、
   // 実行時フォールバック経路を言語として持たない（compiler_pipeline.md §3）。
-  // ただし **String は算術の対象ではない**（§3.2、左右どちらでも型エラー）。爆発律は
-  // 算術の代数の中の話なので、代数に居ないものは通り抜けない——`__ + \`abc\`` も
+  // ただし **String は算術の代数に居ない**（§3.2。左辺が String なら文字列の域で、そこにある射は `*`＝連結の
+  // n 乗だけ）。爆発律は算術の代数の中の話なので、代数に居ないものは通り抜けない——`__ + \`abc\`` も
   // `\`abc\` + __` も `__` で、左右対称である。
   if (isUnit(l)) {
     if (r === undefined) return UNIT;
@@ -1259,7 +1260,7 @@ function arithOnValues(name, l, r, resultType, charset = DEFAULT_CHARSET) {
   // 書き出すときだけ」として `#` の出口へ移していたが、前提を替えたので戻した。域の外の `__` は誤りの印では
   // なく、その域に値が無いという正当な `__` である（番地が負に落ちるのと同じ）。
   //
-  // `String` は長さによらず §3.2 の通り算術の対象ではない（型エラーで `__` へ収束）。
+  // `String` は長さによらず文字列の域（§3.2）で、文字の道には入らない。
   // ここで長さ2以上だけを弾けば足りるのは、1文字の `String` を入口で型から弾いてあるからである。
   const cp = (x) => (typeof x === "string" && [...x].length === 1 ? x.codePointAt(0) : null);
   const lc = cp(l);
@@ -1319,11 +1320,10 @@ function arithOnValues(name, l, r, resultType, charset = DEFAULT_CHARSET) {
     // 型が Char の値が数として運ばれていた。
     return inCharDomain(out, charset) ? String.fromCodePoint(Number(out)) : UNIT;
   }
-  // §3.2: String（Listと同型）の左辺に算術演算子は効かない → 型エラーで__に収束。
+  // §3.2: 左辺が String なら文字列の域。射は `*`（連結の n 乗、`repeatText`）だけで、ほかの綴りは `__` に収束する。
   // 注: list_model.md §4.4の文面は「+でコードポイントが露出する」としているが、
   // 自身の例(`123` 123 = `123123`)はスペース連結でありこの主張を実証していない。
-  // type_system.md §3.2の明示的な表（String+算術演算子→型エラー(__消去)）を正とする。
-  // 掛け算だけは繰り返し（§3.2、String ≅ List(Char) なので器の `*` と同じ射）。
+  // type_system.md §3.2の明示的な表を正とする。
   if (typeof l === "string") return name === "mul" ? repeatText(l, r) : UNIT;
   if (isUnit(r)) return l; // 右辺Unit = 単位元（id射、素通し）
   if (Array.isArray(l)) {
