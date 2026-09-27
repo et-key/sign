@@ -1,0 +1,17 @@
+`from: lexer.sn`
+blk_open : 0u0002
+blk_close : 0u0003
+open_br : c ?
+	c = \[ : c
+	c = \( : c
+	c = \{ : c
+	c = blk_open : c
+	__
+
+close_br : c ?
+	c = \] : c
+	c = \) : c
+	c = \} : c
+	c = blk_close : c
+	__
+(0 + (open_br \()) + ((0 + (close_br \})) * 1000) + (0 + (open_br \a))

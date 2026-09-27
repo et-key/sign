@@ -1,0 +1,2 @@
+at : s i ? s ' i
+(at `abc` 5) = (at `abc` (0 - 9))

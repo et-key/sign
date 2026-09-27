@@ -1,0 +1,2 @@
+f : a b c d e g h s ? a + b + c + d + e + g + h + ||s||
+f 1 2 3 4 5 6 7 `ab`

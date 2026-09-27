@@ -1,0 +1,12 @@
+zero : \0
+nine : \9
+dig : c ?
+	c < zero : __
+	c > nine : __
+	c
+low : c ?
+	c <= \Z : 0
+	c >= \a : 2
+	c != \^ : 3
+	1
+((0 + (dig \7)) * 1000) + ((low \B) * 100) + ((low \q) * 10) + (low \^)
