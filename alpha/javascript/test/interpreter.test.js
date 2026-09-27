@@ -1972,5 +1972,49 @@ checkTrue("`__` と `!__` は等しくない（真なので恒等射が返る）
 	check("既定の引数が __", run("g :\n\t\ts\n\t\tc : s ' 9\n\t? `<` c `>`\ng `ab`"), "<>");
 	check("既定の引数が範囲内（対照）", run("g :\n\t\ts\n\t\tc : s ' 0\n\t? `<` c `>`\ng `ab`"), "<a>");
 }
+// ---- 実引数の位置でも、文字列の後置 `~` は器を残す（2026-09-23 の裁定：String だけ μ が強制で `s~ = s`）----
+//
+// 解釈器は呼び先を見ずに文字列を文字へ撒いていた。`n : s ? ||s||` へ `` n `abc`~ `` と渡すと s が 'a' になって
+// 1 を返し（機械は 3）、余った 'b' 'c' は黙って捨てられていた——`` x : `abc`~ `` を挟んで `n x` と書けば 3 なので、
+// 代入しただけで値が変わる形だった。撒くのを残すのはストリーム形（`x ~xs`）で受けるときだけ（機械も 'a' を出す）。
+// 機械と同じ答えになることは test/qemu.test.js の `agree` が見ている。
+{
+	const N = "n : s ? ||s||\n";
+	check("1引数へ文字列を撒かずに渡す", run(N + "n `abc`~"), 3);
+	check("括った文字列に付けても同じ", run(N + "n (`ab`)~"), 2);
+	// 法：`n s~ == n (s~) == (x : s~ / n x)`。値を1つに決め打たず、3つの綴りが同じ答えであることを見る。
+	const law = [run(N + "n `abcd`~"), run(N + "n (`abcd`~)"), run(N + "x : `abcd`~\nn x")];
+	check("代入しても値は変わらない（n s~ == n (s~) == x : s~ / n x）", law.every((v) => v === law[2]) && law[2] === 4, true);
+	check("仮引数に付けても同じ（末尾の呼び出し）", run(N + "g : s ? n s~\ng `abc`"), 3);
+	check("式の中の呼び出しでも同じ", run(N + "(n `abc`~) + 1"), 4);
+	check("2引数の1つ目は文字列のまま", run("m : s t ? s\nm `abc`~ `de`"), "abc");
+	check("2引数の2つ目も文字列のまま", run("m : s t ? t\nm `abc` `de`~"), "de");
+	check("撒いた文字が次の仮引数へずれない", run("e : s i ? s ' i\ne `abc`~ 1"), "b");
+	check("既定の引数へ文字が流れ込まない", run("n :\n\ts\n\tt : 5\n? ||s|| + t\nn `abc`~"), 8);
+	check("部分適用でも文字列のまま（(m s~) t == (m s) t）", run("m : s t ? (||s|| * 10) + ||t||\n(m `abc`~) `de`"), run("m : s t ? (||s|| * 10) + ||t||\n(m `abc`) `de`"));
+	check("部分適用の値", run("m : s t ? (||s|| * 10) + ||t||\n(m `abc`~) `de`"), 32);
+	check("合成の頭へ渡しても文字列のまま", run("f : s ? ||s||\ng : x ? x + 1\n(f g) `abc`~"), 4);
+	// 仮引数の並びを持たない呼び先も1個の値を受ける（`~` を外した形と同じ答え）。
+	check("!__ s~ == !__ s", run("!__ `abc`~"), run("!__ `abc`"));
+	check("[+ 1] s~ == [+ 1] s", JSON.stringify(run("[+ 1] `abc`~")), JSON.stringify(run("[+ 1] `abc`")));
+	check("選択写像も s~ == s", run("[< \\c,] `abc`~"), run("[< \\c,] `abc`"));
+	check("器形は1個の器を割る（残りは文字列）", run("f : [x ~xs] ? xs\nf `abc`~"), "bc");
+	check("混在形も1個の器を割る", run("f : a [h ~t] ? t\nf 1 `abc`~"), "bc");
+	// ストリーム形は今まで通り撒く（list_model.md §2.4①）。
+	check("ストリーム形の頭", run("f : x ~xs ? x\nf `abc`~"), "a");
+	check("ストリーム形の残りの長さ", run("f : x ~xs ? ||xs||\nf `abc`~"), 2);
+	check("ストリーム形で数える", run("cnt : x ~xs ? 1 + (cnt xs~)\ncnt `abc`~"), 3);
+	check("ストリーム形へ末尾の呼び出しで渡しても撒く", run("f : x ~xs ? x\ng : s ? f s~\ng `abc`"), "a");
+	check("部分適用でもストリーム形なら撒く", run("g : a b ~xs ? b\n(g `abc`~) `z`"), "b");
+	// List は今まで通り撒く（後置 `~` は段を1つ下ろす）。
+	check("List は撒く（f l~ == f 1 2 3）", run("f : x ~xs ? ||xs||\nf [1 2 3]~"), run("f : x ~xs ? ||xs||\nf 1 2 3"));
+	// ストリーム形でない関数へも List は撒く（仮引数が2つなら2つへ）。撒くのを止めてよいのは String だけ。
+	check("List はストリーム形でない関数へも撒く", run("m :\n\ta\n\tb : 5\n? a + b\nm [1 2]~"), 3);
+	// **撒いた文字列の値も器のまま渡る。** 撒きを名前に置いた形・撒きをもう一度撒いた形・仮引数の撒きを仮引数へ渡す形。
+	check("撒いた文字列をもう一度撒いても器のまま", run(N + "n `abc`~~"), 3);
+	check("撒きを名前に置いてから撒いても", run(N + "x : `abc`~\nn x~"), 3);
+	check("撒いた名前を仮引数へ渡して撒いても（代入しても値は変わらない）", run(N + "g : s ? n s~\nx : `abc`~\ng x"), run(N + "g : s ? n s~\ng `abc`"));
+	check("撒いた名前を2引数の1つ目へ", run("m : s t ? (||s|| * 10) + ||t||\nx : `abc`~\nm x~ `de`"), 32);
+}
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

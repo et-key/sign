@@ -240,6 +240,9 @@ const EXPECT = {
 	// 取り込みは @~ だけ。後置を2つ付けた文（~~ は pass4 が文字列を返す、!~ は pass4 が断る）を取り込みと読むと
 	// 黙って落とす。
 	"str_stmt_bt.sn": "! postfix `abc`!~",
+	// 前置の付いた文字列の文は裸のテキストではない（lw_isstr が最初の字も引用符かを見る。「エスケープでないか」に
+	// 弱めると `~` `!` `$` の付いた文を読み捨てていた）。
+	"str_stmt_pre.sn": "! ~`abc`",
 	"str_stmt_tt.sn": "! postfix `abc`~~",
 	// 行頭の文字列でも後ろに語が続けば値（コメントは1語だけの文字列の文）。
 	"str_top.sn": "same",
@@ -260,6 +263,9 @@ const EXPECT = {
 	"unitalu.sn": "! unit-alu *",
 	"unitalu2.sn": "! unit-alu +",
 	"unitalu_one.sn": "same",
+	// 両辺が __ の算術は演算子によらず断る（1ファイルは最初の断りしか残さないので、演算子ごとに置く）。
+	"unitalu_div.sn": "! unit-alu /",
+	"unitalu_sub.sn": "! unit-alu -",
 	"unitconst.sn": "! unit-const z",
 	// 0u00 に束縛した定数も __ に束縛している（綴りの __ と 0u0000 だけを見ていた）。
 	"unitconst2.sn": "! unit-const z",
