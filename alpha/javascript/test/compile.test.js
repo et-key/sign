@@ -129,6 +129,10 @@ checkReasons("\\a % 3 → 文字の剰余も", "0u0061 % 3", ["char-without-arro
 checkReasons("\\a ^ 2 → 文字の冪も", "0u0061 ^ 2", ["char-without-arrow"]);
 checkReasons("100 / \\a → 診断なし（Int の域）", "100 / 0u0061", []);
 checkReasons("\\z - \\a → 診断なし（隔たり）", "0u007A - 0u0061", []);
+// **文字どうしの和は information**（数字の足し算のつもりなら、もっともらしい別の字になる）。
+checkReasons("c + d → 文字どうしの和", "0u0020 + 0u0021", ["char-plus-char"]);
+checkReasons("c + 1 → 診断なし（ずらす）", "0u0061 + 1", []);
+checkReasons("0 + c → 診断なし（数として読む）", "0 + 0u0061", []);
 // **実行時に決まる番地どうしの和は意味が無い**ので警告する。片方が字面（か字面を束ねた名前）なら、番地を
 // 16進の数でずらす普通の形である。差は距離なので警告しない。
 checkReasons("p + q（どちらも仮引数の番地）→ 警告", "f : p q ? p + q\nf 0x10 0x20", ["address-plus-address"]);

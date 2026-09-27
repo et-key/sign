@@ -3725,6 +3725,7 @@ function annotateTypes(node, env, diagnostics) {
   if (diagnostics) collectUnitReason(node, env, diagnostics);
   if (diagnostics) collectAddressFactorial(node, env, diagnostics);
   if (diagnostics) collectAddressPlusAddress(node, env, diagnostics);
+  if (diagnostics) collectCharPlusChar(node, env, diagnostics);
   if (diagnostics) collectAddressCompareNegative(node, env, diagnostics);
   if (diagnostics) collectExportMisuse(node, diagnostics);
   if (diagnostics) collectScalarCompareOnContainer(node, env, diagnostics);
@@ -4048,6 +4049,25 @@ function collectAddressPlusAddress(node, env, diagnostics) {
     message:
       `番地どうしの '${node.op}' は、どちらも実行時に決まる番地なので意味がありません（値は番地のまま計算します）。` +
       `ずらすなら片方を数（Int）にし、距離なら '-' を使ってください`,
+  });
+}
+
+/**
+ * **文字どうしの和は、符号位置の和を文字として返す**（type_system.md §3.6「文字の域の射」、利用者の裁定 2026-09-26：
+ * 関数であることには一様にメリットがある、ASCII の範囲ならアリ）。値は域の外なら `__`。ただ `\1 + \2` は `\c`
+ * （0x31 + 0x32 = 0x63）で、数字の足し算のつもりなら**もっともらしい別の字**になる——危険は書ける、気付ける
+ * （番地の名前どうしの和と同じ）ので information で見せる。
+ */
+function collectCharPlusChar(node, env, diagnostics) {
+  if (!node || node.type !== "operation" || node.position !== "infix" || node.name !== "add") return;
+  if (inferAtomType(node.left, env) !== "Char" || inferAtomType(node.right, env) !== "Char") return;
+  diagnostics.push({
+    level: "information",
+    reason: "char-plus-char",
+    spec: "type_system.md §3.6",
+    message:
+      `文字どうしの '${node.op}' は、符号位置の和を文字として返します（域の外なら __）。` +
+      `数の和なら 0 + c + d、数字の足し算なら \\0 + (c - \\0) + (d - \\0) と書いてください`,
   });
 }
 

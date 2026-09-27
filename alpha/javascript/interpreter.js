@@ -1,4 +1,4 @@
-import { literalDigits, literalParts } from "./target_info.js";
+import { literalDigits, literalParts, inCharDomain, DEFAULT_CHARSET } from "./target_info.js";
 import { OPERATOR_DICT } from "./operator_table.js";
 // ノードの形を見るだけの述語は layout.js が唯一の置き場である（理由はそこの
 // `isDefineNode` のコメント）。ここに写しがあったときは「循環 import 回避のため」と
@@ -111,14 +111,21 @@ function isStructBlock(node) {
 
 // ---- 実行時環境（Pass1の静的envとは別物、実際の値を保持する） ----
 // diagnosticsは子envにも同じ配列参照を引き継ぐ（ルートenvに一元的に蓄積される）。
-// charset はここに持たない。文字の算術は符号位置の算術そのもので、charset を見るのは
-// **書き出すときだけ**だからである（理由は `arithOnValues` のコメント）。
-function newRuntimeEnv(parent) {
+// **charset は根に置き、子は親から引き継ぐ。** 文字は位置で、ずらした先が charset の外なら `__` になる
+// （type_system.md §3.6「文字の域の射」、裁定 2026-09-26）——だから算術が charset を知っている必要がある。
+// 以前（b700fb80）は「文字は Int と同じ値で、違うのは書き出すときだけ」として持たせていなかった。
+function newRuntimeEnv(parent, charset) {
   return {
     bindings: new Map(),
     parent: parent || null,
     diagnostics: parent ? parent.diagnostics : [],
+    charset: parent ? charsetOf(parent) : charset || DEFAULT_CHARSET,
   };
+}
+// 手で組んだ環境（`charset` を持たない）もあるので、根まで辿って引く。
+function charsetOf(env) {
+  for (let e = env; e; e = e.parent) if (e.charset) return e.charset;
+  return DEFAULT_CHARSET;
 }
 function envDefine(env, name, value) {
   env.bindings.set(name, value);
@@ -1065,7 +1072,7 @@ const COMPARE_OPS = {
 };
 
 /**
- * **比べるのは値である。文字は符号位置（`Int` と同じ値）として比べる。**
+ * **比べるのは値である。文字は符号位置として比べる。**
  *
  * `COMPARE_OPS` を直に引くと JS の比較になり、1字の文字列は `Number("…")` で読み替えられる。
  * `Number("\b")` は 0 なので `0u0008 > 7` が `__`、`0u0038 > 7` は「8 > 7」として**偶然**
@@ -1161,8 +1168,10 @@ function isScalarValue(x) {
   return typeof x === "number" || typeof x === "bigint" || (typeof x === "string" && [...x].length === 1);
 }
 
+// **番地と文字の域では `__` は吸収元である**（番地は生き返らせない、文字は域の外へ出たものを次のずらしで
+// 生き返らせない——type_system.md §3.6）。単位元のままだと `(c + 200) - 3` が U+0003 という正しく見える別の字になる。
 function absorbsUnit(resultType, l, r) {
-  return resultType === "Address" && (isUnit(l) || isUnit(r));
+  return (resultType === "Address" || resultType === "Char") && (isUnit(l) || isUnit(r));
 }
 
 // 算術族の型規則を**値に対して**適用する（type_system.md §3.2）。
@@ -1173,7 +1182,7 @@ function absorbsUnit(resultType, l, r) {
 //
 // `resultType` は pass3 がノードへ載せた結果の型である。`__` を通すか吸収するかがそれで
 // 決まる（`absorbsUnit`）——値だけでは番地と数の区別が付かないので、呼ぶ側が渡す。
-function arithOnValues(name, l, r, resultType) {
+function arithOnValues(name, l, r, resultType, charset = DEFAULT_CHARSET) {
   // **結果が番地なら、`__` は両側で吸収する**（`absorbsUnit`）。下の爆発律より先に見る。
   if (absorbsUnit(resultType, l, r)) return UNIT;
   // **`__` は算術の両側で単位元である**（爆発律）。
@@ -1193,7 +1202,9 @@ function arithOnValues(name, l, r, resultType) {
   // `\`abc\` + __` も `__` で、左右対称である。
   if (isUnit(l)) {
     if (r === undefined) return UNIT;
-    return typeof r === "string" && [...r].length !== 1 ? UNIT : r;
+    // 相手が文字なら文字の域で、`__` は吸収元（型の無いポイントフリーは値で見る）。
+    if (typeof r === "string") return UNIT;
+    return r;
   }
   // **整数を 0 で割ると、商は 0、剰余は被除数である**（利用者の決定、2026-09-13）。
   //
@@ -1218,22 +1229,21 @@ function arithOnValues(name, l, r, resultType) {
       return 0;
     }
   }
-  // **`Char` は符号位置そのものである**（値の上では1文字の JS 文字列。型が `String` の1文字は
+  // **`Char` は符号位置で表す**（値の上では1文字の JS 文字列。型が `String` の1文字は
   // `evalArith` の入口で `__` にしてある——`` `a` `` は1文字でも `String`、type_system.md §2）。
-  // 文字の算術は符号位置の算術である——**そして値としてはそれで全部**である。
   //
-  // ここで charset の範囲を見るのをやめた。`Char` は `Int` と同じ値であり、違うのは
-  // **書き出すときだけ**だからである（`#` の出口が `emitWritableGuard` で見る）。
-  // 算術で見ると、(1) 判定が半端になり（上限しか見ずサロゲートが通っていた）、
-  // (2) `__` を「誤りの印」として使うことになり、(3) 演算のたびに払う。
+  // **文字は位置で、量ではない**（type_system.md §3.6「文字の域の射」、裁定 2026-09-26）。ずらした先が域の外なら
+  // `__` なので、charset の範囲はここ（算術）で見る。以前（b700fb80）は「`Char` は `Int` と同じ値で、違うのは
+  // 書き出すときだけ」として `#` の出口へ移していたが、前提を替えたので戻した。域の外の `__` は誤りの印では
+  // なく、その域に値が無いという正当な `__` である（番地が負に落ちるのと同じ）。
   //
   // `String` は長さによらず §3.2 の通り算術の対象ではない（型エラーで `__` へ収束）。
   // ここで長さ2以上だけを弾けば足りるのは、1文字の `String` を入口で型から弾いてあるからである。
   const cp = (x) => (typeof x === "string" && [...x].length === 1 ? x.codePointAt(0) : null);
   const lc = cp(l);
   const rc = cp(r);
-  // **どちらが文字でも同じ道である。** `Char` は `Int` と同じ値なので、順序で答えが
-  // 変わる理由が無い。以前は左辺しか見ておらず、`\a + 1` は "b" なのに `1 + \a`
+  // **どちらが文字でも同じ道に入る。** 左辺が文字なら文字の域（ずらす）、左辺が数なら数の域（符号位置を数と
+  // して読む）で、どちらも符号位置の算術から答えが出る。以前は左辺しか見ておらず、`\a + 1` は "b" なのに `1 + \a`
   // が `__` になっていた——右辺の文字が「算術に混ざった非数値」として弾かれていた。
   //
   // **相手が 2^53 を超えても同じ道である。** 文字の道は相手を Number としか見ておらず、BigInt が
@@ -1248,7 +1258,8 @@ function arithOnValues(name, l, r, resultType) {
   if (lc !== null || (rc !== null && (typeof l === "number" || typeof l === "bigint"))) {
     // **文字の域に割る・剰余・冪の射は無い**（型の無いポイントフリーは値で見る——型の道と同じ表）。
     if (lc !== null && charWithoutArrow(name, "Char", rc !== null ? "Char" : isUnit(r) ? "Unit" : "Int")) return UNIT;
-    if (isUnit(r)) return l; // 右辺Unit = 単位元（素通し）
+    // 左辺が文字なら文字の域で `__` は吸収元、左辺が数なら単位元（素通し）。
+    if (isUnit(r)) return lc !== null ? UNIT : l;
     const lv = lc ?? l;
     const rv = rc ?? (typeof r === "number" || typeof r === "bigint" ? r : null);
     if (rv === null) return UNIT;
@@ -1277,11 +1288,10 @@ function arithOnValues(name, l, r, resultType) {
     // **位置どうしの隔たりは数である**（type_system.md §3.6「文字の域の射」）。両辺が文字の引き算は
     // 描ける符号位置でも文字にしない——`\z - \a` は 25（Int）で、負でもよい。
     if (rc !== null && name === "sub") return out;
-    // 値としては `Int` と同じなので、ここで落とすものは無い——負も、上限の外も、
-    // サロゲートも普通に存在する。書けるかどうかは `#` の出口が見る。**描ける符号位置
-    // なら文字として、そうでなければ数として**返す（同じ値の別の見せ方）。
-    const drawable = Number.isInteger(out) && out >= 0 && out <= 0x10ffff && !(out >= 0xd800 && out <= 0xdfff);
-    return drawable ? String.fromCodePoint(out) : out;
+    // **ずらした先が文字の域の外なら `__`**（type_system.md §3.6「文字の域の射」）。負の文字も、charset の上限の
+    // 外も、サロゲートも値として居ない。以前（b700fb80）は「描ければ文字、そうでなければ数」で返しており、
+    // 型が Char の値が数として運ばれていた。
+    return inCharDomain(out, charset) ? String.fromCodePoint(Number(out)) : UNIT;
   }
   // §3.2: String（Listと同型）の左辺に算術演算子は効かない → 型エラーで__に収束。
   // 注: list_model.md §4.4の文面は「+でコードポイントが露出する」としているが、
@@ -1372,7 +1382,7 @@ function evalArith(node, env) {
   // `operator_table.md` の継続の節はこの裁定で埋まった）。番地の算術だけ短絡すると、
   // **同じ綴りが結果の型で評価の回数を変える**ことになる。`Int` と同じ道を通し、機械
   // （両辺を積んでから `csel`、短絡の分岐は1本も出さない）と揃える。
-  if (typeof l === "string" && [...l].length !== 1) return arithOnValues(name, l, undefined, node.atomType);
+  if (typeof l === "string" && [...l].length !== 1) return arithOnValues(name, l, undefined, node.atomType, charsetOf(env));
   const r = unspreadScalar(evaluate(node.right, env));
   // **型が `String` と言う辺は、1文字でも `Char` ではない**（type_system.md §2 の書き方の表、§3.2）。
   // 値は同じ JS 文字列なので、見分けるのは型である——見ないと `(s ' 2~) / 0` が JS の Infinity を漏らす。
@@ -1409,7 +1419,7 @@ function evalArith(node, env) {
       { left: holeL ? undefined : l, right: holeR ? undefined : r }
     );
   }
-  let value = arithOnValues(name, l, r, node.atomType);
+  let value = arithOnValues(name, l, r, node.atomType, charsetOf(env));
   // **回す前の値が丸まっていたら、回しても正しくならない。** 両辺が Number に収まる整数でも、
   // 積や和は 2^53 を超えうる——倍精度はそこで下の桁を黙って丸め、`applyOverflowRule` は丸まった
   // 値を回す（実測で `3037000500 * 3037000500` が解釈器 -9223372036709302272、機械 …301616）。
@@ -2232,7 +2242,7 @@ function applyPointfree(node, closureEnv, argValues, pfbound) {
     // 付かない**——結果の型は穴へ来る値で決まるが、値は番地と数を区別しない。そこでは爆発律の
     // ままで、`[+ ([1] ' 5)] 0x1000` は 4096 を返す。溢れの規則（`applyOverflowRule`）もこの道は
     // まだ通していない。どちらも機械には出せない形（呼び先が静的に決まらない）である。
-    if (ARITH_OPS[node.name]) return arithOnValues(node.name, a, b, node.atomType);
+    if (ARITH_OPS[node.name]) return arithOnValues(node.name, a, b, node.atomType, charsetOf(closureEnv));
     if (COMPARE_OPS[node.name]) {
       // ポイントフリーはList側のfold/map/filterが前提（8/5の設計合意）のため、単位元の
       // 見方も算術側（0/1）ではなくList側に移る——真なら常に要素そのもの(a)を残す。

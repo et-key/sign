@@ -135,6 +135,23 @@ function charLimitOf(charset) {
 }
 
 /**
+ * **文字の域**（type_system.md §3.6「文字の域の射」、利用者の裁定 2026-09-26）。U+0001 から charset の上限まで、
+ * サロゲート（D800–DFFF、単独では文字ではない）を除く。U+0000 は `__` の綴り（niche）なので値として居ない。
+ *
+ * 文字は位置なので、ずらした先が域の外なら**その域に値が無い**——番地が負に落ちて `__` になるのと同じ
+ * 正当な `__` である。解釈器と Pass 4 が同じ表（`CHARSET_LIMITS`）を引く。
+ */
+function inCharDomain(cp, charset) {
+  const limit = charLimitOf(charset);
+  if (typeof cp === "bigint") {
+    if (cp < 1n || cp > BigInt(limit)) return false;
+    cp = Number(cp);
+  }
+  if (!Number.isInteger(cp) || cp < 1 || cp > limit) return false;
+  return !(cp >= 0xd800 && cp <= 0xdfff);
+}
+
+/**
  * ターゲットの幅クラスを返す。未対応なら null。
  */
 function widthsOf(target) {
@@ -231,4 +248,4 @@ function literalDigits(text) {
   const p = literalParts(text);
   return p ? p.digits : String(text ?? "").slice(2);
 }
-export { TARGET_WIDTHS, SIGNEDNESS, UNIT_NICHE_ASM, WIDTH_CLASS, CHARSETS, CHARSET_LIMITS, DEFAULT_CHARSET, ACCESS_WIDTHS, LITERAL_FAMILIES, charSizeOf, charLimitOf, widthsOf, isSupported, sizeOf, reduceToMachineType, literalParts, literalDigits };
+export { TARGET_WIDTHS, SIGNEDNESS, UNIT_NICHE_ASM, WIDTH_CLASS, CHARSETS, CHARSET_LIMITS, DEFAULT_CHARSET, ACCESS_WIDTHS, LITERAL_FAMILIES, charSizeOf, charLimitOf, inCharDomain, widthsOf, isSupported, sizeOf, reduceToMachineType, literalParts, literalDigits };

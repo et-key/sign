@@ -199,6 +199,33 @@ function mayBeNegative(side, em) {
  * 結果が番地なら左辺は番地（か `__`・生の値）なので、符号を見るのは割る数だけでよい
  * （§3.6 の左辺優先——`8 / p` は `Int`）。
  */
+/**
+ * **文字の域の検査**（type_system.md §3.6「文字の域の射」）。ずらした先（和・差・積）が U+0001〜charset の上限、
+ * utf32 ならサロゲートの外でなければ `__`。U+0000 は機械ではビット 0 で niche ではないので、下端も見る。
+ *
+ * 符号なしの比較1つで負も上限超えも落ちる：`x − 1` を符号なしで `上限 − 1` と比べ、大きければ外（負は
+ * 巨大な符号なし値になる）。呼ぶ側が `x12` に niche を置いておくこと。
+ */
+function charDomainCheckOf(mn, n, em) {
+	return (dst) => {
+		em.emit(`${mn} ${dst}, ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
+		const limit = charLimitOf(em.conf.charset);
+		em.emit(`sub x13, ${dst}, #1`, "U+0000 を域の外へ");
+		if (limit - 1 <= 4095) em.emit(`cmp x13, #${limit - 1}`, `charset の上限（${em.conf.charset || DEFAULT_CHARSET}）`);
+		else {
+			emitImm(em, "x14", limit - 1, `charset の上限（${em.conf.charset || DEFAULT_CHARSET}）`);
+			em.emit("cmp x13, x14");
+		}
+		em.emit(`csel ${dst}, x12, ${dst}, hi`, "域の外の文字は __");
+		if (charSizeOf(em.conf.charset) > 1) {
+			emitImm(em, "x14", 0xd800, "サロゲートの下端");
+			em.emit(`sub x13, ${dst}, x14`);
+			em.emit("cmp x13, #0x7ff");
+			em.emit(`csel ${dst}, x12, ${dst}, ls`, "サロゲートは単独では文字ではない");
+		}
+	};
+}
+
 function addressCheckOf(mn, n, em) {
 	if (CARRY[mn]) return (dst) => emitAddressCarry(n, CARRY[mn], dst, em);
 	if (mn === "udiv" && (mayBeNegative(n.right, em) || mayBeZero(n.right))) return (dst) => emitAddressDiv(n, dst, em);
@@ -1849,10 +1876,12 @@ function genExpr(node, env, em, scope, tail = false) {
 		// **番地の辺は `Int` の嘘を信じない**（`cannotBeUnit` の `critical`）。門を通った仮引数
 		// どうしの `Int` の和でも、回った先がちょうど niche なら `__` である。`Int` の算術が続く
 		// だけならその niche を数として足してよい（致命的でない）が、番地へ足すと別の番地が出る。
-		const absorb = n.atomType === "Address";
+		// **文字の域も `__` を吸収する**（type_system.md §3.6「文字の域の射」、裁定 2026-09-26）——外へ出た文字を
+		// 次のずらしで生き返らせない。域の外は `__` なので、ずらした先を見る（`charDomainCheckOf`）。
+		const absorb = n.atomType === "Address" || n.atomType === "Char";
 		const lMaybe = !cannotBeUnit(n.left, env, scope, absorb);
 		const rMaybe = !cannotBeUnit(n.right, env, scope, absorb);
-		const check = absorb ? addressCheckOf(mn, n, em) : null;
+		const check = n.atomType === "Address" ? addressCheckOf(mn, n, em) : n.atomType === "Char" ? charDomainCheckOf(mn, n, em) : null;
 		if (!lMaybe && !rMaybe && !check) {
 			em.emit(`${mn} ${SCRATCH[0]}, ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
 		} else if (!lMaybe && !rMaybe) {
@@ -1864,23 +1893,19 @@ function genExpr(node, env, em, scope, tail = false) {
 			else em.emit(`${mn} x11, ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
 			if (rMaybe) {
 				em.emit(`cmp ${SCRATCH[1]}, x12`, "右辺が __ か");
-				if (absorb) em.emit("csel x11, x12, x11, eq", "右が __ なら __（番地は吸収する）");
+				if (absorb) em.emit("csel x11, x12, x11, eq", `右が __ なら __（${n.atomType === "Char" ? "文字" : "番地"}は吸収する）`);
 				else em.emit(`csel x11, ${SCRATCH[0]}, x11, eq`, "右が __ なら左辺値（完全性公理）");
 			}
 			if (lMaybe) {
 				em.emit(`cmp ${SCRATCH[0]}, x12`, "左辺が __ か");
-				if (absorb) em.emit("csel x11, x12, x11, eq", "左が __ なら __（番地は吸収する）");
+				if (absorb) em.emit("csel x11, x12, x11, eq", `左が __ なら __（${n.atomType === "Char" ? "文字" : "番地"}は吸収する）`);
 				else em.emit(`csel x11, ${SCRATCH[1]}, x11, eq`, "左が __ なら右辺値（爆発律）");
 			}
 			em.emit(`mov ${SCRATCH[0]}, x11`);
 		}
-		// **足せることと、書けることは別である。** 文字の算術は符号位置の算術であり、
-		// 値としてはそれで全部である——charset に収まるかどうかは**書き出すときの話**
-		// なので、`#` の出口（`emitWritableGuard`）が見る。
-		//
-		// 以前はここで上限を見ていた。判定が半端で（サロゲートが通る）、`__` を誤りの
-		// 印として使うことになり、演算のたびに3命令払っていた。`Char` は `Int` と同じ
-		// 値であり、算術の道も同じでよい。
+		// **文字は位置で、ずらした先が域の外なら `__`**（`charDomainCheckOf`）。b700fb80 は「文字は Int と同じ値で、
+		// 違うのは書き出すときだけ」として域の検査を `#` の出口へ移していた。前提が替わったので算術へ戻す——
+		// 実プログラムの文字の算術はほぼ隔たり（Int、検査が要らない）で、代金はほとんど無い。
 		em.pop(1); // 右辺のスロットを返す。結果は左辺のスロットへ書く。
 		em.store(SCRATCH[0], lo);
 		return 1;
@@ -5617,10 +5642,10 @@ const NICHE_VALUE = 0x8000000000000000n;
  *                 書き出せない**。ascii なら 0x7F まで、utf32 なら 0x10FFFF まで
  *                 ——かつ**サロゲート（D800–DFFF）は単独では文字ではない**。
  *
- * **算術ではなく出口で見る。** 値としての `Char` は Int と同じもので、違うのは
- * 書き出すときだけである。算術の途中で見ると、(1) 判定が半端になり（上限しか見て
- * いなかったのでサロゲートが通っていた）、(2) `__` を「誤りの印」として使うことに
- * なり、(3) 演算のたびに払う。出口なら1回で、完全に、要るときだけ見られる。
+ * **域の検査の本体は算術にある**（`charDomainCheckOf`、type_system.md §3.6「文字の域の射」）。文字は位置なので、
+ * ずらした先が域の外なら算術が `__` にする。以前（b700fb80）は「値としての `Char` は Int と同じもので、違うのは
+ * 書き出すときだけ」としてここだけで見ていた。前提を替えて算術へ戻したので、ここは算術を通らずに来た値の
+ * ための二重の門である（命令は変えていない）。
  *
  * **要るときだけ出す。** 値が `__` になり得ないと構文で分かるなら前者は要らず、
  * `Char` でないなら後者も要らない——MMIO の書き込み（`0x9000000 # 72`）はどちらも
