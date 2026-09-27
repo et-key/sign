@@ -1122,14 +1122,21 @@ function addressWithoutArrow(name, leftType, rightType) {
  * 位置なので、割る・剰余・冪は無い。番地の `*` と同じく型は域を保ち（`Char`）、値は `__` になる。
  *
  * 文字の掛け算は繰り返し（`\- * 10`）という別の射で、ここには居ない。割り算が要るのは隔たり（`Int`）の方
- * だけである——`(c - \0) / 16` のように。域の決め方（左辺が `__` か生の値なら相手の域）は番地と同じ。
+ * だけである——`(c - \0) / 16` のように。
+ *
+ * **域の決め方は番地と1か所だけ違う。** 左辺が `__` なら相手の域（`Unit ⊕ T → T`）で同じだが、**生の値は
+ * 数として読む**——文字の相手になれるのはずらし量か隔たりの相手なので（pass3 の `Raw` の節）、`@p / c` は
+ * 数の域の割り算である。番地の表（`WEAK_LEFT_TYPES`、生の値は相手の型を取る）を流用していたので、
+ * `@p + c` は `Int` なのに `@p / c` だけが「文字の域に射が無い」で `__` になっていた（両エンジンとも `__` で
+ * 一致するので検査は緑のままだった）。
  */
 const CHAR_OPS = new Set(["div", "mod", "pow"]);
 const CHAR_DOMAIN = new Set(["Char"]);
 const CHAR_PARTNERS = new Set(["Int", "Address", "Char", "Raw", "Unit"]);
+const CHAR_WEAK_LEFT_TYPES = new Set(["Unit"]);
 function charWithoutArrow(name, leftType, rightType) {
   if (!CHAR_OPS.has(name)) return false;
-  const domain = WEAK_LEFT_TYPES.has(leftType) ? rightType : leftType;
+  const domain = CHAR_WEAK_LEFT_TYPES.has(leftType) ? rightType : leftType;
   return CHAR_DOMAIN.has(domain) && CHAR_PARTNERS.has(rightType);
 }
 

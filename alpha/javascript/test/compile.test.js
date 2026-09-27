@@ -128,6 +128,13 @@ checkReasons("\\a / 2 → 文字を割る射は無い", "0u0061 / 2", ["char-wit
 checkReasons("\\a % 3 → 文字の剰余も", "0u0061 % 3", ["char-without-arrow"]);
 checkReasons("\\a ^ 2 → 文字の冪も", "0u0061 ^ 2", ["char-without-arrow"]);
 checkReasons("100 / \\a → 診断なし（Int の域）", "100 / 0u0061", []);
+// **生の値は文字の相手なら数として読む**ので、左に置いても数の域（`@p + c` と同じ）。番地の表を流用して
+// いたので、和と差は `Int` なのに割る・剰余・冪だけ「文字の域に射が無い」になっていた。
+checkReasons("@p / \\a → 診断なし（生の値は数として読む）", "x : @0x40000000\nx / 0u0061", []);
+check("@p / \\a → Int", lastType("x : @0x40000000\nx / 0u0061"), "Int");
+check("@p % \\a → Int", lastType("x : @0x40000000\nx % 0u0061"), "Int");
+check("@p ^ \\b → Int", lastType("x : @0x40000000\nx ^ 0u0002"), "Int");
+check("@p + \\a → Int（和と同じ読み）", lastType("x : @0x40000000\nx + 0u0061"), "Int");
 checkReasons("\\z - \\a → 診断なし（隔たり）", "0u007A - 0u0061", []);
 // **文字どうしの和は information**（数字の足し算のつもりなら、もっともらしい別の字になる）。
 checkReasons("c + d → 文字どうしの和", "0u0020 + 0u0021", ["char-plus-char"]);
