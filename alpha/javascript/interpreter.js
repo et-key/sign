@@ -1109,6 +1109,15 @@ function listRepeat(l, r) {
   for (let i = 0; i < r; i++) out.push(...l);
   return out;
 }
+// **文字列の繰り返しは器の繰り返しである**（String ≅ List(Char)、type_system.md §3.2・§3.6）。回数の読み方を
+// 2か所で決めないよう、`listRepeat` にそのまま通す。回数が 0 以下なら空の器＝`__`。
+// **空の器は空の文字列で返す**（`isUnit("")` は真）。`UNIT` で返すと、型が `String` の `__` を余積が文字列の種と
+// して残し（`constructValues` の `isTextSeed`）、並びに生の `__` が混ざっていた——`||[* 0,] `ab`||` が 3、
+// `(\a * 0) + 1` が爆発律で 1。切り出しの外（`` `ab` ' [5 ~ 6] ``）と同じ姿にすれば、余積は文字列として繋ぐ。
+function repeatText(l, r) {
+  if (typeof r !== "number") return UNIT;
+  return listRepeat([...l], r).join("");
+}
 function listLift(l, r) {
   // [0 1] ^ 3 → [[0 1] [0 1] [0 1]]（lのコピーをr個、要素として持ち上げる）
   const out = [];
@@ -1185,6 +1194,14 @@ function absorbsUnit(resultType, l, r) {
 function arithOnValues(name, l, r, resultType, charset = DEFAULT_CHARSET) {
   // **結果が番地なら、`__` は両側で吸収する**（`absorbsUnit`）。下の爆発律より先に見る。
   if (absorbsUnit(resultType, l, r)) return UNIT;
+  // **繰り返しの域も `__` を吸収する**（type_system.md §3.6「文字の域の射」）。吸収を選ぶのは結果の型ではなく
+  // 左辺が選ぶ域で、`c * n` の域は `Char`（外へ出た文字は生き返らない）、`s * n` の域は `String`（空の器を
+  // 繰り返しても空）である。算術で結果の型が `String` になるのは繰り返しだけなので、結果の型で拾える——見ないと
+  // 爆発律が回数を返し、`(c + 200) * 3` が 3 になっていた。左辺が空の文字列なら型によらず繰り返しである（型が
+  // 族や `Int` に決まった本体で `(s ' [5 ~ 6]) * 2` が回数の 2 を返さない）。返すのは空の文字列（`String` の `__`、`repeatText` と
+  // 同じ姿）で、次の `+ 1` が爆発律で 1 にならない。`absorbsUnit` へ入れないのは、ビット演算の結果の型が左辺の
+  // 型の素通しで `String` になりうるからである（`` `ab` << __ `` の読みはここで変えない）。
+  if (name === "mul" && (resultType === "String" || typeof l === "string") && (isUnit(l) || isUnit(r))) return "";
   // **`__` は算術の両側で単位元である**（爆発律）。
   //
   // 算術は `A × A → A`——**積**を食って**同じ対象**を返す。片方が始対象なら、返せる値は
@@ -1260,6 +1277,10 @@ function arithOnValues(name, l, r, resultType, charset = DEFAULT_CHARSET) {
     if (lc !== null && charWithoutArrow(name, "Char", rc !== null ? "Char" : isUnit(r) ? "Unit" : "Int")) return UNIT;
     // 左辺が文字なら文字の域で `__` は吸収元、左辺が数なら単位元（素通し）。
     if (isUnit(r)) return lc !== null ? UNIT : l;
+    // **文字の掛け算は繰り返しである**（type_system.md §3.6「文字の域の射」、裁定 2026-09-26）。文字は長さ1の
+    // 文字列の顔を持つので、器の繰り返しと同じ射——`\- * 10` は長さ 10 の文字列。左辺が数なら数の域のまま
+    // （`2 * \a` は 194）。回数が文字の形（`c * d`）は上の射なしで落ちている。
+    if (lc !== null && name === "mul") return repeatText(l, r);
     const lv = lc ?? l;
     const rv = rc ?? (typeof r === "number" || typeof r === "bigint" ? r : null);
     if (rv === null) return UNIT;
@@ -1297,7 +1318,8 @@ function arithOnValues(name, l, r, resultType, charset = DEFAULT_CHARSET) {
   // 注: list_model.md §4.4の文面は「+でコードポイントが露出する」としているが、
   // 自身の例(`123` 123 = `123123`)はスペース連結でありこの主張を実証していない。
   // type_system.md §3.2の明示的な表（String+算術演算子→型エラー(__消去)）を正とする。
-  if (typeof l === "string") return UNIT;
+  // 掛け算だけは繰り返し（§3.2、String ≅ List(Char) なので器の `*` と同じ射）。
+  if (typeof l === "string") return name === "mul" ? repeatText(l, r) : UNIT;
   if (isUnit(r)) return l; // 右辺Unit = 単位元（id射、素通し）
   if (Array.isArray(l)) {
     // §3.2の算術族テーブル: List左辺の `*`/`^`/`/` は右辺を「回数・個数」として使うため
@@ -1368,7 +1390,7 @@ function unspreadScalar(v) {
 function evalArith(node, env) {
   const name = node.name;
   const l = unspreadScalar(evaluate(node.left, env));
-  // 左辺が String の時点で右辺を評価せずに済ませる（型エラーは右辺に依らない）。
+  // 左辺が String の時点で右辺を評価せずに済ませる（`*` でなければ型エラーで、右辺に依らない）。
   // **ただし1文字は短絡しない**——値の上では `Char` と1文字の `String` が同じ JS 文字列なので、
   // 型を見るまで決まらない（`Char` なら算術の対象で右辺が要る。`String` なら下で `__`）。
   //
@@ -1382,11 +1404,17 @@ function evalArith(node, env) {
   // `operator_table.md` の継続の節はこの裁定で埋まった）。番地の算術だけ短絡すると、
   // **同じ綴りが結果の型で評価の回数を変える**ことになる。`Int` と同じ道を通し、機械
   // （両辺を積んでから `csel`、短絡の分岐は1本も出さない）と揃える。
-  if (typeof l === "string" && [...l].length !== 1) return arithOnValues(name, l, undefined, node.atomType, charsetOf(env));
+  // **繰り返しは器の射である**（`s * n`・`c * n`、type_system.md §3.2・§3.6）ので、右辺の回数が要る。
+  // **繰り返すかどうかは左辺の値で決める。** 文字（`arithOnValues`）も器（`listRepeat`）も値で決めており、ここだけ
+  // が型（`node.atomType === "String"`）で決めていた——仮引数の型が呼び出しサイトから `Int` や族に決まった本体で
+  // は、同じ `f : s ? s * 2` が `f `a`` で "aa"、`f `ab`` で右辺を読まずに `__` を返していた（1文字は短絡しない
+  // ので値の道へ届く）。回数に文字・文字列・`__` を置いた形は `repeatText` と `arithOnValues` が値で落とす。
+  const repeats = name === "mul" && typeof l === "string";
+  if (typeof l === "string" && [...l].length !== 1 && !repeats) return arithOnValues(name, l, undefined, node.atomType, charsetOf(env));
   const r = unspreadScalar(evaluate(node.right, env));
   // **型が `String` と言う辺は、1文字でも `Char` ではない**（type_system.md §2 の書き方の表、§3.2）。
   // 値は同じ JS 文字列なので、見分けるのは型である——見ないと `(s ' 2~) / 0` が JS の Infinity を漏らす。
-  if ((typeof l === "string" && node.left && node.left.atomType === "String") || (typeof r === "string" && node.right && node.right.atomType === "String")) return UNIT;
+  if (!repeats && ((typeof l === "string" && node.left && node.left.atomType === "String") || (typeof r === "string" && node.right && node.right.atomType === "String"))) return UNIT;
   // **番地の域に、掛け算と冪の射は無い**（pass3 が `Unit` と型付けする、layout.js の `addressWithoutArrow`）。
   // 射が無いので零射を通る（原理4）。値では番地と数の区別が付かないので、辺の型で見る——`Unit` と型付け
   // される掛け算には `__ * x`（x の型が決まっていない）もあり、そちらは爆発律で x を返す。
@@ -2301,6 +2329,12 @@ function applyPointfree(node, closureEnv, argValues, pfbound) {
   const leftBound = node.left !== null && node.left !== undefined;
   const greedy = !!node.pointfreeMap || (!leftBound && !rightBound);
   if (greedy && argValues.length === 1 && Array.isArray(argValues[0])) argValues = argValues[0];
+  // **写す文字列は `List(Char)` として走る**（`String ≅ List(Char)`、利用者の裁定 2026-09-27「[* 2,] `ab` ==
+  // `aabb`」）。回数が字面なら compile.js の `mapSource` が文字ごとに開いて余積で繋ぐが、名前や式の回数はここへ
+  // 来る。ここは文字列を1要素として扱っていたので、`n : 2` / `[* n,] `ab`` が並び全体の繰り返し（`["abab"]`）と
+  // いう、裁定が写すことと分けた方の答えになっていた。同じ事実を2か所で決めていた形である。
+  const walksText = !!node.pointfreeMap && argValues.length === 1 && typeof argValues[0] === "string";
+  if (walksText) argValues = [...argValues[0]];
 
   if (node.pointfreeMap) {
     // 末尾カンマの写像糖衣構文（`[* 2,]`、function_guide.md「そのすべてに適用される」）。
@@ -2312,7 +2346,9 @@ function applyPointfree(node, closureEnv, argValues, pfbound) {
     // （list_cheat_sheet.md「選択写像」、余積のUnit除去則、type_system.mdの輸入失敗例と同型）。
     const bound = rightBound ? boundOf("right") : undefined;
     const results = argValues.map((v) => (isUnit(v) ? UNIT : combine(v, bound)));
-    return results.filter((r) => !isUnit(r));
+    const kept = results.filter((r) => !isUnit(r));
+    // 文字列を走って結果が全部文字列なら、余積で1つの文字列に繋ぐ（`String` の μ は強制、`mapSource` と同じ）。
+    return walksText && kept.every((r) => typeof r === "string") ? kept.join("") : kept;
   }
 
   if (!leftBound && !rightBound) {

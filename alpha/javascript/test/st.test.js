@@ -656,6 +656,9 @@ check(
 // 比較が値を返す（comparison.md「真なら LHS、偽なら `__`」）のも同じ設計の現れで、
 // 真理値を作る代わりに値をそのまま通す。だから述語は**その値の型**になる。
 check("値を返す述語は値の型になる", entries("is_digit : c ? \\0 <= c <= \\9"), ["is_digit : Char -> Char"]);
+// **畳み込みの蓄積子は、要素と同じ文字のまま**（`c * d` は射なしで型は `Char`）。回数の型が決まらないうちに
+// `Char * Scalar` を `String` と答えていたので、過渡値が蓄積子に固まって `String List(Char) -> Unit` と書いていた。
+check("[*] を包んだ関数の畳み込みは文字の域", entries("#rep : s ? [*] s\nx : rep `ab`").filter((l) => /^(_pf_fold_2a_go|#rep) :/.test(l)), ["_pf_fold_2a_go : Char List(Char) -> Char", "#rep : List(Char) -> Char"]);
 check("比較そのものも値を返す", entries("pos : x ? x > 0"), ["pos : Int -> Int"]);
 // 恒等射を明示的に返す書き方だけが Layer 2 に名前を持たない。`.st` は `_` と書く
 // ——裸の `_` は Sign 自身の恒等射記法なので（unit.md §378）、記号としてこれが正しい。

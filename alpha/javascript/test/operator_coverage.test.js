@@ -144,8 +144,12 @@ for (const [listName, list] of [["NOT_YET", NOT_YET], ["NOT_AN_INSTRUCTION", NOT
 // 直に書いて留めている（表から引くと、表の嘘に検査が付いて行く）。
 // **割り算の符号なしの欄は番地で踏む**（2026-09-26）。文字の域に割る射が無くなった（type_system.md §3.6
 // 「文字の域の射」）ので、文字では `udiv` に届かない。番地の割り算は溢れを見ないので、欄の綴りが1命令で出る
-// （pass4.test.js が `udiv` 1命令を直に留めている）。加減乗は符号で綴りが変わらないので文字のまま。
-const UNSIGNED_OF = { cond: ["Address", "0x1000"], alu: ["Char", `${B}a`], div: ["Address", "0x1000"] };
+// （pass4.test.js が `udiv` 1命令を直に留めている）。加減は符号で綴りが変わらないので文字のまま。
+// **掛け算には符号なしの欄を踏める型が無い**（2026-09-27）。番地の `*` は射が無く、文字の `*` は繰り返し（器を作る
+// 射）なので、どちらも `mul` に届かない。綴りは符号で変わらない（`mul` 1つ）ので、`Int` の側で欄は見えている。
+// **飛ばすのは明示した `null` だけ**である。欄が無い（`undefined`——消した鍵や、名前を変えた形）ときは下の分解で
+// 落ちる。どちらも偽として飛ばすと、符号なしの見本が黙って消える（`alu`・`cond` の欄を消しても緑だった）。
+const UNSIGNED_OF = { cond: ["Address", "0x1000"], alu: ["Char", `${B}a`], div: ["Address", "0x1000"], mul: null };
 const SIGNED_PROBE = {
 	add: "a + R",
 	sub: "a - R",
@@ -171,7 +175,7 @@ const condOf = (insns) => {
 
 for (const [name, template] of Object.entries(SIGNED_PROBE)) {
 	const a = asmOf(name);
-	for (const [kind, arg] of [["Int", "1"], UNSIGNED_OF[name] || UNSIGNED_OF[a.form]]) {
+	for (const [kind, arg] of [["Int", "1"], name in UNSIGNED_OF ? UNSIGNED_OF[name] : UNSIGNED_OF[a.form]].filter((x) => x !== null)) {
 		const want = a.gpr[kind === "Int" ? "signed" : "unsigned"];
 		const other = a.gpr[kind === "Int" ? "unsigned" : "signed"];
 		const expr = template.replace("R", a.form === "cond" && kind === "Address" ? "0x2000" : "2");

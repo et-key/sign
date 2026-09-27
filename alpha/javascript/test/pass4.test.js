@@ -1333,6 +1333,13 @@ f 1`, "f") || [];
 	checkTrue("Int * Address は mul 1命令のまま", mulNP.includes("mul x9, x9, x10"), mulNP.join(" / "));
 	const mulII = body("f : a b ? a * b\nf 1 2", "f") || [];
 	checkTrue("Int * Int は mul 1命令で、溢れを見ない", mulII.includes("mul x9, x9, x10") && !mulII.some((l) => /^(umulh|csel|asr) /.test(l)), mulII.join(" / "));
+	// **回数に位置を置く掛け算（`c * d`）は射が無い**（type_system.md §3.6「文字の域の射」）：番地の積と同じく niche を
+	// 置くだけで、掛け算の命令を出さない。門を外すと `mul` と文字の域の検査に落ち、積が域の中なら文字が出る。
+	const mulCC = body("f : a b ? a * b\nf 0u0001 0u0002", "f") || [];
+	checkTrue("Char * Char は niche を置き、mul を出さない", mulCC.includes("movz x9, #0x8000, lsl #48") && !mulCC.some((l) => /^(mul|umulh|smulh) /.test(l)), mulCC.join(" / "));
+	// **文字の繰り返しはまだ出せない**（結果は器で、器を作る道がまだ無い）。スカラーの `mul` にせず名指しで断る。
+	checkTrue("文字列の繰り返しは名指しで断る", asm("f : s ? s * 2\nf `ab`").diagnostics.some((d) => d.message.includes("文字の繰り返し")));
+	checkTrue("文字の繰り返しも名指しで断る", asm("f : c ? c * 2\nf 0u0061").diagnostics.some((d) => d.message.includes("文字の繰り返し")));
 
 	// 番地の除算：割る数が 0 以下になりうるときだけ、udiv の後に2命令で見る（利用者の決定 2026-09-14）
 	const divPn = body("f : p n ? p / n\nf 0x1000 4", "f") || [];
@@ -1470,6 +1477,42 @@ f 1`, "f") || [];
 	checkTrue("文字だけで呼ぶなら出る", kind("f : c ? c / 2\nf 0u0061").length === 0);
 	checkTrue("数だけで呼ぶなら出る", kind("f : c ? c / 2\nf 3\nf 5").length === 0);
 	checkTrue("文字の隔たりを数の仮引数へ", kind("f : n ? n / 2\nf (0u007A - 0u0061)").length === 0);
+	// **分割代入の頭へは、渡す器の要素の種類を見る**（`String ≅ List(Char)`、スカラーは長さ1の器）。頭の型は変えない。
+	checkTrue("数の頭へ文字列（繰り返し）", kind("f : [c ~r] ? c * 2\nf `!`").length === 1);
+	checkTrue("数の頭へ文字列（ずらす）", kind("f : [c ~r] ? c + 1\nf `!a`").length === 1);
+	checkTrue("混在形の数の頭へ文字列", kind("f : n [c ~r] ? c * 2\nf 1 `!`").length === 1);
+	checkTrue("2つ目の頭が数", kind("f : [a b ~r] ? b * 2\nf `!a`").length === 1);
+	checkTrue("数の頭へスカラーの文字（長さ1の器）", kind("f : [c ~r] ? c * 2\nf 0u0021").length === 1);
+	checkTrue("包んで展開して渡す文字列", kind("f : [c ~r] ? c * 2\ng : s ? f s~\ng `!`").length === 1);
+	checkTrue("ストリーム形の数の頭へ文字列", kind("f : x ~xs ? x + 1\ny : f [5 6]~\nf `!a`~").length === 1);
+	checkTrue("文字の頭へ数の器", kind("f : [c ~r] ? (c != 0u0061) & (c + 200)\nf [1 2]").length === 1);
+	// 型は `String` なのに束縛の要素型は `Int` と言う実引数——どちらかが嘘なので両方を数える。
+	checkTrue("型と要素型が食い違う実引数", kind("f : [c ~r] ? (c != 0u0061) & (c + 200)\ng : xs ? f xs~\ng [1 2]").length === 1);
+	// 頭が文字と数に割れていれば、要素も1つの種類でなければ読み違える（文字か数かを返す呼び出しを渡す形）。
+	checkTrue("頭が割れた器へ文字か数か", kind("pick : n ? n = 0 & 0u0061 | 3\nf : [a b ~r] ? (a != 0u0061) & (0 + b)\nf (pick 1)").length === 1);
+	// **頭が割れていれば、実引数が1つの種類でも断る。** 頭 a は比較で文字、b は数なので、どちらの種類の器を渡しても
+	// 片方の頭の種類と食い違う。実引数が直和（上の `pick`）でなくても断ることを見る——比べるのが最初の頭だけだと
+	// `f [1 2]` が通り、解釈 2 ／機械 0 に割れる（HEAD の形）。
+	checkTrue("頭が割れた器へ数だけの器", kind("f : [a b ~r] ? (a != 0u0061) & (0 + b)\nf [1 2]").length === 1);
+	// 要素の種類が型から読めない実引数は、頭が数なら断る（文字の器でありうる）。積（`Struct`）もそうで、頭へは
+	// 長さ1の器として持ち上がるだけなので、要素の並びとしては読まない。
+	checkTrue("積を数の頭へ（文字と数）", kind("f : [a ~r] ? a / 2\nf (4 , 0u0061)").length === 1);
+	checkTrue("積を数の頭へ（数と番地）", kind("f : [a ~r] ? a - 5\nf (4 , 0x10)").length === 1);
+	checkTrue("積は文字の頭へも断る", kind("f : [a ~r] ? (a != 0u0062) & (0 + a)\nf (0u0061 , 5)").length === 1);
+	// デフォルト式の中から渡す仮引数は型が決まらない（`s` は呼び出しサイトから見えない）。
+	checkTrue("型の決まらない実引数を数の頭へ", kind("f : [c ~r] ? c + 1\ng :\n\ts\n\tc : f s\n? c\ng `!a`").length === 1);
+	// 対照：要素が静的に数と分かる器は、展開しても名前へ置いても断らない。文字の頭へ文字列も出る。
+	checkTrue("数の頭へ数の器", kind("f : [c ~r] ? c + 1\nf [3 4]").length === 0);
+	checkTrue("数の器を展開して渡す", kind("f : [c ~r] ? c / 2\nf [5 6]~").length === 0);
+	checkTrue("数の器を包んで展開して渡す", kind("f : [c ~r] ? c / 2\ng : xs ? f xs~\ng [5 6]").length === 0);
+	checkTrue("名前へ置いた数の器", kind("f : [c ~r] ? c / 2\nxs : [5 6]\nf xs").length === 0);
+	checkTrue("数の積", kind("f : [a b ~r] ? a + b\nf (4 , 5)").length === 0);
+	checkTrue("混在形の数の頭へ数の器", kind("f : n [c ~r] ? c + n\nf 1 [3 4]").length === 0);
+	checkTrue("ストリーム形の数の頭へ数の器", kind("f : x ~xs ? x / 2\nf [5 6]~").length === 0);
+	checkTrue("文字の頭へ文字列", kind("f : [c ~r] ? c = 0u0061\nf `ab`").length === 0);
+	// `__` は種類を語らない（頭は読まれない）。`T | __` は T として読む。
+	checkTrue("数の頭へ __", kind("f : [c ~r] ? c + 1\nf __").length === 0);
+	checkTrue("数の頭へ数か __", kind("f : [c ~r] ? c + 1\ng : n ? n = 0 & 5 | __\nf (g 0)").length === 0);
 }
 
 console.log(`\n${passed}/${total} passed`);

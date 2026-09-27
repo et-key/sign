@@ -70,6 +70,23 @@ check("String ⊕ Int → Unit", lastType("`abc` + 1"), "Unit");
 
 // ---- List 左辺の算術（§3.2 算術族テーブル） ----
 check("List * Int → List（repeat）", lastType("[1 2] * 2"), "List");
+// **文字と文字列の掛け算は繰り返し**（type_system.md §3.6・§3.2、String ≅ List(Char) なので器の `*` と同じ射）。
+check("Char * Int → String（繰り返し）", lastType("0u0061 * 3"), "String");
+check("String * Int → String（繰り返し）", lastType("`ab` * 3"), "String");
+check("Char * Char → Char（回数に位置は置けない、域は保つ）", lastType("0u0061 * 0u0062"), "Char");
+check("Int * Char → Int（数の域）", lastType("2 * 0u0061"), "Int");
+check("Int * String → Unit（型エラー）", lastType("2 * `ab`"), "Unit");
+// **回数になれないものを1つずつ留める**（pass3 の `TEXT_NON_COUNTS`、type_system.md §3.2「回数に文字・文字列・`__` を
+// 置いた形は型エラー」）。値はどれも `__` で解釈器が値で落とすので、集合から1つ抜けても値の検査は緑のまま、型と
+// 診断と断りの名前だけが変わる。
+check("String * Char → Unit（回数に位置は置けない）", lastType("`ab` * 0u0063"), "Unit");
+check("String * String → Unit", lastType("`ab` * `c`"), "Unit");
+check("String * __ → Unit（読みは決めていない、型エラーの側）", lastType("`ab` * __"), "Unit");
+// **数の回数は `Int` だけではない**。生の値は文字の相手なら数（pass3 の `Raw` の節）で、番地の回数は `List * 0x2` と
+// 同じ読み（String ≅ List(Char)）。番地の回数は裁定ではなく器との揃えである。
+check("Char * Raw → String（生の値の回数）", lastType("x : @0x3\n0u0061 * x"), "String");
+check("Char * Address → String（番地の回数、器と同じ読み）", lastType("f : c n ? c * n\nf 0u0061 0x3"), "String");
+check("String * Address → String（番地の回数）", lastType("`ab` * 0x2"), "String");
 check("List ^ Int → List（lift）", lastType("[1 2] ^ 2"), "List");
 check("List / Int → List（split）", lastType("[1 2 3 4] / 2"), "List");
 check("List + List → Unit（+ - % はList左辺で型エラー）", lastType("[1 2] + [3 4]"), "Unit");
@@ -113,7 +130,9 @@ function checkReasons(note, source, want) {
 
 checkReasons("1 + `abc` → 算術族の型不一致を記録", "1 + `abc`", ["arithmetic-type-mismatch"]);
 checkReasons("`abc` + 1 → 同上（両方向とも）", "`abc` + 1", ["arithmetic-type-mismatch"]);
-checkReasons("識別子経由でも追える（x : `abc` / x * 2）", "x : `abc`\nx * 2", ["arithmetic-type-mismatch"]);
+// 文字列の `*` は繰り返し（§3.2）なので、型の不一致の例は `-` で踏む。
+checkReasons("識別子経由でも追える（x : `abc` / x - 2）", "x : `abc`\nx - 2", ["arithmetic-type-mismatch"]);
+checkReasons("識別子経由の繰り返し（x : `abc` / x * 2）→ 診断なし", "x : `abc`\nx * 2", []);
 checkReasons("[1 2] + [3 4] → List左辺の算術が未定義", "[1 2] + [3 4]", ["list-arithmetic-undefined"]);
 checkReasons("5 + 2 → 診断なし", "5 + 2", []);
 // **番地の域に掛け算・冪・階乗の射は無い**（type_system.md §3.6、利用者の決定 2026-09-14）。零射なので `__` へ
@@ -127,6 +146,23 @@ checkReasons("__ * 0x10 → 診断なし（意図された伝播）", "__ * 0x10
 checkReasons("\\a / 2 → 文字を割る射は無い", "0u0061 / 2", ["char-without-arrow"]);
 checkReasons("\\a % 3 → 文字の剰余も", "0u0061 % 3", ["char-without-arrow"]);
 checkReasons("\\a ^ 2 → 文字の冪も", "0u0061 ^ 2", ["char-without-arrow"]);
+checkReasons("\\a * \\b → 回数に位置は置けない", "0u0061 * 0u0062", ["char-without-arrow"]);
+checkReasons("\\a * 3 → 診断なし（繰り返し）", "0u0061 * 3", []);
+checkReasons("`ab` * \\c → 型の不一致", "`ab` * 0u0063", ["arithmetic-type-mismatch"]);
+checkReasons("`ab` * `c` → 型の不一致", "`ab` * `c`", ["arithmetic-type-mismatch"]);
+checkReasons("\\a * @p → 診断なし（生の値の回数）", "x : @0x3\n0u0061 * x", []);
+// **回数の型が決まらないうちに `String` と答えない**（原理4、pass3 の `repeatCountKnown`）。畳み込みの蓄積子に
+// 過渡値が固まると、`\! * \!` が「左辺=String」の型の不一致と記録され、pass4 が Unit で断っていた。
+check("[*] を包んだ関数の c * d → Char（射なし）", lastType("f : s ? [*] s\nf `!!`"), "Char");
+check("[*] を包んだ関数の c * d → 射なしとして記録（型の不一致ではない）", reasons("f : s ? [*] s\nf `!!`").length > 0 && reasons("f : s ? [*] s\nf `!!`").every((r) => r === "char-without-arrow"), true);
+check("回数の型が分からない文字の * は Char のまま（未定義の名前）", lastType("0u0061 * zz"), "Char");
+check("回数の型が分からない文字列の * は String と答えない（未定義の名前）", lastType("`ab` * zz"), "Unit");
+// 回数が族でも文字列の `*` は `String`（繰り返しか回数の型エラーで、`String ⊕ Unit` は `String`）。型の不一致と
+// 記録すると、値（`f `cd` 0x2` は `cdcd`）と食い違う。
+checkReasons("文字列の回数が族（Int と番地で呼ぶ）→ 診断なし", "f : s n ? s * n\nf `ab` 2\nf `cd` 0x2", []);
+check("文字列の右の仮引数は回数（`ab` * n → String）", lastType("f : n ? `ab` * n\nf 3"), "String");
+checkReasons("文字列の右の仮引数は回数 → 診断なし", "f : n ? `ab` * n\nf 3", []);
+checkReasons("畳み込みの回数も仮引数（[*] [a b c]）→ 診断なし", "f : a b c ? [*] [a b c]\nf 0u0021 2 3", []);
 checkReasons("100 / \\a → 診断なし（Int の域）", "100 / 0u0061", []);
 // **生の値は文字の相手なら数として読む**ので、左に置いても数の域（`@p + c` と同じ）。番地の表を流用して
 // いたので、和と差は `Int` なのに割る・剰余・冪だけ「文字の域に射が無い」になっていた。

@@ -1121,8 +1121,10 @@ function addressWithoutArrow(name, leftType, rightType) {
  * **文字の域に射の無い演算か**（type_system.md §3.6「文字の域の射」、利用者の裁定 2026-09-26）。文字は量ではなく
  * 位置なので、割る・剰余・冪は無い。番地の `*` と同じく型は域を保ち（`Char`）、値は `__` になる。
  *
- * 文字の掛け算は繰り返し（`\- * 10`）という別の射で、ここには居ない。割り算が要るのは隔たり（`Int`）の方
- * だけである——`(c - \0) / 16` のように。
+ * 割り算が要るのは隔たり（`Int`）の方だけである——`(c - \0) / 16` のように。
+ *
+ * **文字の掛け算は繰り返しである**（`\- * 10` は長さ 10 の文字列、裁定 2026-09-26）。回数は数なので、回数に
+ * 位置を置く `c * d` には射が無い——位置は量ではない。相手が数なら繰り返しの射があるので、ここには居ない。
  *
  * **域の決め方は番地と1か所だけ違う。** 左辺が `__` なら相手の域（`Unit ⊕ T → T`）で同じだが、**生の値は
  * 数として読む**——文字の相手になれるのはずらし量か隔たりの相手なので（pass3 の `Raw` の節）、`@p / c` は
@@ -1134,10 +1136,13 @@ const CHAR_OPS = new Set(["div", "mod", "pow"]);
 const CHAR_DOMAIN = new Set(["Char"]);
 const CHAR_PARTNERS = new Set(["Int", "Address", "Char", "Raw", "Unit"]);
 const CHAR_WEAK_LEFT_TYPES = new Set(["Unit"]);
+const CHAR_REPEAT_OPS = new Set(["mul"]);
+const CHAR_NON_COUNTS = new Set(["Char"]);
 function charWithoutArrow(name, leftType, rightType) {
-  if (!CHAR_OPS.has(name)) return false;
   const domain = CHAR_WEAK_LEFT_TYPES.has(leftType) ? rightType : leftType;
-  return CHAR_DOMAIN.has(domain) && CHAR_PARTNERS.has(rightType);
+  if (!CHAR_DOMAIN.has(domain)) return false;
+  if (CHAR_REPEAT_OPS.has(name)) return CHAR_NON_COUNTS.has(rightType);
+  return CHAR_OPS.has(name) && CHAR_PARTNERS.has(rightType);
 }
 
 export {

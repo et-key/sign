@@ -1737,7 +1737,8 @@ function genExpr(node, env, em, scope, tail = false) {
 	// 落ちて、**通っていたものが断りに化ける**。
 	// **文字の域の割る・剰余・冪も同じ形である**（layout.js の `charWithoutArrow`、裁定 2026-09-26）。文字は位置
 	// なので射が無く、型は `Char` のまま値は `__`。以前は `/` が `udiv` で符号位置を割り、`%` と `^` は断っていた。
-	const charNoArrow = n.type === "operation" && n.atomType === "Char" && (n.name === "div" || n.name === "mod" || n.name === "pow");
+	// 回数に位置を置く掛け算（`c * d`）も射が無い（相手が数なら繰り返しで、型は `String`）。
+	const charNoArrow = n.type === "operation" && n.atomType === "Char" && (n.name === "div" || n.name === "mod" || n.name === "pow" || n.name === "mul");
 	if (charNoArrow || (n.type === "operation" && n.atomType === "Address" && (n.name === "mul" || n.name === "pow" || n.name === "bit_shift_left" || n.name === "factorial"))) {
 		const operands = n.name === "factorial" ? [n.operand] : [n.left, n.right];
 		const noArrow = charNoArrow ? charWithoutArrow : addressWithoutArrow;
@@ -1812,6 +1813,19 @@ function genExpr(node, env, em, scope, tail = false) {
 				`layer: ${em.conf.layer} では生の番地を算術に使えません（番地の捏造を防ぐため）。` +
 					"番地の算術が要るのは MMIO を扱う layer: 0 だけです——上の層では `$名前`・受け取った参照・分解した先だけが番地になります"
 			);
+		}
+		// **文字と文字列の掛け算は繰り返しである**（type_system.md §3.6「文字の域の射」、裁定 2026-09-26）。結果は器
+		// （`String`）なので、スカラーの `mul` では出せない——以前は符号位置を掛けていた（`\0 * 2` が '`'）。器を作る道
+		// （長さ × 回数の場所と写し）はまだ無いので、名指しで断る。
+		if (n.name === "mul" && n.atomType === "String") {
+			return em.fail(n, "文字の繰り返しはまだ出せません（`c * n`・`s * n` は長さ × n の文字列です。器を作る道がまだありません）");
+		}
+		// **文字の掛け算が `Char` のまま来るのは、回数の型が決まらなかったときだけである**（`c * d` は上の射なしで
+		// `__` を置いた。pass3 の `repeatCountKnown` は分からないことに答えない）。符号位置の `mul` を出すと、解釈器が
+		// 値で繰り返す形を黙って掛け算にするので、名指しで断る（下の番地の掛け算と同じ形）。相手が `__` なら文字の域が
+		// 吸収するので、どちらの読みでも `__` で、出してよい。
+		if (n.name === "mul" && n.atomType === "Char" && !(n.right && n.right.atomType === "Unit")) {
+			return em.fail(n, "文字の繰り返しか射なしかが決まりません（回数の型が決まっていません。`c * n` の n は数、`c * d` は __ です）");
 		}
 		const machine = reduceToMachineType(n.atomType, em.conf.target);
 		if (!machine || machine.class !== "gpr") {
@@ -2483,22 +2497,91 @@ function genExpr(node, env, em, scope, tail = false) {
 		// 型ごとに実体を分ければ両方出せるが、それはまだ出せないので、食い違う呼び出しを名指しする。
 		// **仮引数の型の方は変えない。** 解釈器は `Int` の丈と回り方をノードの型で決めるので、族へ広げると
 		// 数の側の呼び出しが解釈器で壊れる（`f 3` が 1 ではなく 1.5 になる）。
+		//
+		// **分割代入の頭も同じ門を通る。** 頭（`[c ~r]` の `c`）が受けるのは渡された器の要素なので、見るのは
+		// 実引数そのものの種類ではなく要素の種類である。頭の型は本体の字面が決めることがあり（`c * 2` の `2`
+		// から来る既定値の `Int`）、`` f `!` `` と呼ぶと解釈器は文字の繰り返しで `"!!"`、機械は文字列の頭から
+		// 8 byte を数として読んで 66 だった（`c + 1` なら 34 ／ 24866）。2つ目の頭（`[a b ~r]` の `b`）、混在形
+		// （`n [c ~r]`）、ストリーム形（`x ~xs`）、長さ1の器へ持ち上げて渡すスカラーの文字も同じだった。
+		//
+		// **要素の種類が型から読めない実引数は、頭が数なら断る。** 要素型の無い `List`、族、積（`Struct`）は、
+		// 文字の器でありうる。解釈器は値で文字を見分けるので、読めないまま通すと文字が数の命令で読まれても
+		// 誰も気付かない。要素が静的に数と分かる器（`List(Int)`）は、展開して渡しても（`xs~`）断らない。
+		// 積を要素の並びとして読まないのは、頭へは長さ1の器として持ち上がるだけだからである——`(4 , 0x10)` を
+		// `[a ~r]` へ渡すと、機械は積の番地そのものを頭として読んでいた（解釈 -1 ／機械 1090519003）。だから積は
+		// 頭が文字でも断る。頭が文字で、ほかの読めない実引数はまだ通している（`preprocess.sn` の `walk` は型の
+		// 決まらない仮引数を `head_line` へ渡す）。
 		if (sigKept) {
 			// 渡す側の種類は実引数の型が語る（直和なら成員の種類の集まり）。
 			const kindsOfArg = (a) => valueKindsOf(a ? (unwrap(a) || a).atomType : null);
+			// 頭へ渡す実引数の要素の種類。展開（`xs~`）は剥いで読む——器を受ける位置へは器そのものが渡る。
+			// スカラーは長さ1の器へ持ち上げて渡すので（`[x] ≅ x`）その値自身の種類、`String` は文字の器、
+			// 器の要素型はノードか束縛が語る（束縛に無ければ定義の値ノード——`xs : [5 6]` の `xs`）。
+			// 型と要素型が食い違えば両方を数える（`String` なのに要素型は `Int` と言う束縛は、どちらかが嘘）。
+			// `__` は種類を語らない（頭は読まれない）。読めない成員が1つでもあれば `unread` にその型を返す。
+			const elementTypeOfArg = (u) => {
+				const et = elementTypeOfNode(u, env);
+				if (et || !isIdentifierNode(u)) return et;
+				const b = envLookup(env, u.value);
+				const v = b && b.valueNode ? unwrap(b.valueNode) : null;
+				return v && v !== u ? elementTypeOfNode(v, env) : null;
+			};
+			const elementKindsOfArg = (a) => {
+				const u = a ? stripExpand(a) : null;
+				const t = u && typeof u.atomType === "string" ? u.atomType : null;
+				if (!t) return { kinds: [], unread: "型が決まっていない" };
+				const out = new Set();
+				let unread = null;
+				for (const m of t.split(" | ").map((x) => x.trim())) {
+					if (m === "Unit") continue;
+					if (VALUE_KIND[m]) {
+						out.add(VALUE_KIND[m]);
+						continue;
+					}
+					if (m === "String") out.add("文字");
+					const k = valueKindsOf(elementTypeOfArg(u));
+					k.forEach((x) => out.add(x));
+					if (!k.length && m !== "String") unread = m;
+				}
+				return { kinds: [...out].sort(), unread };
+			};
+			let said = "";
 			const kindBad = passed.findIndex((a, i) => {
 				const e = sigKept[i];
 				if (!e || e.error || !e.kinds || !e.kinds.length) return false;
-				const got = kindsOfArg(a, e);
-				return got.length > 0 && got.join() !== e.kinds.join();
+				if (!e.ofElement) {
+					const got = kindsOfArg(a);
+					said = `渡す側は${got.join("か")}`;
+					return got.length > 0 && got.join() !== e.kinds.join();
+				}
+				// 頭は位置で要素を受けるので、要素も頭も1つの種類で揃っていなければ読み違える（`[a b ~r]` で
+				// a が文字、b が数なら、どちらの器を渡しても片方は違う命令で読まれる）。
+				const { kinds: got, unread } = elementKindsOfArg(a);
+				if (got.length > 0 && (got.length !== 1 || e.kinds.length !== 1 || got[0] !== e.kinds[0])) {
+					said = `渡す側の要素は${got.join("か")}`;
+					return true;
+				}
+				// 読めない実引数は、頭が数なら文字でありうるので断る。積は頭の種類によらず断る——長さ1の器として
+				// 持ち上がるだけなので、頭が文字でも積の番地の下位 byte を文字として読む（解釈 97 ／機械 224 だった）。
+				if (unread && (e.kinds.includes("数") || unread === "Struct")) {
+					said = `渡す側の要素は型（${unread}）からは文字か数か読めず`;
+					return true;
+				}
+				return false;
 			});
 			if (kindBad >= 0) {
 				const e = sigKept[kindBad];
+				const sh = e.shape;
+				const who = !e.ofElement
+					? `${bareName(sh.name)} `
+					: sh.stream
+						? `\`${bareName(sh.head)} ~${bareName(sh.rest)}\` の頭`
+						: `\`[${(sh.heads || [sh.head]).map(bareName).join(" ")} ~${bareName(sh.rest)}]\` の頭`;
 				em.pop(total);
 				return em.fail(
 					n,
-					`${callee} の第${kindBad + 1}引数の種類が合いません（渡す側は${kindsOfArg(passed[kindBad], e).join("か")}、` +
-						`受ける側の ${bareName(e.shape.name)} は${e.kinds.join("か")}。文字は位置で数は量なので同じ命令では読めません` +
+					`${callee} の第${kindBad + 1}引数の種類が合いません（${said}、` +
+						`受ける側の ${who}は${e.kinds.join("か")}。文字は位置で数は量なので同じ命令では読めません` +
 						"——型ごとの実体はまだ出せません、type_system.md §3.6）"
 				);
 			}
@@ -10380,6 +10463,9 @@ function paramRegWidths(lambdaNode, em, callees = {}) {
 		const k = valueKindsOf(typeOf(raw));
 		return k.length ? k : valueKindsOf(fallback);
 	};
+	// 分割代入の頭は、どれも渡された器の要素を受ける。頭ごとの束縛の型から種類を集めて署名にする
+	// （`ofElement` の印で、呼ぶ側の門は実引数ではなく要素の種類と比べる）。
+	const kindsOfHeads = (heads) => valueKindsOf(heads.map((h) => typeOf(h)).filter(Boolean).join(" | "));
 	return keep.map((idx) => {
 		let sh = allShapes[idx];
 		if (!sh) return { shape: null, error: "裸の仮引数・デフォルト付き・`[h ~t]`・`[~x]` を出せます（裸の rest はまだ）" };
@@ -10463,6 +10549,8 @@ function paramRegWidths(lambdaNode, em, callees = {}) {
 					regs: 2,
 					elemSize: el.size,
 					signed: SIGNEDNESS[ht] === "signed",
+					kinds: kindsOfHeads(sh.heads),
+					ofElement: true,
 				};
 			}
 			return { shape: sh, regs: 1, layout: null };
@@ -10475,7 +10563,14 @@ function paramRegWidths(lambdaNode, em, callees = {}) {
 		if (slotsOf(headType, em.conf) !== 1) {
 			return { shape: sh, error: `要素そのものが参照で運ぶ値の分割代入はまだ出せません（${headType}）` };
 		}
-		return { shape: sh, regs: 2, elemSize: elem.size, signed: SIGNEDNESS[headType] === "signed" };
+		return {
+			shape: sh,
+			regs: 2,
+			elemSize: elem.size,
+			signed: SIGNEDNESS[headType] === "signed",
+			kinds: kindsOfHeads([sh.head]),
+			ofElement: true,
+		};
 	});
 }
 /**

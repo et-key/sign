@@ -85,6 +85,12 @@ const IDENTITY = "Identity";
 // List左辺で固有の意味を持つのは `*`(repeat)・`^`(lift)・`/`(split) だけ。
 // `+`・`-`・`%` はList/Stringと同様に型エラーで __ へ収束する。
 const LIST_ARITHMETIC_OPS = new Set(["mul", "pow", "div"]);
+// 文字列の繰り返し（`s * n`）の回数になれないもの。文字・文字列は位置と並びで量ではなく、`__` は今までどおり
+// 型エラーの側に置く（`s * __` の読みは決めていない）。
+const TEXT_NON_COUNTS = new Set(["String", "Char", "Unit"]);
+// 文字の繰り返しの回数の型が決まっているか。まだ分からない（`null`）か族（`Scalar` には `Char` も居る）なら、
+// 繰り返し（`String`）か射なし（`Char`）かが決まらない（`arithmeticResultType` の文字の節）。
+const repeatCountKnown = (t) => !!t && !FAMILY_MEMBERS[t];
 
 // 範囲族（list_model.md §2.3）。`~` は単純形式 `[start ~ end]` と、3項形式
 // `[start ~op step ~ end]` の外側を担う。`~+`〜`~^` は step を伴う派生演算子。
@@ -367,7 +373,19 @@ function elementTypeOf(node, env) {
 
 function arithmeticResultType(node, leftType, env) {
   const rightType = inferAtomType(node.right, env);
-  // §3.2: Stringは左右どちらに来ても算術の型エラー（両方向とも __ 消去）
+  // §3.2: Stringは左右どちらに来ても算術の型エラー（両方向とも __ 消去）。
+  // **ただし掛け算は繰り返しである**（type_system.md §3.2、裁定 2026-09-26）。String ≅ List(Char) なので器の `*` と
+  // 同じ射で、回数は数——`` `ab` * 3 `` は `ababab`。回数に文字・文字列・`__` を置いた形は今までどおり型エラー。
+  // 左辺優先なので `` 3 * `ab` `` は数の域のまま（型エラー）。
+  // **回数の型がまだ分からない（`null`）うちは決めない**（原理4）。不動点の途中で答えを決めると、過渡値が束縛に
+  // 固まりうる（下の文字の節で実際に起きた形）。`Unit` なら直和で落ちるので、決まった型が後から入れる。回数が族なら
+  // 決めてよい——どの成員でも答えは繰り返し（`String`）か回数の型エラー（`Unit`、強さの底）で、`String ⊕ Unit` は
+  // `String` である。ここで `Unit` と答えると、`f `ab` 2` と `f `cd` 0x2` の両方で呼ぶ本体が型の不一致と記録され、
+  // 値（`cdcd`）と食い違う。文字の節では族が `String` と `Char` のどちらかを選ぶので、そちらは決められない。
+  if (leftType === "String" && node.name === "mul" && rightType && !TEXT_NON_COUNTS.has(rightType)) {
+    node.elementType = "Char";
+    return "String";
+  }
   if (leftType === "String" || rightType === "String") return "Unit";
   // **番地の域に、掛け算と冪の射は無い**（type_system.md §3.6、利用者の決定 2026-09-14）。
   // 射が無いので零射を通る（原理4）——`` `abc` + 1 `` と同じく `__` へ収束する。
@@ -441,6 +459,18 @@ function arithmeticResultType(node, leftType, env) {
   if (leftType === "Char") {
     if (node.name === "sub" && rightType === "Char") return "Int";
     if (node.name === "sub" && (rightType === "Scalar" || rightType === "Atom")) return "Scalar";
+    // **文字の掛け算は繰り返しである**（type_system.md §3.6「文字の域の射」、裁定 2026-09-26）。文字は長さ1の
+    // 文字列の顔を持つ（`[x] ≅ x`、`String ≅ List(Char)`）ので、`\- * 10` は長さ 10 の文字列。以前は符号位置を
+    // 掛けていた（`\0 * 2` が '`'）。回数に位置を置く `c * d` は上の `charWithoutArrow` が取る。**回数の型が決まって
+    // いなければ決めない**（`repeatCountKnown`、原理4、上の `sub` の節と同じ）——族（`Scalar` には `Char` も居る）は
+    // 繰り返し（`String`）か射なし（`Char`）かを選べない。先に `String` と答えると不動点の過渡値が畳み込みの蓄積子に
+    // 固まり、決まった後の `acc * x`（`String * Char` で型エラー）から蓄積子が文字へ戻れなかった——`[*]` を包んだ関数の
+    // `.ist` が `String List(Char) -> Unit` で、`x + 1` が単位元の側で読まれて 1。以前の `Char` のまま置けば域も
+    // `__` の吸収も保たれ、pass4 はその形を名指しで断る。
+    if (node.name === "mul" && repeatCountKnown(rightType)) {
+      node.elementType = "Char";
+      return "String";
+    }
     return "Char";
   }
   // **`Raw`（生の入力）は最弱である。** 値は在るが型が無いので、相手が具体型なら
@@ -2372,6 +2402,14 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope, bareNames = null,
             refine(side.value, "Scalar");
             continue;
           }
+          // **文字列の右に置いた仮引数は、繰り返しの回数である**（type_system.md §3.2）。回数は数なので、左の文字列は
+          // この仮引数が何かを言っていない——文字列と決めると `f : n ? `ab` * n` を `f 3` で呼んでも「回数に文字列を
+          // 置いた」型エラーになっていた（`s * n` と仮引数どうしで書いた形だけが通っていた）。呼び出しサイトの型か、
+          // 既定の `Int` が決める。
+          if (fromOther === "String" && side === node.right && node.name === "mul") {
+            refine(side.value, "Scalar");
+            continue;
+          }
           // **相手が `Int` なら、それは既定値であって証拠ではない。** `p + 8` の `8` は p が何の数かを
           // 言っていない——p が番地なら和も番地、Float なら和も Float である。
           // だから呼び出しサイトの証拠が出揃うまでは族（`Scalar`）に留め、証拠の来なかった
@@ -3997,6 +4035,16 @@ function collectExportMisuse(node, diagnostics) {
 }
 
 function charWithoutArrowDiagnostic(op) {
+  if (op === "*") {
+    return {
+      level: "information",
+      reason: "char-without-arrow",
+      spec: "type_system.md §3.6",
+      message:
+        `文字の '${op}' の回数が文字なので __ に収束します。文字の掛け算は繰り返し（c * n）で、回数は数です——` +
+        `位置は量ではありません。符号位置を回数にしたいなら数の域へ移してください（c * (0 + d)）`,
+    };
+  }
   return {
     level: "information",
     reason: "char-without-arrow",
