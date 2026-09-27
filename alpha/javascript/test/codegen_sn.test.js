@@ -237,6 +237,11 @@ const EXPECT = {
 	"unitarm.sn": "same",
 	// 括った __ の枝も V（pass4 は括りを剥いで __ そのものかを見る）。綴りの __ だけを見ていた間は U だった。
 	"unitarm_paren.sn": "same",
+	// 両辺が __ の算術（域が Unit）は pass4 も断る。片側だけの __ は相手の域で出す（左が __ の形は unitalu_one、
+	// 右が __ の形は axioms・misc）。断る門が無かった間は、関数の本体でも 0u0000 どうしでも __ を吸収する命令列を出していた。
+	"unitalu.sn": "! unit-alu *",
+	"unitalu2.sn": "! unit-alu +",
+	"unitalu_one.sn": "same",
 	"unitconst.sn": "! unit-const z",
 	// 0u00 に束縛した定数も __ に束縛している（綴りの __ と 0u0000 だけを見ていた）。
 	"unitconst2.sn": "! unit-const z",
