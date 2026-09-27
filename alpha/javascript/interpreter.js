@@ -700,6 +700,11 @@ function constructValues(node, l, r) {
         const isTextSeed = (v, n) => isUnit(v) && !!n && n.atomType === "String";
         if (isUnit(l) && !isTextSeed(l, node.left)) return r;
         if (isUnit(r) && !isTextSeed(r, node.right)) return l;
+        // **残した種は空の文字列として繋ぐ。** 型が `String` の `__` は `` だけではない——写しの基底（`!s : __`）も
+        // 文字列の型を持つ。値が `UNIT` のままだと下の吸収（`textAbsorb`）が文字列と見ず、並びの要素に生の `__` が
+        // 残っていた（`||([- 200,] `ab`) ([- 200,] `cd`)||` が 2、`([* 1,] ``) 1 2` が `[__ 1 2]`）。
+        if (isTextSeed(l, node.left)) l = "";
+        if (isTextSeed(r, node.right)) r = "";
         // tier 10.4（`Lambda` 中置 `Atom` → apply）は演算子表の上では**型による分岐**であり、
         // pass2 は静的に解けた場合だけ apply ノードを作る。ところが「適用の結果が Lambda に
         // なる式」（`[!_] __` → Id射）は、静的には arity 1 が飽和した Atom にしか見えないため
