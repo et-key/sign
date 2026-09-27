@@ -1117,6 +1117,22 @@ function addressWithoutArrow(name, leftType, rightType) {
   return ADDRESS_DOMAIN.has(domain) && ADDRESS_PARTNERS.has(rightType);
 }
 
+/**
+ * **文字の域に射の無い演算か**（type_system.md §3.6「文字の域の射」、利用者の裁定 2026-09-26）。文字は量ではなく
+ * 位置なので、割る・剰余・冪は無い。番地の `*` と同じく型は域を保ち（`Char`）、値は `__` になる。
+ *
+ * 文字の掛け算は繰り返し（`\- * 10`）という別の射で、ここには居ない。割り算が要るのは隔たり（`Int`）の方
+ * だけである——`(c - \0) / 16` のように。域の決め方（左辺が `__` か生の値なら相手の域）は番地と同じ。
+ */
+const CHAR_OPS = new Set(["div", "mod", "pow"]);
+const CHAR_DOMAIN = new Set(["Char"]);
+const CHAR_PARTNERS = new Set(["Int", "Address", "Char", "Raw", "Unit"]);
+function charWithoutArrow(name, leftType, rightType) {
+  if (!CHAR_OPS.has(name)) return false;
+  const domain = WEAK_LEFT_TYPES.has(leftType) ? rightType : leftType;
+  return CHAR_DOMAIN.has(domain) && CHAR_PARTNERS.has(rightType);
+}
+
 export {
   measure,
   layoutOfStruct,
@@ -1143,6 +1159,7 @@ export {
   bareName,
   unparen,
   addressWithoutArrow,
+  charWithoutArrow,
   // **問いの窓口も門のために出す。** `layout.sn` の門は JS の答えをその場で出して突き合わせる
   // （期待値を書き置くと片方だけ直る）。スロット1つ分と詰め方は外からは `layoutOfStruct` 越しに
   // しか引けず、それだと構文木が要る——型の名前と数だけで訊ける入口がこの2つである。

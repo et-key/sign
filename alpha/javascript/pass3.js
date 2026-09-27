@@ -36,7 +36,7 @@ import { OperationError } from "./errors.js";
 // ノードの形を見るだけの述語・名前の綴りを剥ぐ規則・族で割る規則は、layout.js が唯一の
 // 置き場である（理由はそこの `isDefineNode` のコメント）。このファイルでの呼び名
 // （`isSpreadNode` / `bareKey` / `slotsByFamily`）は別名で受ける——写しを持たない。
-import { layoutOfStruct , elementShapeOfList, itemShapeOfListAt, commonSlotShape, isDefineNode, isIdentifierNode, isSlotKeyNode, isExpandNode as isSpreadNode, bareName as bareKey, flattenByFamily as slotsByFamily, addressWithoutArrow, unparen } from "./layout.js";
+import { layoutOfStruct , elementShapeOfList, itemShapeOfListAt, commonSlotShape, isDefineNode, isIdentifierNode, isSlotKeyNode, isExpandNode as isSpreadNode, bareName as bareKey, flattenByFamily as slotsByFamily, addressWithoutArrow, charWithoutArrow, unparen } from "./layout.js";
 import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 const ARITHMETIC_OPS = new Set(["add", "sub", "mul", "div", "mod", "pow"]);
@@ -388,6 +388,8 @@ function arithmeticResultType(node, leftType, env) {
   //
   // 域を保てば `Address + Int` は `Address` なので `absorbsUnit` が吸収し、`__` のまま通る。
   if (addressWithoutArrow(node.name, leftType, rightType)) return "Address";
+  // **文字の域に割る・剰余・冪の射は無い**（type_system.md §3.6「文字の域の射」）。番地と同じく域は保つ。
+  if (charWithoutArrow(node.name, leftType, rightType)) return "Char";
   // **`__` は強さの底である**（爆発律）。
   //
   // 算術は `A × A → A`——積を食って同じ対象を返すので、片方が始対象なら返せる値は
@@ -3993,6 +3995,17 @@ function collectExportMisuse(node, diagnostics) {
   });
 }
 
+function charWithoutArrowDiagnostic(op) {
+  return {
+    level: "information",
+    reason: "char-without-arrow",
+    spec: "type_system.md §3.6",
+    message:
+      `文字の '${op}' は __ に収束します。文字は位置なので、割る・剰余・冪の射がありません——文字でできるのは、` +
+      `ずらす（c + n）・隔たり（c - d、数になる）・繰り返し（c * n）です。数として割りたいなら隔たりを割ってください（(c - \\0) / n）`,
+  };
+}
+
 function addressWithoutArrowDiagnostic(op) {
   return {
     level: "warning",
@@ -4102,7 +4115,16 @@ function collectUnitReason(node, env, diagnostics) {
   //
   // 型の側を変えるのではなく、ここが見るものを「`__` へ収束する節点」に直す。中の各枝は
   // それぞれ `addressWithoutArrow` を自分で問うので、`Address` を通しても広がらない。
-  if (node.atomType !== "Unit" && node.atomType !== "Address") return;
+  if (node.atomType !== "Unit" && node.atomType !== "Address" && node.atomType !== "Char") return;
+  // 文字の域の射なし（`charWithoutArrow`）。致命的な型ではないので information。左辺が字面の `__` の形は
+  // 番地と同じく記録しない。
+  if (node.atomType === "Char") {
+    if (ARITHMETIC_OPS.has(node.name)) {
+      const lt = inferAtomType(node.left, env);
+      if (lt !== "Unit" && charWithoutArrow(node.name, lt, inferAtomType(node.right, env))) diagnostics.push(charWithoutArrowDiagnostic(node.op));
+    }
+    return;
+  }
 
   // 範囲族（§4）: 端点が「点」でない（List / Struct）ため零射へ落ちた場合。
   // `'` の鍵に立つものは範囲ではない（`annotateTypes` の `isSlotKeyIndex` の注記）。

@@ -123,6 +123,12 @@ checkReasons("0x10 ^ 2 → 番地の冪も", "0x10 ^ 2", ["address-without-arrow
 checkReasons("0x5! → 番地の階乗も", "0x5!", ["address-without-arrow"]);
 checkReasons("2 * 0x10 → 診断なし（Int の域）", "2 * 0x10", []);
 checkReasons("__ * 0x10 → 診断なし（意図された伝播）", "__ * 0x10", []);
+// **文字の域に割る・剰余・冪の射は無い**（type_system.md §3.6「文字の域の射」）。致命的な型ではないので information。
+checkReasons("\\a / 2 → 文字を割る射は無い", "0u0061 / 2", ["char-without-arrow"]);
+checkReasons("\\a % 3 → 文字の剰余も", "0u0061 % 3", ["char-without-arrow"]);
+checkReasons("\\a ^ 2 → 文字の冪も", "0u0061 ^ 2", ["char-without-arrow"]);
+checkReasons("100 / \\a → 診断なし（Int の域）", "100 / 0u0061", []);
+checkReasons("\\z - \\a → 診断なし（隔たり）", "0u007A - 0u0061", []);
 // **実行時に決まる番地どうしの和は意味が無い**ので警告する。片方が字面（か字面を束ねた名前）なら、番地を
 // 16進の数でずらす普通の形である。差は距離なので警告しない。
 checkReasons("p + q（どちらも仮引数の番地）→ 警告", "f : p q ? p + q\nf 0x10 0x20", ["address-plus-address"]);

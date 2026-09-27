@@ -38,7 +38,7 @@
 import { reduceToMachineType, widthsOf, UNIT_NICHE_ASM, charSizeOf, charLimitOf, DEFAULT_CHARSET, SIGNEDNESS, literalDigits, literalParts } from "./target_info.js";
 import { envLookup, paramTypeOf } from "./pass1.js";
 import { isBareComment } from "./pass3.js";
-import { passingOf, measure, layoutOfStruct, elementShapeOfList, itemShapeOfListAt, commonSlotShape, flattenProduct, productSlotNodes, isExpandNode, mergeBaseIdentifier, isIdentifierNode, isDefineNode, isSlotKeyNode as isSlotKeyAtom, bareName as slotName, addressWithoutArrow } from "./layout.js";
+import { passingOf, measure, layoutOfStruct, elementShapeOfList, itemShapeOfListAt, commonSlotShape, flattenProduct, productSlotNodes, isExpandNode, mergeBaseIdentifier, isIdentifierNode, isDefineNode, isSlotKeyNode as isSlotKeyAtom, bareName as slotName, addressWithoutArrow, charWithoutArrow } from "./layout.js";
 import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 import { asmOf } from "./operator_table.js";
 
@@ -1708,15 +1708,19 @@ function genExpr(node, env, em, scope, tail = false) {
 	// **型は `Address` のままである**（裁定 2026-09-21）。pass3 が域を保つようになったので、
 	// ここも `Unit` ではなく `Address` で見る——見ないと下の「番地の掛け算は出せません」へ
 	// 落ちて、**通っていたものが断りに化ける**。
-	if (n.type === "operation" && n.atomType === "Address" && (n.name === "mul" || n.name === "pow" || n.name === "bit_shift_left" || n.name === "factorial")) {
+	// **文字の域の割る・剰余・冪も同じ形である**（layout.js の `charWithoutArrow`、裁定 2026-09-26）。文字は位置
+	// なので射が無く、型は `Char` のまま値は `__`。以前は `/` が `udiv` で符号位置を割り、`%` と `^` は断っていた。
+	const charNoArrow = n.type === "operation" && n.atomType === "Char" && (n.name === "div" || n.name === "mod" || n.name === "pow");
+	if (charNoArrow || (n.type === "operation" && n.atomType === "Address" && (n.name === "mul" || n.name === "pow" || n.name === "bit_shift_left" || n.name === "factorial"))) {
 		const operands = n.name === "factorial" ? [n.operand] : [n.left, n.right];
-		if (addressWithoutArrow(n.name, operands[0] && operands[0].atomType, operands[1] && operands[1].atomType)) {
-			const why = "番地の域に射の無い演算の辺";
+		const noArrow = charNoArrow ? charWithoutArrow : addressWithoutArrow;
+		if (noArrow(n.name, operands[0] && operands[0].atomType, operands[1] && operands[1].atomType)) {
+			const why = `${charNoArrow ? "文字" : "番地"}の域に射の無い演算の辺`;
 			if (!genScalar(operands[0], env, em, scope, why)) return false;
 			const at = (em.slot - 1) * 8;
 			if (operands[1] && !genScalar(operands[1], env, em, scope, why)) return false;
 			if (operands[1]) em.pop(1);
-			em.emit(`movz ${SCRATCH[0]}, #0x8000, lsl #48`, `番地の '${n.op}' は射が無い——__`);
+			em.emit(`movz ${SCRATCH[0]}, #0x8000, lsl #48`, `${charNoArrow ? "文字" : "番地"}の '${n.op}' は射が無い——__`);
 			em.store(SCRATCH[0], at);
 			return 1;
 		}

@@ -142,7 +142,10 @@ for (const [listName, list] of [["NOT_YET", NOT_YET], ["NOT_AN_INSTRUCTION", NOT
 // integer_overflow.md §1.1）——検査するかどうかは符号ではなく結果の型が決める。欄の綴りが
 // そのまま命令になるのは、溢れを見ない符号なしの型である。番地の命令は pass4.test.js が綴りを
 // 直に書いて留めている（表から引くと、表の嘘に検査が付いて行く）。
-const UNSIGNED_OF = { cond: ["Address", "0x1000"], alu: ["Char", `${B}a`] };
+// **割り算の符号なしの欄は番地で踏む**（2026-09-26）。文字の域に割る射が無くなった（type_system.md §3.6
+// 「文字の域の射」）ので、文字では `udiv` に届かない。番地の割り算は溢れを見ないので、欄の綴りが1命令で出る
+// （pass4.test.js が `udiv` 1命令を直に留めている）。加減乗は符号で綴りが変わらないので文字のまま。
+const UNSIGNED_OF = { cond: ["Address", "0x1000"], alu: ["Char", `${B}a`], div: ["Address", "0x1000"] };
 const SIGNED_PROBE = {
 	add: "a + R",
 	sub: "a - R",
@@ -168,7 +171,7 @@ const condOf = (insns) => {
 
 for (const [name, template] of Object.entries(SIGNED_PROBE)) {
 	const a = asmOf(name);
-	for (const [kind, arg] of [["Int", "1"], UNSIGNED_OF[a.form]]) {
+	for (const [kind, arg] of [["Int", "1"], UNSIGNED_OF[name] || UNSIGNED_OF[a.form]]) {
 		const want = a.gpr[kind === "Int" ? "signed" : "unsigned"];
 		const other = a.gpr[kind === "Int" ? "unsigned" : "signed"];
 		const expr = template.replace("R", a.form === "cond" && kind === "Address" ? "0x2000" : "2");

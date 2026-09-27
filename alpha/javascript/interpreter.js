@@ -6,7 +6,7 @@ import { OPERATOR_DICT } from "./operator_table.js";
 // 後置 `~` の判定は、ここでは `isStructSpreadLine` という名前で受ける（マージが
 // 「双方に `~`」を条件にしているので、値ではなく**書かれ方**を見る：list_model.md §5.3）。
 // `isSpreadNode` という2つ目の名前も同居していたが、同じ規則の別名で誰も呼んでいない。
-import { isDefineNode, isIdentifierNode, isSlotKeyNode, isExpandNode as isStructSpreadLine, addressWithoutArrow } from "./layout.js";
+import { isDefineNode, isIdentifierNode, isSlotKeyNode, isExpandNode as isStructSpreadLine, addressWithoutArrow, charWithoutArrow } from "./layout.js";
 
 /**
  * 最小インタプリタ（評価器）。Pass2/Pass1b が構築した二分木 AST を評価して値を出す。
@@ -1211,7 +1211,7 @@ function arithOnValues(name, l, r, resultType) {
     const d = typeof r === "string" ? r.codePointAt(0) : r;
     if (d <= 0) return UNIT;
   }
-  if ((name === "div" || name === "mod") && (resultType === "Int" || resultType === "Char")) {
+  if ((name === "div" || name === "mod") && resultType === "Int") {
     const d = typeof r === "string" && [...r].length === 1 ? r.codePointAt(0) : r;
     if (d === 0 || d === 0n) {
       if (name === "mod") return l;
@@ -1246,6 +1246,8 @@ function arithOnValues(name, l, r, resultType) {
   // 越える即値を Sign で読むとここを踏む。
   const bigSide = typeof l === "bigint" || typeof r === "bigint";
   if (lc !== null || (rc !== null && (typeof l === "number" || typeof l === "bigint"))) {
+    // **文字の域に割る・剰余・冪の射は無い**（型の無いポイントフリーは値で見る——型の道と同じ表）。
+    if (lc !== null && charWithoutArrow(name, "Char", rc !== null ? "Char" : isUnit(r) ? "Unit" : "Int")) return UNIT;
     if (isUnit(r)) return l; // 右辺Unit = 単位元（素通し）
     const lv = lc ?? l;
     const rv = rc ?? (typeof r === "number" || typeof r === "bigint" ? r : null);
@@ -1261,9 +1263,8 @@ function arithOnValues(name, l, r, resultType) {
       const fn = ARITH_OPS[name];
       if (!fn) return UNIT;
       out = fn(lv, rv);
-      // **除算は割り目の丈である**（§3.2）。数どうしの道は結果の型が `Int` のときに evalArith が
-      // 丈で切るが、左辺が文字だと結果の型が `Char` なのでそこを通らず、JS の小数が漏れていた
-      // （`0u0064 / 0u0007` が 14.2857…、機械の `udiv` は 14）。
+      // **除算は割り目の丈である**（§3.2）。ここへ来る割り算は右辺だけが文字の形（`[100 /] \a`、左辺が数）
+      // で、結果の型が決まらないポイントフリーでは evalArith の丈の切り方を通らないので、ここで切る。
       if (name === "div" && Number.isFinite(out) && !Number.isInteger(out)) out = Math.trunc(out);
       if (Number.isInteger(out) && !Number.isSafeInteger(out) && BIG_ARITH[name]) {
         const exact = BIG_ARITH[name](BigInt(lv), BigInt(rv));
@@ -1382,6 +1383,8 @@ function evalArith(node, env) {
   // **型は `Address` のままである**（裁定 2026-09-21）。射が無いので値は `__` だが、域から
   // 出るわけではない——`Unit` へ落とすと次の演算に `Int` の法則（単位元）が当たってしまう。
   if (node.atomType === "Address" && addressWithoutArrow(name, node.left && node.left.atomType, node.right && node.right.atomType)) return UNIT;
+  // **文字の域に割る・剰余・冪の射は無い**（layout.js の `charWithoutArrow`）。型は `Char` のまま、値は `__`。
+  if (node.atomType === "Char" && charWithoutArrow(name, node.left && node.left.atomType, node.right && node.right.atomType)) return UNIT;
   // **対象を置けば値が返り、射を置けば射が返る。**
   //
   // `__` は零対象で、初対象と終対象が一致している。演算子の片側に置いたとき、その
@@ -1444,11 +1447,6 @@ function evalArith(node, env) {
   // は `__`）。負の丈は番地ではない。
   if (typeof value === "number" && (node.atomType === "Int" || node.atomType === "Address") && !Number.isInteger(value)) {
     return applyOverflowRule(node.atomType, Math.trunc(value));
-  }
-  // **左辺が `Char` の割り算も丈で切る。** 値が描けない符号位置（負など）に落ちた `Char` は数として
-  // 運ばれるので、文字の道（`arithOnValues` の中で切る）を通らずにここへ来る。
-  if (typeof value === "number" && node.atomType === "Char" && name === "div" && Number.isFinite(value) && !Number.isInteger(value)) {
-    return Math.trunc(value);
   }
   // **溢れ方は型が決める**（integer_overflow.md §1）。`Int` はラップアラウンド、`Address` は
   // `__` へ収束する——不正アドレスの伝播を止めるためである。JS の数値は f64 しか無いので、
