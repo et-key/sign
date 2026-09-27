@@ -114,9 +114,25 @@ const EXPECT = {
 	"deep47.sn": "! deep",
 	"defonly.sn": "same",
 	"div.sn": "same",
+	// 同じ名前の定義は先勝ち（compile が後の行を落とす）。段1が両方出していた間は、関数はラベルが2つ、
+	// 文字列の定数は文が1つ増えて .Lstr の番号がずれていた。最初の定義が定数なら、同じ名前の関数は呼べない。
+	"dup_const.sn": "same",
+	"dup_fn.sn": "same",
+	"dup_kind.sn": "! head f",
 	"edge16.sn": "same",
 	"eight.sn": "same",
 	"eqeq.sn": "! op ==",
+	// export の印（# ## ###）は名前の一部ではない（compile の definedNameOf が剥いで先勝ちを決める）。綴りで比べていた
+	// 間は、#k の後の k を別の名前と読んで文を1つ多く出し、定数を後の定義から読んでいた。印の付いた関数は pass4 が
+	// .global / .hidden を出すので名指しで断る（後に書いた重複なら先勝ちで出さないので一致する）。
+	"export_dup.sn": "same",
+	"export_dup2.sn": "same",
+	"export_fn.sn": "! export #f",
+	"export_fn_dup.sn": "same",
+	// 最初の定義が印の付いた定数なら、同じ名前の関数は呼べない（dup_kind と同じ）。印を剥がずに引くと、後の定義を
+	// 引数の数に数えて型の断り（! type f）に化ける。
+	"export_kind.sn": "! head f",
+	"export_marks.sn": "same",
 	"evenodd.sn": "same",
 	"fact.sn": "same",
 	"ffff48.sn": "same",

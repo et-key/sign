@@ -212,8 +212,10 @@ lw_jc : f [~sg] [~ts] k j [~ps] tc p ?
 lw_arity : p i w ?
 	i >= ||p|| : 0 - 1
 	lw_arity_st (lw_stoks p i) p i w
+`見るのは最初の定義だけ（先勝ち）。最初の定義が定数なら、後に同じ名前の関数があっても呼べない`
 lw_arity_st : [~ts] p i w ?
-	((ts ' 0) == w) & ((ts ' 1) == `:`) & (lw_find ts 2 `?`) : (lw_find ts 2 `?`) - 2
+	((lw_nm (ts ' 0)) == w) & ((ts ' 1) == `:`) & (lw_find ts 2 `?`) : (lw_find ts 2 `?`) - 2
+	((lw_nm (ts ' 0)) == w) & ((ts ' 1) == `:`) : 0 - 1
 	lw_arity p (lw_next p i) w
 `実引数は呼び先の仮引数の型と同じ型で渡す。1本を2本へ持ち上げるのは確保なので断る`
 lw_args : [~ts] k j [~ps] p [~sg] n f ?
@@ -339,7 +341,7 @@ lw_cst : p s i w ?
 `__ に束縛した名前は pass4 が断る（まだ出せない識別子）。撒くと断りが黙った値に化けるので、ここで名指しする。`
 `見るのは綴りではなく型——z : 0u00・z : (__)・z : __ + __ も __ に束縛している`
 lw_cst_st : [~ts] p s i w ?
-	((ts ' 0) == w) & ((ts ' 1) == `:`) : lw_ucst (lw_pure (lw_x ts 2 ||ts|| 2 lw_none 0 p) 1) w
+	((lw_nm (ts ' 0)) == w) & ((ts ' 1) == `:`) : lw_ucst (lw_pure (lw_x ts 2 ||ts|| 2 lw_none 0 p) 1) w
 	lw_cst p s (lw_next s i) w
 lw_ucst : r w ?
 	(lw_ty r) == `Unit` : lw_no (`unit-const ` w)
@@ -421,7 +423,11 @@ lw_pbad : [~pn] i ?
 lw_zip : [~pn] [~sg] i ?
 	i >= ||pn|| : __
 	(lw_pname (pn ' i)) , (sg ' i) , (lw_zip pn sg (i + 1))~
-lw_fst : [~ts] p ?
+`印（#）の付いた関数は、pass4 が .global と .hidden を出す（段2に語が無い）ので名指しで断る。後に書いた`
+`同じ名前の定義なら、上の先勝ちで出さない（compile が落とすので pass4 も出さない）`
+lw_fst : [~ts] p s i ?
+	lw_dup ts s i : __
+	(((ts ' 0) ' 0) = \#) & ((ts ' 1) == `:`) & (lw_find ts 2 `?`) : lw_1 (`! export ` (ts ' 0))
 	((ts ' 1) == `:`) & (lw_find ts 2 `?`) : lw_fn ts (lw_find ts 2 `?`) p
 	__
 `行頭のコメントは前処理の最初の走査が判別して読み捨てている（閉じの直後が後置か空白なら式、それ以外は`
@@ -429,19 +435,35 @@ lw_fst : [~ts] p ?
 `字面そのもの（閉じの後に空白を置いた裸のテキスト。pass4 も文として出さない）と、字面に @~ を付けた取り込み`
 `（compile が定義へ撒く）。後置の付いた字面（~ ! @）は値である——引用符で始まる1語を全部捨てていた間は、`
 `pass4 が断る ! に命令を出し、pass4 が文字列を返す ~ の文で前の文の値を返していた`
-lw_mst : [~ts] p ?
+lw_mst : [~ts] p s i ?
+	lw_dup ts s i : __
 	(||ts|| = 1) & (lw_isstr (ts ' 0)) : __
 	(||ts|| = 1) & (lw_isimp (ts ' 0)) : __
 	((ts ' 1) == `:`) & (lw_find ts 2 `?`) : __
 	(ts ' 1) == `:` : (lw_ws (lw_x ts 2 ||ts|| 2 lw_none 0 p))~ , `S`
 	(lw_ws (lw_x ts 0 ||ts|| 2 lw_none 0 p))~ , `S`
 lw_isimp : w ? (||w|| > 3) & ((w ' (||w|| - 1)) = \~) & ((w ' (||w|| - 2)) = \@) & (lw_isstr (w ' (0 ~ (||w|| - 3))))
+`同じ名前の定義は先に書いた方が勝つ（compile の refuseRedefinitions が後の行を落とす。定義の順序は先勝ち）。`
+`後の定義の文は関数でも定数でも出さない——両方出すと、関数はラベルが2つになってアセンブラが落とし、`
+`定数は文が1つ増えて .Lstr の番号までずれていた`
+`名前は export の印（# ## ###）を剥いで比べる（compile の definedNameOf と同じ）。綴りで比べていた間は、`
+`#k : 1 の後の k : 2 を別の名前と読んで文を1つ多く出し、k を 2 と読んでいた（pass4 は先勝ちで 1）`
+lw_nm : w ?
+	(||w|| > 1) & ((w ' 0) = \#) : lw_nm (w ' (1 ~ (||w|| - 1)))
+	w
+lw_dup : [~ts] s i ? ((ts ' 1) == `:`) & (lw_dup1 s 0 i (lw_nm (ts ' 0)))
+lw_dup1 : s j i w ?
+	j >= i : __
+	lw_dup2 (lw_stoks s j) s j i w
+lw_dup2 : [~ts] s j i w ?
+	((lw_nm (ts ' 0)) == w) & ((ts ' 1) == `:`) : 1
+	lw_dup1 s (lw_next s j) i w
 lw_fns : s i p ?
 	i >= ||s|| : __
-	(lw_fst (lw_stoks s i) p)~ , (lw_fns s (lw_next s i) p)~
+	(lw_fst (lw_stoks s i) p s i)~ , (lw_fns s (lw_next s i) p)~
 lw_main : s i p ?
 	i >= ||s|| : __
-	(lw_mst (lw_stoks s i) p)~ , (lw_main s (lw_next s i) p)~
+	(lw_mst (lw_stoks s i) p s i)~ , (lw_main s (lw_next s i) p)~
 lw_prog : p ist opt ?
 	lw_optck opt : lw_1 (lw_optck opt)
 	(lw_fns p 0 (p , ist))~ , `G` , (lw_main p 0 (p , ist))~ , `D`
