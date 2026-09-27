@@ -730,6 +730,15 @@ check("上がらなかった種は Unit と言わない", entries("f : [x ~xs] ?
 check("呼び出し側から決まる", entries("f : [x ~xs] ? xs\ng : f [1 2 3]"), ["f : List(Int) -> List", "g : List(Int)"]);
 // 本当に `__` を返すものは `Unit` のままである（種と区別が付いている）。
 check("本当に __ を返すなら Unit", entries("f : x ? __"), ["f : Atom -> Unit"]);
+
+// **文字は位置である**（type_system.md §3.6「文字の域の射」、裁定 2026-09-26）。ずらせば文字、
+// 隔たりは数、左辺が数なら数として読む。算術の相手が文字でも仮引数は文字とは言われない
+// ——`\z - n` を `f 1` で呼べば n は数で、結果はずらした文字（以前は n が文字と推され、隔たりになった）。
+check("文字の隔たりは Int", entries("x : 0u007A - 0u0061"), ["x : Int"]);
+check("文字を数でずらすと文字", entries("y : 0u0061 + 1"), ["y : Char"]);
+check("左辺が数なら数として読む", entries("z : 0 + 0u0061"), ["z : Int"]);
+check("数でずらす仮引数は呼び出しが決める", entries("f : n ? 0u007A - n\ng : f 1"), ["f : Int -> Char", "g : Char"]);
+check("文字の仮引数との隔たりは Int", entries("h : c ? c - 0u0030\nk : h 0u0037"), ["h : Char -> Int", "k : Int"]);
 // 再帰は種を必要とする。底から始めて基底ケースが型を決め、次の周回で再帰の枝へ伝わる。
 check("再帰の返値型は従来通り決まる", entries("len : [c ~cs] ? cs & 1 + (len cs) | 1"), ["len : [c cs~] -> Int"]);
 

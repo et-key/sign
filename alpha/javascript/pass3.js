@@ -431,12 +431,22 @@ function arithmeticResultType(node, leftType, env) {
   //
   // 以前ここには `Int + Char → Char` の節があった。右辺の型が結果を決めていたことになり、
   // 左辺優先と食い違う。**節を消すのが直し方**である——強弱が無いものに順序を作らない。
-  if (leftType === "Char") return "Char";
+  //
+  // **位置どうしの隔たりは数である**（利用者の裁定 2026-09-26、type_system.md §3.6「文字の域の射」）。
+  // 文字は量ではなく位置で、ずらし量は `Int` で書く。だから `c - d` は `Int`（負でよい）——以前は
+  // 左辺優先で `Char` のまま返し、負の文字が生まれていた（機械は Char を符号なしで扱うので割れる）。
+  // 相手が族（`Scalar`・`Atom`）なら、ずらしか隔たりかが決まらないので決めない（原理4）。
+  if (leftType === "Char") {
+    if (node.name === "sub" && rightType === "Char") return "Int";
+    if (node.name === "sub" && (rightType === "Scalar" || rightType === "Atom")) return "Scalar";
+    return "Char";
+  }
   // **`Raw`（生の入力）は最弱である。** 値は在るが型が無いので、相手が具体型なら
   // 必ずそちらが勝つ——だからどちらの位置に来ても答えが同じで、**可換が保たれる**
   // （`@p + 0` も `0 + @p` も `Int`）。左辺優先が働くのは「強弱が無いとき」だけで
   // あり、型を持たないものには主張すべき内容が無い。
-  if (leftType === "Raw" && rightType && rightType !== "Raw") return arithmeticResultType(node, rightType, env);
+  // 相手が文字なら、生の入力は数として読む（文字の相手になれるのは、ずらし量か隔たりの相手）。
+  if (leftType === "Raw" && rightType && rightType !== "Raw") return arithmeticResultType(node, rightType === "Char" ? "Int" : rightType, env);
   if (rightType === "Raw" && leftType !== "Raw") return leftType;
 
   // **強弱があるものだけ格子で決まる。無いものは左辺が決める。**
@@ -2348,6 +2358,15 @@ function inferParamTypesFromUsage(bodyNode, paramNames, scope, bareNames = null,
           // `f : k ? k * 0x10` を `f 3` と数で呼んでも必ず `__` になっていた（以前は番地の積として 48）。
           // 呼び出しサイトの型か、既定の `Int` が決める。
           if (fromOther === "Address" && (node.name === "mul" || node.name === "pow")) {
+            refine(side.value, "Scalar");
+            continue;
+          }
+          // **算術の相手が文字でも、仮引数は文字だとは言われていない。** `\z - n` の n は、数ならずらし
+          // （結果は文字）、文字なら隔たり（結果は数）で、相手からは決まらない。文字と決めると呼び出し
+          // サイトの `Int` を上書きし、`f : n ? \z - n` を `f 1` で呼んでも n が文字になっていた——
+          // 隔たりが `Int` になった今は、'y' のつもりの式が黙って 121 に変わる。比較は同種どうしなので
+          // 今のまま（`c = tab` の c は文字）。
+          if (fromOther === "Char" && SCALAR_ARITHMETIC_OPS.has(node.name)) {
             refine(side.value, "Scalar");
             continue;
           }
