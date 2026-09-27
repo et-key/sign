@@ -216,8 +216,8 @@ export const OPERATOR_BY_PRECEDENCE = [
   { // 14
     // 加減算は2の補数で符号あり・符号なしが同じ命令になる。それでも両側に書く（冒頭の注記）。
     // **番地の加減算は、この綴りの上に溢れの検査が乗る**（旗を立てる `adds`/`subs` と niche の
-    // 選択）。検査するかは符号ではなく結果の型が決めるので（`Char` も符号なしだが検査しない）、
-    // 欄ではなく pass4 の `CARRY` が持つ——integer_overflow.md §1.1。
+    // 選択）。検査するかは符号ではなく結果の型が決めるので（`Char` も符号なしで、見るのは桁の旗ではなく文字の
+    // 域——pass4 の `charDomainCheckOf`）、欄ではなく pass4 の `CARRY` が持つ——integer_overflow.md §1.1。
     '+': { position: 'infix', name: 'add', asm: { form: 'alu', axis: 'signed', gpr: { signed: 'add', unsigned: 'add' } } },
     '-': { position: 'infix', name: 'sub', asm: { form: 'alu', axis: 'signed', gpr: { signed: 'sub', unsigned: 'sub' } } },
   },
