@@ -119,6 +119,12 @@ const EXPECT = {
 	"dup_const.sn": "same",
 	"dup_fn.sn": "same",
 	"dup_kind.sn": "! head f",
+	// 前の定義は先頭の文に限らない（dup_mid_*）。定義より前にその名前で始まる文は定義ではない（dup_use_*：`:` を
+	// 見ずに名前だけで重複と読むと、後の定義の文を落とす）。
+	"dup_mid_const.sn": "same",
+	"dup_mid_fn.sn": "same",
+	"dup_use_const.sn": "same",
+	"dup_use_fn.sn": "same",
 	"edge16.sn": "same",
 	"eight.sn": "same",
 	"eqeq.sn": "! op ==",
@@ -197,12 +203,20 @@ const EXPECT = {
 	"post_paren.sn": "! postfix (0u0041)~",
 	"post_str.sn": "! postfix `abc`~",
 	"post_uni.sn": "! postfix 0u0041~",
+	// 16 進の桁の範囲の外にある後置（! は pass4 も断る。@ は pass4 が値 65 を出すが、字面の後置は写さずに断る）。
+	// 桁の判定の端を1字ずらすと、! を桁と読んで命令を出し、@ を桁と読んで 1049 と読み違える。
+	"post_uni_at.sn": "! postfix 0u0041@",
+	"post_uni_bang.sn": "! postfix 0u0041!",
 	"retunit.sn": "same",
 	"rp_lexer_brackets.sn": "same",
 	"rp_parser_has.sn": "same",
 	"slice.sn": "same",
 	// 起点 00 も 0（pass4 は Number(綴り) === 0 を見て命令を出さない）。
 	"slice00.sn": "same",
+	// 起点が 0 と読めるのは字面の数（N）だけ。スロット 0 の仮引数（P 0 1）や、0 に束縛した定数（N 0 X）を
+	// 恒等と読むと、pass4 が出す切り出しの命令が消える。
+	"slice_k0.sn": "same",
+	"slice_p0.sn": "same",
 	"sparam.sn": "same",
 	// 器を返す関数は2本の返値（部分集合の外）。定義で断る（width-ret）のと、先に書いた呼ぶ側で断る
 	// （width）のは別の門で、どちらか片方を外すともう片方のファイルが赤くなる。
@@ -223,6 +237,10 @@ const EXPECT = {
 	"str_stmt_at.sn": "! postfix `abc`@",
 	"str_stmt_bang.sn": "! postfix `abc`!",
 	"str_stmt_tilde.sn": "! postfix `abc`~",
+	// 取り込みは @~ だけ。後置を2つ付けた文（~~ は pass4 が文字列を返す、!~ は pass4 が断る）を取り込みと読むと
+	// 黙って落とす。
+	"str_stmt_bt.sn": "! postfix `abc`!~",
+	"str_stmt_tt.sn": "! postfix `abc`~~",
 	// 行頭の文字列でも後ろに語が続けば値（コメントは1語だけの文字列の文）。
 	"str_top.sn": "same",
 	"streq.sn": "! container-op =",
