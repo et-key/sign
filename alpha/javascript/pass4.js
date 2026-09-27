@@ -1878,7 +1878,12 @@ function genExpr(node, env, em, scope, tail = false) {
 		// だけならその niche を数として足してよい（致命的でない）が、番地へ足すと別の番地が出る。
 		// **文字の域も `__` を吸収する**（type_system.md §3.6「文字の域の射」、裁定 2026-09-26）——外へ出た文字を
 		// 次のずらしで生き返らせない。域の外は `__` なので、ずらした先を見る（`charDomainCheckOf`）。
-		const absorb = n.atomType === "Address" || n.atomType === "Char";
+		// **吸収するかは域で決まる**（左辺の型。左辺が `__` なら相手の型、type_system.md §3.6「文字の域の射」）。結果の型で
+		// 決めていたので、文字どうしの隔たり（域は文字、結果は Int）が死んだ文字を吸収せず、`x : \a + 200` の `x - \a` が
+		// 機械だけ 97 になっていた（解釈器は左辺が文字の値なら吸収する）。番地は結果の型と域が一致するので変わらない。
+		const domainOf = n.left && n.left.atomType === "Unit" ? n.right && n.right.atomType : n.left && n.left.atomType;
+		const absorbs = n.atomType === "Address" ? "番地" : n.atomType === "Char" || domainOf === "Char" ? "文字" : null;
+		const absorb = absorbs !== null;
 		const lMaybe = !cannotBeUnit(n.left, env, scope, absorb);
 		const rMaybe = !cannotBeUnit(n.right, env, scope, absorb);
 		const check = n.atomType === "Address" ? addressCheckOf(mn, n, em) : n.atomType === "Char" ? charDomainCheckOf(mn, n, em) : null;
@@ -1893,12 +1898,12 @@ function genExpr(node, env, em, scope, tail = false) {
 			else em.emit(`${mn} x11, ${SCRATCH[0]}, ${SCRATCH[1]}`, `${n.op}`);
 			if (rMaybe) {
 				em.emit(`cmp ${SCRATCH[1]}, x12`, "右辺が __ か");
-				if (absorb) em.emit("csel x11, x12, x11, eq", `右が __ なら __（${n.atomType === "Char" ? "文字" : "番地"}は吸収する）`);
+				if (absorb) em.emit("csel x11, x12, x11, eq", `右が __ なら __（${absorbs}は吸収する）`);
 				else em.emit(`csel x11, ${SCRATCH[0]}, x11, eq`, "右が __ なら左辺値（完全性公理）");
 			}
 			if (lMaybe) {
 				em.emit(`cmp ${SCRATCH[0]}, x12`, "左辺が __ か");
-				if (absorb) em.emit("csel x11, x12, x11, eq", `左が __ なら __（${n.atomType === "Char" ? "文字" : "番地"}は吸収する）`);
+				if (absorb) em.emit("csel x11, x12, x11, eq", `左が __ なら __（${absorbs}は吸収する）`);
 				else em.emit(`csel x11, ${SCRATCH[1]}, x11, eq`, "左が __ なら右辺値（爆発律）");
 			}
 			em.emit(`mov ${SCRATCH[0]}, x11`);

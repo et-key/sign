@@ -90,6 +90,12 @@ export const SELF_OPTION_WARNINGS = SELF_OPTION.warnings;
  * 辺に持つ所」だけで、素の `Int + Int` は今までどおり `add` 1命令である
  * （`project_sign_critical_overflow` の「critical か否かで検査を払う」はそのまま）。
  * 残り5枚は命令数も指紋も1つも動いていない。
+ *
+ * ## 2026-09-27、`target_info.sn` と `layout.sn` の指紋が動いた。命令数は同じ
+ *
+ * 機械の吸収を**域**（左辺の型）で決めるようにした（`pass4.js`、type_system.md §3.6）。文字どうしの隔たりは結果が
+ * `Int` でも域は文字なので、死んだ文字を吸収する。`target_info.sn` の差は `csel` の2行だけで、選ぶ先が相手の値
+ * （`x9`/`x10`）から niche（`x12`）へ替わった。命令の数と綴り（`csel`）は変わらない。
  */
 export const CORPUS = [
 	{ rel: "alpha/sign/preprocess.sn", front: 0, asm: [{ severity: "information", includes: "beyond: 返す器の上界は見積もりです（撒きながら食う枝を、段ごとに消えたぶんで見積もった" }, { severity: "information", includes: "gap: 返す器の上界は見積もりです（撒きながら食う枝を、段ごとに消えたぶんで見積もった" }, { severity: "information", includes: "walk: 返す器の上界は見積もりです（撒きながら食う枝を、段ごとに消えたぶんで見積もった" }, { severity: "information", includes: "preprocess: 返す器の上界は見積もりです（撒きながら食う枝を、段ごとに消えたぶんで見積もった" }], insn: { full: 3711, plain: 5628 }, digest: { full: "8e35f8d0a07dc74a", plain: "2494ff932efb4e17" } },
@@ -113,7 +119,7 @@ export const CORPUS = [
 	// 分ける小さな走査が乗る。**表だけの枚（`operator_table.sn`）と歩く枚（`preprocess.sn`）の
 	// 中間**で、その両方の代金がこの1枚に立っている——`.rodata` に行く表と、`s ' i` で歩く
 	// match_case の鎖である。`target_info_sn.test.js` が JS 側と答えを突き合わせる。
-	{ rel: "alpha/sign/target_info.sn", front: 0, asm: [], insn: { full: 1299, plain: 2059 }, digest: { full: "84509028dcf43542", plain: "797b248cccc5006b" } },
+	{ rel: "alpha/sign/target_info.sn", front: 0, asm: [], insn: { full: 1299, plain: 2059 }, digest: { full: "899b4c27bfeb237c", plain: "b913afb74d5cfd66" } },
 	// 値の置き方と渡し方。型の名前と数だけで答えられる問い（渡し方の表・構造体の詰め方・番地の域）を
 	// `layout.js` から移した枚で、`target_info.sn` を取り込んで幅を引く。表を引く枝と、直和の綴りを
 	// 1文字ずつ歩く枝と、平行2本の数の列を歩く枝が同居する。`layout_sn.test.js` が JS 側と答えを突き合わせる。
@@ -122,7 +128,7 @@ export const CORPUS = [
 	// 器が宛先に無かった形で、ここでは直に呼ばれていたので値は元から合っていた（layout_sn は同じ答え）。
 	// 同日：比較の右辺が `__` になり得るとき吸収する2命令が入った（4334 → 4369。parser・emit・target_info も同じ理由）。
 	// 2026-09-26：文字が左辺の比較から 0/1 の規則（3命令）を外した（4369 → 4361、target_info も 1303 → 1299）。
-	{ rel: "alpha/sign/layout.sn", front: 0, asm: [], insn: { full: 4361, plain: 6912 }, digest: { full: "0d24a8f3d5d83e5d", plain: "e3c93ab9c4572b28" } },
+	{ rel: "alpha/sign/layout.sn", front: 0, asm: [], insn: { full: 4361, plain: 6912 }, digest: { full: "8b2d8f0f4eee2fd7", plain: "23754b4acd70a9ac" } },
 	{
 		rel: "documents/ja-jp/guide/examples/n-queen/n_queens.sn",
 		front: 0,
