@@ -113,6 +113,12 @@ pre-alpha 実装はアーカイブへ退避した（`documents/ja-jp/impl/append
 - `pass1b.js` — Pass1b（`type_system.md`§5、`@ref`ジェネリック仮引数の具体化）の実装。
   `@`前置演算子で参照される仮引数を検出し、プログラム全体の呼び出しサイトから実引数の
   カテゴリ（Lambda/Atom）を静的に収集する。
+- `runtime_kind.js` — **実行時の種類**の唯一の置き場（RTTI の裁定 2026-09-27：動的な側は RTTI に頼り、
+  静的な側は動的な側が付けた型を信じて RTTI なしで走る）。`UNIT`・`isUnit`・恒等射 `IDENTITY` と、値の形を
+  見る述語（`isIterator`・`isNamedSlots`）、値の種類を pass3 の型の名前で答える `kindOf` を持つ。JS の値で
+  区別できない2組（`Num` ＝ `Int`/`Address`/`Float`、`Chr1` ＝ `Char`/長さ1の `String`）は箱が入るまで割れて
+  いない。`interpreter.js` は `UNIT`・`isUnit` を出し直すので、引いている試験は変わらない。算術の結果の型は
+  `layout.js` の `arithDomain`（表は1つ、読む側は pass3・解釈器・機械の3つ）が決める。
 - `interpreter.js` — 最小インタプリタ（初実装）。`evaluate(node, runtimeEnv)`でPass2/Pass1bの
   ASTを実際に評価する。完全性公理（`f __ = __`）、デフォルト引数・restパラメータへのUnit
   フォールバック、算術/比較演算子のUnit伝播則、`&`/`|`/`;`の短絡評価、多引数関数の一括適用

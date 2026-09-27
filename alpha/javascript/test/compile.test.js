@@ -76,13 +76,13 @@ check("String * Int → String（繰り返し）", lastType("`ab` * 3"), "String
 check("Char * Char → Char（回数に位置は置けない、域は保つ）", lastType("0u0061 * 0u0062"), "Char");
 check("Int * Char → Int（数の域）", lastType("2 * 0u0061"), "Int");
 check("Int * String → Unit（型エラー）", lastType("2 * `ab`"), "Unit");
-// **回数になれないものを1つずつ留める**（pass3 の `TEXT_NON_COUNTS`、type_system.md §3.2「回数に文字・文字列・`__` を
+// **回数になれないものを1つずつ留める**（layout.js の `TEXT_NON_COUNTS`、type_system.md §3.2「回数に文字・文字列・`__` を
 // 置いた形は型エラー」）。値はどれも `__` で解釈器が値で落とすので、集合から1つ抜けても値の検査は緑のまま、型と
 // 診断と断りの名前だけが変わる。
 check("String * Char → Unit（回数に位置は置けない）", lastType("`ab` * 0u0063"), "Unit");
 check("String * String → Unit", lastType("`ab` * `c`"), "Unit");
 check("String * __ → Unit（読みは決めていない、型エラーの側）", lastType("`ab` * __"), "Unit");
-// **数の回数は `Int` だけではない**。生の値は文字の相手なら数（pass3 の `Raw` の節）で、番地の回数は `List * 0x2` と
+// **数の回数は `Int` だけではない**。生の値は文字の相手なら数（layout.js の `arithRow` の `Raw` の行）で、番地の回数は `List * 0x2` と
 // 同じ読み（String ≅ List(Char)）。番地の回数は裁定ではなく器との揃えである。
 check("Char * Raw → String（生の値の回数）", lastType("x : @0x3\n0u0061 * x"), "String");
 check("Char * Address → String（番地の回数、器と同じ読み）", lastType("f : c n ? c * n\nf 0u0061 0x3"), "String");

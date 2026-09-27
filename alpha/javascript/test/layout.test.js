@@ -8,7 +8,7 @@
  * 実行: node test/layout.test.js（`npm test` からも呼ばれる）
  */
 import { compile } from "../compile.js";
-import { measure, layoutOfStruct, alignUp, passingOf } from "../layout.js";
+import { measure, layoutOfStruct, alignUp, passingOf, arithDomain, arithRow } from "../layout.js";
 
 let passed = 0;
 let total = 0;
@@ -351,6 +351,87 @@ check("Unit は何も渡らない", passVia("u : __"), "register/0");
 	}
 	if (ok) passed++;
 	console.log(`${ok ? "OK  " : "FAIL"} 深すぎる入れ子でも落ちない`);
+}
+
+// ---- 算術の域の表（`arithDomain`、type_system.md §3.2・§3.6） ----
+//
+// **表は1つ、読む側は3つ**（pass3・解釈器・機械、RTTI の裁定 2026-09-27）。行の族ごとに代表を置き、答えは直に
+// 書く——pass3 の答えと突き合わせると、pass3 がこの表を引いているので、行の誤りを両側が同じく持つ
+// （[[寄生したオラクル]]）。左辺が域を選び、結果はその域の値か `__` である。
+{
+	const rows = [
+		// 数値の昇格格子：強弱があるもの（精度）だけ格子で決まり、無いもの（符号の有無）は左辺が決める
+		["add", "Int", "Int", "Int"],
+		["add", "Int", "Float", "Float"],
+		["add", "Float", "Int", "Float"],
+		["mul", "Float", "Vector", "Vector"],
+		["add", "Address", "Int", "Address"], // 番地を進める
+		["add", "Int", "Address", "Int"], // 数に数を足す。番地にはならない
+		["sub", "Address", "Address", "Address"],
+		["div", "Address", "Int", "Address"], // 枠（`p / a`）は射がある
+		// `__` は強さの底（`Unit ⊕ T → T`）
+		["add", "Unit", "Int", "Int"],
+		["sub", "Float", "Unit", "Float"],
+		["add", "Unit", "Char", "Char"],
+		["add", "Unit", "Unit", "Unit"],
+		// 番地の域に積・冪の射は無い——域は保つ
+		["mul", "Address", "Int", "Address"],
+		["pow", "Address", "Char", "Address"],
+		["mul", "Unit", "Address", "Address"],
+		["mul", "Raw", "Address", "Address"],
+		["mul", "Address", "Float", "Float"], // 昇格すれば番地の域ではない
+		["mul", "Int", "Address", "Int"], // `8 * p` は数の域
+		// 文字は位置：ずらし・隔たり・繰り返し。割る・剰余・冪と、回数に位置を置く形は射なし（域は保つ）
+		["add", "Char", "Int", "Char"],
+		["sub", "Char", "Char", "Int"],
+		["add", "Int", "Char", "Int"],
+		["div", "Char", "Int", "Char"],
+		["mod", "Unit", "Char", "Char"],
+		["pow", "Char", "Char", "Char"],
+		["mul", "Char", "Int", "String"],
+		["mul", "Char", "Char", "Char"],
+		["mul", "Char", "Unit", "Char"],
+		// 生の値は最弱。文字の相手になるときは数として読む
+		["add", "Raw", "Int", "Int"],
+		["add", "Int", "Raw", "Int"],
+		["div", "Raw", "Char", "Int"],
+		["add", "Raw", "Raw", "Raw"],
+		["add", "Unit", "Raw", "Unit"],
+		// 文字列の域の射は `*`（連結の n 乗）だけ。数の域に文字列の相手は居ない
+		["mul", "String", "Int", "String"],
+		["mul", "String", "Char", "Unit"],
+		["mul", "String", "String", "Unit"],
+		["mul", "String", "Unit", "Unit"],
+		["add", "String", "Int", "Unit"],
+		["pow", "String", "Int", "Unit"],
+		["mul", "Int", "String", "Unit"],
+		// 器の固有の射は `*` `^` `/` だけ
+		["mul", "List", "Int", "List"],
+		["div", "Struct", "Int", "Struct"],
+		["add", "List", "Int", "Unit"],
+		["add", "Struct", "Int", "Unit"],
+		["mul", "List", "Iterator", "List"], // 行の順：器の行が場所の行より先に当たる
+		// 場所と流れは算術の対象でない
+		["add", "Iterator", "Int", "Unit"],
+		["mul", "Int", "Implicit", "Unit"],
+		// 表の外（推論の途中の型・算術の相手にならない型）には答えない——pass3 の `arithmeticTypeInFlight` が持つ
+		["add", "Scalar", "Int", null],
+		["mul", "String", null, null],
+		["sub", "Char", "Atom", null],
+		["add", "Identity", "Int", null],
+	];
+	for (const [op, l, r, want] of rows) check(`算術の域の表: ${op} ${l} ${r} → ${want}`, arithDomain(op, l, r), want);
+	// **行（`arithRow`）は表の外の型にも引かれる**（pass3 の推論中の道）。当たる行が無ければ答えず（`undefined`、残りは
+	// 引いた側が決める）、生の値は相手の型で読み直す——読み直しは引いた側の入口（`reread`）へ戻す。相手の型が
+	// まだ分からなければ読み直さない。
+	const asked = [];
+	const reread = (...a) => (asked.push(a.join(" ")), "R");
+	check("算術の域の表の行: 当たる行が無ければ答えない", arithRow("add", "Int", "List", reread), undefined);
+	check("算術の域の表の行: 表の外の相手はどの行の鍵にもならない", arithRow("add", "Scalar", "Int", reread), undefined);
+	check("算術の域の表の行: 生の値は相手の型で読み直す", [arithRow("add", "Raw", "Scalar", reread), arithRow("div", "Raw", "Char", reread)], ["R", "R"]);
+	check("算術の域の表の行: 読み直しは引いた側の入口へ（文字の相手は数として）", asked, ["add Scalar Scalar", "div Int Char"]);
+	check("算術の域の表の行: 相手が分からなければ読み直さない", [arithRow("add", "Raw", null, reread), asked.length], [undefined, 2]);
+	check("算術の域の表の行: 右の生の値は左の型を通す（左が族でも、族の読みより先に）", arithRow("add", "Container", "Raw", reread), "Container");
 }
 
 console.log(`\n${passed}/${total} passed`);

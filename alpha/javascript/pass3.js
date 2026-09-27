@@ -36,7 +36,7 @@ import { OperationError } from "./errors.js";
 // ノードの形を見るだけの述語・名前の綴りを剥ぐ規則・族で割る規則は、layout.js が唯一の
 // 置き場である（理由はそこの `isDefineNode` のコメント）。このファイルでの呼び名
 // （`isSpreadNode` / `bareKey` / `slotsByFamily`）は別名で受ける——写しを持たない。
-import { layoutOfStruct , elementShapeOfList, itemShapeOfListAt, commonSlotShape, isDefineNode, isIdentifierNode, isSlotKeyNode, isExpandNode as isSpreadNode, bareName as bareKey, flattenByFamily as slotsByFamily, addressWithoutArrow, charWithoutArrow, unparen } from "./layout.js";
+import { layoutOfStruct , elementShapeOfList, itemShapeOfListAt, commonSlotShape, isDefineNode, isIdentifierNode, isSlotKeyNode, isExpandNode as isSpreadNode, bareName as bareKey, flattenByFamily as slotsByFamily, addressWithoutArrow, charWithoutArrow, unparen, arithDomain, arithRow, NUMERIC_TYPES, NON_SCALAR_PLACES } from "./layout.js";
 import { CURSOR_SUFFIXES } from "./stream_desugar.js";
 
 const ARITHMETIC_OPS = new Set(["add", "sub", "mul", "div", "mod", "pow"]);
@@ -64,32 +64,20 @@ function stripImport(n) {
 // ——名前付きスロット（`[key : val]`）と連番スロット（`1, 2, 3`）は同じ構造であり、
 // 名前がコンパイル時にオフセットへ解決されて Pass 4 に残らない点も同じだからである。
 
-// type_system.md §3.2「数値の昇格格子」と算術族の型変換テーブルの実装。
-// 左辺は「どの規則を使うか」を選ぶだけで、数値同士の結果型は昇格格子が決める
-// （＝左辺の型がそのまま結果型になるとは限らない）。
-const NUMERIC_TYPES = new Set(["Int", "Address", "Float", "Vector"]);
-// 数値の昇格格子の順（`arithmeticResultType` が使っている順そのもの）。**下ほど弱い。**
+// type_system.md §3.2「数値の昇格格子」の成員（`NUMERIC_TYPES`）と算術族の型変換テーブル（`arithDomain`）は
+// layout.js にある——**表は1つ、読む側は3つ**（pass3・解釈器・機械）。ここに残るのは推論の状態に依る読み方だけで
+// ある（`arithmeticTypeInFlight`）。
+// 数値の昇格格子の順（`arithDomain` が使っている順そのもの）。**下ほど弱い。**
 // `Int` が最下位であることには意味がある——算術の相手に `1` と書いてあっても、それは
 // 「相手も Int だ」とは言っていない。`Address + 1` も `Float + 1` も普通に書ける形で、
 // 昇格すれば通るからである。したがって Int リテラルは**証拠として一番弱い**。
 const NUMERIC_RANK = { Int: 0, Address: 1, Float: 2, Vector: 3 };
-// 「場所」と「ストリーム」。値ではないので算術・比較の対象にならない（§4 は Scalar を要求）。
-// `Iterator` は範囲族が生む。`Implicit` を生むものは今は無い——前置 `~` は長さ1の器
-// （`List`）を作るようになったので、`'`・前置 `#` が参照を返すようになるまで出番が無い。
-// `~xs + 1` はここではなく List 算術の規則で `__` になる（素の `xs + 1` と同じ理由）。
-const NON_SCALAR_PLACES = new Set(["Implicit", "Iterator"]);
 // 恒等射（真）。Layer 1 の射であって Layer 2 の値ではないので、型の表には載らない。
 // `__` が単位元である以上 `x ⊗ __ ≅ x` であり、`__` の積関手は恒等関手そのものである
 // ——恒等射は `__` から導かれる別の顔であって、独立した型ではない。
 const IDENTITY = "Identity";
-// List左辺で固有の意味を持つのは `*`(repeat)・`^`(lift)・`/`(split) だけ。
-// `+`・`-`・`%` はList/Stringと同様に型エラーで __ へ収束する。
-const LIST_ARITHMETIC_OPS = new Set(["mul", "pow", "div"]);
-// 文字列の域の `*`（連結の n 乗）の回数になれないもの。文字・文字列は位置と並びで量ではない。`__` を回数に
-// 置いた形（`s * __`）も射なしの側に置く。
-const TEXT_NON_COUNTS = new Set(["String", "Char", "Unit"]);
 // 文字の繰り返しの回数の型が決まっているか。まだ分からない（`null`）か族（`Scalar` には `Char` も居る）なら、
-// 繰り返し（`String`）か射なし（`Char`）かが決まらない（`arithmeticResultType` の文字の節）。
+// 繰り返し（`String`）か射なし（`Char`）かが決まらない（`arithmeticTypeInFlight` の文字の節）。
 const repeatCountKnown = (t) => !!t && !FAMILY_MEMBERS[t];
 
 // 範囲族（list_model.md §2.3）。`~` は単純形式 `[start ~ end]` と、3項形式
@@ -371,138 +359,57 @@ function elementTypeOf(node, env) {
   return type;
 }
 
+/**
+ * 算術の結果の型。**具体的な型どうしの表は layout.js の `arithDomain` が1か所で持つ**（表は1つ、読む側は3つ——
+ * pass3・解釈器・機械、RTTI の裁定 2026-09-27）。ここに残るのは推論の状態に依る所だけである: 片方でも表の外の
+ * 型が居る組の読み方（`arithmeticTypeInFlight`）と、結果が文字列のときの要素型の書き込み。
+ */
 function arithmeticResultType(node, leftType, env) {
-  const rightType = inferAtomType(node.right, env);
-  // **左辺が文字列なら文字列の域である**（type_system.md §3.2、裁定 2026-09-26・27）。左辺が域を選ぶので、`s * n` は
-  // 算術の代数の例外ではなく**文字列の代数の射**である。文字列の代数は連結（余積）のモノイドで、`s * n` はその n 乗
-  // ——`s s … s`（n 個の余積）。`s * 0` は空の余積で単位元 `__`。ほかの綴りに射は無い（`^` は直接の計算として
-  // 定まらず、`/` は分数がきれいな逆像になるとは限らないので忘却したものへの適用になる）。回数に文字・文字列・`__`
-  // を置いた形も射なし（型は `Unit`、値は `__`）。数の域に文字列の相手は居ない（`` 3 * `ab` `` も型エラー）。
+  const t = arithmeticTypeOf(node.name, leftType, inferAtomType(node.right, env));
+  // **文字列が返るのは繰り返し（`s * n`・`c * n`）だけで、その要素は文字である**（`String ≅ List(Char)`）。
+  if (t === "String") node.elementType = "Char";
+  return t;
+}
+
+// 両辺の型の名前だけから算術の結果の型を決める入口。表の型どうしは表（`arithDomain`）が、表の外の型が居る組は
+// 推論の途中の読み方（`arithmeticTypeInFlight`）が答える。生の値を相手の型で読み直すとき（`arithRow` の `reread`）も
+// ここへ戻るので、読み直した組がどちらに属しても同じ規則で答える。
+function arithmeticTypeOf(name, leftType, rightType) {
+  return arithDomain(name, leftType, rightType) ?? arithmeticTypeInFlight(name, leftType, rightType);
+}
+
+/**
+ * **片方でも表の外の型が居る組**の算術の結果の型。表の外とは、まだ分からない型（`null`）・族（`Scalar` `Atom`
+ * `Container`）・直和（`Int | List`）と、算術の相手にならない型（`Identity` `Reader`）である。
+ *
+ * **行は表と同じもの（layout.js の `arithRow`）を引く。** 表の外の側はどの行の鍵にも当たらないので、具体的な側が
+ * 行を選ぶ形はそのまま表の答えになる。ここに書くのは、表の外の側が**どちらの行かを選んでしまう**所だけである
+ * ——どれも「分かっていないことを分かったことにしない」（原理4）ので、行を引く前に待つ:
+ *
+ *   - 文字列の繰り返しの回数がまだ分からないうちは `Unit` で待つ。
+ *   - 文字の隔たり・繰り返しは、相手が族なら決めない。
+ *
+ * 行のどれにも当たらなければ、族が居れば結果も族（`Scalar`）、居なければ左辺を通す。
+ */
+function arithmeticTypeInFlight(name, leftType, rightType) {
   // **回数の型がまだ分からない（`null`）うちは決めない**（原理4）。不動点の途中で答えを決めると、過渡値が束縛に
   // 固まりうる（下の文字の節で実際に起きた形）。`Unit` なら直和で落ちるので、決まった型が後から入れる。回数が族なら
-  // 決めてよい——どの成員でも答えは繰り返し（`String`）か回数の型エラー（`Unit`、強さの底）で、`String ⊕ Unit` は
-  // `String` である。ここで `Unit` と答えると、`f `ab` 2` と `f `cd` 0x2` の両方で呼ぶ本体が型の不一致と記録され、
-  // 値（`cdcd`）と食い違う。文字の節では族が `String` と `Char` のどちらかを選ぶので、そちらは決められない。
-  if (leftType === "String") {
-    if (node.name === "mul" && rightType && !TEXT_NON_COUNTS.has(rightType)) {
-      node.elementType = "Char";
-      return "String";
-    }
-    return "Unit";
-  }
-  if (rightType === "String") return "Unit";
-  // **番地の域に、掛け算と冪の射は無い**（type_system.md §3.6、利用者の決定 2026-09-14）。
-  // 射が無いので零射を通る（原理4）——`` `abc` + 1 `` と同じく `__` へ収束する。
-  //
-  // **域は保つ**（利用者の裁定 2026-09-21）。値は `__` だが、型を `Unit` へ落としてはいけない。
-  //
-  // **型とは演算が満たす法則である**（`0_design_principles.md` 原理6、記憶の「型とは演算が
-  // 満たす法則」）。その言い方をすると、`__` の役は域ごとに違う:
-  //
-  //   `Int` の代数      `__` は**単位元**（`__ + 5 = 5`。完全性公理がその単位律）
-  //   `Address` の代数  `__` は**吸収元**（`__ + 5 = __`。番地は生き返らせない）
-  //
-  // **同じ値に2つの法則があるのではなく、域が法則を選ぶ。** だから型が落ちると、値は `__` の
-  // まま同じでも**次の演算に当たる法則が入れ替わる**——実測で `(0x1000 * 2) + 1` が
-  // **両エンジンとも 1** を返していた（`p * 2` が `Unit` へ落ち、`Unit + Int` が `Int` へ
-  // 昇格して単位元の側で読まれる）。利用者：「アドレス型の場合の想定なら、1ではあるけどね…
-  // **これで読み書きされるとたまったものじゃない**」。
-  //
-  // 域を保てば `Address + Int` は `Address` なので `absorbsUnit` が吸収し、`__` のまま通る。
-  if (addressWithoutArrow(node.name, leftType, rightType)) return "Address";
-  // **文字の域に割る・剰余・冪の射は無い**（type_system.md §3.6「文字の域の射」）。番地と同じく域は保つ。
-  if (charWithoutArrow(node.name, leftType, rightType)) return "Char";
-  // **`__` は強さの底である**（爆発律）。
-  //
-  // 算術は `A × A → A`——積を食って同じ対象を返すので、片方が始対象なら返せる値は
-  // 残った方しか無い。型でも同じで `Unit ⊕ T → T` になる。「A と B が出会ったら強い方」
-  // の A に `__` を置くと必ず相手が勝つ、という一点である。
-  //
-  // 以前ここは `Unit` を素通りさせていて、`__ + 3` の型が `Unit` になっていた。値の側は
-  // 3 を出すのに型が `Unit` なので、Pass 4 が「GPR 幅の整数演算だけを出せます（Unit）」で
-  // 止まる——**意味と型が食い違っていた**。
-  //
-  // **相手が `Address` でも型は `T` のままである。** 値の側では、結果が番地なら `__` が両側で
-  // 吸収する（operator_table.md の爆発律の欄の例外、interpreter.js の `absorbsUnit`）ので、
-  // 残るのは相手ではなく `__` である。だが `__` は番地の型の値でもある（niche）ので、型の答えは
-  // 変わらない——そしてその例外を選ぶのが、ここで決まる結果の型である。
-  //
-  // 相手が算術の対象でないとき（String は上で落ちる、List や Implicit は下の規則）は
-  // 通り抜けない。代数の中に居ないものは、底から持ち上がる先が無い。
-  if (leftType === "Unit" && (NUMERIC_TYPES.has(rightType) || rightType === "Char")) return rightType;
-  if (rightType === "Unit" && (NUMERIC_TYPES.has(leftType) || leftType === "Char")) return leftType;
-  if (leftType === "List" || leftType === "Struct") {
-    return LIST_ARITHMETIC_OPS.has(node.name) ? leftType : "Unit";
-  }
-  // 場所（`Implicit`）とストリーム（`Iterator`）は Scalar ではないので算術の対象にならない
-  // （§4: `(L(Scalar) -> R(Scalar)) -> L`）。射が無い＝零射なので `__` へ収束する。
-  // 持ち上げた結果に算術を書いてしまう形（`~xs + 1`）がここに来る——要素型を決める演算は
-  // 持ち上げの**内側**に置くこと（`~(xs + 1)`）。
-  if (NON_SCALAR_PLACES.has(leftType) || NON_SCALAR_PLACES.has(rightType)) return "Unit";
-  // **文字の算術は符号位置の算術である。** `c + 1` で次の文字を取る書き方が成立する
-  // のはこのためで、結果もまた文字である。ただし**足せることと、足した先が文字である
-  // ことは別**なので、charset の外へ出たら `__` になる——そこは値を見る側（インタプリタ
-  // と Pass 4）が決める。型の側は「文字である」とだけ言う。
-  //
-  // `Char` を `Scalar` の成員に入れていないのは算術の対象でないからではなく、昇格格子
-  // （`Int → Address → Float → Vector`）に乗らないからである。文字は数の一種ではない。
-  // **`Char` と `Int` の間に強弱は無い。** 昇格格子は「精度の高い方へ上がる」で決まるが、
-  // 文字は数の一種ではないので上下が付かない——だから格子では決められず、**左辺優先の
-  // 規則**がそのまま働く（§3.2「左辺の**型**が演算の意味を選ぶ」）。
-  //
-  //   `\`a\` + 1`  → `Char`（位置に差を足すと位置）
-  //   `1 + \`a\``  → `Int` （数に数を足すと数。文字にはならない）
-  //
-  // 以前ここには `Int + Char → Char` の節があった。右辺の型が結果を決めていたことになり、
-  // 左辺優先と食い違う。**節を消すのが直し方**である——強弱が無いものに順序を作らない。
-  //
-  // **位置どうしの隔たりは数である**（利用者の裁定 2026-09-26、type_system.md §3.6「文字の域の射」）。
-  // 文字は量ではなく位置で、ずらし量は `Int` で書く。だから `c - d` は `Int`（負でよい）——以前は
-  // 左辺優先で `Char` のまま返し、負の文字が生まれていた（機械は Char を符号なしで扱うので割れる）。
-  // 相手が族（`Scalar`・`Atom`）なら、ずらしか隔たりかが決まらないので決めない（原理4）。
+  // 決めてよい（表の行へ進む）——どの成員でも答えは繰り返し（`String`）か回数の型エラー（`Unit`、強さの底）で、
+  // `String ⊕ Unit` は `String` である。ここで `Unit` と答えると、`f `ab` 2` と `f `cd` 0x2` の両方で呼ぶ本体が型の
+  // 不一致と記録され、値（`cdcd`）と食い違う。文字の節では族が `String` と `Char` のどちらかを選ぶので、そちらは決められない。
+  if (leftType === "String" && !rightType) return "Unit";
   if (leftType === "Char") {
-    if (node.name === "sub" && rightType === "Char") return "Int";
-    if (node.name === "sub" && (rightType === "Scalar" || rightType === "Atom")) return "Scalar";
-    // **文字の掛け算は連結の n 乗である**（type_system.md §3.6「文字の域の射」、裁定 2026-09-26）。文字は長さ1の
-    // 文字列の顔を持つ（`[x] ≅ x`、`String ≅ List(Char)`）ので、`c * n` は文字列の代数の n 乗 `c c … c`——
-    // `\- * 10` は長さ 10 の文字列。以前は符号位置を
-    // 掛けていた（`\0 * 2` が '`'）。回数に位置を置く `c * d` は上の `charWithoutArrow` が取る。**回数の型が決まって
-    // いなければ決めない**（`repeatCountKnown`、原理4、上の `sub` の節と同じ）——族（`Scalar` には `Char` も居る）は
-    // 繰り返し（`String`）か射なし（`Char`）かを選べない。先に `String` と答えると不動点の過渡値が畳み込みの蓄積子に
-    // 固まり、決まった後の `acc * x`（`String * Char` で型エラー）から蓄積子が文字へ戻れなかった——`[*]` を包んだ関数の
-    // `.ist` が `String List(Char) -> Unit` で、`x + 1` が単位元の側で読まれて 1。以前の `Char` のまま置けば域も
-    // `__` の吸収も保たれ、pass4 はその形を名指しで断る。
-    if (node.name === "mul" && repeatCountKnown(rightType)) {
-      node.elementType = "Char";
-      return "String";
-    }
-    return "Char";
+    // 相手が族（`Scalar`・`Atom`）なら、ずらしか隔たりかが決まらないので決めない（原理4）。
+    if (name === "sub" && (rightType === "Scalar" || rightType === "Atom")) return "Scalar";
+    // **回数の型が決まっていなければ決めない**（`repeatCountKnown`、原理4、上の `sub` の節と同じ）——族（`Scalar` には
+    // `Char` も居る）は繰り返し（`String`）か射なし（`Char`）かを選べない。先に `String` と答えると不動点の過渡値が
+    // 畳み込みの蓄積子に固まり、決まった後の `acc * x`（`String * Char` で型エラー）から蓄積子が文字へ戻れなかった
+    // ——`[*]` を包んだ関数の `.ist` が `String List(Char) -> Unit` で、`x + 1` が単位元の側で読まれて 1。以前の
+    // `Char` のまま置けば域も `__` の吸収も保たれ、pass4 はその形を名指しで断る。
+    if (name === "mul" && !repeatCountKnown(rightType)) return "Char";
   }
-  // **`Raw`（生の入力）は最弱である。** 値は在るが型が無いので、相手が具体型なら
-  // 必ずそちらが勝つ——だからどちらの位置に来ても答えが同じで、**可換が保たれる**
-  // （`@p + 0` も `0 + @p` も `Int`）。左辺優先が働くのは「強弱が無いとき」だけで
-  // あり、型を持たないものには主張すべき内容が無い。
-  // 相手が文字なら、生の入力は数として読む（文字の相手になれるのは、ずらし量か隔たりの相手）。
-  if (leftType === "Raw" && rightType && rightType !== "Raw") return arithmeticResultType(node, rightType === "Char" ? "Int" : rightType, env);
-  if (rightType === "Raw" && leftType !== "Raw") return leftType;
-
-  // **強弱があるものだけ格子で決まる。無いものは左辺が決める。**
-  //
-  // `Vector` と `Float` は精度で本当に上なので、どちら側に来ても昇格する（降格しない）。
-  // だが `Address` と `Int` の間に強弱は無い——片方が精度で上なのではなく、**符号の有無
-  // が違うだけ**で、溢れ方が違う（integer_overflow.md）。上下が付かないものに順序を作る
-  // と、右辺が結果を決めることになり左辺優先と食い違う。
-  //
-  //   `番地 + 8` → `Address`（番地を進める）
-  //   `8 + 番地` → `Int`   （数に数を足す。番地にはならない）
-  //
-  // 以前は `Address` が片側にあれば結果も `Address` だった。`Char` の `Int + Char →
-  // Char` と同じ形の誤りで、**強弱の無いものに順序を作っていた**。
-  if (NUMERIC_TYPES.has(leftType) && NUMERIC_TYPES.has(rightType)) {
-    if (leftType === "Vector" || rightType === "Vector") return "Vector";
-    if (leftType === "Float" || rightType === "Float") return "Float";
-    return leftType;
-  }
+  const t = arithRow(name, leftType, rightType, arithmeticTypeOf);
+  if (t !== undefined) return t;
   // **片方が族なら、結果も族である。** `Int + Scalar` を `Int` と答えてはいけない
   // ——相手が Float なら昇格して Float になり、Address なら Address になる。具体型の側を
   // そのまま答えにすると、分かっていないことを分かったと書くことになる（原理4）。
@@ -1970,7 +1877,7 @@ function computeAtomType(node, env) {
       const leftType = inferAtomType(node.left, env);
       if (ARITHMETIC_OPS.has(node.name)) return arithmeticResultType(node, leftType, env);
       // 番地の左シフトは番地の積なので射が無い（layout.js の `addressWithoutArrow`）。
-      // **域は保つ**（裁定 2026-09-21）。上の `arithmeticResultType` と同じ理由——`Unit` へ
+      // **域は保つ**（裁定 2026-09-21）。算術の域の表（layout.js の `arithDomain`）と同じ理由——`Unit` へ
       // 落とすと次の演算に `Int` の法則（`__` が単位元）が当たり、番地から数が生まれる。
       if (node.name === "bit_shift_left" && addressWithoutArrow(node.name, leftType, inferAtomType(node.right, env))) return "Address";
       return leftType; // 左辺が規則を選ぶ（§3.2）。比較・構造比較族は左辺の型が結果型
@@ -2224,7 +2131,7 @@ const FAMILY_MEMBERS = {
   //
   // ただし**昇格格子には乗らない**（`NUMERIC_TYPES` に入れていない）。文字は数の一種
   // ではないので、`Char + Float` は Float にはならない——足せるのは文字と整数だけで、
-  // 結果は文字である（`arithmeticResultType`）。族の成員であることと、格子を昇るのは
+  // 結果は文字である（layout.js の `arithDomain`）。族の成員であることと、格子を昇るのは
   // 別の話である。
   Scalar: new Set(["Int", "Address", "Float", "Vector", "Char"]),
   // **器だとは分かるが、どの器かはまだ分からない。** 仮引数を添字・スライス・撒きする

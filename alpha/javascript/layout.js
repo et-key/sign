@@ -1094,8 +1094,8 @@ function passingOf(node, conf) {
  * も、添字と歩幅という数どうしの積を番地に足す合成であって、番地を掛けてはいない。冪は掛け算の高階で、指数が
  * 負なら番地で割ることになるので、なおさら無い。C でもポインタは `*` `/` `%` の被演算子になれない（C17 6.5.5）。
  *
- * 左辺が `__` か型の無い生の値（`Raw`）なら相手の域で見る（`Unit ⊕ T → T`、`Raw` は最弱——pass3 の
- * `arithmeticResultType` と同じ読み方で、ここを書かれた型のまま訊くと型・診断・解釈器・機械の答えが割れる）。
+ * 左辺が `__` か型の無い生の値（`Raw`）なら相手の域で見る（`Unit ⊕ T → T`、`Raw` は最弱——下の算術の域の表
+ * `arithDomain` と同じ読み方で、ここを書かれた型のまま訊くと型・診断・解釈器・機械の答えが割れる）。
  * 相手の型が決まっていない・族・`Float`/`Vector` なら答えない——昇格すれば番地の域ではなくなるので、
  * 分かっていないことを分かったことにしない（原理4）。`8 * p` は左辺優先で `Int` の域なので、ここでは見ない。
  */
@@ -1127,7 +1127,7 @@ function addressWithoutArrow(name, leftType, rightType) {
  * 位置を置く `c * d` には射が無い——位置は量ではない。相手が数なら繰り返しの射があるので、ここには居ない。
  *
  * **域の決め方は番地と1か所だけ違う。** 左辺が `__` なら相手の域（`Unit ⊕ T → T`）で同じだが、**生の値は
- * 数として読む**——文字の相手になれるのはずらし量か隔たりの相手なので（pass3 の `Raw` の節）、`@p / c` は
+ * 数として読む**——文字の相手になれるのはずらし量か隔たりの相手なので（`arithRow` の `Raw` の行）、`@p / c` は
  * 数の域の割り算である。番地の表（`WEAK_LEFT_TYPES`、生の値は相手の型を取る）を流用していたので、
  * `@p + c` は `Int` なのに `@p / c` だけが「文字の域に射が無い」で `__` になっていた（両エンジンとも `__` で
  * 一致するので検査は緑のままだった）。
@@ -1143,6 +1143,173 @@ function charWithoutArrow(name, leftType, rightType) {
   if (!CHAR_DOMAIN.has(domain)) return false;
   if (CHAR_REPEAT_OPS.has(name)) return CHAR_NON_COUNTS.has(rightType);
   return CHAR_OPS.has(name) && CHAR_PARTNERS.has(rightType);
+}
+
+// type_system.md §3.2「数値の昇格格子」の成員。左辺は「どの規則を使うか」を選ぶだけで、数値同士の結果型は
+// 昇格格子が決める（＝左辺の型がそのまま結果型になるとは限らない）。
+const NUMERIC_TYPES = new Set(["Int", "Address", "Float", "Vector"]);
+// 「場所」と「ストリーム」。値ではないので算術・比較の対象にならない（§4 は Scalar を要求）。
+// `Iterator` は範囲族が生む。`Implicit` を生むものは今は無い——前置 `~` は長さ1の器
+// （`List`）を作るようになったので、`'`・前置 `#` が参照を返すようになるまで出番が無い。
+// `~xs + 1` はここではなく List 算術の規則で `__` になる（素の `xs + 1` と同じ理由）。
+const NON_SCALAR_PLACES = new Set(["Implicit", "Iterator"]);
+// List左辺で固有の意味を持つのは `*`(repeat)・`^`(lift)・`/`(split) だけ。
+// `+`・`-`・`%` はList/Stringと同様に型エラーで __ へ収束する。
+const LIST_ARITHMETIC_OPS = new Set(["mul", "pow", "div"]);
+// 文字列の域の `*`（連結の n 乗）の回数になれないもの。文字・文字列は位置と並びで量ではない。`__` を回数に
+// 置いた形（`s * __`）も射なしの側に置く。
+const TEXT_NON_COUNTS = new Set(["String", "Char", "Unit"]);
+// 表が答える型。**ここに居ないものには答えない**（下の `arithDomain` の頭）。
+const ARITH_TYPES = new Set([...NUMERIC_TYPES, "Char", "String", "Unit", "Raw", "List", "Struct", ...NON_SCALAR_PLACES]);
+
+/**
+ * **算術の域の表**（type_system.md §3.2「数値の昇格格子」、§3.6「番地の域の射」「文字の域の射」）。演算の名前
+ * （`add` `sub` `mul` `div` `mod` `pow`）と両辺の型から、結果の型を返す。**左辺が域を選び、結果はその域の値か
+ * `__` である**——演算は「左辺が選ぶ域 → 結果 | `__`」の射で、行はその射を型の名前で書いたものである。
+ *
+ * **表は1つ、読む側は3つ**（RTTI の裁定 2026-09-27：動的な側は RTTI に頼り、静的な側は動的な側が付けた型を
+ * 信じて RTTI なしで走る）。pass3 は推論した型で、解釈器は値の実行時の種類（`runtime_kind.js`）で、機械は
+ * pass3 の型越しに、同じ表を引く。それぞれが写しを持てば、型・解釈器・機械の答えが割れる（上の
+ * `addressWithoutArrow` の頭に書いた割れ方）。いま引いているのは pass3 だけである。
+ *
+ * **答えるのは表の型どうしだけである**（`ARITH_TYPES`）。まだ分からない型（`null`）・族（`Scalar` `Atom`
+ * `Container`）・直和（`Int | List`）は推論の途中の状態で、どう待つかは不動点の都合である——先に答えると
+ * 過渡値が束縛に固まる。それは pass3 の `arithmeticTypeInFlight` が持つので、ここは `null` を返して答えない
+ * （原理4）。算術の相手にならない型（`Identity` `Reader`）も表の外である。
+ *
+ * **射が無い形は2通りに出る。** 域を保つもの（番地の `*` `^`、文字の `/` `%` `^`、回数に位置を置く `c * d`）は
+ * 域の型を返し、値は `__` である——どれがそうかは `addressWithoutArrow` / `charWithoutArrow` が言う。域を
+ * 持たないもの（文字列の域の `*` 以外の綴り、回数に文字・文字列・`__` を置いた形、数と文字列、器の `+` `-` `%`、
+ * 場所と流れ）は `Unit` を返す。
+ *
+ * 行そのものは `arithRow` が持つ。ここは表の型どうしに限って行を引き、どの行にも当たらない組に答える所である。
+ */
+function arithDomain(name, leftType, rightType) {
+  if (!ARITH_TYPES.has(leftType) || !ARITH_TYPES.has(rightType)) return null;
+  const t = arithRow(name, leftType, rightType, arithDomain);
+  // 行の無い組（`1 + [2]`・`__ + __`・生の値どうし）は、左辺が規則を選ぶ（§3.2）。
+  return t === undefined ? leftType : t;
+}
+
+/**
+ * **算術の域の表の行**を上から順に読み、最初に当たった行の答えを返す。どの行にも当たらなければ `undefined`。
+ *
+ * **行は1か所にしか書かない。** 表の型どうしは `arithDomain` が、片方でも表の外の型（まだ分からない・族・直和）が
+ * 居る組は pass3 の `arithmeticTypeInFlight` が、同じこの行を引く。表の外の型はどの行の鍵にも当たらない
+ * ——`null` は何とも一致せず、族も直和も表の型ではないので、具体的な側が行を選ぶ形だけがそのまま答えになる。
+ * 写しを2つ持つと、行を直した日に推論の途中の道だけが古い規則で答える（`[a : 1] + n` で起きた形）。
+ *
+ * `reread` は、生の値を相手の型として読み直すときに引く表全体の入口である（`arithDomain` か、pass3 の推論中の入口）。
+ * 読み直した組に表の外の型が居れば、表の外の読み方で答えなければならないので、呼ぶ側が渡す。
+ */
+function arithRow(name, leftType, rightType, reread) {
+  // **左辺が文字列なら文字列の域である**（type_system.md §3.2、裁定 2026-09-26・27）。左辺が域を選ぶので、`s * n` は
+  // 算術の代数の例外ではなく**文字列の代数の射**である。文字列の代数は連結（余積）のモノイドで、`s * n` はその n 乗
+  // ——`s s … s`（n 個の余積）。`s * 0` は空の余積で単位元 `__`。ほかの綴りに射は無い（`^` は直接の計算として
+  // 定まらず、`/` は分数がきれいな逆像になるとは限らないので忘却したものへの適用になる）。回数に文字・文字列・`__`
+  // を置いた形も射なし（型は `Unit`、値は `__`）。数の域に文字列の相手は居ない（`` 3 * `ab` `` も型エラー）。
+  if (leftType === "String") return name === "mul" && !TEXT_NON_COUNTS.has(rightType) ? "String" : "Unit";
+  if (rightType === "String") return "Unit";
+  // **番地の域に、掛け算と冪の射は無い**（type_system.md §3.6、利用者の決定 2026-09-14）。
+  // 射が無いので零射を通る（原理4）——`` `abc` + 1 `` と同じく `__` へ収束する。
+  //
+  // **域は保つ**（利用者の裁定 2026-09-21）。値は `__` だが、型を `Unit` へ落としてはいけない。
+  //
+  // **型とは演算が満たす法則である**（`0_design_principles.md` 原理6、記憶の「型とは演算が
+  // 満たす法則」）。その言い方をすると、`__` の役は域ごとに違う:
+  //
+  //   `Int` の代数      `__` は**単位元**（`__ + 5 = 5`。完全性公理がその単位律）
+  //   `Address` の代数  `__` は**吸収元**（`__ + 5 = __`。番地は生き返らせない）
+  //
+  // **同じ値に2つの法則があるのではなく、域が法則を選ぶ。** だから型が落ちると、値は `__` の
+  // まま同じでも**次の演算に当たる法則が入れ替わる**——実測で `(0x1000 * 2) + 1` が
+  // **両エンジンとも 1** を返していた（`p * 2` が `Unit` へ落ち、`Unit + Int` が `Int` へ
+  // 昇格して単位元の側で読まれる）。利用者：「アドレス型の場合の想定なら、1ではあるけどね…
+  // **これで読み書きされるとたまったものじゃない**」。
+  //
+  // 域を保てば `Address + Int` は `Address` なので `absorbsUnit` が吸収し、`__` のまま通る。
+  if (addressWithoutArrow(name, leftType, rightType)) return "Address";
+  // **文字の域に割る・剰余・冪の射は無い**（type_system.md §3.6「文字の域の射」）。番地と同じく域は保つ。
+  if (charWithoutArrow(name, leftType, rightType)) return "Char";
+  // **`__` は強さの底である**（爆発律）。
+  //
+  // 算術は `A × A → A`——積を食って同じ対象を返すので、片方が始対象なら返せる値は
+  // 残った方しか無い。型でも同じで `Unit ⊕ T → T` になる。「A と B が出会ったら強い方」
+  // の A に `__` を置くと必ず相手が勝つ、という一点である。
+  //
+  // 以前ここは `Unit` を素通りさせていて、`__ + 3` の型が `Unit` になっていた。値の側は
+  // 3 を出すのに型が `Unit` なので、Pass 4 が「GPR 幅の整数演算だけを出せます（Unit）」で
+  // 止まる——**意味と型が食い違っていた**。
+  //
+  // **相手が `Address` でも型は `T` のままである。** 値の側では、結果が番地なら `__` が両側で
+  // 吸収する（operator_table.md の爆発律の欄の例外、interpreter.js の `absorbsUnit`）ので、
+  // 残るのは相手ではなく `__` である。だが `__` は番地の型の値でもある（niche）ので、型の答えは
+  // 変わらない——そしてその例外を選ぶのが、ここで決まる結果の型である。
+  //
+  // 相手が算術の対象でないとき（String は上で落ちる、List や Implicit は下の規則）は
+  // 通り抜けない。代数の中に居ないものは、底から持ち上がる先が無い。
+  if (leftType === "Unit" && (NUMERIC_TYPES.has(rightType) || rightType === "Char")) return rightType;
+  if (rightType === "Unit" && (NUMERIC_TYPES.has(leftType) || leftType === "Char")) return leftType;
+  if (leftType === "List" || leftType === "Struct") return LIST_ARITHMETIC_OPS.has(name) ? leftType : "Unit";
+  // 場所（`Implicit`）とストリーム（`Iterator`）は Scalar ではないので算術の対象にならない
+  // （§4: `(L(Scalar) -> R(Scalar)) -> L`）。射が無い＝零射なので `__` へ収束する。
+  // 持ち上げた結果に算術を書いてしまう形（`~xs + 1`）がここに来る——要素型を決める演算は
+  // 持ち上げの**内側**に置くこと（`~(xs + 1)`）。
+  if (NON_SCALAR_PLACES.has(leftType) || NON_SCALAR_PLACES.has(rightType)) return "Unit";
+  // **文字の算術は符号位置の算術である。** `c + 1` で次の文字を取る書き方が成立する
+  // のはこのためで、結果もまた文字である。ただし**足せることと、足した先が文字である
+  // ことは別**なので、charset の外へ出たら `__` になる——そこは値を見る側（インタプリタ
+  // と Pass 4）が決める。型の側は「文字である」とだけ言う。
+  //
+  // `Char` を `Scalar` の成員に入れていないのは算術の対象でないからではなく、昇格格子
+  // （`Int → Address → Float → Vector`）に乗らないからである。文字は数の一種ではない。
+  // **`Char` と `Int` の間に強弱は無い。** 昇格格子は「精度の高い方へ上がる」で決まるが、
+  // 文字は数の一種ではないので上下が付かない——だから格子では決められず、**左辺優先の
+  // 規則**がそのまま働く（§3.2「左辺の**型**が演算の意味を選ぶ」）。
+  //
+  //   `\`a\` + 1`  → `Char`（位置に差を足すと位置）
+  //   `1 + \`a\``  → `Int` （数に数を足すと数。文字にはならない）
+  //
+  // 以前ここには `Int + Char → Char` の節があった。右辺の型が結果を決めていたことになり、
+  // 左辺優先と食い違う。**節を消すのが直し方**である——強弱が無いものに順序を作らない。
+  //
+  // **位置どうしの隔たりは数である**（利用者の裁定 2026-09-26、type_system.md §3.6「文字の域の射」）。
+  // 文字は量ではなく位置で、ずらし量は `Int` で書く。だから `c - d` は `Int`（負でよい）——以前は
+  // 左辺優先で `Char` のまま返し、負の文字が生まれていた（機械は Char を符号なしで扱うので割れる）。
+  if (leftType === "Char") {
+    if (name === "sub" && rightType === "Char") return "Int";
+    // **文字の掛け算は連結の n 乗である**（type_system.md §3.6「文字の域の射」、裁定 2026-09-26）。文字は長さ1の
+    // 文字列の顔を持つ（`[x] ≅ x`、`String ≅ List(Char)`）ので、`c * n` は文字列の代数の n 乗 `c c … c`——
+    // `\- * 10` は長さ 10 の文字列。以前は符号位置を掛けていた（`\0 * 2` が '`'）。回数に位置を置く `c * d` は
+    // 上の `charWithoutArrow` が取る。
+    return name === "mul" ? "String" : "Char";
+  }
+  // **`Raw`（生の入力）は最弱である。** 値は在るが型が無いので、相手が具体型なら
+  // 必ずそちらが勝つ——だからどちらの位置に来ても答えが同じで、**可換が保たれる**
+  // （`@p + 0` も `0 + @p` も `Int`）。左辺優先が働くのは「強弱が無いとき」だけで
+  // あり、型を持たないものには主張すべき内容が無い。
+  // 相手が文字なら、生の入力は数として読む（文字の相手になれるのは、ずらし量か隔たりの相手）。
+  // 相手の型がまだ分からなければ、取る型も無い（読み直さない）。
+  if (leftType === "Raw" && rightType && rightType !== "Raw") return reread(name, rightType === "Char" ? "Int" : rightType, rightType);
+  if (rightType === "Raw" && leftType !== "Raw") return leftType;
+  // **強弱があるものだけ格子で決まる。無いものは左辺が決める。**
+  //
+  // `Vector` と `Float` は精度で本当に上なので、どちら側に来ても昇格する（降格しない）。
+  // だが `Address` と `Int` の間に強弱は無い——片方が精度で上なのではなく、**符号の有無
+  // が違うだけ**で、溢れ方が違う（integer_overflow.md）。上下が付かないものに順序を作る
+  // と、右辺が結果を決めることになり左辺優先と食い違う。
+  //
+  //   `番地 + 8` → `Address`（番地を進める）
+  //   `8 + 番地` → `Int`   （数に数を足す。番地にはならない）
+  //
+  // 以前は `Address` が片側にあれば結果も `Address` だった。`Char` の `Int + Char →
+  // Char` と同じ形の誤りで、**強弱の無いものに順序を作っていた**。
+  if (NUMERIC_TYPES.has(leftType) && NUMERIC_TYPES.has(rightType)) {
+    if (leftType === "Vector" || rightType === "Vector") return "Vector";
+    if (leftType === "Float" || rightType === "Float") return "Float";
+    return leftType;
+  }
+  return undefined;
 }
 
 export {
@@ -1172,6 +1339,12 @@ export {
   unparen,
   addressWithoutArrow,
   charWithoutArrow,
+  // **算術の域の表と、その行と、表が引く型の集まり。** pass3 は族・未定の型を読む所（`arithmeticTypeInFlight`）でも
+  // 同じ行（`arithRow`）を引き、診断でも同じ集まりを引く——写しを置くと、表に行を足した日に片方だけ古くなる。
+  arithDomain,
+  arithRow,
+  NUMERIC_TYPES,
+  NON_SCALAR_PLACES,
   // **問いの窓口も門のために出す。** `layout.sn` の門は JS の答えをその場で出して突き合わせる
   // （期待値を書き置くと片方だけ直る）。スロット1つ分と詰め方は外からは `layoutOfStruct` 越しに
   // しか引けず、それだと構文木が要る——型の名前と数だけで訊ける入口がこの2つである。

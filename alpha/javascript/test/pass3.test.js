@@ -417,5 +417,54 @@ checkWriteArg("その要素の場所なら通る", "f : p ? p # 7\ng : s ? f $(s
 checkWriteArg("可変引数の位置は見ない", "map : f x ~y ? (@f x) , (map y~)\nmap $[* 2] 1 2 3 4 5", 0);
 checkWriteArg("分解で受ける位置も見ない", "f : p [h ~t] ? p # h\nx : 5\nf $x [1 2 3]", 0);
 
+// **表の外の型を相手にした算術**（pass3 の `arithmeticTypeInFlight`）。具体的な型どうしは layout.js の算術の域の表
+// （`arithDomain`、行は layout.test.js が釘付けにする）が決め、片方でも表の外の型が居る組だけを pass3 が読む——ただし
+// 行は表と同じ `arithRow` を引く（写しを持たない）。呼ばれない仮引数は使われ方から族（`Scalar`）に留まり、`&` の後の
+// `|` は直和になるので、その2つで表の外の相手を作る。答えは直に書く——分かっていないことを分かったことにしない
+// （原理4）読み方が、表へ移した後も残っていることと、表の行が推論の途中の道にも効いていること。
+function arithTypesOf(source) {
+	const ops = new Set(["add", "sub", "mul", "div", "mod", "pow"]);
+	const found = [];
+	const seen = new Set();
+	const walk = (n) => {
+		if (!n || typeof n !== "object" || seen.has(n)) return;
+		seen.add(n);
+		if (n.type === "operation" && n.position === "infix" && ops.has(n.name)) found.push(n.atomType + (n.elementType ? `(${n.elementType})` : ""));
+		for (const k of Object.keys(n)) if (k !== "env") walk(n[k]);
+	};
+	compile(source, { parse: parser.parse }).nodes.forEach(walk);
+	return found.join(" ");
+}
+function checkArith(note, source, want) {
+	extra++;
+	const got = arithTypesOf(source);
+	if (got === want) {
+		console.log(`OK   ${note}`);
+		extraPassed++;
+	} else {
+		console.log(`FAIL ${note}`);
+		console.log(`     got:  ${got}`);
+		console.log(`     want: ${want}`);
+	}
+}
+const UNION_G = "g : x ? (x > 0) & 1 | [2 3]\n";
+// **繰り返しの要素は文字である**——文字列の繰り返しだけでなく文字の繰り返し（`c * n`）も `String(Char)`。要素型を
+// 書くのが左辺が文字列のときだけだと、文字の繰り返しが要素型を失う（検証役の変異 N2、どの検査も素通りした）。
+checkArith("文字の繰り返しは String(Char)", "0u0061 * 3", "String(Char)");
+checkArith("文字の仮引数の繰り返しも String(Char)", "f : c n ? c * n\nf 0u0061 3", "String(Char)");
+checkArith("文字列の繰り返しも String(Char)", "`ab` * 2", "String(Char)");
+checkArith("文字 − 族は決めない（隔たりか、ずらしか）", "f : n ? \\a - n", "Scalar");
+checkArith("文字 × 族は決めない（繰り返しか、射なしか）——文字のまま", "f : n ? \\a * n", "Char");
+checkArith("文字列 × 族の回数は繰り返し", "f : n ? `ab` * n", "String(Char)");
+checkArith("文字列 × 直和の回数も繰り返し", "g : x ? (x > 0) & 1 | `ab`\nh : n ? `cd` * (g n)", "String(Char)");
+checkArith("器 + 族は射なし", "f : n ? [1 2] + n", "Unit");
+checkArith("構造体 + 族も射なし（器の行は表と1つ）", "f : n ? [a : 1] + n", "Unit");
+checkArith("器 × 族は器の射（繰り返し）", "f : n ? [1 2] * n", "List");
+checkArith("流れ + 族は射なし", "f : n ? [0 ~+ 1] + n", "Unit");
+checkArith("族 + 流れも射なし", "f : n ? n + [0 ~+ 1]", "Unit");
+checkArith("番地 × 族は族（昇格すれば番地の域ではない）", "f : n ? 0x10 * n", "Scalar");
+checkArith("生の値 + 直和は相手の型（生の値は最弱）", UNION_G + "h : n ? @0x40200000 + (g n)", "Int | List");
+checkArith("直和 + 数は左辺を通す", UNION_G + "h : n ? (g n) + 1", "Int | List");
+
 console.log(`\n${passed + extraPassed}/${cases.length + extra} passed`);
 process.exit(passed === cases.length && extraPassed === extra ? 0 : 1);
