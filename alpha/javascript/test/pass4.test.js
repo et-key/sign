@@ -1515,5 +1515,18 @@ f 1`, "f") || [];
 	checkTrue("数の頭へ数か __", kind("f : [c ~r] ? c + 1\ng : n ? n = 0 & 5 | __\nf (g 0)").length === 0);
 }
 
+// **構造体は算術に使えない**（算術の代数に居ない）。構造体は1本の番地で運ぶので、辺の型を見ないと構造体の番地を
+// 数として足していた（qemu で 1090519009、解釈器は __）。番地 ⊕ 構造体・文字 ⊕ 構造体・名前に置いた構造体も同じ。
+// 欄を引いた形（辺の型は Int）には、この門は掛からない（名前の欄を引く形そのものは pass4 がまだ出せない）。
+{
+	const structAlu = (src, layer = 1) => generateAsm(compile(src, { charset: "ascii" }).nodes, compile(src, { charset: "ascii" }).env, { target: "aarch64_qemu", charset: "ascii", layer }).diagnostics.filter((d) => /構造体は算術に使えません/.test(String(d.message)));
+	checkTrue("数 ⊕ 構造体（仮引数）は断る", structAlu("f : s ? 1 + s\nf [a : 1]").length === 1);
+	checkTrue("番地 ⊕ 構造体（仮引数）は断る", structAlu("f : a b ? a + b\nf 0x10 [a : 1]").length === 1);
+	checkTrue("番地 / 構造体も断る", structAlu("f : a b ? a / b\nf 0x40800000 [a : 1]").length === 1);
+	checkTrue("文字 ⊕ 構造体も断る", structAlu("f : s ? 0u0061 + s\nf [a : 1]").length === 1);
+	checkTrue("名前に置いた構造体も断る", structAlu("x : [a : 1]\n1 + x").length === 1);
+	checkTrue("欄を引いた形（Int）には構造体の門は掛からない", structAlu("f : s ? (s ' a) + 1\nf [a : 1]").length === 0);
+}
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

@@ -1828,6 +1828,14 @@ function genExpr(node, env, em, scope, tail = false) {
 		if (n.name === "mul" && n.atomType === "Char" && !(n.right && n.right.atomType === "Unit")) {
 			return em.fail(n, "文字の繰り返しか射なしかが決まりません（回数の型が決まっていません。`c * n` の n は数、`c * d` は __ です）");
 		}
+		// **構造体は算術の代数に居ない**（type_system.md §3.2、operator_table.md「代数に居ないものは通り抜けない」）。構造体は
+		// 1本の番地で運ぶので、辺の型を見ずに GPR の演算を出すと、構造体の番地そのものを数として足していた——
+		// `f : s ? 1 + s` / `f [a : 1]` が qemu で 1090519009（解釈器は __、診断ゼロ）、番地 ⊕ 構造体も仮引数を通すと
+		// `adds` を出していた。List は2本以上で運ぶので genScalar が先に断っていた。辺の型が構造体なら名指しで断る。
+		const structSide = [n.left, n.right].find((q) => q && q.atomType === "Struct");
+		if (structSide) {
+			return em.fail(n, `構造体は算術に使えません（'${n.op}' の辺が構造体です。構造体は算術の代数に居ないので値は __——欄を引くなら \`s ' 名前\` を使ってください）`);
+		}
 		const machine = reduceToMachineType(n.atomType, em.conf.target);
 		if (!machine || machine.class !== "gpr") {
 			return em.fail(n, `GPR 幅の整数演算だけを出せます（${n.atomType}）`);
