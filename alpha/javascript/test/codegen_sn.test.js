@@ -235,6 +235,8 @@ const EXPECT = {
 	"twoarg_tail.sn": "same",
 	"uncalled.sn": "! type f",
 	"unitarm.sn": "same",
+	// 括った __ の枝も V（pass4 は括りを剥いで __ そのものかを見る）。綴りの __ だけを見ていた間は U だった。
+	"unitarm_paren.sn": "same",
 	"unitconst.sn": "! unit-const z",
 	// 0u00 に束縛した定数も __ に束縛している（綴りの __ と 0u0000 だけを見ていた）。
 	"unitconst2.sn": "! unit-const z",

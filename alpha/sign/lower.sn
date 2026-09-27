@@ -382,9 +382,17 @@ lw_arm : cd v ?
 	(lw_ty v) == `?` : v
 	(lw_ty cd) == `String` : lw_no `width cond`
 	(lw_ty v) , `A` , (lw_ws cd)~ , `T` , `W` , (lw_ws v)~ , `E`
+`枝の値が __ そのもの（括っても同じ）なら V（置き場に幅ぶんの __）。pass4 の isUnitNode は括りを剥いで見る`
+`——綴りの __ だけを見ていた間は、(__) の枝が U（値の __ を積む）になって命令がずれていた。0u0000 は`
+`pass4 でも値の __（U）である`
 lw_val : [~ts] i j [~ps] tc p ?
-	((j - i) = 1) & ((ts ' i) == `__`) : lw_t `Unit` `V`
+	((j - i) = 1) & (lw_bare (ts ' i)) : lw_t `Unit` `V`
 	lw_x ts i j 2 ps tc p
+lw_bare : w ?
+	w == `__` : 1
+	((w ' 0) = \() & ((w ' (||w|| - 1)) = \)) : lw_bare1 (tokens (w ' (1 ~ (||w|| - 2))))
+	__
+lw_bare1 : [~ts] ? (||ts|| = 1) & (lw_bare (ts ' 0))
 
 `--- 文：関数・定数・式 ---`
 `F の語は仮引数ごとの幅の並び（例 F 21 f）。仮引数は裸の名前か [~名前]（分解は部分集合の外）`
