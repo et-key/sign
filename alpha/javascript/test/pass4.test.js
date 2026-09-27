@@ -1453,5 +1453,24 @@ f 1`, "f") || [];
 	checkTrue("場所を渡す呼び出しは出る", wa("f : p ? p # 7\nx : 5\nf $x").length === 0);
 }
 
+// ---- 文字を数の仮引数へ渡す呼び出しは、呼ぶ側の門で断る（type_system.md §3.6「文字の域の射」） ----
+//
+// 呼び先は仮引数の型で命令を選ぶので、文字と数で呼ばれる仮引数は1つの実体では出せない。仮引数の型は
+// 変えず（解釈器は型で `Int` の丈を決める）、食い違う呼び出しだけを名指しする。
+{
+	const kind = (src) => asm(src).diagnostics.filter((d) => d.severity === "error" && /の種類が合いません/.test(String(d.message)));
+	checkTrue("数と文字で呼ぶ：文字の呼び出しを断る", kind("f : c ? c / 2\nf 3\nf 0u0061").length === 1);
+	checkTrue("数と文字で呼ぶ（域の端）", kind("f : c ? c + 1\nf 3\nf 0u007F").length === 1);
+	checkTrue("包んで渡す：外の呼び出しを断る", kind("f : c ? c / 2\ng : c ? f c\ng 3\ng 0u0061").length === 1);
+	checkTrue("export の2引数に文字", kind("#g : c n ? (c / 2) + (0 + n)\ng 0u0061 1").length === 1);
+	checkTrue("デフォルトが数と言う仮引数に文字", kind("g :\n\tc : 0\n? c / 2\ng 0u0061").length === 1);
+	checkTrue("文字か数かを返す呼び出しを渡す", kind("pick : n ? n = 0 & 0u0061 | 3\nf : c ? c / 2\nf (pick 0)").length === 1);
+	checkTrue("文字の仮引数に数", kind("f : c ? c = 0u0061\nf 3").length === 1);
+	// 対照：どの呼び出しも同じ種類なら断らない。
+	checkTrue("文字だけで呼ぶなら出る", kind("f : c ? c / 2\nf 0u0061").length === 0);
+	checkTrue("数だけで呼ぶなら出る", kind("f : c ? c / 2\nf 3\nf 5").length === 0);
+	checkTrue("文字の隔たりを数の仮引数へ", kind("f : n ? n / 2\nf (0u007A - 0u0061)").length === 0);
+}
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

@@ -2471,6 +2471,38 @@ function genExpr(node, env, em, scope, tail = false) {
 				);
 			}
 		}
+		// **本数も要素の幅も合っていても、文字か数かが違えば読み方が違う。**
+		//
+		// 呼び先は仮引数の型で命令を選んでいる。文字は位置で数は量なので（type_system.md §3.6
+		// 「文字の域の射」）、片方の命令はもう片方には当てはまらない。`f : c ? c / 2` を `f 3` と
+		// `f 0u0061` の両方で呼ぶと、証拠が食い違うので c は字面の既定値の `Int` のままで、機械は文字にも
+		// `Int` の割り算を当てて 48 を返していた。解釈器は値の文字を見て `__`（文字の域に割る射は無い）
+		// ——診断ゼロで割れていた。包んで渡す形（`g : c ? f c`）、デフォルトが数と言う仮引数に文字が来る形、
+		// 文字か数かを返す呼び出し（`Char | Int`）を渡す形、export の仮引数も同じだった。
+		//
+		// 型ごとに実体を分ければ両方出せるが、それはまだ出せないので、食い違う呼び出しを名指しする。
+		// **仮引数の型の方は変えない。** 解釈器は `Int` の丈と回り方をノードの型で決めるので、族へ広げると
+		// 数の側の呼び出しが解釈器で壊れる（`f 3` が 1 ではなく 1.5 になる）。
+		if (sigKept) {
+			// 渡す側の種類は実引数の型が語る（直和なら成員の種類の集まり）。
+			const kindsOfArg = (a) => valueKindsOf(a ? (unwrap(a) || a).atomType : null);
+			const kindBad = passed.findIndex((a, i) => {
+				const e = sigKept[i];
+				if (!e || e.error || !e.kinds || !e.kinds.length) return false;
+				const got = kindsOfArg(a, e);
+				return got.length > 0 && got.join() !== e.kinds.join();
+			});
+			if (kindBad >= 0) {
+				const e = sigKept[kindBad];
+				em.pop(total);
+				return em.fail(
+					n,
+					`${callee} の第${kindBad + 1}引数の種類が合いません（渡す側は${kindsOfArg(passed[kindBad], e).join("か")}、` +
+						`受ける側の ${bareName(e.shape.name)} は${e.kinds.join("か")}。文字は位置で数は量なので同じ命令では読めません` +
+						"——型ごとの実体はまだ出せません、type_system.md §3.6）"
+				);
+			}
+		}
 		const widths =
 			sigW && sigW.length >= parts.length && sigW.every((x) => x !== null) && parts.every((p, i) => p.w === sigW[i])
 				? sigW
@@ -10291,6 +10323,19 @@ function wrapFrame(bodyLines, slots, name, movedSp = false, alloc = true, peep =
 }
 
 /**
+ * **値の種類——文字か数か。** 同じ1本のレジスタで運ばれても、文字は位置で数は量である
+ * （type_system.md §3.6「文字の域の射」）。直和は成員の種類を集め、`__` は数えない（`T | Unit` は T と
+ * 同じ幅で運ぶ）。種類を持たない型（`Atom`・族・器・`Raw`）は空で、呼ぶ側はそこを確かめない。
+ */
+const VALUE_KIND = { Char: "文字", Int: "数", Address: "数", Float: "数", Vector: "数" };
+function valueKindsOf(type) {
+	if (typeof type !== "string") return [];
+	const out = new Set();
+	for (const t of type.split(" | ")) if (VALUE_KIND[t.trim()]) out.add(VALUE_KIND[t.trim()]);
+	return [...out].sort();
+}
+
+/**
  * 仮引数が引数レジスタを何本ずつ使うかを返す（診断は出さない）。
  *
  * **呼び出しサイトと関数の入口が同じ計算を使う必要がある。** 省略された引数には呼ぶ側が
@@ -10327,6 +10372,14 @@ function paramRegWidths(lambdaNode, em, callees = {}) {
 		const c = et ? elementCellSize(et, em.conf) : null;
 		return c && c.size ? c.size : null;
 	};
+	// **文字か数かも署名である。** 幅が同じ1本でも、呼び先が仮引数の型で選んだ命令は、もう片方の
+	// 種類には当てはまらない（呼ぶ側の門が確かめる）。見るのは本体が読む型——束縛の型——で、
+	// 束縛が種類を語らないときだけ呼び出し側の型へ落ちる。デフォルトが `Int` と言う仮引数は、呼び出し
+	// 側の型が `Char` でも本体は `Int` の命令で出ている（pass3「デフォルト式があれば、その型がその仮引数の型」）。
+	const kindsOfParam = (raw, fallback) => {
+		const k = valueKindsOf(typeOf(raw));
+		return k.length ? k : valueKindsOf(fallback);
+	};
 	return keep.map((idx) => {
 		let sh = allShapes[idx];
 		if (!sh) return { shape: null, error: "裸の仮引数・デフォルト付き・`[h ~t]`・`[~x]` を出せます（裸の rest はまだ）" };
@@ -10355,7 +10408,13 @@ function paramRegWidths(lambdaNode, em, callees = {}) {
 			if (w === null) return { shape: sh, error: `仮引数 ${bareName(sh.name)} の渡し方が決まりません（直和か族）` };
 			// **規則かどうかは入口の判定を変える。** 尽きているかを `len` で見るか
 			// `start` と `end` の関係で見るかが違う（`emitIsUnit`）。
-			return { shape: sh, regs: w, rule: isRuleNode(view, em.conf, lambdaNode.scope), cell: cellOf(sh.name, view.atomType, view.elementType) };
+			return {
+				shape: sh,
+				regs: w,
+				rule: isRuleNode(view, em.conf, lambdaNode.scope),
+				cell: cellOf(sh.name, view.atomType, view.elementType),
+				kinds: kindsOfParam(sh.name, view.atomType),
+			};
 		}
 		// **構文だけでは読み方が決まらない。** `[bar ~this]` は `[h ~t]`（器の頭と残り）とも
 		// `[名前 ~残り]`（構造体を名前で分ける）とも読める——同じ形である。決めるのは型だと
