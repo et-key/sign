@@ -79,6 +79,10 @@ const EXPECT = {
 	"callcond.sn": "same",
 	// 文字の算術は域の検査（charset の外は __）を伴う別の命令列。部分集合の外。
 	"chr_alu.sn": "! char-alu +",
+	// 文字の字面 \` は最後の字が引用符でも文字列ではない。最後の字だけで文字列と見ていた間は、\` だけの文を
+	// 裸のテキストとして読み捨てて前の文の値を返し（chr_bt_stmt）、\`@~ を取り込みとして落としていた（chr_bt_imp）。
+	"chr_bt_imp.sn": "! postfix \\`@~",
+	"chr_bt_stmt.sn": "same",
 	"chr_cmp.sn": "same",
 	// 比較の結果（Char）を算術の辺に置く形。結果の型を Int と取り違えると素の add を黙って出す。
 	"chr_cmpalu.sn": "! char-alu +",
@@ -197,6 +201,12 @@ const EXPECT = {
 	"str_lit.sn": "same",
 	"str_order.sn": "same",
 	"str_ret.sn": "same",
+	// 1語だけの文字列の文でも、後置が付けば値（前処理の判別：閉じの直後が後置か空白なら式）。字面に後置を
+	// 付けた形は写さずに断る。引用符で始まる1語を全部コメントにしていた間は、~ の文で前の文の値を返し、
+	// pass4 が断る ! に命令を出し、@ の文を落としていた。
+	"str_stmt_at.sn": "! postfix `abc`@",
+	"str_stmt_bang.sn": "! postfix `abc`!",
+	"str_stmt_tilde.sn": "! postfix `abc`~",
 	// 行頭の文字列でも後ろに語が続けば値（コメントは1語だけの文字列の文）。
 	"str_top.sn": "same",
 	"streq.sn": "! container-op =",
@@ -361,6 +371,24 @@ check("届いた器の形", [...reached.forms].sort(), ["B", "B（空）", "H", 
 	check("option.ms の target が aarch64_qemu でなければ断る", first(call("lw_prog", preprocess("1\n"), IST0, opt("riscv64", 1, "ascii"))), "! option target");
 	check("option.ms に charset が無ければ断る（既定で埋めない）", first(call("lw_prog", preprocess("1\n"), IST0, "target : aarch64_qemu\nlayer : 1\n")), "! option charset");
 	check("option.ms が揃っていれば断らない", first(call("lw_prog", preprocess("1\n"), IST0, OPT)), "G");
+}
+
+// **ファイルに置けない形も同じ門に通す。** 行末の空白（エディタが落とす）と、取り込み（compile に読み手が要る）。
+// 段1が読み捨てる1語だけの文字列の文はこの2つだけ：裸のテキスト（閉じの後に空白。前処理は式と判別するが、
+// pass4 は文として出さない）と、`` `x`@~ ``（compile が定義へ撒く。ここでは空の枚を読ませる）。
+{
+	const same = (note, src, readImp) => {
+		const { nodes, env: cenv } = compile(src, { parse: parser.parse, readImport: readImp, charset: "ascii" });
+		const g4 = generateAsm(nodes, cenv, { target: conf.target, charset: conf.charset, layer: conf.layer, regAlloc: false, peepholes: false });
+		const ist = generateSignType(nodes, cenv, { scope: "ist" }).text;
+		const ilv = call("lw_prog", preprocess(src), ist, OPT);
+		const asmv = call("g_run", ilv);
+		const d = diffAsm(g4.text, isUnit(asmv) ? "" : String(observe(asmv)));
+		check(`${note}: pass4 の素の出力とバイト一致`, d.same ? "一致" : formatDiff(d, "pass4", "sign"), "一致");
+		check(`${note}: 段1の語の列が pass2 の木からの語の列と同じ`, isUnit(ilv) ? [] : observe(ilv), lowerReference(nodes));
+	};
+	same("裸のテキストの文（閉じの後に空白）は読み捨てる", "5\n`abc` \n");
+	same("取り込みの行は読み捨てる", "`empty.sn`@~\n5\n", () => "");
 }
 
 // **断りは組めない。** `.err` の行はアセンブラが落とすので、断りが黙ったバイナリに化けない。
