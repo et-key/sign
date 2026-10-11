@@ -260,14 +260,16 @@
 			"unobserved": 61,
 			"several": 0,
 			"conflict": 67,
-			"exported": 0
+			"exported": 0,
+			"unplaced": 0
 		},
 		"refusedFunctions": 86,
 		"refusedByClass": {
 			"unobserved": 27,
 			"several": 0,
 			"conflict": 61,
-			"exported": 0
+			"exported": 0,
+			"unplaced": 0
 		},
 		"refused": {
 			"g2": [

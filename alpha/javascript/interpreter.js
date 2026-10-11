@@ -536,7 +536,10 @@ function makePointfreeClosure(node, env, bound) {
 // pass2が判定した「引数の個数が足りない」とは別軸——ここへ来る時点で個数の判断は
 // 既に済んでいる）、残りの仮引数だけを持つ新しいLambdaを返す。
 function makePartialClosure(closure, suppliedArgs) {
-  if (observer !== null) observer.partial(closure, suppliedArgs);
+  // **観測は束縛した値で数える**（記録器を付けたときだけ）。既定値の入った位置は既定値の種類で、直の呼び出し
+  // （`observer.called` が束縛を読む）と同じ——渡した `__` を数えると、その位置は証拠を持たないまま残る。
+  const rec = observer;
+  const boundValues = rec === null ? null : [...suppliedArgs];
   const entries = paramEntriesOf(closure.params);
   const bound = entries.slice(0, suppliedArgs.length);
   const remaining = entries.slice(suppliedArgs.length);
@@ -546,10 +549,15 @@ function makePartialClosure(closure, suppliedArgs) {
     let value = suppliedArgs[i];
     if (isUnit(value)) {
       if (entry.default) value = evaluate(entry.default, capturedEnv);
-      else return UNIT; // 完全性公理：デフォルト無しのパラメータに明示的なUnitが来た場合は崩壊
+      else {
+        if (rec !== null) rec.partial(closure, suppliedArgs);
+        return UNIT; // 完全性公理：デフォルト無しのパラメータに明示的なUnitが来た場合は崩壊
+      }
     }
+    if (boundValues !== null) boundValues[i] = value;
     envDefine(capturedEnv, entry.name, value);
   }
+  if (rec !== null) rec.partial(closure, boundValues);
   const remainingParams = {
     type: "params",
     entries: remaining,
@@ -873,7 +881,9 @@ function isGreedyPointfreeClosure(closure) {
 
 /**
  * **観測の記録器**（observe.js、RTTI の計画 R2）。付いていなければ null で、関数の適用1回・部分適用1回ごとに
- * ここを1度見るだけである——付けていない解釈器は何も数えない。付けたかどうかで値は変わらない（記録器は読むだけ）。
+ * ここを1度読み、あとは読んだ写し（局所の変数）の null を見るだけである——適用はトランポリンの周ごとに1度
+ * （`applyClosure` の `chain`）、部分適用は終わりにもう1度。付けていない解釈器は何も数えない。付けたかどうかで
+ * 値は変わらない（記録器は読むだけ）。
  */
 let observer = null;
 function observeCalls(hooks) {

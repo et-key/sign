@@ -29,6 +29,8 @@
  *   名前付きスロット     pass3 が同じ鍵の Struct・素の Struct・族なら Struct、ほかは断る
  *   公開した関数（`#`）   位置を見ずに関数ごと断る——外の呼び出しは観測にも pass3 にも見えない（pass3 は export された
  *                        関数をジェネリックのまま置く）。観測の走りに出た種類で狭めると `.st` の契約が黙って狭まる
+ *   置く名前が無い       事実になる位置でも、器そのものを受ける名前（裸の名前・括りの rest）が無ければ断る（類 unplaced）
+ *                        ——rest の無い括り（`[a b]`）。置かずに数えると、事実と数えた位置を周回が書き換える
  *
  * 新しい意味の裁定はしない——事実にするのは観測と pass3 が両立する所だけで、両立しなければ名指しで断る。
  * 観測を渡さない compile は今までと1バイトも変わらない（ここは呼ばれない）。
@@ -277,6 +279,7 @@ function reachedNames(nodes) {
 
 const isLambda = (n) => !!n && n.type === "operation" && n.name === "lambda";
 const EXPORTED_TEXT = "公開した関数（#）は外の呼び出しが観測にも pass3 にも見えないので、観測で型を決めない（.st の契約は多相のまま）";
+const UNPLACED_TEXT = "観測の事実を置く名前が無い（rest の無い括りは器そのものを受ける名前を持たない）——置かない事実は周回が書き換える";
 
 /**
  * 仮引数の位置ごとに、器そのものを受ける名前（裸の名前・括りの rest）。括りの頭（`[c ~rest]` の `c`）には事実を置かない
@@ -301,7 +304,7 @@ function planObservedFacts(base, observed) {
   const sigs = signatureTextsOf(base.nodes);
   const { defs, reach } = reachedNames(base.nodes);
   const fns = new Map();
-  const stats = { functions: 0, positions: 0, fixed: 0, echo: 0, refusedPositions: { unobserved: 0, several: 0, conflict: 0, exported: 0 } };
+  const stats = { functions: 0, positions: 0, fixed: 0, echo: 0, refusedPositions: { unobserved: 0, several: 0, conflict: 0, exported: 0, unplaced: 0 } };
   for (const name of reach) {
     const d = defs.get(name);
     if (!d || !isLambda(d.right) || !sigs.has(name)) continue;
@@ -319,7 +322,13 @@ function planObservedFacts(base, observed) {
       continue;
     }
     const o = observed.get(name) || null;
-    const params = sig.params.map((text, i) => decidePosition(o && o.params[i], text));
+    // **置けない事実は断る。** 事実は器そのものを受ける名前（裸の名前・括りの rest）に置く（`receiversOf`）。rest の無い
+    // 括り（`[a b]`）にはその名前が無く、置かないまま数えると周回が自由に書く——事実と数えた位置が推論のまま通る
+    const recv = receiversOf(d.right);
+    const params = sig.params.map((text, i) => {
+      const x = decidePosition(o && o.params[i], text);
+      return x.fact && !(recv[i] && recv[i].recv) ? refuse("unplaced", UNPLACED_TEXT) : x;
+    });
     const ret = decidePosition(o && o.ret, sig.ret);
     stats.functions++;
     for (const x of [...params, ret]) {
@@ -411,8 +420,15 @@ function fixCallsiteTypes(rhs, fixedAt, guard) {
  * @returns 書き換えの試みを数える `guard`
  */
 function installObservedFacts(nodes, env, plan) {
-  // `missing`：事実があるのに置く束縛が見つからなかった位置（置けなかった事実は、周回が自由に書く）
-  const guard = { attempts: 0, fixedFields: [], fixedCallsites: [], missing: 0 };
+  // `missing`：事実があるのに置く束縛が見つからなかった位置。置けなかった事実は周回が自由に書くので、数えるだけでなく
+  // その関数を断る（`missingAt`、確かめる段が類 unplaced で名指しする）。名前の無い括りは決める段が先に断ってあるので、
+  // ここへ来るのはそれ以外の取りこぼしだけである
+  const guard = { attempts: 0, fixedFields: [], fixedCallsites: [], missing: 0, missingAt: new Map() };
+  const miss = (name, where) => {
+    guard.missing++;
+    if (!guard.missingAt.has(name)) guard.missingAt.set(name, []);
+    guard.missingAt.get(name).push(where);
+  };
   const done = new Set();
   for (const node of nodes) {
     if (!isDefineNode(node) || !isIdentifierNode(node.left) || !isLambda(node.right)) continue;
@@ -428,14 +444,14 @@ function installObservedFacts(nodes, env, plan) {
       if (!x || !x.fact) return;
       const fields = { atomType: atomOf(x.fact) };
       if (elemOf(x.fact)) fields.elementType = elemOf(x.fact);
-      if (!(scope && r.recv && fixBinding(scope, r.recv, fields, guard))) guard.missing++;
+      if (!(scope && r.recv && fixBinding(scope, r.recv, fields, guard))) miss(f.name, `仮引数 ${i + 1}`);
       if (!r.whole) fixedAt.push([i, fields.atomType]);
     });
     if (fixedAt.length) fixCallsiteTypes(rhs, fixedAt, guard);
     if (f.ret.fact) {
       const fields = { returns: atomOf(f.ret.fact) };
       if (elemOf(f.ret.fact)) fields.returnsElementType = elemOf(f.ret.fact);
-      if (!fixBinding(env, node.left.value, fields, guard)) guard.missing++;
+      if (!fixBinding(env, node.left.value, fields, guard)) miss(f.name, "返値");
     }
   }
   return guard;
@@ -455,6 +471,15 @@ function argAgrees(fieldsAtom, fieldsElem, arg) {
   if (t !== fieldsAtom) return false;
   if (fieldsElem && arg.elementType && !VAGUE_ATOMS.has(arg.elementType) && arg.elementType !== fieldsElem) return false;
   return true;
+}
+
+/**
+ * 返値の本体の推論（`atomType`・`elementType`）が、事実の型と同じか（呼ぶ側は事実を読み、本体は推論で組む——食い違えば
+ * 2つの意味になる）。要素は、本体が言っていて違うときだけ食い違い（言わないのは知らないだけ——素通しの本体 `? ts` は
+ * 要素を書かない）。
+ */
+function bodyAgrees(want, wantE, got, gotE) {
+  return got === want && !(wantE && gotE && gotE !== wantE);
 }
 
 /** 適用の連なり（`f a b` → `{ base: f, args: [a, b] }`）。 */
@@ -489,15 +514,16 @@ function settleObservedFacts(nodes, env, plan, guard) {
     }
     f.params.forEach((x, i) => x.refuse && add(name, x.refuse.cls, `仮引数 ${i + 1}：${x.refuse.text}`));
     if (f.ret.refuse) add(name, f.ret.refuse.cls, `返値：${f.ret.refuse.text}`);
-    // 返値：本体の推論が事実と同じ型か（呼ぶ側は事実を読み、本体は推論で組む——食い違えば2つの意味になる）。
-    // 要素は、本体が言っていて違うときだけ食い違い（言わないのは知らないだけ——素通しの本体 `? ts` は要素を書かない）
+    // 置く段で置けなかった事実（`installObservedFacts` の `missingAt`）
+    for (const where of guard.missingAt.get(name) || []) add(name, "unplaced", `${where}：${UNPLACED_TEXT}`);
+    // 返値：本体の推論が事実と同じ型か（`bodyAgrees`）
     if (f.ret.fact) {
       const body = rhs.right;
       const want = atomOf(f.ret.fact);
       const wantE = elemOf(f.ret.fact);
       const got = body && body.atomType;
       const gotE = body && body.elementType;
-      if (got !== want || (wantE && gotE && gotE !== wantE)) add(name, "conflict", `返値：観測は ${spell(f.ret.fact)}、本体の推論は ${got === "List" && gotE ? `List(${gotE})` : got || "_"}`);
+      if (!bodyAgrees(want, wantE, got, gotE)) add(name, "conflict", `返値：観測は ${spell(f.ret.fact)}、本体の推論は ${got === "List" && gotE ? `List(${gotE})` : got || "_"}`);
     }
   }
   // 呼ぶ側：事実を置いた仮引数へ、別の型を渡す呼び出しがあれば断る（その呼び出しは観測した走りに無かった型を渡す）
@@ -565,7 +591,7 @@ function settleObservedFacts(nodes, env, plan, guard) {
     for (const [k, v] of Object.entries(fields)) if (!b || b[k] !== v) moved++;
   }
   for (const { rhs, fixedAt } of guard.fixedCallsites) for (const [i, t] of fixedAt) if (!Array.isArray(rhs.callsiteParamTypes) || rhs.callsiteParamTypes[i] !== t) moved++;
-  const byClass = { unobserved: 0, several: 0, conflict: 0, exported: 0 };
+  const byClass = { unobserved: 0, several: 0, conflict: 0, exported: 0, unplaced: 0 };
   for (const rs of refusals.values()) for (const c of new Set(rs.map((r) => r.cls))) byClass[c]++;
   return {
     ...plan.stats,
@@ -579,4 +605,4 @@ function settleObservedFacts(nodes, env, plan, guard) {
   };
 }
 
-export { planObservedFacts, installObservedFacts, settleObservedFacts, parseType, decide, spell };
+export { planObservedFacts, installObservedFacts, settleObservedFacts, parseType, decide, spell, argAgrees, bodyAgrees };
