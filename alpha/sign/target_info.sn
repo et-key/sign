@@ -111,7 +111,7 @@ charset_of : cs ? charsets ' cs~
 `真は前提そのものを返す。__ でないことしか意味を持たない`
 
 is_supported : tg ?
-	(widths_of tg) : tg
+	widths_of tg : tg
 
 width_by_class : [~w] cls ? w ' cls~
 
@@ -119,7 +119,7 @@ width_by_class : [~w] cls ? w ' cls~
 
 size_of : ty tg ?
 	!(widths_of tg) : __
-	(fixed_size ' ty~) : (fixed_size ' ty~)
+	fixed_size ' ty~ : fixed_size ' ty~
 	width_by_class (widths_of tg) (class_of ty)
 
 `Pass 4 が要る形（幅・符号・クラス）。器を返すと sret の上界が要るので3つの問いに分ける`
@@ -138,8 +138,8 @@ mt_class : ty tg ?
 
 `--- charset の問い ---`
 
-char_size_of : cs ? (charsets ' cs~) | (charsets ' default_charset~)
-char_limit_of : cs ? (charset_limit ' cs~) | (charset_limit ' default_charset~)
+char_size_of : cs ? charsets ' cs~ | charsets ' default_charset~
+char_limit_of : cs ? charset_limit ' cs~ | charset_limit ' default_charset~
 
 `--- 字面のプリフィックス ---`
 
@@ -158,14 +158,14 @@ r_ch : \r
 b_ch : \b
 
 is_digit : c ?
-	(c >= zero_ch) & (c <= nine_ch) : c
+	c >= zero_ch & c <= nine_ch : c
 	__
 
 `数字の続く長さ。器を縮めず添字で歩く`
 
 digit_run : [~s] i ?
 	i >= ||s|| : i
-	is_digit (s ' i) : digit_run s (i + 1)
+	is_digit s ' i : digit_run s i + 1
 	i
 
 `十進の値。桁の値は零からの隔たりそのものなので、10 枝の表は要らない`
@@ -174,7 +174,7 @@ digit_run : [~s] i ?
 digit_num : [~s] i acc ?
 	i >= ||s|| : acc
 	!(is_digit (s ' i)) : acc
-	digit_num s (i + 1) ((acc * 10) + ((s ' i) - zero_ch))
+	digit_num s i + 1 acc * 10 + (s ' i - zero_ch)
 
 `族は表ではなく所属で見る。鍵が Char なので綴りの表には入らない`
 
@@ -196,7 +196,7 @@ fam_ok : c ?
 
 lit_family : [~s] ?
 	(digit_run s 0) = 0 : __
-	fam_ok (s ' (digit_run s 0))
+	fam_ok s ' (digit_run s 0)
 
 `数字の部分。開いた切り出しなので写しは起きない（add と subs だけ）`
 
@@ -231,7 +231,7 @@ is_access : n ?
 `% は出ないので割り目で書く`
 
 bits_to_bytes : n ?
-	(n - ((n / 8) * 8)) = 0 : n / 8
+	n - n / 8 * 8 = 0 : n / 8
 	no_width
 
 bytes_of : fam n ?
@@ -241,7 +241,7 @@ bytes_of : fam n ?
 lit_width : [~s] ?
 	!(lit_family s) : __
 	(digit_num s 0 0) = 0 : __
-	(is_access (bytes_of (lit_family s) (digit_num s 0 0))) | no_width
+	is_access (bytes_of (lit_family s) (digit_num s 0 0)) | no_width
 
 `数字が欲しい側はこれを使う。プリフィックスが無ければ __ である`
 
@@ -251,7 +251,7 @@ literal_digits : [~s] ? lit_digits s
 `呼ばれない関数は出せない（仮引数 X の渡し方が決まりません）ので、この枚は自分を使い切る`
 
 drive : x ?
-	(widths_of `aarch64_qemu`) : 1
+	widths_of `aarch64_qemu` : 1
 	endian_of `aarch64_qemu` : 1
 	is_supported `aarch64_qemu` : 1
 	signed_of `Int` : 1
