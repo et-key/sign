@@ -21,19 +21,19 @@ put_char : c ?
 
 put_str : [~s] i ?
 	i >= ||s|| : i
-	out # (s ' i) : put_str s (i + 1)
+	out # s ' i : put_str s i + 1
 
 `--- 10 の冪。n を収める桁を選ぶ ---`
 
 scale : n d ?
-	(n / d) = 0 : d / 10
-	scale n (d * 10)
+	n / d = 0 : d / 10
+	scale n d * 10
 
 `--- 上の桁から 1 桁ずつ。`%` は出ないので割り目で書く ---`
 
 put_digits : n d ?
 	d = 0 : n
-	out # (48 + ((n / d) - (((n / d) / 10) * 10))) : put_digits n (d / 10)
+	out # 48 + (n / d - n / d / 10 * 10) : put_digits n d / 10
 
 put_dec : n ?
 	n = 0 : put_char 48
@@ -50,7 +50,7 @@ put_imm : n ?
 `--- 綴りから命令の綴りを引く。無い綴りなら __ が返る ---`
 
 mnemonic : k ?
-	(asm_infix_signed ' k~) ' gpr_signed
+	asm_infix_signed ' k~ ' gpr_signed
 
 `--- 一行ずつ ---`
 
@@ -63,7 +63,7 @@ put_movz : d n ?
 `--- 綴りが表に無ければ .err を吐く（__ を | で受ける） ---`
 
 put_infix : k d n m ?
-	put_alu ((mnemonic k) | `.err`) d n m
+	put_alu (mnemonic k | `.err`) d n m
 
 `--- 駆動 ---`
 
