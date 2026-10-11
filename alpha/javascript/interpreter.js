@@ -9,7 +9,7 @@ import { OPERATOR_DICT } from "./operator_table.js";
 import { isDefineNode, isIdentifierNode, isSlotKeyNode, isExpandNode as isStructSpreadLine, addressWithoutArrow, charWithoutArrow, writtenUnitMode, writtenSpineOf, arithDomain } from "./layout.js";
 // **値の種類を見る述語は runtime_kind.js が唯一の置き場である**（RTTI の裁定 2026-09-27、理由はそこの頭）。
 // `UNIT` と `isUnit` は下の export から出し直す——このファイルから引いている試験はそのまま動く。
-import { UNIT, isUnit, IDENTITY, isIdentityMorphism, isIterator, isNamedSlots } from "./runtime_kind.js";
+import { UNIT, isUnit, IDENTITY, isIdentityMorphism, isIterator, isNamedSlots, chr, chrOf, isChr, isText, textOf } from "./runtime_kind.js";
 
 /**
  * 最小インタプリタ（評価器）。Pass2/Pass1b が構築した二分木 AST を評価して値を出す。
@@ -145,7 +145,8 @@ function evalLiteral(node) {
     case "string":
       return node.value.slice(1, -1); // バッククォートを剥がす
     case "char":
-      return node.value.slice(1); // "\a" -> "a"
+      // `\a` は文字（箱、runtime_kind.js の `chr`）。長さ1の文字列 `` `a` `` とは値で割れる（RTTI の計画 R6）。
+      return chrOf(node.value.slice(1));
     case "address":
       // 番地のリテラルも番地の溢れ方を通る（`clampAddress`）。`0x8000000000000000` は niche の
       // ビットそのもので、非正準なので番地にもならない。
@@ -160,7 +161,7 @@ function evalLiteral(node) {
       // U+0000 は Char の値域から除外された niche であり、`__`（Unit）そのものである
       // （value_representation.md §3、system_semantics.md）。
       const cp = parseInt(literalDigits(node.value), 16);
-      return cp === 0 ? UNIT : String.fromCodePoint(cp);
+      return cp === 0 ? UNIT : chr(cp);
     }
     case "register":
       // **`0r` / `0b` は16進・2進で書けるレジスタの即値で、`Int` である**（§3.6）。十進の字面と同じく
@@ -262,7 +263,11 @@ function isDestructurable(v) {
   // 「物なら構造体」と読むと `[h ~t]` が番地を構造体として鍵 `h` で引いて `__` になっていた——スカラーなら
   // 長さ1の器へ持ち上がる（`[x] ≅ x`、括りへのスカラーは持ち上げてよい）。分解できるのは器（List・
   // String・名前付きスロット）と規則だけである。
-  return Array.isArray(v) || typeof v === "string" || isNamedSlots(v) || isIterator(v);
+  //
+  // **文字（箱、R6）も分解できる**——1文字の並びとして（`bindBracketParams`）。文字が JS の文字列だった頃は文字列
+  // として分解されていたので、ここで外すと `f : [~s] ? s` / `f \a` が位置で束縛する道へ落ち、s が `[\a]` に
+  // なっていた（機械は 97）。
+  return Array.isArray(v) || typeof v === "string" || isChr(v) || isNamedSlots(v) || isIterator(v);
 }
 
 // ブラケット仮引数リストへ、単一のList/Struct実引数を分割代入する（8/5の設計合意）。
@@ -279,6 +284,11 @@ function isDestructurable(v) {
 // 集約されているため、将来.st生成（type_system.md §6.2「関数仮引数のフィールド要求」）を
 // 実装する際、このentries列挙をそのまま構造的フィールド要求集合として再利用できる想定。
 function bindBracketParams(entries, value, env) {
+  // **撒いた文字列・文字は、撒いた元の値として分解する**（`String` の μ は強制で `s~ = s`、撒いた文字は文字）。
+  // 撒いた並びのまま下の規則の道へ入ると、頭が並びの位置（0）になる——`f : [c ~r] ? c * \a` / `f (\a~)` が、
+  // 文字が箱になって値で決めるようになってから 0 を返した（機械は `__`、文字の繰り返しの回数に文字は置けない）。
+  // 以前は頭が同じく 0 で、辺の型（Char）が `__` にしていた。
+  value = collapseText(value);
   // **`[先頭... ~残り]` はイテレータを展開しない。**
   // 先頭は規則を進めれば出るし、残りは「進めたイテレータ」そのものである。これが
   // 効くおかげで、レンジ上の再帰が O(1) メモリで回る——無限ストリームでも回る。
@@ -304,7 +314,16 @@ function bindBracketParams(entries, value, env) {
   }
   // スカラー ≅ 1要素リスト（asList/get_propと同じ同型性）。Struct（プレーンオブジェクト）
   // ではない非Array値は、長さ1のリストとして分割代入できる。
-  if (!isDestructurable(value)) value = [value];
+  // **文字は1文字の並びとして分解する**（`[x] ≅ x` と `String ≅ List(Char)`）。頭は文字、頭が取った後の残りは
+  // 空の文字列で、**残りが全部を受けたら（頭が何も取らなければ）文字そのもの**である——持ち上げた1要素の器は
+  // その要素と同じもの（`[x] ≅ x`）なので、`f : [~s] ? s + 1` / `f \a` は 98（機械も 98）。1文字の文字列にすると
+  // 算術と数との比較の射を失う（文字列には無い）。どれも文字が JS の文字列だった頃と同じ値である。残りが全部を受けられる
+  // のは残りが最後の名前のときだけで（下の割らない道）、割る道では残りの後ろの名前が末尾から取るので全部は残らない。
+  let wholeChar = null;
+  if (isChr(value)) {
+    wholeChar = value;
+    value = value.s;
+  } else if (!isDestructurable(value)) value = [value];
   // 文字列は文字のリストとして分解し、rest には**文字列のまま**返す。範囲添字（`s ' 1~`）が
   // 文字列を返すのと揃える——同じ「残り」を取る操作が、書き方で違う型になってはいけない。
   // 符号位置単位で切る（サロゲートペアを2文字に割らない）。
@@ -319,17 +338,19 @@ function bindBracketParams(entries, value, env) {
     for (const entry of entries.slice(0, restAt)) {
       let v = UNIT;
       if (off < value.length) {
-        v = String.fromCodePoint(value.codePointAt(off));
-        off += v.length;
+        // 頭は文字（箱）——文字列の要素は文字である
+        const cp = value.codePointAt(off);
+        v = chr(cp);
+        off += cp > 0xffff ? 2 : 1;
       }
       if (isUnit(v) && entry.default) v = evaluate(entry.default, env);
       envDefine(env, entry.name, v);
     }
-    envDefine(env, entries[restAt].name, value.slice(off));
+    envDefine(env, entries[restAt].name, wholeChar !== null && off === 0 ? wholeChar : value.slice(off));
     return env;
   }
-  if (fromString) value = [...value];
-  const restValue = (v) => (fromString ? v.join("") : v);
+  if (fromString) value = charsOf(value);
+  const restValue = (v) => (fromString ? v.map(textOf).join("") : v);
   if (Array.isArray(value)) {
     const restIdx = entries.findIndex((e) => e.rest);
     const before = restIdx === -1 ? entries : entries.slice(0, restIdx);
@@ -1163,7 +1184,7 @@ const COMPARE_OPS = {
  * ここを1か所にする。
  */
 function scalarForCompare(x) {
-  return isOneCodePoint(x) ? x.codePointAt(0) : x;
+  return isChr(x) ? x.cp : x;
 }
 function alignForCompare(a, b) {
   let x = scalarForCompare(a);
@@ -1190,8 +1211,15 @@ function codePointOrder(a, b) {
   }
   return x.length === y.length ? 0 : x.length < y.length ? -1 : 1;
 }
+// **文字は箱で、文字列とは値で割れる**（RTTI の計画 R6）。文字どうしは符号位置で、文字と文字列は文字を1文字の文字列と
+// して辞書順で（裁定 2026-09-30）、文字と数は符号位置を数として比べる（裁定(2)）。**文字列と、文字でも文字列でもない
+// もの（数・器）の順序には射が無い**——1文字の文字列は以前は文字と割れず符号位置で比べられていたが、割れた今は
+// 文字列の側の規則で、JS の比較（`"5" < 10` を数へ読み替える）へは落とさない。
 function compareValues(name, a, b) {
-  if (typeof a === "string" && typeof b === "string") return COMPARE_OPS[name](codePointOrder(a, b), 0);
+  // 文字どうしは下の辞書順と同じ答えになる近道（1文字の並びの比較は符号位置の比較）
+  if (isChr(a) && isChr(b)) return COMPARE_OPS[name](a.cp, b.cp);
+  if (isText(a) && isText(b)) return COMPARE_OPS[name](codePointOrder(textOf(a), textOf(b)), 0);
+  if (typeof a === "string" || typeof b === "string") return false;
   const [x, y] = alignForCompare(a, b);
   return COMPARE_OPS[name](x, y);
 }
@@ -1213,7 +1241,7 @@ function listRepeat(l, r) {
 // `(\a * 0) + 1` が爆発律で 1。切り出しの外（`` `ab` ' [5 ~ 6] ``）と同じ姿にすれば、余積は文字列として繋ぐ。
 function repeatText(l, r) {
   if (typeof r !== "number") return UNIT;
-  return listRepeat([...l], r).join("");
+  return listRepeat([...textOf(l)], r).join("");
 }
 function listLift(l, r) {
   // [0 1] ^ 3 → [[0 1] [0 1] [0 1]]（lのコピーをr個、要素として持ち上げる）
@@ -1271,9 +1299,9 @@ function roundHalfAwayFromZero(x) {
  * ここへ訊く。同じ族の同じ規則なので、決める場所は1つである。機械の側は pass4 の算術の
  * `csel` が同じ事実を持つ。
  */
-// 算術の値として扱える1語か（数・BigInt・1文字）。`__` や器・文字列は含まない。
+// 算術の値として扱える1語か（数・BigInt・文字）。`__` や器・文字列（長さ1でも）は含まない。
 function isScalarValue(x) {
-  return typeof x === "number" || typeof x === "bigint" || isOneCodePoint(x);
+  return typeof x === "number" || typeof x === "bigint" || isChr(x);
 }
 
 // **番地と文字の域では `__` は吸収元である**（番地は生き返らせない、文字は域の外へ出たものを次のずらしで
@@ -1318,8 +1346,8 @@ function arithOnValues(name, l, r, resultType, charset = DEFAULT_CHARSET) {
   // `\`abc\` + __` も `__` で、左右対称である。
   if (isUnit(l)) {
     if (r === undefined) return UNIT;
-    // 相手が文字なら文字の域で、`__` は吸収元（型の無いポイントフリーは値で見る）。
-    if (typeof r === "string") return UNIT;
+    // 相手が文字なら文字の域で、`__` は吸収元（型の無いポイントフリーは値で見る）。文字列は算術の代数に居ない。
+    if (isText(r)) return UNIT;
     return r;
   }
   // **整数を 0 で割ると、商は 0、剰余は被除数である**（利用者の決定、2026-09-13）。
@@ -1335,27 +1363,27 @@ function arithOnValues(name, l, r, resultType, charset = DEFAULT_CHARSET) {
   //
   // 以前は JS の `Infinity`/`NaN` が漏れていた（機械は 0）。`Float` は IEEE 754 のまま（ここへ来ない）。
   if ((name === "div" || name === "mod") && resultType === "Address" && isScalarValue(r)) {
-    const d = typeof r === "string" ? r.codePointAt(0) : r;
+    const d = isChr(r) ? r.cp : r;
     if (d <= 0) return UNIT;
   }
   if ((name === "div" || name === "mod") && resultType === "Int") {
-    const d = isOneCodePoint(r) ? r.codePointAt(0) : r;
+    const d = isChr(r) ? r.cp : r;
     if (d === 0 || d === 0n) {
       if (name === "mod") return l;
       return 0;
     }
   }
-  // **`Char` は符号位置で表す**（値の上では1文字の JS 文字列。型が `String` の1文字は
-  // `evalArith` の入口で `__` にしてある——`` `a` `` は1文字でも `String`、type_system.md §2）。
+  // **`Char` は符号位置の箱である**（runtime_kind.js の `chr`、RTTI の計画 R6）。`` `a` `` は1文字でも `String`
+  // （type_system.md §2）で JS の文字列のまま——値で割れるので、文字の道に入るのは箱だけである。
   //
   // **文字は位置で、量ではない**（type_system.md §3.6「文字の域の射」、裁定 2026-09-26）。ずらした先が域の外なら
   // `__` なので、charset の範囲はここ（算術）で見る。以前（b700fb80）は「`Char` は `Int` と同じ値で、違うのは
   // 書き出すときだけ」として `#` の出口へ移していたが、前提を替えたので戻した。域の外の `__` は誤りの印では
   // なく、その域に値が無いという正当な `__` である（番地が負に落ちるのと同じ）。
   //
-  // `String` は長さによらず文字列の域（§3.2）で、文字の道には入らない。
-  // ここで長さ2以上だけを弾けば足りるのは、1文字の `String` を入口で型から弾いてあるからである。
-  const cp = (x) => (isOneCodePoint(x) ? x.codePointAt(0) : null);
+  // `String` は長さによらず文字列の域（§3.2）で、文字の道には入らない（以前は1文字の `String` を入口で pass3 の型
+  // から弾いていた——文字と値で割れなかったので）。
+  const cp = (x) => (isChr(x) ? x.cp : null);
   const lc = cp(l);
   const rc = cp(r);
   // **どちらが文字でも同じ道に入る。** 左辺が文字なら文字の域（ずらす）、左辺が数なら数の域（符号位置を数と
@@ -1411,7 +1439,7 @@ function arithOnValues(name, l, r, resultType, charset = DEFAULT_CHARSET) {
     // **ずらした先が文字の域の外なら `__`**（type_system.md §3.6「文字の域の射」）。負の文字も、charset の上限の
     // 外も、サロゲートも値として居ない。以前（b700fb80）は「描ければ文字、そうでなければ数」で返しており、
     // 型が Char の値が数として運ばれていた。
-    return inCharDomain(out, charset) ? String.fromCodePoint(Number(out)) : UNIT;
+    return inCharDomain(out, charset) ? chr(Number(out)) : UNIT;
   }
   // §3.2: 左辺が String なら文字列の域。射は `*`（連結の n 乗、`repeatText`）だけで、ほかの綴りは `__` に収束する。
   // 注: list_model.md §4.4の文面は「+でコードポイントが露出する」としているが、
@@ -1482,15 +1510,19 @@ function evalBit(node, env) {
  */
 function unspreadScalar(v) {
   if (!isSpread(v)) return v;
-  return iteratorCount(v) === 1 ? iteratorAt(v, 0) : v;
+  if (iteratorCount(v) !== 1) return v;
+  // **撒いた文字列は文字列のまま**（`String` の μ は強制、`s~ = s`）——要素の文字（箱）を取り出すと
+  // `` `a`~ + 1 `` が文字の道へ入って 'b' になる（`` `a` + 1 `` は `__`）。文字が JS の文字列だった頃は要素も
+  // 同じ JS 文字列で、辺の型（String）が `__` にしていた。撒いた文字は文字そのもの（印が文字）。
+  return v.text ? v.text : iteratorAt(v, 0);
 }
 
 function evalArith(node, env) {
   const name = node.name;
   const l = unspreadScalar(evaluate(node.left, env));
-  // 左辺が String の時点で右辺を評価せずに済ませる（`*` でなければ型エラーで、右辺に依らない）。
-  // **ただし1文字は短絡しない**——値の上では `Char` と1文字の `String` が同じ JS 文字列なので、
-  // 型を見るまで決まらない（`Char` なら算術の対象で右辺が要る。`String` なら下で `__`）。
+  // 左辺が String の時点で右辺を評価せずに済ませる（`*` でなければ型エラーで、右辺に依らない）。長さ1の
+  // `String` も同じである——文字は箱なので（RTTI の計画 R6）、値で `Char` と割れる。以前は1文字を短絡せず、
+  // 右辺を評価してから pass3 の型（`node.left.atomType === "String"`）で `__` にしていた。
   //
   // **`__` では短絡できない。** 爆発律で結果が右辺そのものになるので、右辺の値が要る
   // ——ここは観測できる差である（`__ + ($UART # x)` は書き込みが起きる）。以前は
@@ -1505,14 +1537,15 @@ function evalArith(node, env) {
   // **繰り返しは器の射である**（`s * n`・`c * n`、type_system.md §3.2・§3.6）ので、右辺の回数が要る。
   // **繰り返すかどうかは左辺の値で決める。** 文字（`arithOnValues`）も器（`listRepeat`）も値で決めており、ここだけ
   // が型（`node.atomType === "String"`）で決めていた——仮引数の型が呼び出しサイトから `Int` や族に決まった本体で
-  // は、同じ `f : s ? s * 2` が `f `a`` で "aa"、`f `ab`` で右辺を読まずに `__` を返していた（1文字は短絡しない
-  // ので値の道へ届く）。回数に文字・文字列・`__` を置いた形は `repeatText` と `arithOnValues` が値で落とす。
+  // は、同じ `f : s ? s * 2` が `f `a`` で "aa"、`f `ab`` で右辺を読まずに `__` を返していた。回数に文字・文字列・
+  // `__` を置いた形は `repeatText` と `arithOnValues` が値で落とす。
   const repeats = name === "mul" && typeof l === "string";
-  if (typeof l === "string" && !isOneCodePoint(l) && !repeats) return arithOnValues(name, l, undefined, node.atomType, charsetOf(env));
+  if (typeof l === "string" && !repeats) return arithOnValues(name, l, undefined, node.atomType, charsetOf(env));
   const r = unspreadScalar(evaluate(node.right, env));
-  // **型が `String` と言う辺は、1文字でも `Char` ではない**（type_system.md §2 の書き方の表、§3.2）。
-  // 値は同じ JS 文字列なので、見分けるのは型である——見ないと `(s ' 2~) / 0` が JS の Infinity を漏らす。
-  if (!repeats && ((typeof l === "string" && node.left && node.left.atomType === "String") || (typeof r === "string" && node.right && node.right.atomType === "String"))) return UNIT;
+  // **文字列は、1文字でも `Char` ではない**（type_system.md §2 の書き方の表、§3.2）。以前はここで辺の型
+  // （`node.right.atomType === "String"`）を見て `__` にしていた——値が同じ JS 文字列で文字と割れず、見ないと
+  // `1 + (s ' 2~)` が文字の道へ入ったからである。文字が箱になって（R6）文字の道へ入るのは箱だけになり、右辺の
+  // 文字列は `arithOnValues` の数の道の最後（数でない辺）で `__` に落ちるので、ここで見る物は無い。
   // **番地の域に、掛け算と冪の射は無い**（pass3 が `Unit` と型付けする、layout.js の `addressWithoutArrow`）。
   // 射が無いので零射を通る（原理4）。値では番地と数の区別が付かないので、辺の型で見る——`Unit` と型付け
   // される掛け算には `__ * x`（x の型が決まっていない）もあり、そちらは爆発律で x を返す。
@@ -1520,7 +1553,7 @@ function evalArith(node, env) {
   // 出るわけではない——`Unit` へ落とすと次の演算に `Int` の法則（単位元）が当たってしまう。
   if (node.atomType === "Address" && addressWithoutArrow(name, node.left && node.left.atomType, node.right && node.right.atomType)) return UNIT;
   // **文字の域に割る・剰余・冪の射は無い**（layout.js の `charWithoutArrow`）。型は `Char` のまま、値は `__`。
-  if (node.atomType === "Char" && charWithoutArrow(name, node.left && node.left.atomType, node.right && node.right.atomType)) return UNIT;
+  // 決めるのは値である（`arithOnValues` が左辺の文字の箱を見て同じ表を引く、R6）。以前はここで辺の型を読んでいた。
   // **対象を置けば値が返り、射を置けば射が返る。**
   //
   // `__` は零対象で、初対象と終対象が一致している。演算子の片側に置いたとき、その
@@ -1664,7 +1697,8 @@ function affineStepOf(op, step) {
 // 走っていた（無限ループではないが実用上はハング）。
 function isRangePoint(v, allowChar) {
   if (typeof v === "number" || typeof v === "bigint") return true;
-  return allowChar && isOneCodePoint(v);
+  // 点になる1文字は文字（箱）だけで、長さ1の文字列は点ではない（器である）
+  return allowChar && isChr(v);
 }
 
 // 文字の範囲（`\a ~ \e` → `abcde`）。文字は Layer 2 では String だが、範囲の端点
@@ -1674,10 +1708,9 @@ function isRangePoint(v, allowChar) {
 // ——数値経路の `v + step` は文字列に対して `"a"` → `"a1"` → `"a11"` と伸ばし続け、
 // 100万回のガードに当たるまで走り続けてしまう（実際にハングとして踏んだ）。
 function buildCharRange(start, end) {
-  const isChar = (v) => isOneCodePoint(v);
-  if (!isChar(start) || !isChar(end)) return null;
-  const s = start.codePointAt(0);
-  const e = end.codePointAt(0);
+  if (!isChr(start) || !isChr(end)) return null;
+  const s = start.cp;
+  const e = end.cp;
   const step = s <= e ? 1 : -1;
   // 符号位置の並びを作るのは**レンジそのもの**である——`makeIterator` が規則を持ち、
   // 実体化は `materializeIterator` が1本で行う（終端の包含も百万件のガードもそこ）。
@@ -1890,8 +1923,11 @@ function deIterate(v) {
  */
 function collapseText(v) {
   if (!isIterator(v) || !v.spread || !v.text) return v;
+  // 撒いた文字列・文字は元の値を印として持っている（`expand`）——撒いた並びは書き換わらないので、並べ直さずにそれを
+  // 返す。文字は文字へ戻る（1要素の並びはその要素、`[x] ≅ x`）
+  if (typeof v.text === "string" || isChr(v.text)) return v.text;
   const d = deIterate(v);
-  return Array.isArray(d) && d.every((x) => typeof x === "string") ? d.join("") : v;
+  return Array.isArray(d) && d.every(isText) ? d.map(textOf).join("") : v;
 }
 
 function structuralEqual(l, r) {
@@ -1928,9 +1964,14 @@ function structuralEqual(l, r) {
   //
   // **符号位置で割る**（`[...r]`）。`split("")` だとサロゲート対が壊れる——
   // `` `𐀀𐀁𐀂` `` を解釈器が 6 と数えていた件と同じ形である。
-  if (Array.isArray(l) && typeof r === "string") return structuralEqual(l, [...r]);
-  if (typeof l === "string" && Array.isArray(r)) return structuralEqual([...l], r);
+  if (Array.isArray(l) && typeof r === "string") return structuralEqual(l, charsOf(r));
+  if (typeof l === "string" && Array.isArray(r)) return structuralEqual(charsOf(l), r);
   if (Array.isArray(l) || Array.isArray(r)) return false;
+  // **文字と1文字の文字列は構造として等しい**（`[x] ≅ x` と `String ≅ List(Char)`——長さ1の文字列は1要素の文字の器）。
+  // 文字は符号位置ごとに1つの箱なので、文字どうしは `===` で足りる（下の最後の行）。
+  if (isChr(l) && typeof r === "string") return l.s === r;
+  if (typeof l === "string" && isChr(r)) return l === r.s;
+  if (isChr(l) || isChr(r)) return l === r;
   const lIsPlainObject = l !== null && typeof l === "object" && !l.__lambda__;
   const rIsPlainObject = r !== null && typeof r === "object" && !r.__lambda__;
   if (lIsPlainObject && rIsPlainObject) {
@@ -1998,6 +2039,10 @@ function compareOnValues(name, op, l, r, leftNode) {
     // 真の場合の返値選択は他の比較演算子と同じ §2.1 の規則に従う（comparison.md §1が
     // `!=` を対象の比較演算子として列挙しており、§2.1の適用外とされているのは
     // 構造比較の `==`/`!==` だけ）。ここだけ左辺固定になっていた。
+    // 文字と文字列は、文字を1文字の文字列として比べる（裁定 2026-09-30、`compareValues` と同じ）。文字列と、文字でも
+    // 文字列でもないもの（数・器）の比較には射が無い（`compareValues` と同じ）。
+    if (isText(l) && isText(r)) return textOf(l) !== textOf(r) ? (isArithmeticUnitElement(l, leftNode) ? r : l) : UNIT;
+    if (typeof l === "string" || typeof r === "string") return UNIT;
     const [lx, rx] = alignForCompare(l, r);
     return lx !== rx ? (isArithmeticUnitElement(l, leftNode) ? r : l) : UNIT;
   }
@@ -2080,9 +2125,13 @@ function evalUnaryOp(name, v) {
       // 名前に束縛した瞬間に消える）、`String` の μ は強制なので**値として見るときには
       // 文字列に戻らなければならない**（原理7）。機械では `~` は 0 命令なので最初から
       // 同じもので、解釈器だけが `["a","b"]` のまま持っていた。
-      if (typeof v === "string") {
-        const w = makeWalk([...v]);
-        w.text = true;
+      // 撒いた要素は文字（箱）——文字列の要素は文字である（`String ≅ List(Char)`）。文字を撒いても文字の並び
+      // （1要素、`[x] ≅ x`）なので、同じ印を付ける——付けないと `st~ (s ' 0)~` の吸収が外れる。
+      // 印には撒いた元の値を置く（`collapseText` が並べ直さずに返す）。**文字の印は文字のままである**——1文字の
+      // 文字列にすると、`(\a~ = \a) + 0` が文字列の比較・算術（射が無い）へ落ちて `__` になる（機械は 97）。
+      if (typeof v === "string" || isChr(v)) {
+        const w = makeWalk(isChr(v) ? [v] : charsOf(v));
+        w.text = v;
         return w;
       }
       // **段を下ろすのはここ1か所である。** 撒いた並びを読む所（余積・直積・`||…||`・
@@ -2196,14 +2245,15 @@ function getPropValue(l, rightNode, env) {
       : rightNode.desugaredFrom === "index-rest"
         ? rightNode.left
         : null;
-  if (l && typeof l === "object" && !Array.isArray(l) && keyByValue) {
+  // 文字の箱は物だが名前を持たない（スカラー）——鍵の道へ入れない
+  if (l && typeof l === "object" && !Array.isArray(l) && !isChr(l) && keyByValue) {
     const key = evaluate(keyByValue, env);
     if (isUnit(key)) return UNIT;
-    const k = String(observe(key));
+    const k = keyTextOf(key);
     return Object.prototype.hasOwnProperty.call(l, k) ? l[k] : UNIT;
   }
   if (rightNode.type === "atom" && (rightNode.kind === "identifier" || rightNode.kind === "string")) {
-    if (l && typeof l === "object" && !Array.isArray(l)) {
+    if (l && typeof l === "object" && !Array.isArray(l) && !isChr(l)) {
       const key = rightNode.value.slice(1, -1); // "<foo>" -> "foo" / "`+`" -> "+"
       return Object.prototype.hasOwnProperty.call(l, key) ? l[key] : UNIT;
     }
@@ -2221,6 +2271,21 @@ function getPropValue(l, rightNode, env) {
   // 鍵の位置では「x が持っている値を添字にする」であって「x の指す先を読む」ではない
   // ——`$` で作った参照を渡されたときに、素の `@` として評価すると読みが変わる。
   return getPropByValue(l, evaluate(keyByValue && rightNode.inGetPropKey ? keyByValue : rightNode, env));
+}
+
+/**
+ * **中身で引く鍵の綴り**（`obj ' k~`）。文字列はそのまま、文字は1文字の文字列、**文字の器（`List(Char)`）は文字を
+ * 繋いだ文字列**である——`String ≅ List(Char)`（利用者の裁定 2026-09-20・10-04）なので、`c , d` で組んだ鍵と
+ * `` `ab` `` は同じ鍵を引く（機械は元からそう引いている）。以前は器を JS の綴り（`a,b`）にしていて、文字の器の鍵が
+ * 解釈器だけ `__` だった（文字が JS の文字列で、文字の器と文字列の器を値で割れなかった——R6）。
+ */
+function keyTextOf(key) {
+  if (typeof key === "string") return key;
+  // 観測した姿で引く——撒いた文字（`k~` の k が文字）は文字へ、撒いた文字列は文字列へ戻る
+  const v = observeValue(key);
+  if (Array.isArray(v) && v.length > 0 && v.every(isChr)) return v.map(textOf).join("");
+  // ほかの綴りは文字が JS の文字列だった頃と同じ（ホストの姿——文字は1文字の文字列）
+  return String(hostValueOf(v));
 }
 
 // 添字が**値として**確定している場合の取得。フィールド名（識別子）と get-rest（後置~）は
@@ -2278,14 +2343,15 @@ function codePointLength(s) {
   return isBmpOnly(s) ? s.length : [...s].length;
 }
 /**
- * 符号位置1つだけの文字列か（`typeof x === "string" && [...x].length === 1` と同じ答え）。符号位置1つは UTF-16 で
- * 1単位か2単位なので、3単位以上の文字列は広げずに偽と言える——1文字かを訊く所（比較・算術・範囲の端）に長い
- * 文字列が来ても、全文を写さない。
+ * 文字列の要素の並び——文字（箱）の配列（`[...s].map(chrOf)` と同じ答え）。サロゲートが無ければ UTF-16 の単位が
+ * そのまま符号位置なので、1度の走査で箱を表から引く。
  */
-function isOneCodePoint(x) {
-  return typeof x === "string" && x.length > 0 && x.length <= 2 && [...x].length === 1;
+function charsOf(s) {
+  if (!isBmpOnly(s)) return [...s].map(chrOf);
+  const out = new Array(s.length);
+  for (let i = 0; i < s.length; i++) out[i] = chr(s.charCodeAt(i));
+  return out;
 }
-
 // **引ける並びとして見る。** `'` は器の種類を問わず「位置で引く」ので、まず並びへ均す
 // ——String は符号位置の列（`String ≅ List(0u)`）、名前付きスロットは宣言順の値の列、
 // それ以外は1要素の器（`[x] ≅ x`、原理8）。
@@ -2293,7 +2359,7 @@ function isOneCodePoint(x) {
 // この読み替えは `getPropByValue` の中に2つ（`l ' 1~` の側と `l ' 0` の側）写しで
 // あった。片方だけ器の種類が増えれば、同じ器から引いた添字とスライスが別の答えを出す。
 function asIndexableList(l) {
-  return Array.isArray(l) ? l : typeof l === "string" ? [...l] : isNamedSlots(l) ? Object.values(l) : [l];
+  return Array.isArray(l) ? l : typeof l === "string" ? charsOf(l) : isNamedSlots(l) ? Object.values(l) : [l];
 }
 
 function getPropByValue(l, r) {
@@ -2330,7 +2396,7 @@ function getPropByValue(l, r) {
       return listView(items, start, items.length);
     }
     const sliced = items.slice(from);
-    return asStr ? sliced.join("") : collapseSlice(sliced, l);
+    return asStr ? sliced.map(textOf).join("") : collapseSlice(sliced, l);
   }
   // **添字としてのレンジは消費側である。** どの位置を採るかの並びが要るので、ここで走る。
   r = deIterate(r);
@@ -2354,6 +2420,8 @@ function getPropByValue(l, r) {
   // 文字列は、サロゲートが無ければ字面のまま引く——UTF-16 の位置が符号位置と同じなので、`l[i]` と `l.length` が
   // `[...l][i]` と `[...l].length` と同じ答えになる（下の位置の解き方も、範囲で引いて繋ぐ道もそのまま通る）
   const asIndexable = isString && isBmpOnly(l) ? l : asIndexableList(l);
+  // 文字列の要素は文字（箱）である。字面のまま引く道では、UTF-16 の単位がそのまま符号位置なので箱を表から引く
+  const bmpText = isString && asIndexable === l;
   // 負のインデックスは末尾から数える（`-1`=最後の要素、length+indexへ写像）。
   // 正側は0始まり、負側は-1始まり（-0が無いため対称にはならない）。
   // type_system.md §4.1: `'` は Address（位置）を構造的に要求するため、Float が
@@ -2368,7 +2436,8 @@ function getPropByValue(l, r) {
   };
   if (typeof r === "number") {
     const idx = resolveIndex(r);
-    return idx >= 0 && idx < asIndexable.length ? asIndexable[idx] : UNIT;
+    if (!(idx >= 0 && idx < asIndexable.length)) return UNIT;
+    return bmpText ? chr(l.charCodeAt(idx)) : asIndexable[idx];
   }
   // list_cheat_sheet.md「範囲で要素取得」: `[1 2 3 4] ' [1 ~ 3]` → `[2 3 4]`。
   // rangeが実体化したインデックス列（配列）で、該当位置の値をまとめて取り出す。
@@ -2381,9 +2450,9 @@ function getPropByValue(l, r) {
     for (const i of r) {
       if (typeof i !== "number") continue;
       const idx = resolveIndex(i);
-      if (idx >= 0 && idx < asIndexable.length) kept.push(asIndexable[idx]);
+      if (idx >= 0 && idx < asIndexable.length) kept.push(bmpText ? l[idx] : asIndexable[idx]);
     }
-    return isString ? kept.join("") : Array.isArray(l) ? kept : collapseSlice(kept, l);
+    return isString ? kept.map(textOf).join("") : Array.isArray(l) ? kept : collapseSlice(kept, l);
   }
   return UNIT;
 }
@@ -2649,8 +2718,12 @@ function applyPointfree(node, closureEnv, argValues, pfbound) {
   // `aabb`」）。回数が字面なら compile.js の `mapSource` が文字ごとに開いて余積で繋ぐが、名前や式の回数はここへ
   // 来る。ここは文字列を1要素として扱っていたので、`n : 2` / `[* n,] `ab`` が並び全体の繰り返し（`["abab"]`）と
   // いう、裁定が写すことと分けた方の答えになっていた。同じ事実を2か所で決めていた形である。
-  const walksText = !!node.pointfreeMap && argValues.length === 1 && typeof argValues[0] === "string";
-  if (walksText) argValues = [...argValues[0]];
+  // **文字1つも1文字の並びとして走る**（`[x] ≅ x`）——文字が JS の文字列だった頃と同じ道で、結果も同じ姿にする
+  // （下の `walkedChar`）。外すと `n : 1` / `[+ n,] \a` が器 `["b"]` になる。
+  const walksText = !!node.pointfreeMap && argValues.length === 1 && isText(argValues[0]);
+  const walkedChar = walksText && isChr(argValues[0]);
+  // 写す要素は文字（箱）——文字列の要素は文字である
+  if (walksText) argValues = walkedChar ? [argValues[0]] : charsOf(argValues[0]);
 
   if (node.pointfreeMap) {
     // 末尾カンマの写像糖衣構文（`[* 2,]`、function_guide.md「そのすべてに適用される」）。
@@ -2668,7 +2741,9 @@ function applyPointfree(node, closureEnv, argValues, pfbound) {
     const results = elems.map((v) => (isUnit(v) && !catches ? UNIT : combine(v, bound)));
     const kept = results.filter((r) => !isUnit(r));
     // 文字列を走って結果が全部文字列なら、余積で1つの文字列に繋ぐ（`String` の μ は強制、`mapSource` と同じ）。
-    return walksText && kept.every((r) => typeof r === "string") ? kept.join("") : kept;
+    // 文字1つを走って結果が文字1つなら、その文字である（1要素の並びは要素、`[x] ≅ x`——`([+ n,] \a) + 0` は 98）。
+    if (walkedChar && kept.length === 1 && isChr(kept[0])) return kept[0];
+    return walksText && kept.every(isText) ? kept.map(textOf).join("") : kept;
   }
 
   if (!leftBound && !rightBound) {
@@ -2729,7 +2804,8 @@ function textAbsorb(l, r) {
   // きちんと指定して演算してほしい。いわゆるモナドになるわけだから」）。
   const a = collapseText(l);
   const b = collapseText(r);
-  if (typeof a === "string" || typeof b === "string") return stringifyForConcat(a) + stringifyForConcat(b);
+  // 文字（箱）も文字列の側に数える——余積で並べた文字は文字列になる（`\a \b` は `ab`、pass3 の余積の文字吸収と同じ）
+  if (isText(a) || isText(b)) return stringifyForConcat(a) + stringifyForConcat(b);
   return null;
 }
 
@@ -2755,6 +2831,7 @@ function groupedAbsorb(l, r, groupedNode) {
 
 function stringifyForConcat(v) {
   if (typeof v === "string") return v;
+  if (isChr(v)) return v.s;
   if (isUnit(v)) return "";
   // List は要素を順に描画して連結する。`String([1,2,3])` が `"1,2,3"` になるのは
   // JS の Array.prototype.toString がカンマ区切りを挟むためで、Sign の意味論ではない
@@ -2885,7 +2962,7 @@ function evalAddress(operandNode, env) {
     //
     // 決まらないことは言う（原理4）。構造体を書き換えられるようにするかどうかは
     // まだ決めていないので、決めるまでは名指しで止める。
-    if (isNamedSlots(observe(l))) {
+    if (isNamedSlots(observeValue(l))) {
       env.diagnostics.push({
         level: "error",
         message: "構造体のスロットへは書けません（`$[p ' foo] # 値`）。書ける先は名前の束縛と器の要素だけです",
@@ -2959,6 +3036,8 @@ function evaluate(node, env) {
       // JS の `.length`（UTF-16 単位）では非 BMP が 2 と数えられる——実際 `𐀀𐀁𐀂` が
       // 6 になり、**実機の 3 のほうが正しかった**（オラクルの側が壊れていた）。
       if (typeof inner === "string") return codePointLength(inner);
+      // 文字はスカラーで、1要素の器と同じく 1（文字が JS の文字列だった頃と同じ答え）
+      if (isChr(inner)) return 1;
       if (isNamedSlots(inner)) return Object.keys(inner).length;
 
       // **番地は器ではない**（利用者の裁定 2026-09-20）。器でないものは長さ1として数える
@@ -3057,7 +3136,7 @@ function evaluate(node, env) {
         // **書いた行には勝てない。** 埋めるのは書かれなかった鍵だけである。撒く行どうしで
         // 重なったときは後の行が勝つ——そこは埋める順の話であって、仕様と埋め草の話ではない。
         if (isStructSpreadLine(line)) {
-          const spread = observe(evaluate(line.operand, structEnv));
+          const spread = observeValue(evaluate(line.operand, structEnv));
           if (isNamedSlots(spread)) for (const k of Object.keys(spread)) if (!written.has(k)) dict[k] = spread[k];
           continue;
         }
@@ -3418,18 +3497,74 @@ return items.filter((v) => !isUnit(v));
  * ホストは「全部を同時に見る」ことしかできないので、これは type_system.md §2 の
  * `Implicit`（同時アクセス）側の消費者である。展開が起きてよい場所がここしか無い、
  * というのが `Iterator` を実体にした狙いそのものである。無限は観測できないので `__`。
+ *
+ * 解釈器の中で値の姿を見る所（鍵の綴り・構造体の撒き・番地の先）はこちら（`observeValue`）を引く——文字は箱のまま
+ * である。外へ出すのは下の `observe` で、文字を1文字の文字列にする。
  */
-function observe(v) {
+function observeValue(v) {
   v = collapseText(v);
   // 中に入れ子になった規則も実体化する。**観測の話であって値の話ではない**
   // ——`[1 2] [1 ~ 3]` の値は「カウンタを1個持つリスト」であり、それを見せるときに
   // 有限の規則は要素の並びとして描かれる（`String ≅ List` を描画側で保つのと同じ）。
-  if (Array.isArray(v)) return v.map(observe);
+  if (Array.isArray(v)) return v.map(observeValue);
   const d = deIterate(v);
   // **観測は段を変えない。** 段を下ろしたのは後置 `~`（撒いた並び）だけなので、1要素を
   // 要素へ戻すのもそれだけである（`st : 0` の `st~` は `0`、`5~` は `5`）。作った規則
   // （`1 ~ 1`）も切り出した規則（`[1 ~ 5] ' 4~`、`[h ~t]` の `t`）も器のまま描く。
   return isIterator(v) && Array.isArray(d) && v.spread ? collapseSlice(d) : d;
+}
+
+/**
+ * **観測境界（ホストへ渡す）。** 文字（箱、RTTI の計画 R6）は1文字の文字列で渡す——ホストの値は JS の値で、文字が
+ * 箱になる前と同じ姿である（試験・道具・playground は文字と1文字の文字列を割らずに読む）。器と名前付きスロットの
+ * 中の文字も同じに渡し、文字を含まない器はそのまま返す。文字と長さ1の文字列を割って見たいなら、ホストは観測の
+ * 記録器（observe.js）か `runtime_kind.js` の `kindOf` で種類を訊く。
+ */
+function observe(v) {
+  return hostValueOf(observeValue(v));
+}
+function hostValueOf(v) {
+  if (isChr(v)) return v.s;
+  // 撒いた並び・規則がスロットや器の中に居ると、観測はそこまで降りない（以前から生のまま渡っている）。中の文字は1文字の
+  // 文字列にし、撒いた文字列・文字の印（`text`、中では撒いた元の値）は以前と同じ真偽にする——箱になる前と同じ姿で渡す
+  if (isIterator(v)) {
+    const out = { ...v };
+    let changed = false;
+    for (const k of ["source", "origin"]) {
+      if (!Object.prototype.hasOwnProperty.call(v, k) || v[k] === null || v[k] === undefined) continue;
+      const x = hostValueOf(v[k]);
+      if (x !== v[k]) {
+        out[k] = x;
+        changed = true;
+      }
+    }
+    if (v.text) {
+      out.text = true;
+      changed = true;
+    }
+    return changed ? out : v;
+  }
+  if (Array.isArray(v)) {
+    let out = null;
+    for (let i = 0; i < v.length; i++) {
+      const x = hostValueOf(v[i]);
+      if (x === v[i]) continue;
+      if (out === null) out = Array.prototype.slice.call(v);
+      out[i] = x;
+    }
+    return out === null ? v : out;
+  }
+  if (isNamedSlots(v)) {
+    let out = null;
+    for (const k of Object.keys(v)) {
+      const x = hostValueOf(v[k]);
+      if (x === v[k]) continue;
+      if (out === null) out = { ...v };
+      out[k] = x;
+    }
+    return out === null ? v : out;
+  }
+  return v;
 }
 
 // `structuralEqual` を外へ出すのは**検査が言語の `==` を使えるようにする**ためである。

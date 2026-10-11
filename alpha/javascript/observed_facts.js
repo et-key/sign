@@ -20,7 +20,8 @@
  *   種類が2つ以上        `Int | String` など → 断る（型ごとの実体は後の片）
  *   整数の値（Int）      pass3 が Int・族（`_`・`Atom`・`Scalar`）なら Int。Address・Float・Raw なら断る——値では
  *                        番地と小数の整数を割れない（箱は R3・R4）
- *   Char-or-String       pass3 が Char か String と言えばその言い分（反響として数える）、言わなければ断る（R6 まで）
+ *   Char                 pass3 が Char・族（`_`・`Atom`・`Scalar`）なら Char、ほかは断る（文字は箱で、長さ1の String と
+ *                        値で割れる——R6。以前は割れず、pass3 の言い分を採って反響として数えていた）
  *   String・Float・…     pass3 が同じ型か族なら観測の型、ほかは断る（食い違い）
  *   器 List(T)           pass3 が List(T') なら要素を同じ規則で、族・形（`[s~]`）なら List(要素)。要素が空の器しか
  *                        来なかったら、pass3 が List と言うときだけその要素を採る。pass3 が Struct（素・和の成員）なら
@@ -155,11 +156,11 @@ function decide(K, P) {
         return refuse("conflict", `観測は整数の値、pass3 は ${P.v}——値では番地・小数の整数と割れない（箱は R3・R4）`);
       return refuse("conflict", `観測は ${K.key}、pass3 は ${spell(P)}`);
     }
-    case "Chr1": {
-      if (P.k === "prim" && (P.v === "Char" || P.v === "String")) return fact(prim(P.v), true);
-      // 族の Scalar の文字の成員は Char だけ
-      if (P.k === "vague" && P.v === "Scalar") return fact(prim("Char"), true);
-      return refuse("conflict", `観測は1文字（Char か1文字の String か、値では割れない）、pass3 は ${spell(P)}——R6 の箱まで pass3 の言い分が要る`);
+    case "Char": {
+      // 文字は箱で、長さ1の文字列と値で割れる（R6）——pass3 の言い分を借りない
+      if (P.k === "prim" && P.v === "Char") return fact(prim("Char"));
+      if (P.k === "vague" && (P.v === "_" || P.v === "Atom" || P.v === "Scalar")) return fact(prim("Char"));
+      return refuse("conflict", `観測は Char、pass3 は ${spell(P)}`);
     }
     case "String": {
       if (P.k === "prim" && P.v === "String") return fact(prim("String"));

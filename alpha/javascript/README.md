@@ -123,12 +123,13 @@ pre-alpha 実装はアーカイブへ退避した（`documents/ja-jp/impl/append
   カテゴリ（Lambda/Atom）を静的に収集する。
 - `runtime_kind.js` — **実行時の種類**の唯一の置き場（RTTI の裁定 2026-09-27：動的な側は RTTI に頼り、
   静的な側は動的な側が付けた型を信じて RTTI なしで走る）。`UNIT`・`isUnit`・恒等射 `IDENTITY` と、値の形を
-  見る述語（`isIterator`・`isNamedSlots`）、値の種類を pass3 の型の名前で答える `kindOf` を持つ。JS の値で
-  区別できない2組（`Num` ＝ `Int`/`Address`/`Float`、`Chr1` ＝ `Char`/長さ1の `String`）は箱が入るまで割れて
-  いない。`interpreter.js` は `UNIT`・`isUnit` を出し直すので、引いている試験は変わらない。算術の結果の型は
+  見る述語（`isIterator`・`isNamedSlots`）、値の種類を pass3 の型の名前で答える `kindOf` を持つ。**文字は箱**
+  （R6、`chr`：符号位置ごとに1つの凍った物で、`===` で比べられる）で、長さ1の `String`（JS の文字列のまま）と値で
+  割れる。JS の値で区別できない組（`Num` ＝ `Int`/`Address`/`Float`）は箱が入るまで割れていない。
+  `interpreter.js` は `UNIT`・`isUnit` を出し直すので、引いている試験は変わらない。算術の結果の型は
   `layout.js` の `arithDomain`（表は1つ、読む側は pass3・解釈器・機械の3つ）が決める。
 - `observe.js` — **観測の記録器**（RTTI の計画 R2）。解釈器がプログラムを走らせる間、ユーザーが定義した関数ごとに
-  仮引数の位置（括りだけの並びは器1つの位置）と返値に来た値の種類（`Int`・`Float`・`Char-or-String`・`String`・
+  仮引数の位置（括りだけの並びは器1つの位置）と返値に来た値の種類（`Int`・`Float`・`Char`・`String`・
   `List(T)`・`Struct{…}`・`Lambda`・`Address`・`Iterator`、合流しなければ並び）を合流して数える。付けるのは
   `interpreter.js` の `observeCalls(rec.hooks)` で、付けていない解釈器が払うのは適用1回ごとの null の照合1つと、
   トランポリンの周ごとの局所の照合1つ（`applyClosure` の `chain`、部分適用は終わりにもう1つ）だけ。
@@ -399,7 +400,7 @@ pre-alpha 実装はアーカイブへ退避した（`documents/ja-jp/impl/append
   返しても古い種類を付けない）の種類が書いた答えと同じことと、記録器を付けても外しても `codegen_corpus` の値と
   実行時の診断が同じことを見る。
 - `test/observed_facts.test.js` — 観測をつなぐ（`observed_facts.js`）。小さなプログラムを記録器を付けて走らせ、観測を渡して
-  compile し直し、両立する位置は事実になり（.ist は同じ、1文字は pass3 の言い分＝反響）、pass3 が曖昧だった輪の素通しの
+  compile し直し、両立する位置は事実になり（.ist は同じ、文字と長さ1の文字列は値で割れて反響しない）、pass3 が曖昧だった輪の素通しの
   返値は観測の型で埋まり、周回は事実を書き換えようとしても通らないことと、観測が無い・種類が2つ以上・整数の値と
   Address・器と連番の構造体・`[x] ≅ x` の持ち上げ・走らなかった枝の呼び出しが（直に・別名越しに・器の要素だけ違う型で）
   違う型を渡す・返値の本体が観測の走りに無かった型を返す・既定値と渡した値の種類が違う・公開した関数・事実を置く名前の

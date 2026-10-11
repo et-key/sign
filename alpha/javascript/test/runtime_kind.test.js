@@ -1,9 +1,10 @@
 /**
  * 実行時の種類（`runtime_kind.js`、RTTI の裁定 2026-09-27）。
  *
- * **いま値の JS の姿から読めるだけ**を答えることを見る。`Num`（`Int` `Address` `Float`）と `Chr1`（`Char` と長さ1の
- * `String`）はまだ割れていない2組で、箱が入った日にこの検査の答えが変わる——変わるのが正しいので、そのとき
- * 書き換える。答えは直に書く（種類の名前は pass3 の型の名前と同じ）。
+ * **いま値の JS の姿から読めるだけ**を答えることを見る。`Num`（`Int` `Address` `Float`）はまだ割れていない組で、
+ * 箱が入った日にこの検査の答えが変わる——変わるのが正しいので、そのとき書き換える。文字は箱が入った（R6）ので、
+ * `Char` と長さ1の `String` が値で割れる（以前の `Chr1` の行は、この組の答えが変わったもの）。答えは直に書く
+ * （種類の名前は pass3 の型の名前と同じ）。
  *
  * 見るのは解釈器が返した値そのもので、観測の境界（`observe`）は通さない——種類は値の上に在る。
  *
@@ -55,15 +56,21 @@ check("`!__` が返すのは runtime_kind.js の恒等射", value("!__") === IDE
 check("`__` は Unit", kind("__"), "Unit");
 check("文字の niche（`0u0000`）も Unit", kind("0u0000"), "Unit");
 
-// ---- まだ割れていない2組 ----
+// ---- まだ割れていない組 ----
 check("十進の整数は Num", kind("5"), "Num");
 check("番地も Num（箱が入るまで整数と同じ値）", kind("0x10"), "Num");
 check("実数も Num（箱が入るまで整数と同じ値）", kind("1.5"), "Num");
 check("2^53 を越える整数（BigInt）も Num", kind("9007199254740993"), "Num");
-check("文字は Chr1", kind(BS + "a"), "Chr1");
-check("長さ1の文字列も Chr1（箱が入るまで文字と同じ値）", kind("s : `a`\ns"), "Chr1");
-check("符号位置1つならサロゲート対でも Chr1", kind("0u1D11E"), "Chr1");
-check("文字列から引いた1文字も Chr1", kind("`ab` ' 0"), "Chr1");
+
+// ---- 文字は箱（R6）：長さ1の文字列と値で割れる ----
+check("文字は Char", kind(BS + "a"), "Char");
+check("長さ1の文字列は String（文字と値で割れる）", kind("s : `a`\ns"), "String");
+check("符号位置1つならサロゲート対でも Char", kind("0u1D11E"), "Char");
+check("文字列から引いた1文字は Char（文字列の要素は文字）", kind("`ab` ' 0"), "Char");
+check("同じ文字は同じ箱（符号位置ごとに1つ）", value(BS + "a") === value("`ba` ' 1") && value("0u1D11E") === value("0u1D11E"), true);
+check("文字をずらした先は Char、文字どうしの隔たりは Num", [kind(BS + "a + 1"), kind(BS + "z - " + BS + "a")].join(" "), "Char Num");
+check("文字を繰り返すと String（長さ1でも）", kind(BS + "a * 1"), "String");
+check("文字の箱は名前付きスロットではなく、観測の境界では1文字の文字列", kind(BS + "a") !== "Struct" && I.observe(value(BS + "a")) === "a", true);
 
 // ---- 域を答える（その域の `__` かどうかは `isUnit`） ----
 check("2文字の文字列は String", kind("s : `ab`\ns"), "String");

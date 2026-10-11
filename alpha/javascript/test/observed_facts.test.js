@@ -14,7 +14,8 @@
  *   規則     突き合わせの表（observed_facts.js の頭）は行ごとに通す側と断る側を `decide` で直に見る（小さなプログラムでは
  *            出しにくい行——名前付きスロットの鍵の食い違い、空の器しか来なかった位置、和の成員が2つ通る形も）。確かめる段の
  *            物差し（返値の本体 `bodyAgrees`・呼ぶ側が渡す型 `argAgrees`）も直に見る
- *   反響     1文字の値は pass3 の Char・String の言い分を採る（R6 の箱まで）
+ *   反響     文字と長さ1の文字列は値で割れる（文字は箱、R6）ので、pass3 の Char・String の言い分を借りずに事実になる
+ *            ——以前は割れず、pass3 の言い分を採って反響として数えていた
  *   素通り   観測を渡さない compile は印も数えも持たない（ここは呼ばれない）
  *
  * 種類と型の綴りを書き出すのは、ここに直に書いた小さなプログラムの答えだけである（観測はディスクに置かない）。
@@ -31,7 +32,7 @@ import { generateAsm } from "../pass4.js";
 import { blockingOf } from "../errors.js";
 import { envLookup, paramTypeOf } from "../pass1.js";
 import * as I from "../interpreter.js";
-import { makeRecorder, listKind, structKind, K_INT, K_FLOAT, K_STRING, K_CHR1, K_LAMBDA } from "../observe.js";
+import { makeRecorder, listKind, structKind, K_INT, K_FLOAT, K_STRING, K_CHAR, K_LAMBDA } from "../observe.js";
 import { planObservedFacts, installObservedFacts, decide, parseType, spell, argAgrees, bodyAgrees } from "../observed_facts.js";
 import { PROGS } from "./ring_shapes.js";
 
@@ -85,14 +86,14 @@ const marked = (c) => c.nodes.filter((n) => n && n.type === "operation" && n.nam
 	check("観測を渡さない compile は数え（observation）も断りの印も持たない", ["observation" in c, marked(c)], [false, []]);
 }
 
-// ---- 事実：両立する位置はそのまま、1文字は pass3 の言い分（反響） ----
+// ---- 事実：両立する位置はそのまま、文字と長さ1の文字列も値で割れて事実になる（反響しない） ----
 {
 	const src = "f : x y ? x + y\ng : [~s] ? ||s||\nh : [c ~r] ? c\nc : x ? x\nc2 : x ? x\nf 1 2\ng `abc`\nh `xy`\nc \\a\nc2 `a`\n";
 	const { plain, c } = connect(src);
 	check("観測と pass3 が両立する関数は .ist が観測を持たない compile と同じ", istLines(c), istLines(plain));
 	const o = c.observation;
-	check("位置はどれも事実になり、1文字の値の位置（h の返値・c・c2 の仮引数と返値）は反響として数える", [o.functions, o.positions, o.fixed, o.echo, o.refusedFunctions], [5, 11, 11, 5, 0]);
-	check("1文字の値：pass3 が Char と言えば Char、String と言えば String のまま", istLines(c).filter((l) => /^c2? :/.test(l)), ["c : Char -> Char", "c2 : String -> String"]);
+	check("位置はどれも事実になり、文字・長さ1の文字列の位置（h の返値・c・c2 の仮引数と返値）も反響しない（文字は箱で割れる）", [o.functions, o.positions, o.fixed, o.echo, o.refusedFunctions], [5, 11, 11, 0, 0]);
+	check("文字の位置は Char、長さ1の文字列の位置は String——観測の値がそう言う", istLines(c).filter((l) => /^c2? :/.test(l)), ["c : Char -> Char", "c2 : String -> String"]);
 }
 
 // ---- 事実：pass3 が曖昧だった所を観測の型で埋め、周回は事実を書き換えない ----
@@ -236,12 +237,12 @@ const marked = (c) => c.nodes.filter((n) => n && n.type === "operation" && n.nam
 		[d(K_INT, "Int | String"), d(ab, "Struct{`a` : Int , 0  `b` : Int , 1} | Struct"), d(empty, "List(Int) | List(String)")],
 		[["fact", "Int", false], ["refuse", "conflict"], ["refuse", "conflict"]]
 	);
-	check("長い文字列：pass3 が String・族なら String、Char なら断る", [d(K_STRING, "String"), d(K_STRING, "Atom"), d(K_STRING, "Char")], [["fact", "String", false], ["fact", "String", false], ["refuse", "conflict"]]);
+	check("文字列（長さ1も）：pass3 が String・族なら String、Char なら断る", [d(K_STRING, "String"), d(K_STRING, "Atom"), d(K_STRING, "Char")], [["fact", "String", false], ["fact", "String", false], ["refuse", "conflict"]]);
 	check("関数：pass3 が Lambda なら事実、関数でない型・族なら断る", [d(K_LAMBDA, "Lambda"), d(K_LAMBDA, "Int"), d(K_LAMBDA, "_")], [["fact", "Lambda", true], ["refuse", "conflict"], ["refuse", "conflict"]]);
 	check(
-		"1文字の値：族のうち Scalar だけが Char（文字の成員は Char だけ）、Atom・_ は String とも Char とも言わないので断る（R6 の箱まで）",
-		[d(K_CHR1, "Scalar"), d(K_CHR1, "Atom"), d(K_CHR1, "_")],
-		[["fact", "Char", true], ["refuse", "conflict"], ["refuse", "conflict"]]
+		"文字（箱、R6）：pass3 が Char・族（Scalar・Atom・_）なら Char の事実で反響しない、String・Int・器の族（Container）なら断る",
+		[d(K_CHAR, "Char"), d(K_CHAR, "Scalar"), d(K_CHAR, "Atom"), d(K_CHAR, "_"), d(K_CHAR, "String"), d(K_CHAR, "Int"), d(K_CHAR, "Container")],
+		[["fact", "Char", false], ["fact", "Char", false], ["fact", "Char", false], ["fact", "Char", false], ["refuse", "conflict"], ["refuse", "conflict"], ["refuse", "conflict"]]
 	);
 }
 

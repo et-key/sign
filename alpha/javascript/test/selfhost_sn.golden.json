@@ -5,15 +5,15 @@
 	"counts": {
 		"reachable": 247,
 		"pass4-emits": {
-			"functions": 103,
+			"functions": 98,
 			"same": 34,
-			"refused": 69,
+			"refused": 64,
 			"closed": 26
 		},
 		"pass4-blocks": {
-			"functions": 144,
+			"functions": 149,
 			"same": 0,
-			"refused": 144
+			"refused": 149
 		},
 		"same": 34,
 		"refused": 213,
@@ -26,18 +26,18 @@
 	"reasons": {
 		"type": {
 			"pass4-emits": 24,
-			"pass4-blocks": 103
+			"pass4-blocks": 107
 		},
 		"head": {
-			"pass4-emits": 13,
+			"pass4-emits": 10,
 			"pass4-blocks": 15
 		},
 		"width": {
-			"pass4-emits": 5,
+			"pass4-emits": 4,
 			"pass4-blocks": 7
 		},
 		"leaf": {
-			"pass4-emits": 9,
+			"pass4-emits": 8,
 			"pass4-blocks": 2
 		},
 		"op &": {
@@ -50,7 +50,7 @@
 		},
 		"arity": {
 			"pass4-emits": 0,
-			"pass4-blocks": 5
+			"pass4-blocks": 6
 		},
 		"op |": {
 			"pass4-emits": 4,
@@ -107,10 +107,14 @@
 	],
 	"pass4Blocked": [
 		"op_word",
+		"take_quote",
 		"take_word",
 		"tokens",
+		"dec5",
 		"pad5",
 		"lo5",
+		"decu",
+		"dec",
 		"ld_mn",
 		"load_at",
 		"mov_rr",
@@ -189,6 +193,7 @@
 		"g_ld",
 		"g_st",
 		"g_niche",
+		"g_hx",
 		"g_mv",
 		"g_mvn",
 		"g_kn",
@@ -254,24 +259,33 @@
 	"observation": {
 		"functions": 247,
 		"positions": 874,
-		"fixed": 746,
-		"echo": 27,
+		"fixed": 741,
+		"echo": 1,
 		"refusedPositions": {
 			"unobserved": 61,
-			"several": 0,
-			"conflict": 67,
+			"several": 7,
+			"conflict": 65,
 			"exported": 0,
 			"unplaced": 0
 		},
-		"refusedFunctions": 86,
+		"refusedFunctions": 91,
 		"refusedByClass": {
 			"unobserved": 27,
-			"several": 0,
-			"conflict": 61,
+			"several": 7,
+			"conflict": 59,
 			"exported": 0,
 			"unplaced": 0
 		},
 		"refused": {
+			"dec": [
+				"several"
+			],
+			"dec5": [
+				"several"
+			],
+			"decu": [
+				"several"
+			],
 			"g2": [
 				"conflict"
 			],
@@ -317,6 +331,9 @@
 			],
 			"g_hasi": [
 				"conflict"
+			],
+			"g_hx": [
+				"several"
 			],
 			"g_imn": [
 				"unobserved"
@@ -366,11 +383,7 @@
 			"g_run": [
 				"conflict"
 			],
-			"g_slb": [
-				"conflict"
-			],
 			"g_slg": [
-				"conflict",
 				"unobserved"
 			],
 			"g_x1": [
@@ -446,6 +459,7 @@
 				"conflict"
 			],
 			"lw_fn2": [
+				"several",
 				"conflict"
 			],
 			"lw_fns": [
@@ -517,6 +531,9 @@
 			"lw_val": [
 				"conflict"
 			],
+			"lw_wd": [
+				"several"
+			],
 			"lw_x": [
 				"conflict"
 			],
@@ -531,6 +548,9 @@
 			],
 			"pad5": [
 				"unobserved"
+			],
+			"take_quote": [
+				"several"
 			]
 		}
 	},
@@ -551,7 +571,7 @@
 		"is_space": "! op |",
 		"open_br": "same",
 		"close_br": "same",
-		"take_quote": "! !s",
+		"take_quote": "! type take_quote",
 		"drop_quote": "! pattern drop_quote",
 		"take_word": "! !s",
 		"drop_word": "! !s",
@@ -561,11 +581,11 @@
 		"digit_run": "same",
 		"digit_num": "! !(is_digit (s  '  i))",
 		"dgt": "same",
-		"dec5": "! head (dgt (n  /  10))",
+		"dec5": "! type dec5",
 		"pad5": "! type pad5",
 		"lo5": "! type lo5",
-		"decu": "! width dec5",
-		"dec": "! head `-`",
+		"decu": "! type decu",
+		"dec": "! type dec",
 		"rg": "! head `x`",
 		"rw": "! head `w`",
 		"imm": "! head `#`",
@@ -696,7 +716,7 @@
 		"g_max": "same",
 		"g_frame": "same",
 		"g_h1": "same",
-		"g_hx": "! head (g_h1 (n  /  16))",
+		"g_hx": "! type g_hx",
 		"g_ch": "same",
 		"g_sh": "! head `, lsl #`",
 		"g_mv": "! head mn",
@@ -746,7 +766,7 @@
 		"g_nn": "! arity g_ld",
 		"g_ixb": "! head (g_ld 10 i)",
 		"g_slg": "! type g_slg",
-		"g_slb": "! type g_slb",
+		"g_slb": "! arity g_ld",
 		"g_args": "! head (g_ld j (d  +  j))",
 		"g_call": "! arity g_args",
 		"g_jump": "! op ==",

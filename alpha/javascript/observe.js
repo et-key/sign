@@ -11,8 +11,8 @@
  *   Int             整数の値（番地と Float の整数は値では割れない——R3・R4 の箱まで、Int と読むのは記録の側の
  *                   約束で、静的な側は pass3 が Address・Float と言う所を名指しで断る）
  *   Float           整数でない数
- *   Char-or-String  符号位置1つの文字列（Char か長さ1の String か、値では割れない——R6 の箱まで）
- *   String          それ以外の文字列（空の文字列は String の `__`、runtime_kind の `kindOf` と同じ）
+ *   Char            文字（箱、runtime_kind.js の `chr`——RTTI の計画 R6）
+ *   String          文字列（長さ1も。空の文字列は String の `__`、runtime_kind の `kindOf` と同じ）
  *   List(T)         器。要素の種類は中身ぜんぶの合流で、空の器は要素の証拠を持たない（`List(_)`）
  *   Struct{…}       名前付きスロット（鍵と、スロットごとの種類）
  *   Lambda          関数（閉包・合成・部分適用・点なし・恒等射・組み込み）
@@ -21,15 +21,16 @@
  *   __              種類の無い `__`（証拠ではない。`__` しか来なかった位置は「観測が無い」）
  *
  * 1つの位置に合流しない種類が来たら、合流は種類の並び（`Int | String`）になる——型ごとの実体の候補で、
- * つなぐ側は名指しで断る。合流で1つにまとめるのは2つだけ：符号位置1つの文字列と長い文字列は String
- * （長い文字列が来る位置は String の位置である）、器どうしは要素を合流する。
+ * つなぐ側は名指しで断る。合流で1つにまとめるのは器どうし（要素を合流する）と名前付きスロットどうし（鍵が同じなら
+ * スロットごとに合流する）だけで、文字と文字列も並び（`Char | String`）である。以前は文字と長さ1の文字列を値で
+ * 割れず（`Char-or-String`）、長い文字列と合流させて String にしていた——文字が箱になって（R6）その合流は要らない。
  *
  * ## 位置
  *
  * 仮引数の並びの位置ごとに1つ（裸の名前・混在形の中の括りはどれも1位置）。**括りだけの並び（`[h ~t]`・`[~s]`）は
  * 器1つの位置**である——渡された1つを分解するので、記録するのは渡された器そのもの。器でない値（数・番地・関数）を
- * 括りが受けると、解釈器は1要素の器へ持ち上げて分解する（`bindBracketParams`）ので、記録も持ち上げた器にする。
- * 実引数が2つ以上で括りに来たら（`f 1 2` を `[~xs]` で受ける）、実引数の並びが器である。
+ * 括りが受けると、解釈器は1要素の器へ持ち上げて分解する（`bindBracketParams`）ので、記録も持ち上げた器にする（文字は
+ * 文字のまま、`bracketKindOf`）。実引数が2つ以上で括りに来たら（`f 1 2` を `[~xs]` で受ける）、実引数の並びが器である。
  *
  * - **潰れた呼び出し**（完全性公理、`f __ = __`）も呼び出しとして数え、来ていた実引数の種類は証拠にする。返値は
  *   `__` で、証拠にしない（数だけ数える）。
@@ -78,7 +79,7 @@ function kindOfKey(key, t, extra) {
 const K_UNIT = kindOfKey("__", "Unit");
 const K_INT = kindOfKey("Int", "Int");
 const K_FLOAT = kindOfKey("Float", "Float");
-const K_CHR1 = kindOfKey("Char-or-String", "Chr1");
+const K_CHAR = kindOfKey("Char", "Char");
 const K_STRING = kindOfKey("String", "String");
 const K_LAMBDA = kindOfKey("Lambda", "Lambda");
 const K_ADDRESS = kindOfKey("Address", "Address");
@@ -108,7 +109,7 @@ function joinKinds(a, b) {
   if (a.t === "Unit") return b;
   if (b.t === "Unit") return a;
   if (a.t === "Several" || b.t === "Several") {
-    // 並びの中で合流できるものは合流し直す（`Int | Char-or-String` に String が来たら `Int | String`）
+    // 並びの中で合流できるものは合流し直す（`Int | List(Int)` に `List(_)` が来ても `Int | List(Int)`）
     const out = [];
     for (const m of [...(a.t === "Several" ? a.of : [a]), ...(b.t === "Several" ? b.of : [b])]) {
       const i = out.findIndex((x) => joinKinds(x, m).t !== "Several");
@@ -117,7 +118,6 @@ function joinKinds(a, b) {
     }
     return out.length === 1 ? out[0] : severalKind(out);
   }
-  if ((a.t === "Chr1" && b.t === "String") || (a.t === "String" && b.t === "Chr1")) return K_STRING;
   if (a.t === "List" && b.t === "List") return listKind(a.e === null ? b.e : b.e === null ? a.e : joinKinds(a.e, b.e));
   if (a.t === "Struct" && b.t === "Struct") {
     const ka = [...a.slots.keys()].join("\u0000");
@@ -134,8 +134,8 @@ function kindOfValue(v) {
       return K_UNIT;
     case "Num":
       return typeof v === "bigint" || Number.isInteger(v) ? K_INT : K_FLOAT;
-    case "Chr1":
-      return K_CHR1;
+    case "Char":
+      return K_CHAR;
     case "String":
       return K_STRING;
     case "List": {
@@ -162,11 +162,14 @@ function kindOfValue(v) {
 
 /**
  * **括りが受けた1つの値の種類。** 器でない値（数・番地・関数）は、解釈器が1要素の器へ持ち上げて分解する
- * （`bindBracketParams` の `[value]`）ので、記録も持ち上げた器にする。`__` は呼び出しごと潰れる。
+ * （`bindBracketParams` の `[value]`）ので、記録も持ち上げた器にする。**文字は持ち上げずに Char**——解釈器は文字を
+ * 1文字の並びとして分解するが、全部を受ける残り（`[~s]`）は文字そのもので（`[x] ≅ x`）、算術も数との比較も文字の
+ * 射で走る。String と記録すると、本体を文字列の型で読ませて（`s + 1` が `__`）、解釈器の値と食い違う。`__` は呼び出し
+ * ごと潰れる。
  */
 function bracketKindOf(v) {
   const k = kindOfValue(v);
-  if (k.t === "Unit" || k.t === "List" || k.t === "String" || k.t === "Chr1" || k.t === "Struct" || k.t === "Iterator") return k;
+  if (k.t === "Unit" || k.t === "List" || k.t === "String" || k.t === "Char" || k.t === "Struct" || k.t === "Iterator") return k;
   return listKind(k);
 }
 
@@ -291,4 +294,4 @@ function makeRecorder(nodes) {
   return { hooks, observations };
 }
 
-export { makeRecorder, kindOfValue, joinKinds, listKind, structKind, severalKind, K_UNIT, K_INT, K_FLOAT, K_CHR1, K_STRING, K_LAMBDA, K_ADDRESS, K_ITERATOR };
+export { makeRecorder, kindOfValue, joinKinds, listKind, structKind, severalKind, K_UNIT, K_INT, K_FLOAT, K_CHAR, K_STRING, K_LAMBDA, K_ADDRESS, K_ITERATOR };

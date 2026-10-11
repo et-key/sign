@@ -5,10 +5,10 @@
  * 答えは直に書く（種類の綴りは observe.js の頭の表）。見るのは3つ：
  *
  *   位置      仮引数の並びの位置ごとに1つ、括りだけの並び（`[h ~t]`・`[~s]`）は器1つの位置、混在形の括りも1位置。
- *             括りが器でない値を受けたら、解釈器と同じく1要素の器へ持ち上げて数える。既定値の入った位置は既定値の種類
+ *             括りが器でない値を受けたら、解釈器と同じく1要素の器へ持ち上げて数える（文字は文字のまま）。既定値の入った位置は既定値の種類
  *             （部分適用で既定値の位置に `__` を渡しても）
  *   返値      末尾呼び出しで渡り歩いた関数のどれにも、その関数の返値が付く——前置き（`構築 ＋ 再帰`）を溜めて
- *             回す鎖でも、段ごとの返値を取り違えない（`w` の見本：一番内側だけが1文字、外の2段は長い文字列）。
+ *             回す鎖でも、段ごとの返値を取り違えない（`w` の見本：一番内側だけが文字、外の2段は文字列）。
  *             内側の関数が返した器を外の関数がその場で書き換えて返しても、外の返値は書き換えた後の種類（`g` の見本）
  *   値        記録器を付けても外しても、コーパス（`test/codegen_corpus` の全部）の値と
  *             実行時の診断が同じ（記録器は読むだけ）
@@ -23,7 +23,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { compile } from "../compile.js";
 import * as I from "../interpreter.js";
-import { makeRecorder, kindOfValue, joinKinds, K_INT, K_STRING, K_CHR1 } from "../observe.js";
+import { makeRecorder, kindOfValue, joinKinds, K_INT, K_STRING, K_CHAR } from "../observe.js";
+import { chr } from "../runtime_kind.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const parser = peggy.generate(fs.readFileSync(path.join(__dirname, "..", "sign.pegjs"), "utf8"));
@@ -72,17 +73,17 @@ const valueOf = (source) => {
 	check("整数は Int", k("5"), "Int");
 	check("2^53 を越える整数（BigInt）も Int", k("9007199254740993"), "Int");
 	check("整数でない数は Float", k("2.5"), "Float");
-	check("符号位置1つの文字列は Char-or-String（R6 の箱まで割れない）", [k("\\a"), k("s : `a`\ns")], ["Char-or-String", "Char-or-String"]);
+	check("文字は Char、長さ1の文字列は String（文字は箱で、値で割れる——R6）", [k("\\a"), k("s : `a`\ns"), k("`ab` ' 0")], ["Char", "String", "Char"]);
 	check("長い文字列は String、空の文字列も String（String の __）", [k("s : `ab`\ns"), kindOfValue("").key], ["String", "String"]);
 	check("器は要素ぜんぶの合流、空の器は要素の証拠を持たない", [k("[1 2 3]"), kindOfValue([]).key], ["List(Int)", "List(_)"]);
-	check("器の中の1文字と長い文字列は String に合流する", kindOfValue(["a", "bc"]).key, "List(String)");
+	check("器の中の長さ1の文字列と長い文字列は String、文字と文字列は並び", [kindOfValue(["a", "bc"]).key, kindOfValue([chr(97), "bc"]).key], ["List(String)", "List(Char | String)"]);
 	check("合流しない要素は種類の並び", kindOfValue([1, "bc"]).key, "List(Int | String)");
 	check("名前付きスロットは鍵ごとの種類", k("pt :\n\ta : 1\n\tb : `xy`\npt"), "Struct{`a` : Int  `b` : String}");
 	check("閉包・点なしは Lambda", [k("f : x ? x + 1\nf"), k("[+ 1]")], ["Lambda", "Lambda"]);
 	check("`$` の参照セルは Address", k("v : 5\n$v"), "Address");
 	check("規則は Iterator", k("1 ~ 5"), "Iterator");
 	check("`__` は種類の無い __", kindOfValue(I.UNIT).key, "__");
-	check("合流：__ は証拠ではない・1文字と長い文字列は String・違う種類は並び", [joinKinds(kindOfValue(I.UNIT), K_INT).key, joinKinds(K_CHR1, K_STRING).key, joinKinds(K_INT, K_STRING).key], ["Int", "String", "Int | String"]);
+	check("合流：__ は証拠ではない・文字と文字列は並び（もう1つにまとめない）・違う種類は並び", [joinKinds(kindOfValue(I.UNIT), K_INT).key, joinKinds(K_CHAR, K_STRING).key, joinKinds(K_INT, K_STRING).key], ["Int", "Char | String", "Int | String"]);
 }
 
 // ---- 位置 ----
@@ -94,6 +95,12 @@ const valueOf = (source) => {
 	const o = run("g : [h ~t] ? h\ng [1 2 3]\ns : [~s] ? ||s||\ns `abc`\nc : [c ~r] ? c\nc 5\n").observed;
 	check("括りだけの並びは器1つの位置（分解した名前ごとに割らない）", [shape(o, "g").params, shape(o, "s").params], [["List(Int)"], ["String"]]);
 	check("括りが器でない値を受けたら、1要素の器へ持ち上げて数える（解釈器の分解と同じ）", shape(o, "c"), { calls: 1, collapsed: 0, partial: 0, params: ["List(Int)"], ret: "Int", retCollapsed: 0 });
+}
+{
+	// 文字は持ち上げずに文字のまま数える——全部を受ける残りは文字そのもの（interpreter.js の `bindBracketParams`）で、
+	// String と数えると本体を文字列の型で読ませる（`s + 1` が `__`、解釈器は 'b'）
+	const o = run("hd : [c ~r] ? c\nhd \\q\nwh : [~s] ? s + 1\nwh \\a\n").observed;
+	check("括りが文字を受けたら Char として数える（頭も、全部を受けた残りも文字）", [shape(o, "hd").params, shape(o, "hd").ret, shape(o, "wh").params, shape(o, "wh").ret], [["Char"], "Char", ["Char"], "Char"]);
 }
 {
 	const o = run("m : a [h ~t] ? h\nm 1 [2 3]\n").observed;
@@ -139,13 +146,13 @@ const valueOf = (source) => {
 
 // ---- 返値：前置きを溜めて回す鎖でも、段ごとの返値を取り違えない ----
 {
-	const r = run("w : n ?\n\tn = 0 : `x`\n\t`ab` (w n - 1)\nw 2\n");
+	const r = run("w : n ?\n\tn = 0 : \\x\n\t`ab` (w n - 1)\nw 2\n");
 	const f = r.observed.get("w");
 	check("w 2 の値は ababx（記録器を付けても同じ）", r.value, "ababx");
 	check(
-		"返値は段ごと：一番内側の w 0 だけが1文字、w 1・w 2 は長い文字列（鎖の後ろから前置きを繋いだ値）",
+		"返値は段ごと：一番内側の w 0 だけが文字、w 1・w 2 は文字列（鎖の後ろから前置きを繋いだ値）",
 		{ calls: f.calls, ret: Object.fromEntries([...f.ret.kinds].map(([k, n]) => [k.key, n])), evidence: f.ret.evidence },
-		{ calls: 3, ret: { "Char-or-String": 1, String: 2 }, evidence: 3 }
+		{ calls: 3, ret: { Char: 1, String: 2 }, evidence: 3 }
 	);
 }
 {
