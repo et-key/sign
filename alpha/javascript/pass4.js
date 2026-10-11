@@ -11794,16 +11794,23 @@ function generateAsm(nodes, env, options = {}) {
 	// **断りではなく information である。** 実際に外れたかどうかは実行時にしか分からないし、
 	// 見積もりを断ると添字で回る再帰が丸ごと出せなくなる（それがこの見積もりの理由である）。
 	// 危険は書けるが気付ける、という側に置く。
+	//
+	// **観測をつないだ compile では、見積もりで通さずに断る**（compile の `observed`、observed_facts.js）。観測で型が
+	// 埋まると、推論が曖昧で断っていた輪が出せるようになり、そこへ同じ見積もりが当たる——外れると、名指しの断りだった
+	// ものが短い器の黙った誤答に変わる（輪の見本 `lit3_three_br_i1c0` が `xy` で解釈 1 ／機械 0）。観測の道は名指しの
+	// 断りか正しい値かのどちらかに留める。観測を渡さない compile は今までどおり information である。
+	const observedCompile = !!(env && env.observedCompile);
 	for (const [name, v] of em.sretPlan || []) {
 		if (!(v.estimated || []).length || !v.needsSlot) continue;
 		em.diagnostics.push({
-			severity: "information",
+			severity: observedCompile ? "error" : "information",
 			reason: "sret-bound-is-an-estimate",
 			spec: "stack_abi.md §4.7",
 			message:
 				`${name}: 返す器の上界は見積もりです（${v.estimated.join("・")}）——外れると書く直前の` +
 				"照合で `__` を返し、その `__` は呼ぶ側の連結に吸われるので、踏み抜かない代わりに" +
-				"**短い器が黙って返り**ます（stack_abi.md §4.7）",
+				"**短い器が黙って返り**ます（stack_abi.md §4.7）" +
+				(observedCompile ? "。観測をつないだ compile では見積もりで出しません" : ""),
 			node: null,
 		});
 	}
@@ -11854,6 +11861,18 @@ function generateAsm(nodes, env, options = {}) {
 			const rhs = node.right;
 			if (rhs && rhs.type === "operation" && rhs.name === "lambda") {
 				const fname = bareName(node.left.value);
+				// **観測から型を決めなかった関数は出さない**（compile の `observed`、observed_facts.js）。観測が無い・種類が
+				// 2つ以上・観測と推論が食い違う関数で、型を推論の当て推量で埋めずに名指しで断る。`.ist` も署名を書かないので、
+				// 後段（lower.sn）も同じ関数を断る。印は観測を渡した compile にしか付かない。
+				if (rhs.observedRefusal) {
+					em.diagnostics.push({
+						severity: "error",
+						reason: "observed-type-refused",
+						message: `${fname}: 観測から型を決めないので出しません（${rhs.observedRefusal.map((r) => r.text).join("・")}）`,
+						node: rhs,
+					});
+					continue;
+				}
 				const entry = monos.get(fname);
 				if (entry) {
 					// **呼ばれている組み合わせのぶんだけ実体を出す。** 呼び出しサイトが1つも

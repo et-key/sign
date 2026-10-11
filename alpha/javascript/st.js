@@ -488,6 +488,13 @@ function entryFor(defineNode, defineByName) {
   if (!isDefineNode(defineNode) || !isIdentifierNode(defineNode.left)) return null;
   const name = bareName(defineNode.left.value);
   const rhs = defineNode.right;
+  // **観測から型を決めなかった関数は、署名を書かない**（compile の `observed`、observed_facts.js）。後段は署名の
+  // 無い関数を名指しで断る（lower.sn の `lw_sig` が `! type 名前`）——pass4 が同じ関数を名指しで断るのと揃う。
+  // 理由は注記の行に残す（バッククォートは注記を閉じるので書かない）。印は観測を渡した compile にしか付かない。
+  if (rhs && rhs.observedRefusal) {
+    const why = rhs.observedRefusal.map((r) => r.text).join("・").replace(/`/g, "'");
+    return { name, text: `\` 観測で断る: ${name} —— ${why}`, unresolved: 0, note: true };
+  }
 
   const sig = signatureOfNode(rhs, defineByName, new Set([defineNode.left.value]));
   if (sig) return signatureText(name, sig.params, sig.ret, sig.retIdentity);
@@ -528,7 +535,7 @@ function generateSignType(nodes, env, options = {}) {
     const binding = bindings.get(`<${e.name}>`);
     const exported = binding ? binding.exported : null;
     if (scope === "st" && !exported) continue;
-    out.push(exported ? `${exported}${e.text}` : e.text);
+    out.push(exported && !e.note ? `${exported}${e.text}` : e.text);
     entries++;
     unresolved += e.unresolved;
   }
@@ -543,4 +550,22 @@ function generateSignType(nodes, env, options = {}) {
   return { text: [...header, "", ...out].join("\n") + "\n", entries, unresolved };
 }
 
-export { generateSignType };
+/**
+ * **トップレベルの関数ごとの署名の綴り**（`.ist` と同じ綴りの、仮引数の位置ごとの型と返値の型）。観測をつなぐ側
+ * （observed_facts.js）が、位置ごとの pass3 の言い分として読む——`.ist` を書いて読み直すのではなく、同じ関数
+ * （`lambdaSignature`）から取る。
+ * @returns {Map<string, { params: string[], ret: string }>}
+ */
+function signatureTextsOf(nodes) {
+  const out = new Map();
+  for (const node of nodes) {
+    if (!isDefineNode(node) || !isIdentifierNode(node.left) || !isLambdaNode(node.right)) continue;
+    const name = bareName(node.left.value);
+    if (out.has(name)) continue;
+    const sig = lambdaSignature(node.right);
+    out.set(name, { params: sig.params, ret: sig.ret });
+  }
+  return out;
+}
+
+export { generateSignType, signatureTextsOf };

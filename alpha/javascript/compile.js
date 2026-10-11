@@ -30,6 +30,7 @@ import { OperationError } from "./errors.js";
 import { OPERATOR_DICT } from "./operator_table.js";
 import { specializeGenericParams } from "./pass1b.js";
 import { annotateAll, checkLayerConstraints, checkCharsetConstraints } from "./pass3.js";
+import { planObservedFacts, installObservedFacts, settleObservedFacts } from "./observed_facts.js";
 // ノードの形を見るだけの述語は layout.js が唯一の置き場である（理由はそこの
 // `isDefineNode` のコメント）。`isArmNode`／`isIdentNode` はこのファイルでの呼び名で、
 // 規則は同じ——写しを持たず、別名で受ける。
@@ -1458,7 +1459,21 @@ function checkDefineLeftSides(nodes) {
   for (const node of nodes) walk(node, "binding");
 }
 
+/**
+ * **観測を渡された compile**（`options.observed`、observe.js の記録器がプログラムを解釈器で走らせて取ったもの。
+ * 同じプロセスのメモリの Map で、ディスクには置かない）。観測を持たない compile を1回回して位置ごとの pass3 の
+ * 言い分を読み、観測と突き合わせて事実か名指しの断りを決め（`planObservedFacts`）、同じソースをもう1回 compile
+ * する——2回目は不動点を回す前に事実を置き、周回は読むだけにする（observed_facts.js の頭）。
+ */
+function compileWithObserved(source, options) {
+  const { observed, ...rest } = options;
+  const base = compile(source, rest);
+  const plan = planObservedFacts(base, observed);
+  return compile(source, { ...rest, __observedPlan: plan });
+}
+
 function compile(source, options = {}) {
+  if (options.observed && !options.__observedPlan) return compileWithObserved(source, options);
   // **`[:]` と `[?]` は字句の段で中置へ脱糖する**（`desugarSections`）。束縛表が生のトークン列から
   // 定義を読むので、区間の形のままでは定義が見えない。取り込むファイルも同じ `parseFn` を通る。
   const parseRaw = options.parse || parse;
@@ -1555,7 +1570,12 @@ function compile(source, options = {}) {
   // を `layoutOfStruct` のスナップショットとして焼くので、後から和集合を足すとそこだけ
   // 古い並びが残り、`f p` の中の `this ' foo` が隣のスロットを読む。
   // Pass 3 の型注釈と Pass 3b（`__` へ収束する経路の静的記録）は同じ走査で行う。
+  //
+  // 観測を渡された compile の2回目（`compileWithObserved`）は、不動点を回す前に観測の事実を置き、回した後で事実と
+  // 推論が両立しない関数に断りの印を付ける（observed_facts.js）。観測が無ければどちらも走らない。
+  const observedGuard = options.__observedPlan ? installObservedFacts(nodes, env, options.__observedPlan) : null;
   annotateAll(nodes, env, diagnostics, options.fixpointStats);
+  const observation = observedGuard ? settleObservedFacts(nodes, env, options.__observedPlan, observedGuard) : null;
   // layer による使用可能リテラル型の門番（option_ms_schema.md §4）。型が確定した後でないと
   // 判定できないのでここに置く。`options.layer` を渡さなければ検査しない——`option.ms` を
   // 読まない経路（テスト・playground の素の評価）まで std 相当を強制しないためである。
@@ -1593,6 +1613,7 @@ function compile(source, options = {}) {
   // 字面の `__` で区間を `__` へ畳むと、その区間が出すはずだった名指しの断り（廃止した `===`、番地でない左辺への
   // `#` …）が消える——だから Pass 3 と層・字の門番の後、最後に1回。
   settleWrittenUnits(nodes);
+  if (observation) return { nodes, env, specializations, diagnostics, observation };
   return { nodes, env, specializations, diagnostics };
 }
 
