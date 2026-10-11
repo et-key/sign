@@ -127,6 +127,11 @@ pre-alpha 実装はアーカイブへ退避した（`documents/ja-jp/impl/append
   区別できない2組（`Num` ＝ `Int`/`Address`/`Float`、`Chr1` ＝ `Char`/長さ1の `String`）は箱が入るまで割れて
   いない。`interpreter.js` は `UNIT`・`isUnit` を出し直すので、引いている試験は変わらない。算術の結果の型は
   `layout.js` の `arithDomain`（表は1つ、読む側は pass3・解釈器・機械の3つ）が決める。
+- `observe.js` — **観測の記録器**（RTTI の計画 R2）。解釈器がプログラムを走らせる間、ユーザーが定義した関数ごとに
+  仮引数の位置（括りだけの並びは器1つの位置）と返値に来た値の種類（`Int`・`Float`・`Char-or-String`・`String`・
+  `List(T)`・`Struct{…}`・`Lambda`・`Address`・`Iterator`、合流しなければ並び）を合流して数える。付けるのは
+  `interpreter.js` の `observeCalls(rec.hooks)` で、付けていない解釈器が払うのは適用1回ごとの null の照合1つだけ。
+  観測はメモリにだけ置く（ディスクへ書かない）。試験は `test/observe.test.js`。
 - `interpreter.js` — 最小インタプリタ（初実装）。`evaluate(node, runtimeEnv)`でPass2/Pass1bの
   ASTを実際に評価する。完全性公理（`f __ = __`）、デフォルト引数・restパラメータへのUnit
   フォールバック、算術/比較演算子のUnit伝播則、`&`/`|`/`;`の短絡評価、多引数関数の一括適用
@@ -377,6 +382,11 @@ pre-alpha 実装はアーカイブへ退避した（`documents/ja-jp/impl/append
   List 扱いしていたため `` `x` (`y`) `` が construct ではなく push へ落ち、String の
   連結が起きなかった。同じ問題は8-Queensの時にも一度発覚して `isRealListValue` が
   作られていたが、`coproductReduce` の 10.1/10.2 判定だけ古い判定のまま残っていた。
+- `test/observe.test.js` — 観測の記録器（`observe.js`）。小さなプログラムを記録器を付けて走らせ、位置（裸の仮引数・
+  括りだけの並びは器1つ・混在形の括りも1位置、括りが受けた器でない値は1要素の器へ持ち上げる）・潰れた呼び出し・
+  部分適用・既定値・返値（前置きを溜めて回す鎖でも段ごとの返値を取り違えない、内側が返した器を外がその場で書き換えて
+  返しても古い種類を付けない）の種類が書いた答えと同じことと、記録器を付けても外しても `codegen_corpus` の値と
+  実行時の診断が同じことを見る。
 - `test/selfhost_sn.test.js` — **自己適用の門（毎片の門、利用者 2026-10-07）。** Sign で書いたコンパイラ
   （`alpha/sign/lower.sn`＋`codegen.sn` とその取り込み先の束、解釈器の上）に自分自身を通し、駆動から届く関数ごとに
   素の pass4 と同じ命令か（same）・名指しの断りか・違う命令を出したか（differs＝黙った誤答）を出して、呼び先まで

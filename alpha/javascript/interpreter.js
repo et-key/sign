@@ -536,6 +536,7 @@ function makePointfreeClosure(node, env, bound) {
 // pass2が判定した「引数の個数が足りない」とは別軸——ここへ来る時点で個数の判断は
 // 既に済んでいる）、残りの仮引数だけを持つ新しいLambdaを返す。
 function makePartialClosure(closure, suppliedArgs) {
+  if (observer !== null) observer.partial(closure, suppliedArgs);
   const entries = paramEntriesOf(closure.params);
   const bound = entries.slice(0, suppliedArgs.length);
   const remaining = entries.slice(suppliedArgs.length);
@@ -870,15 +871,44 @@ function isGreedyPointfreeClosure(closure) {
   return node.pointfreeMap === true || (node.left === null && node.right === null);
 }
 
+/**
+ * **観測の記録器**（observe.js、RTTI の計画 R2）。付いていなければ null で、関数の適用1回・部分適用1回ごとに
+ * ここを1度見るだけである——付けていない解釈器は何も数えない。付けたかどうかで値は変わらない（記録器は読むだけ）。
+ */
+let observer = null;
+function observeCalls(hooks) {
+  observer = hooks || null;
+}
+
 function applyClosure(closure, argValues, env = null) {
   // 末尾の手前に置かれた前置き（`構築 ＋ 再帰`）を溜める。積まずに回すために要る。
   const pending = [];
+  // **観測の鎖。** 記録器が付いているときだけ、末尾呼び出しで渡り歩いた関数を覚える（`observer.called` の印）。
+  const rec = observer;
+  const chain = rec === null ? null : [];
   // **どの出口でも前置きを畳む。** 完全性公理で潰れる底（`callEnv === null`）のように、
   // ループの途中から返る道がいくつもある——そこを素通しすると、溜めた前置きが丸ごと
   // 落ちて `__` になる。畳み方は1箇所にしておく。
+  //
+  // 観測するときは、畳みながら鎖の関数ごとの返値を渡す——鎖の後ろの関数の返値に、その関数より後に溜めた前置きを
+  // 繋いだものが、その関数の返値である。畳む順と回数は観測しないときと同じ。`fresh` は「前の関数と同じ値ではない」
+  // の印で、この finish の最初の関数と、前置きを繋いだ後の関数に立つ（記録器の写しはこの印の間でしか使えない——
+  // 返した器を外の関数がその場で書き換えて返すと、同じ物が別の種類になる）。
   const finish = (v) => {
     let out = v;
-    for (let i = pending.length - 1; i >= 0; i--) out = constructValues(pending[i].node, pending[i].left, out);
+    let i = pending.length - 1;
+    if (chain !== null) {
+      let fresh = true;
+      for (let k = chain.length - 1; k >= 0; k--) {
+        for (; i >= chain[k].from; i--) {
+          out = constructValues(pending[i].node, pending[i].left, out);
+          fresh = true;
+        }
+        rec.returned(chain[k], out, fresh);
+        fresh = false;
+      }
+    }
+    for (; i >= 0; i--) out = constructValues(pending[i].node, pending[i].left, out);
     return out;
   };
   // eslint-disable-next-line no-constant-condition
@@ -968,6 +998,10 @@ function applyClosure(closure, argValues, env = null) {
       if (r !== undefined) return finish(r);
     }
     const callEnv = bindParams(closure.params, argValues, closure.env);
+    if (chain !== null) {
+      const seen = rec.called(closure, argValues, callEnv, pending.length);
+      if (seen !== null) chain.push(seen);
+    }
     if (callEnv === null) return finish(UNIT);
     const result = evaluateTail(closure.body, callEnv);
     if (result instanceof TailCall) {
@@ -3392,4 +3426,4 @@ function observe(v) {
 // 門がホストの等価（JSON の字面など）で比べると、`[x] ≅ x` や `String ≅ List(Char)` を
 // 門の側でもう一度書くことになり、同じ事実が2箇所で決まる——実測で、言語が等しいと言う
 // `` `abc` `` と `a ,  , c` を `isomorphism.test.js` が等しくないと言っていた。
-export { evaluate, newRuntimeEnv, envDefine, envGet, UNIT, isUnit, observe, structuralEqual };
+export { evaluate, newRuntimeEnv, envDefine, envGet, UNIT, isUnit, observe, structuralEqual, observeCalls };
