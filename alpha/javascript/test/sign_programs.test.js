@@ -408,7 +408,8 @@ function fromMs(v, paramSide) {
 	// 87 → 98 は、裸のストリーム仮引数の門（`bare_stream` ほか、2026-10-04）の行の括りの葉である。
 	// 98 → 72 は lexer.sn の要らない括弧を外したぶん（括弧の監査、2026-10-09。前段の木が変わらない括り）——括りの葉だった式が
 	// 行の比較へ出てきた。外すと parser.sn と pass2 の読みが割れる括り（添字の位置の `(s ' 1~)` ほか）は残してある。
-	check("そのうち括りの葉は pass2 が木にした（parser.sn はまだ降りない）", outsourcedLeaves, 72);
+	// 72 → 52 は parser.sn の同じ監査のぶん（割れる `(infix ' (ts ' k)~)`・`(ts ' 1~)` は残してある）。
+	check("そのうち括りの葉は pass2 が木にした（parser.sn はまだ降りない）", outsourcedLeaves, 52);
 	// 1語だけの列は `[x] ≅ x` で String に潰れるので、2語以上で訊く。
 	check("括りは1語のまま返る（器）", astText("expr [`[1 2 3]` , `+` , `1`]"), "ast : [\nop : `+`\nl : [1 2 3]\nr : 1\n]");
 	check("括りは1語のまま返る（丸括弧）", astText("expr [`(1 + 2)` , `*` , `3`]"), "ast : [\nop : `*`\nl : (1 + 2)\nr : 3\n]");

@@ -32,13 +32,13 @@ top_tier : 22
 `（実測で数式ひとつに2分以上かかっていたのが、渡す形にして数ミリ秒になった）`
 
 end_of : [~ts] i t ?
-	(t > top_tier) & (op_word (ts ' i)) : i
+	t > top_tier & op_word ts ' i : i
 	t > top_tier : i + 1
-	t = juxt_tier : jend ts (end_of ts i (t + 1))
-	end_at ts i t (end_of ts i (t + 1))
+	t = juxt_tier : jend ts (end_of ts i t + 1)
+	end_at ts i t (end_of ts i t + 1)
 
 end_at : [~ts] i t k ?
-	is_tier ts k t : end_run ts t (assoc_at ts k) (end_of ts (k + 1) (t + 1))
+	is_tier ts k t : end_run ts t (assoc_at ts k) (end_of ts k + 1 t + 1)
 	k
 
 `連なりは最初の演算子と結合の向きが同じ間だけ続ける。段の中で向きが2つあるのは 18 の ' と @ だけで、`
@@ -46,16 +46,16 @@ end_at : [~ts] i t k ?
 `向きの違う演算子が来たらそこで止める——入口の長さの検査が __ を返す（pass2 は同じ形を名指しで断る）`
 
 end_run : [~ts] t a k ?
-	(is_tier ts k t) & ((assoc_at ts k) = a) : end_run ts t a (end_of ts (k + 1) (t + 1))
+	is_tier ts k t & (assoc_at ts k) = a : end_run ts t a (end_of ts k + 1 t + 1)
 	k
 
 `段 t の左結合で、最後の項が始まる位置`
 
-last_of : [~ts] i j t ? last_at ts i j t (end_of ts i (t + 1))
+last_of : [~ts] i j t ? last_at ts i j t (end_of ts i t + 1)
 
 last_at : [~ts] i j t k ?
 	k = j : i
-	last_of ts (k + 1) j t
+	last_of ts k + 1 j t
 
 `--- 出力：AST を .ms で書く ---`
 `節は括り1つで、欄は3つ——op（演算子の綴り）・l（左）・r（右）。葉（字句の1語）はそのまま置く:`
@@ -116,17 +116,17 @@ ms_q : \`
 out : [~ts] i j t ?
 	t > top_tier : ts ' i
 	t = juxt_tier : out_j ts i j
-	out_at ts i j t (end_of ts i (t + 1))
+	out_at ts i j t (end_of ts i t + 1)
 
 out_at : [~ts] i j t k ?
-	k = j : out ts i j (t + 1)
+	k = j : out ts i j t + 1
 	out_as ts i j t k (assoc_at ts k)
 
 out_as : [~ts] i j t k a ?
-	a = -1 : out_one ts i j k (t + 1) t
-	out_one ts i j ((last_of ts i j t) - 1) t (t + 1)
+	a = -1 : out_one ts i j k t + 1 t
+	out_one ts i j (last_of ts i j t) - 1 t t + 1
 
-out_one : [~ts] i j o tl tr ? ms_open ms_nl `op : ` ms_q (ts ' o) ms_q ms_nl `l : ` (out ts i o tl) ms_nl `r : ` (out ts (o + 1) j tr) ms_nl ms_close
+out_one : [~ts] i j o tl tr ? ms_open ms_nl `op : ` ms_q ts ' o ms_q ms_nl `l : ` out ts i o tl ms_nl `r : ` out ts o + 1 j tr ms_nl ms_close
 
 
 
@@ -150,8 +150,8 @@ juxt_tier : 11
 jend : [~ts] k ?
 	k >= ||ts|| : k
 	tier_at ts k : k
-	op_word (ts ' k) : k
-	jend ts (end_of ts k (juxt_tier + 1))
+	op_word ts ' k : k
+	jend ts (end_of ts k juxt_tier + 1)
 
 
 `--- 演算子の語は項ではない ---`
@@ -187,11 +187,11 @@ op_word : [~w] ?
 `同じ段の中の結び方（f x y が (f x) y か、1 2 3 が [1 2 3] か）は Sign が型とアリティで決める`
 `——木は連なりをそのまま渡す`
 
-out_j : [~ts] i j ? out_jk ts i j (end_of ts i (juxt_tier + 1))
+out_j : [~ts] i j ? out_jk ts i j (end_of ts i juxt_tier + 1)
 
 out_jk : [~ts] i j k ?
-	k = j : out ts i j (juxt_tier + 1)
-	ms_open ms_nl `op : ` ms_q ` ` ms_q ms_nl `l : ` (out ts i k (juxt_tier + 1)) ms_nl `r : ` (out ts k j juxt_tier) ms_nl ms_close
+	k = j : out ts i j juxt_tier + 1
+	ms_open ms_nl `op : ` ms_q ` ` ms_q ms_nl `l : ` out ts i k juxt_tier + 1 ms_nl `r : ` out ts k j juxt_tier ms_nl ms_close
 
 `--- 入口：全部を食べたか ---`
 `表に在ることが「演算子である」という言明そのものなので、廃止された綴りも未知の綴りも`
@@ -212,10 +212,10 @@ prop_ch : `'`
 at_ch : `@`
 
 has_tok : t [~ts] ?
-	(ts ' 0) == t : 1
+	ts ' 0 == t : 1
 	has_tok t (ts ' 1~)
 
-mixed_get : [~ts] ? (has_tok prop_ch ts) & (has_tok at_ch ts)
+mixed_get : [~ts] ? has_tok prop_ch ts & has_tok at_ch ts
 
 `裸のストリーム仮引数は書けない（利用者の裁定 2026-10-04）。括りの外の ~名前 を仮引数に置く形`
 `（f : x ~xs ?・f : ~this ?）は廃止した。器は括りで受ける——[x ~xs]・[~xs]`
@@ -231,14 +231,14 @@ mixed_get : [~ts] ? (has_tok prop_ch ts) & (has_tok at_ch ts)
 
 q_ch : `?`
 
-tilde_word : [~w] ? (w ' 0) = \~
+tilde_word : [~w] ? w ' 0 = \~
 
 stream_at : [~ts] k s ?
 	k >= ||ts|| : __
-	((ts ' k) == q_ch) & (s = 1) : 1
-	op_word (ts ' k) : stream_at ts (k + 1) s
-	tilde_word (ts ' k) : stream_at ts (k + 1) 1
-	stream_at ts (k + 1) s
+	ts ' k == q_ch & s = 1 : 1
+	op_word ts ' k : stream_at ts k + 1 s
+	tilde_word ts ' k : stream_at ts k + 1 1
+	stream_at ts k + 1 s
 
 bare_stream : [~ts] ? stream_at ts 0 0
 
@@ -248,7 +248,7 @@ expr : [~ts] ?
 	expr_at ts (end_of ts 0 2)
 
 expr_at : [~ts] j ?
-	j = ||ts|| : `ast : ` (out ts 0 j 2)
+	j = ||ts|| : `ast : ` out ts 0 j 2
 	__
 
 `実行例`
