@@ -78,9 +78,9 @@ m , [5 6]
 
 > [!CAUTION]
 > **`[1 2] [3 4]` has the same shape as `1 2 , 3 4` (two dimensions).** Both sides are
-> bracketed, so each is one item. Widths that do not agree are not an error — they make the
+> bracketed, so each is one item. Element types that do not unify are not an error — they make the
 > type a `Struct` ([`type_system.md` §2](type_system.md): what separates `List` from `Struct`
-> is whether the widths are uniform). To join them flat, lower both (`[1 2]~ [3 4]~`) or leave
+> for an unnamed chain is whether the element types unify to one type). To join them flat, lower both (`[1 2]~ [3 4]~`) or leave
 > the left unbracketed (`1 2 [3 4]~`); lowering only one gives `[[1 2] 3 4]`, not `[1 2 3 4]`.
 >
 > **Sharing a shape is not the same as changing an operator.** This section previously read

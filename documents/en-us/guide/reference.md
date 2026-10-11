@@ -132,7 +132,7 @@ Sign supports the following literal forms:
 ## Lists
 
 * Created by separating literals with commas `,` (Product) or whitespace (Coproduct).
-* Heterogeneous tuple lists are supported natively.
+* A comma list whose elements share one type is a `List` (an integer promotes when a float is present: `1, 2.5` is a list of floats); a heterogeneous one is a tuple (`Struct`), supported natively.
 * Lists of characters represent strings.
 * `__` represents the empty list.
 * Comma `,` is the Product operator ($\times$).

@@ -78,14 +78,14 @@ Atom Subtypes govern binary operator semantics and type casts:
 | `Float` | Floating-point number | `3.14`, `1.0` | **2+** |
 | `String` | Unicode string (Isomorphic to `List(0u)`) | `` `hello` ``, `\a` | 0+ |
 | `Vector` | SIMD Vector type | `[1.0 2.0 3.0 4.0]` | **3+** |
-| `List` | Homogeneous 1D array | `1 2 3`, `[1 2 3]` | 0+ |
-| `Struct` | Heterogeneous Product structure | `1, 2, 3` | 0+ |
+| `List` | Homogeneous 1D array (a comma chain whose elements unify to one type is one too) | `1 2 3`, `[1 2 3]`, `1, 2, 3` | 0+ |
+| `Struct` | Heterogeneous Product structure (a comma chain whose elements do not unify) | `` 1, `a`, 2.5 `` | 0+ |
 | `Dict` | Key-Value structure | `[key : val]` | 0+ |
 | `Unit` | Zero object / Empty / Null | `__` | 0+ |
 | `Address` | Pointer location | `0x00`, `$expr` | 0+ |
 
 > [!NOTE]
-> **alpha today (not a rule).** Every statement in this document about `UInt`, `Int` traps and division by zero still answers by the old rules in alpha: it types `0r`/`0b` as `Int` (there is no `UInt` yet), wraps `Int` at 64 bits without trapping, and divides by zero to quotient 0 and remainder = dividend (user rulings 2026-10-11; they land in a later slice).
+> **alpha today (not a rule).** Every statement in this document about `UInt`, `Int` traps and division by zero still answers by the old rules in alpha: it types `0r`/`0b` as `Int` (there is no `UInt` yet), wraps `Int` at 64 bits without trapping, and divides by zero to quotient 0 and remainder = dividend (user rulings 2026-10-11; they land in a later slice). It also still types as a `Struct` a comma chain that unifies only by promotion (`1, 2.5`), one holding `__` (`x , __`), a scalar beside a container (`1 , [2 3]`), and containers of different lengths — the values are already right.
 
 ---
 
