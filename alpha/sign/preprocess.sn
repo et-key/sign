@@ -46,11 +46,11 @@ strict : t ?
 `!! は1つの記号（前置の bitNOT）。この言語に二重否定は要らないので ! 2つには読まない——後ろの = と組んで != にしない`
 
 sep : [c ~rest] ?
-	c = escape : c (rest ' 0) (sep (rest ' 1~))
+	c = escape : c rest ' 0 (sep rest ' 1~)
 	c = quote : c (in_quote rest)
-	(c = bang) & ((rest ' 0) = bang) : c (rest ' 0) (sep (rest ' 1~))
-	strict (c (rest ' 0) (rest ' 1)) : space (c (rest ' 0) (rest ' 1)) space (sep (rest ' 2~))
-	strict (c (rest ' 0)) : space (c (rest ' 0)) space (sep (rest ' 1~))
+	c = bang & rest ' 0 = bang : c rest ' 0 (sep rest ' 1~)
+	strict (c rest ' 0 rest ' 1) : space (c rest ' 0 rest ' 1) space (sep rest ' 2~)
+	strict (c rest ' 0) : space (c rest ' 0) space (sep rest ' 1~)
 	strict c : space c space (sep rest)
 	c (sep rest)
 
@@ -113,10 +113,10 @@ continues :
 	?
 		h = space : b
 		cont1 h : b
-		(h = bang) & (t = \=) : b
-		(h = bar) & (t = space) : b
-		(h = bar) & (t = bar) & ((b ' 2) = space) : b
-		(h = tilde) & (cont_tilde t) : b
+		h = bang & t = \= : b
+		h = bar & t = space : b
+		h = bar & t = bar & b ' 2 = space : b
+		h = tilde & cont_tilde t : b
 		__
 
 `括弧の中の行の前の区切り。続きの行なら空白でつなぎ、そうでなければ改行する`
@@ -152,7 +152,7 @@ skip_quote : [c ~rest] ?
 `n + __ = n となり、それまでの和がそのまま残る`
 
 delta : [c ~rest] ?
-	c = escape : delta (rest ' 1~)
+	c = escape : delta rest ' 1~
 	c = quote : delta (skip_quote rest)
 	open_br c : 1 + (delta rest)
 	close_br c : -1 + (delta rest)
@@ -203,8 +203,8 @@ blank : [c ~rest] ?
 
 beyond : [c ~rest] n m ?
 	!(c = tab) : __
-	n > 0 : beyond rest (n - 1) m
-	m (beyond rest 0 m)
+	n > 0 : beyond rest n - 1 m
+	m beyond rest 0 m
 
 `続きの行を読んだ後の深さの位置。浅くなったぶんは閉じるが、深い TAB は揃えなので段を増やさない`
 
@@ -217,7 +217,7 @@ unwind : ks s k d ?
 
 gap : [~ks] [~s] k d ?
 	d > k : beyond s k indent
-	(beyond ks d dedent) cr
+	beyond ks d dedent cr
 
 `1行ずつ処理する。空行は落とす——深さ計算に関わらず、パース結果も変わらない`
 `（DEDENT は直前の内容行に付く必要があり、空行を残すと間に挟まって構文が壊れる）`
@@ -247,10 +247,10 @@ walk :
 		b : body_of line
 		nd : bd + (delta b)
 	?
-		!(blank b) : (walk rest ks bd) | (beyond ks 0 dedent)
-		bd > 0 : (bracket_gap b) b ((walk rest ks nd) | (beyond ks 0 dedent))
-		continues b : (beyond ks d dedent) space b ((walk rest (unwind ks s k d) nd) | (beyond (unwind ks s k d) 0 dedent))
-		(gap ks s k d) b ((walk rest s nd) | (beyond s 0 dedent))
+		!(blank b) : walk rest ks bd | beyond ks 0 dedent
+		bd > 0 : (bracket_gap b) b (walk rest ks nd | beyond ks 0 dedent)
+		continues b : beyond ks d dedent space b (walk rest (unwind ks s k d) nd | beyond (unwind ks s k d) 0 dedent)
+		gap ks s k d b (walk rest s nd | beyond s 0 dedent)
 
 `walk は各行の前に区切りを置くため、先頭行のぶんだけ余分な改行が付く`
 `先頭行がインデントされている場合は区切りが INDENT になるので、その時は取らない`
@@ -276,13 +276,13 @@ skip_lf : [c ~rest] ?
 
 at_line : [~s] bd ?
 	bd > 0 : body_cls s bd
-	((s ' 0) = quote) & !(quote_expr (s ' 1~)) : drop_line s bd
+	s ' 0 = quote & !(quote_expr s ' 1~) : drop_line s bd
 	body_cls s bd
 
 `開きの直後から読み、閉じの直後の1文字を返す（式なら真、コメントなら __）`
 
 quote_expr : [c ~rest] ?
-	c = quote : after_close (rest ' 0)
+	c = quote : after_close rest ' 0
 	c = cr : __
 	c = lf : __
 	quote_expr rest
@@ -297,45 +297,45 @@ after_close : ch ?
 `コメントの行。行末まで読み捨て、区切りの CR だけを残す（空の処理行は walk が落とす）`
 
 drop_line : [c ~rest] bd ?
-	c = cr : cr (at_line (skip_lf rest) bd)
-	c = lf : cr (at_line rest bd)
+	c = cr : cr at_line (skip_lf rest) bd
+	c = lf : cr at_line rest bd
 	drop_line rest bd
 
 body_cls : [c ~rest] bd ?
-	c = cr : cr (at_line (skip_lf rest) bd)
-	c = lf : cr (at_line rest bd)
-	c = escape : escape (esc_cls rest bd)
-	c = quote : c (str_cls rest bd)
-	c = dquote : c (dstr_cls rest bd)
-	open_br c : c (body_cls rest (bd + 1))
-	close_br c : c (body_cls rest (bd - 1))
-	c (body_cls rest bd)
+	c = cr : cr at_line (skip_lf rest) bd
+	c = lf : cr at_line rest bd
+	c = escape : escape esc_cls rest bd
+	c = quote : c str_cls rest bd
+	c = dquote : c dstr_cls rest bd
+	open_br c : c body_cls rest bd + 1
+	close_br c : c body_cls rest bd - 1
+	c body_cls rest bd
 
 `エスケープの直後。改行なら LF 1個にして、その後のタブをすべて落とす（続きの行の頭のタブは揃えで、その後の空白が余積になる）`
 `それ以外はその1文字`
 `入力の末尾ならエスケープの記号だけが残る`
 
 esc_cls : [c ~rest] bd ?
-	c = cr : lf (body_cls (skip_tabs (skip_lf rest)) bd)
-	c = lf : lf (body_cls (skip_tabs rest) bd)
-	c (body_cls rest bd)
+	c = cr : lf body_cls (skip_tabs (skip_lf rest)) bd
+	c = lf : lf body_cls (skip_tabs rest) bd
+	c body_cls rest bd
 
 skip_tabs : [c ~rest] ?
 	c = tab : skip_tabs rest
 	c rest
 
 str_cls : [c ~rest] bd ?
-	c = quote : c (body_cls rest bd)
-	c = cr : cr (at_line (skip_lf rest) bd)
-	c = lf : cr (at_line rest bd)
-	c (str_cls rest bd)
+	c = quote : c body_cls rest bd
+	c = cr : cr at_line (skip_lf rest) bd
+	c = lf : cr at_line rest bd
+	c str_cls rest bd
 
 dstr_cls : [c ~rest] bd ?
-	c = dquote : c (body_cls rest bd)
-	c = cr : cr (at_line (skip_lf rest) bd)
-	c = lf : cr (at_line rest bd)
-	(c = escape) & !((rest ' 0) = cr) & !((rest ' 0) = lf) : c (rest ' 0) (dstr_cls (rest ' 1~) bd)
-	c (dstr_cls rest bd)
+	c = dquote : c body_cls rest bd
+	c = cr : cr at_line (skip_lf rest) bd
+	c = lf : cr at_line rest bd
+	c = escape & !(rest ' 0 = cr) & !(rest ' 0 = lf) : c rest ' 0 dstr_cls rest ' 1~ bd
+	c dstr_cls rest bd
 
 `--- 3. ? の行の字下げ（利用者の裁定 2026-10-05） ---`
 `? の行は、定義の行から1段だけ字下げする。仮引数のブロックは2段、? は1段、本体のブロックも2段`
@@ -374,29 +374,29 @@ q_lead : [c ~rest] ?
 	__
 
 pow2 : k ?
-	k > 0 : 2 * (pow2 (k - 1))
+	k > 0 : 2 * (pow2 k - 1)
 	1
 
 `k 桁目より下（m を 2 の k 乗で割った余り）。剰余は機械がまだ出せないので、割り算で書く`
 
-low : m k ? m - ((m / (pow2 k)) * (pow2 k))
+low : m k ? m - m / (pow2 k) * (pow2 k)
 
-has_row : m k ? (low m (k + 1)) >= (pow2 k)
+has_row : m k ? (low m k + 1) >= (pow2 k)
 
-no_row : m k ? (low m (k + 1)) < (pow2 k)
+no_row : m k ? (low m k + 1) < (pow2 k)
 
 `d - 1 に書いた行があり、d に書いた行が無ければ、d より深い書いた行を見る。付く先を誤るなら 1`
 `（d = 0 なら d - 1 の桁は無い——has_row m -1 は m によらず __）`
 
 q_off : m o d ?
-	(has_row m (d - 1)) & (no_row m d) : q_deeper m o d
+	has_row m d - 1 & no_row m d : q_deeper m o d
 	1
 
 `d より深い書いた行が無いか、いちばん浅いものが d + 1 にあってその行で開いた段なら __、そうでなければ 1`
 
 q_deeper : m o d ?
-	m < (pow2 (d + 1)) : __
-	has_row o (d + 1) : __
+	m < (pow2 d + 1) : __
+	has_row o d + 1 : __
 	1
 
 `続きの行で浅くなったら、今の行の深さと、その深さより上の桁を落とす`
@@ -406,23 +406,23 @@ shallow : k d ?
 	k
 
 cut : m k d ?
-	d < k : low m (d + 1)
+	d < k : low m d + 1
 	m
 
 `書いた行の o の桁。その深さに書いた行がもうあればそのまま、無ければ字下げを深くして開いたときだけ立てる`
 
 mark : m o k d ?
-	has_row m d : low o (d + 1)
+	has_row m d : low o d + 1
 	d > k : (low o d) + (pow2 d)
 	low o d
 
 `括りの中で始まった行が、括りの外（深さ 0）へ出た後に ? を書いていれば 1。数え方は delta と同じ`
 
 close_q : [c ~rest] n ?
-	c = escape : close_q (rest ' 1~) n
+	c = escape : close_q rest ' 1~ n
 	c = quote : close_q (skip_quote rest) n
-	open_br c : close_q rest (n + 1)
-	close_br c : close_q rest (n - 1)
+	open_br c : close_q rest n + 1
+	close_br c : close_q rest n - 1
 	n > 0 : close_q rest n
 	c = qmark : 1
 	close_q rest n
@@ -444,12 +444,12 @@ q_bad :
 		nd : bd + (delta b)
 	?
 		!(blank b) : q_bad rest k m o bd seen
-		(bd > 0) & (close_q b bd) : 1
+		bd > 0 & close_q b bd : 1
 		bd > 0 : q_bad rest k m o nd 1
 		d > 61 : 1
-		(seen = 1) & (q_lead b) & (q_off m o d) : 1
+		seen = 1 & q_lead b & q_off m o d : 1
 		continues b : q_bad rest (shallow k d) (cut m k d) (cut o k d) nd 1
-		q_bad rest d ((low m d) + (pow2 d)) (mark m o k d) nd 1
+		q_bad rest d (low m d) + (pow2 d) (mark m o k d) nd 1
 
 `--- 前処理の全体 ---`
 `改行の役割を先に分け、? の行の字下げを確かめ、インデントを確定させてから、演算子の空白を入れる`
