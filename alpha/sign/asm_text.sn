@@ -22,33 +22,33 @@
 `5 桁を越えたら5桁ずつ割って並べる。以前は5桁目で止まっていて dec 100000 が 00000 になった
 `（コード生成のラベル番号がそこを越えると、黙って別のラベルとぶつかる）。負の数は - を付けて綴る
 dg : `0123456789`
-dgt : n ? dg ' (n - ((n / 10) * 10))
+dgt : n ? dg ' (n - n / 10 * 10)
 dec5 : n ?
 	n < 10 : dgt n
-	n < 100 : (dgt (n / 10)) (dgt n)
-	n < 1000 : (dgt (n / 100)) (dgt (n / 10)) (dgt n)
-	n < 10000 : (dgt (n / 1000)) (dgt (n / 100)) (dgt (n / 10)) (dgt n)
-	(dgt (n / 10000)) (dgt (n / 1000)) (dgt (n / 100)) (dgt (n / 10)) (dgt n)
-pad5 : n ? (dgt (n / 10000)) (dgt (n / 1000)) (dgt (n / 100)) (dgt (n / 10)) (dgt n)
-lo5 : n ? n - ((n / 100000) * 100000)
+	n < 100 : (dgt (n / 10)) dgt n
+	n < 1000 : dgt n / 100 dgt n / 10 dgt n
+	n < 10000 : dgt n / 1000 dgt n / 100 dgt n / 10 dgt n
+	dgt n / 10000 dgt n / 1000 dgt n / 100 dgt n / 10 dgt n
+pad5 : n ? (dgt (n / 10000)) dgt n / 1000 dgt n / 100 dgt n / 10 dgt n
+lo5 : n ? n - n / 100000 * 100000
 decu : n ?
 	n < 100000 : dec5 n
-	n < 10000000000 : (dec5 (n / 100000)) (pad5 (lo5 n))
-	n < 1000000000000000 : (dec5 (n / 10000000000)) (pad5 (lo5 (n / 100000))) (pad5 (lo5 n))
-	(dec5 (n / 1000000000000000)) (pad5 (lo5 (n / 10000000000))) (pad5 (lo5 (n / 100000))) (pad5 (lo5 n))
+	n < 10000000000 : dec5 n / 100000 pad5 (lo5 n)
+	n < 1000000000000000 : dec5 n / 10000000000 pad5 (lo5 n / 100000) pad5 (lo5 n)
+	dec5 n / 1000000000000000 pad5 (lo5 n / 10000000000) pad5 (lo5 n / 100000) pad5 (lo5 n)
 dec : n ?
-	n < 0 : `-` (decu (0 - n))
+	n < 0 : `-` decu 0 - n
 	decu n
 
 `--- 綴り手。レジスタ・即値・場所 ---`
 `幅で名前が変わるのはレジスタだけで、場所の綴りは幅に依らない`
-rg : n ? `x` (dec n)
-rw : n ? `w` (dec n)
-imm : n ? `#` (dec n)
+rg : n ? `x` dec n
+rw : n ? `w` dec n
+imm : n ? `#` dec n
 at : b ? `[` b `]`
-at_off : b o ? `[` b `, #` (dec o) `]`
+at_off : b o ? `[` b `, #` dec o `]`
 at_reg : b i ? `[` b `, ` i `]`
-at_idx : b i s ? `[` b `, ` i `, lsl #` (dec s) `]`
+at_idx : b i s ? `[` b `, ` i `, lsl #` dec s `]`
 
 `--- 幅から命令の綴りを引く。表は operator_table.sn が持っている ---`
 `鍵を綴りで組んで引く道（' (`gpr_w` (dec w))~）は取らない——幅は4通りしかなく、`
@@ -101,13 +101,13 @@ store_at : s b w ? ln2 (st_mn w) (reg_w s w) (at b)
 `真偽はその場で signed か Unit になる——target_info.sn の is_signed がその形である
 sg_of : ty ? is_signed ' (signedness ' ty~)~
 sl_ld_mn : w ty ?
-	w = 1 : (sg_of ty) & `ldrsb` | `ldrb`
-	w = 2 : (sg_of ty) & `ldrsh` | `ldrh`
-	w = 4 : (sg_of ty) & `ldrsw` | `ldr`
+	w = 1 : sg_of ty & `ldrsb` | `ldrb`
+	w = 2 : sg_of ty & `ldrsh` | `ldrh`
+	w = 4 : sg_of ty & `ldrsw` | `ldr`
 	`ldr`
 sl_ld_reg : n w ty ?
 	w >= 8 : rg n
-	(sg_of ty) & (rg n) | (rw n)
+	sg_of ty & rg n | rw n
 slot_load : d b o w ty ? ln2 (sl_ld_mn w ty) (sl_ld_reg d w ty) (at_off b o)
 `slotStoreInsn（読む側の対。8 byte を超える幅は 8 で書く）`
 slot_store : s b o w ?
@@ -120,7 +120,7 @@ mov_ri : d n ? ln2 `mov` (rg d) (imm n)
 cmp_rr : d n ? ln2 `cmp` (rg d) (rg n)
 cmp_ri : d n ? ln2 `cmp` (rg d) (imm n)
 `R,I,S（movz は 830 本すべてがこの形で、シフト無しは 1 本も出ていない）`
-movz_ris : d n s ? ln3 `movz` (rg d) (imm n) (`lsl #` (dec s))
+movz_ris : d n s ? ln3 `movz` (rg d) (imm n) (`lsl #` dec s)
 `R,R,R と R,R,I`
 alu_rrr : op d n m ? ln3 op (rg d) (rg n) (rg m)
 alu_rri : op d n m ? ln3 op (rg d) (rg n) (imm m)
