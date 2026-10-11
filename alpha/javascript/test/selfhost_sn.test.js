@@ -20,8 +20,8 @@
  *         （`unaccountedOf`）。比べない所——関数の後ろに足された名前付きのコード、節の後の裸の命令、誰も
  *         引かない像——に何かが紛れ込んだら、比較とは別にここで名指しする。
  *
- * どちらの段も解釈器の上で走る（codegen_sn.test.js と同じ）。型は pass3 の `.ist`（`generateSignType` の
- * `scope: "ist"`）をプロセスの中で作って渡す——ディスクへは書かない（compiler_pipeline.md §4）。
+ * どちらの段も解釈器の上で走る（codegen_sn.test.js と同じ）。型は**観測をつないだ** pass3 の `.ist`（下の「観測」、
+ * `generateSignType` の `scope: "ist"`）をプロセスの中で作って渡す——ディスクへは書かない（compiler_pipeline.md §4）。
  * 門は `lw_prog` を通らずに `lw_fst` を直に呼ぶので、`lw_prog` の最初の行（身元の検査 `lw_optck`）は
  * pass4 に渡したのと同じ option.ms の字面で別に通す。
  *
@@ -38,12 +38,26 @@
  *      golden を書き直して通すのは、その片がわざとそこを断りへ倒したときだけで、言い分を commit に書く。
  *
  * golden は HEAD 7437adeb（2026-10-07。alpha/ は ea281f4f と同じ）で取った：届く 247 本・same 28 本・閉じる 25 本・
- * differs 0 本。
+ * differs 0 本。観測をつないだ日（2026-10-11）に取り直した：届く 247 本・same 34 本・閉じる 26 本・pass4 が出せる 103 本・
+ * differs 0 本（つなぐ前は same 29・閉じる 26・出せる 127）。
+ *
+ * ## 観測（RTTI の計画 R2、利用者 2026-10-11）
+ *
+ * 型はテストが決める——解釈器が束を走らせれば型は出ている（利用者 10-09）。門はまず束を解釈器で1周走らせ（身元の
+ * 検査・文の歩き・関数ごとの段1と、断らなかった関数の段2・束ねて1回。型は観測を持たない pass3 の .ist）、記録器
+ * （observe.js）で関数ごと・位置ごとの値の種類を取る。その観測をメモリの Map のまま `compile(…, { observed })` へ渡し
+ * （observed_facts.js）、観測を確定した事実として pass3 の不動点の外に置いた compile から、pass4（素）と .ist を作る。
+ * 下ろして比べるのはその .ist と pass4 である。観測が無い・種類が2つ以上・観測と推論が食い違う関数と公開した関数（`#`、
+ * 束には無い）は、pass4 が名指しで断り、.ist は署名を書かない（段1が `! type 名前` で断る）——門はその関数がどちらの側
+ * でも断られることを見る。
+ * 周回が事実を書き換えようとした回数は数え、どれも通らなかったこと（周回の後も事実が置いたまま）を見る。観測の数と、
+ * 観測で断った関数（類ごと）も golden に置く。観測はディスクに置かない（数と類と名前だけ）。
  *
  * ## 段と時間
  *
- * `npm test`（test/run.js）が回す速い段に置く。1周は約 30 秒（2026-10-07、ワーカー全体：読み込み 4 秒・
- * 歩き 19 秒（うち対照 7 秒）・メモ無しの見本 3 秒）で、目安の2分に収まる。HEAD 7437adeb の解釈器と parser.sn
+ * `npm test`（test/run.js）が回す速い段に置く。1周は約 75 秒（2026-10-11、ワーカー全体：読み込み 6 秒・
+ * 観測の走り 21 秒・観測をつないだ compile 10 秒・歩き 26 秒（うち対照 15 秒）・メモ無しの見本 3 秒）で、目安の
+ * 2分に収まる（観測をつなぐ前は約 30 秒——2026-10-07、読み込み 4 秒・歩き 19 秒（うち対照 7 秒）・メモ無しの見本 3 秒）。HEAD 7437adeb の解釈器と parser.sn
  * では 421 秒だった——解釈器の `s ' i` が引くたびに全文を広げていたのと、parser.sn の op_word が語を1字ずつ
  * 数えていたのを直して縮んだ。2分を超えるようになったら、速い段から外して自分の段へ移し、どの片の検証でも
  * 別に回す、と頭と alpha/javascript/README.md に書き直す。走り終わりに「1周」の行で時間を出す。
@@ -1139,7 +1153,8 @@ async function work(cfg) {
 	const { readOptionMs } = await import("../option_ms.js");
 	const { blockingOf } = await import("../errors.js");
 	const { preprocess } = await import("../lexer.js");
-	const { evaluate, newRuntimeEnv, envDefine, isUnit, observe } = await import("../interpreter.js");
+	const { evaluate, newRuntimeEnv, envDefine, isUnit, observe, observeCalls } = await import("../interpreter.js");
+	const { makeRecorder } = await import("../observe.js");
 	const tStart = performance.now();
 	const parser = peggy.generate(fs.readFileSync(path.join(__dirname, "..", "sign.pegjs"), "utf8"));
 	const res = { checks: [], functions: [], timing: {} };
@@ -1179,48 +1194,10 @@ async function work(cfg) {
 		res.bundle = { statements: stmts.length, bytes: FLAT.length, files: [...new Set(stmts.map((s) => s.from))] };
 	}
 
-	// ---- pass4（素）と .ist ----
+	// 身元（pass4 と段1の身元の検査に同じ字面を渡す）。pass4 と .ist は観測の走りの後で、観測をつないだ compile から作る
 	const OPT = readImport("option.ms");
 	const conf = readOptionMs(OPT);
 	check("alpha/sign/option.ms が読める（警告 0 件）・身元は段1が通すもの", [conf.target, conf.layer, conf.charset, conf.warnings], ["aarch64_qemu", 1, "ascii", []]);
-	const g4 = generateAsm(c.nodes, c.env, { target: conf.target, charset: conf.charset, layer: conf.layer, regAlloc: false, peepholes: false });
-	const ist = generateSignType(c.nodes, c.env, { scope: "ist" }).text;
-	const P4 = pass4Side(g4.text);
-	const { lines: p4lines, secs: p4secs, data: p4data } = P4;
-	check("pass4 の行はどれも、どこかの区画・像・節の指示に入る（区画の切り方が行を取りこぼさない）", unaccountedOf(p4lines, null).slice(0, 8), []);
-	check("pass4 の出力で normalizeAsm が落とすのは注釈・空行・引用符の外の空白の連なりだけ（正規化の釘）", pinOf(g4.text, false), null);
-	// pass4 が出せない関数：区画に「出せない」の注釈があるか、その関数の阻む診断がある
-	const blocked = new Set();
-	{
-		let cur = null;
-		for (const l of g4.text.split("\n")) {
-			const m = l.match(/^("?)([^".\s][^"]*)\1:$/);
-			if (m) cur = m[2];
-			else if (/^\s*\.(section|data|text|global|hidden)\b/.test(l)) cur = null;
-			else if (cur && l.includes("// 出せない:")) blocked.add(cur);
-		}
-		const owner = new Map();
-		for (const [nm, d] of G.defs) {
-			const seen = new Set();
-			const st = [d];
-			while (st.length) {
-				const n = st.pop();
-				if (!n || typeof n !== "object" || seen.has(n)) continue;
-				seen.add(n);
-				if (!owner.has(n)) owner.set(n, nm);
-				if (Array.isArray(n)) n.forEach((x) => st.push(x));
-				else for (const [k, v] of Object.entries(n)) if (!["binding", "valueNode", "scope", "parent", "atomType", "elementType"].includes(k) && v && typeof v === "object") st.push(v);
-			}
-		}
-		const unattributed = [];
-		for (const x of blockingOf(g4.diagnostics)) {
-			const byPrefix = (String(x.message).match(/^([A-Za-z_][A-Za-z_0-9]*):/) || [])[1];
-			const fn = owner.get(x.node) || (byPrefix && G.defs.has(byPrefix) ? byPrefix : null);
-			if (fn) blocked.add(fn);
-			else unattributed.push(String(x.message).slice(0, 100));
-		}
-		res.p4 = { diagnostics: g4.diagnostics.length, blocking: blockingOf(g4.diagnostics).length, unattributed };
-	}
 
 	// ---- 段1・段2を1つの環境に ----
 	const tLoad = performance.now();
@@ -1241,13 +1218,6 @@ async function work(cfg) {
 		return evaluate(node, env);
 	};
 	const obs = (v) => (isUnit(v) ? null : observe(v));
-
-	// ---- 段1の身元の検査（lw_prog の最初の行）。pass4 に渡したのと同じ字面を通す ----
-	check("段1の身元の検査 lw_optck が alpha/sign/option.ms を通す（pass4 に渡したのと同じ字面）", obs(call("lw_optck", OPT)), null);
-	{
-		const bad = OPT.replace(/^(target\s*:\s*)aarch64_qemu\s*$/m, "$1riscv64");
-		check("lw_optck は target の違う身元を名指しで断る（上の検査が空振りでない）", [bad !== OPT, obs(call("lw_optck", bad))], [true, "! option target"]);
-	}
 
 	// ---- メモ：実引数すべてを鍵に、Sign の関数が出した答えを覚える ----
 	const memo = { hits: 0, misses: 0, bypass: 0, clashes: [], byName: {} };
@@ -1305,25 +1275,112 @@ async function work(cfg) {
 	const memoCalls = () => MEMOIZED.map((x) => memo.byName[x].hits + memo.byName[x].misses + memo.byName[x].bypass);
 	memoOn();
 
-	const P = call("sh_pair", FLAT, ist);
-
-	// ---- 文を Sign の歩き（lw_next）で辿る。切れ目は JS の束と同じはず ----
-	const tWalk = performance.now();
+	// ---- 観測の走り（R2、利用者 2026-10-11）：束を解釈器で1周走らせ、記録器で関数ごとの位置の種類を取る ----
+	// 走らせるのは下の比べる歩きと同じ鎖（身元の検査・文の歩き・関数ごとの段1と、断らなかった関数の段2・束ねて1回）で、
+	// 型は観測を持たない pass3 の .ist を渡す。この走りの答えは比べない。観測はメモリの Map のまま compile へ渡し、
+	// ディスクへは書かない。`--only` でも全部走らせる（観測が欠けると事実が変わる）。
+	const tObs = performance.now();
+	const ist0 = generateSignType(c.nodes, c.env, { scope: "ist" }).text;
+	const rec = makeRecorder(lib.nodes);
 	const offsets = [];
-	for (let i = 0; i < FLAT.length; ) {
-		offsets.push(i);
-		i = call("lw_next", FLAT, i);
-		if (typeof i !== "number") throw new Error("lw_next が数を返さない");
-	}
-	{
-		const js = [];
-		let o = 0;
-		for (const s of stmts) {
-			js.push(o);
-			o += s.text.length + 1;
+	observeCalls(rec.hooks);
+	try {
+		// 段1の身元の検査（lw_prog の最初の行）。pass4 に渡したのと同じ字面を通す
+		check("段1の身元の検査 lw_optck が alpha/sign/option.ms を通す（pass4 に渡したのと同じ字面）", obs(call("lw_optck", OPT)), null);
+		{
+			const bad = OPT.replace(/^(target\s*:\s*)aarch64_qemu\s*$/m, "$1riscv64");
+			check("lw_optck は target の違う身元を名指しで断る（上の検査が空振りでない）", [bad !== OPT, obs(call("lw_optck", bad))], [true, "! option target"]);
 		}
-		check("Sign の文の歩き（lw_next）が束の文の切れ目と同じ", JSON.stringify(offsets) === JSON.stringify(js) ? "同じ" : { sign: offsets.length, js: js.length, first: offsets.findIndex((x, i) => x !== js[i]) }, "同じ");
+		const P0 = call("sh_pair", FLAT, ist0);
+		// 文を Sign の歩き（lw_next）で辿る。切れ目は JS の束と同じはず
+		for (let i = 0; i < FLAT.length; ) {
+			offsets.push(i);
+			i = call("lw_next", FLAT, i);
+			if (typeof i !== "number") throw new Error("lw_next が数を返さない");
+		}
+		{
+			const js = [];
+			let o = 0;
+			for (const s of stmts) {
+				js.push(o);
+				o += s.text.length + 1;
+			}
+			check("Sign の文の歩き（lw_next）が束の文の切れ目と同じ", JSON.stringify(offsets) === JSON.stringify(js) ? "同じ" : { sign: offsets.length, js: js.length, first: offsets.findIndex((x, i) => x !== js[i]) }, "同じ");
+		}
+		const seen0 = new Set();
+		const all0 = [];
+		for (const i of offsets) {
+			const tsv = call("lw_stoks", FLAT, i);
+			const ts = obs(tsv) || [];
+			const nm = Array.isArray(ts) && typeof ts[0] === "string" ? ts[0].replace(/^#+/, "") : null;
+			if (!(Array.isArray(ts) && ts[1] === ":") || seen0.has(nm)) continue;
+			seen0.add(nm);
+			if (!G.reach.has(nm) || !G.isFn(nm)) continue;
+			const words = obs(call("lw_fst", tsv, P0, FLAT, i));
+			const wl = words == null ? [] : Array.isArray(words) ? words : [words];
+			if (wl.length === 0 || wl.some((w) => typeof w === "string" && w.startsWith("!"))) continue;
+			const asm = String(obs(call("g_run", [...wl, "G", "D"])) ?? "");
+			if (!asm.split("\n").some((l) => l.trim().startsWith(".err"))) all0.push(...wl);
+		}
+		obs(call("g_run", [...all0, "G", "D"]));
+	} finally {
+		observeCalls(null);
 	}
+	const observed = rec.observations();
+	res.timing.observeMs = Math.round(performance.now() - tObs);
+
+	// ---- 観測をつないだ compile：pass4（素）と .ist ----
+	// 観測は確定した事実として不動点の外に置かれ、観測が無い・種類が2つ以上・観測と推論が食い違う関数と公開した関数は、
+	// pass4 が名指しで断り、.ist は署名を書かない（段1が `! type 名前` で断る）——observed_facts.js の頭
+	const tCo = performance.now();
+	const co = compile(SRC, { parse: parser.parse, readImport, charset: "ascii", observed });
+	res.timing.observedCompileMs = Math.round(performance.now() - tCo);
+	check("観測をつないだ束の compile の診断が 0 件", co.diagnostics.map((d) => String(d.message).slice(0, 80)), []);
+	const ob = co.observation;
+	res.observation = { functions: ob.functions, positions: ob.positions, fixed: ob.fixed, echo: ob.echo, refusedPositions: ob.refusedPositions, refusedFunctions: ob.refusedFunctions, refusedByClass: ob.refusedByClass, attempts: ob.attempts, fixedFields: ob.fixedFields };
+	const observedRefusals = new Map([...ob.refused].map(([k, rs]) => [k, [...new Set(rs.map((r) => r.cls))]]));
+	check(`観測の事実は不動点の周回の後も置いたまま（周回が書き換えようとした ${ob.attempts} 回はどれも通らなかった、事実の欄 ${ob.fixedFields}、置けなかった事実 ${ob.missing}）`, [ob.attempts > 0, ob.moved, ob.missing], [true, 0, 0]);
+	const g4 = generateAsm(co.nodes, co.env, { target: conf.target, charset: conf.charset, layer: conf.layer, regAlloc: false, peepholes: false });
+	const ist = generateSignType(co.nodes, co.env, { scope: "ist" }).text;
+	const P4 = pass4Side(g4.text);
+	const { lines: p4lines, secs: p4secs, data: p4data } = P4;
+	check("pass4 の行はどれも、どこかの区画・像・節の指示に入る（区画の切り方が行を取りこぼさない）", unaccountedOf(p4lines, null).slice(0, 8), []);
+	check("pass4 の出力で normalizeAsm が落とすのは注釈・空行・引用符の外の空白の連なりだけ（正規化の釘）", pinOf(g4.text, false), null);
+	// pass4 が出せない関数：区画に「出せない」の注釈があるか、その関数の阻む診断がある（持ち主は観測をつないだ compile の木で引く）
+	const blocked = new Set();
+	{
+		let cur = null;
+		for (const l of g4.text.split("\n")) {
+			const m = l.match(/^("?)([^".\s][^"]*)\1:$/);
+			if (m) cur = m[2];
+			else if (/^\s*\.(section|data|text|global|hidden)\b/.test(l)) cur = null;
+			else if (cur && l.includes("// 出せない:")) blocked.add(cur);
+		}
+		const owner = new Map();
+		for (const [nm, d] of graphOf(co.nodes).defs) {
+			const seen = new Set();
+			const st = [d];
+			while (st.length) {
+				const n = st.pop();
+				if (!n || typeof n !== "object" || seen.has(n)) continue;
+				seen.add(n);
+				if (!owner.has(n)) owner.set(n, nm);
+				if (Array.isArray(n)) n.forEach((x) => st.push(x));
+				else for (const [k, v] of Object.entries(n)) if (!["binding", "valueNode", "scope", "parent", "atomType", "elementType"].includes(k) && v && typeof v === "object") st.push(v);
+			}
+		}
+		const unattributed = [];
+		for (const x of blockingOf(g4.diagnostics)) {
+			const byPrefix = (String(x.message).match(/^([A-Za-z_][A-Za-z_0-9]*):/) || [])[1];
+			const fn = owner.get(x.node) || (byPrefix && G.defs.has(byPrefix) ? byPrefix : null);
+			if (fn) blocked.add(fn);
+			else unattributed.push(String(x.message).slice(0, 100));
+		}
+		res.p4 = { diagnostics: g4.diagnostics.length, blocking: blockingOf(g4.diagnostics).length, unattributed };
+	}
+
+	const P = call("sh_pair", FLAT, ist);
+	const tWalk = performance.now();
 
 	const reachFns = [...G.reach].filter((x) => G.isFn(x));
 	const only = cfg.only ? new Set(cfg.only) : null;
@@ -1412,6 +1469,17 @@ async function work(cfg) {
 		log(`     ${(r.status === "refused" ? r.reason : r.status).padEnd(44)} ${nm} [${from}] ${r.lowerMs}ms${r.codegenMs !== undefined ? "+" + r.codegenMs + "ms" : ""}`);
 	}
 	res.timing.walkMs = Math.round(performance.now() - tWalk);
+	// 観測で断った関数は、どちらの側でも名指しの断り（pass4 は阻む診断、段1は .ist に署名が無いので `! type 名前`）
+	{
+		const bad = [];
+		for (const nm of observedRefusals.keys()) {
+			const r = res.functions.find((x) => x.name === nm);
+			// --only で下ろさなかった関数は見ない
+			if (r && (!blocked.has(nm) || r.status !== "refused")) bad.push(`${nm}: pass4 ${blocked.has(nm) ? "断る" : "出す"}・Sign ${statusOf(r)}`);
+		}
+		check(`観測で断った関数（${observedRefusals.size} 本）は、pass4 も段1・段2も名指しで断る`, bad, []);
+	}
+	res.observation.refused = Object.fromEntries([...observedRefusals].sort((a, b) => (a[0] < b[0] ? -1 : 1)));
 
 	// ---- 束ねて1回：same の関数の語を歩いた順につなぎ（lw_prog の lw_fns と同じ並び）、g_run に1回だけ通す ----
 	// 関数を1本ずつ出すと、関数をまたぐ状態（文字列の番号・ラベルの番号）が一度も動かない。束ねた出力の
@@ -1625,11 +1693,12 @@ function summarize(res) {
 	return {
 		note: "test/selfhost_sn.test.js が書く（--update）。関数ごとの状態は same か「! 理由」。数の範囲は pass4 が出せる関数（pass4-emits）と出せない関数（pass4-blocks）で分ける。",
 		driver: DRIVER,
-		types: "pass3 .ist (generateSignType scope ist, in memory)",
+		types: "pass3 .ist with observed facts (observe.js over the self-application run, in memory)",
 		counts,
 		reasons: sortedReasons,
 		closed,
 		pass4Blocked: res.functions.filter((r) => r.p4 === "blocked").map((r) => r.name),
+		observation: { functions: res.observation.functions, positions: res.observation.positions, fixed: res.observation.fixed, echo: res.observation.echo, refusedPositions: res.observation.refusedPositions, refusedFunctions: res.observation.refusedFunctions, refusedByClass: res.observation.refusedByClass, refused: res.observation.refused },
 		functions: byName,
 	};
 }
@@ -1972,6 +2041,10 @@ async function main() {
 	const m = res.memo;
 	console.log(`（メモ：当たり ${m.hits}・外れ ${m.misses}・鍵にできず素通し ${m.bypass}・鍵が同じで実引数が違う ${m.clashes}・答えが綴れず書き換えを見られない ${m.unverifiable}。${Object.entries(m.byName).map(([k, v]) => `${k} ${v.hits}/${v.misses}/${v.bypass}`).join("、")}）`);
 	console.log(`（時間：読み込み ${res.timing.loadMs}ms・歩き ${Math.round(res.timing.walkMs / 1000)}s（うち対照 ${Math.round((res.timing.controlsMs ?? 0) / 1000)}s）${res.timing.memoCheckMs !== undefined ? `・メモ無しの見本 ${Math.round(res.timing.memoCheckMs / 1000)}s（${res.memoCheck.map((x) => `${x.name} ${Math.round(x.ms / 1000)}s`).join("・")}）` : ""}・ワーカー全体 ${Math.round(res.timing.totalMs / 1000)}s・壁時計 ${Math.round((Date.now() - t0) / 1000)}s）`);
+	{
+		const o = res.observation;
+		console.log(`（観測：届く関数 ${o.functions}・位置 ${o.positions}——事実 ${o.fixed}（うち反響 ${o.echo}）・断った位置 観測が無い ${o.refusedPositions.unobserved}・種類が2つ以上 ${o.refusedPositions.several}・食い違い ${o.refusedPositions.conflict}・公開 ${o.refusedPositions.exported}。断った関数 ${o.refusedFunctions}（観測が無い ${o.refusedByClass.unobserved}・種類が2つ以上 ${o.refusedByClass.several}・食い違い ${o.refusedByClass.conflict}・公開 ${o.refusedByClass.exported}、重なりあり）。周回の書き換えの試み ${o.attempts}（通らず）。観測の走り ${Math.round(res.timing.observeMs / 1000)}s・観測をつないだ compile ${Math.round(res.timing.observedCompileMs / 1000)}s）`);
+	}
 	console.log(`（数：届く関数 ${g.counts.reachable}＝pass4 が出せる ${g.counts["pass4-emits"].functions}＋出せない ${g.counts["pass4-blocks"].functions}。same ${g.counts.same}（出せる範囲 ${g.counts["pass4-emits"].same}）・閉じる ${g.counts.closed}（出せる範囲 ${g.counts["pass4-emits"].closed}））`);
 	// 1周の時間（速い段に置く目安は2分。頭の「段と時間」）
 	console.log(`（1周 ${Math.round((Date.now() - t0) / 1000)} 秒）`);
@@ -2022,6 +2095,7 @@ async function main() {
 	check("閉じた集合が golden と同じ（増えたなら --update）", g.closed, golden.closed);
 	check("数が golden と同じ（範囲は pass4 が出せる／出せない）", g.counts, golden.counts);
 	check("断りの類の数が golden と同じ", g.reasons, golden.reasons);
+	check("観測の数と、観測で断った関数（類ごと）が golden と同じ", g.observation, golden.observation);
 	console.log(`\n${passed}/${total} passed`);
 	process.exit(passed === total ? 0 : 1);
 }

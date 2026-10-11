@@ -1,22 +1,22 @@
 {
 	"note": "test/selfhost_sn.test.js が書く（--update）。関数ごとの状態は same か「! 理由」。数の範囲は pass4 が出せる関数（pass4-emits）と出せない関数（pass4-blocks）で分ける。",
 	"driver": "g_run (lw_prog `1` `x` `y`)",
-	"types": "pass3 .ist (generateSignType scope ist, in memory)",
+	"types": "pass3 .ist with observed facts (observe.js over the self-application run, in memory)",
 	"counts": {
 		"reachable": 247,
 		"pass4-emits": {
-			"functions": 127,
-			"same": 29,
-			"refused": 98,
+			"functions": 103,
+			"same": 34,
+			"refused": 69,
 			"closed": 26
 		},
 		"pass4-blocks": {
-			"functions": 120,
+			"functions": 144,
 			"same": 0,
-			"refused": 120
+			"refused": 144
 		},
-		"same": 29,
-		"refused": 218,
+		"same": 34,
+		"refused": 213,
 		"closed": 26,
 		"differs": 0,
 		"unrefused": 0,
@@ -25,42 +25,54 @@
 	},
 	"reasons": {
 		"type": {
-			"pass4-emits": 53,
-			"pass4-blocks": 83
+			"pass4-emits": 24,
+			"pass4-blocks": 103
 		},
 		"head": {
-			"pass4-emits": 15,
-			"pass4-blocks": 17
+			"pass4-emits": 13,
+			"pass4-blocks": 15
 		},
 		"width": {
-			"pass4-emits": 7,
-			"pass4-blocks": 9
+			"pass4-emits": 5,
+			"pass4-blocks": 7
 		},
 		"leaf": {
-			"pass4-emits": 8,
+			"pass4-emits": 9,
 			"pass4-blocks": 2
 		},
 		"op &": {
-			"pass4-emits": 6,
-			"pass4-blocks": 3
+			"pass4-emits": 7,
+			"pass4-blocks": 2
 		},
 		"op ==": {
-			"pass4-emits": 3,
-			"pass4-blocks": 1
+			"pass4-emits": 4,
+			"pass4-blocks": 5
+		},
+		"arity": {
+			"pass4-emits": 0,
+			"pass4-blocks": 5
 		},
 		"op |": {
 			"pass4-emits": 4,
 			"pass4-blocks": 0
 		},
-		"op ,": {
+		"op ~": {
 			"pass4-emits": 0,
 			"pass4-blocks": 3
 		},
-		"op ~": {
-			"pass4-emits": 1,
+		"op ,": {
+			"pass4-emits": 0,
 			"pass4-blocks": 2
 		},
 		"pattern": {
+			"pass4-emits": 1,
+			"pass4-blocks": 0
+		},
+		"width arm": {
+			"pass4-emits": 1,
+			"pass4-blocks": 0
+		},
+		"width-ret": {
 			"pass4-emits": 1,
 			"pass4-blocks": 0
 		}
@@ -69,17 +81,14 @@
 		"has",
 		"op1",
 		"count_op",
-		"op_word",
 		"open_br",
 		"close_br",
 		"dgt",
-		"lo5",
 		"narrow",
 		"lw_qend",
 		"lw_lfend",
 		"lw_hv",
 		"lw_hex",
-		"lw_hassp",
 		"g_pow",
 		"g_bit",
 		"g_max",
@@ -90,10 +99,18 @@
 		"g_nf",
 		"g_zeros",
 		"g_ones",
+		"g_dyn",
+		"g_fw",
 		"g_pfl",
-		"g_fr_of"
+		"g_fr_of",
+		"g_plain"
 	],
 	"pass4Blocked": [
+		"op_word",
+		"take_word",
+		"tokens",
+		"pad5",
+		"lo5",
 		"ld_mn",
 		"load_at",
 		"mov_rr",
@@ -101,14 +118,15 @@
 		"lw_1",
 		"lw_t",
 		"lw_no",
-		"lw_ty",
 		"lw_stoks",
 		"lw_rowe",
+		"lw_rowt",
 		"lw_sig2",
 		"lw_x",
+		"lw_at",
 		"lw_as",
+		"lw_iscond",
 		"lw_one",
-		"lw_bin",
 		"lw_cmp",
 		"lw_alu",
 		"lw_get",
@@ -121,37 +139,51 @@
 		"lw_j",
 		"lw_jk",
 		"lw_jc",
+		"lw_arity",
 		"lw_arity_st",
+		"lw_args",
 		"lw_arg",
 		"lw_bad",
 		"lw_call",
 		"lw_cj",
 		"lw_leaf",
+		"lw_e",
+		"lw_post",
 		"lw_str",
 		"lw_norm",
 		"lw_pf",
+		"lw_off",
 		"lw_p",
+		"lw_big",
 		"lw_cst",
 		"lw_cst_st",
-		"lw_ucst",
 		"lw_pure",
+		"lw_blk",
 		"lw_mt",
+		"lw_lines",
 		"lw_lj",
+		"lw_line",
 		"lw_wv",
 		"lw_arm",
 		"lw_val",
 		"lw_bare",
+		"lw_bare1",
 		"lw_fn",
 		"lw_fn1",
 		"lw_fn2",
-		"lw_rq",
+		"lw_wd",
 		"lw_pname",
-		"lw_pok",
+		"lw_hassp",
 		"lw_zip",
 		"lw_fst",
 		"lw_mst",
 		"lw_isimp",
 		"lw_nm",
+		"lw_dup",
+		"lw_dup1",
+		"lw_dup2",
+		"lw_fns",
+		"lw_main",
 		"lw_prog",
 		"g_slot",
 		"g_ld",
@@ -159,27 +191,25 @@
 		"g_niche",
 		"g_mv",
 		"g_mvn",
+		"g_kn",
 		"g_imn",
 		"g_imm",
 		"g_name",
-		"g_opk",
-		"g_fw",
-		"g_mn",
-		"g_mu",
-		"g_form",
+		"g_peak",
+		"g_pk",
 		"g_rm",
 		"g_lm",
 		"g_alu",
 		"g_rule",
-		"g_pick",
-		"g_cmn",
+		"g_neq_ld",
 		"g_neq_r",
 		"g_neq_l",
 		"g_cu",
 		"g_body_op",
 		"g_op",
-		"g_isb",
 		"g_first",
+		"g_nth",
+		"g_nth2",
 		"g_lbl",
 		"g_b",
 		"g_pld",
@@ -203,18 +233,305 @@
 		"g_retj",
 		"g_deep",
 		"g_main",
+		"g_x1",
 		"g_end",
 		"g_keep",
-		"g_plain",
+		"g_bx",
 		"g_bytes",
 		"g_data",
+		"g_hasb",
 		"g_hasi",
+		"g_ros",
 		"g_ros2",
 		"g_anon",
 		"g_ro",
+		"g2",
 		"g2c",
+		"g2f",
+		"g2g",
 		"g_run"
 	],
+	"observation": {
+		"functions": 247,
+		"positions": 874,
+		"fixed": 746,
+		"echo": 27,
+		"refusedPositions": {
+			"unobserved": 61,
+			"several": 0,
+			"conflict": 67,
+			"exported": 0
+		},
+		"refusedFunctions": 86,
+		"refusedByClass": {
+			"unobserved": 27,
+			"several": 0,
+			"conflict": 61,
+			"exported": 0
+		},
+		"refused": {
+			"g2": [
+				"conflict"
+			],
+			"g2c": [
+				"conflict"
+			],
+			"g2f": [
+				"conflict"
+			],
+			"g2g": [
+				"conflict"
+			],
+			"g_anon": [
+				"conflict"
+			],
+			"g_b": [
+				"conflict"
+			],
+			"g_bx": [
+				"conflict"
+			],
+			"g_deep": [
+				"unobserved"
+			],
+			"g_e": [
+				"conflict"
+			],
+			"g_eb": [
+				"conflict"
+			],
+			"g_end": [
+				"conflict"
+			],
+			"g_ez": [
+				"conflict",
+				"unobserved"
+			],
+			"g_first": [
+				"conflict"
+			],
+			"g_hasb": [
+				"conflict"
+			],
+			"g_hasi": [
+				"conflict"
+			],
+			"g_imn": [
+				"unobserved"
+			],
+			"g_keep": [
+				"unobserved"
+			],
+			"g_kn": [
+				"unobserved"
+			],
+			"g_lbl": [
+				"conflict"
+			],
+			"g_mvn": [
+				"unobserved"
+			],
+			"g_neq_l": [
+				"unobserved"
+			],
+			"g_neq_ld": [
+				"unobserved"
+			],
+			"g_neq_r": [
+				"unobserved"
+			],
+			"g_nth": [
+				"conflict"
+			],
+			"g_nth2": [
+				"conflict"
+			],
+			"g_peak": [
+				"conflict"
+			],
+			"g_pk": [
+				"conflict"
+			],
+			"g_ro": [
+				"conflict"
+			],
+			"g_ros": [
+				"conflict"
+			],
+			"g_ros2": [
+				"conflict"
+			],
+			"g_run": [
+				"conflict"
+			],
+			"g_slb": [
+				"conflict"
+			],
+			"g_slg": [
+				"conflict",
+				"unobserved"
+			],
+			"g_x1": [
+				"unobserved"
+			],
+			"ld_mn": [
+				"conflict"
+			],
+			"lo5": [
+				"unobserved"
+			],
+			"lw_1": [
+				"conflict"
+			],
+			"lw_alu": [
+				"conflict"
+			],
+			"lw_arg": [
+				"conflict"
+			],
+			"lw_args": [
+				"conflict"
+			],
+			"lw_arity": [
+				"conflict"
+			],
+			"lw_arity_st": [
+				"conflict"
+			],
+			"lw_as": [
+				"conflict"
+			],
+			"lw_at": [
+				"conflict"
+			],
+			"lw_bad": [
+				"conflict"
+			],
+			"lw_bare1": [
+				"unobserved"
+			],
+			"lw_big": [
+				"unobserved"
+			],
+			"lw_blk": [
+				"conflict"
+			],
+			"lw_call": [
+				"conflict"
+			],
+			"lw_cj": [
+				"conflict"
+			],
+			"lw_cmp": [
+				"conflict"
+			],
+			"lw_dup": [
+				"unobserved"
+			],
+			"lw_dup1": [
+				"unobserved"
+			],
+			"lw_dup2": [
+				"unobserved"
+			],
+			"lw_e": [
+				"conflict"
+			],
+			"lw_fn": [
+				"conflict"
+			],
+			"lw_fn1": [
+				"conflict"
+			],
+			"lw_fn2": [
+				"conflict"
+			],
+			"lw_fns": [
+				"unobserved"
+			],
+			"lw_fst": [
+				"conflict"
+			],
+			"lw_get": [
+				"conflict"
+			],
+			"lw_get1": [
+				"conflict"
+			],
+			"lw_hassp": [
+				"unobserved"
+			],
+			"lw_iscond": [
+				"conflict"
+			],
+			"lw_isimp": [
+				"unobserved"
+			],
+			"lw_j": [
+				"conflict"
+			],
+			"lw_jc": [
+				"conflict"
+			],
+			"lw_jk": [
+				"conflict"
+			],
+			"lw_ksl": [
+				"conflict"
+			],
+			"lw_leaf": [
+				"conflict"
+			],
+			"lw_line": [
+				"conflict"
+			],
+			"lw_lines": [
+				"conflict"
+			],
+			"lw_main": [
+				"unobserved"
+			],
+			"lw_mst": [
+				"unobserved"
+			],
+			"lw_off": [
+				"conflict"
+			],
+			"lw_one": [
+				"conflict"
+			],
+			"lw_p": [
+				"conflict"
+			],
+			"lw_pf": [
+				"conflict"
+			],
+			"lw_post": [
+				"unobserved"
+			],
+			"lw_prog": [
+				"unobserved"
+			],
+			"lw_val": [
+				"conflict"
+			],
+			"lw_x": [
+				"conflict"
+			],
+			"lw_zero": [
+				"unobserved"
+			],
+			"lw_zip": [
+				"conflict"
+			],
+			"op_word": [
+				"unobserved"
+			],
+			"pad5": [
+				"unobserved"
+			]
+		}
+	},
 	"functions": {
 		"tier_at": "! type tier_at",
 		"assoc_at": "! type assoc_at",
@@ -228,7 +545,7 @@
 		"has": "same",
 		"op1": "same",
 		"count_op": "same",
-		"op_word": "same",
+		"op_word": "! type op_word",
 		"is_space": "! op |",
 		"open_br": "same",
 		"close_br": "same",
@@ -243,8 +560,8 @@
 		"digit_num": "! !(is_digit (s  '  i))",
 		"dgt": "same",
 		"dec5": "! head (dgt (n  /  10))",
-		"pad5": "! head (dgt (n  /  10000))",
-		"lo5": "same",
+		"pad5": "! type pad5",
+		"lo5": "! type lo5",
 		"decu": "! width dec5",
 		"dec": "! head `-`",
 		"rg": "! head `x`",
@@ -252,7 +569,7 @@
 		"imm": "! head `#`",
 		"at": "! head `[`",
 		"at_off": "! head `[`",
-		"ld_mn": "! form",
+		"ld_mn": "! type ld_mn",
 		"narrow": "same",
 		"reg_w": "! width rw",
 		"ln2": "! head op",
@@ -261,7 +578,7 @@
 		"mov_rr": "! width rg",
 		"mov_ri": "! width rg",
 		"alu_rrr": "! width rg",
-		"lw_1": "! op ,",
+		"lw_1": "! type lw_1",
 		"lw_t": "! op ,",
 		"lw_no": "! op ,",
 		"lw_ty": "! type lw_ty",
@@ -317,7 +634,7 @@
 		"lw_cj": "! type lw_cj",
 		"lw_leaf": "! type lw_leaf",
 		"lw_e": "! type lw_e",
-		"lw_post": "! !((w  '  (||w|| - 1))  =  \\))",
+		"lw_post": "! type lw_post",
 		"lw_isstr": "! op &",
 		"lw_hexrun": "same",
 		"lw_ishex": "! op |",
@@ -331,7 +648,7 @@
 		"lw_pf": "! type lw_pf",
 		"lw_off": "! type lw_off",
 		"lw_p": "! type lw_p",
-		"lw_big": "! op ~",
+		"lw_big": "! type lw_big",
 		"lw_cst": "! type lw_cst",
 		"lw_cst_st": "! type lw_cst_st",
 		"lw_ucst": "! type lw_ucst",
@@ -349,23 +666,23 @@
 		"lw_fn": "! type lw_fn",
 		"lw_fn1": "! type lw_fn1",
 		"lw_fn2": "! type lw_fn2",
-		"lw_rq": "! type lw_rq",
+		"lw_rq": "! width arm",
 		"lw_wd": "! type lw_wd",
 		"lw_pname": "! op ~",
 		"lw_pok": "! !((w  '  0)  =  \\[)",
-		"lw_hassp": "same",
+		"lw_hassp": "! type lw_hassp",
 		"lw_pbad": "! type lw_pbad",
 		"lw_zip": "! type lw_zip",
 		"lw_fst": "! type lw_fst",
 		"lw_mst": "! type lw_mst",
-		"lw_isimp": "! op &",
+		"lw_isimp": "! type lw_isimp",
 		"lw_nm": "! op &",
 		"lw_dup": "! type lw_dup",
-		"lw_dup1": "! type lw_dup2",
+		"lw_dup1": "! type lw_dup1",
 		"lw_dup2": "! type lw_dup2",
 		"lw_fns": "! type lw_fns",
 		"lw_main": "! type lw_main",
-		"lw_prog": "! width lw_optck",
+		"lw_prog": "! type lw_prog",
 		"g_ln": "! head g_tab",
 		"g_lab": "! head s",
 		"g_slot": "! width at_off",
@@ -386,37 +703,37 @@
 		"g_nf": "same",
 		"g_zeros": "same",
 		"g_ones": "same",
-		"g_mvn": "! head `movn `",
-		"g_kn": "! width g_mv",
-		"g_imn": "! head `movn `",
+		"g_mvn": "! type g_mvn",
+		"g_kn": "! type g_kn",
+		"g_imn": "! type g_imn",
 		"g_imm": "! width mov_ri",
-		"g_n": "! type g_n",
-		"g_name": "! type g_name",
-		"g_opk": "! type g_opk",
-		"g_w2": "! type g_w2",
-		"g_dyn": "! type g_dyn",
-		"g_fw": "! type g_fw",
-		"g_fk": "! type g_fk",
-		"g_fK": "! type g_fK",
-		"g_eff": "! type g_eff",
+		"g_n": "same",
+		"g_name": "! op ~",
+		"g_opk": "! width-ret g_opk",
+		"g_w2": "same",
+		"g_dyn": "same",
+		"g_fw": "same",
+		"g_fk": "same",
+		"g_fK": "same",
+		"g_eff": "same",
 		"g_peak": "! type g_peak",
 		"g_pk": "! type g_pk",
-		"g_mn": "! type g_mn",
-		"g_mu": "! type g_mu",
-		"g_form": "! type g_form",
+		"g_mn": "! form",
+		"g_mu": "! form",
+		"g_form": "! form",
 		"g_rm": "! head (g_ln `cmp x10, x12`)",
 		"g_lm": "! head (g_ln `cmp x9, x12`)",
 		"g_alu": "! width alu_rrr",
-		"g_rule": "! type g_rule",
-		"g_pick": "! type g_pick",
-		"g_cmn": "! type g_cmn",
-		"g_neq_ld": "! width g_ld",
-		"g_neq_r": "! head (g_ln `cmp x10, x12`)",
-		"g_neq_l": "! head (g_ln `cmp x13, x12`)",
-		"g_cu": "! type g_cu",
-		"g_body_op": "! type g_body_op",
-		"g_op": "! type g_op",
-		"g_isb": "! type g_isb",
+		"g_rule": "! op ==",
+		"g_pick": "! op ==",
+		"g_cmn": "! width g_mu",
+		"g_neq_ld": "! type g_neq_ld",
+		"g_neq_r": "! type g_neq_r",
+		"g_neq_l": "! type g_neq_l",
+		"g_cu": "! op ==",
+		"g_body_op": "! op ==",
+		"g_op": "! arity g_ld",
+		"g_isb": "! op &",
 		"g_first": "! type g_first",
 		"g_nth": "! type g_nth",
 		"g_nth2": "! type g_nth2",
@@ -424,34 +741,34 @@
 		"g_b": "! type g_b",
 		"g_pfl": "same",
 		"g_pld": "! head (g_ld 9 o)",
-		"g_nn": "! type g_nn",
+		"g_nn": "! arity g_ld",
 		"g_ixb": "! head (g_ld 10 i)",
 		"g_slg": "! type g_slg",
 		"g_slb": "! type g_slb",
 		"g_args": "! head (g_ld j (d  +  j))",
-		"g_call": "! type g_call",
-		"g_jump": "! type g_jump",
+		"g_call": "! arity g_args",
+		"g_jump": "! op ==",
 		"g_eb": "! type g_eb",
 		"g_ez": "! type g_ez",
 		"g_e": "! type g_e",
 		"g_t": "! type g_t",
 		"g_strs": "! head (g_st j j)",
-		"g_chks": "! type g_chks",
+		"g_chks": "! arity g_ld",
 		"g_pro": "! head (g_lab name)",
 		"g_epi": "! head (g_ln (`ldp x29, x30, [sp], #` (dec fr)))",
-		"g_fn": "! type g_fn",
+		"g_fn": "! arity g_pro",
 		"g_ret": "! head (g_ld 0 k)",
 		"g_retj": "! head (g_lab (`.Lunit` (dec (lp  +  1))))",
 		"g_fr_of": "same",
-		"g_deep": "! width g_ln",
+		"g_deep": "! type g_deep",
 		"g_main": "! head (g_ln `.global _.main`)",
-		"g_x1": "! width g_ld",
+		"g_x1": "! type g_x1",
 		"g_end": "! type g_end",
 		"g_keep": "! type g_keep",
-		"g_plain": "! type g_plain",
-		"g_bx": "! head `0x`",
-		"g_bytes": "! type g_bytes",
-		"g_data": "! type g_data",
+		"g_plain": "same",
+		"g_bx": "! type g_bx",
+		"g_bytes": "! head acc",
+		"g_data": "! head `.ascii \"`",
 		"g_hasb": "! type g_hasb",
 		"g_hasi": "! type g_hasi",
 		"g_ros": "! type g_ros",
