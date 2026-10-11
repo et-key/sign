@@ -12,7 +12,7 @@ space : \
 tab : \	
 cr : 0u000D
 newline : 0u000A
-is_space : c ? (c = space) | (c = tab) | (c = cr) | (c = newline)
+is_space : c ? c = space | c = tab | c = cr | c = newline
 
 quote : \`
 escape : \\
@@ -41,8 +41,8 @@ close_br : c ?
 
 take_quote : [~s] ?
 	!s : ``
-	(s ' 0) = quote : s ' 0
-	(s ' 0) (take_quote (s ' 1~))
+	s ' 0 = quote : s ' 0
+	s ' 0 (take_quote s ' 1~)
 
 drop_quote : [c ~rest] ?
 	c = quote : rest
@@ -53,25 +53,25 @@ drop_quote : [c ~rest] ?
 
 take_word : d [~s] ?
 	!s : ``
-	(d = 0) & (is_space (s ' 0)) : ``
-	(s ' 0) = escape : (s ' 0) (s ' 1) (take_word d (s ' 2~))
-	(s ' 0) = quote : (s ' 0) (take_quote (s ' 1~)) (take_word d (drop_quote (s ' 1~)))
-	open_br (s ' 0) : (s ' 0) (take_word (d + 1) (s ' 1~))
-	close_br (s ' 0) : (s ' 0) (take_word (d - 1) (s ' 1~))
-	(s ' 0) (take_word d (s ' 1~))
+	d = 0 & is_space s ' 0 : ``
+	s ' 0 = escape : s ' 0 s ' 1 take_word d (s ' 2~)
+	s ' 0 = quote : s ' 0 (take_quote s ' 1~) take_word d (drop_quote s ' 1~)
+	open_br s ' 0 : s ' 0 take_word d + 1 (s ' 1~)
+	close_br s ' 0 : s ' 0 take_word d - 1 (s ' 1~)
+	s ' 0 take_word d (s ' 1~)
 
 drop_word : d [~s] ?
 	!s : __
-	(d = 0) & (is_space (s ' 0)) : s
-	(s ' 0) = escape : drop_word d (s ' 2~)
-	(s ' 0) = quote : drop_word d (drop_quote (s ' 1~))
-	open_br (s ' 0) : drop_word (d + 1) (s ' 1~)
-	close_br (s ' 0) : drop_word (d - 1) (s ' 1~)
+	d = 0 & is_space s ' 0 : s
+	s ' 0 = escape : drop_word d (s ' 2~)
+	s ' 0 = quote : drop_word d (drop_quote s ' 1~)
+	open_br s ' 0 : drop_word d + 1 (s ' 1~)
+	close_br s ' 0 : drop_word d - 1 (s ' 1~)
 	drop_word d (s ' 1~)
 
 drop_space : [~s] ?
 	!s : __
-	is_space (s ' 0) : drop_space (s ' 1~)
+	is_space s ' 0 : drop_space (s ' 1~)
 	s
 
 `--- 字句解析本体 ---`
@@ -80,7 +80,7 @@ drop_space : [~s] ?
 
 tokens : [~s] ?
 	!s : __
-	is_space (s ' 0) : tokens (drop_space s)
+	is_space s ' 0 : tokens (drop_space s)
 	(take_word 0 s) , (tokens (drop_word 0 s))~
 
 `実行例`
