@@ -17,7 +17,7 @@
 x : -353.15134
 y : 4001.35364502
 
-` Various numeric literal examples (Hex, Binary, Register type, Unicode, etc.) `
+` Various numeric literal examples (Hex, Binary, wrapping 0r numbers, Unicode, etc.) `
 hex_val : 0xAF8534
 bin_val : 0b00101001
 regA : 0rA

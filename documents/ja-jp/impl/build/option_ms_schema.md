@@ -112,7 +112,7 @@ link     : dynamic
 
 各 layer は下位 layer を**累積的に包含する**（機能が段階的に追加される）。
 
-| 数値 | 別名 | 説明 | alloca | Int | Float | Vector(SIMD) | 動的モジュール | `@`/`#` 意味論 |
+| 数値 | 別名 | 説明 | alloca | Int/UInt | Float | Vector(SIMD) | 動的モジュール | `@`/`#` 意味論 |
 |:---:|:---:|---|:---:|:---:|:---:|:---:|:---:|---|
 | `0` | bare | RAM 未初期化。BIOS/UEFI 初期フェーズ相当 | ✗ | ✓ | ✗ | ✗ | ✗ | volatile 自動適用 |
 | `1` | alloc | RAM 開通・alloca 有効。`Rc`/`Arc` が使用可能 | ✓ | ✓ | ✗ | ✗ | ✗ | 通常 load/store |
@@ -127,7 +127,7 @@ link     : dynamic
 > |---|---|:---:|
 > | `42`, `-1`（整数） | `Int` | 0以上 |
 > | `0x00`, `0xFF`（アドレス） | `Address` | 0以上 |
-> | `0r00`（bit列） | raw binary | 0以上 |
+> | `0r00`, `0b01`（bit列） | `UInt`（回る符号なし整数。alpha ではまだ `Int`） | 0以上 |
 > | `0u0000`（Unicode） | `Char` | 0以上 |
 > | `` `text` ``（文字列） | `String`（= `List(0u)`） | 0以上 |
 > | `3.14`, `1.0`（小数点あり） | `Float` | **2以上** |

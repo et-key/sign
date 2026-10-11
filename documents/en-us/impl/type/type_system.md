@@ -73,7 +73,8 @@ Atom Subtypes govern binary operator semantics and type casts:
 
 | Subtype | Description | Example Literal | Minimum `layer` Required |
 |:---:|---|---|:---:|
-| `Int` | Integer (Signed / Unsigned) | `42`, `-1` | **0+** |
+| `Int` | Signed integer: ℤ held in one GPR word, −(2^63−1) … 2^63−1 (`INT64_MIN` is the `__` niche). A result that does not fit the word traps (`wfi`); division by zero is `__` | `42`, `-1` | **0+** |
+| `UInt` | Wrapping unsigned integer, the ring ℤ/2^64ℤ; bit strings (`0r`, `0b`) and the home of bit operations. It has no niche: a value that may be `__` is carried as a (value, flag) pair, the one exception to "one bit representation per width class" (ja type_system §2). Division by zero is `__` | `0rFF`, `0b1010` | 0+ |
 | `Float` | Floating-point number | `3.14`, `1.0` | **2+** |
 | `String` | Unicode string (Isomorphic to `List(0u)`) | `` `hello` ``, `\a` | 0+ |
 | `Vector` | SIMD Vector type | `[1.0 2.0 3.0 4.0]` | **3+** |
@@ -82,6 +83,9 @@ Atom Subtypes govern binary operator semantics and type casts:
 | `Dict` | Key-Value structure | `[key : val]` | 0+ |
 | `Unit` | Zero object / Empty / Null | `__` | 0+ |
 | `Address` | Pointer location | `0x00`, `$expr` | 0+ |
+
+> [!NOTE]
+> **alpha today (not a rule).** Every statement in this document about `UInt`, `Int` traps and division by zero still answers by the old rules in alpha: it types `0r`/`0b` as `Int` (there is no `UInt` yet), wraps `Int` at 64 bits without trapping, and divides by zero to quotient 0 and remainder = dividend (user rulings 2026-10-11; they land in a later slice).
 
 ---
 

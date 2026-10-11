@@ -447,6 +447,8 @@ _ * 5 → [* 5]    `hole(*(5))を生成
 
 **GPR 幅の型では `0x8000000000000000` を niche として `__` に充てる**
 （[`value_representation.md`](value_representation.md) §3.5）。判定は `cmp` 1命令で済む。
+ただし `UInt` は除く——2^64 個を全部値に使うので、`__` になりうる値だけを値と印の対で運ぶ
+（value_representation.md §3.5。alpha にはまだ `UInt` が無い）。
 
 - **条件付き命令活用**: AArch64の条件付き命令でUnit判定を効率化
 

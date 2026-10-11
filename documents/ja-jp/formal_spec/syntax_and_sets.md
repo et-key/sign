@@ -113,12 +113,12 @@ Occ  = Op × Pos
 ```text
 Cat  = { Lambda, Atom }
 
-Ty₂  = { Address, Float, String, Vector, Unit }
+Ty₂  = { Int, UInt, Address, Char, Float, String, Vector, Unit }
        ⊎ { List(τ), Implicit(τ), Iterator(τ) | τ ∈ Ty₂ }
        ⊎ { Struct(S) | S は slot の有限な型記述 }
 ```
 
-この `Ty₂` は型システムに現れる constructor を仕様記述用に列挙したものだ。`Struct(S)` の slot 記述、`Vector` の要素型、target layer ごとの有効範囲などの詳細は、この文書で勝手に固定しない。既存の型表が `Address`、`Float`、`String`、`Vector`、`List`、`Struct`、`Implicit`、`Iterator`、`Unit` を規定し、layer 制約を持つことだけをここで参照する。[6]
+この `Ty₂` は型システムに現れる constructor を仕様記述用に列挙したものだ。`Struct(S)` の slot 記述、`Vector` の要素型、target layer ごとの有効範囲などの詳細は、この文書で勝手に固定しない。既存の型表が `Int`、`UInt`、`Address`、`Char`、`Float`、`String`、`Vector`、`List`、`Struct`、`Implicit`、`Iterator`、`Unit` を規定し、layer 制約を持つことだけをここで参照する。[6]
 
 Layer 1 のカテゴリ付けは、構文と識別子表から得る部分写像として書ける。
 

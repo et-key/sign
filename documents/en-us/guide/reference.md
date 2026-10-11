@@ -89,14 +89,14 @@ Because SOL backticks are strictly parsed as comments, placing a bare string lit
 Sign supports the following literal forms:
 
 * **Numbers**
-  * Unsigned Integers
+  * Non-negative Integers
   * Signed Integers
   * Floating-Point Numbers
   * Fractions
   * Hexadecimal Numbers (`0x...`)
   * Octal Numbers (`0o...`)
   * Binary Numbers (`0b...`)
-  * Register Identifiers (`0r...`)
+  * Register literals (`0r...`, wrapping unsigned)
   * Unicode Scalar (`0u...`)
 * **Characters** (`\c`)
 * **Strings** (`` `...` ``)
@@ -108,13 +108,14 @@ Sign supports the following literal forms:
 
 ## Numbers
 
-* **Unsigned Integer**: `57`
+* **Non-negative Integer**: `57`
 * **Signed Integer**: `-57`, `57`
+* Decimal integers are `Int`: −(2^63−1) … 2^63−1. A computation that leaves that range traps (`wfi`); a literal outside it (`9223372036854775808`) is a compile-time error. Division by zero is `__`. Write numbers that should wrap with `0r`.
 * **Floating-Point**: `3537.45468`, `0.357`, `-187.0235`
 * **Hexadecimal**: `0xAF8534`
 * **Octal**: `0o3574`
 * **Binary**: `0b00101001`
-* **Register Identifier**: `0rA`, `0r01` directly specify physical/logical CPU registers (e.g., AArch64 `x1`), bypassing heavy typechecking via pure zero-cost syntax.
+* **Register literal**: `0r` followed by hex digits (`0r18`) is an unsigned number written in hex (`UInt`). It wraps modulo 2^64 (`0rFFFFFFFFFFFFFFFF + 0r1` is 0), so hash/crypto arithmetic and bit operations are written with it. It is not an address (`0x`), so it can offset one (`p + 0r18`). Binary `0b…` is the same `UInt`.
 * **Unicode Scalar**: `0u3042` (represents 'あ')
 
 ## Characters
