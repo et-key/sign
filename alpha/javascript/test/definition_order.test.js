@@ -16,6 +16,11 @@
  * 自分で定義していると、展開された列に同じ名前が2つ並ぶ。後勝ちだと**引く順番を変えた
  * だけで答えが変わる**。
  *
+ * **枚を跨ぐ同じ名前は名指しで断る**（利用者の裁定 2026-10-12。上の 09-19 を、枚を跨ぐ衝突について
+ * 上書きした）。先勝ちで片方を落とすと、落とされた側の枚の中の呼び出しがもう一方の定義に黙って化ける
+ * ——取り込む側が取り込みの行より前に同じ名前を書けば、モジュールの private な名前を乗っ取れた。ひし形も
+ * 同じ形である。先勝ちと information が残るのは、同じ枚の中の再定義だけ（§1・§2）。
+ *
  * ## ここが見るのは「揃っていること」である
  *
  * 決めるまで、2つの実装は同じ入力に**2つの答え**を持っていた:
@@ -138,22 +143,61 @@ agree("再定義：関数（昔はアセンブラが止めた）", "f : x ? x + 
 agree("再定義：最後の文が断られる形", "a : 1\na : 2\n");
 agree("再定義：3つ並ぶ", "a : 1\na : 2\na : 3\na\n");
 agree("再定義：器", "p : [1 2 3]\np : [4 5 6]\np ' 1\n");
-agree("ひし形：B と C が同じ名前を定義する", "`b.sn`@~\n`c.sn`@~\nv 1\n", {
+// **枚を跨ぐ同じ名前は、compile が名指しで断る**（利用者の裁定 2026-10-12）。断りは compile の段なので、
+// 解釈器も機械も同じ断りを受ける——どちらの枚の何番目の文かを両方とも言う。
+const refusedAcross = (source, mods) => {
+	try {
+		compile(source, { charset: "ascii", readImport: modsReader(mods || {}) });
+		return "通った";
+	} catch (e) {
+		return String(e.message);
+	}
+};
+const DIAMOND = {
 	"b.sn": "`d.sn`@~\nv : x ? x + w\n",
 	"c.sn": "`d.sn`@~\nv : x ? x + 100\n",
 	"d.sn": "w : 7\n",
-});
-agree("ひし形：引く順を入れ替える（先勝ちは並べ方で決まる）", "`c.sn`@~\n`b.sn`@~\nv 1\n", {
-	"b.sn": "`d.sn`@~\nv : x ? x + w\n",
-	"c.sn": "`d.sn`@~\nv : x ? x + 100\n",
-	"d.sn": "w : 7\n",
-});
-agree("引いた側が先：自分の定義が断られる", "`m.sn`@~\nfoo : x ? x + 2\nfoo 1\n", {
-	"m.sn": "foo : x ? x + 1\nfoo 1\n",
-});
-agree("自分が先：引いた側が断られる", "foo : x ? x + 2\n`m.sn`@~\nfoo 1\n", {
-	"m.sn": "foo : x ? x + 1\nfoo 1\n",
-});
+};
+for (const [note, src, a, b] of [
+	["ひし形：B と C が同じ名前を定義する", "`b.sn`@~\n`c.sn`@~\nv 1\n", "b.sn の 2 番目の文", "c.sn の 2 番目の文"],
+	["ひし形：引く順を入れ替えても断る", "`c.sn`@~\n`b.sn`@~\nv 1\n", "c.sn の 2 番目の文", "b.sn の 2 番目の文"],
+]) {
+	const m = refusedAcross(src, DIAMOND);
+	check(`${note}：名指しで断る（両方の枚を言う）`, [m.includes("'v'"), m.includes(a), m.includes(b), m.includes("2026-10-12")], [true, true, true, true]);
+}
+{
+	const M = { "m.sn": "foo : x ? x + 1\nfoo 1\n" };
+	const before = refusedAcross("`m.sn`@~\nfoo : x ? x + 2\nfoo 1\n", M);
+	const after = refusedAcross("foo : x ? x + 2\n`m.sn`@~\nfoo 1\n", M);
+	check("引いた後に同じ名前：名指しで断る", [before.includes("'foo'"), before.includes("m.sn の 1 番目の文")], [true, true]);
+	check("引く前に同じ名前（乗っ取りの形）：名指しで断る", [after.includes("'foo'"), after.includes("m.sn の 1 番目の文")], [true, true]);
+	// 乗っ取りの実例：モジュールの private な w を、取り込む側が先に書いた w が置き換えていた（||(k 5)|| が 3、機械も 3）。
+	const hijack = refusedAcross("w : x ? `abc`\n`a.sn`@~\n||(k 5)||\n", { "a.sn": "w : x ? x + 1\n#k : x ? w x\n" });
+	check("乗っ取り：モジュールの private な名前を先に書いても断る", hijack.includes("'w'") && hijack.includes("a.sn の 1 番目の文"), true);
+	// 否定対照：同じ枚の中の再定義は先勝ち・information のまま（§2）、別々の名前は通る。
+	check("否定対照：枚を跨いでも別々の名前は通る", refusedAcross("`m.sn`@~\nbar : x ? x + 2\nfoo (bar 1)\n", M), "通った");
+}
+// **枚は継いだ道の文字列で見分ける**（ファイルそのものではない）。1つのファイルを joinPath が均さない2つの綴り
+// （sourcePath の無い相対と絶対）で引くと、同じ定義が2つの枚に並んで断る（前は先の写しで `k 5` が 6、information 2件）。
+// 両方の綴りを名指しし、綴りを揃える案内を出す。sourcePath を渡せば同じ道に均されて通る。
+{
+	const AB = { "a.sn": "w : x ? x + 1\n#k : x ? w x\n", "b.sn": "`C:/proj/a.sn`@~\n#q : 1\n" };
+	const SRC = "`a.sn`@~\n`b.sn`@~\nk 5\n";
+	const m = refusedAcross(SRC, AB);
+	check(
+		"2つの綴りで引いた1つのファイル：両方の綴りを名指しして断る（綴りを揃える案内つき）",
+		[m.includes("が a.sn の 1 番目の文 と C:/proj/a.sn の 1 番目の文 の2つの枚"), m.includes("綴りを揃えてください")],
+		[true, true]
+	);
+	let viaSourcePath;
+	try {
+		compile(SRC, { charset: "ascii", sourcePath: "C:/proj/main.sn", readImport: modsReader(AB) });
+		viaSourcePath = "通った";
+	} catch (e) {
+		viaSourcePath = String(e.message);
+	}
+	check("否定対照：sourcePath を渡せば2つの綴りは同じ道に均されて通る", viaSourcePath, "通った");
+}
 
 // --- 2. 断りは information で出る -----------------------------------------
 //
@@ -169,11 +213,12 @@ agree("自分が先：引いた側が断られる", "foo : x ? x + 2\n`m.sn`@~\n
 	// **出所の枚と、その枚の何番目の文かを言う。** 行番号は言えない——パーサーはコメントを
 	// 落とし、字句は位置を持たない。ひし形で知りたいのは「**どちらの枚か**」なので、
 	// 枚と文の順番で足りる。
-	const dia = front("`b.sn`@~\n`c.sn`@~\nv 1\n", {
+	// ひし形（枚を跨ぐ同じ名前）は information ではなく compile が断る（§1 の後ろ、利用者の裁定 2026-10-12）。
+	const dia = refusedAcross("`b.sn`@~\n`c.sn`@~\nv 1\n", {
 		"b.sn": "v : x ? x + 1\n",
 		"c.sn": "v : x ? x + 2\n",
 	});
-	check("断り：ひし形は両方の枚を名指しする", [dia.length, dia[0].message.includes("b.sn の 1 番目の文"), dia[0].message.includes("c.sn の 1 番目の文")], [1, true, true]);
+	check("断り：ひし形は両方の枚を名指しして断る", [dia.includes("b.sn の 1 番目の文"), dia.includes("c.sn の 1 番目の文")], [true, true]);
 }
 
 // --- 3. 空振りしていないこと（否定対照） ----------------------------------

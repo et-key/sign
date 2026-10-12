@@ -57,19 +57,25 @@ Passes 1–3 (Accounting) reduce user-defined types into "how many bytes wide is
 > a local label. Only the symbol duplication disappears; the data duplication remains.
 
 > [!IMPORTANT]
-> **When the same name is defined twice, the one written first wins.**
+> **When the same name is defined twice, the one written first wins — but the same name across files is refused.**
 >
-> If two definitions of the same name end up side by side in the expanded stream, the
+> If two definitions of the same name end up side by side within one file, the
 > **second one is not used**. Nothing stops — one `information` is emitted, naming the
 > originating file and statement index for both the winner and the refused one. (Line
 > numbers are not available: the parser drops comments and tokens carry no position.)
 >
-> The motivation is the diamond. A imports B and C, and B and C each define the same
-> name themselves; under last-wins, **changing the import order changes the answer**.
+> **Defining the same name in two files is a compile error that names both** (user ruling 2026-10-12).
+> Dropping one of them by first-wins silently turns the calls inside the dropped file into calls to the other
+> file's definition: an importer that wrote the same name before the import line could take over a private name
+> of the imported file. The diamond (A imports B and C, and both define the same name) is the same shape.
+> Rename one of them. The proper way to avoid the clash is to hide the imported file's private names (not landed).
 >
-> **Ordering still matters, though.** An import line is where the spread definitions land,
-> so writing your own definition first makes yours win. It is not an importer/imported
-> distinction — it is written order. The export mark (`#`) belongs to the winner too.
+> > [!NOTE]
+> > Before (2026-09-19 to 10-11), first-wins applied across files too, with an `information` only — motivated by
+> > the diamond, where last-wins changes the answer when the import order changes. First-wins remains within a file.
+>
+> **Within one file, ordering still matters.** Writing your own definition first makes yours win. The export
+> mark (`#`) belongs to the winner too.
 >
 > This does not conflict with §1's "top-level declarations are order-independent"
 > ([`1_definition.md`](../1_definition.md)): order-independence is about **when a reference

@@ -371,33 +371,23 @@ const asmOfFile = (name) => {
 	check("入れ子: `.st` も入口の1つだけ", nest.stEntries, 1);
 	check("入れ子: 診断は出さない", nest.diagnostics, []);
 
-	// **同じ名前を両方が定義する場合は、先に書いた方が勝つ**（利用者の決定 2026-09-19、
-	// `compile.js` の `refuseRedefinitions`。規則そのものは `test/first_wins.test.js` が見る）。
-	// ここで見るのは**印との関係**だけである——印はこの衝突の原因でも解でもない。
-	//
-	// 昔はここが後勝ちで、ラベルも `.global` も2つ出てアセンブラが `already defined` で
-	// 止めていた。**止まることは検査になっていなかった**——解釈器は後の定義で走り、機械は
-	// リンクまで行かないので、同じ入力に2つの答えが在ったままだった。
-	//
-	// 撒かれてきた定義は **import を書いた位置**に落ちる。行頭で引けば引いた側が先になり、
-	// 自分の `#foo` は「後から書いた定義」として断られる——印ごと落ちる。
-	const dup = look({ "m.sn": "#foo : x ? x + 1\nfoo 1\n" }, "`m.sn`@~\n#foo : x ? x + 2\nfoo 1\n");
-	check("同名: ラベルは1つだけ（2つ目の定義は列から落ちる）", dup.labels, ["foo:"]);
-	check("同名: 断られた定義の `#` は効かない", dup.globals, []);
-	check("同名: 前段が information を1件出す", dup.front, ["information: redefinition-refused"]);
-	check("同名: どの枚の何番目の文かを言う", dup.messages[0].includes("m.sn の 1 番目の文"), true);
-	check("同名: 機械は何も言わない（前段で済んでいる）", dup.diagnostics, []);
-	// 引いた側だけが `#` の形も答えは同じ。先に在るのは撒かれてきた定義で、その印は
-	// 「定義した枚のもの」として既に落ちている（§7 冒頭）。
-	const dup2 = look({ "m.sn": "#foo : x ? x + 1\nfoo 1\n" }, "`m.sn`@~\nfoo : x ? x + 2\nfoo 1\n");
-	check("同名: 引く側が無印でも同じ", [dup2.labels, dup2.globals], [["foo:"], []]);
-	// 印が1つも無くても同じ。**印はこの衝突に関係しない**ことの証拠。
-	const dup3 = look({ "m.sn": "foo : x ? x + 1\nfoo 1\n" }, "`m.sn`@~\nfoo : x ? x + 2\nfoo 1\n");
-	check("同名: 印が1つも無くても同じ", [dup3.labels, dup3.globals], [["foo:"], []]);
-	// **自分の定義を先に書けば、自分が勝つ——印も効く。** 先勝ちは「書いた順」の話であって
-	// 「引いた側／引く側」の話ではない。import を書く位置で決められる、という形になっている。
-	const dup4 = look({ "m.sn": "#foo : x ? x + 1\nfoo 1\n" }, "#foo : x ? x + 2\n`m.sn`@~\nfoo 1\n");
-	check("同名: 自分を先に書けば自分が勝つ（`#` も効く）", [dup4.labels, dup4.globals], [["foo:"], ["foo"]]);
+	// **枚を跨いで同じ名前を定義したら、compile が名指しで断る**（利用者の裁定 2026-10-12。それまでは 2026-09-19 の
+	// 先勝ちで、後の定義を列から落として information を1件出していた）。先勝ちで落とすと、落とされた側の枚の中の
+	// 呼び出しがもう一方の定義に黙って化ける——引く前に同じ名前を書けば、引いた枚の private な名前を乗っ取れた。
+	// ここで見るのは**印との関係**だけである——印はこの衝突の原因でも解でもないので、`#` がどちらに付いていても、
+	// 付いていなくても、書いた順を入れ替えても同じく断る。
+	const dupRefused = (mods, src) => {
+		try {
+			look(mods, src);
+			return "通った";
+		} catch (e) {
+			return String(e.message).includes("'foo'") && String(e.message).includes("m.sn の 1 番目の文") ? "名指しで断る" : String(e.message);
+		}
+	};
+	check("同名: 引いた後に `#foo` を書くと断る", dupRefused({ "m.sn": "#foo : x ? x + 1\nfoo 1\n" }, "`m.sn`@~\n#foo : x ? x + 2\nfoo 1\n"), "名指しで断る");
+	check("同名: 引く側が無印でも断る", dupRefused({ "m.sn": "#foo : x ? x + 1\nfoo 1\n" }, "`m.sn`@~\nfoo : x ? x + 2\nfoo 1\n"), "名指しで断る");
+	check("同名: 印が1つも無くても断る", dupRefused({ "m.sn": "foo : x ? x + 1\nfoo 1\n" }, "`m.sn`@~\nfoo : x ? x + 2\nfoo 1\n"), "名指しで断る");
+	check("同名: 自分を先に書いても断る（書いた順で勝ち負けを決めない）", dupRefused({ "m.sn": "#foo : x ? x + 1\nfoo 1\n" }, "#foo : x ? x + 2\n`m.sn`@~\nfoo 1\n"), "名指しで断る");
 
 	// **`###` は「公開」と「置き場所」の2つを言っている。** 印を落とすと置き場所も落ちる
 	// ——引いた `###` の像は `.sign.pinned` へ行かない。置き場所は**定義した枚**が持つ、
@@ -512,13 +502,11 @@ const asmOfFile = (name) => {
 			const dup = [...err.matchAll(/duplicate symbol: (\S+)/g)].map((m) => m[1]);
 			check(`${a} + ${b}: 重複は \`_.main\` だけ`, dup, ["_.main"]);
 		}
-		// **同名の衝突はアセンブラまで行かない**（§7 で先勝ちにした）。昔はここが
-		// `error: symbol 'foo' is already defined` で止まっていたが、止まることは検査に
-		// なっていなかった——解釈器は後の定義で走っていたので、同じ入力に2つの答えが在った。
-		// 今は列に定義が1つしか無いので、**通ること**を道具の側の証人にする。
-		const dupSrc = compile("`m.sn`@~\n#foo : x ? x + 2\nfoo 1\n", {
-			readImport: (full) => { if (path.basename(full) === "m.sn") return "#foo : x ? x + 1\nfoo 1\n"; throw new Error("知らない枚"); },
-		});
+		// **同名の衝突はアセンブラまで行かない。** 昔はここが `error: symbol 'foo' is already defined` で
+		// 止まっていたが、止まることは検査になっていなかった——解釈器は後の定義で走っていたので、同じ入力に
+		// 2つの答えが在った。2026-09-19 からは先勝ちで後の定義を落とし、2026-10-12 からは枚を跨ぐ同名を
+		// compile が名指しで断る（§7）。同じ枚の中の再定義は先勝ちのままなので、そちらで「通ること」を見る。
+		const dupSrc = compile("#foo : x ? x + 1\n#foo : x ? x + 2\nfoo 1\n", {});
 		const sPath = path.join(dir, "dup.s");
 		const dupAsm = generateAsm(dupSrc.nodes, dupSrc.env, OPT).text;
 		fs.writeFileSync(sPath, dupAsm);
@@ -528,6 +516,15 @@ const asmOfFile = (name) => {
 		check("同名: アセンブラは通る（もう `already defined` は出ない）", asmErr, "");
 		check("同名: `foo:` は1つだけ", dupAsm.split("\n").filter((l) => l.trim() === "foo:").length, 1);
 		check("同名: 前段は断りを1件持っている", dupSrc.diagnostics.map((d) => d.reason), ["redefinition-refused"]);
+		let crossMsg = "通った";
+		try {
+			compile("`m.sn`@~\n#foo : x ? x + 2\nfoo 1\n", {
+				readImport: (full) => { if (path.basename(full) === "m.sn") return "#foo : x ? x + 1\nfoo 1\n"; throw new Error("知らない枚"); },
+			});
+		} catch (e) {
+			crossMsg = String(e.message).includes("'foo'") ? "名指しで断る" : String(e.message);
+		}
+		check("同名: 枚を跨ぐ同名はアセンブラへ行く前に compile が断る", crossMsg, "名指しで断る");
 
 		// **レジスタと読まれる綴りの囲みは字句だけで、ELF の名前は Sign の名前のまま。**
 		// `bl h1` は半精度レジスタへの分岐と読まれてアセンブラが落ちるので、`.s` の中では `"h1"` と

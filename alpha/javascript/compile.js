@@ -404,6 +404,24 @@ function refuseRedefinitions(lines, state, exempt, diagnostics) {
     if (!d || exempt.has(name)) { out.push(line); continue; }
     const at = state.from.get(line);
     if (!seen.has(name)) { seen.set(name, at); out.push(line); continue; }
+    // **枚を跨ぐ同じ名前は名指しで断る**（利用者の裁定 2026-10-12。2026-09-19 の「ひし形は先勝ち・information だけ」を
+    // 枚を跨ぐ衝突について上書きした）。先勝ちで片方を落とすと、落とされた側の枚の中の呼び出しが、もう一方の枚の
+    // 定義に黙って化ける——取り込む側が取り込みの行より前に同じ名前を書けば、モジュールの private な名前を乗っ取れた
+    // （モジュール `w : x ? x + 1`／`#k : x ? w x` に、取り込む側が先に `` w : x ? `abc` `` を書くと `||(k 5)||` が 3、機械も 3）。
+    // ひし形（B と C が同じ名前を定義する）も同じ形である。同じ枚の中の再定義は、下の先勝ちと information のまま。
+    // 名前をぶつけずに済ませる本来の形は、モジュールの private な名前を隠すこと（隠す＋# の片）。
+    //
+    // **枚は継いだ道の文字列で見分ける**（ファイルそのものではない——読み手は文字列を返すだけで、2つの綴りが同じ
+    // ファイルかを compile は確かめられない）。だから1つのファイルを joinPath が均さない2つの綴り（sourcePath の無い
+    // 相対と絶対、大文字小文字だけ違う綴り）で引くと、同じ定義が2つの枚に並んでここで断る。断りの文面でそれを言う。
+    const prev = seen.get(name);
+    if (prev && at && prev.path !== at.path)
+      throw new SyntaxError(
+        `'${name}' が ${where(prev)} と ${where(at)} の2つの枚で定義されています——枚を跨いだ同じ名前は、` +
+          `一方の枚の中の呼び出しがもう一方の定義に化けるので断ります。どちらかの名前を変えてください` +
+          `（1つのファイルを2つの綴りで引いているなら——相対と絶対、大文字小文字の違い——綴りを揃えてください。` +
+          `compiler_pipeline.md §4、利用者の裁定 2026-10-12）`
+      );
     diagnostics.push({
       level: "information",
       reason: "redefinition-refused",
