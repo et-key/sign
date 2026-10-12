@@ -1425,6 +1425,12 @@ function genExpr(node, env, em, scope, tail = false) {
 			em.emit(`cmp ${SCRATCH[0]}, x12`);
 			em.emit(`mov ${SCRATCH[0]}, #${k}`, "スロット数（形は型にある）");
 			em.emit(`csel ${SCRATCH[0]}, xzr, ${SCRATCH[0]}, eq`, "__ は 0");
+		} else if (iw === 1 && shapelessStructForm(inner, env)) {
+			// **形の分からない構造体は数えない。** 上の枝でスロットの表（`structSlots`）が出なかった `Struct` を下の「スカラーは
+			// 1要素」で数えると、スロットがいくつあっても 1 を返す（`||(1 , \`a\`) | 9||`・`f (1 , \`a\`)`・器の要素の `||l ' 0||` が
+			// 解釈 2／機械 1）。例外は `@` が読んだ1語（`shapelessStructForm` の注）。
+			em.pop(iw);
+			return em.fail(n, "形の分からない構造体の要素数はまだ出せません（Struct——スロットの表が出ない：`|`・`&` の結果、切り出しの結果、並びの見えない仮引数、器の要素や構造体のスロットに入った構造体）");
 		} else if (iw === 1) {
 			em.load(SCRATCH[0], io, "中身");
 			em.emit("movz x12, #0x8000, lsl #48", "__ の niche");
@@ -5023,6 +5029,32 @@ function structFootprint(lay) {
 	return n;
 }
 
+// **スロットの表の出ない `Struct` は、数えも引きもしない。** 呼ぶ側は表（structShapeOf・structSlots）が出なかったときだけ
+// ここを訊く。`{ptr}` の1本で運ばれるのに表が無い `Struct` は、器の道や「スカラーは1要素」へ落ちて構造体の番地を器の頭や
+// 値として読む——形を数え上げると漏れる（`|`・`&` の結果、切り出しの結果、並びの見えない仮引数を挙げた後にも、器の要素
+// `||l ' 0||`・構造体の中の構造体 `||s ' 0||`・名前付きスロットの中の構造体 `||s ' q||` が解釈 2／機械 1、`(l ' 1) ' 0` が
+// 構造体の番地のまま残っていた）。だから**表の無いことそのもの**で決める。
+// **例外は `@` が読んだ1語だけ**（`@$p`、それを束縛した名前 `r : @$p`）。機械の `@` は番地の1語を読む別の道で、指す先が
+// 1スロットの構造体なら値が合う（coproduct_domain.test.js の否定対照「番地だけの `@` は値も揃う」、`(@$p) ' 0` が 7）。
+// 2スロット以上や幅の広いスロットを指す `@` の割れは前から（`(@$p) ' 1` が解釈 8／機械 `__`）——この門の外。
+function shapelessStructForm(node, env) {
+	const u = unwrap(node);
+	if (!u || u.atomType !== "Struct") return false;
+	return !derefReadOf(u, env, 0);
+}
+
+// `@` が読んだ1語か（束縛した名前は値の式へ降りる）。
+function derefReadOf(u, env, depth) {
+	if (!u || depth > 8) return false;
+	if (u.type === "operation" && u.position === "prefix" && u.name === "input") return true;
+	if (isIdentifierNode(u) && env) {
+		const b = envLookup(env, u.value);
+		const vn = b && b.valueNode ? unwrap(b.valueNode) : null;
+		if (vn && vn !== u) return derefReadOf(vn, env, depth + 1);
+	}
+	return false;
+}
+
 function structSlots(node, em, env) {
 	const u = unwrap(node);
 	if (!u || u.atomType !== "Struct") return null;
@@ -6491,6 +6523,18 @@ function genIndex(node, env, em, scope) {
 		// カーソルがここへ落ちて「1本で運びます」と断られた。前提は明示して確かめる。
 		const carried = sb ? slotsOfNode(sb, conf, env) : null;
 		const slay = sb && sb.atomType === "Struct" && carried === 1 ? structShapeOf(sb, env, { target: conf.target, charset: conf.charset, env }) : null;
+		// **形の分からない構造体は引かない。** `{ptr}` の1本で運ばれる `Struct` なのに形（`structShapeOf`）が出ないもの
+		// （`shapelessStructForm`——`|`・`&` の結果、構造体の切り出しの結果、並びの見えない仮引数、器の要素や構造体のスロットに
+		// 入った構造体）は、下の器の道へ落ちて構造体の番地を器の頭として読み、別の値を黙って返していた（`((1 , \`a\`) | 9) ' 1` が
+		// 解釈 `a`／機械 0、`f (1 , \`a\`)` が解釈 1／機械は構造体の番地、`(l ' 1) ' 0` も構造体の番地）。連番の構造体の切り出し
+		// （`s ' i~`）も同じで、スロットの並びを器として切る置き方が無い（`||(1 , \`a\`) ' 0~||` が解釈 2／機械 1）。名前付きの
+		// 構造体の切り出しは名前を探す道（`genNameSearch`）が `__` を返す。
+		if (sb && sb.atomType === "Struct" && carried === 1) {
+			if (!slay && shapelessStructForm(sb, env)) return em.fail(node, "形の分からない構造体はまだ引けません（Struct——スロットの表が出ない：`|`・`&` の結果、切り出しの結果、並びの見えない仮引数、器の要素や構造体のスロットに入った構造体）");
+			const k = unwrap(node.right);
+			if (slay && slay.slotKind !== "named" && k && k.type === "operation" && (k.name === "range_arithmetic" || k.name === "range"))
+				return em.fail(node, "連番の構造体の切り出し（`s ' i~`）はまだ出せません——スロットの並びを器として切る置き方が無い");
+		}
 		// 引き方は2つ——連番と名前。**どちらもスロットを1つ決めるだけ**で、読み出しの命令は
 		// 同じである。決めるところだけ分けて、出すところは1本にまとめる。
 		let slot = null;
