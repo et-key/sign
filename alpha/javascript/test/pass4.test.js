@@ -1563,5 +1563,37 @@ f 1`, "f") || [];
 	checkTrue("前段を飛ばして届いた括りでない rest を、機械は出さない", ds.some((m) => m.startsWith("f: ") && m.includes("を出せます")), ds.join(" / "));
 }
 
+// **中身の置き場（arena）を要る呼び先へ、置き場の無い返値スロットを中継しない**（控えの (w)、2026-10-12）。
+// tk は要素を cp の sret の呼び出しで置くので、返値スロットの後ろの置き場の頭2語を読み書きする。w は字面の枝（や字面の
+// 引数）のせいで中身の上界を言えず、main は w のために置き場無しで場所を取る。w がその場所を tk へ中継すると、tk は
+// 取られていない2語（main の保存した x29/x30）を「次に書く場所／終わり」として使っていた（qemu の値の門は
+// qemu.test.js の同じ形で lexer.sn の tokens を使って見る）。中継の道——相互末尾の `b`・追記（枝の追記・器の続き・
+// 仮引数を返すだけの呼び先へ渡す引数）・末尾だが `b` にできない `bl`（returnsHere）——はどれも断る。w の計画が置き場を
+// 言える対照（字面の枝を `__` に、または器の仮引数から中身の上界が出る）は断らない。
+{
+	const B = "`";
+	const H = `cp : [~s] ?\n\t!s : __\n\t(s ' 0) (cp s ' 1~)\ntk : [~s] ?\n\t!s : __\n\t(cp s) , (tk s ' 1~)~\n`;
+	const lit = `\t||s|| > 100 : ${B}zz${B} , ${B}yy${B}\n`;
+	const unit = `\t||s|| > 100 : __\n`;
+	const arenaRelay = (src) => asm(src).diagnostics.filter((d) => d.severity === "error" && String(d.message).includes("中身の置き場を要りますが")).map((d) => String(d.message));
+	const named = (ms) => ms.length > 0 && ms[0].includes("tk は返す器の中身の置き場を要りますが、w が渡す返値スロットには置き場がありません");
+	// [道, 断る形, 対照（w の計画が置き場を言える形、無ければ null）]
+	const shapes = [
+		["相互末尾の b", `${H}w : [~s] ?\n${lit}\ttk s\n((w ${B}abc${B}) ' 1) ' 0`, `${H}w : [~s] ?\n${unit}\ttk s\n((w ${B}abc${B}) ' 1) ' 0`],
+		["自分への追記を持つ関数の枝（枝の追記）", `${H}w : [~s] ?\n${lit}\t||s|| > 3 : ${B}q${B} , (w s ' 1~)~\n\ttk s\n((w ${B}abc${B}) ' 1) ' 0`, `${H}w : [~s] ?\n${unit}\t||s|| > 3 : (w s ' 1~)\n\ttk s\n((w ${B}abc${B}) ' 1) ' 0`],
+		["器の続きを書かせる追記", `${H}w : [~s] ?\n${lit}\t${B}aa${B} , (tk s)~\n((w ${B}abc${B}) ' 2) ' 0`, null],
+		["仮引数を返すだけの呼び先へ渡す引数", `${H}g : [~t] ? t\nw : [~s] ?\n${lit}\tg (tk s)\n((w ${B}abc${B}) ' 1) ' 0`, `${H}g : [~t] ? t\nw : [~s] ?\n${unit}\tg (tk s)\n((w ${B}abc${B}) ' 1) ' 0`],
+		["末尾だが b にできない bl（returnsHere：引数が自分の枠に取った器）", `${H}w : n ? tk (cp ${B}abc${B})\n((w 1) ' 1) ' 0`, `${H}w : [~s] [~t] ? tk (cp s)\n((w ${B}abc${B} ${B}zz${B}) ' 1) ' 0`],
+	];
+	for (const [what, bad, ok] of shapes) {
+		const ms = arenaRelay(bad);
+		checkTrue(`置き場の無い場所を置き場を要る呼び先へ中継しない：${what}（両方の関数を名指し）`, named(ms), ms.join(" / ") || "断らなかった");
+		if (ok === null) continue;
+		const ok2 = arenaRelay(ok);
+		checkTrue(`対照：置き場の在る場所の中継は断らない：${what}`, ok2.length === 0, ok2.join(" / "));
+	}
+	checkTrue("対照：置き場を要る関数を直に呼ぶ形は断らない", arenaRelay(`${H}((tk ${B}abc${B}) ' 1) ' 0`).length === 0);
+}
+
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

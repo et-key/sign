@@ -2770,6 +2770,8 @@ function genExpr(node, env, em, scope, tail = false) {
 			{
 				const ce = em.sretPlan && (em.sretPlan.get(callee) || em.sretPlan.get(baseName));
 				if (ce && ce.needsSlot && em.sretDest !== null && em.sretDest !== undefined) {
+					// 渡し直す場所に中身の置き場が在るかは自分の計画が決めている（`arenaRelayOk`）。
+					if (!arenaRelayOk(em, n, callee, ce, scope, em.sretHasArena)) return false;
 					em.load("x8", em.sretDest, "返値スロットを渡し直す（末尾呼び出し）");
 					if (em.sretLimit !== null && em.sretLimit !== undefined) em.load(SRET_LIMIT, em.sretLimit, "残りも渡し直す");
 				} else if (ce && ce.needsSlot) {
@@ -2823,7 +2825,11 @@ function genExpr(node, env, em, scope, tail = false) {
 		// 知りようがない——`emitSretCapacityGuard` が読むのはこの x15 である。組み立てるのは
 		// `bl` の直前（下）で、ここでは何を渡すかだけを決める。
 		let limit = null;
+		// **中継する場所に中身の置き場が在るか**は、下の2つ（追記・そのまま返す）では呼び先の計画ではなく
+		// 自分の計画で決まる（`arenaRelayOk`）。新しく取る最後の枝は呼び先の計画で付ける。中身の続き（3つ目）を
+		// 渡す呼び先は値の並び（幅 1）を返すので、計画が置き場を言うことは無い（`content` は幅 16 に限る）。
 		if (sp && n._sretInto !== undefined && n._sretInto !== null) {
+			if (!arenaRelayOk(em, n, callee, sp, scope, em.sretHasArena)) return false;
 			em.load("x8", n._sretInto, "続きを書く場所（追記）");
 			// **追記は器を割る。** 自分が先に k 個書いたぶん、呼び先の取り分はそれだけ狭い。
 			// **どこで割れているかは呼ぶ側の情報**なので、ここでしか出せない。
@@ -2848,6 +2854,7 @@ function genExpr(node, env, em, scope, tail = false) {
 			//
 			// 収まることは上界が言っている——呼ぶ側の上界はこの呼び出しを**合成して**
 			// 求めた式（`k₂ + c₂k₁ + c₂c₁||p||`）なので、内側のぶんを必ず覆う。
+			if (!arenaRelayOk(em, n, callee, sp, scope, em.sretHasArena)) return false;
 			em.load("x8", em.sretDest, "返値スロットは自分がもらったもの（sret を下へ渡す）");
 			// 場所ごと渡すのだから、残りもそのまま渡る。
 			const mine = em.sretLimit;
@@ -2899,7 +2906,7 @@ function genExpr(node, env, em, scope, tail = false) {
 				// `宛先 + 16×残り` が不変だからである。だから継ぎ足し位置を段の間で渡す必要が
 				// 無い——レジスタも引数も増えない。
 				let mslot = null;
-				if (sp.content) {
+				if (needsContentArena(sp)) {
 					em.emit(`mov x11, #0`, "中身の総量（バイト）を測る");
 					for (const t of sp.content) {
 						const shifted = t.sizeOfIndex - drop.filter((i) => i < t.sizeOfIndex).length;
@@ -10428,6 +10435,53 @@ function emitSretBase(em, dst, width) {
 	else em.emit(`sub ${dst}, ${dst}, ${SCRATCH[1]}`, "戻せば器の底");
 }
 
+/**
+ * **その計画の関数は、返値スロットの後ろに中身の置き場（arena）を要るか。**
+ *
+ * 呼ぶ側が場所を新しく取るときは、これが真なら置き場（頭の2語と中身）も付けて取り（`genCall`）、
+ * 呼ばれた側は入口でこれを `em.sretHasArena` に控えて置き場を読む（`emitContentArena`）。
+ * **両側が同じ計画のこの1つの問いを引く**——別々に決めると、片方だけが置き場の有る前提で読み書きする。
+ */
+function needsContentArena(entry) {
+	return !!(entry && entry.needsSlot && entry.content);
+}
+
+/**
+ * **置き場を要る呼び先へ、置き場の無い場所を渡さない**（控えの (w)、2026-10-12）。
+ *
+ * 置き場を付けて場所を取るのは、場所を新しく取る呼ぶ側だけである（呼び先の計画が `needsContentArena`）。
+ * もらった場所をそのまま下へ渡す中継——相互末尾の `b`（返値スロットを渡し直す）・末尾だが `b` にできない
+ * 呼び出し（`returnsHere`）・追記（器の続きを書かせる `_sretInto`、仮引数を返すだけの呼び先へ渡す引数の
+ * 呼び出しも同じ印）——では、渡す場所に置き場が在るかは**自分の**計画が決めている（`em.sretHasArena`）。呼び先は自分の計画で置き場の有無を決めるので、自分の計画が置き場を
+ * 言えないのに呼び先が要ると、呼び先は `x8 + 16×x15` を置き場の頭と読み、取られていない2語（呼ぶ側の
+ * 保存した x29/x30）を「次に書く場所／終わり」として使って中身を書く——記憶を壊していた：
+ *
+ *     w : [~s] ?
+ *     	||s|| > 100 : `zz` , `yy`
+ *     	tokens s                       （tokens は lexer.sn の語の列）
+ *     ((w `foo bar`) ' 1) ' 0         解釈 98 ／実機 0
+ *
+ * `w` の計画は字面の枝のせいで中身の上界を言えず（`content` は `konst === 0` に限る）、main は置き場無しで
+ * 場所を取る。tokens は main の保存した x29（qemu の入口では 0）を「次に書く場所」と読んで語の中身をそこへ
+ * 書き、進めたカーソルを main の保存した x29 の上へ書き戻していた（qemu で要素の ptr が 0 と 3）。長さだけ
+ * 見る `||w `foo bar`||` は 2 で合うが、同じ書き込みは走っている。中身の続き（`_sretContentInto`）を渡す
+ * 呼び先は値の並び（幅 1）を返すので、計画が置き場を言うことは無く、ここを通らない。
+ *
+ * 直し方の本命は、置き場の要否を呼び先から中継へ伝え、中継の計画にも中身の上界を持たせること（1つの事実を
+ * 1か所で）。それまでは名指しで断る。断ったら false、渡してよければ true。
+ */
+function arenaRelayOk(em, n, callee, entry, scope, carries) {
+	if (!needsContentArena(entry) || carries) return true;
+	const me = scope && scope.selfLabel ? scope.selfLabel : "呼ぶ側";
+	em.fail(
+		n,
+		`器の構築はまだ出せません（${callee} は返す器の中身の置き場を要りますが、${me} が渡す返値スロットには` +
+			`置き場がありません——${me} の計画は中身の上界を言えないので、呼ぶ側は置き場を付けずに場所を取ります。` +
+			`そのまま渡すと ${callee} が置き場の頭の2語を、取られていない場所から読み書きします）`
+	);
+	return false;
+}
+
 // **上限との照合はこの3命令だけである。** 上限を読み、比べ、越えていたら `__` へ飛ぶ
 // ——3箇所が同じことを別々に書いていた。違うのは比べる向きと条件だけなので、そこを
 // 引数にする。`em.sretLimit` が無い（スロットをもらっていない）なら何も出さない。
@@ -11256,7 +11310,7 @@ function genFunction(name, lambdaNode, env, em, mono) {
 	// **中身の置き場は、計画が中身の上界を言えたときだけ呼ぶ側が取る**（`sp.content`）。
 	// 言えていない関数が置き場を読むと、呼ぶ側が置いていない頭の2語（次に書く場所・終わり）
 	// ——つまり返値スロットの外の残骸——を番地として使い、そこへ中身を書く。
-	em.sretHasArena = !!(sretEntry && sretEntry.needsSlot && sretEntry.content);
+	em.sretHasArena = needsContentArena(sretEntry);
 	if (sretEntry && sretEntry.needsSlot) {
 		em.push();
 		em.sretDest = (em.slot - 1) * 8;

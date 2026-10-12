@@ -1704,6 +1704,31 @@ agree("入れ子の枝（内側が尽きる）", "f : x y ?\n\tx < 0 :\n\t\ty > 
 	// のに、呼ばれた側が置き場の頭の2語（呼ぶ側が置いていない残骸）を番地として読み、そこへ
 	// 中身を書いていた（`((g `x`) ' 0) ' 0` が解釈 '!' ／実機 255）。置き場が無ければ従来の門が断る。
 	checkNamed("List(String)：呼んだ結果を要素に返す（置き場なし）", "c : [~r] ? `! ` r\ng : [~r] ? (c r) , `?`\n((g `x`) ' 0) ' 0", "ascii", "この枠で取った場所へ書いた結果");
+	// **置き場をもらっていない関数から、置き場を要る呼び先へ場所を中継する形**（控えの (w)、2026-10-12）。w は字面の枝の
+	// せいで計画が中身の上界を言えず、main は置き場無しで場所を取る。w がそれを tokens（要素を take_word の結果で置く）へ
+	// 中継すると、tokens は main の保存した x29/x30 を置き場の頭の2語と読み、語の中身をそこへ書いていた（各形とも
+	// `((w `foo bar`) ' 1) ' 0` が解釈 98 ／実機 0、要素の ptr が 0 と 3。returnsHere の形は実機 `__`）。中継の道
+	// ——相互末尾の `b`・枝の追記・器の続き・返すだけの呼び先へ渡す引数・`b` にできない `bl`——とも名指しで断り、w の計画が
+	// 置き場を言える対照（字面の枝を `__` に、または器の仮引数から中身の上界が出る）は値が合う。
+	{
+		const LX = "`lexer.sn`@~\n";
+		const CP = "cp : [~s] ?\n\t!s : __\n\t(s ' 0) (cp s ' 1~)\n";
+		const LIT = "\t||s|| > 100 : `zz` , `yy`\n";
+		const UNIT = "\t||s|| > 100 : __\n";
+		const RELAY = "tokens は返す器の中身の置き場を要りますが、w が渡す返値スロットには置き場がありません";
+		checkNamed("置き場の無い中継：相互末尾の b", LX + "w : [~s] ?\n" + LIT + "\ttokens s\n((w `foo bar`) ' 1) ' 0", "ascii", RELAY);
+		checkNamed("置き場の無い中継：枝の追記", LX + "w : [~s] ?\n" + LIT + "\t||s|| > 7 : `q` , (w s ' 1~)~\n\ttokens s\n((w `foo bar`) ' 1) ' 0", "ascii", RELAY);
+		checkNamed("置き場の無い中継：器の続き", LX + "w : [~s] ?\n" + LIT + "\t`aa` , (tokens s)~\n((w `foo bar`) ' 2) ' 0", "ascii", RELAY);
+		checkNamed("置き場の無い中継：返すだけの呼び先へ", LX + "g : [~t] ? t\nw : [~s] ?\n" + LIT + "\tg (tokens s)\n((w `foo bar`) ' 1) ' 0", "ascii", RELAY);
+		checkNamed("置き場の無い中継：b にできない bl", LX + CP + "w : n ? tokens (cp `foo bar`)\n((w 1) ' 1) ' 0", "ascii", RELAY);
+		// 長さだけ見る形も断る（長さは合っていたが、同じ書き込みが走っていた）。
+		checkNamed("置き場の無い中継：長さだけ見ても", LX + "w : [~s] ?\n" + LIT + "\ttokens s\n||w `foo bar`||", "ascii", RELAY);
+		agree("置き場の在る中継（対照）：相互末尾の b", LX + "w : [~s] ?\n" + UNIT + "\ttokens s\n((w `foo bar`) ' 1) ' 0");
+		agree("置き場の在る中継（対照）：枝の追記", LX + "w : [~s] ?\n" + UNIT + "\t||s|| > 7 : (w s ' 1~)\n\ttokens s\n((w `foo bar`) ' 1) ' 0");
+		agree("置き場の在る中継（対照）：返すだけの呼び先へ", LX + "g : [~t] ? t\nw : [~s] ?\n" + UNIT + "\tg (tokens s)\n((w `foo bar`) ' 1) ' 0");
+		agree("置き場の在る中継（対照）：b にできない bl", LX + CP + "w : [~s] [~t] ? tokens (cp s)\n((w `foo bar` `zz`) ' 1) ' 0");
+		agree("置き場を要る関数を直に呼ぶ（対照）", LX + "((tokens `foo bar`) ' 1) ' 0");
+	}
 	// 追記（自己再帰がループになる道）。置いた個数が静的な即値で埋まっていた。
 	const AP2 = (input, body) => "f : [c ~rest] ?\n\t||rest|| = 0 : c\n\t" + body + "\n||f `" + input + "`||";
 	const AP = (body) => AP2("abc", body);
