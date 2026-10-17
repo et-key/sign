@@ -1,6 +1,8 @@
 /**
  * Sign Language Lexer (前処理フェーズ)
- * alpha/javascript/lexer.js（c3b203fc）から移植（変更なし）。元は pre_alpha/lexisize/lexer.js
+ * alpha/javascript/lexer.js（c3b203fc）から移植。元は pre_alpha/lexisize/lexer.js
+ * alpha1 で足した規則（利用者 2026-10-17）：字下げのブロックは演算子の右にだけ置ける（refuseBlockAfterValue）、
+ * いちばん外の定義が字下げのブロックで終わったら空行を1行置く（refuseMissingBlankLine）。
  *
  * 主な役割:
  * - 多義的でない中置演算子の前後に自動で空白を挿入し、PEGパーサーが
@@ -18,7 +20,7 @@
  * 本来この手の自動整形はコンパイラ／lexerではなくエディタ側のフォーマッタが担うべき仕事。
  */
 
-import { buildLexerRegex } from './operator_table.js';
+import { buildLexerRegex, OPERATOR_DICT } from './operator_table.js';
 import { OperationError } from './errors.js';
 
 export function separateInfix(input) {
@@ -69,7 +71,16 @@ export function separateInfix(input) {
  * 後の段で閉じが見つかると、2行にまたがる文字列が黙ってできていた。
  */
 export function classifyNewlines(input) {
+  return classifyNewlinesWithComments(input).text;
+}
+
+// classifyNewlines の本体。読み捨てた行頭のコメントの行の番号（CR で切った処理行の何番目か）も返す。markBlock は
+// それを見て、コメントの行を空行に数えない（refuseMissingBlankLine）。印を文字列の中に置くと、ソースに同じ文字が
+// あったときに見分けが付かないので、行の番号で外に渡す。
+function classifyNewlinesWithComments(input) {
   const n = input.length;
+  const commentLines = new Set();
+  let lineNo = 0;
   const newlineWidth = (k) => (input[k] === '\r' ? (input[k + 1] === '\n' ? 2 : 1) : input[k] === '\n' ? 1 : 0);
   let out = '';
   let i = 0;
@@ -80,12 +91,14 @@ export function classifyNewlines(input) {
       lineStart = false;
       if (bracketDepth <= 0 && input[i] === '`' && isCommentAt(input, i)) {
         while (i < n && !newlineWidth(i)) i++;
+        commentLines.add(lineNo);
         continue;
       }
     }
     const w = newlineWidth(i);
     if (w) {
       out += '\r';
+      lineNo++;
       i += w;
       lineStart = true;
       continue;
@@ -120,7 +133,7 @@ export function classifyNewlines(input) {
     out += ch;
     i++;
   }
-  return out;
+  return { text: out, commentLines };
 }
 
 // 行頭のバッククォートがコメントの始まりか（sign.pegjs の `comment` と同じ判別）。
@@ -252,6 +265,89 @@ function questionAfterClose(content, depth) {
   return false;
 }
 
+// **字下げのブロックは、演算子の右にだけ置ける**（利用者 2026-10-17）。値や語のすぐ後ろの字下げを余積の項として
+// 読むと、ブロックと余積が混ざる。前の行の余積を続けたいなら、TAB の後に空白を置く——行頭の空白は前の行の続き
+// なので（上の markBlock の注）、`inc` の次の行の `\t 5` は `inc 5` である。器として渡したいなら括りで書く。
+//
+// 「演算子の右」は、前の行（続きの行をつないだもの）の最後の語が、中置の意味を持つ演算子（演算子表に中置の行が
+// ある綴り）であること。中置演算子の前後の空白は書き手が書くものだが、separateInfix が補う分も同じに読むよう、
+// 補った後の綴りで見る。前置・後置にしかならない綴り（`$`・`!!`・`!`・`##`・`###`）は、前置なら被演算子に密着
+// させる演算子で、改行をはさんだ下のブロックの前置にはならない（位置は隣接で決まる）ので、ここでは値と同じに断る。
+// 前置にも中置にもなる綴り（`-`・`~`・`#`・`@`）は、前の行の末尾で空白に区切られているので中置である。
+function endsWithInfixOperator(text) {
+  const words = separateInfix(text).trimEnd().split(' ');
+  const defs = OPERATOR_DICT[words[words.length - 1]];
+  return !!defs && defs.some((d) => d.position === 'infix');
+}
+
+// 断りの文面で引く行。続きの行をつないだときの空白の重なりと、文字の改行（`\` + LF）を見える形にする。
+const quoted = (s) => s.replace(/ {2,}/g, ' ').replace(/\n/g, '\\n');
+
+function refuseBlockAfterValue(logical, content, q) {
+  throw new OperationError(
+    `字下げのブロックは、中置の演算子（\`:\`・\`?\` を含む）の右にだけ置けます。この行（TAB ${q} 個の \`${quoted(content)}\`）は、` +
+      `値や語、または前置・後置にしかならない演算子で終わる行（\`${quoted(logical)}\`）の下で字下げを深くしています。` +
+      "前の行の余積を続けるなら（括りを渡すときも）TAB の後に空白を置きます。",
+    { reason: "block-after-value" }
+  );
+}
+
+// **いちばん外の定義の終わりには空行を1行置く**（利用者 2026-10-17）。関数のブロック・構造体のブロックが終わり、
+// しかも定義も終わる所である。ブロックの途中で深さが変わる所（入れ子のブロックの終わり、ブロックの中の定義の
+// 終わり）は深さで分かるので要らない。1行で書き終えた定義（ブロックが無い）にも要らない。仮引数のブロックの後に
+// `?` の行が続く所は、定義がまだ終わっていないので置かない（`?` の行は続きの行）。ファイルの終わりは、空行が
+// 無くても定義の終わりである。行頭のコメントの行は空行に数えない。
+//
+// 定義かどうかは、いちばん外の行（続きの行をつないだもの）に括りの外の `:` があるかで見る。絶対値・ノルムの囲み
+// （`|x : 1|`）の中も括りの中と同じに数える——囲みか中置かは空白の位置が決めるので、密着した `|` で始まる語が開き、
+// 密着した `|` で終わる語が閉じる（sign.pegjs の Block の注）。
+function hasTopLevelDefine(text) {
+  const s = separateInfix(text);
+  let depth = 0;
+  let word = '';
+  const isDefineWord = () => depth === 0 && word === ':';
+  const countEnclosure = () => {
+    if (word === '|' || word === '||') return;
+    if (/^\|\|?[^|]/.test(word)) depth++;
+    if (/[^|]\|\|?$/.test(word)) depth--;
+  };
+  for (let i = 0; i < s.length; ) {
+    const ch = s[i];
+    if (ch === '\\') {
+      word += s.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (ch === '`' || ch === '"') {
+      const close = s.indexOf(ch, i + 1);
+      if (close === -1) return false;
+      word += s.slice(i, close + 1);
+      i = close + 1;
+      continue;
+    }
+    if (ch === ' ' || ch === '[' || ch === '(' || ch === '{' || ch === ']' || ch === ')' || ch === '}') {
+      if (isDefineWord()) return true;
+      countEnclosure();
+      word = '';
+      if (ch === '[' || ch === '(' || ch === '{') depth++;
+      else if (ch !== ' ') depth--;
+      i++;
+      continue;
+    }
+    word += ch;
+    i++;
+  }
+  return isDefineWord();
+}
+
+function refuseMissingBlankLine(definition, content) {
+  throw new OperationError(
+    `いちばん外の定義が字下げのブロックで終わったら、空行を1行置いてから次の行を書きます。定義（\`${quoted(definition)}\`）の後の、` +
+      `この行（\`${quoted(content)}\`）の前に空行がありません。`,
+    { reason: "definition-end-blank-line" }
+  );
+}
+
 function refuseQuestionAfterClose(content, q) {
   throw new OperationError(
     `${QUESTION_ROW_RULE}この行（TAB ${q} 個の \`${content}\`）は複数の行に書いた括りを閉じた行で、閉じの後ろに \`?\` を続けています` +
@@ -268,7 +364,7 @@ function refuseQuestionAfterClose(content, q) {
 // 2段戻れば DEDENT DEDENT。だから覚えるのは今の TAB の数だけでよい。
 // かつては Python のように「実際に深くなった TAB の数」を積んでいたので、何段跳んでも INDENT は1つで、
 // 跳んだ途中の深さへ戻ると、閉じてから開き直した別のブロックになっていた（0→2→1 が `a→b←→c←`）。
-function markBlock(input) {
+function markBlock(input, commentLines = new Set()) {
   const lines = input.split('\r');
   let depth = 0; // 今のブロックの深さ（TAB の数）
   let result = [];
@@ -293,14 +389,26 @@ function markBlock(input) {
   // `opened` はその段を**その行が字下げを深くして開いた**か——跳んだ途中の段へ後から戻って書いた行（0 → 3 → 2 の
   // 2）や、閉じた段へ書いた行は開いていない。同じ深さの次の行はその段の印を変えない。
   const written = [];
+  // 前の書いた行からこの行までに空行があったか（refuseMissingBlankLine）。
+  let sawBlank = false;
+  // 今の行（続きの行をつないだもの）の中身。字下げのブロックが開くとき、その上の行がこれである（refuseBlockAfterValue）。
+  let logical = '';
+  // いちばん外（TAB 0 個）の文：その行（続きの行をつないだもの）、字下げのブロックを開いたか、定義か。
+  let top = { logical: '', hadBlock: false, isDef: false };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
+    // 行頭のコメントの行（classifyNewlines が読み捨てた行）。空行には数えない。
+    if (commentLines.has(i)) {
+      continue;
+    }
+
     // **空の処理行は読み捨てる**（preprocessor.md §0）。ブロックや括弧の中の空行も同じで、残すと
     // 行の区切りが2つ続いて構文が壊れていた。空とは TAB と空白しか無い行である——trim() だと
-    // U+3000 や NBSP だけの行まで黙って食っていた。
+    // U+3000 や NBSP だけの行まで黙って食っていた。読み捨てるが、在ったことは覚える（定義の終わりの空行）。
     if (/^[\t ]*$/.test(line)) {
+      sawBlank = true;
       continue;
     }
 
@@ -338,11 +446,24 @@ function markBlock(input) {
         result.push(content);
         lastContentLineIdx = result.length - 1;
       }
+      logical = isContinuation ? logical + ' ' + content.replace(/^ +/, '') : content;
+      // 括りの中の行も、いちばん外の文がまだ字下げのブロックを開いていなければ、その文の行である（括りを閉じた行の
+      // 後ろの `:` を定義と見るため）。
+      if (!top.hadBlock) top.logical += ' ' + content.replace(/^ +/, '');
+      sawBlank = false;
       bracketDepth += bracketDelta(content);
       continue;
     }
 
     const currentIndent = leadingWs.length; // タブの数をインデントレベルとする
+
+    // いちばん外の文の始まり。前の文が字下げのブロックを開いた定義なら、その終わりには空行が要る。
+    if (!isContinuation && currentIndent === 0) {
+      if (top.hadBlock && top.isDef && !sawBlank) refuseMissingBlankLine(top.logical, content);
+      top = { logical: content, hadBlock: false, isDef: false };
+    } else if (isContinuation && !top.hadBlock) {
+      top.logical += ' ' + content.replace(/^ +/, '');
+    }
 
     // `?` で始まる行が付く先は、この行を前の行へつなぐ前（下の DEDENT の前）の深さで決まる。行頭の空白の後の `?`
     // （`\t ? x`）も同じ所に付く——空白は余積で、つないだ後の木は `?` で始まる行と変わらない。
@@ -370,11 +491,19 @@ function markBlock(input) {
         lastContentLineIdx = result.length - 1;
       }
     } else if (currentIndent > depth) {
+      // 字下げのブロックは中置の演算子の右にだけ開ける（refuseBlockAfterValue）。
+      if (lastContentLineIdx !== -1 && !endsWithInfixOperator(logical)) refuseBlockAfterValue(logical, content, currentIndent);
+      if (depth === 0) {
+        top.hadBlock = true;
+        top.isDef = hasTopLevelDefine(top.logical);
+      }
       // インデントが深くなった場合、深くなった段の数だけ INDENT マーカーを出力
       const indents = '\x02'.repeat(currentIndent - depth); // INDENTマーカー
       depth = currentIndent;
+      // 演算子とブロックの間に空白を1つ置く。置かないと、前置にもなる綴り（`-`・`~`・`#`・`@`）がブロックに密着して
+      // 前置と読まれる（`1 -` の下の `2` が `1` と `-(ブロック)` の余積になっていた）。
       if (lastContentLineIdx !== -1) {
-        result[lastContentLineIdx] += indents + content;
+        result[lastContentLineIdx] += ' ' + indents + content;
       } else {
         result.push(indents + content);
         lastContentLineIdx = result.length - 1;
@@ -385,6 +514,8 @@ function markBlock(input) {
       lastContentLineIdx = result.length - 1;
     }
 
+    logical = isContinuation ? logical + ' ' + content.replace(/^ +/, '') : content;
+    sawBlank = false;
     bracketDepth += bracketDelta(content);
   }
 
@@ -397,7 +528,6 @@ function markBlock(input) {
 }
 
 export function preprocess(input) {
-  return separateInfix(
-    markBlock(classifyNewlines(input))
-  );
+  const { text, commentLines } = classifyNewlinesWithComments(input);
+  return separateInfix(markBlock(text, commentLines));
 }

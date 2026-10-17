@@ -10,7 +10,10 @@ Start = Program
 // 1つ以上の半角スペース = Sign言語におけるコプロダクト（余積）演算子
 // この「演算子としてのスペース」が Expression 層でフラットリストを生成し、
 // Shunting Yard（演算子テーブル）に渡される入力となる。
-__ = " "+ { return null; } / &"\x02" { return null; } // coproduct operator（演算子直後に空白なしでインデントブロックが続くケースを先読みで許容（\x02自体は消費しない、Block側が消費する）
+// coproduct operator。`&"\x02"` は、演算子の直後に空白なしで字下げのブロックが続くケースを先読みで許容する（\x02 自体は
+// 消費しない、Block 側が消費する）。値や語の直後に字下げのブロックを置くこと（ブロックを余積の項にすること）は、
+// 前処理（lexer.js の refuseBlockAfterValue）が名指しで断るので、ここへは来ない。
+__ = " "+ { return null; } / &"\x02" { return null; }
 _  = " "* { return null; } // optional (used only at line edges)
 _e = (" " / EOL)* { return null; } // ブロックの縁（`[` の直後・`]` の直前）。ここだけ EOL を許す
 // **行の区切りは CR だけである**（preprocessor.md §0）。前処理の最初の走査が、`\` の直後の改行を LF
@@ -98,18 +101,21 @@ Core
   / Atom
 
 // --- 空間的配置（ネスト構造） ---
+// **括りには「括り」の印を付ける。** 印が無いと、括りの中身（行の配列）と行そのものが同じ形の配列になり、
+// どちらなのかは根からの深さでしか分からなかった。`[...]`・`{...}`・`(...)` の意味は1つなので
+// （利用者 2026-08-05「カッコの意味って統一されているから種類を問うていない」）、種類は残さず印は1つにする。
 Block
-  = "[" _e exprs:Expressions _e "]" { return exprs; }
-  / "{" _e exprs:Expressions _e "}" { return exprs; }
-  / "(" _e exprs:Expressions _e ")" { return exprs; }
+  = "[" _e exprs:Expressions _e "]" { return [`"BRACKET_"`, exprs]; }
+  / "{" _e exprs:Expressions _e "}" { return [`"BRACKET_"`, exprs]; }
+  / "(" _e exprs:Expressions _e ")" { return [`"BRACKET_"`, exprs]; }
   // 空ブロック（`[]` / `{}` / `()`）。`_ = []`——空の器と単位は同じものであり、
   // `none : []` のように書けなければならない
   // （guide/example.sn 37行目）。Expressionsは1個以上を要求するため、非空の
   // 選択肢の「後ろ」に空専用の選択肢を置いて拾う（PEGは順序付き選択なので、
   // 非空の解釈が先に試される順序は変わらない）。
-  / "[" _e "]" { return []; }
-  / "{" _e "}" { return []; }
-  / "(" _e ")" { return []; }
+  / "[" _e "]" { return [`"BRACKET_"`, []]; }
+  / "{" _e "}" { return [`"BRACKET_"`, []]; }
+  / "(" _e ")" { return [`"BRACKET_"`, []]; }
   // ノルム（要素数）。**囲みの区別は空白の位置が決める**——絶対値（`|x|`）とまったく
   // 同じ規則である。密着していれば囲み、空白で区切られていれば中置演算子
   // （`||` は tier 22 の `bit_or`）：
