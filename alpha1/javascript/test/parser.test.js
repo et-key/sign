@@ -44,7 +44,37 @@ const cases = [
 	{ name: "括りの中の行は行の配列のまま", input: "f [1 2] 3", expect: ["<f>", [B, [["1", "2"]]], "3"] },
 ];
 
+// 絶対値・ノルムの囲みのすぐ中の定義は、域の外なので断る。括りに入れた構造体は値なので通る。
+const refused = [
+	{ name: "`|x : 1|` は断る（`:` は `|_|` の域に入らない）", input: "|x : 1|" },
+	{ name: "`||x : 1||` も断る", input: "||x : 1||" },
+	{ name: "囲みの中の枝の `:` も断る", input: "|x < 0 : 1|" },
+];
+const allowed = [
+	{ name: "括りに入れた構造体は値なので通る", input: "|[x : 1] ' x|", expect: [[`"ABS_"`, [[[B, [["<x>", ":", "1"]]], "'", "<x>"]]]] },
+];
+
 let passed = 0;
+for (const c of refused) {
+	try {
+		parser.parse(preprocess(c.input));
+		console.log(`FAIL ${c.name}\n     断るはずが通った`);
+	} catch (e) {
+		if (/の囲みの中には定義/.test(e.message)) { console.log(`OK   ${c.name}`); passed++; }
+		else console.log(`FAIL ${c.name}\n     別の理由: ${e.message}`);
+	}
+}
+for (const c of allowed) {
+	try {
+		const got = JSON.stringify(parser.parse(preprocess(c.input))[0]);
+		if (got === JSON.stringify(c.expect)) { console.log(`OK   ${c.name}`); passed++; }
+		else console.log(`FAIL ${c.name}\n     got:  ${got}\n     want: ${JSON.stringify(c.expect)}`);
+	} catch (e) {
+		console.log(`FAIL ${c.name}\n     error: ${e.message}`);
+	}
+}
+const extra = refused.length + allowed.length;
+
 for (const c of cases) {
 	const pre = preprocess(c.input);
 	try {
@@ -66,5 +96,5 @@ for (const c of cases) {
 	}
 }
 
-console.log(`\n${passed}/${cases.length} passed`);
-process.exit(passed === cases.length ? 0 : 1);
+console.log(`\n${passed}/${cases.length + extra} passed`);
+process.exit(passed === cases.length + extra ? 0 : 1);

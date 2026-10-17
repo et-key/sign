@@ -1,6 +1,15 @@
 {
   // 状態管理（Depth）はLexerの前処理に完全に委譲したため、
   // グローバルな変数は一切不要になりました。
+
+  // **絶対値・ノルムの囲みのすぐ中には定義を置けない**（利用者 2026-10-17）。`:` は名前を付ける定義（メタ）で、
+  // 値を返す射ではないので、`|_|`（数 → 数）の域にも `||_||`（器 → 数）の域にも入らない。括りの中に入れた
+  // 構造体（`|[x : 1] ' x|`）は値なので通す——括りは印つきの1つの項なので、行の上には `:` が出てこない。
+  function refuseDefineInEnclosure(exprs, name) {
+    if (exprs.some((line) => Array.isArray(line) && line.includes(":"))) {
+      error(`${name} の囲みの中には定義（\`:\`）を置けません。\`:\` は名前を付ける定義で値を返さないので、${name} の域に入りません。`);
+    }
+  }
 }
 
 Start = Program
@@ -129,8 +138,8 @@ Block
   // 揃えれば、どちらも曖昧さなく書ける（`|5|` は 5、`||5||` は 1）。
   //
   // **絶対値より先に試す。** 後だと `||5||` が `|` + `|5|` + `|` に読めてしまう。
-  / "||" exprs:Expressions "||" &(__ / EOL / EOF / "]" / "}" / ")" / "\x03") { return [`"NORM_"`, exprs]; }
-  / "|" exprs:Expressions "|" &(__ / EOL / EOF / "]" / "}" / ")" / "\x03") { return [`"ABS_"`, exprs]; }
+  / "||" exprs:Expressions "||" &(__ / EOL / EOF / "]" / "}" / ")" / "\x03") { refuseDefineInEnclosure(exprs, "`||…||`"); return [`"NORM_"`, exprs]; }
+  / "|" exprs:Expressions "|" &(__ / EOL / EOF / "]" / "}" / ")" / "\x03") { refuseDefineInEnclosure(exprs, "`|…|`"); return [`"ABS_"`, exprs]; }
   // Lexerが挿入した制御用ASCIIコードによるインデントブロックの切り出し
   // ※実際のLexerの実装に合わせて "\x02", "\x03" は変更してください
   // 【修正済み】以前は ...exprs と展開しており、bracket系(exprsをそのまま返す)より
