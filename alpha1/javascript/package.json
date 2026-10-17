@@ -1,0 +1,13 @@
+{
+  "name": "sign-alpha1-js",
+  "version": "0.1.0",
+  "description": "Sign alpha1 の前段（前処理・lexer・構文・演算子表）。単位は `_` だけで書く。",
+  "type": "module",
+  "scripts": {
+    "build:parser": "peggy -o parser.js --format es sign.pegjs",
+    "test": "node test/run.js"
+  },
+  "dependencies": {
+    "peggy": "^4.0.0"
+  }
+}
