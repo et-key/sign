@@ -271,23 +271,31 @@ myGreet :
 myGreet ' greet ' hello == `hello,`
 
 
-`ブロックスコープを使うことで、ブロックスコープ内にgetを直接記述できる。`
-`このブロック構文も、もちろん演算終了時に返り値がある。`
-`これはブロックスコープでの結果の直和が可能であれば直和を返す。`
+`欄をまとめて読むときは、使う欄の名前を仮引数の括りに並べて受ける（参照をばらして取る）。`
+`仮引数の名前が構造体の鍵と同じなら、そこへ入る。`
 
-myGreet
-	'greet
-		'welcome
-	'world
- == `welcome, world`
+greeting : [greet world] ? (greet ' welcome) world
+
+greeting myGreet == `welcome, world`
 
 
-`値のmodifyが可能`
+`値の書き換えは、新しい構造体を組み直して返す（元の構造体はそのまま）。`
+`書いた行が勝ち、撒いた行（this~）は書かなかった鍵だけを埋める。撒く行は末尾に置く。`
 
-myGreet
-	'greet
-		'welcome : `welcome to our `
-	'world : `metaverse!`
+regreet : [~this] ? [
+	greet : [
+		welcome : `welcome to our `
+		(this ' greet)~
+	]
+	world : `metaverse!`
+	this~
+]
+
+regreet myGreet
+
+`いちばん外の欄だけを書き換えるなら、上書きで書ける。`
+
+myGreet~ [world : `metaverse!`]~
 
 
 `プリミティブな型のみを推論することで、実際の型の問題が解決できるような設計となる。`
