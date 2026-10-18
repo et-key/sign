@@ -194,36 +194,6 @@ john ' name = john ' `name`
 [> 3 : [+ 3]] 3 4 = 4
 
 
-`データクラスっぽい記述`
-
-#MyGame :
-	State :
-		Existence
-		Durability
-		Mentality
-		Wisdom
-		Agility
-		Equipment
-		Bag
-
-`後置「~」によりリストが平坦化（Flatten）され、また評価が強制される。
-`辞書型などに適用することで要素が展開コピーされる。他のファイルからの読み込みであれば、「@」を使用する。
-
-#Mob : MyGame~
-	Base : State~
-	State~
-
-#Magician : Mob~
-	Base :
-		Existence : 1
-		Durability : 3
-		Mentality : 10
-		Wisdom : 8
-		agility : 5
-	State : Magician ' Base~
-
-myMagician : Magician~
-
 ` --- ビット演算の例 ---
 flags : 0b1100
 mask  : 0b1010
@@ -336,16 +306,20 @@ y = 1
 
 
 `@後置演算子はimport。ファイル名からの指定も可能で、path指定も可`
-`辞書型の場合、~演算子で一つ上のスコープへ展開できるため、@~を使うことで、ファイル内で使えるインポートも可能。`
+`ブロックの中だけで取り込むときは、関数の本体を範囲にする。取り込んだ物を関数に当て、`
+`使う名前は仮引数で受ける——仮引数の名前が構造体の鍵と同じなら、そこへ入る。`
+`使う名前だけ受ける [say]、使う名前と残りを受ける [say ~rest]、まるごと受けて欄を引く [~rest] のどれでも書ける。`
 
-io@~
-	say Hello World
+hello : [say] ? say Hello World
 
-`ファイルスコープ上のインポートではないため、下の行は、Say is not definedエラーを返す。`
+hello io@
+
+`関数の本体の外では say は定義されていないので、下の行の say は未定義の名前（値は _）になる。`
 
 say Hello World
 
 
+`辞書型の場合、~演算子で一つ上のスコープへ展開できるため、@~を使うことで、ファイル内で使えるインポートも可能。`
 `ファイルスコープへ展開して使う。`
 
 io@~
