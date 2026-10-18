@@ -18,6 +18,12 @@
  * 当てた所（「確かめ」）、変異試験で壊しても落ちなかった所を見分ける入力（「穴」）を置く。「確かめ」の行は、直す
  * 前の実装では黙って通るか、別の読みになっていた。
  *
+ * 最後に §5 Q1 の答え（2026-10-19、R24・R25・R26）の行（「答え」）と、期待値ではなく同じ射の綴りどうしを比べる
+ * 試験（「法則」）を置く。§6.3 の「断られる」表の2行（`f : [x ~xs] ? [f xs] x` の本体・`hello : [say] ? say Hello World`
+ * の本体）は、R25 で通る側（「答え」の R25 の行）へ移した。標準の定義の `map : f [x ~y] ? x` と `n : [~x] ? x` は
+ * 括りの関数なので、R25 で定義の行の木が `(defer {x})` になる（試験は最後の行の木だけを見るので、期待値は変わらない）。
+ * その後ろに、R24〜R26 の実装を確かめた2つの workflow の指摘を当てた行（「確かめ」の直した・穴・守り）を置く。
+ *
  * 実行: node test/coproduct.test.js（`npm test` からも呼ばれる）
  */
 import { resolve, show, kindOf } from "../resolve.js";
@@ -44,9 +50,9 @@ const STD = [
 // 標準の定義の後ろに行を足す。omit は外す定義の名前（その行の仮引数が定義を隠すとき）。
 const std = (lines, { omit = [] } = {}) =>
 	[...STD.filter((d) => !omit.includes(d.split(" ")[0])), ...[].concat(lines)].join("\n");
-// 最後の行の木。body なら `(: t (? […] 本体))` の本体。
-const lastTree = (r, body) => {
-	const t = r.trees[r.trees.length - 1];
+// 最後の行の木。body なら `(: t (? […] 本体))` の本体。at なら、その番号の行の木（0 から、負なら後ろから）。
+const lastTree = (r, body, at) => {
+	const t = at === undefined ? r.trees[r.trees.length - 1] : r.trees[at < 0 ? r.trees.length + at : at];
 	return body ? t.right.body : t;
 };
 
@@ -130,8 +136,8 @@ const refused = [
 	["_ + 1 f", std("_ + 1 f"), "G5"],
 	["inc 1 , inc 2", std("inc 1 , inc 2"), "G3"],
 	["本体 @f x , map y", std("t : f x y ? @f x , map y"), "G3"],
-	["f : [x ~xs] ? [f xs] x の本体", "f : [x ~xs] ? [f xs] x", "G7"],
-	["hello : [say] ? say Hello World の本体", std("hello : [say] ? say Hello World"), "G7"],
+	// §6.3 の「`f : [x ~xs] ? [f xs] x` の本体」と「`hello : [say] ? say Hello World` の本体」（G7）は、§5 Q1 の答え
+	// （R24・R25）で通る側へ移した。呼ばれない括りの関数は本体を読まず、断らない（下の「答え」の R25 の行）。
 	["fs~", std("fs~"), "G7"],
 	["fs~ 5", std("fs~ 5"), "G7"],
 	["[:] x 20", std("[:] x 20"), "G7"],
@@ -168,7 +174,7 @@ const ok = (name) => {
 };
 const fail = (name, ...lines) => console.log(`FAIL ${name}\n${lines.map((l) => `     ${l}`).join("\n")}`);
 
-// 通る行を確かめる。extra：body（本体の木を見る）・excess・diag（undefined-name が出る名前）・
+// 通る行を確かめる。extra：body（本体の木を見る）・at（見る行の番号）・excess・diag（undefined-name が出る名前）・
 // diagCount（出る診断の数）。
 const checkPass = (name, src, want, kind, extra = {}) => {
 	total++;
@@ -179,7 +185,7 @@ const checkPass = (name, src, want, kind, extra = {}) => {
 		fail(name, `断られた: ${e.reason || e.name} ${e.gate || ""} ${e.message}`);
 		return;
 	}
-	const t = lastTree(r, extra.body);
+	const t = lastTree(r, extra.body, extra.at);
 	const got = show(t);
 	const problems = [];
 	if (got !== want) problems.push(`木   got:  ${got}`, `     want: ${want}`);
@@ -196,7 +202,8 @@ const checkPass = (name, src, want, kind, extra = {}) => {
 };
 
 // 断られる行を確かめる。want が `G…` なら門の reason と枝（`gate`）を、それ以外なら reason だけを比べる。
-const checkRefused = (name, src, want) => {
+// inst があれば、括りの関数の実体で当たった門（R25）で、呼んだ行が名指しした関数と形の並び（[[関数, 形], …]）も比べる。
+const checkRefused = (name, src, want, inst) => {
 	total++;
 	try {
 		const r = resolve(src);
@@ -204,8 +211,17 @@ const checkRefused = (name, src, want) => {
 	} catch (e) {
 		const isName = !/^G/.test(want);
 		const wantReason = isName ? want : GATE_REASON[want.replace(/\(.\)$/, "")];
-		if (e.reason === wantReason && (isName || e.gate === want)) ok(`${name} → ${want}`);
-		else fail(name, `got: ${e.reason} ${e.gate || ""}  want: ${wantReason} ${isName ? "" : want}`, e.message);
+		const gotInst = e.instances ? JSON.stringify(e.instances.map((i) => [i.fn, i.shape])) : "なし";
+		const instOk = !inst || gotInst === JSON.stringify(inst);
+		if (e.reason === wantReason && (isName || e.gate === want) && instOk) ok(`${name} → ${want}`);
+		else {
+			fail(
+				name,
+				`got: ${e.reason} ${e.gate || ""}  want: ${wantReason} ${isName ? "" : want}`,
+				...(inst ? [`実体 got: ${gotInst}  want: ${JSON.stringify(inst)}`] : []),
+				e.message
+			);
+		}
 	}
 };
 
@@ -247,7 +263,8 @@ const fixPasses = [
 	["[+] 5 6 inc（貪欲な2項のまま）", std("[+] 5 6 inc"), "(apply inc (apply [+] (construct 5 6)) ·rev)", "A"],
 	["[-] 5 3 1（未知の根）", std("[-] 5 3 1"), "(apply [-] (construct 5 3 1))", "未知"],
 	["[*] inc 2 3（未知の根）", std("[*] inc 2 3"), "(apply (compose [*] inc) (construct 2 3))", "未知"],
-	// 段18 の点なしは、引いた物の種類が決まらない（§2 Q1）ので、適用は未知。
+	// 段18 の点なしの適用は、k = 1 なら `fs ' 0` と同じ desc（R26。2026-10-19 に §2 Q1 の答えで決まった）。ここは
+	// k = 2 なので未知のまま。k = 1 の `[' 0] fs` も、fs の要素に関数が見えるので未知（下の「法則」で比べる）。
 	["[' 0] fs 5（未知の根）", std("[' 0] fs 5"), "(apply [' 0] (construct fs 5))", "未知", { excess: false }],
 	// 中置の右のブロックは前段が置く場所なので通る。
 	["中置の右のブロック", std(["v : 1 +", "\t2"]), "(: v (+ 1 (block 2)))", null],
@@ -394,6 +411,356 @@ const gapRefused = [
 ];
 for (const [name, src, want, kind, extra] of gapPasses) checkPass(`穴 ${name}`, src, want, kind, extra);
 for (const [name, src, want] of gapRefused) checkRefused(`穴 ${name}`, src, want);
+
+// ---------------------------------------------------------------------------
+// §5 Q1 の答え（2026-10-19）：R24・R25・R26
+// ---------------------------------------------------------------------------
+//
+// R24：括りで受けた名前の種類は、呼ぶ側が渡した物の生まれで決まる（形ごとの実体）。
+// R25：括りの関数の本体は、実体を作るときにだけ読む。呼ばれない関数は `(defer …)` で、断らない。門に当たった実体は
+//      呼んだ行で断る。
+// R26：`x ' k`（と `[' k] x`）で引いた物の種類は、引かれた物の生まれで決まる。
+// 実体の形の綴りは resolve.js の頭の注（`{say:L other:A}`・`[A…]`・`A`、仮引数ごとに空白で並べる）。
+
+const src = (lines) => lines.join("\n");
+// pattern_guide.md「IO Reader Writer」の m と a・b・c（3つとも 42 を返す、同じ射の3つの綴り）。
+const M = ["m :", "\tsay : x ? x * 2", "\tother : 1", ""];
+const IO = [...M, "a : [say] ? say 21", "b : [say ~rest] ? say 21", "c : [~rest] ? (rest ' say) 21"];
+// example.sn の myGreet。欄 greet は構造体。FN は欄 welcome を関数にしたもの、STR は example.sn のまま（文字列）。
+const GREETING = "greeting : [greet world] ? (greet ' welcome) world";
+const MY_GREET_FN = ["myGreet :", "\tgreet :", "\t\thello : x ? x", "\t\twelcome : x ? x", "\tworld : ` world`", ""];
+const MY_GREET_STR = ["myGreet :", "\tgreet :", "\t\thello : `hello,`", "\t\twelcome : `welcome,`", "\tworld : ` world`", ""];
+const REC = "f : [x ~xs] ? [f xs] x";
+
+const answerPasses = [
+	// R24 の例1（pattern_guide.md「IO Reader Writer」）。木の行は m・a・b・c・呼ぶ行の順。
+	["R24 a m", src([...IO, "a m"]), "(apply a m)", "A"],
+	["R24 a m の実体（本体は (apply say 21)）", src([...IO, "a m"]), "(: a (? [[say]] (inst {say:L other:A} (apply say 21))))", null, { at: 1 }],
+	["R24 b m", src([...IO, "b m"]), "(apply b m)", "A"],
+	["R24 b m の実体", src([...IO, "b m"]), "(: b (? [[say ~rest]] (inst {say:L other:A} (apply say 21))))", null, { at: 2 }],
+	["R26 c m（rest ' say は欄 say の生まれ）", src([...IO, "c m"]), "(apply c m)", "A"],
+	["R26 c m の実体", src([...IO, "c m"]), "(: c (? [[~rest]] (inst {say:L other:A} (apply [rest ' say] 21))))", null, { at: 3 }],
+	// R24 の例2：利用者の基本の再帰。§6.3 では本体が G7 だった。xs は同じ要素の List なので、自分を同じ形で呼ぶ。
+	["R24 f [1 2 3]", src([REC, "f [1 2 3]"]), "(apply f [1 2 3])", "A"],
+	["R24 f [1 2 3] の実体（本体は (construct [f xs] x)）", src([REC, "f [1 2 3]"]), "(: f (? [[x ~xs]] (inst [A…] (construct [f xs] x))))", null, { at: 0 }],
+	// 文字列の字面は List（String ≅ List(Char)）なので、同じ再帰で分解できる。形は [1 2 3] と同じ。
+	["R24 f `abc`（文字列を List として分解する再帰）", src([REC, "f `abc`"]), "(apply f `abc`)", "A"],
+	["R24 f `abc` の実体は [1 2 3] と同じ形", src([REC, "f `abc`"]), "(: f (? [[x ~xs]] (inst [A…] (construct [f xs] x))))", null, { at: 0 }],
+	// R24 の例3：括りは1つで1と数える（function_guide.md「参照の取り方」）。
+	["R24 pair [1 2 3] [10 20]", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1 2 3] [10 20]"]), "(apply pair (construct [1 2 3] [10 20]))", "A"],
+	["R24 pair の実体（形は仮引数ごとに並べる）", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1 2 3] [10 20]"]), "(: pair (? [[a ~as] [b ~bs]] (inst [A…] [A…] (+ a b))))", null, { at: 0 }],
+	// k ≠ n は未知（§5 Q2）。根なら通り、実体は作らない（定義の行は defer のまま）。
+	["Q2 a m m（k ≠ n は未知の根）", src([...IO, "a m m"]), "(apply a (construct m m))", "未知"],
+	["Q2 a m m では実体を作らない", src([...IO, "a m m"]), "(: a (? [[say]] (defer {say 21})))", null, { at: 1 }],
+	// R25：呼ばれない括りの関数は、本体を書いたまま残して断らない。読まないので、本体の未定義の名前も information を出さない。
+	// §6.3 の「hello : [say] ? say Hello World の本体」「f : [x ~xs] ? [f xs] x の本体」（G7）をここへ移した。
+	["R25 hello : [say] ? say Hello World だけ", "hello : [say] ? say Hello World", "(: hello (? [[say]] (defer {say Hello World})))", null, { diagCount: 0 }],
+	["R25 #hello（公開しても同じ）", "#hello : [say] ? say Hello World", "(: #hello (? [[say]] (defer {say Hello World})))", null, { diagCount: 0 }],
+	["R25 f : [x ~xs] ? [f xs] x だけ", REC, "(: f (? [[x ~xs]] (defer {[f xs] x})))", null],
+	["R25 標準の定義と hello（§6.3 の行）", std("hello : [say] ? say Hello World"), "(: hello (? [[say]] (defer {say Hello World})))", null, { diagCount: 0 }],
+	["R25 字下げの本体の defer", src(["t : [a] ?", "\ta", "\t5", ""]), "(: t (? [[a]] (defer {a ⏎ 5})))", null],
+	// 実体の本体の中の未定義の名前は、今までどおり1回だけ information を出す。
+	["R25 実体の本体の未定義の名前", src(["k : [x ~xs] ? zz x", "k [1 2]", "k `ab`"]), "(apply k `ab`)", "A", { diag: "zz", diagCount: 1 }],
+	// Zipper の map（pattern_guide.md）。f は裸の仮引数なので A、[x ~y] は List。map f y は同じ形で自分を呼ぶ。
+	["R24 map $[* 2] [1 2 3 4 5]", src(["map : f [x ~y] ? (@f x) , (map f y)", "map $[* 2] [1 2 3 4 5]"]), "(apply map (construct $[* 2] [1 2 3 4 5]))", "A"],
+	["R24 map の実体", src(["map : f [x ~y] ? (@f x) , (map f y)", "map $[* 2] [1 2 3 4 5]"]), "(: map (? [f [x ~y]] (inst A [A…] (, [@f x] [map f y]))))", null, { at: 0 }],
+	// D 97749496 の greeting。欄 greet は構造体で、その欄 welcome が関数なら (greet ' welcome) world は適用、文字列なら構築。
+	["R24・R26 greeting myGreet（welcome が関数）", src([...MY_GREET_FN, GREETING, "greeting myGreet"]), "(apply greeting myGreet)", "A"],
+	[
+		"R24・R26 greeting の実体（welcome が関数）",
+		src([...MY_GREET_FN, GREETING, "greeting myGreet"]),
+		"(: greeting (? [[greet world]] (inst {greet:{hello:L welcome:L} world:[A…]} (apply [greet ' welcome] world))))",
+		null,
+		{ at: 1 },
+	],
+	[
+		"R24・R26 greeting の実体（example.sn のまま、welcome が文字列）",
+		src([...MY_GREET_STR, GREETING, "greeting myGreet"]),
+		"(: greeting (? [[greet world]] (inst {greet:{hello:[A…] welcome:[A…]} world:[A…]} (construct [greet ' welcome] world))))",
+		null,
+		{ at: 1 },
+	],
+	// R26：裸の名前の鍵の鎖（example.sn）。引いた物は文字列なので、`==` の両辺が A。
+	["R26 myGreet ' greet ' hello == `hello,`", src([...MY_GREET_STR, "myGreet ' greet ' hello == `hello,`"]), "(== (' (' myGreet greet) hello) `hello,`)", "A"],
+	// 括った `?` も括りの関数。
+	["R24 [[say] ? say 21] m", src([...M, "[[say] ? say 21] m"]), "(apply [[say] ? say 21] m)", "A"],
+	// 入れ子の関数の本体の中の括りの関数。外の仮引数 v は、実体の範囲の外側から引く。
+	["R24 素の関数の本体の中の括りの関数", src([...M, "outer : v ? [[say] ? say v] m", "outer 21"]), "(apply outer 21)", "A"],
+	[
+		"R24 実体の本体の中の括りの関数",
+		src([...M, "a : [say] ? [[other] ? say other] m", "a m"]),
+		"(: a (? [[say]] (inst {say:L other:A} (apply [[other] ? say other] m))))",
+		null,
+		{ at: 1 },
+	],
+	// 標準の定義の n（`n : [~x] ? x`）は、k = n なら実体を作る（§6.3 の n 1 2 3 は k ≠ n で未知のまま）。
+	["R24 n vs（標準の定義の n、k = n）", std("n vs"), "(apply n vs)", "A"],
+	// 構造体の ~rest は受けなかった欄の構造体。そこから欄を引ける（R26）。
+	["R24・R26 [say ~r] ? r ' other", src([...M, "h2 : [say ~r] ? r ' other", "h2 m"]), "(: h2 (? [[say ~r]] (inst {say:L other:A} (' r other))))", null, { at: 1 }],
+	// List の要素の形は長さに依らない。
+	["R24 要素の List の長さは形に入らない", src(["f : [x ~xs] ? x", "f [[1 2] [3 4 5]]"]), "(: f (? [[x ~xs]] (inst [[A…]…] x)))", null, { at: 0 }],
+	// R26：引いた物が関数なら L。点なしの [' k] も同じ（下の法則で両方の綴りを比べる）。
+	// 裸の名前の鍵は欄の名前で、名前として引かない（say はファイルの定義に無いが、information を出さない）。
+	["R26 m ' say は L", src([...M, "m ' say"]), "(' m say)", "L", { diagCount: 0 }],
+	["R26 [' say] m は L", src([...M, "[' say] m"]), "(apply [' say] m)", "L", { diagCount: 0 }],
+	["R26 (m ' say) 21", src([...M, "(m ' say) 21"]), "(apply [m ' say] 21)", "A"],
+	["R26 vs ' 0", std("vs ' 0"), "(' vs 0)", "A"],
+	// R26 の外の鍵は今までどおり未知（根なら通る）。
+	["R26 m ' 0（構造体に整数の鍵）は未知", src([...M, "m ' 0"]), "(' m 0)", "未知"],
+	["R26 vs ' say（List に名前の鍵）は未知", std("vs ' say"), "(' vs say)", "未知"],
+	["R26 m @ say は未知", src([...M, "m @ say"]), "(@ m say)", "未知"],
+];
+const answerRefused = [
+	// R24 の例4：List の要素に L が見えるので名前は未知。呼んだ行で G7、関数と形を名指しする（R25）。
+	["R24 g fs（h は未知）", src(["inc : x ? x + 1", "double : x ? x * 2", "fs : inc , double", "g : [h ~hs] ? h 5", "g fs"]), "G7", [["g", "[U…]"]]],
+	// 構造体に同じ名前の欄が無い。
+	["R24 構造体に無い名前", src([...M, "a2 : [nope] ? nope 21", "a2 m"]), "G7", [["a2", "{say:L other:A}"]]],
+	// 呼ぶ行が素の関数の本体なら、その定義の行で断る。
+	["R25 素の関数の本体から呼んで門", src([...M, "a2 : [nope] ? nope 21", "p : v ? a2 m"]), "G7", [["a2", "{say:L other:A}"]]],
+	// 実体の本体の中で別の括りの関数を呼んで門に当たったら、通った実体を呼んだ順に名指しする。
+	["R25 実体の中の実体で門", src(["p : [x ~xs] ? q x", "q : [y] ? y 5", "p [1 2]"]), "G7", [["p", "[A…]"], ["q", "A"]]],
+	// k ≠ n の未知の節は、対に入れば G2(a)（§5 Q2）。
+	["Q2 a m m inc", src([...IO, "inc : x ? x + 1", "a m m inc"]), "G2(a)"],
+	// 逆適用と穴は素の関数だけ（括りの関数・分解した名前は通さない）。
+	["R12 m a（括りの関数の逆適用）", src([...IO, "m a"]), "G8"],
+	["R12 実体の中の 21 say（分解した名前の逆適用）", src([...M, "a3 : [say] ? 21 say", "a3 m"]), "G8", [["a3", "{say:L other:A}"]]],
+	["R16 a _（括りの関数の穴）", src([...IO, "a _"]), "G5"],
+	// 長さ1の括り `[3]` はスカラと同型（§2 の括りの行）で、R24 の List（構築・`,`・2行以上・文字列）に入らない。中身の
+	// 見えない A なので、裸の名前は未知になる。
+	["R24 f [3]（長さ1の括りは中身の見えない A）", src(["f : [x ~xs] ? x 1", "f [3]"]), "G7", [["f", "A"]]],
+	// 形を変えながら自分を呼び続ける再帰は、実体が有限に収まらないので断る。
+	["R24 形が深くなり続ける再帰", src(["f : [x ~xs] ? f [xs xs]", "f [1 2]"]), "G7"],
+	// R26 の外の鍵で引いた物は未知なので、並びでは G7。
+	["R26 (m ' 0) 21", src([...M, "(m ' 0) 21"]), "G7"],
+	["R26 (m ' say~) 21", src([...M, "(m ' say~) 21"]), "G7"],
+	["R26 ([' 0] fs) 5（L の見える List から引いた物は未知）", std("([' 0] fs) 5"), "G7"],
+];
+for (const [name, s, want, kind, extra] of answerPasses) checkPass(`答え ${name}`, s, want, kind, extra);
+for (const [name, s, want, inst] of answerRefused) checkRefused(`答え ${name}`, s, want, inst);
+
+// ---- 法則（期待値ではなく、同じ射の綴りどうしを比べる） ----
+
+const law = (name, test) => {
+	total++;
+	try {
+		const problems = test();
+		if (problems.length) fail(`法則 ${name}`, ...problems);
+		else ok(`法則 ${name}`);
+	} catch (e) {
+		fail(`法則 ${name}`, `断られた: ${e.reason || e.name} ${e.gate || ""} ${e.message}`);
+	}
+};
+const lastKind = (s) => {
+	const r = resolve(s);
+	return kindOf(r.trees[r.trees.length - 1]);
+};
+const instCount = (s, at) => (show(resolve(s).trees[at]).match(/\(inst /g) || []).length;
+
+// R24・R26：IO Reader Writer の a・b・c は同じ射（3つとも 42）なので、m に当てた種類は同じで、どれも A。
+law("a m・b m・c m は同じ種類（A）", () => {
+	const ks = ["a m", "b m", "c m"].map((line) => lastKind(src([...IO, line])));
+	return ks.every((k) => k === "A") ? [] : [`種類 got: ${ks.join(" ")}  want: A A A`];
+});
+// R26：点なしの [' k] は x ' k と同じ射なので、[' k] x と x ' k は同じ種類（A・L・未知のどれでも）。
+law("[' k] x と x ' k は同じ種類", () => {
+	const pairs = [
+		[std("[' 0] vs"), std("vs ' 0"), "A"],
+		[std("[' 0] fs"), std("fs ' 0"), "未知"],
+		[src([...M, "[' say] m"]), src([...M, "m ' say"]), "L"],
+		[src([...M, "[' other] m"]), src([...M, "m ' other"]), "A"],
+		[src([...M, "([' say] m) 21"]), src([...M, "(m ' say) 21"]), "A"],
+		[src([...MY_GREET_STR, "[' greet] myGreet"]), src([...MY_GREET_STR, "myGreet ' greet"]), "A"],
+		[src([...MY_GREET_FN, "([' welcome] ([' greet] myGreet)) 5"]), src([...MY_GREET_FN, "(myGreet ' greet ' welcome) 5"]), "A"],
+	];
+	const out = [];
+	for (const [p, q, want] of pairs) {
+		const kp = lastKind(p);
+		const kq = lastKind(q);
+		if (kp !== kq || kp !== want) out.push(`${p.split("\n").pop()}: ${kp}  ${q.split("\n").pop()}: ${kq}  want: ${want}`);
+	}
+	return out;
+});
+// R24：同じ形なら同じ実体。2か所から（並びの行と、素の関数の本体から）呼んでも、長さの違う List や文字列で呼んでも1つ。
+law("同じ形で2か所から呼んでも実体は1つ", () => {
+	const out = [];
+	const n1 = instCount(src([...IO, "a m", "p : v ? a m", "a m"]), 1);
+	if (n1 !== 1) out.push(`a の実体の数 got: ${n1}  want: 1`);
+	const n2 = instCount(src([REC, "f [1 2 3]", "f [4 5]", "f `abc`"]), 0);
+	if (n2 !== 1) out.push(`f の実体の数 got: ${n2}  want: 1`);
+	// 形が違えば別の実体（List と構造体）。
+	const n3 = instCount(src([...M, "k : [x ~xs] ? 1", "k m", "k [1 2]"]), 1);
+	if (n3 !== 2) out.push(`k の実体の数 got: ${n3}  want: 2`);
+	return out;
+});
+// R24：同じ綴り {say:L other:A} でも、本体の根が違う関数を渡したら別の実体（鍵に関数の出どころが入る）。m3 の say は
+// 本体の根が点なし（L）なので、`say 21` は未知になる。m の実体を先に作っても、m3 の答えが m の答えに化けない。
+law("本体の根が違う関数は別の実体", () => {
+	const M3 = ["m3 :", "\tsay : x ? [+ x]", "\tother : 1", ""];
+	const out = [];
+	const s = src([...M, ...M3, "a : [say] ? say 21", "a m", "a m3"]);
+	const k3 = lastKind(s);
+	if (k3 !== "未知") out.push(`a m3 の種類 got: ${k3}  want: 未知`);
+	const n = instCount(s, 2);
+	if (n !== 2) out.push(`a の実体の数 got: ${n}  want: 2`);
+	const alone = lastKind(src([...M3, "a : [say] ? say 21", "a m3"]));
+	if (alone !== k3) out.push(`m3 だけのファイルと種類が違う: ${alone} と ${k3}`);
+	return out;
+});
+// R25：呼ぶ行を定義の前に置いても後に置いても、全部の木と診断が同じ（行の順は違うので、並べ替えて比べる）。
+law("呼ぶ行を定義の前に置いても後に置いても、全部の木が同じ", () => {
+	const defs = [...M, "a : [say] ? say zz", REC, "c : [~rest] ? (rest ' say) 21"];
+	const calls = ["a m", "f [1 2 3]", "f `ab`", "c m", "outer : v ? [[say] ? say v] m"];
+	const look = (s) => {
+		const r = resolve(s);
+		return {
+			trees: r.trees.map((t) => `${show(t)} : ${kindOf(t)}`).sort(),
+			diag: r.diagnostics.map((d) => `${d.reason}/${d.name}`).sort(),
+		};
+	};
+	const after = look(src([...defs, ...calls]));
+	const before = look(src([...calls, ...defs]));
+	const out = [];
+	if (JSON.stringify(after.trees) !== JSON.stringify(before.trees)) out.push(`後: ${after.trees.join(" | ")}`, `前: ${before.trees.join(" | ")}`);
+	if (JSON.stringify(after.diag) !== JSON.stringify(before.diag)) out.push(`診断 後: ${after.diag}  前: ${before.diag}`);
+	if (!after.trees.some((t) => t.includes("(inst {say:L other:A} (apply say zz))"))) out.push(`a の実体が無い: ${after.trees.join(" | ")}`);
+	return out;
+});
+// R25：呼ばれるまでは defer、呼ぶ行を足すと同じ定義の行が inst になる（定義の行そのものは断らない）。
+law("呼ぶ行を足すと defer が inst になる", () => {
+	const alone = show(resolve(src([...M, "a : [say] ? say 21"])).trees[1]);
+	const called = show(resolve(src([...M, "a : [say] ? say 21", "a m"])).trees[1]);
+	const out = [];
+	if (alone !== "(: a (? [[say]] (defer {say 21})))") out.push(`呼ばない got: ${alone}`);
+	if (called !== "(: a (? [[say]] (inst {say:L other:A} (apply say 21))))") out.push(`呼ぶ got: ${called}`);
+	return out;
+});
+
+// ---------------------------------------------------------------------------
+// R24〜R26 の実装の確かめ（2026-10-19、仕様どおりか・反証の2つ）
+// ---------------------------------------------------------------------------
+//
+// 「直した」行は、直す前の実装では黙って通るか、断りすぎるか、行の順で答えが割れていた。「穴」の行は、実装は
+// 合っていたが、壊しても落ちる試験が無かった所（変異で確かめた）。「守り」の行は、直す前も通っていて、直しが
+// 断りすぎていないこと（中身が全部値の器・1行のブロック・2項の条件）を見る。
+
+// 別々の括りの関数の鎖 p1 → p2 → … → pN（再帰しない）。
+const chain = (N) => {
+	const ls = [];
+	for (let i = 1; i < N; i++) ls.push(`p${i} : [a ~r] ? p${i + 1} r`);
+	ls.push(`p${N} : [a ~r] ? a`);
+	return ls;
+};
+const MIX = ["inc : x ? x + 1", "q :", "\tk : inc", "\t5", ""]; // 欄と値の混ざったブロック。中身に関数が見える
+const SPREAD_REST = "f : [~r] ? r~";
+const AF1 = ["g : [say] ? say 1", "f : [x ~xs] ? [z ? hh1 z]"];
+const AF1_HH1 = "hh1 : y ? (g [say : [w ? f [1 2]]]) y";
+const AF1_KK = "kk : y ? f [1 2]";
+
+const checkPasses = [
+	// 直した（F1・F5）：実体の深さの門は、同じ `?` の実体の入れ子だけを数える。別々の関数の 33 段・40 段の鎖は有限で通る。
+	["直した 括りの関数の 33 段の鎖", src([...chain(33), "p1 [1 2 3]"]), "(apply p1 [1 2 3])", "A"],
+	["直した 括りの関数の 40 段の鎖", src([...chain(40), "p1 [1 2 3]"]), "(apply p1 [1 2 3])", "A"],
+	// 直した（F2・F3）：構造体とも List とも読めない器でも、中身が全部値なら `~rest` で撒ける（A）。
+	["守り 中身が全部値の混ざったブロックの ~rest を撒く", src(["q0 :", "\tk : 1", "\t5", "", SPREAD_REST, "f q0"]), "(: f (? [[~r]] (inst A r~)))", null, { at: 1 }],
+	// 直した（反証 F2）：同じ綴りの括りの関数は答えを共有するが、呼ばれていない方の行は defer のまま（R25）。
+	[
+		"直した 同じ綴りの呼ばれない関数は defer",
+		src([...M, "a : [say] ? say 21", "b : [say] ? say 21", "a m"]),
+		"(: b (? [[say]] (defer {say 21})))",
+		null,
+		{ at: 2 },
+	],
+	["守り 同じ綴りの関数を呼んだ方は inst", src([...M, "a : [say] ? say 21", "b : [say] ? say 21", "a m"]), "(: a (? [[say]] (inst {say:L other:A} (apply say 21))))", null, { at: 1 }],
+	["直した 括った ? を呼んでも、同じ綴りの名前の定義は defer", src([...M, "a : [say] ? say 21", "v : [[say] ? say 21] m"]), "(: a (? [[say]] (defer {say 21})))", null, { at: 1 }],
+	// 穴（F4 (a)）：中身の見えない A（数の字面）の `~rest` は A。
+	["穴 ro 5 の ~rest は A", src(["ro : [~r] ? r 1", "ro 5"]), "(: ro (? [[~r]] (inst A (construct r 1))))", null, { at: 0 }],
+	["穴 ro 5", src(["ro : [~r] ? r 1", "ro 5"]), "(apply ro 5)", "A"],
+	// 穴（F5 (e)）：`[' 0]` に2項は、`x ' k` の形でないので未知の根。
+	["穴 [' 0] vs 5（k = 2 は未知）", src(["vs : 1 , 2", "[' 0] vs 5"]), "(apply [' 0] (construct vs 5))", "未知"],
+	// 読まない所（1項の `:` の左・既定値）に括りの関数を1項で書いただけ（値として書いた）なら、呼んでいないので断らない。
+	["守り 既定値に括りの関数を値として書く", src(["inc : [x] ? x + 1", "ff : [z : inc] ? z"]), "(: ff (? [[z : inc]] z))", null],
+	["守り 1項の条件に括りの関数を値として書く", src(["t : [a ~r] ? 5 a", "u : x ?", "\t(t) : 1", "\t2", ""]), "(: u (? [x] (block (: [t] 1) 2)))", null],
+	// 字下げのブロックでも、1行なら中の行の形（構築の並びは List）。
+	["守り 1行の字下げのブロックは中の行の形", src(["sh : [x ~xs] ? x 1", "w :", "\t1 2", "", "sh w"]), "(apply sh w)", "A"],
+];
+const checkRefusedRows = [
+	// 直した（F2・反証 F3）：行の混ざったブロック・同じ名前の欄・欄の混ざった括り・撒く項を含む並びは、形は中身の見えない
+	// A だが中身に関数が見える。`~rest` は中身を持ち越すので、撒けば呼んだ行で G7（直に撒く `q~` と同じ）。
+	["直した 混ざったブロックの ~rest を撒く", src([...MIX, SPREAD_REST, "f q"]), "G7", [["f", "A(U)"]]],
+	["直した 同じ名前の欄の ~rest を撒く", src(["inc : x ? x + 1", "q3 :", "\tk : inc", "\tk : 5", "", SPREAD_REST, "f q3"]), "G7", [["f", "A(U)"]]],
+	["直した 欄の混ざった括りの ~rest を撒く", src(["inc : x ? x + 1", "g : [~r] ? 5 r~", "g [a : inc", "5]"]), "G7", [["g", "A(U)"]]],
+	["直した 撒く項を含む並びの ~rest を撒く", src(["inc : x ? x + 1", "vs : 1 2", "fs2 : inc , vs~", "g : [x ~xs] ? 5 xs~", "g fs2"]), "G7", [["g", "A(U)"]]],
+	// 数の字面（A）の実体を先に作っても、中身に関数の見える器は別の実体（鍵が A(U)）。
+	["直した f 5 の後の f q", src([...MIX, SPREAD_REST, "f 5", "f q"]), "G7", [["f", "A(U)"]]],
+	// 直した（F3）：1項の `:` の左は解かない（P3）ので、そこで括りの関数を呼ぶと実体が作れない。defer にせず断る。
+	["直した 1項の条件の中で括りの関数を呼ぶ", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "u : x ?", "\t(t [1 2]) : 1", "\t2", ""]), "G7"],
+	["直した 1項の条件の中で括りの関数の別名を呼ぶ", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "p : t", "u : x ?", "\t(p [1 2]) : 1", "\t2", ""]), "G7"],
+	["直した 1項の条件の中の括った ?", src([...M, "u : x ?", "\t([[a] ? a 1] m) : 1", "\t2", ""]), "G7"],
+	["直した 1項の条件の中の関数の本体で括りの関数を呼ぶ", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "u : x ?", "\t([q ? t [q q]]) : 1", "\t2", ""]), "G7"],
+	// 既定値（`?` の左）も解かない（P3）ので、同じ理由で断る（F3 と同じ穴）。
+	["直した 括りの既定値の中で括りの関数を呼ぶ", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "o : [x : t [1 2]] ? 5"]), "G7"],
+	["直した 仮引数のブロックの既定値の中で括りの関数を呼ぶ", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "o :", "\t\tx : t [1 2]", "\t? 5"]), "G7"],
+	// 2項以上の条件は今までどおり解くので、実体の本体の門（G1）で名指しする。
+	["守り 2項の条件は実体を作る", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "u : x ?", "\tt [1 2] : 1", "\t2", ""]), "G1", [["t", "[A…]"]]],
+	// 直した（F6）：2行以上の値の字下げのブロックは、R24 の List（括りだけを挙げる）に入らないので中身の見えない A。
+	["直した 2行の値の字下げのブロックは List でない", src(["sh : [x ~xs] ? x 1", "w :", "\t1", "\t2", "", "sh w"]), "G7", [["sh", "A"]]],
+	// 直した（反証 F1）：無名の素の関数の本体の根が、外の関数の仮置きの上で決まり、欄として別の実体へ渡っても、仮置きが
+	// 外れたら直る。行の順（kk と hh1）に依らず hh1 の行で G7。
+	["直した 仮置きの上の無名の関数（kk が先）", src([...AF1, AF1_KK, AF1_HH1]), "G7"],
+	["守り 仮置きの上の無名の関数（hh1 が先。直す前も G7）", src([...AF1, AF1_HH1, AF1_KK]), "G7"],
+	["直した 仮置きの上の無名の関数（f の中）", src(["g : [say] ? say 1", "f : [x ~xs] ? [z ? (g [say : [y ? f [1 2]]]) z]", "f [1 2]"]), "G7", [["f", "[A…]"]]],
+	// 直した（反証 F2）：断る行で使った関数を名指しする（同じ綴りの別の関数が先に実体を作っていても）。
+	["直した 同じ綴りの関数の名指し", src([...M, "a2 : [nope] ? nope 21", "b2 : [nope] ? nope 21", "b2 m", "v : a2 m"]), "G7", [["b2", "{say:L other:A}"]]],
+	// 穴（F4 (b)〜(d)）：構造体の `~rest` に受けた欄は残らない／裸の仮引数は A／行の混ざったブロックは構造体でない。
+	["穴 [say ~r] ? r ' say", src([...M, "b : [say ~r] ? (r ' say) 21", "b m"]), "G7", [["b", "{say:L other:A}"]]],
+	["穴 裸の仮引数から引く", src([...M, "mp : f [x ~y] ? (f ' say) 1", "mp m [1 2]"]), "G7", [["mp", "A [A…]"]]],
+	["穴 行の混ざったブロックは構造体でない", src(["inc : x ? x + 1", "sa : [say] ? say 21", "w :", "\tsay : inc", "\t5", "", "sa w"]), "G7", [["sa", "A(U)"]]],
+	// 穴（F5 (f)〜(h)）：引いた欄の中身の関数を撒く／入れ子の分解の名前は未知／形の違う要素の List の要素は中身の見えない A。
+	["穴 引いた欄の中身の関数を撒く", src(["inc : x ? x + 1", "w :", "\tfs : inc , inc", "", "[w ' fs]~ 1"]), "G7"],
+	["穴 入れ子の分解の名前は未知", src(["nd : [[a b] c] ? a 1", "nd [[1 2] 3]"]), "G7", [["nd", "[A…]"]]],
+	["穴 形の違う要素の List から引く", src(["f : [x ~xs] ? (x ' 0) 1", "f [[1 2] 3]"]), "G7", [["f", "[A…]"]]],
+];
+for (const [name, s, want, kind, extra] of checkPasses) checkPass(`確かめ ${name}`, s, want, kind, extra);
+for (const [name, s, want, inst] of checkRefusedRows) checkRefused(`確かめ ${name}`, s, want, inst);
+
+// 直した（F1・F5）：鎖の途中の実体を先に作る行があってもなくても、同じ答え（行の順に依らない）。
+law("括りの関数の鎖は、途中を先に呼んでも後に呼んでも同じ", () => {
+	const look = (s) => {
+		try {
+			return resolve(s).trees.map((t) => `${show(t)} : ${kindOf(t)}`).sort().join(" | ");
+		} catch (e) {
+			return `断る ${e.reason} ${e.gate}`;
+		}
+	};
+	const first = look(src([...chain(33), "p20 [1 2 3]", "p1 [1 2 3]"]));
+	const last = look(src([...chain(33), "p1 [1 2 3]", "p20 [1 2 3]"]));
+	return first === last && !first.startsWith("断る") ? [] : [`途中が先: ${first.slice(0, 200)}`, `途中が後: ${last.slice(0, 200)}`];
+});
+// 直した（反証 F4）：同じ物を2つの欄に置く構造体（DAG）の鍵は、深さに比例する手間で作る。木として辿ると深さ 24 で
+// 10 秒、形が倍々に深くなる再帰は 61 秒の後に内部の例外（文字列の長さの上限）だった。1本 5 秒の上限で見る。
+law("欄どうしで同じ物を指す形の鍵は速い", () => {
+	const out = [];
+	const dag = ["m0 : [z : 1]"];
+	for (let i = 1; i <= 24; i++) dag.push(`m${i} : [p : m${i - 1}`, `q : m${i - 1}]`);
+	dag.push("g : [p] ? 1", "g m24");
+	let t0 = Date.now();
+	const r = resolve(src(dag));
+	const ms1 = Date.now() - t0;
+	if (ms1 > 5000) out.push(`DAG の深さ 24：${ms1}ms`);
+	const gLine = show(r.trees[r.trees.length - 2]);
+	if (gLine.length > 1000 || !gLine.includes("⋯")) out.push(`形の綴りを切っていない（${gLine.length} 字）`);
+	t0 = Date.now();
+	let got = "通った";
+	try {
+		resolve(src(["f : [x ~r] ? f [p : r", "q : r]", "f [z : 1]"]));
+	} catch (e) {
+		got = `${e.reason} ${e.gate || ""}`;
+	}
+	const ms2 = Date.now() - t0;
+	if (ms2 > 5000) out.push(`倍々の再帰：${ms2}ms`);
+	if (got !== "coproduct-unknown-kind G7") out.push(`倍々の再帰 got: ${got}  want: G7`);
+	return out;
+});
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
