@@ -637,6 +637,35 @@ const answerPasses = [
 	["Q24 [pair [1]] inc [2]（合成の頭の部分適用）", src(["inc : x ? x + 1", "pair : [a ~as] [b ~bs] ? a + b", "(pair [1]) inc [2]"]), "(: pair (? [[a ~as] [b ~bs]] (inst N N (+ a b))))", null, { at: 1 }],
 	["Q24 inc head [5 6 7]（後ろの括りの関数は前の結果を受ける）", src(["inc : x ? x + 1", "head : [x ~xs] ? x", "inc head [5 6 7]"]), "(: head (? [[x ~xs]] (inst A x)))", null, { at: 1 }],
 	["Q24 inc head [5 6 7] の根は未知（head の本体の根が未知）", src(["inc : x ? x + 1", "head : [x ~xs] ? x", "inc head [5 6 7]"]), "(apply (compose inc head) [5 6 7])", "未知"],
+	// 合成の後ろの部分適用（§5 Q26 の案1、利用者 2026-10-19「合成の後ろの素の関数の部分適用も、残り1つで本体の根が A なら
+	// A に数える。」）。括りの関数の部分適用と同じ読みにする。
+	["Q26 inc (pr 1) 5（素の部分適用が合成の後ろ）", src(["inc : x ? x + 1", "pr : x y ? y", "inc (pr 1) 5"]), "(apply (compose inc [pr 1]) 5)", "A"],
+	["Q26 inc (pr 1) 5 inc", src(["inc : x ? x + 1", "pr : x y ? y", "inc (pr 1) 5 inc"]), "(apply inc (apply (compose inc [pr 1]) 5) ·rev)", "A"],
+	["Q26 名前を付けた部分適用 p1 : pr 1 の inc p1 5 inc", src(["inc : x ? x + 1", "pr : x y ? y", "p1 : pr 1", "inc p1 5 inc"]), "(apply inc (apply (compose inc p1) 5) ·rev)", "A"],
+	["Q26 inc (pr [1]) 5（括りの部分適用が合成の後ろ）", src(["inc : x ? x + 1", "pr : [x ~xs] y ? y", "inc (pr [1]) 5"]), "(apply (compose inc [pr [1]]) 5)", "A"],
+	["Q26 inc (pr [1]) 5 の実体", src(["inc : x ? x + 1", "pr : [x ~xs] y ? y", "inc (pr [1]) 5"]), "(: pr (? [[x ~xs] y] (inst N A y)))", null, { at: 1 }],
+	// 残りが2つ以上の部分適用は、合成の後ろでは今までどおり未知（§5 Q13）。
+	["Q26 inc (f3 1) 5（残り2つは未知）", src(["inc : x ? x + 1", "f3 : a b c ? c", "inc (f3 1) 5"]), "(apply (compose inc [f3 1]) 5)", "未知"],
+	// 穴の書き換えを後ろに置く形は決めていない（Q26 の答え）。穴の部分適用も穴の出どころのまま（同じ関数を穴で直接書いた
+	// `[f3 1 _ 3]` と同じ読み）。確かめ 2026-10-19 の F1・T1。
+	["Q26 inc [add _ 10] 5（穴は未知のまま）", src(["inc : x ? x + 1", "add : x y ? x + y", "inc [add _ 10] 5"]), "(apply (compose inc [add _ 10]) 5)", "未知"],
+	["Q26 inc ([f3 _ _ 3] 1) 5（穴の部分適用も未知）", src(["inc : x ? x + 1", "f3 : a b c ? c", "inc ([f3 _ _ 3] 1) 5"]), "(apply (compose inc [[f3 _ _ 3] 1]) 5)", "未知"],
+	["Q26 h2 : h1 1（h1 : f3 _ _ 3）の inc h2 5", src(["inc : x ? x + 1", "f3 : a b c ? c", "h1 : f3 _ _ 3", "h2 : h1 1", "inc h2 5"]), "(apply (compose inc h2) 5)", "未知"],
+	// 最初の関数が余れば印 `excess`（後ろに素の部分適用があっても落とさない）。確かめ 2026-10-19 の T2。
+	["Q26 inc (pr 1) 5 6（excess）", src(["inc : x ? x + 1", "pr : x y ? y", "inc (pr 1) 5 6"]), "(apply (compose inc [pr 1]) (construct 5 6))", "A", { excess: true }],
+	// 後ろの関数が2つ以上でも、全部を見る（位置に依らない）。確かめ 2026-10-19 の T3。
+	["Q26 inc double (pr 1) 5 inc（後ろの2つ目）", src(["inc : x ? x + 1", "double : x ? x * 2", "pr : x y ? y", "inc double (pr 1) 5 inc"]), "(apply inc (apply (compose inc double [pr 1]) 5) ·rev)", "A"],
+	["Q26 inc (pr 1) double 5 inc（後ろの1つ目）", src(["inc : x ? x + 1", "double : x ? x * 2", "pr : x y ? y", "inc (pr 1) double 5 inc"]), "(apply inc (apply (compose inc [pr 1] double) 5) ·rev)", "A"],
+	// 元の関数の根が仮置きで決まる再帰の部分適用（§3.4 の再帰の仮置き）。確かめ 2026-10-19 の F3。
+	["Q26 自己再帰 r1 : x y ? inc (r1 1) y の r1 1 2", src(["inc : x ? x + 1", "r1 : x y ? inc (r1 1) y", "r1 1 2"]), "(apply r1 (construct 1 2))", "A"],
+	["Q26 相互再帰 a1・b1 の a1 1 2", src(["inc : x ? x + 1", "a1 : x y ? inc (b1 1) y", "b1 : x y ? inc (a1 1) y", "a1 1 2"]), "(apply a1 (construct 1 2))", "A"],
+	["Q26 名前を通す再帰 p1 : rp 1 の rp 1 2", src(["inc : x ? x + 1", "p1 : rp 1", "rp : x y ? inc p1 y", "rp 1 2"]), "(apply rp (construct 1 2))", "A"],
+	["Q26 仮置きが外れる再帰 r2 1 2 は未知", src(["inc : x ? x + 1", "r2 : x y ?", "\tinc (r2 1) y", "\tinc", "", "r2 1 2"]), "(apply r2 (construct 1 2))", "未知"],
+	// 合成の後ろの根は、ここまでが A のときだけ引く。使わない根を引くと、仮置き（解いている途中の f）が外れたとき、それに
+	// 依らない g の根まで未知に替わり、定義の順で答えが割れていた。どちらの順でも A。確かめ 2026-10-19 の F1（反証）。
+	["Q26 g : y ? (adder (f 1) y) , 1（f が先）の g 5 inc", src(["inc : x ? x + 1", "adder : m ? [+ m]", "f : x y ?", "\tg y", "\tinc", "", "g : y ? (adder (f 1) y) , 1", "g 5 inc"]), "(apply inc (apply g 5) ·rev)", "A"],
+	["Q26 g : y ? (adder (f 1) y) , 1（g が先）の g 5 inc", src(["inc : x ? x + 1", "adder : m ? [+ m]", "g : y ? (adder (f 1) y) , 1", "f : x y ?", "\tg y", "\tinc", "", "g 5 inc"]), "(apply inc (apply g 5) ·rev)", "A"],
+	["Q26 g : y ? (inc [+] f1 y) , 1（f1 が先、素の関数）の g 5 inc", src(["inc : x ? x + 1", "f1 : y ?", "\tg y", "\tinc", "", "g : y ? (inc [+] f1 y) , 1", "g 5 inc"]), "(apply inc (apply g 5) ·rev)", "A"],
 ];
 const answerRefused = [
 	// R24 の例4：List の要素に L が見えるので名前は未知。呼んだ行で G7、関数と形を名指しする（R25）。
@@ -723,6 +752,18 @@ const answerRefused = [
 	["Q24 bad inc [1 2]（本体の門は呼んだ行で）", src(["inc : x ? x + 1", "bad : [x ~xs] ? 1 _ 2", "bad inc [1 2]"]), "G5", [["bad", "[N…]"]]],
 	["Q24 tg inc 1 2 3（本体の根が関数で k > n）", src(["inc : x ? x + 1", "tg : [x ~xs] y ? inc", "tg inc 1 2 3"]), "G12(b)"],
 	["Q24 inc h2 [5 6 7]（後ろの括りの関数の名前は未知）", src(["inc : x ? x + 1", "h2 : [x ~xs] ? x 1", "inc h2 [5 6 7]"]), "G7", [["h2", "A"]]],
+	// 合成の後ろの部分適用でも、本体の根が A でなければ A に数えない（Q26 は根が A のときだけ）。
+	["Q26 inc (pq 1) 5 inc（本体の根が関数の部分適用）", src(["inc : x ? x + 1", "pq : x y ? inc", "inc (pq 1) 5 inc"]), "G2(a)"],
+	// 後ろの部分適用の後ろに根が A でない部分適用があれば未知（後ろの全部を見る）。確かめ 2026-10-19 の T3。
+	["Q26 inc (pr 1) (pq 1) 5 inc", src(["inc : x ? x + 1", "pr : x y ? y", "pq : x y ? inc", "inc (pr 1) (pq 1) 5 inc"]), "G2(a)"],
+	// 余りの印は後ろに素の部分適用があっても残る（G12(a)）。確かめ 2026-10-19 の T2。
+	["Q26 inc (pr 1) 5 6 inc（excess の隣）", src(["inc : x ? x + 1", "pr : x y ? y", "inc (pr 1) 5 6 inc"]), "G12(a)"],
+	// 穴と穴の部分適用は未知のまま、隣と結べば G2(a)。確かめ 2026-10-19 の F1・T1。
+	["Q26 inc [add _ 10] 5 inc（穴）", src(["inc : x ? x + 1", "add : x y ? x + y", "inc [add _ 10] 5 inc"]), "G2(a)"],
+	["Q26 inc ([f3 _ _ 3] 1) 5 inc（穴の部分適用）", src(["inc : x ? x + 1", "f3 : a b c ? c", "inc ([f3 _ _ 3] 1) 5 inc"]), "G2(a)"],
+	["Q26 h2 : h1 1（h1 : f3 _ _ 3）の inc h2 5 inc", src(["inc : x ? x + 1", "f3 : a b c ? c", "h1 : f3 _ _ 3", "h2 : h1 1", "inc h2 5 inc"]), "G2(a)"],
+	// 仮置きが外れる再帰の部分適用は未知、隣と結べば G2(a)。確かめ 2026-10-19 の F3。
+	["Q26 仮置きが外れる再帰 r2 1 2 inc", src(["inc : x ? x + 1", "r2 : x y ?", "\tinc (r2 1) y", "\tinc", "", "r2 1 2 inc"]), "G2(a)"],
 ];
 for (const [name, s, want, kind, extra] of answerPasses) checkPass(`答え ${name}`, s, want, kind, extra);
 for (const [name, s, want, inst] of answerRefused) checkRefused(`答え ${name}`, s, want, inst);

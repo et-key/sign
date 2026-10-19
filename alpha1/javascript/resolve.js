@@ -610,7 +610,8 @@ function paramInChain(scope, name) {
 //
 // desc：{k:'A'|'L'|'U', fn?, spread?, elements?, shape?}
 //   fn（L のとき）：
-//     {type:'plain', origin:'plain'|'partial'|'hole', n, getBodyRoot, idKey}  素の関数・部分適用・穴（§3.4）
+//     {type:'plain', origin:'plain'|'partial'|'hole', n, getBodyRoot, idKey}  素の関数・部分適用・穴（§3.4）。穴の部分適用は
+//       'hole' のまま（plainApply）
 //     {type:'pattern', n, idKey, label, op, scopeKey, lastBracket, bareAt, instantiate}  括りの関数（R24）。n は仮引数の数
 //       （括りは1つで1）。lastBracket は最後の仮引数が括りの関数（k > n なら残りの並び全体を最後の括りが1つの List として
 //       受ける、applyKind）。bareAt は仮引数ごとに裸か。op と scopeKey は書いた `?` と、それを解いた範囲（定義の行の木に、
@@ -2332,8 +2333,11 @@ function applyKind(fn, arg) {
 
 function plainApply(fn, k) {
   if (k < fn.n) {
-    // 足りない適用は L（残り n−k）。本体の根は元の関数のもの。
-    return { kind: { k: "L", fn: { type: "plain", origin: "partial", n: fn.n - k, getBodyRoot: fn.getBodyRoot, idKey: fn.idKey } }, insufficient: true };
+    // 足りない適用は L（残り n−k）。本体の根は元の関数のもの。穴の部分適用（`[f3 _ _ 3] 1`・`h2 : h1 1`）は穴の出どころ
+    // （origin "hole"）のまま持つ。合成の後ろでは穴を数えない（§5 Q26）が、"partial" にすると、同じ関数を穴で直接書いた
+    // `[f3 1 _ 3]` は未知なのに、部分適用を挟むと A に数えられていた（確かめ 2026-10-19 の F1）。
+    const origin = fn.origin === "hole" ? "hole" : "partial";
+    return { kind: { k: "L", fn: { type: "plain", origin, n: fn.n - k, getBodyRoot: fn.getBodyRoot, idKey: fn.idKey } }, insufficient: true };
   }
   const root = fn.getBodyRoot();
   if (k === fn.n) return { kind: root === "A" ? A() : U() };
@@ -2395,8 +2399,18 @@ function composeApply(fn, k, arg) {
       if (f.instantiate([restA ? A() : U()]).kind.k !== "A") restA = false;
       continue;
     }
-    // 後ろに `[+]`・アリティ2以上・本体の根が値でない関数・非貪欲の点なし（§5 Q13）
-    const ok = f && ((f.type === "plain" && f.origin === "plain" && f.n === 1 && f.getBodyRoot() === "A") || f.type === "pfGreedyUnary");
+    // 後ろに `[+]`・アリティ2以上・本体の根が値でない関数・非貪欲の点なし（§5 Q13）。素の関数の部分適用も、残り1つで
+    // 本体の根が A なら数える（§5 Q26 の案1、利用者 2026-10-19「合成の後ろの素の関数の部分適用も、残り1つで本体の根が
+    // A なら A に数える。」）。括りの関数の部分適用（上の分岐）と揃える。穴の書き換え（origin "hole"。穴の部分適用も）は
+    // 決めていない。
+    // ここまでが A でなければ（restA が偽）、本体の根は引かない。答えに使わない根を引くと、解いている途中の関数の仮置き
+    // （consult）が、それを使っていない外の本体の根まで依りに数え、仮置きが外れると未知に替える。定義の順で答えが割れて
+    // いた（確かめ 2026-10-19 の F1：`g : y ? (adder (f 1) y) , 1` は f が先だと `g 5 inc` が G2(a)、g が先だと A）。
+    if (!restA) continue;
+    const ok =
+      f &&
+      ((f.type === "plain" && (f.origin === "plain" || f.origin === "partial") && f.n === 1 && f.getBodyRoot() === "A") ||
+        f.type === "pfGreedyUnary");
     if (!ok) restA = false;
   }
   if (!restA) return { kind: U() };
