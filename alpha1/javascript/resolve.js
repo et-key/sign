@@ -2324,7 +2324,7 @@ function applyKind(fn, arg) {
       }
       return { kind: A(), excess: true };
     case "compose":
-      return composeApply(fn, k);
+      return composeApply(fn, k, arg);
     default:
       return { kind: U() }; // `@p`・`[|]` など・既定値のある関数
   }
@@ -2343,17 +2343,37 @@ function plainApply(fn, k) {
   return { kind: A(), excess: true };
 }
 
-function composeApply(fn, k) {
+// 括りの関数（とその部分適用）は、合成の中でも頭の適用と同じく実体を作る（§5 Q24 の案1、利用者 2026-10-19「とりあえず
+// 案1を採用して、強化したり追跡できるなら、また考えてみよう。」）。合成は左から実行する（R11）ので、最初の関数は並びを
+// 受け（applyKind と同じ当て方：k = n・残りを最後の括り・部分適用・余り）、後ろの関数は前の関数の結果を1つ受ける。
+// 結果は中身の見えない A なので、後ろの括りの関数の括りの名前は未知になる（R24）。作らないと、呼ばれた本体を読まず
+// （R25 と割れる）、本体の門や G12(b) が合成の頭に置くだけですり抜けていた。
+function composeApply(fn, k, arg) {
   const [first, ...rest] = fn.fns;
   if (!first) return { kind: U() };
+  // restA：ここまでの結果が A か。最初の関数が足りた適用でも結果が A でなければ、偽にして後ろの関数へ進む（後ろの関数は
+  // その結果を受けて呼ばれる、R11。だから後ろの括りの関数は未知を受けて実体を作る、R25）。
+  let restA = true;
   let suff;
-  if (first.type === "plain") suff = k < first.n ? "short" : k === first.n ? "exact" : "excess";
+  if (first.type === "pattern") {
+    const r = applyKind(first, arg);
+    if (r.insufficient) return { kind: { k: "L", fn: { type: "other" } }, insufficient: true };
+    if (r.kind.k !== "A") restA = false; // 足りた適用で、実体の根が A でない（§3.4 の括りの関数の行の「ほかは未知」）
+    suff = r.excess ? "excess" : "exact";
+  } else if (first.type === "plain") suff = k < first.n ? "short" : k === first.n ? "exact" : "excess";
   else if (first.type === "pfUnary") suff = k === 1 ? "exact" : "excess";
   else if (first.type === "pfGreedyUnary") suff = "exact";
   else if (first.type === "pfGreedyBinary") suff = k >= 2 ? "exact" : "unknown";
-  else suff = "unknown";
+  else if (first.type === "pfPick" && k === 1) {
+    // `[' 0] x` は `x ' 0` と同じ射の足りた適用（R26、§3.4 の段18 の行）。合成の A の行は最初の関数に挙げていないので、
+    // 結果は未知として後ろへ渡す。
+    suff = "exact";
+    restA = false;
+  } else suff = "unknown";
   // 最初の関数に足りなければ L。何を残すかは後ろの関数まで含めて決まらないので、アリティは未知にする。
   if (suff === "short") return { kind: { k: "L", fn: { type: "other" } }, insufficient: true };
+  // 最初の関数に足りたか決まらない（`[+]` に1項 Q17・既定値のある関数 Q8 など）。後ろの関数が呼ばれるかも決まらないので、
+  // 後ろの括りの関数の実体は作らない（R25）。
   if (suff === "unknown") return { kind: U() };
   // 最初の関数の本体の根が値でなければ、頭の関数と同じに扱う：k > n は G12(b)、k = n は未知。§3.4 の合成の行は
   // 最初の関数の本体の根に触れていないが、最初の関数は足りた適用で、§5 Q21 は足りた適用を「未知」とする。k = n
@@ -2362,12 +2382,24 @@ function composeApply(fn, k) {
     if (suff === "excess") {
       throw gate("G12(b)", "合成の最初の関数に実引数がアリティより多いのに、その本体の根が値ではありません（§5 Q21・Q11）。");
     }
-    return { kind: U() };
+    restA = false;
   }
-  const restOk = rest.every(
-    (f) => f && ((f.type === "plain" && f.origin === "plain" && f.n === 1 && f.getBodyRoot() === "A") || f.type === "pfGreedyUnary")
-  );
-  if (!restOk) return { kind: U() }; // 後ろに `[+]`・アリティ2以上・本体の根が値でない関数・非貪欲の点なし（§5 Q13）
+  // 後ろの関数を前から順に見る。括りの関数は、前の結果（前が全部 A なら中身の見えない A、そうでなければ未知）を1つ
+  // 受けて実体を作る。最初の関数や途中で未知になっても、後ろの括りの関数の実体は作る（呼ばれた本体を読む、R25）。
+  for (const f of rest) {
+    if (f && f.type === "pattern") {
+      if (f.n !== 1) {
+        restA = false; // アリティ2以上（§5 Q13、素の関数と同じ）
+        continue;
+      }
+      if (f.instantiate([restA ? A() : U()]).kind.k !== "A") restA = false;
+      continue;
+    }
+    // 後ろに `[+]`・アリティ2以上・本体の根が値でない関数・非貪欲の点なし（§5 Q13）
+    const ok = f && ((f.type === "plain" && f.origin === "plain" && f.n === 1 && f.getBodyRoot() === "A") || f.type === "pfGreedyUnary");
+    if (!ok) restA = false;
+  }
+  if (!restA) return { kind: U() };
   return suff === "excess" ? { kind: A(), excess: true } : { kind: A() };
 }
 

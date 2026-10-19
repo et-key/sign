@@ -628,6 +628,15 @@ const answerPasses = [
 	// 欄の値の2行のブロックも List（構造体の欄 k は、その生まれの数の List）。
 	["R24 欄の値の2行の字下げのブロック", src(BLOCK_NESTED), "(apply g w)", "A"],
 	["R24 欄の値の2行の字下げのブロックの実体", src(BLOCK_NESTED), "(: g (? [[k]] (inst {k:[N…] other:N} (apply h k))))", null, { at: 0 }],
+	// 合成の中の括りの関数も実体を作る（§5 Q24 の案1、利用者 2026-10-19「とりあえず案1を採用して、強化したり追跡できるなら、
+	// また考えてみよう。」）。合成は左から実行する（R11）ので、最初の関数が並びを受け、後ろの関数は前の結果（中身の見えない A）を受ける。
+	["Q24 head inc [5 6 7]（合成の頭の括りの関数）", src(["inc : x ? x + 1", "head : [x ~xs] ? x", "head inc [5 6 7]"]), "(apply (compose head inc) [5 6 7])", "A"],
+	["Q24 head inc [5 6 7] の実体", src(["inc : x ? x + 1", "head : [x ~xs] ? x", "head inc [5 6 7]"]), "(: head (? [[x ~xs]] (inst [N…] x)))", null, { at: 1 }],
+	["Q24 head inc [5 6 7] と head [5 6 7] は同じ実体", src(["inc : x ? x + 1", "head : [x ~xs] ? x", "head inc [5 6 7]", "head [5 6 7]"]), "(: head (? [[x ~xs]] (inst [N…] x)))", null, { at: 1 }],
+	["Q24 head inc [5 6 7] double（合成の適用の節は隣と結べる）", src(["inc : x ? x + 1", "double : x ? x * 2", "head : [x ~xs] ? x", "head inc [5 6 7] double"]), "(apply double (apply (compose head inc) [5 6 7]) ·rev)", "A"],
+	["Q24 [pair [1]] inc [2]（合成の頭の部分適用）", src(["inc : x ? x + 1", "pair : [a ~as] [b ~bs] ? a + b", "(pair [1]) inc [2]"]), "(: pair (? [[a ~as] [b ~bs]] (inst N N (+ a b))))", null, { at: 1 }],
+	["Q24 inc head [5 6 7]（後ろの括りの関数は前の結果を受ける）", src(["inc : x ? x + 1", "head : [x ~xs] ? x", "inc head [5 6 7]"]), "(: head (? [[x ~xs]] (inst A x)))", null, { at: 1 }],
+	["Q24 inc head [5 6 7] の根は未知（head の本体の根が未知）", src(["inc : x ? x + 1", "head : [x ~xs] ? x", "inc head [5 6 7]"]), "(apply (compose inc head) [5 6 7])", "未知"],
 ];
 const answerRefused = [
 	// R24 の例4：List の要素に L が見えるので名前は未知。呼んだ行で G7、関数と形を名指しする（R25）。
@@ -710,6 +719,10 @@ const answerRefused = [
 	["R26 ([' 0] fs) 5（L の見える List から引いた物は未知）", std("([' 0] fs) 5"), "G7"],
 	// 行に関数が見えるブロックは、括りと同じく要素に L が見えるので名前は未知。
 	["R24 関数の行のある字下げのブロック", src(["inc : x ? x + 1", "sh : [h ~hs] ? h 1", "w :", "\tinc", "\t2", "", "sh w"]), "G7", [["sh", "[U…]"]]],
+	// 合成の頭に置いても、括りの関数の本体の門と G12(b) はすり抜けない（Q24 の案1）。
+	["Q24 bad inc [1 2]（本体の門は呼んだ行で）", src(["inc : x ? x + 1", "bad : [x ~xs] ? 1 _ 2", "bad inc [1 2]"]), "G5", [["bad", "[N…]"]]],
+	["Q24 tg inc 1 2 3（本体の根が関数で k > n）", src(["inc : x ? x + 1", "tg : [x ~xs] y ? inc", "tg inc 1 2 3"]), "G12(b)"],
+	["Q24 inc h2 [5 6 7]（後ろの括りの関数の名前は未知）", src(["inc : x ? x + 1", "h2 : [x ~xs] ? x 1", "inc h2 [5 6 7]"]), "G7", [["h2", "A"]]],
 ];
 for (const [name, s, want, kind, extra] of answerPasses) checkPass(`答え ${name}`, s, want, kind, extra);
 for (const [name, s, want, inst] of answerRefused) checkRefused(`答え ${name}`, s, want, inst);
@@ -1194,6 +1207,93 @@ checkRefused(
 	"G2(b)",
 	[["k", "{f:L}"]]
 );
+
+// ---------------------------------------------------------------------------
+// 合成の中の括りの関数（§5 Q24 の案1、2026-10-19、確かめ）
+// ---------------------------------------------------------------------------
+//
+// 直した：合成の最初の関数が足りた適用で、結果が A でないとき（括りの関数の実体の根が A でない・素の関数の本体の根が
+// A でない k = n・`[' 0]` に1項）、直す前は後ろの関数を見ずに未知で返していた。だから後ろの括りの関数の実体を作らず、
+// 本体の門をすり抜け、定義の行は defer のままだった。前に `inc` を1つ足した `inc pa bad [1 2]` は断るのに、
+// `pa bad [1 2]` は通っていた。最初の関数は足りた適用なので、後ろの関数はその結果を受けて呼ばれる（R11）。だから後ろの
+// 括りの関数は未知を受けて実体を作り（§3.4 の合成の行「前に未知があれば未知」）、門に当たれば呼んだ行で断る（R25）。
+// 最初の関数に足りたか決まらない形（`[+]` に1項 Q17・既定値のある関数 Q8）は、後ろが呼ばれるかも決まらないので、
+// 今までどおり実体を作らない。
+//
+// 穴：変異で壊しても落ちなかった所（途中で未知になった後の括りの関数・合成の頭の括りの関数の根が A でない k = n・
+// k > n・足りない・後ろの括りの関数のアリティが2以上）。
+
+const PA = "pa : [x ~xs] ? [+ x]"; // 実体の根が L（未知）
+const HL = "hl : [x ~xs] ? inc"; // 実体の根が L（未知）
+const BAD = "bad : [y ~ys] ? 1 _ 2";
+const TL = "tl : [y ~ys] ? ys";
+const TR = "tr : [x ~xs] ? xs 1";
+const INC = "inc : x ? x + 1";
+const DOUBLE = "double : x ? x * 2";
+const ADDER = "adder : m ? [+ m]"; // 本体の根が L（§5 Q21）
+
+const composePasses = [
+	["直した pa tl [1 2] の根は未知", src([PA, TL, "pa tl [1 2]"]), "(apply (compose pa tl) [1 2])", "未知"],
+	["直した pa tl [1 2] の tl は未知を受けて実体を作る", src([PA, TL, "pa tl [1 2]"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 1 }],
+	["直した adder tl 1 の tl は未知を受けて実体を作る", src([ADDER, TL, "adder tl 1"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 1 }],
+	["穴 inc adder tl 1（途中で未知になった後の括りの関数は未知を受ける）", src([INC, ADDER, TL, "inc adder tl 1"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 2 }],
+	["穴 inc adder tl 1 の根は未知", src([INC, ADDER, TL, "inc adder tl 1"]), "(apply (compose inc adder tl) 1)", "未知"],
+	["穴 pu inc [1]（合成の頭の括りの関数の実体の根が A でない k = n）", src([INC, "pu : [x ~xs] ? [+ x]", "pu inc [1]"]), "(apply (compose pu inc) [1])", "未知"],
+	["穴 pr inc [1] 2 3（合成の頭の最後の仮引数が裸の k > n は余り）", src([INC, "pr : [x ~xs] y ? y", "pr inc [1] 2 3"]), "(apply (compose pr inc) (construct [1] 2 3))", "A", { excess: true }],
+	["穴 head inc 5 6 7 double（合成の頭の最後の括りが残りを受ける）", src([INC, DOUBLE, "head : [x ~xs] ? x", "head inc 5 6 7 double"]), "(apply double (apply (compose head inc) (construct 5 6 7)) ·rev)", "A"],
+	["穴 pair inc [1]（合成の頭の括りの関数に足りない）", src([INC, "pair : [a ~as] [b ~bs] ? a + b", "pair inc [1]"]), "(apply (compose pair inc) [1])", "L"],
+	["穴 inc pb [1]（後ろの括りの関数のアリティが2）の根は未知", src([INC, "pb : [a] [b] ? 1 _ 2", "inc pb [1]"]), "(apply (compose inc pb) [1])", "未知"],
+	["穴 inc pb [1] の pb は呼ばれないので defer", src([INC, "pb : [a] [b] ? 1 _ 2", "inc pb [1]"]), "(: pb (? [[a] [b]] (defer {1 _ 2})))", null, { at: 1 }],
+	["穴 inc pair [1]（後ろの括りの関数のアリティが2、Q13）", src([INC, "pair : [a ~as] [b ~bs] ? a + b", "inc pair [1]"]), "(apply (compose inc pair) [1])", "未知"],
+	// 最初の関数に足りたか決まらない（`[+]` に1項、§5 Q17）。後ろが呼ばれるかも決まらないので、実体は作らない。
+	["今は [+] tl 5 の tl は defer のまま（Q17：後ろが呼ばれるか決まらない）", src([TL, "[+] tl 5"]), "(: tl (? [[y ~ys]] (defer {ys})))", null, { at: 0 }],
+];
+const composeRefused = [
+	["直した pa bad [1 2]（頭の括りの関数の実体の根が L）", src([PA, BAD, "pa bad [1 2]"]), "G5", [["bad", "U"]]],
+	["直した hl bad [1 2]（頭の括りの関数の実体の根が L）", src([INC, HL, BAD, "hl bad [1 2]"]), "G5", [["bad", "U"]]],
+	["直した adder bad 1（頭の素の関数の本体の根が L、k = n）", src([ADDER, BAD, "adder bad 1"]), "G5", [["bad", "U"]]],
+	["直した 5 adder bad（逆適用の右の合成）", src([ADDER, BAD, "5 adder bad"]), "G5", [["bad", "U"]]],
+	["直した t : y ? adder bad y（素の関数の本体の中）", src([ADDER, BAD, "t : y ? adder bad y"]), "G5", [["bad", "U"]]],
+	["直した [' 0] bad fs（頭が段18 の点なしに1項）", src([INC, DOUBLE, "fs : inc , double", BAD, "[' 0] bad fs"]), "G5", [["bad", "U"]]],
+	["穴 inc adder tr 1（途中で未知になった後の括りの関数は未知を受ける）", src([INC, ADDER, TR, "inc adder tr 1"]), "G7", [["tr", "U"]]],
+	["穴 pu inc [1] double（合成の頭の括りの関数の実体の根が A でない節が対に入る）", src([INC, DOUBLE, "pu : [x ~xs] ? [+ x]", "pu inc [1] double"]), "G2(a)"],
+	["穴 pr inc [1] 2 3 double（合成の頭の余りが対に入る）", src([INC, DOUBLE, "pr : [x ~xs] y ? y", "pr inc [1] 2 3 double"]), "G12(a)"],
+	["穴 pair inc [1] double 5（足りない合成が適用の頭）", src([INC, DOUBLE, "pair : [a ~as] [b ~bs] ? a + b", "pair inc [1] double 5"]), "G2(b)"],
+];
+for (const [name, s, want, kind, extra] of composePasses) checkPass(`確かめ ${name}`, s, want, kind, extra);
+for (const [name, s, want, inst] of composeRefused) checkRefused(`確かめ ${name}`, s, want, inst);
+
+// 最初の関数の結果が未知なら、その前に関数を足しても、後ろの括りの関数が受ける物は同じ（未知）。だから `h g a` と
+// `inc h g a` で、後ろの括りの関数 g の答え（定義の行の木、断るなら門と名指し）は同じ。直す前は、h が頭のときだけ g の
+// 実体を作らなかった。
+law("頭の結果が未知なら、h g a と inc h g a で後ろの括りの関数の答えが同じ", () => {
+	const gs = [["bad", BAD], ["tl", TL], ["tr", TR]];
+	const heads = [
+		["pa", [PA], "[1 2]"],
+		["hl", [HL], "[1 2]"],
+		["adder", [ADDER], "1"],
+		["[' 0]", [DOUBLE, "fs : inc , double"], "fs"],
+	];
+	const look = (s, g) => {
+		try {
+			const r = resolve(s);
+			return show(r.trees.find((t) => show(t).startsWith(`(: ${g} (? `)));
+		} catch (e) {
+			return `断り ${e.gate || e.reason} ${JSON.stringify((e.instances || []).map((i) => [i.fn, i.shape]))}`;
+		}
+	};
+	const out = [];
+	for (const [g, gDef] of gs) {
+		for (const [h, hDefs, a] of heads) {
+			const defs = [INC, ...hDefs, gDef];
+			const x = look(src([...defs, `${h} ${g} ${a}`]), g);
+			const y = look(src([...defs, `inc ${h} ${g} ${a}`]), g);
+			if (x !== y) out.push(`${h} ${g} ${a}：${x}`, `inc ${h} ${g} ${a}：${y}`);
+			else if (x.includes("(defer ")) out.push(`${h} ${g} ${a}：どちらも実体を作っていない ${x}`);
+		}
+	}
+	return out;
+});
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
