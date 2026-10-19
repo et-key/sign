@@ -23,6 +23,7 @@
  * の本体）は、R25 で通る側（「答え」の R25 の行）へ移した。標準の定義の `map : f [x ~y] ? x` と `n : [~x] ? x` は
  * 括りの関数なので、R25 で定義の行の木が `(defer {x})` になる（試験は最後の行の木だけを見るので、期待値は変わらない）。
  * その後ろに、R24〜R26 の実装を確かめた2つの workflow の指摘を当てた行（「確かめ」の直した・穴・守り）を置く。
+ * 最後に、反証の続きで直した合成の鍵の法則と守りを置く。
  *
  * 実行: node test/coproduct.test.js（`npm test` からも呼ばれる）
  */
@@ -1033,6 +1034,52 @@ law("部分適用を当てた部分適用の鎖の鍵は速い", () => {
 	if (got !== "coproduct-unknown-kind G7") out.push(`倍々の部分適用の再帰 got: ${got}  want: G7`);
 	return out;
 });
+
+// ---------------------------------------------------------------------------
+// 合成の鍵（2026-10-19、反証の続き）
+// ---------------------------------------------------------------------------
+
+// 直した（反証の続き）：合成の鍵も、形と部分適用の鍵と同じく番号に寄せて綴る（canonKey）。同じ部分適用を2つ並べた
+// 合成（`c1 : q1 q1`）を当てた部分適用の鎖は、合成の鍵を子の鍵の文字列でつなぐと段ごとに倍になり、24 段で内部の例外
+// （文字列の長さの上限）だった。形が倍々に深くなる再帰は、内部の例外ではなく深さの門（G7）で断る。1本 5 秒の上限で見る。
+law("合成を当てた部分適用の鎖の鍵は速い", () => {
+	const out = [];
+	const ls = ["inc : x ? x + 1", "pp : [a] [b] [c] ? a", "c0 : inc inc"];
+	for (let i = 1; i <= 24; i++) ls.push(`q${i} : pp [f : c${i - 1}] [f : c${i - 1}]`, `c${i} : q${i} q${i}`);
+	ls.push("h : [f] ? f [1]", "h [f : c24]");
+	let t0 = Date.now();
+	const r = resolve(src(ls));
+	const ms1 = Date.now() - t0;
+	if (ms1 > 5000) out.push(`合成を当てた部分適用の鎖の深さ 24：${ms1}ms`);
+	const hLine = show(r.trees[r.trees.length - 2]);
+	if (hLine !== "(: h (? [[f]] (inst {f:L} (apply f [1]))))") out.push(`h の行 got: ${hLine}`);
+	t0 = Date.now();
+	let got = "通った";
+	try {
+		resolve(src(["inc : x ? x + 1", "pp : [a] [b] [c] ? a", "g : [f] ? g [f : pp [f : f f] [f : f f]]", "g [f : inc]"]));
+	} catch (e) {
+		got = `${e.reason} ${e.gate || ""}`;
+	}
+	const ms2 = Date.now() - t0;
+	if (ms2 > 5000) out.push(`倍々の合成の再帰：${ms2}ms`);
+	if (got !== "coproduct-unknown-kind G7") out.push(`倍々の合成の再帰 got: ${got}  want: G7`);
+	return out;
+});
+// 合成の鍵を番号に寄せても、鍵は合成の中身で分かれる：並びの違う合成は別の実体、同じ綴りの合成は同じ実体。
+law("合成の鍵は中身で分かれる", () => {
+	const defs = ["inc : x ? x + 1", "double : x ? x * 2", "ca : inc double", "cb : double inc", "ca2 : inc double", "k : [f] ? f 1"];
+	const n = instCount(src([...defs, "k [f : ca]", "k [f : cb]", "k [f : ca2]"]), 5);
+	return n === 2 ? [] : [`k の実体の数 got: ${n}  want: 2`];
+});
+// 合成の鍵は、足りない適用の節を含むか（partial）でも分かれる。分けないと、括りの部分適用 `[add 1]` で始まる合成の実体を
+// 先に作った行の後で、`add 1 inc`（足りない適用の節を含む）を渡した行が黙って通る（直す前の鍵も分けていたが、落ちる試験が
+// 無かった。変異で確かめた）。
+checkRefused(
+	"確かめ 守り 合成の鍵は足りない適用の印で分かれる",
+	src(["inc : x ? x + 1", "add : x y ? x + y", "k : [f] ? f 1", "k [f : [add 1] inc]", "k [f : add 1 inc]"]),
+	"G2(b)",
+	[["k", "{f:L}"]]
+);
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

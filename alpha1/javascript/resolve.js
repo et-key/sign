@@ -793,7 +793,7 @@ function fnKey(fn) {
     case "pattern":
       return fn.bound ? canonKey(internPartial(fn)) : `pattern:${fn.idKey}`;
     case "compose":
-      return `compose(${fn.fns.map(fnKey).join(" ")})${fn.partial ? ":partial" : ""}`;
+      return canonKey(internCompose(fn));
     case "pfPick":
       return `pfPick:${fn.sym}:${fn.key ? JSON.stringify(fn.key) : ""}`;
     default:
@@ -812,9 +812,12 @@ function fnKey(fn) {
 // 括りの関数の部分適用の L も同じ2段で鍵にする（internPartial）。当てた物に前の部分適用が入ると（`q1 : pp [f : q0]
 // [f : q0]`）、当てた物を葉の文字列に綴れば段ごとに倍になり、22 段で文字列の長さの上限を超えた（部分適用の確かめ
 // 2026-10-19 の F1）。
+// 合成の L も同じ（internCompose）。子の鍵を文字列でつなぐと、同じ部分適用を2つ並べた合成（`c1 : q1 q1`）を当てた
+// 部分適用の鎖で段ごとに倍になり、24 段で文字列の長さの上限を超えた（反証 2026-10-19 の続き）。
 // 表は resolve を呼ぶたびに作り直す（resetIntern）。
 let internTable = new Map(); // 中身の綴り（子は番号）→ 番号
 // 番号 → {leaf} | {s:'struct', fields:[[名前, 番号]]} | {s:'list', elem:番号|null} | {s:'partial', base, bound:[番号]}
+//   | {s:'compose', fns:[番号], partial}
 let internNodes = [];
 let internByDesc = new WeakMap();
 let internByShape = new WeakMap();
@@ -843,7 +846,7 @@ function internDesc(d) {
   const memo = internByDesc.get(d);
   if (memo !== undefined) return memo;
   let id;
-  if (d.k === "L") id = d.fn && d.fn.bound ? internPartial(d.fn) : internLeaf(`L<${fnKey(d.fn)}>`);
+  if (d.k === "L") id = internFn(d.fn);
   else if (d.k !== "A") id = internLeaf("U");
   else if (d.spread) id = internLeaf("A~");
   // 中身の見えない A。中身に関数か未知が見える器（`A(U)`、頭の注）は、`~rest` の読みが違うので別の鍵にする。
@@ -880,6 +883,21 @@ function internPartial(fn) {
   internByFn.set(fn, id);
   return id;
 }
+// 合成の鍵：中の関数の鍵を、書いた順に番号で並べる（部分適用と同じく、子は番号）。
+function internCompose(fn) {
+  const memo = internByFn.get(fn);
+  if (memo !== undefined) return memo;
+  const fns = fn.fns.map(internFn);
+  const id = internText(`C(${fns.map((c) => `#${c}`).join(" ")})${fn.partial ? ":partial" : ""}`, { s: "compose", fns, partial: !!fn.partial });
+  internByFn.set(fn, id);
+  return id;
+}
+// L の desc の関数の番号。部分適用と合成は中身で番号に寄せ、ほかは fnKey の綴りの葉（短い綴りで決まる）。
+function internFn(fn) {
+  if (fn && fn.type === "pattern" && fn.bound) return internPartial(fn);
+  if (fn && fn.type === "compose") return internCompose(fn);
+  return internLeaf(`L<${fnKey(fn)}>`);
+}
 function canonKey(id) {
   const memo = canonMemo.get(id);
   if (memo !== undefined) return memo;
@@ -891,6 +909,7 @@ function canonKey(id) {
     seen.set(i, seen.size);
     if (node.s === "struct") return `{${node.fields.map(([n, c]) => `${n}:${walk(c)}`).join(" ")}}`;
     if (node.s === "partial") return `L<pattern:${node.base}<${node.bound.map(walk).join(" ")}>>`;
+    if (node.s === "compose") return `L<compose(${node.fns.map(walk).join(" ")})${node.partial ? ":partial" : ""}>`;
     return node.elem === null ? "[]" : `[${walk(node.elem)}…]`; // `[]` は要素の無い List（空の文字列の字面）
   };
   const s = walk(id);
