@@ -631,8 +631,8 @@ const U = () => ({ k: "U" });
 // ---- 形（R24・R26） ----
 //
 // 形は「渡された物の生まれ」を書く。構造体は、全部の行が `名前 : 値` の括りか字下げのブロック（rowsShape）。List は、
-// 構築の並び・`,` の並び・2行以上の値の括り・文字列の字面。数（SCALAR）は長さ1の List と同型。それ以外は中身の見えない
-// A（shape なし）。
+// 構築の並び・`,` の並び・2行以上の値の括りか字下げのブロック（1行が1要素、rowsShape）・文字列の字面。数（SCALAR）は
+// 長さ1の List と同型。それ以外は中身の見えない A（shape なし）。
 // List の要素の desc は長さに依らない（mergeElems）。長さを形に入れると、再帰で長さごとに実体ができ、`f [1 2 3]` と
 // `f [1 2]` が別の実体になる（R24「同じ形なら同じ実体」に反する）。
 
@@ -726,11 +726,9 @@ function descOfTree(tree) {
 // 枝の行は、構造体とも List とも言えないので中身の見えない A にする。欄の右辺が撒く項（`k : vs~`）なら、欄で受けた
 // 名前が撒く項として並びに入ることになり、それはどの言葉にも無いので、構造体ごと中身の見えない A にする（listShapeOf
 // の撒く項と同じ）。
-// 字下げのブロック（block）の2行以上の値の行は List にしない。R24 は構造体を「全部の行が `名前 : 値` の括りか字下げの
-// ブロック」と書くが、List は「構築の並び・`,` の並び・2行以上の値の括り・文字列の字面」と書き、字下げのブロックを
-// 挙げていない。仕様に無い読みを足すと黙って通る形が増えるので、中身の見えない A（名前は未知）に倒す。中身は §2 の
-// とおり見える（elements は rowsInfo が付ける）ので、`~rest` で受けて撒けば門に当たる（bindBracket）。
-function rowsShape(trees, { block = false } = {}) {
+// 字下げのブロックも括りと同じに読む：2行以上の値の行は List で、1行が1要素（利用者 2026-10-19「値の行を並べた字下げの
+// ブロックを、括りと同じ List（1行が1要素）として受けていい？」に「それでいいよ」）。
+function rowsShape(trees) {
   const isField = (t) => !!t && t.t === "op" && t.sym === ":" && !!t.fieldName;
   if (trees.every(isField)) {
     const names = trees.map((t) => t.fieldName);
@@ -738,7 +736,6 @@ function rowsShape(trees, { block = false } = {}) {
     return { s: "struct", fields: trees.map((t) => ({ name: t.fieldName, desc: descOfTree(t.right) })) };
   }
   if (trees.length === 1) return shapeOfTree(trees[0]);
-  if (block) return null;
   if (trees.some((t) => !t || (t.t === "op" && t.sym === ":"))) return null;
   return listShapeOf(trees);
 }
@@ -1175,7 +1172,7 @@ function bindBracket(p, d, descs) {
   if (!sh) {
     // 中身の見えない A：裸の名前は未知、`~rest` は A。
     // 形では構造体とも List とも読めないが §2 では中身の見える器（行の混ざった括り・同じ名前の欄が2つある構造体・欄の
-    // 右辺が撒く項の構造体・撒く項を含む並び・2行以上の値の字下げのブロック）は、`~rest` に中身（elements）を持ち
+    // 右辺が撒く項の構造体・撒く項を含む並び）は、`~rest` に中身（elements）を持ち
     // 越す。R24 の表の「中身の見えない A」は裸の仮引数・`$` の番地と番地の字面・範囲・適用の結果のように中身が本当に
     // 見えない物の行で（数の字面は 2026-10-19 に R24 の数の行へ移した）、ここで A() にすると、関数の見える中身を
     // `r~` で撒いても門（§3.3 の手順1）を素通りした（確かめ 2026-10-19 の F2）。
@@ -1547,16 +1544,16 @@ function bracketInfo(core, ctx) {
 
 // 字下げのブロック（`?` の本体でない所。構造体や中置の右）。点なしは括りでだけ書けるので見ない。
 function blockInfo(core, ctx) {
-  return rowsInfo(core.rows, ctx, { block: true });
+  return rowsInfo(core.rows, ctx);
 }
 
-function rowsInfo(rows, ctx, { block = false } = {}) {
+function rowsInfo(rows, ctx) {
   const scope = blockScope(rows, ctx);
   const inner = scope ? { ...ctx, scope } : ctx;
   const trees = rows.map((r) => resolveTree(r, inner));
   if (trees.length >= 2) {
     const desc = { k: "A", elements: trees.map(elementKind) };
-    const sh = rowsShape(trees, { block });
+    const sh = rowsShape(trees);
     if (sh) desc.shape = sh;
     return { desc, trees, isQ: false };
   }
