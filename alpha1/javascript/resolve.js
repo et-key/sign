@@ -611,9 +611,13 @@ function paramInChain(scope, name) {
 // desc：{k:'A'|'L'|'U', fn?, spread?, elements?, shape?}
 //   fn（L のとき）：
 //     {type:'plain', origin:'plain'|'partial'|'hole', n, getBodyRoot, idKey}  素の関数・部分適用・穴（§3.4）
-//     {type:'pattern', n, idKey, label, op, scopeKey, lastBracket, instantiate}  括りの関数（R24）。n は仮引数の数（括りは1つで1）。
-//       lastBracket は最後の仮引数が括りの関数（k > n なら残りの並び全体を最後の括りが1つの List として受ける、applyKind）。
-//       op と scopeKey は書いた `?` と、それを解いた範囲（定義の行の木に、その `?` を通って呼ばれた実体だけを描くため）
+//     {type:'pattern', n, idKey, label, op, scopeKey, lastBracket, bareAt, instantiate}  括りの関数（R24）。n は仮引数の数
+//       （括りは1つで1）。lastBracket は最後の仮引数が括りの関数（k > n なら残りの並び全体を最後の括りが1つの List として
+//       受ける、applyKind）。bareAt は仮引数ごとに裸か。op と scopeKey は書いた `?` と、それを解いた範囲（定義の行の木に、
+//       その `?` を通って呼ばれた実体だけを描くため）
+//     {type:'pattern', n, label, lastBracket, base, bound, instantiate}  括りの関数の部分適用（patternPartial）。n は残りの
+//       仮引数の数、base は元の括りの関数、bound は当てた物の desc（前から）。instantiate は bound を前に足して base の
+//       実体を作る。鍵は idKey ではなく base の出どころと当てた物の形（internPartial）
 //     {type:'pfUnary'|'pfGreedyUnary'|'pfGreedyBinary'|'pfUnknownArity', pointfree:true}  点なし（§2、pointfreeOf の注）
 //     {type:'pfPick', pointfree:true, sym, key}  段18 の点なし。key は `[' 0]`・`[' say]` の鍵（R26）、ほかは null
 //     {type:'compose', fns, partial}  合成
@@ -787,7 +791,7 @@ function fnKey(fn) {
     case "plain":
       return `plain:${fn.origin}:${fn.n}:${fn.idKey || ""}`;
     case "pattern":
-      return `pattern:${fn.idKey}`;
+      return fn.bound ? canonKey(internPartial(fn)) : `pattern:${fn.idKey}`;
     case "compose":
       return `compose(${fn.fns.map(fnKey).join(" ")})${fn.partial ? ":partial" : ""}`;
     case "pfPick":
@@ -805,17 +809,23 @@ function fnKey(fn) {
 // 2. canonKey：番号の DAG を深さ優先で綴り、2回目に出た形は `^n`（n 番目に綴った形）で指す。綴りは中身だけで決まる
 //    （番号の振り方＝形を見た順に依らない）ので、行の順を入れ替えても鍵と、鍵で決める並び順は変わらない。長さは形の
 //    中の違う物の数に比例する。
+// 括りの関数の部分適用の L も同じ2段で鍵にする（internPartial）。当てた物に前の部分適用が入ると（`q1 : pp [f : q0]
+// [f : q0]`）、当てた物を葉の文字列に綴れば段ごとに倍になり、22 段で文字列の長さの上限を超えた（部分適用の確かめ
+// 2026-10-19 の F1）。
 // 表は resolve を呼ぶたびに作り直す（resetIntern）。
 let internTable = new Map(); // 中身の綴り（子は番号）→ 番号
-let internNodes = []; // 番号 → {leaf} | {s:'struct', fields:[[名前, 番号]]} | {s:'list', elem:番号|null}
+// 番号 → {leaf} | {s:'struct', fields:[[名前, 番号]]} | {s:'list', elem:番号|null} | {s:'partial', base, bound:[番号]}
+let internNodes = [];
 let internByDesc = new WeakMap();
 let internByShape = new WeakMap();
+let internByFn = new WeakMap();
 let canonMemo = new Map();
 function resetIntern() {
   internTable = new Map();
   internNodes = [];
   internByDesc = new WeakMap();
   internByShape = new WeakMap();
+  internByFn = new WeakMap();
   canonMemo = new Map();
 }
 function internText(text, node) {
@@ -833,7 +843,7 @@ function internDesc(d) {
   const memo = internByDesc.get(d);
   if (memo !== undefined) return memo;
   let id;
-  if (d.k === "L") id = internLeaf(`L<${fnKey(d.fn)}>`);
+  if (d.k === "L") id = d.fn && d.fn.bound ? internPartial(d.fn) : internLeaf(`L<${fnKey(d.fn)}>`);
   else if (d.k !== "A") id = internLeaf("U");
   else if (d.spread) id = internLeaf("A~");
   // 中身の見えない A。中身に関数か未知が見える器（`A(U)`、頭の注）は、`~rest` の読みが違うので別の鍵にする。
@@ -857,6 +867,19 @@ function internShape(sh) {
   internByShape.set(sh, id);
   return id;
 }
+// 括りの関数の部分適用の鍵：元の関数の出どころと、当てた物の形。裸の仮引数の位置は A にする——実体の鍵（bindParams）が
+// 裸の位置の形を見ないので、そこに何を当てても同じ関数である（R24「裸の仮引数の位置は、形に数えない」。素の関数の部分
+// 適用の鍵が当てた物を見ないのと同じ）。数えると、同じ実体が2つ描かれ、再帰では同じ形の実体が入れ子になって G7 に
+// なった（部分適用の確かめ 2026-10-19 の F2）。綴りは番号で書く（子と同じ。`(` の中は番号だけなので、後ろの出どころと
+// 混ざらない）。
+function internPartial(fn) {
+  const memo = internByFn.get(fn);
+  if (memo !== undefined) return memo;
+  const bound = fn.bound.map((d, i) => (fn.base.bareAt[i] ? internLeaf("A") : internDesc(d)));
+  const id = internText(`P(${bound.map((c) => `#${c}`).join(" ")})${fn.base.idKey}`, { s: "partial", base: fn.base.idKey, bound });
+  internByFn.set(fn, id);
+  return id;
+}
 function canonKey(id) {
   const memo = canonMemo.get(id);
   if (memo !== undefined) return memo;
@@ -867,6 +890,7 @@ function canonKey(id) {
     if (seen.has(i)) return `^${seen.get(i)}`;
     seen.set(i, seen.size);
     if (node.s === "struct") return `{${node.fields.map(([n, c]) => `${n}:${walk(c)}`).join(" ")}}`;
+    if (node.s === "partial") return `L<pattern:${node.base}<${node.bound.map(walk).join(" ")}>>`;
     return node.elem === null ? "[]" : `[${walk(node.elem)}…]`; // `[]` は要素の無い List（空の文字列の字面）
   };
   const s = walk(id);
@@ -1125,8 +1149,28 @@ const INSTANCE_DEPTH_LIMIT = 32;
 function patternFn(F, op, params, defScope, label) {
   const fn = { type: "pattern", n: params.length, idKey: lambdaKey(op, defScope.key), label, op, scopeKey: defScope.key };
   fn.lastBracket = params[params.length - 1].kind !== "bare"; // 残りの並びを最後の括りが受ける形（applyKind）
+  fn.bareAt = params.map((p) => p.kind === "bare"); // 裸の仮引数の位置（部分適用の鍵で A にする、internPartial）
   fn.instantiate = (argDescs) => instantiate(F, fn, op, params, defScope, argDescs);
   return fn;
+}
+
+// 括りの関数の部分適用（applyKind の k < n）。残りの仮引数は後ろの n − k 個なので、最後の仮引数が括りかは元の関数の
+// まま。当てた物（bound）は元の関数（base）の前から並べて覚え、残りが来たら合わせて元の関数の実体を作る。部分適用の
+// 部分適用（`(t3 1) 2`）も、元の関数に当てた物を足していく。
+// 鍵は当てた物の形を入れ、木のまま持つ（internPartial）——当てた物の違う部分適用を同じ関数として扱わない（欄に入れて
+// 括りの関数に渡したときの実体の鍵）。
+function patternPartial(fn, args) {
+  const base = fn.base || fn;
+  const bound = [...(fn.bound || []), ...args];
+  return {
+    type: "pattern",
+    n: base.n - bound.length,
+    label: base.label,
+    lastBracket: base.lastBracket,
+    base,
+    bound,
+    instantiate: (argDescs) => base.instantiate([...bound, ...argDescs]),
+  };
 }
 
 // その `?` を通って、木まで解く実体を呼んだ（定義の行の木に描く物。resolve の最後）。
@@ -2135,7 +2179,11 @@ function applyKind(fn, arg) {
         const rest = descOfTree({ t: "construct", items: args.slice(fn.n - 1), kind: A() });
         return fn.instantiate([...front, rest]);
       }
-      return { kind: U() }; // ほかの k ≠ n（k < n・最後の仮引数が裸で k > n）は未知（§5 Q2）
+      // k < n は、素の関数と同じく部分適用（残り n − k の L）。当てた物は覚えておき、残りが来た所で合わせて実体を作る
+      // （利用者 2026-10-19「括りの関数に実引数が足りないときも、素の関数と同じく部分適用（残りの仮引数を待つ関数）に
+      // する。」）。足りない適用なので、素の関数と同じく `insufficient`（合成に入れば partial、G2(b)）。
+      if (k < fn.n) return { kind: { k: "L", fn: patternPartial(fn, args.map(descOfTree)) }, insufficient: true };
+      return { kind: U() }; // 最後の仮引数が裸で k > n は未知（§5 Q2）
     case "compose":
       return composeApply(fn, k);
     default:

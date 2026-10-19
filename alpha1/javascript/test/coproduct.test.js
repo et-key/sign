@@ -438,6 +438,10 @@ const X1_INST = "(: f (? [[x ~xs]] (inst N (construct x 1))))";
 // `w : [k : [1 ⏎ 2] ⏎ other : 3]`）。
 const BLOCK_ROWS = ["f : [x ~xs] ? (x ' 0) 1", "w :", "\t1 2", "\t3 4", "", "f w"];
 const BLOCK_NESTED = ["g : [k] ? h k", "h : [x ~xs] ? x 1", "w :", "\tk :", "\t\t1", "\t\t2", "\tother : 3", "", "g w"];
+// 当てた物の違う括りの関数の部分適用を、欄に入れて同じ括りの関数に渡す（R24。部分適用の確かめ 2026-10-19 の TG1）。
+const PAIR_FIELDS = ["inc : x ? x + 1", "pair : [a ~as] [b ~bs] ? a b", "call : [f ~r] ? f [2]", "s :", "\ta : inc", "", "m1 :", "\tf : pair [1]", "", "m2 :", "\tf : pair s", ""];
+const PAIR_FIELDS_INST = "(: pair (? [[a ~as] [b ~bs]] (inst N N (construct a b)) (inst {a:L} N (apply a b))))";
+const PAIR_GATE = ["pair : [a ~as] [b ~bs] ? a 1", "call : [f ~r] ? f [2]", "s2 :", "\tz : 1", "", "m1 :", "\tf : pair [1]", "", "m2 :", "\tf : pair s2", ""];
 
 const answerPasses = [
 	// R24 の例1（pattern_guide.md「IO Reader Writer」）。木の行は m・a・b・c・呼ぶ行の順。
@@ -466,14 +470,44 @@ const answerPasses = [
 	// `p3 1 [2 3] [4 5]` と同じ実体で、実体は1つ。前の当て方を逆にしたり、前に1つしか当てないと形が変わる。
 	["R24 p3 1 [2 3] 4 5 は p3 1 [2 3] [4 5] と同じ実体（前の仮引数に左から1つずつ）", src(["p3 : [a] [b ~bs] [c ~cs] ? a + c", "p3 1 [2 3] 4 5", "p3 1 [2 3] [4 5]"]), "(: p3 (? [[a] [b ~bs] [c ~cs]] (inst N [N…] [N…] (+ a c))))", null, { at: 0 }],
 	["R24 p3 1 [2 3] 4 5", src(["p3 : [a] [b ~bs] [c ~cs] ? a + c", "p3 1 [2 3] 4 5"]), "(apply p3 (construct 1 [2 3] 4 5))", "A"],
-	// Q2 に残る形：k < n（括りの関数の部分適用）と、最後の仮引数が裸の関数の k > n。根なら未知で通り、実体は作らない。
-	["Q2 pair [1]（k < n は未知の根）", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1]"]), "(apply pair [1])", "未知"],
-	["Q2 pair [1] では実体を作らない", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1]"]), "(: pair (? [[a ~as] [b ~bs]] (defer {a + b})))", null, { at: 0 }],
+	// k < n は、素の関数と同じく部分適用（残り n − k の L）。残りが来た所で、当てた物と合わせて実体を作る（R24、利用者
+	// 2026-10-19「括りの関数に実引数が足りないときも、素の関数と同じく部分適用（残りの仮引数を待つ関数）にする。」）。
+	["R24 pair [1]（k < n は部分適用の L）", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1]"]), "(apply pair [1])", "L"],
+	["R24 pair [1] だけでは実体を作らない", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1]"]), "(: pair (? [[a ~as] [b ~bs]] (defer {a + b})))", null, { at: 0 }],
+	["R24 (pair [1]) [2] は pair [1] [2] と同じ実体", src(["pair : [a ~as] [b ~bs] ? a + b", "(pair [1]) [2]", "pair [1] [2]"]), "(: pair (? [[a ~as] [b ~bs]] (inst N N (+ a b))))", null, { at: 0 }],
+	["R24 (pair [1]) [2]", src(["pair : [a ~as] [b ~bs] ? a + b", "(pair [1]) [2]"]), "(apply [pair [1]] [2])", "A"],
+	["R24 名前を付けた部分適用 p1 : pair [1] の p1 [2]", src(["pair : [a ~as] [b ~bs] ? a + b", "p1 : pair [1]", "p1 [2]"]), "(apply p1 [2])", "A"],
+	["R24 t3 1 2（n = 3 の k < n は部分適用の L）", src(["t3 : u v [~r] ? u", "t3 1 2"]), "(apply t3 (construct 1 2))", "L"],
+	["R24 t3 1 2 だけでは実体を作らない", src(["t3 : u v [~r] ? u", "t3 1 2"]), "(: t3 (? [u v [~r]] (defer {u})))", null, { at: 0 }],
+	["R24 (t3 1 2) 3 4 は t3 1 2 3 4 と同じ実体（部分適用の残りも最後の括りが受ける）", src(["t3 : u v [~r] ? u", "(t3 1 2) 3 4", "t3 1 2 3 4"]), "(: t3 (? [u v [~r]] (inst A A [N…] u)))", null, { at: 0 }],
+	["R24 ((t3 1) 2) [3]（部分適用の部分適用）", src(["t3 : u v [~r] ? u", "((t3 1) 2) [3]"]), "(apply [[t3 1] 2] [3])", "A"],
+	["R24 pair [1] inc（部分適用の節は素の関数と同じく合成に入る）", src(["inc : x ? x + 1", "pair : [a ~as] [b ~bs] ? a + b", "pair [1] inc"]), "(compose (apply pair [1]) inc)", "L"],
+	// 部分適用の行だけで、残りが来た所に実体を作る（直の行を並べると、その行が実体を作るので、部分適用の側が何もしなくても
+	// 上の「同じ実体」の行は合ってしまう。部分適用の確かめ 2026-10-19 の TG2・TG3）。
+	["R24 (pair [1]) [2] だけで実体を作る", src(["pair : [a ~as] [b ~bs] ? a + b", "(pair [1]) [2]"]), "(: pair (? [[a ~as] [b ~bs]] (inst N N (+ a b))))", null, { at: 0 }],
+	["R24 p1 [2] だけで実体を作る（名前を付けた部分適用）", src(["pair : [a ~as] [b ~bs] ? a + b", "p1 : pair [1]", "p1 [2]"]), "(: pair (? [[a ~as] [b ~bs]] (inst N N (+ a b))))", null, { at: 0 }],
+	["R24 (t3 1 2) 3 4 だけで、残りを最後の括りが受ける実体を作る", src(["t3 : u v [~r] ? u", "(t3 1 2) 3 4"]), "(: t3 (? [u v [~r]] (inst A A [N…] u)))", null, { at: 0 }],
+	["R24 (t3 1 2) 3 4", src(["t3 : u v [~r] ? u", "(t3 1 2) 3 4"]), "(apply [t3 1 2] (construct 3 4))", "A"],
+	["R24 (pair [1]) [2] [3] だけで、残りを最後の括りが受ける実体を作る", src(["pair : [a ~as] [b ~bs] ? a + b", "(pair [1]) [2] [3]"]), "(: pair (? [[a ~as] [b ~bs]] (inst N [N…] (+ a b))))", null, { at: 0 }],
+	// 部分適用の部分適用は、元の関数に当てた物を前から足していく（[~r] は [3 4] を受ける）。
+	["R24 ((t3 1) 2) [3 4] の実体", src(["t3 : u v [~r] ? u", "((t3 1) 2) [3 4]"]), "(: t3 (? [u v [~r]] (inst A A [N…] u)))", null, { at: 0 }],
+	// 当てた物の違う部分適用（`pair [1]` と `pair s`）を欄に入れて同じ括りの関数に渡したら、別の関数なので call の実体も
+	// 別で、pair の実体は2つ。行の順に依らない（鍵に当てた物を入れないと、先に呼んだ方の実体を後の行が黙って使い回し、
+	// pair の実体は1つになる。部分適用の確かめ 2026-10-19 の TG1）。
+	["R24 当てた物の違う部分適用を欄で渡す（m1 が先）", src([...PAIR_FIELDS, "call m1", "call m2"]), PAIR_FIELDS_INST, null, { at: 1 }],
+	["R24 当てた物の違う部分適用を欄で渡す（m2 が先）", src([...PAIR_FIELDS, "call m2", "call m1"]), PAIR_FIELDS_INST, null, { at: 1 }],
+	// 裸の仮引数に当てた物は形に数えない（R24「裸の仮引数の位置は、形に数えない」）。`t2 1` と `t2 [1 2]` は同じ関数なので、
+	// h の実体は1つ。括りの仮引数に当てた物は数えるので、`[u]` なら別の関数で2つ（部分適用の確かめ 2026-10-19 の F2）。
+	["R24 裸の仮引数に当てた物の違う部分適用は同じ関数", src(["t2 : u [v] ? v", "h : [f] ? f [2]", "h [f : t2 1]", "h [f : t2 [1 2]]"]), "(: h (? [[f]] (inst {f:L} (apply f [2]))))", null, { at: 1 }],
+	["R24 括りの仮引数に当てた物の違う部分適用は別の関数", src(["t2 : [u] [v] ? v", "h : [f] ? f [2]", "h [f : t2 1]", "h [f : t2 [1 2]]"]), "(: h (? [[f]] (inst {f:L} (apply f [2])) (inst {f:L} (apply f [2]))))", null, { at: 1 }],
+	// 裸の仮引数に自分の欄を当て直す再帰は、同じ形で自分を呼ぶので有限（数えると、同じ形の実体が 32 段入れ子になって G7）。
+	["R24 裸の仮引数に部分適用を当て直す再帰", src(["inc : x ? x + 1", "t2 : u [v] ? v", "g : [f] ? g [f : t2 [f : f]]", "g [f : inc]"]), "(apply g [f : inc])", "A"],
+	// Q2 に残る形：最後の仮引数が裸の関数の k > n。根なら未知で通り、実体は作らない。
 	["Q2 tl 1 2 3（最後の仮引数が裸の k > n は未知の根）", src(["tl : [x ~xs] y ? x + y", "tl 1 2 3"]), "(apply tl (construct 1 2 3))", "未知"],
 	["Q2 tl 1 2 3 では実体を作らない", src(["tl : [x ~xs] y ? x + y", "tl 1 2 3"]), "(: tl (? [[x ~xs] y] (defer {x + y})))", null, { at: 0 }],
-	// 仮引数が3つで 1 < k < n も未知（k > n ではないので、最後の括りに空の残りを当てた実体を作らない）。
-	["Q2 t3 1 2（n = 3 の k < n は未知の根）", src(["t3 : u v [~r] ? u", "t3 1 2"]), "(apply t3 (construct 1 2))", "未知"],
-	["Q2 t3 1 2 では実体を作らない", src(["t3 : u v [~r] ? u", "t3 1 2"]), "(: t3 (? [u v [~r]] (defer {u})))", null, { at: 0 }],
+	// 部分適用に残りが多くても同じ（最後の括りが受けるのは、最後の仮引数が括りの関数だけ。部分適用の確かめ 2026-10-19 の TG4）。
+	["Q2 (tl 1) 2 3（部分適用の残りが多い）", src(["tl : [x ~xs] y ? x + y", "(tl 1) 2 3"]), "(apply [tl 1] (construct 2 3))", "未知"],
+	["Q2 (tl 1) 2 3 では実体を作らない", src(["tl : [x ~xs] y ? x + y", "(tl 1) 2 3"]), "(: tl (? [[x ~xs] y] (defer {x + y})))", null, { at: 0 }],
 	// 括りが1つの関数は、並び全体を1つの List として受ける（R24、利用者 2026-10-19「それでいいよ」）。
 	["R24 n 1 2 3 は n [1 2 3] と同じ実体", src(["n : [~x] ? x", "n 1 2 3", "n [1 2 3]"]), "(: n (? [[~x]] (inst [N…] x)))", null, { at: 0 }],
 	["R24 f 1 2 3（x は頭の数）", src(["f : [x ~xs] ? x 1", "f 1 2 3"]), "(: f (? [[x ~xs]] (inst [N…] (construct x 1))))", null, { at: 0 }],
@@ -597,10 +631,21 @@ const answerRefused = [
 	["R24 a m m（関数の見える構造体の List を並びで渡す）", src([...IO, "a m m"]), "G7", [["a", "[U…]"]]],
 	// 形の混ざった並びの要素は中身の見えない A（`p [1 $inc]` と同じ。R24 の断る側）なので、q の y は未知。
 	["R24 p 1 $inc（形の混ざった並び）", src(["inc : x ? x + 1", "p : [x ~xs] ? q x", "q : [y] ? y 5", "p 1 $inc"]), "G7", [["p", "[A…]"], ["q", "A"]]],
-	// Q2 に残る形（k < n・最後の仮引数が裸の k > n）の未知の節は、対に入れば G2(a)（§5 Q2）。
-	["Q2 pair [1] inc（k < n の未知の節は対に入れない）", src(["inc : x ? x + 1", "pair : [a ~as] [b ~bs] ? a + b", "pair [1] inc"]), "G2(a)"],
+	// 括りの関数の部分適用の節は、素の関数の部分適用と同じ門に当たる：合成に入って頭になれば G2(b)（`f2 1 g 2` と同じ、
+	// §5 Q4）、逆適用の右なら G8（`5 f2 1` と同じ、§5 Q5）。
+	["R24 pair [1] inc 5（部分適用を含む合成が頭）", src(["inc : x ? x + 1", "pair : [a ~as] [b ~bs] ? a + b", "pair [1] inc 5"]), "G2(b)"],
+	["R24 5 t3 1 2（部分適用の節が逆適用の右）", src(["t3 : u v [~r] ? u", "5 t3 1 2"]), "G8"],
+	// 部分適用で作った実体が門に当たれば、残りを渡して呼んだ行で断る（R25。部分適用の確かめ 2026-10-19 の TG2）。
+	["R24 (pair $inc) [2]（部分適用で作った実体の門）", src(["inc : x ? x + 1", "pair : [a ~as] [b ~bs] ? a 1", "(pair $inc) [2]"]), "G7", [["pair", "A N"]]],
+	// 当てた物の違う部分適用を欄で渡すと call の実体は別なので、m1 の実体を先に作っても、m2 の行は m2 の形で門に当たる
+	// （部分適用の確かめ 2026-10-19 の TG1）。
+	["R24 当てた物の違う部分適用を欄で渡す（m2 の実体が門）", src([...PAIR_GATE, "call m1", "call m2"]), "G7", [["call", "{f:L}"], ["pair", "{z:N} N"]]],
+	// 1項の `:` の左と既定値は解かない（R25・P3）ので、名前を付けた部分適用を既定値の中で呼ぶ形も、別名（`p : t`）と同じく
+	// 実体が作れず G7（部分適用の確かめ 2026-10-19 の TG5）。
+	["R25 既定値の中で、名前を付けた部分適用を呼ぶ", src(["pair : [a ~as] [b ~bs] ? a + b", "p1 : pair [1]", "o : [x : p1 [2]] ? 5"]), "G7"],
+	// Q2 に残る形（最後の仮引数が裸の k > n）の未知の節は、対に入れば G2(a)（§5 Q2）。部分適用に残りが多い形も同じ。
 	["Q2 tl 1 2 3 inc（最後の仮引数が裸の k > n）", src(["inc : x ? x + 1", "tl : [x ~xs] y ? x + y", "tl 1 2 3 inc"]), "G2(a)"],
-	["Q2 5 t3 1 2（n = 3 の k < n の未知の節）", src(["t3 : u v [~r] ? u", "5 t3 1 2"]), "G2(a)"],
+	["Q2 (tl 1) 2 3 inc（部分適用の残りが多い）", src(["inc : z ? z + 1", "tl : [x ~xs] y ? x + y", "(tl 1) 2 3 inc"]), "G2(a)"],
 	// 並び全体を受けた未知の節も、対に入れば G2(a)（並び全体が実引数1つなので k > n にならず、G12 ではない）。撒く項を
 	// 含む並びの未知の節も同じ。
 	["R24 gi 1 2 inc（並び全体を受けた未知の節）", src(["gi : [x ~xs] ? inc", "inc : y ? y + 1", "gi 1 2 inc"]), "G2(a)"],
@@ -959,6 +1004,33 @@ law("欄どうしで同じ物を指す形の鍵は速い", () => {
 	const ms2 = Date.now() - t0;
 	if (ms2 > 5000) out.push(`倍々の再帰：${ms2}ms`);
 	if (got !== "coproduct-unknown-kind G7") out.push(`倍々の再帰 got: ${got}  want: G7`);
+	return out;
+});
+// 直した（部分適用の確かめ 2026-10-19 の F1）：前の部分適用を2つの欄に当てた部分適用の鎖（`q1 : pp [f : q0] [f : q0]`）
+// の鍵も、深さに比例する手間で作る。当てた物を葉の文字列に綴ると段ごとに倍になり、22 段で内部の例外（文字列の長さの
+// 上限）、呼ぶ行を足すとヒープの上限でプロセスごと落ちた。形が倍々に深くなる再帰は、内部の例外ではなく深さの門（G7）
+// で断る。1本 5 秒の上限で見る。
+law("部分適用を当てた部分適用の鎖の鍵は速い", () => {
+	const out = [];
+	const ls = ["inc : x ? x + 1", "pp : [a] [b] [c] ? a", "q0 : pp [f : inc] [f : inc]"];
+	for (let i = 1; i <= 24; i++) ls.push(`q${i} : pp [f : q${i - 1}] [f : q${i - 1}]`);
+	ls.push("h : [f] ? f [1]", "h [f : q24]");
+	let t0 = Date.now();
+	const r = resolve(src(ls));
+	const ms1 = Date.now() - t0;
+	if (ms1 > 5000) out.push(`部分適用の鎖の深さ 24：${ms1}ms`);
+	const hLine = show(r.trees[r.trees.length - 2]);
+	if (hLine !== "(: h (? [[f]] (inst {f:L} (apply f [1]))))") out.push(`h の行 got: ${hLine}`);
+	t0 = Date.now();
+	let got = "通った";
+	try {
+		resolve(src(["inc : x ? x + 1", "pp : [a] [b] [c] ? a", "g : [f] ? g [f : pp [f : f] [f : f]]", "g [f : inc]"]));
+	} catch (e) {
+		got = `${e.reason} ${e.gate || ""}`;
+	}
+	const ms2 = Date.now() - t0;
+	if (ms2 > 5000) out.push(`倍々の部分適用の再帰：${ms2}ms`);
+	if (got !== "coproduct-unknown-kind G7") out.push(`倍々の部分適用の再帰 got: ${got}  want: G7`);
 	return out;
 });
 
