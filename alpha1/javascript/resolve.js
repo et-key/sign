@@ -1364,7 +1364,9 @@ function bindBracket(p, d, descs) {
 }
 
 // 括りの関数の適用（§3.4 の括りの関数の行）。k = n のとき（前から順に当てる）と、最後の仮引数が括りで k > n の
-// とき（残りの並び全体を最後の括りが1つの List として受ける、R24）に実体を作る（呼ぶのは applyKind）。
+// とき（残りの並び全体を最後の括りが1つの List として受ける、R24）と、最後の仮引数が裸で k > n のとき（前から n 個
+// だけを当てる。余りは鍵に入れない）に実体を作る（呼ぶのは applyKind）。部分適用は、残りが来たときに当てた物と
+// 合わせて、元の関数のこの3つのどれかで作る（patternPartial）。
 function instantiate(F, fn, op, params, defScope, argDescs) {
   const b = bindParams(params, argDescs);
   const key = `${fnKey(fn)}|${b.key}`;
@@ -2233,7 +2235,7 @@ function checkNodes(items) {
   if (items.length < 2) return;
   for (const it of items) {
     if (it.t === "leaf") continue;
-    if (it.kind.k === "U") throw gate("G2(a)", `種類の決まらない節 \`${show(it)}\` が隣と結ぼうとしています（§5 Q2・Q8・Q13・Q17・Q21）。`);
+    if (it.kind.k === "U") throw gate("G2(a)", `種類の決まらない節 \`${show(it)}\` が隣と結ぼうとしています（R24、§5 Q8・Q13・Q17・Q21）。`);
     if (it.excess) throw gate("G12(a)", `実引数がアリティより多い適用 \`${show(it)}\` が隣と結ぼうとしています。余りの扱いは値の段で決まります（§5 Q11・Q6）。`);
   }
 }
@@ -2314,7 +2316,13 @@ function applyKind(fn, arg) {
       // （利用者 2026-10-19「括りの関数に実引数が足りないときも、素の関数と同じく部分適用（残りの仮引数を待つ関数）に
       // する。」）。足りない適用なので、素の関数と同じく `insufficient`（合成に入れば partial、G2(b)）。
       if (k < fn.n) return { kind: { k: "L", fn: patternPartial(fn, args.map(descOfTree)) }, insufficient: true };
-      return { kind: U() }; // 最後の仮引数が裸で k > n は未知（§5 Q2）
+      // 最後の仮引数が裸で k > n は、素の関数と同じく前から n 個を当てて、余り（`excess`）にする。本体の根が A でなければ
+      // G12(b)（plainApply と同じ）。余りの扱いは値の段（§5 Q11）。利用者 2026-10-19「最後の仮引数が裸の括りの関数に
+      // 多く渡したときは、素の関数と同じく前から n 個を当てて、余り（excess）にする。」
+      if (fn.instantiate(args.slice(0, fn.n).map(descOfTree)).kind.k !== "A") {
+        throw gate("G12(b)", `実引数がアリティより多いのに、頭の本体の根が値ではありません（§5 Q21・Q11）。`);
+      }
+      return { kind: A(), excess: true };
     case "compose":
       return composeApply(fn, k);
     default:
