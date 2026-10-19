@@ -420,7 +420,7 @@ for (const [name, src, want] of gapRefused) checkRefused(`穴 ${name}`, src, wan
 // R25：括りの関数の本体は、実体を作るときにだけ読む。呼ばれない関数は `(defer …)` で、断らない。門に当たった実体は
 //      呼んだ行で断る。
 // R26：`x ' k`（と `[' k] x`）で引いた物の種類は、引かれた物の生まれで決まる。
-// 実体の形の綴りは resolve.js の頭の注（`{say:L other:A}`・`[A…]`・`A`、仮引数ごとに空白で並べる）。
+// 実体の形の綴りは resolve.js の頭の注（`{say:L other:N}`・`[N…]`・`A`、仮引数ごとに空白で並べる）。
 
 const src = (lines) => lines.join("\n");
 // pattern_guide.md「IO Reader Writer」の m と a・b・c（3つとも 42 を返す、同じ射の3つの綴り）。
@@ -431,24 +431,27 @@ const GREETING = "greeting : [greet world] ? (greet ' welcome) world";
 const MY_GREET_FN = ["myGreet :", "\tgreet :", "\t\thello : x ? x", "\t\twelcome : x ? x", "\tworld : ` world`", ""];
 const MY_GREET_STR = ["myGreet :", "\tgreet :", "\t\thello : `hello,`", "\t\twelcome : `welcome,`", "\tworld : ` world`", ""];
 const REC = "f : [x ~xs] ? [f xs] x";
+// 受けた名前 x を並びの頭に置く。x が数なら構築、中身の見えない A を受けて未知なら呼んだ行で G7（名指しは f と形）。
+const X1 = "f : [x ~xs] ? x 1";
+const X1_INST = "(: f (? [[x ~xs]] (inst N (construct x 1))))";
 
 const answerPasses = [
 	// R24 の例1（pattern_guide.md「IO Reader Writer」）。木の行は m・a・b・c・呼ぶ行の順。
 	["R24 a m", src([...IO, "a m"]), "(apply a m)", "A"],
-	["R24 a m の実体（本体は (apply say 21)）", src([...IO, "a m"]), "(: a (? [[say]] (inst {say:L other:A} (apply say 21))))", null, { at: 1 }],
+	["R24 a m の実体（本体は (apply say 21)）", src([...IO, "a m"]), "(: a (? [[say]] (inst {say:L other:N} (apply say 21))))", null, { at: 1 }],
 	["R24 b m", src([...IO, "b m"]), "(apply b m)", "A"],
-	["R24 b m の実体", src([...IO, "b m"]), "(: b (? [[say ~rest]] (inst {say:L other:A} (apply say 21))))", null, { at: 2 }],
+	["R24 b m の実体", src([...IO, "b m"]), "(: b (? [[say ~rest]] (inst {say:L other:N} (apply say 21))))", null, { at: 2 }],
 	["R26 c m（rest ' say は欄 say の生まれ）", src([...IO, "c m"]), "(apply c m)", "A"],
-	["R26 c m の実体", src([...IO, "c m"]), "(: c (? [[~rest]] (inst {say:L other:A} (apply [rest ' say] 21))))", null, { at: 3 }],
+	["R26 c m の実体", src([...IO, "c m"]), "(: c (? [[~rest]] (inst {say:L other:N} (apply [rest ' say] 21))))", null, { at: 3 }],
 	// R24 の例2：利用者の基本の再帰。§6.3 では本体が G7 だった。xs は同じ要素の List なので、自分を同じ形で呼ぶ。
 	["R24 f [1 2 3]", src([REC, "f [1 2 3]"]), "(apply f [1 2 3])", "A"],
-	["R24 f [1 2 3] の実体（本体は (construct [f xs] x)）", src([REC, "f [1 2 3]"]), "(: f (? [[x ~xs]] (inst [A…] (construct [f xs] x))))", null, { at: 0 }],
+	["R24 f [1 2 3] の実体（本体は (construct [f xs] x)）", src([REC, "f [1 2 3]"]), "(: f (? [[x ~xs]] (inst [N…] (construct [f xs] x))))", null, { at: 0 }],
 	// 文字列の字面は List（String ≅ List(Char)）なので、同じ再帰で分解できる。形は [1 2 3] と同じ。
 	["R24 f `abc`（文字列を List として分解する再帰）", src([REC, "f `abc`"]), "(apply f `abc`)", "A"],
-	["R24 f `abc` の実体は [1 2 3] と同じ形", src([REC, "f `abc`"]), "(: f (? [[x ~xs]] (inst [A…] (construct [f xs] x))))", null, { at: 0 }],
+	["R24 f `abc` の実体は [1 2 3] と同じ形", src([REC, "f `abc`"]), "(: f (? [[x ~xs]] (inst [N…] (construct [f xs] x))))", null, { at: 0 }],
 	// R24 の例3：括りは1つで1と数える（function_guide.md「参照の取り方」）。
 	["R24 pair [1 2 3] [10 20]", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1 2 3] [10 20]"]), "(apply pair (construct [1 2 3] [10 20]))", "A"],
-	["R24 pair の実体（形は仮引数ごとに並べる）", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1 2 3] [10 20]"]), "(: pair (? [[a ~as] [b ~bs]] (inst [A…] [A…] (+ a b))))", null, { at: 0 }],
+	["R24 pair の実体（形は仮引数ごとに並べる）", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1 2 3] [10 20]"]), "(: pair (? [[a ~as] [b ~bs]] (inst [N…] [N…] (+ a b))))", null, { at: 0 }],
 	// k ≠ n は未知（§5 Q2）。根なら通り、実体は作らない（定義の行は defer のまま）。
 	["Q2 a m m（k ≠ n は未知の根）", src([...IO, "a m m"]), "(apply a (construct m m))", "未知"],
 	["Q2 a m m では実体を作らない", src([...IO, "a m m"]), "(: a (? [[say]] (defer {say 21})))", null, { at: 1 }],
@@ -463,20 +466,20 @@ const answerPasses = [
 	["R25 実体の本体の未定義の名前", src(["k : [x ~xs] ? zz x", "k [1 2]", "k `ab`"]), "(apply k `ab`)", "A", { diag: "zz", diagCount: 1 }],
 	// Zipper の map（pattern_guide.md）。f は裸の仮引数なので A、[x ~y] は List。map f y は同じ形で自分を呼ぶ。
 	["R24 map $[* 2] [1 2 3 4 5]", src(["map : f [x ~y] ? (@f x) , (map f y)", "map $[* 2] [1 2 3 4 5]"]), "(apply map (construct $[* 2] [1 2 3 4 5]))", "A"],
-	["R24 map の実体", src(["map : f [x ~y] ? (@f x) , (map f y)", "map $[* 2] [1 2 3 4 5]"]), "(: map (? [f [x ~y]] (inst A [A…] (, [@f x] [map f y]))))", null, { at: 0 }],
+	["R24 map の実体", src(["map : f [x ~y] ? (@f x) , (map f y)", "map $[* 2] [1 2 3 4 5]"]), "(: map (? [f [x ~y]] (inst A [N…] (, [@f x] [map f y]))))", null, { at: 0 }],
 	// D 97749496 の greeting。欄 greet は構造体で、その欄 welcome が関数なら (greet ' welcome) world は適用、文字列なら構築。
 	["R24・R26 greeting myGreet（welcome が関数）", src([...MY_GREET_FN, GREETING, "greeting myGreet"]), "(apply greeting myGreet)", "A"],
 	[
 		"R24・R26 greeting の実体（welcome が関数）",
 		src([...MY_GREET_FN, GREETING, "greeting myGreet"]),
-		"(: greeting (? [[greet world]] (inst {greet:{hello:L welcome:L} world:[A…]} (apply [greet ' welcome] world))))",
+		"(: greeting (? [[greet world]] (inst {greet:{hello:L welcome:L} world:[N…]} (apply [greet ' welcome] world))))",
 		null,
 		{ at: 1 },
 	],
 	[
 		"R24・R26 greeting の実体（example.sn のまま、welcome が文字列）",
 		src([...MY_GREET_STR, GREETING, "greeting myGreet"]),
-		"(: greeting (? [[greet world]] (inst {greet:{hello:[A…] welcome:[A…]} world:[A…]} (construct [greet ' welcome] world))))",
+		"(: greeting (? [[greet world]] (inst {greet:{hello:[N…] welcome:[N…]} world:[N…]} (construct [greet ' welcome] world))))",
 		null,
 		{ at: 1 },
 	],
@@ -489,16 +492,16 @@ const answerPasses = [
 	[
 		"R24 実体の本体の中の括りの関数",
 		src([...M, "a : [say] ? [[other] ? say other] m", "a m"]),
-		"(: a (? [[say]] (inst {say:L other:A} (apply [[other] ? say other] m))))",
+		"(: a (? [[say]] (inst {say:L other:N} (apply [[other] ? say other] m))))",
 		null,
 		{ at: 1 },
 	],
 	// 標準の定義の n（`n : [~x] ? x`）は、k = n なら実体を作る（§6.3 の n 1 2 3 は k ≠ n で未知のまま）。
 	["R24 n vs（標準の定義の n、k = n）", std("n vs"), "(apply n vs)", "A"],
 	// 構造体の ~rest は受けなかった欄の構造体。そこから欄を引ける（R26）。
-	["R24・R26 [say ~r] ? r ' other", src([...M, "h2 : [say ~r] ? r ' other", "h2 m"]), "(: h2 (? [[say ~r]] (inst {say:L other:A} (' r other))))", null, { at: 1 }],
+	["R24・R26 [say ~r] ? r ' other", src([...M, "h2 : [say ~r] ? r ' other", "h2 m"]), "(: h2 (? [[say ~r]] (inst {say:L other:N} (' r other))))", null, { at: 1 }],
 	// List の要素の形は長さに依らない。
-	["R24 要素の List の長さは形に入らない", src(["f : [x ~xs] ? x", "f [[1 2] [3 4 5]]"]), "(: f (? [[x ~xs]] (inst [[A…]…] x)))", null, { at: 0 }],
+	["R24 要素の List の長さは形に入らない", src(["f : [x ~xs] ? x", "f [[1 2] [3 4 5]]"]), "(: f (? [[x ~xs]] (inst [[N…]…] x)))", null, { at: 0 }],
 	// R26：引いた物が関数なら L。点なしの [' k] も同じ（下の法則で両方の綴りを比べる）。
 	// 裸の名前の鍵は欄の名前で、名前として引かない（say はファイルの定義に無いが、information を出さない）。
 	["R26 m ' say は L", src([...M, "m ' say"]), "(' m say)", "L", { diagCount: 0 }],
@@ -509,25 +512,86 @@ const answerPasses = [
 	["R26 m ' 0（構造体に整数の鍵）は未知", src([...M, "m ' 0"]), "(' m 0)", "未知"],
 	["R26 vs ' say（List に名前の鍵）は未知", std("vs ' say"), "(' vs say)", "未知"],
 	["R26 m @ say は未知", src([...M, "m @ say"]), "(@ m say)", "未知"],
+	// 数と、数だけを括った `[3]` は、長さ1の List として受ける（R24、利用者 2026-10-19「それでいいはずだよ」）。
+	// 名前はその数、`~rest` は同じ要素の List。数でない中身の見えない A（裸の仮引数・`$` の番地・範囲）は持ち上げない。
+	["R24 f [3]（長さ1の括りは長さ1の List）", src(["f : [x ~xs] ? x 1", "f [3]"]), "(apply f [3])", "A"],
+	["R24 f [3] の実体", src(["f : [x ~xs] ? x 1", "f [3]"]), "(: f (? [[x ~xs]] (inst N (construct x 1))))", null, { at: 0 }],
+	["R24 f 3（数は長さ1の List）", src(["f : [x ~xs] ? x 1", "f 3"]), "(apply f 3)", "A"],
+	["R24 f -3（負の数の字面）", src(["f : [x ~xs] ? x 1", "f -3"]), "(apply f -3)", "A"],
+	["R24 f 1 + 2（数どうしの値の演算子は数）", src(["f : [x ~xs] ? x 1", "f 1 + 2"]), "(apply f (+ 1 2))", "A"],
+	// 値の印を当てた数（数の確かめ 2026-10-19 の F5）。前置 `-` は括り・名前・`_` の前でだけ印になる（`-3` は数の字面）。
+	["R24 f -y（名前の数に値の印）", src(["y : 3", X1, "f -y"]), X1_INST, null, { at: 1 }],
+	["R24 f -[3]（数だけの括りに値の印）", src([X1, "f -[3]"]), X1_INST, null, { at: 0 }],
+	["R24 f !!1（ビット反転）", src([X1, "f !!1"]), X1_INST, null, { at: 0 }],
+	["R24 f 3!（後置 !）", src([X1, "f 3!"]), X1_INST, null, { at: 0 }],
+	// 値の演算子の段ごとの代表（数の確かめ 2026-10-19 の F6）。段14 は上の `f 1 + 2`。
+	["R24 f 1 < 2（段13）", src([X1, "f 1 < 2"]), X1_INST, null, { at: 0 }],
+	["R24 f 2 * 3（段15）", src([X1, "f 2 * 3"]), X1_INST, null, { at: 0 }],
+	["R24 f 2 ^ 3（段16）", src([X1, "f 2 ^ 3"]), X1_INST, null, { at: 0 }],
+	["R24 f 1 << 2（段19）", src([X1, "f 1 << 2"]), X1_INST, null, { at: 0 }],
+	["R24 f 1 && 2（段22）", src([X1, "f 1 && 2"]), X1_INST, null, { at: 0 }],
+	// 文字は Int と同じ扱いの数（README の法則 B）、`0r`・`0b` は符号なしの数（UInt）。名前の定義の右辺が数なら、名前を
+	// 通して数（§2「名前を通して中身を見る」。数の確かめ 2026-10-19 の F8）。
+	["R24 f \\a（文字の字面）", src([X1, "f \\a"]), X1_INST, null, { at: 0 }],
+	["R24 f 0u0041（文字の字面）", src([X1, "f 0u0041"]), X1_INST, null, { at: 0 }],
+	["R24 f 0r18（符号なしの数の字面）", src([X1, "f 0r18"]), X1_INST, null, { at: 0 }],
+	["R24 f x0（x0 : 3）", src(["x0 : 3", X1, "f x0"]), X1_INST, null, { at: 1 }],
+	["R24 f x0（x0 : [3]）", src(["x0 : [3]", X1, "f x0"]), X1_INST, null, { at: 1 }],
+	["R24 f x0（x0 : -y）", src(["y : 3", "x0 : -y", X1, "f x0"]), X1_INST, null, { at: 2 }],
+	["R24 g 3 の再帰（数と、残りの List の2つの実体）", src(["g : [x ~xs] ? [g xs] x", "g 3"]), "(: g (? [[x ~xs]] (inst N (construct [g xs] x)) (inst [N…] (construct [g xs] x))))", null, { at: 0 }],
+	["R24 数の要素をもう一度括りで受ける", src(["p : [x ~xs] ? q x", "q : [y] ? y 5", "p [1 2]"]), "(apply p [1 2])", "A"],
+	// 数を `~rest` で受けた物は R24 の List なので、R26 で要素を引ける（数そのものから引く形は断る側、下の「答え」の断る行）。
+	["R26 数の ~rest から引く", src(["h : [~r] ? (r ' 0) 1", "h 5"]), "(apply h 5)", "A"],
 ];
 const answerRefused = [
 	// R24 の例4：List の要素に L が見えるので名前は未知。呼んだ行で G7、関数と形を名指しする（R25）。
 	["R24 g fs（h は未知）", src(["inc : x ? x + 1", "double : x ? x * 2", "fs : inc , double", "g : [h ~hs] ? h 5", "g fs"]), "G7", [["g", "[U…]"]]],
 	// 構造体に同じ名前の欄が無い。
-	["R24 構造体に無い名前", src([...M, "a2 : [nope] ? nope 21", "a2 m"]), "G7", [["a2", "{say:L other:A}"]]],
+	["R24 構造体に無い名前", src([...M, "a2 : [nope] ? nope 21", "a2 m"]), "G7", [["a2", "{say:L other:N}"]]],
 	// 呼ぶ行が素の関数の本体なら、その定義の行で断る。
-	["R25 素の関数の本体から呼んで門", src([...M, "a2 : [nope] ? nope 21", "p : v ? a2 m"]), "G7", [["a2", "{say:L other:A}"]]],
+	["R25 素の関数の本体から呼んで門", src([...M, "a2 : [nope] ? nope 21", "p : v ? a2 m"]), "G7", [["a2", "{say:L other:N}"]]],
 	// 実体の本体の中で別の括りの関数を呼んで門に当たったら、通った実体を呼んだ順に名指しする。
-	["R25 実体の中の実体で門", src(["p : [x ~xs] ? q x", "q : [y] ? y 5", "p [1 2]"]), "G7", [["p", "[A…]"], ["q", "A"]]],
+	// 要素が中身の見えない A（未定義の名前）なので、q の y は未知。要素が数なら通る（「数の要素をもう一度括りで受ける」）。
+	["R25 実体の中の実体で門", src(["p : [x ~xs] ? q x", "q : [y] ? y 5", "p [zz zz]"]), "G7", [["p", "[A…]"], ["q", "A"]]],
 	// k ≠ n の未知の節は、対に入れば G2(a)（§5 Q2）。
 	["Q2 a m m inc", src([...IO, "inc : x ? x + 1", "a m m inc"]), "G2(a)"],
 	// 逆適用と穴は素の関数だけ（括りの関数・分解した名前は通さない）。
 	["R12 m a（括りの関数の逆適用）", src([...IO, "m a"]), "G8"],
-	["R12 実体の中の 21 say（分解した名前の逆適用）", src([...M, "a3 : [say] ? 21 say", "a3 m"]), "G8", [["a3", "{say:L other:A}"]]],
+	["R12 実体の中の 21 say（分解した名前の逆適用）", src([...M, "a3 : [say] ? 21 say", "a3 m"]), "G8", [["a3", "{say:L other:N}"]]],
 	["R16 a _（括りの関数の穴）", src([...IO, "a _"]), "G5"],
-	// 長さ1の括り `[3]` はスカラと同型（§2 の括りの行）で、R24 の List（構築・`,`・2行以上・文字列）に入らない。中身の
-	// 見えない A なので、裸の名前は未知になる。
-	["R24 f [3]（長さ1の括りは中身の見えない A）", src(["f : [x ~xs] ? x 1", "f [3]"]), "G7", [["f", "A"]]],
+	// 数でない物は持ち上げない（R24 の「数」は字面と、それに値の印・値の演算子を当てた物だけ）。
+	["R26 数から名前の鍵で引く", src(["(5 ' say) 1"]), "G7"],
+	// 前置 `!` は数を保たない：`!_` は恒等射（R18）なので、`!(1 < 0)` は関数になりうる。数と読むと `h 5` を黙って構築と読む。
+	["R24 前置 ! を当てた物は数でない", src(["f : [h ~hs] ? h 5", "f !(1 < 0)"]), "G7", [["f", "A"]]],
+	["R24 前置 ! を当てた数の字面も数でない", src(["f : [h ~hs] ? h 5", "f !3"]), "G7", [["f", "A"]]],
+	["R24 裸の仮引数は数と決まらない", src(["f : [x ~xs] ? x 1", "k : v ? f v", "k 3"]), "G7", [["f", "A"]]],
+	["R24 $ の番地は数と決まらない", src(["inc : x ? x + 1", "f : [x ~xs] ? x 1", "f $inc"]), "G7", [["f", "A"]]],
+	["R24 範囲は数でない", src(["f : [x ~xs] ? x 1", "f 1 ~ 3"]), "G7", [["f", "A"]]],
+	// 番地の字面（`0x…`・`NxHHHH`）は数でない（数の確かめ 2026-10-19 の F1）。§2 の字面の行は番地を数と別に挙げ、型は `$` の
+	// 番地と同じ Address なので、`$` の番地と同じく中身の見えない A。
+	["R24 番地の字面は数でない", src([X1, "f 0x10"]), "G7", [["f", "A"]]],
+	["R24 幅つきの番地の字面", src([X1, "f 8x00FF"]), "G7", [["f", "A"]]],
+	["R24 番地だけの括り", src([X1, "f [0x10]"]), "G7", [["f", "A"]]],
+	["R24 番地の名前", src(["uart : 0x09000000", "g : [h ~hs] ? h 5", "g uart"]), "G7", [["g", "A"]]],
+	["R24 番地のずらし", src([X1, "f 0x10 + 1"]), "G7", [["f", "A"]]],
+	["R24 番地に値の印", src([X1, "f !!0x10"]), "G7", [["f", "A"]]],
+	["R26 番地から引く", src(["(0x10 ' 0) 1"]), "G7"],
+	// R26 は x の形を「R24 の構造体か List」と書くので、数そのものからは引かない（数の確かめ 2026-10-19 の F2。`[x]≅x` から
+	// 引けると読むかは決めていない）。
+	["R26 数から整数の鍵で引く", src(["(5 ' 0) 1"]), "G7"],
+	["R26 [' 0] で数から引く", src(["([' 0] 3) 1"]), "G7"],
+	["R26 数の名前から引く", src(["y : 3", "(y ' 0) 1"]), "G7"],
+	// 中身の見えない A に値の印・値の演算子を当てても数にならない。値の演算子は両辺が数のときだけ数（数の確かめ 2026-10-19
+	// の F5・F6）。
+	["R24 裸の仮引数に値の印", src([X1, "k : v ? f -v", "k 3"]), "G7", [["f", "A"]]],
+	["R24 器に値の印", src([X1, "f -[1 2]"]), "G7", [["f", "A"]]],
+	["R24 数と裸の仮引数の値の演算子", src([X1, "k : v ? f 1 + v", "k 3"]), "G7", [["f", "A"]]],
+	["R24 裸の仮引数と数の値の演算子", src([X1, "k : v ? f v + 1", "k 3"]), "G7", [["f", "A"]]],
+	["R24 $ の番地と数の値の演算子", src(["inc : x ? x + 1", X1, "f $inc + 1"]), "G7", [["f", "A"]]],
+	// 数と中身の見えない A は別の実体（鍵が N と A。数の確かめ 2026-10-19 の F7）。数の実体を先に作っても、適用の結果を渡した
+	// 行は数の答えに化けない。行の順を入れ替えても同じ所で断る。
+	["R24 f 3 の後の f (inc 3)", src(["inc : x ? x + 1", X1, "f 3", "f (inc 3)"]), "G7", [["f", "A"]]],
+	["R24 f (inc 3) の後の f 3", src(["inc : x ? x + 1", X1, "f (inc 3)", "f 3"]), "G7", [["f", "A"]]],
 	// 形を変えながら自分を呼び続ける再帰は、実体が有限に収まらないので断る。
 	["R24 形が深くなり続ける再帰", src(["f : [x ~xs] ? f [xs xs]", "f [1 2]"]), "G7"],
 	// R26 の外の鍵で引いた物は未知なので、並びでは G7。
@@ -592,7 +656,7 @@ law("同じ形で2か所から呼んでも実体は1つ", () => {
 	if (n3 !== 2) out.push(`k の実体の数 got: ${n3}  want: 2`);
 	return out;
 });
-// R24：同じ綴り {say:L other:A} でも、本体の根が違う関数を渡したら別の実体（鍵に関数の出どころが入る）。m3 の say は
+// R24：同じ綴り {say:L other:N} でも、本体の根が違う関数を渡したら別の実体（鍵に関数の出どころが入る）。m3 の say は
 // 本体の根が点なし（L）なので、`say 21` は未知になる。m の実体を先に作っても、m3 の答えが m の答えに化けない。
 law("本体の根が違う関数は別の実体", () => {
 	const M3 = ["m3 :", "\tsay : x ? [+ x]", "\tother : 1", ""];
@@ -622,7 +686,7 @@ law("呼ぶ行を定義の前に置いても後に置いても、全部の木が
 	const out = [];
 	if (JSON.stringify(after.trees) !== JSON.stringify(before.trees)) out.push(`後: ${after.trees.join(" | ")}`, `前: ${before.trees.join(" | ")}`);
 	if (JSON.stringify(after.diag) !== JSON.stringify(before.diag)) out.push(`診断 後: ${after.diag}  前: ${before.diag}`);
-	if (!after.trees.some((t) => t.includes("(inst {say:L other:A} (apply say zz))"))) out.push(`a の実体が無い: ${after.trees.join(" | ")}`);
+	if (!after.trees.some((t) => t.includes("(inst {say:L other:N} (apply say zz))"))) out.push(`a の実体が無い: ${after.trees.join(" | ")}`);
 	return out;
 });
 // R25：呼ばれるまでは defer、呼ぶ行を足すと同じ定義の行が inst になる（定義の行そのものは断らない）。
@@ -631,7 +695,7 @@ law("呼ぶ行を足すと defer が inst になる", () => {
 	const called = show(resolve(src([...M, "a : [say] ? say 21", "a m"])).trees[1]);
 	const out = [];
 	if (alone !== "(: a (? [[say]] (defer {say 21})))") out.push(`呼ばない got: ${alone}`);
-	if (called !== "(: a (? [[say]] (inst {say:L other:A} (apply say 21))))") out.push(`呼ぶ got: ${called}`);
+	if (called !== "(: a (? [[say]] (inst {say:L other:N} (apply say 21))))") out.push(`呼ぶ got: ${called}`);
 	return out;
 });
 
@@ -670,10 +734,13 @@ const checkPasses = [
 		null,
 		{ at: 2 },
 	],
-	["守り 同じ綴りの関数を呼んだ方は inst", src([...M, "a : [say] ? say 21", "b : [say] ? say 21", "a m"]), "(: a (? [[say]] (inst {say:L other:A} (apply say 21))))", null, { at: 1 }],
+	["守り 同じ綴りの関数を呼んだ方は inst", src([...M, "a : [say] ? say 21", "b : [say] ? say 21", "a m"]), "(: a (? [[say]] (inst {say:L other:N} (apply say 21))))", null, { at: 1 }],
 	["直した 括った ? を呼んでも、同じ綴りの名前の定義は defer", src([...M, "a : [say] ? say 21", "v : [[say] ? say 21] m"]), "(: a (? [[say]] (defer {say 21})))", null, { at: 1 }],
-	// 穴（F4 (a)）：中身の見えない A（数の字面）の `~rest` は A。
-	["穴 ro 5 の ~rest は A", src(["ro : [~r] ? r 1", "ro 5"]), "(: ro (? [[~r]] (inst A (construct r 1))))", null, { at: 0 }],
+	// 穴（F4 (a)）：中身の見えない A の `~rest` は A。数の字面は 2026-10-19 から R24 の数（`~rest` は数の List）になった
+	// ので、中身の見えない A は `$` の番地で見る（数の確かめ 2026-10-19 の F3。`ro 5` だけでは、この枝を壊しても落ちない）。
+	["穴 ro $inc の ~rest は A", src(["inc : x ? x + 1", "ro : [~r] ? r 1", "ro $inc"]), "(: ro (? [[~r]] (inst A (construct r 1))))", null, { at: 1 }],
+	["穴 ro $inc", src(["inc : x ? x + 1", "ro : [~r] ? r 1", "ro $inc"]), "(apply ro $inc)", "A"],
+	["穴 ro 5 の ~rest は数の List",src(["ro : [~r] ? r 1", "ro 5"]), "(: ro (? [[~r]] (inst N (construct r 1))))", null, { at: 0 }],
 	["穴 ro 5", src(["ro : [~r] ? r 1", "ro 5"]), "(apply ro 5)", "A"],
 	// 穴（F5 (e)）：`[' 0]` に2項は、`x ' k` の形でないので未知の根。
 	["穴 [' 0] vs 5（k = 2 は未知）", src(["vs : 1 , 2", "[' 0] vs 5"]), "(apply [' 0] (construct vs 5))", "未知"],
@@ -690,8 +757,9 @@ const checkRefusedRows = [
 	["直した 同じ名前の欄の ~rest を撒く", src(["inc : x ? x + 1", "q3 :", "\tk : inc", "\tk : 5", "", SPREAD_REST, "f q3"]), "G7", [["f", "A(U)"]]],
 	["直した 欄の混ざった括りの ~rest を撒く", src(["inc : x ? x + 1", "g : [~r] ? 5 r~", "g [a : inc", "5]"]), "G7", [["g", "A(U)"]]],
 	["直した 撒く項を含む並びの ~rest を撒く", src(["inc : x ? x + 1", "vs : 1 2", "fs2 : inc , vs~", "g : [x ~xs] ? 5 xs~", "g fs2"]), "G7", [["g", "A(U)"]]],
-	// 数の字面（A）の実体を先に作っても、中身に関数の見える器は別の実体（鍵が A(U)）。
-	["直した f 5 の後の f q", src([...MIX, SPREAD_REST, "f 5", "f q"]), "G7", [["f", "A(U)"]]],
+	// 中身の見えない A（`$inc`）の実体を先に作っても、中身に関数の見える器は別の実体（鍵が A(U)）。数の字面は 2026-10-19
+	// から数（鍵が N）なので、`f 5` ではこの鍵の分け方を踏まない（数の確かめ 2026-10-19 の F4）。
+	["直した f $inc の後の f q", src([...MIX, SPREAD_REST, "f $inc", "f q"]), "G7", [["f", "A(U)"]]],
 	// 直した（F3）：1項の `:` の左は解かない（P3）ので、そこで括りの関数を呼ぶと実体が作れない。defer にせず断る。
 	["直した 1項の条件の中で括りの関数を呼ぶ", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "u : x ?", "\t(t [1 2]) : 1", "\t2", ""]), "G7"],
 	["直した 1項の条件の中で括りの関数の別名を呼ぶ", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "p : t", "u : x ?", "\t(p [1 2]) : 1", "\t2", ""]), "G7"],
@@ -701,19 +769,19 @@ const checkRefusedRows = [
 	["直した 括りの既定値の中で括りの関数を呼ぶ", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "o : [x : t [1 2]] ? 5"]), "G7"],
 	["直した 仮引数のブロックの既定値の中で括りの関数を呼ぶ", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "o :", "\t\tx : t [1 2]", "\t? 5"]), "G7"],
 	// 2項以上の条件は今までどおり解くので、実体の本体の門（G1）で名指しする。
-	["守り 2項の条件は実体を作る", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "u : x ?", "\tt [1 2] : 1", "\t2", ""]), "G1", [["t", "[A…]"]]],
+	["守り 2項の条件は実体を作る", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "u : x ?", "\tt [1 2] : 1", "\t2", ""]), "G1", [["t", "[N…]"]]],
 	// 直した（F6）：2行以上の値の字下げのブロックは、R24 の List（括りだけを挙げる）に入らないので中身の見えない A。
 	["直した 2行の値の字下げのブロックは List でない", src(["sh : [x ~xs] ? x 1", "w :", "\t1", "\t2", "", "sh w"]), "G7", [["sh", "A"]]],
 	// 直した（反証 F1）：無名の素の関数の本体の根が、外の関数の仮置きの上で決まり、欄として別の実体へ渡っても、仮置きが
 	// 外れたら直る。行の順（kk と hh1）に依らず hh1 の行で G7。
 	["直した 仮置きの上の無名の関数（kk が先）", src([...AF1, AF1_KK, AF1_HH1]), "G7"],
 	["守り 仮置きの上の無名の関数（hh1 が先。直す前も G7）", src([...AF1, AF1_HH1, AF1_KK]), "G7"],
-	["直した 仮置きの上の無名の関数（f の中）", src(["g : [say] ? say 1", "f : [x ~xs] ? [z ? (g [say : [y ? f [1 2]]]) z]", "f [1 2]"]), "G7", [["f", "[A…]"]]],
+	["直した 仮置きの上の無名の関数（f の中）", src(["g : [say] ? say 1", "f : [x ~xs] ? [z ? (g [say : [y ? f [1 2]]]) z]", "f [1 2]"]), "G7", [["f", "[N…]"]]],
 	// 直した（反証 F2）：断る行で使った関数を名指しする（同じ綴りの別の関数が先に実体を作っていても）。
-	["直した 同じ綴りの関数の名指し", src([...M, "a2 : [nope] ? nope 21", "b2 : [nope] ? nope 21", "b2 m", "v : a2 m"]), "G7", [["b2", "{say:L other:A}"]]],
+	["直した 同じ綴りの関数の名指し", src([...M, "a2 : [nope] ? nope 21", "b2 : [nope] ? nope 21", "b2 m", "v : a2 m"]), "G7", [["b2", "{say:L other:N}"]]],
 	// 穴（F4 (b)〜(d)）：構造体の `~rest` に受けた欄は残らない／裸の仮引数は A／行の混ざったブロックは構造体でない。
-	["穴 [say ~r] ? r ' say", src([...M, "b : [say ~r] ? (r ' say) 21", "b m"]), "G7", [["b", "{say:L other:A}"]]],
-	["穴 裸の仮引数から引く", src([...M, "mp : f [x ~y] ? (f ' say) 1", "mp m [1 2]"]), "G7", [["mp", "A [A…]"]]],
+	["穴 [say ~r] ? r ' say", src([...M, "b : [say ~r] ? (r ' say) 21", "b m"]), "G7", [["b", "{say:L other:N}"]]],
+	["穴 裸の仮引数から引く", src([...M, "mp : f [x ~y] ? (f ' say) 1", "mp m [1 2]"]), "G7", [["mp", "A [N…]"]]],
 	["穴 行の混ざったブロックは構造体でない", src(["inc : x ? x + 1", "sa : [say] ? say 21", "w :", "\tsay : inc", "\t5", "", "sa w"]), "G7", [["sa", "A(U)"]]],
 	// 穴（F5 (f)〜(h)）：引いた欄の中身の関数を撒く／入れ子の分解の名前は未知／形の違う要素の List の要素は中身の見えない A。
 	["穴 引いた欄の中身の関数を撒く", src(["inc : x ? x + 1", "w :", "\tfs : inc , inc", "", "[w ' fs]~ 1"]), "G7"],

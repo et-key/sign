@@ -30,6 +30,8 @@
  *
  * **形の綴り**（`inst` の形。R24 の「渡された物の生まれ」を書く）。
  * - 中身の見えない A は `A`、関数は `L`、未知は `U`。
+ * - 数（数・文字の字面と、それに値の印や値の演算子を当てた物。長さ1の List と同型）は `N`。数の List は `[N…]`。
+ *   番地の字面（`0x…`・`NxHHHH`）は数に入れず、中身の見えない A（SCALAR の注）。
  * - 構造体とも List とも読めないが中身の見える器（行の混ざった括り・同じ名前の欄が2つある構造体など）で、中身に
  *   関数か未知が見える物は `A(U)`。名前で受ければ未知、`~rest` で受ければ中身の見えたまま（撒けば §3.3 の手順1 の
  *   G7）なので、`A` とは別の実体にする。
@@ -618,7 +620,8 @@ function paramInChain(scope, name) {
 //     {type:'other'}  アリティの分からない関数（既定値のある関数など）
 //   idKey：関数の出どころ（書いた `?` の綴りと、定義した所の範囲の鍵）。実体の鍵（fnKey）に使う。
 //   spread：後置 `~` で撒く項。elements：中身の見える器の要素の種類（§2「中身が見える器」）。
-//   shape（A のとき）：中身の形（R24）。{s:'struct', fields:[{name, desc}]} か {s:'list', elem}。無ければ中身の見えない A。
+//   shape（A のとき）：中身の形（R24）。{s:'struct', fields:[{name, desc}]}・{s:'list', elem}・{s:'scalar'}（数）。無ければ
+//     中身の見えない A。
 //     shape のある desc は、いつも elements も持つ。elements は撒く項の門（§3.3 の手順1）が見る「中身に L か未知が
 //     見えるか」で、shape から読める答えと食い違わないようにする（elementsOfShape・deepKind）。
 
@@ -628,7 +631,8 @@ const U = () => ({ k: "U" });
 // ---- 形（R24・R26） ----
 //
 // 形は「渡された物の生まれ」を書く。構造体は、全部の行が `名前 : 値` の括りか字下げのブロック（rowsShape）。List は、
-// 構築の並び・`,` の並び・2行以上の値の括り・文字列の字面。それ以外は中身の見えない A（shape なし）。
+// 構築の並び・`,` の並び・2行以上の値の括り・文字列の字面。数（SCALAR）は長さ1の List と同型。それ以外は中身の見えない
+// A（shape なし）。
 // List の要素の desc は長さに依らない（mergeElems）。長さを形に入れると、再帰で長さごとに実体ができ、`f [1 2 3]` と
 // `f [1 2]` が別の実体になる（R24「同じ形なら同じ実体」に反する）。
 
@@ -640,12 +644,30 @@ function deepKind(d) {
   return "A";
 }
 function elementsOfShape(shape) {
+  if (shape.s === "scalar") return ["A"];
   if (shape.s === "struct") return shape.fields.map((f) => deepKind(f.desc));
   return shape.elem ? [deepKind(shape.elem)] : [];
 }
 function withShape(shape) {
   return { k: "A", shape, elements: elementsOfShape(shape) };
 }
+
+// 数（R24）：数・文字の字面と、それに値の印（`-`・`!!`・後置 `!`）や値の演算子（段13〜16・19〜22）を当てた物。前置 `!` は
+// 入れない（`!_` は恒等射なので、`!x` は `_` か関数で、数にならない。classify の値の印の枝）。
+// `[x]≅x` なので長さ1の List と同型で、括りで受ければ名前はその数、`~rest` は同じ要素の List（利用者 2026-10-19
+// 「数や `[3]` を `[x ~xs]` に渡したら、長さ1の List（x は 3、xs は空）として分解していい？」に「それでいいはずだよ」）。
+// 中身の見えない A（裸の仮引数・適用の結果・`$` の番地）は数と決まっていないので、ここに入れない：器かもしれず、
+// 器なら要素に関数が見えるかもしれない。段12（`~` の範囲）は List を作るので数にしない。
+// 番地の字面（`0x…`・`NxHHHH`）も入れない。R24 の数は「数・文字の字面」で、§2 の字面の行は番地を数と別に挙げ、
+// 型でも番地の字面は `$` が返す値と同じ Address（type_system.md §2 の Atom 内部型）なので、指す先が器かもしれない
+// のは `$` の番地と同じである。数と決めると、番地を受けた名前を黙って値と読む（数の確かめ 2026-10-19 の F1）。
+// `0r`・`0b` は符号なしの数（UInt）、`0u` は文字（Char）なので数に入れる。
+const SCALAR = { s: "scalar" };
+const scalarDesc = () => ({ k: "A", shape: SCALAR, elements: ["A"] });
+const isScalar = (d) => !!d && d.k === "A" && !d.spread && !!d.shape && d.shape.s === "scalar";
+const SCALAR_INFIX_STAGES = new Set([13, 14, 15, 16, 19, 20, 21, 22]);
+// 番地の字面（sign.pegjs の address と同じ形）。
+const ADDRESS_LIT = /^[0-9]+x[0-9a-fA-F]+$/;
 
 // List の要素の desc。要素の形が全部同じならそれ、全部 A だが形が違えば中身の見えない A、中身に L か未知が見え
 // れば U（R24「要素に L が見えたら、名前は未知」。既存の elements が深く見て U にするので、それと揃える）。
@@ -738,6 +760,9 @@ function pickDesc(desc, key) {
     return f ? f.desc : U();
   }
   if (sh.s === "list" && key.int !== undefined) return sh.elem && sh.elem.k === "A" ? sh.elem : U();
+  // 数（`5 ' 0`・`[' 0] 3`）からは引かない。R26 の文面は x の形を「R24 の構造体か List」と書き、R24 は数をそのどちらとも
+  // 別の行に置く（数を長さ1の List として読むのは、括りで受けるときの文面）。`[x]≅x` から引けると読むかは決めていない
+  // ので、未知にする（断る側、数の確かめ 2026-10-19 の F2）。数を `~rest` で受けた物は R24 の List なので、そこからは引ける。
   return U();
 }
 
@@ -823,7 +848,8 @@ function internShape(sh) {
   const memo = internByShape.get(sh);
   if (memo !== undefined) return memo;
   let id;
-  if (sh.s === "struct") {
+  if (sh.s === "scalar") id = internLeaf("N");
+  else if (sh.s === "struct") {
     const fields = sh.fields.map((f) => [f.name, internDesc(f.desc)]);
     id = internText(`{${fields.map(([n, c]) => `${n}:#${c}`).join(" ")}}`, { s: "struct", fields });
   } else {
@@ -873,6 +899,7 @@ function descText(d, max = SHAPE_TEXT_MAX) {
     if (x.spread) return put("A~");
     if (!x.shape) return put(deepKind(x) === "A" ? "A" : "A(U)");
     const sh = x.shape;
+    if (sh.s === "scalar") return put("N");
     if (sh.s === "struct") {
       put("{");
       sh.fields.forEach((f, i) => {
@@ -1149,11 +1176,18 @@ function bindBracket(p, d, descs) {
     // 中身の見えない A：裸の名前は未知、`~rest` は A。
     // 形では構造体とも List とも読めないが §2 では中身の見える器（行の混ざった括り・同じ名前の欄が2つある構造体・欄の
     // 右辺が撒く項の構造体・撒く項を含む並び・2行以上の値の字下げのブロック）は、`~rest` に中身（elements）を持ち
-    // 越す。R24 の表の「中身の見えない A」は数の字面・裸の仮引数・適用の結果のように中身が本当に見えない物の行で、
-    // ここで A() にすると、関数の見える中身を `r~` で撒いても門（§3.3 の手順1）を素通りした（確かめ 2026-10-19 の F2）。
+    // 越す。R24 の表の「中身の見えない A」は裸の仮引数・`$` の番地と番地の字面・範囲・適用の結果のように中身が本当に
+    // 見えない物の行で（数の字面は 2026-10-19 に R24 の数の行へ移した）、ここで A() にすると、関数の見える中身を
+    // `r~` で撒いても門（§3.3 の手順1）を素通りした（確かめ 2026-10-19 の F2）。
     // 何が残りに入るかは決まらないので、元の器の中身を全部持ち越す（断る側）。
     setNames(() => U());
     if (p.rest) descs.set(p.rest, d.elements ? { k: "A", elements: d.elements } : A());
+    return;
+  }
+  if (sh.s === "scalar") {
+    // 数：長さ1の List として受ける（SCALAR の注）。名前はその数、`~rest` は同じ要素の List（形は長さに依らない）。
+    setNames(() => scalarDesc());
+    if (p.rest) descs.set(p.rest, withShape({ s: "list", elem: scalarDesc() }));
     return;
   }
   if (sh.s === "struct") {
@@ -1355,11 +1389,12 @@ function classify(term, ctx) {
   if (pre.length === 0 && post.length === 0) {
     switch (core.c) {
       case "lit":
-        // 文字列の字面は List（R24。String ≅ List(Char)）。要素は文字で、中身の見えない A。
+        // 文字列の字面は List（R24。String ≅ List(Char)）。要素は文字で、文字は Int と同じ扱いの数（README の法則 B）。
         if (core.text.length >= 2 && core.text[0] === "`" && core.text[core.text.length - 1] === "`") {
-          return plain(withShape({ s: "list", elem: core.text.length > 2 ? A() : null }));
+          return plain(withShape({ s: "list", elem: core.text.length > 2 ? scalarDesc() : null }));
         }
-        return plain(A());
+        // 番地の字面は数でない（SCALAR の注）ので中身の見えない A。ほかは数・文字の字面。
+        return plain(ADDRESS_LIT.test(core.text) ? A() : scalarDesc());
       case "unit":
         return { cat: "unit", desc: U(), view };
       case "name":
@@ -1403,7 +1438,11 @@ function classify(term, ctx) {
   if (pre.every((p) => VALUE_PREFIX.has(p)) && post.every((p) => p === "!")) {
     if (core.c === "unit") return plain(U());
     const inner = classify({ type: "atom", pre: [], core, post: [] }, ctx);
-    return plain(inner.cat === "plain" && inner.desc.k === "A" && !inner.desc.spread ? A() : U());
+    if (!(inner.cat === "plain" && inner.desc.k === "A" && !inner.desc.spread)) return plain(U());
+    // 数に値の印を当てても数（SCALAR の注）。ただし前置 `!` は外す：`!_` は恒等射（R18）で、`_` でない物に当てると
+    // `_` になる。だから `!x` は数にならず、x が `_` になる物（`1 < 0`・`/ 0`）なら関数になる。数と読むと、
+    // `f !(1 < 0)` の実体で `h 5` を黙って構築と読む。
+    return plain(isScalar(inner.desc) && !pre.includes("!") ? scalarDesc() : A());
   }
   // 後置 `@`（取り込み）・前置 `#`・表に無い印の組み合わせ（`@f~`・`$x@` など）は未知（§2、G7）。
   touchCore(core, ctx);
@@ -1459,7 +1498,10 @@ function classifyInfix(term, ctx) {
     throw gate("G5", `値の演算子 \`${term.sym}\` の被演算子に字面の \`_\` があります（\`${writeTerm(term)}\`）。\`_ + 1\` の読みは決まっていません（§5 Q7）。`);
   }
   const isA = (x) => x && x.cat === "plain" && x.desc.k === "A" && !x.desc.spread;
-  return { cat: "plain", desc: isA(l) && isA(r) ? A() : U(), view };
+  if (!(isA(l) && isA(r))) return { cat: "plain", desc: U(), view };
+  // 数どうしの値の演算子の結果は数（SCALAR の注）。段12（範囲）は List を作るので入れない。
+  const scalar = SCALAR_INFIX_STAGES.has(term.stage) && isScalar(l.desc) && isScalar(r.desc);
+  return { cat: "plain", desc: scalar ? scalarDesc() : A(), view };
 }
 
 // 後置 `~` の項（§2）。核が「中身が見えて要素が全部 A の器」か「裸の仮引数」か「中身の見えない物」なら撒く印つき
