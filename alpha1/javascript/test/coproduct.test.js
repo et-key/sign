@@ -99,7 +99,7 @@ const passes = [
 	["say 5（say は未定義）", std("say 5"), "(construct say 5)", "A", { diag: "say" }],
 	["[x ? x + 1] 5", std("[x ? x + 1] 5"), "(apply [x ? x + 1] 5)", "A"],
 	["map $[* 2] 1 2 3 4 5（未知の根）", std("map $[* 2] 1 2 3 4 5"), "(apply map (construct $[* 2] 1 2 3 4 5))", "未知"],
-	["n 1 2 3（未知の根）", std("n 1 2 3"), "(apply n (construct 1 2 3))", "未知"],
+	["n 1 2 3（括り1つの関数は並び全体を受ける。R24、2026-10-19）", std("n 1 2 3"), "(apply n (construct 1 2 3))", "A"],
 	["adder 5（未知の根）", std("adder 5"), "(apply adder 5)", "未知"],
 	["f : x y ? x + y（解くのは x + y だけ）", "f : x y ? x + y", "(: f (? [x y] (+ x y)))", null],
 ];
@@ -456,9 +456,25 @@ const answerPasses = [
 	// R24 の例3：括りは1つで1と数える（function_guide.md「参照の取り方」）。
 	["R24 pair [1 2 3] [10 20]", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1 2 3] [10 20]"]), "(apply pair (construct [1 2 3] [10 20]))", "A"],
 	["R24 pair の実体（形は仮引数ごとに並べる）", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1 2 3] [10 20]"]), "(: pair (? [[a ~as] [b ~bs]] (inst [N…] [N…] (+ a b))))", null, { at: 0 }],
-	// k ≠ n は未知（§5 Q2）。根なら通り、実体は作らない（定義の行は defer のまま）。
-	["Q2 a m m（k ≠ n は未知の根）", src([...IO, "a m m"]), "(apply a (construct m m))", "未知"],
-	["Q2 a m m では実体を作らない", src([...IO, "a m m"]), "(: a (? [[say]] (defer {say 21})))", null, { at: 1 }],
+	// 仮引数が2つ以上の括りの関数の k ≠ n は、まだ未知の根（§5 Q2）。根なら通り、実体は作らない（定義の行は defer の
+	// まま）。括りが2つの関数と、裸と括りの混ざった関数（`h : v [x ~xs]` も仮引数は2つ）の両方で見る。
+	["Q2 pair [1] [2] [3]（k ≠ n は未知の根）", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1] [2] [3]"]), "(apply pair (construct [1] [2] [3]))", "未知"],
+	["Q2 pair [1] [2] [3] では実体を作らない", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1] [2] [3]"]), "(: pair (? [[a ~as] [b ~bs]] (defer {a + b})))", null, { at: 0 }],
+	["Q2 h 1 2 3（裸と括りの混ざった関数の k ≠ n は未知の根）", src(["h : v [x ~xs] ? v 1", "h 1 2 3"]), "(apply h (construct 1 2 3))", "未知"],
+	["Q2 h 1 2 3 では実体を作らない", src(["h : v [x ~xs] ? v 1", "h 1 2 3"]), "(: h (? [v [x ~xs]] (defer {v 1})))", null, { at: 0 }],
+	["Q2 map $[* 2] 1 2 3 4 5 では実体を作らない（§6.3 の map）", src(["map : f [x ~y] ? x", "map $[* 2] 1 2 3 4 5"]), "(: map (? [f [x ~y]] (defer {x})))", null, { at: 0 }],
+	// 括りが1つの関数は、並び全体を1つの List として受ける（R24、利用者 2026-10-19「それでいいよ」）。
+	["R24 n 1 2 3 は n [1 2 3] と同じ実体", src(["n : [~x] ? x", "n 1 2 3", "n [1 2 3]"]), "(: n (? [[~x]] (inst [N…] x)))", null, { at: 0 }],
+	["R24 f 1 2 3（x は頭の数）", src(["f : [x ~xs] ? x 1", "f 1 2 3"]), "(: f (? [[x ~xs]] (inst [N…] (construct x 1))))", null, { at: 0 }],
+	["R24 Zipper の f 1 2 3（pattern_guide）", src(["f : [~a] ? a ' 0 + a ' 2 + a ' 3", "f 1 2 3"]), "(apply f (construct 1 2 3))", "A"],
+	["R24 f 1 2 3 inc（並び全体を受けた節は隣と結べる）", src(["inc : x ? x + 1", "f : [x ~xs] ? x 1", "f 1 2 3 inc"]), "(apply inc (apply f (construct 1 2 3)) ·rev)", "A"],
+	// 並び全体を受けても、実体の本体の根が A でなければ適用の節は未知（R24。k = n と同じ読みで、G12(b) にしない）。
+	["R24 gi 1 2（実体の本体の根が A でなければ未知の根）", src(["gi : [x ~xs] ? inc", "inc : y ? y + 1", "gi 1 2"]), "(apply gi (construct 1 2))", "未知"],
+	["R24 gi 1 2 の実体（本体の根は L）", src(["gi : [x ~xs] ? inc", "inc : y ? y + 1", "gi 1 2"]), "(: gi (? [[x ~xs]] (inst [N…] inc)))", null, { at: 0 }],
+	// 撒く項を含む並びは k を数えない（R24）ので、括り1つの関数でも並び全体を受けず、未知の根で実体を作らない。括った
+	// `n [vs~ 1]` は撒く項を含む器を1つ渡す形で、別の読み（R24 の「構造体とも List とも読めないが中身の見える器」）。
+	["R24 n vs~ 1（撒く項を含む並びは未知の根）", src(["n : [~x] ? x", "vs : 1 , 2", "n vs~ 1"]), "(apply n (construct vs~ 1))", "未知"],
+	["R24 n 4 vs~ 5 では実体を作らない", src(["n : [~x] ? x", "vs : 1 , 2", "n 4 vs~ 5"]), "(: n (? [[~x]] (defer {x})))", null, { at: 0 }],
 	// R25：呼ばれない括りの関数は、本体を書いたまま残して断らない。読まないので、本体の未定義の名前も information を出さない。
 	// §6.3 の「hello : [say] ? say Hello World の本体」「f : [x ~xs] ? [f xs] x の本体」（G7）をここへ移した。
 	["R25 hello : [say] ? say Hello World だけ", "hello : [say] ? say Hello World", "(: hello (? [[say]] (defer {say Hello World})))", null, { diagCount: 0 }],
@@ -500,7 +516,7 @@ const answerPasses = [
 		null,
 		{ at: 1 },
 	],
-	// 標準の定義の n（`n : [~x] ? x`）は、k = n なら実体を作る（§6.3 の n 1 2 3 は k ≠ n で未知のまま）。
+	// 標準の定義の n（`n : [~x] ? x`）は、k = n なら実体を作る（§6.3 の n 1 2 3 も、括りが1つなので並び全体を受けて A）。
 	["R24 n vs（標準の定義の n、k = n）", std("n vs"), "(apply n vs)", "A"],
 	// 構造体の ~rest は受けなかった欄の構造体。そこから欄を引ける（R26）。
 	["R24・R26 [say ~r] ? r ' other", src([...M, "h2 : [say ~r] ? r ' other", "h2 m"]), "(: h2 (? [[say ~r]] (inst {say:L other:N} (' r other))))", null, { at: 1 }],
@@ -566,8 +582,17 @@ const answerRefused = [
 	// 実体の本体の中で別の括りの関数を呼んで門に当たったら、通った実体を呼んだ順に名指しする。
 	// 要素が中身の見えない A（未定義の名前）なので、q の y は未知。要素が数なら通る（「数の要素をもう一度括りで受ける」）。
 	["R25 実体の中の実体で門", src(["p : [x ~xs] ? q x", "q : [y] ? y 5", "p [zz zz]"]), "G7", [["p", "[A…]"], ["q", "A"]]],
-	// k ≠ n の未知の節は、対に入れば G2(a)（§5 Q2）。
-	["Q2 a m m inc", src([...IO, "inc : x ? x + 1", "a m m inc"]), "G2(a)"],
+	// 括り1つの関数は並び全体を List として受ける（R24）。要素に L が見えるので say は未知で、呼んだ行で G7。
+	["R24 a m m（関数の見える構造体の List を並びで渡す）", src([...IO, "a m m"]), "G7", [["a", "[U…]"]]],
+	// 形の混ざった並びの要素は中身の見えない A（`p [1 $inc]` と同じ。R24 の断る側）なので、q の y は未知。
+	["R24 p 1 $inc（形の混ざった並び）", src(["inc : x ? x + 1", "p : [x ~xs] ? q x", "q : [y] ? y 5", "p 1 $inc"]), "G7", [["p", "[A…]"], ["q", "A"]]],
+	// 仮引数が2つ以上の括りの関数の k ≠ n の未知の節は、対に入れば G2(a)（§5 Q2）。
+	["Q2 pair [1] [2] [3] inc（k ≠ n の未知の節は対に入れない）", src(["inc : x ? x + 1", "pair : [a ~as] [b ~bs] ? a + b", "pair [1] [2] [3] inc"]), "G2(a)"],
+	["Q2 h 1 2 3 inc（裸と括りの混ざった関数）", src(["inc : x ? x + 1", "h : v [x ~xs] ? v 1", "h 1 2 3 inc"]), "G2(a)"],
+	// 並び全体を受けた未知の節も、対に入れば G2(a)（並び全体が実引数1つなので k > n にならず、G12 ではない）。撒く項を
+	// 含む並びの未知の節も同じ。
+	["R24 gi 1 2 inc（並び全体を受けた未知の節）", src(["gi : [x ~xs] ? inc", "inc : y ? y + 1", "gi 1 2 inc"]), "G2(a)"],
+	["R24 n vs~ 1 inc（撒く項を含む並びの未知の節）", src(["inc : y ? y + 1", "n : [~x] ? x", "vs : 1 , 2", "n vs~ 1 inc"]), "G2(a)"],
 	// 逆適用と穴は素の関数だけ（括りの関数・分解した名前は通さない）。
 	["R12 m a（括りの関数の逆適用）", src([...IO, "m a"]), "G8"],
 	["R12 実体の中の 21 say（分解した名前の逆適用）", src([...M, "a3 : [say] ? 21 say", "a3 m"]), "G8", [["a3", "{say:L other:N}"]]],
@@ -741,6 +766,42 @@ law("値の行の字下げのブロックと括りは同じ読み", () => {
 		const got = k.startsWith("断り") ? k.split(" ")[2] : k.split(" : ").pop();
 		if (got !== want) out.push(`${bracket.join(" ⏎ ")} の括り got: ${got}  want: ${want}`);
 	}
+	return out;
+});
+// R24：仮引数が括り1つだけの関数は、並び全体を1つの List として受ける（`f 1 2 3` は `f [1 2 3]` と同じ。利用者
+// 2026-10-19「それでいいよ」）。値の並び（項が全部 A）を並びで渡しても括って渡しても、呼ぶ行の木のほかは全部の木と
+// 種類と診断が同じで、呼ぶ行の種類も同じ。断るなら門と名指しも同じ。並びには形の混ざった物（`1 [2 3]`・`1 $inc` の
+// 要素は中身の見えない A）と、4項以上の物も入れる。撒く項（k を数えない）と `_` は R24 の文で読みが違うので入れない
+// （上の「答え」の `n vs~ 1` の行）。関数で始まる並び（`f inc 1`）は合成になるので、この法則の外。
+law("括り1つの関数に並びで渡しても括って渡しても同じ読み", () => {
+	const DEFS = ["inc : x ? x + 1", ...M, "pt :", "\tk : 1", "\tother : 2", ""];
+	const FNS = [["f : [x ~xs] ? x 1"], ["n : [~x] ? x"], ["p : [x ~xs] ? q x", "q : [y] ? y 5"], [REC], ["s : [h ~hs] ? (h ' 0) 1"]];
+	const ARGS = ["1 2", "1 2 3 4", "`ab` `cd`", "\\a \\b", "[1 2] [3 4]", "1 [2 3]", "1 $inc", "$inc $inc", "m m", "pt pt", "zz zz", "(inc 1) 2"];
+	const look = (s) => {
+		try {
+			const r = resolve(s);
+			const ts = r.trees.map((t) => `${show(t)} : ${kindOf(t)}`);
+			ts[ts.length - 1] = `呼ぶ行 : ${kindOf(r.trees[r.trees.length - 1])}`;
+			return `${ts.join(" | ")} || ${r.diagnostics.map((d) => `${d.reason}/${d.name}`).sort().join(" ")}`;
+		} catch (e) {
+			return `断り ${e.reason} ${e.gate || ""} ${JSON.stringify((e.instances || []).map((i) => [i.fn, i.shape]))}`;
+		}
+	};
+	const out = [];
+	let nPass = 0;
+	let nRefused = 0;
+	for (const fn of FNS) {
+		const name = fn[0].split(" ")[0];
+		for (const a of ARGS) {
+			const seq = look(src([...DEFS, ...fn, `${name} ${a}`]));
+			const br = look(src([...DEFS, ...fn, `${name} [${a}]`]));
+			if (seq !== br) out.push(`${name} ${a}`, `  並び: ${seq}`, `  括り: ${br}`);
+			if (br.startsWith("断り")) nRefused++;
+			else nPass++;
+		}
+	}
+	// 比べる組が全部同じ理由で断られていたら、法則は何も見ていない。
+	if (!nPass || !nRefused) out.push(`通る組 ${nPass}・断る組 ${nRefused}（どちらも1つ以上のはず）`);
 	return out;
 });
 

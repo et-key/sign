@@ -611,7 +611,8 @@ function paramInChain(scope, name) {
 // desc：{k:'A'|'L'|'U', fn?, spread?, elements?, shape?}
 //   fn（L のとき）：
 //     {type:'plain', origin:'plain'|'partial'|'hole', n, getBodyRoot, idKey}  素の関数・部分適用・穴（§3.4）
-//     {type:'pattern', n, idKey, label, op, scopeKey, instantiate}  括りの関数（R24）。n は仮引数の数（括りは1つで1）。
+//     {type:'pattern', n, idKey, label, op, scopeKey, singleBracket, instantiate}  括りの関数（R24）。n は仮引数の数（括りは1つで1）。
+//       singleBracket は仮引数が括り1つだけの関数（k > 1 の並び全体を1つの List として受ける、applyKind）。
 //       op と scopeKey は書いた `?` と、それを解いた範囲（定義の行の木に、その `?` を通って呼ばれた実体だけを描くため）
 //     {type:'pfUnary'|'pfGreedyUnary'|'pfGreedyBinary'|'pfUnknownArity', pointfree:true}  点なし（§2、pointfreeOf の注）
 //     {type:'pfPick', pointfree:true, sym, key}  段18 の点なし。key は `[' 0]`・`[' say]` の鍵（R26）、ほかは null
@@ -1123,6 +1124,7 @@ const INSTANCE_DEPTH_LIMIT = 32;
 
 function patternFn(F, op, params, defScope, label) {
   const fn = { type: "pattern", n: params.length, idKey: lambdaKey(op, defScope.key), label, op, scopeKey: defScope.key };
+  fn.singleBracket = params.length === 1 && params[0].kind !== "bare"; // 並び全体を受ける形（applyKind）
   fn.instantiate = (argDescs) => instantiate(F, fn, op, params, defScope, argDescs);
   return fn;
 }
@@ -1202,7 +1204,8 @@ function bindBracket(p, d, descs) {
   if (p.rest) descs.set(p.rest, d);
 }
 
-// 括りの関数の適用（§3.4 の括りの関数の行）。k = n のときだけ実体を作る。
+// 括りの関数の適用（§3.4 の括りの関数の行）。k = n のとき（前から順に当てる）と、仮引数が括り1つだけで k > 1 の
+// とき（並び全体を1つの List として受ける、R24）に実体を作る（呼ぶのは applyKind）。
 function instantiate(F, fn, op, params, defScope, argDescs) {
   const b = bindParams(params, argDescs);
   const key = `${fnKey(fn)}|${b.key}`;
@@ -2120,8 +2123,13 @@ function applyKind(fn, arg) {
       // `[' k] x` は `x ' k` と同じ desc（R26）。引いた物が関数なら L（fn つき）。k ≠ 1 と鍵の無い形は未知。
       return k === 1 && fn.key ? { kind: pickDesc(descOfTree(args[0]), fn.key) } : { kind: U() };
     case "pattern":
-      // 括りの関数（R24）：k = n のときだけ実体を作る。k ≠ n は未知（§5 Q2）。
-      return k === fn.n ? fn.instantiate(args.map(descOfTree)) : { kind: U() };
+      // 括りの関数（R24）：k = n のときは前から順に当てて実体を作る。
+      if (k === fn.n) return fn.instantiate(args.map(descOfTree));
+      // 仮引数が括り1つだけなら、並び全体を1つの List として受ける（`f 1 2 3` は `f [1 2 3]` と同じ。利用者 2026-10-19
+      // 「括りの仮引数が1つの関数に `f 1 2 3` を渡したら、`f [1 2 3]` と同じでいい？」に「それでいいよ」。撒いて渡す先
+      // だった裸の `x ~xs` は廃止したので、並びは括りが受ける）。並び全体が実引数1つなので、`excess` は付けない。
+      if (fn.singleBracket && k > 1) return fn.instantiate([descOfTree(arg)]);
+      return { kind: U() }; // ほかの k ≠ n は未知（§5 Q2）
     case "compose":
       return composeApply(fn, k);
     default:
