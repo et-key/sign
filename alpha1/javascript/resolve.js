@@ -830,6 +830,12 @@ function resetIntern() {
   internByShape = new WeakMap();
   internByFn = new WeakMap();
   canonMemo = new Map();
+  identTable = new Map([["·", NO_IDENT]]);
+  identByDesc = new WeakMap();
+  identByShape = new WeakMap();
+  identByFn = new WeakMap();
+  opSerial = new WeakMap();
+  opCount = 0;
 }
 function internText(text, node) {
   let id = internTable.get(text);
@@ -1147,14 +1153,16 @@ function bodyRootOf(F, lambdaOp) {
 // 2. 木（materialize）：解いている途中の種類が無い（F.stack が空）ときに、仮置きの済んだ答えで本体をもう一度解き、
 //    木か門を残す。門に当たった実体は、呼んだ行で断る（R25）。呼んだ所が別の実体の本体の中なら、その実体も同じ門で
 //    失敗し、いちばん外の呼んだ行で1回だけ、関数の名前と形を足して投げ直す。
+//    分け合った実体を、まだ歩いていない物（callIdent）で呼んだら、本体をその物で歩き直して記録だけを足す（walkCalls）。
 //
 // 定義の行の木（`(inst 形 本体)` の並び）は、ファイルの全部の行を解き終えてから埋める（resolve の最後）。だから
 // 呼ぶ行が定義の前でも後でも、定義の行の木は同じになる。行を前もって全部解いて実体を集める段は要らない。
 //
 // 実体（の答え）は鍵（書いた `?` の綴り・範囲・渡された物の形）で共有するが、定義の行に描くのは、その `?` を
 // 通って呼ばれた実体だけにする（F.calls、recordCall）。同じ綴りの別の関数の呼び出しで描くと、呼ばれていない関数の
-// 行に inst が出て、R25 の「一度も呼ばれない括りの関数は defer」が破れる。門の名指しも、呼んだ行で使った関数の名前に
-// する（instanceError）。実体を最初に作った関数の名前にすると、ほかの行の有無で名指しが変わる。
+// 行に inst が出て、R25 の「一度も呼ばれない括りの関数は defer」が破れる。逆に、分け合った実体の本体の中の呼び出しを
+// 作った側の物でしか記録しないと、呼ばれた方の行が defer のまま残る（呼んだ物の同一性、callIdent の注）。門の名指しも、
+// 呼んだ行で使った関数の名前にする（instanceError）。実体を最初に作った関数の名前にすると、ほかの行の有無で名指しが変わる。
 
 // 形を変えながら自分（か、自分を呼ぶ関数の輪）を呼び続ける再帰（`f : [x ~xs] ? f [xs xs]`）は、実体が有限に収まら
 // ない。同じ `?` の実体が、解いている途中の実体の並びにこの数だけ入れ子になったら、読みを決めずに断る（名指しせずに
@@ -1169,6 +1177,7 @@ function patternFn(F, op, params, defScope, label) {
   const fn = { type: "pattern", n: params.length, idKey: lambdaKey(op, defScope.key), label, op, scopeKey: defScope.key };
   fn.lastBracket = params[params.length - 1].kind !== "bare"; // 残りの並びを最後の括りが受ける形（applyKind）
   fn.bareAt = params.map((p) => p.kind === "bare"); // 裸の仮引数の位置（部分適用の鍵で A にする、internPartial）
+  fn.env = scopeIdent(defScope); // 書いた範囲の同一性（callIdent）
   fn.instantiate = (argDescs) => instantiate(F, fn, op, params, defScope, argDescs);
   return fn;
 }
@@ -1199,6 +1208,93 @@ function recordCall(F, fn, inst) {
   let set = byScope.get(fn.scopeKey);
   if (!set) byScope.set(fn.scopeKey, (set = new Set()));
   set.add(inst);
+}
+
+// ---- 呼んだ物の同一性（R25 の描き方） ----
+//
+// 実体の答えは綴りの鍵で分け合うが、記録（recordCall）は「その `?` を通って呼ばれたか」なので、どの `?` かという物の
+// 同一性で取る。分け合った実体の本体の中で呼ぶ関数（欄に入れて渡した関数・実体の中の括った `?`）は、実体を作った側の
+// 物ではなく、いま呼んだ側の物である。直す前は、使い回したときに本体の中の呼び出しを記録しなかったので、
+// `h [f : pair]` と `h [f : pair2]`（pair と pair2 は同じ綴り）で、どちらの定義の行に inst が出るかが行の順で入れ替わった。
+// 値の定義が先に作った実体を別の行が木にすると、門の名指しも作った側の名前になった（反証 2026-10-19 の続き）。
+// だから呼び出しごとに、呼んだ物の同一性を番号に寄せ（callIdent）、実体ごとに、まだ歩いていない番号で呼ばれたら、本体を
+// その物で歩いて記録を足す（materialize・walkCalls）。答えは綴りで決まるので、歩き直しても木・種類・門は変わらない。
+// 同一性は、実引数の中と、関数を書いた範囲（実体の範囲なら、その実体を呼んだ物）の中の括りの関数の `?` で決まる。
+// 素の関数と点なしは数えない（NO_IDENT）：素の関数の本体は定義の行で解き、呼んでも本体を歩かない。合成は中の関数を数える。
+// 番号は歩きを重ねないためだけに使い、鍵にも並び順にも入れない。番号の振り方は見た順に依るが、記録される `?` と実体の
+// 組は依らない。比べるのは同じ実体（同じ鍵）を呼んだ物どうしだけで、鍵が各位置の関数の綴りと範囲の鍵を決めているので、
+// 番号には書いた `?` と、書いた範囲の同一性だけを入れる。
+const NO_IDENT = 0; // 括りの関数が見えない物
+let identTable = new Map([["·", NO_IDENT]]); // 綴り（子は番号）→ 番号
+let identByDesc = new WeakMap();
+let identByShape = new WeakMap();
+let identByFn = new WeakMap();
+let opSerial = new WeakMap(); // 書いた `?` → 番号（物の同一性）
+let opCount = 0;
+function identText(text) {
+  let id = identTable.get(text);
+  if (id === undefined) identTable.set(text, (id = identTable.size));
+  return id;
+}
+function identDesc(d) {
+  if (!d) return NO_IDENT;
+  const memo = identByDesc.get(d);
+  if (memo !== undefined) return memo;
+  const id = d.k === "L" ? identFn(d.fn) : d.k === "A" && d.shape ? identShape(d.shape) : NO_IDENT;
+  identByDesc.set(d, id);
+  return id;
+}
+function identShape(sh) {
+  const memo = identByShape.get(sh);
+  if (memo !== undefined) return memo;
+  let id = NO_IDENT;
+  if (sh.s === "struct") {
+    const fields = sh.fields.map((f) => [f.name, identDesc(f.desc)]);
+    if (fields.some(([, c]) => c !== NO_IDENT)) id = identText(`{${fields.map(([n, c]) => `${n}:#${c}`).join(" ")}}`);
+  } else if (sh.s === "list" && sh.elem) {
+    const c = identDesc(sh.elem);
+    if (c !== NO_IDENT) id = identText(`[#${c}…]`);
+  }
+  identByShape.set(sh, id);
+  return id;
+}
+function identFn(fn) {
+  if (!fn) return NO_IDENT;
+  const memo = identByFn.get(fn);
+  if (memo !== undefined) return memo;
+  let id = NO_IDENT;
+  if (fn.type === "pattern" && fn.bound) {
+    // 部分適用：元の関数と当てた物。裸の仮引数の位置は、実体の中で A なので呼べない（internPartial と同じ）。
+    const bound = fn.bound.map((d, i) => (fn.base.bareAt[i] ? NO_IDENT : identDesc(d)));
+    id = identText(`P#${identFn(fn.base)}(${bound.map((c) => `#${c}`).join(" ")})`);
+  } else if (fn.type === "pattern") {
+    let n = opSerial.get(fn.op);
+    if (n === undefined) opSerial.set(fn.op, (n = opCount++));
+    id = identText(`F${n}#${fn.env}`);
+  } else if (fn.type === "compose") {
+    const fns = fn.fns.map(identFn);
+    if (fns.some((c) => c !== NO_IDENT)) id = identText(`C(${fns.map((c) => `#${c}`).join(" ")})`);
+  }
+  identByFn.set(fn, id);
+  return id;
+}
+// 呼んだ物の同一性：関数を書いた範囲の同一性と、括りの仮引数に当てた物の同一性（裸の仮引数の位置は A なので数えない）。
+function callIdent(fn, params, argDescs) {
+  const args = params.map((p, i) => (p.kind === "bare" ? NO_IDENT : identDesc(argDescs[i])));
+  return identText(`${fn.env}(${args.map((c) => `#${c}`).join(" ")})`);
+}
+// 範囲の同一性。実体の範囲は、その実体を呼んだ物の同一性を持つ（instScope）。ほかの範囲は外の範囲のもの。
+function scopeIdent(scope) {
+  for (let s = scope; s; s = s.parent) if (s.ident !== undefined) return s.ident;
+  return NO_IDENT;
+}
+// 実体の範囲：仮引数に当てた desc（R24）と、呼んだ物の同一性を持つ。
+function instScope(F, op, defScope, b, key, ident) {
+  const lam = makeLambda(op, { F, scope: defScope });
+  lam.scope.descs = b.descs;
+  lam.scope.key = key;
+  lam.scope.ident = ident;
+  return lam.scope;
 }
 
 // 仮引数に渡された物を当てる（R24 の表）。返す物は {descs（名前 → desc）, key, text}。
@@ -1272,6 +1368,7 @@ function bindBracket(p, d, descs) {
 function instantiate(F, fn, op, params, defScope, argDescs) {
   const b = bindParams(params, argDescs);
   const key = `${fnKey(fn)}|${b.key}`;
+  const ident = callIdent(fn, params, argDescs);
   let inst = F.instances.get(key);
   if (!inst) {
     // 同じ `?` の実体だけを数える（INSTANCE_DEPTH_LIMIT の注）。
@@ -1283,16 +1380,18 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
         `括りの関数 \`${fn.label}\` が、形を変えながら自分（か、自分を呼ぶ関数の輪）を呼び続けています（同じ関数の実体が ${INSTANCE_DEPTH_LIMIT} 段入れ子になりました。いまの形 ${text}）。実体が有限に収まるかを決めないので、本体の読みを決めません（R24）。`
       );
     }
-    const lam = makeLambda(op, { F, scope: defScope });
-    lam.scope.descs = b.descs;
-    lam.scope.key = key;
-    inst = { isInst: true, key, label: fn.label, shapeText: b.text, lambda: op, scope: lam.scope, cycleDeps: new Set() };
+    // scope は作った側の物の範囲（根の種類を出す、instRootOf）。walked は本体を歩いて記録した物の同一性（callIdent の注）。
+    const scope = instScope(F, op, defScope, b, key, ident);
+    inst = { isInst: true, key, label: fn.label, shapeText: b.text, lambda: op, scope, walked: new Set(), cycleDeps: new Set() };
     F.instances.set(key, inst);
   }
   const root = instRootOf(F, inst);
   if (F.stack.length === 0) {
     recordCall(F, fn, inst);
-    materialize(F, inst);
+    // 木と、本体の中の呼び出しの記録は、いま呼んだ側の物の範囲で歩く。実体を作ったのが木を残さない所（値の定義の種類を
+    // 出す所など）でも、門は呼んだ行で渡した物の名前で名指しする。
+    const scopeOf = () => (ident === inst.scope.ident ? inst.scope : instScope(F, op, defScope, b, key, ident));
+    materialize(F, inst, scopeOf);
     if (inst.error) {
       if (!F.matStack.length) throw instanceError(inst, fn.label);
       // 別の実体の本体の中から呼んだ：その実体も同じ門で失敗する。どの実体を、どの名前で呼んで門に当たったかを
@@ -1300,6 +1399,8 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
       F.matStack[F.matStack.length - 1].via = { inst, label: fn.label };
       throw inst.error;
     }
+    // 分け合った実体を、まだ歩いていない物で呼んだ：その物で本体を歩き、呼んだ `?` を記録する（R25）。
+    if (!inst.walked.has(ident)) walkCalls(F, inst, scopeOf());
   }
   // 実体の本体の根が A なら A、ほかは未知（§3.4 の素の関数の k = n と同じ）。結果は中身の見えない A。
   return { kind: root === "A" ? A() : U() };
@@ -1335,7 +1436,8 @@ function instRootOf(F, inst) {
 
 // 実体の木（R25）。解いている途中の種類が無いときにだけ呼ぶ。本体の中の未定義の名前は、ここで1回だけ information を
 // 出す（F.reported）。定義の所では本体を解かないので、呼ばれない本体の中の名前は出さない（読まないので）。
-function materialize(F, inst) {
+// 範囲（scopeOf）は、はじめて木にした呼び出しの物のもの。その物の分の記録も、この歩きで取る（walked）。
+function materialize(F, inst, scopeOf) {
   if (inst.materializing) {
     // 木を解いている途中の実体を、本体の中からもう一度呼んだ（再帰）。根の種類は仮置きの済んだ答えを使い、木は
     // 外側の1回で作る。外側が門に当たったら、間にある実体（どれも外側を呼んでいる）も同じ門で失敗にする。
@@ -1344,10 +1446,12 @@ function materialize(F, inst) {
     return;
   }
   if (inst.done) return;
+  const scope = scopeOf();
+  inst.walked.add(scope.ident);
   inst.materializing = true;
   F.matStack.push(inst);
   try {
-    inst.tree = resolveBody(inst.lambda.right, { F, scope: inst.scope, diag: F.diag }).tree;
+    inst.tree = resolveBody(inst.lambda.right, { F, scope, diag: F.diag }).tree;
   } catch (e) {
     if (!isGate(e)) throw e;
     inst.error = e;
@@ -1357,6 +1461,14 @@ function materialize(F, inst) {
     inst.done = true;
   }
   if (inst.error) failDependents(inst);
+}
+// 分け合った実体の本体を、いま呼んだ側の物（scope）で歩き直し、本体の中の呼び出しだけを記録する（callIdent の注）。
+// 木と information は残さない：答えは綴りで決まるので、木は materialize の1回と同じになり、未定義の名前も同じである。
+// 歩く前に印を付けるので、同じ物で自分を呼ぶ再帰は1回で止まる。本体の中の実体は、同じ綴りの鍵で materialize の
+// 歩きがもう作っている。
+function walkCalls(F, inst, scope) {
+  inst.walked.add(scope.ident);
+  resolveBody(inst.lambda.right, { F, scope, diag: null });
 }
 // 守り：実体が門に当たると、その門は呼んだ行まで投げ上がり、resolve 全体が断る（materialize は F.stack が空のときにだけ
 // 走り、そこから上で門を捕まえる所は無い）。だから輪の途中の実体に付けた失敗は、今は誰にも読まれない（確かめ

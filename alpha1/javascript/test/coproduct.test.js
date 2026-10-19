@@ -23,7 +23,7 @@
  * の本体）は、R25 で通る側（「答え」の R25 の行）へ移した。標準の定義の `map : f [x ~y] ? x` と `n : [~x] ? x` は
  * 括りの関数なので、R25 で定義の行の木が `(defer {x})` になる（試験は最後の行の木だけを見るので、期待値は変わらない）。
  * その後ろに、R24〜R26 の実装を確かめた2つの workflow の指摘を当てた行（「確かめ」の直した・穴・守り）を置く。
- * 最後に、反証の続きで直した合成の鍵の法則と守りを置く。
+ * 最後に、反証の続きで直した2つ（分け合った実体の描き方・合成の鍵）の行と法則を置く。
  *
  * 実行: node test/coproduct.test.js（`npm test` からも呼ばれる）
  */
@@ -1032,6 +1032,106 @@ law("部分適用を当てた部分適用の鎖の鍵は速い", () => {
 	const ms2 = Date.now() - t0;
 	if (ms2 > 5000) out.push(`倍々の部分適用の再帰：${ms2}ms`);
 	if (got !== "coproduct-unknown-kind G7") out.push(`倍々の部分適用の再帰 got: ${got}  want: G7`);
+	return out;
+});
+
+// ---------------------------------------------------------------------------
+// 分け合った実体の描き方（2026-10-19、反証の続き）
+// ---------------------------------------------------------------------------
+//
+// 同じ綴りの括りの関数（pair と pair2）は実体の答えを分け合う（R25）。直す前は、分け合った実体を使い回すと、その本体の
+// 中の呼び出しを、実体を最初に作った側の物（欄の関数）で一度だけ記録していた。だから欄で pair2 を渡した行の分が記録
+// されず、どちらの定義の行に inst が出るかが行の順で入れ替わった。値の定義が先に作った実体を別の行が木にすると、門の
+// 名指しも作った側の名前になった。直した後は、呼んだ側の物ごとに本体を歩き、呼んだ `?` に inst を描く。
+
+const SAME_PAIRS = ["pair : [a ~as] [b ~bs] ? a + b", "pair2 : [a ~as] [b ~bs] ? a + b"];
+const H_PAIR = "h : [f] ? f [1] [2]";
+const H_NESTED = "h : [f] ? [[x] ? f x [2]] [1]"; // 実体の本体の中の括った `?` から、欄の関数を呼ぶ
+const PAIR_INST = (name, shape) => `(: ${name} (? [[a ~as] [b ~bs]] (inst ${shape} (+ a b))))`;
+const NAMING = [...M, "a2 : [nope] ? nope 21", "b2 : [nope] ? nope 21", "hh : [f] ? f m"];
+const PP2 = ["pp2 : [g] [x] ? g [1] [2]", "k : [f] ? f [9]"];
+
+const sharePasses = [
+	["直した 欄で pair・pair2 の順に渡すと pair2 の行も inst", src([...SAME_PAIRS, H_PAIR, "h [f : pair]", "h [f : pair2]"]), PAIR_INST("pair2", "N N"), null, { at: 1 }],
+	["直した 欄で pair2・pair の順に渡すと pair の行も inst", src([...SAME_PAIRS, H_PAIR, "h [f : pair2]", "h [f : pair]"]), PAIR_INST("pair", "N N"), null, { at: 0 }],
+	["直した 部分適用を欄で渡す（pair が先）", src([...SAME_PAIRS, H_PAIR, "h [f : pair [1]]", "h [f : pair2 [1]]"]), PAIR_INST("pair2", "N [N…]"), null, { at: 1 }],
+	["直した 部分適用を欄で渡す（pair2 が先）", src([...SAME_PAIRS, H_PAIR, "h [f : pair2 [1]]", "h [f : pair [1]]"]), PAIR_INST("pair", "N [N…]"), null, { at: 0 }],
+	["直した 実体の中の括った ? から呼ぶ（pair が先）", src([...SAME_PAIRS, H_NESTED, "h [f : pair]", "h [f : pair2]"]), PAIR_INST("pair2", "N N"), null, { at: 1 }],
+	["直した 実体の中の括った ? から呼ぶ（pair2 が先）", src([...SAME_PAIRS, H_NESTED, "h [f : pair2]", "h [f : pair]"]), PAIR_INST("pair", "N N"), null, { at: 0 }],
+	// 部分適用に当てた物の中の関数も、呼んだ物に数える（pp2 の実体を通って pair か pair2 を呼ぶ）。
+	["直した 部分適用に当てた欄の関数", src([...SAME_PAIRS, ...PP2, "k [f : pp2 [g : pair]]", "k [f : pp2 [g : pair2]]"]), PAIR_INST("pair2", "N N"), null, { at: 1 }],
+	// 値の定義の種類は、行を解く前に出す（実体はそこで作る）。素の関数の本体から pair2 を渡す行が、その実体を使い回す。
+	["直した 値の定義が先に作った実体を素の関数の本体が使う", src([...SAME_PAIRS, H_PAIR, "v : h [f : pair]", "p : y ? h [f : pair2]"]), PAIR_INST("pair2", "N N"), null, { at: 1 }],
+	["守り 分け合った実体は h の行に1つ", src([...SAME_PAIRS, H_PAIR, "h [f : pair]", "h [f : pair2]"]), "(: h (? [[f]] (inst {f:L} (apply f (construct [1] [2])))))", null, { at: 2 }],
+	["守り 呼ばれない pair2 は defer のまま", src([...SAME_PAIRS, H_PAIR, "h [f : pair]"]), "(: pair2 (? [[a ~as] [b ~bs]] (defer {a + b})))", null, { at: 1 }],
+];
+const shareRefused = [
+	// 断る行で書いた関数を名指しする。直す前は、値の定義 v が先に作った実体（欄は a2）で木にしたので、b2 の行で a2 と言った。
+	["直した 値の定義が先に作った実体を、別の綴りの関数で呼んで門", src([...NAMING, "hh [f : b2]", "v : hh [f : a2]"]), "G7", [["hh", "{f:L}"], ["b2", "{say:L other:N}"]]],
+	["守り 値の定義の行が先なら、その行で名指し", src([...NAMING, "v : hh [f : a2]", "hh [f : b2]"]), "G7", [["hh", "{f:L}"], ["a2", "{say:L other:N}"]]],
+];
+for (const [name, s, want, kind, extra] of sharePasses) checkPass(`確かめ ${name}`, s, want, kind, extra);
+for (const [name, s, want, inst] of shareRefused) checkRefused(`確かめ ${name}`, s, want, inst);
+
+// 単位（1つの定義か1つの呼ぶ行。字下げのブロックは1単位）の並べ方。5単位までは全部、それより多ければ回転と、その逆順。
+const orders = (units) => {
+	const out = [];
+	if (units.length <= 5) {
+		const go = (rest, acc) => {
+			if (!rest.length) out.push(acc);
+			rest.forEach((u, i) => go([...rest.slice(0, i), ...rest.slice(i + 1)], [...acc, u]));
+		};
+		go(units, []);
+		return out;
+	}
+	for (let i = 0; i < units.length; i++) out.push([...units.slice(i), ...units.slice(0, i)]);
+	return [...out, ...out.map((o) => [...o].reverse())];
+};
+// R25：行の順を入れ替えても、全部の木・種類・診断が同じ。断るなら門と名指しも同じ。called の関数は、どの並べ方でも
+// 定義の行が inst（defer のまま揃っているだけなら、法則は何も見ていない）。
+law("分け合った実体があっても、行の順を入れ替えて全部の木・種類・診断・門が同じ", () => {
+	const look = (s) => {
+		try {
+			const r = resolve(s);
+			const trees = r.trees.map((t) => `${show(t)} : ${kindOf(t)}`).sort();
+			return { text: `${trees.join(" | ")} || ${r.diagnostics.map((d) => `${d.reason}/${d.name}`).sort().join(" ")}`, trees };
+		} catch (e) {
+			return { text: `断り ${e.reason} ${e.gate || ""} ${JSON.stringify((e.instances || []).map((i) => [i.fn, i.shape]))}`, trees: [] };
+		}
+	};
+	const P = SAME_PAIRS.map((d) => [d]);
+	// [名前, 単位, 定義の行が inst になるはずの関数, 断る門（通るなら null）]
+	const groups = [
+		["欄で渡す", [...P, [H_PAIR], ["h [f : pair]"], ["h [f : pair2]"]], ["pair", "pair2", "h"], null],
+		["部分適用を欄で渡す", [...P, [H_PAIR], ["h [f : pair [1]]"], ["h [f : pair2 [1]]"]], ["pair", "pair2", "h"], null],
+		["実体の中の括った ? から呼ぶ", [...P, [H_NESTED], ["h [f : pair]"], ["h [f : pair2]"]], ["pair", "pair2", "h"], null],
+		["値の定義と素の関数の本体から呼ぶ", [...P, [H_PAIR], ["v : h [f : pair]"], ["p : y ? h [f : pair2]"]], ["pair", "pair2", "h"], null],
+		["部分適用に当てた欄の関数", [...P, PP2, ["k [f : pp2 [g : pair]]"], ["k [f : pp2 [g : pair2]]"]], ["pair", "pair2", "pp2", "k"], null],
+		["当て方の違う部分適用（括りと数）", [["t3 : [a] [b] [c] ? a + c"], ["t4 : [a] [b] [c] ? a + c"], ["k : [f] ? f [2] [3]"], ["k [f : t3 [1]]"], ["k [f : (t4 1)]"]], ["t3", "t4", "k"], null],
+		[
+			"門（断る行は1つ）",
+			[...P, [H_PAIR], ["h [f : pair]"], ["h [f : pair2]"], M, ["a2 : [nope] ? nope 21"], ["hh : [f] ? f m"], ["v : hh [f : a2]"]],
+			[],
+			"G7",
+		],
+	];
+	const out = [];
+	for (const [name, units, called, gate] of groups) {
+		const all = orders(units);
+		const first = look(src(all[0].flat()));
+		for (const o of all.slice(1)) {
+			const got = look(src(o.flat()));
+			if (got.text !== first.text) {
+				out.push(`${name}：並べ方で割れた`, `  ${all[0].map((u) => u[0]).join(" ⏎ ")}`, `    ${first.text}`, `  ${o.map((u) => u[0]).join(" ⏎ ")}`, `    ${got.text}`);
+				break;
+			}
+		}
+		if (gate && !first.text.startsWith(`断り ${GATE_REASON[gate]} ${gate} `)) out.push(`${name}：got ${first.text}  want: ${gate}`);
+		for (const c of called) {
+			const line = first.trees.find((t) => t.startsWith(`(: ${c} (? `));
+			if (!line || !line.includes("(inst ") || line.includes("(defer ")) out.push(`${name}：${c} の定義の行が inst でない: ${line}`);
+		}
+	}
 	return out;
 });
 
