@@ -23,7 +23,8 @@
  * の本体）は、R25 で通る側（「答え」の R25 の行）へ移した。標準の定義の `map : f [x ~y] ? x` と `n : [~x] ? x` は
  * 括りの関数なので、R25 で定義の行の木が `(defer {x})` になる（試験は最後の行の木だけを見るので、期待値は変わらない）。
  * その後ろに、R24〜R26 の実装を確かめた2つの workflow の指摘を当てた行（「確かめ」の直した・穴・守り）を置く。
- * 最後に、反証の続きで直した2つ（分け合った実体の描き方・合成の鍵）の行と法則を置く。
+ * 最後に、反証の続きで直した2つ（分け合った実体の描き方・合成の鍵）の行と法則、合成の中の括りの関数（§5 Q24）の確かめ、
+ * 合成を適用の畳み込みにした所（2026-10-19。(g∘f) x = g (f x) で答えが変わった行と、その法則）を置く。
  *
  * 実行: node test/coproduct.test.js（`npm test` からも呼ばれる）
  */
@@ -646,11 +647,18 @@ const answerPasses = [
 	["Q26 inc (pr [1]) 5 の実体", src(["inc : x ? x + 1", "pr : [x ~xs] y ? y", "inc (pr [1]) 5"]), "(: pr (? [[x ~xs] y] (inst N A y)))", null, { at: 1 }],
 	// 残りが2つ以上の部分適用は、合成の後ろでは今までどおり未知（§5 Q13）。
 	["Q26 inc (f3 1) 5（残り2つは未知）", src(["inc : x ? x + 1", "f3 : a b c ? c", "inc (f3 1) 5"]), "(apply (compose inc [f3 1]) 5)", "未知"],
-	// 穴の書き換えを後ろに置く形は決めていない（Q26 の答え）。穴の部分適用も穴の出どころのまま（同じ関数を穴で直接書いた
-	// `[f3 1 _ 3]` と同じ読み）。確かめ 2026-10-19 の F1・T1。
-	["Q26 inc [add _ 10] 5（穴は未知のまま）", src(["inc : x ? x + 1", "add : x y ? x + y", "inc [add _ 10] 5"]), "(apply (compose inc [add _ 10]) 5)", "未知"],
-	["Q26 inc ([f3 _ _ 3] 1) 5（穴の部分適用も未知）", src(["inc : x ? x + 1", "f3 : a b c ? c", "inc ([f3 _ _ 3] 1) 5"]), "(apply (compose inc [[f3 _ _ 3] 1]) 5)", "未知"],
-	["Q26 h2 : h1 1（h1 : f3 _ _ 3）の inc h2 5", src(["inc : x ? x + 1", "f3 : a b c ? c", "h1 : f3 _ _ 3", "h2 : h1 1", "inc h2 5"]), "(apply (compose inc h2) 5)", "未知"],
+	// 穴の書き換えとその部分適用を後ろに置く形は、Q26 の答えの時は決めずに未知にしていた（利用者の言葉ではなく、表を作った
+	// 側の慎重さ）。合成を適用の畳み込みにした（(g∘f) x = g (f x)、R11。2026-10-19「その方向でお願い」）ので、直接書いた
+	// `[add _ 10] (inc 5)` と同じく A。穴の部分適用も、同じ関数を穴で直接書いた `[f3 1 _ 3] (inc 5)` と同じ読みで A。
+	["法則で変わった inc [add _ 10] 5（穴、前は未知）", src(["inc : x ? x + 1", "add : x y ? x + y", "inc [add _ 10] 5"]), "(apply (compose inc [add _ 10]) 5)", "A"],
+	["法則で変わった inc ([f3 _ _ 3] 1) 5（穴の部分適用、前は未知）", src(["inc : x ? x + 1", "f3 : a b c ? c", "inc ([f3 _ _ 3] 1) 5"]), "(apply (compose inc [[f3 _ _ 3] 1]) 5)", "A"],
+	["法則で変わった h2 : h1 1（h1 : f3 _ _ 3）の inc h2 5（前は未知）", src(["inc : x ? x + 1", "f3 : a b c ? c", "h1 : f3 _ _ 3", "h2 : h1 1", "inc h2 5"]), "(apply (compose inc h2) 5)", "A"],
+	// 前は未知の節で、隣と結べば G2(a) だった。
+	["法則で変わった inc [add _ 10] 5 inc（前は G2(a)）", src(["inc : x ? x + 1", "add : x y ? x + y", "inc [add _ 10] 5 inc"]), "(apply inc (apply (compose inc [add _ 10]) 5) ·rev)", "A"],
+	["法則で変わった inc ([f3 _ _ 3] 1) 5 inc（前は G2(a)）", src(["inc : x ? x + 1", "f3 : a b c ? c", "inc ([f3 _ _ 3] 1) 5 inc"]), "(apply inc (apply (compose inc [[f3 _ _ 3] 1]) 5) ·rev)", "A"],
+	["法則で変わった h2 : h1 1 の inc h2 5 inc（前は G2(a)）", src(["inc : x ? x + 1", "f3 : a b c ? c", "h1 : f3 _ _ 3", "h2 : h1 1", "inc h2 5 inc"]), "(apply inc (apply (compose inc h2) 5) ·rev)", "A"],
+	// 穴の本体の根は元の関数のもの。根が A でなければ、直接書いた `[pq _ 1] (inc 5)` と同じく未知のまま。
+	["守り inc [pq _ 1] 5（穴の元の関数の根が関数なら未知）", src(["inc : x ? x + 1", "pq : x y ? inc", "inc [pq _ 1] 5"]), "(apply (compose inc [pq _ 1]) 5)", "未知"],
 	// 最初の関数が余れば印 `excess`（後ろに素の部分適用があっても落とさない）。確かめ 2026-10-19 の T2。
 	["Q26 inc (pr 1) 5 6（excess）", src(["inc : x ? x + 1", "pr : x y ? y", "inc (pr 1) 5 6"]), "(apply (compose inc [pr 1]) (construct 5 6))", "A", { excess: true }],
 	// 後ろの関数が2つ以上でも、全部を見る（位置に依らない）。確かめ 2026-10-19 の T3。
@@ -758,12 +766,13 @@ const answerRefused = [
 	["Q26 inc (pr 1) (pq 1) 5 inc", src(["inc : x ? x + 1", "pr : x y ? y", "pq : x y ? inc", "inc (pr 1) (pq 1) 5 inc"]), "G2(a)"],
 	// 余りの印は後ろに素の部分適用があっても残る（G12(a)）。確かめ 2026-10-19 の T2。
 	["Q26 inc (pr 1) 5 6 inc（excess の隣）", src(["inc : x ? x + 1", "pr : x y ? y", "inc (pr 1) 5 6 inc"]), "G12(a)"],
-	// 穴と穴の部分適用は未知のまま、隣と結べば G2(a)。確かめ 2026-10-19 の F1・T1。
-	["Q26 inc [add _ 10] 5 inc（穴）", src(["inc : x ? x + 1", "add : x y ? x + y", "inc [add _ 10] 5 inc"]), "G2(a)"],
-	["Q26 inc ([f3 _ _ 3] 1) 5 inc（穴の部分適用）", src(["inc : x ? x + 1", "f3 : a b c ? c", "inc ([f3 _ _ 3] 1) 5 inc"]), "G2(a)"],
-	["Q26 h2 : h1 1（h1 : f3 _ _ 3）の inc h2 5 inc", src(["inc : x ? x + 1", "f3 : a b c ? c", "h1 : f3 _ _ 3", "h2 : h1 1", "inc h2 5 inc"]), "G2(a)"],
+	// 穴と穴の部分適用の `… 5 inc` は、合成を適用の畳み込みにして通る側（上の「法則で変わった」の行）へ移した。
 	// 仮置きが外れる再帰の部分適用は未知、隣と結べば G2(a)。確かめ 2026-10-19 の F3。
 	["Q26 仮置きが外れる再帰 r2 1 2 inc", src(["inc : x ? x + 1", "r2 : x y ?", "\tinc (r2 1) y", "\tinc", "", "r2 1 2 inc"]), "G2(a)"],
+	// 形が枝ごとに増える再帰は、深さ 32 以内でも実体が 2^深さ になる。同じ関数の実体の総数の上限（§5 Q25 の実装の守り）で、
+	// 止まらずに G7 で断る（上限が無いと解決が止まらなかった。確かめ 2026-10-20）。
+	["Q25 枝ごとに形が増える再帰（合成の頭の引き）", src(["g : [x ~xs] ? ([' 0] g [[a : xs] [a : xs]]) , ([' 0] g [[b : xs] [b : xs]])", "g [1 2]"]), "G7"],
+	["Q25 枝ごとに形が増える再帰（直接）", src(["g : [x ~xs] ? (g [[a : xs] [a : xs]]) , (g [[b : xs] [b : xs]])", "g [1 2]"]), "G7"],
 ];
 for (const [name, s, want, kind, extra] of answerPasses) checkPass(`答え ${name}`, s, want, kind, extra);
 for (const [name, s, want, inst] of answerRefused) checkRefused(`答え ${name}`, s, want, inst);
@@ -1258,8 +1267,9 @@ checkRefused(
 // 本体の門をすり抜け、定義の行は defer のままだった。前に `inc` を1つ足した `inc pa bad [1 2]` は断るのに、
 // `pa bad [1 2]` は通っていた。最初の関数は足りた適用なので、後ろの関数はその結果を受けて呼ばれる（R11）。だから後ろの
 // 括りの関数は未知を受けて実体を作り（§3.4 の合成の行「前に未知があれば未知」）、門に当たれば呼んだ行で断る（R25）。
-// 最初の関数に足りたか決まらない形（`[+]` に1項 Q17・既定値のある関数 Q8）は、後ろが呼ばれるかも決まらないので、
-// 今までどおり実体を作らない。
+// 最初の関数に足りたか決まらない形（`[+]` に1項 Q17・既定値のある関数 Q8）は、Q24 の直しの時は「後ろが呼ばれるかも
+// 決まらない」として実体を作らなかった。合成を適用の畳み込みにした（2026-10-19）ので、最初の関数の適用が未知なだけで、
+// 後ろの括りの関数は同じく未知を受けて実体を作る（§5 Q27 の断る側。`[+] bad 5` と `inc [+] bad 5` が割れていた）。
 //
 // 穴：変異で壊しても落ちなかった所（途中で未知になった後の括りの関数・合成の頭の括りの関数の根が A でない k = n・
 // k > n・足りない・後ろの括りの関数のアリティが2以上）。
@@ -1286,8 +1296,27 @@ const composePasses = [
 	["穴 inc pb [1]（後ろの括りの関数のアリティが2）の根は未知", src([INC, "pb : [a] [b] ? 1 _ 2", "inc pb [1]"]), "(apply (compose inc pb) [1])", "未知"],
 	["穴 inc pb [1] の pb は呼ばれないので defer", src([INC, "pb : [a] [b] ? 1 _ 2", "inc pb [1]"]), "(: pb (? [[a] [b]] (defer {1 _ 2})))", null, { at: 1 }],
 	["穴 inc pair [1]（後ろの括りの関数のアリティが2、Q13）", src([INC, "pair : [a ~as] [b ~bs] ? a + b", "inc pair [1]"]), "(apply (compose inc pair) [1])", "未知"],
-	// 最初の関数に足りたか決まらない（`[+]` に1項、§5 Q17）。後ろが呼ばれるかも決まらないので、実体は作らない。
-	["今は [+] tl 5 の tl は defer のまま（Q17：後ろが呼ばれるか決まらない）", src([TL, "[+] tl 5"]), "(: tl (? [[y ~ys]] (defer {ys})))", null, { at: 0 }],
+	// 最初の関数に足りたか決まらない（`[+]` に1項、§5 Q17）。前は「後ろが呼ばれるかも決まらない」として実体を作らず、
+	// この行を「今は defer」として置いていた（§5 Q27）。合成を適用の畳み込みにして裏返した：後ろの括りの関数は未知を受ける。
+	["Q27 で裏返した [+] tl 5 の tl は未知を受けて実体を作る（前は defer）", src([TL, "[+] tl 5"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 0 }],
+	["Q27 [+] tl 5 の根は未知のまま", src([TL, "[+] tl 5"]), "(apply (compose [+] tl) 5)", "未知"],
+	// ほかの足りたか決まらない頭も同じ：アリティの分からない点なし（`[|]`・`[*]`）・既定値のある関数（Q8）・撒く項を含む並び
+	// （k を数えない）。撒く項は、合成も最初の関数への適用から畳む（applyKind の頭）ので、前は合成ごと未知で返していた。
+	["Q27 [|] tl 5 の tl は未知を受けて実体を作る", src([TL, "[|] tl 5"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 0 }],
+	["Q27 [*] tl 2 3 の tl は未知を受けて実体を作る", src([TL, "[*] tl 2 3"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 0 }],
+	["Q27 go tl xs（既定値のある関数）の tl は未知を受けて実体を作る", src([...GO_DEFAULT, TL, "go tl xs"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 2 }],
+	["Q27 inc tl vs~（撒く項）の tl は未知を受けて実体を作る", src([INC, "vs : 1 , 2", TL, "inc tl vs~"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 2 }],
+	["Q27 inc tl vs~ の根は未知のまま", src([INC, "vs : 1 , 2", TL, "inc tl vs~"]), "(apply (compose inc tl) vs~)", "未知"],
+	// 今は：撒く項を受ける最初の関数そのものが括りの関数なら、実体を作らない（R24「撒く項があれば k は数えない（未知）」。
+	// 合成でない頭の「R24 n 4 vs~ 5 では実体を作らない」と同じ）。だから `bad inc vs~` は bad の本体を読まずに通り、後ろに
+	// 置いた `inc bad vs~` は未知を受けた bad の実体で G5（下の composeRefused の Q27 の行）。Q27 が問題にした非対称（頭に
+	// 置くだけで本体の門をすり抜ける）が、撒く項を受ける括りの関数に残っている。撒く項を受けた括りの関数の当て方（どの
+	// 仮引数に何が入るか）は k が数えられないので決まらず、未知を受けて作るか・名指しの門で断るかは決めていない（§5 の未決、
+	// 合成の畳み込みの確かめの F3）。決まったら、この2行を裏返す。
+	["今は bad inc vs~（撒く項を受ける最初の括りの関数）は実体を作らない", src([INC, "vs : 1 , 2", BAD, "bad inc vs~"]), "(: bad (? [[y ~ys]] (defer {1 _ 2})))", null, { at: 2 }],
+	["今は bad 1 vs~（合成でない頭）も実体を作らない", src(["vs : 1 , 2", BAD, "bad 1 vs~"]), "(: bad (? [[y ~ys]] (defer {1 _ 2})))", null, { at: 1 }],
+	// 後ろに素の関数だけなら、根を引かずに未知のまま（Q28）。
+	["守り [+] inc 5（後ろが素の関数なら未知のまま）", src([INC, "[+] inc 5"]), "(apply (compose [+] inc) 5)", "未知"],
 ];
 const composeRefused = [
 	["直した pa bad [1 2]（頭の括りの関数の実体の根が L）", src([PA, BAD, "pa bad [1 2]"]), "G5", [["bad", "U"]]],
@@ -1300,6 +1329,10 @@ const composeRefused = [
 	["穴 pu inc [1] double（合成の頭の括りの関数の実体の根が A でない節が対に入る）", src([INC, DOUBLE, "pu : [x ~xs] ? [+ x]", "pu inc [1] double"]), "G2(a)"],
 	["穴 pr inc [1] 2 3 double（合成の頭の余りが対に入る）", src([INC, DOUBLE, "pr : [x ~xs] y ? y", "pr inc [1] 2 3 double"]), "G12(a)"],
 	["穴 pair inc [1] double 5（足りない合成が適用の頭）", src([INC, DOUBLE, "pair : [a ~as] [b ~bs] ? a + b", "pair inc [1] double 5"]), "G2(b)"],
+	// 足りたか決まらない頭でも、後ろの括りの関数は未知を受けて実体を作る（§5 Q27。前は実体を作らずに通していた）。
+	["Q27 で裏返した [+] bad 5（前は通っていた）", src([BAD, "[+] bad 5"]), "G5", [["bad", "U"]]],
+	["Q27 go bad xs（既定値のある関数、前は通っていた）", src([...GO_DEFAULT, BAD, "go bad xs"]), "G5", [["bad", "U"]]],
+	["Q27 inc bad vs~（撒く項、前は通っていた）", src([INC, "vs : 1 , 2", BAD, "inc bad vs~"]), "G5", [["bad", "U"]]],
 ];
 for (const [name, s, want, kind, extra] of composePasses) checkPass(`確かめ ${name}`, s, want, kind, extra);
 for (const [name, s, want, inst] of composeRefused) checkRefused(`確かめ ${name}`, s, want, inst);
@@ -1314,6 +1347,10 @@ law("頭の結果が未知なら、h g a と inc h g a で後ろの括りの関�
 		["hl", [HL], "[1 2]"],
 		["adder", [ADDER], "1"],
 		["[' 0]", [DOUBLE, "fs : inc , double"], "fs"],
+		// 足りたか決まらない頭（§5 Q27。合成を適用の畳み込みにして、ほかの頭と同じになった）。
+		["[+]", [], "5"],
+		["[|]", [], "5"],
+		["inc", ["vs : 1 , 2"], "vs~"],
 	];
 	const look = (s, g) => {
 		try {
@@ -1333,6 +1370,133 @@ law("頭の結果が未知なら、h g a と inc h g a で後ろの括りの関�
 			else if (x.includes("(defer ")) out.push(`${h} ${g} ${a}：どちらも実体を作っていない ${x}`);
 		}
 	}
+	return out;
+});
+
+// ---------------------------------------------------------------------------
+// 合成は適用の畳み込み（2026-10-19）
+// ---------------------------------------------------------------------------
+//
+// 合成の適用は適用の繰り返しである：(g∘f) x = g (f x)。合成は左から実行する（R11）ので、`f1 f2 … fm x` は
+// fm (… (f2 (f1 x)) …)。前は合成の行（§3.4）を適用とは別の表として育て、後ろの関数を名簿（本体の根が A のアリティ1の
+// 素の関数・その部分適用・貪欲な単項・アリティ1の括りの関数）で数えていたので、直接書いた g (f x) と答えが割れていた
+// （§5 Q13・Q24・Q26・Q27 は、その割れが表に出た物）。主の Claude の提案「合成の適用を、適用を左から畳む形に作り直して
+// 合成用の表を消す」に、利用者 2026-10-19「質問が続いてたから気付いてたよ。その方向でお願い」。
+// 法則から決まり直した所（前の答えから変わった所）：
+// - 後ろの非貪欲の点なしの単項（`inc [+ 1] 5`）：前は未知（§5 Q13 の行。Q13 の出どころ U 09-28 22:07「inc [+]」は `[+]` と
+//   アリティ2以上の話で、非貪欲の単項は表を作った側の慎重さだった）→ A。
+// - 後ろの穴の書き換えとその部分適用：前は未知（Q26 の注）→ A（上の「答え」の Q26 の行）。
+// - 最初が段18 の点なし（`[' 0] inc [1 2 3]`）：前は未知 → 引いた物の生まれ（R26）で A になりうる。
+// - 最初が足りたか決まらない頭（Q27）：後ろの括りの関数も未知を受けて実体を作る（上の「確かめ」の Q27 の行）。
+// - 後ろの関数は、前の結果の形を受ける（前が括りの関数の実体や素の関数なら中身の見えない A なので今までと同じ。前が
+//   点なしの引きなら形が付く）。
+// 前の結果が L か未知なら、そこから先は未知（関数を値として次へ渡す読みは決めていない）。直接書いた g (f x) は、f x が
+// 未知なら未知の項を並びに置くので G7 だが、合成は節ごと未知にして根なら通す。だから下の法則は、f x が A の所で比べる。
+
+const FOLD_DEFS = [
+	INC,
+	DOUBLE,
+	"add : x y ? x + y",
+	"pr : x y ? y",
+	"pq : x y ? inc",
+	"f3 : a b c ? c",
+	ADDER,
+	"head : [x ~xs] ? x",
+	TL,
+	BAD,
+	"pb : [a] [b] ? a + b",
+	"pt : [a ~as] y ? y",
+];
+const foldPasses = [
+	["Q13 で変わった inc [+ 1] 5（後ろの非貪欲の単項、前は未知）", src([INC, "inc [+ 1] 5"]), "(apply (compose inc [+ 1]) 5)", "A"],
+	["Q13 で変わった inc [+ 1] 5 inc（前は G2(a)）", src([INC, "inc [+ 1] 5 inc"]), "(apply inc (apply (compose inc [+ 1]) 5) ·rev)", "A"],
+	["Q13 で変わった inc [-_] 5（前置の点なしの単項）", src([INC, "inc [-_] 5"]), "(apply (compose inc [-_]) 5)", "A"],
+	["Q13 で変わった inc [+ 1] 5 6（余りの印は最初の関数から）", src([INC, "inc [+ 1] 5 6"]), "(apply (compose inc [+ 1]) (construct 5 6))", "A", { excess: true }],
+	["守り inc [+] 5（後ろの [+] に1項は未知のまま、Q17）", src([INC, "inc [+] 5"]), "(apply (compose inc [+]) 5)", "未知"],
+	["R26 で変わった [' 0] inc [1 2 3]（最初が段18 の点なし、前は未知）", src([INC, "[' 0] inc [1 2 3]"]), "(apply (compose [' 0] inc) [1 2 3])", "A"],
+	["R26 で変わった [' 0] inc [1 2 3] double（前は G2(a)）", src([INC, DOUBLE, "[' 0] inc [1 2 3] double"]), "(apply double (apply (compose [' 0] inc) [1 2 3]) ·rev)", "A"],
+	["守り [' 0] inc fs（引いた物が見えなければ未知のまま）", std("[' 0] inc fs"), "(apply (compose [' 0] inc) fs)", "未知"],
+	["守り [' say] inc m（引いた物が関数なら未知のまま）", src([...M, INC, "[' say] inc m"]), "(apply (compose [' say] inc) m)", "未知"],
+	["形を受ける [' 0] head [[1 2] [3 4]]（head は引いた物の形を受ける）", src(["head : [x ~xs] ? x", "[' 0] head [[1 2] [3 4]]"]), "(: head (? [[x ~xs]] (inst [N…] x)))", null, { at: 0 }],
+	["形を受ける [' 0] head [[1 2] [3 4]] は A（前は未知）", src(["head : [x ~xs] ? x", "[' 0] head [[1 2] [3 4]]"]), "(apply (compose [' 0] head) [[1 2] [3 4]])", "A"],
+	["形を受ける [' 0] [' 0] [[1 2] [3 4]]（前は未知）", src(["[' 0] [' 0] [[1 2] [3 4]]"]), "(apply (compose [' 0] [' 0]) [[1 2] [3 4]])", "A"],
+	// 合成の節の種類は、最後の結果の desc を形ごと持つ（直接書いた `head ([' 0] ([' 0] …))` の head が受ける物と同じ、R11・
+	// R26）。根に置くと「A」としか見えないので、desc を読む head に渡して見る。合成の畳み込みの確かめの F1：最後の desc を中身の
+	// 見えない A に潰しても、前の試験は全部通っていた（head が `(inst A x)` で、根が未知になる）。
+	["形を運ぶ head ([' 0] [' 0] [[1 2] [3 4]]) の head は数を受ける", src(["head : [x ~xs] ? x", "head ([' 0] [' 0] [[1 2] [3 4]])"]), "(: head (? [[x ~xs]] (inst N x)))", null, { at: 0 }],
+	["形を運ぶ head ([' 0] [' 0] [[1 2] [3 4]]) は A", src(["head : [x ~xs] ? x", "head ([' 0] [' 0] [[1 2] [3 4]])"]), "(apply head [[' 0] [' 0] [[1 2] [3 4]]])", "A"],
+	["形を運ぶ v : [' 0] [' 0] [[1 2] [3 4]] を名前で渡す head v の head は数を受ける", src(["head : [x ~xs] ? x", "v : [' 0] [' 0] [[1 2] [3 4]]", "head v"]), "(: head (? [[x ~xs]] (inst N x)))", null, { at: 0 }],
+	["形を運ぶ v : [' 0] [' 0] [[1 2] [3 4]] の後の head v は A", src(["head : [x ~xs] ? x", "v : [' 0] [' 0] [[1 2] [3 4]]", "head v"]), "(apply head v)", "A"],
+	["守り inc head [5 6 7]（前が素の関数なら中身の見えない A を受ける）", src([INC, "head : [x ~xs] ? x", "inc head [5 6 7]"]), "(: head (? [[x ~xs]] (inst A x)))", null, { at: 1 }],
+];
+const foldRefused = [
+	["形を受ける [' 0] bad [[1 2] [3 4]] は形 [N…] で名指し（前は U）", src([BAD, "[' 0] bad [[1 2] [3 4]]"]), "G5", [["bad", "[N…]"]]],
+	["R26 で変わった [' 0] inc [1 2 3] head（前は G2(a)、今は逆適用の右の括りの関数で G8）", src([INC, "head : [x ~xs] ? x", "[' 0] inc [1 2 3] head"]), "G8"],
+];
+for (const [name, s, want, kind, extra] of foldPasses) checkPass(`合成 ${name}`, s, want, kind, extra);
+for (const [name, s, want, inst] of foldRefused) checkRefused(`合成 ${name}`, s, want, inst);
+
+// 合成は適用の繰り返し：f x が A なら、`f g x` と直接書いた `g (f x)` は、根が A かどうかと、定義の行の木（括りの関数の
+// 実体）と、断るなら門と名指しが同じ。後ろが2つの `f g h x` と `h (g (f x))` も、g (f x) が A なら同じ。前の実装では、後ろの
+// 非貪欲の単項・穴・最初の `[' k]` で割れていた。g (f x) が足りない適用（L）のとき、合成は未知にする（関数を値として次へ
+// 渡す読みは決めていない）ので、比べるのは A かどうかだけにする。
+law("合成は適用の繰り返し：f g x と g (f x) は同じ読み", () => {
+	const look = (s) => {
+		try {
+			const r = resolve(s);
+			const ts = r.trees.map((t) => show(t));
+			const last = r.trees[r.trees.length - 1];
+			return { a: kindOf(last) === "A", defs: ts.slice(0, -1).join(" | ") };
+		} catch (e) {
+			return { refused: `${e.reason} ${e.gate || ""} ${JSON.stringify((e.instances || []).map((i) => [i.fn, i.shape]))}` };
+		}
+	};
+	const same = (p, q) => JSON.stringify(p) === JSON.stringify(q);
+	const isA = (expr) => {
+		const r = look(src([...FOLD_DEFS, expr]));
+		return !r.refused && r.a;
+	};
+	const FIRSTS = [
+		["inc", "5"],
+		["inc", "5 6"],
+		["[+ 1]", "5"],
+		["[* 2,]", "1 2 3"],
+		["[+]", "5 6"],
+		["(pr 1)", "5"],
+		["[add _ 10]", "5"],
+		["head", "[5 6 7]"],
+		["head", "5 6 7"],
+		["[' 0]", "[1 2 3]"],
+		["[' 0]", "[[1 2] [3 4]]"],
+		["pt", "[1] 2"],
+	];
+	const LATER = ["inc", "double", "[+ 1]", "[-_]", "[* 2,]", "[+]", "add", "adder", "pq", "(pr 1)", "(pq 1)", "[add _ 10]", "([f3 _ _ 3] 1)", "head", "tl", "bad", "pb", "(pt [1])", "[' 0]"];
+	const LATER2 = ["inc", "[+ 1]", "(pr 1)", "[add _ 10]", "head", "tl", "bad", "[' 0]"];
+	const out = [];
+	let nA = 0;
+	let nNotA = 0;
+	let nRefused = 0;
+	const check = (composed, direct) => {
+		const c = look(src([...FOLD_DEFS, composed]));
+		const d = look(src([...FOLD_DEFS, direct]));
+		if (!same(c, d)) out.push(composed, `  合成: ${JSON.stringify(c)}`, `  直接: ${JSON.stringify(d)}`);
+		if (c.refused) nRefused++;
+		else if (c.a) nA++;
+		else nNotA++;
+	};
+	for (const [f, x] of FIRSTS) {
+		if (!isA(`${f} ${x}`)) {
+			out.push(`前提が崩れた：${f} ${x} が A でない`);
+			continue;
+		}
+		for (const g of LATER) {
+			check(`${f} ${g} ${x}`, `${g} (${f} ${x})`);
+			if (!LATER2.includes(g) || !isA(`${g} (${f} ${x})`)) continue;
+			for (const h of LATER2) check(`${f} ${g} ${h} ${x}`, `${h} (${g} (${f} ${x}))`);
+		}
+	}
+	// 比べる組が全部同じ読みなら、法則は何も見ていない。
+	if (!nA || !nNotA || !nRefused) out.push(`A ${nA}・A でない ${nNotA}・断る ${nRefused}（どれも1つ以上のはず）`);
 	return out;
 });
 

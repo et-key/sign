@@ -1173,6 +1173,11 @@ function bodyRootOf(F, lambdaOp) {
 // 減っていく形の再帰（入れ子の字面を1段ずつ剥がす）も同じ `?` の実体が入れ子になるので、32 段を超える入れ子の字面は
 // 断る側に倒れる。これは有限の物を断る（読みは決まっている）ので、上限は十分大きくしてある。
 const INSTANCE_DEPTH_LIMIT = 32;
+// 同じ `?` の実体の総数の上限（§5 Q25 の実装の守り）。深さは 32 以内でも、形が枝ごとに増えると（`g : [x ~xs] ? (g [[a : xs]]) ,
+// (g [[b : xs]])`）実体は 2^深さ になり、解決が止まらない。止まらないのは断るより悪い（どちらも読みを出さないが、止まら
+// ないと呼んだ行も名指しできない）ので、超えたら読みを決めずに G7 で名指しする。上限の値は言語の規則ではなく、実装の
+// 守りである（どの値にするかは決めていない。今の試験と .sn で同じ関数の実体が 64 を超える物は無い）。
+const INSTANCE_TOTAL_LIMIT = 512;
 
 function patternFn(F, op, params, defScope, label) {
   const fn = { type: "pattern", n: params.length, idKey: lambdaKey(op, defScope.key), label, op, scopeKey: defScope.key };
@@ -1383,6 +1388,16 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
         `括りの関数 \`${fn.label}\` が、形を変えながら自分（か、自分を呼ぶ関数の輪）を呼び続けています（同じ関数の実体が ${INSTANCE_DEPTH_LIMIT} 段入れ子になりました。いまの形 ${text}）。実体が有限に収まるかを決めないので、本体の読みを決めません（R24）。`
       );
     }
+    // 同じ `?` の実体の総数（INSTANCE_TOTAL_LIMIT の注）。
+    const total = (F.instanceTotals.get(op) || 0) + 1;
+    if (total > INSTANCE_TOTAL_LIMIT) {
+      const text = b.text.length > 60 ? `${b.text.slice(0, 60)}…` : b.text;
+      throw gate(
+        "G7",
+        `括りの関数 \`${fn.label}\` の実体が、形を変えながら ${INSTANCE_TOTAL_LIMIT} 個を超えました（いまの形 ${text}）。実体が有限に収まるかを決めないので、本体の読みを決めません（§5 Q25）。`
+      );
+    }
+    F.instanceTotals.set(op, total);
     // scope は作った側の物の範囲（根の種類を出す、instRootOf）。walked は本体を歩いて記録した物の同一性（callIdent の注）。
     const scope = instScope(F, op, defScope, b, key, ident);
     inst = { isInst: true, key, label: fn.label, shapeText: b.text, lambda: op, scope, walked: new Set(), cycleDeps: new Set() };
@@ -2284,6 +2299,13 @@ function makeReverse(left, right) {
 
 // できた適用の節の種類（§3.4、R9）。返す物は {kind, excess?, insufficient?}。挙げた形だけを決め、ほかは未知。
 function applyKind(fn, arg) {
+  // 合成は、撒く項があっても最初の関数への適用から畳む（composeApply の注）。撒く項は k を数えない（未知）だけで、最初の
+  // 関数は呼ばれるので、足りたか決まらない頭（§5 Q27）と同じく、後ろの括りの関数は未知を受けて実体を作る。前はここで
+  // 合成ごと未知で返し、後ろの実体を作らなかった（`inc bad vs~` が通っていた）。
+  // 撒く項を受ける関数そのものが括りの関数なら、下の spread で未知を返し、実体は作らない（R24「撒く項があれば k は数えない
+  // （未知）」。どの仮引数に何が当たるかが決まらない）。だから `bad inc vs~`・`bad 1 vs~` は bad の本体を読まずに通り、
+  // `inc bad vs~` は G5 で断る。未知を受けて作るか、名指しの門で断るかは決めていない（§5 の未決、合成の畳み込みの確かめの F3）。
+  if (fn && fn.type === "compose") return composeApply(fn, arg);
   const args = arg.t === "construct" ? arg.items : [arg];
   const k = args.length;
   const spread = args.some((a) => a.t === "leaf" && a.desc.spread); // 撒く項があれば k は数えない
@@ -2324,8 +2346,6 @@ function applyKind(fn, arg) {
         throw gate("G12(b)", `実引数がアリティより多いのに、頭の本体の根が値ではありません（§5 Q21・Q11）。`);
       }
       return { kind: A(), excess: true };
-    case "compose":
-      return composeApply(fn, k, arg);
     default:
       return { kind: U() }; // `@p`・`[|]` など・既定値のある関数
   }
@@ -2334,8 +2354,9 @@ function applyKind(fn, arg) {
 function plainApply(fn, k) {
   if (k < fn.n) {
     // 足りない適用は L（残り n−k）。本体の根は元の関数のもの。穴の部分適用（`[f3 _ _ 3] 1`・`h2 : h1 1`）は穴の出どころ
-    // （origin "hole"）のまま持つ。合成の後ろでは穴を数えない（§5 Q26）が、"partial" にすると、同じ関数を穴で直接書いた
-    // `[f3 1 _ 3]` は未知なのに、部分適用を挟むと A に数えられていた（確かめ 2026-10-19 の F1）。
+    // （origin "hole"）のまま持つ。出どころを見るのは、逆適用の右と穴の頭（どちらも "plain" だけを通すので、"hole" と
+    // "partial" を分けない）と実体の鍵（fnKey）だけである。合成はもう出どころを見ない（composeApply：合成は適用の畳み込み
+    // なので、後ろの穴も、穴の部分適用も、直接書いた `[f3 1 _ 3] (inc 5)` と同じ読み）。
     const origin = fn.origin === "hole" ? "hole" : "partial";
     return { kind: { k: "L", fn: { type: "plain", origin, n: fn.n - k, getBodyRoot: fn.getBodyRoot, idKey: fn.idKey } }, insufficient: true };
   }
@@ -2347,74 +2368,56 @@ function plainApply(fn, k) {
   return { kind: A(), excess: true };
 }
 
-// 括りの関数（とその部分適用）は、合成の中でも頭の適用と同じく実体を作る（§5 Q24 の案1、利用者 2026-10-19「とりあえず
-// 案1を採用して、強化したり追跡できるなら、また考えてみよう。」）。合成は左から実行する（R11）ので、最初の関数は並びを
-// 受け（applyKind と同じ当て方：k = n・残りを最後の括り・部分適用・余り）、後ろの関数は前の関数の結果を1つ受ける。
-// 結果は中身の見えない A なので、後ろの括りの関数の括りの名前は未知になる（R24）。作らないと、呼ばれた本体を読まず
-// （R25 と割れる）、本体の門や G12(b) が合成の頭に置くだけですり抜けていた。
-function composeApply(fn, k, arg) {
+// 合成の適用は、適用の繰り返しである：(g∘f) x = g (f x)。合成は左から実行する（R11）ので、`f1 f2 … fm x` は
+// fm (… (f2 (f1 x)) …)。だから種類は、最初の関数を並び x に当てた適用から始めて、後ろの関数に前の結果を1つの実引数として
+// 当てた適用を左から畳んで決める（どれも applyKind）。合成のための表は持たない。前は合成の行（§3.4）を適用とは別の表と
+// して育て、後ろの関数を名簿（本体の根が A のアリティ1の素の関数・その部分適用・貪欲な単項・アリティ1の括りの関数）で
+// 数えていたので、直接書いた g (f x) と答えが割れていた（§5 Q13・Q24・Q26・Q27 は、その割れが表に出た物。主の Claude が
+// 「合成の適用を、適用を左から畳む形に作り直して合成用の表を消す」と言い、利用者 2026-10-19「その方向でお願い」）。
+// - 最初の関数は、頭の適用と同じ（k = n・残りを最後の括り・部分適用・余り）。足りなければ L で、足りない適用の印つき。
+//   何を残すかは後ろの関数まで含めて決まらないので、アリティは未知にする。G12(b) と、括りの関数の実体の門（R25）は
+//   applyKind がそのまま投げる。
+// - 前の結果が A（足りた適用で、余りでない）なら、その desc（形を持っていれば形ごと、R24・R26）を1項の実引数として次の
+//   関数に当てる。直接書いた g (f x) の g が受ける物と同じにするためである。
+// - 前の結果が L か未知なら、そこから先は未知。関数を値として次へ渡す読みは決めていない（素の関数の裸の仮引数は A しか
+//   受けない）。ただし括りの関数（とその部分適用）は、前の結果（未知）を受けて実体を作る。後ろの関数は前の結果を受けて
+//   呼ばれ（R11）、呼ばれた本体は読む（R25、§5 Q24）。最初の関数に足りたか決まらない形（`[+]` に1項 Q17・既定値のある
+//   関数 Q8・撒く項を含む並び）でも作る（§5 Q27 の断る側）。作らないと、呼ばれるかもしれない本体の門が合成の頭に置く
+//   だけですり抜ける（前は `[+] bad 5` を通し、`inc [+] bad 5` を断っていた）。ほかの関数は本体の根を引かない：答えに
+//   使わない根を引くと、解いている途中の関数の仮置き（consult）の依りが増え、仮置きが外れると、それを使っていない外の
+//   本体の根まで未知に替わって、定義の順で答えが割れる（§5 Q28。確かめ 2026-10-19 の F1：`g : y ? (adder (f 1) y) , 1`
+//   は f が先だと `g 5 inc` が G2(a)、g が先だと A）。
+//   ただし前の結果が A の間は、後ろの関数に当てて根を引く（直接書いた g (f x) と同じ）ので、その後で未知になれば、引いた根は
+//   答えに使われない（`inc [+ 1] f [+] y`）。未知の後ろの括りの関数の実体の本体が引く根も同じ（`[+] tl y` の tl の本体が
+//   `f 1 5` を呼ぶ形）。どちらも直接書いた入れ子（`[+] (f ([+ 1] (inc y)))`・`tl y`）が同じ根を引くので、法則どおりで、
+//   割れは Q28 そのもの（依りを根に使った物だけに付ける Q28 の案(1)が決まるまで、断る側の割れとして残す。合成の
+//   畳み込みの確かめの F2）。前の表は、後ろの非貪欲の単項・穴・最初の `[' k]` の後ろと、足りたか決まらない頭の後ろでは根も
+//   実体も引かなかったので、そこからは割れなかった。
+//   直接書いた g (f x) と同じになるのは、f x が A のときである。f x が未知なら、直接書いた形は未知の項を並びに置くので
+//   G7 で断るが、合成は節ごと未知にして根なら通す（§3.4 の「上に無いもの」と同じ扱い）。
+// - 最初の関数の余り（`excess`）は、結果が A なら最後まで持ち越す（R10。余りは最初の関数の実引数の話）。
+function composeApply(fn, arg) {
   const [first, ...rest] = fn.fns;
   if (!first) return { kind: U() };
-  // restA：ここまでの結果が A か。最初の関数が足りた適用でも結果が A でなければ、偽にして後ろの関数へ進む（後ろの関数は
-  // その結果を受けて呼ばれる、R11。だから後ろの括りの関数は未知を受けて実体を作る、R25）。
-  let restA = true;
-  let suff;
-  if (first.type === "pattern") {
-    const r = applyKind(first, arg);
-    if (r.insufficient) return { kind: { k: "L", fn: { type: "other" } }, insufficient: true };
-    if (r.kind.k !== "A") restA = false; // 足りた適用で、実体の根が A でない（§3.4 の括りの関数の行の「ほかは未知」）
-    suff = r.excess ? "excess" : "exact";
-  } else if (first.type === "plain") suff = k < first.n ? "short" : k === first.n ? "exact" : "excess";
-  else if (first.type === "pfUnary") suff = k === 1 ? "exact" : "excess";
-  else if (first.type === "pfGreedyUnary") suff = "exact";
-  else if (first.type === "pfGreedyBinary") suff = k >= 2 ? "exact" : "unknown";
-  else if (first.type === "pfPick" && k === 1) {
-    // `[' 0] x` は `x ' 0` と同じ射の足りた適用（R26、§3.4 の段18 の行）。合成の A の行は最初の関数に挙げていないので、
-    // 結果は未知として後ろへ渡す。
-    suff = "exact";
-    restA = false;
-  } else suff = "unknown";
-  // 最初の関数に足りなければ L。何を残すかは後ろの関数まで含めて決まらないので、アリティは未知にする。
-  if (suff === "short") return { kind: { k: "L", fn: { type: "other" } }, insufficient: true };
-  // 最初の関数に足りたか決まらない（`[+]` に1項 Q17・既定値のある関数 Q8 など）。後ろの関数が呼ばれるかも決まらないので、
-  // 後ろの括りの関数の実体は作らない（R25）。
-  if (suff === "unknown") return { kind: U() };
-  // 最初の関数の本体の根が値でなければ、頭の関数と同じに扱う：k > n は G12(b)、k = n は未知。§3.4 の合成の行は
-  // 最初の関数の本体の根に触れていないが、最初の関数は足りた適用で、§5 Q21 は足りた適用を「未知」とする。k = n
-  // のときだけ見ないと、`adder inc 5` が `adder 5`（関数かもしれない物）を `inc` に渡したまま A と読まれる。
-  if (first.type === "plain" && first.getBodyRoot() !== "A") {
-    if (suff === "excess") {
-      throw gate("G12(b)", "合成の最初の関数に実引数がアリティより多いのに、その本体の根が値ではありません（§5 Q21・Q11）。");
-    }
-    restA = false;
-  }
-  // 後ろの関数を前から順に見る。括りの関数は、前の結果（前が全部 A なら中身の見えない A、そうでなければ未知）を1つ
-  // 受けて実体を作る。最初の関数や途中で未知になっても、後ろの括りの関数の実体は作る（呼ばれた本体を読む、R25）。
+  const r0 = applyKind(first, arg);
+  if (r0.insufficient) return { kind: { k: "L", fn: { type: "other" } }, insufficient: true };
+  // prev：前の結果が A ならその desc、L か未知なら null。
+  let prev = r0.kind.k === "A" ? r0.kind : null;
   for (const f of rest) {
-    if (f && f.type === "pattern") {
-      if (f.n !== 1) {
-        restA = false; // アリティ2以上（§5 Q13、素の関数と同じ）
-        continue;
-      }
-      if (f.instantiate([restA ? A() : U()]).kind.k !== "A") restA = false;
-      continue;
+    if (prev) {
+      const r = applyKind(f, composeLeaf(prev));
+      prev = r.kind.k === "A" && !r.insufficient && !r.excess ? r.kind : null;
+    } else if (f && f.type === "pattern") {
+      applyKind(f, composeLeaf(U()));
     }
-    // 後ろに `[+]`・アリティ2以上・本体の根が値でない関数・非貪欲の点なし（§5 Q13）。素の関数の部分適用も、残り1つで
-    // 本体の根が A なら数える（§5 Q26 の案1、利用者 2026-10-19「合成の後ろの素の関数の部分適用も、残り1つで本体の根が
-    // A なら A に数える。」）。括りの関数の部分適用（上の分岐）と揃える。穴の書き換え（origin "hole"。穴の部分適用も）は
-    // 決めていない。
-    // ここまでが A でなければ（restA が偽）、本体の根は引かない。答えに使わない根を引くと、解いている途中の関数の仮置き
-    // （consult）が、それを使っていない外の本体の根まで依りに数え、仮置きが外れると未知に替える。定義の順で答えが割れて
-    // いた（確かめ 2026-10-19 の F1：`g : y ? (adder (f 1) y) , 1` は f が先だと `g 5 inc` が G2(a)、g が先だと A）。
-    if (!restA) continue;
-    const ok =
-      f &&
-      ((f.type === "plain" && (f.origin === "plain" || f.origin === "partial") && f.n === 1 && f.getBodyRoot() === "A") ||
-        f.type === "pfGreedyUnary");
-    if (!ok) restA = false;
   }
-  if (!restA) return { kind: U() };
-  return suff === "excess" ? { kind: A(), excess: true } : { kind: A() };
+  if (!prev) return { kind: U() };
+  return r0.excess ? { kind: prev, excess: true } : { kind: prev };
+}
+
+// 合成の中で、前の関数の結果を次の関数へ渡す1項の実引数。applyKind と descOfTree がそのまま読む葉にする。
+function composeLeaf(desc) {
+  return { t: "leaf", term: null, cat: "plain", desc, kind: desc, view: { v: "atom", text: "·" } };
 }
 
 // R16：穴。並び全体が `h t1 … tn` で、h が素の関数・撒く項が無い・k = n・`_` 以外の ti が全部 A・`_` がどれも
@@ -2466,6 +2469,7 @@ export function resolve(source) {
     // 根の種類の仮置きの記録、木を解いている途中の実体、定義の行の `?` の木（最後に実体で埋める）、実体の本体の
     // information の出し先。
     instances: new Map(),
+    instanceTotals: new Map(), // `?` → 作った実体の数（INSTANCE_TOTAL_LIMIT）
     calls: new Map(),
     instMemo: new Map(),
     matStack: [],

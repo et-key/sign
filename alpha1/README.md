@@ -17,7 +17,7 @@ alpha を作り直すための、2本目の実装である。利用者の決定�
 | `operator_table.js` | 演算子の表のうち、構文が使う欄だけ（段・位置・名前・結合の向き・廃止の印） |
 | `errors.js` | 前処理が使う `OperationError` だけ |
 | `resolve.js` | 余積の解決（`resolve(source)` → 木と診断）。手順と門は `docs/coproduct_spec.md`。90% に届かない読みは門（G1〜G12）で名指しして断る |
-| `test/` | `parser.test.js`、`block_rules.test.js`、`comment_discriminator.test.js`、`editor_char.test.js`、`coproduct.test.js`（`run.js` が全部を回す） |
+| `test/` | `parser.test.js`、`block_rules.test.js`、`comment_discriminator.test.js`、`editor_char.test.js`、`coproduct.test.js`、`coproduct_laws.test.js`（余積の解決の法則：合成は適用の繰り返し・並びと括り・行の順・括りの関数と素の関数。`run.js` が全部を回す） |
 | `package.json` | peggy だけに依る。`npm test` と `npm run build:parser` |
 
 ## alpha（c3b203fc）との違い
