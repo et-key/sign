@@ -1434,6 +1434,7 @@ function nameKindOf(F, def) {
   if (running) throw cycleError(F, F.stack.indexOf(running));
   const frame = pushFrame(F, def);
   frame.isValue = true; // 値の定義の枠（consult が、この枠より下の仮置きを読ませない）
+  const restoreNest = freshNest(F);
   let value;
   try {
     const root = resolveTree(def.rhs, { F, scope: F.fileScope, diag: null });
@@ -1445,6 +1446,8 @@ function nameKindOf(F, def) {
   } catch (e) {
     abortFrame(F, frame);
     throw e;
+  } finally {
+    restoreNest();
   }
   finishFrame(F, frame, F.valueMemo, value);
   return value;
@@ -1460,6 +1463,7 @@ function bodyRootOf(F, lambdaOp) {
     return "A";
   }
   const frame = pushFrame(F, lambdaOp);
+  const restoreNest = freshNest(F);
   let value;
   try {
     const ctx = { F, scope: F.fileScope, diag: null };
@@ -1472,6 +1476,8 @@ function bodyRootOf(F, lambdaOp) {
     }
     value = "U"; // 本体が門に当たる。根は決まらない（行を解くときに同じ門で断る）
     if (e.guard) frame.tainted = true; // 守りの断りを捕まえた（汚れ、refusalOf）
+  } finally {
+    restoreNest();
   }
   if (frame.consulted && value !== "A") {
     value = "U";
@@ -1573,8 +1579,14 @@ function bodyRootOf(F, lambdaOp) {
 //    の手間も入れ子の長さの2乗ほどで増えた（前の深さの守り「同じ `?` の実体の入れ子 32」を外した後。確かめ 2026-10-20）。だから、
 //    再帰の入れ子（根の種類を解いている実体と木を解いている実体のうち、同じ `?` の2つ目から先の数の和）に上限を置く
 //    （instance-nest-limit、enterNest）。値だけを渡す別々の関数の鎖（それぞれの `?` は1つずつ）は数えない：重いのは再帰で、
-//    鎖は前の版と同じく何段でも通す。前の版を通った物は、同じ `?` を 32 段より深く入れ子にしないので、9 つ以上の `?` が同時に
-//    深く再帰しない限り、ここも通る（9 つの `?` が 30 段ずつ再帰する有限の形は、前の版は通し、ここで断る。和を 512 にするか、
+//    鎖は前の版と同じく何段でも通す。数えるのは、素の名前つき関数の本体と値の定義を解く枠の間だけで、その枠に入ると数え直す
+//    （freshNest。前の版の深さの守り stretchOf も、括りの関数の実体でない枠で数えるのを止めていた）。どちらの枠も枠の並びに
+//    1つずつしか積まれないので、入れ子の長さは（その数 + 1）× 上限までに収まる。前は枠を跨いで数えたので、素の関数を挟む hb の
+//    鎖（`fi : x ? hb [s : f(i+1)]`）を 257 個で断った（前の版は通す。確かめ 2026-10-20 の6回目）。数え直す所が多いと遅くなる
+//    （素の関数で区切った欄 6 つの並べ替えの再帰を 64 個つなぐと、`--stack-size=8000` で 16 秒。前の版は 3 秒。既定のスタック
+//    では溢れて 0.1 秒で resolve-stack-limit。§5 Q25 の未決）。前の版を通った物は、素の関数の枠の間で同じ `?` を 32 段より深く
+//    入れ子にしないので、その間で 9 つ以上の `?` が同時に深く再帰しない限り、ここも通る（9 つの `?` が 30 段ずつ再帰する有限の
+//    形は、前の版は通し、ここで断る。和を 512 にするか、
 //    `?` ごとに 32 段を超えるまで断らないと、関数を跨ぐ並べ替えの再帰が、関数 16 個で 37 秒、32 個で 5 分を超えた。重いのは
 //    解き直しと輪の記録で、入れ子の長さの2乗ほどで増える。確かめ 2026-10-20、§5 Q25 の未決）。入れ子の長さは、先に作った
 //    実体の記録を引くかで変わるので、上限の前後では定義の順で割れうる（§5 Q25 の未決）。全部の入れ子でも数えると、関数を跨ぐ
@@ -1597,7 +1609,8 @@ const INSTANCE_NEST_LIMIT = 256;
 // 深さを、実体の鍵の深さと同じく数える（括りと並びと `,` は中身に 1 を足す。名前は、ファイルの値の定義なら右辺の書いた
 // 深さを通す。定義が前の定義を指して深くなる鎖（`q1 : pp [f : q0] [f : q0]`…）も書いた分に数える。輪は 0 で切る）。
 // 数え方は鍵の深さより浅くならない側に倒す（1行の括りにも 1 を足す、関数の本体の枝の条件（`:` の左）に書いた形も数える、
-// など）。`x ' k`・`x @ k` の右は鍵（欄の名前か位置、R26）なので名前として辿らない。brackets は、書いた括りの関数（括りの
+// 文字列の字面は文字の List なので 2、など）。`x ' k` の右が裸の名前か字面の整数なら鍵（欄の名前か位置、R26）なので名前として
+// 辿らず、ほかの右（`x @ k` の右も）は解くので数える。brackets は、書いた括りの関数（括りの
 // 仮引数を持つ `?`）の数。
 function writtenDepth(lines, F) {
   let deepest = 1;
@@ -1619,10 +1632,12 @@ function writtenDepth(lines, F) {
   // inValue：値の定義の右辺の形を数えている（関数の本体には入らず、deepest も動かさない）。
   const termDepth = (t, inValue) => {
     if (!t) return 1;
-    // `x ' k`・`x @ k` の右は鍵（欄の名前か位置）で、名前として引かない（R26）。
-    if (t.type === "infix") return 1 + Math.max(termDepth(t.left, inValue), t.sym === "'" || t.sym === "@" ? 1 : termDepth(t.right, inValue));
+    // `x ' k` の右が裸の名前か字面の整数なら鍵（欄の名前か位置）で、名前として引かない（R26、pickKeyOf。classifyInfix と同じ）。
+    // ほかの右（`x @ k` の右も）は解くので、書いた形を数える。
+    if (t.type === "infix") return 1 + Math.max(termDepth(t.left, inValue), t.sym === "'" && pickKeyOf(t.right) ? 1 : termDepth(t.right, inValue));
     if (t.core.c === "name") return t.pre.length || t.post.length ? 1 : nameDepth(t.core.name);
     if (t.core.rows) return 1 + t.core.rows.reduce((m, r) => Math.max(m, treeDepth(r, inValue)), 0);
+    if (t.core.c === "lit" && t.core.text.startsWith("`")) return 2; // 文字列は文字の List（鍵では 2 段）
     return 1;
   };
   const treeDepth = (t, inValue) => {
@@ -1763,7 +1778,7 @@ function countSettled(F, inst, op, label) {
 const GUARD = {
   total: { reason: GATE_REASON.G7, gate: "G7", what: () => `確定した実体が ${INSTANCE_TOTAL_LIMIT} 個を超えました` },
   work: { reason: "instance-work-limit", gate: "", what: () => `作った実体（仮置きの上で作った物も数える）が ${INSTANCE_WORK_LIMIT} 個を超えました` },
-  nest: { reason: "instance-nest-limit", gate: "", what: () => `実体を解いている途中の入れ子が ${INSTANCE_NEST_LIMIT} 段を超えました` },
+  nest: { reason: "instance-nest-limit", gate: "", what: () => `実体を解いている途中に、再帰の入れ子（同じ \`?\` の2つ目から先の実体の数の和）が ${INSTANCE_NEST_LIMIT} を超えました` },
 };
 function guardRefusal(F, kind, label, op) {
   const g = GUARD[kind];
@@ -1797,6 +1812,18 @@ function leaveNest(F, inst) {
   const n = F.instNest.get(inst.lambda) - 1;
   F.instNest.set(inst.lambda, n);
   if (n >= 1) F.instRecur--;
+}
+// 素の名前つき関数の本体と値の定義を解く間は、入れ子を数え直す（注の4）。どちらも枠に1つしか積まれない（解いている途中に
+// また引けば、仮置きか値を含む輪）ので、数え直しても入れ子の長さは「（その数 + 1）× 上限」までに収まる。前の版の深さの守り
+// （stretchOf）も、括りの関数の実体でない枠で数えるのを止めていた。返すのは、元の数に戻す関数。
+function freshNest(F) {
+  const { instNest, instRecur } = F;
+  F.instNest = new Map();
+  F.instRecur = 0;
+  return () => {
+    F.instNest = instNest;
+    F.instRecur = instRecur;
+  };
 }
 // JS のスタックが溢れた（注の4）：入れ子の数の守りの内でも、実体1段の本体が重い（括弧の深い入れ子）と溢れる。内部の例外の
 // まま出さず、資源の守りとして断る（どこで溢れるかは、同じプロセスで前に何を解いたかでも変わる）。
@@ -3205,7 +3232,12 @@ export function resolve(source) {
   F.fileScope = { parent: null, params: null, locals: null, hasImport: lines.some(hasImportIn), key: "file" };
   // 実体の深さの上限（INSTANCE_DEPTH_MARGIN の注の1）：入れ子の道で、括りの関数をそれぞれ余り（32）回まで通り直したときに届く
   // 深さ。呼んだ行に書いた形と、括りの関数を1つ通るたびに足される形は、書いたいちばん深い形までしか深くない。解く前にソースだけから決める。
-  const written = writtenDepth(lines, F);
+  let written;
+  try {
+    written = writtenDepth(lines, F);
+  } catch (e) {
+    throw stackRefusal(e) || e; // 値の定義の長い鎖を辿って溢れても、内部の例外にしない（stackRefusal の注）
+  }
   F.depthLimit = (INSTANCE_DEPTH_MARGIN * written.brackets + 1) * written.deepest;
 
   // 穴の生成名は、ソースの名前と衝突しない綴りにする（`$p0` が `p0` の番地と読めないように）。
