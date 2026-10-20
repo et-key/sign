@@ -1490,10 +1490,11 @@ function bodyRootOf(F, lambdaOp) {
 // ほかの門と同じく本体と前提の値だけで決まり、「仮置きの記録」の理屈（どの順に解いても同じ不動点に着く）の中にある。
 // 3と4は止まるための資源の守りで、計算の道で決まる（理屈の外。別の reason で断る）。
 // どの守りも、当たったら門として投げる（根の種類を解く所では未知になり、そこから先は浅く止まる）。1 は普通の門で、呼んだ行
-// で名指しする。2〜4 は覚えて（guardRefusal）、resolve の最後に、ほかの門より先に断る（値を含む輪と解き直しの守りの後）。
-// 当たった `?` では、それから新しい実体を作らない（ほかの `?` は解き続ける）。断る理由が2つ以上あるファイル（守りに当たる `?`
-// と、門に当たる別の行。守りに当たる `?` が2つで、片方の溢れが他方の計算の中にある、など）では、どれを言うかが解く順に依り
-// うる。行の門が2つあるときに、行の順に断るのと同じである（§5 Q25 の未決）。
+// で名指しする。2〜4 は覚えて（guardRefusal）、resolve の最後に言う。当たった `?` では、それから新しい実体を作らない（ほかの
+// `?` は解き続ける）。断る行があっても残りの行を解き、言うのは、解き直しの守り → 値を含む輪 → 2（ファイル全体の最後の木で
+// 決まる）→ 最初に断った行の門 → 3・4 の順（refusalOf）。3・4 は計算の道で決まり、当たった後は実体を作らせないので、最後の木の
+// 門を先に言う。断る行が2つ以上なら行の順に言うのは今までどおりで、資源の守りの前後では、断るかが解く順に依りうる（§5 Q25 の
+// 未決）。
 //
 // 1. 深さ（INSTANCE_DEPTH_LIMIT）：作る実体の鍵の入れ子の深さ（instanceDepth）がこの数を超えたら、その実体を作らずに
 //    G7 で断る。根の種類を解く所（instRootOf）では未知になり、木を残す段（materialize）が同じ鍵にまた当たって、呼んだ行で
@@ -1529,7 +1530,8 @@ function bodyRootOf(F, lambdaOp) {
 //    足すと、g が先なら仮置きの上の p|{s:A} も数えて G7、f が先なら通る。§5 Q25 の SC-3）。門に当たる実体の後ろの実体も数えて
 //    いたので、`t : x ? (bad [y : 1]) , (p [m : 1])` と p の実体を 512 個作る行は、行の順で G5 と総数の G7 に割れた（前の版も）。
 //    枝ごとに形が増える再帰（`g : [x ~xs] ? (g [[a : xs] [a : xs]]) , (g [[b : xs] [b : xs]])`）は、最初の枝を深さ優先で降りて
-//    深さの門に当たるので、最後の木はそこで断る形で、残りの枝は最後の木に無い。だから 3 で断る。
+//    深さの門に当たるので、最後の木はそこで断る形で、残りの枝は最後の木に無い。根の種類を解く所の増え方は 3 で止まり、言うのは
+//    最後の木の深さの門（refusalOf）。
 // 3. 作った実体の数（INSTANCE_WORK_LIMIT）：2 で数えない実体（仮置きに頼った物と、門に当たる実体の後ろの物）は、増え続けても
 //    2 では止まらない（`g : [x ~xs] ? (g xs) , (g [[a : xs] [a : xs]]) , (g [[b : xs] [b : xs]])` は、同じ形で自分を引いた後なので、
 //    後ろの実体はどれも g の仮置きに頼る）。だから同じ `?` で作って外れていない実体（確定した物と、まだ仮置きに頼っている物と、
@@ -1689,10 +1691,23 @@ function enterNest(F, inst) {
 // まま出さず、資源の守りとして断る（どこで溢れるかは、同じプロセスで前に何を解いたかでも変わる）。
 function stackRefusal(e) {
   if (!(e instanceof RangeError) || !/call stack/i.test(e.message)) return null;
-  return new OperationError("解決の途中で JS のスタックが溢れました（実体の入れ子か、本体の入れ子が深すぎます）。読みを決めません（§5 Q25）。", {
+  const s = new OperationError("解決の途中で JS のスタックが溢れました（実体の入れ子か、本体の入れ子が深すぎます）。読みを決めません（§5 Q25）。", {
     spec: `${SPEC} §4 R24`,
     reason: "resolve-stack-limit",
   });
+  s.guard = "stack"; // 資源の守り（refusalOf）
+  return s;
+}
+// 断る理由を1つ選ぶ（resolve の最後）。e は最初に断った行の断り（か、行を解く前の断り）。解き直しの守り → 値を含む輪 → 実体の
+// 総数（G7、ファイル全体の最後の木で決まる）→ 行の門（最初に断った行）→ 資源の守り（作った実体の数・入れ子の数・スタック）の順。
+// 資源の守りは計算の道で決まり、当たった後の計算は当たった `?` の新しい実体を作らないので、行の門より後に置く。行の断りが資源の
+// 守りから来た物（実体を作らせなかった所）なら、資源の守りを言う。
+function refusalOf(F, e) {
+  if (F.againRefused) return F.againRefused;
+  if (F.cycleRefused) return F.cycleRefused;
+  if (F.guards.total) return F.guards.total;
+  if (e && !e.guard) return e;
+  return F.guards.work || F.guards.nest || e;
 }
 
 function patternFn(F, op, params, defScope, label) {
@@ -1900,10 +1915,12 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
     // 実体の守り（INSTANCE_DEPTH_LIMIT の注）。深さは鍵だけで決まる普通の門で、超える実体は作らない。守りに当たった `?` では、
     // 新しい実体を作らない（作り続けると、当たった後の枝を全部解いて遅かった）。止めるのは当たった `?` だけにする：全部を
     // 止めると、ほかの `?` の守りや、新しい実体を通る値を含む輪が見つからず、言うことが定義の順で割れた（確かめ 2026-10-20）。
-    const stopped = F.guardStops.get(op);
-    if (stopped) throw stopped;
+    // 深さの門は止める所より先に見る（鍵だけで決まる門なので、木を残す段が守りに当たった後でも同じ所で断り、最後の木の門を
+    // 言える。refusalOf）。
     const depth = instanceDepth(params, argDescs);
     if (depth > INSTANCE_DEPTH_LIMIT) throw depthGate(fn.label, b.text, depth);
+    const stopped = F.guardStops.get(op);
+    if (stopped) throw stopped;
     // 範囲の深さ（中で書いた閉包の深さ、fnDepth）は、当てた物の深さと書いた所の範囲の深さの大きい方。
     b.depth = Math.max(depth, envDepth(defScope));
     // scope は作った側の物の範囲（根の種類を出す、instRootOf）。walked は本体を歩いて記録した物の同一性（callIdent の注）。
@@ -2055,6 +2072,7 @@ function instanceError(inst, label) {
     reason: e0.reason,
   });
   e.gate = e0.gate;
+  e.guard = e0.guard; // 守りの断りから来た物か（refusalOf）
   e.instance = chain[0];
   e.instances = chain;
   return e;
@@ -3078,12 +3096,13 @@ export function resolve(source) {
   // 解き直しの守り（guardAgain）で断ったら、ほかの誤りより先に、その言い分で断る（握りつぶされても、ほかの門に化けても）。
   // 値を含む輪（cycleError）で断ったら、その次に、その言い分で断る（輪は種類を計算する所で見つかるので、普通は行を解く
   // 前に、輪の言い分のまま投げ上がる）。
-  // 実体の守り（総数・作った実体の数・入れ子の数、guardRefusal）に当たったら、その次に、ほかの門より先に断る（当たった所は
-  // 門として未知になり、根の種類を解く所や namesPattern に握りつぶされても、覚えた断りは残る）。輪より後に置くのは、守りの
-  // 断りが解く順に依らずに見つかる輪を覆わないため（前は総数の守りが先に投げ上がり、輪を見る前に止まる並べ方があった。確かめ
-  // 2026-10-20）。実体の深さの守りは、鍵だけで決まる普通の門なので、ほかの門と同じく行を解くときに断る（INSTANCE_DEPTH_LIMIT
-  // の注の1）。
+  // 実体の総数の守りに当たったら、その次に、行の門より先に断る。作った実体の数と入れ子の数の守り（資源の守り）は、行の門の
+  // 後に言う（refusalOf。当たった所は門として未知になり、根の種類を解く所や namesPattern に握りつぶされても、覚えた断りは残る）。
+  // 輪より後に置くのは、守りの断りが解く順に依らずに見つかる輪を覆わないため（前は総数の守りが先に投げ上がり、輪を見る前に
+  // 止まる並べ方があった。確かめ 2026-10-20）。実体の深さの守りは、鍵だけで決まる普通の門なので、ほかの門と同じく行を解くとき
+  // に断る（INSTANCE_DEPTH_LIMIT の注の1）。
   let trees;
+  let lineError = null;
   try {
     for (const def of F.defs.values()) {
       if (def.lambda) continue;
@@ -3095,17 +3114,27 @@ export function resolve(source) {
     }
     for (const def of F.defs.values()) if (def.lambda && def.plain) bodyRootOf(F, def.lambda);
 
-    // 各行を解く。括りの関数の実体は、呼んだ所で作って木まで解く（instantiate）。
-    trees = lines.map((line) => resolveTree(line, { F, scope: F.fileScope, diag: diagnostics }));
+    // 各行を解く。括りの関数の実体は、呼んだ所で作って木まで解く（instantiate）。断る行があっても、残りの行を解き続ける：
+    // 実体の総数はファイル全体の木の性質なので、断る行で止めると、総数を超えるかが行の順で割れた（門のある行と、合わせて
+    // 総数を超える2つの行。確かめ 2026-10-20）。断る行は、最初の物を覚える（行の門が2つあれば、行の順に断る。今までどおり）。
+    trees = [];
+    for (const line of lines) {
+      try {
+        trees.push(resolveTree(line, { F, scope: F.fileScope, diag: diagnostics }));
+      } catch (e) {
+        if (!(e instanceof OperationError)) throw e;
+        // 資源の守りから来た断り（当たった `?` の実体を作らせなかった所）より、ほかの断りを先に覚える（refusalOf）。資源の守りに
+        // 当たる前に作った実体の門を、守りに当たった行が先に来る並べ方でも言う（確かめ 2026-10-20）。
+        if (!lineError || (lineError.guard && !e.guard)) lineError = e;
+        trees.push(null);
+      }
+    }
   } catch (e) {
-    throw F.againRefused || F.cycleRefused || guardRefused(F) || stackRefusal(e) || e;
+    const stack = stackRefusal(e);
+    if (!stack && !(e instanceof OperationError)) throw e; // 内部の誤りは、覚えた断りで覆わない
+    throw refusalOf(F, stack || e);
   }
-  if (F.againRefused) throw F.againRefused;
-  // 値を含む輪を、どこかで握りつぶしても断る（namesPattern は、既定値を覗いた所を通る輪だけを握りつぶし、そのときは
-  // F.cycleRefused を覗く前に戻す。namesPattern の注）。
-  if (F.cycleRefused) throw F.cycleRefused;
-  const guarded = guardRefused(F);
-  if (guarded) throw guarded;
+  if (lineError || F.againRefused || F.cycleRefused || guardRefused(F)) throw refusalOf(F, lineError);
 
   // 括りの関数の `?` の木を、ファイル全体で集めた実体で埋める（R25）。全部の行を解き終えてから埋めるので、呼ぶ行が
   // 定義の前でも後でも同じ木になる。並べるのは、その `?` を通って呼ばれ（recordCall）、木まで解けた実体だけ：門に
