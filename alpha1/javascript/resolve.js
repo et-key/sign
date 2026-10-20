@@ -1138,7 +1138,17 @@ function abortFrame(F, frame) {
   }
   // この枠に頼って作った実体は、外れたのと同じに扱う（INSTANCE_DEPTH_LIMIT の注の3）。
   if (frame.pendingCalls) settlePending(F, frame, true, []);
+  if (frame.tainted) taint(F); // 汚れは、抜けた先の計算に移る（refusalOf）
 }
+// 守りの断りの汚れ（INSTANCE_DEPTH_LIMIT の注の5、refusalOf）。守りに当たった所は門として未知になり、当たった `?` の新しい実体は
+// 作らないので、それを捕まえた枠の答えと、その答えを読んだ計算は、守りが無いときの答えと違いうる。汚れた計算で出た門と値を
+// 含む輪は、作り物かもしれないので、守りの断りより後に言う。汚れた計算の呼び出しは、確定した実体に数えない（noteCall）。
+// いまの計算に汚れを付ける：解いている途中の枠か、枠が空なら、いま解いている行。
+function taint(F) {
+  if (F.stack.length) F.stack[F.stack.length - 1].tainted = true;
+  else F.lineTainted = true;
+}
+const taintedNow = (F) => F.lineTainted || F.stack.some((f) => f.tainted);
 // 解いている途中の枠 target の仮置きを読む。via は、記録を通して読んだときの、その記録から target までの道筋（一歩の
 // 綴りの配列を返す関数。言い分を作るときだけ呼ぶ）。
 // target より上に値の定義の枠があれば、仮置きで閉じずに断る（「値を含む輪」の注）。
@@ -1254,7 +1264,9 @@ function cycleError(F, i, via) {
   );
   e.cycle = ring.map((s) => s.text);
   e.cycleFrom = i; // 輪のいちばん下の枠（namesPattern が、覗いた所を通る輪かを見る）
-  F.cycleRefused = F.cycleRefused || e;
+  // 汚れた計算（守りの断りを捕まえた答えを読んだ所）で見つけた輪は、作り物かもしれない（taint、refusalOf）。汚れていない輪を先に覚える。
+  e.suspect = taintedNow(F);
+  if (!F.cycleRefused || (F.cycleRefused.suspect && !e.suspect)) F.cycleRefused = e;
   return e;
 }
 // 輪の道筋の一歩（枠の持ち主か、枠を積まない無名の素の関数の本体）。
@@ -1323,6 +1335,7 @@ function collectedRoot(F, c, value, again) {
       }
       root = "U";
       gated = true;
+      if (e.guard) frame.tainted = true; // 守りの断りを捕まえた（汚れ、refusalOf）
     }
     cell.gated = gated || !!frame.gated;
     finishFrame(F, frame, memo, root);
@@ -1334,6 +1347,7 @@ function readMemo(F, entry, owner) {
   const via = (d) => () => [owner(), ...(entry.cyc.has(d) ? entry.cyc.get(d)() : [])];
   for (const d of entry.deps) consult(F, d, via(d));
   for (const d of entry.cyc.keys()) if (!entry.deps.has(d)) passThrough(F, d, via(d));
+  if (entry.tainted) taint(F); // 汚れた記録を読んだ（taint）
   return entry.value;
 }
 // 記録を引く。古ければ記録を消して null を返し、呼んだ側が解き直す（そのときには、外れた仮置きの関数の記録は確定して
@@ -1362,6 +1376,7 @@ function finishFrame(F, frame, memo, value) {
     [...frame.deps].filter((d) => d !== frame),
     [...frame.cyc].filter(([d]) => d !== frame)
   );
+  if (frame.tainted) entry.tainted = true; // 汚れた答え（taint）
   memo.set(frame.key, entry);
   for (const d of entry.deps) d.tentatives.push(entry);
   for (const d of entry.cyc.keys()) d.cycEntries.push(entry);
@@ -1392,6 +1407,12 @@ function finishFrame(F, frame, memo, value) {
   }
   // この枠に頼って作った実体（INSTANCE_DEPTH_LIMIT の注の2・3）。外れたら作った実体の数から外し、当たったら、この枠が頼った
   // 仮置きに頼り直す。外れたかは仮置きの記録と同じ（読まれて A でない）。最後に置く（総数の門に当たっても、記録は済んでいる）。
+  // 汚れた答えは、それを読んだ呼んだ側の計算と、仮置きを読んで頼った答えにも移る（taint）。
+  if (frame.tainted) {
+    taint(F);
+    for (const t of frame.tentatives) t.tainted = true;
+    for (const c of frame.pendingCalls || []) c.onPath = false; // 汚れた答えに頼った呼び出しは数えない
+  }
   if (frame.pendingCalls) settlePending(F, frame, frame.failed || (frame.consulted && value !== "A"), entry.deps);
 }
 
@@ -1450,6 +1471,7 @@ function bodyRootOf(F, lambdaOp) {
       throw e;
     }
     value = "U"; // 本体が門に当たる。根は決まらない（行を解くときに同じ門で断る）
+    if (e.guard) frame.tainted = true; // 守りの断りを捕まえた（汚れ、refusalOf）
   }
   if (frame.consulted && value !== "A") {
     value = "U";
@@ -1491,9 +1513,10 @@ function bodyRootOf(F, lambdaOp) {
 // 3と4は止まるための資源の守りで、計算の道で決まる（理屈の外。別の reason で断る）。
 // どの守りも、当たったら門として投げる（根の種類を解く所では未知になり、そこから先は浅く止まる）。1 は普通の門で、呼んだ行
 // で名指しする。2〜4 は覚えて（guardRefusal）、resolve の最後に言う。当たった `?` では、それから新しい実体を作らない（ほかの
-// `?` は解き続ける）。断る行があっても残りの行を解き、言うのは、解き直しの守り → 値を含む輪 → 2（ファイル全体の最後の木で
-// 決まる）→ 最初に断った行の門 → 3・4 の順（refusalOf）。3・4 は計算の道で決まり、当たった後は実体を作らせないので、最後の木の
-// 門を先に言う。断る行が2つ以上なら行の順に言うのは今までどおりで、資源の守りの前後では、断るかが解く順に依りうる（§5 Q25 の
+// `?` は解き続ける）。前段（名前の種類と素の関数の本体の根）でも行でも、断ってもその先を解き続け（解き直しの守りと値を含む輪
+// だけは、そこで止める）、言うのは、解き直しの守り → 値を含む輪 → 2（ファイル全体の最後の木で決まる）→ 最初に断った行の門 →
+// 3・4 → 汚れた所の輪と門の順（refusalOf、注の5）。3・4 は計算の道で決まり、当たった後は実体を作らせないので、汚れていない最後の
+// 木の門を先に言う。断る行が2つ以上なら行の順に言うのは今までどおりで、資源の守りの前後では、断るかが解く順に依りうる（§5 Q25 の
 // 未決）。
 //
 // 1. 深さ（INSTANCE_DEPTH_LIMIT）：作る実体の鍵の入れ子の深さ（instanceDepth）がこの数を超えたら、その実体を作らずに
@@ -1530,8 +1553,8 @@ function bodyRootOf(F, lambdaOp) {
 //    足すと、g が先なら仮置きの上の p|{s:A} も数えて G7、f が先なら通る。§5 Q25 の SC-3）。門に当たる実体の後ろの実体も数えて
 //    いたので、`t : x ? (bad [y : 1]) , (p [m : 1])` と p の実体を 512 個作る行は、行の順で G5 と総数の G7 に割れた（前の版も）。
 //    枝ごとに形が増える再帰（`g : [x ~xs] ? (g [[a : xs] [a : xs]]) , (g [[b : xs] [b : xs]])`）は、最初の枝を深さ優先で降りて
-//    深さの門に当たるので、最後の木はそこで断る形で、残りの枝は最後の木に無い。根の種類を解く所の増え方は 3 で止まり、言うのは
-//    最後の木の深さの門（refusalOf）。
+//    深さの門に当たるので、最後の木はそこで断る形で、残りの枝は最後の木に無い。根の種類を解く所の増え方は 3 で止まる。最後の木の
+//    深さの門は、3 に当たった答えを読んだ所（汚れた計算、注の5）で出るので作り物と見分けられず、3 を言う（refusalOf）。
 // 3. 作った実体の数（INSTANCE_WORK_LIMIT）：2 で数えない実体（仮置きに頼った物と、門に当たる実体の後ろの物）は、増え続けても
 //    2 では止まらない（`g : [x ~xs] ? (g xs) , (g [[a : xs] [a : xs]]) , (g [[b : xs] [b : xs]])` は、同じ形で自分を引いた後なので、
 //    後ろの実体はどれも g の仮置きに頼る）。だから同じ `?` で作って外れていない実体（確定した物と、まだ仮置きに頼っている物と、
@@ -1547,6 +1570,11 @@ function bodyRootOf(F, lambdaOp) {
 //    （§5 Q25 の未決。値だけを渡す別々の関数でも 257 段の鎖は断る。前の版は数千段まで通し、並べ方によってスタックが溢れた）。
 //    実体1段の本体が重い（括弧の深い入れ子）と、上限の内でもスタックが溢れる。そのときは内部の例外にせず、資源の守りとして断る
 //    （resolve-stack-limit、stackRefusal。どこで溢れるかは、同じプロセスで前に何を解いたかでも変わる）。
+// 5. 汚れ（taint）：守りに当たった所は門として未知になり、当たった `?` の新しい実体は作らないので、守りの断りを捕まえた枠の答え
+//    と、その答えを読んだ計算は、守りが無いときと違いうる。だから、守りの断りを捕まえた枠と、汚れた答えを読んだ計算に印を付け
+//    （frame.tainted・記録の tainted・行の F.lineTainted）、汚れた計算の呼び出しは 2 に数えず、汚れた計算で出た門と値を含む輪は
+//    作り物かもしれないので、3・4 の後に言う（refusalOf）。前は、入れ子の数の守りで未知になった根から出た G2(a) を、最後の木の
+//    門として先に言った（`pi : [a ~r] ? p(i+1) r` の 300 個と `f : x ? p1 [1 2 3]`・`f 5 inc`。確かめ 2026-10-20）。
 // どの値も言語の規則ではなく実装の守りで、値は決めていない。
 const INSTANCE_DEPTH_LIMIT = 32;
 const INSTANCE_TOTAL_LIMIT = 512;
@@ -1594,7 +1622,7 @@ function noteCall(F, inst, op, label, made) {
   const set = F.instanceTotals.get(op);
   if (set && set.has(inst)) return;
   const pend = pendingNow(F);
-  const onPath = !gatedNow(F);
+  const onPath = !gatedNow(F) && !taintedNow(F);
   if (!pend.size) {
     if (onPath) countSettled(F, inst, op, label);
     return;
@@ -1698,16 +1726,18 @@ function stackRefusal(e) {
   s.guard = "stack"; // 資源の守り（refusalOf）
   return s;
 }
-// 断る理由を1つ選ぶ（resolve の最後）。e は最初に断った行の断り（か、行を解く前の断り）。解き直しの守り → 値を含む輪 → 実体の
-// 総数（G7、ファイル全体の最後の木で決まる）→ 行の門（最初に断った行）→ 資源の守り（作った実体の数・入れ子の数・スタック）の順。
-// 資源の守りは計算の道で決まり、当たった後の計算は当たった `?` の新しい実体を作らないので、行の門より後に置く。行の断りが資源の
-// 守りから来た物（実体を作らせなかった所）なら、資源の守りを言う。
+// 断る理由を1つ選ぶ（resolve の最後）。e は覚えた行の断り（資源の守りから来ていない、汚れていない物を先に覚えた物）。
+// 解き直しの守り → 値を含む輪（汚れていない物）→ 実体の総数（G7、ファイル全体の最後の木で決まる）→ 行の門（汚れていない、
+// 最初に断った行）→ 資源の守り（作った実体の数・入れ子の数・スタック）→ 汚れた輪・汚れた行の断りの順。資源の守りに当たった後の
+// 計算は、当たった `?` の新しい実体を作らず、それを捕まえた答えは守りが無いときと違いうる（taint）ので、汚れた所で出た門は
+// 資源の守りの後に置く。汚れていない門は最後の木の門なので、資源の守りより先に言う。
 function refusalOf(F, e) {
   if (F.againRefused) return F.againRefused;
-  if (F.cycleRefused) return F.cycleRefused;
+  const cycle = F.cycleRefused;
+  if (cycle && !cycle.suspect) return cycle;
   if (F.guards.total) return F.guards.total;
-  if (e && !e.guard) return e;
-  return F.guards.work || F.guards.nest || e;
+  if (e && !e.guard && !e.suspect) return e;
+  return F.guards.work || F.guards.nest || F.stackRefused || cycle || e;
 }
 
 function patternFn(F, op, params, defScope, label) {
@@ -1984,6 +2014,7 @@ function instRootOf(F, inst, label) {
     // 同じ。INSTANCE_DEPTH_LIMIT の注の1）。
     value = "U";
     gated = true;
+    if (e.guard) frame.tainted = true; // 守りの断りを捕まえた（汚れ、refusalOf）
   }
   F.instNest--;
   // 本体が門に当たるか、門に当たる実体を呼んだ実体は、木を残す段で断る（呼んだ側の枠の後ろは最後の木に無い、instantiate）。
@@ -2537,6 +2568,7 @@ function namesPattern(name, ctx, inDefault) {
     return isPattern(nameKindOf(F, def)); // 別名（`p : t`）
   } catch (e) {
     if (!(e instanceof OperationError)) throw e;
+    if (e.guard) taint(F); // 守りの断りを握りつぶす：この先の計算は汚れる（taint）
     if (e.reason !== "name-cycle") return false; // 門は、その定義の行を解くときに出る
     // 名前の輪（§5 Q30）。既定値の中を覗いた所を通る輪（輪のいちばん下の枠が、覗く前から解いている途中）は、種類の輪では
     // ない。既定値は解かず（P3）、値の無で呼ばれたときにだけ評価する（§3.7）ので、値はできる（`v : g 1`・`g : x ? [[y : v 2]
@@ -3070,6 +3102,9 @@ export function resolve(source) {
     guards: {},
     guardStops: new Map(), // 守りに当たった `?` → その断り（新しい実体を作らない、instantiate）
     instNest: 0,
+    // いま解いている行（か前段の定義）の計算が、守りの断りの汚れを読んだか（taint）。JS のスタックの溢れの断り（stackRefusal）。
+    lineTainted: false,
+    stackRefused: null,
   };
   resetIntern();
 
@@ -3103,36 +3138,48 @@ export function resolve(source) {
   // に断る（INSTANCE_DEPTH_LIMIT の注の1）。
   let trees;
   let lineError = null;
-  try {
-    for (const def of F.defs.values()) {
-      if (def.lambda) continue;
-      try {
-        nameKindOf(F, def);
-      } catch (e) {
-        if (!isGate(e)) throw e;
-      }
+  // 断りの順（refusalOf）：資源の守りから来た断り（当たった `?` の実体を作らせなかった所）・汚れた計算で出た断りより、ほかの
+  // 断りを先に覚える。資源の守りに当たる前に作った実体の門を、守りに当たった行が先に来る並べ方でも言う（確かめ 2026-10-20）。
+  const rank = (e) => (e.guard ? 2 : e.suspect ? 1 : 0);
+  const noteLineError = (e) => {
+    if (!e.guard && F.lineTainted) e.suspect = true;
+    if (!lineError || rank(e) < rank(lineError)) lineError = e;
+  };
+  // 前段（名前の種類と素の関数の本体の根）の断りでも止めず、残りの定義と行を解く。その断りは、定義の行を解くときにまた出る
+  // （前は門でない断りで止めたので、総数を超えるかが定義の順で割れた。確かめ 2026-10-20）。解き直しの守りと値を含む輪に
+  // 当たったら止める（それを言うので。解き続けると、抜けた枠の解き直しで解き直しの守りに当たった）。
+  const ahead = (f) => {
+    F.lineTainted = false;
+    try {
+      f();
+    } catch (e) {
+      if (!(e instanceof OperationError) || F.againRefused || F.cycleRefused) throw e;
     }
-    for (const def of F.defs.values()) if (def.lambda && def.plain) bodyRootOf(F, def.lambda);
+  };
+  try {
+    for (const def of F.defs.values()) if (!def.lambda) ahead(() => nameKindOf(F, def));
+    for (const def of F.defs.values()) if (def.lambda && def.plain) ahead(() => bodyRootOf(F, def.lambda));
 
     // 各行を解く。括りの関数の実体は、呼んだ所で作って木まで解く（instantiate）。断る行があっても、残りの行を解き続ける：
     // 実体の総数はファイル全体の木の性質なので、断る行で止めると、総数を超えるかが行の順で割れた（門のある行と、合わせて
     // 総数を超える2つの行。確かめ 2026-10-20）。断る行は、最初の物を覚える（行の門が2つあれば、行の順に断る。今までどおり）。
     trees = [];
     for (const line of lines) {
+      F.lineTainted = false;
       try {
         trees.push(resolveTree(line, { F, scope: F.fileScope, diag: diagnostics }));
       } catch (e) {
-        if (!(e instanceof OperationError)) throw e;
-        // 資源の守りから来た断り（当たった `?` の実体を作らせなかった所）より、ほかの断りを先に覚える（refusalOf）。資源の守りに
-        // 当たる前に作った実体の門を、守りに当たった行が先に来る並べ方でも言う（確かめ 2026-10-20）。
-        if (!lineError || (lineError.guard && !e.guard)) lineError = e;
+        if (!(e instanceof OperationError) || F.againRefused || F.cycleRefused) throw e;
+        noteLineError(e);
         trees.push(null);
       }
     }
   } catch (e) {
     const stack = stackRefusal(e);
     if (!stack && !(e instanceof OperationError)) throw e; // 内部の誤りは、覚えた断りで覆わない
-    throw refusalOf(F, stack || e);
+    if (stack) F.stackRefused = stack;
+    else noteLineError(e);
+    throw refusalOf(F, lineError);
   }
   if (lineError || F.againRefused || F.cycleRefused || guardRefused(F)) throw refusalOf(F, lineError);
 
