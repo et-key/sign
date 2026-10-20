@@ -1599,8 +1599,8 @@ const INSTANCE_NEST_LIMIT = 256;
 function writtenDepth(lines, F) {
   let deepest = 1;
   const lambdas = new Set();
-  // 値の定義の書いた深さ。右辺の値の形だけを数える：関数の本体（`?` の右）と `:` の左は値の形に入らず、`$`・`@`・前置 `~` など
-  // 前置の印の付いた名前は種類を引かない（形の無い値か、未知）ので辿らない。だから、ここで辿る名前の輪は種類の輪（値を含む輪で、
+  // 値の定義の書いた深さ。右辺の値の形だけを数える：関数の本体（`?` の右）と `:` の左は値の形に入らず、印の付いた名前（`$w`・
+  // `@w`・前置 `~`・後置 `@` は種類を引かない。値の印・後置 `~` を付けた物も、鍵では形の無い値か撒く項で深さ 1）は辿らない。だから、ここで辿る名前の輪は種類の輪（値を含む輪で、
   // どの並べ方でも name-cycle で断る。§5 Q30）だけで、そこを 0 で切っても、断らないプログラムの答えは並べ方に依らない。
   const memo = new Map(); // 値の定義 → 書いた深さ（解いている途中は 0）
   const nameDepth = (name) => {
@@ -1616,7 +1616,7 @@ function writtenDepth(lines, F) {
   const termDepth = (t, inValue) => {
     if (!t) return 1;
     if (t.type === "infix") return 1 + Math.max(termDepth(t.left, inValue), termDepth(t.right, inValue));
-    if (t.core.c === "name") return t.pre.length ? 1 : nameDepth(t.core.name);
+    if (t.core.c === "name") return t.pre.length || t.post.length ? 1 : nameDepth(t.core.name);
     if (t.core.rows) return 1 + t.core.rows.reduce((m, r) => Math.max(m, treeDepth(r, inValue)), 0);
     return 1;
   };
