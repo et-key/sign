@@ -1017,22 +1017,95 @@ function reportUndefined(name, ctx) {
   });
 }
 
-// ---- 仮置きの記録（§3.4「再帰は、A と仮置きして一巡し、仮置きと結果が食い違えば未知にする」） ----
+// ---- 仮置きの記録（§3.4「再帰は、A と仮置きして一巡し、食い違えばその関数を未知にし、外れた仮置きに頼った答えは確定した値で解き直す」） ----
 //
-// 本体の根を解いている途中の関数をもう一度引いたら、A と仮置きして返す。仮置きを使って出した答え（途中の
-// 関数より上で解いた本体の根や、値の定義の種類）は、仮置きが当たったと分かるまで「仮の答え」として覚え、
-// 食い違ったら未知に替える。そうしないと、外れた仮置きの上に立った答えが黙って残る。
+// 種類（素の関数の本体の根・値の定義の種類・括りの関数の実体の本体の根・無名の素の関数の本体の根）は、定義どうしの依りの
+// 上の不動点である。本体の根を解いている途中の関数をもう一度引いたら、A と仮置きして返す。その関数の本体の根が A でなければ、
+// 仮置きが外れたので、その関数は未知（§3.4）。仮置きを使って出した答え（途中の関数より上で解いた本体の根や、値の定義の
+// 種類）は、仮置きが当たったと分かるまで「仮の答え」として覚える。外れたら、その答えに古い（stale）と印を付け、次に読まれた
+// ときに、確定した値で解き直す（freshMemo・collectedRoot）。そうしないと、外れた仮置きの上に立った答えが黙って残る。
+//
+// 前は、外れた仮置きに頼った答えを全部未知に替えていた。依り（deps）は、解いている途中の関数を引いた所より上の枠の全部に
+// 付く（根に使ったかは見ない）ので、根に使っていない本体（`g : y ? (f 1 y) , 1`。根は積）まで未知になり、f と g のどちらを
+// 先に解くかで g の根が割れた（§5 Q28。f が先なら `g 5 inc` は G2(a)、g が先なら A）。解き直すなら、依りが広くても、
+// 増えるのは解き直しの手間だけで、答えは変わらない（利用者 2026-10-20「コンパイルの時間を早めたければ、定義の順序を
+// 見直せとも言えるね！」）。依りを根に使った物だけに狭める（Q28 の案(1)）必要は無い。
+//
+// 印を付けるのは3つの所である。どれが欠けても、外れた仮置きの上に立った答えが残り、定義の順で答えが割れる。
+// 1. 外れた枠の名簿（tentatives）にある答え（finishFrame）。
+// 2. 当たった枠の名簿にある答えは、その枠が頼った仮置き（枠の deps）を引き継ぐ（finishFrame）。枠が当たったと言えるのは、
+//    その枠が頼った下の仮置きも当たったときだけだからである。前は引き継がず、O・M・N の順に枠が積まれ、N が M の仮置きを、
+//    M が O の仮置きを使い、M が A で閉じた後で O が外れると、N の答えが古いまま残った（確かめ 2026-10-20 の F1：
+//    `h : x ? ⏎ ⇥f x ⏎ ⇥inc`・`f : x ? ⏎ ⇥g x ⏎ ⇥h x`・`g : x ? f x` は、h を f・g より先に置くと `g 5 inc` が A、ほかの並べ方は
+//    G2(a)。A の側は黙った誤答。HEAD からある）。
+// 3. 例外（門ではない例外。名前の輪など）で抜けた枠の名簿にある答え（abortFrame）。仮置きが当たったか確かめられないから
+//    である。前は付けず、namesPattern が輪を握りつぶす道で、仮置きの上で A と出した関数の答えが残った（確かめ 2026-10-20 の
+//    Q28V-3：`k : x ? h x` の h が未知なのに、w を v より先に置くと `k 5 inc` が A。HEAD からある）。
+//
+// 根の答えが未知なら、印を付けず、依りも持たせない（entryOf）。未知はいちばん下で、下の「単調」により、確定した値で解き
+// 直しても未知のままだからである。前は未知の答えにも印を付けていたので、解き直しの中で外の枠がまた仮置きされて外れ直し、
+// 同じ記録の解き直しが関数の数の指数で増えた（確かめ 2026-10-20 の Q28V-1・F3：f1〜f5 が後ろの f と g を呼び、g が積で
+// f1〜f5 を呼ぶ形で、g の解き直しが 31 回。関数 16 個で 65535 回）。値の定義の種類は A・L・U と中身の形を持つので、根と
+// 同じ「いちばん下」は言わず、いつも解き直す（値の定義は仮置きされないので、解き直しても外れは増えない）。
+//
+// 答えが定義の順に依らない理由（P2「順序には依らない」）：根の種類で答えに効くのは「A か、A でないか」だけ（plainApply・
+// instantiate）で、§3.4 の表の行は、引いた根が A のときだけ A を返し、A でなければ未知か門（門に当たった本体の根は未知）に
+// する。だから引いた根が A から A でないへ下がっても、どの本体の根も上がらない（単調）。仮置きは A（上）から始め、外れたら
+// 確定した値（A でない）で解き直すので、各関数の値は A から一度だけ下がる。下げるのは、上の仮置き（どれも本当の値より
+// 下がっていない）のもとでも A にならないと分かった時だけなので、確定した値は、いちばん大きい不動点の値より下がらない。
+// 外れた仮置きに頼った答えは、上の3つの印で全部解き直すので、着いた所は不動点である。だから、どの順に解いても、いちばん
+// 大きい不動点に着く。解き直しの手間だけが順に依る。
+// この理屈は、門が本体と前提の値だけで決まることを使っている。実体の深さの守りは、それだけでは決まらない（当たるかが枠の
+// 積み方で決まる）ので、理屈の外に置く。当たったら記録の答えに頼らず、resolve ごと断る（INSTANCE_DEPTH_LIMIT の注の3）。
+// 実体の総数の守りも同じく理屈の外で、作った実体の数（外れた仮置きの上でだけ作った物も入る）で当たるので、断るかが定義の
+// 順で割れうる（§5 Q25、未決。2026-10-20 の自己点検の SC-3）。
+//
+// 解き直しの手間：外れた記録は未知に下がり、二度と枠を積まないので、各記録の仮置きが外れるのは一度だけである。印は外れか
+// 例外のたびにしか付かないので、同じ記録の解き直しは、それまでの外れと例外の数を超えない（外れは記録の数まで）。上の
+// Q28V-1 の形は、g の解き直しが関数の数（5 回）で済む。単調でない所（未知を受けると A になる所）があっても、未知の根は
+// 解き直さないので、根が上がって振動することは無い（確かめ 2026-10-20 では、単調でない所は見つかっていない）。
+
+// 同じ記録の解き直しの守り（実装の守り。値は言語の規則ではない）。上の「解き直しの手間」により、同じ記録の解き直しは、
+// 外れの数（枠を積んだ鍵の数 F.frameKeys まで）と例外の数の和を超えない。例外は名前の輪のような止まる誤りで、続くのは
+// namesPattern が握りつぶす所だけなので、鍵の数を超えて解き直すのは、例外が繰り返したか、上の理屈が破れたときである。
+// そのときは読みを決めずに、名指しして断る（未知に固定して黙って進めると、断る側でも言い分が別の門になり、理由が見えない）。
+// 前は 16 回で未知に固定していたが、未知の答えにも印を付けて解き直しが指数で増えたので、関数5つの普通のプログラムが上限を
+// 踏み、定義の順で割れた（確かめ 2026-10-20 の Q28V-1・F2）。
+function guardAgain(F, count, label) {
+  if (count <= F.frameKeys.size) return;
+  const e = new OperationError(
+    `${label} の種類を、仮置きが外れたので ${count} 回解き直しました（枠を積んだ記録の数 ${F.frameKeys.size} を超えました）。解き直しが終わるかを決めないので、読みを決めません（§3.4）。`,
+    { spec: `${SPEC} §3.4`, reason: "resolve-again-limit" }
+  );
+  F.againRefused = F.againRefused || e; // namesPattern が握りつぶしても、resolve の最後に断る
+  throw e;
+}
+function recordLabel(F, key) {
+  if (key.isInst) return `括りの関数 \`${key.label}\` の実体（形 ${key.shapeText}）`;
+  const fn = F.namedLambdas.get(key);
+  if (fn) return `関数 \`${fn.name}\``;
+  return F.defs.get(key.name) === key ? `定義 \`${key.name}\`` : "名前の無い関数";
+}
 
 function pushFrame(F, key) {
   const frame = { key, deps: new Set(), consulted: false, failed: false, tentatives: [] };
   F.stack.push(frame);
   F.inProgress.set(key, frame);
+  F.frameKeys.add(key);
   return frame;
 }
-function abortFrame(F, frame) {
+function popFrame(F, frame) {
   const i = F.stack.lastIndexOf(frame);
   if (i >= 0) F.stack.splice(i, 1);
   F.inProgress.delete(frame.key);
+}
+// 例外で抜けた枠（「仮置きの記録」の注の3）。
+function abortFrame(F, frame) {
+  popFrame(F, frame);
+  for (const t of frame.tentatives) {
+    t.deps.delete(frame);
+    if (t.value !== "U") t.stale = true;
+  }
 }
 function consult(F, target) {
   target.consulted = true;
@@ -1047,6 +1120,11 @@ function consult(F, target) {
 // 別の括りの関数の実体へ渡る。仮置きを覚えずに `() => root` で持つと、仮置きが外れても根が古いまま残り、それを読んだ
 // 実体の答え（instMemo）も古いまま残る。行の順で、同じ関数が通ったり G7 になったりした（確かめ 2026-10-19 の A-F1）。
 // 覚えた仮置きは名前つきの関数の根（bodyRootOf）と同じく記録に載せ、読むたびに consult する（readMemo）。
+// 名前が無いので記録の地図（bodyMemo）には載らない。だから記録は閉包が持ち、本体を同じ範囲で解き直す手段（again）も持つ。
+// 仮置きが外れて古くなったら、読まれたときに枠を積んで解き直す（bodyRootOf と同じく根だけ。枠を積むので F.stack は空に
+// ならず、実体の木（materialize）も呼んだ記録（recordCall）も作らない。門に当たれば未知）。解き直している途中に、ほかの
+// 関数の本体（欄で受けた実体など）を通ってまた読まれたら、bodyRootOf と同じく A と仮置きする（§3.4。枠を積み直すと、
+// 同じ鍵の枠が2つ積まれ、内の枠を閉じたときに外の枠が解いている途中の印から消える）。
 function beginCollect(F) {
   const c = { start: F.stack.length, deps: new Set() };
   F.collectors.push(c);
@@ -1056,24 +1134,71 @@ function endCollect(F, c) {
   const i = F.collectors.lastIndexOf(c);
   if (i >= 0) F.collectors.splice(i, 1);
 }
-function collectedRoot(F, c, value) {
-  const entry = { value, deps: new Set([...c.deps].filter((d) => F.stack.includes(d))) };
-  for (const d of entry.deps) d.tentatives.push({ entry, unknown: () => "U" });
-  return () => readMemo(F, entry);
+function collectedRoot(F, c, value, again) {
+  const cell = { entry: entryOf(value, [...c.deps].filter((d) => F.stack.includes(d))), count: 0 };
+  for (const d of cell.entry.deps) d.tentatives.push(cell.entry);
+  const memo = { set: (_, entry) => (cell.entry = entry) };
+  return () => {
+    const running = F.inProgress.get(cell);
+    if (running) {
+      consult(F, running);
+      return "A";
+    }
+    if (!cell.entry.stale) return readMemo(F, cell.entry);
+    guardAgain(F, ++cell.count, "名前の無い関数");
+    const frame = pushFrame(F, cell);
+    let root;
+    try {
+      root = again();
+    } catch (e) {
+      if (!isGate(e)) {
+        abortFrame(F, frame);
+        throw e;
+      }
+      root = "U";
+    }
+    finishFrame(F, frame, memo, root);
+    return root;
+  };
 }
 function readMemo(F, entry) {
   for (const d of entry.deps) consult(F, d);
   return entry.value;
 }
-function finishFrame(F, frame, memo, value, unknown) {
-  abortFrame(F, frame);
-  const entry = { value, deps: new Set(frame.deps) };
-  entry.deps.delete(frame);
+// 記録を引く。古ければ記録を消して null を返し、呼んだ側が解き直す（そのときには、外れた仮置きの関数の記録は確定して
+// いる）。解き直しの回数は guardAgain が見る。
+function freshMemo(F, memo, key) {
+  const entry = memo.get(key);
+  if (!entry || !entry.stale) return entry || null;
+  memo.delete(key);
+  const n = (F.againCounts.get(key) || 0) + 1;
+  F.againCounts.set(key, n);
+  guardAgain(F, n, recordLabel(F, key));
+  return null;
+}
+// 記録。根の答えが未知なら依りを持たせない（「仮置きの記録」の注：未知は解き直さない。読んだ側にも依りを渡さない）。
+function entryOf(value, deps) {
+  return { value, deps: new Set(value === "U" ? [] : deps) };
+}
+// 枠を閉じて記録に載せる（「仮置きの記録」の注の1・2）。この枠の仮置きが外れたら（failed）、それに頼った答えに古いと印を
+// 付ける（解き直しは読まれた時）。当たったら、それに頼った答えは、この枠が頼った仮置きを引き継ぐ。
+function finishFrame(F, frame, memo, value) {
+  popFrame(F, frame);
+  const entry = entryOf(value, [...frame.deps].filter((d) => d !== frame));
   memo.set(frame.key, entry);
-  for (const d of entry.deps) d.tentatives.push({ entry, unknown });
+  for (const d of entry.deps) d.tentatives.push(entry);
   for (const t of frame.tentatives) {
-    t.entry.deps.delete(frame);
-    if (frame.failed) t.entry.value = t.unknown();
+    t.deps.delete(frame);
+    if (t.stale || t.value === "U") continue;
+    if (frame.failed) {
+      t.stale = true;
+      continue;
+    }
+    for (const d of entry.deps) {
+      if (t.deps.has(d)) continue;
+      t.deps.add(d);
+      d.tentatives.push(t);
+    }
   }
 }
 
@@ -1088,7 +1213,7 @@ function nameKindOf(F, def) {
       fn: { type: "plain", origin: "plain", n: def.n, getBodyRoot: () => bodyRootOf(F, def.lambda), idKey: lambdaKey(def.lambda, F.fileScope.key) },
     };
   }
-  const memo = F.valueMemo.get(def);
+  const memo = freshMemo(F, F.valueMemo, def);
   if (memo) return readMemo(F, memo);
   if (F.inProgress.has(def)) {
     throw nameError("name-cycle", `定義 \`${def.name}\` の種類が、並びを通して自分の種類に依っています（輪）。`);
@@ -1106,13 +1231,13 @@ function nameKindOf(F, def) {
     abortFrame(F, frame);
     throw e;
   }
-  finishFrame(F, frame, F.valueMemo, value, U);
+  finishFrame(F, frame, F.valueMemo, value);
   return value;
 }
 
 // 素の名前つき関数の、本体の根の種類（§3.4）。
 function bodyRootOf(F, lambdaOp) {
-  const memo = F.bodyMemo.get(lambdaOp);
+  const memo = freshMemo(F, F.bodyMemo, lambdaOp);
   if (memo) return readMemo(F, memo);
   const running = F.inProgress.get(lambdaOp);
   if (running) {
@@ -1136,7 +1261,7 @@ function bodyRootOf(F, lambdaOp) {
     value = "U";
     frame.failed = true;
   }
-  finishFrame(F, frame, F.bodyMemo, value, () => "U");
+  finishFrame(F, frame, F.bodyMemo, value);
   return value;
 }
 
@@ -1166,18 +1291,142 @@ function bodyRootOf(F, lambdaOp) {
 // 呼んだ行で使った関数の名前にする（instanceError）。実体を最初に作った関数の名前にすると、ほかの行の有無で名指しが変わる。
 
 // 形を変えながら自分（か、自分を呼ぶ関数の輪）を呼び続ける再帰（`f : [x ~xs] ? f [xs xs]`）は、実体が有限に収まら
-// ない。同じ `?` の実体が、解いている途中の実体の並びにこの数だけ入れ子になったら、読みを決めずに断る（名指しせずに
-// 未知や仮置きのまま止めると、黙って違う木になる）。数えるのは同じ `?` の実体だけにする。別々の関数の鎖（`p1` が
-// `p2` を、`p2` が `p3` を…呼ぶ）は、関数の数で有限なので数えない（数えると、33 段の鎖を断り、しかも鎖の途中の実体を
-// 先に作った行があるかどうかで答えが変わった。確かめ 2026-10-19 の F1・F5）。
+// ない。同じ `?` の実体の入れ子がこの数を超えたら、読みを決めずに断る（名指しせずに未知や仮置きのまま止めると、黙って
+// 違う木になる）。数えるのは同じ `?` の実体だけにする。別々の関数の鎖（`p1` が `p2` を、`p2` が `p3` を…呼ぶ）は、関数の
+// 数で有限なので数えない（数えると、33 段の鎖を断り、しかも鎖の途中の実体を先に作った行があるかどうかで答えが変わった。
+// 確かめ 2026-10-19 の F1・F5）。
 // 減っていく形の再帰（入れ子の字面を1段ずつ剥がす）も同じ `?` の実体が入れ子になるので、32 段を超える入れ子の字面は
 // 断る側に倒れる。これは有限の物を断る（読みは決まっている）ので、上限は十分大きくしてある。
+//
+// 入れ子の数は、枠の積み方ではなく、実体どうしの呼び出しだけで決める（P2・R25：定義と行の順に依らない）。3つの所がある。
+// 1. 入れ子は、実体の本体が実体を作ることである。素の名前つき関数・値の定義・無名の関数の解き直しの枠は、本体をそれぞれ
+//    決まった範囲（ファイルの範囲・書いた所の範囲）で解くので、その上で作る実体は、下の枠の中に入れ子にならない。だから
+//    数えるのは、枠の並びのいちばん上から続く実体の枠と、枠が実体だけなら木を解いている途中の実体である（stretchOf）。前は
+//    下の枠まで全部数えたので、素の関数を挟む鎖（`f0 : x ? hb [s : f1]`・`f1 : x ? hb [s : f2]`…、hb の実体は素の関数の
+//    本体ごとに1段）を f0 から解くと、34 個の関数で hb の実体が 32 段に数えられて f0 の根が黙って未知になり、逆順なら A
+//    だった（確かめ 2026-10-20 の SC-1）。素の関数の枠は、解いている途中の物を引けば仮置きなので、並びに1度しか出ず、
+//    数えなくても段は有限である。
+// 2. 記録の済んだ実体を引いたら、その下の入れ子（heights：`?` → その実体から下へ続く同じ `?` の実体の数のいちばん大きい物）
+//    を足して数える。前は積んだ枠だけを数えたので、下の実体を浅い所で先に作った行があると数が減った。33 段の入れ子の字面
+//    （`p : [a] ? p a` と `b : p [a : [a : … 1]]`）が、浅い呼び出し `a2 : p [a : 1]` を先に置けば A、後に置けば b が黙って
+//    未知になった（SC-2）。実体どうしが形を変えながら呼び合う輪では、輪の中の実体を輪の外から引いたときだけ、輪の頭の
+//    段まで上げて数える（raiseInLoop・knownHeights。輪の頭が入れ子にあるときに上げると、輪の頭へ戻る道を2回数え、上限の
+//    内の入れ子を断った）。1本の輪なら、どこから入っても段の数が同じになる。輪の頭から下へ輪の外の道がある形に、頭でない
+//    実体から入ると1段少なく数えうるので、上限のちょうど上では、入る所で断るかが割れうる（近似。前からの未決）。
+// 3. 守りに当たった記録（当たった枠と、その下の枠の答え）は、前提の値だけでなく、枠の積み方で決まる。未知として記録に
+//    残すと、木を残す段（materialize）は記録を辿るだけで当たり直さず、黙った未知が残った（SC-2）。だから当たったことを
+//    覚え（F.depthFires）、resolve の最後に、ほかの誤りより先に、その言い分で断る（depthRefusal）。名指しは、当たった
+//    入れ子のいちばん外の実体（並べ方で替わらないよう、当たった物のうち形の綴りの順で最初の物）。
 const INSTANCE_DEPTH_LIMIT = 32;
 // 同じ `?` の実体の総数の上限（§5 Q25 の実装の守り）。深さは 32 以内でも、形が枝ごとに増えると（`g : [x ~xs] ? (g [[a : xs]]) ,
 // (g [[b : xs]])`）実体は 2^深さ になり、解決が止まらない。止まらないのは断るより悪い（どちらも読みを出さないが、止まら
 // ないと呼んだ行も名指しできない）ので、超えたら読みを決めずに G7 で名指しする。上限の値は言語の規則ではなく、実装の
 // 守りである（どの値にするかは決めていない。今の試験と .sn で同じ関数の実体が 64 を超える物は無い）。
+// 数えるのは作った実体の全部で、外れた仮置きの上でだけ作った実体（後で使われない物）も入る。だから上限の前後では、断るか
+// が定義の順で割れる（`g : x ? ⏎ ⇥f x ⏎ ⇥inc` と `f : x ? p [s : (g x)]` に、p の実体を 511 個作る行を足すと、g が先なら
+// p|{s:A} も数えて 513 個で G7、f が先なら 512 個で通る。2026-10-20 の自己点検の SC-3）。直すには、何を数えるか（木まで解いた
+// 実体だけか）と、止まるための別の上限を決める必要があり、どちらも決めていない（§5 Q25 の未決。断る側の割れで、黙った誤答
+// ではない）。
 const INSTANCE_TOTAL_LIMIT = 512;
+
+// いま解いている実体の入れ子（INSTANCE_DEPTH_LIMIT の注の1）。`?` → 段の数、入れ子の実体の集まり（輪の頭を見る、
+// knownHeights）、いちばん外の実体（名指し）。
+function stretchOf(F) {
+  const counts = new Map();
+  const members = new Set();
+  let head = null;
+  const put = (inst, label) => {
+    counts.set(inst.lambda, (counts.get(inst.lambda) || 0) + 1);
+    members.add(inst);
+    head = { label, shape: inst.shapeText, key: inst.key };
+  };
+  for (let i = F.stack.length - 1; i >= 0; i--) {
+    const k = F.stack[i].key;
+    if (!k || !k.isInst) return { counts, members, head };
+    put(k, F.stack[i].label);
+  }
+  for (let i = F.matStack.length - 1; i >= 0; i--) put(F.matStack[i], F.matStack[i].matLabel);
+  return { counts, members, head };
+}
+// 実体を呼ぶ前に、入れ子の段を数える（INSTANCE_DEPTH_LIMIT の注の2）。inst は記録の済んだ実体（その下の入れ子を足す）か、
+// null（作る実体。その実体の1段だけで、下は解きながら数える）。
+// 名指しは、入れ子のいちばん外の実体（どの `?` の段が先に超えたかは、記録の済み方で替わるので見ない）。入れ子が無ければ
+// 呼んだ実体。
+function checkDepth(F, fn, op, key, shapeText, inst) {
+  const s = stretchOf(F);
+  const h = (inst && knownHeights(F, inst, s.members)) || new Map([[op, 1]]);
+  for (const [q, n] of h) {
+    if ((s.counts.get(q) || 0) + n <= INSTANCE_DEPTH_LIMIT) continue;
+    const named = s.head || { label: fn.label, shape: shapeText, key };
+    F.depthFires.push(named);
+    mergeHeights(F, h); // 下の枠も、当たった段を持つ（後でその枠の記録を引いた所も当たる）
+    throw depthGate(named);
+  }
+}
+function depthGate(head) {
+  const shape = head.shape.length > 60 ? `${head.shape.slice(0, 60)}…` : head.shape;
+  const e = gate(
+    "G7",
+    `括りの関数 \`${head.label}\` を形 ${shape} で呼ぶと、同じ括りの関数の実体が、形を変えながら ${INSTANCE_DEPTH_LIMIT} 段を超えて入れ子になります（自分か、自分を呼ぶ関数の輪を呼び続けています）。実体が有限に収まるかを決めないので、本体の読みを決めません（R24）。`
+  );
+  e.instance = { fn: head.label, shape: head.shape };
+  e.instances = [e.instance];
+  return e;
+}
+// 深さの守りに当たっていたら、その言い分（INSTANCE_DEPTH_LIMIT の注の3）。当たった物が2つ以上なら、形の綴り・名前・鍵の
+// 順で最初の物（どれに先に当たるかは解く順に依る）。
+function depthRefusal(F) {
+  if (!F.depthFires.length) return null;
+  const order = (h) => [h.shape, h.label, h.key];
+  const less = (a, b) => {
+    const x = order(a);
+    const y = order(b);
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] < y[i];
+    return false;
+  };
+  return depthGate(F.depthFires.reduce((a, b) => (less(b, a) ? b : a)));
+}
+// 記録の済んだ実体の下の入れ子。記録が無いか古ければ null（引けば解き直すので、下は解きながら数える）。輪の中の実体は、
+// 輪の頭が入れ子に無いとき（輪の外から入ったとき）だけ、輪の頭の段まで上げる（raised、注の2）。輪の頭が入れ子にあるなら、
+// 輪の頭へ戻る道はもう数えてあるので、上げると同じ実体を2回数える。
+function knownHeights(F, inst, stretch) {
+  let h = inst.done || ((e) => e && !e.stale)(F.instMemo.get(inst)) ? inst.heights : null;
+  if (!h || !inst.raised) return h;
+  for (const [loopHead, hs] of inst.raised) {
+    if (stretch.has(loopHead)) continue;
+    for (const [q, n] of hs) {
+      if ((h.get(q) || 0) >= n) continue;
+      if (h === inst.heights) h = new Map(h);
+      h.set(q, n);
+    }
+  }
+  return h;
+}
+// 呼んだ実体の下の入れ子を、呼んだ側（いま本体を解いている実体の枠か、木を解いている途中の実体）に足す。呼んだ側が
+// 実体でない枠（素の関数・値の定義・無名の関数の解き直し）なら、入れ子はそこで切れる（注の1）。
+function mergeHeights(F, h) {
+  const top = F.stack[F.stack.length - 1];
+  if (top) {
+    if (!top.key || !top.key.isInst) return;
+    const below = top.below || (top.below = new Map());
+    for (const [q, n] of h) if ((below.get(q) || 0) < n) below.set(q, n);
+    return;
+  }
+  const m = F.matStack[F.matStack.length - 1];
+  if (!m) return;
+  for (const [q, n] of h) {
+    const v = n + (q === m.lambda ? 1 : 0);
+    if ((m.heights.get(q) || 0) < v) m.heights.set(q, v);
+  }
+}
+// 輪の頭 loopHead の段を、輪の中の実体 inst に覚える（knownHeights が、輪の外から入ったときに使う）。
+function raiseInLoop(inst, loopHead) {
+  const raised = inst.raised || (inst.raised = new Map());
+  const old = raised.get(loopHead);
+  const hs = new Map(old || []);
+  for (const [q, n] of loopHead.heights) if ((hs.get(q) || 0) < n) hs.set(q, n);
+  raised.set(loopHead, hs);
+}
 
 function patternFn(F, op, params, defScope, label) {
   const fn = { type: "pattern", n: params.length, idKey: lambdaKey(op, defScope.key), label, op, scopeKey: defScope.key };
@@ -1378,16 +1627,12 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
   const key = `${fnKey(fn)}|${b.key}`;
   const ident = callIdent(fn, params, argDescs);
   let inst = F.instances.get(key);
+  // 入れ子の段を数える（INSTANCE_DEPTH_LIMIT の注）。解いている途中か木を解いている途中の実体を引いたら輪なので、段はもう
+  // 数えてある。本体の中の呼び出しを記録するだけの歩き（walkCalls）は、歩く実体を木を解いている途中に積まないので1段
+  // 少なく数え、呼んだ側に足す段も、歩いた実体を通して足す段（呼んだ所で足す）を超えない。だから歩きで当たり方は変わらない。
+  const nests = !(inst && (F.inProgress.has(inst) || inst.materializing));
   if (!inst) {
-    // 同じ `?` の実体だけを数える（INSTANCE_DEPTH_LIMIT の注）。
-    const sameOp = F.stack.filter((f) => f.key && f.key.isInst && f.key.lambda === op).length + F.matStack.filter((i) => i.lambda === op).length;
-    if (sameOp >= INSTANCE_DEPTH_LIMIT) {
-      const text = b.text.length > 60 ? `${b.text.slice(0, 60)}…` : b.text;
-      throw gate(
-        "G7",
-        `括りの関数 \`${fn.label}\` が、形を変えながら自分（か、自分を呼ぶ関数の輪）を呼び続けています（同じ関数の実体が ${INSTANCE_DEPTH_LIMIT} 段入れ子になりました。いまの形 ${text}）。実体が有限に収まるかを決めないので、本体の読みを決めません（R24）。`
-      );
-    }
+    if (nests) checkDepth(F, fn, op, key, b.text, null);
     // 同じ `?` の実体の総数（INSTANCE_TOTAL_LIMIT の注）。
     const total = (F.instanceTotals.get(op) || 0) + 1;
     if (total > INSTANCE_TOTAL_LIMIT) {
@@ -1400,16 +1645,17 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
     F.instanceTotals.set(op, total);
     // scope は作った側の物の範囲（根の種類を出す、instRootOf）。walked は本体を歩いて記録した物の同一性（callIdent の注）。
     const scope = instScope(F, op, defScope, b, key, ident);
-    inst = { isInst: true, key, label: fn.label, shapeText: b.text, lambda: op, scope, walked: new Set(), cycleDeps: new Set() };
+    // heights は、その実体から下へ続く同じ `?` の実体の数（INSTANCE_DEPTH_LIMIT の注の2）。
+    inst = { isInst: true, key, label: fn.label, shapeText: b.text, lambda: op, scope, walked: new Set(), cycleDeps: new Set(), heights: new Map([[op, 1]]) };
     F.instances.set(key, inst);
-  }
-  const root = instRootOf(F, inst);
+  } else if (nests) checkDepth(F, fn, op, key, inst.shapeText, inst);
+  const root = instRootOf(F, inst, fn.label);
   if (F.stack.length === 0) {
     recordCall(F, fn, inst);
     // 木と、本体の中の呼び出しの記録は、いま呼んだ側の物の範囲で歩く。実体を作ったのが木を残さない所（値の定義の種類を
     // 出す所など）でも、門は呼んだ行で渡した物の名前で名指しする。
     const scopeOf = () => (ident === inst.scope.ident ? inst.scope : instScope(F, op, defScope, b, key, ident));
-    materialize(F, inst, scopeOf);
+    materialize(F, inst, scopeOf, fn.label);
     if (inst.error) {
       if (!F.matStack.length) throw instanceError(inst, fn.label);
       // 別の実体の本体の中から呼んだ：その実体も同じ門で失敗する。どの実体を、どの名前で呼んで門に当たったかを
@@ -1420,20 +1666,28 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
     // 分け合った実体を、まだ歩いていない物で呼んだ：その物で本体を歩き、呼んだ `?` を記録する（R25）。
     if (!inst.walked.has(ident)) walkCalls(F, inst, scopeOf());
   }
+  if (nests) mergeHeights(F, (inst.raised && knownHeights(F, inst, stretchOf(F).members)) || inst.heights);
   // 実体の本体の根が A なら A、ほかは未知（§3.4 の素の関数の k = n と同じ）。結果は中身の見えない A。
   return { kind: root === "A" ? A() : U() };
 }
 
-// 実体の本体の根の種類（bodyRootOf と同じ仕組み）。
-function instRootOf(F, inst) {
-  const memo = F.instMemo.get(inst);
+// 実体の本体の根の種類（bodyRootOf と同じ仕組み）。label は呼んだ名前（深さの守りの名指し、stretchOf）。
+function instRootOf(F, inst, label) {
+  const memo = freshMemo(F, F.instMemo, inst);
   if (memo) return readMemo(F, memo);
   const running = F.inProgress.get(inst);
   if (running) {
     consult(F, running); // 同じ形で自分を呼んだ：同じ実体の仮置き（R24）
+    // 輪の中の実体（INSTANCE_DEPTH_LIMIT の注の2）：間の枠が実体だけなら、その実体は輪の頭の入れ子の中にある。
+    const i = F.stack.indexOf(running);
+    if (i >= 0 && F.stack.slice(i + 1).every((f) => f.key && f.key.isInst)) {
+      const members = running.members || (running.members = new Set());
+      for (let j = i + 1; j < F.stack.length; j++) members.add(F.stack[j].key);
+    }
     return "A";
   }
   const frame = pushFrame(F, inst);
+  frame.label = label;
   let value;
   try {
     value = resolveBody(inst.lambda.right, { F, scope: inst.scope, diag: null }).rootKind;
@@ -1442,20 +1696,26 @@ function instRootOf(F, inst) {
       abortFrame(F, frame);
       throw e;
     }
-    value = "U"; // 本体が門に当たる。木を残す段（materialize）で同じ門に当たり、呼んだ行で断る
+    // 本体が門に当たる。木を残す段（materialize）で同じ門に当たり、呼んだ行で断る。深さの守り（checkDepth）は木を残す段で
+    // 当たり直すとは限らないので、当たったことを覚えて resolve の最後に断る（INSTANCE_DEPTH_LIMIT の注の3）。
+    value = "U";
   }
   if (frame.consulted && value !== "A") {
     value = "U";
     frame.failed = true;
   }
-  finishFrame(F, frame, F.instMemo, value, () => "U");
+  // 下の入れ子（INSTANCE_DEPTH_LIMIT の注の2）：本体で呼んだ実体の heights のいちばん大きい物に、この実体の1段を足す。
+  inst.heights = new Map(frame.below || []);
+  inst.heights.set(inst.lambda, (inst.heights.get(inst.lambda) || 0) + 1);
+  if (frame.members) for (const m of frame.members) raiseInLoop(m, inst);
+  finishFrame(F, frame, F.instMemo, value);
   return value;
 }
 
 // 実体の木（R25）。解いている途中の種類が無いときにだけ呼ぶ。本体の中の未定義の名前は、ここで1回だけ information を
 // 出す（F.reported）。定義の所では本体を解かないので、呼ばれない本体の中の名前は出さない（読まないので）。
 // 範囲（scopeOf）は、はじめて木にした呼び出しの物のもの。その物の分の記録も、この歩きで取る（walked）。
-function materialize(F, inst, scopeOf) {
+function materialize(F, inst, scopeOf, label) {
   if (inst.materializing) {
     // 木を解いている途中の実体を、本体の中からもう一度呼んだ（再帰）。根の種類は仮置きの済んだ答えを使い、木は
     // 外側の1回で作る。外側が門に当たったら、間にある実体（どれも外側を呼んでいる）も同じ門で失敗にする。
@@ -1467,6 +1727,7 @@ function materialize(F, inst, scopeOf) {
   const scope = scopeOf();
   inst.walked.add(scope.ident);
   inst.materializing = true;
+  inst.matLabel = label; // 深さの守りの名指し（stretchOf）
   F.matStack.push(inst);
   try {
     inst.tree = resolveBody(inst.lambda.right, { F, scope, diag: F.diag }).tree;
@@ -1478,6 +1739,9 @@ function materialize(F, inst, scopeOf) {
     inst.materializing = false;
     inst.done = true;
   }
+  // 輪の中の実体に、輪の外から引いたときの段（輪の頭の段）を覚える（INSTANCE_DEPTH_LIMIT の注の2。根の種類の段の members
+  // と同じ）。
+  for (const d of inst.cycleDeps) raiseInLoop(d, inst);
   if (inst.error) failDependents(inst);
 }
 // 分け合った実体の本体を、いま呼んだ側の物（scope）で歩き直し、本体の中の呼び出しだけを記録する（callIdent の注）。
@@ -2058,7 +2322,9 @@ function resolveLambda(op, ctx) {
       type: "plain",
       origin: "plain",
       n: lam.params.names.length,
-      getBodyRoot: named ? () => bodyRootOf(ctx.F, op) : collectedRoot(ctx.F, col, body.rootKind),
+      getBodyRoot: named
+        ? () => bodyRootOf(ctx.F, op)
+        : collectedRoot(ctx.F, col, body.rootKind, () => resolveBody(op.right, { ...ctx, scope: lam.scope, diag: null }).rootKind),
       idKey: lambdaKey(op, ctx.scope.key),
     };
   }
@@ -2383,16 +2649,15 @@ function plainApply(fn, k) {
 //   受けない）。ただし括りの関数（とその部分適用）は、前の結果（未知）を受けて実体を作る。後ろの関数は前の結果を受けて
 //   呼ばれ（R11）、呼ばれた本体は読む（R25、§5 Q24）。最初の関数に足りたか決まらない形（`[+]` に1項 Q17・既定値のある
 //   関数 Q8・撒く項を含む並び）でも作る（§5 Q27 の断る側）。作らないと、呼ばれるかもしれない本体の門が合成の頭に置く
-//   だけですり抜ける（前は `[+] bad 5` を通し、`inc [+] bad 5` を断っていた）。ほかの関数は本体の根を引かない：答えに
-//   使わない根を引くと、解いている途中の関数の仮置き（consult）の依りが増え、仮置きが外れると、それを使っていない外の
-//   本体の根まで未知に替わって、定義の順で答えが割れる（§5 Q28。確かめ 2026-10-19 の F1：`g : y ? (adder (f 1) y) , 1`
-//   は f が先だと `g 5 inc` が G2(a)、g が先だと A）。
-//   ただし前の結果が A の間は、後ろの関数に当てて根を引く（直接書いた g (f x) と同じ）ので、その後で未知になれば、引いた根は
+//   だけですり抜ける（前は `[+] bad 5` を通し、`inc [+] bad 5` を断っていた）。ほかの関数は本体の根を引かない（答えに
+//   使わない）。前は、使わない根を引くと、解いている途中の関数の仮置き（consult）の依りが増え、仮置きが外れると、それを
+//   使っていない外の本体の根まで未知に替わって、定義の順で答えが割れた（§5 Q28。確かめ 2026-10-19 の F1：
+//   `g : y ? (adder (f 1) y) , 1` は f が先だと `g 5 inc` が G2(a)、g が先だと A）。外れた仮置きに頼った答えを解き直すように
+//   した（2026-10-20、「仮置きの記録」の注）後は、依りが増えても解き直しの手間が増えるだけで、答えは割れない。
+//   前の結果が A の間は、後ろの関数に当てて根を引く（直接書いた g (f x) と同じ）ので、その後で未知になれば、引いた根は
 //   答えに使われない（`inc [+ 1] f [+] y`）。未知の後ろの括りの関数の実体の本体が引く根も同じ（`[+] tl y` の tl の本体が
-//   `f 1 5` を呼ぶ形）。どちらも直接書いた入れ子（`[+] (f ([+ 1] (inc y)))`・`tl y`）が同じ根を引くので、法則どおりで、
-//   割れは Q28 そのもの（依りを根に使った物だけに付ける Q28 の案(1)が決まるまで、断る側の割れとして残す。合成の
-//   畳み込みの確かめの F2）。前の表は、後ろの非貪欲の単項・穴・最初の `[' k]` の後ろと、足りたか決まらない頭の後ろでは根も
-//   実体も引かなかったので、そこからは割れなかった。
+//   `f 1 5` を呼ぶ形）。どちらも直接書いた入れ子（`[+] (f ([+ 1] (inc y)))`・`tl y`）が同じ根を引くので、法則どおりである。
+//   解き直す前は、ここから Q28 の割れに入った（合成の畳み込みの確かめの F2。法則の試験の Q28_FORMS の4〜9つ目）。
 //   直接書いた g (f x) と同じになるのは、f x が A のときである。f x が未知なら、直接書いた形は未知の項を並びに置くので
 //   G7 で断るが、合成は節ごと未知にして根なら通す（§3.4 の「上に無いもの」と同じ扱い）。
 // - 最初の関数の余り（`excess`）は、結果が A なら最後まで持ち越す（R10。余りは最初の関数の実引数の話）。
@@ -2477,6 +2742,12 @@ export function resolve(source) {
     diag: diagnostics,
     // 無名の素の関数の本体を解いている間に引いた仮置き（collectedRoot）。
     collectors: [],
+    // 記録の鍵 → 古くなって解き直した回数（freshMemo）、枠を積んだ鍵、解き直しの守りで断った誤り（guardAgain）。
+    againCounts: new Map(),
+    frameKeys: new Set(),
+    againRefused: null,
+    // 深さの守りに当たった入れ子のいちばん外の実体（checkDepth・depthRefusal）。
+    depthFires: [],
   };
   resetIntern();
 
@@ -2500,18 +2771,29 @@ export function resolve(source) {
   // 括りの関数の本体は、ここでは解かない（R25：実体を作るとき＝呼ばれたときにだけ解く）。§6.4 の1の3は「各関数の
   // 本体の根」と書いたままだが、R25 が後から決まったので、素の関数に読む。
   // 門はここでは止めない——その行を解くときに、行の順に同じ門で断る。
-  for (const def of F.defs.values()) {
-    if (def.lambda) continue;
-    try {
-      nameKindOf(F, def);
-    } catch (e) {
-      if (!isGate(e)) throw e;
+  // 解き直しの守り（guardAgain）で断ったら、ほかの誤りより先に、その言い分で断る（握りつぶされても、ほかの門に化けても）。
+  // 深さの守り（checkDepth）に当たったら、その次に先に断る（当たった枠の答えは枠の積み方で決まり、木を残す段で当たり直す
+  // とは限らない。INSTANCE_DEPTH_LIMIT の注の3）。
+  let trees;
+  try {
+    for (const def of F.defs.values()) {
+      if (def.lambda) continue;
+      try {
+        nameKindOf(F, def);
+      } catch (e) {
+        if (!isGate(e)) throw e;
+      }
     }
-  }
-  for (const def of F.defs.values()) if (def.lambda && def.plain) bodyRootOf(F, def.lambda);
+    for (const def of F.defs.values()) if (def.lambda && def.plain) bodyRootOf(F, def.lambda);
 
-  // 各行を解く。括りの関数の実体は、呼んだ所で作って木まで解く（instantiate）。
-  const trees = lines.map((line) => resolveTree(line, { F, scope: F.fileScope, diag: diagnostics }));
+    // 各行を解く。括りの関数の実体は、呼んだ所で作って木まで解く（instantiate）。
+    trees = lines.map((line) => resolveTree(line, { F, scope: F.fileScope, diag: diagnostics }));
+  } catch (e) {
+    throw F.againRefused || depthRefusal(F) || e;
+  }
+  if (F.againRefused) throw F.againRefused;
+  const deep = depthRefusal(F);
+  if (deep) throw deep;
 
   // 括りの関数の `?` の木を、ファイル全体で集めた実体で埋める（R25）。全部の行を解き終えてから埋めるので、呼ぶ行が
   // 定義の前でも後でも同じ木になる。並べるのは、その `?` を通って呼ばれ（recordCall）、木まで解けた実体だけ：門に
