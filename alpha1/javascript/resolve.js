@@ -1040,13 +1040,16 @@ function reportUndefined(name, ctx) {
 //    G2(a)。A の側は黙った誤答。HEAD からある）。
 // 3. 例外（門ではない例外。名前の輪など）で抜けた枠の名簿にある答え（abortFrame）。仮置きが当たったか確かめられないから
 //    である。前は付けず、namesPattern が輪を握りつぶす道で、仮置きの上で A と出した関数の答えが残った（確かめ 2026-10-20 の
-//    Q28V-3：`k : x ? h x` の h が未知なのに、w を v より先に置くと `k 5 inc` が A。HEAD からある）。
+//    Q28V-3：`k : x ? h x` の h が未知なのに、w を v より先に置くと `k 5 inc` が A。HEAD からある）。輪の依りを持つ記録は、
+//    根の答えが未知でも印を付ける（「値を含む輪」の注の、例外で抜けた枠）。
 //
 // 根の答えが未知なら、印を付けず、依りも持たせない（entryOf）。未知はいちばん下で、下の「単調」により、確定した値で解き
 // 直しても未知のままだからである。前は未知の答えにも印を付けていたので、解き直しの中で外の枠がまた仮置きされて外れ直し、
 // 同じ記録の解き直しが関数の数の指数で増えた（確かめ 2026-10-20 の Q28V-1・F3：f1〜f5 が後ろの f と g を呼び、g が積で
 // f1〜f5 を呼ぶ形で、g の解き直しが 31 回。関数 16 個で 65535 回）。値の定義の種類は A・L・U と中身の形を持つので、根と
-// 同じ「いちばん下」は言わず、いつも解き直す（値の定義は仮置きされないので、解き直しても外れは増えない）。
+// 同じ「いちばん下」は言わず、いつも解き直す（値の定義は仮置きされないので、解き直しても外れは増えない）。値を含む輪を
+// 断るようにした（§5 Q30、「値を含む輪」の注）後は、値の定義が仮置きを読めば断るので、値の定義の記録は仮置きに頼らず、
+// 古くならない（この道は守りとして残す）。
 //
 // 答えが定義の順に依らない理由（P2「順序には依らない」）：根の種類で答えに効くのは「A か、A でないか」だけ（plainApply・
 // instantiate）で、§3.4 の表の行は、引いた根が A のときだけ A を返し、A でなければ未知か門（門に当たった本体の根は未知）に
@@ -1087,8 +1090,10 @@ function recordLabel(F, key) {
   return F.defs.get(key.name) === key ? `定義 \`${key.name}\`` : "名前の無い関数";
 }
 
+// 枠：deps は仮置きの依り、cyc は輪の依り（「値を含む輪」の注。読んだ途中の枠から、そこまでの道筋への表）、tentatives・
+// cycEntries はそれぞれを持つ記録の名簿。
 function pushFrame(F, key) {
-  const frame = { key, deps: new Set(), consulted: false, failed: false, tentatives: [] };
+  const frame = { key, deps: new Set(), cyc: new Map(), cycEntries: [], consulted: false, failed: false, tentatives: [] };
   F.stack.push(frame);
   F.inProgress.set(key, frame);
   F.frameKeys.add(key);
@@ -1099,20 +1104,150 @@ function popFrame(F, frame) {
   if (i >= 0) F.stack.splice(i, 1);
   F.inProgress.delete(frame.key);
 }
-// 例外で抜けた枠（「仮置きの記録」の注の3）。
+// 例外で抜けた枠（「仮置きの記録」の注の3）。この枠を輪の依りに持つ記録は、未知でも古いと印を付ける（「値を含む輪」の注の、
+// 例外で抜けた枠）。
 function abortFrame(F, frame) {
   popFrame(F, frame);
+  for (const t of frame.cycEntries) {
+    if (!t.cyc.has(frame)) continue;
+    t.cyc.delete(frame);
+    t.stale = true;
+  }
   for (const t of frame.tentatives) {
     t.deps.delete(frame);
     if (t.value !== "U") t.stale = true;
   }
 }
-function consult(F, target) {
+// 解いている途中の枠 target の仮置きを読む。via は、記録を通して読んだときの、その記録から target までの道筋（一歩の
+// 綴りの配列を返す関数。言い分を作るときだけ呼ぶ）。
+// target より上に値の定義の枠があれば、仮置きで閉じずに断る（「値を含む輪」の注）。
+function consult(F, target, via) {
+  const i = F.stack.indexOf(target);
+  if (i >= 0) for (let j = i + 1; j < F.stack.length; j++) if (F.stack[j].isValue) throw cycleError(F, i, via);
   target.consulted = true;
+  if (i < 0) return;
+  addCycle(F, i, target, via, true);
+}
+// 記録の輪の依りにある、解いている途中の枠 target を通る（「値を含む輪」の注の輪の依り）。consult と同じく、target より上に
+// 値の定義の枠があれば断るが、仮置きの依りには入れない（解き直しは今までどおり）。
+function passThrough(F, target, via) {
   const i = F.stack.indexOf(target);
   if (i < 0) return;
-  for (let j = i + 1; j < F.stack.length; j++) F.stack[j].deps.add(target);
-  for (const c of F.collectors) if (c.start > i) c.deps.add(target);
+  for (let j = i + 1; j < F.stack.length; j++) if (F.stack[j].isValue) throw cycleError(F, i, via);
+  addCycle(F, i, target, via, false);
+}
+// target（枠の並びの i）より上の枠と無名の関数の本体に、target への依りを足す。輪の依りには、そこから target までの道筋
+// （上の一歩と via）も覚える（言い分の道筋。記録を通して見つけた輪でも、記録の中の段を抜かさない）。
+function addCycle(F, i, target, via, tentative) {
+  const chain = chainFrom(F, i);
+  for (let at = 1; at < chain.length; at++) {
+    const s = chain[at];
+    if (tentative) s.deps.add(target);
+    if (!s.cyc.has(target)) s.cyc.set(target, () => [...chain.slice(at + 1).map((u) => stepText(F, u)), ...(via ? via() : [])]);
+  }
+}
+// 枠の並びの i から上の一歩：枠と、その間で解いている無名の素の関数の本体（beginCollect。枠を積まない）を、呼んだ順に。
+function chainFrom(F, i) {
+  const inner = F.collectors.filter((c) => c.start > i);
+  const chain = [];
+  for (let j = i; j < F.stack.length; j++) {
+    chain.push(F.stack[j]);
+    for (const c of inner) if (c.start === j + 1) chain.push(c);
+  }
+  return chain;
+}
+
+// ---- 値を含む輪（§5 Q30） ----
+//
+// 値の定義の種類を解いている途中に、その外側（枠の並びで下）で解いている途中の枠を仮置きで読んだら（consult）、輪に値の
+// 定義が入っている。外側の枠の計算から値の定義へ入ったのだから外側はこの値に頼り、この値は外側を読んだのだから外側に
+// 頼るからである。だから仮置きで閉じずに、名前の輪（name-cycle）で断る。値の定義から入った輪（nameKindOf の「解いている
+// 途中」）と同じ断りで、どこから入っても同じ答えになる。
+// 前は、値の定義から入れば断り、関数から入れば仮置きで閉じていた。`a : f 1`・`v : f 1`・`f : x ? v` は、v が先なら
+// name-cycle、a が先なら f の仮置きで輪が閉じて、v が自分に頼っているのが見えず、黙って通った（§5 Q30）。v = f 1 = v で、
+// 値はいつまでもできない（主の Claude「本当の欠陥は a が先だと通ってしまうほう」、利用者 2026-10-20「明らかにそうだと思う」）。
+// 解決器の役目は、意味を決めることではなく、書いた人が見落とした輪（長い輪）を、入口に依らずに必ず見つけて、輪の道筋を
+// 名指しすることである（利用者 2026-10-20「エンジニアかAIなら、書いていて気付くと思うし、それに気づきやすい言語だと
+// 思ってるんだ」）。だから言い分に、輪に入っている枠を並べて書く（cycleError）。
+// 輪に値の定義が無い物（関数どうしの再帰・括りの関数の実体の輪）は、今までどおり A と仮置きして閉じる（§3.4）。`$` で
+// 遅らせた名前（`f : x ? x , $v`）は種類を引かない（touchName。前置 `@`・前置 `~` の名前も同じ）ので、輪に数えない（今の
+// まま。この片では扱わない）。
+// 名前が括りの関数かを覗く所（namesPattern。既定値と1項の `:` の左は解かない（P3）ので、G7 を探すためだけに名前の種類を
+// 引く）のうち、既定値を覗いた所を通る輪は輪に数えない（値はできる。namesPattern の注）。
+// 値の定義の記録は、これで仮置きに頼らない（仮置きを読めば断るので、記録の依りは空のまま）。だから値の定義の記録が古く
+// なることも無い（freshMemo の値の定義の道は、守りとして残す）。
+//
+// 輪の依り（cyc）。仮置きの依り（deps）は解き直しのための物で、根の答えが未知の記録には持たせない（entryOf。未知は解き
+// 直さない）。だが輪を見つけるには、未知の記録も、計算の途中で読んだ解いている途中の枠を覚えていなければならない。覚えないと、
+// 輪を値の定義の無い所で先に閉じ、閉じた関数の答えが未知だったとき、後で値の定義がその記録を読んでも、解いている途中の外の
+// 枠を通ったことが見えない（`a : g 1`・`g : x ? ⏎ ⇥k x ⏎ ⇥vk`・`k : x ? ⏎ ⇥g x ⏎ ⇥k x ⏎ ⇥inc`・`vk : k 1` は、vk が先なら
+// name-cycle、a が先なら k が未知で閉じて黙って通った。上の規則だけでは直らず、HEAD からある。2026-10-20 の確かめで、生成器の
+// 4 万本のうち 9 本が、上の規則だけでは入口で割れた。1本は通る並べ方があった）。
+// だから記録は、仮置きの依りとは別に、輪の依り（計算の途中で読んだ、解いている途中の枠。仮置きの依りを含む）を持ち、読む
+// ときに通る（passThrough）。輪の依りは、値の定義の枠より下の枠を通れば断るためだけに使い、仮置きの依りには入れない。古い
+// という印（stale）に使うのは、下の「例外で抜けた枠」だけで、そこでも未知を未知に解き直すだけである。だから断らないプログラム
+// の答えは、輪の依りを足す前と同じである。閉じた枠の輪の依りは、その枠を
+// 読んだ記録が引き継ぐ（finishFrame。「仮置きの記録」の注の2と同じ理由：記録 → 閉じた枠 → その枠が読んだ途中の枠）。
+// 輪の依りは、途中の枠までの道筋も覚える（addCycle・finishFrame）。記録を通して見つけた輪の言い分に、記録の中の段（記録が
+// 閉じる前に通った枠と、引き継いだ枠）を書くためである。前は記録の持ち主の1歩しか書かず、入口で言い分が替わり、無い辺を
+// 名指しした（確かめ 2026-10-20 の Q30-V2：`a : g 1`・`g : x ? ⏎ ⇥m x ⏎ ⇥vk`・`m : x ? k x`・`k : x ? g x`・`vk : m 1` は、
+// a が先なら「`vk` → `m` の本体 → `g` の本体」で、m の本体は g を引かない）。
+//
+// 例外で抜けた枠（abortFrame）。例外で抜けた枠は閉じないので、その枠を輪の依りに持つ記録へ、その枠が読んだ途中の枠を
+// 引き継がない。未知の記録は古いと印を付けない（「仮置きの記録」の注）ので、そのままだと、輪の依りの欠けた記録が残る。
+// 今それが起きるのは、namesPattern が例外（既定値を覗いた所を通る名前の輪と、名前の輪でない止まる誤り）を握りつぶすとき
+// だけである（覗いた定義から上の枠が抜ける）。
+// `a : g 1`・`g : x ? [[y : v 2] ? 5] x`・`v : h 1`・`h : x ? ⏎ ⇥k x ⏎ ⇥g x ⏎ ⇥vk ⏎ ⇥inc`・`k : x ? ⏎ ⇥h x ⏎ ⇥inc`・`vk : k 1` は、
+// a が先なら、覗いた v の中で k が h を読んで未知で閉じ、h の行 `g x` が覗いた所を通る輪で抜ける。後で vk が k の記録を読んでも
+// h を通ったことが見えず、vk → k → h → vk の輪が黙って抜けた（7 文の並べ方 5040 のうち 1680）。だから、例外で抜けた枠を
+// 輪の依りに持つ記録には、未知でも古いと印を付け、次に読まれたときに解き直す。未知の記録を解き直しても、「仮置きの記録」の
+// 注の「単調」により未知のままなので、答えは変わらない（変わるのは、輪を見つけるかだけ）。
+//
+// 残る割れ（§5 Q30 の未決、HEAD から）：輪を閉じる道が、仮置きの上でだけ通る形。`pb : [y ~ys] ? y + 1`・`g : x ? ⏎ ⇥pb [k x]
+// ⏎ ⇥ek`・`k : x ? pb [g x]`・`ek : k 1`・`pf : g 1` は、ek が先なら k の仮置き（A）の上で g の本体が行 `ek` まで進んで
+// name-cycle、pf が先なら確定した k（未知）で g の本体が1行目の G7 に当たり、行 `ek` を読まないので輪が無い。どちらも断る
+// （黙った誤答ではない）が、言い分が入口で割れる。確定した値の上では輪が無いので、輪を見つけた道が仮置きに頼ったかまで見て
+// 断りを遅らせるか、書いた名前だけで輪を見るか（`$` の無い名前。呼ばれない関数の値を欄に入れた `v : [s : p]` まで断る）は、
+// 決めていない。
+
+// 輪の言い分。輪は枠の並びの i から上の全部（i の計算が上の枠を順に呼び、いちばん上が i を読んだ）で、via があれば
+// その記録（記録の持ち主と、記録が覚えた道筋）を通して i へ戻る。無名の素の関数の本体（枠を積まずに解く、collectedRoot）も、その間に挟む。書き始めは、輪の
+// 中の値の定義のうち、ファイルに先に書いた物にする（同じ輪なら、どこから入っても言い分が替わらない）。
+// 言い分を作ったら覚え（F.cycleRefused）、握りつぶされても resolve の最後に断る（guardAgain の againRefused と同じ作り）。
+function cycleError(F, i, via) {
+  const steps = chainFrom(F, i).map((s) => ({ text: stepText(F, s), def: s.isValue ? s.key : null }));
+  if (via) for (const text of via()) steps.push({ text, def: null });
+  let at = steps.findIndex((s) => s.def);
+  for (const d of F.defs.values()) {
+    const k = steps.findIndex((s) => s.def === d);
+    if (k >= 0) {
+      at = k;
+      break;
+    }
+  }
+  const ring = [...steps.slice(at), ...steps.slice(0, at)];
+  const path = [...ring, ring[0]].map((s) => s.text).join(" → ");
+  const e = nameError(
+    "name-cycle",
+    `定義 \`${ring[0].def.name}\` の種類が、並びを通して自分の種類に依っています（輪：${path}）。輪に値の定義があるので、その値はいつまでもできません（§5 Q30）。`
+  );
+  e.cycle = ring.map((s) => s.text);
+  e.cycleFrom = i; // 輪のいちばん下の枠（namesPattern が、覗いた所を通る輪かを見る）
+  F.cycleRefused = F.cycleRefused || e;
+  return e;
+}
+// 輪の道筋の一歩（枠の持ち主か、枠を積まない無名の素の関数の本体）。
+function stepText(F, frame) {
+  if (!frame.key) return frame.label || "名前の無い関数の本体";
+  const k = frame.key;
+  if (frame.isValue) return `\`${k.name}\``;
+  if (k.isInst) return `\`${frame.label || k.label}\` を形 ${cutShape(k.shapeText)} で呼んだ実体の本体`;
+  const fn = F.namedLambdas.get(k);
+  if (fn) return `\`${fn.name}\` の本体`;
+  return k.label || "名前の無い関数の本体";
+}
+function cutShape(text) {
+  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
 }
 
 // 無名の素の関数（`[w ? f [1 2]]`）の本体の根。名前の無い関数は自分を引けないので枠（pushFrame）は積まないが、本体を
@@ -1125,8 +1260,9 @@ function consult(F, target) {
 // ならず、実体の木（materialize）も呼んだ記録（recordCall）も作らない。門に当たれば未知）。解き直している途中に、ほかの
 // 関数の本体（欄で受けた実体など）を通ってまた読まれたら、bodyRootOf と同じく A と仮置きする（§3.4。枠を積み直すと、
 // 同じ鍵の枠が2つ積まれ、内の枠を閉じたときに外の枠が解いている途中の印から消える）。
-function beginCollect(F) {
-  const c = { start: F.stack.length, deps: new Set() };
+// label は輪の道筋に書く一歩（cycleError。無名の関数は書いた所で名指しする）。
+function beginCollect(F, label) {
+  const c = { start: F.stack.length, deps: new Set(), cyc: new Map(), label };
   F.collectors.push(c);
   return c;
 }
@@ -1135,8 +1271,10 @@ function endCollect(F, c) {
   if (i >= 0) F.collectors.splice(i, 1);
 }
 function collectedRoot(F, c, value, again) {
-  const cell = { entry: entryOf(value, [...c.deps].filter((d) => F.stack.includes(d))), count: 0 };
+  const live = (d) => F.stack.includes(d);
+  const cell = { entry: entryOf(value, [...c.deps].filter(live), [...c.cyc].filter(([d]) => live(d))), count: 0, label: c.label };
   for (const d of cell.entry.deps) d.tentatives.push(cell.entry);
+  for (const d of cell.entry.cyc.keys()) d.cycEntries.push(cell.entry);
   const memo = { set: (_, entry) => (cell.entry = entry) };
   return () => {
     const running = F.inProgress.get(cell);
@@ -1144,7 +1282,7 @@ function collectedRoot(F, c, value, again) {
       consult(F, running);
       return "A";
     }
-    if (!cell.entry.stale) return readMemo(F, cell.entry);
+    if (!cell.entry.stale) return readMemo(F, cell.entry, () => cell.label);
     guardAgain(F, ++cell.count, "名前の無い関数");
     const frame = pushFrame(F, cell);
     let root;
@@ -1161,8 +1299,11 @@ function collectedRoot(F, c, value, again) {
     return root;
   };
 }
-function readMemo(F, entry) {
-  for (const d of entry.deps) consult(F, d);
+// owner は記録の持ち主（輪の道筋に書く一歩を返す関数）。記録から途中の枠までの道筋は、持ち主の一歩と、記録が覚えた道筋。
+function readMemo(F, entry, owner) {
+  const via = (d) => () => [owner(), ...(entry.cyc.has(d) ? entry.cyc.get(d)() : [])];
+  for (const d of entry.deps) consult(F, d, via(d));
+  for (const d of entry.cyc.keys()) if (!entry.deps.has(d)) passThrough(F, d, via(d));
   return entry.value;
 }
 // 記録を引く。古ければ記録を消して null を返し、呼んだ側が解き直す（そのときには、外れた仮置きの関数の記録は確定して
@@ -1177,16 +1318,35 @@ function freshMemo(F, memo, key) {
   return null;
 }
 // 記録。根の答えが未知なら依りを持たせない（「仮置きの記録」の注：未知は解き直さない。読んだ側にも依りを渡さない）。
-function entryOf(value, deps) {
-  return { value, deps: new Set(value === "U" ? [] : deps) };
+// 輪の依り（cyc、「値を含む輪」の注）は、未知でも持たせる。
+// cyc は [途中の枠, そこまでの道筋] の並び。
+function entryOf(value, deps, cyc) {
+  return { value, deps: new Set(value === "U" ? [] : deps), cyc: new Map(cyc) };
 }
 // 枠を閉じて記録に載せる（「仮置きの記録」の注の1・2）。この枠の仮置きが外れたら（failed）、それに頼った答えに古いと印を
 // 付ける（解き直しは読まれた時）。当たったら、それに頼った答えは、この枠が頼った仮置きを引き継ぐ。
 function finishFrame(F, frame, memo, value) {
   popFrame(F, frame);
-  const entry = entryOf(value, [...frame.deps].filter((d) => d !== frame));
+  const entry = entryOf(
+    value,
+    [...frame.deps].filter((d) => d !== frame),
+    [...frame.cyc].filter(([d]) => d !== frame)
+  );
   memo.set(frame.key, entry);
   for (const d of entry.deps) d.tentatives.push(entry);
+  for (const d of entry.cyc.keys()) d.cycEntries.push(entry);
+  // 輪の依りは、当たっても外れても引き継ぐ（記録はこの枠の答えを読んだので、この枠が読んだ途中の枠も通っている）。道筋は、
+  // 記録からこの枠まで、この枠の一歩、この枠からその途中の枠まで。
+  for (const t of frame.cycEntries) {
+    const toFrame = t.cyc.get(frame);
+    if (!toFrame) continue;
+    t.cyc.delete(frame);
+    for (const [d, toD] of entry.cyc) {
+      if (t.cyc.has(d)) continue;
+      t.cyc.set(d, () => [...toFrame(), stepText(F, frame), ...toD()]);
+      d.cycEntries.push(t);
+    }
+  }
   for (const t of frame.tentatives) {
     t.deps.delete(frame);
     if (t.stale || t.value === "U") continue;
@@ -1214,11 +1374,12 @@ function nameKindOf(F, def) {
     };
   }
   const memo = freshMemo(F, F.valueMemo, def);
-  if (memo) return readMemo(F, memo);
-  if (F.inProgress.has(def)) {
-    throw nameError("name-cycle", `定義 \`${def.name}\` の種類が、並びを通して自分の種類に依っています（輪）。`);
-  }
+  if (memo) return readMemo(F, memo, () => `\`${def.name}\``);
+  // 解いている途中の値の定義をもう一度引いた：値を含む輪（「値を含む輪」の注）。輪はその枠から上の全部。
+  const running = F.inProgress.get(def);
+  if (running) throw cycleError(F, F.stack.indexOf(running));
   const frame = pushFrame(F, def);
+  frame.isValue = true; // 値の定義の枠（consult が、この枠より下の仮置きを読ませない）
   let value;
   try {
     const root = resolveTree(def.rhs, { F, scope: F.fileScope, diag: null });
@@ -1238,7 +1399,7 @@ function nameKindOf(F, def) {
 // 素の名前つき関数の、本体の根の種類（§3.4）。
 function bodyRootOf(F, lambdaOp) {
   const memo = freshMemo(F, F.bodyMemo, lambdaOp);
-  if (memo) return readMemo(F, memo);
+  if (memo) return readMemo(F, memo, () => `\`${F.namedLambdas.get(lambdaOp).name}\` の本体`);
   const running = F.inProgress.get(lambdaOp);
   if (running) {
     consult(F, running);
@@ -1674,7 +1835,7 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
 // 実体の本体の根の種類（bodyRootOf と同じ仕組み）。label は呼んだ名前（深さの守りの名指し、stretchOf）。
 function instRootOf(F, inst, label) {
   const memo = freshMemo(F, F.instMemo, inst);
-  if (memo) return readMemo(F, memo);
+  if (memo) return readMemo(F, memo, () => `\`${label || inst.label}\` を形 ${cutShape(inst.shapeText)} で呼んだ実体の本体`);
   const running = F.inProgress.get(inst);
   if (running) {
     consult(F, running); // 同じ形で自分を呼んだ：同じ実体の仮置き（R24）
@@ -2172,7 +2333,7 @@ function isNameTarget(term) {
 // 1項だけ（`[z : inc]` の inc、`(t)`）は関数を値として書いただけで、`$` で渡すのと同じく実体を作らない（R25 の公開と
 // 同じ扱い）ので断らない。素の関数は定義の行で本体を読むので、ここには関わらない（前からの P3 のまま）。
 function patternCallIn(term, ctx) {
-  return patternCallWalk(ctx, (visitTree, visitTerm) => visitTerm(term));
+  return patternCallWalk(ctx, (visitTree, visitTerm) => visitTerm(term), false);
 }
 // 既定値（`?` の左の `:` の右）も、`?` の左は解かない（P3）ので読まない。そこで括りの関数を呼ぶ形も、1項の `:` の
 // 左と同じ理由（R25 の「一度も呼ばれない」に当たらないのに、実体が作れない）で断る。
@@ -2185,7 +2346,7 @@ function patternCallInDefaults(left, ctx) {
       return;
     }
     if (t.sym === ":") {
-      found = patternCallWalk(ctx, (visitTree) => visitTree(t.right)); // 既定値（右）は全部を見る
+      found = patternCallWalk(ctx, (visitTree) => visitTree(t.right), true); // 既定値（右）は全部を見る
       return;
     }
     visit(t.left);
@@ -2201,13 +2362,14 @@ function patternCallInDefaults(left, ctx) {
   visit(left);
   return found;
 }
-function patternCallWalk(ctx, start) {
+// inDefault は既定値の中を見ているか（namesPattern）。
+function patternCallWalk(ctx, start, inDefault) {
   let found = null;
   // 2項以上の並びの項のうち、括りの関数を指す物（裸の名前か、括った `?`）。
   const calledIn = (terms) => {
     for (const x of terms) {
       const n = bareName(x);
-      if (n && namesPattern(n, ctx)) return n;
+      if (n && namesPattern(n, ctx, inDefault)) return n;
       const op = x && x.type === "atom" && !x.pre.length && !x.post.length ? unwrapLambda({ type: "seq", terms: [x] }) : null;
       if (op && patternParamsOf(op.left)) return `[${writeTree(op)}]`;
     }
@@ -2233,20 +2395,43 @@ function patternCallWalk(ctx, start) {
   start(visitTree, visitTerm);
   return found;
 }
-// 名前が括りの関数を指すか（lookup と同じ順に探す。未定義の information は出さない）。
-function namesPattern(name, ctx) {
+// 名前が括りの関数を指すか（lookup と同じ順に探す。未定義の information は出さない）。inDefault は、既定値の中を覗いて
+// いるか（patternCallInDefaults）。
+function namesPattern(name, ctx, inDefault) {
   const isPattern = (d) => !!d && d.k === "L" && !!d.fn && d.fn.type === "pattern";
   for (let s = ctx.scope; s; s = s.parent) {
     if (s.descs && s.descs.has(name)) return isPattern(s.descs.get(name));
     if ((s.params && s.params.has(name)) || (s.locals && s.locals.has(name))) return false;
   }
-  const def = ctx.F.defs.get(name);
+  const F = ctx.F;
+  const def = F.defs.get(name);
   if (!def) return false;
   if (def.lambda) return !!def.pattern;
+  const start = F.stack.length;
+  const before = F.cycleRefused;
   try {
-    return isPattern(nameKindOf(ctx.F, def)); // 別名（`p : t`）
+    return isPattern(nameKindOf(F, def)); // 別名（`p : t`）
   } catch (e) {
-    if (e instanceof OperationError) return false; // 門・輪は、その定義の行を解くときに出る
+    if (!(e instanceof OperationError)) throw e;
+    if (e.reason !== "name-cycle") return false; // 門は、その定義の行を解くときに出る
+    // 名前の輪（§5 Q30）。既定値の中を覗いた所を通る輪（輪のいちばん下の枠が、覗く前から解いている途中）は、種類の輪では
+    // ない。既定値は解かず（P3）、値の無で呼ばれたときにだけ評価する（§3.7）ので、値はできる（`v : g 1`・`g : x ? [[y : v 2]
+    // ? 5] x` は v = 5）。覗くのは G7（R25）を探すためだけで、行を解く段（枠が空）で、確定した種類でもう一度覗く。だから
+    // 握りつぶして「括りの関数ではない」と読み、作った言い分（F.cycleRefused）も覗く前に戻す。前（2026-10-20 の作り直し）は
+    // 投げ直していて、HEAD がどの並べ方でも通していた、値のできるプログラムを name-cycle で断った（確かめ 2026-10-20 の
+    // Q30-V1・ADV-1）。
+    // 覗いた定義の計算の中だけで閉じる輪（輪のいちばん下の枠が、覗いてから積んだ物）は、覗いた所を通らない本物の輪なので、
+    // 投げ直す（`a : g 1`・`g : x ? [[y : v 2] ? 5] x`・`v : h 1`・`h : x ? ⏎ ⇥k x ⏎ ⇥vk ⏎ ⇥inc`・`k : x ? ⏎ ⇥h x ⏎ ⇥inc`・
+    // `vk : k 1` の vk → k → h → vk）。前の作り（例外で抜けた枠を輪の依りに持つ記録に印を付けない）で全部を握りつぶすと、a が先
+    // なら黙って通った（5040 のうち 1680）。今は、握りつぶしても後の計算が印から同じ輪をもう一度見つける（確かめ 2026-10-20、
+    // 生成器 1 万本で、全部を握りつぶす写しと答え・輪の道筋が同じ）が、見つけた本物の輪を捨てる理由が無いので、断る側に置く。
+    // 1項の `:` の左（枝の条件）を覗いた所を通る輪は、投げ直す（断る側。§5 Q30 の未決）。枝の条件も解かない（P3）が、本体を
+    // 実行すれば評価するので、値は本当にできない（`v : (g 1) , 1`・`g : x ? ⏎ ⇥(v 2) : 1`）。ただ、覗くのは値の定義の名前だけ
+    // なので、関数を1つ挟む（`(f 2) : 1`・`f : x ? v`）と HEAD のまま通る。
+    if (inDefault && e.cycleFrom < start) {
+      F.cycleRefused = before;
+      return false;
+    }
     throw e;
   }
 }
@@ -2309,7 +2494,7 @@ function resolveLambda(op, ctx) {
   const lam = makeLambda(op, ctx);
   const named = ctx.F.namedLambdas.has(op);
   // 無名の素の関数は、本体を解く間に引いた仮置きを覚える（collectedRoot の注）。
-  const col = lam.params.plain && !named ? beginCollect(ctx.F) : null;
+  const col = lam.params.plain && !named ? beginCollect(ctx.F, `無名の関数 \`[${cutShape(writeTree(op))}]\` の本体`) : null;
   let body;
   try {
     body = resolveBody(op.right, { ...ctx, scope: lam.scope });
@@ -2746,6 +2931,8 @@ export function resolve(source) {
     againCounts: new Map(),
     frameKeys: new Set(),
     againRefused: null,
+    // 値を含む輪で断った誤り（cycleError）。
+    cycleRefused: null,
     // 深さの守りに当たった入れ子のいちばん外の実体（checkDepth・depthRefusal）。
     depthFires: [],
   };
@@ -2774,6 +2961,8 @@ export function resolve(source) {
   // 解き直しの守り（guardAgain）で断ったら、ほかの誤りより先に、その言い分で断る（握りつぶされても、ほかの門に化けても）。
   // 深さの守り（checkDepth）に当たったら、その次に先に断る（当たった枠の答えは枠の積み方で決まり、木を残す段で当たり直す
   // とは限らない。INSTANCE_DEPTH_LIMIT の注の3）。
+  // 値を含む輪（cycleError）で断ったら、その次に、その言い分で断る（輪は種類を計算する所で見つかるので、普通は行を解く
+  // 前に、輪の言い分のまま投げ上がる）。
   let trees;
   try {
     for (const def of F.defs.values()) {
@@ -2789,11 +2978,14 @@ export function resolve(source) {
     // 各行を解く。括りの関数の実体は、呼んだ所で作って木まで解く（instantiate）。
     trees = lines.map((line) => resolveTree(line, { F, scope: F.fileScope, diag: diagnostics }));
   } catch (e) {
-    throw F.againRefused || depthRefusal(F) || e;
+    throw F.againRefused || depthRefusal(F) || F.cycleRefused || e;
   }
   if (F.againRefused) throw F.againRefused;
   const deep = depthRefusal(F);
   if (deep) throw deep;
+  // 値を含む輪を、どこかで握りつぶしても断る（namesPattern は、既定値を覗いた所を通る輪だけを握りつぶし、そのときは
+  // F.cycleRefused を覗く前に戻す。namesPattern の注）。
+  if (F.cycleRefused) throw F.cycleRefused;
 
   // 括りの関数の `?` の木を、ファイル全体で集めた実体で埋める（R25）。全部の行を解き終えてから埋めるので、呼ぶ行が
   // 定義の前でも後でも同じ木になる。並べるのは、その `?` を通って呼ばれ（recordCall）、木まで解けた実体だけ：門に
