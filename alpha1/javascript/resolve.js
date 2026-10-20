@@ -1529,11 +1529,13 @@ function bodyRootOf(F, lambdaOp) {
 //    部分適用と穴は、元の関数と同じ（鍵に当てた物が入らない）。門で見る実体の深さは、括りの仮引数に当てた物のいちばん深い物
 //    （裸の仮引数は A なので 1）。関数を書いた所の深さは入れない（書いた所の実体は、その実体の門で見てある）。実体の範囲の
 //    深さ（中で書く閉包の深さ）は、当てた物の深さと、書いた所の範囲の深さの大きい方。
-//    上限：この数 ×（書いた括りの関数の数 + 1）× 書いたいちばん深い形（writtenDepth。名前を通した深さ、前の定義を指して深く
-//    なる鎖も書いた分）。入れ子の道（実体の本体が実体を作る道）で括りの関数を1つ通るたびに、呼んだ所に書いた形の分（いちばん
-//    深い形まで）しか深くならない（受けた物を、書いた形の中に入れて渡すだけ）。だから、どの括りの関数もこの数の回までしか通り
-//    直さない道は、上限までしか届かない。前の版の深さの守り（同じ `?` の実体の入れ子 32）を通った形は、どれも上限を越えない。
-//    越えるのは、同じ `?` を何十回も通り直して形が深くなり続ける再帰だけである。書いた字面・書いた部分適用と合成の鎖
+//    上限：（この数 × 書いた括りの関数の数 + 1）× 書いたいちばん深い形（writtenDepth。名前を通した深さ、前の定義を指して深く
+//    なる鎖も書いた分）。呼んだ行に書いた形はいちばん深い形まで（ここで + 1）で、入れ子の道（実体の本体が実体を作る道）で括りの
+//    関数を1つ通るたびに、呼んだ所に書いた形の分（いちばん深い形まで）しか深くならない（受けた物を、書いた形の中に入れて渡す
+//    だけ）。だから、どの括りの関数もこの数の回までしか通り直さない道（括りの関数を この数 × 書いた括りの関数の数 回まで通る道）
+//    は、上限までしか届かない。前の版の深さの守り（同じ `?` の実体の入れ子 32）を通った形は、どれも上限を越えない。
+//    越えるのは、同じ `?` を何十回も通り直して形が深くなり続ける再帰だけである（前の「この数 ×（括りの関数の数 + 1）× いちばん深い形」
+//    は、この道の届く深さより 31 × いちばん深い形だけ大きく、深くなり続ける再帰をその分遅く断った）。書いた字面・書いた部分適用と合成の鎖
 //    （`q1 : pp [f : q0] [f : q0]`…）・値や閉包を欄で渡す別々の関数の鎖・減っていく形の再帰・輪の中で深くなってから戻る有限の
 //    再帰は断らない。形が深くなり続ける再帰（`f : [x ~xs] ? f [xs xs]`、閉包が前の実体の中で書かれる `f : [s] ? f [s : [y ? s y]]`
 //    など）は、書いた形が浅ければ深さの門で、上限が大きければ先に入れ子の数の守り（注の4）で断る。前（同じ日のまとめ直しの
@@ -1594,14 +1596,16 @@ const INSTANCE_NEST_LIMIT = 256;
 // deepest は、ファイルに書いたどの形（括り・字下げのブロック・並び・`,` の並び、関数の本体の中も）よりも深い数：書いた形の
 // 深さを、実体の鍵の深さと同じく数える（括りと並びと `,` は中身に 1 を足す。名前は、ファイルの値の定義なら右辺の書いた
 // 深さを通す。定義が前の定義を指して深くなる鎖（`q1 : pp [f : q0] [f : q0]`…）も書いた分に数える。輪は 0 で切る）。
-// 数え方は鍵の深さより浅くならない側に倒す（1行の括りにも 1 を足す、など）。brackets は、書いた括りの関数（括りの仮引数を
-// 持つ `?`）の数。
+// 数え方は鍵の深さより浅くならない側に倒す（1行の括りにも 1 を足す、関数の本体の枝の条件（`:` の左）に書いた形も数える、
+// など）。`x ' k`・`x @ k` の右は鍵（欄の名前か位置、R26）なので名前として辿らない。brackets は、書いた括りの関数（括りの
+// 仮引数を持つ `?`）の数。
 function writtenDepth(lines, F) {
   let deepest = 1;
   const lambdas = new Set();
   // 値の定義の書いた深さ。右辺の値の形だけを数える：関数の本体（`?` の右）と `:` の左は値の形に入らず、印の付いた名前（`$w`・
-  // `@w`・前置 `~`・後置 `@` は種類を引かない。値の印・後置 `~` を付けた物も、鍵では形の無い値か撒く項で深さ 1）は辿らない。だから、ここで辿る名前の輪は種類の輪（値を含む輪で、
-  // どの並べ方でも name-cycle で断る。§5 Q30）だけで、そこを 0 で切っても、断らないプログラムの答えは並べ方に依らない。
+  // `@w`・前置 `~`・後置 `@` は種類を引かない。値の印・後置 `~` を付けた物も、鍵では形の無い値か撒く項で深さ 1）は辿らない。
+  // だから、ここで辿る名前の輪は種類の輪（値を含む輪で、どの並べ方でも name-cycle で断る。§5 Q30）だけで、そこを 0 で切っても、
+  // 断らないプログラムの答えは並べ方に依らない。
   const memo = new Map(); // 値の定義 → 書いた深さ（解いている途中は 0）
   const nameDepth = (name) => {
     const def = F.defs.get(name);
@@ -1615,7 +1619,8 @@ function writtenDepth(lines, F) {
   // inValue：値の定義の右辺の形を数えている（関数の本体には入らず、deepest も動かさない）。
   const termDepth = (t, inValue) => {
     if (!t) return 1;
-    if (t.type === "infix") return 1 + Math.max(termDepth(t.left, inValue), termDepth(t.right, inValue));
+    // `x ' k`・`x @ k` の右は鍵（欄の名前か位置）で、名前として引かない（R26）。
+    if (t.type === "infix") return 1 + Math.max(termDepth(t.left, inValue), t.sym === "'" || t.sym === "@" ? 1 : termDepth(t.right, inValue));
     if (t.core.c === "name") return t.pre.length || t.post.length ? 1 : nameDepth(t.core.name);
     if (t.core.rows) return 1 + t.core.rows.reduce((m, r) => Math.max(m, treeDepth(r, inValue)), 0);
     return 1;
@@ -1627,10 +1632,15 @@ function writtenDepth(lines, F) {
     else if (t.sym === "?") {
       if (!inValue && !lambdas.has(t)) {
         lambdas.add(t);
-        deepest = Math.max(deepest, treeDepth(t.right, false)); // 本体に書いた形
+        const body = treeDepth(t.right, false); // 本体に書いた形（先に数える：中の括り・枝の条件・`?` でも deepest が上がる）
+        deepest = Math.max(deepest, body);
       }
       d = 1;
-    } else if (t.sym === ":") d = treeDepth(t.right, inValue);
+    } else if (t.sym === ":") {
+      // 左は値の形に入らない（定義・欄の名前、枝の条件）。ただ2項以上の枝の条件は解くので、そこに書いた形も数える。
+      if (!inValue) treeDepth(t.left, false);
+      d = treeDepth(t.right, inValue);
+    }
     else if (t.sym === ",") d = 1 + Math.max(treeDepth(t.left, inValue), treeDepth(t.right, inValue));
     else d = Math.max(treeDepth(t.left, inValue), treeDepth(t.right, inValue));
     if (!inValue) deepest = Math.max(deepest, d);
@@ -3194,9 +3204,9 @@ export function resolve(source) {
   checkParamNames(lines, F);
   F.fileScope = { parent: null, params: null, locals: null, hasImport: lines.some(hasImportIn), key: "file" };
   // 実体の深さの上限（INSTANCE_DEPTH_MARGIN の注の1）：入れ子の道で、括りの関数をそれぞれ余り（32）回まで通り直したときに届く
-  // 深さ。括りの関数を1つ通るたびに、書いたいちばん深い形の分までしか深くならない。解く前にソースだけから決める。
+  // 深さ。呼んだ行に書いた形と、括りの関数を1つ通るたびに足される形は、書いたいちばん深い形までしか深くない。解く前にソースだけから決める。
   const written = writtenDepth(lines, F);
-  F.depthLimit = INSTANCE_DEPTH_MARGIN * (written.brackets + 1) * written.deepest;
+  F.depthLimit = (INSTANCE_DEPTH_MARGIN * written.brackets + 1) * written.deepest;
 
   // 穴の生成名は、ソースの名前と衝突しない綴りにする（`$p0` が `p0` の番地と読めないように）。
   const names = new Set();
