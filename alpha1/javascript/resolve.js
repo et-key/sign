@@ -100,9 +100,9 @@ function gate(id, message) {
 
 // 余積の門か。本体の根の種類を仮に解くとき（下の bodyRootOf）は、門に当たっても止めずに「未知」にする。
 // 名前の門（P2）は仮に解いても答えが変わらないので止める。
-// 実体の総数の守りの断り（totalRefusal）は、reason は G7 でも門に数えない（未知にせず、resolve ごと断る）。
+// 実体の守りの断り（guardRefusal）も門に数える。根の種類を解く所では未知にし、覚えた断りを resolve の最後に投げる。
 function isGate(e) {
-  return e instanceof OperationError && typeof e.reason === "string" && e.reason.startsWith("coproduct-") && !e.fatal;
+  return e instanceof OperationError && typeof e.reason === "string" && (e.reason.startsWith("coproduct-") || !!e.guard);
 }
 
 function nameError(reason, message) {
@@ -914,12 +914,12 @@ function internFn(fn) {
   if (fn && fn.type === "compose") return internCompose(fn);
   return internLeaf(`L<${fnKey(fn)}>`, fnDepth(fn));
 }
-// 関数の葉の深さ：書いた所の範囲の実体の深さ（envDepth、ファイルの範囲なら 0）に 1 を足す。範囲を持たない関数（点なし・
-// 頭の前置 `@`・アリティの分からない関数）は 1。
+// 関数の葉の深さ：書いた所の範囲の深さ（envDepth。閉包の鍵は書いた所の範囲の鍵を持つので、その段と同じ）。ファイルの範囲の
+// 関数と、範囲を鍵に持たない関数（点なし・頭の前置 `@`・アリティの分からない関数・素の関数の部分適用と穴は元の関数のまま）は 1。
 function fnDepth(fn) {
-  return 1 + ((fn && fn.envDepth) || 0);
+  return Math.max(1, (fn && fn.envDepth) || 0);
 }
-// 範囲の中の、いちばん内の実体の深さ（実体の範囲は depth を持つ、instScope）。実体の中でなければ 0。
+// 範囲の中の、いちばん内の実体の範囲の深さ（実体の範囲は depth を持つ、instScope）。実体の中でなければ 0。
 function envDepth(scope) {
   for (let s = scope; s; s = s.parent) if (s.depth !== undefined) return s.depth;
   return 0;
@@ -1136,6 +1136,8 @@ function abortFrame(F, frame) {
     t.deps.delete(frame);
     if (t.value !== "U") t.stale = true;
   }
+  // この枠に頼って作った実体は、外れたのと同じに扱う（INSTANCE_DEPTH_LIMIT の注の3）。
+  if (frame.pendingCalls) settlePending(F, frame, true, []);
 }
 // 解いている途中の枠 target の仮置きを読む。via は、記録を通して読んだときの、その記録から target までの道筋（一歩の
 // 綴りの配列を返す関数。言い分を作るときだけ呼ぶ）。
@@ -1295,16 +1297,23 @@ function collectedRoot(F, c, value, again) {
   for (const d of cell.entry.deps) d.tentatives.push(cell.entry);
   for (const d of cell.entry.cyc.keys()) d.cycEntries.push(cell.entry);
   const memo = { set: (_, entry) => (cell.entry = entry) };
+  // 解き直しで本体が門に当たったら、読んだ側の枠の後ろは最後の木の道に無い（木では、書いた所で本体が門に当たる。
+  // INSTANCE_DEPTH_LIMIT の注の2。instantiate の、門に当たる実体を呼んだ所と同じ）。
+  const gate = (root) => {
+    if (cell.gated && F.stack.length) F.stack[F.stack.length - 1].gated = true;
+    return root;
+  };
   return () => {
     const running = F.inProgress.get(cell);
     if (running) {
       consult(F, running);
       return "A";
     }
-    if (!cell.entry.stale) return readMemo(F, cell.entry, () => cell.label);
+    if (!cell.entry.stale) return gate(readMemo(F, cell.entry, () => cell.label));
     guardAgain(F, ++cell.count, "名前の無い関数");
     const frame = pushFrame(F, cell);
     let root;
+    let gated = false;
     try {
       root = again();
     } catch (e) {
@@ -1313,9 +1322,11 @@ function collectedRoot(F, c, value, again) {
         throw e;
       }
       root = "U";
+      gated = true;
     }
+    cell.gated = gated || !!frame.gated;
     finishFrame(F, frame, memo, root);
-    return root;
+    return gate(root);
   };
 }
 // owner は記録の持ち主（輪の道筋に書く一歩を返す関数）。記録から途中の枠までの道筋は、持ち主の一歩と、記録が覚えた道筋。
@@ -1379,6 +1390,9 @@ function finishFrame(F, frame, memo, value) {
       d.tentatives.push(t);
     }
   }
+  // この枠に頼って作った実体（INSTANCE_DEPTH_LIMIT の注の2・3）。外れたら作った実体の数から外し、当たったら、この枠が頼った
+  // 仮置きに頼り直す。外れたかは仮置きの記録と同じ（読まれて A でない）。最後に置く（総数の門に当たっても、記録は済んでいる）。
+  if (frame.pendingCalls) settlePending(F, frame, frame.failed || (frame.consulted && value !== "A"), entry.deps);
 }
 
 // 名前の種類（§2「ファイルの定義の名前」）。`?` なら L、それ以外は右辺を解いた根の種類。値なら中身の形も持つ（R24：
@@ -1471,54 +1485,74 @@ function bodyRootOf(F, lambdaOp) {
 // 呼んだ行で使った関数の名前にする（instanceError）。実体を最初に作った関数の名前にすると、ほかの行の有無で名指しが変わる。
 
 // 形を変えながら自分（か、自分を呼ぶ関数の輪）を呼び続ける再帰（`f : [x ~xs] ? f [xs xs]`）は、実体が有限に収まら
-// ない。名指しせずに未知や仮置きのまま止めると黙って違う木になるので、守りに当たったら読みを決めずに断る。守りは3つで、
-// 1と2は実体の鍵（渡された形）と確定した答えだけで決める。枠の積み方や、作った実体の履歴では決めない。だから当たるかは、
+// ない。名指しせずに未知や仮置きのまま止めると黙って違う木になるので、守りに当たったら読みを決めずに断る。守りは4つある。
+// 1と2は実体の鍵（渡された形）と確定した答えだけで決め、枠の積み方や作った実体の履歴では決めない。だから当たるかは、
 // ほかの門と同じく本体と前提の値だけで決まり、「仮置きの記録」の理屈（どの順に解いても同じ不動点に着く）の中にある。
+// 3と4は止まるための資源の守りで、計算の道で決まる（理屈の外。別の reason で断る）。
+// どの守りも、当たったら門として投げる（根の種類を解く所では未知になり、そこから先は浅く止まる）。1 は普通の門で、呼んだ行
+// で名指しする。2〜4 は覚えて（guardRefusal）、resolve の最後に、ほかの門より先に断る（値を含む輪と解き直しの守りの後）。
 //
 // 1. 深さ（INSTANCE_DEPTH_LIMIT）：作る実体の鍵の入れ子の深さ（instanceDepth）がこの数を超えたら、その実体を作らずに
-//    G7 で断る。普通の門なので、根の種類を解く所（instRootOf）では未知になり、木を残す段（materialize）が同じ鍵にまた
-//    当たって、呼んだ行で名指しする（R25）。深さは鍵の綴りだけで決まる（番号に持たせる、depthOf）ので、どの定義・行から
-//    先に解いても、記録を引いても同じになる。
+//    G7 で断る。根の種類を解く所（instRootOf）では未知になり、木を残す段（materialize）が同じ鍵にまた当たって、呼んだ行で
+//    名指しする（R25）。深さは鍵の綴りだけで決まる（番号に持たせる、depthOf）ので、どの定義・行から先に解いても、記録を
+//    引いても同じになる。
 //    数え方：中身の見えない A・未知・数の葉は 1、構造体と List は中身のいちばん深い物に 1 を足す。関数の葉は、書いた所の
-//    範囲が実体の中なら、その実体の深さに 1 を足す（閉包の鍵は、書いた所の範囲の鍵＝実体の鍵を持つ。fnDepth）。部分
-//    適用・合成は、元の関数と当てた物（裸の仮引数の位置は A）・中の関数のいちばん深い物に 1 を足す。実体の深さは、関数の
-//    深さと、括りの仮引数に当てた物の深さのいちばん大きい物（裸の仮引数は A なので 1）。
-//    `f : [x ~xs] ? f [xs xs]` は形が1段ずつ深くなるので断る。減っていく形の再帰（入れ子の字面を1段ずつ剥がす）は、初めの
-//    形の深さで決まる：32 段の入れ子の字面（深さ 33）は最初の呼び出しで断り、31 段（深さ 32）は通る。再帰でなくても、
-//    渡した形が上限より深ければ断る（鍵だけで決めるので、通る形と区別しない）。別々の関数の鎖（`p1` が `p2` を、`p2` が
-//    `p3` を…呼ぶ）や、素の関数を挟む鎖（`f0 : x ? hb [s : f1]`…）、形の深くならない輪（欄の入れ替え）は当たらない。
+//    範囲の深さ（実体の中で書いた閉包の鍵は、書いた所の範囲の鍵＝実体の鍵を持つ。fnDepth）で、ファイルの範囲なら 1。括りの
+//    関数の部分適用と合成は、元の関数と当てた物（裸の仮引数の位置は A）・中の関数のいちばん深い物に 1 を足す。素の関数の
+//    部分適用と穴は、元の関数と同じ（鍵に当てた物が入らない）。門で見る実体の深さは、括りの仮引数に当てた物のいちばん深い物
+//    （裸の仮引数は A なので 1）。関数を書いた所の深さは入れない（書いた所の実体は、その実体の門で見てある）。実体の範囲の
+//    深さ（中で書く閉包の深さ）は、当てた物の深さと、書いた所の範囲の深さの大きい方。
+//    `f : [x ~xs] ? f [xs xs]` は形が1段ずつ深くなり、`f : [s] ? f [s : [y ? s y]]` は閉包が前の実体の中で書かれるので鍵が
+//    1段ずつ深くなって断る。減っていく形の再帰（入れ子の字面を1段ずつ剥がす）は、初めの形の深さで決まる：32 段の入れ子の
+//    字面（深さ 33）は最初の呼び出しで断り、31 段（深さ 32）は通る。再帰でなくても、渡した物の鍵が上限より深ければ断る
+//    （鍵だけで決めるので、通る形と区別しない。閉包を欄に入れて次の関数へ渡す鎖も、閉包が前の実体の鍵を持つので深くなる）。
+//    値だけを渡す別々の関数の鎖（`p1` が `p2` を、`p2` が `p3` を…呼ぶ）や、素の関数を挟む鎖（`f0 : x ? hb [s : f1]`…）、
+//    形の深くならない輪（欄の入れ替え）は当たらない。
 //    前は同じ `?` の実体の入れ子を数え、どの順に解いても同じ段になるよう数え直していた（枠の並びの数え方・記録の下の
 //    入れ子・輪の頭の段・当たった記録を resolve の最後に断る作り。2026-10-20 の自己点検の SC-1・SC-2）。それでも輪の中は
 //    近似で、上限のちょうど上では入口で割れえたうえ、当たるかが枠の積み方で決まるので、理屈の外に置いていた。
 //    穴（前から、§5 Q25 の未決）：合成の子の合成は開く（R8）ので、同じ合成を2つ並べて渡す再帰（`f : [g] ? f [g : g g]`）は、
 //    合成の中の関数の数が倍々になっても深さが増えない。総数の上限に届く前に鍵の長さが溢れ、内部の例外になる。
-// 2. 総数（INSTANCE_TOTAL_LIMIT）：深さに上限があっても、形が枝ごとに増えると（`g : [x ~xs] ? (g [[a : xs]]) , (g [[b : xs]])`）
-//    実体は 2^深さ になり、解決が止まらない。同じ関数（書いた綴りと範囲。fnKey で、同じ綴りの関数は実体を分け合う）の、
-//    確定した実体の数がこの数を超えたら断る。確定した実体とは、作ったときに解いている途中のどの枠も仮置きに頼っていなかった
-//    物（settled）と、木まで解いた物（materialize）である。確定した値だけを読んで辿った道は、木を残す段がもう一度辿るので、
-//    確定した実体はどれも最後の木の実体である。外れた仮置きの上でだけ作った実体は、確定した値の上では作られないので数えない。
+// 2. 総数（INSTANCE_TOTAL_LIMIT）：深さに上限があっても、形が枝ごとに増えると実体は 2^深さ になり、解決が止まらない。同じ
+//    `?`（書いた所。どの範囲で書いた物も1つ）を通って呼んだ、確定した実体の数がこの数を超えたら G7 で断る。同じ綴りの関数は
+//    実体を分け合うが、呼んだ `?` のそれぞれで数える（綴りで数えると、別々に書いた2つの関数が上限を分け合った。確かめ
+//    2026-10-20）。確定した実体とは、最後の木の道にあると言える呼び出しの実体である（noteCall）：呼んだときに、解いている途中の
+//    どの枠も仮置きに頼っておらず（pendingNow）、門に当たる実体を呼んだ後でもない（gated）物、頼っていた枠が全部当たって閉じた
+//    物（settlePending）、枠が空のとき（木を残す段）に呼んだ物。確定した値だけを読んで辿った道は木を残す段がもう一度辿るので、
+//    どれも最後の木の実体である。門に当たる実体を呼んだ後ろは、木を残す段がそこで呼んだ行ごと断るので、最後の木に無い（根の
+//    種類を解く所は、門を未知にして先へ進む）。外れた仮置きの上でだけ作った実体も、確定した値の上では作られないので数えない。
 //    だから断るのは「最後の木の実体の数が上限を超える」ときで、どの順に解いても同じになる。前は作った実体の全部を数えたので、
 //    上限の前後で断るかが定義の順で割れた（`g : x ? ⏎ ⇥f x ⏎ ⇥inc` と `f : x ? p [s : (g x)]` に、p の実体を 511 個作る行を
-//    足すと、g が先なら仮置きの上の p|{s:A} も数えて G7、f が先なら通る。§5 Q25 の SC-3）。
-//    当たった実体と、当たったときに解いていた行は解く順に依るので、行で名指しせず、関数だけを言って resolve ごと断る
-//    （totalRefusal）。
-// 3. 止まるための上限（INSTANCE_WORK_LIMIT）：仮置きに頼って作った実体は 2 では数えないので、仮置きの上で形が増え続けると
-//    止まらない（`g : [x ~xs] ? (g xs) , (g [[a : xs] [a : xs]]) , (g [[b : xs] [b : xs]])` は、同じ形で自分を引いた後なので、
-//    後ろの実体はどれも g の仮置きに頼る）。だから同じ関数の作った実体の全部にも、2 の 2 倍の上限を置き、超えたら同じく断る。
-//    これは、同じ関数の実体が解いている途中で入れ子になる数も抑える。形が深くならないまま入れ子が長くなる再帰（欄 7 つの
-//    並べ替え。形は 5040 通り）は、前の深さの守り（同じ `?` の実体の入れ子 32）を外した後、この上限が無いと JS のスタックが
-//    溢れて内部の例外になった（試験は `--stack-size=8000` で回し、入れ子 1024 は収まる。既定のスタックでは収まらない）。
-//    これだけは作った実体の履歴で決まるので、外れた仮置きの上でだけ作った実体が上限と 2 の差（512 個）を埋めると、断るかが
-//    定義の順で割れうる（§5 Q25。割れる形は、試験と確かめでは見つかっていない）。2 の上限より大きいので、確定した実体だけで
-//    上限に届く形は、先に 2 で断る。
+//    足すと、g が先なら仮置きの上の p|{s:A} も数えて G7、f が先なら通る。§5 Q25 の SC-3）。門に当たる実体の後ろの実体も数えて
+//    いたので、`t : x ? (bad [y : 1]) , (p [m : 1])` と p の実体を 512 個作る行は、行の順で G5 と総数の G7 に割れた（前の版も）。
+//    枝ごとに形が増える再帰（`g : [x ~xs] ? (g [[a : xs] [a : xs]]) , (g [[b : xs] [b : xs]])`）は、最初の枝を深さ優先で降りて
+//    深さの門に当たるので、最後の木はそこで断る形で、残りの枝は最後の木に無い。だから 3 で断る。
+// 3. 作った実体の数（INSTANCE_WORK_LIMIT）：2 で数えない実体（仮置きに頼った物と、門に当たる実体の後ろの物）は、増え続けても
+//    2 では止まらない（`g : [x ~xs] ? (g xs) , (g [[a : xs] [a : xs]]) , (g [[b : xs] [b : xs]])` は、同じ形で自分を引いた後なので、
+//    後ろの実体はどれも g の仮置きに頼る）。だから同じ `?` で作って外れていない実体（確定した物と、まだ仮置きに頼っている物と、
+//    門の後ろの物）にも 2 の 2 倍の上限を置く（instance-work-limit）。頼っていた枠の仮置きが外れたら、その実体は数から外す
+//    （discard）。外さないと、外れた仮置きの世界ごとに実体が積み増し、上限の前後で定義の順で割れた（f が g と h の仮置きの上で
+//    同じ p の実体を 342 個ずつ作り、g → h → f の順に解く並べ方だけ 1026 個で断る。確かめ 2026-10-20）。外した後に残る割れは、
+//    まだ外れると分かっていない仮置きの上の実体と門の後ろの実体が、同時に 2 との差（512 個）を埋めるときである（§5 Q25 の未決）。
+// 4. 入れ子の数（INSTANCE_NEST_LIMIT）：形が深くならないまま、解いている途中の実体が長く入れ子になる再帰（欄 7 つの並べ替え。
+//    形は 5040 通り）や、それを関数を跨いで呼び合う再帰は、JS のスタックを溢れさせ、解き直しと輪の記録（仮置きの依り・輪の依り）
+//    の手間も入れ子の長さの2乗ほどで増えた（前の深さの守り「同じ `?` の実体の入れ子 32」を外した後。確かめ 2026-10-20）。だから、
+//    根の種類を解いている実体と木を解いている実体の入れ子の数に上限を置く（instance-nest-limit。1段が 1.3KB ほどで、node の
+//    既定のスタックでも収まる）。入れ子の長さは、先に作った実体の記録を引くかで変わるので、上限の前後では定義の順で割れうる
+//    （§5 Q25 の未決。値だけを渡す別々の関数でも 257 段の鎖は断る。前の版は数千段まで通し、並べ方によってスタックが溢れた）。
+//    実体1段の本体が重い（括弧の深い入れ子）と、上限の内でもスタックが溢れる。そのときは内部の例外にせず、資源の守りとして断る
+//    （resolve-stack-limit、stackRefusal。どこで溢れるかは、同じプロセスで前に何を解いたかでも変わる）。
 // どの値も言語の規則ではなく実装の守りで、値は決めていない。
 const INSTANCE_DEPTH_LIMIT = 32;
 const INSTANCE_TOTAL_LIMIT = 512;
 const INSTANCE_WORK_LIMIT = 2 * INSTANCE_TOTAL_LIMIT;
+const INSTANCE_NEST_LIMIT = 256;
 
-// 作る実体の鍵の深さ（注の1）。fn は元の括りの関数、params と argDescs は bindParams と同じ。
-function instanceDepth(fn, params, argDescs) {
-  let depth = fnDepth(fn);
+// 作る実体の門で見る鍵の深さ（注の1）：括りの仮引数に当てた物のいちばん深い物（裸の仮引数は A なので数えない）。関数を
+// 書いた所の深さは入れない（書いた所の実体は、その実体の門で見てある。入れると、深い実体の中で書いた `[[b] ? b] [1]` まで
+// 断る）。params と argDescs は bindParams と同じ。
+function instanceDepth(params, argDescs) {
+  let depth = 1;
   params.forEach((p, i) => {
     if (p.kind !== "bare") depth = Math.max(depth, depthOf(internDesc(argDescs[i])));
   });
@@ -1527,42 +1561,133 @@ function instanceDepth(fn, params, argDescs) {
 function depthGate(label, shapeText, depth) {
   const e = gate(
     "G7",
-    `括りの関数 \`${label}\` を形 ${cutShape(shapeText)} で呼ぶと、渡した形の入れ子が ${INSTANCE_DEPTH_LIMIT} 段を超えます（${depth} 段）。形を変えながら自分か、自分を呼ぶ関数の輪を呼び続けると、実体が有限に収まるかを決めないので、本体の読みを決めません（R24）。`
+    `括りの関数 \`${label}\` を形 ${cutShape(shapeText)} で呼ぶと、渡した物の鍵の入れ子（形と、欄の関数を書いた所の実体の鍵）が ${INSTANCE_DEPTH_LIMIT} 段を超えます（${depth} 段）。形を変えながら自分か、自分を呼ぶ関数の輪を呼び続けると、実体が有限に収まるかを決めないので、本体の読みを決めません（R24）。`
   );
   e.instance = { fn: label, shape: shapeText };
   e.instances = [e.instance];
   return e;
 }
-// いま作る実体が確定した物か（注の2）：解いている途中のどの枠も、仮置きを読まれておらず（consulted）、仮置きに頼って
-// いない（deps）。枠を積まずに解いている無名の関数の本体（collector）も同じ。
-function settled(F) {
-  return F.stack.every((f) => !f.consulted && !f.deps.size) && F.collectors.every((c) => !c.deps.size);
+
+// いまの呼び出しが最後の木の道にあると言えるか（注の2）。言えないのは、解いている途中の枠が仮置きに頼っているとき
+// （pendingNow。仮置きを読まれた枠 consulted と、枠と無名の関数の本体が頼っている枠 deps）と、枠の計算が門に当たった実体を
+// 呼んだ後のとき（gated）。根の種類を解く所は、実体の本体が門に当たっても未知にして先へ進むが、木を残す段はそこで呼んだ行
+// ごと断るので、その後ろで作る実体は最後の木に入らない（門に当たる `bad [y : 1]` の後ろの `p [m : 1]`。確かめ 2026-10-20）。
+function pendingNow(F) {
+  const s = new Set();
+  for (const f of F.stack) {
+    if (f.consulted) s.add(f);
+    for (const d of f.deps) s.add(d);
+  }
+  for (const c of F.collectors) for (const d of c.deps) s.add(d);
+  return s;
 }
-// 確定した実体を数える（注の2）。上限を超えたら resolve ごと断る。
-function countSettled(F, inst) {
-  if (inst.counted) return;
-  const family = inst.family;
-  const total = (F.instanceTotals.get(family) || 0) + 1;
-  if (total > INSTANCE_TOTAL_LIMIT) throw totalRefusal(F, family, inst.lambda, `確定した実体が ${INSTANCE_TOTAL_LIMIT} 個を超えました`);
-  F.instanceTotals.set(family, total);
-  inst.counted = true;
+const gatedNow = (F) => F.stack.some((f) => f.gated);
+// 括りの関数 fn（書いた `?` は op）を通って実体 inst を呼んだ（注の2・3）。made なら、この呼び出しが実体を作った（か、外した
+// 実体を作り直した）。最後の木の道にあると言えれば、op の確定した実体に数える。仮置きに頼っていれば、頼っている枠に覚えさせ、
+// 枠が閉じたときに決める（settlePending）。門に当たった実体を呼んだ後なら数えない（木を残す段で、呼んだ所が数える）。
+function noteCall(F, inst, op, label, made) {
+  const set = F.instanceTotals.get(op);
+  if (set && set.has(inst)) return;
+  const pend = pendingNow(F);
+  const onPath = !gatedNow(F);
+  if (!pend.size) {
+    if (onPath) countSettled(F, inst, op, label);
+    return;
+  }
+  const entry = { inst, op, label, made, onPath, pendingOn: pend };
+  for (const f of pend) (f.pendingCalls || (f.pendingCalls = [])).push(entry);
 }
-// 総数の守りの断り（注の2・3）。当たった実体と行は解く順に依るので名指しせず、関数を言う。同じ綴りの関数は実体を分け合う
-// ので、ファイルの定義のうち同じ綴りの物の名前でいちばん小さい物で言う（無ければ書いた綴り）。門を捕まえて続ける所
-// （根の種類を解く所）に未知として飲まれないよう、門としては投げず、覚えて resolve の最後にも断る（guardAgain と同じ作り）。
-function totalRefusal(F, family, op, what) {
-  const names = [];
-  for (const d of F.defs.values()) if (d.lambda && lambdaKey(d.lambda, F.fileScope.key) === family.slice("pattern:".length)) names.push(d.name);
-  names.sort();
-  const label = names[0] || `[${cutShape(writeTree(op))}]`;
+// 作って外れていない実体の数（注の3）。作った `?`（か、外した実体を作り直した `?`）で数える。
+function makeLive(F, inst, op, label) {
+  const made = (F.instancesMade.get(op) || 0) + 1;
+  if (made > INSTANCE_WORK_LIMIT) throw guardRefusal(F, "work", label);
+  F.instancesMade.set(op, made);
+  inst.liveOp = op;
+}
+// 外れた仮置きの上でだけ作った実体を、作った実体の数から外す（注の3）。鍵の記録（F.instances）には残し、また呼ばれたら
+// 作り直したと数える（instantiate）。確定した実体は外さない。
+function discard(F, inst) {
+  if (!inst.liveOp || inst.final) return;
+  F.instancesMade.set(inst.liveOp, F.instancesMade.get(inst.liveOp) - 1);
+  inst.liveOp = null;
+}
+// 解いている途中の枠 frame が閉じた（failed なら仮置きが外れた）ときの、frame に頼った呼び出し。外れたら、その呼び出しが作った
+// 実体を作った実体の数から外し、当たったら frame が頼っていた枠（deps）に頼り直す。どの枠にも頼らなくなったら確定した実体
+// （総数に数える）。数えるのは最後にまとめて（総数の門に当たっても、frame の後片付けを終えてから投げる）。
+function settlePending(F, frame, failed, deps) {
+  const now = [];
+  for (const entry of frame.pendingCalls || []) {
+    if (!entry.pendingOn || !entry.pendingOn.has(frame)) continue;
+    entry.pendingOn.delete(frame);
+    if (failed) {
+      entry.pendingOn = null;
+      if (entry.made) discard(F, entry.inst);
+      continue;
+    }
+    for (const d of deps) {
+      if (entry.pendingOn.has(d)) continue;
+      entry.pendingOn.add(d);
+      (d.pendingCalls || (d.pendingCalls = [])).push(entry);
+    }
+    if (entry.pendingOn.size) continue;
+    entry.pendingOn = null;
+    if (entry.onPath) now.push(entry);
+  }
+  frame.pendingCalls = null;
+  for (const e of now) countSettled(F, e.inst, e.op, e.label);
+}
+// 確定した実体を、呼んだ `?` ごとに数える（注の2）。同じ綴りの関数が分け合う実体は、呼んだ `?` のそれぞれで1つ。上限を
+// 超えたら断る。確定した実体は、作った実体の数でも外さない。
+function countSettled(F, inst, op, label) {
+  let set = F.instanceTotals.get(op);
+  if (!set) F.instanceTotals.set(op, (set = new Set()));
+  if (set.has(inst)) return;
+  if (set.size + 1 > INSTANCE_TOTAL_LIMIT) throw guardRefusal(F, "total", label);
+  set.add(inst);
+  if (!inst.liveOp) makeLive(F, inst, op, label);
+  inst.final = true;
+}
+// 守りの断り（注の2〜4）。当たった実体と行は解く順に依るので、書いた `?` の名前（名前の定義なら名前、括りなら綴り）だけを
+// 言う。ほかの門と同じく投げ（根の種類を解く所では未知になり、そこから先は浅く止まる）、覚えて resolve の最後に断る。覚えた物が
+// 2つ以上なら、名前のいちばん小さい物。総数は G7（断るかは最後の木だけで決まる）、作った実体の数と入れ子の数は資源の守り
+// なので、別の reason にする。
+const GUARD = {
+  total: { reason: GATE_REASON.G7, gate: "G7", what: () => `確定した実体が ${INSTANCE_TOTAL_LIMIT} 個を超えました` },
+  work: { reason: "instance-work-limit", gate: "", what: () => `作った実体（仮置きの上で作った物も数える）が ${INSTANCE_WORK_LIMIT} 個を超えました` },
+  nest: { reason: "instance-nest-limit", gate: "", what: () => `実体を解いている途中の入れ子が ${INSTANCE_NEST_LIMIT} 段を超えました` },
+};
+function guardRefusal(F, kind, label) {
+  const g = GUARD[kind];
   const e = new OperationError(
-    `括りの関数 \`${label}\` の${what}（形を変えながら増え続けています）。実体が有限に収まるかを決めないので、本体の読みを決めません（§5 Q25）。`,
-    { spec: `${SPEC} §6.2 G7`, reason: GATE_REASON.G7 }
+    `括りの関数 \`${label}\` の${g.what()}（形を変えながら増え続けています）。実体が有限に収まるかを決めないので、本体の読みを決めません（§5 Q25）。`,
+    { spec: `${SPEC} §4 R24`, reason: g.reason }
   );
-  e.gate = "G7";
-  e.fatal = true; // isGate に数えない（根の種類を解く所で未知にせず、resolve ごと断る）
-  F.totalRefused = F.totalRefused || e;
+  e.gate = g.gate;
+  e.guard = kind; // isGate に数える（ほかの門と同じく、根の種類を解く所では未知）
+  e.label = label;
+  const old = F.guards[kind];
+  if (!old || label < old.label) F.guards[kind] = e;
+  F.guardStop = F.guardStop || e; // 新しい実体を作らない（instantiate）
   return e;
+}
+// 覚えた守りの断り（resolve の最後）。総数・作った実体の数・入れ子の数の順。
+function guardRefused(F) {
+  return F.guards.total || F.guards.work || F.guards.nest || null;
+}
+// 解いている途中の実体（根の種類を解いている物と、木を解いている物）の入れ子に入る（注の4）。出るのは呼んだ側（instRootOf・
+// materialize）。
+function enterNest(F, inst) {
+  if (F.instNest >= INSTANCE_NEST_LIMIT) throw guardRefusal(F, "nest", inst.label);
+  F.instNest++;
+}
+// JS のスタックが溢れた（注の4）：入れ子の数の守りの内でも、実体1段の本体が重い（括弧の深い入れ子）と溢れる。内部の例外の
+// まま出さず、資源の守りとして断る（どこで溢れるかは、同じプロセスで前に何を解いたかでも変わる）。
+function stackRefusal(e) {
+  if (!(e instanceof RangeError) || !/call stack/i.test(e.message)) return null;
+  return new OperationError("解決の途中で JS のスタックが溢れました（実体の入れ子か、本体の入れ子が深すぎます）。読みを決めません（§5 Q25）。", {
+    spec: `${SPEC} §4 R24`,
+    reason: "resolve-stack-limit",
+  });
 }
 
 function patternFn(F, op, params, defScope, label) {
@@ -1767,30 +1892,35 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
   const ident = callIdent(fn, params, argDescs);
   let inst = F.instances.get(key);
   if (!inst) {
-    // 実体の守り（INSTANCE_DEPTH_LIMIT の注）。深さは鍵だけで決まる普通の門で、超える実体は作らない。総数は、同じ綴りの関数
-    // （family）の、作った実体の全部（注の3）と、確定した実体（注の2）。
-    b.depth = instanceDepth(fn, params, argDescs);
-    if (b.depth > INSTANCE_DEPTH_LIMIT) throw depthGate(fn.label, b.text, b.depth);
-    const family = fnKey(fn);
-    const made = (F.instancesMade.get(family) || 0) + 1;
-    if (made > INSTANCE_WORK_LIMIT) {
-      throw totalRefusal(F, family, op, `作った実体が ${INSTANCE_WORK_LIMIT} 個を超えました（仮置きの上で作った物も数える、止まるための守り）`);
-    }
-    F.instancesMade.set(family, made);
+    // 実体の守り（INSTANCE_DEPTH_LIMIT の注）。深さは鍵だけで決まる普通の門で、超える実体は作らない。守りの断りを覚えた後は、
+    // 新しい実体を作らない（resolve はその断りで終わるので、残りの計算は値を含む輪と解き直しの守りを見るためだけにある。作り
+    // 続けると、当たった後の枝を全部解いて遅かった）。
+    if (F.guardStop) throw F.guardStop;
+    const depth = instanceDepth(params, argDescs);
+    if (depth > INSTANCE_DEPTH_LIMIT) throw depthGate(fn.label, b.text, depth);
+    // 範囲の深さ（中で書いた閉包の深さ、fnDepth）は、当てた物の深さと書いた所の範囲の深さの大きい方。
+    b.depth = Math.max(depth, envDepth(defScope));
     // scope は作った側の物の範囲（根の種類を出す、instRootOf）。walked は本体を歩いて記録した物の同一性（callIdent の注）。
     const scope = instScope(F, op, defScope, b, key, ident);
-    inst = { isInst: true, key, label: fn.label, shapeText: b.text, depth: b.depth, family, lambda: op, scope, walked: new Set(), cycleDeps: new Set() };
-    if (settled(F)) countSettled(F, inst);
+    inst = { isInst: true, key, label: fn.label, shapeText: b.text, depth: b.depth, lambda: op, scope, walked: new Set(), cycleDeps: new Set(), liveOp: null };
+    makeLive(F, inst, op, fn.label);
     F.instances.set(key, inst);
-  }
+    noteCall(F, inst, op, fn.label, true);
+  } else if (!inst.liveOp) {
+    // 外れた仮置きの上でだけ作った実体を、また呼んだ：作り直したと数える（注の3）。
+    makeLive(F, inst, op, fn.label);
+    noteCall(F, inst, op, fn.label, true);
+  } else noteCall(F, inst, op, fn.label, false);
   b.depth = inst.depth; // 呼んだ側の物の範囲も、同じ深さを持つ（scopeOf）
   const root = instRootOf(F, inst, fn.label);
+  // 本体が門に当たる実体を呼んだ：木を残す段はここで呼んだ行ごと断るので、この枠の計算の後ろは最後の木の道に無い（注の2）。
+  if (inst.gated && F.stack.length) F.stack[F.stack.length - 1].gated = true;
   if (F.stack.length === 0) {
     recordCall(F, fn, inst);
     // 木と、本体の中の呼び出しの記録は、いま呼んだ側の物の範囲で歩く。実体を作ったのが木を残さない所（値の定義の種類を
     // 出す所など）でも、門は呼んだ行で渡した物の名前で名指しする。
     const scopeOf = () => (ident === inst.scope.ident ? inst.scope : instScope(F, op, defScope, b, key, ident));
-    materialize(F, inst, scopeOf, fn.label);
+    materialize(F, inst, scopeOf);
     if (inst.error) {
       if (!F.matStack.length) throw instanceError(inst, fn.label);
       // 別の実体の本体の中から呼んだ：その実体も同じ門で失敗する。どの実体を、どの名前で呼んで門に当たったかを
@@ -1814,20 +1944,27 @@ function instRootOf(F, inst, label) {
     consult(F, running); // 同じ形で自分を呼んだ：同じ実体の仮置き（R24）
     return "A";
   }
+  enterNest(F, inst);
   const frame = pushFrame(F, inst);
   frame.label = label;
   let value;
+  let gated = false;
   try {
     value = resolveBody(inst.lambda.right, { F, scope: inst.scope, diag: null }).rootKind;
   } catch (e) {
     if (!isGate(e)) {
+      F.instNest--;
       abortFrame(F, frame);
       throw e;
     }
     // 本体が門に当たる。木を残す段（materialize）で同じ門に当たり、呼んだ行で断る（深さの守りも、鍵だけで決まる門なので
     // 同じ。INSTANCE_DEPTH_LIMIT の注の1）。
     value = "U";
+    gated = true;
   }
+  F.instNest--;
+  // 本体が門に当たるか、門に当たる実体を呼んだ実体は、木を残す段で断る（呼んだ側の枠の後ろは最後の木に無い、instantiate）。
+  inst.gated = gated || !!frame.gated;
   if (frame.consulted && value !== "A") {
     value = "U";
     frame.failed = true;
@@ -1839,8 +1976,9 @@ function instRootOf(F, inst, label) {
 // 実体の木（R25）。解いている途中の種類が無いときにだけ呼ぶ。本体の中の未定義の名前は、ここで1回だけ information を
 // 出す（F.reported）。定義の所では本体を解かないので、呼ばれない本体の中の名前は出さない（読まないので）。
 // 範囲（scopeOf）は、はじめて木にした呼び出しの物のもの。その物の分の記録も、この歩きで取る（walked）。
-// 木まで解く実体は、最後の木の実体なので、確定した実体に数える（INSTANCE_TOTAL_LIMIT、INSTANCE_DEPTH_LIMIT の注の2）。
-function materialize(F, inst, scopeOf, label) {
+// 木まで解く実体は最後の木の実体で、呼んだ所（instantiate の noteCall。枠が空なので確定した呼び出し）で確定した実体に数えて
+// ある（INSTANCE_DEPTH_LIMIT の注の2）。
+function materialize(F, inst, scopeOf) {
   if (inst.materializing) {
     // 木を解いている途中の実体を、本体の中からもう一度呼んだ（再帰）。根の種類は仮置きの済んだ答えを使い、木は
     // 外側の1回で作る。外側が門に当たったら、間にある実体（どれも外側を呼んでいる）も同じ門で失敗にする。
@@ -1849,7 +1987,7 @@ function materialize(F, inst, scopeOf, label) {
     return;
   }
   if (inst.done) return;
-  countSettled(F, inst);
+  enterNest(F, inst);
   const scope = scopeOf();
   inst.walked.add(scope.ident);
   inst.materializing = true;
@@ -1860,6 +1998,7 @@ function materialize(F, inst, scopeOf, label) {
     if (!isGate(e)) throw e;
     inst.error = e;
   } finally {
+    F.instNest--;
     F.matStack.pop();
     inst.materializing = false;
     inst.done = true;
@@ -2881,7 +3020,8 @@ export function resolve(source) {
     // 根の種類の仮置きの記録、木を解いている途中の実体、定義の行の `?` の木（最後に実体で埋める）、実体の本体の
     // information の出し先。
     instances: new Map(),
-    // 同じ綴りの関数（fnKey）→ 確定した実体の数（INSTANCE_TOTAL_LIMIT）、作った実体の数（INSTANCE_WORK_LIMIT）。
+    // 書いた `?` → それを通って呼んだ確定した実体の集まり（INSTANCE_TOTAL_LIMIT）、作って外れていない実体の数
+    // （INSTANCE_WORK_LIMIT）。
     instanceTotals: new Map(),
     instancesMade: new Map(),
     calls: new Map(),
@@ -2897,8 +3037,9 @@ export function resolve(source) {
     againRefused: null,
     // 値を含む輪で断った誤り（cycleError）。
     cycleRefused: null,
-    // 実体の総数の守りで断った誤り（totalRefusal）。
-    totalRefused: null,
+    // 実体の守りで断った誤り（guardRefusal。total・work・nest）と、解いている途中の実体の入れ子の数（enterNest）。
+    guards: {},
+    instNest: 0,
   };
   resetIntern();
 
@@ -2923,10 +3064,13 @@ export function resolve(source) {
   // 本体の根」と書いたままだが、R25 が後から決まったので、素の関数に読む。
   // 門はここでは止めない——その行を解くときに、行の順に同じ門で断る。
   // 解き直しの守り（guardAgain）で断ったら、ほかの誤りより先に、その言い分で断る（握りつぶされても、ほかの門に化けても）。
-  // 実体の総数の守り（totalRefusal）で断ったら、その次に先に断る（根の種類を解く所や namesPattern に握りつぶされても）。
-  // 実体の深さの守りは、鍵だけで決まる普通の門なので、ほかの門と同じく行を解くときに断る（INSTANCE_DEPTH_LIMIT の注の1）。
   // 値を含む輪（cycleError）で断ったら、その次に、その言い分で断る（輪は種類を計算する所で見つかるので、普通は行を解く
   // 前に、輪の言い分のまま投げ上がる）。
+  // 実体の守り（総数・作った実体の数・入れ子の数、guardRefusal）に当たったら、その次に、ほかの門より先に断る（当たった所は
+  // 門として未知になり、根の種類を解く所や namesPattern に握りつぶされても、覚えた断りは残る）。輪より後に置くのは、守りの
+  // 断りが解く順に依らずに見つかる輪を覆わないため（前は総数の守りが先に投げ上がり、輪を見る前に止まる並べ方があった。確かめ
+  // 2026-10-20）。実体の深さの守りは、鍵だけで決まる普通の門なので、ほかの門と同じく行を解くときに断る（INSTANCE_DEPTH_LIMIT
+  // の注の1）。
   let trees;
   try {
     for (const def of F.defs.values()) {
@@ -2942,13 +3086,14 @@ export function resolve(source) {
     // 各行を解く。括りの関数の実体は、呼んだ所で作って木まで解く（instantiate）。
     trees = lines.map((line) => resolveTree(line, { F, scope: F.fileScope, diag: diagnostics }));
   } catch (e) {
-    throw F.againRefused || F.totalRefused || F.cycleRefused || e;
+    throw F.againRefused || F.cycleRefused || guardRefused(F) || stackRefusal(e) || e;
   }
   if (F.againRefused) throw F.againRefused;
-  if (F.totalRefused) throw F.totalRefused;
   // 値を含む輪を、どこかで握りつぶしても断る（namesPattern は、既定値を覗いた所を通る輪だけを握りつぶし、そのときは
   // F.cycleRefused を覗く前に戻す。namesPattern の注）。
   if (F.cycleRefused) throw F.cycleRefused;
+  const guarded = guardRefused(F);
+  if (guarded) throw guarded;
 
   // 括りの関数の `?` の木を、ファイル全体で集めた実体で埋める（R25）。全部の行を解き終えてから埋めるので、呼ぶ行が
   // 定義の前でも後でも同じ木になる。並べるのは、その `?` を通って呼ばれ（recordCall）、木まで解けた実体だけ：門に
