@@ -1569,8 +1569,10 @@ function bodyRootOf(F, lambdaOp) {
 //    の手間も入れ子の長さの2乗ほどで増えた（前の深さの守り「同じ `?` の実体の入れ子 32」を外した後。確かめ 2026-10-20）。だから、
 //    再帰の入れ子（根の種類を解いている実体と木を解いている実体のうち、同じ `?` の2つ目から先の数の和）に上限を置く
 //    （instance-nest-limit、enterNest）。値だけを渡す別々の関数の鎖（それぞれの `?` は1つずつ）は数えない：重いのは再帰で、
-//    鎖は前の版と同じく何段でも通す（前の版を通った物は、同じ `?` を 32 段より深く入れ子にしないので、9 つ以上の `?` が同時に
-//    深く再帰しない限り、ここも通る）。入れ子の長さは、先に作った
+//    鎖は前の版と同じく何段でも通す。前の版を通った物は、同じ `?` を 32 段より深く入れ子にしないので、9 つ以上の `?` が同時に
+//    深く再帰しない限り、ここも通る（9 つの `?` が 30 段ずつ再帰する有限の形は、前の版は通し、ここで断る。和を 512 にするか、
+//    `?` ごとに 32 段を超えるまで断らないと、関数を跨ぐ並べ替えの再帰が、関数 16 個で 37 秒、32 個で 5 分を超えた。重いのは
+//    解き直しと輪の記録で、入れ子の長さの2乗ほどで増える。確かめ 2026-10-20、§5 Q25 の未決）。入れ子の長さは、先に作った
 //    実体の記録を引くかで変わるので、上限の前後では定義の順で割れうる（§5 Q25 の未決）。全部の入れ子でも数えると、関数を跨ぐ
 //    並べ替えの再帰が 1024 段で 3.8GB を使い、`?` ごとに数えると、関数 8 つで 2048 段になりヒープが尽きた（2026-10-20）。
 //    スタックが溢れたら（鎖が長いか、実体1段の本体が重い）、内部の例外にせず、資源の守りとして断る（resolve-stack-limit、
@@ -1595,39 +1597,44 @@ const INSTANCE_NEST_LIMIT = 256;
 function writtenDepth(lines, F) {
   let deepest = 1;
   const lambdas = new Set();
+  // 値の定義の書いた深さ。右辺の値の形だけを数える：関数の本体（`?` の右）と `:` の左は値の形に入らず、`$`・`@`・前置 `~` など
+  // 前置の印の付いた名前は種類を引かない（形の無い値か、未知）ので辿らない。だから、ここで辿る名前の輪は種類の輪（値を含む輪で、
+  // どの並べ方でも name-cycle で断る。§5 Q30）だけで、そこを 0 で切っても、断らないプログラムの答えは並べ方に依らない。
   const memo = new Map(); // 値の定義 → 書いた深さ（解いている途中は 0）
   const nameDepth = (name) => {
     const def = F.defs.get(name);
     if (!def || def.lambda) return 1;
     if (memo.has(def)) return memo.get(def);
     memo.set(def, 0);
-    const d = treeDepth(def.rhs);
+    const d = treeDepth(def.rhs, true);
     memo.set(def, d);
     return d;
   };
-  const termDepth = (t) => {
+  // inValue：値の定義の右辺の形を数えている（関数の本体には入らず、deepest も動かさない）。
+  const termDepth = (t, inValue) => {
     if (!t) return 1;
-    if (t.type === "infix") return 1 + Math.max(termDepth(t.left), termDepth(t.right));
-    if (t.core.c === "name") return nameDepth(t.core.name);
-    if (t.core.rows) return 1 + t.core.rows.reduce((m, r) => Math.max(m, treeDepth(r)), 0);
+    if (t.type === "infix") return 1 + Math.max(termDepth(t.left, inValue), termDepth(t.right, inValue));
+    if (t.core.c === "name") return t.pre.length ? 1 : nameDepth(t.core.name);
+    if (t.core.rows) return 1 + t.core.rows.reduce((m, r) => Math.max(m, treeDepth(r, inValue)), 0);
     return 1;
   };
-  const treeDepth = (t) => {
+  const treeDepth = (t, inValue) => {
     if (!t) return 1;
     let d;
-    if (t.type === "seq") d = t.terms.length === 1 ? termDepth(t.terms[0]) : 1 + Math.max(...t.terms.map(termDepth));
+    if (t.type === "seq") d = t.terms.length === 1 ? termDepth(t.terms[0], inValue) : 1 + Math.max(...t.terms.map((x) => termDepth(x, inValue)));
     else if (t.sym === "?") {
-      if (!lambdas.has(t)) {
+      if (!inValue && !lambdas.has(t)) {
         lambdas.add(t);
-        deepest = Math.max(deepest, treeDepth(t.right)); // 本体に書いた形
+        deepest = Math.max(deepest, treeDepth(t.right, false)); // 本体に書いた形
       }
       d = 1;
-    } else if (t.sym === ",") d = 1 + Math.max(treeDepth(t.left), treeDepth(t.right));
-    else d = Math.max(treeDepth(t.left), treeDepth(t.right));
-    deepest = Math.max(deepest, d);
+    } else if (t.sym === ":") d = treeDepth(t.right, inValue);
+    else if (t.sym === ",") d = 1 + Math.max(treeDepth(t.left, inValue), treeDepth(t.right, inValue));
+    else d = Math.max(treeDepth(t.left, inValue), treeDepth(t.right, inValue));
+    if (!inValue) deepest = Math.max(deepest, d);
     return d;
   };
-  for (const line of lines) treeDepth(line);
+  for (const line of lines) treeDepth(line, false);
   const brackets = [...lambdas].filter((op) => op.left && patternParamsOf(op.left)).length;
   return { deepest, brackets };
 }
@@ -1672,6 +1679,9 @@ const gatedNow = (F) => F.stack.some((f) => f.gated);
 function noteCall(F, inst, op, label, made) {
   const set = F.instanceTotals.get(op);
   if (set && set.has(inst)) return;
+  // 同じ `?` からの控えが残っていれば、足さない（控えは `?` ごとに1つ。頼っている枠の全部へ呼ぶたびに足すと、輪で何度も
+  // 呼び直す再帰で控えが入れ子の長さの2乗ほどに増えた。足さずに数え漏れても、木を残す段の呼び出しが数える）。
+  if (!made && inst.pendingOps && inst.pendingOps.has(op)) return;
   const pend = pendingNow(F);
   const onPath = !gatedNow(F) && !taintedNow(F);
   if (!pend.size) {
@@ -1680,6 +1690,7 @@ function noteCall(F, inst, op, label, made) {
   }
   const entry = { inst, op, label, made, onPath, pendingOn: pend };
   for (const f of pend) (f.pendingCalls || (f.pendingCalls = [])).push(entry);
+  (inst.pendingOps || (inst.pendingOps = new Set())).add(op);
 }
 // 作って外れていない実体の数（注の3）。作った `?`（か、外した実体を作り直した `?`）で数える。
 function makeLive(F, inst, op, label) {
@@ -1705,6 +1716,7 @@ function settlePending(F, frame, failed, deps) {
     entry.pendingOn.delete(frame);
     if (failed) {
       entry.pendingOn = null;
+      entry.inst.pendingOps.delete(entry.op);
       if (entry.made) discard(F, entry.inst);
       continue;
     }
@@ -1715,6 +1727,7 @@ function settlePending(F, frame, failed, deps) {
     }
     if (entry.pendingOn.size) continue;
     entry.pendingOn = null;
+    entry.inst.pendingOps.delete(entry.op);
     if (entry.onPath) now.push(entry);
   }
   frame.pendingCalls = null;

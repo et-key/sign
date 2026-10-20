@@ -954,6 +954,9 @@ const answerRefused = [
 	// 形が1段ずつ深くなる再帰は、別の所に深い形を書いても（上限が上がっても）断る。
 	["深さ 形が1段ずつ深くなる再帰", src(["f : [x ~xs] ? f [xs xs]", "f [1 2]"]), "G7"],
 	["深さ 形が1段ずつ深くなる再帰（別の所に 40 段の字面）", src(["f : [x ~xs] ? f [xs xs]", `w : ${NEST(40)}`, "f [1 2]"]), "G7"],
+	// 上限が大きい（書いた形が深いか、括りの関数が多い）と、1段ずつ深くなる再帰は、深さの門より先に入れ子の数の守り（再帰の
+	// 入れ子 256）に当たる。断るのは変わらない（確かめ 2026-10-20 の4回目）。
+	["深さ 形が1段ずつ深くなる再帰（別の所に 200 段の字面）", src(["f : [x ~xs] ? f [xs xs]", `w : ${NEST(200)}`, "f [1 2]"]), "instance-nest-limit", [["f", ""]]],
 ];
 for (const [name, s, want, kind, extra] of answerPasses) checkPass(`答え ${name}`, s, want, kind, extra);
 for (const [name, s, want, inst] of answerRefused) checkRefused(`答え ${name}`, s, want, inst);
