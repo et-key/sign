@@ -1491,6 +1491,9 @@ function bodyRootOf(F, lambdaOp) {
 // 3と4は止まるための資源の守りで、計算の道で決まる（理屈の外。別の reason で断る）。
 // どの守りも、当たったら門として投げる（根の種類を解く所では未知になり、そこから先は浅く止まる）。1 は普通の門で、呼んだ行
 // で名指しする。2〜4 は覚えて（guardRefusal）、resolve の最後に、ほかの門より先に断る（値を含む輪と解き直しの守りの後）。
+// 当たった `?` では、それから新しい実体を作らない（ほかの `?` は解き続ける）。断る理由が2つ以上あるファイル（守りに当たる `?`
+// と、門に当たる別の行。守りに当たる `?` が2つで、片方の溢れが他方の計算の中にある、など）では、どれを言うかが解く順に依り
+// うる。行の門が2つあるときに、行の順に断るのと同じである（§5 Q25 の未決）。
 //
 // 1. 深さ（INSTANCE_DEPTH_LIMIT）：作る実体の鍵の入れ子の深さ（instanceDepth）がこの数を超えたら、その実体を作らずに
 //    G7 で断る。根の種類を解く所（instRootOf）では未知になり、木を残す段（materialize）が同じ鍵にまた当たって、呼んだ行で
@@ -1600,7 +1603,7 @@ function noteCall(F, inst, op, label, made) {
 // 作って外れていない実体の数（注の3）。作った `?`（か、外した実体を作り直した `?`）で数える。
 function makeLive(F, inst, op, label) {
   const made = (F.instancesMade.get(op) || 0) + 1;
-  if (made > INSTANCE_WORK_LIMIT) throw guardRefusal(F, "work", label);
+  if (made > INSTANCE_WORK_LIMIT) throw guardRefusal(F, "work", label, op);
   F.instancesMade.set(op, made);
   inst.liveOp = op;
 }
@@ -1642,7 +1645,7 @@ function countSettled(F, inst, op, label) {
   let set = F.instanceTotals.get(op);
   if (!set) F.instanceTotals.set(op, (set = new Set()));
   if (set.has(inst)) return;
-  if (set.size + 1 > INSTANCE_TOTAL_LIMIT) throw guardRefusal(F, "total", label);
+  if (set.size + 1 > INSTANCE_TOTAL_LIMIT) throw guardRefusal(F, "total", label, op);
   set.add(inst);
   if (!inst.liveOp) makeLive(F, inst, op, label);
   inst.final = true;
@@ -1656,7 +1659,7 @@ const GUARD = {
   work: { reason: "instance-work-limit", gate: "", what: () => `作った実体（仮置きの上で作った物も数える）が ${INSTANCE_WORK_LIMIT} 個を超えました` },
   nest: { reason: "instance-nest-limit", gate: "", what: () => `実体を解いている途中の入れ子が ${INSTANCE_NEST_LIMIT} 段を超えました` },
 };
-function guardRefusal(F, kind, label) {
+function guardRefusal(F, kind, label, op) {
   const g = GUARD[kind];
   const e = new OperationError(
     `括りの関数 \`${label}\` の${g.what()}（形を変えながら増え続けています）。実体が有限に収まるかを決めないので、本体の読みを決めません（§5 Q25）。`,
@@ -1665,9 +1668,11 @@ function guardRefusal(F, kind, label) {
   e.gate = g.gate;
   e.guard = kind; // isGate に数える（ほかの門と同じく、根の種類を解く所では未知）
   e.label = label;
+  e.instance = { fn: label, shape: "" }; // 名指しは `?` の名前だけ（形は言わない）
+  e.instances = [e.instance];
   const old = F.guards[kind];
   if (!old || label < old.label) F.guards[kind] = e;
-  F.guardStop = F.guardStop || e; // 新しい実体を作らない（instantiate）
+  if (!F.guardStops.has(op)) F.guardStops.set(op, e); // この `?` では新しい実体を作らない（instantiate）
   return e;
 }
 // 覚えた守りの断り（resolve の最後）。総数・作った実体の数・入れ子の数の順。
@@ -1677,7 +1682,7 @@ function guardRefused(F) {
 // 解いている途中の実体（根の種類を解いている物と、木を解いている物）の入れ子に入る（注の4）。出るのは呼んだ側（instRootOf・
 // materialize）。
 function enterNest(F, inst) {
-  if (F.instNest >= INSTANCE_NEST_LIMIT) throw guardRefusal(F, "nest", inst.label);
+  if (F.instNest >= INSTANCE_NEST_LIMIT) throw guardRefusal(F, "nest", inst.label, inst.lambda);
   F.instNest++;
 }
 // JS のスタックが溢れた（注の4）：入れ子の数の守りの内でも、実体1段の本体が重い（括弧の深い入れ子）と溢れる。内部の例外の
@@ -1892,10 +1897,11 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
   const ident = callIdent(fn, params, argDescs);
   let inst = F.instances.get(key);
   if (!inst) {
-    // 実体の守り（INSTANCE_DEPTH_LIMIT の注）。深さは鍵だけで決まる普通の門で、超える実体は作らない。守りの断りを覚えた後は、
-    // 新しい実体を作らない（resolve はその断りで終わるので、残りの計算は値を含む輪と解き直しの守りを見るためだけにある。作り
-    // 続けると、当たった後の枝を全部解いて遅かった）。
-    if (F.guardStop) throw F.guardStop;
+    // 実体の守り（INSTANCE_DEPTH_LIMIT の注）。深さは鍵だけで決まる普通の門で、超える実体は作らない。守りに当たった `?` では、
+    // 新しい実体を作らない（作り続けると、当たった後の枝を全部解いて遅かった）。止めるのは当たった `?` だけにする：全部を
+    // 止めると、ほかの `?` の守りや、新しい実体を通る値を含む輪が見つからず、言うことが定義の順で割れた（確かめ 2026-10-20）。
+    const stopped = F.guardStops.get(op);
+    if (stopped) throw stopped;
     const depth = instanceDepth(params, argDescs);
     if (depth > INSTANCE_DEPTH_LIMIT) throw depthGate(fn.label, b.text, depth);
     // 範囲の深さ（中で書いた閉包の深さ、fnDepth）は、当てた物の深さと書いた所の範囲の深さの大きい方。
@@ -3003,7 +3009,12 @@ function tryHole(items, ctx) {
  * @returns {{ trees: object[], diagnostics: object[] }}
  */
 export function resolve(source) {
-  const lines = frontEnd(source).map((words) => parseRow(words));
+  let lines;
+  try {
+    lines = frontEnd(source).map((words) => parseRow(words));
+  } catch (e) {
+    throw stackRefusal(e) || e; // 前段の深い括弧の入れ子でも、スタックの溢れは内部の例外にしない（stackRefusal の注）
+  }
 
   const diagnostics = [];
   const F = {
@@ -3039,6 +3050,7 @@ export function resolve(source) {
     cycleRefused: null,
     // 実体の守りで断った誤り（guardRefusal。total・work・nest）と、解いている途中の実体の入れ子の数（enterNest）。
     guards: {},
+    guardStops: new Map(), // 守りに当たった `?` → その断り（新しい実体を作らない、instantiate）
     instNest: 0,
   };
   resetIntern();
