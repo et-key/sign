@@ -100,8 +100,9 @@ function gate(id, message) {
 
 // 余積の門か。本体の根の種類を仮に解くとき（下の bodyRootOf）は、門に当たっても止めずに「未知」にする。
 // 名前の門（P2）は仮に解いても答えが変わらないので止める。
+// 実体の総数の守りの断り（totalRefusal）は、reason は G7 でも門に数えない（未知にせず、resolve ごと断る）。
 function isGate(e) {
-  return e instanceof OperationError && typeof e.reason === "string" && e.reason.startsWith("coproduct-");
+  return e instanceof OperationError && typeof e.reason === "string" && e.reason.startsWith("coproduct-") && !e.fatal;
 }
 
 function nameError(reason, message) {
@@ -625,6 +626,7 @@ function paramInChain(scope, name) {
 //     {type:'input'}  頭の前置 `@`
 //     {type:'other'}  アリティの分からない関数（既定値のある関数など）
 //   idKey：関数の出どころ（書いた `?` の綴りと、定義した所の範囲の鍵）。実体の鍵（fnKey）に使う。
+//   envDepth：定義した所の範囲の、いちばん内の実体の深さ（無ければ 0）。鍵の深さ（fnDepth、実体の深さの守り）に使う。
 //   spread：後置 `~` で撒く項。elements：中身の見える器の要素の種類（§2「中身が見える器」）。
 //   shape（A のとき）：中身の形（R24）。{s:'struct', fields:[{name, desc}]}・{s:'list', elem}・{s:'scalar'}（数）。無ければ
 //     中身の見えない A。
@@ -816,9 +818,10 @@ function fnKey(fn) {
 // 合成の L も同じ（internCompose）。子の鍵を文字列でつなぐと、同じ部分適用を2つ並べた合成（`c1 : q1 q1`）を当てた
 // 部分適用の鎖で段ごとに倍になり、24 段で文字列の長さの上限を超えた（反証 2026-10-19 の続き）。
 // 表は resolve を呼ぶたびに作り直す（resetIntern）。
+// 番号には、鍵の入れ子の深さ（depth）も持たせる（実体の深さの守り、INSTANCE_DEPTH_LIMIT の注の1）。深さは綴りだけで決まる。
 let internTable = new Map(); // 中身の綴り（子は番号）→ 番号
 // 番号 → {leaf} | {s:'struct', fields:[[名前, 番号]]} | {s:'list', elem:番号|null} | {s:'partial', base, bound:[番号]}
-//   | {s:'compose', fns:[番号], partial}
+//   | {s:'compose', fns:[番号], partial}。どれも depth を持つ。
 let internNodes = [];
 let internByDesc = new WeakMap();
 let internByShape = new WeakMap();
@@ -847,7 +850,11 @@ function internText(text, node) {
   }
   return id;
 }
-const internLeaf = (text) => internText(text, { leaf: text });
+// 葉の深さは 1。関数の葉は、書いた所の範囲が実体の中なら、その実体の深さに 1 を足す（fnDepth）。綴りに範囲の鍵（＝実体の
+// 鍵）が入っているので、同じ綴りの葉は同じ深さになる。
+const internLeaf = (text, depth = 1) => internText(text, { leaf: text, depth });
+const depthOf = (id) => internNodes[id].depth;
+const maxDepth = (ids) => ids.reduce((m, c) => Math.max(m, depthOf(c)), 0);
 function internDesc(d) {
   if (!d) return internLeaf("U");
   const memo = internByDesc.get(d);
@@ -869,10 +876,11 @@ function internShape(sh) {
   if (sh.s === "scalar") id = internLeaf("N");
   else if (sh.s === "struct") {
     const fields = sh.fields.map((f) => [f.name, internDesc(f.desc)]);
-    id = internText(`{${fields.map(([n, c]) => `${n}:#${c}`).join(" ")}}`, { s: "struct", fields });
+    const depth = 1 + maxDepth(fields.map(([, c]) => c));
+    id = internText(`{${fields.map(([n, c]) => `${n}:#${c}`).join(" ")}}`, { s: "struct", fields, depth });
   } else {
     const elem = sh.elem ? internDesc(sh.elem) : null;
-    id = internText(elem === null ? "[]" : `[#${elem}…]`, { s: "list", elem });
+    id = internText(elem === null ? "[]" : `[#${elem}…]`, { s: "list", elem, depth: elem === null ? 1 : 1 + depthOf(elem) });
   }
   internByShape.set(sh, id);
   return id;
@@ -886,7 +894,8 @@ function internPartial(fn) {
   const memo = internByFn.get(fn);
   if (memo !== undefined) return memo;
   const bound = fn.bound.map((d, i) => (fn.base.bareAt[i] ? internLeaf("A") : internDesc(d)));
-  const id = internText(`P(${bound.map((c) => `#${c}`).join(" ")})${fn.base.idKey}`, { s: "partial", base: fn.base.idKey, bound });
+  const depth = 1 + Math.max(fnDepth(fn.base), maxDepth(bound));
+  const id = internText(`P(${bound.map((c) => `#${c}`).join(" ")})${fn.base.idKey}`, { s: "partial", base: fn.base.idKey, bound, depth });
   internByFn.set(fn, id);
   return id;
 }
@@ -895,7 +904,7 @@ function internCompose(fn) {
   const memo = internByFn.get(fn);
   if (memo !== undefined) return memo;
   const fns = fn.fns.map(internFn);
-  const id = internText(`C(${fns.map((c) => `#${c}`).join(" ")})${fn.partial ? ":partial" : ""}`, { s: "compose", fns, partial: !!fn.partial });
+  const id = internText(`C(${fns.map((c) => `#${c}`).join(" ")})${fn.partial ? ":partial" : ""}`, { s: "compose", fns, partial: !!fn.partial, depth: 1 + maxDepth(fns) });
   internByFn.set(fn, id);
   return id;
 }
@@ -903,7 +912,17 @@ function internCompose(fn) {
 function internFn(fn) {
   if (fn && fn.type === "pattern" && fn.bound) return internPartial(fn);
   if (fn && fn.type === "compose") return internCompose(fn);
-  return internLeaf(`L<${fnKey(fn)}>`);
+  return internLeaf(`L<${fnKey(fn)}>`, fnDepth(fn));
+}
+// 関数の葉の深さ：書いた所の範囲の実体の深さ（envDepth、ファイルの範囲なら 0）に 1 を足す。範囲を持たない関数（点なし・
+// 頭の前置 `@`・アリティの分からない関数）は 1。
+function fnDepth(fn) {
+  return 1 + ((fn && fn.envDepth) || 0);
+}
+// 範囲の中の、いちばん内の実体の深さ（実体の範囲は depth を持つ、instScope）。実体の中でなければ 0。
+function envDepth(scope) {
+  for (let s = scope; s; s = s.parent) if (s.depth !== undefined) return s.depth;
+  return 0;
 }
 function canonKey(id) {
   const memo = canonMemo.get(id);
@@ -1058,10 +1077,10 @@ function reportUndefined(name, ctx) {
 // 下がっていない）のもとでも A にならないと分かった時だけなので、確定した値は、いちばん大きい不動点の値より下がらない。
 // 外れた仮置きに頼った答えは、上の3つの印で全部解き直すので、着いた所は不動点である。だから、どの順に解いても、いちばん
 // 大きい不動点に着く。解き直しの手間だけが順に依る。
-// この理屈は、門が本体と前提の値だけで決まることを使っている。実体の深さの守りは、それだけでは決まらない（当たるかが枠の
-// 積み方で決まる）ので、理屈の外に置く。当たったら記録の答えに頼らず、resolve ごと断る（INSTANCE_DEPTH_LIMIT の注の3）。
-// 実体の総数の守りも同じく理屈の外で、作った実体の数（外れた仮置きの上でだけ作った物も入る）で当たるので、断るかが定義の
-// 順で割れうる（§5 Q25、未決。2026-10-20 の自己点検の SC-3）。
+// この理屈は、門が本体と前提の値だけで決まることを使っている。実体の深さの守りは、作る実体の鍵（渡された形）だけで決まる
+// 普通の門なので、この理屈の中にある。実体の総数の守りは、確定した実体（最後の木の実体）だけを数えるので、断るかは
+// 最後の木だけで決まる。理屈の外に残るのは、止まるための上限（作った実体の全部）だけである（INSTANCE_DEPTH_LIMIT の注、
+// §5 Q25）。
 //
 // 解き直しの手間：外れた記録は未知に下がり、二度と枠を積まないので、各記録の仮置きが外れるのは一度だけである。印は外れか
 // 例外のたびにしか付かないので、同じ記録の解き直しは、それまでの外れと例外の数を超えない（外れは記録の数まで）。上の
@@ -1452,141 +1471,98 @@ function bodyRootOf(F, lambdaOp) {
 // 呼んだ行で使った関数の名前にする（instanceError）。実体を最初に作った関数の名前にすると、ほかの行の有無で名指しが変わる。
 
 // 形を変えながら自分（か、自分を呼ぶ関数の輪）を呼び続ける再帰（`f : [x ~xs] ? f [xs xs]`）は、実体が有限に収まら
-// ない。同じ `?` の実体の入れ子がこの数を超えたら、読みを決めずに断る（名指しせずに未知や仮置きのまま止めると、黙って
-// 違う木になる）。数えるのは同じ `?` の実体だけにする。別々の関数の鎖（`p1` が `p2` を、`p2` が `p3` を…呼ぶ）は、関数の
-// 数で有限なので数えない（数えると、33 段の鎖を断り、しかも鎖の途中の実体を先に作った行があるかどうかで答えが変わった。
-// 確かめ 2026-10-19 の F1・F5）。
-// 減っていく形の再帰（入れ子の字面を1段ずつ剥がす）も同じ `?` の実体が入れ子になるので、32 段を超える入れ子の字面は
-// 断る側に倒れる。これは有限の物を断る（読みは決まっている）ので、上限は十分大きくしてある。
+// ない。名指しせずに未知や仮置きのまま止めると黙って違う木になるので、守りに当たったら読みを決めずに断る。守りは3つで、
+// 1と2は実体の鍵（渡された形）と確定した答えだけで決める。枠の積み方や、作った実体の履歴では決めない。だから当たるかは、
+// ほかの門と同じく本体と前提の値だけで決まり、「仮置きの記録」の理屈（どの順に解いても同じ不動点に着く）の中にある。
 //
-// 入れ子の数は、枠の積み方ではなく、実体どうしの呼び出しだけで決める（P2・R25：定義と行の順に依らない）。3つの所がある。
-// 1. 入れ子は、実体の本体が実体を作ることである。素の名前つき関数・値の定義・無名の関数の解き直しの枠は、本体をそれぞれ
-//    決まった範囲（ファイルの範囲・書いた所の範囲）で解くので、その上で作る実体は、下の枠の中に入れ子にならない。だから
-//    数えるのは、枠の並びのいちばん上から続く実体の枠と、枠が実体だけなら木を解いている途中の実体である（stretchOf）。前は
-//    下の枠まで全部数えたので、素の関数を挟む鎖（`f0 : x ? hb [s : f1]`・`f1 : x ? hb [s : f2]`…、hb の実体は素の関数の
-//    本体ごとに1段）を f0 から解くと、34 個の関数で hb の実体が 32 段に数えられて f0 の根が黙って未知になり、逆順なら A
-//    だった（確かめ 2026-10-20 の SC-1）。素の関数の枠は、解いている途中の物を引けば仮置きなので、並びに1度しか出ず、
-//    数えなくても段は有限である。
-// 2. 記録の済んだ実体を引いたら、その下の入れ子（heights：`?` → その実体から下へ続く同じ `?` の実体の数のいちばん大きい物）
-//    を足して数える。前は積んだ枠だけを数えたので、下の実体を浅い所で先に作った行があると数が減った。33 段の入れ子の字面
-//    （`p : [a] ? p a` と `b : p [a : [a : … 1]]`）が、浅い呼び出し `a2 : p [a : 1]` を先に置けば A、後に置けば b が黙って
-//    未知になった（SC-2）。実体どうしが形を変えながら呼び合う輪では、輪の中の実体を輪の外から引いたときだけ、輪の頭の
-//    段まで上げて数える（raiseInLoop・knownHeights。輪の頭が入れ子にあるときに上げると、輪の頭へ戻る道を2回数え、上限の
-//    内の入れ子を断った）。1本の輪なら、どこから入っても段の数が同じになる。輪の頭から下へ輪の外の道がある形に、頭でない
-//    実体から入ると1段少なく数えうるので、上限のちょうど上では、入る所で断るかが割れうる（近似。前からの未決）。
-// 3. 守りに当たった記録（当たった枠と、その下の枠の答え）は、前提の値だけでなく、枠の積み方で決まる。未知として記録に
-//    残すと、木を残す段（materialize）は記録を辿るだけで当たり直さず、黙った未知が残った（SC-2）。だから当たったことを
-//    覚え（F.depthFires）、resolve の最後に、ほかの誤りより先に、その言い分で断る（depthRefusal）。名指しは、当たった
-//    入れ子のいちばん外の実体（並べ方で替わらないよう、当たった物のうち形の綴りの順で最初の物）。
+// 1. 深さ（INSTANCE_DEPTH_LIMIT）：作る実体の鍵の入れ子の深さ（instanceDepth）がこの数を超えたら、その実体を作らずに
+//    G7 で断る。普通の門なので、根の種類を解く所（instRootOf）では未知になり、木を残す段（materialize）が同じ鍵にまた
+//    当たって、呼んだ行で名指しする（R25）。深さは鍵の綴りだけで決まる（番号に持たせる、depthOf）ので、どの定義・行から
+//    先に解いても、記録を引いても同じになる。
+//    数え方：中身の見えない A・未知・数の葉は 1、構造体と List は中身のいちばん深い物に 1 を足す。関数の葉は、書いた所の
+//    範囲が実体の中なら、その実体の深さに 1 を足す（閉包の鍵は、書いた所の範囲の鍵＝実体の鍵を持つ。fnDepth）。部分
+//    適用・合成は、元の関数と当てた物（裸の仮引数の位置は A）・中の関数のいちばん深い物に 1 を足す。実体の深さは、関数の
+//    深さと、括りの仮引数に当てた物の深さのいちばん大きい物（裸の仮引数は A なので 1）。
+//    `f : [x ~xs] ? f [xs xs]` は形が1段ずつ深くなるので断る。減っていく形の再帰（入れ子の字面を1段ずつ剥がす）は、初めの
+//    形の深さで決まる：32 段の入れ子の字面（深さ 33）は最初の呼び出しで断り、31 段（深さ 32）は通る。再帰でなくても、
+//    渡した形が上限より深ければ断る（鍵だけで決めるので、通る形と区別しない）。別々の関数の鎖（`p1` が `p2` を、`p2` が
+//    `p3` を…呼ぶ）や、素の関数を挟む鎖（`f0 : x ? hb [s : f1]`…）、形の深くならない輪（欄の入れ替え）は当たらない。
+//    前は同じ `?` の実体の入れ子を数え、どの順に解いても同じ段になるよう数え直していた（枠の並びの数え方・記録の下の
+//    入れ子・輪の頭の段・当たった記録を resolve の最後に断る作り。2026-10-20 の自己点検の SC-1・SC-2）。それでも輪の中は
+//    近似で、上限のちょうど上では入口で割れえたうえ、当たるかが枠の積み方で決まるので、理屈の外に置いていた。
+//    穴（前から、§5 Q25 の未決）：合成の子の合成は開く（R8）ので、同じ合成を2つ並べて渡す再帰（`f : [g] ? f [g : g g]`）は、
+//    合成の中の関数の数が倍々になっても深さが増えない。総数の上限に届く前に鍵の長さが溢れ、内部の例外になる。
+// 2. 総数（INSTANCE_TOTAL_LIMIT）：深さに上限があっても、形が枝ごとに増えると（`g : [x ~xs] ? (g [[a : xs]]) , (g [[b : xs]])`）
+//    実体は 2^深さ になり、解決が止まらない。同じ関数（書いた綴りと範囲。fnKey で、同じ綴りの関数は実体を分け合う）の、
+//    確定した実体の数がこの数を超えたら断る。確定した実体とは、作ったときに解いている途中のどの枠も仮置きに頼っていなかった
+//    物（settled）と、木まで解いた物（materialize）である。確定した値だけを読んで辿った道は、木を残す段がもう一度辿るので、
+//    確定した実体はどれも最後の木の実体である。外れた仮置きの上でだけ作った実体は、確定した値の上では作られないので数えない。
+//    だから断るのは「最後の木の実体の数が上限を超える」ときで、どの順に解いても同じになる。前は作った実体の全部を数えたので、
+//    上限の前後で断るかが定義の順で割れた（`g : x ? ⏎ ⇥f x ⏎ ⇥inc` と `f : x ? p [s : (g x)]` に、p の実体を 511 個作る行を
+//    足すと、g が先なら仮置きの上の p|{s:A} も数えて G7、f が先なら通る。§5 Q25 の SC-3）。
+//    当たった実体と、当たったときに解いていた行は解く順に依るので、行で名指しせず、関数だけを言って resolve ごと断る
+//    （totalRefusal）。
+// 3. 止まるための上限（INSTANCE_WORK_LIMIT）：仮置きに頼って作った実体は 2 では数えないので、仮置きの上で形が増え続けると
+//    止まらない（`g : [x ~xs] ? (g xs) , (g [[a : xs] [a : xs]]) , (g [[b : xs] [b : xs]])` は、同じ形で自分を引いた後なので、
+//    後ろの実体はどれも g の仮置きに頼る）。だから同じ関数の作った実体の全部にも、2 の 2 倍の上限を置き、超えたら同じく断る。
+//    これは、同じ関数の実体が解いている途中で入れ子になる数も抑える。形が深くならないまま入れ子が長くなる再帰（欄 7 つの
+//    並べ替え。形は 5040 通り）は、前の深さの守り（同じ `?` の実体の入れ子 32）を外した後、この上限が無いと JS のスタックが
+//    溢れて内部の例外になった（試験は `--stack-size=8000` で回し、入れ子 1024 は収まる。既定のスタックでは収まらない）。
+//    これだけは作った実体の履歴で決まるので、外れた仮置きの上でだけ作った実体が上限と 2 の差（512 個）を埋めると、断るかが
+//    定義の順で割れうる（§5 Q25。割れる形は、試験と確かめでは見つかっていない）。2 の上限より大きいので、確定した実体だけで
+//    上限に届く形は、先に 2 で断る。
+// どの値も言語の規則ではなく実装の守りで、値は決めていない。
 const INSTANCE_DEPTH_LIMIT = 32;
-// 同じ `?` の実体の総数の上限（§5 Q25 の実装の守り）。深さは 32 以内でも、形が枝ごとに増えると（`g : [x ~xs] ? (g [[a : xs]]) ,
-// (g [[b : xs]])`）実体は 2^深さ になり、解決が止まらない。止まらないのは断るより悪い（どちらも読みを出さないが、止まら
-// ないと呼んだ行も名指しできない）ので、超えたら読みを決めずに G7 で名指しする。上限の値は言語の規則ではなく、実装の
-// 守りである（どの値にするかは決めていない。今の試験と .sn で同じ関数の実体が 64 を超える物は無い）。
-// 数えるのは作った実体の全部で、外れた仮置きの上でだけ作った実体（後で使われない物）も入る。だから上限の前後では、断るか
-// が定義の順で割れる（`g : x ? ⏎ ⇥f x ⏎ ⇥inc` と `f : x ? p [s : (g x)]` に、p の実体を 511 個作る行を足すと、g が先なら
-// p|{s:A} も数えて 513 個で G7、f が先なら 512 個で通る。2026-10-20 の自己点検の SC-3）。直すには、何を数えるか（木まで解いた
-// 実体だけか）と、止まるための別の上限を決める必要があり、どちらも決めていない（§5 Q25 の未決。断る側の割れで、黙った誤答
-// ではない）。
 const INSTANCE_TOTAL_LIMIT = 512;
+const INSTANCE_WORK_LIMIT = 2 * INSTANCE_TOTAL_LIMIT;
 
-// いま解いている実体の入れ子（INSTANCE_DEPTH_LIMIT の注の1）。`?` → 段の数、入れ子の実体の集まり（輪の頭を見る、
-// knownHeights）、いちばん外の実体（名指し）。
-function stretchOf(F) {
-  const counts = new Map();
-  const members = new Set();
-  let head = null;
-  const put = (inst, label) => {
-    counts.set(inst.lambda, (counts.get(inst.lambda) || 0) + 1);
-    members.add(inst);
-    head = { label, shape: inst.shapeText, key: inst.key };
-  };
-  for (let i = F.stack.length - 1; i >= 0; i--) {
-    const k = F.stack[i].key;
-    if (!k || !k.isInst) return { counts, members, head };
-    put(k, F.stack[i].label);
-  }
-  for (let i = F.matStack.length - 1; i >= 0; i--) put(F.matStack[i], F.matStack[i].matLabel);
-  return { counts, members, head };
+// 作る実体の鍵の深さ（注の1）。fn は元の括りの関数、params と argDescs は bindParams と同じ。
+function instanceDepth(fn, params, argDescs) {
+  let depth = fnDepth(fn);
+  params.forEach((p, i) => {
+    if (p.kind !== "bare") depth = Math.max(depth, depthOf(internDesc(argDescs[i])));
+  });
+  return depth;
 }
-// 実体を呼ぶ前に、入れ子の段を数える（INSTANCE_DEPTH_LIMIT の注の2）。inst は記録の済んだ実体（その下の入れ子を足す）か、
-// null（作る実体。その実体の1段だけで、下は解きながら数える）。
-// 名指しは、入れ子のいちばん外の実体（どの `?` の段が先に超えたかは、記録の済み方で替わるので見ない）。入れ子が無ければ
-// 呼んだ実体。
-function checkDepth(F, fn, op, key, shapeText, inst) {
-  const s = stretchOf(F);
-  const h = (inst && knownHeights(F, inst, s.members)) || new Map([[op, 1]]);
-  for (const [q, n] of h) {
-    if ((s.counts.get(q) || 0) + n <= INSTANCE_DEPTH_LIMIT) continue;
-    const named = s.head || { label: fn.label, shape: shapeText, key };
-    F.depthFires.push(named);
-    mergeHeights(F, h); // 下の枠も、当たった段を持つ（後でその枠の記録を引いた所も当たる）
-    throw depthGate(named);
-  }
-}
-function depthGate(head) {
-  const shape = head.shape.length > 60 ? `${head.shape.slice(0, 60)}…` : head.shape;
+function depthGate(label, shapeText, depth) {
   const e = gate(
     "G7",
-    `括りの関数 \`${head.label}\` を形 ${shape} で呼ぶと、同じ括りの関数の実体が、形を変えながら ${INSTANCE_DEPTH_LIMIT} 段を超えて入れ子になります（自分か、自分を呼ぶ関数の輪を呼び続けています）。実体が有限に収まるかを決めないので、本体の読みを決めません（R24）。`
+    `括りの関数 \`${label}\` を形 ${cutShape(shapeText)} で呼ぶと、渡した形の入れ子が ${INSTANCE_DEPTH_LIMIT} 段を超えます（${depth} 段）。形を変えながら自分か、自分を呼ぶ関数の輪を呼び続けると、実体が有限に収まるかを決めないので、本体の読みを決めません（R24）。`
   );
-  e.instance = { fn: head.label, shape: head.shape };
+  e.instance = { fn: label, shape: shapeText };
   e.instances = [e.instance];
   return e;
 }
-// 深さの守りに当たっていたら、その言い分（INSTANCE_DEPTH_LIMIT の注の3）。当たった物が2つ以上なら、形の綴り・名前・鍵の
-// 順で最初の物（どれに先に当たるかは解く順に依る）。
-function depthRefusal(F) {
-  if (!F.depthFires.length) return null;
-  const order = (h) => [h.shape, h.label, h.key];
-  const less = (a, b) => {
-    const x = order(a);
-    const y = order(b);
-    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] < y[i];
-    return false;
-  };
-  return depthGate(F.depthFires.reduce((a, b) => (less(b, a) ? b : a)));
+// いま作る実体が確定した物か（注の2）：解いている途中のどの枠も、仮置きを読まれておらず（consulted）、仮置きに頼って
+// いない（deps）。枠を積まずに解いている無名の関数の本体（collector）も同じ。
+function settled(F) {
+  return F.stack.every((f) => !f.consulted && !f.deps.size) && F.collectors.every((c) => !c.deps.size);
 }
-// 記録の済んだ実体の下の入れ子。記録が無いか古ければ null（引けば解き直すので、下は解きながら数える）。輪の中の実体は、
-// 輪の頭が入れ子に無いとき（輪の外から入ったとき）だけ、輪の頭の段まで上げる（raised、注の2）。輪の頭が入れ子にあるなら、
-// 輪の頭へ戻る道はもう数えてあるので、上げると同じ実体を2回数える。
-function knownHeights(F, inst, stretch) {
-  let h = inst.done || ((e) => e && !e.stale)(F.instMemo.get(inst)) ? inst.heights : null;
-  if (!h || !inst.raised) return h;
-  for (const [loopHead, hs] of inst.raised) {
-    if (stretch.has(loopHead)) continue;
-    for (const [q, n] of hs) {
-      if ((h.get(q) || 0) >= n) continue;
-      if (h === inst.heights) h = new Map(h);
-      h.set(q, n);
-    }
-  }
-  return h;
+// 確定した実体を数える（注の2）。上限を超えたら resolve ごと断る。
+function countSettled(F, inst) {
+  if (inst.counted) return;
+  const family = inst.family;
+  const total = (F.instanceTotals.get(family) || 0) + 1;
+  if (total > INSTANCE_TOTAL_LIMIT) throw totalRefusal(F, family, inst.lambda, `確定した実体が ${INSTANCE_TOTAL_LIMIT} 個を超えました`);
+  F.instanceTotals.set(family, total);
+  inst.counted = true;
 }
-// 呼んだ実体の下の入れ子を、呼んだ側（いま本体を解いている実体の枠か、木を解いている途中の実体）に足す。呼んだ側が
-// 実体でない枠（素の関数・値の定義・無名の関数の解き直し）なら、入れ子はそこで切れる（注の1）。
-function mergeHeights(F, h) {
-  const top = F.stack[F.stack.length - 1];
-  if (top) {
-    if (!top.key || !top.key.isInst) return;
-    const below = top.below || (top.below = new Map());
-    for (const [q, n] of h) if ((below.get(q) || 0) < n) below.set(q, n);
-    return;
-  }
-  const m = F.matStack[F.matStack.length - 1];
-  if (!m) return;
-  for (const [q, n] of h) {
-    const v = n + (q === m.lambda ? 1 : 0);
-    if ((m.heights.get(q) || 0) < v) m.heights.set(q, v);
-  }
-}
-// 輪の頭 loopHead の段を、輪の中の実体 inst に覚える（knownHeights が、輪の外から入ったときに使う）。
-function raiseInLoop(inst, loopHead) {
-  const raised = inst.raised || (inst.raised = new Map());
-  const old = raised.get(loopHead);
-  const hs = new Map(old || []);
-  for (const [q, n] of loopHead.heights) if ((hs.get(q) || 0) < n) hs.set(q, n);
-  raised.set(loopHead, hs);
+// 総数の守りの断り（注の2・3）。当たった実体と行は解く順に依るので名指しせず、関数を言う。同じ綴りの関数は実体を分け合う
+// ので、ファイルの定義のうち同じ綴りの物の名前でいちばん小さい物で言う（無ければ書いた綴り）。門を捕まえて続ける所
+// （根の種類を解く所）に未知として飲まれないよう、門としては投げず、覚えて resolve の最後にも断る（guardAgain と同じ作り）。
+function totalRefusal(F, family, op, what) {
+  const names = [];
+  for (const d of F.defs.values()) if (d.lambda && lambdaKey(d.lambda, F.fileScope.key) === family.slice("pattern:".length)) names.push(d.name);
+  names.sort();
+  const label = names[0] || `[${cutShape(writeTree(op))}]`;
+  const e = new OperationError(
+    `括りの関数 \`${label}\` の${what}（形を変えながら増え続けています）。実体が有限に収まるかを決めないので、本体の読みを決めません（§5 Q25）。`,
+    { spec: `${SPEC} §6.2 G7`, reason: GATE_REASON.G7 }
+  );
+  e.gate = "G7";
+  e.fatal = true; // isGate に数えない（根の種類を解く所で未知にせず、resolve ごと断る）
+  F.totalRefused = F.totalRefused || e;
+  return e;
 }
 
 function patternFn(F, op, params, defScope, label) {
@@ -1594,6 +1570,7 @@ function patternFn(F, op, params, defScope, label) {
   fn.lastBracket = params[params.length - 1].kind !== "bare"; // 残りの並びを最後の括りが受ける形（applyKind）
   fn.bareAt = params.map((p) => p.kind === "bare"); // 裸の仮引数の位置（部分適用の鍵で A にする、internPartial）
   fn.env = scopeIdent(defScope); // 書いた範囲の同一性（callIdent）
+  fn.envDepth = envDepth(defScope); // 鍵の深さ（fnDepth）
   fn.instantiate = (argDescs) => instantiate(F, fn, op, params, defScope, argDescs);
   return fn;
 }
@@ -1704,12 +1681,13 @@ function scopeIdent(scope) {
   for (let s = scope; s; s = s.parent) if (s.ident !== undefined) return s.ident;
   return NO_IDENT;
 }
-// 実体の範囲：仮引数に当てた desc（R24）と、呼んだ物の同一性を持つ。
+// 実体の範囲：仮引数に当てた desc（R24）と、呼んだ物の同一性と、鍵の深さ（中で書いた関数の深さ、fnDepth）を持つ。
 function instScope(F, op, defScope, b, key, ident) {
   const lam = makeLambda(op, { F, scope: defScope });
   lam.scope.descs = b.descs;
   lam.scope.key = key;
   lam.scope.ident = ident;
+  lam.scope.depth = b.depth;
   return lam.scope;
 }
 
@@ -1788,28 +1766,24 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
   const key = `${fnKey(fn)}|${b.key}`;
   const ident = callIdent(fn, params, argDescs);
   let inst = F.instances.get(key);
-  // 入れ子の段を数える（INSTANCE_DEPTH_LIMIT の注）。解いている途中か木を解いている途中の実体を引いたら輪なので、段はもう
-  // 数えてある。本体の中の呼び出しを記録するだけの歩き（walkCalls）は、歩く実体を木を解いている途中に積まないので1段
-  // 少なく数え、呼んだ側に足す段も、歩いた実体を通して足す段（呼んだ所で足す）を超えない。だから歩きで当たり方は変わらない。
-  const nests = !(inst && (F.inProgress.has(inst) || inst.materializing));
   if (!inst) {
-    if (nests) checkDepth(F, fn, op, key, b.text, null);
-    // 同じ `?` の実体の総数（INSTANCE_TOTAL_LIMIT の注）。
-    const total = (F.instanceTotals.get(op) || 0) + 1;
-    if (total > INSTANCE_TOTAL_LIMIT) {
-      const text = b.text.length > 60 ? `${b.text.slice(0, 60)}…` : b.text;
-      throw gate(
-        "G7",
-        `括りの関数 \`${fn.label}\` の実体が、形を変えながら ${INSTANCE_TOTAL_LIMIT} 個を超えました（いまの形 ${text}）。実体が有限に収まるかを決めないので、本体の読みを決めません（§5 Q25）。`
-      );
+    // 実体の守り（INSTANCE_DEPTH_LIMIT の注）。深さは鍵だけで決まる普通の門で、超える実体は作らない。総数は、同じ綴りの関数
+    // （family）の、作った実体の全部（注の3）と、確定した実体（注の2）。
+    b.depth = instanceDepth(fn, params, argDescs);
+    if (b.depth > INSTANCE_DEPTH_LIMIT) throw depthGate(fn.label, b.text, b.depth);
+    const family = fnKey(fn);
+    const made = (F.instancesMade.get(family) || 0) + 1;
+    if (made > INSTANCE_WORK_LIMIT) {
+      throw totalRefusal(F, family, op, `作った実体が ${INSTANCE_WORK_LIMIT} 個を超えました（仮置きの上で作った物も数える、止まるための守り）`);
     }
-    F.instanceTotals.set(op, total);
+    F.instancesMade.set(family, made);
     // scope は作った側の物の範囲（根の種類を出す、instRootOf）。walked は本体を歩いて記録した物の同一性（callIdent の注）。
     const scope = instScope(F, op, defScope, b, key, ident);
-    // heights は、その実体から下へ続く同じ `?` の実体の数（INSTANCE_DEPTH_LIMIT の注の2）。
-    inst = { isInst: true, key, label: fn.label, shapeText: b.text, lambda: op, scope, walked: new Set(), cycleDeps: new Set(), heights: new Map([[op, 1]]) };
+    inst = { isInst: true, key, label: fn.label, shapeText: b.text, depth: b.depth, family, lambda: op, scope, walked: new Set(), cycleDeps: new Set() };
+    if (settled(F)) countSettled(F, inst);
     F.instances.set(key, inst);
-  } else if (nests) checkDepth(F, fn, op, key, inst.shapeText, inst);
+  }
+  b.depth = inst.depth; // 呼んだ側の物の範囲も、同じ深さを持つ（scopeOf）
   const root = instRootOf(F, inst, fn.label);
   if (F.stack.length === 0) {
     recordCall(F, fn, inst);
@@ -1827,24 +1801,17 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
     // 分け合った実体を、まだ歩いていない物で呼んだ：その物で本体を歩き、呼んだ `?` を記録する（R25）。
     if (!inst.walked.has(ident)) walkCalls(F, inst, scopeOf());
   }
-  if (nests) mergeHeights(F, (inst.raised && knownHeights(F, inst, stretchOf(F).members)) || inst.heights);
   // 実体の本体の根が A なら A、ほかは未知（§3.4 の素の関数の k = n と同じ）。結果は中身の見えない A。
   return { kind: root === "A" ? A() : U() };
 }
 
-// 実体の本体の根の種類（bodyRootOf と同じ仕組み）。label は呼んだ名前（深さの守りの名指し、stretchOf）。
+// 実体の本体の根の種類（bodyRootOf と同じ仕組み）。label は呼んだ名前（輪の道筋の一歩、stepText）。
 function instRootOf(F, inst, label) {
   const memo = freshMemo(F, F.instMemo, inst);
   if (memo) return readMemo(F, memo, () => `\`${label || inst.label}\` を形 ${cutShape(inst.shapeText)} で呼んだ実体の本体`);
   const running = F.inProgress.get(inst);
   if (running) {
     consult(F, running); // 同じ形で自分を呼んだ：同じ実体の仮置き（R24）
-    // 輪の中の実体（INSTANCE_DEPTH_LIMIT の注の2）：間の枠が実体だけなら、その実体は輪の頭の入れ子の中にある。
-    const i = F.stack.indexOf(running);
-    if (i >= 0 && F.stack.slice(i + 1).every((f) => f.key && f.key.isInst)) {
-      const members = running.members || (running.members = new Set());
-      for (let j = i + 1; j < F.stack.length; j++) members.add(F.stack[j].key);
-    }
     return "A";
   }
   const frame = pushFrame(F, inst);
@@ -1857,18 +1824,14 @@ function instRootOf(F, inst, label) {
       abortFrame(F, frame);
       throw e;
     }
-    // 本体が門に当たる。木を残す段（materialize）で同じ門に当たり、呼んだ行で断る。深さの守り（checkDepth）は木を残す段で
-    // 当たり直すとは限らないので、当たったことを覚えて resolve の最後に断る（INSTANCE_DEPTH_LIMIT の注の3）。
+    // 本体が門に当たる。木を残す段（materialize）で同じ門に当たり、呼んだ行で断る（深さの守りも、鍵だけで決まる門なので
+    // 同じ。INSTANCE_DEPTH_LIMIT の注の1）。
     value = "U";
   }
   if (frame.consulted && value !== "A") {
     value = "U";
     frame.failed = true;
   }
-  // 下の入れ子（INSTANCE_DEPTH_LIMIT の注の2）：本体で呼んだ実体の heights のいちばん大きい物に、この実体の1段を足す。
-  inst.heights = new Map(frame.below || []);
-  inst.heights.set(inst.lambda, (inst.heights.get(inst.lambda) || 0) + 1);
-  if (frame.members) for (const m of frame.members) raiseInLoop(m, inst);
   finishFrame(F, frame, F.instMemo, value);
   return value;
 }
@@ -1876,6 +1839,7 @@ function instRootOf(F, inst, label) {
 // 実体の木（R25）。解いている途中の種類が無いときにだけ呼ぶ。本体の中の未定義の名前は、ここで1回だけ information を
 // 出す（F.reported）。定義の所では本体を解かないので、呼ばれない本体の中の名前は出さない（読まないので）。
 // 範囲（scopeOf）は、はじめて木にした呼び出しの物のもの。その物の分の記録も、この歩きで取る（walked）。
+// 木まで解く実体は、最後の木の実体なので、確定した実体に数える（INSTANCE_TOTAL_LIMIT、INSTANCE_DEPTH_LIMIT の注の2）。
 function materialize(F, inst, scopeOf, label) {
   if (inst.materializing) {
     // 木を解いている途中の実体を、本体の中からもう一度呼んだ（再帰）。根の種類は仮置きの済んだ答えを使い、木は
@@ -1885,10 +1849,10 @@ function materialize(F, inst, scopeOf, label) {
     return;
   }
   if (inst.done) return;
+  countSettled(F, inst);
   const scope = scopeOf();
   inst.walked.add(scope.ident);
   inst.materializing = true;
-  inst.matLabel = label; // 深さの守りの名指し（stretchOf）
   F.matStack.push(inst);
   try {
     inst.tree = resolveBody(inst.lambda.right, { F, scope, diag: F.diag }).tree;
@@ -1900,9 +1864,6 @@ function materialize(F, inst, scopeOf, label) {
     inst.materializing = false;
     inst.done = true;
   }
-  // 輪の中の実体に、輪の外から引いたときの段（輪の頭の段）を覚える（INSTANCE_DEPTH_LIMIT の注の2。根の種類の段の members
-  // と同じ）。
-  for (const d of inst.cycleDeps) raiseInLoop(d, inst);
   if (inst.error) failDependents(inst);
 }
 // 分け合った実体の本体を、いま呼んだ側の物（scope）で歩き直し、本体の中の呼び出しだけを記録する（callIdent の注）。
@@ -2511,6 +2472,7 @@ function resolveLambda(op, ctx) {
         ? () => bodyRootOf(ctx.F, op)
         : collectedRoot(ctx.F, col, body.rootKind, () => resolveBody(op.right, { ...ctx, scope: lam.scope, diag: null }).rootKind),
       idKey: lambdaKey(op, ctx.scope.key),
+      envDepth: envDepth(ctx.scope), // 鍵の深さ（fnDepth）
     };
   }
   return { t: "lambda", paramsText: op.left ? writeTree(op.left) : "", body: body.tree, kind: { k: "L", fn } };
@@ -2809,7 +2771,7 @@ function plainApply(fn, k) {
     // "partial" を分けない）と実体の鍵（fnKey）だけである。合成はもう出どころを見ない（composeApply：合成は適用の畳み込み
     // なので、後ろの穴も、穴の部分適用も、直接書いた `[f3 1 _ 3] (inc 5)` と同じ読み）。
     const origin = fn.origin === "hole" ? "hole" : "partial";
-    return { kind: { k: "L", fn: { type: "plain", origin, n: fn.n - k, getBodyRoot: fn.getBodyRoot, idKey: fn.idKey } }, insufficient: true };
+    return { kind: { k: "L", fn: { type: "plain", origin, n: fn.n - k, getBodyRoot: fn.getBodyRoot, idKey: fn.idKey, envDepth: fn.envDepth } }, insufficient: true };
   }
   const root = fn.getBodyRoot();
   if (k === fn.n) return { kind: root === "A" ? A() : U() };
@@ -2889,7 +2851,7 @@ function tryHole(items, ctx) {
   });
   const arg = args.length === 1 ? args[0] : makeConstruct(args);
   const body = { t: "apply", head: h, arg, rev: false, ...applyKind(fn, arg) };
-  return { t: "hole", params, body, kind: { k: "L", fn: { type: "plain", origin: "hole", n: params.length, getBodyRoot: fn.getBodyRoot, idKey: fn.idKey } } };
+  return { t: "hole", params, body, kind: { k: "L", fn: { type: "plain", origin: "hole", n: params.length, getBodyRoot: fn.getBodyRoot, idKey: fn.idKey, envDepth: fn.envDepth } } };
 }
 
 // ---------------------------------------------------------------------------
@@ -2919,7 +2881,9 @@ export function resolve(source) {
     // 根の種類の仮置きの記録、木を解いている途中の実体、定義の行の `?` の木（最後に実体で埋める）、実体の本体の
     // information の出し先。
     instances: new Map(),
-    instanceTotals: new Map(), // `?` → 作った実体の数（INSTANCE_TOTAL_LIMIT）
+    // 同じ綴りの関数（fnKey）→ 確定した実体の数（INSTANCE_TOTAL_LIMIT）、作った実体の数（INSTANCE_WORK_LIMIT）。
+    instanceTotals: new Map(),
+    instancesMade: new Map(),
     calls: new Map(),
     instMemo: new Map(),
     matStack: [],
@@ -2933,8 +2897,8 @@ export function resolve(source) {
     againRefused: null,
     // 値を含む輪で断った誤り（cycleError）。
     cycleRefused: null,
-    // 深さの守りに当たった入れ子のいちばん外の実体（checkDepth・depthRefusal）。
-    depthFires: [],
+    // 実体の総数の守りで断った誤り（totalRefusal）。
+    totalRefused: null,
   };
   resetIntern();
 
@@ -2959,8 +2923,8 @@ export function resolve(source) {
   // 本体の根」と書いたままだが、R25 が後から決まったので、素の関数に読む。
   // 門はここでは止めない——その行を解くときに、行の順に同じ門で断る。
   // 解き直しの守り（guardAgain）で断ったら、ほかの誤りより先に、その言い分で断る（握りつぶされても、ほかの門に化けても）。
-  // 深さの守り（checkDepth）に当たったら、その次に先に断る（当たった枠の答えは枠の積み方で決まり、木を残す段で当たり直す
-  // とは限らない。INSTANCE_DEPTH_LIMIT の注の3）。
+  // 実体の総数の守り（totalRefusal）で断ったら、その次に先に断る（根の種類を解く所や namesPattern に握りつぶされても）。
+  // 実体の深さの守りは、鍵だけで決まる普通の門なので、ほかの門と同じく行を解くときに断る（INSTANCE_DEPTH_LIMIT の注の1）。
   // 値を含む輪（cycleError）で断ったら、その次に、その言い分で断る（輪は種類を計算する所で見つかるので、普通は行を解く
   // 前に、輪の言い分のまま投げ上がる）。
   let trees;
@@ -2978,11 +2942,10 @@ export function resolve(source) {
     // 各行を解く。括りの関数の実体は、呼んだ所で作って木まで解く（instantiate）。
     trees = lines.map((line) => resolveTree(line, { F, scope: F.fileScope, diag: diagnostics }));
   } catch (e) {
-    throw F.againRefused || depthRefusal(F) || F.cycleRefused || e;
+    throw F.againRefused || F.totalRefused || F.cycleRefused || e;
   }
   if (F.againRefused) throw F.againRefused;
-  const deep = depthRefusal(F);
-  if (deep) throw deep;
+  if (F.totalRefused) throw F.totalRefused;
   // 値を含む輪を、どこかで握りつぶしても断る（namesPattern は、既定値を覗いた所を通る輪だけを握りつぶし、そのときは
   // F.cycleRefused を覗く前に戻す。namesPattern の注）。
   if (F.cycleRefused) throw F.cycleRefused;
