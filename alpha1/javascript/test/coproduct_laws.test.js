@@ -10,6 +10,7 @@
  * 2. 並びで渡すのと括りで渡すのは同じ（R24）
  * 3. 行の順に依らない（P2・R25）
  * 4. 括りの関数は、括りを外した素の関数と同じ（括りの受け方を除いて、R24）
+ * 5. 逆適用は、前から書いた適用と同じ（逆適用だけの門を除いて、R12・R13）
  *
  * 法則ごとに、比べる2つの綴り・何を同じと見るか・なぜ同じでなければならないか（出どころの規則と利用者の言葉）・
  * 比べの外に出した形とその理由を、その法則の頭に書く。主の Claude の提案「法則の試験を常設の一式として持つ」に、
@@ -1101,6 +1102,135 @@ law("4 括りの関数と、括りを外した素の関数は、数を渡せば�
 	}
 	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
 	return { problems, note: `比べた組 ${Object.values(count).reduce((x, y) => x + y, 0)}：${Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・")}` };
+});
+
+// ---------------------------------------------------------------------------
+// 法則5：逆適用は、前から書いた適用と同じ（逆適用だけの門を除いて、R12・R13）
+// ---------------------------------------------------------------------------
+//
+// 比べる2つの綴り：逆適用 `x f1 … fm` と、前から書いた適用 `f1 … fm x`。
+//
+// なぜ同じか：`x f` は `(apply f x ·rev)` で、意味は `(apply f x)` と同じ（R12。`·rev` は書いた向きの印）。並びの読みは
+// 合成 > 適用 > 逆適用（R6）なので、`x f1 … fm` は合成 `f1 … fm` に x を逆適用した物で、その合成の適用は前から書いた
+// `f1 … fm x` と同じく、適用を左から畳む（R11）。主の Claude の「逆適用の右の合成の後ろに点なしがある `5 inc [* 2]` は、
+// `[* 2] (inc 5)` と読んでいい？」に、利用者 2026-10-21「関数合成の方が優先では？」（§5 Q23 の答え）。
+//
+// 何を同じと見るか：逆適用が通るなら、前から書いた適用も通り、呼ぶ行の種類と余りの印・ほかの行の木（括りの関数の実体）・
+// 診断が同じ。逆適用が逆適用だけの門のほかで断るなら、前から書いた適用も同じ門と名指しで断る。
+//
+// 比べの外（違ってよい所）：逆適用だけの門。R12 は右を「アリティ1の素の関数か、それで始まる合成」に限り（ほかは G8、§5 Q5）、
+// R13 は主語を直に受ける関数が点なしなら断る（G10）。前から書いた適用には、この2つの門が無い。呼ぶ行の木の綴りも比べない
+// （`·rev` の印と、並びの読みの違い）。
+//
+// 門の枝も見る：G10 は、最初の関数が点なし（点なしの部分適用 `([<<] 1)`・`q : [<<] 1` の q を含む）のときだけ当たり、合成の
+// 2つ目より後ろの点なしでは当たらない（R13、§5 Q23 の答え）。前は合成のどこかに点なしがあれば G10 だった。
+
+const DEFS5 = [
+	INC,
+	"double : x ? x * 2",
+	"add : x y ? x + y",
+	"pq : x y ? inc",
+	"uu : x ? [,] x",
+	"head : [x ~xs] ? x",
+	"tl : [y ~ys] ? ys",
+	"hx : [x ~xs] ? x 1",
+	"bad : [y ~ys] ? [+ 1] _ _",
+	"i : !_",
+	"q : [<<] 1",
+	"p1 : add 1",
+	...M,
+];
+// 最初の関数と、それが点なしか。逆適用の右に置ける物（アリティ1の素の関数）・点なし・G8 に当たる物が混ざる。
+const FIRSTS5 = [
+	["inc", false],
+	["double", false],
+	["uu", false],
+	["[x ? x * 3]", false],
+	["add", false],
+	["(add 1)", false],
+	["p1", false],
+	["head", false],
+	["i", false],
+	["[* 2]", true],
+	["[-_]", true],
+	["[* 2,]", true],
+	["[+]", true],
+	["[' 0]", true],
+	["([<<] 1)", true],
+	["q", true],
+];
+// 後ろに置く関数。素の関数・部分適用・括りの関数と、点なしのどの種類も混ぜる。
+const LATER5 = [
+	"inc",
+	"double",
+	"add",
+	"uu",
+	"(pq 1)",
+	"(add 1)",
+	"p1",
+	"i",
+	"head",
+	"tl",
+	"hx",
+	"bad",
+	"[+ 1]",
+	"[* 2]",
+	"[-_]",
+	"[!_]",
+	"[_!]",
+	"[* 2,]",
+	"[-_,]",
+	"[+]",
+	"[&]",
+	"[<]",
+	"[' 0]",
+	"[<<]",
+	"([<<] 1)",
+	"q",
+	"[,]",
+];
+const POINTFREE_LATER5 = new Set(["[+ 1]", "[* 2]", "[-_]", "[!_]", "[_!]", "[* 2,]", "[-_,]", "[+]", "[&]", "[<]", "[' 0]", "[<<]", "([<<] 1)", "q", "[,]"]);
+const SUBJECTS5 = ["5", "[1 2 3]", "m", "(inc 5)"];
+// m = 3 の組（最初の関数の一部と、後ろの関数の一部）。
+const FIRSTS5_3 = FIRSTS5.filter(([f]) => ["inc", "uu", "[* 2]", "([<<] 1)"].includes(f));
+const LATER5_3 = ["inc", "add", "head", "bad", "[* 2]", "[-_]", "[+]", "[' 0]", "([<<] 1)", "[,]"];
+
+law("5 逆適用と、前から書いた適用は同じ読み：x f1 … fm と f1 … fm x", () => {
+	const problems = [];
+	// 「後ろに点なしがあって通る」は「通る」の内訳（§5 Q23 の答えで通るようになった枝）。
+	const count = { 通る: 0, "後ろに点なしがあって通る": 0, 同じ門で断る: 0, "G10（最初が点なし）": 0, "G8（比べの外）": 0 };
+	let n = 0;
+	const view = (o) => {
+		if (o.refused) return `断り ${refusalText(o)}`;
+		const n = o.trees.length;
+		return `${o.trees.map((t, i) => (i === n - 1 ? `（呼ぶ行）: ${t.kind}${t.excess ? "（excess）" : ""}` : `${t.text} : ${t.kind}`)).join(" | ")} || ${o.diag.join(" ")}`;
+	};
+	const check = ([f, firstPf], gs, x) => {
+		n++;
+		const fs = [f, ...gs].join(" ");
+		const rev = outcome(src([...DEFS5, `${x} ${fs}`]));
+		const fwd = outcome(src([...DEFS5, `${fs} ${x}`]));
+		const label = `${x} ${fs}  ⇔  ${fs} ${x}`;
+		if (rev.crash || fwd.crash) return problems.push(label, `  逆適用: ${brief(rev)}`, `  前から: ${brief(fwd)}`);
+		const g10 = !!rev.refused && rev.refused.gate === "G10";
+		if (g10 !== firstPf) {
+			return problems.push(label, `  G10 は最初の関数が点なしのときだけ（最初の \`${f}\` は${firstPf ? "" : "点なしでない"}）: ${brief(rev)}`);
+		}
+		if (g10) return count["G10（最初が点なし）"]++;
+		if (rev.refused && rev.refused.gate === "G8") return count["G8（比べの外）"]++;
+		const vr = view(rev);
+		const vf = view(fwd);
+		if (vr !== vf) return problems.push(label, `  逆適用: ${vr}`, `  前から: ${vf}`);
+		if (rev.refused) count.同じ門で断る++;
+		else {
+			count.通る++;
+			if (gs.some((g) => POINTFREE_LATER5.has(g))) count["後ろに点なしがあって通る"]++;
+		}
+	};
+	for (const first of FIRSTS5) for (const g of LATER5) for (const x of SUBJECTS5) check(first, [g], x);
+	for (const first of FIRSTS5_3) for (const g of LATER5_3) for (const h of LATER5_3) check(first, [g, h], "5");
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: `比べた組 ${n}：${Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・")}` };
 });
 
 console.log(`\n${passed}/${total} passed`);
