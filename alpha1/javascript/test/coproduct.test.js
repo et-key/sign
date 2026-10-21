@@ -183,7 +183,7 @@ const ok = (name) => {
 const fail = (name, ...lines) => console.log(`FAIL ${name}\n${lines.map((l) => `     ${l}`).join("\n")}`);
 
 // 通る行を確かめる。extra：body（本体の木を見る）・at（見る行の番号）・excess・diag（undefined-name が出る名前）・
-// diagCount（出る診断の数）。
+// diagText（その名前の undefined-name のどれかの文面に含まれる文字列）・diagCount（出る診断の数）。
 const checkPass = (name, src, want, kind, extra = {}) => {
 	total++;
 	let r;
@@ -201,6 +201,9 @@ const checkPass = (name, src, want, kind, extra = {}) => {
 	if ("excess" in extra && !!t.excess !== extra.excess) problems.push(`excess got: ${!!t.excess}  want: ${extra.excess}`);
 	if (extra.diag && !r.diagnostics.some((d) => d.reason === "undefined-name" && d.severity === "information" && d.name === extra.diag)) {
 		problems.push(`undefined-name（${extra.diag}）が出ていない: ${JSON.stringify(r.diagnostics)}`);
+	}
+	if (extra.diagText && !r.diagnostics.some((d) => d.reason === "undefined-name" && d.name === extra.diag && d.message.includes(extra.diagText))) {
+		problems.push(`undefined-name（${extra.diag}）の文面に「${extra.diagText}」が無い: ${JSON.stringify(r.diagnostics)}`);
 	}
 	if ("diagCount" in extra && r.diagnostics.length !== extra.diagCount) {
 		problems.push(`診断の数 got: ${r.diagnostics.length}  want: ${extra.diagCount}  ${JSON.stringify(r.diagnostics)}`);
@@ -500,7 +503,7 @@ const unitRefused = [
 	// 字下げの仮引数のブロックの1行に名前が2つあると、仮引数の数が数えられないので穴にしない（前は行の数 2 を n にして、
 	// 仮引数3つの関数の `gz !_ 3` を黙って穴にした）。
 	["G7 gz !_ 3（仮引数のブロックの行 a b）", std(["gz :", "\t\ta b", "\t\tc : 3", "\t? a", "", "gz !_ 3"]), "G7"],
-	// G14：`_` を被演算子の印に使う点なし（§5 Q32）
+	// G14：`_` を被演算子の印に使う前の綴りの点なし。新しい綴りは R30 の `[-a]`・`[a!]`・`[!a]`（下の「R30」）
 	["G14 [-_] 5", std("[-_] 5"), "G14"],
 	["G14 [_!] 5", std("[_!] 5"), "G14"],
 	["G14 [!!_] 5", std("[!!_] 5"), "G14"],
@@ -544,6 +547,116 @@ const unitRefused = [
 ];
 for (const [name, src, want, kind, extra] of unitPasses) checkPass(`印と穴 ${name}`, src, want, kind, extra);
 for (const [name, src, want] of unitRefused) checkRefused(`印と穴 ${name}`, src, want);
+
+// ---------------------------------------------------------------------------
+// R30：前置・後置の点なしは、未定義の名前を被演算子に書く（2026-10-21、§5 Q32 の答え）
+// ---------------------------------------------------------------------------
+//
+// U 2026-10-21 04:25「僕は未定義の識別子なら何を当てても成り立つという書き方が良いと思っている。」。主の Claude の提案（自由な
+// 名前を仮引数に読むのは、括りの中が1行で、値の前置か後置の印1つと、その範囲で未定義の裸の名前1つのときだけ）に、
+// U〔答え〕04:29「良い提案だね！ / その方向で行こう！」。種類は前の `[-_]` と同じ単項の点なし（L）。名前が定義されている・
+// 取り込みのある範囲・ほかの形（印が2つ以上・前置と後置の両方・核が括りや字面・中置の区間・2項以上・2行以上）は今のまま。
+// information undefined-name は出し、文面だけを替える。
+const R30_TEXT = "点なしの自由な名前（仮引数）として読みました（R30）";
+const VALUE_TEXT = "値として読み";
+const r30Passes = [
+	// 通る：前置・後置の点なしの単項
+	["[-a] 5", std("[-a] 5"), "(apply [-a] 5)", "A", { diag: "a", diagText: R30_TEXT, diagCount: 1 }],
+	["[a!] 5", std("[a!] 5"), "(apply [a!] 5)", "A", { diag: "a", diagText: R30_TEXT }],
+	["[!a] (2 < 3)（否定の点なし）", std("[!a] (2 < 3)"), "(apply [!a] [2 < 3])", "A", { diag: "a", diagText: R30_TEXT }],
+	["[!!a] 5", std("[!!a] 5"), "(apply [!!a] 5)", "A", { diag: "a", diagText: R30_TEXT }],
+	["[-a]（1項は関数）", std("[-a]"), "[-a]", "L", { diag: "a", diagText: R30_TEXT }],
+	["inc [-a] 5（合成の後ろ）", std("inc [-a] 5"), "(apply (compose inc [-a]) 5)", "A"],
+	["[-a] inc 5（合成の頭）", std("[-a] inc 5"), "(apply (compose [-a] inc) 5)", "A"],
+	["[* 2,] [-a] 1 2 3", std("[* 2,] [-a] 1 2 3"), "(apply (compose [* 2,] [-a]) (construct 1 2 3))", "A"],
+	["[-a] 5 6（根、excess）", std("[-a] 5 6"), "(apply [-a] (construct 5 6))", "A", { excess: true }],
+	["[-a] 5 inc（逆適用の左）", std("[-a] 5 inc"), "(apply inc (apply [-a] 5) ·rev)", "A"],
+	// 名前の綴りには依らない（`[-x]` と `[-n]` は同じ関数）。標準の定義には n があるので、ここは定義なしで書く。
+	["[-x] [-n] 5（綴りに依らない）", "[-x] [-n] 5", "(apply (compose [-x] [-n]) 5)", "A", { diag: "n", diagText: R30_TEXT }],
+	["本体 t : y ? [-a] y", std("t : y ? [-a] y"), "(apply [-a] y)", "A", { body: true, diag: "a", diagText: R30_TEXT }],
+	["括りの関数の実体の本体 t : [y] ? [-a] y", std(["t : [y] ? [-a] y", "t 1"]), "(: t (? [[y]] (inst N (apply [-a] y))))", null, { at: -2, diag: "a", diagText: R30_TEXT }],
+	["p : [-a] の後で p 5", std(["p : [-a]", "p 5"]), "(apply p 5)", "A", { diag: "a", diagText: R30_TEXT }],
+	// 今のまま：名前が定義されている（値・仮引数・括りで受けた名前）
+	["今のまま v : 3 の後で [-v] 5（値に印）", std(["v : 3", "[-v] 5"]), "(construct [-v] 5)", "A", { diagCount: 0 }],
+	["今のまま 本体 t : a ? [-a] 5（仮引数）", std("t : a ? [-a] 5"), "(construct [-a] 5)", "A", { body: true, diagCount: 0 }],
+	["今のまま t : [a] ? [-a] 5（括りで受けた名前）", std(["t : [a] ? [-a] 5", "t 1"]), "(: t (? [[a]] (inst N (construct [-a] 5))))", null, { at: -2, diagCount: 0 }],
+	// 今のまま：ほかの形（値の印に未定義の名前を当てた値で、文面も値の読み）
+	["今のまま [!!!a] 5（印が2つ）", std("[!!!a] 5"), "(construct [!!!a] 5)", "A", { diag: "a", diagText: VALUE_TEXT, diagCount: 1 }],
+	["今のまま [-a!] 5（前置と後置の両方）", std("[-a!] 5"), "(construct [-a!] 5)", "A", { diag: "a", diagText: VALUE_TEXT, diagCount: 1 }],
+	["今のまま [-5] 5（核が字面）", std("[-5] 5"), "(construct [-5] 5)", "A"],
+	["今のまま [-[q]] 5（核が括り）", std("[-[q]] 5"), "(construct [-[q]] 5)", "A", { diag: "q", diagText: VALUE_TEXT, diagCount: 1 }],
+	["今のまま [a + 1] 5（中置の項）", std("[a + 1] 5"), "(construct [a + 1] 5)", "A", { diag: "a", diagText: VALUE_TEXT, diagCount: 1 }],
+	["今のまま [- a] 5（中置の区間）", std("[- a] 5"), "(apply [- a] 5)", "A", { diag: "a", diagText: VALUE_TEXT, diagCount: 1 }],
+	["今のまま [-a b] 5（2項）", std("[-a b] 5"), "(construct [-a b] 5)", "A", { diag: "a", diagText: VALUE_TEXT }],
+	["今のまま [-a ⏎ 1] 5（2行）", std(["[-a", "1] 5"]), "(construct [-a ⏎ 1] 5)", "A", { diag: "a", diagText: VALUE_TEXT, diagCount: 1 }],
+	["今のまま [a] 5（印が無い）", std("[a] 5"), "(construct [a] 5)", "A", { diag: "a", diagText: VALUE_TEXT, diagCount: 1 }],
+	// 同じ名前を値としても読んだファイルでは、関数に読んだ所の information も別に出す（黙らない）。
+	["w : a と [-a] 5（information が2つ）", std(["w : a", "[-a] 5"]), "(apply [-a] 5)", "A", { diag: "a", diagText: R30_TEXT, diagCount: 2 }],
+];
+const r30Refused = [
+	// 点なしなので逆適用の右では G10（前の `[-_]` と同じ）
+	["G10 5 [-a]", std("5 [-a]"), "G10"],
+	["G10 5 inc [-a]", std("5 inc [-a]"), "G10"],
+	// 今のまま：関数に印（Q22）・取り込みのある範囲・局所の定義
+	["今のまま [-inc] 5（関数に印）", std("[-inc] 5"), "G7"],
+	["今のまま io@ の後で [-a] 5（取り込みのある範囲）", std(["io@", "[-a] 5"]), "G7"],
+	["今のまま [a : 1 ⏎ [-a] 5]（括りの局所の定義）", std(["[a : 1", "[-a] 5]"]), "G7"],
+];
+for (const [name, s, want, kind, extra] of r30Passes) checkPass(`R30 ${name}`, s, want, kind, extra);
+for (const [name, s, want] of r30Refused) checkRefused(`R30 ${name}`, s, want);
+// G14 の言い分は、新しい綴りを案内する（`_` を名前に替えた綴りと、R30 の形）。
+for (const [s, spelled] of [["[-_] 5", "[-a]"], ["[_!] 5", "[a!]"], ["[!!_] 5", "[!!a]"]]) {
+	total++;
+	const name = `R30 G14 ${s} の言い分は \`${spelled}\` を案内する`;
+	try {
+		resolve(std(s));
+		fail(name, "断るはずが通った");
+	} catch (e) {
+		const text = String(e.message);
+		if (e.gate === "G14" && text.includes(`\`${spelled}\``) && text.includes("R30") && !text.includes("Q32")) ok(name);
+		else fail(name, `${e.reason} ${e.gate || ""} ${text}`);
+	}
+}
+// 言い分の具体的な綴りは、その範囲で未定義の名前で書く。a が定義された範囲で `[-a]` と案内すると、言い分どおりに直した行が
+// 黙って値の括り（`(construct [-a] 5)`、information も無い）になる。言い分どおりに直した行は R30 で読まれる。
+for (const [label, lines, spelled, fixedWant] of [
+	["a : 3 の後", ["a : 3", "[-_] 5"], "[-b]", "(apply [-b] 5)"],
+	["仮引数 a の中", ["t : a ? [-_] a"], "[-b]", "(: t (? [a] (apply [-b] a)))"],
+	["a と b の後", ["a : 3", "b : 4", "[_!] 5"], "[c!]", "(apply [c!] 5)"],
+]) {
+	// 標準の定義は仮引数に a・b を使う（ファイルの a を隠すと P2 の門）ので、ここは標準の定義なしで書く。
+	total++;
+	const name = `R30 G14 ${label}、言い分は \`${spelled}\` を案内し、直した行は R30`;
+	try {
+		resolve(lines.join("\n"));
+		fail(name, "断るはずが通った");
+	} catch (e) {
+		const text = String(e.message);
+		if (!(e.gate === "G14" && text.includes(`\`${spelled}\` です`))) {
+			fail(name, `${e.reason} ${e.gate || ""} ${text}`);
+			continue;
+		}
+		const fixed = lines.map((l, i) => (i === lines.length - 1 ? l.replace(/\[(?:-_|_!|!!_)\]/, spelled) : l));
+		try {
+			const r = resolve(fixed.join("\n"));
+			const got = show(r.trees[r.trees.length - 1]);
+			if (got === fixedWant && r.diagnostics.some((d) => String(d.message).includes(R30_TEXT))) ok(name);
+			else fail(name, `直した行 ${got} ${r.diagnostics.map((d) => d.message).join(" | ")}`);
+		} catch (e2) {
+			fail(name, `直した行が断られた ${e2.reason} ${e2.gate || ""} ${e2.message}`);
+		}
+	}
+}
+// 取り込みのある範囲では R30 が使えないので、具体的な綴りを案内しない。
+total++;
+try {
+	resolve(std(["io@", "[-_] 5"]));
+	fail("R30 G14 io@ の後の言い分は具体的な綴りを案内しない", "断るはずが通った");
+} catch (e) {
+	const text = String(e.message);
+	if (e.gate === "G14" && text.includes("取り込みがある") && !text.includes("この点なしなら")) ok("R30 G14 io@ の後の言い分は具体的な綴りを案内しない");
+	else fail("R30 G14 io@ の後の言い分は具体的な綴りを案内しない", `${e.reason} ${e.gate || ""} ${text}`);
+}
 
 // ---------------------------------------------------------------------------
 // §5 Q1 の答え（2026-10-19）：R24・R25・R26
@@ -1746,7 +1859,9 @@ const FOLD_DEFS = [
 const foldPasses = [
 	["Q13 で変わった inc [+ 1] 5（後ろの非貪欲の単項、前は未知）", src([INC, "inc [+ 1] 5"]), "(apply (compose inc [+ 1]) 5)", "A"],
 	["Q13 で変わった inc [+ 1] 5 inc（前は G2(a)）", src([INC, "inc [+ 1] 5 inc"]), "(apply inc (apply (compose inc [+ 1]) 5) ·rev)", "A"],
-	// 前置の点なしの単項 `[-_]` は 2026-10-21 に G14（下の foldRefused）。後ろの恒等射 `[!_]` は前の結果を desc ごと通す。
+	// 前置の点なしの単項は、2026-10-21 の R30 で `[-a]`（a は未定義の名前）。前の綴り `[-_]` は G14（下の foldRefused）。
+	["Q13 で変わった inc [-a] 5（前置の点なしの単項、前は [-_]）", src([INC, "inc [-a] 5"]), "(apply (compose inc [-a]) 5)", "A"],
+	// 後ろの恒等射 `[!_]` は前の結果を desc ごと通す。
 	["後ろの恒等射 inc [!_] 5", src([INC, "inc [!_] 5"]), "(apply (compose inc [!_]) 5)", "A"],
 	["後ろの恒等射は形を運ぶ [' 0] [!_] head [[1 2] [3 4]]", src(["head : [x ~xs] ? x", "[' 0] [!_] head [[1 2] [3 4]]"]), "(: head (? [[x ~xs]] (inst [N…] x)))", null, { at: 0 }],
 	["Q13 で変わった inc [+ 1] 5 6（余りの印は最初の関数から）", src([INC, "inc [+ 1] 5 6"]), "(apply (compose inc [+ 1]) (construct 5 6))", "A", { excess: true }],
@@ -1768,7 +1883,7 @@ const foldPasses = [
 	["守り inc head [5 6 7]（前が素の関数なら中身の見えない A を受ける）", src([INC, "head : [x ~xs] ? x", "inc head [5 6 7]"]), "(: head (? [[x ~xs]] (inst A x)))", null, { at: 1 }],
 ];
 const foldRefused = [
-	["Q32 inc [-_] 5（前置の点なしの単項は綴りが未決、前は通っていた）", src([INC, "inc [-_] 5"]), "G14"],
+	["G14 inc [-_] 5（`_` を被演算子の印にした前の綴り。R30 の綴りは inc [-a] 5）", src([INC, "inc [-_] 5"]), "G14"],
 	["形を受ける [' 0] bad [[1 2] [3 4]] は形 [N…] で名指し（前は U）", src([BAD, "[' 0] bad [[1 2] [3 4]]"]), "G5", [["bad", "[N…]"]]],
 	["R26 で変わった [' 0] inc [1 2 3] head（前は G2(a)、今は逆適用の右の括りの関数で G8）", src([INC, "head : [x ~xs] ? x", "[' 0] inc [1 2 3] head"]), "G8"],
 ];
@@ -1809,7 +1924,7 @@ law("合成は適用の繰り返し：f g x と g (f x) は同じ読み", () => 
 		["[' 0]", "[[1 2] [3 4]]"],
 		["pt", "[1] 2"],
 	];
-	const LATER = ["inc", "double", "[+ 1]", "[!_]", "[* 2,]", "[+]", "add", "adder", "pq", "(pr 1)", "(pq 1)", "[add _ 10]", "([f3 _ _ 3] 1)", "head", "tl", "bad", "pb", "(pt [1])", "[' 0]"];
+	const LATER = ["inc", "double", "[+ 1]", "[-a]", "[!_]", "[* 2,]", "[+]", "add", "adder", "pq", "(pr 1)", "(pq 1)", "[add _ 10]", "([f3 _ _ 3] 1)", "head", "tl", "bad", "pb", "(pt [1])", "[' 0]"];
 	const LATER2 = ["inc", "[+ 1]", "(pr 1)", "[add _ 10]", "head", "tl", "bad", "[' 0]"];
 	const out = [];
 	let nA = 0;

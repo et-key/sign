@@ -2,7 +2,7 @@
  * 余積（空白）の解決（alpha1 の意味解析の最初の段）。
  *
  * 仕様は alpha1/docs/coproduct_spec.md（設計 workflow の最終版）。ここに書くのは、確信度 91% 以上の規則
- * （§4 の R1〜R29（R18 は 2026-10-21 に廃止）、§1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の門（G1〜G15、
+ * （§4 の R1〜R30（R18 は 2026-10-21 に廃止）、§1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の門（G1〜G15、
  * P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の答えが出たときに、
  * その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
  *
@@ -1043,6 +1043,20 @@ function reportUndefined(name, ctx) {
     reason: "undefined-name",
     name,
     message: `\`${name}\` は定義されていません。値として読み、値は値の段で決めます（§4 R21）。`,
+  });
+}
+
+// 前置・後置の点なし（R30、pointfreeOf）の自由な名前。reason は同じ undefined-name で、文面だけが違う。値として読んだ所の
+// information とは別に数える（同じ名前を値としても読んだファイルで、関数に読んだことが黙らないように）。
+function reportFreeName(name, ctx) {
+  const key = `R30 ${name}`; // 名前に空白は入らないので、値の読みの鍵（名前そのもの）と重ならない
+  if (!ctx.diag || ctx.F.reported.has(key)) return;
+  ctx.F.reported.add(key);
+  ctx.diag.push({
+    severity: "information",
+    reason: "undefined-name",
+    name,
+    message: `\`${name}\` は定義されていないので、点なしの自由な名前（仮引数）として読みました（R30）。`,
   });
 }
 
@@ -2587,16 +2601,54 @@ function pointfreeOf(row, ctx) {
   if (t.type === "atom" && t.core.c === "unit" && t.pre.length + t.post.length === 1) {
     // `[!_]` は穴だけ（恒等射、§3.5）で点なしではない。`[$_]` は値。どちらも行として解く（rowsInfo）。
     if (t.pre[0] === "!" || t.pre[0] === "$") return null;
-    // 前置・後置の点なし（`[-_]`・`[!!_]`・`[_!]`）は、書いた `_` を被演算子の印に使う。`_` はいつも印（単位）なので被演算子の
-    // 印にならず、新しい綴りは決まっていない（§5 Q32。`[-!_]` は今の前段では構文エラー）。否定の点なしは、`[!_]` が恒等射に
-    // なったので綴りが無い。`[~_]` などは今までどおり未知（Q19）。
-    const valueMark = (t.pre.length === 1 && VALUE_PREFIX.has(t.pre[0])) || (t.post.length === 1 && t.post[0] === "!");
-    if (valueMark) {
-      throw gate("G14", `点なし \`[${writeTerm(t)}]\` は、書いた \`_\` を被演算子の印に使っています。\`_\` はいつも印（単位）なので被演算子の印になりません。前置・後置の点なしの綴りは決まっていません（§5 Q32）。`);
+    // `[-_]`・`[!!_]`・`[_!]` は、書いた `_` を被演算子の印に使う。`_` はいつも印（単位）なので被演算子の印にならない（G14）。
+    // 前置・後置の点なしは、未定義の裸の名前を被演算子に書く（R30、下）。`[~_]` などは今までどおり未知（Q19）。
+    // 言い分の具体的な綴りは、この範囲で未定義の名前で書く（a が定義された範囲で `[-a]` と案内すると、直した行が黙って
+    // 値の括りになる）。取り込みのある範囲では、どの名前も未定義か分からないので R30 は使えない。
+    if (isValueMark(t)) {
+      const free = freeNameFor(ctx);
+      const hint = free === null
+        ? "この範囲は取り込みがあるので、名前が未定義か分からず、R30 の点なしは書けません。"
+        : `この点なしなら \`[${t.pre.join("")}${free}${t.post.join("")}]\` です（\`${free}\` はこの範囲で定義されていない名前）。`;
+      throw gate("G14", `点なし \`[${writeTerm(t)}]\` は、書いた \`_\` を被演算子の印に使っています。\`_\` はいつも印（単位）なので被演算子の印になりません。前置・後置の点なしは \`[-a]\`・\`[a!]\`・\`[!a]\` と書きます（a はその範囲で定義されていない名前、R30）。${hint}`);
     }
     return U();
   }
+  // R30：前置・後置の点なし（`[-a]`・`[a!]`・`[!a]`・`[!!a]`）。値の印1つと、その範囲で未定義の裸の名前だけの行なら、その
+  // 名前を仮引数に読む（U 2026-10-21 04:25「未定義の識別子なら何を当てても成り立つ」。形と範囲は主の Claude の提案で、
+  // それへの U〔答え〕04:29）。fn は前の `[-_]` と同じ単項の点なし。
+  // 名前の綴りには依らない（`[-x]` と `[-n]` は同じ関数）。打ち間違いが黙って関数になるのを見せるため、information を出す
+  // （reportFreeName）。名前が定義されていれば今までどおり値に印を当てた項（関数なら未知、Q22）、取り込みのある範囲の
+  // 未定義の名前は今までどおり未知（並びで G7）。印が2つ以上・前置と後置の両方・核が括りや字面・中置の区間（`[a + 1]`・
+  // `[- a]`）・2項以上・2行以上は、ここに来ないか、ここで外して今のまま。
+  if (t.type === "atom" && t.core.c === "name" && isValueMark(t) && isFreeName(t.core.name, ctx)) {
+    reportFreeName(t.core.name, ctx);
+    return L("pfUnary");
+  }
   return null;
+}
+
+// 値の印1つ（前置の `-`・`!`・`!!` か後置の `!`。前置と後置を組まない）だけが付いた項か（§2、R30・G14）。
+function isValueMark(t) {
+  return (t.pre.length === 1 && VALUE_PREFIX.has(t.pre[0]) && t.post.length === 0) || (t.pre.length === 0 && t.post.length === 1 && t.post[0] === "!");
+}
+
+// 名前がその範囲で未定義か（R30）。lookup と同じ順に、括りで受けた名前（実体の desc）・仮引数・局所の定義・ファイルの定義を
+// 探し、どれにも無ければ未定義。取り込みのある範囲（lookup が未知にする所）は、未定義か分からないので数えない。
+function isFreeName(name, ctx) {
+  for (let s = ctx.scope; s; s = s.parent) {
+    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name)) || (s.locals && s.locals.has(name))) return false;
+    if (s.hasImport) return false;
+  }
+  return !ctx.F.defs.has(name);
+}
+
+// G14 の言い分に書く、その範囲で未定義の名前（a・b・…・z、その後は a1・a2・…の最初の空き）。取り込みのある範囲では、
+// どの名前も未定義か分からない（isFreeName が偽）ので null。名前は有限個しか定義されないので、ループは止まる。
+function freeNameFor(ctx) {
+  for (let s = ctx.scope; s; s = s.parent) if (s.hasImport) return null;
+  for (const c of "abcdefghijklmnopqrstuvwxyz") if (isFreeName(c, ctx)) return c;
+  for (let i = 1; ; i++) if (isFreeName(`a${i}`, ctx)) return `a${i}`;
 }
 
 // ---------------------------------------------------------------------------
