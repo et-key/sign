@@ -2,8 +2,8 @@
  * 余積（空白）の解決（alpha1 の意味解析の最初の段）。
  *
  * 仕様は alpha1/docs/coproduct_spec.md（設計 workflow の最終版）。ここに書くのは、確信度 91% 以上の規則
- * （§4 の R1〜R32（R18 と R30 は 2026-10-21 に廃止）、§1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
- * 門（G1〜G15（G14 は 2026-10-21 に廃止）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
+ * （§4 の R1〜R33（R18 と R30 は 2026-10-21 に廃止）、§1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
+ * 門（G1〜G17（G14 は 2026-10-21 に廃止）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
  * 答えが出たときに、その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
  *
  * 入り口は `resolve(source)` の1つで、`{ trees, diagnostics }` を返す。trees は1行に1つの木、diagnostics は
@@ -91,6 +91,8 @@ const GATE_REASON = {
   G13: "coproduct-hole-arity",
   // G14（coproduct-pointfree-unit）は 2026-10-21 に廃止した。断っていた `[-_]`・`[!!_]`・`[_!]` は単項の点なし（pointfreeOf）。
   G15: "coproduct-default-unit",
+  G16: "coproduct-bare-function-return",
+  G17: "coproduct-manual-curry",
 };
 
 // 門の番号（`G2(b)` のように枝まで）から断りを作る。reason は門ごとの名前で、枝は spec と gate で見分ける。
@@ -2177,8 +2179,11 @@ function instRootOf(F, inst, label) {
   frame.label = label;
   let value;
   let gated = false;
+  let spelled = false;
   try {
-    value = resolveBody(inst.lambda.right, { F, scope: inst.scope, diag: null }).rootKind;
+    const body = resolveBody(inst.lambda.right, { F, scope: inst.scope, diag: null });
+    value = body.rootKind;
+    spelled = sectionSpelled(body.tree) || curriedSpelled(body.tree);
   } catch (e) {
     if (!isGate(e)) {
       leaveNest(F, inst);
@@ -2193,7 +2198,11 @@ function instRootOf(F, inst, label) {
   }
   leaveNest(F, inst);
   // 本体が門に当たるか、門に当たる実体を呼んだ実体は、木を残す段で断る（呼んだ側の枠の後ろは最後の木に無い、instantiate）。
-  inst.gated = gated || !!frame.gated;
+  // 本体の根が L の実体も、木を残す段で G16 に当たる（materialize）。自分の仮置きを読んでいなければ、根は確定した値の上の木の根と
+  // 同じ（外の仮置きが外れれば、記録は古くなって解き直す）なので、門に当たる実体に数える。読んでいれば根は未知になり（§3.4）、
+  // 木の根が L かはここでは分からないので数えない。綴りで断る根（区間・`$` で包んだ入れ子の `?`、returnGate）は仮置きに依らない
+  // ので、読んでいても門に当たる実体に数える。
+  inst.gated = gated || !!frame.gated || spelled || (value === "L" && !frame.consulted);
   if (frame.consulted && value !== "A") {
     value = "U";
     frame.failed = true;
@@ -2222,7 +2231,12 @@ function materialize(F, inst, scopeOf) {
   inst.materializing = true;
   F.matStack.push(inst);
   try {
-    inst.tree = resolveBody(inst.lambda.right, { F, scope, diag: F.diag }).tree;
+    const body = resolveBody(inst.lambda.right, { F, scope, diag: F.diag });
+    // 実体の本体の根が裸の関数なら G16、`$` で包んだ入れ子の `?` なら G17（R33、returnGate）。ほかの門と同じく、呼んだ行で関数と
+    // 形を名指しする（R25）。
+    const refused = returnGate(() => "", body);
+    if (refused) throw refused;
+    inst.tree = body.tree;
   } catch (e) {
     if (!isGate(e)) throw e;
     inst.error = e;
@@ -2594,7 +2608,8 @@ function pointfreeOf(row, ctx) {
     return term.type === "infix" && term.stage >= 12 && term.stage <= 22 && (term.left === null) !== (term.right === null) ? term : null;
   };
   // 点なしの被演算子は1項に限り、A でなければ（関数や未知なら）点なしとしても未知にする。書いた `_` の被演算子は、中置の
-  // 被演算子と同じく印（値）なので A に数える（`[_ +]`、classifyInfix の注）。
+  // 被演算子と同じく印（値）なので A に数える（`[_ +]`、classifyInfix の注）。未知にしても綴りは区間なので、関数の本体の根に
+  // 置けば G16 で断る（sectionSpelled。根の未知を通すと、区間を返す本体が黙って通る）。
   const withOperand = (term, type) => {
     const c = classify(term.left || term.right, ctx);
     if (c.cat === "hole") throw refuseHole(`点なし \`[${writeTerm(term)}]\` の被演算子`);
@@ -2882,8 +2897,78 @@ function makeLambda(op, ctx) {
   return { params, scope };
 }
 
+// G16（R33、§5 Q21 の答え）：`?` で作る関数の本体の根が裸の関数（L）。関数を返すなら `$` を明示する（U 09-11 23:58「関数を返す
+// 関数なら、$は明示というルール」、U 10-21 12:50「adder が返すべきは [+ m] じゃなくて $[+ m]」。U〔答え〕10-21 15:58：書く人が `$` を
+// 書く）。カリー化はシステムの側が持つ（U〔答え〕10-21 16:02「実際には断る形なんだよ。 / 理由は、カリー化はシステムの側で持つべき。」）
+// ので、入れ子の `?` も断る。警告で通さないのは、裸の関数は書いた行の中でしか生きない（U 09-11 03:47）ので、返した時にはもう無く、
+// 本体のコードが作れないから（主の Claude の読み。警告の案に U 10-21 15:59「それって、コンパイラの状態で可能なの？ / 普通に止まると
+// 思うんだけど…」）。呼ばれない定義でも断る（本体そのものがコードにできない。公開 `#` すればコンパイルされる）。
+// 根は、解き終えた所（解いている途中の種類が無い、F.stack が空）で解いた本体の木の根で見る：名前の定義と無名の `?` は行を解く
+// 所（resolveLambda）、括りの関数の実体は木を残す段（materialize）。§3.4 の仮置きの上（根の種類を解く所）では断らない。仮置きの
+// 上でだけ L になる根（`h : x ? [s : [+ [k x]]] ' s`・`k : x ? h x` の h は、k の仮置き A の上では引いた区間で L、確定した値の上では
+// 未知）で断ると、どの定義から解くかで断るかが割れ、門で未知にした根が外の本体の答えまで変える（「仮置きの記録」の注の単調は、
+// 根が A か A でないかだけを見る）。自分を呼ぶ再帰で仮置きが外れた関数は、§3.4 の根は未知だが、解き終えた木の根が L なら断る
+// （`f : x ? [y ? f y]`。本体は裸の関数のままで、コードにできない。断る側。実装する人の読み）。
+// 種類のほかに綴りも見る：根の綴りが区間（sectionSpelled）なら、種類が未知でも断る。§2 の表は区間を被演算子の種類に依らず L
+// （94）にするが、pointfreeOf は被演算子が A でなければ区間の種類を未知にする（当てた結果の読みが §5 Q22 で決まっていないので、
+// 並びの中では G7 にする側）。その未知が根では G16 をすり抜けて、区間を返す本体（`ww : x ? [+ [uu x]]`・`q : x ? [+ inc]`。前の
+// `h : x ? [+ [k x]]` も）を黙って通していた（確かめ 2026-10-22。直す人の読み）。綴りは仮置きに依らないので、どの定義から解いても同じ。
+// what は名指し（「関数 `adder` の」。実体は呼んだ行で instanceError が関数と形を足すので空）。
+// 言い分：入れ子の `?`（`add : x ? y ? x + y`）は手で書いたカリー化なので、`$` を勧めず、仮引数を並べる書き方だけを勧める
+// （U〔答え〕10-21 16:02「理由は、カリー化はシステムの側で持つべき。 / ユーザーが明示はね…」。`$` で包んだ入れ子の `?` は G17）。
+function bareReturnGate(what, root) {
+  const nested = root.t === "lambda" || !!root.isQBracket;
+  const advice = nested
+    ? "カリー化はシステムの側が持つので、入れ子の `?` で関数を返さずに、仮引数を並べて書きます（`x y ? x + y`。足りない適用は自動で部分適用になります）"
+    : "関数を返すなら `$` を明示して値にします（`$[+ m]`）。カリー化はシステムの側が持つので、関数を返す代わりに仮引数を並べて書きます（`x y ? x + y`。足りない適用は自動で部分適用になります）";
+  return gate(
+    "G16",
+    `${what}本体の根 \`${cutShape(show(root))}\` が裸の関数です。裸の関数は書いた行の中でしか生きないので、返した時にはもう無く、本体のコードが作れません。${advice}（§4 R33、§5 Q21）。`
+  );
+}
+// 根の綴りが区間（段12〜22 の片側の欠けた点なし `[+ X]`・`[X +]`・`[@ X]` と、貪欲な `[* X,]`。1行の括りに包んだ `[[+ X]]`・
+// `([+ X])` も）か。被演算子の種類は見ない（G16 の注）。
+function sectionSpelled(tree) {
+  return !!tree && tree.t === "leaf" && !!tree.term && sectionTerm(tree.term);
+}
+function sectionTerm(term) {
+  if (!isBareBlock(term, "bracket") || term.core.rows.length !== 1) return false;
+  const row = term.core.rows[0];
+  const one = (t) => (t && t.type === "seq" && t.terms.length === 1 ? t.terms[0] : null);
+  const unary = (x) => !!x && x.type === "infix" && x.stage >= 12 && x.stage <= 22 && (x.left === null) !== (x.right === null);
+  if (row.type === "op") return row.sym === "," && row.right === null && unary(one(row.left));
+  const x = one(row);
+  return unary(x) || sectionTerm(x);
+}
+
+// G17（R33、§5 Q35）：`?` で作る関数の本体の根が、`$` で包んだ入れ子の `?`（`add : x ? $[y ? x + y]`。手で書いたカリー化）。
+// `$` で値にした関数を返す形は G16 に当たらない（`adder : m ? $[+ m]` は U 10-21 12:50・U〔答え〕15:58 で確かめた）が、入れ子の `?` を
+// `$` で包んで返す形を通すかは、利用者に確かめていない。D type_system.md「関数を返す関数は、`$` を付けて関数オブジェクトの番地で
+// 返す」は通す側に、U〔答え〕10-21 16:02「理由は、カリー化はシステムの側で持つべき。 / ユーザーが明示はね…」は断る側に読める。
+// 決まっていないので、名指しで断る（直す人の読み、断る側）。見るのは綴り（`$` 1つと、1行の括りの入れ子の中の、両側のある `?`、
+// unwrapLambda）だけで、種類にも仮置きにも依らない。
+function curriedSpelled(tree) {
+  if (!tree || tree.t !== "leaf" || !tree.term || tree.term.type !== "atom") return false;
+  const { pre, core, post } = tree.term;
+  if (post.length || pre.length !== 1 || pre[0] !== "$" || core.c !== "bracket") return false;
+  return !!unwrapLambda({ type: "seq", terms: [{ ...tree.term, pre: [] }] });
+}
+function curryGate(what, root) {
+  return gate(
+    "G17",
+    `${what}本体の根 \`${cutShape(show(root))}\` は、\`$\` で包んだ入れ子の \`?\`（手で書いたカリー化）です。\`$\` で値にした関数を返す形（\`$[+ m]\`）は通りますが、入れ子の \`?\` を \`$\` で包んで返す形を通すかは決まっていません。仮引数を並べて書けば、足りない適用は自動で部分適用になります（\`x y ? x + y\`）（§4 R33、§5 Q35）。`
+  );
+}
+// 本体の根で断る門（G16・G17）。断らないなら null。what は名指しを返す関数（断るときだけ作る）。
+function returnGate(what, body) {
+  if (body.rootKind === "L" || sectionSpelled(body.tree)) return bareReturnGate(what(), body.tree);
+  if (curriedSpelled(body.tree)) return curryGate(what(), body.tree);
+  return null;
+}
+
 // `?`（P3：左は解かず、右を関数の範囲で解く）。片側の欠けた `?` は点なし（unwrapLambda の注）なので、種類は未知。
 // 括りの関数は、ここでは本体を解かない（R25）。木は resolve の最後に、集めた実体で埋める（patternNode）。
+// 解き終えた所で本体の根が L なら G16（bareReturnGate）、`$` で包んだ入れ子の `?` なら G17（curryGate）。
 function resolveLambda(op, ctx) {
   if (isSection(op)) {
     return { t: "lambda", paramsText: op.left ? writeTree(op.left) : "", body: op.right ? resolveTree(op.right, ctx) : null, kind: U() };
@@ -2906,6 +2991,16 @@ function resolveLambda(op, ctx) {
     body = resolveBody(op.right, { ...ctx, scope: lam.scope });
   } finally {
     if (col) endCollect(ctx.F, col);
+  }
+  const refused = returnGate(() => `関数 \`${named ? ctx.F.namedLambdas.get(op).name : `[${cutShape(writeTree(op))}]`}\` の`, body);
+  if (refused) {
+    // 根の種類を解く所（前段、F.stack が空でない）では断らない（bareReturnGate の注）。ただ、木を残す段はここで行ごと断るので、
+    // いまの枠のこの後ろで作る実体は最後の木に無い（INSTANCE_DEPTH_MARGIN の注の2。門に当たる実体を呼んだ所と同じ gated）。前は
+    // 数えていたので、その後ろの括りの関数の確定した実体が上限の境目にあると、G16 の代わりに総数の G7 を言った（確かめ 2026-10-22）。
+    // 仮置きを読んで L になった根でも、仮置きが当たれば木の根も L、外れれば後ろの呼び出しは頼った枠と一緒に外す（settlePending）ので、
+    // どちらでも数えないのが最後の木の数である。
+    if (!ctx.F.stack.length) throw refused;
+    ctx.F.stack[ctx.F.stack.length - 1].gated = true;
   }
   let fn = otherFn(op.left);
   if (lam.params.plain) {
@@ -3145,7 +3240,7 @@ function checkNodes(items) {
   if (items.length < 2) return;
   for (const it of items) {
     if (it.t === "leaf") continue;
-    if (it.kind.k === "U") throw gate("G2(a)", `種類の決まらない節 \`${show(it)}\` が隣と結ぼうとしています（R24・R31・R32、§5 Q8・Q13・Q21）。`);
+    if (it.kind.k === "U") throw gate("G2(a)", `種類の決まらない節 \`${show(it)}\` が隣と結ぼうとしています（R24・R31・R32、§5 Q8・Q13）。`);
     if (it.excess) throw gate("G12(a)", `実引数がアリティより多い適用 \`${show(it)}\` が隣と結ぼうとしています。余りの扱いは値の段で決まります（§5 Q11・Q6）。`);
   }
 }
@@ -3339,7 +3434,7 @@ function applyKind(fn, arg) {
       // G12(b)（plainApply と同じ）。余りの扱いは値の段（§5 Q11）。利用者 2026-10-19「最後の仮引数が裸の括りの関数に
       // 多く渡したときは、素の関数と同じく前から n 個を当てて、余り（excess）にする。」
       if (fn.instantiate(args.slice(0, fn.n).map(descOfTree)).kind.k !== "A") {
-        throw gate("G12(b)", `実引数がアリティより多いのに、頭の本体の根が値ではありません（§5 Q21・Q11）。`);
+        throw gate("G12(b)", `実引数がアリティより多いのに、頭の本体の根が値ではありません（§5 Q11）。`);
       }
       return { kind: A(), excess: true };
     default:
@@ -3359,7 +3454,10 @@ function plainApply(fn, k) {
   const root = fn.getBodyRoot();
   if (k === fn.n) return { kind: root === "A" ? A() : U() };
   if (root !== "A") {
-    throw gate("G12(b)", `実引数がアリティより多いのに、頭の本体の根が値ではありません（§5 Q21・Q11）。`);
+    // 根が L なら、頭は裸の関数を返す定義（G16、R33）で、この言い分が出るのは、その定義の行がこの行より後ろにあるときだけ（定義が
+    // 先なら、行の順に先にその G16 を言う）。言い分でそちらを指す（確かめ 2026-10-22）。
+    const bare = root === "L" ? "頭の本体の根は裸の関数なので、その定義の行は G16 で断ります（§4 R33）。" : "";
+    throw gate("G12(b)", `実引数がアリティより多いのに、頭の本体の根が値ではありません（§5 Q11）。${bare}`);
   }
   return { kind: A(), excess: true };
 }

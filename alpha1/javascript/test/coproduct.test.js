@@ -6,7 +6,8 @@
  * 試験で、§5 の問いの答えが出たら通る側へ移す（§6.4 の8）。
  *
  * 定義は §6.3 の「定義」をそのまま使う。ただし次の3か所は、仕様のほかの規則（P2：隠し）と両立しないので直した。
- * - `adder : n ? [+ n]` の仮引数 `n` は、同じ表の `n : [~x] ? x`（ファイルの定義）を隠すので `m` にした。
+ * - `adder : n ? [+ n]` の仮引数 `n` は、同じ表の `n : [~x] ? x`（ファイルの定義）を隠すので `m` にした（2026-10-22 から §6.3 も
+ *   `adder : m ? $[+ m]` と書く）。
  * - 「`x : add 1` の後で `x 5`」は、ファイルの定義 `x` が `inc` や `add` の仮引数 `x` を隠すので、名前を `add1` にした。
  * - `map : f [x ~y] ? …` の本体は書かれていないので、門に当たらない `x` を置いた（`@f x , map y~` は G3）。
  * 定義を足すと別の門に当たる行（隠し・同名）は、その行に要る定義だけで書いた。
@@ -25,7 +26,10 @@
  * その後ろに、R24〜R26 の実装を確かめた2つの workflow の指摘を当てた行（「確かめ」の直した・穴・守り）を置く。
  * 最後に、反証の続きで直した2つ（分け合った実体の描き方・合成の鍵）の行と法則、合成の中の括りの関数（§5 Q24）の確かめ、
  * 合成を適用の畳み込みにした所（2026-10-19。(g∘f) x = g (f x) で答えが変わった行と、その法則）を置く。
- * いちばん後ろに、値を含む輪（§5 Q30、2026-10-20。どこから入っても name-cycle で、言い分に輪の道筋）の行を置く。
+ * その後ろに、値を含む輪（§5 Q30、2026-10-20。どこから入っても name-cycle で、言い分に輪の道筋）の行を置く。
+ * いちばん後ろに、裸の関数を返す形（§5 Q21 の答え、2026-10-21、R33。本体の根が L か区間の綴りの `?` は G16、`$` で包んだ
+ * 入れ子の `?` は G17（§5 Q35））の行を置く。標準の定義の adder は、この答えで `$[+ m]` を返すように直した（前は `[+ m]` で本体の
+ * 根が L）。
  *
  * 実行: node test/coproduct.test.js（`npm test` からも呼ばれる）
  */
@@ -43,7 +47,7 @@ const STD = [
 	"use : f x ? @f x",
 	"f3 : a b c ? a + b + c",
 	"f4 : a b c e ? a + b + c + e",
-	"adder : m ? [+ m]",
+	"adder : m ? $[+ m]",
 	"map : f [x ~y] ? x",
 	"n : [~x] ? x",
 	"fs : inc , double , 3",
@@ -120,7 +124,11 @@ const passes = [
 	["[x ? x + 1] 5", std("[x ? x + 1] 5"), "(apply [x ? x + 1] 5)", "A"],
 	["map $[* 2] 1 2 3 4 5（最後の括りが残りの並びを受ける。R24、2026-10-19）", std("map $[* 2] 1 2 3 4 5"), "(apply map (construct $[* 2] 1 2 3 4 5))", "A"],
 	["n 1 2 3（括り1つの関数は並び全体を受ける。R24、2026-10-19）", std("n 1 2 3"), "(apply n (construct 1 2 3))", "A"],
-	["adder 5（未知の根）", std("adder 5"), "(apply adder 5)", "未知"],
+	// §5 Q21 の答え（2026-10-21、R33）：関数を返すなら `$` を明示する（利用者 2026-10-21「adder が返すべきは [+ m] じゃなくて $[+ m]」）。前の
+	// `adder : m ? [+ m]` は G16（下の「裸の関数を返す」）で、`$[+ m]` の adder の本体の根は A。前は未知の根。
+	["adder 5（前は未知の根）", std("adder 5"), "(apply adder 5)", "A"],
+	["adder 5 3（根、excess。前は G12(b)）", std("adder 5 3"), "(apply adder (construct 5 3))", "A", { excess: true }],
+	["inc adder 5（前は未知の根、§5 Q13）", std("inc adder 5"), "(apply (compose inc adder) 5)", "A"],
 	["f : x y ? x + y（解くのは x + y だけ）", "f : x y ? x + y", "(: f (? [x y] (+ x y)))", null],
 ];
 
@@ -133,7 +141,9 @@ const refused = [
 	["[,] 5 g 3（前は [+] 5 g 3）", std("[,] 5 g 3"), "G2(a)"],
 	["5 inc 3 4", std("5 inc 3 4"), "G12(a)"],
 	["inc 1 2 inc", std("inc 1 2 inc"), "G12(a)"],
-	["adder 5 3", std("adder 5 3"), "G12(b)"],
+	// §6.3 の `adder 5 3`（G12(b)）は、adder が `$[+ m]` を返すようになって通る側へ移した（R33）。G12(b) の見本は、本体の根が
+	// 未知の use にした。
+	["use $inc 5 3（前は adder 5 3）", std("use $inc 5 3"), "G12(b)"],
 	["5 f2 1", std("5 f2 1"), "G8"],
 	["5 f2", std("5 f2"), "G8"],
 	["5 (f2 1)", std("5 (f2 1)"), "G8"],
@@ -181,6 +191,8 @@ const GATE_REASON = {
 	G13: "coproduct-hole-arity",
 	// G14（coproduct-pointfree-unit）は 2026-10-21 に廃止（resolve.js の写しと同じ）。
 	G15: "coproduct-default-unit",
+	G16: "coproduct-bare-function-return",
+	G17: "coproduct-manual-curry",
 };
 
 
@@ -263,15 +275,16 @@ const extraPasses = [
 	["R1 x * 2 y * 2", std("t : x y ? x * 2 y * 2"), "(construct (* x 2) (* y 2))", "A", { body: true }],
 	// 再帰は A と仮置きして一巡する（§3.4）。仮置きと合えば A のまま。
 	["再帰：仮置きが合う", std(["fact : k ? k * [fact k - 1]", "fact 5"]), "(apply fact 5)", "A"],
-	// 仮置きと食い違えば未知（本体の根は点なし＝L）。根の k = n は未知で通り、k > n は G12(b)。
-	// この行は、根が L のままでも未知になるので、仮置きを取り消す仕組みは見ていない（寄生したオラクル）。
-	// 取り消しは下の「相互再帰」の2行で見る。
-	["再帰：仮置きが外れる", std(["r : k ? [+ [r k]]", "r 1"]), "(apply r 1)", "未知"],
+	// 仮置きと食い違えば未知（本体の根は、仮置き A から引いた物で未知）。根の k = n は未知で通り、k > n は G12(b)。
+	// この行は、根が仮置きのままでも未知になるので、仮置きを取り消す仕組みは見ていない（寄生したオラクル）。
+	// 取り消しは下の「相互再帰」の2行で見る。前の本体は `[+ [r k]]`（仮置き A の上で区間 L）だったが、区間の綴りの本体は
+	// G16（R33、2026-10-22）なので、`(r k) ' 0` にした。
+	["再帰：仮置きが外れる", std(["r : k ? (r k) ' 0", "r 1"]), "(apply r 1)", "未知"],
 	// 字下げのブロックの本体：全部の行（枝なら値の側）の根が A のときだけ A。
 	["字下げの本体", std(["sgn : v ?", "\tv < 0 : 0 - v", "\tv", "", "sgn 5"]), "(apply sgn 5)", "A"],
 ];
 const extraRefused = [
-	["再帰：仮置きが外れて k > n", std(["r : k ? [+ [r k]]", "r 1 2"]), "G12(b)"],
+	["再帰：仮置きが外れて k > n", std(["r : k ? (r k) ' 0", "r 1 2"]), "G12(b)"],
 	["同じ名前の定義が2つ", "p : 1\np : 2", "name-duplicate"],
 	["入れ子の関数の仮引数が外の仮引数を隠す", "f : x ? [x ? x] x", "name-shadow"],
 	["取り込みのある範囲の未定義の名前は未知", "io@\nsay 5", "G7"],
@@ -296,8 +309,10 @@ const fixPasses = [
 	["[' 0] fs 5（未知の根）", std("[' 0] fs 5"), "(apply [' 0] (construct fs 5))", "未知", { excess: false }],
 	// 中置の右のブロックは前段が置く場所なので通る。
 	["中置の右のブロック", std(["v : 1 +", "\t2"]), "(: v (+ 1 (block 2)))", null],
-	// 合成の最初の関数の本体の根が値でなければ、k = n でも未知（§5 Q21）。
-	["adder inc 5（未知の根）", std("adder inc 5"), "(apply (compose adder inc) 5)", "未知"],
+	// 合成の最初の関数の本体の根が値でなければ、k = n でも未知。前は本体の根が L の adder（§5 Q21）で見ていたが、根が L の関数は
+	// G16 になった（R33）ので、根が未知の uu で見る。adder は `$[+ m]` を返すので A。
+	["uu inc 5（未知の根。前は adder inc 5）", std(["uu : x ? [,] x", "uu inc 5"]), "(apply (compose uu inc) 5)", "未知"],
+	["adder inc 5（前は未知の根）", std("adder inc 5"), "(apply (compose adder inc) 5)", "A"],
 	["use inc 5 6（未知の根）", std("use inc 5 6"), "(apply (compose use inc) (construct 5 6))", "未知"],
 	// 器の中の器まで見て、関数が無ければ撒ける。
 	["[vs 1]~ 5", std("[vs 1]~ 5"), "(construct [vs 1]~ 5)", "A"],
@@ -350,10 +365,10 @@ const fixRefused = [
 	["ブロックが , の左", std(["v :", "\t1", " , 2"]), "indent-block-position"],
 	["ブロックが == の左", std(["v :", "\t1", " == 2"]), "indent-block-position"],
 	["本体のブロックが並びの項", std(["t : a ?", "\ta", "\tinc", " 5", "", "t 1 inc"]), "indent-block-position"],
-	// 合成の最初の関数の本体の根が値でない（§5 Q21）。
-	["1 adder inc 5", std("1 adder inc 5"), "G2(a)"],
-	["adder inc 5 double", std("adder inc 5 double"), "G2(a)"],
-	["adder inc 5 6", std("adder inc 5 6"), "G12(b)"],
+	// 合成の最初の関数の本体の根が値でない。前は adder（§5 Q21）で見ていた。根が L の関数は G16 になった（R33）ので、根が未知の uu で見る。
+	["1 uu inc 5（前は 1 adder inc 5）", std(["uu : x ? [,] x", "1 uu inc 5"]), "G2(a)"],
+	["uu inc 5 double（前は adder inc 5 double）", std(["uu : x ? [,] x", "uu inc 5 double"]), "G2(a)"],
+	["uu inc 5 6（前は adder inc 5 6）", std(["uu : x ? [,] x", "uu inc 5 6"]), "G12(b)"],
 	// 器の中の器に関数が見える（構築を平らにするかは §5 Q12 で未決）。
 	["[fs 1]~ 5", std("[fs 1]~ 5"), "G7"],
 	["gs : fs 1 の後で gs~ 5", std(["gs : fs 1", "gs~ 5"]), "G7"],
@@ -381,7 +396,8 @@ const gapPasses = [
 	["5 [x ? x + 1]", std("5 [x ? x + 1]"), "(apply [x ? x + 1] 5 ·rev)", "A"],
 	// 貪欲な単項は excess にしない（§3.4）ので、逆適用の左に置ける。
 	["[* 2,] 1 2 3 inc", std("[* 2,] 1 2 3 inc"), "(apply inc (apply [* 2,] (construct 1 2 3)) ·rev)", "A"],
-	["double adder 5（未知の根）", std("double adder 5"), "(apply (compose double adder) 5)", "未知"],
+	// 前は `double adder 5`（adder の根が L、§5 Q21）。根が L の関数は G16（R33）なので、根が未知の uu で見る。
+	["double uu 5（未知の根）", std(["uu : x ? [,] x", "double uu 5"]), "(apply (compose double uu) 5)", "未知"],
 	["inc add 5（未知の根）", std("inc add 5"), "(apply (compose inc add) 5)", "未知"],
 	["R31 で変わった [+] inc 5（`[+] 5` は 5、前は未知の根）", std("[+] inc 5"), "(apply (compose [+] inc) 5)", "A"],
 	["[,] inc 5（未知の根）", std("[,] inc 5"), "(apply (compose [,] inc) 5)", "未知"],
@@ -417,9 +433,11 @@ const gapRefused = [
 	["本体の括りの局所の定義", std("h : a ? [yy : a] yy"), "G7"],
 	["仮引数の重複", std("ff : x x ? x"), "name-duplicate"],
 	["括りの中の取り込み", std(["[io@]", "say 5"]), "G7"],
-	// 仮置きを取り消す仕組み：gq の本体の根は fq の点なし（L）なので未知。仮置き（A）が残ると `gq 1 inc` が通る。
-	["相互再帰：仮置きの取り消し", std(["fq : k ? [+ [gq k]]", "gq : k ? fq k", "gq 1 inc"]), "G2(a)"],
-	["相互再帰：依っている答えを戻す", std(["fq : k ? [+ [gq k] * [hq k]]", "gq : k ? fq k", "hq : k ? gq k", "hq 1 inc"]), "G2(a)"],
+	// 仮置きを取り消す仕組み：gq の根は fq の仮置き A の上で A と出るが、fq の根は gq から引いた物で未知なので、仮置きが外れて
+	// gq も未知。外れた仮置きに頼った答え（A）が残ると `gq 1 inc` が通る。前の fq は `[+ [gq k]]`（仮置き A の上で区間 L）だったが、
+	// 区間の綴りの本体は G16（R33、2026-10-22）なので、`(gq k) ' 0` にした（古いと印を付けないように変えると、どちらの行も通る）。
+	["相互再帰：仮置きの取り消し", std(["fq : k ? (gq k) ' 0", "gq : k ? fq k", "gq 1 inc"]), "G2(a)"],
+	["相互再帰：依っている答えを戻す", std(["fq : k ? ([gq k] * [hq k]) ' 0", "gq : k ? fq k", "hq : k ? gq k", "hq 1 inc"]), "G2(a)"],
 	// 字下げの本体が A にならない形。
 	["字下げの本体の最後が関数", std(["t : a ?", "\ta", "\tinc", "", "t 1 inc"]), "G2(a)"],
 	["字下げの本体の局所の定義", std(["t : a ?", "\tyy : 5", "\ta", "", "t 1 inc"]), "G2(a)"],
@@ -500,7 +518,8 @@ const unitPasses = [
 	["i : !_ の後で i _（終わり、R28）", std(["i : !_", "i _"]), "(apply i _)", "A"],
 	// 並び全体を受けた結果（A）は、隣の関数へ逆適用で渡る。否定の点なし `[!_] 1 2 inc` は G12(a)（下の「前置・後置の点なし」）
 	["i : !_ の後で i 1 2 inc（逆適用の左）", std(["i : !_", "i 1 2 inc"]), "(apply inc (apply i (construct 1 2)) ·rev)", "A"],
-	["本体が !_ だけ（前は G7）", std("tt : a ? !_"), "!_", "L", { body: true }],
+	// 本体が `!_` だけの関数（`tt : a ? !_`）も行は恒等射（L）と読むが、本体の根が裸の関数なので G16（R33、下の unitRefused）。前は
+	// ここで通っていた（その前は G7）。
 	// 行が `!_` だけなら、2行以上の括りの中の行・構造体の欄でも恒等射（R29 の R の所）。中置の被演算子の `!_` は下の G7。
 	["[!_ ⏎ 1]（前は G7）", std(["[!_", "1]"]), "[!_ ⏎ 1]", "A"],
 	["構造体の欄 a : !_ を引く", std(["st :", "\ta : !_", "", "st ' a"]), "(' st a)", "L"],
@@ -512,6 +531,8 @@ const unitPasses = [
 	["(s3 1 3) 2 の実体", std([S3, "(s3 1 3) 2"]), "(: s3 (? [[p] [q] [r]] (inst N N N p)))", null, { at: -2 }],
 ];
 const unitRefused = [
+	// 本体が `!_` だけ：行は恒等射（L、R29）なので、本体の根が裸の関数（G16、R33）。前は `!_` の L で通っていた。
+	["本体が !_ だけ（前は通る）", std("tt : a ? !_"), "G16"],
 	// G15：既定値のある関数の実引数に書いた `_`（内側でも最後でも）。値は既定値、種類は §5 Q8 で未決
 	["G15 go _ 3", std([...GO_DEFAULT, "go _ 3"]), "G15"],
 	["G15 go 1 _", std([...GO_DEFAULT, "go 1 _"]), "G15"],
@@ -1088,9 +1109,10 @@ const answerPasses = [
 	["R24 f 1 2 3（x は頭の数）", src(["f : [x ~xs] ? x 1", "f 1 2 3"]), "(: f (? [[x ~xs]] (inst [N…] (construct x 1))))", null, { at: 0 }],
 	["R24 Zipper の f 1 2 3（pattern_guide）", src(["f : [~a] ? a ' 0 + a ' 2 + a ' 3", "f 1 2 3"]), "(apply f (construct 1 2 3))", "A"],
 	["R24 f 1 2 3 inc（並び全体を受けた節は隣と結べる）", src(["inc : x ? x + 1", "f : [x ~xs] ? x 1", "f 1 2 3 inc"]), "(apply inc (apply f (construct 1 2 3)) ·rev)", "A"],
-	// 並び全体を受けても、実体の本体の根が A でなければ適用の節は未知（R24。k = n と同じ読みで、G12(b) にしない）。
-	["R24 gi 1 2（実体の本体の根が A でなければ未知の根）", src(["gi : [x ~xs] ? inc", "inc : y ? y + 1", "gi 1 2"]), "(apply gi (construct 1 2))", "未知"],
-	["R24 gi 1 2 の実体（本体の根は L）", src(["gi : [x ~xs] ? inc", "inc : y ? y + 1", "gi 1 2"]), "(: gi (? [[x ~xs]] (inst [N…] inc)))", null, { at: 0 }],
+	// 並び全体を受けても、実体の本体の根が A でなければ適用の節は未知（R24。k = n と同じ読みで、G12(b) にしない）。前は本体の根が
+	// L の `gi : [x ~xs] ? inc` で見ていたが、根が L の実体は G16（R33）になったので、根が未知の `[,] x` で見る。
+	["R24 gi 1 2（実体の本体の根が A でなければ未知の根）", src(["gi : [x ~xs] ? [,] x", "gi 1 2"]), "(apply gi (construct 1 2))", "未知"],
+	["R24 gi 1 2 の実体（本体の根は未知）", src(["gi : [x ~xs] ? [,] x", "gi 1 2"]), "(: gi (? [[x ~xs]] (inst [N…] (apply [,] x))))", null, { at: 0 }],
 	// 撒く項を含む並びは k を数えない（R24）ので、括り1つの関数でも並び全体を受けず、未知の根で実体を作らない。括った
 	// `n [vs~ 1]` は撒く項を含む器を1つ渡す形で、別の読み（R24 の「構造体とも List とも読めないが中身の見える器」）。
 	["R24 n vs~ 1（撒く項を含む並びは未知の根）", src(["n : [~x] ? x", "vs : 1 , 2", "n vs~ 1"]), "(apply n (construct vs~ 1))", "未知"],
@@ -1220,7 +1242,8 @@ const answerPasses = [
 	["法則で変わった inc ([f3 _ _ 3] 1) 5 inc（前は G2(a)）", src(["inc : x ? x + 1", "f3 : a b c ? c", "inc ([f3 _ _ 3] 1) 5 inc"]), "(apply inc (apply (compose inc [[f3 _ _ 3] 1]) 5) ·rev)", "A"],
 	["法則で変わった h2 : h1 1 の inc h2 5 inc（前は G2(a)）", src(["inc : x ? x + 1", "f3 : a b c ? c", "h1 : f3 _ _ 3", "h2 : h1 1", "inc h2 5 inc"]), "(apply inc (apply (compose inc h2) 5) ·rev)", "A"],
 	// 穴の本体の根は元の関数のもの。根が A でなければ、直接書いた `[pq _ 1] (inc 5)` と同じく未知のまま。
-	["守り inc [pq _ 1] 5（穴の元の関数の根が関数なら未知）", src(["inc : x ? x + 1", "pq : x y ? inc", "inc [pq _ 1] 5"]), "(apply (compose inc [pq _ 1]) 5)", "未知"],
+	// 前は根が L の `pq : x y ? inc` で見ていたが、根が L の関数は G16（R33）なので、根が未知の `[,] y` で見る。
+	["守り inc [pq _ 1] 5（穴の元の関数の根が未知なら未知）", src(["inc : x ? x + 1", "pq : x y ? [,] y", "inc [pq _ 1] 5"]), "(apply (compose inc [pq _ 1]) 5)", "未知"],
 	// 最初の関数が余れば印 `excess`（後ろに素の部分適用があっても落とさない）。確かめ 2026-10-19 の T2。
 	["Q26 inc (pr 1) 5 6（excess）", src(["inc : x ? x + 1", "pr : x y ? y", "inc (pr 1) 5 6"]), "(apply (compose inc [pr 1]) (construct 5 6))", "A", { excess: true }],
 	// 後ろの関数が2つ以上でも、全部を見る（位置に依らない）。確かめ 2026-10-19 の T3。
@@ -1233,8 +1256,9 @@ const answerPasses = [
 	["Q26 仮置きが外れる再帰 r2 1 2 は未知", src(["inc : x ? x + 1", "r2 : x y ?", "\tinc (r2 1) y", "\tinc", "", "r2 1 2"]), "(apply r2 (construct 1 2))", "未知"],
 	// 合成の後ろの根は、ここまでが A のときだけ引く。使わない根を引くと、仮置き（解いている途中の f）が外れたとき、それに
 	// 依らない g の根まで未知に替わり、定義の順で答えが割れていた。どちらの順でも A。確かめ 2026-10-19 の F1（反証）。
-	["Q26 g : y ? (adder (f 1) y) , 1（f が先）の g 5 inc", src(["inc : x ? x + 1", "adder : m ? [+ m]", "f : x y ?", "\tg y", "\tinc", "", "g : y ? (adder (f 1) y) , 1", "g 5 inc"]), "(apply inc (apply g 5) ·rev)", "A"],
-	["Q26 g : y ? (adder (f 1) y) , 1（g が先）の g 5 inc", src(["inc : x ? x + 1", "adder : m ? [+ m]", "g : y ? (adder (f 1) y) , 1", "f : x y ?", "\tg y", "\tinc", "", "g 5 inc"]), "(apply inc (apply g 5) ·rev)", "A"],
+	// 前は根が L の `adder : m ? [+ m]`（§5 Q21）で見ていたが、根が L の関数は G16（R33）なので、根が未知の uu で見る。
+	["Q26 g : y ? (uu (f 1) y) , 1（f が先）の g 5 inc", src(["inc : x ? x + 1", "uu : m ? [,] m", "f : x y ?", "\tg y", "\tinc", "", "g : y ? (uu (f 1) y) , 1", "g 5 inc"]), "(apply inc (apply g 5) ·rev)", "A"],
+	["Q26 g : y ? (uu (f 1) y) , 1（g が先）の g 5 inc", src(["inc : x ? x + 1", "uu : m ? [,] m", "g : y ? (uu (f 1) y) , 1", "f : x y ?", "\tg y", "\tinc", "", "g 5 inc"]), "(apply inc (apply g 5) ·rev)", "A"],
 	// `inc y` は中身の見えない A なので、後ろの `[+]` に1項で未知になり、f1 の根を引かない（R31 の1項。R31 の前は `[+]` に1項が
 	// いつも未知、Q17）。
 	["Q26 g : y ? (inc [+] f1 y) , 1（f1 が先、素の関数）の g 5 inc", src(["inc : x ? x + 1", "f1 : y ?", "\tg y", "\tinc", "", "g : y ? (inc [+] f1 y) , 1", "g 5 inc"]), "(apply inc (apply g 5) ·rev)", "A"],
@@ -1247,9 +1271,12 @@ const answerPasses = [
 	["Q28 v : f 1 が f を先に解かせても g の根は積で A", src(["inc : x ? x + 1", "v : f 1", "f : x ?", "\tg x", "\tinc", "", "g : x ? (f x) , 1", "g 5 inc"]), "(apply inc (apply g 5) ·rev)", "A"],
 	// 呼ばれない素の関数 f の本体の根を先に解く（§6.4 の1 の3）と、h の実体が輪（h → k → g → h）の頭になって仮置きが外れ、
 	// それに頼った g の実体（形 N）の根が未知に替わっていた（f を消すと前も A。呼ばれない定義が、ほかの行の答えを変えていた）。
-	["Q28 呼ばれない f : x ? (g x) , 1 があっても g [5] inc は A", src(["inc : x ? x + 1", "f : x ? (g x) , 1", "g : [x ~xs] ? (h [s : k]) , 1", "h : [s] ? s 1", "k : [x ~xs] ? [+ [g x]]", "g [5] inc"]), "(apply inc (apply g [5]) ·rev)", "A"],
+	// k の本体は前は `[+ [g x]]`（g の仮置きの上で根が L）だったが、根が L の実体は G16（R33）なので、g を引いて根が未知の
+	// `[,] [g x]` にした（h の実体の根が A でないのは同じ）。
+	["Q28 呼ばれない f : x ? (g x) , 1 があっても g [5] inc は A", src(["inc : x ? x + 1", "f : x ? (g x) , 1", "g : [x ~xs] ? (h [s : k]) , 1", "h : [s] ? s 1", "k : [x ~xs] ? [,] [g x]", "g [5] inc"]), "(apply inc (apply g [5]) ·rev)", "A"],
 	// 合成と、直接書いた入れ子（`inc (f [1 2])`、前も A）が同じ読み（R11）。前は合成の側だけ未知だった。
-	["Q28 inc f [1 2] は inc (f [1 2]) と同じく A", src(["inc : x ? x + 1", "h : [s] ? s 1", "f : [x ~xs] ? (h [s : g]) , 1", "g : x ? [+ [f x]]", "inc f [1 2]"]), "(apply (compose inc f) [1 2])", "A"],
+	// g の本体は前は `[+ [f x]]`（根が L）だったが、根が L の関数は G16（R33）なので、f を引いて根が未知の `[,] [f x]` にした。
+	["Q28 inc f [1 2] は inc (f [1 2]) と同じく A", src(["inc : x ? x + 1", "h : [s] ? s 1", "f : [x ~xs] ? (h [s : g]) , 1", "g : x ? [,] [f x]", "inc f [1 2]"]), "(apply (compose inc f) [1 2])", "A"],
 	// 実体の深さの守り（SC-1）：素の関数を挟む鎖。hb の形はどれも {s:L}（f1 … はファイルの定義なので深さ 1 の葉）で、深く
 	// ならない。前は f0 を先に置くと、f0 → hb の実体 → f1 → … と積んだ枠の hb の実体を全部数え、34 個の関数で 32 段に達して
 	// f0 の根が黙って未知になり、`f0 5 inc` が G2(a) だった（逆順なら A。逆順と並べ替えは法則の試験が見る）。
@@ -1328,15 +1355,16 @@ const answerRefused = [
 	// 1項の `:` の左と既定値は解かない（R25・P3）ので、名前を付けた部分適用を既定値の中で呼ぶ形も、別名（`p : t`）と同じく
 	// 実体が作れず G7（部分適用の確かめ 2026-10-19 の TG5）。
 	["R25 既定値の中で、名前を付けた部分適用を呼ぶ", src(["pair : [a ~as] [b ~bs] ? a + b", "p1 : pair [1]", "o : [x : p1 [2]] ? 5"]), "G7"],
-	// 余りの節は、素の関数と同じく対に入れば G12(a)。本体の根が A でなければ G12(b)（§5 Q11・Q21）。
+	// 余りの節は、素の関数と同じく対に入れば G12(a)。本体の根が A でなければ G12(b)（§5 Q11）。前は本体の根が L の
+	// `tg : [x ~xs] y ? inc` で見ていたが、根が L の実体は G16（R33）なので、根が未知の `[,] y` で見る。
 	["R24 tl 1 2 3 inc（余りの節は対に入れない）", src(["inc : x ? x + 1", "tl : [x ~xs] y ? x + y", "tl 1 2 3 inc"]), "G12(a)"],
 	["R24 (tl 1) 2 3 inc（部分適用の余り）", src(["inc : z ? z + 1", "tl : [x ~xs] y ? x + y", "(tl 1) 2 3 inc"]), "G12(a)"],
-	["R24 tg 1 2 3（本体の根が関数で k > n）", src(["inc : z ? z + 1", "tg : [x ~xs] y ? inc", "tg 1 2 3"]), "G12(b)"],
+	["R24 tg 1 2 3（本体の根が未知で k > n）", src(["tg : [x ~xs] y ? [,] y", "tg 1 2 3"]), "G12(b)"],
 	// 部分適用の残りが多いときも同じ（余りの確かめ 2026-10-19 の TG3）。
-	["R24 (tg 1) 2 3（部分適用で本体の根が関数、k > n）", src(["inc : z ? z + 1", "tg : [x ~xs] y ? inc", "(tg 1) 2 3"]), "G12(b)"],
+	["R24 (tg 1) 2 3（部分適用で本体の根が未知、k > n）", src(["tg : [x ~xs] y ? [,] y", "(tg 1) 2 3"]), "G12(b)"],
 	// 並び全体を受けた未知の節も、対に入れば G2(a)（並び全体が実引数1つなので k > n にならず、G12 ではない）。撒く項を
 	// 含む並びの未知の節も同じ。
-	["R24 gi 1 2 inc（並び全体を受けた未知の節）", src(["gi : [x ~xs] ? inc", "inc : y ? y + 1", "gi 1 2 inc"]), "G2(a)"],
+	["R24 gi 1 2 inc（並び全体を受けた未知の節）", src(["gi : [x ~xs] ? [,] x", "inc : y ? y + 1", "gi 1 2 inc"]), "G2(a)"],
 	["R24 n vs~ 1 inc（撒く項を含む並びの未知の節）", src(["inc : y ? y + 1", "n : [~x] ? x", "vs : 1 , 2", "n vs~ 1 inc"]), "G2(a)"],
 	// 逆適用と穴は素の関数だけ（括りの関数・分解した名前は通さない）。
 	["R12 m a（括りの関数の逆適用）", src([...IO, "m a"]), "G8"],
@@ -1385,12 +1413,13 @@ const answerRefused = [
 	["R24 関数の行のある字下げのブロック", src(["inc : x ? x + 1", "sh : [h ~hs] ? h 1", "w :", "\tinc", "\t2", "", "sh w"]), "G7", [["sh", "[U…]"]]],
 	// 合成の頭に置いても、括りの関数の本体の門と G12(b) はすり抜けない（Q24 の案1）。
 	["Q24 bad inc [1 2]（本体の門は呼んだ行で）", src(["inc : x ? x + 1", "bad : [x ~xs] ? [+ 1] _ _", "bad inc [1 2]"]), "G5", [["bad", "[N…]"]]],
-	["Q24 tg inc 1 2 3（本体の根が関数で k > n）", src(["inc : x ? x + 1", "tg : [x ~xs] y ? inc", "tg inc 1 2 3"]), "G12(b)"],
+	["Q24 tg inc 1 2 3（本体の根が未知で k > n）", src(["inc : x ? x + 1", "tg : [x ~xs] y ? [,] y", "tg inc 1 2 3"]), "G12(b)"],
 	["Q24 inc h2 [5 6 7]（後ろの括りの関数の名前は未知）", src(["inc : x ? x + 1", "h2 : [x ~xs] ? x 1", "inc h2 [5 6 7]"]), "G7", [["h2", "A"]]],
 	// 合成の後ろの部分適用でも、本体の根が A でなければ A に数えない（Q26 は根が A のときだけ）。
-	["Q26 inc (pq 1) 5 inc（本体の根が関数の部分適用）", src(["inc : x ? x + 1", "pq : x y ? inc", "inc (pq 1) 5 inc"]), "G2(a)"],
+	// 前は根が L の `pq : x y ? inc` で見ていたが、根が L の関数は G16（R33）なので、根が未知の `[,] y` で見る。
+	["Q26 inc (pq 1) 5 inc（本体の根が未知の部分適用）", src(["inc : x ? x + 1", "pq : x y ? [,] y", "inc (pq 1) 5 inc"]), "G2(a)"],
 	// 後ろの部分適用の後ろに根が A でない部分適用があれば未知（後ろの全部を見る）。確かめ 2026-10-19 の T3。
-	["Q26 inc (pr 1) (pq 1) 5 inc", src(["inc : x ? x + 1", "pr : x y ? y", "pq : x y ? inc", "inc (pr 1) (pq 1) 5 inc"]), "G2(a)"],
+	["Q26 inc (pr 1) (pq 1) 5 inc", src(["inc : x ? x + 1", "pr : x y ? y", "pq : x y ? [,] y", "inc (pr 1) (pq 1) 5 inc"]), "G2(a)"],
 	// 余りの印は後ろに素の部分適用があっても残る（G12(a)）。確かめ 2026-10-19 の T2。
 	["Q26 inc (pr 1) 5 6 inc（excess の隣）", src(["inc : x ? x + 1", "pr : x y ? y", "inc (pr 1) 5 6 inc"]), "G12(a)"],
 	// 穴と穴の部分適用の `… 5 inc` は、合成を適用の畳み込みにして通る側（上の「法則で変わった」の行）へ移した。
@@ -1528,9 +1557,10 @@ law("同じ形で2か所から呼んでも実体は1つ", () => {
 	return out;
 });
 // R24：同じ綴り {say:L other:N} でも、本体の根が違う関数を渡したら別の実体（鍵に関数の出どころが入る）。m3 の say は
-// 本体の根が点なし（L）なので、`say 21` は未知になる。m の実体を先に作っても、m3 の答えが m の答えに化けない。
+// 本体の根が未知（`[,] x`）なので、`say 21` は未知になる。m の実体を先に作っても、m3 の答えが m の答えに化けない。前は本体の
+// 根が点なし（L）の `say : x ? [+ x]` で見ていたが、根が L の関数は G16（R33）になった。
 law("本体の根が違う関数は別の実体", () => {
-	const M3 = ["m3 :", "\tsay : x ? [+ x]", "\tother : 1", ""];
+	const M3 = ["m3 :", "\tsay : x ? [,] x", "\tother : 1", ""];
 	const out = [];
 	const s = src([...M, ...M3, "a : [say] ? say 21", "a m", "a m3"]);
 	const k3 = lastKind(s);
@@ -1669,7 +1699,8 @@ const chain = (N) => {
 };
 const MIX = ["inc : x ? x + 1", "q :", "\tk : inc", "\t5", ""]; // 欄と値の混ざったブロック。中身に関数が見える
 const SPREAD_REST = "f : [~r] ? r~";
-const AF1 = ["g : [say] ? say 1", "f : [x ~xs] ? [z ? hh1 z]"];
+// f の本体は字下げのブロック（下の「直した 仮置きの上の無名の関数」の注）。
+const AF1 = ["g : [say] ? say 1", "f : [x ~xs] ?", "\t[z ? hh1 z]", ""];
 const AF1_HH1 = "hh1 : y ? (g [say : [w ? f [1 2]]]) y";
 const AF1_KK = "kk : y ? f [1 2]";
 
@@ -1725,7 +1756,11 @@ const checkRefusedRows = [
 	// 2項以上の条件は今までどおり解くので、実体の本体の門（G1）で名指しする。
 	["守り 2項の条件は実体を作る", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "u : x ?", "\tt [1 2] : 1", "\t2", ""]), "G1", [["t", "[N…]"]]],
 	// 直した（反証 F1）：無名の素の関数の本体の根が、外の関数の仮置きの上で決まり、欄として別の実体へ渡っても、仮置きが
-	// 外れたら直る。行の順（kk と hh1）に依らず hh1 の行で G7。
+	// 外れたら直る。行の順（kk と hh1）に依らず hh1 の行で G7。前の f は `f : [x ~xs] ? [z ? hh1 z]` だったが、実体の本体の根が
+	// 裸の関数なので G16（R33）に当たり、F1 の直しを戻しても G16 で断られて、この2行は空振りしていた（確かめ 2026-10-22。
+	// `[,] [z ? hh1 z]` も合成で L なので G16）。だから f の本体を字下げのブロックにした：ブロックの本体の根は L にならない（今は、
+	// R33 の R の所・§5 Q35）ので G16 に当たらず、前と同じ道（f の実体が仮置きを読まれて外れる）を通る。F1 の直しを戻すと、kk が
+	// 先の行が通る（確かめた）。ブロックの本体の根の読みが決まって G16 に当たるようになったら、この2行は別の形に替える。
 	["直した 仮置きの上の無名の関数（kk が先）", src([...AF1, AF1_KK, AF1_HH1]), "G7"],
 	["守り 仮置きの上の無名の関数（hh1 が先。直す前も G7）", src([...AF1, AF1_HH1, AF1_KK]), "G7"],
 	["直した 仮置きの上の無名の関数（f の中）", src(["g : [say] ? say 1", "f : [x ~xs] ? [z ? (g [say : [y ? f [1 2]]]) z]", "f [1 2]"]), "G7", [["f", "[N…]"]]],
@@ -1985,22 +2020,25 @@ checkRefused(
 // 穴：変異で壊しても落ちなかった所（途中で未知になった後の括りの関数・合成の頭の括りの関数の根が A でない k = n・
 // k > n・足りない・後ろの括りの関数のアリティが2以上）。
 
-const PA = "pa : [x ~xs] ? [+ x]"; // 実体の根が L（未知）
-const HL = "hl : [x ~xs] ? inc"; // 実体の根が L（未知）
+// 頭の根が A でない関数は、前は本体の根が L の物（`pa : [x ~xs] ? [+ x]`・`hl : [x ~xs] ? inc`・`adder : m ? [+ m]`・
+// `pu : [x ~xs] ? [+ x]`）で見ていた。根が L の関数と実体は G16（R33）になったので、根が未知の `[,] …` で見る。pa と hl は
+// 未知を受けても（`inc pa bad [1 2]`）根が未知のままで門に当たらないよう、仮引数を並びに置かない（`[,] x` は x が未知なら G7）。
+const PA = "pa : [x ~xs] ? [,] 1"; // 実体の根が未知
+const HL = "hl : [x ~xs] ? [,] 2"; // 実体の根が未知
 const BAD = "bad : [y ~ys] ? [+ 1] _ _";
 const TL = "tl : [y ~ys] ? ys";
 const TR = "tr : [x ~xs] ? xs 1";
 const INC = "inc : x ? x + 1";
 const DOUBLE = "double : x ? x * 2";
-const ADDER = "adder : m ? [+ m]"; // 本体の根が L（§5 Q21）
+const UU = "uu : m ? [,] m"; // 本体の根が未知（前は adder : m ? [+ m]、§5 Q21）
 
 const composePasses = [
 	["直した pa tl [1 2] の根は未知", src([PA, TL, "pa tl [1 2]"]), "(apply (compose pa tl) [1 2])", "未知"],
 	["直した pa tl [1 2] の tl は未知を受けて実体を作る", src([PA, TL, "pa tl [1 2]"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 1 }],
-	["直した adder tl 1 の tl は未知を受けて実体を作る", src([ADDER, TL, "adder tl 1"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 1 }],
-	["穴 inc adder tl 1（途中で未知になった後の括りの関数は未知を受ける）", src([INC, ADDER, TL, "inc adder tl 1"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 2 }],
-	["穴 inc adder tl 1 の根は未知", src([INC, ADDER, TL, "inc adder tl 1"]), "(apply (compose inc adder tl) 1)", "未知"],
-	["穴 pu inc [1]（合成の頭の括りの関数の実体の根が A でない k = n）", src([INC, "pu : [x ~xs] ? [+ x]", "pu inc [1]"]), "(apply (compose pu inc) [1])", "未知"],
+	["直した uu tl 1 の tl は未知を受けて実体を作る（前は adder tl 1）", src([UU, TL, "uu tl 1"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 1 }],
+	["穴 inc uu tl 1（途中で未知になった後の括りの関数は未知を受ける）", src([INC, UU, TL, "inc uu tl 1"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 2 }],
+	["穴 inc uu tl 1 の根は未知", src([INC, UU, TL, "inc uu tl 1"]), "(apply (compose inc uu tl) 1)", "未知"],
+	["穴 pu inc [1]（合成の頭の括りの関数の実体の根が A でない k = n）", src([INC, "pu : [x ~xs] ? [,] x", "pu inc [1]"]), "(apply (compose pu inc) [1])", "未知"],
 	["穴 pr inc [1] 2 3（合成の頭の最後の仮引数が裸の k > n は余り）", src([INC, "pr : [x ~xs] y ? y", "pr inc [1] 2 3"]), "(apply (compose pr inc) (construct [1] 2 3))", "A", { excess: true }],
 	["穴 head inc 5 6 7 double（合成の頭の最後の括りが残りを受ける）", src([INC, DOUBLE, "head : [x ~xs] ? x", "head inc 5 6 7 double"]), "(apply double (apply (compose head inc) (construct 5 6 7)) ·rev)", "A"],
 	["穴 pair inc [1]（合成の頭の括りの関数に足りない）", src([INC, "pair : [a ~as] [b ~bs] ? a + b", "pair inc [1]"]), "(apply (compose pair inc) [1])", "L"],
@@ -2039,14 +2077,14 @@ const composePasses = [
 	["守り [,] inc 5（後ろが素の関数なら未知のまま）", src([INC, "[,] inc 5"]), "(apply (compose [,] inc) 5)", "未知"],
 ];
 const composeRefused = [
-	["直した pa bad [1 2]（頭の括りの関数の実体の根が L）", src([PA, BAD, "pa bad [1 2]"]), "G5", [["bad", "U"]]],
-	["直した hl bad [1 2]（頭の括りの関数の実体の根が L）", src([INC, HL, BAD, "hl bad [1 2]"]), "G5", [["bad", "U"]]],
-	["直した adder bad 1（頭の素の関数の本体の根が L、k = n）", src([ADDER, BAD, "adder bad 1"]), "G5", [["bad", "U"]]],
-	["直した 5 adder bad（逆適用の右の合成）", src([ADDER, BAD, "5 adder bad"]), "G5", [["bad", "U"]]],
-	["直した t : y ? adder bad y（素の関数の本体の中）", src([ADDER, BAD, "t : y ? adder bad y"]), "G5", [["bad", "U"]]],
+	["直した pa bad [1 2]（頭の括りの関数の実体の根が未知）", src([PA, BAD, "pa bad [1 2]"]), "G5", [["bad", "U"]]],
+	["直した hl bad [1 2]（頭の括りの関数の実体の根が未知）", src([INC, HL, BAD, "hl bad [1 2]"]), "G5", [["bad", "U"]]],
+	["直した uu bad 1（頭の素の関数の本体の根が未知、k = n。前は adder bad 1）", src([UU, BAD, "uu bad 1"]), "G5", [["bad", "U"]]],
+	["直した 5 uu bad（逆適用の右の合成）", src([UU, BAD, "5 uu bad"]), "G5", [["bad", "U"]]],
+	["直した t : y ? uu bad y（素の関数の本体の中）", src([UU, BAD, "t : y ? uu bad y"]), "G5", [["bad", "U"]]],
 	["直した [' 0] bad fs（頭が段18 の点なしに1項）", src([INC, DOUBLE, "fs : inc , double", BAD, "[' 0] bad fs"]), "G5", [["bad", "U"]]],
-	["穴 inc adder tr 1（途中で未知になった後の括りの関数は未知を受ける）", src([INC, ADDER, TR, "inc adder tr 1"]), "G7", [["tr", "U"]]],
-	["穴 pu inc [1] double（合成の頭の括りの関数の実体の根が A でない節が対に入る）", src([INC, DOUBLE, "pu : [x ~xs] ? [+ x]", "pu inc [1] double"]), "G2(a)"],
+	["穴 inc uu tr 1（途中で未知になった後の括りの関数は未知を受ける）", src([INC, UU, TR, "inc uu tr 1"]), "G7", [["tr", "U"]]],
+	["穴 pu inc [1] double（合成の頭の括りの関数の実体の根が A でない節が対に入る）", src([INC, DOUBLE, "pu : [x ~xs] ? [,] x", "pu inc [1] double"]), "G2(a)"],
 	["穴 pr inc [1] 2 3 double（合成の頭の余りが対に入る）", src([INC, DOUBLE, "pr : [x ~xs] y ? y", "pr inc [1] 2 3 double"]), "G12(a)"],
 	["穴 pair inc [1] double 5（足りない合成が適用の頭）", src([INC, DOUBLE, "pair : [a ~as] [b ~bs] ? a + b", "pair inc [1] double 5"]), "G2(b)"],
 	// 足りたか決まらない頭でも、後ろの括りの関数は未知を受けて実体を作る（§5 Q27。前は実体を作らずに通していた）。
@@ -2067,7 +2105,7 @@ law("頭の結果が未知なら、h g a と inc h g a で後ろの括りの関�
 	const heads = [
 		["pa", [PA], "[1 2]"],
 		["hl", [HL], "[1 2]"],
-		["adder", [ADDER], "1"],
+		["uu", [UU], "1"],
 		["[' 0]", [DOUBLE, "fs : inc , double"], "fs"],
 		// 足りたか決まらない頭（§5 Q27。合成を適用の畳み込みにして、ほかの頭と同じになった）。前は `[+]`・`[|]` に1項で見ていたが、
 		// R31 で数1つは値になったので、アリティの分からない `[,]` と、中身の見えない A を1項で畳む `[&]`（R31 の1項で未知）に替えた。
@@ -2121,9 +2159,9 @@ const FOLD_DEFS = [
 	DOUBLE,
 	"add : x y ? x + y",
 	"pr : x y ? y",
-	"pq : x y ? inc",
+	"pq : x y ? [,] y", // 本体の根が未知（前は `? inc` で根が L。根が L の関数は G16、R33）
 	"f3 : a b c ? c",
-	ADDER,
+	UU, // 前は ADDER（本体の根が L）
 	"head : [x ~xs] ? x",
 	TL,
 	BAD,
@@ -2203,7 +2241,7 @@ law("合成は適用の繰り返し：f g x と g (f x) は同じ読み", () => 
 		["[' 0]", "[[1 2] [3 4]]"],
 		["pt", "[1] 2"],
 	];
-	const LATER = ["inc", "double", "[+ 1]", "[-_]", "i", "[* 2,]", "[+]", "add", "adder", "pq", "(pr 1)", "(pq 1)", "[add _ 10]", "([f3 _ _ 3] 1)", "head", "tl", "bad", "pb", "(pt [1])", "[' 0]"];
+	const LATER = ["inc", "double", "[+ 1]", "[-_]", "i", "[* 2,]", "[+]", "add", "uu", "pq", "(pr 1)", "(pq 1)", "[add _ 10]", "([f3 _ _ 3] 1)", "head", "tl", "bad", "pb", "(pt [1])", "[' 0]"];
 	const LATER2 = ["inc", "[+ 1]", "(pr 1)", "[add _ 10]", "head", "tl", "bad", "[' 0]"];
 	const out = [];
 	let nA = 0;
@@ -2382,6 +2420,170 @@ try {
 	if (e.message.includes("輪：`a` → `b` → `a`")) ok("Q30 直接の輪の道筋（`a` → `b` → `a`）");
 	else fail("Q30 直接の輪の道筋", e.message);
 }
+
+// ---------------------------------------------------------------------------
+// §5 Q21：裸の関数を返す（2026-10-21、R33・G16）
+// ---------------------------------------------------------------------------
+//
+// `?` で作る関数（名前の定義の右辺・括った `[x ? …]`・本体の中の局所の定義や欄の `?`）の本体の根が裸の関数（L）なら、その
+// `?` の所で G16 で断る。呼ばれない定義でも断る（本体そのものがコードにできない）。関数を返すなら `$` を明示する（利用者
+// 2026-10-21「adder が返すべきは [+ m] じゃなくて $[+ m]」、`$` は書く人が書く）。カリー化はシステムの側が持つので、入れ子の
+// `?` も断る（主の Claude の「入れ子の `?`（`add : x ? y ? x + y`）も、裸の関数を返す形として断る？」に、利用者 2026-10-21
+// 「実際には断る形なんだよ。 / 理由は、カリー化はシステムの側で持つべき。」）。
+// 括りの関数は、実体の本体の根が L なら、呼んだ行で関数と形を名指しする（R25 と同じ）。呼ばれない括りの関数は本体を読まない。
+// 根は解き終えた所で見る（resolve.js の bareReturnGate の注）：仮置きの上でだけ根が L になる関数は断らず、どの定義から解いても
+// 同じ答えになる。根の綴りが区間なら、被演算子の種類が未知で根の種類が未知でも断る（綴りは仮置きに依らない。2026-10-22）。
+// `$` で包んだ入れ子の `?`（`add : x ? $[y ? x + y]`。手で書いたカリー化）は、通すか決まっていないので G17 で断る（§5 Q35）。
+const BARE = [
+	// 当たる形
+	["区間の点なし adder : m ? [+ m]", ["adder : m ? [+ m]"]],
+	["区間の点なしを呼ぶ行が先", ["adder 5", "adder : m ? [+ m]"]],
+	["貪欲な点なし f : x ? [* 2,]", ["f : x ? [* 2,]"]],
+	["前置の点なし f : x ? [-_]", ["f : x ? [-_]"]],
+	["畳む点なし f : x ? [+]", ["f : x ? [+]"]],
+	["関数の名前 f : x ? inc", [INC, "f : x ? inc"]],
+	["自分の名前 f : x ? f", ["f : x ? f"]],
+	["足りない適用 f : x ? add x", ["add : a b ? a + b", "f : x ? add x"]],
+	["合成 f : x ? inc double", [INC, DOUBLE, "f : x ? inc double"]],
+	["恒等射 f : x ? !_", ["f : x ? !_"]],
+	["恒等射の名前 f : x ? i（i : !_）", ["i : !_", "f : x ? i"]],
+	["穴 f : x ? add !_ x（穴の書き換えは関数）", ["add : a b ? a + b", "f : x ? add !_ x"]],
+	["入れ子の ? add : x ? y ? x + y", ["add : x ? y ? x + y"]],
+	["入れ子の ? を呼ぶ add 1 2", ["add : x ? y ? x + y", "add 1 2"]],
+	["括りで包んだ定義 f : [x ? inc]", [INC, "f : [x ? inc]"]],
+	["括った ? を行で呼ぶ [x ? inc] 5", [INC, "[x ? inc] 5"]],
+	["本体の中の局所の定義の ?", [INC, "f : x ?", "\tg : y ? inc", "\tx", ""]],
+	["構造体の欄の ?", [INC, "m :", "\tsay : x ? inc", "\tother : 1", ""]],
+	["既定値のある関数 go : … ? inc", [INC, "go :", "\t\tys", "\t\tzs : 3", "\t? inc"]],
+	["相互再帰 f : x ? g（g : y ? f y）", ["f : x ? g", "g : y ? f y", "g 1"]],
+	["相互再帰（g が先）", ["g : y ? f y", "f : x ? g", "g 1"]],
+	// 自分を呼ぶ再帰で仮置きが外れた関数（§3.4 の根は未知）でも、解き終えた木の根が裸の関数なら断る（実装する人の読み、断る側）。
+	["仮置きが外れても木の根が L f : x ? [y ? f y]", ["f : x ? [y ? f y]"]],
+	// 区間の綴り（2026-10-22、確かめで見つかった）：被演算子が A でない区間は種類が未知（pointfreeOf。当てた結果は §5 Q22）だが、
+	// §2 の表では区間は被演算子に依らず L で、綴りは関数。前は根の種類が未知で黙って通っていた。
+	["区間の被演算子の種類が未知 ww : x ? [+ [uu x]]", ["uu : x ? [,] x", "ww : x ? [+ [uu x]]"]],
+	["区間の被演算子が関数 q : x ? [+ inc]", [INC, "q : x ? [+ inc]"]],
+	["左の被演算子の区間 q : x ? [inc *]", [INC, "q : x ? [inc *]"]],
+	["貪欲な区間 q : x ? [+ inc ,]", [INC, "q : x ? [+ inc ,]"]],
+	["1行の括りに包んだ区間 q : x ? [[+ inc]]", [INC, "q : x ? [[+ inc]]"]],
+	// 前は「仮置きの上でだけ根が L」で通していた形（h は k の仮置き A の上で `[+ A]` の L、確定した値の上では未知）。綴りで断るので、
+	// どの定義から解いても G16。
+	["区間の相互再帰（h が先）", ["h : x ? [+ [k x]]", "k : x ? h x", "k 1"]],
+	["区間の相互再帰（k が先）", ["k : x ? h x", "h : x ? [+ [k x]]", "k 1"]],
+	["区間の自己再帰 r : k ? [+ [r k]]（前は通っていた）", ["r : k ? [+ [r k]]"]],
+	// 素の関数の本体で、名前の欄の関数を引いて返す（R26 で引いた物は L）。括りの関数の実体の `c : [~r] ? r ' say`（BARE_INST）と同じく、
+	// 構造体に入った関数を返す形は利用者に確かめていない（U 2026-10-18 は構造体に入った関数を「完全な裸」と分ける。R33 の R の所）。
+	// 断る側に置いた。番号で引いた物・List の要素で受けた物は、形の見え方で未知になって通る（下の「今は」）。
+	["名前の欄の関数を引いて返す q : x ? m ' say", [...M, "q : x ? m ' say"]],
+	["値の定義の欄の関数を引いて返す q : x ? st ' g", [INC, "st : [g : inc]", "q : x ? st ' g"]],
+];
+const BARE_INST = [
+	// 括りの関数の実体（呼んだ行で、関数と形を名指しする）
+	["括りの関数の実体 gi 1 2", [INC, "gi : [x ~xs] ? inc", "gi 1 2"], [["gi", "[N…]"]]],
+	["括りの関数の実体を呼ぶ行が定義より先", ["gi 1 2", INC, "gi : [x ~xs] ? inc"], [["gi", "[N…]"]]],
+	["括りの関数の部分適用 (tg 1) 2 3", [INC, "tg : [x ~xs] y ? inc", "(tg 1) 2 3"], [["tg", "N A"]]],
+	["欄の関数を返す h [g : inc]", [INC, "h : [g] ? g", "h [g : inc]"], [["h", "{g:L}"]]],
+	["素の関数の本体から呼ぶ t : y ? gi [y]", [INC, "gi : [x ~xs] ? inc", "t : y ? gi [y]"], [["gi", "A"]]],
+	["実体の中の実体 p : [x] ? [y ? p [y]]", ["p : [x] ? [y ? p [y]]", "p [1]"], [["p", "N"], ["p", "A"]]],
+	["' で欄の関数を引いて返す c : [~r] ? r ' say", [...M, "c : [~r] ? r ' say", "c m"], [["c", "{say:L other:N}"]]],
+];
+for (const [name, lines] of BARE) checkRefused(`Q21 ${name}`, src(lines), "G16");
+for (const [name, lines, inst] of BARE_INST) checkRefused(`Q21 ${name}`, src(lines), "G16", inst);
+// G17（§5 Q35）：`$` で包んだ入れ子の `?`。綴りで見るので、括りの関数の実体でも、呼ぶ行が先でも同じ。
+const CURRY = [
+	["$ で包んだ入れ子の ? add : x ? $[y ? x + y]", ["add : x ? $[y ? x + y]"], null],
+	["$ で包んだ入れ子の ? を呼ぶ行が先", ["add 1 2", "add : x ? $[y ? x + y]"], null],
+	["$ で包んだ括りの関数の ? q : x ? $[[y] ? y]", ["q : x ? $[[y] ? y]"], null],
+	["括りの関数の実体の根が $ で包んだ入れ子の ?", ["gi : [x ~xs] ? $[y ? y]", "gi 1 2"], [["gi", "[N…]"]]],
+];
+for (const [name, lines, inst] of CURRY) checkRefused(`Q35 ${name}`, src(lines), "G17", inst || undefined);
+// 入れ子の `?` で断ったときの言い分は、`$` を勧めず、仮引数を並べる書き方だけを勧める（U〔答え〕10-21 16:02「理由は、カリー化は
+// システムの側で持つべき。 / ユーザーが明示はね…」）。ほかの裸の関数は `$` を先に勧める（U 10-21 12:50）。
+{
+	const msgOf = (lines) => {
+		try {
+			resolve(src(lines));
+			return "通った";
+		} catch (e) {
+			return `${e.gate || e.reason} ${e.message}`;
+		}
+	};
+	const rows = [
+		["入れ子の ? の言い分は仮引数を並べる書き方だけ", msgOf(["add : x ? y ? x + y"]), (m) => m.startsWith("G16 ") && m.includes("仮引数を並べて書きます") && !m.includes("`$` を明示")],
+		["区間の言い分は $ を先に勧める", msgOf(["adder : m ? [+ m]"]), (m) => m.startsWith("G16 ") && m.includes("`$` を明示して値にします（`$[+ m]`）")],
+		// 定義より前の行の G12(b)（下の「今は」）は、根が L なら定義の行の G16 を指す（確かめ 2026-10-22）。
+		["定義より前の adder 5 3 の G12(b) は、定義の行の G16 を指す", msgOf(["adder 5 3", "adder : m ? [+ m]"]), (m) => m.startsWith("G12(b) ") && m.includes("G16") && m.includes("R33")],
+	];
+	for (const [name, m, good] of rows) {
+		total++;
+		if (good(m)) ok(`Q21 言い分 ${name}`);
+		else fail(`Q21 言い分 ${name}`, m);
+	}
+}
+// 数え方（INSTANCE_DEPTH_MARGIN の注の2）：G16 に当たる入れ子の `?` の後ろで呼んだ括りの関数の実体は、最後の木に無いので、確定した
+// 実体の総数に数えない。前は前段（根の種類を解く所）で G16 を見ないので数えてしまい、p の実体がちょうど上限（512）のとき、G16 の
+// 代わりに総数の G7 を言った（確かめ 2026-10-22。どちらの行の順でも）。素の関数の本体・値の定義・実体の本体のどこでも同じ。
+{
+	const P512 = `a : ${[...Array(512).keys()].map((i) => `(p [k${i} : 1])`).join(" , ")}`;
+	const P = "p : [s] ? 1";
+	const rows = [
+		["素の関数の本体（t が先）", [P, INC, "t : x ? ([z ? inc] 1) , (p [m : 1])", P512], "G16", null],
+		["素の関数の本体（a が先）", [P, INC, P512, "t : x ? ([z ? inc] 1) , (p [m : 1])"], "G16", null],
+		["値の定義", [P, INC, "v : ([z ? inc] 1) , (p [m : 1])", P512], "G16", null],
+		["局所の定義", [P, INC, "t : x ?", "\tk : y ? inc", "\t(p [m : 1]) , 1", "", P512], "G16", null],
+		["実体の本体の入れ子の ?", [P, INC, "bad : [y] ? ([z ? inc] 1) , 1", "t : x ? (bad [y : 1]) , (p [m : 1])", P512], "G16", [["bad", "{y:N}"]]],
+		["入れ子の ? の本体が区間の綴り", [P, INC, "t : x ? ([z ? [+ inc]] 1) , (p [m : 1])", P512], "G16", null],
+		// 綴りで断る実体の根（区間・`$` で包んだ入れ子の `?`）は、根の種類が未知でも門に当たる実体に数える（instRootOf）。
+		["実体の本体が区間の綴り", [P, INC, "bad : [y] ? [+ inc]", "t : x ? (bad [y : 1]) , (p [m : 1])", P512], "G16", [["bad", "{y:N}"]]],
+		["実体の本体が $ で包んだ入れ子の ?", [P, "bad : [y] ? $[z ? z]", "t : x ? (bad [y : 1]) , (p [m : 1])", P512], "G17", [["bad", "{y:N}"]]],
+	];
+	for (const [name, lines, want, inst] of rows) checkRefused(`Q21 数え方 ${name}`, src(lines), want, inst || undefined);
+}
+// 今は：断る行が2つ以上なら行の順に言う（今までどおり）ので、G16 の定義より前の行で根が L の関数を k > n で呼ぶと、その行の
+// G12(b) を言う。定義が先なら G16。呼ぶ行を根に置く（`adder 5`）なら、断るのは定義の行だけで、行の順に依らず G16（上の行）。
+checkRefused("Q21 今は 定義より前の adder 5 3 は G12(b)", src(["adder 5 3", "adder : m ? [+ m]"]), "G12(b)");
+checkRefused("Q21 定義が先なら adder 5 3 の前に G16", src(["adder : m ? [+ m]", "adder 5 3"]), "G16");
+// 当たらない形
+const BARE_PASSES = [
+	["$ で値にした関数 adder : m ? $[+ m]", src(["adder : m ? $[+ m]", "adder 5"]), "(apply adder 5)", "A"],
+	["$ で値にした関数の定義の行", src(["adder : m ? $[+ m]"]), "(: adder (? [m] $[+ m]))", null],
+	["$inc を返す f : x ? $inc", src([INC, "f : x ? $inc", "f 5"]), "(apply f 5)", "A"],
+	// 本体の根が未知の関数は G16 に当たらない（足りた適用は未知、k > n は G12(b)）。
+	["本体の根が未知 use : f x ? @f x", src(["use : f x ? @f x"]), "(: use (? [f x] (apply @f x)))", null],
+	["本体の根が未知の use $inc 5", src(["use : f x ? @f x", "use $inc 5"]), "(apply use (construct $inc 5))", "未知"],
+	// 値の定義は関数を返す本体ではない。
+	["値の定義 p : inc", src([INC, "p : inc"]), "(: p inc)", null],
+	["値の定義 x2 : !_", src(["x2 : !_"]), "(: x2 !_)", null],
+	["値の定義の欄 st : [g : inc]", src([INC, "st : [g : inc]"]), "(: st [g : inc])", null],
+	// 呼ばれない括りの関数は本体を読まない（R25）。
+	["呼ばれない括りの関数 gi : [x ~xs] ? inc", src([INC, "gi : [x ~xs] ? inc"]), "(: gi (? [[x ~xs]] (defer {inc})))", null],
+	// 括りの関数は渡された物で根が決まる：数を渡せば根は値。
+	["数を受けた h [g : 1]", src(["h : [g] ? g", "h [g : 1]"]), "(: h (? [[g]] (inst {g:N} g)))", null, { at: 0 }],
+	// 関数を本体の中で呼んだ結果は関数でない。
+	["本体で関数を呼ぶ f : x ? inc x", src([INC, "f : x ? inc x"]), "(: f (? [x] (apply inc x)))", null],
+	// 今は：字下げのブロックの本体は、全部の行（枝なら値の側）の根が A のときだけ A で、ほかは未知（§3.4）。根が L になることは
+	// 無いので、最後の行や枝の値が裸の関数でも G16 に当たらない。ブロックの本体の根を行からどう決めるか（手続きの最後の行・枝の
+	// 値）は §3.4 の外で、決まっていない（R33 の R の所）。決まったら、この行を見直す。
+	["今は 字下げのブロックの本体の行が関数", src([INC, "f : x ?", "\tinc", ""]), "(: f (? [x] (block inc)))", null],
+	// `$` で値にした部分適用（D type_system.md の `g : x ? $(add3 x + 1)` と同じ形）は G16 にも G17 にも当たらない。
+	["$ で値にした部分適用 q : x ? $[add x]", src(["add : a b ? a + b", "q : x ? $[add x]", "q 1"]), "(apply q 1)", "A"],
+	// 今は（§5 Q35）：次の形は、裸の関数を返すのに根が L にならないので G16 に当たらない。どれも通すか決まっていない。決まったら、
+	// この行を見直す。
+	// - 仮置きの上でだけ根が L になる関数（h は k の仮置き A の上では引いた区間で L、確定した値の上では未知。区間を欄に入れて引くと、
+	//   引いた物は被演算子が未知の区間で、種類が未知になる）。どの定義から解いても断らない（仮置きの途中で断ると、解く順で割れる）。
+	["今は 区間を欄に入れて引いて返す（h が先）", src(["h : x ? [s : [+ [k x]]] ' s", "k : x ? h x", "k 1"]), "(apply k 1)", "未知"],
+	["今は 区間を欄に入れて引いて返す（k が先）", src(["k : x ? h x", "h : x ? [s : [+ [k x]]] ' s", "k 1"]), "(apply k 1)", "未知"],
+	["今は 区間を欄に入れて引いて返す h の行（k が先）", src(["k : x ? h x", "h : x ? [s : [+ [k x]]] ' s", "k 1"]), "(: h (? [x] (' [s : [+ [k x]]] s)))", null, { at: 1 }],
+	// - 1行の条件の値が関数（段4〜8 の中置は、被演算子が全部 A でなければ未知。§2）。
+	["今は 1行の条件の値が関数 q : x ? x = 0 & inc | double", src([INC, DOUBLE, "q : x ? x = 0 & inc | double"]), "(: q (? [x] (| (& (= x 0) inc) double)))", null],
+	// - 関数を並べた器を返す（`,` は A。D type_system.md は止める側、U 2026-10-18 は構造体に入った関数を「完全な裸」と分ける）。
+	["今は 関数を並べた器を返す q : x ? inc , double", src([INC, DOUBLE, "q : x ? inc , double"]), "(: q (? [x] (, inc double)))", null],
+	// - 番号で引いた関数を返す（要素が混ざった器から番号で引くと、R26 で未知。名前の欄を引くと L で G16）。
+	["今は 番号で引いた関数を返す q : x ? fs ' 0", src([INC, DOUBLE, "fs : inc , double , 3", "q : x ? fs ' 0"]), "(: q (? [x] (' fs 0)))", null],
+	// - 解かない位置（P3：既定値・1項の `:` の左）に書いた `?`。
+	["今は 既定値の中の ? o : [x : [y ? inc]] ? 5", src([INC, "o : [x : [y ? inc]] ? 5"]), "(: o (? [[x : [y ? inc]]] 5))", null],
+];
+for (const [name, s, want, kind, extra] of BARE_PASSES) checkPass(`Q21 ${name}`, s, want, kind, extra);
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
