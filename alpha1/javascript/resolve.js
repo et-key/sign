@@ -2,12 +2,12 @@
  * 余積（空白）の解決（alpha1 の意味解析の最初の段）。
  *
  * 仕様は alpha1/docs/coproduct_spec.md（設計 workflow の最終版）。ここに書くのは、確信度 91% 以上の規則
- * （§4 の R1〜R30（R18 と R30 は 2026-10-21 に廃止）、§1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
+ * （§4 の R1〜R32（R18 と R30 は 2026-10-21 に廃止）、§1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
  * 門（G1〜G15（G14 は 2026-10-21 に廃止）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
  * 答えが出たときに、その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
  *
  * 入り口は `resolve(source)` の1つで、`{ trees, diagnostics }` を返す。trees は1行に1つの木、diagnostics は
- * 止めない診断（information の undefined-name）。門に当たったら OperationError を投げる（reason は §6.2 の名前、
+ * 止めない診断（information の undefined-name と pointfree-not-folded）。門に当たったら OperationError を投げる（reason は §6.2 の名前、
  * spec は `…§6.2 G2(b)` のように門の番号まで、`gate` に門の番号）。
  *
  * **木の書き方（`show`）**。§1.3・§6.3 の S 式に合わせ、無い所はここで決めた。
@@ -149,6 +149,10 @@ const BLOCK_TAG = { '"BRACKET_"': "bracket", '"ABS_"': "abs", '"NORM_"': "norm",
 
 // 値の演算子の印（§2「A の核に前置 `-` `!` `!!`・後置 `!`」）。
 const VALUE_PREFIX = new Set(["-", "!", "!!"]);
+
+// 畳む2項の点なしの記号（R31、pointfreeOf）。算術（`^` だけ右から）・ビット・論理・比較。`<<`・`>>`・get・set・範囲・`!=`・
+// `!==`・中置の `#` は畳まず、素の2引数の関数として読む（R32、§5 Q34 の答え）。
+const FOLD_SYMS = new Set(["+", "-", "*", "/", "%", "^", "||", ";;", "&&", "|", "&", ";", "<", "<=", "=", ">=", ">", "=="]);
 
 function makeCore(w) {
   if (Array.isArray(w)) {
@@ -623,7 +627,11 @@ function paramInChain(scope, name) {
 //     {type:'pattern', n, label, lastBracket, base, bound, instantiate}  括りの関数の部分適用（patternPartial）。n は残りの
 //       仮引数の数、base は元の括りの関数、bound は当てた物の desc（前から）。instantiate は bound を前に足して base の
 //       実体を作る。鍵は idKey ではなく base の出どころと当てた物の形（internPartial）
-//     {type:'pfUnary'|'pfGreedyUnary'|'pfGreedyBinary'|'pfUnknownArity', pointfree:true}  点なし（§2、pointfreeOf の注）
+//     {type:'pfUnary'|'pfGreedyUnary'|'pfUnknownArity', pointfree:true}  点なし（§2、pointfreeOf の注）
+//     {type:'pfFold', pointfree:true, sym}  畳む2項の点なし（`[+]`・`[&]`・`[<]` など、R31）。sym は書いた記号
+//     {type:'pfBinary', pointfree:true, sym, n, root}  畳まない2項の点なし（`[<<]`・`[']`・`[!=]` など、R32）。素の2引数の
+//       関数と同じに読む。n は残りの口の数（書いたままなら 2、1つ当てた足りない適用なら 1）、root は足りた適用の種類（値を
+//       返す演算は 'A'、get・set は 'U'）
 //     {type:'pfPick', pointfree:true, sym, key}  段18 の点なし。key は `[' 0]`・`[' say]` の鍵（R26）、ほかは null
 //     {type:'compose', fns, partial}  合成（`||f||` は f の後に norm を並べた合成、R27）
 //     {type:'id'}  穴 `!_` 1つ（恒等射、§3.5）。並び全体を受ける
@@ -804,6 +812,11 @@ function fnKey(fn) {
       return canonKey(internCompose(fn));
     case "pfPick":
       return `pfPick:${fn.sym}:${fn.key ? JSON.stringify(fn.key) : ""}`;
+    case "pfBinary":
+      // 種類は残りの口の数と足りた適用の種類だけで決まる（記号に依らない）。type だけを鍵にすると、`[<<]`（A）と `[']`（未知）を
+      // 括りの関数に欄で渡したときに実体を分け合い、先に解いた方の答えをもう片方が黙って使う。記号は鍵に入れないので、実体の
+      // 本体から出る言い分にも記号を書かない（applyKind の G12(b)）。
+      return `pfBinary:${fn.n}:${fn.root}`;
     case "other":
       // 既定値のある関数は、書いた `_` で G15、`!_` で仮引数の数 n の穴（tryHole）になり、ほかのアリティの分からない関数
       // （`gx : a ~y ? a`）と振る舞いが分かれる。鍵を `other` 1つにすると、括りの関数に欄で渡したときに実体を分け合い、
@@ -1043,6 +1056,21 @@ function reportUndefined(name, ctx) {
     reason: "undefined-name",
     name,
     message: `\`${name}\` は定義されていません。値として読み、値は値の段で決めます（§4 R21）。`,
+  });
+}
+
+// 畳まない2項の点なし（R32）を読んだ所。「おすすめは出来ない」（U〔答え〕2026-10-21 10:52「同じに読んでいいけど、おすすめは
+// 出来ないという方向で良いと思う。」）を、断らずに information で見せる（この形と文面は決定の規則、主の Claude の案。§4 R32 の
+// R の所）。書いた点なし1つにつき1回（row は括りの中の行で、書いた所ごとに1つ）。
+// 実体ごとに本体を読み直しても、同じ書いた所なら出し直さない。読まない本体（R25）では出さない（undefined-name と同じ）。
+function reportNotFolded(row, sym, ctx) {
+  if (!ctx.diag || ctx.F.reportedPf.has(row)) return;
+  ctx.F.reportedPf.add(row);
+  ctx.diag.push({
+    severity: "information",
+    reason: "pointfree-not-folded",
+    name: `[${sym}]`,
+    message: `\`[${sym}]\` は畳めない2項の点なしなので、素の2引数の関数として読みました。おすすめはしません（§4 R32、§5 Q34）。`,
   });
 }
 
@@ -2535,10 +2563,22 @@ function blockScope(rows, ctx) {
 // 点なしの括り（§2）。返す物は desc、点なしでなければ null。
 //
 // 種類（§3.4 の行）：
-// - pfUnary（`[+ 1]` と前置・後置の点なし `[-_]`・`[!_]` など）・pfGreedyUnary（`[* 2,]` など）・pfGreedyBinary（`[+]` だけ）。
-// - pfUnknownArity：アリティの分からない点なし。`[|]`・`[&]`・`[,]` と、`[+]` 以外の両側の欠けた点なし（`[*]`・
-//   `[-]`・`[<]`・`[']` など）。§3.4 の貪欲な2項の行は `[+]` だけを挙げ（出どころの U 08-27 03:28 も `[+]` の話）、
-//   表の頭は「挙げた形だけを決め、ほかは「未知」にする」なので、`[*] 2 3` の種類は未知にする。点なしなので G10 は当たる。
+// - pfUnary（`[+ 1]` と前置・後置の点なし `[-_]`・`[!_]` など）・pfGreedyUnary（`[* 2,]` など、と前置・後置の点なしの写像
+//   `[-_,]`・`[!_,]`・`[!!_,]`・`[_!,]`。U〔答え〕2026-10-21 10:09「前置・後置の点なしにも , を付けて、[* 2,] と同じ要素ごとの
+//   写像と読む。」）。
+// - pfFold：畳む2項の点なし（R31）。両側の欠けた中置で、記号が FOLD_SYMS のどれか（`[+]`・`[-]`・`[*]`・`[/]`・`[%]`・`[^]`・
+//   `[||]`・`[;;]`・`[&&]`・`[|]`・`[&]`・`[;]`・`[<]`・`[<=]`・`[=]`・`[>=]`・`[>]`・`[==]`）。`[op] x1 … xn` は、`x1 op … op xn`
+//   を演算子表の結合の向きどおりに並べた物と同じ（U〔答え〕2026-10-21 09:15）。前は `[+]` だけが貪欲な2項（pfGreedyBinary）で、
+//   ほかはアリティの分からない点なしだった。種類は applyKind、書いた `_` は markApply。点なしなので G10 は当たる。
+// - pfBinary：畳まない2項の点なし（R32）。両側の欠けた中置で、記号が畳まない物（段12〜22 の `[<<]`・`[>>]`・`[']`・`[@]`・範囲の
+//   `[~]`・`[~+]` など・`[!=]` と、段1〜9 の `[!==]`・中置の `[#]`）。素の2引数の関数と同じに読む（U〔答え〕2026-10-21 10:52
+//   「同じに読んでいいけど、おすすめは出来ないという方向で良いと思う。」）。足りた適用の種類は、値を返す演算なら A、get・set
+//   （`'`・`@`・中置の `#`）は何を引いたか・何をしたかが決まらないので未知（root）。「おすすめは出来ない」は断らずに information
+//   で見せる（reportNotFolded）。足りた適用の種類と information の形は決定の規則（主の Claude の案）。点なしなので G10 は当たる
+//   （1つ当てた部分適用でも、合成の中でも。`add 1` とはここだけ違う）。前は段12〜22 の物がアリティの分からない点なし、段1〜9 の物が
+//   未知の葉（どちらも Q34）だった。
+// - pfUnknownArity：アリティの分からない点なし。`[,]`（U 10-11「[,] ... は、[!__,] と同じ」）だけ。適用の種類は未知で、点なし
+//   なので G10 は当たる。段1〜9 のほかの点なし（`[:]`・`[?]`・片側の欠けた `[| 5]` など）は、今までどおり葉ごと未知（Q19）。
 // - pfPick：段18（`'`・`@`）の片側の欠けた点なし（`[' 0]`・`[@ 0]`）。`[' k]` で k が字面の整数か裸の名前なら、`x ' k` と
 //   同じ射なので、`[' k] x` の適用は `x ' k` と同じ desc にする（R26、§3.4 の段18 の行）。そのために鍵を fn に持たせる。
 //   ほかの形（`[@ 0]`・`[x ']`・鍵が式）は、§2 の `x @ k` と同じく何を引いたか決まらないので未知。A と読むと、
@@ -2559,16 +2599,40 @@ function pointfreeOf(row, ctx) {
     if (term.stage === 18) return { k: "L", fn: { type: "pfPick", pointfree: true, sym: term.sym, key: null } };
     return L(type);
   };
+  // 畳む2項の点なし（R31）。記号は値の段（どの演算で畳むか・比較の畳み込みか）のために持つだけで、種類（applyKind）と実体の
+  // 鍵（fnKey は型の名前だけ）は記号に依らない（どの記号でも同じ種類になる）。
+  const fold = (sym) => ({ k: "L", fn: { type: "pfFold", pointfree: true, sym } });
+  // 畳まない2項の点なし（R32）。root は足りた適用の種類：get・set（段18 の `'`・`@` と、段4 の中置の `#`）は未知、ほかは A。
+  const binary = (sym, root) => {
+    reportNotFolded(row, sym, ctx);
+    return { k: "L", fn: { type: "pfBinary", pointfree: true, sym, n: 2, root } };
+  };
+  // 値の演算子の前置・後置の点なしの項：値の前置の印1つ（`-`・`!`・`!!`）か後置の `!` 1つと、核の書いた `_` だけ（`-_`・`!_`・
+  // `!!_`・`_!`）。
+  const valueMarkUnit = (t) =>
+    !!t && t.type === "atom" && t.core.c === "unit" && t.pre.length + t.post.length === 1 &&
+    ((t.pre.length === 1 && VALUE_PREFIX.has(t.pre[0])) || (t.post.length === 1 && t.post[0] === "!"));
   if (row.type === "op") {
-    // 貪欲な単項：`[* 2,]`・`[< 3,]`
     if (row.sym === "," && row.right === null) {
+      // 貪欲な単項：`[* 2,]`・`[< 3,]`
       const u = unaryInfix(row.left);
       if (u) return withOperand(u, "pfGreedyUnary");
+      // 前置・後置の点なしの写像：`[-_,]`・`[!_,]`・`[!!_,]`・`[_!,]` は `[* 2,]` と同じ要素ごとの写像（U〔答え〕2026-10-21 10:09）。
+      // `$`・`@`・`#`・`~` の印には点なしを作らない（U〔答え〕09:21）ので、`[$_,]`・`[@_,]` などは下で未知のまま。
+      if (row.left && row.left.type === "seq" && row.left.terms.length === 1 && valueMarkUnit(row.left.terms[0])) return L("pfGreedyUnary");
     }
     if (row.left === null || row.right === null) {
-      // `[|]`・`[&]`・`[,]` は L（アリティは未知、91）。段1〜9 のほかの点なし（`[:]`・`[?]`・`[==]` など）は未知（Q19）。
-      // 前置・後置の印の点なしに `,` を付けた写像（`[-_,]`・`[!_,]`・`[$_,]`）も、ここで未知（Q33）。
-      if (row.left === null && row.right === null && (row.sym === "|" || row.sym === "&" || row.sym === ",")) return L("pfUnknownArity");
+      if (row.left === null && row.right === null) {
+        // `[|]`・`[&]`・`[;]`・`[==]` は畳む（R31。`[&] a b c` は c、U 2026-10-21 08:50）。`[,]` はアリティの分からない点なし
+        // （L、91）。
+        if (FOLD_SYMS.has(row.sym)) return fold(row.sym);
+        if (row.sym === ",") return L("pfUnknownArity");
+        // 畳まない `[!==]`（値を返す）と中置の `[#]`（set）は、素の2引数の関数（R32）。
+        if (row.sym === "!==") return binary(row.sym, "A");
+        if (row.sym === "#") return binary(row.sym, "U");
+      }
+      // 段1〜9 のほかの点なしは未知：`[:]`・`[?]`・片側の欠けた `[| 5]`・`[== 3]` など（Q19）。
+      // 前置・後置の印に `,` を付けた、値の演算子でない写像（`[$_,]`・`[@_,]` など）も、ここで未知。
       return U();
     }
     return null;
@@ -2577,7 +2641,8 @@ function pointfreeOf(row, ctx) {
   const t = row.terms[0];
   if (t.type === "infix" && t.stage >= 12 && t.stage <= 22) {
     if (t.left === null && t.right === null) {
-      return L(t.sym === "+" ? "pfGreedyBinary" : "pfUnknownArity"); // `[+]` だけが貪欲な2項（`[']`・`[@]` も未知）
+      // 畳む記号なら R31。ほか（`[<<]`・`[>>]`・`[']`・`[@]`・範囲・`[!=]`）は素の2引数の関数（R32）で、段18 の get は未知を返す。
+      return FOLD_SYMS.has(t.sym) ? fold(t.sym) : binary(t.sym, t.stage === 18 ? "U" : "A");
     }
     if (t.left === null || t.right === null) {
       // `[' 0]`・`[' say]`：鍵は名前として引かない（pickKeyOf の注）ので、被演算子を解かない。
@@ -2587,20 +2652,17 @@ function pointfreeOf(row, ctx) {
     }
     return null;
   }
-  if (t.type === "atom" && t.core.c === "unit" && t.pre.length + t.post.length === 1) {
-    // `[$_]` は点なしではなく値（行 `$_` の括りで A）。行として解く（rowsInfo）。
-    if (t.pre[0] === "$") return null;
-    // 前置・後置の点なし。値の演算子（`[-_]`・`[!_]`・`[!!_]`・`[_!]`）だけを L にし、`[~_]` は未知（Q19）、`[@_]`・`[#_]`・
-    // `[_@]`・`[_~]` も未知（Q33。利用者の答えはまだ）。書いた `_` は、
-    // 被演算子を書いていない口の印である（前置・後置の印は隣接で位置が決まるので、隣に何かが要る。主の Claude の読み）。
-    // 括った `[!_]` は否定の点なしで、恒等射は括らない `!_`（R29。U 2026-10-21 08:24「[!_] は否定の点無しにしないの？ 恒等射なら
-    // 括らなくていい。」）。`( … )` も同じ括り（前段は同じ印で渡す）なので `(!_)` も否定の点なし。2行以上の括りの中の `!_` の行
-    // （`[!_ ⏎ 1]`）は、ここに来ず、行として恒等射（R29、single）。
-    // 同じ日の R30（未定義の名前を被演算子に書く `[-a]`）と、`_` の綴りを断った G14 は廃止した（U〔答え〕08:20）。`[-a]` は
-    // R30 の前と同じく、値の印を当てた項の括り（a が未定義なら A で、information は R21 の文面）。
-    const valueMark = (t.pre.length === 1 && VALUE_PREFIX.has(t.pre[0])) || (t.post.length === 1 && t.post[0] === "!");
-    return valueMark ? L("pfUnary") : U();
-  }
+  // 前置・後置の点なし。値の演算子（`[-_]`・`[!_]`・`[!!_]`・`[_!]`）だけを L にする。書いた `_` は、
+  // 被演算子を書いていない口の印である（前置・後置の印は隣接で位置が決まるので、隣に何かが要る。主の Claude の読み）。
+  // 括った `[!_]` は否定の点なしで、恒等射は括らない `!_`（R29。U 2026-10-21 08:24「[!_] は否定の点無しにしないの？ 恒等射なら
+  // 括らなくていい。」）。`( … )` も同じ括り（前段は同じ印で渡す）なので `(!_)` も否定の点なし。2行以上の括りの中の `!_` の行
+  // （`[!_ ⏎ 1]`）は、ここに来ず、行として恒等射（R29、single）。
+  // 同じ日の R30（未定義の名前を被演算子に書く `[-a]`）と、`_` の綴りを断った G14 は廃止した（U〔答え〕08:20）。`[-a]` は
+  // R30 の前と同じく、値の印を当てた項の括り（a が未定義なら A で、information は R21 の文面）。
+  if (valueMarkUnit(t)) return L("pfUnary");
+  // `$`・`@`・`#`・`~` の印には点なしを作らない（U〔答え〕2026-10-21 09:21「良いと思う。」。Q33 の答え）。`[$_]` は値 `$_` の括りで A、
+  // `[@_]`・`[#_]`・`[_@]`・`[_~]`・`[~_]` は点なしではなく、ふつうの括りの項で、その印の項の読み（前置 `@` は Q9、前置 `~` は
+  // Q14、後置 `@`・前置 `#` は Q10、撒く `_~` は classifySpread）に従う。どれも行として解き（rowsInfo）、`$_` のほかは今は未知。
   return null;
 }
 
@@ -2934,7 +2996,7 @@ function reduceItems(items, ctx) {
   // 1. 前検査
   const unknown = items.find((i) => i.cat === "plain" && i.desc.k === "U");
   if (unknown) {
-    throw gate("G7", `種類の決まらない項 \`${showView(unknown.view)}\` が余積の並びにあります。隣とどう結ぶかが決まりません（R24・R26、§5 Q10・Q19・Q22・Q33）。`);
+    throw gate("G7", `種類の決まらない項 \`${showView(unknown.view)}\` が余積の並びにあります。隣とどう結ぶかが決まりません（R24・R26・R31、§5 Q9・Q10・Q14・Q19・Q22）。`);
   }
   if (items.some((i) => i.cat === "ptilde")) {
     throw gate("G4", "前置 `~` の項が2項以上の並びにあります。前置 `~` の被演算子は決まっていません（§5 Q14）。");
@@ -2950,7 +3012,8 @@ function reduceItems(items, ctx) {
   // - 並び全体が素の関数の実引数の並びで k = n なら、`!_` と（最後でない）`_` を仮引数にする（tryHole、R16）。
   // - 残った `!_` は断る（holeRefusal）。
   // - 残った `_` は値の項（印）として並びに入る。適用の実引数にならずに残った構築の中では消える（R15 を両側に：0 ⊕ A ≅ A）。
-  //   適用の実引数の中の `_` は、括りの関数なら消え、並びの最後なら「終わり」、ほかは G5（markApply）。逆適用の左は G5。
+  //   適用の実引数の中の `_` は、括りの関数なら消え、畳む2項の点なし（R31）なら被演算子の印のまま、並びの最後なら「終わり」、
+  //   ほかは G5（markApply）。逆適用の左は G5。
   const marks = items.some(isMark);
   if (marks || items.some(isHoleItem)) {
     if (items.every(isMark)) return single(items[0]);
@@ -3079,7 +3142,7 @@ function checkNodes(items) {
   if (items.length < 2) return;
   for (const it of items) {
     if (it.t === "leaf") continue;
-    if (it.kind.k === "U") throw gate("G2(a)", `種類の決まらない節 \`${show(it)}\` が隣と結ぼうとしています（R24、§5 Q8・Q13・Q17・Q21）。`);
+    if (it.kind.k === "U") throw gate("G2(a)", `種類の決まらない節 \`${show(it)}\` が隣と結ぼうとしています（R24・R31・R32、§5 Q8・Q13・Q21）。`);
     if (it.excess) throw gate("G12(a)", `実引数がアリティより多い適用 \`${show(it)}\` が隣と結ぼうとしています。余りの扱いは値の段で決まります（§5 Q11・Q6）。`);
   }
 }
@@ -3121,10 +3184,14 @@ function makeApply(head, arg) {
 // - 並びの最後の `_` が実引数の最後に来て、ほかに `_` が無い：「ここで終わり」（R28、U〔答え〕10-14 03:14）。木は `_` を残す。
 //   k' を `_` を除いた実引数の数として、k' < n なら印（A）で、足りない適用（insufficient）にしない（`add 3 _` は `_`）。
 //   k' ≥ n なら k' 個での適用と同じ種類（`add 2 3 _` は 5、k' > n は余りの規則）。頭のアリティが決まっているのは、素の関数
-//   （n）・恒等射 `!_`・段12〜22 の非貪欲の点なし・前置・後置の点なし（`[-_]`・`[!_]`）・段18 の点なし（どれも 1）だけで、
-//   ほかの頭（貪欲な点なし・アリティの分からない関数・合成・前置 `@`）は G5。撒く項があれば k' が数えられないので G5。
+//   （n）・恒等射 `!_`・段12〜22 の非貪欲の点なし・前置・後置の点なし（`[-_]`・`[!_]`）・段18 の点なし（どれも 1）と、畳まない
+//   2項の点なし（R32、素の2引数の関数と同じく n = 2。1つ当てた足りない適用は 1）だけで、ほかの頭（貪欲な単項・アリティの
+//   分からない関数・合成・前置 `@`）は G5。撒く項があれば k' が数えられないので G5。
 //   「終わり」は、`_` が並びそのものの最後にあるときだけにする。U〔答え〕の形（`add 3 _`・`(f _) 5` の括りの中）はどれも
 //   並びの最後で、後ろに関数が続く形（`add _ inc`）を「終わった後に逆適用」と読むかは、どの言葉にも無い（断る側）。
+// - 畳む2項の点なし（R31。合成なら最初の関数）：`_` は中置の被演算子と同じく印で A（R15）。末尾の `_` も「終わり」（R28）に
+//   しない（`[+] 1 _` は `1 + _`）。木は `_` を残し、値は演算子表の Unit の欄が読む（単位なら消え、吸収する側なら `_`）。だから
+//   どの位置の `_` も、ほかの実引数と同じに数える（前は `[+] 1 _ 3`・`[+] 1 _` を G5 で断っていた）。
 // - ほか（内側の `_`、`_` が2つ以上、`f _ _`）は G5。
 function markApply(head, arg) {
   const fn = head.kind.fn;
@@ -3155,11 +3222,12 @@ function markApply(head, arg) {
     const a = rest.length === 1 ? rest[0] : makeConstruct(rest);
     return { t: "apply", head, arg: a, rev: false, ...applyKind(fn, a) };
   }
+  if (first && first.type === "pfFold") return { t: "apply", head, arg, rev: false, ...applyKind(fn, arg) };
   const n = endArity(fn);
   const last = args[args.length - 1];
   const front = args.slice(0, -1);
   if (n === null || !isMark(last) || !last.atEnd || front.some(isMark) || front.some((a) => a.t === "leaf" && a.desc.spread)) {
-    throw gate("G5", `書いた \`_\` の読みが決まらない位置にあります（\`${show(head)}\` の実引数 \`${show(arg)}\`）。読みが決まるのは、値だけの並び・素の関数の穴（\`f _ 3\`）・並びの最後の「終わり」（\`add 3 _\`）・括りの関数の実引数・中置の被演算子です（§3.5、§5 Q7・Q18）。`);
+    throw gate("G5", `書いた \`_\` の読みが決まらない位置にあります（\`${show(head)}\` の実引数 \`${show(arg)}\`）。読みが決まるのは、値だけの並び・素の関数の穴（\`f _ 3\`）・並びの最後の「終わり」（\`add 3 _\`）・括りの関数の実引数・中置の被演算子・畳む2項の点なしの実引数（\`[+] 1 _\`、R31）です（§3.5、§5 Q7・Q18）。`);
   }
   if (front.length < n) return { t: "apply", head, arg, rev: false, kind: A() };
   return { t: "apply", head, arg, rev: false, ...applyKind(fn, front.length === 1 ? front[0] : makeConstruct(front)) };
@@ -3167,7 +3235,7 @@ function markApply(head, arg) {
 // 「終わり」の `_` を当てられる頭のアリティ（markApply）。決まっていなければ null。
 function endArity(fn) {
   if (!fn) return null;
-  if (fn.type === "plain") return fn.n;
+  if (fn.type === "plain" || fn.type === "pfBinary") return fn.n;
   if (fn.type === "id" || fn.type === "pfUnary" || fn.type === "pfPick") return 1;
   return null;
 }
@@ -3215,8 +3283,23 @@ function applyKind(fn, arg) {
       return k === 1 ? { kind: A() } : { kind: A(), excess: true };
     case "pfGreedyUnary":
       return { kind: A() };
-    case "pfGreedyBinary":
-      return k >= 2 ? { kind: A() } : { kind: U() }; // `[+]` に1項は未知（§5 Q17）
+    case "pfFold":
+      // 畳む2項の点なし（R31）：`[op] x1 … xn` は `x1 op … op xn`。k ≥ 2 は、中置の値の演算子の被演算子が全部 A のときと同じく
+      // A（実引数の並びは A の項だけ）。`excess` にしない。結果は中身の見えない A（項の desc を通さないのは、List 1つのときの値が
+      // 畳んだ物で、List の形ではないから）。k = 1 は foldOneKind。
+      return { kind: k === 1 ? foldOneKind(args[0]) : A() };
+    case "pfBinary":
+      // 畳まない2項の点なし（R32）：素の2引数の関数と同じ（plainApply）。本体の根の代わりに root（値を返す演算は A、get・set は
+      // 未知）。k < n は残りの口を待つ足りない適用（L）、k = n は root、k > n は余り（root が A でなければ G12(b)）。
+      if (k < fn.n) return { kind: { k: "L", fn: { ...fn, n: fn.n - k } }, insufficient: true };
+      if (k === fn.n) return { kind: fn.root === "A" ? A() : U() };
+      // 言い分に記号（fn.sym）を書かない。実体の鍵（fnKey）は記号を分けないので、欄で渡した `[']` と `[@]` は実体を分け合い、
+      // 記号を書くと、先に解いた方の記号がもう片方の行の言い分になる（行の順で名指しが替わる。fnKey の "other" の注と同じ割れ）。
+      // root が A でないのは get・set だけである（pointfreeOf の binary）。
+      if (fn.root !== "A") {
+        throw gate("G12(b)", `実引数がアリティ（${fn.n}）より多いのに、get・set の点なし（\`[']\`・\`[@]\`・中置の \`[#]\`）の足りた適用の種類が値と決まっていません（§4 R32、§5 Q11）。`);
+      }
+      return { kind: A(), excess: true };
     case "pfPick":
       // `[' k] x` は `x ' k` と同じ desc（R26）。引いた物が関数なら L（fn つき）。k ≠ 1 と鍵の無い形は未知。
       return k === 1 && fn.key ? { kind: pickDesc(descOfTree(args[0]), fn.key) } : { kind: U() };
@@ -3251,7 +3334,7 @@ function applyKind(fn, arg) {
       }
       return { kind: A(), excess: true };
     default:
-      return { kind: U() }; // `@p`・`[|]` など・既定値のある関数
+      return { kind: U() }; // `@p`・`[,]`（アリティの分からない点なし）・既定値のある関数
   }
 }
 
@@ -3272,6 +3355,26 @@ function plainApply(fn, k) {
   return { kind: A(), excess: true };
 }
 
+// 畳む2項の点なし（R31）に実引数が1項のときの種類。1項が数なら、その数そのもの（`[+] 5` は 5）。List 1つなら、要素を並びと
+// して畳んだ物（`[+] [1 2 3]` は 6）で、値は一番右か一番左の要素か、要素どうしの演算の結果になる（`[&]` は一番右、`[|]` は一番
+// 左、比較は一番右か `_`）。だから要素に関数が混ざれば、畳んだ結果は関数になりうる（`gs : 1 , inc` の `[&] gs` は inc）。
+// - A：書いた `_`（印。中置の被演算子と同じ、R15）・数（R24）・中身の見える List で、深く見て要素が全部 A の物（`[1 2 3]`・
+//   `vs`・`[' 0]` で引いた List）。
+// - 未知：ほかの全部。要素に L か未知が見える器（`gs`・`(inc , 1)`。並びの中では G7）、中身の見えない A（裸の仮引数・適用の
+//   結果・`$` の番地。器かもしれず、器なら要素に関数が見えるかもしれない）、構造体（欄を畳む読みは決まっていない）。
+//   括り1つの `(y)`・`([< 3,] 1 5 2)` も、中の行の形が見えなければ未知（`[x]≅x` なので `(y)` は y と同じ）。
+// 前（2026-10-21 の R31 の最初の版）は1項ならいつも A にしていて、`z : [&] gs` の `z 5` を黙って構築と読んだ（確かめで見つかった
+// 黙った誤答。R31 の前の `[&]` はアリティの分からない点なしで、未知か G7 だった）。中置で書いた同じ物（`gs ' 0 & gs ' 1`）・
+// 同じ器を撒く形（`gs~`、Q20）・`[' 0] fs` も未知か G7 なので、それと揃える。
+// k ≥ 2 は中置と同じく A（`[&] 1 gs` は `1 & gs` と同じで、gs は器の値）。
+function foldOneKind(arg) {
+  if (isMark(arg)) return A();
+  const d = descOfTree(arg);
+  if (isScalar(d)) return A();
+  if (d.k === "A" && !d.spread && d.shape && d.shape.s === "list" && deepKind(d) === "A") return A();
+  return U();
+}
+
 // 合成の適用は、適用の繰り返しである：(g∘f) x = g (f x)。合成は左から実行する（R11）ので、`f1 f2 … fm x` は
 // fm (… (f2 (f1 x)) …)。だから種類は、最初の関数を並び x に当てた適用から始めて、後ろの関数に前の結果を1つの実引数として
 // 当てた適用を左から畳んで決める（どれも applyKind）。合成のための表は持たない。前は合成の行（§3.4）を適用とは別の表と
@@ -3285,16 +3388,20 @@ function plainApply(fn, k) {
 //   関数に当てる。直接書いた g (f x) の g が受ける物と同じにするためである。
 // - 前の結果が L か未知なら、そこから先は未知。関数を値として次へ渡す読みは決めていない（素の関数の裸の仮引数は A しか
 //   受けない）。ただし括りの関数（とその部分適用）は、前の結果（未知）を受けて実体を作る。後ろの関数は前の結果を受けて
-//   呼ばれ（R11）、呼ばれた本体は読む（R25、§5 Q24）。最初の関数に足りたか決まらない形（`[+]` に1項 Q17・既定値のある
-//   関数 Q8・撒く項を含む並び）でも作る（§5 Q27 の断る側）。作らないと、呼ばれるかもしれない本体の門が合成の頭に置く
-//   だけですり抜ける（前は `[+] bad 5` を通し、`inc [+] bad 5` を断っていた）。ほかの関数は本体の根を引かない（答えに
-//   使わない）。前は、使わない根を引くと、解いている途中の関数の仮置き（consult）の依りが増え、仮置きが外れると、それを
+//   呼ばれ（R11）、呼ばれた本体は読む（R25、§5 Q24）。最初の関数に足りたか決まらない形（アリティの分からない点なし
+//   `[,]`・既定値のある関数 Q8・撒く項を含む並び）と、最初の関数の適用が未知の形（畳む2項の点なしに中身の見えない A を
+//   1項、R31）でも作る（§5 Q27 の断る側）。作らないと、呼ばれるかもしれない本体の門が合成の頭に置くだけですり抜ける（前は
+//   `[+] bad 5` を通し、`inc [+] bad 5` を断っていた。`[+]` に数1つは、Q17 が R31 で閉じて値になった）。畳まない2項の点なしに
+//   1項（`[<<] tl 5`、R32）は、素の2引数の関数（`add tl 5`）と同じく足りない適用なので、後ろは呼ばれない（L で返す、下の頭の
+//   行）。ほかの関数は本体の根を引かない（答えに使わない）。
+//   前は、使わない根を引くと、解いている途中の関数の仮置き（consult）の依りが増え、仮置きが外れると、それを
 //   使っていない外の本体の根まで未知に替わって、定義の順で答えが割れた（§5 Q28。確かめ 2026-10-19 の F1：
 //   `g : y ? (adder (f 1) y) , 1` は f が先だと `g 5 inc` が G2(a)、g が先だと A）。外れた仮置きに頼った答えを解き直すように
 //   した（2026-10-20、「仮置きの記録」の注）後は、依りが増えても解き直しの手間が増えるだけで、答えは割れない。
 //   前の結果が A の間は、後ろの関数に当てて根を引く（直接書いた g (f x) と同じ）ので、その後で未知になれば、引いた根は
-//   答えに使われない（`inc [+ 1] f [+] y`）。未知の後ろの括りの関数の実体の本体が引く根も同じ（`[+] tl y` の tl の本体が
-//   `f 1 5` を呼ぶ形）。どちらも直接書いた入れ子（`[+] (f ([+ 1] (inc y)))`・`tl y`）が同じ根を引くので、法則どおりである。
+//   答えに使われない（`inc [+ 1] f [+] y`。f の結果は中身の見えない A なので `[+]` で未知、R31）。未知の後ろの括りの関数の
+//   実体の本体が引く根も同じ（`[+] tl y` の tl の本体が `f 1 5` を呼ぶ形。y は裸の仮引数で中身が見えない）。どちらも直接書いた
+//   入れ子（`[+] (f ([+ 1] (inc y)))`・`tl y`）が同じ根を引くので、法則どおりである。
 //   解き直す前は、ここから Q28 の割れに入った（合成の畳み込みの確かめの F2。法則の試験の Q28_FORMS の4〜9つ目）。
 //   直接書いた g (f x) と同じになるのは、f x が A のときである。f x が未知なら、直接書いた形は未知の項を並びに置くので
 //   G7 で断るが、合成は節ごと未知にして根なら通す（§3.4 の「上に無いもの」と同じ扱い）。
@@ -3389,6 +3496,8 @@ export function resolve(source) {
     fileScope: null,
     holePrefix: "p",
     reported: new Set(),
+    // 畳まない2項の点なしの information を出した、書いた所（reportNotFolded）。
+    reportedPf: new Set(),
     // 括りの関数の実体（R24・R25）：鍵 → 実体、書いた `?` → 範囲の鍵 → その `?` を通って呼んだ実体（recordCall）、
     // 根の種類の仮置きの記録、木を解いている途中の実体、定義の行の `?` の木（最後に実体で埋める）、実体の本体の
     // information の出し先。
