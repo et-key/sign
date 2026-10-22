@@ -2,17 +2,18 @@
  * 余積（空白）の解決（alpha1 の意味解析の最初の段）。
  *
  * 仕様は alpha1/docs/coproduct_spec.md（設計 workflow の最終版）。ここに書くのは、確信度 91% 以上の規則
- * （§4 の R1〜R34（R18 と R30 は 2026-10-21 に廃止）、§1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
- * 門（G1〜G17（G14 は 2026-10-21、G17 は 2026-10-22 に廃止）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
+ * （§4 の R1〜R39（R18 と R30 は 2026-10-21 に廃止）、§1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
+ * 門（G1〜G17（G14 は 2026-10-21、G17 と G1 は 2026-10-22 に廃止）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
  * 答えが出たときに、その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
  *
  * 入り口は `resolve(source)` の1つで、`{ trees, diagnostics }` を返す。trees は1行に1つの木、diagnostics は
  * 止めない診断（information の undefined-name と pointfree-not-folded）。門に当たったら OperationError を投げる（reason は §6.2 の名前、
- * spec は `…§6.2 G2(b)` のように門の番号まで、`gate` に門の番号）。
+ * spec は `…§6.2 G12(b)` のように門の番号まで、`gate` に門の番号）。
  *
  * **木の書き方（`show`）**。§1.3・§6.3 の S 式に合わせ、無い所はここで決めた。
  * - 節：`(construct a b …)`・`(compose f g …)`・`(apply h x)`・`(apply h x ·rev)`・`(? [$p0 …] (apply h …))`。穴の口の足りない
- *   並び（R34）は、最後の仮引数を括りで書いて `(? [$p0 [~$p1]] (apply h (construct $p0 … $p1~)))`。
+ *   並び（R34）は、最後の仮引数を括りで書いて `(? [$p0 [~$p1]] (apply h (construct $p0 … $p1~)))`。実引数がアリティより多い適用は、
+ *   前から n 個を当てた適用の後ろに余りを並べた構築 `(construct (apply h x1 … xn) xn+1 …)`（R35）。
  * - 葉は項そのもの。名前は `<>` を外した綴り、字面は書いたまま、印は核に付けて書く（`$inc`・`xs~`・`-x!`・`!_`）。
  * - 中置の項は綴りを頭にした `(+ 1 2)`。欠けた被演算子は `·`。
  * - 括りは書いたとおりに、いつも `[…]` で書く。前段は `[…]`・`(…)`・`{…}` を1つの印にまとめて種類を残さない
@@ -77,7 +78,9 @@ function frontEnd(source) {
 // ---------------------------------------------------------------------------
 
 const GATE_REASON = {
-  G1: "coproduct-reverse-of-many",
+  // G1（coproduct-reverse-of-many）は 2026-10-22 に廃止した（§5 Q6 の答え、U〔答え〕10-21 23:23。U の時刻は UTC）。断っていた
+  // 逆適用の左の構築（`1 2 inc`）は、一番近い1項だけを取って残りを前に積む（R37。`1 (2 inc)`）。余りを後ろに積んだ構築の後ろの
+  // 逆適用（`inc 1 2 inc`）は G12(a)。
   G2: "coproduct-partial-neighbor",
   G3: "coproduct-beside-product",
   G4: "coproduct-prefix-tilde",
@@ -97,7 +100,7 @@ const GATE_REASON = {
   // `$[+ m]` と同じく `$` で値にした関数を返す形で、本体の根は A で通る（R33）。
 };
 
-// 門の番号（`G2(b)` のように枝まで）から断りを作る。reason は門ごとの名前で、枝は spec と gate で見分ける。
+// 門の番号（`G12(b)` のように枝まで）から断りを作る。reason は門ごとの名前で、枝は spec と gate で見分ける。
 function gate(id, message) {
   const base = id.replace(/\(.\)$/, "");
   const e = new OperationError(message, { spec: `${SPEC} §6.2 ${id}`, reason: GATE_REASON[base] });
@@ -829,7 +832,8 @@ function fnKey(fn) {
       // 既定値のある関数は、書いた `_` で G15、`!_` で仮引数の数 n の穴（tryHole）になり、ほかのアリティの分からない関数
       // （`gx : a ~y ? a`）と振る舞いが分かれる。鍵を `other` 1つにすると、括りの関数に欄で渡したときに実体を分け合い、
       // 先に解いた方の門（G5 か G15）が、もう片方の行の言い分になった（行の順で名指しが入れ替わる）。だから印と n を入れる。
-      return fn.defaults ? `other:d${fn.n === null ? "?" : fn.n}` : "other";
+      // 既定値のある口の位置（defaultAt）でも、書いた `_` を当てたときの答え（既定値か G15、R39）が分かれるので入れる。
+      return fn.defaults ? `other:d${fn.n === null ? "?" : fn.n}${fn.defaultAt ? `:${fn.defaultAt.map((b) => (b ? 1 : 0)).join("")}` : ""}` : "other";
     default:
       return fn.idKey ? `${fn.type}:${fn.idKey}` : fn.type;
   }
@@ -930,12 +934,21 @@ function internPartial(fn) {
   internByFn.set(fn, id);
   return id;
 }
-// 合成の鍵：中の関数の鍵を、書いた順に番号で並べる（部分適用と同じく、子は番号）。
+// 合成の鍵：中の関数の鍵を、書いた順に番号で並べる（部分適用と同じく、子は番号）。流れの足りない合成（R36、composeApply）は、
+// 先に当てた物（pre）の形も入れる（括りの関数の部分適用の bound と同じく、当てた物の違う合成を同じ関数として扱わない）。
 function internCompose(fn) {
   const memo = internByFn.get(fn);
   if (memo !== undefined) return memo;
   const fns = fn.fns.map(internFn);
-  const id = internText(`C(${fns.map((c) => `#${c}`).join(" ")})${fn.partial ? ":partial" : ""}`, { s: "compose", fns, partial: !!fn.partial, depth: 1 + maxDepth(fns) });
+  const pre = (fn.pre || []).map(internDesc);
+  const preText = fn.pre ? `<${pre.map((c) => `#${c}`).join(" ")}>` : "";
+  const id = internText(`C(${fns.map((c) => `#${c}`).join(" ")})${fn.partial ? ":partial" : ""}${preText}`, {
+    s: "compose",
+    fns,
+    partial: !!fn.partial,
+    pre: fn.pre ? pre : null,
+    depth: 1 + maxDepth([...fns, ...pre]),
+  });
   internByFn.set(fn, id);
   return id;
 }
@@ -966,7 +979,7 @@ function canonKey(id) {
     seen.set(i, seen.size);
     if (node.s === "struct") return `{${node.fields.map(([n, c]) => `${n}:${walk(c)}`).join(" ")}}`;
     if (node.s === "partial") return `L<pattern:${node.base}<${node.bound.map(walk).join(" ")}>>`;
-    if (node.s === "compose") return `L<compose(${node.fns.map(walk).join(" ")})${node.partial ? ":partial" : ""}>`;
+    if (node.s === "compose") return `L<compose(${node.fns.map(walk).join(" ")})${node.partial ? ":partial" : ""}${node.pre ? `<${node.pre.map(walk).join(" ")}>` : ""}>`;
     return node.elem === null ? "[]" : `[${walk(node.elem)}…]`; // `[]` は要素の無い List（空の文字列の字面）
   };
   const s = walk(id);
@@ -1466,9 +1479,22 @@ function finishFrame(F, frame, memo, value) {
 // 仮引数の数を付ける：書いた `_` を実引数に当てた形は G15 で断り（値は既定値だが種類は §5 Q8 で未決、U〔答え〕10-21 03:11）、
 // 穴 `!_` は既定値があっても穴にする（tryHole）。仮引数の数は defaultsArity。数え方で振る舞い（G15・穴の k = n と k ≠ n）が分かれるので、
 // 実体の鍵（fnKey）にも印と数を入れる。
+// 既定値のある口の位置（defaultAt、R39）：前から数えた仮引数ごとに、既定値のある仮引数か。n が数えられなければ null。書いた `_` が
+// 既定値のある口に当たれば既定値という値（markApply・tryHole）、既定値の無い口なら G15 なので、実体の鍵にも入れる。
 function otherFn(left) {
   if (!left || !treeHasColon(left)) return { type: "other" };
-  return { type: "other", defaults: true, n: defaultsArity(left) };
+  const n = defaultsArity(left);
+  return { type: "other", defaults: true, n, defaultAt: n === null ? null : defaultsSlots(left) };
+}
+
+// 既定値のある関数の、仮引数ごとの「既定値のある口か」（R39）。数え方は defaultsArity と同じで、既定値のある口は、仮引数の
+// ブロックの `名前 : 既定値` の行と、中に `:` のある括り（`[x : 1]`）。
+function defaultsSlots(left) {
+  const withDefault = (t) => isBareBlock(t, "bracket") && t.core.rows.some(treeHasColon);
+  if (left.terms.length === 1 && isBareBlock(left.terms[0], "indent")) {
+    return left.terms[0].core.rows.map((row) => row.type === "op" || withDefault(row.terms[0]));
+  }
+  return left.terms.map(withDefault);
 }
 
 // 既定値のある関数の仮引数の数（§3.4 の言葉。既定値のある仮引数も1つ）。1つと数えるのは、裸の名前・括り（R24 と同じく
@@ -2024,7 +2050,8 @@ function identFn(fn) {
     id = identText(`F${n}#${fn.env}`);
   } else if (fn.type === "compose") {
     const fns = fn.fns.map(identFn);
-    if (fns.some((c) => c !== NO_IDENT)) id = identText(`C(${fns.map((c) => `#${c}`).join(" ")})`);
+    const pre = (fn.pre || []).map(identDesc); // 流れの足りない合成に先に当てた物（R36）
+    if ([...fns, ...pre].some((c) => c !== NO_IDENT)) id = identText(`C(${fns.map((c) => `#${c}`).join(" ")})<${pre.map((c) => `#${c}`).join(" ")}>`);
   }
   identByFn.set(fn, id);
   return id;
@@ -2428,8 +2455,11 @@ function touchCore(core, ctx) {
 // `|…|`・`||…||`（§2、R27）。囲みは値の演算子（絶対値・ノルム）なので、中の行の根が全部値なら A にする。書いた `_` だけの
 // 行は印（値）なので A のまま（`||_||` は 0、`||$_||`・`||$!_||` は 1。U 10-21 02:54・U〔答え〕03:01）。
 // ノルムの中が1行で根が関数 f なら、f の後にノルムを当てる合成（L）にする（R27、U〔答え〕10-21 03:01「多分筋が良いのは合成」）：
-// `||f|| x` は `||f x||`。合成は適用の繰り返し（R11）なので、fns に f と「1つ受けて A」のノルム（NORM_FN）を並べる。f が合成なら
-// 開いて並べ、足りない適用を含む合成（partial）なら印も持ち越す（括りの `[use 5 inc]` と同じく G2(b) に当たる）。`||!_||` は
+// `||f|| x` は `||f x||`（x が f のアリティ分のとき。k > n は合成の流れ（R36）で、ノルムは口を1つと数えて余りを後ろに積む。
+// `||inc|| 1 2` は `||inc 1||` の後ろに 2、flowArity の注）。合成は適用の繰り返し（R11）なので、fns に f と「1つ受けて A」のノルム
+// （NORM_FN）を並べる。f が合成なら
+// 開いて並べ、足りない適用を含む合成（partial）なら印も持ち越す（括りの `[use 5 inc]` と同じく、流れで読む。R36）。流れの足りない
+// 合成（先に当てた物 pre を持つ、composeApply）は開かずに1つの関数として並べる（開くと当てた物を落とす）。`||!_||` は
 // 恒等射の後にノルムで、並び全体を受けて数える（`[~x] ? ||x||`、U 10-21 02:54）。
 // ほか（中に未知・2行以上で L・絶対値の囲み `|f|`・`|!_|`）は、値の演算子に関数が来た項（§5 Q22）と同じく読みが決まらないので
 // 未知にする。中が関数のときまで A と読むと、`|inc| 5` が黙って構築になる。撒く項だけの行（`|vs~|`）は、中置の被演算子の
@@ -2442,7 +2472,7 @@ function enclosureInfo(core, ctx) {
   const root = trees.length === 1 ? trees[0] : null;
   if (core.c === "norm" && root && root.kind.k === "L" && root.kind.fn) {
     const f = root.kind.fn;
-    const fns = f.type === "compose" ? [...f.fns, NORM_FN] : [f, NORM_FN];
+    const fns = f.type === "compose" && !f.pre ? [...f.fns, NORM_FN] : [f, NORM_FN];
     return { desc: { k: "L", fn: { type: "compose", fns, partial: f.type === "compose" && !!f.partial } }, trees };
   }
   return { desc: U(), trees };
@@ -2553,7 +2583,8 @@ function rowsInfo(rows, ctx) {
   }
   const root = trees[0];
   // 1行なら、中の行を解いた根の種類（頂が `?` なら L、`:`・`,` なら A、段4〜8 なら被演算子が全部 A のとき A）。
-  // `excess` は葉に持ち込まない：括りの中の根でなら通る（G12）。形は、1行の `名前 : 値` なら欄1つの構造体、ほかは
+  // 余りを後ろに積んだ構築の印（leftover、R35）は葉に持ち込まない：括りは1つの項なので、後ろの逆適用は括りごと受ける（R37、
+  // `[inc 1 2] inc` の inc が受けるのは括り）。形は、1行の `名前 : 値` なら欄1つの構造体、ほかは
   // 中の行の形（長さ1のリストはスカラと同型なので、`[m]` は m の形、`[1 2 3]` は構築の並びの形）。
   const desc = { k: root.kind.k };
   if (root.kind.fn) desc.fn = root.kind.fn;
@@ -3102,12 +3133,16 @@ function reduceItems(items, ctx) {
   // - 残った `_` は値の項（印）として並びに入る。適用の実引数にならずに残った構築の中では消える（R15 を両側に：0 ⊕ A ≅ A）。
   //   適用の実引数の中の `_` は、括りの関数なら消え、畳む2項の点なし（R31）なら被演算子の印のまま、並びの最後なら「終わり」、
   //   ほかは G5（markApply）。逆適用の左は G5。
+  // - 既定値の無い素の関数の頭の内側の `_` は、k ≠ n でも `!_` と同じ（R38）。R34 が読まない形は G13（g13Of）。
+  // - 既定値のある関数の頭なら、既定値のある口に書いた `_` は既定値という値（R39。defaultUnits）。
   const marks = items.some(isMark);
   if (marks || items.some(isHoleItem)) {
     if (items.every(isMark)) return single(items[0]);
     const hole = tryHole(items, ctx);
     if (hole) return hole;
     if (items.some(isHoleItem)) throw holeRefusal(items);
+    const unitHole = g13Of(items);
+    if (unitHole) throw unitHole;
     // 並びの最後の `_` だけが「終わり」になれる（markApply の注）。
     const last = items.length - 1;
     items = items.map((it, i) => (isMark(it) ? { ...it, desc: A(), kind: A(), atEnd: i === last } : it));
@@ -3132,7 +3167,9 @@ function reduceItems(items, ctx) {
     }
     i = findPair(items, (a, b) => a === "A" && b === "L");
     if (i >= 0) {
-      items.splice(i, 2, makeReverse(items[i], items[i + 1]));
+      // 左が2項以上の構築なら、一番近い1項だけを取り、残りは前に積んだまま並びに戻す（R37）。戻した前の項と逆適用の節は、
+      // 次の回にふつうに結ぶ（節が A なら構築、未知なら G2(a)、L なら逆適用で R12 の門）。
+      items.splice(i, 2, ...reverseItems(items[i], items[i + 1]));
       continue;
     }
     throw gate("G11", "余積の並びに、どの対（構築・合成・適用・逆適用）も見つかりません（§5 Q16）。");
@@ -3154,9 +3191,11 @@ function single(item) {
   return item;
 }
 
-// 書いた `_`（印）の葉か・穴 `!_` の葉か。
+// 書いた `_`（印）の葉か・穴 `!_` の葉か。既定値のある口に書いた `_`（R39）は印ではなく、既定値という値の葉（cat "default"、A）。
 const isMark = (x) => !!x && x.t === "leaf" && x.cat === "unit";
 const isHoleItem = (x) => !!x && x.t === "leaf" && x.cat === "hole";
+// 穴の並びで、値の項として数える葉（撒く項でない A。既定値という値の葉も含む）。
+const isValueItem = (x) => !!x && (x.cat === "plain" || x.cat === "default") && x.desc.k === "A" && !x.desc.spread;
 const hasMark = (x) => isMark(x) || (!!x && x.t === "construct" && x.items.some(isMark));
 
 // 適用の実引数にならずに残った構築（根）の中の印は消える（§3.5、R15 を両側に）。`1 _ 2` は `(construct 1 2)`、`\a _` は `\a`、
@@ -3190,7 +3229,8 @@ function holeHeadArity(h) {
 // 前から穴へ入れるが、入れる物が穴の読みは決まっていない。`inc 5 !_`・`add !_ 1 !_`）。前（Q31 の答えの前）は k ≠ n の全部を
 // G13 で断っていた（U〔答え〕10-15 23:16 は「go !_ xs は go xs と読む」に「そうなるね！」だったが、穴の読みでは go の口を穴が
 // 埋めて xs が余る、と割れた）。R34 の k < n で作った関数に後から当てる所の G13 は applyKind。
-// ほかの位置（頭の `!_`・値の後・値の間・関数の混ざった並び・書いた `_` の混ざった並び・k = n の撒く項）は G7。
+// 既定値の無い素の関数の頭では、最後の項でない書いた `_` も穴と同じに数える（R38。最後の項が `_` の並びは終わり（R28）なので数えない）。
+// ほかの位置（頭の `!_`・値の後・値の間・関数の混ざった並び・最後の項が `_` の並び・k = n の撒く項）は G7。
 function holeRefusal(items) {
   const h = items[0];
   const ts = items.slice(1);
@@ -3209,20 +3249,31 @@ function holeRefusal(items) {
       return gate("G5", `括りの関数 \`${showView(p.view)}\` の実引数に穴 \`!_\` があります。穴は素の関数の実引数にだけ書けます（§3.5、U〔答え〕10-14 22:23）。`);
     }
   }
+  return g13Of(items) || refuseHole("並びの中の、穴として読める位置の外");
+}
+
+// G13（R34・R38 が読まない、穴と実引数の数が合わない並び）か。当たらなければ null。穴は `!_` と、既定値の無い素の関数の頭なら
+// 最後の項でない書いた `_`（R38）。
+function g13Of(items) {
+  const h = items[0];
+  const ts = items.slice(1);
   const n = holeHeadArity(h);
-  if (n !== null && ts.some(isHoleItem) && ts.length !== n && ts.every((t) => isHoleItem(t) || (t.cat === "plain" && t.desc.k === "A"))) {
-    const what = isPlainHead(h) ? "素の関数" : "既定値のある関数";
-    const arity = isPlainHead(h) ? `${n}` : `${n}。既定値のある仮引数も1つと数える`;
-    const spread = ts.some((t) => t.cat === "plain" && t.desc.spread);
-    const why = spread
-      ? "撒く項があるので実引数の数が数えられず、穴に入れる実引数と余りが決まりません"
-      : `前から ${n} 個の外に \`!_\` があります。余った実引数は前から順に穴へ入れますが、入れる物が穴の読みは決まっていません`;
-    return gate(
-      "G13",
-      `${what} \`${showView(h.view)}\` の実引数の並びに穴 \`!_\` があり、書いた数（${ts.length}）がアリティ（${arity}）と違います。${why}（§4 R34、§5 Q31）。`
-    );
-  }
-  return refuseHole("並びの中の、穴として読める位置の外");
+  if (n === null || !ts.length) return null;
+  const unitHoles = isPlainHead(h) && !isMark(ts[ts.length - 1]);
+  const isHole = (t) => isHoleItem(t) || (unitHoles && isMark(t));
+  if (!ts.some(isHole) || ts.length === n || !ts.every((t) => isHole(t) || (t.cat === "plain" && t.desc.k === "A"))) return null;
+  const what = isPlainHead(h) ? "素の関数" : "既定値のある関数";
+  const arity = isPlainHead(h) ? `${n}` : `${n}。既定値のある仮引数も1つと数える`;
+  const spread = ts.some((t) => t.cat === "plain" && t.desc.spread);
+  // 綴りの後ろに空白を置く（「穴 `!_` があり」。括弧で閉じる方は空白を置かない）。
+  const hole = unitHoles && ts.some(isMark) ? "穴（`!_` か、内側の書いた `_`、R38）" : "穴 `!_` ";
+  const why = spread
+    ? "撒く項があるので実引数の数が数えられず、穴に入れる実引数と余りが決まりません"
+    : `前から ${n} 個の外に穴があります。余った実引数は前から順に穴へ入れますが、入れる物が穴の読みは決まっていません`;
+  return gate(
+    "G13",
+    `${what} \`${showView(h.view)}\` の実引数の並びに${hole}があり、書いた数（${ts.length}）がアリティ（${arity}）と違います。${why}（§4 R34・R38、§5 Q31）。`
+  );
 }
 
 function findPair(items, test) {
@@ -3230,45 +3281,58 @@ function findPair(items, test) {
   return -1;
 }
 
-// 手順の 8：節が対に入ろうとしたら、種類の未知な節（G2(a)）と `excess` の節（G12(a)）を断る。2項以上が残って
-// いれば、その節はいずれ隣と結ぶので、縮めるたびに見ればよい。
+// 手順の 9：節が対に入ろうとしたら、種類の未知な節（G2(a)）を断る。2項以上が残っていれば、その節はいずれ隣と結ぶので、
+// 縮めるたびに見ればよい。前は `excess` の節（実引数がアリティより多い適用）も G12(a) で断っていたが、余りは後ろに積む（R35）
+// ようになり、印は無くなった。余りを積んだ構築の後ろに来る逆適用の G12(a) は reverseItems が見る。
 function checkNodes(items) {
   if (items.length < 2) return;
   for (const it of items) {
     if (it.t === "leaf") continue;
     if (it.kind.k === "U") throw gate("G2(a)", `種類の決まらない節 \`${show(it)}\` が隣と結ぼうとしています（R24・R31・R32、§5 Q8・Q13）。`);
-    if (it.excess) throw gate("G12(a)", `実引数がアリティより多い適用 \`${show(it)}\` が隣と結ぼうとしています。余りの扱いは値の段で決まります（§5 Q11・Q6）。`);
   }
 }
 
-// R8：構築の子の構築は開いて並べる（左からの畳み込みと同じ）。括りと囲みは葉なので開かない。
+// R8：構築の子の構築は開いて並べる（左からの畳み込みと同じ）。括りと囲みは葉なので開かない。印 leftover（最後の項が、適用の
+// 後ろに積んだ余り、R35）は、最後の子の物を持ち越す（余りはいつも並びの後ろにあるので、構築の後ろもそこで終わる）。
 function makeConstruct(group) {
-  return { t: "construct", items: group.flatMap((g) => (g.t === "construct" ? g.items : [g])), kind: A() };
+  const last = group[group.length - 1];
+  const node = { t: "construct", items: group.flatMap((g) => (g.t === "construct" ? g.items : [g])), kind: A() };
+  if (last && last.leftover) node.leftover = true;
+  return node;
 }
 
+// 合成の子の合成は開いて並べる（R8）。流れの足りない合成（先に当てた物 pre を持つ、composeApply）は開かない（開くと当てた物を落とす）。
+// 印 partial（足りない適用の節を含む）は実体の鍵にだけ残る。前は、partial の合成が適用の頭か逆適用の右になると G2(b) で断って
+// いたが、合成は流れとして左から畳む（R36）ので、頭なら流れで読み、逆適用の右なら R12 の門（G8）が当たる。
 function makeCompose(group) {
   const items = group.flatMap((g) => (g.t === "compose" ? g.items : [g]));
   const partial = group.some((g) => (g.t === "apply" && g.insufficient) || (g.kind.fn && g.kind.fn.type === "compose" && g.kind.fn.partial));
-  const fns = items.flatMap((i) => (i.kind.fn && i.kind.fn.type === "compose" ? i.kind.fn.fns : [i.kind.fn]));
+  const fns = items.flatMap((i) => (i.kind.fn && i.kind.fn.type === "compose" && !i.kind.fn.pre ? i.kind.fn.fns : [i.kind.fn]));
   return { t: "compose", items, partial, kind: { k: "L", fn: { type: "compose", fns, partial } } };
 }
 
-function isPartialCompose(x) {
-  return !!(x.kind.fn && x.kind.fn.type === "compose" && x.kind.fn.partial);
-}
-
-// 5. 適用（L, A）。実引数は右の値の並び全体（R10）。
+// 5. 適用（L, A）。実引数は右の値の並び全体（R10）。頭が実引数の一部しか取らなければ、残りは後ろに積む（R35・R36、applied）。
 function makeApply(head, arg) {
-  if (isPartialCompose(head)) {
-    throw gate("G2(b)", `足りない適用を含む合成 \`${show(head)}\` が適用の頭になっています。\`f 1 g 2\` の読みは決まっていません（§5 Q4）。`);
-  }
   if (hasMark(arg)) return markApply(head, arg);
-  return { t: "apply", head, arg, rev: false, ...applyKind(head.kind.fn, arg) };
+  return applied(head, arg, applyKind(head.kind.fn, arg));
 }
 
-// 実引数に書いた `_`（印）がある適用（§3.5）。穴（R16）は並び全体の前処理（tryHole）で済んでいる。
-// - 既定値のある関数：G15（値は既定値、U〔答え〕10-21 03:11。種類は §5 Q8 で未決）。合成の最初の関数が既定値のある関数でも
-//   同じ（合成は左から実行する、R11。`5 gd inc _` の `_` は gd の実引数）。
+// 適用の節。applyKind の答え r が take（頭が実引数の並びの前から取る数）を持ち、実引数の数がそれより多ければ、前から take 個を
+// 当てた適用の後ろに、余りを値として並べた構築にする（R35。`f1 3 4` は `(construct (apply f1 3) 4)`。U〔答え〕10-21 23:10「余った
+// 引数は後ろに積んでいい。」）。構築には印 leftover を付ける（後ろに逆適用が来たら G12(a)、reverseItems）。
+function applied(head, arg, r, rev = false) {
+  const { take, ...rest } = r;
+  const args = arg.t === "construct" ? arg.items : [arg];
+  if (take === undefined || take >= args.length) return { t: "apply", head, arg, rev, ...rest };
+  const used = args.slice(0, take);
+  const app = { t: "apply", head, arg: used.length === 1 ? used[0] : makeConstruct(used), rev, ...rest };
+  return { t: "construct", items: [app, ...args.slice(take)], kind: A(), leftover: true };
+}
+
+// 実引数に書いた `_`（印）がある適用（§3.5）。穴（R16・R34・R38）は並び全体の前処理（tryHole）で済んでいる。
+// - 既定値のある関数：既定値のある口に当たる `_` は既定値という値（R39、U〔答え〕10-21 23:42「そうなるね。」。defaultUnits）。
+//   既定値の無い口に当たるか、位置が数えられなければ G15。合成の最初の関数が既定値のある関数でも同じ（合成は左から実行する、
+//   R11。`5 gd inc _` の `_` は gd の実引数）。
 // - 括りの関数（とその部分適用）：`_` は括りが受ける並びの中の印で、消える（U〔答え〕10-14 22:23：`(s 1 _ 3) 2` は `(s 1 3) 2` と同じ）。
 //   k を数える前に木から除く。ただし実引数の最後が `_` で、`_` を除いた実引数がアリティに足りない（か撒く項で数えられない）
 //   ときは G5：末尾の `_` は「終わり」（R28、U〔答え〕10-14 03:14「(f _) 5 は…_ 5 で 5」）とも、消える印（22:23 の例は内側の
@@ -3277,7 +3341,7 @@ function makeApply(head, arg) {
 //   `_` を除いた実引数がアリティ以上なら、2つの読みは同じ種類になるので消す。
 // - 並びの最後の `_` が実引数の最後に来て、ほかに `_` が無い：「ここで終わり」（R28、U〔答え〕10-14 03:14）。木は `_` を残す。
 //   k' を `_` を除いた実引数の数として、k' < n なら印（A）で、足りない適用（insufficient）にしない（`add 3 _` は `_`）。
-//   k' ≥ n なら k' 個での適用と同じ種類（`add 2 3 _` は 5、k' > n は余りの規則）。頭のアリティが決まっているのは、素の関数
+//   k' ≥ n なら k' 個での適用と同じ種類（`add 2 3 _` は 5、k' > n は余りを後ろに積む、R35）。頭のアリティが決まっているのは、素の関数
 //   （n）・恒等射 `!_`・段12〜22 の非貪欲の点なし・前置・後置の点なし（`[-_]`・`[!_]`）・段18 の点なし（どれも 1）と、畳まない
 //   2項の点なし（R32、素の2引数の関数と同じく n = 2。1つ当てた足りない適用は 1）だけで、ほかの頭（貪欲な単項・アリティの
 //   分からない関数・合成・前置 `@`）は G5。撒く項があれば k' が数えられないので G5。
@@ -3295,7 +3359,12 @@ function markApply(head, arg) {
   const args = arg.t === "construct" ? arg.items : [arg];
   const first = fn && fn.type === "compose" ? fn.fns[0] : fn;
   if (first && first.type === "other" && first.defaults) {
-    throw gate("G15", `既定値のある関数${fn === first ? "" : "で始まる合成"} \`${show(head)}\` の実引数に書いた \`_\` があります（\`${show(arg)}\`）。値は既定値ですが、適用の種類は決まっていません（§5 Q8）。`);
+    // R39：既定値のある口に書いた `_` は既定値という値で、口は書いた `_` とほかの値を見分けないので、その口に別の値を書いたときと
+    // 同じ種類（今は既定値のある関数の適用は未知）。木では実引数のまま残す。合成の最初の関数でも、位置が数えられれば同じ（合成は
+    // 左から実行する、R11。既定値のある関数は流れを広げないので、最初の関数が実引数の並び全体を受ける、R36）。
+    const a = defaultUnits(head, first, args, fn === first ? "" : "で始まる合成");
+    const conv = a.length === 1 ? a[0] : makeConstruct(a);
+    return applied(head, conv, applyKind(fn, conv));
   }
   if (fn && fn.type === "plain" && fn.rest) {
     throw gate(
@@ -3323,17 +3392,55 @@ function markApply(head, arg) {
       );
     }
     const a = rest.length === 1 ? rest[0] : makeConstruct(rest);
-    return { t: "apply", head, arg: a, rev: false, ...applyKind(fn, a) };
+    return applied(head, a, applyKind(fn, a));
   }
-  if (first && first.type === "pfFold") return { t: "apply", head, arg, rev: false, ...applyKind(fn, arg) };
+  if (first && first.type === "pfFold") return applied(head, arg, applyKind(fn, arg));
   const n = endArity(fn);
   const last = args[args.length - 1];
   const front = args.slice(0, -1);
-  if (n === null || !isMark(last) || !last.atEnd || front.some(isMark) || front.some((a) => a.t === "leaf" && a.desc.spread)) {
-    throw gate("G5", `書いた \`_\` の読みが決まらない位置にあります（\`${show(head)}\` の実引数 \`${show(arg)}\`）。読みが決まるのは、値だけの並び・素の関数の穴（\`f _ 3\`）・並びの最後の「終わり」（\`add 3 _\`）・括りの関数の実引数・中置の被演算子・畳む2項の点なしの実引数（\`[+] 1 _\`、R31）です（§3.5、§5 Q7・Q18）。`);
+  const plainEnd = isMark(last) && last.atEnd && !front.some(isMark) && !front.some((a) => a.t === "leaf" && a.desc.spread);
+  if (plainEnd && fn && fn.type === "compose" && flowArity(fn) !== null) {
+    // 合成の頭の終わりの `_`（`inc inc _`・`inc add 5 _`・`f2 3 f2 5 _`）。流れのアリティは R36 で数えられるようになったが、合成の頭に
+    // R28 の「終わり」を当てるかは決めていない（R28 が挙げた頭は合成を含まない。断る側）。前の言い分は、アリティの数えられない頭と
+    // 同じだった（確かめ 2026-10-22）。
+    throw gate(
+      "G5",
+      `合成 \`${show(head)}\` の実引数の最後に、終わりの \`_\` があります（\`${show(arg)}\`）。合成の流れのアリティは数えられます（R36）が、合成の頭に「ここで終わる」（R28）を当てるかは決まっていません（§4 R28・R36、§5 Q18）。`
+    );
+  }
+  if (n === null || !plainEnd) {
+    throw gate("G5", `書いた \`_\` の読みが決まらない位置にあります（\`${show(head)}\` の実引数 \`${show(arg)}\`）。読みが決まるのは、値だけの並び・素の関数の穴（\`f _ 3\`・\`f3 _ 2\`）・並びの最後の「終わり」（\`add 3 _\`）・括りの関数の実引数・既定値のある口（R39）・中置の被演算子・畳む2項の点なしの実引数（\`[+] 1 _\`、R31）です（§3.5、§5 Q7・Q18）。`);
   }
   if (front.length < n) return { t: "apply", head, arg, rev: false, kind: A() };
-  return { t: "apply", head, arg, rev: false, ...applyKind(fn, front.length === 1 ? front[0] : makeConstruct(front)) };
+  // k' ≥ n は、最後の `_` を除いた k' 個の適用と同じ（R28）。k' > n なら余りを後ろに積む（R35）ので、木は `_` を除いた適用の
+  // 後ろに余りを並べた構築になる（構築の中の `_` は手順8で消えるので、書かない）。k' = n なら、木は `_` を最後に残す。
+  const front1 = front.length === 1 ? front[0] : makeConstruct(front);
+  const r = applyKind(fn, front1);
+  if (r.take !== undefined && r.take < front.length) return applied(head, front1, r);
+  return { t: "apply", head, arg, rev: false, ...r };
+}
+
+// R39：既定値のある関数 fn（合成の最初の関数でもよい）の実引数の並び ts の、書いた `_` を読む。前から数えた位置が既定値のある口
+// （fn.defaultAt）なら、既定値という値の葉（cat "default"、A）に替える。既定値の無い口・位置が数えられない形（撒く項か、値でない項が
+// 前にある・n が数えられない）は G15 で断る。穴 `!_` は1つの口に数える（tryHole、R16・R34）。
+function defaultUnits(head, fn, ts, what = "") {
+  const at = fn.defaultAt;
+  const slot = (t) => isHoleItem(t) || isMark(t) || (!!t.kind && t.kind.k === "A" && !(t.t === "leaf" && t.desc && t.desc.spread));
+  return ts.map((t, i) => {
+    if (!isMark(t)) return t;
+    if (at && i < at.length && ts.slice(0, i).every(slot) && at[i]) return { ...t, cat: "default", desc: A(), kind: A() };
+    const why = !at
+      ? "仮引数の数が数えられないので、どの口に当たるかが決まりません"
+      : !ts.slice(0, i).every(slot)
+        ? "前に撒く項か値でない項があるので、どの口に当たるかが数えられません"
+        : i >= at.length
+          ? `前から ${i + 1} 番目で、仮引数（${at.length}）の外に当たります`
+          : `前から ${i + 1} 番目の口は既定値の無い仮引数です`;
+    throw gate(
+      "G15",
+      `既定値のある関数${what} \`${show(head)}\` の実引数に書いた \`_\` が、既定値のある口に当たりません（${why}）。既定値の無い口に当たる \`_\` の読みは決まっていません（§4 R39、§5 Q8）。`
+    );
+  });
 }
 // 「終わり」の `_` を当てられる頭のアリティ（markApply）。決まっていなければ null。
 function endArity(fn) {
@@ -3351,28 +3458,80 @@ function endArity(fn) {
 // （U〔答え〕2026-10-21 11:46「関数合成の方が優先では？」、§5 Q23 の答え）。前は合成のどこかに点なしがあれば断っていた。
 // 主語を直に受ける関数だけを見るこの形は、決定の規則（主の Claude の案）。包んだ合成でも最初の関数を見るのは、実装する人の
 // 読み（§4 R13 の R の所）。
+// 足りない適用の節を含む合成（印 partial）が右に来る形は、前は G2(b) で断っていた。合成を流れとして読む（R36）ようになった後も、
+// R12 の形（最初の関数がアリティ1の素の関数の葉）に当たらないので、G8 で断る（主語が足りない口のどこに入るかは §5 Q5）。最初の
+// 関数がアリティ1の素の関数の葉で、後ろに足りない適用の節がある合成は、並びの縮め方では作られない（足りない適用の節の左は値か
+// 並びの頭）が、作られても R12 の形でないので G8 にする。
 function makeReverse(left, right) {
   // 書いた `_` が逆適用の左（の構築）にある（`_ inc`・`5 _ inc`）。`x h` は `h x` と同じ射（R12）だが、左の構築は逆適用の実引数で、
   // 適用の実引数にならずに残った構築ではないので `_` は消さない。`_ f` を f と読む（D 06-11 Kan §3.3）か、終わりの `_` と読むかは
   // 決まっていない（§3.5、§5 Q7）。
   if (hasMark(left)) {
-    throw gate("G5", `書いた \`_\` が逆適用の左（\`${show(left)}\`）にあります。\`_ f\` の読みは決まっていません（§3.5、§5 Q7・Q18）。`);
+    throw gate("G5", `書いた \`_\` が逆適用の主語（左の一番近い1項、R37）にあります（\`${show(left)}\` の後ろの \`${show(right)}\`）。\`_ f\` の読みは決まっていません（§3.5、§5 Q7・Q18）。`);
   }
-  if (left.t === "construct") throw gate("G1", `逆適用の左が構築の並び \`${show(left)}\` です（§5 Q6）。`);
   if (left.t === "leaf" && left.desc.spread) throw gate("G9", `逆適用の左に撒く項 \`${show(left)}\` は書けません（R14）。`);
-  if (left.excess) throw gate("G12(a)", `実引数がアリティより多い適用 \`${show(left)}\` が逆適用の左にあります（§5 Q11・Q6）。`);
-  const fn = right.kind.fn;
-  const first = fn && fn.type === "compose" ? fn.fns[0] : fn;
-  if (first && first.pointfree) throw gate("G10", `逆適用の右 \`${show(right)}\` が点なしか、点なしで始まる合成です（R13、§5 Q23）。`);
-  if (isPartialCompose(right)) throw gate("G2(b)", `足りない適用を含む合成 \`${show(right)}\` が逆適用の右になっています（§5 Q4）。`);
-  const unaryPlainLeaf = (x) =>
-    x.t === "leaf" && x.kind.fn && x.kind.fn.type === "plain" && x.kind.fn.origin === "plain" && x.kind.fn.n === 1 && (x.isLambdaName || x.isQBracket);
-  const ok = right.t === "compose" ? unaryPlainLeaf(right.items[0]) : unaryPlainLeaf(right);
-  if (!ok) throw gate("G8", `逆適用の右 \`${show(right)}\` が、アリティ1の素の関数でも、それで始まる合成でもありません。主語がどの仮引数に入るかは決まっていません（§5 Q5）。`);
-  return { t: "apply", head: right, arg: left, rev: true, ...applyKind(fn, left) };
+  const rightGate = reverseRightGate(right);
+  if (rightGate) throw rightGate;
+  return applied(right, left, applyKind(right.kind.fn, left), true);
 }
 
-// できた適用の節の種類（§3.4、R9）。返す物は {kind, excess?, insufficient?}。挙げた形だけを決め、ほかは未知。
+// 逆適用の右だけで決まる門（R12・R13）：右で主語を直に受ける関数が点なしなら G10、R12 の形でなければ G8。当たらなければ null。
+// 左をどう読んでも右は同じなので、左の読みが割れる形（reverseItems の G12(a)）より先に名指しする（確かめ 2026-10-22。前は
+// `inc 1 2 f2 3`・`inc 1 2 [+ 1]` を G12(a) と言っていたが、どちらの読みでも G8・G10 に当たり、割れる2つの読みが成り立たない）。
+function reverseRightGate(right) {
+  const fn = right.kind.fn;
+  const first = fn && fn.type === "compose" ? fn.fns[0] : fn;
+  if (first && first.pointfree) return gate("G10", `逆適用の右 \`${show(right)}\` が点なしか、点なしで始まる合成です（R13、§5 Q23）。`);
+  const unaryPlainLeaf = (x) =>
+    x.t === "leaf" && x.kind.fn && x.kind.fn.type === "plain" && x.kind.fn.origin === "plain" && x.kind.fn.n === 1 && (x.isLambdaName || x.isQBracket);
+  const ok = right.t === "compose" ? !right.partial && unaryPlainLeaf(right.items[0]) : unaryPlainLeaf(right);
+  if (!ok) return gate("G8", `逆適用の右 \`${show(right)}\` が、アリティ1の素の関数でも、それで始まり足りない適用を含まない合成でもありません。主語がどの仮引数に入るかは決まっていません（§5 Q5）。`);
+  return null;
+}
+
+// 逆適用の対（A, L）を縮めた物を、並びに戻す項の列で返す（R12・R37）。
+// - 左が構築でなければ、逆適用の節1つ（makeReverse）。
+// - 左が2項以上の構築なら、一番近い1項（構築の最後の項）だけを主語に取り、残りは前に積んだまま返す（R37。`1 2 inc` は
+//   `(construct 1 (apply inc 2 ·rev))`。U〔答え〕10-21 23:23「合ってる。」。主の Claude の問いは「逆適用の左が2項以上のとき
+//   （`1 2 inc`）は、Q11 の鏡として、一番近い1項だけを取って残りを前に積む（`1 (2 inc)`）、でいい？」）。主語の門（撒く項は G9・
+//   点なしは G10・R12 の形でなければ G8）は makeReverse が見る。
+// - 左が、適用の後ろに余りを積んだ構築（印 leftover、R35）なら G12(a)：一番近い1項は余りで、R37 なら `(inc 1) (inc 2)`、流れの
+//   読み（R36：適用の結果を流れの頭に戻し、次の関数が流れの前から取る）なら `inc (inc 1)` の後ろに 2 で、割れる（§5 Q6・Q11）。
+//   一番近い1項が適用の結果そのもの（`5 inc 3 inc`）なら、2つの読みは同じ `5 (inc (inc 3))` なので通す。
+// - 主語（一番近い1項）が、恒等射が2項以上の並び全体を受けた適用の節（印 idRow、R29。`i 1 2`）なら G12(a)：結果全体を主語に取る
+//   読み（R29 の「並び全体を受ける」、主の Claude の読み）と、単位律で `i 1 2` を `1 2` と同じに見て一番近い1項を取る読み（R37。
+//   `1 (inc 2)`）で割れる（§5 Q6 の残り。確かめ 2026-10-22。前は `i 1 2 inc` を `inc (i 1 2)` と黙って読んでいた）。
+// - どちらの G12(a) でも、右だけで決まる門（G10・G8、reverseRightGate）が先：左をどう読んでも当たるので、割れではない。
+// - 書いた `_` は、主語に当たれば G5（makeReverse、`5 _ inc`・`1 2 _ inc`）。前に積む項の `_`（`_ 1 inc`・`1 _ 2 inc`）は、構築の
+//   中の印として並びに戻り、根の構築の中で消える（手順8・R15。`_ 1 inc` は `inc 1`）。前は左の構築のどこかに `_` があれば G5 で断って
+//   いた（G1 の頃、左の構築の全体が主語だった時の名残。確かめ 2026-10-22）。
+function reverseItems(left, right) {
+  const subject = left.t === "construct" ? left.items[left.items.length - 1] : left;
+  // 印 leftover は、積んだ構築と、中で余りを積んだ適用の節（R34 の k < n で作った関数に多く当てた物、plainApply）に付く。
+  if (left.leftover || subject.idRow) {
+    const rightGate = reverseRightGate(right);
+    if (rightGate) throw rightGate;
+    if (left.leftover) {
+      throw gate(
+        "G12(a)",
+        `余りを後ろに積んだ値 \`${show(left)}\`（R35）の後ろに、逆適用の \`${show(right)}\` が来ています。一番近い1項（余り）を取る読み（R37）と、適用の結果を流れの頭に戻して次の関数が取る読み（R36）で割れます（§5 Q6・Q11）。`
+      );
+    }
+    throw gate(
+      "G12(a)",
+      `恒等射が並び全体（${subject.idRow} 項）を受けた値 \`${show(subject)}\`（R29）の後ろに、逆適用の \`${show(right)}\` が来ています。結果全体を主語に取る読み（R29）と、単位律で恒等射の適用を受けた並びと同じに見て一番近い1項を取る読み（R37）で割れます（§4 R29・R37、§5 Q6）。`
+    );
+  }
+  if (left.t !== "construct") return [makeReverse(left, right)];
+  const front = left.items.slice(0, -1);
+  const rev = makeReverse(subject, right);
+  return [front.length === 1 ? front[0] : makeConstruct(front), rev];
+}
+
+// できた適用の節の種類（§3.4、R9）。返す物は {kind, take?, insufficient?}。挙げた形だけを決め、ほかは未知。
+// take：頭が実引数の並びの前から取る数。実引数がそれより多ければ、残りは後ろに積む（R35。木は applied が作る）。kind はそのとき、
+// 前から take 個を当てた適用の種類（後ろに積んだ構築は A）。前は実引数がアリティより多い適用に印 `excess` を付け、対に入れば
+// G12(a) で断っていた（余りの扱いは値の段、§5 Q11）が、Q11 の答え（U〔答え〕10-21 23:10）で印は無くなった。
 function applyKind(fn, arg) {
   // 合成は、撒く項があっても最初の関数への適用から畳む（composeApply の注）。撒く項は k を数えない（未知）だけで、最初の
   // 関数は呼ばれるので、足りたか決まらない頭（§5 Q27）と同じく、後ろの括りの関数は未知を受けて実体を作る。前はここで
@@ -3397,32 +3556,37 @@ function applyKind(fn, arg) {
       }
       return plainApply(fn, k);
     case "pfUnary":
-      return k === 1 ? { kind: A() } : { kind: A(), excess: true };
+      // 単項なので、2項以上は前から1つを当てて、残りを後ろに積む（R35。`[+ 1] 1 2 3` は `([+ 1] 1) 2 3` で、値は `[2 2 3]`。
+      // U〔答え〕09-28 00:58「どちらも [2 2 3] じゃない？」と同じ値）。
+      return k === 1 ? { kind: A() } : { kind: A(), take: 1 };
     case "pfGreedyUnary":
       return { kind: A() };
     case "pfFold":
       // 畳む2項の点なし（R31）：`[op] x1 … xn` は `x1 op … op xn`。k ≥ 2 は、中置の値の演算子の被演算子が全部 A のときと同じく
-      // A（実引数の並びは A の項だけ）。`excess` にしない。結果は中身の見えない A（項の desc を通さないのは、List 1つのときの値が
+      // A（実引数の並びは A の項だけ）。並び全体を受けるので、余りは出ない（R35 に当たらない）。結果は中身の見えない A（項の desc を通さないのは、List 1つのときの値が
       // 畳んだ物で、List の形ではないから）。k = 1 は foldOneKind。
       return { kind: k === 1 ? foldOneKind(args[0]) : A() };
     case "pfBinary":
       // 畳まない2項の点なし（R32）：素の2引数の関数と同じ（plainApply）。本体の根の代わりに root（値を返す演算は A、get・set は
-      // 未知）。k < n は残りの口を待つ足りない適用（L）、k = n は root、k > n は余り（root が A でなければ G12(b)）。
+      // 未知）。k < n は残りの口を待つ足りない適用（L）、k = n は root、k > n は余りを後ろに積む（R35。root が A でなければ G12(b)）。
       if (k < fn.n) return { kind: { k: "L", fn: { ...fn, n: fn.n - k } }, insufficient: true };
       if (k === fn.n) return { kind: fn.root === "A" ? A() : U() };
       // 言い分に記号（fn.sym）を書かない。実体の鍵（fnKey）は記号を分けないので、欄で渡した `[']` と `[@]` は実体を分け合い、
       // 記号を書くと、先に解いた方の記号がもう片方の行の言い分になる（行の順で名指しが替わる。fnKey の "other" の注と同じ割れ）。
       // root が A でないのは get・set だけである（pointfreeOf の binary）。
       if (fn.root !== "A") {
-        throw gate("G12(b)", `実引数がアリティ（${fn.n}）より多いのに、get・set の点なし（\`[']\`・\`[@]\`・中置の \`[#]\`）の足りた適用の種類が値と決まっていません（§4 R32、§5 Q11）。`);
+        throw gate("G12(b)", `実引数がアリティ（${fn.n}）より多いのに、get・set の点なし（\`[']\`・\`[@]\`・中置の \`[#]\`）の足りた適用の種類が値と決まっていません。余りを後ろに積む（R35）か、引いた物に当てるかが割れます（§4 R32、§5 Q11）。`);
       }
-      return { kind: A(), excess: true };
+      return { kind: A(), take: fn.n };
     case "pfPick":
       // `[' k] x` は `x ' k` と同じ desc（R26）。引いた物が関数なら L（fn つき）。k ≠ 1 と鍵の無い形は未知。
       return k === 1 && fn.key ? { kind: pickDesc(descOfTree(args[0]), fn.key) } : { kind: U() };
     case "id":
       // 恒等射 `!_`（§3.5）：並び全体を受ける。1項なら受けた物そのもの（desc ごと）、2項以上なら並び（中身の見えない A）。
-      return k === 1 ? { kind: descOfTree(args[0]) } : { kind: A() };
+      // 2項以上なら印 idRow（受けた項の数）を付ける：結果を1つの値として次へ渡す読み（R29、主の Claude の読み）と、単位律で受けた
+      // 並びのまま次へ渡す読み（R35〜R37）が割れるので、後ろに逆適用が来れば G12(a)（reverseItems）、合成の後ろに関数が続けば
+      // G12(c)（composeApply）。根や値の並びの中なら、どちらの読みでも値は受けた並びなので通す（`i 1 2 3`）。
+      return k === 1 ? { kind: descOfTree(args[0]) } : { kind: A(), idRow: k };
     case "norm":
       // `||f||` の合成の最後の関数（R27）：前の結果を1つ受けて数える。合成の畳み込みの外からは来ない。
       return k === 1 ? { kind: A() } : { kind: U() };
@@ -3433,7 +3597,7 @@ function applyKind(fn, arg) {
       // 受ける（`map $[* 2] 1 2 3 4 5` は `map $[* 2] [1 2 3 4 5]` と、`f 1 2 3` は `f [1 2 3]` と同じ）。利用者 2026-10-19
       // 「括りの仮引数が1つの関数に `f 1 2 3` を渡したら、`f [1 2 3]` と同じでいい？」に「それでいいよ」（撒いて渡す先
       // だった裸の `x ~xs` は廃止したので、並びは括りが受ける）、続けて「最後の仮引数が括りの関数は、前の仮引数に1つずつ
-      // 当てて、残りの並び全体を最後の括りが受ける。」。残りは実引数1つなので、`excess` は付けない。
+      // 当てて、残りの並び全体を最後の括りが受ける。」。残りは実引数1つなので、余りは出ない（R35 に当たらない）。
       if (fn.lastBracket && k > fn.n) {
         const front = args.slice(0, fn.n - 1).map(descOfTree);
         const rest = descOfTree({ t: "construct", items: args.slice(fn.n - 1), kind: A() });
@@ -3441,15 +3605,20 @@ function applyKind(fn, arg) {
       }
       // k < n は、素の関数と同じく部分適用（残り n − k の L）。当てた物は覚えておき、残りが来た所で合わせて実体を作る
       // （利用者 2026-10-19「括りの関数に実引数が足りないときも、素の関数と同じく部分適用（残りの仮引数を待つ関数）に
-      // する。」）。足りない適用なので、素の関数と同じく `insufficient`（合成に入れば partial、G2(b)）。
+      // する。」）。足りない適用なので、素の関数と同じく `insufficient`（合成に入れば partial。合成は流れで読む、R36）。
       if (k < fn.n) return { kind: { k: "L", fn: patternPartial(fn, args.map(descOfTree)) }, insufficient: true };
-      // 最後の仮引数が裸で k > n は、素の関数と同じく前から n 個を当てて、余り（`excess`）にする。本体の根が A でなければ
-      // G12(b)（plainApply と同じ）。余りの扱いは値の段（§5 Q11）。利用者 2026-10-19「最後の仮引数が裸の括りの関数に
-      // 多く渡したときは、素の関数と同じく前から n 個を当てて、余り（excess）にする。」
-      if (fn.instantiate(args.slice(0, fn.n).map(descOfTree)).kind.k !== "A") {
-        throw gate("G12(b)", `実引数がアリティより多いのに、頭の本体の根が値ではありません（§5 Q11）。`);
+      // 最後の仮引数が裸で k > n は、素の関数と同じく前から n 個を当てて、余りを後ろに積む（R35）。根拠は、主の Claude の問い「最後の
+      // 仮引数が裸の関数に多く渡したとき（`tl 1 2 3`）は、素の関数と同じく余り（excess）でいい？」に、利用者が答えのボタン「それでいい」
+      // で答えたこと（U〔答え〕2026-10-19 06:49、UTC。ボタンの文「それでいい。最後の仮引数が裸の括りの関数に多く渡したときは、素の関数と
+      // 同じく前から n 個を当てて、余り（excess）にする。」は主の Claude が用意した物で、利用者の言葉ではない。確かめ 2026-10-22 に
+      // 書き起こしで確かめた）。本体の根が A でなければ G12(b)（plainApply と同じ）。
+      {
+        const r = fn.instantiate(args.slice(0, fn.n).map(descOfTree));
+        if (r.kind.k !== "A") {
+          throw gate("G12(b)", `実引数がアリティより多いのに、頭の本体の根が値ではありません。余りを後ろに積む（R35）か、結果に当てるかが割れます（§5 Q11）。`);
+        }
+        return { kind: r.kind, take: fn.n };
       }
-      return { kind: A(), excess: true };
     default:
       return { kind: U() }; // `@p`・`[,]`（アリティの分からない点なし）・既定値のある関数
   }
@@ -3477,9 +3646,15 @@ function plainApply(fn, k) {
     // 根が L なら、頭は裸の関数を返す定義（G16、R33）で、この言い分が出るのは、その定義の行がこの行より後ろにあるときだけ（定義が
     // 先なら、行の順に先にその G16 を言う）。言い分でそちらを指す（確かめ 2026-10-22）。
     const bare = root === "L" ? "頭の本体の根は裸の関数なので、その定義の行は G16 で断ります（§4 R33）。" : "";
-    throw gate("G12(b)", `実引数がアリティより多いのに、頭の本体の根が値ではありません（§5 Q11）。${bare}`);
+    throw gate("G12(b)", `実引数がアリティより多いのに、頭の本体の根が値ではありません。余りを後ろに積む（R35）か、結果に当てるかが割れます（§5 Q11）。${bare}`);
   }
-  return { kind: A(), excess: true };
+  // k > n：前から n 個を当てた適用の後ろに、余りを積む（R35、applied）。R34 の k < n で作った関数（rest）は、書いていない後ろの口を
+  // 最後の括りの仮引数 `[~c]` で受ける関数（`a [~c] ? f3 a 2 c~`）で、最後の括りは残りの並び全体を受ける（R24）ので、ここでは
+  // 積まない。余りは元の関数（f3）の余りとして、その後ろに積まれる（値は同じ）。ここで前から n 個に切ると、最後の括りにちょうど
+  // 1つで入る値が G13 の割れ（applyKind）に見え、全体（`(f3 !_ 2) 1 vs 4` は c が `[vs 4]`）では割れない並びを G13 で断ることになる。
+  // 中で積まれた余りは、適用の節の印 leftover で持ち越す：後ろに逆適用が来れば、積んだ構築と同じく G12(a)（reverseItems）、合成の
+  // 流れの途中なら G12(c)（composeApply）。印が無いと、`[f3 !_ 3] 7 8 9 inc` の inc が適用の結果全体（2つの値）を受けると黙って読む。
+  return fn.rest ? { kind: A(), leftover: true } : { kind: A(), take: fn.n };
 }
 
 // 畳む2項の点なし（R31）に実引数が1項のときの種類。1項が数なら、その数そのもの（`[+] 5` は 5）。List 1つなら、要素を並びと
@@ -3509,7 +3684,8 @@ function foldOneKind(arg) {
 // 数えていたので、直接書いた g (f x) と答えが割れていた（§5 Q13・Q24・Q26・Q27 は、その割れが表に出た物。主の Claude が
 // 「合成の適用を、適用を左から畳む形に作り直して合成用の表を消す」と言い、利用者 2026-10-19「その方向でお願い」）。
 // - 最初の関数は、頭の適用と同じ（k = n・残りを最後の括り・部分適用・余り）。足りなければ L で、足りない適用の印つき。
-//   何を残すかは後ろの関数まで含めて決まらないので、アリティは未知にする。G12(b) と、括りの関数の実体の門（R25）は
+//   何を残すかは後ろの関数まで含めて決まらないので、アリティは未知にする（2026-10-22 に流れ（R36）を入れる前の読み。今は下の流れで、当てた物を
+//   覚えた合成にし、残りのアリティを数える）。G12(b) と、括りの関数の実体の門（R25）は
 //   applyKind がそのまま投げる。
 // - 前の結果が A（足りた適用で、余りでない）なら、その desc（形を持っていれば形ごと、R24・R26）を1項の実引数として次の
 //   関数に当てる。直接書いた g (f x) の g が受ける物と同じにするためである。
@@ -3532,24 +3708,158 @@ function foldOneKind(arg) {
 //   解き直す前は、ここから Q28 の割れに入った（合成の畳み込みの確かめの F2。法則の試験の Q28_FORMS の4〜9つ目）。
 //   直接書いた g (f x) と同じになるのは、f x が A のときである。f x が未知なら、直接書いた形は未知の項を並びに置くので
 //   G7 で断るが、合成は節ごと未知にして根なら通す（§3.4 の「上に無いもの」と同じ扱い）。
-// - 最初の関数の余り（`excess`）は、結果が A なら最後まで持ち越す（R10。余りは最初の関数の実引数の話）。
+// - 前は、最初の関数の余り（`excess`）を、結果が A なら最後まで持ち越していた。今は下の流れで、余りは後ろに積む（R35・R36）。
+//
+// **流れ（R36、2026-10-22）**。合成は、実引数の並びを流れとして左から畳む（U〔答え〕10-21 23:18「合ってる。」。主の Claude の問いは
+// 「括りの無い余積の並び（`f2 3 f2 5 6`）は代数として左から畳み、ポーランドの読みは括りを明示したときだけ、でいい？」）。最初の関数は
+// 流れの前から自分のアリティ分（足りない適用なら足りない口の数）だけ取り、結果を流れの頭に戻す。次の関数は、流れの前から
+// （前の結果を先頭に）自分のアリティ分を取る。最後に残った物は後ろに積む（R35。take を返し、木は applied が作る）。
+// `f2 3 f2 5 6` は `f2 (f2 3 5) 6`、`f2 1 g 2` は `g (f2 1 2)`、`inc f2 5 6` は `f2 (inc 5) 6`、`inc inc 5 6` は `(inc (inc 5)) 6`。
+// - 流れが足りなくなったら、合成の足りない適用（L）：当てた物を pre に覚えた合成で、残りが来たら合わせて流れを畳み直す
+//   （括りの関数の部分適用の bound と同じ）。前は L のアリティの分からない関数にしていた。
+// - 流れを広げない関数（flowArity が null：並び全体を受ける関数・アリティの分からない関数。畳む2項の点なし `[+]`・`[,]`・貪欲な
+//   単項・恒等射 `!_`・段18 の点なし `[' 0]`・最後の仮引数が括りの関数・R34 の k < n で作った関数・既定値のある関数・前置 `@`）があれば、
+//   そこから後ろは前の読み（tailOld）：最初の関数なら並び全体を受け、後ろなら前の結果だけを受ける。そこに流れの余りが残っていれば、
+//   その関数が余りまで受けるか、余りを後ろに積むかが割れるので G12(c)（§5 Q13 の残り）。撒く項があれば k が数えられないので、最初から
+//   前の読み。最初の恒等射が2項以上を受けて後ろに関数が続く形も G12(c)（下の idRow の注）。
+// - 途中の結果が値でない（本体の根が未知の関数・実体の根が A でない括りの関数・L を引いた点なし）なら、そこから後ろは前の読み
+//   （未知。括りの関数は未知を受けて実体を作る）。そこに流れの余りが残っていれば、結果に当てるか後ろに積むかが割れるので G12(b)
+//   （頭の本体の根が A でない k > n と同じ割れ）。
 function composeApply(fn, arg) {
+  const given = arg.t === "construct" ? arg.items : [arg];
+  const items = [...(fn.pre || []).map(composeLeaf), ...given];
   const [first, ...rest] = fn.fns;
   if (!first) return { kind: U() };
-  const r0 = applyKind(first, arg);
-  if (r0.insufficient) return { kind: { k: "L", fn: { type: "other" } }, insufficient: true };
-  // prev：前の結果が A ならその desc、L か未知なら null。
-  let prev = r0.kind.k === "A" ? r0.kind : null;
-  for (const f of rest) {
+  const tree = (xs) => (xs.length === 1 ? xs[0] : { t: "construct", items: xs, kind: A() });
+  // 流れが足りなくなった合成（L）。pre は当てた物、fed は流れが足りなくなった関数の位置（fns の番号）。fed より前の関数は、作った時に
+  // 流れから取る数が決まっている（下の段18 の点なし）。
+  const short = (at) => ({ kind: { k: "L", fn: { type: "compose", fns: fn.fns, partial: true, pre: items.map(descOfTree), fed: at } }, insufficient: true });
+  // 段18 の点なし（`[' 0]`）は、流れの前に1項だけがあるときだけ口を1つと数える（直に当てた適用と同じく、k = 1 は R26 で決まって
+  // いて、k ≠ 1 は未知。flowArity の注）。流れの足りない合成を畳み直すとき（pre と fed がある）は、fed より前の段18 の点なしは作った
+  // 時に1項を取った物なので、後から来た実引数に依らず 1 と数える（`([' 0] [' 0] add [[1 2] [3 4]]) 5` の2つ目の `[' 0]` は、括りの中で
+  // 前の結果1項を取った。後から来た 5 を前にしても k ≠ 1 にならない）。最初の関数なら、受ける流れが1項のときか fed > 0、後ろの関数
+  // なら、流れの余りが無いときか、その位置が fed より前のとき（下の for）。
+  const settled = (at) => fn.fed !== undefined && at < fn.fed;
+  const a1 = flowArity(first) ?? (first && first.type === "pfPick" && (items.length === 1 || settled(0)) ? 1 : null);
+  if (a1 === null || items.some((a) => a.t === "leaf" && a.desc.spread)) {
+    const r0 = applyKind(first, tree(items));
+    if (r0.insufficient) return short(0);
+    if (r0.leftover && rest.length) {
+      // 最初の関数（R34 の k < n で作った関数）が並び全体を受けて、中で余りを積んだ（plainApply）。次の関数が結果を受けるか、
+      // 余りを受けるかが割れる（§5 Q13 の残り）。
+      throw gate(
+        "G12(c)",
+        `合成の最初の関数（最後の括りの仮引数が残りの並びを受ける、R34）が流れの全体を受けて、中で余りを後ろに積みました（R35）。次の関数が結果を受けるか、余りまで受けるかが割れます（§4 R36、§5 Q13）。`
+      );
+    }
+    if (r0.idRow && rest.length) {
+      // 最初の関数が恒等射で、2項以上の流れの全体を受けた（applyKind の id）。後ろの関数が結果を1つの値として受ける読み（R29 の
+      // 「並び全体を受ける」、主の Claude の読み）と、単位律（恒等射との合成はその関数そのもの。`i inc 1 2` は `inc 1 2` で
+      // `(inc 1) 2`、R35）で流れのまま前から取る読みが割れる（§5 Q13 の残り。確かめ 2026-10-22。前は `i inc 1 2` を、inc が
+      // 並び全体を受けると黙って読んでいた）。続く恒等射は読みを変えないので飛ばし、その次が貪欲な単項（並び全体を受けて、結果を
+      // 1つの値で返す）なら、どちらの読みでも同じなので通す。ノルム（`||!_||`）は、利用者の式 `||!_|| = [~x] ? ||x||`（U 10-21 02:54。
+      // 受けた並び全体を数える）が答えを決めているので通す。後ろが恒等射だけなら、結果はまだ受けた並び（印を持ち越す）。
+      const j = rest.findIndex((f) => !(f && f.type === "id"));
+      if (j < 0) return { kind: tailOld(rest, r0.kind), idRow: r0.idRow };
+      if (rest[j].type !== "pfGreedyUnary" && rest[j].type !== "norm") {
+        throw gate(
+          "G12(c)",
+          `合成の最初の関数が恒等射（R29）で、流れの全体（${r0.idRow} 項）を受け、後ろに関数（合成の ${j + 2} 番目）が続きます。その関数が恒等射の結果を1つの値として受ける読み（R29）と、単位律で流れのまま前から取る読み（R36）で割れます（§4 R29・R36、§5 Q13）。`
+        );
+      }
+    }
+    return { kind: tailOld(rest, r0.kind.k === "A" ? r0.kind : null) };
+  }
+  if (items.length < a1) return short(0);
+  let left = items.slice(a1);
+  let prev = applyKind(first, tree(items.slice(0, a1))).kind;
+  for (let i = 0; i < rest.length; i++) {
+    const f = rest[i];
+    if (prev.k !== "A") {
+      if (left.length) throw flowValueGate(fn, i, left);
+      return { kind: tailOld(rest.slice(i), null) };
+    }
+    const a = flowArity(f) ?? (f && f.type === "pfPick" && (!left.length || settled(i + 1)) ? 1 : null);
+    if (a === null) {
+      if (left.length) {
+        // 段18 の点なしは、前の結果と余りの2項以上を前にするので、直に当てた k ≠ 1（未知）と同じ割れ（`inc [' 0] [1 2] 5`）。
+        const what =
+          f && f.type === "pfPick"
+            ? "段18 の点なし（k ≠ 1 の読みは決まっていない、§4 R35 の R の所）"
+            : "並び全体を受ける関数かアリティの数えられない関数";
+        throw gate(
+          "G12(c)",
+          `合成の流れ（R36）に余り（${left.length} 個）が残ったまま、${what}（合成の ${i + 2} 番目）に届きました。その関数が余りまで受けるか、余りを後ろに積む（R35）かが割れます（§4 R36、§5 Q13）。`
+        );
+      }
+      return { kind: tailOld(rest.slice(i), prev) };
+    }
+    if (left.length < a - 1) return short(i + 1);
+    prev = applyKind(f, tree([composeLeaf(prev), ...left.slice(0, a - 1)])).kind;
+    left = left.slice(a - 1);
+  }
+  if (prev.k !== "A") {
+    if (left.length) throw flowValueGate(fn, rest.length, left);
+    return { kind: U() };
+  }
+  return left.length ? { kind: prev, take: given.length - left.length } : { kind: prev };
+}
+
+// 流れの途中の結果が値でないのに、流れに余りが残った（composeApply の注）。
+function flowValueGate(fn, at, left) {
+  return gate(
+    "G12(b)",
+    `合成の流れ（R36）の ${at + 1} 番目の関数の結果が値と決まらないのに、流れに余り（${left.length} 個）が残っています。余りを後ろに積む（R35）か、結果に当てるかが割れます（§5 Q11・Q13）。`
+  );
+}
+
+// 流れを広げない所から後ろの、前の読み（2026-10-19 からの合成の適用の畳み込み）：後ろの関数は前の結果を1つ受ける。前の結果が L か
+// 未知なら、そこから先は未知で、括りの関数（とその部分適用）は未知を受けて実体を作る（§5 Q24・Q27）。返す物は最後の結果の desc か未知。
+function tailOld(fns, prev) {
+  for (const f of fns) {
     if (prev) {
       const r = applyKind(f, composeLeaf(prev));
-      prev = r.kind.k === "A" && !r.insufficient && !r.excess ? r.kind : null;
+      prev = r.kind.k === "A" && !r.insufficient ? r.kind : null;
     } else if (f && f.type === "pattern") {
       applyKind(f, composeLeaf(U()));
     }
   }
-  if (!prev) return { kind: U() };
-  return r0.excess ? { kind: prev, excess: true } : { kind: prev };
+  return prev || U();
+}
+
+// 合成の流れ（R36）で、関数が流れの前から取る数。数えられなければ null（流れを広げない、composeApply の注）。
+// 括りの関数は、最後の仮引数が裸なら n（最後が括りなら、残りの並び全体を受けるので null）。点なしの単項は 1、
+// 畳まない2項の点なし（R32）と素の関数は残りの口の数。流れの足りない合成（pre を持つ）は、中の関数が全部数えられれば、足りない数。
+// 段18 の点なし（`[' 0]`）は null：直に当てた適用の k ≠ 1 は未知のまま（applyKind の pfPick、§4 R35 の R の所）なので、流れの中で
+// だけ口を1つと数えると、同じ関数の口の数が2か所で割れる（確かめ 2026-10-22。前は 1 で、`[' 0] inc [1 2] 5` が `[1 2]` だけを取って
+// 5 を後ろに積み、直に当てた `[' 0] [1 2] 5` は並び全体を受ける未知だった）。流れの前が1項なら1と数える（composeApply）。
+// ノルム（`||f||` の最後の関数、R27）は 1：R27 は「1つ受けて A を返す関数」と決めているので、流れでも口を1つと数え、余りは後ろに
+// 積む（`||inc|| 1 2` は `||inc 1||` の後ろに 2）。R27 の等式 `||f|| x` ＝ `||f x||` は、x が f のアリティ分のときの言い換え（確かめ
+// 2026-10-22 に R27 の文面を狭めた）。
+function flowArity(fn) {
+  if (!fn) return null;
+  switch (fn.type) {
+    case "plain":
+      return fn.rest ? null : fn.n;
+    case "pfUnary":
+    case "norm":
+      return 1;
+    case "pfBinary":
+      return fn.n;
+    case "pattern":
+      return fn.lastBracket ? null : fn.n;
+    case "compose": {
+      let need = 0;
+      for (let i = 0; i < fn.fns.length; i++) {
+        const a = flowArity(fn.fns[i]);
+        if (a === null) return null;
+        need += i === 0 ? a : a - 1;
+      }
+      return need - (fn.pre ? fn.pre.length : 0);
+    }
+    default:
+      return null;
+  }
 }
 
 // 合成の中で、前の関数の結果を次の関数へ渡す1項の実引数。applyKind と descOfTree がそのまま読む葉にする。
@@ -3561,27 +3871,32 @@ function composeLeaf(desc) {
 // ti が全部 A のとき、各穴を生成名に替えて `(? [$p0 …] (apply h …))` にする。種類は L、アリティは穴の数。
 // 穴は `!_`（その口の恒等射）と、最後の項でない書いた `_`（U 10-14 03:10「f _ 10 は a ? f a 10」）。`!_` は最後の項でもよい
 // （η：`add 1 !_` は `add 1`、`inc !_` は `inc`）。最後の `_` は「終わり」（markApply）なので穴にしない。
-// 既定値のある関数：書いた `_` を当てたら G15（内側でも最後でも。値は既定値、U〔答え〕10-21 03:11。種類は §5 Q8 で未決）。
+// 既定値のある関数：書いた `_` は、既定値のある口に当たれば既定値という値（R39、defaultUnits。値の項として実引数に残す）、既定値の
+// 無い口なら G15。穴 `!_` の無い並びの `_` は、縮める所（markApply）が同じ規則で読む。
 // `!_` は既定値があっても穴（仮引数の数 n で k = n を見る。n が数えられなければ穴にしない、defaultsArity）。その関数の適用の
 // 種類は未知（applyKind の other）なので、穴の関数もアリティの分からない関数（other）にする。アリティは数えない（§3.4 の
 // 穴の行。`(gd !_ 3) 5` は未知、`(gd !_ 3) _` は終わりの頭のアリティが数えられないので G5）。
-// k ≠ n は R34（holeMismatch）。書いた `_` の混ざった k ≠ n は読まない（R16 のカリー化は k = n だけ。残った `!_` は holeRefusal）。
+// k ≠ n は R34（holeMismatch）。既定値の無い素の関数の頭の、最後の項でない書いた `_` は、k ≠ n でも `!_` と同じ穴（R38。U 10-21
+// 03:14 のカリー化と、余りは口に入ってから後ろに積まれる R35 から出した読み）。最後の項が `_` の k ≠ n は読まない（最後の `_` は
+// 終わり、R28。`!_` が残れば holeRefusal）。
 function tryHole(items, ctx) {
   const h = items[0];
   const fn = h.kind.fn;
   if (h.cat !== "plain" || h.kind.k !== "L" || !fn) return null;
-  const ts = items.slice(1);
-  const marks = ts.some(isMark);
+  let ts = items.slice(1);
+  let marks = ts.some(isMark);
   if (!marks && !ts.some(isHoleItem)) return null;
   const defaulted = fn.type === "other" && !!fn.defaults;
   if (defaulted && marks) {
-    throw gate("G15", `既定値のある関数 \`${showView(h.view)}\` の実引数に書いた \`_\` があります。値は既定値ですが、適用の種類は決まっていません（§5 Q8）。`);
+    if (!ts.some(isHoleItem)) return null;
+    ts = defaultUnits(h, fn, ts);
+    marks = false;
   }
   const n = holeHeadArity(h);
   if (n === null) return null;
-  if (ts.length !== n) return marks ? null : holeMismatch(h, ts, n, ctx);
+  if (ts.length !== n) return marks && isMark(ts[ts.length - 1]) ? null : holeMismatch(h, ts, n, ctx);
   if (isMark(ts[ts.length - 1])) return null;
-  if (!ts.every((t) => isMark(t) || isHoleItem(t) || (t.cat === "plain" && t.desc.k === "A" && !t.desc.spread))) return null;
+  if (!ts.every((t) => isMark(t) || isHoleItem(t) || isValueItem(t))) return null;
   const params = [];
   const args = ts.map((t) => {
     if (!isMark(t) && !isHoleItem(t)) return t;
@@ -3590,7 +3905,7 @@ function tryHole(items, ctx) {
     return holeParamLeaf(name);
   });
   const arg = args.length === 1 ? args[0] : makeConstruct(args);
-  const body = { t: "apply", head: h, arg, rev: false, ...applyKind(fn, arg) };
+  const body = applied(h, arg, applyKind(fn, arg));
   return { t: "hole", params, body, kind: { k: "L", fn: holeFnOf(fn, params.length) } };
 }
 
@@ -3611,11 +3926,12 @@ function holeFnOf(fn, n, restAt) {
 }
 
 // R34：穴 `!_` があって、実引数の数 k が頭のアリティ n と違う（§5 Q31 の答え）。頭は R16 と同じ（素の関数か、n が数えられる
-// 既定値のある関数。名前の定義か `?` の括り）。穴でない項は全部 A で撒く項が無く、書いた `_` が無いときだけ読む。
+// 既定値のある関数。名前の定義か `?` の括り）。穴でない項は全部 A で撒く項が無いときだけ読む。既定値の無い素の関数の頭では、最後の
+// 項でない書いた `_` も穴に数える（R38。`f2 _ 3 4` は `f2 4 3`、`f3 _ 2` は `a [~c] ? f3 a 2 c~`）。
 // - k > n：前から n 個で穴の関数を作り（R16）、残りの実引数を前から順にその穴へ入れる（U〔答え〕10-21 22:51「合ってる。Bだね」。
 //   主の Claude の問いの (B)「`go !_` は穴で `a ? go a`、後ろの xs がその穴を埋めて `go xs`。`f !_ 3 4`（f は2引数）は
 //   `(a ? f a 3) 4` で `f 4 3`。括った `[f !_ 3] 4` と同じ答え」）。穴より残りが多ければ、穴を全部埋めた適用で、余りは素の関数の
-//   余り（applyKind が `excess` を付けるか、本体の根が A でなければ G12(b)）。穴が残れば、残った穴を待つ穴の関数（L）。木は埋めた
+//   余り（後ろに積む（R35）か、本体の根が A でなければ G12(b)）。穴が残れば、残った穴を待つ穴の関数（L）。木は埋めた
 //   所を値に替えた形（`go !_ xs` は `(apply go xs)`、`f !_ 3 4` は `(apply f (construct 4 3))`。決定の規則）。
 // - k < n：穴を前から順に裸の仮引数にし、書いていない後ろの n − k 個の口を、最後の括りの仮引数 `[~c]` 1つで受けて後ろへ撒く
 //   関数にする（U〔答え〕10-21 22:55「`a [~c] ? f3 a 2 c~` / という、足りない分は全部後ろへっていう変換がかかる。」）。木は
@@ -3633,10 +3949,13 @@ function holeFnOf(fn, n, restAt) {
 //     どちらも L になる形（`q : x ? (f4 !_) 7 xs`）で、本体の根の G16 をすり抜けるから。数1つ（`[x]≅x`、R24）か2つ以上なら、
 //     2つの読みは同じ答えになる。c の前に残る裸の口の数（restAt）は、部分適用にも持ち越し（plainApply）、実体の鍵にも入れる（fnKey。
 //     `f4 !_ 2` と `f4 !_ !_ 2` はアリティが同じで、List を1つ当てたときの答えが分かれる）。
-// 読まない形（null を返し、holeRefusal が G13 で断る）：撒く項がある（k が数えられない）・k > n で前から n 個の外に `!_` がある
+// 読まない形（null を返し、holeRefusal か g13Of が G13 で断る）：撒く項がある（k が数えられない）・k > n で前から n 個の外に穴がある
 // （残りの実引数を穴へ入れる、の「入れる物」が穴になる）。作った関数に後から当てる所の G13 は applyKind（上の2つ目）。
 function holeMismatch(h, ts, n, ctx) {
-  if (!ts.every((t) => isHoleItem(t) || (t.cat === "plain" && t.desc.k === "A" && !t.desc.spread))) return null;
+  // 穴は `!_` と、既定値の無い素の関数の頭なら書いた `_`（R38。呼ぶ側の tryHole が、最後の項が `_` の並びを先に外す。既定値のある
+  // 関数の頭の `_` は、既定値のある口なら値の葉に替えてあり、ほかは G15 で断ってある）。
+  const isHole = (t) => isHoleItem(t) || isMark(t);
+  if (!ts.every((t) => isHole(t) || isValueItem(t))) return null;
   const fn = h.kind.fn;
   const params = [];
   const param = () => {
@@ -3646,19 +3965,19 @@ function holeMismatch(h, ts, n, ctx) {
   };
   if (ts.length > n) {
     const rest = ts.slice(n);
-    if (rest.some(isHoleItem)) return null;
+    if (rest.some(isHole)) return null;
     let r = 0;
-    const filled = ts.slice(0, n).map((t) => (!isHoleItem(t) ? t : r < rest.length ? rest[r++] : param()));
+    const filled = ts.slice(0, n).map((t) => (!isHole(t) ? t : r < rest.length ? rest[r++] : param()));
     const all = [...filled, ...rest.slice(r)];
     const arg = all.length === 1 ? all[0] : makeConstruct(all);
-    const app = { t: "apply", head: h, arg, rev: false, ...applyKind(fn, arg) };
+    const app = applied(h, arg, applyKind(fn, arg));
     return params.length ? { t: "hole", params, body: app, kind: { k: "L", fn: holeFnOf(fn, params.length) } } : app;
   }
-  const args = ts.map((t) => (isHoleItem(t) ? param() : t));
+  const args = ts.map((t) => (isHole(t) ? param() : t));
   const c = holeName(ctx, params.length);
   const spread = { k: "A", spread: true };
   const arg = makeConstruct([...args, { t: "leaf", term: null, cat: "plain", desc: spread, kind: spread, view: { v: "atom", text: `${c}~` } }]);
-  const body = { t: "apply", head: h, arg, rev: false, ...applyKind(fn, arg) };
+  const body = applied(h, arg, applyKind(fn, arg));
   return { t: "hole", params: [...params, `[~${c}]`], body, kind: { k: "L", fn: holeFnOf(fn, params.length + n - ts.length, params.length) } };
 }
 

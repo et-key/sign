@@ -74,9 +74,11 @@ const passes = [
 	// （中身の見えない A）で、器なら要素に関数が見えるかもしれないので、今までどおり未知（R31 の1項、2026-10-21 の確かめで直した。
 	// R31 の最初の版は A にしていた）。
 	["[* 2,] [+] 1 2 3 4 5（未知の根）", std("[* 2,] [+] 1 2 3 4 5"), "(apply (compose [* 2,] [+]) (construct 1 2 3 4 5))", "未知"],
-	["k1 1 2", std("k1 1 2"), "(apply k1 (construct 1 2))", "A", { excess: false }],
-	["d 1 2（根、excess）", std("d 1 2"), "(apply d (construct 1 2))", "A", { excess: true }],
-	["[+ 1] 1 2 3（根、excess）", std("[+ 1] 1 2 3"), "(apply [+ 1] (construct 1 2 3))", "A", { excess: true }],
+	["k1 1 2", std("k1 1 2"), "(apply k1 (construct 1 2))", "A", { leftover: false }],
+	// §5 Q11 の答え（U〔答え〕2026-10-21 23:10「余った引数は後ろに積んでいい。」、R35）：実引数がアリティより多い適用は、前から n 個を
+	// 当てた適用の後ろに余りを並べた構築。前は `(apply d (construct 1 2))` に印 excess（根でだけ通る）だった。
+	["d 1 2（余りは後ろに積む、R35）", std("d 1 2"), "(construct (apply d 1) 2)", "A", { leftover: true }],
+	["[+ 1] 1 2 3（余りは後ろに積む、R35。値は U〔答え〕09-28 00:58 の [2 2 3]）", std("[+ 1] 1 2 3"), "(construct (apply [+ 1] 1) 2 3)", "A", { leftover: true }],
 	["[+ 1] [1 2 3]~（未知の根）", std("[+ 1] [1 2 3]~"), "(apply [+ 1] [1 2 3]~)", "未知"],
 	["[+] [1 2 3]~（未知の根）", std("[+] [1 2 3]~"), "(apply [+] [1 2 3]~)", "未知"],
 	// 畳む2項の点なしに List 1つは、要素を並びとして畳む（R31。U〔答え〕10-07 05:10 は `[+] ([< 3,] 1 5 2)` を 3）。ここの括りの中は
@@ -119,7 +121,7 @@ const passes = [
 	["\\a _", std("\\a _"), "\\a", "A"],
 	["_ inc 5（適用の実引数でない構築の印は消える）", std("_ inc 5"), "(apply inc 5)", "A"],
 	["add 1 _（終わり：足りない適用にしない）", std("add 1 _"), "(apply add (construct 1 _))", "A"],
-	["inc 1 _（終わり：飽和なら k' 個の適用）", std("inc 1 _"), "(apply inc (construct 1 _))", "A", { excess: false }],
+	["inc 1 _（終わり：飽和なら k' 個の適用）", std("inc 1 _"), "(apply inc (construct 1 _))", "A", { leftover: false }],
 	["f _ _（f は未定義の名前＝値）", std("f _ _"), "f", "A", { diag: "f" }],
 	["_ + 1 f（中置の被演算子の印は A、f は未定義の名前）", std("_ + 1 f"), "(construct (+ _ 1) f)", "A", { diag: "f" }],
 	["say 5（say は未定義）", std("say 5"), "(construct say 5)", "A", { diag: "say" }],
@@ -129,7 +131,12 @@ const passes = [
 	// §5 Q21 の答え（2026-10-21、R33）：関数を返すなら `$` を明示する（利用者 2026-10-21「adder が返すべきは [+ m] じゃなくて $[+ m]」）。前の
 	// `adder : m ? [+ m]` は G16（下の「裸の関数を返す」）で、`$[+ m]` の adder の本体の根は A。前は未知の根。
 	["adder 5（前は未知の根）", std("adder 5"), "(apply adder 5)", "A"],
-	["adder 5 3（根、excess。前は G12(b)）", std("adder 5 3"), "(apply adder (construct 5 3))", "A", { excess: true }],
+	["adder 5 3（余りは後ろに積む、R35。前は G12(b)、その後は excess）", std("adder 5 3"), "(construct (apply adder 5) 3)", "A", { leftover: true }],
+	// §6.3 の「断られる」表から移した行（2026-10-22）。`f2 1 g 2` は §5 Q4 の答え（R36：合成は流れとして左から畳む）で `g (f2 1 2)`、
+	// `5 inc 3 4` は Q11 の答え（R35）で `5 (inc 3) 4`、`1 2 inc` は Q6 の答え（R37：一番近い1項だけを取る）で `1 (2 inc)`。
+	["f2 1 g 2（前は G2(b)、R36）", std("f2 1 g 2"), "(apply (compose (apply f2 1) g) 2)", "A"],
+	["5 inc 3 4（前は G12(a)、R35）", std("5 inc 3 4"), "(construct 5 (apply inc 3) 4)", "A", { leftover: true }],
+	["1 2 inc（前は G1、R37）", std("1 2 inc"), "(construct 1 (apply inc 2 ·rev))", "A"],
 	["inc adder 5（前は未知の根、§5 Q13）", std("inc adder 5"), "(apply (compose inc adder) 5)", "A"],
 	["f : x y ? x + y（解くのは x + y だけ）", "f : x y ? x + y", "(: f (? [x y] (+ x y)))", null],
 ];
@@ -137,11 +144,11 @@ const passes = [
 // 断られる：[名前, ソース, 門]
 const GO_DEFAULT = ["go :", "\t\tys", "\t\tzs : 3", "\t? ys", "", "xs : 1 , 2"];
 const refused = [
-	["f2 1 g 2", std("f2 1 g 2"), "G2(b)"],
+	// §6.3 の `f2 1 g 2`（G2(b)）・`5 inc 3 4`（G12(a)）・`1 2 inc`（G1）は、2026-10-22 に通る側（上の表）へ移した（R35〜R37）。
 	// §6.3 の `[+] 5 g 3`（G2(a)）は、R31 で `[+] 5` が値になって通る側（下の「畳む2項の点なし」）へ移した。G2(a) の見本は、
-	// アリティの分からない点なし `[,]` に1項の `[,] 5 g 3` にした（畳まない `[<<] 5 g 3` は R32 で足りない適用になり、G2(b)）。
+	// アリティの分からない点なし `[,]` に1項の `[,] 5 g 3` にした（畳まない `[<<] 5 g 3` は R32 で足りない適用になり、R36 で流れとして通る）。
 	["[,] 5 g 3（前は [+] 5 g 3）", std("[,] 5 g 3"), "G2(a)"],
-	["5 inc 3 4", std("5 inc 3 4"), "G12(a)"],
+	// 余りを後ろに積んだ構築の後ろの逆適用：R37 なら `(inc 1) (inc 2)`、R36 の流れなら `inc (inc 1)` の後ろに 2 で、割れる（G12(a)）。
 	["inc 1 2 inc", std("inc 1 2 inc"), "G12(a)"],
 	// §6.3 の `adder 5 3`（G12(b)）は、adder が `$[+ m]` を返すようになって通る側へ移した（R33）。G12(b) の見本は、本体の根が
 	// 未知の use にした。
@@ -149,7 +156,6 @@ const refused = [
 	["5 f2 1", std("5 f2 1"), "G8"],
 	["5 f2", std("5 f2"), "G8"],
 	["5 (f2 1)", std("5 (f2 1)"), "G8"],
-	["1 2 inc", std("1 2 inc"), "G1"],
 	["5 [+ 1]", std("5 [+ 1]"), "G10"],
 	// §6.3 の `5 inc [* 2]`（G10）は、§5 Q23 の答えで通る側へ移した。G10 の見本は、合成の最初が点なしの `5 [* 2] inc` にした。
 	["5 [* 2] inc（前の見本は 5 inc [* 2]）", std("5 [* 2] inc"), "G10"],
@@ -178,7 +184,7 @@ const refused = [
 ];
 
 const GATE_REASON = {
-	G1: "coproduct-reverse-of-many",
+	// G1（coproduct-reverse-of-many）は 2026-10-22 に廃止（答えは U〔答え〕10-21 23:23、UTC。resolve.js の写しと同じ）。
 	G2: "coproduct-partial-neighbor",
 	G3: "coproduct-beside-product",
 	G4: "coproduct-prefix-tilde",
@@ -206,7 +212,8 @@ const ok = (name) => {
 };
 const fail = (name, ...lines) => console.log(`FAIL ${name}\n${lines.map((l) => `     ${l}`).join("\n")}`);
 
-// 通る行を確かめる。extra：body（本体の木を見る）・at（見る行の番号）・excess・diag（undefined-name が出る名前）・
+// 通る行を確かめる。extra：body（本体の木を見る）・at（見る行の番号）・leftover（根が、余りを後ろに積んだ構築か。R35。前の印
+// excess の行は、2026-10-22 にこの印へ移した）・diag（undefined-name が出る名前）・
 // diagText（その名前の undefined-name のどれかの文面に含まれる文字列）・diagCount（出る診断の数）・pfInfo（pointfree-not-folded
 // の information が出る点なしの綴り。R32）。
 const checkPass = (name, src, want, kind, extra = {}) => {
@@ -223,7 +230,7 @@ const checkPass = (name, src, want, kind, extra = {}) => {
 	const problems = [];
 	if (got !== want) problems.push(`木   got:  ${got}`, `     want: ${want}`);
 	if (kind !== null && kindOf(t) !== kind) problems.push(`種類 got: ${kindOf(t)}  want: ${kind}`);
-	if ("excess" in extra && !!t.excess !== extra.excess) problems.push(`excess got: ${!!t.excess}  want: ${extra.excess}`);
+	if ("leftover" in extra && !!t.leftover !== extra.leftover) problems.push(`leftover got: ${!!t.leftover}  want: ${extra.leftover}`);
 	if (extra.diag && !r.diagnostics.some((d) => d.reason === "undefined-name" && d.severity === "information" && d.name === extra.diag)) {
 		problems.push(`undefined-name（${extra.diag}）が出ていない: ${JSON.stringify(r.diagnostics)}`);
 	}
@@ -308,7 +315,7 @@ const fixPasses = [
 	["[,] inc 2 3（未知の根）", std("[,] inc 2 3"), "(apply (compose [,] inc) (construct 2 3))", "未知"],
 	// 段18 の点なしの適用は、k = 1 なら `fs ' 0` と同じ desc（R26。2026-10-19 に §2 Q1 の答えで決まった）。ここは
 	// k = 2 なので未知のまま。k = 1 の `[' 0] fs` も、fs の要素に関数が見えるので未知（下の「法則」で比べる）。
-	["[' 0] fs 5（未知の根）", std("[' 0] fs 5"), "(apply [' 0] (construct fs 5))", "未知", { excess: false }],
+	["[' 0] fs 5（未知の根）", std("[' 0] fs 5"), "(apply [' 0] (construct fs 5))", "未知", { leftover: false }],
 	// 中置の右のブロックは前段が置く場所なので通る。
 	["中置の右のブロック", std(["v : 1 +", "\t2"]), "(: v (+ 1 (block 2)))", null],
 	// 合成の最初の関数の本体の根が値でなければ、k = n でも未知。前は本体の根が L の adder（§5 Q21）で見ていたが、根が L の関数は
@@ -349,8 +356,8 @@ const fixRefused = [
 	["[@ 0] fs inc", std("[@ 0] fs inc"), "G2(a)"],
 	["[@] fs 0 inc", std("[@] fs 0 inc"), "G2(a)"],
 	["5 [' 0]", std("5 [' 0]"), "G10"],
-	// §3.3 の「他の読みと割れる所」は G12 と書くが、手順と R12 で縮めると G1（左が構築の節）。
-	["5 inc 3 inc", std("5 inc 3 inc"), "G1"],
+	// §3.3 の「他の読みと割れる所」の `5 inc 3 inc` は、前は G1（左が構築の節）だった。2026-10-22 から R37 で一番近い1項（`inc 3`）を
+	// 取って通る（下の「余りと流れ」の行）。`inc 3` は余りでないので、R36 の流れでも同じ `5 (inc (inc 3))`。
 	// 撒く項を中置・点なしにどう渡すかは仕様に無いので未知（2項以上の並びで G7）。
 	["vs~ + 1 5", std("vs~ + 1 5"), "G7"],
 	["[+ vs~] 1", std("[+ vs~] 1"), "G7"],
@@ -401,7 +408,13 @@ const gapPasses = [
 	["[* 2,] 1 2 3 inc", std("[* 2,] 1 2 3 inc"), "(apply inc (apply [* 2,] (construct 1 2 3)) ·rev)", "A"],
 	// 前は `double adder 5`（adder の根が L、§5 Q21）。根が L の関数は G16（R33）なので、根が未知の uu で見る。
 	["double uu 5（未知の根）", std(["uu : x ? [,] x", "double uu 5"]), "(apply (compose double uu) 5)", "未知"],
-	["inc add 5（未知の根）", std("inc add 5"), "(apply (compose inc add) 5)", "未知"],
+	// 前は未知（§5 Q13）。R36 の流れで `add (inc 5)` の足りない適用（L）。
+	["inc add 5（L の根、R36。前は未知）", std("inc add 5"), "(apply (compose inc add) 5)", "L"],
+	// §5 Q4 の答え（R36）で、足りない適用を含む合成も流れとして読む。前は G2(b)（下の gapRefused にあった）。
+	["add inc 1 double 5（前は G2(b)）", std("add inc 1 double 5"), "(apply (compose (apply (compose add inc) 1) double) 5)", "A"],
+	["pc : use 5 inc の後で pc double 3（前は G2(b)。use の本体の根が未知なので未知）", std(["pc : use 5 inc", "pc double 3"]), "(apply (compose pc double) 3)", "未知"],
+	// 既定値の無い素の関数の内側の `_` は、k ≠ n でも `!_` と同じ（R38）。前は G5（下の gapRefused にあった）。
+	["add _ 10 5（前は G5、R38）", std("add _ 10 5"), "(apply add (construct 5 10))", "A"],
 	["R31 で変わった [+] inc 5（`[+] 5` は 5、前は未知の根）", std("[+] inc 5"), "(apply (compose [+] inc) 5)", "A"],
 	["[,] inc 5（未知の根）", std("[,] inc 5"), "(apply (compose [,] inc) 5)", "未知"],
 	["use 5 inc double（R8 で開く）", std("use 5 inc double"), "(compose (apply use 5) inc double)", "L"],
@@ -417,13 +430,11 @@ const gapPasses = [
 	["say say", std("say say"), "(construct say say)", "A", { diag: "say", diagCount: 1 }],
 ];
 const gapRefused = [
-	["5 use 5 inc", std("5 use 5 inc"), "G2(b)"],
+	// 足りない適用を含む合成が逆適用の右：前は G2(b)。R36 の後も R12 の形（最初がアリティ1の素の関数の葉）でないので G8。
+	["5 use 5 inc（前は G2(b)）", std("5 use 5 inc"), "G8"],
 	["add1 : add 1 の後で 5 add1", std(["add1 : add 1", "5 add1"]), "G8"],
 	["5 add inc", std("5 add inc"), "G8"],
-	["add inc 1 double 5", std("add inc 1 double 5"), "G2(b)"],
 	["double inc 5 6 inc", std("double inc 5 6 inc"), "G12(a)"],
-	["pc : use 5 inc の後で pc double 3", std(["pc : use 5 inc", "pc double 3"]), "G2(b)"],
-	["add _ 10 5", std("add _ 10 5"), "G5"],
 	["g3 : f3 1 の後で g3 _ 3", std(["g3 : f3 1", "g3 _ 3"]), "G5"],
 	["add _ inc", std("add _ inc"), "G5"],
 	["add _ vs~", std("add _ vs~"), "G5"],
@@ -452,8 +463,8 @@ const gapRefused = [
 	["5 +", std("5 +"), "infix-missing-operand"],
 	["1 === 1", std("1 === 1"), "operator-removed"],
 	// 本体の根を先に解くとき（§6.4 の1）は門で止めず、行を解くときに行の順に断る。本体は頭の `!_`（G7）。前の本体 `!_` だけは、
-	// 2026-10-21 に恒等射で通るようになった。
-	["門は行の順に断る", std(["1 2 inc", "tt : a ? !_ 5"]), "G1"],
+	// 2026-10-21 に恒等射で通るようになった。前の1行目 `1 2 inc`（G1）は R37 で通るようになったので、G12(a) の `inc 1 2 inc` にした。
+	["門は行の順に断る", std(["inc 1 2 inc", "tt : a ? !_ 5"]), "G12(a)"],
 ];
 for (const [name, src, want, kind, extra] of gapPasses) checkPass(`穴 ${name}`, src, want, kind, extra);
 for (const [name, src, want] of gapRefused) checkRefused(`穴 ${name}`, src, want);
@@ -484,10 +495,11 @@ const unitPasses = [
 	["[add 1 !_] 5", std("[add 1 !_] 5"), "(apply [add 1 !_] 5)", "A"],
 	["go !_ 3（既定値があっても穴）", std([...GO_DEFAULT, "go !_ 3"]), "(? [$p0] (apply go (construct $p0 3)))", "L"],
 	// 末尾の `_`：ここで終わり。足りなければ印（足りない適用にしない）、飽和なら評価
-	["add 3 _（足りなければ印）", std("add 3 _"), "(apply add (construct 3 _))", "A", { excess: false }],
+	["add 3 _（足りなければ印）", std("add 3 _"), "(apply add (construct 3 _))", "A", { leftover: false }],
 	["(add 3 _) inc（括りは印で、関数ではない）", std("(add 3 _) inc"), "(apply inc [add 3 _] ·rev)", "A"],
-	["add 2 3 _（飽和なら評価）", std("add 2 3 _"), "(apply add (construct 2 3 _))", "A", { excess: false }],
-	["d 1 2 _（k' > n は余り）", std("d 1 2 _"), "(apply d (construct 1 2 _))", "A", { excess: true }],
+	["add 2 3 _（飽和なら評価）", std("add 2 3 _"), "(apply add (construct 2 3 _))", "A", { leftover: false }],
+	// k' > n は、最後の `_` を除いた `d 1 2` と同じ（R28）で、余りを後ろに積む（R35）。構築の中の `_` は手順8で消えるので、木に書かない。
+	["d 1 2 _（k' > n は余りを後ろに積む）", std("d 1 2 _"), "(construct (apply d 1) 2)", "A", { leftover: true }],
 	["[+ 1] _", std("[+ 1] _"), "(apply [+ 1] _)", "A"],
 	["(add 3 _) 5（括りの中で終わる）", std("(add 3 _) 5"), "(construct [add 3 _] 5)", "A"],
 	["5 add 3 _（並びの最後なら頭でなくても終わり）", std("5 add 3 _"), "(construct 5 (apply add (construct 3 _)))", "A"],
@@ -518,10 +530,10 @@ const unitPasses = [
 	["x2 : !_（前は G7）", std("x2 : !_"), "(: x2 !_)", null],
 	["x2 : !_ の後で x2 5", std(["x2 : !_", "x2 5"]), "(apply x2 5)", "A"],
 	["i : !_ の後で i 5", std(["i : !_", "i 5"]), "(apply i 5)", "A"],
-	["i : !_ の後で i 1 2 3（並び全体を受ける。excess にしない）", std(["i : !_", "i 1 2 3"]), "(apply i (construct 1 2 3))", "A", { excess: false }],
+	["i : !_ の後で i 1 2 3（並び全体を受ける。excess にしない）", std(["i : !_", "i 1 2 3"]), "(apply i (construct 1 2 3))", "A", { leftover: false }],
 	["i : !_ の後で i _（終わり、R28）", std(["i : !_", "i _"]), "(apply i _)", "A"],
-	// 並び全体を受けた結果（A）は、隣の関数へ逆適用で渡る。否定の点なし `[!_] 1 2 inc` は G12(a)（下の「前置・後置の点なし」）
-	["i : !_ の後で i 1 2 inc（逆適用の左）", std(["i : !_", "i 1 2 inc"]), "(apply inc (apply i (construct 1 2)) ·rev)", "A"],
+	// 並び全体を受けた結果（A）の後ろの逆適用 `i 1 2 inc` は、2026-10-22 の確かめから G12(a)（下の unitRefused）。前はここで
+	// `(apply inc (apply i (construct 1 2)) ·rev)` と通していた。
 	// 本体が `!_` だけの関数（`tt : a ? !_`）も行は恒等射（L）と読むが、本体の根が裸の関数なので G16（R33、下の unitRefused）。前は
 	// ここで通っていた（その前は G7）。
 	// 行が `!_` だけなら、2行以上の括りの中の行・構造体の欄でも恒等射（R29 の R の所）。中置の被演算子の `!_` は下の G7。
@@ -533,13 +545,18 @@ const unitPasses = [
 	["s3 1 2 3 _（_ を除いてアリティどおりなら消える）", std([S3, "s3 1 2 3 _"]), "(apply s3 (construct 1 2 3))", "A"],
 	["(s3 1 _ 3) 2 の実体は (s3 1 3) 2 と同じ", std([S3, "(s3 1 _ 3) 2"]), "(: s3 (? [[p] [q] [r]] (inst N N N p)))", null, { at: -2 }],
 	["(s3 1 3) 2 の実体", std([S3, "(s3 1 3) 2"]), "(: s3 (? [[p] [q] [r]] (inst N N N p)))", null, { at: -2 }],
+	// 既定値のある口（go の zs）に書いた `_` は、既定値という値（R39、U〔答え〕10-21 23:42）。木では実引数のまま残し、種類は `go 1 3` と
+	// 同じ（既定値のある関数の適用は未知）。前は G15（下の unitRefused にあった）。
+	["go 1 _（既定値のある口の _、前は G15）", std([...GO_DEFAULT, "go 1 _"]), "(apply go (construct 1 _))", "未知"],
+	// 足りない適用を含む合成を囲んだノルムも、括りの `[use 5 inc] 3` と同じく流れで読む（R36）。use の本体の根が未知なので未知。前は G2(b)。
+	["||use 5 inc|| 3（前は G2(b)）", std("||use 5 inc|| 3"), "(apply ||use 5 inc|| 3)", "未知"],
 ];
 const unitRefused = [
 	// 本体が `!_` だけ：行は恒等射（L、R29）なので、本体の根が裸の関数（G16、R33）。前は `!_` の L で通っていた。
 	["本体が !_ だけ（前は通る）", std("tt : a ? !_"), "G16"],
-	// G15：既定値のある関数の実引数に書いた `_`（内側でも最後でも）。値は既定値、種類は §5 Q8 で未決
+	// G15：既定値のある関数の実引数に書いた `_` が、既定値の無い口（go の ys）に当たる（R39 の残り、§5 Q8）。既定値のある口に当たる
+	// `go 1 _` は、2026-10-22 から通る（上の unitPasses）。
 	["G15 go _ 3", std([...GO_DEFAULT, "go _ 3"]), "G15"],
-	["G15 go 1 _", std([...GO_DEFAULT, "go 1 _"]), "G15"],
 	["G15 頭でない go の _（5 go _ 3）", std([...GO_DEFAULT, "5 go _ 3"]), "G15"],
 	// 合成は左から実行する（R11）ので、最初の関数が既定値のある関数なら `_` はその実引数（前は G5）。
 	["G15 5 go inc _（合成の最初が既定値のある関数）", std([...GO_DEFAULT, "5 go inc _"]), "G15"],
@@ -554,7 +571,12 @@ const unitRefused = [
 	["G5 add _ inc（終わりの後ろに関数）", std("add _ inc"), "G5"],
 	["G5 inc 5 _ inc", std("inc 5 _ inc"), "G5"],
 	["G5 _ inc（逆適用の左）", std("_ inc"), "G5"],
-	["G5 5 _ inc（逆適用の左の構築）", std("5 _ inc"), "G5"],
+	// 逆適用の主語は一番近い1項（R37）なので、`_` が主語のときだけ G5。前に積む項の `_`（`_ 1 inc`）は下の「確かめ 2026-10-22」で通る。
+	["G5 5 _ inc（逆適用の主語が `_`）", std("5 _ inc"), "G5"],
+	["G5 1 2 _ inc（逆適用の主語が `_`）", std("1 2 _ inc"), "G5"],
+	// 恒等射が2項以上の並び全体を受けた値の後ろの逆適用：結果全体を主語に取る読み（R29）と、単位律で `i 1 2` を `1 2` と同じに見て
+	// 一番近い1項を取る読み（R37）で割れる（確かめ 2026-10-22。前は `(apply inc (apply i (construct 1 2)) ·rev)` で通っていた）。
+	["G12(a) i 1 2 inc（恒等射の並びの後ろの逆適用）", std(["i : !_", "i 1 2 inc"]), "G12(a)"],
 	// 前の `G5 [+] 1 _（貪欲な頭の終わり）` は、R31 で `_` が被演算子の印（`1 + _`）になって通る側（下の「畳む2項の点なし」）へ移した。
 	["G5 [* 2,] 1 _（貪欲な単項の頭の終わり）", std("[* 2,] 1 _"), "G5"],
 	["G5 inc inc _（合成の頭の終わり）", std("inc inc _"), "G5"],
@@ -581,7 +603,6 @@ const unitRefused = [
 	["G7 inc !_ inc（関数の混ざった並び）", std("inc !_ inc"), "G7"],
 	["G7 |!_| 5（絶対値の囲みに関数）", std("|!_| 5"), "G7"],
 	["G7 |inc| 5", std("|inc| 5"), "G7"],
-	["G2(b) ||use 5 inc|| 3（足りない適用を含む合成の印は持ち越す）", std("||use 5 inc|| 3"), "G2(b)"],
 	// 既定値のある関数と、ほかのアリティの分からない関数は、実体の鍵を分ける（fnKey）。前は鍵が `other` 1つで、括りの関数に
 	// 欄で渡すと実体を分け合い、先に解いた方の門が言い分になった：gx の行（G5 のはず）が、後ろの go の行の G15 で断られた。
 	["鍵 ap [f : gx] の行は、後ろの ap [f : go] に依らず G5", std(["gx : a ~y ? a", ...GO_DEFAULT, "ap : [f] ? f _ 3", "w : y ? ap [f : gx]", "w2 : ap [f : go]"]), "G5"],
@@ -609,10 +630,10 @@ const holeCountPasses = [
 	["add !_ 1 2（`add 2 1`、前は G13）", std("add !_ 1 2"), "(apply add (construct 2 1))", "A"],
 	["f2 !_ 3 4（`f2 4 3`）", std("f2 !_ 3 4"), "(apply f2 (construct 4 3))", "A"],
 	["[f2 !_ 3] 4（括っても同じ答え）", std("[f2 !_ 3] 4"), "(apply [f2 !_ 3] 4)", "A"],
-	["f3 !_ 2 3 4 5（埋めた後の余りは f3 の余り）", std("f3 !_ 2 3 4 5"), "(apply f3 (construct 4 2 3 5))", "A", { excess: true }],
+	["f3 !_ 2 3 4 5（埋めた後の余りは f3 の余りで、後ろに積む、R35）", std("f3 !_ 2 3 4 5"), "(construct (apply f3 (construct 4 2 3)) 5)", "A", { leftover: true }],
 	["f3 !_ !_ 5 6（穴が残る）", std("f3 !_ !_ 5 6"), "(? [$p0] (apply f3 (construct 6 $p0 5)))", "L"],
 	["f4 !_ 2 !_ 3 9（前の穴から埋める）", std("f4 !_ 2 !_ 3 9"), "(? [$p0] (apply f4 (construct 9 2 $p0 3)))", "L"],
-	["f3 !_ !_ 5 6 7（穴を全部埋める）", std("f3 !_ !_ 5 6 7"), "(apply f3 (construct 6 7 5))", "A", { excess: false }],
+	["f3 !_ !_ 5 6 7（穴を全部埋める）", std("f3 !_ !_ 5 6 7"), "(apply f3 (construct 6 7 5))", "A", { leftover: false }],
 	["use !_ 5 3（埋めた適用は本体の根が未知）", std("use !_ 5 3"), "(apply use (construct 3 5))", "未知"],
 	["go !_ 3 4（既定値のある go、n = 2。前は G13）", std([...GO_DEFAULT, "go !_ 3 4"]), "(apply go (construct 4 3))", "未知"],
 	["本体 t : y ? inc !_ y", std("t : y ? inc !_ y"), "(apply inc y)", "A", { body: true }],
@@ -622,10 +643,12 @@ const holeCountPasses = [
 	["add !_（η で add。前は G13）", std("add !_"), "(? [$p0 [~$p1]] (apply add (construct $p0 $p1~)))", "L"],
 	["f4 !_ !_（穴2つと残りの括り）", std("f4 !_ !_"), "(? [$p0 $p1 [~$p2]] (apply f4 (construct $p0 $p1 $p2~)))", "L"],
 	["f4 2 !_（穴が後ろでも、残りの口は最後の括り）", std("f4 2 !_"), "(? [$p0 [~$p1]] (apply f4 (construct 2 $p0 $p1~)))", "L"],
-	["(f3 !_ 2) 1 3（`f3 1 2 3`）", std("(f3 !_ 2) 1 3"), "(apply [f3 !_ 2] (construct 1 3))", "A", { excess: false }],
+	["(f3 !_ 2) 1 3（`f3 1 2 3`）", std("(f3 !_ 2) 1 3"), "(apply [f3 !_ 2] (construct 1 3))", "A", { leftover: false }],
 	["(f3 !_ 2) 1（足りない適用）", std("(f3 !_ 2) 1"), "(apply [f3 !_ 2] 1)", "L"],
 	["((f3 !_ 2) 1) 3", std("((f3 !_ 2) 1) 3"), "(apply [[f3 !_ 2] 1] 3)", "A"],
-	["(f3 !_ 2) 1 3 4（f3 の余り）", std("(f3 !_ 2) 1 3 4"), "(apply [f3 !_ 2] (construct 1 3 4))", "A", { excess: true }],
+	// 最後の括りの仮引数 `[~c]` が残りの並び全体を受ける（R24）ので、この関数の所では木を切らない（f3 の余りとして、f3 の後ろに積まれる。
+	// resolve.js の plainApply の注）。中で積んだ余りは、適用の節の印 leftover で持ち越す（後ろの逆適用は G12(a)）。
+	["(f3 !_ 2) 1 3 4（f3 の余り。最後の括りが受けるので、木は切らない）", std("(f3 !_ 2) 1 3 4"), "(apply [f3 !_ 2] (construct 1 3 4))", "A", { leftover: true }],
 	["(add !_) 1 2（add 1 2）", std("(add !_) 1 2"), "(apply [add !_] (construct 1 2))", "A"],
 	["(f3 !_ 2) 1 3 inc（逆適用の左）", std("(f3 !_ 2) 1 3 inc"), "(apply inc (apply [f3 !_ 2] (construct 1 3)) ·rev)", "A"],
 	["(f3 !_ 2) vs~（撒く項は数えない）", std("(f3 !_ 2) vs~"), "(apply [f3 !_ 2] vs~)", "未知"],
@@ -639,6 +662,8 @@ const holeCountPasses = [
 	["(go !_) 1（既定値のある関数の適用は未知）", std([...GO_DEFAULT, "(go !_) 1"]), "(apply [go !_] 1)", "未知"],
 	// 書いた `_` を当てない関数なら、実体の鍵は同じアリティの穴の関数と分けても答えは同じ。
 	["鍵 h [f : [f3 !_ !_ 3]]（k = n の穴の関数に終わりの `_`）", std(["h : [f] ? f 1 _", "h [f : [f3 !_ !_ 3]]"]), "(apply h [f : [f3 !_ !_ 3]])", "A"],
+	// 既定値の無い素の関数の内側の `_` は、k ≠ n でも `!_` と同じ（R38）なので、`_` と `!_` を混ぜてよい。前は G7（下の holeCountRefused にあった）。
+	["add !_ _ 3（`_` と `!_` を混ぜた k > n、R38。前は G7）", std("add !_ _ 3"), "(? [$p0] (apply add (construct 3 $p0)))", "L"],
 ];
 const holeCountRefused = [
 	["use !_ 5 3 4（埋めた後の余りで、本体の根が未知）", std("use !_ 5 3 4"), "G12(b)"],
@@ -672,9 +697,9 @@ const holeCountRefused = [
 	// 実体の鍵は、最後の括りの前に残る裸の口の数（fnKey の restAt）でも分ける。分けないと、先に解いた `[f4 !_ 2]` の実体（A）を
 	// `[f4 !_ !_ 2]` の行が黙って使う（`f 1 2 vs` は、`[f4 !_ 2]` なら最後の括りに2つ、`[f4 !_ !_ 2]` なら vs が1つで入る）。
 	["鍵 w : h [f : [f4 !_ 2]] の後の h [f : [f4 !_ !_ 2]]", std(["h : [f] ? f 1 2 vs", "w : h [f : [f4 !_ 2]]", "h [f : [f4 !_ !_ 2]]"]), "G13"],
-	// 今のまま：書いた `_` の混ざった k ≠ n・k = n の撒く項・括りの関数の頭・n の数えられない頭は G7 か G5
-	["G7 add !_ _ 3（書いた _ の混ざった k ≠ n）", std("add !_ _ 3"), "G7"],
-	["G7 f3 !_ _（書いた _ の混ざった k < n）", std("f3 !_ _"), "G7"],
+	// 今のまま：最後の項が `_` の k ≠ n（最後の `_` は終わり、R28）・k = n の撒く項・括りの関数の頭・n の数えられない頭は G7 か G5。
+	// 内側の `_` の混ざった `add !_ _ 3` は、R38 で通る側（上の holeCountPasses）へ移した。
+	["G7 f3 !_ _（最後の項が _ の k < n）", std("f3 !_ _"), "G7"],
 	["G7 add !_ vs~（k = n の撒く項）", std("add !_ vs~"), "G7"],
 	["G5 io1 !_ 5（括りの関数の頭）", std([IO1, "io1 !_ 5"]), "G5"],
 	["G7 gz !_（n の数えられない既定値のある関数）", std(["gz :", "\t\ta b", "\t\tc : 3", "\t? a", "", "gz !_"]), "G7"],
@@ -704,14 +729,14 @@ const unaryPasses = [
 	["[!_]（1項は関数）", std("[!_]"), "[!_]", "L"],
 	["[!_] 5", std("[!_] 5"), "(apply [!_] 5)", "A"],
 	// 否定の点なしは単項なので、2項以上は余り（恒等射 `i : !_` の `i 1 2 3` は並び全体を受けて excess にしない、上の「印と穴」）
-	["[!_] 1 2 3（根、excess）", std("[!_] 1 2 3"), "(apply [!_] (construct 1 2 3))", "A", { excess: true }],
+	["[!_] 1 2 3（余りは後ろに積む、R35）", std("[!_] 1 2 3"), "(construct (apply [!_] 1) 2 3)", "A", { leftover: true }],
 	["(!_) 5（丸い括りも同じ括り）", std("(!_) 5"), "(apply [!_] 5)", "A"],
 	["inc [-_] 5（合成の後ろ）", std("inc [-_] 5"), "(apply (compose inc [-_]) 5)", "A"],
 	["inc [!_] 5（合成の後ろ）", std("inc [!_] 5"), "(apply (compose inc [!_]) 5)", "A"],
 	["[-_] inc 5（合成の頭）", std("[-_] inc 5"), "(apply (compose [-_] inc) 5)", "A"],
 	["[-_] [!_] 5（点なしどうしの合成）", std("[-_] [!_] 5"), "(apply (compose [-_] [!_]) 5)", "A"],
 	["[* 2,] [-_] 1 2 3", std("[* 2,] [-_] 1 2 3"), "(apply (compose [* 2,] [-_]) (construct 1 2 3))", "A"],
-	["[-_] 5 6（根、excess）", std("[-_] 5 6"), "(apply [-_] (construct 5 6))", "A", { excess: true }],
+	["[-_] 5 6（余りは後ろに積む、R35）", std("[-_] 5 6"), "(construct (apply [-_] 5) 6)", "A", { leftover: true }],
 	["[-_] 5 inc（逆適用の左）", std("[-_] 5 inc"), "(apply inc (apply [-_] 5) ·rev)", "A"],
 	// 逆適用の右の合成の後ろなら G10 にしない（R13、§5 Q23 の答え。前は G10）。
 	["5 inc [-_]（逆適用の右の合成の後ろ）", std("5 inc [-_]"), "(apply (compose inc [-_]) 5 ·rev)", "A"],
@@ -761,7 +786,7 @@ const unaryRefused = [
 // 前置・後置の点なしの写像（U〔答え〕2026-10-21 10:09「前置・後置の点なしにも , を付けて、[* 2,] と同じ要素ごとの写像と読む。」）。
 // 前は §5 Q33 で未知（G7）だった。種類は貪欲な単項（`[* 2,]` の行）：k ≥ 1 で A、`excess` にしない。
 const mapPasses = [
-	["[-_,] 1 2 3（前は G7）", std("[-_,] 1 2 3"), "(apply [-_,] (construct 1 2 3))", "A", { excess: false }],
+	["[-_,] 1 2 3（前は G7）", std("[-_,] 1 2 3"), "(apply [-_,] (construct 1 2 3))", "A", { leftover: false }],
 	["[!_,] 1 2 3", std("[!_,] 1 2 3"), "(apply [!_,] (construct 1 2 3))", "A"],
 	["[!!_,] 1 2 3", std("[!!_,] 1 2 3"), "(apply [!!_,] (construct 1 2 3))", "A"],
 	["[_!,] 1 2 3", std("[_!,] 1 2 3"), "(apply [_!,] (construct 1 2 3))", "A"],
@@ -794,8 +819,8 @@ for (const [name, s, want, kind, extra] of mapPasses) checkPass(`点なし 写�
 // 欄）が読むので、ここでは木と種類だけを見る。値の列（`[^] 2 3 2` は 512 など）は確かめない。
 // 畳まない2項の点なし（`<<`・`>>`・get・set・範囲・`!=`・`!==`・中置の `#`）は、下の「畳まない2項の点なし」（R32）。
 const foldPfPasses = [
-	["[+] 5（1項はその項そのもの、前は未知）", std("[+] 5"), "(apply [+] 5)", "A", { excess: false }],
-	["[+] 1 2 3", std("[+] 1 2 3"), "(apply [+] (construct 1 2 3))", "A", { excess: false }],
+	["[+] 5（1項はその項そのもの、前は未知）", std("[+] 5"), "(apply [+] 5)", "A", { leftover: false }],
+	["[+] 1 2 3", std("[+] 1 2 3"), "(apply [+] (construct 1 2 3))", "A", { leftover: false }],
 	["[-] 5 3 1", std("[-] 5 3 1"), "(apply [-] (construct 5 3 1))", "A"],
 	["[-] 10 3 2（§6.3 の行）", std("[-] 10 3 2"), "(apply [-] (construct 10 3 2))", "A"],
 	["[*] 2 3（前は未知）", std("[*] 2 3"), "(apply [*] (construct 2 3))", "A"],
@@ -900,7 +925,7 @@ for (const [name, s, want] of foldPfRefused) checkRefused(`畳む ${name}`, s, w
 // ので未知（決定の規則、主の Claude の案）。「おすすめは出来ない」は断らずに information `pointfree-not-folded` で見せる（書いた
 // 点なし1つにつき1回）。前は段12〜22 の物がアリティの分からない点なし（適用は未知）、段1〜9 の物が未知の葉（G7）だった。
 const binPfPasses = [
-	["[<<] 1 2（前は未知の根）", std("[<<] 1 2"), "(apply [<<] (construct 1 2))", "A", { excess: false, pfInfo: "[<<]", diagCount: 1 }],
+	["[<<] 1 2（前は未知の根）", std("[<<] 1 2"), "(apply [<<] (construct 1 2))", "A", { leftover: false, pfInfo: "[<<]", diagCount: 1 }],
 	["[>>] 4 1", std("[>>] 4 1"), "(apply [>>] (construct 4 1))", "A", { pfInfo: "[>>]" }],
 	["[~] 1 5（範囲）", std("[~] 1 5"), "(apply [~] (construct 1 5))", "A", { pfInfo: "[~]" }],
 	["[~+] 1 5", std("[~+] 1 5"), "(apply [~+] (construct 1 5))", "A", { pfInfo: "[~+]" }],
@@ -913,9 +938,9 @@ const binPfPasses = [
 	// 口は左から埋まる。
 	["[<<] 1（右の口を待つ足りない適用）", std("[<<] 1"), "(apply [<<] 1)", "L"],
 	["['] fs（get も同じく L）", std("['] fs"), "(apply ['] fs)", "L"],
-	["[<<] 1 4 2（余り）", std("[<<] 1 4 2"), "(apply [<<] (construct 1 4 2))", "A", { excess: true }],
+	["[<<] 1 4 2（余りは後ろに積む、R35）", std("[<<] 1 4 2"), "(construct (apply [<<] (construct 1 4)) 2)", "A", { leftover: true }],
 	["[<<] 1 _（末尾の `_` は R28 の n = 2）", std("[<<] 1 _"), "(apply [<<] (construct 1 _))", "A"],
-	["[<<] 1 2 _（k' = n）", std("[<<] 1 2 _"), "(apply [<<] (construct 1 2 _))", "A", { excess: false }],
+	["[<<] 1 2 _（k' = n）", std("[<<] 1 2 _"), "(apply [<<] (construct 1 2 _))", "A", { leftover: false }],
 	["[<<] 1 2 inc（前は G2(a)）", std("[<<] 1 2 inc"), "(apply inc (apply [<<] (construct 1 2)) ·rev)", "A"],
 	["[!=] 1 2 inc（前は G2(a)）", std("[!=] 1 2 inc"), "(apply inc (apply [!=] (construct 1 2)) ·rev)", "A"],
 	["[~] 1 5 inc（前は G2(a)）", std("[~] 1 5 inc"), "(apply inc (apply [~] (construct 1 5)) ·rev)", "A"],
@@ -926,14 +951,20 @@ const binPfPasses = [
 	["p : [<<] の後で p 1 2", std(["p : [<<]", "p 1 2"]), "(apply p (construct 1 2))", "A"],
 	["[<<] inc 2 3（前は未知の根）", std("[<<] inc 2 3"), "(apply (compose [<<] inc) (construct 2 3))", "A"],
 	["[<<] inc 5（`add inc 5` と同じく足りない、L の根）", std("[<<] inc 5"), "(apply (compose [<<] inc) 5)", "L"],
-	["inc [<<] 5（後ろの足りない適用は未知、`inc add 5` と同じ）", std("inc [<<] 5"), "(apply (compose inc [<<]) 5)", "未知"],
+	// 後ろの足りない適用は、流れ（R36）で `[<<] (inc 5)` の足りない適用（L）。`inc add 5` と同じ。前は未知。
+	["inc [<<] 5（後ろの足りない適用は L、`inc add 5` と同じ。前は未知）", std("inc [<<] 5"), "(apply (compose inc [<<]) 5)", "L"],
+	["inc [<<] 5 6（流れで `[<<] (inc 5) 6`、R36。前は未知）", std("inc [<<] 5 6"), "(apply (compose inc [<<]) (construct 5 6))", "A"],
+	// 足りない適用を含む合成が適用の頭（`f2 1 g 2` と同じ）：流れで `g ([<<] 5 3)`（R36）。前は G2(b)（下の binPfRefused にあった）。
+	["[<<] 5 g 3（前は G2(b)）", std("[<<] 5 g 3"), "(apply (compose (apply [<<] 5) g) 3)", "A", { pfInfo: "[<<]" }],
+	// 余りは後ろに積む（R35）。前は G12(a)（余りの節が対に入る）。
+	["1 [<<] 2 3 4（前は G12(a)）", std("1 [<<] 2 3 4"), "(construct 1 (apply [<<] (construct 2 3)) 4)", "A", { leftover: true }],
 	// 逆適用の右の合成の後ろなら、ほかの点なしと同じく G10 にしない（R13、§5 Q23 の答え。前は G10）。素の2引数の関数と同じに
 	// なる（`5 inc (add 1)`・`q2 : add 1` ⏎ `5 inc q2` は A）。
 	["5 inc ([<<] 1)（前は G10）", std("5 inc ([<<] 1)"), "(apply (compose inc [[<<] 1]) 5 ·rev)", "A", { pfInfo: "[<<]", diagCount: 1 }],
 	["q : [<<] 1 ⏎ 5 inc q（前は G10）", std(["q : [<<] 1", "5 inc q"]), "(apply (compose inc q) 5 ·rev)", "A", { pfInfo: "[<<]", diagCount: 1 }],
 	["比べ 5 inc (add 1)", std("5 inc (add 1)"), "(apply (compose inc [add 1]) 5 ·rev)", "A"],
 	["比べ q2 : add 1 ⏎ 5 inc q2", std(["q2 : add 1", "5 inc q2"]), "(apply (compose inc q2) 5 ·rev)", "A"],
-	["5 inc [<<]（`inc [<<] 5` と同じく未知の根）", std("5 inc [<<]"), "(apply (compose inc [<<]) 5 ·rev)", "未知", { pfInfo: "[<<]" }],
+	["5 inc [<<]（`inc [<<] 5` と同じく L の根。前は未知）", std("5 inc [<<]"), "(apply (compose inc [<<]) 5 ·rev)", "L", { pfInfo: "[<<]" }],
 	// information は書いた点なし1つにつき1回。本体を何度読んでも、同じ書いた所なら1回。
 	["[<<] 1 2 ⏎ [<<] 3 4（書いた所が2つ）", std(["[<<] 1 2", "[<<] 3 4"]), "(apply [<<] (construct 3 4))", "A", { diagCount: 2 }],
 	["t : y ? [<<] y 1 ⏎ t 2 ⏎ t 3（書いた所が1つ）", std(["t : y ? [<<] y 1", "t 2", "t 3"]), "(apply t 3)", "A", { pfInfo: "[<<]", diagCount: 1 }],
@@ -944,9 +975,9 @@ const binPfPasses = [
 	["t : [y] ? [<<] y だけ（呼ばれない本体は information を出さない）", std("t : [y] ? [<<] y"), "(: t (? [[y]] (defer {[<<] y})))", null, { diagCount: 0 }],
 ];
 const binPfRefused = [
-	// 足りない適用を含む合成が適用の頭（`f2 1 g 2` と同じ）。前の `[<<] 5 g 3` は G2(a)。
-	["G2(b) [<<] 5 g 3", std("[<<] 5 g 3"), "G2(b)"],
-	["G12(a) 1 [<<] 2 3 4（余りが対に入る）", std("1 [<<] 2 3 4"), "G12(a)"],
+	// 前の `G2(b) [<<] 5 g 3` と `G12(a) 1 [<<] 2 3 4` は、R36・R35 で通る側（上の binPfPasses）へ移した。余りを積んだ構築の後ろの
+	// 逆適用は G12(a)（R37 と R36 の流れで割れる）。
+	["G12(a) 1 [<<] 2 3 4 inc（余りを積んだ構築の後ろの逆適用）", std("1 [<<] 2 3 4 inc"), "G12(a)"],
 	// get・set の足りた適用は未知なので、余りは G12(b)、対に入れば G2(a)。
 	["G12(b) ['] fs 0 1", std("['] fs 0 1"), "G12(b)"],
 	["G2(a) ['] fs 0 inc", std("['] fs 0 inc"), "G2(a)"],
@@ -1181,9 +1212,9 @@ const answerPasses = [
 	["R24 裸の仮引数に部分適用を当て直す再帰", src(["inc : x ? x + 1", "t2 : u [v] ? v", "g : [f] ? g [f : t2 [f : f]]", "g [f : inc]"]), "(apply g [f : inc])", "A"],
 	// 最後の仮引数が裸の k > n は、素の関数と同じく前から n 個を当てて余り（excess）。本体の根が A でなければ G12(b)（R24、
 	// 利用者 2026-10-19「最後の仮引数が裸の括りの関数に多く渡したときは、素の関数と同じく前から n 個を当てて、余り（excess）にする。」）。
-	["R24 tl 1 2 3（最後の仮引数が裸の k > n は余り）", src(["tl : [x ~xs] y ? x + y", "tl 1 2 3"]), "(apply tl (construct 1 2 3))", "A", { excess: true }],
+	["R24 tl 1 2 3（最後の仮引数が裸の k > n は余りを後ろに積む、R35）", src(["tl : [x ~xs] y ? x + y", "tl 1 2 3"]), "(construct (apply tl (construct 1 2)) 3)", "A", { leftover: true }],
 	["R24 tl 1 2 3 の実体（前から n 個を当てる）", src(["tl : [x ~xs] y ? x + y", "tl 1 2 3"]), "(: tl (? [[x ~xs] y] (inst N A (+ x y))))", null, { at: 0 }],
-	["R24 (tl 1) 2 3（部分適用の残りが多い）", src(["tl : [x ~xs] y ? x + y", "(tl 1) 2 3"]), "(apply [tl 1] (construct 2 3))", "A", { excess: true }],
+	["R24 (tl 1) 2 3（部分適用の残りが多い）", src(["tl : [x ~xs] y ? x + y", "(tl 1) 2 3"]), "(construct (apply [tl 1] 2) 3)", "A", { leftover: true }],
 	["R24 (tl 1) 2 3 の実体", src(["tl : [x ~xs] y ? x + y", "(tl 1) 2 3"]), "(: tl (? [[x ~xs] y] (inst N A (+ x y))))", null, { at: 0 }],
 	["R24 [tl 1 2 3]（余りの節も括りの中の根なら通る）", src(["tl : [x ~xs] y ? x + y", "[tl 1 2 3]"]), "[tl 1 2 3]", "A"],
 	// 当てるのは前から n 個（余りの確かめ 2026-10-19 の TG1・TG2・TG4）。実引数が全部数だと、どこから当てても鍵が `N A` に
@@ -1193,9 +1224,9 @@ const answerPasses = [
 	["R24 h 1 [2 3] 4 5 の実体（前から n 個）", src(["h : u [x] v ? u + x + v", "h 1 [2 3] 4 5"]), "(: h (? [u [x] v] (inst A [N…] A (+ (+ u x) v))))", null, { at: 0 }],
 	["R24 (tl [1 2]) 3 4 の実体（当てた物が前）", src(["tl : [x ~xs] y ? x + y", "(tl [1 2]) 3 4"]), "(: tl (? [[x ~xs] y] (inst [N…] A (+ x y))))", null, { at: 0 }],
 	// k > n なら k の大きさに依らず同じ読み（素の関数の d 1 2 と同じ）。
-	["R24 tl 1 2 3 4（k = n + 2 も余り）", src(["tl : [x ~xs] y ? x + y", "tl 1 2 3 4"]), "(apply tl (construct 1 2 3 4))", "A", { excess: true }],
+	["R24 tl 1 2 3 4（k = n + 2 も余り）", src(["tl : [x ~xs] y ? x + y", "tl 1 2 3 4"]), "(construct (apply tl (construct 1 2)) 3 4)", "A", { leftover: true }],
 	// k = n の括りの関数の節は余りではないので、逆適用の左に置ける（TG5。excess は k > n だけ）。
-	["R24 pair [1] [2] inc（k = n の節は余りでない）", src(["inc : z ? z + 1", "pair : [a ~as] [b ~bs] ? a + b", "pair [1] [2] inc"]), "(apply inc (apply pair (construct [1] [2])) ·rev)", "A", { excess: false }],
+	["R24 pair [1] [2] inc（k = n の節は余りでない）", src(["inc : z ? z + 1", "pair : [a ~as] [b ~bs] ? a + b", "pair [1] [2] inc"]), "(apply inc (apply pair (construct [1] [2])) ·rev)", "A", { leftover: false }],
 	// 括りが1つの関数は、並び全体を1つの List として受ける（R24、利用者 2026-10-19「それでいいよ」）。
 	["R24 n 1 2 3 は n [1 2 3] と同じ実体", src(["n : [~x] ? x", "n 1 2 3", "n [1 2 3]"]), "(: n (? [[~x]] (inst [N…] x)))", null, { at: 0 }],
 	["R24 f 1 2 3（x は頭の数）", src(["f : [x ~xs] ? x 1", "f 1 2 3"]), "(: f (? [[x ~xs]] (inst [N…] (construct x 1))))", null, { at: 0 }],
@@ -1321,8 +1352,9 @@ const answerPasses = [
 	["Q26 名前を付けた部分適用 p1 : pr 1 の inc p1 5 inc", src(["inc : x ? x + 1", "pr : x y ? y", "p1 : pr 1", "inc p1 5 inc"]), "(apply inc (apply (compose inc p1) 5) ·rev)", "A"],
 	["Q26 inc (pr [1]) 5（括りの部分適用が合成の後ろ）", src(["inc : x ? x + 1", "pr : [x ~xs] y ? y", "inc (pr [1]) 5"]), "(apply (compose inc [pr [1]]) 5)", "A"],
 	["Q26 inc (pr [1]) 5 の実体", src(["inc : x ? x + 1", "pr : [x ~xs] y ? y", "inc (pr [1]) 5"]), "(: pr (? [[x ~xs] y] (inst N A y)))", null, { at: 1 }],
-	// 残りが2つ以上の部分適用は、合成の後ろでは今までどおり未知（§5 Q13）。
-	["Q26 inc (f3 1) 5（残り2つは未知）", src(["inc : x ? x + 1", "f3 : a b c ? c", "inc (f3 1) 5"]), "(apply (compose inc [f3 1]) 5)", "未知"],
+	// 残りが2つ以上の部分適用は、前は合成の後ろで未知（§5 Q13）。流れ（R36）では、残りの口が流れに足りれば A、足りなければ L。
+	["Q26 inc (f3 1) 5（残り2つで流れが足りない、L。前は未知）", src(["inc : x ? x + 1", "f3 : a b c ? c", "inc (f3 1) 5"]), "(apply (compose inc [f3 1]) 5)", "L"],
+	["Q26 inc (f3 1) 5 6（`f3 1 (inc 5) 6`、R36）", src(["inc : x ? x + 1", "f3 : a b c ? c", "inc (f3 1) 5 6"]), "(apply (compose inc [f3 1]) (construct 5 6))", "A"],
 	// 穴の書き換えとその部分適用を後ろに置く形は、Q26 の答えの時は決めずに未知にしていた（利用者の言葉ではなく、表を作った
 	// 側の慎重さ）。合成を適用の畳み込みにした（(g∘f) x = g (f x)、R11。2026-10-19「その方向でお願い」）ので、直接書いた
 	// `[add _ 10] (inc 5)` と同じく A。穴の部分適用も、同じ関数を穴で直接書いた `[f3 1 _ 3] (inc 5)` と同じ読みで A。
@@ -1337,7 +1369,7 @@ const answerPasses = [
 	// 前は根が L の `pq : x y ? inc` で見ていたが、根が L の関数は G16（R33）なので、根が未知の `[,] y` で見る。
 	["守り inc [pq _ 1] 5（穴の元の関数の根が未知なら未知）", src(["inc : x ? x + 1", "pq : x y ? [,] y", "inc [pq _ 1] 5"]), "(apply (compose inc [pq _ 1]) 5)", "未知"],
 	// 最初の関数が余れば印 `excess`（後ろに素の部分適用があっても落とさない）。確かめ 2026-10-19 の T2。
-	["Q26 inc (pr 1) 5 6（excess）", src(["inc : x ? x + 1", "pr : x y ? y", "inc (pr 1) 5 6"]), "(apply (compose inc [pr 1]) (construct 5 6))", "A", { excess: true }],
+	["Q26 inc (pr 1) 5 6（流れの余りは後ろに積む、R36）", src(["inc : x ? x + 1", "pr : x y ? y", "inc (pr 1) 5 6"]), "(construct (apply (compose inc [pr 1]) 5) 6)", "A", { leftover: true }],
 	// 後ろの関数が2つ以上でも、全部を見る（位置に依らない）。確かめ 2026-10-19 の T3。
 	["Q26 inc double (pr 1) 5 inc（後ろの2つ目）", src(["inc : x ? x + 1", "double : x ? x * 2", "pr : x y ? y", "inc double (pr 1) 5 inc"]), "(apply inc (apply (compose inc double [pr 1]) 5) ·rev)", "A"],
 	["Q26 inc (pr 1) double 5 inc（後ろの1つ目）", src(["inc : x ? x + 1", "double : x ? x * 2", "pr : x y ? y", "inc (pr 1) double 5 inc"]), "(apply inc (apply (compose inc [pr 1] double) 5) ·rev)", "A"],
@@ -1435,9 +1467,8 @@ const answerRefused = [
 	["R24 a m m（関数の見える構造体の List を並びで渡す）", src([...IO, "a m m"]), "G7", [["a", "[U…]"]]],
 	// 形の混ざった並びの要素は中身の見えない A（`p [1 $inc]` と同じ。R24 の断る側）なので、q の y は未知。
 	["R24 p 1 $inc（形の混ざった並び）", src(["inc : x ? x + 1", "p : [x ~xs] ? q x", "q : [y] ? y 5", "p 1 $inc"]), "G7", [["p", "[A…]"], ["q", "A"]]],
-	// 括りの関数の部分適用の節は、素の関数の部分適用と同じ門に当たる：合成に入って頭になれば G2(b)（`f2 1 g 2` と同じ、
-	// §5 Q4）、逆適用の右なら G8（`5 f2 1` と同じ、§5 Q5）。
-	["R24 pair [1] inc 5（部分適用を含む合成が頭）", src(["inc : x ? x + 1", "pair : [a ~as] [b ~bs] ? a + b", "pair [1] inc 5"]), "G2(b)"],
+	// 括りの関数の部分適用の節は、素の関数の部分適用と同じ門に当たる：逆適用の右なら G8（`5 f2 1` と同じ、§5 Q5）。合成に入って
+	// 頭になる形（`pair [1] inc 5`）は、前は G2(b) だったが、`f2 1 g 2` と同じく流れで読む（R36、下の「余りと流れ」の行）。
 	["R24 5 t3 1 2（部分適用の節が逆適用の右）", src(["t3 : u v [~r] ? u", "5 t3 1 2"]), "G8"],
 	// 部分適用で作った実体が門に当たれば、残りを渡して呼んだ行で断る（R25。部分適用の確かめ 2026-10-19 の TG2）。
 	["R24 (pair $inc) [2]（部分適用で作った実体の門）", src(["inc : x ? x + 1", "pair : [a ~as] [b ~bs] ? a 1", "(pair $inc) [2]"]), "G7", [["pair", "A N"]]],
@@ -1845,8 +1876,9 @@ const checkRefusedRows = [
 	// 既定値（`?` の左）も解かない（P3）ので、同じ理由で断る（F3 と同じ穴）。
 	["直した 括りの既定値の中で括りの関数を呼ぶ", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "o : [x : t [1 2]] ? 5"]), "G7"],
 	["直した 仮引数のブロックの既定値の中で括りの関数を呼ぶ", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "o :", "\t\tx : t [1 2]", "\t? 5"]), "G7"],
-	// 2項以上の条件は今までどおり解くので、実体の本体の門（G1）で名指しする。
-	["守り 2項の条件は実体を作る", src(["inc : x ? x + 1", "t : [a ~r] ? 5 inc 3 inc", "u : x ?", "\tt [1 2] : 1", "\t2", ""]), "G1", [["t", "[N…]"]]],
+	// 2項以上の条件は今までどおり解くので、実体の本体の門で名指しする。前の本体 `5 inc 3 inc`（G1）は R37 で通るようになった
+	// （2026-10-22）ので、門に当たる本体を `inc 1 2 inc`（G12(a)）にした。
+	["守り 2項の条件は実体を作る", src(["inc : x ? x + 1", "t : [a ~r] ? inc 1 2 inc", "u : x ?", "\tt [1 2] : 1", "\t2", ""]), "G12(a)", [["t", "[N…]"]]],
 	// 直した（反証 F1）：無名の素の関数の本体の根が、外の関数の仮置きの上で決まり、欄として別の実体へ渡っても、仮置きが
 	// 外れたら直る。行の順（kk と hh1）に依らず hh1 の行で G7。前の f は `f : [x ~xs] ? [z ? hh1 z]` だったが、実体の本体の根が
 	// 裸の関数なので G16（R33）に当たり、F1 の直しを戻しても G16 で断られて、この2行は空振りしていた（確かめ 2026-10-22。
@@ -2082,14 +2114,15 @@ law("合成の鍵は中身で分かれる", () => {
 	const n = instCount(src([...defs, "k [f : ca]", "k [f : cb]", "k [f : ca2]"]), 5);
 	return n === 2 ? [] : [`k の実体の数 got: ${n}  want: 2`];
 });
-// 合成の鍵は、足りない適用の節を含むか（partial）でも分かれる。分けないと、括りの部分適用 `[add 1]` で始まる合成の実体を
-// 先に作った行の後で、`add 1 inc`（足りない適用の節を含む）を渡した行が黙って通る（直す前の鍵も分けていたが、落ちる試験が
-// 無かった。変異で確かめた）。
-checkRefused(
-	"確かめ 守り 合成の鍵は足りない適用の印で分かれる",
+// 合成の鍵は、足りない適用の節を含むか（partial）でも分かれる。前は、partial の合成が適用の頭になると G2(b) で断っていたので、
+// 分けないと、括りの部分適用 `[add 1]` で始まる合成の実体を先に作った行の後で、`add 1 inc`（足りない適用の節を含む）を渡した行が
+// 黙って通った。2026-10-22 から、合成は流れとして読む（R36）ので、`[add 1] inc` と `add 1 inc` は同じ流れ（`inc (add 1 1)`）で、
+// どちらの行も A。鍵は今も印で分けている（分け合っても答えは同じ）。
+checkPass(
+	"確かめ 守り 合成の足りない適用の印は、流れの答えを変えない（前は G2(b)）",
 	src(["inc : x ? x + 1", "add : x y ? x + y", "k : [f] ? f 1", "k [f : [add 1] inc]", "k [f : add 1 inc]"]),
-	"G2(b)",
-	[["k", "{f:L}"]]
+	"(apply k [f : add 1 inc])",
+	"A"
 );
 
 // ---------------------------------------------------------------------------
@@ -2131,7 +2164,7 @@ const composePasses = [
 	["穴 inc uu tl 1（途中で未知になった後の括りの関数は未知を受ける）", src([INC, UU, TL, "inc uu tl 1"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 2 }],
 	["穴 inc uu tl 1 の根は未知", src([INC, UU, TL, "inc uu tl 1"]), "(apply (compose inc uu tl) 1)", "未知"],
 	["穴 pu inc [1]（合成の頭の括りの関数の実体の根が A でない k = n）", src([INC, "pu : [x ~xs] ? [,] x", "pu inc [1]"]), "(apply (compose pu inc) [1])", "未知"],
-	["穴 pr inc [1] 2 3（合成の頭の最後の仮引数が裸の k > n は余り）", src([INC, "pr : [x ~xs] y ? y", "pr inc [1] 2 3"]), "(apply (compose pr inc) (construct [1] 2 3))", "A", { excess: true }],
+	["穴 pr inc [1] 2 3（合成の頭の最後の仮引数が裸の k > n は、流れの余りを後ろに積む）", src([INC, "pr : [x ~xs] y ? y", "pr inc [1] 2 3"]), "(construct (apply (compose pr inc) (construct [1] 2)) 3)", "A", { leftover: true }],
 	["穴 head inc 5 6 7 double（合成の頭の最後の括りが残りを受ける）", src([INC, DOUBLE, "head : [x ~xs] ? x", "head inc 5 6 7 double"]), "(apply double (apply (compose head inc) (construct 5 6 7)) ·rev)", "A"],
 	["穴 pair inc [1]（合成の頭の括りの関数に足りない）", src([INC, "pair : [a ~as] [b ~bs] ? a + b", "pair inc [1]"]), "(apply (compose pair inc) [1])", "L"],
 	["穴 inc pb [1]（後ろの括りの関数のアリティが2）の根は未知", src([INC, "pb : [a] [b] ? [+ 1] _ _", "inc pb [1]"]), "(apply (compose inc pb) [1])", "未知"],
@@ -2177,8 +2210,8 @@ const composeRefused = [
 	["直した [' 0] bad fs（頭が段18 の点なしに1項）", src([INC, DOUBLE, "fs : inc , double", BAD, "[' 0] bad fs"]), "G5", [["bad", "U"]]],
 	["穴 inc uu tr 1（途中で未知になった後の括りの関数は未知を受ける）", src([INC, UU, TR, "inc uu tr 1"]), "G7", [["tr", "U"]]],
 	["穴 pu inc [1] double（合成の頭の括りの関数の実体の根が A でない節が対に入る）", src([INC, DOUBLE, "pu : [x ~xs] ? [,] x", "pu inc [1] double"]), "G2(a)"],
-	["穴 pr inc [1] 2 3 double（合成の頭の余りが対に入る）", src([INC, DOUBLE, "pr : [x ~xs] y ? y", "pr inc [1] 2 3 double"]), "G12(a)"],
-	["穴 pair inc [1] double 5（足りない合成が適用の頭）", src([INC, DOUBLE, "pair : [a ~as] [b ~bs] ? a + b", "pair inc [1] double 5"]), "G2(b)"],
+	["穴 pr inc [1] 2 3 double（合成の頭の流れの余りを積んだ構築の後ろの逆適用）", src([INC, DOUBLE, "pr : [x ~xs] y ? y", "pr inc [1] 2 3 double"]), "G12(a)"],
+	// 前の `穴 pair inc [1] double 5`（足りない合成が適用の頭、G2(b)）は、R36 で流れとして通る（下の「余りと流れ」の行）。
 	// 足りたか決まらない頭でも、後ろの括りの関数は未知を受けて実体を作る（§5 Q27。前は実体を作らずに通していた）。
 	["Q27 で裏返した [,] bad 5（前は [+] bad 5 で通っていた）", src([BAD, "[,] bad 5"]), "G5", [["bad", "U"]]],
 	// R31 で `[+] 5` は値になったので、bad は A を受ける（前は U）。本体の門は受けた物に依らず G5。
@@ -2271,11 +2304,11 @@ const foldPasses = [
 	["後ろの恒等射 inc i 5（i : !_）", src([INC, "i : !_", "inc i 5"]), "(apply (compose inc i) 5)", "A"],
 	["後ろの恒等射は形を運ぶ [' 0] i head [[1 2] [3 4]]（i : !_）", src(["head : [x ~xs] ? x", "i : !_", "[' 0] i head [[1 2] [3 4]]"]), "(: head (? [[x ~xs]] (inst [N…] x)))", null, { at: 0 }],
 	["否定の点なしは形を運ばない [' 0] [!_] head [[1 2] [3 4]]", src(["head : [x ~xs] ? x", "[' 0] [!_] head [[1 2] [3 4]]"]), "(: head (? [[x ~xs]] (inst A x)))", null, { at: 0 }],
-	["Q13 で変わった inc [+ 1] 5 6（余りの印は最初の関数から）", src([INC, "inc [+ 1] 5 6"]), "(apply (compose inc [+ 1]) (construct 5 6))", "A", { excess: true }],
+	["Q13 で変わった inc [+ 1] 5 6（流れの余りは後ろに積む、R36。前は余りの印 excess）", src([INC, "inc [+ 1] 5 6"]), "(construct (apply (compose inc [+ 1]) 5) 6)", "A", { leftover: true }],
 	// R31 で `[+]` に数1つは値（§5 Q17 は閉じた）が、`inc 5` は中身の見えない A なので、後ろの `[+]` は今までどおり未知（R31 の1項）。
 	["守り inc [+] 5（後ろの [+] に中身の見えない A は未知のまま、R31）", src([INC, "inc [+] 5"]), "(apply (compose inc [+]) 5)", "未知"],
 	["守り [' 0] [+] [[1 2] [3 4]]（引いた List は要素が全部 A と見えるので A）", src(["[' 0] [+] [[1 2] [3 4]]"]), "(apply (compose [' 0] [+]) [[1 2] [3 4]])", "A"],
-	["守り inc [<<] 5（後ろの畳まない点なしに1項は足りない適用で未知、R32）", src([INC, "inc [<<] 5"]), "(apply (compose inc [<<]) 5)", "未知"],
+	["守り inc [<<] 5（後ろの畳まない点なしに1項は足りない適用で L、R32・R36。前は未知）", src([INC, "inc [<<] 5"]), "(apply (compose inc [<<]) 5)", "L"],
 	["R26 で変わった [' 0] inc [1 2 3]（最初が段18 の点なし、前は未知）", src([INC, "[' 0] inc [1 2 3]"]), "(apply (compose [' 0] inc) [1 2 3])", "A"],
 	["R26 で変わった [' 0] inc [1 2 3] double（前は G2(a)）", src([INC, DOUBLE, "[' 0] inc [1 2 3] double"]), "(apply double (apply (compose [' 0] inc) [1 2 3]) ·rev)", "A"],
 	["守り [' 0] inc fs（引いた物が見えなければ未知のまま）", std("[' 0] inc fs"), "(apply (compose [' 0] inc) fs)", "未知"],
@@ -2301,9 +2334,26 @@ for (const [name, s, want, inst] of foldRefused) checkRefused(`合成 ${name}`, 
 
 // 合成は適用の繰り返し：f x が A なら、`f g x` と直接書いた `g (f x)` は、根が A かどうかと、定義の行の木（括りの関数の
 // 実体）と、断るなら門と名指しが同じ。後ろが2つの `f g h x` と `h (g (f x))` も、g (f x) が A なら同じ。前の実装では、後ろの
-// 非貪欲の単項・穴・最初の `[' k]` で割れていた。g (f x) が足りない適用（L）のとき、合成は未知にする（関数を値として次へ
-// 渡す読みは決めていない）ので、比べるのは A かどうかだけにする。
-law("合成は適用の繰り返し：f g x と g (f x) は同じ読み", () => {
+// 非貪欲の単項・穴・最初の `[' k]` で割れていた。g (f x) が足りない適用（L）のとき、比べるのは A かどうかだけにする。
+// 2026-10-22 から、合成は流れとして左から畳む（R36、§5 Q4 の答え U〔答え〕10-21 23:18）。直接書く側も流れの読みで書く：f は x の
+// 前から自分のアリティ分 x1 … xn だけを取り、g は `g (f x1 … xn)` の後ろに流れの次の物を（g のアリティ − 1 個）取る。最後に残った
+// 物は後ろに積む（`(… ) xm`、R35）。アリティは下の表で、試験の側が自分で数える（実装の flowArity を使わない）。並び全体を受ける
+// 関数（アリティ null）に流れの余りが残ったまま届く形は、合成が G12(c) で断ることだけを見る（§5 Q13 の残り）。最後の結果が値でない
+// のに余りが残る形は、合成が G12(b) で断ることを見る（直接書いた側は、未知の括りの葉を並びに置くので G7）。
+// 段18 の点なし `[' 0]` は "pick"：前にある流れが1項のときだけ 1 と数え、2項以上なら null（直に当てた `[' 0] x y` の k ≠ 1 が未知
+// なのと同じ。確かめ 2026-10-22。前は 1 で、流れの中でだけ口を1つと数えていた）。最初の恒等射 i が2項以上を受けて、後ろに恒等射・
+// 貪欲な単項でない関数が続く形も、合成が G12(c) で断ることだけを見る（R29 の「並び全体を受ける」と単位律が割れる。確かめ 2026-10-22）。
+const FLOW_ARITY = new Map([
+	["inc", 1], ["double", 1], ["[+ 1]", 1], ["[-_]", 1], ["i", null], ["[* 2,]", null], ["[+]", null], ["add", 2], ["uu", 1], ["pq", 2],
+	["(pr 1)", 1], ["(pq 1)", 1], ["[add _ 10]", 1], ["([f3 _ _ 3] 1)", 1], ["head", null], ["tl", null], ["bad", null], ["pb", null],
+	["(pt [1])", 1], ["[' 0]", "pick"], ["pt", 2],
+]);
+// 前に n 項の流れがあるときの、関数 f が流れから取る数。
+const flowArityAt = (f, n) => {
+	const a = FLOW_ARITY.get(f);
+	return a === "pick" ? (n === 1 ? 1 : null) : a;
+};
+law("合成は流れとして左から畳む（R36）：f g x と、流れを括りで書いた g (f x1 … xn) xn+1 …", () => {
 	const look = (s) => {
 		try {
 			const r = resolve(s);
@@ -2319,47 +2369,89 @@ law("合成は適用の繰り返し：f g x と g (f x) は同じ読み", () => 
 		const r = look(src([...FOLD_DEFS, expr]));
 		return !r.refused && r.a;
 	};
+	// [最初の関数, 実引数の項の並び]。余りの残る物（`inc 5 6`・`pt [1] 2 3`）を混ぜる。
 	const FIRSTS = [
-		["inc", "5"],
-		["inc", "5 6"],
-		["[+ 1]", "5"],
-		["[* 2,]", "1 2 3"],
-		["[+]", "5 6"],
-		["(pr 1)", "5"],
-		["[add _ 10]", "5"],
-		["head", "[5 6 7]"],
-		["head", "5 6 7"],
-		["[' 0]", "[1 2 3]"],
-		["[' 0]", "[[1 2] [3 4]]"],
-		["pt", "[1] 2"],
+		["inc", ["5"]],
+		["inc", ["5", "6"]],
+		["inc", ["5", "6", "7"]],
+		["[+ 1]", ["5"]],
+		["[* 2,]", ["1", "2", "3"]],
+		["[+]", ["5", "6"]],
+		["(pr 1)", ["5"]],
+		["[add _ 10]", ["5"]],
+		["head", ["[5 6 7]"]],
+		["head", ["5", "6", "7"]],
+		["[' 0]", ["[1 2 3]"]],
+		["[' 0]", ["[[1 2] [3 4]]"]],
+		["pt", ["[1]", "2"]],
+		["pt", ["[1]", "2", "3"]],
+		// 恒等射（確かめ 2026-10-22）。2項を受けた i の後ろに、恒等射・貪欲な単項でない関数が続けば G12(c)。
+		["i", ["5"]],
+		["i", ["5", "6"]],
 	];
 	const LATER = ["inc", "double", "[+ 1]", "[-_]", "i", "[* 2,]", "[+]", "add", "uu", "pq", "(pr 1)", "(pq 1)", "[add _ 10]", "([f3 _ _ 3] 1)", "head", "tl", "bad", "pb", "(pt [1])", "[' 0]"];
-	const LATER2 = ["inc", "[+ 1]", "(pr 1)", "[add _ 10]", "head", "tl", "bad", "[' 0]"];
+	const LATER2 = ["inc", "[+ 1]", "(pr 1)", "[add _ 10]", "head", "tl", "bad", "[' 0]", "add"];
 	const out = [];
-	let nA = 0;
-	let nNotA = 0;
-	let nRefused = 0;
-	const check = (composed, direct) => {
-		const c = look(src([...FOLD_DEFS, composed]));
-		const d = look(src([...FOLD_DEFS, direct]));
-		if (!same(c, d)) out.push(composed, `  合成: ${JSON.stringify(c)}`, `  直接: ${JSON.stringify(d)}`);
-		if (c.refused) nRefused++;
-		else if (c.a) nA++;
-		else nNotA++;
+	const count = { A: 0, "A でない": 0, 断る: 0, "余りを積んで比べた": 0, "G12(c)（余りが並び全体を受ける関数に届く）": 0, "G12(b)（余りの前の結果が値でない）": 0 };
+	// 流れ（R36）を括りで書く。steps は途中の括りの綴り（最後が g の適用）、left は最後に残って後ろに積む項。並び全体を受ける関数に
+	// 余りが残ったまま届けば cut。
+	const flow = (fs, xs) => {
+		const a0 = flowArityAt(fs[0], xs.length);
+		let cur = a0 === null || xs.length <= a0 ? `${fs[0]} ${xs.join(" ")}` : `${fs[0]} ${xs.slice(0, a0).join(" ")}`;
+		let rest = a0 === null || xs.length <= a0 ? [] : xs.slice(a0);
+		const steps = [cur];
+		if (fs[0] === "i" && xs.length > 1) {
+			const next = fs.slice(1).find((g) => g !== "i");
+			if (next !== undefined && next !== "[* 2,]") return { steps, cut: true };
+		}
+		for (const g of fs.slice(1)) {
+			const b = flowArityAt(g, 1 + rest.length);
+			if (b === undefined) throw new Error(`FLOW_ARITY に ${g} が無い`);
+			if (b === null && rest.length) return { steps, cut: true };
+			const take = b === null ? [] : rest.slice(0, b - 1);
+			rest = rest.slice(take.length);
+			cur = `${g} (${cur})${take.length ? ` ${take.join(" ")}` : ""}`;
+			steps.push(cur);
+		}
+		return { steps, direct: rest.length ? `(${cur}) ${rest.join(" ")}` : cur, left: rest.length };
 	};
-	for (const [f, x] of FIRSTS) {
-		if (!isA(`${f} ${x}`)) {
-			out.push(`前提が崩れた：${f} ${x} が A でない`);
+	const check = (fs, xs) => {
+		const composed = `${fs.join(" ")} ${xs.join(" ")}`;
+		const c = look(src([...FOLD_DEFS, composed]));
+		const fl = flow(fs, xs);
+		if (fl.cut) {
+			count["G12(c)（余りが並び全体を受ける関数に届く）"]++;
+			if (!(c.refused && c.refused.startsWith("coproduct-excess-neighbor G12(c)"))) out.push(composed, `  余りが並び全体を受ける関数に届くのに G12(c) で断っていない: ${JSON.stringify(c)}`);
+			return;
+		}
+		const lastStep = look(src([...FOLD_DEFS, fl.steps[fl.steps.length - 1]]));
+		if (fl.left && !lastStep.refused && !lastStep.a) {
+			count["G12(b)（余りの前の結果が値でない）"]++;
+			if (!(c.refused && c.refused.startsWith("coproduct-excess-neighbor G12(b)"))) out.push(composed, `  余りの前の結果が値でないのに G12(b) で断っていない: ${JSON.stringify(c)}`);
+			return;
+		}
+		const d = look(src([...FOLD_DEFS, fl.direct]));
+		if (!same(c, d)) out.push(`${composed}  ⇔  ${fl.direct}`, `  合成: ${JSON.stringify(c)}`, `  直接: ${JSON.stringify(d)}`);
+		if (fl.left) count["余りを積んで比べた"]++;
+		if (c.refused) count.断る++;
+		else if (c.a) count.A++;
+		else count["A でない"]++;
+	};
+	for (const [f, xs] of FIRSTS) {
+		const n1 = flow([f], xs).steps[0];
+		if (!isA(n1)) {
+			out.push(`前提が崩れた：${n1} が A でない`);
 			continue;
 		}
 		for (const g of LATER) {
-			check(`${f} ${g} ${x}`, `${g} (${f} ${x})`);
-			if (!LATER2.includes(g) || !isA(`${g} (${f} ${x})`)) continue;
-			for (const h of LATER2) check(`${f} ${g} ${h} ${x}`, `${h} (${g} (${f} ${x}))`);
+			check([f, g], xs);
+			const fl = flow([f, g], xs);
+			if (!LATER2.includes(g) || fl.cut || !isA(fl.steps[1])) continue;
+			for (const h of LATER2) check([f, g, h], xs);
 		}
 	}
 	// 比べる組が全部同じ読みなら、法則は何も見ていない。
-	if (!nA || !nNotA || !nRefused) out.push(`A ${nA}・A でない ${nNotA}・断る ${nRefused}（どれも1つ以上のはず）`);
+	for (const [k, v] of Object.entries(count)) if (!v) out.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
 	return out;
 });
 
@@ -2589,7 +2681,7 @@ const CURRY_PASSES = [
 	["$ で包んだ入れ子の ? add : x ? $[y ? x + y]", src(["add : x ? $[y ? x + y]"]), "(: add (? [x] $[y ? x + y]))", null],
 	["$ で包んだ入れ子の ? の add 1", src(["add : x ? $[y ? x + y]", "add 1"]), "(apply add 1)", "A"],
 	["$ で包んだ入れ子の ? の inc add 1", src([INC, "add : x ? $[y ? x + y]", "inc add 1"]), "(apply (compose inc add) 1)", "A"],
-	["$ で包んだ入れ子の ? を呼ぶ行が先", src(["add 1 2", "add : x ? $[y ? x + y]"]), "(apply add (construct 1 2))", "A", { at: 0, excess: true }],
+	["$ で包んだ入れ子の ? を呼ぶ行が先", src(["add 1 2", "add : x ? $[y ? x + y]"]), "(construct (apply add 1) 2)", "A", { at: 0, leftover: true }],
 	["$ で包んだ括りの関数の ? q : x ? $[[y] ? y]", src(["q : x ? $[[y] ? y]", "q 1"]), "(apply q 1)", "A"],
 	["括った ? の本体の $ で包んだ入れ子の ?", src(["[x ? $[y ? x + y]] 5"]), "(apply [x ? $[y ? x + y]] 5)", "A"],
 	["括りの関数の実体の根が $ で包んだ入れ子の ?", src(["gi : [x ~xs] ? $[y ? y]", "gi 1 2"]), "(apply gi (construct 1 2))", "A"],
@@ -2694,6 +2786,219 @@ const BARE_PASSES = [
 	["今は 既定値の中の ? o : [x : [y ? inc]] ? 5", src([INC, "o : [x : [y ? inc]] ? 5"]), "(: o (? [[x : [y ? inc]]] 5))", null],
 ];
 for (const [name, s, want, kind, extra] of BARE_PASSES) checkPass(`Q21 ${name}`, s, want, kind, extra);
+
+// ---------------------------------------------------------------------------
+// 余りと流れ（2026-10-22、R35〜R39。§5 Q11・Q4・Q6・Q8 の答え）
+// ---------------------------------------------------------------------------
+//
+// - R35（Q11 の答え、U〔答え〕10-21 23:10「余った引数は後ろに積んでいい。」）：実引数がアリティより多い適用は、前から n 個を当てた
+//   適用の後ろに、余りを値として並べる（構築）。`f1 3 4` は `(construct (apply f1 3) 4)`。印 excess と、余りの節が対に入る G12(a) は
+//   無くなった。頭の本体の根が A でない k > n（G12(b)、`use $inc 5 3`）と get・set の k > 2 は今のまま断る。
+// - R36（Q4 の答え、U〔答え〕10-21 23:18「合ってる。」）：括らない余積の並びの合成は、実引数の並びを流れとして左から畳む。
+//   `f2 3 f2 5 6` は `f2 (f2 3 5) 6`、`inc f2 5 6` は `f2 (inc 5) 6`、`inc inc 5 6` は `(inc (inc 5)) 6`。G2(b) は要らなくなった。
+// - R37（Q6 の答え、U〔答え〕10-21 23:23「合ってる。」）：逆適用の左が2項以上なら、一番近い1項だけを取り、残りは前に積む。
+//   `1 2 inc` は `1 (2 inc)`。G1 は廃止した。余りを積んだ構築の後ろの逆適用（`inc 1 2 inc`）は、R37 の `(inc 1) (inc 2)` と、R36 の
+//   流れ（`inc 1` の結果を流れの頭に戻して次の関数が取る）の `inc (inc 1)` の後ろに 2 で割れるので、G12(a) で断る（主の Claude の読み、R）。
+// - R38（主の Claude が法則から書いた物、R）：既定値の無い素の関数の内側の `_` は、k ≠ n でも `!_` と同じ（`f _ 3 4` は `f 4 3`）。
+// - R39（Q8 の一部の答え、U〔答え〕10-21 23:42「そうなるね。」）：既定値のある口に書いた `_` は既定値という値（木では実引数のまま残す）。
+const ADEF = ["sub : x y ? x - y", "pt : [a ~as] y ? y", "kf : [f] ? f 1"];
+const GF = "gf : [x : 1] y ? y"; // 既定値のある口が前（位置 0）
+const GB = "gb : [x : 1] [y : 2] ? x"; // 口が2つとも既定値
+const GZ = ["gz :", "\t\ta b", "\t\tc : 3", "\t? a", ""]; // 仮引数の数が数えられない既定値のある関数
+const flowPasses = [
+	// R35
+	["R35 inc 3 4", std("inc 3 4"), "(construct (apply inc 3) 4)", "A", { leftover: true }],
+	["R35 f2 5 6 7", std("f2 5 6 7"), "(construct (apply f2 (construct 5 6)) 7)", "A", { leftover: true }],
+	// U〔答え〕10-21 23:10 の前の問いの例（主の Claude の言葉）：`f1 3 4 f2 5 6 f1 6` は `(f1 3) 4 (f2 5 6) (f1 6)`。前は G12(a)。
+	["R35 inc 3 4 f2 5 6 inc 6（前は G12(a)）", std("inc 3 4 f2 5 6 inc 6"), "(construct (apply inc 3) 4 (apply f2 (construct 5 6)) (apply inc 6))", "A", { leftover: false }],
+	["R35 5 d 1 2 _（前は G12(a)）", std("5 d 1 2 _"), "(construct 5 (apply d 1) 2)", "A", { leftover: true }],
+	["R35 [add !_ 10] 5 6（穴の関数）", std("[add !_ 10] 5 6"), "(construct (apply [add !_ 10] 5) 6)", "A", { leftover: true }],
+	["R35 pt [1] 2 3（最後の仮引数が裸の括りの関数）", std([...ADEF, "pt [1] 2 3"]), "(construct (apply pt (construct [1] 2)) 3)", "A", { leftover: true }],
+	// R34 の k < n で作った関数は、最後の括りが残りの並び全体を受ける（R24）ので、その関数の所では木を切らない（f3・add の余りになり、
+	// 適用の節に印 leftover が付く）。
+	["R35 (add !_) 1 2 3（最後の括りが受ける）", std("(add !_) 1 2 3"), "(apply [add !_] (construct 1 2 3))", "A", { leftover: true }],
+	["R35 (f3 !_ 2) 1 vs 4（最後の括りに2つ入るので G13 にならない）", std("(f3 !_ 2) 1 vs 4"), "(apply [f3 !_ 2] (construct 1 vs 4))", "A"],
+	// 積んだ構築は値なので、名前や括りで包めば後ろの逆適用はそれを受ける。
+	["R35 v : inc 3 4 ⏎ v inc", std(["v : inc 3 4", "v inc"]), "(apply inc v ·rev)", "A"],
+	["R35 (inc 3 4) inc", std("(inc 3 4) inc"), "(apply inc [inc 3 4] ·rev)", "A"],
+	// R36
+	["R36 f2 3 f2 5 6（`f2 (f2 3 5) 6`）", std("f2 3 f2 5 6"), "(apply (compose (apply f2 3) f2) (construct 5 6))", "A"],
+	["R36 sub 3 sub 5 6（`sub (sub 3 5) 6`、ポーランドの `sub 3 (sub 5 6)` ではない）", std([...ADEF, "sub 3 sub 5 6"]), "(apply (compose (apply sub 3) sub) (construct 5 6))", "A"],
+	["R36 inc f2 5 6（`f2 (inc 5) 6`。前は未知）", std("inc f2 5 6"), "(apply (compose inc f2) (construct 5 6))", "A"],
+	["R36 inc inc 5 6（`(inc (inc 5)) 6`。前は excess）", std("inc inc 5 6"), "(construct (apply (compose inc inc) 5) 6)", "A", { leftover: true }],
+	["R36 [f2 3 f2] 5 6（括っても同じ）", std("[f2 3 f2] 5 6"), "(apply [f2 3 f2] (construct 5 6))", "A"],
+	["R36 f2 3 f2 5（流れが足りない、L）", std("f2 3 f2 5"), "(apply (compose (apply f2 3) f2) 5)", "L"],
+	["R36 (f2 3 f2 5) 6（足りない合成に後から当てる）", std("(f2 3 f2 5) 6"), "(apply [f2 3 f2 5] 6)", "A"],
+	["R36 f2 3 f2 5 6 7（流れの余りは後ろに積む）", std("f2 3 f2 5 6 7"), "(construct (apply (compose (apply f2 3) f2) (construct 5 6)) 7)", "A", { leftover: true }],
+	["R36 (inc add 5) 3（前は G7）", std("(inc add 5) 3"), "(apply [inc add 5] 3)", "A"],
+	["R36 q : inc add 5 ⏎ q 3 4", std(["q : inc add 5", "q 3 4"]), "(construct (apply q 3) 4)", "A", { leftover: true }],
+	["R36 inc add 5 g 3（`g (add (inc 5) 3)`。前は G2(a)）", std("inc add 5 g 3"), "(apply (compose (apply (compose inc add) 5) g) 3)", "A"],
+	["R36 inc add add 5 3 4", std("inc add add 5 3 4"), "(apply (compose inc add add) (construct 5 3 4))", "A"],
+	["R36 inc add add 5 3（流れが足りない、L）", std("inc add add 5 3"), "(apply (compose inc add add) (construct 5 3))", "L"],
+	["R36 inc pt [5] 6（後ろの括りの関数も流れから取る）", std([...ADEF, "inc pt [5] 6"]), "(apply (compose inc pt) (construct [5] 6))", "A"],
+	// 段18 の点なしは、流れの前が1項のときだけ口を1つと数える（直に当てた `[' 0] [1 2] 3` の k ≠ 1 は未知のまま、R35 の R の所）。
+	// 前（2026-10-22 の確かめの前）は流れの中でだけ 1 と数え、`[' 0] add [1 2] 3` を A にしていた（同じ関数の口の数が2か所で割れる）。
+	["R36 [' 0] add [1 2] 3（流れが2項なので未知。直に当てた `[' 0] [1 2] 3` と同じ）", std("[' 0] add [1 2] 3"), "(apply (compose [' 0] add) (construct [1 2] 3))", "未知"],
+	["R36 [' 0] add [1 2]（流れが1項なら口を1つと数える、L）", std("[' 0] add [1 2]"), "(apply (compose [' 0] add) [1 2])", "L"],
+	["R36 ([' 0] add [1 2]) 3（流れの足りない合成に後から当てる）", std("([' 0] add [1 2]) 3"), "(apply [[' 0] add [1 2]] 3)", "A"],
+	["R36 [' 0] inc [1 2] 5（流れが2項なので未知）", std("[' 0] inc [1 2] 5"), "(apply (compose [' 0] inc) (construct [1 2] 5))", "未知"],
+	// 後ろの段18 の点なしも、流れの余りが無ければ口を1つと数える。流れの足りない合成を畳み直すときは、作った時に1項を取った段18 の
+	// 点なし（括りの中で、前の結果1項を前にした物）を、後から来た実引数に依らず 1 と数える（変異で確かめた）。
+	["R36 [' 0] [' 0] add [[1 2] [3 4]]（後ろの段18 も、余りが無ければ口を1つ、L）", std("[' 0] [' 0] add [[1 2] [3 4]]"), "(apply (compose [' 0] [' 0] add) [[1 2] [3 4]])", "L"],
+	["R36 ([' 0] [' 0] add [[1 2] [3 4]]) 5（括りの中で取った数は変わらない）", std("([' 0] [' 0] add [[1 2] [3 4]]) 5"), "(apply [[' 0] [' 0] add [[1 2] [3 4]]] 5)", "A"],
+	["R36 [' 0] [' 0] add [[1 2] [3 4]] 5（括らなければ最初の段18 の前に2項、未知）", std("[' 0] [' 0] add [[1 2] [3 4]] 5"), "(apply (compose [' 0] [' 0] add) (construct [[1 2] [3 4]] 5))", "未知"],
+	["R36 ||inc add 5|| 3（ノルムの合成に包んだ足りない合成）", std("||inc add 5|| 3"), "(apply ||inc add 5|| 3)", "A"],
+	["R36 kf [f : inc add 5]（欄で渡した足りない合成）", std([...ADEF, "kf [f : inc add 5]"]), "(apply kf [f : inc add 5])", "A"],
+	["R36 kf [f : pt2 inc [5]]（先に当てた物の形で実体を作る）", src(["inc : x ? x + 1", "pt2 : [a ~as] y ? a 1", "kf : [f] ? f 1", "kf [f : pt2 inc [5]]"]), "(: pt2 (? [[a ~as] y] (inst N A (construct a 1))))", null, { at: 1 }],
+	["R36 pair [1] inc 5（前は G2(b)）", src(["inc : x ? x + 1", "pair : [a ~as] [b ~bs] ? a + b", "pair [1] inc 5"]), "(apply (compose (apply pair [1]) inc) 5)", "A"],
+	["R36 pair inc [1] double 5（前は G2(b)）", src([INC, DOUBLE, "pair : [a ~as] [b ~bs] ? a + b", "pair inc [1] double 5"]), "(apply (compose (apply (compose pair inc) [1]) double) 5)", "A"],
+	["R36 5 inc add（逆適用の合成も流れ、L）", std("5 inc add"), "(apply (compose inc add) 5 ·rev)", "L"],
+	// 並び全体を受ける関数・アリティの数えられない関数は、余りが無ければ前の読み（前の結果だけを受ける）。
+	["R36 add [+] 5 6（余りが無い所の `[+]` は前の読み）", std("add [+] 5 6"), "(apply (compose add [+]) (construct 5 6))", "未知"],
+	["R36 [+] add 5 6（最初の `[+]` は並び全体を受ける）", std("[+] add 5 6"), "(apply (compose [+] add) (construct 5 6))", "未知"],
+	// R37
+	["R37 1 2 3 inc", std("1 2 3 inc"), "(construct 1 2 (apply inc 3 ·rev))", "A"],
+	["R37 5 inc 3 inc（一番近い1項は `inc 3`。前は G1）", std("5 inc 3 inc"), "(construct 5 (apply inc (apply inc 3) ·rev))", "A"],
+	["R37 vs~ 1 inc（前に積む項は撒く項でもよい）", std("vs~ 1 inc"), "(construct vs~ (apply inc 1 ·rev))", "A"],
+	["R37 1 2 inc inc（右が合成）", std("1 2 inc inc"), "(construct 1 (apply (compose inc inc) 2 ·rev))", "A"],
+	["R37 1 2 inc 3 double", std("1 2 inc 3 double"), "(construct 1 2 (apply double (apply inc 3) ·rev))", "A"],
+	["R37 本体 1 y inc", std("t : y ? 1 y inc"), "(construct 1 (apply inc y ·rev))", "A", { body: true }],
+	// R38
+	["R38 f3 _ 2（`a [~c] ? f3 a 2 c~`）", std("f3 _ 2"), "(? [$p0 [~$p1]] (apply f3 (construct $p0 2 $p1~)))", "L"],
+	["R38 f2 _ 3 4（`f2 4 3`）", std("f2 _ 3 4"), "(apply f2 (construct 4 3))", "A"],
+	["R38 add _ 3 4 5（埋めた後の余りは後ろに積む）", std("add _ 3 4 5"), "(construct (apply add (construct 4 3)) 5)", "A", { leftover: true }],
+	["R38 inc _ 5", std("inc _ 5"), "(apply inc 5)", "A"],
+	["R38 add 1 _ 5", std("add 1 _ 5"), "(apply add (construct 1 5))", "A"],
+	["R38 f3 _ 2 _ 9（穴が残る）", std("f3 _ 2 _ 9"), "(? [$p0] (apply f3 (construct 9 2 $p0)))", "L"],
+	["R38 (f3 _ 2) 1 3", std("(f3 _ 2) 1 3"), "(apply [f3 _ 2] (construct 1 3))", "A"],
+	// R39
+	["R39 gf _ 3（既定値のある口の _）", std([GF, "gf _ 3"]), "(apply gf (construct _ 3))", "未知"],
+	["R39 gb _ _（口が2つとも既定値）", std([GB, "gb _ _"]), "(apply gb (construct _ _))", "未知"],
+	["R39 g2 : gf ⏎ g2 _ 3（別名の頭でも同じ関数）", std([GF, "g2 : gf", "g2 _ 3"]), "(apply g2 (construct _ 3))", "未知"],
+	["R39 go !_ _（既定値のある口の _ と穴）", std([...GO_DEFAULT, "go !_ _"]), "(? [$p0] (apply go (construct $p0 _)))", "L"],
+	["R39 go !_ _ 5（`!_` も口を1つ占めて数える）", std([...GO_DEFAULT, "go !_ _ 5"]), "(apply go (construct 5 _))", "未知"],
+];
+const flowRefused = [
+	// R35 の残り
+	["R35 use $inc 5 3（本体の根が未知、今のまま）", std("use $inc 5 3"), "G12(b)"],
+	["R35 ['] fs 0 1（get の k > 2、今のまま）", std("['] fs 0 1"), "G12(b)"],
+	// R37 と R36 の割れ（G12(a)）
+	["R37 inc 1 2 inc（`(inc 1) (inc 2)` と `inc (inc 1)` の後ろに 2 で割れる）", std("inc 1 2 inc"), "G12(a)"],
+	["R37 5 inc 3 4 inc", std("5 inc 3 4 inc"), "G12(a)"],
+	["R37 inc 1 2 3 inc", std("inc 1 2 3 inc"), "G12(a)"],
+	["R37 inc inc 5 6 inc（流れの余り）", std("inc inc 5 6 inc"), "G12(a)"],
+	// R34 の k < n で作った関数の中で積んだ余り（適用の節の印 leftover）も同じ。
+	["R37 [f3 !_ 3] 7 8 9 inc（中で積んだ余りの後ろの逆適用）", std("[f3 !_ 3] 7 8 9 inc"), "G12(a)"],
+	["R36 [f3 !_ 3] inc 7 8 9（中で積んだ余りの後ろに、合成の次の関数）", std("[f3 !_ 3] inc 7 8 9"), "G12(c)"],
+	// R37 で一番近い1項に取った後の、主語の門
+	["R37 1 vs~ inc（主語が撒く項）", std("1 vs~ inc"), "G9"],
+	["R37 1 2 [+ 1]（右が点なし）", std("1 2 [+ 1]"), "G10"],
+	["R37 1 2 f2（右がアリティ1でない）", std("1 2 f2"), "G8"],
+	["R37 1 5 inc add（逆適用の結果が L で、前の 1 にまた逆適用）", std("1 5 inc add"), "G8"],
+	// R36 の残り（§5 Q13）
+	["R36 inc [+] 5 6（余りが並び全体を受ける関数に届く）", std("inc [+] 5 6"), "G12(c)"],
+	["R36 inc [* 2,] 5 6", std("inc [* 2,] 5 6"), "G12(c)"],
+	["R36 inc i 5 6（恒等射）", std(["i : !_", "inc i 5 6"]), "G12(c)"],
+	["R36 add [+] 5 6 7", std("add [+] 5 6 7"), "G12(c)"],
+	["R36 inc uu 5 6（余りの前の結果が値でない。前は未知）", std(["uu : x ? [,] x", "inc uu 5 6"]), "G12(b)"],
+	["R36 5 use 5 inc（逆適用の右の足りない合成は R12 の形でない）", std("5 use 5 inc"), "G8"],
+	// 流れの足りない合成の鍵には、先に当てた物の形を入れる（括りの関数の部分適用の鍵と同じ）。入れないと、先に解いた `[5]` の実体
+	// （A）を、`[$inc]`（中身の見えない A。pt2 の a が未知で G7）の行が黙って使う（変異で確かめた）。
+	[
+		"R36 鍵 w : kf [f : pt2 inc [5]] の後の kf [f : pt2 inc [$inc]]",
+		src(["inc : x ? x + 1", "pt2 : [a ~as] y ? a 1", "kf : [f] ? f 1", "w : kf [f : pt2 inc [5]]", "kf [f : pt2 inc [$inc]]"]),
+		"G7",
+		[["kf", "{f:L}"], ["pt2", "A A"]],
+	],
+	// 流れで足りない適用になる本体の根は裸の関数（R33）。前は未知の根で通っていた。
+	["R36 ff : x ? inc add x（本体の根が L）", std("ff : x ? inc add x"), "G16"],
+	// R38 の残り（R34 の G13 と同じ）
+	["R38 inc 1 _ 2（前から n 個の外の `_`。前は G5）", std("inc 1 _ 2"), "G13"],
+	["R38 f3 _ vs~（撒く項。前は G5）", std("f3 _ vs~"), "G13"],
+	["R38 go _ vs~（撒く項）", std(["go : ys ? ys", "go _ vs~"]), "G13"],
+	["R38 (f3 _ 2) 1 vs（最後の括りに1つで入る数でない値）", std("(f3 _ 2) 1 vs"), "G13"],
+	["R38 (f3 _ 2) 1 _（R34 の関数に書いた `_`）", std("(f3 _ 2) 1 _"), "G5"],
+	// 今のまま：最後の項が `_`（終わり、R28）・k = n の撒く項
+	["R38 f4 _ 2 _（最後の項が `_`、今のまま）", std("f4 _ 2 _"), "G5"],
+	["R38 add _ vs~（k = n の撒く項、今のまま）", std("add _ vs~"), "G5"],
+	// R39 の残り（G15）
+	["R39 go _ 3（既定値の無い口）", std([...GO_DEFAULT, "go _ 3"]), "G15"],
+	["R39 go 1 2 _（仮引数の外）", std([...GO_DEFAULT, "go 1 2 _"]), "G15"],
+	["R39 go xs~ _（前に撒く項）", std([...GO_DEFAULT, "go xs~ _"]), "G15"],
+	["R39 gz _ 3（仮引数の数が数えられない）", std([...GZ, "gz _ 3"]), "G15"],
+	["R39 go _ !_（既定値の無い口の `_` と穴）", std([...GO_DEFAULT, "go _ !_"]), "G15"],
+	// 既定値のある関数の適用は未知なので、隣と結べば G2(a)（`5 gf inc 7` と同じ）。
+	["R39 5 gf inc _（`5 gf inc 7` と同じく G2(a)）", std([GF, "5 gf inc _"]), "G2(a)"],
+	// 口の外の `!_` は G7 のまま（§5 Q15。U〔答え〕10-21 23:47「合ってる」で、待っている問いではなく決定済みの断り。仕様 §7.16 の
+	// 決定の D6。D は決定の番号で、証拠の印 D（文書）ではない）。
+	["Q15 !_ 5（口の外の `!_`）", std("!_ 5"), "G7"],
+	["Q15 5 !_", std("5 !_"), "G7"],
+	["Q15 5 !_ 3", std("5 !_ 3"), "G7"],
+	["Q15 inc !_ inc", std("inc !_ inc"), "G7"],
+	// R34 の k < n の割れは G13 のまま（§5 Q31 の残り。§7.16 の決定の D7）。
+	["Q31 (f3 !_) 1 [1 2]", std("(f3 !_) 1 [1 2]"), "G13"],
+];
+for (const [name, s, want, kind, extra] of flowPasses) checkPass(`余りと流れ ${name}`, s, want, kind, extra);
+for (const [name, s, want, inst] of flowRefused) checkRefused(`余りと流れ ${name}`, s, want, inst);
+
+// 確かめ 2026-10-22（R35〜R39 を確かめた2人の指摘を当てた行。§7.17）。
+const recheckPasses = [
+	// 逆適用の主語は一番近い1項（R37）。前に積む項の `_` は根の構築の中で消える（手順8・R15）。前は左の構築のどこかに `_` があれば G5。
+	["R37 _ 1 inc（前に積む `_` は消える。前は G5）", std("_ 1 inc"), "(apply inc 1 ·rev)", "A"],
+	["R37 1 _ 2 inc（前は G5）", std("1 _ 2 inc"), "(construct 1 (apply inc 2 ·rev))", "A"],
+	// 恒等射が並びを受けた後ろが恒等射・貪欲な単項・ノルムなら、R29 と単位律のどちらで読んでも同じなので通す。
+	["R29 i i 1 2（後ろも恒等射）", std(["i : !_", "i i 1 2"]), "(apply (compose i i) (construct 1 2))", "A"],
+	["R29 i [* 2,] 1 2（後ろが貪欲な単項）", std(["i : !_", "i [* 2,] 1 2"]), "(apply (compose i [* 2,]) (construct 1 2))", "A"],
+	["R29 i 1 2 3（根なら通す）", std(["i : !_", "i 1 2 3"]), "(apply i (construct 1 2 3))", "A"],
+	["R29 [i 1 2] inc（括れば1つの項）", std(["i : !_", "[i 1 2] inc"]), "(apply inc [i 1 2] ·rev)", "A"],
+	// ノルムは R27 で「1つ受けて A を返す関数」なので、流れでも口を1つと数え、余りは後ろに積む。R27 の等式 `||f|| x` ＝ `||f x||` は、
+	// x が f のアリティ分のときの言い換え（確かめ 2026-10-22 に文面を狭めた）。
+	["R27 ||add|| 1 2", std("||add|| 1 2"), "(apply ||add|| (construct 1 2))", "A"],
+	["R27 inc ||add|| 1 2（余りはノルムに届く前に add が取る）", std("inc ||add|| 1 2"), "(apply (compose inc ||add||) (construct 1 2))", "A"],
+	["R27 ||inc|| 1 2（`||inc 1||` の後ろに 2 を積む）", std("||inc|| 1 2"), "(construct (apply ||inc|| 1) 2)", "A", { leftover: true }],
+	["R27 ||inc|| add 1 2（ノルムの後ろの add が余りを取る）", std("||inc|| add 1 2"), "(apply (compose ||inc|| add) (construct 1 2))", "A", { leftover: false }],
+];
+const recheckRefused = [
+	// 余りを積んだ値の後ろの逆適用でも、右だけで決まる門（G8・G10）が先（左をどう読んでも当たるので、R37 と R36 の割れではない）。
+	["G8 inc 1 2 f2 3（前は G12(a)）", std("inc 1 2 f2 3"), "G8"],
+	["G8 inc 1 2 f2（前は G12(a)）", std("inc 1 2 f2"), "G8"],
+	["G10 inc 1 2 [+ 1]（前は G12(a)）", std("inc 1 2 [+ 1]"), "G10"],
+	// 恒等射が2項以上を受けた後ろの関数・逆適用（R29 の「並び全体を受ける」と単位律が割れる）。
+	["G12(c) i inc 1 2（前は inc が並び全体を受けて A）", std(["i : !_", "i inc 1 2"]), "G12(c)"],
+	["G12(c) i f2 1 2（前は未知）", std(["i : !_", "i f2 1 2"]), "G12(c)"],
+	["G12(c) i ||inc|| 1 2", std(["i : !_", "i ||inc|| 1 2"]), "G12(c)"],
+	["G12(a) i i 1 2 inc（恒等射だけの合成も並びを持ち越す）", std(["i : !_", "i i 1 2 inc"]), "G12(a)"],
+	["G12(a) 5 i 1 2 inc（主語が恒等射の並び）", std(["i : !_", "5 i 1 2 inc"]), "G12(a)"],
+	// 段18 の点なしに、前の結果と余りの2項以上が届く（直に当てた k ≠ 1 と同じ割れ）。
+	["G12(c) inc [' 0] [1 2] 5（前は G12(b)）", std("inc [' 0] [1 2] 5"), "G12(c)"],
+	["G12(c) add [' 0] 1 2 3", std("add [' 0] 1 2 3"), "G12(c)"],
+	// ノルムの合成の余りを積んだ値の後ろの逆適用は、ほかの余りと同じく G12(a)。
+	["G12(a) ||inc|| 1 2 inc", std("||inc|| 1 2 inc"), "G12(a)"],
+];
+for (const [name, s, want, kind, extra] of recheckPasses) checkPass(`確かめ ${name}`, s, want, kind, extra);
+for (const [name, s, want, inst] of recheckRefused) checkRefused(`確かめ ${name}`, s, want, inst);
+{
+	const msgOf = (s) => {
+		try {
+			resolve(s);
+			return "通った";
+		} catch (e) {
+			return `${e.gate || e.reason} ${e.message}`;
+		}
+	};
+	const rows = [
+		["G13 の穴の綴りの後ろに空白（inc 1 !_）", msgOf(std("inc 1 !_")), (m) => m.startsWith("G13 ") && m.includes("並びに穴 `!_` があり")],
+		["合成の頭の終わりの `_` は G5 で、理由は合成の頭（inc inc _）", msgOf(std("inc inc _")), (m) => m.startsWith("G5 ") && m.includes("合成の頭に「ここで終わる」（R28）を当てるか")],
+		["段18 の点なしに余りが届く G12(c) は k ≠ 1 を名指し", msgOf(std("inc [' 0] [1 2] 5")), (m) => m.startsWith("G12(c) ") && m.includes("段18 の点なし")],
+		["恒等射の G12(c) は R29 と単位律を名指し", msgOf(std(["i : !_", "i inc 1 2"])), (m) => m.startsWith("G12(c) ") && m.includes("恒等射") && m.includes("単位律")],
+		["恒等射の並びの後ろの逆適用の G12(a) は R29 と R37 を名指し", msgOf(std(["i : !_", "i 1 2 inc"])), (m) => m.startsWith("G12(a) ") && m.includes("R29") && m.includes("R37")],
+	];
+	for (const [name, m, good] of rows) {
+		total++;
+		if (good(m)) ok(`確かめ 言い分 ${name}`);
+		else fail(`確かめ 言い分 ${name}`, m);
+	}
+}
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
