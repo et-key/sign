@@ -2,8 +2,8 @@
  * 余積（空白）の解決（alpha1 の意味解析の最初の段）。
  *
  * 仕様は alpha1/docs/coproduct_spec.md（設計 workflow の最終版）。ここに書くのは、確信度 91% 以上の規則
- * （§4 の R1〜R33（R18 と R30 は 2026-10-21 に廃止）、§1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
- * 門（G1〜G17（G14 は 2026-10-21 に廃止）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
+ * （§4 の R1〜R34（R18 と R30 は 2026-10-21 に廃止）、§1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
+ * 門（G1〜G17（G14 は 2026-10-21、G17 は 2026-10-22 に廃止）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
  * 答えが出たときに、その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
  *
  * 入り口は `resolve(source)` の1つで、`{ trees, diagnostics }` を返す。trees は1行に1つの木、diagnostics は
@@ -11,7 +11,8 @@
  * spec は `…§6.2 G2(b)` のように門の番号まで、`gate` に門の番号）。
  *
  * **木の書き方（`show`）**。§1.3・§6.3 の S 式に合わせ、無い所はここで決めた。
- * - 節：`(construct a b …)`・`(compose f g …)`・`(apply h x)`・`(apply h x ·rev)`・`(? [$p0 …] (apply h …))`。
+ * - 節：`(construct a b …)`・`(compose f g …)`・`(apply h x)`・`(apply h x ·rev)`・`(? [$p0 …] (apply h …))`。穴の口の足りない
+ *   並び（R34）は、最後の仮引数を括りで書いて `(? [$p0 [~$p1]] (apply h (construct $p0 … $p1~)))`。
  * - 葉は項そのもの。名前は `<>` を外した綴り、字面は書いたまま、印は核に付けて書く（`$inc`・`xs~`・`-x!`・`!_`）。
  * - 中置の項は綴りを頭にした `(+ 1 2)`。欠けた被演算子は `·`。
  * - 括りは書いたとおりに、いつも `[…]` で書く。前段は `[…]`・`(…)`・`{…}` を1つの印にまとめて種類を残さない
@@ -92,7 +93,8 @@ const GATE_REASON = {
   // G14（coproduct-pointfree-unit）は 2026-10-21 に廃止した。断っていた `[-_]`・`[!!_]`・`[_!]` は単項の点なし（pointfreeOf）。
   G15: "coproduct-default-unit",
   G16: "coproduct-bare-function-return",
-  G17: "coproduct-manual-curry",
+  // G17（coproduct-manual-curry）は 2026-10-22 に廃止した（§5 Q35 の答え、U〔答え〕10-21 22:46。U の時刻は UTC）。断っていた `$` で包んだ入れ子の `?`（`add : x ? $[y ? x + y]`）は、
+  // `$[+ m]` と同じく `$` で値にした関数を返す形で、本体の根は A で通る（R33）。
 };
 
 // 門の番号（`G2(b)` のように枝まで）から断りを作る。reason は門ごとの名前で、枝は spec と gate で見分ける。
@@ -620,8 +622,8 @@ function paramInChain(scope, name) {
 //
 // desc：{k:'A'|'L'|'U', fn?, spread?, elements?, shape?}
 //   fn（L のとき）：
-//     {type:'plain', origin:'plain'|'partial'|'hole', n, getBodyRoot, idKey}  素の関数・部分適用・穴（§3.4）。穴の部分適用は
-//       'hole' のまま（plainApply）
+//     {type:'plain', origin:'plain'|'partial'|'hole', n, getBodyRoot, idKey, rest?}  素の関数・部分適用・穴（§3.4）。穴の部分適用は
+//       'hole' のまま（plainApply）。rest は R34 の k < n で作った穴の関数とその部分適用（holeMismatch）
 //     {type:'pattern', n, idKey, label, op, scopeKey, lastBracket, bareAt, instantiate}  括りの関数（R24）。n は仮引数の数
 //       （括りは1つで1）。lastBracket は最後の仮引数が括りの関数（k > n なら残りの並び全体を最後の括りが1つの List として
 //       受ける、applyKind）。bareAt は仮引数ごとに裸か。op と scopeKey は書いた `?` と、それを解いた範囲（定義の行の木に、
@@ -807,7 +809,11 @@ function fnKey(fn) {
   if (!fn) return "?";
   switch (fn.type) {
     case "plain":
-      return `plain:${fn.origin}:${fn.n}:${fn.idKey || ""}`;
+      // R34 の k < n で作った穴の関数（rest）は、書いた `_` で G5 になり、同じアリティの穴の関数と振る舞いが分かれる（"other" の
+      // 注と同じ割れ）ので、鍵に印を入れる。最後の括りの前に残る裸の口の数（restAt。最後の括りに入り始めた後は無い）でも、
+      // 数でない実引数を1つ当てたときの答えが分かれる（applyKind）ので、それも入れる。
+      const rest = fn.rest ? (fn.restAt === undefined ? "+rest" : `+rest@${fn.restAt}`) : "";
+      return `plain:${fn.origin}${rest}:${fn.n}:${fn.idKey || ""}`;
     case "pattern":
       return fn.bound ? canonKey(internPartial(fn)) : `pattern:${fn.idKey}`;
     case "compose":
@@ -1458,7 +1464,7 @@ function finishFrame(F, frame, memo, value) {
 
 // 素の関数でも括りの関数でもない関数（アリティの分からない関数）の fn。既定値のある関数（`?` の左に `:` がある）には印と
 // 仮引数の数を付ける：書いた `_` を実引数に当てた形は G15 で断り（値は既定値だが種類は §5 Q8 で未決、U〔答え〕10-21 03:11）、
-// 穴 `!_` は既定値があっても穴にする（tryHole）。仮引数の数は defaultsArity。数え方で振る舞い（G15・穴の k = n）が分かれるので、
+// 穴 `!_` は既定値があっても穴にする（tryHole）。仮引数の数は defaultsArity。数え方で振る舞い（G15・穴の k = n と k ≠ n）が分かれるので、
 // 実体の鍵（fnKey）にも印と数を入れる。
 function otherFn(left) {
   if (!left || !treeHasColon(left)) return { type: "other" };
@@ -2183,7 +2189,7 @@ function instRootOf(F, inst, label) {
   try {
     const body = resolveBody(inst.lambda.right, { F, scope: inst.scope, diag: null });
     value = body.rootKind;
-    spelled = sectionSpelled(body.tree) || curriedSpelled(body.tree);
+    spelled = sectionSpelled(body.tree);
   } catch (e) {
     if (!isGate(e)) {
       leaveNest(F, inst);
@@ -2200,8 +2206,8 @@ function instRootOf(F, inst, label) {
   // 本体が門に当たるか、門に当たる実体を呼んだ実体は、木を残す段で断る（呼んだ側の枠の後ろは最後の木に無い、instantiate）。
   // 本体の根が L の実体も、木を残す段で G16 に当たる（materialize）。自分の仮置きを読んでいなければ、根は確定した値の上の木の根と
   // 同じ（外の仮置きが外れれば、記録は古くなって解き直す）なので、門に当たる実体に数える。読んでいれば根は未知になり（§3.4）、
-  // 木の根が L かはここでは分からないので数えない。綴りで断る根（区間・`$` で包んだ入れ子の `?`、returnGate）は仮置きに依らない
-  // ので、読んでいても門に当たる実体に数える。
+  // 木の根が L かはここでは分からないので数えない。綴りで断る根（区間、returnGate）は仮置きに依らないので、読んでいても門に当たる
+  // 実体に数える。
   inst.gated = gated || !!frame.gated || spelled || (value === "L" && !frame.consulted);
   if (frame.consulted && value !== "A") {
     value = "U";
@@ -2232,8 +2238,7 @@ function materialize(F, inst, scopeOf) {
   F.matStack.push(inst);
   try {
     const body = resolveBody(inst.lambda.right, { F, scope, diag: F.diag });
-    // 実体の本体の根が裸の関数なら G16、`$` で包んだ入れ子の `?` なら G17（R33、returnGate）。ほかの門と同じく、呼んだ行で関数と
-    // 形を名指しする（R25）。
+    // 実体の本体の根が裸の関数なら G16（R33、returnGate）。ほかの門と同じく、呼んだ行で関数と形を名指しする（R25）。
     const refused = returnGate(() => "", body);
     if (refused) throw refused;
     inst.tree = body.tree;
@@ -2443,13 +2448,13 @@ function enclosureInfo(core, ctx) {
   return { desc: U(), trees };
 }
 
-// 括らない `!_` を、穴として読める位置（素の関数か既定値のある関数の実引数の並び・`!_` だけの行・`||!_||`）の外で見つけたとき
+// 括らない `!_` を、穴として読める位置（素の関数か既定値のある関数の実引数の並び（R16・R34）・`!_` だけの行・`||!_||`）の外で見つけたとき
 // （§3.5、Q15）。`!_` だけの行は括らない行（`x : !_`・本体・2行以上の括りの中の行）で、1行の括り `[!_]`・`(!_)` は否定の
 // 点なし（R29、§2）。言い分にもそう書く（`!_ 5` を `(!_) 5` に書き直すと、恒等射ではなく否定になるので）。
 function refuseHole(where) {
   return gate(
     "G7",
-    `括らない \`!_\` が${where}にあります。\`!_\` は穴（その口の恒等射）で、読みが決まるのは、素の関数か既定値のある関数（名前の定義か \`?\` の括り）の実引数の並びが R16 の条件（撒く項が無い・k = n・ほかの項が全部 A）を満たして最後の項が書いた \`_\` でないときと、括らない \`!_\` だけの行（\`x : !_\`・本体・2行以上の括りの中の行。1行の括り \`[!_]\`・\`(!_)\` は恒等射ではなく否定の点なし）と、\`||!_||\` だけです。それ以外の位置の読みは決まっていません（§3.5、§5 Q15）。`
+    `括らない \`!_\` が${where}にあります。\`!_\` は穴（その口の恒等射）で、読みが決まるのは、素の関数か既定値のある関数（名前の定義か \`?\` の括り）の実引数の並びで、撒く項が無く、ほかの項が全部 A のとき（k = n なら最後の項が書いた \`_\` でないとき（R16）、k ≠ n なら書いた \`_\` が無く、k > n なら \`!_\` が前から n 個の中にあるとき（R34））と、括らない \`!_\` だけの行（\`x : !_\`・本体・2行以上の括りの中の行。1行の括り \`[!_]\`・\`(!_)\` は恒等射ではなく否定の点なし）と、\`||!_||\` だけです。それ以外の位置の読みは決まっていません（§3.5、§5 Q15）。`
   );
 }
 
@@ -2915,7 +2920,10 @@ function makeLambda(op, ctx) {
 // `h : x ? [+ [k x]]` も）を黙って通していた（確かめ 2026-10-22。直す人の読み）。綴りは仮置きに依らないので、どの定義から解いても同じ。
 // what は名指し（「関数 `adder` の」。実体は呼んだ行で instanceError が関数と形を足すので空）。
 // 言い分：入れ子の `?`（`add : x ? y ? x + y`）は手で書いたカリー化なので、`$` を勧めず、仮引数を並べる書き方だけを勧める
-// （U〔答え〕10-21 16:02「理由は、カリー化はシステムの側で持つべき。 / ユーザーが明示はね…」。`$` で包んだ入れ子の `?` は G17）。
+// （U〔答え〕10-21 16:02「理由は、カリー化はシステムの側で持つべき。 / ユーザーが明示はね…」）。
+// `$` で包んだ入れ子の `?`（`add : x ? $[y ? x + y]`）は当たらない：`$[+ m]` と同じく、外の仮引数を掴んだ関数を `$` で物にして返す
+// 形で、本体の根は A（U〔答え〕10-21 22:46「通して不都合がないなら通していいよ。」。不都合が無いという見立ては主の Claude の物。
+// 前は G17 で断っていた）。
 function bareReturnGate(what, root) {
   const nested = root.t === "lambda" || !!root.isQBracket;
   const advice = nested
@@ -2941,34 +2949,15 @@ function sectionTerm(term) {
   return unary(x) || sectionTerm(x);
 }
 
-// G17（R33、§5 Q35）：`?` で作る関数の本体の根が、`$` で包んだ入れ子の `?`（`add : x ? $[y ? x + y]`。手で書いたカリー化）。
-// `$` で値にした関数を返す形は G16 に当たらない（`adder : m ? $[+ m]` は U 10-21 12:50・U〔答え〕15:58 で確かめた）が、入れ子の `?` を
-// `$` で包んで返す形を通すかは、利用者に確かめていない。D type_system.md「関数を返す関数は、`$` を付けて関数オブジェクトの番地で
-// 返す」は通す側に、U〔答え〕10-21 16:02「理由は、カリー化はシステムの側で持つべき。 / ユーザーが明示はね…」は断る側に読める。
-// 決まっていないので、名指しで断る（直す人の読み、断る側）。見るのは綴り（`$` 1つと、1行の括りの入れ子の中の、両側のある `?`、
-// unwrapLambda）だけで、種類にも仮置きにも依らない。
-function curriedSpelled(tree) {
-  if (!tree || tree.t !== "leaf" || !tree.term || tree.term.type !== "atom") return false;
-  const { pre, core, post } = tree.term;
-  if (post.length || pre.length !== 1 || pre[0] !== "$" || core.c !== "bracket") return false;
-  return !!unwrapLambda({ type: "seq", terms: [{ ...tree.term, pre: [] }] });
-}
-function curryGate(what, root) {
-  return gate(
-    "G17",
-    `${what}本体の根 \`${cutShape(show(root))}\` は、\`$\` で包んだ入れ子の \`?\`（手で書いたカリー化）です。\`$\` で値にした関数を返す形（\`$[+ m]\`）は通りますが、入れ子の \`?\` を \`$\` で包んで返す形を通すかは決まっていません。仮引数を並べて書けば、足りない適用は自動で部分適用になります（\`x y ? x + y\`）（§4 R33、§5 Q35）。`
-  );
-}
-// 本体の根で断る門（G16・G17）。断らないなら null。what は名指しを返す関数（断るときだけ作る）。
+// 本体の根で断る門（G16）。断らないなら null。what は名指しを返す関数（断るときだけ作る）。
 function returnGate(what, body) {
   if (body.rootKind === "L" || sectionSpelled(body.tree)) return bareReturnGate(what(), body.tree);
-  if (curriedSpelled(body.tree)) return curryGate(what(), body.tree);
   return null;
 }
 
 // `?`（P3：左は解かず、右を関数の範囲で解く）。片側の欠けた `?` は点なし（unwrapLambda の注）なので、種類は未知。
 // 括りの関数は、ここでは本体を解かない（R25）。木は resolve の最後に、集めた実体で埋める（patternNode）。
-// 解き終えた所で本体の根が L なら G16（bareReturnGate）、`$` で包んだ入れ子の `?` なら G17（curryGate）。
+// 解き終えた所で本体の根が L か区間の綴りなら G16（returnGate）。
 function resolveLambda(op, ctx) {
   if (isSection(op)) {
     return { t: "lambda", paramsText: op.left ? writeTree(op.left) : "", body: op.right ? resolveTree(op.right, ctx) : null, kind: U() };
@@ -3107,7 +3096,8 @@ function reduceItems(items, ctx) {
   });
 
   // 2. 書いた `_`（印）と穴 `!_`（§3.5）。書いた `_` は穴にならない（穴の綴りは `!_`。U 10-21 03:06、U〔答え〕03:11）。
-  // - 並び全体が素の関数の実引数の並びで k = n なら、`!_` と（最後でない）`_` を仮引数にする（tryHole、R16）。
+  // - 並び全体が素の関数の実引数の並びで k = n なら、`!_` と（最後でない）`_` を仮引数にする（tryHole、R16）。k ≠ n で `!_` が
+  //   あり `_` が無ければ、余った実引数を穴へ入れるか、足りない口を最後の括りで受ける（holeMismatch、R34）。
   // - 残った `!_` は断る（holeRefusal）。
   // - 残った `_` は値の項（印）として並びに入る。適用の実引数にならずに残った構築の中では消える（R15 を両側に：0 ⊕ A ≅ A）。
   //   適用の実引数の中の `_` は、括りの関数なら消え、畳む2項の点なし（R31）なら被演算子の印のまま、並びの最後なら「終わり」、
@@ -3184,7 +3174,7 @@ function isPlainHead(h) {
   return !!fn && h.cat === "plain" && h.kind.k === "L" && fn.type === "plain" && fn.origin === "plain" && (h.isLambdaName || h.isQBracket);
 }
 
-// 穴 `!_` を書ける頭のアリティ（R16）。素の関数の頭は n。既定値のある関数の頭（名前の定義か `?` の括り）は仮引数の数
+// 穴 `!_` を書ける頭のアリティ（R16・R34）。素の関数の頭は n。既定値のある関数の頭（名前の定義か `?` の括り）は仮引数の数
 // （defaultsArity。数えられなければ null）。ほかの頭は null。
 function holeHeadArity(h) {
   const fn = h && h.kind && h.kind.fn;
@@ -3194,11 +3184,13 @@ function holeHeadArity(h) {
 }
 
 // 穴が tryHole で読めなかった並び（§3.5）。括りの関数の実引数の `!_` は G5（穴は素の関数だけ。括りの仮引数の関数では `_` が
-// 括りの受ける並びの中の印になる、U〔答え〕10-14 22:23）。穴を書ける頭（素の関数か既定値のある関数）の実引数の並びで k ≠ n
-// なら G13（§5 Q31：U〔答え〕10-15 23:16 は「go !_ xs は go xs と読む」に「そうなるね！」だったが、穴の読みでは go の口を穴が
-// 埋めて xs が余る）。既定値のある関数も同じ門にするのは、10-15 の問いの `!_` が既定値の口を埋める綴り（10-14 05:41「既定値で
-// 埋めたいなら !_」）で、利用者が名指しで断るよう言った `go !_ xs` の go は既定値を持ちうるから。ほかの位置（頭の `!_`・値の後・
-// 値の間・関数の混ざった並び・最後の項が書いた `_` の並び・撒く項）は G7。
+// 括りの受ける並びの中の印になる、U〔答え〕10-14 22:23）。穴を書ける頭（素の関数か既定値のある関数）の実引数の並びで、穴でない
+// 項が全部書いた `_` でない A で k ≠ n なのに R34（holeMismatch）が読まなかった形は G13：撒く項がある（k が数えられないので、
+// 穴に入れる実引数も余りも決まらない。`go !_ vs~`・`f3 !_ vs~`）か、k > n で前から n 個の外に `!_` がある（R34 は残りの実引数を
+// 前から穴へ入れるが、入れる物が穴の読みは決まっていない。`inc 5 !_`・`add !_ 1 !_`）。前（Q31 の答えの前）は k ≠ n の全部を
+// G13 で断っていた（U〔答え〕10-15 23:16 は「go !_ xs は go xs と読む」に「そうなるね！」だったが、穴の読みでは go の口を穴が
+// 埋めて xs が余る、と割れた）。R34 の k < n で作った関数に後から当てる所の G13 は applyKind。
+// ほかの位置（頭の `!_`・値の後・値の間・関数の混ざった並び・書いた `_` の混ざった並び・k = n の撒く項）は G7。
 function holeRefusal(items) {
   const h = items[0];
   const ts = items.slice(1);
@@ -3221,9 +3213,13 @@ function holeRefusal(items) {
   if (n !== null && ts.some(isHoleItem) && ts.length !== n && ts.every((t) => isHoleItem(t) || (t.cat === "plain" && t.desc.k === "A"))) {
     const what = isPlainHead(h) ? "素の関数" : "既定値のある関数";
     const arity = isPlainHead(h) ? `${n}` : `${n}。既定値のある仮引数も1つと数える`;
+    const spread = ts.some((t) => t.cat === "plain" && t.desc.spread);
+    const why = spread
+      ? "撒く項があるので実引数の数が数えられず、穴に入れる実引数と余りが決まりません"
+      : `前から ${n} 個の外に \`!_\` があります。余った実引数は前から順に穴へ入れますが、入れる物が穴の読みは決まっていません`;
     return gate(
       "G13",
-      `${what} \`${showView(h.view)}\` の実引数の並びに穴 \`!_\` がありますが、実引数の数（${ts.length}）がアリティ（${arity}）と違います。穴がその口を埋めて残りが余るのか、穴を取り除くのか（U〔答え〕10-15 23:16 は「go !_ xs は go xs と読む」に「そうなるね！」）が決まっていません（§5 Q31）。`
+      `${what} \`${showView(h.view)}\` の実引数の並びに穴 \`!_\` があり、書いた数（${ts.length}）がアリティ（${arity}）と違います。${why}（§4 R34、§5 Q31）。`
     );
   }
   return refuseHole("並びの中の、穴として読める位置の外");
@@ -3290,6 +3286,9 @@ function makeApply(head, arg) {
 // - 畳む2項の点なし（R31。合成なら最初の関数）：`_` は中置の被演算子と同じく印で A（R15）。末尾の `_` も「終わり」（R28）に
 //   しない（`[+] 1 _` は `1 + _`）。木は `_` を残し、値は演算子表の Unit の欄が読む（単位なら消え、吸収する側なら `_`）。だから
 //   どの位置の `_` も、ほかの実引数と同じに数える（前は `[+] 1 _ 3`・`[+] 1 _` を G5 で断っていた）。
+// - R34 の k < n で作った穴の関数（とその部分適用。印 rest）：G5。最後の括りの仮引数 `[~c]` が残りを受けるので、`_` は括りが
+//   受ける並びの中の消える印（U〔答え〕10-14 22:23）とも、c に入る値（終わりの `_`、R28）とも読め、種類が割れる
+//   （`(f3 !_ 2) 1 _` は消えれば `f3 1 2` で L、値なら `f3 1 2 _` で A）。合成の頭なら、下の終わりの頭のアリティが数えられずに G5。
 // - ほか（内側の `_`、`_` が2つ以上、`f _ _`）は G5。
 function markApply(head, arg) {
   const fn = head.kind.fn;
@@ -3297,6 +3296,12 @@ function markApply(head, arg) {
   const first = fn && fn.type === "compose" ? fn.fns[0] : fn;
   if (first && first.type === "other" && first.defaults) {
     throw gate("G15", `既定値のある関数${fn === first ? "" : "で始まる合成"} \`${show(head)}\` の実引数に書いた \`_\` があります（\`${show(arg)}\`）。値は既定値ですが、適用の種類は決まっていません（§5 Q8）。`);
+  }
+  if (fn && fn.type === "plain" && fn.rest) {
+    throw gate(
+      "G5",
+      `穴の口の足りない並びから作った関数 \`${show(head)}\`（書いていない後ろの口を最後の括りの仮引数で受ける、§4 R34）の実引数 \`${show(arg)}\` に、書いた \`_\` があります。括りが受ける並びの中の消える印（U〔答え〕10-14 22:23）か、最後の括りに入る値（終わりの \`_\`、R28）かで読みが割れます（§3.5、§5 Q7）。`
+    );
   }
   if (fn && fn.type === "pattern") {
     // `_` を消して詰めるのは、残りの仮引数が全部括りのときだけ（U〔答え〕10-14 22:23 は「参照を取る関数」の話）。裸の仮引数が
@@ -3382,6 +3387,14 @@ function applyKind(fn, arg) {
   if (!fn || spread) return { kind: U() };
   switch (fn.type) {
     case "plain":
+      // R34 の k < n で作った穴の関数で、最後の括り `[~c]` にちょうど1つで入る実引数が数と分からない：R24（List 1つは括りがその
+      // List を受ける）と位置どおりの数え方で答えが割れるので、G13（holeMismatch の注、§5 Q31 の残り）。
+      if (fn.rest && fn.restAt !== undefined && k === fn.restAt + 1 && !isScalar(descOfTree(args[fn.restAt]))) {
+        throw gate(
+          "G13",
+          `穴の口の足りない並びから作った関数（書いていない後ろの口を最後の括りの仮引数で受ける、§4 R34）の最後の括りに、数と分からない実引数（List・中身の見えない A・構造体など）がちょうど1つで入ります。括りがその値を受けて撒く（R24。List なら要素の数だけ口を埋める）のか、位置どおりに口を1つ埋めるのかが決まっていません（§4 R34、§5 Q31）。`
+        );
+      }
       return plainApply(fn, k);
     case "pfUnary":
       return k === 1 ? { kind: A() } : { kind: A(), excess: true };
@@ -3448,8 +3461,15 @@ function plainApply(fn, k) {
     // （origin "hole"）のまま持つ。出どころを見るのは、逆適用の右と穴の頭（どちらも "plain" だけを通すので、"hole" と
     // "partial" を分けない）と実体の鍵（fnKey）だけである。合成はもう出どころを見ない（composeApply：合成は適用の畳み込み
     // なので、後ろの穴も、穴の部分適用も、直接書いた `[f3 1 _ 3] (inc 5)` と同じ読み）。
+    // R34 の k < n で作った穴の関数の部分適用も、印 rest を持ち越す（書いた `_` は G5、markApply）。最後の括りの前に残る裸の口の
+    // 数（restAt）は当てた数だけ減らし、最後の括りに入り始めたら外す（入った物は位置どおりに f3 の口へ並ぶ、holeMismatch の注）。
     const origin = fn.origin === "hole" ? "hole" : "partial";
-    return { kind: { k: "L", fn: { type: "plain", origin, n: fn.n - k, getBodyRoot: fn.getBodyRoot, idKey: fn.idKey, envDepth: fn.envDepth } }, insufficient: true };
+    const part = { type: "plain", origin, n: fn.n - k, getBodyRoot: fn.getBodyRoot, idKey: fn.idKey, envDepth: fn.envDepth };
+    if (fn.rest) {
+      part.rest = true;
+      if (fn.restAt !== undefined && k <= fn.restAt) part.restAt = fn.restAt - k;
+    }
+    return { kind: { k: "L", fn: part }, insufficient: true };
   }
   const root = fn.getBodyRoot();
   if (k === fn.n) return { kind: root === "A" ? A() : U() };
@@ -3545,6 +3565,7 @@ function composeLeaf(desc) {
 // `!_` は既定値があっても穴（仮引数の数 n で k = n を見る。n が数えられなければ穴にしない、defaultsArity）。その関数の適用の
 // 種類は未知（applyKind の other）なので、穴の関数もアリティの分からない関数（other）にする。アリティは数えない（§3.4 の
 // 穴の行。`(gd !_ 3) 5` は未知、`(gd !_ 3) _` は終わりの頭のアリティが数えられないので G5）。
+// k ≠ n は R34（holeMismatch）。書いた `_` の混ざった k ≠ n は読まない（R16 のカリー化は k = n だけ。残った `!_` は holeRefusal）。
 function tryHole(items, ctx) {
   const h = items[0];
   const fn = h.kind.fn;
@@ -3557,22 +3578,88 @@ function tryHole(items, ctx) {
     throw gate("G15", `既定値のある関数 \`${showView(h.view)}\` の実引数に書いた \`_\` があります。値は既定値ですが、適用の種類は決まっていません（§5 Q8）。`);
   }
   const n = holeHeadArity(h);
-  if (n === null || ts.length !== n) return null;
+  if (n === null) return null;
+  if (ts.length !== n) return marks ? null : holeMismatch(h, ts, n, ctx);
   if (isMark(ts[ts.length - 1])) return null;
   if (!ts.every((t) => isMark(t) || isHoleItem(t) || (t.cat === "plain" && t.desc.k === "A" && !t.desc.spread))) return null;
   const params = [];
   const args = ts.map((t) => {
     if (!isMark(t) && !isHoleItem(t)) return t;
-    const name = `$${ctx.F.holePrefix}${params.length}`;
+    const name = holeName(ctx, params.length);
     params.push(name);
-    return { t: "leaf", term: null, cat: "plain", desc: A(), kind: A(), view: { v: "atom", text: name } };
+    return holeParamLeaf(name);
   });
   const arg = args.length === 1 ? args[0] : makeConstruct(args);
   const body = { t: "apply", head: h, arg, rev: false, ...applyKind(fn, arg) };
-  const holeFn = defaulted
-    ? { type: "other" }
-    : { type: "plain", origin: "hole", n: params.length, getBodyRoot: fn.getBodyRoot, idKey: fn.idKey, envDepth: fn.envDepth };
-  return { t: "hole", params, body, kind: { k: "L", fn: holeFn } };
+  return { t: "hole", params, body, kind: { k: "L", fn: holeFnOf(fn, params.length) } };
+}
+
+// 穴の生成名と、それを実引数の位置に置いた葉（A）。
+const holeName = (ctx, i) => `$${ctx.F.holePrefix}${i}`;
+const holeParamLeaf = (name) => ({ t: "leaf", term: null, cat: "plain", desc: A(), kind: A(), view: { v: "atom", text: name } });
+// 穴の関数の fn。頭が既定値のある関数なら、アリティの分からない関数（tryHole の注）。素の関数なら、出どころ "hole" のアリティ n の
+// 素の関数（本体の根は頭のもの）。restAt は R34 の k < n で作った関数（最後の括りの仮引数で残りを受ける、holeMismatch）のときだけ
+// 渡し、印 rest と、最後の括り `[~c]` の前に残る裸の口の数 restAt を付ける。
+function holeFnOf(fn, n, restAt) {
+  if (fn.type === "other") return { type: "other" };
+  const out = { type: "plain", origin: "hole", n, getBodyRoot: fn.getBodyRoot, idKey: fn.idKey, envDepth: fn.envDepth };
+  if (restAt !== undefined) {
+    out.rest = true;
+    out.restAt = restAt;
+  }
+  return out;
+}
+
+// R34：穴 `!_` があって、実引数の数 k が頭のアリティ n と違う（§5 Q31 の答え）。頭は R16 と同じ（素の関数か、n が数えられる
+// 既定値のある関数。名前の定義か `?` の括り）。穴でない項は全部 A で撒く項が無く、書いた `_` が無いときだけ読む。
+// - k > n：前から n 個で穴の関数を作り（R16）、残りの実引数を前から順にその穴へ入れる（U〔答え〕10-21 22:51「合ってる。Bだね」。
+//   主の Claude の問いの (B)「`go !_` は穴で `a ? go a`、後ろの xs がその穴を埋めて `go xs`。`f !_ 3 4`（f は2引数）は
+//   `(a ? f a 3) 4` で `f 4 3`。括った `[f !_ 3] 4` と同じ答え」）。穴より残りが多ければ、穴を全部埋めた適用で、余りは素の関数の
+//   余り（applyKind が `excess` を付けるか、本体の根が A でなければ G12(b)）。穴が残れば、残った穴を待つ穴の関数（L）。木は埋めた
+//   所を値に替えた形（`go !_ xs` は `(apply go xs)`、`f !_ 3 4` は `(apply f (construct 4 3))`。決定の規則）。
+// - k < n：穴を前から順に裸の仮引数にし、書いていない後ろの n − k 個の口を、最後の括りの仮引数 `[~c]` 1つで受けて後ろへ撒く
+//   関数にする（U〔答え〕10-21 22:55「`a [~c] ? f3 a 2 c~` / という、足りない分は全部後ろへっていう変換がかかる。」）。木は
+//   `(? [$p0 [~$p1]] (apply f3 (construct $p0 2 $p1~)))`。最後の括りが残りの並び全体を受ける（R24）ので、`(f3 !_ 2) 1 3` は
+//   `f3 1 2 3`、`(f3 !_ 2) 1` は足りない適用（決定の規則は「c が空で `f3 1 2`」、R24 の k < n では c を待つ部分適用。どちらも L）、
+//   多ければ f3 の余り。だから種類は、穴の数 + (n − k) をアリティにした穴の関数と同じになる（`add !_` はアリティ 2 で、η で add。
+//   決定の規則）。括りの仮引数の関数（pattern）としては作らない：本体の `c~` が撒く項なので、その実体の根はいつも未知になり、
+//   足りた適用が A にならない。違いは2つ。
+//   - 書いた `_`：括りの受ける並びの中の `_` は消える印（U〔答え〕10-14 22:23）とも、c に入る値とも読めるので、印 rest を付けて
+//     G5 で断る（markApply。実装する人の読み、断る側）。
+//   - 最後の括りにちょうど1つで入る実引数が数と分からないとき（List・中身の見えない A・`$` の番地・構造体）：R24 では、最後の括りに
+//     1つで入った List はその List を受ける（`f 1 2 3` は `f [1 2 3]` と同じ）ので、`c~` で撒くと `(f3 !_) 1 xs` は `f3 1 1 2`、
+//     `(f3 !_ 2) 1 vs` は f3 の余りになり、位置どおりに数えた読み（残りを待つ L・余りの無い A。η の `add !_` は add）と割れる。
+//     どちらとも決めず、G13 で名指しして断る（applyKind。直す人の読み、断る側、§5 Q31 の残り）。未知にしないのは、2つの読みが
+//     どちらも L になる形（`q : x ? (f4 !_) 7 xs`）で、本体の根の G16 をすり抜けるから。数1つ（`[x]≅x`、R24）か2つ以上なら、
+//     2つの読みは同じ答えになる。c の前に残る裸の口の数（restAt）は、部分適用にも持ち越し（plainApply）、実体の鍵にも入れる（fnKey。
+//     `f4 !_ 2` と `f4 !_ !_ 2` はアリティが同じで、List を1つ当てたときの答えが分かれる）。
+// 読まない形（null を返し、holeRefusal が G13 で断る）：撒く項がある（k が数えられない）・k > n で前から n 個の外に `!_` がある
+// （残りの実引数を穴へ入れる、の「入れる物」が穴になる）。作った関数に後から当てる所の G13 は applyKind（上の2つ目）。
+function holeMismatch(h, ts, n, ctx) {
+  if (!ts.every((t) => isHoleItem(t) || (t.cat === "plain" && t.desc.k === "A" && !t.desc.spread))) return null;
+  const fn = h.kind.fn;
+  const params = [];
+  const param = () => {
+    const name = holeName(ctx, params.length);
+    params.push(name);
+    return holeParamLeaf(name);
+  };
+  if (ts.length > n) {
+    const rest = ts.slice(n);
+    if (rest.some(isHoleItem)) return null;
+    let r = 0;
+    const filled = ts.slice(0, n).map((t) => (!isHoleItem(t) ? t : r < rest.length ? rest[r++] : param()));
+    const all = [...filled, ...rest.slice(r)];
+    const arg = all.length === 1 ? all[0] : makeConstruct(all);
+    const app = { t: "apply", head: h, arg, rev: false, ...applyKind(fn, arg) };
+    return params.length ? { t: "hole", params, body: app, kind: { k: "L", fn: holeFnOf(fn, params.length) } } : app;
+  }
+  const args = ts.map((t) => (isHoleItem(t) ? param() : t));
+  const c = holeName(ctx, params.length);
+  const spread = { k: "A", spread: true };
+  const arg = makeConstruct([...args, { t: "leaf", term: null, cat: "plain", desc: spread, kind: spread, view: { v: "atom", text: `${c}~` } }]);
+  const body = { t: "apply", head: h, arg, rev: false, ...applyKind(fn, arg) };
+  return { t: "hole", params: [...params, `[~${c}]`], body, kind: { k: "L", fn: holeFnOf(fn, params.length + n - ts.length, params.length) } };
 }
 
 // ---------------------------------------------------------------------------

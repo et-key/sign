@@ -11,6 +11,7 @@
  * 3. 行の順に依らない（P2・R25）
  * 4. 括りの関数は、括りを外した素の関数と同じ（括りの受け方を除いて、R24）
  * 5. 逆適用は、前から書いた適用と同じ（逆適用だけの門を除いて、R12・R13）
+ * 6. 穴に後から当てるのは、埋めた適用と同じ（R16・R34）
  *
  * 法則ごとに、比べる2つの綴り・何を同じと見るか・なぜ同じでなければならないか（出どころの規則と利用者の言葉）・
  * 比べの外に出した形とその理由を、その法則の頭に書く。主の Claude の提案「法則の試験を常設の一式として持つ」に、
@@ -772,6 +773,9 @@ const PROGRAMS3 = [
 	["括りの関数の実体の根が裸の関数（G16、呼んだ行で）", [[INC], ["gi : [x ~xs] ? inc"], ["gi 1 2"], ["inc 5"]]],
 	["仮置きの上でだけ根が L（G16 に当たらない）", [["h : x ? [s : [+ [k x]]] ' s"], ["k : x ? h x"], ["k 1"], [INC], ["inc h 1"]]],
 	["区間の綴りの本体は、被演算子の種類が未知でも G16（断る文が1つ）", [["h : x ? [+ [k x]]"], ["k : x ? h x"], ["k 1"], [INC], ["inc k 1"]]],
+	// §5 Q35 の答え（2026-10-21 22:46、G17 は廃止）：`$` で包んだ入れ子の `?` は、`$[+ m]` と同じく本体の根が A で通る。括りの関数の
+	// 実体でも同じで、どの並べ方でも同じ木と種類になる。
+	["$ で包んだ入れ子の ? は通る（G17 は廃止）", [["add : x ? $[y ? x + y]"], [INC], ["inc add 1"], ["gi : [x ~xs] ? $[y ? y]"], ["gi 1 2"]]],
 	...Q28_FORMS,
 	...Q28_REFUSE_FORMS,
 	...DEPTH_FORMS.map(([name, units]) => [name, units]),
@@ -1246,6 +1250,137 @@ law("5 逆適用と、前から書いた適用は同じ読み：x f1 … fm と 
 	};
 	for (const first of FIRSTS5) for (const g of LATER5) for (const x of SUBJECTS5) check(first, [g], x);
 	for (const first of FIRSTS5_3) for (const g of LATER5_3) for (const h of LATER5_3) check(first, [g, h], "5");
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: `比べた組 ${n}：${Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・")}` };
+});
+
+// ---------------------------------------------------------------------------
+// 法則6：穴に後から当てるのは、その位置に書いた適用と同じ（R16・R34）
+// ---------------------------------------------------------------------------
+//
+// 比べる綴り：頭 h（アリティ n）の実引数の並び P（長さ n 以下で、`!_` が1つ以上、ほかは値）と、後から当てる値の並び E について、
+// (1) 括った穴の関数に当てた適用 `[h P] E`、(2) 括らずに続けて書いた `h P E`（P の長さが n のときだけ）、(3) 埋めた適用 `h P'`。
+// P' は、P の `!_` を前から順に E の項で埋め、余った E を後ろに並べた物（E が穴より少なければ、残りの `!_` はそのまま）。
+//
+// なぜ同じか：
+// - (1) と (3)：穴の関数の仮引数は、書いた `!_` の位置どおり前から並ぶ（R16。`add !_ 10` は `a ? add a 10`）。P が n より短ければ、
+//   書いていない後ろの口を最後の括りの仮引数で受けて撒く（R34、U〔答え〕10-21 22:55「`a [~c] ? f3 a 2 c~` / という、足りない分は
+//   全部後ろへっていう変換がかかる。」）。最後の括りは残りの並び全体を受ける（R24）ので、E の残りは h の口の後ろへ並ぶ。
+// - (2) と (1)：k > n は、余った実引数が前から穴に入る（R34、U〔答え〕10-21 22:51「合ってる。Bだね」。主の Claude の問いの (B) は
+//   「括った `[f !_ 3] 4` と同じ答え」）。
+// - (2) と (3) の木：埋めた所を値に替えた形（決定の規則。`f !_ 3 4` は `(apply f (construct 4 3))`）。穴が残れば、(3) は R16 の
+//   穴の書き換えで、同じ木になる。
+//
+// 何を同じと見るか：(1) と (3) は、最後の行の種類と余りの印と診断（断るなら門の reason と番号）。木は綴りが違う（括りの葉と
+// 埋めた適用）ので比べない。(2) と (3) は、木も比べる。
+//
+// E は数だけにする。(3) は位置どおりに埋めた形で、R34 の変換（最後の括りが残りを受けて撒く）と同じ答えになるのは、最後の括りに
+// 入る物が数1つ（`[x]≅x`）か2つ以上のときだけだからである。数でない値（List・中身の見えない A）が最後の括りにちょうど1つで入る
+// 形は、(3) と比べると実装と同じ前提を両側に置くことになる（寄生したオラクル）。そこは下の (4) で、R24 から比べる。
+//
+// (4) 最後の括りにちょうど1つで入る List（R24）：P が n より短い（R34 の k < n）とき、穴を数で埋めた次の値は、最後の括り `[~c]` に
+// ちょうど1つで入る。R24 では、最後の括りに1つで入った List はその List を受ける（`f 1 2 3` は `f [1 2 3]` と同じ。部分適用の後でも
+// 同じ）ので、`[h P] E X`・`([h P] E) X` は、X の要素を並べて当てた `[h P] E x1 … xm`・`([h P] E) x1 … xm` と同じ読み。X の側は
+// G13 で断ってもよい（位置どおりに数えた読みと割れるので、名指しして断る。resolve.js の holeMismatch の注、§5 Q31 の残り）が、
+// 黙って別の種類や余りの印にしてはいけない。数を括った `[5]` は数（R24）なので、`5` と同じでなければならない。
+//
+// 比べの外：P が n より短い括らない `h P E`（並び全体が1つの実引数の並びになり、k = n なら R16 の穴、ほかは R34 で、穴の数え方が
+// (1) と違う。`f3 !_ 2 1` は `a ? f3 a 2 1`）。既定値のある関数の (1) で、E が穴より少ない形（穴の関数はアリティの分からない関数で、
+// 当てた適用は未知。§3.4 の穴の行・§5 Q8。(3) は穴が残って L）。E に書いた `_`（R34 の k < n で作った関数は G5、markApply）と
+// 撒く項、前から n 個の外の `!_`（R34 は読まず、G13 か G7）。中身の見えない A（裸の仮引数）を最後の括りに1つで入れる形は、比べる
+// 相手の綴りが無いので、coproduct.test.js の「穴と実引数の数」の行で見る。
+const DEFS6 = [INC, "add : x y ? x + y", "f3 : a b c ? a + b + c", "f4 : a b c e ? a + b + c + e", "use : f x ? @f x", "uu : x ? [,] x", "gd :", "\t\tys", "\t\tzs : 3", "\t? ys", ""];
+// (4) の List と、その要素。
+const DEFS6L = [...DEFS6, "xs : 1 , 2", "vs : 1 , 2 , 3"];
+const LISTS6 = [
+	["xs", ["1", "2"]],
+	["[1 2]", ["1", "2"]],
+	["vs", ["1", "2", "3"]],
+	["[5]", ["5"]],
+];
+// [頭, アリティ, 既定値のある関数か]。本体の根が A の素の関数・本体の根が未知の素の関数（余りは G12(b)）・既定値のある関数（適用は
+// 未知）。
+const HEADS6 = [
+	["inc", 1, false],
+	["add", 2, false],
+	["f3", 3, false],
+	["f4", 4, false],
+	["use", 2, false],
+	["uu", 1, false],
+	["gd", 2, true],
+];
+// 長さ len の並びで、`!_` が1つ以上の物。値は位置ごとに 2・3・4・5（埋めた値と見分ける）。
+const holePatterns = (len) => {
+	const out = [];
+	for (let mask = 1; mask < 1 << len; mask++) out.push([...Array(len).keys()].map((i) => (mask & (1 << i) ? "!_" : String(i + 2))));
+	return out;
+};
+const fill6 = (p, e) => {
+	let r = 0;
+	const filled = p.map((t) => (t === "!_" && r < e.length ? e[r++] : t));
+	return [...filled, ...e.slice(r)];
+};
+const ARGS6 = [["7"], ["7", "8"], ["7", "8", "9"]];
+
+law("6 穴に後から当てるのは、埋めた適用と同じ：[h P] E・h P E と h P'、最後の括りに1つで入る List と要素", () => {
+	const problems = [];
+	const count = { "A で通る": 0, "L で通る": 0, "未知で通る": 0, 同じ門で断る: 0, "括らない h P E も比べた": 0, "既定値のある関数で、E が穴より少ない（比べの外）": 0 };
+	let n = 0;
+	const last = (o) => (o.refused ? `断り ${o.refused.reason} ${o.refused.gate}` : `${lastOf(o).kind}${lastOf(o).excess ? "（excess）" : ""} || ${o.diag.join(" ")}`);
+	const full = (o) => (o.refused ? `断り ${o.refused.reason} ${o.refused.gate}` : `${lastOf(o).text} : ${last(o)}`);
+	for (const [h, arity, defaulted] of HEADS6) {
+		for (let len = 1; len <= arity; len++) {
+			for (const p of holePatterns(len)) {
+				for (const e of ARGS6) {
+					n++;
+					const filled = outcome(src([...DEFS6, `${h} ${fill6(p, e).join(" ")}`]));
+					const bracketed = outcome(src([...DEFS6, `[${h} ${p.join(" ")}] ${e.join(" ")}`]));
+					const label = `[${h} ${p.join(" ")}] ${e.join(" ")}  ⇔  ${h} ${fill6(p, e).join(" ")}`;
+					if (filled.crash || bracketed.crash) {
+						problems.push(label, `  括った: ${brief(bracketed)}`, `  埋めた: ${brief(filled)}`);
+						continue;
+					}
+					if (defaulted && e.length < p.filter((t) => t === "!_").length) count["既定値のある関数で、E が穴より少ない（比べの外）"]++;
+					else if (last(bracketed) !== last(filled)) problems.push(label, `  括った: ${last(bracketed)}`, `  埋めた: ${last(filled)}`);
+					if (len === arity) {
+						const inline = outcome(src([...DEFS6, `${h} ${p.join(" ")} ${e.join(" ")}`]));
+						count["括らない h P E も比べた"]++;
+						if (inline.crash || full(inline) !== full(filled)) {
+							problems.push(`${h} ${p.join(" ")} ${e.join(" ")}  ⇔  ${h} ${fill6(p, e).join(" ")}`, `  括らない: ${inline.crash ? brief(inline) : full(inline)}`, `  埋めた: ${full(filled)}`);
+						}
+					}
+					if (filled.refused) count.同じ門で断る++;
+					else count[lastOf(filled).kind === "未知" ? "未知で通る" : `${lastOf(filled).kind} で通る`]++;
+				}
+			}
+		}
+	}
+	// (4)：最後の括りにちょうど1つで入る List と、その要素を並べた物（R24）。
+	const count4 = { "(4) 同じ": 0, "(4) List の側が G13": 0 };
+	for (const [h, arity] of HEADS6) {
+		for (let len = 1; len < arity; len++) {
+			for (const p of holePatterns(len)) {
+				const e = ["7", "8", "9"].slice(0, p.filter((t) => t === "!_").length);
+				for (const [x, elems] of LISTS6) {
+					for (const [open, close] of [["", ""], ["(", ")"]]) {
+						n++;
+						const head = `${open}[${h} ${p.join(" ")}] ${e.join(" ")}${close}`;
+						const one = outcome(src([...DEFS6L, `${head} ${x}`]));
+						const many = outcome(src([...DEFS6L, `${head} ${elems.join(" ")}`]));
+						const label = `${head} ${x}  ⇔  ${head} ${elems.join(" ")}`;
+						if (one.crash || many.crash) {
+							problems.push(label, `  List: ${brief(one)}`, `  要素: ${brief(many)}`);
+							continue;
+						}
+						if (last(one) === last(many)) count4["(4) 同じ"]++;
+						else if (x !== "[5]" && one.refused && one.refused.gate === "G13") count4["(4) List の側が G13"]++;
+						else problems.push(label, `  List: ${last(one)}`, `  要素: ${last(many)}`);
+					}
+				}
+			}
+		}
+	}
+	Object.assign(count, count4);
 	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
 	return { problems, note: `比べた組 ${n}：${Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・")}` };
 });
