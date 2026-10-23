@@ -85,7 +85,7 @@ project/
 
 > [!NOTE]
 > `layer` を指定しない場合、デフォルトは `4`（std）となる。
-> 各レイヤーにおけるメモリ操作やモジュール解決の数学的・意味論的詳細については、[システムアーキテクチャ仕様書](System_Architecture_ja-jp.md) を参照のこと。
+> 各レイヤーにおけるメモリ操作やモジュール解決の数学的・意味論的詳細については、[システムアーキテクチャ仕様書](system_architecture.md) を参照のこと。
 
 > [!IMPORTANT]
 > **型と layer の対応**
@@ -179,7 +179,7 @@ _start :
 > `x86_64` は将来的な拡張候補として存在するが、現時点では選択リスト上の予約値にとどまる。
 
 > [!IMPORTANT]
-> **`option.ms` の全フィールド仕様は [`Option_MS_Spec_ja-jp.md`](Option_MS_Spec_ja-jp.md) を参照すること。**
+> **`option.ms` の全フィールド仕様は [`option_ms_schema.md`](option_ms_schema.md) を参照すること。**
 > 本ドキュメントはビルドシステムの設計思想と継承モデルを中心に記述する。
 > 全フィールド一覧・`target` 別デフォルト値・実用テンプレートは統合仕様書を参照。
 

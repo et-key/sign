@@ -117,7 +117,7 @@ TCO 解析は完全な識別子テーブルが確定した後で実行
 
 **未インポートの場合：**
 インポートされていない関数は「未定義識別子」として `__`（Unit）に収束する
-（`Undefined_Identifiers_and_Unit_ja-jp.md` §1 参照）。
+（`unit.md` §0.1 参照）。
 コンパイラは「未定義識別子を末尾位置で呼び出している」場合に警告を出す。
 解決策は単純で、該当ファイルをインポートするだけ。特別な前方宣言構文は不要。
 
@@ -257,7 +257,7 @@ f:
 
 ### 9.1 問題の所在
 
-部分適用クロージャは `alloca` 上に `{ fn_ptr, captured_args }` として存在する（→ [Range_Expression_and_Stack_ABI](../memory/Range_Expression_and_Stack_ABI_ja-jp.md) §4.3）。
+部分適用クロージャは `alloca` 上に `{ fn_ptr, captured_args }` として存在する（→ [stack_abi.md](../memory/stack_abi.md) §4.3）。
 TCO で `f` から `g` へ `JMP` するとき、`f` 内の `alloca` 領域が上書きされる可能性がある。
 
 ### 9.2 main アリーナ方式（有望な解決策候補）

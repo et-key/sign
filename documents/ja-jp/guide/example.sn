@@ -17,7 +17,7 @@
 `短絡評価や条件分岐での遅延は構文から自動的に決定可能である。`
 
 `":"は英文では「即ち」なので代入演算子とし、=は飽くまで比較演算子である。`
-`各演算子の優先順位と意味は、specification\A_Operator_Table.mdを参照。`
+`各演算子の優先順位と意味は、documents/ja-jp/impl/syntax/operator_table.mdを参照。`
 
 x : -353.15134
 y : 4001.35364502
@@ -143,7 +143,7 @@ _ 1, 2, 3 == 1
 `高階関数に渡す引数は直積によって評価するかしないかを分けて書く必要がある。`
 
 `関数内で副作用を記述する場合、即時生成を伴うことになるため、: 演算子は使えない`
-`このため、documents\ja-jp\specification\system_semantics_ja-jp.md に従った副作用の記述を使用する。`
+`このため、documents/ja-jp/impl/core/system_semantics.md に従った副作用の記述を使用する。`
 `ただし、この記述は、unsafe_perform_ioに相当することを念頭に置くこと。`
 
 [ x ?
