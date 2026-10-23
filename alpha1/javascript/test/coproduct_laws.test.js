@@ -10,12 +10,18 @@
  * 2. 並びで渡すのと括りで渡すのは同じ（R24）
  * 3. 行の順に依らない（P2・R25）
  * 4. 括りの関数は、括りを外した素の関数と同じ（括りの受け方を除いて、R24）
- * 5. 逆適用は、前から書いた適用と同じ（逆適用だけの門を除いて、R12・R13）
+ * 5. 逆適用は、前から書いた適用と同じ（逆適用だけの門を除いて、R12・R40。R13 は 2026-10-23 に廃止）
  * 6. 穴に後から当てるのは、埋めた適用と同じ（R16・R34）
  * 7. 左からの畳み込み（R35・R36・R37）：カリー化した適用・関数の並びを括った適用・余りを積んだ適用・一番近い1項の逆適用は、括りを
  *    外して並べ直した綴りと同じ種類と木の形
  * 8. 既定値のある口に書いた `_` は、同じ口に数を書いたのと同じ種類（R39）
  * 9. 既定値の無い素の関数の内側の `_` は、`!_` と同じ木（R38）
+ * 10. 前を括っても同じ（左結合、R40）：`P S` と `(P) S` と `v : P ⏎ v S`。同じにならない所（可変長の口が括りの終わりで閉じる・
+ *    根の `_`・積み上げが括りの中で閉じる・印と穴）は、試験の側で P を畳んで決める
+ *
+ * 2026-10-23 の左からの畳み込み（R40〜R43）で、1・4・5・6・7 の比べ方を直した（各法則の頭の注）。強さの順（R6）・流れの組み立て
+ * 直し・G12 は無くなった。同じ日の確かめの直し（§7.19）で R13（G10）も無くなり、5 と 10 の畳み方を直した。3 に、器の名前を
+ * 括りの関数の最後の括りへ渡すプログラムを足した。
  *
  * 法則ごとに、比べる2つの綴り・何を同じと見るか・なぜ同じでなければならないか（出どころの規則と利用者の言葉）・
  * 比べの外に出した形とその理由を、その法則の頭に書く。主の Claude の提案「法則の試験を常設の一式として持つ」に、
@@ -67,8 +73,15 @@ const outcome = (s) => {
 	try {
 		const r = resolve(s);
 		o = {
-			// leftover：余りを後ろに積んだ値の印（R35。前の印 excess は 2026-10-22 に無くなった）。
-			trees: r.trees.map((t) => ({ text: show(t), kind: kindOf(t), leftover: !!t.leftover })),
+			// leftover：余りを後ろに積んだ値の印（R35。前の印 excess は 2026-10-22 に無くなった）。2026-10-23 の左からの畳み込み（R40）で
+			// 節の印は無くなり、余りは積み上げの構築そのもの（根が、最初の項が適用の構築）なので、その形で見る。
+			// kind：根に残った未評価のラムダは `_`（R42、木では `(unit …)` で包む）。包んだ根は包みの中の種類に「（根で _）」を付けて、
+			// A とも裸の L とも分ける（包みの A を値の A と数えると、足りない適用が「通って A」に化け、法則の枝が入れ替わる）。
+			trees: r.trees.map((t) => ({
+				text: show(t),
+				kind: t.t === "unit" ? `${kindOf(t.inner)}（根で _）` : kindOf(t),
+				leftover: t.t === "construct" && t.items[0].t === "apply",
+			})),
 			diag: r.diagnostics.map((d) => `${d.reason}/${d.name}`).sort(),
 		};
 	} catch (e) {
@@ -147,6 +160,11 @@ const M = ["m :", "\tsay : x ? x * 2", "\tother : 1", ""];
 // 試験の側が数える（実装の flowArity を使わない。並び全体を受ける関数とアリティの数えられない関数は null）。比べの外：null の関数に
 // 流れの余りが残ったまま届く形（合成は G12(c) で断る。§5 Q13 の残り。ここでは断ることだけを見る）と、最後の結果が値でないのに
 // 余りが残る形（合成は G12(b)、入れ子は未知の括りの葉を並びに置くので G7。ここでは合成が G12(b) で断ることだけを見る）。
+//
+// 左からの畳み込み（2026-10-23、R40・R41）：流れは畳み込みの1歩そのもの（後から来る物は、最初の関数から順に流れ込む）。変わったのは：
+// null の関数は、流れの余りが残っていても並びの終わりまで受ける（R41。前の G12(c) の枝は、入れ子 `g (N) xk …` と比べる枝になる）。
+// 最後の結果が値でないのに余りが残る形は G2(a)（R40 の読み6、前は G12(b)）。最初の恒等射の割れは G18（前は G12(c)）で、恒等射が
+// 続くならその先の最初の恒等射でない関数で見る。根に残った足りない適用は `_`（R42）で、種類は「L（根で _）」と見る（上の outcome）。
 //
 // 関数は、素の関数（アリティ1・2、本体の根が A・未知。`$` で値にした関数を返す adder は A）・素の関数の部分適用（括り・名前、
 // 本体の根が A・未知）・穴の書き換え
@@ -333,8 +351,8 @@ const argTerms = (x) => {
 	if (cur) out.push(cur);
 	return out;
 };
-// 合成 fs を x に当てた流れ（R36）を、括りの入れ子で綴る。inner は途中の綴り（N1 … Nm）、nested は最後に余りを積んだ綴り、cut は
-// null の関数に流れの余りが残ったまま届いたこと、left は最後に残った項の数。
+// 合成 fs を x に当てた流れ（R40。前は R36）を、括りの入れ子で綴る。inner は途中の綴り（N1 … Nm）、nested は最後に余りを積んだ綴り、
+// cut は恒等射の割れ（G18）、left は最後に残った項の数、wide は null の関数が流れの余りまで受けた数（R41。前は cut で G12(c)）。
 const flowNested1 = (fs, x) => {
 	const xs = argTerms(x);
 	const a0 = arity1At(fs[0], xs.length);
@@ -343,22 +361,27 @@ const flowNested1 = (fs, x) => {
 	let cur = all ? `${fs[0]} ${x}` : `${fs[0]} ${xs.slice(0, a0).join(" ")}`;
 	let rest = all ? [] : xs.slice(a0);
 	const inner = [cur];
-	// 最初の恒等射が2項以上を受けて、後ろに恒等射・貪欲な単項でない関数が続く：R29 の「並び全体を受ける」（結果を1つの値で次へ）と、
-	// 単位律（`i g x` は `g x`）で割れるので、合成は G12(c) で断る（確かめ 2026-10-22。前は前者の読みで比べていた）。
-	if (fs[0] === "i" && xs.length > 1) {
-		const next = fs.slice(1).find((g) => g !== "i");
-		if (next !== undefined && next !== "[* 2,]") return { inner, cut: true };
-	}
-	for (const g of fs.slice(1)) {
+	let wide = 0;
+	// 恒等射が2項以上を受けて、その先の最初の恒等射でない関数が貪欲な単項でない：R29 の「並び全体を受ける」（結果を1つの値で次へ）と、
+	// 単位律（`i g x` は `g x`）で割れるので、合成は断る（確かめ 2026-10-22 は G12(c)、2026-10-23 から G18。前は前者の読みで比べていた）。
+	const idCut = (j, got) => {
+		if (fs[j] !== "i" || got < 2) return false;
+		const next = fs.slice(j + 1).find((g) => g !== "i");
+		return next !== undefined && next !== "[* 2,]";
+	};
+	if (idCut(0, all ? xs.length : a0)) return { inner, cut: true };
+	for (let j = 1; j < fs.length; j++) {
+		const g = fs[j];
 		const b = arity1At(g, 1 + rest.length);
 		if (b === undefined) throw new Error(`ARITY1 に ${g} が無い`);
-		if (b === null && rest.length) return { inner, cut: true };
-		const take = b === null ? [] : rest.slice(0, b - 1);
+		const take = b === null ? rest : rest.slice(0, b - 1);
+		if (b === null && rest.length) wide++;
+		if (idCut(j, 1 + take.length)) return { inner, cut: true };
 		rest = rest.slice(take.length);
 		cur = `${g} (${cur})${take.length ? ` ${take.join(" ")}` : ""}`;
 		inner.push(cur);
 	}
-	return { inner, nested: rest.length ? `(${cur}) ${rest.join(" ")}` : cur, left: rest.length };
+	return { inner, nested: rest.length ? `(${cur}) ${rest.join(" ")}` : cur, left: rest.length, wide };
 };
 
 // 1つの綴り（行の並び）を、使う定義だけ前に並べて解く。
@@ -381,8 +404,9 @@ law("1 合成は適用の繰り返し：f1 … fm x と fm (… (f1 x))", () => 
 		文脈で比べた組: 0,
 		文脈で断る組: 0,
 		余りを積んだ組: 0,
-		"余りが並び全体を受ける関数に届く（G12(c)、比べの外）": 0,
-		"余りの前の結果が値でない（G12(b)、比べの外）": 0,
+		"余りが並び全体を受ける関数に届いて、並びの終わりまで受ける（R41、前は G12(c)）": 0,
+		"恒等射が2項以上を受けて後ろに関数（G18、比べの外）": 0,
+		"余りの前の結果が値でない（G2(a)、前は G12(b)、比べの外）": 0,
 	};
 	let n = 0;
 	const at = (expr) => at1(expr);
@@ -414,21 +438,22 @@ law("1 合成は適用の繰り返し：f1 … fm x と fm (… (f1 x))", () => 
 		const fl = flowNested1(fs, x);
 		const c = at(composed);
 		if (fl.cut) {
-			// null の関数に流れの余りが残ったまま届く。途中が全部 A なら、合成は G12(c) で断る（途中で断るか値でなくなれば、そちらが先）。
-			count["余りが並び全体を受ける関数に届く（G12(c)、比べの外）"]++;
-			if (fl.inner.every((s) => isA(at(s))) && !(c.refused && c.refused.gate === "G12(c)")) {
-				problems.push(`${composed}`, `  余りが並び全体を受ける関数に届くのに G12(c) で断っていない`, `  合成: ${brief(c)}`);
+			// 恒等射が2項以上を受けて、後ろに関数が続く。途中が全部 A なら、合成は G18 で断る（途中で断るか値でなくなれば、そちらが先）。
+			count["恒等射が2項以上を受けて後ろに関数（G18、比べの外）"]++;
+			if (fl.inner.every((s) => isA(at(s))) && !(c.refused && c.refused.gate === "G18")) {
+				problems.push(`${composed}`, `  恒等射が2項以上を受けて後ろに関数が続くのに G18 で断っていない`, `  合成: ${brief(c)}`);
 			}
 			return;
 		}
+		if (fl.wide) count["余りが並び全体を受ける関数に届いて、並びの終わりまで受ける（R41、前は G12(c)）"]++;
 		const inner = fl.inner;
 		const nested = fl.nested;
 		if (fl.left) {
 			count.余りを積んだ組++;
 			const lastStep = at(inner[inner.length - 1]);
 			if (!lastStep.crash && !lastStep.refused && !isA(lastStep) && inner.slice(0, -1).every((s) => isA(at(s)))) {
-				count["余りの前の結果が値でない（G12(b)、比べの外）"]++;
-				if (!(c.refused && c.refused.gate === "G12(b)")) problems.push(`${composed}`, `  余りの前の結果が値でないのに G12(b) で断っていない`, `  合成: ${brief(c)}`);
+				count["余りの前の結果が値でない（G2(a)、前は G12(b)、比べの外）"]++;
+				if (!(c.refused && c.refused.gate === "G2(a)")) problems.push(`${composed}`, `  余りの前の結果が値でないのに G2(a) で断っていない`, `  合成: ${brief(c)}`);
 				return;
 			}
 		}
@@ -878,6 +903,12 @@ const PROGRAMS3 = [
 	// §5 Q35 の答え（2026-10-21 22:46、G17 は廃止）：`$` で包んだ入れ子の `?` は、`$[+ m]` と同じく本体の根が A で通る。括りの関数の
 	// 実体でも同じで、どの並べ方でも同じ木と種類になる。
 	["$ で包んだ入れ子の ? は通る（G17 は廃止）", [["add : x ? $[y ? x + y]"], [INC], ["inc add 1"], ["gi : [x ~xs] ? $[y ? y]"], ["gi 1 2"]]],
+	// R34 の k < n の関数の最後の括り `[~c]` に、括りの関数の仮引数で受けた器を渡す（2026-10-23 の確かめで見つかった）。名前の右辺の器の
+	// 数は、ファイルの値の定義を直に指す名前にだけ付ける。前は器の数が desc に乗って仮引数に入り、実体の鍵（数を見ない）を長さの違う
+	// 器が分け合ったので、先に呼んだ方の答えを後の方が黙って使った（`ap vs ⏎ ap ws` は両方 A、`ap ws ⏎ ap vs` は G16）。
+	["最後の括りに仮引数の器を渡す（長さの違う器、R34・R24）", [["f4 : a b c e ? a + b + c + e"], ["vs : 1 , 2 , 3"], ["ws : 1 , 2"], ["ap : [~r] ? (f4 !_) 1 r"], ["ap vs"], ["ap ws"]]],
+	["最後の括りに分解した尾を渡す（R34・R24）", [["f4 : a b c e ? a + b + c + e"], ["vs : 1 , 2 , 3"], ["ws : 1 , 2"], ["ap2 : [x ~xs] ? (f4 !_) 1 xs"], ["ap2 vs"], ["ap2 ws"]]],
+	["最後の括りにファイルの器の名前を渡す（数える、R34）", [["f4 : a b c e ? a + b + c + e"], ["zs : ws 3"], ["ws : 1 , 2"], ["(f4 !_) 1 zs"], ["(f4 !_) 1 ws"]]],
 	...Q28_FORMS,
 	...Q28_REFUSE_FORMS,
 	...DEPTH_FORMS.map(([name, units]) => [name, units]),
@@ -1099,7 +1130,17 @@ law("3 の守り 素の関数を挟む括りの関数の鎖は、どの並べ方
 //   作らない」）。素の関数は定義の所で本体を解く。だから足りない適用だけの行は、素の関数の本体が通るなら同じと見る。素の
 //   関数の本体が断るなら、括りの関数は h を名指しして断らず、通るなら h の定義の行が defer のままであることを見る（本体に依らない
 //   門は断ってよい）。足りない適用を含む合成が頭の形（`h a inc a`）は、前は G2(b) で断って本体を読まなかったので、ここに数えていた。
-//   2026-10-22 から流れとして読み（R36）、h は呼ばれるので、ほかの呼ぶ形と同じに比べる。
+//   2026-10-22 から流れとして読み（R36）、h は呼ばれるので、ほかの呼ぶ形と同じに比べる。2026-10-23 の左からの畳み込み（R40）では、
+//   値の後ろの `h a b`（`1 h a b`）は `(h 1) a b` で、h の口が2つ残るので主語の口が決まらず G8（§5 Q5）。h は呼ばれないので、ここに
+//   数える。
+// - 左からの畳み込み（2026-10-23、R40）で、値の後ろの関数はいつも逆適用（`1 h a` は `(h 1) a`）。括りの関数の最後の括りは並びの
+//   終わりまで受ける（R41）ので、`1 h a` の括りは a まで受ける（k > n、上の「括りが残りの並びを受ける所」）。だから構築に置く形は、
+//   h の適用を値の後ろに逆適用で書く `1 a h`（1 引数）と、括って書く `1 (h a a)`（2 引数）にした（前は `1 h a`・`1 h a a` で、強さの
+//   順（R6）で `1 (h a)` と読んだ）。
+// - 最後の括りが受けている間に来た関数（`h a inc` の inc）は、括りの関数では合成の後ろに入り（L·L、R40・R41）、素の関数では閉じた
+//   値を逆適用で取る（A·L）。h の値が A なら、どちらも `inc (h a)` で木も同じ（renderEntry の trailingFrom）。h の値が A でなければ、
+//   合成は節ごと未知（法則1）、逆適用は次の項を当てるか積むかが決まらない G2(a)（R40 の読み6）で割れる。これも「括りが残りの並びを
+//   受ける所」で、比べの外にする（括りの側が未知で通り、素の側が G2(a) で断ることを見る）。
 // - 逆適用の右（`5 h`）と穴の頭（`h _`・`h !_`）：R12 は逆適用の右を「アリティ1の素の関数」に限り、穴は素の関数だけ（R16、
 //   U〔答え〕10-14 22:23「括りの仮引数の関数では `_` は穴ではない」）。括りの関数は `5 h` を G8、`h !_` を G5 で断り、`h _` の
 //   `_` は括りが受ける並びの中の印で消える（素の関数では終わりの `_`、§3.5）ので入れない。
@@ -1148,13 +1189,13 @@ const SHAPES4 = [
 	["[a ~as] b", "a b", 2, true],
 	["a [b]", "a b", 2, false],
 ];
-// 呼ぶ形：[名前, 行を作る関数, 足りない適用だけか]。行の頭が h の定義の後ろに並ぶ。
+// 呼ぶ形：[名前, 行を作る関数, h が呼ばれない形か（足りない適用だけ・逆適用の口が決まらず G8）]。行の頭が h の定義の後ろに並ぶ。
 const CALLS4_1 = [
 	["根", (a) => [`h ${a}`]],
 	["逆適用の左", (a) => [`h ${a} inc`]],
 	["合成の頭", (a) => [`h inc ${a}`]],
 	["数を引いて合成の後ろへ", (a) => [`[' 0] h [${a} 6]`]],
-	["構築", (a) => [`1 h ${a}`]],
+	["構築（R40。前は `1 h a`）", (a) => [`1 ${a} h`]],
 	["括りの中", (a) => [`[h ${a}] inc`]],
 	["括りを実引数に", (a) => [`inc (h ${a})`]],
 	["積", (a) => [`(h ${a}) , 1`]],
@@ -1167,7 +1208,9 @@ const CALLS4_2 = [
 	["合成の頭", (a) => [`h inc ${a} ${a}`]],
 	["括りの部分適用", (a) => [`(h ${a}) ${a}`]],
 	["名前の部分適用", (a) => [`p : h ${a}`, `p ${a}`]],
-	["構築", (a) => [`1 h ${a} ${a}`]],
+	["構築（R40。前は `1 h a a`）", (a) => [`1 (h ${a} ${a})`]],
+	// 値の後ろの h は逆適用で、口が2つ残るので G8（§5 Q5、R40）。h は呼ばれない。
+	["値の後ろの h の逆適用（R40、§5 Q5 で G8）", (a) => [`1 h ${a} ${a}`], true],
 	["括りの中", (a) => [`[h ${a} ${a}] inc`]],
 	["素の関数の本体", (a) => [`t : u ? h ${a} ${a}`, "t 1 inc"]],
 	["足りない適用だけ", (a) => [`h ${a}`], true],
@@ -1184,7 +1227,7 @@ const CALLS4_EXCESS = [
 
 law("4 括りの関数と、括りを外した素の関数は、数を渡せば同じ読み", () => {
 	const problems = [];
-	const count = { 通る: 0, 断る: 0, "呼ばれない本体（R25）": 0 };
+	const count = { 通る: 0, 断る: 0, "呼ばれない本体（R25）": 0, "最後の括りが受けている間に来た関数で、h の値が A でない（比べの外）": 0 };
 	const hAt = DEFS4.length;
 	let turn = 0;
 	for (const [bp, pp, n, lastBare] of SHAPES4) {
@@ -1220,6 +1263,11 @@ law("4 括りの関数と、括りを外した素の関数は、数を渡せば�
 				};
 				const vb = view(bracket);
 				const vp = view(plain);
+				const lastBracket = !lastBare && callName === "逆適用の左";
+				if (lastBracket && !bracket.refused && lastOf(bracket).kind === "未知" && plain.refused && plain.refused.gate === "G2(a)") {
+					count["最後の括りが受けている間に来た関数で、h の値が A でない（比べの外）"]++;
+					continue;
+				}
 				if (vb !== vp) problems.push(label, `  括り: ${vb}`, `  素: ${vp}`);
 				if (bracket.refused) count.断る++;
 				else count.通る++;
@@ -1231,7 +1279,7 @@ law("4 括りの関数と、括りを外した素の関数は、数を渡せば�
 });
 
 // ---------------------------------------------------------------------------
-// 法則5：逆適用は、前から書いた適用と同じ（逆適用だけの門を除いて、R12・R13）
+// 法則5：逆適用は、前から書いた適用と同じ（逆適用だけの門を除いて、R12・R40。R13 は 2026-10-23 に廃止）
 // ---------------------------------------------------------------------------
 //
 // 比べる2つの綴り：逆適用 `x f1 … fm` と、前から書いた適用 `f1 … fm x`。
@@ -1245,11 +1293,27 @@ law("4 括りの関数と、括りを外した素の関数は、数を渡せば�
 // 診断が同じ。逆適用が逆適用だけの門のほかで断るなら、前から書いた適用も同じ門と名指しで断る。
 //
 // 比べの外（違ってよい所）：逆適用だけの門。R12 は右を「アリティ1の素の関数か、それで始まる合成」に限り（ほかは G8、§5 Q5）、
-// R13 は主語を直に受ける関数が点なしなら断る（G10）。前から書いた適用には、この2つの門が無い。呼ぶ行の木の綴りも比べない
-// （`·rev` の印と、並びの読みの違い）。
+// R13 は主語を直に受ける関数が点なしなら断っていた（G10。2026-10-23 に廃止）。前から書いた適用には、この門が無い。呼ぶ行の木の綴りも
+// 比べない（`·rev` の印と、並びの読みの違い）。
 //
-// 門の枝も見る：G10 は、最初の関数が点なし（点なしの部分適用 `([<<] 1)`・`q : [<<] 1` の q を含む）のときだけ当たり、合成の
-// 2つ目より後ろの点なしでは当たらない（R13、§5 Q23 の答え）。前は合成のどこかに点なしがあれば G10 だった。
+// 門の枝も見ていた（2026-10-22 まで）：G10 は、最初の関数が点なし（点なしの部分適用 `([<<] 1)`・`q : [<<] 1` の q を含む）のときだけ
+// 当たり、合成の2つ目より後ろの点なしでは当たらない（R13、§5 Q23 の答え）。
+//
+// 左からの畳み込み（2026-10-23、R40）：強さの順（R6）は無くなり、`x f1 … fm` は `(… ((x f1) f2) …) fm`。値の後ろの関数は、その値を
+// 逆適用で取る（A·L）。関数の後ろの関数は合成（L·L）で、前の関数がまだ口を開けている（可変長の口が受けている・主語の口が決まらない）
+// 間は、後ろの関数は合成の後ろに入る。だから、比べる前に試験の側で畳み込みを歩いて、逆適用で主語を取る関数ごとに見る（実装の
+// 畳み込みを使わない。口の形は下の SHAPE5 で、定義から数える）：
+// - 主語にする値が未知：G2(a)（R40 の読み6。前は合成ごと未知にして通した）。可変長の口の関数（括りの関数・恒等射・畳む点なし・
+//   貪欲な単項）が主語を受けて開いている間に来た関数は、合成の後ろに入る（規則の文面の `[+] 1 2 inc 3` は `inc ([+] 1 2 3)`）ので、
+//   閉じた値が未知でも G2(a) に当たらない（節ごと未知、法則1）。前から書いた適用と同じに比べる。
+// - 段18 の点なし（`[' 0]`）が主語を取った後に関数が来る：引いた物が値なら合成の後ろに入り（R41 の読み8）、前から書いた適用と同じ。
+//   値でなければ G2(a)（引いた関数との合成か、引いた物を次の関数が受けるかが決まらない。前から書くと点なしはまだ受けていないので
+//   当たらない、逆適用だけの門）。
+// - ほかは、前から書いた適用と同じ。点なしも、ほかの関数と同じ口の形で主語を取る（2026-10-23 に R13 を廃止した。前は主語を逆適用で
+//   取る関数が点なしなら G10 で比べの外、`5 inc [* 2]` は Q23 の答えで通し、作り直しの最初の版は `(5 inc) [* 2]` で G10）。主語の口が
+//   決まらない逆適用（`5 add`・`5 [<<]`、§5 Q5）は、後ろに実引数が来なければ行の終わりで `_`（R42）で、前から書いた `add … 5` の足りない
+//   適用（根で `_`）と同じ種類になる（前は G8 で比べの外）。口の数の分からない `[,]` の主語の口が決まらない逆適用は、行の終わりで未知
+//   （どの口に入ったかで足りたかが変わる）で、前から書いた `[,] … 5`（並びの終わりで閉じて未知）と同じ種類になる。
 
 const DEFS5 = [
 	INC,
@@ -1317,14 +1381,71 @@ const LATER5 = [
 ];
 const POINTFREE_LATER5 = new Set(["[+ 1]", "[* 2]", "[-_]", "[!_]", "[_!]", "[* 2,]", "[-_,]", "[+]", "[&]", "[<]", "[' 0]", "[<<]", "([<<] 1)", "q", "[,]"]);
 const SUBJECTS5 = ["5", "[1 2 3]", "m", "(inc 5)"];
+// 関数の口の形（定義から数える）：one は口が1つ（逆適用で主語を取ると閉じる）、two は口が2つ（主語の口が決まらない、§5 Q5）、var は
+// 可変長の口だけ（括りの仮引数・恒等射・畳む点なし・貪欲な単項。主語を受けても並びの終わりまで開いている、R41）、pick は段18 の点なし
+// （書いていない左の被演算子の口に主語が入り、並びの終わりまで開いている、R41 の読み8）、unk は口の数が分からない（`[,]`。主語の口が
+// 決まらず、行の終わりで未知）。点なしも、ほかの関数と同じ形で主語を取る（2026-10-23 に R13 を廃止）。
+const SHAPE5 = new Map([
+	["inc", "one"], ["double", "one"], ["uu", "one"], ["[x ? x * 3]", "one"], ["(add 1)", "one"], ["p1", "one"], ["(pq 1)", "one"],
+	["[+ 1]", "one"], ["[* 2]", "one"], ["[-_]", "one"], ["[!_]", "one"], ["[_!]", "one"], ["([<<] 1)", "one"], ["q", "one"],
+	["add", "two"], ["[<<]", "two"],
+	["head", "var"], ["tl", "var"], ["hx", "var"], ["bad", "var"], ["i", "var"],
+	["[* 2,]", "var"], ["[-_,]", "var"], ["[+]", "var"], ["[&]", "var"], ["[<]", "var"],
+	["[' 0]", "pick"],
+	["[,]", "unk"],
+]);
+// 畳み込みを歩く（上の注）。主語にする値の種類は、前から書いた適用 `f1 … fi x` を解いて見る（R11 で同じ値）。
+function walk5(fs, x) {
+	let st = "val";
+	let openAt = -1; // 可変長の口で開いた関数の位置（後ろの関数は合成の後ろに入る）
+	let pending = false;
+	let pfTook = false; // 点なしが主語を逆適用で取った
+	const pf = new Set([...POINTFREE_LATER5, ...FIRSTS5.filter(([, p]) => p).map(([g]) => g)]);
+	const kindAt = (i) => {
+		const o = outcome(src([...DEFS5, `${fs.slice(0, i + 1).join(" ")} ${x}`]));
+		return o.trees ? lastOf(o).kind : null;
+	};
+	for (let i = 0; i < fs.length; i++) {
+		const f = fs[i];
+		if (st === "pick") {
+			// 段18 の点なしが主語を受けた後の関数：引いた物（前から書いた `f1 … [' 0] x` の値）が値なら合成の後ろに入る。
+			if (kindAt(i - 1) !== "A") return { gate: "G2(a)", why: `\`${fs[i - 1]}\` が受けた後に関数が来て、引いた物が値でない` };
+			st = "open";
+			continue;
+		}
+		if (st !== "val") continue; // 前の関数が口を開けている：合成の後ろに入る
+		if (i > 0 && kindAt(i - 1) === "未知") return { gate: "G2(a)", why: `主語にする値 \`${fs.slice(0, i).join(" ")} ${x}\` が未知` };
+		const sh = SHAPE5.get(f);
+		if (!sh) throw new Error(`SHAPE5 に ${f} が無い`);
+		if (pf.has(f)) pfTook = true;
+		if (sh === "two" || sh === "unk") {
+			st = "pending";
+			pending = true;
+		} else if (sh === "var") {
+			st = "open";
+			openAt = i;
+		} else if (sh === "pick") {
+			st = "pick";
+			openAt = i;
+		}
+	}
+	return { pending, open: openAt >= 0, pfTook };
+}
 // m = 3 の組（最初の関数の一部と、後ろの関数の一部）。
 const FIRSTS5_3 = FIRSTS5.filter(([f]) => ["inc", "uu", "[* 2]", "([<<] 1)"].includes(f));
 const LATER5_3 = ["inc", "add", "head", "bad", "[* 2]", "[-_]", "[+]", "[' 0]", "([<<] 1)", "[,]"];
 
 law("5 逆適用と、前から書いた適用は同じ読み：x f1 … fm と f1 … fm x", () => {
 	const problems = [];
-	// 「後ろに点なしがあって通る」は「通る」の内訳（§5 Q23 の答えで通るようになった枝）。
-	const count = { 通る: 0, "後ろに点なしがあって通る": 0, 同じ門で断る: 0, "G10（最初が点なし）": 0, "G8（比べの外）": 0 };
+	// 「後ろに点なしがあって通る」は「通る」の内訳（2026-10-23 からは、前の関数が口を開けている間に合成の後ろに入った点なし）。
+	const count = {
+		通る: 0,
+		"後ろに点なしがあって通る": 0,
+		"点なしが主語を逆適用で取って通る": 0,
+		同じ門で断る: 0,
+		"G2(a)（主語にする値が未知・引いた物が値でない）": 0,
+		"主語の口が決まらない逆適用（行の終わりで _ か未知）": 0,
+	};
 	let n = 0;
 	const view = (o) => {
 		if (o.refused) return `断り ${refusalText(o)}`;
@@ -1338,12 +1459,13 @@ law("5 逆適用と、前から書いた適用は同じ読み：x f1 … fm と 
 		const fwd = outcome(src([...DEFS5, `${fs} ${x}`]));
 		const label = `${x} ${fs}  ⇔  ${fs} ${x}`;
 		if (rev.crash || fwd.crash) return problems.push(label, `  逆適用: ${brief(rev)}`, `  前から: ${brief(fwd)}`);
-		const g10 = !!rev.refused && rev.refused.gate === "G10";
-		if (g10 !== firstPf) {
-			return problems.push(label, `  G10 は最初の関数が点なしのときだけ（最初の \`${f}\` は${firstPf ? "" : "点なしでない"}）: ${brief(rev)}`);
+		const want = walk5([f, ...gs], x);
+		if (want.gate) {
+			if (!rev.refused || rev.refused.gate !== want.gate) return problems.push(label, `  ${want.why}なので ${want.gate} のはず: ${brief(rev)}`);
+			return count["G2(a)（主語にする値が未知・引いた物が値でない）"]++;
 		}
-		if (g10) return count["G10（最初が点なし）"]++;
-		if (rev.refused && rev.refused.gate === "G8") return count["G8（比べの外）"]++;
+		if (rev.refused && ["G10", "G2(a)"].includes(rev.refused.gate)) return problems.push(label, `  ${rev.refused.gate} に当たる形ではない（畳み込みを歩いた答え）: ${brief(rev)}`);
+		if (want.pending) count["主語の口が決まらない逆適用（行の終わりで _ か未知）"]++;
 		const vr = view(rev);
 		const vf = view(fwd);
 		if (vr !== vf) return problems.push(label, `  逆適用: ${vr}`, `  前から: ${vf}`);
@@ -1351,6 +1473,7 @@ law("5 逆適用と、前から書いた適用は同じ読み：x f1 … fm と 
 		else {
 			count.通る++;
 			if (gs.some((g) => POINTFREE_LATER5.has(g))) count["後ろに点なしがあって通る"]++;
+			if (want.pfTook) count["点なしが主語を逆適用で取って通る"]++;
 		}
 	};
 	for (const first of FIRSTS5) for (const g of LATER5) for (const x of SUBJECTS5) check(first, [g], x);
@@ -1388,6 +1511,12 @@ law("5 逆適用と、前から書いた適用は同じ読み：x f1 … fm と 
 // 同じ）ので、`[h P] E X`・`([h P] E) X` は、X の要素を並べて当てた `[h P] E x1 … xm`・`([h P] E) x1 … xm` と同じ読み。X の側は
 // G13 で断ってもよい（位置どおりに数えた読みと割れるので、名指しして断る。resolve.js の holeMismatch の注、§5 Q31 の残り）が、
 // 黙って別の種類や余りの印にしてはいけない。数を括った `[5]` は数（R24）なので、`5` と同じでなければならない。
+// 2026-10-23 から、R34 の k < n の G13 は無い（規則の文面で `(f3 !_) 1 [1 2]` は `f3 1 1 2`、§5 Q31）ので、X の側も要素と同じ読みで
+// なければならない（G13 の逃げ道を外した）。
+//
+// 左からの畳み込み（2026-10-23、R40）で、余りの印（leftover）は無くなった：余りは積み上げの構築そのもので、R34 の k < n で作った
+// 関数の余りは、関数の本体の中で h の後ろに積まれる（木では `[h P]` の適用1つ）。だから (1) と (3) は印を比べず、種類と診断を比べる
+// （(2) と (3) は木ごと比べるので、構築の形はそこで見る）。根に残った足りない適用は `_`（R42）で、種類は「L（根で _）」と見る。
 //
 // 比べの外：P が n より短い括らない `h P E`（並び全体が1つの実引数の並びになり、k = n なら R16 の穴、ほかは R34 で、穴の数え方が
 // (1) と違う。`f3 !_ 2 1` は `a ? f3 a 2 1`）。既定値のある関数の (1) で、E が穴より少ない形（穴の関数はアリティの分からない関数で、
@@ -1403,8 +1532,8 @@ const LISTS6 = [
 	["vs", ["1", "2", "3"]],
 	["[5]", ["5"]],
 ];
-// [頭, アリティ, 既定値のある関数か]。本体の根が A の素の関数・本体の根が未知の素の関数（余りは G12(b)）・既定値のある関数（適用は
-// 未知）。
+// [頭, アリティ, 既定値のある関数か]。本体の根が A の素の関数・本体の根が未知の素の関数（余りは G12(b)。2026-10-23 から G2(a)、R40）・
+// 既定値のある関数（適用は未知）。
 const HEADS6 = [
 	["inc", 1, false],
 	["add", 2, false],
@@ -1429,9 +1558,9 @@ const ARGS6 = [["7"], ["7", "8"], ["7", "8", "9"]];
 
 law("6 穴に後から当てるのは、埋めた適用と同じ：[h P] E・h P E と h P'、最後の括りに1つで入る List と要素", () => {
 	const problems = [];
-	const count = { "A で通る": 0, "L で通る": 0, "未知で通る": 0, 同じ門で断る: 0, "括らない h P E も比べた": 0, "既定値のある関数で、E が穴より少ない（比べの外）": 0 };
+	const count = { "A で通る": 0, "L（根で _） で通る": 0, "未知で通る": 0, 同じ門で断る: 0, "括らない h P E も比べた": 0, "既定値のある関数で、E が穴より少ない（比べの外）": 0 };
 	let n = 0;
-	const last = (o) => (o.refused ? `断り ${o.refused.reason} ${o.refused.gate}` : `${lastOf(o).kind}${lastOf(o).leftover ? "（余りを積む）" : ""} || ${o.diag.join(" ")}`);
+	const last = (o) => (o.refused ? `断り ${o.refused.reason} ${o.refused.gate}` : `${lastOf(o).kind} || ${o.diag.join(" ")}`);
 	const full = (o) => (o.refused ? `断り ${o.refused.reason} ${o.refused.gate}` : `${lastOf(o).text} : ${last(o)}`);
 	for (const [h, arity, defaulted] of HEADS6) {
 		for (let len = 1; len <= arity; len++) {
@@ -1461,7 +1590,7 @@ law("6 穴に後から当てるのは、埋めた適用と同じ：[h P] E・h P
 		}
 	}
 	// (4)：最後の括りにちょうど1つで入る List と、その要素を並べた物（R24）。
-	const count4 = { "(4) 同じ": 0, "(4) List の側が G13": 0 };
+	const count4 = { "(4) 同じ": 0 };
 	for (const [h, arity] of HEADS6) {
 		for (let len = 1; len < arity; len++) {
 			for (const p of holePatterns(len)) {
@@ -1478,7 +1607,6 @@ law("6 穴に後から当てるのは、埋めた適用と同じ：[h P] E・h P
 							continue;
 						}
 						if (last(one) === last(many)) count4["(4) 同じ"]++;
-						else if (x !== "[5]" && one.refused && one.refused.gate === "G13") count4["(4) List の側が G13"]++;
 						else problems.push(label, `  List: ${last(one)}`, `  要素: ${last(many)}`);
 					}
 				}
@@ -1515,6 +1643,17 @@ law("6 穴に後から当てるのは、埋めた適用と同じ：[h P] E・h P
 //
 // 比べの外：頭の本体の根が A でない k > n（(c) の左は G12(b)、右は括りの葉が未知で G7）。主語の門（G8・G9・G10）は、左右とも同じ
 // 門で断ることを見る。
+//
+// 左からの畳み込み（2026-10-23、R40〜R43）で：
+// - (d) は畳み込みの1歩から出る（A·A は積み、A·L はいちばん上の値を取る、R40）。前の R37（一番近い1項）と同じ答え。
+// - (b) の右（括らない並び）は、後ろの関数が並びの項を受けると、各関数が受けた物の見える入れ子の適用で書く（R40 の読み9、resolve.js の
+//   renderEntry）。左（括った並び）は括りの葉に当てた適用で、開くと合成の適用になる。だから両側の木を、試験の側で流れの入れ子に
+//   書き直してから比べる（flowCanon：合成の各関数が受ける数を下の ARITY7 で数える。実装の流れの規則を使わない）。
+// - 根に残った未評価のラムダは `_`（R42、木では `(unit …)`）。開くときは包みの中を開く。
+// - 比べの外を1つ足す：(d) の右が口を2つ残す関数（`f2`）。左 `x1 … xm f2` は根で `_`（R40・R42。構築の中の `_` は R15 で消える）、
+//   右の括り `[xm f2]` の中は評価する所でないので主語の口が決まらない関数のまま残り、外の xm−1 を逆適用で取って G8（§5 Q5）・撒く
+//   項なら G9。左が通り、右がそのどちらかで断ることを見る。xm が撒く項なら、左右とも G9（R14）で、ほかの組と同じに比べる。
+// - (c) の比べの外の G12(b) は G2(a)（R40 の読み6、G12 は廃止）。
 const DEFS7 = [
 	INC,
 	"double : x ? x * 2",
@@ -1554,16 +1693,82 @@ const openTree = (t) => {
 		}
 		case "hole":
 			return { ...t, body: openTree(t.body) };
+		case "unit":
+			return { t: "unit", inner: openTree(t.inner) };
 		default:
 			return t;
 	}
+};
+// 合成の流れ（R40）で、関数が並びから受ける数。並びの終わりまで受ける関数（可変長の口、R41）は null。綴りは show の頭の綴り。
+const ARITY7 = new Map([
+	["inc", 1], ["double", 1], ["g", 1], ["uu", 1], ["add", 2], ["f2", 2], ["pr", 2], ["pt", 2], ["use", 2], ["[<<]", 2], ["f3", 3],
+	["[+]", null], ["pair", null], ["n", null], ["hd", null], ["[+ 1]", 1],
+]);
+// 開いた木の、合成の適用 `(apply (compose F1 … Fm) X)` を、流れの入れ子 `(apply Fm (… (apply F1 x1 … xa) …))` に書き直す。F1 が並びから
+// 自分の口の数だけ受け、後ろの Fi は前の結果と、口の残りの数だけを受け、足りなくなった所から後ろは合成のまま、余りは後ろに積む。
+// 部分適用の頭 `(apply f a)` は f の口から a の数を引く。表に無い関数があれば書き直さない。逆適用の合成 `(apply (compose g1 … gk) x ·rev)`
+// は `(apply gk (… (apply g1 x ·rev) …) ·rev)`（R11・R12）。
+const flowCanon = (t) => {
+	if (!t || typeof t !== "object") return t;
+	switch (t.t) {
+		case "unit":
+			return { t: "unit", inner: flowCanon(t.inner) };
+		case "construct": {
+			const items = t.items.map(flowCanon).flatMap((u) => (u && u.t === "construct" ? u.items : [u]));
+			return { t: "construct", items };
+		}
+		case "compose":
+			return { t: "compose", items: t.items.map(flowCanon) };
+		case "hole":
+			return { ...t, body: flowCanon(t.body) };
+		case "apply":
+			break;
+		default:
+			return t;
+	}
+	const head = flowCanon(t.head);
+	const arg = flowCanon(t.arg);
+	const items = (x) => (x.t === "construct" ? x.items : [x]);
+	const app = (f, xs, rev) => {
+		if (f.t === "apply" && !f.rev && !rev) return { t: "apply", head: f.head, arg: { t: "construct", items: [...items(f.arg), ...xs] }, rev: false };
+		return { t: "apply", head: f, arg: xs.length === 1 ? xs[0] : { t: "construct", items: xs }, rev };
+	};
+	if (head.t !== "compose") return app(head, items(arg), !!t.rev);
+	const fs = head.items;
+	if (t.rev) return fs.reduce((cur, f) => ({ t: "apply", head: f, arg: cur, rev: true }), arg);
+	const arity = (f) => {
+		if (f.t === "apply" && !f.rev) {
+			const a = arity(f.head);
+			return a === undefined || a === null ? a : a - items(f.arg).length;
+		}
+		return ARITY7.get(show(f));
+	};
+	if (fs.some((f) => arity(f) === undefined)) return { t: "apply", head, arg, rev: false };
+	let rest = items(arg);
+	const a0 = arity(fs[0]);
+	if (a0 !== null && rest.length < a0) return { t: "apply", head, arg, rev: false };
+	let cur = app(fs[0], a0 === null ? rest : rest.slice(0, a0), false);
+	rest = a0 === null ? [] : rest.slice(a0);
+	let open = false;
+	for (const f of fs.slice(1)) {
+		if (open) {
+			cur = { t: "compose", items: cur.t === "compose" ? [...cur.items, f] : [cur, f] };
+			continue;
+		}
+		const b = arity(f);
+		const take = b === null ? rest : rest.slice(0, b - 1);
+		rest = rest.slice(take.length);
+		if (b !== null && 1 + take.length < b) open = true;
+		cur = app(f, [cur, ...take], false);
+	}
+	return rest.length ? { t: "construct", items: [cur, ...rest] } : cur;
 };
 const opened = (lines) => {
 	const s = src([...usedDefs(UNITS7, lines.join("\n")), ...lines]);
 	try {
 		const r = resolve(s);
 		const t = r.trees[r.trees.length - 1];
-		return { text: show(openTree(t)), kind: kindOf(t) };
+		return { text: show(flowCanon(openTree(t))), kind: kindOf(t) };
 	} catch (e) {
 		if (!e.reason) return { crash: `${e.name}: ${e.message}` };
 		return { refused: `${e.reason} ${e.gate || ""}` };
@@ -1573,7 +1778,16 @@ const view7 = (o) => (o.crash ? `例外 ${o.crash}` : o.refused ? `断り ${o.re
 
 law("7 左からの畳み込み：カリー化・関数の並びを括る・余りを積む・一番近い1項の逆適用は、括りを開いた綴りと同じ", () => {
 	const problems = [];
-	const count = { "(a) カリー化": 0, "(b) 関数の並びを括る": 0, "(c) 余りを積む": 0, "(d) 一番近い1項": 0, 通る: 0, 断る: 0, 余りのある組: 0 };
+	const count = {
+		"(a) カリー化": 0,
+		"(b) 関数の並びを括る": 0,
+		"(c) 余りを積む": 0,
+		"(d) 一番近い1項": 0,
+		"(d) 右が口を2つ残す（左は根で _、右は G8・G9、比べの外）": 0,
+		通る: 0,
+		断る: 0,
+		余りのある組: 0,
+	};
 	const pair = (name, left, right) => {
 		count[name]++;
 		const l = opened([left]);
@@ -1610,7 +1824,21 @@ law("7 左からの畳み込み：カリー化・関数の並びを括る・余�
 	const RIGHTS_D = ["inc", "double", "inc inc", "[x ? x * 3]", "f2", "[+ 1]", "inc [* 2]"];
 	for (const l of LEFTS_D) {
 		const ts = argTerms(l);
-		for (const h of RIGHTS_D) pair("(d) 一番近い1項", `${l} ${h}`, `${ts.slice(0, -1).join(" ")} [${ts[ts.length - 1]} ${h}]`);
+		for (const h of RIGHTS_D) {
+			const left = `${l} ${h}`;
+			const right = `${ts.slice(0, -1).join(" ")} [${ts[ts.length - 1]} ${h}]`;
+			if (h === "f2" && !ts[ts.length - 1].endsWith("~")) {
+				// 口を2つ残す関数の逆適用（上の注）。
+				count["(d) 右が口を2つ残す（左は根で _、右は G8・G9、比べの外）"]++;
+				const lo = opened([left]);
+				const ro = opened([right]);
+				if (lo.refused || lo.crash || !/\(unit /.test(lo.text) || !ro.refused || !/ G(8|9)$/.test(ro.refused)) {
+					problems.push(`(d) 右が口を2つ残す：${left}  ⇔  ${right}`, `  左（根で _ のはず）: ${view7(lo)}`, `  右（G8・G9 のはず）: ${view7(ro)}`);
+				}
+				continue;
+			}
+			pair("(d) 一番近い1項", left, right);
+		}
 	}
 	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
 	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
@@ -1765,6 +1993,196 @@ law("9 既定値の無い素の関数の内側の _ は、!_ と同じ木", () =
 					else count.通る++;
 				}
 			}
+		}
+	}
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則10：前を括っても同じ（左結合、R40、2026-10-23）
+// ---------------------------------------------------------------------------
+//
+// 比べる3つの綴り：括らない並び `P S`、前を括った `(P) S`、前を名前に入れた `v : P ⏎ v S`（P は2〜3項、S は1〜2項）。
+//
+// なぜ同じか：余積は1つの演算子で左結合（R40、§3.3 の文面。U〔答え〕2026-10-22 11:24「そう、合ってる。」で `5 inc 3` は
+// `(inc 5) 3`）。並びは左から1項ずつ畳むので、`P S` は P を畳んだ物に S の項を1つずつ畳んだ物で、`(P) S` と同じ。`:` の右辺は
+// 式を指すだけで、余ったラムダを `_` にしない（U〔答え〕10-22 22:14、ボタン「定義は式を指す」）ので、`v : P ⏎ v S` も同じ。
+//
+// 何を同じと見るか：根の種類と、断るなら門（reason と番号）。通るなら、括りの葉を開いて（openTree）流れの入れ子に書き直した
+// （flowCanon）木。名前の綴りは、名前の葉を開けないので種類と門だけを比べる。期待値は書かない（3つの綴りを互いに比べる）。
+//
+// 比べの外（同じにならない所。試験の側で、語の口の形の表 SHAPE10 から P を畳んで決める。実装の答えを見て決めない）：
+// - (i) 可変長の口が括りの終わりで閉じる：P の終わりに、可変長の口（最後の括り・畳む点なし、R41）の関数が1つ以上受けて開いて
+//   いる。括らなければ、S の値もその口が受け、S の関数は合成の後ろに入る（`[+] 1 2 inc 3` は `inc ([+] 1 2 3)`）。括りの終わりで閉じ
+//   れば、閉じた値の後ろに S が来て、S の関数はその値を逆適用で取る（`([+] 1 2) 3` は2つの値、`(n 1) add` は主語の口が決まらない）。
+//   だから比べない。ただし S が口の1つの関数（点なしの単項も。2026-10-23 に R13 を廃止して、点なしも逆適用で主語を取る）だけで、
+//   閉じた値が A なら、合成でも逆適用でも `g (P)` で、木も同じ綴り（resolve.js の trailingFrom）なので比べる（`(n 1 2) [+ 1]` は、前は
+//   G10）。閉じた値が A かは、`(P)` を1行で解いて見る（法則1 が途中の入れ子を1行で解くのと同じ）。
+// - (ii) 根の `_`：P を根で評価した値（行の根に残った未評価のラムダは `_`、R42）は、括りの中身とは違う。括りと名前の中は評価する所
+//   ではないので、ラムダのまま S を受ける。だから、P を1行で解いた結果を S の前に置いた物とは比べない（比べるのは括りと名前だけ）。
+//   P が根で `_` になる組は、そのことだけ見る（P を1行で解くと `(unit …)`、括りの中は L）。
+// - (iii) 積み上げが括りの中で閉じる：P を畳んだ積み上げが2つ以上（値の並び、値の後ろに口の開いた関数）。括りは積み上げを1つの項
+//   （構築）にするので、括らなければ S の関数はいちばん上の項だけを取る（R40）が、括れば構築全体を取る（`5 5 inc hd` の hd は
+//   `inc 5` を、`(5 5 inc) hd` の hd は構築を受ける）。値だけの積み上げで S も値だけなら、どちらも積むだけなので種類を比べる。
+//   S に関数があるか、積み上げの上が関数なら比べない（構築の上の関数は、括りの外では種類を決めない）。
+// - (iv) 印と穴：P の中の `_`（口を埋める所で読む、R43。並びの終わりの `_` は R28）と `!_`（穴の規則は並び全体を見る、R16・R34・
+//   R38）は、括りで並びが切れると読みが変わるので、語に入れない。
+const DEFS10 = [INC, "double : x ? x * 2", "add : x y ? x + y", "f2 : x y ? x - y", "n : [~x] ? x", "hd : [x ~xs] ? x", "vs : 1 , 2 , 3"];
+// 語の口の形：v は値、one は口が1つ、two は口が2つ、var は可変長の口、pf1 は点なしの単項、pfv は畳む点なし（可変長の口）。
+const SHAPE10 = new Map([
+	["5", "v"], ["[1 2]", "v"], ["vs", "v"],
+	["inc", "one"], ["double", "one"], ["(add 1)", "one"], ["add", "two"], ["f2", "two"], ["n", "var"], ["hd", "var"],
+	["[+ 1]", "pf1"], ["[+]", "pfv"],
+]);
+const WORDS10 = [...SHAPE10.keys()];
+// P を試験の側で畳む（R40・R41）。返す物：{ gate }（G8 で断る）か { stack, openVar, rootUnit }。stack は積み上げの項の種類の並び
+// （"v" か "f"）、openVar は終わりに可変長の口が1つ以上受けて開いている、rootUnit は根なら `_` になる（上が口の開いた関数）。
+const fold10 = (ws) => {
+	const stack = [];
+	for (const w of ws) {
+		const sh = SHAPE10.get(w);
+		const top = stack[stack.length - 1];
+		if (sh === "v") {
+			if (!top || top.t === "v") stack.push({ t: "v" });
+			else if (top.pending) return { gate: "G8" };
+			else feed10(stack, top);
+			continue;
+		}
+		const fn = { t: "f", stages: [{ sh, recv: 0 }], pending: false };
+		if (!top) stack.push(fn);
+		else if (top.t === "v") {
+			// 逆適用：値を主語に取る（R40）。点なしも同じ（R13 は 2026-10-23 に廃止。pf1 は口が1つ、pfv は可変長の口）。口が2つなら
+			// 主語の口が決まらない（§5 Q5）。
+			stack.pop();
+			if (sh === "two") {
+				fn.pending = true;
+				fn.stages[0].recv = 1;
+				stack.push(fn);
+			} else {
+				stack.push(fn);
+				feed10(stack, fn);
+			}
+		} else top.stages.push({ sh, recv: 0 }); // 合成：後ろに段を足す
+	}
+	const top = stack[stack.length - 1];
+	const cur = top && top.t === "f" ? top.stages.find((s) => !s.done) : null;
+	const openVar = !!cur && (cur.sh === "var" || cur.sh === "pfv") && cur.recv > 0 && !top.pending;
+	// 並びの終わり（R41）：可変長の口で1つ以上受けた段は閉じ、結果は次の段に入る（次も可変長なら、それも閉じる）。閉じきらない段が
+	// 残る（固定の口が足りない・主語の口が決まらない）なら、上は口の開いた関数のままで、根なら `_`（R42）。
+	let rootUnit = false;
+	if (top && top.t === "f") {
+		const need = { one: 1, pf1: 1, two: 2 };
+		const st = top.stages.map((s) => ({ ...s }));
+		let i = st.findIndex((s) => !s.done);
+		while (!top.pending && i >= 0 && i < st.length) {
+			const s = st[i];
+			const fixed = need[s.sh];
+			if (fixed !== undefined ? s.recv < fixed : s.recv === 0) break;
+			s.done = true;
+			i++;
+			if (i < st.length) st[i].recv++;
+		}
+		rootUnit = top.pending || st.some((s) => !s.done);
+	}
+	return { stack: stack.map((e) => e.t), openVar, rootUnit };
+};
+// 関数の項の、いちばん最初の閉じていない段に1つ入れる。固定の口が埋まった段は閉じ、結果が次の段に入る。全部閉じたら値になる。
+const feed10 = (stack, e) => {
+	const need = { one: 1, pf1: 1, two: 2 };
+	let i = e.stages.findIndex((s) => !s.done);
+	e.stages[i].recv++;
+	while (i >= 0 && i < e.stages.length && need[e.stages[i].sh] !== undefined && e.stages[i].recv >= need[e.stages[i].sh]) {
+		e.stages[i].done = true;
+		i++;
+		if (i < e.stages.length) e.stages[i].recv++;
+	}
+	if (e.stages.every((s) => s.done)) stack[stack.length - 1] = { t: "v" };
+};
+
+law("10 前を括っても同じ（左結合）：P S と (P) S と v : P ⏎ v S", () => {
+	const problems = [];
+	const count = {
+		比べた組: 0,
+		通る: 0,
+		断る: 0,
+		"(i) 可変長の口が括りの終わりで閉じる（比べの外）": 0,
+		"(i) 閉じた値が A で、口の1つの関数だけが続く（比べる）": 0,
+		"(ii) P が根で _（括りと名前の中は L のまま）": 0,
+		"(iii) 値だけの積み上げに値だけ（種類だけ比べる）": 0,
+		"(iii) 積み上げに関数が来るか、上が関数（比べの外）": 0,
+	};
+	const solve = (lines) => {
+		const s = src([...DEFS10, ...lines]);
+		try {
+			const r = resolve(s);
+			const t = r.trees[r.trees.length - 1];
+			return { text: show(flowCanon(openTree(t))), kind: kindOf(t), unit: t.t === "unit", inner: t.t === "unit" ? kindOf(t.inner) : null };
+		} catch (e) {
+			if (!e.reason) return { crash: `${e.name}: ${e.message}` };
+			return { refused: `${e.reason} ${e.gate || ""}` };
+		}
+	};
+	const v10 = (o, withTree) => (o.crash ? `例外 ${o.crash}` : o.refused ? `断り ${o.refused}` : withTree ? `${o.text} : ${o.kind}` : `${o.kind}`);
+	const prefixes = [];
+	for (const a of WORDS10) for (const b of WORDS10) {
+		prefixes.push([a, b]);
+		// 3項目は、値・口が2つ・可変長の口の代表だけ（組が多く、1本が 15 秒を超えないように）。
+		for (const c of ["5", "add", "n"]) prefixes.push([a, b, c]);
+	}
+	const suffixes = [];
+	for (const x of WORDS10) {
+		suffixes.push([x]);
+		for (const y of ["5", "inc"]) suffixes.push([x, y]);
+	}
+	for (const P of prefixes) {
+		const fp = fold10(P);
+		if (fp.gate) {
+			// P の中で断る：3つの綴りとも同じ門（括りの中も、名前の右辺も、同じ並びを畳む）。
+			for (const S of suffixes.slice(0, 4)) {
+				count.比べた組++;
+				const plain = solve([`${P.join(" ")} ${S.join(" ")}`]);
+				const br = solve([`(${P.join(" ")}) ${S.join(" ")}`]);
+				if (!plain.refused || !br.refused || !plain.refused.endsWith(fp.gate) || !br.refused.endsWith(fp.gate)) {
+					problems.push(`${P.join(" ")} ${S.join(" ")}  ⇔  (${P.join(" ")}) ${S.join(" ")}`, `  P の中で ${fp.gate} のはず`, `  並び: ${v10(plain)}`, `  括り: ${v10(br)}`);
+				}
+				count.断る++;
+			}
+			continue;
+		}
+		// (ii) P を根で解くと、上が関数なら `_`。括りの中（`(P)` を1行に置くと、括りの葉1つの並びで、やはり根で `_`）と名前の右辺は L。
+		if (fp.rootUnit && fp.stack.length === 1) {
+			count["(ii) P が根で _（括りと名前の中は L のまま）"]++;
+			const alone = solve([P.join(" ")]);
+			const named = solve([`v : ${P.join(" ")}`, "v"]);
+			if (!alone.refused && !alone.crash && !(alone.unit && alone.inner === "L")) problems.push(`${P.join(" ")}：根で \`_\`（包みの中が L）のはず: ${v10(alone, true)}`);
+			if (!named.refused && !named.crash && !(named.unit && named.inner === "L")) problems.push(`v : ${P.join(" ")} ⏎ v：名前は式を指すので、根で使えば同じく \`_\` のはず: ${v10(named, true)}`);
+		}
+		const closedA = fp.openVar ? solve([`(${P.join(" ")})`]).kind === "A" : false;
+		for (const S of suffixes) {
+			if (fp.openVar) {
+				if (!closedA || !S.every((w) => ["one", "pf1"].includes(SHAPE10.get(w)))) {
+					count["(i) 可変長の口が括りの終わりで閉じる（比べの外）"]++;
+					continue;
+				}
+				count["(i) 閉じた値が A で、口の1つの関数だけが続く（比べる）"]++;
+			}
+			if (fp.stack.length >= 2 && (fp.stack[fp.stack.length - 1] === "f" || !S.every((w) => SHAPE10.get(w) === "v"))) {
+				count["(iii) 積み上げに関数が来るか、上が関数（比べの外）"]++;
+				continue;
+			}
+			const onlyKind = fp.stack.length >= 2;
+			if (onlyKind) count["(iii) 値だけの積み上げに値だけ（種類だけ比べる）"]++;
+			count.比べた組++;
+			const plain = solve([`${P.join(" ")} ${S.join(" ")}`]);
+			const br = solve([`(${P.join(" ")}) ${S.join(" ")}`]);
+			const named = solve([`v : ${P.join(" ")}`, `v ${S.join(" ")}`]);
+			const vp = v10(plain, !onlyKind);
+			const vb = v10(br, !onlyKind);
+			if (vp !== vb) problems.push(`${P.join(" ")} ${S.join(" ")}  ⇔  (${P.join(" ")}) ${S.join(" ")}`, `  並び: ${vp}`, `  括り: ${vb}`);
+			if (v10(plain) !== v10(named)) problems.push(`${P.join(" ")} ${S.join(" ")}  ⇔  v : ${P.join(" ")} ⏎ v ${S.join(" ")}`, `  並び: ${v10(plain)}`, `  名前: ${v10(named)}`);
+			if (plain.refused) count.断る++;
+			else count.通る++;
 		}
 	}
 	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
