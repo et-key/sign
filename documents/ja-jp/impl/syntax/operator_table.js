@@ -1,6 +1,6 @@
 /**
  * Sign言語 演算子テーブル (正引き・逆引き)
- * `A_Operator_Table.md` に基づく定義
+ * `operator_table.md` に基づく定義
  */
 
 // 逆引き用: 優先順位順の配列 (precedens順)
