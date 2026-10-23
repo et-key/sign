@@ -18,6 +18,10 @@
  * 9. 既定値の無い素の関数の内側の `_` は、`!_` と同じ木（R38）
  * 10. 前を括っても同じ（左結合、R40）：`P S` と `(P) S` と `v : P ⏎ v S`。同じにならない所（可変長の口が括りの終わりで閉じる・
  *    根の `_`・積み上げが括りの中で閉じる・印と穴）は、試験の側で P を畳んで決める
+ * 11. 口の外の `!_` は、`i : !_` の i と同じ（R44）：`!_ X` と `i X`、`5 !_ X` と `5 i X`
+ * 12. 恒等射は `,` の単位（R45）：行 `X` と `!_ , X`・`X , !_`・`i , X`・`X , i`、`X , !_ , 7` と `X , 7`
+ * 13. 恒等射を消しても同じか、恒等射の側が断る（単位律、R29・R44）：`P i S` と `P S`。根と、括って・名前に入れて後から当てた形で
+ * 14. 口の中で通った `!_` は、恒等射と読んでも穴と読んでも同じ（R46）：`Y !_ S` と `Y i S`・`[x ? Y x] S`
  *
  * 2026-10-23 の左からの畳み込み（R40〜R43）で、1・4・5・6・7 の比べ方を直した（各法則の頭の注）。強さの順（R6）・流れの組み立て
  * 直し・G12 は無くなった。同じ日の確かめの直し（§7.19）で R13（G10）も無くなり、5 と 10 の畳み方を直した。3 に、器の名前を
@@ -2184,6 +2188,275 @@ law("10 前を括っても同じ（左結合）：P S と (P) S と v : P ⏎ v 
 			if (plain.refused) count.断る++;
 			else count.通る++;
 		}
+	}
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則11：口の外の `!_` は、`i : !_` の i と同じ（R44、2026-10-23）
+// ---------------------------------------------------------------------------
+//
+// 比べる2つの綴り：`!_ X` と、`i : !_` の下の `i X`（X は1〜3項）。値の後ろでも同じ：`5 !_ X` と `5 i X`（X は1〜2項）。
+//
+// なぜ同じか：`:` はメタで、名前は右辺の式を指す（U〔答え〕2026-10-22 22:14、ボタン「定義は式を指す」）ので、`i` と書くのは右辺の `!_` と
+// 書くのと同じ。並びの頭と値の後ろは口の外（`!_` が埋める口が無い）で、口の外の `!_` は恒等射（R44。U〔答え〕[2026-10-22 23:48 ebf18260]
+// 「5 !_ / 5 , !_ も追加で、 全部5になるはず…」。主の Claude の問い「`!_ 5` は `i 5` に合わせて 5、でいい？」への答え）。だから X が
+// 何でも、2つの綴りは同じ答えでなければならない（期待値は書かない）。
+//
+// 何を同じと見るか：最後の行の木（葉の `i` を `!_` と読む）・種類・余りの印、断るなら門（reason と番号と名指し）。
+//
+// 比べの外：無い。X の中に `!_` があっても（口の中の穴・G5・G7）、2つの綴りで同じ所に同じ物があるので比べる。中置の被演算子の `!_`
+// （`!_ + 1`、§5 Q15）は項の中で、並びの頭の `!_` ではないので、X の語に中置を入れない。頭の関数の口を値で埋めた後ろの `!_`
+// （`inc 5 !_` の G13、§5 Q40。`inc 5 i` は通る）は、並びの頭でも `5` の後ろでもないので、この法則の比べの外（名指しで断る所）。
+// この法則は `!_` と i の配線が揃っているかを見るだけで、恒等射の読みそのもの（R29 の流れ）が単位律と合うかは見ない（両側に同じ
+// 読みが乗る）。それは法則13 が見る。
+const DEFS11 = [
+	INC,
+	"add : x y ? x + y",
+	"f2 : x y ? x - y",
+	"f3 : a b c ? c",
+	"n : [~r] ? r",
+	"io1 : [say] ? say 21",
+	"uu : m ? [,] m",
+	"use : f m ? @f m",
+	"gq : m [y : 1] ? m + y",
+	"i : !_",
+	"vs : 1 , 2 , 3",
+];
+const UNITS11 = toUnits(DEFS11);
+const WORDS11 = ["5", "[1 2]", "vs", "_", "$inc", "(inc 5)", "inc", "add", "f2", "f3", "n", "io1", "uu", "use", "gq", "i", "!_", "[+]", "[+ 1]", "[* 2,]", "[<<]", "[' 0]", "||inc||", "(add 1)", "vs~"];
+const WORDS11_3 = ["5", "_", "inc", "add", "n", "io1", "i", "!_", "[+]", "[+ 1]", "(add 1)", "vs~"];
+// 葉の `i` を `!_` と読む（木の綴りの、空白か括弧で区切られた `i` だけ。`inc`・`$inc` などは触らない）。
+const asBang = (s) => s.replace(/(?<=^|[\s(\[])i(?=$|[\s)\]])/g, "!_");
+const view11 = (o) => (o.crash ? `例外 ${o.crash}` : o.refused ? `断り ${asBang(refusalText(o))}` : `${asBang(lastOf(o).text)} : ${lastOf(o).kind}${lastOf(o).leftover ? "（余りを積む）" : ""}`);
+const solve11 = (line, defsFrom = line) => outcome(src([...usedDefs(UNITS11, defsFrom), line]));
+const seqs11 = (ws, k) => (k === 0 ? [[]] : seqs11(ws, k - 1).flatMap((s) => ws.map((w) => [...s, w])));
+
+law("11 口の外の !_ は i : !_ の i と同じ：!_ X と i X、5 !_ X と 5 i X", () => {
+	const problems = [];
+	const count = { 比べた組: 0, 通る: 0, 断る: 0, "値の後ろ": 0 };
+	const Xs = [...seqs11(WORDS11, 1), ...seqs11(WORDS11, 2), ...seqs11(WORDS11_3, 3)];
+	const pairs = [
+		...Xs.map((x) => [`!_ ${x.join(" ")}`, `i ${x.join(" ")}`, false]),
+		...Xs.filter((x) => x.length <= 2).map((x) => [`5 !_ ${x.join(" ")}`, `5 i ${x.join(" ")}`, true]),
+	];
+	for (const [a, b, after] of pairs) {
+		const oa = solve11(a, b);
+		const ob = solve11(b);
+		count.比べた組++;
+		if (after) count.値の後ろ++;
+		if (oa.crash || ob.crash || view11(oa) !== view11(ob)) problems.push(`${a}  ⇔  ${b}`, `  !_: ${view11(oa)}`, `  i : ${view11(ob)}`);
+		else if (oa.refused) count.断る++;
+		else count.通る++;
+	}
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則12：恒等射は `,` の単位（R45、2026-10-23）
+// ---------------------------------------------------------------------------
+//
+// 比べる綴り：行 `X` と、`!_ , X`・`X , !_`・`i , X`・`X , i`（X は1〜2項の並び）。もう1つ被演算子があっても同じ：`X , !_ , 7` と
+// `!_ , X , 7` と `X , 7`（`,` は右結合なので、`X , !_ , 7` は `X , (!_ , 7)`）。
+//
+// なぜ同じか：恒等射の型 0 ⇒ 0 ≅ 1 は終対象で、積の単位（1 × A ≅ A・A × 1 ≅ A。書いた `_` が余積の並びから消える 0 ⊕ A ≅ A（R15）の
+// 双対。主の Claude の読み）。`,` の被演算子の恒等射は消え、もう片方の被演算子が答え（木も、もう片方の木そのもの。U〔答え〕[2026-10-22
+// 23:48 ebf18260]「5 !_ / 5 , !_ も追加で、 全部5になるはず…」）。片方が恒等射なら、G3 の割れ（`(f x) , y` か `f (x , y)` か、§5 Q3）も
+// 消える（`(f x) , !_` も `f (x , !_)` も `f x`）。根の `,` が消えて並びだけが残れば、その行の根はその並びなので、行 `X` と同じく評価する
+// 所（R42）。
+//
+// 何を同じと見るか：法則11 と同じ（葉の `i` を `!_` と読む。恒等射どうしの `!_ , i` は、どちらの恒等射が残っても同じ）。
+//
+// 比べの外：無い（`$!_` は値（A）で恒等射ではないので、X の語に入れて、消えないことも比べる）。
+law("12 恒等射は , の単位：X と !_ , X・X , !_・i , X・X , i、X , !_ , 7 と X , 7", () => {
+	const problems = [];
+	const count = { 比べた組: 0, 通る: 0, 断る: 0, "もう1つの被演算子": 0 };
+	const Xs = [...seqs11([...WORDS11, "$!_"], 1), ...seqs11(WORDS11, 2)].map((x) => x.join(" "));
+	for (const X of Xs) {
+		const defsFrom = `i ${X}`;
+		const base = solve11(X, defsFrom);
+		const groups = [
+			[base, [`!_ , ${X}`, `${X} , !_`, `i , ${X}`, `${X} , i`]],
+			[solve11(`${X} , 7`, defsFrom), [`${X} , !_ , 7`, `!_ , ${X} , 7`]],
+		];
+		for (const [want, lines] of groups) {
+			for (const line of lines) {
+				const o = solve11(line, defsFrom);
+				count.比べた組++;
+				if (line.endsWith(", 7")) count["もう1つの被演算子"]++;
+				const ref = line.endsWith(", 7") ? `${X} , 7` : X;
+				if (o.crash || want.crash || view11(o) !== view11(want)) problems.push(`${line}  ⇔  ${ref}`, `  ${line}: ${view11(o)}`, `  ${ref}: ${view11(want)}`);
+				else if (o.refused) count.断る++;
+				else count.通る++;
+			}
+		}
+	}
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則13：恒等射を消しても同じか、恒等射の側が断る（単位律、R29・R44・R46、2026-10-23）
+// ---------------------------------------------------------------------------
+//
+// 比べる2つの綴り：`P i S` と、恒等射を消した `P S`（P は0〜1項、S は1〜2項）。行の根のほかに、括って後から当てた `(P i S) 3` と
+// `(P S) 3`、名前に入れて当てた `v9 : P i S ⏎ v9 3` と `v9 : P S ⏎ v9 3` も比べる（根では行の終わりの `_`（R42）で同じになる割れが、
+// 後から当てると見える）。
+//
+// なぜ同じか：恒等射との合成はその関数そのもの、恒等射を当てた物は当てた物そのもの（単位律。U〔答え〕[2026-10-22 23:48 ebf18260]
+// 「5 !_ / 5 , !_ も追加で、 全部5になるはず…」で `5 !_` は 5）。余積は左結合（R40）なので `P i S` は `(P i) S` で、`P i` は P。一方、
+// 恒等射は並び全体を受けて1つの値で次へ渡す（R29、主の Claude の読み）ので、恒等射が開いている間に来た関数は合成の後ろに入り、単位律の
+// 読み（その関数が逆適用で取る）と割れうる。割れる所は G18 で断る（§4 R29、§5 Q6・Q13・Q43）。だから恒等射の側は、消した側と同じ答え
+// か、断るかのどちらか。`!_` の側は、法則11（口の外）と法則14（口の中、R46）が `i` に結ぶ。
+//
+// 何を同じと見るか：恒等射の側が通るなら、消した側も通り、根の種類と積み上げの形（sig13：恒等射を当てた節はその中身、恒等射が並びを
+// 受けた節は構築に開く、ほかの適用・合成は1つ）が同じ。恒等射の側の種類が未知なのは、弱い答えとして許す（恒等射が撒く項を受けた並びは
+// 未知。R24 の「撒く項があれば k は数えない」で、消した側は構築で A）。恒等射の側が断るのは許す（断る側。`vs~ i` は R14 の G9）。
+// 期待値は書かない。
+//
+// 2026-10-23 の確かめで足した。法則11 は `!_ X` と `i X` の配線を比べるだけで、両側に同じ恒等射の読みが乗るので、この割れ
+// （`(5 !_ f2) 3` が f2 5 3 で通り、`(5 f2) 3` は G8。`!_ 1 2 [* 2,]` が `[* 2,] [1 2]`、`1 2 [* 2,]` は `1 ([* 2,] 2)`）に盲目だった。
+const DEFS13 = [
+	INC,
+	"add : x y ? x + y",
+	"f2 : x y ? x - y",
+	"n : [~r] ? r",
+	"io1 : [say] ? say 21",
+	"uu : m ? [,] m",
+	"c1 : inc inc",
+	"i : !_",
+	"vs : 1 , 2 , 3",
+	"gd :",
+	"\t\tys",
+	"\t\tzs : 3",
+	"\t? ys",
+	"",
+];
+const UNITS13 = toUnits(DEFS13);
+const WORDS13 = ["5", "[1 2]", "vs~", "inc", "add", "f2", "n", "io1", "uu", "gd", "[+]", "[+ 1]", "[* 2,]", "[<<]", "(add 1)", "||!_||", "[' 0]"];
+const isId13 = (t) => !!t && t.t === "leaf" && !!t.view && (t.view.text === "i" || t.view.text === "!_");
+const idRow13 = (t) => t.t === "apply" && isId13(t.head) && t.arg.t === "construct";
+// 積み上げの形：構築は項ごと（恒等射が並びを受けた節は開く）、恒等射を当てた節はその中身、恒等射を除いて1つの関数の合成はその関数、
+// ほかの適用・合成と関数の葉は f、値の葉は x、根の `_` は u(…)。
+const sig13 = (t) => {
+	switch (t.t) {
+		case "unit":
+			return `u(${sig13(t.inner)})`;
+		case "construct":
+			return `[${t.items.flatMap((u) => (idRow13(u) ? u.arg.items : [u])).map(sig13).join(",")}]`;
+		case "apply":
+			return isId13(t.head) ? sig13(t.arg) : "f";
+		case "compose": {
+			const xs = t.items.filter((u) => !isId13(u));
+			return xs.length === 1 && xs[0].t !== "leaf" ? sig13(xs[0]) : "f";
+		}
+		case "leaf":
+			return isId13(t) || (t.kind && t.kind.k === "L") ? "f" : "x";
+		default:
+			return "x";
+	}
+};
+const memo13 = new Map();
+const solve13 = (line) => {
+	let o = memo13.get(line);
+	if (o) return o;
+	try {
+		const r = resolve(src([...usedDefs(UNITS13, line), ...line.split("\n")]));
+		const t = r.trees[r.trees.length - 1];
+		o = { text: show(t), sig: sig13(t), kind: t.t === "unit" ? `${kindOf(t.inner)}（根で _）` : kindOf(t) };
+	} catch (e) {
+		o = e.reason ? { refused: `${e.reason} ${e.gate || ""}` } : { crash: `${e.name}: ${e.message}` };
+	}
+	memo13.set(line, o);
+	return o;
+};
+const view13 = (o) => (o.crash ? `例外 ${o.crash}` : o.refused ? `断り ${o.refused}` : `${o.sig} : ${o.kind}`);
+const weaker13 = (o) => o.kind === "未知" || o.kind === "未知（根で _）";
+// 恒等射の側 a と、比べる側 b。a が通るなら、b も通り、種類（a が未知なら許す）と形が同じ。
+const unitLaw13 = (a, b) => {
+	if (a.crash || b.crash) return "例外";
+	if (a.refused) return null;
+	if (b.refused) return "恒等射の側だけ通る";
+	if (a.kind !== b.kind) return weaker13(a) ? null : "種類";
+	return a.sig === b.sig ? null : "形";
+};
+const ctx13 = (s, c) => (c === 1 ? `(${s}) 3` : c === 2 ? `v9 : ${s}\nv9 3` : s);
+
+law("13 恒等射を消しても同じか、恒等射の側が断る（単位律）：P i S と P S", () => {
+	const problems = [];
+	const count = { 比べた組: 0, 通る: 0, "恒等射の側が断る": 0, "恒等射の側が未知（弱い答え）": 0, 後から当てる: 0 };
+	const Ps = [[], ...seqs11(WORDS13, 1)];
+	const Ss = [...seqs11(WORDS13, 1), ...seqs11(WORDS13, 2)];
+	for (const P of Ps) for (const S of Ss) for (const c of [0, 1, 2]) {
+		const a = ctx13(`${[...P, "i", ...S].join(" ")}`, c);
+		const b = ctx13(`${[...P, ...S].join(" ")}`, c);
+		const oa = solve13(a);
+		const ob = solve13(b);
+		count.比べた組++;
+		if (c) count.後から当てる++;
+		const bad = unitLaw13(oa, ob);
+		if (bad) problems.push(`${bad}：${a.replace("\n", " ⏎ ")}  ⇔  ${b.replace("\n", " ⏎ ")}`, `  恒等射: ${view13(oa)}`, `  消した: ${view13(ob)}`);
+		else if (oa.refused) count["恒等射の側が断る"]++;
+		else if (!ob.refused && oa.kind !== ob.kind) count["恒等射の側が未知（弱い答え）"]++;
+		else count.通る++;
+	}
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則14：口の中で通った `!_` は、恒等射と読んでも穴と読んでも同じ（R46、2026-10-23）
+// ---------------------------------------------------------------------------
+//
+// 比べる綴り：`Y !_ S` と、恒等射の読みの `Y i S`、穴の読みの `[x ? Y x] S`（その口に置いた λ、R16・R34 の穴と同じくその段の適用を
+// 包む）。Y は口が1つの関数で、穴の頭（名前の定義か `?` の括り）でない物（穴の規則が並び全体で読まないので、通るなら R46）。S は0〜2項。
+// 根のほかに、法則13 と同じく後から当てた形も比べる。
+//
+// なぜ同じか：R46 は、口の数の決まった関数に口が1つだけ残った所の `!_` を、穴と読んでも恒等射と読んでも同じ関数なので通す（主の Claude の
+// 依頼から出した規則、R）。だから通った `Y !_ S` は、`Y i S` と同じ木（葉の `i` を `!_` と読む）・同じ種類で、`[x ? Y x] S` とは法則13 の
+// 見方で同じ（`!_` の側が未知なのは弱い答えとして許す：恒等射が撒く項を含む並びを受けた `[+ 1] !_ 5 vs~` は未知、λ の読みは構築で A）。
+//
+// 何を同じと見るか：上の通り。`Y !_ S` が断るなら比べない（断る側。口が2つ以上残る・可変長の口などの G7 と、割れる所の G18）。
+// 2026-10-23 の確かめで足した（前は R46 に期待値の行しか無かった）。
+const HEADS14 = [
+	["[+ 1]", "[x ? [+ 1] x]"],
+	["(add 1)", "[x ? add 1 x]"],
+	["(inc)", "[x ? inc x]"],
+	["||inc||", "[x ? ||inc|| x]"],
+	["[<<] 1", "[x ? [<<] 1 x]"],
+	["c1", "[x ? c1 x]"],
+];
+law("14 口の中で通った !_ は、恒等射と読んでも穴と読んでも同じ：Y !_ S と Y i S・[x ? Y x] S", () => {
+	const problems = [];
+	const count = { 比べた組: 0, 通る: 0, 断る: 0, "!_ の側が未知（弱い答え）": 0 };
+	const Ss = [[], ...seqs11(WORDS13, 1), ...seqs11(["5", "vs~", "inc", "f2", "uu", "[* 2,]", "||!_||", "[' 0]"], 2)];
+	for (const [Y, lam] of HEADS14) for (const S of Ss) for (const c of [0, 1, 2]) {
+		const tail = S.length ? ` ${S.join(" ")}` : "";
+		const a = ctx13(`${Y} !_${tail}`, c);
+		const bi = ctx13(`${Y} i${tail}`, c);
+		const bl = ctx13(`${lam}${tail}`, c);
+		const oa = solve13(a);
+		count.比べた組++;
+		if (oa.crash) {
+			problems.push(`例外：${a}`, `  ${oa.crash}`);
+			continue;
+		}
+		if (oa.refused) {
+			count.断る++;
+			continue;
+		}
+		const oi = solve13(bi);
+		if (oi.refused || oi.crash || asBang(oi.text) !== oa.text || oi.kind !== oa.kind) {
+			problems.push(`恒等射の読みと違う：${a.replace("\n", " ⏎ ")}  ⇔  ${bi.replace("\n", " ⏎ ")}`, `  !_: ${view13(oa)} ${oa.text}`, `  i : ${view13(oi)} ${oi.text || ""}`);
+			continue;
+		}
+		const ol = solve13(bl);
+		const bad = unitLaw13(oa, ol);
+		if (bad) problems.push(`穴の読みと${bad}：${a.replace("\n", " ⏎ ")}  ⇔  ${bl.replace("\n", " ⏎ ")}`, `  !_: ${view13(oa)}`, `  λ : ${view13(ol)}`);
+		else if (oa.kind !== ol.kind) count["!_ の側が未知（弱い答え）"]++;
+		else count.通る++;
 	}
 	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
 	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
