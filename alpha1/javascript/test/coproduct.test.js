@@ -110,7 +110,7 @@ const passes = [
 	["[* 2,] `ab` == `aabb`", std("[* 2,] `ab` == `aabb`"), "(== (apply [* 2,] `ab`) `aabb`)", null],
 	["1 2 , 3 4", std("1 2 , 3 4"), "(, (construct 1 2) (construct 3 4))", null],
 	["vs~ 4", std("vs~ 4"), "(construct vs~ 4)", "A"],
-	// R47：値の後ろの関数は積まれて 5 を取らない。根に余って `_` になり、構築の中で消える（R42・R15）。余ったことは information で
+	// R47：値の後ろの関数は積まれて 5 を取らない。根に余って `_` になり、構築の中で消える（R42・R15）。余ったことは leftover-lambda で
 	// 知らせる（R48）。前（2026-10-23 まで）は逆適用で `(apply inc 5 ·rev)`・`(apply (compose inc inc) 5 ·rev)`。
 	["5 inc（R47・R48。前は逆適用）", std("5 inc"), "(construct 5 (unit inc))", "A"],
 	["5 inc inc（R47・R48）", std("5 inc inc"), "(construct 5 (unit (compose inc inc)))", "A"],
@@ -234,8 +234,9 @@ const fail = (name, ...lines) => console.log(`FAIL ${name}\n${lines.map((l) => `
 // excess の行は、2026-10-22 にこの印へ移した。2026-10-23 の左からの畳み込み（R40）で節の印 leftover は無くなったので、木の形で見る：
 // 根が構築で、最初の子が適用の節（前から n 個を当てた適用の後ろに余りが並ぶ形）・diag（undefined-name が出る名前）・
 // diagText（その名前の undefined-name のどれかの文面に含まれる文字列）・diagCount（出る診断の数）・pfInfo（pointfree-not-folded
-// の information が出る点なしの綴り。R32）・leftoverDiag（leftover-lambda の information が出る、余ったラムダの木の綴りの並び。出ない
-// ことを見るなら []。R48、2026-10-24）。
+// の information が出る点なしの綴り。R32）・leftoverDiag（leftover-lambda の warning が出る、余ったラムダの木の綴りの並び。出ない
+// ことを見るなら []。R48、2026-10-24。重さは同じ日の §5 Q44 の答えで information から warning に上げた）・severities（出る診断の
+// 「重さ/reason」を並べ替えた並び。重さの1か所 DIAG_SEVERITY を見る）。
 const checkPass = (name, src, want, kind, extra = {}) => {
 	total++;
 	let r;
@@ -269,8 +270,12 @@ const checkPass = (name, src, want, kind, extra = {}) => {
 		const names = left.map((d) => d.name);
 		if (JSON.stringify(names) !== JSON.stringify(extra.leftoverDiag)) problems.push(`leftover-lambda got: ${JSON.stringify(names)}  want: ${JSON.stringify(extra.leftoverDiag)}`);
 		for (const d of left) {
-			if (d.severity !== "information" || !d.message.includes(`\`${d.name}\``) || !d.message.includes("R48")) problems.push(`leftover-lambda の重さか文面が違う: ${JSON.stringify(d)}`);
+			if (d.severity !== "warning" || !d.message.includes(`\`${d.name}\``) || !d.message.includes("R48")) problems.push(`leftover-lambda の重さか文面が違う: ${JSON.stringify(d)}`);
 		}
+	}
+	if ("severities" in extra) {
+		const got = r.diagnostics.map((d) => `${d.severity}/${d.reason}`).sort();
+		if (JSON.stringify(got) !== JSON.stringify(extra.severities)) problems.push(`診断の重さ got: ${JSON.stringify(got)}  want: ${JSON.stringify(extra.severities)}`);
 	}
 	if (problems.length) fail(name, ...problems);
 	else ok(name);
@@ -1094,7 +1099,7 @@ for (const [name, s, want] of binPfRefused) checkRefused(`畳まない ${name}`,
 //
 // 2026-10-24 に逆適用そのものを廃止した（R47。U [2026-10-23 13:12 ebf18260]「…逆適用は廃止しよう」）。Q23 の答えも逆適用がある前提の
 // 答えで、R47 で上書きされた：値の後ろの関数は積まれて値を取らない（関数は右からだけ受ける）。`5 inc [* 2]` は 5 の後ろに合成
-// `inc [* 2]` が積まれて余り、根で `_`（R42。余ったことは information で知らせる、R48）。下の行は、前の答え（括弧の中）からの変わり方。
+// `inc [* 2]` が積まれて余り、根で `_`（R42。余ったことは leftover-lambda で知らせる、R48）。下の行は、前の答え（括弧の中）からの変わり方。
 const q23Passes = [
 	["5 (inc [* 2])（R47。前は逆適用、その前は G8）", std("5 (inc [* 2])"), "(construct 5 (unit [inc [* 2]]))", "A"],
 	["5 (inc inc)（R47。前は逆適用、その前は G8）", std("5 (inc inc)"), "(construct 5 (unit [inc inc]))", "A"],
@@ -2926,7 +2931,7 @@ for (const [name, s, want, kind, extra] of BARE_PASSES) checkPass(`Q21 ${name}`,
 // G12 は要らなくなった。答えの変わった行は、行の注に規則の番号を書いた。後ろの関数が並びの項を受けた合成は、各関数が受けた物の
 // 見える入れ子の適用で書く（R40 の読み9、§1.3）。
 // 2026-10-24 の逆適用の廃止（R47）で、R37（一番近い1項）も廃止した：値の後ろの関数は積まれて、値を取らない（関数は右からだけ受ける）。
-// 根に余った関数は `_`（R42）で、構築の中で消え、余ったことは information で知らせる（R48）。行の名前の「前は」に、2026-10-23 の逆適用の
+// 根に余った関数は `_`（R42）で、構築の中で消え、余ったことは leftover-lambda で知らせる（R48）。行の名前の「前は」に、2026-10-23 の逆適用の
 // 答えを足した。
 const ADEF =["sub : x y ? x - y", "pt : [a ~as] y ? y", "kf : [f] ? f 1"];
 const GF = "gf : [x : 1] y ? y"; // 既定値のある口が前（位置 0）
@@ -3180,7 +3185,7 @@ for (const [name, s, want, inst] of recheckRefused) checkRefused(`確かめ ${na
 // ここには、上の節で断る・通るが入れ替わった行を移した（行の注に、どの規則で変わったかを書く）。行の名前の「前は」は、2026-10-23 の
 // 左からの畳み込みより前の答え、「その後」は 2026-10-23 の答え。
 const leftFoldPasses = [
-	// 値の後ろの関数は積まれて、根に余って `_`（R47・R42。余ったことは information で知らせる、R48）。2026-10-23 は逆適用で、口が2つ以上
+	// 値の後ろの関数は積まれて、根に余って `_`（R47・R42。余ったことは leftover-lambda で知らせる、R48）。2026-10-23 は逆適用で、口が2つ以上
 	// 残った関数は主語の口が決まらないまま行の終わりで `_`、口が1つだけ残った関数はその口を埋めた（`5 (f2 1)` は `f2 1 5`）。前は G8。
 	["5 f2（R47。前は G8、その後 主語の口が決まらない逆適用で `_`）", std("5 f2"), "(construct 5 (unit f2))", "A"],
 	["5 (f2 1)（R47。前は G8、その後 `f2 1 5`）", std("5 (f2 1)"), "(construct 5 (unit [f2 1]))", "A"],
@@ -3252,7 +3257,7 @@ for (const [name, s, want, inst] of leftFoldRefused) checkRefused(`畳み込み 
 // 口が2つ（畳まない2項の点なし `[<<]`、R32）か数が分からない（`[,]`）なら、主語の口が決まらなかった（§5 Q5）。
 //
 // 2026-10-24 の逆適用の廃止（R47）で、点なしもほかの関数と同じく、値の後ろに積まれて値を取らない。後ろの項を右から受け、根に余れば `_`
-// （R42、構築の中で消える。余ったことは information で知らせる、R48）。決定の文面の `1 2 [+] 3 4` は `1 2 ([+] 3 4)`（主の Claude が示した
+// （R42、構築の中で消える。余ったことは leftover-lambda で知らせる、R48）。決定の文面の `1 2 [+] 3 4` は `1 2 ([+] 3 4)`（主の Claude が示した
 // 表の形。U〔答え〕[2026-10-23 15:32 ebf18260]「合ってる。 それでOK！」）。行の名前の「前は」は 2026-10-23 より前、「その後」は 2026-10-23 の答え。
 const pfReversePasses = [
 	// 決定の文面の例。R47 で `[+]` は 2 を取らず、後ろの 3 4 を可変長の口で受ける（R41）。
@@ -3575,8 +3580,9 @@ for (const [name, s, want, inst] of idFixRefused) checkRefused(`恒等射の直�
 // 廃止だね。 逆適用は廃止しよう」。続く主の Claude の問い「A の後の L は積む（関数は右からだけ受ける）。根でラムダが余って `_` になったら
 // 診断で知らせる。これでいい？」に、U〔答え〕[2026-10-23 15:32 ebf18260]「合ってる。 それでOK！」。
 // - R47：畳み込みの1歩は3行。L·A は適用、L·L は合成、いちばん上が A か空なら次の項を積む（L も積み、積まれた L は後ろの項を右から受ける）。
-// - R48：評価する所で余ったラムダは今までどおり `_`（R42、並びの中では消える、R15）で、information の leftover-lambda で知らせる。余ったのが
-//   恒等射（`!_`・`i : !_` の i・恒等射どうしの合成）なら知らせない。括りの中・`:` の右辺・本体は評価する所でないので知らせない。
+// - R48：評価する所で余ったラムダは今までどおり `_`（R42、並びの中では消える、R15）で、leftover-lambda で知らせる（重さは 2026-10-24 の
+//   §5 Q44 の答えで information から warning に上げた）。余ったのが恒等射（`!_`・`i : !_` の i・恒等射どうしの合成）なら知らせない。括りの中・
+//   `:` の右辺・本体は評価する所でないので知らせない（同じ日の R52 と §5 Q50 の答えから、値の上に積まれて閉じた関数はそこでも知らせる）。
 // 上の節の行のうち、門が無くなって通る側へ移った行と、主の Claude が示した表の行をここに置く。法則は coproduct_laws.test.js の法則5
 // （値の後ろの関数は、値を取らない）。
 const UU_DEF = "uu : x ? [,] x";
@@ -3625,9 +3631,10 @@ const norevPasses = [
 	["R48 i : !_ ⏎ 5 i（名前の恒等射）", std(["i : !_", "5 i"]), "(construct 5 (unit i))", "A", { diagCount: 0, leftoverDiag: [] }],
 	["R48 i : !_ ⏎ 5 i i（恒等射どうしの合成も恒等射）", std(["i : !_", "5 i i"]), "(construct 5 (unit (compose i i)))", "A", { diagCount: 0, leftoverDiag: [] }],
 	["R48 !_ , !_（`,` の単位で消えて残った恒等射）", std("!_ , !_"), "(unit !_)", "A", { diagCount: 0, leftoverDiag: [] }],
-	// 出ない形：`:` の右辺は式を指すだけ（R52 の外）。
-	["R48 v : 5 inc（`:` の右辺は式を指すだけ）", std("v : 5 inc"), "(: v (construct 5 inc))", null, { diagCount: 0 }],
-	["R48 v : 5 inc ⏎ v（名前は未知の値で、根でも余らない）", std(["v : 5 inc", "v"]), "v", "未知", { diagCount: 0 }],
+	// R48 の片では出ない形だった：`:` の右辺は式を指すだけ（R52 の外）で、v は未知。2026-10-24 の §5 Q50 の答えから、右辺は閉じた1つの項で
+	// R52 を当てるので、定義の行で知らせ、v は 5（closedRhsPasses）。
+	["R48 v : 5 inc（Q50 の答えから定義の行で知らせる。前は `(construct 5 inc)` で知らせなかった）", std("v : 5 inc"), "(: v (construct 5 (unit inc)))", null, { diagCount: 1, leftoverDiag: ["inc"] }],
+	["R48 v : 5 inc ⏎ v（v は 5 で、根でも余らない。知らせるのは定義の行の1回。前は v が未知）", std(["v : 5 inc", "v"]), "v", "A", { diagCount: 1, leftoverDiag: ["inc"] }],
 	// 2026-10-24 の R52 から出る形：評価する所の外（括りの中・本体）でも、値の上に積まれて何も受けずに閉じた関数は余ったラムダで `_` になり、
 	// 知らせる。R47 の最初の版（R48）は、評価する所でないので知らせず、値と関数の並んだ構築は種類を決めなかった（未知、§5 Q38）。
 	["R52 (5 inc)（括りの中。R48 では未知で知らせなかった）", std("(5 inc)"), "[5 inc]", "A", { diagCount: 1, leftoverDiag: ["inc"] }],
@@ -3656,7 +3663,8 @@ for (const [name, s, want, inst] of norevRefused) checkRefused(`逆適用の廃�
 // (3) 括りの関数の末尾の `_` で、`_` を除いた実引数が足りない形は、値の後ろでも G5（`io1 _` と同じ）。2026-10-23 は逆適用で通っていた
 //     （`5 io1 _` は `(apply io1 5 ·rev)`）。仕様の記録は「前は G8」と書いていて、通る→断るの変化が読めなかった（確かめの指摘）。
 // (4) 黒い芽のうち、評価する所の外で、診断も門も無いまま未知の根で通っていた所（§5 Q35・Q38・Q44 に名指しした）。2026-10-24 の R52 から、
-//     値の上に積まれて何も受けずに閉じた関数は、どこでも（`:` の右辺を除く）余ったラムダで `_` になり、知らせる（いちばん後ろの節）。
+//     値の上に積まれて何も受けずに閉じた関数は、どこでも（`:` の右辺を除く）余ったラムダで `_` になり、知らせる（後ろの R52 の節）。同じ日の
+//     §5 Q50 の答えから、`:` の右辺も除かない（除くのは `$[…]` の中身の並びだけ、いちばん後ろの節）。
 const IO1_FIX = "io1 : [say] ? say 21";
 const norevFixPasses = [
 	// (1) 穴の規則が F の並びで読む（`5 (F Y)` と同じ）
@@ -3932,13 +3940,16 @@ law("試し：合成を倍々にする再帰は、合成の幅の資源の守り
 // でいい？」に U〔答え〕[2026-10-24 06:32 ebf18260]「もちろん！」。
 // - R52：左が名前1つの `:`（定義・欄・局所の定義）の右辺の並びを除く、どの並びでも（行の根・括りの中・段4〜8 と `,` の辺・字下げの本体の
 //   各行・`?` の本体の根・枝の条件と値・囲み）、値の上に積まれた関数が、並びが閉じるまでに何も受けなければ、余ったラムダとして `_` になり、
-//   構築の中では消える（R15）。information の leftover-lambda で知らせる（R48 と同じ。恒等射なら知らせない）。合成は受けたことに数えない。
+//   構築の中では消える（R15）。leftover-lambda で知らせる（R48 と同じ。重さは同じ日の §5 Q44 の答えで information から warning に上げた。
+//   恒等射なら知らせない）。合成は受けたことに数えない。§5 Q50 の答えから、`:` の右辺の並びも除かない（下の注、closedRhsPasses）。
 // - 並び全体が1つの関数（`(inc add 5)`・`(f3 !_ 2)`・辺の `inc`）は今のまま（括りの中は後から当てられる、§5 Q37）。
 // - 確かめの直し（§7.25）：値の上に積まれた後に受けた関数（`(5 add 1)`）と穴の関数（`(5 f2 !_)`）にも当てる。値の上に積まれたのは `(F Y)` の
 //   1項で、括った `(5 (add 1))`・名前の `5 p1` と同じ（法則5）。最初の版は外に置いていて（未知）、括った綴りと割れていた。`:` の右辺の `,` が
 //   恒等射で消えて残った並び（`v : 5 inc , !_`）は、右辺の並びとして R52 の外（R45。最初の版は v を 5 と読んでいた）。
 // - 主の Claude の訂正：同じ答えの中で主の Claude は「`v : 5 inc` ⏎ `v 3` は `5 (inc 3)` で、inc がちゃんと受ける」と書いたが、名前は右辺を1つの
 //   項として指し（R42 の読み7）、字面への置き換えではないので、v は未知で `v 3` は G7。字面どおりに読むかは §5 Q50。
+// - 2026-10-24 の §5 Q50 の答え（下の closedRhsPasses）：右辺は閉じた1つの項で、`:` の右辺にも R52 を当てる（v は 5、`v 3` は `5 3`）。この節の
+//   `:` の右辺の行は、答えを今の物に直した。
 // 法則は coproduct_laws.test.js の法則16（`C[(X F)]` と `C[X]`）。
 const r52Passes = [
 	// 規則の例（上の問いの答えの後に主の Claude が挙げた物）
@@ -3990,13 +4001,14 @@ const r52Passes = [
 	["(inc add 5) 3（括りの中身が丸ごと関数は、後から当てられる）", std("(inc add 5) 3"), "(apply [inc add 5] 3)", "A", { diagCount: 0 }],
 	["(f3 !_ 2) 1 3（同じ）", std("(f3 !_ 2) 1 3"), "(apply [f3 !_ 2] (construct 1 3))", "A", { diagCount: 0 }],
 	["inc == 5（辺が関数だけは今のまま未知）", std("inc == 5"), "(== inc 5)", "未知", { diagCount: 0 }],
-	// 出ない所：左が名前1つの `:` の右辺の並び（式を指すだけ）
-	["v : 5 inc（右辺の並びは今のまま）", std("v : 5 inc"), "(: v (construct 5 inc))", null, { diagCount: 0 }],
-	["st : ⏎ k : 5 inc（欄の右辺も）", src([INC, "st :", "\tk : 5 inc", "\tj : 2", ""]), "(: st (block (: k (construct 5 inc)) (: j 2)))", "A", { at: 1, diagCount: 0 }],
-	["q : x ? ⏎ y : x inc ⏎ y（局所の定義の右辺も。本体は今のまま未知）", std(["q : x ?", "\ty : x inc", "\ty", "", "q 3"]), "(apply q 3)", "未知", { diagCount: 0 }],
-	// `:` の右辺の `,` が恒等射で消えて残った並びも、右辺の並び（R45。確かめの直し、§7.25。最初の版は v を 5 と読んで知らせていた）
-	["v : 5 inc , !_（`v : 5 inc` と同じ右辺の並び）", std("v : 5 inc , !_"), "(: v (construct 5 inc))", null, { diagCount: 0 }],
-	["st : ⏎ k : 5 inc , !_（欄の右辺も）", src([INC, "st :", "\tk : 5 inc , !_", "\tj : 2", ""]), "(: st (block (: k (construct 5 inc)) (: j 2)))", "A", { at: 1, diagCount: 0 }],
+	// 左が名前1つの `:` の右辺の並び：R52 の片では出ない所（式を指すだけ）だった。2026-10-24 の §5 Q50 の答えから、右辺は閉じた1つの項で
+	// R52 を当てる（closedRhsPasses）。下の行は答えを今の物に直した（名前の「前は」が R52 の片の答え）。
+	["v : 5 inc（Q50 の答えから知らせる。前は `(construct 5 inc)` で知らせなかった）", std("v : 5 inc"), "(: v (construct 5 (unit inc)))", null, { diagCount: 1, leftoverDiag: ["inc"] }],
+	["st : ⏎ k : 5 inc（欄の右辺も。前は知らせなかった）", src([INC, "st :", "\tk : 5 inc", "\tj : 2", ""]), "(: st (block (: k (construct 5 (unit inc))) (: j 2)))", "A", { at: 1, diagCount: 1, leftoverDiag: ["inc"] }],
+	["q : x ? ⏎ y : x inc ⏎ y（局所の定義の右辺も。前は知らせなかった。局所の名前は今のまま未知なので、本体は未知）", std(["q : x ?", "\ty : x inc", "\ty", "", "q 3"]), "(apply q 3)", "未知", { diagCount: 1, leftoverDiag: ["inc"] }],
+	// `:` の右辺の `,` が恒等射で消えて残った並びも、右辺の並び（R45）なので、`v : 5 inc` と同じく R52（前は、`v : 5 inc` と同じく R52 の外）
+	["v : 5 inc , !_（`v : 5 inc` と同じ右辺の並び。前は知らせなかった）", std("v : 5 inc , !_"), "(: v (construct 5 (unit inc)))", null, { diagCount: 1, leftoverDiag: ["inc"] }],
+	["st : ⏎ k : 5 inc , !_（欄の右辺も。前は知らせなかった）", src([INC, "st :", "\tk : 5 inc , !_", "\tj : 2", ""]), "(: st (block (: k (construct 5 (unit inc))) (: j 2)))", "A", { at: 1, diagCount: 1, leftoverDiag: ["inc"] }],
 	["v : (5 inc) , !_ ⏎ v 3（`,` の辺の括りの中は R52。v は値）", std(["v : (5 inc) , !_", "v 3"]), "(construct v 3)", "A", { leftoverDiag: ["inc"] }],
 	["v : 5 inc == 6 , !_（`,` で残ったのは `==` で、その辺は R52）", std("v : 5 inc == 6 , !_"), "(: v (== (construct 5 (unit inc)) 6))", null, { leftoverDiag: ["inc"] }],
 	// 値の上に積まれた後に受けた関数と、穴の関数（確かめの直し、§7.25。法則5 で括った `(5 (add 1))`・名前の `5 p1` と同じ。最初の版は未知・G7）
@@ -4018,18 +4030,96 @@ const r52Refused = [
 	// 例の `5 inc , 1` は G3 のまま：`(5 inc) , 1` と `5 (inc , 1)` のどちらで読むか（§5 Q3）は R52 では決まらない（前者は `5 , 1`、後者は
 	// 関数を器に入れた `5 [inc 1]` で、値が割れる）。
 	["5 inc , 1（G3 のまま、§5 Q3）", std("5 inc , 1"), "G3"],
-	// 主の Claude の訂正の行：名前は右辺を1つの項として指すので、v は未知で、後ろに 3 が来ると G7（§5 Q38・Q50）。
-	["v : 5 inc ⏎ v 3（v は未知。主の Claude は `5 (inc 3)` と書いたが誤り、§5 Q50）", std(["v : 5 inc", "v 3"]), "G7"],
-	// `,` が恒等射で消えて残った右辺の並びも同じ（R45。確かめの直し、§7.25。最初の版は通っていた）
-	["v : 5 inc , !_ ⏎ v 3（`v : 5 inc` と同じ、§5 Q50）", std(["v : 5 inc , !_", "v 3"]), "G7"],
-	["v : !_ , 5 inc ⏎ v 3（同じ）", std(["v : !_ , 5 inc", "v 3"]), "G7"],
-	["i : !_ ⏎ v : 5 inc , i ⏎ v 3（同じ）", std(["i : !_", "v : 5 inc , i", "v 3"]), "G7"],
-	["v : 5 inc , !_ , !_ ⏎ v 3（同じ）", std(["v : 5 inc , !_ , !_", "v 3"]), "G7"],
-	// 受けた後の関数の右辺の並びも、名前は未知（§5 Q50。`(5 add 1) 3` は確かめの直しで通る側へ移した）
-	["v : 5 add 1 ⏎ v 3（同じ、§5 Q50）", std(["v : 5 add 1", "v 3"]), "G7"],
+	// 主の Claude の訂正の行（名前は右辺を1つの項として指すので、v は未知で `v 3` は G7）と、`,` が恒等射で消えて残った右辺の並び・受けた後の
+	// 関数の右辺の並びの G7 の行（R52 の片と §7.25）は、2026-10-24 の §5 Q50 の答え（v は閉じた1つの項で 5）で通る側へ移した（closedRhsPasses）。
 ];
 for (const [name, s, want, kind, extra] of r52Passes) checkPass(`余ったラムダ ${name}`, s, want, kind, extra);
 for (const [name, s, want, inst] of r52Refused) checkRefused(`余ったラムダ ${name}`, s, want, inst);
+
+// ---------------------------------------------------------------------------
+// `:` の右辺は閉じた1つの項・`$[…]` の中身は遅延・余ったラムダの知らせは warning（2026-10-24、§5 Q50〜Q52・Q44 の答え、§7.26）
+// ---------------------------------------------------------------------------
+//
+// 経緯：R52 の片で残した §5 Q50〜Q52・Q44 に、利用者 U [2026-10-24 09:46 ebf18260]「Q50は迷うので、そう読むことで生じるデメリットを先に
+// 教えて / Q51は具体例がある方が良いね… / Q52は最初からそのつもりだったしその方が良いと考えてたけど…違うなら違うと言って / Q44は知らせが
+// 届かないってだけかい？」。主の Claude は 09:48（UTC）に材料と見立てを出した（Q50：閉じた1つの項として読むに傾いてる。Q51：今のまま当てる
+// のがいい。Q52：`$` は物にする＝遅延なので、書いた所では判定せず、`@p` で開いた所で。Q44：本題は重さで、warning に上げるのが筋）。
+// U〔答え〕[2026-10-24 09:49 ebf18260]「全てその方向で良いと思う。」。
+// - Q50：左が名前1つの `:`（定義・欄・局所の定義）の右辺にも R52 を当てる。名前は右辺を閉じた1つの項として指す：`v : 5 inc` の右辺は
+//   `(construct 5 (unit inc))` で、定義の行で知らせ、v は 5（`v 3` は `5 3`）。右辺が丸ごと関数（`c1 : inc inc`・`a1 : add 1`）は今のまま L。
+// - Q51：枝の値にも当てる（今のまま。r52Passes の枝の行）。
+// - Q52：`$[…]` の中身は遅延した式で、R52 の判定をしない（`_` にせず、知らせない）。中身の項の中（入れ子の括り・`?` の本体・段4〜8 の辺）は
+//   今のまま当てる（遅延が中まで及ぶかは §5 Q53）。中身の行が段2 の `:`（欄・枝）なら、右辺はほかの `:` の右辺と同じく当てる（これも
+//   §5 Q53。欄は Q50 の答えから新しく知らせる）。`@p` で中身を開けない形（中身が関数でない `$[5 inc]`）は今のまま未知（§5 Q9）で、知らせは
+//   どこにも出ない（§5 Q44 の残り）。
+// - Q44：leftover-lambda の重さは warning（断らない）。ほかの診断（undefined-name・pointfree-not-folded）は information のまま。
+// 法則は coproduct_laws.test.js の法則10・12・13・16（名前と、括った右辺 `(P)` が同じ答え）。
+const closedRhsPasses = [
+	// Q50：右辺は閉じた1つの項
+	["Q50 v : 5 inc（定義の行で知らせる）", std("v : 5 inc"), "(: v (construct 5 (unit inc)))", null, { diagCount: 1, leftoverDiag: ["inc"] }],
+	["Q50 v : 5 inc ⏎ v 3（`5 3`。前は v が未知で G7）", std(["v : 5 inc", "v 3"]), "(construct v 3)", "A", { diagCount: 1, leftoverDiag: ["inc"] }],
+	["Q50 v : 5 inc ⏎ (v) 3（括っても同じ）", std(["v : 5 inc", "(v) 3"]), "(construct [v] 3)", "A", { diagCount: 1, leftoverDiag: ["inc"] }],
+	["Q50 v : 5 inc ⏎ inc v（v は 5。前は G7）", std(["v : 5 inc", "inc v"]), "(apply inc v)", "A", { diagCount: 1, leftoverDiag: ["inc"] }],
+	["Q50 v : 5 inc ⏎ v == 5（前は未知）", std(["v : 5 inc", "v == 5"]), "(== v 5)", "A", { diagCount: 1, leftoverDiag: ["inc"] }],
+	["Q50 v : 5 inc ⏎ v inc（v の後ろの inc は根で余る。知らせるのは書いた所ごとに1つ）", std(["v : 5 inc", "v inc"]), "(construct v (unit inc))", "A", { diagCount: 2, leftoverDiag: ["inc", "inc"] }],
+	["Q50 v : 5 add 1 ⏎ v 3（受けた後の関数も。前は G7）", std(["v : 5 add 1", "v 3"]), "(construct v 3)", "A", { leftoverDiag: ["(apply add 1)"] }],
+	["Q50 v : 5 inc double ⏎ v 3（合成も）", std(["v : 5 inc double", "v 3"]), "(construct v 3)", "A", { leftoverDiag: ["(compose inc double)"] }],
+	["Q50 v : 5 f2 !_ ⏎ v 3（穴の関数も）", std(["v : 5 f2 !_", "v 3"]), "(construct v 3)", "A", { leftoverDiag: ["(? [$p0 [~$p1]] (apply f2 (construct $p0 $p1~)))"] }],
+	["Q50 i : !_ ⏎ v : 5 i ⏎ v 3（恒等射は知らせない）", std(["i : !_", "v : 5 i", "v 3"]), "(construct v 3)", "A", { diagCount: 0, leftoverDiag: [] }],
+	// `,` が恒等射で消えて残った右辺の並びも、右辺の並びそのもの（R45）なので同じ
+	["Q50 v : 5 inc , !_ ⏎ v 3（前は G7）", std(["v : 5 inc , !_", "v 3"]), "(construct v 3)", "A", { diagCount: 1, leftoverDiag: ["inc"] }],
+	["Q50 v : !_ , 5 inc ⏎ v 3（前は G7）", std(["v : !_ , 5 inc", "v 3"]), "(construct v 3)", "A", { diagCount: 1, leftoverDiag: ["inc"] }],
+	["Q50 i : !_ ⏎ v : 5 inc , i ⏎ v 3（前は G7）", std(["i : !_", "v : 5 inc , i", "v 3"]), "(construct v 3)", "A", { leftoverDiag: ["inc"] }],
+	["Q50 v : 5 inc , !_ , !_ ⏎ v 3（前は G7）", std(["v : 5 inc , !_ , !_", "v 3"]), "(construct v 3)", "A", { leftoverDiag: ["inc"] }],
+	// 消えた後の形：名前を通しても `[1 2]` と同じ形で、括りの関数は同じ実体を使う
+	["Q50 v : 1 2 inc ⏎ tl v ⏎ tl [1 2]（実体は1つ）", std(["tl : [a ~r] ? r", "v : 1 2 inc", "tl v", "tl [1 2]"]), "(: tl (? [[a ~r]] (inst [N…] r)))", "A", { at: -4, leftoverDiag: ["inc"] }],
+	// 欄・局所の定義（R52 の片では外だった）
+	["Q50 st : ⏎ k : 5 inc（欄）", src([INC, "st :", "\tk : 5 inc", "\tj : 2", ""]), "(: st (block (: k (construct 5 (unit inc))) (: j 2)))", "A", { at: 1, diagCount: 1, leftoverDiag: ["inc"] }],
+	["Q50 q : x ? ⏎ y : x inc ⏎ y（局所の定義。局所の名前は今のまま未知）", std(["q : x ?", "\ty : x inc", "\ty", "", "q 3"]), "(apply q 3)", "未知", { diagCount: 1, leftoverDiag: ["inc"] }],
+	// 括りの欄も（主の Claude が 09:48 の Q51 の表で「対象外、知らせない」と挙げた形。2026-10-24 の確かめの指摘で足した）
+	["Q50 [a : 5 inc]（括りの欄。R52 の片では知らせなかった）", std("[a : 5 inc]"), "[a : 5 inc]", "A", { diagCount: 1, leftoverDiag: ["inc"] }],
+	// 右辺が丸ごと関数は今のまま L で、後から当てられる（10-22 22:14 のボタンの文の形）
+	["Q50 c1 : inc inc ⏎ c1 5（丸ごと関数は L のまま）", std(["c1 : inc inc", "c1 5"]), "(apply c1 5)", "A", { diagCount: 0 }],
+	["Q50 a1 : add 1 ⏎ a1 5（同じ）", std(["a1 : add 1", "a1 5"]), "(apply a1 5)", "A", { diagCount: 0 }],
+	["Q50 c1 : inc inc（定義の行も知らせない）", std("c1 : inc inc"), "(: c1 (compose inc inc))", null, { diagCount: 0 }],
+	["Q50 q : inc add 5 ⏎ q 3（流れの足りない合成も丸ごと関数）", std(["q : inc add 5", "q 3"]), "(apply q 3)", "A", { diagCount: 0 }],
+	["Q50 s : [+] 1 ⏎ s 2（並びの終わりで閉じる可変長の口は今のまま、R41 の読み5）", std(["s : [+] 1", "s 2"]), "(construct s 2)", "A", { diagCount: 0 }],
+	// Q52：`$[…]` の中身は遅延した式
+	["Q52 p : $[5 inc]（知らせない。前は中身の inc を知らせた）", std("p : $[5 inc]"), "(: p $[5 inc])", null, { diagCount: 0, leftoverDiag: [] }],
+	// 中身が値の `$[…]` は開けないので、知らせはどこにも出ない（書いた所の判定は外し、開く所の道は無い。開けない `@p` の所で知らせるかは
+	// §5 Q44 の残り。2026-10-24 の確かめの指摘で名前に書いた）
+	["Q52 p : $[5 inc] ⏎ @p 3（開けないので今のまま未知、§5 Q9。知らせはどこにも出ない、§5 Q44 の残り）", std(["p : $[5 inc]", "@p 3"]), "(apply @p 3)", "未知", { diagCount: 0 }],
+	["Q52 p : $[5 inc , !_]（`,` の恒等射で残った中身の並びも）", std("p : $[5 inc , !_]"), "(: p $[5 inc , !_])", null, { diagCount: 0 }],
+	["Q52 adder2 : m ? $[m inc]（本体の根の `$[…]` も）", std("adder2 : m ? $[m inc]"), "(: adder2 (? [m] $[m inc]))", null, { diagCount: 0 }],
+	["Q52 use $[5 inc] 3（実引数の `$[…]` も）", std("use $[5 inc] 3"), "(apply use (construct $[5 inc] 3))", "未知", { diagCount: 0 }],
+	["Q52 [$[5 inc]]（括りの中の `$[…]` も）", std("[$[5 inc]]"), "[$[5 inc]]", "A", { diagCount: 0 }],
+	["Q52 p : $[inc add 5]（丸ごと関数の中身は今までどおり L で、番地が運ぶ）", std(["p : $[inc add 5]", "use p 3"]), "(apply use (construct p 3))", "未知", { diagCount: 0 }],
+	// 中身の項の中は今のまま R52（遅延が中まで及ぶかは §5 Q53）。`@` で開く括りの中身も R52（開く所）
+	["Q52 p : $[(5 inc) 3]（入れ子の括りの中は今のまま当てる、§5 Q53）", std("p : $[(5 inc) 3]"), "(: p $[[5 inc] 3])", null, { leftoverDiag: ["inc"] }],
+	["Q52 p : $[5 inc == 6]（段4〜8 の辺は今のまま当てる、§5 Q53）", std("p : $[5 inc == 6]"), "(: p $[5 inc == 6])", null, { leftoverDiag: ["inc"] }],
+	["Q52 p : $[x ? x inc]（`?` の本体は今のまま当てる、§5 Q53）", std("p : $[x ? x inc]"), "(: p $[x ? x inc])", null, { leftoverDiag: ["inc"] }],
+	// 確かめの指摘で足した §5 Q53 の形（2026-10-24）：1項を括っただけの中身は、`$[5 inc]` と [x] ≅ x で同じ物なのに、今は括りの中として当てて
+	// 知らせが割れる。中身の行が段2 の `:` なら、右辺はほかの `:` の右辺と同じく当てる：欄の右辺は R52 の片では印 pointsTo で黙っていて、
+	// §5 Q50 の答えから新しく知らせる（今のままではない）。枝の値は前も今も当てる。木と種類はどれも前と同じ。
+	["Q53 p : $[(5 inc)]（1項の括りを重ねた中身は今は当てる。`$[5 inc]` とは知らせが割れる）", std("p : $[(5 inc)]"), "(: p $[[5 inc]])", null, { diagCount: 1, leftoverDiag: ["inc"] }],
+	["Q53 p : $[k : 5 inc]（中身の欄の右辺は今は当てる。R52 の片では黙っていた）", std("p : $[k : 5 inc]"), "(: p $[k : 5 inc])", null, { diagCount: 1, leftoverDiag: ["inc"] }],
+	["Q53 p : $[5 > 1 : 5 inc]（中身の枝の値は前も今も当てる）", std("p : $[5 > 1 : 5 inc]"), "(: p $[5 > 1 : 5 inc])", null, { diagCount: 1, leftoverDiag: ["inc"] }],
+	["Q52 @[5 inc] 3（`@` は開く所なので当てる）", std("@[5 inc] 3"), "(apply @[5 inc] 3)", "未知", { leftoverDiag: ["inc"] }],
+	// Q44：重さ（DIAG_SEVERITY の1か所）。warning でも断らない
+	["Q44 5 inc（leftover-lambda は warning）", std("5 inc"), "(construct 5 (unit inc))", "A", { severities: ["warning/leftover-lambda"] }],
+	["Q44 (5 inc) 3（R52 の知らせも warning）", std("(5 inc) 3"), "(construct [5 inc] 3)", "A", { severities: ["warning/leftover-lambda"] }],
+	["Q44 zz 5 inc（undefined-name は information のまま）", std("zz 5 inc"), "(construct zz 5 (unit inc))", "A", { severities: ["information/undefined-name", "warning/leftover-lambda"] }],
+	["Q44 [<<] 3 4 inc（pointfree-not-folded は information のまま）", std("[<<] 3 4 inc"), "(construct (apply [<<] (construct 3 4)) (unit inc))", "A", { severities: ["information/pointfree-not-folded", "warning/leftover-lambda"] }],
+];
+const closedRhsRefused = [
+	// 名前が 5 になったので、5 を置いた並びと同じ門に当たる（`gd 5 i`・`!_ 5 inc` と同じ）
+	["Q50 既定値のある go で v : 5 inc ⏎ go v i（`go 5 i` と同じ G2(a)。前は G7）", std([...GO_DEFAULT, "i : !_", "v : 5 inc", "go v i"]), "G2(a)"],
+	["Q50 v : 5 inc ⏎ !_ v inc（`!_ 5 inc` と同じ G18。前は G7）", std(["v : 5 inc", "!_ v inc"]), "G18"],
+	// Q52：中身を開けない `@p` の後ろに項（今のまま、§5 Q9）
+	["Q52 p : $[5 inc] ⏎ inc @p 3（`@p` が頭以外、§5 Q9）", std(["p : $[5 inc]", "inc @p 3"]), "G6"],
+];
+for (const [name, s, want, kind, extra] of closedRhsPasses) checkPass(`閉じた右辺 ${name}`, s, want, kind, extra);
+for (const [name, s, want, inst] of closedRhsRefused) checkRefused(`閉じた右辺 ${name}`, s, want, inst);
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

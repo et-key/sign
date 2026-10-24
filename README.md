@@ -42,8 +42,8 @@ config:
 graph LR
 
 subgraph Lambda
-    subgraph Identity [ Identity : !__ = _ ]
-        void( Void : __  )
+    subgraph Identity [ Identity : !_ ]
+        void( Void : _  )
     end
 end
 
@@ -52,7 +52,7 @@ subgraph Object[ Object = True ]
     Letter([ UTF ... etc ])
 
     subgraph List [ List ...etc ]
-        False( False : __ )
+        False( False : _ )
     end
 end
 

@@ -6,13 +6,14 @@
  * R40〜R43 に替えて廃止。R44〜R46 は同じ日の、口の外の `!_` は恒等射・恒等射は `,` の単位。R12・R14・R37 は 2026-10-24 に、逆適用の
  * 廃止（R47）で廃止。R48 は同じ日の、余ったラムダの診断。R49〜R51 は同じ日の**試し**（番地は指す関数を運ぶ・`[F,]` の写像・撒いた並びは
  * 流れの1項。利用者「試しにやってみよう！…悪ければロールバックしよう。」。戻す道は §7.23）。R52 は同じ日の、評価する所の外でも、値の上に
- * 積まれて何も受けずに閉じた関数は余ったラムダ）、§1.2 の P1〜P3、§2 の表の「する」の行）
+ * 積まれて何も受けずに閉じた関数は余ったラムダ。同じ日の §5 Q50〜Q52・Q44 の答えで、`:` の右辺にも当て、`$[…]` の中身は遅延した式で
+ * 判定せず、知らせの重さは warning）、§1.2 の P1〜P3、§2 の表の「する」の行）
  * だけである。90% 以下の所は §6.2 の
  * 門（G1〜G19（G14 は 2026-10-21、G17 と G1 は 2026-10-22、G12 は 2026-10-23、G8 と G9 は 2026-10-24 に廃止。G19 は 2026-10-24 の試し）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
  * 答えが出たときに、その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
  *
  * 入り口は `resolve(source)` の1つで、`{ trees, diagnostics }` を返す。trees は1行に1つの木、diagnostics は
- * 止めない診断（information の undefined-name・pointfree-not-folded・leftover-lambda）。門に当たったら OperationError を投げる（reason は §6.2 の名前、
+ * 止めない診断（information の undefined-name・pointfree-not-folded と、warning の leftover-lambda。重さは DIAG_SEVERITY の1か所）。門に当たったら OperationError を投げる（reason は §6.2 の名前、
  * spec は `…§6.2 G2(a)` のように門の番号まで、`gate` に門の番号）。
  *
  * **木の書き方（`show`）**。§1.3・§6.3 の S 式に合わせ、無い所はここで決めた。
@@ -26,9 +27,12 @@
  *   無くなった。renderEntry の注）。
  * - 評価する所（定義でない行の根の並び、R42）の終わりに残った未評価のラムダは `_` になり、木では元の木を `(unit …)` で包む
  *   （`inc add 5` は `(unit (apply (compose inc add) 5))`、種類は A。`5 inc` は `(construct 5 (unit inc))`）。恒等射でなければ、
- *   information の leftover-lambda で知らせる（R48）。評価する所の外（左が名前1つの `:` の右辺の並びを除く）でも、値の上に積まれて口の開いた
- *   まま閉じた関数（何も受けない物も、受けた後の物も、穴の関数も）は同じく `(unit …)` で包み、知らせる（R52、2026-10-24。`(5 inc)` の中身は
- *   `(construct 5 (unit inc))`、`(5 add 1)` は `(construct 5 (unit (apply add 1)))`、種類は A）。構築の中の `(unit …)` は値の形・要素・数に
+ *   warning の leftover-lambda で知らせる（R48。重さは 2026-10-24 の §5 Q44 の答えで information から上げた）。評価する所の外でも、値の上に
+ *   積まれて口の開いたまま閉じた関数（何も受けない物も、受けた後の物も、穴の関数も）は同じく `(unit …)` で包み、知らせる（R52、2026-10-24。
+ *   `(5 inc)` の中身は `(construct 5 (unit inc))`、`(5 add 1)` は `(construct 5 (unit (apply add 1)))`、種類は A）。左が名前1つの `:` の右辺の
+ *   並びも同じ（`v : 5 inc` の右辺は `(construct 5 (unit inc))` で、v は 5。§5 Q50 の答え）。除くのは `$[…]` の中身の並びだけで、遅延した式
+ *   なので書いたとおり（`$[5 inc]` の中身は `(construct 5 inc)`、知らせない。§5 Q52 の答え。中身の項の中と、中身の行の `:` の右辺には
+ *   今のまま当てる。§5 Q53、resolveDelayed の注）。構築の中の `(unit …)` は値の形・要素・数に
  *   入れない（vanishedOne）。
  * - 葉は項そのもの。名前は `<>` を外した綴り、字面は書いたまま、印は核に付けて書く（`$inc`・`xs~`・`-x!`・`!_`）。
  * - 中置の項は綴りを頭にした `(+ 1 2)`。欠けた被演算子は `·`。
@@ -1163,15 +1167,23 @@ function touchName(name, ctx) {
   if (!ctx.F.defs.has(name) && !imported) reportUndefined(name, ctx);
 }
 
+// 止めない診断の重さ（§6.2 の門の表の「（情報）」「（警告）」の行）。重さはここの1か所で決め、出す所（pushDiag）は名前で引く。
+// 2026-10-24 までは、どの診断も information で、出す所ごとに重さを書いていた。leftover-lambda は同じ日の §5 Q44 の答えで warning にした：
+// 主の Claude「逆適用を廃止した後は、値の後ろに積まれて余る関数は、まず書き間違い（昔の逆適用の書き癖）だと思う。…warning に上げるのが
+// 筋だと僕は思う。」に、U〔答え〕[2026-10-24 09:49 ebf18260]「全てその方向で良いと思う。」。warning でも断らない（止めない）のは今までどおり。
+const DIAG_SEVERITY = {
+  "undefined-name": "information",
+  "pointfree-not-folded": "information",
+  "leftover-lambda": "warning",
+};
+function pushDiag(ctx, reason, name, message) {
+  ctx.diag.push({ severity: DIAG_SEVERITY[reason], reason, name, message });
+}
+
 function reportUndefined(name, ctx) {
   if (!ctx.diag || ctx.F.reported.has(name)) return;
   ctx.F.reported.add(name);
-  ctx.diag.push({
-    severity: "information",
-    reason: "undefined-name",
-    name,
-    message: `\`${name}\` は定義されていません。値として読み、値は値の段で決めます（§4 R21）。`,
-  });
+  pushDiag(ctx, "undefined-name", name, `\`${name}\` は定義されていません。値として読み、値は値の段で決めます（§4 R21）。`);
 }
 
 // 畳まない2項の点なし（R32）を読んだ所。「おすすめは出来ない」（U〔答え〕2026-10-21 10:52「同じに読んでいいけど、おすすめは
@@ -1181,12 +1193,7 @@ function reportUndefined(name, ctx) {
 function reportNotFolded(row, sym, ctx) {
   if (!ctx.diag || ctx.F.reportedPf.has(row)) return;
   ctx.F.reportedPf.add(row);
-  ctx.diag.push({
-    severity: "information",
-    reason: "pointfree-not-folded",
-    name: `[${sym}]`,
-    message: `\`[${sym}]\` は畳めない2項の点なしなので、素の2引数の関数として読みました。おすすめはしません（§4 R32、§5 Q34）。`,
-  });
+  pushDiag(ctx, "pointfree-not-folded", `[${sym}]`, `\`[${sym}]\` は畳めない2項の点なしなので、素の2引数の関数として読みました。おすすめはしません（§4 R32、§5 Q34）。`);
 }
 
 // ---- 仮置きの記録（§3.4「再帰は、A と仮置きして一巡し、食い違えばその関数を未知にし、外れた仮置きに頼った答えは確定した値で解き直す」） ----
@@ -1629,7 +1636,9 @@ function nameKindOf(F, def) {
   const restoreNest = freshNest(F);
   let value;
   try {
-    const root = resolveRhs(def.rhs, { F, scope: F.fileScope, diag: null }); // 定義の行と同じ道（resolveRhs の注、R52）
+    // 定義の行（resolveDefine）と同じ道で右辺を解く。右辺は閉じた1つの項で、ほかの並びと同じく R52 を当てる（`v : 5 inc` の v は 5。§5 Q50 の
+    // 答え、resolveDefine の注）。片方だけ当てると、定義の行と名前の種類が割れる（R52 の最初の版で作る途中に見つけた）。
+    const root = resolveTree(def.rhs, { F, scope: F.fileScope, diag: null });
     value = { k: root.kind.k, fn: root.kind.fn };
     // `:` はメタなので、名前は右辺の式の印を持ち越す（R42 の読み7）：`w : vs~` の w は撒く項のまま（`inc w` は `inc vs~` と同じく
     // 未知、`w inc` は `vs~ inc` と同じく inc を積む。2026-10-23 までは G9）。前は撒く印が落ちて、`inc w` が A、`inc vs~` が未知で割れていた。
@@ -2563,9 +2572,9 @@ function classify(term, ctx) {
   }
   // `$` が前に付いた項（名前・括り・`!_`・`_`）は値（§2、96）。`$_` は数えて 1（R27、U〔答え〕10-21 03:01「||$_|| = 1」）。
   // 2026-10-24 の試し（R49）：名前か括りが関数なら、番地は指す関数の fn を印 ref に持つ（A のまま。`@x` が口の数を知る）。名前は値の
-  // 定義を解かずに覗く（peekDesc）。
+  // 定義を解かずに覗く（peekDesc）。括りの中身は遅延した式で、R52 の判定をしない（resolveDelayed、§5 Q52 の答え）。
   if (post.length === 0 && pre.length === 1 && pre[0] === "$" && (core.c === "name" || core.c === "bracket")) {
-    const d = pointedDesc(core, ctx);
+    const d = pointedDesc(core, ctx, true);
     return plain(d && d.k === "L" && d.fn ? { k: "A", ref: d.fn } : A());
   }
   if (post.length === 0 && pre.length === 1 && pre[0] === "$" && core.c === "unit") return plain(A());
@@ -2603,13 +2612,13 @@ function classify(term, ctx) {
 }
 
 // `$x`・`@x` の x の desc（R49、試し）。名前は値の定義を解かずに覗き（peekDesc。未定義なら information だけ出す、touchName）、
-// 括りは解く（前の touchCore と同じ）。
-function pointedDesc(core, ctx) {
+// 括りは解く（前の touchCore と同じ）。delayed は `$x` の x（括りの中身は遅延した式、resolveDelayed）。`@x` の x は開く所なので false。
+function pointedDesc(core, ctx, delayed = false) {
   if (core.c === "name") {
     touchName(core.name, ctx);
     return peekDesc(core.name, ctx);
   }
-  return bracketInfo(core, ctx).desc;
+  return bracketInfo(core, ctx, delayed).desc;
 }
 
 function touchCore(core, ctx) {
@@ -2734,13 +2743,14 @@ function litDesc(core) {
 }
 
 // 括りの種類（§2）。点なしを先に見る（点なしの行は被演算子が欠けているので、並びとしては解けない）。
-function bracketInfo(core, ctx) {
+// delayed は `$[…]` の中身（遅延した式で、行の並びに R52 の判定をしない。resolveDelayed）。
+function bracketInfo(core, ctx, delayed = false) {
   if (core.rows.length === 0) return { desc: { k: "A", elements: [] }, trees: [], isQ: false };
   if (core.rows.length === 1) {
     const pf = pointfreeOf(core.rows[0], ctx);
     if (pf) return { desc: pf, trees: [], isQ: false };
   }
-  return rowsInfo(core.rows, ctx);
+  return rowsInfo(core.rows, ctx, delayed);
 }
 
 // 字下げのブロック（`?` の本体でない所。構造体や中置の右）。点なしは括りでだけ書けるので見ない。
@@ -2748,10 +2758,10 @@ function blockInfo(core, ctx) {
   return rowsInfo(core.rows, ctx);
 }
 
-function rowsInfo(rows, ctx) {
+function rowsInfo(rows, ctx, delayed = false) {
   const scope = blockScope(rows, ctx);
   const inner = scope ? { ...ctx, scope } : ctx;
-  const trees = rows.map((r) => resolveTree(r, inner));
+  const trees = rows.map((r) => (delayed ? resolveDelayed(r, inner) : resolveTree(r, inner)));
   if (trees.length >= 2) {
     const desc = { k: "A", elements: trees.map(elementKind) };
     const sh = rowsShape(trees);
@@ -2997,11 +3007,15 @@ function resolveTree(tree, ctx) {
 
 // `:`（R3、P3）。左は、1項なら解かない（定義・欄・既定値の左はいつも1項）。2項以上なら枝の条件として解く。
 // fieldName は左が1語の裸の名前のときの名前で、括りやブロックの行なら構造体の欄の名前になる（rowsShape、R24）。
-// 左が名前1つの `:`（定義・欄・局所の定義。isNameTarget）の右辺の並びは、式を指すだけ（U〔答え〕10-22 22:14「定義は式を指す」）なので、
-// 値の上に積まれて口の開いたまま閉じた関数もラムダのまま残す（R52 の外。印 pointsTo を付けて resolveSeq に渡す。右辺が `,` で、恒等射で
-// 消えて並びだけが残ったときも、その並びは右辺の並び、resolveRhs）。右辺の並びの項の中（括り・囲み）と、右辺が並びでない形（`?`・段4〜8・
-// 消えない `,` の辺）の中の並びは、ほかの所と同じく R52 を当てる。左が名前でない `:`（枝。1項の `x > 1 : …`・`(c) : …` も、2項以上の
-// `inc x : …` も）の右辺は枝の値で、R52 を当てる（§4 R52 の R の所。どの `:` の右辺を除くかは §5 Q51）。
+// 右辺は、左が名前1つの `:`（定義・欄・局所の定義）でも枝でも、ほかの並びと同じく解き、R52 を当てる。名前は右辺を閉じた1つの項として
+// 指す（R42 の読み7）：`v : 5 inc` の右辺は `(construct 5 (unit inc))` で v は 5、inc は定義の行で知らせ、`v 3` は `5 3`。右辺が丸ごと
+// 関数（`c1 : inc inc`・`a1 : add 1`）は、値の上に積まれていないので今のまま L（`c1 5`・`a1 5` は当たる）。
+// 根拠：§5 Q50 で主の Claude は、字面どおり（`v 3` を `5 (inc 3)`）に読むと名前が自分の値を持たない・括ると意味が変わる・使う所ごとに解き
+// 直す・得る物が小さいと挙げ、「閉じた1つの項として読む（v は 5、定義の所で inc を知らせる）に傾いてる」と書いた（2026-10-24 09:48 UTC）。
+// U〔答え〕[2026-10-24 09:49 ebf18260]「全てその方向で良いと思う。」。2026-10-24 の R52 の最初の版から同じ日のこの片までは、左が名前1つの
+// `:` の右辺の並びを R52 の外にしていた（印 pointsTo。U〔答え〕10-22 22:14 のボタンの文「`:` はメタなので、右辺の余ったラムダは `_` に
+// しない」から。その文は主の Claude の物で、右辺が丸ごと関数の形について今も残り、値の上に積まれた形は Q50 の答えで上書きされた）。
+// 枝の値も同じく当てる（§5 Q51 は、今の答えのまま閉じた）。
 function resolveDefine(tree, ctx) {
   let left = null;
   let isLocalDef = false;
@@ -3023,19 +3037,31 @@ function resolveDefine(tree, ctx) {
     if (n && ctx.scope.locals && ctx.scope.locals.has(n)) isLocalDef = true;
     fieldName = n;
   } else left = resolveTree(tree.left, ctx);
-  const right = oneLeft && isNameTarget(tree.left.terms[0]) ? resolveRhs(tree.right, ctx) : resolveTree(tree.right, ctx);
+  const right = resolveTree(tree.right, ctx);
   return { t: "op", sym: ":", left, right, kind: A(), isLocalDef, fieldName };
 }
 
-// 左が名前1つの `:` の右辺を解く（R52 の外の印 pointsTo は、右辺が並びか `,` のときだけ付ける）。定義の行（resolveDefine）と、名前の種類を
-// 引く所（nameKindOf）は、同じこの道で右辺を解く：片方だけ R52 を当てると、`v : 5 inc` の定義の行は未知の構築なのに、`v 3` の v は値と読む。
-// 右辺が `,` なら、印は resolveProduct に渡し、`,` が恒等射で消えて並びだけが残ったときだけ、その並びに効かせる（R45：`v : 5 inc , !_` は
-// `v : 5 inc` と同じ右辺の並び。2026-10-24 の確かめの指摘。前は `,` の木に印を付けず、`v : 5 inc` は v が未知で `v 3` が G7 なのに、
-// `v : 5 inc , !_` は v が値で `v 3` が通っていた）。消えない `,` の辺は右辺の並びそのものではないので、印は渡さない。
-function resolveRhs(rhs, ctx) {
-  if (rhs && rhs.type === "seq") return resolveSeq(rhs.terms, { ...ctx, pointsTo: true });
-  if (rhs && rhs.sym === ",") return resolveTree(rhs, { ...ctx, pointsTo: true });
-  return resolveTree(rhs, ctx);
+// `$[…]` の中身の行を解く（rowsInfo の delayed）。`$` は物にする＝遅延なので、中身は書いた所では評価しない遅延した式で、R52 の判定をしない：
+// 値の上に積まれて口の開いたまま閉じた関数も、ラムダのまま書いたとおりに残し、知らせない（`p : $[5 inc]` の中身は `(construct 5 inc)`）。
+// 判定は `@` で開いた所でする（開いた所の読みは §5 Q50 の閉じた1つの項。今の解決器では、中身が関数でない `$[5 inc]` の `@p` は開けず、
+// 今のまま未知。§5 Q9）。だからその形では、書いた所の判定を外した上に開く所で判定する道も無く、知らせはどこにも出ない（HEAD a70fb89b では
+// 定義の行で1つ出ていた。開けない `@p` の所で知らせるかは §5 Q44 の残り。2026-10-24 の確かめの指摘）。
+// 根拠：U [2026-10-24 09:46 ebf18260]「Q52は最初からそのつもりだったしその方が良いと考えてたけど…違うなら違うと言って」（問いは
+// 「`$[…]` の中身も、式を指すだけと読むか」）。主の Claude「`$` は「物にする＝遅延」なので、`$[…]` を書いた所では中身を評価しない。
+// 評価しない所で「余った」と判定するのは筋違いだね。…判定は、`@p` で開いた所ですればいい。」（09:48 UTC）に、U〔答え〕[2026-10-24 09:49
+// ebf18260]「全てその方向で良いと思う。」。
+// 印 delayed（closeIdle を外す）を付けるのは、行が並びか `,` のときだけで、効くのは行の並びそのものと、`,` が恒等射で消えて残った並び
+// （R45：`$[5 inc , !_]` は `$[5 inc]` と同じ。resolveProduct）だけ。中身の項の中（入れ子の括り `$[(5 inc) 3]`・1項を括っただけの
+// `$[(5 inc)]`・囲み・`?` の本体 `$[x ? x inc]`・段4〜8 の辺 `$[5 inc == 6]`・消えない `,` の辺）は、ほかの所と同じく R52 を当てる（遅延が
+// 中まで及ぶかは訊いていない、§5 Q53。今のまま）。中身の行が段2 の `:`（欄 `$[k : 5 inc]`・枝 `$[5 > 1 : 5 inc]`）なら、印は付けず、右辺は
+// ほかの `:` の右辺と同じく当てる（resolveDefine。これも §5 Q53）。枝の値は今のままだが、欄の右辺は R52 の片では印 pointsTo で外だったので、
+// §5 Q50 の答えから新しく知らせる（HEAD では黙っていた。2026-10-24 の確かめの指摘）。`$` に別の印の付いた括り（`$[…]~` など、表に無い
+// 組み合わせで未知）も今のまま。
+// 2026-10-24 の R52 の片では、同じ印を pointsTo の名前で左が名前1つの `:` の右辺に付けていた（§5 Q50 の答えで外した）。
+function resolveDelayed(row, ctx) {
+  if (row && row.type === "seq") return resolveSeq(row.terms, { ...ctx, delayed: true });
+  if (row && row.sym === ",") return resolveTree(row, { ...ctx, delayed: true });
+  return resolveTree(row, ctx);
 }
 
 // 1項の `:` の左が名前（定義・欄・局所の定義の左。公開の `#` 付きも）か。名前でない1項（`(t [1 2]) : 1`）は枝の
@@ -3176,14 +3202,15 @@ function namesPattern(name, ctx, inDefault) {
 // （vanishedSeq。単位律で `2 , !_ , inc 1` は `2 , inc 1` で G3。2026-10-24 の確かめで直した。前は中の `,` が消えた後の並びを外の `,` が
 // 見直さず、`(, 2 (apply inc 1))` で通していた）。
 //
-// 印 ctx.pointsTo（左が名前1つの `:` の右辺の `,`、resolveRhs）：`,` が恒等射で消えて並びだけが残れば、その並びは右辺の並びそのもの（R45）
-// なので、R52 の外（reduceItems の closeIdle を外す）。中の `,` の辺（右結合の `5 inc , !_ , !_` の右）にも印を渡す。消えない `,` の辺と、
-// 辺の項の中（括り・中置の辺）は右辺の並びそのものではないので、印を外して解く（R52 を当てる）。
+// 印 ctx.delayed（`$[…]` の中身の行の `,`、resolveDelayed）：`,` が恒等射で消えて並びだけが残れば、その並びは中身の行の並びそのもの（R45）
+// なので、遅延した式として R52 の判定をしない（reduceItems の closeIdle を外す）。中の `,` の辺（右結合の `5 inc , !_ , !_` の右）にも印を
+// 渡す。消えない `,` の辺と、辺の項の中（括り・中置の辺）は中身の行の並びそのものではないので、印を外して解く（R52 を当てる）。
+// 2026-10-24 の R52 の片では、同じ印を pointsTo の名前で左が名前1つの `:` の右辺に付けていた（§5 Q50 の答えで外した、resolveDefine の注）。
 function resolveProduct(tree, ctx) {
   if (isBlockSeq(tree.left)) throw refuseIndentBlock("`,` の左");
-  const pointsTo = !!ctx.pointsTo;
-  const cx = pointsTo ? { ...ctx, pointsTo: false } : ctx;
-  const sideCtx = (side) => (pointsTo && side && side.type !== "seq" && side.sym === "," ? ctx : cx);
+  const delayed = !!ctx.delayed;
+  const cx = delayed ? { ...ctx, delayed: false } : ctx;
+  const sideCtx = (side) => (delayed && side && side.type !== "seq" && side.sym === "," ? ctx : cx);
   const both = [tree.left, tree.right];
   const isMulti = (side) => !!side && side.type === "seq" && side.terms.length >= 2;
   const multi = both.map(isMulti);
@@ -3200,7 +3227,7 @@ function resolveProduct(tree, ctx) {
       } catch (e) {
         if (!(e instanceof OperationError)) throw e;
       }
-      if (isIdentity(other)) return reduceItems(sides[j], cx, false, !pointsTo);
+      if (isIdentity(other)) return reduceItems(sides[j], cx, false, !delayed);
     }
     throw gate("G3", `\`,\` の被演算子 \`${writeTree(both[j])}\` は関数か種類の未知な物を含む余積の並びです。括って書きます（§5 Q3）。`);
   }
@@ -3445,7 +3472,7 @@ function blockBodyKind(rows) {
 // - いちばん上 A か空：次の項を積む（次が A なら構築。次が L も積み、積まれた L は、その後に来る項を右から受ける。関数は右からだけ受ける）
 // 可変長の口（最後の括り `[~c]`、畳む点なし、`[* 2,]` など）は並びの終わりまで受け、1つ以上受けていれば終わりで閉じる（R41）。
 // 評価する所（`:` の右辺でない行の根の並び）で、終わりに未評価のラムダが残れば `_` になり、並びの中では消える（R42・R15）。そのとき
-// 恒等射でなければ information で知らせる（R48、reportLeftover）。評価する所の外でも（左が名前1つの `:` の右辺の並びを除く）、終わりに
+// 恒等射でなければ warning で知らせる（R48、reportLeftover）。評価する所の外でも（`:` の右辺も。除くのは `$[…]` の中身の並びだけ）、終わりに
 // 値の上に積まれて口の開いたまま閉じた関数が残れば、同じく `_` で、知らせる（R52、2026-10-24。受けた後の関数・穴の関数も、手順7）。
 // 書いた `_` と `!_` は、口を1つ埋める所で読む（R43）。
 // 根拠：U [2026-10-23 13:12 ebf18260]「いやこれ、むしろ2引数を断るなら逆適用の意味が余計に薄い上に構文が乱れる元だから、廃止だね。
@@ -3474,13 +3501,13 @@ function leafOf(term, c) {
 
 // 評価する所（R42）は、resolve が行の根の並びに付けた印 ctx.evaluate だけ。項の中（括り・囲み・中置）は評価する所でないので、
 // 印を外してから項を作る。
-// 印 ctx.pointsTo は、左が名前1つの `:` の右辺の並び（resolveDefine・resolveRhs）。そこだけは、値の上に積まれて口の開いたまま閉じた関数を
-// ラムダのまま残す（R52 の外）。項の中は右辺の並びそのものではないので、これも外してから項を作る。
+// 印 ctx.delayed は、`$[…]` の中身の行の並び（resolveDelayed）。そこだけは遅延した式なので、値の上に積まれて口の開いたまま閉じた関数を
+// ラムダのまま残す（R52 の判定をしない、§5 Q52 の答え）。項の中は中身の行の並びそのものではないので、これも外してから項を作る。
 function resolveSeq(terms, ctx) {
   const evaluate = !!ctx.evaluate;
-  const pointsTo = !!ctx.pointsTo;
-  const inner = evaluate || pointsTo ? { ...ctx, evaluate: false, pointsTo: false } : ctx;
-  return reduceItems(classifyItems(terms, inner), inner, evaluate, !pointsTo);
+  const delayed = !!ctx.delayed;
+  const inner = evaluate || delayed ? { ...ctx, evaluate: false, delayed: false } : ctx;
+  return reduceItems(classifyItems(terms, inner), inner, evaluate, !delayed);
 }
 
 // 0. 項を作る。字下げのブロックは並びの項にならない（§2、refuseIndentBlock の注）。
@@ -3489,8 +3516,8 @@ function classifyItems(terms, ctx) {
   return terms.map((t) => leafOf(t, classify(t, ctx)));
 }
 
-// closeIdle は、値の上に積まれて口の開いたまま閉じた関数を余ったラムダにする並びか（R52。左が名前1つの `:` の右辺の並びと、その `,` が恒等射で
-// 消えて残った並びだけ false）。
+// closeIdle は、値の上に積まれて口の開いたまま閉じた関数を余ったラムダにする並びか（R52。`$[…]` の中身の行の並びと、その `,` が恒等射で
+// 消えて残った並びだけ false。遅延した式、§5 Q52 の答え。resolveDelayed）。
 function reduceItems(items, ctx, evaluate = false, closeIdle = true) {
   // 1項の並びは、その項そのもの（手順の3）。`!_` 1つは恒等射（L）、書いた `_` 1つは印（A）にする（single）。
   if (items.length === 1) return finishTrees([single(items[0])], evaluate, ctx);
@@ -3576,14 +3603,15 @@ function subHole(st, i, ctx) {
 }
 
 // 積み上げを木にする。評価する所（R42）で、いちばん上に未評価のラムダが残れば `_`：木では元の木を `(unit …)` で包む（§1.3）。
-// そのとき、恒等射でなければ information で知らせる（R48、reportLeftover）。
-// 評価する所の外（左が名前1つの `:` の右辺の並びを除く）でも、いちばん上が値の上に積まれて口の開いたまま閉じた関数（at がある）なら、
+// そのとき、恒等射でなければ warning で知らせる（R48、reportLeftover）。
+// 評価する所の外（`:` の右辺も。`$[…]` の中身の並びを除く）でも、いちばん上が値の上に積まれて口の開いたまま閉じた関数（at がある）なら、
 // 同じく `_` にして知らせる（R52、2026-10-24）。逆適用は無い（R47）ので、値の後ろの関数は前の値を取らず、並びが閉じた後に実引数を受ける
 // 道も無い（`(5 inc) 3` の 3 は括りの外の項で、括りの中の inc には届かない）。値の上で受けた後の関数（`(5 add 1)`）と穴の関数（`(5 f2 !_)`）も
 // 同じ（法則5 で `(5 (add 1))`・`(5 (f2 !_))` と同じ、reduceItems の手順7）。並び全体が1つの関数（下に値が無い）なら、評価する所の外では
 // 今までどおりラムダのまま残す（括りの中なら後から当てられる。辺・本体などに広げるかは §5 Q37）。
-// 2項以上なら構築（R8：子の構築は開いて並べる）。いちばん上が関数で下に値がある構築が残るのは、左が名前1つの `:` の右辺の並び
-// （`v : 5 inc`。R52 の外）だけで、種類を決めない（未知）：値の並びの後ろに、まだ口の開いた関数が残った物（§5 Q38 の残り・Q50）。
+// 2項以上なら構築（R8：子の構築は開いて並べる）。いちばん上が関数で下に値がある構築が残るのは、`$[…]` の中身の並び（`$[5 inc]`。遅延した
+// 式で R52 の判定をしない）だけで、種類を決めない（未知）：値の並びの後ろに、まだ口の開いた関数が残った物（§5 Q38・Q52）。2026-10-24 の
+// §5 Q50 の答えまでは、左が名前1つの `:` の右辺の並び（`v : 5 inc`）もここだった。
 // 積み上げの中で口の開いた関数が残るのは、いちばん上だけである：積んだ関数は次の項を受けるか合成し（R47）、口が全部埋まれば値になる。
 function finishTrees(trees, evaluate, ctx, at = null) {
   const last = trees.length - 1;
@@ -3603,9 +3631,10 @@ function leftoverUnit(tree, ctx, at = null) {
   return { t: "unit", inner: tree, kind: A() };
 }
 
-// R48：評価する所の終わりに余った未評価のラムダは、断らずに information で知らせる（`5 inc` を 6 のつもりで書いても、黙って 5 に
+// R48：評価する所の終わりに余った未評価のラムダは、断らずに知らせる（`5 inc` を 6 のつもりで書いても、黙って 5 に
 // なる所。主の Claude の問い「…根でラムダが余って `_` になったら診断で知らせる。これでいい？」に U〔答え〕[2026-10-23 15:32 ebf18260]
-// 「合ってる。 それでOK！」）。重さは information（今の診断の重さ。上げるかは §5 Q44）。名前と言い分は実装する人が決めた。
+// 「合ってる。 それでOK！」）。重さは warning（DIAG_SEVERITY。2026-10-24 の §5 Q44 の答えで information から上げた。断らないのは今までどおり）。
+// 名前と言い分は実装する人が決めた。
 // 知らせないのは、余ったのが恒等射のとき（`!_`・`i : !_` の i・恒等射どうしの合成。落としても当てても値が同じなので、失う物が無い。
 // `5 !_` は 5、根に1つの `!_` は `_` で、U [2026-10-22 23:41 ebf18260]「…!_ だけを評価したら _ に戻るのは都合がいいねって話。」）。
 // 恒等射どうしの合成（`i i`）を恒等射に数えるのは、圏の単位律（id ; id = id）から（R）。
@@ -3618,14 +3647,14 @@ function reportLeftover(tree, ctx, at = null) {
     ctx.F.reportedLeft.add(at);
   }
   const name = show(tree);
-  ctx.diag.push({
-    severity: "information",
-    reason: "leftover-lambda",
+  pushDiag(
+    ctx,
+    "leftover-lambda",
     name,
-    message: at
+    at
       ? `未評価のラムダ \`${name}\` が値の上に積まれ、口が開いたまま並びが閉じたので、\`_\` になりました。並びの中では消えます（§4 R48・R52）。逆適用は廃止なので（R47）、値の後ろの関数は前の値を取らず、並びが閉じた後に実引数を受けることもありません。当てるつもりなら、実引数を関数の後ろに書きます。`
-      : `未評価のラムダ \`${name}\` が評価する所の終わりに余ったので、\`_\` になりました。並びの中では消えます（§4 R42・R48）。当てるつもりなら、実引数を関数の後ろに書きます（逆適用は廃止、R47）。`,
-  });
+      : `未評価のラムダ \`${name}\` が評価する所の終わりに余ったので、\`_\` になりました。並びの中では消えます（§4 R42・R48）。当てるつもりなら、実引数を関数の後ろに書きます（逆適用は廃止、R47）。`
+  );
 }
 
 // 種類が恒等射（`!_`・`i : !_` の i・恒等射だけの合成）か。
@@ -4756,11 +4785,11 @@ export function resolve(source) {
     reported: new Set(),
     // 畳まない2項の点なしの information を出した、書いた所（reportNotFolded）。
     reportedPf: new Set(),
-    // 評価する所の外で余ったラムダ（R52）の information を出した、積まれた関数の書いた所（reportLeftover）。
+    // 評価する所の外で余ったラムダ（R52）の warning を出した、積まれた関数の書いた所（reportLeftover）。
     reportedLeft: new Set(),
     // 括りの関数の実体（R24・R25）：鍵 → 実体、書いた `?` → 範囲の鍵 → その `?` を通って呼んだ実体（recordCall）、
     // 根の種類の仮置きの記録、木を解いている途中の実体、定義の行の `?` の木（最後に実体で埋める）、実体の本体の
-    // information の出し先。
+    // 診断の出し先。
     instances: new Map(),
     // 書いた `?` → それを通って呼んだ確定した実体の集まり（INSTANCE_TOTAL_LIMIT）、作って外れていない実体の数
     // （INSTANCE_WORK_LIMIT）。
