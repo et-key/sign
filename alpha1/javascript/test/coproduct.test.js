@@ -86,8 +86,10 @@ const passes = [
 	// 当てた適用の後ろに余りを並べた構築。前は `(apply d (construct 1 2))` に印 excess（根でだけ通る）だった。
 	["d 1 2（余りは後ろに積む、R35）", std("d 1 2"), "(construct (apply d 1) 2)", "A", { leftover: true }],
 	["[+ 1] 1 2 3（余りは後ろに積む、R35。値は U〔答え〕09-28 00:58 の [2 2 3]）", std("[+ 1] 1 2 3"), "(construct (apply [+ 1] 1) 2 3)", "A", { leftover: true }],
-	["[+ 1] [1 2 3]~（未知の根）", std("[+ 1] [1 2 3]~"), "(apply [+ 1] [1 2 3]~)", "未知"],
-	["[+] [1 2 3]~（未知の根）", std("[+] [1 2 3]~"), "(apply [+] [1 2 3]~)", "未知"],
+	// 2026-10-24 の試し（R51）：撒いた並びは流れの1項で、口が1つの `[+ 1]` は写像（値は [2 3 4]）。前は撒く項で k を数えないので未知の根。
+	["[+ 1] [1 2 3]~（R51 の写像、試し。前は未知の根）", std("[+ 1] [1 2 3]~"), "(apply [+ 1] [1 2 3]~)", "A"],
+	// 畳む点なしは最後の口が可変長なので、流れを丸ごと受ける（R51）。種類は今までどおり未知（§5 Q46）。
+	["[+] [1 2 3]~（未知の根。R51 でも丸ごと受けて今のまま）", std("[+] [1 2 3]~"), "(apply [+] [1 2 3]~)", "未知"],
 	// 畳む2項の点なしに List 1つは、要素を並びとして畳む（R31。U〔答え〕10-07 05:10 は `[+] ([< 3,] 1 5 2)` を 3）。ここの括りの中は
 	// `[< 3,]` の結果（中身の見えない A）なので、要素が全部 A とは見えず、今までどおり未知（R31 の1項。R31 の最初の版は A にしていた）。
 	["[|] ([< 3,] 5 1 2)（未知の根）", std("[|] ([< 3,] 5 1 2)"), "(apply [|] [[< 3,] 5 1 2])", "未知"],
@@ -212,6 +214,8 @@ const GATE_REASON = {
 	G16: "coproduct-bare-function-return",
 	// G17（coproduct-manual-curry）は 2026-10-22 に廃止（答えは U〔答え〕10-21 22:46、UTC。resolve.js の写しと同じ）。
 	G18: "coproduct-identity-row",
+	// G19 は 2026-10-24 の試し（R51。撒いた流れを受ける口の数が決まらない。resolve.js の写しと同じ）。
+	G19: "coproduct-stream-arity",
 };
 
 
@@ -695,7 +699,8 @@ const holeCountPasses = [
 	// 最後の括り `[~c]` が受けている間に来た inc は合成の後ろ（R41）。木は入れ子の適用（R47 で `·rev` の綴りが無くなった。前は
 	// `(apply inc (apply [f3 !_ 2] (construct 1 3)) ·rev)` で、名前は「逆適用の左」）。
 	["(f3 !_ 2) 1 3 inc（最後の括りが受けている間の合成）", std("(f3 !_ 2) 1 3 inc"), "(apply inc (apply [f3 !_ 2] (construct 1 3)))", "A"],
-	["(f3 !_ 2) vs~（撒く項は数えない）", std("(f3 !_ 2) vs~"), "(apply [f3 !_ 2] vs~)", "未知"],
+	// `(f3 !_ 2) vs~`（前は「撒く項は数えない」で未知の根）は、2026-10-24 の試し（R51）で、固定の口の後ろに可変長の口 `[~c]` があって流れを
+	// 受ける口の数が決まらない G19。下の holeCountRefused へ移した。
 	// 最後の括りに入る物が数1つ（`[x]≅x`、R24）か2つ以上なら、括りが受けて撒いても、位置どおりに数えても同じ答え。最後の括りに
 	// 入り始めた後（`(f3 !_) 1 5` の後）は、位置どおりに f3 の口へ並ぶ。
 	["(f3 !_ 2) 1 [3]（数を括った物は数）", std("(f3 !_ 2) 1 [3]"), "(apply [f3 !_ 2] (construct 1 [3]))", "A"],
@@ -732,6 +737,9 @@ const holeCountRefused = [
 	["(f3 !_ 2) 1 _", std("(f3 !_ 2) 1 _"), "G5"],
 	["(f3 !_ 2) _", std("(f3 !_ 2) _"), "G5"],
 	["((f3 !_ 2) 1) _（部分適用も同じ）", std("((f3 !_ 2) 1) _"), "G5"],
+	// 2026-10-24 の試し（R51）：撒いた流れを受ける口が、固定の口1つの後ろに可変長の口 `[~c]`（流れを口 a に入れるか、`[~c]` が丸ごと受けるか
+	// 決まらない）。前は撒く項で k を数えないので未知の根で通っていた。
+	["(f3 !_ 2) vs~（R51 の G19、試し。前は未知の根）", std("(f3 !_ 2) vs~"), "G19"],
 	// 実体の鍵は、同じアリティの穴の関数と分ける（fnKey の "+rest"）。分けないと、先に解いた `[f3 !_ !_ 3]` の実体（A）を
 	// `[f3 !_ 2]` の行が黙って使う。
 	["鍵 w : h [f : [f3 !_ !_ 3]] の後の h [f : [f3 !_ 2]]", std(["h : [f] ? f 1 _", "w : h [f : [f3 !_ !_ 3]]", "h [f : [f3 !_ 2]]"]), "G5"],
@@ -841,7 +849,8 @@ const mapPasses = [
 	["[-_,] 1 2 inc（受けている間の合成）", std("[-_,] 1 2 inc"), "(apply inc (apply [-_,] (construct 1 2)))", "A"],
 	["inc [-_,] 5（合成の後ろ）", std("inc [-_,] 5"), "(apply (compose inc [-_,]) 5)", "A"],
 	["[!_,] [* 2,] 1 2 3（合成の頭）", std("[!_,] [* 2,] 1 2 3"), "(apply (compose [!_,] [* 2,]) (construct 1 2 3))", "A"],
-	["[-_,] vs~（撒く項は未知の根）", std("[-_,] vs~"), "(apply [-_,] vs~)", "未知"],
+	// 2026-10-24 の試し（R51）：貪欲な単項は流れを丸ごと受け、写した結果は List（流れはいくつでも1項）。前は撒く項で k を数えないので未知の根。
+	["[-_,] vs~（R51、試し。前は未知の根）", std("[-_,] vs~"), "(apply [-_,] vs~)", "A"],
 ];
 for (const [name, s, want, kind, extra] of unaryPasses) checkPass(`点なし ${name}`, s, want, kind, extra);
 for (const [name, s, want] of unaryRefused) checkRefused(`点なし ${name}`, s, want);
@@ -1226,7 +1235,8 @@ const answerPasses = [
 	// 2026-10-19「最後の仮引数が括りの関数は、前の仮引数に1つずつ当てて、残りの並び全体を最後の括りが受ける。」）。
 	["R24 pair [1] [2] [3]（a は [1]、[b ~bs] は [2] [3]）", src(["pair : [a ~as] [b ~bs] ? a + b", "pair [1] [2] [3]"]), "(: pair (? [[a ~as] [b ~bs]] (inst N [N…] (+ a b))))", null, { at: 0 }],
 	["R24 h 1 2 3（v は 1、[x ~xs] は 2 3）", src(["h : v [x ~xs] ? v 1", "h 1 2 3"]), "(: h (? [v [x ~xs]] (inst A [N…] (construct v 1))))", null, { at: 0 }],
-	["R24 map $[* 2] 1 2 3 4 5 は map $[* 2] [1 2 3 4 5] と同じ実体", src(["map : f [x ~y] ? x", "map $[* 2] 1 2 3 4 5", "map $[* 2] [1 2 3 4 5]"]), "(: map (? [f [x ~y]] (inst A [N…] x)))", null, { at: 0 }],
+	// 2026-10-24 の試し（R49）：裸の仮引数 f に渡った `$[* 2]` は関数を指す番地で、印ごと実体の鍵に入り、形は `$L`（前は `A`）。
+	["R24 map $[* 2] 1 2 3 4 5 は map $[* 2] [1 2 3 4 5] と同じ実体", src(["map : f [x ~y] ? x", "map $[* 2] 1 2 3 4 5", "map $[* 2] [1 2 3 4 5]"]), "(: map (? [f [x ~y]] (inst $L [N…] x)))", null, { at: 0 }],
 	// 最後の括りが受けている間に来た inc は合成の後ろ（R41）。木は入れ子の適用（2026-10-24 の R47 で `·rev` の綴りが無くなった。前は
 	// `(apply inc (apply h (construct 1 2 3)) ·rev)`。下の `pair [1] [2] inc`・`f 1 2 3 inc` も同じ）。
 	["R24 h 1 2 3 inc（残りを受けた節は隣と結べる）", src(["inc : x ? x + 1", "h : v [x ~xs] ? v 1", "h 1 2 3 inc"]), "(apply inc (apply h (construct 1 2 3)))", "A"],
@@ -1309,7 +1319,9 @@ const answerPasses = [
 	["R25 実体の本体の未定義の名前", src(["k : [x ~xs] ? zz x", "k [1 2]", "k `ab`"]), "(apply k `ab`)", "A", { diag: "zz", diagCount: 1 }],
 	// Zipper の map（pattern_guide.md）。f は裸の仮引数なので A、[x ~y] は List。map f y は同じ形で自分を呼ぶ。
 	["R24 map $[* 2] [1 2 3 4 5]", src(["map : f [x ~y] ? (@f x) , (map f y)", "map $[* 2] [1 2 3 4 5]"]), "(apply map (construct $[* 2] [1 2 3 4 5]))", "A"],
-	["R24 map の実体", src(["map : f [x ~y] ? (@f x) , (map f y)", "map $[* 2] [1 2 3 4 5]"]), "(: map (? [f [x ~y]] (inst A [N…] (, [@f x] [map f y]))))", null, { at: 0 }],
+	// 2026-10-24 の試し（R49）：f は `$[* 2]` を指す番地の印を持つ（形 `$L`。前は `A`）。`@f x` は `[* 2] x` で A、`map f y` は同じ印の f で
+	// 同じ実体（前は `@f x` が前置 `@` の項で未知）。
+	["R24 map の実体", src(["map : f [x ~y] ? (@f x) , (map f y)", "map $[* 2] [1 2 3 4 5]"]), "(: map (? [f [x ~y]] (inst $L [N…] (, [@f x] [map f y]))))", null, { at: 0 }],
 	// D 97749496 の greeting。欄 greet は構造体で、その欄 welcome が関数なら (greet ' welcome) world は適用、文字列なら構築。
 	["R24・R26 greeting myGreet（welcome が関数）", src([...MY_GREET_FN, GREETING, "greeting myGreet"]), "(apply greeting myGreet)", "A"],
 	[
@@ -2256,11 +2268,14 @@ const composePasses = [
 	["R32 [<<] tl 5 の根は L（根なので `_`、R42）", src([TL, "[<<] tl 5"]), "(unit (apply (compose [<<] tl) 5))", "A"],
 	// ほかの足りたか決まらない頭も同じ：アリティの分からない点なし（`[,]`。前の見本の `[|]`・`[*]` は R31 で畳むようになった）・
 	// 既定値のある関数（Q8）・撒く項を含む並び（k を数えない）。撒く項は、合成も最初の関数への適用から畳む（applyKind の頭）ので、
-	// 前は合成ごと未知で返していた。
+	// 前は合成ごと未知で返していた。2026-10-24 の試し（R51）から、撒く項は流れの1項で、口が1つの最初の関数（inc）は写像で値を返すので、
+	// 撒く項は「足りたか決まらない頭」ではなくなった（下の2行）。
 	["Q27 [,] tl 2 3 の tl は未知を受けて実体を作る（前は [*] tl 2 3）", src([TL, "[,] tl 2 3"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 0 }],
 	["Q27 go tl xs（既定値のある関数）の tl は未知を受けて実体を作る", src([...GO_DEFAULT, TL, "go tl xs"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 2 }],
-	["Q27 inc tl vs~（撒く項）の tl は未知を受けて実体を作る", src([INC, "vs : 1 , 2", TL, "inc tl vs~"]), "(: tl (? [[y ~ys]] (inst U ys)))", null, { at: 2 }],
-	["Q27 inc tl vs~ の根は未知のまま", src([INC, "vs : 1 , 2", TL, "inc tl vs~"]), "(apply (compose inc tl) vs~)", "未知"],
+	// 2026-10-24 の試し（R51）：撒いた流れは inc の口（1つ）に入って写像になり、写した List（中身の見えない A）が tl へ流れる（R11。
+	// `tl (inc vs~)` と同じ）。前は撒く項で k を数えないので inc の適用が未知で、tl は未知を受けて実体を作り、根は未知だった。
+	["Q27 inc tl vs~（R51 の写像の後、試し）の tl は A を受けて実体を作る（前は U）", src([INC, "vs : 1 , 2", TL, "inc tl vs~"]), "(: tl (? [[y ~ys]] (inst A ys)))", null, { at: 2 }],
+	["Q27 inc tl vs~ の根は A（R51、試し。前は未知）", src([INC, "vs : 1 , 2", TL, "inc tl vs~"]), "(apply (compose inc tl) vs~)", "A"],
 	// 今は：撒く項を受ける最初の関数そのものが括りの関数なら、実体を作らない（R24「撒く項があれば k は数えない（未知）」。
 	// 合成でない頭の「R24 n 4 vs~ 5 では実体を作らない」と同じ）。だから `bad inc vs~` は bad の本体を読まずに通り、後ろに
 	// 置いた `inc bad vs~` は未知を受けた bad の実体で G5（下の composeRefused の Q27 の行）。Q27 が問題にした非対称（頭に
@@ -2290,7 +2305,8 @@ const composeRefused = [
 	// R31 で `[+] 5` は値になったので、bad は A を受ける（前は U）。本体の門は受けた物に依らず G5。
 	["R31 で変わった [+] bad 5 は bad を形 A で名指し（前は U）", src([BAD, "[+] bad 5"]), "G5", [["bad", "A"]]],
 	["Q27 go bad xs（既定値のある関数、前は通っていた）", src([...GO_DEFAULT, BAD, "go bad xs"]), "G5", [["bad", "U"]]],
-	["Q27 inc bad vs~（撒く項、前は通っていた）", src([INC, "vs : 1 , 2", BAD, "inc bad vs~"]), "G5", [["bad", "U"]]],
+	// 2026-10-24 の試し（R51）：inc の写像の結果（中身の見えない A）を bad が受ける（前は未知の U）。本体の門は受けた物に依らず G5。
+	["Q27 inc bad vs~（撒く項、前は通っていた。R51 で bad は A を受ける、試し）", src([INC, "vs : 1 , 2", BAD, "inc bad vs~"]), "G5", [["bad", "A"]]],
 ];
 for (const [name, s, want, kind, extra] of composePasses) checkPass(`確かめ ${name}`, s, want, kind, extra);
 for (const [name, s, want, inst] of composeRefused) checkRefused(`確かめ ${name}`, s, want, inst);
@@ -3059,7 +3075,8 @@ const flowRefused = [
 	// R39 の残り（G15）
 	["R39 go _ 3（既定値の無い口）", std([...GO_DEFAULT, "go _ 3"]), "G15"],
 	["R39 go 1 2 _（仮引数の外）", std([...GO_DEFAULT, "go 1 2 _"]), "G15"],
-	["R39 go xs~ _（前に撒く項）", std([...GO_DEFAULT, "go xs~ _"]), "G15"],
+	// 2026-10-24 の試し（R51）：既定値のある go は口の数が分からないので、撒いた流れ xs~ が来た所で G19（前は `_` の所で G15。どちらも断る）。
+	["R39 go xs~ _（前に撒く項。R51 の G19、試し。前は G15）", std([...GO_DEFAULT, "go xs~ _"]), "G19"],
 	["R39 gz _ 3（仮引数の数が数えられない）", std([...GZ, "gz _ 3"]), "G15"],
 	["R39 go _ !_（既定値の無い口の `_` と穴）", std([...GO_DEFAULT, "go _ !_"]), "G15"],
 	// `5 gf inc _`（2026-10-23 は G8：gf が 5 を逆適用で取り、口が決まらない（§5 Q5）まま、合成の後に `_` が来る。その前は G2(a)）は、R47 で
@@ -3510,7 +3527,10 @@ const idFixRefused = [
 	// 恒等射が受けた物を口の数の分からない関数が受け、その後に関数が合成された形（R47 の確かめで足した。HEAD では通っていた）。単位律の
 	// 読みでは、その関数が受けた後に関数が来て G2(a)（`[,] 5 inc`・`f2 vs~ inc`）。
 	["i [,] 5 inc（R47 の確かめで足した。単位律では `[,] 5 inc` の G2(a)）", std(["i : !_", "i [,] 5 inc"]), "G18"],
-	["i f2 vs~ inc（撒く項を受けた f2 は口の数が数えられない。単位律では `f2 vs~ inc` の G2(a)）", std(["i : !_", "i f2 vs~ inc"]), "G18"],
+	// 2026-10-24 の試し（R51）から、f2 は恒等射が渡した撒いた流れを畳み込みで受けて閉じ、単位律の `f2 vs~ inc` では inc が畳み込みの値の
+	// 後ろに積まれて値を取らない（流れの読みでは受ける）ので、「受けた後に合成された関数」の G18。前は、撒く項を受けた f2 は口の数が
+	// 数えられず、単位律では `f2 vs~ inc` の G2(a) で、口の数の分からない関数の G18 だった（答えは同じ G18）。
+	["i f2 vs~ inc（R51 の試しから、畳み込みの値の後ろの inc。前は撒く項を受けた f2 の口の数が数えられない形）", std(["i : !_", "i f2 vs~ inc"]), "G18"],
 	// 2026-10-23 は G18 だった `(5 !_ f2) 3` の形は、R47 で恒等射が 5 を受けない（合成 `!_ f2` が 5 の後ろに積まれる）。括りの中は評価する所で
 	// ないので、値と関数の並んだ構築は種類を決めず（未知、§5 Q38）、後ろに 3 を当てると G7。単位律の `(5 f2) 3` も同じ G7 で、割れない。
 	["(5 !_ f2) 3（R47 で G7。単位律の `(5 f2) 3` も G7。前は f2 5 3 で通り、その後 G18）", std("(5 !_ f2) 3"), "G7"],
@@ -3702,6 +3722,195 @@ law("恒等射で消えた , の後の G3 の確かめは、名前の , の鎖�
 	if (got !== "coproduct-beside-product G3") out.push(`恒等射の鎖の後ろの inc 1 got: ${got}  want: G3`);
 	const only = show(resolve(src(["i : !_", `${ids} , 5`])).trees.at(-1));
 	if (only !== "5") out.push(`恒等射だけの鎖の後ろの 5 got: ${only}  want: 5`);
+	return out;
+});
+
+// ---------------------------------------------------------------------------
+// 試し（2026-10-24、R49〜R51）：番地は指す関数を運ぶ・`[F,]` の写像・撒いた並びは流れの1項
+// ---------------------------------------------------------------------------
+//
+// 利用者「試しにやってみよう！ ちょっと別のセッションとも議論してくるけど、おそらくやれることは何でもやってみて、悪ければロールバックしよう。」
+// （U〔答え〕[2026-10-24 04:30 ebf18260]）。戻すときは、この節と、上の節で「試し」と書いた行の注の「前は」の答えに戻す（仕様 §7.23）。
+// - R49：`$名前`（名前が関数）・`$[…]`（括りが関数）は、指す関数を印に持つ番地（A）。`@x` の x に印があれば、`@x` はその関数（L、口の数が
+//   分かる）。括りの関数の実体で裸の仮引数に渡れば、印を持ち越し、実体の鍵に入る（形は `$L`）。素の関数の仮引数には届かない（§5 Q45）。
+// - R50：`[F,]` の F が口の1つ残った関数の項なら、F の写像（`[* 2,]` と同じ貪欲な単項）。口が2つ以上か分からなければ今のまま未知（G7）。
+// - R51：いちばん上が L で次が撒く項なら、撒いた並びは流れの1項で、いちばん最初の閉じていない段の残りの口の数で受ける：1つなら写像、2つなら
+//   左からの畳み込み、最後の口が可変長なら丸ごと、ほか（3つ以上・分からない・固定の口の後ろに可変長の口）は G19。段の結果は次の段へ流れる（R11）。
+//   書き並べた実引数は今までどおり（R35 で余りを積む）：`add vs~` は畳み込み、`add 1 2 3` は `(add 1 2) 3`。
+const MAPS = ["vs : 1 , 2 , 3", "uu : x ? [,] x", "map : f [~t] ? [@f,] t~", "map2 : f [~t] ? @f t~", "fold : f [~h] ? @f h~"];
+const trial = (lines) => src([INC, DOUBLE, "add : x y ? x + y", "f3 : a b c ? a + b + c", ...MAPS, ...[].concat(lines)]);
+const trialPasses = [
+	// 仕様 §4 R51 の例の `map`・`map2`・`fold`（値は [2 3 4]・6。種類は A）
+	["map $inc vs（R49・R50・R51）", trial("map $inc vs"), "(apply map (construct $inc vs))", "A"],
+	["map $inc vs の map の実体（f は `$L`、本体は `[@f,]` の写像）", trial("map $inc vs"), "(: map (? [f [~t]] (inst $L [N…] (apply [@f,] t~))))", null, { at: 6 }],
+	["map2 $inc vs（`@f t~` は口が1つの写像）", trial("map2 $inc vs"), "(apply map2 (construct $inc vs))", "A"],
+	["fold $add vs（`@f h~` は口が2つの畳み込み）", trial("fold $add vs"), "(apply fold (construct $add vs))", "A"],
+	["fold $add vs の fold の実体", trial("fold $add vs"), "(: fold (? [f [~h]] (inst $L [N…] (apply @f h~))))", null, { at: 8 }],
+	["inc (fold $add vs)（G7 にならずに A）", trial("inc (fold $add vs)"), "(apply inc [fold $add vs])", "A"],
+	// 撒いた流れと書き並べは別の物
+	["inc vs~（写像）", trial("inc vs~"), "(apply inc vs~)", "A"],
+	["add vs~（畳み込み）", trial("add vs~"), "(apply add vs~)", "A"],
+	["add 1 2 3（書き並べは今までどおり R35。`(add 1 2) 3`）", trial("add 1 2 3"), "(construct (apply add (construct 1 2)) 3)", "A", { leftover: true }],
+	["add 1 vs~（口が1つ残った add 1 の写像）", trial("add 1 vs~"), "(apply add (construct 1 vs~))", "A"],
+	["(add 1) vs~（同じ）", trial("(add 1) vs~"), "(apply [add 1] vs~)", "A"],
+	["f3 1 vs~（口が2つ残った f3 1 の畳み込み）", trial("f3 1 vs~"), "(apply f3 (construct 1 vs~))", "A"],
+	["[inc,] vs（R50。1つで入った器の要素を写す）", trial("[inc,] vs"), "(apply [inc,] vs)", "A"],
+	["[inc,] 1 2 3（R50）", trial("[inc,] 1 2 3"), "(apply [inc,] (construct 1 2 3))", "A"],
+	["[inc,] vs~（貪欲な単項は流れを丸ごと受ける）", trial("[inc,] vs~"), "(apply [inc,] vs~)", "A"],
+	["[(add 1),] vs（部分適用の写像）", trial("[(add 1),] vs"), "(apply [[add 1],] vs)", "A"],
+	["[add 1,] vs（括らない部分適用も同じ）", trial("[add 1,] vs"), "(apply [add 1,] vs)", "A"],
+	["[x ? x + 1,] vs（括りの関数の写像）", trial("[[x ? x + 1],] vs"), "(apply [[x ? x + 1],] vs)", "A"],
+	["add []~（空の流れの畳み込みは `_`、A）", trial("add []~"), "(apply add []~)", "A"],
+	["inc []~（空の流れの写像は空の List、A）", trial("inc []~"), "(apply inc []~)", "A"],
+	["inc vs~ 5（写像の値の後ろに積む）", trial("inc vs~ 5"), "(construct (apply inc vs~) 5)", "A"],
+	["5 inc vs~（値の後ろに積まれた inc も同じ、R47）", trial("5 inc vs~"), "(construct 5 (apply inc vs~))", "A"],
+	["vs~ inc（いちばん上が値なら今までどおり積む）", trial("vs~ inc"), "(construct vs~ (unit inc))", "A", { leftoverDiag: ["inc"] }],
+	// 合成：流れはいちばん最初の閉じていない段に入り（R40）、結果は次の段へ値として流れる（R11。`double (inc vs~)`）
+	["inc double vs~（`double (inc vs~)`）", trial("inc double vs~"), "(apply (compose inc double) vs~)", "A"],
+	["inc add vs~ 5（`add (inc vs~) 5`）", trial("inc add vs~ 5"), "(apply add (construct (apply inc vs~) 5))", "A"],
+	["i : !_ ⏎ i inc vs~（恒等射が受けた流れは、そのまま次の段へ。`inc vs~` と同じ）", trial(["i : !_", "i inc vs~"]), "(apply (compose i inc) vs~)", "A"],
+	// 根が A でない関数の写像・畳み込みは未知
+	["uu vs~（根が未知の関数の写像は未知）", trial("uu vs~"), "(apply uu vs~)", "未知"],
+	["map $uu vs（同じ）", trial("map $uu vs"), "(apply map (construct $uu vs))", "未知"],
+	["[uu,] vs（同じ）", trial("[uu,] vs"), "(apply [uu,] vs)", "未知"],
+	// 番地の印の持ち越し（R49）
+	["p : $inc ⏎ map p vs（`:` はメタで、名前は印を持ち越す）", trial(["p : $inc", "map p vs"]), "(apply map (construct p vs))", "A"],
+	["(map $inc) vs（括りの関数の部分適用も印を持つ）", trial("(map $inc) vs"), "(apply [map $inc] vs)", "A"],
+	["map [$inc] vs（[x] ≅ x）", trial("map [$inc] vs"), "(apply map (construct [$inc] vs))", "A"],
+	["map $[x ? x + 1] vs（括りの関数の番地）", trial("map $[x ? x + 1] vs"), "(apply map (construct $[x ? x + 1] vs))", "A"],
+	["hh : [f] ? [@f,] vs ⏎ hh [f : $inc]（欄の番地）", trial(["hh : [f] ? [@f,] vs", "hh [f : $inc]"]), "(apply hh [f : $inc])", "A"],
+	// 実体の鍵：番地の印が違えば実体を分け合わない（分け合うと、先に解いた方の答えを後の方が黙って使う）
+	["鍵 map $inc vs ⏎ map $uu vs の2行目は未知", trial(["map $inc vs", "map $uu vs"]), "(apply map (construct $uu vs))", "未知"],
+	["鍵 map $uu vs ⏎ map $inc vs の2行目は A", trial(["map $uu vs", "map $inc vs"]), "(apply map (construct $inc vs))", "A"],
+	["鍵 map $inc vs ⏎ map $double vs の map の実体は2つ（同じ綴りの `$L [N…]`）", trial(["map $inc vs", "map $double vs"]), "(: map (? [f [~t]] (inst $L [N…] (apply [@f,] t~)) (inst $L [N…] (apply [@f,] t~))))", null, { at: 6 }],
+	["鍵 hh [f : $inc] ⏎ hh [f : $uu] の2行目は未知（欄の番地も鍵に入る）", trial(["hh : [f] ? [@f,] vs", "hh [f : $inc]", "hh [f : $uu]"]), "(apply hh [f : $uu])", "未知"],
+	["鍵 hh [f : $uu] ⏎ hh [f : $inc] の2行目は A", trial(["hh : [f] ? [@f,] vs", "hh [f : $uu]", "hh [f : $inc]"]), "(apply hh [f : $inc])", "A"],
+	// `[F,]` の写像は、写す関数ごとに鍵を分ける（fnKey。type だけだと `[inc,]` と `[uu,]` を欄で渡したときに実体を分け合う）
+	["鍵 kk [f : [inc,]] ⏎ kk [f : [uu,]] の2行目は未知", trial(["kk : [f] ? f [1 2]", "kk [f : [inc,]]", "kk [f : [uu,]]"]), "(apply kk [f : [uu,]])", "未知"],
+	["鍵 kk [f : [uu,]] ⏎ kk [f : [inc,]] の2行目は A", trial(["kk : [f] ? f [1 2]", "kk [f : [uu,]]", "kk [f : [inc,]]"]), "(apply kk [f : [inc,]])", "A"],
+	// 畳み込みの2歩目の左は前の結果（中身の見えない A）。括りの関数はそれで答えが変わりうるので、2歩目まで見る（foldOver）：pp の実体の
+	// [a] に数が入れば A、中身の見えない A なら a は未知で未知。
+	["pp : [a] y ? a + y ⏎ pp vs~（2歩目の [a] は中身の見えない A なので未知）", trial(["pp : [a] y ? a + y", "pp vs~"]), "(apply pp vs~)", "未知"],
+	["pp : [a] y ? a + y ⏎ pp vs~ の実体（1歩目 N N と2歩目 A N）", trial(["pp : [a] y ? a + y", "pp vs~"]), "(: pp (? [[a] y] (inst A A (+ a y)) (inst N A (+ a y))))", null, { at: 9 }],
+	// 括りの仮引数に直に渡った番地は、中身の見えない A と同じに受ける（印は本体から見えない）ので、鍵と綴りは今までどおり `A`
+	["ro : [~r] ? r 1 ⏎ ro $inc の実体の形は今までどおり A", trial(["ro : [~r] ? r 1", "ro $inc"]), "(: ro (? [[~r]] (inst A (construct r 1))))", null, { at: 9 }],
+	// 試しの確かめ（2026-10-24）で直した所。
+	// - 可変長の口だけの関数も `[F,]` で写す（R50。`[F,] a b` は `F a , F b` で、`F a` は1つの行なので可変長の口は a 1つを受けて閉じる。最初の版は
+	//   口の数の分からない物と一緒に G7 にしていた）。
+	["hd : [y ~ys] ? y ⏎ [hd,] ws（最後の仮引数が括りの関数の写像。前は G7）", trial(["hd : [y ~ys] ? y", "ws : [1 2] , [3 4]", "[hd,] ws"]), "(apply [hd,] ws)", "A"],
+	["h1 : [a] ? a + 1 ⏎ [h1,] vs（同じ）", trial(["h1 : [a] ? a + 1", "[h1,] vs"]), "(apply [h1,] vs)", "A"],
+	["pq : x [b] ? x + b ⏎ [(pq 1),] vs（その部分適用）", trial(["pq : x [b] ? x + b", "[(pq 1),] vs"]), "(apply [[pq 1],] vs)", "A"],
+	["[[+],] ws（畳む点なしの写像。要素ごとに R31 の1項）", trial(["ws : [1 2] , [3 4]", "[[+],] ws"]), "(apply [[+],] ws)", "A"],
+	["[[' 0],] ws（段18 の点なしの写像。要素ごとに `w ' 0`）", trial(["ws : [1 2] , [3 4]", "[[' 0],] ws"]), "(apply [[' 0],] ws)", "A"],
+	["i : !_ ⏎ [i,] vs（恒等射の写像）", trial(["i : !_", "[i,] vs"]), "(apply [i,] vs)", "A"],
+	["hd : [y ~ys] ? y ⏎ map $hd ws（`[@f,]` の f も同じ）", trial(["hd : [y ~ys] ? y", "ws : [1 2] , [3 4]", "map $hd ws"]), "(apply map (construct $hd ws))", "A"],
+	["map $[* 2,] vs（貪欲な単項の写像。前は G7）", trial("map $[* 2,] vs"), "(apply map (construct $[* 2,] vs))", "A"],
+	// - 畳み込みは、撒いた器が数か中身の見える List（深く見て要素が全部 A）か空の括りのときだけ値と言える（R31 の1項の読みと同じ線）。
+	//   中身の見えない器は、要素に関数があるかもしれず、要素が1つなら関数を当てずにその要素を返すので未知（前は A で、`first (tl fs)~ 5` を黙って
+	//   構築と読んだ）。写像は結果がいつも List なので A のまま。
+	["tl ⏎ fs2 ⏎ fold $add (tl fs2)（中身の見えない器の畳み込みは未知）", trial(["tl : [y ~ys] ? ys", "fs2 : inc , double", "fold $add (tl fs2)"]), "(apply fold (construct $add [tl fs2]))", "未知"],
+	["tl ⏎ add (tl vs)~（同じ。`[|] (tl vs)` と同じ未知）", trial(["tl : [y ~ys] ? ys", "add (tl vs)~"]), "(apply add [tl vs]~)", "未知"],
+	["tl ⏎ inc (tl vs)~（写像は A のまま）", trial(["tl : [y ~ys] ? ys", "inc (tl vs)~"]), "(apply inc [tl vs]~)", "A"],
+	["z : xs ? add xs~ ⏎ z vs（素の関数の裸の仮引数を畳む本体の根は未知）", trial(["z : xs ? add xs~", "z vs"]), "(apply z vs)", "未知"],
+	// - 畳まない2項の点なしの部分適用は口が1つの写像で、畳まないので通す（口が2つの `[<<] vs~` は下で G19）。
+	["([<<] 1) vs~（口が1つの写像）", trial("([<<] 1) vs~"), "(apply [[<<] 1] vs~)", "A", { pfInfo: "[<<]" }],
+];
+const trialRefused = [
+	["f3 vs~（口が3つ。G19）", trial("f3 vs~"), "G19"],
+	["fold $f3 vs（実体の中の `@f h~` で口が3つ。G19）", trial("fold $f3 vs"), "G19", [["fold", "$L [N…]"]]],
+	["map $f3 vs（`[@f,]` の f の口が3つなので未知、G7）", trial("map $f3 vs"), "G7", [["map", "$L [N…]"]]],
+	["[add,] vs（口が2つの関数は写像にしない、今のまま G7）", trial("[add,] vs"), "G7"],
+	// 前は `map $[* 2,] vs`（可変長の口の関数も写像にしない、G7）をここに置いていた。試しの確かめで、可変長の口だけの関数は要素1つで閉じるので
+	// 写す側へ移した（上）。固定の口の後ろに可変長の口がある関数は今のまま G7。
+	["nn : a [~c] ? a ⏎ [nn,] vs（固定の口の後ろに可変長の口。今のまま G7）", trial(["nn : a [~c] ? a", "[nn,] vs"]), "G7"],
+	["[' 0] vs~（口の数が分からない点なし。G19）", trial("[' 0] vs~"), "G19"],
+	["go vs~（既定値のある関数は口の数が分からない。G19）", trial([...GO_DEFAULT, "go vs~"]), "G19"],
+	["pb2 : [a] [b] ? a + b ⏎ pb2 vs~（固定の口の後ろに最後の括り。G19）", trial(["pb2 : [a] [b] ? a + b", "pb2 vs~"]), "G19"],
+	// 素の関数の仮引数には印が届かない（呼ぶたびに実体を作らない。§5 Q45）：`@g` は今までどおり前置 `@` の項で、口の数が分からない
+	["tg : g ? @g vs~（素の関数の本体。G19）", trial("tg : g ? @g vs~"), "G19"],
+	["tg : g ? [@g,] vs（素の関数の本体の `[@g,]` は未知、G7）", trial("tg : g ? [@g,] vs"), "G7"],
+	["uu vs~ 5（未知の写像の後ろに項。G2(a)）", trial("uu vs~ 5"), "G2(a)"],
+	["[inc,] fs（写す器の中身に関数。G7）", trial(["fs : inc , double", "[inc,] fs"]), "G7"],
+	["inc fs~（撒く器の中身に関数。今のまま G7）", trial(["fs : inc , double", "inc fs~"]), "G7"],
+	["map $inc fs（同じ。実体の中で G7）", trial(["fs : inc , double", "map $inc fs"]), "G7", [["map", "$L [U…]"]]],
+	// 試しの確かめ（2026-10-24）で直した所。
+	// - 写す関数の無い貪欲な単項も、写す器の中身に関数が見えれば G7（`[[* 2],] fs` と同じ写像。前は `[* 2,] fs` だけ A）。
+	["[[* 2],] fs（G7）", trial(["fs : inc , double", "[[* 2],] fs"]), "G7"],
+	["[* 2,] fs（同じ写像なので G7。前は A）", trial(["fs : inc , double", "[* 2,] fs"]), "G7"],
+	["[-_,] fs（同じ。前は A）", trial(["fs : inc , double", "[-_,] fs"]), "G7"],
+	// - 中身の見えない器の畳み込みは未知（上の通る側）。後ろに項が来れば G2(a)（前は構築の A：`tl fs` は `[double inc]` なので first の値は
+	//   double で、5 はそれに当たる。黙った誤答だった）。
+	["first ⏎ tl ⏎ fs3 ⏎ first (tl fs3)~ 5（G2(a)。前は構築の A）", trial(["first : x y ? x", "tl : [y ~ys] ? ys", "fs3 : inc , double , inc", "first (tl fs3)~ 5"]), "G2(a)"],
+	["tl ⏎ fs2 ⏎ add (tl fs2)~ 5（要素1つなら add は当たらず要素の double を返す。G2(a)）", trial(["tl : [y ~ys] ? ys", "fs2 : inc , double", "add (tl fs2)~ 5"]), "G2(a)"],
+	["first ⏎ z : xs ? first xs~ ⏎ z fs2 5（素の関数の本体で畳む。G2(a)）", trial(["first : x y ? x", "z : xs ? first xs~", "fs2 : inc , double", "z fs2 5"]), "G2(a)"],
+	["tl ⏎ fs2 ⏎ inc (fold $add (tl fs2)) 5（未知の括りが並びの中。G7）", trial(["tl : [y ~ys] ? ys", "fs2 : inc , double", "inc (fold $add (tl fs2)) 5"]), "G7"],
+	// - 畳まない2項の点なし（R32。利用者「ビットシフトとget set は 畳めないね。」）は、撒いた流れを畳まない（G19、§5 Q49。前は畳んで A）。
+	["[<<] vs~（G19）", trial("[<<] vs~"), "G19"],
+	["[!=] vs~（G19）", trial("[!=] vs~"), "G19"],
+	["[~] vs~（範囲。G19）", trial("[~] vs~"), "G19"],
+	["fold $[<<] vs（実体の中の `@f h~`。G19）", trial("fold $[<<] vs"), "G19", [["fold", "$L [N…]"]]],
+	["g : xs ? [<<] xs~（素の関数の本体。G19）", trial("g : xs ? [<<] xs~"), "G19"],
+	// - 値の定義の名前の番地（`$cc`）には印が届かない（§5 Q45）。G19 の言い分は Q45 を名指しする（言い分は下の法則で見る）。
+	["cc : add inc ⏎ fold $cc vs（G19。`cc vs~`・`fold $[add inc] vs` は通る）", trial(["cc : add inc", "fold $cc vs"]), "G19", [["fold", "A [N…]"]]],
+];
+for (const [name, s, want, kind, extra] of trialPasses) checkPass(`試し ${name}`, s, want, kind, extra);
+for (const [name, s, want, inst] of trialRefused) checkRefused(`試し ${name}`, s, want, inst);
+
+// 試しの確かめ（2026-10-24）で直した所の言い分と資源の守り。
+const refusalOfSrc = (s) => {
+	try {
+		resolve(s);
+		return null;
+	} catch (e) {
+		return e;
+	}
+};
+law("試し：G19 の言い分は、印の届かない `@x` で §5 Q45 を名指しする", () => {
+	const out = [];
+	for (const s of [trial(["cc : add inc", "fold $cc vs"]), trial("tg : g ? @g vs~")]) {
+		const e = refusalOfSrc(s);
+		if (!e || e.gate !== "G19" || !e.message.includes("§5 Q45")) out.push(`got: ${e ? `${e.gate} ${e.message}` : "通った"}`);
+	}
+	// 口の数が分からない関数（印の問題でない）の言い分は Q45 を言わない。
+	const g = refusalOfSrc(trial([...GO_DEFAULT, "go vs~"]));
+	if (!g || g.gate !== "G19" || g.message.includes("Q45")) out.push(`go vs~ got: ${g ? `${g.gate} ${g.message}` : "通った"}`);
+	return out;
+});
+law("試し：恒等射が渡した流れを写像・畳み込みで受けた後の関数は、「受けた後に合成された関数」の G18（R51）", () => {
+	const out = [];
+	for (const line of ["i inc vs~ double", "i add vs~ double", "i f2 vs~ inc"]) {
+		const e = refusalOfSrc(trial(["i : !_", "f2 : x y ? x - y", line]));
+		if (!e || e.gate !== "G18" || !e.message.includes("を受けた後に、関数") || e.message.includes("口の数の分からない")) out.push(`${line} got: ${e ? `${e.gate} ${e.message}` : "通った"}`);
+	}
+	// 恒等射を消した並び（単位律の側）は、写像・畳み込みの値の後ろに関数が積まれて余る。
+	for (const line of ["inc vs~ double", "f2 vs~ inc"]) {
+		const r = resolve(trial(["f2 : x y ? x - y", line]));
+		const t = r.trees[r.trees.length - 1];
+		if (!(t.t === "construct" && kindOf(t) === "A")) out.push(`${line} got: ${show(t)} : ${kindOf(t)}`);
+	}
+	return out;
+});
+// 合成の幅の資源の守り（COMPOSE_WIDTH_LIMIT。§5 Q25 の前からの穴）：同じ合成を並べて渡す再帰は、合成の中の関数が倍々になっても鍵の深さが
+// 増えないので、前はヒープが尽きてプロセスごと落ちた（欄の道は HEAD d78ce73c でも、番地の道は試しの R49 から。前の番地の道は `@f` が頭以外で
+// G6）。1本 5 秒の上限で見る。
+law("試し：合成を倍々にする再帰は、合成の幅の資源の守りで断る", () => {
+	const out = [];
+	const cases = [
+		trial(["deep7 : f [~t] ? deep7 $[@f @f] t", "deep7 $inc vs"]),
+		trial(["deep : f [x ~t] ? (deep $[@f @f] t) , x", "deep $inc vs"]),
+		trial(["dg : [f] [~t] ? dg [f : f f] t", "dg [f : inc] vs"]),
+		trial(["fq : [g] ? fq [g : g g]", "fq [g : inc]"]),
+	];
+	for (const s of cases) {
+		const t0 = Date.now();
+		const e = refusalOfSrc(s);
+		const ms = Date.now() - t0;
+		if (ms > 5000) out.push(`${s.split("\n").slice(-2).join(" ⏎ ")}：${ms}ms`);
+		if (!e || e.reason !== "compose-width-limit") out.push(`${s.split("\n").slice(-2).join(" ⏎ ")} got: ${e ? `${e.reason} ${e.gate || ""}` : "通った"}  want: compose-width-limit`);
+	}
+	// 幅が1ずつ増えるだけの再帰は、今までどおり入れ子の数の守りで止まる。
+	const e = refusalOfSrc(trial(["deep8 : f [~t] ? deep8 $[@f inc] t", "deep8 $inc vs"]));
+	if (!e || e.reason !== "instance-nest-limit") out.push(`deep8 got: ${e ? e.reason : "通った"}  want: instance-nest-limit`);
 	return out;
 });
 
