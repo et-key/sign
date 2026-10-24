@@ -5,7 +5,8 @@
  * （§4 の R1〜R48（R18 と R30 は 2026-10-21 に廃止。R6 の強さの順と R35〜R37 の組み立て直しの部分は 2026-10-23 に、左からの畳み込み
  * R40〜R43 に替えて廃止。R44〜R46 は同じ日の、口の外の `!_` は恒等射・恒等射は `,` の単位。R12・R14・R37 は 2026-10-24 に、逆適用の
  * 廃止（R47）で廃止。R48 は同じ日の、余ったラムダの診断。R49〜R51 は同じ日の**試し**（番地は指す関数を運ぶ・`[F,]` の写像・撒いた並びは
- * 流れの1項。利用者「試しにやってみよう！…悪ければロールバックしよう。」。戻す道は §7.23））、§1.2 の P1〜P3、§2 の表の「する」の行）
+ * 流れの1項。利用者「試しにやってみよう！…悪ければロールバックしよう。」。戻す道は §7.23）。R52 は同じ日の、評価する所の外でも、値の上に
+ * 積まれて何も受けずに閉じた関数は余ったラムダ）、§1.2 の P1〜P3、§2 の表の「する」の行）
  * だけである。90% 以下の所は §6.2 の
  * 門（G1〜G19（G14 は 2026-10-21、G17 と G1 は 2026-10-22、G12 は 2026-10-23、G8 と G9 は 2026-10-24 に廃止。G19 は 2026-10-24 の試し）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
  * 答えが出たときに、その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
@@ -25,7 +26,10 @@
  *   無くなった。renderEntry の注）。
  * - 評価する所（定義でない行の根の並び、R42）の終わりに残った未評価のラムダは `_` になり、木では元の木を `(unit …)` で包む
  *   （`inc add 5` は `(unit (apply (compose inc add) 5))`、種類は A。`5 inc` は `(construct 5 (unit inc))`）。恒等射でなければ、
- *   information の leftover-lambda で知らせる（R48）。
+ *   information の leftover-lambda で知らせる（R48）。評価する所の外（左が名前1つの `:` の右辺の並びを除く）でも、値の上に積まれて口の開いた
+ *   まま閉じた関数（何も受けない物も、受けた後の物も、穴の関数も）は同じく `(unit …)` で包み、知らせる（R52、2026-10-24。`(5 inc)` の中身は
+ *   `(construct 5 (unit inc))`、`(5 add 1)` は `(construct 5 (unit (apply add 1)))`、種類は A）。構築の中の `(unit …)` は値の形・要素・数に
+ *   入れない（vanishedOne）。
  * - 葉は項そのもの。名前は `<>` を外した綴り、字面は書いたまま、印は核に付けて書く（`$inc`・`xs~`・`-x!`・`!_`）。
  * - 中置の項は綴りを頭にした `(+ 1 2)`。欠けた被演算子は `·`。
  * - 括りは書いたとおりに、いつも `[…]` で書く。前段は `[…]`・`(…)`・`{…}` を1つの印にまとめて種類を残さない
@@ -763,10 +767,24 @@ function commaItems(tree) {
   return out;
 }
 
+// 構築の中の余ったラムダ `(unit …)`（R42・R48・R52）は、R15 のとおり並びの中で消える（`1 2 f2` の値は `1 2`）ので、構築の値の形・要素・
+// 数には入れない。消えた後に1項だけ残れば、構築の値はその項そのもの（`(5 inc)` は `(5 _)` と同じく 5。[x] ≅ x）。構築の中に `(unit …)` が
+// 入るのは、2026-10-24 の R52 までは行の根だけで、根の木の形はどこからも読まれなかった。R52 で括りの中・本体の根にも入るので、ここで消す。
+// 消えた項が無ければ null（構築のまま見る）。
+function vanishedOne(tree) {
+  if (!tree || tree.t !== "construct" || !tree.items.some(isUnitTree)) return null;
+  const live = tree.items.filter((x) => !isUnitTree(x));
+  return live.length === 1 ? live[0] : null;
+}
+const isUnitTree = (x) => !!x && x.t === "unit";
+const liveItems = (items) => items.filter((x) => !isUnitTree(x));
+
 // 解いた木の中身の形。見えなければ null。
 function shapeOfTree(tree) {
   if (!tree || tree.kind.k !== "A") return null;
-  if (tree.t === "construct") return listShapeOf(tree.items);
+  const one = vanishedOne(tree);
+  if (one) return shapeOfTree(one);
+  if (tree.t === "construct") return listShapeOf(liveItems(tree.items));
   if (tree.t === "op" && tree.sym === ",") return listShapeOf(commaItems(tree));
   if ((tree.t === "leaf" && tree.cat === "plain" && !tree.desc.spread) || tree.t === "apply") return tree.kind.shape || null;
   return null;
@@ -775,6 +793,8 @@ function shapeOfTree(tree) {
 // 解いた木を、値として渡したときの desc（構築と `,` の並びは、ここで形と要素を付ける）。
 function descOfTree(tree) {
   if (!tree) return U();
+  const one = vanishedOne(tree);
+  if (one) return descOfTree(one);
   if (tree.t === "construct" || (tree.t === "op" && tree.sym === ",")) {
     const d = { k: "A" };
     const sh = shapeOfTree(tree);
@@ -1609,7 +1629,7 @@ function nameKindOf(F, def) {
   const restoreNest = freshNest(F);
   let value;
   try {
-    const root = resolveTree(def.rhs, { F, scope: F.fileScope, diag: null });
+    const root = resolveRhs(def.rhs, { F, scope: F.fileScope, diag: null }); // 定義の行と同じ道（resolveRhs の注、R52）
     value = { k: root.kind.k, fn: root.kind.fn };
     // `:` はメタなので、名前は右辺の式の印を持ち越す（R42 の読み7）：`w : vs~` の w は撒く項のまま（`inc w` は `inc vs~` と同じく
     // 未知、`w inc` は `vs~ inc` と同じく inc を積む。2026-10-23 までは G9）。前は撒く印が落ちて、`inc w` が A、`inc vs~` が未知で割れていた。
@@ -2464,7 +2484,9 @@ function instanceError(inst, label) {
 // 中身の見える器（字面の括り・`,` の並び・構築の並び）の要素の種類。見えなければ null。
 function visibleElements(tree) {
   if (!tree) return null;
-  if (tree.t === "construct") return tree.items.map(elementKind);
+  const one = vanishedOne(tree); // 余ったラムダは消える（vanishedOne の注）
+  if (one) return visibleElements(one);
+  if (tree.t === "construct") return liveItems(tree.items).map(elementKind);
   if (tree.t === "op" && tree.sym === ",") {
     const out = [];
     let t = tree;
@@ -2975,11 +2997,17 @@ function resolveTree(tree, ctx) {
 
 // `:`（R3、P3）。左は、1項なら解かない（定義・欄・既定値の左はいつも1項）。2項以上なら枝の条件として解く。
 // fieldName は左が1語の裸の名前のときの名前で、括りやブロックの行なら構造体の欄の名前になる（rowsShape、R24）。
+// 左が名前1つの `:`（定義・欄・局所の定義。isNameTarget）の右辺の並びは、式を指すだけ（U〔答え〕10-22 22:14「定義は式を指す」）なので、
+// 値の上に積まれて口の開いたまま閉じた関数もラムダのまま残す（R52 の外。印 pointsTo を付けて resolveSeq に渡す。右辺が `,` で、恒等射で
+// 消えて並びだけが残ったときも、その並びは右辺の並び、resolveRhs）。右辺の並びの項の中（括り・囲み）と、右辺が並びでない形（`?`・段4〜8・
+// 消えない `,` の辺）の中の並びは、ほかの所と同じく R52 を当てる。左が名前でない `:`（枝。1項の `x > 1 : …`・`(c) : …` も、2項以上の
+// `inc x : …` も）の右辺は枝の値で、R52 を当てる（§4 R52 の R の所。どの `:` の右辺を除くかは §5 Q51）。
 function resolveDefine(tree, ctx) {
   let left = null;
   let isLocalDef = false;
   let fieldName = null;
-  if (tree.left && tree.left.type === "seq" && tree.left.terms.length === 1) {
+  const oneLeft = !!(tree.left && tree.left.type === "seq" && tree.left.terms.length === 1);
+  if (oneLeft) {
     const term = tree.left.terms[0];
     if (!isNameTarget(term)) {
       const label = patternCallIn(term, ctx);
@@ -2995,8 +3023,19 @@ function resolveDefine(tree, ctx) {
     if (n && ctx.scope.locals && ctx.scope.locals.has(n)) isLocalDef = true;
     fieldName = n;
   } else left = resolveTree(tree.left, ctx);
-  const right = resolveTree(tree.right, ctx);
+  const right = oneLeft && isNameTarget(tree.left.terms[0]) ? resolveRhs(tree.right, ctx) : resolveTree(tree.right, ctx);
   return { t: "op", sym: ":", left, right, kind: A(), isLocalDef, fieldName };
+}
+
+// 左が名前1つの `:` の右辺を解く（R52 の外の印 pointsTo は、右辺が並びか `,` のときだけ付ける）。定義の行（resolveDefine）と、名前の種類を
+// 引く所（nameKindOf）は、同じこの道で右辺を解く：片方だけ R52 を当てると、`v : 5 inc` の定義の行は未知の構築なのに、`v 3` の v は値と読む。
+// 右辺が `,` なら、印は resolveProduct に渡し、`,` が恒等射で消えて並びだけが残ったときだけ、その並びに効かせる（R45：`v : 5 inc , !_` は
+// `v : 5 inc` と同じ右辺の並び。2026-10-24 の確かめの指摘。前は `,` の木に印を付けず、`v : 5 inc` は v が未知で `v 3` が G7 なのに、
+// `v : 5 inc , !_` は v が値で `v 3` が通っていた）。消えない `,` の辺は右辺の並びそのものではないので、印は渡さない。
+function resolveRhs(rhs, ctx) {
+  if (rhs && rhs.type === "seq") return resolveSeq(rhs.terms, { ...ctx, pointsTo: true });
+  if (rhs && rhs.sym === ",") return resolveTree(rhs, { ...ctx, pointsTo: true });
+  return resolveTree(rhs, ctx);
 }
 
 // 1項の `:` の左が名前（定義・欄・局所の定義の左。公開の `#` 付きも）か。名前でない1項（`(t [1 2]) : 1`）は枝の
@@ -3136,13 +3175,20 @@ function namesPattern(name, ctx, inDefault) {
 // 辺が `,` で、その中の `,` が恒等射で消えて並びだけが残るなら（`2 , !_ , inc 1` の右の `!_ , inc 1` は `inc 1`）、G3 はその並びで見る
 // （vanishedSeq。単位律で `2 , !_ , inc 1` は `2 , inc 1` で G3。2026-10-24 の確かめで直した。前は中の `,` が消えた後の並びを外の `,` が
 // 見直さず、`(, 2 (apply inc 1))` で通していた）。
+//
+// 印 ctx.pointsTo（左が名前1つの `:` の右辺の `,`、resolveRhs）：`,` が恒等射で消えて並びだけが残れば、その並びは右辺の並びそのもの（R45）
+// なので、R52 の外（reduceItems の closeIdle を外す）。中の `,` の辺（右結合の `5 inc , !_ , !_` の右）にも印を渡す。消えない `,` の辺と、
+// 辺の項の中（括り・中置の辺）は右辺の並びそのものではないので、印を外して解く（R52 を当てる）。
 function resolveProduct(tree, ctx) {
   if (isBlockSeq(tree.left)) throw refuseIndentBlock("`,` の左");
+  const pointsTo = !!ctx.pointsTo;
+  const cx = pointsTo ? { ...ctx, pointsTo: false } : ctx;
+  const sideCtx = (side) => (pointsTo && side && side.type !== "seq" && side.sym === "," ? ctx : cx);
   const both = [tree.left, tree.right];
   const isMulti = (side) => !!side && side.type === "seq" && side.terms.length >= 2;
   const multi = both.map(isMulti);
-  const eff = both.map((side, j) => (multi[j] ? side : vanishedSeq(side, ctx)));
-  const sides = eff.map((side) => (isMulti(side) ? classifyItems(side.terms, ctx) : null));
+  const eff = both.map((side, j) => (multi[j] ? side : vanishedSeq(side, cx)));
+  const sides = eff.map((side) => (isMulti(side) ? classifyItems(side.terms, cx) : null));
   const g3 = sides.map((items) => !!items && items.some((c) => c.cat !== "unit" && c.desc.k !== "A"));
   const j = g3.indexOf(true);
   if (j >= 0) {
@@ -3150,16 +3196,16 @@ function resolveProduct(tree, ctx) {
     if (!g3[o] && !multi[o] && mayBeIdentity(both[o])) {
       let other = null;
       try {
-        other = resolveTree(both[o], ctx);
+        other = resolveTree(both[o], cx);
       } catch (e) {
         if (!(e instanceof OperationError)) throw e;
       }
-      if (isIdentity(other)) return reduceItems(sides[j], ctx);
+      if (isIdentity(other)) return reduceItems(sides[j], cx, false, !pointsTo);
     }
     throw gate("G3", `\`,\` の被演算子 \`${writeTree(both[j])}\` は関数か種類の未知な物を含む余積の並びです。括って書きます（§5 Q3）。`);
   }
-  const left = multi[0] ? reduceItems(sides[0], ctx) : resolveTree(tree.left, ctx);
-  const right = multi[1] ? reduceItems(sides[1], ctx) : resolveTree(tree.right, ctx);
+  const left = multi[0] ? reduceItems(sides[0], cx) : resolveTree(tree.left, sideCtx(tree.left));
+  const right = multi[1] ? reduceItems(sides[1], cx) : resolveTree(tree.right, sideCtx(tree.right));
   // 両方とも恒等射（1 × 1 ≅ 1）なら、`!_` の葉を残す（無ければ右）。どちらを残しても恒等射だが、段4〜8 の中置の被演算子では `!_` は
   // G7（§5 Q15）、名前の i は通るので、残す方を並べた順で選ぶと `!_ , i == 1` と `i , !_ == 1` が割れる（確かめで見つかった、2026-10-23）。
   // 断る側の `!_` に揃える。
@@ -3399,7 +3445,9 @@ function blockBodyKind(rows) {
 // - いちばん上 A か空：次の項を積む（次が A なら構築。次が L も積み、積まれた L は、その後に来る項を右から受ける。関数は右からだけ受ける）
 // 可変長の口（最後の括り `[~c]`、畳む点なし、`[* 2,]` など）は並びの終わりまで受け、1つ以上受けていれば終わりで閉じる（R41）。
 // 評価する所（`:` の右辺でない行の根の並び）で、終わりに未評価のラムダが残れば `_` になり、並びの中では消える（R42・R15）。そのとき
-// 恒等射でなければ information で知らせる（R48、reportLeftover）。書いた `_` と `!_` は、口を1つ埋める所で読む（R43）。
+// 恒等射でなければ information で知らせる（R48、reportLeftover）。評価する所の外でも（左が名前1つの `:` の右辺の並びを除く）、終わりに
+// 値の上に積まれて口の開いたまま閉じた関数が残れば、同じく `_` で、知らせる（R52、2026-10-24。受けた後の関数・穴の関数も、手順7）。
+// 書いた `_` と `!_` は、口を1つ埋める所で読む（R43）。
 // 根拠：U [2026-10-23 13:12 ebf18260]「いやこれ、むしろ2引数を断るなら逆適用の意味が余計に薄い上に構文が乱れる元だから、廃止だね。
 // 逆適用は廃止しよう」。主の Claude の問い「A の後の L は積む（関数は右からだけ受ける）。根でラムダが余って `_` になったら診断で知らせる。
 // これでいい？」に、U〔答え〕[2026-10-23 15:32 ebf18260]「合ってる。 それでOK！」。左結合そのものは U 2026-10-22 11:24 ebf18260「…余積は
@@ -3426,10 +3474,13 @@ function leafOf(term, c) {
 
 // 評価する所（R42）は、resolve が行の根の並びに付けた印 ctx.evaluate だけ。項の中（括り・囲み・中置）は評価する所でないので、
 // 印を外してから項を作る。
+// 印 ctx.pointsTo は、左が名前1つの `:` の右辺の並び（resolveDefine・resolveRhs）。そこだけは、値の上に積まれて口の開いたまま閉じた関数を
+// ラムダのまま残す（R52 の外）。項の中は右辺の並びそのものではないので、これも外してから項を作る。
 function resolveSeq(terms, ctx) {
   const evaluate = !!ctx.evaluate;
-  const inner = evaluate ? { ...ctx, evaluate: false } : ctx;
-  return reduceItems(classifyItems(terms, inner), inner, evaluate);
+  const pointsTo = !!ctx.pointsTo;
+  const inner = evaluate || pointsTo ? { ...ctx, evaluate: false, pointsTo: false } : ctx;
+  return reduceItems(classifyItems(terms, inner), inner, evaluate, !pointsTo);
 }
 
 // 0. 項を作る。字下げのブロックは並びの項にならない（§2、refuseIndentBlock の注）。
@@ -3438,7 +3489,9 @@ function classifyItems(terms, ctx) {
   return terms.map((t) => leafOf(t, classify(t, ctx)));
 }
 
-function reduceItems(items, ctx, evaluate = false) {
+// closeIdle は、値の上に積まれて口の開いたまま閉じた関数を余ったラムダにする並びか（R52。左が名前1つの `:` の右辺の並びと、その `,` が恒等射で
+// 消えて残った並びだけ false）。
+function reduceItems(items, ctx, evaluate = false, closeIdle = true) {
   // 1項の並びは、その項そのもの（手順の3）。`!_` 1つは恒等射（L）、書いた `_` 1つは印（A）にする（single）。
   if (items.length === 1) return finishTrees([single(items[0])], evaluate, ctx);
 
@@ -3469,20 +3522,28 @@ function reduceItems(items, ctx, evaluate = false) {
   //    （R47：積まれた関数は後ろの項を右から受け、前の値は取らない）なので、手順2 の穴の規則も、その並びを頭 F の並びとして見る
   //    （subHole、2026-10-24 の確かめで直した。前は並び全体の頭だけを見ていて、`5 inc _ 7` が G5・`5 (inc _ 7)` が `5 (inc 7)`、
   //    `5 add 1 2 !_` が通り・`5 (add 1 2 !_)` が G13 と、括るかどうかで割れていた）。
-  const st = { stack: [], mark: null, items };
+  const st = { stack: [], mark: null, items, topAt: null };
   const marked = suffixMarked(items);
   for (let i = 0; i < items.length; i++) {
     const sub = i > 0 && marked[i] ? subHole(st, i, ctx) : null;
     if (sub) {
       st.stack.push(sub);
+      st.topAt = items[i].term || items[i]; // 穴の関数を積んだ項の書いた所（R52 の知らせ、手順7）
       break;
     }
     foldStep(st, i);
   }
-  // 7. 終わり：可変長の口を閉じ（R41）、残った関数は評価する所なら `_`（R42）で、知らせる（R48）。
+  // 7. 終わり：可変長の口を閉じ（R41）、残った関数は評価する所なら `_`（R42）で、知らせる（R48）。評価する所の外でも、値の上に積まれて
+  //    口が開いたまま閉じた関数は `_` で、知らせる（R52）。
+  //    積み上げが2項以上なら、いちばん上の関数は値の上に積まれた物（積み上げの中で関数がいられるのは、いちばん上だけ。finishTrees の注）。
+  //    その関数が値の上で何かを受けた後（`5 add 1`）でも、穴の関数（`5 f2 !_`）でも同じ：値の上に積まれたのは `(F Y)` の1項（法則5：`X F Y`
+  //    は括った `X (F Y)` と同じ）で、括った `(add 1)`・`(f2 !_)` は値の上で何も受けずに閉じた関数そのもの（R52 の文面）なので、括らない綴りも
+  //    同じ答えでなければならない（2026-10-24 の確かめの指摘。前は「何も受けない」を積み上げの項の中の記録で見て、`(5 add 1) 3` が G7・
+  //    `(5 (add 1)) 3` が A と割れていた）。知らせる所は、その関数を積んだ項の書いた所（st.topAt）。
+  const at = closeIdle && st.stack.length >= 2 ? st.topAt : null;
   const trees = st.stack.map((e) => (e.t === "fn" ? closeEntry(e) : e));
   if (!trees.length) return single(st.mark); // 書いた `_` だけの並び（R15。`_ _` は `_`）
-  return finishTrees(trees, evaluate, ctx);
+  return finishTrees(trees, evaluate, ctx, at);
 }
 
 // 手順2：穴 `!_` と、穴として数える書いた `_`（§3.5、R16・R34・R38）を、頭 items[0] の並びとして見る。読める並びなら、穴の関数（か、
@@ -3516,20 +3577,29 @@ function subHole(st, i, ctx) {
 
 // 積み上げを木にする。評価する所（R42）で、いちばん上に未評価のラムダが残れば `_`：木では元の木を `(unit …)` で包む（§1.3）。
 // そのとき、恒等射でなければ information で知らせる（R48、reportLeftover）。
-// 2項以上なら構築（R8：子の構築は開いて並べる）。いちばん上が関数で下に値がある構築は、評価する所の外では種類を決めない（未知）：
-// 値の並びの後ろに、まだ口の開いた関数が残った物で、どの言葉にも無い（断る側、§5 Q38）。
+// 評価する所の外（左が名前1つの `:` の右辺の並びを除く）でも、いちばん上が値の上に積まれて口の開いたまま閉じた関数（at がある）なら、
+// 同じく `_` にして知らせる（R52、2026-10-24）。逆適用は無い（R47）ので、値の後ろの関数は前の値を取らず、並びが閉じた後に実引数を受ける
+// 道も無い（`(5 inc) 3` の 3 は括りの外の項で、括りの中の inc には届かない）。値の上で受けた後の関数（`(5 add 1)`）と穴の関数（`(5 f2 !_)`）も
+// 同じ（法則5 で `(5 (add 1))`・`(5 (f2 !_))` と同じ、reduceItems の手順7）。並び全体が1つの関数（下に値が無い）なら、評価する所の外では
+// 今までどおりラムダのまま残す（括りの中なら後から当てられる。辺・本体などに広げるかは §5 Q37）。
+// 2項以上なら構築（R8：子の構築は開いて並べる）。いちばん上が関数で下に値がある構築が残るのは、左が名前1つの `:` の右辺の並び
+// （`v : 5 inc`。R52 の外）だけで、種類を決めない（未知）：値の並びの後ろに、まだ口の開いた関数が残った物（§5 Q38 の残り・Q50）。
 // 積み上げの中で口の開いた関数が残るのは、いちばん上だけである：積んだ関数は次の項を受けるか合成し（R47）、口が全部埋まれば値になる。
-function finishTrees(trees, evaluate, ctx) {
+function finishTrees(trees, evaluate, ctx, at = null) {
   const last = trees.length - 1;
-  if (evaluate && trees[last].kind.k === "L") trees[last] = leftoverUnit(trees[last], ctx);
+  if (trees[last].kind.k === "L") {
+    if (evaluate) trees[last] = leftoverUnit(trees[last], ctx);
+    else if (at) trees[last] = leftoverUnit(trees[last], ctx, at);
+  }
   if (trees.length === 1) return trees[0];
   const items = trees.flatMap((g) => (g.t === "construct" ? g.items : [g]));
   return { t: "construct", items, kind: trees.some((t) => t.kind.k !== "A") ? U() : A() };
 }
 
 // 評価する所の終わりに余った未評価のラムダ（R42）を `_` にした木 `(unit …)`。恒等射でなければ知らせる（R48）。
-function leftoverUnit(tree, ctx) {
-  reportLeftover(tree, ctx);
+// at は R52 で包んだときの、積まれた関数の書いた所（知らせるのは書いた所ごとに1回、reportLeftover）。評価する所（根）では null。
+function leftoverUnit(tree, ctx, at = null) {
+  reportLeftover(tree, ctx, at);
   return { t: "unit", inner: tree, kind: A() };
 }
 
@@ -3539,14 +3609,22 @@ function leftoverUnit(tree, ctx) {
 // 知らせないのは、余ったのが恒等射のとき（`!_`・`i : !_` の i・恒等射どうしの合成。落としても当てても値が同じなので、失う物が無い。
 // `5 !_` は 5、根に1つの `!_` は `_` で、U [2026-10-22 23:41 ebf18260]「…!_ だけを評価したら _ に戻るのは都合がいいねって話。」）。
 // 恒等射どうしの合成（`i i`）を恒等射に数えるのは、圏の単位律（id ; id = id）から（R）。
-function reportLeftover(tree, ctx) {
+// R52（at がある）：評価する所の外で、値の上に積まれて口の開いたまま閉じた関数。名前と重さは R48 と同じで、言い分だけ置かれた所を言う。
+// 本体は括りの関数の実体ごとに読み直す（materialize）ので、書いた所（at）ごとに1回だけ知らせる（reportNotFolded と同じ）。
+function reportLeftover(tree, ctx, at = null) {
   if (!ctx || !ctx.diag || isIdentityKind(tree.kind)) return;
+  if (at && ctx.F) {
+    if (ctx.F.reportedLeft.has(at)) return;
+    ctx.F.reportedLeft.add(at);
+  }
   const name = show(tree);
   ctx.diag.push({
     severity: "information",
     reason: "leftover-lambda",
     name,
-    message: `未評価のラムダ \`${name}\` が評価する所の終わりに余ったので、\`_\` になりました。並びの中では消えます（§4 R42・R48）。当てるつもりなら、実引数を関数の後ろに書きます（逆適用は廃止、R47）。`,
+    message: at
+      ? `未評価のラムダ \`${name}\` が値の上に積まれ、口が開いたまま並びが閉じたので、\`_\` になりました。並びの中では消えます（§4 R48・R52）。逆適用は廃止なので（R47）、値の後ろの関数は前の値を取らず、並びが閉じた後に実引数を受けることもありません。当てるつもりなら、実引数を関数の後ろに書きます。`
+      : `未評価のラムダ \`${name}\` が評価する所の終わりに余ったので、\`_\` になりました。並びの中では消えます（§4 R42・R48）。当てるつもりなら、実引数を関数の後ろに書きます（逆適用は廃止、R47）。`,
   });
 }
 
@@ -3608,9 +3686,14 @@ function foldStep(st, i) {
   }
   // x は関数（L）。いちばん上が空か値なら積む（R47）。種類の未知な値の後ろなら、その値が関数かもしれず、x を合成するか積むかが
   // 決まらない（G2(a)、R40 の読み6）。
-  if (!top) return void stack.push(newEntry(x));
+  // 関数の項を積んだ所（st.topAt）は、並びの終わりに値の上で口が開いたまま閉じたときの知らせの書いた所（R52、reduceItems の手順7）。
+  if (!top) {
+    st.topAt = x.term || x;
+    return void stack.push(newEntry(x));
+  }
   if (top.t !== "fn") {
     if (top.kind.k !== "A") throw unknownNeighbor(top, x);
+    st.topAt = x.term || x;
     stack.push(newEntry(x));
     return;
   }
@@ -4110,7 +4193,12 @@ function writtenLength(t) {
   const d = descOfTree(t);
   if (isScalar(d)) return 1;
   const allA = (xs) => xs.every((x) => !!x && !isSpreadNode(x) && elementKind(x) === "A");
-  if (t.t === "construct") return allA(t.items) ? t.items.length : null;
+  const one = vanishedOne(t); // 余ったラムダは消える（vanishedOne の注）
+  if (one) return writtenLength(one);
+  if (t.t === "construct") {
+    const live = liveItems(t.items);
+    return allA(live) ? live.length : null;
+  }
   if (t.t === "op" && t.sym === ",") {
     const xs = commaItems(t);
     return allA(xs) ? xs.length : null;
@@ -4668,6 +4756,8 @@ export function resolve(source) {
     reported: new Set(),
     // 畳まない2項の点なしの information を出した、書いた所（reportNotFolded）。
     reportedPf: new Set(),
+    // 評価する所の外で余ったラムダ（R52）の information を出した、積まれた関数の書いた所（reportLeftover）。
+    reportedLeft: new Set(),
     // 括りの関数の実体（R24・R25）：鍵 → 実体、書いた `?` → 範囲の鍵 → その `?` を通って呼んだ実体（recordCall）、
     // 根の種類の仮置きの記録、木を解いている途中の実体、定義の行の `?` の木（最後に実体で埋める）、実体の本体の
     // information の出し先。
