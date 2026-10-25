@@ -7,9 +7,10 @@
  * 廃止（R47）で廃止。R48 は同じ日の、余ったラムダの診断。R49〜R51 は同じ日の**試し**（番地は指す関数を運ぶ・`[F,]` の写像・撒いた並びは
  * 流れの1項。利用者「試しにやってみよう！…悪ければロールバックしよう。」。戻す道は §7.23）。R52 は同じ日の、評価する所の外でも、値の上に
  * 積まれて何も受けずに閉じた関数は余ったラムダ。同じ日の §5 Q50〜Q52・Q44 の答えで、`:` の右辺にも当て、`$[…]` の中身は遅延した式で
- * 判定せず、知らせの重さは warning。R53 は同じ日の、`$` は関数だけを運ぶ（試しとは別の規則で、G20））、§1.2 の P1〜P3、§2 の表の「する」の行）
- * だけである。90% 以下の所は §6.2 の
- * 門（G1〜G20（G14 は 2026-10-21、G17 と G1 は 2026-10-22、G12 は 2026-10-23、G8 と G9 は 2026-10-24 に廃止。G19 は 2026-10-24 の試し、G20 は同じ日の R53）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
+ * 判定せず、知らせの重さは warning。R53 は同じ日の、`$` は関数だけを運ぶ（試しとは別の規則で、G20）。R54〜R57 は 2026-10-25 の、`$` の先は
+ * 書いた所で1つの関数と言い切れること（局所の定義・別名の印・`$_` は零射 `$[x ? _]`・後置の印は断り、前置の印の組み合わせは先で決める。classifyDollar））、
+ * §1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
+ * 門（G1〜G20（G14 は 2026-10-21、G17 と G1 は 2026-10-22、G12 は 2026-10-23、G8 と G9 は 2026-10-24 に廃止。G19 は 2026-10-24 の試し、G20 は同じ日の R53。2026-10-25 に R54〜R57 で G20 の当たる形を直した）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
  * 答えが出たときに、その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
  *
  * 入り口は `resolve(source)` の1つで、`{ trees, diagnostics }` を返す。trees は1行に1つの木、diagnostics は
@@ -134,8 +135,10 @@ const GATE_REASON = {
   // 試しを戻すときは、この行と streamStep を消す（§7.23）。
   G19: "coproduct-stream-arity",
   // G20 は 2026-10-24（R53）：`$` の先（名前か括りの中身。同じ日の確かめの直しから、字面・ほかの印と組んだ `$5`・`$$inc`・`$vs~` の先も）が
-  // 関数でない（値か未知、書いた `_`）。`$` は関数だけを運ぶ（U〔答え〕10-24 12:34
+  // 関数でない（値か未知）。`$` は関数だけを運ぶ（U〔答え〕10-24 12:34
   // 「…だから全部の$で良いはずだ。」）。値の束縛の番地の綴りは §5 Q54。R49〜R51 の試しとは別の規則で、試しを戻しても残す。
+  // 2026-10-25（R54〜R57）から、`$` の先を書いた所で1つの関数と言い切れない（U [2026-10-24 16:52 8dfc006e] の条件、classifyDollar の注）：書いた `_` は
+  // 零射 `$[x ? _]` で通り（R56）、局所の定義は右辺で決め（R54）、後置の印の付いた形（`$inc~`・`$fs~`・`$inc!`）は断る（R57）。
   G20: "coproduct-dollar-value",
   // G17（coproduct-manual-curry）は 2026-10-22 に廃止した（§5 Q35 の答え、U〔答え〕10-21 22:46。U の時刻は UTC）。断っていた `$` で包んだ入れ子の `?`（`add : x ? $[y ? x + y]`）は、
   // `$[+ m]` と同じく `$` で値にした関数を返す形で、本体の根は A で通る（R33）。
@@ -1124,11 +1127,11 @@ function lookup(name, ctx) {
   return A();
 }
 
-// `$名前`・`@名前` の名前の desc を、値の定義を解かずに覗く（R49、2026-10-24 の試し）。仮引数・局所の名前・実体の中で渡された物
-// （s.descs）・関数の定義（`?`）だけを見て、値の定義（別名 `p : inc` も）と取り込みの範囲の名前は null（印を付けない、今までどおり）。
-// 値の定義を解かないのは、`$` で遅らせた名前は種類を引かない（輪に数えない、「値を含む輪」の注）という今の作りを変えないためだった。
-// 同じ日の R53（`$` は関数だけを運ぶ）から、`$名前` は名前が関数かを見るために、null なら lookup で値の定義の右辺を解いて種類を引く
-// （classify。`$v` の輪は値を含む輪で断る）。印はこの関数が返す物にだけ付けるので、別名の番地は今までどおり印を持たない（§5 Q45）。
+// `@名前` の名前の desc を、値の定義を解かずに覗く（R49、2026-10-24 の試し）。仮引数・局所の名前・実体の中で渡された物
+// （s.descs）・関数の定義（`?`）だけを見て、値の定義（`p : $inc` も）と取り込みの範囲の名前は null（印を読まない、今までどおり）。
+// 値の定義を解かないのは、前置 `@` の名前は種類を引かない（輪に数えない、「値を含む輪」の注）という今の作りを変えないため。
+// 2026-10-24 までは `$名前` もここで覗いていた。同じ日の R53 から `$名前` は値の定義の右辺も解いて種類を引き、2026-10-25 の R55 から指す関数の印も
+// その種類から付ける（dollarNameTarget。別名 `p : inc` の `$p` も印を持つ）。`p : $inc` の `@p` は今のまま印を読まない（§5 Q45 の残り）。
 function peekDesc(name, ctx) {
   for (let s = ctx.scope; s; s = s.parent) {
     if (s.descs && s.descs.has(name)) return s.descs.get(name);
@@ -1668,6 +1671,8 @@ function nameKindOf(F, def) {
     if (el) value.elements = el;
     const sh = shapeOfTree(root);
     if (sh) value.shape = sh;
+    // 右辺が書いた `_` を指すか（R56、2026-10-25）。`q : _` の `$q` は `$_` と同じ零射の番地。desc には入れない（pointsToMark の注）。
+    F.unitDefs.set(def, pointsToMark(root, { F, scope: F.fileScope }));
   } catch (e) {
     abortFrame(F, frame);
     throw e;
@@ -1871,7 +1876,9 @@ function writtenDepth(lines, F) {
     // ほかの右（`x @ k` の右も）は解くので、書いた形を数える。
     if (t.type === "infix") return 1 + Math.max(termDepth(t.left, inValue), t.sym === "'" && pickKeyOf(t.right) ? 1 : termDepth(t.right, inValue));
     // `$名前` は、名前が関数なら指す関数の印を持つ番地で、鍵の深さは 2（R49、試し。internDesc の ref）。浅くならない側に倒して 2 と数える。
-    if (t.core.c === "name") return t.pre.length || t.post.length ? (t.pre.length === 1 && t.pre[0] === "$" && !t.post.length ? 2 : 1) : nameDepth(t.core.name);
+    // 2026-10-25 の R55〜R57 から、印を持つ番地は `$名前` のほかにも、`$_`（零射、R56）と、前置の印の組み合わせ `$@f`（R57）がある。どれも 2 と数える。
+    if (t.core.c === "name") return t.pre.length || t.post.length ? (t.pre[0] === "$" && !t.post.length ? 2 : 1) : nameDepth(t.core.name);
+    if (t.core.c === "unit" && t.pre.length === 1 && t.pre[0] === "$" && !t.post.length) return 2;
     if (t.core.rows) return 1 + t.core.rows.reduce((m, r) => Math.max(m, treeDepth(r, inValue)), 0);
     if (t.core.c === "lit" && t.core.text.startsWith("`")) return 2; // 文字列は文字の List（鍵では 2 段）
     return 1;
@@ -2577,63 +2584,8 @@ function classify(term, ctx) {
       }
     }
   }
-  // `$` が前に付いた項（名前・括り・`!_`）は値（関数を物にした番地。§2、96）。
-  // `$` は関数だけを運ぶ（R53、2026-10-24）：名前か括りの中身の種類が L（関数）のときだけ通し、A（値）・未知なら G20 で断る（refuseDollar）。
-  // 名前の種類は、仮引数・局所の名前・実体の中で渡された物・`?` の定義なら覗いた物（peekDesc）、値の定義なら右辺を解いた根の種類
-  // （nameKindOf。別名 `p : inc` は L で通る）、未定義なら A（R21）、取り込みのある範囲の未定義なら未知（lookup）。括りは中身を解いた種類
-  // （`$[+ m]`・`$[x ? …]`・`$[inc double]` は L、`$[5 inc]`・`$[1 2]`・`$(n , 99)` は値か未知）。`$!_` は恒等射なので通り、`$_`（書いた `_` は
-  // 印＝値）は断る。根拠：U [2026-10-24 12:25 ebf18260]「そもそも $ は必ず関数だけ運ぶというくらいの縛りがあっていい！」。主の Claude の問い
-  // 「`$` の縛りは、全部の `$` にかける？ それとも `$[…]` の中身だけ？」（12:26 UTC）に、U〔答え〕[2026-10-24 12:34 ebf18260]「そもそも、
-  // 識別子で名前がついているものも関数か否かについては区分可能。 / だから全部の$で良いはずだ。」。
-  // 2026-10-24 の試し（R49）：名前か括りが関数なら、番地は指す関数の fn を印 ref に持つ（A のまま。`@x` が口の数を知る）。印を付けるのは今までどおり
-  // 覗いた物だけで、値の定義の名前（別名の `$p`）には付けない（§5 Q45）。R53 は R49 と別の規則で、試しを戻しても残る。括りの中身は遅延した式で、
-  // R52 の判定をしない（resolveDelayed、§5 Q52 の答え）。中身が関数だけになったので、中身の並びで余るラムダは無い（中身の項の中は今のまま
-  // 当てる。§5 Q53 は狭まって残る）。
-  // 前は名前・括りの種類に依らず A で、`$vs`・`$[5 inc]`・`$_` も通っていた（`$_` は数えて 1、R27）。
-  if (post.length === 0 && pre.length === 1 && pre[0] === "$" && (core.c === "name" || core.c === "bracket")) {
-    const d = pointedDesc(core, ctx, true);
-    const kind = core.c === "name" ? d || lookup(core.name, ctx) : d;
-    if (!kind || kind.k !== "L") throw refuseDollar(term, kind, ctx);
-    return plain(d && d.k === "L" && d.fn ? { k: "A", ref: d.fn } : A());
-  }
-  if (post.length === 0 && pre.length === 1 && pre[0] === "$" && core.c === "unit") throw refuseDollar(term, null, ctx);
-  if (post.length === 0 && pre.length === 2 && pre[0] === "$" && pre[1] === "!" && core.c === "unit") return plain(A());
-  // `$` がほかの印や字面と組んだ項（2026-10-24 の R53 の確かめの直し）：`$` の先が関数でなければ、上の名前・括りと同じく G20。
-  // 前は表に無い組み合わせで、どれも未知（根・`,` の辺・`:` の右辺では通り、並びの中で G7）。[x] ≅ x の相手の `$[5]`・`$[$inc]`・`$[|5|]`・
-  // `$[vs~]` は R53 で G20 なので、括らない綴りだけが黙って通り、「全部の `$`」（U〔答え〕10-24 12:34）が綴りで割れていた。
-  // - 後置の印が無い（`$5`・`$$inc`・`$|5|`・`$-x`・`$@f`・`$~x`・`$#x`）：前置の印は核に近い物から結ぶので、`$`（いちばん外の前置）の先は残り
-  //   全部（`$5` の 5、`$$inc` の `$inc`、`$-x` の `-x`）。先を classify で見て、L でなければ G20。番地（`$…`）の種類は A か、それ自身が G20 なので、
-  //   `$$inc` はいつも G20（`p : $inc` ⏎ `$p` と同じ）。先が L（`$||inc||`・実体の中で印のある `$@f`）は表に無い組み合わせのまま未知（R53 の通る側は
-  //   名前と括りだけ。通すかは §5 Q55）。
-  // - 後置の印がある（`$vs~`・`$5!`）：前置の `$` と後置の印のどちらが先に結ぶかは決まっていない（表に無い組み合わせ）。`$` が `$` だけで、
-  //   核だけ（`($vs)~` の読み）も、核に後置の印を前から当てた物（`$(vs~)` の読み）も、どれも L でなく門にも当たらないときだけ、どの読みでも
-  //   `$` の先が関数でないので G20。核が L（`$inc~`）か、どれかの読みの先が門に当たる・L になる（`$fs~` の `fs~` は G7。要素ごとに `$` を
-  //   当てる読みなら関数だけの器は通りうる）なら、今のまま未知。試した読みの診断は、今のまま未知にするときは消す（核を1回だけ当てた今の答えと同じ）。
-  if (pre[0] === "$" && core.c !== "indent" && post.length === 0) {
-    const inner = classify({ type: "atom", pre: pre.slice(1), core, post: [] }, ctx);
-    const kind = inner.cat === "plain" ? inner.desc : U();
-    if (kind.k !== "L") throw refuseDollar(term, kind, ctx);
-    return plain(U());
-  }
-  if (pre.length === 1 && pre[0] === "$" && core.c !== "indent" && post.length > 0) {
-    const k0 = classify({ type: "atom", pre: [], core, post: [] }, ctx);
-    const kind0 = k0.cat === "plain" ? k0.desc : k0.cat === "unit" ? null : U();
-    if (kind0 && kind0.k === "L") return plain(U());
-    const mark = ctx.diag ? ctx.diag.length : 0;
-    let every = true;
-    for (let j = 1; j <= post.length && every; j++) {
-      try {
-        const kj = classify({ type: "atom", pre: [], core, post: post.slice(0, j) }, ctx);
-        if (kj.cat === "plain" && kj.desc.k === "L") every = false;
-      } catch (e) {
-        if (!isGate(e)) throw e;
-        every = false;
-      }
-    }
-    if (every) throw refuseDollar(term, kind0, ctx, "（`$` と後置の印のどちらが先に結ぶ読みでも）");
-    if (ctx.diag) ctx.diag.length = mark;
-    return plain(U());
-  }
+  // `$` が前に付いた項は、`$` の先を1つの関数と言い切れるときだけ値（関数を物にした番地。§2、96）。言い切れなければ G20（classifyDollar）。
+  if (pre[0] === "$" && core.c !== "indent") return classifyDollar(term, ctx, plain);
   // 前置 `@`：種類は並びの位置で決まる（§2、G6）。
   // 2026-10-24 の試し（R49）：x の desc が関数を指す番地の印（ref）を持てば、`@x` はその関数そのもの（L、口の数が分かる。前置 `@` の
   // 項ではないので G6 にも当たらない）。印が無ければ今までどおり（入力の項）。
@@ -2661,63 +2613,274 @@ function classify(term, ctx) {
     // `f !(1 < 0)` の実体で `h 5` を黙って構築と読む。
     return plain(isScalar(inner.desc) && !pre.includes("!") ? scalarDesc() : A());
   }
-  // 後置 `@`（取り込み）・前置 `#`・表に無い印の組み合わせ（`@f~` など。`$` が前に付いた組み合わせは上の `$` の枝で、先が関数でなければ
-  // G20、`$!_~` のように `$` の後ろに別の前置の印と後置の印が両方ある物はここ）は未知（§2、G7）。
+  // 後置 `@`（取り込み）・前置 `#`・表に無い印の組み合わせ（`@f~` など。`$` が前に付いた項は、印の組み合わせに依らず上の `$` の枝
+  // classifyDollar で決める）は未知（§2、G7）。
   touchCore(core, ctx);
   return plain(U());
 }
 
-// `$x` の x が関数でない（R53、G20）。kind は x の種類（null は書いた `_`）。言い分に、番地を受けた仮引数を先へ渡すときは `$` を付けずにそのまま
-// 渡すこと（`g : f [~t] ? map f t`）と、先が値ならデータの番地の綴りが未決なこと（§5 Q54）を書く。先が名前1つなら、名前がなぜその種類かを添える
-// （未定義の名前は値で R21、取り込みのある範囲の名前と括り・本体の中の局所の名前は未知で §5 Q10。2026-10-24 の確かめの指摘：未定義の名前の
-// 打ち間違いが「値です」とだけ言われると原因を取り違え、局所の名前を Q54 へ向けると開ける問いが違う）。how は読みの注（後置の印のある項）。
-function refuseDollar(term, kind, ctx, how = "") {
+// ---- `$` の先は1つの関数（R53・R54〜R57、G20） ----
+//
+// `$X` は、X を書いた所で1つの関数と言い切れるときだけ値（関数を物にした番地、A）。言い切れなければ G20（refuseDollar）。
+// 根拠：U [2026-10-24 16:52 8dfc006e]「そもそも、$が指定できるのは、一つの関数だと言い切れることが条件。」。主の Claude はこの条件で通す物と断る物を
+// 分け、「この条件（`$` の先は1つの関数と言い切れること）で入れていい？」と訊いた（16:53 UTC）。続く U [2026-10-25 00:08 8dfc006e]「_は、実は、
+// [x ? _] と同じだから / $_ は $[x ? _]」。主の Claude は、並びの中の `_` は余積の単位の顔で、`$` で物にする所で関数の顔（零射）が出る、と読み、
+// 「この読みで、`$` の条件（1つの関数と言い切れること）と一緒に入れていい？」と訊いた（00:09 UTC）。U〔答え〕[2026-10-25 00:25 8dfc006e]
+// 「正確にはそうなるね。 / 圏論は準同型しか見てないから、すごく大雑把なところがあるのは認める。 / $!_ も同じ理屈で、$に渡せる。 / 後はすべて君の言う通り。」。
+// 2026-10-24 の R53（`$` は関数だけを運ぶ）は種類が L かだけを見ていた。この片（2026-10-25）で、言い切れる物を足し（R54 局所の定義、R55 別名の印、
+// R56 `$_` は零射、R57 `$` とほかの前置の印の組み合わせで先が関数の物）、言い切れない形（後置の印の付いた物）を断る側に決めた（R57）。
+// - 後置の印（`~`・`!`・`@`）が付いた項（`$vs~`・`$inc~`・`$fs~`・`$inc!`・`$5!`・`$x@`・`$!_~`）：`$` と後置の印のどちらが先に結ぶ読みでも、
+//   1つの関数と言い切れない（撒いた形は並びで、`!` は値の印、`@` は取り込み）。前（R53）は、核が関数か読みの先が門に当たる物（`$inc~`・`$fs~`・
+//   `$inc!`）を表に無い組み合わせの未知にして、根・`,` の辺・`:` の右辺では通していた（§5 Q55）。
+// - 書いた `_` の `$_`：`$[x ? _]`（零射。何を受けても `_` を返す1引数の関数）を物にした番地（R56）。指す関数の印（R49、試し）は ZERO_FN。
+//   名前・括りを通して書いた `_` を指す物（`$[_]`・`$[[_]]`・`q : _` ⏎ `$q`・`q : _` ⏎ `$[q]`）も同じ（[x] ≅ x、`:` はメタで名前は右辺を指す。
+//   pointsToMark）。並びの中の `_` は今までどおり余積の単位（R15）で、`_` を `[x ? _]` と読むのは `$` で物にする所だけ。`_` を指すかは desc に
+//   入れず（入れると実体の鍵が見ない印が実体を跨いで分け合われる）、書いた所の木と名前の定義で見る。括りの関数の実体で仮引数に `_` が
+//   渡った名前（`h : [s] ? $s` ⏎ `h [s : _]`）は、渡された物の desc だけを見るので今のまま G20（断る側）。
+// - `$!_` は恒等射を物にした番地（今までどおり A）。U〔答え〕[2026-10-25 00:25 8dfc006e]「$!_ も同じ理屈で、$に渡せる。」。指す関数の印（R49、試し）は
+//   付けない（今までどおり）。恒等射の別名（`i : !_` の `$i`、局所の `h : !_` の `$h`）も、R55 の印から外す（下の isHeldIdentity）。
+//   指す関数が、並び全体を受ける恒等射（R29 の `!_`、`!_ 1 2` は `1 2` を丸ごと受ける）か、1引数の `[x ? x]`（主の Claude の 00:09 の読み「`!_` は
+//   恒等射 `[x ? x]`」、`[x ? x] 1 2` は 1 を受けて 2 を後ろに積む）かが決まっていないからである（§5 Q56）。`$_` は利用者の言葉が `$[x ? _]` を
+//   名指ししたので1引数の零射（ZERO_FN）だが、`$!_` の「同じ理屈」がどちらの恒等射を指すかは言っていない。2026-10-25 の作る途中の版は、別名の
+//   `$i` と割れないように `$!_` にも並び全体を受ける恒等射の印を付けていて、`tw : f [~r] ? @f 1 2` ⏎ `tw $!_ vs` の実体が `(apply @f (construct 1 2))`
+//   と決まり、`tw $[x ? x] vs` の `(construct (apply @f 1) 2)` と黙って割れていた（同じ日の確かめの指摘）。印が無ければ、開いた所の `@f` は
+//   口の数の分からない前置 `@` の項で、HEAD b08feb4f と同じに未知か門（`map $!_ vs` は実体の `[@f,]` で G7、`map2 $!_ vs` は G19）。
+// - 名前：dollarNameTarget。括り：中身を解いた種類（遅延した式、§5 Q52 の答え）。前置の印がほかにもある（`$$inc`・`$@f`・`$-inc`）か、核が字面・
+//   囲み（`$5`・`$||inc||`）：`$` の先は残り全部（前置の印は核に近い物から結ぶ）で、それが L なら通す（R57。指す関数の印も付ける）。
+function classifyDollar(term, ctx, plain) {
+  const { pre, core, post } = term;
+  if (post.length) throw refuseDollar(term, null, ctx, { where: "post" });
+  if (pre.length === 1 && core.c === "unit") return plain({ k: "A", ref: ZERO_FN });
+  if (pre.length === 2 && pre[1] === "!" && core.c === "unit") return plain(A());
+  let target;
+  const named = pre.length === 1 ? bracketedName(core) : null;
+  if (named) target = { ...dollarNameTarget(named, ctx), name: named };
+  else if (pre.length === 1 && core.c === "bracket") {
+    const b = bracketInfo(core, ctx, true);
+    target = { kind: b.desc, unit: b.trees.length === 1 && pointsToMark(b.trees[0], ctx) };
+  } else {
+    const inner = classify({ type: "atom", pre: pre.slice(1), core, post: [] }, ctx);
+    target = { kind: inner.cat === "plain" ? inner.desc : U() };
+  }
+  if (target.unit) return plain({ k: "A", ref: ZERO_FN });
+  const kind = target.kind;
+  if (!kind || kind.k !== "L") throw refuseDollar(term, kind, ctx, target);
+  // 指す関数の印（R49、試し）。2026-10-25 の R55 から、値の定義の名前（別名 `p : inc` の `$p`）にも付ける（前は覗いた物だけで、別名には付けなかった。§5 Q45）。
+  // 恒等射（`i : !_` の i）は印を付けない（上の `$!_` の注、§5 Q56）。
+  return plain(kind.fn && !isHeldIdentity(kind.fn) ? { k: "A", ref: kind.fn } : A());
+}
+
+// `$` の番地に印を付けない恒等射（§5 Q56）：穴 `!_` 1つの fn（R29。`i : !_`・局所の `h : !_`・`[i , !_]` の中身）。
+function isHeldIdentity(fn) {
+  return !!fn && fn.type === "id";
+}
+
+// `$` の先が名前1つか、名前1つを1行で括った物（`[sq]`・`[[sq]]`・`(sq)`）なら、その名前。[x] ≅ x なので `$[N]` は `$N` と同じ先を見る
+// （2026-10-25 の R54 から。括りの中を解いて引くと、局所の名前は lookup で未知になり、`$sq` は通るのに `$[sq]` は G20 と割れる。この片の作る途中に
+// 見つけた）。1行が名前1つの括りには局所の名前が無い（`:` の行が無い）ので、括りの範囲も外と同じ。
+function bracketedName(core) {
+  if (core.c === "name") return core.name;
+  if (core.c !== "bracket" || core.rows.length !== 1) return null;
+  const row = core.rows[0];
+  if (!row || row.type !== "seq" || row.terms.length !== 1) return null;
+  const t = row.terms[0];
+  return t.type === "atom" && !t.pre.length && !t.post.length && (t.core.c === "name" || t.core.c === "bracket") ? bracketedName(t.core) : null;
+}
+
+// `$_` が指す関数（R56）：`[x ? _]` の零射。口は1つで、何を受けても本体は書いた `_`（印＝値、本体の根は A。`[x ? _] 5` は A）。
+// 出どころ（idKey）は綴りの無い定数で、書いた `$[x ? _]` とは実体の鍵が別になる（答えの木は同じ。法則18）。
+const ZERO_FN = { type: "plain", origin: "plain", n: 1, getBodyRoot: () => "A", idKey: "零射[x ? _]" };
+
+// 解いた木が、書いた `_` を指すか（R56）：書いた `_` の葉（印）、それを1行で括った物（`[_]`・`[[_]]`。中の行が `_` に縮む `[_ _]`・`[_ , !_]` も）、
+// 書いた `_` を右辺に持つファイルの値の定義（F.unitDefs、nameKindOf が置く）。局所の定義の名前そのものの `$w`（`w : _`）は localTarget が右辺で見る。
+// 木の中に裸で書いた局所の名前（局所の別名 `v : w` の右辺の w、`v : [w]` の中の w）は、ここでも辿らない：裸で書いた局所の名前は lookup で
+// 種類を決めない（§5 Q10）ので、`w : inc` ⏎ `v : w` の `$v` は未知で G20。辿ると `w : _` ⏎ `v : w` の `$v` だけが零射で通り、同じ形が右辺で割れる。
+// 2026-10-25 の作る途中の版は辿っていて、局所の別名どうしの輪（`w : v` ⏎ `v : w` ⏎ `$v`・`[w : w ⏎ $w]`）では localTarget と互いに呼び合って
+// JS のスタックが溢れていた（同じ日の確かめの指摘）。
+function pointsToMark(t, ctx) {
+  if (isMark(t)) return true;
+  if (!t || t.t !== "leaf" || !t.term || t.term.type !== "atom" || t.term.pre.length || t.term.post.length) return false;
+  const c = t.term.core;
+  if (c.c === "bracket") return !!t.view && Array.isArray(t.view.inner) && t.view.inner.length === 1 && pointsToMark(t.view.inner[0], ctx);
+  if (c.c !== "name") return false;
+  for (let s = ctx.scope; s; s = s.parent) {
+    if ((s.descs && s.descs.has(c.name)) || (s.params && s.params.has(c.name))) return false;
+    if (s.locals && s.locals.has(c.name)) return false;
+  }
+  const def = ctx.F.defs.get(c.name);
+  return !!def && !def.lambda && !!ctx.F.unitDefs.get(def);
+}
+
+// `$名前` の先（R53・R54・R55）。返す物は {kind, where, unit}。kind は名前の種類（lookup と同じ順に探す）、where は G20 の言い分のための出どころ、
+// unit は書いた `_` を指す名前か（R56）。
+// - 仮引数・実体の中で渡された物：今の desc（素の関数の裸の仮引数は A、括りの関数の実体では渡された物の生まれ、R24）。
+// - 局所の名前（括り・本体の中の `:` の左の名前）：localTarget（R54）。
+// - ファイルの定義：nameKindOf（`?` なら L、ほかは右辺を解いた種類。値を含む輪は name-cycle、R53）。
+// - 取り込みのある範囲の未定義の名前は未知（このファイルから中身が見えない）、未定義の名前は値（R21、information を出す）。
+// - 関数の本体の範囲で、その範囲の行に左がその名前1つの `:` があるのに、名前が仮引数かファイルの定義で局所の名前に数えない（scanLocals）なら、未知で
+//   G20（"local-shadow"。括りの範囲には defRows が無いので見ない、blockScope の注）。R54 の読みではその行は局所の定義で外の名前を隠すが、隠しを通すかは決まっていない（§5 Q10 の「名前の隠し」、P2 の
+//   name-shadow は仮引数だけを見る）。前（HEAD b08feb4f から）は、`tt : x ?` ⏎ `\tinc : z ? z * z` ⏎ `\tmap $inc x` の `$inc` が黙ってファイルの inc
+//   を指し、本体の行は何にも使われなかった（2026-10-25 の確かめの指摘）。
+function dollarNameTarget(name, ctx) {
+  let imported = false;
+  for (let s = ctx.scope; s; s = s.parent) {
+    if (s.defRows && localDefsOf(s).shadow.has(name)) return { kind: U(), where: "local-shadow" };
+    if (s.descs && s.descs.has(name)) return { kind: s.descs.get(name) };
+    if (s.params && s.params.has(name)) return { kind: s.params.get(name) === "bare" ? A() : U() };
+    if (s.locals && s.locals.has(name)) return localTarget(name, s, ctx);
+    if (s.hasImport) imported = true;
+  }
+  const def = ctx.F.defs.get(name);
+  if (def) {
+    const kind = nameKindOf(ctx.F, def);
+    return { kind, unit: !def.lambda && !!ctx.F.unitDefs.get(def) };
+  }
+  if (imported) return { kind: U(), where: "imported" };
+  reportUndefined(name, ctx);
+  return { kind: A(), where: "undefined" };
+}
+
+// 局所の名前の先（R54、2026-10-25）：関数の本体の範囲 s の行（入れ子の括りの中の行は入れない）に、左がその名前1つの `:` がちょうど1つ
+// あれば、その右辺を、その `:` の行と同じ範囲で解いた種類（`sq : z ? z * z` は L、`q : inc`・`c : inc double`・`a : add 1`・外の仮引数を掴む
+// `k : z ? z + x` も L、`v : 5` は A）。行の `:` は定義の行と同じく解く（resolveDefine の右辺。知らせは定義の行で出すので、ここは出さない）。
+// 言い切れない所は未知にして G20 で断る（where に理由）：
+// - 範囲が括りか、関数の本体でない字下げのブロック（"local-field"。blockScope。括りは器（構造体か2次元配列、利用者 2026-09-28）で、その行の
+//   `sq : …` は欄かもしれず、局所の定義と読むかは決まっていない（§5 Q10、blockScope の注）。主の Claude が利用者に出した例は関数の本体の局所の
+//   定義だけだった。2026-10-25 の作る途中の版は括りにも当てていた（同じ日の確かめの指摘）。
+// - その名前の `:` が入れ子の括りの中にしか無い（"local-nested"。scanLocals は入れ子の括りの `:` の名前も外の範囲に数えるが、そこから見えるかは
+//   決まっていない、§5 Q10）。
+// - 範囲の行に、局所の定義と読めない `:` の行がある（"local-branch"。左が名前1つでない `x > 0 : …`・`_ : 0`、左が仮引数かファイルの定義の名前1つ
+//   `x : 1`）。本体のブロックは枝が有れば match_case で（利用者 2026-09-28）、そのときの `sq : inc` は条件 sq の枝とも読める（§5 Q10「本体の中の
+//   `:` が、局所の定義か枝か」）。主の Claude が利用者に出した例は、枝の無い本体（`sq : z ? z * z` ⏎ `map $sq x`）だけだった。2026-10-25 の
+//   作る途中の版は、枝の行と混ざった1つの行も通していた（同じ日の確かめの指摘）。
+// - 同じ範囲に2つ以上ある（"local-twice"。どれを指すか1つに決まらない。枝の条件の並びかもしれない）。
+// - 右辺を解いている途中で、また同じ範囲の同じ名前を `$` で指した（"local-cycle"。自分を `$` で指す局所の関数・局所の定義どうしの輪）。ファイルの
+//   `?` の定義は本体を解かずに L と分かる（nameKindOf）が、局所の `?` の定義は右辺を解いて関数の印を作るので、輪は解き終えられない。断る側に
+//   倒した（実装する人の読み、§5 Q10 に残す）。範囲は書いた範囲の物そのもの（実体ごとに別の物）で数えるので、実体を跨いだ同じ綴りは輪に数えない。
+// - 右辺が局所の名前を裸で書いた別名（"local-alias"。`w : inc` ⏎ `v : w`・`v : [w]` の `$v`）：裸で書いた局所の名前は lookup で種類を決めない
+//   （§5 Q10）ので、右辺の種類は未知。言い分でそれを言う。
+// 根拠：主の Claude「局所の `?` 定義：`sq : z ? z * z` ⏎ `map $sq x`。今は局所の名前を未知にしていて断っているので、ここが変わる。」（2026-10-24
+// 16:53 UTC）に U〔答え〕[2026-10-25 00:25 8dfc006e]「…後はすべて君の言う通り。」。裸で呼ぶ `sq x` は今のまま未知（lookup。この答えは `$` の先の話で、
+// 本体の中の `:` が局所の定義か枝かは §5 Q10 に残る）。
+// 右辺の種類は覚えない（`$名前` のたびに右辺を解き直す）。局所の `$` が2つずつ前の局所を指す鎖では指数で遅くなる（n=16 で 13 秒、同じ日の確かめ）
+// が、範囲ごとに覚えると、不動点を回している途中の過渡値が覚えた種類に固まりうる（関数の根は門を捕まえて未知にして回す、bodyRootOf）ので入れていない。
+function localTarget(name, s, ctx) {
+  if (s.field) return { kind: U(), where: "local-field" };
+  const d = localDefsOf(s);
+  const rhss = d.defs.get(name) || [];
+  if (!rhss.length) return { kind: U(), where: "local-nested" };
+  if (d.branch) return { kind: U(), where: "local-branch" };
+  if (rhss.length > 1) return { kind: U(), where: "local-twice" };
+  const busy = s.dollarBusy || (s.dollarBusy = new Set());
+  if (busy.has(name)) return { kind: U(), where: "local-cycle" };
+  busy.add(name);
+  let root;
+  try {
+    root = resolveTree(rhss[0], { F: ctx.F, scope: s, diag: null });
+  } finally {
+    busy.delete(name);
+  }
+  if (!root || !root.kind) return { kind: U(), where: "local-value" };
+  const alias = root.kind.k === "U" ? localAliasOf(rhss[0], s) : null;
+  if (alias) return { kind: root.kind, where: "local-alias", alias };
+  return { kind: root.kind, where: "local-value", unit: pointsToMark(root, { F: ctx.F, scope: s }) };
+}
+
+// 局所の定義の右辺が名前1つ（`v : w`・`v : [w]`・`v : (w)`）で、その名前が局所の名前なら、その名前（R54 の言い分のため）。
+function localAliasOf(rhs, s) {
+  if (!rhs || rhs.type !== "seq" || rhs.terms.length !== 1) return null;
+  const t = rhs.terms[0];
+  if (t.type !== "atom" || t.pre.length || t.post.length) return null;
+  const n = bracketedName(t.core);
+  if (!n) return null;
+  for (let q = s; q; q = q.parent) {
+    if ((q.descs && q.descs.has(n)) || (q.params && q.params.has(n))) return null;
+    if (q.locals && q.locals.has(n)) return n;
+  }
+  return null;
+}
+
+// 範囲 s の行の `:` の分け方（R54）：defs は左が局所の名前1つの `:` の行の右辺（名前 → 右辺の並び）、shadow は左が名前1つでも局所の名前に
+// 数えない名前（仮引数・ファイルの定義、scanLocals）、branch は局所の定義と読めない `:` の行があるか（左が名前1つでない行か、shadow の行）。
+// 行は関数の範囲の本体の行（字下げのブロックならその行、ほかは本体そのもの1つ。makeLambda が defRows に置く。括り・ブロックの範囲には無い）。
+function localDefsOf(s) {
+  if (s.localDefs) return s.localDefs;
+  const defs = new Map();
+  const shadow = new Set();
+  let branch = false;
+  for (const row of s.defRows || []) {
+    if (!row || row.type !== "op" || row.sym !== ":") continue;
+    const n = singleBareName(row.left);
+    if (!n) branch = true;
+    else if (!s.locals.has(n)) shadow.add(n);
+    else {
+      if (!defs.has(n)) defs.set(n, []);
+      defs.get(n).push(row.right);
+    }
+  }
+  s.localDefs = { defs, shadow, branch: branch || shadow.size > 0 };
+  return s.localDefs;
+}
+
+// `$x` の x が1つの関数と言い切れない（R53・R54〜R57、G20）。kind は x の種類（後置の印の付いた項は null）、target.where は出どころ。言い分に、
+// 番地を受けた仮引数を先へ渡すときは `$` を付けずにそのまま渡すこと（`g : f [~t] ? map f t`）と、先が値ならデータの番地の綴りが未決なこと
+// （§5 Q54）を書く。先が名前1つなら、名前がなぜその種類かを添える（未定義の名前は値で R21、取り込みのある範囲の名前は未知、局所の名前は R54 の
+// 言い切れない理由。2026-10-24 の確かめの指摘：未定義の名前の打ち間違いが「値です」とだけ言われると原因を取り違え、局所の名前を Q54 へ向けると
+// 開ける問いが違う）。
+function refuseDollar(term, kind, ctx, target = {}) {
   const text = writeTerm(term);
-  const name = term.type === "atom" && term.pre.length === 1 && !term.post.length && term.core.c === "name" ? term.core.name : null;
-  const where = name && ctx ? dollarNameWhere(name, ctx) : null;
+  const name = target.name || null;
+  const where = target.where || null;
+  if (where === "post") {
+    return gate(
+      "G20",
+      `\`${text}\` の \`$\` の先は後置の印 \`${term.post.join("")}\` の付いた形で、\`$\` と後置の印のどちらが先に結ぶ読みでも、1つの関数と言い切れません（撒いた形は並び、\`!\` は値の印、\`@\` は取り込み）。\`$\` の先は、書いた所で1つの関数と言い切れる物だけです（§4 R53・R57）。`
+    );
+  }
   const why =
     where === "undefined"
       ? `（\`${name}\` は定義されていない名前で、値として読みます。R21）`
-      : where === "local"
-        ? `（\`${name}\` は括り・本体の中の \`:\` の左の名前で、局所の定義か欄・枝の条件か決まっていないので、種類が未知です。§5 Q10）`
-        : where === "imported"
-          ? `（\`${name}\` は取り込みのある範囲の定義されていない名前で、種類が未知です。§5 Q10）`
-          : "";
-  const value = !kind || kind.k === "A";
-  const what = !kind
-    ? "書いた `_`（印）で、値です"
-    : kind.k === "A"
+      : where === "imported"
+        ? `（\`${name}\` は取り込みのある範囲の定義されていない名前で、中身がこのファイルから見えないので、種類が未知です。§5 Q10）`
+        : where === "local-field"
+          ? `（\`${name}\` は括りか、関数の本体でない字下げのブロックの中の \`:\` の左の名前です。括りは器で、その行は欄かもしれず、局所の定義と読むかが決まっていません。局所の定義を \`$\` で渡すのは関数の本体の行だけです。§4 R54、§5 Q10）`
+          : where === "local-nested"
+            ? `（\`${name}\` を左に置いた \`:\` が、この範囲の行ではなく入れ子の括りの中にあり、ここから見えるかが決まっていません。§4 R54、§5 Q10）`
+            : where === "local-branch"
+              ? `（\`${name}\` を左に置いた \`:\` のある本体に、局所の定義と読めない \`:\` の行（枝の条件か、仮引数・ファイルの定義と同じ名前の行）があります。枝のある本体は match_case で、\`${name} : …\` も枝の条件と読めるので、局所の定義か決まっていません。§4 R54、§5 Q10）`
+              : where === "local-shadow"
+                ? `（\`${name}\` を左に置いた \`:\` の行が本体にありますが、\`${name}\` は仮引数かファイルの定義の名前です。その行を局所の定義と読むと外の \`${name}\` を隠しますが、隠しを通すかは決まっていないので、どちらを指すか1つに言い切れません。§4 R54、§5 Q10）`
+                : where === "local-twice"
+                  ? `（\`${name}\` を左に置いた \`:\` が同じ範囲に2つ以上あり、どれを指すか1つに決まりません。§4 R54）`
+                  : where === "local-cycle"
+                    ? `（局所の定義 \`${name}\` の右辺を解いている途中で、また \`$${name}\` を指しました。自分か、ほかの局所の定義を通して自分を \`$\` で指す局所の関数は、右辺を解き終えられないので通しません。§4 R54、§5 Q10）`
+                    : where === "local-alias"
+                      ? `（\`${name}\` は局所の定義の名前で、右辺は局所の名前 \`${target.alias}\` を裸で書いた物です。裸で書いた局所の名前は、今のまま種類を決めません。§4 R54、§5 Q10）`
+                      : where === "local-value"
+                        ? `（\`${name}\` は局所の定義の名前で、右辺を解いた種類で見ました。§4 R54）`
+                        : "";
+  const value = !!kind && kind.k === "A";
+  const what =
+    kind && kind.k === "A"
       ? refOf(kind)
         ? "関数を指す番地（値）です。番地を受けた名前を先へ渡すときは、`$` を付けずにそのまま渡します（`g : f [~t] ? map f t`）"
         : `値です${why}`
-      : `種類が決まらないので、関数と言えません${why}`;
+      : `種類が決まらないので、1つの関数と言い切れません${why}`;
   return gate(
     "G20",
-    `\`${text}\` の \`$\` の先は${how}${what}。\`$\` は関数だけを運びます（§4 R53）。${value ? "値の束縛の番地（データの番地）の綴りは、まだ決めていません（§5 Q54）。" : ""}`
+    `\`${text}\` の \`$\` の先は${what}。\`$\` の先は、書いた所で1つの関数と言い切れる物だけです（§4 R53）。${value ? "値の束縛の番地（データの番地）の綴りは、まだ決めていません（§5 Q54）。" : ""}`
   );
 }
 
-// `$名前` の名前が、どこで種類の決まる名前か（refuseDollar の言い分のため。lookup と同じ順に探す）：仮引数・実体の中で渡された物・ファイルの定義は
-// null、括り・本体の中の局所の名前は "local"、取り込みのある範囲の未定義は "imported"、未定義は "undefined"。
-function dollarNameWhere(name, ctx) {
-  let imported = false;
-  for (let s = ctx.scope; s; s = s.parent) {
-    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name))) return null;
-    if (s.locals && s.locals.has(name)) return "local";
-    if (s.hasImport) imported = true;
-  }
-  if (ctx.F.defs.has(name)) return null;
-  return imported ? "imported" : "undefined";
-}
-
-// `$x`・`@x` の x の desc（R49、試し）。名前は値の定義を解かずに覗き（peekDesc。未定義なら information だけ出す、touchName）、
-// 括りは解く（前の touchCore と同じ）。delayed は `$x` の x（括りの中身は遅延した式、resolveDelayed）。`@x` の x は開く所なので false。
-function pointedDesc(core, ctx, delayed = false) {
+// `@x` の x の desc（R49、試し）。名前は値の定義を解かずに覗き（peekDesc。未定義なら information だけ出す、touchName）、
+// 括りは解く（前の touchCore と同じ）。`@x` の x は開く所なので、括りの中身は遅延した式にしない。`$x` の x は classifyDollar が見る
+// （2026-10-24 までは、ここで delayed の印を付けて `$x` の x も見ていた）。
+function pointedDesc(core, ctx) {
   if (core.c === "name") {
     touchName(core.name, ctx);
     return peekDesc(core.name, ctx);
   }
-  return bracketInfo(core, ctx, delayed).desc;
+  return bracketInfo(core, ctx).desc;
 }
 
 function touchCore(core, ctx) {
@@ -2889,7 +3052,10 @@ function rowsInfo(rows, ctx, delayed = false) {
 // 定義した行の隣で「定義されていません」と出る。だから仮引数でもファイルの定義でもなければ、その括りの中で未知に
 // する。範囲を括りの中に限るのは、括りの外では欄の名前を裸で読まない（欄は分解して受ける関数で読む）からである。
 function blockScope(rows, ctx) {
-  const scope = { parent: ctx.scope, params: null, locals: new Set(), hasImport: false };
+  // field は、この範囲の局所の名前を `$` の先で局所の定義と読まない印（R54。括りは器で、行は欄かもしれない。localTarget の "local-field"、§5 Q10）。
+  // 局所の定義を探す行（defRows、localDefsOf）は関数の範囲（makeLambda）にだけ置く。括りの行が外の名前と同じ名前の欄（`[inc : 5 ⏎ $inc]`）は、
+  // R54 が括りの行を局所の定義と読まないので、今までどおり外の名前（ファイルの inc）を指す（裸で書いた `[inc : 5 ⏎ inc 3]` と同じ、§5 Q10）。
+  const scope = { parent: ctx.scope, params: null, locals: new Set(), hasImport: false, field: true };
   for (const r of rows) scanLocals(r, scope, ctx.F);
   if (!scope.locals.size) return null;
   // 範囲の鍵（実体の鍵に入る関数の出どころ。lambdaKey の注）。中身は書いた行と外の範囲で決まる。
@@ -3165,7 +3331,8 @@ function resolveDefine(tree, ctx) {
 // `$[add ||5 inc||]`・`$[add [k : 5 inc]]`）と `?` の本体（`$[x ? x inc]`）は、今のまま当てて書いた所で知らせる（`$` の無い `[add (5 inc)]` と
 // 同じ）。R53 が保証するのは中身の根が関数であることだけなので、遅延が中まで及ぶかの §5 Q53 は狭まって残る（R53 の片では「閉じた」と書き、
 // 確かめの指摘で直した。M8 で差が出ないのは、遅延の有無に依らず中身の項の中を当てているから）。`$` に別の印の付いた括りは、確かめの直しから、
-// どの読みでも先が関数でない `$[5 inc]~` は G20（classify の `$` の組み合わせの枝）。
+// どの読みでも先が関数でない `$[5 inc]~` は G20（classify の `$` の組み合わせの枝）。2026-10-25 の R57 から、後置の印の付いた `$` の項は先に依らず
+// G20（`$[inc]~` も。classifyDollar）。
 function resolveDelayed(row, ctx) {
   if (row && row.type === "seq") return resolveSeq(row.terms, { ...ctx, delayed: true });
   if (row && row.sym === ",") return resolveTree(row, { ...ctx, delayed: true });
@@ -3409,14 +3576,17 @@ function isBlockSeq(tree) {
 
 // 関数の範囲。鍵は外の範囲と書いた `?` で決まる（仮引数は書いた綴りで決まり、局所の名前も本体の綴りで決まる）。
 // 実体の範囲は、この鍵を実体の鍵で置き換え、仮引数に当てた desc を持つ（instantiate）。
+// defRows は局所の定義を探す行（R54、localDefsOf）：字下げのブロックの本体ならその行、ほかは本体そのもの1つ。
 function makeLambda(op, ctx) {
   const params = parseParams(op.left);
+  const body = op.right;
   const scope = {
     parent: ctx.scope,
     params: new Map(params.names.map((p) => [p.name, p.cls])),
     locals: new Set(),
     hasImport: hasImportIn(op.right),
     key: `${ctx.scope.key}/${lambdaKey(op, "")}`,
+    defRows: body && body.type === "seq" && body.terms.length === 1 && isBareBlock(body.terms[0], "indent") ? body.terms[0].core.rows : [body],
   };
   scanLocals(op.right, scope, ctx.F);
   return { params, scope };
@@ -4488,13 +4658,13 @@ function streamInto(e, s, x) {
   const m = streamMouths(s);
   if (m === "whole") return void putArg(e, s, x);
   if (m !== 1 && m !== 2) {
-    // 印の無い `@x`（素の関数の仮引数・値の定義の名前の番地。R49 の印が届かない所）は、口の数が分からない前置 `@` の項のまま（§5 Q45）。
-    // 言い分でそれを名指しする（`cc : add inc` の `fold $cc vs` は、`cc vs~`・`fold $[add inc] vs` が通るのにここで断る。確かめ 2026-10-24）。
+    // 印の無い `@x`（素の関数の仮引数・恒等射の番地。R49 の印が届かない所）は、口の数が分からない前置 `@` の項のまま（§5 Q45・Q56）。
+    // 言い分でそれを名指しする（2026-10-24 の確かめ。そのときは別名の `cc : add inc` の `fold $cc vs` もここで断っていたが、2026-10-25 の R55 で通る）。
     const input = !!s.fn && s.fn.type === "input";
     const why =
       m === null
         ? input
-          ? "前置 `@` の項が指す名前に、関数を指す番地の印（R49）が届いていないので、口の数が分かりません。印は `$名前`（名前が `?` の関数）と `$[…]` が持ち、括りの関数の実体の裸の仮引数・欄・器の要素に渡れば届きますが、素の関数の仮引数と、値の定義の名前の番地（`p : inc` の `$p`）には届きません（§5 Q45）"
+          ? "前置 `@` の項が指す名前に、関数を指す番地の印（R49）が届いていないので、口の数が分かりません。印は `$名前`（関数の定義・別名・局所の定義）・`$[…]`・`$_` が持ち、括りの関数の実体の裸の仮引数・欄・器の要素に渡れば届きますが、素の関数の仮引数には届かず（§5 Q45）、恒等射の `$!_`・`$i`（`i : !_`）は指す関数が決まっていないので印を持ちません（§5 Q56）"
           : "口の数が分からないか、固定の口の後ろに可変長の口があります"
         : `口が ${m} つ残っています`;
     throw gate(
@@ -4907,6 +5077,8 @@ export function resolve(source) {
     instMemo: new Map(),
     matStack: [],
     patternNodes: [],
+    // 値の定義 → 右辺が書いた `_` を指すか（R56、nameKindOf が置き、pointsToMark・dollarNameTarget が読む）。
+    unitDefs: new Map(),
     diag: diagnostics,
     // 無名の素の関数の本体を解いている間に引いた仮置き（collectedRoot）。
     collectors: [],
