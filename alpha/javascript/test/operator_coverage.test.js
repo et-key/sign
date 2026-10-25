@@ -3,7 +3,7 @@
  *
  * `operator_table.js` の `asm` 欄は「この演算子はどの命令で出るのか」に答える。**答えが無い
  * ことは答えである**——引けば `__` が返り、`__` は唯一の偽である。だが「無い」は2つの別々の
- * 事実を意味する：`-`（negate）は `neg` 1命令で出るはずのものがまだ書かれていないだけで、
+ * 事実を意味する：`||`（bit_or）は `orr` 1命令で出るはずのものがまだ書かれていないだけで、
  * `:`（define）はそもそも命令にならない。片方の理由の欄にもう片方の言葉を書けば表が嘘をつく。
  *
  * だから答えは3通りあり、**どの綴りもそのどれか1つに居なければならない**：
@@ -205,6 +205,22 @@ for (const [name, template] of Object.entries(SIGNED_PROBE)) {
 	}
 }
 
+// 符号なしの欄を踏める型は alpha に無い（`UInt` の字面は `Int` と型付けされる）ので、`mul` と同じく符号ありの側だけ見る。
+{
+	const a = asmOf("negate");
+	const int = emit(`f : a ? -a${NL}f 1`);
+	checkTrue(`-a（Int）は ${a.gpr.signed} で出る`, int.errors.length === 0 && hasInsn(int.insns, `^\\t${a.gpr.signed} `), `診断 ${int.errors.join(" ")}`);
+	checkTrue("-a の綴りは符号で変わらない", a.gpr.signed === a.gpr.unsigned);
+	for (const [kind, src, says] of [
+		["Char", `f : a ? -a${NL}f ${B}a`, "Char の符号反転"],
+		["Address", `f : a ? -a${NL}f 0x1000`, "番地の符号反転"],
+		["Raw", `f : a ? -(@0x9000000)${NL}f 1`, "Raw の符号反転"],
+	]) {
+		const r = emit(src);
+		checkTrue(`-a（${kind}）は出さずに名指しで断る`, !hasInsn(r.insns, `^\\t${a.gpr.signed} `) && r.errors.some((m) => m.includes("negate") && m.includes(says)), `診断 ${r.errors.join(" ")}`);
+	}
+}
+
 // 幅の軸。**幅を言うのは番地である**（`NxHHHH` の `N`）。言わなければ語幅になる。
 // レジスタまで見る——4 byte と 8 byte は綴りが同じ `ldr` で、`w` か `x` だけが違う。
 for (const [name, probe] of [
@@ -268,7 +284,7 @@ for (const [name, p] of Object.entries(SHAPE_PROBE)) {
 
 // ---- 5. NOT_YET は本当に断る ----
 
-// **断り文句は名前を言う**（`まだ出せない式です（negate）`）。黙って別の命令に化けないこと
+// **断り文句は名前を言う**（`まだ出せない式です（bit_or）`）。黙って別の命令に化けないこと
 // ここで見ているのはその一点である。
 const NOT_YET_PROBE = {
 	xor: `f : a b ? a ; b${NL}f 1 2`,
@@ -285,7 +301,6 @@ const NOT_YET_PROBE = {
 	range_power: `f : a ? 2 ~^ 2${NL}f 1`,
 	factorial: `f : a ? a!${NL}f 1`,
 	bit_not: `f : a ? !!a${NL}f 1`,
-	negate: `f : a ? -a${NL}f 1`,
 };
 
 for (const [name, src] of Object.entries(NOT_YET_PROBE)) {
@@ -302,7 +317,7 @@ for (const [name, src] of Object.entries(NOT_YET_PROBE)) {
 // **名簿を増やしたら探針も増える。** ここが無いと、行だけ足して確かめないという抜け道が
 // 残る——「選ばないと通らない」を、選んだ後にも効かせる。
 {
-	const probed = new Set([...Object.keys(SIGNED_PROBE), ...Object.keys(SHAPE_PROBE), "input", "output", "address", "abs"]);
+	const probed = new Set([...Object.keys(SIGNED_PROBE), ...Object.keys(SHAPE_PROBE), "input", "output", "address", "abs", "negate"]);
 	const missing = [];
 	for (const tier of OPERATOR_BY_PRECEDENCE) {
 		for (const def of Object.values(tier || {})) {

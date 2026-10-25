@@ -291,19 +291,19 @@ const asmOfFile = (name) => {
 // --- 6. コーパスの6枚: 自分が定義していない名前の `.global` は出ない ------
 //
 // **これが目標そのものである。** `own` と `globals` を golden に置くのは「落としすぎて
-// いない」側を見るためで、`operator_table.sn` の 13 個が消えたら赤になる。
+// いない」側を見るためで、`operator_table.sn` の 14 個が消えたら赤になる。
 //
 // `strict_infix` が `own` に在って `globals` に無いのは印の話ではない——`operator_table.sn`
 // **単独では一度も使われない**平らな器なので、そもそも像が出ない（`corpus.js` の
 // `ST_EDGES` の注記と同じ事実）。引く側（`preprocess.sn`）では使われるから像は出るが、
 // そちらの印は落ちるので `.global` にはならない。
 {
-	const N13 = ["asm_enclosure_shape", "asm_enclosure_signed", "asm_infix_shape", "asm_infix_signed", "asm_infix_width", "asm_postfix_shape", "asm_prefix_place", "asm_prefix_shape", "asm_prefix_width", "enclosure", "infix", "postfix", "prefix"];
+	const N14 = ["asm_enclosure_shape", "asm_enclosure_signed", "asm_infix_shape", "asm_infix_signed", "asm_infix_width", "asm_postfix_shape", "asm_prefix_place", "asm_prefix_shape", "asm_prefix_signed", "asm_prefix_width", "enclosure", "infix", "postfix", "prefix"];
 	const SHAPE = {
 		"preprocess.sn": { own: [], globals: [] },
 		"lexer.sn": { own: [], globals: [] },
 		"parser.sn": { own: [], globals: [] },
-		"operator_table.sn": { own: [...N13, "strict_infix"].sort(), globals: N13 },
+		"operator_table.sn": { own: [...N14, "strict_infix"].sort(), globals: N14 },
 		"emit.sn": { own: [], globals: [] },
 		"target_info.sn": { own: [], globals: [] },
 		"layout.sn": { own: [], globals: [] },
