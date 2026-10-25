@@ -42,6 +42,12 @@
  * 18. `$` の先は書いた所で1つの関数（R54〜R57、2026-10-25）：ファイルの定義 `N : R` の `$N` と、右辺を開いた `$[R]` と、同じ定義を本体・括りの
  *    局所に置いた `$N` が同じ答え（局所の定義、R54。別名の印、R55）。`$_` と `$[x ? _]` も同じ答え（R56）。`$!_` と `$[x ? x]` と `i : !_` の `$i` も
  *    同じ答え（§5 Q56 の答え、2026-10-25。R55 の片では `$!_` と `$i` だけを比べていた）
+ * 19. 合成に来た流れは合成全体の口の数で受ける（R58、2026-10-25 の §5 Q58 の答え）：`F G X~` と、合成を名前にした `g : F G ⏎ g X~` と、括った `(F G) X~`。
+ *    合成全体の口が1つか2つなら、合成を素の関数で書いた `h X~` とも（実装の外の片側）
+ *
+ * 2026-10-25 の R58〜R61（§5 Q58・Q53・Q54・Q41 の答え、§7.33）で、19 を足し、12（書いた `_` も積の単位：`X , _`・`_ , X` と X。書いた `_` と恒等射の積は
+ * `_` の側が断る、§5 Q61）・15（合成全体の口が2つの合成は畳み込みの比べに、3つ以上は G19）・16（(b) は `$[X F]` と `$[X F , !_]` が G20）・17（値の先も
+ * 値を読む参照として比べ、(c) の規則と錨を R59・R60 の文面に）・18（値の右辺と、右辺に余る関数のある右辺）を直した（各法則の頭の注）。
  *
  * 2026-10-23 の左からの畳み込み（R40〜R43）で、1・4・5・6・7 の比べ方を直した（各法則の頭の注）。強さの順（R6）・流れの組み立て
  * 直し・G12 は無くなった。同じ日の確かめの直し（§7.19）で R13（G10）も無くなり、5 と 10 の畳み方を直した。3 に、器の名前を
@@ -2356,9 +2362,13 @@ law("11 口の外の !_ は i : !_ の i と同じ：!_ X と i X、5 !_ X と 5
 //
 // 比べの外：`$!_` は値（A）で恒等射ではないので、X の語に入れて、消えないことも比べる。名前と括りの比べでは、X が `!_` 1つの形だけ外す：
 // 1行の括り `(!_)` は否定の点なし（§2、U 2026-10-21 08:24）で、`!_` を括った物ではない。
+// 2026-10-25（R61、§5 Q41 の答え）に広げた所：書いた `_` も積の単位なので、`_ , X`・`X , _`・`X , _ , 7`・`_ , X , 7`・`7 , _ , X`・`7 , X , _`・名前の右辺の
+// `v : X , _`・`v : _ , X` も、恒等射のときと同じ相手と比べる（U [2026-10-25 08:41 533071da]「Q41 / _ , 5 も 5 , _ も 5 になるはずだ。」。主の Claude の読み：
+// `_` は点付きの側の零対象で、終対象として積の単位）。X が恒等射で `_` と隣り合う積だけは、どちらの単位が消えるかで残る物が割れるので、`_` の側が G7
+// で断る（§5 Q61、断る側だけを許す）。消えるのは書いた `_` だけで、名前や括りを通した `_`（`un : _` の un・`(_)`）は比べない（閉じた1つの項）。
 law("12 恒等射は , の単位：X と !_ , X・X , !_・i , X・X , i、X , !_ , 7 と X , 7、7 , !_ , X と 7 , X、v : X , !_ と v : X、v : X と (X)", () => {
 	const problems = [];
-	const count = { 比べた組: 0, 通る: 0, 断る: 0, "もう1つの被演算子": 0, "名前の右辺": 0, "名前と括った右辺": 0 };
+	const count = { 比べた組: 0, 通る: 0, 断る: 0, "もう1つの被演算子": 0, "名前の右辺": 0, "名前と括った右辺": 0, "書いた `_`（R61）": 0, "書いた `_` と恒等射の積は断る（Q61）": 0 };
 	// 全部の行の木（葉の `i` を `!_` と読む）・種類・門と、診断。
 	const viewAll = (o) =>
 		o.crash ? `例外 ${o.crash}` : o.refused ? `断り ${asBang(refusalText(o))}` : `${o.trees.map((t) => `${asBang(t.text)} : ${t.kind}`).join(" | ")} || ${o.diag.join(" ")}`;
@@ -2369,17 +2379,49 @@ law("12 恒等射は , の単位：X と !_ , X・X , !_・i , X・X , i、X , !
 	for (const X of Xs) {
 		const defsFrom = `i ${X}`;
 		const base = solve11(X, defsFrom);
+		// 3つ目は、恒等射が X と隣り合う `,` の積か（X が書いた `_` なら、下の R61 の注のとおり G7 で断る側）。
+		const xIsMark = X.split(" ").every((w) => w === "_"); // `_`・`_ _`（書いた `_` だけの並びは `_`、R15）
 		const groups = [
-			[base, [`!_ , ${X}`, `${X} , !_`, `i , ${X}`, `${X} , i`]],
-			[solve11(`${X} , 7`, defsFrom), [`${X} , !_ , 7`, `!_ , ${X} , 7`]],
-			[solve11(`7 , ${X}`, defsFrom), [`7 , !_ , ${X}`, `7 , ${X} , !_`, `7 , i , ${X}`]],
+			[base, [`!_ , ${X}`, `${X} , !_`, `i , ${X}`, `${X} , i`], true],
+			[solve11(`${X} , 7`, defsFrom), [`${X} , !_ , 7`, `!_ , ${X} , 7`], false],
+			[solve11(`7 , ${X}`, defsFrom), [`7 , !_ , ${X}`, `7 , ${X} , !_`, `7 , i , ${X}`], true],
 		];
-		for (const [want, lines] of groups) {
+		for (const [want, lines, adjacentId] of groups) {
 			for (const line of lines) {
 				const o = solve11(line, defsFrom);
 				count.比べた組++;
 				if (want !== base) count["もう1つの被演算子"]++;
+				if (xIsMark && adjacentId) {
+					if (!o.refused || o.refused.gate !== "G7") problems.push(`${line}：書いた \`_\` と恒等射の積は G7 のはず（§5 Q61）`, `  ${view11(o)}`);
+					else count["書いた `_` と恒等射の積は断る（Q61）"]++;
+					continue;
+				}
 				const ref = want === base ? X : line.startsWith("7 ,") ? `7 , ${X}` : `${X} , 7`;
+				if (o.crash || want.crash || view11(o) !== view11(want)) problems.push(`${line}  ⇔  ${ref}`, `  ${line}: ${view11(o)}`, `  ${ref}: ${view11(want)}`);
+				else if (o.refused) count.断る++;
+				else count.通る++;
+			}
+		}
+		// 書いた `_` も積の単位（R61、2026-10-25 の §5 Q41 の答え。U [2026-10-25 08:41 533071da]「Q41 / _ , 5 も 5 , _ も 5 になるはずだ。」）：`_ , X`・`X , _` と X、
+		// `X , _ , 7`・`_ , X , 7` と `X , 7`、`7 , _ , X`・`7 , X , _` と `7 , X`。X が恒等射（`!_`・`i`）で、`_` と隣り合う `,` の積は、どちらの単位が消えるかで
+		// 残る物が割れるので、`_` の側が G7 で断る（§5 Q61。法則13 の「恒等射の側が断る」と同じく、断る側だけを許す）。X が `_` なら `_ , _` は `_`。
+		const xIsId = X === "i" || X === "!_";
+		const unitGroups = [
+			[base, [`_ , ${X}`, `${X} , _`], true],
+			[solve11(`${X} , 7`, defsFrom), [`${X} , _ , 7`, `_ , ${X} , 7`], false],
+			[solve11(`7 , ${X}`, defsFrom), [`7 , _ , ${X}`, `7 , ${X} , _`], true],
+		];
+		for (const [want, lines, adjacent] of unitGroups) {
+			for (const line of lines) {
+				const o = solve11(line, defsFrom);
+				count.比べた組++;
+				count["書いた `_`（R61）"]++;
+				const ref = want === base ? X : line.startsWith("7 ,") ? `7 , ${X}` : `${X} , 7`;
+				if (xIsId && adjacent) {
+					if (!o.refused || o.refused.gate !== "G7") problems.push(`${line}：書いた \`_\` と恒等射の積は G7 のはず（§5 Q61）`, `  ${view11(o)}`);
+					else count["書いた `_` と恒等射の積は断る（Q61）"]++;
+					continue;
+				}
 				if (o.crash || want.crash || view11(o) !== view11(want)) problems.push(`${line}  ⇔  ${ref}`, `  ${line}: ${view11(o)}`, `  ${ref}: ${view11(want)}`);
 				else if (o.refused) count.断る++;
 				else count.通る++;
@@ -2397,10 +2439,18 @@ law("12 恒等射は , の単位：X と !_ , X・X , !_・i , X・X , i、X , !
 				else if (brL.refused) count.断る++;
 				else count.通る++;
 			}
-			for (const rhs of [`${X} , !_`, `!_ , ${X}`, `${X} , i`, `i , ${X}`]) {
+			const rhss = [`${X} , !_`, `!_ , ${X}`, `${X} , i`, `i , ${X}`, `${X} , _`, `_ , ${X}`];
+			for (let k = 0; k < rhss.length; k++) {
+				const rhs = rhss[k];
 				const o = solveLines([`v : ${rhs}`, use], defsFrom);
 				count.比べた組++;
 				count["名前の右辺"]++;
+				// 名前の右辺の `X , _`・`_ , X`（R61、後ろの2つ）。X が恒等射なら、上と同じく `_` の側が G7（§5 Q61）。X が書いた `_` で、前の4つ（恒等射との積）も同じ。
+				if ((k >= 4 && xIsId) || (k < 4 && xIsMark)) {
+					if (!o.refused || o.refused.gate !== "G7") problems.push(`v : ${rhs} ⏎ ${use}：書いた \`_\` と恒等射の積は G7 のはず（§5 Q61）`, `  ${viewAll(o)}`);
+					else count["書いた `_` と恒等射の積は断る（Q61）"]++;
+					continue;
+				}
 				if (o.crash || wantN.crash || viewAll(o) !== viewAll(wantN)) problems.push(`v : ${rhs} ⏎ ${use}  ⇔  v : ${X} ⏎ ${use}`, `  ,: ${viewAll(o)}`, `  X: ${viewAll(wantN)}`);
 				else if (o.refused) count.断る++;
 				else count.通る++;
@@ -2603,8 +2653,9 @@ law("14 口の中で通った !_ は、恒等射と読んでも穴と読んで�
 // 比べる綴り：
 // - 写像（f は口が1つの関数か、可変長の口だけの関数）：`map $f xs`（`map : f [~l] ? [@f,] l~`。`$f` は指す関数を運ぶ番地で、`@f` は f そのもの、
 //   `[@f,]` は f の写像）・`[f,] xs`・`[f,] xs~`。
-// - 畳み込み（f は口が2つの関数）：`fold $f xs`（`fold : f [~h] ? @f h~`。撒いた流れを口が2つの関数が受ける左からの畳み込み）・`f xs~`。
-// - 書き下し（f は口が1つの関数。合成も）：書いた List の `f X~` と、X の要素を書き並べた `f x1 x2 …`。
+// - 畳み込み（f は口が2つの関数）：`fold $f xs`（`fold : f [~h] ? @f h~`。撒いた流れを口が2つの関数が受ける左からの畳み込み）・`f xs~`。2026-10-25 の
+//   R58（§5 Q58 の答え）から、合成全体の口が2つの合成 c も（`fold $[c] xs`・`c xs~`）。合成全体の口が3つ以上か分からない合成の流れは G19。
+// - 書き下し（f は口が1つの関数。合成全体の口が1つの合成も、R58）：書いた List の `f X~` と、X の要素を書き並べた `f x1 x2 …`。
 // なぜ同じか：`$f` の番地は指す関数を運ぶので、実体の中の `@f` は f と同じ関数（R49）。`[f,]` は f の写像（R50、U〔答え〕10-24 03:43）で、`[f,] xs`
 // の xs は1つで入った器なのでその要素を写し（`[* 2,] \`ab\`` と同じ）、`[f,] xs~` は貪欲な単項の可変長の口が撒いた流れを丸ごと受けて写す
 // （U [2026-10-25 07:37 2772473e]「[ink,] [1 2 3]~ が [2 3 4] になるのも大事だと思う。」）。撒いた並びは流れの1項で、関数は残りの口の数で受ける：
@@ -2664,10 +2715,13 @@ const TWO15 = ["add", "f2", "k1", "uu2", "(f3 1)", "[<<]", "[x y ? x + y]", "pp"
 const XS15 = ["vs", "[1 2 3]", "[]", "`ab`", "5", "(inc 5)", "ws", "sv", "fs", "[vs vs]", "(tl fs)"];
 const VAR15 = ["hd", "[+]", "[' 0]", "(pq 1)"];
 const FOLDPLAIN15 = ["add", "f2", "k1", "[x y ? x + y]", "(f3 1)"];
-// 書き下しの比べだけに使う、最初の段の口が1つの合成。合成全体の口が最初の段の口と違う `inc add`・`inc [+]`・`inc f3` は、流れを最初の段で受けるか
-// 合成全体で受けるかが割れるので、流れの側は G19（§5 Q58。2026-10-25 の確かめの直し。作る途中の版は `inc f3` だけを §5 Q57 で断っていた）。
-// 断る側なので、合成のときだけ数えて許す。
-const COMPOSE15 = ["inc double", "inc add", "double inc", "inc [+]", "inc f3"];
+// 合成（2026-10-25 の §5 Q58 の答え、R58）：合成は1つの関数なので、撒いた流れは合成全体の口の数で受ける。合成全体の口が1つの合成（COMPOSE15）は
+// 書き下しの比べに、口が2つの合成（COMPOSE15_TWO）は畳み込みの比べ（`fold $[c] xs` と `c xs~`）に入れる。口が3つ以上か分からない合成
+// （COMPOSE15_MORE）は、流れの側が G19 であることだけを見る（R58 の文面の「3つ以上は G19」。§5 Q46）。答えの前（確かめの直し）は、`inc add`・`inc [+]`・
+// `inc f3` を書き下しの比べに入れ、流れの側が G19（§5 Q58）なら数えて許していた。
+const COMPOSE15 = ["inc double", "double inc", "[x ? x] inc"];
+const COMPOSE15_TWO = ["inc add", "add inc", "[x ? x] add", "inc f2 double"];
+const COMPOSE15_MORE = ["inc [+]", "inc f3", "add add"];
 // 書き下しの List と要素（写像は要素ごと、畳み込みは左から、口が1つの関数は書き並べ）。空の List は書き下しの比べの外（§5 Q57）。
 const WRITTEN15 = [
 	["[1 2 3]", ["1", "2", "3"]],
@@ -2684,7 +2738,8 @@ law("15 撒いた並びは流れの1項：map $f xs・[f,] xs・[f,] xs~ と、f
 	const problems = [];
 	const count = { 写像の組: 0, 可変長の口の写像の組: 0, 畳み込みの組: 0, 書き下しの組: 0, 通る: 0, 断る: 0, 実体の鍵の組: 0, 書き下しの写像の組: 0, 書き下しの畳み込みの組: 0, R31との組: 0 };
 	count.書き下しより慎重 = 0; // 数えるだけ（0 でもよい。下の「組が無い」の確かめに入れない）
-	count.合成の書き下しで流れの側がG19 = 0; // 数えるだけ（COMPOSE15 の `inc add`・`inc [+]`・`inc f3`。§5 Q58）
+	count.合成の畳み込みの組 = 0; // COMPOSE15_TWO（R58）
+	count.合成全体の口が3つ以上でG19の組 = 0; // COMPOSE15_MORE（R58）
 	const sigOf = (x) => [x, ans15(at15(x)), ans15(at15(`inc (${x})`))];
 	const sig = (r) => `${r[1]} / 文脈 ${r[2]}`;
 	const compare = (label, forms) => {
@@ -2716,18 +2771,26 @@ law("15 撒いた並びは流れの1項：map $f xs・[f,] xs・[f,] xs~ と、f
 			compare(`口2 ${f} ${xs}`, [`fold ${ref15(f)} ${xs}`, `${f} ${xs}~`]);
 		}
 	}
-	// 書き下し：口が1つの f の `f X~` と、X の要素を書き並べた `f x1 x2 …`（R51、2026-10-25）。
+	// 合成全体の口が2つの合成（R58）：`fold $[c] xs` と `c xs~`（どちらも合成全体を2引数の関数として畳む）。
+	for (const c of COMPOSE15_TWO) {
+		for (const xs of XS15) {
+			count.合成の畳み込みの組++;
+			compare(`合成の口2 ${c} ${xs}`, [`fold $[${c}] ${xs}`, `${c} ${xs}~`]);
+		}
+	}
+	// 合成全体の口が3つ以上か分からない合成（R58）：流れの側は G19。
+	for (const c of COMPOSE15_MORE) {
+		for (const [xs] of WRITTEN15) {
+			count.合成全体の口が3つ以上でG19の組++;
+			const so = at15(`${c} ${xs}~`);
+			if (!so.refused || so.refused.gate !== "G19") problems.push(`合成全体の口が3つ以上：${c} ${xs}~ は ${ans15(so)}（R58 の文面では G19）`);
+		}
+	}
+	// 書き下し：口が1つの f の `f X~` と、X の要素を書き並べた `f x1 x2 …`（R51、2026-10-25）。合成全体の口が1つの合成も（R58）。
 	for (const [xs, es] of WRITTEN15) {
 		for (const f of [...ONE15, ...COMPOSE15]) {
-			const stream = `${f} ${xs}~`;
-			const written = `${f} ${es.join(" ")}`;
-			const so = at15(stream);
-			if (f.includes(" ") && so.refused && so.refused.gate === "G19") {
-				count.合成の書き下しで流れの側がG19++;
-				continue;
-			}
 			count.書き下しの組++;
-			compare(`書き下し ${f} ${xs}`, [stream, written]);
+			compare(`書き下し ${f} ${xs}`, [`${f} ${xs}~`, `${f} ${es.join(" ")}`]);
 		}
 	}
 	// 実装の外の片側：写像と畳み込みの書き下し。
@@ -2810,6 +2873,8 @@ law("15 撒いた並びは流れの1項：map $f xs・[f,] xs・[f,] xs~ と、f
 // その形は比べない（F の括った物 `(add 1)`・`(inc !_)`・`(inc add)` は丸ごと関数で、どちらの読みでも余らない）。
 // 同じ日の R53（`$` は関数だけを運ぶ、U〔答え〕[2026-10-24 12:34 ebf18260]「…だから全部の$で良いはずだ。」）で、(b) の3つの綴りは中身が関数で
 // ないので、どれも G20 で書けなくなった（§5 Q53 と Q44 の残り その2 は閉じた）。(b) は、3つが同じ門で、それが G20 であることを見る。
+// 2026-10-25 の R60（§5 Q54 の答え：`$` は Reader と Writer を作る接頭辞）から、値の中身の `$[X]` は値を読む参照として通るので、(b) は `$[X F]` と
+// `$[X F , !_]` の2つが同じで、G20 であることを見る（遅延した中身の値と関数の積み上げは種類が決まらず、1つの Reader と言い切れない。R59 にも当たる）。
 // 中身が関数の `$[B]` が `[B]` と同じ知らせを出すこと（遅延が中身の関数に効かないこと）は法則17 で見る。
 // F には、何も受けない関数のほかに、値の上で何かを受けた後の関数（`add 1`）・穴の関数（`f2 !_`・`f2 _ 3`・`inc !_`）と、それを括った物
 // （`(add 1)`・`(inc !_)`）・名前にした物（`p1 : add 1` の p1）も入れる。値の上に積まれたのは `(F Y)` の1項（法則5）なので、どれも R52 で
@@ -2891,7 +2956,7 @@ law("16 括りの中で値の上に積まれて閉じた関数は、括りを外
 		"(a) 根の X F と (X F)": 0,
 		"撒く項は (X) と比べる": 0,
 		"名前 w : X F と (X F)": 0,
-		"(b) $[X F]・$[X F , !_] と $[X]（書いた所は遅延）": 0,
+		"(b) $[X F]・$[X F , !_] と $[X]（書いた所は遅延）": 0, // 2026-10-25 の R60 から `$[X F]` と `$[X F , !_]` の比べ（名前は前のまま）
 		"(c) @[X F] と (X F) の診断（開く所）": 0,
 	};
 	for (const x of XS16) {
@@ -2974,17 +3039,17 @@ law("16 括りの中で値の上に積まれて閉じた関数は、括りを外
 			// (b) `$[…]` の中身の並びは遅延した式：D[$[X F]]・D[$[X F , !_]] と D[$[X]] が、最後の行の種類と門、診断で同じ（上の注）。
 			// 2026-10-24 の R53（`$` は関数だけを運ぶ）から、中身の X F・X F , !_・X はどれも関数でないので、3つとも G20 で同じ（書けない）。
 			// 同じことに加えて G20 であることを見る（前は3つとも通って、同じ種類と診断だった）。
+			// 2026-10-25 の R60（`$` は Reader と Writer を作る接頭辞、§5 Q54 の答え）から、値の中身の `$[X]` は値を読む参照として通る（法則17 が `$X` と
+			// `$[X]` と右辺で比べる）。遅延した中身の X F は判定しない値と関数の積み上げで、種類が決まらないので1つの Reader と言い切れず、今までどおり G20
+			// （F が恒等射でない物は R59、§5 Q53 の答えの「中身のどこかで余る関数があれば G20」にも当たる）。だから比べる相手は `$[X F]` と `$[X F , !_]`
+			// の2つで、どちらも G20 であることを見る（`$[X]` とは比べない）。
 			for (const d of DELAY16) {
-				const pl = d(x);
-				for (const body of [`${x} ${f}`, `${x} ${f} , !_`]) {
-					const dl = d(body);
-					const defsFrom = [...dl, ...pl].join("\n");
-					const od = at16(dl, defsFrom);
-					const op = at16(pl, defsFrom);
-					count["(b) $[X F]・$[X F , !_] と $[X]（書いた所は遅延）"]++;
-					if (lastView16(od) !== lastView16(op)) problems.push(`(b) ${dl.join(" ⏎ ")}  ⇔  ${pl.join(" ⏎ ")}：$[…] の中身の並びは書いた所で判定しないので同じはず`, `  遅延: ${lastView16(od)}`, `  替えた: ${lastView16(op)}`);
-					else if (!od.refused || od.refused.gate !== "G20") problems.push(`(b) ${dl.join(" ⏎ ")}：中身が関数でない \`$[…]\` は G20 のはず（R53）`, `  ${lastView16(od)}`);
-				}
+				const dls = [`${x} ${f}`, `${x} ${f} , !_`].map((body) => d(body));
+				const defsFrom = dls.flat().join("\n");
+				const [o1, o2] = dls.map((dl) => at16(dl, defsFrom));
+				count["(b) $[X F]・$[X F , !_] と $[X]（書いた所は遅延）"]++;
+				if (lastView16(o1) !== lastView16(o2)) problems.push(`(b) ${dls[0].join(" ⏎ ")}  ⇔  ${dls[1].join(" ⏎ ")}：恒等射で消えて残った中身の並びは同じはず（R45）`, `  ${lastView16(o1)}`, `  ${lastView16(o2)}`);
+				else if (!o1.refused || o1.refused.gate !== "G20") problems.push(`(b) ${dls[0].join(" ⏎ ")}：遅延した中身の値と関数の積み上げは G20 のはず（R53・R59・R60）`, `  ${lastView16(o1)}`);
 			}
 			// (c) 開く所の `@[X F]` と、括った `(X F)` の門と診断が同じ（上の注。種類は比べない）。
 			for (const e of OPEN16) {
@@ -3036,6 +3101,11 @@ law("16 括りの中で値の上に積まれて閉じた関数は、括りを外
 // - (a') の先が関数で表に無い組み合わせ（`$||inc||`・`$||!_||`）は、R53 の片では括らない綴りが未知のまま（§5 Q55）で割れを数えていた。R57 で
 //   `$[…]` と同じく通るので、ほかの先と同じく答えの全部を比べる。
 // - 書いた `_` の `$_` と `$[_]` は、R53 の片では両方 G20 で同じだった。R56 で両方とも零射 `$[x ? _]` の番地で、同じ（通る）。
+// 2026-10-25（R59・R60、§7.33）に広げた所（法則の名前は前のまま）：
+// - R60（`$` は Reader と Writer を作る接頭辞、§5 Q54 の答え）から、値の名前（`vs`・`five`・`st`・`pa`・`zz`）・値の右辺・名前でない値の先の `$X` は、
+//   値を読む参照として通る。(a)(b)(a') の比べは今までどおりで、R53 の片では G20 どうしの比べだった組が、通る答えどうしの比べになった（値へ広げた）。
+// - (c) の規則：`[B]` の右辺に余るラムダ（R59：中身のどこかに余る関数）があるか、B が後置の印の付いた項1つ（R57）なら `$[B]` は G20。ほかで `[B]` が関数か
+//   値なら通り、診断は `[B]` と同じ。未知なら G20。錨（ANCHOR17）は R59・R60 の文面の例に書き直した。
 const DEFS17 = [
 	INC,
 	"double : x ? x * 2",
@@ -3120,30 +3190,36 @@ const NONNAME17 = [
 	["||inc||", true],
 	["||!_||", true],
 ];
-// (c) の錨：R53 の文面の例で、中身が関数か（§4 R53 の「括りの種類」と §6.2 の G20 の行）。
+// (c) の錨：R53 の文面の例で、中身が関数か（§4 R53 の「括りの種類」と §6.2 の G20 の行）。2026-10-25 の R59・R60 から、[B の綴り, `[B]` の種類, `$[B]` が
+// 通るか]：先が値なら値を読む参照として通り（R60。R53 の文面では G20）、中身のどこかに余る関数があれば G20（R59。R53 の片では関数なら通った）。
 const ANCHOR17 = [
-	["+ 1", true],
-	["inc double", true],
-	["add 1", true],
-	["f3 !_ 2", true],
-	["x ? x + 1", true],
-	[",", true],
-	["inc , !_", true],
-	["5 inc", false],
-	["1 2", false],
-	["inc 5", false],
-	["uu 5", false],
-	["5", false],
-	["vs", false],
-	["$inc", false],
-	["k : 5 inc", false],
+	["+ 1", "L", true],
+	["inc double", "L", true],
+	["add 1", "L", true],
+	["f3 !_ 2", "L", true],
+	["x ? x + 1", "L", true],
+	[",", "L", true],
+	["inc , !_", "L", true],
+	["5 inc", "A", false], // 括りの中は R52 で 5。`$[…]` の中身の並びは遅延した積み上げで種類が決まらない（Q52）
+	["1 2", "A", true], // R60（R53 の文面では G20）
+	["inc 5", "A", true], // R60
+	["uu 5", "U", false],
+	["5", "A", true], // R60
+	["vs", "A", true], // R60
+	["$inc", "A", true], // R60（番地を読む参照）
+	["k : 5 inc", "A", false], // R59（欄の右辺に余る関数）
+	["x ? x inc", "L", false], // R59（`?` の本体に余る関数。R53 の片では通った）
+	["add (5 inc)", "L", false], // R59（R53 の片では通った）
+	["vs~", "A", false], // R57（[x] ≅ x で `$vs~` と同じ）
 ];
-// 括りの中身 B（(c)）。関数・値・積み上げ・欄・枝・中置・恒等射・印・番地。
+// 括りの中身 B（(c)）。関数・値・積み上げ・欄・枝・中置・恒等射・印・番地。2026-10-25 の R59 から、中身の項の中に余る関数のある物（`add (5 inc)`・`f3 (5 inc)`）も。
 const BODIES17 = [
 	"inc", "inc double", "add 1", "+ 1", "* 2,", "[+]", ",", "uu", "hd", "!_", "inc , !_", "!_ , inc", "inc add 5", "f3 !_ 2", "x ? x inc", "x ? x + 1",
 	"x ? 5 inc", "[x ? x inc]", "inc inc inc", "@inc", "5 inc", "(5 inc)", "5 inc , !_", "k : 5 inc", "5 > 1 : 5 inc", "5 inc == 6", "(5 inc) 3", "1 2",
-	"vs", "uu 5", "inc 5", "_", "5", "$inc", "5 add 1", "!_ == 1", "inc vs~", "vs~",
+	"vs", "uu 5", "inc 5", "_", "5", "$inc", "5 add 1", "!_ == 1", "inc vs~", "vs~", "add (5 inc)", "f3 (5 inc)", "add (5 !_)", "_ , 5",
 ];
+// 後置の印の付いた項1つの中身（R57・R60：[x] ≅ x で、括らない `$x~` と同じく G20）。
+const POSTFIX17 = new Set(["vs~"]);
 const view17 = (o) => (o.crash ? `例外 ${o.crash}` : o.refused ? `断り ${refusalText(o)}` : `${lastOf(o).kind} || ${o.diag.join(" ")}`);
 const r53Of17 = (o) => (o.crash ? `例外 ${o.crash}` : o.refused && o.refused.gate === "G20" ? "G20" : "G20 でない");
 const at17 = (lines) => outcome(src([...usedDefs(UNITS17, lines.join("\n")), ...lines]));
@@ -3202,8 +3278,8 @@ law("17 `$` は関数だけを運ぶ（R53）：C[$N] と C[$[N]] と C[$[右辺
 			pair(`(a') ${x}`, c(`$${x}`), c(`$[${x}]`), false, fnCombo);
 		}
 	}
-	// (c) の錨：`p : [B]` の右辺が関数かを、R53 の文面の例で規則の側に書く。
-	for (const [b, fn] of ANCHOR17) {
+	// (c) の錨：`p : [B]` の右辺の種類と `p : $[B]` が通るかを、R53・R59・R60 の文面の例で規則の側に書く。
+	for (const [b, kind, pass] of ANCHOR17) {
 		count["(c) 錨（R53 の文面の例）"]++;
 		if (!BODIES17.includes(b)) problems.push(`(c) 錨 ${b}：BODIES17 に無い`);
 		let rk = null;
@@ -3215,10 +3291,11 @@ law("17 `$` は関数だけを運ぶ（R53）：C[$N] と C[$[N]] と C[$[右辺
 		} catch (e) {
 			rk = `断り ${e.reason || e.message}`;
 		}
-		if ((rk === "L") !== fn) problems.push(`(c) 錨 ${b}：[B] の種類が ${rk}（R53 の文面では${fn ? "関数" : "関数でない"}）`);
+		const rkWant = kind === "U" ? "未知" : kind;
+		if (rk !== rkWant) problems.push(`(c) 錨 ${b}：[B] の種類が ${rk}（文面の例では ${rkWant}）`);
 		const od = at17([`p : $[${b}]`]);
 		const passed = !od.crash && !od.refused;
-		if (passed !== fn || (!fn && (!od.refused || od.refused.gate !== "G20"))) problems.push(`(c) 錨 ${b}：$[B] は ${view17(od)}（R53 の文面では${fn ? "通る" : "G20"}）`);
+		if (passed !== pass || (!pass && (!od.refused || od.refused.gate !== "G20"))) problems.push(`(c) 錨 ${b}：$[B] は ${view17(od)}（文面の例では${pass ? "通る" : "G20"}）`);
 	}
 	// (c) `p : $[B]` と `p : [B]`。
 	for (const b of BODIES17) {
@@ -3243,16 +3320,26 @@ law("17 `$` は関数だけを運ぶ（R53）：C[$N] と C[$[N]] と C[$[右辺
 		} catch (e) {
 			rk = `例外 ${e.message}`;
 		}
+		// 2026-10-25 の R59・R60 から：`[B]` の右辺に余るラムダの知らせ（leftover-lambda）があれば、`$[B]` は G20（R59：中身のどこかに余る関数。中身の並び
+		// そのものの値と関数の積み上げは、遅延した式で種類が決まらないので、同じく G20）。後置の印の付いた項1つの中身も G20（R57）。ほかで、`[B]` が関数（L）
+		// か値（A、R60：値を読む参照）なら通り、診断は `[B]` と同じ。未知なら G20。R53 の片では「関数なら通り、関数でなければ G20」だった。
+		// 注（2026-10-25 の反証する人の指摘）：この側の「余る関数があるか」は、実装と同じ leftoverUnit の知らせ（恒等射を除く isIdentityKind も同じ）から読むので、
+		// 両側に同じ前提が置かれている。実装の外から余る関数を数える物は、まだ無い。外延が恒等射の `[y ? y]` の余り（`$[x ? x (y ? y)]` は G20、`$[x ? x !_]` は
+		// 通る）は、この比べでは見えない（R52 の知らせと同じ線。§5 Q56 の `$!_` が `[x ? x]` を指すこととの関わりは §5 Q65 の注）。
+		const deadInside = op.diag.includes("leftover-lambda");
 		if (b === "_") {
 			// 書いた `_` の中身（R56、2026-10-25）：並びの中の `[_]` は値（印）だが、`$` で物にする所では零射 `$[x ? _]` の番地で通る。診断は `[B]` と同じ。
 			count["(c) 中身が書いた `_`（R56、通る）"] = (count["(c) 中身が書いた `_`（R56、通る）"] || 0) + 1;
 			if (od.refused || od.diag.join(" ") !== op.diag.join(" ")) problems.push(`(c) ${b}：\`$[_]\` は零射の番地で通り、診断は [B] と同じはず（R56）`, `  $[B]: ${view17(od)}`, `  [B]: ${view17(op)}`);
-		} else if (rk === "L") {
-			count["(c) 中身が関数で通る"]++;
-			if (od.refused || od.diag.join(" ") !== op.diag.join(" ")) problems.push(`(c) ${b}：中身が関数なら通り、診断は [B] と同じはず`, `  $[B]: ${view17(od)}`, `  [B]: ${view17(op)}`);
+		} else if (deadInside || POSTFIX17.has(b)) {
+			count["(c) 中身に余る関数か後置の印で G20（R59・R57）"] = (count["(c) 中身に余る関数か後置の印で G20（R59・R57）"] || 0) + 1;
+			if (!od.refused || od.refused.gate !== "G20") problems.push(`(c) ${b}：中身に余る関数か後置の印があれば G20 のはず（R59・R57）`, `  $[B]: ${view17(od)}`, `  [B]: ${view17(op)}`);
+		} else if (rk === "L" || rk === "A") {
+			count[rk === "L" ? "(c) 中身が関数で通る" : "(c) 中身が値で通る（R60）"] = (count[rk === "L" ? "(c) 中身が関数で通る" : "(c) 中身が値で通る（R60）"] || 0) + 1;
+			if (od.refused || od.diag.join(" ") !== op.diag.join(" ")) problems.push(`(c) ${b}：中身が関数か値なら通り、診断は [B] と同じはず（R60）`, `  $[B]: ${view17(od)}`, `  [B]: ${view17(op)}`);
 		} else {
 			count["(c) 中身が関数でなく G20"]++;
-			if (!od.refused || od.refused.gate !== "G20") problems.push(`(c) ${b}：中身が関数でない（${rk}）なら G20 のはず`, `  $[B]: ${view17(od)}`);
+			if (!od.refused || od.refused.gate !== "G20") problems.push(`(c) ${b}：中身が未知（${rk}）なら G20 のはず`, `  $[B]: ${view17(od)}`);
 		}
 	}
 	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
@@ -3285,6 +3372,9 @@ law("17 `$` は関数だけを運ぶ（R53）：C[$N] と C[$[N]] と C[$[右辺
 // 主の Claude の局所の定義を通す案に U〔答え〕[2026-10-25 00:25 8dfc006e]「…後はすべて君の言う通り。」。
 // 比べの外：右辺の中から自分を `$` で指す局所の定義（R54 で断る。ファイルの `?` の定義は通る）と、右辺を解く所を通る値の輪（`w : [sq : z ? w ⏎ $sq]`。
 // 局所では値を含む輪、ファイルの定義なら通る）は、局所の側だけが断る形として coproduct.test.js に置いた（§5 Q10）。
+// 2026-10-25（R59・R60、§7.33）に広げた所：R60 から値の右辺（`5`・`1 , 2`・`[k : 1]`・`$inc`・`vs`）の `$lf` は値を読む参照として通るので、R54〜R57 の片では
+// G20 どうしだった組が、通る答えどうしの比べになった（局所の側も、右辺の値の形を持つ。resolve.js の localTarget）。右辺・本体に余る関数のある物（`add (5 inc)`・
+// `z ? z inc`。R59）と、`,` の `_` の消える右辺（`5 , _`。R61）を足した。
 const BASE18 = [
 	INC,
 	"double : x ? x * 2",
@@ -3316,6 +3406,10 @@ const RHS18 = [
 	["$inc", false],
 	["vs", false],
 	["_", false],
+	// 2026-10-25 の R59（§5 Q53 の答え）：右辺・本体に余る関数のある物。`$[R]` は G20 で、名前を通した `$lf`（ファイルの定義も局所も）も同じく G20（§5 Q62）。
+	["add (5 inc)", false],
+	["z ? z inc", false],
+	["5 , _", false], // R61：`,` の `_` は消えて 5
 ];
 const CTX18 = [(x) => x, (x) => `map ${x} vs`, (x) => `map2 ${x} vs`, (x) => `fold ${x} vs`, (x) => `use ${x} u`, (x) => `[${x}]`, (x) => `${x} , 1`, (x) => `||${x}||`];
 const CTX18F = [...CTX18, (x) => `tw ${x} vs`]; // (4)・(5)：開いた所の口の数が木に出る文脈を足す
@@ -3400,6 +3494,176 @@ law("18 `$` の先は1つの関数（R54〜R57）：ファイルの `$lf`・開�
 			[line("$[x ? x]"), ["$[x ? x]", "$!_"]],
 			[["lf : !_", ...line("$lf")], ["$lf", "$!_"]],
 		]);
+	}
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則19：合成に来た流れは、合成全体の口の数で受ける（R58、2026-10-25）
+// ---------------------------------------------------------------------------
+//
+// 比べる綴り：
+// (a) 合成 `F G` に撒いた流れを当てた `F G X~` と、合成を名前にした `g : F G` ⏎ `g X~` と、括った `(F G) X~`。
+// (b) 合成全体の口が1つか2つなら、合成を関数で書き下した `h X~`（合成全体の口が2つ：F の口が1つなら `h : x y ? G (F x) y`、F の口が2つなら
+//     `h : x y ? G (F x y)`。口が1つなら `h : x ? G (F x)`）。実装の外の片側（合成全体の口を数える所 composedMouths を通らない綴り）。
+// 何を同じと見るか：最後の行が通るか断るか、通るなら種類、断るなら reason と門。文脈 `inc (B)` に置いた答えも。期待値は書かない。
+// なぜ同じか：合成は1つの関数（カリー化された関数）で、撒いた流れはその関数の口の数で受ける（主の Claude の問い「合成に入った流れは、合成全体を
+// 1つの関数として口の数で受ける、でいい？」（10:06 UTC）に、利用者は主の Claude が用意したボタン「合成全体で受ける」を選んだ。U〔答え〕[2026-10-25
+// 14:39 533071da]。ボタンの文は主の Claude の物：「合成は1つの関数なので、撒いた流れは合成全体の口の数で受ける（2つなら畳み込み、1つなら書き下し、
+// 3つ以上は G19）。」）。`:` はメタで名前は右辺を指す（§5 Q50 の答え）、括りは [x] ≅ x なので、(a) の3つは同じ関数。(b) の h は、合成と同じ関数を
+// 素の関数で書いた物。
+// 比べの外・許す所：(b) の合成の側が G19 で断るのは許す（断る側。畳まない2項の点なし `[<<]` を合成全体で畳む形は §5 Q49 で断り、h は素の関数なので
+// 通る）。h の側は、本体の根が F・G の根で決まる素の関数なので、合成の側の未知を A と読むことはない（片向きに、合成の側が A なら h の側も A を見る）。
+const DEFS19 = [
+	INC,
+	"double : x ? x * 2",
+	"add : x y ? x + y",
+	"f2 : x y ? x - y",
+	"f3 : a b c ? a + b + c",
+	"uu : x ? [,] x",
+	"tl : [y ~ys] ? ys",
+	"vs : 1 , 2 , 3",
+];
+const UNITS19 = toUnits(DEFS19);
+// [関数の項, 口の数（null は可変長の口か、口の数の分からない関数）]
+const FNS19 = [
+	["inc", 1],
+	["double", 1],
+	["add", 2],
+	["f2", 2],
+	["[+ 1]", 1],
+	["(add 1)", 1],
+	["[x ? x]", 1],
+	["[<<]", 2],
+	["f3", 3],
+	["uu", 1],
+	["[+]", null],
+	["tl", null],
+];
+const XS19 = ["vs", "[1 2]", "[5]", "5", "`ab`", "[]", "(tl vs)"];
+const at19 = (lines) => outcome(src([...usedDefs(UNITS19, lines.join("\n")), ...lines]));
+const ans19 = (o) => (o.crash ? `例外 ${o.crash}` : o.refused ? `断り ${o.refused.reason} ${o.refused.gate}` : `通る ${lastOf(o).kind}`);
+law("19 合成に来た流れは合成全体の口で受ける（R58）：F G X~ と g : F G ⏎ g X~ と (F G) X~、合成全体の口が1つか2つなら合成を素の関数で書いた h X~", () => {
+	const problems = [];
+	const count = { "(a) 3つの綴り": 0, 通る: 0, 断る: 0, "(b) 素の関数で書いた h": 0, "(b) 合成の側が断る（許す）": 0, "(b) 同じ答え": 0 };
+	count["(b) h の側が断る（許す。本体の中で未知の項が並びにある `add (uu x9) y9` など）"] = 0; // 数えるだけ（0 でもよい）
+	const both = (lines) => [ans19(at19(lines)), ans19(at19([...lines.slice(0, -1), `inc (${lines[lines.length - 1]})`]))].join(" / 文脈 ");
+	for (const [f, mf] of FNS19) {
+		for (const [g, mg] of FNS19) {
+			for (const xs of XS19) {
+				const forms = [[`${f} ${g} ${xs}~`], [`g9 : ${f} ${g}`, `g9 ${xs}~`], [`(${f} ${g}) ${xs}~`]];
+				const outs = forms.map(both);
+				count["(a) 3つの綴り"]++;
+				if (outs.some((a) => a.includes("例外"))) problems.push(`(a) ${f} ${g} ${xs}~：例外`, ...outs.map((a, i) => `  ${forms[i].join(" ⏎ ")} → ${a}`));
+				else if (outs.some((a) => a !== outs[0])) problems.push(`(a) ${f} ${g} ${xs}~：答えが割れた`, ...outs.map((a, i) => `  ${forms[i].join(" ⏎ ")} → ${a}`));
+				else if (outs[0].startsWith("断り")) count.断る++;
+				else count.通る++;
+				// (b) 合成全体の口が1つか2つなら、素の関数で書いた h。
+				if (mf === null || mg === null) continue;
+				const whole = mf + mg - 1;
+				if (whole !== 1 && whole !== 2) continue;
+				const h =
+					whole === 1 ? `h9 : x9 ? ${g} (${f} x9)` : mf === 1 ? `h9 : x9 y9 ? ${g} (${f} x9) y9` : `h9 : x9 y9 ? ${g} (${f} x9 y9)`;
+				const oh = both([h, `h9 ${xs}~`]);
+				count["(b) 素の関数で書いた h"]++;
+				const oc = outs[0];
+				if (oh.includes("例外")) problems.push(`(b) ${h} ⏎ h9 ${xs}~：例外 ${oh}`);
+				else if (oc.startsWith("断り coproduct-stream-arity")) count["(b) 合成の側が断る（許す）"]++;
+				else if (oh.startsWith("断り")) count["(b) h の側が断る（許す。本体の中で未知の項が並びにある `add (uu x9) y9` など）"]++;
+				else if (oc !== oh) problems.push(`(b) ${f} ${g} ${xs}~  ⇔  ${h} ⏎ h9 ${xs}~：合成全体の口で受けるので同じはず`, `  合成: ${oc}`, `  h: ${oh}`);
+				else count["(b) 同じ答え"]++;
+			}
+		}
+	}
+	for (const [k, v] of Object.entries(count)) if (!v && !k.startsWith("(b) h の側")) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則20：`$[…]` の中身を単位律と [x] ≅ x で縮めても、`$` の先は同じ（R44・R45・R61・R57・R59、2026-10-25 の確かめの直し）
+// ---------------------------------------------------------------------------
+//
+// 比べる綴り：`C[$[X]]` と `C[$[X , _]]`・`C[$[_ , X]]`・`C[$[X , !_]]`・`C[$[!_ , X]]`・`C[$[(X)]]`。文脈 C は根・素の関数の口（`use X 1`）・括りの関数の
+// 実体の裸の仮引数（`hk [1] X`。実体の形の綴りで、`$` が作った物が番地か参照か・指す物の形まで見る）。
+// 何を同じと見るか：断れば門と名指し、通れば最後の行の種類と診断と、`hk` の実体の形。期待値は書かない。
+// なぜ同じか：`,` の被演算子の恒等射（R45）と書いた `_`（R61）は積の単位で消え、括り1つは中身と同じ（[x] ≅ x）ので、どの綴りも中身は X 1つ。
+// 確かめる人・反証する人の指摘（2026-10-25）：R57 の後置の印と R59 の名前の先は、書いた字面の1項・名前1つだけを見ていて、`$[vs~ , _]`・`$[p , !_]`
+// （p : add (5 inc)）が値を読む参照で通り、`$[vs~]`・`$p` の G20 と割れていた。
+// 比べの外：X が `_`・`!_` の物（`_ , !_` は §5 Q61 で G7、`[!_]` は否定の点なし）と、並びの単位（`$[p !_]`。中身の並びは遅延した式、§5 Q63）。
+const DEFS20 = [INC, "add : x y ? x + y", "vs : 1 , 2 , 3", "use : f x ? @f x", "hk : [k] f ? f", "p : add (5 inc)", "q5 : 5", "sq : x ? x inc", "w : vs~", "un : _", "fs : inc , 1"];
+const UNITS20 = toUnits(DEFS20);
+const XS20 = ["5", "vs", "inc", "add 1", "q5", "p", "sq", "w", "un", "vs~", "5!", "add (5 inc)", "[x ? x inc]", "[x ? x + 1]", "$inc", "(inc 5)", "fs", "zz"];
+const CTX20 = [(x) => x, (x) => `use ${x} 1`, (x) => `hk [1] ${x}`];
+const ans20 = (line) => {
+	const o = outcome(src([...usedDefs(UNITS20, line), line]));
+	if (o.crash) return `例外 ${o.crash}`;
+	if (o.refused) return `断り ${refusalText(o)}`;
+	const inst = o.trees.map((t) => t.text).filter((t) => t.startsWith("(: hk ")).map((t) => (t.match(/\(inst [^ ]+/g) || []).join(" "));
+	return `通る ${lastOf(o).kind} ${inst.join(" ")} || ${o.diag.join(" ")}`;
+};
+law("20 `$[…]` の中身を単位律で縮めても同じ先：C[$[X]] と C[$[X , _]]・C[$[_ , X]]・C[$[X , !_]]・C[$[!_ , X]]・C[$[(X)]]", () => {
+	const problems = [];
+	const count = { 比べた組: 0, 通る: 0, G20: 0, "ほかの断り": 0 };
+	for (const x of XS20) {
+		for (const c of CTX20) {
+			const forms = [`$[${x}]`, `$[${x} , _]`, `$[_ , ${x}]`, `$[${x} , !_]`, `$[!_ , ${x}]`, `$[(${x})]`].map(c);
+			const outs = forms.map(ans20);
+			count.比べた組 += forms.length - 1;
+			if (outs.some((a) => a.startsWith("例外"))) problems.push(`${c(`$[${x}]`)}：例外`, ...outs.map((a, i) => `  ${forms[i]} → ${a}`));
+			else if (outs.some((a) => a !== outs[0])) problems.push(`${c(`$[${x}]`)}：答えが割れた`, ...outs.map((a, i) => `  ${forms[i]} → ${a}`));
+			else if (outs[0].startsWith("通る")) count.通る++;
+			else if (outs[0].includes(" G20 ")) count.G20++;
+			else count["ほかの断り"]++;
+		}
+	}
+	for (const k of ["比べた組", "通る", "G20"]) if (!count[k]) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則21：Reader を値の演算子に当てる形は、綴りに依らず同じ答え（R60 の細かい所・§5 Q59、2026-10-25 の確かめの直し）
+// ---------------------------------------------------------------------------
+//
+// 比べる綴り：R を値の演算子に当てる形を、中置（`R + 1`・`1 + R`・`R == 1`）・区間（`[+ 1] R`・`[1 +] R`・`[+ R] 1`・`[R +] 1`）・畳む点なし（`[+] R 1`・
+// `[+] 1 R`・`[==] R 1`）・畳まない点なし（`[<<] R 1`）・前置の点なし（`[-_] R`）・写像（`[* 2,] R`・`[inc,] R`）・絶対値（`|R|`）・素の関数の口（`inc R`・
+// `add R 1`・`add 1 R`・`(add R) 1`・`[x9 ? x9 + 1] R`・別の素の関数の口を通る `g9 R`）・括りの関数の実体の裸の仮引数（`pq [1] R`）で書く。
+// 何を同じと見るか：R が `$` の作った Reader（`$5`・`$vs`・`$inc`・`p5 : $5` の p5）なら、どの綴りも同じ門（G7）。R が Reader でない値（`5`・`vs`）なら、
+// どの綴りも通る。値の演算子でない物（論理の `R | 1` と `[|] R 1`）は、R に依らず同じ答え。期待値の門は書かず、中置の `R + 1` の答えと比べる。
+// なぜ同じか：区間は位置で被演算子を取り（`[+ 1] x` は `x + 1`、R31・R32）、写像は要素ごとの適用（R50）、素の関数の適用は本体への代入（β）。前（R60 の片）は
+// 中置の項の所だけで断っていて、ほかの綴りは通った（確かめる人・反証する人の指摘）。
+// 比べの外（届かない所、§5 Q59）：素の関数が返した値（`id2 : x ? x` の `(id2 $5) + 1`）・器の中身（`($5 , 1) + 1`）・括りの関数や前置 `@` の項の口へ
+// 素の関数の本体から渡した物。どれも、値の演算子が直に見ない所で、関数を器に入れた `(inc , 1) + 1` が A なのと同じ線。
+const DEFS21 = [INC, "add : x y ? x + y", "vs : 1 , 2 , 3", "p5 : $5", "g9 : y ? inc y", "pq : [a] b ? a + b"];
+const UNITS21 = toUnits(DEFS21);
+const RS21 = [["$5", true], ["$vs", true], ["$inc", true], ["p5", true], ["5", false], ["vs", false]];
+const FORMS21 = [
+	(r) => `${r} + 1`, (r) => `1 + ${r}`, (r) => `${r} == 1`, (r) => `[+ 1] ${r}`, (r) => `[1 +] ${r}`, (r) => `[+ ${r}] 1`, (r) => `[${r} +] 1`,
+	(r) => `[+] ${r} 1`, (r) => `[+] 1 ${r}`, (r) => `[==] ${r} 1`, (r) => `[<<] ${r} 1`, (r) => `[-_] ${r}`, (r) => `[* 2,] ${r}`, (r) => `[inc,] ${r}`,
+	(r) => `|${r}|`, (r) => `inc ${r}`, (r) => `add ${r} 1`, (r) => `add 1 ${r}`, (r) => `(add ${r}) 1`, (r) => `[x9 ? x9 + 1] ${r}`, (r) => `g9 ${r}`, (r) => `pq [1] ${r}`,
+];
+const LOGIC21 = [(r) => `${r} | 1`, (r) => `[|] ${r} 1`];
+const cls21 = (line) => {
+	const o = outcome(src([...usedDefs(UNITS21, line), line]));
+	if (o.crash) return `例外 ${o.crash}`;
+	return o.refused ? `断り ${o.refused.reason} ${o.refused.gate}` : "通る";
+};
+law("21 Reader を値の演算子に当てる形は綴りに依らず同じ答え：R + 1 と [+ 1] R・[+] R 1・inc R・[inc,] R・|R|・pq [1] R ほか", () => {
+	const problems = [];
+	const count = { 比べた組: 0, "Reader で断る": 0, "Reader でない値で通る": 0, "論理の綴りの組": 0 };
+	for (const [r, reader] of RS21) {
+		const base = cls21(FORMS21[0](r));
+		if (reader !== base.startsWith("断り")) problems.push(`${FORMS21[0](r)}：${base}（Reader なら断り、Reader でなければ通るはず）`);
+		for (const f of FORMS21.slice(1)) {
+			const line = f(r);
+			const a = cls21(line);
+			count.比べた組++;
+			if (a !== base) problems.push(`${line}：${a}（${FORMS21[0](r)} は ${base}）`);
+			else count[reader ? "Reader で断る" : "Reader でない値で通る"]++;
+		}
+		const logic = LOGIC21.map((f) => cls21(f(r)));
+		count["論理の綴りの組"]++;
+		if (logic[0] !== logic[1]) problems.push(`${LOGIC21[0](r)} と ${LOGIC21[1](r)}：答えが割れた（${logic.join(" / ")}）`);
 	}
 	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
 	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
