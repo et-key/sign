@@ -34,6 +34,13 @@
  * 落ちていた。v の右辺の門はその門で断る、selfReaderHolds）、輪の中で仮に通した参照から `'` で引けば name-cycle（pickSelfReader）、字下げの本体の返す所
  * （1行だけの本体・枝の値・枝の後の既定の行）は1行の本体の根と同じく G16（resolveBlockBody・returnGate）、2行以上の手続きの `!_` だけの行は G7
  * （refuseProcedureHole）、裸のラムダの行も評価する所、R76 の所の丸ごとの関数は R59・R75 の受け皿に拾わない（leftoverUnit）、`~$x` は `[$x]`（classify）、
+ * R80〜R82 は同じ日の、2026-10-25 の §5 Q10・Q45 の答えの片：枝の無い関数の本体の、左が名前1つの `:` の行は局所の定義で、どの使い方でも右辺の種類で読む
+ * （R80、localInfo。名前の desc と付きの物はファイルの値の定義と同じ valueOfRoot。局所の定義の行は手続きの行に数えない。局所の値の輪は name-cycle）、素の関数も
+ * 実引数の印（関数の番地・値を読む参照・番地の点と差・書いた `_`）で実体を作る（R81、monoKind・instantiate。印の無い実引数は今のまま本体を1回だけ）、前置 `@` の
+ * 値の定義の名前も右辺の印を読む（R82、peekDesc。`@p` は `@[p]` と同じ）、同じ日の確かめの直しで、穴の関数も頭と書いた実引数と穴の位置を持ち越して頭の実体を
+ * 作り（holeFnOf・plainApplyKind・restHoleKind。法則6）、仮引数の別名はその名前と同じ物（paramAliasOf）、単相化の実体の印の無い仮引数は定義の行の読みのまま
+ * （bindParams）、深さの上限は素の関数も数え（writtenDepth）、印の鍵は番号の DAG（internPlainMarks）、外の局所の名前を隠す内の行は今のまま断り（scanLocals）、
+ * `$` の辺のある局所の輪はどこから解いても local-cycle（localInfo）、G6 の言い分は届かない理由を言う（inputWhy）、
  * §1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
  * 門（G1〜G22（G14 は 2026-10-21、G17 と G1 は 2026-10-22、G12 は 2026-10-23、G8 と G9 は 2026-10-24 に廃止。G19 は 2026-10-24 の R51（2026-10-25 に決定）、G20 は同じ日の R53。2026-10-25 に R54〜R57 で G20 の当たる形を直し、同じ日の R58〜R61 で G19・G20 の当たる形を直した。G21 は 2026-10-26 の R62、G22 は同じ日の R67）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
  * 答えが出たときに、その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
@@ -728,8 +735,12 @@ function checkParamNames(lines, F) {
   for (const line of lines) visitTree(line, new Set());
 }
 
-// 関数の本体の中で `:` の左に1語で置かれた名前は、局所の定義か枝の条件か決まっていない（P2）。仮引数でも
-// ファイルの定義でもなければ「種類が未知」にする。入れ子の関数の本体は、その関数の範囲で数える。
+// 関数の本体の中で `:` の左に1語で置かれた名前（P2）。仮引数でもファイルの定義でもなければ局所の名前に数える。種類は、枝の無い本体の局所の定義なら右辺の
+// 種類（2026-10-26 の R80、localInfo）、ほか（枝のある本体・括り・同じ範囲に2つなど、局所の定義か枝の条件か欄かが決まっていない所）は今のまま未知。
+// 入れ子の関数の本体は、その関数の範囲で数える。
+// 関数の本体の範囲では、外の範囲の局所の名前（外の関数の本体の局所の定義・括りの行の名前）と同じ名前も局所の名前に数えない（仮引数・ファイルの定義と同じく
+// 外の名前を隠す行。localDefsOf の shadow で、その本体の局所の名前は今のまま断る local-branch、`$名前` は local-shadow）。2026-10-26 の R80 の片の作る途中の版は
+// 数えて、内の局所の定義が外の局所の定義を黙って隠していた（確かめの指摘。HEAD は裸の局所の名前が未知で G7）。括りの範囲（field）は今のまま。
 function scanLocals(tree, scope, F) {
   if (!tree) return;
   if (tree.type === "seq") return tree.terms.forEach((t) => scanLocalsTerm(t, scope, F));
@@ -737,7 +748,7 @@ function scanLocals(tree, scope, F) {
   if (tree.sym === ":") {
     const n = singleBareName(tree.left);
     if (n) {
-      if (!paramInChain(scope, n) && !F.defs.has(n)) scope.locals.add(n);
+      if (!paramInChain(scope, n) && !F.defs.has(n) && (scope.field || !localInChain(scope.parent, n))) scope.locals.add(n);
     } else scanLocals(tree.left, scope, F);
     return scanLocals(tree.right, scope, F);
   }
@@ -753,6 +764,10 @@ function scanLocalsTerm(term, scope, F) {
 }
 function paramInChain(scope, name) {
   for (let s = scope; s; s = s.parent) if (s.params && s.params.has(name)) return true;
+  return false;
+}
+function localInChain(scope, name) {
+  for (let s = scope; s; s = s.parent) if (s.locals && s.locals.has(name)) return true;
   return false;
 }
 
@@ -850,6 +865,9 @@ const treeHasAddr = (t) => !!t && hasAddr(descOfTree(t));
 //   関数や前置 `@` の項の口へ渡した物・穴の関数（`f3 !_ 2`）の口。どれも、器の中身に値の演算子を当てる形（`(inc , 1) + 1` は今も A）と同じく、
 //   値の演算子が直に見ない所である。2026-10-26 の確かめの直しから、番地の算術で作った点・差については、印を落とす所に入る所で断る（hasAddr の注）。
 //   値を読む参照は今のまま届かない。
+// - 2026-10-26 の R81（§5 Q45 の答え）から、印のある実引数（関数の番地・値を読む参照・番地の点と差・書いた `_`）で呼んだ素の関数は、その印で実体を作り、本体の中の
+//   規則（addressOp・refuseReaderOperand・括りの関数の口へ渡した物の実体）で読む（monoKind）。札で見る（readerAtPlain）のは、印を持たない実引数（番地の点・差を
+//   中に持つ器）だけになった。穴の関数の口に書いた物・後から当てた物も、同じ日の確かめの直しから、頭の素の関数の実引数に並べ直して実体を作る（holeFnOf）。
 const PARAM_TAGS = new WeakMap();
 function paramTag(op, key, i) {
   let m = PARAM_TAGS.get(op);
@@ -1104,11 +1122,11 @@ function fnKey(fn) {
   // （idSplit）を、同じ関数と分けていた。逆適用の廃止（R47）で、どちらの印も無くなった。
   switch (fn.type) {
     case "plain":
-      // R34 の k < n で作った穴の関数（rest）は、書いた `_` で G5 になり、同じアリティの穴の関数と振る舞いが分かれる（"other" の
-      // 注と同じ割れ）ので、鍵に印を入れる。最後の括りの前に残る裸の口の数（restAt）でも、後から当てた物がどの口に入るかが
-      // 分かれる（restCloseKind）ので、それも入れる。
-      const rest = fn.rest ? (fn.restAt === undefined ? "+rest" : `+rest@${fn.restAt}`) : "";
-      return `plain:${fn.origin}${rest}:${fn.n}:${fn.idKey || ""}`;
+      // rest と restAt は plainKeyText の注。素の関数の部分適用と穴の関数に当てた物の印（R81。印のある物は口が埋まった所で実体を作るので、答えが印で分かれる）は、括りの関数の部分適用と同じく
+      // 番号の DAG で鍵にする（internPlainMarks。綴りを文字列に書き写すと、同じ印を2回当てる再帰で段ごとに倍になり、深さの門より先に文字列の長さの上限を
+      // 超えて JS の RangeError で落ちた。2026-10-26 の確かめの指摘）。
+      if (plainMarksOf(fn)) return canonKey(internPlainMarks(fn));
+      return plainKeyText(fn);
     case "pattern":
       return fn.bound ? canonKey(internPartial(fn)) : `pattern:${fn.idKey}`;
     case "compose":
@@ -1276,10 +1294,35 @@ function internCompose(fn) {
   internByFn.set(fn, id);
   return id;
 }
+// 素の関数の鍵の綴り（印を除く）。R34 の k < n で作った穴の関数（rest）は、書いた `_` で G5 になり、同じアリティの穴の関数と振る舞いが分かれる（"other" の
+// 注と同じ割れ）ので、鍵に印を入れる。最後の括りの前に残る裸の口の数（restAt）でも、後から当てた物がどの口に入るかが分かれる（restCloseKind）ので、それも入れる。
+function plainKeyText(fn) {
+  const rest = fn.rest ? (fn.restAt === undefined ? "+rest" : `+rest@${fn.restAt}`) : "";
+  return `plain:${fn.origin}${rest}:${fn.n}:${fn.idKey || ""}`;
+}
+// 素の関数の部分適用（bound）と穴の関数（holeArgs。穴の位置は □）に当てた物のうち、鍵に入れる物（R81）：印のある物は desc、印の無い物は A。印が1つも無ければ
+// null（今までどおり鍵に入れない）。
+function plainMarksOf(fn) {
+  const slots = fn.holeHead ? [...fn.holeArgs.map((t, i) => (fn.holeAt.includes(i) ? null : descOfTree(t))), ...(fn.holeC || []).map(descOfTree)] : fn.bound;
+  if (!slots || !slots.some((d) => d && monoMarked(d))) return null;
+  return slots.map((d) => (d === null ? "hole" : monoMarked(d) ? d : "A"));
+}
+// 素の関数の部分適用・穴の関数の印の鍵の番号（internPartial と同じ2段。深さは当てた物のいちばん深い物に 1 を足す：印を当て続ける再帰が深さの門に届く）。
+function internPlainMarks(fn) {
+  const memo = internByFn.get(fn);
+  if (memo !== undefined) return memo;
+  const bound = plainMarksOf(fn).map((d) => (d === "hole" ? internLeaf("□") : d === "A" ? internLeaf("A") : internDesc(d)));
+  const base = plainKeyText(fn);
+  const depth = 1 + Math.max(fnDepth(fn), maxDepth(bound));
+  const id = internText(`PM(${bound.map((c) => `#${c}`).join(" ")})${base}`, { s: "plainMarks", base, bound, depth });
+  internByFn.set(fn, id);
+  return id;
+}
 // L の desc の関数の番号。部分適用と合成は中身で番号に寄せ、ほかは fnKey の綴りの葉（短い綴りで決まる）。
 function internFn(fn) {
   if (fn && fn.type === "pattern" && fn.bound) return internPartial(fn);
   if (fn && fn.type === "compose") return internCompose(fn);
+  if (fn && fn.type === "plain" && plainMarksOf(fn)) return internPlainMarks(fn);
   return internLeaf(`L<${fnKey(fn)}>`, fnDepth(fn));
 }
 // 関数の葉の深さ：書いた所の範囲の深さ（envDepth。閉包の鍵は書いた所の範囲の鍵を持つので、その段と同じ）。ファイルの範囲の
@@ -1305,6 +1348,7 @@ function canonKey(id) {
     if (node.s === "ref") return `$${walk(node.fn)}`;
     if (node.s === "vref") return `$=${walk(node.val)}`;
     if (node.s === "partial") return `L<pattern:${node.base}<${node.bound.map(walk).join(" ")}>>`;
+    if (node.s === "plainMarks") return `L<${node.base}<${node.bound.map(walk).join(" ")}>>`;
     if (node.s === "compose") return `L<compose(${node.fns.map(walk).join(" ")})>`;
     return node.elem === null ? "[]" : `[${walk(node.elem)}…]`; // `[]` は要素の無い List（空の文字列の字面）
   };
@@ -1372,7 +1416,11 @@ function lookup(name, ctx) {
     if (s.descs && s.descs.has(name)) return s.descs.get(name);
     // 素の関数の裸の仮引数は A で、札の印 pv を付ける（paramTag の注。R60 の細かい所、§5 Q59）。
     if (s.params && s.params.has(name)) return s.params.get(name) === "bare" ? (s.plainOp ? { k: "A", pv: paramTag(s.plainOp, s.plainKey, s.paramIdx.get(name)) } : A()) : U();
-    if (s.locals && s.locals.has(name)) return U();
+    // 局所の名前（R80）：関数の本体の局所の定義なら、右辺の種類（localInfo）。今のまま断る所（枝のある本体・括りの行・同じ範囲に2つ・局所の関数の再帰）は未知。
+    if (s.locals && s.locals.has(name)) {
+      const info = localInfo(name, s, ctx);
+      return info.why ? U() : info.desc;
+    }
     if (s.hasImport) imported = true;
   }
   const def = ctx.F.defs.get(name);
@@ -1382,38 +1430,90 @@ function lookup(name, ctx) {
   return A();
 }
 
-// `@名前` の名前の desc を、値の定義を解かずに覗く（R49）。仮引数・局所の名前・実体の中で渡された物
-// （s.descs）・関数の定義（`?`）だけを見て、値の定義（`p : $inc` も）と取り込みの範囲の名前は null（印を読まない、今までどおり）。
-// 値の定義を解かないのは、前置 `@` の名前は種類を引かない（輪に数えない、「値を含む輪」の注）という今の作りを変えないため。
+// `@名前` の名前の desc（R49）。仮引数・局所の名前・実体の中で渡された物（s.descs）・ファイルの定義を見る。取り込みの範囲の名前と未定義の名前は null（印を読まない）。
+// 2026-10-26 の R82（§5 Q45 の残り）から、値の定義の名前（`p : $inc`・`p : $vs`・`q : $vs + 0x10`）も右辺を解いて印を読む：`:` はメタで名前は右辺を指すので、
+// `@p` は `@$inc`・`@[p]` と同じ先（[x] ≅ x）。右辺を解くので、輪にも数える（`@[p]` と同じ。値を含む輪は name-cycle）。前（R49 から）は値の定義を解かずに覗き、
+// `@p` だけが印の無い前置 `@` の項（入力の項）で、`@[p]` と割れていた（`p : $vs` の `@p 3` は `(apply @p 3)` で未知、`@[p] 3` は構築の A）。局所の名前も、R80 から
+// 右辺の種類（今のまま断る所は未知）。
 // 2026-10-24 までは `$名前` もここで覗いていた。同じ日の R53 から `$名前` は値の定義の右辺も解いて種類を引き、2026-10-25 の R55 から指す関数の印も
-// その種類から付ける（dollarNameTarget。別名 `p : inc` の `$p` も印を持つ）。`p : $inc` の `@p` は今のまま印を読まない（§5 Q45 の残り）。
+// その種類から付ける（dollarNameTarget。別名 `p : inc` の `$p` も印を持つ）。
 function peekDesc(name, ctx) {
   for (let s = ctx.scope; s; s = s.parent) {
     if (s.descs && s.descs.has(name)) return s.descs.get(name);
     if (s.params && s.params.has(name)) return s.params.get(name) === "bare" ? A() : U();
-    if (s.locals && s.locals.has(name)) return U();
+    if (s.locals && s.locals.has(name)) {
+      const info = localInfo(name, s, ctx);
+      if (info.why) return U();
+      // 仮引数か実体の中で渡された物の別名（paramAliasOf）は、その名前で覗く（`@w` は `@a` と同じ）。
+      return info.paramAlias ? peekDesc(info.paramAlias.name, { F: ctx.F, scope: info.paramAlias.scope }) : info.desc;
+    }
   }
   const def = ctx.F.defs.get(name);
-  return def && def.lambda ? nameKindOf(ctx.F, def) : null;
+  return def ? nameKindOf(ctx.F, def) : null;
+}
+
+// 印の無い前置 `@` の項（入力の項）の先に、印が届かない理由（G6 の言い分、reduceItems）。peekDesc と同じ順に探す。
+function inputWhy(core, ctx) {
+  const name = bracketedName(core);
+  if (!name) return "括りの中身に、関数を指す番地か値を読む参照の印がありません";
+  let imported = false;
+  for (let s = ctx.scope; s; s = s.parent) {
+    if (s.descs && s.descs.has(name)) return `\`${name}\` は実体（括りの関数の実体か、印のある実引数で作った素の関数の実体）で渡された印の無い値で、中身の見えない値は関数か値か分かりません（§4 R24・R81）`;
+    if (s.params && s.params.has(name)) {
+      if (s.params.get(name) !== "bare") return `\`${name}\` は括りか既定値のある仮引数の名前で、本体は印の無いまま読みます（§3.4）`;
+      return s.plainOp
+        ? `\`${name}\` は素の関数の裸の仮引数で、ここは印の無い1回の読み（素の関数の定義の行か、印の無い実引数で読む本体）です。印のある実引数で呼んだ実体では印を読みます（§4 R81、§5 Q45）`
+        : `\`${name}\` は、印の無い実引数を受けた裸の仮引数です（§4 R81）`;
+    }
+    if (s.locals && s.locals.has(name)) {
+      const info = localInfo(name, s, ctx);
+      if (info.why) {
+        const where = {
+          "local-field": "括りか、関数の本体でない字下げのブロックの行",
+          "local-nested": "入れ子の括りの中だけの名前",
+          "local-branch": "枝のある本体か、外の名前を隠す行のある本体",
+          "local-twice": "同じ範囲に2つ",
+          "local-recursion": "局所の関数の再帰",
+        }[info.why] || info.why;
+        return `\`${name}\` は局所の名前で、局所の定義として読めない所（${where}）です（§4 R80、§5 Q10）`;
+      }
+      if (info.paramAlias) return `\`${name}\` は右辺が \`${info.paramAlias.name}\` の局所の定義（同じ物）で、${inputWhy({ c: "name", name: info.paramAlias.name }, { F: ctx.F, scope: info.paramAlias.scope })}`;
+      return `\`${name}\` は関数の本体の局所の定義で、右辺に関数を指す番地か値を読む参照の印がありません（§4 R80・R82）`;
+    }
+    if (s.hasImport) imported = true;
+  }
+  const def = ctx.F.defs.get(name);
+  if (def) return `\`${name}\` は値の定義の名前で、右辺に関数を指す番地か値を読む参照の印がありません（§4 R82）`;
+  if (imported) return `\`${name}\` は取り込みのある範囲の定義されていない名前で、中身がこのファイルから見えません（§5 Q45 の残り）`;
+  return `\`${name}\` は定義されていない名前です（R21）`;
 }
 
 // 名前が `?` の定義（`f : x ? …`・`f : [x ? …]`）を直に指すか。穴の頭（R16）に置けるのは、§3.4 の素の関数（「名前の定義と
 // `?` の括りがあたる」）だけである（2026-10-23 までは逆適用の右（R12「名前か `?` の括り」）も。R12 は 2026-10-24 に廃止、R47）。
 // 別名（`p : inc`・`q : [inc]`）を素の関数に数えるかは仕様に書かれていないので、断る側に揃えた。別名の適用の種類（§3.4 の表）は
 // 今のまま、生まれた関数で決める。
+// 局所の名前（R80）は、右辺が `?` の定義（unwrapLambda）なら、ファイルの `?` の定義と同じく数える（同じ定義をファイルに置いた形と同じ答え）。
 function isLambdaName(name, ctx) {
   for (let s = ctx.scope; s; s = s.parent) {
-    if ((s.params && s.params.has(name)) || (s.locals && s.locals.has(name))) return false;
+    if (s.params && s.params.has(name)) return false;
+    if (s.locals && s.locals.has(name)) {
+      const info = localInfo(name, s, ctx);
+      return !info.why && !!info.lambda;
+    }
   }
   const def = ctx.F.defs.get(name);
   return !!(def && def.lambda);
 }
 
-// 名前がファイルの値の定義を直に指すなら、その右辺の器の数（nameKindOf が F.valueCounts に置く）。仮引数・局所の名前・実体の中で
-// 渡された物（s.descs）は数えない（null）：実体は長さを書かない形で共有される（R24）。
+// 名前がファイルの値の定義を直に指すなら、その右辺の器の数（nameKindOf が F.valueCounts に置く）。仮引数・実体の中で
+// 渡された物（s.descs）は数えない（null）：実体は長さを書かない形で共有される（R24）。局所の名前は、R80 から右辺の数（localInfo。ファイルの値の定義と同じ数え方）。
 function valueCountOf(name, ctx) {
   for (let s = ctx.scope; s; s = s.parent) {
-    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name)) || (s.locals && s.locals.has(name))) return null;
+    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name))) return null;
+    if (s.locals && s.locals.has(name)) {
+      const info = localInfo(name, s, ctx);
+      return info.why ? null : info.count;
+    }
   }
   const def = ctx.F.defs.get(name);
   if (!def || def.lambda || !ctx.F.valueCounts.has(def)) return null;
@@ -1425,7 +1525,11 @@ function valueCountOf(name, ctx) {
 // 最後の括りの数（valueCounts、writtenLength）には入れない：そこでは字面の文字列も数えない（入れると、名前と字面で R34 の答えが割れる）。
 function stringCountOf(name, ctx) {
   for (let s = ctx.scope; s; s = s.parent) {
-    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name)) || (s.locals && s.locals.has(name))) return null;
+    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name))) return null;
+    if (s.locals && s.locals.has(name)) {
+      const info = localInfo(name, s, ctx);
+      return info.why ? null : info.strCount;
+    }
   }
   const def = ctx.F.defs.get(name);
   if (!def || def.lambda || !ctx.F.stringCounts.has(def)) return null;
@@ -1901,11 +2005,10 @@ function nameKindOf(F, def) {
   if (def.lambda) {
     if (def.pattern) return { k: "L", fn: patternFn(F, def.lambda, def.pattern, F.fileScope, def.name) };
     if (!def.plain) return { k: "L", fn: otherFn(def.lambda.left) };
-    return {
-      k: "L",
-      // op・label は、裸の仮引数の札（paramTag）と、Reader を口に渡した呼び出しの言い分のため（readerAtPlain）。
-      fn: { type: "plain", origin: "plain", n: def.n, getBodyRoot: () => bodyRootOf(F, def.lambda), idKey: lambdaKey(def.lambda, F.fileScope.key), op: def.lambda, label: def.name },
-    };
+    // op・label は、裸の仮引数の札（paramTag）と、Reader を口に渡した呼び出しの言い分のため（readerAtPlain）。
+    const fn = { type: "plain", origin: "plain", n: def.n, getBodyRoot: () => bodyRootOf(F, def.lambda), idKey: lambdaKey(def.lambda, F.fileScope.key), op: def.lambda, label: def.name };
+    plainInstantiable(F, fn, def.lambda, F.fileScope);
+    return { k: "L", fn };
   }
   const memo = freshMemo(F, F.valueMemo, def);
   if (memo) return readMemo(F, memo, () => `\`${def.name}\``);
@@ -1925,7 +2028,30 @@ function nameKindOf(F, def) {
     // 右辺そのものの余る関数と、右辺の木（別名の引き継ぎは、引く所で木から見る。deadOfDef・aliasDeadOfTree）。
     F.deadDefs.set(def, dead[0] || null);
     F.defRoots.set(def, root);
-    value = { k: root.kind.k, fn: root.kind.fn };
+    // 右辺の木から名前の desc と付きの物を作るのは valueOfRoot の1か所（関数の本体の局所の定義も同じ物を使う、R80）。
+    const v = valueOfRoot(F, root, F.fileScope);
+    value = v.value;
+    if (v.count !== null) F.valueCounts.set(def, v.count);
+    else F.valueCounts.delete(def);
+    if (v.chars !== null) F.stringCounts.set(def, v.chars);
+    else F.stringCounts.delete(def);
+    F.unitDefs.set(def, v.unit);
+    F.hexDefs.set(def, v.hex);
+  } catch (e) {
+    abortFrame(F, frame);
+    throw e;
+  } finally {
+    restoreNest();
+  }
+  finishFrame(F, frame, F.valueMemo, value);
+  return value;
+}
+
+// 値の定義の右辺を解いた木 root から、名前の desc（value）と、名前の葉に付ける物（器の数 count・文字の数 chars）・書いた `_` を指すか（unit）・番地の字面か（hex）。
+// ファイルの値の定義（nameKindOf）と、関数の本体の局所の定義（localInfo、R80）の1か所。scope は右辺を解いた範囲（`_` と番地の字面を名前の先まで辿る所）。
+function valueOfRoot(F, root, scope) {
+  const value = { k: root.kind.k, fn: root.kind.fn };
+  {
     // `:` はメタなので、名前は右辺の式の印を持ち越す（R42 の読み7）：`w : vs~` の w は撒く項のまま（`inc w` は `inc vs~` と同じく
     // 未知、`w inc` は `vs~ inc` と同じく inc を積む。2026-10-23 までは G9）。前は撒く印が落ちて、`inc w` が A、`inc vs~` が未知で割れていた。
     // 2026-10-24 の R51 からは、撒いた器の desc（of）も持ち越す（`inc w` は `inc vs~` と同じ書き下しで、要素の desc を読む）。
@@ -1947,12 +2073,8 @@ function nameKindOf(F, def) {
     // 答えが行の順で変わった）。実体の中では長さを書かない（R24）ので、仮引数の名前は数えない（未知）。
     // 右辺が撒く項（`w : vs~`）なら、撒いた器の数（R51 の書き下しが `inc w` で `inc vs~` と同じ数を見る。flowCount）。
     const count = root.kind.spread ? flowCount(root) : writtenLength(root);
-    if (count !== null) F.valueCounts.set(def, count);
-    else F.valueCounts.delete(def);
     // 右辺が文字列なら、文字の数（撒いた流れの数だけが読む。stringCountOf）。
     const chars = root.kind.spread ? null : stringLength(root);
-    if (chars !== null) F.stringCounts.set(def, chars);
-    else F.stringCounts.delete(def);
     const el = visibleElements(root);
     if (el) value.elements = el;
     const sh = shapeOfTree(root);
@@ -1960,20 +2082,13 @@ function nameKindOf(F, def) {
     // 右辺が書いた `_` を指すか（R56、2026-10-25）。`q : _` の `$q` は `$_` と同じ零射の番地。2026-10-26 の R63（§5 Q64 の答え）から、desc にも印 zero を
     // 付け、実体の鍵に入れる（括りの関数に欄・要素・裸の仮引数で渡しても、実体の中の `$s` が零射の番地と分かる。internDesc の `_`）。R56 の片では desc に
     // 入れなかった（入れると実体の鍵が見ない印が実体を跨いで分け合われうる、pointsToMark の注。R63 で鍵に入れたので、その心配は無い）。
-    const unit = pointsToMark(root, { F, scope: F.fileScope });
-    F.unitDefs.set(def, unit);
+    const unit = pointsToMark(root, { F, scope });
     if (unit && value.k === "A" && !value.shape && !value.spread && !value.ref && !value.vref && !value.addr) value.zero = true;
     // 右辺が番地の字面か（R62）：`n : 0x10` の `$x + n` は `$x + 0x10` と同じく、点に足す差（hexOperand）。desc には入れない（番地の字面は中身の見えない
     // A のまま、解決器は今の扱い。顔は位置で決まり、点に足し引きする所でだけ差と読む）。
-    F.hexDefs.set(def, hexTree(root, { F, scope: F.fileScope }));
-  } catch (e) {
-    abortFrame(F, frame);
-    throw e;
-  } finally {
-    restoreNest();
+    const hex = hexTree(root, { F, scope });
+    return { value, count, chars, unit, hex };
   }
-  finishFrame(F, frame, F.valueMemo, value);
-  return value;
 }
 
 // 素の名前つき関数の、本体の根の種類（§3.4）。
@@ -2061,7 +2176,7 @@ function bodyRootOf(F, lambdaOp) {
 //    部分適用と穴は、元の関数と同じ（鍵に当てた物が入らない）。門で見る実体の深さは、括りの仮引数に当てた物のいちばん深い物
 //    （裸の仮引数は A なので 1）。関数を書いた所の深さは入れない（書いた所の実体は、その実体の門で見てある）。実体の範囲の
 //    深さ（中で書く閉包の深さ）は、当てた物の深さと、書いた所の範囲の深さの大きい方。
-//    上限：（この数 × 書いた括りの関数の数 + 1）× 書いたいちばん深い形（writtenDepth。名前を通した深さ、前の定義を指して深く
+//    上限：（この数 × 書いた括りの関数の数（2026-10-26 の R81 から、実体を作る素の関数も数える） + 1）× 書いたいちばん深い形（writtenDepth。名前を通した深さ、前の定義を指して深く
 //    なる鎖も書いた分）。呼んだ行に書いた形はいちばん深い形まで（ここで + 1）で、入れ子の道（実体の本体が実体を作る道）で括りの
 //    関数を1つ通るたびに、呼んだ所に書いた形の分（いちばん深い形まで）しか深くならない（受けた物を、書いた形の中に入れて渡す
 //    だけ）。だから、どの括りの関数もこの数の回までしか通り直さない道（括りの関数を この数 × 書いた括りの関数の数 回まで通る道）
@@ -2147,7 +2262,7 @@ const COMPOSE_WIDTH_LIMIT = 1024;
 // 数え方は鍵の深さより浅くならない側に倒す（1行の括りにも 1 を足す、関数の本体の枝の条件（`:` の左）に書いた形も数える、
 // 文字列の字面は文字の List なので 2、など）。`x ' k` の右が裸の名前か字面の整数なら鍵（欄の名前か位置、R26）なので名前として
 // 辿らず、ほかの右（`x @ k` の右も）は解くので数える。brackets は、書いた括りの関数（括りの
-// 仮引数を持つ `?`）の数。
+// 仮引数を持つ `?`）と、2026-10-26 の R81 から素の関数（仮引数が全部裸の `?`）の数。
 function writtenDepth(lines, F) {
   let deepest = 1;
   const lambdas = new Set();
@@ -2204,7 +2319,11 @@ function writtenDepth(lines, F) {
     return d;
   };
   for (const line of lines) treeDepth(line, false);
-  const brackets = [...lambdas].filter((op) => op.left && patternParamsOf(op.left)).length;
+  // 実体を作る `?` の数：括りの関数と、2026-10-26 の R81 から素の関数（仮引数が全部裸の `?`。印のある実引数で実体を作る）も数える。数えないと、括りの関数の
+  // 無いファイルでは上限が書いた形の深さそのものになり、`$` で包んで渡す再帰しない素の関数の鎖（`a1 : f ? a2 $f` ⏎ `a2 : g ? a3 $g` ⏎ … ⏎ `a1 $inc`）まで、
+  // 鎖が3段を超えると深さの門で断り、関係の無い括りの関数を1つ足すと通った（2026-10-26 の確かめの指摘）。上限の理屈（実体を作る関数をそれぞれこの数の回まで
+  // 通り直す道の届く深さ）は、素の関数の実体にもそのまま当たる。
+  const brackets = [...lambdas].filter((op) => op.left && (patternParamsOf(op.left) || parseParams(op.left).plain)).length;
   return { deepest, brackets };
 }
 
@@ -2222,10 +2341,10 @@ function instanceDepth(params, argDescs) {
   });
   return depth;
 }
-function depthGate(label, shapeText, depth, limit) {
+function depthGate(label, shapeText, depth, limit, plain = false) {
   const e = gate(
     "G7",
-    `括りの関数 \`${label}\` を形 ${cutShape(shapeText)} で呼ぶと、渡した物の鍵の入れ子（形と、欄の関数を書いた所の実体の鍵）が ${limit} 段を超えます（${depth} 段。上限は、括りの関数をそれぞれ ${INSTANCE_DEPTH_MARGIN} 回まで通り直したときに、書いた形から届く深さ）。形を変えながら自分か、自分を呼ぶ関数の輪を呼び続けると、実体が有限に収まるかを決めないので、本体の読みを決めません（R24）。`
+    `${plain ? "素の関数（印のある実引数で実体を作る所、R81）" : "括りの関数"} \`${label}\` を形 ${cutShape(shapeText)} で呼ぶと、渡した物の鍵の入れ子（形と、欄の関数を書いた所の実体の鍵）が ${limit} 段を超えます（${depth} 段。上限は、実体を作る関数（括りの関数と素の関数）をそれぞれ ${INSTANCE_DEPTH_MARGIN} 回まで通り直したときに、書いた形から届く深さ）。形を変えながら自分か、自分を呼ぶ関数の輪を呼び続けると、実体が有限に収まるかを決めないので、本体の読みを決めません（R24）。`
   );
   e.instance = { fn: label, shape: shapeText };
   e.instances = [e.instance];
@@ -2268,7 +2387,7 @@ function noteCall(F, inst, op, label, made) {
 // 作って外れていない実体の数（注の3）。作った `?`（か、外した実体を作り直した `?`）で数える。
 function makeLive(F, inst, op, label) {
   const made = (F.instancesMade.get(op) || 0) + 1;
-  if (made > INSTANCE_WORK_LIMIT) throw guardRefusal(F, "work", label, op);
+  if (made > INSTANCE_WORK_LIMIT) throw guardRefusal(F, "work", label, op, inst.plain);
   F.instancesMade.set(op, made);
   inst.liveOp = op;
 }
@@ -2312,7 +2431,7 @@ function countSettled(F, inst, op, label) {
   let set = F.instanceTotals.get(op);
   if (!set) F.instanceTotals.set(op, (set = new Set()));
   if (set.has(inst)) return;
-  if (set.size + 1 > INSTANCE_TOTAL_LIMIT) throw guardRefusal(F, "total", label, op);
+  if (set.size + 1 > INSTANCE_TOTAL_LIMIT) throw guardRefusal(F, "total", label, op, inst.plain);
   set.add(inst);
   if (!inst.liveOp) makeLive(F, inst, op, label);
   inst.final = true;
@@ -2326,10 +2445,10 @@ const GUARD = {
   work: { reason: "instance-work-limit", gate: "", what: () => `作った実体（仮置きの上で作った物も数える）が ${INSTANCE_WORK_LIMIT} 個を超えました` },
   nest: { reason: "instance-nest-limit", gate: "", what: () => `実体を解いている途中に、再帰の入れ子（同じ \`?\` の2つ目から先の実体の数の和）が ${INSTANCE_NEST_LIMIT} を超えました` },
 };
-function guardRefusal(F, kind, label, op) {
+function guardRefusal(F, kind, label, op, plain = false) {
   const g = GUARD[kind];
   const e = new OperationError(
-    `括りの関数 \`${label}\` の${g.what()}（形を変えながら増え続けています）。実体が有限に収まるかを決めないので、本体の読みを決めません（§5 Q25）。`,
+    `${plain ? "素の関数（印のある実引数で実体を作る所、R81）" : "括りの関数"} \`${label}\` の${g.what()}（形を変えながら増え続けています）。実体が有限に収まるかを決めないので、本体の読みを決めません（§5 Q25）。`,
     { spec: `${SPEC} §4 R24`, reason: g.reason }
   );
   e.gate = g.gate;
@@ -2350,7 +2469,7 @@ function guardRefused(F) {
 // materialize）。
 function enterNest(F, inst) {
   const n = F.instNest.get(inst.lambda) || 0;
-  if (n >= 1 && F.instRecur >= INSTANCE_NEST_LIMIT) throw guardRefusal(F, "nest", inst.label, inst.lambda);
+  if (n >= 1 && F.instRecur >= INSTANCE_NEST_LIMIT) throw guardRefusal(F, "nest", inst.label, inst.lambda, inst.plain);
   F.instNest.set(inst.lambda, n + 1);
   if (n >= 1) F.instRecur++;
 }
@@ -2416,6 +2535,39 @@ function patternFn(F, op, params, defScope, label) {
   fn.envDepth = envDepth(defScope); // 鍵の深さ（fnDepth）
   fn.instantiate = (argDescs) => instantiate(F, fn, op, params, defScope, argDescs);
   return fn;
+}
+
+// ---- 素の関数の単相化（R81、2026-10-26。§5 Q45 の答え） ----
+//
+// 素の関数（括りの仮引数の無い関数）も、実引数が持つ印で実体を作る。印は、関数を指す番地（R49・R55）・値を読む参照（R60）・番地の算術で作った点と差（R62）・
+// 書いた `_` と分かる値（R63）。印の無い実引数では今のまま、本体を1回だけ、裸の仮引数を A として解く（中身の見えない A。bodyRootOf）。実体の鍵・深さ・輪・
+// 守りと、本体の門を呼んだ行で名指しする所は、括りの関数の実体（R24・R25、instantiate）と同じ仕組みに乗せる（仮引数は全部裸：bindParams が印だけを持ち越し、
+// 印ごと鍵に入れる）。答えは括りの関数の実体と同じく、本体の根が A なら A、ほかは未知（本体の根の点・差の印は持たない。持たせるかは §5 Q66 の残り）。
+// これで `use : f x ? @f x` ⏎ `use $inc 5` の `@f` は inc（A）、`gg : f ? map $f vs` ⏎ `gg un` の実体の `$f` は零射の番地。`tg : g ? @g vs~` ⏎ `tg $add` は、
+// tg の定義の行（印の無い1回の読み）が G19 で断るので閉じない（§5 Q45 の残り）。
+// 定義の行の木には実体を描かない（素の関数の本体は、印の無い1回の木のまま）。部分適用は当てた物（bound）を持ち越し、口が全部埋まった所で実体を作る（partialFn）。
+// 穴の関数（`(use $inc !_) 5`・`(ff !_) $5`）は、頭と、書いた実引数と穴の位置を持ち越し、口が埋まった所で頭の適用として作る（holeFnOf、2026-10-26 の確かめの直し）。
+// 根拠：主の Claude の問いの表「Q45 | 括りの仮引数が無い素の関数（`use : f x ? @f x`）にも、引数で実体を作る（単相化する）か。今は番地の印が届かず、`@f` が
+// 未知 | 単相化する（引数で決まる多相は単相化の線）」（2026-10-25 07:43 UTC）に、U〔答え〕[2026-10-25 08:44 c8ccdd69]「Q10 と Q45 は、君の傾きを採用できそうだと
+// 思う。」。
+const monoMarked = (d) => !!readerOf(d) || !!zeroOf(d);
+// 素の関数の仮引数（全部裸）を、括りの関数の仮引数の並びの形（bindParams・instanceDepth・callIdent が読む）にする。
+function plainParamsOf(op) {
+  return parseParams(op.left).names.map((p) => ({ kind: "bare", name: p.name }));
+}
+// 素の関数の fn に、実体を作る口を付ける（R81）。defScope は書いた範囲（閉包の外の名前を引く所）。
+function plainInstantiable(F, fn, op, defScope) {
+  fn.env = scopeIdent(defScope); // 書いた範囲の同一性（callIdent）
+  fn.instantiate = (argDescs) => instantiate(F, fn, op, plainParamsOf(op), defScope, argDescs);
+  return fn;
+}
+// 素の関数 fn（部分適用なら当てた物 bound を前に足す）の口が、trees で全部埋まった。実引数のどれかが印を持てば、実体の答え（R81）。ほかは null（今までどおり）。
+function monoKind(fn, trees) {
+  const base = fn.base || fn;
+  if (!base.instantiate || fn.origin === "hole" || fn.rest) return null;
+  const descs = [...(fn.bound || []), ...trees.map(descOfTree)];
+  if (descs.length !== base.n || !descs.some(monoMarked)) return null;
+  return base.instantiate(descs).kind;
 }
 
 // 括りの関数の部分適用（口の開いたまま残った段、partialFn）。残りの仮引数は後ろの n − k 個なので、最後の仮引数が括りかは元の関数の
@@ -2512,6 +2664,11 @@ function identFn(fn) {
     if (fns.some((c) => c !== NO_IDENT)) id = identText(`C(${fns.map((c) => `#${c}`).join(" ")})`);
   } else if (fn.type === "pfGreedyUnary" && fn.map) {
     id = identFn(fn.map); // `[F,]` の写像（R50）は、写す関数を呼ぶ
+  } else if (fn.type === "plain" && (fn.bound || fn.holeHead)) {
+    // 素の関数の部分適用と穴の関数（R81）：当てた物の印が指す括りの関数を、口が埋まった所の実体で呼ぶ。
+    const marks = plainMarksOf(fn) || [];
+    const bound = marks.map((d) => (d === "hole" || d === "A" ? NO_IDENT : identDesc(d)));
+    if (bound.some((c) => c !== NO_IDENT)) id = identText(`PP(${bound.map((c) => `#${c}`).join(" ")})`);
   }
   identByFn.set(fn, id);
   return id;
@@ -2534,11 +2691,15 @@ function instScope(F, op, defScope, b, key, ident) {
   lam.scope.key = key;
   lam.scope.ident = ident;
   lam.scope.depth = b.depth;
+  // 素の関数の単相化（R81）の実体：印の無い実引数の裸の仮引数は仮引数のまま読む（bindParams）が、札（paramTag）は実体に持ち込まない（実体は鍵で分け合われ、
+  // 本体を印の分だけ別に解くので、札に足すと定義の行の印の無い読みの答えが実体の読みで変わる。paramTag の注）。
+  if (b.plain) lam.scope.plainOp = null;
   return lam.scope;
 }
 
 // 仮引数に渡された物を当てる（R24 の表）。返す物は {descs（名前 → desc）, key, text}。
-function bindParams(params, argDescs) {
+// plain は素の関数の単相化（R81）の実体（仮引数は全部裸。言い分だけが違う）。
+function bindParams(params, argDescs, plain = false) {
   const descs = new Map();
   const keys = [];
   const texts = [];
@@ -2570,8 +2731,11 @@ function bindParams(params, argDescs) {
       }
       // 番地の算術で作った点・差を要素・欄に持つ器（hasAddr）は、裸の仮引数では形を見ずに A で受ける（R24）ので、中の印が落ちる。断る側に倒した
       // （2026-10-26 の確かめの直し、§5 Q66。括りの仮引数で受ければ要素・欄の印は見える）。
-      if (hasAddr(d)) throw refuseAddressDrop("bare", descText(d));
-      descs.set(p.name, A());
+      if (hasAddr(d)) throw refuseAddressDrop("bare", descText(d), { plain });
+      // 素の関数の単相化（R81）の実体では、印の無い実引数を受けた裸の仮引数は descs に入れず、定義の行の読みと同じ裸の仮引数のまま読む（lookup が仮引数として A を
+      // 返し、`$x` は値を読む参照。札は実体に持ち込まない、instScope）。括りの関数の実体の「渡された形の見えない値」（isInstOpaque、`$x` は G20）にすると、関係の無い
+      // 別の口の印で実体を作っただけで x の読みが割れた（`pz : f x ? $x` の `pz $inc 5` が G20、`pz 1 5`・β の `$5` は A。2026-10-26 の確かめの指摘）。
+      if (!plain) descs.set(p.name, A());
       keys.push("A");
       texts.push("A");
       return;
@@ -2592,7 +2756,7 @@ function bindParams(params, argDescs) {
     }
     bindBracket(p, d, descs);
   });
-  return { descs, key: keys.join(" "), text: texts.join(" ") };
+  return { descs, key: keys.join(" "), text: texts.join(" "), plain };
 }
 function bindBracket(p, d, descs) {
   const setNames = (f) => p.names.forEach((n) => descs.set(n, f(n)));
@@ -2641,7 +2805,9 @@ function bindBracket(p, d, descs) {
 // だけを当てる。余りは鍵に入れない）に実体を作る（呼ぶのは doneKind・closeKind）。部分適用は、残りが来たときに当てた物と
 // 合わせて、元の関数のこの3つのどれかで作る（patternPartial）。
 function instantiate(F, fn, op, params, defScope, argDescs) {
-  const b = bindParams(params, argDescs);
+  const plain = fn.type === "plain"; // 素の関数の単相化（R81）。言い分の名指しだけが違う
+  const label = fn.label || (plain ? `[${cutShape(writeTree(op))}]` : fn.label); // 無名の素の関数は書いた綴りで名指しする
+  const b = bindParams(params, argDescs, plain);
   const key = `${fnKey(fn)}|${b.key}`;
   const ident = callIdent(fn, params, argDescs);
   let inst = F.instances.get(key);
@@ -2652,24 +2818,24 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
     // 深さの門は止める所より先に見る（鍵だけで決まる門なので、木を残す段が守りに当たった後でも同じ所で断り、最後の木の門を
     // 言える。refusalOf）。
     const depth = instanceDepth(params, argDescs);
-    if (depth > F.depthLimit) throw depthGate(fn.label, b.text, depth, F.depthLimit);
+    if (depth > F.depthLimit) throw depthGate(label, b.text, depth, F.depthLimit, plain);
     const stopped = F.guardStops.get(op);
     if (stopped) throw stopped;
     // 範囲の深さ（中で書いた閉包の深さ、fnDepth）は、当てた物の深さと書いた所の範囲の深さの大きい方。
     b.depth = Math.max(depth, envDepth(defScope));
     // scope は作った側の物の範囲（根の種類を出す、instRootOf）。walked は本体を歩いて記録した物の同一性（callIdent の注）。
     const scope = instScope(F, op, defScope, b, key, ident);
-    inst = { isInst: true, key, label: fn.label, shapeText: b.text, depth: b.depth, lambda: op, scope, walked: new Set(), cycleDeps: new Set(), liveOp: null };
-    makeLive(F, inst, op, fn.label);
+    inst = { isInst: true, key, label: label, shapeText: b.text, depth: b.depth, lambda: op, scope, walked: new Set(), cycleDeps: new Set(), liveOp: null, plain };
+    makeLive(F, inst, op, label);
     F.instances.set(key, inst);
-    noteCall(F, inst, op, fn.label, true);
+    noteCall(F, inst, op, label, true);
   } else if (!inst.liveOp) {
     // 外れた仮置きの上でだけ作った実体を、また呼んだ：作り直したと数える（注の3）。
-    makeLive(F, inst, op, fn.label);
-    noteCall(F, inst, op, fn.label, true);
-  } else noteCall(F, inst, op, fn.label, false);
+    makeLive(F, inst, op, label);
+    noteCall(F, inst, op, label, true);
+  } else noteCall(F, inst, op, label, false);
   b.depth = inst.depth; // 呼んだ側の物の範囲も、同じ深さを持つ（scopeOf）
-  const root = instRootOf(F, inst, fn.label);
+  const root = instRootOf(F, inst, label);
   // 本体が門に当たる実体を呼んだ：木を残す段はここで呼んだ行ごと断るので、この枠の計算の後ろは最後の木の道に無い（注の2）。
   if (inst.gated && F.stack.length) F.stack[F.stack.length - 1].gated = true;
   if (F.stack.length === 0) {
@@ -2679,10 +2845,10 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
     const scopeOf = () => (ident === inst.scope.ident ? inst.scope : instScope(F, op, defScope, b, key, ident));
     materialize(F, inst, scopeOf);
     if (inst.error) {
-      if (!F.matStack.length) throw instanceError(inst, fn.label);
+      if (!F.matStack.length) throw instanceError(inst, label);
       // 別の実体の本体の中から呼んだ：その実体も同じ門で失敗する。どの実体を、どの名前で呼んで門に当たったかを
       // 覚えておき、いちばん外の呼んだ行で、呼んだ順に名指しする（instanceError）。
-      F.matStack[F.matStack.length - 1].via = { inst, label: fn.label };
+      F.matStack[F.matStack.length - 1].via = { inst, label: label };
       throw inst.error;
     }
     // 分け合った実体を、まだ歩いていない物で呼んだ：その物で本体を歩き、呼んだ `?` を記録する（R25）。
@@ -2817,7 +2983,9 @@ function instanceError(inst, label) {
     chain.length > 4
       ? `${chain.slice(0, 3).map(seg).join(J)}${J}…（ほか ${chain.length - 4} 段）…、${seg(chain[chain.length - 1])}`
       : chain.map(seg).join(J);
-  const e = new OperationError(`括りの関数 ${named}呼んだ実体の本体が、門に当たりました（R25：呼んだ行で断る）。${e0.message}`, {
+  // 素の関数の単相化（R81）の実体は「素の関数」と名指す（いちばん外の実体で決める）。
+  const what = inst.plain ? "素の関数（印のある実引数で実体を作る所、R81）" : "括りの関数";
+  const e = new OperationError(`${what} ${named}呼んだ実体の本体が、門に当たりました（R25：呼んだ行で断る）。${e0.message}`, {
     spec: e0.spec,
     reason: e0.reason,
   });
@@ -2923,7 +3091,7 @@ function classify(term, ctx) {
     // 番地の算術で作った点・差（R62）を開く：ずらした点が指す物は、差が指す物の要素の幅の倍数かと一緒に型の段で決まるので、解決器の段では分からない。
     // 差は位置ではないので読めない。印の無い前置 `@`（入力の項）に倒さずに断る（§5 Q66）。
     if (addrOf(pd)) throw refuseOpenAddress(writeTerm(term), pd);
-    return { cat: "input", desc: { k: "L", fn: { type: "input" } }, view };
+    return { cat: "input", desc: { k: "L", fn: { type: "input" } }, view, inputWhy: () => inputWhy(core, ctx) };
   }
   // 後置 `~`（撒く項）。
   if (pre.length === 0 && post.length === 1 && post[0] === "~") return classifySpread(term, view, ctx);
@@ -3052,7 +3220,10 @@ function classifyDollar(term, ctx, plain) {
     // 中身が名前1つに縮み、その名前が括りの関数の実体で渡された形の見えない値なら、`$名前` と同じ G20（`$[s , !_]`・`$[_ , s]` は `$s`。2026-10-26 の R63 の片で
     // 見つけた：R60 の確かめの片は名前1つの綴り `$s`・`$[s]` だけを断り、縮む綴りは値を読む参照で通っていた。書いた `_` と分かる値は下の zero で零射）。
     const oneName = one && one.t === "leaf" && one.term && one.term.type === "atom" && !one.term.pre.length && !one.term.post.length && one.term.core.c === "name" ? one.term.core.name : null;
-    if (oneName && instOpaqueName(oneName, ctx)) throw refuseDollar(term, U(), ctx, { where: "inst-opaque", name: oneName });
+    if (oneName && instOpaqueName(oneName, ctx)) {
+      const al = localNamed(oneName, ctx); // 局所の別名（R80）なら言い分にその右辺の名前を添える
+      throw refuseDollar(term, U(), ctx, { where: "inst-opaque", name: oneName, aliasOf: al && !al.why && al.paramAlias ? al.paramAlias.name : undefined });
+    }
     // 書いた `_` を指すか（R56）は、木で見る（pointsToMark）か、中身の desc の印 zero で見る（R63。括りの関数の実体の中の `$[s , !_]` の s は、名前の木では
     // 見えない）。
     target = {
@@ -3119,10 +3290,11 @@ const ID1_FN = { type: "plain", origin: "plain", n: 1, getBodyRoot: () => "A", i
 
 // 解いた木が、書いた `_` を指すか（R56）：書いた `_` の葉（印）、それを1行で括った物（`[_]`・`[[_]]`。中の行が `_` に縮む `[_ _]`・`[_ , !_]` も）、
 // 書いた `_` を右辺に持つファイルの値の定義（F.unitDefs、nameKindOf が置く）。局所の定義の名前そのものの `$w`（`w : _`）は localTarget が右辺で見る。
-// 木の中に裸で書いた局所の名前（局所の別名 `v : w` の右辺の w、`v : [w]` の中の w）は、ここでも辿らない：裸で書いた局所の名前は lookup で
-// 種類を決めない（§5 Q10）ので、`w : inc` ⏎ `v : w` の `$v` は未知で G20。辿ると `w : _` ⏎ `v : w` の `$v` だけが零射で通り、同じ形が右辺で割れる。
-// 2026-10-25 の作る途中の版は辿っていて、局所の別名どうしの輪（`w : v` ⏎ `v : w` ⏎ `$v`・`[w : w ⏎ $w]`）では localTarget と互いに呼び合って
-// JS のスタックが溢れていた（同じ日の確かめの指摘）。
+// 2026-10-26 の R80 から、木の中に裸で書いた関数の本体の局所の名前（局所の別名 `v : w` の右辺の w、`v : [w]` の中の w）も、その右辺で辿る（localInfo の unit。
+// ファイルの値の定義の unitDefs と同じ）：`w : _` ⏎ `v : w` の `$v` は `$_` と同じ零射の番地（ファイルの `w : _` ⏎ `v : w` と同じ答え）。前（R54）は裸で書いた
+// 局所の名前の種類を決めなかったので辿らず、`$v` は G20 だった。2026-10-25 の作る途中の版は辿っていて、局所の別名どうしの輪（`w : v` ⏎ `v : w` ⏎ `$v`）で
+// localTarget と互いに呼び合って JS のスタックが溢れていた。R80 は右辺を解く途中の名前を覚える（F.localBusy）ので、輪は name-cycle で止まる。
+// 括りの中の名前（`[w : w ⏎ $w]`）は今のまま辿らない（"local-field"）。
 function pointsToMark(t, ctx) {
   if (isMark(t)) return true;
   if (!t || t.t !== "leaf" || !t.term || t.term.type !== "atom" || t.term.pre.length || t.term.post.length) return false;
@@ -3131,7 +3303,11 @@ function pointsToMark(t, ctx) {
   if (c.c !== "name") return false;
   for (let s = ctx.scope; s; s = s.parent) {
     if ((s.descs && s.descs.has(c.name)) || (s.params && s.params.has(c.name))) return false;
-    if (s.locals && s.locals.has(c.name)) return false;
+    // 局所の名前（R80）：関数の本体の局所の定義なら、右辺が書いた `_` を指すか（localInfo。ファイルの値の定義の unitDefs と同じ）。
+    if (s.locals && s.locals.has(c.name)) {
+      const info = localInfo(c.name, s, ctx);
+      return !info.why && !!info.unit;
+    }
   }
   const def = ctx.F.defs.get(c.name);
   return !!def && !def.lambda && !!ctx.F.unitDefs.get(def);
@@ -3254,7 +3430,12 @@ function instOpaqueName(name, ctx) {
   for (let s = ctx.scope; s; s = s.parent) {
     if (s.defRows && localDefsOf(s).shadow.has(name)) return false;
     if (s.descs && s.descs.has(name)) return isInstOpaque(s.descs.get(name));
-    if ((s.params && s.params.has(name)) || (s.locals && s.locals.has(name))) return false;
+    if (s.params && s.params.has(name)) return false;
+    // 局所の名前（R80）：仮引数か実体の中で渡された物の別名（`⇥w : s`、paramAliasOf）なら、その名前で見る（`$[w , !_]` は `$[s , !_]` と同じ）。
+    if (s.locals && s.locals.has(name)) {
+      const info = localInfo(name, s, ctx);
+      return !info.why && !!info.paramAlias && instOpaqueName(info.paramAlias.name, { F: ctx.F, scope: info.paramAlias.scope });
+    }
   }
   return false;
 }
@@ -3349,7 +3530,12 @@ function aliasDeadOfTree(F, t, s) {
   if (!one || one.t !== "leaf" || !one.term || one.term.type !== "atom" || one.term.pre.length || one.term.post.length || one.term.core.c !== "name") return null;
   const n = one.term.core.name;
   for (let q = s; q; q = q.parent) {
-    if ((q.descs && q.descs.has(n)) || (q.params && q.params.has(n)) || (q.locals && q.locals.has(n))) return null;
+    if ((q.descs && q.descs.has(n)) || (q.params && q.params.has(n))) return null;
+    // 局所の名前（R80）：関数の本体の局所の定義なら、その右辺の余る関数（localInfo）。
+    if (q.locals && q.locals.has(n)) {
+      const info = localInfo(n, q, { F, scope: s });
+      return info.why ? null : info.dead;
+    }
   }
   const def = F.defs.get(n);
   return def ? deadOfDef(F, def) : null;
@@ -3426,38 +3612,141 @@ function deadInPatternBody(F, op, scope) {
 // - 右辺を解いている途中で、また同じ範囲の同じ名前を `$` で指した（"local-cycle"。自分を `$` で指す局所の関数・局所の定義どうしの輪）。ファイルの
 //   `?` の定義は本体を解かずに L と分かる（nameKindOf）が、局所の `?` の定義は右辺を解いて関数の印を作るので、輪は解き終えられない。断る側に
 //   倒した（実装する人の読み、§5 Q10 に残す）。範囲は書いた範囲の物そのもの（実体ごとに別の物）で数えるので、実体を跨いだ同じ綴りは輪に数えない。
-// - 右辺が局所の名前を裸で書いた別名（"local-alias"。`w : inc` ⏎ `v : w`・`v : [w]` の `$v`）：裸で書いた局所の名前は lookup で種類を決めない
-//   （§5 Q10）ので、右辺の種類は未知。言い分でそれを言う。
+// - 右辺が局所の名前を裸で書いた別名（"local-alias"。`w : inc` ⏎ `w : double` ⏎ `v : w` の `$v`）で、その名前が局所の定義として読めない（同じ範囲に2つ・
+//   入れ子の括りの中だけ・局所の関数の再帰）ので右辺の種類が未知。言い分でそれを言う。2026-10-26 の R80 から、読める局所の名前を裸で書いた別名
+//   （`w : inc` ⏎ `v : w`・`v : [w]`・`w : _` ⏎ `v : w`）は右辺の種類で通る（前は裸で書いた局所の名前の種類を決めなかったので、どれも G20）。
 // 根拠：主の Claude「局所の `?` 定義：`sq : z ? z * z` ⏎ `map $sq x`。今は局所の名前を未知にしていて断っているので、ここが変わる。」（2026-10-24
-// 16:53 UTC）に U〔答え〕[2026-10-25 00:25 8dfc006e]「…後はすべて君の言う通り。」。裸で呼ぶ `sq x` は今のまま未知（lookup。この答えは `$` の先の話で、
-// 本体の中の `:` が局所の定義か枝かは §5 Q10 に残る）。
-// 右辺の種類は覚えない（`$名前` のたびに右辺を解き直す）。局所の `$` が2つずつ前の局所を指す鎖では指数で遅くなる（n=16 で 13 秒、同じ日の確かめ）
-// が、範囲ごとに覚えると、不動点を回している途中の過渡値が覚えた種類に固まりうる（関数の根は門を捕まえて未知にして回す、bodyRootOf）ので入れていない。
+// 16:53 UTC）に U〔答え〕[2026-10-25 00:25 8dfc006e]「…後はすべて君の言う通り。」。裸で呼ぶ `sq x` は、R54 の片では未知だった（この答えは `$` の先の話で、
+// 本体の中の `:` が局所の定義か枝かは §5 Q10 に残った）。2026-10-26 の R80（§5 Q10 の答え）から、裸で書いた所も同じ右辺の種類で読む（localInfo）。
+// 右辺の答えは、範囲の本体を解いている間だけ覚える（localInfo の注。R54 の片は覚えず、`$名前` のたびに右辺を解き直していた：局所の `$` が2つずつ前の局所を
+// 指す鎖で指数で遅くなった（n=16 で 13 秒））。範囲の本体を解き始めるたびに消すので、不動点を回している途中の過渡値は覚えた種類に固まらない。
 function localTarget(name, s, ctx) {
-  if (s.field) return { kind: U(), where: "local-field" };
+  const info = localInfo(name, s, ctx, true);
+  if (info.why) return { kind: U(), where: info.why };
+  // 仮引数か実体の中で渡された物の別名（`⇥w : a`、paramAliasOf）：`$w` は `$a` と同じ先（書いた `_` と分かる値なら零射、形の見えない値なら G20）。
+  if (info.paramAlias) return { ...dollarNameTarget(info.paramAlias.name, { F: ctx.F, scope: info.paramAlias.scope }), aliasOf: info.paramAlias.name };
+  if (info.alias) return { kind: info.desc, where: "local-alias", alias: info.alias };
+  return { kind: info.desc, where: "local-value", unit: info.unit, dead: info.dead };
+}
+
+// ---- 関数の本体の局所の定義（R80、2026-10-26。§5 Q10 の答え） ----
+//
+// 枝の無い関数の本体（字下げの本体の各行が手続き）で、左がその名前1つの `:` の行は局所の定義。2026-10-25 の R54 までは `$名前` の先（localTarget）でだけ
+// 右辺を読み、裸で書いた所（`sq x`・`$[sq double]`・`$||sq||`・局所の別名の右辺 `r : sq`）は種類を決めない未知だった。R80 から、どの使い方でも、その局所の
+// 定義の右辺の種類で読む（`:` はメタなので、局所の名前は右辺を閉じた1つの項として指す。§5 Q50）。名前の desc と付きの物（器の数・文字の数・書いた `_` を
+// 指すか・番地の字面か・右辺の余る関数）は、ファイルの値の定義と同じ valueOfRoot で作る（同じ定義をファイルに置いた形と同じ答え。法則27）。右辺が `?` の
+// 定義なら、右辺を解いた関数（閉包。外の仮引数を掴んでよい）。行の順は定義の順序に従う（先勝ち＋順序非依存：使う行が定義の行の前でも後でも同じ）。
+// 今のまま断る所（why。裸で書いた名前は今のまま未知、`$名前` は G20 の言い分）：括りと関数の本体でない字下げのブロックの行（"local-field"）・入れ子の括りの中に
+// しか `:` の無い名前（"local-nested"）・枝のある本体と、外の名前と同じ名前の行のある本体（"local-branch"。外の名前と同じ名前の行の `$名前` は
+// dollarNameTarget の "local-shadow"）・同じ範囲に2つ（"local-twice"）。輪（F.localBusy）：右辺を解いている途中に同じ範囲の同じ名前へ戻ったら、
+// 輪の道に値の定義（右辺が `?` でない）があれば name-cycle（ファイルの値を含む輪と同じ、§5 Q30）、関数の定義だけなら局所の関数の再帰で、今のまま未知
+// （"local-recursion"。`$名前` で戻った所は今のまま "local-cycle" の G20）。
+// 根拠：主の Claude の問いの表「Q10 | 本体の `name : …` の行は、局所の定義か、枝の条件か。…| 枝の無い本体なら局所の定義、で今のまま」（2026-10-25 07:43 UTC）と、
+// 「残る問いは Q10（本体の `:` は局所の定義か枝か）と Q45（素の関数を単相化するか）だね。」（08:43 UTC）に、U〔答え〕[2026-10-25 08:44 c8ccdd69]「Q10 と Q45 は、
+// 君の傾きを採用できそうだと思う。」。
+// 覚え（s.localCache）：範囲の物ごとに、名前 → 答え。範囲の本体を解き始める所（resolveBody）で消すので、解き直し（仮置きが外れた枠・実体の根と木）は
+// いつも右辺を解き直す（過渡値が覚えた答えに固まらない。2026-10-25 の localTarget の注の心配）。局所の関数の再帰で未知を返した所に頼った答えは覚えない
+// （入口の名前で答えが割れうる、noCache）。
+function localRecordOf(name, s) {
+  if (s.field) return { why: "local-field" };
   const d = localDefsOf(s);
   const rhss = d.defs.get(name) || [];
-  if (!rhss.length) return { kind: U(), where: "local-nested" };
-  if (d.branch) return { kind: U(), where: "local-branch" };
-  if (rhss.length > 1) return { kind: U(), where: "local-twice" };
-  const busy = s.dollarBusy || (s.dollarBusy = new Set());
-  if (busy.has(name)) return { kind: U(), where: "local-cycle" };
-  busy.add(name);
-  let root;
-  // 受け皿 dead：右辺に値の上に積まれて口が開いたまま閉じた関数があるか（R59。ファイルの定義の deadOfDef と同じ）。
-  const dead = [];
-  try {
-    root = resolveTree(rhss[0], { F: ctx.F, scope: s, diag: null, dead });
-  } finally {
-    busy.delete(name);
+  if (!rhss.length) return { why: "local-nested" };
+  if (d.branch) return { why: "local-branch" };
+  if (rhss.length > 1) return { why: "local-twice" };
+  return { rhs: rhss[0], lambda: unwrapLambda(rhss[0]) };
+}
+// 範囲 s の局所の名前 name の答え：{why}（今のまま断る所）か {desc, root, lambda, count, strCount, unit, hex, dead, alias}。viaDollar は `$名前` の先から引いた所。
+function localInfo(name, s, ctx, viaDollar = false) {
+  const F = ctx.F;
+  const rec = localRecordOf(name, s);
+  if (rec.why) return rec;
+  const busyAt = F.localBusy.findIndex((e) => e.s === s && e.name === name);
+  if (busyAt >= 0) {
+    // 輪の辺は、戻った所の辺（viaDollar）と、輪の途中の名前に入った辺（via）。どれかが `$` なら、R54 の `$` の輪（local-cycle、G20）。戻った所の辺だけを見ると、
+    // 同じ輪がどの名前から解き始めたかで name-cycle と G20 に割れた（`⇥v : f9 1` ⏎ `⇥f9 : z ? z , $v`。2026-10-26 の確かめの指摘）。
+    if (viaDollar) return { why: "local-cycle" };
+    const chain = F.localBusy.slice(busyAt);
+    const viaAt = chain.slice(1).find((e) => e.via);
+    if (viaAt) throw localDollarCycleError(chain, viaAt);
+    if (chain.some((e) => e.value)) throw localCycleError(chain);
+    for (let i = busyAt + 1; i < F.localBusy.length; i++) F.localBusy[i].noCache = true;
+    return { why: "local-recursion" };
   }
-  if (!root || !root.kind) return { kind: U(), where: "local-value" };
-  const alias = root.kind.k === "U" ? localAliasOf(rhss[0], s) : null;
-  if (alias) return { kind: root.kind, where: "local-alias", alias };
-  // 値なら、ファイルの値の定義（nameKindOf）と同じく、右辺の中身の形と要素も持つ（R60 の値を読む参照が指す値の形。descOfTree。`\tlf : 1 , 2` の `$lf` は
-  // ファイルの `lf : 1 , 2` の `$lf`・`$[1 , 2]` と同じ `$[N…]`。持たないと、局所の側だけ形の見えない `$A` になり、法則18 で割れた）。
-  const kind = root.kind.k === "A" ? descOfTree(root) : root.kind;
-  return { kind, where: "local-value", unit: pointsToMark(root, { F: ctx.F, scope: s }), dead: dead[0] || aliasDeadOfTree(ctx.F, root, s) };
+  const cache = s.localCache || (s.localCache = new Map());
+  if (cache.has(name)) return cache.get(name);
+  const entry = { s, name, value: !rec.lambda, via: viaDollar, noCache: false };
+  F.localBusy.push(entry);
+  const dead = [];
+  let root;
+  try {
+    root = resolveTree(rec.rhs, { F, scope: s, diag: null, dead });
+  } finally {
+    F.localBusy.splice(F.localBusy.lastIndexOf(entry), 1);
+  }
+  let info;
+  if (!root || !root.kind) info = { why: "local-value" };
+  else if (rec.lambda) info = { desc: { k: root.kind.k, fn: root.kind.fn }, root, lambda: true, count: null, strCount: null, unit: false, hex: false, dead: dead[0] || null };
+  else {
+    const v = valueOfRoot(F, root, s);
+    // 右辺が単位律と [x] ≅ x で仮引数か実体の中で渡された物の名前1つに縮む（`⇥w : a`・`⇥w : [s]`）なら、w はその名前と同じ物（`:` はメタ）：desc はその名前の
+    // desc そのもの（裸の仮引数の札 pv、書いた `_` を指す印 zero、括りの関数の実体で渡された形の見えない値も、そのまま。valueOfRoot は印を選んで写すので、
+    // 写さない物が別名で落ちた）。`$w` もその名前の先（localTarget）。2026-10-26 の確かめの指摘：前は `⇥w : a` ⏎ `⇥w + b` の札が落ち、`w : f` の `$w` が零射に
+    // ならず、形の見えない値の `$w` が G20 を素通りした。
+    const pa = paramAliasOf(F, root, s);
+    info = { desc: pa ? pa.desc : v.value, root, lambda: false, count: v.count, strCount: v.chars, unit: v.unit, hex: v.hex, dead: dead[0] || aliasDeadOfTree(F, root, s) };
+    if (pa) info.paramAlias = pa;
+    if (root.kind.k === "U") {
+      const alias = localAliasOf(rec.rhs, s);
+      if (alias) info.alias = alias;
+    }
+  }
+  if (!entry.noCache) cache.set(name, info);
+  return info;
+}
+// 局所の定義の右辺の木 root が、単位律と [x] ≅ x で、仮引数か実体の中で渡された物の名前1つに縮むなら、{name, scope（その名前を見つけた範囲）, desc（その名前の
+// desc）}（R80 の別名）。局所の名前に縮めば、その局所の定義の物を引き継ぐ。ほかは null。
+function paramAliasOf(F, root, s) {
+  const one = unitReduced(root);
+  if (!one || one.t !== "leaf" || !one.term || one.term.type !== "atom" || one.term.pre.length || one.term.post.length || one.term.core.c !== "name") return null;
+  const n = one.term.core.name;
+  for (let q = s; q; q = q.parent) {
+    if ((q.descs && q.descs.has(n)) || (q.params && q.params.has(n))) return { name: n, scope: q, desc: one.kind };
+    if (q.locals && q.locals.has(n)) {
+      const info = localInfo(n, q, { F, scope: s });
+      return !info.why && info.paramAlias ? { name: info.paramAlias.name, scope: info.paramAlias.scope, desc: one.kind } : null;
+    }
+  }
+  return null;
+}
+// 局所の定義どうしの輪に、`$` で入った辺がある（R54 の local-cycle と同じ。戻った所が裸の名前でも）。at は `$` で入った名前の所。
+function localDollarCycleError(chain, at) {
+  const path = [...chain, chain[0]].map((e) => `\`${e.name}\``).join(" → ");
+  return gate(
+    "G20",
+    `\`$${at.name}\` の \`$\` の先は種類が決まらないので、1つの Reader（関数か、値を読む参照）と言い切れません（局所の定義 \`${at.name}\` を \`$\` で指した所が、局所の定義どうしの輪にあります（輪：${path}）。自分か、ほかの局所の定義を通して自分を \`$\` で指す局所の定義は、右辺を解き終えられないので通しません。§4 R54・R80、§5 Q10）。\`$\` の先は、書いた所で1つの Reader（関数か、値を読む参照）と言い切れる物だけです（§4 R53・R60）。`
+  );
+}
+// 局所の定義どうしの輪に値の定義がある（R80）。ファイルの値を含む輪（§5 Q30）と同じ name-cycle で、道筋を名指しする。
+function localCycleError(chain) {
+  const path = [...chain, chain[0]].map((e) => `\`${e.name}\``).join(" → ");
+  return nameError(
+    "name-cycle",
+    `関数の本体の局所の定義 \`${chain[0].name}\` の種類が、局所の定義を通して自分の種類に依っています（輪：${path}）。輪に値の定義があるので、その値はいつまでもできません（§4 R80、§5 Q30）。`
+  );
+}
+// 範囲 ctx.scope から名前 name を探し、いちばん近い所が局所の名前ならその範囲（R80）。仮引数・実体の中で渡された物が先に見つかれば null。
+function localScopeOf(name, ctx) {
+  for (let s = ctx.scope; s; s = s.parent) {
+    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name))) return null;
+    if (s.locals && s.locals.has(name)) return s;
+  }
+  return null;
+}
+// 名前 name の局所の答え（R80）。局所の名前でなければ null、今のまま断る所なら {why}。
+function localNamed(name, ctx) {
+  const s = localScopeOf(name, ctx);
+  return s ? localInfo(name, s, ctx) : null;
 }
 
 // 局所の定義の右辺が名前1つ（`v : w`・`v : [w]`・`v : (w)`）で、その名前が局所の名前なら、その名前（R54 の言い分のため）。
@@ -3475,7 +3764,7 @@ function localAliasOf(rhs, s) {
 }
 
 // 範囲 s の行の `:` の分け方（R54）：defs は左が局所の名前1つの `:` の行の右辺（名前 → 右辺の並び）、shadow は左が名前1つでも局所の名前に
-// 数えない名前（仮引数・ファイルの定義、scanLocals）、branch は局所の定義と読めない `:` の行があるか（左が名前1つでない行か、shadow の行）。
+// 数えない名前（仮引数・ファイルの定義・外の範囲の局所の名前、scanLocals）、branch は局所の定義と読めない `:` の行があるか（左が名前1つでない行か、shadow の行）。
 // 行は関数の範囲の本体の行（字下げのブロックならその行、ほかは本体そのもの1つ。makeLambda が defRows に置く。括り・ブロックの範囲には無い）。
 function localDefsOf(s) {
   if (s.localDefs) return s.localDefs;
@@ -3534,7 +3823,7 @@ function refuseDollar(term, kind, ctx, target = {}) {
   if (where === "inst-opaque") {
     return gate(
       "G20",
-      `\`${text}\` の \`$\` の先 \`${name}\` は、括りの関数の実体で渡された形の見えない値です。渡された物が書いた \`_\` と分かれば \`$_\` と同じ零射の番地（R63。欄の \`[s : _]\`・\`_\` を右辺に持つ名前など）、\`_\` でないと分かれば値を読む参照（R60）ですが、形の見えない値は、どちらか言い切れません（要素の混ざった List の要素・適用の結果など。§5 Q64 は閉じた）。${tail}（§4 R56・R60・R63）。`
+      `\`${text}\` の \`$\` の先 \`${name}\`${target.aliasOf ? `（関数の本体の局所の定義で、右辺は \`${target.aliasOf}\`。\`:\` はメタなので同じ物、§4 R80）` : ""} は、括りの関数の実体で渡された形の見えない値です。渡された物が書いた \`_\` と分かれば \`$_\` と同じ零射の番地（R63。欄の \`[s : _]\`・\`_\` を右辺に持つ名前など）、\`_\` でないと分かれば値を読む参照（R60）ですが、形の見えない値は、どちらか言い切れません（要素の混ざった List の要素・適用の結果など。§5 Q64 は閉じた）。${tail}（§4 R56・R60・R63）。`
     );
   }
   const why =
@@ -3547,15 +3836,15 @@ function refuseDollar(term, kind, ctx, target = {}) {
           : where === "local-nested"
             ? `（\`${name}\` を左に置いた \`:\` が、この範囲の行ではなく入れ子の括りの中にあり、ここから見えるかが決まっていません。§4 R54、§5 Q10）`
             : where === "local-branch"
-              ? `（\`${name}\` を左に置いた \`:\` のある本体に、局所の定義と読めない \`:\` の行（枝の条件か、仮引数・ファイルの定義と同じ名前の行）があります。枝のある本体は match_case で、\`${name} : …\` も枝の条件と読めるので、局所の定義か決まっていません。§4 R54、§5 Q10）`
+              ? `（\`${name}\` を左に置いた \`:\` のある本体に、局所の定義と読めない \`:\` の行（枝の条件か、仮引数・ファイルの定義・外の範囲の局所の名前と同じ名前の行）があります。枝のある本体は match_case で、\`${name} : …\` も枝の条件と読めるので、局所の定義か決まっていません。§4 R54、§5 Q10）`
               : where === "local-shadow"
-                ? `（\`${name}\` を左に置いた \`:\` の行が本体にありますが、\`${name}\` は仮引数かファイルの定義の名前です。その行を局所の定義と読むと外の \`${name}\` を隠しますが、隠しを通すかは決まっていないので、どちらを指すか1つに言い切れません。§4 R54、§5 Q10）`
+                ? `（\`${name}\` を左に置いた \`:\` の行が本体にありますが、\`${name}\` は仮引数・ファイルの定義か、外の範囲の局所の名前です。その行を局所の定義と読むと外の \`${name}\` を隠しますが、隠しを通すかは決まっていないので、どちらを指すか1つに言い切れません。§4 R54、§5 Q10）`
                 : where === "local-twice"
                   ? `（\`${name}\` を左に置いた \`:\` が同じ範囲に2つ以上あり、どれを指すか1つに決まりません。§4 R54）`
                   : where === "local-cycle"
                     ? `（局所の定義 \`${name}\` の右辺を解いている途中で、また \`$${name}\` を指しました。自分か、ほかの局所の定義を通して自分を \`$\` で指す局所の関数は、右辺を解き終えられないので通しません。§4 R54、§5 Q10）`
                     : where === "local-alias"
-                      ? `（\`${name}\` は局所の定義の名前で、右辺は局所の名前 \`${target.alias}\` を裸で書いた物です。裸で書いた局所の名前は、今のまま種類を決めません。§4 R54、§5 Q10）`
+                      ? `（\`${name}\` は局所の定義の名前で、右辺は局所の名前 \`${target.alias}\` を裸で書いた物です。\`${target.alias}\` は局所の定義として読めない名前（同じ範囲に2つ・入れ子の括りの中だけ・局所の関数の再帰など、今のまま断る所）で、種類が決まりません。§4 R54・R80、§5 Q10）`
                       : where === "local-value"
                         ? `（\`${name}\` は局所の定義の名前で、右辺を解いた種類で見ました。§4 R54）`
                         : "";
@@ -3731,15 +4020,19 @@ function refuseOpenAddress(text, d) {
 function refuseAddressDrop(where, text, extra = {}) {
   const tail = "印を持ち越すか（答えに点・差を持たせるか）は決まっていないので、断る側に倒しました（§4 R62、§5 Q66）。";
   const why = {
-    return: `\`${text}\` は関数の本体が返す値（字下げの本体なら、局所の定義の右辺・枝の値・行の値も）で、番地の算術で作った点か差を含みます。関数の答えは本体の根の種類だけで持ち（素の関数と括りの関数の実体の答えは中身の見えない A。字下げの本体の局所の名前は種類が未知、P2）、点・差の印を答えに持たせられないので、返した番地が数と黙って混ざります（\`gw : y ? $x + 0x10\` ⏎ \`(gw 1) + 1\`）。`,
-    plain: `番地の算術で作った点か差 ${text} を、素の関数 \`${extra.label}\` の前から ${extra.at} 番目の口に渡しました。素の関数の本体は裸の仮引数を番地と見ずに1回だけ解き、答えは本体の根の種類だけなので、本体がその口を返しても値の演算子に置いても、点・差の印を持たせられません（\`gi : y ? y\` ⏎ \`(gi ($x + 0x10)) + 1\` が黙って通る）。`,
+    return: `\`${text}\` は関数の本体が返す値（字下げの本体なら、枝の値・行の値と、局所の定義として読めない行（枝のある本体・同じ範囲に2つ）の右辺も）で、番地の算術で作った点か差を含みます。関数の答えは本体の根の種類だけで持ち（素の関数と括りの関数の実体の答えは中身の見えない A。印のある実引数で作った素の関数の実体も同じ、R81）、点・差の印を答えに持たせられないので、返した番地が数と黙って混ざります（\`gw : y ? $x + 0x10\` ⏎ \`(gw 1) + 1\`）。`,
+    // 2026-10-26 の確かめの指摘から、点・差そのものと、それを中に持つ器で言い分を分ける（点・差そのものは印で実体を作る（R81）ので、ここに来るのは実体を
+    // 作らない口だけ）。
+    plain: extra.direct
+      ? `番地の算術で作った点か差 ${text} を、素の関数 \`${extra.label}\` の前から ${extra.at} 番目の口に渡しました。この口は印で実体を作らない所（R81 の外）で、素の関数の本体は裸の仮引数を番地と見ずに1回だけ解くので、本体がその口を返しても値の演算子に置いても、点・差の印を持たせられません。`
+      : `番地の算術で作った点か差を中に持つ ${text} を、素の関数 \`${extra.label}\` の前から ${extra.at} 番目の口に渡しました。素の関数の裸の仮引数は器の中を見ずに受ける（印のある実引数で実体を作る所でも、器は中身の見えない A、R81）ので、本体がその口を返しても値の演算子に置いても、中の点・差の印を持たせられません（\`gi : y ? y\` ⏎ \`((gi (($x + 0x10) , 1)) ' 0) + 1\` が黙って通る）。`,
     logic: `\`${text}\` の論理の \`${extra.sym}\` の被演算子 \`${extra.operand}\` は、番地の算術で作った点か差を含みます。論理の答えは通った側の値で、点・差の印を持たせられないので、番地が数と黙って混ざります（\`(c & ($x + 0x10) | $y) + 1\`）。`,
     writeTo: `\`${text}\` は、番地の算術で作った${extra.pt ? "点（ずらした番地）" : "差"}に \`#\` で書いています。${extra.pt ? "ずらした点が指す物（書く所の型）は、差が指す物の要素の幅の倍数かと一緒に型の段で決まるので、解決器の段では分かりません" : "差は位置ではないので、書く所がありません"}（\`@\` で開く形と同じ）。`,
     writeOf: `\`${text}\` は、番地の算術で作った点か差を \`#\` で書いています。書いた物は置き場の中身になり、解決器は置き場の中身と \`#\` の答えに点・差の印を持たせられません。`,
     mixed: `番地の算術で作った点か差を、要素の形の揃わない器（List・積。要素の形 ${cutShape(text)}）に入れました。形の揃わない要素は中身の見えない値にまとまり（\`[x ~xs]\` の x・\`' 0\` で引いた物）、点・差の印を持たせられないので、番地が数と黙って混ざります（\`([($x + 0x10) 5] ' 0) + 1\`）。`,
     bracket: `番地の算術で作った点か差（形 ${text}）を、括りの関数の括りの仮引数に直に渡しました。括りの仮引数に直に渡った番地は中身の見えない値として受ける（名前は未知）ので、点・差の印を本体に持ち越せません（裸の仮引数か欄で渡せば持ち越します）。`,
     other: `番地の算術で作った点か差 ${text} を、既定値のある関数（か、口の読みの決まっていない関数）の口に渡しました。その関数の答えは未知で（§3.4）、点・差の印を持たせられません。`,
-    bare: `番地の算術で作った点・差を中に持つ器（形 ${cutShape(text)}）を、括りの関数の裸の仮引数に渡しました。裸の仮引数は形を見ずに中身の見えない A で受ける（R24）ので、中の点・差の印が本体で落ちます（括りの仮引数で受ければ、要素・欄の印は見えます）。`,
+    bare: `番地の算術で作った点・差を中に持つ器（形 ${cutShape(text)}）を、${extra.plain ? "素の関数（印のある実引数で実体を作る所、R81）" : "括りの関数"}の裸の仮引数に渡しました。裸の仮引数は形を見ずに中身の見えない A で受ける（R24）ので、中の点・差の印が本体で落ちます（括りの仮引数で受ければ、要素・欄の印は見えます）。`,
   }[where];
   return gate("G21", `${why}${tail}`);
 }
@@ -3789,7 +4082,12 @@ function hexName(name, ctx) {
     // 関数の本体の `:` の行がファイルの定義の名前を隠す所（§5 Q10）では、ファイルの定義の字面の顔を使わない（本体の行の読みなら別の物。2026-10-26 の
     // 確かめの指摘：`nx : 0x10` を本体の `nx : 5` が隠しても、`$vs + nx` を点 + 差で通していた。同じ本体の `$nx` は隠しの G20）。顔は「ほか」になる。
     if (s.defRows && localDefsOf(s).shadow.has(name)) return false;
-    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name)) || (s.locals && s.locals.has(name))) return false;
+    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name))) return false;
+    // 局所の名前（R80）：関数の本体の局所の定義なら、右辺が番地の字面か（localInfo。ファイルの値の定義の hexDefs と同じ）。
+    if (s.locals && s.locals.has(name)) {
+      const info = localInfo(name, s, ctx);
+      return !info.why && !!info.hex;
+    }
   }
   const def = ctx.F.defs.get(name);
   if (!def || def.lambda) return false;
@@ -3797,8 +4095,8 @@ function hexName(name, ctx) {
   return !!ctx.F.hexDefs.get(def);
 }
 
-// `@x` の x の desc（R49）。名前は値の定義を解かずに覗き（peekDesc。未定義なら information だけ出す、touchName）、
-// 括りは解く（前の touchCore と同じ）。`@x` の x は開く所なので、括りの中身は遅延した式にしない。`$x` の x は classifyDollar が見る
+// `@x` の x の desc（R49）。名前は peekDesc で引き（2026-10-26 の R82 から、値の定義も右辺を解いて印を読み、輪に数える。前は解かずに覗いた。未定義なら
+// information だけ出す、touchName）、括りは解く（前の touchCore と同じ）。`@x` の x は開く所なので、括りの中身は遅延した式にしない。`$x` の x は classifyDollar が見る
 // （2026-10-24 までは、ここで delayed の印を付けて `$x` の x も見ていた）。
 function pointedDesc(core, ctx) {
   if (core.c === "name") {
@@ -4387,7 +4685,8 @@ function resolveDefine(tree, outerCtx) {
   // 行（P2）も含めて、名前の定義として除く（§5 Q50）。
   const isBranch = branchReturn && isBranchColon(tree);
   const right = resolveTree(tree.right, isBranch && tree.right && tree.right.type === "seq" ? { ...ctx, bodyRoot: true } : ctx);
-  return { t: "op", sym: ":", left, right, kind: A(), isLocalDef, fieldName };
+  // isQualifiedDef：関数の本体の局所の定義の行（R80。本体の値の行に数えない、blockBodyKind・refuseReturnedAddress）。
+  return { t: "op", sym: ":", left, right, kind: A(), isLocalDef, isQualifiedDef: isLocalDef && isQualifiedDefRow(tree, ctx.scope), fieldName };
 }
 // 字下げの本体の行が枝（左が名前1つでない `:`。match_case の枝）か。
 const isColonRow = (r) => !!r && r.type !== "seq" && r.sym === ":";
@@ -4512,7 +4811,12 @@ function namesPattern(name, ctx, inDefault) {
   const isPattern = (d) => !!d && d.k === "L" && !!d.fn && d.fn.type === "pattern";
   for (let s = ctx.scope; s; s = s.parent) {
     if (s.descs && s.descs.has(name)) return isPattern(s.descs.get(name));
-    if ((s.params && s.params.has(name)) || (s.locals && s.locals.has(name))) return false;
+    if (s.params && s.params.has(name)) return false;
+    // 局所の名前（R80）：関数の本体の局所の定義なら、右辺の種類で見る（ファイルの別名と同じ）。
+    if (s.locals && s.locals.has(name)) {
+      const info = localInfo(name, s, ctx);
+      return !info.why && isPattern(info.desc);
+    }
   }
   const F = ctx.F;
   const def = F.defs.get(name);
@@ -4877,6 +5181,7 @@ function resolveLambda(op, ctx) {
       op, // 裸の仮引数の札（paramTag）と、Reader を口に渡した呼び出しの言い分（readerAtPlain）
       label: named ? ctx.F.namedLambdas.get(op).name : null, // 無名なら書いた綴り（断るときだけ作る、readerAtPlain）
     };
+    plainInstantiable(ctx.F, fn, op, ctx.scope);
   }
   return { t: "lambda", paramsText: op.left ? writeTree(op.left) : "", body: body.tree, kind: { k: "L", fn } };
 }
@@ -4907,6 +5212,8 @@ function patternNode(op, pattern, ctx) {
 // ときだけ A（§3.4）。局所の定義の行は、定義か枝か決まらないので A に数えない。rootTree は、字下げの本体の返す所（1行だけの手続きの行・枝の値・
 // 枝の後の既定の行）に裸の関数か区間の綴りが残った所の木で、returnGate がそれを本体の根として G16 で断る（rootKind は、裸の関数なら L）。
 function resolveBody(right, ctx) {
+  // 局所の定義の覚え（R80、localInfo の注）は、範囲の本体を解き始めるたびに消す（解き直しは右辺も解き直す）。
+  if (ctx.scope && ctx.scope.localCache) ctx.scope.localCache.clear();
   // 字下げの本体は resolveBlockBody（分けておくのは、本体を解く入れ子が深い鎖でこの関数の枠を小さく保つため。素の関数を挟む 300 個の鎖が JS のスタックの
   // 内に収まる、確かめ 2026-10-26）。
   if (right && right.type === "seq" && right.terms.length === 1 && isBareBlock(right.terms[0], "indent")) return resolveBlockBody(right, ctx);
@@ -4925,7 +5232,10 @@ function resolveBody(right, ctx) {
 function resolveBlockBody(right, ctx) {
   const src = right.terms[0].core.rows;
   const branched = src.some(isBranchColon);
-  const returnsAt = (i) => !isColonRow(src[i]) && (branched ? i === src.length - 1 : src.length === 1);
+  // 局所の定義の行（R80）は定義で、手続きの行（`l1 & … & ln` の被演算子）ではない（`:` はメタ）。だから枝の無い本体の返す所は、局所の定義の行を除いた行が
+  // 1つだけのときのその行（局所の定義をファイルに置いた1行の本体と同じ所。法則27）。前（R76）は局所の定義の行も数え、`⇥sq : …` ⏎ `⇥sq` が手続きの2行だった。
+  const valueRows = src.filter((r) => !isQualifiedDefRow(r, ctx.scope)).length;
+  const returnsAt = (i) => !isColonRow(src[i]) && (branched ? i === src.length - 1 : valueRows === 1);
   const rows = src.map((r, i) => {
     if (isColonRow(r)) return resolveTree(r, { ...ctx, branchReturn: true });
     if (returnsAt(i)) return resolveTree(r, r && r.type === "seq" ? { ...ctx, bodyRoot: true } : ctx);
@@ -4947,11 +5257,14 @@ function resolveBlockBody(right, ctx) {
 
 // 関数の本体が返しうる値（根。字下げの本体なら全部の行の値の側：局所の定義の右辺・枝の値・行そのもの。入れ子のブロックはその行）に、番地の算術で作った
 // 点・差（R62）があれば断る（2026-10-26 の確かめの直し、hasAddr の注）。関数の答えは本体の根の種類だけで持つ（素の関数の getBodyRoot・括りの関数の
-// instRootOf は "A"/"U"）ので、印を答えに持たせられない。局所の定義の右辺は、名前が種類の未知な局所の名前（P2）になって印が落ちる（`ww : $x + 0x10` ⏎
+// instRootOf は "A"/"U"）ので、印を答えに持たせられない。局所の定義の右辺は、名前が種類の未知な局所の名前（P2）になって印が落ちていた（`ww : $x + 0x10` ⏎
 // `ww + 1` は未知で通っていた）。HEAD は中の算術を G7 で断っていた。
+// 2026-10-26 の R80 から、関数の本体の局所の定義の行（isQualifiedDef）は見ない：局所の名前は右辺の desc（点・差の印も）を持つ（localInfo、ファイルの値の定義と同じ）
+// ので、右辺の印は落ちない。今のまま断る所（枝のある本体・同じ範囲に2つなど、名前が未知）の局所の定義の右辺は今のまま見る。
 function refuseReturnedAddress(rows) {
   const valueSide = (t) => (t && t.t === "op" && t.sym === ":" ? t.right : t);
   for (const row of rows) {
+    if (row && row.isQualifiedDef) continue;
     const v = valueSide(row);
     if (v && v.t === "leaf" && v.view && v.view.v === "block") {
       refuseReturnedAddress(v.view.rows);
@@ -4961,6 +5274,8 @@ function refuseReturnedAddress(rows) {
   }
 }
 
+// 関数の本体の局所の定義の行（R80、isQualifiedDef）は定義で、本体の値の行に数えない（局所の定義をファイルに置いた本体と同じ種類。法則27）。値の行が1つも
+// 無ければ未知。今のまま断る所（枝のある本体の左が名前1つの行など）の行は、今のまま定義か枝か決まらないので A に数えない。
 function blockBodyKind(rows) {
   const valueKind = (t) => {
     if (!t) return "U";
@@ -4971,7 +5286,14 @@ function blockBodyKind(rows) {
     if (row && row.t === "op" && row.sym === ":") return row.isLocalDef ? "U" : valueKind(row.right);
     return valueKind(row);
   };
-  return rows.every((r) => rowKind(r) === "A") ? "A" : "U";
+  const values = rows.filter((r) => !(r && r.isQualifiedDef));
+  return values.length && values.every((r) => rowKind(r) === "A") ? "A" : "U";
+}
+// 行 r が、範囲 s（関数の本体の範囲）の局所の定義の行か（R80）：左が局所の名前1つの `:` で、本体の行（defRows）の1つで、その名前が今のまま断る所でない。
+function isQualifiedDefRow(r, s) {
+  if (!isColonRow(r) || !s || !s.defRows || !s.locals) return false;
+  const n = singleBareName(r.left);
+  return !!n && s.locals.has(n) && s.defRows.includes(r) && !localRecordOf(n, s).why;
 }
 
 // ---------------------------------------------------------------------------
@@ -5010,6 +5332,7 @@ function leafOf(term, c) {
     isQBracket: !!c.isQBracket,
     count: c.count === undefined ? null : c.count,
     strCount: c.strCount === undefined ? null : c.strCount,
+    ...(c.inputWhy ? { inputWhy: c.inputWhy } : {}), // 印の無い前置 `@` の項の、印が届かない理由（G6 の言い分、reduceItems）
   };
 }
 
@@ -5058,7 +5381,10 @@ function reduceItems(items, ctx, evaluate = false, closeIdle = true, bodyRoot = 
   // 並びのどこに置いてもその先として読む（入力の項 cat "input" にならない）。ここで断るのは、先の分からない `@x`（印の無い入力の項）だけ。根拠：主の Claude の
   // 21:58 の案「先が分かる `@x` は、その先そのもの（関数なら関数、値なら値）として、どこに置いてもいい。分からない `@x` だけ、今の G6 で断る。」に U〔答え〕
   // [2026-10-25 22:42 c8ccdd69]「Q9 提案受理」。先の分かる `@x` は R49・R60 の片から入力の項でなく、HEAD でもこの門に当たらなかった（答えが実装に追い付いた）。
-  const unknownAt = (it) => `前置 \`@\` の項 \`${showView(it.view)}\` は、先（関数か値か）が分かりません（\`$\` の印が届かない。値の定義の名前の \`@p\` も、今は印を読みません、§5 Q45）`;
+  // 2026-10-26 の R81・R82 から、素の関数の仮引数は印のある実引数で呼んだ実体で、値の定義の名前の `@p` は右辺の印で、先が分かる。印が届かないのは、印の無い
+  // 実引数で読む本体（素の関数の定義の行の1回の読みも）と、未定義・取り込みの名前（§5 Q45 の残り）。
+  // 言い分は、その `@x` の先に印が届かない本当の理由を言う（inputWhy。2026-10-26 の確かめの指摘：前は未定義の名前・括りの関数の実体の値にも、素の関数の R81 を理由に挙げた）。
+  const unknownAt = (it) => `前置 \`@\` の項 \`${showView(it.view)}\` は、先（関数か値か）が分かりません（\`$\` の印が届かない：${it.inputWhy ? it.inputWhy() : "先に関数を指す番地か値を読む参照の印がありません"}）`;
   items.forEach((it, i) => {
     if (it.cat !== "input") return;
     if (i !== 0) throw gate("G6", `${unknownAt(it)}。先の分からない \`@x\` は並びの頭にだけ置けますが、ここは頭以外です（§4 R78、§5 Q9）。`);
@@ -5624,7 +5950,7 @@ function readerAtPlain(fn, trees) {
     const label = fn.label || `[${cutShape(writeTree(fn.op))}]`;
     // 番地の算術で作った点・差（R62。器の要素・欄にあっても）は、口が値の演算子に届かなくても断る（2026-10-26 の確かめの直し、hasAddr の注）：素の関数の
     // 答えは本体の根の種類だけなので、本体がその口を返せば（`gi : y ? y`）印が落ちる。値を読む参照は今のまま、届く口だけ断る（§5 Q66 の届かない所）。
-    if (treeHasAddr(r.tree)) throw refuseAddressDrop("plain", readerText(r.tree), { label, at: r.i + 1 });
+    if (treeHasAddr(r.tree)) throw refuseAddressDrop("plain", readerText(r.tree), { label, at: r.i + 1, direct: !!addrOf(descOfTree(r.tree)) });
     const tag = paramTag(fn.op, fn.idKey, r.i);
     if (!tag.fn) tag.fn = fn;
     if (!numericParam(tag)) continue;
@@ -5801,11 +6127,12 @@ function composeAt(e, g) {
 function doneKind(s) {
   const fn = s.fn;
   switch (fn.type) {
-    case "plain": {
-      const root = fn.getBodyRoot();
-      readerAtPlain(fn, s.recv); // Reader・番地を口に渡した呼び出し（R60 の細かい所・R62）
-      return root === "A" ? A() : U();
-    }
+    case "plain":
+      // 実引数のどれかが印を持てば、印で実体を作る（R81、monoKind）。本体はその印で解くので、Reader・番地の点と差を値の演算子に置く形も本体の中の規則で読む。
+      // 穴の関数は、穴に当てた物を頭に当てた実引数の並びに入れて、頭の素の関数の適用として読む（法則6。holeFnOf の注）。
+      // R34 の k < n の関数（rest）は最後の括りが閉じた所（restCloseKind）で読む。
+      if (fn.holeHead && !fn.rest) return plainApplyKind(fn.holeHead, holeFill(fn, s.recv));
+      return plainApplyKind(fn, s.recv);
     case "pfUnary":
     case "norm":
       return A();
@@ -5877,12 +6204,21 @@ function stringLengthThrough(t, ctx) {
     }
     if (c.c === "name" && (t.strCount === null || t.strCount === undefined) && ctx && ctx.F) {
       // 仮引数・局所の名前に隠されていない、ファイルの値の定義（stringCountOf と同じ順に探す）。右辺に余ったラムダが消えた1項があれば、その1項で数える。
+      // 局所の名前（R80）は、関数の本体の局所の定義なら右辺の木（localInfo）で同じに数える。
+      let localRoot = null;
       const hidden = (() => {
-        for (let s = ctx.scope; s; s = s.parent) if ((s.descs && s.descs.has(c.name)) || (s.params && s.params.has(c.name)) || (s.locals && s.locals.has(c.name))) return true;
+        for (let s = ctx.scope; s; s = s.parent) {
+          if ((s.descs && s.descs.has(c.name)) || (s.params && s.params.has(c.name))) return true;
+          if (s.locals && s.locals.has(c.name)) {
+            const info = localInfo(c.name, s, ctx);
+            if (!info.why && !info.lambda) localRoot = info.root;
+            return true;
+          }
+        }
         return false;
       })();
       const def = hidden ? null : ctx.F.defs.get(c.name);
-      const root = def && !def.lambda ? ctx.F.defRoots.get(def) : null;
+      const root = localRoot || (def && !def.lambda ? ctx.F.defRoots.get(def) : null);
       const inner = root ? vanishedOne(root) : null;
       if (inner) return stringLengthThrough(inner, ctx);
     }
@@ -5951,6 +6287,10 @@ function restCloseKind(fn, args) {
   const len = cLength(args.slice(fn.restAt || 0));
   if (len === null) return U();
   const m = fn.n - (fn.restAt || 0);
+  if (fn.holeHead) {
+    const mono = restHoleKind(fn, args, len, m);
+    if (mono) return mono;
+  }
   if (len < m) return { k: "L", fn: { type: "plain", origin: "partial", n: m - len, getBodyRoot: fn.getBodyRoot, idKey: fn.idKey, envDepth: fn.envDepth } };
   const root = fn.getBodyRoot();
   if (len === m) return root === "A" ? A() : U();
@@ -5993,6 +6333,69 @@ function writtenLength(t) {
     }
   }
   return null;
+}
+// writtenLength で数えた物の、要素の木の並び（数えたのと同じ道。[x] ≅ x で1つの数・1行の括りはその中身）。名前（ファイルの値の定義の右辺の数）は木が無いので null。
+function writtenItems(t) {
+  if (isScalar(descOfTree(t))) return [t];
+  const one = vanishedOne(t);
+  if (one) return writtenItems(one);
+  if (t.t === "construct") return liveItems(t.items);
+  if (t.t === "op" && t.sym === ",") return commaItems(t);
+  if (t.t === "leaf" && t.cat === "plain" && t.term && t.term.type === "atom" && !t.term.pre.length && !t.term.post.length) {
+    const c = t.term.core.c;
+    if (c === "bracket" || c === "indent") {
+      const rows = c === "bracket" ? t.view.inner : t.view.rows;
+      if (!rows) return null;
+      if (rows.length !== 1) return rows;
+      return writtenItems(rows[0]);
+    }
+  }
+  return null;
+}
+// desc が印（R81 の4つ）を持つか、中身（List の要素・構造体の欄）に印か番地の点・差を持つか。
+function markedDeep(d, depth = 0) {
+  if (!d || depth > 32) return false;
+  if (monoMarked(d) || addrOf(d)) return true;
+  const sh = d.k === "A" && !d.spread ? d.shape : null;
+  if (!sh) return false;
+  if (sh.s === "list") return markedDeep(sh.elem, depth + 1);
+  if (sh.s === "struct") return sh.fields.some((f) => markedDeep(f.desc, depth + 1));
+  return false;
+}
+// R34 の k < n で作った穴の関数（rest）を閉じた所で、頭に当てた実引数の並び（書いた物・穴に当てた物・最後の括りに入った物）に印があれば、頭の素の関数の
+// 適用として読む（R81、2026-10-26 の確かめの直し。法則6：`(f3 !_ 2) 1 $5` は `f3 1 2 $5`）。印が無ければ null（restCloseKind の今の読み）。
+// 最後の括りに入った物の要素の木が無い（[x] ≅ x で数えた名前の中身）のに印があれば、どの口に入るかを実体の口に並べ直せないので G7 で断る（§5 Q45 の残り）。
+function restHoleKind(fn, args, len, m) {
+  const at = fn.restAt || 0;
+  const filled = holeFill(fn, args.slice(0, at));
+  const C = [...(fn.holeC || []), ...args.slice(at)];
+  // 印は、最後の括りに入った物を [x] ≅ x で開いた要素ごとに見る（`(f3 !_) 1 [2 $5]` は `f3 1 2 $5`。開く前の器の desc は、形の揃わない要素の印を混ぜて落とす）。
+  const items = C.length >= 2 ? C : C.length === 1 ? writtenItems(C[0]) : null;
+  const opened = !fn.holeC && !!items && items.length === len;
+  if (![...filled, ...(opened ? items : C)].some((t) => markedDeep(descOfTree(t)))) return null;
+  const label = fn.holeHead.label || `[${cutShape(writeTree(fn.holeHead.op))}]`;
+  if (!opened) {
+    throw gate(
+      "G7",
+      `R34 の k < n で作った関数（素の関数 \`${label}\` の穴の関数。書いていない後ろの口を最後の括りで受ける）の口に、印（関数の番地・値を読む参照・番地の点と差・書いた \`_\`）を持つ物が入りましたが、最後の括りに入った物の中身の木が見えないので、元の関数のどの口に入るかを並べ直せません。印で実体を作る（R81）読みに並べ直す作りが無いので、断る側に倒しました（§4 R34・R81、§5 Q45 の残り）。`
+    );
+  }
+  const full = [...filled, ...items.slice(0, m)];
+  if (len < m) {
+    // 足りない：元の関数の部分適用（L）。当てた物を持ち越し、残りが来たら印で実体を作る（partialFn の部分適用と同じ形）。
+    const head = fn.holeHead;
+    const out = { type: "plain", origin: "partial", n: head.n - full.length, getBodyRoot: head.getBodyRoot, idKey: head.idKey, envDepth: head.envDepth, base: head, bound: full.map(descOfTree) };
+    if (head.op) {
+      out.op = head.op;
+      out.label = head.label;
+      out.at = full.length;
+      out.readers = full.map((t, i) => (plainReaderArg(descOfTree(t)) ? { i, tree: t } : null)).filter(Boolean);
+    }
+    return { k: "L", fn: out };
+  }
+  const kind = plainApplyKind(fn.holeHead, full);
+  if (len === m || kind.k === "A") return kind.k === "A" ? A() : kind;
+  throw gate("G2(a)", `穴の口の足りない並びから作った関数の最後の括りが、元の関数のアリティより多くを受けました。元の関数の本体の根が値でないので、余りを当てるか積むかが決まりません（§4 R34・R40、§5 Q11）。`);
 }
 
 // ---- 撒いた並びは流れの1項（R51）と `[F,]` の写像（R50） ----
@@ -6147,14 +6550,15 @@ function streamInto(e, s, x) {
   const m = streamMouths(s);
   if (m === "whole") return void putArg(e, s, x);
   if (m !== 1 && m !== 2) {
-    // 印の無い `@x`（素の関数の仮引数。R49 の印が届かない所）は、口の数が分からない前置 `@` の項のまま（§5 Q45）。言い分でそれを名指しする
+    // 印の無い `@x`（素の関数の定義の行と印の無い実引数で読む本体の仮引数。R49 の印が届かない所。印のある実引数の実体は R81 で届く）は、口の数が分からない
+    // 前置 `@` の項のまま（§5 Q45 の残り）。言い分でそれを名指しする
     // （2026-10-24 の確かめ。そのときは別名の `cc : add inc` の `fold $cc vs` もここで断っていたが、2026-10-25 の R55 で通る。恒等射の `$!_`・`$i` も
     // 同じ日の Q56 の答えで1引数の恒等射の印を持ち、ここに来ない）。
     const input = !!s.fn && s.fn.type === "input";
     const why =
       m === null
         ? input
-          ? "前置 `@` の項が指す名前に、関数を指す番地の印（R49）が届いていないので、口の数が分かりません。印は `$名前`（関数の定義・別名・局所の定義・恒等射）・`$[…]`・`$_`・`$!_` が持ち、括りの関数の実体の裸の仮引数・欄・器の要素に渡れば届きますが、素の関数の仮引数には届きません（§5 Q45）"
+          ? "前置 `@` の項が指す名前に、関数を指す番地の印（R49）が届いていないので、口の数が分かりません。印は `$名前`（関数の定義・別名・局所の定義・恒等射）・`$[…]`・`$_`・`$!_` が持ち、括りの関数の実体と、印のある実引数で呼んだ素の関数の実体（R81）の裸の仮引数・欄・器の要素に渡れば届きますが、素の関数の定義の行の読み（印の無い実引数の読み）には届きません（§5 Q45 の残り）"
           : "口の数が分からないか、固定の口の後ろに可変長の口があります"
         : `口が ${m} つ残っています`;
     // 口が3つ以上・分からない・固定の口の後ろに可変長の口がある関数の読み（前から詰める・3つずつ畳む・断る）は、2026-10-25 の答えに無いので
@@ -6413,6 +6817,22 @@ function partialFn(s) {
         const rs = s.recv.map((t, i) => (plainReaderArg(descOfTree(t)) ? { i: (fn.at || 0) + i, tree: t } : null)).filter(Boolean);
         out.readers = [...(fn.readers || []), ...rs];
       }
+      // 素の関数の単相化（R81）：部分適用は元の関数（base）と当てた物の desc（bound）を持ち越し、口が全部埋まった所で、印があれば実体を作る（monoKind）。
+      // 鍵は当てた物の印を入れる（fnKey）。
+      if ((fn.base || fn).instantiate && origin !== "hole" && !fn.rest) {
+        out.base = fn.base || fn;
+        out.bound = [...(fn.bound || []), ...s.recv.map(descOfTree)];
+      }
+      // 穴の関数の部分適用は、頭と、当てた物を穴に入れた並びを持ち越す（holeFnOf の注、2026-10-26 の確かめの直し）。R34 の k < n の関数で、裸の口より多く
+      // 当てた物は、最後の括りに入った物（holeC）。
+      if (fn.holeHead) {
+        const P = fn.holeAt.length;
+        out.holeHead = fn.holeHead;
+        out.holeArgs = holeFill(fn, s.recv.slice(0, P));
+        out.holeAt = fn.holeAt.slice(Math.min(k, P));
+        const extra = [...(fn.holeC || []), ...s.recv.slice(P)];
+        if (extra.length) out.holeC = extra;
+      }
     } else if (fn.type === "pfBinary") out = { ...fn, n: fn.n - k };
     // 括りの関数の部分適用で当てた括りの実引数も、名前の無い要素を知らせる（R64、noteExcess）。当てた所で知らせるので、括った `(pb2 [1 2 3]) [4]`・名前を
     // 通した `pa : pb2 [1 2 3]` ⏎ `pa [4]` も、書き並べた `pb2 [1 2 3] [4]` と同じく1回（2026-10-26 の確かめの直し。前は残りを当てた所で、当てた括りを
@@ -6658,31 +7078,63 @@ function tryHole(items, ctx) {
     params.push(name);
     return holeParamLeaf(name);
   });
-  return { t: "hole", params, body: holeApply(h, args), kind: { k: "L", fn: holeFnOf(fn, params.length) } };
+  const body = holeApply(h, args);
+  return { t: "hole", params, body, kind: { k: "L", fn: holeFnOf(fn, params.length, undefined, args, body) } };
 }
 
 // 穴の書き換えの本体と、穴を全部埋めた適用：頭に口の数だけ当てた適用（§3.4 の k = n）。既定値のある関数の適用は未知（§5 Q8）。
+// 素の関数の頭は、口が全部埋まった適用と同じ（plainApplyKind）：書いた実引数に印があれば、印で実体を作る（R81）。穴の残る形の本体は、穴の口を印の無い A
+// （穴の生成名の葉）にした実体で、`$p ? h … $p …` の定義の行の読みと同じ（`(use $inc !_)` の本体は `use $inc A` の実体）。
+// 2026-10-26 の確かめの直し：R81 の片の作る途中の版は、穴を全部埋めた適用だけで実体を作り、穴の関数は書いた印も後から当てた印も持ち越さなかった。だから
+// `ff : x ? pq [1] x` の `(ff !_) $5` が本体の根の A で通り、`ff $5`（実体で G21）と法則6 で割れた（`ii : x ? x + 1` の `(ii !_) $5` も、HEAD から A で
+// `ii $5` の G21 と割れていた：穴の関数は札の op も持たず、後から当てた Reader を見なかった）。
 function holeApply(h, args) {
   const fn = h.kind.fn;
-  const kind = fn.type === "plain" ? (fn.getBodyRoot() === "A" ? A() : U()) : U();
-  readerAtPlain(fn, args); // 穴の関数の実引数に書いた Reader・番地も、口に渡した物（R60 の細かい所・R62。`f3 $5 !_ 2`）
+  // 穴の関数の実引数に書いた Reader・番地も、口に渡した物（R60 の細かい所・R62。`f3 $5 !_ 2`）。既定値のある関数の適用は未知（§5 Q8）。
+  const kind = fn.type === "plain" ? plainApplyKind(fn, args) : U();
   return { t: "apply", head: h, arg: args.length === 1 ? args[0] : { t: "construct", items: args, kind: A() }, kind };
 }
+// 素の関数 fn の口が trees で全部埋まった適用の種類：実引数のどれかが印を持てば実体の答え（R81、monoKind）、ほかは本体の根（§3.4）で、Reader・番地を口に
+// 渡した呼び出しを札で見る（readerAtPlain。R60 の細かい所・R62）。
+function plainApplyKind(fn, trees) {
+  const mono = monoKind(fn, trees);
+  if (mono) return mono;
+  const root = fn.getBodyRoot();
+  readerAtPlain(fn, trees);
+  return root === "A" ? A() : U();
+}
 
-// 穴の生成名と、それを実引数の位置に置いた葉（A）。
+// 穴の生成名と、それを実引数の位置に置いた葉（A。印 holeParam は、穴の関数の口の位置を覚える所 holeFnOf が見る）。
 const holeName = (ctx, i) => `$${ctx.F.holePrefix}${i}`;
-const holeParamLeaf = (name) => ({ t: "leaf", term: null, cat: "plain", desc: A(), kind: A(), view: { v: "atom", text: name } });
+const holeParamLeaf = (name) => ({ t: "leaf", term: null, cat: "plain", desc: A(), kind: A(), view: { v: "atom", text: name }, holeParam: true });
 // 穴の関数の fn。頭が既定値のある関数なら、アリティの分からない関数（tryHole の注）。素の関数なら、出どころ "hole" のアリティ n の
-// 素の関数（本体の根は頭のもの）。restAt は R34 の k < n で作った関数（最後の括りの仮引数で残りを受ける、holeMismatch）のときだけ
+// 素の関数。restAt は R34 の k < n で作った関数（最後の括りの仮引数で残りを受ける、holeMismatch）のときだけ
 // 渡し、印 rest と、最後の括り `[~c]` の前に残る裸の口の数 restAt を付ける。
-function holeFnOf(fn, n, restAt) {
+// 2026-10-26 の確かめの直しから、頭の素の関数（holeHead）と、頭に当てた実引数の並び（holeArgs。穴の位置は穴の生成名の葉）と、穴の位置（holeAt、穴の順）を
+// 持ち越す（R81）：口が埋まった所（doneKind・restCloseKind）で、穴に当てた物を holeArgs の穴の位置に入れた並びを頭に当て、印があれば実体を作る（`(ff !_) $5` は
+// `ff $5` と同じ。法則6）。本体の根は、書いた実引数に印があれば本体（body）の実体の答え、無ければ頭のもの。鍵には書いた実引数の印を入れる（plainMarksOf）。
+function holeFnOf(fn, n, restAt, args, body) {
   if (fn.type === "other") return { type: "other" };
   const out = { type: "plain", origin: "hole", n, getBodyRoot: fn.getBodyRoot, idKey: fn.idKey, envDepth: fn.envDepth };
   if (restAt !== undefined) {
     out.rest = true;
     out.restAt = restAt;
   }
+  if (args && fn.instantiate) {
+    out.holeHead = fn;
+    out.holeArgs = args;
+    out.holeAt = args.map((t, i) => (t.holeParam ? i : -1)).filter((i) => i >= 0);
+    if (body && plainMarksOf(out)) out.getBodyRoot = () => (body.kind && body.kind.k === "A" ? "A" : "U");
+  }
   return out;
+}
+// 穴の関数 fn の穴に、前から trees を入れた実引数の並び（R81。trees が穴より少なければ、残りの穴は穴の生成名の葉のまま）。
+function holeFill(fn, trees) {
+  const full = fn.holeArgs.slice();
+  fn.holeAt.forEach((pos, j) => {
+    if (j < trees.length) full[pos] = trees[j];
+  });
+  return full;
 }
 
 
@@ -6723,7 +7175,10 @@ function holeMismatch(h, ts, n, ctx) {
     let r = 0;
     const filled = ts.slice(0, n).map((t) => (!isHole(t) ? t : r < rest.length ? rest[r++] : param()));
     const extra = rest.slice(r);
-    if (params.length) return { t: "hole", params, body: holeApply(h, filled), kind: { k: "L", fn: holeFnOf(fn, params.length) } };
+    if (params.length) {
+      const body = holeApply(h, filled);
+      return { t: "hole", params, body, kind: { k: "L", fn: holeFnOf(fn, params.length, undefined, filled, body) } };
+    }
     if (fn.type === "other") return holeApply(h, [...filled, ...extra]);
     const app = holeApply(h, filled);
     if (!extra.length) return app;
@@ -6735,7 +7190,8 @@ function holeMismatch(h, ts, n, ctx) {
   const spread = { k: "A", spread: true };
   const items = [...args, { t: "leaf", term: null, cat: "plain", desc: spread, kind: spread, view: { v: "atom", text: `${c}~` } }];
   const body = { t: "apply", head: h, arg: { t: "construct", items, kind: A() }, kind: U() };
-  return { t: "hole", params: [...params, `[~${c}]`], body, kind: { k: "L", fn: holeFnOf(fn, params.length + n - ts.length, params.length) } };
+  // 書いた実引数の Reader・番地は、穴の関数を閉じた所（restCloseKind）で、埋めた並びを頭に当てて読む（R81。holeFnOf の注）。
+  return { t: "hole", params: [...params, `[~${c}]`], body, kind: { k: "L", fn: holeFnOf(fn, params.length + n - ts.length, params.length, args) } };
 }
 
 // ---------------------------------------------------------------------------
@@ -6808,6 +7264,8 @@ export function resolve(source) {
     cycleRefused: null,
     // `$v` の輪で、v の種類を引かずに値を読む参照として通した所（R73、selfReaderTarget）：v と、引いた所で出た輪の断り。最後に、v を解き終えた種類で合うかを見る。
     selfReaders: [],
+    // 右辺を解いている途中の、関数の本体の局所の定義（R80、localInfo）：{s, name, value, noCache} の並び。輪を見つける。
+    localBusy: [],
     // 実体の守りで断った誤り（guardRefusal。total・work・nest）と、解いている途中の実体の入れ子の数（enterNest）。
     guards: {},
     guardStops: new Map(), // 守りに当たった `?` → その断り（新しい実体を作らない、instantiate）
