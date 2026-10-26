@@ -26,6 +26,14 @@
  * 余ったラムダで `_`（R70、closeEmpty。閉じるのは後ろに何も続かない評価する所・本体の根・値の上だけで、ほかは G19、emptyClosable）、`_ , !_` は `_`（R71）、
  * `$[…]` の中身で値の上に余った恒等射は即時に消える（R72）。同じ日の確かめの直しで、`,` の右の要素が2項以上の並び（`f 1 , 2 3`）は R66 の外（G3、
  * rightChainHasSeq）、既定値と組んだ前置 `~` の仮引数も G22、名前の無い要素の知らせは文字列・合成の段・部分適用でも同じに数える（noteExcess）、
+ * R73〜R79 は同じ日の、2026-10-25 の答えの2つ目の片：`$v` の輪は、Reader が v をその場で評価しないので通す（R73、selfReaderTarget。輪の中で `@` で開けば・v が
+ * 値でなければ今のまま name-cycle）、恒等射で始まる合成は単位律で恒等射が消える（R74、foldStep）、`$` で物にした括りの関数を呼んだ実体の本体で値の上に余る関数は
+ * G20 で、言い分で `$inc` と書く道を案内する（R75、dollarOpened・asValueAdvice）、比べ・論理の被演算子と2行以上の手続きの本体の行は評価する所（R76、evaluatePlace）、
+ * 段18 の点なし `[' k]` は口1つ（R77、fnShape）、先の分かる `@x` は位置に依らない（R78。実装は R49・R60 の片から。G6 の言い分）、前置 `~` は単一の対象を
+ * 要素1つの List に持ち上げる（R79、classify。`~_` だけ G4）。同じ日の確かめの直しで、`$v` の輪の見直しは写しを歩き（自分の右辺が門に当たる `v : $v + 1` で
+ * 落ちていた。v の右辺の門はその門で断る、selfReaderHolds）、輪の中で仮に通した参照から `'` で引けば name-cycle（pickSelfReader）、字下げの本体の返す所
+ * （1行だけの本体・枝の値・枝の後の既定の行）は1行の本体の根と同じく G16（resolveBlockBody・returnGate）、2行以上の手続きの `!_` だけの行は G7
+ * （refuseProcedureHole）、裸のラムダの行も評価する所、R76 の所の丸ごとの関数は R59・R75 の受け皿に拾わない（leftoverUnit）、`~$x` は `[$x]`（classify）、
  * §1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
  * 門（G1〜G22（G14 は 2026-10-21、G17 と G1 は 2026-10-22、G12 は 2026-10-23、G8 と G9 は 2026-10-24 に廃止。G19 は 2026-10-24 の R51（2026-10-25 に決定）、G20 は同じ日の R53。2026-10-25 に R54〜R57 で G20 の当たる形を直し、同じ日の R58〜R61 で G19・G20 の当たる形を直した。G21 は 2026-10-26 の R62、G22 は同じ日の R67）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
  * 答えが出たときに、その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
@@ -2680,8 +2688,9 @@ function instantiate(F, fn, op, params, defScope, argDescs) {
     // 分け合った実体を、まだ歩いていない物で呼んだ：その物で本体を歩き、呼んだ `?` を記録する（R25）。
     if (!inst.walked.has(ident)) walkCalls(F, inst, scopeOf());
   }
-  // 実体の本体の根が A なら A、ほかは未知（§3.4 の素の関数の k = n と同じ）。結果は中身の見えない A。
-  return { kind: root === "A" ? A() : U() };
+  // 実体の本体の根が A なら A、ほかは未知（§3.4 の素の関数の k = n と同じ）。結果は中身の見えない A。inst は、`$` で物にした括りの関数を呼んだ所が本体の
+  // 余る関数を見るため（R75、dollarOpened）。
+  return { kind: root === "A" ? A() : U(), inst };
 }
 
 // 実体の本体の根の種類（bodyRootOf と同じ仕組み）。label は呼んだ名前（輪の道筋の一歩、stepText）。
@@ -2700,9 +2709,12 @@ function instRootOf(F, inst, label) {
   let gated = false;
   let spelled = false;
   try {
-    const body = resolveBody(inst.lambda.right, { F, scope: inst.scope, diag: null });
+    // 受け皿 dead：本体に値の上に積まれて口が開いたまま閉じた関数（恒等射を除く）があるか。`$` で物にした括りの関数を呼んだ所が見る（R75、dollarOpened）。
+    const dead = [];
+    const body = resolveBody(inst.lambda.right, { F, scope: inst.scope, diag: null, dead });
+    inst.dead = dead[0] || null;
     value = body.rootKind;
-    spelled = sectionSpelled(body.tree);
+    spelled = sectionSpelled(body.rootTree || body.tree); // 字下げの本体の返す所の区間も（resolveBody の rootTree）
   } catch (e) {
     if (!isGate(e)) {
       leaveNest(F, inst);
@@ -2905,9 +2917,9 @@ function classify(term, ctx) {
   if (post.length === 0 && pre.length === 1 && pre[0] === "@" && (core.c === "name" || core.c === "bracket")) {
     const pd = pointedDesc(core, ctx);
     const d = refOf(pd);
-    if (d) return plain({ k: "L", fn: d.ref });
+    if (d) return plain({ k: "L", fn: dollarOpened(d.ref) }); // `$` で物にした括りの関数は、呼んだ実体の余る関数を見る（R75、dollarOpened）
     const v = vrefOf(pd);
-    if (v) return plain(v.vref);
+    if (v) return plain(openSelfReader(v.vref, ctx));
     // 番地の算術で作った点・差（R62）を開く：ずらした点が指す物は、差が指す物の要素の幅の倍数かと一緒に型の段で決まるので、解決器の段では分からない。
     // 差は位置ではないので読めない。印の無い前置 `@`（入力の項）に倒さずに断る（§5 Q66）。
     if (addrOf(pd)) throw refuseOpenAddress(writeTerm(term), pd);
@@ -2915,10 +2927,27 @@ function classify(term, ctx) {
   }
   // 後置 `~`（撒く項）。
   if (pre.length === 0 && post.length === 1 && post[0] === "~") return classifySpread(term, view, ctx);
-  // 前置 `~`：1項の並びなら項として残し、2項以上なら G4。
+  // 前置 `~`（R79、2026-10-26。§5 Q14 の答え）：前置の印は単一の対象か括りの式にだけ係るので、`~x` は x を要素1つの List に持ち上げた物で、書いた
+  // `[x]` と同じ項（[x] ≅ x。種類と desc は1行の括り `[x]` のもの）。`~1 2 3` は `(~1) 2 3`、つまり `[1] 2 3`。根拠：U〔答え〕[2026-10-25 22:42 c8ccdd69]「Q14
+  // 持ち上げたいなら積の形も使えるからね、一般の式の中なら使う意図が , と被るのは確か。どうしても一要素だけリストに持ち上げたいときの前置~は有りだと思う。
+  // 前置演算子のルールは前にも述べたが、カッコ付きの式か単一の対象。つまり単一の対象と言えるものだけが範囲。」、主の Claude の 22:43 の受け取り（`~1 2 3` は
+  // `[1] 2 3`、G4 は外す）に U〔答え〕[22:45]「その方向でお願い。」。前は種類を決めず、2項以上の並びにあれば G4 だった。
+  // 書いた `_` の持ち上げ（`~_`）は、`[_]` が閉じた1つの項（R56・R61）か、並びの単位として消える印かが答えの文から決まらないので、今のまま種類を決めず、
+  // 2項以上の並びにあれば G4（§5 Q14 の残り）。
+  // `~$x`（2026-10-26 の確かめの直し）：前置の印は核に近い物から結ぶ（R53・R57）ので `~($x)`。`$x` は単一の対象（関数を指す番地か値を読む参照、R60）なので、
+  // `[$x]` と同じ項（関数を値として持つ List を作るなら `$` を付ける、R75 の案内と同じ線）。前は前置の印2つの表に無い組み合わせで、未知（並びの中で G7）。
+  // ほかの印との組み合わせ（`~-5`・`~!x`・入力の `~@uart`）は今のまま表に無い組み合わせ（§5 Q14 の残り）。
+  if (post.length === 0 && pre.length === 2 && pre[0] === "~" && pre[1] === "$" && core.c !== "indent") {
+    const b = bracketInfo({ c: "bracket", rows: [{ type: "seq", terms: [{ type: "atom", pre: ["$"], core, post: [] }] }] }, ctx);
+    return { cat: "plain", desc: b.desc, view: { ...view, inner: b.trees }, isQBracket: b.isQ };
+  }
   if (post.length === 0 && pre.length === 1 && pre[0] === "~") {
-    touchCore(core, ctx);
-    return { cat: "ptilde", desc: U(), view };
+    if (core.c === "unit" || core.c === "indent") {
+      touchCore(core, ctx);
+      return { cat: "ptilde", desc: U(), view };
+    }
+    const b = bracketInfo({ c: "bracket", rows: [{ type: "seq", terms: [{ type: "atom", pre: [], core, post: [] }] }] }, ctx);
+    return { cat: "plain", desc: b.desc, view: { ...view, inner: b.trees }, isQBracket: b.isQ };
   }
   // 括らない `!_`：穴（その口の恒等射、§3.5）。読みは位置で決まる（口の中は穴：tryHole・holeRefusal、口の外は恒等射：holeStep、R44・R46）。
   if (post.length === 0 && pre.length === 1 && pre[0] === "!" && core.c === "unit") return { cat: "hole", desc: U(), view };
@@ -3141,12 +3170,81 @@ function dollarNameTarget(name, ctx) {
   }
   const def = ctx.F.defs.get(name);
   if (def) {
+    const self = def.lambda ? null : selfReaderTarget(ctx.F, def);
+    if (self) return self;
     const kind = nameKindOf(ctx.F, def);
     return { kind, unit: !def.lambda && !!ctx.F.unitDefs.get(def), dead: deadOfDef(ctx.F, def) };
   }
   if (imported) return { kind: U(), where: "imported" };
   reportUndefined(name, ctx);
   return { kind: A(), where: "undefined" };
+}
+
+// ---- `$v` の輪（R73、2026-10-26。§5 Q60 の答え） ----
+//
+// 値の定義 v の種類を引いたら、値を含む輪（§5 Q30 の name-cycle）が、この `$v` の所を通って閉じた（輪のいちばん下の枠が、`$v` を解き始める前から解いている
+// 途中）。Reader（`$`）は v をその場で評価しない（v は自分を読む参照を含む値）ので、この辺は種類の輪ではない：v の種類を引かずに、v を読む参照（A、印 vref）と
+// して通す。指す値の形は v を解き終えるまで分からないので、中身の見えない A（印 selfOf に、輪のいちばん下の枠と v を持つ）。引いた途中で積んだ枠は、
+// 例外で抜けた枠として閉じる（abortFrame）。作った言い分（F.cycleRefused）は引く前に戻す（namesPattern の既定値の輪と同じ作り）。
+// 境目（§5 Q30 との）：
+// - 輪がこの `$v` の所を通らない（輪のいちばん下の枠が、`$v` を引いてから積んだ物）なら、`$` の外の本物の輪なので、今までどおり name-cycle。同じ輪に `$` の無い
+//   v も書いてあれば（`f : x ? x , $v , v`）、その v の所で name-cycle。
+// - 輪の中で、その参照を `@` で開いた（v の値を読んだ）なら、v の値が自分に依るので name-cycle（`v : f 1`・`f : x ? @[$v]`。pointedDesc の selfOf）。
+// - v を解き終えた種類が、値を読む参照の読み（`$v` は値の Reader）と合わなければ（v が関数・未知・撒いた形・余る関数を持つ・書いた `_`）、仮に置いた参照の読みが
+//   外れたので、引いた所で出た name-cycle で断る（resolve の最後、selfReaderHolds）。合えば、木を残す段で `$v` はふつうに v の種類を引く（そのときには v は
+//   解き終えている）ので、木と形の綴りは輪の無い `$v` と同じ。
+// 根拠：主の Claude の傾き「Q60 | `$v` の輪（`v : f 1`・`f : x ? x , $v`） | 通す。Reader は v をその場で評価しない」に U〔答え〕[2026-10-25 21:56 c8ccdd69]「他は全部、
+// 君の傾き通り。」。前（R53 の片から）は、`$v` が v の種類を引くので輪に数え、どの並べ方でも name-cycle だった。
+function selfReaderTarget(F, def) {
+  const start = F.stack.length;
+  const before = F.cycleRefused;
+  try {
+    nameKindOf(F, def);
+    return null;
+  } catch (e) {
+    if (!(e instanceof OperationError) || e.reason !== "name-cycle" || !(e.cycleFrom < start)) throw e;
+    F.cycleRefused = before;
+    // 見直しの所（resolve の最後）は v ごとに1つ。v の右辺が断られると、v を引くたびに解き直して同じ `$v` に来るので、足すのは初めの1回だけ（確かめ 2026-10-26：
+    // 足し続けると、最後の見直しのループが足した所を歩き続け、`v : $v + 1` でプロセスがヒープを使い切って落ちた）。
+    if (!F.selfReaders.some((r) => r.def === def)) F.selfReaders.push({ def, error: e });
+    return { kind: { k: "A", selfOf: { def, frame: F.stack[e.cycleFrom], error: e } }, self: true };
+  }
+}
+// 値を読む参照が指す値を `@` で開く（R60）。`$v` の輪で仮に通した参照（R73、印 selfOf）を、輪のいちばん下の枠がまだ解いている途中に開いたら、v の値が
+// 自分に依るので、その輪の name-cycle で断る（§5 Q30 の境目）。解き終えた後に開いたら、指す値は中身の見えない A（v は自分を読む参照を含む値で、形を
+// 中に書くと形が限りなく深くなる）。
+function openSelfReader(target, ctx) {
+  if (!target || !target.selfOf) return target;
+  const F = ctx.F;
+  const s = target.selfOf;
+  if (F.stack.includes(s.frame)) {
+    // 言い分は、`$v` を引いた所で見つけた輪の物（輪の道筋に v が入っている。いまの枠の並びには、例外で抜けた v の枠が無いことがある）。
+    if (!F.cycleRefused || (F.cycleRefused.suspect && !s.error.suspect)) F.cycleRefused = s.error;
+    throw s.error;
+  }
+  return A();
+}
+// 仮に値を読む参照として通した `$v`（R73）の v が、解き終えた種類で値を読む参照の読みと合うか（classifyDollar の名前の先の読みで vref になるか）。
+// 答えは true（合う）・false（合わない：v が関数・未知など、仮に置いた読みが外れた）・"gate"（v を解き直すと輪の外の門で断られる：v の右辺そのものが
+// 断られる形で、`$v` を輪の外の値の `$u` に替えても同じ門に当たる。resolve の最後は、その門の行の断りを言う。確かめ 2026-10-26、法則25）。
+function selfReaderHolds(F, def) {
+  try {
+    const ctx = { F, scope: F.fileScope, diag: null };
+    const t = dollarNameTarget(def.name, ctx);
+    if (t.self || t.dead || t.unit) return false;
+    const kind = t.kind;
+    if (!kind || kind.k !== "A" || kind.spread) return false;
+    return !(!kind.shape && !readerOf(kind) && deepKind(kind) !== "A");
+  } catch (e) {
+    if (!(e instanceof OperationError)) throw e;
+    return e.reason === "name-cycle" ? false : "gate";
+  }
+}
+// 段18 の中置（`'`・`@`）の左が、`$v` の輪で仮に通した参照（R73）。`'` で引く・`@` で引く形が参照の先（v の中身）を読むかは決まっていない（`$vs ' 0` は
+// 未知、§2）。読むなら v の値が自分に依る輪で、`@[$v]` と同じ name-cycle になるので、輪の中では断る側に倒す（openSelfReader。確かめ 2026-10-26、§5 Q60 の
+// 残り）。ノルム（`||$v||`）は数えるだけで先を読まない（`||$_||` は 1、R56）ので当てない。
+function pickSelfReader(l, ctx) {
+  if (l && l.cat === "plain" && vrefOf(l.desc)) openSelfReader(l.desc.vref, ctx);
 }
 
 // 括りの関数の実体で渡された、形の見えない値の desc（§5 Q64。`$` の先にすると G20）：形も番地・参照・点と差の印も、書いた `_` を指す印（R63）も無い A。
@@ -3416,9 +3514,12 @@ function refuseDollar(term, kind, ctx, target = {}) {
     );
   }
   if (where === "dead") {
+    // 言い分の案内（R75、2026-10-26。§5 Q62 の答え）：関数を値として並べる・渡すなら、書く人が `$` を付けて表明する（U〔答え〕[2026-10-25 21:56 c8ccdd69]
+    // 「Q62,65 incに$を付けるというアサーションをしてもいい。」）。前の言い分は「逆適用の廃止の後の書き癖」と書いていた（同じ答えの「逆適用の事はいい加減
+    // 忘れて欲しい。」で外した）。
     return gate(
       "G20",
-      `\`${text}\` の \`$\` の先${name ? `（名前 \`${name}\` の右辺か本体）` : "の中身"}に、値の上に積まれて口が開いたまま閉じた関数 \`${cutShape(show(target.dead))}\` があります（§4 R52）。中身は2つの関数を括った形で、余った方は黙って落ちるので、1つの関数と言い切れません（逆適用の廃止の後の書き癖、§4 R47）。${tail}（§4 R59、§5 Q53 の答え${name ? "・Q62" : ""}）。`
+      `\`${text}\` の \`$\` の先${name ? `（名前 \`${name}\` の右辺か本体）` : "の中身"}に、値の上に積まれて口が開いたまま閉じた関数 \`${cutShape(show(target.dead))}\` があります（§4 R52）。中身は2つの関数を括った形で、余った方は黙って落ちるので、1つの関数と言い切れません。${asValueAdvice(target.dead)}${tail}（§4 R59・R75、§5 Q53 の答え${name ? "・Q62 の答え" : ""}）。`
     );
   }
   if (where === "spread") {
@@ -3459,6 +3560,46 @@ function refuseDollar(term, kind, ctx, target = {}) {
                         ? `（\`${name}\` は局所の定義の名前で、右辺を解いた種類で見ました。§4 R54）`
                         : "";
   return gate("G20", `\`${text}\` の \`$\` の先は種類が決まらないので、1つの Reader（関数か、値を読む参照）と言い切れません${why}。${tail}（§4 R53・R60）。`);
+}
+
+// 余った関数を値として並べるつもりなら `$` を付ける、という案内（R75）。余ったのが書いた項1つ（印の無い名前・括り）なら `$inc`・`$[…]`、ほか（受けた後の
+// 関数・合成）は書いた綴りが木に無いので、括って `$[…]` と書く道を言う。
+function asValueAdvice(dead) {
+  const one = dead && dead.t === "leaf" && dead.term && dead.term.type === "atom" && !dead.term.pre.length && !dead.term.post.length;
+  const spelled = one ? `\`$\` を付けて \`$${writeTerm(dead.term)}\` と書きます` : "括って `$[…]` と書きます";
+  return `その関数を値として並べる・渡すつもりなら、${spelled}（§4 R75）。`;
+}
+
+// ---- `$` で物にした括りの関数を呼んだ実体（R75、2026-10-26。§5 Q65 の答え） ----
+//
+// 括りの関数の本体は、呼ばれるまで読まない（R25）ので、仮引数に依って値の上に積まれて余る関数（`$[[x] ? x inc]` の inc：x が値なら余り、関数なら合成）は、
+// `$` を書いた所では分からない（R59 が読むのは仮引数を含まない行だけ）。だから `$` で物にした括りの関数（関数を指す番地の印 ref。`@f` で開いた所）を呼んで
+// 実体を作ったら、その実体の本体に値の上で余った関数（恒等射を除く）があるかを見て、あれば G20（`$` の先は、呼んだ形で1つの関数と言い切れない）。x が関数の
+// 形で呼べば合成で余らないので通る（本体の根が裸の関数なら、今までどおり実体の G16）。`$` を通さずに呼ぶ所（`bq 5`・`[[x] ? x inc] 5`）は今までどおり R52 の
+// 知らせ（warning）：`$` の無い名前（`p : add (5 inc)` ⏎ `p 3`）が知らせで通るのと同じ線で、断るのは `$` で1つの関数と表明した所だけ。
+// 根拠：主の Claude の傾き「Q65 | `$[[x] ? x inc]` | 呼んだ実体で余ったときだけ断る」と、答え U〔答え〕[2026-10-25 21:56 c8ccdd69]「Q62,65 incに$を付けるという
+// アサーションをしてもいい。逆適用の事はいい加減忘れて欲しい。泣くぞｗ」。言い分で `$inc` と書く道を案内する（asValueAdvice）。前は本体を呼んだ所で R52 の知らせを
+// 出して通していた（`map $[[x] ? x inc] vs` は warning だけ）。
+// 開いた関数は、元の関数の写しに印 dollar を付け、実体を作る口（instantiate）を包む（部分適用は写しを元にするので、残りを当てた所でも同じに見る）。実体の鍵・
+// 同一性は元の関数と同じ綴り（fnKey・identFn は中身で決まる）なので、実体は分け合い、答えの違いは呼んだ所の G20 だけ。
+function dollarOpened(fn) {
+  if (!fn || fn.type !== "pattern" || fn.dollar) return fn;
+  if (fn.bound) {
+    const base = dollarOpened(fn.base);
+    return { ...fn, base, dollar: true, instantiate: (argDescs) => base.instantiate([...fn.bound, ...argDescs]) };
+  }
+  const w = { ...fn, dollar: true };
+  w.instantiate = (argDescs) => {
+    const r = fn.instantiate(argDescs);
+    if (r.inst && r.inst.dead) {
+      throw gate(
+        "G20",
+        `\`$\` で物にした括りの関数 \`${fn.label}\` を形 ${cutShape(r.inst.shapeText)} で呼んだ実体の本体に、値の上に積まれて口が開いたまま閉じた関数 \`${cutShape(show(r.inst.dead))}\` があります（§4 R52）。呼んだ形では、本体は2つの関数を括った形で、余った方は黙って落ちるので、\`$\` の先を1つの関数と言い切れません（§4 R59・R75、§5 Q65 の答え）。${asValueAdvice(r.inst.dead)}`
+      );
+    }
+    return r;
+  };
+  return w;
 }
 
 // R60 の細かい所（§5 Q59）：`$` が作った物（関数を指す番地・値を読む参照。どちらも1つの Reader）が、値の演算子（算術・ビット・範囲の段12〜16・19〜22、
@@ -3719,6 +3860,17 @@ function refuseHole(where) {
 function refuseOperandHole(tree, sym) {
   if (tree && tree.t === "leaf" && tree.cat === "hole") throw refuseHole(`中置 \`${sym}\` の被演算子`);
 }
+// 2行以上の手続きの本体（と、枝の間の裸の行）の、括らない `!_` だけの行（`t : a ?` ⏎ `⇥!_` ⏎ `⇥a`）。手続きは `l1 & … & ln`（evaluatePlace の注）なので、
+// この行は中置 `&` の被演算子の `!_`（`!_ & a`、refuseOperandHole）と同じ所で、恒等射と読む（評価する所で `_` になり、手続きがそこで止まる）かが決まって
+// いない（§5 Q15）。2026-10-26 の R76 の最初の版は、評価する所で黙って `(unit !_)` にしていた（恒等射は知らせない、R48。だが `&` の鎖では `_` が鎖を止める
+// ので、R48 の「落としても当てても値が同じ」が成り立たない。確かめ 2026-10-26）。その前（R29 の R の所）は恒等射の行で、本体の根は未知だった。
+// 1行だけの本体の `⇥!_` と枝の値の `!_` は、本体の返す所なので1行の `t : a ? !_` と同じく G16（resolveBody）。
+function refuseProcedureHole() {
+  return gate(
+    "G7",
+    "括らない `!_` だけの行が、2行以上の手続きの本体の行にあります。手続きの本体は `l1 & … & ln`（途中の `_` で止まる）なので、この行は中置 `&` の被演算子の `!_`（`!_ & a`）と同じ所です。そこで `!_` を恒等射と読む（評価する所で `_` になり、手続きがそこで止まる）かは決まっていません（§4 R29・R76、§5 Q15・Q37）。"
+  );
+}
 
 // 段12〜22 の中置の項（§2）。値の演算子（段12〜16・19〜22）は被演算子が全部 A のときだけ A。書いた `_` の被演算子は
 // 印（値）なので A に数える（`_ + 1`・`1 * _`。値は値の段で演算子表の Unit の欄が読む。§3.5、U〔答え〕10-14 03:32）。
@@ -3731,6 +3883,7 @@ function refuseOperandHole(tree, sym) {
 function classifyInfix(term, ctx) {
   if (isBareIndent(term.left)) throw refuseIndentBlock(`中置 \`${term.sym}\` の左`);
   const l = term.left ? classify(term.left, ctx) : null;
+  if (term.stage === 18) pickSelfReader(l, ctx); // `$v` の輪の中で、仮に通した参照から引く（R73 の残り）
   const key = term.sym === "'" && term.left ? pickKeyOf(term.right) : null;
   if (key) {
     // 鍵は名前として引かない（pickKeyOf の注）。書いたとおりの葉にする。
@@ -4086,6 +4239,7 @@ function mouthsOf(fn) {
       return fn.rest ? null : fn.n;
     case "pfUnary":
     case "norm":
+    case "pfPick": // 段18 の点なしは口1つ（R77）
       return 1;
     case "pfBinary":
       return fn.n;
@@ -4122,8 +4276,9 @@ function resolveTree(tree, ctx) {
     default: {
       // 段4〜8：被演算子が全部 A なら A、そうでなければ未知（§2）。
       if (isBlockSeq(tree.left)) throw refuseIndentBlock(`\`${tree.sym}\` の左`);
-      const l = resolveTree(tree.left, ctx);
-      const r = resolveTree(tree.right, ctx);
+      // R76（2026-10-26、§5 Q37 の答え）：比べと論理（段5〜8 の `;`・`|`・`&`・`==`・`!==`）の被演算子の並びは評価する所（evaluatePlace）。
+      const l = resolveTree(tree.left, evaluatePlace(tree.left, tree.sym, ctx));
+      const r = resolveTree(tree.right, evaluatePlace(tree.right, tree.sym, ctx));
       refuseOperandHole(l, tree.sym);
       refuseOperandHole(r, tree.sym);
       // 論理（段5〜7 の `;`・`|`・`&`）の被演算子と、書き込み（段4 の `#`）の被演算子に、番地の算術で作った点・差（R62）があれば断る（2026-10-26 の
@@ -4156,6 +4311,41 @@ function resolveTree(tree, ctx) {
   }
 }
 
+// ---- 評価する所を広げる（R76、2026-10-26。§5 Q37 の答え） ----
+//
+// 評価する所（R42：終わりに残った未評価のラムダが `_` になり、恒等射でなければ warning で知らせる、R48）は、行の根の並びのほかに、次の並び：
+// - 比べと論理の被演算子（段5〜8 の `;`・`|`・`&`・`==`・`!==`）。`inc == 5` は `(== (unit inc) 5)`、`inc add 5 == x` の左は `(unit (apply (compose inc add) 5))`、
+//   `(inc add 5) == x` の左は被演算子の括りそのものが丸ごとの関数なので `(unit [inc add 5])`（括りの中は評価する所でないので、中身は書いたまま）、`c & inc | double` の
+//   inc と double は `_`。
+// - 関数の本体が字下げの手続き（枝の行の無い、2行以上のブロック）なら、その各行。手続きは `l1 & … & ln`（途中の `_` で止まる）なので、各行は `&` の被演算子と
+//   同じ所（主の Claude の「1. **そこで止まって `__`（おすすめ）**。ブロックは `l1 & l2 & … & ln` と同じになる。」に U〔答え〕[2026-09-28 01:43 9ef332e0]「1」）。
+//   最後の行も `&` の右の被演算子なので、1行の `t : a ? a & inc` と同じく `_`。裸のラムダの行（`⇥z ? z + a`）も、括った行（`⇥[z ? z + a]`）と同じく丸ごとの
+//   関数（[x] ≅ x）。括らない `!_` だけの行は、`!_ & a` と同じく G7（§5 Q15、refuseProcedureHole）。局所の定義と1項の名前の `:` の右辺は、名前が右辺を閉じた
+//   1つの項として指す（§5 Q50）ので除く（resolveBody）。
+// - 本体の返す所（1行だけの字下げの本体・枝の値・枝の後の既定の行）は評価する所にしない。1行の本体の根と同じ所で、丸ごとの関数が残れば G16（R33、
+//   resolveBody の返す所）。前の版（同じ日）は返す所も評価する所にしていて、同じ本体が字下げのしかただけで G16 と `_` に割れた（確かめ 2026-10-26）。
+// 除くのは、`:` の右辺の並び（左が名前1つ。`c1 : inc inc` の c1 は今のまま L、Q50）、`$[…]` の中身の並び（遅延、Q52）、括りの中、関数を値として渡す口
+// （`$` の先・関数を受ける口・`[f,]` の f・器の要素）。器の要素（`,` の辺の1項の関数 `inc , 3`・`fs : inc , double , 3`）は関数を値として持つ所（Q20 の `fs~` が
+// 断られるのは中身に関数が見えるから）なので除き、`,` の辺の2項以上の関数の並びは今のまま G3（Q3 の値の口、R66）。段4 の `#`（書き込み）の被演算子は比べでも
+// 論理でもなく、右は書き込む値なので今のまま（§5 Q73）。値の演算子の被演算子（段12〜22。`inc + 1`）は、木の段では今のまま（葉なら未知、2項以上の並びの中なら
+// G7。§5 Q22 の答え「今のまま断る」、§5 Q73）。
+// `?` の本体の根の並びも評価する所だが、そこに丸ごと関数が残る形（`t : y ? inc`）は今までどおり G16（R33。U〔答え〕[2026-10-21 16:02 e2047fb9]「実際には断る形
+// なんだよ。」：関数を返す本体は、警告で通さずに断る、§5 Q21）が先に読む。
+// 根拠：主の Claude の傾き「Q37 | 評価する所を、演算子の辺・本体へ広げるか | 広げる。辺に丸ごと関数が残ったら `_` にして知らせる」に U〔答え〕[2026-10-25 21:56
+// c8ccdd69]「他は全部、君の傾き通り。」。同じ日の別のセッションで、主の Claude の「で、聞きたい。「評価する所」を値の演算子の被演算子まで広げる、で行く？」に
+// U〔答え〕[2026-10-25 22:11 e20e5341]「x + sum _ = x + sum = x + _ だから x だけが返る…と言いたいな。」（実行時の `_` で口の開いた関数が値の演算子の被演算子に
+// 残る形で、値の段の話、§3.7。sum の口 `[x ~xs]` は、その後の参照の口の条件化（R65）で分解が立たずに `_` になる形になった）。前（R42 の読み1）は、評価する所は
+// 行の根の並びだけで、被演算子と本体の行に残った丸ごとの関数は L のまま（中置の種類は未知、ブロックの本体の根は未知）だった。
+// 印 evaluate の sym は、置かれた所の中置（知らせの言い分を分ける：比べ `==`・`!==` の被演算子には `$` を付けた番地を置けないので、`$` の案内をしない）。
+function evaluatePlace(side, sym, ctx) {
+  if (!side || side.type !== "seq" || sym === "#") return ctx;
+  // 中置の被演算子の括らない `!_` 1つ（`!_ == 1`・`1 & !_`）は、今のまま G7（R44、§5 Q15：中置の被演算子の `!_` を恒等射と読むかは決まっていない。refuseOperandHole）。
+  // 評価する所にすると `(unit !_)` になって G7 を素通りする。手続きの行の `!_` は、resolveBody が先に断る（refuseProcedureHole）。
+  if (side.terms.length === 1 && isHoleTerm(side.terms[0])) return ctx;
+  return { ...ctx, evaluate: { at: side, sym } };
+}
+const isHoleTerm = (t) => !!t && t.type === "atom" && t.pre.length === 1 && t.pre[0] === "!" && !t.post.length && t.core.c === "unit";
+
 // `:`（R3、P3）。左は、1項なら解かない（定義・欄・既定値の左はいつも1項）。2項以上なら枝の条件として解く。
 // fieldName は左が1語の裸の名前のときの名前で、括りやブロックの行なら構造体の欄の名前になる（rowsShape、R24）。
 // 右辺は、左が名前1つの `:`（定義・欄・局所の定義）でも枝でも、ほかの並びと同じく解き、R52 を当てる。名前は右辺を閉じた1つの項として
@@ -4167,7 +4357,12 @@ function resolveTree(tree, ctx) {
 // `:` の右辺の並びを R52 の外にしていた（印 pointsTo。U〔答え〕10-22 22:14 のボタンの文「`:` はメタなので、右辺の余ったラムダは `_` に
 // しない」から。その文は主の Claude の物で、右辺が丸ごと関数の形について今も残り、値の上に積まれた形は Q50 の答えで上書きされた）。
 // 枝の値も同じく当てる（§5 Q51 は、今の答えのまま閉じた）。
-function resolveDefine(tree, ctx) {
+function resolveDefine(tree, outerCtx) {
+  // 印 branchReturn（字下げの本体の行の `:`、resolveBody）は、この `:` が枝なら値の側を本体の返す所（1行の本体の根と同じ所、R33）として解く。左と、名前の
+  // 定義の右辺には渡さない。2026-10-26 の R76 の最初の版は、枝の値を評価する所（丸ごとの関数は `_`）にしていたが、1行の本体の根の G16 と字下げのしかたで
+  // 割れたので、返す所に直した（確かめ 2026-10-26、§5 Q35）。
+  const branchReturn = !!outerCtx.branchReturn;
+  const ctx = branchReturn ? { ...outerCtx, branchReturn: false } : outerCtx;
   let left = null;
   let isLocalDef = false;
   let fieldName = null;
@@ -4188,9 +4383,15 @@ function resolveDefine(tree, ctx) {
     if (n && ctx.scope.locals && ctx.scope.locals.has(n)) isLocalDef = true;
     fieldName = n;
   } else left = resolveTree(tree.left, ctx);
-  const right = resolveTree(tree.right, ctx);
+  // 枝（左が名前1つでない `:`）の値は本体の返す所（印 bodyRoot は1行の本体の根と同じ、R70）。左が名前1つの `:` は、局所の定義か枝の条件か決まっていない本体の
+  // 行（P2）も含めて、名前の定義として除く（§5 Q50）。
+  const isBranch = branchReturn && isBranchColon(tree);
+  const right = resolveTree(tree.right, isBranch && tree.right && tree.right.type === "seq" ? { ...ctx, bodyRoot: true } : ctx);
   return { t: "op", sym: ":", left, right, kind: A(), isLocalDef, fieldName };
 }
+// 字下げの本体の行が枝（左が名前1つでない `:`。match_case の枝）か。
+const isColonRow = (r) => !!r && r.type !== "seq" && r.sym === ":";
+const isBranchColon = (r) => isColonRow(r) && !(r.left && r.left.type === "seq" && r.left.terms.length === 1 && isNameTarget(r.left.terms[0]));
 
 // `$[…]` の中身の行を解く（rowsInfo の delayed）。`$` は物にする＝遅延なので、中身は書いた所では評価しない遅延した式で、R52 の判定をしない：
 // 値の上に積まれて口の開いたまま閉じた関数も、ラムダのまま書いたとおりに残し、知らせない（`p : $[5 inc]` の中身は `(construct 5 inc)`）。
@@ -4586,14 +4787,19 @@ function makeLambda(op, ctx) {
 // `$` で包んだ入れ子の `?`（`add : x ? $[y ? x + y]`）は当たらない：`$[+ m]` と同じく、外の仮引数を掴んだ関数を `$` で物にして返す
 // 形で、本体の根は A（U〔答え〕10-21 22:46「通して不都合がないなら通していいよ。」。不都合が無いという見立ては主の Claude の物。
 // 前は G17 で断っていた）。
-function bareReturnGate(what, root) {
+// block（2026-10-26 の確かめの直し）：字下げの本体の返す所（1行だけの手続きの行・枝の値・枝の後の既定の行。resolveBody）に残った裸の関数。1行の本体の根と
+// 同じ門で、言い分は置かれた所を言う（§5 Q35）。
+function bareReturnGate(what, root, block = false) {
   const nested = root.t === "lambda" || !!root.isQBracket;
   const advice = nested
     ? "カリー化はシステムの側が持つので、入れ子の `?` で関数を返さずに、仮引数を並べて書きます（`x y ? x + y`。足りない適用は自動で部分適用になります）"
     : "関数を返すなら `$` を明示して値にします（`$[+ m]`）。カリー化はシステムの側が持つので、関数を返す代わりに仮引数を並べて書きます（`x y ? x + y`。足りない適用は自動で部分適用になります）";
+  const where = block
+    ? `${what}字下げの本体の返す所（1行だけの本体の行・枝の値・枝の後の既定の行。1行の本体の根と同じ所）の \`${cutShape(show(root))}\``
+    : `${what}本体の根 \`${cutShape(show(root))}\``;
   return gate(
     "G16",
-    `${what}本体の根 \`${cutShape(show(root))}\` が裸の関数です。裸の関数は書いた行の中でしか生きないので、返した時にはもう無く、本体のコードが作れません。${advice}（§4 R33、§5 Q21）。`
+    `${where} が裸の関数です。裸の関数は書いた行の中でしか生きないので、返した時にはもう無く、本体のコードが作れません。${advice}（§4 R33${block ? "・R76" : ""}、§5 Q21${block ? "・Q35" : ""}）。`
   );
 }
 // 根の綴りが区間（段12〜22 の片側の欠けた点なし `[+ X]`・`[X +]`・`[@ X]` と、貪欲な `[* X,]`。1行の括りに包んだ `[[+ X]]`・
@@ -4613,7 +4819,8 @@ function sectionTerm(term) {
 
 // 本体の根で断る門（G16）。断らないなら null。what は名指しを返す関数（断るときだけ作る）。
 function returnGate(what, body) {
-  if (body.rootKind === "L" || sectionSpelled(body.tree)) return bareReturnGate(what(), body.tree);
+  const root = body.rootTree || body.tree;
+  if (body.rootKind === "L" || sectionSpelled(root)) return bareReturnGate(what(), root, !!body.rootTree);
   return null;
 }
 
@@ -4696,20 +4903,46 @@ function patternNode(op, pattern, ctx) {
   return node;
 }
 
-// 関数の本体を解く。返す物は {tree, rootKind}。字下げのブロックの本体は、全部の行（枝なら値の側）の根が A の
-// ときだけ A（§3.4）。局所の定義の行は、定義か枝か決まらないので A に数えない。
+// 関数の本体を解く。返す物は {tree, rootKind, rootTree}。字下げのブロックの本体は、全部の行（枝なら値の側）の根が A の
+// ときだけ A（§3.4）。局所の定義の行は、定義か枝か決まらないので A に数えない。rootTree は、字下げの本体の返す所（1行だけの手続きの行・枝の値・
+// 枝の後の既定の行）に裸の関数か区間の綴りが残った所の木で、returnGate がそれを本体の根として G16 で断る（rootKind は、裸の関数なら L）。
 function resolveBody(right, ctx) {
-  if (right && right.type === "seq" && right.terms.length === 1 && isBareBlock(right.terms[0], "indent")) {
-    const rows = right.terms[0].core.rows.map((r) => resolveTree(r, ctx));
-    refuseReturnedAddress(rows);
-    const k = blockBodyKind(rows);
-    const term = right.terms[0];
-    return { tree: { t: "leaf", term, cat: "plain", desc: { k }, kind: { k }, view: { v: "block", rows } }, rootKind: k };
-  }
+  // 字下げの本体は resolveBlockBody（分けておくのは、本体を解く入れ子が深い鎖でこの関数の枠を小さく保つため。素の関数を挟む 300 個の鎖が JS のスタックの
+  // 内に収まる、確かめ 2026-10-26）。
+  if (right && right.type === "seq" && right.terms.length === 1 && isBareBlock(right.terms[0], "indent")) return resolveBlockBody(right, ctx);
   // 本体の根の並びには印 bodyRoot を付ける（空の流れの余ったラムダを閉じてよい所、R70、closeEmpty）。根が中置・`,`・`:` なら付けない。
   const tree = resolveTree(right, right && right.type === "seq" ? { ...ctx, bodyRoot: true } : ctx);
   refuseReturnedAddress([tree]);
   return { tree, rootKind: tree ? tree.kind.k : "U" };
+}
+// 字下げの本体（2026-10-26 の R76 と、同じ日の確かめの直し。§5 Q35・Q37）：枝の行（左が名前1つでない `:`）があれば match_case、無ければ手続き
+// （`l1 & … & ln`、evaluatePlace の注）。
+// - 返す所：1行だけの手続きの行（本体の根そのもの）・枝の値（resolveDefine の印 branchReturn）・枝の後の既定の行（最後の行が `:` の行でない）。1行の本体の
+//   根と同じく解き（印 bodyRoot、R70）、丸ごとの関数か区間の綴りが残れば G16（R33。U〔答え〕[2026-10-21 16:02 e2047fb9]「実際には断る形なんだよ。」）。
+//   前の版（同じ日の R76）は、返す所も評価する所にしていて、`adder2 : m ?` ⏎ `⇥[+ m]` が `_` で通り、1行の `adder2 : m ? [+ m]` の G16 と割れた。
+// - 2行以上の手続きの行と、枝の間の裸の行：評価する所（R76、evaluatePlace）。裸のラムダの行（`⇥z ? z + a`）は、括った行（`⇥[z ? z + a]`）と同じく
+//   丸ごとの関数で `_`（[x] ≅ x。前の版は括った行だけ `_` で、裸の行は L のまま残った）。括らない `!_` だけの行は G7（refuseProcedureHole）。
+function resolveBlockBody(right, ctx) {
+  const src = right.terms[0].core.rows;
+  const branched = src.some(isBranchColon);
+  const returnsAt = (i) => !isColonRow(src[i]) && (branched ? i === src.length - 1 : src.length === 1);
+  const rows = src.map((r, i) => {
+    if (isColonRow(r)) return resolveTree(r, { ...ctx, branchReturn: true });
+    if (returnsAt(i)) return resolveTree(r, r && r.type === "seq" ? { ...ctx, bodyRoot: true } : ctx);
+    if (r && r.type === "seq" && r.terms.length === 1 && isHoleTerm(r.terms[0])) throw refuseProcedureHole();
+    const t = resolveTree(r, r && r.type === "seq" ? evaluatePlace(r, "row", ctx) : ctx);
+    return r && r.type !== "seq" && r.sym === "?" && t && t.kind.k === "L" ? leftoverUnit(t, ctx, r, "place") : t;
+  });
+  refuseReturnedAddress(rows);
+  const k = blockBodyKind(rows);
+  const term = right.terms[0];
+  const returned = rows.flatMap((t, i) => (isBranchColon(src[i]) ? [t.right] : returnsAt(i) ? [t] : []));
+  const bare = returned.find((t) => !!t && (t.kind.k === "L" || sectionSpelled(t)));
+  return {
+    tree: { t: "leaf", term, cat: "plain", desc: { k }, kind: { k }, view: { v: "block", rows } },
+    rootKind: bare && bare.kind.k === "L" ? "L" : k,
+    rootTree: bare || null,
+  };
 }
 
 // 関数の本体が返しうる値（根。字下げの本体なら全部の行の値の側：局所の定義の右辺・枝の値・行そのもの。入れ子のブロックはその行）に、番地の算術で作った
@@ -4780,14 +5013,16 @@ function leafOf(term, c) {
   };
 }
 
-// 評価する所（R42）は、resolve が行の根の並びに付けた印 ctx.evaluate だけ。項の中（括り・囲み・中置）は評価する所でないので、
+// 評価する所（R42）は、resolve が行の根の並びに付けた印 ctx.evaluate と、R76 で広げた所（比べ・論理の被演算子・2行以上の手続きの本体の行。evaluatePlace）。
+// 項の中（括り・囲み・値の演算子の中置）は評価する所でないので、
 // 印を外してから項を作る。
 // 印 ctx.delayed は、`$[…]` の中身の行の並び（resolveDelayed）。そこだけは遅延した式なので、値の上に積まれて口の開いたまま閉じた関数を
 // ラムダのまま残す（R52 の判定をしない、§5 Q52 の答え）。項の中は中身の行の並びそのものではないので、これも外してから項を作る。
 // 印 ctx.bodyRoot は、関数の本体の根の並び（resolveBody。字下げの本体の行は付けない）。空の流れの余ったラムダ（R70、closeEmpty）だけが読む。
 // 項の中は本体の根の並びそのものではないので、これも外してから項を作る。
 function resolveSeq(terms, ctx) {
-  const evaluate = !!ctx.evaluate;
+  // 印 evaluate は、行の根なら true、R76 で広げた評価する所（比べ・論理の被演算子・手続きの行）なら書いた所 {at, sym}（知らせを書いた所ごとに1回にする、finishTrees）。
+  const evaluate = ctx.evaluate || false;
   const delayed = !!ctx.delayed;
   const bodyRoot = !!ctx.bodyRoot;
   const inner = evaluate || delayed || bodyRoot ? { ...ctx, evaluate: false, delayed: false, bodyRoot: false } : ctx;
@@ -4811,14 +5046,24 @@ function reduceItems(items, ctx, evaluate = false, closeIdle = true, bodyRoot = 
   if (unknown) {
     throw gate("G7", `種類の決まらない項 \`${showView(unknown.view)}\` が余積の並びにあります。隣とどう結ぶかが決まりません（R24・R26・R31、§5 Q9・Q10・Q14・Q19・Q22）。`);
   }
-  if (items.some((i) => i.cat === "ptilde")) {
-    throw gate("G4", "前置 `~` の項が2項以上の並びにあります。前置 `~` の被演算子は決まっていません（§5 Q14）。");
+  // 前置 `~` は 2026-10-26 から、単一の対象を要素1つの List に持ち上げた項（R79、classify）で、ここに残るのは書いた `_` を持ち上げた `~_` だけ。
+  const pt = items.find((i) => i.cat === "ptilde");
+  if (pt) {
+    throw gate(
+      "G4",
+      `前置 \`~\` で書いた \`_\` を持ち上げた項 \`${showView(pt.view)}\` が2項以上の並びにあります。前置 \`~\` は単一の対象を要素1つの List に持ち上げますが（\`~1 2 3\` は \`[1] 2 3\`、§4 R79）、\`[_]\` が閉じた1つの項か、並びの単位として消える印かが決まっていません（§5 Q14 の残り）。`
+    );
   }
+  // 前置 `@`（R78、2026-10-26。§5 Q9 の答え）：先の分かる `@x`（`$` の印が届く x。関数を指す番地なら指す関数、値を読む参照なら指す値。classify の `@` の枝）は、
+  // 並びのどこに置いてもその先として読む（入力の項 cat "input" にならない）。ここで断るのは、先の分からない `@x`（印の無い入力の項）だけ。根拠：主の Claude の
+  // 21:58 の案「先が分かる `@x` は、その先そのもの（関数なら関数、値なら値）として、どこに置いてもいい。分からない `@x` だけ、今の G6 で断る。」に U〔答え〕
+  // [2026-10-25 22:42 c8ccdd69]「Q9 提案受理」。先の分かる `@x` は R49・R60 の片から入力の項でなく、HEAD でもこの門に当たらなかった（答えが実装に追い付いた）。
+  const unknownAt = (it) => `前置 \`@\` の項 \`${showView(it.view)}\` は、先（関数か値か）が分かりません（\`$\` の印が届かない。値の定義の名前の \`@p\` も、今は印を読みません、§5 Q45）`;
   items.forEach((it, i) => {
     if (it.cat !== "input") return;
-    if (i !== 0) throw gate("G6", `前置 \`@\` の項 \`${showView(it.view)}\` が並びの頭以外にあります（§5 Q9）。`);
+    if (i !== 0) throw gate("G6", `${unknownAt(it)}。先の分からない \`@x\` は並びの頭にだけ置けますが、ここは頭以外です（§4 R78、§5 Q9）。`);
     const r = items[1];
-    if (r && r.cat === "plain" && r.desc.k === "L") throw gate("G6", `前置 \`@\` の項 \`${showView(it.view)}\` のすぐ右が関数です（§5 Q9）。`);
+    if (r && r.cat === "plain" && r.desc.k === "L") throw gate("G6", `${unknownAt(it)}。並びの頭にありますが、すぐ右が関数です（§4 R78、§5 Q9）。`);
   });
 
   // 2. 穴 `!_` と、穴として数える書いた `_`（§3.5、R16・R34・R38）。穴の規則の中身（頭の後ろの並びが全部その実引数の並びで、穴でない項が
@@ -4909,7 +5154,9 @@ function subHole(st, i, ctx) {
 // 同じく `_` にして知らせる（R52、2026-10-24）。逆適用は無い（R47）ので、値の後ろの関数は前の値を取らず、並びが閉じた後に実引数を受ける
 // 道も無い（`(5 inc) 3` の 3 は括りの外の項で、括りの中の inc には届かない）。値の上で受けた後の関数（`(5 add 1)`）と穴の関数（`(5 f2 !_)`）も
 // 同じ（法則5 で `(5 (add 1))`・`(5 (f2 !_))` と同じ、reduceItems の手順7）。並び全体が1つの関数（下に値が無い）なら、評価する所の外では
-// 今までどおりラムダのまま残す（括りの中なら後から当てられる。辺・本体などに広げるかは §5 Q37）。
+// 今までどおりラムダのまま残す（括りの中なら後から当てられる）。2026-10-26 の R76（§5 Q37 の答え）から、比べと論理の被演算子・2行以上の手続きの本体の行も
+// 評価する所（evaluatePlace の注）。そこでも、値の上に積まれた関数（at がある）は R52 の余り（`$[5 inc == 6]` は R59 の G20 のまま。確かめ 2026-10-26：
+// 最初の版は R76 の所の余りとして数え、`$` の先の受け皿に拾わずに通していた）で、丸ごとの関数（at が無い）だけが R76 の所の余り（why "place"・"place-cmp"）。
 // 2項以上なら構築（R8：子の構築は開いて並べる）。いちばん上が関数で下に値がある構築が残るのは、`$[…]` の中身の並び（`$[5 inc]`。遅延した
 // 式で R52 の判定をしない）だけで、種類を決めない（未知）：値の並びの後ろに、まだ口の開いた関数が残った物（§5 Q38・Q52）。2026-10-24 の
 // §5 Q50 の答えまでは、左が名前1つの `:` の右辺の並び（`v : 5 inc`）もここだった。
@@ -4917,8 +5164,10 @@ function subHole(st, i, ctx) {
 function finishTrees(trees, evaluate, ctx, at = null) {
   const last = trees.length - 1;
   if (trees[last].kind.k === "L") {
-    if (evaluate) trees[last] = leftoverUnit(trees[last], ctx);
+    // R76 で広げた評価する所（evaluate が {at, sym}）は、本体の行・被演算子が括りの関数の実体ごとに読み直されるので、書いた所ごとに1回だけ知らせる（R52 と同じ）。
+    if (evaluate === true) trees[last] = leftoverUnit(trees[last], ctx);
     else if (at) trees[last] = leftoverUnit(trees[last], ctx, at);
+    else if (evaluate) trees[last] = leftoverUnit(trees[last], ctx, evaluate.at, evaluate.sym === "==" || evaluate.sym === "!==" ? "place-cmp" : "place");
   }
   if (trees.length === 1) return trees[0];
   const items = trees.flatMap((g) => (g.t === "construct" ? g.items : [g]));
@@ -4927,10 +5176,13 @@ function finishTrees(trees, evaluate, ctx, at = null) {
 
 // 評価する所の終わりに余った未評価のラムダ（R42）を `_` にした木 `(unit …)`。恒等射でなければ知らせる（R48）。
 // at は R52 で包んだときの、積まれた関数の書いた所（知らせるのは書いた所ごとに1回、reportLeftover）。評価する所（根）では null。
-function leftoverUnit(tree, ctx, at = null) {
+function leftoverUnit(tree, ctx, at = null, why = null) {
   // `$` の先を解いている所（受け皿 ctx.dead がある、R59）なら、余ったラムダを拾う（恒等射は落としても当てても値が同じなので拾わない）。
-  if (ctx && ctx.dead && !isIdentityKind(tree.kind)) ctx.dead.push(tree);
-  reportLeftover(tree, ctx, at);
+  // R76 で広げた評価する所に丸ごと残った関数（why が "place"・"place-cmp"）は拾わない：R59・R75 が断るのは、値の上に積まれて余る関数（`$[…]` の中身が2つの関数を
+  // 括った形）で、比べ・論理の被演算子や手続きの行に丸ごと残った関数は、`$` の先を1つの関数と言い切れなくする物ではない（`$[x ? inc == x]` は1つの関数。
+  // 確かめ 2026-10-26。前の版は拾って G20 にし、言い分も「値の上に積まれた」と事実と違っていた）。
+  if (ctx && ctx.dead && !isIdentityKind(tree.kind) && why !== "place" && why !== "place-cmp") ctx.dead.push(tree);
+  reportLeftover(tree, ctx, at, why);
   return { t: "unit", inner: tree, kind: A() };
 }
 
@@ -4957,6 +5209,10 @@ function reportLeftover(tree, ctx, at = null, why = null) {
     name,
     why === "empty"
       ? `空の流れを口が1つの関数が受け、何も当たらずに未評価のラムダ \`${name}\` が余ったので、\`_\` になりました。並びの中では消えます（§4 R48・R70、§5 Q57）。`
+      : why === "place"
+      ? `未評価のラムダ \`${name}\` が評価する所（論理の被演算子か、字下げの本体の手続きの行）の終わりに余ったので、\`_\` になりました（§4 R42・R48・R76、§5 Q37 の答え）。当てるつもりなら、実引数を関数の後ろに書きます。関数を値として置くつもりなら、\`$\` を付けて番地にします（§4 R75）。`
+      : why === "place-cmp"
+      ? `未評価のラムダ \`${name}\` が評価する所（比べの被演算子）の終わりに余ったので、\`_\` になりました（§4 R42・R48・R76、§5 Q37 の答え）。当てるつもりなら、実引数を関数の後ろに書きます。比べの被演算子に関数を値として置く綴りはありません（\`$\` を付けた関数の番地を比べに置く形も断ります、§4 R62）。`
       : at
       ? `未評価のラムダ \`${name}\` が値の上に積まれ、口が開いたまま並びが閉じたので、\`_\` になりました。並びの中では消えます（§4 R48・R52）。逆適用は廃止なので（R47）、値の後ろの関数は前の値を取らず、並びが閉じた後に実引数を受けることもありません。当てるつもりなら、実引数を関数の後ろに書きます。`
       : `未評価のラムダ \`${name}\` が評価する所の終わりに余ったので、\`_\` になりました。並びの中では消えます（§4 R42・R48）。当てるつもりなら、実引数を関数の後ろに書きます（逆適用は廃止、R47）。`
@@ -5041,15 +5297,31 @@ function foldStep(st, i) {
     return;
   }
   // 合成：いちばん上の関数の後ろに、x の段を足す。いちばん上の段が、アリティの分からない関数（前置 `@`・`[,]`・既定値のある関数・
-  // 撒く項を受けた関数・段18 の点なし）で、もう実引数を受けていれば、その関数が終わったのか（閉じて値になり、x は積まれる）、まだ
+  // 撒く項を受けた関数）で、もう実引数を受けていれば、その関数が終わったのか（閉じて値になり、x は積まれる）、まだ
   // 受けるのか（x は合成）が決まらないので断る（G2(a)。前は種類の未知な適用の節が隣と結ぶ形として同じ門だった）。
-  // 2026-10-23 までは、段18 の点なし（`[' 0]`）が1つ受けて引いた物が値なら通していた（`[' 0] [1 2 3] inc`）：閉じてから逆適用しても、
-  // 開いたまま合成しても答えは同じだったから。逆適用の廃止（R47）で、閉じた読みでは inc が値の後ろに積まれて引いた物を取らない
-  // （`([' 0] [1 2 3]) inc` は 1 の後ろに inc が余る）ので、開いた読み（`inc ([' 0] [1 2 3])`）と割れる。だから `[,]` と同じく G2(a)。
+  // 段18 の点なし（`[' 0]`）は、2026-10-24 の R47 から 2026-10-26 までここで G2(a) だった（`[' 0] [1 2 3] inc`：閉じた読みでは inc が引いた値の後ろに積まれ、
+  // 開いた読みでは合成）。2026-10-26 の R77（§5 Q39 の答え）から口1つの関数なので、1つ受ければ閉じて値になり、inc は積まれる（閉じた読みに決まった）。
+  // その前（2026-10-23 まで）は、引いた物が値なら通していた（閉じてから逆適用しても、開いたまま合成しても同じ答えだった）。
   const s = curStage(top);
   if (s && stageShape(s).unknown && s.recv.length) throw unknownNeighbor(renderEntry(top), x);
+  // R74（2026-10-26、§5 Q13 の答え）：恒等射で始まる合成は、単位律（id ; f = f）で恒等射が消える。いちばん上の関数の項が、まだ何も受けていない恒等射
+  // （`!_`・`i : !_` の i・それを括った物・その合成）だけで、x が恒等射でない関数なら、恒等射の項を x の項に置き換える（木も x から始まる）：`i inc 1 2` は
+  // `inc 1 2`（`(inc 1) 2`）、`!_ inc 1 2` も同じ、`5 i inc 1 2` は `5 (inc 1) 2`。根拠：主の Claude の傾き「Q13 | `i inc 1 2`（恒等射で始まる合成） |
+  // 単位律で i が消えて `inc 1 2`」に U〔答え〕[2026-10-25 21:56 c8ccdd69]「他は全部、君の傾き通り。」。前は恒等射が並び全体を受けて1つの値で inc へ
+  // 渡す読み（R29）と割れるので G18 だった。恒等射が受けた後に来た関数（`i 5 inc`）・合成の途中の恒等射（`inc i double 1 2`）・`||!_||` の中の恒等射は
+  // 「始まる」形ではないので今のまま（§5 Q13 の残り）。
+  if (isFreshIdentityEntry(top) && !isIdentityKind(x.kind)) {
+    stack[stack.length - 1] = newEntry(x);
+    st.topAt = x.term || x;
+    return;
+  }
   addGroup(top, x);
   top.log.push({ k: "compose", group: top.groups.length - 1 });
+}
+
+// 関数の項が、まだ何も受けていない恒等射の段だけでできているか（R74）。
+function isFreshIdentityEntry(e) {
+  return e.stages.length > 0 && e.stages.every((s) => !!s.fn && s.fn.type === "id" && !s.recv.length && !s.done) && !e.log.some((ev) => ev.k === "arg");
 }
 
 // 種類の未知な物（未知の適用・合成の結果）がいちばん上にあるときに、次の項が来た（G2(a)、R40 の読み6）。前の G12(b)（本体の根が
@@ -5269,6 +5541,12 @@ function fnShape(fn) {
     case "pfUnary":
     case "norm":
       return { fixed: 1 };
+    // 段18 の片側の欠けた点なし（`[' 0]`・`[@ 0]`・`[fs ']`）は、書いていない被演算子の口が1つ（R77、2026-10-26。§5 Q39 の答え：主の Claude の傾き
+    // 「1つ（`[+ 1]` と同じ）」に U〔答え〕[2026-10-25 21:56 c8ccdd69]「Q39 アリティ1という意味なら合ってる。」）。`[' 0] [1 2] 5` は `([' 0] [1 2]) 5`（余りは
+    // 後ろに積む、R35）、`[' 0] [1 2 3] inc` は引いた値の後ろに inc が積まれて余る（R47）。前（R41 の読み8）は口の数の分からない関数として並びの終わりまで
+    // 受け、1つで閉じれば引いた物・2つ以上なら未知、受けた後に関数が来たら G2(a) だった。
+    case "pfPick":
+      return { fixed: 1 };
     case "pfBinary":
       return { fixed: fn.n };
     case "pattern":
@@ -5278,9 +5556,8 @@ function fnShape(fn) {
     case "id":
       return { fixed: 0, varying: true };
     default:
-      // 前置 `@`・`[,]`・既定値のある関数・アリティの分からない関数と、段18 の点なし（`[' 0]`、R26。1つ受けて閉じれば引いた物、
-      // 2つ以上なら未知で、口の数を決めるのはここと closeKind の1か所。受けた後に関数が来たら、閉じて値になった後ろに積む読みか、
-      // まだ受けていて合成する読みかが決まらない：G2(a)。R41 の読み8・R47）。
+      // 前置 `@`・`[,]`・既定値のある関数・アリティの分からない関数（並びの終わりまで受けて閉じる。受けた後に関数が来たら、閉じて値になった後ろに積む
+      // 読みか、まだ受けていて合成する読みかが決まらない：G2(a)。R41 の読み8・R47）。段18 の点なしは 2026-10-26 から上の口1つ（R77）。
       return { fixed: 0, unknown: true };
   }
 }
@@ -5439,10 +5716,10 @@ function logShape(e) {
 //   取らない）。2026-10-23 までは、単位律の読みの関数は逆適用で値を主語に取ったので、主語の口が1つに決まる関数（`i 5 inc`・
 //   `!_ 5 [* 2,]`）と、1つ受けた後の貪欲な単項（`i 1 [* 2,] 2`）は割れずに通していた。主語の口が決まらない関数（`5 !_ f2` の形）は
 //   印 idSplit で残して後から実引数が来たら G18、撒く項の主語は G9 の代わりの G18 だった。R47 で、どれも同じ1つの割れになった。
-// - 恒等射が2項以上を受け、その前に合成されていた関数が並び全体を受けない（`i inc 1 2`・`i f2 1 2`。単位律では inc が 1 2 を1つずつ
-//   受ける）。並び全体を受ける貪欲な単項・ノルム（`i [* 2,] 1 2`・`i ||!_|| 1 2`。利用者の式 `||!_|| = [~x] ? ||x||`（U 10-21 02:54））は
-//   通す。
-// - 恒等射が1つ受け、その前に合成されていた関数が口の数の分からない関数（`[,]`・段18 の点なし・既定値のある関数。R51（2026-10-24）の
+// - 恒等射が2項以上を受け、その前に合成されていた関数が並び全体を受けない（`inc i double 1 2`。単位律では double が受けた物を1つずつ
+//   受ける）。並び全体を受ける貪欲な単項・ノルムは通す。2026-10-26 の R74（§5 Q13 の答え）から、恒等射で始まる合成（`i inc 1 2`・`i f2 1 2`・
+//   `i [* 2,] 1 2`）は単位律で恒等射が消える（foldStep）ので、ここに来るのは恒等射が合成の途中にある形だけ（前は `i inc 1 2` がここの G18）。
+// - 恒等射が1つ受け、その前に合成されていた関数が口の数の分からない関数（`[,]`・既定値のある関数。段18 の点なしは 2026-10-26 の R77 から口1つ。R51（2026-10-24）の
 //   前は、撒く項を受けた固定の口の関数も、R24 で数えられなくなるのでここだった。R51 からは、撒いた流れを受けた口が1つか2つの関数は閉じて
 //   値を渡すので、上の「受けた後に合成された関数」で見る）で、その後に関数が合成されている（`i [,] 5 inc`）。単位律の読みでは、その関数が受けた後に
 //   関数が来て G2(a)（閉じたか、まだ受けるかが決まらない、R40 の読み6）だが、流れの読みでは恒等射が開いている間に合成されて通る。
@@ -5532,6 +5809,9 @@ function doneKind(s) {
     case "pfUnary":
     case "norm":
       return A();
+    case "pfPick":
+      // 段18 の点なし（R77）：口1つが埋まれば `x ' k` と同じ desc（R26）。鍵が式・`[@ 0]`・`[x ']` は何を引いたか決まらないので未知（§2 の `x @ k`）。
+      return fn.key ? pickDesc(descOfTree(s.recv[0]), fn.key) : U();
     case "pfBinary":
       return fn.root === "A" ? A() : U();
     case "pattern":
@@ -5643,9 +5923,8 @@ function closeKind(s) {
       if (fn.vop && k === 1 && hasAddr(descOfTree(args[0])) && !addrOf(descOfTree(args[0]))) throw refuseAddressSpelling(null, readerText(args[0], false));
       if (!fn.vop) for (const t of args) if (treeHasAddr(t)) throw refuseAddressDrop("logic", readerText(t, false), { sym: `[${fn.sym}]`, operand: readerText(t, false) });
       return k === 1 ? foldOneKind(args[0]) : A();
-    case "pfPick":
-      // `[' k] x` は `x ' k` と同じ desc（R26）。2つ以上を受けた形は、何を引くかが決まらないので未知。
-      return k === 1 && fn.key ? pickDesc(descOfTree(args[0]), fn.key) : U();
+    // 段18 の点なし（`[' k]`）は 2026-10-26 から口1つの関数で、口が埋まった所（doneKind）で閉じるので、ここには来ない（R77。前は並びの終わりで閉じ、
+    // 1つなら `x ' k` と同じ desc、2つ以上なら未知だった）。
     case "id":
       // 恒等射（R29）：1項なら受けた物そのもの（desc ごと）、2項以上なら並び（中身の見えない A）。
       return k === 1 ? descOfTree(args[0]) : A();
@@ -6041,10 +6320,12 @@ function closeEmpty(e, s, x) {
   reportLeftover(inner, ctx, x.term || x, "empty");
 }
 // 空の流れを受けた関数の項 e を、受けた所で `_` に閉じてよいか（R70）。2つの読み（受けた所で閉じる・空の流れが並びの単位として消えて関数が開いたまま
-// 残り、評価する所で `_`）が同じ答えになる所だけ true：流れが並びの最後の項で（後ろに何も続かない）、その並びが評価する所（行の根、R42・R48）か関数の
-// 本体の根（決定の例 `map2 $!_ []`。本体へ評価する所を広げる §5 Q37 の答えとも同じ）か、e が値の上に積まれている（R52。`$[…]` の中身の並びを除く）。
-// 括りの中・`:` の右辺・中置と `,` の被演算子・字下げの本体の行で並び全体が1つの関数の所は、消える読みでは関数が L のまま残るので false（§5 Q37 の
+// 残り、評価する所で `_`）が同じ答えになる所だけ true：流れが並びの最後の項で（後ろに何も続かない）、その並びが評価する所（行の根、R42・R48。2026-10-26 の
+// R76 から、比べと論理の被演算子・2行以上の手続きの本体の行も）か関数の本体の根（決定の例 `map2 $!_ []`。同じ日の確かめの直しから、字下げの本体の返す所
+// （1行だけの本体の行・枝の値・枝の後の既定の行）も本体の根の印 bodyRoot で解く）か、e が値の上に積まれている（R52。`$[…]` の中身の
+// 並びを除く）。括りの中・`:` の右辺・`,` の被演算子・値の演算子の被演算子で並び全体が1つの関数の所は、消える読みでは関数が L のまま残るので false（§5 Q37 の
 // 「括りの中身が丸ごと関数の形は広げる候補に入れない」）。書いた並びの外（applyKind の写像・畳み込みの中、foldSeq が null）も false。
+// R76 の前は比べ・論理の被演算子（`inc []~ == 1`）と字下げの本体の行も false で G19（§5 Q69）だった。
 function emptyClosable(e) {
   const q = foldSeq;
   if (!q || q.at !== q.st.items.length - 1) return false;
@@ -6525,6 +6806,8 @@ export function resolve(source) {
     againRefused: null,
     // 値を含む輪で断った誤り（cycleError）。
     cycleRefused: null,
+    // `$v` の輪で、v の種類を引かずに値を読む参照として通した所（R73、selfReaderTarget）：v と、引いた所で出た輪の断り。最後に、v を解き終えた種類で合うかを見る。
+    selfReaders: [],
     // 実体の守りで断った誤り（guardRefusal。total・work・nest）と、解いている途中の実体の入れ子の数（enterNest）。
     guards: {},
     guardStops: new Map(), // 守りに当たった `?` → その断り（新しい実体を作らない、instantiate）
@@ -6605,7 +6888,8 @@ export function resolve(source) {
     for (const line of lines) {
       F.lineTainted = false;
       try {
-        // 評価する所（R42）は、定義でない行の根の並びだけ（`:` の右辺・段1〜9 の辺・括りの中・本体の行は今のまま）。根の `,` が恒等射で
+        // 評価する所（R42）は、定義でない行の根の並び（ここ）と、R76 で広げた比べ・論理の被演算子・字下げの本体の行（evaluatePlace）。`:` の右辺・`,` の辺・
+        // 括りの中は今のまま。根の `,` が恒等射で
         // 消えて片方の並びだけが残れば、その並びが行の根なので評価する所（R45、evaluated）。
         const t = resolveTree(line, { F, scope: F.fileScope, diag: diagnostics, evaluate: !!line && line.type === "seq" });
         const collapsed = !!line && line.type !== "seq" && line.sym === "," && !!t && !(t.t === "op" && t.sym === ",");
@@ -6623,6 +6907,14 @@ export function resolve(source) {
     if (stack) F.stackRefused = stack;
     else noteLineError(e);
     throw refusalOf(F, lineError);
+  }
+  // `$v` の輪で仮に値を読む参照として通した所（R73）：v を解き終えた種類が値を読む参照の読みと合わなければ、引いた所で出た輪の断り（name-cycle）で断る。
+  // 見直しは写しを歩く（v を解き直すと、また `$v` を引く。確かめ 2026-10-26）。v の右辺が輪の外の門で断られた形（selfReaderHolds が "gate"。`v : $v + 1` は
+  // `$v + 1` の G7）は、その門の行の断りを言う（`$v` を `$u` に替えた形と同じ。行の断りが無ければ、今までどおり輪の断り）。
+  for (const s of [...F.selfReaders]) {
+    const held = selfReaderHolds(F, s.def);
+    if (held === true || (held === "gate" && lineError)) continue;
+    if (!F.cycleRefused || (F.cycleRefused.suspect && !s.error.suspect)) F.cycleRefused = s.error;
   }
   if (lineError || F.againRefused || F.cycleRefused || guardRefused(F)) throw refusalOf(F, lineError);
 

@@ -50,6 +50,13 @@
  *    同じ日の確かめの直しで、点 − 差 + 差は点（`(P - X) + X` と P）・作用の結合（`(P + D1) + D2` と `P + (D1 + D2)`）・差の群（`(D1 + D2) - D2` と D1）を足した
  * 23. 参照の口は双積の点（R64・R66、2026-10-26。§5 Q3 の答えと、括りの名前は射影）：最後の仮引数が括りの関数に、書き並べ `H e1 … em`・積 `H e1 , … , em`・
  *    括り `H [e1 … em]`・撒いた流れ `H [e1 … em]~` が同じ答え（名前・括り・本体で包んでも）
+ * 24. 評価する所に残った丸ごとの関数は、どの評価する所でも同じ（R76、2026-10-26。§5 Q37 の答え）：行の根の `F` と、比べ・論理の被演算子・字下げの本体の行・
+ *    枝の値に置いた F の部分木と知らせが同じ（`(unit F)`、恒等射は知らせない）。名前（`w : F` ⏎ w）と括り（`(F)`）で包んでも、どこでも `(unit …)` で知らせの数が同じ
+ * 25. `$v` の輪を通す形は、`$v` を輪の外の値を読む `$u` に替えた形と同じ種類（R73、2026-10-26。§5 Q60 の答え）。輪の側は文の並べ方に依らない
+ *
+ * 2026-10-26 の R73〜R79（§5 Q60・Q13・Q62・Q65・Q37・Q39・Q9・Q14 の答え。§7.38）で、24・25 を足し、1（頭の恒等射は単位律で消えるので、頭の i を外した流れで比べる、
+ * R74）・3（`$v` の輪を Q30_PASS_FORMS へ戻し、断る側に残る形を Q30_FORMS に足した。字下げの本体の行 `⇥inc` で本体の根を未知にしていた形は、R76 で行が `_` に
+ * なるので、根が未知の `⇥[,] x` にした）を直した（各法則の頭の注）。
  *
  * 2026-10-26 の R64〜R72（§5 Q3・Q8・Q40・Q57・Q61・Q63 の答えと、括りの名前は射影。§7.36）で、23 を足し、8（既定値の無い口の内側の `_` は `!_` の穴と同じ答え、
  * R68）・12（書いた `_` と恒等射の積は `_`、R71。R66 の積の括りの綴りの中の単位は木の比べで消して読む）・16（(b) の F が恒等射なら `$[X F]` は `$[X]` と同じ、R72）
@@ -371,6 +378,8 @@ const LATER1 = [
 // `$[+ q]` を返して根が A になった（R33）ので、根が未知の uu に替えた（2026-10-22）。
 const FIRSTS1_3 = [
 	["inc", "5"],
+	// 2026-10-26：合成の途中の恒等射が2項以上を受ける組（`inc i head 5 6`、G18 の枝）を作るため、余りの出る並びを足した（R74 で頭の恒等射は消えるので）。
+	["inc", "5 6"],
 	["uu", "5"],
 	["[+]", "5"],
 	["[' 0]", "[[1 2] [3 4]]"],
@@ -379,15 +388,17 @@ const FIRSTS1_3 = [
 	["head", "[1 2 3]"],
 	["pb", "[1] [2 3]"],
 ];
-const LATER1_3 = ["inc", "[+ 1]", "[add _ 10]", "h2", "[' 0]", "head", "tl", "hx", "bad", "uu"];
+// 2026-10-26 の R74 で頭の恒等射は単位律で消える（G18 の枝に当たらない）ので、合成の途中の恒等射（`inc i head 5 6`）で G18 の枝を見るように i を足した。
+const LATER1_3 = ["inc", "[+ 1]", "[add _ 10]", "h2", "[' 0]", "head", "tl", "hx", "bad", "uu", "i"];
 // 流れ（R36）で関数が流れから取る数。並び全体を受ける関数（恒等射・貪欲な単項・畳む2項の点なし・最後の仮引数が括りの関数とその
 // 部分適用）は null。数は定義から数える：素の関数は仮引数の数、部分適用と穴は残りの口の数、点なしの単項は 1、最後の仮引数が
 // 裸の括りの関数は仮引数の数。段18 の点なし（`[' k]`）は "pick"：前にある流れが1項のときだけ 1、2項以上なら null（直に当てた
 // `[' 0] x y` の k ≠ 1 が未知なのと同じ。確かめ 2026-10-22。前は 1 で、流れの中でだけ口を1つと数えていた）。
+// 2026-10-26 の R77（§5 Q39 の答え：`[' k]` は口1つ）から、段18 の点なしはいつも 1（"pick" は使わない。直に当てた `[' 0] x y` も `([' 0] x) y`）。
 const ARITY1 = new Map([
 	["inc", 1], ["double", 1], ["add", 2], ["adder", 1], ["uu", 1], ["uu2", 2], ["(pr 1)", 1], ["(pq 1)", 1], ["(uu2 1)", 1], ["p1", 1],
 	["(add 1)", 1], ["[add _ 10]", 1], ["([f3 _ _ 3] 1)", 1], ["h2", 1], ["[+ 1]", 1], ["[-_]", 1], ["i", null], ["[* 2,]", null], ["[+]", null],
-	["[' 0]", "pick"], ["[' say]", "pick"], ["[' other]", "pick"], ["head", null], ["tl", null], ["hx", null], ["bad", null], ["rs", null], ["pb", null],
+	["[' 0]", 1], ["[' say]", 1], ["[' other]", 1], ["head", null], ["tl", null], ["hx", null], ["bad", null], ["rs", null], ["pb", null],
 	["pt", 2], ["(pb [1])", null], ["(pt [1])", 1],
 ]);
 // 前に n 項の流れがあるときの、関数 f が流れから取る数（undefined は表に無い）。
@@ -469,6 +480,7 @@ law("1 合成は適用の繰り返し：f1 … fm x と fm (… (f1 x))", () => 
 		"余りが並び全体を受ける関数に届いて、並びの終わりまで受ける（R41、前は G12(c)）": 0,
 		"恒等射が2項以上を受けて後ろに関数（G18、比べの外）": 0,
 		"余りの前の結果が値でない（G2(a)、前は G12(b)、比べの外）": 0,
+		"頭の恒等射は単位律で消える（R74）": 0,
 	};
 	let n = 0;
 	const at = (expr) => at1(expr);
@@ -497,6 +509,18 @@ law("1 合成は適用の繰り返し：f1 … fm x と fm (… (f1 x))", () => 
 	const check = (fs, x) => {
 		n++;
 		const composed = `${fs.join(" ")} ${x}`;
+		// R74（2026-10-26、§5 Q13 の答え）：恒等射で始まる合成は、単位律で頭の恒等射が消える（`i inc 5 6` は `inc 5 6`）ので、頭の i を外した合成と同じ答え
+		// （最後の行の木・種類・門・診断）かを比べ、ここで終える（頭の i を外した合成の流れは、外した綴りの組が見る。前は、頭の i が2項以上を受けて後ろに関数が
+		// 続けば G18 の cut）。合成の途中の i は今までどおり cut が見る。
+		const lead = fs.findIndex((g) => g !== "i");
+		if (lead > 0) {
+			count["頭の恒等射は単位律で消える（R74）"]++;
+			const c1 = at(composed);
+			const c0 = at(`${fs.slice(lead).join(" ")} ${x}`);
+			const last = (o) => (o.crash ? `例外 ${o.crash}` : o.refused ? `断り ${refusalText(o)}` : `${lastOf(o).text} : ${lastOf(o).kind} || ${o.diag.join(" ")}`);
+			if (last(c1) !== last(c0)) problems.push(`${composed}  ⇔  ${fs.slice(lead).join(" ")} ${x}`, `  頭の恒等射が単位律で消えていない`, `  恒等射あり: ${last(c1)}`, `  恒等射なし: ${last(c0)}`);
+			return;
+		}
 		const fl = flowNested1(fs, x);
 		const c = at(composed);
 		if (fl.cut) {
@@ -779,12 +803,15 @@ law("2 最後の仮引数が括りの関数に、残りを並びで渡しても�
 // 割れる）。
 // 2つ目・4つ目・8つ目の `[+]` が受けるのは中身の見えない A（f の結果・裸の仮引数 y）なので、R31（2026-10-21）の後も1項で未知
 // （R31 の1項。R31 の前は `[+]` に1項がいつも未知、§5 Q17）。
-const Q28F = ["f : x y ?", "\tg y", "\tinc", ""];
+// 2026-10-26 の R76（§5 Q37 の答え：字下げの本体の行は評価する所）で、最後の行の `inc`（丸ごとの関数）は余ったラムダで `_` になり、本体の根が A に決まって
+// 仮置きが外れなくなった。この法則の形が仮置きの外れる道を通るように、最後の行を根が未知の `[,] y`・`[,] x` にした（下の Q28_REFUSE_FORMS・Q30_FORMS・
+// PROGRAMS3・DEEP_Q28 の同じ形も。どれも HEAD でも同じ答え）。
+const Q28F = ["f : x y ?", "\tg y", "\t[,] y", ""];
 const Q28_FORMS = [
 	["Q28 f が g を呼び、g の積の中で f を呼ぶ", [[INC], Q28F, ["g : y ? (f 1 y) , 1"], ["g 5 inc"]]],
 	["Q28 根を引いた後で未知になる（inc (f 1) [+] y）", [[INC], Q28F, ["g : y ? (inc (f 1) [+] y) , 1"], ["g 5 inc"]]],
-	["Q28 括りの関数の実体を通して再帰に入る（欄の関数）", [[INC], ["f : x ?", "\th [s : g]", "\tinc", ""], ["g : y ? (f y) , 1"], ["h : [s] ? s 1"], ["g 5 inc"]]],
-	["Q28 後ろの非貪欲の単項の後で根を引き、[+] で使われなくなる（inc [+ 1] f [+] y）", [[INC], ["f : x ?", "\tg x", "\tinc", ""], ["g : y ? (inc [+ 1] f [+] y) , 1"], ["g 5 inc"]]],
+	["Q28 括りの関数の実体を通して再帰に入る（欄の関数）", [[INC], ["f : x ?", "\th [s : g]", "\t[,] x", ""], ["g : y ? (f y) , 1"], ["h : [s] ? s 1"], ["g 5 inc"]]],
+	["Q28 後ろの非貪欲の単項の後で根を引き、[+] で使われなくなる（inc [+ 1] f [+] y）", [[INC], ["f : x ?", "\tg x", "\t[,] x", ""], ["g : y ? (inc [+ 1] f [+] y) , 1"], ["g 5 inc"]]],
 	["Q28 後ろの非貪欲の単項の後で根を引く（inc [+ 1] (f 1) y）", [[INC], Q28F, ["g : y ? (inc [+ 1] (f 1) y) , 1"], ["g 5 inc"]]],
 	["Q28 後ろの穴の後で根を引く（inc [add _ 10] (f 1) y）", [[INC], ["add : a b ? a + b"], Q28F, ["g : y ? (inc [add _ 10] (f 1) y) , 1"], ["g 5 inc"]]],
 	["Q28 最初の [' 0] の後で根を引く（[' 0] (f 1) [[1 2] [3 4]]）", [[INC], Q28F, ["g : y ? ([' 0] (f 1) [[1 2] [3 4]]) , 1"], ["g 5 inc"]]],
@@ -792,8 +819,8 @@ const Q28_FORMS = [
 	// 前は `(inc tl ws~)`（撒く項の頭の後ろの括りの関数）で見ていた。2026-10-25 の確かめの直しで、合成に来た流れは合成全体の口が最初の段の口と
 	// 違えば G19（仕様 §5 Q58）になったので、書き下しの結果を括って渡す `tl (inc ws~)` にした（tl の実体は書いた `(inc 1) 2` と同じ `[A…]`）。
 	["Q28 撒いた流れの書き下しの結果を受けた括りの関数の実体が根を引く（tl (inc ws~)、§5 Q27）", [[INC], Q28F, ["g : y ? (tl (inc ws~)) , 1"], ["tl : [q ~qs] ? (f 1 5) , 1"], ["ws : 1 , 2"], ["g 5 inc"]]],
-	["Q28 無名の関数の根が外れた仮置きに頼り、欄で括りの関数の実体へ渡る", [[INC], ["hh : [s] ? s 1"], ["f : x ?", "\tg x", "\tinc", ""], ["g : y ? hh [s : [w ? (f w) , 1]]"], ["g 5 inc"]]],
-	["Q28 2つの仮置きが入れ子に外れ、g の解き直しが重なる", [[INC], ["f : x ?", "\te x", "\tg x", "\tinc", ""], ["e : x ?", "\tg x", "\tinc", ""], ["g : y ? (f y) , (e y) , 1"], ["g 5 inc"]]],
+	["Q28 無名の関数の根が外れた仮置きに頼り、欄で括りの関数の実体へ渡る", [[INC], ["hh : [s] ? s 1"], ["f : x ?", "\tg x", "\t[,] x", ""], ["g : y ? hh [s : [w ? (f w) , 1]]"], ["g 5 inc"]]],
+	["Q28 2つの仮置きが入れ子に外れ、g の解き直しが重なる", [[INC], ["f : x ?", "\te x", "\tg x", "\t[,] x", ""], ["e : x ?", "\tg x", "\t[,] x", ""], ["g : y ? (f y) , (e y) , 1"], ["g 5 inc"]]],
 ];
 
 // 外れた仮置きに頼った答えに、古いと印を付ける所（resolve.js の「仮置きの記録」の注の1〜3）の形。どれも呼ぶ行は、どの並べ方
@@ -808,10 +835,10 @@ const Q28_FORMS = [
 // - 4つ目（collectedRoot、Q28V-5）：無名の関数を、外の枠（f1）がまだ解いている途中に解き直す形。解き直しで引いた仮置きにも
 //   頼る。g の根＝hh の実体の根＝無名の関数の根＝f1 の根で、f1 は未知。
 const Q28_REFUSE_FORMS = [
-	["Q28 外れた仮置きの上で閉じた枠に頼る（h → f → g）", [[INC], ["h : x ?", "\tf x", "\tinc", ""], ["f : x ?", "\tg x", "\th x", ""], ["g : x ? f x"], ["g 5 inc"]]],
-	["Q28 外れた仮置きの上で閉じた枠に頼る（括りの関数の実体）", [[INC], ["hb : [s] ? s 1"], ["f : x ?", "\tinc", "\tk x", ""], ["k : x ?", "\tf x", "\thb [s : k]", ""], ["hb [s : k] inc"]]],
-	["Q28 例外で抜けた枠の仮置きに頼る（名前の輪を握りつぶす道）", [[INC], ["w : 1 , [[x : v 2] ? 5]"], ["v : h 1"], ["h : x ?", "\tk x", "\tw", "\tinc", ""], ["k : x ? h x"], ["k 5 inc"]]],
-	["Q28 無名の関数の解き直しが外の枠の仮置きに頼る", [[INC], ["hh : [s] ? s 1"], ["f1 : x ?", "\tf2 x", "\tg x", "\tinc", ""], ["f2 : x ?", "\tg x", "\tinc", ""], ["g : y ? hh [s : [w ? f1 ((f2 w) , 1)]]"], ["g 5 inc"]]],
+	["Q28 外れた仮置きの上で閉じた枠に頼る（h → f → g）", [[INC], ["h : x ?", "\tf x", "\t[,] x", ""], ["f : x ?", "\tg x", "\th x", ""], ["g : x ? f x"], ["g 5 inc"]]],
+	["Q28 外れた仮置きの上で閉じた枠に頼る（括りの関数の実体）", [[INC], ["hb : [s] ? s 1"], ["f : x ?", "\t[,] x", "\tk x", ""], ["k : x ?", "\tf x", "\thb [s : k]", ""], ["hb [s : k] inc"]]],
+	["Q28 例外で抜けた枠の仮置きに頼る（名前の輪を握りつぶす道）", [[INC], ["w : 1 , [[x : v 2] ? 5]"], ["v : h 1"], ["h : x ?", "\tk x", "\tw", "\t[,] x", ""], ["k : x ? h x"], ["k 5 inc"]]],
+	["Q28 無名の関数の解き直しが外の枠の仮置きに頼る", [[INC], ["hh : [s] ? s 1"], ["f1 : x ?", "\tf2 x", "\tg x", "\t[,] x", ""], ["f2 : x ?", "\tg x", "\t[,] x", ""], ["g : y ? hh [s : [w ? f1 ((f2 w) , 1)]]"], ["g 5 inc"]]],
 ];
 
 // 実体の守り（resolve.js の INSTANCE_DEPTH_MARGIN の注、2026-10-20）。守りの値は言語の規則ではなく実装の守りだが、当たるかは
@@ -906,21 +933,29 @@ const Q30_FORMS = [
 	["Q30 値を含む輪が無名の関数の本体を通る", [["a : f 1"], ["v : [w ? f w] 1"], ["f : x ? v"], ["f 2"]]],
 	["Q30 値の定義が2つの輪（関数を挟む）", [["a : f 2"], ["v : f 1"], ["w : v"], ["f : x ? w"], ["f 3"]]],
 	["Q30 値を含む輪を根に使わない所で引く", [[INC], ["a : inc f 1"], ["v : (f 1) , 1"], ["f : x ? v"], ["f 2"]]],
-	["Q30 未知で閉じた関数の記録を通る輪（仮置きが外れて未知）", [[INC], ["a : g 1"], ["g : x ?", "\tk x", "\tvk", ""], ["k : x ?", "\tg x", "\tk x", "\tinc", ""], ["vk : k 1"]]],
+	["Q30 未知で閉じた関数の記録を通る輪（仮置きが外れて未知）", [[INC], ["a : g 1"], ["g : x ?", "\tk x", "\tvk", ""], ["k : x ?", "\tg x", "\tk x", "\t[,] x", ""], ["vk : k 1"]]],
 	["Q30 未知で閉じた関数の記録を通る輪（門で未知）", [["a : g 1"], ["g : x ?", "\tk x", "\tvk", ""], ["k : x ?", "\tg x", "\t[+ 1] _ _", ""], ["vk : k 1"], ["g 5"]]],
-	["Q30 未知の記録が閉じた枠の輪の依りを引き継ぐ", [[INC], ["a : g 1"], ["g : x ?", "\tm x", "\tvk", ""], ["m : x ?", "\tr x", "\tg x", ""], ["r : x ?", "\tm x", "\tinc", ""], ["vk : r 1"]]],
-	["Q30 未知の記録を読んだ関数がまた未知で閉じる（2段）", [[INC], ["a : g 1"], ["g : x ?", "\tr x", "\ty x", "\tvk", ""], ["r : x ?", "\tg x", "\tinc", ""], ["y : x ? r x"], ["vk : y 1"]]],
+	["Q30 未知の記録が閉じた枠の輪の依りを引き継ぐ", [[INC], ["a : g 1"], ["g : x ?", "\tm x", "\tvk", ""], ["m : x ?", "\tr x", "\tg x", ""], ["r : x ?", "\tm x", "\t[,] x", ""], ["vk : r 1"]]],
+	["Q30 未知の記録を読んだ関数がまた未知で閉じる（2段）", [[INC], ["a : g 1"], ["g : x ?", "\tr x", "\ty x", "\tvk", ""], ["r : x ?", "\tg x", "\t[,] x", ""], ["y : x ? r x"], ["vk : y 1"]]],
 	["Q30 既定値を覗いた定義の中だけで閉じる輪", [["a : g 1"], ["g : x ? [[y : v 2] ? 5] x"], ["v : h 1"], ["h : x ?", "\tk x", "\tvk", ""], ["k : x ?", "\th x", "\t[+ 1] _ _", ""], ["vk : k 1"]]],
 	["Q30 既定値の覗きが抜けた後の記録を通る輪", [["a : g 1"], ["g : x ? [[y : v 2] ? 5] x"], ["v : h 1"], ["h : x ?", "\tk x", "\tg x", "\tvk", ""], ["k : x ?", "\th x", "\t[+ 1] _ _", ""], ["vk : k 1"]]],
 	["Q30 1項の `:` の左を覗いた所を通る輪（未決、断る側）", [["v : (g 1) , 1"], ["g : x ?", "\t(v 2) : 1", ""], ["g 2"]]],
 	// 2026-10-24 の R53（`$` は関数だけを運ぶ）で `$v` が v の種類を引くので、値を含む輪になった（前は Q30_PASS_FORMS で、どの並べ方でも通った）。
-	["Q30 `$` の先の自分の名前に外から入る（R53。前は通る）", [["a : f 1"], ["v : f 1"], ["f : x ? x , $v"], ["v"]]],
+	// 2026-10-26 の R73（§5 Q60 の答え）で、輪を閉じる辺が `$v` の所だけなら通る（Q30_PASS_FORMS へ戻した）。断る側に残る形（輪の中で参照を `@` で開く・`$` の
+	// 無い v も輪にある・v が値でない）を、ここに置く。
+	["Q30 `$v` の輪の中で参照を `@` で開く（R73 の外）", [["a : f 1"], ["v : f 1"], ["f : x ? @[$v]"], ["v"]]],
+	["Q30 `$v` の輪に `$` の無い v もある（R73 の外）", [["a : f 1"], ["v : f 1"], ["f : x ? x , $v , v"], ["v"]]],
+	["Q30 `$v` の輪の v が関数になる（R73 の外）", [["add : x y ? x + y"], ["v : add (f 1)"], ["f : x ? x , $v"], ["v 3"]]],
 ];
 const Q30_PASS_FORMS = [
 	["Q30 値を挟まない関数どうしの再帰に値の定義から入る", [["a : f 1"], ["f : x ? g x"], ["g : y ? f y"], ["f 2"]]],
 	["Q30 既定値を覗いた所を通る輪（値はできる）", [["v : g 1"], ["g : x ? [[y : v 2] ? 5] x"], ["a : g 2"]]],
 	["Q30 既定値が関数で、値の定義を呼ぶ", [["w : 1 , [[z : [u ? v u]] ? z]"], ["v : w"], ["w"]]],
-	["Q30 既定値を覗いた所を通る輪に外から入る（覗いた中の枠が抜ける）", [[INC], ["a : g 1"], ["g : x ? [[y : v 2] ? 5] x"], ["v : h 1"], ["h : x ?", "\tk x", "\tg x", "\tinc", ""], ["k : x ?", "\th x", "\tinc", ""]]],
+	["Q30 既定値を覗いた所を通る輪に外から入る（覗いた中の枠が抜ける）", [[INC], ["a : g 1"], ["g : x ? [[y : v 2] ? 5] x"], ["v : h 1"], ["h : x ?", "\tk x", "\tg x", "\t[,] x", ""], ["k : x ?", "\th x", "\t[,] x", ""]]],
+	// R73（2026-10-26、§5 Q60 の答え）：輪を閉じる辺が `$v` の所だけなら、v の種類を引かずに値を読む参照として通す（前は name-cycle）。
+	["Q30 `$` の先の自分の名前に外から入る（R73。前は name-cycle）", [["a : f 1"], ["v : f 1"], ["f : x ? x , $v"], ["v"]]],
+	["Q30 `$` の先の自分の名前が括りの関数の実体を通る（R73）", [["a : h [2]"], ["v : h [1]"], ["h : [x] ? x , $v"], ["v"]]],
+	["Q30 `$` の先の自分の名前を右辺に直に持つ（R73）", [["v : 1 , $v"], ["w : v"], ["w"]]],
 ];
 
 const PROGRAMS3 = [
@@ -958,9 +993,9 @@ const PROGRAMS3 = [
 	// Q28 の隣：仮置きが外れても、その根を使う本体なら割れない。仮置きが合えば、根に使わない本体でも割れない。
 	["相互再帰の仮置きが外れ、根に使う", [["fq : k ? (gq k) ' 0"], ["gq : k ? fq k"], ["gq 1"], [INC], ["inc gq 1"]]],
 	["3つの相互再帰の仮置きが外れ、根に使う", [["fq : k ? ([gq k] * [hq k]) ' 0"], ["gq : k ? fq k"], ["hq : k ? gq k"], ["hq 1"], ["v : gq 1"]]],
-	["自己再帰の仮置きが外れ、積の中で自分を引く", [[INC], ["r : k ?", "\t(r k) , 1", "\tinc", ""], ["r 1"], ["g : y ? r y"]]],
+	["自己再帰の仮置きが外れ、積の中で自分を引く", [[INC], ["r : k ?", "\t(r k) , 1", "\t[,] k", ""], ["r 1"], ["g : y ? r y"]]],
 	["相互再帰の仮置きが合い、積の中で引く", [[INC], ["f : x y ? (g y) , 1"], ["g : y ? (f 1 y) , 1"], ["g 5 inc"]]],
-	["括りの関数の再帰の仮置きが外れ、積の中で引く", [[INC], ["f : [x ~xs] ?", "\t(f xs) , 1", "\tinc", ""], ["f [1 2]"], ["g : y ? (f [y]) , 1"], ["g 5 inc"]]],
+	["括りの関数の再帰の仮置きが外れ、積の中で引く", [[INC], ["f : [x ~xs] ?", "\t(f xs) , 1", "\t[,] x", ""], ["f [1 2]"], ["g : y ? (f [y]) , 1"], ["g 5 inc"]]],
 	// §5 Q21 の答え（2026-10-21、R33・G16）：本体の根が裸の関数なら、その `?` の所で断る（断る文が1つ。呼ぶ文は根に置くので通る）。
 	// 根は解き終えた所で見るので、どの並べ方でも同じ門と名指しになり、仮置きの上でだけ根が L になる h は、どの並べ方でも断らない。
 	// 前の h は `[+ [k x]]` だったが、区間は綴りで G16（R33、2026-10-22）になったので、区間を欄に入れて引く `[s : [+ [k x]]] ' s` にした
@@ -1111,7 +1146,7 @@ const deepQ28 = (shape, n, gFirst) => {
 		: shape === "cycle" ? [F[(i + 1) % n]]
 		: shape === "two" ? [...F.slice(i + 1, i + 3), F[0]]
 		: F;
-	const defs = F.map((f, i) => [`${f} : x ?`, ...rows(i).map((h) => `\t${h} x`), "\tg x", "\tinc", ""]);
+	const defs = F.map((f, i) => [`${f} : x ?`, ...rows(i).map((h) => `\t${h} x`), "\tg x", "\t[,] x", ""]);
 	const g = [`g : y ? ${F.map((f) => `(${f} y)`).join(" , ")} , 1`];
 	return [[INC], ...(gFirst ? [g, ...defs] : [...defs, g]), ["g 5 inc"]];
 };
@@ -3898,6 +3933,236 @@ law("23 参照の口は双積の点：H e1 … em と H e1 , … , em と H [e1 
 	anchor(["fp 1 , _ , 2"], "通る A");
 	anchor(["inc 1 , 2"], "断り coproduct-beside-product G3");
 	anchor(["fl 1 vs~"], "通る 未知");
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則24：評価する所に残った丸ごとの関数は、どの評価する所でも同じ（R42・R48・R76、2026-10-26 の §5 Q37 の答え）
+// ---------------------------------------------------------------------------
+//
+// 評価する所（行の根・比べと論理の被演算子・2行以上の手続きの本体の行）に丸ごとの関数 F（未評価のラムダ）が残れば、どこでも `_`（木は `(unit F)`）で、恒等射で
+// なければ同じ名前で1回知らせる。期待値は書かず、行の根に置いた `F` の答えと、ほかの評価する所に置いた F の所の部分木と知らせを比べる。名前（`w : F` ⏎ w）と
+// 括り（`(F)`）で包んでも、どの評価する所でも `(unit …)` になり、知らせの数は包まない F と同じ（名前の右辺は閉じた1つの項で、`:` の行では知らせない、§5 Q50）。
+// 確かめの直し（2026-10-26）：手続きの最後の行（`&` の右の被演算子）も比べる。枝の値は本体の返す所（法則26）なので、ここから外した。裸のラムダの行は、括った
+// ラムダの行と同じく `(unit …)` で1回知らせる（[x] ≅ x。最初の版は括った行だけを比べていて、裸の行が L のまま残る割れを見ていなかった）。
+const DEFS24 = [INC, "add : x y ? x + y", "f2 : x y ? x - y", "i : !_", "uu : m ? [,] m"];
+const UNITS24 = toUnits(DEFS24);
+const F24 = ["inc", "add 1", "inc add 5", "[+ 1]", "(inc add)", "||inc||", "add !_ 3", "f2 _ 3", "i", "i i", "[x ? x + 1]", "inc i", "[<<] 1"];
+// [置き方, F を置いた行, 置いた所の部分木を取り出す関数]
+const PLACES24 = [
+	["比べの左", (f) => [`${f} == 7`], (t) => t.left],
+	["比べの右", (f) => [`7 == ${f}`], (t) => t.right],
+	["否定の比べの左", (f) => [`${f} !== 7`], (t) => t.left],
+	["論理の &", (f) => [`7 & ${f} | 8`], (t) => t.left.right],
+	["論理の |", (f) => [`7 | ${f}`], (t) => t.right],
+	["論理の ;", (f) => [`7 ; ${f}`], (t) => t.right],
+	["字下げの本体の行", (f) => ["t24 : y ?", `\t${f}`, "\ty", ""], (t) => t.right.body.view.rows[0]],
+	["手続きの最後の行", (f) => ["t24 : y ?", "\ty", `\t${f}`, ""], (t) => t.right.body.view.rows[1]],
+];
+// 裸のラムダと括ったラムダ（手続きの行で比べる。行の根では裸のラムダは `?` の木で、並びではない）。
+const LAMBDAS24 = ["x ? x + 1", "x ? add x 1", "[x] ? x", "x ? y"];
+const solve24 = (lines) => {
+	const s = src([...usedDefs(UNITS24, lines.join("\n")), ...lines]);
+	try {
+		const r = resolve(s);
+		return { r, left: r.diagnostics.filter((d) => d.reason === "leftover-lambda").map((d) => d.name) };
+	} catch (e) {
+		return { refused: `${e.reason} ${e.gate || ""} ${e.message}` };
+	}
+};
+law("24 評価する所に残った丸ごとの関数は、どの評価する所でも `_` と同じ知らせ（R76）：根の F と、比べ・論理の被演算子・手続きの行の F、名前と括りで包んだ F", () => {
+	const problems = [];
+	const count = { 比べた組: 0, 恒等射: 0, "包んで比べた組": 0, "裸と括ったラムダの行": 0 };
+	for (const lam of LAMBDAS24) {
+		for (const [label, rowsOf, pick] of [
+			["手続きの最初の行", (g) => ["t24 : y ?", `\t${g}`, "\ty", ""], (t) => t.right.body.view.rows[0]],
+			["手続きの最後の行", (g) => ["t24 : y ?", "\ty", `\t${g}`, ""], (t) => t.right.body.view.rows[1]],
+		]) {
+			const bare = solve24(rowsOf(lam));
+			const wrapped = solve24(rowsOf(`[${lam}]`));
+			count["裸と括ったラムダの行"]++;
+			if (bare.refused || wrapped.refused) {
+				problems.push(`${label} の ${lam}: ${bare.refused || "通る"}  ⇔  括った: ${wrapped.refused || "通る"}`);
+				continue;
+			}
+			const sb = pick(bare.r.trees[bare.r.trees.length - 1]);
+			const sw = pick(wrapped.r.trees[wrapped.r.trees.length - 1]);
+			if (!sb || !sw || sb.t !== "unit" || sw.t !== "unit") problems.push(`${label} の ${lam}: ${sb ? show(sb) : "部分木が無い"}  ⇔  括った: ${sw ? show(sw) : "部分木が無い"}`);
+			if (bare.left.length !== 1 || wrapped.left.length !== 1) problems.push(`${label} の ${lam} の知らせの数: ${bare.left.length}  ⇔  括った: ${wrapped.left.length}`);
+		}
+	}
+	for (const f of F24) {
+		const root = solve24([f]);
+		if (root.refused) {
+			problems.push(`根の ${f} が断られた: ${root.refused}`);
+			continue;
+		}
+		const rt = root.r.trees[root.r.trees.length - 1];
+		if (rt.t !== "unit") {
+			problems.push(`根の ${f} が (unit …) でない: ${show(rt)}`);
+			continue;
+		}
+		const isId = root.left.length === 0;
+		if (isId) count.恒等射++;
+		for (const [label, place, pick] of PLACES24) {
+			const o = solve24(place(f));
+			count.比べた組++;
+			if (o.refused) {
+				problems.push(`${label} の ${f} が断られた: ${o.refused}`);
+				continue;
+			}
+			const sub = pick(o.r.trees[o.r.trees.length - 1]);
+			if (!sub || show(sub) !== show(rt) || kindOf(sub) !== "A") problems.push(`${label} の ${f}: ${sub ? `${show(sub)} : ${kindOf(sub)}` : "部分木が無い"}  ⇔  根: ${show(rt)}`);
+			if (JSON.stringify(o.left) !== JSON.stringify(root.left)) problems.push(`${label} の ${f} の知らせ: ${JSON.stringify(o.left)}  ⇔  根: ${JSON.stringify(root.left)}`);
+			// 名前と括りで包む：どこでも `(unit …)` で、知らせの数は同じ。
+			for (const [wrapLabel, pre, g] of [
+				["名前", ["w24 : " + f], "w24"],
+				["括り", [], `(${f})`],
+			]) {
+				const ow = solve24([...pre, ...place(g)]);
+				const orw = solve24([...pre, g]);
+				count["包んで比べた組"]++;
+				if (ow.refused || orw.refused) {
+					problems.push(`${wrapLabel}で包んだ ${f}（${label}）が断られた: ${ow.refused || orw.refused}`);
+					continue;
+				}
+				const sw = pick(ow.r.trees[ow.r.trees.length - 1]);
+				const rw = orw.r.trees[orw.r.trees.length - 1];
+				if (!sw || sw.t !== "unit" || rw.t !== "unit" || show(sw) !== show(rw)) problems.push(`${wrapLabel}で包んだ ${f}（${label}）: ${sw ? show(sw) : "部分木が無い"}  ⇔  根: ${show(rw)}`);
+				if (ow.left.length !== root.left.length || orw.left.length !== root.left.length) problems.push(`${wrapLabel}で包んだ ${f}（${label}）の知らせの数: ${ow.left.length}・根 ${orw.left.length}  ⇔  包まない ${root.left.length}`);
+			}
+		}
+	}
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則25：`$v` の輪を通す形は、同じ値を輪の無い綴りで書いた形と同じ種類（R73、2026-10-26 の §5 Q60 の答え）
+// ---------------------------------------------------------------------------
+//
+// Reader（`$`）は v をその場で評価しないので、輪を閉じる辺が `$v` の所だけなら輪ではない。だから `$v` の輪を通すプログラムの各行の種類（通るか、門の名前）は、
+// `$v` を輪の外の値の名前（`u25 : 0`）を読む `$u25` に替えたプログラムと同じ。期待値は書かず、2つを比べる。輪の側は、文の並べ方を全部回しても同じ答え（法則3）。
+// 輪の中で参照を `@` で開く形・`$` の無い v も輪にある形・v が値でない形は、輪の側が name-cycle で断る（比べの外、錨で見る）。
+const HEADS25 = [
+	// [v の右辺, 関数の定義（$R が `$v` か `$u25` に替わる）]
+	["f25 1", (b) => `f25 : x ? ${b}`],
+	["hv25 [1]", (b) => `hv25 : [x] ? ${b}`],
+	["[w ? f25 w] 2", (b) => `f25 : x ? ${b}`],
+];
+const BODIES25 = ["x , $R", "$R , x", "[x $R]", "x , ($R)", "(x , $R) , 1", "x , [$R , 2]"];
+// 輪の外の側で門に当たる本体（確かめの直し、2026-10-26）。輪の外の側が断れば、輪の側も断る（門の名前は、v の種類が決まらずに R73 の残りの name-cycle になる
+// ことがあるので比べない）。最初の版はこの組を持たず、`v : $v + 1` でプロセスが落ちる形に届かなかった。
+const REFUSED25 = ["$R + 1", "x , $R + 1", "x , [$R]~", "x , |$R|", "$R == 1", "x , $R * 2"];
+// v の右辺に直に書いた形（輪は `v` → `v`）。輪の外の綴りは `v25 : <body の $R を $u25>`。
+const DIRECT25 = ["1 , $R", "$R , 1", "[1 $R]", "$R + 1", "1 + $R", "$R == 1", "|$R|", "[$R]~", "1 , $R + 1", "[$R,] 1"];
+const USES25 = [["v25"], ["w25 : v25", "w25"], ["v25 , 2"], ["[v25 1]"], ["n25 : [~q] ? q", "n25 v25"]];
+// skip は、輪の無い綴りの頭に足した `u25 : 0` の行（比べの外）。
+const ans25 = (lines, skip = 0) => {
+	try {
+		const r = resolve(src(lines));
+		return `通る ${r.trees.slice(skip).map((t) => kindOf(t)).join(" ")}`;
+	} catch (e) {
+		return `断り ${e.reason} ${e.gate || ""}`;
+	}
+};
+const perms25 = (xs) => (xs.length <= 1 ? [xs] : xs.flatMap((x, i) => perms25([...xs.slice(0, i), ...xs.slice(i + 1)]).map((p) => [x, ...p])));
+law("25 `$v` の輪を通す形は、`$v` を輪の外の値の `$u25` に替えた形と同じ種類（R73）。輪の側は並べ方に依らない", () => {
+	const problems = [];
+	const count = { 比べた組: 0, 並べ方: 0, "輪の側が通る": 0, "外の側が断る組": 0, "右辺に直に書いた組": 0 };
+	for (const [rhs, def] of HEADS25) {
+		for (const body of REFUSED25) {
+			const ring = [`v25 : ${rhs}`, def(body.replace("$R", "$v25")), "v25"];
+			const free = ["u25 : 0", `v25 : ${rhs}`, def(body.replace("$R", "$u25")), "v25"];
+			const a = ans25(ring);
+			const b = ans25(free, 1);
+			count["外の側が断る組"]++;
+			if (!b.startsWith("断り")) problems.push(`外の側が断るはずの本体 ${body} が通った：${free.join(" ⏎ ")}：${b}`);
+			else if (!a.startsWith("断り")) problems.push(`${ring.join(" ⏎ ")}：${a}  ⇔  輪の無い綴り：${b}`);
+		}
+	}
+	for (const body of DIRECT25) {
+		const a = ans25([`v25 : ${body.replace("$R", "$v25")}`, "v25"]);
+		const b = ans25(["u25 : 0", `v25 : ${body.replace("$R", "$u25")}`, "v25"], 1);
+		count["右辺に直に書いた組"]++;
+		// 門の名前まで同じ（v の右辺の門は、その門の行の断り、resolve.js の selfReaderHolds）。通る形は同じ種類。
+		if (a !== b) problems.push(`v25 : ${body.replace("$R", "$v25")}：${a}  ⇔  輪の無い綴り：${b}`);
+	}
+	for (const [rhs, def] of HEADS25) {
+		for (const body of BODIES25) {
+			for (const use of USES25) {
+				const ring = [[`v25 : ${rhs}`], [def(body.replace("$R", "$v25"))], use];
+				const free = [["u25 : 0"], [`v25 : ${rhs}`], [def(body.replace("$R", "$u25"))], use];
+				const a = ans25(ring.flat());
+				const b = ans25(free.flat(), 1);
+				count.比べた組++;
+				if (a !== b) problems.push(`${ring.flat().join(" ⏎ ")}：${a}  ⇔  輪の無い綴り：${b}`);
+				if (a.startsWith("通る")) count["輪の側が通る"]++;
+				// 輪の側の並べ方（定義の2文だけを入れ替える。使う行は後ろ）
+				for (const p of perms25([0, 1])) {
+					const c = ans25([...p.flatMap((k) => ring[k]), ...use]);
+					count.並べ方++;
+					if (c !== a) problems.push(`並べ方で割れた ${p.join(",")}：${c}  ⇔  ${a}`);
+				}
+			}
+		}
+	}
+	// 錨：輪の外の断り（name-cycle のまま）と、輪の内で通る形の種類。
+	const anchor = (lines, want) => {
+		const a = ans25(lines);
+		if (!a.startsWith(want)) problems.push(`錨 ${lines.join(" ⏎ ")}：${a}（${want} のはず）`);
+	};
+	anchor(["v25 : f25 1", "f25 : x ? @[$v25]", "v25"], "断り name-cycle");
+	anchor(["v25 : f25 1", "f25 : x ? x , $v25 , v25", "v25"], "断り name-cycle");
+	anchor(["add : x y ? x + y", "v25 : add (f25 1)", "f25 : x ? x , $v25", "v25 3"], "断り name-cycle");
+	anchor(["v25 : f25 1", "f25 : x ? x , $v25", "v25"], "通る A A A");
+	anchor(["v25 : 1 , $v25", "v25"], "通る A A");
+	anchor(["v25 : 1 , ($v25 ' 0)", "v25"], "断り name-cycle"); // 輪の中で `'` で引く（`'` が参照の先を読むかは決まっていない、§5 Q60 の残り）
+	anchor(["v25 : 1 , ||$v25||", "v25"], "通る A A"); // ノルムは先を読まない（`||$_||` は 1）
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則26：本体の返す所に置いた F は、1行の本体の根に置いた F と同じ答え（R33・R76、2026-10-26 の確かめの直し。§5 Q35）
+// ---------------------------------------------------------------------------
+//
+// 本体の返す所は、1行の本体の根（`t26 : y ? F`）・1行だけの字下げの本体（`⇥F`）・枝の値（`⇥y > 0 : F`）・枝の後の既定の行（`⇥F`）。どこに置いても、断るなら
+// 同じ門（裸の関数なら G16）、通るなら `t26 5` の種類と知らせの数が同じ。期待値は書かず、1行の本体の根と比べる。2行以上の手続きの最後の行は `&` の右の
+// 被演算子（法則24）で、返す所ではない。最初の版の R76 は字下げの返す所を評価する所にしていて、`⇥[+ m]` が `_` で通り、1行の `[+ m]` の G16 と割れた。
+const DEFS26 = [INC, "add : x y ? x + y", "f2 : x y ? x - y", "i : !_"];
+const UNITS26 = toUnits(DEFS26);
+const F26 = ["inc", "add 1", "add y", "inc add 5", "[+ 1]", "[+ y]", "[+ inc]", "([+ y])", "(inc)", "||inc||", "add !_ 3", "i", "!_", "x ? x + y", "[x ? x + y]", "y", "inc y", "y + 1", "5 inc", "$inc", "$[+ y]", "inc == y", "y & inc", "5"];
+const PLACES26 = [
+	["1行だけの字下げの本体", (f) => ["t26 : y ?", `\t${f}`, ""]],
+	["枝の値", (f) => ["t26 : y ?", `\ty > 0 : ${f}`, "\ty", ""]],
+	["枝の後の既定の行", (f) => ["t26 : y ?", "\ty > 0 : y", `\t${f}`, ""]],
+];
+const ans26 = (lines) => {
+	const s = src([...usedDefs(UNITS26, lines.join("\n")), ...lines, "t26 5"]);
+	try {
+		const r = resolve(s);
+		const left = r.diagnostics.filter((d) => d.reason === "leftover-lambda").length;
+		return `通る ${kindOf(r.trees[r.trees.length - 1])} 知らせ${left}`;
+	} catch (e) {
+		return `断り ${e.reason} ${e.gate || ""}`;
+	}
+};
+law("26 本体の返す所（1行だけの字下げの本体・枝の値・枝の後の既定の行）に置いた F は、1行の本体の根に置いた F と同じ答え（R33・R76）", () => {
+	const problems = [];
+	const count = { 比べた組: 0, 断る組: 0, 通る組: 0 };
+	for (const f of F26) {
+		const root = ans26([`t26 : y ? ${f}`]);
+		if (root.startsWith("断り")) count.断る組++;
+		else count.通る組++;
+		for (const [label, place] of PLACES26) {
+			const a = ans26(place(f));
+			count.比べた組++;
+			// 枝の値・既定の行は、枝の条件 `y > 0` が A なので、返す所の答えは1行の根と同じ（通るなら種類、断るなら門）。
+			if (a !== root) problems.push(`${label} の ${f}：${a}  ⇔  1行の本体の根：${root}`);
+		}
+	}
 	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
 	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
 });
