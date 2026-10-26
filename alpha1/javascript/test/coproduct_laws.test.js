@@ -44,6 +44,10 @@
  *    同じ答え（§5 Q56 の答え、2026-10-25。R55 の片では `$!_` と `$i` だけを比べていた）
  * 19. 合成に来た流れは合成全体の口の数で受ける（R58、2026-10-25 の §5 Q58 の答え）：`F G X~` と、合成を名前にした `g : F G ⏎ g X~` と、括った `(F G) X~`。
  *    合成全体の口が1つか2つなら、合成を素の関数で書いた `h X~` とも（実装の外の片側）
+ * （20・21 は 2026-10-25 の確かめの直しで足した物で、その法則の頭に書いた。）
+ * 22. 番地の点と差は torsor（R62、2026-10-26 の §5 Q59 の答え）：点 + 差 − 点は差（`(P + X) - P` とほかの差）、点 + (点2 − 点) は点2、名前・括りで
+ *    包んでも同じ答え（`C[X]`・`C[(X)]`・`w : X ⏎ C[w]`）。文脈は点・差・数の顔を見分ける所（`C + 0x10`・`C - $vs`・`C == ($vs - $five)` ほか）。
+ *    同じ日の確かめの直しで、点 − 差 + 差は点（`(P - X) + X` と P）・作用の結合（`(P + D1) + D2` と `P + (D1 + D2)`）・差の群（`(D1 + D2) - D2` と D1）を足した
  *
  * 2026-10-25 の R58〜R61（§5 Q58・Q53・Q54・Q41 の答え、§7.33）で、19 を足し、12（書いた `_` も積の単位：`X , _`・`_ , X` と X。書いた `_` と恒等射の積は
  * `_` の側が断る、§5 Q61）・15（合成全体の口が2つの合成は畳み込みの比べに、3つ以上は G19）・16（(b) は `$[X F]` と `$[X F , !_]` が G20）・17（値の先も
@@ -3634,6 +3638,10 @@ law("20 `$[…]` の中身を単位律で縮めても同じ先：C[$[X]] と C[$
 // 中置の項の所だけで断っていて、ほかの綴りは通った（確かめる人・反証する人の指摘）。
 // 比べの外（届かない所、§5 Q59）：素の関数が返した値（`id2 : x ? x` の `(id2 $5) + 1`）・器の中身（`($5 , 1) + 1`）・括りの関数や前置 `@` の項の口へ
 // 素の関数の本体から渡した物。どれも、値の演算子が直に見ない所で、関数を器に入れた `(inc , 1) + 1` が A なのと同じ線。
+// 2026-10-26 の R62（§5 Q59 の答え、番地の点と差）から、値を読む参照（`$5`・`$vs`・p5）の綴りはどれも G21（中置の `R + 1`・`R == 1` は Address と数を
+// 混ぜた形で G21、ほかの綴りは中置の外の綴りで G21）、関数を指す番地（`$inc`）は今のまま G7。比べ方（中置の `R + 1` の答えと同じ門）は変えない。
+// 中置で通る `R + 0x10`・`R - R` を中置の外の綴りで書いた形（`[+ 0x10] R`・`[-] R R`）は G21 で割れるので、この法則の外（§5 Q66。法則22 は中置だけを比べる）。
+// 届かない所は 2026-10-26 から §5 Q66。
 const DEFS21 = [INC, "add : x y ? x + y", "vs : 1 , 2 , 3", "p5 : $5", "g9 : y ? inc y", "pq : [a] b ? a + b"];
 const UNITS21 = toUnits(DEFS21);
 const RS21 = [["$5", true], ["$vs", true], ["$inc", true], ["p5", true], ["5", false], ["vs", false]];
@@ -3666,6 +3674,106 @@ law("21 Reader を値の演算子に当てる形は綴りに依らず同じ答�
 		if (logic[0] !== logic[1]) problems.push(`${LOGIC21[0](r)} と ${LOGIC21[1](r)}：答えが割れた（${logic.join(" / ")}）`);
 	}
 	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則22：番地の点と差は torsor（R62、2026-10-26。§5 Q59 の答え）
+// ---------------------------------------------------------------------------
+//
+// 比べる綴り：
+// (a) 点 + 差 − 点は差：`((P + X) - P)` と、ほかの綴りの差 `($vs - $five)`。P は点（`$vs`・`$five`・`$5`・`p : $vs` の p・ずらした点 `($vs + 0x10)` と
+//     それを指す名前 q）、X は差（`0x10`・`8x00FF`・括った `(0x10)`・字面を右辺に持つ名前 nx・点どうしの差 `($five - $vs)`）。
+// (b) 点 + (点2 − 点) は点2：`(P + (Q - P))` と `(Q)`（P・Q は (a) の点）。
+// (c) 名前・括りで包んでも同じ：`C[X]` と `C[(X)]` と `w : X ⏎ C[w]` と `w : X ⏎ w2 : w ⏎ C[w2]`（X は1語：点・字面・数・関数の番地・未定義の名前）。
+//     2語以上の X（ずらした点・差）は字面のまま置くと結び方が変わるので、`C[(X)]` と名前の綴りだけを比べる。
+// (d) 点 − 差 + 差は点：`((P - X) + X)` と `(P)`（P は (a) の点、X は (a) の差）。
+// (e) 作用の結合：`((P + D1) + D2)` と `(P + (D1 + D2))`（D1・D2 は点どうしの差の綴り。`0x…` どうしの和 `(0x10 + 0x8)` は点が無いので今までの読みの
+//     中身の見えない A で、点に足すと §5 Q66：割れるのが分かっているので比べの外にし、錨で今の答えを留める）。
+// (f) 差の群：`((D1 + D2) - D2)` と `(D1)`（D1・D2 は (e) の差）。
+// 文脈 C は顔（点・差・数）を見分ける所：根・`C + 0x10`（点なら点、差なら §5 Q66）・`C - $vs`（点なら差、差なら §5 Q66）・`$vs - C`・`$vs + C`・`C + 1`・
+// `C == $vs`・`C == ($vs - $five)`・`($vs - $five) + C`・`$[C]`・`use C 1`・括りの関数の実体の裸の仮引数（`hk [1] C`、hk の本体は `f == $vs`。2026-10-26 の
+// 確かめの直しの前は `f - $vs` だったが、差を返す関数は答えに印を持たせられないので、どの C でも G21 になり顔を見分けない）。
+// 何を同じと見るか：断れば門と名指し、通れば最後の行の種類と診断。(c) は `hk` の実体の形も（(a)(b) は、ずらした点の形 `$+` と値を読む参照の形 `$[N…]` が
+// 違うので見ない）。期待値は書かない。
+// なぜ同じか：位置は差の群が働く torsor（アフィン空間）で、点 + 差は点、点 − 点は差、差は群（主の Claude の読み、R。表に U〔答え〕[2026-10-25 21:15
+// c8ccdd69]「その表のとおりで良い。」）。名前は右辺を指し（`:` はメタ）、括り1つは中身と同じ（[x] ≅ x）。
+// 比べの外：`@` で開く文脈（ずらした点が指す物は解決器の段では分からず G21、点2 の `@` は指す値を読む。§5 Q66）・中置の外の綴り（区間・点なし・素の
+// 関数の口は番地を受ければ G21 で、答えに点・差の印を持たない。§5 Q66）・書いた `_`（並びの中と名前・括りで顔が違う、R56 の R の所）。
+// 2026-10-26 の確かめの直しの後の比べの外：(b)(d) で右が `$` の作った点（`$vs`・`$five`・`$5`・p）のときの `use C 1`。番地の算術で作った点・差は、印を落とす
+// 所（素の関数の口）に入れば G21、`$` が作った点（値を読む参照）は R60 の届かない所のまま通るので、同じ点が綴りで割れる（§5 Q66 の問い、圏論の視点で
+// 見直す所）。錨で今の答えを留める。本体の局所の名前で包む形（`tt : y ? ⏎ w : X ⏎ C[w]`）も比べない：局所の名前は種類が未知（P2）で、局所の定義の
+// 右辺の点・差は G21（印を落とす所）なので、本体に直に書いた `C[X]`（`C == $vs` なら通る）と割れる。
+const DEFS22 = [
+	INC, "add : x y ? x + y", "vs : 1 , 2 , 3", "use : f x ? @f x", "five : 5", "p : $vs", "q : $vs + 0x10", "nx : 0x10", "hk : [k] f ? f == $vs", "dq : $vs - $five",
+];
+const UNITS22 = toUnits(DEFS22);
+const PTS22 = ["$vs", "$five", "$5", "p", "($vs + 0x10)", "q"];
+const DIFFS22 = ["0x10", "8x00FF", "(0x10)", "nx", "($five - $vs)"];
+const WORDS22 = ["0x10", "8x00FF", "$vs", "$five", "$5", "5", "$inc", "zz", "p", "q", "nx"];
+const MULTI22 = ["$vs + 0x10", "$vs - $five", "$five - 0x10", "(0x10)", "($vs - $five) + ($five - $vs)"];
+// 点どうしの差の綴り（(e)(f)。名前 dq も）。
+const DD22 = ["($five - $vs)", "($vs - $five)", "(($vs + 0x10) - $vs)", "dq"];
+// `$` が作った点（値を読む参照）の綴り。(b)(d) の右がこれなら、印を落とす所の `use C 1` は比べない（上の注）。
+const DOLLAR_PTS22 = new Set(["$vs", "$five", "$5", "p"]);
+const USE22 = (e) => `use ${e} 1`;
+const CTX22 = [
+	(e) => e, (e) => `${e} + 0x10`, (e) => `${e} - $vs`, (e) => `$vs - ${e}`, (e) => `$vs + ${e}`, (e) => `${e} + 1`, (e) => `${e} == $vs`,
+	(e) => `${e} == ($vs - $five)`, (e) => `($vs - $five) + ${e}`, (e) => `$[${e}]`, USE22, (e) => `hk [1] ${e}`,
+];
+const ctxFor22 = (right) => (DOLLAR_PTS22.has(right) ? CTX22.filter((c) => c !== USE22) : CTX22);
+const ans22 = (lines, withInst) => {
+	const line = lines[lines.length - 1];
+	const o = outcome(src([...usedDefs(UNITS22, lines.join("\n")), ...lines]));
+	if (o.crash) return `例外 ${o.crash}`;
+	if (o.refused) return withInst ? `断り ${refusalText(o)}` : `断り ${o.refused.reason} ${o.refused.gate}`;
+	const inst = withInst ? o.trees.map((t) => t.text).filter((t) => t.startsWith("(: hk ")).map((t) => (t.match(/\(inst [^ ]+ [^ ]+/g) || []).join(" ")) : [];
+	return `通る ${lastOf(o).kind} ${inst.join(" ")} || ${o.diag.join(" ")}${line ? "" : ""}`;
+};
+law("22 番地の点と差は torsor：(P + X) - P と差・P + (Q - P) と Q・C[X] と C[(X)] と名前・(P - X) + X と P・作用の結合・差の群", () => {
+	const problems = [];
+	const count = {
+		比べた組: 0, "(a) 通る": 0, "(a) 断る": 0, "(b) 通る": 0, "(b) 断る": 0, "(c) 通る": 0, "(c) 断る": 0,
+		"(d) 通る": 0, "(d) 断る": 0, "(e) 通る": 0, "(e) 断る": 0, "(f) 通る": 0, "(f) 断る": 0,
+	};
+	const cmp = (tag, forms, withInst) => {
+		const outs = forms.map((ls) => ans22(ls, withInst));
+		count.比べた組 += forms.length - 1;
+		if (outs.some((a) => a.startsWith("例外"))) problems.push(`${tag}：例外`, ...outs.map((a, i) => `  ${forms[i].join(" ⏎ ")} → ${a}`));
+		else if (outs.some((a) => a !== outs[0])) problems.push(`${tag}：答えが割れた`, ...outs.map((a, i) => `  ${forms[i].join(" ⏎ ")} → ${a}`));
+		else count[`${tag.slice(0, 3)} ${outs[0].startsWith("通る") ? "通る" : "断る"}`]++;
+	};
+	// (a) 点 + 差 − 点は差
+	for (const pt of PTS22) for (const x of DIFFS22) for (const c of CTX22) cmp("(a) " + c(`((${pt} + ${x}) - ${pt})`), [[c(`((${pt} + ${x}) - ${pt})`)], [c("($vs - $five)")]], false);
+	// (b) 点 + (点2 − 点) は点2
+	for (const pt of PTS22) for (const q2 of PTS22) for (const c of ctxFor22(q2)) cmp("(b) " + c(`(${pt} + (${q2} - ${pt}))`), [[c(`(${pt} + (${q2} - ${pt}))`)], [c(`(${q2})`)]], false);
+	// (d) 点 − 差 + 差は点
+	for (const pt of PTS22) for (const x of DIFFS22) for (const c of ctxFor22(pt)) cmp("(d) " + c(`((${pt} - ${x}) + ${x})`), [[c(`((${pt} - ${x}) + ${x})`)], [c(`(${pt})`)]], false);
+	// (e) 作用の結合（点どうしの差の綴りで）
+	for (const pt of PTS22) for (const d1 of DD22) for (const d2 of DD22) for (const c of CTX22) cmp("(e) " + c(`((${pt} + ${d1}) + ${d2})`), [[c(`((${pt} + ${d1}) + ${d2})`)], [c(`(${pt} + (${d1} + ${d2}))`)]], false);
+	// (f) 差の群
+	for (const d1 of DD22) for (const d2 of DD22) for (const c of CTX22) cmp("(f) " + c(`((${d1} + ${d2}) - ${d2})`), [[c(`((${d1} + ${d2}) - ${d2})`)], [c(`(${d1})`)]], false);
+	// (c) 名前・括りで包んでも同じ
+	for (const x of WORDS22) for (const c of CTX22) cmp("(c) " + c(x), [[c(x)], [c(`(${x})`)], [`w : ${x}`, c("w")], [`w : ${x}`, "w2 : w", c("w2")]], true);
+	for (const x of MULTI22) for (const c of CTX22) cmp("(c) " + c(`(${x})`), [[c(`(${x})`)], [`w : ${x}`, c("w")], [`w : ${x}`, "w2 : w", c("w2")]], true);
+	// 錨：(a) の差は「点の左に置けば §5 Q66、点から引けば点」、(b) の点は「`0x10` を足せば点、点から引けば差」と、顔を見分けて答えが分かれていること。
+	const anchor = (line, want) => {
+		const a = ans22([line], false);
+		if (!a.startsWith(want)) problems.push(`錨 ${line}：${a}（${want} のはず）`);
+	};
+	anchor("(($vs + 0x10) - $vs) - $vs", "断り coproduct-address-arith G21");
+	anchor("$vs - (($vs + 0x10) - $vs)", "通る A");
+	anchor("($vs + ($five - $vs)) + 0x10", "通る A");
+	anchor("($vs + ($five - $vs)) - $vs", "通る A");
+	anchor("($vs + ($five - $vs)) == ($vs - $five)", "断り coproduct-address-arith G21");
+	anchor("(($vs + 0x10) - $vs) + 1", "断り coproduct-address-arith G21");
+	// 比べの外にした割れ（§5 Q66）を、今の答えで留める：印を落とす所（素の関数の口）では、算術で作った点は G21、`$` が作った点は通る。`0x…` どうしの和を
+	// 点に足すと §5 Q66、1つずつ足せば点（作用の結合が `0x…` の綴りで割れる）。
+	anchor("use ($vs + ($five - $vs)) 1", "断り coproduct-address-arith G21");
+	anchor("use ($five) 1", "通る 未知");
+	anchor("$vs + (0x10 + 0x8)", "断り coproduct-address-arith G21");
+	anchor("($vs + 0x10) + 0x8", "通る A");
+	for (const k of Object.keys(count)) if (!count[k]) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
 	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
 });
 

@@ -14,9 +14,14 @@
  * 答え：合成に来た流れは合成全体の口の数で受ける（streamInto）・`$[…]` の中身に余る関数があれば G20・`$` は Reader と Writer を作る接頭辞で値の先も
  * 値を読む参照として通す（classifyDollar）・`,` の被演算子の書いた `_` は積の単位（resolveProduct）。同じ日の確かめの直しで、Reader を値の演算子に
  * 置く形を綴りに依らず断り（valueOperand・readerAtPlain・paramTag）、`$[…]` の中身を単位律で縮めて見て（unitReduced）、括りの関数の本体の仮引数を
- * 含まない行を読み（deadInPatternBody）、名前の先の本体を覗くのは木を残す段だけにした（deadOfDef））、
+ * 含まない行を読み（deadInPatternBody）、名前の先の本体を覗くのは木を残す段だけにした（deadOfDef）。R62・R63 は 2026-10-26 の §5 Q59・Q64 の
+ * 答え：番地の点と差（`$` の値の参照と点として置いた `0x…` は点、点どうしの差と点に足し引きする `0x…` は差。どちらも Address 型で Int・UInt と混ぜない。
+ * 点 ± 差は点・点 − 点は差・差 ± 差は差・点 + 点は断る。addressOp・G21）と、書いた `_` と分かる値を括りの関数の実体へ渡しても `$` は零射の番地
+ * （印 zero、dollarNameTarget）。同じ日の確かめの直しで、番地の算術で作った点・差が印を落とす所（関数の答え・素の関数の口・論理と `#`・要素の
+ * 形の揃わない器・括りの仮引数に直に）に入れば G21（hasAddr・refuseAddressDrop）、本体の行に隠された名前の番地の顔は使わない（shadowFace）、
+ * 消えた余りのラムダの残り1項の印は持ち越す（vanishedOne））、
  * §1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
- * 門（G1〜G20（G14 は 2026-10-21、G17 と G1 は 2026-10-22、G12 は 2026-10-23、G8 と G9 は 2026-10-24 に廃止。G19 は 2026-10-24 の R51（2026-10-25 に決定）、G20 は同じ日の R53。2026-10-25 に R54〜R57 で G20 の当たる形を直し、同じ日の R58〜R61 で G19・G20 の当たる形を直した）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
+ * 門（G1〜G21（G14 は 2026-10-21、G17 と G1 は 2026-10-22、G12 は 2026-10-23、G8 と G9 は 2026-10-24 に廃止。G19 は 2026-10-24 の R51（2026-10-25 に決定）、G20 は同じ日の R53。2026-10-25 に R54〜R57 で G20 の当たる形を直し、同じ日の R58〜R61 で G19・G20 の当たる形を直した。G21 は 2026-10-26 の R62）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
  * 答えが出たときに、その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
  *
  * 入り口は `resolve(source)` の1つで、`{ trees, diagnostics }` を返す。trees は1行に1つの木、diagnostics は
@@ -157,6 +162,13 @@ const GATE_REASON = {
   // 同じ日の R59・R60（§5 Q53・Q54 の答え）から、`$` の先は1つの Reader（関数か、値を読む参照）と言い切れること：値の先は通り（R60）、中身に余る関数の
   // ある `$[…]` は断る（R59）。名前の reason（coproduct-dollar-value）は試験と法則が読むので変えない。
   G20: "coproduct-dollar-value",
+  // G21 は 2026-10-26（R62、§5 Q59 の答え）：番地の点と差の算術・比べで、決まっていない組か、決まって断る組。点（`$` が作った値を読む参照と、
+  // それをずらした物）と差（点どうしの差）はどちらも Address 型で、点 ± 差は点・点 − 点は差・差 ± 差は差・点どうしと差どうしの比べは通る。点 + 点と、
+  // Address と数（Int・UInt・文字）を混ぜた算術・比べは断る（決まって断る組）。ほかの組（差に `0x…`・点の左の `0x…`・差 + 点・点と差の比べ・顔の
+  // 分からない値・書いた `_`・`*` などの演算）と、中置の外の綴り（区間・点なし・絶対値・値の印・素の関数の口）で番地を受けた形は §5 Q66。
+  // 関数を指す番地（`$inc`）を動かす・比べる形は、今までどおり G7（R53 の外）。同じ日の確かめの直しから、番地の算術で作った点・差が印を落とす所に入る
+  // 形（refuseAddressDrop）・点・差を中に持つ器に値の演算子を当てる形・本体の行に隠された名前の点・差（shadowFace）も G21（§5 Q66）。
+  G21: "coproduct-address-arith",
   // G17（coproduct-manual-curry）は 2026-10-22 に廃止した（§5 Q35 の答え、U〔答え〕10-21 22:46。U の時刻は UTC）。断っていた `$` で包んだ入れ子の `?`（`add : x ? $[y ? x + y]`）は、
   // `$[+ m]` と同じく `$` で値にした関数を返す形で、本体の根は A で通る（R33）。
 };
@@ -221,7 +233,8 @@ const VALUE_PREFIX = new Set(["-", "!", "!!"]);
 // 畳む2項の点なしの記号（R31、pointfreeOf）。算術（`^` だけ右から）・ビット・論理・比較。`<<`・`>>`・get・set・範囲・`!=`・
 // `!==`・中置の `#` は畳まず、素の2引数の関数として読む（R32、§5 Q34 の答え）。
 const FOLD_SYMS = new Set(["+", "-", "*", "/", "%", "^", "||", ";;", "&&", "|", "&", ";", "<", "<=", "=", ">=", ">", "=="]);
-// そのうち論理（段5〜7）の物。値の演算子ではないので、Reader を受けても断らない（中置の `;`・`|`・`&` と同じ。R60 の細かい所、§5 Q59）。
+// そのうち論理（段5〜7）の物。値の演算子ではないので、Reader を受けても断らない（中置の `;`・`|`・`&` と同じ。R60 の細かい所。番地の点と差の規則 R62 も
+// 当てない）。
 const LOGIC_FOLD_SYMS = new Set(["|", "&", ";"]);
 
 function makeCore(w) {
@@ -729,10 +742,41 @@ const refOf = (d) => (!!d && d.k === "A" && !d.spread && !d.shape && !!d.ref ? d
 // 値を読む参照（R60、2026-10-25。`$名前` の名前が値・`$[…]` の中身が値・`$5` の字面）の desc なら、その desc。ほかは null。
 // 参照は値（A）で、指す値の desc を vref に持つ（`@x` の x に vref があれば、`@x` はその値。番地は読む環境の実装の1つで、意味には出ない）。
 const vrefOf = (d) => (!!d && d.k === "A" && !d.spread && !d.shape && !!d.vref ? d : null);
-// `$` が作った物（関数を指す番地か、値を読む参照）。どちらも1つの Reader（R60）で、数ではない（値の演算子の被演算子にしない、R60 の細かい所・§5 Q59）。
-const readerOf = (d) => refOf(d) || vrefOf(d);
+// 番地の点と差（R62、2026-10-26。§5 Q59 の答え）のうち、算術で作った物の desc なら、その desc。ほかは null。印 addr は 'pt'（点をずらした点：
+// `$x + 0x10`）か 'diff'（点どうしの差：`$foo - $bar`）。どちらも Address 型の値（A）で、Int・UInt と混ぜない。ずらした点が指す物は解決器の段では
+// 分からない（差が指す物の要素の幅の倍数かと一緒に型の段で決まる）ので、指す値の印 vref は持たない（`@` で開けば G21、§5 Q66）。
+const addrOf = (d) => (!!d && d.k === "A" && !d.spread && !d.shape && (d.addr === "pt" || d.addr === "diff") ? d : null);
+// 番地の顔（R62）：値を読む参照（R60 の vref）とずらした点は 'pt'（点）、点どうしの差は 'diff'（差）。ほかは null。関数を指す番地（ref）は顔に数えない
+// （1つの関数と言い切れる番地で、動かす・比べるのは R53 の外。G7）。
+const addrFace = (d) => (vrefOf(d) ? "pt" : addrOf(d) ? d.addr : null);
+// `$` が作った物（関数を指す番地か、値を読む参照）と、R62 の番地の算術で作った物（ずらした点・差）。`$` が作った物は1つの Reader（R60）で、数では
+// ない。実体の鍵に入れ（裸の仮引数でも、bindParams・internPartial）、素の関数の口に渡せば札で見て（readerAtPlain）、写像では1つの要素（elemsOfContainer）。
+const readerOf = (d) => refOf(d) || vrefOf(d) || addrOf(d);
+// 書いた `_` を指すと分かっている値（R63、2026-10-26。§5 Q64 の答え）：欄の右辺の `_`（`[s : _]`）・`_` だけの括り（`[_]`）・書いた `_` を右辺に持つ
+// ファイルの値の定義の名前（`un : _`）の desc に印 zero を付け、括りの関数の実体へ欄・要素・裸の仮引数で渡しても持ち越す（実体の鍵 `_`）。実体の中の
+// `$s` は、`$_` と同じ零射 `$[x ? _]` の番地（dollarNameTarget）。印の無い形の見えない値は、今のまま `_` か言い切れない（G20）。
+const zeroOf = (d) => (!!d && d.k === "A" && !d.spread && !d.shape && !!d.zero && !d.ref && !d.vref && !d.addr ? d : null);
+const zeroDesc = () => ({ k: "A", zero: true });
+// 番地の算術で作った点・差（R62）が、desc の中のどこか（それ自身・揃った器の要素・欄）にあるか（2026-10-26 の確かめの直し）。点・差の印を落とさずに
+// 運べるのは、名前（`:` はメタ）・括り1つ（[x] ≅ x。消えた余りのラムダの残り1項も、vanishedOne）・括りの関数の実体の裸の仮引数と欄・揃った器の要素と、
+// 中置の値の演算子（addressOp）だけである。印を落とす所に入ると、答えは中身の見えない値になり、数と黙って混ざる（`gi : y ? y` ⏎ `(gi ($x + 0x10)) + 1`。
+// HEAD は中の算術を G7 で断っていた）。だから印を落とす所に入る所で断る（§5 Q66）：関数の答え（resolveBody。字下げの本体の局所の定義の右辺と枝の値も）・
+// 素の関数の口（readerAtPlain）・論理の `;` `|` `&` と書き込み `#` の被演算子（resolveTree）・要素の形の揃わない器（mergeElems）・括りの仮引数に直に渡した物
+// （bindParams）。値を読む参照（`$vs`、vref）は R60 の届かない所のまま（§5 Q66 の届かない所）。
+function hasAddr(d, depth = 0) {
+  if (!d || depth > 32) return false;
+  if (addrOf(d)) return true;
+  const sh = d.k === "A" && !d.spread ? d.shape : null;
+  if (!sh) return false;
+  if (sh.s === "list") return hasAddr(sh.elem, depth + 1);
+  if (sh.s === "struct") return sh.fields.some((f) => hasAddr(f.desc, depth + 1));
+  return false;
+}
+// 解いた木の値に番地の算術で作った点・差があるか（hasAddr。構築の中の消えた余りのラムダは消してから見る、descOfTree）。
+const treeHasAddr = (t) => !!t && hasAddr(descOfTree(t));
 
-// 素の関数の裸の仮引数の印（R60 の細かい所、§5 Q59。2026-10-25 の確かめの直し）。素の関数は実体を作らず、本体を1回だけ、裸の仮引数を A として
+// 素の関数の裸の仮引数の印（R60 の細かい所。2026-10-25 の確かめの直し。2026-10-26 の R62 から、番地の点と差を口に渡した物は G21、関数を指す番地は G7、
+// §5 Q66）。素の関数は実体を作らず、本体を1回だけ、裸の仮引数を A として
 // 解く（§3.4）ので、`inc $5` の本体の `x + 1` は Reader を見ない。β で `inc $5` は `$5 + 1` と同じ形なので、本体を解く所で、裸の仮引数の desc に
 // 印 pv（その関数の書いた `?` と仮引数の位置の札）を付け、札に「値の演算子の被演算子に置かれた（numeric）」と「別の素の関数の口へそのまま渡された
 // （edges）」を覚える。Reader を素の関数の口に渡した呼び出しは、札から値の演算子に届くなら G7（readerAtPlain）。
@@ -741,9 +785,10 @@ const readerOf = (d) => refOf(d) || vrefOf(d);
 //   同じ出どころの本体を何度解いても同じ札に足す（覚えるのは「どこかで置かれた」だけ）。
 // - 札は実体に持ち込まない（bindParams が外す）：実体は鍵で分け合われ、本体は1回しか解かないので、持ち込むと先に呼んだ側の札だけに覚え、
 //   答えが定義の順で割れる。
-// - 届かない所（決めずに残した、§5 Q59）：素の関数が返した値（`id2 : x ? x` の `id2 $5` の結果）・本体の中で器に入れた物・括りの関数や既定値のある
+// - 届かない所（決めずに残した。2026-10-26 から §5 Q66）：素の関数が返した値（`id2 : x ? x` の `id2 $5` の結果）・本体の中で器に入れた物・括りの関数や既定値のある
 //   関数や前置 `@` の項の口へ渡した物・穴の関数（`f3 !_ 2`）の口。どれも、器の中身に値の演算子を当てる形（`(inc , 1) + 1` は今も A）と同じく、
-//   値の演算子が直に見ない所である。
+//   値の演算子が直に見ない所である。2026-10-26 の確かめの直しから、番地の算術で作った点・差については、印を落とす所に入る所で断る（hasAddr の注）。
+//   値を読む参照は今のまま届かない。
 const PARAM_TAGS = new WeakMap();
 function paramTag(op, key, i) {
   let m = PARAM_TAGS.get(op);
@@ -753,11 +798,14 @@ function paramTag(op, key, i) {
   if (!t) m.set(k, (t = { op, i, numeric: false, edges: new Set(), fn: null }));
   return t;
 }
-// 値の演算子 sym の被演算子の desc d（R60 の細かい所、§5 Q59）：`$` が作った Reader なら G7 で断り、素の関数の裸の仮引数（印 pv）なら札に覚える。
-// text は断るときの被演算子の綴り（作るのは断るときだけ）。
+// 値の演算子 sym の被演算子の desc d（R60 の細かい所、R62）：関数を指す番地なら G7、番地の点・差（値を読む参照・ずらした点・差）なら G21 で断り
+// （中置の `+`・`-`・比べは、ここより前に addressOp が点と差の規則で読む。ここに来るのは中置の外の綴り：区間・点なし・絶対値・値の印と、R62 で
+// 決めていない中置の記号は addressOp が先に断る）、素の関数の裸の仮引数（印 pv）なら札に覚える。text は断るときの被演算子の綴り（作るのは断るときだけ）。
 function valueOperand(d, sym, text) {
   if (!d) return;
-  if (readerOf(d)) throw refuseReaderOperand(sym, text());
+  if (refOf(d)) throw refuseReaderOperand(sym, text());
+  // 番地の点・差と、算術で作った点・差を中に持つ器（hasAddr、2026-10-26 の確かめの直し。operandFace の box と同じ）。
+  if (addrFace(d) || hasAddr(d)) throw refuseAddressSpelling(sym, text());
   if (d.pv) d.pv.numeric = true;
 }
 // 札 tag の仮引数が、本体から（別の素の関数の口を通っても）値の演算子の被演算子に届くか。届く先の本体がまだ解かれていなければ解く（解けなければ
@@ -863,7 +911,11 @@ function mergeElems(descs) {
   if (!descs.length) return null;
   if (descs.some((d) => deepKind(d) !== "A")) return U();
   const k0 = internDesc(descs[0]);
-  return descs.every((d) => internDesc(d) === k0) ? descs[0] : A();
+  if (descs.every((d) => internDesc(d) === k0)) return descs[0];
+  // 番地の算術で作った点・差（R62）を、形の揃わない要素と並べた（2026-10-26 の確かめの直し）：要素は中身の見えない A にまとまり、`[x ~xs]` の x や
+  // `' 0` で引いた物から点・差の印が落ちる（hasAddr の注）。断る側に倒した（§5 Q66）。
+  if (descs.some((d) => hasAddr(d))) throw refuseAddressDrop("mixed", descs.map((d) => descText(d)).join(" "));
+  return A();
 }
 
 function isSpreadNode(t) {
@@ -937,7 +989,8 @@ function rowsShape(trees) {
   if (trees.every(isField)) {
     const names = trees.map((t) => t.fieldName);
     if (new Set(names).size !== names.length || trees.some((t) => isSpreadNode(t.right))) return null;
-    return { s: "struct", fields: trees.map((t) => ({ name: t.fieldName, desc: descOfTree(t.right) })) };
+    // 欄の右辺が書いた `_`（`[s : _]`）なら、`_` を指す印 zero を付ける（R63。実体の中の `$s` が零射の番地と分かる）。
+    return { s: "struct", fields: trees.map((t) => ({ name: t.fieldName, desc: isMark(t.right) ? zeroDesc() : descOfTree(t.right) })) };
   }
   if (trees.length === 1) return shapeOfTree(trees[0]);
   if (trees.some((t) => !t || (t.t === "op" && t.sym === ":"))) return null;
@@ -1098,6 +1151,12 @@ function internDesc(d) {
     const v = internDesc(d.vref);
     id = internText(`$=#${v}`, { s: "vref", val: v, depth: 1 + depthOf(v) });
   }
+  // 番地の算術で作った点・差（R62）：ずらした点 `$+`・差 `$-$`。中身の見えない A と別の鍵にする（同じ鍵だと、`hc [1] ($v + 0x10)` と `hc [1] 5` が実体を
+  // 分け合い、本体の `f == $v` の答え（点どうしの比べか、顔の分からない値との G21 か）を先に解いた方が決める。hc は `[k] f ? f == $vs`）。
+  else if (addrOf(d)) id = internLeaf(d.addr === "pt" ? "$+" : "$-$");
+  // 書いた `_` を指すと分かっている値（R63）：`_`。中身の見えない A と別の鍵にする（同じ鍵だと、`h [s : _]` と `h [s : (inc 5)]` が実体を分け合い、
+  // 本体の `$s` が零射の番地か G20 かを、先に解いた方が決める。§5 Q64 の影響）。
+  else if (zeroOf(d)) id = internLeaf("_");
   // 書いた空の括り `[]`（`A[]`、頭の注）は、R51 の撒いた流れが空と読む（elemsOfContainer・foldableContainer）ので、中身の見えない A と別の鍵にする。
   // 同じ鍵だと、`k2 : [~t] ? inc t~` の `k2 []`（空の流れの書き下しで G19）と `k2 (tl vs)`（数の見えない流れで未知）が1つの実体を分け合い、
   // 先に作った方の答えを後の方が黙って使った（2026-10-25 の確かめの指摘。`fold $first []` ⏎ `(fold $first (tl fs)) 5` も、中身の見えない器の
@@ -1133,8 +1192,9 @@ function internShape(sh) {
 function internPartial(fn) {
   const memo = internByFn.get(fn);
   if (memo !== undefined) return memo;
-  // 裸の位置でも、関数を指す番地（R49）は印ごと鍵に入れる（実体の鍵 bindParams と同じ）。
-  const bound = fn.bound.map((d, i) => (fn.base.bareAt[i] && !readerOf(d) ? internLeaf("A") : internDesc(d)));
+  // 裸の位置でも、関数を指す番地（R49）は印ごと鍵に入れる（実体の鍵 bindParams と同じ）。値を読む参照・番地の点と差（R60・R62）と、書いた `_` を
+  // 指す値（R63）も同じ。
+  const bound = fn.bound.map((d, i) => (fn.base.bareAt[i] && !readerOf(d) && !zeroOf(d) ? internLeaf("A") : internDesc(d)));
   const depth = 1 + Math.max(fnDepth(fn.base), maxDepth(bound));
   const id = internText(`P(${bound.map((c) => `#${c}`).join(" ")})${fn.base.idKey}`, { s: "partial", base: fn.base.idKey, bound, depth });
   internByFn.set(fn, id);
@@ -1218,6 +1278,8 @@ function descText(d, max = SHAPE_TEXT_MAX) {
       put("$"); // 値を読む参照（R60）：`$` の後ろに指す値の形（`$N`・`$[N…]`・`$$L`）
       return walk(x.vref);
     }
+    if (addrOf(x)) return put(x.addr === "pt" ? "$+" : "$-$"); // 番地の算術で作った点・差（R62。internDesc の注）
+    if (zeroOf(x)) return put("_"); // 書いた `_` を指すと分かっている値（R63）
     if (isEmptyBracket(x)) return put("A[]"); // 書いた空の括り（internDesc の注）
     if (!x.shape) return put(deepKind(x) === "A" ? "A" : "A(U)");
     const sh = x.shape;
@@ -1810,6 +1872,10 @@ function nameKindOf(F, def) {
     // 関数を指す番地の印（R49）も持ち越す（`p : $inc` の `map p vs` は `map $inc vs` と同じ）。値を読む参照の印（R60）も同じ（`q : $vs` の q は `$vs`）。
     if (refOf(root.kind)) value.ref = root.kind.ref;
     if (vrefOf(root.kind)) value.vref = root.kind.vref;
+    // 番地の算術で作った点・差の印（R62）も同じ（`p : $vs + 0x10` の `p - $vs` は `($vs + 0x10) - $vs` と同じ差）。構築の中の余ったラムダが消えて1項だけ
+    // 残った右辺（`w : ($vs + 0x10) !_`、vanishedOne）からも持ち越す（括り1つの rowsInfo と同じ。2026-10-26 の確かめの直し）。
+    const addrRoot = addrOf(root.kind) || addrOf(vanishedOne(root) ? descOfTree(root) : null);
+    if (addrRoot) value.addr = addrRoot.addr;
     // 右辺が中身の見える器なら、撒いたときの数（R34 の最後の括り `[~c]` に1つで入ったとき、[x] ≅ x で数える。restCloseKind）。
     // 数は desc に入れず、名前の葉にだけ付ける（valueCountOf）。desc に入れると、括りの関数に渡した desc に乗って、括りの仮引数
     // （`[~r]`・`[x ~xs]` の尾）に器全体の数が入り、しかも実体の鍵（descKey）は数を見ないので、長さの違う器が1つの実体を分け合って
@@ -1827,8 +1893,15 @@ function nameKindOf(F, def) {
     if (el) value.elements = el;
     const sh = shapeOfTree(root);
     if (sh) value.shape = sh;
-    // 右辺が書いた `_` を指すか（R56、2026-10-25）。`q : _` の `$q` は `$_` と同じ零射の番地。desc には入れない（pointsToMark の注）。
-    F.unitDefs.set(def, pointsToMark(root, { F, scope: F.fileScope }));
+    // 右辺が書いた `_` を指すか（R56、2026-10-25）。`q : _` の `$q` は `$_` と同じ零射の番地。2026-10-26 の R63（§5 Q64 の答え）から、desc にも印 zero を
+    // 付け、実体の鍵に入れる（括りの関数に欄・要素・裸の仮引数で渡しても、実体の中の `$s` が零射の番地と分かる。internDesc の `_`）。R56 の片では desc に
+    // 入れなかった（入れると実体の鍵が見ない印が実体を跨いで分け合われうる、pointsToMark の注。R63 で鍵に入れたので、その心配は無い）。
+    const unit = pointsToMark(root, { F, scope: F.fileScope });
+    F.unitDefs.set(def, unit);
+    if (unit && value.k === "A" && !value.shape && !value.spread && !value.ref && !value.vref && !value.addr) value.zero = true;
+    // 右辺が番地の字面か（R62）：`n : 0x10` の `$x + n` は `$x + 0x10` と同じく、点に足す差（hexOperand）。desc には入れない（番地の字面は中身の見えない
+    // A のまま、解決器は今の扱い。顔は位置で決まり、点に足し引きする所でだけ差と読む）。
+    F.hexDefs.set(def, hexTree(root, { F, scope: F.fileScope }));
   } catch (e) {
     abortFrame(F, frame);
     throw e;
@@ -2080,7 +2153,7 @@ function instanceDepth(params, argDescs) {
     // 裸の仮引数に渡った、関数を指す番地（R49）も鍵に入るので数える。括りの仮引数に直に渡った番地は、鍵では A（bindParams）。
     const d = argDescs[i];
     if (p.kind === "bare") {
-      if (readerOf(d)) depth = Math.max(depth, depthOf(internDesc(d))); // 値を読む参照（R60）も鍵に入る
+      if (readerOf(d) || zeroOf(d)) depth = Math.max(depth, depthOf(internDesc(d))); // 値を読む参照（R60）・番地の点と差（R62）・`_` を指す値（R63）も鍵に入る
     } else depth = Math.max(depth, depthOf(internDesc(readerOf(d) ? A() : d)));
   });
   return depth;
@@ -2424,6 +2497,16 @@ function bindParams(params, argDescs) {
         texts.push(descText(d));
         return;
       }
+      // 番地の算術で作った点・差（R62）と、書いた `_` を指す値（R63）も、印を持ち越して鍵に入れる（本体の `f - $v` が差か、`$f` が零射の番地か）。
+      if (addrOf(d) || zeroOf(d)) {
+        descs.set(p.name, addrOf(d) ? { k: "A", addr: d.addr } : zeroDesc());
+        keys.push(descKey(d));
+        texts.push(descText(d));
+        return;
+      }
+      // 番地の算術で作った点・差を要素・欄に持つ器（hasAddr）は、裸の仮引数では形を見ずに A で受ける（R24）ので、中の印が落ちる。断る側に倒した
+      // （2026-10-26 の確かめの直し、§5 Q66。括りの仮引数で受ければ要素・欄の印は見える）。
+      if (hasAddr(d)) throw refuseAddressDrop("bare", descText(d));
       descs.set(p.name, A());
       keys.push("A");
       texts.push("A");
@@ -2432,7 +2515,11 @@ function bindParams(params, argDescs) {
     // 括りの仮引数に直に渡った、関数を指す番地（R49）は、中身の見えない A と同じに受ける（名前は未知、`~rest` は A。bindBracket）ので、
     // 印は本体から見えない。鍵と綴りも今までどおり `A` にする（同じ実体を分け合ってよい）。器の要素や欄の番地は、名前で受けると見えるので
     // 鍵に入れたまま（`[$L…]`・`{f:$L}`）。
-    const dk = readerOf(d) ? A() : d; // 値を読む参照（R60）も、括りの仮引数に直に渡れば同じ
+    // 値を読む参照（R60）・番地の点と差（R62）・`_` を指す値（R63）も、括りの仮引数に直に渡れば同じ（中身の見えない A。名前は未知で、印は本体から見えない）
+    // 2026-10-26 の確かめの直し：番地の算術で作った点・差（R62）が直に渡ったら、名前が未知になって印が落ちる（hasAddr の注）ので断る（§5 Q66）。器の要素・
+    // 欄の点・差は名前で受けると見える（bindBracket）ので今のまま。
+    if (addrOf(d)) throw refuseAddressDrop("bracket", descText(d));
+    const dk = readerOf(d) || zeroOf(d) ? A() : d;
     keys.push(descKey(dk));
     texts.push(descText(dk));
     if (!p.simple) {
@@ -2765,6 +2852,9 @@ function classify(term, ctx) {
     if (d) return plain({ k: "L", fn: d.ref });
     const v = vrefOf(pd);
     if (v) return plain(v.vref);
+    // 番地の算術で作った点・差（R62）を開く：ずらした点が指す物は、差が指す物の要素の幅の倍数かと一緒に型の段で決まるので、解決器の段では分からない。
+    // 差は位置ではないので読めない。印の無い前置 `@`（入力の項）に倒さずに断る（§5 Q66）。
+    if (addrOf(pd)) throw refuseOpenAddress(writeTerm(term), pd);
     return { cat: "input", desc: { k: "L", fn: { type: "input" } }, view };
   }
   // 後置 `~`（撒く項）。
@@ -2780,7 +2870,7 @@ function classify(term, ctx) {
   if (pre.every((p) => VALUE_PREFIX.has(p)) && post.every((p) => p === "!")) {
     if (core.c === "unit") return plain(U());
     const inner = classify({ type: "atom", pre: [], core, post: [] }, ctx);
-    // 値の印（前置 `-`・`!!`・後置 `!`）は値の演算子：核が `$` の作った Reader なら G7、素の関数の裸の仮引数なら札に覚える（R60 の細かい所、§5 Q59。
+    // 値の印（前置 `-`・`!!`・後置 `!`）は値の演算子：核が関数を指す番地なら G7、番地の点・差なら G21（R62、§5 Q66）、素の関数の裸の仮引数なら札に覚える（R60 の細かい所。
     // valueOperand）。前置 `!` だけの項（`!p`）は否定で、値の演算子ではないので今のまま。
     const mark = pre.find((p) => p !== "!") || (post.length ? "!" : null);
     if (mark && inner.cat === "plain") valueOperand(inner.desc, mark, () => inner.view.text);
@@ -2841,8 +2931,11 @@ function classify(term, ctx) {
 //   切れること」で、言い切れない物（取り込みの名前・枝で選ぶ物・種類が未知・撒いた形・後置の印）は今のまま G20。番地は読む環境の実装の1つで、
 //   番地の計算は意味に出ない。Reader は数ではないので、値の演算子の被演算子にする形（`$vs - $vs`・`$x + 1`・`$x == $y`）は名指しで断る（G7、
 //   refuseReaderOperand、§5 Q59。同じ日の確かめの直しから、区間・点なし・絶対値・値の印・素の関数の口の綴りでも、valueOperand・readerAtPlain）。
+//   → 2026-10-26 の R62（§5 Q59 の答え）から、値を読む参照は番地の点で、中置の `+`・`-`・比べは点と差の規則で読む（addressOp）。断るのは G21。関数を
+//   指す番地は今のまま G7。
 //   同じ日の確かめの直しから、形の見えない値で中身に関数か未知が見える物（枝で選ぶ括り `$[5 > 1 : inc]`、形の綴り `A(U)`）と、括りの関数の実体で
-//   渡された形の見えない値の名前（`h [s : _]` の `$s`、§5 Q64。dollarNameTarget）は G20。
+//   渡された形の見えない値の名前（`h [s : _]` の `$s`、§5 Q64。dollarNameTarget）は G20。→ 2026-10-26 の R63（§5 Q64 の答え）から、書いた `_` と
+//   分かる値（印 zero）は零射の番地で通る。印の無い形の見えない値は今のまま G20。
 //   根拠：U [2026-10-25 07:51 533071da]「よく考えるんだ。 / $ は Reader と Writer のための単なる接頭辞として、それが偶々アドレスを渡すと読むと同じ読みが
 //   出来るだけと読み替えるとおもしろいはずだ。」。主の Claude の問い「`$` を Reader と Writer を作る接頭辞と読み替えて、`$値` も参照として通す（Q54 は
 //   これで閉じる）、でいい？」（07:57 UTC）に、U〔答え〕[2026-10-25 08:37 533071da]「それで不都合が起きなければ。 / 細かい問題が起きるなら、もう一度
@@ -2871,7 +2964,17 @@ function classifyDollar(term, ctx, plain) {
     const leafTerm = one && one.t === "leaf" && one.term && one.term.type === "atom" ? one.term : null;
     if (leafTerm && leafTerm.post.length) throw refuseDollar(term, null, ctx, { where: "post", inner: leafTerm });
     if (one && one.kind && one.kind.k === "A" && one.kind.spread) throw refuseDollar(term, one.kind, ctx, { where: "spread" });
-    target = { kind: b.desc, unit: b.trees.length === 1 && pointsToMark(b.trees[0], ctx), dead: dead[0] || (one ? aliasDeadOfTree(ctx.F, one, ctx.scope) : null) };
+    // 中身が名前1つに縮み、その名前が括りの関数の実体で渡された形の見えない値なら、`$名前` と同じ G20（`$[s , !_]`・`$[_ , s]` は `$s`。2026-10-26 の R63 の片で
+    // 見つけた：R60 の確かめの片は名前1つの綴り `$s`・`$[s]` だけを断り、縮む綴りは値を読む参照で通っていた。書いた `_` と分かる値は下の zero で零射）。
+    const oneName = one && one.t === "leaf" && one.term && one.term.type === "atom" && !one.term.pre.length && !one.term.post.length && one.term.core.c === "name" ? one.term.core.name : null;
+    if (oneName && instOpaqueName(oneName, ctx)) throw refuseDollar(term, U(), ctx, { where: "inst-opaque", name: oneName });
+    // 書いた `_` を指すか（R56）は、木で見る（pointsToMark）か、中身の desc の印 zero で見る（R63。括りの関数の実体の中の `$[s , !_]` の s は、名前の木では
+    // 見えない）。
+    target = {
+      kind: b.desc,
+      unit: (b.trees.length === 1 && pointsToMark(b.trees[0], ctx)) || !!zeroOf(b.desc),
+      dead: dead[0] || (one ? aliasDeadOfTree(ctx.F, one, ctx.scope) : null),
+    };
   } else {
     const inner = classify({ type: "atom", pre: pre.slice(1), core, post: [] }, ctx);
     target = { kind: inner.cat === "plain" ? inner.desc : U() };
@@ -2968,8 +3071,12 @@ function dollarNameTarget(name, ctx) {
       // 物が書いた `_` なら R56 の零射の番地、ほかの値なら値を読む参照で、desc からはどちらか言い切れない（R56 の R の所が「断る側への割れ」として G20 に
       // 残していた形。R60 の片で値を読む参照として通り、`rd1 $s 0` の実体が `(construct @f 1)` で、同じ `_` の `rd1 $_ 0` の `(apply @f 1)` と割れていた。
       // 2026-10-25 の確かめの指摘、§5 Q64）。形の見える値（`{s:N}`・`[N…]`）と番地・参照は今のまま通す。
+      // 2026-10-26 の R63（§5 Q64 の答え）：渡された物が書いた `_` と分かっていれば（印 zero：欄の `[s : _]`・`[s : un]`・`[s : [_]]`、要素が全部 `_` の
+      // List、`_` を指す名前を受けた裸の仮引数）、`$_` と同じ零射 `$[x ? _]` の番地（`@f 1` は零射を当てた `_` で、`_ 1` の並びではない）。印の無い形の
+      // 見えない値は、今のまま `_` か言い切れない（G20）。番地の算術で作った点・差（R62）は `_` でないので、値を読む参照で通る。
       const d = s.descs.get(name);
-      if (d && d.k === "A" && !d.shape && !d.ref && !d.vref && !d.spread && !isEmptyBracket(d)) return { kind: U(), where: "inst-opaque" };
+      if (zeroOf(d)) return { kind: d, unit: true };
+      if (isInstOpaque(d)) return { kind: U(), where: "inst-opaque" };
       return { kind: d };
     }
     if (s.params && s.params.has(name)) return { kind: s.params.get(name) === "bare" ? A() : U() };
@@ -2986,6 +3093,18 @@ function dollarNameTarget(name, ctx) {
   return { kind: A(), where: "undefined" };
 }
 
+// 括りの関数の実体で渡された、形の見えない値の desc（§5 Q64。`$` の先にすると G20）：形も番地・参照・点と差の印も、書いた `_` を指す印（R63）も無い A。
+const isInstOpaque = (d) => !!d && d.k === "A" && !d.shape && !d.ref && !d.vref && !d.addr && !d.spread && !zeroOf(d) && !isEmptyBracket(d);
+// 名前 name が、いちばん近い範囲で括りの関数の実体に渡された形の見えない値か（dollarNameTarget と同じ順に探す。仮引数・局所の名前が先に見つかれば違う）。
+function instOpaqueName(name, ctx) {
+  for (let s = ctx.scope; s; s = s.parent) {
+    if (s.defRows && localDefsOf(s).shadow.has(name)) return false;
+    if (s.descs && s.descs.has(name)) return isInstOpaque(s.descs.get(name));
+    if ((s.params && s.params.has(name)) || (s.locals && s.locals.has(name))) return false;
+  }
+  return false;
+}
+
 // ファイルの定義の右辺（値の定義）か本体（素の `?` の定義と、既定値のある `?` の定義）に、値の上に積まれて口が開いたまま閉じた関数（R52 の余った
 // ラムダ。恒等射を除く）があれば、その木（R59、`$名前` が `$[右辺]` と同じ先を見るため。§5 Q62）。無ければ null。
 // - 値の定義：nameKindOf が右辺を解くときに受け皿で拾い、F.deadDefs に置く。右辺が名前1つ（`p : q`・`p : [q]`）なら、その名前の物を引き継ぐ（[x] ≅ x、
@@ -2993,7 +3112,7 @@ function dollarNameTarget(name, ctx) {
 // - 素の `?` の定義：bodyRootOf が本体を解くときに拾い、F.deadBodies に置く（記録が古くなれば解き直すので、同じ答えになる）。
 // - 既定値のある `?` の定義：本体の根を解く所が無いので、ここで本体を解いて拾う（門に当たれば、その定義の行が同じ門で断るので null）。
 // - 括りの関数（R24）：本体は呼ばれるまで読まない（R25）。仮引数の名前を1つも含まない行だけは、どの実体でも同じに読むので読んで拾う
-//   （deadInPatternBody。2026-10-25 の確かめの直し、§5 Q64）。
+//   （deadInPatternBody。2026-10-25 の確かめの直し、§5 Q65）。
 // 関数の定義の本体を覗くのは、解いている途中の種類が無い所（F.stack が空）だけ（2026-10-25 の確かめの直し）：`$` は名前の先を評価しないので、値の
 // 定義の右辺を解いている途中に本体を覗くと、`p : $sq` ⏎ `sq : x ? use p x`（`$` で自分を指す表を持つ再帰）が、覗いた所を通る輪で name-cycle になった
 // （R59 の片の書く人の版。HEAD は通す）。途中の所で覗かなくても、`$名前` の書かれた所は、どれも木を残す段（定義の行・行の根・実体の木、F.stack が空）で
@@ -3084,7 +3203,7 @@ function aliasDeadOfTree(F, t, s) {
 // 括りの関数の本体のうち、仮引数の名前を1つも含まない行（本体そのもの・括り・囲み・字下げのブロックの中の行・中置の辺）の余る関数（R59、2026-10-25 の
 // 確かめの直し）。括りの関数の本体は呼ばれるまで読まない（R25）が、それは本体の読み（適用か構築か）が渡された物の生まれで決まる（R24）からで、
 // 仮引数を含まない行の読みは渡された物に依らず、どの実体でも同じなので、`$` の先を見る所で読んでよい（`$[[x] ? f2 (5 inc) 1]` の `(5 inc)` は、どの x でも
-// inc が 5 の上で余る）。仮引数を含む行（`$[[x] ? x inc]`）は今のまま読まない（x が関数なら合成、値なら余る。§5 Q64）。
+// inc が 5 の上で余る）。仮引数を含む行（`$[[x] ? x inc]`）は今のまま読まない（x が関数なら合成、値なら余る。§5 Q65）。
 // 読む間は枠を積んで、作った実体を木の記録に入れない（呼ばれない括りの関数の本体が呼ぶ物を、定義の行の木に描かない。外れた枠と同じに扱う）。
 // 門と輪は握りつぶして（輪の言い分も戻す）、読めなかった行は拾わない。
 function deadInPatternBody(F, op, scope) {
@@ -3258,7 +3377,7 @@ function refuseDollar(term, kind, ctx, target = {}) {
   if (where === "inst-opaque") {
     return gate(
       "G20",
-      `\`${text}\` の \`$\` の先 \`${name}\` は、括りの関数の実体で渡された形の見えない値です。渡された物が書いた \`_\` なら \`$_\` と同じ零射の番地（R56）、ほかの値なら値を読む参照（R60）で、渡された物の desc からはどちらか言い切れません（R56 の R の所が断る側に残した形。§5 Q64）。${tail}（§4 R56・R60）。`
+      `\`${text}\` の \`$\` の先 \`${name}\` は、括りの関数の実体で渡された形の見えない値です。渡された物が書いた \`_\` と分かれば \`$_\` と同じ零射の番地（R63。欄の \`[s : _]\`・\`_\` を右辺に持つ名前など）、\`_\` でないと分かれば値を読む参照（R60）ですが、形の見えない値は、どちらか言い切れません（要素の混ざった List の要素・適用の結果など。§5 Q64 は閉じた）。${tail}（§4 R56・R60・R63）。`
     );
   }
   const why =
@@ -3295,11 +3414,190 @@ function refuseDollar(term, kind, ctx, target = {}) {
 // 同じ日の確かめの直しから、中置の項のほかの綴りでも同じに断る（valueOperand）：区間の被演算子（`[+ $5]`）・値の演算子の点なしが受けた実引数
 // （`[+ 1] $vs`・`[+] $vs 1`・`[-_] $vs`・`[* 2,] $vs`。argOperand）・絶対値の囲み（`|$vs|`。enclosureInfo）・値の印（`-p`・`!!p`・`p!`、p : $vs）・
 // 素の関数の口（`inc $5`。readerAtPlain）。前は中置の項の所だけで、ほかの綴りは通った（確かめの指摘）。sym が null なら点なしが受けた所で、記号は書かない。
+// 2026-10-26 の R62（§5 Q59 の答え）から、ここで断るのは関数を指す番地（`$inc`・`p : $inc` の p・`$inc` を受けた仮引数）だけ：1つの関数と言い切れる
+// 番地を動かす・比べるのは R53 の外（R の印）。値を読む参照（`$vs`）は番地の点で、点と差の規則（addressOp）で読む。
 function refuseReaderOperand(sym, operand) {
   return gate(
     "G7",
-    `\`$\` が作った \`${operand}\` が、${sym === null ? "値の演算子の点なし" : `値の演算子 \`${sym}\` `}の被演算子にあります。\`$\` が作るのは1つの Reader（関数を指す番地か、値を読む参照）で、数ではありません。番地は読む環境の実装の1つで、番地の計算（場所どうしの距離など）は意味に出ないので、Reader を値の演算子に当てる読みは決まっていません（§4 R60、§5 Q59）。`
+    `\`$\` が作った \`${operand}\` は関数を指す番地で、${sym === null ? "値の演算子の点なし" : `値の演算子 \`${sym}\` `}の被演算子にあります。関数を指す番地は1つの関数と言い切れる番地で（§4 R53）、値の演算子で動かす・比べる形は、その外なので断ります（§4 R62。番地の点と差の規則は、値を読む参照とそれをずらした点・点どうしの差に当てます）。`
   );
+}
+
+// ---- 番地の点と差（R62、2026-10-26。§5 Q59 の答え） ----
+//
+// `$` の値の参照（R60）と、点として置かれた `0x…` の字面は「番地の点」、点どうしの差と、点に足し引きする `0x…` は「番地の差」。どちらも Address 型の値で、
+// Int・UInt と混ぜない。決まった組（主の Claude の表に U〔答え〕[2026-10-25 21:15 c8ccdd69]「その表のとおりで良い。」）：
+// - 点 ± 差 → 点（`$x + 0x10`・`$x - ($b - $a)`）、点 − 点 → 差（`$foo - $bar`）、差 ± 差 → 差。点 + 点 → 断る。
+// - Address と数（Int・UInt・文字。数の desc、SCALAR の注）を混ぜた算術と比べ（`$x + 1`・`$x - 8`・`$x == 0`）→ 断る（言い分「ずらしは `0x…` で書く」。
+//   U [2026-10-25 07:48 533071da]「Q54は、Address型とint UIntを混ぜるなって話になるのだと見てる。AddressはAddress同士でしか計算は出来ない…」）。
+// - 番地どうしの比べ（点どうし・点と `0x…`・差どうし。段13 の `<` `<=` `=` `>=` `>` `!=` と段8 の `==` `!==`）→ 通す（A。R の印：Address どうしなので）。
+// `0x…` の字面は位置で顔が決まる：点の右に足し引きするなら差、比べの相手なら点。解決器は字面を今のまま中身の見えない A で持ち（SCALAR の注）、
+// 点の相手の所でだけ書いた綴り（字面・括り1つ・右辺がそれの名前）から見る（hexOperand）。
+// 決まっていない組は断る（§5 Q66）：差 ± `0x…`（差か点か）・点の左の `0x…`（`0x10 + $x`・`0x1000 - $x`）・差 ± 点・点と差の比べ・顔の分からない値（裸の
+// 仮引数・適用の結果・器・書いた `_`）・`*` `/` `%` `^`・ビット・範囲（差を要素の幅で割って数にする道は §5 Q67）。中置の外の綴り（区間・点なし・
+// 絶対値・値の印・素の関数の口）で番地を受けた形は、答えに点・差の印を持たせられないので断る（refuseAddressSpelling・readerAtPlain、§5 Q66）。
+// 差が指す物の要素の幅の倍数か（U [2026-10-25 21:12 c8ccdd69]「…メモリアドレスの倍数の加法だと確定できるなら何とかなると思う。」）は、解決器が幅を
+// 持たないので型の段で確かめる（仕様 §4 R62。決められる所は見つからなかった）。
+// 圏論の読み（主の Claude、R）：位置は差の群が働く torsor（アフィン空間）。`$x` はメモリの1点に焦点を合わせたストアの位置で、`@` は extract、`#` は put、
+// `$x + 0x10` は seek。Reader を関手で持ち上げる読み（読んでから当てる）は採らない。
+// 2026-09-30 の「番地−番地は Int（距離）」「ずらしは Int で書く」は、差を Address 型にする形で上書きした。
+const ADDR_ADD = new Map([
+  ["pt+diff", "pt"],
+  ["pt+hex", "pt"],
+  ["diff+diff", "diff"],
+]);
+const ADDR_SUB = new Map([
+  ["pt-diff", "pt"],
+  ["pt-hex", "pt"],
+  ["pt-pt", "diff"],
+  ["diff-diff", "diff"],
+]);
+const ADDR_CMP_SYMS = new Set(["<", "<=", "=", ">=", ">", "!=", "==", "!=="]);
+const ADDR_CMP_OK = new Set(["pt|pt", "pt|hex", "hex|pt", "diff|diff"]);
+const FACE_TEXT = {
+  pt: "番地の点",
+  diff: "番地の差",
+  hex: "`0x…` の字面",
+  num: "数（Int・UInt・文字）",
+  unit: "書いた `_`",
+  fnv: "関数（番地でも数でもない）",
+  box: "番地の算術で作った点・差を中に持つ器",
+  other: "点か差か数か分からない値",
+  none: "書いていない被演算子",
+};
+// 被演算子の顔：書いた `_`（unit）・関数を指す番地（fn）・関数（fnv）・番地の点（pt）・差（diff）・番地の字面（hex）・数（num）・ほか（other）。被演算子が
+// 無ければ none。関数（L）は言い分で名指しするためだけに分ける（2026-10-26 の確かめの指摘：前は「点か差か数か分からない値」と言っていた）。答えは「ほか」と同じ。
+function operandFace(isUnit, desc, hex) {
+  if (isUnit) return "unit";
+  if (!desc) return "none";
+  if (refOf(desc)) return "fn";
+  if (desc.k === "L") return "fnv";
+  const f = addrFace(desc);
+  if (f) return f;
+  // 番地の算術で作った点・差を要素・欄に持つ器（hasAddr。2026-10-26 の確かめの直し）：器の中身に値の演算子を当てる形は、器の中の番地の顔が答えに残らない
+  // （`([($x + 0x10) ($x + 0x10)] ' 0)` を包んで `[…] + 1`）ので断る（addressOp、§5 Q66）。
+  if (hasAddr(desc)) return "box";
+  if (hex) return "hex";
+  if (isScalar(desc)) return "num";
+  return "other";
+}
+// 値の演算子 sym の被演算子の顔 lf・rf（R62）。どちらにも番地の点か差が無ければ null（今までの読み）。読めれば答えの desc（点・差、比べは A）。
+// 関数を指す番地は G7、決まって断る組と決まっていない組は G21。text は項の綴り、operand[i] は i 番目の被演算子の綴り（作るのは断るときだけ）。
+function addressOp(sym, lf, rf, text, operand) {
+  if (lf === "fn" || rf === "fn") throw refuseReaderOperand(sym, operand[lf === "fn" ? 0 : 1]());
+  if (lf === "box" || rf === "box") {
+    throw gate(
+      "G21",
+      `\`${text()}\` の \`${sym}\` の被演算子（左は${FACE_TEXT[lf]}、右は${FACE_TEXT[rf]}）に、番地の算術で作った点・差を中に持つ器があります。器の中身に値の演算子を当てる形は、答えに中の番地の点・差の印を持たせられないので、断る側に倒しました（器の中の番地は \`' 0\` で引いてから中置で書けば、§4 R62 で読みます。§5 Q66）。`
+    );
+  }
+  const isAddr = (f) => f === "pt" || f === "diff";
+  if (!isAddr(lf) && !isAddr(rf)) return null;
+  const out = sym === "+" ? ADDR_ADD.get(`${lf}+${rf}`) : sym === "-" ? ADDR_SUB.get(`${lf}-${rf}`) : null;
+  if (out) return { k: "A", addr: out };
+  if (ADDR_CMP_SYMS.has(sym) && ADDR_CMP_OK.has(`${lf}|${rf}`)) return A();
+  const t = text();
+  const pair = `左は${FACE_TEXT[lf]}、右は${FACE_TEXT[rf]}`;
+  if (lf === "num" || rf === "num") {
+    const cmp = ADDR_CMP_SYMS.has(sym);
+    throw gate(
+      "G21",
+      `\`${t}\` は番地（Address）と数を混ぜた${cmp ? "比べ" : "算術"}です（${pair}）。Address と Int は混ぜません。${cmp ? "番地と比べるのは番地（`0x…` の字面・点・差）です" : "ずらしは `0x…` で書きます（`$x + 0x10`）"}（§4 R62）。${sym === "/" || sym === "%" ? "番地の差を要素の幅で割って数にする道は決まっていません（§5 Q67）。" : ""}`
+    );
+  }
+  if (sym === "+" && lf === "pt" && rf === "pt") {
+    throw gate("G21", `\`${t}\` は番地の点どうしを足す形です。点に足せるのは差（\`0x…\` の字面か、点どうしの差）だけで、点 + 点は意味がないので断ります（§4 R62）。`);
+  }
+  throw gate(
+    "G21",
+    `\`${t}\` の \`${sym}\` の組（${pair}）は、番地の点と差の規則（点 ± 差は点、点 − 点は差、差 ± 差は差、点どうし・差どうし・点と \`0x…\` の比べ。§4 R62）で決まっていません（§5 Q66）。`
+  );
+}
+// 中置の外の綴り（区間の被演算子・値の演算子の点なしが受けた実引数・絶対値・値の印）で、番地の点か差を値の演算子の被演算子にした（R62）。中置の項と違って
+// 答えに点・差の印を持たせられない（区間・点なしの適用の答えは中身の見えない A で、実体の鍵も記号と被演算子を見ない）ので、中置で書けば通る組も断る
+// （断る側に倒した、§5 Q66）。sym が null なら点なしが受けた所で、記号は書かない（refuseReaderOperand の注）。
+function refuseAddressSpelling(sym, operand) {
+  return gate(
+    "G21",
+    `\`${operand}\` は番地（\`$\` が作った値を読む参照か、それをずらした点か、点どうしの差）か、番地の算術で作った点・差を中に持つ器で、${sym === null ? "値の演算子の点なしが受けた所" : `値の演算子 \`${sym}\` の被演算子（区間・点なし・絶対値・値の印の綴り）`}にあります。番地の点と差の規則（§4 R62）を当てるのは中置で書いた \`+\`・\`-\` と比べだけで、この綴りは決まっていません（中置で書けば R62 で読みます。§5 Q66）。`
+  );
+}
+// `@x` で、番地の算術で作った点・差を開いた（R62。classify の前置 `@` の枝）。
+function refuseOpenAddress(text, d) {
+  return gate(
+    "G21",
+    `\`${text}\` は、番地の算術で作った${d.addr === "pt" ? "点（ずらした番地）" : "差"}を \`@\` で開いています。${d.addr === "pt" ? "ずらした点が指す物は、差が指す物の要素の幅の倍数かと一緒に型の段で決まるので、解決器の段では分かりません" : "差は位置ではないので、読む物がありません"}（§4 R62、§5 Q66）。`
+  );
+}
+// 番地の算術で作った点・差（R62）が、印を落とす所に入った（hasAddr の注。2026-10-26 の確かめの直し）。where は入った所、text は綴り（器なら要素の形）。
+// どれも、印を持ち越すかは決まっていない（§5 Q66）ので、断る側に倒した。HEAD は中の算術を G7 で断っていた。
+function refuseAddressDrop(where, text, extra = {}) {
+  const tail = "印を持ち越すか（答えに点・差を持たせるか）は決まっていないので、断る側に倒しました（§4 R62、§5 Q66）。";
+  const why = {
+    return: `\`${text}\` は関数の本体が返す値（字下げの本体なら、局所の定義の右辺・枝の値・行の値も）で、番地の算術で作った点か差を含みます。関数の答えは本体の根の種類だけで持ち（素の関数と括りの関数の実体の答えは中身の見えない A。字下げの本体の局所の名前は種類が未知、P2）、点・差の印を答えに持たせられないので、返した番地が数と黙って混ざります（\`gw : y ? $x + 0x10\` ⏎ \`(gw 1) + 1\`）。`,
+    plain: `番地の算術で作った点か差 ${text} を、素の関数 \`${extra.label}\` の前から ${extra.at} 番目の口に渡しました。素の関数の本体は裸の仮引数を番地と見ずに1回だけ解き、答えは本体の根の種類だけなので、本体がその口を返しても値の演算子に置いても、点・差の印を持たせられません（\`gi : y ? y\` ⏎ \`(gi ($x + 0x10)) + 1\` が黙って通る）。`,
+    logic: `\`${text}\` の論理の \`${extra.sym}\` の被演算子 \`${extra.operand}\` は、番地の算術で作った点か差を含みます。論理の答えは通った側の値で、点・差の印を持たせられないので、番地が数と黙って混ざります（\`(c & ($x + 0x10) | $y) + 1\`）。`,
+    writeTo: `\`${text}\` は、番地の算術で作った${extra.pt ? "点（ずらした番地）" : "差"}に \`#\` で書いています。${extra.pt ? "ずらした点が指す物（書く所の型）は、差が指す物の要素の幅の倍数かと一緒に型の段で決まるので、解決器の段では分かりません" : "差は位置ではないので、書く所がありません"}（\`@\` で開く形と同じ）。`,
+    writeOf: `\`${text}\` は、番地の算術で作った点か差を \`#\` で書いています。書いた物は置き場の中身になり、解決器は置き場の中身と \`#\` の答えに点・差の印を持たせられません。`,
+    mixed: `番地の算術で作った点か差を、要素の形の揃わない器（List・積。要素の形 ${cutShape(text)}）に入れました。形の揃わない要素は中身の見えない値にまとまり（\`[x ~xs]\` の x・\`' 0\` で引いた物）、点・差の印を持たせられないので、番地が数と黙って混ざります（\`([($x + 0x10) 5] ' 0) + 1\`）。`,
+    bracket: `番地の算術で作った点か差（形 ${text}）を、括りの関数の括りの仮引数に直に渡しました。括りの仮引数に直に渡った番地は中身の見えない値として受ける（名前は未知）ので、点・差の印を本体に持ち越せません（裸の仮引数か欄で渡せば持ち越します）。`,
+    other: `番地の算術で作った点か差 ${text} を、既定値のある関数（か、口の読みの決まっていない関数）の口に渡しました。その関数の答えは未知で（§3.4）、点・差の印を持たせられません。`,
+    bare: `番地の算術で作った点・差を中に持つ器（形 ${cutShape(text)}）を、括りの関数の裸の仮引数に渡しました。裸の仮引数は形を見ずに中身の見えない A で受ける（R24）ので、中の点・差の印が本体で落ちます（括りの仮引数で受ければ、要素・欄の印は見えます）。`,
+  }[where];
+  return gate("G21", `${why}${tail}`);
+}
+// 名前 name が、いちばん近い範囲で、関数の本体の `:` の行に隠されたファイルの定義の名前か（§5 Q10。dollarNameTarget・instOpaqueName の隠しと同じ順に探す）。
+function shadowedName(name, ctx) {
+  for (let s = ctx.scope; s; s = s.parent) {
+    if (s.defRows && localDefsOf(s).shadow.has(name)) return true;
+    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name)) || (s.locals && s.locals.has(name))) return false;
+  }
+  return false;
+}
+// 中置の被演算子の項が、隠された名前（それを1行で括った物も、[x] ≅ x）なら、その名前。ほかは null（R62 の顔、2026-10-26 の確かめの直し）。
+function shadowedOperand(term, view, ctx) {
+  if (!term || term.type !== "atom" || term.pre.length || term.post.length) return null;
+  const c = term.core;
+  if (c.c === "name") return shadowedName(c.name, ctx) ? c.name : null;
+  if (c.c === "bracket" && view && Array.isArray(view.inner) && view.inner.length === 1) return shadowedTree(view.inner[0], ctx);
+  return null;
+}
+function shadowedTree(t, ctx) {
+  return t && t.t === "leaf" && t.term ? shadowedOperand(t.term, t.view, ctx) : null;
+}
+// 隠された名前の被演算子の顔（R62）：ファイルの定義の読みで番地の点か差なら断り（本体の行の読みとどちらで当てるか言い切れない。`$名前` の隠しの G20 と
+// 同じ線、§5 Q10・Q66）、ほかは今の顔（番地の字面の顔は hexName が隠しを見て落とすので「ほか」）。
+function shadowFace(f, name) {
+  if (f !== "pt" && f !== "diff") return f;
+  throw gate(
+    "G21",
+    `\`${name}\` は、関数の本体の \`:\` の行が隠すファイルの定義の名前で、ファイルの定義の読みでは番地の${f === "pt" ? "点" : "差"}です。隠しを通すかは決まっていない（§5 Q10。\`$${name}\` の G20 と同じ）ので、ファイルの定義と本体の行のどちらの読みで番地の点と差の規則（§4 R62）を当てるか言い切れません（§5 Q66）。`
+  );
+}
+// 番地の字面の項（R62）：書いた `0x…`・`NxHHHH`（ADDRESS_LIT）、それを1行で括った物（[x] ≅ x。中身の `,` の単位は解いた木で消えている）、右辺がそれの
+// ファイルの値の定義の名前（`:` はメタ。F.hexDefs、nameKindOf が置く）。仮引数・実体で渡された物・局所の名前は見ない（顔が分からない、§5 Q66）。
+function hexOperand(term, view, ctx) {
+  if (!term || term.type !== "atom" || term.pre.length || term.post.length) return false;
+  const c = term.core;
+  if (c.c === "lit") return ADDRESS_LIT.test(c.text);
+  if (c.c === "bracket") return !!view && Array.isArray(view.inner) && view.inner.length === 1 && hexTree(view.inner[0], ctx);
+  if (c.c === "name") return hexName(c.name, ctx);
+  return false;
+}
+function hexTree(t, ctx) {
+  return !!t && t.t === "leaf" && !!t.term && hexOperand(t.term, t.view, ctx);
+}
+function hexName(name, ctx) {
+  for (let s = ctx.scope; s; s = s.parent) {
+    // 関数の本体の `:` の行がファイルの定義の名前を隠す所（§5 Q10）では、ファイルの定義の字面の顔を使わない（本体の行の読みなら別の物。2026-10-26 の
+    // 確かめの指摘：`nx : 0x10` を本体の `nx : 5` が隠しても、`$vs + nx` を点 + 差で通していた。同じ本体の `$nx` は隠しの G20）。顔は「ほか」になる。
+    if (s.defRows && localDefsOf(s).shadow.has(name)) return false;
+    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name)) || (s.locals && s.locals.has(name))) return false;
+  }
+  const def = ctx.F.defs.get(name);
+  if (!def || def.lambda) return false;
+  nameKindOf(ctx.F, def);
+  return !!ctx.F.hexDefs.get(def);
 }
 
 // `@x` の x の desc（R49）。名前は値の定義を解かずに覗き（peekDesc。未定義なら information だけ出す、touchName）、
@@ -3333,7 +3631,7 @@ function touchCore(core, ctx) {
 const NORM_FN = { type: "norm" };
 function enclosureInfo(core, ctx) {
   const trees = core.rows.map((r) => resolveTree(r, ctx));
-  // 絶対値は値の演算子：中に `$` が作った Reader があれば G7、素の関数の裸の仮引数なら札に覚える（R60 の細かい所、§5 Q59。valueOperand）。
+  // 絶対値は値の演算子：中に関数を指す番地があれば G7、番地の点・差があれば G21（R62、§5 Q66）、素の関数の裸の仮引数なら札に覚える（R60 の細かい所。valueOperand）。
   // ノルム（数える）は今のまま（`||$_||` は 1、R56）。
   if (core.c === "abs") for (const t of trees) if (t && t.kind) valueOperand(t.kind, "|…|", () => show(t));
   const isValue = (t) => !!t && t.kind.k === "A" && !(t.t === "leaf" && t.desc.spread);
@@ -3388,8 +3686,18 @@ function classifyInfix(term, ctx) {
   if ((l && l.cat === "hole") || (r && r.cat === "hole")) throw refuseHole(`中置 \`${term.sym}\` の被演算子`);
   const view = { v: "infix", sym: term.sym, left: l ? l.view : null, right: r ? r.view : null };
   if (term.stage === 18) return { cat: "plain", desc: U(), view };
-  // 値の演算子（段12〜16・19〜22）の被演算子に `$` が作った Reader があれば断る（R60 の細かい所、§5 Q59。refuseReaderOperand）。
-  // 素の関数の裸の仮引数なら、その札に覚える（valueOperand・paramTag）。
+  // 番地の点と差（R62、2026-10-26。§5 Q59 の答え）：被演算子に番地の点か差があれば、点と差の規則で読む（addressOp。答えは点・差か、比べの A）。
+  // 関数を指す番地は G7（R53 の外）。被演算子に番地の顔が無ければ今までの読み。
+  // 関数の本体の `:` の行に隠された名前（§5 Q10）は、ファイルの定義の読みの顔が点・差なら断る（shadowFace、2026-10-26 の確かめの直し）。
+  const face = (x, side) => {
+    const f = operandFace(x && x.cat === "unit", x && x.cat === "plain" ? x.desc : null, !!x && x.cat === "plain" && hexOperand(side, x.view, ctx));
+    const sh = x && x.cat === "plain" ? shadowedOperand(side, x.view, ctx) : null;
+    return sh ? shadowFace(f, sh) : f;
+  };
+  const addr = addressOp(term.sym, face(l, term.left), face(r, term.right), () => writeTerm(term), [l, r].map((x) => () => showView(x.view)));
+  if (addr) return { cat: "plain", desc: addr, view };
+  // 値の演算子（段12〜16・19〜22）の被演算子の素の関数の裸の仮引数は、その札に覚える（valueOperand・paramTag）。`$` が作った Reader・番地の点と差は、
+  // 上の addressOp が先に読むか断る。
   for (const x of [l, r]) if (x && x.cat === "plain") valueOperand(x.desc, term.sym, () => showView(x.view));
   const isA = (x) => x && (x.cat === "unit" || (x.cat === "plain" && x.desc.k === "A" && !x.desc.spread));
   if (!(isA(l) && isA(r))) return { cat: "plain", desc: U(), view };
@@ -3422,7 +3730,7 @@ function classifySpread(term, view, ctx) {
   const refuseReader = () =>
     gate(
       "G20",
-      `\`${writeTerm(term)}\` が撒く物は \`$\` が作った Reader です。[x] ≅ x と \`:\` はメタなので、\`$\` の項に後置の \`~\` を付けた形（\`$vs~\`・\`$inc~\`）と同じで、撒いた形（並び）は1つの Reader と言い切れません（§4 R57・R60）。`
+      `\`${writeTerm(term)}\` が撒く物は \`$\` が作った Reader（か、それをずらした番地・番地の差。§4 R62）です。[x] ≅ x と \`:\` はメタなので、\`$\` の項に後置の \`~\` を付けた形（\`$vs~\`・\`$inc~\`）と同じで、撒いた形（並び）は1つの Reader と言い切れません（§4 R57・R60）。`
     );
   if (core.c === "lit") return spread(litDesc(core), countOf(litDesc(core)));
   if (core.c === "abs" || core.c === "norm") {
@@ -3518,6 +3826,12 @@ function rowsInfo(rows, ctx, delayed = false) {
   // 関数を指す番地の印（R49）は、括り1つでも持ち越す（[x] ≅ x。`[$inc]` は `$inc`）。値を読む参照の印（R60）も同じ（`[$vs]` は `$vs`）。
   if (refOf(root.kind)) desc.ref = root.kind.ref;
   if (vrefOf(root.kind)) desc.vref = root.kind.vref;
+  // 番地の算術で作った点・差の印（R62）と、書いた `_` を指す印（R63。`[_]`・`[un]`）も、括り1つなら持ち越す（[x] ≅ x）。
+  // 点・差の印は、構築の中の余ったラムダが消えて1項だけ残った物（`(($x + 0x10) !_)`、vanishedOne）からも持ち越す（descOfTree と同じ読み。2026-10-26 の確かめの
+  // 指摘：前は落ちて、`(($x + 0x10) !_) + 1` が黙って通った）。
+  const addrRoot = addrOf(root.kind) || addrOf(vanishedOne(root) ? descOfTree(root) : null);
+  if (addrRoot) desc.addr = addrRoot.addr;
+  if (isMark(root) || zeroOf(root.kind)) desc.zero = true;
   desc.elements = visibleElements(root) || [elementKind(root)];
   if (desc.k === "A") {
     const sh = rowsShape(trees);
@@ -3581,7 +3895,8 @@ function pointfreeOf(row, ctx) {
   // 被演算子と同じく印（値）なので A に数える（`[_ +]`、classifyInfix の注）。未知にしても綴りは区間なので、関数の本体の根に
   // 置けば G16 で断る（sectionSpelled。根の未知を通すと、区間を返す本体が黙って通る）。
   // 値の演算子の点なし（段18 の get を除く区間・前置 `!` を除く前置・後置の点なし・値の記号で畳む点なし・値を返す畳まない点なし）は、印 vop に
-  // 記号を持つ：受けた実引数と書いた被演算子が `$` の作った Reader なら、中置の `$x + 1` と同じく G7（R60 の細かい所、§5 Q59。argOperand・
+  // 記号を持つ：受けた実引数と書いた被演算子が関数を指す番地なら、中置の `$inc + 1` と同じく G7、番地の点・差なら G21（答えに点・差の印を持たせられない
+  // ので、中置なら通る `[+ 0x10] $5` も断る。R62、§5 Q66）（R60 の細かい所。argOperand・
   // valueOperand。区間は位置で被演算子を取るので `[+ $5] 1` は `1 + $5`、`[+ 1] $5` は `$5 + 1`）。
   const withOperand = (term, type) => {
     const c = classify(term.left || term.right, ctx);
@@ -3755,10 +4070,30 @@ function resolveTree(tree, ctx) {
       const r = resolveTree(tree.right, ctx);
       refuseOperandHole(l, tree.sym);
       refuseOperandHole(r, tree.sym);
-      // 比較（段8 の `==`・`!==`）の被演算子に `$` が作った Reader があれば断る（R60 の細かい所、§5 Q59）。論理（`;`・`|`・`&`）と書き込み（`#`、Writer）は今のまま。
+      // 論理（段5〜7 の `;`・`|`・`&`）の被演算子と、書き込み（段4 の `#`）の被演算子に、番地の算術で作った点・差（R62）があれば断る（2026-10-26 の
+      // 確かめの直し。hasAddr の注）：論理の答えは通った側の値で、`#` は置き場に書くので、どちらも点・差の印を持たせられない。`#` の左のずらした点・差は、
+      // `@` で開く形（refuseOpenAddress）と同じ理由でも言い切れない（ストアの余モナドの読みでは `@` が extract、`#` が put。§5 Q66）。
+      // 値を読む参照（`$vs # 5`・`$vs & 1`）は今のまま。
+      if (tree.sym === ";" || tree.sym === "|" || tree.sym === "&") {
+        for (const x of [l, r]) if (treeHasAddr(x)) throw refuseAddressDrop("logic", writeTree(tree), { sym: tree.sym, operand: show(x) });
+      }
+      if (tree.sym === "#") {
+        const ld = l ? descOfTree(l) : null;
+        if (addrOf(ld)) throw refuseAddressDrop("writeTo", writeTree(tree), { pt: ld.addr === "pt" });
+        if (treeHasAddr(l) || treeHasAddr(r)) throw refuseAddressDrop("writeOf", writeTree(tree));
+      }
+      // 比較（段8 の `==`・`!==`）の被演算子に `$` が作った Reader があれば断っていた（R60 の細かい所、§5 Q59）。論理（`;`・`|`・`&`）と書き込み（`#`、Writer）は今のまま。
       // 素の関数の裸の仮引数なら、その札に覚える（valueOperand・paramTag）。
+      // 2026-10-26 の R62 から、番地どうしの比べ（点どうし・差どうし・点と `0x…`）は通り、関数を指す番地は G7、点と差・番地と数は G21（addressOp）。
       if (tree.sym === "==" || tree.sym === "!==") {
-        for (const x of [l, r]) if (x && x.kind) valueOperand(x.kind, tree.sym, () => show(x));
+        const face = (x) => {
+          const f = operandFace(isMark(x), x ? x.kind : null, hexTree(x, ctx));
+          const sh = shadowedTree(x, ctx);
+          return sh ? shadowFace(f, sh) : f;
+        };
+        if (!addressOp(tree.sym, face(l), face(r), () => writeTree(tree), [l, r].map((x) => () => show(x)))) {
+          for (const x of [l, r]) if (x && x.kind) valueOperand(x.kind, tree.sym, () => show(x));
+        }
       }
       return { t: "op", sym: tree.sym, left: l, right: r, kind: l && r && l.kind.k === "A" && r.kind.k === "A" ? A() : U() };
     }
@@ -4263,12 +4598,30 @@ function patternNode(op, pattern, ctx) {
 function resolveBody(right, ctx) {
   if (right && right.type === "seq" && right.terms.length === 1 && isBareBlock(right.terms[0], "indent")) {
     const rows = right.terms[0].core.rows.map((r) => resolveTree(r, ctx));
+    refuseReturnedAddress(rows);
     const k = blockBodyKind(rows);
     const term = right.terms[0];
     return { tree: { t: "leaf", term, cat: "plain", desc: { k }, kind: { k }, view: { v: "block", rows } }, rootKind: k };
   }
   const tree = resolveTree(right, ctx);
+  refuseReturnedAddress([tree]);
   return { tree, rootKind: tree ? tree.kind.k : "U" };
+}
+
+// 関数の本体が返しうる値（根。字下げの本体なら全部の行の値の側：局所の定義の右辺・枝の値・行そのもの。入れ子のブロックはその行）に、番地の算術で作った
+// 点・差（R62）があれば断る（2026-10-26 の確かめの直し、hasAddr の注）。関数の答えは本体の根の種類だけで持つ（素の関数の getBodyRoot・括りの関数の
+// instRootOf は "A"/"U"）ので、印を答えに持たせられない。局所の定義の右辺は、名前が種類の未知な局所の名前（P2）になって印が落ちる（`ww : $x + 0x10` ⏎
+// `ww + 1` は未知で通っていた）。HEAD は中の算術を G7 で断っていた。
+function refuseReturnedAddress(rows) {
+  const valueSide = (t) => (t && t.t === "op" && t.sym === ":" ? t.right : t);
+  for (const row of rows) {
+    const v = valueSide(row);
+    if (v && v.t === "leaf" && v.view && v.view.v === "block") {
+      refuseReturnedAddress(v.view.rows);
+      continue;
+    }
+    if (treeHasAddr(v)) throw refuseAddressDrop("return", cutShape(show(v)));
+  }
 }
 
 function blockBodyKind(rows) {
@@ -4811,7 +5164,7 @@ function putArg(e, s, tree) {
   if (!sh.varying && !sh.unknown && s.recv.length >= sh.fixed) settle(e, s, doneKind(s));
 }
 
-// 段 s が実引数 tree を受ける所の、Reader と札（R60 の細かい所、§5 Q59。2026-10-25 の確かめの直し）。
+// 段 s が実引数 tree を受ける所の、Reader と札（R60 の細かい所。2026-10-25 の確かめの直し。2026-10-26 の R62 から、番地の点と差は G21、§5 Q66）。
 // - 値の演算子の点なし（印 vop：`[+ 1]`・`[1 +]`・`[-_]`・`[!!_]`・`[_!]`・`[+]`・`[==]`・`[<<]`・`[~]`・`[!=]`・`[!==]`・`[* 2,]`・`[-_,]`）が Reader を受けたら、
 //   中置で書いた `$x + 1` と同じく G7（区間は位置で被演算子を取る：`[+ 1] x` は `x + 1`、R31・R32）。前は中置の項の所だけで見ていて、
 //   `[+ 1] $vs`・`[+] $vs 1` が通った（確かめの指摘）。素の関数の裸の仮引数を受けたら、その札に覚える（valueOperand）。
@@ -4819,6 +5172,9 @@ function putArg(e, s, tree) {
 function argOperand(s, tree) {
   const fn = s.fn;
   if (!fn) return;
+  // 既定値のある関数（とほかの「other」の関数）の答えは未知（doneKind）で、口に渡した番地の算術の点・差の印を持たせられない（2026-10-26 の確かめの直し、
+  // hasAddr の注。素の関数の口の readerAtPlain と同じ線、§5 Q66）。
+  if (fn.type === "other" && treeHasAddr(tree)) throw refuseAddressDrop("other", readerText(tree));
   // 言い分に点なしの記号は書かない（点なしは実体の鍵に記号を入れないので、分け合った実体の本体から出る言い分が記号で割れる。fnKey の注）。
   // 畳む点なしは、1項だけなら演算を当てない（`[+] 5` は 5、R31 の foldOneKind）ので、ここでは見ず、2項以上で閉じた所で見る（closeKind）。
   if (fn.vop && fn.type !== "pfFold") return void valueOperand(descOfTree(tree), null, () => readerText(tree, false));
@@ -4837,19 +5193,30 @@ function readerText(tree, quote = true) {
   if (t !== "·") return quote ? `\`${t}\`` : t;
   return `形 ${descText(descOfTree(tree))} の要素`;
 }
+// 素の関数の口で見る実引数（readerAtPlain・partialFn の readers）：`$` が作った Reader と、番地の算術で作った点・差を含む物（R62、hasAddr）。
+const plainReaderArg = (d) => !!readerOf(d) || hasAddr(d);
 // 素の関数 fn（印 op）の口が足りた：前に当てた Reader（部分適用の readers）と、いま当てた trees の Reader の口の札が、本体から値の演算子に届くなら
 // G7（paramTag の注。β で `inc $5` は `$5 + 1` と同じ形）。届かない口（`use : f x ? @f x` の f）に渡した Reader は今までどおり通る。
 function readerAtPlain(fn, trees) {
   if (!fn || fn.type !== "plain" || !fn.op) return;
-  const here = trees.map((t, i) => (readerOf(descOfTree(t)) ? { i: (fn.at || 0) + i, tree: t } : null)).filter(Boolean);
+  const here = trees.map((t, i) => (plainReaderArg(descOfTree(t)) ? { i: (fn.at || 0) + i, tree: t } : null)).filter(Boolean);
   for (const r of [...(fn.readers || []), ...here]) {
+    const label = fn.label || `[${cutShape(writeTree(fn.op))}]`;
+    // 番地の算術で作った点・差（R62。器の要素・欄にあっても）は、口が値の演算子に届かなくても断る（2026-10-26 の確かめの直し、hasAddr の注）：素の関数の
+    // 答えは本体の根の種類だけなので、本体がその口を返せば（`gi : y ? y`）印が落ちる。値を読む参照は今のまま、届く口だけ断る（§5 Q66 の届かない所）。
+    if (treeHasAddr(r.tree)) throw refuseAddressDrop("plain", readerText(r.tree), { label, at: r.i + 1 });
     const tag = paramTag(fn.op, fn.idKey, r.i);
     if (!tag.fn) tag.fn = fn;
     if (!numericParam(tag)) continue;
-    const label = fn.label || `[${cutShape(writeTree(fn.op))}]`;
+    const head = `${readerText(r.tree)} を、素の関数 \`${label}\` の前から ${r.i + 1} 番目の口に渡しました。\`${label}\` の本体はその口を（別の素の関数の口を通っても）値の演算子の被演算子に置くので、β で、`;
+    // 関数を指す番地は G7（R53 の外）。番地の点と差（値を読む参照・ずらした点・差）は G21：素の関数の本体は裸の仮引数を A として1回だけ解くので、β の形
+    // （`$5 + 1` は数と混ぜた G21、`$5 + 0x10` は点）を本体の中で読み分けられず、答えに点・差の印も持たせられない（断る側に倒した、§5 Q66）。
+    if (refOf(descOfTree(r.tree))) {
+      throw gate("G7", `\`$\` が作った ${head}関数を指す番地を値の演算子に当てる形（\`$inc + 1\` など）と同じです。関数を指す番地を動かす・比べる形は §4 R53 の外なので断ります（§4 R62）。`);
+    }
     throw gate(
-      "G7",
-      `\`$\` が作った ${readerText(r.tree)} を、素の関数 \`${label}\` の前から ${r.i + 1} 番目の口に渡しました。\`${label}\` の本体はその口を（別の素の関数の口を通っても）値の演算子の被演算子に置くので、β で、Reader を値の演算子に当てる形（\`$5 + 1\` など）と同じです。\`$\` が作るのは1つの Reader で、数ではなく、Reader を値の演算子に当てる読みは決まっていません（§4 R60、§5 Q59）。`
+      "G21",
+      `番地 ${head}番地を値の演算子に当てる形（\`$5 + 1\`・\`$5 + 0x10\` など）と同じです。素の関数の本体は裸の仮引数を番地と見ずに1回だけ解くので、番地の点と差の規則（§4 R62）を本体の中で当てられません（中置で書けば R62 で読みます。§5 Q66）。`
     );
   }
 }
@@ -5016,7 +5383,7 @@ function doneKind(s) {
   switch (fn.type) {
     case "plain": {
       const root = fn.getBodyRoot();
-      readerAtPlain(fn, s.recv); // Reader を口に渡した呼び出し（R60 の細かい所、§5 Q59）
+      readerAtPlain(fn, s.recv); // Reader・番地を口に渡した呼び出し（R60 の細かい所・R62）
       return root === "A" ? A() : U();
     }
     case "pfUnary":
@@ -5048,8 +5415,13 @@ function closeKind(s) {
       return A();
     case "pfFold":
       // 畳む2項の点なし（R31）：k ≥ 2 は中置の値の演算子と同じく A。k = 1 は foldOneKind。
-      // k ≥ 2 の値の記号の畳み込みは、中置の `x1 + … + xn` と同じく、実引数の Reader を断る（R60 の細かい所、§5 Q59。argOperand の注）。
+      // k ≥ 2 の値の記号の畳み込みは、実引数の関数を指す番地を G7、番地の点・差を G21 で断る（R60 の細かい所・R62、§5 Q66。argOperand の注）。
       if (k >= 2 && fn.vop) for (const t of args) valueOperand(descOfTree(t), null, () => readerText(t, false));
+      // 2026-10-26 の確かめの直し（hasAddr の注）：1項の器を畳む形（`[+] [($x + 0x10) ($x + 0x10)]`）は、器の中の点・差に値の記号を当てるので、k ≥ 2 と同じく
+      // G21。論理の記号の畳み込み（`[|]`・`[&]`・`[;]`）は、中置の論理と同じく、答えが通った側の値で点・差の印が落ちるので G21（§5 Q66）。
+      // 1項の点・差そのもの（`[+] ($x + 0x10)`）は演算を当てない（R31 の foldOneKind）ので、今のまま未知。
+      if (fn.vop && k === 1 && hasAddr(descOfTree(args[0])) && !addrOf(descOfTree(args[0]))) throw refuseAddressSpelling(null, readerText(args[0], false));
+      if (!fn.vop) for (const t of args) if (treeHasAddr(t)) throw refuseAddressDrop("logic", readerText(t, false), { sym: `[${fn.sym}]`, operand: readerText(t, false) });
       return k === 1 ? foldOneKind(args[0]) : A();
     case "pfPick":
       // `[' k] x` は `x ' k` と同じ desc（R26）。2つ以上を受けた形は、何を引くかが決まらないので未知。
@@ -5143,7 +5515,7 @@ function elemsOfContainer(d) {
   if (!d) return [A()];
   if (d.k !== "A") return null;
   // `$` が作った Reader は、[x] ≅ x でそれ1つを要素にする（`[inc,] $5` は `inc $5` と同じく、写した関数が Reader を受ける）。Reader に関数を写す
-  // 読み（fmap、読んでから当てる）は §5 Q59 の割れる読みの1つで、決めていないので、Reader を受けた関数の所で断る側に揃える（R60 の細かい所。
+  // 読み（fmap、読んでから当てる）は §5 Q59 の割れる読みの1つで、2026-10-26 の答え（R62）でも採らなかったので、Reader を受けた関数の所で断る側に揃える（R60 の細かい所。
   // 前は中身の見えない器と同じ A の要素で、写した関数が Reader を見ずに通った）。
   if (readerOf(d)) return [d];
   if (d.elements && d.elements.some((k) => k !== "A")) return null;
@@ -5474,7 +5846,7 @@ function partialFn(s) {
         out.op = fn.op;
         out.label = fn.label;
         out.at = (fn.at || 0) + k;
-        const rs = s.recv.map((t, i) => (readerOf(descOfTree(t)) ? { i: (fn.at || 0) + i, tree: t } : null)).filter(Boolean);
+        const rs = s.recv.map((t, i) => (plainReaderArg(descOfTree(t)) ? { i: (fn.at || 0) + i, tree: t } : null)).filter(Boolean);
         out.readers = [...(fn.readers || []), ...rs];
       }
     } else if (fn.type === "pfBinary") out = { ...fn, n: fn.n - k };
@@ -5699,7 +6071,7 @@ function tryHole(items, ctx) {
 function holeApply(h, args) {
   const fn = h.kind.fn;
   const kind = fn.type === "plain" ? (fn.getBodyRoot() === "A" ? A() : U()) : U();
-  readerAtPlain(fn, args); // 穴の関数の実引数に書いた Reader も、口に渡した物（R60 の細かい所、§5 Q59。`f3 $5 !_ 2`）
+  readerAtPlain(fn, args); // 穴の関数の実引数に書いた Reader・番地も、口に渡した物（R60 の細かい所・R62。`f3 $5 !_ 2`）
   return { t: "apply", head: h, arg: args.length === 1 ? args[0] : { t: "construct", items: args, kind: A() }, kind };
 }
 
@@ -5819,6 +6191,8 @@ export function resolve(source) {
     patternNodes: [],
     // 値の定義 → 右辺が書いた `_` を指すか（R56、nameKindOf が置き、pointsToMark・dollarNameTarget が読む）。
     unitDefs: new Map(),
+    // 値の定義 → 右辺が番地の字面（`0x…`・`NxHHHH`。括り1つ・別名を通しても）か（R62、nameKindOf が置き、hexName が読む）。
+    hexDefs: new Map(),
     // 値の定義 → 右辺の余ったラムダ（R59、nameKindOf が置く）、素の `?` の定義 → 本体の余ったラムダ（bodyRootOf が置く）と括りの関数の定義 → 仮引数を
     // 含まない行の余ったラムダ（deadOfDef・deadInPatternBody）、既定値のある `?` の定義の本体を解いている途中の印と別名を辿っている途中の印（deadOfDef）。
     deadDefs: new Map(),
