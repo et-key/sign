@@ -4091,7 +4091,9 @@ const writeOutFixPasses = [
 	// `fold $add (tl vs)` ⏎ `fold $add []` の2行目（A、空の流れの畳み込み）と `fold $add []` ⏎ `fold $add (tl vs)` の2行目（未知）は、2026-10-27 の R84（§5 Q69 の答え：
 	// 空の流れは書いた `_` と同じ）で `fold $add []` の実体の本体 `@f h~` が `@f _` と同じ、末尾の `_` が消えて関数 add が本体の根に残る G16（R33）になったので、
 	// 下の writeOutFixRefused へ移した。鍵を分けることは、空の List でも G16 にならない本体の k3（下の writeOutFixKeys）で見る。
-	["空の括りの鍵 map $inc [] の map の実体は `$L A[]`", trial("map $inc []"), "(: map (? [f [~t]] (inst $L A[] (apply [@f,] t~))))", null, { at: 6 }],
+	// `map $inc []` の map の実体 `$L A[]`（`(: map (? [f [~t]] (inst $L A[] (apply [@f,] t~))))`）は、2026-10-27 の片6 の R95（§5 Q75 (b) の点なしの所の答え：写像の可変長の口に
+	// 来た空の流れは書いた `_` と同じで、点なしの関数が残る）で、実体の本体 `[@f,] t~` が `[@f,] _` と同じく本体の根に `[@f,]` の残る G16（R33）になったので、下の
+	// writeOutFixRefused へ移した（実体の鍵 `$L A[]` は門の名指しで見る）。
 	["文字列の名前 st : `abc` ⏎ inc st~ 5（字面の inc `abc`~ 5 と同じ。前は G2(a)）", trial(["st : `abc`", "inc st~ 5"]), "(construct (apply inc st~) 5)", "A"],
 	["文字列の名前の別名 st2 : st ⏎ inc st2~ 5（同じ）", trial(["st : `abc`", "st2 : st", "inc st2~ 5"]), "(construct (apply inc st2~) 5)", "A"],
 	["括った文字列 inc [`abc`]~ 5（[x] ≅ x。前は G2(a)）", trial("inc [`abc`]~ 5"), "(construct (apply inc [`abc`]~) 5)", "A"],
@@ -4119,6 +4121,7 @@ const writeOutFixRefused = [
 	["空の List fold $add []（R84 で本体 `@f _` が G16。前は空の流れの畳み込みで A）", trial("fold $add []"), "G16", [["fold", "$L A[]"]]],
 	["空の List map2 $inc []（R84 で本体 `@f _` が G16。前は R70 の余ったラムダで A）", trial("map2 $inc []"), "G16", [["map2", "$L A[]"]]],
 	["空の List k2 []（R84 で本体 `inc _` が G16。前は R70 の余ったラムダで A）", trial(["k2 : [~t] ? inc t~", "k2 []"]), "G16", [["k2", "A[]"]]],
+	["空の List map $inc []（片6 の R95 で本体 `[@f,] _` が G16。前は空の List の写像で A、実体 `$L A[]`）", trial("map $inc []"), "G16", [["map", "$L A[]"]]],
 	// 門に当たる本体は、2026-10-26 の R28 の書き直し（末尾の `_` は消える）で、前の `[+ 1] _ _`（`[+ 1]` になって G16）から `[+ 1] _ 1`（内側の `_` の G5）に替えた。
 	["数の見えない流れ (bb [1]) (tl vs)~ も頭に当てて本体の G5（前は未知で通った）", trial(["bb : [a] y ? [+ 1] _ 1", SEVEN, "(bb [1]) (tl vs)~"]), "G5", [["bb", "N A"]]],
 	["数の見えない流れ map2 $(bb [1]) vs（同じ G5）", trial(["bb : [a] y ? [+ 1] _ 1", "map2 $(bb [1]) vs"]), "G5", [["map2", "$L [N…]"], ["bb", "N A"]]],
@@ -5547,7 +5550,8 @@ const r73Passes = [
 	// R75（§5 Q62・Q65）：`$` を通さずに呼ぶ所は今までどおり R52 の知らせ
 	["R75 bq 5（`$` を通さずに呼べば R52 の知らせのまま）", r73("bq 5"), "(apply bq 5)", "A", { leftoverDiag: ["inc"] }],
 	["R75 mp2 $[[x] ? x + 1] vs（余る関数が無ければ通る）", r73("mp2 $[[x] ? x + 1] vs"), "(apply mp2 (construct $[[x] ? x + 1] vs))", "A"],
-	["R75 mp2 $[[x] ? x inc] []（呼ばれなければ見ない）", r73("mp2 $[[x] ? x inc] []"), "(apply mp2 (construct $[[x] ? x inc] []))", "A"],
+	// `mp2 $[[x] ? x inc] []`（呼ばれなければ見ない、A）は、2026-10-27 の片6 の R95（写像の可変長の口に来た空の流れは書いた `_` と同じで、点なしの関数が残る）で、
+	// 実体の本体 `[@h,] l~` が本体の根に `[@h,]` の残る G16（R33）になったので、断る側（下の r73Refused）へ移した。呼ばれない本体を見ないことは今のまま（G20 ではない）。
 	// R76（§5 Q37）：評価する所を広げる
 	["R76 inc == 5（前は `(== inc 5)` の未知）", std("inc == 5"), "(== (unit inc) 5)", "A", { leftoverDiag: ["inc"] }],
 	["R76 5 == inc（右の被演算子も）", std("5 == inc"), "(== 5 (unit inc))", "A", { leftoverDiag: ["inc"] }],
@@ -5645,6 +5649,7 @@ const r73Refused = [
 	["R74 i 1 2 inc（今のまま G18）", r73("i 1 2 inc"), "G18"],
 	["R74 i [,] 5 inc（`[,] 5 inc` と同じ G2(a)。前は G18）", r73("i [,] 5 inc"), "G2(a)"],
 	// R75（§5 Q62・Q65）
+	["R75 mp2 $[[x] ? x inc] []（写像は呼ばれず G20 ではない。片6 の R95 で本体 `[@h,] _` の G16、前は A）", r73("mp2 $[[x] ? x inc] []"), "G16", [["mp2", "$L A[]"]]],
 	["R75 mp2 $[[x] ? x inc] vs（呼んだ実体で inc が値の上に余る。前は知らせて通る）", r73("mp2 $[[x] ? x inc] vs"), "G20", [["mp2", "$L [N…]"]]],
 	["R75 mp2 $bq vs（名前の括りの関数も。前は知らせて通る）", r73("mp2 $bq vs"), "G20", [["mp2", "$L [N…]"]]],
 	["R75 @[$[[x] ? x inc]] 5（開いて直に呼んでも。前は知らせて通る）", r73("@[$[[x] ? x inc]] 5"), "G20"],
@@ -6113,8 +6118,10 @@ const r83Passes = [
 	["R84 []~ 5 は 5（値の隣で消える、R43。前は `(construct []~ 5)`）", r83("[]~ 5"), "5", "A"],
 	["R84 5 []~ は 5（前は `(construct 5 []~)`）", r83("5 []~"), "5", "A"],
 	["R84 inc [[]]~ 5（[x] ≅ x で空の流れ。前は G19）", r83("inc [[]]~ 5"), "(apply inc 5)", "A"],
-	["R84 可変長の口の流れ1つは今のまま丸ごと：i []~（R51、§5 Q75）", r83("i []~"), "(apply i []~)", "未知"],
-	["R84 可変長の口の流れ1つは今のまま丸ごと：[* 2,] []~（R51、§5 Q75）", r83("[* 2,] []~"), "(apply [* 2,] []~)", "A"],
+	// 点なしの可変長の口の流れ1つ（片5 は R51 の丸ごとで `(apply i []~)` の未知・`(apply [* 2,] []~)` の A）は、2026-10-27 の片6 の R95（§5 Q75 (b) の点なしの所の答え：
+	// U〔答え〕[2026-10-27 09:25 df447414]「4. それは点無しの関数が残るはず。」）で、書いた `_` と同じく点なしの関数が残る。
+	["R84・R95 恒等射の流れ1つ：i []~ は `i _` と同じ i（恒等射なので知らせない）", r83("i []~"), "(unit i)", "A", { diagCount: 0 }],
+	["R84・R95 貪欲な単項の流れ1つ：[* 2,] []~ は `[* 2,] _` と同じ", r83("[* 2,] []~"), "(unit [* 2,])", "A", { leftoverDiag: ["[* 2,]"] }],
 	// 2026-10-27 の確かめの直し：`_` と分かる値（印 zero）・長さ 0 と分かる List を撒いた流れも空の流れ（`_~ = _`）。中置の被演算子の空の流れも書いた `_`。
 	["R84 inc [_]~ 5（前は G2(a)）", r83("inc [_]~ 5"), "(apply inc 5)", "A"],
 	["R84 inc un~ 5（un : _。前は G2(a)）", r83("inc un~ 5"), "(apply inc 5)", "A"],
@@ -6122,10 +6129,11 @@ const r83Passes = [
 	["R84 []~ + 1 は `_ + 1`（前は未知）", r83("[]~ + 1"), "(+ []~ 1)", "A"],
 	["R84 inc ([]~ + 1) は `inc (_ + 1)` と同じ（前は G7）", r83("inc ([]~ + 1)"), "(apply inc [[]~ + 1])", "A"],
 	["R84 _~ + 1", r83("_~ + 1"), "(+ _~ 1)", "A"],
-	// R85：書いた `[]` は値の口では断る（下の r83Refused）。口でない所・器を受ける口は今のまま。
-	["R85 閉じた値の後ろの [] は口でない：inc 5 []", r83("inc 5 []"), "(construct (apply inc 5) [])", "A"],
-	["R85 頭の名前の無い括りの口：fl [] は本体を読む（R64）", r83("fl []"), "(apply fl [])", "A"],
-	["R85 可変長の口：[* 2,] []", r83("[* 2,] []"), "(apply [* 2,] [])", "A"],
+	// R85（片5：書いた `[]` は値の口では断る）は、2026-10-27 の片6 の R94 で廃止（値の口では同じ位置に書いた `_` と同じ。下の「R94・R95」の節）。口でない所・器を受ける
+	// 口は、R85 でも R94 でも今のまま。
+	["R85・R94 閉じた値の後ろの [] は口でない：inc 5 []", r83("inc 5 []"), "(construct (apply inc 5) [])", "A"],
+	["R85・R94 頭の名前の無い括りの口：fl [] は本体を読む（R64）", r83("fl []"), "(apply fl [])", "A"],
+	["R85・R94 可変長の口：[* 2,] []", r83("[* 2,] []"), "(apply [* 2,] [])", "A"],
 	// R86（§5 Q74 (a)）：関数を挟んで値が続く `_` は穴で位置を保つ（前は G5）。
 	["R86 f2 _ inc 5 は `a ? f2 a inc 5`（5 は y）", r83("f2 _ inc 5"), "(unit (? [$p0] (apply (compose (apply f2 $p0) inc) 5)))", "A", { leftoverDiag: ["(? [$p0] (apply (compose (apply f2 $p0) inc) 5))"] }],
 	["R86 mx _ inc 5（括りの関数の裸の口）", r83("mx _ inc 5"), "(unit (? [$p0] (apply (compose (apply mx $p0) inc) 5)))", "A", { leftoverDiag: ["(? [$p0] (apply (compose (apply mx $p0) inc) 5))"] }],
@@ -6155,9 +6163,11 @@ const r83Passes = [
 	["R88 ~_ 5（前は G4。`[_] 5` と同じ）", r83("~_ 5"), "(construct ~_ 5)", "A"],
 	["R88 [~_] 5（前は G7）", r83("[~_] 5"), "(construct [~_] 5)", "A"],
 	["R88 fh ~_ は `fh [_]` と同じ（R90 の印 zero）", r83("fh ~_"), "(apply fh ~_)", "A"],
-	["R88 inc ~_ は `inc [_]` と同じ A（確かめの直しの前は G5）", r83("inc ~_"), "(apply inc ~_)", "A"],
-	["R88 add ~_ 3 は `add [_] 3` と同じ", r83("add ~_ 3"), "(apply add (construct ~_ 3))", "A"],
-	["R88 inc [~_]（[x] ≅ x）", r83("inc [~_]"), "(apply inc [~_])", "A"],
+	// 値の口の `inc ~_`・`add ~_ 3`・`inc [~_]`（片5 は `inc [_]` と同じ A の `(apply inc ~_)` など）は、2026-10-27 の片6 の R94（§5 Q75 (a) の答え）で、中身が詰まって `[]` に
+	// なる書いた括りとして、同じ位置に書いた `_` と同じになった（`inc [_]` も同じ）。
+	["R88・R94 inc ~_ は `inc _` と同じ（片5 は A、確かめの直しの前は G5）", r83("inc ~_"), "(unit inc)", "A", { leftoverDiag: ["inc"] }],
+	["R88・R94 add ~_ 3 は `add _ 3` と同じ（片5 は `(apply add (construct ~_ 3))`）", r83("add ~_ 3"), "(unit (? [$p0] (apply add (construct $p0 3))))", "A", { leftoverDiag: ["(? [$p0] (apply add (construct $p0 3)))"] }],
+	["R88・R94 inc [~_]（[x] ≅ x。片5 は A）", r83("inc [~_]"), "(unit inc)", "A", { leftoverDiag: ["inc"] }],
 	["R88 e6 : ~_ ⏎ fh e6（名前を通しても `fh [_]` と同じ。確かめの直しの前は未知）", r83(["e6 : ~_", "fh e6"]), "(apply fh e6)", "A"],
 	["R88 e8 : ~[] ⏎ fh e8（`fh [[]]` と同じ。確かめの直しの前は未知）", r83(["e8 : ~[]", "fh e8"]), "(apply fh e8)", "A"],
 	["R88 inc ~_~ 5 の形：e6 : ~_ ⏎ inc e6~ 5 は空の流れ（確かめの直しの前は G2(a)）", r83(["e6 : ~_", "inc e6~ 5"]), "(apply inc 5)", "A"],
@@ -6210,19 +6220,10 @@ const r83Passes = [
 	["R93 5 fp 1 2 , 3（値の後ろに積まれた頭も同じ）", r83("5 fp 1 2 , 3"), "(construct 5 (apply fp [1 2 , 3]))", "A"],
 ];
 const r83Refused = [
-	// R85：書いた `[]` が値の口に来た（`[] = _` の穴か、10-04 の TypeError か。§5 Q75）。前は中身の見えない A の値で通っていた。
-	["R85 inc []", r83("inc []"), "G5"],
-	["R85 add [] 3", r83("add [] 3"), "G5"],
-	["R85 add 3 []", r83("add 3 []"), "G5"],
-	["R85 [+ 1] []（単項の点なしの口）", r83("[+ 1] []"), "G5"],
-	["R85 mx [] 1（括りの関数の裸の口）", r83("mx [] 1"), "G5"],
-	["R85 inc e0（名前を通しても同じ）", r83("inc e0"), "G5"],
-	// `inc ~_`（G5）は、2026-10-27 の確かめの直しで `~_` を書いた `[_]` と同じ項にしたので、`inc [_]` と同じく通る側（上の R88 の行）へ移した。
-	["R85 inc ~[]（`~[]` は `[[]]`、R79）", r83("inc ~[]"), "G5"],
-	["R85 e8 : ~[] ⏎ inc e8（名前を通しても同じ。確かめの直しの前は A で通った）", r83(["e8 : ~[]", "inc e8"]), "G5"],
-	["R85 add _ []（手順2 の穴の規則が組んだ口も同じ）", r83("add _ []"), "G5"],
-	["R85 (add !_ 3) []（穴の関数の口）", r83("(add !_ 3) []"), "G5"],
-	["R85 5 inc []（値の後ろに積まれた頭も同じ）", r83("5 inc []"), "G5"],
+	// R85（片5：書いた `[]` が値の口に来たら G5）の行（`inc []`・`add [] 3`・`add 3 []`・`[+ 1] []`・`inc e0`・`inc ~[]`・`e8 : ~[]` ⏎ `inc e8`・`add _ []`・`(add !_ 3) []`・
+	// `5 inc []`）は、2026-10-27 の片6 の R94（§5 Q75 (a) の答え：U〔答え〕[2026-10-27 09:25 df447414]「1. _ と読んで断らない方向で問題無ければどうぞ」）で、同じ位置に
+	// 書いた `_` と同じに通る（名前の `inc e0`・`inc e8` は R63 の A）ので、通る側（下の「R94・R95」の節）へ移した。`mx [] 1` は `mx _ 1` と同じく G5 のまま（言い分が変わった）。
+	["R85・R94 mx [] 1（括りの関数の裸の口。`mx _ 1` と同じ G5：詰める読みとカリー化が割れる、§5 Q7）", r83("mx [] 1"), "G5"],
 	// R86 の残り（§5 Q74 (a) の残り）：頭が R16 の外・並び全体を受ける口・既定値のある関数・すぐ後ろが値か `_` の内側の `_`（§5 Q7 の残り）は今のまま。
 	["R86 i _ inc 5（恒等射、今のまま G5）", r83("i _ inc 5"), "G5"],
 	["R86 (f3 !_ 2) _ inc 5（括った頭、今のまま G5）", r83("(f3 !_ 2) _ inc 5"), "G5"],
@@ -6270,7 +6271,8 @@ const r83Refused = [
 for (const [name, s, want, kind, extra] of r83Passes) checkPass(name, s, want, kind, extra);
 for (const [name, s, want, inst] of r83Refused) checkRefused(name, s, want, inst);
 const r83Messages = [
-	["R85 書いた [] の G5 は2つの読みを名指しする", r83("inc []"), "G5", ["`[] = _`", "穴で位置を保つ", "2026-10-04 の裁定", "§4 R85", "§5 Q75"], []],
+	// R85 の言い分（`inc []` の G5 が2つの読みを名指しする）は、片6 の R94 で `inc []` が通るので外した。G5 に当たる `mx [] 1` は、書いた `[]` を `_` と読んだことを言い分に添える。
+	["R94 書いた [] を `_` と読んで門に当たったら、言い分に添える", r83("mx [] 1"), "G5", ["書いた `[]` は、値の口では同じ位置に書いた `_` と同じに読みます（§4 R94）", "§5 Q7"], ["§4 R85", "2026-10-04 の裁定"]],
 	["R87 値の演算子の被演算子の知らせ", r83("inc + 1"), null, ["値の演算子の被演算子", "§4 R42・R48・R87", "§5 Q73 の答え"], []],
 ];
 for (const [name, s, gateId, must, mustNot] of r83Messages) {
@@ -6285,6 +6287,166 @@ for (const [name, s, gateId, must, mustNot] of r83Messages) {
 		text = r.diagnostics.filter((d) => d.reason === "leftover-lambda").map((d) => d.message).join("\n");
 	} catch (e) {
 		if (!gateId || e.gate !== gateId) {
+			fail(`言い分 ${name}`, `gate: ${e.gate}`, String(e.message));
+			continue;
+		}
+		text = String(e.message);
+	}
+	const missing = must.filter((w) => !text.includes(w));
+	const extra = mustNot.filter((w) => text.includes(w));
+	if (!missing.length && !extra.length) ok(`言い分 ${name}`);
+	else fail(`言い分 ${name}`, `無い語: ${missing.join("・")}`, `余計な語: ${extra.join("・")}`, text);
+}
+
+// ---------------------------------------------------------------------------
+// R94・R95（2026-10-27 の片6。値の口の書いた `[]`・点なしの可変長の口の空の流れ）
+// ---------------------------------------------------------------------------
+// 根拠（U の時刻は UTC、sid df447414。片5 の会話が再起動した続き）：主の Claude の問い（2026-10-27 02:35 UTC。片5 の確かめで増えた4つ）に、U〔答え〕[2026-10-27 09:25 df447414]
+// 「1. _ と読んで断らない方向で問題無ければどうぞ / 2. そもそも、なんでコード中にからの[]を書かなければならない場面があるのかの方が問題かも / 3. その加法に保証が出来るかが鍵 /
+// 4. それは点無しの関数が残るはず。」。
+// - R94（問い1、§5 Q75 (a)）：書いた `[]` と、中身が詰まって `[]` になる書いた括り（`[[]]`・`~[]`・`[_]`・`~_`）は、値の口（既定値のある関数の口も）では同じ位置に書いた `_` と
+//   同じ。名前（`inc e0`・`inc un`）は R63 の A のまま。参照の口・可変長の口・口でない所は器のまま。
+// - R95（問い4、§5 Q75 (b) の点なしの所）：点なしの可変長の口（`[* 2,]`・`[inc,]`・`[+]`・恒等射）に来た長さ 0 の流れも、書いた `_` と同じ（点なしの関数が残る）。元の流れで読むのは
+//   括りの関数の最後の括り（参照の口）だけ。本体の根に点なしの関数が残る形は G16（問い2 の線でそのまま受ける）。
+// - 問い2・問い3 は記録だけ（`fold $add []` の G16 と、R92 の差の隣の `0x…` は今のまま）。
+// 書いた `_` と同じ答えであることは、法則（coproduct_laws.test.js の 31・34）が両側の比べで見る。ここは決定の例を書く。
+const R94D = ["gq : x [y : 1] ? x + y", "hd : [a b] [y : 1] ? a", "fold : f [~h] ? @f h~", "tl : [y ~ys] ? ys"];
+const r94 = (lines) => r83([...R94D, ...[].concat(lines)]);
+const r94Passes = [
+	// R94：値の口
+	["R94 inc [] は `inc _` と同じ（inc が残り、根で `_`。片5 は G5）", r94("inc []"), "(unit inc)", "A", { leftoverDiag: ["inc"] }],
+	["R94 add [] 3 は `a ? add a 3`（片5 は G5）", r94("add [] 3"), "(unit (? [$p0] (apply add (construct $p0 3))))", "A", { leftoverDiag: ["(? [$p0] (apply add (construct $p0 3)))"] }],
+	["R94 (add [] 3) 5 は 8（片5 は G5）", r94("(add [] 3) 5"), "(apply [add [] 3] 5)", "A"],
+	["R94 add 3 [] は `add 3`（末尾で消える、R28。片5 は G5）", r94("add 3 []"), "(unit (apply add 3))", "A", { leftoverDiag: ["(apply add 3)"] }],
+	["R94 add _ []（手順2 の穴の規則が組んだ口も同じ。片5 は G5）", r94("add _ []"), "(unit add)", "A", { leftoverDiag: ["add"] }],
+	["R94 add [] !_（穴と一緒でも `add _ !_` と同じ）", r94("add [] !_"), "(unit (? [$p0 $p1] (apply add (construct $p0 $p1))))", "A", { leftoverDiag: ["(? [$p0 $p1] (apply add (construct $p0 $p1)))"] }],
+	["R94 add !_ 1 []（R34 で余りが前の穴に入る。`add !_ 1 _` と同じ）", r94("add !_ 1 []"), "(unit (? [$p0] (apply add (construct $p0 1))))", "A", { leftoverDiag: ["(? [$p0] (apply add (construct $p0 1)))"] }],
+	["R94 inc [] 5 は `inc _ 5` と同じ 6", r94("inc [] 5"), "(apply inc 5)", "A"],
+	["R94 f2 [] inc 5 は `f2 _ inc 5` と同じ穴（R86）", r94("f2 [] inc 5"), "(unit (? [$p0] (apply (compose (apply f2 $p0) inc) 5)))", "A", { leftoverDiag: ["(? [$p0] (apply (compose (apply f2 $p0) inc) 5))"] }],
+	["R94 [+ 1] []（単項の点なしの口。片5 は G5）", r94("[+ 1] []"), "(unit [+ 1])", "A", { leftoverDiag: ["[+ 1]"] }],
+	["R94 [* 2] []", r94("[* 2] []"), "(unit [* 2])", "A", { leftoverDiag: ["[* 2]"] }],
+	["R94 map inc [] は `map inc _` と同じく `(compose map inc)` が残る（片5 は G5）", r94("map inc []"), "(unit (compose map inc))", "A", { leftoverDiag: ["(compose map inc)"] }],
+	["R94 inc double []（合成の中の値の口）", r94("inc double []"), "(unit (compose inc double))", "A", { leftoverDiag: ["(compose inc double)"] }],
+	["R94 use [] 5（素の関数の、関数を受ける裸の口も値の口）", r94("use [] 5"), "(unit (? [$p0] (apply use (construct $p0 5))))", "A", { leftoverDiag: ["(? [$p0] (apply use (construct $p0 5)))"] }],
+	["R94 (add !_ 3) []（穴の関数の口。片5 は G5）", r94("(add !_ 3) []"), "(unit [add !_ 3])", "A", { leftoverDiag: ["[add !_ 3]"] }],
+	["R94 (f3 !_ 2) []（R34 の穴の関数の裸の口。片5 は G5）", r94("(f3 !_ 2) []"), "(unit [f3 !_ 2])", "A", { leftoverDiag: ["[f3 !_ 2]"] }],
+	["R94 5 inc []（値の後ろに積まれた頭も同じ。片5 は G5）", r94("5 inc []"), "(construct 5 (unit inc))", "A", { leftoverDiag: ["inc"] }],
+	// 中身が詰まって `[]` になる書いた括り（List の中の `_` は連結の単位で消える、[x] ≅ x、前置 `~` は書いた `[x]`）
+	["R94 inc [_]（片5 は A）", r94("inc [_]"), "(unit inc)", "A", { leftoverDiag: ["inc"] }],
+	["R94 inc [[]]（片5 は G5）", r94("inc [[]]"), "(unit inc)", "A", { leftoverDiag: ["inc"] }],
+	["R94 inc ~[]（片5 は G5）", r94("inc ~[]"), "(unit inc)", "A", { leftoverDiag: ["inc"] }],
+	["R94 inc [_ _]（片5 は A）", r94("inc [_ _]"), "(unit inc)", "A", { leftoverDiag: ["inc"] }],
+	["R94 inc ([])", r94("inc ([])"), "(unit inc)", "A", { leftoverDiag: ["inc"] }],
+	// 既定値のある関数（裸の仮引数と既定値のある口が値の口。片5 の R85 は外していた）
+	["R94 go [] は `go _` と同じ go（片5 は未知の適用）", r94("go []"), "(unit go)", "A", { leftoverDiag: ["go"] }],
+	["R94 go [] 2 は `go _ 2` と同じカリー化（R68。片5 は未知の適用）", r94("go [] 2"), "(unit (? [$p0] (apply go (construct $p0 2))))", "A", { leftoverDiag: ["(? [$p0] (apply go (construct $p0 2)))"] }],
+	["R94 go 1 [] は zs の既定値（R39。葉の綴りは書いたまま）", r94("go 1 []"), "(apply go (construct 1 []))", "未知"],
+	["R94 go [] !_ は `go _ !_` と同じ（片5 は `[]` を ys に入れた穴の関数）", r94("go [] !_"), "(unit (? [$p0 $p1] (apply go (construct $p0 $p1))))", "A", { leftoverDiag: ["(? [$p0 $p1] (apply go (construct $p0 $p1)))"] }],
+	["R94 gq [] 2（`[y : 1]` の前の裸の x）", r94("gq [] 2"), "(unit (? [$p0] (apply gq (construct $p0 2))))", "A", { leftoverDiag: ["(? [$p0] (apply gq (construct $p0 2)))"] }],
+	["R94 hd [1 2] []（`[y : 1]` は既定値のある口で、既定値）", r94("hd [1 2] []"), "(apply hd (construct [1 2] []))", "未知"],
+	// 今のまま（R94 の外）
+	["R94 の外：名前 inc e0 は R63 の A（片5 は G5、§5 Q75 (e)）", r94("inc e0"), "(apply inc e0)", "A"],
+	["R94 の外：名前 e8 : ~[] ⏎ inc e8（片5 は G5）", r94(["e8 : ~[]", "inc e8"]), "(apply inc e8)", "A"],
+	["R94 の外：名前 inc un", r94("inc un"), "(apply inc un)", "A"],
+	["R94 の外：空でない器 inc [1 2] は木の段では A（10-04 の TypeError は型の段の話）", r94("inc [1 2]"), "(apply inc [1 2])", "A"],
+	["R94 の外：最後でない括りの口 pb2 [] 1 は空の器", r94("pb2 [] 1"), "(apply pb2 (construct [] 1))", "A"],
+	["R94 の外：R34 の穴の関数の最後の括り (f3 !_ 2) 1 []", r94("(f3 !_ 2) 1 []"), "(unit (apply [f3 !_ 2] (construct 1 [])))", "A", { leftoverDiag: ["(apply [f3 !_ 2] (construct 1 []))"] }],
+	["R94 の外：既定値のある関数の括りの仮引数 hd [] 1", r94("hd [] 1"), "(apply hd (construct [] 1))", "未知"],
+	["R94 の外：口の数を数えない穴の関数 (go !_ 2) []（§5 Q75 (a) の残り）", r94("(go !_ 2) []"), "(apply [go !_ 2] [])", "未知"],
+	["R94 の外：恒等射 i [] は器を受ける", r94("i []"), "(apply i [])", "A"],
+	["R94 の外：値の隣 [] 5", r94("[] 5"), "(construct [] 5)", "A"],
+	["R94 の外：$[[]] は `[]` を読む参照（$[_] は R56 の零射の番地、§5 Q75 (d)）", r94("$[[]]"), "$[[]]", "A"],
+	// R95：点なしの可変長の口の空の流れ（片5 は R51 の丸ごと）
+	["R95 [inc,] []~ は `[inc,] _` と同じ（片5 は A）", r94("[inc,] []~"), "(unit [inc,])", "A", { leftoverDiag: ["[inc,]"] }],
+	["R95 [+] []~ は `[+] _` と同じ R31 の A（片5 は未知）", r94("[+] []~"), "(apply [+] []~)", "A"],
+	["R95 [+] inc []~ は `[+] inc _` と同じ（片5 は未知）", r94("[+] inc []~"), "(apply (compose [+] inc) []~)", "A"],
+	["R95 inc ([+] inc []~) は `inc ([+] inc _)` と同じ（片5 は G7）", r94("inc ([+] inc []~)"), "(apply inc [[+] inc []~])", "A"],
+	["R95 [* 2,] inc []~（点なしを頭にした合成）", r94("[* 2,] inc []~"), "(unit (compose [* 2,] inc))", "A", { leftoverDiag: ["(compose [* 2,] inc)"] }],
+	["R95 5 [* 2,] []~", r94("5 [* 2,] []~"), "(construct 5 (unit [* 2,]))", "A", { leftoverDiag: ["[* 2,]"] }],
+	["R95 i []~ inc は `i _ inc` と同じ inc（片5 は G18）", r94("i []~ inc"), "(unit inc)", "A", { leftoverDiag: ["inc"] }],
+	["R95 $[i []~] は `$[i _]` と同じ（片5 は G20）", r94("$[i []~]"), "$[i []~]", "A"],
+	["R95 k4 : [~t] ? [+] t~ ⏎ k4 []（本体は R31 の `_`。片5 は未知）", r94(["k4 : [~t] ? [+] t~", "k4 []"]), "(apply k4 [])", "A"],
+	["R95 の外：括りの関数の最後の括り fq []~ は `fq []`（R64）", r94("fq []~"), "(apply fq []~)", "A"],
+	["R95 の外：R34 の穴の関数の最後の括り (f3 !_ 2) 1 []~ も元の流れ", r94("(f3 !_ 2) 1 []~"), "(apply [f3 !_ 2] (construct 1 []~))", "未知"],
+	// 問い2 の記録（`fold $add []` の G16 は今のまま）：G16 は書いた時点で長さ 0 と分かる List を畳む形にだけ当たり、実行時に空になる List では当たらない。
+	["問い2 g1 : [x ~xs] ? fold $add xs ⏎ g1 [1]（xs は実行時に空。実体の中の残りの名前は長さを持たない、R91）", r94(["g1 : [x ~xs] ? fold $add xs", "g1 [1]"]), "(apply g1 [1])", "A"],
+	["問い2 lz : [x ~xs] ? 1 + (lz xs) ⏎ lz [1]（再帰の終わりの空も同じ）", r94(["lz : [x ~xs] ? 1 + (lz xs)", "lz [1]"]), "(apply lz [1])", "A"],
+	["問い2 g3 : [~xs] ? fold $add xs ⏎ g3 [1]", r94(["g3 : [~xs] ? fold $add xs", "g3 [1]"]), "(apply g3 [1])", "A"],
+	["問い2 fold $add (tl [1])（関数の結果の空は長さが見えない）", r94("fold $add (tl [1])"), "(apply fold (construct $add [tl [1]]))", "未知"],
+	// 片6 の確かめの直し（2026-10-27）：書いた `_` の後ろの書いた `[]` は、着く口を先に数える（writtenEmptyAhead）。最初の版は `[]` を器の値に数えたまま `_` の門（G5・G15）が
+	// 先に当たり、同じ位置に書いた `_` の答えと割れていた（`add [_] [_] inc` は HEAD で通っていた形）。
+	["R94 add _ [] inc は `add _ _ inc` と同じ（確かめの直しの前は G5）", r94("add _ [] inc"), "(unit (compose add inc))", "A", { leftoverDiag: ["(compose add inc)"] }],
+	["R94 add [] [] inc は `add _ _ inc` と同じ（直しの前は G5）", r94("add [] [] inc"), "(unit (compose add inc))", "A", { leftoverDiag: ["(compose add inc)"] }],
+	["R94 add [_] [_] inc は `add _ _ inc` と同じ（直しの前は G5、HEAD は通った）", r94("add [_] [_] inc"), "(unit (compose add inc))", "A", { leftoverDiag: ["(compose add inc)"] }],
+	["R94 add _ [] [] inc（2つ目の `[]` は R34 で前の穴に入る値の口）", r94("add _ [] [] inc"), "(unit (compose add inc))", "A", { leftoverDiag: ["(compose add inc)"] }],
+	["R94 add _ [] _ inc（最後の葉の後ろの `_` は、どちらの読みでも消えるので数えない）", r94("add _ [] _ inc"), "(unit (compose add inc))", "A", { leftoverDiag: ["(compose add inc)"] }],
+	["R94 f3 1 _ [[]] inc", r94("f3 1 _ [[]] inc"), "(unit (compose (apply f3 1) inc))", "A", { leftoverDiag: ["(compose (apply f3 1) inc)"] }],
+	["R94 use _ [] inc", r94("use _ [] inc"), "(unit (compose use inc))", "A", { leftoverDiag: ["(compose use inc)"] }],
+	["R94 (f3 1) [] []（括った頭）", r94("(f3 1) [] []"), "(unit [f3 1])", "A", { leftoverDiag: ["[f3 1]"] }],
+	["R94 (add !_ !_) _ []（穴の関数）", r94("(add !_ !_) _ []"), "(unit [add !_ !_])", "A", { leftoverDiag: ["[add !_ !_]"] }],
+	["R94 [<<] _ []（畳まない2項の点なし）", r94("[<<] _ []"), "(unit [<<])", "A", { leftoverDiag: ["[<<]"], pfInfo: "[<<]" }],
+	["R94 double add _ []（合成の段を越えた口）", r94("double add _ []"), "(unit (compose double add))", "A", { leftoverDiag: ["(compose double add)"] }],
+	["R94 add inc _ []（合成の頭の口）", r94("add inc _ []"), "(unit (compose add inc))", "A", { leftoverDiag: ["(compose add inc)"] }],
+	["R94 double f3 [] [] []（後ろの葉はまとめて読み直す）", r94("double f3 [] [] []"), "(unit (compose double f3))", "A", { leftoverDiag: ["(compose double f3)"] }],
+	["R94 gq _ inc []（既定値のある関数。直しの前は G15）", r94("gq _ inc []"), "(unit (compose gq inc))", "A", { leftoverDiag: ["(compose gq inc)"] }],
+	["R94 go _ inc []（直しの前は G15）", r94("go _ inc []"), "(unit (compose go inc))", "A", { leftoverDiag: ["(compose go inc)"] }],
+	// 片6 の確かめの直し：括りの中の長さ 0 と分かる流れも連結の単位で消える（`[]~ = _~ = _`）ので、`[_~]`・`[[]~]`・`([]~)`・`[e0~]` も中身が詰まって `[]` になる書いた括り。
+	// 最初の版は書いた `_` だけを消し、`inc [_~]` は器の A で `inc [_]` と割れていた（片5 までは同じ答え）。
+	["R94 inc [_~] は `inc [_]` と同じ（直しの前は A）", r94("inc [_~]"), "(unit inc)", "A", { leftoverDiag: ["inc"] }],
+	["R94 inc [[]~]", r94("inc [[]~]"), "(unit inc)", "A", { leftoverDiag: ["inc"] }],
+	["R94 inc ([]~)（[x] ≅ x で `inc []~` と同じ）", r94("inc ([]~)"), "(unit inc)", "A", { leftoverDiag: ["inc"] }],
+	["R94 inc [e0~]（中の `e0~` は R84 の長さ 0 の流れ）", r94("inc [e0~]"), "(unit inc)", "A", { leftoverDiag: ["inc"] }],
+	["R94 (add [_~] 3) 5 は 8（直しの前は `(construct [add [_~] 3] 5)`）", r94("(add [_~] 3) 5"), "(apply [add [_~] 3] 5)", "A"],
+	["R94 inc [_~] 5 は 6", r94("inc [_~] 5"), "(apply inc 5)", "A"],
+	["R94 map inc [_~]", r94("map inc [_~]"), "(unit (compose map inc))", "A", { leftoverDiag: ["(compose map inc)"] }],
+	// 合成の中で値の口に入る所は、いちばん上の関数の今の段（合成の頭から順）の口：頭が可変長の口なら器を受ける（§5 Q75 (b)）。
+	["R94 mx inc [] は mx の裸の口で `mx inc _` と同じ", r94("mx inc []"), "(unit (compose mx inc))", "A", { leftoverDiag: ["(compose mx inc)"] }],
+	["R94 の外：[* 2,] inc [] は頭の可変長の口で器", r94("[* 2,] inc []"), "(apply (compose [* 2,] inc) [])", "A"],
+];
+const r94Refused = [
+	// R94：書いた `_` と同じ門
+	["R94 double f2 [] inc 5 は `double f2 _ inc 5` と同じ G5（合成の頭の内側、R86 の残り）", r94("double f2 [] inc 5"), "G5"],
+	["R94 [<<] [] 2 は `[<<] _ 2` と同じ G5", r94("[<<] [] 2"), "G5"],
+	["R94 go [] inc 5 は `go _ inc 5` と同じ G15（片5 は G2(a)）", r94("go [] inc 5"), "G15"],
+	// R95 の帰結：本体の根に点なしの関数が残る（R33 の G16。片5 は A か未知）
+	["R95 k3 : [~t] ? [* 2,] t~ ⏎ k3 []（片5 は A）", r94(["k3 : [~t] ? [* 2,] t~", "k3 []"]), "G16", [["k3", "A[]"]]],
+	["R95 k5 : [~t] ? i t~ ⏎ k5 []（片5 は未知）", r94(["k5 : [~t] ? i t~", "k5 []"]), "G16", [["k5", "A[]"]]],
+	["R95 k6 : [~t] ? [inc,] t~ ⏎ k6 []（片5 は A）", r94(["k6 : [~t] ? [inc,] t~", "k6 []"]), "G16", [["k6", "A[]"]]],
+	// R95：綴りで並びの形を見る門も、長さ 0 の流れを書いた `_` に数える
+	["R95 !_ []~ == 1 は `!_ _ == 1` と同じ G7（片5 は `(== (unit !_) 1)`）", r94("!_ []~ == 1"), "G7"],
+	["R95 (!_ []~) 7 は `(!_ _) 7` と同じ G7（§5 Q74 (c)。片5 は恒等射の括りで通った）", r94("(!_ []~) 7"), "G7"],
+	["R95 [!_ []~]（片5 は通った）", r94("[!_ []~]"), "G7"],
+	// 問い2 の記録：書いた時点で長さ 0 と分かる List を畳む形
+	["問い2 fold $add []（今のまま G16、R84）", r94("fold $add []"), "G16", [["fold", "$L A[]"]]],
+	["問い2 fold $add e0（`e0 : []` の名前も長さ 0 と分かる）", r94("fold $add e0"), "G16", [["fold", "$L A[]"]]],
+	["問い2 g3 : [~xs] ? fold $add xs ⏎ g3 []（書いた `[]` を残りだけの括りで受けて渡しても）", r94(["g3 : [~xs] ? fold $add xs", "g3 []"]), "G16"],
+	// 片6 の確かめの直し：R34 が読まない並び（余りに穴）でも、前から n 個の値の口の `[]` は先に読み直す（直しの前は G13 で、`gq _ 1 !_` の G15 と門が割れた）。
+	["R94 gq [] 1 !_ は `gq _ 1 !_` と同じ G15", r94("gq [] 1 !_"), "G15"],
+	// 今のまま（§5 Q75 (g)）：`_` の後ろの `[]` が、`_` を穴と読むと値の口でない所に着く（器の読みも成り立つ）か、数えられない所。器の葉で、`_` の門が名指しする。
+	["Q75 (g) mx _ [] inc（`[]` は穴の読みで [b] の括りの口。§5 Q7）", r94("mx _ [] inc"), "G5"],
+	["Q75 (g) pq _ []（`_` が括りの口 [a]）", r94("pq _ []"), "G5"],
+	["Q75 (g) (f3 !_ 2) _ []（`[]` は R34 の最後の括り）", r94("(f3 !_ 2) _ []"), "G5"],
+	["Q75 (g) (add 3) _ [] []（2つ目の `[]` は閉じた値の後ろ）", r94("(add 3) _ [] []"), "G5"],
+	["Q75 (g) inc _ _ []（口の尽きた後の `_`、R34 が読まない G13）", r94("inc _ _ []"), "G13"],
+];
+for (const [name, s, want, kind, extra] of r94Passes) checkPass(name, s, want, kind, extra);
+for (const [name, s, want, inst] of r94Refused) checkRefused(name, s, want, inst);
+const r94Messages = [
+	["R94 書いた [] を `_` と読んで G15 に当たったら、言い分に添える", r94("go [] inc 5"), "G15", ["書いた `[]` は、値の口では同じ位置に書いた `_` と同じに読みます（§4 R94）"], []],
+	["R95 綴りの門の言い分は長さ 0 の流れを名指しする", r94("(!_ []~) 7"), "G7", ["長さ 0 の流れも同じ、§4 R84・R95", "§5 Q74"], []],
+	["R95 書いた `_` だけの綴りの門の言い分は流れを名指ししない", r94("(!_ _) 7"), "G7", ["§5 Q74"], ["長さ 0 の流れ"]],
+	["Q75 (g) `_` の後ろの `[]` を器のまま数えた門は、そう添える", r94("mx _ [] inc"), "G5", ["§5 Q7", "後ろの書いた `[]` は", "器のまま数えました（§4 R94、§5 Q75 (g)）"], ["書いた `[]` は、値の口では"]],
+	["Q75 (g) 書いた `_` だけの門は添えない", r94("mx _ 5 inc"), "G5", ["§5 Q7"], ["§5 Q75 (g)"]],
+];
+for (const [name, s, gateId, must, mustNot] of r94Messages) {
+	total++;
+	let text;
+	try {
+		resolve(s);
+		fail(`言い分 ${name}`, "断るはずが通った");
+		continue;
+	} catch (e) {
+		if (e.gate !== gateId) {
 			fail(`言い分 ${name}`, `gate: ${e.gate}`, String(e.message));
 			continue;
 		}

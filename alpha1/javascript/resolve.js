@@ -42,14 +42,20 @@
  * （bindParams）、深さの上限は素の関数も数え（writtenDepth）、印の鍵は番号の DAG（internPlainMarks）、外の局所の名前を隠す内の行は今のまま断り（scanLocals）、
  * `$` の辺のある局所の輪はどこから解いても local-cycle（localInfo）、G6 の言い分は届かない理由を言う（inputWhy）、
  * R83〜R93 は 2026-10-27 の片：`_` は置かれた演算の単位（R83。値の口は穴、既定値のある口は既定値、括りの口は空の器。木の段で変わる所は下の物だけ）、
- * 長さ 0 の流れ `[]~`・`_~` は書いた `_` と同じ印（R84、emptyMark。可変長の口が流れ1つを丸ごと受ける所だけ元の流れ、markStep）、書いた `[]` を値の口に
- * 置いた形は G5（R85、refuseEmptyAtValue）、関数を挟んで値が続く `_` は穴（R86、tryHoleRow）、値の演算子の被演算子は評価する所（R87、classifyInfix・
+ * 長さ 0 の流れ `[]~`・`_~` は書いた `_` と同じ印（R84、emptyMark。括りの関数の最後の括りが流れ1つを丸ごと受ける所だけ元の流れ、markStep）、書いた `[]` を値の口に
+ * 置いた形は G5（R85。同じ日の R94 で廃止）、関数を挟んで値が続く `_` は穴（R86、tryHoleRow）、値の演算子の被演算子は評価する所（R87、classifyInfix・
  * classifyEvaluated）、`~_` は書いた `[_]` と同じ項（R88、R79 のまま。G4 は廃止）、閉じた頭の後ろの口の外の `!_`・`_` は並びの単位（R89、g13Of・holeRefusal）、頭の名前がある
  * 括りに空の List か `_` と分かる値が来たら本体を読まずに `_`（R90、instantiate）、書いた時点で長さの分かる List の足りない名前は `_`（R91、bindParams・
  * argDescOf）、番地と言える物どうしで顔が1つに決まる組（R92、ADDR_ADD・ADDR_SUB）、`,` の積は書いた形のまま括りの口へ（R93、productIntoRefPort）、
  * 同じ日の確かめの直しで、R86 は `_` より前に関数がある並び（合成の頭）を今のまま断り（tryHoleRow）、前置 `~` の葉の中身と `_` を指すかは括り1つの `[x]` と同じに
  * 読み（isLiftTerm）、`_` と分かる値・長さ 0 と分かる List を撒けば空の流れで、中置の被演算子の空の流れも書いた `_`（isKnownEmpty・classifyInfix）、空の文字列も
  * R90、実体の中の残りの名前は長さを持たない（bindBracket の withoutLen）、
+ * R94・R95 は 2026-10-27 の片6：値の口に着いた書いた `[]`（と `[[]]`・`~[]`・`[_]`・`~_` など、中身が詰まって `[]` になる書いた括り）は、同じ位置に書いた `_` と同じ
+ * （R94、classifyItems の印 writtenEmpty・readWrittenEmpty の読み直し・valuePortOf・emptyArgsAtValue。既定値のある関数の値の口は otherFn の bareAt。名前は R63 の `_` と
+ * 分かる値のまま）、点なしの可変長の口（`[* 2,]`・`[inc,]`・`[+]`・恒等射）に来た長さ 0 の流れも書いた `_` と同じ（R95、markStep。元の流れで読むのは括りの関数の
+ * 最後の括り（と R34 の穴の関数の最後の括り）だけ）、綴りで並びの形を見る所も長さ 0 の流れを書いた `_` に数える（R95、isUnitLikeTerm）、同じ片の確かめの直しで、
+ * 書いた `_` の後ろの書いた `[]` は着く口を先に数え（writtenEmptyAhead。位置を保つ読みで全部値の口に着く所だけ）、括りの中の長さ 0 の流れも詰め（`[_~]`・`[[]~]`、
+ * isWrittenEmptyCore）、R34 が読まない並びの前から n 個の口も先に見る（holeMismatch）、
  * §1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
  * 門（G1〜G22（G14 は 2026-10-21、G17 と G1 は 2026-10-22、G12 は 2026-10-23、G8 と G9 は 2026-10-24、G4 は 2026-10-27 に廃止。G19 は 2026-10-24 の R51（2026-10-25 に決定）、G20 は同じ日の R53。2026-10-25 に R54〜R57 で G20 の当たる形を直し、同じ日の R58〜R61 で G19・G20 の当たる形を直した。G21 は 2026-10-26 の R62、G22 は同じ日の R67）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
  * 答えが出たときに、その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
@@ -1165,7 +1171,11 @@ function fnKey(fn) {
       // （仮引数のブロックの1行に名前が2つある `gq :` ⏎ `⇥⇥a b` ⏎ `⇥? a`。前の例の `gx : a ~y ? a` は、2026-10-26 から定義の所で G22、R67）と振る舞いが分かれる。鍵を `other` 1つにすると、括りの関数に欄で渡したときに実体を分け合い、
       // 先に解いた方の門（G5 か G15）が、もう片方の行の言い分になった（行の順で名指しが入れ替わる）。だから印と n を入れる。
       // 既定値のある口の位置（defaultAt）でも、書いた `_` を当てたときの答え（既定値か G15、R39）が分かれるので入れる。
-      return fn.defaults ? `other:d${fn.n === null ? "?" : fn.n}${fn.defaultAt ? `:${fn.defaultAt.map((b) => (b ? 1 : 0)).join("")}` : ""}` : "other";
+      // 2026-10-27 の R94 から、括りの仮引数のある物は値の口の位置（bareAt）も入れる（書いた `[]` を当てたときの答え（書いた `_` と同じか、空の器か）が分かれる）。
+      // 括りの仮引数の無い物は今までどおりの綴り（どの口も値の口）。
+      return fn.defaults
+        ? `other:d${fn.n === null ? "?" : fn.n}${fn.defaultAt ? `:${fn.defaultAt.map((b) => (b ? 1 : 0)).join("")}` : ""}${fn.bareAt && fn.bareAt.some((b) => !b) ? `:b${fn.bareAt.map((b) => (b ? 1 : 0)).join("")}` : ""}`
+        : "other";
     default:
       return fn.idKey ? `${fn.type}:${fn.idKey}` : fn.type;
   }
@@ -1978,10 +1988,23 @@ function finishFrame(F, frame, memo, value) {
 // 実体の鍵（fnKey）にも印と数を入れる。
 // 既定値のある口の位置（defaultAt、R39）：前から数えた仮引数ごとに、既定値のある仮引数か。n が数えられなければ null。書いた `_` が
 // 既定値のある口に当たれば既定値という値（defaultUnit・tryHole）、既定値の無い口なら G15 なので、実体の鍵にも入れる。
+// 値の口の位置（bareAt、2026-10-27 の R94）：前から数えた仮引数ごとに、値の口（裸の名前か、既定値のある口）か。括りの仮引数（`[a b]`）は参照の口で false。
+// 書いた `[]` が値の口に着いたら、同じ位置に書いた `_` と同じに読む（R94、valuePortOf・emptyArgsAtValue）ので、どの口が値の口かを持つ。n が数えられなければ null。
 function otherFn(left) {
   if (!left || !treeHasColon(left)) return { type: "other" };
   const n = defaultsArity(left);
-  return { type: "other", defaults: true, n, defaultAt: n === null ? null : defaultsSlots(left) };
+  return { type: "other", defaults: true, n, defaultAt: n === null ? null : defaultsSlots(left), bareAt: n === null ? null : defaultsBare(left) };
+}
+
+// 既定値のある関数の、仮引数ごとの「値の口か」（R94）。数え方は defaultsArity・defaultsSlots と同じで、値の口は、裸の名前・`名前 : 既定値` の行・中に `:` のある括り
+// （`[x : 1]`。括りは既定値を書く綴りで、受けるのは裸の名前 x）。ほかの括り（`[a b]`）は括りの仮引数（参照の口）。
+function defaultsBare(left) {
+  const withDefault = (t) => isBareBlock(t, "bracket") && t.core.rows.some(treeHasColon);
+  const bare = (t) => !!bareName(t) || withDefault(t);
+  if (left.terms.length === 1 && isBareBlock(left.terms[0], "indent")) {
+    return left.terms[0].core.rows.map((row) => row.type === "op" || bare(row.terms[0]));
+  }
+  return left.terms.map(bare);
 }
 
 // 既定値のある関数の、仮引数ごとの「既定値のある口か」（R39）。数え方は defaultsArity と同じで、既定値のある口は、仮引数の
@@ -3149,12 +3172,14 @@ function classify(term, ctx) {
   }
   if (post.length === 0 && pre.length === 1 && pre[0] === "~") {
     // `~_`（R88、2026-10-27。§5 Q14 の残りの答え）：R79 のとおり書いた `[_]` と同じ項（下の bracketInfo の道）。`[_]` は R63 の文面の「書いた `_` と分かる値」（印 zero）
-    // なので、`~_` も `_` と分かる値：値の口では `inc [_]`・`inc un` と同じ A（実行時の `_` と同じく値の段で穴、R83）、括りの口では R90 の A、並びの中では閉じた1つの項
+    // なので、`~_` も `_` と分かる値：値の口では `inc [_]` と同じく書いた `_` と同じ（R94、2026-10-27 の片6。書いた括りの `[_]`・`~_` は中身が詰まって `[]` で、
+    // 値の口では同じ位置に書いた `_`。片5 の間は `inc un` と同じ A だった）、括りの口では R90 の A、並びの中では閉じた1つの項
     // （R63 の「名前・括りを通した `_` は閉じた1つの項」）、撒けば長さ 0 の流れ（R84）。根拠：主の Claude の傾き「Q14 の残り | `~_` | `_`。持ち上げた `[_]` は、List の中の
     // `_` が連結の単位で消えて `[]`、つまり `_`」（2026-10-26 11:57 の表の A）に、利用者は A の行に異議を言わなかった（U [2026-10-26 23:35 c8ccdd69] は B の行と R39 だけに
     // 答えた。主の Claude は、傾きと違う物だけ言う取り決めどおり傾きで受けた、R）。前は種類を決めず、2項以上の並びで G4（`[_]` が閉じた1つの項か、並びの単位として消える
     // 印かが決まらない）。2026-10-27 の確かめの直し：最初の版は `~_` を書いた `[]`（空の括り）にしていて、書いた `[_]` と答えが割れた（`inc ~_` は G5、`inc [_]` は A）。
-    // `[_]` を `[]` と同じにする読み（傾きの途中の式）は、値の口で R85 の割れに入るかが決まらないので、§5 Q75 (a) に残した。
+    // `[_]` を `[]` と同じにする読み（傾きの途中の式）は、片5 では値の口で R85 の割れに入るかが決まらないので §5 Q75 (a) に残し、片6 の R94 で値の口では `[]` と同じ
+    // （書いた `_` と同じ）に決まった。値の口でない所（並びの中・括りの口・名前の右辺）は今のまま R63 の `_` と分かる値。
     if (core.c === "indent") {
       touchCore(core, ctx);
       return { cat: "plain", desc: U(), view }; // 字下げのブロックの持ち上げは表に無い組み合わせ（未知。前は `~_` と同じ ptilde の G4）
@@ -4525,14 +4550,17 @@ function pointfreeOf(row, ctx) {
   // `(+ 1 _)`・`[!_ _ ,]` の `,` の左）は断る（G7）。末尾の `_` を消してから括りの形を見れば点なし（`(!_ _)` は `(!_)` で否定の点なし、§2・R28）、書いた項で
   // 見れば1項でないので点なしの形でなく、中の並びの読み（括らない `!_` は恒等射 R29、ほかは種類の未知な項）になり、読みが割れる（`double (!_ _) 5` は
   // 否定なら double (!5)、恒等射なら 10）。2026-10-26 の確かめの直し（最初の版は中の並びの読みで `(!_ _)` を恒等射にしていた。§5 Q74）。
+  // 2026-10-27 の R95 の片：長さ 0 と分かる流れ（`(!_ []~)`・`(!_ e0~)`）も書いた `_` と同じに数える（R84 の `[]~ = _`、isUnitLikeTerm。法則31 を点なしの口に広げて
+  // 見つかった。前は書いた `_` の綴りだけを見ていて、`(!_ []~) 7` は恒等射の読みで通り、`(!_ _) 7` は G7 と割れていた）。
   const pfHead = (t) =>
     valueMarkUnit(t) || (!!t && t.type === "infix" && t.stage >= 12 && t.stage <= 22 && (t.left === null || t.right === null));
   const refusePfTail = (seq, comma = "") => {
-    if (!seq || seq.type !== "seq" || seq.terms.length < 2 || !pfHead(seq.terms[0]) || !seq.terms.slice(1).every(isUnitTerm)) return;
+    if (!seq || seq.type !== "seq" || seq.terms.length < 2 || !pfHead(seq.terms[0]) || !seq.terms.slice(1).every((t) => isUnitLikeTerm(t, ctx))) return;
     const pf = `[${writeTerm(seq.terms[0])}${comma}]`;
+    const flow = seq.terms.slice(1).some((t) => !isUnitTerm(t)) ? "（長さ 0 の流れも同じ、§4 R84・R95）" : "";
     throw gate(
       "G7",
-      `1行の括りの中が、点なしの形 \`${pf}\`（§2）の項の後ろに書いた \`_\` だけが続く並び \`${seq.terms.map(writeTerm).join(" ")}\` です。末尾の \`_\` を消してから括りの形を見れば点なし \`${pf}\`（§4 R28）、書いた項で見れば点なしの形ではなく中の並びの読み（括らない \`!_\` は恒等射 §4 R29、ほかは種類の決まらない項）で、読みが割れます（§5 Q74）。点なしなら \`_\` を書かずに \`${pf}\` と書きます。`
+      `1行の括りの中が、点なしの形 \`${pf}\`（§2）の項の後ろに書いた \`_\`${flow || " "}だけが続く並び \`${seq.terms.map(writeTerm).join(" ")}\` です。末尾の \`_\` を消してから括りの形を見れば点なし \`${pf}\`（§4 R28）、書いた項で見れば点なしの形ではなく中の並びの読み（括らない \`!_\` は恒等射 §4 R29、ほかは種類の決まらない項）で、読みが割れます（§5 Q74）。点なしなら \`_\` を書かずに \`${pf}\` と書きます。`
     );
   };
   if (row.type === "op") {
@@ -4747,17 +4775,24 @@ function evaluatePlace(side, sym, ctx) {
   if (!side || side.type !== "seq" || sym === "#") return ctx;
   // 中置の被演算子の括らない `!_` 1つ（`!_ == 1`・`1 & !_`）は、今のまま G7（R44、§5 Q15：中置の被演算子の `!_` を恒等射と読むかは決まっていない。refuseOperandHole）。
   // 評価する所にすると `(unit !_)` になって G7 を素通りする。手続きの行の `!_` は、resolveBody が先に断る（refuseProcedureHole）。
-  if (loneHole(side.terms)) return ctx;
+  if (loneHole(side.terms, ctx)) return ctx;
   return { ...ctx, evaluate: { at: side, sym } };
 }
 const isHoleTerm = (t) => !!t && t.type === "atom" && t.pre.length === 1 && t.pre[0] === "!" && !t.post.length && t.core.c === "unit";
 const isUnitTerm = (t) => !!t && t.type === "atom" && !t.pre.length && !t.post.length && t.core.c === "unit";
+// 書いた `_` か、長さ 0 と分かる撒いた流れ（R84：`[]~`・`_~`・`e0 : []` の `e0~` など。並びの項では emptyMark が書いた `_` と同じ印にする）の項。綴りで並びの形を
+// 見る所（loneHole・点なしの括りの refusePfTail）が、並びの項と同じ数え方をするため（2026-10-27 の R95 の片で、法則31 を点なしの口に広げて見つかった。R95 で恒等射が
+// 受ける長さ 0 の流れも書いた `_` と同じになり、綴りだけを見ると `!_ []~ == 1` は評価する所で `(unit !_)`、`!_ _ == 1` は G7 と割れる）。項を作るのと同じ classify で
+// 流れの長さを見るので、呼ぶ側は頭の形（`!_`・点なしの形）を先に見てから呼ぶ。
+const isUnitLikeTerm = (t, ctx) =>
+  isUnitTerm(t) || (!!t && t.type === "atom" && !t.pre.length && t.post.length === 1 && t.post[0] === "~" && isEmptyFlow(leafOf(t, classify(t, ctx))));
 // 並びが括らない `!_` 1つか（後ろに書いた `_` しか続かない `!_ _` も：並びの終わりの `_` は消える、R28。2026-10-26 に書き直した R28 から。前は `!_ _` を恒等射の
-// 「終わり」で A にしていて、`1 & !_ _` は通り、`1 & !_` は G7 と割れていた）。
-function loneHole(terms) {
+// 「終わり」で A にしていて、`1 & !_ _` は通り、`1 & !_` は G7 と割れていた）。長さ 0 と分かる流れも書いた `_` と同じに数える（isUnitLikeTerm、R95）。
+function loneHole(terms, ctx) {
+  if (!terms.length || !isHoleTerm(terms[0])) return false;
   let end = terms.length;
-  while (end > 1 && isUnitTerm(terms[end - 1])) end--;
-  return end === 1 && isHoleTerm(terms[0]);
+  while (end > 1 && isUnitLikeTerm(terms[end - 1], ctx)) end--;
+  return end === 1;
 }
 
 // `:`（R3、P3）。左は、1項なら解かない（定義・欄・既定値の左はいつも1項）。2項以上なら枝の条件として解く。
@@ -5357,7 +5392,7 @@ function resolveBlockBody(right, ctx) {
   const rows = src.map((r, i) => {
     if (isColonRow(r)) return resolveTree(r, { ...ctx, branchReturn: true });
     if (returnsAt(i)) return resolveTree(r, r && r.type === "seq" ? { ...ctx, bodyRoot: true } : ctx);
-    if (r && r.type === "seq" && loneHole(r.terms)) throw refuseProcedureHole();
+    if (r && r.type === "seq" && loneHole(r.terms, ctx)) throw refuseProcedureHole();
     const t = resolveTree(r, r && r.type === "seq" ? evaluatePlace(r, "row", ctx) : ctx);
     return r && r.type !== "seq" && r.sym === "?" && t && t.kind.k === "L" ? leftoverUnit(t, ctx, r, "place") : t;
   });
@@ -5474,11 +5509,38 @@ function resolveSeq(terms, ctx) {
 // R84（2026-10-27、§5 Q69 の答え）：長さが 0 と分かる撒いた流れ（`[]~`・`e : []` の `e~`・書いた `_~`）は、書いた `_` と同じ印の葉にする（emptyMark）。
 // `[]~ = _~ = _`（U〔答え〕[2026-10-26 11:35 c8ccdd69]「…[]~ = _~ = _ / [] = _ / をきちんと念頭に」）：展開は List から並びへのモノイド準同型なので、単位を単位へ
 // 送る（主の Claude の読み、R）。印になった後は、着いた口で読む（R83）：値の口は穴（R16・R38）か消える（R28）、既定値のある口は既定値（R39）、括りの受ける並びの中は
-// 消える（R15）。元の流れは emptyFrom に持ち、可変長の口が流れ1つだけを丸ごと受ける所（R64 の `f []~` は `f []`・R51 の丸ごと）でだけ元の流れで読む（markStep）。
+// 消える（R15）。元の流れは emptyFrom に持ち、括りの関数の最後の括りが流れ1つだけを丸ごと受ける所（R64 の `f []~` は `f []`）でだけ元の流れで読む（markStep）。
+// 点なしの可変長の口（`[* 2,]`・`[+]`・恒等射）は 2026-10-27 の R95 から書いた `_` と同じ（前は R51 の丸ごと）。
 // 前（R51・R70）は流れの1項で、口2つの `add []~` は畳み込みの `_`、口1つの `inc []~` は後ろに何も続かない所だけ余ったラムダの `_`、ほかは G19 だった。
+// R94（2026-10-27、§5 Q75 (a) の答え）：書いた `[]` と、中身が連結の単位で詰まって `[]` になる書いた括り（isWrittenEmptyTerm）の葉には、印 writtenEmpty（番号）を
+// 付ける。器の葉のまま畳み、値の口に着いた所でだけ、同じ位置に書いた `_` と同じに読み直す（reduceItems・WrittenEmptyAtValue）。
+let writtenEmptySeq = 0;
 function classifyItems(terms, ctx) {
   if (terms.length >= 2 && terms.some(isBareIndent)) throw refuseIndentBlock("余積の並びの項");
-  return terms.map((t) => emptyMark(leafOf(t, classify(t, ctx))));
+  return terms.map((t) => {
+    const leaf = emptyMark(leafOf(t, classify(t, ctx)));
+    return leaf.cat === "plain" && isWrittenEmptyTerm(t, ctx) ? { ...leaf, writtenEmpty: ++writtenEmptySeq } : leaf;
+  });
+}
+// R94：書いた `[]` と、中身が連結の単位で詰まって `[]` になる書いた括り。List の中の書いた `_` は連結の単位で消える（U〔答え〕[2026-10-26 11:35 c8ccdd69]「…[]~ = _~ = _
+// / [] = _ / をきちんと念頭に」）ので、`[_]`・`[_ _]` は `[]`。要素1つの括りは中身と同じ（[x] ≅ x）ので、`[[]]`・`[[_]]`・`([])` も `[]`。前置 `~` は書いた `[x]` と
+// 同じ項（R79・R88）なので、`~_`・`~[]` も `[]`。名前（`e0 : []` の e0・`un : _` の un）と名前を括った物（`[e0]`）は当てない：名前を通した `_` は R63 の「`_` と分かる値」
+// のまま（§5 Q75 (e)）。行の中の `[] 5` の `[]` のような要素は消さない（`[[] 5]` は2要素のまま。値の口でない所の答えは変えない）。
+// 括りの中の長さ 0 と分かる流れ（`[]~`・`_~`・`e0~` など）も、書いた `_` と同じに消える（R84 の `[]~ = _~ = _`、isUnitLikeTerm）ので、`[_~]`・`[[]~]`・`([]~)` も `[]`
+// （2026-10-27 の片6 の確かめの直し。最初の版は書いた `_` だけを消し、`inc [_~]` が器の A で `inc [_]` の `(unit inc)` と割れていた。片5 までは同じ答えだった）。
+function isWrittenEmptyTerm(t, ctx, depth = 0) {
+  if (!t || t.type !== "atom" || t.post.length || depth > 64) return false;
+  if (t.pre.length === 1 && t.pre[0] === "~") return t.core.c === "unit" || isWrittenEmptyCore(t.core, ctx, depth);
+  return !t.pre.length && isWrittenEmptyCore(t.core, ctx, depth);
+}
+function isWrittenEmptyCore(core, ctx, depth) {
+  if (!core || core.c !== "bracket") return false;
+  if (!core.rows.length) return true;
+  if (core.rows.length !== 1) return false;
+  const row = core.rows[0];
+  if (!row || row.type !== "seq") return false;
+  const rest = row.terms.filter((u) => !isUnitLikeTerm(u, ctx));
+  return rest.length === 0 || (rest.length === 1 && isWrittenEmptyTerm(rest[0], ctx, depth + 1));
 }
 // 長さが 0 と分かる撒いた流れの葉を、書いた `_` と同じ印（cat "unit"）にする（R84）。長さの分からない流れは今のまま流れの1項。
 // 長さは、書いた数（flowCount）か、撒いた器の desc が長さ 0 と分かる物（isEmptyFlowOf）。
@@ -5496,9 +5558,52 @@ function isKnownEmpty(d) {
   return isEmptyBracket(d) || !!zeroOf(d) || (!!d && d.k === "A" && !d.spread && d.len === 0);
 }
 
+// R94（2026-10-27、§5 Q75 (a) の答え）：書いた `[]`（と、中身が詰まって `[]` になる書いた括り。印 writtenEmpty、classifyItems）が値の口に着いたら、同じ位置に書いた
+// `_` と同じに読む。値の口かは畳み込みの段（いちばん上の関数の今の口）で決まるので、1回目は器の葉のまま畳み、値の口に着いた所（foldStep の valuePortOf と、手順2 の
+// 穴の規則が組んだ口の emptyArgsAtValue）で WrittenEmptyAtValue を投げる。その葉を書いた並び（いちばん外の、その葉を項に持つ reduceItems）が受けて、葉を書いた `_` の
+// 印（writtenEmptyMark）に替え、並びを初めから読み直す。手順2 の穴の規則（R16・R38・R68・R86）も畳み込みの印の読み（R28・R39・R43）も、書いた `_` と同じに当たる。
+// 1回の読み直しで印が1つ以上減るので、読み直しは項の数で止まる。知らせは出す所ごとに1回（reportUndefined などの印）なので、読み直しても重ならない。
+// 2026-10-27 の片6 の確かめの直しから、書いた `_` の後ろに葉が続く所は、葉が値の口に着く前に、葉の着く口を先に数える（markStep の writtenEmptyAhead）。
+// 根拠：主の Claude の問い1（値の口に書いた `[]`、`inc []`・`map inc []`）「`[] = _` と読めば穴になる。でも 10-04 の「自明に TypeError で良い」とも読めるので、今は G5 で
+// 断っている（Q75 (a)）。」（2026-10-27 02:35 UTC）に、U〔答え〕[2026-10-27 09:25 df447414]「1. _ と読んで断らない方向で問題無ければどうぞ」。前（R85）は G5 で断っていた。
+// 葉は1つ（畳み込みの1歩・手順2 の穴の規則で着いた葉）か、いくつか（writtenEmptyAhead が並びの残りの葉を全部まとめて数えた所）。
+class WrittenEmptyAtValue extends Error {
+  constructor(ids) {
+    super("R94: written [] at a value port");
+    this.writtenEmptyIds = [].concat(ids);
+  }
+}
+const reduceOwners = []; // 読み直す印を持つ項の並びのうち、いま読んでいる物（外から順）
+function writtenEmptyMark(leaf) {
+  const { writtenEmpty, ...rest } = leaf;
+  return { ...rest, cat: "unit", desc: U(), kind: U(), count: null, strCount: null, writtenEmptyFrom: leaf };
+}
+// 書いた `[]` を書いた `_` と読み直した印（writtenEmptyMark）が門に当たったら、言い分にそう書き添える（書いた綴りは `[]` なので）。
+const writtenEmptyNote = (x) => (x && x.writtenEmptyFrom ? `書いた \`${writeTerm(x.writtenEmptyFrom.term)}\` は、値の口では同じ位置に書いた \`_\` と同じに読みます（§4 R94）。` : "");
+// 書いた `[]` の葉（印 writtenEmpty）のある並びを、値の口に着いた葉を読み直しながら畳む（R94。reduceItems が rereading の印を付けて呼び直す）。
+function readWrittenEmpty(items, ctx, evaluate, closeIdle, bodyRoot) {
+  for (;;) {
+    reduceOwners.push(items);
+    try {
+      return reduceItems(items, ctx, evaluate, closeIdle, bodyRoot, true);
+    } catch (e) {
+      if (!(e instanceof WrittenEmptyAtValue)) throw e;
+      const ids = new Set(e.writtenEmptyIds);
+      const has = (list) => list.some((t) => t && ids.has(t.writtenEmpty));
+      // 葉を書いた並びは、その葉を項に持ついちばん外の並び（穴の関数の本体のように、同じ葉を並べ直して読む内の並びは、外へ返す）。
+      if (!has(items) || reduceOwners.slice(0, -1).some(has)) throw e;
+      items = items.map((t) => (t && ids.has(t.writtenEmpty) ? writtenEmptyMark(t) : t));
+    } finally {
+      reduceOwners.pop();
+    }
+  }
+}
 // closeIdle は、値の上に積まれて口の開いたまま閉じた関数を余ったラムダにする並びか（R52。`$[…]` の中身の行の並びと、その `,` が恒等射で
 // 消えて残った並びだけ false。遅延した式、§5 Q52 の答え。resolveDelayed）。bodyRoot は、関数の本体の根の並びか（R70 の closeEmpty だけが読む）。
-function reduceItems(items, ctx, evaluate = false, closeIdle = true, bodyRoot = false) {
+// 書いた `[]` の葉（印 writtenEmpty）のある並びは、readWrittenEmpty が読み直しながら畳む（R94）。無い並び（ほとんど全部）は、読み直しの枠を積まずにここで直に畳む
+// （深い入れ子でスタックの段を増やさないため）。
+function reduceItems(items, ctx, evaluate = false, closeIdle = true, bodyRoot = false, rereading = false) {
+  if (!rereading && items.some((t) => t && t.writtenEmpty)) return readWrittenEmpty(items, ctx, evaluate, closeIdle, bodyRoot);
   // 1項の並びは、その項そのもの（手順の3）。`!_` 1つは恒等射（L）、書いた `_` 1つは印（A）にする（single）。
   if (items.length === 1) return finishTrees([single(items[0])], evaluate, ctx);
   // 書いた `_` の前が1項だけ（`foo _`・`@f _`・`~_ _`・`!_ _`）：その1項が値か、印の無い前置 `@` の項か、`~_` か、括らない `!_` なら、後ろの `_` は値の隣でも（R43）
@@ -5778,7 +5883,7 @@ function foldStep(st, i) {
   if (x.kind.k === "A") {
     if (!top || (top.t !== "fn" && top.kind.k === "A")) return void stack.push(x);
     if (top.t !== "fn") throw unknownNeighbor(top, x);
-    if (isEmptyItem(x) && valuePortOf(curStage(top))) throw refuseEmptyAtValue(renderEntry(top), x);
+    if (x.writtenEmpty && valuePortOf(curStage(top))) throw new WrittenEmptyAtValue(x.writtenEmpty); // R94：書いた `_` と同じに読み直す（reduceItems）
     // 撒く項は流れの1項で、関数の残りの口の数で受ける（R51）。書き下しか畳み込みで段が閉じ、全部閉じれば値。
     if (isSpreadNode(x) && streamStep(top, x)) {
       if (entryDone(top)) stack[stack.length - 1] = renderEntry(top);
@@ -5824,42 +5929,52 @@ function foldStep(st, i) {
   top.log.push({ k: "compose", group: top.groups.length - 1 });
 }
 
-// R85（2026-10-27）：書いた `[]`（`e : []` の e・`[[]]`・`~[]`・それを括った物・名前にした物も。空の括りの desc、isEmptyBracket）が値の口（素の関数・穴の関数の裸の口・単項と
-// 畳まない2項の点なしの口・括りの関数の裸の仮引数）に来た。`[] = _`（U〔答え〕[2026-10-26 11:35 c8ccdd69]）から読めば、同じ位置に書いた `_` と同じ（値の口は穴、
-// R83）。一方、2026-10-04 の裁定（主の Claude の問い「1. 裸の仮引数にリストが来たら、名指しで断る、でいい？」に U〔答え〕[2026-10-04 00:23 c89225be]「1. その通り、
-// 自明にTypeErrorで良い。…」）から読めば、空の List を裸の口に渡す形は型の誤り。`~_` は書いた `[_]` と同じ項（R88、`_` と分かる値）で、ここに当たらない。
-// 2つの読みで答えが割れる（穴か、断るか）ので、名指しで断る（§5 Q75）。既定値のある関数の口は、仮引数ごとに裸か括りかを持たない（otherFn）ので今のまま（適用は未知）。
-// 括りの口・可変長の口（貪欲な単項・畳む2項の点なし・恒等射）は器を受ける口で、今のまま（`f []` は R90、§5 Q70 の答え）。
-const isEmptyItem = (x) => !!x && x.t === "leaf" && x.cat === "plain" && isEmptyBracket(x.desc);
+// R94（2026-10-27、§5 Q75 (a) の答え）：段 s の次の口が値の口か（素の関数・穴の関数の裸の口・単項と畳まない2項の点なしの口・括りの関数の裸の仮引数・既定値のある関数の
+// 裸の仮引数と既定値のある口。合成の中で値の口に入る所も、いちばん上の関数の今の段で見る）。書いた `[]`（印 writtenEmpty）がここに着いたら、同じ位置に書いた `_` と同じに
+// 読み直す（reduceItems）。2026-10-04 の裁定（主の Claude の問い「1. 裸の仮引数にリストが来たら、名指しで断る、でいい？」に U〔答え〕[2026-10-04 00:23 c89225be]
+// 「1. その通り、自明にTypeErrorで良い。…」）は、空でない器の話として残る（`inc [1 2]` は木の段では今のまま A で、型の段の話）。`[] = _` は器ではなく単位（主の Claude の読み、R）。
+// 前（R85、2026-10-27 の片5）は、2つの読み（穴か TypeError か）が割れるとして G5 で断り、名前（`e0 : []` の e0・`e8 : ~[]` の e8）も同じに断っていた。名前は R63 の
+// 「`_` と分かる値」の今の読み（A）に戻した（§5 Q75 (e)）。
+// 既定値のある関数は、仮引数の数が数えられ、前の実引数が全部1つの口に入る値のときだけ見る（defaultUnit と同じ数え方。値の口の位置は otherFn の bareAt）。
+// 当てない所（今のまま）：括りの口（`fq []` は R90、最後でない括りの `pb2 [] 1`・R34 の穴の関数の最後の括り `(f3 !_ 2) 1 []` も器のまま）・可変長の口（貪欲な単項・畳む2項の
+// 点なし・恒等射の `[* 2,] []`・`[+] []`・`i []` は器を受ける）・口の数の分からない関数（前置 `@`・既定値のある関数から作った穴の関数 `(go !_ 2) []`・仮引数の数えられない
+// 既定値のある関数）・口でない所（値の隣 `[] 5`・閉じた値の後ろ `inc 5 []`）。
 function valuePortOf(s) {
+  return !!s && valuePortAt(s, s.recv.length);
+}
+// 段 s の前から p 番目の口（s がもう受けた物も数える）が値の口か（valuePortOf と writtenEmptyAhead）。
+function valuePortAt(s, p) {
   const fn = s && s.fn;
   if (!fn || s.tainted) return false;
   switch (fn.type) {
     case "plain":
-      return s.recv.length < (fn.rest ? fn.restAt || 0 : fn.n);
+      return p < (fn.rest ? fn.restAt || 0 : fn.n);
     case "pfUnary":
     case "pfBinary":
-      return s.recv.length < fnShape(fn).fixed;
+      return p < fnShape(fn).fixed;
     case "pattern": {
       const base = fn.base || fn;
-      const used = (fn.bound ? fn.bound.length : 0) + s.recv.length;
+      const used = (fn.bound ? fn.bound.length : 0) + p;
       return !!base.bareAt && !!base.bareAt[used];
+    }
+    case "other": {
+      const at = fn.defaults ? fn.bareAt : null;
+      const slot = (t) => !!t.kind && t.kind.k === "A" && !isSpreadNode(t);
+      return !!at && s.recv.every(slot) && p < at.length && at[p];
     }
     default:
       return false;
   }
 }
-function refuseEmptyAtValue(head, x) {
-  return gate(
-    "G5",
-    `書いた空の List \`${show(x)}\` が、\`${show(head)}\` の値の口（裸の仮引数）に来ました。\`[] = _\` と読めば同じ位置に書いた \`_\` と同じ（値の口は穴で位置を保つ、§4 R83）ですが、裸の仮引数に器が来たら型の誤り（2026-10-04 の裁定）とも読めて、答えが割れます（§4 R85、§5 Q75）。穴のつもりなら \`_\` か \`!_\` と書きます。`
-  );
-}
-// 手順2 の穴の規則（tryHole・holeMismatch）が組んだ、頭の素の関数の口に入る実引数の並び args に、書いた `[]` があれば同じに断る（R85）。
-function refuseEmptyArgs(h, args) {
-  if (!h.kind || !h.kind.fn || h.kind.fn.type !== "plain") return;
-  const e = args.find(isEmptyItem);
-  if (e) throw refuseEmptyAtValue(h, e);
+// 手順2 の穴の規則（tryHole・holeMismatch）が組んだ、頭の口に前から順に入る実引数の並び args に、値の口（素の関数の口・既定値のある関数の bareAt の口）に着く書いた `[]`
+// （印 writtenEmpty）があれば、同じ位置に書いた `_` と同じに読み直す（R94。前は R85 の G5 で、素の関数の頭だけを見ていた）。
+function emptyArgsAtValue(h, args) {
+  const fn = h.kind && h.kind.fn;
+  const plain = !!fn && fn.type === "plain";
+  const at = !!fn && fn.type === "other" && fn.defaults ? fn.bareAt : null;
+  if (!plain && !at) return;
+  const e = args.find((t, i) => !!t && !!t.writtenEmpty && (plain || (i < at.length && at[i])));
+  if (e) throw new WrittenEmptyAtValue(e.writtenEmpty);
 }
 
 // 関数の項が、まだ何も受けていない恒等射の段だけでできているか（R74）。
@@ -5957,10 +6072,15 @@ function markStep(st, i, top) {
   }
   const s = curStage(top);
   const fn = s.fn;
-  // R84（2026-10-27）：長さ 0 の流れの印（emptyMark）は、書いた `_` と同じに読む。ただし可変長の口が、その流れ1つだけを丸ごと受ける所（可変長の口がまだ何も
-  // 受けておらず、後ろに書いた `_` か関数しか続かない）では、元の流れのまま受ける：括りの関数の最後の括り（参照の口）に入った流れ1つは撒いた器そのもの
-  // （R64：`f []~` は `f []`）、ほかの可変長の口（貪欲な単項・畳む2項の点なし・恒等射）も今のまま丸ごと受ける（R51）。書いた `f _` は R28 で f のまま（§5 Q75）。
-  if (x.emptyFrom && streamMouths(s) === "whole" && s.recv.length === stageShape(s).fixed && argRun(st.items, i).end) {
+  // R84（2026-10-27）：長さ 0 の流れの印（emptyMark）は、書いた `_` と同じに読む。ただし括りの関数の最後の括り（参照の口）が、その流れ1つだけを丸ごと受ける所
+  // （最後の括りがまだ何も受けておらず、後ろに書いた `_` か関数しか続かない）では、元の流れのまま受ける：撒いた器そのもの（R64：`f []~` は `f []`）。書いた `f _` は
+  // R28 で f のまま（§5 Q75 (b) の参照の口）。R34 の穴の関数の最後の括り（`fn.rest`）も参照の口なので同じ。
+  // R95（2026-10-27、§5 Q75 (b) の点なしの所の答え）：点なしの可変長の口（貪欲な単項 `[* 2,]`・写像 `[inc,]`・畳む2項の点なし `[+]`・恒等射 `i`・`!_`）と、それを頭にした
+  // 合成は、ここに当てない（同じ位置に書いた `_` と同じ。`[* 2,] []~` は `[* 2,] _` と同じく点なしの関数が残る `(unit [* 2,])`）。根拠：主の Claude の問い4（可変長の口が
+  // 流れ1つを受ける形、`[* 2,] []~` と `[* 2,] _`）「値はどちらも `_` で、木だけが割れている（Q75 (b)）。」（2026-10-27 02:35 UTC）に、U〔答え〕[2026-10-27 09:25 df447414]
+  // 「4. それは点無しの関数が残るはず。」。前（R84 の最初の版、片5）は R51 の丸ごとで、`[* 2,] []~` は空の List の写像の A だった。
+  const refPort = !!fn && (fn.type === "pattern" || (fn.type === "plain" && !!fn.rest));
+  if (x.emptyFrom && refPort && streamMouths(s) === "whole" && s.recv.length === stageShape(s).fixed && argRun(st.items, i).end) {
     feed(top, x.emptyFrom);
     if (entryDone(top)) st.stack[st.stack.length - 1] = renderEntry(top);
     return;
@@ -5973,19 +6093,20 @@ function markStep(st, i, top) {
     return;
   }
   const run = argRun(st.items, i);
+  if (!run.end) writtenEmptyAhead(st, i, top, s);
   if (fn && fn.type === "other" && fn.defaults) {
     // 既定値のある関数：引数の並びの終わりの `_` は、右から見て既定値のある口に当たる `_` まで残し、その後ろ（既定値の無い口・仮引数の外）は消える
     // （defaultKeep。`gd _` は gd、`gd 1 2 _` は `gd 1 2`、`gd inc _` は `gd inc`）。残した `_` と内側の `_` は今までどおり口ごとに読む（既定値のある口なら
     // 既定値、R39。既定値の無い口は G15）。位置が数えられなければ（null）今までどおり G15（§5 Q8）。
     if (run.end && defaultKeep(s, run.len) === 0) return;
-    feed(top, defaultUnit(top, s, x), false);
+    feed(top, defaultUnit(top, s, x, emptyAheadNote(st.items, i)), false);
     return;
   }
   if (run.end) return; // 引数の並びの終わりの `_` は消える（R28）
   if (fn && fn.type === "plain" && fn.rest) {
     throw gate(
       "G5",
-      `穴の口の足りない並びから作った関数 \`${show(s.headTree || renderEntry(top))}\`（書いていない後ろの口を最後の括りの仮引数で受ける、§4 R34）の実引数の内側（後ろのどこかに値か \`!_\` が続く所）に、書いた \`_\` があります。括りが受ける並びの中の消える印（U〔答え〕10-14 22:23）と読むか、裸の口ならカリー化（U 10-21 03:14）と読むかは決まっていません（§3.5、§5 Q7）。引数の並びの終わりの \`_\` なら消えます（§4 R28）。`
+      `穴の口の足りない並びから作った関数 \`${show(s.headTree || renderEntry(top))}\`（書いていない後ろの口を最後の括りの仮引数で受ける、§4 R34）の実引数の内側（後ろのどこかに値か \`!_\` が続く所）に、書いた \`_\` があります。括りが受ける並びの中の消える印（U〔答え〕10-14 22:23）と読むか、裸の口ならカリー化（U 10-21 03:14）と読むかは決まっていません（§3.5、§5 Q7）。引数の並びの終わりの \`_\` なら消えます（§4 R28）。${writtenEmptyNote(x)}${emptyAheadNote(st.items, i)}`
     );
   }
   if (fn && fn.type === "pattern") {
@@ -6001,14 +6122,14 @@ function markStep(st, i, top) {
     if (base.bareAt.slice(used).some(Boolean)) {
       throw gate(
         "G5",
-        `裸の仮引数を持つ括りの関数 \`${show(renderEntry(top))}\` の実引数に、書いた \`_\` があります。\`_\` を消して詰める（U〔答え〕10-14 22:23、参照を取る関数）か、裸の口のカリー化（U 10-21 03:14）かで読みが割れます（§3.5、§5 Q7）。`
+        `裸の仮引数を持つ括りの関数 \`${show(renderEntry(top))}\` の実引数に、書いた \`_\` があります。\`_\` を消して詰める（U〔答え〕10-14 22:23、参照を取る関数）か、裸の口のカリー化（U 10-21 03:14）かで読みが割れます（§3.5、§5 Q7）。${writtenEmptyNote(x)}${emptyAheadNote(st.items, i)}`
       );
     }
     return; // 消える（R15）
   }
   throw gate(
     "G5",
-    `書いた \`_\` の読みが決まらない位置にあります（\`${show(renderEntry(top))}\` の実引数の内側。後ろのどこかに値か \`!_\` が続きます）。読みが決まるのは、値の隣（並びの単位として消える）・素の関数の穴（\`f _ 3\`・\`f3 _ 2\`）・引数の並びの終わり（並びの終わりまで、後ろに書いた \`_\` か関数しか続かない所。消える、R28）・括りの関数の実引数・既定値のある口（R39）・中置の被演算子・畳む2項の点なしの実引数（\`[+] 1 _\`、R31）です（§3.5、§5 Q7・Q74）。`
+    `書いた \`_\` の読みが決まらない位置にあります（\`${show(renderEntry(top))}\` の実引数の内側。後ろのどこかに値か \`!_\` が続きます）。読みが決まるのは、値の隣（並びの単位として消える）・素の関数の穴（\`f _ 3\`・\`f3 _ 2\`）・引数の並びの終わり（並びの終わりまで、後ろに書いた \`_\` か関数しか続かない所。消える、R28）・括りの関数の実引数・既定値のある口（R39）・中置の被演算子・畳む2項の点なしの実引数（\`[+] 1 _\`、R31）です（§3.5、§5 Q7・Q74）。${writtenEmptyNote(x)}${emptyAheadNote(st.items, i)}`
   );
 }
 
@@ -6022,6 +6143,87 @@ function argRun(items, i) {
   while (j < items.length && isMark(items[j])) j++;
   const rest = items.slice(j);
   return { len: j - i, end: rest.every((t) => isMark(t) || (!isHoleItem(t) && !!t.kind && t.kind.k === "L")) };
+}
+
+// R94 の先回り（2026-10-27 の片6 の確かめの直し）：書いた `_` x（items[i]、段 s の口）の後ろに書いた `[]` の葉（印 writtenEmpty）があり、葉を書いた `_` と数えれば
+// 引数の並びの終わり（argRun の end）になる所。葉を器のまま畳むと値に数えられ、x の門（G5・G15）が、葉が値の口に着く前に当たってしまう（`add _ [] inc` が G5 で、
+// 同じ位置に書いた `_` の `add _ _ inc`・`add _ []~ inc` は `(compose add inc)`）。
+// 葉を書いた `_` と読めば、x から後ろは引数の並びの終わりで全部消える（R28）。葉を器と読めば、x は値の前の内側の `_` で、葉の着く口は x の読みで決まる：x が穴で
+// 位置を保つ読み（R16・R86。x と後ろの `_` も1つずつ口を取り、口が尽きた後の値は前の穴を前から埋める、R34 の k > n）と、x を消して詰める読み（葉は x の口から順に
+// 着く。§5 Q7 の詰める読み）。詰める読みの葉の口は、位置を保つ読みの葉の口の手前（同じ段の前の方か、次の段の同じ数の口）なので、位置を保つ読みで葉が全部値の口に
+// 着けば、どちらの読みでも器が値の口に着いて R94 と食い違う（器の読みは成り立たない）。そのときは葉は同じ位置に書いた `_` と同じ（R94）：後ろの葉を全部まとめて読み直す
+// （WrittenEmptyAtValue。readWrittenEmpty が書いた `_` の印に替え、並びを初めから読む）。1つずつ読み直すと、読み直した `_` が次の数えで口の尽きた後の `_`（R34 が読まない
+// 所）になり、器で数えた時と口の数え方が変わる（`double f3 _ [] []` は、1つ目の葉が double の穴を埋め、2つ目が f3 の2つ目の口に着く。1つ目だけ `_` にすると、
+// その `_` は口の尽きた後の `_` で数えられない）。位置を保つ読みで値の口でない所（括りの口・可変長の口・閉じた値の後ろ）に着く葉があれば、器の読みも成り立つ（詰める
+// 読みで値の口に着いても、2つの読みが割れる）ので決めず、今のまま（器の葉で、x の門が名指しする。§5 Q75 (g)）：括りの関数の `mx _ [] inc`・`pq _ []`（§5 Q7 の割れ
+// そのもの）、R34 の穴の関数の `(f3 !_ 2) _ []`、閉じた値の後ろに出る `(add 3) _ [] []`。口の数の分からない段（既定値のある関数の仮引数の外・前置 `@`）と、口が尽きた
+// 後に葉の前の `_` が続く所（R34 が読まない G13 の所、`inc _ _ []`）も数えられないので今のまま。最後の葉の後ろの `_` は、どちらの読みでも引数の並びの終わりで消える
+// （R28）ので数えない。関数は合成で後ろに段を足し、口を取らない（R28・R86）。
+function writtenEmptyAhead(st, i, top, s) {
+  const items = st.items;
+  const leaves = [];
+  let last = -1;
+  for (let j = i + 1; j < items.length; j++) {
+    const t = items[j];
+    if (t.writtenEmpty) {
+      leaves.push(t.writtenEmpty);
+      last = j;
+    } else if (!isMark(t) && (isHoleItem(t) || !t.kind || t.kind.k !== "L")) return; // 葉でない値・`!_`・撒く項が続く（葉を `_` と読んでも内側の `_`）
+  }
+  if (leaves.length && leavesAtValue(items, i, last, top, s)) throw new WrittenEmptyAtValue(leaves);
+}
+// 書いた `_` の門（G5・G15）の言い分の添え書き：後ろに続く値が書いた `[]` の葉だけで、writtenEmptyAhead が値の口に着くと数えられなかった所（§5 Q75 (g)）。
+function emptyAheadNote(items, i) {
+  const leaves = [];
+  for (let j = i + 1; j < items.length; j++) {
+    const t = items[j];
+    if (t.writtenEmpty) leaves.push(t);
+    else if (!isMark(t) && (isHoleItem(t) || !t.kind || t.kind.k !== "L")) return "";
+  }
+  if (!leaves.length) return "";
+  return `後ろの書いた ${leaves.map((t) => `\`${writeTerm(t.term)}\``).join("・")} は、値の口に着くと数えられない（この \`_\` が値の口でない口にあるか、この \`_\` を穴と読むと、括りの口・可変長の口・閉じた値の後ろ・口の数えられない所に着く）ので、同じ位置に書いた \`_\` とは読まず、器のまま数えました（§4 R94、§5 Q75 (g)）。`;
+}
+// 位置を保つ読みで、器と読んだ葉（items[i + 1..last] の中の）が全部値の口に着くか（writtenEmptyAhead）。x と後ろの `_` は穴で口を1つずつ取り（値の口でない口に着く `_` は
+// 穴でないので、数えずに false）、段の口が尽きた後の葉は前の穴を前から埋める。穴も尽きれば段が閉じ、その結果が次の段の最初の口に入る。段の並びは s から後ろ
+// （後ろの関数は着いた順に段を足す）。
+function leavesAtValue(items, i, last, top, s) {
+  const chain = top.stages.slice(top.stages.indexOf(s));
+  let k = 0;
+  let p = s.recv.length;
+  let holes = 0;
+  for (let j = i; j <= last; j++) {
+    const t = items[j];
+    if (!isMark(t) && !t.writtenEmpty) {
+      const fn = t.kind.fn;
+      for (const f of fn && fn.type === "compose" ? fn.fns : [fn]) chain.push({ fn: f, recv: [], tainted: false });
+      continue;
+    }
+    for (;;) {
+      const c = chain[k];
+      if (!c) return false; // 閉じた値の後ろ（口でない所）
+      if (c.fn && c.fn.type === "other") {
+        const at = c.fn.defaults ? c.fn.bareAt : null;
+        if (!at || p >= at.length) return false; // 既定値のある関数の仮引数の外は、閉じたかが数えられない（§5 Q8）
+        break;
+      }
+      const sh = stageShape(c);
+      if (sh.unknown || (sh.varying && p >= sh.fixed)) return false; // 口の数の分からない段・可変長の口
+      if (sh.varying || p < sh.fixed || holes) break;
+      k++;
+      p = 1;
+    }
+    const c = chain[k];
+    if (c.fn && c.fn.type !== "other" && p >= stageShape(c).fixed) {
+      // 口が尽きた後：値（器の葉）は前の穴を前から埋める（R34 の k > n）。`_` が来れば R34 が読まない所（G13）。
+      if (isMark(t)) return false;
+      holes--;
+      continue;
+    }
+    if (!valuePortAt(c, p)) return false;
+    if (isMark(t)) holes++;
+    p++;
+  }
+  return true;
 }
 
 // 既定値のある関数の段 s に、引数の並びの終わりの `_` が len 個続けて来る（R28・R39）。前から数えた位置（前の `_` も1つの口に数える）で、右から見て既定値の
@@ -6041,7 +6243,7 @@ function defaultKeep(s, len) {
 // 値の葉（cat "default"、A）。既定値の無い口・仮引数の外・位置が数えられない形（撒く項か値でない項を受けた後・n が数えられない）は
 // G15。合成の段でも同じ（合成は左から実行する、R11）。頭の並びの内側の、既定値の無い口の `_`（R68 のカリー化）は、ここに来る前に手順2 の tryHole が読む。
 // 引数の並びの終わりの `_` で既定値の無い口・仮引数の外に当たる物は、ここに来る前に消える（R28、markStep の defaultKeep）。
-function defaultUnit(e, s, x) {
+function defaultUnit(e, s, x, aheadNote = "") {
   const fn = s.fn;
   const at = fn.defaultAt;
   const i = s.recv.length;
@@ -6056,7 +6258,7 @@ function defaultUnit(e, s, x) {
       : i >= at.length
         ? `前から ${i + 1} 番目で、仮引数（${at.length}）の外に当たります`
         : `前から ${i + 1} 番目の口は既定値の無い仮引数です`;
-  throw gate("G15", `既定値のある関数${what} \`${show(e.groups[s.group].item)}\` の実引数に書いた \`_\` が、既定値のある口に当たりません（${why}）。${noDefaultTail(noDefault)}`);
+  throw gate("G15", `既定値のある関数${what} \`${show(e.groups[s.group].item)}\` の実引数に書いた \`_\` が、既定値のある口に当たりません（${why}）。${noDefaultTail(noDefault)}${writtenEmptyNote(x)}${aheadNote}`);
 }
 // G15 の言い分の終わり。既定値の無い口に当たる `_`（noDefault）は、2026-10-26 の R68 で内側の `_` のカリー化が決まったので、ここに来た訳を名指しする
 // （2026-10-26 の確かめの直し。前は「読みは決まっていません」のままで、答えの出た位置を決まっていないと言っていた）：内側の `_` は穴の規則（R16・R68）の
@@ -7270,7 +7472,7 @@ function defaultUnits(head, fn, ts, what = "", keep = null) {
           ? `前から ${i + 1} 番目で、仮引数（${at.length}）の外に当たります`
           : `前から ${i + 1} 番目の口は既定値の無い仮引数です`;
     const noDefault = !!at && ts.slice(0, i).every(slot) && i < at.length;
-    throw gate("G15", `既定値のある関数${what} \`${show(head)}\` の実引数に書いた \`_\` が、既定値のある口に当たりません（${why}）。${noDefaultTail(noDefault)}`);
+    throw gate("G15", `既定値のある関数${what} \`${show(head)}\` の実引数に書いた \`_\` が、既定値のある口に当たりません（${why}）。${noDefaultTail(noDefault)}${writtenEmptyNote(t)}`);
   });
 }
 
@@ -7333,7 +7535,7 @@ function tryHole(items, ctx) {
     params.push(name);
     return holeParamLeaf(name);
   });
-  refuseEmptyArgs(h, args);
+  emptyArgsAtValue(h, args);
   const body = holeApply(h, args);
   return { t: "hole", params, body, kind: { k: "L", fn: holeFnOf(fn, params.length, undefined, args, body) } };
 }
@@ -7486,11 +7688,16 @@ function holeMismatch(h, ts, n, ctx) {
   };
   if (ts.length > n) {
     const rest = ts.slice(n);
-    if (rest.some(isHole)) return null;
+    // 前から n 個は位置で頭の口に入るので、そこの値の口に着いた書いた `[]` は、R34 が読まない形（余りに穴がある、下の G13）でも先に読み直す（R94。2026-10-27 の
+    // 片6 の確かめの直し：前は `gq [] 1 !_` が G13 で、同じ位置に書いた `_` の `gq _ 1 !_` は G15 と、門が割れていた）。
+    if (rest.some(isHole)) {
+      emptyArgsAtValue(h, ts.slice(0, n));
+      return null;
+    }
     let r = 0;
     const filled = ts.slice(0, n).map((t) => (!isHole(t) ? t : r < rest.length ? rest[r++] : param()));
     const extra = rest.slice(r);
-    refuseEmptyArgs(h, filled);
+    emptyArgsAtValue(h, filled);
     if (params.length) {
       const body = holeApply(h, filled);
       return { t: "hole", params, body, kind: { k: "L", fn: holeFnOf(fn, params.length, undefined, filled, body) } };
@@ -7502,7 +7709,7 @@ function holeMismatch(h, ts, n, ctx) {
     return { t: "construct", items: [app, ...extra], kind: A() };
   }
   const args = ts.map((t) => (isHole(t) ? param() : t));
-  refuseEmptyArgs(h, args);
+  emptyArgsAtValue(h, args);
   const c = holeName(ctx, params.length);
   const spread = { k: "A", spread: true };
   const items = [...args, { t: "leaf", term: null, cat: "plain", desc: spread, kind: spread, view: { v: "atom", text: `${c}~` } }];
