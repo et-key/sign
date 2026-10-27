@@ -67,6 +67,15 @@
  * 34. 値の口に書いた `[]`（と中身が詰まって `[]` になる書いた括り）は、同じ位置に書いた `_` と同じ答え（R94、2026-10-27 の片6）。葉の種類まで比べる
  * 35. 番地の作用は部分的な作用として結合し（`(P + A) + B` が通れば `P + (A + B)` も通り同じ答え、`(P - A) - B` が通れば `P - (A + B)` も）、差は交換する
  *    （`A + B` と `B + A`。R96・R97、2026-10-27 の片7。同じ日の確かめの直しで、両向きの比べを部分的な作用の片向きに直した）
+ * 36. `$` を通る輪は、持ち上げだけを通るなら輪の無い綴りと同じ答え、定義の時に下ろす所（`@`・`' i`）を通るなら name-cycle（R103、2026-10-27 の片8）。どの並べ方でも同じ
+ * 37. `$x ' 0` は x（R102、2026-10-27 の片8）：`C[($x ' 0)]` と `C[(x)]` と `C[@[$x]]` が同じ種類と門（`$` の警告を除く）。`' k`（k ≠ 0 の字面）は k に依らない
+ * 38. 書いた `,` の積の `$` の判定（R101、2026-10-27 の片8）は、単位律で縮めた中身の判定と同じで、包み方（名前の右辺・括り・関数の本体・手続きの行・単位を名前で
+ *    包む）に依らない
+ *
+ * 2026-10-27 の片8（R99〜R104。U〔答え〕[2026-10-27 10:56 58a809c9]「それでいい。async も例外なしで、`$` が関数以外を運んだら警告、書いた `,` の積の `$` は断って
+ * `[$v , 1]` を案内。`$v ' 0` は v、下ろす所を通る輪だけ断る。片 7 の次に片 8 として入れて。」（ボタンの文で主の Claude の物））で、36〜38 を足し、17（値の先は警告、
+ * 未知の先は持ち上げで通る、書いた積は G20）・25（v が関数の輪は通る、輪の中の `' 0` は R102 の下ろす所）・3 の守り（Q30 の形）を直した。`$` の警告（dollar-non-function）は
+ * 書いた `$` の項ごとに出て名前は書いた綴りなので、どの法則も出たかどうかだけを比べる（diagKeys）。
  *
  * 2026-10-27 の片7（R96〜R98。§5 Q66 の算術の所と Q67 の答え：U〔答え〕[2026-10-27 09:53 58a809c9]「それでいい。算術の中の `0x…` は差と読める所ではいつも差（…）、
  * 点としか読めない所は断る。…」（ボタンの文で主の Claude の物）・U〔答え〕[2026-10-27 12:46 58a809c9]「これが通るのはダメだと思う。」「レイヤに依らず許せると思ってるけど…」）で、
@@ -129,6 +138,20 @@
  */
 import { resolve, show, kindOf } from "../resolve.js";
 
+// 診断の比べの鍵。2026-10-27 の片8 の dollar-non-function（R100：`$` が関数以外を持ち上げた）は、書いた `$` の項ごとに1回出て、名前は書いた綴り（`$[5 !_]` と
+// `$[5 !_ , !_]`・`$vs` と `$[vs]`）なので、比べる2つの綴りでは名前も数も違う。出たかどうかだけにまとめる。leftover-lambda は、leftNames が偽なら名前を外す（余った
+// ラムダの綴りは比べる2つの綴りで違う。前からの outcome の読み）。
+const diagKeys = (r, leftNames = false) => {
+	const out = [];
+	let lifted = false;
+	for (const d of r.diagnostics) {
+		if (d.reason === "dollar-non-function") lifted = true;
+		else out.push(d.reason === "leftover-lambda" && !leftNames ? d.reason : `${d.reason}/${d.name}`);
+	}
+	if (lifted) out.push("dollar-non-function");
+	return out.sort();
+};
+
 let passed = 0;
 let total = 0;
 const ok = (name) => {
@@ -180,7 +203,8 @@ const outcome = (s) => {
 			})),
 			// leftover-lambda（R48、2026-10-24）の名前は余ったラムダの木の綴りで、比べる2つの綴りでは書き方が違う（`inc add 5` と
 			// `add (inc 5)`）ので、出たかどうかだけを比べる（reason だけにする）。
-			diag: r.diagnostics.map((d) => (d.reason === "leftover-lambda" ? d.reason : `${d.reason}/${d.name}`)).sort(),
+			// 2026-10-27 の片8 の dollar-non-function（R100）は、出たかどうかだけを比べる（diagKeys）。
+			diag: diagKeys(r),
 		};
 	} catch (e) {
 		if (!e.reason) o = { crash: `${e.name}: ${e.message}` };
@@ -979,7 +1003,10 @@ const Q30_FORMS = [
 	// 無い v も輪にある・v が値でない）を、ここに置く。
 	["Q30 `$v` の輪の中で参照を `@` で開く（R73 の外）", [["a : f 1"], ["v : f 1"], ["f : x ? @[$v]"], ["v"]]],
 	["Q30 `$v` の輪に `$` の無い v もある（R73 の外）", [["a : f 1"], ["v : f 1"], ["f : x ? x , $v , v"], ["v"]]],
-	["Q30 `$v` の輪の v が関数になる（R73 の外）", [["add : x y ? x + y"], ["v : add (f 1)"], ["f : x ? x , $v"], ["v 3"]]],
+	// 「Q30 `$v` の輪の v が関数になる（R73 の外）」は、2026-10-27 の片8 の R103（持ち上げだけを通る輪は値の輪ではない）で、下の Q30_PASS_FORMS へ移した。
+	// 輪の中で下ろす所を通る形（R103 の断る側）：`' 0` で下ろす・関数の本体の `@` で下ろす。
+	["Q30 `$v` の輪の中で参照を `' 0` で下ろす（R103）", [["a : f 1"], ["v : f 1"], ["f : x ? x , ($v ' 0)"], ["v"]]],
+	["Q30 `$v` の輪の中で関数の本体が `@` で下ろす（R103）", [["g9 : r ? @r"], ["v : 1 , (g9 $v)"], ["v"]]],
 ];
 const Q30_PASS_FORMS = [
 	["Q30 値を挟まない関数どうしの再帰に値の定義から入る", [["a : f 1"], ["f : x ? g x"], ["g : y ? f y"], ["f 2"]]],
@@ -990,6 +1017,10 @@ const Q30_PASS_FORMS = [
 	["Q30 `$` の先の自分の名前に外から入る（R73。前は name-cycle）", [["a : f 1"], ["v : f 1"], ["f : x ? x , $v"], ["v"]]],
 	["Q30 `$` の先の自分の名前が括りの関数の実体を通る（R73）", [["a : h [2]"], ["v : h [1]"], ["h : [x] ? x , $v"], ["v"]]],
 	["Q30 `$` の先の自分の名前を右辺に直に持つ（R73）", [["v : 1 , $v"], ["w : v"], ["w"]]],
+	// 2026-10-27 の片8 の R103：v が関数でも、持ち上げだけを通る輪は通る（前は R73 の外で name-cycle）。持ち上げの中で下ろしても、持ち上げの中は評価しないので通る。
+	["Q30 `$v` の輪の v が関数になる（R103。前は name-cycle）", [["add : x y ? x + y"], ["v : add (f 1)"], ["f : x ? x , $v"], ["v 3"]]],
+	["Q30 持ち上げの中で下ろす関数を呼ぶ輪（R103。前は name-cycle）", [["g9 : r ? @r"], ["wk : r ? $[g9 r]"], ["v : 1 , (wk $v)"], ["v"]]],
+	["Q30 持ち上げの中身が自分を読む輪（R103。前は name-cycle）", [["v : 1 , $[v + 1]"], ["w : v"], ["w"]]],
 ];
 
 const PROGRAMS3 = [
@@ -2094,7 +2125,7 @@ law("8 既定値のある口に書いた _ は、同じ口に数を書いたの�
 		try {
 			const r = resolve(src([...DEFS8, ...lines]));
 			const t = r.trees[r.trees.length - 1];
-			return { kinds: r.trees.map((x) => kindOf(x)).join(" "), last: show(t), diag: r.diagnostics.map((d) => d.reason).join(" ") };
+			return { kinds: r.trees.map((x) => kindOf(x)).join(" "), last: show(t), diag: diagKeys(r).map((k) => k.split("/")[0]).join(" ") };
 		} catch (e) {
 			if (!e.reason) return { crash: `${e.name}: ${e.message}` };
 			return { refused: `${e.reason} ${e.gate || ""}` };
@@ -3304,6 +3335,11 @@ law("16 括りの中で値の上に積まれて閉じた関数は、括りを外
 // 2026-10-25（R59・R60、§7.33）に広げた所（法則の名前は前のまま）：
 // - R60（`$` は Reader と Writer を作る接頭辞、§5 Q54 の答え）から、値の名前（`vs`・`five`・`st`・`pa`・`zz`）・値の右辺・名前でない値の先の `$X` は、
 //   値を読む参照として通る。(a)(b)(a') の比べは今までどおりで、R53 の片では G20 どうしの比べだった組が、通る答えどうしの比べになった（値へ広げた）。
+// 2026-10-27（片8、R99〜R101、§7.49）に変えた所（法則の名前は前のまま）：
+// - `$` は必ず持ち上げ（R99）。値の先は通って warning の dollar-non-function（R100）、先の種類の分からない先も持ち上げで通る（前は G20）。診断は出たかどうかだけ
+//   比べる（diagKeys）。(c) の規則は、値なら `[B]` の診断に警告を足した物、未知なら `[B]` と同じ診断で通る、に変えた。
+// - 書いた `,` の積（単位律の後にも `,` が残る、product17）の `$[B]` は G20（R101）。名前を通した積は警告で通るので、(b) の右辺が積の組は比べず、規則の側の答え
+//   （開いた側は G20、名前の側は G20 でない）を見る。
 // - (c) の規則：`[B]` の右辺に余るラムダ（R59：中身のどこかに余る関数）があるか、B が後置の印の付いた項1つ（R57）なら `$[B]` は G20。ほかで `[B]` が関数か
 //   値なら通り、診断は `[B]` と同じ。未知なら G20。錨（ANCHOR17）は R59・R60 の文面の例に書き直した。
 const DEFS17 = [
@@ -3403,7 +3439,9 @@ const ANCHOR17 = [
 	["5 inc", "A", false], // 括りの中は R52 で 5。`$[…]` の中身の並びは遅延した積み上げで種類が決まらない（Q52）
 	["1 2", "A", true], // R60（R53 の文面では G20）
 	["inc 5", "A", true], // R60
-	["uu 5", "U", false],
+	["uu 5", "U", true], // 2026-10-27 の片8 の R99：先の種類の分からない持ち上げで通る（前は G20）
+	["inc , double", "A", false], // 2026-10-27 の片8 の R101：書いた `,` の積の `$` は断る（前は値を読む参照で通った）
+	["five , 1 , _", "A", false], // R101：単位律の後にも `,` が残る
 	["5", "A", true], // R60
 	["vs", "A", true], // R60
 	["$inc", "A", true], // R60（番地を読む参照）
@@ -3417,9 +3455,14 @@ const BODIES17 = [
 	"inc", "inc double", "add 1", "+ 1", "* 2,", "[+]", ",", "uu", "hd", "!_", "inc , !_", "!_ , inc", "inc add 5", "f3 !_ 2", "x ? x inc", "x ? x + 1",
 	"x ? 5 inc", "[x ? x inc]", "inc inc inc", "@inc", "5 inc", "(5 inc)", "5 inc , !_", "k : 5 inc", "5 > 1 : 5 inc", "5 inc == 6", "(5 inc) 3", "1 2",
 	"vs", "uu 5", "inc 5", "_", "5", "$inc", "5 add 1", "!_ == 1", "inc vs~", "vs~", "add (5 inc)", "f3 (5 inc)", "add (5 !_)", "_ , 5",
+	// 2026-10-27 の片8 の R101：単位律の後にも `,` が残る積と、単位律で1項に縮む積
+	"inc , double", "five , 1 , _", "five , 1", "inc , i", "i , five", "_ , !_",
 ];
 // 後置の印の付いた項1つの中身（R57・R60：[x] ≅ x で、括らない `$x~` と同じく G20）。
 const POSTFIX17 = new Set(["vs~"]);
+// 中身 B が、単位律（R45・R61・R71：`_`・`!_`・恒等射の名前 `i` は `,` の単位）の後にも `,` の残る書いた積か（2026-10-27 の片8 の R101。規則の側で、書いた綴りから数える。
+// B はいちばん外の `,` で切れる綴りだけを並べている）。
+const product17 = (b) => b.includes(" , ") && b.split(" , ").filter((x) => !["_", "!_", "i"].includes(x.trim())).length >= 2;
 const view17 = (o) => (o.crash ? `例外 ${o.crash}` : o.refused ? `断り ${refusalText(o)}` : `${lastOf(o).kind} || ${o.diag.join(" ")}`);
 const r53Of17 = (o) => (o.crash ? `例外 ${o.crash}` : o.refused && o.refused.gate === "G20" ? "G20" : "G20 でない");
 const at17 = (lines) => outcome(src([...usedDefs(UNITS17, lines.join("\n")), ...lines]));
@@ -3433,7 +3476,7 @@ law("17 `$` は関数だけを運ぶ（R53）：C[$N] と C[$[N]] と C[$[右辺
 		"G20 の組": 0,
 		"別名の組（R55 から答えの全部）": 0,
 		"(c) 中身が関数で通る": 0,
-		"(c) 中身が関数でなく G20": 0,
+		"(c) 中身の種類が分からず持ち上げで通る（R99）": 0,
 		"(c) 中身が断る（同じ門）": 0,
 	};
 	count["(a') 名前でない先の $X と $[X]"] = 0;
@@ -3460,7 +3503,16 @@ law("17 `$` は関数だけを運ぶ（R53）：C[$N] と C[$[N]] と C[$[右辺
 		for (const c of CTX17) {
 			count["(a) $N と $[N]"]++;
 			pair(`(a) ${n}`, c(`$${n}`), c(`$[${n}]`), alias);
-			if (rhs !== null) {
+			if (rhs !== null && product17(rhs)) {
+				// 2026-10-27 の片8 の R101：右辺が書いた `,` の積（単位律の後にも `,` が残る）なら、開いた `$[右辺]` は書いた積の `$` で G20、名前を通した `$N` は名前の先の
+				// 値の持ち上げで通る（R100 の警告）。決定の文が書いた綴りで分けた所（U [2026-10-27 10:24 58a809c9]「この段階で,がついてるので無し。」）なので、
+				// 同じ答えは比べず、規則の側の答え（開いた側は G20、名前の側は G20 でない）を見る。
+				count["(b) 右辺が書いた `,` の積（R101、開いた側だけ G20）"] = (count["(b) 右辺が書いた `,` の積（R101、開いた側だけ G20）"] || 0) + 1;
+				const oo = at17(c(`$[${rhs}]`));
+				const on = at17(c(`$${n}`));
+				if (!oo.refused || oo.refused.gate !== "G20") problems.push(`(b) ${n} : ${rhs}：開いた \`$[右辺]\` は書いた積の G20 のはず（R101）`, `  ${view17(oo)}`);
+				if (on.refused && on.refused.gate === "G20") problems.push(`(b) ${n} : ${rhs}：名前を通した \`$N\` は G20 でないはず（R100）`, `  ${view17(on)}`);
+			} else if (rhs !== null) {
 				count["(b) $N と $[右辺]"]++;
 				pair(`(b) ${n} : ${rhs}`, c(`$${n}`), c(`$[${rhs}]`), alias);
 			}
@@ -3527,19 +3579,28 @@ law("17 `$` は関数だけを運ぶ（R53）：C[$N] と C[$[N]] と C[$[右辺
 		// 両側に同じ前提が置かれている。実装の外から余る関数を数える物は、まだ無い。外延が恒等射の `[y ? y]` の余り（`$[x ? x (y ? y)]` は G20、`$[x ? x !_]` は
 		// 通る）は、この比べでは見えない（R52 の知らせと同じ線。§5 Q56 の `$!_` が `[x ? x]` を指すこととの関わりは §5 Q65 の注）。
 		const deadInside = op.diag.includes("leftover-lambda");
-		if (b === "_") {
-			// 書いた `_` の中身（R56、2026-10-25）：並びの中の `[_]` は値（印）だが、`$` で物にする所では零射 `$[x ? _]` の番地で通る。診断は `[B]` と同じ。
+		// 2026-10-27 の片8（R99〜R101）から：`$` は必ず持ち上げで、先の種類では断らない。値の先は通って警告（R100、dollar-non-function）、関数の先と先の種類の分からない
+		// 先は警告しない。断るのは中で余る関数（R59）・後置の印（R57）・書いた `,` の積（R101）だけ。前（R60）は、未知の先が G20 で、値の先は黙って通った。
+		const lifted = !!od.diag && od.diag.includes("dollar-non-function");
+		const odPlain = (od.diag || []).filter((x) => x !== "dollar-non-function").join(" ");
+		if (b === "_" || b === "_ , !_") {
+			// 書いた `_` の中身（R56、2026-10-25。`_ , !_` は R71 で `_`）：並びの中の `[_]` は値（印）だが、`$` で物にする所では零射 `$[x ? _]` の番地で通る。診断は `[B]` と同じ
+			// （零射は関数なので警告しない、R100）。
 			count["(c) 中身が書いた `_`（R56、通る）"] = (count["(c) 中身が書いた `_`（R56、通る）"] || 0) + 1;
 			if (od.refused || od.diag.join(" ") !== op.diag.join(" ")) problems.push(`(c) ${b}：\`$[_]\` は零射の番地で通り、診断は [B] と同じはず（R56）`, `  $[B]: ${view17(od)}`, `  [B]: ${view17(op)}`);
 		} else if (deadInside || POSTFIX17.has(b)) {
 			count["(c) 中身に余る関数か後置の印で G20（R59・R57）"] = (count["(c) 中身に余る関数か後置の印で G20（R59・R57）"] || 0) + 1;
 			if (!od.refused || od.refused.gate !== "G20") problems.push(`(c) ${b}：中身に余る関数か後置の印があれば G20 のはず（R59・R57）`, `  $[B]: ${view17(od)}`, `  [B]: ${view17(op)}`);
+		} else if (product17(b)) {
+			count["(c) 中身が書いた `,` の積で G20（R101）"] = (count["(c) 中身が書いた `,` の積で G20（R101）"] || 0) + 1;
+			if (!od.refused || od.refused.gate !== "G20") problems.push(`(c) ${b}：単位律の後にも \`,\` の残る書いた積なら G20 のはず（R101）`, `  $[B]: ${view17(od)}`, `  [B]: ${view17(op)}`);
 		} else if (rk === "L" || rk === "A") {
-			count[rk === "L" ? "(c) 中身が関数で通る" : "(c) 中身が値で通る（R60）"] = (count[rk === "L" ? "(c) 中身が関数で通る" : "(c) 中身が値で通る（R60）"] || 0) + 1;
-			if (od.refused || od.diag.join(" ") !== op.diag.join(" ")) problems.push(`(c) ${b}：中身が関数か値なら通り、診断は [B] と同じはず（R60）`, `  $[B]: ${view17(od)}`, `  [B]: ${view17(op)}`);
+			count[rk === "L" ? "(c) 中身が関数で通る" : "(c) 中身が値で通り警告（R60・R100）"] = (count[rk === "L" ? "(c) 中身が関数で通る" : "(c) 中身が値で通り警告（R60・R100）"] || 0) + 1;
+			if (od.refused || odPlain !== op.diag.join(" ") || lifted !== (rk === "A"))
+				problems.push(`(c) ${b}：中身が関数か値なら通り、診断は [B] と同じ（値なら R100 の警告を足す）はず`, `  $[B]: ${view17(od)}`, `  [B]: ${view17(op)}`);
 		} else {
-			count["(c) 中身が関数でなく G20"]++;
-			if (!od.refused || od.refused.gate !== "G20") problems.push(`(c) ${b}：中身が未知（${rk}）なら G20 のはず`, `  $[B]: ${view17(od)}`);
+			count["(c) 中身の種類が分からず持ち上げで通る（R99）"]++;
+			if (od.refused || od.diag.join(" ") !== op.diag.join(" ")) problems.push(`(c) ${b}：中身が未知（${rk}）なら持ち上げで通り、警告しないはず（R99・R100）`, `  $[B]: ${view17(od)}`, `  [B]: ${view17(op)}`);
 		}
 	}
 	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
@@ -3636,7 +3697,7 @@ const answer18 = (lines, rename) => {
 			out.push(`括りの2行目 ${fix(show(t.view.inner[1]))} [${kindOf(t)}]`);
 		} else out.push(`${fix(text)} [${kindOf(t)}]`);
 	}
-	const diag = r.diagnostics.map((d) => (d.reason === "leftover-lambda" ? d.reason : `${d.reason}/${d.name}`)).sort();
+	const diag = diagKeys(r);
 	return `通る ${out.join(" ⏎ ")} || ${diag.join(" ")}`;
 };
 law("18 `$` の先は1つの関数（R54〜R57）：ファイルの `$lf`・開いた `$[R]`・局所の `$lf` が同じ答え、`$_` と `$[x ? _]`、`$!_` と `$[x ? x]` と `$i` が同じ答え", () => {
@@ -3658,9 +3719,17 @@ law("18 `$` の先は1つの関数（R54〜R57）：ファイルの `$lf`・開�
 	for (const [r, closure] of RHS18) {
 		for (const c of CTX18) {
 			const body = (first, x) => ["tt : u ?", `\t${first}`, `\t${c(x)}`, "", "tt 1"];
+			// 2026-10-27 の片8 の R101：右辺が書いた `,` の積（単位律の後にも `,` が残る）なら、開いた `$[R]` は書いた積の `$` で G20、名前を通した `$lf` は値の持ち上げ
+			// （R100 の警告）。決定の文が書いた綴りで分けた所なので、開いた側は比べから外し、規則の側の答え（G20）を見る（法則17 の (b) と同じ）。
+			const product = r.includes(" , ") && r.split(" , ").filter((x) => !["_", "!_"].includes(x.trim())).length >= 2;
+			if (product) {
+				count["開いた側が書いた積（R101、比べの外で G20）"] = (count["開いた側が書いた積（R101、比べの外で G20）"] || 0) + 1;
+				const a = answer18(body("w0 : 0", open18(r)), null);
+				if (!a.includes(" G20 ")) problems.push(`本体 ${r} / ${c("X")}：開いた \`$[R]\` は書いた積の G20 のはず（R101）：${a}`);
+			}
 			const forms = [];
 			if (!closure) forms.push([[`lf : ${r}`, ...body("w0 : 0", "$lf")], null]);
-			forms.push([body("w0 : 0", open18(r)), [open18(r), "$lf"]]);
+			if (!product) forms.push([body("w0 : 0", open18(r)), [open18(r), "$lf"]]);
 			forms.push([body(`lf : ${r}`, "$lf"), null]);
 			// 局所の名前を括った `$[lf]`（[x] ≅ x で `$lf` と同じ先、R54）
 			forms.push([body(`lf : ${r}`, "$[lf]"), ["$[lf]", "$lf"]]);
@@ -3669,10 +3738,14 @@ law("18 `$` の先は1つの関数（R54〜R57）：ファイルの `$lf`・開�
 			// 括りの中の文脈（u は外の名前で、どれも未定義の名前）。括りの中に定義を置いた形は比べない（上の注）。
 			const br = (first, x) => [`[${first}`, `${c(x)}]`];
 			count["括りの中の文脈の2つ"]++;
-			same(`括り ${r} / ${c("X")}`, [
-				[[`lf : ${r}`, ...br("w0 : 0", "$lf")], null],
-				[br("w0 : 0", open18(r)), [open18(r), "$lf"]],
-			]);
+			if (product) {
+				const a = answer18(br("w0 : 0", open18(r)), null);
+				if (!a.includes(" G20 ")) problems.push(`括り ${r} / ${c("X")}：開いた \`$[R]\` は書いた積の G20 のはず（R101）：${a}`);
+			} else
+				same(`括り ${r} / ${c("X")}`, [
+					[[`lf : ${r}`, ...br("w0 : 0", "$lf")], null],
+					[br("w0 : 0", open18(r)), [open18(r), "$lf"]],
+				]);
 		}
 	}
 	// (4) `$_` と `$[x ? _]`（ファイルの範囲の文脈。use の u は 5 に替える）
@@ -4260,10 +4333,12 @@ law("25 `$v` の輪を通す形は、`$v` を輪の外の値の `$u25` に替え
 	};
 	anchor(["v25 : f25 1", "f25 : x ? @[$v25]", "v25"], "断り name-cycle");
 	anchor(["v25 : f25 1", "f25 : x ? x , $v25 , v25", "v25"], "断り name-cycle");
-	anchor(["add : x y ? x + y", "v25 : add (f25 1)", "f25 : x ? x , $v25", "v25 3"], "断り name-cycle");
+	// v が関数（2026-10-27 の片8 の R103：持ち上げだけを通る輪は値の輪ではないので通る。前は値を読む参照の読みが外れて name-cycle）
+	anchor(["add : x y ? x + y", "v25 : add (f25 1)", "f25 : x ? x , $v25", "v25 3"], "通る A A A A");
 	anchor(["v25 : f25 1", "f25 : x ? x , $v25", "v25"], "通る A A A");
 	anchor(["v25 : 1 , $v25", "v25"], "通る A A");
-	anchor(["v25 : 1 , ($v25 ' 0)", "v25"], "断り name-cycle"); // 輪の中で `'` で引く（`'` が参照の先を読むかは決まっていない、§5 Q60 の残り）
+	// 輪の中で `' 0` で下ろす（2026-10-27 の片8 の R102・R103：`$v ' 0` は v で、下ろす所を通る輪。前は `'` が参照の先を読むかが決まらず、断る側に倒していた）
+	anchor(["v25 : 1 , ($v25 ' 0)", "v25"], "断り name-cycle");
 	anchor(["v25 : 1 , ||$v25||", "v25"], "通る A A"); // ノルムは先を読まない（`||$_||` は 1）
 	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
 	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
@@ -4351,7 +4426,7 @@ const ans27 = (lines) => {
 		const rows = body && body.view && body.view.v === "block" ? body.view.rows : [body];
 		const values = rows.filter((x) => !(x && x.t === "op" && x.sym === ":" && x.isQualifiedDef)).map((x) => `${show(x)}:${kindOf(x)}`);
 		const insts = r.trees.filter((t) => t && /^\(: (hx|mp2|fold|hd|pq) /.test(show(t))).map((t) => show(t));
-		const diag = r.diagnostics.map((d) => (d.reason === "leftover-lambda" ? d.reason : `${d.reason}/${d.name}`)).sort();
+		const diag = diagKeys(r);
 		a = `通る ${values.join(" ")} || tt 1：${kindOf(r.trees[r.trees.length - 1])} || ${insts.join(" ")} || ${diag.join(" ")}`;
 	} catch (e) {
 		a = e.reason ? `断り ${e.reason} ${e.gate || ""}` : `例外 ${e.name}: ${e.message}`;
@@ -4692,7 +4767,7 @@ const ans30 = (lines, from = null, to = null) => {
 	let o;
 	try {
 		const r = resolve(src([...DEFS30, ...lines]));
-		o = `通る ${r.trees.map((t) => `${show(t)} : ${kindOf(t)}`).join(" ⏎ ")} ／ ${r.diagnostics.map((d) => `${d.reason}/${d.name}`).sort().join(" ")}`;
+		o = `通る ${r.trees.map((t) => `${show(t)} : ${kindOf(t)}`).join(" ⏎ ")} ／ ${diagKeys(r, true).join(" ")}`;
 	} catch (e) {
 		return e.reason ? `断り ${e.reason} ${e.gate || ""}` : `例外 ${e.name}: ${e.message}`;
 	}
@@ -4775,7 +4850,7 @@ const ans31 = (lines, from = null) => {
 	try {
 		const r = resolve(src([...usedDefs(UNITS31, s), ...lines]));
 		// 比べるのは書いた行の木だけ（定義の行は、使う名前の定義だけを並べるので両側で違う：`e0~` の側にだけ e0 の定義がある）
-		o = `通る ${r.trees.slice(-lines.length).map((t) => `${show(t)} : ${kindOf(t)}`).join(" ⏎ ")} ／ ${r.diagnostics.map((d) => `${d.reason}/${d.name}`).sort().join(" ")}`;
+		o = `通る ${r.trees.slice(-lines.length).map((t) => `${show(t)} : ${kindOf(t)}`).join(" ⏎ ")} ／ ${diagKeys(r, true).join(" ")}`;
 	} catch (e) {
 		return e.reason ? `断り ${e.reason} ${e.gate || ""}` : `例外 ${e.name}: ${e.message}`;
 	}
@@ -4831,7 +4906,7 @@ const ans32 = (lines) => {
 	try {
 		const r = resolve(src([...DEFS32, ...lines]));
 		// 比べるのは書いた行の木だけ（定義の行の本体の中置を、演算子の読み替えに巻き込まない）
-		return `通る ${r.trees.slice(-lines.length).map((t) => `${show(t)} : ${kindOf(t)}`).join(" ⏎ ")} ／ ${r.diagnostics.map((d) => `${d.reason}/${d.name}`).sort().join(" ")}`;
+		return `通る ${r.trees.slice(-lines.length).map((t) => `${show(t)} : ${kindOf(t)}`).join(" ⏎ ")} ／ ${diagKeys(r, true).join(" ")}`;
 	} catch (e) {
 		return e.reason ? `断り ${e.reason} ${e.gate || ""}` : `例外 ${e.name}: ${e.message}`;
 	}
@@ -4840,7 +4915,7 @@ const kindDiag32 = (lines) => {
 	try {
 		const r = resolve(src([...DEFS32, ...lines]));
 		const t = r.trees[r.trees.length - 1];
-		return `通る ${kindOf(t)} ／ ${r.diagnostics.map((d) => `${d.reason}/${d.name}`).sort().join(" ")}`;
+		return `通る ${kindOf(t)} ／ ${diagKeys(r, true).join(" ")}`;
 	} catch (e) {
 		return e.reason ? `断り ${e.reason} ${e.gate || ""}` : `例外 ${e.name}: ${e.message}`;
 	}
@@ -5012,7 +5087,7 @@ const ans34 = (lines, from = null) => {
 		o = `通る ${r.trees
 			.slice(-lines.length)
 			.map((t) => `${show(t)} : ${kindOf(t)} <${leafCats34(t).join(",")}>`)
-			.join(" ⏎ ")} ／ ${r.diagnostics.map((d) => `${d.reason}/${d.name}`).sort().join(" ")}`;
+			.join(" ⏎ ")} ／ ${diagKeys(r, true).join(" ")}`;
 	} catch (e) {
 		return e.reason ? `断り ${e.reason} ${e.gate || ""}` : `例外 ${e.name}: ${e.message}`;
 	}
@@ -5155,6 +5230,252 @@ law("35 番地の作用は部分的な作用として結合し、差は交換す
 	anchor(["$vs + 0x3"], "断り coproduct-address-arith G21");
 	anchor(["$vs + (0x10 - 0x8)"], "通る A");
 	anchor(["$st + 0x3"], "通る A");
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則36：`$` を通る輪は、持ち上げだけを通るなら輪の無い綴りと同じ答え、下ろす所を通るなら name-cycle（R103、2026-10-27 の片8）
+// ---------------------------------------------------------------------------
+//
+// 持ち上げ（`$`）は中身を評価しないので、輪が持ち上げを通るだけなら値の輪ではない（R103。R73 の `$v` を、持ち上げの中身の全部と、v が値でない形へ広げた）。だから、
+// 輪の中の v を輪の外の値 u36（`u36 : 1 , 2`）に替えた綴りと、各行の種類・門・`$` の警告が同じ。定義の時に下ろす所（`@`・`' i`。持ち上げの外）を通る輪は、v の値が
+// 自分に依るので name-cycle（輪の外の綴りは name-cycle でない）。持ち上げの中の `@`・`' i` は定義の時に評価しないので、持ち上げだけの側。
+// どちらの側かは規則の側に書く（LIFT36・LOWER36。期待値の答えは書かず、輪の外の綴りと比べる）。輪の側は、定義の文の並べ方を全部回しても同じ答え（法則3）。
+// v の居場所は3つ：右辺に直に（`v36 : 1 , X`）と、関数の本体を通して（`v36 : f36 1` ⏎ `f36 : x ? x , X`）と、名前を通して（`w36 : X` ⏎ `v36 : 1 , w36`。
+// 2026-10-28 の確かめの直しで足した）。比べる輪の外の値 u36 は、輪の中の v36 と同じ見え方の所だけで比べる（関数の本体の居場所の v36 は関数の返値で形が見えないので、
+// `$[v ' 0]`・`$[map $inc v]` のように v の形で種類の決まる綴りは、形の見える u36 とは比べられない。確かめの指摘のうち2つはこれだった）。
+// 2026-10-28 の確かめの直し：持ち上げを返す関数の返値を下ろす綴り（`@(wk36 $v)`）を LOWER36 に、名前に置いた持ち上げを下ろす輪（LIFTED36 × LOWERED36）を足した。
+// どちらも前は黙って通った（持ち上げた物の印が関数の返値で落ち、名前に固まった仮の参照は輪のいちばん下の枠が閉じた後に開かれた）。
+const DEFS36 = ["g36 : r ? @r", "wk36 : r ? $[g36 r]", "add : x y ? x + y"];
+// [綴り（n は名前）, 説明, 足す定義]
+const LIFT36 = [
+	[(n) => `$${n}`, "`$v`"],
+	[(n) => `$[${n}]`, "`$[v]`"],
+	[(n) => `$[${n} 1]`, "`$[v 1]`"],
+	[(n) => `$[${n} + 1]`, "`$[v + 1]`"],
+	[(n) => `$-${n}`, "`$-v`"],
+	[(n) => `[$${n}]`, "`[$v]`"],
+	[(n) => `||$${n}||`, "`||$v||`（ノルムは先を読まない）"],
+	[(n) => `$[@[$${n}]]`, "持ち上げの中の `@`"],
+	[(n) => `$[(${"$"}${n} ' 0)]`, "持ち上げの中の `' 0`"],
+	[(n) => `(wk36 $${n})`, "持ち上げを返す関数の中の `@`"],
+	[(n) => `$[g36 $${n}]`, "持ち上げの中で下ろす関数を呼ぶ"],
+	[(n) => `$[[]~ , ${n}]`, "長さ 0 の流れは積の単位（R84・R104）"],
+	[(n) => `$[fl36 ${n} , 2]`, "`,` のすぐ左が参照の口に入る適用（R66）", ["fl36 : [x ~xs] ? x"]],
+];
+const LOWER36 = [
+	[(n) => `@[$${n}]`, "`@` で開く"],
+	[(n) => `($${n} ' 0)`, "`' 0` で下ろす（R102）"],
+	[(n) => `($${n} ' 1)`, "`' 1` で下ろす"],
+	[(n) => `(g36 $${n})`, "関数の本体の `@` で下ろす"],
+	[(n) => `@[$[${n} + 1]]`, "持ち上げた中身を開く"],
+	[(n) => `@(wk36 $${n})`, "持ち上げを返す関数の返値を `@` で開く"],
+	[(n) => `((wk36 $${n}) ' 0)`, "持ち上げを返す関数の返値を `' 0` で下ろす"],
+];
+// 名前に置いた持ち上げ（`w36 : X`）を、v の右辺で下ろす輪。X は値が持ち上げその物の綴り、下ろし方は3つ。どの並べ方でも name-cycle で、輪の外の綴りは name-cycle でない。
+const LIFTED36 = [(n) => `$${n}`, (n) => `$[${n}]`, (n) => `$[${n} 1]`, (n) => `$[${n} + 1]`, (n) => `$[add ${n} 1]`];
+const LOWERED36 = ["v36 : 1 , @w36", "v36 : 1 , (w36 ' 0)", "v36 : 1 , (g36 w36)"];
+const ans36 = (lines, skip = 0) => {
+	try {
+		const r = resolve(src(lines));
+		return `通る ${r.trees.slice(skip).map((t) => kindOf(t)).join(" ")} ／ ${diagKeys(r).join(" ")}`;
+	} catch (e) {
+		return `断り ${e.reason} ${e.gate || ""}`;
+	}
+};
+const perms36 = (xs) => (xs.length <= 1 ? [xs] : xs.flatMap((x, i) => perms36([...xs.slice(0, i), ...xs.slice(i + 1)]).map((p) => [x, ...p])));
+law("36 `$` を通る輪：持ち上げだけを通るなら輪の外の値に替えた綴りと同じ答え、定義の時に下ろす所を通るなら name-cycle（R103）。並べ方に依らない", () => {
+	const problems = [];
+	const count = { "持ち上げだけの組": 0, "下ろす組": 0, 並べ方: 0, "輪の側が通る": 0, "名前に置いて下ろす組": 0 };
+	const homes = [
+		(x) => [[`v36 : 1 , ${x}`]],
+		(x) => [["v36 : f36 1"], [`f36 : x ? x , ${x}`]],
+		(x) => [[`w36 : ${x}`], ["v36 : 1 , w36"]],
+	];
+	for (const [lifted, list] of [[true, LIFT36], [false, LOWER36]]) {
+		for (const [spell, label, extra = []] of list) {
+			for (const home of homes) {
+				const ring = [...[...DEFS36, ...extra].map((d) => [d]), ...home(spell("v36"))];
+				const free = [["u36 : 1 , 2"], ...[...DEFS36, ...extra].map((d) => [d]), ...home(spell("u36"))];
+				const a = ans36([...ring.flat(), "v36"]);
+				const b = ans36([...free.flat(), "v36"], 1);
+				count[lifted ? "持ち上げだけの組" : "下ろす組"]++;
+				if (lifted) {
+					if (a !== b) problems.push(`持ち上げだけ（${label}）：${ring.flat().join(" ⏎ ")}：${a}  ⇔  輪の外の綴り：${b}`);
+					if (a.startsWith("通る")) count["輪の側が通る"]++;
+				} else {
+					if (!a.startsWith("断り name-cycle")) problems.push(`下ろす（${label}）：${ring.flat().join(" ⏎ ")}：${a}（name-cycle のはず）`);
+					if (b.startsWith("断り name-cycle")) problems.push(`下ろす（${label}）の輪の外の綴りが name-cycle：${free.flat().join(" ⏎ ")}`);
+				}
+				// 並べ方（定義の文だけを入れ替える。使う行は後ろ）
+				for (const p of perms36([...ring.keys()])) {
+					const c = ans36([...p.flatMap((k) => ring[k]), "v36"]);
+					count.並べ方++;
+					if (c !== a) problems.push(`並べ方で割れた（${label}）${p.join(",")}：${c}  ⇔  ${a}`);
+				}
+			}
+		}
+	}
+	// 名前に置いた持ち上げを v の右辺で下ろす輪（`w36 : $[v36 + 1]` ⏎ `v36 : 1 , @w36`）：どの並べ方でも name-cycle、輪の外の綴りは name-cycle でない。
+	for (const x of LIFTED36) {
+		for (const low of LOWERED36) {
+			const ring = [...DEFS36.map((d) => [d]), [`w36 : ${x("v36")}`], [low]];
+			const free = ["u36 : 1 , 2", ...DEFS36, `w36 : ${x("u36")}`, low, "v36"];
+			count["名前に置いて下ろす組"]++;
+			for (const p of perms36([...ring.keys()])) {
+				const c = ans36([...p.flatMap((k) => ring[k]), "v36"]);
+				count.並べ方++;
+				if (!c.startsWith("断り name-cycle")) problems.push(`名前に置いて下ろす ${x("v36")} ⏎ ${low}（並べ方 ${p.join(",")}）：${c}（name-cycle のはず）`);
+			}
+			if (ans36(free, 1).startsWith("断り name-cycle")) problems.push(`名前に置いて下ろす輪の外の綴りが name-cycle：${free.join(" ⏎ ")}`);
+		}
+	}
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則37：`$x ' 0` は x（R102、2026-10-27 の片8）
+// ---------------------------------------------------------------------------
+//
+// `$` は持ち上げで、`$x` は x 1つの領域を指す番地。下ろすのは `@` と `' i` なので、`$x ' 0` は `@[$x]` と同じく x そのもの（C の `(&v)[0]`、[x] ≅ x の `[x] ' 0`）。
+// だから文脈 C に置いた `C[($x ' 0)]`・`C[(x)]`・`C[@[$x]]` は、同じ種類と門と診断（`$` の警告（R100）は `$` を書いた側にだけ出るので除く）。木の綴りは書いた形なので
+// 比べない。x は値（名前・字面・器・足りた適用・文字列）と関数（名前・別名・部分適用）。字面の `' k` で k が 0 でなければ1つの物の領域の外の `_`（R102）で、k に依らない
+// （`C[($x ' 1)]` と `C[($x ' 2)]`）。期待値は書かない（錨だけ、決定の文の例 `$v ' 0` は v を規則の側に書く）。
+// x に `_` は入れない：`$_` は `_` の持ち上げではなく零射 `[x ? _]` の番地（R56）なので、`$_ ' 0` は零射そのもので `(_)` とは違う（R102 の R の所。2026-10-28 の確かめで
+// 名指しした）。`$_` は `C[($_ ' 0)]` と `C[@[$_]]` だけを比べる（ZERO37）。
+const ZERO37 = ["$_"];
+const DEFS37 = [INC, "add : x y ? x + y", "five37 : 5", "p37 : inc", "st37 : `ab`", "vs37 : 1 , 2 , 3"];
+const UNITS37 = toUnits(DEFS37);
+const X37 = ["five37", "vs37", "st37", "5", "[1 2]", "(inc 5)", "inc", "p37", "(add 1)"];
+const C37 = [
+	(t) => [t],
+	(t) => [`${t} 5`],
+	(t) => [`inc ${t}`],
+	(t) => [`[${t}]`],
+	(t) => [`q37 : ${t}`, "q37"],
+	(t) => [`${t} , 1`],
+	(t) => [`t37 : y ? ${t}`, "t37 1"],
+	(t) => [`h37 : [s] ? s`, `h37 [s : ${t}]`],
+];
+const ans37 = (lines) => {
+	try {
+		const r = resolve(src([...usedDefs(UNITS37, lines.join("\n")), ...lines]));
+		const kinds = r.trees.slice(-lines.length).map((t) => (t && t.t === "unit" ? `${kindOf(t.inner)}（根で _）` : kindOf(t)));
+		return `通る ${kinds.join(" ")} ／ ${diagKeys(r)
+			.filter((k) => k !== "dollar-non-function")
+			.join(" ")}`;
+	} catch (e) {
+		return `断り ${e.reason} ${e.gate || ""}`;
+	}
+};
+law("37 `$x ' 0` は x（R102）：C[($x ' 0)] と C[(x)] と C[@[$x]] が同じ種類と門、`' k`（k ≠ 0）は k に依らない", () => {
+	const problems = [];
+	const count = { "`' 0` の組": 0, "`' k` の組": 0, 通る: 0, 断る: 0, 錨: 0, "零射の組": 0 };
+	for (const z of ZERO37) {
+		for (const c of C37) {
+			const lowered = ans37(c(`(${z} ' 0)`));
+			const opened = ans37(c(`@[${z}]`));
+			count["零射の組"]++;
+			if (lowered !== opened) problems.push(`${z} の ${c("X").join(" ⏎ ")}：\`(${z} ' 0)\` ${lowered}  ⇔  \`@[${z}]\` ${opened}`);
+		}
+	}
+	for (const x of X37) {
+		for (const c of C37) {
+			const lowered = ans37(c(`($${x} ' 0)`));
+			const plain = ans37(c(`(${x})`));
+			const opened = ans37(c(`@[$${x}]`));
+			count["`' 0` の組"]++;
+			if (lowered.startsWith("通る")) count.通る++;
+			else count.断る++;
+			if (lowered !== plain || lowered !== opened) problems.push(`${x} の ${c("X").join(" ⏎ ")}：\`($x ' 0)\` ${lowered}  ⇔  \`(x)\` ${plain}  ⇔  \`@[$x]\` ${opened}`);
+			const k1 = ans37(c(`($${x} ' 1)`));
+			const k2 = ans37(c(`($${x} ' 2)`));
+			count["`' k` の組"]++;
+			if (k1 !== k2) problems.push(`${x} の ${c("X").join(" ⏎ ")}：\`($x ' 1)\` ${k1}  ⇔  \`($x ' 2)\` ${k2}`);
+		}
+	}
+	// 錨：決定の文の例（`$v ' 0` は v で、値なら値）と、関数を下ろして当てる形。
+	const anchor = (lines, want) => {
+		count.錨++;
+		const a = ans37(lines);
+		if (!a.startsWith(want)) problems.push(`錨 ${lines.join(" ⏎ ")}：${a}（${want} のはず）`);
+	};
+	anchor(["$five37 ' 0"], "通る A");
+	anchor(["($inc ' 0) 5"], "通る A");
+	anchor(["$vs37 ' 1"], "通る A");
+	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
+	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
+});
+
+// ---------------------------------------------------------------------------
+// 法則38：書いた `,` の積の `$` の判定は、単位律で縮めた中身の判定と同じで、包み方に依らない（R101、2026-10-27 の片8）
+// ---------------------------------------------------------------------------
+//
+// 書いた `,` の積を `$` で持ち上げた形は、単位律（`_`・`!_`・恒等射の名前 `i` は `,` の単位、R45・R61・R71）の後にも `,` が残れば G20（R101）。縮んで1項になれば、その項を
+// 持ち上げた `$[R]` と同じ答え（`$[inc , !_]` は `$[inc]`、`$[_ , 5]` は `$[5]`）。どちらも、`$[P]` を書いた所（行の根・名前の右辺・括り・関数の本体の根・手続きの行・
+// 関数の口）と、`$` の先の綴り（`$[P]`・`$(P)`・`$[(P)]`・`$[[P]]`）に依らない。積かどうかは規則の側に書く（product38。書いた綴りから単位を数える）。期待値は書かず、
+// 縮めた側と比べる（縮まない積は、どの包みでも G20 を規則の側で見る）。名前を通した積（`p : five , 1` ⏎ `$p`）は書いた積の `$` ではない（R100 の警告）ので比べの外。
+const DEFS38 = [INC, "double : x ? x * 2", "add : x y ? x + y", "use : f x ? @f x", "five : 5", "i : !_"];
+const UNITS38 = toUnits(DEFS38);
+// [中身 P, 単位律で縮めた項 R（縮まない積は null）]
+const P38 = [
+	["five , 1", null],
+	["inc , double", null],
+	["1 , 2", null],
+	["five , 1 , _", null],
+	["inc , double , !_", null],
+	["five , i , 1", null],
+	["inc , !_", "inc"],
+	["!_ , inc", "inc"],
+	["inc , i", "inc"],
+	["i , five", "five"],
+	["_ , 5", "5"],
+	["5 , _", "5"],
+	["_ , !_", "_"],
+	["(add 1) , !_", "(add 1)"],
+	["inc 5 , !_", "inc 5"],
+	["_ , [1 2]", "[1 2]"],
+];
+// 積かどうか（規則の側）：いちばん外の `,` で切り、単位を除いて2つ以上残るか。
+const product38 = (p) => p.split(" , ").filter((x) => !["_", "!_", "i"].includes(x.trim())).length >= 2;
+const SPELL38 = [(p) => `$[${p}]`, (p) => `$(${p})`, (p) => `$[(${p})]`, (p) => `$[[${p}]]`];
+const WRAP38 = [
+	(t) => [t],
+	(t) => [`q38 : ${t}`, "q38"],
+	(t) => [`[${t}]`],
+	(t) => [`t38 : y ? ${t}`, "t38 1"],
+	(t) => [`t38 : y ?`, `\t${t}`, "\ty", "", "t38 1"],
+	(t) => [`use ${t} 5`],
+];
+const ans38 = (lines) => {
+	try {
+		const r = resolve(src([...usedDefs(UNITS38, lines.join("\n")), ...lines]));
+		return `通る ${r.trees.slice(-1).map((t) => kindOf(t)).join(" ")} ／ ${diagKeys(r).join(" ")}`;
+	} catch (e) {
+		return `断り ${e.reason} ${e.gate || ""}`;
+	}
+};
+law("38 書いた `,` の積の `$` の判定（R101）は、単位律で縮めた中身の判定と同じで、包み方（名前・括り・本体・手続きの行・口）と `$` の先の綴りに依らない", () => {
+	const problems = [];
+	const count = { "縮まない積（G20）": 0, "縮む積（縮めた側と同じ）": 0 };
+	for (const [p, r] of P38) {
+		if ((r === null) !== product38(p)) problems.push(`P38 の ${p}：縮めた項の書き方が規則の側の数え方と合わない`);
+		for (const w of WRAP38) {
+			const want = r === null ? null : ans38(w(`$[${r}]`));
+			for (const sp of SPELL38) {
+				const a = ans38(w(sp(p)));
+				if (r === null) {
+					count["縮まない積（G20）"]++;
+					if (a !== "断り coproduct-dollar-value G20") problems.push(`${w(sp(p)).join(" ⏎ ")}：${a}（書いた積の G20 のはず）`);
+				} else {
+					count["縮む積（縮めた側と同じ）"]++;
+					if (a !== want) problems.push(`${w(sp(p)).join(" ⏎ ")}：${a}  ⇔  縮めた ${w(`$[${r}]`).join(" ⏎ ")}：${want}`);
+				}
+			}
+		}
+	}
 	for (const [k, v] of Object.entries(count)) if (!v) problems.push(`「${k}」の組が無い（法則がその枝を見ていない）`);
 	return { problems, note: Object.entries(count).map(([k, v]) => `${k} ${v}`).join("・") };
 });
