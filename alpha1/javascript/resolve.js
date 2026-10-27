@@ -56,6 +56,10 @@
  * 最後の括り（と R34 の穴の関数の最後の括り）だけ）、綴りで並びの形を見る所も長さ 0 の流れを書いた `_` に数える（R95、isUnitLikeTerm）、同じ片の確かめの直しで、
  * 書いた `_` の後ろの書いた `[]` は着く口を先に数え（writtenEmptyAhead。位置を保つ読みで全部値の口に着く所だけ）、括りの中の長さ 0 の流れも詰め（`[_~]`・`[[]~]`、
  * isWrittenEmptyCore）、R34 が読まない並びの前から n 個の口も先に見る（holeMismatch）、
+ * R96〜R98 は 2026-10-27 の片7：算術の中の `0x…` は差と読める所ではいつも差（R96、addressOp。`0x…` どうしの和も字面として点か差の隣で差と読み（hexOperand）、
+ * `0x… - 差` は差、`0x… - 点` は点としか読めないので断る、refuseHexMinusPoint）、点 ± 差で点の要素の幅（値を読む参照の先が Int か Int の List なら 8 byte、
+ * intTree・classifyDollar の w）と差の書いた時点の値（`0x…` の字面とその畳み込み、hexOperand）が分かり、差が幅の倍数でなければ断る（R97、refuseWidth。値は倍数で
+ * 字面のどれかが倍数でない所は §5 Q77。幅は名前・括り1つ・中置の鎖と、点の顔と同じく仮引数・揃った器の要素・欄に運び、実体の鍵に入れる）、`差 / Int` は数（R98）、
  * §1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
  * 門（G1〜G22（G14 は 2026-10-21、G17 と G1 は 2026-10-22、G12 は 2026-10-23、G8 と G9 は 2026-10-24、G4 は 2026-10-27 に廃止。G19 は 2026-10-24 の R51（2026-10-25 に決定）、G20 は同じ日の R53。2026-10-25 に R54〜R57 で G20 の当たる形を直し、同じ日の R58〜R61 で G19・G20 の当たる形を直した。G21 は 2026-10-26 の R62、G22 は同じ日の R67）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
  * 答えが出たときに、その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
@@ -843,6 +847,24 @@ const addrOf = (d) => (!!d && d.k === "A" && !d.spread && !d.shape && (d.addr ==
 // 番地の顔（R62）：値を読む参照（R60 の vref）とずらした点は 'pt'（点）、点どうしの差は 'diff'（差）。ほかは null。関数を指す番地（ref）は顔に数えない
 // （1つの関数と言い切れる番地で、動かす・比べるのは R53 の外。G7）。
 const addrFace = (d) => (vrefOf(d) ? "pt" : addrOf(d) ? d.addr : null);
+// R97（2026-10-27 の片7）：番地の点の要素の幅 w（幅の倍数の門、addressOp）。
+// - w：点の指す要素の幅（byte）が木の段で分かるとき。分かるのは、値を読む参照の先が数（Int）の要素だと書いた所から分かるとき（`v : 5` の `$v`・
+//   `vs : 1 , 2 , 3` の `$vs`・`$5`・`$[1 2]`。intTree、classifyDollar が付ける）と、それを書いた時点で値の決まる差（`0x…` の字面とその畳み込み、hexOperand）で
+//   ずらした点。幅は Int の語の 8 byte（INT_WORD）。主の Claude の読み（R）：利用者は `$vs + 0x3` を「通るのはダメ」と答えた（U〔答え〕[2026-10-27 12:46 58a809c9]）
+//   ので、数の要素の幅は 3 の約数ではない。言語の Int は 64 bit の語なので 8 と置く。値の決まらない差（点 − 点の差・仮引数・実行時の値）でずらした点は w を持たない。
+// - 差の書いた時点の値は desc に持たない：書いた時点で値の決まる差は `0x…` の字面とその `+`・`-` の畳み込みだけで、`0x…` の顔は置かれた所で書いた綴りから見る
+//   （hexOperand、R62）。だから値も同じ所で綴りから読む（同じ日の確かめの直し。最初の版は畳み込みの答えに差の印と値を持たせ、仮引数・器で値を落として門を素通りした）。
+// w は名前（`:` はメタ）・括り1つ（[x] ≅ x）・消えた余りのラムダの残り1項・中置の鎖と、点の顔と同じ所（括りの関数の実体の裸の仮引数と欄・揃った器の要素、R62）に
+// 運び、実体の鍵に入れる（同じ日の確かめの直し。最初の版は仮引数と器に運ばず、`hb [1] $vs`（hb は `[k] f ? (f + 0x3) == $vs`）が、本体に書き込んだ
+// `($vs + 0x3) == $vs`（断る）と割れて通った）。鍵に入れないと、`hb [1] $vs` と `hb [1] $st` が実体を分け合い、先に解いた方の答えを後の方が使う。
+const INT_WORD = 8;
+const ptWidthOf = (d) => (!!d && (vrefOf(d) || (addrOf(d) && d.addr === "pt")) && d.w) || null;
+// 幅 w を外した desc（揃った器の要素を比べる所、mergeElems）。顔（pt・diff・vref）はそのまま。
+function withoutWidth(d) {
+  if (!d || typeof d !== "object" || d.w === undefined) return d;
+  const { w, ...rest } = d;
+  return rest;
+}
 // `$` が作った物（関数を指す番地か、値を読む参照）と、R62 の番地の算術で作った物（ずらした点・差）。`$` が作った物は1つの Reader（R60）で、数では
 // ない。実体の鍵に入れ（裸の仮引数でも、bindParams・internPartial）、素の関数の口に渡せば札で見て（readerAtPlain）、写像では1つの要素（elemsOfContainer）。
 const readerOf = (d) => refOf(d) || vrefOf(d) || addrOf(d);
@@ -1009,6 +1031,11 @@ function mergeElems(descs) {
   if (descs.some((d) => deepKind(d) !== "A")) return U();
   const k0 = internDesc(descs[0]);
   if (descs.every((d) => internDesc(d) === k0)) return descs[0];
+  // 点の幅（R97）だけが違う要素（`[($vs + 0x8) ($vs + ($five - $vs))]`）は、幅を外して揃える（ptWidthOf の注。幅の分からない点が混ざれば、要素の幅は分からない）。
+  // 幅の分からない側へ倒すので、要素から引いた点は幅の門を見ない（断らない側。§5 Q77）。
+  const bare = descs.map(withoutWidth);
+  const b0 = internDesc(bare[0]);
+  if (bare.every((d) => internDesc(d) === b0)) return bare[0];
   // 番地の算術で作った点・差（R62）を、形の揃わない要素と並べた（2026-10-26 の確かめの直し）：要素は中身の見えない A にまとまり、`[x ~xs]` の x や
   // `' 0` で引いた物から点・差の印が落ちる（hasAddr の注）。断る側に倒した（§5 Q66）。
   if (descs.some((d) => hasAddr(d))) throw refuseAddressDrop("mixed", descs.map((d) => descText(d)).join(" "));
@@ -1248,13 +1275,15 @@ function internDesc(d) {
   }
   // 値を読む参照（R60）：指す値の鍵を持つ（関数の番地と同じ理由。`h $vs 0` と `h $five 0` の実体の `@f` は、指す値の形が違う）。深さは指す値の深さに
   // 1 を足す（参照の参照を渡し続ける再帰が深さの門に届く）。
+  // 2026-10-27 の片7 の確かめの直しから、点の要素の幅（R97 の w、ptWidthOf の注）も鍵に入れる（`hb [1] $vs` と `hb [1] $st` の実体を分ける）。
   else if (d.vref && !d.shape) {
     const v = internDesc(d.vref);
-    id = internText(`$=#${v}`, { s: "vref", val: v, depth: 1 + depthOf(v) });
+    id = internText(`$=${d.w ? `${d.w}:` : ""}#${v}`, { s: "vref", val: v, w: d.w || 0, depth: 1 + depthOf(v) });
   }
   // 番地の算術で作った点・差（R62）：ずらした点 `$+`・差 `$-$`。中身の見えない A と別の鍵にする（同じ鍵だと、`hc [1] ($v + 0x10)` と `hc [1] 5` が実体を
-  // 分け合い、本体の `f == $v` の答え（点どうしの比べか、顔の分からない値との G21 か）を先に解いた方が決める。hc は `[k] f ? f == $vs`）。
-  else if (addrOf(d)) id = internLeaf(d.addr === "pt" ? "$+" : "$-$");
+  // 分け合い、本体の `f == $v` の答え（点どうしの比べか、顔の分からない値との G21 か）を先に解いた方が決める。hc は `[k] f ? f == $vs`）。ずらした点の幅（R97）も
+  // 鍵に入れる（`$+8`。上の値を読む参照と同じ）。
+  else if (addrOf(d)) id = internLeaf(d.addr === "pt" ? (d.w ? `$+${d.w}` : "$+") : "$-$");
   // 書いた `_` を指すと分かっている値（R63）：`_`。中身の見えない A と別の鍵にする（同じ鍵だと、`h [s : _]` と `h [s : (inc 5)]` が実体を分け合い、
   // 本体の `$s` が零射の番地か G20 かを、先に解いた方が決める。§5 Q64 の影響）。
   else if (zeroOf(d)) id = internLeaf("_");
@@ -1368,7 +1397,7 @@ function canonKey(id) {
     seen.set(i, seen.size);
     if (node.s === "struct") return `{${node.fields.map(([n, c]) => `${n}:${walk(c)}`).join(" ")}}`;
     if (node.s === "ref") return `$${walk(node.fn)}`;
-    if (node.s === "vref") return `$=${walk(node.val)}`;
+    if (node.s === "vref") return `$=${node.w ? `${node.w}:` : ""}${walk(node.val)}`;
     if (node.s === "partial") return `L<pattern:${node.base}<${node.bound.map(walk).join(" ")}>>`;
     if (node.s === "plainMarks") return `L<${node.base}<${node.bound.map(walk).join(" ")}>>`;
     if (node.s === "compose") return `L<compose(${node.fns.map(walk).join(" ")})>`;
@@ -2072,6 +2101,7 @@ function nameKindOf(F, def) {
     else F.stringCounts.delete(def);
     F.unitDefs.set(def, v.unit);
     F.hexDefs.set(def, v.hex);
+    F.intDefs.set(def, v.int);
   } catch (e) {
     abortFrame(F, frame);
     throw e;
@@ -2096,11 +2126,17 @@ function valueOfRoot(F, root, scope) {
     }
     // 関数を指す番地の印（R49）も持ち越す（`p : $inc` の `map p vs` は `map $inc vs` と同じ）。値を読む参照の印（R60）も同じ（`q : $vs` の q は `$vs`）。
     if (refOf(root.kind)) value.ref = root.kind.ref;
-    if (vrefOf(root.kind)) value.vref = root.kind.vref;
+    // 2026-10-27 の片7 の確かめの直しから、値を読む参照の印も、構築の中の余ったラムダが消えて1項だけ残った右辺（`w : $vs !_`、vanishedOne）から持ち越す
+    // （下の点・差の印と同じ。前は落ちて、`w + 1` が `$vs + 1` と割れて黙って通った。HEAD から）。
+    const vrefRoot = vrefOf(root.kind) || vrefOf(vanishedOne(root) ? descOfTree(root) : null);
+    if (vrefRoot) value.vref = vrefRoot.vref;
     // 番地の算術で作った点・差の印（R62）も同じ（`p : $vs + 0x10` の `p - $vs` は `($vs + 0x10) - $vs` と同じ差）。構築の中の余ったラムダが消えて1項だけ
     // 残った右辺（`w : ($vs + 0x10) !_`、vanishedOne）からも持ち越す（括り1つの rowsInfo と同じ。2026-10-26 の確かめの直し）。
     const addrRoot = addrOf(root.kind) || addrOf(vanishedOne(root) ? descOfTree(root) : null);
     if (addrRoot) value.addr = addrRoot.addr;
+    // 点の幅（R97）も、名前は持ち越す（`p : $vs` の `p + 0x3` は `$vs + 0x3` と同じ）。
+    const marked = vrefRoot || addrRoot;
+    if (marked && marked.w) value.w = marked.w;
     // 右辺が中身の見える器なら、撒いたときの数（R34 の最後の括り `[~c]` に1つで入ったとき、[x] ≅ x で数える。restCloseKind）。
     // 数は desc に入れず、名前の葉にだけ付ける（valueCountOf）。desc に入れると、括りの関数に渡した desc に乗って、括りの仮引数
     // （`[~r]`・`[x ~xs]` の尾）に器全体の数が入り、しかも実体の鍵（descKey）は数を見ないので、長さの違う器が1つの実体を分け合って
@@ -2122,7 +2158,9 @@ function valueOfRoot(F, root, scope) {
     // 右辺が番地の字面か（R62）：`n : 0x10` の `$x + n` は `$x + 0x10` と同じく、点に足す差（hexOperand）。desc には入れない（番地の字面は中身の見えない
     // A のまま、解決器は今の扱い。顔は位置で決まり、点に足し引きする所でだけ差と読む）。
     const hex = hexTree(root, { F, scope });
-    return { value, count, chars, unit, hex };
+    // 右辺の値が Int か Int の List と書いた所から分かるか（R97：`$名前` の指す要素の幅。"scalar"・"list"・null、intName が読む）。
+    const int = intTree(root, { F, scope });
+    return { value, count, chars, unit, hex, int };
   }
 }
 
@@ -2751,15 +2789,16 @@ function bindParams(params, argDescs, plain = false) {
         return;
       }
       // 値を読む参照（R60）も同じ（本体の `@f` が指す値を読む。`h $vs 0` と `h $five 0` が実体を分け合うと、先に解いた方の答えを後の方が使う）。
+      // 2026-10-27 の片7 の確かめの直しから、点の要素の幅（R97 の w）も持ち越す（鍵に入っている。ptWidthOf の注）。
       if (vrefOf(d)) {
-        descs.set(p.name, { k: "A", vref: d.vref });
+        descs.set(p.name, d.w ? { k: "A", vref: d.vref, w: d.w } : { k: "A", vref: d.vref });
         keys.push(descKey(d));
         texts.push(descText(d));
         return;
       }
       // 番地の算術で作った点・差（R62）と、書いた `_` を指す値（R63）も、印を持ち越して鍵に入れる（本体の `f - $v` が差か、`$f` が零射の番地か）。
       if (addrOf(d) || zeroOf(d)) {
-        descs.set(p.name, addrOf(d) ? { k: "A", addr: d.addr } : zeroDesc());
+        descs.set(p.name, addrOf(d) ? (d.w ? { k: "A", addr: d.addr, w: d.w } : { k: "A", addr: d.addr }) : zeroDesc());
         keys.push(descKey(d));
         texts.push(descText(d));
         return;
@@ -3193,6 +3232,8 @@ function classify(term, ctx) {
   if (pre.every((p) => VALUE_PREFIX.has(p)) && post.every((p) => p === "!")) {
     if (core.c === "unit") return plain(U());
     const inner = classify({ type: "atom", pre: [], core, post: [] }, ctx);
+    // 核の view（括りなら解いた中の木 inner を持つ）を、印の付いた項の view にも置く（R97 の intTerm が `-(5)`・`!!(2 + 3)` の核を読む。2026-10-27 の片7 の確かめの直し）。
+    view.coreView = inner.view;
     // 値の印（前置 `-`・`!!`・後置 `!`）は値の演算子：核が関数を指す番地なら G7、番地の点・差なら G21（R62、§5 Q66）、素の関数の裸の仮引数なら札に覚える（R60 の細かい所。
     // valueOperand）。前置 `!` だけの項（`!p`）は否定で、値の演算子ではないので今のまま。
     const mark = pre.find((p) => p !== "!") || (post.length ? "!" : null);
@@ -3277,7 +3318,8 @@ function classifyDollar(term, ctx, plain) {
   if (pre.length === 2 && pre[1] === "!" && core.c === "unit") return plain({ k: "A", ref: ID1_FN });
   let target;
   const named = pre.length === 1 ? bracketedName(core) : null;
-  if (named) target = { ...dollarNameTarget(named, ctx), name: named };
+  // 先の値が Int と書いた所から分かるか（R97：値を読む参照の指す要素の幅、int）。名前は intName、括りは中身の行、字面は intTerm で見る。
+  if (named) target = { ...dollarNameTarget(named, ctx), name: named, int: () => !!intName(named, ctx) };
   else if (pre.length === 1 && core.c === "bracket") {
     // 中身が1項だけで、その項に後置の印が付いている（`$[vs~]`・`$[5!]`・`$[[x@]]`）：[x] ≅ x で、括らない `$vs~`・`$5!` と同じ先（R57 の G20）。R60 で
     // 値の先が通るので、ここで見ないと、括った綴りだけが値の参照で通り、括らない綴りの G20 と割れる（法則17 の (a')）。
@@ -3306,10 +3348,13 @@ function classifyDollar(term, ctx, plain) {
       kind: b.desc,
       unit: (b.trees.length === 1 && pointsToMark(b.trees[0], ctx)) || !!zeroOf(b.desc),
       dead: dead[0] || (one ? aliasDeadOfTree(ctx.F, one, ctx.scope) : null),
+      // 中身が1行なら [x] ≅ x でその行、2行以上なら行が要素の List。
+      int: () => (one ? !!intTree(one, ctx) : allScalar(b.trees, ctx)),
     };
   } else {
-    const inner = classify({ type: "atom", pre: pre.slice(1), core, post: [] }, ctx);
-    target = { kind: inner.cat === "plain" ? inner.desc : U() };
+    const atom = { type: "atom", pre: pre.slice(1), core, post: [] };
+    const inner = classify(atom, ctx);
+    target = { kind: inner.cat === "plain" ? inner.desc : U(), int: () => !!intTerm(atom, inner.view, ctx) };
   }
   if (target.dead) throw refuseDollar(term, target.kind, ctx, { ...target, where: "dead" });
   if (target.unit) return plain({ k: "A", ref: ZERO_FN });
@@ -3320,8 +3365,9 @@ function classifyDollar(term, ctx, plain) {
   // Reader と言い切れない（G20。2026-10-25 の確かめの直し：枝の行の括りは前段で A(U) に分けられ、値なら通す R60 に乗って抜けていた。同じ枝の
   // `$[1 > 0 & inc | double]` は種類が未知で G20）。形の見える器（`$fs`・`$(inc , 1)` の `$[U…]`）は値を読む参照で通す。
   if (kind && kind.k === "A" && !kind.shape && !readerOf(kind) && deepKind(kind) !== "A") throw refuseDollar(term, kind, ctx, { ...target, where: target.where || "mixed" });
-  // R60：先が値なら、その値を読む参照（1つの Reader）。
-  if (kind && kind.k === "A") return plain({ k: "A", vref: kind });
+  // R60：先が値なら、その値を読む参照（1つの Reader）。2026-10-27 の R97 から、先が Int と書いた所から分かれば、指す要素の幅 w（Int の語の 8 byte）を持つ
+  // （幅の倍数の門、addressOp）。
+  if (kind && kind.k === "A") return plain(target.int && target.int() ? { k: "A", vref: kind, w: INT_WORD } : { k: "A", vref: kind });
   if (!kind || kind.k !== "L") throw refuseDollar(term, kind, ctx, target);
   // 指す関数の印（R49）。2026-10-25 の R55 から、値の定義の名前（別名 `p : inc` の `$p`）にも付ける（前は覗いた物だけで、別名には付けなかった。§5 Q45）。
   // 恒等射（`i : !_` の i）の印は、`$!_` と同じ1引数の恒等射（上の `$!_` の注、§5 Q56 の答え）。
@@ -3763,7 +3809,7 @@ function localInfo(name, s, ctx, viaDollar = false) {
   }
   let info;
   if (!root || !root.kind) info = { why: "local-value" };
-  else if (rec.lambda) info = { desc: { k: root.kind.k, fn: root.kind.fn }, root, lambda: true, count: null, strCount: null, unit: false, hex: false, dead: dead[0] || null };
+  else if (rec.lambda) info = { desc: { k: root.kind.k, fn: root.kind.fn }, root, lambda: true, count: null, strCount: null, unit: false, hex: null, int: null, dead: dead[0] || null };
   else {
     const v = valueOfRoot(F, root, s);
     // 右辺が単位律と [x] ≅ x で仮引数か実体の中で渡された物の名前1つに縮む（`⇥w : a`・`⇥w : [s]`）なら、w はその名前と同じ物（`:` はメタ）：desc はその名前の
@@ -3771,7 +3817,7 @@ function localInfo(name, s, ctx, viaDollar = false) {
     // 写さない物が別名で落ちた）。`$w` もその名前の先（localTarget）。2026-10-26 の確かめの指摘：前は `⇥w : a` ⏎ `⇥w + b` の札が落ち、`w : f` の `$w` が零射に
     // ならず、形の見えない値の `$w` が G20 を素通りした。
     const pa = paramAliasOf(F, root, s);
-    info = { desc: pa ? pa.desc : v.value, root, lambda: false, count: v.count, strCount: v.chars, unit: v.unit, hex: v.hex, dead: dead[0] || aliasDeadOfTree(F, root, s) };
+    info = { desc: pa ? pa.desc : v.value, root, lambda: false, count: v.count, strCount: v.chars, unit: v.unit, hex: v.hex, int: v.int, dead: dead[0] || aliasDeadOfTree(F, root, s) };
     if (pa) info.paramAlias = pa;
     if (root.kind.k === "U") {
       const alias = localAliasOf(rec.rhs, s);
@@ -3997,10 +4043,11 @@ function refuseReaderOperand(sym, operand) {
 // `0x…` の字面は位置で顔が決まる：点の右に足し引きするなら差、比べの相手なら点。解決器は字面を今のまま中身の見えない A で持ち（SCALAR の注）、
 // 点の相手の所でだけ書いた綴り（字面・括り1つ・右辺がそれの名前）から見る（hexOperand）。
 // 決まっていない組は断る（§5 Q66）：差 ± `0x…`（差か点か）・点の左の `0x…`（`0x10 + $x`・`0x1000 - $x`）・差 ± 点・点と差の比べ・顔の分からない値（裸の
-// 仮引数・適用の結果・器・書いた `_`）・`*` `/` `%` `^`・ビット・範囲（差を要素の幅で割って数にする道は §5 Q67）。中置の外の綴り（区間・点なし・
+// 仮引数・適用の結果・器・書いた `_`）・`*` `/` `%` `^`・ビット・範囲（差を要素の幅で割って数にする道は §5 Q67 → 2026-10-27 の R98 で `差 / 数` は数）。中置の外の綴り（区間・点なし・
 // 絶対値・値の印・素の関数の口）で番地を受けた形は、答えに点・差の印を持たせられないので断る（refuseAddressSpelling・readerAtPlain、§5 Q66）。
 // 差が指す物の要素の幅の倍数か（U [2026-10-25 21:12 c8ccdd69]「…メモリアドレスの倍数の加法だと確定できるなら何とかなると思う。」）は、解決器が幅を
-// 持たないので型の段で確かめる（仕様 §4 R62。決められる所は見つからなかった）。
+// 持たないので型の段で確かめる（仕様 §4 R62。決められる所は見つからなかった）。→ 2026-10-27 の R97 から、点の幅と差の書いた時点の値が見える所は解決器で断る
+// （ptWidthOf の注・refuseWidth）。ほかは今のまま型の段と値の段。
 // 圏論の読み（主の Claude、R）：位置は差の群が働く torsor（アフィン空間）。`$x` はメモリの1点に焦点を合わせたストアの位置で、`@` は extract、`#` は put、
 // `$x + 0x10` は seek。Reader を関手で持ち上げる読み（読んでから当てる）は採らない。
 // 2026-09-30 の「番地−番地は Int（距離）」「ずらしは Int で書く」は、差を Address 型にする形で上書きした。
@@ -4017,13 +4064,67 @@ const ADDR_ADD = new Map([
   ["diff+hex", "diff"],
   ["hex+diff", "diff"],
 ]);
+// R96（2026-10-27 の片7、§5 Q66 の算術の所の答え）：`0x… - 差` は差（`0x…` は差と読める所ではいつも差。U〔答え〕[2026-10-27 09:53 58a809c9]「…`0x… − 差` も
+// 差で通して。…」）。`0x… - 点` は差と読むと差 − 点で行が無く、点としか読めないので断る。`0x… ± 0x…`（点も差も無い組）の答えは、`0x…` の字面と同じく中身の見えない
+// A のままで、点か差の隣に置いた所で書いた綴りから字面の和として見る（hexOperand。`$vs + (0x10 + 0x8)` は点 + 差）。同じ日の確かめの直し：最初の版は和の答えに差の
+// 印を付けたので、和を仮引数・器に渡すと印だけ運んで値を落とし（幅の倍数の門を素通り）、比べ・数と混ぜる所・関数の口では `0x18` と答えが割れた。
 const ADDR_SUB = new Map([
   ["pt-diff", "pt"],
   ["pt-hex", "pt"],
   ["pt-pt", "diff"],
   ["diff-diff", "diff"],
   ["diff-hex", "diff"],
+  ["hex-diff", "diff"],
 ]);
+function gcdBig(a, b) {
+  let x = a < 0n ? -a : a;
+  let y = b < 0n ? -b : b;
+  while (y) [x, y] = [y, x % y];
+  return x;
+}
+const hexText = (n) => (n < 0n ? `-0x${(-n).toString(16).toUpperCase()}` : `0x${n.toString(16).toUpperCase()}`);
+// R97：点 ± 差で、点の要素の幅 w が分かり、差の値が書いた時点で決まる（`0x…` の字面とその `+`・`-` の畳み込み。h は hexOperand の答え：値 v と、足し引きした字面の
+// 絶対値の最大公約数 g）。
+// - 値 h.v が幅の倍数でない：要素の途中を指す点になる（R97、決まって断る）。
+// - 値は幅の倍数だが、足し引きした字面のどれかが倍数でない（`$vs + (0x4 + 0x4)`）：字面ごとに見るか値で見るかは決まっていない（§5 Q77）。値で見ると、同じ字面の組の
+//   `($vs + 0x4) + 0x4` は内の `$vs + 0x4` で断られ、畳み込みの順で答えが割れる。断る側に倒した（前の答えも G21、§5 Q66。同じ日の確かめの直しで言い分を分けた：
+//   最初の版はこの形も「幅の倍数でない差」「要素の途中を指す点」と言い、利用者の答えを根拠に引いていた）。
+function refuseWidth(t, sym, w, h, diffText) {
+  const verb = sym === "+" ? "足して" : "引いて";
+  const how = `ずらしは幅の倍数の \`0x…\` で書きます（\`$x + 0x${w.toString(16).toUpperCase()}\`）。`;
+  if (h.v % BigInt(w) !== 0n) {
+    return gate(
+      "G21",
+      `\`${t}\` は、要素の幅が ${w} byte（Int の語）と分かる番地の点に、幅の倍数でない差 \`${diffText}\`（値 ${hexText(h.v)}）を${verb}います。要素の途中を指す点になり、保証できる加法ではないので断ります（§4 R97。U〔答え〕[2026-10-27 12:46 58a809c9]「これが通るのはダメだと思う。」）。${how}`
+    );
+  }
+  return gate(
+    "G21",
+    `\`${t}\` は、要素の幅が ${w} byte（Int の語）と分かる番地の点に、\`0x…\` の字面を足し引きした差 \`${diffText}\`（値 ${hexText(h.v)} は幅の倍数）を${verb}います。足し引きした字面の最大公約数は ${hexText(h.g)} で、字面のどれかが幅の倍数ではありません。差を字面ごとに見るか、畳み込んだ値で見るかは決まっていないので、断る側に倒しました（§4 R97 の R の所、§5 Q77）。${how}`
+  );
+}
+// R96：`0x… - 点`。算術の中の `0x…` は差と読むが、差 − 点は表に行が無い。`0x…` を点（生の番地）と読めば点 − 点で差だが、その点には領域が無く、保証は層0にしか立たない。
+function refuseHexMinusPoint(t) {
+  return gate(
+    "G21",
+    `\`${t}\` は \`0x…\` から番地の点を引く形です。算術の中の \`0x…\` は差（ずらし量）と読みますが、差 − 点は番地の点と差の表（§4 R62）に行がありません。\`0x…\` を点（生の番地）と読めば点 − 点で差になりますが、生の番地には領域が無く、その加法の保証は層0にしか立たないので断ります（§4 R96。点としか読めない所は断る）。点からのずれが欲しいなら、点の側から \`$x - $y\` と書きます。`
+  );
+}
+// 番地と数を混ぜた算術の言い分の後ろ（R98）：割る・余り・掛ける所の決まった所と残り。差 / 数 で割る数が Int と書いた所から分かる物（intTerm）は、ここに来る前に
+// 数で通る。同じ日の確かめの直しから、割る数がほかの数（小数・文字・`0u`・`0r`・`0b`。数の desc はどれも数に数える）の 差 / 数 は、今までどおり断って §5 Q76 を名指しする
+// （最初の版は数の desc で見て通した。主の Claude の Q67 の行への U〔答え〕[2026-10-26 23:46 29bed94e] の「論外」の所）。
+function mixedNumNote(sym, lf, rf) {
+  const pt = lf === "pt" || rf === "pt";
+  if (sym === "/") {
+    if (pt) return "割って数にできるのは差 / 数だけで、点は割れません（§4 R98）。";
+    if (lf === "diff") return "差を割って数にするのは、割る数が Int と書いた所から分かる形（`($b - $a) / 8`、§4 R98）だけで、ほかの数（小数・文字・`0u…`・`0r…`・`0b…` など）で割る形は決まっていません（§5 Q76）。";
+    return "数 / 差は決まっていません（§5 Q76）。";
+  }
+  if (pt) return "";
+  if (sym === "%") return `${lf === "diff" ? "差 % 数" : "数 % 差"}は決まっていません（§5 Q76）。`;
+  if (sym === "*") return "差と数を掛ける形は決まっていません（§5 Q76）。";
+  return "";
+}
 const ADDR_CMP_SYMS = new Set(["<", "<=", "=", ">=", ">", "!=", "==", "!=="]);
 const ADDR_CMP_OK = new Set(["pt|pt", "pt|hex", "hex|pt", "diff|diff"]);
 const FACE_TEXT = {
@@ -4055,7 +4156,16 @@ function operandFace(isUnit, desc, hex) {
 }
 // 値の演算子 sym の被演算子の顔 lf・rf（R62）。どちらにも番地の点か差が無ければ null（今までの読み）。読めれば答えの desc（点・差、比べは A）。
 // 関数を指す番地は G7、決まって断る組と決まっていない組は G21。text は項の綴り、operand[i] は i 番目の被演算子の綴り（作るのは断るときだけ）。
-function addressOp(sym, lf, rf, text, operand) {
+// info[i] は i 番目の被演算子の幅と値（R97、2026-10-27 の片7）：点なら {w}（要素の幅、分からなければ null）、`0x…` の字面（とその和）なら {lit}（hexOperand の
+// 書いた時点の値）、数なら {int}（Int と書いた所から分かるか、R98）。比べの所（resolveTree）は渡さない。
+// 2026-10-27 の片7（R96〜R98。U〔答え〕[2026-10-27 09:53 58a809c9]「それでいい。算術の中の `0x…` は差と読める所ではいつも差（ずらし量で、生の番地じゃないので
+// どの層でも書ける）、点としか読めない所は断る。`0x… − 差` も差で通して。…」。文はボタンの文で、主の Claude の物）：
+// - R96：中置の `+`・`-` の被演算子の `0x…`（括り1つ・名前と、`0x…` どうしの `+`・`-` の和も。hexOperand）は、差と読めば表に行のある所ではいつも差。`0x… - 差` は差。
+//   差と読むと行が無く点としか読めない `0x… - 点` は断る（言い分は保証できる加法か、refuseHexMinusPoint）。点と差の顔の無い `0x… ± 0x…`・`0x… ± 数` と、`0x…` の
+//   比べは今まで（ここでは見ない。比べの相手の和は字面の和として見ない、hexFace）。
+// - R97：点 ± 差で、点の要素の幅 w と差の書いた時点の値 lit が分かり、差が幅の倍数でなければ断る（refuseWidth。値が倍数でも字面のどれかが倍数でなければ §5 Q77）。
+// - R98：`差 / Int` は数（`($b - $a) / 8`・`0x10 / 2`）。層に依らない。
+function addressOp(sym, lf, rf, text, operand, info = [null, null]) {
   if (lf === "fn" || rf === "fn") throw refuseReaderOperand(sym, operand[lf === "fn" ? 0 : 1]());
   if (lf === "box" || rf === "box") {
     throw gate(
@@ -4064,22 +4174,42 @@ function addressOp(sym, lf, rf, text, operand) {
     );
   }
   const isAddr = (f) => f === "pt" || f === "diff";
-  if (!isAddr(lf) && !isAddr(rf)) return null;
+  const litAt = (i) => (info[i] && info[i].lit) || null;
+  // R98：割る数が Int と書いた所から分かるか（intTerm。数の desc は小数・文字・`0u`・`0r`・`0b` も数に数えるので、desc では見ない）。
+  const intDivisor = sym === "/" && rf === "num" && !!info[1] && !!info[1].int;
+  if (!isAddr(lf) && !isAddr(rf)) {
+    // R98：`0x… / Int` は差 / 数で数（`0x…` は差と読める所）。割る数が Int と分からなければ今まで（点も差も無い組、ここでは見ない）。
+    if (intDivisor && lf === "hex") return scalarDesc();
+    return null;
+  }
   const out = sym === "+" ? ADDR_ADD.get(`${lf}+${rf}`) : sym === "-" ? ADDR_SUB.get(`${lf}-${rf}`) : null;
-  if (out) return { k: "A", addr: out };
+  if (out === "diff") return { k: "A", addr: "diff" };
+  if (out === "pt") {
+    // 点の側と差の側（`0x…` は差）。点 ± 差・差 + 点・`0x…` + 点で、点はいつも片側だけ。
+    const p = lf === "pt" ? 0 : 1;
+    const w = (info[p] && info[p].w) || null;
+    const lit = litAt(1 - p);
+    // R97：幅の倍数の門。足し引きした字面の最大公約数 g が幅の倍数でなければ断る（値が倍数でない所は R97、値は倍数で字面のどれかが倍数でない所は §5 Q77）。
+    if (w && lit && lit.g % BigInt(w) !== 0n) throw refuseWidth(text(), sym, w, lit, operand[1 - p]());
+    // ずらした点は、幅と書いた時点の値の差でずらしたときだけ幅を持つ（値の決まらない差でずらした点は、指す要素が分からない）。
+    return w && lit ? { k: "A", addr: "pt", w } : { k: "A", addr: "pt" };
+  }
   if (ADDR_CMP_SYMS.has(sym) && ADDR_CMP_OK.has(`${lf}|${rf}`)) return A();
+  // R98：差 / Int は数（要素の数。層の門は作らない）。
+  if (intDivisor && lf === "diff") return scalarDesc();
   const t = text();
   const pair = `左は${FACE_TEXT[lf]}、右は${FACE_TEXT[rf]}`;
   if (lf === "num" || rf === "num") {
     const cmp = ADDR_CMP_SYMS.has(sym);
     throw gate(
       "G21",
-      `\`${t}\` は番地（Address）と数を混ぜた${cmp ? "比べ" : "算術"}です（${pair}）。Address と Int は混ぜません。${cmp ? "番地と比べるのは番地（`0x…` の字面・点・差）です" : "ずらしは `0x…` で書きます（`$x + 0x10`）"}（§4 R62）。${sym === "/" || sym === "%" ? "番地の差を要素の幅で割って数にする道は決まっていません（§5 Q67）。" : ""}`
+      `\`${t}\` は番地（Address）と数を混ぜた${cmp ? "比べ" : "算術"}です（${pair}）。Address と Int は混ぜません。${cmp ? "番地と比べるのは番地（`0x…` の字面・点・差）です" : "ずらしは `0x…` で書きます（`$x + 0x10`）"}（§4 R62）。${mixedNumNote(sym, lf, rf)}`
     );
   }
   if (sym === "+" && lf === "pt" && rf === "pt") {
     throw gate("G21", `\`${t}\` は番地の点どうしを足す形です。点に足せるのは差（\`0x…\` の字面か、点どうしの差）だけで、点 + 点は意味がないので断ります（§4 R62）。`);
   }
+  if (sym === "-" && lf === "hex" && rf === "pt") throw refuseHexMinusPoint(t);
   throw gate(
     "G21",
     `\`${t}\` の \`${sym}\` の組（${pair}）は、番地の点と差の規則（点 ± 差は点、点 − 点は差、差 ± 差は差、点どうし・差どうし・点と \`0x…\` の比べ。§4 R62）で決まっていません（§5 Q66）。`
@@ -4152,33 +4282,116 @@ function shadowFace(f, name) {
 }
 // 番地の字面の項（R62）：書いた `0x…`・`NxHHHH`（ADDRESS_LIT）、それを1行で括った物（[x] ≅ x。中身の `,` の単位は解いた木で消えている）、右辺がそれの
 // ファイルの値の定義の名前（`:` はメタ。F.hexDefs、nameKindOf が置く）。仮引数・実体で渡された物・局所の名前は見ない（顔が分からない、§5 Q66）。
+// 2026-10-27 の片7 の R96・R97 から、答えは字面の値 {v, g, sum}（BigInt。v は値、g は足し引きした字面の絶対値の最大公約数で幅の倍数の門が読む、sum は字面どうしの
+// `+`・`-` の和か）。番地の字面でなければ null。字面どうしの和（`0x10 + 0x8`・`(0x10 + 0x8)`・`w8 : 0x10 + 0x8` の w8。どちらの被演算子もこの関数で字面と読める
+// 中置の `+`・`-`）も字面の値として読む（R96：「`0x…` どうしの算術の結果」も `0x…` と同じく、差と読める所では差。決定の文の括り方）。比べの相手では和を見ない
+// （hexFace。`0x…` を含む比べは今まで）。
 function hexOperand(term, view, ctx) {
-  if (!term || term.type !== "atom" || term.pre.length || term.post.length) return false;
+  if (!term) return null;
+  if (term.type === "infix") {
+    if ((term.sym !== "+" && term.sym !== "-") || !view || view.v !== "infix") return null;
+    const a = hexOperand(term.left, view.left, ctx);
+    const b = a && hexOperand(term.right, view.right, ctx);
+    return b ? { v: term.sym === "+" ? a.v + b.v : a.v - b.v, g: gcdBig(a.g, b.g), sum: true } : null;
+  }
+  if (term.type !== "atom" || term.pre.length || term.post.length) return null;
   const c = term.core;
-  if (c.c === "lit") return ADDRESS_LIT.test(c.text);
-  if (c.c === "bracket") return !!view && Array.isArray(view.inner) && view.inner.length === 1 && hexTree(view.inner[0], ctx);
+  if (c.c === "lit") {
+    if (!ADDRESS_LIT.test(c.text)) return null;
+    const v = hexLitValue(c.text);
+    return { v, g: v, sum: false };
+  }
+  if (c.c === "bracket") return !!view && Array.isArray(view.inner) && view.inner.length === 1 ? hexTree(view.inner[0], ctx) : null;
   if (c.c === "name") return hexName(c.name, ctx);
-  return false;
+  return null;
 }
 function hexTree(t, ctx) {
-  return !!t && t.t === "leaf" && !!t.term && hexOperand(t.term, t.view, ctx);
+  return !!t && t.t === "leaf" && !!t.term ? hexOperand(t.term, t.view, ctx) : null;
 }
+// 被演算子の `0x…` の顔（operandFace の hex）：比べ（cmp）の相手では、字面どうしの和を字面と読まない（R96 の決定の文「`0x…` を含む比べは今のまま」。前は和が中身の
+// 見えない値で、`(0x10 + 0x8) == $vs` は G21、`(0x10 + 0x8) == 0x18` は A。同じ日の確かめの直し：最初の版は和を差にして、`(0x10 + 0x8) == ($vs - $five)` を差どうしの
+// 比べで通した）。
+const hexFace = (h, cmp) => (h && !(cmp && h.sum) ? h : null);
+// 番地の字面の値（R97）：`0x…`・`NxHHHH` の `x` の後ろの16進の数。`x` の前の数字（幅、`0` は未指定）は値に入れない。
+const hexLitValue = (text) => BigInt(`0x${text.slice(text.indexOf("x") + 1)}`);
 function hexName(name, ctx) {
   for (let s = ctx.scope; s; s = s.parent) {
     // 関数の本体の `:` の行がファイルの定義の名前を隠す所（§5 Q10）では、ファイルの定義の字面の顔を使わない（本体の行の読みなら別の物。2026-10-26 の
     // 確かめの指摘：`nx : 0x10` を本体の `nx : 5` が隠しても、`$vs + nx` を点 + 差で通していた。同じ本体の `$nx` は隠しの G20）。顔は「ほか」になる。
-    if (s.defRows && localDefsOf(s).shadow.has(name)) return false;
-    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name))) return false;
+    if (s.defRows && localDefsOf(s).shadow.has(name)) return null;
+    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name))) return null;
     // 局所の名前（R80）：関数の本体の局所の定義なら、右辺が番地の字面か（localInfo。ファイルの値の定義の hexDefs と同じ）。
     if (s.locals && s.locals.has(name)) {
       const info = localInfo(name, s, ctx);
-      return !info.why && !!info.hex;
+      return !info.why && info.hex ? info.hex : null;
     }
   }
   const def = ctx.F.defs.get(name);
-  if (!def || def.lambda) return false;
+  if (!def || def.lambda) return null;
   nameKindOf(ctx.F, def);
-  return !!ctx.F.hexDefs.get(def);
+  return ctx.F.hexDefs.get(def) || null;
+}
+
+// ---- 値が Int と書いた所から分かるか（R97、2026-10-27 の片7） ----
+//
+// 値を読む参照 `$x` の指す要素の幅（ptWidthOf の注）が木の段で分かるのは、x の値が Int（"scalar"）か、Int を並べた List（"list"）だと書いた所から分かるとき。
+// Int は、Int の字面（`5`・`-3`。小数点・番地・文字・文字コード `0u…`・`0r`・`0b` の字面は入れない）・Int どうしの値の演算（算術 `+` `-` `*` `/` `%` `^` と
+// ビット `<<` `>>` `||` `;;` `&&`）の答え・Int に当てた値の印（前置 `-`・`!!`・後置 `!`）と絶対値 `|x|`・括り1つ（[x] ≅ x）・前置 `~`（R79、`~x` は `[x]`）・右辺がそれの
+// 名前（ファイルの値の定義と局所の定義。`:` はメタ）。List は、Int を並べた構築・`,` の積・2行以上の括り（`vs : 1 , 2 , 3`・`[1 2]`）。
+// 同じ日の確かめの直し：最初の版は前置 `-` を名前にだけ当て（`-five` は Int、`-(5)`・`-(five)` は分からない）、ビット・`!!`・`!`・`|x|`・`~x` を数えず、包み方で答えが割れた。
+// ノルム `||x||` と `差 / 数`（R98）の答えは数えない（§5 Q77）。
+// 要素が List の器（`[1 2] , [3 4]`）は、要素が Int でないので入れない。数の desc（SCALAR）は文字と文字列の要素も数に数えるので、desc ではなく書いた木で見る。
+// 仮引数・実体で渡された物・ほかの物は分からない（幅を見ない、R97 の決定の文「幅が木の段で分からない所」）。答えは "scalar"・"list"・null。
+const INT_LIT = /^-?[0-9]+$/;
+const INT_OPS = new Set(["+", "-", "*", "/", "%", "^", "<<", ">>", "||", ";;", "&&"]);
+const INT_MARKS = new Set(["-", "!!"]);
+const allScalar = (ts, ctx) => ts.length > 0 && ts.every((x) => intTree(x, ctx) === "scalar");
+function intTree(t, ctx) {
+  if (!t) return null;
+  const one = vanishedOne(t);
+  if (one) return intTree(one, ctx);
+  if (t.t === "construct") return allScalar(liveItems(t.items), ctx) ? "list" : null;
+  if (t.t === "op" && t.sym === ",") return allScalar(commaItems(t), ctx) ? "list" : null;
+  return t.t === "leaf" && !!t.term ? intTerm(t.term, t.view, ctx) : null;
+}
+function intTerm(term, view, ctx) {
+  if (!term) return null;
+  if (term.type === "infix") {
+    const ok = INT_OPS.has(term.sym) && !!view && view.v === "infix" && intTerm(term.left, view.left, ctx) === "scalar" && intTerm(term.right, view.right, ctx) === "scalar";
+    return ok ? "scalar" : null;
+  }
+  if (term.type !== "atom") return null;
+  const c = term.core;
+  const { pre, post } = term;
+  if (pre.length || post.length) {
+    // 前置 `~` だけ（R79）：書いた `[x]` と同じ項で、view.inner は `[x]` の中の木（classify）。
+    if (pre.length === 1 && pre[0] === "~" && !post.length) return !!view && Array.isArray(view.inner) && view.inner.length === 1 ? intTree(view.inner[0], ctx) : null;
+    // 値の印（前置 `-`・`!!`・後置 `!`）：Int に当てれば Int。核の view は classify が coreView に置く。
+    if (!pre.every((p) => INT_MARKS.has(p)) || !post.every((p) => p === "!")) return null;
+    return intTerm({ type: "atom", pre: [], core: c, post: [] }, view ? view.coreView : null, ctx) === "scalar" ? "scalar" : null;
+  }
+  if (c.c === "lit") return INT_LIT.test(c.text) ? "scalar" : null;
+  if (c.c === "name") return intName(c.name, ctx);
+  if (c.c === "abs") return !!view && Array.isArray(view.inner) && view.inner.length === 1 && intTree(view.inner[0], ctx) === "scalar" ? "scalar" : null;
+  if (c.c !== "bracket" || !view || !Array.isArray(view.inner) || !view.inner.length) return null;
+  if (view.inner.length === 1) return intTree(view.inner[0], ctx);
+  return allScalar(view.inner, ctx) ? "list" : null;
+}
+// 名前の右辺の値が Int と書いた所から分かるか（hexName と同じ順に探す。隠された名前・仮引数・実体で渡された物は分からない）。ここからは名前を解かず、もう解いた
+// 名前の答え（intDefs・局所の定義の覚え）だけを読む：`$名前` の先（dollarNameTarget）と木の中の名前は、ここより前に解いてある。解き終えていない名前（`$v` の輪、
+// R73 の指す値は中身の見えない A）は分からない側（解かせると、R73 が通す輪を name-cycle にした。`a : f 1` ⏎ `v : f 1` ⏎ `f : x ? x , $v`）。
+function intName(name, ctx) {
+  const F = ctx.F;
+  for (let s = ctx.scope; s; s = s.parent) {
+    if (s.defRows && localDefsOf(s).shadow.has(name)) return null;
+    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name))) return null;
+    if (s.locals && s.locals.has(name)) {
+      const info = s.localCache && s.localCache.get(name);
+      return (!!info && !info.why && info.int) || null;
+    }
+  }
+  const def = F.defs.get(name);
+  return (!!def && !def.lambda && F.intDefs.get(def)) || null;
 }
 
 // `@x` の x の desc（R49）。名前は peekDesc で引き（2026-10-26 の R82 から、値の定義も右辺を解いて印を読み、輪に数える。前は解かずに覗いた。未定義なら
@@ -4285,12 +4498,24 @@ function classifyInfix(term, ctx) {
   // 番地の点と差（R62、2026-10-26。§5 Q59 の答え）：被演算子に番地の点か差があれば、点と差の規則で読む（addressOp。答えは点・差か、比べの A）。
   // 関数を指す番地は G7（R53 の外）。被演算子に番地の顔が無ければ今までの読み。
   // 関数の本体の `:` の行に隠された名前（§5 Q10）は、ファイルの定義の読みの顔が点・差なら断る（shadowFace、2026-10-26 の確かめの直し）。
+  // 比べの相手では、`0x…` どうしの和を字面と読まない（hexFace、R96）。
+  const cmp = ADDR_CMP_SYMS.has(term.sym);
   const face = (x, side) => {
-    const f = operandFace(x && x.cat === "unit", x && x.cat === "plain" ? x.desc : null, !!x && x.cat === "plain" && hexOperand(side, x.view, ctx));
+    const f = operandFace(x && x.cat === "unit", x && x.cat === "plain" ? x.desc : null, !!x && x.cat === "plain" && hexFace(hexOperand(side, x.view, ctx), cmp));
     const sh = x && x.cat === "plain" ? shadowedOperand(side, x.view, ctx) : null;
     return sh ? shadowFace(f, sh) : f;
   };
-  const addr = addressOp(term.sym, face(l, term.left), face(r, term.right), () => writeTerm(term), [l, r].map((x) => () => showView(x.view)));
+  // 被演算子の幅と値（R97・R98）：点なら要素の幅、`0x…` の字面（とその和）ならその値（差と読む所の値）、数なら Int と書いた所から分かるか（割る数）。
+  const info = (x, side, f) => {
+    if (!x || x.cat !== "plain") return null;
+    if (f === "pt") return { w: ptWidthOf(x.desc) };
+    if (f === "hex") return { lit: hexOperand(side, x.view, ctx) };
+    if (f === "num") return { int: intTerm(side, x.view, ctx) === "scalar" };
+    return null;
+  };
+  const lf = face(l, term.left);
+  const rf = face(r, term.right);
+  const addr = addressOp(term.sym, lf, rf, () => writeTerm(term), [l, r].map((x) => () => showView(x.view)), [info(l, term.left, lf), info(r, term.right, rf)]);
   if (addr) return { cat: "plain", desc: addr, view };
   // R87（2026-10-27、§5 Q73 の答え）：値の演算子（段12〜16・19〜22。算術・比べの `<` など・ビット・範囲）の被演算子も評価する所（R42・R76 と同じ）。そこに丸ごと残った
   // 関数は `_` になり、恒等射でなければ知らせる（`inc + 1` は `(+ (unit inc) 1)` で、`_ + 1`）。`x + sum _` は `(x + sum) _` で、`x + sum` → `x + _` → x（U〔答え〕
@@ -4449,12 +4674,18 @@ function rowsInfo(rows, ctx, delayed = false) {
   if (root.kind.fn) desc.fn = root.kind.fn;
   // 関数を指す番地の印（R49）は、括り1つでも持ち越す（[x] ≅ x。`[$inc]` は `$inc`）。値を読む参照の印（R60）も同じ（`[$vs]` は `$vs`）。
   if (refOf(root.kind)) desc.ref = root.kind.ref;
-  if (vrefOf(root.kind)) desc.vref = root.kind.vref;
+  // 値を読む参照の印は、2026-10-27 の片7 の確かめの直しから、消えた余りのラムダの残り1項（`($vs !_)`）からも持ち越す（valueOfRoot の注。前は落ちて、
+  // `($vs !_) + 1` が `$vs + 1` と割れて黙って通った。HEAD から）。
+  const vrefRoot = vrefOf(root.kind) || vrefOf(vanishedOne(root) ? descOfTree(root) : null);
+  if (vrefRoot) desc.vref = vrefRoot.vref;
   // 番地の算術で作った点・差の印（R62）と、書いた `_` を指す印（R63。`[_]`・`[un]`）も、括り1つなら持ち越す（[x] ≅ x）。
   // 点・差の印は、構築の中の余ったラムダが消えて1項だけ残った物（`(($x + 0x10) !_)`、vanishedOne）からも持ち越す（descOfTree と同じ読み。2026-10-26 の確かめの
   // 指摘：前は落ちて、`(($x + 0x10) !_) + 1` が黙って通った）。
   const addrRoot = addrOf(root.kind) || addrOf(vanishedOne(root) ? descOfTree(root) : null);
   if (addrRoot) desc.addr = addrRoot.addr;
+  // 点の幅（R97）も、括り1つなら持ち越す（`($vs) + 0x3` は括らない `$vs + 0x3` と同じ）。
+  const marked = vrefRoot || addrRoot;
+  if (marked && marked.w) desc.w = marked.w;
   if (isMark(root) || zeroOf(root.kind)) desc.zero = true;
   desc.elements = visibleElements(root) || [elementKind(root)];
   if (desc.k === "A") {
@@ -4732,7 +4963,7 @@ function resolveTree(tree, ctx) {
       // 2026-10-26 の R62 から、番地どうしの比べ（点どうし・差どうし・点と `0x…`）は通り、関数を指す番地は G7、点と差・番地と数は G21（addressOp）。
       if (tree.sym === "==" || tree.sym === "!==") {
         const face = (x) => {
-          const f = operandFace(isMark(x), x ? x.kind : null, hexTree(x, ctx));
+          const f = operandFace(isMark(x), x ? x.kind : null, hexFace(hexTree(x, ctx), true));
           const sh = shadowedTree(x, ctx);
           return sh ? shadowFace(f, sh) : f;
         };
@@ -7768,8 +7999,11 @@ export function resolve(source) {
     patternNodes: [],
     // 値の定義 → 右辺が書いた `_` を指すか（R56、nameKindOf が置き、pointsToMark・dollarNameTarget が読む）。
     unitDefs: new Map(),
-    // 値の定義 → 右辺が番地の字面（`0x…`・`NxHHHH`。括り1つ・別名を通しても）か（R62、nameKindOf が置き、hexName が読む）。
+    // 値の定義 → 右辺が番地の字面（`0x…`・`NxHHHH`。括り1つ・別名を通しても）か（R62、nameKindOf が置き、hexName が読む）。2026-10-27 の R97 から、字面の値
+    // （{v, g, sum}、hexOperand。`0x…` どうしの和も。無ければ null）。
     hexDefs: new Map(),
+    // 値の定義 → 右辺の値が Int か Int の List と書いた所から分かるか（R97。"scalar"・"list"・null、nameKindOf が置き、intName が読む）。
+    intDefs: new Map(),
     // 値の定義 → 右辺の余ったラムダ（R59、nameKindOf が置く）、素の `?` の定義 → 本体の余ったラムダ（bodyRootOf が置く）と括りの関数の定義 → 仮引数を
     // 含まない行の余ったラムダ（deadOfDef・deadInPatternBody）、既定値のある `?` の定義の本体を解いている途中の印と別名を辿っている途中の印（deadOfDef）。
     deadDefs: new Map(),
