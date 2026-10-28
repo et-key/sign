@@ -70,12 +70,17 @@
  * `(!_ _)` は書いた項どおり恒等射（R108、pointfreeOf の negTail）、空は `_` と書く（R109、instanceError の G16 の言い分）、評価する所では種類の未知な項の後ろの `_` も
  * 消える（R110、reduceItems。同じ日の確かめの直しで、適用の結果と分かる項だけ、appliedResult）、既定値のある関数から作った穴の関数は穴の数を持つ（holeFnOf の holeOf。
  * 穴の口は値の口、穴の外の `_` は G5）、評価する所（R76 の所も）の `,` が単位で消えて残った並びはその評価する所の並び（同じ日の確かめの直し、resolveEvaluatedSide）、
+ * R111〜R116 は 2026-10-28 の片9b：取り込みの無い範囲の未定義の名前は `un : _` の un と同じ「`_` と分かる値」（印 zero。R111、lookup・pointsToMark・dollarNameTarget）、
+ * 値の口に着いた `_` と分かる名前と括りは同じ位置に書いた `_` と同じ（R112、classifyItems の isKnownUnitItem で R94 の読み直しの道に乗せる。評価する所の値の隣の
+ * 未定義の名前も同じ、undefinedLikeName）、`x : _` は書かなかったことと同じ（R113、ファイルの定義は定義の表に入れず、枝の無い本体の局所の定義は erasedRowsOf、
+ * 構造体の欄は rowsInfo。外の x が見える本体の局所の定義は information の erased-unit-shadow）、既定値に書いた `_` の仮引数は G22（R114、unitDefaultParam）、
+ * 無い欄は `_`（R115、bindBracket・pickDesc）、`#` の右の被演算子は評価する所（R116、evaluatePlace の "#r"）、
  * §1.2 の P1〜P3、§2 の表の「する」の行）だけである。90% 以下の所は §6.2 の
  * 門（G1〜G22（G14 は 2026-10-21、G17 と G1 は 2026-10-22、G12 は 2026-10-23、G8 と G9 は 2026-10-24、G4 は 2026-10-27 に廃止。G19 は 2026-10-24 の R51（2026-10-25 に決定）、G20 は同じ日の R53。2026-10-25 に R54〜R57 で G20 の当たる形を直し、同じ日の R58〜R61 で G19・G20 の当たる形を直した。G21 は 2026-10-26 の R62、G22 は同じ日の R67）、P2 の門）で名指しで断る。決まっていない形を黙ってどれかの読みに倒すと、後で利用者の
  * 答えが出たときに、その形が黙った誤答として残るからである。断った形は、答えが出たら試験の「断られる」側から「通る」側へ移す。
  *
  * 入り口は `resolve(source)` の1つで、`{ trees, diagnostics }` を返す。trees は1行に1つの木、diagnostics は
- * 止めない診断（information の undefined-name・pointfree-not-folded・bracket-excess と、warning の leftover-lambda・dollar-non-function。重さは DIAG_SEVERITY の1か所）。門に当たったら OperationError を投げる（reason は §6.2 の名前、
+ * 止めない診断（information の undefined-name・pointfree-not-folded・bracket-excess・erased-unit-shadow と、warning の leftover-lambda・dollar-non-function。重さは DIAG_SEVERITY の1か所）。門に当たったら OperationError を投げる（reason は §6.2 の名前、
  * spec は `…§6.2 G2(a)` のように門の番号まで、`gate` に門の番号）。
  *
  * **木の書き方（`show`）**。§1.3・§6.3 の S 式に合わせ、無い所はここで決めた。
@@ -640,6 +645,104 @@ function bareRestParam(left) {
   }
   return null;
 }
+// R114（2026-10-28 の片9b、G22）：既定値が書いた `_` だけの仮引数（1行の綴りの既定値の括り `[y : _]`、括りの中の行 `y : _`、字下げの仮引数のブロックの行 `y : _`）。
+// 既定値に `_` を置くのは、既定値の口を「値の口と同じく `_` を受ける口」にするためで、`y`（値の口）か `[y]`（参照の口）と書けば済む。見つかれば {text, name}、無ければ null。
+// 括りの値の欄 `[s : _]`（R113。構造体の欄は書かなかったことと同じ）とは別の物：こちらは `?` の左の仮引数の並びで、既定値の綴り。
+// 根拠：U [2026-10-27 14:47 58a809c9]「なぜ既定値にワザと未定義を入れてまで再帰を回さなければならないか…？ / かな、筋が悪いと思う…」、主の Claude の問い「既定値の
+// `[y : _]` は断って、`y` か `[y]` と書くよう案内する、でいい？」（14:48 UTC）に U〔答え〕[14:49]（ボタンの文は主の Claude の物）「それでいい。既定値の [y : _] は
+// [~rest : _] と同じく断って、y か [y] と書くよう案内する。片9 に入れて。」。
+// 2026-10-28 の片9b の確かめの直し：括りを重ねた既定値の括り（`[[y : _]]`・`([y : _])`）と、字下げの仮引数のブロックの括りの行（`⇥⇥[y : _]`）も同じ既定値の括り（[x] ≅ x。
+// 解決器も中に `:` のある括りを既定値の口に数える、defaultsSlots）なので、1行1項の括りを剥がしてから見る。前は1行の綴りの `[y : _]` とブロックの `y : _` の行だけを見ていて、
+// `gz : x [[y : _]] ? x + y` は既定値のある口として黙って通った（確かめる人の指摘）。
+// 同じ確かめの直しで、既定値が書いた `_` でなくても `_` と分かる値（未定義の名前・書かなかったことにした `x : _` の名前（R111・R113）・単位律で書いた `_` に縮む綴り
+// `_~`・`[]`・`[_]`・`(_)`・`~_`・`_ , _`・`_ , !_`・`_ _`・右辺がそれらのファイルの値の定義の名前）なら、断る側に倒して G22 で名指しする（unitLikeDefault、§5 Q84）。
+// 利用者の答えが名指ししたのは `[y : _]` だけで、ほかの綴りを同じに読むかは決まっていない。返す物の unit は書いた `_` 以外の `_` と分かる既定値の綴り（言い分を分ける）。
+function unitDefaultParam(left, ctx) {
+  if (!left || left.type !== "seq") return null;
+  // 既定値の中の名前がこの関数の仮引数（`[y : x]` の x）なら、値は呼ばれた所で決まるので見ない（unitLikeDefault）。
+  const own = new Set(parseParams(left).names.map((p) => p.name));
+  // 1行1項の括りを剥がした既定値の括りの行（[x] ≅ x）。括りでなければ null。
+  const rowsOf = (t) => {
+    let b = t;
+    for (let d = 0; d < 64 && isBareBlock(b, "bracket") && b.core.rows.length === 1; d++) {
+      const r = b.core.rows[0];
+      if (!r || r.type !== "seq" || r.terms.length !== 1 || !isBareBlock(r.terms[0], "bracket")) break;
+      b = r.terms[0];
+    }
+    return isBareBlock(b, "bracket") ? b.core.rows : null;
+  };
+  const hit = (row) => {
+    if (!isColonRow(row) || !singleBareName(row.left)) return null;
+    const name = singleBareName(row.left);
+    if (isUnitRhs(row.right)) return { text: writeTree(row), name };
+    if (ctx && !own.has(singleBareName(row.right)) && unitLikeDefault(row.right, ctx)) return { text: writeTree(row), name, unit: writeTree(row.right) };
+    return null;
+  };
+  const inBracket = (t) => {
+    for (const row of rowsOf(t) || []) {
+      const h = hit(row);
+      if (h) return { ...h, text: writeTerm(t) };
+    }
+    return null;
+  };
+  if (left.terms.length === 1 && isBareBlock(left.terms[0], "indent")) {
+    for (const row of left.terms[0].core.rows) {
+      const h = row && row.type === "seq" ? (row.terms.length === 1 ? inBracket(row.terms[0]) : null) : hit(row);
+      if (h) return h;
+    }
+    return null;
+  }
+  for (const t of left.terms) {
+    const h = inBracket(t);
+    if (h) return h;
+  }
+  return null;
+}
+// 既定値の右辺 rhs が、書いた `_` でない `_` と分かる値か（unitDefaultParam、§5 Q84）：単位律で書いた `_` に縮む綴り（unitSpelled）か、名前が未定義の名前（取り込みの無い範囲。
+// 書かなかったことにした `x : _` の名前も、R111・R113）か、右辺がそれらのファイルの値の定義の名前（`e0 : []`・`q : [_]`・`w : no`）。仮引数・局所の名前（呼ばれた所で値が
+// 決まる）と取り込みのある範囲の未定義の名前（未知、§5 Q10）は当てない。既定値は `?` の左なので解かず（P3）、綴りと名前の表だけで見る。
+function unitLikeDefault(rhs, ctx, depth = 0) {
+  if (!rhs || depth > 16) return false;
+  if (unitSpelled(rhs)) return true;
+  const n = singleBareName(rhs);
+  if (!n) return false;
+  let imported = false;
+  for (let s = ctx.scope; s; s = s.parent) {
+    if ((s.descs && s.descs.has(n)) || (s.params && s.params.has(n)) || (s.locals && s.locals.has(n))) return false;
+    if (s.hasImport) imported = true;
+  }
+  const def = ctx.F.defs.get(n);
+  if (def) return !def.lambda && unitLikeDefault(def.rhs, { F: ctx.F, scope: ctx.F.fileScope }, depth + 1);
+  return !imported;
+}
+// 単位律で書いた `_` に縮む綴り（書いた `_`・空の流れ `_~`・`[]~`（R84）・中身が詰まって `[]` になる括り（R94。`[]`・`[_]`・`(_)`・`~_`・`~[]`・`[_ _]`）・`_ _`（R15）・
+// `_ , _`（R61）・`_ , !_` と `!_ , _`（R71・R45））。名前は見ない（unitLikeDefault が見る）。
+function unitSpelled(tree) {
+  if (!tree) return false;
+  if (tree.type === "seq") return tree.terms.length > 0 && tree.terms.every(unitSpelledTerm);
+  if (tree.sym !== ",") return false;
+  const hole = (t) => !!t && t.type === "seq" && t.terms.length === 1 && isHoleTerm(t.terms[0]);
+  return (unitSpelled(tree.left) && (unitSpelled(tree.right) || hole(tree.right))) || (hole(tree.left) && unitSpelled(tree.right));
+}
+function unitSpelledTerm(t) {
+  if (!t || t.type !== "atom") return false;
+  if (t.post.length > 1 || (t.post.length === 1 && t.post[0] !== "~")) return false;
+  if (t.pre.length > 1 || (t.pre.length === 1 && t.pre[0] !== "~")) return false;
+  if (t.core.c === "unit") return true;
+  return t.core.c === "bracket" && t.core.rows.every(unitSpelled);
+}
+function refuseUnitDefault(u, label) {
+  if (u.unit) {
+    return gate(
+      "G22",
+      `${label}の仮引数 \`${u.text}\` の既定値 \`${u.unit}\` は、\`_\` と分かる値（未定義の名前・書かなかったことにした \`x : _\` の名前・単位律で書いた \`_\` に縮む綴り・右辺がそれらの名前）です。既定値に書いた \`_\` を置いた仮引数は断ります（§4 R114）が、\`_\` と分かるほかの値を既定値に置いた形を同じに読むかは決まっていないので、断ります（§5 Q84）。値で受けるなら \`${u.name}\`（値の口）、参照で受けるなら \`[${u.name}]\`（参照の口）と書きます。`
+    );
+  }
+  return gate(
+    "G22",
+    `${label}の仮引数 \`${u.text}\` は、既定値に書いた \`_\` を置いています。既定値に \`_\` を置いた仮引数は、\`[~rest : _]\` と同じく断ります。値で受けるなら \`${u.name}\`（値の口）、参照で受けるなら \`[${u.name}]\`（参照の口）と書きます（§4 R114）。`
+  );
+}
 function refuseBareRest(bare, label) {
   const what = bare.withDefault ? "既定値と組んでいますが（既定値の括り `[名前 : 既定値]` と仮引数のブロックの `名前 : 既定値` の行は、残りを受ける括りではありません）、" : "";
   return gate(
@@ -724,6 +827,15 @@ function unwrapLambda(rhs) {
   return t && t.type === "op" && t.sym === "?" && !isSection(t) ? t : null;
 }
 
+// R113（2026-10-28 の片9b）：右辺が書いた `_` 1つだけか（`x : _`）。`[_]`・`[]`・`_ , _`・`(_)`・`_ _`・`_~` は当てない（定義のまま席を取る。使う所の読みは R111・R112）。
+function isUnitRhs(rhs) {
+  return !!rhs && rhs.type === "seq" && rhs.terms.length === 1 && isUnitTerm(rhs.terms[0]);
+}
+// `x : _` の行（左が名前1つ、右辺が書いた `_` 1つだけ）か。
+function isUnitDefRow(row) {
+  return !!row && row.type === "op" && row.sym === ":" && !!singleBareName(row.left) && isUnitRhs(row.right);
+}
+
 function asDefinition(line) {
   if (!line || line.type !== "op" || line.sym !== ":" || !line.left || line.left.type !== "seq" || line.left.terms.length !== 1) return null;
   const t = line.left.terms[0];
@@ -775,9 +887,12 @@ function checkParamNames(lines, F) {
 // 関数の本体の範囲では、外の範囲の局所の名前（外の関数の本体の局所の定義・括りの行の名前）と同じ名前も局所の名前に数えない（仮引数・ファイルの定義と同じく
 // 外の名前を隠す行。localDefsOf の shadow で、その本体の局所の名前は今のまま断る local-branch、`$名前` は local-shadow）。2026-10-26 の R80 の片の作る途中の版は
 // 数えて、内の局所の定義が外の局所の定義を黙って隠していた（確かめの指摘。HEAD は裸の局所の名前が未知で G7）。括りの範囲（field）は今のまま。
-function scanLocals(tree, scope, F) {
+// body は、tree が関数の本体そのもの（makeLambda が渡す）か：本体の字下げのブロックの行は本体の行で、構造体の欄の消去（erasedFieldRows）は当てない（本体の局所の
+// `x : _` は erasedRowsOf）。
+function scanLocals(tree, scope, F, body = false) {
   if (!tree) return;
-  if (tree.type === "seq") return tree.terms.forEach((t) => scanLocalsTerm(t, scope, F));
+  if (scope.erasedRows && scope.erasedRows.has(tree)) return; // 書かなかったことにした `x : _` の行（R113、erasedRowsOf・erasedFieldRows）
+  if (tree.type === "seq") return tree.terms.forEach((t) => scanLocalsTerm(t, scope, F, body && tree.terms.length === 1));
   if (tree.sym === "?") return;
   if (tree.sym === ":") {
     const n = singleBareName(tree.left);
@@ -789,12 +904,17 @@ function scanLocals(tree, scope, F) {
   scanLocals(tree.left, scope, F);
   scanLocals(tree.right, scope, F);
 }
-function scanLocalsTerm(term, scope, F) {
+function scanLocalsTerm(term, scope, F, body = false) {
   if (!term) return;
   if (term.type === "infix") {
     scanLocalsTerm(term.left, scope, F);
     scanLocalsTerm(term.right, scope, F);
-  } else if (term.core.rows) term.core.rows.forEach((r) => scanLocals(r, scope, F));
+  } else if (term.core.rows) {
+    // 入れ子の構造体の、右辺が書いた `_` だけの欄（R113）は書かなかったことと同じなので、外の範囲（関数の本体・外の括り）の名前にも数えない（2026-10-28 の片9b の
+    // 確かめの直し。前は外の範囲が欄の名前を局所の名前に数え、`t9 : y ? hs [s : _]` の s が t9 の局所の名前になっていた）。
+    const erased = body && term.core.c === "indent" ? null : erasedFieldRows(term.core.rows);
+    for (const r of term.core.rows) if (!erased || !erased.has(r)) scanLocals(r, scope, F);
+  }
 }
 function paramInChain(scope, name) {
   for (let s = scope; s; s = s.parent) if (s.params && s.params.has(name)) return true;
@@ -885,6 +1005,8 @@ const readerOf = (d) => refOf(d) || vrefOf(d) || addrOf(d) || liftOf(d);
 // 書いた `_` を指すと分かっている値（R63、2026-10-26。§5 Q64 の答え）：欄の右辺の `_`（`[s : _]`）・`_` だけの括り（`[_]`）・書いた `_` を右辺に持つ
 // ファイルの値の定義の名前（`un : _`）の desc に印 zero を付け、括りの関数の実体へ欄・要素・裸の仮引数で渡しても持ち越す（実体の鍵 `_`）。実体の中の
 // `$s` は、`$_` と同じ零射 `$[x ? _]` の番地（dollarNameTarget）。印の無い形の見えない値は、今のまま `_` か言い切れない（G20）。
+// 2026-10-28 の片9b から、取り込みの無い範囲の未定義の名前（R111）・無い欄の名前と無い欄を引いた物（R115）も印 zero を持つ。欄の `[s : _]` は R113 で書かなかったことと
+// 同じ（`[]`）なので、印 zero の欄にはならない。値の口に着いた印 zero の名前と括りは、書いた `_` と同じに読む（R112、isKnownUnitItem）。
 const zeroOf = (d) => (!!d && d.k === "A" && !d.spread && !d.shape && !!d.zero && !d.ref && !d.vref && !d.addr ? d : null);
 const zeroDesc = () => ({ k: "A", zero: true });
 // 番地の算術で作った点・差（R62）が、desc の中のどこか（それ自身・揃った器の要素・欄）にあるか（2026-10-26 の確かめの直し）。点・差の印を落とさずに
@@ -1163,13 +1285,17 @@ function lowerPick(d, key, ctx) {
   if (r) return { k: "L", fn: dollarOpened(r.ref) };
   return openSelfReader(v.vref, ctx);
 }
-// 引いた物の desc（R26）。構造体＋裸の名前は同じ名前の欄（無ければ未知）、List＋字面の整数は要素。ほかは未知。
+// 引いた物の desc（R26）。構造体＋裸の名前は同じ名前の欄（無ければ `_`、R115）、List＋字面の整数は要素。ほかは未知。
+// 2026-10-28 の片9b（R115）：構造体に無い欄を `'` で引いたら `_`（印 zero）。欄が無い＝定義が無い＝`_`（R111）。根拠：主の Claude の 2026-10-27 14:46 UTC の文「`'` で引いて
+// 無い欄も `_` にする（9-05 の君の案「外れれば `__`」）。」（R。D c90433a）。前は未知。
 function pickDesc(desc, key) {
+  // 欄の無い物（空の括り `[]`・`_` と分かる値。`[s : _]` は R113 で `[]`）を名前で引いても `_`（無い欄は `_`、R115）。字面の整数で引く形は今のまま未知。
+  if (key && key.name !== undefined && (isEmptyBracket(desc) || zeroOf(desc))) return zeroDesc();
   if (!desc || desc.k !== "A" || desc.spread || !desc.shape || !key) return U();
   const sh = desc.shape;
   if (sh.s === "struct" && key.name !== undefined) {
     const f = sh.fields.find((x) => x.name === key.name);
-    return f ? f.desc : U();
+    return f ? f.desc : zeroDesc();
   }
   if (sh.s === "list" && key.int !== undefined) return sh.elem && sh.elem.k === "A" ? sh.elem : U();
   // 数（`5 ' 0`・`[' 0] 3`）からは引かない。R26 の文面は x の形を「R24 の構造体か List」と書き、R24 は数をそのどちらとも
@@ -1518,7 +1644,13 @@ function lookup(name, ctx) {
   if (def) return nameKindOf(ctx.F, def);
   if (imported) return U();
   reportUndefined(name, ctx);
-  return A();
+  // R111（2026-10-28 の片9b）：取り込みの無い範囲の未定義の名前は、`un : _` の un と同じ「`_` と分かる値」（印 zero、R63）で、使う所で読む（値の口なら書いた `_` と同じ、
+  // R112。参照の口なら空の器、R90。撒けば長さ 0 の流れ、R84。`$no` は零射の番地、R56）。前（R21）は印の無い A で、括りの口・撒く所・`$`・名前を通す所で `un` と
+  // 割れていた（主の Claude の 2026-10-27 14:46 UTC の調べ：HEAD ce697684 の写しで、ここと pointsToMark・dollarNameTarget の3か所に印を付けると、ファイルと局所の割れが 0）。
+  // 根拠：U [2026-10-27 13:44 58a809c9]「…un : _ / と / 定義しない no / は / no = un / が成り立つことを考慮すれば答えは自明だと思う。」、U [14:02]「「定義が無い」という事と、
+  // 「解が無い」という事は、同値関係に当たる。」、U [14:06]「…使われればどちらも _ だね」、U〔答え〕[2026-10-15 23:16 444eeb3c]「nop : _ を書いてなくても、 nop を
+  // 表現できることにもなる。undefinedなら _ だからだ。」。取り込みのある範囲は今のまま未知（定義が取り込み先にあるかもしれない、§5 Q10）。
+  return zeroDesc();
 }
 
 // `@名前` の名前の desc（R49）。仮引数・局所の名前・実体の中で渡された物（s.descs）・ファイルの定義を見る。取り込みの範囲の名前と未定義の名前は null（印を読まない）。
@@ -1647,6 +1779,9 @@ const DIAG_SEVERITY = {
   "undefined-name": "information",
   "pointfree-not-folded": "information",
   "bracket-excess": "information",
+  // 2026-10-28 の片9b（R113）：書かなかったことにした本体の局所の `x : _` の外に x が見える所（reportErasedShadow）。断らない（U〔答え〕[2026-10-27 14:49 58a809c9]
+  // の「外の x が見えてしまう所だけ information で知らせる」）。
+  "erased-unit-shadow": "information",
   "leftover-lambda": "warning",
   // 2026-10-27 の片8（R100）：`$` が関数以外を持ち上げた（U [2026-10-27 10:11 UTC 58a809c9]「$が関数以外のものを運んでいたら警告クラスだｗ」）。断らない。
   "dollar-non-function": "warning",
@@ -1657,8 +1792,13 @@ function pushDiag(ctx, reason, name, message) {
 
 function reportUndefined(name, ctx) {
   if (!ctx.diag || ctx.F.reported.has(name)) return;
+  // 書かなかったことにした `x : _`（R113）の x は、未定義の名前と同じに読むが、書いた人は名前を `_` と定義しているので知らせない（ファイルの定義と、使う所から見える
+  // 本体の局所の定義）。
+  if (ctx.F.erased.has(name)) return;
+  for (let s = ctx.scope; s; s = s.parent) if (s.erasedNames && s.erasedNames.has(name)) return;
   ctx.F.reported.add(name);
-  pushDiag(ctx, "undefined-name", name, `\`${name}\` は定義されていません。値として読み、値は値の段で決めます（§4 R21）。`);
+  // 2026-10-28 の片9b（R111）から、未定義の名前は `_`（定義が無い＝解が無い）。言い分も書き直した（前は「値として読み、値は値の段で決めます（§4 R21）」）。
+  pushDiag(ctx, "undefined-name", name, `\`${name}\` は定義されていません。定義が無い名前は \`_\` で、使う所で読みます（値の口では書いた \`_\` と同じ、参照の口では空の器。§4 R21・R111）。`);
 }
 
 // 畳まない2項の点なし（R32）を読んだ所。「おすすめは出来ない」（U〔答え〕2026-10-21 10:52「同じに読んでいいけど、おすすめは
@@ -2199,7 +2339,10 @@ function valueOfRoot(F, root, scope) {
     // 右辺が書いた `_` を指すか（R56、2026-10-25）。`q : _` の `$q` は `$_` と同じ零射の番地。2026-10-26 の R63（§5 Q64 の答え）から、desc にも印 zero を
     // 付け、実体の鍵に入れる（括りの関数に欄・要素・裸の仮引数で渡しても、実体の中の `$s` が零射の番地と分かる。internDesc の `_`）。R56 の片では desc に
     // 入れなかった（入れると実体の鍵が見ない印が実体を跨いで分け合われうる、pointsToMark の注。R63 で鍵に入れたので、その心配は無い）。
-    const unit = pointsToMark(root, { F, scope });
+    // 2026-10-28 の片9b の確かめの直し：右辺の木そのものが印 zero を持つ物（無い欄を引いた `ob ' c`・`no ' s`（R115）、`$v ' 1` の領域の外（R102））も、名前は同じ印を
+    // 持ち越す（`:` はメタ。括り1つの rowsInfo の `zeroOf(root.kind)` と同じ）。前は木で `_` を指す物（pointsToMark）だけを見ていて、`w : ob ' c` の w が印を落とし、
+    // `inc (ob ' c) 5` は `(apply inc 5)`、`inc w 5` は `(construct (apply inc w) 5)` と割れ、本体の根の G16 も名前1つ挟むだけで抜けていた（確かめる人の指摘）。
+    const unit = pointsToMark(root, { F, scope }) || !!zeroOf(root.kind);
     if (unit && value.k === "A" && !value.shape && !value.spread && !value.ref && !value.vref && !value.addr) value.zero = true;
     // 右辺が番地の字面か（R62）：`n : 0x10` の `$x + n` は `$x + 0x10` と同じく、点に足す差（hexOperand）。desc には入れない（番地の字面は中身の見えない
     // A のまま、解決器は今の扱い。顔は位置で決まり、点に足し引きする所でだけ差と読む）。
@@ -2917,11 +3060,14 @@ function bindBracket(p, d, descs) {
     return;
   }
   if (sh.s === "struct") {
-    // 構造体：裸の名前は同じ名前の欄の生まれ。無ければ未知（名前で当たらなかった名前を前から当てるかは、どの言葉にも
-    // 無い）。`~rest` は受けなかった欄の構造体。
+    // 構造体：裸の名前は同じ名前の欄の生まれ。`~rest` は受けなかった欄の構造体。
+    // 同じ名前の欄が無ければ `_`（印 zero、R115。2026-10-28 の片9b）：名前付きスロットには順序が無いので、前から当てる読みは取らない。欄が無い＝定義が無い＝`_`（R111）。
+    // 根拠：主の Claude の 2026-10-27 14:50 UTC の文「構造体を括りの名前で受けて、同じ名前の欄が無いとき：その名前は `_`。名前付きスロットには順序が無いから、前から当てる
+    // 読みは取らない。」（R。「違ったら止めて」と書いて片9 に入れた）。D c90433a（名前付きスロット、「外れれば `__`」）。前は未知（名前で当たらなかった名前を前から当てるかは、
+    // どの言葉にも無い、R24）。
     setNames((n) => {
       const f = sh.fields.find((x) => x.name === n);
-      return f ? f.desc : U();
+      return f ? f.desc : zeroDesc();
     });
     if (p.rest) descs.set(p.rest, withShape({ s: "struct", fields: sh.fields.filter((f) => !p.names.includes(f.name)) }));
     return;
@@ -3716,6 +3862,7 @@ const ID1_FN = { type: "plain", origin: "plain", n: 1, getBodyRoot: () => "A", i
 
 // 解いた木が、書いた `_` を指すか（R56）：書いた `_` の葉（印）、それを1行で括った物（`[_]`・`[[_]]`。中の行が `_` に縮む `[_ _]`・`[_ , !_]` も）、
 // 書いた `_` を右辺に持つファイルの値の定義（F.unitDefs、nameKindOf が置く）。局所の定義の名前そのものの `$w`（`w : _`）は localTarget が右辺で見る。
+// 2026-10-28 の片9b から、取り込みの無い範囲の未定義の名前も `_` を指す（R111）。`x : _` は R113 で書かなかったことと同じなので、その x も未定義の名前として指す。
 // 2026-10-26 の R80 から、木の中に裸で書いた関数の本体の局所の名前（局所の別名 `v : w` の右辺の w、`v : [w]` の中の w）も、その右辺で辿る（localInfo の unit。
 // ファイルの値の定義の unitDefs と同じ）：`w : _` ⏎ `v : w` の `$v` は `$_` と同じ零射の番地（ファイルの `w : _` ⏎ `v : w` と同じ答え）。前（R54）は裸で書いた
 // 局所の名前の種類を決めなかったので辿らず、`$v` は G20 だった。2026-10-25 の作る途中の版は辿っていて、局所の別名どうしの輪（`w : v` ⏎ `v : w` ⏎ `$v`）で
@@ -3737,7 +3884,13 @@ function pointsToMark(t, ctx) {
     }
   }
   const def = ctx.F.defs.get(c.name);
-  return !!def && !def.lambda && !!ctx.F.unitDefs.get(def);
+  // 2026-10-28 の片9b（R111）：取り込みの無い範囲の未定義の名前も `_` を指す（lookup の注。書かなかったことにした `x : _` の x も、R113）。前は未定義の名前は指さず、
+  // `v : no` の `$v` が値を読む参照で、`v : un` の `$v`（零射の番地）と割れていた。
+  if (!def) {
+    for (let s = ctx.scope; s; s = s.parent) if (s.hasImport) return false;
+    return true;
+  }
+  return !def.lambda && !!ctx.F.unitDefs.get(def);
 }
 
 // `$名前` の先（R53・R54・R55）。返す物は {kind, where, unit}。kind は名前の種類（lookup と同じ順に探す）、where は G20 の言い分のための出どころ、
@@ -3745,7 +3898,8 @@ function pointsToMark(t, ctx) {
 // - 仮引数・実体の中で渡された物：今の desc（素の関数の裸の仮引数は A、括りの関数の実体では渡された物の生まれ、R24）。
 // - 局所の名前（括り・本体の中の `:` の左の名前）：localTarget（R54）。
 // - ファイルの定義：nameKindOf（`?` なら L、ほかは右辺を解いた種類。値を含む輪は name-cycle、R53）。
-// - 取り込みのある範囲の未定義の名前は未知（このファイルから中身が見えない）、未定義の名前は値（R21、information を出す）。
+// - 取り込みのある範囲の未定義の名前は未知（このファイルから中身が見えない）、未定義の名前は `_`（2026-10-28 の片9b の R111。`$no` は `$_` と同じ零射の番地、
+//   information を出す。前は R21 の値で、R60 の値を読む参照）。
 // - 関数の本体の範囲で、その範囲の行に左がその名前1つの `:` があるのに、名前が仮引数かファイルの定義で局所の名前に数えない（scanLocals）なら、未知で
 //   G20（"local-shadow"。括りの範囲には defRows が無いので見ない、blockScope の注）。R54 の読みではその行は局所の定義で外の名前を隠すが、隠しを通すかは決まっていない（§5 Q10 の「名前の隠し」、P2 の
 //   name-shadow は仮引数だけを見る）。前（HEAD b08feb4f から）は、`tt : x ?` ⏎ `\tinc : z ? z * z` ⏎ `\tmap $inc x` の `$inc` が黙ってファイルの inc
@@ -3780,7 +3934,8 @@ function dollarNameTarget(name, ctx) {
   }
   if (imported) return { kind: U(), where: "imported" };
   reportUndefined(name, ctx);
-  return { kind: A(), where: "undefined" };
+  // 2026-10-28 の片9b（R111）：未定義の名前の `$no` は `$un` と同じ零射の番地（R56）。前は R60 の値を読む参照で、R100 の警告（dollar-non-function）を出していた。
+  return { kind: zeroDesc(), unit: true };
 }
 
 // ---- `$v` の輪（R73、2026-10-26。§5 Q60 の答え） ----
@@ -4420,6 +4575,7 @@ function localDefsOf(s) {
   let branch = false;
   for (const row of s.defRows || []) {
     if (!row || row.type !== "op" || row.sym !== ":") continue;
+    if (s.erasedRows && s.erasedRows.has(row)) continue; // 書かなかったことにした `x : _` の行（R113）は、定義にも隠しにも枝にも数えない
     const n = singleBareName(row.left);
     if (!n) branch = true;
     else if (!s.locals.has(n)) shadow.add(n);
@@ -5011,7 +5167,8 @@ function classifyInfix(term, ctx) {
   if (key) {
     // 鍵は名前として引かない（pickKeyOf の注）。書いたとおりの葉にする。
     if (l.cat === "hole") throw refuseHole(`中置 \`${term.sym}\` の被演算子`);
-    const desc = l.cat === "plain" ? lowerPick(l.desc, key, ctx) || pickDesc(l.desc, key) : U();
+    // 書いた `_`（と長さ 0 の流れ）を名前で引けば、無い欄なので `_`（R115。`un ' s`・`[] ' s` と同じ）。
+    const desc = l.cat === "plain" ? lowerPick(l.desc, key, ctx) || pickDesc(l.desc, key) : l.cat === "unit" ? pickDesc(zeroDesc(), key) : U();
     return { cat: "plain", desc, view: { v: "infix", sym: term.sym, left: l.view, right: rawView(term.right) } };
   }
   const r = term.right ? unitIfEmpty(classify(term.right, ctx)) : null;
@@ -5184,6 +5341,21 @@ function rowsInfo(rows, ctx, delayed = false) {
   const scope = blockScope(rows, ctx);
   const inner = scope ? { ...ctx, scope } : ctx;
   const trees = rows.map((r) => (delayed ? resolveDelayed(r, inner) : resolveTree(r, inner)));
+  // R113（2026-10-28 の片9b）：構造体（全部の行が `名前 : 値` の欄）の、右辺が書いた `_` だけの欄 `s : _` は書かなかったことと同じ（席を取らない）。`[s : _]` は `[]` と
+  // 同じ空の括り、`[a : 1 ⏎ s : _]` は `[a : 1]` と同じ構造体（形・要素・実体の鍵）。木は書いたまま。行の混ざった括り（欄か局所の定義か決まらない行、§5 Q10）は今のまま。
+  // 根拠：主の Claude の 2026-10-27 14:50 UTC の文「「どこでも」には構造体の欄の `s : _` も入ると読んで、…`[s : _]` は `[]` と同じ」（R。「違ったら止めて」と書いて片9 に
+  // 入れた。利用者は止めていないが、答えではない）。前（R63）は欄に印 zero を付けて席を取っていた（`h : [s] ? $s` ⏎ `h [s : _]` の s は `_` を受けた名前）。
+  // 2026-10-28 の片9b の確かめの直し：消す欄は、ファイルと本体の局所の定義と同じく書いた行で見る（erasedFieldRows。右辺が書いた `_` 1つだけ）。前は解いた木の印（isMark）で
+  // 見ていて、単位律で `_` に縮む `s : _ , _`・`s : _ _`・`s : _ , !_` の欄も消え、ファイルの `x : _ , _`（定義のまま席を取る）と割れていた（確かめる人の指摘）。
+  // 欄の名前は括りの中の名前の範囲（blockScope）からも外す（`[a : s ⏎ s : _]` は `[a : s]` と同じ）。外の局所の名前が見えるようになる所は知らせる（reportErasedField）。
+  const erasedF = erasedFieldRows(rows);
+  if (erasedF) {
+    for (const r of erasedF) reportErasedField(r, rows, erasedF, ctx);
+    const kept = trees.filter((t, i) => !erasedF.has(rows[i]));
+    if (!kept.length) return { desc: { k: "A", elements: [] }, trees, isQ: false };
+    const sh = rowsShape(kept);
+    return { desc: sh ? { k: "A", elements: kept.map(elementKind), shape: sh } : { k: "A", elements: kept.map(elementKind) }, trees, isQ: false };
+  }
   if (trees.length >= 2) {
     const desc = { k: "A", elements: trees.map(elementKind) };
     const sh = rowsShape(trees);
@@ -5225,13 +5397,40 @@ function rowsInfo(rows, ctx, delayed = false) {
 // 決まっていない（§5 Q10）のは同じである。ここを未定義の名前（A）と読むと、同じ字面が置き場所で別の木になり、
 // 定義した行の隣で「定義されていません」と出る。だから仮引数でもファイルの定義でもなければ、その括りの中で未知に
 // する。範囲を括りの中に限るのは、括りの外では欄の名前を裸で読まない（欄は分解して受ける関数で読む）からである。
+// R113 の構造体の欄（2026-10-28 の片9b と同じ日の確かめの直し）：全部の行が、左が名前1つの `:` の行（構造体の欄）の括り・ブロックで、右辺が書いた `_` 1つだけの欄の行
+// （isUnitDefRow。ファイルと本体の局所の定義と同じ綴りの判定）。当たらなければ null。行の混ざった括り（欄か局所の定義か決まらない行、§5 Q10）は今のまま。
+function erasedFieldRows(rows) {
+  if (!rows || !rows.length || !rows.every((r) => isColonRow(r) && !!singleBareName(r.left))) return null;
+  const unit = rows.filter(isUnitDefRow);
+  return unit.length ? new Set(unit) : null;
+}
+// 消した欄の名前が、括りの外の局所の名前（外の関数の本体の局所の定義・外の括りの欄）と同じなら、括りの中のその名前は外の名前を指すようになるので information で知らせる
+// （本体の局所の `x : _` の reportErasedShadow と同じ「外の x が見えてしまう所だけ information」）。仮引数とファイルの定義の名前は、欄が書いた値でも括りの中の名前に数えない
+// （scanLocals）ので、消しても見え方は変わらず、知らせない。書いた行ごとに1回。
+// 同じ括りに同じ名前の消えない欄が残っていれば（`[s : _ ⏎ s : 5]`）、括りの中の名前はその欄で、外は見えないので知らせない。
+function reportErasedField(row, rows, erased, ctx) {
+  const name = singleBareName(row.left);
+  if (!ctx.diag || !name || ctx.F.reportedErased.has(row)) return;
+  if (rows.some((r) => !erased.has(r) && singleBareName(r.left) === name)) return;
+  if (paramInChain(ctx.scope, name) || ctx.F.defs.has(name) || !localInChain(ctx.scope, name)) return;
+  ctx.F.reportedErased.add(row);
+  pushDiag(ctx, "erased-unit-shadow", name, `構造体の欄 \`${name} : _\` は書かなかったのと同じ（右辺が書いた \`_\` だけの欄は席を取りません）なので、括りの中の \`${name}\` は外の \`${name}\`（外の局所の名前）を指します。外の \`${name}\` を隠すつもりなら、別の名前を使います（§4 R113）。`);
+}
 function blockScope(rows, ctx) {
   // field は、この範囲の局所の名前を `$` の先で局所の定義と読まない印（R54。括りは器で、行は欄かもしれない。localTarget の "local-field"、§5 Q10）。
   // 局所の定義を探す行（defRows、localDefsOf）は関数の範囲（makeLambda）にだけ置く。括りの行が外の名前と同じ名前の欄（`[inc : 5 ⏎ $inc]`）は、
   // R54 が括りの行を局所の定義と読まないので、今までどおり外の名前（ファイルの inc）を指す（裸で書いた `[inc : 5 ⏎ inc 3]` と同じ、§5 Q10）。
   const scope = { parent: ctx.scope, params: null, locals: new Set(), hasImport: false, field: true };
+  // 構造体の、右辺が書いた `_` だけの欄（R113、erasedFieldRows）は書かなかったことと同じなので、括りの中の名前に数えない（scanLocals が飛ばす）。その名前は使う所で
+  // 外の名前か未定義の名前で、undefined-name は知らせない（本体の局所の `x : _` と同じ。reportUndefined の erasedNames）。消した欄がある括りは、ほかに局所の名前が無くても
+  // 範囲を作る（知らせを抑える印を置くため）。
+  const erasedF = erasedFieldRows(rows);
+  if (erasedF) {
+    scope.erasedRows = erasedF;
+    scope.erasedNames = new Set([...erasedF].map((r) => singleBareName(r.left)));
+  }
   for (const r of rows) scanLocals(r, scope, ctx.F);
-  if (!scope.locals.size) return null;
+  if (!scope.locals.size && !erasedF) return null;
   // 範囲の鍵（実体の鍵に入る関数の出どころ。lambdaKey の注）。中身は書いた行と外の範囲で決まる。
   scope.key = `${ctx.scope.key}/b{${rows.map(writeTree).join(" ⏎ ")}}`;
   return scope;
@@ -5475,8 +5674,9 @@ function resolveTree(tree, ctx) {
       if (isBlockSeq(tree.left)) throw refuseIndentBlock(`\`${tree.sym}\` の左`);
       // R76（2026-10-26、§5 Q37 の答え）：比べと論理（段5〜8 の `;`・`|`・`&`・`==`・`!==`）の被演算子の並びは評価する所（evaluatePlace）。被演算子の `,` が
       // 恒等射か書いた `_` で消えて片方の並びだけが残れば、その並びも評価する所（resolveEvaluatedSide。2026-10-28 の片9 の確かめの直し、法則12）。
+      // R116（2026-10-28 の片9b、§5 Q73 の `#` の答え）：書き込み `#` の右の被演算子（書き込む値）も評価する所（印 "#r"）。左（書き込む先）は今のまま。
       const l = resolveEvaluatedSide(tree.left, tree.sym, ctx);
-      const r = resolveEvaluatedSide(tree.right, tree.sym, ctx);
+      const r = resolveEvaluatedSide(tree.right, tree.sym === "#" ? "#r" : tree.sym, ctx);
       refuseOperandHole(l, tree.sym);
       refuseOperandHole(r, tree.sym);
       // 論理（段5〜7 の `;`・`|`・`&`）の被演算子と、書き込み（段4 の `#`）の被演算子に、番地の算術で作った点・差（R62）があれば断る（2026-10-26 の
@@ -5551,8 +5751,11 @@ function resolveEvaluatedSide(side, sym, ctx) {
 }
 // 残る並び rest が `,` の単位そのもの（恒等射か書いた `_`）か。単位になりうる綴り（mayBeUnit）だけを解いて見る（vanishedSeq の idOf と同じ）。解いて断られたら、
 // 今までどおり `,` として解く側（そこで同じ断りになる）。
+// 2026-10-28 の片9a の確かめの直し（片9b の確かめで見た）：R108 で書いた項どおり恒等射になる括り（`(!_ _)`・`(!_ []~)`、holeGroup）も、単位になりうる綴りに数える。前は綴り
+// （mayBeUnit）だけで見ていて、`(!_ _) , !_ == 2` が評価する所の並びとして解き直されて通り、`i , !_ == 2` の G7 と割れていた（resolveProduct は `(!_ _)` を恒等射と
+// 認め、恒等射×恒等射は断る側の `!_` に揃える。確かめる人の指摘）。
 function unitRest(rest, ctx) {
-  if (!mayBeUnit(rest)) return false;
+  if (!mayBeUnit(rest) && !holeGroup(rest, ctx)) return false;
   try {
     return isUnitOperand(resolveTree(rest, ctx));
   } catch (e) {
@@ -5560,6 +5763,18 @@ function unitRest(rest, ctx) {
     return true;
   }
 }
+// 並び tree が、括らない `!_` の後ろに書いた `_` か長さ 0 の流れだけが続く行1つの括り（`(!_ _)`・`(!_ []~)`。R108 で恒等射）か、それを1行1項で括った物（[x] ≅ x）か。
+// `(!_)` は否定の点なし（R29）なので当てない（行が2項以上）。
+function holeGroup(tree, ctx, depth = 0) {
+  if (!tree || depth > 16 || tree.type !== "seq" || tree.terms.length !== 1 || !isBareBlock(tree.terms[0], "bracket") || tree.terms[0].core.rows.length !== 1) return false;
+  const row = tree.terms[0].core.rows[0];
+  if (!row || row.type !== "seq") return false;
+  return (row.terms.length >= 2 && loneHole(row.terms, ctx)) || holeGroup(row, ctx, depth + 1);
+}
+// 2026-10-28 の片9b（R116）：書き込み `#` の右の被演算子（sym "#r"）も評価する所。裸の関数を置けば評価されて `_` になり、知らせて `$inc` と書くよう案内する
+// （finishTrees の "place-write"）。左（sym "#"、書き込む先）は今のまま。根拠：主の Claude の 2026-10-27 12:51 UTC の表の読み A「書き込む値の所を、評価する所に入れる。
+// 裸の inc は食われて `_` になり、知らせて `$inc` と書くよう案内する。box には `_` が入る。」と、問い（12:51 UTC）に U〔答え〕[2026-10-27 12:54 58a809c9]（ボタンの文は
+// 主の Claude の物）「A でいい。p # inc の inc は評価する所で _ になって、知らせて $inc を案内する。」。前は書き込む値も評価する所の外で、`p # inc` は `(# p inc)` の未知。
 function evaluatePlace(side, sym, ctx) {
   if (!side || side.type !== "seq" || sym === "#") return ctx;
   // 中置の被演算子の括らない `!_` 1つ（`!_ == 1`・`1 & !_`）は、今のまま G7（R44、§5 Q15：中置の被演算子の `!_` を恒等射と読むかは決まっていない。refuseOperandHole）。
@@ -5625,8 +5840,30 @@ function resolveDefine(tree, outerCtx) {
   // 行（P2）も含めて、名前の定義として除く（§5 Q50）。
   const isBranch = branchReturn && isBranchColon(tree);
   const right = resolveTree(tree.right, isBranch && tree.right && tree.right.type === "seq" ? { ...ctx, bodyRoot: true } : ctx);
-  // isQualifiedDef：関数の本体の局所の定義の行（R80。本体の値の行に数えない、blockBodyKind・refuseReturnedAddress）。
-  return { t: "op", sym: ":", left, right, kind: A(), isLocalDef, isQualifiedDef: isLocalDef && isQualifiedDefRow(tree, ctx.scope), fieldName };
+  // isQualifiedDef：関数の本体の局所の定義の行（R80。本体の値の行に数えない、blockBodyKind・refuseReturnedAddress）。書かなかったことにした `x : _` の行（R113）も同じ。
+  // 構造体の欄（括りの範囲、field）の消した行は、知らせを rowsInfo が出し（reportErasedField）、本体の値の行の数えにも入らない（括りの行）ので、ここでは見ない。
+  const erased = !!(ctx.scope && !ctx.scope.field && ctx.scope.erasedRows && ctx.scope.erasedRows.has(tree));
+  if (erased) reportErasedShadow(tree, fieldName, ctx);
+  return { t: "op", sym: ":", left, right, kind: A(), isLocalDef, isQualifiedDef: erased || (isLocalDef && isQualifiedDefRow(tree, ctx.scope)), fieldName };
+}
+// R113 の information：書かなかったことにした本体の局所の `x : _` の外に x が見える（仮引数・実体で渡された物・外の本体の局所の名前・ファイルの定義）。その行で外の x を
+// 隠すつもりだった人に、黙って外の x が見えないように知らせる。書いた行ごとに1回。取り込みのある範囲は、解決器が取り込み先の名前を見ていない（名前は未知、§5 Q10）ので
+// 知らせない。
+// 根拠：主の Claude の 2026-10-27 14:46 UTC の文「危ないのは3行目だけ。外の `x` を隠すつもりで `x : _` を書いた人には、黙って外の `x` が見えてしまう。だからそこには
+// 「書かなかったのと同じなので、外の `x` が見えます」と information で知らせる。」と、U〔答え〕[2026-10-27 14:49 58a809c9]（ボタンの文は主の Claude の物）の「外の x が
+// 見えてしまう所だけ information で知らせる」。
+function reportErasedShadow(row, name, ctx) {
+  if (!ctx.diag || !name || ctx.F.reportedErased.has(row)) return;
+  const s = ctx.scope;
+  let what = null;
+  for (let q = s; q && !what; q = q.parent) {
+    if ((q.descs && q.descs.has(name)) || (q.params && q.params.has(name))) what = "仮引数";
+    else if (q !== s && q.locals && q.locals.has(name)) what = "外の本体の局所の定義";
+  }
+  if (!what && ctx.F.defs.has(name)) what = "ファイルの定義";
+  if (!what) return;
+  ctx.F.reportedErased.add(row);
+  pushDiag(ctx, "erased-unit-shadow", name, `本体の局所の定義 \`${name} : _\` は書かなかったのと同じ（右辺が書いた \`_\` だけの定義は席を取りません）なので、外の \`${name}\`（${what}）が見えます。外の \`${name}\` を隠すつもりなら、別の名前を使います（§4 R113）。`);
 }
 // 字下げの本体の行が枝（左が名前1つでない `:`。match_case の枝）か。
 const isColonRow = (r) => !!r && r.type !== "seq" && r.sym === ":";
@@ -6012,8 +6249,30 @@ function makeLambda(op, ctx) {
     scope.plainKey = lambdaKey(op, ctx.scope.key); // 関数の出どころ（fn.idKey と同じ綴り）
     scope.paramIdx = new Map(params.names.map((p, i) => [p.name, i]));
   }
-  scanLocals(op.right, scope, ctx.F);
+  // R113（2026-10-28 の片9b）：枝の無い本体の局所の `x : _` は書かなかったことと同じ（erasedRowsOf）。局所の名前に数えず（scanLocals が飛ばす）、外の名前を隠す行にも
+  // 枝の行にも数えない（localDefsOf）。
+  const erased = erasedRowsOf(scope, ctx.F);
+  if (erased) {
+    scope.erasedRows = erased.rows;
+    scope.erasedNames = erased.names;
+  }
+  scanLocals(op.right, scope, ctx.F, true);
   return { params, scope };
+}
+// R113：関数の範囲 scope の本体の行（defRows）のうち、書かなかったことにする `x : _` の行と、その名前。当たらなければ null。
+// 当てるのは枝の無い本体だけ：`x : _` でない `:` の行に、左が名前1つでない行（枝）か、外の名前（仮引数・ファイルの定義・外の本体の局所の名前）と同じ名前の行（localDefsOf の
+// shadow、R80 の "local-branch"）があれば、今のまま（その本体の行が枝か定義か決まっていない。枝なら消すと次の枝に落ちる。§5 Q10）。本体の行が全部 `x : _` の本体
+// （`g : y ? x : _`）も今のまま（消すと本体が無くなる。§5 Q10 の残り）。
+// 根拠：主の Claude の 2026-10-27 14:50 UTC の文「1つだけ §5 に残す。枝のある本体や括りの中の `x : _` の行だね。その行が枝なのか定義なのかが、まだ Q10 で決まってない。
+// 枝なら「x が通れば `_` を返す」で、消すと次の枝に落ちるから、消せるとは言い切れない。」（R）。
+function erasedRowsOf(scope, F) {
+  const rows = scope.defRows || [];
+  const unit = rows.filter(isUnitDefRow);
+  if (!unit.length || unit.length === rows.length) return null;
+  const outer = (n) => paramInChain(scope, n) || F.defs.has(n) || localInChain(scope.parent, n);
+  const branchy = rows.some((r) => isColonRow(r) && !isUnitDefRow(r) && (!singleBareName(r.left) || outer(singleBareName(r.left))));
+  if (branchy) return null;
+  return { rows: new Set(unit), names: new Set(unit.map((r) => singleBareName(r.left))) };
 }
 
 // G16（R33、§5 Q21 の答え）：`?` で作る関数の本体の根が裸の関数（L）。関数を返すなら `$` を明示する（U 09-11 23:58「関数を返す
@@ -6084,7 +6343,11 @@ function resolveLambda(op, ctx) {
   }
   // 仮引数の裸の `~xs` は、定義の所で断る（R67、G22。呼ばれない定義でも断る：綴りそのものが廃止）。
   const bare = bareRestParam(op.left);
-  if (bare) throw refuseBareRest(bare, ctx.F.namedLambdas.has(op) ? `関数 \`${ctx.F.namedLambdas.get(op).name}\` ` : `関数 \`[${cutShape(writeTree(op))}]\` `);
+  const label = () => (ctx.F.namedLambdas.has(op) ? `関数 \`${ctx.F.namedLambdas.get(op).name}\` ` : `関数 \`[${cutShape(writeTree(op))}]\` `);
+  if (bare) throw refuseBareRest(bare, label());
+  // 既定値が書いた `_` の仮引数（`[y : _]`・仮引数のブロックの `y : _` の行）も、定義の所で断る（R114、G22。2026-10-28 の片9b）。
+  const unitDefault = unitDefaultParam(op.left, ctx);
+  if (unitDefault) throw refuseUnitDefault(unitDefault, label());
   const pattern = patternParamsOf(op.left);
   if (pattern) return patternNode(op, pattern, ctx);
   const inDefault = patternCallInDefaults(op.left, ctx);
@@ -6189,6 +6452,10 @@ function resolveBlockBody(right, ctx) {
     if (r && r.type === "seq" && loneHole(r.terms, ctx)) throw refuseProcedureHole();
     // 行が `,` で、恒等射か書いた `_` で消えて片方の並びだけが残れば、その並びも評価する所（resolveEvaluatedSide、2026-10-28 の片9 の確かめの直し）。
     const t = r && r.type !== "seq" && r.sym === "," ? resolveEvaluatedSide(r, "row", ctx) : resolveTree(r, r && r.type === "seq" ? evaluatePlace(r, "row", ctx) : ctx);
+    // 行の `,` が恒等射どうしで括らない `!_` 1つに縮んだ（`!_ , !_`・`i , !_`・`!_ , i`。resolveProduct が断る側の `!_` に揃える）なら、`!_` だけの行と同じ G7（中置 `&` の
+    // 被演算子の `!_` と同じ所。`!_ , !_ & a` は refuseOperandHole の G7）。2026-10-28 の片9a の確かめの直し（片9b の確かめで見た）：前は `(block !_ a)` で黙って通っていた
+    // （HEAD からの穴。手続きの行の法則12 が X = `!_` で割れていた）。
+    if (r && r.type !== "seq" && r.sym === "," && t && t.t === "leaf" && t.cat === "hole") throw refuseProcedureHole();
     return r && r.type !== "seq" && r.sym === "?" && t && t.kind.k === "L" ? leftoverUnit(t, ctx, r, "place") : t;
   });
   refuseReturnedAddress(rows);
@@ -6240,6 +6507,7 @@ function blockBodyKind(rows) {
 // 行 r が、範囲 s（関数の本体の範囲）の局所の定義の行か（R80）：左が局所の名前1つの `:` で、本体の行（defRows）の1つで、その名前が今のまま断る所でない。
 function isQualifiedDefRow(r, s) {
   if (!isColonRow(r) || !s || !s.defRows || !s.locals) return false;
+  if (s.erasedRows && s.erasedRows.has(r)) return true; // 書かなかったことにした `x : _` の行（R113）も、本体の値の行に数えない
   const n = singleBareName(r.left);
   return !!n && s.locals.has(n) && s.defRows.includes(r) && !localRecordOf(n, s).why;
 }
@@ -6314,13 +6582,61 @@ function classifyItems(terms, ctx) {
   if (terms.length >= 2 && terms.some(isBareIndent)) throw refuseIndentBlock("余積の並びの項");
   return terms.map((t) => {
     const leaf = emptyMark(leafOf(t, classify(t, ctx)));
-    return leaf.cat === "plain" && isWrittenEmptyTerm(t, ctx) ? { ...leaf, writtenEmpty: ++writtenEmptySeq } : leaf;
+    if (leaf.cat !== "plain") return leaf;
+    if (isWrittenEmptyTerm(t, ctx)) return { ...leaf, writtenEmpty: ++writtenEmptySeq };
+    // R112（2026-10-28 の片9b）：書いた時点で `_` と分かる名前と括り（isKnownUnitItem）も、値の口に着いたら同じ位置に書いた `_` と同じに読む（書いた `[]` と同じ印
+    // writtenEmpty で、値の口の所でだけ読み直す。R94 と同じ道）。未定義の名前（undefinedLikeName）は、評価する所で値の隣に着いた所でも読み直す（rootUnit、foldStep）。
+    if (isKnownUnitItem(t, leaf)) return { ...leaf, writtenEmpty: ++writtenEmptySeq, knownUnit: true, ...(undefinedLikeName(t, ctx) ? { rootUnit: true } : {}) };
+    return leaf;
   });
 }
+// R112（2026-10-28 の片9b）：書いた時点で `_` と分かる名前と括り（desc が印 zero か空の括り：未定義の名前（R111）・`e0 : []` の e0・`q : [_]` の q・`e8 : ~[]` の e8・
+// `e6 : ~_` の e6・R61・R71 で `_` に縮む `(_ , _)`・`(_ , !_)`・それを括った物と前置 `~` で持ち上げた物（R79）・括りの関数の実体で `_` を受けた名前・R91 の足りない射影の
+// 名前）は、値の口（素の関数の口・括りの関数の裸の口・点なしの口・既定値のある関数の口・穴の関数の穴の口、valuePortOf）に着いたら、同じ位置に書いた `_` と同じに
+// 読む：値の口なら単位律で消え（R105）、既定値のある口なら既定値（R39）。値の口でない所（値の隣・括りの口・`,` の被演算子・中置の被演算子）の答えは変えない（参照の口は
+// R90・R65 のまま、空の器として席を取る）。木の段が書いた時点で `_` と知っている所なので、計算の `_` の §5 Q79 の外。
+// 根拠：主の Claude の問い「10-14 の (1) は R83 で置き換わったと読んで、`(inc un) 5` は 6 にしていい？」（2026-10-27 15:06 UTC）に U〔答え〕[2026-10-27 15:21 58a809c9]
+// （ボタンの文は主の Claude の物。前半の「10-14 の (1) は R83 で置き換わったと読む。」は主の Claude が 15:49 UTC に取り下げた）の後半「…値の口では un も未定義の名前も
+// 書いた _ と同じ形で、(inc un) 5 は 6。参照の口は R90 のまま。片9 に入れて。」と、U〔答え〕[15:59]（ボタンの文は主の Claude の物）「…書いた・名前・計算の _ は値の口で
+// どれも同じ。穴は !_ だけ。…」。前（R94 の片）は名前と名前を括った物を当てず、`inc un 5` は `(construct (apply inc un) 5)`、`inc [_] 5` は `(apply inc 5)` で割れていた
+// （§5 Q75 (e)）。
+function isKnownUnitItem(t, leaf) {
+  if (!t || t.type !== "atom" || t.post.length) return false;
+  if (t.pre.length && !(t.pre.length === 1 && t.pre[0] === "~")) return false;
+  if (t.core.c !== "name" && t.core.c !== "bracket") return false;
+  const d = leaf.desc;
+  return !!zeroOf(d) || isEmptyBracket(d);
+}
+// R112 の根の読み：項 t が、取り込みの無い範囲の未定義の名前（R111。書かなかったことにした `x : _` の x も、R113）か、右辺がそれ1つの名前（`w : no` の w。`:` はメタ。
+// ファイルの値の定義と関数の本体の局所の定義）か、右辺が単位律で書いた `_` に縮む名前（`v : _ , !_`、aliasOfUndefined）か。評価する所（行の根と R76 の所）で値の隣（積み上げが空か、いちばん上が値）に着いたら、同じ位置に書いた `_` と同じに
+// 読む（`no 5` は `_ 5` と同じ 5）。定義のある名前（`e0 : []`・`q : [_]`）は右辺の綴り（`[] 5`・`[_] 5`）と同じく、値の隣では読み直さない（R94 の線）。
+// 根拠：この片の決定の文（主の Claude の指示）の「根の `no 5` は `_ 5` と同じ」。評価する所に限ったのは作る側の読み（R）：括りの中・`:` の右辺・本体の根の並びで読み直すと、
+// 書いた括りの中身の数が変わり、括りの口が行の残りを1つの List で受ける読み（R64：`fq no 1 2` は `fq [no 1 2]`）と、参照の口の未定義の名前が席を取る読み（R90）が割れる。
+// 評価する所の外は今のまま（§5 Q83）。
+function undefinedLikeName(t, ctx, depth = 0) {
+  if (!t || depth > 16 || t.type !== "atom" || t.pre.length || t.post.length || t.core.c !== "name") return false;
+  const name = t.core.name;
+  let imported = false;
+  for (let s = ctx.scope; s; s = s.parent) {
+    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name))) return false;
+    if (s.locals && s.locals.has(name)) {
+      const info = localInfo(name, s, ctx);
+      return !info.why && !info.lambda && aliasOfUndefined(info.root, { F: ctx.F, scope: s }, depth);
+    }
+    if (s.hasImport) imported = true;
+  }
+  const def = ctx.F.defs.get(name);
+  if (def) return !def.lambda && aliasOfUndefined(ctx.F.defRoots.get(def), { F: ctx.F, scope: ctx.F.fileScope }, depth);
+  return !imported;
+}
+// 右辺の木が書いた `_` の印（単位律で `_` に縮む `_ , !_`・`_ , _`・`_ _`。R61・R71・R15）の名前も、右辺が `_` そのものなので同じに読む（法則12 の `v : _ , !_` と
+// `v : _` が同じ答え。`v : _` は R113 で書かなかったことと同じで未定義の名前）。括り（`[_]`・`(_ , _)`）は R94 の線で当てない。
+const aliasOfUndefined = (root, ctx, depth) => !!root && (isMark(root) || (root.t === "leaf" && !!root.term && undefinedLikeName(root.term, ctx, depth + 1)));
 // R94：書いた `[]` と、中身が連結の単位で詰まって `[]` になる書いた括り。List の中の書いた `_` は連結の単位で消える（U〔答え〕[2026-10-26 11:35 c8ccdd69]「…[]~ = _~ = _
 // / [] = _ / をきちんと念頭に」）ので、`[_]`・`[_ _]` は `[]`。要素1つの括りは中身と同じ（[x] ≅ x）ので、`[[]]`・`[[_]]`・`([])` も `[]`。前置 `~` は書いた `[x]` と
 // 同じ項（R79・R88）なので、`~_`・`~[]` も `[]`。名前（`e0 : []` の e0・`un : _` の un）と名前を括った物（`[e0]`）は当てない：名前を通した `_` は R63 の「`_` と分かる値」
-// のまま（§5 Q75 (e)）。行の中の `[] 5` の `[]` のような要素は消さない（`[[] 5]` は2要素のまま。値の口でない所の答えは変えない）。
+// のまま（§5 Q75 (e)）→ 2026-10-28 の片9b の R112 で、名前と名前を括った物も値の口では同じ印で読み直す（isKnownUnitItem。§5 Q75 (e) の値の口の所を閉じた）。
+// 行の中の `[] 5` の `[]` のような要素は消さない（`[[] 5]` は2要素のまま。値の口でない所の答えは変えない）。
 // 括りの中の長さ 0 と分かる流れ（`[]~`・`_~`・`e0~` など）も、書いた `_` と同じに消える（R84 の `[]~ = _~ = _`、isUnitLikeTerm）ので、`[_~]`・`[[]~]`・`([]~)` も `[]`
 // （2026-10-27 の片6 の確かめの直し。最初の版は書いた `_` だけを消し、`inc [_~]` が器の A で `inc [_]` の `(unit inc)` と割れていた。片5 までは同じ答えだった）。
 function isWrittenEmptyTerm(t, ctx, depth = 0) {
@@ -6375,7 +6691,13 @@ function writtenEmptyMark(leaf) {
   return { ...rest, cat: "unit", desc: U(), kind: U(), count: null, strCount: null, writtenEmptyFrom: leaf };
 }
 // 書いた `[]` を書いた `_` と読み直した印（writtenEmptyMark）が門に当たったら、言い分にそう書き添える（書いた綴りは `[]` なので）。
-const writtenEmptyNote = (x) => (x && x.writtenEmptyFrom ? `書いた \`${writeTerm(x.writtenEmptyFrom.term)}\` は、値の口では同じ位置に書いた \`_\` と同じに読みます（§4 R94）。` : "");
+// 2026-10-28 の片9b から、`_` と分かる名前・括り（R112）も同じ印で読み直すので、出どころの規則を分けて言う。
+const writtenEmptyNote = (x) =>
+  x && x.writtenEmptyFrom
+    ? x.writtenEmptyFrom.knownUnit
+      ? `\`${writeTerm(x.writtenEmptyFrom.term)}\` は書いた時点で \`_\` と分かる値なので、値の口では同じ位置に書いた \`_\` と同じに読みます（§4 R112）。`
+      : `書いた \`${writeTerm(x.writtenEmptyFrom.term)}\` は、値の口では同じ位置に書いた \`_\` と同じに読みます（§4 R94）。`
+    : "";
 // 書いた `[]` の葉（印 writtenEmpty）のある並びを、値の口に着いた葉を読み直しながら畳む（R94。reduceItems が rereading の印を付けて呼び直す）。
 function readWrittenEmpty(items, ctx, evaluate, closeIdle, bodyRoot) {
   for (;;) {
@@ -6395,8 +6717,9 @@ function readWrittenEmpty(items, ctx, evaluate, closeIdle, bodyRoot) {
   }
 }
 // R110（reduceItems）の当たる項か：種類の決まらない項 item が、1つ以上受けた適用の結果と分かるか（2026-10-28 の片9 の確かめの直し）。分かるのは、1行の括りで中の木が
-// 適用（`(gq 1)`）か、それを中身に持つ括り・名前（深さ 16 まで）と、ファイルの値の定義の名前で右辺の木が適用（`w : gq 1` の w）の所。名前は、仮引数・局所の名前・
-// 実体の中で渡された物に隠されていないときだけ見る。前置の印のある項（`@$gf`）・囲み・合成・構築・中置は見ない（分からない側）。
+// 適用（`(gq 1)`）か、それを中身に持つ括り・名前（深さ 16 まで）と、ファイルの値の定義の名前で右辺の木が適用（`w : gq 1` の w）の所。名前は、仮引数・実体の中で
+// 渡された物に隠されていないときだけ見る。2026-10-28 の片9b の確かめの直しから、枝の無い本体の局所の定義（R80）の名前も右辺の木で見て、本体の行が外の名前を隠しうる
+// 範囲の名前（localDefsOf の shadow）は見ない（下の注）。前置の印のある項（`@$gf`）・囲み・合成・構築・中置は見ない（分からない側）。
 function appliedResult(item, ctx, depth = 0) {
   if (!item || depth > 16) return false;
   if (item.t === "apply") return true;
@@ -6408,7 +6731,17 @@ function appliedResult(item, ctx, depth = 0) {
   if (term.core.c !== "name") return false;
   const name = term.core.name;
   for (let s = ctx.scope; s; s = s.parent) {
-    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name)) || (s.locals && s.locals.has(name))) return false;
+    if ((s.descs && s.descs.has(name)) || (s.params && s.params.has(name))) return false;
+    // 2026-10-28 の片9a の確かめの直し（片9b の確かめで見た）：本体の行が外の名前（ファイルの定義・外の局所の名前）と同じ名前を左に置いた `:` の行を持つ範囲では、その名前が
+    // 外を指すか本体の行を指すか決まっていない（R54、§5 Q10。`$名前` の local-shadow と同じ、dollarNameTarget）ので見ない。前はファイルの `w : gq 1` を見て、本体の
+    // `⇥w : @$gf` ⏎ `⇥w _` が通っていた（`wz` の綴りは G7。確かめる人の指摘）。
+    if (s.defRows && localDefsOf(s).shadow.has(name)) return false;
+    if (s.locals && s.locals.has(name)) {
+      // 枝の無い関数の本体の局所の定義（R80）は、ファイルの値の定義と同じく右辺の木で見る（法則27：局所の定義はファイルに置いた形と同じ答え）。前は局所の名前を全部
+      // 見ず、本体の `⇥wl : gq 1` ⏎ `⇥wl _` が G7、ファイルの `wl : gq 1` は通っていた（確かめる人の指摘）。括りの範囲の名前・枝のある本体の名前（localInfo の why）は見ない。
+      const info = localInfo(name, s, ctx);
+      return !info.why && !info.lambda && appliedResult(info.root, { ...ctx, scope: s }, depth + 1);
+    }
   }
   const def = ctx.F.defs.get(name);
   return !!def && !def.lambda && appliedResult(ctx.F.defRoots.get(def), ctx, depth + 1);
@@ -6440,11 +6773,13 @@ function reduceItems(items, ctx, evaluate = false, closeIdle = true, bodyRoot = 
   if (single1 && head1.cat === "plain" && head1.desc.k === "U") {
     const applied = appliedResult(head1, ctx);
     if (evaluate && applied) return finishTrees([single(head1)], evaluate, ctx);
+    // 本体の行が外の名前を隠しうる名前（appliedResult の注。それを1行で括った物も）は、言い分でその理由を言う（2026-10-28 の片9b の確かめの直し、shadowedTree）。
+    const shadowed = !applied && shadowedTree(head1, ctx);
     throw gate(
       "G7",
       applied
         ? `種類の決まらない項 \`${showView(head1.view)}\` の後ろに、書いた \`_\` だけが続きます。その項が値か、既定値の無い口の開いた関数なら \`_\` は消えます（§4 R43・R105）が、既定値のある関数の部分適用なら、既定値のある口に当たる \`_\` は既定値（§4 R39）で、評価する所の外では埋まった値か部分適用かが決まりません（§5 Q8・Q80）。評価する所（行の根・比べと論理の被演算子）ならどちらでも同じ値なので通ります（§4 R110）。`
-        : `種類の決まらない項 \`${showView(head1.view)}\` の後ろに、書いた \`_\` だけが続きます。その項が値か、次の口が既定値の無い口の関数なら \`_\` は消えます（§4 R43・R105）が、次の口が既定値のある口の関数なら \`_\` は既定値（§4 R39）です。その項は適用の結果と分からず、何も受けていない既定値のある関数（\`@$名前\` が指す関数など）かもしれないので、どちらか決まりません（§5 Q8・Q80 (a)）。評価する所で通すのは、適用の結果と分かる項（中が適用の括り・右辺が適用の名前）の後ろだけです（§4 R110）。`
+        : `種類の決まらない項 \`${showView(head1.view)}\` の後ろに、書いた \`_\` だけが続きます。その項が値か、次の口が既定値の無い口の関数なら \`_\` は消えます（§4 R43・R105）が、次の口が既定値のある口の関数なら \`_\` は既定値（§4 R39）です。その項は適用の結果と分からず、何も受けていない既定値のある関数（\`@$名前\` が指す関数など）かもしれないので、どちらか決まりません（§5 Q8・Q80 (a)）。${shadowed ? `\`${shadowed}\` は本体の行の \`:\` の左にもあり、その行が外の \`${shadowed}\` を隠すか（どちらの定義を指すか）が決まっていません（§4 R54、§5 Q10）。` : ""}評価する所で通すのは、適用の結果と分かる項（中が適用の括り・右辺が適用の名前）の後ろだけです（§4 R110）。`
     );
   }
   if (single1 && !isMark(head1) && !(head1.cat === "plain" && head1.kind.k === "L")) return finishTrees([single(head1)], evaluate, ctx);
@@ -6596,7 +6931,7 @@ function finishTrees(trees, evaluate, ctx, at = null) {
     // R76 で広げた評価する所（evaluate が {at, sym}）は、本体の行・被演算子が括りの関数の実体ごとに読み直されるので、書いた所ごとに1回だけ知らせる（R52 と同じ）。
     if (evaluate === true) trees[last] = leftoverUnit(trees[last], ctx);
     else if (at) trees[last] = leftoverUnit(trees[last], ctx, at);
-    else if (evaluate) trees[last] = leftoverUnit(trees[last], ctx, evaluate.at, evaluate.sym === "==" || evaluate.sym === "!==" ? "place-cmp" : "place");
+    else if (evaluate) trees[last] = leftoverUnit(trees[last], ctx, evaluate.at, evaluate.sym === "==" || evaluate.sym === "!==" ? "place-cmp" : evaluate.sym === "#r" ? "place-write" : "place");
   }
   if (trees.length === 1) return trees[0];
   const items = trees.flatMap((g) => (g.t === "construct" ? g.items : [g]));
@@ -6610,7 +6945,7 @@ function leftoverUnit(tree, ctx, at = null, why = null) {
   // R76 で広げた評価する所に丸ごと残った関数（why が "place"・"place-cmp"）は拾わない：R59・R75 が断るのは、値の上に積まれて余る関数（`$[…]` の中身が2つの関数を
   // 括った形）で、比べ・論理の被演算子や手続きの行に丸ごと残った関数は、`$` の先を1つの関数と言い切れなくする物ではない（`$[x ? inc == x]` は1つの関数。
   // 確かめ 2026-10-26。前の版は拾って G20 にし、言い分も「値の上に積まれた」と事実と違っていた）。
-  if (ctx && ctx.dead && !isIdentityKind(tree.kind) && why !== "place" && why !== "place-cmp") ctx.dead.push(tree);
+  if (ctx && ctx.dead && !isIdentityKind(tree.kind) && why !== "place" && why !== "place-cmp" && why !== "place-write") ctx.dead.push(tree);
   reportLeftover(tree, ctx, at, why);
   return { t: "unit", inner: tree, kind: A() };
 }
@@ -6642,6 +6977,8 @@ function reportLeftover(tree, ctx, at = null, why = null) {
       ? `未評価のラムダ \`${name}\` が評価する所（論理の被演算子か、字下げの本体の手続きの行）の終わりに余ったので、\`_\` になりました（§4 R42・R48・R76、§5 Q37 の答え）。当てるつもりなら、実引数を関数の後ろに書きます。関数を値として置くつもりなら、\`$\` を付けて番地にします（§4 R75）。`
       : why === "place-op"
       ? `未評価のラムダ \`${name}\` が評価する所（値の演算子の被演算子）に丸ごと残ったので、\`_\` になりました（§4 R42・R48・R87、§5 Q73 の答え）。当てるつもりなら、実引数を関数の後ろに書いて括ります（\`(inc 1) + 1\`）。`
+      : why === "place-write"
+      ? `未評価のラムダ \`${name}\` が評価する所（書き込み \`#\` の右の被演算子、書き込む値）に丸ごと残ったので、\`_\` になりました（§4 R42・R48・R116、§5 Q73 の答え）。関数を書き込むなら、\`$\` で持ち上げて \`${tree.t === "leaf" ? `$${name}` : "$[…]"}\` と書きます（§4 R53・R99）。当てるつもりなら、実引数を関数の後ろに書きます。`
       : why === "place-cmp"
       ? `未評価のラムダ \`${name}\` が評価する所（比べの被演算子）の終わりに余ったので、\`_\` になりました（§4 R42・R48・R76、§5 Q37 の答え）。当てるつもりなら、実引数を関数の後ろに書きます。比べの被演算子に関数を値として置く綴りはありません（\`$\` を付けた関数の番地を比べに置く形も断ります、§4 R62）。`
       : at
@@ -6703,9 +7040,13 @@ function foldStep(st, i) {
   if (isMark(x)) return markStep(st, i, top);
   if (isHoleItem(x)) x = holeStep(st, i, top);
   if (x.kind.k === "A") {
-    if (!top || (top.t !== "fn" && top.kind.k === "A")) return void stack.push(x);
+    if (!top || (top.t !== "fn" && top.kind.k === "A")) {
+      // R112 の根の読み（2026-10-28 の片9b）：評価する所で値の隣に着いた未定義の名前は、同じ位置に書いた `_` と同じに読み直す（`no 5` は `_ 5`、undefinedLikeName）。
+      if (x.rootUnit && foldSeq && foldSeq.evaluate) throw new WrittenEmptyAtValue(x.writtenEmpty);
+      return void stack.push(x);
+    }
     if (top.t !== "fn") throw unknownNeighbor(top, x);
-    if (x.writtenEmpty && valuePortOf(curStage(top))) throw new WrittenEmptyAtValue(x.writtenEmpty); // R94：書いた `_` と同じに読み直す（reduceItems）
+    if (x.writtenEmpty && valuePortOf(curStage(top))) throw new WrittenEmptyAtValue(x.writtenEmpty); // R94・R112：書いた `_` と同じに読み直す（reduceItems）
     // 撒く項は流れの1項で、関数の残りの口の数で受ける（R51）。書き下しか畳み込みで段が閉じ、全部閉じれば値。
     if (isSpreadNode(x) && streamStep(top, x)) {
       if (entryDone(top)) stack[stack.length - 1] = renderEntry(top);
@@ -6756,7 +7097,7 @@ function foldStep(st, i) {
 // 読み直す（reduceItems）。2026-10-04 の裁定（主の Claude の問い「1. 裸の仮引数にリストが来たら、名指しで断る、でいい？」に U〔答え〕[2026-10-04 00:23 c89225be]
 // 「1. その通り、自明にTypeErrorで良い。…」）は、空でない器の話として残る（`inc [1 2]` は木の段では今のまま A で、型の段の話）。`[] = _` は器ではなく単位（主の Claude の読み、R）。
 // 前（R85、2026-10-27 の片5）は、2つの読み（穴か TypeError か）が割れるとして G5 で断り、名前（`e0 : []` の e0・`e8 : ~[]` の e8）も同じに断っていた。名前は R63 の
-// 「`_` と分かる値」の今の読み（A）に戻した（§5 Q75 (e)）。
+// 「`_` と分かる値」の今の読み（A）に戻した（§5 Q75 (e)）。2026-10-28 の片9b の R112 から、名前（と未定義の名前）も値の口では書いた `_` と同じに読み直す（classifyItems）。
 // 既定値のある関数は、仮引数の数が数えられ、前の実引数が全部1つの口に入る値のときだけ見る（defaultUnit と同じ数え方。値の口の位置は otherFn の bareAt）。
 // 2026-10-28 の R105 の片から、既定値のある関数から作った穴の関数の穴の口（`(go !_ 2) []` の `[]`）は値の口に数える（穴の関数に印 holeOf と穴の数を持たせたので
 // 数えられる。書いた `_` の `(go !_ 2) _` と同じ答えにする、法則40）。
@@ -8459,6 +8800,10 @@ export function resolve(source) {
     patternNodes: [],
     // 値の定義 → 右辺が書いた `_` を指すか（R56、nameKindOf が置き、pointsToMark・dollarNameTarget が読む）。
     unitDefs: new Map(),
+    // 書かなかったことにした、ファイルのいちばん外の `x : _` の名前（R113、2026-10-28 の片9b）。使う所では未定義の名前と同じで、undefined-name の知らせだけを出さない。
+    erased: new Set(),
+    // 書かなかったことにした本体の局所の `x : _` で、外の x が見えると知らせた行（R113 の information、reportErasedShadow）。
+    reportedErased: new Set(),
     // 値の定義 → 右辺が番地の字面（`0x…`・`NxHHHH`。括り1つ・別名を通しても）か（R62、nameKindOf が置き、hexName が読む）。2026-10-27 の R97 から、字面の値
     // （{v, g, sum}、hexOperand。`0x…` どうしの和も。無ければ null）。
     hexDefs: new Map(),
@@ -8500,6 +8845,16 @@ export function resolve(source) {
   for (const line of lines) {
     const def = asDefinition(line);
     if (!def) continue;
+    // R113（2026-10-28 の片9b）：右辺が書いた `_` だけの定義（`x : _`）は、書かなかったことと同じ（席を取らない）。定義の表に入れないので、同じ名前の2つ目にも
+    // （`x : _` ⏎ `x : 5` の x は 5、順を逆にしても同じ）、仮引数の隠し（P2）にも、輪にもならず、使う所では未定義の名前（R111 の `_`）と同じに読む。知らせ
+    // （undefined-name）だけは出さない（書いた人は名前を `_` と定義している。reportUndefined）。行の木は今のまま `(: x _)`。
+    // 根拠：U [2026-10-27 14:07 58a809c9]「つまり、 / un : _ / は書かなかったことに出来る。」、U [15:48]「…未定義を定義する / un : _ / つまり、定義が未定義という不動点に
+    // 至ってる。 / だから、 / un : _ / は書かなかったことと同じ。」、主の Claude の問い「同じ名前がほかにある所でも、`x : _` は席を取らずに消える、でいい？」（14:49 UTC）に
+    // U〔答え〕[14:49]（ボタンの文は主の Claude の物）「席を取らないでいい。x : _ はどこでも書かなかったことにして、外の x が見えてしまう所だけ information で知らせる。片9 に入れて。」。
+    if (isUnitRhs(def.rhs)) {
+      F.erased.add(def.name);
+      continue;
+    }
     if (F.defs.has(def.name)) throw nameError("name-duplicate", `\`${def.name}\` がファイルのいちばん外で2回定義されています。`);
     F.defs.set(def.name, def);
     if (def.lambda) F.namedLambdas.set(def.lambda, def);
