@@ -50,7 +50,7 @@ const FAMILY_TYPES = new Set(["Atom", "Scalar", "Container", "Raw", "Struct", "L
  * 読めなかったことを、**場所と綴りごと**運ぶ。
  *
  * 場所（`where`）は `infix ' + ' tier` のようなスロットの道である。名前だけで断ると
- * 「`operator_table` が読めません」としか言えず、14エントリのうちどの葉が欠けているのか
+ * 「`operator_table` が読めません」としか言えず、15エントリのうちどの葉が欠けているのか
  * 探す所からになる。綴り（`spelling`）は原文のまま——要約すると、直す手掛かりが消える。
  */
 class StRefusal extends Error {

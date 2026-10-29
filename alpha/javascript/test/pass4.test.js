@@ -83,6 +83,36 @@ check("加算は add", arith("f : a ? a + 1\nf 1", "add"), ["add x9, x10"]);
 check("減算は sub", arith("f : a ? a - 1\nf 1", "sub"), ["sub x9, x10"]);
 check("乗算は mul", arith("f : a ? a * 2\nf 1", "mul"), ["mul x9, x10"]);
 check("除算は sdiv（Int は符号あり）", arith("f : a ? a / 2\nf 1", "sdiv"), ["sdiv x9, x10"]);
+check("符号反転は neg", arith("f : a ? -a\nf 1", "neg"), ["neg x9"]);
+checkTrue("符号反転に公理の csel は付かない", !(body("f : a ? -a\nf 1", "f") || []).some((l) => l.startsWith("csel")));
+// 結果を書き戻さない形は `neg` があっても元の値を返すので、次の `mov` まで見る。
+{
+	const ls = body("g : x ? x + 1\nf : x ? -(g x)\nf 1", "f", true) || [];
+	const k = ls.indexOf("neg x9, x0");
+	checkTrue("符号反転は呼んだ結果を反転して返す（割り当てあり）", k >= 0 && ls[k + 1] === "mov x0, x9", ls.join(" / "));
+}
+for (const [kind, src] of [
+	["束縛した恒等射", "t : !__\nf : a ? -t\nf 1"],
+	["否定", "f : a ? -(!a)\nf 1"],
+]) {
+	const ls = body(src, "f") || [];
+	const k = ls.indexOf("movz x9, #0x8000, lsl #48");
+	checkTrue(
+		`${kind}の符号反転は neg を出さずに __ を置いて返す`,
+		k >= 0 && /^str x9, /.test(ls[k + 1] || "") && !ls.some((l) => l.startsWith("neg")) && asm(src).diagnostics.every((d) => d.severity !== "error"),
+		ls.join(" / ")
+	);
+}
+for (const [kind, src, says] of [
+	["Char", "f : a ? -a\nf \\a", "Char の符号反転"],
+	["Char 型の数", "f : c ? -((c > \\z) | 5)\nf \\a", "Char の符号反転"],
+	["$ の番地", "x : 5\nf : a ? -($x)\nf 1", "`$` が作った番地は算術に使えません"],
+	["List", "f : a ? -a\nf [1 2]", "器に符号の反転はありません"],
+	["Float", "f : a ? -a\nf 1.5", "浮動小数の符号反転"],
+	["部分適用", "g : f ? @f 3\ng $[-_]", "まだ出せない式です（negate）"],
+]) {
+	checkTrue(`${kind}の符号反転は名指しで断る`, asm(src).diagnostics.some((d) => d.message.includes("negate") && d.message.includes(says)));
+}
 
 // ---- AAPCS64 ----
 //

@@ -101,7 +101,8 @@ export const CORPUS = [
 	// 2026-10-05：`?` の行の字下げの門（`q_bad` ほか、利用者の裁定）が乗った（3711 → 4733、最適化なし
 	// 5628 → 7017）。足した12関数（`q_bad` が最も大きい）と入口 `preprocess` の分岐のぶんで、ほかの関数の命令は
 	// 1つも動いていない。診断は前と同じ4件（門を入口の分岐に置き、返す器の上界を持つ関数を増やしていない）。
-	{ rel: "alpha/sign/preprocess.sn", front: 0, asm: [{ severity: "information", includes: "beyond: 返す器の上界は見積もりです（撒きながら食う枝を、段ごとに消えたぶんで見積もった" }, { severity: "information", includes: "gap: 返す器の上界は見積もりです（撒きながら食う枝を、段ごとに消えたぶんで見積もった" }, { severity: "information", includes: "walk: 返す器の上界は見積もりです（撒きながら食う枝を、段ごとに消えたぶんで見積もった" }, { severity: "information", includes: "preprocess: 返す器の上界は見積もりです（撒きながら食う枝を、段ごとに消えたぶんで見積もった" }], insn: { full: 4733, plain: 7017 }, digest: { full: "6be0bb1d5b6c55b2", plain: "990a61d1d3bce469" } },
+	// 2026-10-19：取り込む `operator_table.sn` に表が1枚増え（前置 `-` の `#asm_prefix_signed`）、指紋だけ動いた（命令数は同じ）。
+	{ rel: "alpha/sign/preprocess.sn", front: 0, asm: [{ severity: "information", includes: "beyond: 返す器の上界は見積もりです（撒きながら食う枝を、段ごとに消えたぶんで見積もった" }, { severity: "information", includes: "gap: 返す器の上界は見積もりです（撒きながら食う枝を、段ごとに消えたぶんで見積もった" }, { severity: "information", includes: "walk: 返す器の上界は見積もりです（撒きながら食う枝を、段ごとに消えたぶんで見積もった" }, { severity: "information", includes: "preprocess: 返す器の上界は見積もりです（撒きながら食う枝を、段ごとに消えたぶんで見積もった" }], insn: { full: 4733, plain: 7017 }, digest: { full: "9d048c154fffd544", plain: "1d2f21bae0dac253" } },
 	// **語 ＝ 次の空白まで**（文字列の中と括りの中は数えない）。規則1つで `is_digit` も `<=` も
 	// `[a ~b]` も1語になる——空白が余積演算子そのものだから、空白で割ることが余積の項を取り
 	// 出すことになる。括りは1語のまま返し、中身を字句へ投げ返すのは構文解析の仕事である。
@@ -118,13 +119,16 @@ export const CORPUS = [
 	// **+27 命令（2026-10-07、最適化なしは +35）。** `op_word` に「先頭の字が演算子の字でなければ、語を数えずに __」の
 	// 枝を足した（速さの直し。答えは同じ——数えても語の長さに届かない）。動いたのは `op_word` の区画だけで、ほかの
 	// 関数の命令は1つも動いていない（ずれたのはローカルラベルの番号と、注釈の桁揃えだけ）。診断は前と同じ7件。
-	{ rel: "alpha/sign/parser.sn", front: 0, asm: [{ severity: "information", includes: "out: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした" }, { severity: "information", includes: "out_at: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした" }, { severity: "information", includes: "out_as: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした" }, { severity: "information", includes: "out_one: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした・添字で回る再帰の段数を、その添字が走る器で抑えた・撒きながら食う枝を、段ごとに消えたぶんで見積もった）" }, { severity: "information", includes: "out_jk: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした" }, { severity: "information", includes: "expr: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした" }, { severity: "information", includes: "expr_at: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした" }], insn: { full: 2156, plain: 3174 }, digest: { full: "0be0b3ff081fd958", plain: "ab7d766f134a00a7" } },
+	// 2026-10-19：取り込む `operator_table.sn` に表が1枚増え（前置 `-` の `#asm_prefix_signed`）、指紋だけ動いた（命令数は同じ）。
+	{ rel: "alpha/sign/parser.sn", front: 0, asm: [{ severity: "information", includes: "out: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした" }, { severity: "information", includes: "out_at: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした" }, { severity: "information", includes: "out_as: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした" }, { severity: "information", includes: "out_one: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした・添字で回る再帰の段数を、その添字が走る器で抑えた・撒きながら食う枝を、段ごとに消えたぶんで見積もった）" }, { severity: "information", includes: "out_jk: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした" }, { severity: "information", includes: "expr: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした" }, { severity: "information", includes: "expr_at: 返す器の上界は見積もりです（輪の相手が食っていることを根拠にした" }], insn: { full: 2156, plain: 3174 }, digest: { full: "8ace7aaf5e149b62", plain: "78709a9726e3b03e" } },
 	// 表だけの1枚。命令は `_.main` の `ret` 1つきりで、正規化後 824 行のうち
 	// **823 行がディレクティブとラベル**である。ディレクティブを落とす比べ方なら、この1枚は
 	// 「`ret` が1つ」としか言わない——`asmdiff` がディレクティブを残す理由も、命令数だけの
 	// golden では足りない理由も、そのままこの行に立っている。
-	{ rel: "alpha/sign/operator_table.sn", front: 0, asm: [], insn: { full: 1, plain: 1 }, digest: { full: "0a54415ea5f080d3", plain: "0a54415ea5f080d3" } },
-	{ rel: "alpha/sign/emit.sn", front: 0, asm: [], insn: { full: 578, plain: 851 }, digest: { full: "07bcfa2323b1abf0", plain: "3e6bc5afa44b8b84" } },
+	// 2026-10-19：前置 `-` を NOT_YET から命令の表へ移し、`#asm_prefix_signed` が1枚増えた。命令は `ret` 1つのまま。
+	{ rel: "alpha/sign/operator_table.sn", front: 0, asm: [], insn: { full: 1, plain: 1 }, digest: { full: "a80b01305cdd80d7", plain: "a80b01305cdd80d7" } },
+	// 2026-10-19：取り込む `operator_table.sn` に表が1枚増え（前置 `-` の `#asm_prefix_signed`）、指紋だけ動いた（命令数は同じ）。
+	{ rel: "alpha/sign/emit.sn", front: 0, asm: [], insn: { full: 578, plain: 851 }, digest: { full: "a8ecbe4661dbcf2e", plain: "2ff09e35693ce5a9" } },
 	// 型システムと Pass 4 の継ぎ目。表が8つと、そこから1つの還元、それに字面のプリフィックスを
 	// 分ける小さな走査が乗る。**表だけの枚（`operator_table.sn`）と歩く枚（`preprocess.sn`）の
 	// 中間**で、その両方の代金がこの1枚に立っている——`.rodata` に行く表と、`s ' i` で歩く
@@ -248,10 +252,11 @@ export const ST_BOUNDARY = [
 	{ rel: "alpha/sign/parser.sn", st: { sha: "5e73c5151d3d9647", bytes: 95, entries: 0, unresolved: 0 }, own: [], selfCopy: false, raised: "7be35452c61194ea" },
 	{
 		rel: "alpha/sign/operator_table.sn",
-		st: { sha: "46a3e2b0f23e2540", bytes: 8075, entries: 14, unresolved: 0 },
-		own: ["infix", "prefix", "postfix", "enclosure", "asm_infix_width", "asm_infix_shape", "asm_infix_signed", "asm_prefix_shape", "asm_prefix_place", "asm_prefix_width", "asm_postfix_shape", "asm_enclosure_signed", "asm_enclosure_shape", "strict_infix"],
+		// 2026-10-19：前置 `-` の `#asm_prefix_signed` が増え、エントリ 14 → 15、8075 → 8218 byte。
+		st: { sha: "50731fa7b4f9b0c3", bytes: 8218, entries: 15, unresolved: 0 },
+		own: ["infix", "prefix", "postfix", "enclosure", "asm_infix_width", "asm_infix_shape", "asm_infix_signed", "asm_prefix_shape", "asm_prefix_place", "asm_prefix_width", "asm_prefix_signed", "asm_postfix_shape", "asm_enclosure_signed", "asm_enclosure_shape", "strict_infix"],
 		selfCopy: true,
-		raised: "0a54415ea5f080d3",
+		raised: "a80b01305cdd80d7",
 	},
 	{ rel: "alpha/sign/emit.sn", st: { sha: "85cbca180facc0b9", bytes: 93, entries: 0, unresolved: 0 }, own: [], selfCopy: false, raised: "7be35452c61194ea" },
 	{ rel: "alpha/sign/target_info.sn", st: { sha: "be05332cb5937e52", bytes: 100, entries: 0, unresolved: 0 }, own: [], selfCopy: false, raised: "7be35452c61194ea" },

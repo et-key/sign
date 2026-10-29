@@ -1512,6 +1512,45 @@ function genExpr(node, env, em, scope, tail = false) {
 		return 1;
 	}
 
+	// niche は反転しても niche で、Int の値域は対称なので `__` の見張りは要らない。
+	// Char は裁定（2026-09-27 (4)）では `__` だが、`|` の右の腕から数が Char と型付けされたまま来るので断る。
+	// pass3 が値と違う型を付ける形（`|` の右の腕、右辺を返す比較、`|` の左の腕の `!x`）では解釈器と割れる（絶対値も同じ）。
+	if (n.type === "operation" && n.position === "prefix" && n.name === "negate" && !n.partial) {
+		if (addressFromDollar(n.operand, env)) {
+			return em.fail(n, "`$` が作った番地は算術に使えません（negate）。番地は表に出ません。読むなら `@`、列を辿るなら `[h ~t]` の分解を使ってください");
+		}
+		const w = genExpr(n.operand, env, em, scope);
+		if (w === false) return false;
+		const ty = n.operand.atomType;
+		if (w !== 1 || ty === "Struct") {
+			em.pop(w);
+			return em.fail(n, `器に符号の反転はありません（negate、${ty}）`);
+		}
+		// `Identity` の恒等射は機械では `0` なので、素通しすると `0` が出る。
+		if (ty === "Unit" || ty === "Identity") {
+			if (isUnitNode(unwrap(n.operand))) return 1;
+			const uo = (em.slot - 1) * 8;
+			em.emit(`movz ${SCRATCH[0]}, #0x8000, lsl #48`, "射に符号の反転は無いので __");
+			em.store(SCRATCH[0], uo, "符号反転");
+			return 1;
+		}
+		const m = reduceToMachineType(ty, em.conf.target);
+		if (!m || m.class !== "gpr" || ty === "Char" || ty === "Address" || ty === "Raw") {
+			em.pop(1);
+			if (m && m.class === "float") return em.fail(n, `浮動小数の符号反転はまだ出せません（negate、${ty}）。fneg になるが、pass4 に浮動小数の道が無い`);
+			if (ty === "Char") return em.fail(n, "Char の符号反転はまだ出せません（negate）。負の文字は無いが、`|` の右の腕から数が Char と型付けされたまま来る形があり、`__` を置くと黙って割れる");
+			if (ty === "Address") return em.fail(n, "番地の符号反転はまだ出せません（negate）。番地は 0 以上の位置で、`-p` の読み方が決まっていない（字面の番地なら解釈器は負の数を返す）");
+			if (ty === "Raw") return em.fail(n, "Raw の符号反転はまだ出せません（negate）。結果が Raw のまま渡るので、数として読むなら `0 - …` と書いてください");
+			return em.fail(n, `符号反転を出せるのは GPR 幅の整数だけです（negate、${ty}）`);
+		}
+		const mn = asmOf("negate").gpr[m.signed ? "signed" : "unsigned"];
+		const o = (em.slot - 1) * 8;
+		em.load(SCRATCH[0], o, "中身");
+		em.emit(`${mn} ${SCRATCH[0]}, ${SCRATCH[0]}`, "符号反転（niche は反転しても niche）");
+		em.store(SCRATCH[0], o, "符号反転");
+		return 1;
+	}
+
 	if (!isStructBlock(n) && Array.isArray(n.lines) && (n.lines.length > 1 || (n.lines.length === 1 && isDefineNode(n.lines[0])))) {
 		return genMatch(n, env, em, scope, tail);
 	}

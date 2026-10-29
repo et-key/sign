@@ -1388,6 +1388,41 @@ agree("入れ子の枝（内側が尽きる）", "f : x y ?\n\tx < 0 :\n\t\ty > 
 	checkNamed("絶対値：Char は名指しで断る", "f : c ? |c|\nf \\a", "ascii", "abs");
 }
 
+// ---- 符号反転（前置 `-`） ----
+//
+// 見張りが要らないことを踏むのは、実行時に `__` になる値（範囲外の添字・偽の比較・INT64_MIN に着いた和）だけである。
+// 和が niche に着くのは alpha が溢れても回るからで（integer_overflow.md §1.1 の NOTE）、規範では罠である。
+{
+	agree("符号反転：実行時の正", "f : n ? -n\nf 7");
+	agree("符号反転：実行時の負", "f : n ? -n\nf -7");
+	agree("符号反転：実行時の端（-INT64_MAX）", "f : n ? -n\nf (0 - 9223372036854775807)");
+	agree("符号反転：束縛した値", "x : 5\n-x");
+	agree("符号反転：括り", "f : a ? -(a + 1)\nf 7");
+	agree("符号反転：中置の減算と混ざらない", "f : a ? 3 - -a\nf 7");
+	agree("符号反転：二重", "f : a ? -(-a)\nf 7");
+	agree("符号反転：呼んだ結果", "g : x ? x + 1\nf : x ? -(g x)\nf 1");
+	// 呼び先がスロットと違うレジスタで答えを作る形。反転の前に読み直さないと、残っていた値を反転する。
+	agree("符号反転：定数を返す関数の結果", "g : x ? 5\nf : x ? -(g x)\nf 1");
+	agree("符号反転：名前を付けたポイントフリー", "g : [-_]\ng 5");
+	agree("符号反転で計算", "f : n ? (-n) + 1\nf 7");
+	agree("符号反転：実行時に __ になる値", "f : i ? -([1 2 3] ' i)\nf 9");
+	agree("符号反転：偽の比較は __ のまま", "f : a ? -(a = 9)\nf 7");
+	agree("符号反転：溢れて niche に落ちた和", "f : a b ? -(a + b)\nf 9223372036854775807 1");
+	agree("符号反転：真（!__）は __", "f : a ? -(!__)\nf 1");
+	agree("符号反転：真を束縛してから", "t : !__\nf : a ? -t\nf 1");
+	agree("符号反転：真を返す関数の結果", "g : x ? !__\nf : x ? -(g x)\nf 1");
+	agree("符号反転：否定した比較", "f : a b ? -(!(a < b))\nf 5 2");
+	// 汎用の断り（`まだ出せない式です（negate）`）にも名前は出るので、理由の文言まで見る。
+	checkNamed("符号反転：器は名指しで断る", "f : a ? -a\nf [1 2]", "ascii", "器に符号の反転");
+	checkNamed("符号反転：構造体は名指しで断る", "f : a ? -a\nf (a : 1)", "ascii", "器に符号の反転");
+	checkNamed("符号反転：$ の番地は名指しで断る", "x : 5\nf : a ? -($x)\nf 1", "ascii", "`$` が作った番地");
+	// ここが通らなくなったら `|` の型付けが直った日で、Char に `__` を置ける。
+	checkNamed("符号反転：Char は名指しで断る", "f : c ? -c\nf \\a", "ascii", "Char の符号反転");
+	checkNamed("符号反転：Raw は名指しで断る", "f : a ? -(@0x9000000)\nf 1", "ascii", "Raw の符号反転");
+	// ここが通らなくなったら `-p` の読み方が決まった日である。
+	checkNamed("符号反転：番地の字面は名指しで断る", "f : p ? -p\nf 0x40000000", "ascii", "番地の符号反転");
+}
+
 // ---- 番地の加減算は溢れたら `__`、`Int` は回ってよい ----
 //
 // 分ける基準は「誤りが致命的か」である（integer_overflow.md §1）。溢れた番地は任意の記憶を指す
@@ -2821,8 +2856,8 @@ agree("歩幅つきを数え上げる", SUM + "sum [0 ~+ 3] 0 0");
 		const tables = [...new Set(cells.map((c) => c.table))];
 		// 表の読み方が壊れて 0 枚になれば、下の検査は黙って空振りする——枚数と欄の数を先に留める。
 		total++;
-		if (tables.length === 9 && cells.length === 64) passed++;
-		console.log(`${tables.length === 9 && cells.length === 64 ? "ok  " : "FAIL"} 演算子表：命令の表は 9 枚で、欄は 64（${tables.length} / ${cells.length}）`);
+		if (tables.length === 10 && cells.length === 67) passed++;
+		console.log(`${tables.length === 10 && cells.length === 67 ? "ok  " : "FAIL"} 演算子表：命令の表は 10 枚で、欄は 67（${tables.length} / ${cells.length}）`);
 		for (const t of tables) {
 			const cs = cells.filter((c) => c.table === t);
 			const terms = cs.map((c) => (c.value ? `||(g \`${c.op}\` \`${c.col}\`) == \`${c.value}\`||` : `||g \`${c.op}\` \`${c.col}\`||`));
