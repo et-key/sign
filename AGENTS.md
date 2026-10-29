@@ -1,7 +1,7 @@
 # Agent Instructions for Sign Workspace
 
 ## MANDATORY FIRST STEP: 仕様書の熟読
-**いかなる実装や推論を行う前にも、必ず `documents/ja-jp/specification/` 配下の仕様書に目を通すこと。**
+**いかなる実装や推論を行う前にも、必ず `documents/ja-jp/impl/` 配下の仕様書に目を通すこと。**
 JSの実装や他言語の常識で推論せず、必ずSignの圏論的・数学的基盤（仕様書）を正として行動してください。
 
 ## Sign Language Philosophy & Core Mechanics

@@ -488,6 +488,6 @@ __ | X のコンパイル方式(概念):
 
 ## 8. 参照仕様
 
-- [`Unit_Specification_ja-jp.md`](https://github.com/johnny-shaman/Sign/blob/main/documents/ja-jp/specification/core/Unit_Specification_ja-jp.md) — Unit の圏論的基盤
-- [`system_semantics_ja-jp.md`](https://github.com/johnny-shaman/Sign/blob/main/documents/ja-jp/specification/core/system_semantics_ja-jp.md) — `$`, `@`, `#` 演算子のシステム層意味論
-- [`A_Operator_Table.md`](https://github.com/johnny-shaman/Sign/blob/main/documents/ja-jp/specification/syntax/A_Operator_Table.md) — 演算子の優先順位と Unit との相互作用表
+- [`unit.md`](unit.md) — Unit の圏論的基盤
+- [`system_semantics.md`](system_semantics.md) — `$`, `@`, `#` 演算子のシステム層意味論
+- [`operator_table.md`](../syntax/operator_table.md) — 演算子の優先順位と Unit との相互作用表

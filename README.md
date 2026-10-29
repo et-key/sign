@@ -14,18 +14,18 @@ It is designed to be used in various Anyone, such as data validation, integrity 
 
 ## Example
 
-* [language example](./documents/en-us/example.en-us.sn)
-* [日本語はこちら](./documents/ja-jp/example.ja-jp.sn)
+* [language example](./documents/en-us/guide/example.sn)
+* [日本語はこちら](./documents/ja-jp/guide/example.sn)
 
 ## Reference
 
-* [language reference](./documents/en-us/Sign_reference_en-us.md)
-* [日本語はこちら](./documents/ja-jp/Sign_reference_ja-jp.md)
+* [language reference](./documents/en-us/guide/reference.md)
+* [日本語はこちら](./documents/ja-jp/guide/reference.md)
 
 ## Specification
 
-* [language specification](./documents/en-us/specification/)
-* [日本語はこちら](./documents/ja-jp/specification/)
+* [language specification](./documents/en-us/impl/)
+* [日本語はこちら](./documents/ja-jp/impl/)
 
 ## License
 

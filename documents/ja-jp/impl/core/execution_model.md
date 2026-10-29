@@ -135,7 +135,7 @@ Sign では：
 GC も `free` も所有権注釈も不要。すべてがコンパイル時に決定する。
 
 > [!IMPORTANT]
-> **layer 0 では `alloca` 自体が使用不可**である。`alloca` はスタック（RAM）が初期化済みであることを前提とするため、RAM がまだ初期化されていない layer 0 では利用できない（[Build_System_ja-jp.md](../build/Build_System_ja-jp.md) の layer 表を参照）。layer 0 のコードはレジスタ渡しと `#`/`@` による volatile な生アドレス操作のみで RAM/スタックを手動でブートストラップし（[Entry_Point_ja-jp.md](../build/Entry_Point_ja-jp.md) 参照）、その完了後に layer 1 以上として宣言されたモジュールに制御を渡すことで、初めて `alloca` を伴う配列・構造体・クロージャ相当の機能が使用可能になる。
+> **layer 0 では `alloca` 自体が使用不可**である。`alloca` はスタック（RAM）が初期化済みであることを前提とするため、RAM がまだ初期化されていない layer 0 では利用できない（[build_system.md](../build/build_system.md) の layer 表を参照）。layer 0 のコードはレジスタ渡しと `#`/`@` による volatile な生アドレス操作のみで RAM/スタックを手動でブートストラップし（[entry_point.md](../build/entry_point.md) 参照）、その完了後に layer 1 以上として宣言されたモジュールに制御を渡すことで、初めて `alloca` を伴う配列・構造体・クロージャ相当の機能が使用可能になる。
 
 ただし、`memory_management.md` が定義する stdlib 拡張（Shared-Heap, `##`）は任意選択の layer 1 以上の機能であり、この原則の例外として明示的にオプトインされる。RC/ARC 管理された Shared-Heap は、コア言語のヒープレス性を損なわない、独立した上位レイヤーの機能である。
 
@@ -153,4 +153,4 @@ layer: 2+ → FPU, SIMD 等が加わる
 ```
 
 Sign のスタックが「BIOS から書ける」のは、この実行モデルが OS のランタイムに
-依存しないことの直接の帰結である。layer 0 の手動ブートストラップ（RAM/スタック初期化）は、[Entry_Point_ja-jp.md](../build/Entry_Point_ja-jp.md) が定義する `boot.sn`（`entry`/`stack` フィールド）の役割であり、これが完了して初めて layer 1 以上の alloca ベースのヒープレス実行モデルに引き継がれる。
+依存しないことの直接の帰結である。layer 0 の手動ブートストラップ（RAM/スタック初期化）は、[entry_point.md](../build/entry_point.md) が定義する `boot.sn`（`entry`/`stack` フィールド）の役割であり、これが完了して初めて layer 1 以上の alloca ベースのヒープレス実行モデルに引き継がれる。

@@ -13,7 +13,7 @@ Sign の実行モデルでは `main.sn` が論理的なエントリポイント�
 ## 1. `option.ms` の拡張構文
 
 > [!IMPORTANT]
-> **`option.ms` の全フィールド一覧と `target` 別デフォルト値は [`Option_MS_Spec_ja-jp.md`](Option_MS_Spec_ja-jp.md) を参照すること。**
+> **`option.ms` の全フィールド一覧と `target` 別デフォルト値は [`option_ms_schema.md`](option_ms_schema.md) を参照すること。**
 > 本ドキュメントは `entry`/`stack` フィールドの意味とスタートアップスタブ生成の詳細を記述する。
 
 ```son
@@ -214,7 +214,7 @@ Sign では `crt0.s` の代わりにコンパイラがスタートアップス�
 コンパイラはスタートアップスタブをバイナリに直接埋め込むだけでなく、
 **`boot.sn` ファイルとして生成物に出力**する。
 
-これは [type/Type_System_ja-jp.md](../type/Type_System_ja-jp.md) における
+これは [type/type_system.md](../type/type_system.md) における
 `.st` ファイル（構造体型の自動生成）と同じパターンである。
 
 ### 生成物の例（target: x86_bios）
@@ -268,7 +268,7 @@ main
 
 ## 6. Execution Model との整合
 
-[core/Execution_Model_ja-jp.md](./Execution_Model_ja-jp.md) で定義した通り、
+[core/execution_model.md](../core/execution_model.md) で定義した通り、
 Sign の全関数は `main.sn` の内部関数として静的に展開される。
 
 物理エントリポイント（スタートアップスタブ）は `main.sn` の外側に生成される

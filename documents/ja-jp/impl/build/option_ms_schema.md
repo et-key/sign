@@ -2,7 +2,7 @@
 
 > [!IMPORTANT]
 > **このドキュメントは `option.ms` の唯一の正規リファレンスである。**
-> `Build_System_ja-jp.md`、`Entry_Point_ja-jp.md`、`System_Architecture_ja-jp.md` の
+> `build_system.md`、`entry_point.md`、`system_architecture.md` の
 > 各ファイルから `option.ms` 関連の記述を参照する場合、本ドキュメントへのリンクを使用すること。
 
 ---
@@ -341,7 +341,7 @@ project/
 | **後置 `@`** (link: static) | ✅ 静的シンボル解決 | ✅ 静的シンボル解決 |
 | **後置 `@`** (link: dynamic) | ❌ コンパイルエラー | ✅（layer: 4 のみ有効） |
 
-詳細は [`System_Architecture_ja-jp.md`](System_Architecture_ja-jp.md) §3 を参照。
+詳細は [`system_architecture.md`](system_architecture.md) §3 を参照。
 
 ---
 
@@ -469,7 +469,7 @@ sign build . --target aarch64_rpi
 
 | ドキュメント | 参照すべき内容 |
 |---|---|
-| [`Build_System_ja-jp.md`](Build_System_ja-jp.md) | ms フォーマット概要、継承モデルの設計思想 |
-| [`Entry_Point_ja-jp.md`](Entry_Point_ja-jp.md) | boot.sn 自動生成詳細、target 別スタートアップコード例 |
-| [`System_Architecture_ja-jp.md`](System_Architecture_ja-jp.md) | `#`/`@` の layer 別意味論、随伴関係によるリンク自動導出の数学的基盤 |
-| [`Integer_Overflow_ja-jp.md`](../core/Integer_Overflow_ja-jp.md) | layer × リテラル型の切り分け詳細 |
+| [`build_system.md`](build_system.md) | ms フォーマット概要、継承モデルの設計思想 |
+| [`entry_point.md`](entry_point.md) | boot.sn 自動生成詳細、target 別スタートアップコード例 |
+| [`system_architecture.md`](system_architecture.md) | `#`/`@` の layer 別意味論、随伴関係によるリンク自動導出の数学的基盤 |
+| [`integer_overflow.md`](../core/integer_overflow.md) | layer × リテラル型の切り分け詳細 |

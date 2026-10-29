@@ -1,4 +1,4 @@
-// 演算子の型定義（Type_System_ja-jp.md に基づく）
+// 演算子の型定義（documents/ja-jp/impl/type/type_system.md に基づく）
 // JavaScript の型判定には .constructor を使用する
 // - typeof null === 'object' などの罠を回避できる
 // - null/undefined は ?. で安全にアクセスできる

@@ -1,7 +1,7 @@
 # Sign 設計原理
 
 > [!IMPORTANT]
-> 本書は `0_definition.md` よりも前に読むべき文書である。個々の仕様（演算子テーブル、型システム、
+> 本書は `1_definition.md` よりも前に読むべき文書である。個々の仕様（演算子テーブル、型システム、
 > コンパイラパイプライン等）は、ここで宣言する原理の具体例に過ぎない。各仕様ファイルの規則を読んで
 >「なぜそうなっているか」が分からない場合は、まずここに戻ること。
 
@@ -47,7 +47,7 @@ RISC-V）に対して**as-is**——中間表現で均さずに、演算子の�
 ハードウェアが既に持っている型を書き写している**。as-is とは、演算子の並びが命令列へ
 落ちることだけを指すのではなく、**Layer 2 の型がハードウェアの区別そのものであること**
 までを含む。`Address`（GPR幅）・`Float`（FPU幅）・`Vector`（SIMD幅）が「幅クラスごとに
-実行時のビット表現はただ1種類」（[`type_system.md` §2](impl/type/type_system.md)）と定められて
+実行時のビット表現はただ1種類」（[`type_system.md` §2](type/type_system.md)）と定められて
 いるのは、この写像の直接の帰結である。
 
 > [!NOTE]
@@ -59,7 +59,7 @@ RISC-V）に対して**as-is**——中間表現で均さずに、演算子の�
 >
 > Sign も同じ手を採る——判別子は帳簿（`.ist`）に置く。
 >
-> - `__` へ収束した理由は Pass 3b が静的に記録する（[`type_system.md` §5](impl/type/type_system.md)）
+> - `__` へ収束した理由は Pass 3b が静的に記録する（[`type_system.md` §5](type/type_system.md)）
 > - enum の各バリアントは自動採番により**値そのものが判別子**になる（同 §6.2、C の enum と同格）
 > - `__`（零対象）はそもそも吸収するためタグを必要としない
 >
@@ -68,8 +68,8 @@ RISC-V）に対して**as-is**——中間表現で均さずに、演算子の�
 > 選ぶ（同 §8）。これは敗北ではなく、**ハードウェアが持つ型システムの限界を、そのまま言語の
 > 限界として引き受ける**という原理2の立場の帰結である。
 
-**関連文書**：[`compiler_pipeline.md` §1](impl/core/compiler_pipeline.md#1-設計動機risc-プロセッサに対するas-isコンパイラ)、
-[`type_system.md` §2](impl/type/type_system.md)（Layer 2 の幅クラス）
+**関連文書**：[`compiler_pipeline.md` §1](core/compiler_pipeline.md#1-設計動機riscプロセッサに対するas-isコンパイラ)、
+[`type_system.md` §2](type/type_system.md)（Layer 2 の幅クラス）
 
 ---
 
@@ -102,8 +102,8 @@ Pass 4（コード生成）に渡すためだけに存在する。Pass 4 は str
 > 本原理が「型は実行時に一切残らない」と言い切れるのは、Sign が禁欲的だからではなく、
 > **写している対象が最初からそういう構造をしているから**である。
 
-**関連文書**：[`compiler_pipeline.md` §2, §3](impl/core/compiler_pipeline.md#2-型システムの立ち位置建前としてのheapless本音としてのrisc固定長制約)、
-[`type_system.md`](impl/type/type_system.md)
+**関連文書**：[`compiler_pipeline.md` §2, §3](core/compiler_pipeline.md#2-型システムの立ち位置建前としてのheapless本音としてのrisc固定長制約)、
+[`type_system.md`](type/type_system.md)
 
 ---
 
@@ -138,7 +138,7 @@ Signの各所に、同じ形のパターンが繰り返し現れる——**安�
 > 「定数に見えるのに実は毎回IOが飛ぶ」という見た目と挙動の乖離は、原理3が禁じている
 > 「危険が既定の書き方に紛れ込む」パターンそのものだったため。
 
-**関連文書**：括りの rest（[`list_model.md`](type/list_model.md) §2.4・§2.5。器は括りで受け、裸のストリーム仮引数 `f : x ~xs ?` は 2026-10-04 に廃止——[`coproduct_resolver.md`](core/coproduct_resolver.md) §5.4）、[`operator_table.md`](guide/operator_table.md)
+**関連文書**：括りの rest（[`list_model.md`](type/list_model.md) §2.4・§2.5。器は括りで受け、裸のストリーム仮引数 `f : x ~xs ?` は 2026-10-04 に廃止——[`coproduct_resolver.md`](core/coproduct_resolver.md) §5.4）、[`operator_table.md`](syntax/operator_table.md)
 
 ---
 
@@ -230,14 +230,14 @@ Signの設計における最も筋の良い原理の一つである。
 自然に導かれる。
 
 - **積（struct/Struct）**：`[x:1, y:2]`という並置がそのまま積。フィールド名の集合が
-  Hom集合を決める（[`type_system.md`](impl/type/type_system.md#62-コンストラクタ関数と--の意味論) §6.2）
+  Hom集合を決める（[`type_system.md`](type/type_system.md#62-コンストラクタ関数と--の意味論) §6.2）
 - **和（enum/直和型）**：「共通の操作集合に応答する値たち」は、その応答の有無だけで
   自然にクラス分けされる——専用構文を新設せずとも、この暗黙の直和構造は既に成立している。
   既存の明示的なenum構文（`#RGB : Red | Green | Blue`）は、この一般現象のうち
   「値そのものに意味を持たせず、タグとしての区別だけが要る」場合への、ゼロコストな
   糖衣として位置づけられる
 
-Signがtrait/interface宣言構文を持たない（[`type_system.md`](impl/type/type_system.md#1-設計原則型は演算子と構文から自明に決まる) §1）ことと、直和型の専用構文が
+Signがtrait/interface宣言構文を持たない（[`type_system.md`](type/type_system.md#1-設計原則型は演算子と構文から自明に決まる) §1）ことと、直和型の専用構文が
 enumの糖衣以外に存在しないことは、同じ根から来ている：**型はコードが実際に行った操作の
 反映（影）である**という§1の原則が、積・和という型システムの両輪にまで一貫して及んでいる、
 ということである。
@@ -245,7 +245,7 @@ enumの糖衣以外に存在しないことは、同じ根から来ている：*
 なお本原理が答えるのは「**一段の中に何が並ぶか**」であり、「**何段まで積めるか**」は
 答えていない。後者は要素の型が終端かどうかで決まる別の問いであり、原理7が扱う。
 
-**関連文書**：[`type_system.md`](impl/type/type_system.md) §1・§6.2
+**関連文書**：[`type_system.md`](type/type_system.md) §1・§6.2
 
 ---
 
@@ -307,7 +307,7 @@ enumの糖衣以外に存在しないことは、同じ根から来ている：*
 用意し、呼ばれた側が `#` で書く）において、スロットを何バイト取るかを決めるのが
 この判定である。
 
-**関連文書**：[`list_model.md`](impl/type/list_model.md)、[`type_system.md`](impl/type/type_system.md)、[`value_representation.md`](impl/core/value_representation.md)
+**関連文書**：[`list_model.md`](type/list_model.md)、[`type_system.md`](type/type_system.md)、[`value_representation.md`](core/value_representation.md)
 
 ---
 
@@ -382,7 +382,7 @@ f : [~st] ? st ' 0     器を1つ受けると書いてある            → `[st
 どれも「命令は出ているが値が違う」形で出る。型検査を通り、命令列も出て、走らせて初めて
 分かる——だから確かめる場所は実機である。
 
-**関連文書**：[`list_model.md`](impl/type/list_model.md)、[`value_representation.md`](impl/core/value_representation.md)、[`stack_abi.md`](impl/memory/stack_abi.md)
+**関連文書**：[`list_model.md`](type/list_model.md)、[`value_representation.md`](core/value_representation.md)、[`stack_abi.md`](memory/stack_abi.md)
 
 ---
 
